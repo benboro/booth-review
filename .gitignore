@@ -1,0 +1,49 @@
+# This is a public repo. Anything not deliberately published stays local.
+
+# ── Secrets ─────────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+.envrc
+*.pem
+*.key
+
+# ── Data ────────────────────────────────────────────────────────────────────
+# Deny by default. Scraped pages and API responses belong to their sources and
+# are not ours to redistribute; see data/README.md. To publish a derived table
+# once its sources' terms allow it, add an explicit `!data/processed/<file>`.
+data/*
+!data/README.md
+!data/reference/
+
+# HTTP and query caches can hold full responses (and request headers, including
+# API keys), so they're ignored wherever they land.
+.cache/
+*.sqlite
+*.sqlite3
+*.db
+*.duckdb
+
+# ── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv
+
+# ── Tool caches ─────────────────────────────────────────────────────────────
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# ── Local editor and agent settings ─────────────────────────────────────────
+.claude/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

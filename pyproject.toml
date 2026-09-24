@@ -1,0 +1,37 @@
+[project]
+name = "booth-review"
+version = "0.1.0"
+description = "Which broadcasters get the best college football games, and who draws viewers beyond what the matchup predicts."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Ben Borovinsky" }]
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "ruff>=0.16.9",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.18,<0.13.0"]
+build-backend = "uv_build"
+
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W",  # pycodestyle, pyflakes
+    "I",            # isort
+    "B",            # flake8-bugbear
+    "UP",           # pyupgrade
+    "SIM",          # flake8-simplify
+    "PTH",          # prefer pathlib
+    "DTZ",          # naive datetimes; kickoff times cross time zones
+    "RUF",          # ruff-native
+]
