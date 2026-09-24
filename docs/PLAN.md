@@ -1,6 +1,6 @@
 # Who Calls the Best Games? College Football Feasibility Study and Project Plan
 
-Prepared September 24, 2026. No code has been written yet; this document covers scope, sources, risks, and the build plan.
+Prepared September 24, 2026. No code has been written yet; this document covers scope, sources, risks, and the build plan. Sections 3, 4, 6, 9, 13, and 14 were updated the same day after checking each source's terms, robots.txt, and API limits.
 
 ---
 
@@ -53,7 +53,7 @@ This splits the project into two questions:
 | Component | Best source | Coverage | Format | Verdict |
 |---|---|---|---|---|
 | Announcer names | 506 Sports weekly CFB pages | 2013 to present on the main site; 2009 to 2020 on an older blog | Consistent HTML, one page per week | Strong |
-| Viewership | Ratings Reference (aggregates Sports Media Watch and others) | About 3,800 telecasts, Aug 2013 to present | HTML tables, paginated | Good, but only for rated games |
+| Viewership | Ratings Reference (aggregates Sports Media Watch and others) | About 3,800 telecasts, Aug 2013 to present | JSON record per telecast; CC BY 4.0 | Good, but only for rated games |
 | Game data, lines, excitement | CollegeFootballData.com (CFBD) API | Games 1869+, in-game win probability 2014+, betting lines 2013+ | JSON API, free key | Strong |
 
 **Why college football beats the NFL for this project:**
@@ -80,6 +80,7 @@ This splits the project into two questions:
   - Neutral-site games use "vs" and home games use "@".
 - **Access caveat:** The 506 Archive wiki (older seasons) sits behind a Cloudflare bot check, which blocked automated fetching during this research. The main site loaded normally. For 2009 to 2012, expect manual work or a request to the site owners.
 - **Etiquette:** 506 is a small, fan-run site funded partly through Patreon. Scrape slowly, cache pages locally so each is fetched once, and consider contacting them or becoming a patron before bulk collection.
+- **Terms (checked September 24, 2026):** the site has no robots.txt (404), and its schedule pages carry no terms or copyright notice. Republishing derived crew data is therefore unresolved; ask the owners.
 
 ### 4.2 Viewership: Ratings Reference, Sports Media Watch, and others
 
@@ -100,13 +101,20 @@ This splits the project into two questions:
 | 2019 | 343 | 2026 (partial) | 121 |
 
   Note that the years are calendar years, so bowl games fall into the following year. The 2021 to 2024 dip is a coverage gap in the aggregator, not a drop in games played; investigate before modeling.
-- **To verify:** terms of use, whether a bulk export or API exists (the site has a bot policy page and an error-report process), and spot-check accuracy against Sports Media Watch.
+- **Access (checked September 24, 2026):**
+  - robots.txt allows all crawlers. The `/bot` page describes the site's own crawler (one request per source at a time with pauses; honors robots.txt and ETag/Last-Modified), which is a good model for ours.
+  - Every telecast has a JSON record at `/api/telecast/<id>.json` (for example, `cfb-ohio-state-texas-2026-09-12`). Each figure in it records the value, the Nielsen measurement era (`era_id`, for example `nielsen-bd-plus-panel`), the measurement method, the publisher, the original `source_url`, and a status (`final`, with `supersedes_id` when a figure replaces an earlier one). Use these records instead of scraping the HTML tables.
+  - There's no league-wide JSON file. List telecasts from the paginated league pages (`?page=N`) or `sitemap.xml`, then fetch each record once: about 3,800 requests, one time. An RSS feed at `/feed/cfb.xml` may help pick up new records in season (not yet inspected).
+- **License:** the compilation and its JSON records are CC BY 4.0. Reuse requires crediting RatingsReference.com and linking each record used, and each figure's original source should be cited alongside. The figures themselves are facts; the license covers the compilation. This means a viewership table derived from Ratings Reference can be published.
+- **Still to verify:** spot-check accuracy against Sports Media Watch.
 
 **Sports Media Watch (SMW)** is the upstream source:
 
 - Season pages back to 2012 at `sportsmediawatch.com/college-football-tv-ratings/`.
 - **Problem:** weekly figures are published as chart images (PNG), not tables. Using SMW directly means OCR or manual entry, which is why Ratings Reference is the better starting point.
 - SMW's written recaps are useful for context flags, such as competing events (a World Series Game 7) and carriage disputes.
+- **robots.txt:** allows general crawlers but explicitly blocks scripting tools (`Python-urllib`, `scrapy`, `curl`) and AI crawlers. Don't collect SMW with scripts.
+- **Role in this project:** manual only. Spot-check a sample of Ratings Reference figures, note context flags from the recaps, and, if the Phase 3 coverage audit shows the 2021 to 2024 gap matters, consider filling it by hand.
 
 **Supplementary sources:** Wikipedia bowl game pages list the network, full announcer crew (including sidelines), and Nielsen viewers in a structured infobox. They're a good cross-check for postseason games.
 
@@ -122,10 +130,18 @@ This splits the project into two questions:
 | Rankings (AP, CFP) | 1936 / 2014 to present | Ranked-matchup controls |
 | Team talent, recruiting | 2015 / 2000 to present | Drawing-power proxies |
 
-- **Access:** a free API key (bearer token). Current rate limits and tiers are on the CFBD tiers page and change over time, so check before planning bulk pulls.
+- **Access:** a free API key (bearer token). The free tier allows 1,000 requests per calendar month, and creating extra keys to get around the limit is prohibited (from the key's terms). CFBD recommends making all requests server-side, never from a web frontend; this project goes further, and the website never calls the API at all (Section 9).
+- **Request budget** (endpoint parameters from the API's OpenAPI spec):
+
+| Data | Endpoint | Calls, 2013 to 2025 |
+|---|---|---|
+| Games, media, pregame win probability, rankings, talent, betting lines | `/games`, `/games/media`, `/metrics/wp/pregame`, `/rankings`, `/talent`, `/lines` | About one per season each, so roughly 100 (a regular/postseason split may add some) |
+| Play-by-play | `/plays` (requires year and week) | About 17 per season, so roughly 220 |
+| In-game win probability | `/metrics/wp` (requires a game ID) | One per game: 10,000+, far over budget |
+
 - **Excitement index caveat:** CFBD notes that stored in-game win-probability values from 2025 onward use the current model, and earlier values were not backfilled. That's a model break at 2025. Options:
   1. Use CFBD's `excitementIndex` as-is and add a season fixed effect.
-  2. Recompute excitement from play-by-play with one consistent win-probability model (for example, cfbfastR's model), for a uniform definition across seasons. This is preferred if time allows.
+  2. Recompute excitement from play-by-play with one consistent win-probability model (for example, cfbfastR's model), for a uniform definition across seasons. This is preferred if time allows. Under the free tier, this has to start from `/plays` or from play-by-play data the cfbfastR project publishes (check availability), not from the per-game `/metrics/wp` endpoint.
 - **Media endpoint caveat:** media records are not available for every game, so treat 506 as the primary network source and CFBD as the cross-check.
 
 ---
@@ -152,6 +168,8 @@ Build these as explicit flags or era variables. Year-over-year viewership compar
 | Varies | Some NBC and Peacock figures combine Nielsen and Adobe Analytics | Not comparable to Nielsen-only; flag as a separate measurement type |
 | Nov 2025 | Disney networks blacked out on YouTube TV for several weeks | Depressed ABC and ESPN numbers; flag the affected weeks |
 | Any week | Competing events (World Series, NFL, other marquee games in the same window) | Include a same-window competition variable |
+
+Ratings Reference tags each figure with a measurement era (`era_id`, for example `nielsen-bd-plus-panel`). In Phase 0, check how its eras line up with the rows above; they may supply most of these flags directly.
 
 ---
 
@@ -213,6 +231,7 @@ An event study around each change, controlling for matchup quality, is more cred
 - **Hover:** matchup and date, final score, rankings, network and kickoff time, play-by-play and analyst, viewers (with source and measurement type), excitement, residual, and any flags (such as a carriage dispute or a competing event).
 - **Filter:** search or multi-select by person. Matched dots are enlarged and outlined; unmatched dots drop to about 15% opacity but keep their color. In compare mode, each selected person gets their own marker shape.
 - **Stack (when coding begins):** Python, Plotly with Dash, `Scattergl` for performance, pathlib for file handling, and a small class-based data layer that loads the tables and builds the figure.
+- **Deployment (decided September 24, 2026):** the website serves pre-built data files only. All data is pulled ahead of time, server-side, so viewing the page never sends a request to CFBD or any other source, and the CFBD key never reaches the site.
 
 ---
 
@@ -274,7 +293,8 @@ The per-person table (`telecast_people`) is what makes filtering work across net
 2. FBS only, or include FCS games when they're rated?
 3. Primary-network rule for simulcasts (for example, ABC plus ESPN2 or Disney+): first-listed outlet, or rights holder?
 4. Include Nielsen plus Adobe figures with a flag, or restrict to Nielsen-only?
-5. Terms of use and bulk-access options for 506 Sports and Ratings Reference.
+5. Terms of use: resolved for Ratings Reference (CC BY 4.0; see Section 4.2). Still open for 506 Sports (no published terms; ask the owners) and for republishing CFBD data, especially its `excitementIndex` (ask CFBD).
+6. Front end: the personal site is served by GitHub Pages, which can't run a Dash server. Build a static Plotly page with client-side filtering, or host Dash somewhere else?
 
 ---
 
@@ -283,7 +303,10 @@ The per-person table (`telecast_people`) is what makes filtering work across net
 - 506 Sports CFB schedule and announcers: https://506sports.com/ncaaf.php
 - 506 Archive (older seasons): https://archive.506sports.com/wiki/College_Football
 - Ratings Reference, CFB: https://ratingsreference.com/league/cfb
+- Ratings Reference methodology and license: https://ratingsreference.com/methodology
+- Ratings Reference bot policy: https://ratingsreference.com/bot
 - Sports Media Watch CFB ratings: https://www.sportsmediawatch.com/college-football-tv-ratings/
 - CFBD API docs: https://api.collegefootballdata.com/
 - CFBD data availability: https://api.collegefootballdata.com/data-availability
+- CFBD OpenAPI spec: https://api.collegefootballdata.com/api-docs.json
 - cfbfastR (win probability models): https://cfbfastr.sportsdataverse.org/

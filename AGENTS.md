@@ -9,16 +9,35 @@ model, and build phases; read the relevant section before starting a phase.
 - This repo is public. Never commit secrets. The CFBD API key lives in `.env`
   (gitignored); `.env.example` is the template.
 - Everything under `data/` is gitignored except `data/README.md` and `data/reference/`.
-  Never loosen these rules to commit scraped pages or API responses. Publishing a
-  derived table requires confirming the sources' terms first, then adding an explicit
-  `!data/processed/<file>` line to `.gitignore`.
+  Never loosen these rules to commit scraped pages or API responses. A derived table
+  can be published only if every source it draws on allows it (see the source table
+  in `data/README.md`); publish it with an explicit `!data/processed/<file>` line in
+  `.gitignore`.
 - Before every commit, check `git status` for staged data, cache, or `.env` files.
 
 # Collecting Data
 
-- Cache every fetched page and API response under `data/raw/` and never re-fetch a
-  cached one.
-- Rate-limit requests. 506 Sports is a small fan-run site.
+- Identify every request with the user agent
+  `booth-review/<version> (+https://github.com/benboro/booth-review)`, and check the
+  site's robots.txt before fetching.
+- Send one request at a time, with a pause between requests. 506 Sports is a small
+  fan-run site; keep its rate especially low.
+- Cache every page and API response under `data/raw/`. Never re-fetch a cached
+  response from a completed season. When re-checking current-season data, send
+  conditional requests (ETag / Last-Modified) where the source supports them.
+- Ratings Reference: read the per-telecast JSON records (`/api/telecast/<id>.json`)
+  instead of scraping HTML. Keep each row's record URL and the figure's original
+  `source_url`; Ratings Reference's reuse terms ask for both.
+- Sports Media Watch: never collect with scripts; its robots.txt blocks them. Use it
+  only for manual spot checks.
+- CFBD: the free tier allows 1,000 requests per calendar month. Count every call, and
+  never call per-game endpoints such as `/metrics/wp` in bulk.
+
+# Website
+
+- The website serves only pre-built data files. All data is pulled ahead of time,
+  server-side; viewing the page never sends a request to CFBD or any other data
+  source, and the CFBD key never appears in site code or build output.
 
 # Tooling
 

@@ -19,9 +19,15 @@ feasibility study, the analysis design, and the build plan.
 | [Ratings Reference](https://ratingsreference.com/league/cfb) | Viewership for each rated telecast |
 | [CollegeFootballData.com](https://collegefootballdata.com) | Games, scores, betting lines, win probability, excitement |
 
+Viewership data comes from RatingsReference.com under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), with each figure's original
+publisher credited alongside it. [Sports Media Watch](https://www.sportsmediawatch.com/college-football-tv-ratings/),
+the original source for most of those figures, is used only for manual spot checks.
+
 This repo holds code, documentation, and hand-maintained reference tables. It
 doesn't hold the source data itself; [`data/README.md`](data/README.md) explains
-what's committed and why.
+what's committed and why. The website loads a pre-built data file and never calls
+these sources.
 
 ## Setup
 
