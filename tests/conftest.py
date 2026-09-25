@@ -7,6 +7,8 @@ package code outside transport/client.py never imports it.
 from __future__ import annotations
 
 import json
+import random
+import subprocess
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,6 +18,7 @@ import pytest
 import stamina
 
 from booth_review.config import DataPaths
+from booth_review.transport.client import PoliteClient
 
 MockResponseSpec = tuple[int, bytes, dict[str, str]]
 
@@ -103,3 +106,86 @@ def vault_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DataPaths:
     )
     monkeypatch.setenv("BOOTH_REVIEW_VAULT", str(vault_root))
     return paths
+
+
+@pytest.fixture
+def isolated_git_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Blocks the operator's global/system git config from leaking into tests."""
+    empty_config = tmp_path / "empty-gitconfig"
+    empty_config.write_text("", encoding="utf-8")
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(empty_config))
+
+
+@pytest.fixture
+def git_vault(tmp_path: Path, isolated_git_env: None, monkeypatch: pytest.MonkeyPatch) -> DataPaths:
+    """A real bare-remote + clone vault under tmp_path, wired for the CLI.
+
+    Creates the D-01 folders and ledger/frozen.json, pushes a seed commit,
+    points BOOTH_REVIEW_VAULT at the clone, chdir's into tmp_path (so a
+    developer's real .env at the repo root is never read by
+    `load_cfbd_key()`), and clears CFBD_API_KEY by default.
+    """
+    remote = tmp_path / "remote.git"
+    subprocess.run(
+        ["git", "init", "--bare", "-q", "-b", "main", str(remote)],
+        check=True,
+        capture_output=True,
+    )
+
+    vault = tmp_path / "vault"
+    subprocess.run(["git", "clone", "-q", str(remote), str(vault)], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(vault), "config", "user.name", "Test Bot"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(vault), "config", "user.email", "test-bot@example.com"],
+        check=True,
+        capture_output=True,
+    )
+
+    paths = DataPaths(vault=vault)
+    for directory in (paths.raw, paths.interim, paths.processed, paths.ledger, paths.spike):
+        directory.mkdir(parents=True, exist_ok=True)
+    paths.frozen.write_text(
+        json.dumps({"sports506": [], "ratingsref": [], "cfbd": []}), encoding="utf-8"
+    )
+
+    subprocess.run(["git", "-C", str(vault), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(vault), "commit", "-q", "-m", "init: seed"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(vault), "push", "-q", "origin", "main"], check=True, capture_output=True
+    )
+
+    monkeypatch.setenv("BOOTH_REVIEW_VAULT", str(vault))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CFBD_API_KEY", raising=False)
+    return paths
+
+
+@pytest.fixture
+def patched_client(
+    monkeypatch: pytest.MonkeyPatch, fake_clock: FakeClock
+) -> Callable[[MockTransportHandle], None]:
+    """Monkeypatch booth_review.runtime.make_client to build a PoliteClient on
+    a given mock transport with a fake clock, so CLI tests never sleep.
+    """
+
+    def _patch(handle: MockTransportHandle) -> None:
+        def _make_client() -> PoliteClient:
+            return PoliteClient(
+                transport=handle.transport,
+                clock=fake_clock.now,
+                sleep=fake_clock.sleep,
+                rng=random.Random(0),
+            )
+
+        monkeypatch.setattr("booth_review.runtime.make_client", _make_client)
+
+    return _patch
