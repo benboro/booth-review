@@ -193,9 +193,7 @@ class CatchupWindow:
     first_run: bool
 
 
-def catchup_window(
-    state: JobState, now: datetime, season: int, trigger: Trigger
-) -> CatchupWindow:
+def catchup_window(state: JobState, now: datetime, season: int, trigger: Trigger) -> CatchupWindow:
     """Compute the window and missed-slot count a run should catch up on.
 
     With no prior success (`state.last_success_at is None`), the window
