@@ -9,14 +9,16 @@ model, and build phases; read the relevant section before starting a phase.
 - This repo is public. Never commit secrets. The CFBD API key lives in `.env`
   (gitignored); `.env.example` is the template.
 - Everything under `data/` is gitignored except `data/README.md` and `data/reference/`.
-  Never loosen these rules to commit scraped pages or API responses. A derived table
-  can be published only if every source it draws on allows it (see the source table
-  in `data/README.md`); publish it with an explicit `!data/processed/<file>` line in
-  `.gitignore`.
+  Never loosen these rules to commit scraped pages or API responses. `.gitignore`
+  already carries `!data/processed/` then `data/processed/*` after `data/*`, so a
+  derived table is published, once every source it draws on allows it (see the source
+  table in `data/README.md`), by adding one `!data/processed/<file>` line below them;
+  `tests/test_gitignore.py` checks the chain.
 - GSD planning files (`.planning/`) and Fable task briefs (`fable-*.md`) are local and
-  gitignored. Never commit them, and never commit GSD-generated sections (marked
-  `<!-- GSD:`) in `AGENTS.md`; `CLAUDE.md` is a symlink to it, so tools that write
-  `CLAUDE.md` edit `AGENTS.md`.
+  gitignored. Never commit them, and never commit GSD-generated marker sections (an
+  HTML comment whose text starts with the four letters G, S, D, and a colon) in
+  `AGENTS.md`; `CLAUDE.md` is a symlink to it, so tools that write `CLAUDE.md` edit
+  `AGENTS.md`.
 - Before every commit, check `git status` for staged data, cache, or `.env` files.
 
 # Collecting Data
@@ -26,9 +28,15 @@ model, and build phases; read the relevant section before starting a phase.
   site's robots.txt before fetching.
 - Send one request at a time, with a pause between requests. 506 Sports is a small
   fan-run site; keep its rate especially low.
-- Cache every page and API response under `data/raw/`. Never re-fetch a cached
-  response from a completed season. When re-checking current-season data, send
-  conditional requests (ETag / Last-Modified) where the source supports them.
+- Cache every page and API response under `data/vault/raw/`, a local clone of the
+  private data repo. Never re-fetch a cached response from a completed season. When
+  re-checking current-season data, send conditional requests (ETag / Last-Modified)
+  where the source supports them.
+- All requests go through the `booth-review collect` / `booth-review budget`
+  commands, which apply the user agent, robots.txt, pacing, caching, and the CFBD
+  budget. Never fetch with ad-hoc scripts, curl, or notebooks.
+- The vault is private. Never copy its files into the public repo, test fixtures,
+  commit messages, or logs; tests use synthetic 506 and CFBD fixtures.
 - Ratings Reference: read the per-telecast JSON records (`/api/telecast/<id>.json`)
   instead of scraping HTML. Keep each row's record URL and the figure's original
   `source_url`; Ratings Reference's reuse terms ask for both.
@@ -42,6 +50,9 @@ model, and build phases; read the relevant section before starting a phase.
 - The website serves only pre-built data files. All data is pulled ahead of time,
   server-side; viewing the page never sends a request to CFBD or any other data
   source, and the CFBD key never appears in site code or build output.
+- CFBD's terms (updated Aug 12, 2026) bar providing API data as a standalone dataset
+  or bulk download, so the site data file holds display fields only and offers no
+  download.
 
 # Tooling
 
