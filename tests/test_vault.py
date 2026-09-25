@@ -8,11 +8,12 @@ global config never leaks in. No network is involved.
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
-from booth_review.errors import VaultCommitError, VaultStateError
+from booth_review.errors import VaultBusyError, VaultCommitError, VaultStateError
 from booth_review.vault import VaultRepo, batch_message
 
 
@@ -285,3 +286,136 @@ def test_commit_batch_raises_after_second_push_rejection(
     )
     with pytest.raises(VaultCommitError):
         repo.commit_batch(message)
+
+
+# -- lock() -------------------------------------------------------------------------
+
+
+def test_lock_raises_vault_busy_error_when_held_by_another_process(
+    vault_repo_env: tuple[Path, Path],
+) -> None:
+    _remote, vault = vault_repo_env
+    lock_path = vault / ".git" / "booth-review.lock"
+
+    holder_script = (
+        "import fcntl, time\n"
+        f"fd = open({str(lock_path)!r}, 'a+')\n"
+        "fcntl.flock(fd, fcntl.LOCK_EX)\n"
+        "print('locked', flush=True)\n"
+        "time.sleep(2)\n"
+    )
+    proc = subprocess.Popen(
+        [sys.executable, "-c", holder_script], stdout=subprocess.PIPE, text=True
+    )
+    try:
+        line = proc.stdout.readline() if proc.stdout is not None else ""
+        assert line.strip() == "locked"
+
+        repo = VaultRepo(vault)
+        with pytest.raises(VaultBusyError), repo.lock(timeout_s=0.5):
+            pass
+    finally:
+        proc.wait(timeout=5)
+
+
+def test_lock_is_reentrant_within_one_process(vault_repo_env: tuple[Path, Path]) -> None:
+    _remote, vault = vault_repo_env
+    repo = VaultRepo(vault)
+
+    with repo.lock(), repo.lock():
+        pass  # must not deadlock
+
+
+# -- commit_batch: path-scoped commits -----------------------------------------------
+
+
+def test_commit_batch_paths_scopes_commit_and_leaves_other_files_untracked(
+    vault_repo_env: tuple[Path, Path],
+) -> None:
+    remote, vault = vault_repo_env
+    repo = VaultRepo(vault)
+    (vault / "raw" / "sports506" / "2025").mkdir(parents=True)
+    (vault / "raw" / "sports506" / "2025" / "wk01.html").write_text("a\n", encoding="utf-8")
+    (vault / "ledger").mkdir()
+    (vault / "ledger" / "requests.jsonl").write_text('{"x": 1}\n', encoding="utf-8")
+    (vault / "raw" / "ratingsref").mkdir()
+    (vault / "raw" / "ratingsref" / "other.json").write_text("{}\n", encoding="utf-8")
+
+    message = batch_message(
+        "collect", "sports506", "2025", {"fetched": 1, "cached": 0, "not_modified": 0}
+    )
+    result = repo.commit_batch(message, paths=["raw/sports506/2025", "ledger/requests.jsonl"])
+
+    assert result is True
+    assert _remote_head_subject(remote) == message
+
+    status = subprocess.run(
+        ["git", "-C", str(vault), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "raw/ratingsref/" in status.stdout
+    assert "raw/sports506" not in status.stdout
+    assert "ledger/requests.jsonl" not in status.stdout
+
+
+def test_commit_batch_paths_absolute_or_dotdot_raise_before_any_git_call(
+    vault_repo_env: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _remote, vault = vault_repo_env
+    repo = VaultRepo(vault)
+    called: list[list[str]] = []
+    real_run = subprocess.run
+
+    def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        called.append(args)
+        return real_run(args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("booth_review.vault.subprocess.run", fake_run)
+
+    message = batch_message(
+        "collect", "sports506", "2025", {"fetched": 1, "cached": 0, "not_modified": 0}
+    )
+
+    with pytest.raises(ValueError):
+        repo.commit_batch(message, paths=["/etc/passwd"])
+    assert called == []
+
+    with pytest.raises(ValueError):
+        repo.commit_batch(message, paths=["../outside.html"])
+    assert called == []
+
+
+# -- push retry: rebase abort on conflict --------------------------------------------
+
+
+def test_push_retry_aborts_rebase_on_conflict_and_raises(
+    tmp_path: Path, vault_repo_env: tuple[Path, Path]
+) -> None:
+    remote, vault = vault_repo_env
+
+    second = tmp_path / "second-clone-conflict"
+    _run_ok(["git", "clone", "-q", str(remote), str(second)])
+    _run_ok(["git", "-C", str(second), "config", "user.name", "Second Bot"])
+    _run_ok(["git", "-C", str(second), "config", "user.email", "second-bot@example.com"])
+    (second / "README.md").write_text("remote change\n", encoding="utf-8")
+    _run_ok(["git", "-C", str(second), "add", "README.md"])
+    _run_ok(["git", "-C", str(second), "commit", "-q", "-m", "init: remote edit"])
+    _run_ok(["git", "-C", str(second), "push", "-q"])
+
+    repo = VaultRepo(vault)
+    (vault / "README.md").write_text("local change\n", encoding="utf-8")
+
+    message = batch_message(
+        "collect", "sports506", "2025", {"fetched": 1, "cached": 0, "not_modified": 0}
+    )
+    with pytest.raises(VaultCommitError):
+        repo.commit_batch(message, paths=["README.md"])
+
+    status = subprocess.run(
+        ["git", "-C", str(vault), "status"], capture_output=True, text=True, check=True
+    )
+    assert "rebase in progress" not in status.stdout
+    assert not (vault / ".git" / "rebase-merge").exists()
+    assert not (vault / ".git" / "rebase-apply").exists()

@@ -232,6 +232,147 @@ def test_refresh_on_frozen_season_raises(vault_paths, mock_transport_factory) ->
     assert handle.requests == []
 
 
+# -- RR refresh exemption (D-07) -------------------------------------------------
+
+
+def test_refresh_ratingsref_frozen_season_cached_overwrites_and_appends_manifest_line(
+    vault_paths, mock_transport_factory
+) -> None:
+    vault_paths.frozen.write_text(json.dumps({"sports506": [], "ratingsref": [2014], "cfbd": []}))
+    cache_path = "ratingsref/telecast/2014/cfb-old-slug.json"
+    dest = vault_paths.raw / cache_path
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(b'{"old": true}')
+
+    prior_entry = {
+        "url": "https://ratingsreference.com/api/telecast/cfb-old-slug.json",
+        "source": "ratingsref",
+        "season": 2014,
+        "kind": "page",
+        "fetched_at": "2020-01-01T00:00:00Z",
+        "status": 200,
+        "etag": None,
+        "last_modified": None,
+        "sha256": hashlib.sha256(dest.read_bytes()).hexdigest(),
+        "path": cache_path,
+        "bytes": len(dest.read_bytes()),
+        "final_url": "https://ratingsreference.com/api/telecast/cfb-old-slug.json",
+    }
+    vault_paths.manifest.write_text(json.dumps(prior_entry, sort_keys=True) + "\n")
+
+    new_body = b'{"old": false}'
+    handle = mock_transport_factory(
+        {
+            "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
+            "https://ratingsreference.com/api/telecast/cfb-old-slug.json": (200, new_body, {}),
+        }
+    )
+    client = _client(handle)
+    cache = RawCache(vault_paths, client)
+    req = FetchRequest(
+        source="ratingsref",
+        season=2014,
+        url="https://ratingsreference.com/api/telecast/cfb-old-slug.json",
+        cache_path=cache_path,
+    )
+
+    result = cache.get_or_fetch(req, refresh=True)
+
+    assert result.outcome == "fetched"
+    assert dest.read_bytes() == new_body
+
+    lines = _manifest_lines(vault_paths)
+    page_lines = [line for line in lines if line["kind"] == "page"]
+    assert len(page_lines) == 2
+    assert page_lines[-1]["status"] == 200
+
+
+def test_refresh_ratingsref_frozen_season_new_record_is_sent_and_cached(
+    vault_paths, mock_transport_factory
+) -> None:
+    vault_paths.frozen.write_text(json.dumps({"sports506": [], "ratingsref": [2014], "cfbd": []}))
+    cache_path = "ratingsref/telecast/2014/cfb-newly-listed.json"
+    body = b'{"newly": "listed"}'
+    handle = mock_transport_factory(
+        {
+            "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
+            "https://ratingsreference.com/api/telecast/cfb-newly-listed.json": (200, body, {}),
+        }
+    )
+    client = _client(handle)
+    cache = RawCache(vault_paths, client)
+    req = FetchRequest(
+        source="ratingsref",
+        season=2014,
+        url="https://ratingsreference.com/api/telecast/cfb-newly-listed.json",
+        cache_path=cache_path,
+    )
+
+    result = cache.get_or_fetch(req, refresh=True)
+
+    assert result.outcome == "fetched"
+    assert (vault_paths.raw / cache_path).read_bytes() == body
+
+
+def test_non_refresh_ratingsref_miss_in_frozen_season_still_raises(
+    vault_paths, mock_transport_factory
+) -> None:
+    vault_paths.frozen.write_text(json.dumps({"sports506": [], "ratingsref": [2014], "cfbd": []}))
+    handle = mock_transport_factory({})
+    client = _client(handle)
+    cache = RawCache(vault_paths, client)
+    req = FetchRequest(
+        source="ratingsref",
+        season=2014,
+        url="https://ratingsreference.com/api/telecast/cfb-never-cached.json",
+        cache_path="ratingsref/telecast/2014/cfb-never-cached.json",
+    )
+
+    with pytest.raises(FrozenSeasonError):
+        cache.get_or_fetch(req)
+
+    assert handle.requests == []
+
+
+def test_refresh_on_frozen_cfbd_season_raises_before_any_request(
+    vault_paths, mock_transport_factory
+) -> None:
+    vault_paths.frozen.write_text(json.dumps({"sports506": [], "ratingsref": [], "cfbd": [2014]}))
+    handle = mock_transport_factory({})
+    client = _client(handle)
+    cache = RawCache(vault_paths, client)
+    req = FetchRequest(
+        source="cfbd",
+        season=2014,
+        url="https://api.collegefootballdata.com/games?year=2014",
+        cache_path="cfbd/games/2014.json",
+        endpoint="/games",
+    )
+
+    with pytest.raises(FrozenSeasonError):
+        cache.get_or_fetch(req, refresh=True)
+
+    assert handle.requests == []
+
+
+def test_status_frozen_ratingsref_miss_still_reports_frozen_miss(
+    vault_paths, mock_transport_factory
+) -> None:
+    vault_paths.frozen.write_text(json.dumps({"sports506": [], "ratingsref": [2014], "cfbd": []}))
+    handle = mock_transport_factory({})
+    client = _client(handle)
+    cache = RawCache(vault_paths, client)
+    req = FetchRequest(
+        source="ratingsref",
+        season=2014,
+        url="https://ratingsreference.com/api/telecast/cfb-never-cached.json",
+        cache_path="ratingsref/telecast/2014/cfb-never-cached.json",
+    )
+
+    assert cache.status(req) == "frozen-miss"
+    assert handle.requests == []
+
+
 # -- status() -------------------------------------------------------------------
 
 

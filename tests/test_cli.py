@@ -168,6 +168,156 @@ def test_collect_ratingsref_sitemap_only_then_dry_run_reports_same_count(
     assert "new 3" in out2
 
 
+# -- refresh ratingsref -----------------------------------------------------------------
+
+
+def _refresh_sitemap_xml(entries: list[tuple[str, str]]) -> bytes:
+    urls = "".join(
+        f"<url><loc>https://ratingsreference.com/telecast/{slug}</loc>"
+        f"<lastmod>{lastmod}</lastmod></url>\n"
+        for slug, lastmod in entries
+    )
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"{urls}</urlset>\n"
+    ).encode()
+
+
+def _refresh_telecast_url(slug: str) -> str:
+    return f"https://ratingsreference.com/api/telecast/{slug}.json"
+
+
+def test_refresh_ratingsref_help_lists_cap_dry_run_no_commit() -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(["refresh", "ratingsref", "--help"])
+    assert exc.value.code == 0
+
+
+def test_refresh_ratingsref_dry_run_prints_counts_and_sends_nothing(
+    git_vault, mock_transport_factory, patched_client, capsys
+) -> None:
+    paths = git_vault
+    paths.rr_lastmod.write_text("{}", encoding="utf-8")
+    sitemap_xml = _refresh_sitemap_xml(
+        [
+            ("cfb-old-team-team-2025-09-13", "2026-01-01T00:00:00+00:00"),
+            ("cfb-new-team-team-2026-09-13", "2026-09-15T00:00:00+00:00"),
+        ]
+    )
+    sitemap_dir = paths.raw / "ratingsref" / "sitemap"
+    sitemap_dir.mkdir(parents=True, exist_ok=True)
+    (sitemap_dir / "2026-09-25.xml").write_bytes(sitemap_xml)
+
+    handle = mock_transport_factory({})
+    patched_client(handle)
+
+    exit_code = main(["refresh", "ratingsref", "--dry-run"])
+
+    assert exit_code == 0
+    assert handle.requests == []
+    out = capsys.readouterr().out
+    assert "qualifying 2, new 2, advanced 0, selected 2, uncapped_current 1, backlog 0" in out
+
+
+def test_refresh_ratingsref_live_run_commits_and_reports_zero_backlog(
+    git_vault, mock_transport_factory, patched_client, capsys
+) -> None:
+    paths = git_vault
+    remote = paths.vault.parent / "remote.git"
+    paths.rr_lastmod.write_text("{}", encoding="utf-8")
+
+    old_slug = "cfb-old-team-team-2025-09-13"
+    new_slug = "cfb-new-team-team-2026-09-13"
+    sitemap_xml = _refresh_sitemap_xml(
+        [(old_slug, "2026-01-01T00:00:00+00:00"), (new_slug, "2026-09-15T00:00:00+00:00")]
+    )
+    responses = {
+        "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
+        SITEMAP_URL: (200, sitemap_xml, {}),
+        _refresh_telecast_url(old_slug): (200, b'{"telecast": {}}', {}),
+        _refresh_telecast_url(new_slug): (200, b'{"telecast": {}}', {}),
+    }
+    handle = mock_transport_factory(responses)
+    patched_client(handle)
+
+    exit_code = main(["refresh", "ratingsref"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "qualifying 2, new 2, advanced 0, selected 2, uncapped_current 1, backlog 0" in out
+    assert "fetched 2, not_modified 0, failed 0" in out
+    assert "backlog" not in out.splitlines()[-1]
+
+    assert _remote_head_subject(remote) == (
+        "refresh: ratingsref 2014-2026 (fetched 2, not_modified 0, failed 0, backlog 0)"
+    )
+
+
+def test_refresh_ratingsref_cap_override_reports_backlog_and_returns_4(
+    git_vault, mock_transport_factory, patched_client, capsys
+) -> None:
+    paths = git_vault
+    paths.rr_lastmod.write_text("{}", encoding="utf-8")
+
+    slugs = [f"cfb-old-team-{i:03d}-2025-09-13" for i in range(3)]
+    sitemap_xml = _refresh_sitemap_xml(
+        [(slug, f"2026-01-0{i + 1}T00:00:00+00:00") for i, slug in enumerate(slugs)]
+    )
+    responses = {
+        "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
+        SITEMAP_URL: (200, sitemap_xml, {}),
+        _refresh_telecast_url(slugs[0]): (200, b'{"telecast": {}}', {}),
+    }
+    handle = mock_transport_factory(responses)
+    patched_client(handle)
+
+    exit_code = main(["refresh", "ratingsref", "--cap", "1"])
+
+    assert exit_code == 4
+    out = capsys.readouterr().out
+    assert "selected 1, uncapped_current 0, backlog 2" in out
+    assert out.splitlines()[-1] == "backlog 2"
+
+
+def test_refresh_ratingsref_no_commit_skips_commit(
+    git_vault, mock_transport_factory, patched_client
+) -> None:
+    paths = git_vault
+    remote = paths.vault.parent / "remote.git"
+    paths.rr_lastmod.write_text("{}", encoding="utf-8")
+    log_count = _remote_log_count(remote)
+
+    slug = "cfb-old-team-team-2025-09-13"
+    sitemap_xml = _refresh_sitemap_xml([(slug, "2026-01-01T00:00:00+00:00")])
+    responses = {
+        "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
+        SITEMAP_URL: (200, sitemap_xml, {}),
+        _refresh_telecast_url(slug): (200, b'{"telecast": {}}', {}),
+    }
+    handle = mock_transport_factory(responses)
+    patched_client(handle)
+
+    exit_code = main(["refresh", "ratingsref", "--no-commit"])
+
+    assert exit_code == 0
+    assert _remote_log_count(remote) == log_count
+
+
+def test_refresh_ratingsref_missing_ledger_returns_3(
+    git_vault, mock_transport_factory, patched_client, capsys
+) -> None:
+    handle = mock_transport_factory({})
+    patched_client(handle)
+
+    exit_code = main(["refresh", "ratingsref", "--dry-run"])
+
+    assert exit_code == 3
+    err = capsys.readouterr().err
+    assert "VaultStateError" in err
+    assert handle.requests == []
+
+
 # -- collect cfbd -------------------------------------------------------------------------
 
 

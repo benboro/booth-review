@@ -1,0 +1,20 @@
+# Vault .gitattributes template (T-02-32).
+#
+# Installed as the private data repo's own `.gitattributes` (Plan 07, with
+# the user's OK). Named without a leading dot here so it never applies
+# inside this (public) repo's own working copy.
+
+# LF everywhere, so the job (Linux runner) and a developer's local clone
+# never disagree on line endings.
+* text=auto eol=lf
+
+# Raw fetched responses stay byte-exact: RawCache's manifest sha256 values
+# are computed against the exact bytes on disk, so these must never be
+# normalized (CRLF/LF, encoding, or otherwise).
+raw/** -text
+
+# Append-only ledgers: the job (Sunday/Wednesday) and a local run can each
+# append a new line to the same JSONL file between one push and the next.
+# merge=union keeps both sides' lines on a rebase conflict instead of
+# leaving conflict markers, so job and local commits rebase cleanly.
+ledger/*.jsonl merge=union

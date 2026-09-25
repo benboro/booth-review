@@ -454,6 +454,66 @@ def test_cfbd_probe_info_cost_returns_false_when_remaining_equal(
     assert any(line.get("event") == "info_cost_probe" for line in ledger_lines)
 
 
+def test_cfbd_run_refresh_true_overwrites_cached_file_and_ledger_records_call(
+    vault_paths, mock_transport_factory, fake_clock
+) -> None:
+    cache_path = vault_paths.raw / "cfbd" / "games" / "2026.json"
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_bytes(b'{"stale": true}')
+
+    new_body = b'{"stale": false}'
+    responses = {
+        "https://api.collegefootballdata.com/robots.txt": (404, b"nf", {}),
+        "https://api.collegefootballdata.com/info": (200, _cfbd_info_body(600), {}),
+        "https://api.collegefootballdata.com/games?seasonType=both&year=2026": (
+            200,
+            new_body,
+            {},
+        ),
+    }
+    handle = mock_transport_factory(responses)
+    budget = CfbdBudget(vault_paths.cfbd_ledger)
+    cache = RawCache(vault_paths, _client(handle, fake_clock=fake_clock), guards=[budget])
+    collector = CfbdCollector(cache, budget, "test-token")
+
+    collector.info()
+    summary = collector.run(2026, ["games"], dry_run=False, refresh=True)
+
+    assert summary.fetched == 1
+    assert cache_path.read_bytes() == new_body
+
+    data_requests = [
+        r for r in handle.requests if r.url.endswith("/games?seasonType=both&year=2026")
+    ]
+    assert len(data_requests) == 1
+
+    ledger_lines = [
+        json.loads(line)
+        for line in vault_paths.cfbd_ledger.read_text(encoding="utf-8").splitlines()
+    ]
+    data_call_lines = [
+        line
+        for line in ledger_lines
+        if line.get("event") == "call" and line.get("endpoint") == "/games"
+    ]
+    assert len(data_call_lines) == 1
+
+
+def test_cfbd_run_refresh_true_frozen_season_still_raises_frozen_season_error(
+    vault_paths, mock_transport_factory
+) -> None:
+    vault_paths.frozen.write_text(json.dumps({"sports506": [], "ratingsref": [], "cfbd": [2014]}))
+    handle = mock_transport_factory({})
+    budget = CfbdBudget(vault_paths.cfbd_ledger)
+    cache = RawCache(vault_paths, _client(handle), guards=[budget])
+    collector = CfbdCollector(cache, budget, "test-token")
+
+    with pytest.raises(FrozenSeasonError):
+        collector.run(2014, ["games"], dry_run=False, refresh=True)
+
+    assert handle.requests == []
+
+
 def test_cfbd_bearer_token_never_appears_in_any_vault_file(
     vault_paths, mock_transport_factory, fake_clock
 ) -> None:

@@ -4,6 +4,11 @@ Every call goes through RawCache with a CfbdBudget guard wired in, so the
 allow-list, floor, and per-run cap are enforced there; this module only
 builds requests for the six known endpoints (plus /info) and never targets
 anything outside ENDPOINTS (FOUND-03, D-12).
+
+`refresh=True` is used only by the scheduled job (Plan 06), to re-fetch the
+current (unfrozen) season's season-level files each run (D-09). A frozen
+season still refuses regardless of `refresh`: FreezeGuard exempts only
+ratingsref (D-07), never cfbd.
 """
 
 from __future__ import annotations
@@ -61,7 +66,9 @@ class CfbdCollector:
             )
         return requests
 
-    def run(self, season: int, names: Sequence[str], *, dry_run: bool) -> BatchSummary:
+    def run(
+        self, season: int, names: Sequence[str], *, dry_run: bool, refresh: bool = False
+    ) -> BatchSummary:
         requests = self.plan(season, names)
         if not dry_run and self._token is None:
             raise MissingApiKeyError("CFBD_API_KEY is not set; cannot run a live CFBD collection")
@@ -72,6 +79,7 @@ class CfbdCollector:
             season_label=str(season),
             dry_run=dry_run,
             bearer_token=self._token,
+            refresh=refresh,
         )
 
     def info(self) -> InfoSnapshot:

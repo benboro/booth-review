@@ -28,9 +28,14 @@ model, and build phases; read the relevant section before starting a phase.
 - Send one request at a time, with a pause between requests. 506 Sports is a small
   fan-run site; keep its rate especially low.
 - Cache every page and API response under `data/vault/raw/`, a local clone of the
-  private data repo. Never re-fetch a cached response from a completed season. When
-  re-checking current-season data, send conditional requests (ETag / Last-Modified)
-  where the source supports them.
+  private data repo. Never re-fetch a cached response from a completed season. The one
+  exception is Ratings Reference: `booth-review refresh ratingsref` (also run by the
+  scheduled job) re-fetches a record in any season, frozen ones included, when its
+  sitemap `<lastmod>` advanced or the sitemap newly lists it; at most 100 such
+  fetches per run, with current-season new records not counted and the rest carried
+  over. A re-fetch overwrites the cached file; the vault's git history keeps earlier
+  versions. When re-checking current-season data, send conditional requests (ETag /
+  Last-Modified) where the source supports them.
 - All requests go through the `booth-review collect` / `booth-review budget`
   commands, which apply the user agent, robots.txt, pacing, caching, and the CFBD
   budget. Never fetch with ad-hoc scripts, curl, or notebooks.
@@ -42,6 +47,13 @@ model, and build phases; read the relevant section before starting a phase.
   `data/incoming/506/`). It identifies each page by its canonical link and title,
   validates it, and writes it to the same cache path and manifest shape a live
   fetch would.
+- The scheduled job never fetches 506. It lists 2026 week pages that are missing or
+  were saved before their games finished; the user hand-saves those pages and imports
+  them with `booth-review import 506 --season 2026 [--force]`.
+- Once the scheduled job is live, run `git -C data/vault pull --rebase` before a local
+  collection command. Every `booth-review` command that writes to the vault holds a
+  vault lock and commits only the paths it touched, so a local run and the job never
+  clobber each other's in-progress files.
 - The vault is private. Never copy its files into the public repo, test fixtures,
   commit messages, or logs; tests use synthetic 506 and CFBD fixtures.
 - Ratings Reference: read the per-telecast JSON records (`/api/telecast/<id>.json`)

@@ -19,8 +19,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from booth_review.config import DataPaths
+from booth_review.errors import FrozenSeasonError
 from booth_review.sources.sports506.collector import WEEK_LABELS, Sports506Collector
-from booth_review.transport.cache import Manifest, ManifestEntry, RawCache, atomic_write_bytes
+from booth_review.sources.sports506.weeks import discover_season_weeks, smoke_check
+from booth_review.transport.cache import (
+    FreezeGuard,
+    Manifest,
+    ManifestEntry,
+    RawCache,
+    atomic_write_bytes,
+)
 from booth_review.transport.types import FetchRequest
 
 DEFAULT_INCOMING_DIR = Path("data/incoming/506")
@@ -56,6 +64,15 @@ class ImportResult:
     skipped_invalid: list[SkippedFile] = field(default_factory=list)
     missing: list[str] = field(default_factory=list)
     unrecognized: int = 0
+    expected: list[str] = field(default_factory=list)
+    """D-05: the week labels this season is expected to have, either read from
+    the season's own page nav (`expected_source == "nav"`) or, when no nav was
+    found in any scanned/cached page, the full WEEK_LABELS set
+    (`expected_source == "default"`)."""
+    expected_source: str = "default"
+    unsupported_labels: list[str] = field(default_factory=list)
+    """Nav labels outside WEEK_LABELS (e.g. a future week number), surfaced
+    rather than silently dropped."""
 
     def counts(self) -> dict[str, int]:
         """Counts for vault.batch_message, count-only (never real page text)."""
@@ -66,13 +83,17 @@ class ImportResult:
 
     @property
     def has_problems(self) -> bool:
-        """True when something needs a human's attention (missing or invalid files)."""
-        return bool(self.missing or self.skipped_invalid)
+        """True when something needs a human's attention."""
+        return bool(self.missing or self.skipped_invalid or self.unsupported_labels)
 
 
 def _normalize_label(raw: str) -> str | None:
     label = raw if raw == "B" else str(int(raw))
     return label if label in WEEK_LABELS else None
+
+
+def _week_sort_key(label: str) -> tuple[int, int]:
+    return (1, 0) if label == "B" else (0, int(label))
 
 
 def identify_page(path: Path, content: bytes) -> tuple[int, str] | None:
@@ -159,12 +180,50 @@ class Sports506Importer:
             )
         return found
 
+    def _expected_weeks(
+        self, season: int, pages: dict[str, bytes]
+    ) -> tuple[list[str], str, list[str]]:
+        """D-05: the week labels `season` itself lists, from every page we can
+        see (this run's incoming pages plus whatever is already cached),
+        never a fixed 18-week assumption.
+        """
+        labels: set[str] = set()
+        unsupported: set[str] = set()
+        for content in pages.values():
+            season_weeks = discover_season_weeks(content, season)
+            labels.update(season_weeks.labels)
+            unsupported.update(season_weeks.unsupported)
+        season_dir = self._paths.raw / "sports506" / str(season)
+        if season_dir.is_dir():
+            for cached_path in sorted(season_dir.glob("wk-*.html")):
+                season_weeks = discover_season_weeks(cached_path.read_bytes(), season)
+                labels.update(season_weeks.labels)
+                unsupported.update(season_weeks.unsupported)
+
+        if labels:
+            expected = sorted(labels, key=_week_sort_key)
+            expected_source = "nav"
+        else:
+            expected = list(WEEK_LABELS)
+            expected_source = "default"
+        return expected, expected_source, sorted(unsupported, key=_week_sort_key)
+
     def run(self, season: int, *, incoming_dir: Path, force: bool = False) -> ImportResult:
+        # D-06/D-07: a frozen season refuses every write, checked before any
+        # file is scanned or touched.
+        freeze = FreezeGuard.load(self._paths.frozen)
+        if freeze.is_frozen("sports506", season):
+            raise FrozenSeasonError(f"cannot import frozen season: sports506 {season}")
+
         result = ImportResult(season=season)
         collector = Sports506Collector(self._cache)
         requests_by_label = dict(zip(WEEK_LABELS, collector.plan(season), strict=True))
         pages = self._scan(incoming_dir, season, result)
         conflicted = {item.label for item in result.skipped_invalid}
+
+        result.expected, result.expected_source, result.unsupported_labels = self._expected_weeks(
+            season, pages
+        )
 
         for label in WEEK_LABELS:
             req = requests_by_label[label]
@@ -172,7 +231,6 @@ class Sports506Importer:
                 continue
             content = pages.get(label)
             if content is None:
-                result.missing.append(label)
                 continue
 
             dest = self._paths.raw / req.cache_path
@@ -185,8 +243,24 @@ class Sports506Importer:
                 result.skipped_invalid.append(SkippedFile(label=label, reason=reason))
                 continue
 
+            # D-03: reject a page that validates but parses to implausibly
+            # few games/crews (a bad or incomplete hand-save, or an older
+            # layout this parser can't read), before it's ever written.
+            smoke = smoke_check(content, season=season, week_label=label)
+            if not smoke.passed:
+                result.skipped_invalid.append(
+                    SkippedFile(label=label, reason=smoke.reason or "smoke check failed")
+                )
+                continue
+
             self._import_one(req, dest, content)
             result.imported.append(label)
+
+        result.missing = [
+            label
+            for label in result.expected
+            if not (self._paths.raw / requests_by_label[label].cache_path).exists()
+        ]
 
         return result
 

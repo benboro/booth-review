@@ -72,5 +72,13 @@ class VaultCommitError(BoothReviewError):
     """Raised when committing or pushing the data vault fails."""
 
 
+class VaultBusyError(VaultStateError):
+    """Raised when another booth-review process holds the vault lock past the timeout."""
+
+
+class FreezeRefusedError(BoothReviewError):
+    """Raised when freeze preconditions (completeness, freeze date) are not met."""
+
+
 class ParseError(BoothReviewError):
     """Raised when a source response cannot be parsed into typed rows."""

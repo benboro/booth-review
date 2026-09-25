@@ -20,14 +20,28 @@ from pathlib import Path
 from typing import cast
 from urllib.parse import urlsplit
 
+from booth_review.audit.completeness import (
+    SOURCES,
+    CompletenessReport,
+    build_completeness,
+    write_completeness,
+)
+from booth_review.audit.freeze import FreezeResult, Waiver, freeze_seasons, parse_waiver
 from booth_review.config import CFBD_FLOOR_DEFAULT, DataPaths, load_cfbd_key
-from booth_review.errors import BoothReviewError
+from booth_review.errors import BoothReviewError, FreezeRefusedError
+from booth_review.job.attention import build_attention_body
+from booth_review.job.runner import JOB_CFBD_MAX_CALLS, JobRunResult, ScheduledJob
 from booth_review.runtime import Runtime, build_runtime
 from booth_review.seasons import season_of, season_window
 from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.sources.cfbd.collector import ENDPOINTS, CfbdCollector
 from booth_review.sources.cfbd.parser import parse_games
-from booth_review.sources.ratingsref.collector import RatingsRefCollector
+from booth_review.sources.ratingsref.collector import (
+    FIRST_SEASON,
+    REFRESH_CAP_DEFAULT,
+    RatingsRefCollector,
+    RefreshSummary,
+)
 from booth_review.sources.ratingsref.sitemap import parse_sitemap, select_entries
 from booth_review.sources.sports506.collector import Sports506Collector
 from booth_review.sources.sports506.importer import (
@@ -137,6 +151,15 @@ def build_parser() -> argparse.ArgumentParser:
     pcfbd.add_argument("--dry-run", action="store_true")
     pcfbd.add_argument("--no-commit", action="store_true")
 
+    refresh = sub.add_parser("refresh", help="re-fetch source records whose lastmod changed")
+    refresh_sub = refresh.add_subparsers(dest="source", required=True)
+    prefresh = refresh_sub.add_parser(
+        "ratingsref", help="refresh Ratings Reference records whose sitemap lastmod advanced"
+    )
+    prefresh.add_argument("--cap", type=int, default=REFRESH_CAP_DEFAULT)
+    prefresh.add_argument("--dry-run", action="store_true")
+    prefresh.add_argument("--no-commit", action="store_true")
+
     import_cmd = sub.add_parser("import", help="import hand-saved source pages into the vault")
     import_sub = import_cmd.add_subparsers(dest="source", required=True)
 
@@ -165,6 +188,30 @@ def build_parser() -> argparse.ArgumentParser:
     )
     spike_join.add_argument("--finalize", action="store_true")
     spike_join.add_argument("--no-commit", action="store_true")
+
+    audit = sub.add_parser("audit", help="D-05 completeness audit")
+    audit_sub = audit.add_subparsers(dest="audit_command", required=True)
+    audit_completeness = audit_sub.add_parser(
+        "completeness", help="write a season x source completeness report"
+    )
+    audit_completeness.add_argument("--season", required=True, type=parse_season_spec)
+    audit_completeness.add_argument("--no-commit", action="store_true")
+
+    freeze = sub.add_parser("freeze", help="D-06 freeze seasons after a completeness check")
+    freeze.add_argument("--season", required=True, type=parse_season_spec)
+    freeze.add_argument("--waive", type=parse_waiver, action="append", default=[])
+    freeze.add_argument("--dry-run", action="store_true")
+    freeze.add_argument("--no-commit", action="store_true")
+
+    job = sub.add_parser("job", help="AUTO-01 scheduled collect-only job")
+    job_sub = job.add_subparsers(dest="job_command", required=True)
+    job_run = job_sub.add_parser("run", help="run one scheduled collect-only pass")
+    job_run.add_argument("--trigger", choices=["schedule", "manual"], default="manual")
+    job_run.add_argument("--rr-cap", type=int, default=REFRESH_CAP_DEFAULT)
+    job_run.add_argument("--max-cfbd-calls", type=int, default=JOB_CFBD_MAX_CALLS)
+    job_run.add_argument("--attention-out", type=Path, default=None)
+    job_run.add_argument("--dry-run", action="store_true")
+    job_run.add_argument("--no-commit", action="store_true")
 
     budget = sub.add_parser("budget", help="report and record CFBD budget usage")
     budget.add_argument("--offline", action="store_true")
@@ -363,6 +410,71 @@ def _collect_ratingsref_sitemap_only(
     return 0
 
 
+# -- refresh ratingsref ---------------------------------------------------------------
+
+
+def _partial_refresh_counts(before: dict[str, int], after: dict[str, int]) -> dict[str, int]:
+    return {
+        "fetched": after["fetched"] - before["fetched"],
+        "not_modified": after["not_modified"] - before["not_modified"],
+        "failed": 0,
+        "backlog": 0,
+    }
+
+
+def _print_refresh_summary(summary: RefreshSummary) -> None:
+    print(
+        f"qualifying {summary.qualifying}, new {summary.new}, advanced {summary.advanced}, "
+        f"selected {summary.selected}, uncapped_current {summary.uncapped_current}, "
+        f"backlog {summary.backlog}"
+    )
+
+
+def _refresh_ratingsref(args: argparse.Namespace) -> int:
+    runtime = build_runtime(with_budget=False)
+    try:
+        collector = RatingsRefCollector(runtime.cache, runtime.paths)
+        current_season = _current_season_ceiling()
+        season_label = f"{FIRST_SEASON}-{current_season}"
+
+        before = dict(runtime.cache.counters)
+        summary: RefreshSummary | None = None
+        try:
+            summary = collector.refresh(
+                current_season=current_season, cap=args.cap, dry_run=args.dry_run
+            )
+        finally:
+            if not args.dry_run and not args.no_commit:
+                counts = (
+                    summary.counts()
+                    if summary is not None
+                    else _partial_refresh_counts(before, runtime.cache.counters)
+                )
+                runtime.vault.commit_batch(
+                    batch_message("refresh", "ratingsref", season_label, counts),
+                    paths=[
+                        "raw/ratingsref",
+                        "raw/_robots",
+                        "ledger/requests.jsonl",
+                        "ledger/rr_lastmod.json",
+                    ],
+                )
+        assert summary is not None
+
+        _print_refresh_summary(summary)
+        if not args.dry_run:
+            print(
+                f"fetched {summary.fetched}, not_modified {summary.not_modified}, "
+                f"failed {summary.failed}"
+            )
+            if summary.backlog > 0:
+                print(f"backlog {summary.backlog}")
+            return 4 if summary.failed > 0 or summary.backlog > 0 else 0
+        return 0
+    finally:
+        runtime.client.close()
+
+
 # -- collect cfbd ---------------------------------------------------------------------
 
 
@@ -411,17 +523,18 @@ def _collect_cfbd(args: argparse.Namespace) -> int:
 # -- import 506 ----------------------------------------------------------------------------
 
 
-_EXPECTED_506_WEEKS = 18
-
-
 def _print_import_result(result: ImportResult) -> None:
-    present = _EXPECTED_506_WEEKS - len(result.missing)
+    total = len(result.expected)
+    present = total - len(result.missing)
+    source_note = "(weeks from nav)" if result.expected_source == "nav" else "(default 18 weeks)"
     print(
-        f"season {result.season}: present {present}/{_EXPECTED_506_WEEKS}, "
-        f"missing {len(result.missing)}/{_EXPECTED_506_WEEKS}"
+        f"season {result.season}: present {present}/{total}, "
+        f"missing {len(result.missing)}/{total} {source_note}"
     )
     if result.missing:
         print(f"missing weeks: {', '.join(result.missing)}")
+    if result.unsupported_labels:
+        print(f"unsupported nav weeks: {', '.join(result.unsupported_labels)}")
     print(
         f"imported {len(result.imported)}, skipped_existing {len(result.skipped_existing)}, "
         f"skipped_invalid {len(result.skipped_invalid)}"
@@ -440,13 +553,19 @@ def _import_506(args: argparse.Namespace) -> int:
 
         any_problems = False
         for season in args.season:
-            result = importer.run(season, incoming_dir=incoming_dir, force=args.force)
-            _print_import_result(result)
-            if result.has_problems:
-                any_problems = True
-            if not args.no_commit:
-                message = batch_message("import", "sports506", str(season), result.counts())
-                runtime.vault.commit_batch(message)
+            # D-04: hold the vault lock and commit only this season's own
+            # files, so a concurrent RR refresh or another season's import
+            # never races on the same working copy (T-02-02).
+            with runtime.vault.lock():
+                result = importer.run(season, incoming_dir=incoming_dir, force=args.force)
+                _print_import_result(result)
+                if result.has_problems:
+                    any_problems = True
+                if not args.no_commit:
+                    message = batch_message("import", "sports506", str(season), result.counts())
+                    runtime.vault.commit_batch(
+                        message, paths=[f"raw/sports506/{season}", "ledger/requests.jsonl"]
+                    )
         return 4 if any_problems else 0
     finally:
         runtime.client.close()
@@ -519,6 +638,129 @@ def _spike_join(args: argparse.Namespace) -> int:
     return 0
 
 
+# -- audit completeness --------------------------------------------------------------------
+
+
+def _print_completeness(report: CompletenessReport, seasons: Sequence[int]) -> None:
+    by_key = {(cell.season, cell.source): cell for cell in report.cells}
+    for season in seasons:
+        parts = []
+        for source in SOURCES:
+            cell = by_key.get((season, source))
+            status = "complete" if cell is not None and cell.complete else "incomplete"
+            parts.append(f"{source}={status}")
+        print(f"season {season}: {' '.join(parts)}")
+
+
+def _audit_completeness(args: argparse.Namespace) -> int:
+    """Write the D-05 completeness report from data already cached in the
+    vault. Builds no PoliteClient: only checks the vault is a real, pushable
+    git working copy, then reads/writes data/vault/audit/.
+    """
+    paths = DataPaths.from_env()
+    vault = VaultRepo(paths.vault)
+    vault.check()
+
+    report = build_completeness(paths, args.season, now=datetime.now(UTC))
+    with vault.lock():
+        write_completeness(paths, report)
+        if not args.no_commit:
+            complete_count = sum(1 for season in args.season if report.complete_for(season))
+            incomplete_count = len(args.season) - complete_count
+            season_label = f"{min(args.season)}-{max(args.season)}"
+            vault.commit_batch(
+                batch_message(
+                    "audit",
+                    "completeness",
+                    season_label,
+                    {"complete": complete_count, "incomplete": incomplete_count},
+                ),
+                paths=["audit"],
+            )
+
+    _print_completeness(report, args.season)
+    complete_count = sum(1 for season in args.season if report.complete_for(season))
+    return 0 if complete_count == len(args.season) else 4
+
+
+# -- freeze -----------------------------------------------------------------------------
+
+
+def _freeze(args: argparse.Namespace) -> int:
+    """Re-verify D-05 completeness and D-06 freeze dates, then write
+    ledger/frozen.json for --season. Refuses (writes nothing to frozen.json)
+    on any unmet precondition; builds no PoliteClient.
+    """
+    paths = DataPaths.from_env()
+    vault = VaultRepo(paths.vault)
+    vault.check()
+
+    today = datetime.now(UTC).date()
+    season_label = f"{min(args.season)}-{max(args.season)}"
+    waivers: list[Waiver] = args.waive
+
+    try:
+        with vault.lock():
+            result: FreezeResult = freeze_seasons(
+                paths, args.season, today=today, waivers=waivers, dry_run=args.dry_run
+            )
+            if not args.dry_run and not args.no_commit:
+                vault.commit_batch(
+                    batch_message(
+                        "freeze",
+                        "all",
+                        season_label,
+                        {"seasons": len(args.season), "waived": len(result.waivers)},
+                    ),
+                    paths=["ledger/frozen.json", "audit"],
+                )
+    except FreezeRefusedError as exc:
+        print("freeze refused:", file=sys.stderr)
+        for line in str(exc).splitlines():
+            print(f"  {line}", file=sys.stderr)
+        return 4
+
+    verb = "would freeze" if args.dry_run else "froze"
+    print(
+        f"{verb} {len(result.seasons_added)} season(s), "
+        f"{len(result.already_frozen)} already frozen, {len(result.waivers)} waived"
+    )
+    return 0
+
+
+# -- job run (AUTO-01) -------------------------------------------------------------------
+
+
+def _job_run(args: argparse.Namespace) -> int:
+    """Run one scheduled collect-only pass. Never prints or logs the CFBD key
+    (loaded via config.load_cfbd_key, same as every other live command)."""
+    runtime = build_runtime(
+        with_budget=True, floor=CFBD_FLOOR_DEFAULT, max_calls=args.max_cfbd_calls, tag="job"
+    )
+    try:
+        token = None if args.dry_run else load_cfbd_key()
+        job = ScheduledJob(
+            runtime,
+            token=token,
+            now=lambda: datetime.now(UTC),
+            trigger=args.trigger,
+            rr_cap=args.rr_cap,
+            dry_run=args.dry_run,
+            commit=not args.no_commit,
+        )
+        result: JobRunResult = job.run()
+
+        if args.attention_out is not None:
+            body = build_attention_body(result.items, generated_at=datetime.now(UTC))
+            if body is not None:
+                args.attention_out.parent.mkdir(parents=True, exist_ok=True)
+                args.attention_out.write_text(body, encoding="utf-8")
+
+        return result.exit_code
+    finally:
+        runtime.client.close()
+
+
 # -- budget -----------------------------------------------------------------------------
 
 
@@ -586,6 +828,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.source == "cfbd":
                 return _collect_cfbd(args)
             raise AssertionError(f"unknown collect source: {args.source!r}")
+        if args.command == "refresh":
+            if args.source == "ratingsref":
+                return _refresh_ratingsref(args)
+            raise AssertionError(f"unknown refresh source: {args.source!r}")
         if args.command == "import":
             if args.source == "506":
                 return _import_506(args)
@@ -596,6 +842,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.spike_command == "join":
                 return _spike_join(args)
             raise AssertionError(f"unknown spike command: {args.spike_command!r}")
+        if args.command == "audit":
+            if args.audit_command == "completeness":
+                return _audit_completeness(args)
+            raise AssertionError(f"unknown audit command: {args.audit_command!r}")
+        if args.command == "freeze":
+            return _freeze(args)
+        if args.command == "job":
+            if args.job_command == "run":
+                return _job_run(args)
+            raise AssertionError(f"unknown job command: {args.job_command!r}")
         if args.command == "budget":
             return _budget(args)
         raise AssertionError(f"unknown command: {args.command!r}")

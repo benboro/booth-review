@@ -25,6 +25,16 @@ from booth_review.transport.types import FetchGuard, FetchRequest, FetchResponse
 CacheStatus = Literal["cached", "new", "frozen-miss"]
 Outcome = Literal["cached", "fetched", "not_modified"]
 
+# Sources whose refresh=True requests are allowed to pass a frozen season's
+# guard (D-07/COLL-05). Ratings Reference revises and adds telecast records
+# after the fact and needs to re-fetch specific records even in a frozen
+# season; no other source has this need, so the exemption stays narrow.
+# Which *individual* RR records actually qualify for a given refresh run
+# (lastmod advanced, or newly listed in the sitemap) is decided one layer up,
+# by RatingsRefCollector.refresh (Plan 03) -- this constant only says which
+# source is ever allowed to attempt the request.
+_REFRESH_EXEMPT_SOURCES = frozenset({"ratingsref"})
+
 _MANIFEST_FIELDS = (
     "url",
     "source",
@@ -125,9 +135,11 @@ class Manifest:
 
     def append(self, entry: ManifestEntry) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        # Single write call: two processes appending concurrently (D-04
+        # parallel imports, T-02-05) must never have one process's line and
+        # newline interleave with another's.
         with self._path.open("a", encoding="utf-8") as fh:
-            fh.write(entry.to_json())
-            fh.write("\n")
+            fh.write(entry.to_json() + "\n")
 
     def entries(self) -> Iterator[dict[str, Any]]:
         if not self._path.is_file():
@@ -169,8 +181,18 @@ class FreezeGuard:
             raise VaultStateError(f"invalid frozen-season state in {path}: expected {{str: [int]}}")
         return cls(data)
 
-    def is_frozen(self, source: str, season: int | None) -> bool:
+    def is_frozen(self, source: str, season: int | None, *, refresh: bool = False) -> bool:
+        """Whether (source, season) refuses a fetch.
+
+        `refresh=True` lets a source in `_REFRESH_EXEMPT_SOURCES` (currently
+        only ratingsref) through a frozen season (D-07); every other source
+        still refuses regardless of `refresh`. Which individual records
+        actually qualify for re-fetch is a collector-level decision
+        (RatingsRefCollector.refresh, Plan 03), not this method's concern.
+        """
         if season is None:
+            return False
+        if refresh and source in _REFRESH_EXEMPT_SOURCES:
             return False
         return season in self._frozen.get(source, [])
 
@@ -233,7 +255,7 @@ class RawCache:
             self.counters["cached"] += 1
             return CacheResult(content=path.read_bytes(), outcome="cached", path=path)
 
-        if self._freeze.is_frozen(req.source, req.season):
+        if self._freeze.is_frozen(req.source, req.season, refresh=refresh):
             raise FrozenSeasonError(f"cannot fetch frozen season: {req.source} {req.season}")
 
         for guard in self._guards:

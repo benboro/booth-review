@@ -7,7 +7,7 @@ republishing (see [Sources](#sources)).
 
 | Folder | Contents | Committed? |
 |---|---|---|
-| `vault/` | A clone of the private data repo: `raw/` (pages and API responses, cached so each is fetched only once), `interim/`, `processed/`, `ledger/` (the CFBD call ledger), `spike/`. Vault `interim/` and `processed/` copies are rebuilt from `raw/` on every run and never read back as state | Never (not even here — it's a separate private repo) |
+| `vault/` | A clone of the private data repo: `raw/` (pages and API responses, cached so each is fetched only once), `interim/`, `processed/`, `ledger/` (`frozen.json` records which season × source is frozen; `rr_lastmod.json` tracks each Ratings Reference record's last-seen sitemap `<lastmod>`, used by `refresh ratingsref`; `job_state.json` records the scheduled job's last successful run, for catch-up; plus the CFBD and request call ledgers), `audit/` (completeness reports and the freeze sign-off baseline), `spike/`. Vault `interim/` and `processed/` copies are rebuilt from `raw/` on every run and never read back as state | Never (not even here — it's a separate private repo) |
 | `processed/` | Joined tables that feed the plot and the models, published from this public repo | Only tables whose sources all allow it. Publish one by adding a `!data/processed/<file>` line to `.gitignore`, after `!data/processed/` and `data/processed/*` |
 | `reference/` | Hand-maintained tables: team-name crosswalk, announcer name variants, event flags | Yes |
 
