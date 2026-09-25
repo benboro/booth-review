@@ -45,6 +45,7 @@ from booth_review.spike.join import (
 from booth_review.spike.selection import (
     build_candidates,
     load_selection,
+    replace_games,
     save_selection,
     select_games,
 )
@@ -152,6 +153,12 @@ def build_parser() -> argparse.ArgumentParser:
         "join", help="build/finalize the SPIKE-02 20-game hand-join outputs (D-06/D-09)"
     )
     spike_join.add_argument("--reselect", action="store_true")
+    spike_join.add_argument(
+        "--replace-rows",
+        type=_parse_row_list,
+        default=None,
+        help="comma-separated 1-based rows of selection.csv to swap for new games",
+    )
     spike_join.add_argument("--finalize", action="store_true")
     spike_join.add_argument("--no-commit", action="store_true")
 
@@ -207,6 +214,13 @@ def _run_and_commit(
 
 def _identity(url: str) -> str:
     return url
+
+
+def _parse_row_list(text: str) -> list[int]:
+    try:
+        return [int(part) for part in text.split(",") if part.strip()]
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"expected comma-separated row numbers: {text}") from exc
 
 
 def _cfbd_url_display(url: str) -> str:
@@ -480,12 +494,15 @@ def _spike_join(args: argparse.Namespace) -> int:
 
     selection_path = paths.spike / "selection.csv"
     selections = None if args.reselect else load_selection(selection_path)
-    if selections is None:
+    if selections is None or args.replace_rows:
         games_path = paths.raw / "cfbd" / "games" / f"{_SPIKE_JOIN_SEASON}.json"
         games = parse_games(games_path.read_bytes())
         rr_entries = load_rr_sitemap_entries(paths)
         candidates = build_candidates(games, rr_entries)
-        selections = select_games(candidates)
+        if selections is not None and args.replace_rows:
+            selections = replace_games(selections, args.replace_rows, candidates)
+        else:
+            selections = select_games(candidates)
         save_selection(selection_path, selections)
 
     rows = build_join_rows(paths, selections)

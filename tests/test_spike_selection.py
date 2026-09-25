@@ -196,3 +196,65 @@ def test_candidate_is_a_frozen_dataclass_instance() -> None:
     rr_entries = _load_rr_entries()
     candidates = build_candidates(games, rr_entries)
     assert isinstance(candidates[0], Candidate)
+
+
+def test_build_candidates_excludes_games_with_no_fbs_team() -> None:
+    from dataclasses import replace
+
+    games = _load_games()
+    lower = replace(games[0], id=999_001, home_classification="iii", away_classification="iii")
+    mixed = replace(games[1], id=999_002, home_classification="fcs", away_classification="fbs")
+
+    ids = {c.game.id for c in build_candidates([*games, lower, mixed], _load_rr_entries())}
+
+    assert 999_001 not in ids
+    assert 999_002 in ids
+
+
+def test_replace_games_swaps_only_the_given_rows() -> None:
+    from booth_review.spike.selection import replace_games
+
+    candidates = build_candidates(_load_games(), _load_rr_entries())
+    original = select_games(candidates)
+    required = {"rematch", "neutral", "post_dst_november", "late_or_hawaii", "cfp"}
+    plain = [i for i, s in enumerate(original, start=1) if not required & set(s.categories)]
+    rows = plain[:2]
+
+    updated = replace_games(original, rows, candidates)
+
+    original_ids = {s.cfbd_game_id for s in original}
+    for i, (before, after) in enumerate(zip(original, updated, strict=True), start=1):
+        if i in rows:
+            assert after.cfbd_game_id not in original_ids
+        else:
+            assert after == before
+
+
+def test_replace_games_raises_when_a_required_category_cannot_be_refilled() -> None:
+    from booth_review.spike.selection import replace_games
+
+    candidates = build_candidates(_load_games(), _load_rr_entries())
+    original = select_games(candidates)
+    only_post_dst = next(
+        i for i, s in enumerate(original, start=1) if "post_dst_november" in s.categories
+    )
+    selected = {s.cfbd_game_id for s in original}
+    unused_post_dst = [
+        c
+        for c in candidates
+        if c.rated_hint and "post_dst_november" in c.categories and c.game.id not in selected
+    ]
+    assert unused_post_dst == []  # every rated post-DST game in the fixture is already selected
+
+    with pytest.raises(SelectionError, match="post_dst_november"):
+        replace_games(original, [only_post_dst], candidates)
+
+
+def test_replace_games_rejects_out_of_range_rows() -> None:
+    from booth_review.spike.selection import SelectionError, replace_games
+
+    candidates = build_candidates(_load_games(), _load_rr_entries())
+    original = select_games(candidates)
+
+    with pytest.raises(SelectionError):
+        replace_games(original, [0], candidates)

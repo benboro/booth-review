@@ -78,6 +78,10 @@ def _team_pair_key(game: CfbdGame) -> frozenset[int | str]:
     return frozenset({normalize_team(game.home_team), normalize_team(game.away_team)})
 
 
+def _is_fbs_game(game: CfbdGame) -> bool:
+    return "fbs" in (game.home_classification, game.away_classification)
+
+
 def _has_diacritics_directional_or_parens(text: str) -> bool:
     if "(" in text or ")" in text:
         return True
@@ -95,6 +99,9 @@ def build_candidates(
     and whether an RR sitemap entry within one day shares a significant
     token with each team (rated_hint).
     """
+    # JOIN-07: a game is in scope only when at least one team is FBS that season.
+    # The CFBD games file covers every division, so filter before anything else.
+    games = [g for g in games if _is_fbs_game(g)]
     pair_counts: dict[frozenset[int | str], int] = {}
     for g in games:
         key = _team_pair_key(g)
@@ -233,16 +240,64 @@ def select_games(candidates: Sequence[Candidate], *, seed: int = DEFAULT_SEED) -
         if not progressed:
             break
 
-    selections: list[Selection] = []
-    for gid in order:
-        c = by_id[gid]
-        cats = set(tags[gid])
-        if _has_diacritics_directional_or_parens(
-            c.game.home_team
-        ) or _has_diacritics_directional_or_parens(c.game.away_team):
-            cats.add("name_stress")
-        selections.append(Selection(cfbd_game_id=gid, categories=tuple(sorted(cats))))
-    return selections
+    return [_as_selection(by_id[gid], tags[gid]) for gid in order]
+
+
+def _as_selection(c: Candidate, tags: set[str]) -> Selection:
+    cats = set(tags)
+    if _has_diacritics_directional_or_parens(
+        c.game.home_team
+    ) or _has_diacritics_directional_or_parens(c.game.away_team):
+        cats.add("name_stress")
+    return Selection(cfbd_game_id=c.game.id, categories=tuple(sorted(cats)))
+
+
+def replace_games(
+    existing: Sequence[Selection],
+    rows: Sequence[int],
+    candidates: Sequence[Candidate],
+    *,
+    seed: int = DEFAULT_SEED,
+) -> list[Selection]:
+    """Swap out the selections at 1-based `rows`, keeping every other game (and
+    its review) exactly where it was.
+
+    Replacements come from the rated_hint pool, cover any required category the
+    dropped games leave short, and are otherwise drawn at random. Games already
+    in the selection, or just dropped, are never drawn again.
+    """
+    drop = set(rows)
+    if not drop or min(drop) < 1 or max(drop) > len(existing):
+        raise SelectionError(f"rows must be between 1 and {len(existing)}: {sorted(drop)}")
+    kept = [s for i, s in enumerate(existing, start=1) if i not in drop]
+    excluded = {s.cfbd_game_id for s in existing}
+    pool = sorted(
+        (c for c in candidates if c.rated_hint and c.game.id not in excluded),
+        key=lambda c: c.game.id,
+    )
+    rng = random.Random(seed)
+
+    replacements: list[Selection] = []
+    for category, needed in _REQUIRED_CATEGORIES:
+        have = sum(category in s.categories for s in kept) + sum(
+            category in s.categories for s in replacements
+        )
+        cat_pool = [c for c in pool if category in c.categories]
+        while have < needed and len(replacements) < len(drop):
+            if not cat_pool:
+                raise SelectionError(f"no rated_hint replacement for category {category!r}")
+            c = cat_pool.pop(rng.randrange(len(cat_pool)))
+            pool.remove(c)
+            replacements.append(_as_selection(c, {category}))
+            have += 1
+    while len(replacements) < len(drop) and pool:
+        c = pool.pop(rng.randrange(len(pool)))
+        replacements.append(_as_selection(c, set()))
+    if len(replacements) < len(drop):
+        raise SelectionError("not enough rated_hint candidates to replace the dropped rows")
+
+    fill = iter(replacements)
+    return [next(fill) if i in drop else s for i, s in enumerate(existing, start=1)]
 
 
 def save_selection(path: Path, selections: Sequence[Selection]) -> None:
