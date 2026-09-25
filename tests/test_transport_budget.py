@@ -141,9 +141,7 @@ def test_month_rollover_forgets_previous_month(tmp_path: Path) -> None:
         budget.before_fetch(_req("/games"))
 
 
-def test_discrepancy_flagged_and_logged(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_discrepancy_flagged_and_logged(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     ledger = tmp_path / "cfbd_ledger.jsonl"
     budget = CfbdBudget(ledger)
     caplog.set_level(logging.WARNING)
@@ -217,7 +215,11 @@ def test_counted_against_quota_data_vs_info(tmp_path: Path) -> None:
 def test_run_cap_raises_on_third_counted_call(tmp_path: Path) -> None:
     ledger = tmp_path / "cfbd_ledger.jsonl"
     budget = CfbdBudget(ledger, max_calls=2)
+    # Probe /info as free first so it never itself consumes a run-cap slot;
+    # this isolates the cap to the two counted /games calls below.
+    budget.record_info_probe(before=900, after=900)
     budget.after_fetch(_req("/info"), _info_resp(900, header=900))
+    assert budget.run_calls == 0
 
     for remaining in (899, 898):
         req = _req("/games", params=(("year", "2025"),))
@@ -272,12 +274,8 @@ def test_summary_returns_counts_by_endpoint_and_tag(tmp_path: Path) -> None:
     ledger = tmp_path / "cfbd_ledger.jsonl"
     budget = CfbdBudget(ledger, tag="spike")
     budget.after_fetch(_req("/info"), _info_resp(900, header=900))
-    budget.after_fetch(
-        _req("/games", params=(("year", "2025"),)), _resp(call_limit_remaining=899)
-    )
-    budget.after_fetch(
-        _req("/games", params=(("year", "2025"),)), _resp(call_limit_remaining=898)
-    )
+    budget.after_fetch(_req("/games", params=(("year", "2025"),)), _resp(call_limit_remaining=899))
+    budget.after_fetch(_req("/games", params=(("year", "2025"),)), _resp(call_limit_remaining=898))
 
     summary = budget.summary()
     assert summary.by_endpoint == {"/info": 1, "/games": 2}
