@@ -10,8 +10,6 @@ from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.transport.cache import RawCache
 from booth_review.transport.types import FetchRequest
 
-_BASE_URL = "https://506sports.com/ncaaf.php"
-
 WEEK_LABELS: list[str] = [str(n) for n in range(17)] + ["B"]
 
 
@@ -30,7 +28,7 @@ class Sports506Collector:
             FetchRequest(
                 source="sports506",
                 season=season,
-                url=f"{_BASE_URL}?yr={season}&wk={label}",
+                url=f"https://506sports.com/ncaaf.php?yr={season}&wk={label}",
                 cache_path=f"sports506/{season}/wk-{_cache_name(label)}.html",
             )
             for label in WEEK_LABELS
