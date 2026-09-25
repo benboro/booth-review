@@ -13,10 +13,12 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from booth_review import cli
 from booth_review.cli import main, parse_season_spec
 from booth_review.sources.ratingsref.collector import SITEMAP_URL
 from booth_review.sources.sports506.collector import WEEK_LABELS
@@ -322,3 +324,31 @@ def test_parse_season_spec_range_returns_11_seasons() -> None:
 def test_parse_season_spec_rejects_bad_input(text: str) -> None:
     with pytest.raises(argparse.ArgumentTypeError):
         parse_season_spec(text)
+
+
+def test_current_season_ceiling_uses_july_start_season_not_calendar_year(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """WR-05: the CLI's own season ceiling must match seasons.season_of's
+    July-June window -- in February 2026, season 2026 hasn't started yet."""
+
+    class _FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz: object = None) -> datetime:
+            return cls(2026, 2, 1, tzinfo=UTC)
+
+    monkeypatch.setattr(cli, "datetime", _FrozenDateTime)
+    assert cli._current_season_ceiling() == 2025
+
+
+def test_parse_season_spec_rejects_next_season_before_july(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz: object = None) -> datetime:
+            return cls(2026, 2, 1, tzinfo=UTC)
+
+    monkeypatch.setattr(cli, "datetime", _FrozenDateTime)
+    with pytest.raises(argparse.ArgumentTypeError, match=r"\[2013, 2025\]"):
+        parse_season_spec("2026")

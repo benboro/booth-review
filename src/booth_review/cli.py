@@ -23,7 +23,7 @@ from urllib.parse import urlsplit
 from booth_review.config import CFBD_FLOOR_DEFAULT, DataPaths, load_cfbd_key
 from booth_review.errors import BoothReviewError
 from booth_review.runtime import Runtime, build_runtime
-from booth_review.seasons import season_window
+from booth_review.seasons import season_of, season_window
 from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.sources.cfbd.collector import ENDPOINTS, CfbdCollector
 from booth_review.sources.cfbd.parser import parse_games
@@ -59,15 +59,19 @@ _MIN_SEASON = 2013
 
 
 def _current_season_ceiling() -> int:
-    return datetime.now(UTC).year
+    """The latest season that can have any games yet, per the project's
+    July-June season window (booth_review.seasons.season_of) rather than
+    the bare calendar year -- e.g. February 2026 is still season 2025.
+    """
+    return season_of(datetime.now(UTC).date())
 
 
 def parse_season_spec(text: str) -> list[int]:
     """Parse "2025" or "2014-2024" into an inclusive list of seasons.
 
-    Valid seasons run 2013 through the current UTC year. Raises
-    argparse.ArgumentTypeError on malformed input or an out-of-range or
-    descending span.
+    Valid seasons run 2013 through the current season (July-June window).
+    Raises argparse.ArgumentTypeError on malformed input or an out-of-range
+    or descending span.
     """
     if not _SEASON_SPEC_RE.match(text):
         raise argparse.ArgumentTypeError(f"invalid season spec: {text!r}")
