@@ -1,0 +1,46 @@
+{
+  "telecast": {
+    "id": "cfb-ironpeak-foxhollow-2025-11-08",
+    "event_date": "2025-11-08",
+    "title": "cfb-ironpeak-foxhollow-2025-11-08",
+    "networks": [
+      "ECN"
+    ],
+    "teams": [
+      "cfb-ironpeak",
+      "cfb-foxhollow"
+    ],
+    "kind": "game",
+    "tier": 2
+  },
+  "claims": [
+    {
+      "metric_type": "avg_audience",
+      "cut": "full_telecast",
+      "value": 2100000,
+      "unit": "viewers",
+      "status": "final",
+      "supersedes_id": null,
+      "era_id": "era-2025-bdp",
+      "measured_by": "nielsen",
+      "measurement_method": "panel",
+      "publisher": "Example Sports PR",
+      "source_url": "https://example.org/press/cfb-ironpeak-foxhollow-2025-11-08-nielsen-avg_audience-full_telecast-2100000",
+      "first_published": "2025-11-11",
+      "confidence": 1.0,
+      "carrier_network": null,
+      "composite_of": null,
+      "figure_type": "currency",
+      "id": "c-cfb-ironpeak-foxhollow-2025-11-08-nielsen-avg_audience-full_telecast-2100000"
+    }
+  ],
+  "figures_last_changed": "2025-11-08T12:00:00+00:00",
+  "built_at": "2026-09-20T00:00:00+00:00",
+  "about": {
+    "license": "CC BY 4.0",
+    "attribution": "Data from Example Ratings Reference (invented for testing)"
+  },
+  "peers": {
+    "rows": []
+  }
+}

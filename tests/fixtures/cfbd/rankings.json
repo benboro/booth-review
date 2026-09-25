@@ -1,0 +1,42 @@
+[
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 5,
+    "polls": [
+      {
+        "poll": "Example Top 25",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 1,
+            "school": "Northfield State",
+            "conference": "Prairie Conference",
+            "firstPlaceVotes": 58,
+            "points": 1550
+          },
+          {
+            "rank": 2,
+            "school": "Pat Valley",
+            "conference": "Prairie Conference",
+            "firstPlaceVotes": 3,
+            "points": 1490
+          }
+        ]
+      },
+      {
+        "poll": "Example Committee Rankings",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 1,
+            "school": "Northfield State",
+            "conference": "Prairie Conference",
+            "firstPlaceVotes": null,
+            "points": null
+          }
+        ]
+      }
+    ]
+  }
+]

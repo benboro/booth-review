@@ -1,0 +1,48 @@
+{
+  "telecast": {
+    "id": "cfb-thornfield-ravenwood-2026-01-19",
+    "event_date": "2026-01-19",
+    "title": "cfb-thornfield-ravenwood-2026-01-19",
+    "networks": [
+      "ESPN",
+      "ESPN2",
+      "ESPNU"
+    ],
+    "teams": [
+      "cfb-thornfield",
+      "cfb-ravenwood"
+    ],
+    "kind": "game",
+    "tier": 1
+  },
+  "claims": [
+    {
+      "metric_type": "avg_audience",
+      "cut": "full_telecast",
+      "value": 9800000,
+      "unit": "viewers",
+      "status": "final",
+      "supersedes_id": null,
+      "era_id": "era-2025-bdp",
+      "measured_by": "nielsen",
+      "measurement_method": "panel",
+      "publisher": "Example Sports PR",
+      "source_url": "https://example.org/press/cfb-thornfield-ravenwood-2026-01-19-nielsen-avg_audience-full_telecast-9800000",
+      "first_published": "2026-01-22",
+      "confidence": 1.0,
+      "carrier_network": null,
+      "composite_of": null,
+      "figure_type": "currency",
+      "id": "c-cfb-thornfield-ravenwood-2026-01-19-nielsen-avg_audience-full_telecast-9800000"
+    }
+  ],
+  "figures_last_changed": "2026-01-19T12:00:00+00:00",
+  "built_at": "2026-09-20T00:00:00+00:00",
+  "about": {
+    "license": "CC BY 4.0",
+    "attribution": "Data from Example Ratings Reference (invented for testing)"
+  },
+  "peers": {
+    "rows": []
+  }
+}

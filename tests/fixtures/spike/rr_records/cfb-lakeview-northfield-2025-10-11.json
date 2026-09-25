@@ -1,0 +1,46 @@
+{
+  "telecast": {
+    "id": "cfb-lakeview-northfield-2025-10-11",
+    "event_date": "2025-10-11",
+    "title": "cfb-lakeview-northfield-2025-10-11",
+    "networks": [
+      "ECN"
+    ],
+    "teams": [
+      "cfb-lakeview",
+      "cfb-northfield"
+    ],
+    "kind": "game",
+    "tier": 2
+  },
+  "claims": [
+    {
+      "metric_type": "avg_audience",
+      "cut": "full_telecast",
+      "value": 2000000,
+      "unit": "viewers",
+      "status": "final",
+      "supersedes_id": null,
+      "era_id": "era-2025-bdp",
+      "measured_by": "nielsen",
+      "measurement_method": "panel",
+      "publisher": "Example Sports PR",
+      "source_url": "https://example.org/press/cfb-lakeview-northfield-2025-10-11-nielsen-avg_audience-full_telecast-2000000",
+      "first_published": "2025-10-14",
+      "confidence": 1.0,
+      "carrier_network": null,
+      "composite_of": null,
+      "figure_type": "currency",
+      "id": "c-cfb-lakeview-northfield-2025-10-11-nielsen-avg_audience-full_telecast-2000000"
+    }
+  ],
+  "figures_last_changed": "2025-10-11T12:00:00+00:00",
+  "built_at": "2026-09-20T00:00:00+00:00",
+  "about": {
+    "license": "CC BY 4.0",
+    "attribution": "Data from Example Ratings Reference (invented for testing)"
+  },
+  "peers": {
+    "rows": []
+  }
+}

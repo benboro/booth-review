@@ -10,11 +10,19 @@
 
 # ── Data ────────────────────────────────────────────────────────────────────
 # Deny by default. Scraped pages and API responses belong to their sources and
-# are not ours to redistribute; see data/README.md. To publish a derived table
-# once its sources' terms allow it, add an explicit `!data/processed/<file>`.
+# are not ours to redistribute; see data/README.md. data/vault/ is a clone of
+# the private data repo (raw/, interim/, processed/, ledger/, spike/) and
+# stays ignored under data/* like everything else here.
 data/*
 !data/README.md
 !data/reference/
+# Publish chain for cleared processed tables (this repo only, never the
+# vault): un-ignore the directory, then re-deny its files by default, so a
+# single `!data/processed/<file>` line below is the only thing that publishes
+# a table, once data/README.md's source terms allow it.
+!data/processed/
+data/processed/*
+# !data/processed/<file>
 
 # HTTP and query caches can hold full responses (and request headers, including
 # API keys), so they're ignored wherever they land.

@@ -1,0 +1,76 @@
+{
+  "telecast": {
+    "id": "cfb-northfield-state-lakeshore-tech-2025-09-13",
+    "event_date": "2025-09-13",
+    "title": "Northfield State at Lakeshore Tech",
+    "networks": ["ECN"],
+    "teams": ["cfb-northfield-state", "cfb-lakeshore-tech"],
+    "kind": "game",
+    "tier": "national"
+  },
+  "claims": [
+    {
+      "metric_type": "avg_audience",
+      "cut": "full_telecast",
+      "value": 2150000,
+      "unit": "viewers",
+      "status": "final",
+      "supersedes_id": null,
+      "era_id": "era-2025-bdp",
+      "measured_by": "nielsen",
+      "measurement_method": "panel",
+      "publisher": "Example Sports PR",
+      "source_url": "https://example.org/press/northfield-lakeshore-2025",
+      "first_published": "2025-09-16",
+      "confidence": 1.0,
+      "carrier_network": null,
+      "composite_of": null,
+      "figure_type": "currency"
+    },
+    {
+      "metric_type": "avg_audience",
+      "cut": "full_telecast",
+      "value": 2210000,
+      "unit": "viewers",
+      "status": "preliminary",
+      "supersedes_id": null,
+      "era_id": "era-2025-bdp",
+      "measured_by": "nielsen",
+      "measurement_method": "self_report",
+      "publisher": "The Example Ratings Guide",
+      "source_url": "https://example.org/tv-ratings/northfield-lakeshore-2025",
+      "first_published": "2025-09-19",
+      "confidence": 0.9,
+      "carrier_network": null,
+      "composite_of": null
+    },
+    {
+      "metric_type": "peak_audience",
+      "cut": "full_telecast",
+      "value": 2600000,
+      "unit": "viewers",
+      "status": "final",
+      "supersedes_id": null,
+      "era_id": "era-2025-bdp",
+      "measured_by": "nielsen",
+      "measurement_method": "panel",
+      "publisher": "Example Sports PR",
+      "source_url": "https://example.org/press/northfield-lakeshore-2025-peak",
+      "first_published": "2025-09-16",
+      "confidence": 1.0,
+      "carrier_network": null,
+      "composite_of": null
+    }
+  ],
+  "figures_last_changed": "2025-09-19T12:00:00+00:00",
+  "built_at": "2026-09-20T00:00:00+00:00",
+  "about": {
+    "license": "CC BY 4.0",
+    "attribution": "Data from Example Ratings Reference (invented for testing)"
+  },
+  "peers": {
+    "rows": [
+      {"claim_id": "example-peer-1", "current": true}
+    ]
+  }
+}

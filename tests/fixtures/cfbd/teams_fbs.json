@@ -1,0 +1,6 @@
+[
+  { "id": 9001, "school": "Northfield State", "conference": "Prairie Conference", "classification": "fbs" },
+  { "id": 9002, "school": "Lakeshore Tech", "conference": "Prairie Conference", "classification": "fbs" },
+  { "id": 9003, "school": "Riverside Poly", "conference": "Lakeshore Conference", "classification": "fbs" },
+  { "id": 9004, "school": "Granite College", "conference": "Coastal Conference", "classification": "fbs" }
+]
