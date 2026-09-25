@@ -185,13 +185,22 @@ def _cfbd_url_display(url: str) -> str:
     return f"{parts.path}?{parts.query}" if parts.query else parts.path
 
 
-def _print_dry_run(summary: BatchSummary, *, url_display: Callable[[str], str] = _identity) -> None:
+def _print_dry_run(
+    summary: BatchSummary,
+    *,
+    url_display: Callable[[str], str] = _identity,
+    cfbd: bool = False,
+) -> None:
     for url in summary.new_urls:
         print(url_display(url))
-    print(
+    line = (
         f"planned {summary.planned}, cached {summary.cached}, new {len(summary.new_urls)}, "
-        f"frozen-miss {summary.frozen_miss}, cfbd calls {summary.cfbd_calls}"
+        f"frozen-miss {summary.frozen_miss}"
     )
+    # Only CFBD requests spend the monthly budget; other sources would overstate it.
+    if cfbd:
+        line += f", cfbd calls {summary.cfbd_calls}"
+    print(line)
 
 
 def _print_run_summary(
@@ -333,7 +342,7 @@ def _collect_cfbd(args: argparse.Namespace) -> int:
                 no_commit=args.no_commit,
             )
             if args.dry_run:
-                _print_dry_run(summary, url_display=_cfbd_url_display)
+                _print_dry_run(summary, url_display=_cfbd_url_display, cfbd=True)
                 remaining = runtime.budget.last_known_remaining()
                 if remaining is not None:
                     print(f"remaining (last known): {remaining}")
