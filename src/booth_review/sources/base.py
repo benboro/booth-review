@@ -56,6 +56,7 @@ def run_requests(
     season_label: str,
     dry_run: bool,
     bearer_token: str | None = None,
+    refresh: bool = False,
     on_fetched: Callable[[FetchRequest, CacheResult], None] | None = None,
 ) -> BatchSummary:
     """Plan or run one batch of requests through `cache`.
@@ -67,6 +68,14 @@ def run_requests(
     survived retries, a transport error, FrozenSeasonError,
     RobotsDisallowedError, or any budget error) propagates immediately so
     the caller can commit what was fetched so far and stop.
+
+    `refresh=True` re-requests already-cached files (D-09); dry-run is
+    unchanged by it (still cache.status, still zero requests sent) -- a
+    caller that needs refresh-aware dry-run counts computes them itself.
+    `on_fetched` fires whenever a network response confirmed the cached
+    content, i.e. for both "fetched" (200, new bytes) and "not_modified"
+    (304, a refresh confirming the cache is current) -- a caller that only
+    tracks lastmod/validators needs both signals.
     """
     if dry_run:
         return _plan_summary(cache, requests, source=source, season_label=season_label)
@@ -77,7 +86,7 @@ def run_requests(
 
     for i, req in enumerate(requests, start=1):
         try:
-            result = cache.get_or_fetch(req, bearer_token=bearer_token)
+            result = cache.get_or_fetch(req, refresh=refresh, bearer_token=bearer_token)
         except FetchError as exc:
             status = exc.status_code
             if status is not None and 400 <= status < 500 and status != 429:
@@ -95,6 +104,8 @@ def run_requests(
                 on_fetched(req, result)
         elif result.outcome == "not_modified":
             not_modified += 1
+            if on_fetched is not None:
+                on_fetched(req, result)
 
         if i % _LOG_EVERY == 0:
             logger.info(
