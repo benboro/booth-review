@@ -24,6 +24,7 @@ from booth_review.sources.sports506.parser import parse_week_page
 from booth_review.spike.headline import HEADLINE_RULE, select_headline
 from booth_review.spike.join import (
     JoinFileMissingError,
+    JoinRow,
     ReviewIncompleteError,
     build_join_rows,
     finalize,
@@ -528,6 +529,59 @@ def test_write_outputs_report_pending_review_with_provisional_rate(
     assert HEADLINE_RULE in report
     assert "Seed:" in report
     assert "Name-matching problems" in report
+
+
+# -- CSV-injection hardening (WR-04) -------------------------------------------------------
+
+
+def test_write_then_finalize_round_trips_a_notes_field_starting_with_equals(
+    vault_paths: DataPaths,
+) -> None:
+    """join.csv is explicitly reviewer-facing (a human is told to open it in
+    a spreadsheet); a notes value that happens to start with a
+    formula-injection character must be escaped in the raw CSV on write and
+    recovered exactly by --finalize's report."""
+    dangerous_notes = "=cmd; network mismatch: 506=ESPN RR=['FOX']"
+    row = JoinRow(
+        cfbd_game_id=900555,
+        categories="rematch",
+        cfbd_matchup="Example @ Sample",
+        cfbd_start_et="2025-09-13T12:00:00-04:00",
+        s506_week="",
+        s506_row_index="",
+        s506_row="",
+        s506_confidence="none",
+        rr_record_urls="",
+        rr_headline_value="",
+        rr_headline_publisher="",
+        rr_headline_source_url="",
+        rr_claim_count=0,
+        rr_confidence="none",
+        resolved_crew="",
+        match_confidence="none",
+        doubtful=True,
+        notes=dangerous_notes,
+        review_status="pending",
+        review_note="",
+    )
+    write_outputs(vault_paths, [row], [])
+
+    join_path = vault_paths.spike / "join.csv"
+    raw_csv = join_path.read_text(encoding="utf-8")
+    assert f"'{dangerous_notes}" in raw_csv  # escaped in the file a human might open
+
+    with join_path.open(newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    for r in rows:
+        r["review_status"] = "confirmed"
+    with join_path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=_JOIN_ROW_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    finalize(vault_paths)
+    report = (vault_paths.spike / "report.md").read_text(encoding="utf-8")
+    assert dangerous_notes in report  # recovered without the escape marker
 
 
 # -- join.finalize ------------------------------------------------------------------------

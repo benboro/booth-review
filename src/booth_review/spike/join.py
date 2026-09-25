@@ -24,7 +24,14 @@ from booth_review.sources.ratingsref.parser import RRRecord, parse_record
 from booth_review.sources.ratingsref.sitemap import SitemapEntry, parse_sitemap
 from booth_review.sources.sports506.parser import Listing506, parse_week_page
 from booth_review.spike.headline import HEADLINE_RULE, select_headline
-from booth_review.spike.names import normalize_team, significant_tokens, to_et_date, to_et_datetime
+from booth_review.spike.names import (
+    csv_safe,
+    csv_unsafe,
+    normalize_team,
+    significant_tokens,
+    to_et_date,
+    to_et_datetime,
+)
 from booth_review.spike.selection import DEFAULT_SEED, Selection
 from booth_review.transport.cache import atomic_write_bytes
 
@@ -396,7 +403,9 @@ def _write_join_csv(path: Path, rows: Sequence[JoinRow]) -> None:
     writer = csv.DictWriter(buf, fieldnames=_JOIN_ROW_FIELDS)
     writer.writeheader()
     for row in rows:
-        writer.writerow(row.to_csv_dict())
+        raw = row.to_csv_dict()
+        safe = {k: csv_safe(v) if isinstance(v, str) else v for k, v in raw.items()}
+        writer.writerow(safe)
     atomic_write_bytes(path, buf.getvalue().encode("utf-8"))
 
 
@@ -522,25 +531,25 @@ def _row_from_csv_dict(raw: dict[str, str]) -> JoinRow:
     try:
         return JoinRow(
             cfbd_game_id=int(raw["cfbd_game_id"]),
-            categories=raw["categories"],
-            cfbd_matchup=raw["cfbd_matchup"],
-            cfbd_start_et=raw["cfbd_start_et"],
-            s506_week=raw["s506_week"],
-            s506_row_index=raw["s506_row_index"],
-            s506_row=raw["s506_row"],
-            s506_confidence=raw["s506_confidence"],
-            rr_record_urls=raw["rr_record_urls"],
-            rr_headline_value=raw["rr_headline_value"],
-            rr_headline_publisher=raw["rr_headline_publisher"],
-            rr_headline_source_url=raw["rr_headline_source_url"],
+            categories=csv_unsafe(raw["categories"]),
+            cfbd_matchup=csv_unsafe(raw["cfbd_matchup"]),
+            cfbd_start_et=csv_unsafe(raw["cfbd_start_et"]),
+            s506_week=csv_unsafe(raw["s506_week"]),
+            s506_row_index=csv_unsafe(raw["s506_row_index"]),
+            s506_row=csv_unsafe(raw["s506_row"]),
+            s506_confidence=csv_unsafe(raw["s506_confidence"]),
+            rr_record_urls=csv_unsafe(raw["rr_record_urls"]),
+            rr_headline_value=csv_unsafe(raw["rr_headline_value"]),
+            rr_headline_publisher=csv_unsafe(raw["rr_headline_publisher"]),
+            rr_headline_source_url=csv_unsafe(raw["rr_headline_source_url"]),
             rr_claim_count=int(raw["rr_claim_count"]),
-            rr_confidence=raw["rr_confidence"],
-            resolved_crew=raw["resolved_crew"],
-            match_confidence=raw["match_confidence"],
+            rr_confidence=csv_unsafe(raw["rr_confidence"]),
+            resolved_crew=csv_unsafe(raw["resolved_crew"]),
+            match_confidence=csv_unsafe(raw["match_confidence"]),
             doubtful=raw["doubtful"] in ("True", "true", "1"),
-            notes=raw["notes"],
-            review_status=raw["review_status"],
-            review_note=raw["review_note"],
+            notes=csv_unsafe(raw["notes"]),
+            review_status=csv_unsafe(raw["review_status"]),
+            review_note=csv_unsafe(raw["review_note"]),
         )
     except KeyError as exc:
         raise ParseError(f"join.csv is missing expected column {exc}") from exc

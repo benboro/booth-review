@@ -35,6 +35,11 @@ _PUNCT_RE = re.compile(r"[^\w\s]", re.UNICODE)
 _STOPWORDS = {"state", "university", "college", "the"}
 _MIN_TOKEN_LEN = 4
 
+# A cell starting with any of these is interpreted as a formula by Excel/
+# Sheets (classic CSV/formula injection) when opened in a spreadsheet.
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+_CSV_SAFE_MARKER = "'"
+
 
 def _strip_leading_rank(text: str) -> str:
     match = _LEADING_RANK_RE.match(text.strip())
@@ -92,6 +97,29 @@ def load_crosswalk(repo_root: Path) -> dict[str, str]:
             if variant and canonical:
                 mapping[variant] = canonical
     return mapping
+
+
+def csv_safe(value: str) -> str:
+    """Prefix `value` with a literal-text marker if it starts with a
+    character a spreadsheet would read as a formula (=, +, -, @, a tab, or
+    a carriage return). Shared by selection.py's selection.csv writer and
+    join.py's join.csv writer, both explicitly meant to be opened in a
+    spreadsheet for human review (WR-04). Pair with csv_unsafe() on read so
+    a save/load round trip returns the original value.
+    """
+    if value.startswith(_CSV_FORMULA_PREFIXES):
+        return _CSV_SAFE_MARKER + value
+    return value
+
+
+def csv_unsafe(value: str) -> str:
+    """Invert csv_safe(): strip the literal-text marker this module adds, so
+    a selection.csv/join.csv round trip (save then load/finalize) returns
+    the original value.
+    """
+    if value.startswith(_CSV_SAFE_MARKER) and value[1:].startswith(_CSV_FORMULA_PREFIXES):
+        return value[1:]
+    return value
 
 
 def to_et_datetime(dt: datetime) -> datetime:

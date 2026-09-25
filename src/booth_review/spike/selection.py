@@ -21,7 +21,13 @@ from pathlib import Path
 from booth_review.errors import BoothReviewError
 from booth_review.sources.cfbd.parser import CfbdGame
 from booth_review.sources.ratingsref.sitemap import SitemapEntry
-from booth_review.spike.names import normalize_team, significant_tokens, to_et_datetime
+from booth_review.spike.names import (
+    csv_safe,
+    csv_unsafe,
+    normalize_team,
+    significant_tokens,
+    to_et_datetime,
+)
 from booth_review.transport.cache import atomic_write_bytes
 
 DEFAULT_SEED = 2025
@@ -308,7 +314,9 @@ def save_selection(path: Path, selections: Sequence[Selection]) -> None:
     writer = csv.DictWriter(buf, fieldnames=_SELECTION_FIELDS)
     writer.writeheader()
     for s in selections:
-        writer.writerow({"cfbd_game_id": s.cfbd_game_id, "categories": "|".join(s.categories)})
+        writer.writerow(
+            {"cfbd_game_id": s.cfbd_game_id, "categories": csv_safe("|".join(s.categories))}
+        )
     atomic_write_bytes(path, buf.getvalue().encode("utf-8"))
 
 
@@ -319,6 +327,6 @@ def load_selection(path: Path) -> list[Selection] | None:
     selections: list[Selection] = []
     with path.open(newline="", encoding="utf-8") as fh:
         for row in csv.DictReader(fh):
-            cats = tuple(c for c in row["categories"].split("|") if c)
+            cats = tuple(c for c in csv_unsafe(row["categories"]).split("|") if c)
             selections.append(Selection(cfbd_game_id=int(row["cfbd_game_id"]), categories=cats))
     return selections

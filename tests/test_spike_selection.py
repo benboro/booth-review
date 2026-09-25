@@ -16,12 +16,21 @@ import pytest
 
 from booth_review.sources.cfbd.parser import CfbdGame, parse_games
 from booth_review.sources.ratingsref.sitemap import parse_sitemap
-from booth_review.spike.names import load_crosswalk, normalize_team, significant_tokens
+from booth_review.spike.names import (
+    csv_safe,
+    csv_unsafe,
+    load_crosswalk,
+    normalize_team,
+    significant_tokens,
+)
 from booth_review.spike.selection import (
     DEFAULT_SEED,
     Candidate,
+    Selection,
     SelectionError,
     build_candidates,
+    load_selection,
+    save_selection,
     select_games,
 )
 
@@ -81,6 +90,49 @@ def test_load_crosswalk_reads_variant_to_canonical(tmp_path: Path) -> None:
         "variant,canonical\nexample variant,Example Canonical\n", encoding="utf-8"
     )
     assert load_crosswalk(tmp_path) == {"example variant": "Example Canonical"}
+
+
+# -- names.csv_safe / csv_unsafe (WR-04 CSV-injection hardening) --------------------
+
+
+@pytest.mark.parametrize("prefix", ["=", "+", "-", "@", "\t", "\r"])
+def test_csv_safe_prefixes_dangerous_leading_characters(prefix: str) -> None:
+    assert csv_safe(f"{prefix}cmd") == f"'{prefix}cmd"
+
+
+def test_csv_safe_leaves_ordinary_text_untouched() -> None:
+    assert csv_safe("ESPN") == "ESPN"
+
+
+def test_csv_safe_then_csv_unsafe_round_trips() -> None:
+    for value in ["=SUM(A1:A2)", "+1", "-5", "@mention", "\ttab", "\rcr", "ordinary text"]:
+        assert csv_unsafe(csv_safe(value)) == value
+
+
+def test_csv_unsafe_leaves_a_genuine_leading_apostrophe_alone() -> None:
+    # Only strip the marker this module adds (an apostrophe immediately
+    # followed by one of the dangerous prefixes); a name that happens to
+    # start with a real apostrophe must round-trip unchanged.
+    assert csv_unsafe("'Ohana Stadium") == "'Ohana Stadium"
+
+
+# -- selection.save_selection / load_selection (WR-04 CSV-injection hardening) ------
+
+
+def test_save_selection_then_load_selection_round_trips_a_dangerous_category(
+    tmp_path: Path,
+) -> None:
+    """A category value that happens to start with a formula-injection
+    character must be escaped on write and recovered exactly on read."""
+    path = tmp_path / "selection.csv"
+    selections = [Selection(cfbd_game_id=1, categories=("=cmd", "rematch"))]
+    save_selection(path, selections)
+
+    written = path.read_text(encoding="utf-8")
+    assert "'=cmd|rematch" in written  # escaped in the raw CSV a human might open
+
+    loaded = load_selection(path)
+    assert loaded == selections
 
 
 # -- selection.build_candidates -------------------------------------------------------
