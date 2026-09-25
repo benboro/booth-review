@@ -86,6 +86,14 @@ class DataPaths:
     def rr_lastmod(self) -> Path:
         return self.ledger / "rr_lastmod.json"
 
+    @property
+    def audit(self) -> Path:
+        return self.vault / "audit"
+
+    @property
+    def job_state(self) -> Path:
+        return self.ledger / "job_state.json"
+
     @classmethod
     def from_env(cls) -> DataPaths:
         vault = os.environ.get("BOOTH_REVIEW_VAULT")
