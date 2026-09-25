@@ -26,7 +26,9 @@ dev = [
     "mypy>=2.3.1",
     "pytest>=9.1.1",
     "pytest-socket>=0.8.1",
+    "pyyaml>=6.0.3",
     "ruff>=0.16.9",
+    "types-pyyaml>=6.0.12.20260906",
 ]
 
 [build-system]

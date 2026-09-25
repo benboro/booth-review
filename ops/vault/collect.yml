@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - name: Require a pinned JOB_REF (D-10: never default to main)
+      - name: "Require a pinned JOB_REF (D-10: never default to main)"
         run: |
           if [ -z "${{ vars.JOB_REF }}" ]; then
             echo "::error::vars.JOB_REF is not set; refusing to check out an unpinned ref" >&2

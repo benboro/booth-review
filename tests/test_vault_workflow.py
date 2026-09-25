@@ -16,6 +16,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 import booth_review
 from booth_review.errors import VaultCommitError
@@ -39,6 +40,20 @@ def _run_ok(args: list[str]) -> None:
 
 
 # -- version ---------------------------------------------------------------------------------
+
+
+def test_workflow_and_ci_parse_as_yaml_with_expected_structure() -> None:
+    # GitHub rejects a workflow that isn't valid YAML without running any job,
+    # which text assertions alone can't catch (an unquoted ": " in a step name).
+    workflow = yaml.safe_load(WORKFLOW_TEXT)
+    yaml.safe_load(CI_TEXT)
+
+    # PyYAML reads the bare `on:` key as boolean True (YAML 1.1).
+    triggers = workflow[True]
+    assert set(triggers) == {"schedule", "workflow_dispatch"}
+    steps = workflow["jobs"]["collect"]["steps"]
+    assert all(isinstance(step.get("name", ""), str) for step in steps)
+    assert any("JOB_REF" in step.get("name", "") for step in steps)
 
 
 def test_version_is_0_2_0() -> None:
