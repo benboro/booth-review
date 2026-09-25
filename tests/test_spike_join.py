@@ -17,11 +17,13 @@ import pytest
 
 from booth_review.cli import main
 from booth_review.config import DataPaths
+from booth_review.errors import ParseError
 from booth_review.sources.cfbd.parser import CfbdGame, parse_games
 from booth_review.sources.ratingsref.parser import RRClaim, RRRecord, RRTelecast
 from booth_review.sources.sports506.parser import parse_week_page
 from booth_review.spike.headline import HEADLINE_RULE, select_headline
 from booth_review.spike.join import (
+    JoinFileMissingError,
     ReviewIncompleteError,
     build_join_rows,
     finalize,
@@ -488,6 +490,19 @@ def test_build_join_rows_cfp_game_resolves_main_feed_and_notes_alt_spanish(
     assert "spanish" in row.notes
 
 
+def test_build_join_rows_raises_parse_error_for_unknown_cfbd_game_id(
+    vault_paths: DataPaths,
+) -> None:
+    """WR-02: a stale selection.csv referencing a cfbd_game_id no longer in
+    games/2025.json must raise BoothReviewError's ParseError, not a bare
+    KeyError."""
+    _seed_full_vault(vault_paths)
+    selections = [Selection(cfbd_game_id=999_999_999, categories=("rematch",))]
+
+    with pytest.raises(ParseError, match="999999999"):
+        build_join_rows(vault_paths, selections)
+
+
 def test_write_outputs_summary_flags_doubtful_rows(vault_paths: DataPaths) -> None:
     _seed_full_vault(vault_paths)
     selections = _selections_for_full_vault(vault_paths)
@@ -577,6 +592,55 @@ def test_finalize_raises_when_a_row_is_still_pending(vault_paths: DataPaths) -> 
     statuses = ["confirmed"] * 19 + ["pending"]
     _write_join_csv(vault_paths.spike / "join.csv", statuses, match_confidences=["exact"] * 20)
     with pytest.raises(ReviewIncompleteError):
+        finalize(vault_paths)
+
+
+def test_finalize_raises_join_file_missing_error_when_join_csv_absent(
+    vault_paths: DataPaths,
+) -> None:
+    """WR-02: running --finalize before `spike join` has ever produced
+    join.csv must raise a BoothReviewError, not a bare FileNotFoundError."""
+    assert not (vault_paths.spike / "join.csv").exists()
+    with pytest.raises(JoinFileMissingError):
+        finalize(vault_paths)
+
+
+def test_finalize_raises_parse_error_for_hand_edited_join_csv_missing_a_column(
+    vault_paths: DataPaths,
+) -> None:
+    """WR-02: a hand-edited join.csv missing an expected column must raise
+    ParseError, not a bare KeyError."""
+    join_path = vault_paths.spike / "join.csv"
+    join_path.parent.mkdir(parents=True, exist_ok=True)
+    columns = [c for c in _JOIN_ROW_COLUMNS if c != "review_note"]
+    with join_path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(columns)
+        writer.writerow(
+            [
+                900000,
+                "filler",
+                "Example A @ Example B",
+                "2025-09-13T12:00:00-04:00",
+                "3",
+                "0",
+                "Example A @ Example B | ECN | Pat Example",
+                "exact",
+                "",
+                "",
+                "",
+                "",
+                0,
+                "none",
+                "Pat Example",
+                "exact",
+                False,
+                "",
+                "confirmed",
+            ]
+        )
+
+    with pytest.raises(ParseError, match="review_note"):
         finalize(vault_paths)
 
 

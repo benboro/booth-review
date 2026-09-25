@@ -51,6 +51,12 @@ class ReviewIncompleteError(BoothReviewError):
     """
 
 
+class JoinFileMissingError(BoothReviewError):
+    """Raised by finalize() when join.csv does not exist yet -- `spike join`
+    must run (and produce join.csv) before `spike join --finalize`.
+    """
+
+
 @dataclass(frozen=True)
 class Match506:
     confidence: MatchConfidence
@@ -318,7 +324,13 @@ def build_join_rows(paths: DataPaths, selections: Sequence[Selection]) -> list[J
 
     rows: list[JoinRow] = []
     for selection in selections:
-        game = games_by_id[selection.cfbd_game_id]
+        try:
+            game = games_by_id[selection.cfbd_game_id]
+        except KeyError as exc:
+            raise ParseError(
+                f"selection.csv references cfbd_game_id {selection.cfbd_game_id} not found "
+                f"in cfbd/games/{_SEASON}.json"
+            ) from exc
         m506 = match_506(game, all_listings)
         mrr = match_rr(game, all_records)
 
@@ -507,28 +519,31 @@ def write_outputs(
 
 
 def _row_from_csv_dict(raw: dict[str, str]) -> JoinRow:
-    return JoinRow(
-        cfbd_game_id=int(raw["cfbd_game_id"]),
-        categories=raw["categories"],
-        cfbd_matchup=raw["cfbd_matchup"],
-        cfbd_start_et=raw["cfbd_start_et"],
-        s506_week=raw["s506_week"],
-        s506_row_index=raw["s506_row_index"],
-        s506_row=raw["s506_row"],
-        s506_confidence=raw["s506_confidence"],
-        rr_record_urls=raw["rr_record_urls"],
-        rr_headline_value=raw["rr_headline_value"],
-        rr_headline_publisher=raw["rr_headline_publisher"],
-        rr_headline_source_url=raw["rr_headline_source_url"],
-        rr_claim_count=int(raw["rr_claim_count"]),
-        rr_confidence=raw["rr_confidence"],
-        resolved_crew=raw["resolved_crew"],
-        match_confidence=raw["match_confidence"],
-        doubtful=raw["doubtful"] in ("True", "true", "1"),
-        notes=raw["notes"],
-        review_status=raw["review_status"],
-        review_note=raw["review_note"],
-    )
+    try:
+        return JoinRow(
+            cfbd_game_id=int(raw["cfbd_game_id"]),
+            categories=raw["categories"],
+            cfbd_matchup=raw["cfbd_matchup"],
+            cfbd_start_et=raw["cfbd_start_et"],
+            s506_week=raw["s506_week"],
+            s506_row_index=raw["s506_row_index"],
+            s506_row=raw["s506_row"],
+            s506_confidence=raw["s506_confidence"],
+            rr_record_urls=raw["rr_record_urls"],
+            rr_headline_value=raw["rr_headline_value"],
+            rr_headline_publisher=raw["rr_headline_publisher"],
+            rr_headline_source_url=raw["rr_headline_source_url"],
+            rr_claim_count=int(raw["rr_claim_count"]),
+            rr_confidence=raw["rr_confidence"],
+            resolved_crew=raw["resolved_crew"],
+            match_confidence=raw["match_confidence"],
+            doubtful=raw["doubtful"] in ("True", "true", "1"),
+            notes=raw["notes"],
+            review_status=raw["review_status"],
+            review_note=raw["review_note"],
+        )
+    except KeyError as exc:
+        raise ParseError(f"join.csv is missing expected column {exc}") from exc
 
 
 def finalize(paths: DataPaths) -> dict[str, object]:
@@ -539,8 +554,13 @@ def finalize(paths: DataPaths) -> dict[str, object]:
     Raises ReviewIncompleteError if any row is still "pending".
     """
     join_path = paths.spike / "join.csv"
-    with join_path.open(newline="", encoding="utf-8") as fh:
-        raw_rows = list(csv.DictReader(fh))
+    try:
+        with join_path.open(newline="", encoding="utf-8") as fh:
+            raw_rows = list(csv.DictReader(fh))
+    except FileNotFoundError as exc:
+        raise JoinFileMissingError(
+            f"join.csv not found at {join_path}; run 'spike join' before 'spike join --finalize'"
+        ) from exc
 
     if any(r["review_status"] == "pending" for r in raw_rows):
         raise ReviewIncompleteError(
