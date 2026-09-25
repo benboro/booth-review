@@ -8,6 +8,7 @@ whitelist so scraped source text can never land in a commit message or a log.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import subprocess
 from collections.abc import Mapping
@@ -19,6 +20,7 @@ logger = logging.getLogger("booth_review.vault")
 
 _MESSAGE_RE = re.compile(r"^[a-z]+: [a-z0-9 ,()_./:-]+$")
 _MAX_MESSAGE_LEN = 120
+_GIT_TIMEOUT_SECONDS = 60
 
 
 def batch_message(action: str, source: str, season_label: str, counts: Mapping[str, int]) -> str:
@@ -34,12 +36,26 @@ class VaultRepo:
         self._path = path
 
     def _run(self, *args: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            ["git", "-C", str(self._path), *args],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
+        # GIT_TERMINAL_PROMPT=0 plus stdin=DEVNULL keep an unauthenticated
+        # push/pull from blocking on a credential or host-key prompt; the
+        # timeout is a second line of defense (T-01: hung push shouldn't
+        # hang a whole collection batch).
+        env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+        try:
+            return subprocess.run(
+                ["git", "-C", str(self._path), *args],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=_GIT_TIMEOUT_SECONDS,
+                stdin=subprocess.DEVNULL,
+                env=env,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise VaultCommitError(
+                f"git subcommand {args[0] if args else '<none>'} timed out after "
+                f"{_GIT_TIMEOUT_SECONDS}s"
+            ) from exc
 
     def check(self) -> None:
         """Raise VaultStateError unless `self._path` is its own git toplevel with an

@@ -213,6 +213,56 @@ def test_commit_batch_retries_once_after_push_rejection(
     assert _remote_log_count(remote) == 3  # seed + second's commit + this rebased commit
 
 
+def test_commit_batch_raises_vault_commit_error_when_push_times_out(
+    vault_repo_env: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """WR-03: a hung `git push` (e.g. blocked on a credential prompt) must
+    fail fast as VaultCommitError, not hang the process indefinitely."""
+    _remote, vault = vault_repo_env
+    repo = VaultRepo(vault)
+    (vault / "raw").mkdir()
+    (vault / "raw" / "a.html").write_text("a\n", encoding="utf-8")
+
+    real_run = subprocess.run
+
+    def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[-1] == "push":
+            raise subprocess.TimeoutExpired(cmd=args, timeout=60)
+        return real_run(args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("booth_review.vault.subprocess.run", fake_run)
+
+    message = batch_message(
+        "collect", "sports506", "2025", {"fetched": 1, "cached": 0, "not_modified": 0}
+    )
+    with pytest.raises(VaultCommitError, match="timed out"):
+        repo.commit_batch(message)
+
+
+def test_run_passes_stdin_devnull_timeout_and_disables_terminal_prompt(
+    vault_repo_env: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """WR-03: every git call must redirect stdin, set a timeout, and disable
+    GIT_TERMINAL_PROMPT so a credential/host-key prompt can never block."""
+    _remote, vault = vault_repo_env
+    repo = VaultRepo(vault)
+
+    captured: dict[str, object] = {}
+    real_run = subprocess.run
+
+    def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[-1] == "rev-parse" or "--show-toplevel" in args:
+            captured.update(kwargs)
+        return real_run(args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("booth_review.vault.subprocess.run", fake_run)
+    repo.check()
+
+    assert captured["stdin"] is subprocess.DEVNULL
+    assert captured["timeout"] == 60
+    assert captured["env"]["GIT_TERMINAL_PROMPT"] == "0"  # type: ignore[index]
+
+
 def test_commit_batch_raises_after_second_push_rejection(
     vault_repo_env: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
