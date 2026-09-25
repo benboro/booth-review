@@ -31,6 +31,16 @@ def _bowl_listings() -> list[Listing506]:
     return parse_week_page(html, season=2025, week_label="B")
 
 
+def _table_week_listings() -> list[Listing506]:
+    html = (FIXTURES / "week_table_synthetic.html").read_bytes()
+    return parse_week_page(html, season=2018, week_label="5")
+
+
+def _table_bowl_listings() -> list[Listing506]:
+    html = (FIXTURES / "bowls_table_synthetic.html").read_bytes()
+    return parse_week_page(html, season=2018, week_label="B")
+
+
 def test_parse_week_page_returns_one_listing_per_row_in_page_order() -> None:
     listings = _week_listings()
     assert len(listings) == 4
@@ -149,3 +159,100 @@ def test_html_with_no_schedule_table_raises_parse_error() -> None:
     html = b"<html><body><p>not a schedule page</p></body></html>"
     with pytest.raises(ParseError):
         parse_week_page(html, season=2025, week_label="5")
+
+
+# --- 2014-2021 table.listingtable layout (D-03 generic parser fix) ---
+
+
+def test_table_layout_returns_one_listing_per_row_in_page_order() -> None:
+    listings = _table_week_listings()
+    assert len(listings) == 5
+    assert [listing.source_row_index for listing in listings] == [0, 1, 2, 3, 4]
+
+
+def test_table_layout_plain_row_has_no_rank_and_is_not_neutral() -> None:
+    listing = _table_week_listings()[0]
+    assert listing.away_raw == "Riverside Poly"
+    assert listing.away_rank is None
+    assert listing.home_raw == "Lakeshore Tech"
+    assert listing.neutral is False
+    assert listing.network_raw == "ECN"
+    assert listing.crew_names == ("Pat Example", "Jordan Sample")
+
+
+def test_table_layout_bare_digit_rank_prefix_splits_like_the_tagged_form() -> None:
+    listing = _table_week_listings()[1]
+    assert listing.away_raw == "Granite College"
+    assert listing.away_rank == 12
+    assert listing.home_raw == "Harbor View"
+    # Network wrapped in an <a><b>...</b></a> map link still reads as plain text.
+    assert listing.network_raw == "ECN2"
+
+
+def test_table_layout_hash_prefixed_rank_splits_the_same_as_bare_digits() -> None:
+    listing = _table_week_listings()[2]
+    assert listing.away_raw == "Union City"
+    assert listing.away_rank == 7
+    assert listing.home_raw == "Prairie State"
+
+
+def test_table_layout_parenthesized_alt_marker_classifies_as_alt_feed() -> None:
+    listing = _table_week_listings()[2]
+    assert listing.network_raw == "ECN (alt)"
+    assert listing.feed_kind == "alt"
+
+
+def test_table_layout_period_vs_is_neutral_with_location_note_appended() -> None:
+    listing = _table_week_listings()[3]
+    assert listing.neutral is True
+    assert listing.away_raw == "Clearwater Tech"
+    assert listing.home_raw == "Northfield State (in Example City)"
+    assert listing.game_label is None
+
+
+def test_table_layout_br_wrapped_network_reads_as_one_comma_joined_string() -> None:
+    listing = _table_week_listings()[3]
+    assert listing.network_raw == "ECN, ECN Digital"
+
+
+def test_table_layout_empty_crew_cell_gives_none_and_empty_tuple() -> None:
+    listing = _table_week_listings()[3]
+    assert listing.crew_raw is None
+    assert listing.crew_names == ()
+
+
+def test_table_layout_non_breaking_space_around_separator_still_splits() -> None:
+    listing = _table_week_listings()[4]
+    assert listing.away_raw == "Casey Vale State"
+    assert listing.home_raw == "Morgan Tech"
+
+
+def test_table_layout_bowls_bolded_label_kept_like_the_div_layout() -> None:
+    listing = _table_bowl_listings()[0]
+    assert listing.game_label == "Frostbite Bowl"
+    assert listing.away_raw == "Northfield State"
+    assert listing.home_raw == "Lakeshore Tech (in Example City)"
+    assert listing.neutral is True
+
+
+def test_table_layout_bowls_unbolded_label_is_still_recognized() -> None:
+    listing = _table_bowl_listings()[1]
+    assert listing.game_label == "Frontier Bowl"
+    assert listing.away_raw == "Prairie State"
+    assert listing.home_rank == 1
+    assert listing.home_raw == "Union City (in Example City)"
+    assert listing.network_raw == "ECN"
+
+
+def test_table_layout_bowls_drops_row_with_no_teams_named_yet() -> None:
+    listings = _table_bowl_listings()
+    assert len(listings) == 2
+    for listing in listings:
+        assert listing.away_raw
+        assert listing.home_raw
+
+
+def test_table_layout_bowls_rolls_the_year_over_from_december_to_january() -> None:
+    listings = _table_bowl_listings()
+    assert listings[0].date_et == date(2018, 12, 16)
+    assert listings[1].date_et == date(2019, 1, 1)
