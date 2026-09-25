@@ -258,7 +258,21 @@ _STRUCTURE_NOTES = """## Structure notes
 """
 
 
-def _render_markdown(inv: Inventory506) -> str:
+def _render_rank_prefix_poll_section(rank_poll: dict[str, object] | None) -> str:
+    if rank_poll is None:
+        return _RANK_PREFIX_POLL_HEADING
+    lines = [
+        "## Rank-prefix poll",
+        "",
+        str(rank_poll.get("finding", "")),
+        "",
+        f"Ranked rows skipped for a 506/CFBD name mismatch: "
+        f"{rank_poll.get('skipped_name_mismatch', 0)}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _render_markdown(inv: Inventory506, rank_poll: dict[str, object] | None = None) -> str:
     lines: list[str] = [
         f"# 506 Sports Inventory: {inv.season}",
         "",
@@ -328,18 +342,25 @@ def _render_markdown(inv: Inventory506) -> str:
         f"{inv.conditional_get}",
         "",
         _STRUCTURE_NOTES,
-        _RANK_PREFIX_POLL_HEADING,
+        _render_rank_prefix_poll_section(rank_poll),
     ]
     return "\n".join(lines) + "\n"
 
 
-def write_506_inventory(paths: DataPaths, inv: Inventory506) -> None:
+def write_506_inventory(
+    paths: DataPaths, inv: Inventory506, *, rank_poll: dict[str, object] | None = None
+) -> None:
     """Write the private JSON counts and the private Markdown report with
     real examples to data/vault/spike/. Never called with anything but a
     real Inventory506 in production use; tests point `paths` at a tmp vault.
+
+    `rank_poll` (plan 01-11's summarize_rank_prefix_poll output) fills in the
+    "Rank-prefix poll" section; omitted, it stays a placeholder note.
     """
     atomic_write_json(paths.spike / "inventory-506.json", inv.to_json_dict())
-    atomic_write_bytes(paths.spike / "inventory-506.md", _render_markdown(inv).encode("utf-8"))
+    atomic_write_bytes(
+        paths.spike / "inventory-506.md", _render_markdown(inv, rank_poll).encode("utf-8")
+    )
 
 
 if __name__ == "__main__":

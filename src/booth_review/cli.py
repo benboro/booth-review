@@ -19,7 +19,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from booth_review.config import CFBD_FLOOR_DEFAULT, load_cfbd_key
+from booth_review.config import CFBD_FLOOR_DEFAULT, DataPaths, load_cfbd_key
 from booth_review.errors import BoothReviewError
 from booth_review.runtime import Runtime, build_runtime
 from booth_review.seasons import season_window
@@ -33,8 +33,9 @@ from booth_review.sources.sports506.importer import (
     ImportResult,
     Sports506Importer,
 )
+from booth_review.spike.inventory import run_inventory
 from booth_review.transport.budget import BudgetSummary, InfoSnapshot
-from booth_review.vault import batch_message
+from booth_review.vault import VaultRepo, batch_message
 
 logger = logging.getLogger("booth_review.cli")
 
@@ -125,6 +126,13 @@ def build_parser() -> argparse.ArgumentParser:
     p506imp.add_argument("--from", dest="from_dir", type=Path, default=None)
     p506imp.add_argument("--force", action="store_true")
     p506imp.add_argument("--no-commit", action="store_true")
+
+    spike = sub.add_parser("spike", help="spike-only analysis commands (SPIKE-03/04)")
+    spike_sub = spike.add_subparsers(dest="spike_command", required=True)
+    spike_inventory = spike_sub.add_parser(
+        "inventory", help="rebuild source inventories and the pregame-measure report from raw"
+    )
+    spike_inventory.add_argument("--no-commit", action="store_true")
 
     budget = sub.add_parser("budget", help="report and record CFBD budget usage")
     budget.add_argument("--offline", action="store_true")
@@ -405,6 +413,21 @@ def _import_506(args: argparse.Namespace) -> int:
         runtime.client.close()
 
 
+# -- spike inventory ----------------------------------------------------------------------
+
+
+def _spike_inventory(args: argparse.Namespace) -> int:
+    """Rebuild the SPIKE-03/04 reports from data already cached in the vault.
+
+    Builds no PoliteClient (there is nothing to fetch): only checks the vault
+    is a real, pushable git working copy, then calls run_inventory.
+    """
+    paths = DataPaths.from_env()
+    VaultRepo(paths.vault).check()
+    run_inventory(paths, commit=not args.no_commit)
+    return 0
+
+
 # -- budget -----------------------------------------------------------------------------
 
 
@@ -480,6 +503,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.source == "506":
                 return _import_506(args)
             raise AssertionError(f"unknown import source: {args.source!r}")
+        if args.command == "spike":
+            if args.spike_command == "inventory":
+                return _spike_inventory(args)
+            raise AssertionError(f"unknown spike command: {args.spike_command!r}")
         if args.command == "budget":
             return _budget(args)
         raise AssertionError(f"unknown command: {args.command!r}")
