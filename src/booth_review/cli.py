@@ -381,6 +381,8 @@ def _print_import_result(result: ImportResult) -> None:
     )
     for item in result.skipped_invalid:
         print(f"skipped wk-{item.label}: {item.reason}")
+    if result.unrecognized:
+        print(f"ignored {result.unrecognized} HTML file(s) that aren't 506 week pages")
 
 
 def _import_506(args: argparse.Namespace) -> int:

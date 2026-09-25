@@ -13,6 +13,7 @@ re-requests the blocked host.
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,6 +28,16 @@ DEFAULT_INCOMING_DIR = Path("data/incoming/506")
 _MANUAL_ORIGIN = "manual"
 
 _CHALLENGE_MARKERS = ("just a moment", "cf-chl", "attention required")
+
+# A saved week page names itself in its canonical link and its <title>, so the
+# importer identifies pages by content and filenames don't matter (a browser's
+# default "506 Sports - College Football_ Week 12, 2025.html" works as-is).
+_CANONICAL_RE = re.compile(
+    r"<link[^>]*rel=[\"']canonical[\"'][^>]*href=[\"'][^\"']*ncaaf\.php\?yr=(\d{4})(?:&amp;|&)wk=(\d{1,2}|B)[\"']",
+    re.IGNORECASE,
+)
+_TITLE_RE = re.compile(r"<title>[^<]*Week\s+(\d{1,2}|B),\s*(\d{4})[^<]*</title>", re.IGNORECASE)
+_FILENAME_RE = re.compile(r"^(\d{4})-wk(\d{1,2}|B)\.html$")
 
 
 @dataclass
@@ -44,6 +55,7 @@ class ImportResult:
     skipped_existing: list[str] = field(default_factory=list)
     skipped_invalid: list[SkippedFile] = field(default_factory=list)
     missing: list[str] = field(default_factory=list)
+    unrecognized: int = 0
 
     def counts(self) -> dict[str, int]:
         """Counts for vault.batch_message, count-only (never real page text)."""
@@ -58,13 +70,31 @@ class ImportResult:
         return bool(self.missing or self.skipped_invalid)
 
 
-def _candidate_filenames(season: int, label: str) -> list[str]:
-    names = [f"{season}-wk{label}.html"]
-    if label != "B":
-        padded = label.zfill(2)
-        if padded != label:
-            names.append(f"{season}-wk{padded}.html")
-    return names
+def _normalize_label(raw: str) -> str | None:
+    label = raw if raw == "B" else str(int(raw))
+    return label if label in WEEK_LABELS else None
+
+
+def identify_page(path: Path, content: bytes) -> tuple[int, str] | None:
+    """Return (season, week label) for a saved 506 week page, or None if unknown.
+
+    Page content wins: the canonical link, then the title. The filename pattern
+    `{season}-wk{label}.html` is only a fallback for pages that carry neither.
+    """
+    text = content.decode("utf-8", errors="replace")
+    canonical = _CANONICAL_RE.search(text)
+    if canonical:
+        label = _normalize_label(canonical.group(2))
+        return (int(canonical.group(1)), label) if label else None
+    title = _TITLE_RE.search(text)
+    if title:
+        label = _normalize_label(title.group(1))
+        return (int(title.group(2)), label) if label else None
+    named = _FILENAME_RE.match(path.name)
+    if named:
+        label = _normalize_label(named.group(2))
+        return (int(named.group(1)), label) if label else None
+    return None
 
 
 def _looks_like_challenge_page(text: str) -> bool:
@@ -99,22 +129,49 @@ class Sports506Importer:
         self._paths = paths
         self._manifest = Manifest(paths.manifest)
 
-    def _find_incoming_file(self, incoming_dir: Path, season: int, label: str) -> Path | None:
-        for name in _candidate_filenames(season, label):
-            candidate = incoming_dir / name
-            if candidate.is_file():
-                return candidate
-        return None
+    def _scan(self, incoming_dir: Path, season: int, result: ImportResult) -> dict[str, bytes]:
+        """Map week label -> page bytes for every page of `season` in the folder.
+
+        Other seasons' pages are left alone. HTML files that aren't 506 week
+        pages (a Downloads folder holds plenty) are only counted. Two different
+        files claiming the same week are both rejected rather than guessed at.
+        """
+        found: dict[str, bytes] = {}
+        conflicts: set[str] = set()
+        for path in sorted(incoming_dir.glob("*.htm*")):
+            if not path.is_file():
+                continue
+            content = path.read_bytes()
+            identity = identify_page(path, content)
+            if identity is None:
+                result.unrecognized += 1
+                continue
+            page_season, label = identity
+            if page_season != season:
+                continue
+            if label in found and found[label] != content:
+                conflicts.add(label)
+            found[label] = content
+        for label in sorted(conflicts):
+            del found[label]
+            result.skipped_invalid.append(
+                SkippedFile(label=label, reason="two different files claim this week")
+            )
+        return found
 
     def run(self, season: int, *, incoming_dir: Path, force: bool = False) -> ImportResult:
         result = ImportResult(season=season)
         collector = Sports506Collector(self._cache)
         requests_by_label = dict(zip(WEEK_LABELS, collector.plan(season), strict=True))
+        pages = self._scan(incoming_dir, season, result)
+        conflicted = {item.label for item in result.skipped_invalid}
 
         for label in WEEK_LABELS:
             req = requests_by_label[label]
-            source_path = self._find_incoming_file(incoming_dir, season, label)
-            if source_path is None:
+            if label in conflicted:
+                continue
+            content = pages.get(label)
+            if content is None:
                 result.missing.append(label)
                 continue
 
@@ -123,7 +180,6 @@ class Sports506Importer:
                 result.skipped_existing.append(label)
                 continue
 
-            content = source_path.read_bytes()
             reason = _validation_failure_reason(content, season)
             if reason is not None:
                 result.skipped_invalid.append(SkippedFile(label=label, reason=reason))

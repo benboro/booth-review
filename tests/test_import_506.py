@@ -259,3 +259,82 @@ def test_import_506_no_commit_flag_writes_files_but_does_not_commit(
     assert exit_code == 4
     assert (paths.raw / "sports506" / "2025" / "wk-00.html").is_file()
     assert _remote_log_count(remote) == log_count
+
+
+# -- identifying pages by content ------------------------------------------------------
+
+
+def _real_shaped_page(season: int, label: str) -> bytes:
+    # Synthetic, but shaped like a saved 506 week page: canonical link plus title.
+    return (
+        f"<html><head><title>506 Sports - College Football: Week {label}, {season}</title>"
+        f'<link rel="canonical" href="https://506sports.com/ncaaf.php?yr={season}&wk={label}" />'
+        f"</head><body>synthetic schedule {season}</body></html>"
+    ).encode()
+
+
+def test_identify_page_prefers_canonical_then_title_then_filename(tmp_path) -> None:
+    from booth_review.sources.sports506.importer import identify_page
+
+    default_name = tmp_path / "506 Sports - College Football_ Week 12, 2025.html"
+    assert identify_page(default_name, _real_shaped_page(2025, "12")) == (2025, "12")
+    title_only = b"<html><title>506 Sports - College Football: Week B, 2024</title></html>"
+    assert identify_page(tmp_path / "x.html", title_only) == (2024, "B")
+    assert identify_page(tmp_path / "2023-wk07.html", _page(2023, "7")) == (2023, "7")
+    assert identify_page(tmp_path / "other.html", b"<html>not 506</html>") is None
+
+
+def test_import_506_uses_page_content_not_browser_filenames(
+    git_vault, mock_transport_factory, patched_client, tmp_path
+) -> None:
+    paths = git_vault
+    handle = mock_transport_factory({})
+    patched_client(handle)
+
+    incoming = tmp_path / "Downloads"
+    incoming.mkdir()
+    for label in WEEK_LABELS:
+        name = f"506 Sports - College Football_ Week {label}, 2025.html"
+        (incoming / name).write_bytes(_real_shaped_page(2025, label))
+    (incoming / "2024 page.html").write_bytes(_real_shaped_page(2024, "3"))  # other season
+    (incoming / "unrelated.html").write_bytes(b"<html>a receipt</html>")
+
+    exit_code = main(["import", "506", "--season", "2025", "--from", str(incoming)])
+
+    assert exit_code == 0
+    assert handle.requests == []
+    assert (paths.raw / "sports506/2025/wk-12.html").read_bytes() == _real_shaped_page(2025, "12")
+    assert not (paths.raw / "sports506/2024").exists()
+
+
+def test_import_506_content_overrides_a_mislabeled_filename(
+    git_vault, mock_transport_factory, patched_client, tmp_path
+) -> None:
+    paths = git_vault
+    patched_client(mock_transport_factory({}))
+
+    incoming = tmp_path / "incoming"
+    incoming.mkdir()
+    (incoming / "2025-wk3.html").write_bytes(_real_shaped_page(2025, "4"))
+
+    main(["import", "506", "--season", "2025", "--from", str(incoming), "--no-commit"])
+
+    assert (paths.raw / "sports506/2025/wk-04.html").is_file()
+    assert not (paths.raw / "sports506/2025/wk-03.html").exists()
+
+
+def test_import_506_rejects_two_different_files_for_one_week(
+    git_vault, mock_transport_factory, patched_client, tmp_path, capsys
+) -> None:
+    paths = git_vault
+    patched_client(mock_transport_factory({}))
+
+    incoming = tmp_path / "incoming"
+    incoming.mkdir()
+    (incoming / "a.html").write_bytes(_real_shaped_page(2025, "5"))
+    (incoming / "b.html").write_bytes(_real_shaped_page(2025, "5") + b"<!-- resaved -->")
+
+    main(["import", "506", "--season", "2025", "--from", str(incoming), "--no-commit"])
+
+    assert not (paths.raw / "sports506/2025/wk-05.html").exists()
+    assert "skipped wk-5: two different files claim this week" in capsys.readouterr().out
