@@ -1,0 +1,123 @@
+# collect-2026: the AUTO-01 scheduled collect-only workflow.
+#
+# This file is a TEMPLATE. It is installed in the private data repo's own
+# working copy as `.github/workflows/collect.yml` (a manual, user-approved
+# step -- Plan 07, not this plan). It lives here, under `ops/vault/` and
+# outside `.github/`, precisely so it never runs in *this* (public) repo.
+# Never name the private repo here; the checkout below reads it via a
+# `path: vault` self-checkout instead.
+#
+# The `schedule.timezone` key (America/New_York, alongside `cron:`) is new
+# enough (GA 2026-03-19) that the roadmap flagged it for verification: check
+# that the first real scheduled run fires within a few minutes of 10:00 ET
+# Sunday / 20:00 ET Wednesday, across the Nov 1 2026 DST fallback too.
+name: collect-2026
+
+on:
+  schedule:
+    - cron: "0 10 * * 0" # Sunday 10:00 America/New_York
+      timezone: "America/New_York"
+    - cron: "0 20 * * 3" # Wednesday 20:00 America/New_York
+      timezone: "America/New_York"
+  workflow_dispatch: {} # manual trigger, used for the D-13 catch-up drill
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: collect
+  cancel-in-progress: false # queue a mid-batch run rather than cancel it
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Require a pinned JOB_REF (D-10: never default to main)
+        run: |
+          if [ -z "${{ vars.JOB_REF }}" ]; then
+            echo "::error::vars.JOB_REF is not set; refusing to check out an unpinned ref" >&2
+            exit 1
+          fi
+
+      - name: Checkout vault (self)
+        uses: actions/checkout@v7
+        with:
+          path: vault
+
+      - name: Checkout public repo at pinned tag
+        uses: actions/checkout@v7
+        with:
+          repository: benboro/booth-review
+          ref: ${{ vars.JOB_REF }}
+          path: src
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v10.2.0
+
+      - name: Install booth-review
+        working-directory: src
+        run: uv sync --locked
+
+      - name: Configure the vault's git identity
+        run: |
+          git -C vault config user.name "github-actions[bot]"
+          git -C vault config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Run the scheduled collect-only job
+        id: job
+        working-directory: src
+        env:
+          CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
+          BOOTH_REVIEW_VAULT: ${{ github.workspace }}/vault
+        run: |
+          set +e
+          trigger=manual
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            trigger=schedule
+          fi
+          uv run booth-review job run --trigger "$trigger" \
+            --attention-out "$RUNNER_TEMP/attention.md"
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          # Never echo the env or the key; only the count-only exit code above.
+          exit 0
+
+      - name: Update the attention issue (count-only, one tracked issue)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          code="${{ steps.job.outputs.code }}"
+          title="booth-review job: needs attention"
+          run_link="run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "in:title \"$title\"" --json number --jq '.[0].number')
+
+          if [ "$code" != "0" ]; then
+            body_file="$RUNNER_TEMP/attention-body.md"
+            if [ -f "$RUNNER_TEMP/attention.md" ]; then
+              cp "$RUNNER_TEMP/attention.md" "$body_file"
+            else
+              echo "job run exited $code without an attention report" > "$body_file"
+            fi
+            echo "" >> "$body_file"
+            echo "$run_link" >> "$body_file"
+
+            if [ -n "$number" ]; then
+              gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --body-file "$body_file"
+            else
+              gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$body_file"
+            fi
+          elif [ -n "$number" ]; then
+            gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "clean run
+          $run_link"
+            gh issue close "$number" --repo "$GITHUB_REPOSITORY"
+          fi
+
+      - name: Fail the workflow on a hard failure (exit 3)
+        if: steps.job.outputs.code != '0' && steps.job.outputs.code != '4'
+        run: |
+          echo "::error::booth-review job run exited ${{ steps.job.outputs.code }}" >&2
+          exit 1
