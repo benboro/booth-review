@@ -1,0 +1,46 @@
+{
+  "telecast": {
+    "id": "cfb-stonebridge-maplecrest-2025-09-13",
+    "event_date": "2025-09-13",
+    "title": "cfb-stonebridge-maplecrest-2025-09-13",
+    "networks": [
+      "ESPN"
+    ],
+    "teams": [
+      "cfb-stonebridge",
+      "cfb-maplecrest"
+    ],
+    "kind": "game",
+    "tier": 2
+  },
+  "claims": [
+    {
+      "metric_type": "avg_audience",
+      "cut": "full_telecast",
+      "value": 1800000,
+      "unit": "viewers",
+      "status": "final",
+      "supersedes_id": null,
+      "era_id": "era-2025-bdp",
+      "measured_by": "nielsen",
+      "measurement_method": "panel",
+      "publisher": "Example Sports PR",
+      "source_url": "https://example.org/press/cfb-stonebridge-maplecrest-2025-09-13-nielsen-avg_audience-full_telecast-1800000",
+      "first_published": "2025-09-16",
+      "confidence": 1.0,
+      "carrier_network": null,
+      "composite_of": null,
+      "figure_type": "currency",
+      "id": "c-cfb-stonebridge-maplecrest-2025-09-13-nielsen-avg_audience-full_telecast-1800000"
+    }
+  ],
+  "figures_last_changed": "2025-09-13T12:00:00+00:00",
+  "built_at": "2026-09-20T00:00:00+00:00",
+  "about": {
+    "license": "CC BY 4.0",
+    "attribution": "Data from Example Ratings Reference (invented for testing)"
+  },
+  "peers": {
+    "rows": []
+  }
+}
