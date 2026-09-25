@@ -56,8 +56,10 @@ model, and build phases; read the relevant section before starting a phase.
   server-side; viewing the page never sends a request to CFBD or any other data
   source, and the CFBD key never appears in site code or build output.
 - CFBD's terms (updated Aug 12, 2026) bar providing API data as a standalone dataset
-  or bulk download, so the site data file holds display fields only and offers no
-  download.
+  or bulk download, so the site data file holds display fields only. CFBD confirmed
+  (Sep 25, 2026) that its fields, including `excitementIndex`, may appear in the chart;
+  any downloadable file may hold only our own analysis, never CFBD's fields in bulk,
+  even reformatted. Credit "Data provided by CollegeFootballData.com" with a link.
 
 # Tooling
 

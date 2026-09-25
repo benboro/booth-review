@@ -271,7 +271,7 @@ The per-person table (`telecast_people`) is what makes filtering work across net
 - **Earlier seasons:** Actions runners start empty, and GitHub drops cache entries unused for 7 days. The job therefore builds on the previously built data rather than on a raw-page cache; a single cache miss must never trigger a full re-fetch (about 3,800 Ratings Reference requests and 300 CFBD calls).
 - **Offseason:** GitHub disables scheduled workflows in public repos after 60 days without a commit. Re-enable the workflow each August.
 - **Timing:** 506 posts crews before kickoff; CFBD has scores by Saturday night or Sunday; viewership mostly arrives Tuesday to Wednesday (Ohio State–Texas, Sat Sep 12, 2026, was published Tue Sep 15), and some figures come later or are revised.
-- **Prerequisite:** the site's data file publishes joined data, so open question 5 must be settled for CFBD and 506 before the site goes live, in this phase or in Phase 4.
+- **Prerequisite:** the site's data file publishes joined data, so open question 5 must be settled for 506 (CFBD is settled) before the site goes live, in this phase or in Phase 4.
 
 ---
 
@@ -303,7 +303,7 @@ The per-person table (`telecast_people`) is what makes filtering work across net
 2. FBS only, or include FCS games when they're rated?
 3. Primary-network rule for simulcasts (for example, ABC plus ESPN2 or Disney+): first-listed outlet, or rights holder?
 4. Include Nielsen plus Adobe figures with a flag, or restrict to Nielsen-only?
-5. Terms of use: resolved for Ratings Reference (CC BY 4.0; see Section 4.2). Still open for 506 Sports (no published terms; ask the owners) and for republishing CFBD data, especially its `excitementIndex` (ask CFBD).
+5. Terms of use: resolved for Ratings Reference (CC BY 4.0; see Section 4.2) and for CFBD. On September 25, 2026, CFBD's admin confirmed that its fields, including `excitementIndex`, may be used in the interactive chart, with no need to compute a replacement; a downloadable file may hold our own analysis but not a bulk download of CFBD fields. Still open for 506 Sports (no published terms; ask the owners).
 6. ~~Front end: Dash, or a static page?~~ Decided: a static Plotly.js page on GitHub Pages (Section 9).
 7. Co-viewing lift for the `coviewing` basis: keep Nielsen's 4.19% pilot average, or estimate one from college football data once 2026 figures accumulate? The 2026 era effect in the Section 7.2 model mixes co-viewing with every other change in 2026, so it isn't a clean estimate.
 
