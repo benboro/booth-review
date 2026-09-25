@@ -113,7 +113,11 @@ def test_bowls_fixture_ranked_neutral_row() -> None:
     listing = _bowl_listings()[1]
     assert listing.away_raw == "Prairie State"
     assert listing.away_rank == 4
-    assert listing.home_raw == "Union City"
+    # The trailing "(in <city>)" location suffix that 506 writes into the
+    # home team's own text is kept verbatim, per the plan's structural-only
+    # cleanup rule (rank split, whitespace collapse, crew split — nothing
+    # else touches a team name).
+    assert listing.home_raw == "Union City (in Example City)"
     assert listing.home_rank == 1
     assert listing.neutral is True
 
