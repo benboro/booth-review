@@ -495,3 +495,95 @@ def test_import_506_frozen_season_raises_and_writes_nothing(
 
     assert not (vault_paths.raw / "sports506" / "2025").exists()
     assert _manifest_lines(vault_paths) == []
+
+
+def test_import_506_cli_frozen_season_returns_3_and_commits_nothing(
+    git_vault, mock_transport_factory, patched_client, tmp_path, capsys
+) -> None:
+    paths = git_vault
+    remote = paths.vault.parent / "remote.git"
+    paths.frozen.write_text(
+        json.dumps({"sports506": [2025], "ratingsref": [], "cfbd": []}), encoding="utf-8"
+    )
+    log_count = _remote_log_count(remote)
+    handle = mock_transport_factory({})
+    patched_client(handle)
+
+    incoming = tmp_path / "incoming"
+    _write_incoming(incoming, 2025, "0", _importable_page(2025, "0"))
+
+    exit_code = main(["import", "506", "--season", "2025", "--from", str(incoming)])
+
+    assert exit_code == 3
+    err = capsys.readouterr().err
+    assert "FrozenSeasonError" in err
+    assert _remote_log_count(remote) == log_count
+
+
+# -- CLI print format and D-04 path-scoped concurrency-safe commits ------------------------
+
+
+def test_import_506_cli_prints_nav_derived_present_missing_with_source_note(
+    git_vault, mock_transport_factory, patched_client, tmp_path, capsys
+) -> None:
+    handle = mock_transport_factory({})
+    patched_client(handle)
+
+    nav_labels = [str(n) for n in range(12)]  # a 2020-style, 12-week irregular season
+    incoming = tmp_path / "incoming"
+    _write_incoming(incoming, 2020, "0", _importable_page(2020, "0", nav_labels=nav_labels))
+
+    exit_code = main(["import", "506", "--season", "2020", "--from", str(incoming)])
+
+    assert exit_code == 4  # 11 weeks still missing
+    out = capsys.readouterr().out
+    assert "season 2020: present 1/12, missing 11/12 (weeks from nav)" in out
+
+
+def test_import_506_cli_falls_back_to_default_weeks_note(
+    git_vault, mock_transport_factory, patched_client, tmp_path, capsys
+) -> None:
+    handle = mock_transport_factory({})
+    patched_client(handle)
+
+    incoming = tmp_path / "incoming"
+    _write_incoming(incoming, 2025, "0", _importable_page(2025, "0"))  # no nav block
+
+    exit_code = main(["import", "506", "--season", "2025", "--from", str(incoming)])
+
+    assert exit_code == 4
+    out = capsys.readouterr().out
+    assert "season 2025: present 1/18, missing 17/18 (default 18 weeks)" in out
+
+
+def test_import_506_commit_is_path_scoped_leaves_concurrent_untracked_file_untouched(
+    git_vault, mock_transport_factory, patched_client, tmp_path
+) -> None:
+    """D-04/T-02-02: import 506 commits only raw/sports506/<season> and
+    ledger/requests.jsonl -- an untracked file elsewhere in the vault
+    (simulating a concurrent RR refresh's in-progress output) stays untracked.
+    """
+    paths = git_vault
+    handle = mock_transport_factory({})
+    patched_client(handle)
+
+    concurrent_file = paths.raw / "ratingsref" / "telecast" / "2019" / "concurrent.json"
+    concurrent_file.parent.mkdir(parents=True, exist_ok=True)
+    concurrent_file.write_text('{"in_progress": true}', encoding="utf-8")
+
+    incoming = tmp_path / "incoming"
+    _write_incoming(incoming, 2025, "0", _importable_page(2025, "0"))
+
+    exit_code = main(["import", "506", "--season", "2025", "--from", str(incoming)])
+
+    assert exit_code == 4  # 17 weeks still missing
+    status = subprocess.run(
+        ["git", "-C", str(paths.vault), "status", "--porcelain", "--", "raw/ratingsref"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    # git collapses an entirely-untracked directory to its own path; either
+    # form proves the file was never staged by the scoped import commit.
+    assert status.strip() != ""
+    assert concurrent_file.is_file()
