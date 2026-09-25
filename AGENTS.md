@@ -13,6 +13,10 @@ model, and build phases; read the relevant section before starting a phase.
   can be published only if every source it draws on allows it (see the source table
   in `data/README.md`); publish it with an explicit `!data/processed/<file>` line in
   `.gitignore`.
+- GSD planning files (`.planning/`) and Fable task briefs (`fable-*.md`) are local and
+  gitignored. Never commit them, and never commit GSD-generated sections (marked
+  `<!-- GSD:`) in `AGENTS.md`; `CLAUDE.md` is a symlink to it, so tools that write
+  `CLAUDE.md` edit `AGENTS.md`.
 - Before every commit, check `git status` for staged data, cache, or `.env` files.
 
 # Collecting Data

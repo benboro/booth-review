@@ -41,6 +41,11 @@ wheels/
 htmlcov/
 .ipynb_checkpoints/
 
+# ── Local planning ──────────────────────────────────────────────────────────
+# GSD planning files and Fable task briefs stay on this machine.
+.planning/
+fable-*.md
+
 # ── Local editor and agent settings ─────────────────────────────────────────
 .claude/
 .vscode/
