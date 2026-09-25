@@ -104,6 +104,18 @@ def test_discover_season_weeks_no_matching_anchors_returns_empty_lists() -> None
     assert result == SeasonWeeks(labels=[], unsupported=[])
 
 
+def test_discover_season_weeks_ignores_the_canonical_link_not_just_nav_anchors() -> None:
+    # A <link rel="canonical"> carries the same yr=/wk= query shape as a nav
+    # <a> anchor; only <a> tags are a real week-list entry.
+    html = (
+        b'<html><head><link rel="canonical" '
+        b'href="https://506sports.com/ncaaf.php?yr=2025&amp;wk=5" /></head>'
+        b"<body>no nav here, just the canonical link</body></html>"
+    )
+    result = discover_season_weeks(html, 2025)
+    assert result == SeasonWeeks(labels=[], unsupported=[])
+
+
 # -- smoke_check --------------------------------------------------------------------------
 
 

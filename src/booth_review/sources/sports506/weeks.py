@@ -35,7 +35,7 @@ SMOKE_MIN_CREW_SHARE = 0.5
 # the <link rel="canonical"> tag), so this is a dedicated regex, not a reuse
 # of the importer's canonical-link pattern (RESEARCH.md Pattern 3).
 _WEEK_ANCHOR_RE = re.compile(
-    r'href=["\'][^"\']*ncaaf\.php\?yr=(\d{4})(?:&amp;|&)wk=(\d{1,2}|B)["\']',
+    r'<a\b[^>]*\bhref=["\'][^"\']*ncaaf\.php\?yr=(\d{4})(?:&amp;|&)wk=(\d{1,2}|B)["\']',
     re.IGNORECASE,
 )
 
