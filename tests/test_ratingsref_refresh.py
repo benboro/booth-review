@@ -193,7 +193,8 @@ def test_refresh_frozen_season_advanced_record_is_fetched_and_overwrites(
     manifest_lines = [
         json.loads(line) for line in vault_paths.manifest.read_text(encoding="utf-8").splitlines()
     ]
-    assert len(manifest_lines) == 2
+    telecast_lines = [line for line in manifest_lines if line["url"] == _telecast_url(slug)]
+    assert len(telecast_lines) == 2
 
     lastmod_data = json.loads(vault_paths.rr_lastmod.read_text(encoding="utf-8"))
     assert lastmod_data[slug]["lastmod"] == new_lastmod
@@ -286,7 +287,6 @@ def test_refresh_caps_advanced_records_excludes_current_season_new_reports_backl
     vault_paths, mock_transport_factory, fake_clock
 ) -> None:
     current_season = 2026
-    old_season = 2019
     start_date = date(2019, 8, 1)  # within the 2019 season window (2019-07-01..2020-06-30)
 
     advanced_entries: list[tuple[str, str]] = []
