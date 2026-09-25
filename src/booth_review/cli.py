@@ -16,6 +16,7 @@ import re
 import sys
 from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from booth_review.config import CFBD_FLOOR_DEFAULT, load_cfbd_key
@@ -27,6 +28,11 @@ from booth_review.sources.cfbd.collector import ENDPOINTS, CfbdCollector
 from booth_review.sources.ratingsref.collector import RatingsRefCollector
 from booth_review.sources.ratingsref.sitemap import parse_sitemap, select_entries
 from booth_review.sources.sports506.collector import Sports506Collector
+from booth_review.sources.sports506.importer import (
+    DEFAULT_INCOMING_DIR,
+    ImportResult,
+    Sports506Importer,
+)
 from booth_review.transport.budget import BudgetSummary, InfoSnapshot
 from booth_review.vault import batch_message
 
@@ -110,6 +116,15 @@ def build_parser() -> argparse.ArgumentParser:
     pcfbd.add_argument("--floor", type=int, default=CFBD_FLOOR_DEFAULT)
     pcfbd.add_argument("--dry-run", action="store_true")
     pcfbd.add_argument("--no-commit", action="store_true")
+
+    import_cmd = sub.add_parser("import", help="import hand-saved source pages into the vault")
+    import_sub = import_cmd.add_subparsers(dest="source", required=True)
+
+    p506imp = import_sub.add_parser("506", help="import hand-saved 506 Sports week pages")
+    p506imp.add_argument("--season", required=True, type=parse_season_spec)
+    p506imp.add_argument("--from", dest="from_dir", type=Path, default=None)
+    p506imp.add_argument("--force", action="store_true")
+    p506imp.add_argument("--no-commit", action="store_true")
 
     budget = sub.add_parser("budget", help="report and record CFBD budget usage")
     budget.add_argument("--offline", action="store_true")
@@ -337,6 +352,48 @@ def _collect_cfbd(args: argparse.Namespace) -> int:
         runtime.client.close()
 
 
+# -- import 506 ----------------------------------------------------------------------------
+
+
+_EXPECTED_506_WEEKS = 18
+
+
+def _print_import_result(result: ImportResult) -> None:
+    present = _EXPECTED_506_WEEKS - len(result.missing)
+    print(
+        f"season {result.season}: present {present}/{_EXPECTED_506_WEEKS}, "
+        f"missing {len(result.missing)}/{_EXPECTED_506_WEEKS}"
+    )
+    if result.missing:
+        print(f"missing weeks: {', '.join(result.missing)}")
+    print(
+        f"imported {len(result.imported)}, skipped_existing {len(result.skipped_existing)}, "
+        f"skipped_invalid {len(result.skipped_invalid)}"
+    )
+    for item in result.skipped_invalid:
+        print(f"skipped wk-{item.label}: {item.reason}")
+
+
+def _import_506(args: argparse.Namespace) -> int:
+    runtime = build_runtime(with_budget=False)
+    try:
+        importer = Sports506Importer(runtime.cache, runtime.paths)
+        incoming_dir = args.from_dir if args.from_dir is not None else DEFAULT_INCOMING_DIR
+
+        any_problems = False
+        for season in args.season:
+            result = importer.run(season, incoming_dir=incoming_dir, force=args.force)
+            _print_import_result(result)
+            if result.has_problems:
+                any_problems = True
+            if not args.no_commit:
+                message = batch_message("import", "sports506", str(season), result.counts())
+                runtime.vault.commit_batch(message)
+        return 4 if any_problems else 0
+    finally:
+        runtime.client.close()
+
+
 # -- budget -----------------------------------------------------------------------------
 
 
@@ -408,6 +465,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.source == "cfbd":
                 return _collect_cfbd(args)
             raise AssertionError(f"unknown collect source: {args.source!r}")
+        if args.command == "import":
+            if args.source == "506":
+                return _import_506(args)
+            raise AssertionError(f"unknown import source: {args.source!r}")
         if args.command == "budget":
             return _budget(args)
         raise AssertionError(f"unknown command: {args.command!r}")

@@ -92,25 +92,29 @@ class ManifestEntry:
     path: str | None
     bytes: int | None
     final_url: str
+    origin: str | None = None
+    """Optional provenance tag (e.g. "manual" for hand-imported files). Omitted
+    from the JSON line when None, so entries written by RawCache itself keep
+    their existing fixed key set."""
 
     def to_json(self) -> str:
-        return json.dumps(
-            {
-                "url": self.url,
-                "source": self.source,
-                "season": self.season,
-                "kind": self.kind,
-                "fetched_at": self.fetched_at,
-                "status": self.status,
-                "etag": self.etag,
-                "last_modified": self.last_modified,
-                "sha256": self.sha256,
-                "path": self.path,
-                "bytes": self.bytes,
-                "final_url": self.final_url,
-            },
-            sort_keys=True,
-        )
+        payload: dict[str, Any] = {
+            "url": self.url,
+            "source": self.source,
+            "season": self.season,
+            "kind": self.kind,
+            "fetched_at": self.fetched_at,
+            "status": self.status,
+            "etag": self.etag,
+            "last_modified": self.last_modified,
+            "sha256": self.sha256,
+            "path": self.path,
+            "bytes": self.bytes,
+            "final_url": self.final_url,
+        }
+        if self.origin is not None:
+            payload["origin"] = self.origin
+        return json.dumps(payload, sort_keys=True)
 
 
 class Manifest:
