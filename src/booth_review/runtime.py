@@ -3,8 +3,8 @@ RawCache, CfbdBudget, and VaultRepo (D-15).
 
 `make_client()` is the single seam production code uses to build a
 PoliteClient; tests monkeypatch `booth_review.runtime.make_client` to return
-one built on `httpx2.MockTransport` instead, so no other module needs to
-know how a real client differs from a test one.
+one built on a mock transport instead, so no other module needs to know how
+a real client differs from a test one.
 """
 
 from __future__ import annotations
