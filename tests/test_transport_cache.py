@@ -166,9 +166,7 @@ def test_non2xx_appends_manifest_without_writing_file_and_raises(
 
 
 def test_frozen_miss_raises_before_any_request(vault_paths, mock_transport_factory) -> None:
-    vault_paths.frozen.write_text(
-        json.dumps({"sports506": [2014], "ratingsref": [], "cfbd": []})
-    )
+    vault_paths.frozen.write_text(json.dumps({"sports506": [2014], "ratingsref": [], "cfbd": []}))
     handle = mock_transport_factory({})
     client = _client(handle)
     cache = RawCache(vault_paths, client)
@@ -188,9 +186,7 @@ def test_frozen_miss_raises_before_any_request(vault_paths, mock_transport_facto
 def test_frozen_but_already_cached_entry_is_still_returned(
     vault_paths, mock_transport_factory
 ) -> None:
-    vault_paths.frozen.write_text(
-        json.dumps({"sports506": [2014], "ratingsref": [], "cfbd": []})
-    )
+    vault_paths.frozen.write_text(json.dumps({"sports506": [2014], "ratingsref": [], "cfbd": []}))
     cache_path = "sports506/2014/wk01.html"
     dest = vault_paths.raw / cache_path
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -214,9 +210,7 @@ def test_frozen_but_already_cached_entry_is_still_returned(
 
 
 def test_refresh_on_frozen_season_raises(vault_paths, mock_transport_factory) -> None:
-    vault_paths.frozen.write_text(
-        json.dumps({"sports506": [2014], "ratingsref": [], "cfbd": []})
-    )
+    vault_paths.frozen.write_text(json.dumps({"sports506": [2014], "ratingsref": [], "cfbd": []}))
     cache_path = "sports506/2014/wk01.html"
     dest = vault_paths.raw / cache_path
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -244,9 +238,7 @@ def test_refresh_on_frozen_season_raises(vault_paths, mock_transport_factory) ->
 def test_status_returns_cached_new_and_frozen_miss_without_sending(
     vault_paths, mock_transport_factory
 ) -> None:
-    vault_paths.frozen.write_text(
-        json.dumps({"sports506": [2014], "ratingsref": [], "cfbd": []})
-    )
+    vault_paths.frozen.write_text(json.dumps({"sports506": [2014], "ratingsref": [], "cfbd": []}))
     cached_path = "sports506/2025/wk01.html"
     dest = vault_paths.raw / cached_path
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -393,9 +385,7 @@ def test_guard_after_fetch_called_once_for_non2xx_response(
 # -- cache_path validation -----------------------------------------------------------
 
 
-def test_cache_path_absolute_raises_before_any_request(
-    vault_paths, mock_transport_factory
-) -> None:
+def test_cache_path_absolute_raises_before_any_request(vault_paths, mock_transport_factory) -> None:
     handle = mock_transport_factory({})
     client = _client(handle)
     cache = RawCache(vault_paths, client)
@@ -409,9 +399,7 @@ def test_cache_path_absolute_raises_before_any_request(
     assert handle.requests == []
 
 
-def test_cache_path_dotdot_raises_before_any_request(
-    vault_paths, mock_transport_factory
-) -> None:
+def test_cache_path_dotdot_raises_before_any_request(vault_paths, mock_transport_factory) -> None:
     handle = mock_transport_factory({})
     client = _client(handle)
     cache = RawCache(vault_paths, client)

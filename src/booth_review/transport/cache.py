@@ -243,9 +243,7 @@ class RawCache:
 
         return self._handle_response(req, path, resp)
 
-    def _handle_response(
-        self, req: FetchRequest, path: Path, resp: FetchResponse
-    ) -> CacheResult:
+    def _handle_response(self, req: FetchRequest, path: Path, resp: FetchResponse) -> CacheResult:
         fetched_at = resp.fetched_at.strftime("%Y-%m-%dT%H:%M:%SZ")
 
         if resp.status_code == 200:
