@@ -27,7 +27,7 @@ from booth_review.transport.cache import atomic_write_bytes
 DEFAULT_SEED = 2025
 TARGET_COUNT = 20
 
-_POST_DST_NOVEMBER_START = date(2025, 11, 3)
+_POST_DST_NOVEMBER_START = date(2025, 11, 2)
 _POST_DST_NOVEMBER_END = date(2025, 11, 30)
 _LATE_HOUR_ET = 22
 _CFP_KEYWORDS = ("cfp", "college football playoff", "national championship")

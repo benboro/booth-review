@@ -112,6 +112,23 @@ def test_build_candidates_rated_hint_true_for_sitemap_covered_games() -> None:
     assert by_id[500030].rated_hint is False
 
 
+def test_build_candidates_flags_dst_end_sunday_as_post_dst_november() -> None:
+    """DST ends the first Sunday of November; for 2025 that's Nov 2, which
+    already kicks off in standard time and must count as post_dst_november
+    (WR-01: the boundary was off by one day).
+    """
+    from dataclasses import replace
+    from datetime import UTC, datetime
+
+    games = _load_games()
+    sunday_noon_et = datetime.fromisoformat("2025-11-02T12:00:00-05:00").astimezone(UTC)
+    game = replace(games[0], id=999_101, start_date=sunday_noon_et)
+
+    candidates = build_candidates([game], [])
+    by_id = {c.game.id: c for c in candidates}
+    assert "post_dst_november" in by_id[999_101].categories
+
+
 def test_build_candidates_non_rematch_pair_not_flagged() -> None:
     games = _load_games()
     rr_entries = _load_rr_entries()
