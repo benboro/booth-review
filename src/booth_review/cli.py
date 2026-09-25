@@ -550,11 +550,7 @@ def _budget(args: argparse.Namespace) -> int:
         collector = CfbdCollector(runtime.cache, budget, token)
 
         if args.probe_info_cost:
-            before = collector.info()
-            after = collector.info()
-            if before.remaining_calls is not None and after.remaining_calls is not None:
-                budget.record_info_probe(before.remaining_calls, after.remaining_calls)
-            snapshot = after
+            snapshot, _probed = collector.probe_info_cost()
             calls_made = 2
         else:
             snapshot = collector.info()

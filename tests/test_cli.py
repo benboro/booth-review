@@ -296,6 +296,31 @@ def test_budget_live_call_sentinel_key_never_leaks(
             assert b"SENTINEL-KEY-XYZ" not in path.read_bytes()
 
 
+def test_budget_probe_info_cost_calls_info_twice_and_commits_count_2(
+    git_vault, mock_transport_factory, patched_client, monkeypatch
+) -> None:
+    """WR-06: --probe-info-cost must go through collector.probe_info_cost()
+    (not a duplicated inline copy) -- two /info calls, and a batch commit
+    that reflects both."""
+    paths = git_vault
+    monkeypatch.setenv("CFBD_API_KEY", "test-token")
+    responses = {
+        "https://api.collegefootballdata.com/robots.txt": (404, b"nf", {}),
+        "https://api.collegefootballdata.com/info": (200, _cfbd_info_body(600), {}),
+    }
+    handle = mock_transport_factory(responses)
+    patched_client(handle)
+
+    exit_code = main(["budget", "--probe-info-cost"])
+
+    assert exit_code == 0
+    info_requests = [r for r in handle.requests if r.url.endswith("/info")]
+    assert len(info_requests) == 2
+
+    remote = paths.vault.parent / "remote.git"
+    assert _remote_head_subject(remote) == "budget: cfbd info (calls 2)"
+
+
 # -- missing vault ------------------------------------------------------------------------
 
 

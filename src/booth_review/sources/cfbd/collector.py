@@ -88,9 +88,15 @@ class CfbdCollector:
         result = self._cache.get_or_fetch(req, bearer_token=self._token)
         return parse_info(result.content)
 
-    def probe_info_cost(self) -> bool | None:
+    def probe_info_cost(self) -> tuple[InfoSnapshot, bool | None]:
+        """Call /info twice and record whether the second call itself counted
+        against the budget. Returns the second call's snapshot (for display)
+        alongside the probe result (True: counted, False: free, None:
+        inconclusive -- see CfbdBudget.record_info_probe).
+        """
         before = self.info()
         after = self.info()
         if before.remaining_calls is None or after.remaining_calls is None:
-            return None
-        return self._budget.record_info_probe(before.remaining_calls, after.remaining_calls)
+            return after, None
+        recorded = self._budget.record_info_probe(before.remaining_calls, after.remaining_calls)
+        return after, recorded

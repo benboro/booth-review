@@ -443,9 +443,10 @@ def test_cfbd_probe_info_cost_returns_false_when_remaining_equal(
     cache = RawCache(vault_paths, _client(handle, fake_clock=fake_clock), guards=[budget])
     collector = CfbdCollector(cache, budget, "test-token")
 
-    result = collector.probe_info_cost()
+    snapshot, result = collector.probe_info_cost()
 
     assert result is False
+    assert snapshot.remaining_calls == 600
     ledger_lines = [
         json.loads(line)
         for line in vault_paths.cfbd_ledger.read_text(encoding="utf-8").splitlines()
