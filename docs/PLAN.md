@@ -1,6 +1,6 @@
 # Who Calls the Best Games? College Football Feasibility Study and Project Plan
 
-Prepared September 24, 2026. No code has been written yet; this document covers scope, sources, risks, and the build plan. Sections 3, 4, 6, 9, 13, and 14 were updated the same day after checking each source's terms, robots.txt, and API limits.
+Prepared September 24, 2026. No code has been written yet; this document covers scope, sources, risks, and the build plan. Sections 3, 4, 6, 9, 11, 13, and 14 were updated the same day after checking each source's terms, robots.txt, and API limits, and after decisions on hosting, the viewership basis, and in-season updates.
 
 ---
 
@@ -164,12 +164,12 @@ Build these as explicit flags or era variables. Year-over-year viewership compar
 | Aug 31, 2020 | Nielsen begins including out-of-home viewing | Level shift upward |
 | Feb 2025 | Out-of-home measurement expanded to all markets | Further upward shift |
 | Sep 2025 | Nielsen "Big Data + Panel" methodology | Generally boosts live sports |
-| 2026 season | New Nielsen co-viewing metric (about +4% in pilots) | Further upward shift |
+| Aug 31, 2026 | Nielsen adds enhanced co-viewing (passive measurement through wearables) to its currency | Further upward shift, about +4% in February pilots; see the viewership basis option in Section 9 |
 | Varies | Some NBC and Peacock figures combine Nielsen and Adobe Analytics | Not comparable to Nielsen-only; flag as a separate measurement type |
 | Nov 2025 | Disney networks blacked out on YouTube TV for several weeks | Depressed ABC and ESPN numbers; flag the affected weeks |
 | Any week | Competing events (World Series, NFL, other marquee games in the same window) | Include a same-window competition variable |
 
-Ratings Reference tags each figure with a measurement era (`era_id`, for example `nielsen-bd-plus-panel`). In Phase 0, check how its eras line up with the rows above; they may supply most of these flags directly.
+Ratings Reference tags each figure with a measurement era (`era_id`, for example `nielsen-bd-plus-panel`). In Phase 0, check how its eras line up with the rows above; they may supply most of these flags directly. It had not split out a co-viewing era as of September 2026 (the Sep 12 Ohio State–Texas figure is still tagged `nielsen-bd-plus-panel`), so flag the Aug 31, 2026 change ourselves, by air date.
 
 ---
 
@@ -227,10 +227,11 @@ An event study around each change, controlling for matchup quality, is more cred
 - **Dots:** one per rated telecast. Unrated games are hidden by default, with an option to show them hollow on the assignment view.
 - **X-axis toggle:** realized excitement / pre-game expectation (spread or combined rank).
 - **Y-axis toggle:** log viewers / viewership residual from the Section 7.2 model.
+- **Viewership basis (back-end option, decided September 24, 2026):** `as_published` is the default and shows each figure as released. `coviewing` puts every game on Nielsen's co-viewing basis: figures for games aired from Aug 31, 2026 stay as published, and earlier figures are scaled up by an estimated co-viewing lift and marked as estimates in the hover. Nielsen publishes one figure per telecast, so no game has both versions (Ratings Reference shows a single figure for Ohio State–Texas, Sep 12, 2026). The lift starts at Nielsen's 4.19% pilot average, which came from marquee February events rather than college football; replace it if a better estimate appears. The basis follows air date, so any 2026 games before Aug 31 stay on the old basis.
 - **Color:** primary network, with at most about 8 colorblind-safe colors. Group small outlets as "Other."
 - **Hover:** matchup and date, final score, rankings, network and kickoff time, play-by-play and analyst, viewers (with source and measurement type), excitement, residual, and any flags (such as a carriage dispute or a competing event).
 - **Filter:** search or multi-select by person. Matched dots are enlarged and outlined; unmatched dots drop to about 15% opacity but keep their color. In compare mode, each selected person gets their own marker shape.
-- **Stack (when coding begins):** Python, Plotly with Dash, `Scattergl` for performance, pathlib for file handling, and a small class-based data layer that loads the tables and builds the figure.
+- **Stack (decided September 24, 2026):** Python builds the data: collectors, joins, and the Section 7.2 model, with pathlib for file handling and a small class-based data layer. The front end is a static page using Plotly.js (`scattergl` for performance). Hover details come from Plotly's hover templates, and filters and axis toggles run in browser JavaScript, so no Dash server is needed and the page can live on GitHub Pages. Model outputs such as residuals are computed during the build, not in the browser.
 - **Deployment (decided September 24, 2026):** the website serves pre-built data files only. All data is pulled ahead of time, server-side, so viewing the page never sends a request to CFBD or any other source, and the CFBD key never reaches the site.
 
 ---
@@ -262,6 +263,15 @@ The per-person table (`telecast_people`) is what makes filtering work across net
 | 4. Descriptive view | Scatter plot for Question A | Working filter and hover |
 | 5. Model | Section 7.2 model plus event studies around conference moves | Crew effects with intervals; residuals feeding the y-axis toggle |
 | 6. Toggle prep | Repeat Phase 0 for NFL and MLB | Go or no-go per sport |
+| 7. In-season updates | Scheduled job that fetches only the current season (506 week pages, new Ratings Reference records, CFBD data for the week), adds it to the earlier seasons, rebuilds the site data, and publishes it. Runs Sunday for crews, scores, and excitement, and Wednesday for viewership. Can start once Phase 4 works; it doesn't need Phase 5 | A weekend's games appear on the site by Sunday night and their viewership by Wednesday, with no re-fetch of earlier seasons and CFBD use well under the monthly limit |
+
+**Phase 7 notes:**
+
+- **Where it runs:** a scheduled GitHub Actions workflow, the same pattern as terminal-dashboard, pushing the built files to `benboro.github.io`. The CFBD key is an encrypted Actions secret, so requests stay server-side.
+- **Earlier seasons:** Actions runners start empty, and GitHub drops cache entries unused for 7 days. The job therefore builds on the previously built data rather than on a raw-page cache; a single cache miss must never trigger a full re-fetch (about 3,800 Ratings Reference requests and 300 CFBD calls).
+- **Offseason:** GitHub disables scheduled workflows in public repos after 60 days without a commit. Re-enable the workflow each August.
+- **Timing:** 506 posts crews before kickoff; CFBD has scores by Saturday night or Sunday; viewership mostly arrives Tuesday to Wednesday (Ohio State–Texas, Sat Sep 12, 2026, was published Tue Sep 15), and some figures come later or are revised.
+- **Prerequisite:** the site's data file publishes joined data, so open question 5 must be settled for CFBD and 506 before the site goes live, in this phase or in Phase 4.
 
 ---
 
@@ -294,7 +304,8 @@ The per-person table (`telecast_people`) is what makes filtering work across net
 3. Primary-network rule for simulcasts (for example, ABC plus ESPN2 or Disney+): first-listed outlet, or rights holder?
 4. Include Nielsen plus Adobe figures with a flag, or restrict to Nielsen-only?
 5. Terms of use: resolved for Ratings Reference (CC BY 4.0; see Section 4.2). Still open for 506 Sports (no published terms; ask the owners) and for republishing CFBD data, especially its `excitementIndex` (ask CFBD).
-6. Front end: the personal site is served by GitHub Pages, which can't run a Dash server. Build a static Plotly page with client-side filtering, or host Dash somewhere else?
+6. ~~Front end: Dash, or a static page?~~ Decided: a static Plotly.js page on GitHub Pages (Section 9).
+7. Co-viewing lift for the `coviewing` basis: keep Nielsen's 4.19% pilot average, or estimate one from college football data once 2026 figures accumulate? The 2026 era effect in the Section 7.2 model mixes co-viewing with every other change in 2026, so it isn't a clean estimate.
 
 ---
 
@@ -309,4 +320,6 @@ The per-person table (`telecast_people`) is what makes filtering work across net
 - CFBD API docs: https://api.collegefootballdata.com/
 - CFBD data availability: https://api.collegefootballdata.com/data-availability
 - CFBD OpenAPI spec: https://api.collegefootballdata.com/api-docs.json
+- Nielsen co-viewing enters currency Aug 31, 2026 (Front Office Sports): https://frontofficesports.com/article/nielsen-co-viewing-currency/
+- Nielsen co-viewing pilot results: https://www.nielsen.com/insights/2026/nielsen-co-viewing-pilot-delivers-a-4-average-increase-in-total-viewers-for-februarys-live-televised-events/
 - cfbfastR (win probability models): https://cfbfastr.sportsdataverse.org/
