@@ -34,6 +34,12 @@ model, and build phases; read the relevant section before starting a phase.
 - All requests go through the `booth-review collect` / `booth-review budget`
   commands, which apply the user agent, robots.txt, pacing, caching, and the CFBD
   budget. Never fetch with ad-hoc scripts, curl, or notebooks.
+- 506 Sports blocks automated clients (403 Forbidden to booth-review's
+  correctly-identified requests, confirmed 2026-09-25). Never work around this
+  (no User-Agent changes, retries, or alternate request shapes). Instead, save
+  its week pages by hand in a browser to `data/incoming/506/` and bring them into
+  the vault with `booth-review import 506 --season <year>`, which validates each
+  page and writes it to the same cache path and manifest shape a live fetch would.
 - The vault is private. Never copy its files into the public repo, test fixtures,
   commit messages, or logs; tests use synthetic 506 and CFBD fixtures.
 - Ratings Reference: read the per-telecast JSON records (`/api/telecast/<id>.json`)
