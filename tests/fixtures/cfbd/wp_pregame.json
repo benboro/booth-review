@@ -1,0 +1,22 @@
+[
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 1,
+    "gameId": 401520001,
+    "homeTeam": "Northfield State",
+    "awayTeam": "Lakeshore Tech",
+    "spread": -6.5,
+    "homeWinProbability": 0.71
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 1,
+    "gameId": 401520002,
+    "homeTeam": "Riverside Poly",
+    "awayTeam": "Granite College",
+    "spread": 1.5,
+    "homeWinProbability": 0.46
+  }
+]

@@ -1,0 +1,33 @@
+[
+  {
+    "id": 401520001,
+    "season": 2025,
+    "week": 1,
+    "seasonType": "regular",
+    "startDate": "2025-08-30T16:00:00.000Z",
+    "homeTeam": "Northfield State",
+    "awayTeam": "Lakeshore Tech",
+    "lines": [
+      {
+        "provider": "ExampleBook",
+        "spread": -6.5,
+        "formattedSpread": "Northfield State -6.5",
+        "spreadOpen": -7.0,
+        "overUnder": 51.5,
+        "overUnderOpen": 50.0,
+        "homeMoneyline": -220,
+        "awayMoneyline": 180
+      },
+      {
+        "provider": "SecondBook",
+        "spread": null,
+        "formattedSpread": null,
+        "spreadOpen": null,
+        "overUnder": null,
+        "overUnderOpen": null,
+        "homeMoneyline": null,
+        "awayMoneyline": null
+      }
+    ]
+  }
+]
