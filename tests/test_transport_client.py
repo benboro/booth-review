@@ -31,6 +31,11 @@ def _client(
     if fake_clock is not None:
         kwargs["clock"] = fake_clock.now
         kwargs["sleep"] = fake_clock.sleep
+    else:
+        # No test cares about real elapsed time here; use a no-op clock/sleep
+        # so pacing waits never actually block the test suite.
+        kwargs["clock"] = lambda: 0.0
+        kwargs["sleep"] = lambda seconds: None
     if rng is not None:
         kwargs["rng"] = rng
     return PoliteClient(**kwargs)
@@ -407,9 +412,7 @@ def test_bearer_token_added_to_page_request_only() -> None:
     }
     client = _client(_recording_handler(responses, log))
 
-    client.fetch(
-        "https://api.collegefootballdata.com/games?year=2025", bearer_token="secret-token"
-    )
+    client.fetch("https://api.collegefootballdata.com/games?year=2025", bearer_token="secret-token")
 
     robots_request = next(r for r in log if str(r.url).endswith("/robots.txt"))
     page_request = next(r for r in log if str(r.url).endswith("/games?year=2025"))
