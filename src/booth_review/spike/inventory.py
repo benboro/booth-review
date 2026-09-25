@@ -33,6 +33,7 @@ from booth_review.sources.cfbd.parser import (
 from booth_review.sources.ratingsref.parser import parse_record
 from booth_review.sources.sports506.parser import parse_week_page
 from booth_review.spike.inventory_506 import build_506_inventory, write_506_inventory
+from booth_review.spike.pregame_measure import run_pregame_measure
 from booth_review.transport.budget import CfbdBudget
 from booth_review.transport.cache import atomic_write_bytes, atomic_write_json
 from booth_review.vault import VaultRepo, batch_message
@@ -827,9 +828,10 @@ def write_interim(paths: DataPaths, *, season: int = 2025) -> dict[str, int]:
 
 def run_inventory(paths: DataPaths, *, commit: bool) -> None:
     """Rebuild every SPIKE-03 inventory (RR, CFBD, 506, the rank-prefix-vs-poll
-    comparison) and the interim mirror from local raw files, then optionally
-    commit the vault with a count-only message. Sends no request: everything
-    is read from data/vault/raw/ and data/vault/ledger/.
+    comparison), the SPIKE-04 pre-game-measure report, and the interim mirror
+    from local raw files, then optionally commit the vault with a count-only
+    message. Sends no request: everything is read from data/vault/raw/ and
+    data/vault/ledger/.
     """
     rr_inv = build_rr_inventory(paths, _RR_SEASONS)
     atomic_write_json(paths.spike / "inventory-ratingsref.json", rr_inv)
@@ -850,8 +852,11 @@ def run_inventory(paths: DataPaths, *, commit: bool) -> None:
 
     write_interim(paths, season=2025)
 
+    run_pregame_measure(paths)
+
     if commit:
-        files_written = 6  # 3 inventory pairs written this run: RR, CFBD, 506 (.md + .json each)
+        # 3 inventory pairs (.md + .json each) + the pregame-measure report + coverage csv.
+        files_written = 8
         VaultRepo(paths.vault).commit_batch(
             batch_message("spike", "inventory", "2025", {"files": files_written})
         )

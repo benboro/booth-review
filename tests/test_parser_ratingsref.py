@@ -125,3 +125,15 @@ def test_record_url_property() -> None:
     assert record.record_url == (
         "https://ratingsreference.com/telecast/cfb-northfield-state-lakeshore-tech-2025-09-13"
     )
+
+
+def test_parse_record_accepts_int_tier() -> None:
+    """Real Ratings Reference records carry an int tier level (e.g. 1, 2),
+    not the string label ("national") the initial fixture used.
+    """
+    import json
+
+    data = json.loads((FIXTURES / "record_synthetic.json").read_bytes())
+    data["telecast"]["tier"] = 2
+    record = parse_record(json.dumps(data).encode("utf-8"))
+    assert record.telecast.tier == 2

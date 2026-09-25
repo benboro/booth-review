@@ -26,7 +26,9 @@ class RRTelecast(BaseModel):
     networks: list[str] = []
     teams: list[str] = []
     kind: str | None = None
-    tier: str | None = None
+    # Real records carry an int tier level (e.g. 1, 2); the initial research
+    # session assumed a string label ("national"), so both are accepted.
+    tier: int | str | None = None
 
 
 class RRClaim(BaseModel):
