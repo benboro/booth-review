@@ -18,6 +18,9 @@ dependencies = [
     "tzdata>=2026.4",
 ]
 
+[project.scripts]
+booth-review = "booth_review.cli:main"
+
 [dependency-groups]
 dev = [
     "mypy>=2.3.1",
