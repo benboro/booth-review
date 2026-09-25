@@ -15,9 +15,8 @@ model, and build phases; read the relevant section before starting a phase.
   table in `data/README.md`), by adding one `!data/processed/<file>` line below them;
   `tests/test_gitignore.py` checks the chain.
 - GSD planning files (`.planning/`) and Fable task briefs (`fable-*.md`) are local and
-  gitignored. Never commit them, and never commit GSD-generated marker sections (an
-  HTML comment whose text starts with the four letters G, S, D, and a colon) in
-  `AGENTS.md`; `CLAUDE.md` is a symlink to it, so tools that write `CLAUDE.md` edit
+  gitignored. Never commit them, and never commit the sections GSD generates (wrapped in
+  its HTML-comment markers) in `AGENTS.md`; `CLAUDE.md` is a symlink to it, so tools that write `CLAUDE.md` edit
   `AGENTS.md`.
 - Before every commit, check `git status` for staged data, cache, or `.env` files.
 
