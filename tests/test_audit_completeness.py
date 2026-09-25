@@ -311,6 +311,16 @@ def test_check_rr_cached_and_lastmod_recorded_is_complete(vault_paths: DataPaths
     assert cell.counts == {"listed": 1, "cached": 1, "lastmod_recorded": 1, "missing": 0}
 
 
+def test_check_rr_no_listed_telecasts_is_incomplete(vault_paths: DataPaths) -> None:
+    cell = check_rr(vault_paths, 2025, [], lastmod_keys=set())
+
+    assert cell.complete is False
+    assert cell.counts["listed"] == 0
+    assert cell.reasons == [
+        "sitemap lists no telecasts for this season (missing or unparsed sitemap)"
+    ]
+
+
 # -- CFBD ledger month summary ------------------------------------------------------------------
 
 

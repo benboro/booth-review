@@ -254,12 +254,16 @@ def check_rr(
             missing_ids.add(entry.telecast_id)
 
     sorted_missing = sorted(missing_ids)
-    complete = not sorted_missing
-    reasons = (
-        [f"missing {len(sorted_missing)}/{len(entries)} records cached or lastmod-recorded"]
-        if sorted_missing
-        else []
-    )
+    # RR lists telecasts for every in-scope season, so an empty list means the
+    # sitemap is missing or unparsed, never a vacuously complete season.
+    complete = bool(entries) and not sorted_missing
+    reasons: list[str] = []
+    if not entries:
+        reasons.append("sitemap lists no telecasts for this season (missing or unparsed sitemap)")
+    elif sorted_missing:
+        reasons.append(
+            f"missing {len(sorted_missing)}/{len(entries)} records cached or lastmod-recorded"
+        )
 
     return CellResult(
         season=season,

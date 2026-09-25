@@ -132,9 +132,9 @@ def test_audit_completeness_cli_incomplete_season_prints_per_source_status_exits
 
     assert exit_code == 4
     out = capsys.readouterr().out
-    # No RR sitemap is cached at all, so the RR cell has zero listed
-    # telecasts and is vacuously complete -- only 506/CFBD are incomplete.
-    assert "season 2025: sports506=incomplete cfbd=incomplete ratingsref=complete" in out
+    # No RR sitemap is cached at all, so the RR cell lists zero telecasts,
+    # which is incomplete rather than vacuously complete.
+    assert "season 2025: sports506=incomplete cfbd=incomplete ratingsref=incomplete" in out
 
 
 def test_audit_completeness_cli_complete_season_exits_0_and_commits(
