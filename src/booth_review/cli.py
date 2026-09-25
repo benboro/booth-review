@@ -29,6 +29,8 @@ from booth_review.audit.completeness import (
 from booth_review.audit.freeze import FreezeResult, Waiver, freeze_seasons, parse_waiver
 from booth_review.config import CFBD_FLOOR_DEFAULT, DataPaths, load_cfbd_key
 from booth_review.errors import BoothReviewError, FreezeRefusedError
+from booth_review.job.attention import build_attention_body
+from booth_review.job.runner import JOB_CFBD_MAX_CALLS, JobRunResult, ScheduledJob
 from booth_review.runtime import Runtime, build_runtime
 from booth_review.seasons import season_of, season_window
 from booth_review.sources.base import BatchSummary, run_requests
@@ -200,6 +202,16 @@ def build_parser() -> argparse.ArgumentParser:
     freeze.add_argument("--waive", type=parse_waiver, action="append", default=[])
     freeze.add_argument("--dry-run", action="store_true")
     freeze.add_argument("--no-commit", action="store_true")
+
+    job = sub.add_parser("job", help="AUTO-01 scheduled collect-only job")
+    job_sub = job.add_subparsers(dest="job_command", required=True)
+    job_run = job_sub.add_parser("run", help="run one scheduled collect-only pass")
+    job_run.add_argument("--trigger", choices=["schedule", "manual"], default="manual")
+    job_run.add_argument("--rr-cap", type=int, default=REFRESH_CAP_DEFAULT)
+    job_run.add_argument("--max-cfbd-calls", type=int, default=JOB_CFBD_MAX_CALLS)
+    job_run.add_argument("--attention-out", type=Path, default=None)
+    job_run.add_argument("--dry-run", action="store_true")
+    job_run.add_argument("--no-commit", action="store_true")
 
     budget = sub.add_parser("budget", help="report and record CFBD budget usage")
     budget.add_argument("--offline", action="store_true")
@@ -716,6 +728,39 @@ def _freeze(args: argparse.Namespace) -> int:
     return 0
 
 
+# -- job run (AUTO-01) -------------------------------------------------------------------
+
+
+def _job_run(args: argparse.Namespace) -> int:
+    """Run one scheduled collect-only pass. Never prints or logs the CFBD key
+    (loaded via config.load_cfbd_key, same as every other live command)."""
+    runtime = build_runtime(
+        with_budget=True, floor=CFBD_FLOOR_DEFAULT, max_calls=args.max_cfbd_calls, tag="job"
+    )
+    try:
+        token = None if args.dry_run else load_cfbd_key()
+        job = ScheduledJob(
+            runtime,
+            token=token,
+            now=lambda: datetime.now(UTC),
+            trigger=args.trigger,
+            rr_cap=args.rr_cap,
+            dry_run=args.dry_run,
+            commit=not args.no_commit,
+        )
+        result: JobRunResult = job.run()
+
+        if args.attention_out is not None:
+            body = build_attention_body(result.items, generated_at=datetime.now(UTC))
+            if body is not None:
+                args.attention_out.parent.mkdir(parents=True, exist_ok=True)
+                args.attention_out.write_text(body, encoding="utf-8")
+
+        return result.exit_code
+    finally:
+        runtime.client.close()
+
+
 # -- budget -----------------------------------------------------------------------------
 
 
@@ -803,6 +848,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise AssertionError(f"unknown audit command: {args.audit_command!r}")
         if args.command == "freeze":
             return _freeze(args)
+        if args.command == "job":
+            if args.job_command == "run":
+                return _job_run(args)
+            raise AssertionError(f"unknown job command: {args.job_command!r}")
         if args.command == "budget":
             return _budget(args)
         raise AssertionError(f"unknown command: {args.command!r}")
