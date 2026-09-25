@@ -17,6 +17,7 @@ import sys
 from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import cast
 from urllib.parse import urlsplit
 
 from booth_review.config import CFBD_FLOOR_DEFAULT, DataPaths, load_cfbd_key
@@ -25,6 +26,7 @@ from booth_review.runtime import Runtime, build_runtime
 from booth_review.seasons import season_window
 from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.sources.cfbd.collector import ENDPOINTS, CfbdCollector
+from booth_review.sources.cfbd.parser import parse_games
 from booth_review.sources.ratingsref.collector import RatingsRefCollector
 from booth_review.sources.ratingsref.sitemap import parse_sitemap, select_entries
 from booth_review.sources.sports506.collector import Sports506Collector
@@ -34,6 +36,18 @@ from booth_review.sources.sports506.importer import (
     Sports506Importer,
 )
 from booth_review.spike.inventory import run_inventory
+from booth_review.spike.join import (
+    build_join_rows,
+    finalize,
+    load_rr_sitemap_entries,
+    write_outputs,
+)
+from booth_review.spike.selection import (
+    build_candidates,
+    load_selection,
+    save_selection,
+    select_games,
+)
 from booth_review.transport.budget import BudgetSummary, InfoSnapshot
 from booth_review.vault import VaultRepo, batch_message
 
@@ -133,6 +147,13 @@ def build_parser() -> argparse.ArgumentParser:
         "inventory", help="rebuild source inventories and the pregame-measure report from raw"
     )
     spike_inventory.add_argument("--no-commit", action="store_true")
+
+    spike_join = spike_sub.add_parser(
+        "join", help="build/finalize the SPIKE-02 20-game hand-join outputs (D-06/D-09)"
+    )
+    spike_join.add_argument("--reselect", action="store_true")
+    spike_join.add_argument("--finalize", action="store_true")
+    spike_join.add_argument("--no-commit", action="store_true")
 
     budget = sub.add_parser("budget", help="report and record CFBD budget usage")
     budget.add_argument("--offline", action="store_true")
@@ -428,6 +449,55 @@ def _spike_inventory(args: argparse.Namespace) -> int:
     return 0
 
 
+# -- spike join ---------------------------------------------------------------------------
+
+_SPIKE_JOIN_SEASON = 2025
+
+
+def _spike_join(args: argparse.Namespace) -> int:
+    """Build (or finalize) the SPIKE-02 hand-join outputs from data already
+    cached in the vault. Builds no PoliteClient: only checks the vault is a
+    real, pushable git working copy, then reads/writes data/vault/spike/.
+    """
+    paths = DataPaths.from_env()
+    vault = VaultRepo(paths.vault)
+    vault.check()
+
+    if args.finalize:
+        result = finalize(paths)
+        verdict = "PASS" if result["passed"] else "FAIL"
+        print(
+            f"confirmed {result['confirmed']}, corrected {result['corrected']}, "
+            f"rejected {result['rejected']}"
+        )
+        print(f"join rate {result['confirmed']}/{result['total']}: D-09 (80%) {verdict}")
+        if not args.no_commit:
+            counts = {"confirmed": cast(int, result["confirmed"])}
+            vault.commit_batch(
+                batch_message("spike", "join-final", str(_SPIKE_JOIN_SEASON), counts)
+            )
+        return 0
+
+    selection_path = paths.spike / "selection.csv"
+    selections = None if args.reselect else load_selection(selection_path)
+    if selections is None:
+        games_path = paths.raw / "cfbd" / "games" / f"{_SPIKE_JOIN_SEASON}.json"
+        games = parse_games(games_path.read_bytes())
+        rr_entries = load_rr_sitemap_entries(paths)
+        candidates = build_candidates(games, rr_entries)
+        selections = select_games(candidates)
+        save_selection(selection_path, selections)
+
+    rows = build_join_rows(paths, selections)
+    write_outputs(paths, rows, selections)
+    print(f"selected {len(selections)}, rows {len(rows)}")
+    if not args.no_commit:
+        vault.commit_batch(
+            batch_message("spike", "join", str(_SPIKE_JOIN_SEASON), {"rows": len(rows)})
+        )
+    return 0
+
+
 # -- budget -----------------------------------------------------------------------------
 
 
@@ -506,6 +576,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "spike":
             if args.spike_command == "inventory":
                 return _spike_inventory(args)
+            if args.spike_command == "join":
+                return _spike_join(args)
             raise AssertionError(f"unknown spike command: {args.spike_command!r}")
         if args.command == "budget":
             return _budget(args)
