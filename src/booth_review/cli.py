@@ -27,7 +27,12 @@ from booth_review.seasons import season_of, season_window
 from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.sources.cfbd.collector import ENDPOINTS, CfbdCollector
 from booth_review.sources.cfbd.parser import parse_games
-from booth_review.sources.ratingsref.collector import RatingsRefCollector
+from booth_review.sources.ratingsref.collector import (
+    FIRST_SEASON,
+    REFRESH_CAP_DEFAULT,
+    RatingsRefCollector,
+    RefreshSummary,
+)
 from booth_review.sources.ratingsref.sitemap import parse_sitemap, select_entries
 from booth_review.sources.sports506.collector import Sports506Collector
 from booth_review.sources.sports506.importer import (
@@ -136,6 +141,15 @@ def build_parser() -> argparse.ArgumentParser:
     pcfbd.add_argument("--floor", type=int, default=CFBD_FLOOR_DEFAULT)
     pcfbd.add_argument("--dry-run", action="store_true")
     pcfbd.add_argument("--no-commit", action="store_true")
+
+    refresh = sub.add_parser("refresh", help="re-fetch source records whose lastmod changed")
+    refresh_sub = refresh.add_subparsers(dest="source", required=True)
+    prefresh = refresh_sub.add_parser(
+        "ratingsref", help="refresh Ratings Reference records whose sitemap lastmod advanced"
+    )
+    prefresh.add_argument("--cap", type=int, default=REFRESH_CAP_DEFAULT)
+    prefresh.add_argument("--dry-run", action="store_true")
+    prefresh.add_argument("--no-commit", action="store_true")
 
     import_cmd = sub.add_parser("import", help="import hand-saved source pages into the vault")
     import_sub = import_cmd.add_subparsers(dest="source", required=True)
@@ -363,6 +377,71 @@ def _collect_ratingsref_sitemap_only(
     return 0
 
 
+# -- refresh ratingsref ---------------------------------------------------------------
+
+
+def _partial_refresh_counts(before: dict[str, int], after: dict[str, int]) -> dict[str, int]:
+    return {
+        "fetched": after["fetched"] - before["fetched"],
+        "not_modified": after["not_modified"] - before["not_modified"],
+        "failed": 0,
+        "backlog": 0,
+    }
+
+
+def _print_refresh_summary(summary: RefreshSummary) -> None:
+    print(
+        f"qualifying {summary.qualifying}, new {summary.new}, advanced {summary.advanced}, "
+        f"selected {summary.selected}, uncapped_current {summary.uncapped_current}, "
+        f"backlog {summary.backlog}"
+    )
+
+
+def _refresh_ratingsref(args: argparse.Namespace) -> int:
+    runtime = build_runtime(with_budget=False)
+    try:
+        collector = RatingsRefCollector(runtime.cache, runtime.paths)
+        current_season = _current_season_ceiling()
+        season_label = f"{FIRST_SEASON}-{current_season}"
+
+        before = dict(runtime.cache.counters)
+        summary: RefreshSummary | None = None
+        try:
+            summary = collector.refresh(
+                current_season=current_season, cap=args.cap, dry_run=args.dry_run
+            )
+        finally:
+            if not args.dry_run and not args.no_commit:
+                counts = (
+                    summary.counts()
+                    if summary is not None
+                    else _partial_refresh_counts(before, runtime.cache.counters)
+                )
+                runtime.vault.commit_batch(
+                    batch_message("refresh", "ratingsref", season_label, counts),
+                    paths=[
+                        "raw/ratingsref",
+                        "raw/_robots",
+                        "ledger/requests.jsonl",
+                        "ledger/rr_lastmod.json",
+                    ],
+                )
+        assert summary is not None
+
+        _print_refresh_summary(summary)
+        if not args.dry_run:
+            print(
+                f"fetched {summary.fetched}, not_modified {summary.not_modified}, "
+                f"failed {summary.failed}"
+            )
+            if summary.backlog > 0:
+                print(f"backlog {summary.backlog}")
+            return 4 if summary.failed > 0 or summary.backlog > 0 else 0
+        return 0
+    finally:
+        runtime.client.close()
+
+
 # -- collect cfbd ---------------------------------------------------------------------
 
 
@@ -411,17 +490,18 @@ def _collect_cfbd(args: argparse.Namespace) -> int:
 # -- import 506 ----------------------------------------------------------------------------
 
 
-_EXPECTED_506_WEEKS = 18
-
-
 def _print_import_result(result: ImportResult) -> None:
-    present = _EXPECTED_506_WEEKS - len(result.missing)
+    total = len(result.expected)
+    present = total - len(result.missing)
+    source_note = "(weeks from nav)" if result.expected_source == "nav" else "(default 18 weeks)"
     print(
-        f"season {result.season}: present {present}/{_EXPECTED_506_WEEKS}, "
-        f"missing {len(result.missing)}/{_EXPECTED_506_WEEKS}"
+        f"season {result.season}: present {present}/{total}, "
+        f"missing {len(result.missing)}/{total} {source_note}"
     )
     if result.missing:
         print(f"missing weeks: {', '.join(result.missing)}")
+    if result.unsupported_labels:
+        print(f"unsupported nav weeks: {', '.join(result.unsupported_labels)}")
     print(
         f"imported {len(result.imported)}, skipped_existing {len(result.skipped_existing)}, "
         f"skipped_invalid {len(result.skipped_invalid)}"
@@ -440,13 +520,19 @@ def _import_506(args: argparse.Namespace) -> int:
 
         any_problems = False
         for season in args.season:
-            result = importer.run(season, incoming_dir=incoming_dir, force=args.force)
-            _print_import_result(result)
-            if result.has_problems:
-                any_problems = True
-            if not args.no_commit:
-                message = batch_message("import", "sports506", str(season), result.counts())
-                runtime.vault.commit_batch(message)
+            # D-04: hold the vault lock and commit only this season's own
+            # files, so a concurrent RR refresh or another season's import
+            # never races on the same working copy (T-02-02).
+            with runtime.vault.lock():
+                result = importer.run(season, incoming_dir=incoming_dir, force=args.force)
+                _print_import_result(result)
+                if result.has_problems:
+                    any_problems = True
+                if not args.no_commit:
+                    message = batch_message("import", "sports506", str(season), result.counts())
+                    runtime.vault.commit_batch(
+                        message, paths=[f"raw/sports506/{season}", "ledger/requests.jsonl"]
+                    )
         return 4 if any_problems else 0
     finally:
         runtime.client.close()
@@ -586,6 +672,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.source == "cfbd":
                 return _collect_cfbd(args)
             raise AssertionError(f"unknown collect source: {args.source!r}")
+        if args.command == "refresh":
+            if args.source == "ratingsref":
+                return _refresh_ratingsref(args)
+            raise AssertionError(f"unknown refresh source: {args.source!r}")
         if args.command == "import":
             if args.source == "506":
                 return _import_506(args)
