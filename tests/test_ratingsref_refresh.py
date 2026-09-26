@@ -312,7 +312,8 @@ def test_refresh_caps_advanced_records_excludes_current_season_new_reports_backl
 
     sitemap_xml = _sitemap_xml(advanced_entries + new_entries)
 
-    # Sorted (lastmod, telecast_id) ascending: capped selection is i=0..99 of
+    # No capped current-season entries here, so the order is (lastmod,
+    # telecast_id) ascending: capped selection is i=0..99 of
     # the advanced (old-season) entries; i=100..149 are backlog.
     selected_advanced = advanced_entries[:100]
     backlog_advanced = advanced_entries[100:]
@@ -351,6 +352,50 @@ def test_refresh_caps_advanced_records_excludes_current_season_new_reports_backl
     # last-sorted one (highest lastmod, backlog) was never requested.
     assert _telecast_url(selected_advanced[0][0]) in telecast_urls
     assert _telecast_url(backlog_advanced[-1][0]) not in telecast_urls
+
+
+def test_refresh_current_season_advanced_records_come_before_the_historical_backlog(
+    vault_paths, mock_transport_factory, fake_clock
+) -> None:
+    current_season = 2026
+
+    old_entries: list[tuple[str, str]] = []
+    known: dict[str, dict[str, str]] = {}
+    for i in range(3):
+        slug = f"cfb-old-team-{i:03d}-2019-09-{7 + i:02d}"
+        old_entries.append((slug, f"2026-01-0{i + 1}T00:00:00+00:00"))
+        known[slug] = {
+            "lastmod": "2020-01-01T00:00:00+00:00",
+            "fetched_at": "2020-01-01T00:00:00Z",
+            "record_url": f"https://ratingsreference.com/telecast/{slug}",
+        }
+    # A current-season record RR revised: its newer lastmod would sort it last.
+    current_slug = "cfb-cur-team-a-2026-09-12"
+    known[current_slug] = {
+        "lastmod": "2026-09-13T00:00:00+00:00",
+        "fetched_at": "2026-09-13T00:00:00Z",
+        "record_url": f"https://ratingsreference.com/telecast/{current_slug}",
+    }
+    _write_lastmod(vault_paths, known)
+
+    sitemap_xml = _sitemap_xml([*old_entries, (current_slug, "2026-09-20T00:00:00+00:00")])
+    responses = {
+        "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
+        SITEMAP_URL: (200, sitemap_xml, {}),
+        _telecast_url(current_slug): (200, _record_body(current_slug), {}),
+        _telecast_url(old_entries[0][0]): (200, _record_body(old_entries[0][0]), {}),
+    }
+    handle = mock_transport_factory(responses)
+    cache = RawCache(vault_paths, _client(handle, fake_clock=fake_clock))
+    collector = RatingsRefCollector(cache, vault_paths)
+
+    summary = collector.refresh(current_season=current_season, cap=2, dry_run=False)
+
+    assert summary.advanced == 4
+    assert summary.selected == 2
+    assert summary.backlog == 2
+    telecast_urls = [r.url for r in handle.requests if "/api/telecast/" in r.url]
+    assert telecast_urls == [_telecast_url(current_slug), _telecast_url(old_entries[0][0])]
 
 
 def test_refresh_default_cap_constant_is_100_and_first_season_2014() -> None:

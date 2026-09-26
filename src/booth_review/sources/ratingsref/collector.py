@@ -173,9 +173,12 @@ class RatingsRefCollector:
         newly listed, in any season 2014..current_season, frozen ones
         included (D-07). New current-season records are uncapped; every
         other qualifying record (including an advanced current-season
-        record) is capped at `cap` per run, selected deterministically by
-        (lastmod, telecast_id) ascending; the remainder is backlog (D-08).
-        A fetched record overwrites its cached file (D-09).
+        record) is capped at `cap` per run, selected deterministically:
+        current-season records first (an advanced current-season record is
+        most likely a revised viewership figure, and must not wait behind a
+        mass revision of older seasons, WR-05), then by (lastmod,
+        telecast_id) ascending; the remainder is backlog (D-08). A fetched
+        record overwrites its cached file (D-09).
         """
         if not lastmod_ledger_exists(self._paths):
             raise VaultStateError(
@@ -219,7 +222,7 @@ class RatingsRefCollector:
         uncapped_ids = {e.telecast_id for e in uncapped_entries}
         capped_candidates = sorted(
             (e for e in qualifying if e.telecast_id not in uncapped_ids),
-            key=lambda e: (e.lastmod, e.telecast_id),
+            key=lambda e: (e.season != current_season, e.lastmod, e.telecast_id),
         )
         selected_capped = capped_candidates[:cap]
         backlog_entries = capped_candidates[cap:]
