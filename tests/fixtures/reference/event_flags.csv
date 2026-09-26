@@ -1,0 +1,3 @@
+flag_id,kind,label,start_date,end_date,season_from,networks,source_url,note
+fixture-event-1,event,Invented carriage dispute for tests,2025-10-31,2025-11-14,,net-a|net-b,https://example.com/event1,Invented event window for tests
+fixture-model-break,model_break,Invented model change for tests,,,2025,,https://example.com/modelbreak,Invented model-break flag for tests
