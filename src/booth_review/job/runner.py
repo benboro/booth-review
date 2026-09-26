@@ -11,6 +11,14 @@ state (`ledger/job_state.json`) is saved and committed last. A VaultCommitError
 at any commit stops the run immediately (exit 3); every other step failure
 becomes an attention item and the run continues (exit 4 when any attention
 item exists, exit 0 on a clean run).
+
+GitHub's own scheduler is lossy, so the workflow template also fires backup
+cron slots between the two main slots (Sunday 10:00 / Wednesday 20:00 ET,
+D-11). `EXIT_NOTHING_DUE = 5` is returned by a `trigger="schedule"` run that
+finds no main slot has occurred since its last success (`job.catchup.is_due`):
+it exits before any CFBD, RR, or 506 step, any vault commit, or the
+`ledger/job_state.json` save, so a dropped main slot's next backup slot is the
+only run that actually does anything.
 """
 
 from __future__ import annotations
@@ -42,6 +50,7 @@ from booth_review.job.catchup import (
     Trigger,
     catchup_window,
     collectable_season,
+    is_due,
     load_state,
     save_state,
 )
@@ -74,6 +83,11 @@ JOB_CFBD_MAX_CALLS = 8
 # Vault state files the job refuses to run without (VaultStateError, exit 3):
 # a missing file never falls back to treating the vault as empty/new.
 REQUIRED_LEDGER_FILES: tuple[str, ...] = ("rr_lastmod.json", "cfbd_ledger.jsonl", "frozen.json")
+
+# A scheduled run with nothing due since its last success (job.catchup.is_due
+# is False) exits here -- a cheap no-op for a backup cron slot -- before any
+# CFBD, RR, or 506 step, commit, or ledger/job_state.json save.
+EXIT_NOTHING_DUE = 5
 
 
 @dataclass(frozen=True)
@@ -158,6 +172,11 @@ class ScheduledJob:
         rr_current_season = season_of(today)
         window_season = season if season is not None else rr_current_season
         window = catchup_window(state, now, window_season, self._trigger)
+
+        if not is_due(state, now, self._trigger):
+            return JobRunResult(
+                exit_code=EXIT_NOTHING_DUE, items=[], counts={"skipped": 1}, window=window
+            )
 
         items: list[AttentionItem] = []
         counts: dict[str, int] = {}

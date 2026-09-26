@@ -1,6 +1,6 @@
 [project]
 name = "booth-review"
-version = "0.2.0"
+version = "0.2.1"
 description = "Which broadcasters get the best college football games, and who draws viewers beyond what the matchup predicts."
 readme = "README.md"
 license = "MIT"

@@ -19,11 +19,31 @@ from booth_review.job.catchup import (
     JobState,
     catchup_window,
     collectable_season,
+    is_due,
     load_state,
     missed_slots,
     save_state,
     scheduled_slots,
 )
+
+_EMPTY_STATE = JobState(
+    season=None,
+    last_success_at=None,
+    last_attempt_at=None,
+    last_status=None,
+    last_window_start=None,
+)
+
+
+def _state_with_last_success(last_success: datetime) -> JobState:
+    return JobState(
+        season=2026,
+        last_success_at=last_success,
+        last_attempt_at=last_success,
+        last_status="ok",
+        last_window_start=None,
+    )
+
 
 # -- scheduled_slots --------------------------------------------------------
 
@@ -232,3 +252,49 @@ def test_collectable_season_past_freeze_date_is_none() -> None:
 
 def test_collectable_season_new_season_starts_july() -> None:
     assert collectable_season(date(2027, 7, 1)) == 2027
+
+
+# -- is_due (backup-slot no-op) -------------------------------------------------
+
+
+def test_is_due_manual_trigger_is_always_due() -> None:
+    last_success = datetime(2026, 10, 29, 0, 0, tzinfo=UTC)  # Wed 2026-10-28 20:00 ET slot
+    now = datetime(2026, 10, 30, 12, 0, tzinfo=UTC)  # Friday, no main slot since
+    state = _state_with_last_success(last_success)
+    assert is_due(state, now, "manual") is True
+
+
+def test_is_due_first_run_no_state_is_always_due() -> None:
+    now = datetime(2026, 10, 30, 12, 0, tzinfo=UTC)
+    assert is_due(_EMPTY_STATE, now, "schedule") is True
+    assert is_due(_EMPTY_STATE, now, "manual") is True
+
+
+def test_is_due_schedule_trigger_false_with_no_main_slot_since_last_success() -> None:
+    last_success = datetime(2026, 10, 29, 0, 0, tzinfo=UTC)  # Wed 2026-10-28 20:00 ET slot
+    now = datetime(2026, 10, 30, 12, 0, tzinfo=UTC)  # Friday -- a backup slot, nothing due
+    state = _state_with_last_success(last_success)
+    assert is_due(state, now, "schedule") is False
+
+
+def test_is_due_schedule_trigger_true_with_a_main_slot_since_last_success() -> None:
+    last_success = datetime(2026, 10, 4, 14, 5, tzinfo=UTC)
+    now = datetime(2026, 10, 15, 0, 10, tzinfo=UTC)
+    state = _state_with_last_success(last_success)
+    assert is_due(state, now, "schedule") is True
+
+
+def test_is_due_across_dst_boundary_false_before_the_next_main_slot() -> None:
+    # Wed 2026-10-28 20:00 ET (still EDT, UTC-4) == 2026-10-29T00:00Z; the next
+    # main slot is Sun 2026-11-01 10:00 ET (now EST, UTC-5) == 2026-11-01T15:00Z.
+    last_success = datetime(2026, 10, 29, 0, 0, tzinfo=UTC)
+    state = _state_with_last_success(last_success)
+    just_before_next_slot = datetime(2026, 11, 1, 14, 59, tzinfo=UTC)
+    assert is_due(state, just_before_next_slot, "schedule") is False
+
+
+def test_is_due_across_dst_boundary_true_at_the_next_main_slot() -> None:
+    last_success = datetime(2026, 10, 29, 0, 0, tzinfo=UTC)
+    state = _state_with_last_success(last_success)
+    at_next_slot = datetime(2026, 11, 1, 15, 0, tzinfo=UTC)
+    assert is_due(state, at_next_slot, "schedule") is True

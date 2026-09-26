@@ -11,13 +11,27 @@
 # enough (GA 2026-03-19) that the roadmap flagged it for verification: check
 # that the first real scheduled run fires within a few minutes of 10:00 ET
 # Sunday / 20:00 ET Wednesday, across the Nov 1 2026 DST fallback too.
+#
+# GitHub's own scheduler is lossy (an overnight probe on 2026-09-26 saw only
+# ~2 of 32 UTC slots fire, some delayed by hours), so the schedule also fires
+# backup crons after each main slot (D-12). Main slots are the only ones
+# job.catchup.SCHEDULE knows about; `booth-review job run --trigger schedule`
+# treats every other slot as a cheap no-op (exit 5) whenever no main slot has
+# occurred since the last success, so a dropped main slot still gets picked
+# up within hours at almost no cost.
 name: collect-2026
 
 on:
   schedule:
-    - cron: "0 10 * * 0" # Sunday 10:00 America/New_York
+    - cron: "0 10 * * 0" # Sunday 10:00 America/New_York (main slot, D-11)
       timezone: "America/New_York"
-    - cron: "0 20 * * 3" # Wednesday 20:00 America/New_York
+    - cron: "0 12-22/2 * * 0" # Sunday 12,14,16,18,20,22 (backup slots, D-12)
+      timezone: "America/New_York"
+    - cron: "0 20 * * 3" # Wednesday 20:00 America/New_York (main slot, D-11)
+      timezone: "America/New_York"
+    - cron: "0 22 * * 3" # Wednesday 22:00 (backup slot, D-12)
+      timezone: "America/New_York"
+    - cron: "0 6-16/2 * * 4" # Thursday 06,08,10,12,14,16 (backup slots, D-12)
       timezone: "America/New_York"
   workflow_dispatch: {} # manual trigger, used for the D-13 catch-up drill
 
@@ -85,7 +99,9 @@ jobs:
           exit 0
 
       - name: Update the attention issue (count-only, one tracked issue)
-        if: always()
+        # always(): a setup failure (empty code) still opens the issue;
+        # exit 5 (nothing due) leaves it untouched.
+        if: always() && steps.job.outputs.code != '5'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -117,7 +133,10 @@ jobs:
           fi
 
       - name: Fail the workflow on a hard failure (exit 3)
-        if: steps.job.outputs.code != '0' && steps.job.outputs.code != '4'
+        if: >-
+          steps.job.outputs.code != '0' &&
+          steps.job.outputs.code != '4' &&
+          steps.job.outputs.code != '5'
         run: |
           echo "::error::booth-review job run exited ${{ steps.job.outputs.code }}" >&2
           exit 1
