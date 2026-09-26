@@ -1,5 +1,5 @@
 """Tests for the AUTO-01 workflow/gitattributes templates (ops/vault/) and
-the 0.2.0 version bump.
+the 0.2.1 version bump.
 
 `ops/vault/collect.yml` and `ops/vault/gitattributes` are templates: they are
 installed into the *private* data repo's own working copy (Plan 07, with the
@@ -56,25 +56,40 @@ def test_workflow_and_ci_parse_as_yaml_with_expected_structure() -> None:
     assert any("JOB_REF" in step.get("name", "") for step in steps)
 
 
-def test_version_is_0_2_0() -> None:
-    assert booth_review.__version__ == "0.2.0"
+def test_version_is_0_2_1() -> None:
+    assert booth_review.__version__ == "0.2.1"
 
 
-def test_pyproject_declares_0_2_0() -> None:
+def test_pyproject_declares_0_2_1() -> None:
     pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
-    assert 'version = "0.2.0"' in pyproject
+    assert 'version = "0.2.1"' in pyproject
 
 
 # -- collect.yml: schedule / triggers ----------------------------------------------------------
 
 
-def test_workflow_has_two_america_new_york_timezone_entries() -> None:
-    assert WORKFLOW_TEXT.count('timezone: "America/New_York"') == 2
+def test_workflow_has_five_america_new_york_timezone_entries() -> None:
+    # 2 main slots (D-11) + 3 backup-slot groups (D-12: Sun afternoon/evening,
+    # Wed late, Thu daytime) -- every schedule entry uses the same timezone.
+    assert WORKFLOW_TEXT.count('timezone: "America/New_York"') == 5
 
 
-def test_workflow_has_sunday_and_wednesday_cron_entries() -> None:
+def test_workflow_schedule_has_exactly_five_entries_all_america_new_york() -> None:
+    workflow = yaml.safe_load(WORKFLOW_TEXT)
+    entries = workflow[True]["schedule"]
+    assert len(entries) == 5
+    assert all(entry["timezone"] == "America/New_York" for entry in entries)
+
+
+def test_workflow_has_sunday_and_wednesday_main_slot_cron_entries() -> None:
     assert '"0 10 * * 0"' in WORKFLOW_TEXT
     assert '"0 20 * * 3"' in WORKFLOW_TEXT
+
+
+def test_workflow_has_backup_slot_cron_entries() -> None:
+    assert '"0 12-22/2 * * 0"' in WORKFLOW_TEXT  # Sunday backup slots
+    assert '"0 22 * * 3"' in WORKFLOW_TEXT  # Wednesday backup slot
+    assert '"0 6-16/2 * * 4"' in WORKFLOW_TEXT  # Thursday backup slots
 
 
 def test_workflow_has_workflow_dispatch() -> None:
@@ -156,16 +171,31 @@ def test_workflow_never_echoes_a_secret() -> None:
 # -- collect.yml: attention issue step -----------------------------------------------------------
 
 
-def test_workflow_attention_step_runs_always_and_uses_gh_issue() -> None:
-    assert "if: always()" in WORKFLOW_TEXT
+def test_workflow_attention_step_uses_gh_issue() -> None:
     assert "gh issue list" in WORKFLOW_TEXT
     assert "gh issue edit" in WORKFLOW_TEXT
     assert "gh issue create" in WORKFLOW_TEXT
 
 
-def test_workflow_fails_hard_only_outside_0_and_4() -> None:
-    assert "steps.job.outputs.code != '0'" in WORKFLOW_TEXT
-    assert "steps.job.outputs.code != '4'" in WORKFLOW_TEXT
+def test_workflow_attention_step_if_excludes_code_5_nothing_due() -> None:
+    workflow = yaml.safe_load(WORKFLOW_TEXT)
+    steps = workflow["jobs"]["collect"]["steps"]
+    step = next(s for s in steps if "attention issue" in s.get("name", ""))
+    condition = step["if"]
+    assert "== '0'" in condition
+    assert "== '3'" in condition
+    assert "== '4'" in condition
+    assert "== '5'" not in condition
+
+
+def test_workflow_fails_hard_only_outside_0_4_and_5() -> None:
+    workflow = yaml.safe_load(WORKFLOW_TEXT)
+    steps = workflow["jobs"]["collect"]["steps"]
+    step = next(s for s in steps if "hard failure" in s.get("name", ""))
+    condition = step["if"]
+    assert "!= '0'" in condition
+    assert "!= '4'" in condition
+    assert "!= '5'" in condition
 
 
 # -- gitattributes ---------------------------------------------------------------------------
