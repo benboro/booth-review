@@ -15,10 +15,18 @@ item exists, exit 0 on a clean run).
 GitHub's own scheduler is lossy, so the workflow template also fires backup
 cron slots between the two main slots (Sunday 10:00 / Wednesday 20:00 ET,
 D-11). `EXIT_NOTHING_DUE = 5` is returned by a `trigger="schedule"` run that
-finds no main slot has occurred since its last success (`job.catchup.is_due`):
+finds no main slot has occurred since its last attempt (`job.catchup.is_due`):
 it exits before any CFBD, RR, or 506 step, any vault commit, or the
 `ledger/job_state.json` save, so a dropped main slot's next backup slot is the
 only run that actually does anything.
+
+Due-ness is measured from the last *attempt* (`last_attempt_at`, saved by
+every run that gets as far as the state save, failed steps included), not
+the last success: each main slot gets at most one scheduled attempt, so a
+step that keeps failing is retried at the next main slot (or by a manual
+run, which is always due) instead of re-running the whole job at every
+backup slot. A run that stops with exit 3 before the state save records no
+attempt, so the next backup slot retries it.
 """
 
 from __future__ import annotations
@@ -86,7 +94,7 @@ JOB_CFBD_MAX_CALLS = 8
 # a missing file never falls back to treating the vault as empty/new.
 REQUIRED_LEDGER_FILES: tuple[str, ...] = ("rr_lastmod.json", "cfbd_ledger.jsonl", "frozen.json")
 
-# A scheduled run with nothing due since its last success (job.catchup.is_due
+# A scheduled run with nothing due since its last attempt (job.catchup.is_due
 # is False) exits here -- a cheap no-op for a backup cron slot -- before any
 # CFBD, RR, or 506 step, commit, or ledger/job_state.json save.
 EXIT_NOTHING_DUE = 5

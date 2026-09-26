@@ -221,17 +221,29 @@ def catchup_window(state: JobState, now: datetime, season: int, trigger: Trigger
 def is_due(state: JobState, now: datetime, trigger: Trigger) -> bool:
     """Whether a run should proceed, or is a scheduled backup-slot no-op.
 
-    A `trigger="manual"` run is always due, and so is any run with no prior
-    success (first run) -- there is nothing to measure a gap from yet. A
-    `trigger="schedule"` run is due only when at least one main slot (Sunday
-    10:00 / Wednesday 20:00 ET, D-11) has occurred in `(last_success_at,
-    now]`; otherwise the scheduler fired a backup slot with nothing new to
+    A `trigger="manual"` run is always due, and so is a run with no prior
+    attempt or success at all (first run) -- there is nothing to measure a
+    gap from yet. A `trigger="schedule"` run is due only when at least one
+    main slot (Sunday 10:00 / Wednesday 20:00 ET, D-11) has occurred since
+    the last *attempt* (`last_attempt_at`, falling back to
+    `last_success_at` for state written before attempts were recorded);
+    otherwise the scheduler fired a backup slot with nothing new to
     collect, and the caller should exit as a cheap no-op (`EXIT_NOTHING_DUE`
     in job/runner.py) before any CFBD, RR, or vault write.
+
+    Measuring from the last attempt rather than the last success means each
+    main slot gets at most one scheduled attempt: the backup slots exist to
+    catch a *dropped* main slot, not to re-run a step that keeps failing
+    (which would re-send the full CFBD and RR refresh every two hours). A
+    failed attempt is retried at the next main slot, or by a manual run.
+    `last_success_at` still drives the missed-slot count.
     """
-    if trigger == "manual" or state.last_success_at is None:
+    if trigger == "manual":
         return True
-    return len(scheduled_slots(state.last_success_at, now)) >= 1
+    since = state.last_attempt_at or state.last_success_at
+    if since is None:
+        return True
+    return len(scheduled_slots(since, now)) >= 1
 
 
 def collectable_season(today: date) -> int | None:

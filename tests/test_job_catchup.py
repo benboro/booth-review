@@ -298,3 +298,57 @@ def test_is_due_across_dst_boundary_true_at_the_next_main_slot() -> None:
     state = _state_with_last_success(last_success)
     at_next_slot = datetime(2026, 11, 1, 15, 0, tzinfo=UTC)
     assert is_due(state, at_next_slot, "schedule") is True
+
+
+def _state_failed_attempt(last_success: datetime | None, last_attempt: datetime) -> JobState:
+    return JobState(
+        season=2026,
+        last_success_at=last_success,
+        last_attempt_at=last_attempt,
+        last_status="attention",
+        last_window_start=None,
+    )
+
+
+def test_is_due_failed_attempt_after_the_main_slot_makes_backup_slots_no_ops() -> None:
+    # Sun 2026-10-04 10:00 ET main slot (14:00Z) ran at 14:05Z and a step failed:
+    # last_success_at stays at the previous Wednesday. The Sunday backup slots
+    # that follow must not re-run the whole job.
+    last_success = datetime(2026, 10, 1, 0, 5, tzinfo=UTC)
+    failed_attempt = datetime(2026, 10, 4, 14, 5, tzinfo=UTC)
+    state = _state_failed_attempt(last_success, failed_attempt)
+    for backup in (
+        datetime(2026, 10, 4, 16, 0, tzinfo=UTC),
+        datetime(2026, 10, 4, 22, 0, tzinfo=UTC),
+        datetime(2026, 10, 7, 12, 0, tzinfo=UTC),  # Wednesday morning, before 20:00 ET
+    ):
+        assert is_due(state, backup, "schedule") is False
+
+
+def test_is_due_failed_attempt_is_retried_at_the_next_main_slot() -> None:
+    last_success = datetime(2026, 10, 1, 0, 5, tzinfo=UTC)
+    failed_attempt = datetime(2026, 10, 4, 14, 5, tzinfo=UTC)
+    state = _state_failed_attempt(last_success, failed_attempt)
+    next_main_slot = datetime(2026, 10, 8, 0, 0, tzinfo=UTC)  # Wed 2026-10-07 20:00 ET
+    assert is_due(state, next_main_slot, "schedule") is True
+
+
+def test_is_due_failed_attempt_never_blocks_a_manual_run() -> None:
+    state = _state_failed_attempt(
+        datetime(2026, 10, 1, 0, 5, tzinfo=UTC), datetime(2026, 10, 4, 14, 5, tzinfo=UTC)
+    )
+    assert is_due(state, datetime(2026, 10, 4, 16, 0, tzinfo=UTC), "manual") is True
+
+
+def test_is_due_failed_first_attempt_with_no_success_waits_for_the_next_main_slot() -> None:
+    state = _state_failed_attempt(None, datetime(2026, 10, 4, 14, 5, tzinfo=UTC))
+    assert is_due(state, datetime(2026, 10, 4, 16, 0, tzinfo=UTC), "schedule") is False
+    assert is_due(state, datetime(2026, 10, 8, 0, 0, tzinfo=UTC), "schedule") is True
+
+
+def test_is_due_dropped_main_slot_is_still_caught_by_a_backup_slot() -> None:
+    # The last attempt (a success) was the previous Wednesday; the Sunday main
+    # slot was dropped by GitHub's scheduler, so the Sunday backup slot runs.
+    last = datetime(2026, 10, 1, 0, 5, tzinfo=UTC)
+    state = _state_with_last_success(last)
+    assert is_due(state, datetime(2026, 10, 4, 16, 0, tzinfo=UTC), "schedule") is True

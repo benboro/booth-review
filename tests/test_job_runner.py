@@ -583,6 +583,38 @@ def test_scheduled_job_schedule_trigger_nothing_due_is_exit5_no_requests_no_stat
     assert paths.job_state.read_bytes() == before_bytes
 
 
+def test_scheduled_job_backup_slot_after_failed_attempt_is_exit5_no_requests(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+
+    # The Sunday 10:00 ET main slot ran at 14:05Z and a step failed, so
+    # last_success_at is still the previous Wednesday's run.
+    save_state(
+        paths.job_state,
+        JobState(
+            season=2026,
+            last_success_at=datetime(2026, 10, 1, 0, 5, tzinfo=UTC),
+            last_attempt_at=datetime(2026, 10, 4, 14, 5, tzinfo=UTC),
+            last_status="attention",
+            last_window_start=datetime(2026, 10, 1, 0, 5, tzinfo=UTC),
+        ),
+    )
+    before_bytes = paths.job_state.read_bytes()
+
+    now_value = datetime(2026, 10, 4, 16, 0, tzinfo=UTC)  # Sunday backup slot
+    handle = mock_transport_factory({})
+    runtime = _runtime(paths, handle, now=lambda: now_value, fake_clock=fake_clock)
+
+    job = ScheduledJob(runtime, token="test-token", now=lambda: now_value, trigger="schedule")
+    result = job.run()
+
+    assert result.exit_code == 5
+    assert handle.requests == []
+    assert paths.job_state.read_bytes() == before_bytes
+
+
 def test_scheduled_job_manual_trigger_always_runs_even_with_no_main_slot_due(
     git_vault, mock_transport_factory, fake_clock
 ) -> None:
@@ -649,7 +681,7 @@ def test_cli_job_run_exit5_prints_nothing_due_message(
 
     assert exit_code == 5
     out = capsys.readouterr().out
-    assert "nothing due since last success" in out
+    assert "nothing due since last attempt" in out
     assert handle.requests == []
 
 

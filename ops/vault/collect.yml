@@ -17,8 +17,9 @@
 # backup crons after each main slot (D-12). Main slots are the only ones
 # job.catchup.SCHEDULE knows about; `booth-review job run --trigger schedule`
 # treats every other slot as a cheap no-op (exit 5) whenever no main slot has
-# occurred since the last success, so a dropped main slot still gets picked
-# up within hours at almost no cost.
+# occurred since the last attempt, so a dropped main slot still gets picked
+# up within hours at almost no cost, while a main slot whose run failed is
+# retried at the next main slot rather than at every backup slot.
 name: collect-2026
 
 on:

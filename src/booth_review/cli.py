@@ -751,7 +751,7 @@ def _job_run(args: argparse.Namespace) -> int:
         result: JobRunResult = job.run()
 
         if result.exit_code == EXIT_NOTHING_DUE:
-            print("nothing due since last success")
+            print("nothing due since last attempt")
 
         if args.attention_out is not None:
             body = build_attention_body(result.items, generated_at=datetime.now(UTC))
