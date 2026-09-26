@@ -30,7 +30,7 @@ from booth_review.audit.freeze import FreezeResult, Waiver, freeze_seasons, pars
 from booth_review.config import CFBD_FLOOR_DEFAULT, DataPaths, load_cfbd_key
 from booth_review.errors import BoothReviewError, FreezeRefusedError
 from booth_review.job.attention import build_attention_body
-from booth_review.job.runner import JOB_CFBD_MAX_CALLS, JobRunResult, ScheduledJob
+from booth_review.job.runner import EXIT_NOTHING_DUE, JOB_CFBD_MAX_CALLS, JobRunResult, ScheduledJob
 from booth_review.runtime import Runtime, build_runtime
 from booth_review.seasons import season_of, season_window
 from booth_review.sources.base import BatchSummary, run_requests
@@ -749,6 +749,9 @@ def _job_run(args: argparse.Namespace) -> int:
             commit=not args.no_commit,
         )
         result: JobRunResult = job.run()
+
+        if result.exit_code == EXIT_NOTHING_DUE:
+            print("nothing due since last success")
 
         if args.attention_out is not None:
             body = build_attention_body(result.items, generated_at=datetime.now(UTC))

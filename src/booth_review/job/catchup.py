@@ -218,6 +218,22 @@ def catchup_window(state: JobState, now: datetime, season: int, trigger: Trigger
     )
 
 
+def is_due(state: JobState, now: datetime, trigger: Trigger) -> bool:
+    """Whether a run should proceed, or is a scheduled backup-slot no-op.
+
+    A `trigger="manual"` run is always due, and so is any run with no prior
+    success (first run) -- there is nothing to measure a gap from yet. A
+    `trigger="schedule"` run is due only when at least one main slot (Sunday
+    10:00 / Wednesday 20:00 ET, D-11) has occurred in `(last_success_at,
+    now]`; otherwise the scheduler fired a backup slot with nothing new to
+    collect, and the caller should exit as a cheap no-op (`EXIT_NOTHING_DUE`
+    in job/runner.py) before any CFBD, RR, or vault write.
+    """
+    if trigger == "manual" or state.last_success_at is None:
+        return True
+    return len(scheduled_slots(state.last_success_at, now)) >= 1
+
+
 def collectable_season(today: date) -> int | None:
     """The season a run started `today` should collect, or None off-season.
 

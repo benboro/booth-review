@@ -432,6 +432,112 @@ def test_scheduled_job_vault_commit_error_on_push_records_push_failed_exit3(
     assert not paths.job_state.is_file()
 
 
+# -- nothing-due no-op (backup cron slots) -----------------------------------------------------
+
+
+def test_scheduled_job_schedule_trigger_nothing_due_is_exit5_no_requests_no_state_change(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+
+    last_success = datetime(2026, 10, 29, 0, 0, tzinfo=UTC)  # Wed 2026-10-28 20:00 ET slot
+    save_state(
+        paths.job_state,
+        JobState(
+            season=2026,
+            last_success_at=last_success,
+            last_attempt_at=last_success,
+            last_status="ok",
+            last_window_start=last_success,
+        ),
+    )
+    before_bytes = paths.job_state.read_bytes()
+
+    now_value = datetime(2026, 10, 30, 12, 0, tzinfo=UTC)  # Friday backup slot: nothing due
+    handle = mock_transport_factory({})
+    runtime = _runtime(paths, handle, now=lambda: now_value, fake_clock=fake_clock)
+
+    job = ScheduledJob(runtime, token="test-token", now=lambda: now_value, trigger="schedule")
+    result = job.run()
+
+    assert result.exit_code == 5
+    assert result.items == []
+    assert result.counts == {"skipped": 1}
+    assert handle.requests == []
+    assert paths.job_state.read_bytes() == before_bytes
+
+
+def test_scheduled_job_manual_trigger_always_runs_even_with_no_main_slot_due(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+
+    last_success = datetime(2026, 10, 29, 0, 0, tzinfo=UTC)
+    save_state(
+        paths.job_state,
+        JobState(
+            season=2026,
+            last_success_at=last_success,
+            last_attempt_at=last_success,
+            last_status="ok",
+            last_window_start=last_success,
+        ),
+    )
+
+    now_value = datetime(2026, 10, 30, 12, 0, tzinfo=UTC)
+    responses = _cfbd_ok_responses(2026)
+    responses["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
+    responses[SITEMAP_URL] = (200, _empty_sitemap_xml(), {})
+
+    handle = mock_transport_factory(responses)
+    runtime = _runtime(paths, handle, now=lambda: now_value, fake_clock=fake_clock)
+
+    job = ScheduledJob(runtime, token="test-token", now=lambda: now_value, trigger="manual")
+    result = job.run()
+
+    assert result.exit_code != 5
+    saved_state = load_state(paths.job_state)
+    assert saved_state.last_success_at == now_value
+
+
+def test_cli_job_run_exit5_prints_nothing_due_message(
+    git_vault, mock_transport_factory, patched_client, monkeypatch, capsys
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+
+    last_success = datetime(2026, 10, 29, 0, 0, tzinfo=UTC)
+    save_state(
+        paths.job_state,
+        JobState(
+            season=2026,
+            last_success_at=last_success,
+            last_attempt_at=last_success,
+            last_status="ok",
+            last_window_start=last_success,
+        ),
+    )
+
+    class _FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz: object = None) -> datetime:
+            return cls(2026, 10, 30, 12, 0, tzinfo=UTC)
+
+    monkeypatch.setattr(cli, "datetime", _FixedDateTime)
+
+    handle = mock_transport_factory({})
+    patched_client(handle)
+
+    exit_code = main(["job", "run", "--trigger", "schedule", "--no-commit", "--dry-run"])
+
+    assert exit_code == 5
+    out = capsys.readouterr().out
+    assert "nothing due since last success" in out
+    assert handle.requests == []
+
+
 # -- CLI: dummy CFBD key never leaks ------------------------------------------------------------
 
 
