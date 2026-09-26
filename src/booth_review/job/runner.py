@@ -75,6 +75,7 @@ from booth_review.sources.ratingsref.collector import (
     RatingsRefCollector,
     RefreshSummary,
 )
+from booth_review.sources.ratingsref.lastmod import lastmod_ledger_exists
 from booth_review.transport.cache import FreezeGuard
 from booth_review.vault import batch_message
 
@@ -91,8 +92,11 @@ JOB_CFBD_ONCE: tuple[str, ...] = ("teams_fbs",)
 JOB_CFBD_MAX_CALLS = 8
 
 # Vault state files the job refuses to run without (VaultStateError, exit 3):
-# a missing file never falls back to treating the vault as empty/new.
-REQUIRED_LEDGER_FILES: tuple[str, ...] = ("rr_lastmod.json", "cfbd_ledger.jsonl", "frozen.json")
+# a missing file never falls back to treating the vault as empty/new. The RR
+# lastmod ledger counts as present in either form (the pre-0.2.2
+# rr_lastmod.json snapshot or the rr_lastmod.jsonl log; see
+# sources.ratingsref.lastmod).
+REQUIRED_LEDGER_FILES: tuple[str, ...] = ("cfbd_ledger.jsonl", "frozen.json")
 
 # A scheduled run with nothing due since its last attempt (job.catchup.is_due
 # is False) exits here -- a cheap no-op for a backup cron slot -- before any
@@ -113,6 +117,8 @@ class JobRunResult:
 def _check_required_state(runtime: Runtime) -> None:
     paths = runtime.paths
     missing = [name for name in REQUIRED_LEDGER_FILES if not (paths.ledger / name).is_file()]
+    if not lastmod_ledger_exists(paths):
+        missing.insert(0, "rr_lastmod.json(l)")
     if missing:
         raise VaultStateError(
             "job refuses to run: required vault state file(s) missing: "
@@ -305,7 +311,9 @@ class ScheduledJob:
     def _run_rr_step(
         self, current_season: int, items: list[AttentionItem]
     ) -> tuple[bool, dict[str, int]]:
-        collector = RatingsRefCollector(self._runtime.cache, self._runtime.paths)
+        collector = RatingsRefCollector(
+            self._runtime.cache, self._runtime.paths, lock=self._runtime.vault.lock
+        )
         season_label = f"{FIRST_SEASON}-{current_season}"
         before = dict(self._runtime.cache.counters)
         summary: RefreshSummary | None = None
@@ -350,6 +358,7 @@ class ScheduledJob:
                             "raw/_robots",
                             "ledger/requests.jsonl",
                             "ledger/rr_lastmod.json",
+                            "ledger/rr_lastmod.jsonl",
                         ],
                     )
                 except VaultCommitError:

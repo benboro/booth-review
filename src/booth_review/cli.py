@@ -345,7 +345,7 @@ def _collect_506(args: argparse.Namespace) -> int:
 def _collect_ratingsref(args: argparse.Namespace) -> int:
     runtime = build_runtime(with_budget=False)
     try:
-        collector = RatingsRefCollector(runtime.cache, runtime.paths)
+        collector = RatingsRefCollector(runtime.cache, runtime.paths, lock=runtime.vault.lock)
 
         if args.season is not None:
             seasons = args.season
@@ -433,7 +433,7 @@ def _print_refresh_summary(summary: RefreshSummary) -> None:
 def _refresh_ratingsref(args: argparse.Namespace) -> int:
     runtime = build_runtime(with_budget=False)
     try:
-        collector = RatingsRefCollector(runtime.cache, runtime.paths)
+        collector = RatingsRefCollector(runtime.cache, runtime.paths, lock=runtime.vault.lock)
         current_season = _current_season_ceiling()
         season_label = f"{FIRST_SEASON}-{current_season}"
 
@@ -457,6 +457,7 @@ def _refresh_ratingsref(args: argparse.Namespace) -> int:
                         "raw/_robots",
                         "ledger/requests.jsonl",
                         "ledger/rr_lastmod.json",
+                        "ledger/rr_lastmod.jsonl",
                     ],
                 )
         assert summary is not None

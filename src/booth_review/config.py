@@ -87,6 +87,12 @@ class DataPaths:
         return self.ledger / "rr_lastmod.json"
 
     @property
+    def rr_lastmod_log(self) -> Path:
+        """Append-only lastmod log (merge=union); read together with rr_lastmod
+        through sources.ratingsref.lastmod.load_lastmods."""
+        return self.ledger / "rr_lastmod.jsonl"
+
+    @property
     def audit(self) -> Path:
         return self.vault / "audit"
 

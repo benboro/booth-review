@@ -20,6 +20,7 @@ from booth_review.errors import (
 )
 from booth_review.sources.cfbd.collector import CfbdCollector
 from booth_review.sources.ratingsref.collector import SITEMAP_URL, RatingsRefCollector
+from booth_review.sources.ratingsref.lastmod import load_lastmods
 from booth_review.sources.sports506.collector import WEEK_LABELS, Sports506Collector
 from booth_review.transport.budget import CfbdBudget
 from booth_review.transport.cache import RawCache
@@ -221,7 +222,7 @@ def test_ratingsref_run_fetches_sitemap_and_in_window_records_with_lastmod_track
         expected = vault_paths.raw / "ratingsref" / "telecast" / "2025" / f"{telecast_id}.json"
         assert expected.is_file()
 
-    lastmod_data = json.loads(vault_paths.rr_lastmod.read_text(encoding="utf-8"))
+    lastmod_data = load_lastmods(vault_paths)
     assert set(lastmod_data) == set(_SELECTED_RR_IDS)
     for entry in lastmod_data.values():
         assert set(entry) == {"lastmod", "fetched_at", "record_url"}

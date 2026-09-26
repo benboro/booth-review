@@ -1,24 +1,32 @@
 """RatingsRefCollector: fetches the RR sitemap and in-window CFB telecast records.
 
 The sitemap is fetched at most once per UTC day (its cache_path is dated).
-Every fetched record's sitemap <lastmod> is written to ledger/rr_lastmod.json
+Every fetched record's sitemap <lastmod> is appended to ledger/rr_lastmod.jsonl
 immediately after that record is fetched (D-13), so an interrupted run keeps
-every lastmod it earned.
+every lastmod it earned. The append holds the vault lock when one is given, and
+the log is union-merged, so a local run and the job never lose each other's
+lastmods (WR-02; see sources.ratingsref.lastmod).
 """
 
 from __future__ import annotations
 
-import json
+import contextlib
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
 from booth_review.config import DataPaths
 from booth_review.errors import VaultStateError
 from booth_review.sources.base import BatchSummary, run_requests
+from booth_review.sources.ratingsref.lastmod import (
+    append_lastmod,
+    lastmod_ledger_exists,
+    load_lastmods,
+)
 from booth_review.sources.ratingsref.sitemap import SitemapEntry, parse_sitemap, select_entries
-from booth_review.transport.cache import CacheResult, RawCache, atomic_write_json
+from booth_review.transport.cache import CacheResult, RawCache
 from booth_review.transport.types import FetchRequest
 
 logger = logging.getLogger(__name__)
@@ -62,9 +70,18 @@ class RefreshSummary:
 class RatingsRefCollector:
     """Plans, dry-runs, and fetches an in-window slice of RR CFB telecast records."""
 
-    def __init__(self, cache: RawCache, paths: DataPaths) -> None:
+    def __init__(
+        self,
+        cache: RawCache,
+        paths: DataPaths,
+        *,
+        lock: Callable[[], AbstractContextManager[object]] | None = None,
+    ) -> None:
+        """`lock` (normally `VaultRepo.lock`) is held around each lastmod
+        append, so an append never lands mid-commit or mid-rebase."""
         self._cache = cache
         self._paths = paths
+        self._lock: Callable[[], AbstractContextManager[object]] = lock or contextlib.nullcontext
 
     def _sitemap_cache_path(self, day: date) -> str:
         return f"ratingsref/sitemap/{day.isoformat()}.xml"
@@ -160,9 +177,9 @@ class RatingsRefCollector:
         (lastmod, telecast_id) ascending; the remainder is backlog (D-08).
         A fetched record overwrites its cached file (D-09).
         """
-        if not self._paths.rr_lastmod.is_file():
+        if not lastmod_ledger_exists(self._paths):
             raise VaultStateError(
-                "ledger/rr_lastmod.json missing; refusing a refresh that would "
+                "ledger/rr_lastmod.json(l) missing; refusing a refresh that would "
                 "treat every record as new"
             )
 
@@ -187,9 +204,7 @@ class RatingsRefCollector:
             )
 
         entries, _skipped = parse_sitemap(xml)
-        known: dict[str, dict[str, str]] = json.loads(
-            self._paths.rr_lastmod.read_text(encoding="utf-8")
-        )
+        known = load_lastmods(self._paths)
 
         in_window = [e for e in entries if first_season <= e.season <= current_season]
         new_entries = [e for e in in_window if e.telecast_id not in known]
@@ -268,13 +283,5 @@ class RatingsRefCollector:
         return summary
 
     def _record_lastmod(self, entry: SitemapEntry) -> None:
-        path = self._paths.rr_lastmod
-        data: dict[str, dict[str, str]] = {}
-        if path.is_file():
-            data = json.loads(path.read_text(encoding="utf-8"))
-        data[entry.telecast_id] = {
-            "lastmod": entry.lastmod,
-            "fetched_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "record_url": entry.record_url,
-        }
-        atomic_write_json(path, data)
+        with self._lock():
+            append_lastmod(self._paths, entry, fetched_at=datetime.now(UTC))

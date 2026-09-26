@@ -10,6 +10,7 @@ end-to-end via `main([...])`. No test ever sends a request to
 from __future__ import annotations
 
 import json
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -402,6 +403,48 @@ def test_scheduled_job_cfbd_401_is_attention_exit4_success_not_advanced(
     saved_state = load_state(paths.job_state)
     assert saved_state.last_success_at == prior_success  # not advanced
     assert saved_state.last_status == "attention"
+
+
+# -- WR-02: the RR lastmod log (jsonl) is accepted and committed ----------------------------------
+
+
+def test_scheduled_job_accepts_jsonl_only_lastmod_ledger_and_commits_it(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seed_cfbd_ledger(paths, month="2026-10")
+    paths.rr_lastmod_log.write_text("", encoding="utf-8")  # a post-0.2.2 vault: no .json
+    now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+    _precache_cfbd_season(paths, 2026)
+
+    slug = "cfb-new-team-a-2026-09-12"
+    responses = _cfbd_ok_responses(2026, include_teams_fbs=False)
+    responses["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
+    responses[SITEMAP_URL] = (200, _sitemap_xml([(slug, "2026-09-25T00:00:00+00:00")]), {})
+    responses[f"https://ratingsreference.com/api/telecast/{slug}.json"] = (200, b"{}", {})
+
+    handle = mock_transport_factory(responses)
+    runtime = _runtime(paths, handle, now=lambda: now_value, fake_clock=fake_clock)
+
+    job = ScheduledJob(runtime, token="test-token", now=lambda: now_value, trigger="manual")
+    result = job.run()
+
+    assert result.exit_code == 0
+    assert not paths.rr_lastmod.is_file()
+    tracked = subprocess.run(
+        ["git", "-C", str(paths.vault), "ls-files", "ledger/rr_lastmod.jsonl"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert tracked.strip() == "ledger/rr_lastmod.jsonl"
+    status = subprocess.run(
+        ["git", "-C", str(paths.vault), "status", "--porcelain", "ledger/rr_lastmod.jsonl"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert status == ""  # committed, not left dirty
 
 
 # -- RR backlog over cap: attention, exit 4 ---------------------------------------------------

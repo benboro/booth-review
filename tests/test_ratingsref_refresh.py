@@ -20,6 +20,7 @@ from booth_review.sources.ratingsref.collector import (
     SITEMAP_URL,
     RatingsRefCollector,
 )
+from booth_review.sources.ratingsref.lastmod import load_lastmods
 from booth_review.transport.cache import RawCache
 from booth_review.transport.client import PoliteClient
 
@@ -117,7 +118,7 @@ def test_refresh_requests_only_new_or_advanced_entries(
     telecast_urls = {r.url for r in handle.requests if "/api/telecast/" in r.url}
     assert telecast_urls == {_telecast_url(advanced_slug), _telecast_url(new_slug)}
 
-    lastmod_data = json.loads(vault_paths.rr_lastmod.read_text(encoding="utf-8"))
+    lastmod_data = load_lastmods(vault_paths)
     assert lastmod_data[advanced_slug]["lastmod"] == "2026-02-01T00:00:00+00:00"
     assert lastmod_data[new_slug]["lastmod"] == "2026-03-01T00:00:00+00:00"
     # unchanged entry's lastmod record is untouched
@@ -196,7 +197,7 @@ def test_refresh_frozen_season_advanced_record_is_fetched_and_overwrites(
     telecast_lines = [line for line in manifest_lines if line["url"] == _telecast_url(slug)]
     assert len(telecast_lines) == 2
 
-    lastmod_data = json.loads(vault_paths.rr_lastmod.read_text(encoding="utf-8"))
+    lastmod_data = load_lastmods(vault_paths)
     assert lastmod_data[slug]["lastmod"] == new_lastmod
 
 

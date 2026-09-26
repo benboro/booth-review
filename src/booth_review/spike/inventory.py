@@ -30,6 +30,7 @@ from booth_review.sources.cfbd.parser import (
     parse_rankings,
     parse_wp_pregame,
 )
+from booth_review.sources.ratingsref.lastmod import lastmod_ledger_exists, load_lastmods
 from booth_review.sources.ratingsref.parser import parse_record
 from booth_review.sources.sports506.parser import parse_week_page
 from booth_review.spike.inventory_506 import build_506_inventory, write_506_inventory
@@ -239,15 +240,10 @@ def _add_example(bucket: list[str], value: str) -> None:
 
 
 def _lastmod_coverage(paths: DataPaths) -> dict[str, object]:
-    if not paths.rr_lastmod.is_file():
+    if not lastmod_ledger_exists(paths):
         return {"tracked": 0}
-    data: dict[str, object] = json.loads(paths.rr_lastmod.read_text(encoding="utf-8"))
-    lastmods: Counter[str] = Counter()
-    for entry in data.values():
-        if isinstance(entry, dict):
-            lastmod = entry.get("lastmod")
-            if isinstance(lastmod, str):
-                lastmods[lastmod] += 1
+    data = load_lastmods(paths)
+    lastmods: Counter[str] = Counter(entry["lastmod"] for entry in data.values())
     return {
         "tracked": len(data),
         "distinct_lastmods": len(lastmods),
