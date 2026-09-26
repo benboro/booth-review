@@ -151,6 +151,14 @@ def test_smoke_check_fails_on_empty_bytes_never_raises() -> None:
     assert result.reason.startswith("parse failed:")
 
 
+def test_smoke_check_skips_a_non_date_h3_and_never_raises() -> None:
+    html = (FIXTURES / "week_synthetic.html").read_bytes()
+    html = html.replace(b"</article>", b"<h3>Other Links</h3></article>", 1)
+    result = smoke_check(html, season=2025, week_label="5")
+    assert result.passed is True
+    assert result.games == 4
+
+
 def test_smoke_check_passes_at_exactly_one_game_full_crew() -> None:
     result = smoke_check(
         _one_game_page(crew="Pat Example, Jordan Sample"), season=2025, week_label="0"

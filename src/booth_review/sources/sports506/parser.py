@@ -1,7 +1,8 @@
 """Sports506 week-page parser: cached HTML bytes into typed Listing506 rows.
 
 A 506 week page (docs/PLAN.md section 4.1) lays out one <h3> date header per
-game day, with one telecast row underneath it in one of two layouts:
+game day (any other <h3>, such as a sidebar heading, is skipped), with one
+telecast row underneath it in one of two layouts:
 
 - 2022 onward: one <div id="cgame"> per telecast, holding a matchup
   sub-div, a kickoff-time sub-div, a network sub-div, and a crew sub-div.
@@ -102,10 +103,16 @@ def _split_rank(part: str) -> tuple[int | None, str]:
     return int(match.group(1)), match.group(2)
 
 
-def _parse_date_header(text: str, year: int) -> date:
+def _parse_date_header(text: str, year: int) -> date | None:
+    """The date a "Weekday, Month DD" `<h3>` names in `year`, or None when the
+    header isn't a date header at all (a sidebar or section heading such as
+    "Other Links"), so the caller can skip it instead of crashing (WR-10)."""
     _, _, month_day = text.partition(",")
     month_day = _collapse_whitespace(month_day)
-    return datetime.strptime(f"{month_day} {year}", "%B %d %Y").date()  # noqa: DTZ007
+    try:
+        return datetime.strptime(f"{month_day} {year}", "%B %d %Y").date()  # noqa: DTZ007
+    except ValueError:
+        return None
 
 
 def _parse_kickoff(date_et: date, time_text: str) -> datetime | None:
@@ -316,9 +323,13 @@ def _walk_page(
     for element in soup.find_all(["h3", row_tag]):
         if element.name == "h3":
             header_date = _parse_date_header(element.get_text(), year)
+            if header_date is None:
+                continue  # not a date header; rows keep the current date
             if last_month is not None and header_date.month < last_month:
                 year += 1
                 header_date = _parse_date_header(element.get_text(), year)
+                if header_date is None:
+                    continue
             last_month = header_date.month
             current_date = header_date
             continue

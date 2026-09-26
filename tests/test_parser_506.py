@@ -256,3 +256,29 @@ def test_table_layout_bowls_rolls_the_year_over_from_december_to_january() -> No
     listings = _table_bowl_listings()
     assert listings[0].date_et == date(2018, 12, 16)
     assert listings[1].date_et == date(2019, 1, 1)
+
+
+# -- WR-10: a non-date <h3> is skipped, never raised --------------------------------------
+
+
+def _with_extra_h3(html: bytes, *, first_date_header: bytes) -> bytes:
+    # A sidebar/section heading before the first date header and another
+    # after the last row, as a page template change could add.
+    html = html.replace(first_date_header, b"<h3>Other Links</h3>\n" + first_date_header, 1)
+    return html.replace(b"</article>", b"<h3>More Schedules</h3></article>", 1)
+
+
+def test_non_date_h3_is_skipped_div_layout() -> None:
+    html = _with_extra_h3(
+        (FIXTURES / "week_synthetic.html").read_bytes(),
+        first_date_header=b"<h3>THURSDAY, SEPTEMBER 25</h3>",
+    )
+    assert parse_week_page(html, season=2025, week_label="5") == _week_listings()
+
+
+def test_non_date_h3_is_skipped_table_layout() -> None:
+    html = _with_extra_h3(
+        (FIXTURES / "week_table_synthetic.html").read_bytes(),
+        first_date_header=b"<h3>THURSDAY, SEPTEMBER 27</h3>",
+    )
+    assert parse_week_page(html, season=2018, week_label="5") == _table_week_listings()
