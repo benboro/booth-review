@@ -55,6 +55,13 @@ def test_split_outlets_single_outlet_unchanged() -> None:
     assert split_outlets("ESPN") == ["ESPN"]
 
 
+def test_split_outlets_drops_bare_hyphen_placeholder() -> None:
+    # 506's own "no network listed" convention (e.g. a postponed game); not
+    # a real outlet name, dropped like an empty part.
+    assert split_outlets("-") == []
+    assert split_outlets("ESPN, -") == ["ESPN"]
+
+
 # -- strip_feed_marker --------------------------------------------------------------------------
 
 
@@ -323,9 +330,15 @@ def test_network_row_is_frozen() -> None:
 # -- cross-check with event_flags.csv (Task 2 adds the real fixture data) ---------------------
 
 
-def test_fixture_event_flags_do_not_reference_fixture_network_ids() -> None:
-    # Sanity check only: the fixtures directory's event_flags.csv is a
-    # separate synthetic fixture (tests/test_flags.py's), unrelated to this
-    # module's invented net-* ids; just confirm it still loads on its own.
-    flags = load_event_flags(FIXTURES)
-    assert isinstance(flags, list)
+def test_real_networks_table_loads() -> None:
+    table = load_networks(Path("data/reference"))
+    assert len(table.networks()) >= 20
+
+
+def test_event_flag_networks_exist() -> None:
+    table = load_networks(Path("data/reference"))
+    known_ids = set(table.networks())
+    flags = load_event_flags(Path("data/reference"))
+    for flag in flags:
+        for network_id in flag.networks:
+            assert network_id in known_ids, f"{network_id!r} referenced by event_flags.csv"

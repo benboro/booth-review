@@ -84,9 +84,17 @@ def _collapse_whitespace(text: str) -> str:
 def split_outlets(text: str) -> list[str]:
     """Split a raw outlet string on ",", "/", ";", or "|" (a " | " separator
     included); empty parts dropped, each remaining part whitespace-collapsed.
+    A lone "-" part is dropped too -- 506's own convention for "no network
+    listed" (e.g. a postponed or otherwise untelevised game), never a real
+    outlet name, and structurally equivalent to the already-dropped empty
+    part.
     """
     parts = _SEPARATOR_RE.split(text)
-    return [collapsed for part in parts if (collapsed := _collapse_whitespace(part))]
+    return [
+        collapsed
+        for part in parts
+        if (collapsed := _collapse_whitespace(part)) and collapsed != "-"
+    ]
 
 
 def strip_feed_marker(text: str) -> tuple[str, FeedType | None]:
