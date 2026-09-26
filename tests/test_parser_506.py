@@ -282,3 +282,63 @@ def test_non_date_h3_is_skipped_table_layout() -> None:
         first_date_header=b"<h3>THURSDAY, SEPTEMBER 27</h3>",
     )
     assert parse_week_page(html, season=2018, week_label="5") == _table_week_listings()
+
+
+# -- WR-11: a game-label line with a separator is never taken for the matchup --------------
+
+_LABEL_CELLS = (
+    # (matchup cell HTML, expected label, away, home, neutral)
+    (
+        "<b>Semifinal Classic @ Example Stadium</b><br>Prairie State vs Union City"
+        "<br>(in Example City)",
+        "Semifinal Classic @ Example Stadium",
+        "Prairie State",
+        "Union City (in Example City)",
+        True,
+    ),
+    (
+        "Northfield vs Lakeshore Classic<br>Northfield State vs Lakeshore Tech",
+        "Northfield vs Lakeshore Classic",
+        "Northfield State",
+        "Lakeshore Tech",
+        True,
+    ),
+    (
+        "<b>Frontier Bowl</b><br>Casey Vale State @ Morgan Tech<br>(rematch of Casey @ Morgan)",
+        "Frontier Bowl",
+        "Casey Vale State",
+        "Morgan Tech (rematch of Casey @ Morgan)",
+        False,
+    ),
+)
+
+
+def _label_page_div() -> bytes:
+    rows = "".join(
+        f'<div id="cgame"><div id="cmatchup">{cell}</div><div id="ctime">4:00 PM</div>'
+        '<div id="cntwk">ECN</div><div id="canncrs">Pat Example, Jordan Sample</div></div>\n'
+        for cell, *_ in _LABEL_CELLS
+    )
+    return f"<html><body><h3>SATURDAY, DECEMBER 20</h3>\n{rows}</body></html>".encode()
+
+
+def _label_page_table() -> bytes:
+    rows = "".join(
+        f"<tr><td>4:00 PM</td><td>{cell}</td><td>ECN</td><td>Pat Example, Jordan Sample</td></tr>\n"
+        for cell, *_ in _LABEL_CELLS
+    )
+    return (
+        "<html><body><h3>SATURDAY, DECEMBER 20</h3>\n"
+        f'<table class="listingtable">{rows}</table></body></html>'
+    ).encode()
+
+
+@pytest.mark.parametrize("page", [_label_page_div, _label_page_table], ids=["div", "table"])
+def test_label_line_with_separator_is_kept_as_label_not_matchup(page) -> None:
+    listings = parse_week_page(page(), season=2025, week_label="B")
+    assert len(listings) == len(_LABEL_CELLS)
+    for listing, (_cell, label, away, home, neutral) in zip(listings, _LABEL_CELLS, strict=True):
+        assert listing.game_label == label
+        assert listing.away_raw == away
+        assert listing.home_raw == home
+        assert listing.neutral is neutral

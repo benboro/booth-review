@@ -161,13 +161,16 @@ def _extract_matchup(matchup_tag: Tag) -> tuple[str | None, str]:
     `<br>` in some 2014-2021 pages -- and may append a trailing
     `<br>(in <city>)` location note, itself sometimes present on an
     ordinary (non-bowl) neutral-site game with no label at all. `<br>` is
-    turned into a line break first; the *first* line that itself parses as
-    a matchup (`_split_matchup` succeeds) is the matchup line, any line(s)
-    before it are the label, and any line(s) after it are appended back
-    onto the matchup text with a space. This tells a label line from a
-    location-note line by content (only a matchup line contains a
-    separator), so it reads the bold and plain-text label conventions, and
-    the labelless neutral-site case, without a per-layout special case.
+    turned into a line break first; the *last* line that itself parses as
+    a matchup (`_split_matchup` succeeds) and isn't a parenthesized note is
+    the matchup line, any line(s) before it are the label, and any line(s)
+    after it are appended back onto the matchup text with a space. Taking
+    the last such line, not the first, keeps a label that happens to
+    contain a separator ("Semifinal Classic @ Example Stadium", "Northfield
+    vs Lakeshore Classic") from being read as the matchup (WR-11). This
+    tells a label line from a location-note line by content and position,
+    so it reads the bold and plain-text label conventions, and the
+    labelless neutral-site case, without a per-layout special case.
     """
     for br in matchup_tag.find_all("br"):
         br.replace_with("\n")
@@ -178,7 +181,12 @@ def _extract_matchup(matchup_tag: Tag) -> tuple[str | None, str]:
         return None, ""
 
     matchup_index = next(
-        (i for i, line in enumerate(lines) if _split_matchup(line) is not None), None
+        (
+            i
+            for i in range(len(lines) - 1, -1, -1)
+            if not _PAREN_NOTE_RE.match(lines[i]) and _split_matchup(lines[i]) is not None
+        ),
+        None,
     )
     if matchup_index is None:
         return None, _collapse_whitespace(full_text)
@@ -192,6 +200,9 @@ def _extract_matchup(matchup_tag: Tag) -> tuple[str | None, str]:
 # non-breaking space around either separator (also seen in 2014-2021 pages)
 # is already a plain space by the time this runs.
 _HOME_AWAY_RE = re.compile(r"^(.+?)\s@\s(.+)$")
+# A whole line in parentheses is a note (e.g. "(in Example City)"), never the
+# matchup, even if it happens to contain a separator.
+_PAREN_NOTE_RE = re.compile(r"^\(.*\)$")
 _NEUTRAL_RE = re.compile(r"^(.+?)\svs\.?\s(.+)$")
 
 
