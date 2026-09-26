@@ -44,12 +44,17 @@ from booth_review.errors import ParseError
 _EASTERN = ZoneInfo("America/New_York")
 
 _CHARSET_RE = re.compile(rb'charset=["\']?([\w-]+)', re.IGNORECASE)
-# A leading AP rank, optionally prefixed with "#" (2014's plain-text rank
-# convention; other years wrap the same bare digits in <font>/<small>, which
-# get_text() already strips before this regex ever sees them) and optionally
-# followed by a parenthesized CFP seed (e.g. "20 (11) Tulane"); only the AP
-# rank is kept as the structured integer.
-_RANK_RE = re.compile(r"^#?(\d+)(?:\s*\(\d+\))?\s+(.+)$")
+# A leading AP rank (1-25), optionally prefixed with "#" (2014's plain-text
+# rank convention; other years wrap the same bare digits in <font>/<small>,
+# which get_text() already strips before this regex ever sees them) and
+# optionally followed by a parenthesized CFP seed (e.g. "20 (11) Tulane");
+# only the AP rank is kept as the structured integer. The separating
+# whitespace is optional (\s*, not \s+): some 506 markup collapses to a rank
+# glued directly onto the team name with no space at all (e.g. "18Utah").
+# The rank is capped at two digits (matching the 1-25 AP poll range) so this
+# never mistakes a real team name for a rank prefix; no CFBD team name in
+# this project's vault (2014-2026, all divisions) begins with a digit.
+_RANK_RE = re.compile(r"^#?(\d{1,2})(?:\s*\(\d+\))?\s*(.+)$")
 
 # "alt-cast" is the 2022+ wording; 2014-2021 pages mark the same simulcast
 # concept as "(alt)" instead. Both are checked so feed_kind classifies

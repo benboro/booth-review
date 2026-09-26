@@ -7,12 +7,6 @@ ratingsref,cfb-prairie-view-am,Prairie View A&M,2504,,,RR slug omits the ampersa
 ratingsref,cfb-southeastern-louisiana,SE Louisiana,2545,,,CFBD abbreviates Southeastern
 ratingsref,cfb-texas-am,Texas A&M,245,,,RR slug omits the ampersand
 ratingsref,cfb-umass,Massachusetts,113,,,RR slug uses the UMass initialism
-sports506,14Texas A&M,Texas A&M,245,,,"506 rank glued to name, no space"
-sports506,18Utah,Utah,254,,,"506 rank glued to name, no space"
-sports506,19BYU,BYU,252,,,"506 rank glued to name, no space"
-sports506,21Utah,Utah,254,,,"506 rank glued to name, no space"
-sports506,25Oklahoma State,Oklahoma State,197,,,"506 rank glued to name, no space"
-sports506,4Utah,Utah,254,,,"506 rank glued to name, no space"
 sports506,Albany,UAlbany,399,,,506's short name for UAlbany
 sports506,Appalachian State,App State,2026,,,CFBD's own current short name
 sports506,Bowling Green State,Bowling Green,189,,,CFBD drops State from the name
@@ -38,6 +32,7 @@ sports506,N.C. State,NC State,152,,,506's punctuation differs from CFBD's
 sports506,NC Central,North Carolina Central,2428,,,506's abbreviation
 sports506,Nicholls State,Nicholls,2447,,,CFBD drops State
 sports506,North Carolina State,NC State,152,,,506's full name vs CFBD's abbreviation
+sports506,North Central,North Central College,3071,,,DIII Stagg Bowl opponent; CFBD keeps College
 sports506,Penn,Pennsylvania,219,,,506's short name for the Ivy League Penn
 sports506,S.C. State,South Carolina State,2569,,,506's abbreviation
 sports506,SE Missouri State,Southeast Missouri State,2546,,,506's abbreviation of Southeast

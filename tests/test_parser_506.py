@@ -342,3 +342,64 @@ def test_label_line_with_separator_is_kept_as_label_not_matchup(page) -> None:
         assert listing.away_raw == away
         assert listing.home_raw == home
         assert listing.neutral is neutral
+
+
+# -- rank glued directly to a team name, no separating space -------------------------------
+
+
+def _glued_rank_page_div() -> bytes:
+    return (
+        b"<html><body><h3>SATURDAY, SEPTEMBER 20</h3>\n"
+        b'<div id="cgame"><div id="cmatchup">18Northfield State @ Lakeshore Tech</div>'
+        b'<div id="ctime">7:30 PM</div><div id="cntwk">ECN</div>'
+        b'<div id="canncrs">Pat Example, Jordan Sample</div></div>\n'
+        b'<div id="cgame"><div id="cmatchup">Union City @ 4Prairie State</div>'
+        b'<div id="ctime">9:00 PM</div><div id="cntwk">ECN2</div>'
+        b'<div id="canncrs"></div></div>'
+        b"</body></html>"
+    )
+
+
+def _glued_rank_page_table() -> bytes:
+    return (
+        b"<html><body><h3>SATURDAY, SEPTEMBER 22</h3>\n"
+        b'<table class="listingtable">'
+        b"<tr><td>7:30 PM</td><td>18Northfield State @ Lakeshore Tech</td>"
+        b"<td>ECN</td><td>Pat Example, Jordan Sample</td></tr>"
+        b"<tr><td>9:00 PM</td><td>Union City @ 4Prairie State</td>"
+        b"<td>ECN2</td><td></td></tr>"
+        b"</table></body></html>"
+    )
+
+
+@pytest.mark.parametrize(
+    "page", [_glued_rank_page_div, _glued_rank_page_table], ids=["div", "table"]
+)
+def test_rank_glued_to_team_name_with_no_space_still_splits(page) -> None:
+    """506 markup sometimes glues the rank prefix directly onto the team name
+    (e.g. "18Northfield State", no space); this must split the same way the
+    spaced ("18 Northfield State") and hash-prefixed ("#18 Northfield State")
+    forms already do, instead of being left as one unresolved name."""
+    listings = parse_week_page(page(), season=2025, week_label="4")
+    assert len(listings) == 2
+    away, home = listings
+    assert away.away_raw == "Northfield State"
+    assert away.away_rank == 18
+    assert away.home_raw == "Lakeshore Tech"
+    assert away.home_rank is None
+    assert home.away_raw == "Union City"
+    assert home.away_rank is None
+    assert home.home_raw == "Prairie State"
+    assert home.home_rank == 4
+
+
+def test_spaced_and_hash_prefixed_ranks_still_split_unchanged() -> None:
+    """Guards against a regression where loosening the separator to \\s* to
+    support the glued form (above) would stop matching the already-supported
+    spaced and "#"-prefixed conventions."""
+    listing = _week_listings()[0]
+    assert listing.away_raw == "Northfield State"
+    assert listing.away_rank == 12
+    listing = _table_week_listings()[2]
+    assert listing.away_raw == "Union City"
+    assert listing.away_rank == 7
