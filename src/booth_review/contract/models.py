@@ -180,9 +180,7 @@ class SiteData(BaseModel):
                     raise ValueError(f"telecasts.flags[{i}][{j}]: flag index out of range")
             for j, crew_entry in enumerate(tc.crew[i]):
                 if not 0 <= crew_entry.person < num_people:
-                    raise ValueError(
-                        f"telecasts.crew[{i}][{j}].person: person index out of range"
-                    )
+                    raise ValueError(f"telecasts.crew[{i}][{j}].person: person index out of range")
             if tc.viewers[i] <= 0:
                 raise ValueError(f"telecasts.viewers[{i}]: must be > 0")
             if not tc.rr_urls[i]:
