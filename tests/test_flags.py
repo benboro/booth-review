@@ -145,3 +145,19 @@ def test_excitement_value_null_passthrough() -> None:
     assert excitement_value(None) is None
     assert excitement_value(0.0) == 0.0
     assert excitement_value(87.5) == 87.5
+
+
+def test_real_reference_tables_load() -> None:
+    """The real, user-confirmed data/reference tables (not the synthetic
+    fixtures above) load and cover the project's full 2014-2030 season span.
+    """
+    real_reference_dir = Path("data/reference")
+    eras = load_eras(real_reference_dir)
+    assert eras[0].start is None
+    assert eras[-1].end is None
+    assert era_for(date(2014, 1, 1), eras) is not None
+    assert era_for(date(2030, 12, 31), eras) is not None
+
+    event_flags = load_event_flags(real_reference_dir)
+    flag_ids = {f.flag_id for f in event_flags}
+    assert {"yttv-disney-blackout-2025", "cfbd-wp-model-break"} <= flag_ids
