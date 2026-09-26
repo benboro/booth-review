@@ -165,7 +165,7 @@ Build these as explicit flags or era variables. Year-over-year viewership compar
 | Feb 2025 | Out-of-home measurement expanded to all markets | Further upward shift |
 | Sep 2025 | Nielsen "Big Data + Panel" methodology | Generally boosts live sports |
 | Aug 31, 2026 | Nielsen adds enhanced co-viewing (passive measurement through wearables) to its currency | Further upward shift, about +4% in February pilots; see the viewership basis option in Section 9 |
-| Varies | Some NBC and Peacock figures combine Nielsen and Adobe Analytics | Not comparable to Nielsen-only; flag as a separate measurement type |
+| Varies | Some figures blend Nielsen with streaming-analytics data, observed on ESPN/Disney and FS1 telecasts via Sports Media Watch | Not comparable to Nielsen-only; flag as a separate measurement type |
 | Nov 2025 | Disney networks blacked out on YouTube TV for several weeks | Depressed ABC and ESPN numbers; flag the affected weeks |
 | Any week | Competing events (World Series, NFL, other marquee games in the same window) | Include a same-window competition variable |
 

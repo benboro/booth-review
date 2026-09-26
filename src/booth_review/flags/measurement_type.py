@@ -5,8 +5,11 @@ the full corpus: "nielsen" and "blend" -- no literal "adobe" string exists
 anywhere in RR's data (research Assumption A1). "blend" is mapped to this
 project's `nielsen_adobe` measurement type; that mapping is confirmed by the
 user at the Task 3 checkpoint against blend-claim network/publisher
-evidence (docs/PLAN.md section 6's "some NBC and Peacock figures combine
-Nielsen and Adobe Analytics"), not assumed from RR's vocabulary alone.
+evidence: all 316 blend claims are Sports Media Watch figures on
+ESPN/ESPN2/ESPNU/FS1/ABC telecasts (zero NBC/Peacock), i.e. blended Nielsen
+plus streaming-analytics figures observed on ESPN/Disney and FS1 telecasts
+via Sports Media Watch (docs/PLAN.md section 6), not assumed from RR's
+vocabulary alone.
 """
 
 from __future__ import annotations
