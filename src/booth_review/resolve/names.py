@@ -1,15 +1,14 @@
-"""Team-name normalization and significant-token extraction for the SPIKE-02
-hand join (D-06).
+"""Team-name normalization and significant-token extraction, promoted from
+the Phase 1 spike (D-06) into booth_review.resolve for Phase 3's join layer.
 
 Generic rules only (AGENTS.md's crosswalk-only rule): unicode fold, case
 fold, punctuation collapse, and a leading rank stripped. No team is
 special-cased in code; every name the generic rules miss becomes an entry on
-the SPIKE-02 name-matching problem list for Phase 3 (JOIN-01).
+the JOIN-01 name-matching problem list.
 
 Also holds the shared America/New_York conversion used by both
-spike/selection.py (candidate flags) and spike/join.py (matching), kept here
-rather than in either of those modules to avoid a join.py <-> selection.py
-import cycle.
+resolve/games.py (matching) and spike/selection.py (candidate flags), kept
+here rather than in either of those modules to avoid an import cycle.
 """
 
 from __future__ import annotations
@@ -65,7 +64,7 @@ def normalize_team(text: str) -> str:
     """Fold a team name to a comparable form: strip a leading rank, unicode-
     fold diacritics and okina/apostrophe marks, casefold, spell out "&", and
     collapse punctuation/whitespace. No team-specific fix; anything this
-    misses is a SPIKE-02 name-matching problem, not a code change.
+    misses is a JOIN-01 name-matching problem, not a code change.
     """
     return _fold(_strip_leading_rank(text.strip()))
 
@@ -82,9 +81,8 @@ def significant_tokens(text: str) -> set[str]:
 
 def load_crosswalk(repo_root: Path) -> dict[str, str]:
     """Read data/reference/team_crosswalk.csv (variant -> canonical) if it
-    exists. Returns an empty mapping otherwise; the spike never creates that
-    file, so a missing entry stays a name-matching problem, not a fetch or a
-    guess.
+    exists. Returns an empty mapping otherwise; a missing entry stays a
+    name-matching problem, not a fetch or a guess.
     """
     path = repo_root / "data" / "reference" / "team_crosswalk.csv"
     if not path.is_file():
@@ -102,10 +100,10 @@ def load_crosswalk(repo_root: Path) -> dict[str, str]:
 def csv_safe(value: str) -> str:
     """Prefix `value` with a literal-text marker if it starts with a
     character a spreadsheet would read as a formula (=, +, -, @, a tab, or
-    a carriage return). Shared by selection.py's selection.csv writer and
-    join.py's join.csv writer, both explicitly meant to be opened in a
-    spreadsheet for human review (WR-04). Pair with csv_unsafe() on read so
-    a save/load round trip returns the original value.
+    a carriage return). Shared by every review-CSV writer, each explicitly
+    meant to be opened in a spreadsheet for human review (WR-04). Pair with
+    csv_unsafe() on read so a save/load round trip returns the original
+    value.
     """
     if value.startswith(_CSV_FORMULA_PREFIXES):
         return _CSV_SAFE_MARKER + value
@@ -114,8 +112,8 @@ def csv_safe(value: str) -> str:
 
 def csv_unsafe(value: str) -> str:
     """Invert csv_safe(): strip the literal-text marker this module adds, so
-    a selection.csv/join.csv round trip (save then load/finalize) returns
-    the original value.
+    a review-CSV round trip (save then load/finalize) returns the original
+    value.
     """
     if value.startswith(_CSV_SAFE_MARKER) and value[1:].startswith(_CSV_FORMULA_PREFIXES):
         return value[1:]

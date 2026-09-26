@@ -1,4 +1,4 @@
-"""Tests for spike/names.py (team normalization, significant tokens, the
+"""Tests for resolve/names.py (team normalization, significant tokens, the
 optional crosswalk lookup) and spike/selection.py (candidate flags, the
 20-game selection).
 
@@ -14,15 +14,15 @@ from pathlib import Path
 
 import pytest
 
-from booth_review.sources.cfbd.parser import CfbdGame, parse_games
-from booth_review.sources.ratingsref.sitemap import parse_sitemap
-from booth_review.spike.names import (
+from booth_review.resolve.names import (
     csv_safe,
     csv_unsafe,
     load_crosswalk,
     normalize_team,
     significant_tokens,
 )
+from booth_review.sources.cfbd.parser import CfbdGame, parse_games
+from booth_review.sources.ratingsref.sitemap import parse_sitemap
 from booth_review.spike.selection import (
     DEFAULT_SEED,
     Candidate,

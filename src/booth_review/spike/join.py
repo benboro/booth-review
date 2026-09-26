@@ -1,10 +1,10 @@
-"""Automatic 506/RR lookups for each selected CFBD game, crew resolution, the
-D-06 outputs (join.csv, the review summary, and a draft report), and the
---finalize join-rate computation (D-09).
+"""The D-06 outputs (join.csv, the review summary, and a draft report) and
+the --finalize join-rate computation (D-09).
 
-Matching is deterministic and tiered: exact -> date-shift -> partial ->
-ambiguous -> none (ARCHITECTURE.md Pattern 3). No HTTP client is built here
-(T-01-51); everything is read from data already cached under
+Matching, headline selection, crew resolution, and the raw-input loaders
+were promoted to booth_review.resolve in Phase 3 (JOIN-02/03/04); this
+module now imports them rather than defining them. No HTTP client is built
+here (T-01-51); everything is read from data already cached under
 data/vault/raw/. Outputs are written only under data/vault/spike/ (T-01-48).
 """
 
@@ -15,39 +15,23 @@ import io
 from collections.abc import Sequence
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Literal, cast
+from typing import cast
 
 from booth_review.config import DataPaths
 from booth_review.errors import BoothReviewError, ParseError
-from booth_review.sources.cfbd.parser import CfbdGame, parse_games
-from booth_review.sources.ratingsref.parser import RRRecord, parse_record
+from booth_review.resolve.crew import resolve_crew
+from booth_review.resolve.games import CONFIDENCE_RANK, match_506, match_rr
+from booth_review.resolve.headline import HEADLINE_RULE, select_headline
+from booth_review.resolve.inputs import load_506_listings, load_rr_records
+from booth_review.resolve.names import csv_safe, csv_unsafe, to_et_datetime
+from booth_review.sources.cfbd.parser import parse_games
+from booth_review.sources.ratingsref.parser import RRRecord
 from booth_review.sources.ratingsref.sitemap import SitemapEntry, parse_sitemap
-from booth_review.sources.sports506.parser import Listing506, parse_week_page
-from booth_review.spike.headline import HEADLINE_RULE, select_headline
-from booth_review.spike.names import (
-    csv_safe,
-    csv_unsafe,
-    normalize_team,
-    significant_tokens,
-    to_et_date,
-    to_et_datetime,
-)
+from booth_review.sources.sports506.parser import Listing506
 from booth_review.spike.selection import DEFAULT_SEED, Selection
 from booth_review.transport.cache import atomic_write_bytes
 
-MatchConfidence = Literal["exact", "date-shift", "partial", "ambiguous", "none"]
-
-_RR_SLUG_PREFIX = "cfb-"
 _SEASON = 2025
-_WEEK_LABELS: tuple[str, ...] = (*(str(n) for n in range(17)), "B")
-
-_CONFIDENCE_RANK: dict[str, int] = {
-    "exact": 0,
-    "date-shift": 1,
-    "partial": 2,
-    "ambiguous": 3,
-    "none": 4,
-}
 
 _SUFFIXES = ("Jr.", "Sr.", "II", "III", "IV")
 
@@ -62,151 +46,6 @@ class JoinFileMissingError(BoothReviewError):
     """Raised by finalize() when join.csv does not exist yet -- `spike join`
     must run (and produce join.csv) before `spike join --finalize`.
     """
-
-
-@dataclass(frozen=True)
-class Match506:
-    confidence: MatchConfidence
-    listings: tuple[Listing506, ...]
-
-
-@dataclass(frozen=True)
-class MatchRR:
-    confidence: MatchConfidence
-    records: tuple[RRRecord, ...]
-
-
-@dataclass(frozen=True)
-class CrewResolution:
-    crew: str | None
-    matched_listing: Listing506 | None
-    notes: str
-
-
-def _pair(a: str, b: str) -> frozenset[str]:
-    return frozenset({normalize_team(a), normalize_team(b)})
-
-
-def _rr_slug_pair(record: RRRecord) -> frozenset[str]:
-    return frozenset(normalize_team(_strip_rr_prefix(slug)) for slug in record.telecast.teams)
-
-
-def _strip_rr_prefix(slug: str) -> str:
-    return slug[len(_RR_SLUG_PREFIX) :] if slug.startswith(_RR_SLUG_PREFIX) else slug
-
-
-def match_506(game: CfbdGame, listings: Sequence[Listing506]) -> Match506:
-    """Match `game` to its 506 listing(s) on unordered team pair + ET date.
-
-    Returns every listing of the matched game (main, alt, Spanish feeds all
-    share the same matchup text and date).
-    """
-    game_et_date = to_et_date(game.start_date)
-    game_pair = _pair(game.away_team, game.home_team)
-    home_tokens = significant_tokens(game.home_team)
-    away_tokens = significant_tokens(game.away_team)
-
-    same_pair = [ln for ln in listings if _pair(ln.away_raw, ln.home_raw) == game_pair]
-
-    exact = [ln for ln in same_pair if ln.date_et == game_et_date]
-    if exact:
-        return Match506(confidence="exact", listings=tuple(exact))
-
-    shifted = [ln for ln in same_pair if abs((ln.date_et - game_et_date).days) == 1]
-    if shifted:
-        return Match506(confidence="date-shift", listings=tuple(shifted))
-
-    nearby = [ln for ln in listings if abs((ln.date_et - game_et_date).days) <= 1]
-    partial_candidates = []
-    for ln in nearby:
-        listing_tokens = significant_tokens(ln.away_raw) | significant_tokens(ln.home_raw)
-        if (home_tokens & listing_tokens) and (away_tokens & listing_tokens):
-            partial_candidates.append(ln)
-
-    if not partial_candidates:
-        return Match506(confidence="none", listings=())
-
-    groups: dict[tuple[object, ...], list[Listing506]] = {}
-    for ln in partial_candidates:
-        key = (ln.date_et, ln.away_raw.strip().casefold(), ln.home_raw.strip().casefold())
-        groups.setdefault(key, []).append(ln)
-
-    if len(groups) > 1:
-        return Match506(confidence="ambiguous", listings=())
-
-    only_group = next(iter(groups.values()))
-    return Match506(confidence="partial", listings=tuple(only_group))
-
-
-def match_rr(game: CfbdGame, records: Sequence[RRRecord]) -> MatchRR:
-    """Apply the same match_506 rules to RR telecast.teams slugs and
-    event_date. Duplicate records that resolve to the same game are all
-    returned (JOIN-05); the caller pools their claims for headline selection.
-    """
-    game_et_date = to_et_date(game.start_date)
-    game_pair = _pair(game.away_team, game.home_team)
-    home_tokens = significant_tokens(game.home_team)
-    away_tokens = significant_tokens(game.away_team)
-
-    same_pair = [r for r in records if _rr_slug_pair(r) == game_pair]
-
-    exact = [r for r in same_pair if r.telecast.event_date == game_et_date]
-    if exact:
-        return MatchRR(confidence="exact", records=tuple(exact))
-
-    shifted = [r for r in same_pair if abs((r.telecast.event_date - game_et_date).days) == 1]
-    if shifted:
-        return MatchRR(confidence="date-shift", records=tuple(shifted))
-
-    nearby = [r for r in records if abs((r.telecast.event_date - game_et_date).days) <= 1]
-    partial_candidates = []
-    for r in nearby:
-        record_tokens: set[str] = set()
-        for slug in r.telecast.teams:
-            record_tokens |= significant_tokens(slug)
-        if (home_tokens & record_tokens) and (away_tokens & record_tokens):
-            partial_candidates.append(r)
-
-    if not partial_candidates:
-        return MatchRR(confidence="none", records=())
-
-    groups: dict[tuple[object, ...], list[RRRecord]] = {}
-    for r in partial_candidates:
-        key = (r.telecast.event_date, _rr_slug_pair(r))
-        groups.setdefault(key, []).append(r)
-
-    if len(groups) > 1:
-        return MatchRR(confidence="ambiguous", records=())
-
-    only_group = next(iter(groups.values()))
-    return MatchRR(confidence="partial", records=tuple(only_group))
-
-
-def resolve_crew(listings: Sequence[Listing506], rr_networks: Sequence[str]) -> CrewResolution:
-    """Pick the main-feed listing whose network matches one of `rr_networks`
-    (case-insensitive); else the first main-feed listing. Alt and Spanish
-    feeds are never the resolved crew; they go into notes.
-    """
-    main_listings = [ln for ln in listings if ln.feed_kind == "main"]
-    other_listings = [ln for ln in listings if ln.feed_kind != "main"]
-
-    rr_networks_lower = {n.lower() for n in rr_networks}
-    matched = next(
-        (
-            ln
-            for ln in main_listings
-            if ln.network_raw and ln.network_raw.lower() in rr_networks_lower
-        ),
-        None,
-    )
-    chosen = matched if matched is not None else (main_listings[0] if main_listings else None)
-
-    notes = "; ".join(
-        f"{ln.feed_kind}: {ln.network_raw or '(no network)'} ({ln.crew_raw or 'no crew listed'})"
-        for ln in other_listings
-    )
-    crew = chosen.crew_raw if chosen is not None else None
-    return CrewResolution(crew=crew, matched_listing=chosen, notes=notes)
 
 
 # -- D-06 outputs: join.csv, summary.md, report.md --------------------------------------
@@ -267,30 +106,12 @@ class JoinRow:
         return {field.name: getattr(self, field.name) for field in fields(self)}
 
 
-def _week_page_path(paths: DataPaths, season: int, label: str) -> Path:
-    name = label if label == "B" else label.zfill(2)
-    return paths.raw / "sports506" / str(season) / f"wk-{name}.html"
-
-
 def _load_all_506_listings(paths: DataPaths, season: int) -> list[Listing506]:
-    listings: list[Listing506] = []
-    for label in _WEEK_LABELS:
-        page_path = _week_page_path(paths, season, label)
-        if not page_path.is_file():
-            continue
-        listings.extend(parse_week_page(page_path.read_bytes(), season=season, week_label=label))
-    return listings
+    return load_506_listings(paths, season)
 
 
 def _load_all_rr_records(paths: DataPaths, season: int) -> list[RRRecord]:
-    records: list[RRRecord] = []
-    season_dir = paths.raw / "ratingsref" / "telecast" / str(season)
-    if season_dir.is_dir():
-        for record_path in sorted(season_dir.glob("*.json")):
-            try:
-                records.append(parse_record(record_path.read_bytes()))
-            except ParseError:
-                continue
+    records, _parse_error_count = load_rr_records(paths, season)
     return records
 
 
@@ -354,7 +175,7 @@ def build_join_rows(paths: DataPaths, selections: Sequence[Selection]) -> list[J
             and crew.matched_listing.network_raw.lower() not in {n.lower() for n in rr_networks}
         )
 
-        match_conf = max((m506.confidence, mrr.confidence), key=lambda c: _CONFIDENCE_RANK[c])
+        match_conf = max((m506.confidence, mrr.confidence), key=lambda c: CONFIDENCE_RANK[c])
         doubtful = match_conf != "exact" or len(mrr.records) >= 2 or network_mismatch
 
         notes_parts = [crew.notes] if crew.notes else []

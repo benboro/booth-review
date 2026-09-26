@@ -1,4 +1,5 @@
-"""RR headline-figure selection (D-06, SPIKE-02).
+"""RR headline-figure selection (D-06, SPIKE-02), promoted from the Phase 1
+spike into booth_review.resolve for Phase 3's join layer (JOIN-04).
 
 One documented, unit-tested rule instead of "most recent" or "follow
 supersedes_id alone" (Pitfall 1: a later preliminary figure is not the right
@@ -27,6 +28,12 @@ def _claim_id(claim: RRClaim) -> str | None:
     extra = claim.model_extra or {}
     value = extra.get("id")
     return value if isinstance(value, str) else None
+
+
+# Public alias: JOIN-04's disagreement log (compare_with_rr_current) and any
+# other resolve/build code need this reader too, not just select_headline's
+# own tie-breaking.
+claim_id = _claim_id
 
 
 def _rank_key(claim: RRClaim) -> tuple[int, int, float]:

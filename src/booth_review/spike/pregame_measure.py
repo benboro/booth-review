@@ -17,7 +17,8 @@ from dataclasses import dataclass
 from typing import Literal
 
 from booth_review.config import DataPaths
-from booth_review.sources.cfbd.parser import CfbdLine, parse_games, parse_lines, parse_wp_pregame
+from booth_review.resolve.lines import closing_spread_by_game, provider_priority
+from booth_review.sources.cfbd.parser import parse_games, parse_lines, parse_wp_pregame
 from booth_review.transport.cache import atomic_write_bytes
 
 _SEASONS: tuple[int, ...] = tuple(range(2014, 2026))
@@ -153,39 +154,6 @@ def wp_closeness(home_win_probability: float) -> float:
     return 1.0 - abs(2.0 * home_win_probability - 1.0)
 
 
-def _provider_priority(counts: dict[str, int]) -> list[str]:
-    """consensus first if it was ever the provider of record, then the rest
-    by descending appearance count (ties broken alphabetically for
-    determinism). Used to pick one closing spread per game when several
-    providers quoted one.
-    """
-    providers = sorted(counts.keys(), key=lambda p: (-counts[p], p))
-    if "consensus" in providers:
-        providers.remove("consensus")
-        providers.insert(0, "consensus")
-    return providers
-
-
-def _closing_spread_by_game(lines: list[CfbdLine], priority: list[str]) -> dict[int, float]:
-    by_game: dict[int, dict[str, float]] = {}
-    for line in lines:
-        if line.spread is not None:
-            by_game.setdefault(line.game_id, {})[line.provider] = line.spread
-
-    result: dict[int, float] = {}
-    for game_id, by_provider in by_game.items():
-        for provider in priority:
-            if provider in by_provider:
-                result[game_id] = by_provider[provider]
-                break
-        else:
-            # A provider not in the aggregate priority list (shouldn't happen
-            # since priority is built from every provider seen); fall back to
-            # an arbitrary one rather than drop the game.
-            result[game_id] = next(iter(by_provider.values()))
-    return result
-
-
 def _spearman(xs: Sequence[float], ys: Sequence[float]) -> float | None:
     """Spearman rank correlation, computed by hand (no numpy/scipy
     dependency) with average ranks for ties.
@@ -234,7 +202,7 @@ def _spearman_for_season(
         for g in games
         if g.completed and (g.home_classification == "fbs" or g.away_classification == "fbs")
     }
-    spreads = _closing_spread_by_game(parse_lines(lines_path.read_bytes()), priority)
+    spreads = closing_spread_by_game(parse_lines(lines_path.read_bytes()), priority)
     wp_by_game = {
         row.game_id: row.home_win_probability for row in parse_wp_pregame(wp_path.read_bytes())
     }
@@ -344,7 +312,7 @@ def run_pregame_measure(paths: DataPaths) -> MeasureChoice:
     aggregate_counts: Counter[str] = Counter()
     for c in coverages:
         aggregate_counts.update(c.provider_counts)
-    priority = _provider_priority(dict(aggregate_counts))
+    priority = provider_priority(dict(aggregate_counts))
 
     correlation, correlation_n = (
         _spearman_for_season(paths, 2025, priority) if 2025 in _SEASONS else (None, 0)
