@@ -1,8 +1,8 @@
 name_a,name_b,reason,decision
 A.J. Hawk,AJ Hawk,similar_first,same
 A.J. Kanell,AJ Kanell,similar_first,same
-Adam Breneman,Adam Brenneman,near_spelling,different
-Adam Brenemen,Adam Brenneman,near_spelling,different
+Adam Breneman,Adam Brenneman,near_spelling,same
+Adam Brenemen,Adam Brenneman,near_spelling,same
 Anthony Simeone,Tony Simeone,nickname,same
 Barrett Brooke,Barrett Brooks,near_spelling,same
 Ben Hartsock,Brian Hartsock,similar_first,same
@@ -21,7 +21,7 @@ Fozzie Whittaker,Fozzy Whittaker,similar_first,same
 Fozzy Whitaker,Fozzy Whittaker,near_spelling,same
 Glen Mason,Len Mason,similar_first,same
 Glen Parker,Glenn Parker,similar_first,same
-Hudson Mason,Huston Mason,similar_first,different
+Hudson Mason,Huston Mason,similar_first,same
 Hudson Mason,Hutson Mason,similar_first,same
 Huston Mason,Hutson Mason,similar_first,same
 J.B Long,JB Long,similar_first,same
@@ -33,7 +33,7 @@ Jason Ross Jr,John Ross,similar_first,different
 Jesse Palmer,Jessie Palmer,similar_first,same
 Jesse Palmer,Jordan Palmer,similar_first,different
 Jessie Palmer,Jordan Palmer,similar_first,different
-Jim Mora,Jim Mora Jr.,suffix_only,different
+Jim Mora,Jim Mora Jr.,suffix_only,same
 John Cognemi,John Congemi,near_spelling,same
 Jon Vilma,Jonathan Vilma,nickname,same
 Mark Helfich,Mark Helfrich,near_spelling,same
@@ -48,9 +48,9 @@ Randy Cross,Richard Cross,similar_first,different
 Rocky Boiman,Rocky Boiman,possible_two_people,one
 Scott Jackson,Stanley Jackson,similar_first,different
 Sean Kenney,Shawn Kenney,similar_first,same
-Sed Bonner,Sherdric Bonner,similar_first,different
+Sed Bonner,Sherdric Bonner,similar_first,same
 Sed Bonner,Sherdrick Bonner,similar_first,same
 Shawn Kennedy,Shawn Kenney,near_spelling,same
-Sherdric Bonner,Sherdrick Bonner,similar_first,different
+Sherdric Bonner,Sherdrick Bonner,similar_first,same
 Stan Routt,Stanford Routt,similar_first,same
 Wes Durham,Wes Durhan,near_spelling,same
