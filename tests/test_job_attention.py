@@ -15,6 +15,7 @@ from booth_review.job.attention import (
     ATTENTION_TITLE,
     AttentionItem,
     build_attention_body,
+    cfbd_failed,
     cfbd_remaining,
     cfbd_step_failed,
     has_attention,
@@ -47,6 +48,17 @@ def test_cfbd_step_failed_line_and_severity() -> None:
 def test_cfbd_step_failed_rejects_exception_message_not_class_name() -> None:
     with pytest.raises(ValueError, match="error_type"):
         cfbd_step_failed("BudgetFloorError: remaining calls would drop below 250")
+
+
+def test_cfbd_failed_line_and_severity() -> None:
+    item = cfbd_failed(5)
+    assert item.line == "cfbd calls failed: 5"
+    assert item.severity == "attention"
+
+
+def test_cfbd_failed_rejects_negative() -> None:
+    with pytest.raises(ValueError):
+        cfbd_failed(-1)
 
 
 def test_rr_step_failed_line() -> None:

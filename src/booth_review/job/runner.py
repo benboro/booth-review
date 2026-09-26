@@ -32,6 +32,7 @@ from booth_review.config import CFBD_FLOOR_DEFAULT
 from booth_review.errors import BoothReviewError, ParseError, VaultCommitError, VaultStateError
 from booth_review.job.attention import (
     AttentionItem,
+    cfbd_failed,
     cfbd_remaining,
     cfbd_step_failed,
     has_attention,
@@ -251,6 +252,14 @@ class ScheduledJob:
         except BoothReviewError as exc:
             failed = True
             items.append(cfbd_step_failed(type(exc).__name__))
+
+        # run_requests records a 4xx (other than 429) as failed and carries on
+        # without raising, so a revoked key (401) never reaches the except
+        # above; count those failures here so they still need attention.
+        failed_calls = sum(summary.failed for summary in summaries)
+        if failed_calls:
+            failed = True
+            items.append(cfbd_failed(failed_calls))
 
         counts = (
             _sum_batch_counts(summaries)

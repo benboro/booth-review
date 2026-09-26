@@ -74,6 +74,12 @@ def cfbd_step_failed(error_type: str) -> AttentionItem:
     )
 
 
+def cfbd_failed(n: int) -> AttentionItem:
+    """`n` CFBD calls came back 4xx (e.g. a revoked key's 401) during the CFBD step."""
+    _require_non_negative("n", n)
+    return AttentionItem(kind="cfbd_failed", line=f"cfbd calls failed: {n}", severity="attention")
+
+
 def rr_step_failed(error_type: str) -> AttentionItem:
     """The Ratings Reference refresh step raised `error_type`."""
     _require_error_type(error_type)

@@ -355,6 +355,55 @@ def test_scheduled_job_known_month_budget_never_calls_info(
     assert all(not r.url.endswith("/info") for r in handle.requests)
 
 
+# -- CR-02: CFBD 4xx (revoked key) is attention, never a clean exit 0 ---------------------------
+
+
+def test_scheduled_job_cfbd_401_is_attention_exit4_success_not_advanced(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+
+    prior_success = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
+    save_state(
+        paths.job_state,
+        JobState(
+            season=2026,
+            last_success_at=prior_success,
+            last_attempt_at=prior_success,
+            last_status="ok",
+            last_window_start=prior_success,
+        ),
+    )
+    now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+
+    responses = {
+        url: (401, b'{"message": "Unauthorized"}', {})
+        for url in _cfbd_ok_responses(2026)
+        if not url.endswith("robots.txt")
+    }
+    responses["https://api.collegefootballdata.com/robots.txt"] = (404, b"nf", {})
+    responses["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
+    responses[SITEMAP_URL] = (200, _empty_sitemap_xml(), {})
+
+    handle = mock_transport_factory(responses)
+    runtime = _runtime(paths, handle, now=lambda: now_value, fake_clock=fake_clock)
+
+    job = ScheduledJob(runtime, token="test-token", now=lambda: now_value, trigger="manual")
+    result = job.run()
+
+    assert result.exit_code == 4
+    failed_items = [item for item in result.items if item.kind == "cfbd_failed"]
+    assert len(failed_items) == 1
+    assert failed_items[0].severity == "attention"
+    assert failed_items[0].line == "cfbd calls failed: 6"
+    assert result.counts["cfbd_failed"] == 6
+
+    saved_state = load_state(paths.job_state)
+    assert saved_state.last_success_at == prior_success  # not advanced
+    assert saved_state.last_status == "attention"
+
+
 # -- RR backlog over cap: attention, exit 4 ---------------------------------------------------
 
 
