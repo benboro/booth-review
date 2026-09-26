@@ -194,8 +194,16 @@ class CfbdBudget(FetchGuard):
     # -- Budget queries ---------------------------------------------------
 
     def last_known_remaining(self, month: str | None = None) -> int | None:
+        """The remaining-call count from the month's most recent call line.
+
+        "Most recent" is by `called_at`, never by file order: the vault's
+        `merge=union` rebase writes upstream's lines before the replayed local
+        ones, so the last line in the file can be an older, higher count
+        (WR-03). Lines with the same `called_at` (second resolution) resolve
+        to the lowest count, the conservative choice for the floor check.
+        """
         target_month = month or self._now().strftime("%Y-%m")
-        result: int | None = None
+        best: tuple[str, int] | None = None
         for line in self._read_lines():
             if line.get("event") != "call" or line.get("month") != target_month:
                 continue
@@ -207,9 +215,14 @@ class CfbdBudget(FetchGuard):
                 )
                 if v is not None
             ]
-            if candidates:
-                result = min(candidates)
-        return result
+            if not candidates:
+                continue
+            called_at = line.get("called_at")
+            key = (called_at if isinstance(called_at, str) else "", min(candidates))
+            # Latest called_at wins; on a tie, the lower remaining count wins.
+            if best is None or key[0] > best[0] or (key[0] == best[0] and key[1] < best[1]):
+                best = key
+        return None if best is None else best[1]
 
     def info_counts_against_quota(self) -> bool | None:
         result: bool | None = None

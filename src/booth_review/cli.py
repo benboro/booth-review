@@ -345,7 +345,7 @@ def _collect_506(args: argparse.Namespace) -> int:
 def _collect_ratingsref(args: argparse.Namespace) -> int:
     runtime = build_runtime(with_budget=False)
     try:
-        collector = RatingsRefCollector(runtime.cache, runtime.paths)
+        collector = RatingsRefCollector(runtime.cache, runtime.paths, lock=runtime.vault.lock)
 
         if args.season is not None:
             seasons = args.season
@@ -428,12 +428,14 @@ def _print_refresh_summary(summary: RefreshSummary) -> None:
         f"selected {summary.selected}, uncapped_current {summary.uncapped_current}, "
         f"backlog {summary.backlog}"
     )
+    if summary.deferred_failed > 0:
+        print(f"held back after a recent failed fetch {summary.deferred_failed}")
 
 
 def _refresh_ratingsref(args: argparse.Namespace) -> int:
     runtime = build_runtime(with_budget=False)
     try:
-        collector = RatingsRefCollector(runtime.cache, runtime.paths)
+        collector = RatingsRefCollector(runtime.cache, runtime.paths, lock=runtime.vault.lock)
         current_season = _current_season_ceiling()
         season_label = f"{FIRST_SEASON}-{current_season}"
 
@@ -457,6 +459,7 @@ def _refresh_ratingsref(args: argparse.Namespace) -> int:
                         "raw/_robots",
                         "ledger/requests.jsonl",
                         "ledger/rr_lastmod.json",
+                        "ledger/rr_lastmod.jsonl",
                     ],
                 )
         assert summary is not None
@@ -751,7 +754,7 @@ def _job_run(args: argparse.Namespace) -> int:
         result: JobRunResult = job.run()
 
         if result.exit_code == EXIT_NOTHING_DUE:
-            print("nothing due since last success")
+            print("nothing due since last attempt")
 
         if args.attention_out is not None:
             body = build_attention_body(result.items, generated_at=datetime.now(UTC))

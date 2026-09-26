@@ -256,3 +256,89 @@ def test_table_layout_bowls_rolls_the_year_over_from_december_to_january() -> No
     listings = _table_bowl_listings()
     assert listings[0].date_et == date(2018, 12, 16)
     assert listings[1].date_et == date(2019, 1, 1)
+
+
+# -- WR-10: a non-date <h3> is skipped, never raised --------------------------------------
+
+
+def _with_extra_h3(html: bytes, *, first_date_header: bytes) -> bytes:
+    # A sidebar/section heading before the first date header and another
+    # after the last row, as a page template change could add.
+    html = html.replace(first_date_header, b"<h3>Other Links</h3>\n" + first_date_header, 1)
+    return html.replace(b"</article>", b"<h3>More Schedules</h3></article>", 1)
+
+
+def test_non_date_h3_is_skipped_div_layout() -> None:
+    html = _with_extra_h3(
+        (FIXTURES / "week_synthetic.html").read_bytes(),
+        first_date_header=b"<h3>THURSDAY, SEPTEMBER 25</h3>",
+    )
+    assert parse_week_page(html, season=2025, week_label="5") == _week_listings()
+
+
+def test_non_date_h3_is_skipped_table_layout() -> None:
+    html = _with_extra_h3(
+        (FIXTURES / "week_table_synthetic.html").read_bytes(),
+        first_date_header=b"<h3>THURSDAY, SEPTEMBER 27</h3>",
+    )
+    assert parse_week_page(html, season=2018, week_label="5") == _table_week_listings()
+
+
+# -- WR-11: a game-label line with a separator is never taken for the matchup --------------
+
+_LABEL_CELLS = (
+    # (matchup cell HTML, expected label, away, home, neutral)
+    (
+        "<b>Semifinal Classic @ Example Stadium</b><br>Prairie State vs Union City"
+        "<br>(in Example City)",
+        "Semifinal Classic @ Example Stadium",
+        "Prairie State",
+        "Union City (in Example City)",
+        True,
+    ),
+    (
+        "Northfield vs Lakeshore Classic<br>Northfield State vs Lakeshore Tech",
+        "Northfield vs Lakeshore Classic",
+        "Northfield State",
+        "Lakeshore Tech",
+        True,
+    ),
+    (
+        "<b>Frontier Bowl</b><br>Casey Vale State @ Morgan Tech<br>(rematch of Casey @ Morgan)",
+        "Frontier Bowl",
+        "Casey Vale State",
+        "Morgan Tech (rematch of Casey @ Morgan)",
+        False,
+    ),
+)
+
+
+def _label_page_div() -> bytes:
+    rows = "".join(
+        f'<div id="cgame"><div id="cmatchup">{cell}</div><div id="ctime">4:00 PM</div>'
+        '<div id="cntwk">ECN</div><div id="canncrs">Pat Example, Jordan Sample</div></div>\n'
+        for cell, *_ in _LABEL_CELLS
+    )
+    return f"<html><body><h3>SATURDAY, DECEMBER 20</h3>\n{rows}</body></html>".encode()
+
+
+def _label_page_table() -> bytes:
+    rows = "".join(
+        f"<tr><td>4:00 PM</td><td>{cell}</td><td>ECN</td><td>Pat Example, Jordan Sample</td></tr>\n"
+        for cell, *_ in _LABEL_CELLS
+    )
+    return (
+        "<html><body><h3>SATURDAY, DECEMBER 20</h3>\n"
+        f'<table class="listingtable">{rows}</table></body></html>'
+    ).encode()
+
+
+@pytest.mark.parametrize("page", [_label_page_div, _label_page_table], ids=["div", "table"])
+def test_label_line_with_separator_is_kept_as_label_not_matchup(page) -> None:
+    listings = parse_week_page(page(), season=2025, week_label="B")
+    assert len(listings) == len(_LABEL_CELLS)
+    for listing, (_cell, label, away, home, neutral) in zip(listings, _LABEL_CELLS, strict=True):
+        assert listing.game_label == label
+        assert listing.away_raw == away
+        assert listing.home_raw == home
+        assert listing.neutral is neutral

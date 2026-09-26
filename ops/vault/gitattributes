@@ -16,5 +16,7 @@ raw/** -text
 # Append-only ledgers: the job (Sunday/Wednesday) and a local run can each
 # append a new line to the same JSONL file between one push and the next.
 # merge=union keeps both sides' lines on a rebase conflict instead of
-# leaving conflict markers, so job and local commits rebase cleanly.
+# leaving conflict markers, so job and local commits rebase cleanly. This
+# covers ledger/rr_lastmod.jsonl, the RR lastmod log (readers keep the
+# greatest lastmod per record, so line order never matters).
 ledger/*.jsonl merge=union

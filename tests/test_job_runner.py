@@ -10,6 +10,7 @@ end-to-end via `main([...])`. No test ever sends a request to
 from __future__ import annotations
 
 import json
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from booth_review.cli import main
 from booth_review.config import CFBD_FLOOR_DEFAULT
 from booth_review.errors import VaultCommitError, VaultStateError
 from booth_review.job.catchup import JobState, load_state, save_state
+from booth_review.job.gaps506 import find_506_gaps
 from booth_review.job.runner import JOB_CFBD_MAX_CALLS, ScheduledJob
 from booth_review.runtime import Runtime
 from booth_review.sources.ratingsref.collector import SITEMAP_URL
@@ -289,6 +291,163 @@ def test_scheduled_job_cfbd_budget_floor_is_attention_rr_still_runs_exit4(
     assert saved_state.last_status == "attention"
 
 
+# -- CR-01: a new month with no ledger line yet calls /info before the data calls --------------
+
+
+def test_scheduled_job_new_month_without_ledger_line_calls_info_first(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    # Only the *previous* month has a ledger line: the first run of October.
+    _seed_required_state(paths, cfbd_month="2026-09")
+    now_value = datetime(2026, 10, 4, 14, 5, tzinfo=UTC)
+
+    info_url = "https://api.collegefootballdata.com/info"
+    responses = _cfbd_ok_responses(2026)
+    responses[info_url] = (
+        200,
+        json.dumps({"remainingCalls": 1000, "monthlyLimit": 1000, "usedCalls": 0}).encode(),
+        {},
+    )
+    responses["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
+    responses[SITEMAP_URL] = (200, _empty_sitemap_xml(), {})
+
+    handle = mock_transport_factory(responses)
+    runtime = _runtime(
+        paths, handle, now=lambda: now_value, fake_clock=fake_clock, max_calls=JOB_CFBD_MAX_CALLS
+    )
+
+    job = ScheduledJob(runtime, token="test-token", now=lambda: now_value, trigger="manual")
+    result = job.run()
+
+    assert result.exit_code == 0
+    assert "cfbd_step_failed" not in {item.kind for item in result.items}
+
+    cfbd_urls = [
+        r.url
+        for r in handle.requests
+        if r.url.startswith("https://api.collegefootballdata.com")
+        and not r.url.endswith("robots.txt")
+    ]
+    assert cfbd_urls.count(info_url) == 1
+    assert cfbd_urls[0] == info_url  # before any data call
+    assert len(cfbd_urls) == 7  # /info + 5 refresh + teams_fbs
+    assert runtime.budget is not None
+    assert runtime.budget.last_known_remaining("2026-10") is not None
+
+
+def test_scheduled_job_known_month_budget_never_calls_info(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+
+    responses = _cfbd_ok_responses(2026)
+    responses["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
+    responses[SITEMAP_URL] = (200, _empty_sitemap_xml(), {})
+
+    handle = mock_transport_factory(responses)
+    runtime = _runtime(paths, handle, now=lambda: now_value, fake_clock=fake_clock)
+
+    job = ScheduledJob(runtime, token="test-token", now=lambda: now_value, trigger="manual")
+    result = job.run()
+
+    assert result.exit_code == 0
+    assert all(not r.url.endswith("/info") for r in handle.requests)
+
+
+# -- CR-02: CFBD 4xx (revoked key) is attention, never a clean exit 0 ---------------------------
+
+
+def test_scheduled_job_cfbd_401_is_attention_exit4_success_not_advanced(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+
+    prior_success = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
+    save_state(
+        paths.job_state,
+        JobState(
+            season=2026,
+            last_success_at=prior_success,
+            last_attempt_at=prior_success,
+            last_status="ok",
+            last_window_start=prior_success,
+        ),
+    )
+    now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+
+    responses = {
+        url: (401, b'{"message": "Unauthorized"}', {})
+        for url in _cfbd_ok_responses(2026)
+        if not url.endswith("robots.txt")
+    }
+    responses["https://api.collegefootballdata.com/robots.txt"] = (404, b"nf", {})
+    responses["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
+    responses[SITEMAP_URL] = (200, _empty_sitemap_xml(), {})
+
+    handle = mock_transport_factory(responses)
+    runtime = _runtime(paths, handle, now=lambda: now_value, fake_clock=fake_clock)
+
+    job = ScheduledJob(runtime, token="test-token", now=lambda: now_value, trigger="manual")
+    result = job.run()
+
+    assert result.exit_code == 4
+    failed_items = [item for item in result.items if item.kind == "cfbd_failed"]
+    assert len(failed_items) == 1
+    assert failed_items[0].severity == "attention"
+    assert failed_items[0].line == "cfbd calls failed: 6"
+    assert result.counts["cfbd_failed"] == 6
+
+    saved_state = load_state(paths.job_state)
+    assert saved_state.last_success_at == prior_success  # not advanced
+    assert saved_state.last_status == "attention"
+
+
+# -- WR-02: the RR lastmod log (jsonl) is accepted and committed ----------------------------------
+
+
+def test_scheduled_job_accepts_jsonl_only_lastmod_ledger_and_commits_it(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seed_cfbd_ledger(paths, month="2026-10")
+    paths.rr_lastmod_log.write_text("", encoding="utf-8")  # a post-0.2.2 vault: no .json
+    now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+    _precache_cfbd_season(paths, 2026)
+
+    slug = "cfb-new-team-a-2026-09-12"
+    responses = _cfbd_ok_responses(2026, include_teams_fbs=False)
+    responses["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
+    responses[SITEMAP_URL] = (200, _sitemap_xml([(slug, "2026-09-25T00:00:00+00:00")]), {})
+    responses[f"https://ratingsreference.com/api/telecast/{slug}.json"] = (200, b"{}", {})
+
+    handle = mock_transport_factory(responses)
+    runtime = _runtime(paths, handle, now=lambda: now_value, fake_clock=fake_clock)
+
+    job = ScheduledJob(runtime, token="test-token", now=lambda: now_value, trigger="manual")
+    result = job.run()
+
+    assert result.exit_code == 0
+    assert not paths.rr_lastmod.is_file()
+    tracked = subprocess.run(
+        ["git", "-C", str(paths.vault), "ls-files", "ledger/rr_lastmod.jsonl"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert tracked.strip() == "ledger/rr_lastmod.jsonl"
+    status = subprocess.run(
+        ["git", "-C", str(paths.vault), "status", "--porcelain", "ledger/rr_lastmod.jsonl"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert status == ""  # committed, not left dirty
+
+
 # -- RR backlog over cap: attention, exit 4 ---------------------------------------------------
 
 
@@ -468,6 +627,38 @@ def test_scheduled_job_schedule_trigger_nothing_due_is_exit5_no_requests_no_stat
     assert paths.job_state.read_bytes() == before_bytes
 
 
+def test_scheduled_job_backup_slot_after_failed_attempt_is_exit5_no_requests(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+
+    # The Sunday 10:00 ET main slot ran at 14:05Z and a step failed, so
+    # last_success_at is still the previous Wednesday's run.
+    save_state(
+        paths.job_state,
+        JobState(
+            season=2026,
+            last_success_at=datetime(2026, 10, 1, 0, 5, tzinfo=UTC),
+            last_attempt_at=datetime(2026, 10, 4, 14, 5, tzinfo=UTC),
+            last_status="attention",
+            last_window_start=datetime(2026, 10, 1, 0, 5, tzinfo=UTC),
+        ),
+    )
+    before_bytes = paths.job_state.read_bytes()
+
+    now_value = datetime(2026, 10, 4, 16, 0, tzinfo=UTC)  # Sunday backup slot
+    handle = mock_transport_factory({})
+    runtime = _runtime(paths, handle, now=lambda: now_value, fake_clock=fake_clock)
+
+    job = ScheduledJob(runtime, token="test-token", now=lambda: now_value, trigger="schedule")
+    result = job.run()
+
+    assert result.exit_code == 5
+    assert handle.requests == []
+    assert paths.job_state.read_bytes() == before_bytes
+
+
 def test_scheduled_job_manual_trigger_always_runs_even_with_no_main_slot_due(
     git_vault, mock_transport_factory, fake_clock
 ) -> None:
@@ -534,7 +725,7 @@ def test_cli_job_run_exit5_prints_nothing_due_message(
 
     assert exit_code == 5
     out = capsys.readouterr().out
-    assert "nothing due since last success" in out
+    assert "nothing due since last attempt" in out
     assert handle.requests == []
 
 
@@ -615,3 +806,142 @@ def test_cli_job_run_attention_out_writes_season_past_freeze_body(
     body = out_path.read_text(encoding="utf-8")
     assert "past its freeze date" in body
     assert str(paths.vault) not in str(out_path)
+
+
+# -- WR-12: non-BoothReviewError exceptions at a step boundary -----------------------------------
+
+
+def _wr12_job(paths, handle, fake_clock, now_value) -> ScheduledJob:
+    runtime = _runtime(paths, handle, now=lambda: now_value, fake_clock=fake_clock)
+    return ScheduledJob(runtime, token="test-token", now=lambda: now_value, trigger="manual")
+
+
+def _wr12_responses() -> dict:
+    responses = _cfbd_ok_responses(2026, include_teams_fbs=False)
+    responses["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
+    responses[SITEMAP_URL] = (200, _empty_sitemap_xml(), {})
+    return responses
+
+
+_SECRET_MESSAGE = "leak https://example.invalid/x?key=abc123 Team Example"
+
+
+def test_scheduled_job_unexpected_506_step_error_is_count_only_attention_state_saved(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    _precache_cfbd_season(paths, 2026)
+    now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+
+    def _boom(*args, **kwargs):
+        raise ValueError(_SECRET_MESSAGE)
+
+    monkeypatch.setattr("booth_review.job.runner.find_506_gaps", _boom)
+
+    handle = mock_transport_factory(_wr12_responses())
+    result = _wr12_job(paths, handle, fake_clock, now_value).run()
+
+    assert result.exit_code == 4
+    step_items = [item for item in result.items if item.kind == "sports506_step_failed"]
+    assert [item.line for item in step_items] == ["sports506 step failed: ValueError"]
+    assert all("key=" not in item.line and "Team" not in item.line for item in result.items)
+
+    saved_state = load_state(paths.job_state)
+    assert saved_state.last_attempt_at == now_value
+    assert saved_state.last_success_at is None  # a failed step never advances success
+    assert saved_state.last_status == "attention"
+
+
+def test_scheduled_job_unexpected_rr_step_error_still_runs_506_step(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    _precache_cfbd_season(paths, 2026)
+    now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+
+    def _boom(self, **kwargs):
+        raise KeyError(_SECRET_MESSAGE)
+
+    monkeypatch.setattr(
+        "booth_review.sources.ratingsref.collector.RatingsRefCollector.refresh", _boom
+    )
+    gap_calls: list[int] = []
+
+    def _record_gaps(paths_arg, season, games, now):
+        gap_calls.append(season)
+        return find_506_gaps(paths_arg, season, games, now)
+
+    monkeypatch.setattr("booth_review.job.runner.find_506_gaps", _record_gaps)
+
+    handle = mock_transport_factory(_wr12_responses())
+    result = _wr12_job(paths, handle, fake_clock, now_value).run()
+
+    assert result.exit_code == 4
+    assert "rr step failed: KeyError" in [item.line for item in result.items]
+    assert gap_calls == [2026]
+    assert load_state(paths.job_state).last_attempt_at == now_value
+
+
+def test_scheduled_job_unexpected_error_with_unsafe_class_name_reports_exception(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    _precache_cfbd_season(paths, 2026)
+    now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+
+    class Odd_Error2(Exception):  # deliberately off-whitelist
+        pass
+
+    def _boom(*args, **kwargs):
+        raise Odd_Error2(_SECRET_MESSAGE)
+
+    monkeypatch.setattr("booth_review.job.runner.find_506_gaps", _boom)
+
+    handle = mock_transport_factory(_wr12_responses())
+    result = _wr12_job(paths, handle, fake_clock, now_value).run()
+
+    assert result.exit_code == 4
+    assert "sports506 step failed: Exception" in [item.line for item in result.items]
+
+
+def test_scheduled_job_state_save_oserror_is_attention_exit4(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    _precache_cfbd_season(paths, 2026)
+    now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+
+    def _boom(*args, **kwargs):
+        raise OSError(_SECRET_MESSAGE)
+
+    monkeypatch.setattr("booth_review.job.runner.save_state", _boom)
+
+    handle = mock_transport_factory(_wr12_responses())
+    result = _wr12_job(paths, handle, fake_clock, now_value).run()
+
+    assert result.exit_code == 4
+    assert "state step failed: OSError" in [item.line for item in result.items]
+
+
+def test_scheduled_job_commit_vault_state_error_still_propagates(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    _precache_cfbd_season(paths, 2026)
+    now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+
+    handle = mock_transport_factory(_wr12_responses())
+    job = _wr12_job(paths, handle, fake_clock, now_value)
+
+    def _busy(*args, **kwargs):
+        raise VaultStateError("vault is locked by another booth-review process")
+
+    monkeypatch.setattr(job._runtime.vault, "commit_batch", _busy)
+
+    with pytest.raises(VaultStateError):
+        job.run()

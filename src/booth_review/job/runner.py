@@ -10,15 +10,28 @@ Each step commits its own paths with a count-only message (batch_message);
 state (`ledger/job_state.json`) is saved and committed last. A VaultCommitError
 at any commit stops the run immediately (exit 3); every other step failure
 becomes an attention item and the run continues (exit 4 when any attention
-item exists, exit 0 on a clean run).
+item exists, exit 0 on a clean run). "Every other" includes exceptions that
+aren't BoothReviewError (a JSONDecodeError, KeyError, ValueError, OSError...):
+each step boundary turns them into a count-only item naming only the
+exception class, never its message, and the state is still saved (WR-12).
+A VaultStateError raised while committing (the vault lock or check) still
+propagates, as the CLI's exit 3.
 
 GitHub's own scheduler is lossy, so the workflow template also fires backup
 cron slots between the two main slots (Sunday 10:00 / Wednesday 20:00 ET,
 D-11). `EXIT_NOTHING_DUE = 5` is returned by a `trigger="schedule"` run that
-finds no main slot has occurred since its last success (`job.catchup.is_due`):
+finds no main slot has occurred since its last attempt (`job.catchup.is_due`):
 it exits before any CFBD, RR, or 506 step, any vault commit, or the
 `ledger/job_state.json` save, so a dropped main slot's next backup slot is the
 only run that actually does anything.
+
+Due-ness is measured from the last *attempt* (`last_attempt_at`, saved by
+every run that gets as far as the state save, failed steps included), not
+the last success: each main slot gets at most one scheduled attempt, so a
+step that keeps failing is retried at the next main slot (or by a manual
+run, which is always due) instead of re-running the whole job at every
+backup slot. A run that stops with exit 3 before the state save records no
+attempt, so the next backup slot retries it.
 """
 
 from __future__ import annotations
@@ -26,14 +39,17 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from typing import TypeVar
 
 from booth_review.audit.completeness import SOURCES
 from booth_review.config import CFBD_FLOOR_DEFAULT
-from booth_review.errors import BoothReviewError, ParseError, VaultCommitError, VaultStateError
+from booth_review.errors import ParseError, VaultCommitError, VaultStateError
 from booth_review.job.attention import (
     AttentionItem,
+    cfbd_failed,
     cfbd_remaining,
     cfbd_step_failed,
+    error_type_name,
     has_attention,
     missed_runs,
     push_failed,
@@ -43,6 +59,7 @@ from booth_review.job.attention import (
     season_past_freeze,
     sports506_missing,
     sports506_stale,
+    step_failed,
 )
 from booth_review.job.catchup import (
     CatchupWindow,
@@ -66,6 +83,7 @@ from booth_review.sources.ratingsref.collector import (
     RatingsRefCollector,
     RefreshSummary,
 )
+from booth_review.sources.ratingsref.lastmod import lastmod_ledger_exists
 from booth_review.transport.cache import FreezeGuard
 from booth_review.vault import batch_message
 
@@ -76,15 +94,27 @@ JOB_CFBD_REFRESH: tuple[str, ...] = ("games", "media", "lines", "wp_pregame", "r
 JOB_CFBD_ONCE: tuple[str, ...] = ("teams_fbs",)
 
 # A default run-cap for the job's CFBD calls: 5 refresh endpoints + 1 once
-# endpoint (uncached worst case) plus headroom, well under the monthly budget
+# endpoint (uncached worst case) + 1 /info on a month's first run (when the
+# month's remaining budget is still unknown) plus headroom, well under the monthly budget
 # at 2 runs/week (Claude's Discretion; CONTEXT.md's ~45 calls/month estimate).
 JOB_CFBD_MAX_CALLS = 8
 
 # Vault state files the job refuses to run without (VaultStateError, exit 3):
-# a missing file never falls back to treating the vault as empty/new.
-REQUIRED_LEDGER_FILES: tuple[str, ...] = ("rr_lastmod.json", "cfbd_ledger.jsonl", "frozen.json")
+# a missing file never falls back to treating the vault as empty/new. The RR
+# lastmod ledger counts as present in either form (the pre-0.2.2
+# rr_lastmod.json snapshot or the rr_lastmod.jsonl log; see
+# sources.ratingsref.lastmod).
+REQUIRED_LEDGER_FILES: tuple[str, ...] = ("cfbd_ledger.jsonl", "frozen.json")
 
-# A scheduled run with nothing due since its last success (job.catchup.is_due
+# Exceptions a step boundary never turns into an attention item: a vault
+# commit/push failure (exit 3), and a VaultStateError, which can only reach a
+# step boundary from a commit (lock timeout, vault check) because each
+# step's own collection code already catches everything it raises.
+_COMMIT_PASSTHROUGH: tuple[type[Exception], ...] = (VaultCommitError, VaultStateError)
+
+_T = TypeVar("_T")
+
+# A scheduled run with nothing due since its last attempt (job.catchup.is_due
 # is False) exits here -- a cheap no-op for a backup cron slot -- before any
 # CFBD, RR, or 506 step, commit, or ledger/job_state.json save.
 EXIT_NOTHING_DUE = 5
@@ -103,6 +133,8 @@ class JobRunResult:
 def _check_required_state(runtime: Runtime) -> None:
     paths = runtime.paths
     missing = [name for name in REQUIRED_LEDGER_FILES if not (paths.ledger / name).is_file()]
+    if not lastmod_ledger_exists(paths):
+        missing.insert(0, "rr_lastmod.json(l)")
     if missing:
         raise VaultStateError(
             "job refuses to run: required vault state file(s) missing: "
@@ -184,24 +216,60 @@ class ScheduledJob:
 
         try:
             if season is not None:
-                cfbd_failed, cfbd_counts = self._run_cfbd_step(season, items)
-                any_failed = any_failed or cfbd_failed
-                counts.update({f"cfbd_{key}": value for key, value in cfbd_counts.items()})
+                cfbd_season = season
+                cfbd_result = self._guarded(
+                    items,
+                    cfbd_step_failed,
+                    lambda: self._run_cfbd_step(cfbd_season, items),
+                    passthrough=_COMMIT_PASSTHROUGH,
+                )
+                if cfbd_result is None:
+                    any_failed = True
+                else:
+                    cfbd_failed, cfbd_counts = cfbd_result
+                    any_failed = any_failed or cfbd_failed
+                    counts.update({f"cfbd_{key}": value for key, value in cfbd_counts.items()})
 
-            rr_failed, rr_counts = self._run_rr_step(rr_current_season, items)
-            any_failed = any_failed or rr_failed
-            counts.update({f"rr_{key}": value for key, value in rr_counts.items()})
+            rr_result = self._guarded(
+                items,
+                rr_step_failed,
+                lambda: self._run_rr_step(rr_current_season, items),
+                passthrough=_COMMIT_PASSTHROUGH,
+            )
+            if rr_result is None:
+                any_failed = True
+            else:
+                rr_failed, rr_counts = rr_result
+                any_failed = any_failed or rr_failed
+                counts.update({f"rr_{key}": value for key, value in rr_counts.items()})
 
             if season is not None:
-                self._run_506_gap_step(season, now, items)
+                gap_season = season
+                gap_ok = self._guarded_ok(
+                    items,
+                    lambda name: step_failed("sports506", name),
+                    lambda: self._run_506_gap_step(gap_season, now, items),
+                )
             else:
-                self._check_past_freeze(rr_current_season, items)
+                gap_ok = self._guarded_ok(
+                    items,
+                    lambda name: step_failed("freeze", name),
+                    lambda: self._check_past_freeze(rr_current_season, items),
+                )
+            any_failed = any_failed or not gap_ok
 
             if window.missed_slots > 0:
                 items.append(missed_runs(window.missed_slots))
 
-            if self._runtime.budget is not None:
-                remaining = self._runtime.budget.last_known_remaining(now.strftime("%Y-%m"))
+            budget = self._runtime.budget
+            if budget is not None:
+                # None both when the month is unknown and when reading the
+                # ledger failed (the latter already added a budget item).
+                remaining = self._guarded(
+                    items,
+                    lambda name: step_failed("budget", name),
+                    lambda: budget.last_known_remaining(now.strftime("%Y-%m")),
+                )
                 if remaining is not None:
                     items.append(cfbd_remaining(remaining, CFBD_FLOOR_DEFAULT))
         except VaultCommitError:
@@ -221,9 +289,50 @@ class ScheduledJob:
                 self._save_state(new_state, window, window_season, items)
             except VaultCommitError:
                 return JobRunResult(exit_code=3, items=items, counts=counts, window=window)
+            except VaultStateError:
+                raise
+            except Exception as exc:
+                items.append(step_failed("state", error_type_name(exc)))
+                status = "attention"
 
         exit_code = 4 if status == "attention" else 0
         return JobRunResult(exit_code=exit_code, items=items, counts=counts, window=window)
+
+    # -- step boundary ---------------------------------------------------------
+
+    @staticmethod
+    def _guarded(
+        items: list[AttentionItem],
+        on_error: Callable[[str], AttentionItem],
+        step: Callable[[], _T],
+        *,
+        passthrough: tuple[type[Exception], ...] = (VaultCommitError,),
+    ) -> _T | None:
+        """Run one step. Any exception except `passthrough` becomes one
+        count-only attention item naming only its class (`on_error`), and
+        None is returned so the caller records the step as failed (WR-12)."""
+        try:
+            return step()
+        except passthrough:
+            raise
+        except Exception as exc:
+            items.append(on_error(error_type_name(exc)))
+            return None
+
+    @classmethod
+    def _guarded_ok(
+        cls,
+        items: list[AttentionItem],
+        on_error: Callable[[str], AttentionItem],
+        step: Callable[[], None],
+    ) -> bool:
+        """`_guarded` for a step with no result: True when it completed."""
+
+        def _ran() -> bool:
+            step()
+            return True
+
+        return cls._guarded(items, on_error, _ran) is not None
 
     # -- CFBD step -----------------------------------------------------------
 
@@ -237,15 +346,27 @@ class ScheduledJob:
         failed = False
 
         try:
+            if not self._dry_run:
+                # A new month has no ledger line yet; /info records one so the
+                # data calls below aren't refused with BudgetUnknownError.
+                collector.ensure_budget_known()
             summaries.append(
                 collector.run(season, JOB_CFBD_REFRESH, dry_run=self._dry_run, refresh=True)
             )
             summaries.append(collector.run(season, JOB_CFBD_ONCE, dry_run=self._dry_run))
         except VaultCommitError:
             raise
-        except BoothReviewError as exc:
+        except Exception as exc:
             failed = True
-            items.append(cfbd_step_failed(type(exc).__name__))
+            items.append(cfbd_step_failed(error_type_name(exc)))
+
+        # run_requests records a 4xx (other than 429) as failed and carries on
+        # without raising, so a revoked key (401) never reaches the except
+        # above; count those failures here so they still need attention.
+        failed_calls = sum(summary.failed for summary in summaries)
+        if failed_calls:
+            failed = True
+            items.append(cfbd_failed(failed_calls))
 
         counts = (
             _sum_batch_counts(summaries)
@@ -283,7 +404,9 @@ class ScheduledJob:
     def _run_rr_step(
         self, current_season: int, items: list[AttentionItem]
     ) -> tuple[bool, dict[str, int]]:
-        collector = RatingsRefCollector(self._runtime.cache, self._runtime.paths)
+        collector = RatingsRefCollector(
+            self._runtime.cache, self._runtime.paths, lock=self._runtime.vault.lock, now=self._now
+        )
         season_label = f"{FIRST_SEASON}-{current_season}"
         before = dict(self._runtime.cache.counters)
         summary: RefreshSummary | None = None
@@ -295,9 +418,9 @@ class ScheduledJob:
             )
         except VaultCommitError:
             raise
-        except BoothReviewError as exc:
+        except Exception as exc:
             failed = True
-            items.append(rr_step_failed(type(exc).__name__))
+            items.append(rr_step_failed(error_type_name(exc)))
 
         if summary is not None:
             counts = summary.counts()
@@ -328,6 +451,7 @@ class ScheduledJob:
                             "raw/_robots",
                             "ledger/requests.jsonl",
                             "ledger/rr_lastmod.json",
+                            "ledger/rr_lastmod.jsonl",
                         ],
                     )
                 except VaultCommitError:

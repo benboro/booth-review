@@ -17,8 +17,9 @@
 # backup crons after each main slot (D-12). Main slots are the only ones
 # job.catchup.SCHEDULE knows about; `booth-review job run --trigger schedule`
 # treats every other slot as a cheap no-op (exit 5) whenever no main slot has
-# occurred since the last success, so a dropped main slot still gets picked
-# up within hours at almost no cost.
+# occurred since the last attempt, so a dropped main slot still gets picked
+# up within hours at almost no cost, while a main slot whose run failed is
+# retried at the next main slot rather than at every backup slot.
 name: collect-2026
 
 on:
@@ -49,26 +50,28 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: "Require a pinned JOB_REF (D-10: never default to main)"
+        env:
+          JOB_REF: ${{ vars.JOB_REF }}
         run: |
-          if [ -z "${{ vars.JOB_REF }}" ]; then
+          if [ -z "$JOB_REF" ]; then
             echo "::error::vars.JOB_REF is not set; refusing to check out an unpinned ref" >&2
             exit 1
           fi
 
       - name: Checkout vault (self)
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: vault
 
       - name: Checkout public repo at pinned tag
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: benboro/booth-review
           ref: ${{ vars.JOB_REF }}
           path: src
           persist-credentials: false
 
-      - uses: astral-sh/setup-uv@v10.2.0
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
 
       - name: Install booth-review
         working-directory: src

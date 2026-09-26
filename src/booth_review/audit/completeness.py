@@ -16,6 +16,7 @@ from pathlib import Path
 
 from booth_review.config import CFBD_FLOOR_DEFAULT, DataPaths
 from booth_review.sources.cfbd.collector import ENDPOINTS
+from booth_review.sources.ratingsref.lastmod import load_lastmods
 from booth_review.sources.ratingsref.sitemap import SitemapEntry, parse_sitemap
 from booth_review.sources.sports506.weeks import (
     discover_season_weeks,
@@ -344,10 +345,7 @@ def build_completeness(
     if xml is not None:
         entries, _skipped = parse_sitemap(xml)
 
-    lastmod_keys: set[str] = set()
-    if paths.rr_lastmod.is_file():
-        data = json.loads(paths.rr_lastmod.read_text(encoding="utf-8"))
-        lastmod_keys = set(data)
+    lastmod_keys = set(load_lastmods(paths))
 
     entries_by_season: dict[int, list[SitemapEntry]] = {}
     for entry in entries:

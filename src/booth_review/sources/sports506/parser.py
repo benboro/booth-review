@@ -1,7 +1,8 @@
 """Sports506 week-page parser: cached HTML bytes into typed Listing506 rows.
 
 A 506 week page (docs/PLAN.md section 4.1) lays out one <h3> date header per
-game day, with one telecast row underneath it in one of two layouts:
+game day (any other <h3>, such as a sidebar heading, is skipped), with one
+telecast row underneath it in one of two layouts:
 
 - 2022 onward: one <div id="cgame"> per telecast, holding a matchup
   sub-div, a kickoff-time sub-div, a network sub-div, and a crew sub-div.
@@ -102,10 +103,16 @@ def _split_rank(part: str) -> tuple[int | None, str]:
     return int(match.group(1)), match.group(2)
 
 
-def _parse_date_header(text: str, year: int) -> date:
+def _parse_date_header(text: str, year: int) -> date | None:
+    """The date a "Weekday, Month DD" `<h3>` names in `year`, or None when the
+    header isn't a date header at all (a sidebar or section heading such as
+    "Other Links"), so the caller can skip it instead of crashing (WR-10)."""
     _, _, month_day = text.partition(",")
     month_day = _collapse_whitespace(month_day)
-    return datetime.strptime(f"{month_day} {year}", "%B %d %Y").date()  # noqa: DTZ007
+    try:
+        return datetime.strptime(f"{month_day} {year}", "%B %d %Y").date()  # noqa: DTZ007
+    except ValueError:
+        return None
 
 
 def _parse_kickoff(date_et: date, time_text: str) -> datetime | None:
@@ -154,13 +161,16 @@ def _extract_matchup(matchup_tag: Tag) -> tuple[str | None, str]:
     `<br>` in some 2014-2021 pages -- and may append a trailing
     `<br>(in <city>)` location note, itself sometimes present on an
     ordinary (non-bowl) neutral-site game with no label at all. `<br>` is
-    turned into a line break first; the *first* line that itself parses as
-    a matchup (`_split_matchup` succeeds) is the matchup line, any line(s)
-    before it are the label, and any line(s) after it are appended back
-    onto the matchup text with a space. This tells a label line from a
-    location-note line by content (only a matchup line contains a
-    separator), so it reads the bold and plain-text label conventions, and
-    the labelless neutral-site case, without a per-layout special case.
+    turned into a line break first; the *last* line that itself parses as
+    a matchup (`_split_matchup` succeeds) and isn't a parenthesized note is
+    the matchup line, any line(s) before it are the label, and any line(s)
+    after it are appended back onto the matchup text with a space. Taking
+    the last such line, not the first, keeps a label that happens to
+    contain a separator ("Semifinal Classic @ Example Stadium", "Northfield
+    vs Lakeshore Classic") from being read as the matchup (WR-11). This
+    tells a label line from a location-note line by content and position,
+    so it reads the bold and plain-text label conventions, and the
+    labelless neutral-site case, without a per-layout special case.
     """
     for br in matchup_tag.find_all("br"):
         br.replace_with("\n")
@@ -171,7 +181,12 @@ def _extract_matchup(matchup_tag: Tag) -> tuple[str | None, str]:
         return None, ""
 
     matchup_index = next(
-        (i for i, line in enumerate(lines) if _split_matchup(line) is not None), None
+        (
+            i
+            for i in range(len(lines) - 1, -1, -1)
+            if not _PAREN_NOTE_RE.match(lines[i]) and _split_matchup(lines[i]) is not None
+        ),
+        None,
     )
     if matchup_index is None:
         return None, _collapse_whitespace(full_text)
@@ -185,6 +200,9 @@ def _extract_matchup(matchup_tag: Tag) -> tuple[str | None, str]:
 # non-breaking space around either separator (also seen in 2014-2021 pages)
 # is already a plain space by the time this runs.
 _HOME_AWAY_RE = re.compile(r"^(.+?)\s@\s(.+)$")
+# A whole line in parentheses is a note (e.g. "(in Example City)"), never the
+# matchup, even if it happens to contain a separator.
+_PAREN_NOTE_RE = re.compile(r"^\(.*\)$")
 _NEUTRAL_RE = re.compile(r"^(.+?)\svs\.?\s(.+)$")
 
 
@@ -316,9 +334,13 @@ def _walk_page(
     for element in soup.find_all(["h3", row_tag]):
         if element.name == "h3":
             header_date = _parse_date_header(element.get_text(), year)
+            if header_date is None:
+                continue  # not a date header; rows keep the current date
             if last_month is not None and header_date.month < last_month:
                 year += 1
                 header_date = _parse_date_header(element.get_text(), year)
+                if header_date is None:
+                    continue
             last_month = header_date.month
             current_date = header_date
             continue

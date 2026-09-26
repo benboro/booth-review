@@ -1,5 +1,5 @@
 """Tests for the AUTO-01 workflow/gitattributes templates (ops/vault/) and
-the 0.2.1 version bump.
+the 0.2.2 version bump.
 
 `ops/vault/collect.yml` and `ops/vault/gitattributes` are templates: they are
 installed into the *private* data repo's own working copy (Plan 07, with the
@@ -56,13 +56,13 @@ def test_workflow_and_ci_parse_as_yaml_with_expected_structure() -> None:
     assert any("JOB_REF" in step.get("name", "") for step in steps)
 
 
-def test_version_is_0_2_1() -> None:
-    assert booth_review.__version__ == "0.2.1"
+def test_version_is_0_2_2() -> None:
+    assert booth_review.__version__ == "0.2.2"
 
 
-def test_pyproject_declares_0_2_1() -> None:
+def test_pyproject_declares_0_2_2() -> None:
     pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
-    assert 'version = "0.2.1"' in pyproject
+    assert 'version = "0.2.2"' in pyproject
 
 
 # -- collect.yml: schedule / triggers ----------------------------------------------------------
@@ -118,7 +118,9 @@ def test_workflow_concurrency_group_queues_never_cancels() -> None:
 
 
 def test_workflow_checks_out_vault_self_at_path_vault() -> None:
-    pattern = r"uses:\s*actions/checkout@v7\s*\n\s*with:\s*\n\s*path:\s*vault"
+    pattern = (
+        r"uses:\s*actions/checkout@[0-9a-f]{40} # v7\.\d+\.\d+\s*\n\s*with:\s*\n\s*path:\s*vault"
+    )
     assert re.search(pattern, WORKFLOW_TEXT)
 
 
@@ -138,18 +140,49 @@ def test_workflow_never_names_the_private_repo() -> None:
     assert WORKFLOW_TEXT.count("booth-review-data") == 0
 
 
-def test_workflow_setup_uv_version_matches_ci_yml() -> None:
-    workflow_version = re.search(r"astral-sh/setup-uv@(\S+)", WORKFLOW_TEXT)
-    ci_version = re.search(r"astral-sh/setup-uv@(\S+)", CI_TEXT)
-    assert workflow_version is not None
-    assert ci_version is not None
-    assert workflow_version.group(1) == ci_version.group(1)
+# IN-01: every action is pinned to a full commit SHA, with its release tag in a
+# trailing comment, so a moved or compromised tag can't run in a job that
+# holds the CFBD key and a vault write token.
+_PINNED_USES_RE = re.compile(r"uses:\s*([\w.-]+/[\w.-]+)@([0-9a-f]{40}) # (v\d+\.\d+\.\d+)\s*$")
 
 
-def test_workflow_checkout_version_matches_ci_yml() -> None:
-    workflow_versions = set(re.findall(r"actions/checkout@(\S+)", WORKFLOW_TEXT))
-    ci_versions = set(re.findall(r"actions/checkout@(\S+)", CI_TEXT))
-    assert workflow_versions == ci_versions
+def _uses_lines(text: str) -> list[str]:
+    return [line for line in _non_comment_lines(text) if "uses:" in line]
+
+
+def _pins(text: str) -> set[tuple[str, str, str]]:
+    pins = set()
+    for line in _uses_lines(text):
+        match = _PINNED_USES_RE.search(line)
+        assert match is not None, f"action not pinned to a commit SHA with a # vX.Y.Z tag: {line}"
+        pins.add((match.group(1), match.group(2), match.group(3)))
+    return pins
+
+
+@pytest.mark.parametrize("text", [WORKFLOW_TEXT, CI_TEXT], ids=["collect.yml", "ci.yml"])
+def test_every_action_is_pinned_to_a_full_commit_sha_with_a_version_comment(text: str) -> None:
+    assert _uses_lines(text)
+    _pins(text)  # asserts each line
+
+
+def test_workflow_setup_uv_pin_matches_ci_yml() -> None:
+    workflow_pins = {pin for pin in _pins(WORKFLOW_TEXT) if pin[0] == "astral-sh/setup-uv"}
+    ci_pins = {pin for pin in _pins(CI_TEXT) if pin[0] == "astral-sh/setup-uv"}
+    assert len(workflow_pins) == 1
+    assert workflow_pins == ci_pins
+
+
+def test_workflow_checkout_pin_matches_ci_yml() -> None:
+    workflow_pins = {pin for pin in _pins(WORKFLOW_TEXT) if pin[0] == "actions/checkout"}
+    ci_pins = {pin for pin in _pins(CI_TEXT) if pin[0] == "actions/checkout"}
+    assert len(workflow_pins) == 1
+    assert workflow_pins == ci_pins
+
+
+def test_workflow_job_ref_reaches_the_shell_only_through_env() -> None:
+    for line in WORKFLOW_TEXT.splitlines():
+        if "${{ vars.JOB_REF }}" in line:
+            assert line.strip() in ("JOB_REF: ${{ vars.JOB_REF }}", "ref: ${{ vars.JOB_REF }}")
 
 
 # -- collect.yml: secret handling ---------------------------------------------------------------
