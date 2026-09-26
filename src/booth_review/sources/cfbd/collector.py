@@ -96,6 +96,21 @@ class CfbdCollector:
         result = self._cache.get_or_fetch(req, bearer_token=self._token)
         return parse_info(result.content)
 
+    def ensure_budget_known(self) -> bool:
+        """Call /info once when this month's remaining budget is unknown.
+
+        CfbdBudget refuses every data call while the current month has no
+        ledger line (BudgetUnknownError), so an unattended caller (the
+        scheduled job) runs this before its data calls; the /info response is
+        recorded in the ledger by CfbdBudget.after_fetch like any other call.
+        Returns True when /info was called, False when the budget was
+        already known and nothing was sent.
+        """
+        if self._budget.last_known_remaining() is not None:
+            return False
+        self.info()
+        return True
+
     def probe_info_cost(self) -> tuple[InfoSnapshot, bool | None]:
         """Call /info twice and record whether the second call itself counted
         against the budget. Returns the second call's snapshot (for display)

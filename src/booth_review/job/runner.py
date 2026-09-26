@@ -76,7 +76,8 @@ JOB_CFBD_REFRESH: tuple[str, ...] = ("games", "media", "lines", "wp_pregame", "r
 JOB_CFBD_ONCE: tuple[str, ...] = ("teams_fbs",)
 
 # A default run-cap for the job's CFBD calls: 5 refresh endpoints + 1 once
-# endpoint (uncached worst case) plus headroom, well under the monthly budget
+# endpoint (uncached worst case) + 1 /info on a month's first run (when the
+# month's remaining budget is still unknown) plus headroom, well under the monthly budget
 # at 2 runs/week (Claude's Discretion; CONTEXT.md's ~45 calls/month estimate).
 JOB_CFBD_MAX_CALLS = 8
 
@@ -237,6 +238,10 @@ class ScheduledJob:
         failed = False
 
         try:
+            if not self._dry_run:
+                # A new month has no ledger line yet; /info records one so the
+                # data calls below aren't refused with BudgetUnknownError.
+                collector.ensure_budget_known()
             summaries.append(
                 collector.run(season, JOB_CFBD_REFRESH, dry_run=self._dry_run, refresh=True)
             )

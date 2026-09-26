@@ -289,6 +289,72 @@ def test_scheduled_job_cfbd_budget_floor_is_attention_rr_still_runs_exit4(
     assert saved_state.last_status == "attention"
 
 
+# -- CR-01: a new month with no ledger line yet calls /info before the data calls --------------
+
+
+def test_scheduled_job_new_month_without_ledger_line_calls_info_first(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    # Only the *previous* month has a ledger line: the first run of October.
+    _seed_required_state(paths, cfbd_month="2026-09")
+    now_value = datetime(2026, 10, 4, 14, 5, tzinfo=UTC)
+
+    info_url = "https://api.collegefootballdata.com/info"
+    responses = _cfbd_ok_responses(2026)
+    responses[info_url] = (
+        200,
+        json.dumps({"remainingCalls": 1000, "monthlyLimit": 1000, "usedCalls": 0}).encode(),
+        {},
+    )
+    responses["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
+    responses[SITEMAP_URL] = (200, _empty_sitemap_xml(), {})
+
+    handle = mock_transport_factory(responses)
+    runtime = _runtime(
+        paths, handle, now=lambda: now_value, fake_clock=fake_clock, max_calls=JOB_CFBD_MAX_CALLS
+    )
+
+    job = ScheduledJob(runtime, token="test-token", now=lambda: now_value, trigger="manual")
+    result = job.run()
+
+    assert result.exit_code == 0
+    assert "cfbd_step_failed" not in {item.kind for item in result.items}
+
+    cfbd_urls = [
+        r.url
+        for r in handle.requests
+        if r.url.startswith("https://api.collegefootballdata.com")
+        and not r.url.endswith("robots.txt")
+    ]
+    assert cfbd_urls.count(info_url) == 1
+    assert cfbd_urls[0] == info_url  # before any data call
+    assert len(cfbd_urls) == 7  # /info + 5 refresh + teams_fbs
+    assert runtime.budget is not None
+    assert runtime.budget.last_known_remaining("2026-10") is not None
+
+
+def test_scheduled_job_known_month_budget_never_calls_info(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+
+    responses = _cfbd_ok_responses(2026)
+    responses["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
+    responses[SITEMAP_URL] = (200, _empty_sitemap_xml(), {})
+
+    handle = mock_transport_factory(responses)
+    runtime = _runtime(paths, handle, now=lambda: now_value, fake_clock=fake_clock)
+
+    job = ScheduledJob(runtime, token="test-token", now=lambda: now_value, trigger="manual")
+    result = job.run()
+
+    assert result.exit_code == 0
+    assert all(not r.url.endswith("/info") for r in handle.requests)
+
+
 # -- RR backlog over cap: attention, exit 4 ---------------------------------------------------
 
 
