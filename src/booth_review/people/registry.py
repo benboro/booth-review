@@ -20,6 +20,7 @@ from booth_review.people.normalize import fold_person
 from booth_review.people.roles import Role
 from booth_review.people.slugs import assign_slug, slugify
 from booth_review.reference import read_reference_csv, write_reference_csv
+from booth_review.resolve.names import csv_safe, csv_unsafe
 
 PEOPLE_COLUMNS = ("person_id", "canonical_name", "variants", "usual_role", "role_override")
 REVIEWED_COLUMNS = ("name_a", "name_b", "reason", "decision")
@@ -92,13 +93,22 @@ class PeopleRegistry:
         return self._by_variant.get(fold_person(name))
 
     def to_rows(self) -> list[dict[str, str]]:
+        """A row per person, ready for write_reference_csv. canonical_name
+        and every variant pass through csv_safe (T-03-19-style protection):
+        both are scraped 506 crew text, written automatically by
+        register_names, never reviewed by a human before this write, so a
+        name that happens to start with =, +, -, @, a tab, or a carriage
+        return must not corrupt (or, via read_reference_csv's strict
+        rejection, make unreadable) this public table. Pairs with
+        csv_unsafe() in load_people.
+        """
         rows: list[dict[str, str]] = []
         for person in sorted(self.persons.values(), key=lambda p: p.person_id):
             rows.append(
                 {
                     "person_id": person.person_id,
-                    "canonical_name": person.canonical_name,
-                    "variants": "|".join(sorted(person.variants)),
+                    "canonical_name": csv_safe(person.canonical_name),
+                    "variants": "|".join(csv_safe(v) for v in sorted(person.variants)),
                     "usual_role": person.usual_role,
                     "role_override": person.role_override or "",
                 }
@@ -138,7 +148,7 @@ def load_people(reference_dir: Path) -> PeopleRegistry:
                 f"{path.name}: line {line_no}: duplicate person_id {person_id!r}"
             )
 
-        variants = tuple(v for v in raw["variants"].split("|") if v)
+        variants = tuple(csv_unsafe(v) for v in raw["variants"].split("|") if v)
         for variant in variants:
             if "|" in variant:
                 raise ReferenceTableError(
@@ -152,7 +162,7 @@ def load_people(reference_dir: Path) -> PeopleRegistry:
                 )
             variant_owner[key] = person_id
 
-        canonical_name = raw["canonical_name"]
+        canonical_name = csv_unsafe(raw["canonical_name"])
         if canonical_name not in variants:
             raise ReferenceTableError(
                 f"{path.name}: line {line_no}: canonical_name {canonical_name!r} missing "
@@ -185,7 +195,8 @@ def write_people(reference_dir: Path, registry: PeopleRegistry) -> None:
 
 def load_reviewed(reference_dir: Path) -> list[ReviewedPair]:
     """Read people_reviewed.csv (not required). Raises ReferenceTableError on
-    a decision outside same|different|one.
+    a decision outside same|different|one. name_a/name_b pass through
+    csv_unsafe (see write_reviewed).
     """
     path = reference_dir / "people_reviewed.csv"
     raw_rows = read_reference_csv(path, REVIEWED_COLUMNS, required=False)
@@ -197,8 +208,8 @@ def load_reviewed(reference_dir: Path) -> list[ReviewedPair]:
             raise ReferenceTableError(f"{path.name}: line {line_no}: invalid decision {decision!r}")
         pairs.append(
             ReviewedPair(
-                name_a=raw["name_a"],
-                name_b=raw["name_b"],
+                name_a=csv_unsafe(raw["name_a"]),
+                name_b=csv_unsafe(raw["name_b"]),
                 reason=raw["reason"],
                 decision=decision,  # type: ignore[arg-type]
             )
@@ -214,6 +225,12 @@ def _ordered_pair(name_a: str, name_b: str) -> tuple[str, str]:
 
 
 def write_reviewed(reference_dir: Path, pairs: Sequence[ReviewedPair]) -> None:
+    """name_a/name_b pass through csv_safe: like people.csv's canonical_name/
+    variants, these are scraped 506 crew text that reach this public table
+    without a human proofreading step, so a name starting with =, +, -, @, a
+    tab, or a carriage return must not corrupt (or make unreadable) the
+    file. Pairs with csv_unsafe() in load_reviewed.
+    """
     ordered_pairs = []
     for pair in pairs:
         name_a, name_b = _ordered_pair(pair.name_a, pair.name_b)
@@ -221,7 +238,12 @@ def write_reviewed(reference_dir: Path, pairs: Sequence[ReviewedPair]) -> None:
     ordered_pairs.sort(key=lambda p: (fold_person(p.name_a), fold_person(p.name_b)))
 
     rows = [
-        {"name_a": p.name_a, "name_b": p.name_b, "reason": p.reason, "decision": p.decision}
+        {
+            "name_a": csv_safe(p.name_a),
+            "name_b": csv_safe(p.name_b),
+            "reason": p.reason,
+            "decision": p.decision,
+        }
         for p in ordered_pairs
     ]
     write_reference_csv(reference_dir / "people_reviewed.csv", REVIEWED_COLUMNS, rows)
