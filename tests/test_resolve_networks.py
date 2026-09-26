@@ -62,6 +62,39 @@ def test_split_outlets_drops_bare_hyphen_placeholder() -> None:
     assert split_outlets("ESPN, -") == ["ESPN"]
 
 
+def test_split_outlets_drops_cancelled_placeholder() -> None:
+    assert split_outlets("CANCELLED") == []
+    assert split_outlets("cancelled") == []
+
+
+def test_split_outlets_drops_postponed_placeholder() -> None:
+    assert split_outlets("POSTPONED") == []
+    assert split_outlets("POSTPONED to Oct. 7") == []
+
+
+def test_split_outlets_drops_postponed_with_embedded_date_as_one_placeholder() -> None:
+    # The date's own "/" must never be treated as an outlet separator --
+    # this is one placeholder, not two fragments ("POSTPONED TO 12" and
+    # "1").
+    assert split_outlets("POSTPONED TO 12/1") == []
+    assert split_outlets("POSTPONED to 11/23") == []
+
+
+def test_split_outlets_drops_bare_ppv_placeholder() -> None:
+    assert split_outlets("PPV") == []
+
+
+def test_split_outlets_keeps_a_real_outlet_containing_ppv_as_a_substring() -> None:
+    # Format detection on the whole/split text, never a substring match --
+    # "Hawaii PPV" is a real (invented-example) outlet name, not the bare
+    # placeholder.
+    assert split_outlets("Hawaii PPV") == ["Hawaii PPV"]
+
+
+def test_split_outlets_drops_placeholder_alongside_a_real_outlet() -> None:
+    assert split_outlets("ESPN, CANCELLED") == ["ESPN"]
+
+
 # -- strip_feed_marker --------------------------------------------------------------------------
 
 
@@ -133,15 +166,29 @@ def test_primary_network_picks_lowest_tier_rank() -> None:
     assert TIER_RANK["broadcast"] < TIER_RANK["cable"] < TIER_RANK["streaming"]
 
 
-def test_primary_network_ties_pick_first_listed() -> None:
+def test_primary_network_same_tier_tie_breaks_by_network_id_regardless_of_order() -> None:
     table = _table()
-    # net-e and net-a are both broadcast tier (a genuine tie); whichever is
-    # listed first must win.
+    # net-e and net-a are both broadcast tier with no explicit priority (a
+    # genuine tie); the network_id fallback ("net-a" < "net-e") must win
+    # regardless of which one a source listed first.
     e_first = primary_network(["Net E, Net A"], 2025, table)
-    assert e_first.network_id == "net-e"
+    assert e_first.network_id == "net-a"
 
     a_first = primary_network(["Net A, Net E"], 2025, table)
     assert a_first.network_id == "net-a"
+
+
+def test_primary_network_same_tier_tie_breaks_by_explicit_priority_regardless_of_order() -> None:
+    table = _table()
+    # net-f and net-g are both streaming tier; net-f has the lower (winning)
+    # explicit priority. The result must be identical no matter which outlet
+    # a source listed first -- this is the espn-plus-vs-sec-network-plus
+    # case from the real table, reproduced on invented networks.
+    f_first = primary_network(["Net F, Net G"], 2025, table)
+    assert f_first.network_id == "net-f"
+
+    g_first = primary_network(["Net G, Net F"], 2025, table)
+    assert g_first.network_id == "net-f"
 
 
 def test_primary_network_returns_unmapped_strings() -> None:
@@ -156,6 +203,17 @@ def test_primary_network_returns_none_when_nothing_maps() -> None:
     result = primary_network(["Totally Unknown"], 2025, table)
     assert result.network_id is None
     assert result.unmapped == ("Totally Unknown",)
+
+
+def test_primary_network_placeholder_text_is_no_outlet_not_unmapped() -> None:
+    # A status placeholder is dropped before it ever reaches lookup, so it
+    # is neither a chosen network nor an "unmapped" outlet string -- no
+    # telecast should ever get an "unlisted" network_id.
+    table = _table()
+    result = primary_network(["CANCELLED"], 2025, table)
+    assert result.network_id is None
+    assert result.outlets == ()
+    assert result.unmapped == ()
 
 
 def test_primary_network_skips_alt_and_spanish_when_a_main_outlet_exists() -> None:
@@ -183,7 +241,16 @@ def test_primary_network_deduplicates_outlets_in_first_seen_order() -> None:
 
 def test_load_networks_real_table_loads_and_has_the_fixture_ids() -> None:
     table = _table()
-    assert set(table.networks()) == {"net-a", "net-a-es", "net-b", "net-c", "net-d", "net-e"}
+    assert set(table.networks()) == {
+        "net-a",
+        "net-a-es",
+        "net-b",
+        "net-c",
+        "net-d",
+        "net-e",
+        "net-f",
+        "net-g",
+    }
 
 
 def test_load_networks_missing_file_is_empty_table(tmp_path: Path) -> None:
@@ -259,6 +326,39 @@ def test_load_networks_rejects_one_id_with_two_tiers(tmp_path: Path) -> None:
         load_networks(tmp_path)
 
 
+def test_load_networks_rejects_one_id_with_two_priorities(tmp_path: Path) -> None:
+    atomic_write_bytes(
+        tmp_path / "networks.csv",
+        ",".join(NETWORK_COLUMNS).encode() + b"\n"
+        b"Net A,net-a,Network A,family-a,broadcast,main,,,1\n"
+        b"Net A Alt,net-a,Network A,family-a,broadcast,main,,,2\n",
+    )
+    with pytest.raises(ReferenceTableError):
+        load_networks(tmp_path)
+
+
+def test_load_networks_rejects_invalid_priority(tmp_path: Path) -> None:
+    atomic_write_bytes(
+        tmp_path / "networks.csv",
+        ",".join(NETWORK_COLUMNS).encode() + b"\n"
+        b"Net A,net-a,Network A,family-a,broadcast,main,,,bogus\n",
+    )
+    with pytest.raises(ReferenceTableError):
+        load_networks(tmp_path)
+
+
+def test_load_networks_blank_priority_is_none(tmp_path: Path) -> None:
+    atomic_write_bytes(
+        tmp_path / "networks.csv",
+        ",".join(NETWORK_COLUMNS).encode() + b"\n"
+        b"Net A,net-a,Network A,family-a,broadcast,main,,,\n",
+    )
+    table = load_networks(tmp_path)
+    row = table.lookup("Net A", 2025)
+    assert row is not None
+    assert row.priority is None
+
+
 def test_load_networks_allows_same_variant_in_non_overlapping_seasons() -> None:
     # Exercised by the "Net Old" fixture row (2014-2019 -> net-b,
     # 2020-2026 -> net-c); loading the fixture must not raise.
@@ -322,6 +422,7 @@ def test_network_row_is_frozen() -> None:
         feed_type="main",
         season_from=None,
         season_to=None,
+        priority=None,
     )
     with pytest.raises(AttributeError):
         row.network_id = "net-b"  # type: ignore[misc]
@@ -333,6 +434,14 @@ def test_network_row_is_frozen() -> None:
 def test_real_networks_table_loads() -> None:
     table = load_networks(Path("data/reference"))
     assert len(table.networks()) >= 20
+
+
+def test_real_networks_table_has_no_unlisted_network() -> None:
+    # CANCELLED/POSTPONED/date-fragment/bare-PPV placeholder text is now
+    # dropped as no outlet (split_outlets) before it ever reaches the
+    # table, so no row -- and no telecast -- maps to "unlisted" any more.
+    table = load_networks(Path("data/reference"))
+    assert "unlisted" not in table.networks()
 
 
 def test_event_flag_networks_exist() -> None:

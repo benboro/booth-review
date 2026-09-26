@@ -3,8 +3,10 @@ rights-holder primary-network rule.
 
 Rights holder = the highest-precedence outlet among a telecast's main-feed
 outlets, by tier (broadcast > cable > conference > regional > streaming >
-other), first listed on a tie. Precedence and every outlet string this
-project has observed live in data/reference/networks.csv; nothing is
+other); a same-tier tie breaks on each network's `priority` column (lowest
+number wins), then on network_id, so the result never depends on which
+outlet a source happened to list first. Precedence and every outlet string
+this project has observed live in data/reference/networks.csv; nothing is
 hardcoded by brand name here (AGENTS.md's crosswalk-only rule, and the
 research anti-pattern against hardcoding streaming-brand strings such as
 ESPN+/Peacock/Paramount+): a newly observed outlet string that doesn't map
@@ -32,6 +34,7 @@ NETWORK_COLUMNS = (
     "feed_type",
     "season_from",
     "season_to",
+    "priority",
 )
 
 PRIMARY_OVERRIDE_COLUMNS = ("cfbd_game_id", "network_id", "reason")
@@ -51,6 +54,16 @@ TIER_RANK: dict[Tier, int] = {
     "other": 5,
 }
 
+# Same-tier tie-break, lowest priority number wins; a network with no
+# priority in the table sorts after every network that has one (this
+# sentinel), then ties among priority-less networks break on network_id
+# (stable, alphabetical) so the result never depends on outlet listing
+# order. A priority lives on the network_id (one value for every variant
+# row of that id, checked by load_networks the same way display_name,
+# family, and tier are), not on any one outlet string, so it stays a table
+# fact rather than per-network code.
+_DEFAULT_PRIORITY = 1_000_000
+
 _OVERRIDE_REASONS: frozenset[str] = frozenset(
     {"rights-holder", "simulcast", "neutral-site", "other"}
 )
@@ -63,6 +76,22 @@ _NETWORK_ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 # away by the whitespace-collapse pass below, so the literal spaces around
 # "|" don't need their own branch in the regex).
 _SEPARATOR_RE = re.compile(r"[,/;|]")
+
+# 506's non-network status text for a game with no telecast at all: a bare
+# "CANCELLED"/"POSTPONED" (optionally followed by a rescheduled date, which
+# may itself contain a "/" -- "POSTPONED TO 12/1" is never a network string
+# split into "POSTPONED TO 12" and "1", it is one placeholder), or a bare
+# "PPV" with no identifiable network attached. Checked against the whole
+# outlet text before splitting (so an embedded date's "/" is never treated
+# as a network separator), and again against each split-off part as a
+# defensive second pass. Format detection on the placeholder's own text, not
+# a per-network brand list.
+_PLACEHOLDER_RE = re.compile(r"^(cancelled|postponed.*|ppv)$", re.IGNORECASE)
+
+
+def _is_placeholder(text: str) -> bool:
+    return bool(_PLACEHOLDER_RE.match(text))
+
 
 # The same generic feed markers sports506.parser._classify_feed checks
 # (restated here rather than imported, since this module reads outlet text
@@ -87,13 +116,23 @@ def split_outlets(text: str) -> list[str]:
     A lone "-" part is dropped too -- 506's own convention for "no network
     listed" (e.g. a postponed or otherwise untelevised game), never a real
     outlet name, and structurally equivalent to the already-dropped empty
-    part.
+    part. A whole-text status placeholder ("CANCELLED", "POSTPONED", a
+    "POSTPONED TO <date>" with its own embedded "/", or a bare "PPV") is
+    dropped the same way, checked before any splitting so a rescheduled
+    date's "/" is never mistaken for an outlet separator; the same check
+    also applies to each already-split part, in case a placeholder appears
+    alongside a real outlet.
     """
+    collapsed_whole = _collapse_whitespace(text)
+    if not collapsed_whole or collapsed_whole == "-" or _is_placeholder(collapsed_whole):
+        return []
     parts = _SEPARATOR_RE.split(text)
     return [
         collapsed
         for part in parts
-        if (collapsed := _collapse_whitespace(part)) and collapsed != "-"
+        if (collapsed := _collapse_whitespace(part))
+        and collapsed != "-"
+        and not _is_placeholder(collapsed)
     ]
 
 
@@ -145,6 +184,7 @@ class NetworkRow:
     feed_type: FeedType
     season_from: int | None
     season_to: int | None
+    priority: int | None
 
 
 class NetworkTable:
@@ -185,14 +225,16 @@ def load_networks(reference_dir: Path, *, required: bool = False) -> NetworkTabl
     an invalid tier or feed_type, a network_id outside the shared slug
     convention (^[a-z0-9]+(-[a-z0-9]+)*$), the same (variant, season) range
     mapped to two different network ids, or one network_id carrying two
-    different display names, families, or tiers across its rows.
+    different display names, families, tiers, or priorities across its rows.
+    A blank priority is None (the default same-tier tie-break rank in
+    primary_network); a non-blank priority must parse as an integer.
     """
     path = reference_dir / "networks.csv"
     raw_rows = read_reference_csv(path, NETWORK_COLUMNS, required=required)
 
     rows: list[NetworkRow] = []
     variant_ranges: dict[str, list[tuple[int | None, int | None, str]]] = {}
-    network_identity: dict[str, tuple[str, str, Tier]] = {}
+    network_identity: dict[str, tuple[str, str, Tier, int | None]] = {}
 
     for line_no, raw in enumerate(raw_rows, start=2):
         network_id = raw["network_id"]
@@ -219,17 +261,20 @@ def load_networks(reference_dir: Path, *, required: bool = False) -> NetworkTabl
         season_to = _parse_optional_int(
             raw["season_to"], path_name=path.name, line_no=line_no, field="season_to"
         )
+        priority = _parse_optional_int(
+            raw["priority"], path_name=path.name, line_no=line_no, field="priority"
+        )
 
         display_name = raw["display_name"]
         family = raw["family"]
 
         identity = network_identity.get(network_id)
         if identity is None:
-            network_identity[network_id] = (display_name, family, tier)
-        elif identity != (display_name, family, tier):
+            network_identity[network_id] = (display_name, family, tier, priority)
+        elif identity != (display_name, family, tier, priority):
             raise ReferenceTableError(
                 f"{path.name}: line {line_no}: network_id {network_id!r} already has a "
-                "different display_name, family, or tier on an earlier row"
+                "different display_name, family, tier, or priority on an earlier row"
             )
 
         variant_key = _collapse_whitespace(raw["variant"]).lower()
@@ -253,6 +298,7 @@ def load_networks(reference_dir: Path, *, required: bool = False) -> NetworkTabl
                 feed_type=feed_type,
                 season_from=season_from,
                 season_to=season_to,
+                priority=priority,
             )
         )
     return NetworkTable(rows)
@@ -271,13 +317,15 @@ def primary_network(outlet_texts: Sequence[str], season: int, table: NetworkTabl
 
     Every text is split (split_outlets) and each part's feed marker stripped
     (strip_feed_marker) before lookup. Among the outlets that map to a known
-    network, the main-feed outlet with the lowest TIER_RANK wins, first
-    listed on a tie; alt/Spanish-feed outlets are skipped for this choice
-    unless every mapped outlet is alt or Spanish, in which case the primary
-    is the first of those and `feed_type` carries that feed. Unmapped
-    strings are returned separately (a network_diagnose.py review
-    candidate), never guessed at; `network_id` is None only when nothing
-    mapped at all.
+    network, the main-feed outlet with the lowest TIER_RANK wins; a tie
+    within the same tier breaks on the tied networks' `priority` column
+    (lowest number wins), then on network_id, so the choice is the same
+    regardless of which outlet a source listed first. Alt/Spanish-feed
+    outlets are skipped for this choice unless every mapped outlet is alt or
+    Spanish, in which case the primary is the first of those and
+    `feed_type` carries that feed. Unmapped strings are returned separately
+    (a network_diagnose.py review candidate), never guessed at; `network_id`
+    is None only when nothing mapped at all.
     """
     mapped: list[tuple[str, NetworkRow, FeedType]] = []
     unmapped: list[str] = []
@@ -303,7 +351,14 @@ def primary_network(outlet_texts: Sequence[str], season: int, table: NetworkTabl
 
     main_candidates = [item for item in mapped if item[2] == "main"]
     if main_candidates:
-        best_id, _best_row, _ = min(main_candidates, key=lambda item: TIER_RANK[item[1].tier])
+        best_id, _best_row, _ = min(
+            main_candidates,
+            key=lambda item: (
+                TIER_RANK[item[1].tier],
+                item[1].priority if item[1].priority is not None else _DEFAULT_PRIORITY,
+                item[1].network_id,
+            ),
+        )
         return PrimaryResult(
             network_id=best_id, outlets=outlet_ids, unmapped=tuple(unmapped), feed_type="main"
         )

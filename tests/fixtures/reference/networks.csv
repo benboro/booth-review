@@ -1,10 +1,12 @@
-variant,network_id,display_name,family,tier,feed_type,season_from,season_to
-Net A,net-a,Network A,family-a,broadcast,main,,
-NETA,net-a,Network A,family-a,broadcast,main,,
-Net A Deportes,net-a-es,Network A Deportes,family-a,broadcast,spanish,,
-Net B,net-b,Network B,family-b,cable,main,,
-Net C,net-c,Network C,family-c,conference,main,,
-Net D,net-d,Network D,family-d,streaming,main,,
-Net E,net-e,Network E,family-e,broadcast,main,,
-Net Old,net-b,Network B,family-b,cable,main,2014,2019
-Net Old,net-c,Network C,family-c,conference,main,2020,2026
+variant,network_id,display_name,family,tier,feed_type,season_from,season_to,priority
+Net A,net-a,Network A,family-a,broadcast,main,,,
+NETA,net-a,Network A,family-a,broadcast,main,,,
+Net A Deportes,net-a-es,Network A Deportes,family-a,broadcast,spanish,,,
+Net B,net-b,Network B,family-b,cable,main,,,
+Net C,net-c,Network C,family-c,conference,main,,,
+Net D,net-d,Network D,family-d,streaming,main,,,
+Net E,net-e,Network E,family-e,broadcast,main,,,
+Net Old,net-b,Network B,family-b,cable,main,2014,2019,
+Net Old,net-c,Network C,family-c,conference,main,2020,2026,
+Net F,net-f,Network F,family-f,streaming,main,,,1
+Net G,net-g,Network G,family-g,streaming,main,,,
