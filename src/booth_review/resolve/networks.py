@@ -1,0 +1,335 @@
+"""Network layer for JOIN-06: outlet-string -> network resolution, and the
+rights-holder primary-network rule.
+
+Rights holder = the highest-precedence outlet among a telecast's main-feed
+outlets, by tier (broadcast > cable > conference > regional > streaming >
+other), first listed on a tie. Precedence and every outlet string this
+project has observed live in data/reference/networks.csv; nothing is
+hardcoded by brand name here (AGENTS.md's crosswalk-only rule, and the
+research anti-pattern against hardcoding streaming-brand strings such as
+ESPN+/Peacock/Paramount+): a newly observed outlet string that doesn't map
+yet is a network_diagnose.py review-file entry, never a code change or a
+guess.
+"""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal, cast
+
+from booth_review.errors import ReferenceTableError
+from booth_review.reference import read_reference_csv
+
+NETWORK_COLUMNS = (
+    "variant",
+    "network_id",
+    "display_name",
+    "family",
+    "tier",
+    "feed_type",
+    "season_from",
+    "season_to",
+)
+
+PRIMARY_OVERRIDE_COLUMNS = ("cfbd_game_id", "network_id", "reason")
+
+Tier = Literal["broadcast", "cable", "conference", "regional", "streaming", "other"]
+FeedType = Literal["main", "alt", "spanish"]
+
+# Rights-holder precedence, lowest rank wins. The whole point of this table
+# (not per-network code) is that a newly observed network only needs a row
+# here, at whichever tier the reviewed table says it belongs.
+TIER_RANK: dict[Tier, int] = {
+    "broadcast": 0,
+    "cable": 1,
+    "conference": 2,
+    "regional": 3,
+    "streaming": 4,
+    "other": 5,
+}
+
+_OVERRIDE_REASONS: frozenset[str] = frozenset(
+    {"rights-holder", "simulcast", "neutral-site", "other"}
+)
+
+_TIERS: frozenset[str] = frozenset(TIER_RANK)
+_FEED_TYPES: frozenset[str] = frozenset({"main", "alt", "spanish"})
+_NETWORK_ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+
+# ",", "/", ";", or " | " (any whitespace around a separator is collapsed
+# away by the whitespace-collapse pass below, so the literal spaces around
+# "|" don't need their own branch in the regex).
+_SEPARATOR_RE = re.compile(r"[,/;|]")
+
+# The same generic feed markers sports506.parser._classify_feed checks
+# (restated here rather than imported, since this module reads outlet text
+# from three sources, not just 506's network cell); a marker is read from a
+# trailing parenthesized suffix rather than a substring search, since this
+# function must also return the base outlet name with the marker removed.
+_ALT_MARKERS = ("alt-cast", "alt")
+_SPANISH_MARKER = "spanish"
+_TRAILING_PAREN_RE = re.compile(r"\s*\(([^()]*)\)\s*$")
+
+_NEG_INF = float("-inf")
+_POS_INF = float("inf")
+
+
+def _collapse_whitespace(text: str) -> str:
+    return " ".join(text.split())
+
+
+def split_outlets(text: str) -> list[str]:
+    """Split a raw outlet string on ",", "/", ";", or "|" (a " | " separator
+    included); empty parts dropped, each remaining part whitespace-collapsed.
+    """
+    parts = _SEPARATOR_RE.split(text)
+    return [collapsed for part in parts if (collapsed := _collapse_whitespace(part))]
+
+
+def strip_feed_marker(text: str) -> tuple[str, FeedType | None]:
+    """Split a trailing parenthesized alt-cast or Spanish marker off `text`,
+    e.g. "Net2 (alt-cast)" gives ("Net2", "alt"), "Net (alt)" gives ("Net",
+    "alt"), and "Net2 (Spanish)" gives ("Net2", "spanish"). A name with no
+    recognized marker -- including a plain "Net Deportes"-style outlet name,
+    whose Spanish feed type comes from the network table row, not a marker
+    -- is returned unchanged with `None`.
+    """
+    match = _TRAILING_PAREN_RE.search(text)
+    if match is None:
+        return _collapse_whitespace(text), None
+    marker = match.group(1).strip().lower()
+    if marker in _ALT_MARKERS:
+        return _collapse_whitespace(text[: match.start()]), "alt"
+    if marker == _SPANISH_MARKER:
+        return _collapse_whitespace(text[: match.start()]), "spanish"
+    return _collapse_whitespace(text), None
+
+
+def _parse_optional_int(value: str, *, path_name: str, line_no: int, field: str) -> int | None:
+    if not value:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        raise ReferenceTableError(
+            f"{path_name}: line {line_no}: invalid {field} {value!r}"
+        ) from None
+
+
+def _ranges_overlap(
+    a_from: int | None, a_to: int | None, b_from: int | None, b_to: int | None
+) -> bool:
+    lo = max(a_from if a_from is not None else _NEG_INF, b_from if b_from is not None else _NEG_INF)
+    hi = min(a_to if a_to is not None else _POS_INF, b_to if b_to is not None else _POS_INF)
+    return lo <= hi
+
+
+@dataclass(frozen=True)
+class NetworkRow:
+    variant: str
+    network_id: str
+    display_name: str
+    family: str
+    tier: Tier
+    feed_type: FeedType
+    season_from: int | None
+    season_to: int | None
+
+
+class NetworkTable:
+    """Outlet-string -> network resolution, built from data/reference/
+    networks.csv (or a fixture with the same shape)."""
+
+    def __init__(self, rows: Sequence[NetworkRow]) -> None:
+        self._rows = tuple(rows)
+        self._by_variant_key: dict[str, list[NetworkRow]] = {}
+        self._networks: dict[str, tuple[str, str, Tier]] = {}
+        for row in self._rows:
+            key = _collapse_whitespace(row.variant).lower()
+            self._by_variant_key.setdefault(key, []).append(row)
+            self._networks[row.network_id] = (row.display_name, row.family, row.tier)
+
+    def lookup(self, outlet: str, season: int) -> NetworkRow | None:
+        """The row whose variant matches `outlet` case-insensitively (after
+        whitespace collapse) and whose season range covers `season`; None
+        when no row matches -- an unmapped outlet is never a guess."""
+        key = _collapse_whitespace(outlet).lower()
+        for row in self._by_variant_key.get(key, ()):
+            if (row.season_from is None or season >= row.season_from) and (
+                row.season_to is None or season <= row.season_to
+            ):
+                return row
+        return None
+
+    def networks(self) -> dict[str, tuple[str, str, Tier]]:
+        """network_id -> (display_name, family, tier) for every distinct
+        network_id in the table."""
+        return dict(self._networks)
+
+
+def load_networks(reference_dir: Path, *, required: bool = False) -> NetworkTable:
+    """Read networks.csv. Not required by default, so tests (and any code
+    exercised before the real table is populated) get an empty table rather
+    than a crash. Raises ReferenceTableError (naming the file and line) on:
+    an invalid tier or feed_type, a network_id outside the shared slug
+    convention (^[a-z0-9]+(-[a-z0-9]+)*$), the same (variant, season) range
+    mapped to two different network ids, or one network_id carrying two
+    different display names, families, or tiers across its rows.
+    """
+    path = reference_dir / "networks.csv"
+    raw_rows = read_reference_csv(path, NETWORK_COLUMNS, required=required)
+
+    rows: list[NetworkRow] = []
+    variant_ranges: dict[str, list[tuple[int | None, int | None, str]]] = {}
+    network_identity: dict[str, tuple[str, str, Tier]] = {}
+
+    for line_no, raw in enumerate(raw_rows, start=2):
+        network_id = raw["network_id"]
+        if not _NETWORK_ID_RE.match(network_id):
+            raise ReferenceTableError(
+                f"{path.name}: line {line_no}: invalid network_id {network_id!r}"
+            )
+
+        tier_raw = raw["tier"]
+        if tier_raw not in _TIERS:
+            raise ReferenceTableError(f"{path.name}: line {line_no}: invalid tier {tier_raw!r}")
+        tier = cast(Tier, tier_raw)
+
+        feed_type_raw = raw["feed_type"]
+        if feed_type_raw not in _FEED_TYPES:
+            raise ReferenceTableError(
+                f"{path.name}: line {line_no}: invalid feed_type {feed_type_raw!r}"
+            )
+        feed_type = cast(FeedType, feed_type_raw)
+
+        season_from = _parse_optional_int(
+            raw["season_from"], path_name=path.name, line_no=line_no, field="season_from"
+        )
+        season_to = _parse_optional_int(
+            raw["season_to"], path_name=path.name, line_no=line_no, field="season_to"
+        )
+
+        display_name = raw["display_name"]
+        family = raw["family"]
+
+        identity = network_identity.get(network_id)
+        if identity is None:
+            network_identity[network_id] = (display_name, family, tier)
+        elif identity != (display_name, family, tier):
+            raise ReferenceTableError(
+                f"{path.name}: line {line_no}: network_id {network_id!r} already has a "
+                "different display_name, family, or tier on an earlier row"
+            )
+
+        variant_key = _collapse_whitespace(raw["variant"]).lower()
+        for other_from, other_to, other_id in variant_ranges.get(variant_key, ()):
+            if other_id != network_id and _ranges_overlap(
+                season_from, season_to, other_from, other_to
+            ):
+                raise ReferenceTableError(
+                    f"{path.name}: line {line_no}: variant {raw['variant']!r} maps to two "
+                    "different network ids in an overlapping season range"
+                )
+        variant_ranges.setdefault(variant_key, []).append((season_from, season_to, network_id))
+
+        rows.append(
+            NetworkRow(
+                variant=raw["variant"],
+                network_id=network_id,
+                display_name=display_name,
+                family=family,
+                tier=tier,
+                feed_type=feed_type,
+                season_from=season_from,
+                season_to=season_to,
+            )
+        )
+    return NetworkTable(rows)
+
+
+@dataclass(frozen=True)
+class PrimaryResult:
+    network_id: str | None
+    outlets: tuple[str, ...]
+    unmapped: tuple[str, ...]
+    feed_type: FeedType
+
+
+def primary_network(outlet_texts: Sequence[str], season: int, table: NetworkTable) -> PrimaryResult:
+    """Pick the rights-holder network from a telecast's raw outlet text(s).
+
+    Every text is split (split_outlets) and each part's feed marker stripped
+    (strip_feed_marker) before lookup. Among the outlets that map to a known
+    network, the main-feed outlet with the lowest TIER_RANK wins, first
+    listed on a tie; alt/Spanish-feed outlets are skipped for this choice
+    unless every mapped outlet is alt or Spanish, in which case the primary
+    is the first of those and `feed_type` carries that feed. Unmapped
+    strings are returned separately (a network_diagnose.py review
+    candidate), never guessed at; `network_id` is None only when nothing
+    mapped at all.
+    """
+    mapped: list[tuple[str, NetworkRow, FeedType]] = []
+    unmapped: list[str] = []
+    seen_ids: dict[str, None] = {}
+
+    for text in outlet_texts:
+        for outlet in split_outlets(text):
+            base, marker_feed = strip_feed_marker(outlet)
+            row = table.lookup(base, season)
+            if row is None:
+                unmapped.append(outlet)
+                continue
+            feed = marker_feed if marker_feed is not None else row.feed_type
+            mapped.append((row.network_id, row, feed))
+            seen_ids.setdefault(row.network_id, None)
+
+    outlet_ids = tuple(seen_ids)
+
+    if not mapped:
+        return PrimaryResult(
+            network_id=None, outlets=outlet_ids, unmapped=tuple(unmapped), feed_type="main"
+        )
+
+    main_candidates = [item for item in mapped if item[2] == "main"]
+    if main_candidates:
+        best_id, _best_row, _ = min(main_candidates, key=lambda item: TIER_RANK[item[1].tier])
+        return PrimaryResult(
+            network_id=best_id, outlets=outlet_ids, unmapped=tuple(unmapped), feed_type="main"
+        )
+
+    first_id, _, first_feed = mapped[0]
+    return PrimaryResult(
+        network_id=first_id, outlets=outlet_ids, unmapped=tuple(unmapped), feed_type=first_feed
+    )
+
+
+def load_primary_overrides(reference_dir: Path) -> dict[int, str]:
+    """Read primary_network_overrides.csv (not required): cfbd_game_id ->
+    the network_id that forces the primary network for that one game (D-06:
+    pointer-only, a fixed-vocabulary reason code, never crew/figure text).
+    Raises ReferenceTableError on a reason outside {rights-holder,
+    simulcast, neutral-site, other} or a duplicate cfbd_game_id.
+    """
+    path = reference_dir / "primary_network_overrides.csv"
+    raw_rows = read_reference_csv(path, PRIMARY_OVERRIDE_COLUMNS, required=False)
+
+    overrides: dict[int, str] = {}
+    for line_no, raw in enumerate(raw_rows, start=2):
+        reason = raw["reason"]
+        if reason not in _OVERRIDE_REASONS:
+            raise ReferenceTableError(f"{path.name}: line {line_no}: invalid reason {reason!r}")
+        try:
+            game_id = int(raw["cfbd_game_id"])
+        except ValueError:
+            raise ReferenceTableError(
+                f"{path.name}: line {line_no}: invalid cfbd_game_id {raw['cfbd_game_id']!r}"
+            ) from None
+        if game_id in overrides:
+            raise ReferenceTableError(
+                f"{path.name}: line {line_no}: duplicate cfbd_game_id {game_id}"
+            )
+        overrides[game_id] = raw["network_id"]
+    return overrides
