@@ -1,5 +1,5 @@
 """Tests for the AUTO-01 workflow/gitattributes templates (ops/vault/) and
-the 0.2.1 version bump.
+the 0.2.2 version bump.
 
 `ops/vault/collect.yml` and `ops/vault/gitattributes` are templates: they are
 installed into the *private* data repo's own working copy (Plan 07, with the
@@ -56,13 +56,13 @@ def test_workflow_and_ci_parse_as_yaml_with_expected_structure() -> None:
     assert any("JOB_REF" in step.get("name", "") for step in steps)
 
 
-def test_version_is_0_2_1() -> None:
-    assert booth_review.__version__ == "0.2.1"
+def test_version_is_0_2_2() -> None:
+    assert booth_review.__version__ == "0.2.2"
 
 
-def test_pyproject_declares_0_2_1() -> None:
+def test_pyproject_declares_0_2_2() -> None:
     pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
-    assert 'version = "0.2.1"' in pyproject
+    assert 'version = "0.2.2"' in pyproject
 
 
 # -- collect.yml: schedule / triggers ----------------------------------------------------------
