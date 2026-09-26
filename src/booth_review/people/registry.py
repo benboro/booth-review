@@ -1,0 +1,399 @@
+"""The public people registry (JOIN-03, D-01, D-05): person_id -> canonical
+name, name variants, and role.
+
+An id is never renamed once assigned: merging two ids after launch would
+break shared URLs (SITE-12), so avoid it. Every table here is names-only
+(D-05): no game-level row (who called which game) is ever written to
+people.csv or people_reviewed.csv.
+"""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
+from pathlib import Path
+from typing import Literal
+
+from booth_review.errors import ReferenceTableError
+from booth_review.people.normalize import fold_person
+from booth_review.people.roles import Role
+from booth_review.people.slugs import assign_slug, slugify
+from booth_review.reference import read_reference_csv, write_reference_csv
+
+PEOPLE_COLUMNS = ("person_id", "canonical_name", "variants", "usual_role", "role_override")
+REVIEWED_COLUMNS = ("name_a", "name_b", "reason", "decision")
+PERSON_OVERRIDE_COLUMNS = ("season", "pointer", "position", "person_id", "reason")
+
+Decision = Literal["same", "different", "one"]
+_DECISIONS: frozenset[str] = frozenset({"same", "different", "one"})
+_ROLES: frozenset[str] = frozenset({"pbp", "analyst", "unknown"})
+_OVERRIDE_REASONS: frozenset[str] = frozenset({"two-people", "other"})
+
+# person_id: lowercase slug tokens joined by single hyphens (assign_slug's
+# output shape).
+_PERSON_ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+# person_overrides pointer: the sports506 "<week_label>:<source_row_index>"
+# pointer format (resolve.overrides._SPORTS506_POINTER_RE), restated locally
+# since that module models game overrides, not person overrides.
+_POINTER_RE = re.compile(r"^([0-9]{1,2}|B):[0-9]+$")
+
+
+@dataclass(frozen=True)
+class Person:
+    person_id: str
+    canonical_name: str
+    variants: tuple[str, ...]
+    usual_role: Role
+    role_override: Role | None
+
+
+@dataclass(frozen=True)
+class ReviewedPair:
+    name_a: str
+    name_b: str
+    reason: str
+    decision: Decision
+
+
+@dataclass(frozen=True)
+class PersonOverride:
+    season: int
+    pointer: str
+    position: int
+    person_id: str
+    reason: str
+
+
+def _pick_canonical(raw_names: Sequence[str], name_counts: Mapping[str, int]) -> str:
+    """The most frequent raw spelling in `raw_names`, ties broken by lexical
+    order. A name absent from `name_counts` counts as 0 (never a KeyError).
+    """
+    return sorted(raw_names, key=lambda n: (-name_counts.get(n, 0), n))[0]
+
+
+class PeopleRegistry:
+    """An immutable snapshot of the people table: every mutation
+    (register_names, apply_decisions, with_usual_roles) returns a new
+    PeopleRegistry rather than mutating this one.
+    """
+
+    def __init__(self, persons: Mapping[str, Person]) -> None:
+        self.persons: dict[str, Person] = dict(persons)
+        self._by_variant: dict[str, str] = {}
+        for person in self.persons.values():
+            for variant in person.variants:
+                self._by_variant[fold_person(variant)] = person.person_id
+
+    def lookup(self, name: str) -> str | None:
+        """The person_id whose variants include `name` after fold_person
+        normalization, or None.
+        """
+        return self._by_variant.get(fold_person(name))
+
+    def to_rows(self) -> list[dict[str, str]]:
+        rows: list[dict[str, str]] = []
+        for person in sorted(self.persons.values(), key=lambda p: p.person_id):
+            rows.append(
+                {
+                    "person_id": person.person_id,
+                    "canonical_name": person.canonical_name,
+                    "variants": "|".join(sorted(person.variants)),
+                    "usual_role": person.usual_role,
+                    "role_override": person.role_override or "",
+                }
+            )
+        return rows
+
+
+def _validate_role(value: str, *, path_name: str, line_no: int, field: str) -> Role:
+    if value not in _ROLES:
+        raise ReferenceTableError(f"{path_name}: line {line_no}: invalid {field} {value!r}")
+    return value  # type: ignore[return-value]
+
+
+def load_people(reference_dir: Path) -> PeopleRegistry:
+    """Read people.csv (not required: an empty/missing table is a fresh
+    registry). Raises ReferenceTableError on a duplicate person_id, a
+    person_id not matching the slug pattern, a normalized variant owned by
+    two people, a canonical_name missing from its own variants list, a
+    variant containing the "|" delimiter (defense against a hand-edited
+    file corrupting the pipe-joined column), or a role (usual_role or
+    role_override) outside pbp|analyst|unknown (role_override may also be
+    blank, meaning "no override").
+    """
+    path = reference_dir / "people.csv"
+    raw_rows = read_reference_csv(path, PEOPLE_COLUMNS, required=False)
+
+    persons: dict[str, Person] = {}
+    variant_owner: dict[str, str] = {}
+    for line_no, raw in enumerate(raw_rows, start=2):
+        person_id = raw["person_id"]
+        if not _PERSON_ID_RE.match(person_id):
+            raise ReferenceTableError(
+                f"{path.name}: line {line_no}: invalid person_id {person_id!r}"
+            )
+        if person_id in persons:
+            raise ReferenceTableError(
+                f"{path.name}: line {line_no}: duplicate person_id {person_id!r}"
+            )
+
+        variants = tuple(v for v in raw["variants"].split("|") if v)
+        for variant in variants:
+            if "|" in variant:
+                raise ReferenceTableError(
+                    f"{path.name}: line {line_no}: variant {variant!r} contains '|'"
+                )
+            key = fold_person(variant)
+            owner = variant_owner.get(key)
+            if owner is not None and owner != person_id:
+                raise ReferenceTableError(
+                    f"{path.name}: line {line_no}: variant {variant!r} already owned by {owner!r}"
+                )
+            variant_owner[key] = person_id
+
+        canonical_name = raw["canonical_name"]
+        if canonical_name not in variants:
+            raise ReferenceTableError(
+                f"{path.name}: line {line_no}: canonical_name {canonical_name!r} missing "
+                "from variants"
+            )
+
+        usual_role = _validate_role(
+            raw["usual_role"] or "unknown", path_name=path.name, line_no=line_no, field="usual_role"
+        )
+        role_override_raw = raw["role_override"]
+        role_override: Role | None = None
+        if role_override_raw:
+            role_override = _validate_role(
+                role_override_raw, path_name=path.name, line_no=line_no, field="role_override"
+            )
+
+        persons[person_id] = Person(
+            person_id=person_id,
+            canonical_name=canonical_name,
+            variants=variants,
+            usual_role=usual_role,
+            role_override=role_override,
+        )
+    return PeopleRegistry(persons)
+
+
+def write_people(reference_dir: Path, registry: PeopleRegistry) -> None:
+    write_reference_csv(reference_dir / "people.csv", PEOPLE_COLUMNS, registry.to_rows())
+
+
+def load_reviewed(reference_dir: Path) -> list[ReviewedPair]:
+    """Read people_reviewed.csv (not required). Raises ReferenceTableError on
+    a decision outside same|different|one.
+    """
+    path = reference_dir / "people_reviewed.csv"
+    raw_rows = read_reference_csv(path, REVIEWED_COLUMNS, required=False)
+
+    pairs: list[ReviewedPair] = []
+    for line_no, raw in enumerate(raw_rows, start=2):
+        decision = raw["decision"]
+        if decision not in _DECISIONS:
+            raise ReferenceTableError(f"{path.name}: line {line_no}: invalid decision {decision!r}")
+        pairs.append(
+            ReviewedPair(
+                name_a=raw["name_a"],
+                name_b=raw["name_b"],
+                reason=raw["reason"],
+                decision=decision,  # type: ignore[arg-type]
+            )
+        )
+    return pairs
+
+
+def _ordered_pair(name_a: str, name_b: str) -> tuple[str, str]:
+    """name_a <= name_b by fold order (D-02's storage convention), so a pair
+    written twice in either original order lands on the same row.
+    """
+    return (name_a, name_b) if fold_person(name_a) <= fold_person(name_b) else (name_b, name_a)
+
+
+def write_reviewed(reference_dir: Path, pairs: Sequence[ReviewedPair]) -> None:
+    ordered_pairs = []
+    for pair in pairs:
+        name_a, name_b = _ordered_pair(pair.name_a, pair.name_b)
+        ordered_pairs.append(replace(pair, name_a=name_a, name_b=name_b))
+    ordered_pairs.sort(key=lambda p: (fold_person(p.name_a), fold_person(p.name_b)))
+
+    rows = [
+        {"name_a": p.name_a, "name_b": p.name_b, "reason": p.reason, "decision": p.decision}
+        for p in ordered_pairs
+    ]
+    write_reference_csv(reference_dir / "people_reviewed.csv", REVIEWED_COLUMNS, rows)
+
+
+def load_person_overrides(reference_dir: Path) -> list[PersonOverride]:
+    """Read person_overrides.csv (not required). Raises ReferenceTableError
+    on a non-integer season, a malformed pointer, a position outside 0-3, an
+    invalid person_id slug, or a reason outside two-people|other.
+    """
+    path = reference_dir / "person_overrides.csv"
+    raw_rows = read_reference_csv(path, PERSON_OVERRIDE_COLUMNS, required=False)
+
+    overrides: list[PersonOverride] = []
+    for line_no, raw in enumerate(raw_rows, start=2):
+        try:
+            season = int(raw["season"])
+        except ValueError:
+            raise ReferenceTableError(
+                f"{path.name}: line {line_no}: invalid season {raw['season']!r}"
+            ) from None
+
+        pointer = raw["pointer"]
+        if not _POINTER_RE.match(pointer):
+            raise ReferenceTableError(f"{path.name}: line {line_no}: malformed pointer {pointer!r}")
+
+        try:
+            position = int(raw["position"])
+        except ValueError:
+            raise ReferenceTableError(
+                f"{path.name}: line {line_no}: invalid position {raw['position']!r}"
+            ) from None
+        if not 0 <= position <= 3:
+            raise ReferenceTableError(
+                f"{path.name}: line {line_no}: position out of range {position}"
+            )
+
+        person_id = raw["person_id"]
+        if not _PERSON_ID_RE.match(person_id):
+            raise ReferenceTableError(
+                f"{path.name}: line {line_no}: invalid person_id {person_id!r}"
+            )
+
+        reason = raw["reason"]
+        if reason not in _OVERRIDE_REASONS:
+            raise ReferenceTableError(f"{path.name}: line {line_no}: invalid reason {reason!r}")
+
+        overrides.append(
+            PersonOverride(
+                season=season,
+                pointer=pointer,
+                position=position,
+                person_id=person_id,
+                reason=reason,
+            )
+        )
+    return overrides
+
+
+def register_names(registry: PeopleRegistry, name_counts: Mapping[str, int]) -> PeopleRegistry:
+    """Group `name_counts` (raw spelling -> occurrence count) by fold_person,
+    then for each group: if any member already resolves to an existing
+    person, append the group's not-yet-seen spellings as new variants of that
+    person (its person_id never changes); otherwise register a brand new
+    person (canonical = the group's most frequent raw spelling, ties by
+    lexical order; id = assign_slug(slugify(canonical), ...)).
+    """
+    persons = dict(registry.persons)
+    taken_ids = set(persons.keys())
+
+    folded_groups: dict[str, list[str]] = {}
+    for name in name_counts:
+        folded_groups.setdefault(fold_person(name), []).append(name)
+
+    working = PeopleRegistry(persons)
+    for raw_names in folded_groups.values():
+        existing_id = working.lookup(raw_names[0])
+        if existing_id is not None:
+            person = persons[existing_id]
+            new_variants = tuple(n for n in raw_names if n not in person.variants)
+            if new_variants:
+                persons[existing_id] = replace(person, variants=person.variants + new_variants)
+                working = PeopleRegistry(persons)
+            continue
+
+        canonical = _pick_canonical(raw_names, name_counts)
+        person_id = assign_slug(slugify(canonical), taken_ids)
+        taken_ids.add(person_id)
+        persons[person_id] = Person(
+            person_id=person_id,
+            canonical_name=canonical,
+            variants=tuple(sorted(raw_names)),
+            usual_role="unknown",
+            role_override=None,
+        )
+        working = PeopleRegistry(persons)
+    return PeopleRegistry(persons)
+
+
+def apply_decisions(
+    registry: PeopleRegistry,
+    reviewed: Sequence[ReviewedPair],
+    name_counts: Mapping[str, int],
+) -> PeopleRegistry:
+    """Apply each reviewed pair's decision, in order:
+
+    - "same": name_b's person is merged into name_a's person (name_a's
+      person_id, canonical_name, usual_role, and role_override never
+      change); a no-op if they're already the same person.
+    - "different": if name_a and name_b currently resolve to the same
+      person (an earlier "same" decision merged them), the variants that
+      fold to name_b split back out into a brand new person with a fresh
+      slug; a no-op if they're already distinct persons.
+    - "one": no-op (a single string that's really one person; nothing to
+      merge or split).
+
+    Applying the same decisions twice yields an identical registry: the
+    second pass finds every pair already in its target state and no-ops.
+    """
+    persons = dict(registry.persons)
+    working = PeopleRegistry(persons)
+
+    for pair in reviewed:
+        if pair.decision == "one":
+            continue
+
+        person_id_a = working.lookup(pair.name_a)
+        person_id_b = working.lookup(pair.name_b)
+        if person_id_a is None or person_id_b is None:
+            continue
+
+        if pair.decision == "same":
+            if person_id_a == person_id_b:
+                continue
+            person_a = persons[person_id_a]
+            person_b = persons[person_id_b]
+            merged_variants = tuple(sorted(set(person_a.variants) | set(person_b.variants)))
+            persons[person_id_a] = replace(person_a, variants=merged_variants)
+            del persons[person_id_b]
+            working = PeopleRegistry(persons)
+        elif pair.decision == "different":
+            if person_id_a != person_id_b:
+                continue
+            merged_person = persons[person_id_a]
+            fold_b = fold_person(pair.name_b)
+            split_variants = tuple(v for v in merged_person.variants if fold_person(v) == fold_b)
+            remaining_variants = tuple(
+                v for v in merged_person.variants if fold_person(v) != fold_b
+            )
+            if not split_variants or not remaining_variants:
+                continue
+            persons[person_id_a] = replace(merged_person, variants=remaining_variants)
+            canonical_b = _pick_canonical(split_variants, name_counts)
+            new_id = assign_slug(slugify(canonical_b), set(persons.keys()))
+            persons[new_id] = Person(
+                person_id=new_id,
+                canonical_name=canonical_b,
+                variants=split_variants,
+                usual_role="unknown",
+                role_override=None,
+            )
+            working = PeopleRegistry(persons)
+    return PeopleRegistry(persons)
+
+
+def with_usual_roles(registry: PeopleRegistry, usual: Mapping[str, Role]) -> PeopleRegistry:
+    """A copy of `registry` with every person's usual_role set from `usual`
+    (default "unknown" for a person_id absent from the mapping); each
+    person's role_override is untouched.
+    """
+    persons = {
+        person_id: replace(person, usual_role=usual.get(person_id, "unknown"))
+        for person_id, person in registry.persons.items()
+    }
+    return PeopleRegistry(persons)
