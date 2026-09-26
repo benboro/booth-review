@@ -118,6 +118,53 @@ def test_info_response_sets_last_known_remaining(tmp_path: Path) -> None:
     budget.before_fetch(_req("/games"))  # must not raise
 
 
+def _ledger_call_line(called_at: str, remaining: int) -> str:
+    return json.dumps(
+        {
+            "event": "call",
+            "endpoint": "/games",
+            "params": {},
+            "called_at": called_at,
+            "month": called_at[:7],
+            "status": 200,
+            "call_limit_remaining_header": remaining,
+            "info_remaining_calls": None,
+            "info_reset_at": None,
+            "counted_against_quota": True,
+            "discrepancy": False,
+            "tag": None,
+        }
+    )
+
+
+def test_last_known_remaining_uses_latest_called_at_not_file_order(tmp_path: Path) -> None:
+    # After a merge=union rebase, upstream's newer job line (14:00, 300) can
+    # sit *before* the replayed older local line (10:00, 320).
+    ledger = tmp_path / "cfbd_ledger.jsonl"
+    ledger.write_text(
+        _ledger_call_line("2026-10-08T14:00:00Z", 300)
+        + "\n"
+        + _ledger_call_line("2026-10-08T10:00:00Z", 320)
+        + "\n",
+        encoding="utf-8",
+    )
+    budget = CfbdBudget(ledger, now=_Clock(datetime(2026, 10, 8, 15, 0, tzinfo=UTC)))
+    assert budget.last_known_remaining() == 300
+
+
+def test_last_known_remaining_same_second_tie_takes_the_lower_count(tmp_path: Path) -> None:
+    ledger = tmp_path / "cfbd_ledger.jsonl"
+    ledger.write_text(
+        _ledger_call_line("2026-10-08T14:00:00Z", 299)
+        + "\n"
+        + _ledger_call_line("2026-10-08T14:00:00Z", 305)
+        + "\n",
+        encoding="utf-8",
+    )
+    budget = CfbdBudget(ledger, now=_Clock(datetime(2026, 10, 8, 15, 0, tzinfo=UTC)))
+    assert budget.last_known_remaining() == 299
+
+
 def test_floor_boundary(tmp_path: Path) -> None:
     at_floor = CfbdBudget(tmp_path / "a.jsonl", floor=250)
     at_floor.after_fetch(_req("/info"), _info_resp(250))
