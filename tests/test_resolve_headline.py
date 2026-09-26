@@ -1,14 +1,13 @@
 """Tests for resolve/headline.py: the RR headline-figure rule (HEADLINE_RULE,
-select_headline), promoted from spike/headline.py in Phase 3 (JOIN-04).
-
-compare_with_rr_current's tests are appended once Task 2 adds RR's own
-current-figure extraction to sources/ratingsref/parser.py.
+select_headline), promoted from spike/headline.py in Phase 3 (JOIN-04), plus
+compare_with_rr_current, which compares HEADLINE_RULE's pick against RR's own
+current-figure pick (RRRecord.rr_current_claim_id).
 """
 
 from __future__ import annotations
 
-from booth_review.resolve.headline import HEADLINE_RULE, select_headline
-from booth_review.sources.ratingsref.parser import RRClaim
+from booth_review.resolve.headline import HEADLINE_RULE, compare_with_rr_current, select_headline
+from booth_review.sources.ratingsref.parser import RRClaim, RRRecord, RRTelecast
 
 
 def _claim(
@@ -92,3 +91,44 @@ def test_select_headline_prefers_currency_over_other_figure_types() -> None:
     chosen = select_headline([non_currency, currency])
     assert chosen is not None
     assert chosen.value == 1100000
+
+
+# -- headline.compare_with_rr_current ---------------------------------------------------
+
+
+def _record_with_rr_current(
+    *, rr_current_claim_id: str | None, rr_current_status: str = "found"
+) -> RRRecord:
+    return RRRecord(
+        telecast=RRTelecast(
+            id="cfb-example-sample-2025-09-13",
+            event_date="2025-09-13",  # type: ignore[arg-type]
+            teams=["cfb-example", "cfb-sample"],
+        ),
+        claims=[],
+        rr_current_claim_id=rr_current_claim_id,
+        rr_current_status=rr_current_status,  # type: ignore[arg-type]
+    )
+
+
+def test_compare_with_rr_current_agrees_when_ids_match() -> None:
+    headline = _claim(claim_id="c-agree")
+    record = _record_with_rr_current(rr_current_claim_id="c-agree")
+    assert compare_with_rr_current(headline, record) == "agree"
+
+
+def test_compare_with_rr_current_disagrees_when_ids_differ() -> None:
+    headline = _claim(claim_id="c-headline")
+    record = _record_with_rr_current(rr_current_claim_id="c-rr-current")
+    assert compare_with_rr_current(headline, record) == "disagree"
+
+
+def test_compare_with_rr_current_not_comparable_when_headline_is_none() -> None:
+    record = _record_with_rr_current(rr_current_claim_id="c-rr-current")
+    assert compare_with_rr_current(None, record) == "not_comparable"
+
+
+def test_compare_with_rr_current_not_comparable_when_rr_current_is_none() -> None:
+    headline = _claim(claim_id="c-headline")
+    record = _record_with_rr_current(rr_current_claim_id=None, rr_current_status="no_peers")
+    assert compare_with_rr_current(headline, record) == "not_comparable"
