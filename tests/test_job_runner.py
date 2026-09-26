@@ -21,6 +21,7 @@ from booth_review.cli import main
 from booth_review.config import CFBD_FLOOR_DEFAULT
 from booth_review.errors import VaultCommitError, VaultStateError
 from booth_review.job.catchup import JobState, load_state, save_state
+from booth_review.job.gaps506 import find_506_gaps
 from booth_review.job.runner import JOB_CFBD_MAX_CALLS, ScheduledJob
 from booth_review.runtime import Runtime
 from booth_review.sources.ratingsref.collector import SITEMAP_URL
@@ -805,3 +806,142 @@ def test_cli_job_run_attention_out_writes_season_past_freeze_body(
     body = out_path.read_text(encoding="utf-8")
     assert "past its freeze date" in body
     assert str(paths.vault) not in str(out_path)
+
+
+# -- WR-12: non-BoothReviewError exceptions at a step boundary -----------------------------------
+
+
+def _wr12_job(paths, handle, fake_clock, now_value) -> ScheduledJob:
+    runtime = _runtime(paths, handle, now=lambda: now_value, fake_clock=fake_clock)
+    return ScheduledJob(runtime, token="test-token", now=lambda: now_value, trigger="manual")
+
+
+def _wr12_responses() -> dict:
+    responses = _cfbd_ok_responses(2026, include_teams_fbs=False)
+    responses["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
+    responses[SITEMAP_URL] = (200, _empty_sitemap_xml(), {})
+    return responses
+
+
+_SECRET_MESSAGE = "leak https://example.invalid/x?key=abc123 Team Example"
+
+
+def test_scheduled_job_unexpected_506_step_error_is_count_only_attention_state_saved(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    _precache_cfbd_season(paths, 2026)
+    now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+
+    def _boom(*args, **kwargs):
+        raise ValueError(_SECRET_MESSAGE)
+
+    monkeypatch.setattr("booth_review.job.runner.find_506_gaps", _boom)
+
+    handle = mock_transport_factory(_wr12_responses())
+    result = _wr12_job(paths, handle, fake_clock, now_value).run()
+
+    assert result.exit_code == 4
+    step_items = [item for item in result.items if item.kind == "sports506_step_failed"]
+    assert [item.line for item in step_items] == ["sports506 step failed: ValueError"]
+    assert all("key=" not in item.line and "Team" not in item.line for item in result.items)
+
+    saved_state = load_state(paths.job_state)
+    assert saved_state.last_attempt_at == now_value
+    assert saved_state.last_success_at is None  # a failed step never advances success
+    assert saved_state.last_status == "attention"
+
+
+def test_scheduled_job_unexpected_rr_step_error_still_runs_506_step(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    _precache_cfbd_season(paths, 2026)
+    now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+
+    def _boom(self, **kwargs):
+        raise KeyError(_SECRET_MESSAGE)
+
+    monkeypatch.setattr(
+        "booth_review.sources.ratingsref.collector.RatingsRefCollector.refresh", _boom
+    )
+    gap_calls: list[int] = []
+
+    def _record_gaps(paths_arg, season, games, now):
+        gap_calls.append(season)
+        return find_506_gaps(paths_arg, season, games, now)
+
+    monkeypatch.setattr("booth_review.job.runner.find_506_gaps", _record_gaps)
+
+    handle = mock_transport_factory(_wr12_responses())
+    result = _wr12_job(paths, handle, fake_clock, now_value).run()
+
+    assert result.exit_code == 4
+    assert "rr step failed: KeyError" in [item.line for item in result.items]
+    assert gap_calls == [2026]
+    assert load_state(paths.job_state).last_attempt_at == now_value
+
+
+def test_scheduled_job_unexpected_error_with_unsafe_class_name_reports_exception(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    _precache_cfbd_season(paths, 2026)
+    now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+
+    class Odd_Error2(Exception):  # deliberately off-whitelist
+        pass
+
+    def _boom(*args, **kwargs):
+        raise Odd_Error2(_SECRET_MESSAGE)
+
+    monkeypatch.setattr("booth_review.job.runner.find_506_gaps", _boom)
+
+    handle = mock_transport_factory(_wr12_responses())
+    result = _wr12_job(paths, handle, fake_clock, now_value).run()
+
+    assert result.exit_code == 4
+    assert "sports506 step failed: Exception" in [item.line for item in result.items]
+
+
+def test_scheduled_job_state_save_oserror_is_attention_exit4(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    _precache_cfbd_season(paths, 2026)
+    now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+
+    def _boom(*args, **kwargs):
+        raise OSError(_SECRET_MESSAGE)
+
+    monkeypatch.setattr("booth_review.job.runner.save_state", _boom)
+
+    handle = mock_transport_factory(_wr12_responses())
+    result = _wr12_job(paths, handle, fake_clock, now_value).run()
+
+    assert result.exit_code == 4
+    assert "state step failed: OSError" in [item.line for item in result.items]
+
+
+def test_scheduled_job_commit_vault_state_error_still_propagates(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    _precache_cfbd_season(paths, 2026)
+    now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+
+    handle = mock_transport_factory(_wr12_responses())
+    job = _wr12_job(paths, handle, fake_clock, now_value)
+
+    def _busy(*args, **kwargs):
+        raise VaultStateError("vault is locked by another booth-review process")
+
+    monkeypatch.setattr(job._runtime.vault, "commit_batch", _busy)
+
+    with pytest.raises(VaultStateError):
+        job.run()

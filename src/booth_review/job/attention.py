@@ -66,6 +66,29 @@ def _require_labels(labels: list[str]) -> None:
             raise ValueError(f"label is not a recognized 506 week label: {label!r}")
 
 
+# Job steps that report a failure through the generic `step_failed`
+# (cfbd and rr keep their own constructors below, with the same line shape).
+_STEP_NAMES = frozenset({"sports506", "freeze", "budget", "state"})
+
+
+def error_type_name(exc: BaseException) -> str:
+    """`exc`'s bare class name for an attention line -- never its message,
+    which could carry data or a URL with parameters. A class name the
+    whitelist would reject (digits, underscores) becomes "Exception"."""
+    name = type(exc).__name__
+    return name if _ERROR_TYPE_RE.match(name) else "Exception"
+
+
+def step_failed(step: str, error_type: str) -> AttentionItem:
+    """Job step `step` raised `error_type` (a bare exception class name)."""
+    if step not in _STEP_NAMES:
+        raise ValueError(f"step must be one of {sorted(_STEP_NAMES)}: {step!r}")
+    _require_error_type(error_type)
+    return AttentionItem(
+        kind=f"{step}_step_failed", line=f"{step} step failed: {error_type}", severity="attention"
+    )
+
+
 def cfbd_step_failed(error_type: str) -> AttentionItem:
     """The CFBD collection step raised `error_type` (a bare exception class name)."""
     _require_error_type(error_type)

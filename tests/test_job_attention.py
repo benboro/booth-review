@@ -18,6 +18,7 @@ from booth_review.job.attention import (
     cfbd_failed,
     cfbd_remaining,
     cfbd_step_failed,
+    error_type_name,
     has_attention,
     missed_runs,
     push_failed,
@@ -27,6 +28,7 @@ from booth_review.job.attention import (
     season_past_freeze,
     sports506_missing,
     sports506_stale,
+    step_failed,
 )
 
 _NOW = datetime(2026, 10, 15, 0, 10, tzinfo=UTC)
@@ -59,6 +61,30 @@ def test_cfbd_failed_line_and_severity() -> None:
 def test_cfbd_failed_rejects_negative() -> None:
     with pytest.raises(ValueError):
         cfbd_failed(-1)
+
+
+def test_step_failed_line_for_each_generic_step() -> None:
+    for step in ("sports506", "freeze", "budget", "state"):
+        item = step_failed(step, "ValueError")
+        assert item.kind == f"{step}_step_failed"
+        assert item.line == f"{step} step failed: ValueError"
+        assert item.severity == "attention"
+
+
+def test_step_failed_rejects_unknown_step_and_message_text() -> None:
+    with pytest.raises(ValueError, match="step"):
+        step_failed("https://x/y?z=1", "ValueError")
+    with pytest.raises(ValueError, match="error_type"):
+        step_failed("state", "ValueError: key=abc")
+
+
+def test_error_type_name_is_the_bare_class_name_never_the_message() -> None:
+    assert error_type_name(KeyError("secret ?q=1")) == "KeyError"
+
+    class Odd_Error2(Exception):  # deliberately off-whitelist
+        pass
+
+    assert error_type_name(Odd_Error2("x")) == "Exception"
 
 
 def test_rr_step_failed_line() -> None:
