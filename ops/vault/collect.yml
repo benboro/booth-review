@@ -99,10 +99,9 @@ jobs:
           exit 0
 
       - name: Update the attention issue (count-only, one tracked issue)
-        if: >-
-          steps.job.outputs.code == '0' ||
-          steps.job.outputs.code == '3' ||
-          steps.job.outputs.code == '4'
+        # always(): a setup failure (empty code) still opens the issue;
+        # exit 5 (nothing due) leaves it untouched.
+        if: always() && steps.job.outputs.code != '5'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

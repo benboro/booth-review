@@ -177,15 +177,13 @@ def test_workflow_attention_step_uses_gh_issue() -> None:
     assert "gh issue create" in WORKFLOW_TEXT
 
 
-def test_workflow_attention_step_if_excludes_code_5_nothing_due() -> None:
+def test_workflow_attention_step_runs_always_except_code_5_nothing_due() -> None:
     workflow = yaml.safe_load(WORKFLOW_TEXT)
     steps = workflow["jobs"]["collect"]["steps"]
     step = next(s for s in steps if "attention issue" in s.get("name", ""))
-    condition = step["if"]
-    assert "== '0'" in condition
-    assert "== '3'" in condition
-    assert "== '4'" in condition
-    assert "== '5'" not in condition
+    # Without always() GitHub adds an implicit success(), which would skip the
+    # issue update when setup (checkout, uv sync) fails before the job runs.
+    assert step["if"] == "always() && steps.job.outputs.code != '5'"
 
 
 def test_workflow_fails_hard_only_outside_0_4_and_5() -> None:
