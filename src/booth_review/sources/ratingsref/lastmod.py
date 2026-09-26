@@ -14,6 +14,11 @@ Two vault files, always read together:
 `load_lastmods` folds both into one `{telecast_id: entry}` map, keeping for
 each id the entry with the greatest `lastmod` (ties: the later `fetched_at`),
 so neither file order nor a union merge's line order changes the result.
+
+The log also records 4xx refresh failures (`"event": "failed"`, with the
+sitemap lastmod the fetch was attempted at), which `load_failures` reads so
+the refresh can hold back a record that keeps failing instead of letting it
+take the head of the capped queue every run (WR-04).
 Appends happen one line per write, under the vault lock when the caller
 supplies one (RatingsRefCollector), so they never interleave with a
 commit's `git add` or a rebase's autostash.
@@ -22,6 +27,8 @@ commit's `git add` or a rebase's autostash.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -33,6 +40,16 @@ _TIME_FMT = "%Y-%m-%dT%H:%M:%SZ"
 _MIN_DT = datetime.min.replace(tzinfo=UTC)
 
 LastmodEntry = dict[str, str]
+
+
+@dataclass(frozen=True)
+class FailedFetch:
+    """A record's most recent failed refresh fetch."""
+
+    lastmod: str
+    """The sitemap lastmod the failed fetch was attempted at."""
+    failed_at: datetime
+    status: int | None
 
 
 def lastmod_ledger_exists(paths: DataPaths) -> bool:
@@ -88,35 +105,85 @@ def load_lastmods(paths: DataPaths) -> dict[str, LastmodEntry]:
         for telecast_id, raw in data.items():
             _merge(known, telecast_id, _require_entry(raw, where="ledger/rr_lastmod.json"))
 
-    if paths.rr_lastmod_log.is_file():
-        with paths.rr_lastmod_log.open(encoding="utf-8") as fh:
-            for number, raw_line in enumerate(fh, start=1):
-                stripped = raw_line.strip()
-                if not stripped:
-                    continue
-                where = f"ledger/rr_lastmod.jsonl line {number}"
-                try:
-                    line = json.loads(stripped)
-                except json.JSONDecodeError as exc:
-                    raise VaultStateError(f"{where} is not valid JSON") from exc
-                if not isinstance(line, dict) or not isinstance(line.get("telecast_id"), str):
-                    raise VaultStateError(f"{where}: expected an object with telecast_id")
-                if line.get("event", "fetched") != "fetched":
-                    continue
-                _merge(known, line["telecast_id"], _require_entry(line, where=where))
+    for where, line in _log_lines(paths):
+        if line.get("event", "fetched") == "fetched":
+            _merge(known, line["telecast_id"], _require_entry(line, where=where))
 
     return known
 
 
-def append_lastmod(paths: DataPaths, entry: SitemapEntry, *, fetched_at: datetime) -> None:
-    """Append one fetched record's lastmod line to `ledger/rr_lastmod.jsonl`."""
-    line = {
-        "event": "fetched",
-        "telecast_id": entry.telecast_id,
-        "lastmod": entry.lastmod,
-        "fetched_at": fetched_at.astimezone(UTC).strftime(_TIME_FMT),
-        "record_url": entry.record_url,
-    }
+def _log_lines(paths: DataPaths) -> Iterator[tuple[str, dict[str, Any]]]:
+    if not paths.rr_lastmod_log.is_file():
+        return
+    with paths.rr_lastmod_log.open(encoding="utf-8") as fh:
+        for number, raw_line in enumerate(fh, start=1):
+            stripped = raw_line.strip()
+            if not stripped:
+                continue
+            where = f"ledger/rr_lastmod.jsonl line {number}"
+            try:
+                line = json.loads(stripped)
+            except json.JSONDecodeError as exc:
+                raise VaultStateError(f"{where} is not valid JSON") from exc
+            if not isinstance(line, dict) or not isinstance(line.get("telecast_id"), str):
+                raise VaultStateError(f"{where}: expected an object with telecast_id")
+            yield where, line
+
+
+def load_failures(paths: DataPaths) -> dict[str, FailedFetch]:
+    """Each record's most recent failed refresh fetch (by `failed_at`)."""
+    failures: dict[str, FailedFetch] = {}
+    for where, line in _log_lines(paths):
+        if line.get("event") != "failed":
+            continue
+        lastmod, failed_at, status = line.get("lastmod"), line.get("failed_at"), line.get("status")
+        if not isinstance(lastmod, str) or not isinstance(failed_at, str):
+            raise VaultStateError(f"{where}: a failed line needs lastmod and failed_at")
+        try:
+            when = datetime.strptime(failed_at, _TIME_FMT).replace(tzinfo=UTC)
+        except ValueError as exc:
+            raise VaultStateError(f"{where}: failed_at is not a UTC timestamp") from exc
+        current = failures.get(line["telecast_id"])
+        if current is None or when > current.failed_at:
+            failures[line["telecast_id"]] = FailedFetch(
+                lastmod=lastmod,
+                failed_at=when,
+                status=status if isinstance(status, int) else None,
+            )
+    return failures
+
+
+def _append(paths: DataPaths, line: dict[str, Any]) -> None:
     paths.rr_lastmod_log.parent.mkdir(parents=True, exist_ok=True)
     with paths.rr_lastmod_log.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(line, sort_keys=True) + "\n")
+
+
+def append_lastmod(paths: DataPaths, entry: SitemapEntry, *, fetched_at: datetime) -> None:
+    """Append one fetched record's lastmod line to `ledger/rr_lastmod.jsonl`."""
+    _append(
+        paths,
+        {
+            "event": "fetched",
+            "telecast_id": entry.telecast_id,
+            "lastmod": entry.lastmod,
+            "fetched_at": fetched_at.astimezone(UTC).strftime(_TIME_FMT),
+            "record_url": entry.record_url,
+        },
+    )
+
+
+def append_failure(
+    paths: DataPaths, entry: SitemapEntry, *, status: int | None, failed_at: datetime
+) -> None:
+    """Append one record's failed-fetch line (a 4xx) to `ledger/rr_lastmod.jsonl`."""
+    _append(
+        paths,
+        {
+            "event": "failed",
+            "telecast_id": entry.telecast_id,
+            "lastmod": entry.lastmod,
+            "failed_at": failed_at.astimezone(UTC).strftime(_TIME_FMT),
+            "status": status,
+        },
+    )

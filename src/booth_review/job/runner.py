@@ -312,7 +312,7 @@ class ScheduledJob:
         self, current_season: int, items: list[AttentionItem]
     ) -> tuple[bool, dict[str, int]]:
         collector = RatingsRefCollector(
-            self._runtime.cache, self._runtime.paths, lock=self._runtime.vault.lock
+            self._runtime.cache, self._runtime.paths, lock=self._runtime.vault.lock, now=self._now
         )
         season_label = f"{FIRST_SEASON}-{current_season}"
         before = dict(self._runtime.cache.counters)

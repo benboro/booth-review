@@ -428,6 +428,8 @@ def _print_refresh_summary(summary: RefreshSummary) -> None:
         f"selected {summary.selected}, uncapped_current {summary.uncapped_current}, "
         f"backlog {summary.backlog}"
     )
+    if summary.deferred_failed > 0:
+        print(f"held back after a recent failed fetch {summary.deferred_failed}")
 
 
 def _refresh_ratingsref(args: argparse.Namespace) -> int:

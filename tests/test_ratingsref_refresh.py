@@ -9,18 +9,19 @@ shape of tests/fixtures/ratingsref/sitemap_synthetic.xml.
 from __future__ import annotations
 
 import json
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
 from booth_review.errors import VaultStateError
 from booth_review.sources.ratingsref.collector import (
+    FAILED_RETRY_AFTER,
     FIRST_SEASON,
     REFRESH_CAP_DEFAULT,
     SITEMAP_URL,
     RatingsRefCollector,
 )
-from booth_review.sources.ratingsref.lastmod import load_lastmods
+from booth_review.sources.ratingsref.lastmod import load_failures, load_lastmods
 from booth_review.transport.cache import RawCache
 from booth_review.transport.client import PoliteClient
 
@@ -396,6 +397,100 @@ def test_refresh_current_season_advanced_records_come_before_the_historical_back
     assert summary.backlog == 2
     telecast_urls = [r.url for r in handle.requests if "/api/telecast/" in r.url]
     assert telecast_urls == [_telecast_url(current_slug), _telecast_url(old_entries[0][0])]
+
+
+def test_refresh_failed_record_is_held_back_then_retried_last(
+    vault_paths, mock_transport_factory, fake_clock
+) -> None:
+    _write_lastmod(vault_paths, {})
+    bad = "cfb-gone-team-a-2019-09-07"  # listed in the sitemap, but its record 404s
+    good_a = "cfb-old-team-b-2019-09-14"
+    good_b = "cfb-old-team-c-2019-09-21"
+    sitemap_xml = _sitemap_xml(
+        [
+            (bad, "2026-01-01T00:00:00+00:00"),  # oldest lastmod: head of the queue
+            (good_a, "2026-01-02T00:00:00+00:00"),
+            (good_b, "2026-01-03T00:00:00+00:00"),
+        ]
+    )
+    responses = {
+        "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
+        SITEMAP_URL: (200, sitemap_xml, {}),
+        _telecast_url(bad): (404, b"not found", {}),
+        _telecast_url(good_a): (200, _record_body(good_a), {}),
+        _telecast_url(good_b): (200, _record_body(good_b), {}),
+    }
+    handle = mock_transport_factory(responses)
+    cache = RawCache(vault_paths, _client(handle, fake_clock=fake_clock))
+    clock = {"now": datetime(2026, 10, 4, 14, 5, tzinfo=UTC)}
+
+    def _collector() -> RatingsRefCollector:
+        return RatingsRefCollector(cache, vault_paths, now=lambda: clock["now"])
+
+    def _telecast_requests() -> list[str]:
+        return [r.url for r in handle.requests if "/api/telecast/" in r.url]
+
+    # Run 1: the bad record heads the queue and fails; the failure is logged.
+    first = _collector().refresh(current_season=2026, cap=1, dry_run=False)
+    assert first.failed == 1
+    assert _telecast_requests() == [_telecast_url(bad)]
+    failures = load_failures(vault_paths)
+    assert failures[bad].lastmod == "2026-01-01T00:00:00+00:00"
+    assert failures[bad].status == 404
+
+    # Run 2, three days later: the bad record is held back, so the cap goes to
+    # the next record instead of the same 404.
+    clock["now"] += timedelta(days=3)
+    handle.requests.clear()
+    second = _collector().refresh(current_season=2026, cap=1, dry_run=False)
+    assert second.deferred_failed == 1
+    assert second.selected == 1
+    assert second.backlog == 1
+    assert _telecast_requests() == [_telecast_url(good_a)]
+
+    # Run 3, past the hold: the bad record is eligible again but sorts behind
+    # every other candidate, so good_b goes first.
+    clock["now"] += FAILED_RETRY_AFTER
+    handle.requests.clear()
+    third = _collector().refresh(current_season=2026, cap=1, dry_run=False)
+    assert third.deferred_failed == 0
+    assert third.backlog == 1
+    assert _telecast_requests() == [_telecast_url(good_b)]
+
+
+def test_refresh_failure_at_an_older_lastmod_does_not_hold_the_record_back(
+    vault_paths, mock_transport_factory, fake_clock
+) -> None:
+    slug = "cfb-old-team-a-2019-09-07"
+    _write_lastmod(vault_paths, {})
+    vault_paths.rr_lastmod_log.write_text(
+        json.dumps(
+            {
+                "event": "failed",
+                "telecast_id": slug,
+                "lastmod": "2025-12-01T00:00:00+00:00",  # RR has since changed the record
+                "failed_at": "2026-10-03T00:00:00Z",
+                "status": 404,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    responses = {
+        "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
+        SITEMAP_URL: (200, _sitemap_xml([(slug, "2026-01-01T00:00:00+00:00")]), {}),
+        _telecast_url(slug): (200, _record_body(slug), {}),
+    }
+    handle = mock_transport_factory(responses)
+    cache = RawCache(vault_paths, _client(handle, fake_clock=fake_clock))
+    collector = RatingsRefCollector(
+        cache, vault_paths, now=lambda: datetime(2026, 10, 4, tzinfo=UTC)
+    )
+
+    summary = collector.refresh(current_season=2026, cap=10, dry_run=False)
+
+    assert summary.deferred_failed == 0
+    assert summary.fetched == 1
 
 
 def test_refresh_default_cap_constant_is_100_and_first_season_2014() -> None:

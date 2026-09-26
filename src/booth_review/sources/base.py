@@ -58,6 +58,7 @@ def run_requests(
     bearer_token: str | None = None,
     refresh: bool = False,
     on_fetched: Callable[[FetchRequest, CacheResult], None] | None = None,
+    on_failed: Callable[[FetchRequest, int], None] | None = None,
 ) -> BatchSummary:
     """Plan or run one batch of requests through `cache`.
 
@@ -75,7 +76,8 @@ def run_requests(
     `on_fetched` fires whenever a network response confirmed the cached
     content, i.e. for both "fetched" (200, new bytes) and "not_modified"
     (304, a refresh confirming the cache is current) -- a caller that only
-    tracks lastmod/validators needs both signals.
+    tracks lastmod/validators needs both signals. `on_failed` fires with the
+    status code for each 4xx recorded as failed.
     """
     if dry_run:
         return _plan_summary(cache, requests, source=source, season_label=season_label)
@@ -92,6 +94,8 @@ def run_requests(
             if status is not None and 400 <= status < 500 and status != 429:
                 failed += 1
                 failed_urls.append(req.url)
+                if on_failed is not None:
+                    on_failed(req, status)
                 continue
             raise
 

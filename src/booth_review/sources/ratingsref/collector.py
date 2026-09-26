@@ -15,14 +15,16 @@ import logging
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from booth_review.config import DataPaths
 from booth_review.errors import VaultStateError
 from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.sources.ratingsref.lastmod import (
+    append_failure,
     append_lastmod,
     lastmod_ledger_exists,
+    load_failures,
     load_lastmods,
 )
 from booth_review.sources.ratingsref.sitemap import SitemapEntry, parse_sitemap, select_entries
@@ -41,6 +43,16 @@ REFRESH_CAP_DEFAULT = 100
 # D-07: the earliest season the refresh's lastmod diff considers.
 FIRST_SEASON = 2014
 
+# WR-04: a record whose last refresh fetch failed (a 4xx) at the same sitemap
+# lastmod it still has is held back this long, then retried after every other
+# qualifying record. 6 days means about one retry a week at the job's
+# Sunday/Wednesday cadence. A new lastmod clears the hold at once.
+FAILED_RETRY_AFTER = timedelta(days=6)
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
 
 @dataclass
 class RefreshSummary:
@@ -56,6 +68,8 @@ class RefreshSummary:
     not_modified: int
     failed: int
     dry_run: bool
+    deferred_failed: int = 0
+    """Qualifying records held back because they failed recently (WR-04)."""
 
     def counts(self) -> dict[str, int]:
         """Counts for vault.batch_message, in a fixed key order."""
@@ -76,12 +90,15 @@ class RatingsRefCollector:
         paths: DataPaths,
         *,
         lock: Callable[[], AbstractContextManager[object]] | None = None,
+        now: Callable[[], datetime] = _utc_now,
     ) -> None:
         """`lock` (normally `VaultRepo.lock`) is held around each lastmod
-        append, so an append never lands mid-commit or mid-rebase."""
+        append, so an append never lands mid-commit or mid-rebase. `now`
+        stamps lastmod/failure lines and times the failed-record hold."""
         self._cache = cache
         self._paths = paths
         self._lock: Callable[[], AbstractContextManager[object]] = lock or contextlib.nullcontext
+        self._now = now
 
     def _sitemap_cache_path(self, day: date) -> str:
         return f"ratingsref/sitemap/{day.isoformat()}.xml"
@@ -179,6 +196,13 @@ class RatingsRefCollector:
         mass revision of older seasons, WR-05), then by (lastmod,
         telecast_id) ascending; the remainder is backlog (D-08). A fetched
         record overwrites its cached file (D-09).
+
+        A record whose last fetch failed (a 4xx, recorded in the lastmod log)
+        at the lastmod the sitemap still lists is held back for
+        FAILED_RETRY_AFTER (counted in `deferred_failed`, neither selected
+        nor backlog), and after that sorts behind every other capped
+        candidate, so a record that keeps failing can never take the cap
+        from the rest of the queue (WR-04).
         """
         if not lastmod_ledger_exists(self._paths):
             raise VaultStateError(
@@ -218,11 +242,34 @@ class RatingsRefCollector:
         ]
         qualifying = new_entries + advanced_entries
 
-        uncapped_entries = [e for e in new_entries if e.season == current_season]
+        failures = load_failures(self._paths)
+        failed_before = {
+            e.telecast_id
+            for e in qualifying
+            if e.telecast_id in failures and failures[e.telecast_id].lastmod == e.lastmod
+        }
+        hold_cutoff = self._now() - FAILED_RETRY_AFTER
+        deferred_ids = {
+            telecast_id
+            for telecast_id in failed_before
+            if failures[telecast_id].failed_at > hold_cutoff
+        }
+        eligible = [e for e in qualifying if e.telecast_id not in deferred_ids]
+
+        uncapped_entries = [
+            e
+            for e in new_entries
+            if e.season == current_season and e.telecast_id not in deferred_ids
+        ]
         uncapped_ids = {e.telecast_id for e in uncapped_entries}
         capped_candidates = sorted(
-            (e for e in qualifying if e.telecast_id not in uncapped_ids),
-            key=lambda e: (e.season != current_season, e.lastmod, e.telecast_id),
+            (e for e in eligible if e.telecast_id not in uncapped_ids),
+            key=lambda e: (
+                e.telecast_id in failed_before,
+                e.season != current_season,
+                e.lastmod,
+                e.telecast_id,
+            ),
         )
         selected_capped = capped_candidates[:cap]
         backlog_entries = capped_candidates[cap:]
@@ -238,6 +285,7 @@ class RatingsRefCollector:
             "selected": len(selected),
             "uncapped_current": len(uncapped_entries),
             "backlog": len(backlog_entries),
+            "deferred_failed": len(deferred_ids),
         }
 
         if dry_run:
@@ -253,6 +301,9 @@ class RatingsRefCollector:
             def _on_fetched(req: FetchRequest, result: CacheResult) -> None:
                 self._record_lastmod(entries_by_url[req.url])
 
+            def _on_failed(req: FetchRequest, status: int) -> None:
+                self._record_failure(entries_by_url[req.url], status)
+
             batch = run_requests(
                 self._cache,
                 requests,
@@ -261,6 +312,7 @@ class RatingsRefCollector:
                 dry_run=False,
                 refresh=True,
                 on_fetched=_on_fetched,
+                on_failed=_on_failed,
             )
             summary = RefreshSummary(
                 **counts,
@@ -272,13 +324,15 @@ class RatingsRefCollector:
 
         logger.info(
             "ratingsref refresh: qualifying=%d new=%d advanced=%d selected=%d "
-            "uncapped_current=%d backlog=%d fetched=%d not_modified=%d failed=%d",
+            "uncapped_current=%d backlog=%d deferred_failed=%d fetched=%d not_modified=%d "
+            "failed=%d",
             summary.qualifying,
             summary.new,
             summary.advanced,
             summary.selected,
             summary.uncapped_current,
             summary.backlog,
+            summary.deferred_failed,
             summary.fetched,
             summary.not_modified,
             summary.failed,
@@ -287,4 +341,8 @@ class RatingsRefCollector:
 
     def _record_lastmod(self, entry: SitemapEntry) -> None:
         with self._lock():
-            append_lastmod(self._paths, entry, fetched_at=datetime.now(UTC))
+            append_lastmod(self._paths, entry, fetched_at=self._now())
+
+    def _record_failure(self, entry: SitemapEntry, status: int) -> None:
+        with self._lock():
+            append_failure(self._paths, entry, status=status, failed_at=self._now())
