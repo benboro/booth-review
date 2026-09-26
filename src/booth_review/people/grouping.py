@@ -167,6 +167,18 @@ def _share_network(a: NameStats, b: NameStats) -> bool:
     return bool(set(a.networks) & set(b.networks))
 
 
+def _by_frequency(a: NameStats, b: NameStats) -> tuple[NameStats, NameStats]:
+    """(more frequent, less frequent), ties broken by folded text. A "same"
+    decision (registry.apply_decisions) keeps name_a's person_id, canonical
+    name, and usual_role; ordering the pair this way means a merge always
+    keeps the better-attested spelling's identity and role evidence, never a
+    rare misspelling's.
+    """
+    if b.count > a.count or (b.count == a.count and b.folded < a.folded):
+        return b, a
+    return a, b
+
+
 def _has_self_overlap(stats: NameStats) -> bool:
     """True when `stats`' own appearances include two listings on the same
     ET date, on different networks, with kickoffs within _OVERLAP_HOURS (or
@@ -227,13 +239,14 @@ def find_suspicious_pairs(
                 if reason is None:
                     continue
                 flagged.add(frozenset((a.folded, b.folded)))
+                winner, loser = _by_frequency(a, b)
                 pairs.append(
                     SuspiciousPair(
                         reason=reason,
-                        name_a=_representative(a),
-                        name_b=_representative(b),
-                        stats_a=a,
-                        stats_b=b,
+                        name_a=_representative(winner),
+                        name_b=_representative(loser),
+                        stats_a=winner,
+                        stats_b=loser,
                     )
                 )
 
@@ -247,13 +260,16 @@ def find_suspicious_pairs(
             ratio = difflib.SequenceMatcher(None, r.folded, f.folded).ratio()
             if ratio >= _NEAR_SPELLING_RATIO:
                 flagged.add(frozenset((r.folded, f.folded)))
+                # name_a is always the frequent spelling here (count is
+                # already the defining criterion for rare vs. frequent), so
+                # a "same" merge keeps the well-attested spelling's identity.
                 pairs.append(
                     SuspiciousPair(
                         reason="near_spelling",
-                        name_a=_representative(r),
-                        name_b=_representative(f),
-                        stats_a=r,
-                        stats_b=f,
+                        name_a=_representative(f),
+                        name_b=_representative(r),
+                        stats_a=f,
+                        stats_b=r,
                     )
                 )
 

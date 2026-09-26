@@ -270,6 +270,16 @@ def apply(paths: DataPaths, ref_dir: Path) -> ApplySummary:
 
     reviewed_pairs = list(by_key.values())
     registry = apply_decisions(registry, reviewed_pairs, result.raw_counts)
+
+    # A merge/split changes which crews a person_id's appearances resolve
+    # to, so usual roles (computed by scan() against the pre-decision
+    # registry) must be recomputed here too -- otherwise a merged person
+    # keeps whichever side's usual_role happened to survive the merge
+    # (registry.apply_decisions keeps name_a's role field verbatim), even
+    # when the losing side had far more two-person-crew evidence.
+    usual = infer_usual_roles(_main_feed_crews(paths, registry))
+    registry = with_usual_roles(registry, usual)
+
     write_people(ref_dir, registry)
     write_reviewed(ref_dir, reviewed_pairs)
 
