@@ -164,7 +164,11 @@ export function buildFigure(data, view, state, env) {
   const hcolor = [];
   const hsize = [];
   const hsymbol = [];
-  for (const i of view.highlighted) {
+  // `view.highlighted` matches trivially against every visible dot when
+  // nothing is selected (select.js's own semantics); only draw the overlay
+  // once a person/team selection actually exists.
+  const highlighted = view.hasSelection ? view.highlighted : [];
+  for (const i of highlighted) {
     const rawX = data.t[axis][i];
     hx.push(rawX == null ? band.sentinel : rawX);
     hy.push(data.t.viewers[i]);

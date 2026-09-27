@@ -129,6 +129,10 @@ async function bootstrap() {
   darkMedia.addEventListener('change', () => render());
   mobileMedia.addEventListener('change', () => render());
 
+  // The graph div only gains its `.on()` event-emitter API once Plotly has
+  // rendered into it at least once, so the first render must come first.
+  render();
+
   bindChartEvents(chartEl, {
     onLegendClick(key) {
       const current = state.networks ?? allPrimaryNetworkIds();
@@ -146,8 +150,6 @@ async function bootstrap() {
       setState({ networks: isExactlyFamily ? null : famIds });
     },
   });
-
-  render();
 
   window.__testHooks = {
     ready: true,
