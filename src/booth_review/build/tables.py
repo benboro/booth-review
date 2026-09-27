@@ -67,6 +67,7 @@ from booth_review.resolve.networks import (
 from booth_review.resolve.overrides import load_game_overrides, pointer_for_listing
 from booth_review.resolve.teams import TeamResolver, load_team_crosswalk
 from booth_review.sources.sports506.parser import Listing506
+from booth_review.vault import VaultRepo
 
 HEADLINE_DISAGREEMENT_COLUMNS = (
     "telecast_id",
@@ -310,11 +311,18 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--season", type=int, default=None)
     args = parser.parse_args(argv)
 
+    if args.season is not None and not args.no_write:
+        # A single season's tables would overwrite every season's processed
+        # tables, bypassing the regression guard (WR-08); only
+        # `booth-review build` writes processed tables for real.
+        parser.error("--season requires --no-write (use `booth-review build` to write tables)")
+
     paths = DataPaths.from_env()
     seasons = [args.season] if args.season is not None else None
     tables = assemble_tables(paths, reference_dir(), seasons)
     if not args.no_write:
-        write_tables(paths, tables)
+        with VaultRepo(paths.vault).lock():
+            write_tables(paths, tables)
 
     print(
         "season | rr_records | matched | out_of_scope | unmatched | "

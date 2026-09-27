@@ -16,6 +16,7 @@ import polars as pl
 
 from booth_review.build.io import write_review_csv
 from booth_review.config import DataPaths
+from booth_review.vault import VaultRepo
 
 SAMPLE_COLUMNS = (
     "row",
@@ -323,4 +324,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    with VaultRepo(DataPaths.from_env().vault).lock():
+        raise SystemExit(main())

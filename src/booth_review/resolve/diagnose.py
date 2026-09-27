@@ -43,6 +43,7 @@ from booth_review.sources.cfbd.parser import CfbdGame
 from booth_review.sources.ratingsref.parser import RRRecord
 from booth_review.sources.sports506.parser import Listing506
 from booth_review.transport.cache import atomic_write_bytes
+from booth_review.vault import VaultRepo
 
 UNRESOLVED_TEAM_COLUMNS = (
     "source",
@@ -431,4 +432,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    with VaultRepo(DataPaths.from_env().vault).lock():
+        sys.exit(main())

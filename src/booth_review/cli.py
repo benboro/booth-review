@@ -908,25 +908,43 @@ def _build(args: argparse.Namespace) -> int:
 # -- review (Plans 04/05/06/09 review tools) -----------------------------------------------
 
 
+def _with_vault_lock(run: Callable[[], int]) -> int:
+    """Run a vault-writing review command under the vault lock (AGENTS.md:
+    every command that writes to the vault holds it), so it can never
+    interleave with a scheduled-job or build commit (WR-08).
+    """
+    with VaultRepo(DataPaths.from_env().vault).lock():
+        return run()
+
+
 def _review_teams(args: argparse.Namespace) -> int:
-    return resolve_diagnose.main(["--no-write"] if args.no_write else [])
+    if args.no_write:
+        return resolve_diagnose.main(["--no-write"])
+    return _with_vault_lock(lambda: resolve_diagnose.main([]))
 
 
 def _review_people(args: argparse.Namespace) -> int:
-    return people_review.main(["apply"] if args.apply else ["scan"])
+    return _with_vault_lock(lambda: people_review.main(["apply"] if args.apply else ["scan"]))
 
 
 def _review_networks(args: argparse.Namespace) -> int:
-    return network_diagnose.main(["--no-write"] if args.no_write else [])
+    if args.no_write:
+        return network_diagnose.main(["--no-write"])
+    return _with_vault_lock(lambda: network_diagnose.main([]))
 
 
 def _review_combined(args: argparse.Namespace) -> int:
-    build_combined.main([])
-    return 0
+    def _run() -> int:
+        build_combined.main([])
+        return 0
+
+    return _with_vault_lock(_run)
 
 
 def _review_sample(args: argparse.Namespace) -> int:
-    return build_sample.main(["--size", str(args.size), "--seed", str(args.seed)])
+    return _with_vault_lock(
+        lambda: build_sample.main(["--size", str(args.size), "--seed", str(args.seed)])
+    )
 
 
 # -- main -------------------------------------------------------------------------------

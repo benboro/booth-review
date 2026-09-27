@@ -47,6 +47,7 @@ from booth_review.reference import reference_dir
 from booth_review.resolve.inputs import load_506_listings, vault_seasons
 from booth_review.resolve.names import csv_safe, csv_unsafe
 from booth_review.transport.cache import atomic_write_bytes
+from booth_review.vault import VaultRepo
 
 REVIEW_PEOPLE_COLUMNS = (
     "pair_id",
@@ -318,4 +319,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    with VaultRepo(DataPaths.from_env().vault).lock():
+        sys.exit(main())

@@ -36,6 +36,7 @@ from booth_review.errors import ReferenceTableError
 from booth_review.reference import read_reference_csv, reference_dir, write_reference_csv
 from booth_review.resolve.overrides import pointer_for_listing
 from booth_review.sources.sports506.parser import Listing506
+from booth_review.vault import VaultRepo
 
 COMBINED_COLUMNS = ("rr_telecast_id", "decision", "feeds", "reason")
 
@@ -414,4 +415,5 @@ def main(argv: Sequence[str] | None = None) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    with VaultRepo(DataPaths.from_env().vault).lock():
+        main()

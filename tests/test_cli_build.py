@@ -402,3 +402,46 @@ def test_unexpected_build_error_prints_only_its_type(
     assert exit_code == 3
     assert "KeyError" in captured.err
     assert "zz-sentinel-vault-value" not in captured.err + captured.out
+
+
+# -- WR-08: vault-writing review commands hold the vault lock -------------------------------
+
+
+@pytest.mark.parametrize(
+    ("argv", "module_attr"),
+    [
+        (["review", "teams"], "resolve_diagnose"),
+        (["review", "networks"], "network_diagnose"),
+        (["review", "people"], "people_review"),
+        (["review", "combined"], "build_combined"),
+        (["review", "sample"], "build_sample"),
+    ],
+)
+def test_review_commands_that_write_hold_the_vault_lock(
+    build_git_vault: DataPaths,
+    monkeypatch: pytest.MonkeyPatch,
+    argv: list[str],
+    module_attr: str,
+) -> None:
+    from booth_review import cli
+    from booth_review import vault as vault_module
+
+    held: list[bool] = []
+
+    def _fake_main(_argv: list[str] | None = None) -> int:
+        held.append(build_git_vault.vault.resolve() in vault_module._VAULT_LOCKS)
+        return 0
+
+    monkeypatch.setattr(getattr(cli, module_attr), "main", _fake_main)
+
+    assert main(argv) == 0
+    assert held == [True]
+
+
+def test_tables_main_refuses_to_write_a_single_season(build_vault: DataPaths) -> None:
+    from booth_review.build.tables import main as tables_main
+
+    with pytest.raises(SystemExit) as excinfo:
+        tables_main(["--season", "2025"])
+    assert excinfo.value.code == 2
+    assert not (build_vault.processed / "telecasts.parquet").exists()

@@ -48,6 +48,7 @@ from booth_review.resolve.networks import (
 )
 from booth_review.sources.cfbd.parser import parse_media
 from booth_review.transport.cache import atomic_write_bytes
+from booth_review.vault import VaultRepo
 
 REVIEW_COLUMNS = ("source", "outlet", "occurrences", "season_first", "season_last", "network_id")
 
@@ -299,4 +300,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    with VaultRepo(DataPaths.from_env().vault).lock():
+        sys.exit(main())
