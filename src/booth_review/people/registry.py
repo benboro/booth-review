@@ -190,6 +190,21 @@ def load_people(reference_dir: Path) -> PeopleRegistry:
 
 
 def write_people(reference_dir: Path, registry: PeopleRegistry) -> None:
+    """Write people.csv, refusing (ReferenceTableError, before anything is
+    written) a registry load_people would reject for a canonical_name missing
+    from its own variants -- a bad registry is never committed to the public
+    table.
+    """
+    broken = sorted(
+        person.person_id
+        for person in registry.persons.values()
+        if person.canonical_name not in person.variants
+    )
+    if broken:
+        raise ReferenceTableError(
+            f"people.csv: canonical_name missing from variants for {len(broken)} person_id(s): "
+            + ", ".join(broken)
+        )
     write_reference_csv(reference_dir / "people.csv", PEOPLE_COLUMNS, registry.to_rows())
 
 
@@ -356,7 +371,10 @@ def apply_decisions(
     - "different": if name_a and name_b currently resolve to the same
       person (an earlier "same" decision merged them), the variants that
       fold to name_b split back out into a brand new person with a fresh
-      slug; a no-op if they're already distinct persons.
+      slug -- unless the person's canonical_name is one of them, in which
+      case the canonical's group stays on the original person_id and the
+      other group is split off instead; a no-op if they're already distinct
+      persons.
     - "one": no-op (a single string that's really one person; nothing to
       merge or split).
 
@@ -395,6 +413,13 @@ def apply_decisions(
             )
             if not split_variants or not remaining_variants:
                 continue
+            if merged_person.canonical_name in split_variants:
+                # The canonical spelling folds to name_b (write_reviewed
+                # stores pairs in fold order, so either side can hold it).
+                # Keep the canonical's group on the original person_id -- a
+                # public URL (SITE-12) -- and split the other group off
+                # instead, so the canonical always stays among its variants.
+                split_variants, remaining_variants = remaining_variants, split_variants
             persons[person_id_a] = replace(merged_person, variants=remaining_variants)
             canonical_b = _pick_canonical(split_variants, name_counts)
             new_id = assign_slug(slugify(canonical_b), set(persons.keys()))

@@ -530,3 +530,79 @@ def test_with_usual_roles_defaults_missing_to_unknown() -> None:
     )
     updated = with_usual_roles(registry, {})
     assert updated.persons["a-b"].usual_role == "unknown"
+
+
+# -- CR-03: a "different" split never moves a person's canonical name away ------------------
+
+
+def _merged_person_with_nickname() -> PeopleRegistry:
+    return PeopleRegistry(
+        {
+            "robin-vale": Person(
+                person_id="robin-vale",
+                canonical_name="Robin Vale",
+                variants=("Rob Vale", "Robin Vale"),
+                usual_role="pbp",
+                role_override=None,
+            )
+        }
+    )
+
+
+def test_different_split_on_canonical_side_keeps_canonical_with_the_original_id(
+    tmp_path: Path,
+) -> None:
+    registry = _merged_person_with_nickname()
+    # write_reviewed stores pairs in fold order, so name_b is the canonical
+    # spelling here -- the case that used to move the canonical away.
+    reviewed = [
+        ReviewedPair(
+            name_a="Rob Vale", name_b="Robin Vale", reason="nickname", decision="different"
+        )
+    ]
+
+    split = apply_decisions(registry, reviewed, name_counts={"Rob Vale": 3, "Robin Vale": 9})
+
+    original = split.persons["robin-vale"]
+    assert original.canonical_name == "Robin Vale"
+    assert original.variants == ("Robin Vale",)
+    assert original.usual_role == "pbp"
+    assert split.lookup("Robin Vale") == "robin-vale"
+    new_id = split.lookup("Rob Vale")
+    assert new_id is not None and new_id != "robin-vale"
+    assert split.persons[new_id].canonical_name == "Rob Vale"
+
+    write_people(tmp_path, split)
+    reloaded = load_people(tmp_path)
+    assert reloaded.persons == split.persons
+
+
+def test_different_split_is_idempotent_when_canonical_side_moves() -> None:
+    registry = _merged_person_with_nickname()
+    reviewed = [
+        ReviewedPair(
+            name_a="Rob Vale", name_b="Robin Vale", reason="nickname", decision="different"
+        )
+    ]
+    once = apply_decisions(registry, reviewed, name_counts={})
+    twice = apply_decisions(once, reviewed, name_counts={})
+    assert once.persons == twice.persons
+
+
+def test_write_people_refuses_a_registry_whose_canonical_is_not_a_variant(
+    tmp_path: Path,
+) -> None:
+    broken = PeopleRegistry(
+        {
+            "robin-vale": Person(
+                person_id="robin-vale",
+                canonical_name="Robin Vale",
+                variants=("Rob Vale",),
+                usual_role="unknown",
+                role_override=None,
+            )
+        }
+    )
+    with pytest.raises(ReferenceTableError, match="robin-vale"):
+        write_people(tmp_path, broken)
+    assert not (tmp_path / "people.csv").exists()
