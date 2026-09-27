@@ -86,14 +86,20 @@ section below).
 
 ## `excitementIndex`
 
-`excitementIndex` is null for a substantial share of games in every season
-observed — roughly two in five games in the earlier seasons, rising to well
-over half from 2021 on. A null value stays null all the way through this
-project's pipeline (never coerced to zero, which would misrepresent an
-unmeasured game as a genuinely boring one). CFBD changed its excitement
-model partway through 2025; this project flags that season for that reason
-rather than treating all `excitementIndex` values as directly comparable
-across the whole 2014–2025 span.
+`excitementIndex` is null for a substantial share of games on CFBD's own
+**all-division** games table in every season observed — roughly two in five
+games in the earlier seasons, rising to well over half from 2021 on. That
+null rate is not the rate this project actually experiences, though: scoped
+to the **FBS-involving** games this project charts (JOIN-07), the null rate
+stays under 2% in every season from 2014 through 2025. The gap between the
+two numbers is almost entirely non-FBS and FBS-vs-lower-division games CFBD
+doesn't compute excitement for at all, not a coverage problem within this
+project's own sample. A null value stays null all the way through this
+project's pipeline either way (never coerced to zero, which would
+misrepresent an unmeasured game as a genuinely boring one). CFBD changed its
+excitement model partway through 2025; this project flags that season for
+that reason rather than treating all `excitementIndex` values as directly
+comparable across the whole 2014–2025 span.
 
 ## Budget accounting
 
