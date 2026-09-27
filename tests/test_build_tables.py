@@ -128,6 +128,7 @@ def test_write_tables_writes_parquet_and_review_csvs_and_returns_sorted_paths(
         "interim/review_headline_disagreements.csv",
         "interim/review_era_disagreements.csv",
         "interim/review_people_new.csv",
+        "interim/review_combined.csv",
     }
     assert set(written) == expected
 

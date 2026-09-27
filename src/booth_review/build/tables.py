@@ -18,6 +18,14 @@ from pathlib import Path
 
 import polars as pl
 
+from booth_review.build.combined import (
+    REVIEW_COMBINED_COLUMNS,
+    CombinedCandidate,
+    CombinedDecision,
+    apply_combined,
+    find_combined_candidates,
+    load_combined_figures,
+)
 from booth_review.build.games import build_games_frame
 from booth_review.build.io import write_parquet_atomic, write_review_csv
 from booth_review.build.people_links import (
@@ -97,6 +105,25 @@ class BuildTables:
     review_rows: dict[str, tuple[tuple[str, ...], list[dict[str, object]]]]
 
 
+def _combined_review_row(
+    candidate: CombinedCandidate, decision: CombinedDecision | None
+) -> dict[str, object]:
+    return {
+        "candidate_id": candidate.telecast_id,
+        "rr_telecast_id": candidate.rr_telecast_id,
+        "season": candidate.season,
+        "date_et": candidate.date_et.isoformat(),
+        "network_id": candidate.network_id or "",
+        "reasons": "|".join(candidate.reasons),
+        "alt_feed_count": candidate.alt_feed_count,
+        "headline_value": candidate.headline_value,
+        "network_median": candidate.network_median,
+        "proposed": candidate.proposed,
+        "proposed_feeds": candidate.proposed_feeds,
+        "decision": decision.decision if decision is not None else "",
+    }
+
+
 def _join08_rate(
     records_with_crew: int, rr_records: int, rr_excluded: int, rr_out_of_scope: int
 ) -> float | None:
@@ -167,6 +194,14 @@ def assemble_tables(
         telecast_build.telecasts, viewership, telecast_build.records_by_telecast, eras, event_flags
     )
 
+    combined_decisions = load_combined_figures(reference_directory)
+    combined_candidates = find_combined_candidates(
+        telecasts, viewership, telecast_build.listing_links
+    )
+    telecasts, telecast_flags = apply_combined(
+        telecasts, telecast_flags, combined_candidates, combined_decisions
+    )
+
     registry = load_people(reference_directory)
     person_overrides = load_person_overrides(reference_directory)
     listings_by_pointer: dict[tuple[int, str], Listing506] = {
@@ -198,11 +233,32 @@ def assemble_tables(
         "review_headline_disagreements": (HEADLINE_DISAGREEMENT_COLUMNS, disagreement_rows),
         "review_era_disagreements": (ERA_DISAGREEMENT_COLUMNS, era_disagreement_rows),
         "review_people_new": (NEW_NAME_COLUMNS, people_links.new_name_rows),
+        "review_combined": (
+            REVIEW_COMBINED_COLUMNS,
+            [
+                _combined_review_row(c, combined_decisions.get(c.rr_telecast_id))
+                for c in combined_candidates
+            ],
+        ),
     }
 
     diagnostics = _build_diagnostics(telecast_build.counts)
     merged_totals = dict(diagnostics.totals)
     merged_totals.update({f"people_{key}": value for key, value in people_links.counts.items()})
+    merged_totals["combined_candidates_alt_listed"] = sum(
+        1 for c in combined_candidates if "alt_listed" in c.reasons
+    )
+    merged_totals["combined_candidates_outlier"] = sum(
+        1 for c in combined_candidates if "outlier" in c.reasons
+    )
+    merged_totals["combined_decided"] = sum(
+        1 for c in combined_candidates if c.rr_telecast_id in combined_decisions
+    )
+    merged_totals["combined_combined"] = sum(
+        1
+        for c in combined_candidates
+        if (d := combined_decisions.get(c.rr_telecast_id)) is not None and d.decision == "combined"
+    )
     diagnostics = replace(diagnostics, totals=merged_totals)
 
     return BuildTables(
@@ -294,6 +350,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         f"provisional persons: {totals.get('people_provisional_persons', 0)} | "
         f"unlinked alt listings: {totals.get('people_unlinked_alt_listings', 0)} | "
         f"override rows: {totals.get('people_override_rows', 0)}"
+    )
+    print(
+        "combined candidates (alt_listed/outlier): "
+        f"{totals.get('combined_candidates_alt_listed', 0)}/"
+        f"{totals.get('combined_candidates_outlier', 0)} | "
+        f"decided: {totals.get('combined_decided', 0)} | "
+        f"combined: {totals.get('combined_combined', 0)}"
     )
 
 
