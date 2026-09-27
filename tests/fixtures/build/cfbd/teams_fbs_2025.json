@@ -1,0 +1,146 @@
+[
+  {
+    "id": 9201,
+    "school": "Northfield",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9202,
+    "school": "Lakeview",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9203,
+    "school": "Cedarhollow",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9204,
+    "school": "Boulderpass",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9205,
+    "school": "Maplecrest",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9206,
+    "school": "Stonebridge",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9207,
+    "school": "Foxhollow",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9208,
+    "school": "Ironpeak",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9209,
+    "school": "West Hawai\u02bbi State",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9210,
+    "school": "Silverlake",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9211,
+    "school": "Ravenwood",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9212,
+    "school": "Thornfield",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9213,
+    "school": "Timberline",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9214,
+    "school": "Copperfield",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9215,
+    "school": "Brightwater",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9216,
+    "school": "Ashford",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9217,
+    "school": "Millbrook",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9218,
+    "school": "Fernwood",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9219,
+    "school": "Highcliff",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9220,
+    "school": "Wolfridge",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9221,
+    "school": "Eastgate",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9222,
+    "school": "Southmoor",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9223,
+    "school": "Westbrook",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  },
+  {
+    "id": 9224,
+    "school": "Crestmont",
+    "conference": "Example Conference",
+    "classification": "fbs"
+  }
+]

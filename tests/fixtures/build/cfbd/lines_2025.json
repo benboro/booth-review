@@ -1,0 +1,85 @@
+[
+  {
+    "id": 500001,
+    "season": 2025,
+    "week": 6,
+    "seasonType": "regular",
+    "startDate": "2025-10-11T19:30:00.000Z",
+    "homeTeam": "Northfield",
+    "awayTeam": "Lakeview",
+    "lines": [
+      {
+        "provider": "consensus",
+        "spread": -3.5,
+        "formattedSpread": "Northfield -3.5",
+        "spreadOpen": -3.0,
+        "overUnder": 48.5,
+        "overUnderOpen": 47.0,
+        "homeMoneyline": -175,
+        "awayMoneyline": 150
+      },
+      {
+        "provider": "ExampleBook",
+        "spread": -3.0,
+        "formattedSpread": "Northfield -3.0",
+        "spreadOpen": -2.5,
+        "overUnder": 48.0,
+        "overUnderOpen": 47.0,
+        "homeMoneyline": -160,
+        "awayMoneyline": 140
+      }
+    ]
+  },
+  {
+    "id": 500002,
+    "season": 2025,
+    "week": 14,
+    "seasonType": "regular",
+    "startDate": "2025-12-06T17:00:00.000Z",
+    "homeTeam": "Lakeview",
+    "awayTeam": "Northfield",
+    "lines": [
+      {
+        "provider": "ExampleBook",
+        "spread": -6.5,
+        "formattedSpread": "Lakeview -6.5",
+        "spreadOpen": -6.0,
+        "overUnder": 44.5,
+        "overUnderOpen": 43.5,
+        "homeMoneyline": -260,
+        "awayMoneyline": 210
+      }
+    ]
+  },
+  {
+    "id": 500005,
+    "season": 2025,
+    "week": 10,
+    "seasonType": "regular",
+    "startDate": "2025-11-08T18:00:00.000Z",
+    "homeTeam": "Foxhollow",
+    "awayTeam": "Ironpeak",
+    "lines": [
+      {
+        "provider": "consensus",
+        "spread": 2.5,
+        "formattedSpread": "Ironpeak -2.5",
+        "spreadOpen": 3.0,
+        "overUnder": 52.0,
+        "overUnderOpen": 51.5,
+        "homeMoneyline": 130,
+        "awayMoneyline": -150
+      },
+      {
+        "provider": "ExampleBook",
+        "spread": 3.0,
+        "formattedSpread": "Ironpeak -3.0",
+        "spreadOpen": 3.0,
+        "overUnder": 52.0,
+        "overUnderOpen": 52.0,
+        "homeMoneyline": 135,
+        "awayMoneyline": -155
+      }
+    ]
+  }
+]

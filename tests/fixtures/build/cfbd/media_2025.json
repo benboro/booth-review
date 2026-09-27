@@ -1,0 +1,50 @@
+[
+  {
+    "id": 500001,
+    "season": 2025,
+    "week": 6,
+    "seasonType": "regular",
+    "startTime": "2025-10-11T19:30:00.000Z",
+    "isStartTimeTBD": false,
+    "homeTeam": "Northfield",
+    "awayTeam": "Lakeview",
+    "mediaType": "tv",
+    "outlet": "Net A"
+  },
+  {
+    "id": 500002,
+    "season": 2025,
+    "week": 14,
+    "seasonType": "regular",
+    "startTime": "2025-12-06T17:00:00.000Z",
+    "isStartTimeTBD": false,
+    "homeTeam": "Lakeview",
+    "awayTeam": "Northfield",
+    "mediaType": "tv",
+    "outlet": "Net B"
+  },
+  {
+    "id": 500002,
+    "season": 2025,
+    "week": 14,
+    "seasonType": "regular",
+    "startTime": "2025-12-06T17:00:00.000Z",
+    "isStartTimeTBD": false,
+    "homeTeam": "Lakeview",
+    "awayTeam": "Northfield",
+    "mediaType": "web",
+    "outlet": "Net A Stream"
+  },
+  {
+    "id": 500007,
+    "season": 2025,
+    "week": 20,
+    "seasonType": "postseason",
+    "startTime": "2026-01-20T00:30:00.000Z",
+    "isStartTimeTBD": false,
+    "homeTeam": "Ravenwood",
+    "awayTeam": "Thornfield",
+    "mediaType": "tv",
+    "outlet": "Net A"
+  }
+]
