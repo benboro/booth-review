@@ -670,3 +670,55 @@ def test_duplicate_telecast_ids_fail_the_build(monkeypatch: pytest.MonkeyPatch) 
 
     with pytest.raises(VaultStateError, match="telecast_id"):
         _run(games=[game], records=[main_record, alt_record], listings=[], network_rows=rows)
+
+
+# -- WR-05: a primary override also steers 506 main listings --------------------------------
+
+
+def test_primary_override_attaches_a_single_main_listing_without_mismatch() -> None:
+    game = _game(id=90)
+    record = _rr_record(networks=["Net Alpha"])
+    listing = _listing(network_raw="Net Alpha", crew_names=("Pat Example", "Jordan Sample"))
+    rows = [_network_row("Net Alpha", "alpha"), _network_row("Net Omega", "omega")]
+
+    result = _run(
+        games=[game],
+        records=[record],
+        listings=[listing],
+        network_rows=rows,
+        primary_overrides={90: "omega"},
+    )
+
+    assert result.telecasts["telecast_id"].to_list() == ["90-omega"]
+    row = result.telecasts.row(0, named=True)
+    assert row["crew_matched"] is True
+    assert row["crew_network_mismatch"] is False
+
+
+def test_primary_override_simulcast_listings_attach_to_the_rated_telecast() -> None:
+    game = _game(id=91)
+    record = _rr_record(networks=["Net Alpha"])
+    first = _listing(network_raw="Net Alpha", crew_names=("Pat Example",), source_row_index=0)
+    second = _listing(network_raw="Net Beta", crew_names=("Pat Example",), source_row_index=1)
+    rows = [
+        _network_row("Net Alpha", "alpha"),
+        _network_row("Net Beta", "beta"),
+        _network_row("Net Omega", "omega"),
+    ]
+
+    result = _run(
+        games=[game],
+        records=[record],
+        listings=[first, second],
+        network_rows=rows,
+        primary_overrides={91: "omega"},
+    )
+
+    assert result.telecasts["telecast_id"].to_list() == ["91-omega"]
+    row = result.telecasts.row(0, named=True)
+    assert row["rated"] is True
+    assert row["crew_matched"] is True
+    assert row["crew_network_mismatch"] is False
+    assert result.listing_links["telecast_id"].to_list() == ["91-omega", "91-omega"]
+    # listing_links still records each listing's own network.
+    assert result.listing_links["network_id"].to_list() == ["alpha", "beta"]

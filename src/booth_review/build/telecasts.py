@@ -346,6 +346,19 @@ def _build_game_telecasts(
         delta.unmapped_outlets += len(primary.unmapped)
         listing_primaries[id(ln)] = primary
 
+    # The (network, feed) key each main listing matches telecasts on: its own
+    # primary, except that a per-game primary override replaces a main-feed
+    # listing's network exactly as it does an RR record's (WR-05), so an
+    # overridden game's listings (including every simulcast listing) still
+    # find the rated telecast. listing_links keeps each listing's own network.
+    listing_match_keys: dict[int, tuple[str | None, FeedType]] = {}
+    for ln, _conf in main_listings:
+        primary = listing_primaries[id(ln)]
+        match_network_id = primary.network_id
+        if primary.feed_type == "main" and game.id in primary_overrides:
+            match_network_id = primary_overrides[game.id]
+        listing_match_keys[id(ln)] = (match_network_id, primary.feed_type)
+
     # The first main 506 listing (page order), for the "no RR outlet maps"
     # primary-network fallback -- None when the game has no main listing at
     # all.
@@ -385,9 +398,7 @@ def _build_game_telecasts(
         candidates = [
             (ln, conf)
             for ln, conf in main_listings
-            if id(ln) not in attached
-            and listing_primaries[id(ln)].network_id == draft.network_id
-            and listing_primaries[id(ln)].feed_type == draft.feed_type
+            if id(ln) not in attached and listing_match_keys[id(ln)] == key
         ]
         if not candidates:
             continue
@@ -423,8 +434,7 @@ def _build_game_telecasts(
     # -- Any remaining main listing becomes (or joins) its own unrated telecast ------------
     remaining_main = [(ln, conf) for ln, conf in main_listings if id(ln) not in attached]
     for ln, conf in remaining_main:
-        primary = listing_primaries[id(ln)]
-        unrated_key = (primary.network_id, primary.feed_type)
+        unrated_key = listing_match_keys[id(ln)]
         unrated_draft = drafts.get(unrated_key)
         if unrated_draft is None:
             unrated_draft = _TelecastDraft(key=unrated_key, game=game, rated=False)
