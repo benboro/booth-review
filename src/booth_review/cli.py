@@ -28,6 +28,7 @@ from booth_review.audit.completeness import (
 )
 from booth_review.audit.freeze import FreezeResult, Waiver, freeze_seasons, parse_waiver
 from booth_review.build import combined as build_combined
+from booth_review.build import sample as build_sample
 from booth_review.build.pipeline import BuildOutcome, run_build
 from booth_review.config import CFBD_FLOOR_DEFAULT, DataPaths, load_cfbd_key
 from booth_review.errors import BoothReviewError, FreezeRefusedError
@@ -258,6 +259,12 @@ def build_parser() -> argparse.ArgumentParser:
     review_sub.add_parser(
         "combined", help="combined-figure candidate detection and pre-fill (build.combined)"
     )
+
+    review_sample = review_sub.add_parser(
+        "sample", help="JOIN-08 stratified sample of plotted telecasts for a hand-check (D-08)"
+    )
+    review_sample.add_argument("--size", type=int, default=build_sample.DEFAULT_SIZE)
+    review_sample.add_argument("--seed", type=int, default=build_sample.DEFAULT_SEED)
 
     return parser
 
@@ -902,6 +909,10 @@ def _review_combined(args: argparse.Namespace) -> int:
     return 0
 
 
+def _review_sample(args: argparse.Namespace) -> int:
+    return build_sample.main(["--size", str(args.size), "--seed", str(args.seed)])
+
+
 # -- main -------------------------------------------------------------------------------
 
 
@@ -958,6 +969,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return _review_networks(args)
             if args.review_command == "combined":
                 return _review_combined(args)
+            if args.review_command == "sample":
+                return _review_sample(args)
             raise AssertionError(f"unknown review command: {args.review_command!r}")
         raise AssertionError(f"unknown command: {args.command!r}")
     except BoothReviewError as exc:
