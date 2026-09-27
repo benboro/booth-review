@@ -1,4 +1,5 @@
-"""The `booth-review` console script: `collect 506|ratingsref|cfbd` and `budget`.
+"""The `booth-review` console script: `collect 506|ratingsref|cfbd`, `build`,
+`site`, and `budget`.
 
 A single argparse-based entry point (D-15); every subcommand goes through
 `runtime.build_runtime`, dry-run (D-16) sends no request, and every live
@@ -31,8 +32,15 @@ from booth_review.audit.freeze import FreezeResult, Waiver, freeze_seasons, pars
 from booth_review.build import combined as build_combined
 from booth_review.build import sample as build_sample
 from booth_review.build.pipeline import BuildOutcome, run_build
+from booth_review.build.site_assembly import (
+    SiteBuildResult,
+    assemble_site,
+    docs_dir,
+    fixture_path,
+    site_source_dir,
+)
 from booth_review.config import CFBD_FLOOR_DEFAULT, DataPaths, load_cfbd_key
-from booth_review.errors import BoothReviewError, FreezeRefusedError
+from booth_review.errors import BoothReviewError, FreezeRefusedError, SiteBuildError
 from booth_review.job.attention import build_attention_body
 from booth_review.job.runner import EXIT_NOTHING_DUE, JOB_CFBD_MAX_CALLS, JobRunResult, ScheduledJob
 from booth_review.people import review as people_review
@@ -233,6 +241,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     build_cmd.add_argument("--no-commit", action="store_true")
     build_cmd.add_argument("--accept-baseline", action="store_true")
+
+    site_cmd = sub.add_parser(
+        "site", help="D-14: assemble dist/site/ from site/, site-data.json, and rendered pages"
+    )
+    site_cmd.add_argument(
+        "--fixture",
+        action="store_true",
+        help="use the synthetic contract fixture instead of the vault's processed/site-data.json",
+    )
+    site_cmd.add_argument("--out", type=Path, default=Path("dist/site"))
 
     review = sub.add_parser(
         "review", help="Phase 3 review tools: teams, people, networks, combined"
@@ -906,6 +924,55 @@ def _build(args: argparse.Namespace) -> int:
     return 4 if exit_blocked else 0
 
 
+# -- site (D-14) --------------------------------------------------------------------------
+
+
+def _site(args: argparse.Namespace) -> int:
+    """Assemble dist/site/ (D-14) from site/, docs/, and either the
+    synthetic fixture or the vault's processed/site-data.json. Read-only
+    against the vault -- no VaultRepo lock needed."""
+    if args.fixture:
+        source = fixture_path()
+    else:
+        source = DataPaths.from_env().processed / "site-data.json"
+        if not source.is_file():
+            raise SiteBuildError(
+                "processed/site-data.json not found; run `booth-review build` first"
+            )
+    try:
+        result: SiteBuildResult = assemble_site(
+            source=source,
+            out_dir=args.out,
+            site_src=site_source_dir(),
+            docs=docs_dir(),
+        )
+    except BoothReviewError:
+        raise
+    except Exception as exc:
+        # An unexpected error's message or traceback could carry a data
+        # value, so only its type is printed unless the user opts in
+        # locally (WR-03).
+        if os.environ.get("BOOTH_REVIEW_DEBUG"):
+            raise
+        print(
+            f"error: unexpected {type(exc).__name__} assembling the site; details withheld "
+            "(set BOOTH_REVIEW_DEBUG=1 to see the traceback)",
+            file=sys.stderr,
+        )
+        return 3
+    prefix = "site (fixture):" if args.fixture else "site:"
+    print(
+        f"{prefix} {result.telecasts} telecasts, {result.people} people, "
+        f"{len(result.files)} files -> {result.out_dir}"
+    )
+    print(
+        "cfbd key check: passed"
+        if result.key_checked
+        else "cfbd key check: skipped (no key configured)"
+    )
+    return 0
+
+
 # -- review (Plans 04/05/06/09 review tools) -----------------------------------------------
 
 
@@ -995,6 +1062,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _budget(args)
         if args.command == "build":
             return _build(args)
+        if args.command == "site":
+            return _site(args)
         if args.command == "review":
             if args.review_command == "teams":
                 return _review_teams(args)

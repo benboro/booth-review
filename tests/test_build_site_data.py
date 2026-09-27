@@ -618,9 +618,14 @@ def test_written_file_never_contains_the_cfbd_key(
 
 
 def test_site_data_module_never_imports_load_cfbd_key() -> None:
-    build_dir = Path("src/booth_review/build")
-    for path in build_dir.glob("*.py"):
-        assert "load_cfbd_key" not in path.read_text(encoding="utf-8"), path
+    # Scoped to site_data.py itself (the module that builds and writes
+    # processed/site-data.json): that module must never read the key.
+    # build/site_assembly.py is a deliberate, separate, independent gate
+    # (T-04-13/SITE-19) -- its own key-leak guard needs load_cfbd_key to
+    # grep the assembled dist/site output, covered by
+    # tests/test_cli_site.py's key-leak tests instead.
+    path = Path("src/booth_review/build/site_data.py")
+    assert "load_cfbd_key" not in path.read_text(encoding="utf-8"), path
 
 
 # -- CR-02: a plotted row with no usable headline value fails cleanly --------------------------

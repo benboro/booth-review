@@ -38,6 +38,19 @@ uv sync
 cp .env.example .env   # then add your free CFBD API key
 ```
 
+## Building the site
+
+```bash
+uv run booth-review build           # rebuild the processed tables and site-data.json
+uv run booth-review site --fixture  # assemble dist/site from synthetic data (works in any clone)
+uv run booth-review site            # assemble dist/site from the real data (needs the private vault)
+uv run python -m http.server -d dist/site   # preview locally
+```
+
+`dist/` is gitignored: the site loads only its own files (`index.html`, `style.css`,
+`app.js`, `site-data.json`, `methodology.html`, `coverage.html`), never a request to
+CFBD, Ratings Reference, or 506 Sports.
+
 ## License
 
 The code is MIT-licensed. The data isn't covered by that license: it belongs to
