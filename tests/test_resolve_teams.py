@@ -349,3 +349,32 @@ def test_resolver_caches_repeat_lookups() -> None:
     first = resolver.resolve("cfbd", "Northfield", 2025)
     second = resolver.resolve("cfbd", "Northfield", 2025)
     assert first == second
+
+
+# -- WR-16: conflicting crosswalk rows are rejected --------------------------------------------
+
+_CROSSWALK_HEADER = "source,variant,canonical,cfbd_team_id,season_from,season_to,note\n"
+
+
+def test_load_team_crosswalk_rejects_a_variant_mapped_to_two_ids_over_overlapping_seasons(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "team_crosswalk.csv").write_text(
+        _CROSSWALK_HEADER
+        + "sports506,Example State,Example State,101,2014,2020,\n"
+        + "sports506,EXAMPLE STATE,Example State B,202,2019,,\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ReferenceTableError, match="line 3"):
+        load_team_crosswalk(tmp_path)
+
+
+def test_load_team_crosswalk_allows_same_variant_over_disjoint_seasons(tmp_path: Path) -> None:
+    (tmp_path / "team_crosswalk.csv").write_text(
+        _CROSSWALK_HEADER
+        + "sports506,Example State,Example State,101,2014,2018,\n"
+        + "sports506,Example State,Example State B,202,2019,,\n"
+        + "ratingsref,cfb-example-state,Example State,101,,,\n",
+        encoding="utf-8",
+    )
+    assert len(load_team_crosswalk(tmp_path)) == 3

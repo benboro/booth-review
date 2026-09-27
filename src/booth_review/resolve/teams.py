@@ -64,16 +64,35 @@ def _parse_optional_int(value: str, *, path_name: str, field: str) -> int | None
         raise ReferenceTableError(f"{path_name}: invalid {field}: {value!r}") from None
 
 
+_OPEN_LOW = -(10**9)
+_OPEN_HIGH = 10**9
+
+
+def _ranges_overlap(
+    a_from: int | None, a_to: int | None, b_from: int | None, b_to: int | None
+) -> bool:
+    """True when two inclusive season ranges (None = open-ended) share a season."""
+    lo = max(
+        a_from if a_from is not None else _OPEN_LOW, b_from if b_from is not None else _OPEN_LOW
+    )
+    hi = min(a_to if a_to is not None else _OPEN_HIGH, b_to if b_to is not None else _OPEN_HIGH)
+    return lo <= hi
+
+
 def load_team_crosswalk(reference_dir: Path) -> list[TeamCrosswalkRow]:
     """Read team_crosswalk.csv (not required: an empty/missing table just
     means every name must resolve through the direct normalized-name match).
     Raises ReferenceTableError naming the file and line number on an invalid
-    source, a non-integer cfbd_team_id/season, or a note over 80 characters.
+    source, a non-integer cfbd_team_id/season, a note over 80 characters, or
+    the same (source, normalized variant) mapped to two different
+    cfbd_team_ids over overlapping season ranges (the resolver would
+    otherwise silently use whichever row came first).
     """
     path = reference_dir / "team_crosswalk.csv"
     raw_rows = read_reference_csv(path, TEAM_CROSSWALK_COLUMNS, required=False)
 
     rows: list[TeamCrosswalkRow] = []
+    seen: dict[tuple[str, str], list[tuple[int | None, int | None, int]]] = {}
     for line_no, raw in enumerate(raw_rows, start=2):
         source = raw["source"]
         if source not in _SOURCES:
@@ -95,6 +114,18 @@ def load_team_crosswalk(reference_dir: Path) -> list[TeamCrosswalkRow]:
             raise ReferenceTableError(
                 f"{path.name}: line {line_no}: note exceeds {_MAX_NOTE_LEN} characters"
             )
+        normalized_variant = normalize_team(clean_team_text(raw["variant"], source))  # type: ignore[arg-type]
+        variant_key = (source, normalized_variant)
+        for other_from, other_to, other_id in seen.get(variant_key, ()):
+            if other_id != cfbd_team_id and _ranges_overlap(
+                season_from, season_to, other_from, other_to
+            ):
+                raise ReferenceTableError(
+                    f"{path.name}: line {line_no}: variant {raw['variant']!r} maps to "
+                    f"cfbd_team_id {cfbd_team_id}, conflicting with an earlier row's "
+                    f"{other_id} over overlapping seasons"
+                )
+        seen.setdefault(variant_key, []).append((season_from, season_to, cfbd_team_id))
         rows.append(
             TeamCrosswalkRow(
                 source=source,  # type: ignore[arg-type]
