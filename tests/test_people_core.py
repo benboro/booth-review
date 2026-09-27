@@ -667,3 +667,28 @@ def test_write_reviewed_refuses_free_text_reason(tmp_path: Path) -> None:
             [ReviewedPair(name_a="A B", name_b="A C", reason="-", decision="same")],
         )
     assert not (tmp_path / "people_reviewed.csv").exists()
+
+
+# -- WR-15: a name containing the "|" delimiter never reaches people.csv --------------------
+
+
+def test_register_names_rejects_a_name_containing_the_variant_delimiter() -> None:
+    with pytest.raises(ReferenceTableError, match=r"1 crew name"):
+        register_names(PeopleRegistry({}), {"Pat|Example": 1, "Jordan Sample": 2})
+
+
+def test_write_people_rejects_a_variant_containing_the_delimiter(tmp_path: Path) -> None:
+    registry = PeopleRegistry(
+        {
+            "pat-example": Person(
+                person_id="pat-example",
+                canonical_name="Pat Example",
+                variants=("Pat Example", "Pat|Example"),
+                usual_role="unknown",
+                role_override=None,
+            )
+        }
+    )
+    with pytest.raises(ReferenceTableError, match="pat-example"):
+        write_people(tmp_path, registry)
+    assert not (tmp_path / "people.csv").exists()

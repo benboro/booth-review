@@ -39,6 +39,8 @@ REVIEW_REASONS: frozenset[str] = frozenset(
 # person_id: lowercase slug tokens joined by single hyphens (assign_slug's
 # output shape).
 _PERSON_ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+# people.csv joins a person's variants with this character.
+_VARIANT_DELIMITER = "|"
 # person_overrides pointer: the sports506 "<week_label>:<source_row_index>"
 # pointer format (resolve.overrides._SPORTS506_POINTER_RE), restated locally
 # since that module models game overrides, not person overrides.
@@ -115,15 +117,26 @@ class PeopleRegistry:
         name that happens to start with =, +, -, @, a tab, or a carriage
         return must not corrupt (or, via read_reference_csv's strict
         rejection, make unreadable) this public table. Pairs with
-        csv_unsafe() in load_people.
+        csv_unsafe() in load_people. A canonical_name or variant containing
+        the "|" variants delimiter raises ReferenceTableError (naming only
+        the person_id): written unescaped it would split into bogus
+        variants on reload and make the table unreadable.
         """
         rows: list[dict[str, str]] = []
         for person in sorted(self.persons.values(), key=lambda p: p.person_id):
+            if _VARIANT_DELIMITER in person.canonical_name or any(
+                _VARIANT_DELIMITER in v for v in person.variants
+            ):
+                raise ReferenceTableError(
+                    f"people.csv: person_id {person.person_id!r} has a name containing '|'"
+                )
             rows.append(
                 {
                     "person_id": person.person_id,
                     "canonical_name": csv_safe(person.canonical_name),
-                    "variants": "|".join(csv_safe(v) for v in sorted(person.variants)),
+                    "variants": _VARIANT_DELIMITER.join(
+                        csv_safe(v) for v in sorted(person.variants)
+                    ),
                     "usual_role": person.usual_role,
                     "role_override": person.role_override or "",
                 }
@@ -141,9 +154,8 @@ def load_people(reference_dir: Path) -> PeopleRegistry:
     """Read people.csv (not required: an empty/missing table is a fresh
     registry). Raises ReferenceTableError on a duplicate person_id, a
     person_id not matching the slug pattern, a normalized variant owned by
-    two people, a canonical_name missing from its own variants list, a
-    variant containing the "|" delimiter (defense against a hand-edited
-    file corrupting the pipe-joined column), or a role (usual_role or
+    two people, a canonical_name missing from its own variants list, or a
+    role (usual_role or
     role_override) outside pbp|analyst|unknown (role_override may also be
     blank, meaning "no override").
     """
@@ -163,12 +175,8 @@ def load_people(reference_dir: Path) -> PeopleRegistry:
                 f"{path.name}: line {line_no}: duplicate person_id {person_id!r}"
             )
 
-        variants = tuple(csv_unsafe(v) for v in raw["variants"].split("|") if v)
+        variants = tuple(csv_unsafe(v) for v in raw["variants"].split(_VARIANT_DELIMITER) if v)
         for variant in variants:
-            if "|" in variant:
-                raise ReferenceTableError(
-                    f"{path.name}: line {line_no}: variant {variant!r} contains '|'"
-                )
             key = fold_person(variant)
             owner = variant_owner.get(key)
             if owner is not None and owner != person_id:
@@ -365,7 +373,15 @@ def register_names(registry: PeopleRegistry, name_counts: Mapping[str, int]) -> 
     person (its person_id never changes); otherwise register a brand new
     person (canonical = the group's most frequent raw spelling, ties by
     lexical order; id = assign_slug(slugify(canonical), ...)).
+
+    A name containing the "|" variants delimiter raises ReferenceTableError
+    (count only, never the name): it can't be stored in people.csv.
     """
+    delimited = sum(1 for name in name_counts if _VARIANT_DELIMITER in name)
+    if delimited:
+        raise ReferenceTableError(
+            f"people: {delimited} crew name(s) contain '|', which people.csv can't store"
+        )
     persons = dict(registry.persons)
     taken_ids = set(persons.keys())
 
