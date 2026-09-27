@@ -88,3 +88,11 @@ class ReferenceTableError(BoothReviewError):
     """A data/reference CSV is missing a required column, has an unexpected
     column, or holds an invalid value.
     """
+
+
+class SiteBuildError(BoothReviewError):
+    """Raised when the `site` command could not assemble dist/site.
+
+    Messages never carry a data value (a team, person, or figure) or the
+    CFBD key -- only counts, paths, or contract locations (D-14, SITE-19).
+    """
