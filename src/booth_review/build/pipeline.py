@@ -5,8 +5,15 @@ vault count-only, all inside one `VaultRepo.lock()` (T-03-46).
 
 Only `run_build`'s own `--accept-baseline` path (Plan 11's CLI flag) ever
 changes `audit/build_baseline.csv` -- a plain blocked build never does, and
-skips the `processed/site-data.json` write, leaving whatever the last
-accepted build wrote in place (T-03-47).
+skips every `processed/` write (the Parquet tables, coverage CSVs, and
+`site-data.json`), leaving whatever the last accepted build wrote in place
+(T-03-47). A blocked build still writes the `audit/` metrics and regression
+report and the `interim/` review files, which are what a user needs to see
+why it was blocked.
+
+Site data is assembled and validated before anything is written, and before
+`--accept-baseline` records a new baseline, so a run that fails validation
+never leaves a new baseline (or half-updated processed tables) behind.
 """
 
 from __future__ import annotations
@@ -94,16 +101,29 @@ def run_build(
 
     with vault.lock():
         tables = assemble_tables(paths, reference_directory)
-        written: list[str] = []
-        written.extend(write_tables(paths, tables))
-
         coverage = build_coverage(tables)
-        written.extend(write_coverage(paths, coverage))
 
         metrics: Sequence[SeasonMetrics] = build_metrics(tables, paths)
         baseline = load_baseline(paths)
         completeness = load_completeness_counts(paths)
         result = check_regression(metrics, baseline, completeness)
+
+        write_data = (not result.blocked) or accept_baseline
+        # Assemble and validate site data first (WR-01): if it raises, the
+        # run aborts before any processed table, audit file, or new
+        # baseline is written.
+        site = (
+            build_site_data(tables, coverage, reference_directory, generated_at)
+            if write_data
+            else None
+        )
+
+        written: list[str] = []
+        # A blocked build writes only the interim review files, never the
+        # processed tables (WR-02).
+        written.extend(write_tables(paths, tables, processed=write_data))
+        if write_data:
+            written.extend(write_coverage(paths, coverage))
 
         written.extend(write_metrics(paths, metrics))
         written.extend(write_regression_report(paths, metrics, baseline, completeness, result))
@@ -113,9 +133,7 @@ def run_build(
             written.extend(accept_baseline_metrics(paths, metrics))
             accepted = True
 
-        write_data = (not result.blocked) or accepted
-        if write_data:
-            site = build_site_data(tables, coverage, reference_directory, generated_at)
+        if site is not None:
             written.extend(write_site_data(paths, site))
 
         counts = _build_counts(tables, result)

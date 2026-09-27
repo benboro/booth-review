@@ -12,6 +12,7 @@ an accidental network call would surface as a real connection attempt.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -322,3 +323,58 @@ def test_cli_build_json_output_round_trips(build_git_vault: DataPaths) -> None:
     main(["build", "--no-commit"])
     body = json.loads((paths.vault / "processed" / "site-data.json").read_text(encoding="utf-8"))
     assert body["schema_version"] == "1.0.0"
+
+
+# -- WR-01 / WR-02: ordering and scope of a blocked or failing build ---------------------------
+
+
+def test_blocked_build_leaves_processed_tables_and_coverage_untouched(
+    build_git_vault: DataPaths,
+) -> None:
+    paths = build_git_vault
+    assert main(["build", "--accept-baseline"]) == 0
+    processed_before = {
+        p.name: p.read_bytes() for p in sorted(paths.processed.iterdir()) if p.is_file()
+    }
+    assert "telecasts.parquet" in processed_before
+    assert "coverage.csv" in processed_before
+
+    rr_dir = paths.raw / "ratingsref" / "telecast" / "2025"
+    next(iter(sorted(rr_dir.glob("*.json")))).unlink()
+
+    outcome = run_build(
+        paths, Path(os.environ["BOOTH_REVIEW_REFERENCE"]), commit=False, accept_baseline=False
+    )
+
+    assert outcome.blocked is True
+    assert not any(p.startswith("processed/") for p in outcome.written)
+    assert "audit/regression.csv" in outcome.written
+    processed_after = {
+        p.name: p.read_bytes() for p in sorted(paths.processed.iterdir()) if p.is_file()
+    }
+    assert processed_after == processed_before
+
+
+def test_accept_baseline_never_writes_a_baseline_when_site_data_fails(
+    build_git_vault: DataPaths, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from booth_review.build import pipeline
+    from booth_review.errors import VaultStateError
+
+    paths = build_git_vault
+
+    def _fail(*_args: object, **_kwargs: object) -> None:
+        raise VaultStateError("synthetic site-data failure")
+
+    monkeypatch.setattr(pipeline, "build_site_data", _fail)
+
+    with pytest.raises(VaultStateError):
+        run_build(
+            paths,
+            Path(os.environ["BOOTH_REVIEW_REFERENCE"]),
+            commit=False,
+            accept_baseline=True,
+        )
+
+    assert load_baseline(paths) is None
+    assert not (paths.processed / "telecasts.parquet").exists()

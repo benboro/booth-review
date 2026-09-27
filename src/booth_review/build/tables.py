@@ -274,12 +274,14 @@ def assemble_tables(
     )
 
 
-def write_tables(paths: DataPaths, tables: BuildTables) -> list[str]:
+def write_tables(paths: DataPaths, tables: BuildTables, *, processed: bool = True) -> list[str]:
     """Write every processed Parquet table and interim review CSV, atomically
     (build.io), returning the sorted list of vault-relative paths written.
+    `processed=False` writes only the interim review CSVs (a blocked build,
+    build.pipeline).
     """
     written: list[str] = []
-    for name in _PARQUET_TABLES:
+    for name in _PARQUET_TABLES if processed else ():
         frame: pl.DataFrame = getattr(tables, name)
         rel_path = f"processed/{name}.parquet"
         write_parquet_atomic(frame, paths.vault / rel_path)
