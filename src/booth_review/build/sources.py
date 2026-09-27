@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import TypeVar
 
 from booth_review.config import DataPaths
 from booth_review.resolve.inputs import (
@@ -33,8 +32,6 @@ from booth_review.sources.cfbd.parser import (
 from booth_review.sources.ratingsref.parser import RRRecord
 from booth_review.sources.sports506.parser import Listing506
 
-_T = TypeVar("_T")
-
 
 @dataclass(frozen=True)
 class SeasonSources:
@@ -51,9 +48,9 @@ class SeasonSources:
     wp_pregame: list[CfbdPregameWp]
 
 
-def _load_cfbd_endpoint(
-    paths: DataPaths, endpoint: str, season: int, parser: Callable[[bytes], list[_T]]
-) -> list[_T]:
+def _load_cfbd_endpoint[T](
+    paths: DataPaths, endpoint: str, season: int, parser: Callable[[bytes], list[T]]
+) -> list[T]:
     path = paths.raw / "cfbd" / endpoint / f"{season}.json"
     if not path.is_file():
         return []
@@ -88,9 +85,7 @@ def load_season_sources(paths: DataPaths, season: int) -> SeasonSources:
     )
 
 
-def load_all_sources(
-    paths: DataPaths, seasons: Sequence[int] | None = None
-) -> list[SeasonSources]:
+def load_all_sources(paths: DataPaths, seasons: Sequence[int] | None = None) -> list[SeasonSources]:
     """One SeasonSources per vault season, in ascending order. `seasons`
     defaults to `resolve.inputs.vault_seasons` (every season >= 2014 with a
     cached raw/cfbd/games/<season>.json file).
