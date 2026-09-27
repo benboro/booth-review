@@ -17,7 +17,7 @@ guess.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
@@ -380,7 +380,9 @@ def load_primary_overrides(reference_dir: Path) -> dict[int, str]:
     the network_id that forces the primary network for that one game (D-06:
     pointer-only, a fixed-vocabulary reason code, never crew/figure text).
     Raises ReferenceTableError on a reason outside {rights-holder,
-    simulcast, neutral-site, other} or a duplicate cfbd_game_id.
+    simulcast, neutral-site, other}, a network_id outside the shared slug
+    convention, or a duplicate cfbd_game_id. Whether each network_id exists
+    in networks.csv is checked by `check_primary_overrides`.
     """
     path = reference_dir / "primary_network_overrides.csv"
     raw_rows = read_reference_csv(path, PRIMARY_OVERRIDE_COLUMNS, required=False)
@@ -400,5 +402,23 @@ def load_primary_overrides(reference_dir: Path) -> dict[int, str]:
             raise ReferenceTableError(
                 f"{path.name}: line {line_no}: duplicate cfbd_game_id {game_id}"
             )
-        overrides[game_id] = raw["network_id"]
+        network_id = raw["network_id"]
+        if not _NETWORK_ID_RE.match(network_id):
+            raise ReferenceTableError(
+                f"{path.name}: line {line_no}: invalid network_id {network_id!r}"
+            )
+        overrides[game_id] = network_id
     return overrides
+
+
+def check_primary_overrides(overrides: Mapping[int, str], table: NetworkTable) -> None:
+    """Raise ReferenceTableError when a primary override names a network_id
+    networks.csv doesn't define (a typo would otherwise give telecasts a
+    network with no display name or family).
+    """
+    unknown = sorted(set(overrides.values()) - set(table.networks()))
+    if unknown:
+        raise ReferenceTableError(
+            f"primary_network_overrides.csv: {len(unknown)} network_id(s) not in "
+            "networks.csv: " + ", ".join(unknown)
+        )

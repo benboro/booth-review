@@ -467,3 +467,24 @@ def test_primary_network_same_network_alt_and_spanish_ignores_listing_order() ->
     reverse = primary_network(["Net B (alt), Net B (spanish)"], 2025, table)
     assert (forward.network_id, forward.feed_type) == ("net-b", "alt")
     assert (reverse.network_id, reverse.feed_type) == ("net-b", "alt")
+
+
+# -- WR-06: override network ids must be well-formed and defined in networks.csv -----------
+
+
+def test_load_primary_overrides_rejects_malformed_network_id(tmp_path: Path) -> None:
+    atomic_write_bytes(
+        tmp_path / "primary_network_overrides.csv",
+        b"cfbd_game_id,network_id,reason\n900003,Net A,other\n",
+    )
+    with pytest.raises(ReferenceTableError, match="invalid network_id"):
+        load_primary_overrides(tmp_path)
+
+
+def test_check_primary_overrides_rejects_an_unknown_network_id() -> None:
+    from booth_review.resolve.networks import check_primary_overrides
+
+    table = _table()
+    check_primary_overrides({900001: "net-b"}, table)
+    with pytest.raises(ReferenceTableError, match="net-typo"):
+        check_primary_overrides({900001: "net-b", 900002: "net-typo"}, table)

@@ -177,3 +177,34 @@ def test_main_prints_counts_only_and_no_team_or_announcer_name(
     assert "join-08" in captured.out.lower()
     assert not (build_vault.processed / "telecasts.parquet").is_file()
     assert not (build_vault.interim / "review_unmatched.csv").is_file()
+
+
+# -- WR-06: the build refuses a missing networks.csv or an unknown override network ---------
+
+
+def test_assemble_tables_requires_networks_csv(
+    build_vault: DataPaths, build_reference: Path, tmp_path: Path
+) -> None:
+    from booth_review.errors import ReferenceTableError
+
+    reference = tmp_path / "reference_no_networks"
+    shutil.copytree(build_reference, reference)
+    (reference / "networks.csv").unlink()
+
+    with pytest.raises(ReferenceTableError, match=r"networks\.csv"):
+        assemble_tables(build_vault, reference)
+
+
+def test_assemble_tables_rejects_an_override_network_missing_from_networks_csv(
+    build_vault: DataPaths, build_reference: Path, tmp_path: Path
+) -> None:
+    from booth_review.errors import ReferenceTableError
+
+    reference = tmp_path / "reference_bad_override"
+    shutil.copytree(build_reference, reference)
+    (reference / "primary_network_overrides.csv").write_text(
+        "cfbd_game_id,network_id,reason\n900001,net-typo,other\n", encoding="utf-8"
+    )
+
+    with pytest.raises(ReferenceTableError, match="net-typo"):
+        assemble_tables(build_vault, reference)

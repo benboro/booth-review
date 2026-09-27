@@ -59,7 +59,11 @@ from booth_review.resolve.diagnose import (
     unresolved_rows,
 )
 from booth_review.resolve.games import GameIndex
-from booth_review.resolve.networks import load_networks, load_primary_overrides
+from booth_review.resolve.networks import (
+    check_primary_overrides,
+    load_networks,
+    load_primary_overrides,
+)
 from booth_review.resolve.overrides import load_game_overrides, pointer_for_listing
 from booth_review.resolve.teams import TeamResolver, load_team_crosswalk
 from booth_review.sources.sports506.parser import Listing506
@@ -173,8 +177,11 @@ def assemble_tables(
     resolver = TeamResolver({s.season: s.games for s in sources}, crosswalk)
     index = GameIndex([g for s in sources for g in s.games])
     overrides = load_game_overrides(reference_directory)
-    networks = load_networks(reference_directory)
+    # Required here (WR-06): a missing networks.csv would otherwise turn every
+    # telecast "unmapped" without failing the build.
+    networks = load_networks(reference_directory, required=True)
     primary_overrides = load_primary_overrides(reference_directory)
+    check_primary_overrides(primary_overrides, networks)
 
     media_by_game: dict[int, list[str]] = {}
     for season_sources in sources:
