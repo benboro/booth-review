@@ -26,8 +26,10 @@ import polars as pl
 
 from booth_review.config import DataPaths
 from booth_review.contract.models import SCHEMA_VERSION, SiteData, validate_site_data
+from booth_review.errors import VaultStateError
 from booth_review.flags.era import load_eras
 from booth_review.flags.events import load_event_flags
+from booth_review.resolve.headline import is_usable_value
 from booth_review.resolve.networks import load_networks
 from booth_review.transport.cache import atomic_write_bytes
 
@@ -153,6 +155,14 @@ def build_site_data(
         "pregame_x",
     )
     rows = list(plotted.join(games_slim, on="game_id", how="left").iter_rows(named=True))
+    unusable = sum(1 for row in rows if not is_usable_value(row["headline_value"]))
+    if unusable:
+        # Backstop for the plotted rule (CR-02): fail with a clean,
+        # count-only error rather than a TypeError from round(None) or a
+        # contract failure on a 0-viewer dot.
+        raise VaultStateError(
+            f"telecasts: {unusable} plotted row(s) without a usable headline_value"
+        )
     plotted_ids = {row["telecast_id"] for row in rows}
 
     crew_by_telecast: dict[str, list[dict[str, object]]] = {}

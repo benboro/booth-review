@@ -30,7 +30,7 @@ def _claim(
     *,
     claim_id: str,
     status: str = "final",
-    value: float = 2_000_000.0,
+    value: float | None = 2_000_000.0,
     metric_type: str = "avg_audience",
     unit: str | None = "viewers",
     supersedes_id: str | None = None,
@@ -573,3 +573,47 @@ def test_plotted_false_for_unrated_telecast() -> None:
     )
 
     assert telecasts.row(0, named=True)["plotted"] is False
+
+
+# -- CR-02: null/non-positive claims never plot ------------------------------------------------
+
+
+def test_plotted_false_when_only_claim_has_null_value() -> None:
+    record = _record(
+        record_id="cfb-example-sample-2025-09-13",
+        claims=[_claim(claim_id="c-null", value=None)],
+    )
+    rows = [_telecast_row(rated=True, feed_type="main")]
+    build = _build_telecast_build(rows, {"1-alpha": [record]})
+    viewership = build_viewership(build, _ERAS)
+
+    telecasts, *_ = apply_headlines(
+        build.telecasts, viewership, build.records_by_telecast, _ERAS, _EVENT_FLAGS
+    )
+
+    row = telecasts.row(0, named=True)
+    assert row["plotted"] is False
+    assert row["headline_value"] is None
+    assert viewership["is_headline"].to_list() == [False]
+
+
+def test_null_top_ranked_claim_loses_to_lower_ranked_claim_with_a_value() -> None:
+    record = _record(
+        record_id="cfb-example-sample-2025-09-13",
+        claims=[
+            _claim(claim_id="c-revised", status="revised", value=None),
+            _claim(claim_id="c-final", status="final", value=4_000_000.0),
+        ],
+    )
+    rows = [_telecast_row(rated=True, feed_type="main")]
+    build = _build_telecast_build(rows, {"1-alpha": [record]})
+    viewership = build_viewership(build, _ERAS)
+
+    telecasts, *_ = apply_headlines(
+        build.telecasts, viewership, build.records_by_telecast, _ERAS, _EVENT_FLAGS
+    )
+
+    row = telecasts.row(0, named=True)
+    assert row["plotted"] is True
+    assert row["headline_claim_id"] == "c-final"
+    assert row["headline_value"] == 4_000_000.0

@@ -24,6 +24,7 @@ from booth_review.flags.measurement_type import measurement_type
 from booth_review.resolve.headline import (
     claim_id,
     compare_with_rr_current,
+    is_usable_value,
     rank_key,
     select_headline,
 )
@@ -244,7 +245,10 @@ def apply_headlines(
             )
 
         updated["plotted"] = bool(
-            updated["rated"] and updated["feed_type"] == "main" and headline is not None
+            updated["rated"]
+            and updated["feed_type"] == "main"
+            and headline is not None
+            and is_usable_value(headline.value)
         )
 
         updated_rows.append(updated)

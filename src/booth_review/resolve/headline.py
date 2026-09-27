@@ -14,16 +14,31 @@ from typing import Literal
 from booth_review.sources.ratingsref.parser import RRClaim, RRRecord
 
 HEADLINE_RULE = (
-    "Headline figure: among claims with metric_type == 'avg_audience' and "
-    "unit == 'viewers', drop any claim that appears as another claim's "
-    "supersedes_id, then rank the rest by status (revised > final > "
-    "preliminary > any other status), then by figure_type (currency over "
-    "any other figure_type), then by higher confidence, then by the latest "
-    "first_published. The top-ranked claim after those tie-breaks is the "
-    "headline claim; ties on every field keep the first one encountered."
+    "Headline figure: among claims with metric_type == 'avg_audience', "
+    "unit == 'viewers', and a value of at least 1 (a claim with no value, "
+    "or a value below 1, is never the headline), drop any claim that "
+    "appears as another claim's supersedes_id, then rank the rest by status "
+    "(revised > final > preliminary > any other status), then by "
+    "figure_type (currency over any other figure_type), then by higher "
+    "confidence, then by the latest first_published. The top-ranked claim "
+    "after those tie-breaks is the headline claim; ties on every field keep "
+    "the first one encountered."
 )
 
 _STATUS_RANK: dict[str, int] = {"revised": 0, "final": 1, "preliminary": 2}
+
+# The smallest viewer count a headline may carry. Anything below it would
+# round to 0 viewers on the site (the contract requires viewers > 0), so it
+# is treated the same as a missing value (CR-02).
+MIN_HEADLINE_VALUE = 1.0
+
+
+def is_usable_value(value: float | None) -> bool:
+    """True when `value` can be a headline figure: present and at least
+    MIN_HEADLINE_VALUE. Shared by select_headline, the plotted rule, and
+    site_data's backstop so the three never disagree.
+    """
+    return value is not None and value >= MIN_HEADLINE_VALUE
 
 
 def _claim_id(claim: RRClaim) -> str | None:
@@ -54,7 +69,7 @@ rank_key = _rank_key
 
 def select_headline(claims: list[RRClaim]) -> RRClaim | None:
     """Pick the one claim HEADLINE_RULE names, or None when no eligible
-    avg_audience/viewers claim exists.
+    avg_audience/viewers claim with a usable value exists.
     """
     superseded_ids = {claim.supersedes_id for claim in claims if claim.supersedes_id is not None}
     eligible = [
@@ -62,6 +77,7 @@ def select_headline(claims: list[RRClaim]) -> RRClaim | None:
         for claim in claims
         if claim.metric_type == "avg_audience"
         and claim.unit == "viewers"
+        and is_usable_value(claim.value)
         and _claim_id(claim) not in superseded_ids
     ]
     if not eligible:

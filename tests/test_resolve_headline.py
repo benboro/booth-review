@@ -6,6 +6,8 @@ current-figure pick (RRRecord.rr_current_claim_id).
 
 from __future__ import annotations
 
+import pytest
+
 from booth_review.resolve.headline import HEADLINE_RULE, compare_with_rr_current, select_headline
 from booth_review.sources.ratingsref.parser import RRClaim, RRRecord, RRTelecast
 
@@ -14,7 +16,7 @@ def _claim(
     *,
     claim_id: str,
     status: str = "final",
-    value: float = 2000000.0,
+    value: float | None = 2000000.0,
     metric_type: str = "avg_audience",
     unit: str | None = "viewers",
     supersedes_id: str | None = None,
@@ -132,3 +134,32 @@ def test_compare_with_rr_current_not_comparable_when_rr_current_is_none() -> Non
     headline = _claim(claim_id="c-headline")
     record = _record_with_rr_current(rr_current_claim_id=None, rr_current_status="no_peers")
     assert compare_with_rr_current(headline, record) == "not_comparable"
+
+
+# -- CR-02: a claim with no usable value is never the headline ------------------------
+
+
+def test_select_headline_skips_top_ranked_claim_with_null_value() -> None:
+    revised_null = _claim(claim_id="c-revised", status="revised", value=None)
+    final = _claim(claim_id="c-final", status="final", value=3_000_000)
+    chosen = select_headline([revised_null, final])
+    assert chosen is not None
+    assert chosen.value == 3_000_000
+
+
+@pytest.mark.parametrize("bad_value", [0.0, 0.4, -5.0])
+def test_select_headline_skips_non_positive_or_sub_one_values(bad_value: float) -> None:
+    revised_bad = _claim(claim_id="c-revised", status="revised", value=bad_value)
+    final = _claim(claim_id="c-final", status="final", value=3_000_000)
+    chosen = select_headline([revised_bad, final])
+    assert chosen is not None
+    assert chosen.value == 3_000_000
+
+
+def test_select_headline_none_when_only_claims_have_no_value() -> None:
+    assert select_headline([_claim(claim_id="c-null", value=None)]) is None
+    assert select_headline([_claim(claim_id="c-zero", value=0.0)]) is None
+
+
+def test_headline_rule_documents_the_value_filter() -> None:
+    assert "value" in HEADLINE_RULE

@@ -621,3 +621,27 @@ def test_site_data_module_never_imports_load_cfbd_key() -> None:
     build_dir = Path("src/booth_review/build")
     for path in build_dir.glob("*.py"):
         assert "load_cfbd_key" not in path.read_text(encoding="utf-8"), path
+
+
+# -- CR-02: a plotted row with no usable headline value fails cleanly --------------------------
+
+
+@pytest.mark.parametrize("bad_value", [None, 0.0, 0.4, -3.0])
+def test_plotted_row_without_usable_headline_value_raises_vault_state_error(
+    small_tables: BuildTables, build_reference: Path, bad_value: float | None
+) -> None:
+    from dataclasses import replace
+
+    from booth_review.errors import VaultStateError
+
+    first_id = small_tables.telecasts.sort("date_et")["telecast_id"][0]
+    telecasts = small_tables.telecasts.with_columns(
+        pl.when(pl.col("telecast_id") == first_id)
+        .then(pl.lit(bad_value, dtype=pl.Float64()))
+        .otherwise(pl.col("headline_value"))
+        .alias("headline_value")
+    )
+    tables = replace(small_tables, telecasts=telecasts)
+
+    with pytest.raises(VaultStateError, match="headline_value"):
+        _site(tables, build_reference)
