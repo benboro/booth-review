@@ -14,6 +14,7 @@ import { defaultState, computeView } from './modules/select.js';
 import { encodeState, decodeState } from './modules/url-state.js';
 import { buildFigure, renderChart, bindChartEvents } from './modules/chart.js';
 import { initTopbar, renderTopbar } from './modules/topbar.js';
+import { initFilters, renderFilters } from './modules/filters.js';
 
 const versionMeta = document.querySelector('meta[name="site-data-version"]');
 const version = versionMeta ? versionMeta.content : '';
@@ -121,6 +122,9 @@ async function bootstrap() {
 
   initTopbar({ data, getState: () => state, setState });
   renderers.push(renderTopbar);
+
+  initFilters({ data, getState: () => state, setState });
+  renderers.push(renderFilters);
 
   if (axisToggleEl) {
     axisToggleEl.addEventListener('click', (ev) => {
