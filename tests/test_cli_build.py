@@ -378,3 +378,27 @@ def test_accept_baseline_never_writes_a_baseline_when_site_data_fails(
 
     assert load_baseline(paths) is None
     assert not (paths.processed / "telecasts.parquet").exists()
+
+
+# -- WR-03: an unexpected build error prints only its type -------------------------------------
+
+
+def test_unexpected_build_error_prints_only_its_type(
+    build_git_vault: DataPaths,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from booth_review import cli
+
+    def _boom(*_args: object, **_kwargs: object) -> None:
+        raise KeyError("zz-sentinel-vault-value")
+
+    monkeypatch.setattr(cli, "run_build", _boom)
+    monkeypatch.delenv("BOOTH_REVIEW_DEBUG", raising=False)
+
+    exit_code = main(["build", "--no-commit"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 3
+    assert "KeyError" in captured.err
+    assert "zz-sentinel-vault-value" not in captured.err + captured.out

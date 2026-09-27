@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 import polars as pl
+from pydantic import ValidationError
 
 from booth_review.config import DataPaths
 from booth_review.contract.models import SCHEMA_VERSION, SiteData, validate_site_data
@@ -395,7 +396,36 @@ def build_site_data(
         "telecasts": columns,
         "coverage": coverage_rows,
     }
-    return validate_site_data(payload)
+    try:
+        return validate_site_data(payload)
+    except ValidationError as exc:
+        raise VaultStateError(_contract_error_summary(exc)) from None
+
+
+_MAX_REPORTED_ERRORS = 5
+
+
+def _contract_error_summary(exc: ValidationError) -> str:
+    """A contract failure described by field location and error type only.
+
+    pydantic's own messages can embed the offending cell (`input_value=...`),
+    which may be a vault value, so only `loc` and `type` are kept -- plus the
+    message of a `value_error`, which is always one of the contract's own
+    model_validator messages (column and position only, T-03-04). The
+    exception is re-raised `from None` so the original error (and its
+    input) never reaches a traceback.
+    """
+    errors = exc.errors(include_input=False, include_url=False, include_context=False)
+    parts: list[str] = []
+    for error in errors[:_MAX_REPORTED_ERRORS]:
+        loc = ".".join(str(part) for part in error["loc"]) or "<root>"
+        detail = error["type"]
+        if error["type"] == "value_error":
+            detail = f"{detail}: {error['msg']}"
+        parts.append(f"{loc} ({detail})")
+    more = len(errors) - _MAX_REPORTED_ERRORS
+    suffix = f"; {more} more" if more > 0 else ""
+    return f"site data failed the contract: {len(errors)} error(s): {'; '.join(parts)}{suffix}"
 
 
 def write_site_data(paths: DataPaths, site: SiteData) -> list[str]:

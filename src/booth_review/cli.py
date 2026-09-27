@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import functools
 import logging
+import os
 import re
 import sys
 from collections.abc import Callable, Sequence
@@ -869,12 +870,27 @@ def _build(args: argparse.Namespace) -> int:
     """Rebuild every processed table from raw behind the AUDIT-03 regression
     guard; prints counts and rates only (T-03-45)."""
     paths = DataPaths.from_env()
-    outcome: BuildOutcome = run_build(
-        paths,
-        reference_dir(),
-        commit=not args.no_commit,
-        accept_baseline=args.accept_baseline,
-    )
+    try:
+        outcome: BuildOutcome = run_build(
+            paths,
+            reference_dir(),
+            commit=not args.no_commit,
+            accept_baseline=args.accept_baseline,
+        )
+    except BoothReviewError:
+        raise
+    except Exception as exc:
+        # An unexpected error's message or traceback can carry a vault value
+        # (a team or person name), so only its type is printed unless the
+        # user opts in locally (WR-03).
+        if os.environ.get("BOOTH_REVIEW_DEBUG"):
+            raise
+        print(
+            f"error: unexpected {type(exc).__name__} during build; details withheld "
+            "(set BOOTH_REVIEW_DEBUG=1 to see the traceback)",
+            file=sys.stderr,
+        )
+        return 3
     exit_blocked = outcome.blocked and not outcome.accepted
     rate = outcome.counts.get("join08_rate_x10000", 0) / 100
     print(

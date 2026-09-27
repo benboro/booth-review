@@ -662,3 +662,26 @@ def test_crew_person_missing_from_people_table_raises_vault_state_error(
 
     with pytest.raises(VaultStateError, match="person_id"):
         _site(tables, build_reference)
+
+
+# -- WR-03: a contract failure never echoes a cell value -------------------------------------
+
+
+def test_contract_failure_reports_location_and_type_but_never_the_cell_value(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    from dataclasses import replace
+
+    from booth_review.errors import VaultStateError
+
+    people = small_tables.people.with_columns(pl.lit("zz-sentinel-role").alias("usual_role"))
+    tables = replace(small_tables, people=people)
+
+    with pytest.raises(VaultStateError) as excinfo:
+        _site(tables, build_reference)
+
+    message = str(excinfo.value)
+    assert "usual_role" in message
+    assert "zz-sentinel-role" not in message
+    assert excinfo.value.__cause__ is None
+    assert excinfo.value.__suppress_context__ is True
