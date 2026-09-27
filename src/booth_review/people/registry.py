@@ -59,6 +59,16 @@ class ReviewedPair:
 
 @dataclass(frozen=True)
 class PersonOverride:
+    """One person_overrides.csv row: the crew slot at `position` of the 506
+    listing at `pointer` (`<week_label>:<source_row_index>`) is `person_id`.
+
+    `position` is 0-based and counts only real names: placeholder entries
+    ("TBA" and the like) are removed from the listing's crew before
+    counting, so it can differ from the raw 506 column order. The pointer is
+    positional too -- re-importing a week page with rows added or removed
+    shifts it, so re-check these rows after a `--force` re-import.
+    """
+
     season: int
     pointer: str
     position: int
