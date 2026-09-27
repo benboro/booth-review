@@ -54,8 +54,10 @@ def test_run_match_diagnostic_counts(vault_paths: DataPaths) -> None:
     _build_vault(vault_paths)
     diagnostic = run_match_diagnostic(vault_paths, REFERENCE_FIXTURES, seasons=[2025])
 
-    # 8 listings in wk-1.html + 4 in wk-B.html + 1 in the injected wk-2.html.
-    assert diagnostic.listings_total == 13
+    # 8 listings in wk-1.html + 4 in wk-B.html + 1 in the injected wk-2.html,
+    # minus the one the sports506 exclude override removes (counted the way
+    # build.telecasts counts listings_total, WR-11).
+    assert diagnostic.listings_total == 12
     # 8 RR records in the fixture corpus.
     assert diagnostic.rr_records == 8
     assert diagnostic.rr_parse_errors == 0
@@ -119,3 +121,33 @@ def test_main_prints_no_team_name(
     # --no-write must not write the review files.
     assert not (vault_paths.interim / "review_unresolved_teams.csv").is_file()
     assert not (vault_paths.interim / "review_unmatched.csv").is_file()
+
+
+# -- WR-11: the review report and the build agree on JOIN-08 -----------------------------------
+
+
+def test_main_reports_the_builds_own_join08_rate(
+    vault_paths: DataPaths,
+    capsys,  # type: ignore[no-untyped-def]
+    monkeypatch,  # type: ignore[no-untyped-def]
+) -> None:
+    from booth_review.build.tables import assemble_tables
+
+    _build_vault(vault_paths)
+    # A placeholder-only crew: the build never counts it as a crew match, so
+    # a report that did would disagree with the build.
+    week_page = vault_paths.raw / "sports506" / "2025" / "wk-1.html"
+    html = week_page.read_bytes()
+    assert html.count(b'id="canncrs">Casey Vale<') == 1
+    week_page.write_bytes(html.replace(b'id="canncrs">Casey Vale<', b'id="canncrs">TBA<'))
+    monkeypatch.setenv("BOOTH_REVIEW_REFERENCE", str(REFERENCE_FIXTURES))
+
+    assert main(["--no-write"]) == 0
+    out = capsys.readouterr().out
+
+    totals = assemble_tables(vault_paths, REFERENCE_FIXTURES).diagnostics.totals
+    denominator = totals["rr_records"] - totals["rr_excluded"] - totals["rr_out_of_scope"]
+    expected = f"({totals['records_with_crew']}/{denominator})"
+    crew_lines = [line for line in out.splitlines() if "plus-crew" in line]
+    assert len(crew_lines) == 1
+    assert expected in crew_lines[0]

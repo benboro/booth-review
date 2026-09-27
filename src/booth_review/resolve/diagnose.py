@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from booth_review.config import DataPaths
+from booth_review.people.normalize import is_placeholder
 from booth_review.reference import reference_dir
 from booth_review.resolve.games import (
     GameIndex,
@@ -183,17 +184,22 @@ def run_match_diagnostic(
 
     for season in all_seasons:
         for listing in listings_by_season[season]:
-            listings_total += 1
             match = match_listing_to_game(listing, index, resolver, overrides)
             _track_unresolved("sports506", listing.away_raw, season, match.away_resolved)
             _track_unresolved("sports506", listing.home_raw, season, match.home_resolved)
 
             if match.excluded:
                 continue
+            # Counted after the exclude check, as build.telecasts counts it.
+            listings_total += 1
 
             if match.game is not None and match.confidence != "none":
                 listings_matched += 1
-                if listing.feed_kind == "main" and listing.crew_names:
+                # A crew needs one real name, not just a "TBA" placeholder
+                # (the build's crew_matched rule).
+                if listing.feed_kind == "main" and any(
+                    not is_placeholder(name) for name in listing.crew_names
+                ):
                     fbs_games_with_crew.add(match.game.id)
             else:
                 unmatched_rows.append(
@@ -409,19 +415,33 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  out of scope (non-FBS): {diagnostic.rr_out_of_scope}")
     print(f"  unmatched: {diagnostic.rr_unmatched}")
     print(f"  matched by confidence: {dict(sorted(diagnostic.rr_matched_by_confidence.items()))}")
-    print(f"  matched to an FBS game: {diagnostic.rr_matched_fbs}")
-    print(f"  matched to an FBS game with a 506 crew: {diagnostic.rr_matched_fbs_with_crew}")
     print()
 
-    denominator = diagnostic.rr_records - diagnostic.rr_excluded - diagnostic.rr_out_of_scope
+    # The JOIN-08 rates come from the build's own counts (WR-11), so this
+    # report and `booth-review build` can never disagree on them. Imported
+    # here, not at module level: build.tables imports this module.
+    from booth_review.build.tables import assemble_tables
+
+    build_diagnostics = assemble_tables(paths, reference_dir()).diagnostics
+    totals = build_diagnostics.totals
+    denominator = (
+        totals.get("rr_records", 0)
+        - totals.get("rr_excluded", 0)
+        - totals.get("rr_out_of_scope", 0)
+    )
     if denominator > 0:
-        game_rate = diagnostic.rr_matched_fbs / denominator * 100
-        crew_rate = diagnostic.rr_matched_fbs_with_crew / denominator * 100
-        print(f"RR-to-game rate: {game_rate:.1f}% ({diagnostic.rr_matched_fbs}/{denominator})")
+        rr_matched = totals.get("rr_matched", 0)
+        records_with_crew = totals.get("records_with_crew", 0)
         print(
-            f"RR-to-game-plus-crew rate: {crew_rate:.1f}% "
-            f"({diagnostic.rr_matched_fbs_with_crew}/{denominator})"
+            f"RR-to-game rate: {rr_matched / denominator * 100:.1f}% ({rr_matched}/{denominator})"
         )
+        print(
+            f"RR-to-game-plus-crew rate (JOIN-08, as the build reports it): "
+            f"{records_with_crew / denominator * 100:.1f}% ({records_with_crew}/{denominator})"
+        )
+    parse_errors = totals.get("rr_parse_errors", 0)
+    if parse_errors:
+        print(f"  {parse_errors} RR record(s) failed to parse and are in neither denominator")
     print()
 
     print("unresolved team names by source (distinct raw names):")
