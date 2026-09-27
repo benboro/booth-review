@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import random
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -78,10 +79,15 @@ def _season_allocation(counts: Mapping[int, int], size: int) -> dict[int, int]:
     seasons = sorted(counts)
     total = sum(counts.values())
     size = min(size, total)
-    if total == 0 or size == 0:
+    if total == 0 or size <= 0:
         return dict.fromkeys(seasons, 0)
 
-    alloc = {season: min(_MIN_PER_SEASON, counts[season]) for season in seasons}
+    # The per-season floor never pushes the sample past `size` (WR-17): with
+    # more seasons than size // _MIN_PER_SEASON it shrinks (to 0 if need be)
+    # and the proportional pass below places every row.
+    active_seasons = sum(1 for season in seasons if counts[season] > 0)
+    floor = min(_MIN_PER_SEASON, size // active_seasons) if active_seasons else 0
+    alloc = {season: min(floor, counts[season]) for season in seasons}
     remaining = size - sum(alloc.values())
 
     while remaining > 0:
@@ -247,7 +253,16 @@ def _ensure_non_exact(
             if row["match_confidence"] == "exact" and row["season"] == candidate["season"]
         ]
         if not removable:
-            removable = [i for i, row in enumerate(selected) if row["match_confidence"] == "exact"]
+            # A cross-season swap may only take from a season holding more
+            # than its floor, so stratification never empties a season
+            # (WR-17).
+            per_season = Counter(row["season"] for row in selected)
+            removable = [
+                i
+                for i, row in enumerate(selected)
+                if row["match_confidence"] == "exact"
+                and per_season[row["season"]] > _MIN_PER_SEASON
+            ]
         if not removable:
             break
         idx = removable[0]
@@ -304,6 +319,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--size", type=int, default=DEFAULT_SIZE)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     args = parser.parse_args(argv)
+    if args.size <= 0:
+        parser.error("--size must be a positive integer")
 
     paths = DataPaths.from_env()
     rows = sample_from_vault(paths, size=args.size, seed=args.seed)

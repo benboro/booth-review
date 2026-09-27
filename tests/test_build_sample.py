@@ -495,3 +495,44 @@ def test_sample_from_vault_after_a_real_build(sample_git_vault: DataPaths) -> No
 
     rel_path = write_sample(sample_git_vault, rows)
     assert (sample_git_vault.vault / rel_path).is_file()
+
+
+# -- WR-17: --size is honored and the non-exact top-up never empties a season ----------------
+
+
+def test_season_allocation_honors_a_size_smaller_than_two_per_season() -> None:
+    counts = {season: 50 for season in range(2014, 2027)}
+    alloc = _season_allocation(counts, 10)
+    assert sum(alloc.values()) == 10
+
+
+def test_season_allocation_non_positive_size_is_empty() -> None:
+    counts = {2020: 5, 2021: 5}
+    assert sum(_season_allocation(counts, -3).values()) == 0
+    assert sum(_season_allocation(counts, 0).values()) == 0
+
+
+def test_non_exact_top_up_never_empties_another_season() -> None:
+    games_a, telecasts_a = _make_season_telecasts(2020, {"net-a": 2}, game_offset=0)
+    games_b, telecasts_b = _make_season_telecasts(
+        2021, {"net-a": 12}, game_offset=100, non_exact=12
+    )
+    result = stratified_sample(
+        _telecasts_frame(telecasts_a + telecasts_b),
+        _telecast_people_frame([]),
+        _people_frame([]),
+        _games_frame(games_a + games_b),
+        size=4,
+        seed=1,
+    )
+    seasons = [row.season for row in result]
+    assert seasons.count(2020) == 2
+    assert len(result) == 4
+
+
+def test_main_rejects_a_non_positive_size(build_vault: DataPaths) -> None:
+    from booth_review.build.sample import main
+
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--size", "0"])
+    assert excinfo.value.code == 2
