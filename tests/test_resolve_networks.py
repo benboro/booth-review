@@ -223,7 +223,7 @@ def test_primary_network_skips_alt_and_spanish_when_a_main_outlet_exists() -> No
     assert result.feed_type == "main"
 
 
-def test_primary_network_all_alt_or_spanish_picks_first_of_those() -> None:
+def test_primary_network_all_alt_or_spanish_picks_by_the_same_order() -> None:
     table = _table()
     result = primary_network(["Net A (alt-cast), Net A Deportes"], 2025, table)
     assert result.network_id == "net-a"
@@ -451,3 +451,19 @@ def test_event_flag_networks_exist() -> None:
     for flag in flags:
         for network_id in flag.networks:
             assert network_id in known_ids, f"{network_id!r} referenced by event_flags.csv"
+
+
+def test_primary_network_all_alt_or_spanish_pick_ignores_listing_order() -> None:
+    table = _table()
+    forward = primary_network(["Net A (alt-cast), Net A Deportes"], 2025, table)
+    reverse = primary_network(["Net A Deportes, Net A (alt-cast)"], 2025, table)
+    assert (reverse.network_id, reverse.feed_type) == (forward.network_id, forward.feed_type)
+    assert (forward.network_id, forward.feed_type) == ("net-a", "alt")
+
+
+def test_primary_network_same_network_alt_and_spanish_ignores_listing_order() -> None:
+    table = _table()
+    forward = primary_network(["Net B (spanish), Net B (alt)"], 2025, table)
+    reverse = primary_network(["Net B (alt), Net B (spanish)"], 2025, table)
+    assert (forward.network_id, forward.feed_type) == ("net-b", "alt")
+    assert (reverse.network_id, reverse.feed_type) == ("net-b", "alt")

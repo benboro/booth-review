@@ -63,6 +63,8 @@ TIER_RANK: dict[Tier, int] = {
 # family, and tier are), not on any one outlet string, so it stays a table
 # fact rather than per-network code.
 _DEFAULT_PRIORITY = 1_000_000
+# Tie-break for one network listed as both an alt and a Spanish feed.
+_FEED_RANK: dict[str, int] = {"main": 0, "alt": 1, "spanish": 2}
 
 _OVERRIDE_REASONS: frozenset[str] = frozenset(
     {"rights-holder", "simulcast", "neutral-site", "other"}
@@ -322,8 +324,9 @@ def primary_network(outlet_texts: Sequence[str], season: int, table: NetworkTabl
     (lowest number wins), then on network_id, so the choice is the same
     regardless of which outlet a source listed first. Alt/Spanish-feed
     outlets are skipped for this choice unless every mapped outlet is alt or
-    Spanish, in which case the primary is the first of those and
-    `feed_type` carries that feed. Unmapped strings are returned separately
+    Spanish, in which case the same tier/priority/network_id order picks
+    among those (then alt before Spanish for one network listed both ways)
+    and `feed_type` carries the winner's feed. Unmapped strings are returned separately
     (a network_diagnose.py review candidate), never guessed at; `network_id`
     is None only when nothing mapped at all.
     """
@@ -349,23 +352,26 @@ def primary_network(outlet_texts: Sequence[str], season: int, table: NetworkTabl
             network_id=None, outlets=outlet_ids, unmapped=tuple(unmapped), feed_type="main"
         )
 
+    def _pick_key(item: tuple[str, NetworkRow, FeedType]) -> tuple[int, int, str, int]:
+        return (
+            TIER_RANK[item[1].tier],
+            item[1].priority if item[1].priority is not None else _DEFAULT_PRIORITY,
+            item[1].network_id,
+            _FEED_RANK[item[2]],
+        )
+
     main_candidates = [item for item in mapped if item[2] == "main"]
     if main_candidates:
-        best_id, _best_row, _ = min(
-            main_candidates,
-            key=lambda item: (
-                TIER_RANK[item[1].tier],
-                item[1].priority if item[1].priority is not None else _DEFAULT_PRIORITY,
-                item[1].network_id,
-            ),
-        )
+        best_id, _best_row, _ = min(main_candidates, key=_pick_key)
         return PrimaryResult(
             network_id=best_id, outlets=outlet_ids, unmapped=tuple(unmapped), feed_type="main"
         )
 
-    first_id, _, first_feed = mapped[0]
+    # Every mapped outlet is alt or Spanish: the same order-independent pick,
+    # carrying the winner's own feed (WR-04).
+    alt_id, _alt_row, alt_feed = min(mapped, key=_pick_key)
     return PrimaryResult(
-        network_id=first_id, outlets=outlet_ids, unmapped=tuple(unmapped), feed_type=first_feed
+        network_id=alt_id, outlets=outlet_ids, unmapped=tuple(unmapped), feed_type=alt_feed
     )
 
 
