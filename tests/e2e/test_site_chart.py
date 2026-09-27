@@ -1,0 +1,210 @@
+"""Chart-level browser tests (SITE-01, SITE-03, SITE-04, SITE-12, SITE-18,
+SITE-19; D-01..D-04, D-12) -- proven against the fixture build served by
+`guarded_page`/`mobile_page`/`open_app`/`site_url`, per
+`tests/fixtures/contract/site-data.fixture.json`'s 12 dots.
+"""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Callable
+from typing import Any
+
+import pytest
+from playwright.sync_api import Page
+
+pytestmark = pytest.mark.e2e
+
+_TRACES_JS = (
+    "() => document.getElementById('chart').data.map(t => ("
+    "{meta: t.meta, x: t.x, customdata: t.customdata, text: t.text, opacity: t.marker.opacity}))"
+)
+
+
+def _traces(page: Page) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = page.evaluate(_TRACES_JS)
+    return result
+
+
+def _layout(page: Page) -> dict[str, Any]:
+    result: dict[str, Any] = page.evaluate("() => document.getElementById('chart').layout")
+    return result
+
+
+def _family_traces(traces: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [t for t in traces if str(t["meta"]).startswith("family:")]
+
+
+def _dot_x_by_customdata(traces: list[dict[str, Any]]) -> dict[int, float]:
+    points: dict[int, float] = {}
+    for t in _family_traces(traces):
+        for customdata, x in zip(t["customdata"], t["x"], strict=True):
+            points[customdata] = x
+    return points
+
+
+def _hover_text(traces: list[dict[str, Any]], index: int) -> str:
+    for t in _family_traces(traces):
+        for customdata, text in zip(t["customdata"], t["text"], strict=True):
+            if customdata == index:
+                return str(text)
+    raise AssertionError(f"no dot with customdata {index}")
+
+
+def test_default_load_shows_all_dots_no_selection_pregame_axis(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-12: first load with no query shows all 12 dots, nobody highlighted,
+    and the pre-game axis, with a clean URL."""
+    open_app(guarded_page, "")
+    traces = _traces(guarded_page)
+    family_traces = _family_traces(traces)
+
+    assert sum(len(t["x"]) for t in family_traces) == 12
+    assert {t["meta"] for t in family_traces} == {
+        "family:disney",
+        "family:fox",
+        "family:conference",
+        "family:other",
+    }
+    assert traces[-1]["meta"] == "highlight"
+    assert len(traces[-1]["x"]) == 0
+    assert "?" not in guarded_page.url
+    assert (
+        guarded_page.get_attribute('#axis-toggle button[data-axis="pregame"]', "aria-pressed")
+        == "true"
+    )
+    assert guarded_page.is_hidden("#excitement-caption")
+    for t in family_traces:
+        assert t["opacity"] == 1
+
+
+def test_na_strip_places_missing_x_dots_in_the_reserved_band(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-03: dot 3 (pregame) / dot 2 (excitement) sit left of the divider,
+    everything else sits to its right, and the strip is labelled N/A."""
+    open_app(guarded_page, "")
+    layout = _layout(guarded_page)
+    divider = layout["shapes"][0]["x0"]
+    points = _dot_x_by_customdata(_traces(guarded_page))
+    assert points[3] < divider
+    for customdata, x in points.items():
+        if customdata != 3:
+            assert x > divider
+    assert any(a["text"] == "N/A" for a in layout["annotations"])
+
+    open_app(guarded_page, "?axis=excitement")
+    layout2 = _layout(guarded_page)
+    divider2 = layout2["shapes"][0]["x0"]
+    points2 = _dot_x_by_customdata(_traces(guarded_page))
+    assert points2[2] < divider2
+    for customdata, x in points2.items():
+        if customdata != 2:
+            assert x > divider2
+
+
+def test_axis_toggle_shows_excitement_caption_and_persists_on_reload(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """SITE-03/SITE-12, D-04: toggling to excitement busts the URL and shows
+    the 2025-break caption with a methodology link; reload keeps it pressed."""
+    open_app(guarded_page, "")
+    guarded_page.click('#axis-toggle button[data-axis="excitement"]')
+    guarded_page.wait_for_function("location.search === '?axis=excitement'")
+
+    assert guarded_page.url.endswith("?axis=excitement")
+    assert guarded_page.is_visible("#excitement-caption")
+    href = guarded_page.get_attribute("#excitement-caption a", "href")
+    assert href is not None
+    assert href.endswith("methodology.html#the-2025-excitement-break")
+
+    guarded_page.reload()
+    guarded_page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+    assert (
+        guarded_page.get_attribute('#axis-toggle button[data-axis="excitement"]', "aria-pressed")
+        == "true"
+    )
+
+
+def test_y_axis_ticks_use_short_labels_not_raw_exponents(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """SITE-01: log-viewers ticks read like '1M', never a raw exponent."""
+    open_app(guarded_page, "")
+    # SVG <text> nodes have no `innerText`; use `textContent` via
+    # `all_text_contents` instead of `all_inner_texts`.
+    texts = guarded_page.locator(".ytick text").all_text_contents()
+    assert any("1M" in text for text in texts)
+    assert not any(re.search(r"e[+-]?\d", text) for text in texts)
+
+
+def test_legend_click_toggles_family_and_updates_networks_url(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-01/D-05: clicking the Fox legend entry hides its 3 dots and records
+    the remaining networks in the URL."""
+    open_app(guarded_page, "")
+    legend_entry = guarded_page.locator(".traces", has_text="Fox (FOX/FS1/BTN)")
+    legend_entry.locator(".legendtoggle").click()
+    guarded_page.wait_for_function("location.search.includes('networks=')")
+
+    family_traces = _family_traces(_traces(guarded_page))
+    assert sum(len(t["x"]) for t in family_traces) == 9
+    assert "networks=" in guarded_page.url
+    assert "net-b" not in guarded_page.url
+
+
+def test_set_state_people_highlights_and_fades_family_traces(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """SITE-02/SITE-12: selecting a person highlights exactly their games and
+    fades every other dot to 15% opacity, keeping its color."""
+    open_app(guarded_page, "")
+    guarded_page.evaluate("window.__testHooks.setState({people: ['dale-harlow']})")
+
+    traces = _traces(guarded_page)
+    assert sorted(traces[-1]["customdata"]) == [0, 8]
+    for t in _family_traces(traces):
+        assert t["opacity"] == 0.15
+    assert guarded_page.url.endswith("?people=dale-harlow")
+
+
+def test_hover_text_includes_measurement_flags_and_matchup_details(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """SITE-04, D-02, D-04: hover text carries the measurement-type label,
+    flag labels, the combined-feed count, and the matchup/date line."""
+    open_app(guarded_page, "")
+    traces = _traces(guarded_page)
+
+    assert "Nielsen + Adobe (streaming)" in _hover_text(traces, 5)
+    assert "CFBD win-probability model break (2025+)" in _hover_text(traces, 11)
+    assert "Combined across 3 feeds" in _hover_text(traces, 7)
+
+    dot0 = _hover_text(traces, 0)
+    assert "Lakeview 20 at Northfield 27" in dot0
+    assert "Sat, Sep 7, 2019" in dot0
+
+
+def test_missing_site_data_shows_load_error(guarded_page: Page, site_url: str) -> None:
+    """A failed site-data.json fetch unhides #load-error with its copy."""
+    guarded_page.route("**/site-data.json*", lambda route: route.fulfill(status=404))
+    guarded_page.goto(f"{site_url}/index.html")
+    guarded_page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+
+    assert guarded_page.is_visible("#load-error")
+    assert "Couldn't load the site data." in guarded_page.inner_text("#load-error")
+
+
+def test_mobile_layout_disables_drag_zoom_and_moves_legend_below(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """SITE-18: on phones, drag-zoom is off, axis ranges are fixed, and the
+    legend renders below the chart (horizontal orientation)."""
+    open_app(mobile_page, "")
+    layout = _layout(mobile_page)
+
+    assert layout["dragmode"] is False
+    assert layout["xaxis"]["fixedrange"] is True
+    assert layout["legend"]["orientation"] == "h"

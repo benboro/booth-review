@@ -24,13 +24,13 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
 import pytest
-from playwright.sync_api import ConsoleMessage, Error, Page, Playwright, Route
+from playwright.sync_api import Browser, ConsoleMessage, Error, Page, Playwright, Route
 
 from booth_review.cli import main
 
@@ -133,11 +133,10 @@ def fixture_raw(site_dist: Path) -> dict[str, Any]:
     return json.loads((site_dist / "site-data.json").read_text(encoding="utf-8"))  # type: ignore[no-any-return]
 
 
-@pytest.fixture
-def guarded_page(page: Page, site_url: str) -> Iterator[Page]:
-    """`page`, wired to abort and record any request leaving `site_url`'s
+def _install_guard(page: Page, site_url: str) -> tuple[list[str], list[str]]:
+    """Wires `page` to abort and record any request leaving `site_url`'s
     origin (SITE-19), and to record any console error mentioning CSP.
-    Teardown fails the test if either list is non-empty.
+    Returns the two lists it appends to, for the caller's own teardown.
     """
     off_origin: list[str] = []
     csp_errors: list[str] = []
@@ -159,10 +158,50 @@ def guarded_page(page: Page, site_url: str) -> Iterator[Page]:
 
     page.on("console", _on_console)
 
-    yield page
+    return off_origin, csp_errors
 
+
+def _assert_guard_clean(off_origin: list[str], csp_errors: list[str]) -> None:
     if off_origin:
         hosts = sorted({urlsplit(url).hostname for url in off_origin})
         raise AssertionError(f"off-origin requests were made to: {hosts}")
     if csp_errors:
         raise AssertionError(f"Content-Security-Policy violations logged: {csp_errors}")
+
+
+@pytest.fixture
+def guarded_page(page: Page, site_url: str) -> Iterator[Page]:
+    """`page`, wired to abort and record any request leaving `site_url`'s
+    origin (SITE-19), and to record any console error mentioning CSP.
+    Teardown fails the test if either list is non-empty.
+    """
+    off_origin, csp_errors = _install_guard(page, site_url)
+    yield page
+    _assert_guard_clean(off_origin, csp_errors)
+
+
+@pytest.fixture
+def mobile_page(browser: Browser, site_url: str) -> Iterator[Page]:
+    """A guarded `page` from a fresh mobile context (390x844, touch, D-15/SITE-18)."""
+    context = browser.new_context(
+        viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True
+    )
+    page = context.new_page()
+    off_origin, csp_errors = _install_guard(page, site_url)
+    try:
+        yield page
+    finally:
+        context.close()
+    _assert_guard_clean(off_origin, csp_errors)
+
+
+@pytest.fixture
+def open_app(site_url: str) -> Callable[[Page, str], None]:
+    """Returns `open(page, query="")`: navigates to `index.html<query>` and
+    waits for `app.js`'s bootstrap to finish (`window.__testHooks.ready`)."""
+
+    def _open(page: Page, query: str = "") -> None:
+        page.goto(f"{site_url}/index.html{query}")
+        page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+
+    return _open
