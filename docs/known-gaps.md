@@ -81,7 +81,11 @@ project instead flags a likely combined figure for review (a CFP, New
 Year's Six, or MegaCast game with 506-listed alt-casts, or a figure well
 above that network's typical audience) and confirms it by hand in a
 pointer-only override table (`data/reference/`, D-06) rather than trusting
-an empty source field to mean "not combined."
+an empty source field to mean "not combined." Every CFP national
+championship game in this project's range is treated as combined on that
+basis; since neither source lists every alt-cast feed a championship
+MegaCast actually ran, the feed count recorded for those games is a
+documented minimum of 2, not an exact tally.
 
 ## Measurement: eras, blends, and figures with no current-figure marker
 

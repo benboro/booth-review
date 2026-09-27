@@ -50,6 +50,21 @@ gitignored).
   a known file's header drifts from its column constant, if its loader
   can't read it, or if a header re-introduces a game-level column name.
 
+## A note on `combined_figures.csv`'s 12 CFP national championship rows
+
+All 12 CFP national championship game rows in `combined_figures.csv` (`reason`
+`title-game`) carry `feeds,2` as a documented *lower bound*, not a precise
+feed count. Neither Ratings Reference nor 506 Sports lists every alt-cast
+feed a MegaCast championship actually ran; ESPN reports its championship
+audience as a single multi-feed total, and Ratings Reference has back-filled
+an explicit `cut: combined` claim for only 2 of these 12 records. Rather than
+guess a precise number or single out the 2 records with an explicit claim
+for different treatment than the other 10, this project treats all 12 alike:
+flagged combined (one dot, correctly excluded from a single-feed
+network-season comparison), with `feeds,2` standing in for "at least 2, true
+count unknown" (User checkpoint decision, Phase 3 Plan 9 Task 3). See
+`docs/known-gaps.md` for the same caveat in the public-facing gaps page.
+
 ## A note on `event_flags.csv`'s `yttv-disney-blackout-2025` row
 
 That row's `source_url` cites the ESPN carriage-deal report
