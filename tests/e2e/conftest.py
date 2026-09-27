@@ -64,10 +64,15 @@ def site_dist(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return out
 
 
-@pytest.fixture(scope="session")
-def site_url(site_dist: Path) -> Iterator[str]:
-    """Serve `site_dist` via a subprocess `python -m http.server` on an
-    OS-assigned port (RESEARCH Pitfall 1); yields its base URL.
+def _serve_directory(directory: Path) -> Iterator[str]:
+    """Serve `directory` via a subprocess `python -m http.server` on an
+    OS-assigned port (RESEARCH Pitfall 1); yields its base URL, then
+    terminates the subprocess on teardown.
+
+    A plain generator (not a fixture) so both `site_url` (the fixture build,
+    below) and `test_site_realdata.py`'s own real-data build can each wrap it
+    in their own fixture at whatever scope they need, without duplicating
+    the subprocess/port-detection logic.
     """
     proc = subprocess.Popen(
         [
@@ -79,7 +84,7 @@ def site_url(site_dist: Path) -> Iterator[str]:
             "--bind",
             "127.0.0.1",
             "--directory",
-            str(site_dist),
+            str(directory),
         ],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -125,6 +130,12 @@ def site_url(site_dist: Path) -> Iterator[str]:
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             proc.kill()
+
+
+@pytest.fixture(scope="session")
+def site_url(site_dist: Path) -> Iterator[str]:
+    """Serve `site_dist` (the fixture build); yields its base URL."""
+    yield from _serve_directory(site_dist)
 
 
 @pytest.fixture(scope="session")
