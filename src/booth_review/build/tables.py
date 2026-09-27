@@ -13,13 +13,23 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import polars as pl
 
 from booth_review.build.games import build_games_frame
 from booth_review.build.io import write_parquet_atomic, write_review_csv
+from booth_review.build.people_links import (
+    NEW_NAME_COLUMNS,
+    build_people_links,
+)
+from booth_review.build.people_links import (
+    PEOPLE_SCHEMA as PEOPLE_SCHEMA,
+)
+from booth_review.build.people_links import (
+    TELECAST_PEOPLE_SCHEMA as TELECAST_PEOPLE_SCHEMA,
+)
 from booth_review.build.sources import load_all_sources
 from booth_review.build.telecasts import build_telecasts
 from booth_review.build.viewership import (
@@ -32,6 +42,7 @@ from booth_review.build.viewership import (
 from booth_review.config import DataPaths
 from booth_review.flags.era import load_eras
 from booth_review.flags.events import load_event_flags
+from booth_review.people.registry import load_people, load_person_overrides
 from booth_review.reference import reference_dir
 from booth_review.resolve.diagnose import (
     UNMATCHED_COLUMNS,
@@ -41,26 +52,9 @@ from booth_review.resolve.diagnose import (
 )
 from booth_review.resolve.games import GameIndex
 from booth_review.resolve.networks import load_networks, load_primary_overrides
-from booth_review.resolve.overrides import load_game_overrides
+from booth_review.resolve.overrides import load_game_overrides, pointer_for_listing
 from booth_review.resolve.teams import TeamResolver, load_team_crosswalk
-
-PEOPLE_SCHEMA: dict[str, pl.DataType] = {
-    "person_id": pl.Utf8(),
-    "canonical_name": pl.Utf8(),
-    "variants": pl.List(pl.Utf8()),
-    "usual_role": pl.Utf8(),
-    "registered": pl.Boolean(),
-}
-
-TELECAST_PEOPLE_SCHEMA: dict[str, pl.DataType] = {
-    "telecast_id": pl.Utf8(),
-    "person_id": pl.Utf8(),
-    "role": pl.Utf8(),
-    "feed_type": pl.Utf8(),
-    "crew_position": pl.Int32(),
-    "s506_pointer": pl.Utf8(),
-    "source": pl.Utf8(),
-}
+from booth_review.sources.sports506.parser import Listing506
 
 HEADLINE_DISAGREEMENT_COLUMNS = (
     "telecast_id",
@@ -173,8 +167,23 @@ def assemble_tables(
         telecast_build.telecasts, viewership, telecast_build.records_by_telecast, eras, event_flags
     )
 
-    people = pl.DataFrame(schema=PEOPLE_SCHEMA)
-    telecast_people = pl.DataFrame(schema=TELECAST_PEOPLE_SCHEMA)
+    registry = load_people(reference_directory)
+    person_overrides = load_person_overrides(reference_directory)
+    listings_by_pointer: dict[tuple[int, str], Listing506] = {
+        (season_sources.season, pointer_for_listing(listing)): listing
+        for season_sources in sources
+        for listing in season_sources.listings
+    }
+    people_links = build_people_links(
+        telecast_build.listing_links,
+        listings_by_pointer,
+        telecasts,
+        registry,
+        person_overrides,
+        networks,
+    )
+    people = people_links.people
+    telecast_people = people_links.telecast_people
 
     unmatched_review_rows: list[dict[str, object]] = [
         dict(unmatched_row(row)) for row in telecast_build.unmatched_rows
@@ -188,9 +197,13 @@ def assemble_tables(
         "review_unresolved_teams": (UNRESOLVED_COLUMNS, unresolved_review_rows),
         "review_headline_disagreements": (HEADLINE_DISAGREEMENT_COLUMNS, disagreement_rows),
         "review_era_disagreements": (ERA_DISAGREEMENT_COLUMNS, era_disagreement_rows),
+        "review_people_new": (NEW_NAME_COLUMNS, people_links.new_name_rows),
     }
 
     diagnostics = _build_diagnostics(telecast_build.counts)
+    merged_totals = dict(diagnostics.totals)
+    merged_totals.update({f"people_{key}": value for key, value in people_links.counts.items()})
+    diagnostics = replace(diagnostics, totals=merged_totals)
 
     return BuildTables(
         games=games,
@@ -263,6 +276,25 @@ def main(argv: Sequence[str] | None = None) -> None:
         f"{check_counts.get('disagree', 0)}/{check_counts.get('not_comparable', 0)}"
     )
     print(f"era disagreements: {len(tables.review_rows['review_era_disagreements'][1])}")
+
+    totals = tables.diagnostics.totals
+    print(
+        "people rows by role (pbp/analyst/unknown): "
+        f"{totals.get('people_rows_role_pbp', 0)}/"
+        f"{totals.get('people_rows_role_analyst', 0)}/"
+        f"{totals.get('people_rows_role_unknown', 0)}"
+    )
+    print(
+        "people rows by feed (main/alt/spanish): "
+        f"{totals.get('people_rows_feed_main', 0)}/"
+        f"{totals.get('people_rows_feed_alt', 0)}/"
+        f"{totals.get('people_rows_feed_spanish', 0)}"
+    )
+    print(
+        f"provisional persons: {totals.get('people_provisional_persons', 0)} | "
+        f"unlinked alt listings: {totals.get('people_unlinked_alt_listings', 0)} | "
+        f"override rows: {totals.get('people_override_rows', 0)}"
+    )
 
 
 if __name__ == "__main__":

@@ -52,9 +52,9 @@ def test_assemble_tables_builds_every_table(build_vault: DataPaths, vault_refere
     assert tables.viewership.height > 0
     assert tables.telecast_flags.height > 0
     assert tables.listing_links.height > 0
-    assert tables.people.height == 0
+    assert tables.people.height > 0
     assert tables.people.columns == list(PEOPLE_SCHEMA.keys())
-    assert tables.telecast_people.height == 0
+    assert tables.telecast_people.height > 0
     assert tables.telecast_people.columns == list(TELECAST_PEOPLE_SCHEMA.keys())
 
 
@@ -127,6 +127,7 @@ def test_write_tables_writes_parquet_and_review_csvs_and_returns_sorted_paths(
         "interim/review_unresolved_teams.csv",
         "interim/review_headline_disagreements.csv",
         "interim/review_era_disagreements.csv",
+        "interim/review_people_new.csv",
     }
     assert set(written) == expected
 
