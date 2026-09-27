@@ -46,6 +46,12 @@ def _rank_key(claim: RRClaim) -> tuple[int, int, float]:
     return (status_rank, currency_rank, confidence_rank)
 
 
+# Public alias: JOIN-04's era/disagreement bookkeeping and build.viewership
+# (Plan 08) need the same rank key select_headline ties on, not a
+# reimplementation of HEADLINE_RULE's tie-break order.
+rank_key = _rank_key
+
+
 def select_headline(claims: list[RRClaim]) -> RRClaim | None:
     """Pick the one claim HEADLINE_RULE names, or None when no eligible
     avg_audience/viewers claim exists.

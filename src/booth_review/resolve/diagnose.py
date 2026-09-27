@@ -65,6 +65,11 @@ UNMATCHED_COLUMNS = (
     "reason",
 )
 
+# Public alias: build.telecasts (Plan 08) reuses this column tuple under the
+# name the plan documents, so both modules' review_unresolved_teams.csv
+# writers agree on the header without importing a "team"-specific name.
+UNRESOLVED_COLUMNS = UNRESOLVED_TEAM_COLUMNS
+
 _NEARBY_DAYS = 1
 
 
@@ -110,7 +115,7 @@ class MatchDiagnostic:
     unmatched_rows: tuple[UnmatchedRow, ...] = field(default_factory=tuple)
 
 
-def _suggest_canonical(
+def suggest_canonical(
     raw_name: str, season: int, games_by_season: Mapping[int, Sequence[CfbdGame]]
 ) -> tuple[str | None, int | None]:
     """The season's CFBD team (home or away side of any of that season's
@@ -168,15 +173,7 @@ def run_match_diagnostic(
     unresolved_counts: dict[tuple[str, str], dict[str, int]] = {}
 
     def _track_unresolved(source: str, raw: str, season: int, resolved: ResolvedTeam) -> None:
-        if resolved.method != "unresolved":
-            return
-        key = (source, raw)
-        entry = unresolved_counts.setdefault(
-            key, {"season_first": season, "season_last": season, "count": 0}
-        )
-        entry["season_first"] = min(entry["season_first"], season)
-        entry["season_last"] = max(entry["season_last"], season)
-        entry["count"] += 1
+        track_unresolved(unresolved_counts, source, raw, season, resolved)
 
     listings_total = 0
     listings_matched = 0
@@ -204,9 +201,9 @@ def run_match_diagnostic(
                         season=season,
                         pointer=pointer_for_listing(listing),
                         date_et=listing.date_et.isoformat(),
-                        away_raw=csv_safe(listing.away_raw),
-                        home_raw=csv_safe(listing.home_raw),
-                        network_raw=csv_safe(listing.network_raw or ""),
+                        away_raw=listing.away_raw,
+                        home_raw=listing.home_raw,
+                        network_raw=listing.network_raw or "",
                         confidence=match.confidence,
                         reason="ambiguous" if match.confidence == "ambiguous" else "none",
                     )
@@ -244,9 +241,9 @@ def run_match_diagnostic(
                         season=season,
                         pointer=pointer_for_record(record),
                         date_et=record.telecast.event_date.isoformat(),
-                        away_raw=csv_safe(teams[0] if teams else ""),
-                        home_raw=csv_safe(teams[1] if len(teams) > 1 else ""),
-                        network_raw=csv_safe(", ".join(record.telecast.networks)),
+                        away_raw=teams[0] if teams else "",
+                        home_raw=teams[1] if len(teams) > 1 else "",
+                        network_raw=", ".join(record.telecast.networks),
                         confidence=match.confidence,
                         reason="ambiguous" if match.confidence == "ambiguous" else "none",
                     )
@@ -267,7 +264,7 @@ def run_match_diagnostic(
     unresolved_team_rows: list[UnresolvedTeamRow] = []
     for (source, raw_name), info in unresolved_counts.items():
         unresolved_names_by_source[source] += 1
-        suggested_name, suggested_id = _suggest_canonical(
+        suggested_name, suggested_id = suggest_canonical(
             raw_name, info["season_last"], games_by_season
         )
         unresolved_team_rows.append(
@@ -275,9 +272,9 @@ def run_match_diagnostic(
                 source=source,
                 season_first=info["season_first"],
                 season_last=info["season_last"],
-                raw_name=csv_safe(raw_name),
+                raw_name=raw_name,
                 occurrences=info["count"],
-                suggested_canonical=csv_safe(suggested_name) if suggested_name else "",
+                suggested_canonical=suggested_name or "",
                 suggested_cfbd_team_id=str(suggested_id) if suggested_id is not None else "",
             )
         )
@@ -311,43 +308,83 @@ def _write_csv(path: Path, columns: tuple[str, ...], rows: list[dict[str, str]])
     atomic_write_bytes(path, buf.getvalue().encode("utf-8"))
 
 
+def track_unresolved(
+    unresolved_counts: dict[tuple[str, str], dict[str, int]],
+    source: str,
+    raw: str,
+    season: int,
+    resolved: ResolvedTeam,
+) -> None:
+    """Tally one (source, raw) name resolution outcome into `unresolved_counts`
+    (mutated in place) when `resolved` is "unresolved"; a no-op otherwise.
+    Shared by run_match_diagnostic's own scan and build.telecasts's (Plan 08)
+    so both accumulate unresolved-name evidence the same way.
+    """
+    if resolved.method != "unresolved":
+        return
+    key = (source, raw)
+    entry = unresolved_counts.setdefault(
+        key, {"season_first": season, "season_last": season, "count": 0}
+    )
+    entry["season_first"] = min(entry["season_first"], season)
+    entry["season_last"] = max(entry["season_last"], season)
+    entry["count"] += 1
+
+
+def unmatched_row(row: UnmatchedRow) -> dict[str, str]:
+    """One review_unmatched.csv row (UNMATCHED_COLUMNS order), csv_safe applied
+    here -- the single place either writer needs to protect this row's raw
+    text. Shared by write_team_review and build.telecasts's own writer
+    (Plan 08) so both produce byte-identical review files for the same match
+    outcome.
+    """
+    return {
+        "source": row.source,
+        "season": str(row.season),
+        "pointer": row.pointer,
+        "date_et": row.date_et,
+        "away_raw": csv_safe(row.away_raw),
+        "home_raw": csv_safe(row.home_raw),
+        "network_raw": csv_safe(row.network_raw),
+        "confidence": row.confidence,
+        "reason": row.reason,
+    }
+
+
+def unresolved_rows(rows: Sequence[UnresolvedTeamRow]) -> list[dict[str, str]]:
+    """review_unresolved_teams.csv rows (UNRESOLVED_COLUMNS order) for every
+    entry in `rows`, csv_safe applied. Shared the same way as unmatched_row.
+    """
+    return [
+        {
+            "source": row.source,
+            "season_first": str(row.season_first),
+            "season_last": str(row.season_last),
+            "raw_name": csv_safe(row.raw_name),
+            "occurrences": str(row.occurrences),
+            "suggested_canonical": csv_safe(row.suggested_canonical),
+            "suggested_cfbd_team_id": row.suggested_cfbd_team_id,
+        }
+        for row in rows
+    ]
+
+
 def write_team_review(paths: DataPaths, diagnostic: MatchDiagnostic) -> None:
     """Write interim/review_unresolved_teams.csv and interim/review_unmatched.csv.
 
     Rebuilt every run (not committed by this module): Plan 11's build commits
     the vault's interim/ artifacts.
     """
-    unresolved_rows = [
-        {
-            "source": row.source,
-            "season_first": str(row.season_first),
-            "season_last": str(row.season_last),
-            "raw_name": row.raw_name,
-            "occurrences": str(row.occurrences),
-            "suggested_canonical": row.suggested_canonical,
-            "suggested_cfbd_team_id": row.suggested_cfbd_team_id,
-        }
-        for row in diagnostic.unresolved_team_rows
-    ]
     _write_csv(
-        paths.interim / "review_unresolved_teams.csv", UNRESOLVED_TEAM_COLUMNS, unresolved_rows
+        paths.interim / "review_unresolved_teams.csv",
+        UNRESOLVED_COLUMNS,
+        unresolved_rows(diagnostic.unresolved_team_rows),
     )
-
-    unmatched_rows = [
-        {
-            "source": row.source,
-            "season": str(row.season),
-            "pointer": row.pointer,
-            "date_et": row.date_et,
-            "away_raw": row.away_raw,
-            "home_raw": row.home_raw,
-            "network_raw": row.network_raw,
-            "confidence": row.confidence,
-            "reason": row.reason,
-        }
-        for row in diagnostic.unmatched_rows
-    ]
-    _write_csv(paths.interim / "review_unmatched.csv", UNMATCHED_COLUMNS, unmatched_rows)
+    _write_csv(
+        paths.interim / "review_unmatched.csv",
+        UNMATCHED_COLUMNS,
+        [unmatched_row(row) for row in diagnostic.unmatched_rows],
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
