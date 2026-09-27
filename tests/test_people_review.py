@@ -4,6 +4,7 @@ the scan/apply review tool (review.py, Task 2).
 
 from __future__ import annotations
 
+import csv
 import shutil
 from collections import Counter
 from datetime import date, datetime
@@ -331,6 +332,20 @@ def test_scan_registers_names_and_writes_review_file(
     assert injected[0]["proposed"] == "different"
 
 
+def _confirm_every_proposal(review_path: Path) -> None:
+    """Simulate a reviewer copying each proposal into the decision column."""
+    with review_path.open(newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        fieldnames = list(reader.fieldnames or [])
+        rows = [dict(row) for row in reader]
+    for row in rows:
+        row["decision"] = row["proposed"]
+    with review_path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames, lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def test_scan_then_apply_is_idempotent(vault_paths: DataPaths, tmp_path: Path) -> None:
     _build_vault(vault_paths)
     ref_dir = tmp_path / "reference"
@@ -343,6 +358,7 @@ def test_scan_then_apply_is_idempotent(vault_paths: DataPaths, tmp_path: Path) -
     )
 
     scan(vault_paths, ref_dir)
+    _confirm_every_proposal(vault_paths.interim / "review_people.csv")
     first = apply(vault_paths, ref_dir)
     people_after_first = (ref_dir / "people.csv").read_text(encoding="utf-8")
     reviewed_after_first = (ref_dir / "people_reviewed.csv").read_text(encoding="utf-8")
@@ -388,3 +404,34 @@ def test_main_output_contains_no_name(
     out = capsys.readouterr().out
     assert "Equal Sign" not in out
     assert "Marty Sample" not in out
+
+
+# -- WR-10: apply never applies a proposal nobody confirmed -----------------------------------
+
+
+def test_apply_ignores_unconfirmed_proposals_and_counts_them(
+    vault_paths: DataPaths, tmp_path: Path
+) -> None:
+    _build_vault(vault_paths)
+    ref_dir = tmp_path / "reference"
+    ref_dir.mkdir()
+    (ref_dir / "people.csv").write_text(
+        "person_id,canonical_name,variants,usual_role,role_override\n", encoding="utf-8"
+    )
+    (ref_dir / "people_reviewed.csv").write_text(
+        "name_a,name_b,reason,decision\n", encoding="utf-8"
+    )
+
+    scan(vault_paths, ref_dir)
+    with (vault_paths.interim / "review_people.csv").open(newline="", encoding="utf-8") as fh:
+        review_rows = list(csv.DictReader(fh))
+    assert review_rows
+    assert all(row["proposed"] for row in review_rows)
+    people_before = (ref_dir / "people.csv").read_text(encoding="utf-8")
+
+    summary = apply(vault_paths, ref_dir)
+
+    assert summary.pairs_applied == 0
+    assert summary.undecided == len(review_rows)
+    assert load_reviewed(ref_dir) == []
+    assert (ref_dir / "people.csv").read_text(encoding="utf-8") == people_before

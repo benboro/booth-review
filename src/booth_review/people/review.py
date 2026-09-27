@@ -4,8 +4,10 @@
 name into the public people registry (data/reference/people.csv), recomputes
 usual roles from main-feed two-person crews, and writes a vault review file
 (data/vault/interim/review_people.csv) of suspicious name pairs with a
-proposed decision each. `apply` reads that review file (a user-edited
-decision if present, else the proposed one), updates people.csv and
+proposed decision each. `apply` reads that review file, applies only the
+rows whose `decision` column a person filled in (a heuristic proposal is
+never applied on its own -- grouping.py's proposals only suggest), reports
+how many rows are still undecided, updates people.csv and
 people_reviewed.csv, and is idempotent. Printed output is counts only --
 never a name (T-03-21).
 """
@@ -90,6 +92,8 @@ class ApplySummary:
     pairs_applied: int
     decisions_by_kind: dict[str, int]
     persons: int
+    undecided: int = 0
+    invalid: int = 0
 
 
 def collect_name_stats(paths: DataPaths) -> CollectResult:
@@ -260,11 +264,20 @@ def apply(paths: DataPaths, ref_dir: Path) -> ApplySummary:
     }
 
     decisions_by_kind: Counter[str] = Counter()
+    undecided = 0
+    invalid = 0
     for row in raw_rows:
         name_a = csv_unsafe(row["name_a"])
         name_b = csv_unsafe(row["name_b"])
-        decision = row["decision"].strip() or row["proposed"].strip()
+        # Only an explicit decision is applied (WR-10): a blank row keeps
+        # its proposal in the review file for the next scan, since a "same"
+        # merge deletes a person_id (a public URL, SITE-12).
+        decision = row["decision"].strip()
+        if not decision:
+            undecided += 1
+            continue
         if decision not in _DECISIONS:
+            invalid += 1
             continue
         pair = ReviewedPair(name_a=name_a, name_b=name_b, reason=row["reason"], decision=decision)  # type: ignore[arg-type]
         by_key[frozenset((fold_person(name_a), fold_person(name_b)))] = pair
@@ -289,9 +302,11 @@ def apply(paths: DataPaths, ref_dir: Path) -> ApplySummary:
     write_reviewed(ref_dir, reviewed_pairs)
 
     return ApplySummary(
-        pairs_applied=len(raw_rows),
+        pairs_applied=sum(decisions_by_kind.values()),
         decisions_by_kind=dict(decisions_by_kind),
         persons=len(registry.persons),
+        undecided=undecided,
+        invalid=invalid,
     )
 
 
@@ -315,6 +330,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"pairs applied: {apply_summary.pairs_applied}")
         print(f"decisions by kind: {dict(sorted(apply_summary.decisions_by_kind.items()))}")
         print(f"persons: {apply_summary.persons}")
+        if apply_summary.undecided:
+            print(
+                f"undecided pairs left for review (proposals are never applied): "
+                f"{apply_summary.undecided}"
+            )
+        if apply_summary.invalid:
+            print(f"pairs with an invalid decision, skipped: {apply_summary.invalid}")
     return 0
 
 
