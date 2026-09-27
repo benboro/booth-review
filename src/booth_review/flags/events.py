@@ -50,8 +50,17 @@ class EventFlag:
     note: str
 
 
-def _parse_date(value: str) -> date | None:
-    return date.fromisoformat(value) if value else None
+def _parse_date(value: str, *, path_name: str, row_id: str, field: str) -> date | None:
+    """An ISO date, or None when blank; a malformed cell raises
+    ReferenceTableError naming the file, row, and field (never a raw
+    ValueError the CLI can't report cleanly).
+    """
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        raise ReferenceTableError(f"{path_name}: {row_id}: invalid {field}") from None
 
 
 def load_event_flags(reference_dir: Path) -> list[EventFlag]:
@@ -92,10 +101,15 @@ def load_event_flags(reference_dir: Path) -> list[EventFlag]:
                     f"{path.name}: {flag_id}: invalid network id {network_id!r}"
                 )
 
-        start = _parse_date(row["start_date"])
-        end = _parse_date(row["end_date"])
+        start = _parse_date(
+            row["start_date"], path_name=path.name, row_id=flag_id, field="start_date"
+        )
+        end = _parse_date(row["end_date"], path_name=path.name, row_id=flag_id, field="end_date")
         season_from_raw = row["season_from"]
-        season_from = int(season_from_raw) if season_from_raw else None
+        try:
+            season_from = int(season_from_raw) if season_from_raw else None
+        except ValueError:
+            raise ReferenceTableError(f"{path.name}: {flag_id}: invalid season_from") from None
 
         if kind == "event":
             if start is None or end is None:

@@ -161,3 +161,37 @@ def test_real_reference_tables_load() -> None:
     event_flags = load_event_flags(real_reference_dir)
     flag_ids = {f.flag_id for f in event_flags}
     assert {"yttv-disney-blackout-2025", "cfbd-wp-model-break"} <= flag_ids
+
+
+# -- WR-18: malformed dates and seasons raise ReferenceTableError, not ValueError ------------
+
+
+def test_load_eras_rejects_a_malformed_date_with_a_reference_error(tmp_path: Path) -> None:
+    write_reference_csv(
+        tmp_path / "measurement_eras.csv",
+        ERA_COLUMNS,
+        [_era_row("era-a", "", "2020-13-45"), _era_row("era-b", "2020-01-06", "")],
+    )
+    with pytest.raises(ReferenceTableError, match="era-a: invalid end_date"):
+        load_eras(tmp_path)
+
+
+_EVENT_HEADER = "flag_id,kind,label,start_date,end_date,season_from,networks,source_url,note\n"
+
+
+def test_load_event_flags_rejects_a_malformed_date(tmp_path: Path) -> None:
+    (tmp_path / "event_flags.csv").write_text(
+        _EVENT_HEADER + "ev-a,event,Label,2025-02-30,2025-03-01,,,https://example.com/a,\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ReferenceTableError, match="ev-a: invalid start_date"):
+        load_event_flags(tmp_path)
+
+
+def test_load_event_flags_rejects_a_malformed_season_from(tmp_path: Path) -> None:
+    (tmp_path / "event_flags.csv").write_text(
+        _EVENT_HEADER + "mb-a,model_break,Label,,,twenty,,https://example.com/a,\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ReferenceTableError, match="mb-a: invalid season_from"):
+        load_event_flags(tmp_path)

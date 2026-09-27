@@ -36,8 +36,17 @@ class MeasurementEra:
     note: str
 
 
-def _parse_date(value: str) -> date | None:
-    return date.fromisoformat(value) if value else None
+def _parse_date(value: str, *, path_name: str, row_id: str, field: str) -> date | None:
+    """An ISO date, or None when blank; a malformed cell raises
+    ReferenceTableError naming the file, row, and field (never a raw
+    ValueError the CLI can't report cleanly).
+    """
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        raise ReferenceTableError(f"{path_name}: {row_id}: invalid {field}") from None
 
 
 def load_eras(reference_dir: Path) -> list[MeasurementEra]:
@@ -61,8 +70,12 @@ def load_eras(reference_dir: Path) -> list[MeasurementEra]:
             MeasurementEra(
                 era_id=era_id,
                 label=row["label"],
-                start=_parse_date(row["start_date"]),
-                end=_parse_date(row["end_date"]),
+                start=_parse_date(
+                    row["start_date"], path_name=path.name, row_id=era_id, field="start_date"
+                ),
+                end=_parse_date(
+                    row["end_date"], path_name=path.name, row_id=era_id, field="end_date"
+                ),
                 rr_era_ids=frozenset(v for v in row["rr_era_ids"].split("|") if v),
                 source_url=source_url,
                 note=row["note"],
