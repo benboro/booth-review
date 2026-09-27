@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from booth_review.config import DataPaths
 from booth_review.errors import ReferenceTableError
 from booth_review.flags.events import load_event_flags
 from booth_review.resolve.networks import (
@@ -488,3 +489,35 @@ def test_check_primary_overrides_rejects_an_unknown_network_id() -> None:
     check_primary_overrides({900001: "net-b"}, table)
     with pytest.raises(ReferenceTableError, match="net-typo"):
         check_primary_overrides({900001: "net-b", 900002: "net-typo"}, table)
+
+
+# -- WR-14: the network diagnostic strips RR feed markers like the build does ---------------
+
+
+def test_network_diagnostic_strips_feed_markers_from_rr_outlets(vault_paths: DataPaths) -> None:
+    import json
+    import shutil
+
+    from booth_review.resolve.network_diagnose import _collect_usage
+
+    spike = Path(__file__).parent / "fixtures" / "spike"
+    games_dir = vault_paths.raw / "cfbd" / "games"
+    games_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy(spike / "cfbd_games_2025.json", games_dir / "2025.json")
+
+    record = json.loads(
+        (spike / "rr_records" / "cfb-stonebridge-maplecrest-2025-09-13.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    record["telecast"]["networks"] = ["Net A (alt)"]
+    rr_dir = vault_paths.raw / "ratingsref" / "telecast" / "2025"
+    rr_dir.mkdir(parents=True, exist_ok=True)
+    (rr_dir / "cfb-stonebridge-maplecrest-2025-09-13.json").write_text(
+        json.dumps(record), encoding="utf-8"
+    )
+
+    usage, _errors = _collect_usage(vault_paths)
+
+    rr_outlets = {outlet for source, outlet in usage if source == "ratingsref"}
+    assert rr_outlets == {"Net A"}

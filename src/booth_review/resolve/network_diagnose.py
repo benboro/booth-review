@@ -113,7 +113,11 @@ def _collect_usage(paths: DataPaths) -> tuple[dict[tuple[str, str], _Usage], int
         for record in records:
             for entry in record.telecast.networks:
                 for part in split_outlets(entry):
-                    usage.setdefault(("ratingsref", part), _Usage()).add(season)
+                    # Marker stripped exactly as primary_network does, so an
+                    # RR "Net (alt)" outlet the build maps is never reported
+                    # as unmapped (WR-14).
+                    base, _feed = strip_feed_marker(part)
+                    usage.setdefault(("ratingsref", base), _Usage()).add(season)
 
         media_path = paths.raw / "cfbd" / "media" / f"{season}.json"
         if media_path.is_file():
