@@ -590,3 +590,83 @@ def test_unmatched_record_is_counted_and_written_to_review() -> None:
 
     assert result.counts[2099]["rr_unmatched"] == 1
     assert any(row.source == "ratingsref" for row in result.unmatched_rows)
+
+
+# -- CR-01: main and alt/Spanish feeds of one network stay distinct telecasts ---------------
+
+
+def test_main_and_alt_feed_on_same_network_get_distinct_ids_and_keep_their_records() -> None:
+    game = _game(id=77)
+    main_record = _rr_record(record_id="cfb-away-home-2099-10-04", networks=["Net Alpha"])
+    alt_record = _rr_record(record_id="cfb-away-home-2099-10-04-alt", networks=["Net Alpha Alt"])
+    main_listing = _listing(network_raw="Net Alpha", crew_names=("Pat Example", "Jordan Sample"))
+    rows = [
+        _network_row("Net Alpha", "alpha"),
+        _network_row("Net Alpha Alt", "alpha", feed_type="alt"),
+    ]
+
+    result = _run(
+        games=[game],
+        records=[main_record, alt_record],
+        listings=[main_listing],
+        network_rows=rows,
+    )
+
+    ids = result.telecasts["telecast_id"].to_list()
+    assert sorted(ids) == ["77-alpha", "77-alpha-alt"]
+    assert [r.telecast.id for r in result.records_by_telecast["77-alpha"]] == [
+        "cfb-away-home-2099-10-04"
+    ]
+    assert [r.telecast.id for r in result.records_by_telecast["77-alpha-alt"]] == [
+        "cfb-away-home-2099-10-04-alt"
+    ]
+    main_row = result.telecasts.filter(pl.col("telecast_id") == "77-alpha").row(0, named=True)
+    alt_row = result.telecasts.filter(pl.col("telecast_id") == "77-alpha-alt").row(0, named=True)
+    # The main 506 listing (and its crew) belongs to the main feed, never the alt.
+    assert main_row["crew_matched"] is True
+    assert main_row["crew_network_mismatch"] is False
+    assert alt_row["crew_matched"] is False
+    assert alt_row["s506_pointer"] is None
+
+
+def test_main_feed_telecast_id_shape_is_unchanged() -> None:
+    game = _game(id=78)
+    record = _rr_record(networks=["Net Alpha"])
+    rows = [_network_row("Net Alpha", "alpha")]
+
+    result = _run(games=[game], records=[record], listings=[], network_rows=rows)
+
+    assert result.telecasts["telecast_id"].to_list() == ["78-alpha"]
+
+
+def test_leftover_main_listing_never_attaches_to_an_alt_feed_telecast() -> None:
+    game = _game(id=79)
+    record = _rr_record(networks=["Net Alpha (alt)"])
+    listing = _listing(network_raw="Net Bravo", crew_names=("Pat Example",))
+    rows = [_network_row("Net Alpha", "alpha"), _network_row("Net Bravo", "bravo")]
+
+    result = _run(games=[game], records=[record], listings=[listing], network_rows=rows)
+
+    alt_row = result.telecasts.filter(pl.col("telecast_id") == "79-alpha-alt").row(0, named=True)
+    assert alt_row["crew_matched"] is False
+    bravo_row = result.telecasts.filter(pl.col("telecast_id") == "79-bravo").row(0, named=True)
+    assert bravo_row["rated"] is False
+    assert bravo_row["crew_matched"] is True
+
+
+def test_duplicate_telecast_ids_fail_the_build(monkeypatch: pytest.MonkeyPatch) -> None:
+    from booth_review.build import telecasts as telecasts_module
+    from booth_review.errors import VaultStateError
+
+    monkeypatch.setattr(
+        telecasts_module,
+        "_telecast_id",
+        lambda game_id, network_id, _feed_type: f"{game_id}-{network_id}",
+    )
+    game = _game(id=80)
+    main_record = _rr_record(record_id="cfb-away-home-2099-10-04", networks=["Net Alpha"])
+    alt_record = _rr_record(record_id="cfb-away-home-2099-10-04-alt", networks=["Net Alpha (alt)"])
+    rows = [_network_row("Net Alpha", "alpha")]
+
+    with pytest.raises(VaultStateError, match="telecast_id"):
+        _run(games=[game], records=[main_record, alt_record], listings=[], network_rows=rows)

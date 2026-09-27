@@ -27,6 +27,7 @@ from datetime import date
 import polars as pl
 
 from booth_review.build.sources import SeasonSources
+from booth_review.errors import VaultStateError
 from booth_review.people.normalize import is_placeholder
 from booth_review.resolve.diagnose import (
     UnmatchedRow,
@@ -157,8 +158,14 @@ class _TelecastDraft:
         return self.key[1]
 
 
-def _telecast_id(game_id: int, network_id: str | None) -> str:
-    return f"{game_id}-{network_id if network_id is not None else _UNMAPPED_ID}"
+def _telecast_id(game_id: int, network_id: str | None, feed_type: FeedType) -> str:
+    """`<game_id>-<network_id>` for a main feed; an alt/Spanish feed of the
+    same network gets a `-<feed_type>` suffix so it can never share an id
+    with that network's main feed (D-10). Main-feed ids keep their original
+    shape, so every existing pointer to one stays valid.
+    """
+    base = f"{game_id}-{network_id if network_id is not None else _UNMAPPED_ID}"
+    return base if feed_type == "main" else f"{base}-{feed_type}"
 
 
 def _listing_primary(listing: Listing506, season: int, table: NetworkTable) -> PrimaryResult:
@@ -229,7 +236,7 @@ def _finalize_telecast(
     draft: _TelecastDraft, season: int, networks_table: NetworkTable, media_outlets: Sequence[str]
 ) -> dict[str, object]:
     game = draft.game
-    telecast_id = _telecast_id(game.id, draft.network_id)
+    telecast_id = _telecast_id(game.id, draft.network_id, draft.feed_type)
 
     rr_networks_text = [n for record, _ in draft.records for n in record.telecast.networks]
     listing_networks_text = (
@@ -369,13 +376,18 @@ def _build_game_telecasts(
     main_assignment: dict[int, tuple[str | None, FeedType]] = {}
     attached: set[int] = set()
 
-    # -- Direct match: a main listing whose own primary equals the telecast's --------------
+    # -- Direct match: a main listing whose own primary (network AND feed)
+    # equals the telecast's. Comparing the feed too keeps a network's main
+    # listing (and its crew) on that network's main telecast, never its
+    # alt/Spanish one (D-10). ---------------------------------------------------------------
     for key in sorted(drafts, key=lambda k: (k[0] or "", k[1])):
         draft = drafts[key]
         candidates = [
             (ln, conf)
             for ln, conf in main_listings
-            if id(ln) not in attached and listing_primaries[id(ln)].network_id == draft.network_id
+            if id(ln) not in attached
+            and listing_primaries[id(ln)].network_id == draft.network_id
+            and listing_primaries[id(ln)].feed_type == draft.feed_type
         ]
         if not candidates:
             continue
@@ -387,9 +399,17 @@ def _build_game_telecasts(
         main_assignment[id(chosen)] = key
         attached.add(id(chosen))
 
-    # -- Fallback: exactly one still-unattached main listing on the game -------------------
-    leftover_main = [(ln, conf) for ln, conf in main_listings if id(ln) not in attached]
-    needing_crew = [d for d in drafts.values() if d.matched_listing is None]
+    # -- Fallback: exactly one still-unattached main listing on the game, only
+    # ever onto a main-feed telecast (an alt/Spanish feed never borrows the
+    # main listing's crew). -------------------------------------------------------------
+    leftover_main = [
+        (ln, conf)
+        for ln, conf in main_listings
+        if id(ln) not in attached and listing_primaries[id(ln)].feed_type == "main"
+    ]
+    needing_crew = [
+        d for d in drafts.values() if d.matched_listing is None and d.feed_type == "main"
+    ]
     if len(leftover_main) == 1 and needing_crew:
         needing_crew.sort(key=lambda d: (d.network_id or "", d.feed_type))
         chosen, conf = leftover_main[0]
@@ -600,6 +620,11 @@ def build_telecasts(
     telecasts_frame = pl.DataFrame(all_telecast_rows, schema=TELECASTS_SCHEMA)
     if telecasts_frame.height:
         telecasts_frame = telecasts_frame.sort("telecast_id")
+        duplicate_ids = telecasts_frame.height - telecasts_frame["telecast_id"].n_unique()
+        if duplicate_ids:
+            # Count-only (T-03-04): a duplicate id would let one telecast's RR
+            # records overwrite another's in records_by_telecast.
+            raise VaultStateError(f"telecasts: {duplicate_ids} duplicate telecast_id value(s)")
     listing_links_frame = pl.DataFrame(all_listing_link_rows, schema=LISTING_LINKS_SCHEMA)
     if listing_links_frame.height:
         listing_links_frame = listing_links_frame.sort(["season", "week_label", "source_row_index"])
