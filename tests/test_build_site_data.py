@@ -685,3 +685,37 @@ def test_contract_failure_reports_location_and_type_but_never_the_cell_value(
     assert "zz-sentinel-role" not in message
     assert excinfo.value.__cause__ is None
     assert excinfo.value.__suppress_context__ is True
+
+
+# -- WR-07: the unmapped-network coverage row is not a second "ALL" row -----------------------
+
+
+def test_unmapped_network_coverage_row_points_at_the_unmapped_lookup(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    from dataclasses import replace
+
+    first = small_tables.telecasts.sort("date_et").row(0, named=True)
+    unmapped_row = {
+        **first,
+        "telecast_id": f"{first['game_id']}-unmapped",
+        "network_id": None,
+        "outlets": [],
+        "headline_publisher": "Unmapped Publisher Example",
+    }
+    telecasts = pl.concat(
+        [small_tables.telecasts, pl.DataFrame([unmapped_row], schema=small_tables.telecasts.schema)]
+    )
+    tables = replace(small_tables, telecasts=telecasts)
+
+    payload = _site(tables, build_reference)
+
+    network_ids = [n["id"] for n in payload["lookups"]["networks"]]
+    unmapped_index = network_ids.index("unmapped")
+    season = first["season"]
+    season_rows = [r for r in payload["coverage"] if r["season"] == season]
+    all_rows = [r for r in season_rows if r["network"] is None]
+    unmapped_rows = [r for r in season_rows if r["network"] == unmapped_index]
+    assert len(all_rows) == 1
+    assert len(unmapped_rows) == 1
+    assert unmapped_rows[0]["publisher_counts"] == {"Unmapped Publisher Example": 1}

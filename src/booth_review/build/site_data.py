@@ -221,7 +221,12 @@ def build_site_data(
 
     for crow in coverage.rows:
         network_id = crow["network_id"]
-        if network_id and network_id != "ALL":
+        if network_id is None:
+            # Rated telecasts with no mapped network: their own coverage
+            # row points at the "unmapped" lookup entry, the same one the
+            # telecast columns use (WR-07).
+            network_ids.add(_UNMAPPED_NETWORK_ID)
+        elif network_id != "ALL":
             network_ids.add(str(network_id))
 
     team_index = {name: i for i, name in enumerate(sorted(team_names))}
@@ -348,21 +353,22 @@ def build_site_data(
         count = _as_int(prow["headline_count"])
         season_bucket = publisher_counts_by_season.setdefault(season_key, {})
         season_bucket[publisher_name] = season_bucket.get(publisher_name, 0) + count
-        if network_key_raw is not None:
-            key = (season_key, str(network_key_raw))
-            per_network_bucket = publisher_counts_by_key.setdefault(key, {})
-            per_network_bucket[publisher_name] = per_network_bucket.get(publisher_name, 0) + count
+        network_key = str(network_key_raw) if network_key_raw is not None else _UNMAPPED_NETWORK_ID
+        per_network_bucket = publisher_counts_by_key.setdefault((season_key, network_key), {})
+        per_network_bucket[publisher_name] = per_network_bucket.get(publisher_name, 0) + count
 
     coverage_rows: list[dict[str, object]] = []
     for crow in coverage.rows:
         crow_season = _as_int(crow["season"])
         network_id = crow["network_id"]
-        if network_id is None or network_id == "ALL":
+        if network_id == "ALL":
+            # network=None is reserved for the season-wide "ALL" row.
             network_field: int | None = None
             pub_counts = publisher_counts_by_season.get(crow_season, {})
         else:
-            network_field = network_index[str(network_id)]
-            pub_counts = publisher_counts_by_key.get((crow_season, str(network_id)), {})
+            network_key = str(network_id) if network_id is not None else _UNMAPPED_NETWORK_ID
+            network_field = network_index[network_key]
+            pub_counts = publisher_counts_by_key.get((crow_season, network_key), {})
 
         rated_telecasts = _as_int(crow["rated_telecasts"])
         coverage_rows.append(
