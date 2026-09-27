@@ -12,8 +12,12 @@ finds is a *candidate* the user confirms by hand in the pointer-only
 `data/reference/combined_figures.csv` (D-06): a rated main telecast whose
 game has an alt-cast/Spanish 506 listing (`alt_listed`), or whose headline
 figure is a statistical outlier against its own network-season (`outlier`).
-`apply_combined` then folds every confirmed decision back into `telecasts`/
-`telecast_flags`.
+`main` (`booth-review review combined`) only proposes: the proposal goes in
+the vault review file (`interim/review_combined.csv`, `proposed` column) and
+is never written to the public table, so every row there is one a person
+confirmed. `apply_combined` then folds every confirmed decision back into
+`telecasts`/`telecast_flags`, matching a decision on any of the telecast's
+merged RR record ids.
 """
 
 from __future__ import annotations
@@ -33,7 +37,7 @@ from booth_review.build.io import write_review_csv
 from booth_review.build.sources import load_all_sources
 from booth_review.config import DataPaths
 from booth_review.errors import ReferenceTableError
-from booth_review.reference import read_reference_csv, reference_dir, write_reference_csv
+from booth_review.reference import read_reference_csv, reference_dir
 from booth_review.resolve.overrides import pointer_for_listing
 from booth_review.sources.sports506.parser import Listing506
 from booth_review.vault import VaultRepo
@@ -100,6 +104,37 @@ class CombinedCandidate:
     network_median: float | None
     proposed: Decision
     proposed_feeds: int | None
+    # Every RR record id merged into the telecast (JOIN-05); a decision keyed
+    # on any of them applies. `rr_telecast_id` is the first of them.
+    rr_telecast_ids: tuple[str, ...] = ()
+
+
+def decision_for(
+    candidate: CombinedCandidate, decisions: Mapping[str, CombinedDecision]
+) -> CombinedDecision | None:
+    """The confirmed decision for `candidate`, keyed on its first RR record
+    id or, failing that, any other RR record id merged into the same
+    telecast; None when undecided.
+    """
+    for rr_id in (candidate.rr_telecast_id, *candidate.rr_telecast_ids):
+        decision = decisions.get(rr_id)
+        if decision is not None:
+            return decision
+    return None
+
+
+def orphan_decision_count(
+    candidates: Sequence[CombinedCandidate], decisions: Mapping[str, CombinedDecision]
+) -> int:
+    """How many confirmed decisions match no current candidate (for example
+    after an alt listing's link changed), so they are reported rather than
+    silently dropped.
+    """
+    candidate_ids: set[str] = set()
+    for candidate in candidates:
+        candidate_ids.add(candidate.rr_telecast_id)
+        candidate_ids.update(candidate.rr_telecast_ids)
+    return sum(1 for rr_id in decisions if rr_id not in candidate_ids)
 
 
 def load_combined_figures(reference_directory: Path) -> dict[str, CombinedDecision]:
@@ -156,15 +191,6 @@ def load_combined_figures(reference_directory: Path) -> dict[str, CombinedDecisi
             reason=reason,  # type: ignore[arg-type]
         )
     return decisions
-
-
-def _decision_row(decision: CombinedDecision) -> dict[str, str]:
-    return {
-        "rr_telecast_id": decision.rr_telecast_id,
-        "decision": decision.decision,
-        "feeds": str(decision.feeds) if decision.feeds is not None else "",
-        "reason": decision.reason,
-    }
 
 
 def _alt_feed_counts(listing_links: pl.DataFrame) -> dict[int, int]:
@@ -257,6 +283,7 @@ def find_combined_candidates(
                 network_median=network_median,
                 proposed=proposed,
                 proposed_feeds=proposed_feeds,
+                rr_telecast_ids=tuple(rr_ids),
             )
         )
 
@@ -279,7 +306,7 @@ def apply_combined(
     """
     updates: dict[str, int | None] = {}
     for candidate in candidates:
-        decision = decisions.get(candidate.rr_telecast_id)
+        decision = decision_for(candidate, decisions)
         if decision is None:
             continue
         updates[candidate.telecast_id] = decision.feeds if decision.decision == "combined" else None
@@ -350,7 +377,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     from booth_review.build.tables import assemble_tables
 
     parser = argparse.ArgumentParser(
-        description="Detect combined-figure candidates and pre-fill likely decisions."
+        description=(
+            "Detect combined-figure candidates and propose decisions in the vault review "
+            "file; confirmed decisions are copied into combined_figures.csv by hand."
+        )
     )
     parser.parse_args(argv)
 
@@ -377,41 +407,35 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
     }
 
-    new_decisions = dict(decisions)
     reason_counts: Counter[str] = Counter()
     decision_counts: Counter[str] = Counter()
+    proposal_reasons: Counter[str] = Counter()
     for candidate in candidates:
         reason_counts["|".join(candidate.reasons)] += 1
 
-        existing = new_decisions.get(candidate.rr_telecast_id)
+        existing = decision_for(candidate, decisions)
         if existing is not None:
             decision_counts[existing.decision] += 1
             continue
-        if "alt_listed" not in candidate.reasons:
-            decision_counts["undecided"] += 1
-            continue
-
-        reason = _classify_reason(candidate, telecast_pointers, listings_by_pointer)
-        new_decisions[candidate.rr_telecast_id] = CombinedDecision(
-            rr_telecast_id=candidate.rr_telecast_id,
-            decision="combined",
-            feeds=candidate.proposed_feeds,
-            reason=reason,
-        )
-        decision_counts["combined"] += 1
-
-    if new_decisions != decisions:
-        write_reference_csv(
-            ref_dir / "combined_figures.csv",
-            COMBINED_COLUMNS,
-            [
-                _decision_row(d)
-                for d in sorted(new_decisions.values(), key=lambda d: d.rr_telecast_id)
-            ],
-        )
+        decision_counts["undecided"] += 1
+        if "alt_listed" in candidate.reasons:
+            # A proposal only (WR-09): it stays in the review file until a
+            # person copies it into combined_figures.csv.
+            proposal_reasons[
+                _classify_reason(candidate, telecast_pointers, listings_by_pointer)
+            ] += 1
 
     print(f"combined candidates by reason: {dict(sorted(reason_counts.items()))}")
     print(f"decisions: {dict(sorted(decision_counts.items()))}")
+    if proposal_reasons:
+        print(
+            f"proposed 'combined', awaiting confirmation: {sum(proposal_reasons.values())} "
+            f"{dict(sorted(proposal_reasons.items()))} -- see interim/review_combined.csv; "
+            "copy confirmed rows into data/reference/combined_figures.csv"
+        )
+    orphans = orphan_decision_count(candidates, decisions)
+    if orphans:
+        print(f"combined_figures.csv decisions matching no current candidate: {orphans}")
 
 
 if __name__ == "__main__":

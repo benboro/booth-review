@@ -487,3 +487,79 @@ def test_main_writes_only_review_combined_csv_and_prints_counts(
     assert "decisions" in captured.out
     assert (build_vault.interim / "review_combined.csv").is_file()
     assert not (build_vault.processed / "telecasts.parquet").is_file()
+
+
+# -- WR-09: proposals never reach the public table; decisions match any merged RR id ---------
+
+
+def test_apply_combined_matches_a_decision_keyed_on_a_merged_records_other_id() -> None:
+    telecasts = _telecasts_frame([_telecast_row(telecast_id="t1", game_id=1)])
+    telecast_flags = pl.DataFrame(
+        schema={"telecast_id": pl.Utf8, "flag_id": pl.Utf8, "kind": pl.Utf8}
+    )
+    candidate = CombinedCandidate(
+        rr_telecast_id="cfb-a-b-2025-09-06",
+        telecast_id="t1",
+        season=2025,
+        date_et=date(2025, 9, 6),
+        network_id="net-a",
+        reasons=("alt_listed",),
+        alt_feed_count=1,
+        headline_value=1_000_000.0,
+        network_median=None,
+        proposed="combined",
+        proposed_feeds=2,
+        rr_telecast_ids=("cfb-a-b-2025-09-06", "cfb-a-b-2025-09-06-dup"),
+    )
+    decisions = {
+        "cfb-a-b-2025-09-06-dup": CombinedDecision(
+            "cfb-a-b-2025-09-06-dup", "combined", 2, "megacast"
+        )
+    }
+
+    new_telecasts, _ = apply_combined(telecasts, telecast_flags, [candidate], decisions)
+
+    assert new_telecasts.filter(pl.col("telecast_id") == "t1")["combined_feeds"].item() == 2
+
+
+def test_orphan_decisions_are_counted() -> None:
+    from booth_review.build.combined import orphan_decision_count
+
+    candidate = CombinedCandidate(
+        rr_telecast_id="cfb-a-b-2025-09-06",
+        telecast_id="t1",
+        season=2025,
+        date_et=date(2025, 9, 6),
+        network_id="net-a",
+        reasons=("alt_listed",),
+        alt_feed_count=1,
+        headline_value=1_000_000.0,
+        network_median=None,
+        proposed="combined",
+        proposed_feeds=2,
+        rr_telecast_ids=("cfb-a-b-2025-09-06",),
+    )
+    decisions = {
+        "cfb-a-b-2025-09-06": CombinedDecision("cfb-a-b-2025-09-06", "single", None, "other"),
+        "cfb-gone-2025-09-13": CombinedDecision("cfb-gone-2025-09-13", "single", None, "other"),
+    }
+    assert orphan_decision_count([candidate], decisions) == 1
+
+
+def test_main_never_writes_proposals_into_the_public_combined_table(
+    build_vault: DataPaths,
+    vault_reference: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    table = vault_reference / "combined_figures.csv"
+    # Keep only the header, so every alt_listed candidate is undecided and
+    # would have been pre-filled before WR-09.
+    header = table.read_text(encoding="utf-8").splitlines()[0]
+    table.write_text(header + "\n", encoding="utf-8")
+    before = table.read_bytes()
+
+    main([])
+
+    assert table.read_bytes() == before
+    out = capsys.readouterr().out
+    assert "awaiting confirmation" in out

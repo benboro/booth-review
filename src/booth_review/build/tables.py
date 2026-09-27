@@ -23,8 +23,10 @@ from booth_review.build.combined import (
     CombinedCandidate,
     CombinedDecision,
     apply_combined,
+    decision_for,
     find_combined_candidates,
     load_combined_figures,
+    orphan_decision_count,
 )
 from booth_review.build.games import build_games_frame
 from booth_review.build.io import write_parquet_atomic, write_review_csv
@@ -244,7 +246,7 @@ def assemble_tables(
         "review_combined": (
             REVIEW_COMBINED_COLUMNS,
             [
-                _combined_review_row(c, combined_decisions.get(c.rr_telecast_id))
+                _combined_review_row(c, decision_for(c, combined_decisions))
                 for c in combined_candidates
             ],
         ),
@@ -260,12 +262,15 @@ def assemble_tables(
         1 for c in combined_candidates if "outlier" in c.reasons
     )
     merged_totals["combined_decided"] = sum(
-        1 for c in combined_candidates if c.rr_telecast_id in combined_decisions
+        1 for c in combined_candidates if decision_for(c, combined_decisions) is not None
     )
     merged_totals["combined_combined"] = sum(
         1
         for c in combined_candidates
-        if (d := combined_decisions.get(c.rr_telecast_id)) is not None and d.decision == "combined"
+        if (d := decision_for(c, combined_decisions)) is not None and d.decision == "combined"
+    )
+    merged_totals["combined_orphan_decisions"] = orphan_decision_count(
+        combined_candidates, combined_decisions
     )
     diagnostics = replace(diagnostics, totals=merged_totals)
 

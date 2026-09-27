@@ -258,7 +258,8 @@ def build_parser() -> argparse.ArgumentParser:
     review_networks.add_argument("--no-write", action="store_true")
 
     review_sub.add_parser(
-        "combined", help="combined-figure candidate detection and pre-fill (build.combined)"
+        "combined",
+        help="combined-figure candidates; proposals stay in the vault review file (build.combined)",
     )
 
     review_sample = review_sub.add_parser(
