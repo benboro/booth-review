@@ -242,7 +242,7 @@ h1, h2, h3 {
 
 body {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 280px minmax(0, 1fr);
   grid-template-areas:
     "topbar topbar"
     "rail   main"
@@ -259,6 +259,13 @@ body {
 
 #chart-area {
   padding-top: var(--space-xl);
+}
+
+/* Grid items default to min-width: auto, so the Plotly SVG's own width would
+   size its track and push the page wider than a phone screen. */
+#chart-area,
+#matched-games {
+  min-width: 0;
 }
 
 /* ---------- Rail ---------- */
@@ -592,7 +599,7 @@ body.panel-open .drawer {
 
 @media (max-width: 1024px) {
   body.rail-collapsed {
-    grid-template-columns: 0 1fr;
+    grid-template-columns: 0 minmax(0, 1fr);
   }
 
   .drawer {
@@ -604,7 +611,7 @@ body.panel-open .drawer {
 
 @media (max-width: 640px) {
   body {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "topbar"
       "main"

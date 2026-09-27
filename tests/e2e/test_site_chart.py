@@ -208,3 +208,16 @@ def test_mobile_layout_disables_drag_zoom_and_moves_legend_below(
     assert layout["dragmode"] is False
     assert layout["xaxis"]["fixedrange"] is True
     assert layout["legend"]["orientation"] == "h"
+
+
+def test_mobile_page_has_no_horizontal_scroll(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """SITE-18: the chart fits the phone viewport; a grid track sized to the
+    Plotly SVG's own width must not push the page wider than the screen."""
+    open_app(mobile_page, "")
+    widths = mobile_page.evaluate(
+        "() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]"
+    )
+
+    assert widths[0] <= widths[1]
