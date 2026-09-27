@@ -74,8 +74,9 @@ range individually clears 95% game-plus-crew match as well; the lowest is
 2014 at 95.6%. The remaining 43 of 3,459 in-scope records (1.2%) without a
 matched crew are concentrated in 506 listings that never named a crew for an
 otherwise-rated game, not a game this project failed to find. This phase also draws a stratified, hand-checked sample of
-50 telecasts across seasons and networks for a user to confirm; its
-precision figure is recorded once that review is complete. This project's
+50 telecasts across seasons and networks for a user to confirm; the user
+confirmed all 50 rows against their Ratings Reference record and 506 page,
+for a JOIN-08 sample precision of 50/50 (100%). This project's
 own match and crew rates, season by season and network by network, are in
 the coverage table each build produces (`AUDIT-01`, `processed/coverage.csv`
 in the vault).
@@ -103,6 +104,13 @@ clear-cut, corrected through a pointer-only network override once verified
 (see `data/reference/primary_network_overrides.csv`). Uncorrected
 disagreements do not block a telecast from the chart; the dot uses this
 project's own rights-holder rule and is not otherwise flagged to the reader.
+By category (counts only, no game-level detail): 4 benign channel overlaps
+where both sources in fact list overlapping outlets, 2 ambiguous
+streaming-companion pairings, 4 telecasts (2 same-night game pairs) where
+the two sources' channels for that night appear swapped between the pair,
+15 same-family disagreements (e.g. a channel vs. its sister feed), and 3
+cross-family disagreements. None of the 28 were corrected by an override
+after this review; they remain documented disagreements.
 
 ## Combined figures are identified by review, not by a source flag
 
