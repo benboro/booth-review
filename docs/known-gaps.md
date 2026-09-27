@@ -59,15 +59,50 @@ otherwise rated, are counted as coverage gaps rather than silently dropped
 ## Matching: game and game-plus-crew rates
 
 Two match rates matter for "does this telecast make it into the chart with
-the right crew." Matching a Ratings Reference record to a CFBD game alone
-measured 97.9% in this project's research baseline (2014–2025) — comfortably
-above the 95% target. Requiring a matched 506 crew as well brought that down
-to 91.1% in the same baseline measurement, concentrated in cases where 506
-never listed the game at all rather than listing it without a crew. This
-project's own current match and crew rates, season by season and network by
-network, are in the coverage table each build produces (`AUDIT-01`,
-`processed/coverage.csv` in the vault); Plan 12 of this phase updates the
-final numbers reported here once every override and review pass is done.
+the right crew." This project's research baseline (2014–2025, before the
+crosswalk, pointer overrides, and this phase's joins existed) measured 97.9%
+for a Ratings Reference record matched to a CFBD game alone, and 91.1% once
+a matched 506 crew was also required. Those research-baseline numbers are
+kept here only as a historical reference point, not as this project's
+current state.
+
+After building the real crosswalk, pointer-only overrides, and the joins in
+this phase, the project's own full rebuild (2014–2026) measures **100.0%**
+RR-to-game and **98.8%** RR-to-game-plus-crew (3,416 of 3,459 in-scope
+rated records), comfortably above the 95% target for both. Every season in
+range individually clears 95% game-plus-crew match as well; the lowest is
+2014 at 95.6%. The remaining 43 of 3,459 in-scope records (1.2%) without a
+matched crew are concentrated in 506 listings that never named a crew for an
+otherwise-rated game, not a game this project failed to find. This phase also draws a stratified, hand-checked sample of
+50 telecasts across seasons and networks for a user to confirm; its
+precision figure is recorded once that review is complete. This project's
+own match and crew rates, season by season and network by network, are in
+the coverage table each build produces (`AUDIT-01`, `processed/coverage.csv`
+in the vault).
+
+A handful of other counts from the same rebuild, each affecting a small
+share of telecasts and none blocking a telecast from the chart: 4 duplicate
+Ratings Reference records were merged onto an existing telecast rather than
+plotted as their own dot (JOIN-05); 5 telecasts had a headline-figure pick
+that disagreed with Ratings Reference's own current-figure marker; 15
+telecasts disagreed with this project's own era assignment (see below)
+versus Ratings Reference's own era tag; and 14 telecasts were flagged
+combined across simulcast feeds (see the next section).
+
+Separately, this phase's coverage-audit pass compared Ratings Reference's
+own listed network against 506 Sports' own listed network for every rated,
+crew-matched telecast, since the two sources are compiled independently and
+occasionally disagree about which channel actually carried a game. 28 of
+3,416 crew-matched telecasts (0.8%) showed a disagreement between the two
+sources' raw network text. Most of these are plausible same-family channel
+swaps (e.g. ESPN vs. ESPN2) that this project's own review could not
+independently confirm one way or the other without a source neither party
+already has access to, some are simulcasts where both sources in fact list
+overlapping channels and no real disagreement exists, and a small number are
+clear-cut, corrected through a pointer-only network override once verified
+(see `data/reference/primary_network_overrides.csv`). Uncorrected
+disagreements do not block a telecast from the chart; the dot uses this
+project's own rights-holder rule and is not otherwise flagged to the reader.
 
 ## Combined figures are identified by review, not by a source flag
 
