@@ -192,6 +192,26 @@ h1, h2, h3 {
   color: var(--accent);
 }
 
+.toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chip-glyph {
+  font-size: 12px;
+}
+
+.option-variant,
+.option-role {
+  color: var(--muted);
+}
+
+#compare-note {
+  font: var(--font-label);
+  color: var(--muted);
+  margin: var(--space-xs) 0 0 0;
+}
+
 .helper,
 .caption {
   font: var(--font-label);
