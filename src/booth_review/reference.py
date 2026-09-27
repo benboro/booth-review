@@ -28,6 +28,10 @@ from booth_review.transport.cache import atomic_write_bytes
 _FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
 
+def _is_formula_like(value: str) -> bool:
+    return value.startswith(_FORMULA_PREFIXES) or value.strip().startswith(_FORMULA_PREFIXES)
+
+
 def reference_dir() -> Path:
     """data/reference/, or BOOTH_REVIEW_REFERENCE when set and non-empty
     (mirrors config.DataPaths.from_env's env-override pattern, so tests can
@@ -74,7 +78,10 @@ def read_reference_csv(
                 raise ReferenceTableError(f"{path.name}: line {line_no}: unexpected extra column")
             values = list(raw_row) + [""] * (len(columns) - len(raw_row))
             for value in values:
-                if value.startswith(_FORMULA_PREFIXES):
+                # Checked both before and after stripping (WR-13): a cell
+                # like " =HYPERLINK(...)" must not pass the check and then
+                # be returned stripped to a formula.
+                if _is_formula_like(value):
                     raise ReferenceTableError(
                         f"{path.name}: line {line_no}: cell begins with a disallowed character"
                     )
@@ -87,8 +94,16 @@ def write_reference_csv(
 ) -> None:
     """Write `rows` to `path` with `columns` as the header, LF line endings,
     and rows in the order given. A write then read (read_reference_csv)
-    returns identical dicts.
+    returns identical dicts. A cell read_reference_csv would reject (one
+    beginning with a formula character) raises ReferenceTableError before
+    anything is written, so a write can never produce an unreadable file;
+    callers csv_safe free text first.
     """
+    for line_no, row in enumerate(rows, start=2):
+        if any(_is_formula_like(row.get(col, "")) for col in columns):
+            raise ReferenceTableError(
+                f"{path.name}: line {line_no}: cell begins with a disallowed character"
+            )
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=list(columns), lineterminator="\n")
     writer.writeheader()

@@ -110,3 +110,20 @@ def test_write_uses_lf_line_endings(tmp_path: Path) -> None:
     raw = path.read_bytes()
     assert b"\r\n" not in raw
     assert raw == b"id,name,note\n1,a,x\n"
+
+
+# -- WR-13: whitespace can't smuggle a formula past the check; writes can't produce one -------
+
+
+def test_formula_behind_leading_whitespace_raises(tmp_path: Path) -> None:
+    path = tmp_path / "t.csv"
+    path.write_text('a,b\nx," =HYPERLINK(1)"\n', encoding="utf-8")
+    with pytest.raises(ReferenceTableError, match="disallowed"):
+        read_reference_csv(path, ("a", "b"))
+
+
+def test_write_refuses_a_formula_leading_cell(tmp_path: Path) -> None:
+    path = tmp_path / "t.csv"
+    with pytest.raises(ReferenceTableError, match="disallowed"):
+        write_reference_csv(path, ("a", "b"), [{"a": "x", "b": "-"}])
+    assert not path.exists()

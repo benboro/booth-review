@@ -265,7 +265,7 @@ def test_write_reviewed_orders_pair_by_fold(tmp_path: Path) -> None:
         tmp_path,
         [
             ReviewedPair(
-                name_a="Zeb Zorn", name_b="Aaron Adams", reason="other", decision="different"
+                name_a="Zeb Zorn", name_b="Aaron Adams", reason="nickname", decision="different"
             )
         ],
     )
@@ -639,3 +639,31 @@ def test_same_decision_refuses_to_delete_an_override_referenced_person() -> None
     # Protecting only the surviving id is fine.
     merged = apply_decisions(registry, reviewed, name_counts={}, protected_ids={"dale-harlow"})
     assert set(merged.persons) == {"dale-harlow"}
+
+
+# -- WR-13: people_reviewed.csv reasons come from the fixed vocabulary -----------------------
+
+
+def test_review_reasons_match_grouping_reason_literal() -> None:
+    from typing import get_args
+
+    from booth_review.people.grouping import Reason
+    from booth_review.people.registry import REVIEW_REASONS
+
+    assert frozenset(get_args(Reason)) == REVIEW_REASONS
+
+
+def test_load_reviewed_rejects_free_text_reason(tmp_path: Path) -> None:
+    path = tmp_path / "people_reviewed.csv"
+    path.write_text("name_a,name_b,reason,decision\nA,B,looked alike,same\n", encoding="utf-8")
+    with pytest.raises(ReferenceTableError, match="invalid reason"):
+        load_reviewed(tmp_path)
+
+
+def test_write_reviewed_refuses_free_text_reason(tmp_path: Path) -> None:
+    with pytest.raises(ReferenceTableError, match="reason"):
+        write_reviewed(
+            tmp_path,
+            [ReviewedPair(name_a="A B", name_b="A C", reason="-", decision="same")],
+        )
+    assert not (tmp_path / "people_reviewed.csv").exists()

@@ -30,6 +30,11 @@ Decision = Literal["same", "different", "one"]
 _DECISIONS: frozenset[str] = frozenset({"same", "different", "one"})
 _ROLES: frozenset[str] = frozenset({"pbp", "analyst", "unknown"})
 _OVERRIDE_REASONS: frozenset[str] = frozenset({"two-people", "other"})
+# people_reviewed.csv's fixed reason vocabulary (D-06): grouping.Reason's
+# values, restated here because grouping imports this module.
+REVIEW_REASONS: frozenset[str] = frozenset(
+    {"suffix_only", "nickname", "similar_first", "near_spelling", "possible_two_people"}
+)
 
 # person_id: lowercase slug tokens joined by single hyphens (assign_slug's
 # output shape).
@@ -220,8 +225,8 @@ def write_people(reference_dir: Path, registry: PeopleRegistry) -> None:
 
 def load_reviewed(reference_dir: Path) -> list[ReviewedPair]:
     """Read people_reviewed.csv (not required). Raises ReferenceTableError on
-    a decision outside same|different|one. name_a/name_b pass through
-    csv_unsafe (see write_reviewed).
+    a decision outside same|different|one or a reason outside REVIEW_REASONS.
+    name_a/name_b pass through csv_unsafe (see write_reviewed).
     """
     path = reference_dir / "people_reviewed.csv"
     raw_rows = read_reference_csv(path, REVIEWED_COLUMNS, required=False)
@@ -231,6 +236,8 @@ def load_reviewed(reference_dir: Path) -> list[ReviewedPair]:
         decision = raw["decision"]
         if decision not in _DECISIONS:
             raise ReferenceTableError(f"{path.name}: line {line_no}: invalid decision {decision!r}")
+        if raw["reason"] not in REVIEW_REASONS:
+            raise ReferenceTableError(f"{path.name}: line {line_no}: invalid reason")
         pairs.append(
             ReviewedPair(
                 name_a=csv_unsafe(raw["name_a"]),
@@ -254,8 +261,14 @@ def write_reviewed(reference_dir: Path, pairs: Sequence[ReviewedPair]) -> None:
     variants, these are scraped 506 crew text that reach this public table
     without a human proofreading step, so a name starting with =, +, -, @, a
     tab, or a carriage return must not corrupt (or make unreadable) the
-    file. Pairs with csv_unsafe() in load_reviewed.
+    file. Pairs with csv_unsafe() in load_reviewed. A reason outside
+    REVIEW_REASONS raises ReferenceTableError before anything is written.
     """
+    bad_reasons = sum(1 for pair in pairs if pair.reason not in REVIEW_REASONS)
+    if bad_reasons:
+        raise ReferenceTableError(
+            f"people_reviewed.csv: {bad_reasons} pair(s) with a reason outside the fixed vocabulary"
+        )
     ordered_pairs = []
     for pair in pairs:
         name_a, name_b = _ordered_pair(pair.name_a, pair.name_b)

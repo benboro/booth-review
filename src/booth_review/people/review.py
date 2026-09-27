@@ -33,6 +33,7 @@ from booth_review.people.grouping import (
 )
 from booth_review.people.normalize import fold_person, is_placeholder
 from booth_review.people.registry import (
+    REVIEW_REASONS,
     PeopleRegistry,
     ReviewedPair,
     apply_decisions,
@@ -276,7 +277,7 @@ def apply(paths: DataPaths, ref_dir: Path) -> ApplySummary:
         if not decision:
             undecided += 1
             continue
-        if decision not in _DECISIONS:
+        if decision not in _DECISIONS or row["reason"] not in REVIEW_REASONS:
             invalid += 1
             continue
         pair = ReviewedPair(name_a=name_a, name_b=name_b, reason=row["reason"], decision=decision)  # type: ignore[arg-type]
