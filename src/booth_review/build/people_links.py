@@ -32,7 +32,12 @@ from dataclasses import dataclass
 import polars as pl
 
 from booth_review.people.normalize import is_placeholder
-from booth_review.people.registry import PeopleRegistry, PersonOverride, register_names
+from booth_review.people.registry import (
+    PeopleRegistry,
+    PersonOverride,
+    check_person_override_ids,
+    register_names,
+)
 from booth_review.people.roles import Role, crew_roles
 from booth_review.resolve.networks import NetworkTable
 from booth_review.sources.sports506.parser import Listing506
@@ -148,6 +153,7 @@ def build_people_links(
     from data/reference/ (people.registry.load_people /
     load_person_overrides); this function never writes them back.
     """
+    check_person_override_ids(person_overrides, registry)
     registered_ids_before = set(registry.persons.keys())
     override_by_slot: dict[tuple[int, str, int], str] = {
         (o.season, o.pointer, o.position): o.person_id for o in person_overrides

@@ -500,3 +500,28 @@ def test_assemble_tables_produces_non_empty_schema_exact_people_frames(
     assert tables.telecast_people.height > 0
     assert tables.telecast_people.columns == list(TELECAST_PEOPLE_SCHEMA.keys())
     assert tables.review_rows["review_people_new"][0] == NEW_NAME_COLUMNS
+
+
+# -- CR-04: an override naming a person_id missing from people.csv fails cleanly -------------
+
+
+def test_person_override_with_unknown_person_id_raises_reference_table_error() -> None:
+    from booth_review.errors import ReferenceTableError
+
+    persons = [Person("known-person", "Known Person", ("Known Person",), "pbp", None)]
+    listing = _listing(week_label="1", source_row_index=5, crew_names=("Known Person",))
+    override = PersonOverride(
+        season=2025,
+        pointer=_pointer(listing),
+        position=0,
+        person_id="no-such-person",
+        reason="two-people",
+    )
+
+    with pytest.raises(ReferenceTableError, match=r"person_overrides\.csv.*no-such-person"):
+        _run(
+            listings=[listing],
+            link_rows=[_link_row(listing, telecast_id="t1")],
+            registry=_registry(persons),
+            overrides=[override],
+        )

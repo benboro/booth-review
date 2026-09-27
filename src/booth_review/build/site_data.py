@@ -184,6 +184,18 @@ def build_site_data(
     people_by_id: dict[str, dict[str, object]] = {
         prow["person_id"]: prow for prow in tables.people.iter_rows(named=True)
     }
+    missing_people = {
+        str(crow["person_id"])
+        for crew_rows in crew_by_telecast.values()
+        for crow in crew_rows
+        if crow["person_id"] not in people_by_id
+    }
+    if missing_people:
+        # Backstop for people_links' override check (CR-04): a clean,
+        # count-only error instead of a raw KeyError below.
+        raise VaultStateError(
+            f"telecast_people: {len(missing_people)} person_id(s) missing from the people table"
+        )
 
     # -- Pass 1: discover every referenced lookup value -------------------------------------
     team_names: set[str] = set()

@@ -35,6 +35,7 @@ from booth_review.people.registry import (
     ReviewedPair,
     apply_decisions,
     load_people,
+    load_person_overrides,
     load_reviewed,
     register_names,
     with_usual_roles,
@@ -269,7 +270,10 @@ def apply(paths: DataPaths, ref_dir: Path) -> ApplySummary:
         decisions_by_kind[decision] += 1
 
     reviewed_pairs = list(by_key.values())
-    registry = apply_decisions(registry, reviewed_pairs, result.raw_counts)
+    override_ids = {o.person_id for o in load_person_overrides(ref_dir)}
+    registry = apply_decisions(
+        registry, reviewed_pairs, result.raw_counts, protected_ids=override_ids
+    )
 
     # A merge/split changes which crews a person_id's appearances resolve
     # to, so usual roles (computed by scan() against the pre-decision

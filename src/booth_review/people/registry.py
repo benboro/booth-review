@@ -10,7 +10,7 @@ people.csv or people_reviewed.csv.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
@@ -318,6 +318,23 @@ def load_person_overrides(reference_dir: Path) -> list[PersonOverride]:
     return overrides
 
 
+def check_person_override_ids(
+    overrides: Sequence[PersonOverride], registry: PeopleRegistry
+) -> None:
+    """Raise ReferenceTableError when any person_overrides.csv row names a
+    person_id that isn't in people.csv (`registry`), listing every missing
+    id. An override must point at a registered person: an unknown id (a
+    typo, or one a "same" merge deleted) would otherwise reach
+    telecast_people with no people row behind it.
+    """
+    missing = sorted({o.person_id for o in overrides} - set(registry.persons))
+    if missing:
+        raise ReferenceTableError(
+            f"person_overrides.csv: {len(missing)} person_id(s) not in people.csv: "
+            + ", ".join(missing)
+        )
+
+
 def register_names(registry: PeopleRegistry, name_counts: Mapping[str, int]) -> PeopleRegistry:
     """Group `name_counts` (raw spelling -> occurrence count) by fold_person,
     then for each group: if any member already resolves to an existing
@@ -362,6 +379,7 @@ def apply_decisions(
     registry: PeopleRegistry,
     reviewed: Sequence[ReviewedPair],
     name_counts: Mapping[str, int],
+    protected_ids: Collection[str] = frozenset(),
 ) -> PeopleRegistry:
     """Apply each reviewed pair's decision, in order:
 
@@ -380,6 +398,10 @@ def apply_decisions(
 
     Applying the same decisions twice yields an identical registry: the
     second pass finds every pair already in its target state and no-ops.
+
+    `protected_ids` (the person_ids person_overrides.csv references) can
+    never be deleted: a "same" merge that would remove one raises
+    ReferenceTableError instead of orphaning the override.
     """
     persons = dict(registry.persons)
     working = PeopleRegistry(persons)
@@ -396,6 +418,11 @@ def apply_decisions(
         if pair.decision == "same":
             if person_id_a == person_id_b:
                 continue
+            if person_id_b in protected_ids:
+                raise ReferenceTableError(
+                    f"people_reviewed.csv: a 'same' decision would delete person_id "
+                    f"{person_id_b!r}, which person_overrides.csv references"
+                )
             person_a = persons[person_id_a]
             person_b = persons[person_id_b]
             merged_variants = tuple(sorted(set(person_a.variants) | set(person_b.variants)))

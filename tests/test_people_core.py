@@ -606,3 +606,36 @@ def test_write_people_refuses_a_registry_whose_canonical_is_not_a_variant(
     with pytest.raises(ReferenceTableError, match="robin-vale"):
         write_people(tmp_path, broken)
     assert not (tmp_path / "people.csv").exists()
+
+
+# -- CR-04: person-override ids must exist; a merge never deletes one ------------------------
+
+
+def test_check_person_override_ids_names_every_missing_id() -> None:
+    from booth_review.people.registry import check_person_override_ids
+
+    registry = _build_two_persons()
+    overrides = [
+        PersonOverride(
+            season=2025, pointer="1:0", position=0, person_id="dale-harlow", reason="other"
+        ),
+        PersonOverride(season=2025, pointer="1:1", position=1, person_id="ghost-b", reason="other"),
+        PersonOverride(season=2025, pointer="1:2", position=0, person_id="ghost-a", reason="other"),
+    ]
+    with pytest.raises(ReferenceTableError, match=r"2 person_id\(s\).*ghost-a, ghost-b"):
+        check_person_override_ids(overrides, registry)
+    check_person_override_ids(overrides[:1], registry)
+
+
+def test_same_decision_refuses_to_delete_an_override_referenced_person() -> None:
+    registry = _build_two_persons()
+    reviewed = [
+        ReviewedPair(
+            name_a="Dale Harlow", name_b="Dale Harlow Jr.", reason="suffix_only", decision="same"
+        )
+    ]
+    with pytest.raises(ReferenceTableError, match="dale-harlow-jr"):
+        apply_decisions(registry, reviewed, name_counts={}, protected_ids={"dale-harlow-jr"})
+    # Protecting only the surviving id is fine.
+    merged = apply_decisions(registry, reviewed, name_counts={}, protected_ids={"dale-harlow"})
+    assert set(merged.persons) == {"dale-harlow"}

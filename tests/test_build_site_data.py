@@ -645,3 +645,20 @@ def test_plotted_row_without_usable_headline_value_raises_vault_state_error(
 
     with pytest.raises(VaultStateError, match="headline_value"):
         _site(tables, build_reference)
+
+
+# -- CR-04: a crew person_id missing from the people table fails cleanly -----------------------
+
+
+def test_crew_person_missing_from_people_table_raises_vault_state_error(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    from dataclasses import replace
+
+    from booth_review.errors import VaultStateError
+
+    assert small_tables.telecast_people.height > 0
+    tables = replace(small_tables, people=small_tables.people.head(0))
+
+    with pytest.raises(VaultStateError, match="person_id"):
+        _site(tables, build_reference)
