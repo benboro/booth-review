@@ -15,6 +15,8 @@ import { encodeState, decodeState } from './modules/url-state.js';
 import { buildFigure, renderChart, bindChartEvents } from './modules/chart.js';
 import { initTopbar, renderTopbar } from './modules/topbar.js';
 import { initFilters, renderFilters } from './modules/filters.js';
+import { renderPanel, openPanel, closePanel } from './modules/panel.js';
+import { renderTable } from './modules/table.js';
 
 const versionMeta = document.querySelector('meta[name="site-data-version"]');
 const version = versionMeta ? versionMeta.content : '';
@@ -23,9 +25,27 @@ const chartEl = document.getElementById('chart');
 const loadErrorEl = document.getElementById('load-error');
 const axisToggleEl = document.getElementById('axis-toggle');
 const excitementCaptionEl = document.getElementById('excitement-caption');
+const panelBodyEl = document.getElementById('panel-body');
+const panelTitleEl = document.getElementById('panel-title');
+const panelCloseEl = document.getElementById('panel-close');
 
 const darkMedia = window.matchMedia('(prefers-color-scheme: dark)');
 const mobileMedia = window.matchMedia('(max-width: 640px)');
+
+// Registered here, at module-evaluation time, so this listener runs before
+// filters.js's own Escape handler (registered later, inside `initFilters`
+// during `bootstrap`): when the phone filters drawer is open, Escape closes
+// only the drawer, never the detail panel too.
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Escape') return;
+  if (document.body.classList.contains('filters-open')) return;
+  if (!document.body.classList.contains('panel-open')) return;
+  hideDetailPanel();
+});
+
+if (panelCloseEl) {
+  panelCloseEl.addEventListener('click', () => hideDetailPanel());
+}
 
 /** Renderers other plans (04-08..04-10) push into: called every render with {data, state, view, setState}. */
 const renderers = [];
@@ -34,6 +54,44 @@ let data = null;
 let state = null;
 let lastView = null;
 let revision = 0;
+
+/** Telecast index the detail panel currently shows, or null when it's closed. */
+let openPanelIndex = null;
+
+/** The matched-games table's own sort state (kept out of the URL, D-11/SITE-13). */
+let sort = { key: 'date', dir: 'asc' };
+
+/** Opens the detail panel on telecast `i` and remembers it's open, for `render`'s own refresh (D-10). */
+function openDetailPanel(i) {
+  openPanelIndex = i;
+  openPanel(i, { data, state, view: lastView });
+}
+
+/** Closes the detail panel and forgets it's open. */
+function hideDetailPanel() {
+  openPanelIndex = null;
+  closePanel();
+}
+
+/** Pushed into `renderers`: renders the matched-games table and wires its sort headers and Details buttons. */
+function tableRenderer({ data, state, view }) {
+  renderTable({
+    data,
+    view,
+    state,
+    sort,
+    onSort(key) {
+      sort =
+        sort.key === key
+          ? { key, dir: sort.dir === 'asc' ? 'desc' : 'asc' }
+          : { key, dir: key === 'date' ? 'asc' : 'desc' };
+      render();
+    },
+    onDetails(i) {
+      openDetailPanel(i);
+    },
+  });
+}
 
 /** The env object `buildFigure` needs, refreshed on every render. */
 function currentEnv() {
@@ -62,6 +120,14 @@ function render() {
   }
 
   history.replaceState(null, '', location.pathname + encodeState(state, data));
+
+  // Keeps "Selected on this game" (and any other view-derived text) current
+  // in an already-open panel when a filter/selection change elsewhere
+  // triggers this render, without re-running openPanel's own focus/reveal
+  // side effects.
+  if (openPanelIndex !== null) {
+    renderPanel(panelBodyEl, panelTitleEl, { data, i: openPanelIndex, state, view });
+  }
 
   for (const renderer of renderers) {
     renderer({ data, state, view, setState });
@@ -126,6 +192,8 @@ async function bootstrap() {
   initFilters({ data, getState: () => state, setState });
   renderers.push(renderFilters);
 
+  renderers.push(tableRenderer);
+
   if (axisToggleEl) {
     axisToggleEl.addEventListener('click', (ev) => {
       const button = ev.target.closest('button[data-axis]');
@@ -157,6 +225,9 @@ async function bootstrap() {
       const isExactlyFamily = current.length === famIds.length && famIds.every((id) => current.includes(id));
       setState({ networks: isExactlyFamily ? null : famIds });
     },
+    onPointClick(i) {
+      openDetailPanel(i);
+    },
   });
 
   window.__testHooks = {
@@ -173,6 +244,7 @@ async function bootstrap() {
       summary: lastView.summary,
     }),
     renderers,
+    openPanel: (i) => openDetailPanel(i),
   };
 }
 

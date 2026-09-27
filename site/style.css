@@ -448,10 +448,13 @@ body.rail-collapsed #rail {
   background: var(--surface);
 }
 
-.games-table td.date,
-.games-table td.viewers,
+.games-table td.num,
 .games-table th button {
   font-variant-numeric: tabular-nums;
+}
+
+.games-table td {
+  word-break: break-word;
 }
 
 .games-table th button {
@@ -511,6 +514,32 @@ body.panel-open .drawer {
   cursor: pointer;
   font: var(--font-heading);
   float: right;
+}
+
+#panel-body h3 {
+  font: var(--font-heading);
+  margin: var(--space-md) 0 var(--space-sm) 0;
+}
+
+#panel-body p {
+  margin: 0 0 var(--space-sm) 0;
+}
+
+.panel-crew,
+.panel-links,
+.panel-flags {
+  list-style: none;
+  margin: 0 0 var(--space-md) 0;
+  padding: 0;
+}
+
+.panel-crew li,
+.panel-flags li {
+  margin-bottom: var(--space-xs);
+}
+
+.panel-links li {
+  margin-bottom: var(--space-sm);
 }
 
 /* ---------- Footer ---------- */
