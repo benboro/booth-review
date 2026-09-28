@@ -96,7 +96,9 @@ def _open_filter(page: Page, name: str) -> None:
     returns can race the still-pending event."""
     page.click(f"#trigger-{name}")
     page.wait_for_function(f"document.getElementById('pop-{name}').matches(':popover-open')")
-    page.wait_for_function(f"document.getElementById('trigger-{name}').getAttribute('aria-expanded') === 'true'")
+    page.wait_for_function(
+        f"document.getElementById('trigger-{name}').getAttribute('aria-expanded') === 'true'"
+    )
 
 
 def test_season_counts_hidden_until_disclosure_opened(
@@ -336,7 +338,13 @@ def test_reload_restores_full_filter_state(
     guarded_page.wait_for_function("location.search.includes('school=northfield')")
 
     url = guarded_page.evaluate("location.search")
-    fragments = ("seasons=2021-2026", "networks=", "slot=prime", "role=analyst", "school=northfield")
+    fragments = (
+        "seasons=2021-2026",
+        "networks=",
+        "slot=prime",
+        "role=analyst",
+        "school=northfield",
+    )
     for fragment in fragments:
         assert fragment in url
 
@@ -349,22 +357,32 @@ def test_reload_restores_full_filter_state(
     assert guarded_page.evaluate("() => document.getElementById('season-from').value") == "2021"
     assert guarded_page.evaluate("() => document.getElementById('season-to').value") == "2026"
     assert (
-        guarded_page.evaluate("() => document.querySelector(\"input[data-family-checkbox='other']\").checked")
+        guarded_page.evaluate(
+            "() => document.querySelector(\"input[data-family-checkbox='other']\").checked"
+        )
         is False
     )
     assert (
-        guarded_page.evaluate("() => document.querySelector(\"input[name='slot'][value='prime']\").checked")
+        guarded_page.evaluate(
+            "() => document.querySelector(\"input[name='slot'][value='prime']\").checked"
+        )
         is True
     )
     assert (
-        guarded_page.evaluate("() => document.querySelector(\"input[name='role'][value='analyst']\").checked")
+        guarded_page.evaluate(
+            "() => document.querySelector(\"input[name='role'][value='analyst']\").checked"
+        )
         is True
     )
     assert (
-        guarded_page.evaluate("() => document.querySelector(\"#school-list input[value='northfield']\").checked")
+        guarded_page.evaluate(
+            "() => document.querySelector(\"#school-list input[value='northfield']\").checked"
+        )
         is True
     )
-    assert "Northfield" in guarded_page.evaluate("() => document.getElementById('school-chips').textContent")
+    assert "Northfield" in guarded_page.evaluate(
+        "() => document.getElementById('school-chips').textContent"
+    )
 
     assert _visible_count(guarded_page) == before_visible
     assert sorted(_visible_customdata(guarded_page)) == before_active
@@ -451,7 +469,7 @@ def test_chrome_buttons_use_the_theme_text_color_in_dark_mode(
 @pytest.mark.parametrize(
     ("query", "trigger_id", "expected_text"),
     [
-        ("?seasons=2019-2025", "trigger-seasons", "Seasons 2019–2025"),
+        ("?seasons=2019-2025", "trigger-seasons", "Seasons 2019–2025"),  # noqa: RUF001
         ("?networks=net-a", "trigger-networks", "Networks · 1"),
         ("?conferences=SEC", "trigger-conference", "Conference: SEC"),
         ("?conferences=SEC,Big+Ten", "trigger-conference", "Conference · 2"),
@@ -595,7 +613,9 @@ def test_legacy_team_link_migrates_into_school_as_a_fade_filter(
     filter (a fade, not a highlight -- Pitfall 4)."""
     open_app(guarded_page, "?team=northfield")
     assert (
-        guarded_page.evaluate("() => document.querySelector(\"#school-list input[value='northfield']\").checked")
+        guarded_page.evaluate(
+            "() => document.querySelector(\"#school-list input[value='northfield']\").checked"
+        )
         is True
     )
     expect(guarded_page.locator("#trigger-school")).to_have_text("School: Northfield")
@@ -613,7 +633,9 @@ def test_school_chip_remove_clears_the_filter(
     guarded_page.click("#school-chips button.chip-remove")
     guarded_page.wait_for_function("location.search === ''")
     assert (
-        guarded_page.evaluate("() => document.querySelector(\"#school-list input[value='northfield']\").checked")
+        guarded_page.evaluate(
+            "() => document.querySelector(\"#school-list input[value='northfield']\").checked"
+        )
         is False
     )
 
@@ -632,7 +654,9 @@ def test_school_search_keyboard_arrowdown_focuses_first_row_and_space_checks_it(
     guarded_page.keyboard.press("Space")
     guarded_page.wait_for_function("location.search.includes('school=boulder-pass')")
     assert (
-        guarded_page.evaluate("() => document.querySelector(\"#school-list input[value='boulder-pass']\").checked")
+        guarded_page.evaluate(
+            "() => document.querySelector(\"#school-list input[value='boulder-pass']\").checked"
+        )
         is True
     )
 
@@ -804,7 +828,9 @@ def test_mobile_filters_sheet(mobile_page: Page, open_app: Callable[[Page, str],
         expect(mobile_page.locator(f"#trigger-{name}")).to_be_hidden()
 
     filters_button.click()
-    mobile_page.wait_for_function("document.getElementById('filters-sheet').matches(':popover-open')")
+    mobile_page.wait_for_function(
+        "document.getElementById('filters-sheet').matches(':popover-open')"
+    )
     # The native `toggle` event (which moves focus) fires asynchronously
     # relative to `:popover-open` becoming true, so wait for the focus move
     # itself rather than racing it.
@@ -833,7 +859,9 @@ def test_mobile_filters_sheet(mobile_page: Page, open_app: Callable[[Page, str],
     )
 
     filters_button.click()
-    mobile_page.wait_for_function("document.getElementById('filters-sheet').matches(':popover-open')")
+    mobile_page.wait_for_function(
+        "document.getElementById('filters-sheet').matches(':popover-open')"
+    )
     tappable = mobile_page.locator("#filters-sheet button:visible, #filters-sheet label:visible")
     count = tappable.count()
     assert count > 0
