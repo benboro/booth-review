@@ -74,7 +74,7 @@ def test_site_data_json_is_reachable_and_matches_the_contract_version(
     guarded_page.goto(f"{site_url}/index.html")
     response = guarded_page.request.get(f"{site_url}/site-data.json")
     assert response.status == 200
-    assert response.json()["schema_version"] == "1.1.0"
+    assert response.json()["schema_version"] == "1.2.0"
 
 
 _BOX_JS = """

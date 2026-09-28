@@ -320,9 +320,25 @@ def test_shows_time_slot_gates_on_game_type_and_saturday(guarded_page: Page, sit
     non-Saturday game, and never with no recorded slot."""
     _load(guarded_page, site_url)
     assert guarded_page.evaluate(_FORMAT_JS, ["showsTimeSlot", 0]) is True
+    assert guarded_page.evaluate(_FORMAT_JS, ["showsTimeSlot", 2]) is True
     assert guarded_page.evaluate(_FORMAT_JS, ["showsTimeSlot", 7]) is False
     assert guarded_page.evaluate(_FORMAT_JS, ["showsTimeSlot", 5]) is False
     assert guarded_page.evaluate(_FORMAT_JS, ["showsTimeSlot", 3]) is False
+
+
+def test_late_slot_labels(guarded_page: Page, site_url: str) -> None:
+    """D-20: the After dark slot's short and long labels."""
+    _load(guarded_page, site_url)
+    result = guarded_page.evaluate(
+        """
+        async () => {
+          const F = await import('./modules/format.js');
+          return { short: F.SLOT_SHORT_LABELS.late, long: F.SLOT_LABELS.late };
+        }
+        """
+    )
+    assert result["short"] == "After dark"
+    assert result["long"] == "After dark (10 PM ET or later)"
 
 
 def test_game_type_label(guarded_page: Page, site_url: str) -> None:
@@ -382,7 +398,7 @@ def test_url_state_round_trips(guarded_page: Page, site_url: str) -> None:
         "postseason": "exclude",
         "seasons": [2021, 2025],
         "networks": ["net-a", "net-b"],
-        "slots": ["noon", "prime"],
+        "slots": ["noon", "prime", "late"],
         "axis": "excitement",
     }
     round_trip = guarded_page.evaluate(_ROUND_TRIP_JS, full_state)
@@ -445,6 +461,15 @@ def test_decode_conferences_reorders_to_fbs_conferences_order(
     _load(guarded_page, site_url)
     decoded = guarded_page.evaluate(_DECODE_SEARCH_JS, "?conferences=SEC,Big+Ten")
     assert decoded["conferences"] == ["Big Ten", "SEC"]
+
+
+def test_decode_slot_drops_unknown_values(guarded_page: Page, site_url: str) -> None:
+    """D-20/T-04.1-22: `late` is accepted only through the SLOT_ORDER
+    allowlist; an unrecognized value is dropped, and an all-unrecognized
+    param decodes to null (no filter)."""
+    _load(guarded_page, site_url)
+    assert guarded_page.evaluate(_DECODE_SEARCH_JS, "?slot=late,bogus")["slots"] == ["late"]
+    assert guarded_page.evaluate(_DECODE_SEARCH_JS, "?slot=bogus")["slots"] is None
 
 
 @pytest.mark.parametrize(

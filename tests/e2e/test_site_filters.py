@@ -272,7 +272,55 @@ def test_prime_time_slot_fades_non_matching_including_unknown_kickoff(
     guarded_page.wait_for_function("location.search.includes('slot=prime')")
 
     assert _visible_count(guarded_page) == 12
-    assert sorted(_visible_customdata(guarded_page)) == [2, 5, 7, 9]
+    assert sorted(_visible_customdata(guarded_page)) == [5, 7, 9]
+
+
+def test_after_dark_slot_passes_only_the_late_kickoff(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-20/D-26: the After dark checkbox writes slot=late and fades every
+    dot except the one late-kickoff telecast (index 2, 22:30 ET). Its
+    detail panel shows the After dark label."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "kickoff")
+    guarded_page.check("input[name='slot'][value='late']")
+    guarded_page.wait_for_function("location.search.includes('slot=late')")
+
+    assert _visible_count(guarded_page) == 12
+    assert sorted(_visible_customdata(guarded_page)) == [2]
+
+    guarded_page.evaluate("window.__testHooks.openPanel(2)")
+    assert "After dark (10 PM ET or later)" in guarded_page.inner_text("#panel-body")
+
+
+def test_legacy_prime_link_still_decodes(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-20: an existing ?slot=prime link still decodes; the prime checkbox
+    is checked, the new late checkbox is not, and the URL is left alone."""
+    open_app(guarded_page, "?slot=prime")
+
+    assert guarded_page.is_checked("input[name='slot'][value='prime']") is True
+    assert guarded_page.is_checked("input[name='slot'][value='late']") is False
+    assert guarded_page.evaluate("location.search") == "?slot=prime"
+
+
+def test_prime_and_late_together_encode_canonically(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-20: checking late then prime encodes slot=prime,late (canonical
+    SLOT_ORDER order) and the Kickoff trigger reads the count form; late
+    alone reads its short label."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "kickoff")
+
+    guarded_page.check("input[name='slot'][value='late']")
+    guarded_page.wait_for_function("location.search.includes('slot=late')")
+    assert guarded_page.inner_text("#trigger-kickoff") == "Kickoff: After dark"
+
+    guarded_page.check("input[name='slot'][value='prime']")
+    guarded_page.wait_for_function("location.search.includes('slot=prime,late')")
+    assert guarded_page.inner_text("#trigger-kickoff") == "Kickoff · 2"
 
 
 def test_role_filter_limits_taylor_vance_to_her_main_feed_role(
