@@ -45,6 +45,26 @@ def test_time_slot_at_18_is_prime() -> None:
     assert time_slot("2025-01-01T18:00:00-05:00") == "prime"
 
 
+def test_time_slot_at_21_59_is_prime() -> None:
+    assert time_slot("2025-01-01T21:59:00-05:00") == "prime"
+
+
+def test_time_slot_at_22_is_late() -> None:
+    assert time_slot("2025-01-01T22:00:00-05:00") == "late"
+
+
+def test_time_slot_at_23_30_is_late() -> None:
+    assert time_slot("2025-01-01T23:30:00-05:00") == "late"
+
+
+def test_time_slot_after_midnight_is_late() -> None:
+    assert time_slot("2025-01-01T00:30:00-05:00") == "late"
+
+
+def test_time_slot_at_5_is_noon() -> None:
+    assert time_slot("2025-01-01T05:00:00-05:00") == "noon"
+
+
 def test_time_slot_null_kickoff_is_null() -> None:
     assert time_slot(None) is None
 
