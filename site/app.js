@@ -1,23 +1,32 @@
 /**
  * Bootstrap: fetch `site-data.json`, hold one state object, run the render
  * cycle, keep the URL in sync, wire the chart's DOM controls, and expose
- * `window.__testHooks` (SITE-01, SITE-03, SITE-04, SITE-12, SITE-18, SITE-19).
+ * `window.__testHooks` (SITE-01, SITE-03, SITE-04, SITE-12, SITE-18, SITE-19,
+ * SITE-25, SITE-26, D-22).
  *
  * Wiring only -- every selection/format/chart computation lives in
  * ./modules/*.js. This file never assigns raw markup into the page (T-04-24):
  * every piece of dynamic text below is a DOM attribute/property assignment
  * against already-static HTML, never a markup-injecting API.
+ *
+ * D-22: `tooltipMode` (default `chart.js`'s `TOOLTIP_MODE`) drives the
+ * custom HTML tooltip shown on `plotly_hover`/hidden on `plotly_unhover` --
+ * only when the pointer has real hover capability (`hoverNoneMedia`); a
+ * touch device keeps tap-to-open-panel and never sees it. `hideTooltip()` is
+ * also called at the start of every `render()`, when the detail panel
+ * opens, on page scroll, and when the pointer leaves the chart entirely.
  */
 
 import { prepareData } from './modules/data.js';
 import { defaultState, computeView, toggleFamilyNetworks } from './modules/select.js';
 import { encodeState, decodeState } from './modules/url-state.js';
-import { buildFigure, renderChart, bindChartEvents } from './modules/chart.js';
+import { buildFigure, renderChart, bindChartEvents, TOOLTIP_MODE } from './modules/chart.js';
 import { initTopbar, renderTopbar } from './modules/topbar.js';
 import { initFilters, renderFilters } from './modules/filters.js';
 import { initLegend, renderLegend } from './modules/legend.js';
 import { renderPanel, openPanel, closePanel } from './modules/panel.js';
 import { renderTable } from './modules/table.js';
+import { showTooltip, hideTooltip } from './modules/tooltip.js';
 
 const versionMeta = document.querySelector('meta[name="site-data-version"]');
 const version = versionMeta ? versionMeta.content : '';
@@ -34,6 +43,13 @@ const panelEl = document.getElementById('detail-panel');
 const darkMedia = window.matchMedia('(prefers-color-scheme: dark)');
 const mobileMedia = window.matchMedia('(max-width: 640px)');
 const reducedMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)');
+/** True on a touch device with no real hover capability (D-22): these
+ * devices keep tap-to-open-panel and never show the hover tooltip. */
+const hoverNoneMedia = window.matchMedia('(hover: none)');
+
+/** The custom HTML tooltip's current mode (D-22); `__testHooks.setTooltipMode`
+ * is the only way a test flips it to `'plotly'` at runtime. */
+let tooltipMode = TOOLTIP_MODE;
 
 /** Number of times `Plotly.Plots.resize` has *finished* for the detail
  * panel's own open/close (belt-and-suspenders alongside
@@ -89,6 +105,17 @@ if (panelCloseEl) {
   panelCloseEl.addEventListener('click', () => hideDetailPanel());
 }
 
+// D-22 close triggers: the custom HTML tooltip hides on scroll (the anchored
+// dot's own screen position moves under it) and when the pointer leaves the
+// chart entirely (a `plotly_unhover` for the exact hovered dot already
+// covers moving off *that* dot, but not e.g. a fast flick straight off the
+// chart's edge). `render()`/`openDetailPanel` call `hideTooltip()` directly,
+// below.
+window.addEventListener('scroll', () => hideTooltip(), { passive: true });
+if (chartEl) {
+  chartEl.addEventListener('mouseleave', () => hideTooltip());
+}
+
 /** Renderers other plans (04-08..04-10) push into: called every render with {data, state, view, setState}. */
 const renderers = [];
 
@@ -114,6 +141,7 @@ function resizeChartForPanelIfNoTransition() {
 
 /** Opens the detail panel on telecast `i` and remembers it's open, for `render`'s own refresh (D-10). */
 function openDetailPanel(i) {
+  hideTooltip();
   openPanelIndex = i;
   openPanel(i, { data, state, view: lastView });
   resizeChartForPanelIfNoTransition();
@@ -152,12 +180,14 @@ function currentEnv() {
     theme: darkMedia.matches ? 'dark' : 'light',
     mobile: mobileMedia.matches,
     revision,
+    tooltipMode,
   };
 }
 
 /** Recomputes the view, re-renders the chart, syncs the axis UI and the URL, and runs every registered renderer. */
 function render() {
   revision += 1;
+  hideTooltip();
   const view = computeView(data, state);
   lastView = view;
 
@@ -270,6 +300,25 @@ async function bootstrap() {
       onPointClick(i) {
         openDetailPanel(i);
       },
+      onPointHover(i, ev) {
+        if (tooltipMode !== 'html' || hoverNoneMedia.matches) return;
+        const point = ev.points && ev.points[0];
+        let clientX;
+        let clientY;
+        if (point && point.x != null && point.y != null) {
+          const layout = chartEl._fullLayout;
+          const rect = chartEl.getBoundingClientRect();
+          clientX = rect.left + layout._size.l + layout.xaxis.d2p(point.x);
+          clientY = rect.top + layout._size.t + layout.yaxis.d2p(point.y);
+        } else {
+          clientX = ev.event?.clientX;
+          clientY = ev.event?.clientY;
+        }
+        showTooltip(data, i, { axis: state.axis, theme: currentEnv().theme, clientX, clientY });
+      },
+      onPointUnhover() {
+        hideTooltip();
+      },
     });
 
     window.__testHooks = {
@@ -297,6 +346,18 @@ async function bootstrap() {
       openPanel: (i) => openDetailPanel(i),
       get panelResizes() {
         return panelResizes;
+      },
+      // D-22: the only way a test flips the tooltip's mode at runtime,
+      // proving the fallback path (`hoverText`/Plotly's own hovertemplate,
+      // in chart.js) still works end to end.
+      setTooltipMode(mode) {
+        if (mode !== 'html' && mode !== 'plotly') return;
+        tooltipMode = mode;
+        hideTooltip();
+        render();
+      },
+      get tooltipMode() {
+        return tooltipMode;
       },
     };
   } catch (err) {

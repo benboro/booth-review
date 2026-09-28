@@ -611,6 +611,48 @@ input[type="checkbox"] {
   color: var(--muted);
 }
 
+/* ---------- Chart tooltip (D-22) ---------- */
+
+/* The default TOOLTIP_MODE 'html' tooltip (site/modules/tooltip.js),
+   replacing Plotly's own hover label so a network name can render as a real
+   filled pill (SITE-26). `pointer-events: none` so it can never steal hover
+   or a click from the dots underneath it. */
+.chart-tooltip {
+  position: fixed;
+  z-index: 30;
+  pointer-events: none;
+  max-width: 320px;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  font: var(--font-label);
+}
+
+.chart-tooltip .tooltip-title {
+  display: block;
+  font-weight: var(--weight-semibold);
+}
+
+.tooltip-networks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: var(--space-xs) 0;
+}
+
+.tooltip-sep {
+  color: var(--muted);
+}
+
+.tooltip-hint {
+  color: var(--muted);
+  margin-top: var(--space-xs);
+}
+
 /* ---------- Chart area ---------- */
 
 /* `#chart-area`'s own children stack top-to-bottom in flex-column flow (not
