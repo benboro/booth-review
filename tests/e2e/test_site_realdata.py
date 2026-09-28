@@ -79,7 +79,16 @@ _BIG_TEN_ERA_CORRECT_JS = """
   let before2024 = 0;
   let from2024 = 0;
   for (let i = 0; i < data.n; i += 1) {
-    if (data.t.home_team[i] !== teamIdx && data.t.away_team[i] !== teamIdx) continue;
+    const isHome = data.t.home_team[i] === teamIdx;
+    const isAway = data.t.away_team[i] === teamIdx;
+    if (!isHome && !isAway) continue;
+    // The conference filter is OR-within (D-10): a pre-2024 USC (then
+    // Pac-12) game against a Big Ten opponent -- e.g. a Rose Bowl --
+    // legitimately passes the filter on the opponent's side. The
+    // era-correct invariant is about USC's own conference assignment, so
+    // this counts only games where USC's own side is Big Ten.
+    const uscConf = isHome ? data.t.home_conference[i] : data.t.away_conference[i];
+    if (uscConf !== confIdx) continue;
     if (!passing.has(i)) continue;
     if (data.t.season[i] < 2024) before2024 += 1;
     else from2024 += 1;
