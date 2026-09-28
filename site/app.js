@@ -35,17 +35,28 @@ const darkMedia = window.matchMedia('(prefers-color-scheme: dark)');
 const mobileMedia = window.matchMedia('(max-width: 640px)');
 const reducedMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)');
 
-/** Number of times `Plotly.Plots.resize` has run for the detail panel's own
- * open/close (belt-and-suspenders alongside `config.responsive: true`'s
- * internal ResizeObserver, Pattern 1) -- exposed on `__testHooks` so a test
- * can wait deterministically instead of guessing a transition's timing. */
+/** Number of times `Plotly.Plots.resize` has *finished* for the detail
+ * panel's own open/close (belt-and-suspenders alongside
+ * `config.responsive: true`'s internal ResizeObserver, Pattern 1) --
+ * exposed on `__testHooks` so a test can wait deterministically instead of
+ * guessing a transition's timing. `Plotly.Plots.resize` returns a Promise
+ * (a `scattergl` redraw is a WebGL draw call, scheduled for a later
+ * animation frame, not synchronous), so the counter increments only once
+ * the resize itself has actually completed -- incrementing synchronously
+ * on call would let a test's wait resolve before the chart visually
+ * caught up to its new container width. */
 let panelResizes = 0;
 
-/** Resizes the chart for the panel's own width change, and counts it. */
+/** Resizes the chart for the panel's own width change, and counts it once the resize itself settles. */
 function resizeChartForPanel() {
-  panelResizes += 1;
-  if (typeof window.Plotly?.Plots?.resize === 'function') {
-    window.Plotly.Plots.resize(chartEl);
+  const result = window.Plotly?.Plots?.resize?.(chartEl);
+  if (result && typeof result.then === 'function') {
+    result.then(
+      () => { panelResizes += 1; },
+      () => { panelResizes += 1; },
+    );
+  } else {
+    panelResizes += 1;
   }
 }
 

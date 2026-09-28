@@ -114,10 +114,15 @@ def test_secondary_pages_do_not_inherit_the_chart_grid(
 def test_chart_page_keeps_its_grid(guarded_page: Page, site_url: str) -> None:
     """WR-05: scoping the grid to `body.app` leaves the chart page's own
     toolbar + chart layout in place (04.1-04: the left rail was replaced by
-    a full-width toolbar row above the chart, D-01/D-02)."""
+    a full-width toolbar row above the chart, D-01/D-02). At desktop widths
+    the grid also carries a dedicated "panel" column (04.1-05, D-01)."""
     guarded_page.set_viewport_size({"width": 1400, "height": 900})
     guarded_page.goto(f"{site_url}/index.html")
     assert guarded_page.evaluate("getComputedStyle(document.body).display") == "grid"
     toolbar = guarded_page.evaluate(_BOX_JS, "#toolbar")
     assert toolbar["x"] == 0
     assert toolbar["width"] == 1400
+
+    grid_areas = guarded_page.evaluate("getComputedStyle(document.body).gridTemplateAreas")
+    assert "toolbar" in grid_areas
+    assert "panel" in grid_areas
