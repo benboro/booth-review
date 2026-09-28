@@ -318,6 +318,31 @@ def test_table_alt_cast_row_and_team_only_rows(
     assert guarded_page.locator("#games-table tbody tr").count() == 3
 
 
+def test_sideline_role_crew_shows_in_table_and_hover(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """CR-04: role-"unknown" (sideline/other) main-feed crew is listed in the
+    table's crew cell and the tooltip. Robin Teague is dot 3's only crew, so
+    neither may read "Crew not recorded" there; on dots 8 and 11 Robin is
+    listed next to the PBP/analyst crew."""
+    open_app(guarded_page, "?people=robin-teague")
+    expect(guarded_page.locator("#games-table")).to_be_visible()
+
+    rows = _row_texts(guarded_page)
+    assert len(rows) == 3
+    for row in rows:
+        assert "Sideline/other: Robin Teague" in row
+        assert "Crew not recorded" not in row
+
+    hover_texts: list[str] = guarded_page.evaluate(
+        "() => document.getElementById('chart').data.at(-1).text"
+    )
+    assert len(hover_texts) == 3
+    for text in hover_texts:
+        assert "Sideline/other: Robin Teague" in text
+        assert "Crew not recorded" not in text
+
+
 def test_table_source_cell_links_and_details_button_opens_panel(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:

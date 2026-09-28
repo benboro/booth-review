@@ -19,6 +19,7 @@ import {
   formatViewers,
   logTicks,
   niceLinearTicks,
+  ROLE_LABELS,
   stripNetworkNote,
 } from './format.js';
 
@@ -89,6 +90,10 @@ export function hoverText(data, i, selectedNames) {
   const crewParts = [];
   if (crew.pbp.length > 0) crewParts.push(`PBP: ${crew.pbp.join(', ')}`);
   if (crew.analyst.length > 0) crewParts.push(`Analyst: ${crew.analyst.join(', ')}`);
+  // Role "unknown" (sideline/other) main-feed crew still counts as crew on
+  // file: without it a sideline-only dot would read "Crew not recorded"
+  // (CR-04).
+  if (crew.other.length > 0) crewParts.push(`${ROLE_LABELS.unknown}: ${crew.other.join(', ')}`);
   lines.push(escapeHover(crewParts.length > 0 ? crewParts.join(' · ') : 'Crew not recorded'));
 
   lines.push(escapeHover(`Viewers: ${formatViewers(t.viewers[i])}`));

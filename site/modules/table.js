@@ -9,7 +9,14 @@
  * `safeHref` first (T-04-35).
  */
 
-import { crewByRole, formatDate, formatMatchup, formatViewers, measurementLabel } from './format.js';
+import {
+  ROLE_LABELS,
+  crewByRole,
+  formatDate,
+  formatMatchup,
+  formatViewers,
+  measurementLabel,
+} from './format.js';
 import { safeHref } from './panel.js';
 import { personOnGame } from './select.js';
 
@@ -33,12 +40,13 @@ function bindHeaderListeners() {
   viewersSortButton.addEventListener('click', () => currentOnSort?.('viewers'));
 }
 
-/** Main-feed "PBP: ... · Analyst: ..." text, plus any selected alt-cast person appended (D-08). */
+/** Main-feed "PBP: ... · Analyst: ... · Sideline/other: ..." text, plus any selected alt-cast person appended (D-08, CR-04). */
 function crewCellText(data, state, i) {
   const crew = crewByRole(data, i);
   const parts = [];
   if (crew.pbp.length > 0) parts.push(`PBP: ${crew.pbp.join(', ')}`);
   if (crew.analyst.length > 0) parts.push(`Analyst: ${crew.analyst.join(', ')}`);
+  if (crew.other.length > 0) parts.push(`${ROLE_LABELS.unknown}: ${crew.other.join(', ')}`);
   for (const personId of state.people) {
     const personIndex = data.personIndexById.get(personId);
     if (personOnGame(data, i, personIndex, state.role) === 'alt') {
