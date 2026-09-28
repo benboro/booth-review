@@ -1,12 +1,12 @@
 """The site-data contract (D-13/D-14): pydantic models for every display
 field the Phase 4 static site needs, fixed before any join code exists.
 
-Every model uses `extra="forbid"` so an undeclared field (a CFBD conference,
-venue, win probability, or any other bulk field the site never shows) fails
-validation instead of silently shipping (SITE-19, CFBD terms). Every model is
-`strict=True` so a stringified number never silently coerces, and
-`frozen=True` since a validated `SiteData` is a read-only snapshot of the
-build output, never mutated after validation.
+Every model uses `extra="forbid"` so an undeclared field (a CFBD
+classification, venue, win probability, or any other bulk field the site
+never shows) fails validation instead of silently shipping (SITE-19, CFBD
+terms). Every model is `strict=True` so a stringified number never silently
+coerces, and `frozen=True` since a validated `SiteData` is a read-only
+snapshot of the build output, never mutated after validation.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 
 
 class TeamRef(BaseModel):
@@ -30,6 +30,13 @@ class NetworkRef(BaseModel):
     id: str
     name: str
     family: str
+
+
+class ConferenceRef(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    name: str
+    is_fbs: bool
 
 
 class PersonRef(BaseModel):
@@ -74,6 +81,7 @@ class Lookups(BaseModel):
     people: list[PersonRef]
     publishers: list[str]
     flags: list[FlagRef]
+    conferences: list[ConferenceRef]
 
 
 class TelecastColumns(BaseModel):
@@ -109,6 +117,10 @@ class TelecastColumns(BaseModel):
     flags: list[list[int]]
     combined_feeds: list[int | None]
     crew: list[list[CrewEntry]]
+    game_type: list[Literal["regular", "bowl", "playoff"]]
+    playoff_round: list[Literal["first_round", "quarterfinal", "semifinal", "championship"] | None]
+    home_conference: list[int | None]
+    away_conference: list[int | None]
 
 
 class CoverageRow(BaseModel):
@@ -131,7 +143,7 @@ class CoverageRow(BaseModel):
 class SiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["1.0.0"]
+    schema_version: Literal["1.1.0"]
     generated_at: str
     freshness: Freshness
     lookups: Lookups
@@ -161,6 +173,7 @@ class SiteData(BaseModel):
         num_people = len(self.lookups.people)
         num_publishers = len(self.lookups.publishers)
         num_flags = len(self.lookups.flags)
+        num_conferences = len(self.lookups.conferences)
 
         for i in range(n):
             if not 0 <= tc.away_team[i] < num_teams:
@@ -188,6 +201,14 @@ class SiteData(BaseModel):
             combined = tc.combined_feeds[i]
             if combined is not None and combined < 2:
                 raise ValueError(f"telecasts.combined_feeds[{i}]: must be null or >= 2")
+            home_conference = tc.home_conference[i]
+            if home_conference is not None and not 0 <= home_conference < num_conferences:
+                raise ValueError(f"telecasts.home_conference[{i}]: conference index out of range")
+            away_conference = tc.away_conference[i]
+            if away_conference is not None and not 0 <= away_conference < num_conferences:
+                raise ValueError(f"telecasts.away_conference[{i}]: conference index out of range")
+            if tc.playoff_round[i] is not None and tc.game_type[i] != "playoff":
+                raise ValueError(f"telecasts.playoff_round[{i}]: set on a non-playoff game")
 
         for i, row in enumerate(self.coverage):
             if row.network is not None and not 0 <= row.network < num_networks:

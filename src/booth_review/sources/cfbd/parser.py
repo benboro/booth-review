@@ -85,7 +85,7 @@ def parse_games(content: bytes) -> list[CfbdGame]:
         # session (booth-review, phase 04.1 research).
         playoff = row.get("playoff")
         is_cfp = isinstance(playoff, dict)
-        playoff_round_raw = playoff.get("round") if is_cfp else None
+        playoff_round_raw = playoff.get("round") if isinstance(playoff, dict) else None
         playoff_round = playoff_round_raw if isinstance(playoff_round_raw, str) else None
         games.append(
             CfbdGame(
