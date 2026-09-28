@@ -33,13 +33,15 @@ const panelCloseEl = document.getElementById('panel-close');
 const darkMedia = window.matchMedia('(prefers-color-scheme: dark)');
 const mobileMedia = window.matchMedia('(max-width: 640px)');
 
-// Registered here, at module-evaluation time, so this listener runs before
-// filters.js's own Escape handler (registered later, inside `initFilters`
-// during `bootstrap`): when the phone filters drawer is open, Escape closes
-// only the drawer, never the detail panel too.
+// Registered here, at module-evaluation time. This listener runs during
+// Escape's dispatch, before the browser's own native `popover` close
+// (triggered by the same keypress): when a filter popover or the phone
+// filters sheet is open, Escape closes only that popover -- the detail
+// panel stays open, and the popover's own 'toggle' listener (filters.js)
+// still returns focus to its trigger.
 document.addEventListener('keydown', (ev) => {
   if (ev.key !== 'Escape') return;
-  if (document.body.classList.contains('filters-open')) return;
+  if (document.querySelector(':popover-open')) return;
   if (!document.body.classList.contains('panel-open')) return;
   hideDetailPanel();
 });

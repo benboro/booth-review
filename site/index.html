@@ -39,56 +39,103 @@
     <span id="summary-count" class="summary-count"></span>
     <span id="summary-detail"></span>
   </div>
-
-  <button type="button" id="filters-button" class="mobile-only">Filters</button>
 </header>
 
-<aside id="rail" aria-label="Filters">
-  <div class="rail-header">
-    <h2>Filters</h2>
-    <button type="button" id="clear-filters">Clear all filters</button>
-    <button type="button" id="rail-toggle" aria-expanded="true" aria-controls="rail-body">▾</button>
-    <button type="button" id="rail-close" class="mobile-only" aria-label="Close filters">×</button>
+<nav id="toolbar" aria-label="Filters">
+  <button type="button" id="clear-filters">Clear all filters</button>
+  <button type="button" id="filters-button" class="mobile-only" popovertarget="filters-sheet" aria-haspopup="dialog" aria-expanded="false">Filters</button>
+  <button type="button" class="filter-trigger desktop-only" id="trigger-seasons" popovertarget="pop-seasons" aria-haspopup="dialog" aria-expanded="false">Seasons</button>
+  <button type="button" class="filter-trigger desktop-only" id="trigger-networks" popovertarget="pop-networks" aria-haspopup="dialog" aria-expanded="false">Networks</button>
+  <button type="button" class="filter-trigger desktop-only" id="trigger-kickoff" popovertarget="pop-kickoff" aria-haspopup="dialog" aria-expanded="false">Kickoff</button>
+  <button type="button" class="filter-trigger desktop-only" id="trigger-role" popovertarget="pop-role" aria-haspopup="dialog" aria-expanded="false">Role</button>
+  <button type="button" class="filter-trigger desktop-only" id="trigger-conference" popovertarget="pop-conference" aria-haspopup="dialog" aria-expanded="false">Conference</button>
+  <button type="button" class="filter-trigger desktop-only" id="trigger-school" popovertarget="pop-school" aria-haspopup="dialog" aria-expanded="false">School</button>
+  <button type="button" class="filter-trigger desktop-only" id="trigger-postseason" popovertarget="pop-postseason" aria-haspopup="dialog" aria-expanded="false">Bowls/Playoffs</button>
+</nav>
+
+<div id="pop-seasons" class="filter-popover" popover="auto" role="dialog" aria-label="Seasons">
+  <section id="filter-seasons">
+    <h3>Seasons</h3>
+    <label for="season-from">From</label>
+    <select id="season-from"></select>
+    <label for="season-to">To</label>
+    <select id="season-to"></select>
+    <details id="season-counts-details">
+      <summary>Games per season</summary>
+      <ul id="season-counts"></ul>
+    </details>
+  </section>
+</div>
+
+<div id="pop-networks" class="filter-popover" popover="auto" role="dialog" aria-label="Networks">
+  <section id="filter-networks">
+    <h3>Networks</h3>
+  </section>
+</div>
+
+<div id="pop-kickoff" class="filter-popover" popover="auto" role="dialog" aria-label="Kickoff time">
+  <section id="filter-slots">
+    <h3>Kickoff time</h3>
+    <label><input type="checkbox" name="slot" value="noon"> Noon (before 2 PM ET)</label>
+    <label><input type="checkbox" name="slot" value="afternoon"> Afternoon (2–6 PM ET)</label>
+    <label><input type="checkbox" name="slot" value="prime"> Prime time (6 PM ET or later)</label>
+  </section>
+</div>
+
+<div id="pop-role" class="filter-popover" popover="auto" role="dialog" aria-label="Role">
+  <section id="filter-role">
+    <h3>Role</h3>
+    <label><input type="checkbox" name="role" value="pbp"> Play-by-play</label>
+    <label><input type="checkbox" name="role" value="analyst"> Analyst</label>
+  </section>
+</div>
+
+<div id="pop-conference" class="filter-popover" popover="auto" role="dialog" aria-label="Conference">
+  <section id="filter-conference">
+    <h3>Filter by conference</h3>
+    <label for="conference-search" class="visually-hidden">Search conferences</label>
+    <input type="search" id="conference-search" placeholder="Search conferences" autocomplete="off">
+    <p class="helper">Matches when either team was in a selected conference that season.</p>
+    <fieldset id="conference-list">
+      <legend class="visually-hidden">Conference, multi-select</legend>
+    </fieldset>
+  </section>
+</div>
+
+<div id="pop-school" class="filter-popover" popover="auto" role="dialog" aria-label="School">
+  <section id="filter-school">
+    <h3>Filter by school</h3>
+    <label for="school-search" class="visually-hidden">Search schools</label>
+    <input type="search" id="school-search" placeholder="Search schools" autocomplete="off">
+    <p class="helper">Fades games that don't involve a selected school. Doesn't highlight — combine with an announcer search to do both.</p>
+    <ul id="school-chips" aria-label="Selected schools"></ul>
+    <fieldset id="school-list">
+      <legend class="visually-hidden">School, multi-select</legend>
+    </fieldset>
+  </section>
+</div>
+
+<div id="pop-postseason" class="filter-popover" popover="auto" role="dialog" aria-label="Bowls/Playoffs">
+  <section id="filter-postseason">
+    <h3>Bowls/Playoffs</h3>
+    <div id="postseason-options" role="radiogroup" aria-label="Bowls/Playoffs">
+      <button type="button" role="radio" aria-checked="false" data-postseason="all">All games</button>
+      <button type="button" role="radio" aria-checked="false" data-postseason="exclude">Exclude bowls & playoffs</button>
+      <button type="button" role="radio" aria-checked="false" data-postseason="only">Only bowls & playoffs</button>
+    </div>
+  </section>
+</div>
+
+<div id="filters-sheet" class="filters-sheet" popover="auto" role="dialog" aria-labelledby="filters-sheet-title">
+  <div class="sheet-header">
+    <h2 id="filters-sheet-title">Filters</h2>
+    <div class="sheet-clear-slot"></div>
   </div>
-  <div id="rail-body">
-    <section id="filter-seasons">
-      <h3>Seasons</h3>
-      <label for="season-from">From</label>
-      <select id="season-from"></select>
-      <label for="season-to">To</label>
-      <select id="season-to"></select>
-      <details id="season-counts-details">
-        <summary>Games per season</summary>
-        <ul id="season-counts"></ul>
-      </details>
-    </section>
-
-    <section id="filter-networks">
-      <h3>Networks</h3>
-    </section>
-
-    <section id="filter-slots">
-      <h3>Kickoff time</h3>
-      <label><input type="checkbox" name="slot" value="noon"> Noon (before 2 PM ET)</label>
-      <label><input type="checkbox" name="slot" value="afternoon"> Afternoon (2–6 PM ET)</label>
-      <label><input type="checkbox" name="slot" value="prime"> Prime time (6 PM ET or later)</label>
-    </section>
-
-    <section id="filter-role">
-      <h3>Role</h3>
-      <label><input type="checkbox" name="role" value="pbp"> Play-by-play</label>
-      <label><input type="checkbox" name="role" value="analyst"> Analyst</label>
-    </section>
-
-    <section id="filter-team">
-      <h3>Highlight a team</h3>
-      <label for="team-search">Highlight a team</label>
-      <input type="text" id="team-search" role="combobox" aria-controls="team-results" aria-expanded="false" aria-autocomplete="list" placeholder="Search teams" autocomplete="off">
-      <ul id="team-results" role="listbox" hidden></ul>
-      <span id="team-chip"></span>
-    </section>
+  <div class="sheet-body"></div>
+  <div class="sheet-footer">
+    <button type="button" id="filters-show-results">Show results</button>
   </div>
-</aside>
+</div>
 
 <main id="chart-area">
   <div id="chart-tabs" class="chart-tabs-slot" aria-hidden="true"></div>
@@ -119,8 +166,8 @@
 
   <div id="table-empty" class="empty-state">
     <h3>Nothing selected</h3>
-    <p>Select an announcer or team above to see their games here.</p>
-    <p>Try the search box, or highlight a team from the filters.</p>
+    <p>Select an announcer or a school to see their games here.</p>
+    <p>Try the search box, or pick a school from the School filter.</p>
   </div>
 
   <table id="games-table" class="games-table" hidden>
