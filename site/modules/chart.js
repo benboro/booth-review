@@ -29,6 +29,12 @@ const XAXIS_TITLES = {
   excitement: 'Excitement index (CFBD)',
 };
 
+/** Phone x-axis titles: the long pre-game title is wider than a phone screen, so it wraps (Plotly titles never wrap on their own). */
+const XAXIS_TITLES_MOBILE = {
+  pregame: 'Closing spread (points)<br>closer games to the right',
+  excitement: XAXIS_TITLES.excitement,
+};
+
 /**
  * Computes the reserved n/a-strip band for one axis (D-03): a sentinel x for
  * missing values, the numeric-axis divider, the plotted range, and tick
@@ -261,7 +267,7 @@ export function buildFigure(data, view, state, env) {
     xaxis: {
       // Plotly >= 3 takes only the object form; a bare string title is
       // silently dropped (CR-02).
-      title: { text: XAXIS_TITLES[axis] },
+      title: { text: (env.mobile ? XAXIS_TITLES_MOBILE : XAXIS_TITLES)[axis] },
       range: band.range,
       tickmode: 'array',
       tickvals: band.tickvals,
@@ -305,7 +311,10 @@ export function buildFigure(data, view, state, env) {
         font: { size: 14 },
       },
     ],
-    legend: env.mobile ? { orientation: 'h', x: 0, y: -0.25 } : { orientation: 'v', x: 1.02, y: 1 },
+    // Low enough on phones to clear the two-line x-axis title (XAXIS_TITLES_MOBILE).
+    legend: env.mobile
+      ? { orientation: 'h', x: 0, y: -0.36, yanchor: 'top' }
+      : { orientation: 'v', x: 1.02, y: 1 },
     dragmode: env.mobile ? false : 'zoom',
     margin: { l: 70, r: env.mobile ? 24 : 170, t: 24, b: 60 },
   };

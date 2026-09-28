@@ -208,6 +208,26 @@ def test_axis_titles_render_for_both_axes(
     assert guarded_page.locator(".g-xtitle text").all_text_contents() == ["Excitement index (CFBD)"]
 
 
+def test_mobile_x_axis_title_fits_the_screen_and_clears_the_legend(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """CR-02 follow-up: once the titles render, the long pre-game title is
+    wider than a 390px phone, so on phones it wraps onto two lines, stays
+    inside the viewport, and sits above the (below-chart) legend."""
+    open_app(mobile_page, "")
+    boxes = mobile_page.evaluate(
+        "() => ['.g-xtitle', '.legend'].map(s => {"
+        " const r = document.querySelector(s).getBoundingClientRect();"
+        " return {left: r.left, right: r.right, top: r.top, bottom: r.bottom}; })"
+    )
+    title, legend = boxes
+    width = mobile_page.evaluate("document.documentElement.clientWidth")
+    assert title["left"] >= 0
+    assert title["right"] <= width
+    assert title["bottom"] <= legend["top"]
+    assert mobile_page.locator(".g-xtitle text tspan").count() >= 2
+
+
 def test_legend_click_toggles_family_and_updates_networks_url(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
