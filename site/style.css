@@ -277,11 +277,15 @@ body {
 }
 
 /* Desktop/tablet (>640px): the rail gets its own scrollbar and stays pinned
-   near the top of the viewport, and the chart pane stays pinned alongside
-   it, so scrolling the rail (or the page, down to the rail's own bottom)
-   never pushes the chart out of view. The phone media query below replaces
-   `position` with its own `fixed` bottom-sheet rule, so this never reaches
-   the ≤640px drawer. */
+   near the top of the viewport, so scrolling the rail (down to its own
+   bottom) never pushes the chart out of view. `#chart-area` stays in normal
+   flow (never sticky, regression 2026-09-27): making it `position: sticky`
+   too (11ac9b5) pinned it over the "Matched games" table once the *page*
+   itself was scrolled far enough, since a sticky box keeps floating at
+   `top: 0` for as long as its own grid row is in the scrollport -- and the
+   chart's row is taller than the viewport on most screens. The phone media
+   query below replaces `#rail`'s `position` with its own `fixed`
+   bottom-sheet rule, so this never reaches the ≤640px drawer. */
 @media (min-width: 641px) {
   #rail {
     position: sticky;
@@ -290,18 +294,15 @@ body {
     max-height: 100vh;
     overflow-y: auto;
   }
-
-  #chart-area {
-    position: sticky;
-    top: 0;
-    align-self: start;
-  }
 }
 
 .rail-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-sm);
+  row-gap: var(--space-sm);
 }
 
 #rail-toggle {
@@ -423,6 +424,12 @@ body.rail-collapsed #rail {
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--bg);
+  /* Regression: form controls don't inherit `color` from an ancestor like
+     `body` -- the UA stylesheet sets an explicit color for `<button>`
+     itself, which wins over inheritance. Without this, the button rendered
+     in the browser's default button-text color instead of the theme's
+     `--text` token, failing WCAG AA 4.5:1 in dark mode against `--bg`. */
+  color: var(--text);
   cursor: pointer;
 }
 
@@ -537,6 +544,14 @@ body.rail-collapsed #rail {
 
 .sort-glyph {
   font: var(--font-label);
+}
+
+/* Regression: a bare `<button>Details</button>` wraps mid-word ("Detail\ns")
+   once its column is narrower than the word -- the table has no
+   `table-layout: fixed`, so forcing `white-space: nowrap` here just widens
+   the column to fit the word instead of wrapping it. */
+.details-button {
+  white-space: nowrap;
 }
 
 .badge {

@@ -16,6 +16,15 @@ from playwright.sync_api import Page, expect
 pytestmark = pytest.mark.e2e
 
 
+def _boxes_intersect(a: dict[str, float], b: dict[str, float]) -> bool:
+    return (
+        a["x"] < b["x"] + b["width"]
+        and a["x"] + a["width"] > b["x"]
+        and a["y"] < b["y"] + b["height"]
+        and a["y"] + a["height"] > b["y"]
+    )
+
+
 def _view(page: Page) -> dict[str, Any]:
     result: dict[str, Any] = page.evaluate("() => window.__testHooks.getView()")
     return result
@@ -305,12 +314,19 @@ def test_desktop_rail_scrolls_independently_and_keeps_chart_in_view(
     viewport, so scrolling it (even to its own bottom) never carries the
     chart out of view with it (previously the whole page scrolled together:
     no independent rail scrollbar, and scrolling to the bottom of the rail
-    scrolled the chart off-screen with it)."""
+    scrolled the chart off-screen with it). `#chart-area` itself is never
+    `position: sticky` (regression, see
+    test_desktop_chart_never_overlaps_matched_games_table_on_page_scroll
+    below for the bug that caused)."""
     guarded_page.set_viewport_size({"width": 1280, "height": 600})
     open_app(guarded_page, "")
 
     overflow_y = guarded_page.eval_on_selector("#rail", "el => getComputedStyle(el).overflowY")
     assert overflow_y in ("auto", "scroll")
+    chart_area_position = guarded_page.eval_on_selector(
+        "#chart-area", "el => getComputedStyle(el).position"
+    )
+    assert chart_area_position != "sticky"
 
     viewport_height = guarded_page.evaluate("window.innerHeight")
     rail_height = guarded_page.eval_on_selector("#rail", "el => el.getBoundingClientRect().height")
@@ -325,6 +341,35 @@ def test_desktop_rail_scrolls_independently_and_keeps_chart_in_view(
     chart_box = guarded_page.locator("#chart").bounding_box()
     assert chart_box is not None
     assert 0 <= chart_box["y"] < viewport_height
+
+
+@pytest.mark.parametrize("collapse_rail", [False, True], ids=["rail-open", "rail-collapsed"])
+def test_desktop_chart_never_overlaps_matched_games_table_on_page_scroll(
+    guarded_page: Page, open_app: Callable[[Page, str], None], collapse_rail: bool
+) -> None:
+    """Regression (screenshot 2026-09-27): 11ac9b5 made `#chart-area`
+    `position: sticky` alongside the rail, which pinned the chart over the
+    "Matched games" table once the *page itself* (not the rail) was
+    scrolled far enough down -- a sticky box keeps floating at `top: 0` for
+    as long as its own grid row is still in the scrollport, and the chart's
+    row is taller than most viewports. `#chart-area` must stay in normal
+    flow so the table always sits below it, whether the rail is open or
+    collapsed."""
+    guarded_page.set_viewport_size({"width": 1280, "height": 700})
+    open_app(guarded_page, "")
+    if collapse_rail:
+        guarded_page.click("#rail-toggle")
+        expect(guarded_page.locator("#rail-body")).to_be_hidden()
+
+    guarded_page.locator("#matched-games").scroll_into_view_if_needed()
+
+    chart_box = guarded_page.locator("#chart").bounding_box()
+    table_box = guarded_page.locator("#matched-games").bounding_box()
+    assert chart_box is not None
+    assert table_box is not None
+    assert not _boxes_intersect(chart_box, table_box), (
+        "the chart's bounding box overlaps the matched-games table's after scrolling"
+    )
 
 
 def test_network_family_group_has_no_leftover_ua_padding_on_desktop(
