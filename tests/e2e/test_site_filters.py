@@ -279,6 +279,35 @@ def test_desktop_rail_toggle_collapses(
     assert guarded_page.get_attribute("#rail-toggle", "aria-expanded") == "false"
 
 
+def test_desktop_rail_scrolls_independently_and_keeps_chart_in_view(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """The rail gets its own scrollbar and stays pinned near the top of the
+    viewport, so scrolling it (even to its own bottom) never carries the
+    chart out of view with it (previously the whole page scrolled together:
+    no independent rail scrollbar, and scrolling to the bottom of the rail
+    scrolled the chart off-screen with it)."""
+    guarded_page.set_viewport_size({"width": 1280, "height": 600})
+    open_app(guarded_page, "")
+
+    overflow_y = guarded_page.eval_on_selector("#rail", "el => getComputedStyle(el).overflowY")
+    assert overflow_y in ("auto", "scroll")
+
+    viewport_height = guarded_page.evaluate("window.innerHeight")
+    rail_height = guarded_page.eval_on_selector("#rail", "el => el.getBoundingClientRect().height")
+    assert rail_height <= viewport_height + 1
+
+    guarded_page.eval_on_selector("#rail", "el => { el.scrollTop = el.scrollHeight; }")
+    scroll_top = guarded_page.eval_on_selector("#rail", "el => el.scrollTop")
+    assert scroll_top > 0, "the rail did not scroll internally -- it has no overflow of its own"
+
+    assert guarded_page.evaluate("window.scrollY") == 0
+
+    chart_box = guarded_page.locator("#chart").bounding_box()
+    assert chart_box is not None
+    assert 0 <= chart_box["y"] < viewport_height
+
+
 def test_mobile_filters_drawer(mobile_page: Page, open_app: Callable[[Page, str], None]) -> None:
     """SITE-18: the phone Filters(N) button opens a bottom-sheet drawer with 44px tap targets."""
     open_app(mobile_page, "")

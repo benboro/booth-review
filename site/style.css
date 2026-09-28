@@ -276,6 +276,28 @@ body {
   padding: var(--space-lg);
 }
 
+/* Desktop/tablet (>640px): the rail gets its own scrollbar and stays pinned
+   near the top of the viewport, and the chart pane stays pinned alongside
+   it, so scrolling the rail (or the page, down to the rail's own bottom)
+   never pushes the chart out of view. The phone media query below replaces
+   `position` with its own `fixed` bottom-sheet rule, so this never reaches
+   the ≤640px drawer. */
+@media (min-width: 641px) {
+  #rail {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    max-height: 100vh;
+    overflow-y: auto;
+  }
+
+  #chart-area {
+    position: sticky;
+    top: 0;
+    align-self: start;
+  }
+}
+
 .rail-header {
   display: flex;
   align-items: center;
