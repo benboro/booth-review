@@ -50,7 +50,9 @@ _HIGHLIGHT_ALL_PEOPLE_JS = """
   for (const p of data.lookups.people) {
     window.__testHooks.setState({
       people: [p.id],
-      team: null,
+      conferences: [],
+      school: [],
+      postseason: 'all',
       role: null,
       seasons: null,
       networks: null,
@@ -62,6 +64,58 @@ _HIGHLIGHT_ALL_PEOPLE_JS = """
     results.push([...view.highlighted].sort((a, b) => a - b));
   }
   return results;
+}
+"""
+
+_BIG_TEN_ERA_CORRECT_JS = """
+() => {
+  const data = window.__testHooks.data;
+  const teamIdx = data.lookups.teams.findIndex((t) => t.name === 'USC');
+  const confIdx = data.lookups.conferences.findIndex((c) => c.name === 'Big Ten');
+  if (teamIdx === -1 || confIdx === -1) return null;
+  window.__testHooks.setState({ conferences: ['Big Ten'] });
+  const view = window.__testHooks.getView();
+  const passing = new Set(view.passesFilters);
+  let before2024 = 0;
+  let from2024 = 0;
+  for (let i = 0; i < data.n; i += 1) {
+    if (data.t.home_team[i] !== teamIdx && data.t.away_team[i] !== teamIdx) continue;
+    if (!passing.has(i)) continue;
+    if (data.t.season[i] < 2024) before2024 += 1;
+    else from2024 += 1;
+  }
+  return [before2024, from2024];
+}
+"""
+
+_PLAYOFF_BRACKET_JS = """
+() => {
+  const data = window.__testHooks.data;
+  const knownRounds = new Set(['first_round', 'quarterfinal', 'semifinal', 'championship']);
+  const perSeasonPlayoffCount = new Map();
+  let badRound = 0;
+  let regularWithRound = 0;
+  for (let i = 0; i < data.n; i += 1) {
+    const gameType = data.t.game_type[i];
+    const round = data.t.playoff_round[i];
+    if (round !== null && !knownRounds.has(round)) badRound += 1;
+    if (gameType === 'regular' && round !== null) regularWithRound += 1;
+    if (gameType === 'playoff') {
+      const season = data.t.season[i];
+      perSeasonPlayoffCount.set(season, (perSeasonPlayoffCount.get(season) || 0) + 1);
+    }
+  }
+  if (perSeasonPlayoffCount.size === 0) return null;
+  let overBefore2024 = 0;
+  let over2024Plus = 0;
+  for (const [season, count] of perSeasonPlayoffCount) {
+    if (season < 2024) {
+      if (count > 3) overBefore2024 += 1;
+    } else if (count > 11) {
+      over2024Plus += 1;
+    }
+  }
+  return [badRound, regularWithRound, overBefore2024, over2024Plus];
 }
 """
 
@@ -190,3 +244,37 @@ def test_real_default_url_is_clean(
     real_open_app(real_guarded_page, "")
     has_query = "?" in real_guarded_page.url
     assert has_query is False, "default load left a query string"
+
+
+def test_real_big_ten_is_era_correct(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """D-09: the Big Ten conference filter never passes a USC telecast
+    before 2024 (USC joined the Big Ten in 2024) and does pass at least one
+    USC telecast from 2024 on, on the real vault build -- counts only."""
+    real_open_app(real_guarded_page, "")
+    result: list[int] | None = real_guarded_page.evaluate(_BIG_TEN_ERA_CORRECT_JS)
+    if result is None:
+        pytest.skip("USC or Big Ten not present in the real vault data")
+    before_2024, from_2024 = result
+    assert before_2024 == 0, "a USC telecast before 2024 passed the Big Ten filter"
+    assert from_2024 > 0, "no USC telecast from 2024 on passed the Big Ten filter"
+
+
+def test_real_playoff_counts_fit_the_bracket(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """D-17: every season's playoff telecast count fits the CFP bracket size
+    (at most 3 before 2024, at most 11 from 2024 on), every playoff_round is
+    one of the four known CFP rounds or null, and no regular-season
+    telecast carries a playoff_round -- on the real vault build, counts
+    only."""
+    real_open_app(real_guarded_page, "")
+    result: list[int] | None = real_guarded_page.evaluate(_PLAYOFF_BRACKET_JS)
+    if result is None:
+        pytest.skip("no playoff telecasts present in the real vault data")
+    bad_round, regular_with_round, over_before_2024, over_2024_plus = result
+    assert bad_round == 0, "a telecast had a playoff_round outside the four known rounds"
+    assert regular_with_round == 0, "a regular-season telecast carried a playoff_round"
+    assert over_before_2024 == 0, "a pre-2024 season exceeded the 3-game CFP bracket size"
+    assert over_2024_plus == 0, "a 2024-or-later season exceeded the 11-game CFP bracket size"
