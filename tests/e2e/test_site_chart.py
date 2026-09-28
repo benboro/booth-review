@@ -46,6 +46,12 @@ _DOT_PIXEL_JS = """
 
 
 def _dot_point(page: Page, customdata: int) -> dict[str, float]:
+    # The toolbar row (04.1-04, D-02) sits above the chart and pushes it
+    # further down the page than the old side rail did, so a dot's computed
+    # pixel position can now land past the default viewport's bottom edge.
+    # Scrolling the chart into view first keeps this independent of the
+    # exact toolbar height.
+    page.locator("#chart").scroll_into_view_if_needed()
     point: dict[str, float] | None = page.evaluate(_DOT_PIXEL_JS, customdata)
     assert point is not None, f"no dot with customdata {customdata}"
     return point
@@ -70,6 +76,9 @@ _INERT_DOT_PIXEL_JS = """
 
 
 def _inert_dot_point(page: Page, meta: str, index: int = 0) -> dict[str, float]:
+    # See `_dot_point`'s comment: the toolbar row can push the chart past
+    # the default viewport's bottom edge.
+    page.locator("#chart").scroll_into_view_if_needed()
     point: dict[str, float] | None = page.evaluate(_INERT_DOT_PIXEL_JS, [meta, index])
     assert point is not None, f"no point at {meta}[{index}]"
     return point

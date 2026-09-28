@@ -109,8 +109,7 @@ h1, h2, h3 {
   position: relative;
 }
 
-.search-field input,
-#team-search {
+.search-field input {
   font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--border);
@@ -120,13 +119,11 @@ h1, h2, h3 {
   width: 100%;
 }
 
-.search-field input:focus,
-#team-search:focus {
+.search-field input:focus {
   border-color: var(--accent);
 }
 
-#person-results,
-#team-results {
+#person-results {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -135,6 +132,22 @@ h1, h2, h3 {
   background: var(--bg);
   border: 1px solid var(--border);
   width: 100%;
+}
+
+#conference-search,
+#school-search {
+  font: var(--font-body);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  width: 100%;
+}
+
+#conference-search:focus,
+#school-search:focus {
+  border-color: var(--accent);
 }
 
 /* Search-result options, as topbar.js/filters.js build them: bare
@@ -241,41 +254,71 @@ h1, h2, h3 {
   text-align: right;
 }
 
+/* `#filters-button`'s visibility comes from `.mobile-only` below; this rule
+   is only its shape. */
 #filters-button {
-  display: none;
   font: var(--font-label);
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--bg);
+  color: var(--text);
   cursor: pointer;
+}
+
+.desktop-only {
+}
+
+.mobile-only {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .desktop-only {
+    display: none;
+  }
+
+  .mobile-only {
+    display: inline-block;
+  }
 }
 
 /* ---------- Layout grid ---------- */
 
 /* The chart page only (`<body class="app">` in index.html). methodology.html
    and coverage.html share this stylesheet but have none of the grid-area ids,
-   so a bare `body` grid auto-placed their header/main/footer into the 280px
-   rail column (WR-05); they keep normal block flow instead. */
+   so a bare `body` grid auto-placed their header/main/footer into the
+   toolbar row (WR-05); they keep normal block flow instead. Single-column at
+   every width (D-01/D-02): the toolbar replaces the rail entirely, and the
+   detail-panel grid column is a later plan's addition. */
 body.app {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
-    "topbar topbar"
-    "rail   main"
-    "table  table"
-    "footer footer";
+    "topbar"
+    "toolbar"
+    "main"
+    "table"
+    "footer";
   gap: var(--space-lg);
 }
 
 #topbar { grid-area: topbar; }
-#rail { grid-area: rail; }
+#toolbar { grid-area: toolbar; }
 #chart-area { grid-area: main; }
 #matched-games { grid-area: table; }
 #site-footer { grid-area: footer; }
 
 #chart-area {
   padding-top: var(--space-xl);
+  /* Regression (2026-09-27): `#chart-area` must stay in normal flow, never
+     a floating/pinned position -- making it sticky alongside the old left
+     filter column (11ac9b5) pinned it over the "Matched games" table once
+     the *page* itself was scrolled far enough, since a floating box keeps
+     tracking the viewport top for as long as its own grid row is in the
+     scrollport, and the chart's row is taller than the viewport on most
+     screens (D-05, SITE-20). */
+  position: static;
 }
 
 /* Grid items default to min-width: auto, so the Plotly SVG's own width would
@@ -285,72 +328,196 @@ body.app {
   min-width: 0;
 }
 
-/* ---------- Rail ---------- */
+/* ---------- Toolbar ---------- */
 
-#rail {
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  padding: var(--space-lg);
-}
-
-/* Desktop/tablet (>640px): the rail gets its own scrollbar and stays pinned
-   near the top of the viewport, so scrolling the rail (down to its own
-   bottom) never pushes the chart out of view. `#chart-area` stays in normal
-   flow (never sticky, regression 2026-09-27): making it `position: sticky`
-   too (11ac9b5) pinned it over the "Matched games" table once the *page*
-   itself was scrolled far enough, since a sticky box keeps floating at
-   `top: 0` for as long as its own grid row is in the scrollport -- and the
-   chart's row is taller than the viewport on most screens. The phone media
-   query below replaces `#rail`'s `position` with its own `fixed`
-   bottom-sheet rule, so this never reaches the ≤640px drawer. */
-@media (min-width: 641px) {
-  #rail {
-    position: sticky;
-    top: 0;
-    align-self: start;
-    max-height: 100vh;
-    overflow-y: auto;
-  }
-}
-
-.rail-header {
+#toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-sm);
-  row-gap: var(--space-sm);
+  min-height: 48px;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  /* Never sticky or fixed -- scrolls with the page like any other block
+     (D-02). */
 }
 
-#rail-toggle {
-  border: none;
-  background: none;
+#clear-filters,
+.filter-trigger {
+  font: var(--font-label);
+  padding: 6px var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  /* Regression: form controls don't inherit `color` from an ancestor like
+     `body` -- the UA stylesheet sets an explicit color for `<button>`
+     itself, which wins over inheritance. Without this, the button rendered
+     in the browser's default button-text color instead of the theme's
+     `--text` token, failing WCAG AA 4.5:1 in dark mode against `--bg`.
+     SITE-27: "Clear all filters" always uses this default text color, never
+     the low-contrast `--muted` token. */
+  color: var(--text);
   cursor: pointer;
-  font: var(--font-heading);
 }
 
-#rail-close {
-  display: none;
+.filter-trigger::after {
+  content: " ▾";
 }
 
-body.rail-collapsed #rail-body {
-  display: none;
+.filter-trigger[data-active="true"],
+.filter-trigger[aria-expanded="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
 }
 
-body.rail-collapsed #rail {
-  padding-bottom: var(--space-md);
+#clear-filters:focus-visible,
+.filter-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
-#rail-body section {
-  margin-bottom: var(--space-lg);
+/* ---------- Filter popovers ---------- */
+
+.filter-popover {
+  position: fixed;
+  /* Overrides the UA default `[popover]` style (`inset: 0`, which would
+     otherwise stretch the popover to fill the viewport) -- positioned
+     explicitly every time it opens, via filters.js's `positionPopover`
+     (Pitfall 2: a `[popover]` element is promoted to the top layer, so its
+     original position in the grid/flow is irrelevant to where it renders). */
+  inset: auto;
+  margin: 0;
+  width: max-content;
+  min-width: 240px;
+  max-width: min(360px, calc(100vw - 16px));
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: var(--space-md);
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
-#rail-body label {
+.filter-popover h3 {
+  margin: 0 0 var(--space-sm) 0;
+}
+
+.filter-popover label,
+.sheet-body label {
   font: var(--font-label);
   display: flex;
   align-items: center;
   gap: var(--space-xs);
   margin-bottom: var(--space-sm);
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 4px 0;
+  margin-bottom: 0;
+}
+
+#postseason-options.segmented button[aria-checked="true"] {
+  border-bottom: 2px solid var(--accent);
+  color: var(--accent);
+}
+
+#school-chips {
+  list-style: none;
+  margin: var(--space-sm) 0 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+/* ---------- Mobile filters bottom sheet ---------- */
+
+.filters-sheet:popover-open {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  max-width: none;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  padding: 0;
+  border: none;
+}
+
+.sheet-header,
+.sheet-footer {
+  flex: none;
+  padding: var(--space-md);
+  background: var(--surface);
+}
+
+.sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+
+.sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-md);
+}
+
+.sheet-body section {
+  padding-bottom: var(--space-lg);
+  margin-bottom: var(--space-lg);
+  border-bottom: 1px solid var(--border);
+}
+
+.sheet-footer {
+  border-top: 1px solid var(--border);
+}
+
+.sheet-footer #filters-show-results {
+  display: block;
+  width: 100%;
+  font: var(--font-label);
+  padding: var(--space-sm) var(--space-md);
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--bg);
+  cursor: pointer;
+}
+
+/* ---------- Filter sections (network checklist/family-group) ---------- */
+
+/* Every checkbox now lives inside a filter popover or the mobile sheet --
+   scoped globally rather than to the since-removed left filter column's
+   body wrapper. */
+input[type="checkbox"] {
+  accent-color: var(--accent);
+  /* Resets the browser's own UA margin around checkboxes (e.g. Chromium's
+     default ~3px top/bottom), which -- inside a `display: flex` label --
+     doesn't collapse with anything and was inflating every filter row's
+     height beyond its intended compact spacing (SITE-18's mobile tap-target
+     rule below restores height there via `min-height`, not margin). */
+  margin: 0;
+}
+
+#filter-seasons,
+#filter-networks,
+#filter-slots,
+#filter-role,
+#filter-conference,
+#filter-school,
+#filter-postseason {
+  margin-bottom: var(--space-lg);
 }
 
 .network-list,
@@ -389,31 +556,16 @@ body.rail-collapsed #rail {
   margin-bottom: var(--space-xs);
 }
 
-/* The label wrapping each checkbox carries its own `#rail-body label`
-   margin-bottom (space-sm, 8px) for standalone filter rows (slots, role);
-   inside the network list that stacked on top of the `<li>`'s own
-   margin-bottom, roughly doubling the intended gap between rows. The `<li>`
-   already supplies the compact spacing for this list, so the label itself
-   contributes none here. (Needs the `#rail-body` prefix to out-specificity
-   the ID-selector rule above -- a bare `.network-list label` rule loses to
-   it regardless of source order.) */
-#rail-body .network-list label {
+/* The label wrapping each checkbox carries its own `.filter-popover
+   label`/`.sheet-body label` margin-bottom (space-sm, 8px) for standalone
+   filter rows (slots, role); inside the network list that stacked on top of
+   the `<li>`'s own margin-bottom, roughly doubling the intended gap between
+   rows. The `<li>` already supplies the compact spacing for this list, so
+   the label itself contributes none here. (Needs the `#filter-networks`
+   prefix to out-specificity the generic rule above -- a bare `.network-list
+   label` rule loses to it regardless of source order.) */
+#filter-networks .network-list label {
   margin-bottom: 0;
-}
-
-#rail-body input[type="checkbox"] {
-  accent-color: var(--accent);
-  /* Resets the browser's own UA margin around checkboxes (e.g. Chromium's
-     default ~3px top/bottom), which -- inside a `display: flex` label --
-     doesn't collapse with anything and was inflating every filter row's
-     height beyond its intended compact spacing (SITE-18's mobile tap-target
-     rule below restores height there via `min-height`, not margin). */
-  margin: 0;
-}
-
-#team-chip.chip {
-  display: inline-flex;
-  margin-top: var(--space-sm);
 }
 
 #season-counts-details summary {
@@ -433,21 +585,6 @@ body.rail-collapsed #rail {
 
 #season-counts li.out-of-range {
   color: var(--muted);
-}
-
-#clear-filters {
-  font: var(--font-label);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg);
-  /* Regression: form controls don't inherit `color` from an ancestor like
-     `body` -- the UA stylesheet sets an explicit color for `<button>`
-     itself, which wins over inheritance. Without this, the button rendered
-     in the browser's default button-text color instead of the theme's
-     `--text` token, failing WCAG AA 4.5:1 in dark mode against `--bg`. */
-  color: var(--text);
-  cursor: pointer;
 }
 
 /* ---------- Chart area ---------- */
@@ -744,9 +881,8 @@ body.panel-open .drawer {
 /* ---------- Tablet (641px–1024px) ---------- */
 
 @media (max-width: 1024px) {
-  body.app.rail-collapsed {
-    grid-template-columns: 0 minmax(0, 1fr);
-  }
+  /* Toolbar buttons wrap onto a second line (`#toolbar`'s own `flex-wrap`
+     above) rather than scrolling horizontally. */
 
   .drawer {
     width: 320px;
@@ -756,15 +892,6 @@ body.panel-open .drawer {
 /* ---------- Phones (≤640px) ---------- */
 
 @media (max-width: 640px) {
-  body.app {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "topbar"
-      "main"
-      "table"
-      "footer";
-  }
-
   #topbar {
     grid-template-columns: 1fr;
     align-items: stretch;
@@ -772,31 +899,6 @@ body.panel-open .drawer {
 
   #summary {
     text-align: left;
-  }
-
-  #filters-button {
-    display: inline-block;
-  }
-
-  #rail {
-    display: none;
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    max-height: 85vh;
-    overflow: auto;
-    z-index: 30;
-    border-top-left-radius: 12px;
-    border-top-right-radius: 12px;
-  }
-
-  body.filters-open #rail {
-    display: block;
-  }
-
-  #rail-close {
-    display: inline-block;
   }
 
   /* D-04: on phones the legend chip row renders below the chart, not above
@@ -832,11 +934,10 @@ body.panel-open .drawer {
   .chip,
   .chip-remove,
   input[type="checkbox"] + label,
-  #rail-body label,
+  .sheet-body label,
+  .check-row,
   .games-table th button,
   .shape-legend li,
-  #rail-toggle,
-  #rail-close,
   #panel-close,
   .segmented button,
   .legend-chip {
