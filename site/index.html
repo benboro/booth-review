@@ -179,17 +179,18 @@
         <th scope="col">Crew</th>
         <th scope="col"><button type="button" data-sort="viewers" aria-sort="none">Viewers <span class="sort-glyph"></span></button></th>
         <th scope="col">Source</th>
-        <th scope="col">Details</th>
       </tr>
     </thead>
     <tbody></tbody>
   </table>
 </section>
 
-<aside id="detail-panel" class="drawer" role="dialog" aria-modal="false" aria-labelledby="panel-title" hidden>
-  <button type="button" id="panel-close" aria-label="Close details">×</button>
-  <h2 id="panel-title"></h2>
-  <div id="panel-body"></div>
+<aside id="detail-panel" role="dialog" aria-modal="false" aria-labelledby="panel-title" hidden>
+  <div class="panel-inner">
+    <button type="button" id="panel-close" aria-label="Close details">×</button>
+    <h2 id="panel-title"></h2>
+    <div id="panel-body"></div>
+  </div>
 </aside>
 
 <footer id="site-footer" class="site-footer"><!-- booth-review:footer --></footer>

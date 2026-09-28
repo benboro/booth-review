@@ -1,9 +1,10 @@
 /**
  * Detail panel: full per-telecast facts, credits, and source links (SITE-05,
- * SITE-17, D-02, D-04, D-07, D-08, D-10, D-16). A right-side drawer on
- * desktop and a bottom sheet on phones (both styled by `.drawer` in
- * style.css); opened by a chart dot click or a matched-games table row's
- * Details button, closed by `#panel-close` or Escape.
+ * SITE-17, D-01, D-02, D-04, D-07, D-08, D-09, D-10, D-16, D-17). A push
+ * grid column on desktop/tablet and a bottom sheet on phones (styled by
+ * `#detail-panel`/`.panel-inner` in style.css); opened by a chart dot click
+ * or clicking/pressing Enter on a matched-games table row, closed by
+ * `#panel-close` or Escape.
  *
  * DOM is built only with createElement/textContent/replaceChildren -- never
  * any markup-injecting DOM API (T-04-34). Every href passes through
@@ -16,14 +17,17 @@ import {
   FEED_LABELS,
   ROLE_LABELS,
   SLOT_LABELS,
+  conferenceLine,
   formatAxisValue,
   formatDate,
   formatKickoff,
   formatMatchup,
   formatViewers,
-  isSaturday,
+  gameTypeLabel,
   measurementLabel,
+  showsTimeSlot,
 } from './format.js';
+import { currentTheme, makePill } from './pill.js';
 
 /** The element focus should return to once the panel closes, or null. */
 let previouslyFocused = null;
@@ -72,26 +76,36 @@ function externalLink(href, text) {
 }
 
 /** date · kickoff ET · time-slot line. The time-slot label ("Prime time",
- * "Afternoon", "Noon") describes a Saturday scheduling pattern and is
- * omitted for any non-Saturday game (weeknight games, and -- best-effort,
- * since the site-data contract has no `season_type`/`week` field per
- * telecast -- most bowl/CFP games, which are rarely played on a Saturday;
- * see `isSaturday`'s own doc comment for that limitation). */
+ * "Afternoon", "Noon") is gated on `showsTimeSlot` (D-19): only a
+ * regular-season Saturday game shows it, so a Saturday bowl/CFP game never
+ * gets a misleading scheduling-pattern label. */
 function dateLine(data, i) {
   const t = data.t;
   const parts = [formatDate(t.date[i]), formatKickoff(t.kickoff[i]) ?? 'Kickoff time not recorded'];
-  if (t.time_slot[i] != null && isSaturday(t.date[i])) parts.push(SLOT_LABELS[t.time_slot[i]]);
+  if (showsTimeSlot(data, i)) parts.push(SLOT_LABELS[t.time_slot[i]]);
   return parts.join(' · ');
 }
 
-/** Primary network, then "Also on: ..." for any other outlets. */
-function networkLine(data, i) {
+/** Networks paragraph: "Network: " + a pill per network, primary first, then
+ * "Also on: " + a pill per other outlet (SITE-26). Full names and any
+ * parenthetical notes are kept -- the panel is where they belong. */
+function buildNetworksParagraph(data, i, theme) {
   const t = data.t;
-  const primary = data.lookups.networks[t.network[i]].name;
-  const others = t.outlets[i]
-    .filter((idx) => idx !== t.network[i])
-    .map((idx) => data.lookups.networks[idx].name);
-  return others.length > 0 ? `${primary} · Also on: ${others.join(', ')}` : primary;
+  const p = document.createElement('p');
+  p.className = 'panel-networks';
+  p.appendChild(document.createTextNode('Network: '));
+  const primaryNet = data.lookups.networks[t.network[i]];
+  p.appendChild(makePill(primaryNet.name, primaryNet.family, theme));
+  const others = t.outlets[i].filter((idx) => idx !== t.network[i]);
+  if (others.length > 0) {
+    p.appendChild(document.createTextNode(' · Also on: '));
+    others.forEach((idx, pos) => {
+      if (pos > 0) p.appendChild(document.createTextNode(' '));
+      const net = data.lookups.networks[idx];
+      p.appendChild(makePill(net.name, net.family, theme));
+    });
+  }
+  return p;
 }
 
 /** Crew list: one `<li>` per crew entry, "[Position]: [Name]" (product
@@ -207,15 +221,29 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
   dateP.textContent = dateLine(data, i);
   children.push(dateP);
 
+  const gameType = gameTypeLabel(data, i);
+  if (gameType != null) {
+    const gameTypeP = document.createElement('p');
+    gameTypeP.className = 'panel-game-type';
+    gameTypeP.textContent = gameType;
+    children.push(gameTypeP);
+  }
+
   if (t.neutral[i]) {
     const neutralP = document.createElement('p');
     neutralP.textContent = 'Neutral site';
     children.push(neutralP);
   }
 
-  const networkP = document.createElement('p');
-  networkP.textContent = networkLine(data, i);
-  children.push(networkP);
+  const conferences = conferenceLine(data, i);
+  if (conferences != null) {
+    const conferencesP = document.createElement('p');
+    conferencesP.className = 'panel-conferences';
+    conferencesP.textContent = `Conference: ${conferences}`;
+    children.push(conferencesP);
+  }
+
+  children.push(buildNetworksParagraph(data, i, currentTheme()));
 
   const crewHeading = document.createElement('h3');
   crewHeading.textContent = 'Crew';
@@ -277,7 +305,14 @@ export function openPanel(i, ctx) {
   // A reopen inside closePanel's 150ms slide-out window would otherwise be
   // re-hidden when that stale timer fires (WR-03).
   cancelPendingHide();
+  const wasHidden = panelEl.hidden;
   panelEl.hidden = false;
+  // Unhiding and adding `body.panel-open` in the same frame would start the
+  // width transition from `display: none`'s implicit 0 with no paint in
+  // between, so the browser can coalesce it away entirely -- force a reflow
+  // first so the 0-width state is committed before the class (and the
+  // transition to 360px/320px) is applied (Pattern 1).
+  if (wasHidden) void panelEl.offsetWidth;
   document.body.classList.add('panel-open');
   document.getElementById('panel-close').focus();
 }
