@@ -3,6 +3,13 @@
  * DOM-free; imports only from ./select.js. `decodeState` never throws --
  * it allowlists every param against `data`'s own lookups and fixed enums,
  * dropping anything unrecognized (T-04-05).
+ *
+ * Encoding and decoding are symmetric: `encodeState` percent-encodes each
+ * list piece on its own and joins them with a literal `,`; `decodeState`
+ * reads the *raw* (still-encoded) query, splits a list on the literal `,`
+ * first, then percent-decodes each piece exactly once. So an id holding a
+ * comma (`%2C`) is never split in two, and a malformed escape (e.g. a lone
+ * `%`) just drops that one value instead of throwing `URIError`.
  */
 
 import { MAX_COMPARE, defaultState } from './select.js';
@@ -71,14 +78,57 @@ export function encodeState(state, data) {
   return `?${params.map(([key, value]) => `${key}=${value}`).join('&')}`;
 }
 
+/**
+ * Percent-decodes one raw query component exactly once (`+` reads as a
+ * space, as in form encoding), returning null instead of throwing on a
+ * malformed escape such as a lone `%` (CR-01).
+ * @param {string} s
+ * @returns {string|null}
+ */
+function safeDecode(s) {
+  try {
+    return decodeURIComponent(s.replace(/\+/g, ' '));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Splits a query string into its *raw* (still percent-encoded) values by
+ * decoded key, keeping the first occurrence of each key the way
+ * `URLSearchParams#get` does. Values stay encoded so list params can be
+ * split on their literal `,` separator before any decoding.
+ * @param {string|null|undefined} search - with or without a leading `?`.
+ * @returns {Map<string, string>}
+ */
+function rawParams(search) {
+  const params = new Map();
+  const query = String(search ?? '').replace(/^\?/, '');
+  for (const part of query.split('&')) {
+    if (part === '') continue;
+    const eq = part.indexOf('=');
+    const key = safeDecode(eq === -1 ? part : part.slice(0, eq));
+    if (key == null || params.has(key)) continue;
+    params.set(key, eq === -1 ? '' : part.slice(eq + 1));
+  }
+  return params;
+}
+
+/** Decodes a raw scalar param once; a missing param stays null, a malformed one reads as ''. */
+function scalarParam(params, key) {
+  const raw = params.get(key);
+  if (raw == null) return null;
+  return safeDecode(raw) ?? '';
+}
+
 /** Decodes the `people` param: unknown ids dropped, duplicates dropped, first-seen order kept. */
 function decodePeople(raw, data) {
   if (!raw) return [];
   const seen = new Set();
   const ids = [];
   for (const piece of raw.split(',')) {
-    const id = decodeURIComponent(piece);
-    if (!data.personIndexById.has(id) || seen.has(id)) continue;
+    const id = safeDecode(piece);
+    if (id == null || !data.personIndexById.has(id) || seen.has(id)) continue;
     seen.add(id);
     ids.push(id);
   }
@@ -118,8 +168,8 @@ function decodeNetworks(raw, data) {
   if (raw === 'none') return [];
   const ids = [];
   for (const piece of raw.split(',')) {
-    const id = decodeURIComponent(piece);
-    if (data.networkIndexById.has(id) && !ids.includes(id)) ids.push(id);
+    const id = safeDecode(piece);
+    if (id != null && data.networkIndexById.has(id) && !ids.includes(id)) ids.push(id);
   }
   const canonical = data.lookups.networks.map((net) => net.id).filter((id) => ids.includes(id));
   if (canonical.length === 0) return null;
@@ -145,30 +195,27 @@ function decodeSlots(raw) {
  * @returns {object} shaped like `defaultState(data)`.
  */
 export function decodeState(search, data) {
-  const params = new URLSearchParams(search ?? '');
+  const params = rawParams(search);
   const state = defaultState(data);
 
-  state.people = decodePeople(params.get('people'), data);
+  // `people`/`networks` stay raw here: they're split on the literal `,`
+  // before each piece is decoded (see the module header).
+  state.people = decodePeople(params.get('people') ?? null, data);
 
-  const { compare, together } = decodeMode(params.get('mode'));
+  const { compare, together } = decodeMode(scalarParam(params, 'mode'));
   state.compare = state.people.length > MAX_COMPARE ? false : compare;
   state.together = together;
 
-  const rawRole = params.get('role');
+  const rawRole = scalarParam(params, 'role');
   state.role = rawRole === 'pbp' || rawRole === 'analyst' ? rawRole : null;
 
-  const rawTeam = params.get('team');
-  if (rawTeam != null) {
-    const teamSlug = decodeURIComponent(rawTeam);
-    state.team = data.teamIndexBySlug.has(teamSlug) ? teamSlug : null;
-  } else {
-    state.team = null;
-  }
+  const teamSlug = scalarParam(params, 'team');
+  state.team = teamSlug != null && data.teamIndexBySlug.has(teamSlug) ? teamSlug : null;
 
-  state.seasons = decodeSeasons(params.get('seasons'), data);
-  state.networks = decodeNetworks(params.get('networks'), data);
-  state.slots = decodeSlots(params.get('slot'));
-  state.axis = params.get('axis') === 'excitement' ? 'excitement' : 'pregame';
+  state.seasons = decodeSeasons(scalarParam(params, 'seasons'), data);
+  state.networks = decodeNetworks(params.get('networks') ?? null, data);
+  state.slots = decodeSlots(scalarParam(params, 'slot'));
+  state.axis = scalarParam(params, 'axis') === 'excitement' ? 'excitement' : 'pregame';
 
   return state;
 }

@@ -195,3 +195,46 @@ def test_url_state_round_trips(guarded_page: Page, site_url: str) -> None:
     round_trip = guarded_page.evaluate(_ROUND_TRIP_JS, full_state)
     assert round_trip["encoded"] != ""
     assert round_trip["decoded"] == round_trip["state"]
+
+
+_COMMA_ID_ROUND_TRIP_JS = """
+async () => {
+  const D = await import('./modules/data.js');
+  const S = await import('./modules/select.js');
+  const U = await import('./modules/url-state.js');
+  const raw = await (await fetch('site-data.json')).json();
+  raw.lookups.people[0].id = 'harlow,dale';
+  const data = D.prepareData(raw);
+  const state = Object.assign(S.defaultState(data), { people: ['harlow,dale', 'kris-venn'] });
+  return U.decodeState(U.encodeState(state, data), data).people;
+}
+"""
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "?people=%25",
+        "?team=%25",
+        "?networks=%E0%A4%A",
+        "?seasons=%&slot=%&mode=%&role=%&axis=%",
+        "?%=x&people=dale-harlow,%25",
+    ],
+)
+def test_crafted_url_never_breaks_the_app(guarded_page: Page, open_app: Any, query: str) -> None:
+    """CR-01: a malformed percent-escape in any param drops just that value;
+    the app still boots (no URIError from a second decode), and a valid id
+    next to a malformed one is kept."""
+    open_app(guarded_page, query)
+    assert guarded_page.evaluate("window.__testHooks.failed") is None
+    assert guarded_page.locator("#load-error").is_hidden()
+    state = guarded_page.evaluate("window.__testHooks.getState()")
+    assert state["people"] == (["dale-harlow"] if "dale-harlow" in query else [])
+    assert state["team"] is None
+
+
+def test_url_state_keeps_a_comma_inside_an_id(guarded_page: Page, site_url: str) -> None:
+    """CR-01: list params split on the literal `,` before decoding, so an id
+    whose own comma encodes to `%2C` round-trips as one id, not two."""
+    _load(guarded_page, site_url)
+    assert guarded_page.evaluate(_COMMA_ID_ROUND_TRIP_JS) == ["harlow,dale", "kris-venn"]
