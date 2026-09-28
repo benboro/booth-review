@@ -452,6 +452,61 @@ body.rail-collapsed #rail {
 
 /* ---------- Chart area ---------- */
 
+/* `#chart-area`'s own children stack top-to-bottom in flex-column flow (not
+   grid) so the ≤640px media query below can reorder the legend row below
+   the chart via `order`, without touching the rest of the page's grid. */
+#chart-area {
+  display: flex;
+  flex-direction: column;
+}
+
+/* D-08: reserved slot for Phase 04.2's chart-tab bar, empty this phase.
+   Fixed height so no reflow happens once tabs land there. */
+.chart-tabs-slot {
+  height: 40px;
+}
+
+/* D-04: the HTML chip legend replacing Plotly's built-in legend. */
+.legend-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 40px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* SITE-26: shared filled text-pill treatment (legend chips, panel/table
+   network pills -- pill.js's `makePill`). */
+.pill {
+  display: inline-block;
+  font: var(--font-label);
+  padding: 2px var(--space-sm);
+  border-radius: 999px;
+  white-space: nowrap;
+  border: 2px solid transparent;
+}
+
+.legend-chip {
+  cursor: pointer;
+  font: inherit;
+}
+
+/* Toggled off (D-16): legend.js clears the inline fill so this rule's
+   transparent background/--text color shows through; only the chip's own
+   inline `border-color` (the family color) is kept. */
+.legend-chip[aria-pressed="false"] {
+  background: transparent;
+  color: var(--text);
+}
+
+.legend-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .segmented {
   display: inline-flex;
   border: 1px solid var(--border);
@@ -744,6 +799,18 @@ body.panel-open .drawer {
     display: inline-block;
   }
 
+  /* D-04: on phones the legend chip row renders below the chart, not above
+     it -- `#chart-area`'s flex-column order, not a separate grid area. */
+  #legend-chips {
+    order: 1;
+  }
+
+  #shape-legend,
+  #chart-area .caption,
+  #load-error {
+    order: 2;
+  }
+
   .drawer {
     top: auto;
     left: 0;
@@ -771,7 +838,8 @@ body.panel-open .drawer {
   #rail-toggle,
   #rail-close,
   #panel-close,
-  .segmented button {
+  .segmented button,
+  .legend-chip {
     min-height: 44px;
     min-width: 44px;
   }

@@ -10,11 +10,12 @@
  */
 
 import { prepareData } from './modules/data.js';
-import { defaultState, computeView } from './modules/select.js';
+import { defaultState, computeView, toggleFamilyNetworks } from './modules/select.js';
 import { encodeState, decodeState } from './modules/url-state.js';
 import { buildFigure, renderChart, bindChartEvents } from './modules/chart.js';
 import { initTopbar, renderTopbar } from './modules/topbar.js';
 import { initFilters, renderFilters } from './modules/filters.js';
+import { initLegend, renderLegend } from './modules/legend.js';
 import { renderPanel, openPanel, closePanel } from './modules/panel.js';
 import { renderTable } from './modules/table.js';
 
@@ -152,16 +153,6 @@ function showLoadError() {
   window.__testHooks = { ready: true, failed: true };
 }
 
-/** Network ids for every primary network in a given family. */
-function familyNetworkIds(key) {
-  return (data.networksByFamily.get(key) ?? []).map((idx) => data.lookups.networks[idx].id);
-}
-
-/** Network ids for every primary network across all families (the "unfiltered" set). */
-function allPrimaryNetworkIds() {
-  return data.primaryNetworks.map((idx) => data.lookups.networks[idx].id);
-}
-
 async function bootstrap() {
   let response;
   try {
@@ -200,6 +191,12 @@ async function bootstrap() {
     initFilters({ data, getState: () => state, setState });
     renderers.push(renderFilters);
 
+    initLegend({
+      listEl: document.getElementById('legend-chips'),
+      onToggle: (family) => setState({ networks: toggleFamilyNetworks(data, state, family) }),
+    });
+    renderers.push(renderLegend);
+
     renderers.push(tableRenderer);
 
     if (axisToggleEl) {
@@ -218,21 +215,6 @@ async function bootstrap() {
     render();
 
     bindChartEvents(chartEl, {
-      onLegendClick(key) {
-        const current = state.networks ?? allPrimaryNetworkIds();
-        const famIds = familyNetworkIds(key);
-        const everyFamIdIncluded = famIds.every((id) => current.includes(id));
-        const next = everyFamIdIncluded
-          ? current.filter((id) => !famIds.includes(id))
-          : Array.from(new Set([...current, ...famIds]));
-        setState({ networks: next });
-      },
-      onLegendDoubleClick(key) {
-        const current = state.networks ?? allPrimaryNetworkIds();
-        const famIds = familyNetworkIds(key);
-        const isExactlyFamily = current.length === famIds.length && famIds.every((id) => current.includes(id));
-        setState({ networks: isExactlyFamily ? null : famIds });
-      },
       onPointClick(i) {
         openDetailPanel(i);
       },
