@@ -82,3 +82,9 @@ class FreezeRefusedError(BoothReviewError):
 
 class ParseError(BoothReviewError):
     """Raised when a source response cannot be parsed into typed rows."""
+
+
+class ReferenceTableError(BoothReviewError):
+    """A data/reference CSV is missing a required column, has an unexpected
+    column, or holds an invalid value.
+    """

@@ -1,0 +1,107 @@
+"""RR headline-figure selection (D-06, SPIKE-02), promoted from the Phase 1
+spike into booth_review.resolve for Phase 3's join layer (JOIN-04).
+
+One documented, unit-tested rule instead of "most recent" or "follow
+supersedes_id alone" (Pitfall 1: a later preliminary figure is not the right
+pick over an earlier final one). Reads the claim id from `model_extra["id"]`,
+the key name found in the real Ratings Reference inventory (01-11).
+"""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from booth_review.sources.ratingsref.parser import RRClaim, RRRecord
+
+HEADLINE_RULE = (
+    "Headline figure: among claims with metric_type == 'avg_audience', "
+    "unit == 'viewers', and a value of at least 1 (a claim with no value, "
+    "or a value below 1, is never the headline), drop any claim that "
+    "appears as another claim's supersedes_id, then rank the rest by status "
+    "(revised > final > preliminary > any other status), then by "
+    "figure_type (currency over any other figure_type), then by higher "
+    "confidence, then by the latest first_published. The top-ranked claim "
+    "after those tie-breaks is the headline claim; ties on every field keep "
+    "the first one encountered."
+)
+
+_STATUS_RANK: dict[str, int] = {"revised": 0, "final": 1, "preliminary": 2}
+
+# The smallest viewer count a headline may carry. Anything below it would
+# round to 0 viewers on the site (the contract requires viewers > 0), so it
+# is treated the same as a missing value (CR-02).
+MIN_HEADLINE_VALUE = 1.0
+
+
+def is_usable_value(value: float | None) -> bool:
+    """True when `value` can be a headline figure: present and at least
+    MIN_HEADLINE_VALUE. Shared by select_headline, the plotted rule, and
+    site_data's backstop so the three never disagree.
+    """
+    return value is not None and value >= MIN_HEADLINE_VALUE
+
+
+def _claim_id(claim: RRClaim) -> str | None:
+    extra = claim.model_extra or {}
+    value = extra.get("id")
+    return value if isinstance(value, str) else None
+
+
+# Public alias: JOIN-04's disagreement log (compare_with_rr_current) and any
+# other resolve/build code need this reader too, not just select_headline's
+# own tie-breaking.
+claim_id = _claim_id
+
+
+def _rank_key(claim: RRClaim) -> tuple[int, int, float]:
+    status_rank = _STATUS_RANK.get(claim.status, 3)
+    extra = claim.model_extra or {}
+    currency_rank = 0 if extra.get("figure_type") == "currency" else 1
+    confidence_rank = -(claim.confidence if claim.confidence is not None else 0.0)
+    return (status_rank, currency_rank, confidence_rank)
+
+
+# Public alias: JOIN-04's era/disagreement bookkeeping and build.viewership
+# (Plan 08) need the same rank key select_headline ties on, not a
+# reimplementation of HEADLINE_RULE's tie-break order.
+rank_key = _rank_key
+
+
+def select_headline(claims: list[RRClaim]) -> RRClaim | None:
+    """Pick the one claim HEADLINE_RULE names, or None when no eligible
+    avg_audience/viewers claim with a usable value exists.
+    """
+    superseded_ids = {claim.supersedes_id for claim in claims if claim.supersedes_id is not None}
+    eligible = [
+        claim
+        for claim in claims
+        if claim.metric_type == "avg_audience"
+        and claim.unit == "viewers"
+        and is_usable_value(claim.value)
+        and _claim_id(claim) not in superseded_ids
+    ]
+    if not eligible:
+        return None
+
+    best_key = min(_rank_key(claim) for claim in eligible)
+    tied = [claim for claim in eligible if _rank_key(claim) == best_key]
+    tied.sort(key=lambda claim: claim.first_published or "", reverse=True)
+    return tied[0]
+
+
+def compare_with_rr_current(
+    headline: RRClaim | None, record: RRRecord
+) -> Literal["agree", "disagree", "not_comparable"]:
+    """Compare HEADLINE_RULE's pick against RR's own current-figure pick
+    (RRRecord.rr_current_claim_id, extracted from the peers block before it
+    was dropped -- research Pattern 2). "not_comparable" whenever either side
+    has no claim id (no headline claim, or RR's own pick wasn't "found" --
+    research Assumption A3: RR's own pick is best-effort, not a hard
+    requirement); a "not comparable" record is never counted as either an
+    agreement or a disagreement in JOIN-04's disagreement log.
+    """
+    headline_id = claim_id(headline) if headline is not None else None
+    rr_current_id = record.rr_current_claim_id
+    if headline_id is None or rr_current_id is None:
+        return "not_comparable"
+    return "agree" if headline_id == rr_current_id else "disagree"

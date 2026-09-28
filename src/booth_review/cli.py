@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import functools
 import logging
+import os
 import re
 import sys
 from collections.abc import Callable, Sequence
@@ -27,10 +28,17 @@ from booth_review.audit.completeness import (
     write_completeness,
 )
 from booth_review.audit.freeze import FreezeResult, Waiver, freeze_seasons, parse_waiver
+from booth_review.build import combined as build_combined
+from booth_review.build import sample as build_sample
+from booth_review.build.pipeline import BuildOutcome, run_build
 from booth_review.config import CFBD_FLOOR_DEFAULT, DataPaths, load_cfbd_key
 from booth_review.errors import BoothReviewError, FreezeRefusedError
 from booth_review.job.attention import build_attention_body
 from booth_review.job.runner import EXIT_NOTHING_DUE, JOB_CFBD_MAX_CALLS, JobRunResult, ScheduledJob
+from booth_review.people import review as people_review
+from booth_review.reference import reference_dir
+from booth_review.resolve import diagnose as resolve_diagnose
+from booth_review.resolve import network_diagnose
 from booth_review.runtime import Runtime, build_runtime
 from booth_review.seasons import season_of, season_window
 from booth_review.sources.base import BatchSummary, run_requests
@@ -218,6 +226,47 @@ def build_parser() -> argparse.ArgumentParser:
     budget.add_argument("--probe-info-cost", action="store_true")
     budget.add_argument("--floor", type=int, default=CFBD_FLOOR_DEFAULT)
     budget.add_argument("--no-commit", action="store_true")
+
+    build_cmd = sub.add_parser(
+        "build",
+        help="Phase 3 full rebuild from raw: tables, coverage, regression guard, site data",
+    )
+    build_cmd.add_argument("--no-commit", action="store_true")
+    build_cmd.add_argument("--accept-baseline", action="store_true")
+
+    review = sub.add_parser(
+        "review", help="Phase 3 review tools: teams, people, networks, combined"
+    )
+    review_sub = review.add_subparsers(dest="review_command", required=True)
+
+    review_teams = review_sub.add_parser(
+        "teams", help="JOIN-01/02/08 crosswalk match diagnostic (resolve.diagnose)"
+    )
+    review_teams.add_argument("--no-write", action="store_true")
+
+    review_people = review_sub.add_parser(
+        "people", help="people registry scan/apply (people.review)"
+    )
+    review_people.add_argument(
+        "--apply", action="store_true", help="apply review_people.csv's decisions (default: scan)"
+    )
+
+    review_networks = review_sub.add_parser(
+        "networks",
+        help="JOIN-06 outlet inventory and combination diagnostic (resolve.network_diagnose)",
+    )
+    review_networks.add_argument("--no-write", action="store_true")
+
+    review_sub.add_parser(
+        "combined",
+        help="combined-figure candidates; proposals stay in the vault review file (build.combined)",
+    )
+
+    review_sample = review_sub.add_parser(
+        "sample", help="JOIN-08 stratified sample of plotted telecasts for a hand-check (D-08)"
+    )
+    review_sample.add_argument("--size", type=int, default=build_sample.DEFAULT_SIZE)
+    review_sample.add_argument("--seed", type=int, default=build_sample.DEFAULT_SEED)
 
     return parser
 
@@ -815,6 +864,90 @@ def _budget(args: argparse.Namespace) -> int:
         runtime.client.close()
 
 
+# -- build (D-12) -------------------------------------------------------------------------
+
+
+def _build(args: argparse.Namespace) -> int:
+    """Rebuild every processed table from raw behind the AUDIT-03 regression
+    guard; prints counts and rates only (T-03-45)."""
+    paths = DataPaths.from_env()
+    try:
+        outcome: BuildOutcome = run_build(
+            paths,
+            reference_dir(),
+            commit=not args.no_commit,
+            accept_baseline=args.accept_baseline,
+        )
+    except BoothReviewError:
+        raise
+    except Exception as exc:
+        # An unexpected error's message or traceback can carry a vault value
+        # (a team or person name), so only its type is printed unless the
+        # user opts in locally (WR-03).
+        if os.environ.get("BOOTH_REVIEW_DEBUG"):
+            raise
+        print(
+            f"error: unexpected {type(exc).__name__} during build; details withheld "
+            "(set BOOTH_REVIEW_DEBUG=1 to see the traceback)",
+            file=sys.stderr,
+        )
+        return 3
+    exit_blocked = outcome.blocked and not outcome.accepted
+    rate = outcome.counts.get("join08_rate_x10000", 0) / 100
+    print(
+        f"telecasts {outcome.counts.get('plotted_telecasts', 0)} plotted, "
+        f"join rate {rate:.1f}%, merges {outcome.counts.get('duplicate_merges', 0)}, "
+        f"blocked {'yes' if exit_blocked else 'no'}"
+    )
+    if outcome.accepted:
+        print("accepted new baseline")
+    for reason in outcome.reasons:
+        print(reason)
+    return 4 if exit_blocked else 0
+
+
+# -- review (Plans 04/05/06/09 review tools) -----------------------------------------------
+
+
+def _with_vault_lock(run: Callable[[], int]) -> int:
+    """Run a vault-writing review command under the vault lock (AGENTS.md:
+    every command that writes to the vault holds it), so it can never
+    interleave with a scheduled-job or build commit (WR-08).
+    """
+    with VaultRepo(DataPaths.from_env().vault).lock():
+        return run()
+
+
+def _review_teams(args: argparse.Namespace) -> int:
+    if args.no_write:
+        return resolve_diagnose.main(["--no-write"])
+    return _with_vault_lock(lambda: resolve_diagnose.main([]))
+
+
+def _review_people(args: argparse.Namespace) -> int:
+    return _with_vault_lock(lambda: people_review.main(["apply"] if args.apply else ["scan"]))
+
+
+def _review_networks(args: argparse.Namespace) -> int:
+    if args.no_write:
+        return network_diagnose.main(["--no-write"])
+    return _with_vault_lock(lambda: network_diagnose.main([]))
+
+
+def _review_combined(args: argparse.Namespace) -> int:
+    def _run() -> int:
+        build_combined.main([])
+        return 0
+
+    return _with_vault_lock(_run)
+
+
+def _review_sample(args: argparse.Namespace) -> int:
+    return _with_vault_lock(
+        lambda: build_sample.main(["--size", str(args.size), "--seed", str(args.seed)])
+    )
+
+
 # -- main -------------------------------------------------------------------------------
 
 
@@ -860,6 +993,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise AssertionError(f"unknown job command: {args.job_command!r}")
         if args.command == "budget":
             return _budget(args)
+        if args.command == "build":
+            return _build(args)
+        if args.command == "review":
+            if args.review_command == "teams":
+                return _review_teams(args)
+            if args.review_command == "people":
+                return _review_people(args)
+            if args.review_command == "networks":
+                return _review_networks(args)
+            if args.review_command == "combined":
+                return _review_combined(args)
+            if args.review_command == "sample":
+                return _review_sample(args)
+            raise AssertionError(f"unknown review command: {args.review_command!r}")
         raise AssertionError(f"unknown command: {args.command!r}")
     except BoothReviewError as exc:
         print(f"error: {type(exc).__name__}: {exc}", file=sys.stderr)

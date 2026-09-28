@@ -19,15 +19,16 @@ from datetime import date
 from pathlib import Path
 
 from booth_review.errors import BoothReviewError
-from booth_review.sources.cfbd.parser import CfbdGame
-from booth_review.sources.ratingsref.sitemap import SitemapEntry
-from booth_review.spike.names import (
+from booth_review.resolve.games import is_fbs_game
+from booth_review.resolve.names import (
     csv_safe,
     csv_unsafe,
     normalize_team,
     significant_tokens,
     to_et_datetime,
 )
+from booth_review.sources.cfbd.parser import CfbdGame
+from booth_review.sources.ratingsref.sitemap import SitemapEntry
 from booth_review.transport.cache import atomic_write_bytes
 
 DEFAULT_SEED = 2025
@@ -84,10 +85,6 @@ def _team_pair_key(game: CfbdGame) -> frozenset[int | str]:
     return frozenset({normalize_team(game.home_team), normalize_team(game.away_team)})
 
 
-def _is_fbs_game(game: CfbdGame) -> bool:
-    return "fbs" in (game.home_classification, game.away_classification)
-
-
 def _has_diacritics_directional_or_parens(text: str) -> bool:
     if "(" in text or ")" in text:
         return True
@@ -107,7 +104,7 @@ def build_candidates(
     """
     # JOIN-07: a game is in scope only when at least one team is FBS that season.
     # The CFBD games file covers every division, so filter before anything else.
-    games = [g for g in games if _is_fbs_game(g)]
+    games = [g for g in games if is_fbs_game(g)]
     pair_counts: dict[frozenset[int | str], int] = {}
     for g in games:
         key = _team_pair_key(g)

@@ -1,0 +1,54 @@
+source,variant,canonical,cfbd_team_id,season_from,season_to,note
+ratingsref,cfb-alabama-am,Alabama A&M,2010,,,RR slug omits the ampersand
+ratingsref,cfb-appalachian-state,App State,2026,,,CFBD's own current short name
+ratingsref,cfb-fiu,Florida International,2229,,,RR slug uses the FIU initialism
+ratingsref,cfb-mcneese-state,McNeese,2377,,,CFBD drops State from McNeese
+ratingsref,cfb-prairie-view-am,Prairie View A&M,2504,,,RR slug omits the ampersand
+ratingsref,cfb-southeastern-louisiana,SE Louisiana,2545,,,CFBD abbreviates Southeastern
+ratingsref,cfb-texas-am,Texas A&M,245,,,RR slug omits the ampersand
+ratingsref,cfb-umass,Massachusetts,113,,,RR slug uses the UMass initialism
+sports506,Albany,UAlbany,399,,,506's short name for UAlbany
+sports506,Appalachian State,App State,2026,,,CFBD's own current short name
+sports506,Bowling Green State,Bowling Green,189,,,CFBD drops State from the name
+sports506,Cal,California,25,,,506's short name for California
+sports506,Central Connecticut State,Central Connecticut,2115,,,CFBD drops State
+sports506,Central Florida,UCF,2116,,,CFBD's own current short name
+sports506,Citadel,The Citadel,2643,,,CFBD keeps the leading The
+sports506,Colorado Mines,Colorado School of Mines,2146,,,506's short name
+sports506,Connecticut,UConn,41,,,CFBD's own current short name
+sports506,Cortland,SUNY Cortland,2782,,,CFBD keeps the SUNY prefix
+sports506,FAU,Florida Atlantic,2226,,,506 uses the FAU initialism
+sports506,FIU,Florida International,2229,,,506 uses the FIU initialism
+sports506,Grambling State,Grambling,2755,,,CFBD drops State
+sports506,Houston Baptist,Houston Christian,2277,,,school renamed; CFBD backdates the new name
+sports506,Long Island,Long Island University,2341,,,506's short name
+sports506,Louisiana-Monroe,UL Monroe,2433,,,CFBD's own current short name
+sports506,McNeese State,McNeese,2377,,,CFBD drops State
+sports506,Miami (FL),Miami,2390,,,CFBD has no (FL) suffix; Miami (OH) is separate
+sports506,Middle Tennessee State,Middle Tennessee,2393,,,CFBD drops State
+sports506,N.C. A&T,North Carolina A&T,2448,,,506's abbreviation
+sports506,N.C. Central,North Carolina Central,2428,,,506's abbreviation
+sports506,N.C. State,NC State,152,,,506's punctuation differs from CFBD's
+sports506,NC Central,North Carolina Central,2428,,,506's abbreviation
+sports506,Nicholls State,Nicholls,2447,,,CFBD drops State
+sports506,North Carolina State,NC State,152,,,506's full name vs CFBD's abbreviation
+sports506,North Central,North Central College,3071,,,DIII Stagg Bowl opponent; CFBD keeps College
+sports506,Penn,Pennsylvania,219,,,506's short name for the Ivy League Penn
+sports506,S.C. State,South Carolina State,2569,,,506's abbreviation
+sports506,SE Missouri State,Southeast Missouri State,2546,,,506's abbreviation of Southeast
+sports506,Sam Houston State,Sam Houston,2534,,,CFBD drops State
+sports506,Southeast Missouri,Southeast Missouri State,2546,,,506 drops State
+sports506,Southeastern Louisiana,SE Louisiana,2545,,,CFBD abbreviates Southeastern
+sports506,Southern Methodist,SMU,2567,,,CFBD's own current short name
+sports506,Southern Mississippi,Southern Miss,2572,,,CFBD's own current short name
+sports506,Southern University,Southern,2582,,,CFBD drops University
+sports506,St. Francis,Saint Francis,2598,,,506's abbreviation of Saint
+sports506,St. Francis (PA),Saint Francis,2598,,,506's abbreviation of Saint
+sports506,Tarleton,Tarleton State,2627,,,506's short name; CFBD keeps State
+sports506,Tennessee-Martin,UT Martin,2630,,,CFBD's own current short name
+sports506,Texas A&M-Commerce,East Texas A&M,2837,,,school renamed; CFBD backdates the new name
+sports506,UAPB,Arkansas-Pine Bluff,2029,,,506 uses the UAPB initialism
+sports506,ULL,Louisiana,309,,,506 uses the old UL Lafayette initialism
+sports506,ULM,UL Monroe,2433,,,506 uses the old ULM initialism
+sports506,UMass,Massachusetts,113,,,506 uses the UMass initialism
+sports506,USF,South Florida,58,,,506 uses the USF initialism

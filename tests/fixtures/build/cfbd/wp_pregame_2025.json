@@ -1,0 +1,282 @@
+[
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 6,
+    "gameId": 500001,
+    "homeTeam": "Northfield",
+    "awayTeam": "Lakeview",
+    "spread": null,
+    "homeWinProbability": 0.3
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 14,
+    "gameId": 500002,
+    "homeTeam": "Lakeview",
+    "awayTeam": "Northfield",
+    "spread": null,
+    "homeWinProbability": 0.35
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 1,
+    "gameId": 500003,
+    "homeTeam": "Cedarhollow",
+    "awayTeam": "Boulderpass",
+    "spread": null,
+    "homeWinProbability": 0.4
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 3,
+    "gameId": 500004,
+    "homeTeam": "Maplecrest",
+    "awayTeam": "Stonebridge",
+    "spread": null,
+    "homeWinProbability": 0.45
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 10,
+    "gameId": 500005,
+    "homeTeam": "Foxhollow",
+    "awayTeam": "Ironpeak",
+    "spread": null,
+    "homeWinProbability": 0.5
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 4,
+    "gameId": 500006,
+    "homeTeam": "West Hawai\u02bbi State",
+    "awayTeam": "Silverlake",
+    "spread": null,
+    "homeWinProbability": 0.55
+  },
+  {
+    "season": 2025,
+    "seasonType": "postseason",
+    "week": 20,
+    "gameId": 500007,
+    "homeTeam": "Ravenwood",
+    "awayTeam": "Thornfield",
+    "spread": null,
+    "homeWinProbability": 0.6
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 2,
+    "gameId": 500009,
+    "homeTeam": "West Hawai\u02bbi State",
+    "awayTeam": "Lakeview",
+    "spread": null,
+    "homeWinProbability": 0.7
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 2,
+    "gameId": 500010,
+    "homeTeam": "Silverlake",
+    "awayTeam": "Cedarhollow",
+    "spread": null,
+    "homeWinProbability": 0.3
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 3,
+    "gameId": 500011,
+    "homeTeam": "Ravenwood",
+    "awayTeam": "Boulderpass",
+    "spread": null,
+    "homeWinProbability": 0.35
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 4,
+    "gameId": 500012,
+    "homeTeam": "Thornfield",
+    "awayTeam": "Maplecrest",
+    "spread": null,
+    "homeWinProbability": 0.4
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 5,
+    "gameId": 500013,
+    "homeTeam": "Timberline",
+    "awayTeam": "Stonebridge",
+    "spread": null,
+    "homeWinProbability": 0.45
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 5,
+    "gameId": 500014,
+    "homeTeam": "Copperfield",
+    "awayTeam": "Foxhollow",
+    "spread": null,
+    "homeWinProbability": 0.5
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 6,
+    "gameId": 500015,
+    "homeTeam": "Brightwater",
+    "awayTeam": "Ironpeak",
+    "spread": null,
+    "homeWinProbability": 0.55
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 7,
+    "gameId": 500016,
+    "homeTeam": "Ashford",
+    "awayTeam": "West Hawai\u02bbi State",
+    "spread": null,
+    "homeWinProbability": 0.6
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 7,
+    "gameId": 500017,
+    "homeTeam": "Millbrook",
+    "awayTeam": "Silverlake",
+    "spread": null,
+    "homeWinProbability": 0.65
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 8,
+    "gameId": 500018,
+    "homeTeam": "Fernwood",
+    "awayTeam": "Ravenwood",
+    "spread": null,
+    "homeWinProbability": 0.7
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 9,
+    "gameId": 500019,
+    "homeTeam": "Highcliff",
+    "awayTeam": "Thornfield",
+    "spread": null,
+    "homeWinProbability": 0.3
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 9,
+    "gameId": 500020,
+    "homeTeam": "Wolfridge",
+    "awayTeam": "Timberline",
+    "spread": null,
+    "homeWinProbability": 0.35
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 11,
+    "gameId": 500021,
+    "homeTeam": "Eastgate",
+    "awayTeam": "Copperfield",
+    "spread": null,
+    "homeWinProbability": 0.4
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 12,
+    "gameId": 500022,
+    "homeTeam": "Southmoor",
+    "awayTeam": "Brightwater",
+    "spread": null,
+    "homeWinProbability": 0.45
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 12,
+    "gameId": 500023,
+    "homeTeam": "Westbrook",
+    "awayTeam": "Ashford",
+    "spread": null,
+    "homeWinProbability": 0.5
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 13,
+    "gameId": 500024,
+    "homeTeam": "Crestmont",
+    "awayTeam": "Millbrook",
+    "spread": null,
+    "homeWinProbability": 0.55
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 13,
+    "gameId": 500025,
+    "homeTeam": "Northfield",
+    "awayTeam": "Fernwood",
+    "spread": null,
+    "homeWinProbability": 0.6
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 2,
+    "gameId": 500026,
+    "homeTeam": "Lakeview",
+    "awayTeam": "Highcliff",
+    "spread": null,
+    "homeWinProbability": 0.65
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 4,
+    "gameId": 500027,
+    "homeTeam": "Cedarhollow",
+    "awayTeam": "Wolfridge",
+    "spread": null,
+    "homeWinProbability": 0.7
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 6,
+    "gameId": 500028,
+    "homeTeam": "Boulderpass",
+    "awayTeam": "Eastgate",
+    "spread": null,
+    "homeWinProbability": 0.3
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 8,
+    "gameId": 500029,
+    "homeTeam": "Maplecrest",
+    "awayTeam": "Southmoor",
+    "spread": null,
+    "homeWinProbability": 0.35
+  }
+]

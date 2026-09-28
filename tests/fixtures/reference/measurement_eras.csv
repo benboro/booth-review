@@ -1,0 +1,6 @@
+era_id,label,start_date,end_date,rr_era_ids,source_url,note
+rr-fixture-era-1,Fixture Panel-Only Era,,2020-08-30,rr-era-a,https://example.com/era1,Invented pre-OOH era for tests
+rr-fixture-era-2,Fixture Out-of-Home Era,2020-08-31,2025-01-31,rr-era-b,https://example.com/era2,Invented OOH era for tests
+rr-fixture-era-3,Fixture Expanded OOH Era,2025-02-01,2025-08-31,rr-era-b,https://example.com/era3,Invented OOH-expanded era for tests
+rr-fixture-era-4,Fixture Big Data Plus Panel Era,2025-09-01,2026-08-30,rr-era-c,https://example.com/era4,Invented Big Data + Panel era for tests
+rr-fixture-era-5,Fixture Co-Viewing Era,2026-08-31,,rr-era-c,https://example.com/era5,Invented co-viewing era for tests

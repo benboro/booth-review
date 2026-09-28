@@ -110,6 +110,99 @@ def test_parse_record_drops_peers_block() -> None:
     assert "peers" not in (record.model_extra or {})
 
 
+# -- rr_current_claim_id / rr_current_status (research Pattern 2, T-03-05) -----------------
+
+
+def _record_data() -> dict:
+    import json
+
+    return json.loads((FIXTURES / "record_synthetic.json").read_bytes())
+
+
+def test_rr_current_found_with_exactly_one_current_self_row() -> None:
+    import json
+
+    data = _record_data()
+    self_id = data["telecast"]["id"]
+    data["peers"] = {
+        "rows": [{"telecast_id": self_id, "claim_id": "the-current-claim", "current": True}]
+    }
+    record = parse_record(json.dumps(data).encode("utf-8"))
+    assert record.rr_current_claim_id == "the-current-claim"
+    assert record.rr_current_status == "found"
+
+
+def test_rr_current_no_peers_when_peers_key_is_absent() -> None:
+    import json
+
+    data = _record_data()
+    del data["peers"]
+    record = parse_record(json.dumps(data).encode("utf-8"))
+    assert record.rr_current_claim_id is None
+    assert record.rr_current_status == "no_peers"
+
+
+def test_rr_current_no_peers_when_peers_is_null_or_lacks_rows() -> None:
+    import json
+
+    for peers_value in (None, {}, {"rows": "not-a-list"}):
+        data = _record_data()
+        data["peers"] = peers_value
+        record = parse_record(json.dumps(data).encode("utf-8"))
+        assert record.rr_current_claim_id is None
+        assert record.rr_current_status == "no_peers"
+
+
+def test_rr_current_no_self_row_when_no_row_matches() -> None:
+    import json
+
+    data = _record_data()
+    self_id = data["telecast"]["id"]
+    data["peers"] = {
+        "rows": [
+            {"telecast_id": "some-other-telecast", "claim_id": "c-other", "current": True},
+            {"telecast_id": self_id, "claim_id": "c-not-current", "current": False},
+        ]
+    }
+    record = parse_record(json.dumps(data).encode("utf-8"))
+    assert record.rr_current_claim_id is None
+    assert record.rr_current_status == "no_self_row"
+
+
+def test_rr_current_multiple_current_when_two_self_rows_are_current() -> None:
+    import json
+
+    data = _record_data()
+    self_id = data["telecast"]["id"]
+    data["peers"] = {
+        "rows": [
+            {"telecast_id": self_id, "claim_id": "c-one", "current": True},
+            {"telecast_id": self_id, "claim_id": "c-two", "current": True},
+        ]
+    }
+    record = parse_record(json.dumps(data).encode("utf-8"))
+    assert record.rr_current_claim_id is None
+    assert record.rr_current_status == "multiple_current"
+
+
+def test_rr_current_skips_a_malformed_row_without_raising() -> None:
+    import json
+
+    data = _record_data()
+    self_id = data["telecast"]["id"]
+    data["peers"] = {
+        "rows": [
+            "not-a-dict-row",
+            {"telecast_id": self_id, "claim_id": 12345, "current": True},  # claim_id not a string
+            {"telecast_id": self_id, "claim_id": "c-good", "current": True},
+        ]
+    }
+    record = parse_record(json.dumps(data).encode("utf-8"))
+    assert record.rr_current_claim_id == "c-good"
+    assert record.rr_current_status == "found"
+    assert "peers" not in (record.model_extra or {})
+
+
 def test_parse_record_missing_telecast_id_raises_named_field() -> None:
     import json
 

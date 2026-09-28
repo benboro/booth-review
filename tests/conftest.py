@@ -108,6 +108,62 @@ def vault_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DataPaths:
     return paths
 
 
+_BUILD_FIXTURES = Path(__file__).parent / "fixtures" / "build"
+_SPIKE_FIXTURES = Path(__file__).parent / "fixtures" / "spike"
+_REFERENCE_FIXTURES = Path(__file__).parent / "fixtures" / "reference"
+
+
+@pytest.fixture
+def build_vault(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> DataPaths:
+    """A synthetic vault under tmp_path, seeded for the build layer (Plan
+    07+): 2025 CFBD games/media/lines/rankings/wp_pregame/teams_fbs, the two
+    506 week pages, and the RR records -- all invented (D-07). Later plans
+    add fixture files of their own under their own names; they don't edit
+    this fixture.
+    """
+    vault_root = tmp_path / "vault"
+    paths = DataPaths(vault=vault_root)
+    for directory in (paths.raw, paths.interim, paths.processed, paths.ledger, paths.spike):
+        directory.mkdir(parents=True, exist_ok=True)
+    paths.frozen.write_text(
+        json.dumps({"sports506": [], "ratingsref": [], "cfbd": []}), encoding="utf-8"
+    )
+
+    games_dir = paths.raw / "cfbd" / "games"
+    games_dir.mkdir(parents=True, exist_ok=True)
+    (games_dir / "2025.json").write_bytes((_SPIKE_FIXTURES / "cfbd_games_2025.json").read_bytes())
+
+    for endpoint in ("lines", "rankings", "media", "wp_pregame", "teams_fbs"):
+        endpoint_dir = paths.raw / "cfbd" / endpoint
+        endpoint_dir.mkdir(parents=True, exist_ok=True)
+        (endpoint_dir / "2025.json").write_bytes(
+            (_BUILD_FIXTURES / "cfbd" / f"{endpoint}_2025.json").read_bytes()
+        )
+
+    sports506_dir = paths.raw / "sports506" / "2025"
+    sports506_dir.mkdir(parents=True, exist_ok=True)
+    (sports506_dir / "wk-01.html").write_bytes((_SPIKE_FIXTURES / "506_wk-01.html").read_bytes())
+    (sports506_dir / "wk-B.html").write_bytes((_SPIKE_FIXTURES / "506_wk-B.html").read_bytes())
+
+    rr_dir = paths.raw / "ratingsref" / "telecast" / "2025"
+    rr_dir.mkdir(parents=True, exist_ok=True)
+    for record_path in sorted((_SPIKE_FIXTURES / "rr_records").glob("*.json")):
+        (rr_dir / record_path.name).write_bytes(record_path.read_bytes())
+
+    monkeypatch.setenv("BOOTH_REVIEW_VAULT", str(vault_root))
+    return paths
+
+
+@pytest.fixture
+def build_reference(monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point BOOTH_REVIEW_REFERENCE at the synthetic data/reference/ fixture
+    (invented teams/people/networks, D-07), so build-layer tests never read
+    the real public data/reference/ tables.
+    """
+    monkeypatch.setenv("BOOTH_REVIEW_REFERENCE", str(_REFERENCE_FIXTURES))
+    return _REFERENCE_FIXTURES
+
+
 @pytest.fixture
 def isolated_git_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Blocks the operator's global/system git config from leaking into tests."""

@@ -1,0 +1,401 @@
+[
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 1,
+    "polls": [
+      {
+        "poll": "AP Top 25",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 9,
+            "school": "Ironpeak",
+            "conference": "Example Conference"
+          },
+          {
+            "rank": 14,
+            "school": "Northfield",
+            "conference": "Example Conference"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 2,
+    "polls": [
+      {
+        "poll": "AP Top 25",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 16,
+            "school": "Silverlake",
+            "conference": "Example Conference"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 3,
+    "polls": [
+      {
+        "poll": "AP Top 25",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 18,
+            "school": "Maplecrest",
+            "conference": "Example Conference"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 4,
+    "polls": [
+      {
+        "poll": "AP Top 25",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 20,
+            "school": "Thornfield",
+            "conference": "Example Conference"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 5,
+    "polls": [
+      {
+        "poll": "AP Top 25",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 22,
+            "school": "Timberline",
+            "conference": "Example Conference"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 6,
+    "polls": [
+      {
+        "poll": "AP Top 25",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 3,
+            "school": "Northfield",
+            "conference": "Example Conference"
+          },
+          {
+            "rank": 8,
+            "school": "Lakeview",
+            "conference": "Example Conference"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 7,
+    "polls": [
+      {
+        "poll": "AP Top 25",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 19,
+            "school": "Ashford",
+            "conference": "Example Conference"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 8,
+    "polls": [
+      {
+        "poll": "AP Top 25",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 17,
+            "school": "Fernwood",
+            "conference": "Example Conference"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 9,
+    "polls": [
+      {
+        "poll": "AP Top 25",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 15,
+            "school": "Highcliff",
+            "conference": "Example Conference"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 10,
+    "polls": [
+      {
+        "poll": "AP Top 25",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 5,
+            "school": "Foxhollow",
+            "conference": "Example Conference"
+          },
+          {
+            "rank": 12,
+            "school": "Ironpeak",
+            "conference": "Example Conference"
+          }
+        ]
+      },
+      {
+        "poll": "Playoff Committee Rankings",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 7,
+            "school": "Foxhollow",
+            "conference": "Example Conference"
+          },
+          {
+            "rank": 11,
+            "school": "Ironpeak",
+            "conference": "Example Conference"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 11,
+    "polls": [
+      {
+        "poll": "AP Top 25",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 21,
+            "school": "Eastgate",
+            "conference": "Example Conference"
+          }
+        ]
+      },
+      {
+        "poll": "Playoff Committee Rankings",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 21,
+            "school": "Eastgate",
+            "conference": "Example Conference"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 12,
+    "polls": [
+      {
+        "poll": "AP Top 25",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 13,
+            "school": "Southmoor",
+            "conference": "Example Conference"
+          }
+        ]
+      },
+      {
+        "poll": "Playoff Committee Rankings",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 13,
+            "school": "Southmoor",
+            "conference": "Example Conference"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 13,
+    "polls": [
+      {
+        "poll": "AP Top 25",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 10,
+            "school": "Crestmont",
+            "conference": "Example Conference"
+          }
+        ]
+      },
+      {
+        "poll": "Playoff Committee Rankings",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 10,
+            "school": "Crestmont",
+            "conference": "Example Conference"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 14,
+    "polls": [
+      {
+        "poll": "AP Top 25",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 6,
+            "school": "Lakeview",
+            "conference": "Example Conference"
+          },
+          {
+            "rank": 2,
+            "school": "Northfield",
+            "conference": "Example Conference"
+          }
+        ]
+      },
+      {
+        "poll": "Playoff Committee Rankings",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 5,
+            "school": "Lakeview",
+            "conference": "Example Conference"
+          },
+          {
+            "rank": 1,
+            "school": "Northfield",
+            "conference": "Example Conference"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "season": 2025,
+    "seasonType": "regular",
+    "week": 15,
+    "polls": [
+      {
+        "poll": "AP Top 25",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 3,
+            "school": "Ravenwood",
+            "conference": "Example Conference"
+          },
+          {
+            "rank": 5,
+            "school": "Thornfield",
+            "conference": "Example Conference"
+          }
+        ]
+      },
+      {
+        "poll": "Playoff Committee Rankings",
+        "isFinal": false,
+        "ranks": [
+          {
+            "rank": 2,
+            "school": "Ravenwood",
+            "conference": "Example Conference"
+          },
+          {
+            "rank": 4,
+            "school": "Thornfield",
+            "conference": "Example Conference"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "season": 2025,
+    "seasonType": "postseason",
+    "week": 1,
+    "polls": [
+      {
+        "poll": "AP Top 25",
+        "isFinal": true,
+        "ranks": [
+          {
+            "rank": 1,
+            "school": "Ravenwood",
+            "conference": "Example Conference"
+          },
+          {
+            "rank": 7,
+            "school": "Thornfield",
+            "conference": "Example Conference"
+          }
+        ]
+      }
+    ]
+  }
+]

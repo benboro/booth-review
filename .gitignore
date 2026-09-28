@@ -35,8 +35,11 @@ data/processed/*
 # ── Python ──────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[oc]
-build/
-dist/
+# Anchored to the repo root (leading /): an unanchored `build/` also matches
+# src/booth_review/build/ and tests/fixtures/build/, the Phase 3 build
+# package and its fixtures, which must be tracked (Phase 3 Plan 07).
+/build/
+/dist/
 wheels/
 *.egg-info
 .venv
