@@ -31,6 +31,13 @@ RobotsListener = Callable[[str, FetchResponse], None]
 
 _RETRY_ATTEMPTS = 4
 
+# "budgeted" hosts (CFBD) retry only statuses a gateway returns without
+# forwarding the request, with waits sized for a minutes-long outage.
+_GATEWAY_STATUSES = frozenset({502, 503})
+_BUDGETED_RETRY_ATTEMPTS = 3
+_BUDGETED_WAIT_INITIAL_S = 30.0
+_BUDGETED_WAIT_MAX_S = 90.0
+
 
 class _RetryableStatus(Exception):
     """Internal signal that a response's status code should be retried."""
@@ -168,7 +175,7 @@ class PoliteClient:
             if policy.retry_mode == "standard":
                 response = self._send_with_standard_retries(attempt)
             else:
-                response = self._send_with_connect_only_retries(attempt)
+                response = self._send_with_budgeted_retries(attempt)
         except httpx2.TransportError as exc:
             raise FetchError(f"transport failure fetching {url}") from exc
 
@@ -232,16 +239,40 @@ class PoliteClient:
             return last_response
         raise AssertionError("retry loop exited without returning")  # pragma: no cover
 
-    def _send_with_connect_only_retries(
+    def _send_with_budgeted_retries(
         self, attempt: Callable[[], httpx2.Response]
     ) -> httpx2.Response:
-        """Retry only on connection failures; never on a status code or read
-        timeout, since a request that reached the server may already have
-        been counted against a budget (CFBD's monthly quota).
+        """Retry connection failures and gateway 502/503s only.
+
+        Neither reaches the API behind the gateway, so neither is counted
+        against a budget (CFBD's monthly quota): a 2026-09-27 CFBD 502 left
+        X-CallLimit-Remaining unchanged. A read timeout, 500, 504, or 429 may
+        have been served and counted, so none of those is ever retried. The
+        gateway waits are long (tens of seconds) because a CFBD outage lasts
+        minutes, not milliseconds; once attempts are exhausted the last
+        response is returned, as in `_send_with_standard_retries`.
         """
-        for attempt_ctx in stamina.retry_context(
-            on=(httpx2.ConnectError, httpx2.ConnectTimeout), attempts=_RETRY_ATTEMPTS
-        ):
-            with attempt_ctx:
-                return attempt()
+        last_response: httpx2.Response | None = None
+
+        def _do() -> httpx2.Response:
+            nonlocal last_response
+            response = attempt()
+            last_response = response
+            if response.status_code in _GATEWAY_STATUSES:
+                raise _RetryableStatus(f"gateway status {response.status_code}")
+            return response
+
+        try:
+            for attempt_ctx in stamina.retry_context(
+                on=(httpx2.ConnectError, httpx2.ConnectTimeout, _RetryableStatus),
+                attempts=_BUDGETED_RETRY_ATTEMPTS,
+                wait_initial=_BUDGETED_WAIT_INITIAL_S,
+                wait_max=_BUDGETED_WAIT_MAX_S,
+                timeout=None,
+            ):
+                with attempt_ctx:
+                    return _do()
+        except _RetryableStatus:
+            assert last_response is not None
+            return last_response
         raise AssertionError("retry loop exited without returning")  # pragma: no cover
