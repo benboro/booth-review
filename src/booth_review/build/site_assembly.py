@@ -142,11 +142,14 @@ def _verify_bundle(site_src: Path) -> None:
 
 
 def check_no_key_leak(out_dir: Path) -> bool:
-    """Grep every file under `out_dir` for the local CFBD key (T-04-13).
+    """Grep every file under `out_dir` for the configured CFBD key (T-04-13).
 
-    Returns False when no key is configured locally (nothing to check
-    against -- CI always has the key set). On a hit, removes `out_dir` and
-    raises SiteBuildError naming the offending file only, never the key.
+    Returns False when no key is configured (nothing to compare against).
+    CI never holds the real key; its site-build step sets a synthetic
+    canary `CFBD_API_KEY` instead, so this grep still runs there and would
+    catch any build path that copied the configured key into the output
+    (WR-02). On a hit, removes `out_dir` and raises SiteBuildError naming
+    the offending file only, never the key.
     """
     try:
         key = load_cfbd_key()

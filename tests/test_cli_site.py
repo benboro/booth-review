@@ -17,8 +17,10 @@ import json
 import re
 import shutil
 from pathlib import Path
+from typing import Any
 
 import pytest
+import yaml
 
 from booth_review.cli import main
 from booth_review.contract.models import SITE_DATA_FIELDS, validate_site_data
@@ -316,3 +318,46 @@ def test_key_leak_keeps_the_previous_build_and_removes_the_leaky_one(
     assert (out / ".booth-review-site").is_file()
     assert not (out / "modules" / "leak.js").exists()
     assert _siblings(out) == []
+
+
+def _ci_key_guard_step() -> dict[str, Any]:
+    ci = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text("utf-8"))
+    steps = [
+        step for step in ci["jobs"]["check"]["steps"] if "CFBD_API_KEY" in (step.get("env") or {})
+    ]
+    assert len(steps) == 1, "ci.yml must set CFBD_API_KEY on exactly one step"
+    return steps[0]  # type: ignore[no-any-return]
+
+
+def test_ci_runs_the_key_leak_guard_with_a_synthetic_canary_not_a_secret() -> None:
+    """WR-02: CI sets a synthetic canary key (never a `secrets.` reference) on
+    a `booth-review site` step that fails unless the guard reports `passed`,
+    so the key-leak grep can't silently skip in CI."""
+    step = _ci_key_guard_step()
+    canary = step["env"]["CFBD_API_KEY"]
+    assert canary.startswith("ci-canary-")
+    assert "${{" not in canary
+    assert "booth-review site --fixture" in step["run"]
+    assert "grep -qx 'cfbd key check: passed'" in step["run"]
+
+
+def test_ci_canary_key_makes_the_guard_run_and_catches_an_embedded_key(
+    site_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """WR-02: with CI's own canary configured, a clean build reports the
+    exact line the CI step greps for, and a build that embeds the configured
+    key is refused."""
+    canary = _ci_key_guard_step()["env"]["CFBD_API_KEY"]
+    monkeypatch.setenv("CFBD_API_KEY", canary)
+
+    assert main(["site", "--fixture", "--out", str(site_env / "out")]) == 0
+    assert "cfbd key check: passed" in capsys.readouterr().out.splitlines()
+
+    tainted_src = site_env / "site_src_tainted"
+    shutil.copytree(SITE_SRC, tainted_src)
+    (tainted_src / "modules" / "config.js").write_text(
+        f"export const KEY = '{canary}';\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("BOOTH_REVIEW_SITE_SRC", str(tainted_src))
+    assert main(["site", "--fixture", "--out", str(site_env / "out2")]) == 3
+    assert not (site_env / "out2").exists()
