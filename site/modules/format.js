@@ -24,13 +24,6 @@ export const SLOT_LABELS = {
   prime: 'Prime time (6 PM ET or later)',
 };
 
-/** Time-slot labels, short form, for chips/hover/table cells. */
-export const SLOT_SHORT = {
-  noon: 'Noon',
-  afternoon: 'Afternoon',
-  prime: 'Prime time',
-};
-
 /** Crew role filter labels (SITE-07). Sideline/other is role "unknown". */
 export const ROLE_LABELS = {
   pbp: 'Play-by-play',
@@ -232,6 +225,19 @@ export function niceLinearTicks(min, max, target = 6) {
     ticks.push(Math.round(value * 1e6) / 1e6);
   }
   return ticks;
+}
+
+/**
+ * Strips a trailing/nested parenthetical note from a network's display name,
+ * for the chart tooltip only (SITE-04): the canonical name in
+ * `data/reference/networks.csv` sometimes carries a methodology aside (e.g.
+ * "ESPN Plus (regional insert package, pre-2018)"), which belongs in the
+ * detail panel/table's fuller name, not the tooltip's minimal one.
+ * @param {string} name
+ * @returns {string}
+ */
+export function stripNetworkNote(name) {
+  return name.replace(/\s*\([^)]*\)/g, '').trim();
 }
 
 /**

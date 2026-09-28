@@ -13,15 +13,13 @@ import { ACCENT, DIVIDER, FAMILY_COLORS, FAMILY_LABELS, PAGE_BG, SURFACE } from 
 import {
   crewByRole,
   escapeHover,
-  formatAxisValue,
   formatDate,
   formatKickoff,
   formatMatchup,
   formatViewers,
   logTicks,
-  measurementLabel,
   niceLinearTicks,
-  SLOT_SHORT,
+  stripNetworkNote,
 } from './format.js';
 
 /** X-axis chart titles (distinct from format.js's shorter AXIS_LABELS toggle copy). */
@@ -51,37 +49,41 @@ export function naBand(data, axis) {
 }
 
 /**
- * Builds the `<br>`-joined hover text for one telecast, in the UI-SPEC's
- * hover order (SITE-04, D-02, D-04). Each line is built from untrusted data
- * (team/crew/network names) and escaped *individually* before being joined
- * with the literal `<br>` separators Plotly's pseudo-HTML hover renderer
- * expects (T-04-06): escaping the fully-joined string instead would also
- * escape those `<br>` tags themselves, so Plotly would render the whole
- * tooltip as one unbroken line of visible `&lt;br&gt;` markup rather than
- * as actual line breaks.
+ * Builds the `<br>`-joined hover text for one telecast: kept deliberately
+ * minimal (matchup+score, date+kickoff, networks, crew, viewers, and a
+ * closing hint to open the detail panel) -- every other fact (time slot,
+ * measurement/scoring source, axis values, flags, combined-feed notes) is
+ * dropped from the tooltip and lives only in the detail panel (SITE-04,
+ * SITE-05, D-02, D-04; product notes 2026-09-27). Each line is built from
+ * untrusted data (team/crew/network names) and escaped *individually*
+ * before being joined with the literal `<br>` separators Plotly's
+ * pseudo-HTML hover renderer expects (T-04-06): escaping the fully-joined
+ * string instead would also escape those `<br>` tags themselves, so Plotly
+ * would render the whole tooltip as one unbroken line of visible
+ * `&lt;br&gt;` markup rather than as actual line breaks.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
- * @param {"pregame"|"excitement"} axis - the currently active axis.
  * @param {string[]} selectedNames - names of currently selected people on this game.
  * @returns {string}
  */
-export function hoverText(data, i, axis, selectedNames) {
+export function hoverText(data, i, selectedNames) {
   const t = data.t;
   const lines = [];
 
   lines.push(`<b>${escapeHover(formatMatchup(data, i, { withScore: true }))}</b>`);
 
   const dateParts = [formatDate(t.date[i]), formatKickoff(t.kickoff[i]) ?? 'Kickoff time not recorded'];
-  if (t.time_slot[i] != null) dateParts.push(SLOT_SHORT[t.time_slot[i]]);
   lines.push(escapeHover(dateParts.join(' · ')));
 
   const primaryNetwork = data.lookups.networks[t.network[i]];
   const otherOutletNames = t.outlets[i]
     .filter((idx) => idx !== t.network[i])
     .map((idx) => data.lookups.networks[idx].name);
-  let networkLine = primaryNetwork.name;
-  if (otherOutletNames.length > 0) networkLine += ` (also ${otherOutletNames.join(', ')})`;
-  lines.push(escapeHover(networkLine));
+  // Slash-delimited, primary first (e.g. "ABC / ESPN2"), with any nested
+  // methodology parenthetical (e.g. "(regional insert package)") stripped --
+  // tooltip-only; the fuller name still shows in the panel/table.
+  const networkNames = [primaryNetwork.name, ...otherOutletNames].map(stripNetworkNote);
+  lines.push(escapeHover(networkNames.join(' / ')));
 
   const crew = crewByRole(data, i);
   const crewParts = [];
@@ -89,24 +91,11 @@ export function hoverText(data, i, axis, selectedNames) {
   if (crew.analyst.length > 0) crewParts.push(`Analyst: ${crew.analyst.join(', ')}`);
   lines.push(escapeHover(crewParts.length > 0 ? crewParts.join(' · ') : 'Crew not recorded'));
 
-  lines.push(
-    escapeHover(`Viewers: ${formatViewers(t.viewers[i])} · ${measurementLabel(t.measurement_type[i])}`),
-  );
-
-  const otherAxis = axis === 'pregame' ? 'excitement' : 'pregame';
-  lines.push(
-    escapeHover(`${formatAxisValue(axis, t[axis][i])} · ${formatAxisValue(otherAxis, t[otherAxis][i])}`),
-  );
-
-  const flagLabels = t.flags[i].map((idx) => data.lookups.flags[idx].label);
-  const combined = t.combined_feeds[i];
-  if (flagLabels.length > 0 || combined != null) {
-    const flagParts = [...flagLabels];
-    if (combined != null) flagParts.push(`Combined across ${combined} feeds`);
-    lines.push(escapeHover(flagParts.join(' · ')));
-  }
+  lines.push(escapeHover(`Viewers: ${formatViewers(t.viewers[i])}`));
 
   if (selectedNames.length > 0) lines.push(escapeHover(`Selected: ${selectedNames.join(', ')}`));
+
+  lines.push(escapeHover('Click or tap for details'));
 
   return lines.join('<br>');
 }
@@ -158,7 +147,7 @@ export function buildFigure(data, view, state, env) {
       x.push(rawX == null ? band.sentinel : rawX);
       y.push(data.t.viewers[i]);
       customdata.push(i);
-      text.push(hoverText(data, i, axis, selectedNamesFor(data, view, i)));
+      text.push(hoverText(data, i, selectedNamesFor(data, view, i)));
     }
     traces.push({
       type: 'scattergl',
@@ -198,7 +187,7 @@ export function buildFigure(data, view, state, env) {
     hx.push(rawX == null ? band.sentinel : rawX);
     hy.push(data.t.viewers[i]);
     hcustomdata.push(i);
-    htext.push(hoverText(data, i, axis, selectedNamesFor(data, view, i)));
+    htext.push(hoverText(data, i, selectedNamesFor(data, view, i)));
     hcolor.push(FAMILY_COLORS[theme][data.familyOf[i]]);
     const symbol = view.symbols.get(i) ?? 'circle';
     hsymbol.push(symbol);

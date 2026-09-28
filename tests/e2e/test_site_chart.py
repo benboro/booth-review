@@ -214,21 +214,78 @@ def test_set_state_people_highlights_and_fades_family_traces(
     assert guarded_page.url.endswith("?people=dale-harlow")
 
 
-def test_hover_text_includes_measurement_flags_and_matchup_details(
+def test_hover_text_stays_minimal_and_drops_methodology_notes(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """SITE-04, D-02, D-04: hover text carries the measurement-type label,
-    flag labels, the combined-feed count, and the matchup/date line."""
+    """SITE-04 (product notes 2026-09-27): the tooltip carries only the
+    matchup+score, date+kickoff, networks, crew, viewers, and a closing
+    "click or tap for details" hint -- the measurement/scoring-source label,
+    time-slot label, axis values, and flags/combined-feed notes are dropped
+    from the tooltip (they still show in the detail panel: see
+    test_site_panel_table.py's test_open_panel_hook_shows_nielsen_adobe_badge,
+    test_open_panel_hook_shows_flag_label,
+    test_open_panel_hook_shows_alt_cast_and_combined_feeds, and
+    test_panel_time_slot_shown_only_for_saturday_games)."""
     open_app(guarded_page, "")
     traces = _traces(guarded_page)
-
-    assert "Nielsen + Adobe (streaming)" in _hover_text(traces, 5)
-    assert "CFBD win-probability model break (2025+)" in _hover_text(traces, 11)
-    assert "Combined across 3 feeds" in _hover_text(traces, 7)
 
     dot0 = _hover_text(traces, 0)
     assert "Lakeview 20 at Northfield 27" in dot0
     assert "Sat, Sep 7, 2019" in dot0
+    assert "Click or tap for details" in dot0
+    assert dot0.endswith("Click or tap for details")
+
+    dot5 = _hover_text(traces, 5)
+    assert "Nielsen + Adobe" not in dot5
+    assert "Prime time" not in dot5
+    assert "Thursday" not in dot5
+
+    dot11 = _hover_text(traces, 11)
+    assert "CFBD win-probability model break" not in dot11
+    assert "Excitement:" not in dot11
+    assert "Spread:" not in dot11
+
+    dot7 = _hover_text(traces, 7)
+    assert "Combined across" not in dot7
+    assert "Other Network / Alpha Sports / Beta Network" in dot7
+
+
+def test_hover_text_network_line_is_slash_joined_primary_first(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """A multi-outlet telecast lists networks slash-delimited, primary
+    first ("Alpha Sports / Beta Network"), never the old "(also ...)"
+    wrapping."""
+    open_app(guarded_page, "")
+    traces = _traces(guarded_page)
+    dot4 = _hover_text(traces, 4)
+    assert "Alpha Sports / Beta Network" in dot4
+    assert "(also" not in dot4
+
+
+def test_hover_text_strips_nested_network_notes(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+) -> None:
+    """A network's display name can carry a methodology aside (e.g.
+    `data/reference/networks.csv`'s "ESPN Plus (regional insert package,
+    pre-2018)"); the tooltip strips that nested parenthetical -- tooltip
+    only, the panel/table keep the fuller name."""
+    mutated = json.loads(json.dumps(fixture_raw))
+    mutated["lookups"]["networks"][0]["name"] = "Alpha Sports (regional insert package)"
+    body = json.dumps(mutated)
+
+    guarded_page.route(
+        "**/site-data.json*",
+        lambda route: route.fulfill(status=200, content_type="application/json", body=body),
+    )
+    open_app(guarded_page, "")
+
+    traces = _traces(guarded_page)
+    dot0 = _hover_text(traces, 0)
+    assert "Alpha Sports" in dot0
+    assert "regional insert package" not in dot0
 
 
 def test_missing_site_data_shows_load_error(guarded_page: Page, site_url: str) -> None:
