@@ -17,6 +17,11 @@ color — but the specific network that carried a telecast is always named in
 the hover, the detail panel, and the matched-games table. No dot is ever
 colored by an individual announcer or crew.
 
+A dot's tooltip is kept short: the matchup and final score, the date and
+kickoff time, the networks, the crew, and the viewer count. Click or tap the
+dot to open its detail panel, which also has the measurement label, both
+x-axis values, any flags, and, for a Saturday game, its time slot.
+
 ## Assignments, not quality
 
 The single most important thing to understand before reading anything into
@@ -61,9 +66,10 @@ main-feed booth. A Spanish-language broadcast's own figure, and an
 alt-cast-only feed's own figure when it is not part of a combined figure, are
 kept in this project's data but are not plotted as their own dots in v1.
 
-Kickoff time slots shown in the filters and hover are defined as: **noon**
-(before 2:00 PM ET), **afternoon** (2:00 PM up to but not including 6:00 PM
-ET), and **prime** (6:00 PM ET or later).
+Kickoff time slots, used by the kickoff-time filter and shown in a Saturday
+game's detail panel, are defined as: **noon** (before 2:00 PM ET),
+**afternoon** (2:00 PM up to but not including 6:00 PM ET), and **prime**
+(6:00 PM ET or later).
 
 ## Measurement eras
 
@@ -72,7 +78,7 @@ how it measures television audiences several times across this project's
 2014-onward range. Comparing a raw viewership number from one era against
 another without accounting for this is misleading — a level shift from a
 methodology change can look like a change in real audience interest. Every
-dot's hover and detail panel show which era its figure falls under.
+dot's detail panel shows which era its figure falls under.
 
 | Era | Start | End | Source |
 |---|---|---|---|
@@ -103,9 +109,9 @@ on the affected platform for reasons unrelated to the matchup or the crew.
 Some viewership figures on this chart blend Nielsen's linear-television
 measurement with streaming-analytics data from Adobe, rather than reporting
 Nielsen alone. These dots look exactly like every other dot on the chart —
-same size, same color, same behavior under every filter — but their hover
-and detail panel label them "Nielsen + Adobe (streaming)." Because this
-figure type mixes two different measurement approaches, it is not strictly
+same size, same color, same behavior under every filter — but their detail
+panel and matched-games table row label them "Nielsen + Adobe (streaming)."
+Because this figure type mixes two different measurement approaches, it is not strictly
 comparable to a Nielsen-only figure, even within the same era, and should be
 read with that caveat in mind.
 
@@ -117,7 +123,7 @@ excitement for earlier seasons under the new model. As a result, an
 excitement value from the 2025 season or later is not directly comparable to
 an excitement value from an earlier season, even though both are reported on
 the same numeric scale. Every telecast from the 2025 season onward carries
-this flag in its hover and detail panel, and when the chart's x-axis is set
+this flag in its detail panel, and when the chart's x-axis is set
 to excitement mode, a caption appears under the x-axis noting the break.
 Affected dots look identical to any other dot — the flag is informational
 only and never changes a dot's size, color, or shape.

@@ -143,3 +143,36 @@ def test_write_pages_writes_both_files(tmp_path: Path) -> None:
     for name in written:
         assert (tmp_path / name).is_file()
         assert "data/vault" not in (tmp_path / name).read_text(encoding="utf-8")
+
+
+_METHODOLOGY_MD = REPO_ROOT / "docs" / "methodology.md"
+
+# Tooltip-only facts moved to the detail panel in 628784b (chart.js
+# `hoverText`): the time slot, the era/measurement label, and the flags.
+_NOT_IN_HOVER_RE = re.compile(r"\bslots?\b|\beras?\b|Adobe|\bflags?\b", re.IGNORECASE)
+
+
+def test_methodology_never_promises_panel_only_facts_in_the_hover() -> None:
+    """WR-06: the tooltip shows only the matchup/score, date/kickoff,
+    networks, crew and viewers, so no sentence of the public methodology
+    that mentions the hover may send readers there for the time slot, the
+    measurement era/label, or a flag."""
+    text = re.sub(r"\s+", " ", _METHODOLOGY_MD.read_text(encoding="utf-8"))
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    offending = [
+        s
+        for s in sentences
+        if re.search(r"\bhover\b", s, re.IGNORECASE) and _NOT_IN_HOVER_RE.search(s)
+    ]
+    assert offending == []
+
+
+def test_methodology_describes_the_slim_tooltip() -> None:
+    """WR-06: the page says what the tooltip does show, and that the rest
+    lives in the detail panel."""
+    text = re.sub(r"\s+", " ", _METHODOLOGY_MD.read_text(encoding="utf-8"))
+    assert (
+        "A dot's tooltip is kept short: the matchup and final score, the date and "
+        "kickoff time, the networks, the crew, and the viewer count." in text
+    )
+    assert "Click or tap the dot to open its detail panel" in text
