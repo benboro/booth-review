@@ -240,6 +240,24 @@ def test_panel_swap_close_and_escape_restore_focus(
     assert guarded_page.evaluate("document.activeElement.id") == "person-search"
 
 
+def test_reopening_the_panel_during_the_close_transition_keeps_it_shown(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """WR-03: closing the panel schedules a 150 ms post-transition hide; an
+    immediate reopen (e.g. another row's Details button) must cancel it, or
+    the stale timer hides the reopened panel while `panel-open` stays set."""
+    open_app(guarded_page, "")
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    guarded_page.evaluate(
+        "() => { document.getElementById('panel-close').click(); window.__testHooks.openPanel(1); }"
+    )
+    guarded_page.wait_for_timeout(400)
+
+    assert guarded_page.evaluate("document.getElementById('detail-panel').hidden") is False
+    assert guarded_page.evaluate("document.body.classList.contains('panel-open')") is True
+    expect(guarded_page.locator("#panel-close")).to_be_visible()
+
+
 def test_table_empty_state_by_default(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:

@@ -28,6 +28,17 @@ import {
 /** The element focus should return to once the panel closes, or null. */
 let previouslyFocused = null;
 
+/** `closePanel`'s pending post-transition hide, or null (WR-03). */
+let hideTimer = null;
+
+/** Cancels a pending post-close hide, so it can't fire after a reopen. */
+function cancelPendingHide() {
+  if (hideTimer !== null) {
+    window.clearTimeout(hideTimer);
+    hideTimer = null;
+  }
+}
+
 /**
  * Returns `url` unchanged when it parses as an `http:`/`https:` URL, else
  * `null` (T-04-35). A malformed or non-http(s) scheme (e.g. `javascript:`)
@@ -263,6 +274,9 @@ export function openPanel(i, ctx) {
   if (!document.body.classList.contains('panel-open')) {
     previouslyFocused = document.activeElement;
   }
+  // A reopen inside closePanel's 150ms slide-out window would otherwise be
+  // re-hidden when that stale timer fires (WR-03).
+  cancelPendingHide();
   panelEl.hidden = false;
   document.body.classList.add('panel-open');
   document.getElementById('panel-close').focus();
@@ -280,10 +294,12 @@ export function closePanel() {
   const panelEl = document.getElementById('detail-panel');
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const hide = () => {
+    hideTimer = null;
     panelEl.hidden = true;
   };
+  cancelPendingHide();
   if (reducedMotion) hide();
-  else window.setTimeout(hide, 150);
+  else hideTimer = window.setTimeout(hide, 150);
 
   if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
     previouslyFocused.focus();
