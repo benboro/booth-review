@@ -288,9 +288,12 @@ h1, h2, h3 {
 /* The chart page only (`<body class="app">` in index.html). methodology.html
    and coverage.html share this stylesheet but have none of the grid-area ids,
    so a bare `body` grid auto-placed their header/main/footer into the
-   toolbar row (WR-05); they keep normal block flow instead. Single-column at
-   every width (D-01/D-02): the toolbar replaces the rail entirely, and the
-   detail-panel grid column is a later plan's addition. */
+   toolbar row (WR-05); they keep normal block flow instead. Single-column
+   base (mobile default): the toolbar replaces the rail entirely (D-02). The
+   `min-width: 641px` block below adds the panel column that pushes the
+   chart/table aside on tablet and desktop (D-01, SITE-20); phones keep the
+   detail panel as a `position: fixed` bottom sheet (see "Detail panel"
+   below), so no panel column is ever added at that width. */
 body.app {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -308,6 +311,27 @@ body.app {
 #chart-area { grid-area: main; }
 #matched-games { grid-area: table; }
 #site-footer { grid-area: footer; }
+#detail-panel { grid-area: panel; }
+
+/* Tablet/desktop: a real two-column grid, the panel column spanning both the
+   chart row AND the table row (D-01: opening the panel narrows both, per
+   the locked decision -- this refines the UI-SPEC's grid, which spans only
+   the chart row). The column always exists structurally; only its own
+   content width (below, "Detail panel") animates open/closed -- never
+   animate `grid-template-columns` itself (Pitfall 1: interpolating a grid
+   track size fires the vendored Plotly bundle's internal ResizeObserver
+   repeatedly mid-transition, causing visible chart jank). */
+@media (min-width: 641px) {
+  body.app {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "topbar  topbar"
+      "toolbar toolbar"
+      "main    panel"
+      "table   panel"
+      "footer  footer";
+  }
+}
 
 #chart-area {
   padding-top: var(--space-xl);
@@ -755,12 +779,19 @@ input[type="checkbox"] {
   font: var(--font-label);
 }
 
-/* Regression: a bare `<button>Details</button>` wraps mid-word ("Detail\ns")
-   once its column is narrower than the word -- the table has no
-   `table-layout: fixed`, so forcing `white-space: nowrap` here just widens
-   the column to fit the word instead of wrapping it. */
-.details-button {
-  white-space: nowrap;
+/* D-06: the whole row is the click/Enter target that opens the detail
+   panel -- there is no separate Details button/column any more. */
+.games-table tr.row-link {
+  cursor: pointer;
+}
+
+.games-table tr.row-link:hover {
+  background: var(--surface);
+}
+
+.games-table tr.row-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .badge {
@@ -771,29 +802,97 @@ input[type="checkbox"] {
   border-radius: 999px;
 }
 
-/* ---------- Detail panel / drawer ---------- */
+/* ---------- Detail panel ---------- */
 
-.drawer {
-  position: fixed;
-  top: 64px;
-  right: 0;
-  bottom: 0;
-  width: 360px;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
-  padding: var(--space-lg);
-  transform: translateX(100%);
-  transition: transform 150ms ease-out;
-  overflow-y: auto;
-  z-index: 20;
+/* Tablet/desktop (≥641px): a push grid column, not an overlay (D-01). The
+   column's own width animates 0 -> 360px/320px; its content is
+   `.panel-inner`, `position: sticky` inside that column so it stays in view
+   while the page scrolls past a tall table, without ever leaving its own
+   column -- it can never overlap the chart, the legend chips, or the table
+   (D-01, SITE-20). This is not the chart (D-05 still holds: the chart
+   itself is never sticky). Phones (≤640px) keep the panel as a true
+   `position: fixed` overlay bottom sheet instead, below -- the one place an
+   overlay is still correct, since nothing else needs that screen region at
+   the same time. */
+@media (min-width: 641px) {
+  #detail-panel {
+    position: relative;
+    width: 0;
+    min-width: 0;
+    overflow: hidden;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    transition: width 150ms ease-out;
+  }
+
+  body.panel-open #detail-panel {
+    width: 360px;
+  }
+
+  .panel-inner {
+    position: sticky;
+    top: 0;
+    width: 360px;
+    max-height: 100vh;
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: var(--space-lg);
+  }
 }
 
-body.panel-open .drawer {
-  transform: none;
+/* Tablet (641-1024px): narrower panel, unchanged token from Phase 4. */
+@media (min-width: 641px) and (max-width: 1024px) {
+  body.panel-open #detail-panel {
+    width: 320px;
+  }
+
+  .panel-inner {
+    width: 320px;
+  }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .drawer {
+@media (min-width: 641px) and (prefers-reduced-motion: reduce) {
+  #detail-panel {
+    transition: none;
+  }
+}
+
+/* Phones (≤640px): the one place a `position: fixed` overlay bottom sheet
+   is still correct (unchanged mechanism from Phase 4). */
+@media (max-width: 640px) {
+  #detail-panel {
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 55vh;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    transform: translateY(100%);
+    transition: transform 150ms ease-out;
+    overflow: hidden;
+    z-index: 20;
+  }
+
+  body.panel-open #detail-panel {
+    transform: none;
+  }
+
+  .panel-inner {
+    width: auto;
+    height: 100%;
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: var(--space-lg);
+  }
+}
+
+@media (max-width: 640px) and (prefers-reduced-motion: reduce) {
+  #detail-panel {
     transition: none;
   }
 }
@@ -882,11 +981,9 @@ body.panel-open .drawer {
 
 @media (max-width: 1024px) {
   /* Toolbar buttons wrap onto a second line (`#toolbar`'s own `flex-wrap`
-     above) rather than scrolling horizontally. */
-
-  .drawer {
-    width: 320px;
-  }
+     above) rather than scrolling horizontally. The tablet detail-panel
+     width (320px) is set by the "Detail panel" section's own
+     `(min-width: 641px) and (max-width: 1024px)` block above. */
 }
 
 /* ---------- Phones (≤640px) ---------- */
@@ -913,21 +1010,8 @@ body.panel-open .drawer {
     order: 2;
   }
 
-  .drawer {
-    top: auto;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    width: 100%;
-    height: 55vh;
-    border-top-left-radius: 12px;
-    border-top-right-radius: 12px;
-    transform: translateY(100%);
-  }
-
-  body.panel-open .drawer {
-    transform: none;
-  }
+  /* The phone bottom-sheet `#detail-panel` rules live in the "Detail panel"
+     section's own `(max-width: 640px)` block above. */
 
   button,
   .toggle,
@@ -940,7 +1024,8 @@ body.panel-open .drawer {
   .shape-legend li,
   #panel-close,
   .segmented button,
-  .legend-chip {
+  .legend-chip,
+  .games-table tr.row-link {
     min-height: 44px;
     min-width: 44px;
   }

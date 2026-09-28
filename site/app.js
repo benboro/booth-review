@@ -29,9 +29,37 @@ const excitementCaptionEl = document.getElementById('excitement-caption');
 const panelBodyEl = document.getElementById('panel-body');
 const panelTitleEl = document.getElementById('panel-title');
 const panelCloseEl = document.getElementById('panel-close');
+const panelEl = document.getElementById('detail-panel');
 
 const darkMedia = window.matchMedia('(prefers-color-scheme: dark)');
 const mobileMedia = window.matchMedia('(max-width: 640px)');
+const reducedMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+/** Number of times `Plotly.Plots.resize` has run for the detail panel's own
+ * open/close (belt-and-suspenders alongside `config.responsive: true`'s
+ * internal ResizeObserver, Pattern 1) -- exposed on `__testHooks` so a test
+ * can wait deterministically instead of guessing a transition's timing. */
+let panelResizes = 0;
+
+/** Resizes the chart for the panel's own width change, and counts it. */
+function resizeChartForPanel() {
+  panelResizes += 1;
+  if (typeof window.Plotly?.Plots?.resize === 'function') {
+    window.Plotly.Plots.resize(chartEl);
+  }
+}
+
+if (panelEl) {
+  // The deterministic desktop/tablet path: once the panel column's own
+  // `width` transition finishes, resize the chart for its new container
+  // width (Pattern 1). Guarded to this element/property so a transition on
+  // some other panel-inner property (or a future added property) doesn't
+  // double-fire it.
+  panelEl.addEventListener('transitionend', (ev) => {
+    if (ev.target !== panelEl || ev.propertyName !== 'width') return;
+    resizeChartForPanel();
+  });
+}
 
 // Registered here, at module-evaluation time. This listener runs during
 // Escape's dispatch, before the browser's own native `popover` close
@@ -64,16 +92,27 @@ let openPanelIndex = null;
 /** The matched-games table's own sort state (kept out of the URL, D-11/SITE-13). */
 let sort = { key: 'date', dir: 'asc' };
 
+/** No `transitionend` fires when the panel's width change is instant
+ * (reduced motion) or the panel is a phone bottom sheet with no width
+ * transition of its own -- these paths need their own resize call, since
+ * the `transitionend` listener above never runs for them (Pattern 1). */
+function resizeChartForPanelIfNoTransition() {
+  if (!reducedMotionMedia.matches && !mobileMedia.matches) return;
+  window.requestAnimationFrame(resizeChartForPanel);
+}
+
 /** Opens the detail panel on telecast `i` and remembers it's open, for `render`'s own refresh (D-10). */
 function openDetailPanel(i) {
   openPanelIndex = i;
   openPanel(i, { data, state, view: lastView });
+  resizeChartForPanelIfNoTransition();
 }
 
 /** Closes the detail panel and forgets it's open. */
 function hideDetailPanel() {
   openPanelIndex = null;
   closePanel();
+  resizeChartForPanelIfNoTransition();
 }
 
 /** Pushed into `renderers`: renders the matched-games table and wires its sort headers and Details buttons. */
@@ -245,6 +284,9 @@ async function bootstrap() {
       }),
       renderers,
       openPanel: (i) => openDetailPanel(i),
+      get panelResizes() {
+        return panelResizes;
+      },
     };
   } catch (err) {
     console.error('booth-review: the chart failed to start', err);
