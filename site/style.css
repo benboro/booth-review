@@ -368,6 +368,13 @@ body.rail-collapsed #rail {
   margin-top: var(--space-sm);
 }
 
+#season-counts-details summary {
+  font: var(--font-label);
+  color: var(--muted);
+  cursor: pointer;
+  margin-top: var(--space-sm);
+}
+
 #season-counts {
   list-style: none;
   margin: var(--space-sm) 0 0 0;

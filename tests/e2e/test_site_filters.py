@@ -61,9 +61,26 @@ def _pick_team(page: Page, query: str) -> None:
     option.click()
 
 
-def test_default_season_counts(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
-    """SITE-06: every season lists its rated-telecast count on first load."""
+def test_season_counts_hidden_until_disclosure_opened(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """The per-season counts list is noisy by default, so it stays behind a
+    collapsed `<details>` disclosure and is invisible until opened (SITE-06
+    still requires the counts to exist, just not to always show)."""
     open_app(guarded_page, "")
+    assert guarded_page.locator("#season-counts-details").get_attribute("open") is None
+    expect(guarded_page.locator("#season-counts")).to_be_hidden()
+    assert guarded_page.inner_text("#season-counts") == ""
+
+    guarded_page.click("#season-counts-details summary")
+    expect(guarded_page.locator("#season-counts")).to_be_visible()
+
+
+def test_default_season_counts(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
+    """SITE-06: every season lists its rated-telecast count on first load,
+    once the "Games per season" disclosure is opened."""
+    open_app(guarded_page, "")
+    guarded_page.click("#season-counts-details summary")
     text = guarded_page.inner_text("#season-counts")
     assert "2019: 2 rated telecasts" in text
     assert "2021: 2 rated telecasts" in text
@@ -81,6 +98,7 @@ def test_season_range_hides_dots_and_leaves_counts_unchanged(
     guarded_page.wait_for_function("location.search.includes('seasons=2025-2026')")
 
     assert _visible_count(guarded_page) == 8
+    guarded_page.click("#season-counts-details summary")
     text = guarded_page.inner_text("#season-counts")
     assert "2019: 2 rated telecasts" in text
 
@@ -94,6 +112,7 @@ def test_unchecking_fox_family_updates_total_and_counts(
     guarded_page.wait_for_function("location.search.includes('networks=')")
 
     assert _visible_count(guarded_page) == 9
+    guarded_page.click("#season-counts-details summary")
     assert "2019: 1 rated telecast" in guarded_page.inner_text("#season-counts")
 
 
