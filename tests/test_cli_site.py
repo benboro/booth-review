@@ -250,3 +250,69 @@ def test_rerun_into_previous_build_dir_succeeds(site_env: Path) -> None:
 
     assert exit_code == 0
     assert (out / ".booth-review-site").is_file()
+
+
+def _siblings(out: Path) -> list[str]:
+    """Hidden staging/retired dirs `assemble_site` may leave next to `out`."""
+    return sorted(p.name for p in out.parent.iterdir() if p.name.startswith(f".{out.name}."))
+
+
+def test_failed_build_leaves_no_output_and_rerun_succeeds(
+    site_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """WR-01: a build that fails after the out dir would have been created
+    (here: docs/ is missing its pages) leaves nothing behind -- no partly
+    built, unmarked out dir the next run would refuse to overwrite, and no
+    staging dir -- so a normal rerun succeeds."""
+    empty_docs = site_env / "empty-docs"
+    empty_docs.mkdir()
+    monkeypatch.setenv("BOOTH_REVIEW_DOCS", str(empty_docs))
+    out = site_env / "out"
+
+    assert main(["site", "--fixture", "--out", str(out)]) == 3
+    assert not out.exists()
+    assert _siblings(out) == []
+
+    monkeypatch.setenv("BOOTH_REVIEW_DOCS", str(DOCS_DIR))
+    assert main(["site", "--fixture", "--out", str(out)]) == 0
+    assert (out / ".booth-review-site").is_file()
+    assert _siblings(out) == []
+
+
+def test_failed_build_keeps_the_previous_build_intact(
+    site_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """WR-01: a failed rebuild over a previous build never deletes or
+    half-overwrites it -- the old site stays byte-for-byte in place."""
+    out = site_env / "out"
+    assert main(["site", "--fixture", "--out", str(out)]) == 0
+    before = {p.relative_to(out).as_posix(): p.read_bytes() for p in out.rglob("*") if p.is_file()}
+
+    empty_docs = site_env / "empty-docs"
+    empty_docs.mkdir()
+    monkeypatch.setenv("BOOTH_REVIEW_DOCS", str(empty_docs))
+    assert main(["site", "--fixture", "--out", str(out)]) == 3
+
+    after = {p.relative_to(out).as_posix(): p.read_bytes() for p in out.rglob("*") if p.is_file()}
+    assert after == before
+    assert _siblings(out) == []
+
+
+def test_key_leak_keeps_the_previous_build_and_removes_the_leaky_one(
+    site_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """WR-01/T-04-13: a leak caught by the guard never reaches the out dir;
+    a previous clean build there is left as it was."""
+    out = site_env / "out"
+    assert main(["site", "--fixture", "--out", str(out)]) == 0
+
+    monkeypatch.setenv("CFBD_API_KEY", _SYNTHETIC_KEY)
+    tainted_src = site_env / "site_src_tainted"
+    shutil.copytree(SITE_SRC, tainted_src)
+    (tainted_src / "modules" / "leak.js").write_text(f"// {_SYNTHETIC_KEY}\n", encoding="utf-8")
+    monkeypatch.setenv("BOOTH_REVIEW_SITE_SRC", str(tainted_src))
+
+    assert main(["site", "--fixture", "--out", str(out)]) == 3
+    assert (out / ".booth-review-site").is_file()
+    assert not (out / "modules" / "leak.js").exists()
+    assert _siblings(out) == []

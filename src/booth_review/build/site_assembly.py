@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import secrets
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -88,19 +89,44 @@ def load_site_payload(source: Path) -> tuple[SiteData, bytes]:
     return site, body
 
 
-def _prepare_out_dir(out_dir: Path) -> None:
-    """Refuse to touch a non-empty `out_dir` unless it is a previous
-    booth-review site build (T-04-17): only then is it safe to rmtree.
+def _check_out_dir(out_dir: Path) -> None:
+    """Refuse a non-empty `out_dir` unless it is a previous booth-review
+    site build (T-04-17): only then is it safe to replace. Touches nothing.
     """
-    if out_dir.exists():
-        has_content = any(out_dir.iterdir())
-        if has_content and not (out_dir / BUILD_MARKER).is_file():
-            raise SiteBuildError(
-                f"refusing to overwrite {out_dir}: not a previous booth-review site build"
-            )
-        if has_content:
-            shutil.rmtree(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    if out_dir.exists() and any(out_dir.iterdir()) and not (out_dir / BUILD_MARKER).is_file():
+        raise SiteBuildError(
+            f"refusing to overwrite {out_dir}: not a previous booth-review site build"
+        )
+
+
+def _make_staging_dir(out_dir: Path) -> Path:
+    """Create a fresh, hidden sibling of `out_dir` to assemble into (WR-01).
+
+    A sibling (same parent) so the final swap is a same-filesystem rename;
+    created with a plain `mkdir` rather than `tempfile.mkdtemp`, so it gets
+    the usual umask permissions (not mkdtemp's 0700) once it becomes the site.
+    """
+    target = out_dir.resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staging = target.parent / f".{target.name}.staging-{os.getpid()}-{secrets.token_hex(4)}"
+    staging.mkdir()
+    return staging
+
+
+def _swap_into_place(staging: Path, out_dir: Path) -> None:
+    """Replace `out_dir` (a previous build, an empty dir, or nothing) with
+    the fully assembled `staging` dir. The old build is renamed aside before
+    the new one is renamed in, and only then deleted, so no step ever
+    deletes the old build before the new one is in place.
+    """
+    target = out_dir.resolve()
+    retired: Path | None = None
+    if target.exists():
+        retired = target.parent / f".{target.name}.retired-{os.getpid()}-{secrets.token_hex(4)}"
+        target.rename(retired)
+    staging.rename(target)
+    if retired is not None:
+        shutil.rmtree(retired, ignore_errors=True)
 
 
 def _verify_bundle(site_src: Path) -> None:
@@ -158,20 +184,19 @@ def _copy_site_source(site_src: Path, out_dir: Path) -> list[str]:
     return copied
 
 
-def assemble_site(*, source: Path, out_dir: Path, site_src: Path, docs: Path) -> SiteBuildResult:
-    """Assemble `out_dir` from `site_src`, `docs`, and the site-data
-    payload at `source` (D-14): validate, copy, cache-bust, render pages,
-    then run the key-leak guard last.
+def _assemble_into(
+    stage: Path, *, site: SiteData, body: bytes, site_src: Path, docs: Path
+) -> tuple[list[str], list[str], str]:
+    """Write the whole site into the (empty) staging dir `stage`: copy the
+    source, write site-data.json, cache-bust/fill index.html, render the
+    pages, and mark the dir as a booth-review build. Returns the copied
+    files, the rendered page files, and the data version.
     """
-    site, body = load_site_payload(source)
-    _verify_bundle(site_src)
-    _prepare_out_dir(out_dir)
-
-    copied = _copy_site_source(site_src, out_dir)
-    atomic_write_bytes(out_dir / "site-data.json", body)
+    copied = _copy_site_source(site_src, stage)
+    atomic_write_bytes(stage / "site-data.json", body)
     version = hashlib.sha256(body).hexdigest()[:10]
 
-    index_path = out_dir / "index.html"
+    index_path = stage / "index.html"
     if not index_path.is_file():
         raise SiteBuildError("index.html not found in site source")
     index_text = index_path.read_text(encoding="utf-8")
@@ -183,10 +208,38 @@ def assemble_site(*, source: Path, out_dir: Path, site_src: Path, docs: Path) ->
     index_text = index_text.replace(FOOTER_TOKEN, pages.footer_html(site.freshness))
     atomic_write_bytes(index_path, index_text.encode("utf-8"))
 
-    page_files = pages.write_pages(out_dir, site, docs)
-    atomic_write_bytes(out_dir / BUILD_MARKER, b"")
+    page_files = pages.write_pages(stage, site, docs)
+    atomic_write_bytes(stage / BUILD_MARKER, b"")
+    return copied, page_files, version
 
-    key_checked = check_no_key_leak(out_dir)
+
+def assemble_site(*, source: Path, out_dir: Path, site_src: Path, docs: Path) -> SiteBuildResult:
+    """Assemble `out_dir` from `site_src`, `docs`, and the site-data
+    payload at `source` (D-14): validate, copy, cache-bust, render pages,
+    then run the key-leak guard last.
+
+    Everything is built in a hidden sibling staging dir and swapped over
+    `out_dir` only once every step, the key-leak guard included, has
+    passed (WR-01). A failed build removes its staging dir and leaves
+    `out_dir` exactly as it was, so it never leaves behind a half-written,
+    unmarked dir that the next run would refuse to overwrite.
+    """
+    site, body = load_site_payload(source)
+    _verify_bundle(site_src)
+    _check_out_dir(out_dir)
+
+    stage = _make_staging_dir(out_dir)
+    try:
+        copied, page_files, version = _assemble_into(
+            stage, site=site, body=body, site_src=site_src, docs=docs
+        )
+        key_checked = check_no_key_leak(stage)
+        _swap_into_place(stage, out_dir)
+    finally:
+        # On success `stage` was renamed to `out_dir`; on a leak,
+        # `check_no_key_leak` already removed it. Anything else left over is
+        # a failed build's partial output.
+        shutil.rmtree(stage, ignore_errors=True)
 
     files = tuple(sorted({*copied, "site-data.json", *page_files}))
     return SiteBuildResult(
