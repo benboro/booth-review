@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 from playwright.sync_api import Page
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 pytestmark = pytest.mark.e2e
 
@@ -133,6 +134,63 @@ def _hover_text(traces: list[dict[str, Any]], index: int) -> str:
             if customdata == index:
                 return str(text)
     raise AssertionError(f"no dot with customdata {index}")
+
+
+def _hover_dot(page: Page, customdata: int) -> dict[str, float]:
+    """Moves the mouse onto telecast `customdata`'s dot and waits for the
+    D-22 HTML tooltip to show. Returns the dot's own pixel, for a caller
+    that needs it afterward.
+
+    Two vendored-Plotly quirks confirmed empirically this session, both
+    specific to a page that has scrolled (D-22's own close-on-scroll feature
+    means every hover test scrolls, via `_dot_point`'s own
+    `scroll_into_view_if_needed()`):
+
+    1. `scroll_into_view_if_needed()` can leave a *coalesced* `scroll` DOM
+       event pending for a frame or two after the scroll position itself has
+       already settled (`window.scrollY` is correct immediately, but the
+       `scroll` event callback fires a frame later). Hovering immediately
+       afterward raced that deferred event against our own close-on-scroll
+       handler, which would hide the tooltip the instant it finally fired.
+       Waiting two animation frames first lets it fire and settle before the
+       tooltip ever shows.
+    2. If the mouse never actually leaves a dot's pixel (a real native
+       mousemove/mouseleave) before the page scrolls out from under it,
+       Plotly's own gl2d hover picking gets stuck and never fires
+       `plotly_hover` again at the dot's new (post-scroll) pixel, even
+       though a click at that exact pixel still works. A real user's mouse
+       is never frozen on a dot while the page independently scrolls, so
+       this never happens outside a scripted test. Moving the mouse off the
+       chart first forces a clean native mouseleave, which resets it.
+    """
+    page.mouse.move(5, 5)
+    point = _dot_point(page, customdata)
+    page.evaluate(
+        "() => new Promise((resolve) => "
+        "requestAnimationFrame(() => requestAnimationFrame(resolve)))"
+    )
+    for attempt in range(2):
+        page.mouse.move(point["x"], point["y"])
+        try:
+            page.wait_for_selector("#chart-tooltip:not([hidden])", timeout=3000)
+            return point
+        except PlaywrightTimeoutError:
+            if attempt == 1:
+                raise
+            page.mouse.move(5, 5)
+    return point
+
+
+def _use_plotly_tooltip(page: Page) -> None:
+    """Flips `TOOLTIP_MODE` to the D-22 fallback path at runtime
+    (`window.__testHooks.setTooltipMode`) and waits for the highlight
+    trace's own `hovertemplate` to reflect it, so a test reading Plotly's
+    hover label/trace `text` right after this call never races the mode
+    switch's own re-render."""
+    page.evaluate("window.__testHooks.setTooltipMode('plotly')")
+    page.wait_for_function(
+        "document.getElementById('chart').data.at(-1).hovertemplate === '%{text}<extra></extra>'"
+    )
 
 
 def test_default_load_shows_all_dots_no_selection_pregame_axis(
@@ -513,6 +571,7 @@ def test_hover_text_stays_minimal_and_drops_methodology_notes(
     test_open_panel_hook_shows_alt_cast_and_combined_feeds, and
     test_panel_time_slot_shown_only_for_saturday_games)."""
     open_app(guarded_page, "")
+    _use_plotly_tooltip(guarded_page)
     traces = _traces(guarded_page)
 
     dot0 = _hover_text(traces, 0)
@@ -550,6 +609,7 @@ def test_hover_text_network_line_is_slash_joined_primary_first(
     the tooltip stand-in for a filled pill, since Plotly's hover renderer
     can't draw one."""
     open_app(guarded_page, "")
+    _use_plotly_tooltip(guarded_page)
     traces = _traces(guarded_page)
     dot4 = _hover_text(traces, 4)
     assert (
@@ -578,6 +638,7 @@ def test_hover_text_strips_nested_network_notes(
         lambda route: route.fulfill(status=200, content_type="application/json", body=body),
     )
     open_app(guarded_page, "")
+    _use_plotly_tooltip(guarded_page)
 
     traces = _traces(guarded_page)
     dot0 = _hover_text(traces, 0)
@@ -591,6 +652,7 @@ def test_hover_text_crew_lines_use_position_colon_name_format(
     """SITE-25/CONTEXT "Claude's Discretion": one "Position: Name" line per
     main-feed crew member, pbp before analyst before sideline/other."""
     open_app(guarded_page, "")
+    _use_plotly_tooltip(guarded_page)
     traces = _traces(guarded_page)
     lines = _hover_text(traces, 0).split("<br>")
     assert "Play-by-play: Dale Harlow" in lines
@@ -604,6 +666,7 @@ def test_hover_text_shows_the_active_axis_value_and_closing_hint(
     """SITE-25: the tooltip's sixth line is the active axis's own value,
     never the other axis's."""
     open_app(guarded_page, "")
+    _use_plotly_tooltip(guarded_page)
     dot11 = _hover_text(_traces(guarded_page), 11)
     assert "Spread: 1.5" in dot11
     assert "Excitement:" not in dot11
@@ -726,6 +789,7 @@ def test_hover_snaps_to_highlighted_dot_over_a_coincident_faded_dot(
     (now-faded) family trace. Dot 0 is one of Dale Harlow's two highlighted
     games."""
     open_app(guarded_page, "")
+    _use_plotly_tooltip(guarded_page)
     guarded_page.evaluate("window.__testHooks.setState({people: ['dale-harlow']})")
 
     guarded_page.evaluate(
@@ -748,6 +812,7 @@ def test_faded_dots_take_no_hover_while_a_selection_exists(
     nearer faded dot. Plotly drops `hoverinfo` whenever `hovertemplate` is
     set, so this checks the resolved `_fullData`, not just the input trace."""
     open_app(guarded_page, "")
+    _use_plotly_tooltip(guarded_page)
     full_js = (
         "() => document.getElementById('chart')._fullData"
         ".filter(t => String(t.meta).startsWith('family:')).map(t => t.hoverinfo)"
@@ -798,6 +863,7 @@ def test_hover_label_renders_readable_multiline_text_without_literal_markup(
     text like `<br>` or `&lt;br&gt;` (previously the whole joined string,
     including those tags, was HTML-escaped before being handed to Plotly)."""
     open_app(guarded_page, "")
+    _use_plotly_tooltip(guarded_page)
     point = _dot_point(guarded_page, 0)
     guarded_page.mouse.move(point["x"], point["y"])
     guarded_page.wait_for_selector(".hoverlayer .hovertext")
@@ -828,6 +894,7 @@ def test_hover_label_resists_injection_from_a_mutated_team_name(
         lambda route: route.fulfill(status=200, content_type="application/json", body=body),
     )
     open_app(guarded_page, "")
+    _use_plotly_tooltip(guarded_page)
 
     point = _dot_point(guarded_page, 0)
     guarded_page.mouse.move(point["x"], point["y"])
@@ -858,6 +925,7 @@ def test_hover_label_resists_injection_from_a_mutated_network_name(
         lambda route: route.fulfill(status=200, content_type="application/json", body=body),
     )
     open_app(guarded_page, "")
+    _use_plotly_tooltip(guarded_page)
 
     point = _dot_point(guarded_page, 0)
     guarded_page.mouse.move(point["x"], point["y"])
@@ -867,3 +935,247 @@ def test_hover_label_resists_injection_from_a_mutated_network_name(
     assert guarded_page.locator(".hoverlayer img").count() == 0
     text = "".join(guarded_page.locator(".hoverlayer .hovertext tspan").all_text_contents())
     assert "<img" in text
+
+
+# ---------- D-22: the default HTML tooltip ----------
+
+
+def test_html_tooltip_is_the_default_and_plotly_label_is_off(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-22: `TOOLTIP_MODE`/`__testHooks.tooltipMode` starts as `'html'`, a
+    hover shows the custom tooltip, and Plotly's own hover label never
+    renders alongside it."""
+    open_app(guarded_page, "")
+    assert guarded_page.evaluate("window.__testHooks.tooltipMode") == "html"
+
+    _hover_dot(guarded_page, 0)
+
+    assert guarded_page.locator(".hoverlayer .hovertext").count() == 0
+
+
+def test_html_tooltip_content_is_minimal_with_network_pills(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-22/SITE-25/SITE-26: the tooltip holds the matchup, a "Position:
+    Name" crew line, and the closing hint, with no conference/game-type/
+    methodology text; each network in `.tooltip-networks` renders as a real
+    `pill.js` pill with the family's verified WCAG-AA fill/text colors."""
+    open_app(guarded_page, "")
+
+    _hover_dot(guarded_page, 0)
+
+    text = guarded_page.inner_text("#chart-tooltip")
+    assert "Lakeview 20 at Northfield 27" in text
+    assert "Play-by-play: Dale Harlow" in text
+    assert "Click for details →" in text
+    assert "Conference" not in text
+    assert "Bowl" not in text
+    assert "Nielsen" not in text
+
+    networks_text = guarded_page.inner_text("#chart-tooltip .tooltip-networks")
+    assert networks_text == "Alpha Sports"
+
+    disney_bg, disney_color = _PILL_CONTRAST["disney"]
+    pill0 = guarded_page.locator("#chart-tooltip .tooltip-networks .pill").first
+    assert pill0.evaluate(
+        "el => { const s = getComputedStyle(el); return [s.backgroundColor, s.color]; }"
+    ) == [disney_bg, disney_color]
+
+    _hover_dot(guarded_page, 1)
+    guarded_page.wait_for_function(
+        "document.querySelector('#chart-tooltip .tooltip-title')?.textContent.includes('Foxhollow')"
+    )
+    fox_bg, fox_color = _PILL_CONTRAST["fox"]
+    pill1 = guarded_page.locator("#chart-tooltip .tooltip-networks .pill").first
+    assert pill1.evaluate(
+        "el => { const s = getComputedStyle(el); return [s.backgroundColor, s.color]; }"
+    ) == [fox_bg, fox_color]
+
+
+def test_html_tooltip_slot_label_follows_d19(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-19/D-22: telecast 7 is a Saturday bowl game -- the time-slot label
+    never shows for a non-regular-season game, in either tooltip mode."""
+    open_app(guarded_page, "")
+    _hover_dot(guarded_page, 7)
+
+    text = guarded_page.inner_text("#chart-tooltip")
+    assert "Prime time" not in text
+    assert "After dark" not in text
+
+
+def test_html_tooltip_hides_on_mouse_out_scroll_and_panel_open(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-22: the tooltip closes on mouse-out, page scroll, and when the
+    detail panel opens."""
+    open_app(guarded_page, "")
+
+    point = _hover_dot(guarded_page, 0)
+    guarded_page.mouse.move(5, 5)
+    guarded_page.wait_for_selector("#chart-tooltip[hidden]", state="attached")
+
+    _hover_dot(guarded_page, 0)
+    guarded_page.evaluate("window.scrollBy(0, 40)")
+    guarded_page.wait_for_selector("#chart-tooltip[hidden]", state="attached")
+
+    _hover_dot(guarded_page, 0)
+    guarded_page.mouse.click(point["x"], point["y"])
+    guarded_page.wait_for_function("document.body.classList.contains('panel-open')")
+    assert guarded_page.is_hidden("#chart-tooltip")
+
+
+def test_html_tooltip_stays_inside_the_viewport(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-22: at an 800x900 viewport, hovering the right-most dot keeps the
+    tooltip fully on-screen -- clamped at least 8px from the right edge."""
+    guarded_page.set_viewport_size({"width": 800, "height": 900})
+    open_app(guarded_page, "")
+
+    points = _dot_x_by_customdata(_traces(guarded_page))
+    rightmost = max(points, key=lambda cd: points[cd])
+    _hover_dot(guarded_page, rightmost)
+
+    box = guarded_page.locator("#chart-tooltip").bounding_box()
+    assert box is not None
+    assert box["x"] >= 8
+    assert box["x"] + box["width"] <= 800 - 8
+
+
+def test_html_tooltip_never_shows_for_inert_or_person_faded_dots(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-15 (carried forward): a filtered-out dot never shows the tooltip,
+    and neither does a person-faded (15%-opacity) active dot -- only the
+    highlighted dot does."""
+    open_app(guarded_page, "?networks=net-a")
+    inert_point = _inert_dot_point(guarded_page, "inert:fox", 0)
+    guarded_page.mouse.move(inert_point["x"], inert_point["y"])
+    guarded_page.wait_for_timeout(300)
+    assert guarded_page.is_hidden("#chart-tooltip")
+
+    open_app(guarded_page, "?people=dale-harlow")
+    # Dot 1 passes the filters but isn't one of Dale Harlow's two highlighted
+    # games (0, 8), so it's a 15%-faded active dot, not highlighted.
+    point1 = _dot_point(guarded_page, 1)
+    guarded_page.mouse.move(point1["x"], point1["y"])
+    guarded_page.wait_for_timeout(300)
+    assert guarded_page.is_hidden("#chart-tooltip")
+
+    _hover_dot(guarded_page, 0)
+
+
+def test_html_tooltip_resists_injection_from_mutated_team_and_network_names(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+) -> None:
+    """T-04.1-25: a malicious team name and a malicious network name both
+    render as literal text inside the custom tooltip, `#chart-tooltip`
+    never gains a real `<img>` element, and the payload's `onerror`/`alert`
+    never fires."""
+    dialogs: list[str] = []
+
+    def _record_dialog(dialog: object) -> None:
+        dialogs.append(dialog.message)  # type: ignore[attr-defined]
+        dialog.dismiss()  # type: ignore[attr-defined]
+
+    guarded_page.on("dialog", _record_dialog)
+
+    payload = "<img src=x onerror=alert(1)>"
+    mutated = json.loads(json.dumps(fixture_raw))
+    mutated["lookups"]["teams"][0]["name"] = payload
+    mutated["lookups"]["networks"][0]["name"] = payload
+    body = json.dumps(mutated)
+
+    guarded_page.route(
+        "**/site-data.json*",
+        lambda route: route.fulfill(status=200, content_type="application/json", body=body),
+    )
+    open_app(guarded_page, "")
+
+    _hover_dot(guarded_page, 0)
+
+    text = guarded_page.inner_text("#chart-tooltip")
+    # The team name (title line) keeps the full payload. The network name
+    # goes through `stripNetworkNote` first (tooltip-only formatting that
+    # drops a trailing "(...)" methodology aside) -- unrelated to injection
+    # safety, it just means the payload's own "(1)" is stripped from that
+    # one occurrence too, same as any other parenthetical would be.
+    assert payload in text
+    assert "<img src=x onerror=alert>" in text
+    assert guarded_page.locator("#chart-tooltip img").count() == 0
+    assert dialogs == []
+
+
+def test_mobile_tap_opens_panel_without_a_hover_tooltip(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-22: a touch device (`hover: none`) never gets the hover tooltip --
+    tapping a dot opens the detail panel directly."""
+    open_app(mobile_page, "")
+    point = _dot_point(mobile_page, 0)
+    mobile_page.touchscreen.tap(point["x"], point["y"])
+    mobile_page.wait_for_function("document.body.classList.contains('panel-open')")
+    assert mobile_page.is_hidden("#chart-tooltip")
+
+
+def test_tooltip_mode_trace_config(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-22: the default html mode's active (family) traces and the
+    highlight trace carry `hoverinfo: 'none'` (or `'skip'` once a person is
+    selected, D-15) and a falsy `hovertemplate`; switching to the plotly
+    fallback restores `hovertemplate: '%{text}<extra></extra>'` with a
+    `text` array matching `customdata`'s length. Inert traces stay
+    `hoverinfo: 'skip'` with a falsy `hovertemplate` in both modes."""
+    open_app(guarded_page, "")
+    full_js = (
+        "() => document.getElementById('chart')._fullData.map(t => "
+        "({meta: t.meta, hoverinfo: t.hoverinfo, hovertemplate: t.hovertemplate, "
+        "text: t.text, customdata: t.customdata}))"
+    )
+
+    html_full = guarded_page.evaluate(full_js)
+    for t in html_full:
+        if str(t["meta"]).startswith("inert:"):
+            assert t["hoverinfo"] == "skip"
+            assert not t["hovertemplate"]
+        else:
+            assert t["hoverinfo"] == "none"
+            assert not t["hovertemplate"]
+
+    _use_plotly_tooltip(guarded_page)
+
+    # No selection: every family trace is non-empty (12 dots across 4
+    # families) and carries the exact fallback hovertemplate/text. The
+    # highlight trace has zero points here (nobody's highlighted) -- the
+    # vendored Plotly build resets an empty trace's own hovertemplate on
+    # `_fullData` regardless of what was requested, so its string equality
+    # is checked below instead, once a selection makes it non-empty.
+    plotly_full = guarded_page.evaluate(full_js)
+    for t in plotly_full:
+        meta = str(t["meta"])
+        if meta.startswith("inert:"):
+            assert t["hoverinfo"] == "skip"
+            assert not t["hovertemplate"]
+        elif meta.startswith("family:"):
+            assert t["hovertemplate"] == "%{text}<extra></extra>"
+            assert len(t["text"]) == len(t["customdata"])
+
+    # A person selection fades every family trace to 'skip' (D-15) and
+    # fills the highlight trace, which now carries the fallback template.
+    guarded_page.evaluate("window.__testHooks.setState({people: ['dale-harlow']})")
+    plotly_full_selected = guarded_page.evaluate(full_js)
+    for t in plotly_full_selected:
+        meta = str(t["meta"])
+        if meta.startswith("inert:") or meta.startswith("family:"):
+            assert t["hoverinfo"] == "skip"
+            assert not t["hovertemplate"]
+        else:
+            assert meta == "highlight"
+            assert t["hovertemplate"] == "%{text}<extra></extra>"
+            assert len(t["text"]) == len(t["customdata"]) > 0

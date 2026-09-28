@@ -400,6 +400,15 @@ def test_sideline_role_crew_shows_in_table_and_hover(
         assert "Sideline/other: Robin Teague" in row
         assert "Crew not recorded" not in row
 
+    # D-22: the default TOOLTIP_MODE ('html') carries no `text` array on any
+    # trace -- the custom tooltip renders straight from `tooltipModel`
+    # instead. Switch to the `'plotly'` fallback path to read the
+    # hovertemplate `text` array this check was written against (see
+    # test_site_chart.py's `_use_plotly_tooltip` for the same pattern).
+    guarded_page.evaluate("window.__testHooks.setTooltipMode('plotly')")
+    guarded_page.wait_for_function(
+        "document.getElementById('chart').data.at(-1).hovertemplate === '%{text}<extra></extra>'"
+    )
     hover_texts: list[str] = guarded_page.evaluate(
         "() => document.getElementById('chart').data.at(-1).text"
     )
