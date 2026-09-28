@@ -135,6 +135,50 @@ def test_season_range_hides_dots_and_leaves_counts_unchanged(
     assert "2019: 2 rated telecasts" in text
 
 
+@pytest.mark.parametrize(
+    ("query", "expected_seasons", "selects", "visible"),
+    [
+        # Entirely past the last data season: falls back to unfiltered.
+        ("?seasons=2030-2040", None, ("2019", "2026"), 12),
+        # Ends inside gaps (no 2020/2022-2024 data): snaps onto 2021-2021.
+        ("?seasons=2020-2022", [2021, 2021], ("2021", "2021"), 2),
+        # Wholly inside a gap: no data season in range, unfiltered.
+        ("?seasons=2022-2024", None, ("2019", "2026"), 12),
+        # Reversed and starting before the data: swapped, then snapped.
+        ("?seasons=2020-2000", [2019, 2019], ("2019", "2019"), 2),
+    ],
+)
+def test_season_link_snaps_to_data_seasons_the_selects_can_show(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    query: str,
+    expected_seasons: list[int] | None,
+    selects: tuple[str, str],
+    visible: int,
+) -> None:
+    """WR-13: a seasons link never decodes to an inverted range or to a
+    season neither `<select>` offers (which blanked both selects and hid
+    every dot); it snaps onto data seasons or falls back to unfiltered."""
+    open_app(guarded_page, query)
+    assert guarded_page.evaluate("window.__testHooks.getState().seasons") == expected_seasons
+    assert guarded_page.input_value("#season-from") == selects[0]
+    assert guarded_page.input_value("#season-to") == selects[1]
+    assert _visible_count(guarded_page) == visible
+
+
+def test_blank_season_select_value_is_ignored(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """WR-13: a change event while a select reads blank never becomes a
+    season range of 0."""
+    open_app(guarded_page, "?seasons=2021-2025")
+    guarded_page.evaluate(
+        "() => { const el = document.getElementById('season-from'); el.value = ''; "
+        "el.dispatchEvent(new Event('change', {bubbles: true})); }"
+    )
+    assert guarded_page.evaluate("window.__testHooks.getState().seasons") == [2021, 2025]
+
+
 def test_unchecking_fox_family_updates_total_and_counts(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:

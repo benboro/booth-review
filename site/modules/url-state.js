@@ -148,7 +148,14 @@ function decodeMode(raw) {
   return { compare, together };
 }
 
-/** Decodes the `seasons` param, clamped to the data's own season range. */
+/**
+ * Decodes the `seasons` param onto seasons that actually exist in the data
+ * (the only values the season `<select>`s offer): the start snaps up and the
+ * end snaps down to the nearest data season. A range that holds no data
+ * season at all (e.g. entirely past the last season, or inside a gap) falls
+ * back to unfiltered rather than an inverted range or a value neither select
+ * can show (WR-13).
+ */
 function decodeSeasons(raw, data) {
   if (!raw) return null;
   const match = /^(-?\d+)-(-?\d+)$/.exec(raw);
@@ -156,10 +163,11 @@ function decodeSeasons(raw, data) {
   let a = Number(match[1]);
   let b = Number(match[2]);
   if (a > b) [a, b] = [b, a];
-  a = Math.max(a, data.seasonMin);
-  b = Math.min(b, data.seasonMax);
-  if (a === data.seasonMin && b === data.seasonMax) return null;
-  return [a, b];
+  const from = data.seasons.find((season) => season >= a);
+  const to = data.seasons.findLast((season) => season <= b);
+  if (from === undefined || to === undefined || from > to) return null;
+  if (from === data.seasonMin && to === data.seasonMax) return null;
+  return [from, to];
 }
 
 /** Decodes the `networks` param: 'none' -> [], unknown ids dropped, all/none -> null. */

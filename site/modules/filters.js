@@ -258,6 +258,8 @@ export function initFilters({ data, getState, setState }) {
   const onSeasonChange = () => {
     const from = Number(els.seasonFrom.value);
     const to = Number(els.seasonTo.value);
+    // A blank select reads as Number('') === 0; never turn that into a range (WR-13).
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from <= 0 || to <= 0) return;
     setState({ seasons: [from, to] });
   };
   els.seasonFrom.addEventListener('change', onSeasonChange);
