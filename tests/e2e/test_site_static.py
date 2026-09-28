@@ -75,3 +75,48 @@ def test_site_data_json_is_reachable_and_matches_the_contract_version(
     response = guarded_page.request.get(f"{site_url}/site-data.json")
     assert response.status == 200
     assert response.json()["schema_version"] == "1.0.0"
+
+
+_BOX_JS = """
+(selector) => {
+  const r = document.querySelector(selector).getBoundingClientRect();
+  return {x: r.x, width: r.width, height: r.height};
+}
+"""
+
+
+@pytest.mark.parametrize("page_name", ("methodology.html", "coverage.html"))
+def test_secondary_pages_do_not_inherit_the_chart_grid(
+    guarded_page: Page, site_url: str, page_name: str
+) -> None:
+    """WR-05: the chart page's 280px-rail grid is scoped to index.html, so on
+    the methodology/coverage pages the header and footer (with the D-16
+    credit line) span the page instead of being squeezed into the rail
+    column, and the content column is centered."""
+    guarded_page.set_viewport_size({"width": 1400, "height": 900})
+    guarded_page.goto(f"{site_url}/{page_name}")
+
+    assert guarded_page.evaluate("getComputedStyle(document.body).display") == "block"
+    viewport = guarded_page.evaluate("document.documentElement.clientWidth")
+
+    footer = guarded_page.evaluate(_BOX_JS, "footer")
+    assert footer["x"] == 0
+    assert footer["width"] == viewport
+
+    header = guarded_page.evaluate(_BOX_JS, "header")
+    assert header["width"] == viewport
+    assert header["height"] < 100
+
+    main = guarded_page.evaluate(_BOX_JS, "main.page")
+    assert abs((main["x"] + main["width"] / 2) - viewport / 2) <= 1
+
+
+def test_chart_page_keeps_its_grid(guarded_page: Page, site_url: str) -> None:
+    """WR-05: scoping the grid to `body.app` leaves the chart page's own
+    rail + chart layout in place."""
+    guarded_page.set_viewport_size({"width": 1400, "height": 900})
+    guarded_page.goto(f"{site_url}/index.html")
+    assert guarded_page.evaluate("getComputedStyle(document.body).display") == "grid"
+    rail = guarded_page.evaluate(_BOX_JS, "#rail")
+    assert rail["x"] == 0
+    assert rail["width"] == 280

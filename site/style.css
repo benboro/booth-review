@@ -246,7 +246,11 @@ h1, h2, h3 {
 
 /* ---------- Layout grid ---------- */
 
-body {
+/* The chart page only (`<body class="app">` in index.html). methodology.html
+   and coverage.html share this stylesheet but have none of the grid-area ids,
+   so a bare `body` grid auto-placed their header/main/footer into the 280px
+   rail column (WR-05); they keep normal block flow instead. */
+body.app {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   grid-template-areas:
@@ -678,7 +682,7 @@ body.panel-open .drawer {
 /* ---------- Tablet (641px–1024px) ---------- */
 
 @media (max-width: 1024px) {
-  body.rail-collapsed {
+  body.app.rail-collapsed {
     grid-template-columns: 0 minmax(0, 1fr);
   }
 
@@ -690,7 +694,7 @@ body.panel-open .drawer {
 /* ---------- Phones (≤640px) ---------- */
 
 @media (max-width: 640px) {
-  body {
+  body.app {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "topbar"
