@@ -343,24 +343,54 @@ body.rail-collapsed #rail {
 .family-group {
   border: none;
   margin: 0 0 var(--space-sm) 0;
-  padding-left: 0;
+  /* `<fieldset>`'s UA default padding (Chromium: ~0.35em/0.75em/0.625em on
+     top/sides/bottom) was only ever overridden on the left; the leftover
+     top+bottom padding added roughly 15px of unstyled space around every
+     family group -- the actual root cause of "too much vertical spacing"
+     between network entries, since most families hold only 1-3 networks and
+     so read to the eye as adjacent "network rows" (Rule 1). */
+  padding: 0;
 }
 
 .family-group legend {
   padding: 0;
+  margin: 0;
   font: var(--font-label);
 }
 
 .network-list {
   list-style: none;
+  /* `<ul>`'s UA default margin (~1em top/bottom, at the *inherited* 16px
+     body font size since this list never sets its own font-size) added
+     another ~32px of unstyled space around the checklist on top of the
+     fieldset padding above -- also part of Rule 1's root cause. */
+  margin: 0;
 }
 
 .network-list li {
   margin-bottom: var(--space-xs);
 }
 
+/* The label wrapping each checkbox carries its own `#rail-body label`
+   margin-bottom (space-sm, 8px) for standalone filter rows (slots, role);
+   inside the network list that stacked on top of the `<li>`'s own
+   margin-bottom, roughly doubling the intended gap between rows. The `<li>`
+   already supplies the compact spacing for this list, so the label itself
+   contributes none here. (Needs the `#rail-body` prefix to out-specificity
+   the ID-selector rule above -- a bare `.network-list label` rule loses to
+   it regardless of source order.) */
+#rail-body .network-list label {
+  margin-bottom: 0;
+}
+
 #rail-body input[type="checkbox"] {
   accent-color: var(--accent);
+  /* Resets the browser's own UA margin around checkboxes (e.g. Chromium's
+     default ~3px top/bottom), which -- inside a `display: flex` label --
+     doesn't collapse with anything and was inflating every filter row's
+     height beyond its intended compact spacing (SITE-18's mobile tap-target
+     rule below restores height there via `min-height`, not margin). */
+  margin: 0;
 }
 
 #team-chip.chip {

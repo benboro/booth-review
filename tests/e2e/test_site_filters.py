@@ -327,6 +327,71 @@ def test_desktop_rail_scrolls_independently_and_keeps_chart_in_view(
     assert 0 <= chart_box["y"] < viewport_height
 
 
+def test_network_family_group_has_no_leftover_ua_padding_on_desktop(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Root cause of "too much vertical spacing between network entries":
+    `<fieldset>`'s and `<ul>`'s own UA-default padding/margin were never
+    fully reset, adding ~44px of unstyled space around every family group on
+    top of its actual content -- most families hold just 1-3 networks, so
+    this read as oversized gaps between "network entries." Each single-
+    network family group's total rendered height must stay compact."""
+    open_app(guarded_page, "")
+
+    family_groups = guarded_page.locator(".family-group")
+    count = family_groups.count()
+    assert count >= 1
+    for i in range(count):
+        box = family_groups.nth(i).bounding_box()
+        assert box is not None
+        assert box["height"] <= 60, (
+            f"family group {i} is {box['height']}px tall, expected a compact block"
+        )
+
+    padding = guarded_page.eval_on_selector(".family-group", "el => getComputedStyle(el).padding")
+    assert padding == "0px"
+    list_margin = guarded_page.eval_on_selector(
+        ".network-list", "el => getComputedStyle(el).margin"
+    )
+    assert list_margin == "0px"
+
+
+def test_network_checklist_rows_are_compact_on_desktop(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+) -> None:
+    """Within one family, adjacent network checkbox rows are tightly spaced
+    (the `<li>`'s own `xs` margin governs, not the generic filter-row `sm`
+    label margin doubling up on top of it). The stock fixture has only one
+    network per family, so a second `disney` network is added the same way
+    `test_unchecking_one_network_leaves_family_indeterminate` does, to get
+    two `<li>` rows inside one `.network-list`."""
+    mutated = json.loads(json.dumps(fixture_raw))
+    mutated["lookups"]["networks"].append(
+        {"id": "net-e", "name": "Gamma Sports", "family": "disney"}
+    )
+    new_idx = len(mutated["lookups"]["networks"]) - 1
+    mutated["telecasts"]["network"][4] = new_idx
+    mutated["telecasts"]["outlets"][4] = [new_idx]
+    body = json.dumps(mutated)
+
+    guarded_page.route(
+        "**/site-data.json*",
+        lambda route: route.fulfill(status=200, content_type="application/json", body=body),
+    )
+    open_app(guarded_page, "")
+
+    rows = guarded_page.locator(
+        "fieldset.family-group:has(input[data-family-checkbox='disney']) .network-list li"
+    )
+    expect(rows).to_have_count(2)
+
+    tops = [rows.nth(i).bounding_box()["y"] for i in range(2)]
+    gap = tops[1] - tops[0]
+    assert gap <= 26, f"adjacent network rows sit {gap}px apart, expected a compact list"
+
+
 def test_mobile_filters_drawer(mobile_page: Page, open_app: Callable[[Page, str], None]) -> None:
     """SITE-18: the phone Filters(N) button opens a bottom-sheet drawer with 44px tap targets."""
     open_app(mobile_page, "")
