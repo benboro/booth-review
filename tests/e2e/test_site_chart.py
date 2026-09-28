@@ -544,13 +544,32 @@ def test_faded_dots_take_no_hover_while_a_selection_exists(
         "document.getElementById('chart').on('plotly_hover', "
         "(ev) => { window.__hoverMetas.push(ev.points[0].data.meta); }); }"
     )
+    # Positive control (WR-11): in this same state a hover on a highlighted
+    # dot (dot 0) does fire, so an empty log further down means "the faded
+    # dot took no hover", not "hover events never fire at all".
+    point0 = _dot_point(guarded_page, 0)
+    guarded_page.mouse.move(point0["x"], point0["y"])
+    guarded_page.wait_for_function("window.__hoverMetas.length > 0", timeout=5000)
+    assert guarded_page.evaluate("window.__hoverMetas") == ["highlight"]
+
+    # Off the plot area (the chart's top-left margin), then start a fresh log.
+    box = guarded_page.locator("#chart").bounding_box()
+    assert box is not None
+    guarded_page.mouse.move(box["x"] + 2, box["y"] + 2)
+    guarded_page.wait_for_selector(".hoverlayer .hovertext", state="detached")
+    guarded_page.evaluate("window.__hoverMetas = []")
+
     # Dot 1 is not one of Dale Harlow's games: hovering right on it must never
-    # surface its faded family trace.
-    point = _dot_point(guarded_page, 1)
-    guarded_page.mouse.move(point["x"], point["y"])
+    # surface its faded family trace -- no family-trace hover event, and no
+    # hover label showing dot 1's own matchup.
+    dot1_matchup = re.sub(r"</?b>", "", _hover_text(_traces(guarded_page), 1).split("<br>")[0])
+    point1 = _dot_point(guarded_page, 1)
+    guarded_page.mouse.move(point1["x"], point1["y"])
     guarded_page.wait_for_timeout(300)
-    metas = guarded_page.evaluate("window.__hoverMetas")
+    metas: list[str] = guarded_page.evaluate("window.__hoverMetas")
     assert all(meta == "highlight" for meta in metas)
+    label = "".join(guarded_page.locator(".hoverlayer .hovertext").all_text_contents())
+    assert dot1_matchup not in label
 
 
 def test_hover_label_renders_readable_multiline_text_without_literal_markup(
