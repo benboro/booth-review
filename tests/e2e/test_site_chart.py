@@ -67,11 +67,19 @@ def _family_traces(traces: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [t for t in traces if str(t["meta"]).startswith("family:")]
 
 
+def _dot_count(traces: list[dict[str, Any]]) -> int:
+    """Real dots across `traces`, skipping a family trace's `null` legend
+    placeholder (CR-03: an otherwise-empty family keeps one null point so
+    Plotly doesn't drop its legend entry)."""
+    return sum(1 for t in traces for cd in t["customdata"] if cd is not None)
+
+
 def _dot_x_by_customdata(traces: list[dict[str, Any]]) -> dict[int, float]:
     points: dict[int, float] = {}
     for t in _family_traces(traces):
         for customdata, x in zip(t["customdata"], t["x"], strict=True):
-            points[customdata] = x
+            if customdata is not None:
+                points[customdata] = x
     return points
 
 
@@ -92,7 +100,7 @@ def test_default_load_shows_all_dots_no_selection_pregame_axis(
     traces = _traces(guarded_page)
     family_traces = _family_traces(traces)
 
-    assert sum(len(t["x"]) for t in family_traces) == 12
+    assert _dot_count(family_traces) == 12
     assert {t["meta"] for t in family_traces} == {
         "family:disney",
         "family:fox",
@@ -211,9 +219,81 @@ def test_legend_click_toggles_family_and_updates_networks_url(
     guarded_page.wait_for_function("location.search.includes('networks=')")
 
     family_traces = _family_traces(_traces(guarded_page))
-    assert sum(len(t["x"]) for t in family_traces) == 9
+    assert _dot_count(family_traces) == 9
     assert "networks=" in guarded_page.url
     assert "net-b" not in guarded_page.url
+
+
+_LEGEND_LABELS = [
+    "Disney (ABC/ESPN)",
+    "Fox (FOX/FS1/BTN)",
+    "Conference networks",
+    "Other",
+]
+
+
+def _legend_labels(page: Page) -> list[str]:
+    return page.locator(".legend .traces .legendtext").all_text_contents()
+
+
+def _family_visibility(page: Page) -> dict[str, Any]:
+    result: dict[str, Any] = page.evaluate(
+        "() => Object.fromEntries(document.getElementById('chart').data"
+        ".filter(t => String(t.meta).startsWith('family:')).map(t => [t.meta, t.visible]))"
+    )
+    return result
+
+
+def test_legend_entry_survives_toggle_off_and_can_be_toggled_back_on(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """CR-03: a family toggled off keeps its (greyed) legend entry, so a
+    second click turns it back on, and the entries never shift position --
+    a double-click then isolates exactly the family it was aimed at."""
+    open_app(guarded_page, "")
+    assert _legend_labels(guarded_page) == _LEGEND_LABELS
+
+    def toggle(label: str) -> None:
+        guarded_page.locator(".legend .traces", has_text=label).locator(".legendtoggle").click()
+
+    toggle("Disney (ABC/ESPN)")
+    guarded_page.wait_for_function("location.search.includes('networks=')")
+    assert "net-a" not in guarded_page.url
+    assert _legend_labels(guarded_page) == _LEGEND_LABELS
+    assert _family_visibility(guarded_page)["family:disney"] == "legendonly"
+
+    # Past Plotly's double-click window, so the next click reads as a single one.
+    guarded_page.wait_for_timeout(500)
+    toggle("Disney (ABC/ESPN)")
+    guarded_page.wait_for_function("location.search === ''")
+    assert _legend_labels(guarded_page) == _LEGEND_LABELS
+    assert set(_family_visibility(guarded_page).values()) == {True}
+
+    guarded_page.wait_for_timeout(500)
+    guarded_page.locator(".legend .traces", has_text="Fox (FOX/FS1/BTN)").locator(
+        ".legendtoggle"
+    ).dblclick()
+    guarded_page.wait_for_function("location.search === '?networks=net-b'")
+    assert _legend_labels(guarded_page) == _LEGEND_LABELS
+    visibility = _family_visibility(guarded_page)
+    assert visibility["family:fox"] is True
+    assert [visibility[f"family:{f}"] for f in ("disney", "conference", "other")] == [
+        "legendonly"
+    ] * 3
+
+
+@pytest.mark.parametrize("query", ["?seasons=2021-2021", "?team=northfield"])
+def test_legend_keeps_a_family_with_no_dots_of_its_own_as_on(
+    guarded_page: Page, open_app: Callable[[Page, str], None], query: str
+) -> None:
+    """CR-03: a family left with no family-trace dots -- emptied by the
+    season range (2021 has no Disney/Fox games), or because every one of its
+    dots moved to the highlight overlay (Northfield's games are all Disney)
+    -- still lists its legend entry, reading as on (its networks are still
+    selected)."""
+    open_app(guarded_page, query)
+    assert _legend_labels(guarded_page) == _LEGEND_LABELS
+    assert set(_family_visibility(guarded_page).values()) == {True}
 
 
 def test_set_state_people_highlights_and_fades_family_traces(
@@ -353,14 +433,16 @@ def test_highlighted_dots_are_not_duplicated_in_their_faded_family_trace(
     highlighted one."""
     open_app(guarded_page, "")
     traces = _traces(guarded_page)
-    assert sum(len(t["x"]) for t in _family_traces(traces)) == 12
+    assert _dot_count(_family_traces(traces)) == 12
     assert len(traces[-1]["x"]) == 0
 
     guarded_page.evaluate("window.__testHooks.setState({people: ['dale-harlow']})")
     traces = _traces(guarded_page)
     highlighted_customdata = set(traces[-1]["customdata"])
     assert highlighted_customdata == {0, 8}
-    family_customdata = {cd for t in _family_traces(traces) for cd in t["customdata"]}
+    family_customdata = {
+        cd for t in _family_traces(traces) for cd in t["customdata"] if cd is not None
+    }
     assert family_customdata.isdisjoint(highlighted_customdata)
     # every non-highlighted dot is still there, just not the highlighted two
     assert family_customdata == set(range(12)) - highlighted_customdata

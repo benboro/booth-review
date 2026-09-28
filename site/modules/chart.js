@@ -107,6 +107,13 @@ function selectedNamesFor(data, view, i) {
   return onGame.map((personIndex) => data.lookups.people[personIndex].name);
 }
 
+/** Whether the network filter excludes every one of `family`'s networks (its legend entry reads as off). */
+function familyToggledOff(data, state, family) {
+  if (state.networks == null) return false;
+  const famIds = (data.networksByFamily.get(family) ?? []).map((idx) => data.lookups.networks[idx].id);
+  return !famIds.some((id) => state.networks.includes(id));
+}
+
 /**
  * Builds the full Plotly figure (traces, layout, config) for the current
  * data/view/state/env (SITE-01, SITE-03, SITE-04, SITE-18).
@@ -132,7 +139,6 @@ export function buildFigure(data, view, state, env) {
   // it instead of a nearer faded one. Plotly only honours `hoverinfo` when
   // `hovertemplate` is unset, so a skipped trace sets it to null.
   const highlightSet = new Set(highlighted);
-  const highlightedFamilies = new Set(highlighted.map((i) => data.familyOf[i]));
 
   const traces = [];
   for (const family of data.families) {
@@ -148,6 +154,18 @@ export function buildFigure(data, view, state, env) {
       y.push(data.t.viewers[i]);
       customdata.push(i);
       text.push(hoverText(data, i, selectedNamesFor(data, view, i)));
+    }
+    // Plotly's scatter defaults turn a zero-point trace into `visible:
+    // false`, which drops its legend entry entirely -- so a family emptied
+    // by the season range, by being toggled off, or because every dot
+    // moved to the highlight overlay would vanish from the legend and could
+    // never be clicked back on (CR-03). One `null` placeholder point keeps
+    // the entry; Plotly never draws or hovers a null point.
+    if (x.length === 0) {
+      x.push(null);
+      y.push(null);
+      customdata.push(null);
+      text.push('');
     }
     traces.push({
       type: 'scattergl',
@@ -167,11 +185,11 @@ export function buildFigure(data, view, state, env) {
         opacity: view.hasSelection ? 0.15 : 1,
         line: { width: 0 },
       },
-      // A family whose only dots are all currently highlighted has x.length
-      // 0 here (they moved to the overlay trace below), but its dots are
-      // still fully visible on the chart -- so its legend entry must not
-      // read as hidden/off the way an actually-filtered-out family does.
-      visible: x.length > 0 || highlightedFamilies.has(family) ? true : 'legendonly',
+      // The legend entry mirrors the network filter the legend itself
+      // toggles: greyed out only when none of the family's networks is
+      // selected, never merely because the season range or the highlight
+      // overlay left this trace with no dots of its own.
+      visible: familyToggledOff(data, state, family) ? 'legendonly' : true,
     });
   }
 

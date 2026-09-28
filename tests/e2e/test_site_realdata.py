@@ -142,7 +142,11 @@ def test_real_dot_count_and_origin(
     traces: list[dict[str, Any]] = real_guarded_page.evaluate(_TRACES_JS)
     family_traces = [t for t in traces if str(t["meta"]).startswith("family:")]
     total_dots = len(real_raw["telecasts"]["season"])
-    assert sum(len(t["x"]) for t in family_traces) == total_dots
+    # A family trace with no dots of its own carries one null legend
+    # placeholder (CR-03); a real dot always has a numeric x (the n/a strip
+    # sentinel when its axis value is missing), so count only non-null x.
+    plotted = sum(1 for t in family_traces for x in t["x"] if x is not None)
+    assert plotted == total_dots
 
 
 def test_real_every_person_highlights_exactly_their_games(
