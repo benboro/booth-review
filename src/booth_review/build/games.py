@@ -63,12 +63,19 @@ GAMES_SCHEMA: dict[str, pl.DataType] = {
     "home_rank": pl.Int32(),
     "away_rank": pl.Int32(),
     "rank_poll": pl.Utf8(),
+    "game_type": pl.Utf8(),
+    "playoff_round": pl.Utf8(),
 }
 
 # CFBD's exact poll-name strings (confirmed against the real 2014-2026 vault,
 # Phase 3 Plan 07): filtering by a guessed name doesn't work (docs/sources/cfbd.md).
 POLL_PREFERENCE: tuple[str, ...] = ("Playoff Committee Rankings", "AP Top 25")
 RANK_WEEK_OFFSET: int = 0
+
+# CFBD's own "playoff.round" values observed across the 2014-2026 vault
+# (D-17): any other string collapses playoff_round to null rather than
+# shipping an unrecognized label.
+CFP_ROUNDS: frozenset[str] = frozenset({"first_round", "quarterfinal", "semifinal", "championship"})
 
 _IN_SCOPE_SEASON_TYPES = frozenset({"regular", "postseason"})
 
@@ -117,6 +124,24 @@ def _ranks_for_game(
     home_rank = ranks_by_team.get(normalize_team(game.home_team))
     away_rank = ranks_by_team.get(normalize_team(game.away_team))
     return home_rank, away_rank, poll_name
+
+
+def _game_type(game: CfbdGame) -> str:
+    """D-17: CFP (CFBD's own `playoff` object non-null) -> "playoff",
+    regardless of physical venue; any other postseason game -> "bowl";
+    everything else, including conference championships, -> "regular".
+    """
+    if game.is_cfp:
+        return "playoff"
+    if game.season_type == "postseason":
+        return "bowl"
+    return "regular"
+
+
+def _playoff_round(game: CfbdGame) -> str | None:
+    if game.is_cfp and game.playoff_round in CFP_ROUNDS:
+        return game.playoff_round
+    return None
 
 
 def _provider_by_game(lines: Sequence[CfbdLine], priority: Sequence[str]) -> dict[int, str]:
@@ -206,6 +231,8 @@ def build_games_frame(sources: Sequence[SeasonSources]) -> pl.DataFrame:
                     "home_rank": home_rank,
                     "away_rank": away_rank,
                     "rank_poll": rank_poll,
+                    "game_type": _game_type(game),
+                    "playoff_round": _playoff_round(game),
                 }
             )
 
