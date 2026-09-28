@@ -192,6 +192,40 @@ def test_reload_restores_compare_and_together_selection(
     assert _highlight_customdata(guarded_page) == before_highlight
 
 
+def test_removing_a_person_below_two_turns_called_together_off(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """WR-12: "Called together" needs 2+ people. Dropping to one person turns
+    it off (the toggle is disabled then, so it could never be switched off),
+    drops `mode=together` from the URL, and a person added afterwards is
+    OR'ed in rather than silently AND'ed."""
+    open_app(guarded_page, "")
+    _add_person_by_query(guarded_page, "Kris Venn")
+    _add_person_by_query(guarded_page, "Sam Delgado")
+    guarded_page.click("#together-toggle")
+    guarded_page.wait_for_function("location.search.includes('mode=together')")
+
+    guarded_page.click('button[aria-label="Remove Sam Delgado"]')
+    guarded_page.wait_for_function("location.search === '?people=kris-venn'")
+    assert guarded_page.get_attribute("#together-toggle", "aria-pressed") == "false"
+    assert guarded_page.is_disabled("#together-toggle")
+
+    _add_person_by_query(guarded_page, "Sam Delgado")
+    guarded_page.wait_for_function("location.search === '?people=kris-venn,sam-delgado'")
+    assert _highlight_customdata(guarded_page) == [1, 2, 6, 9, 10]
+
+
+def test_single_person_together_link_decodes_with_together_off(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """WR-12: a shared link with one person and `mode=together` opens with
+    the toggle off, and the URL canonicalizes the stale mode away."""
+    open_app(guarded_page, "?people=dale-harlow&mode=together")
+    assert guarded_page.evaluate("window.__testHooks.getState().together") is False
+    assert guarded_page.get_attribute("#together-toggle", "aria-pressed") == "false"
+    guarded_page.wait_for_function("location.search === '?people=dale-harlow'")
+
+
 def test_remove_chip_and_clear_selection_reset_state(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:

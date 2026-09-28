@@ -204,7 +204,11 @@ export function decodeState(search, data) {
 
   const { compare, together } = decodeMode(scalarParam(params, 'mode'));
   state.compare = state.people.length > MAX_COMPARE ? false : compare;
-  state.together = together;
+  // "Called together" (AND) only means something with 2+ people; below that
+  // the toggle is disabled, so a stale `together` would be stuck on and
+  // silently switch the next added person to AND (WR-12). setState goes
+  // through here too, so removing a person clears it.
+  state.together = together && state.people.length >= 2;
 
   const rawRole = scalarParam(params, 'role');
   state.role = rawRole === 'pbp' || rawRole === 'analyst' ? rawRole : null;
