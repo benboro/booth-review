@@ -122,6 +122,24 @@ export function buildFigure(data, view, state, env) {
   const band = naBand(data, axis);
   const theme = env.theme;
 
+  // `view.highlighted` matches trivially against every visible dot when
+  // nothing is selected (select.js's own semantics); only draw the overlay
+  // once a person/team selection actually exists.
+  const highlighted = view.hasSelection ? view.highlighted : [];
+  // Once a selection exists, a highlighted dot is dropped from its own
+  // family (base) trace: the highlight overlay below already draws it (same
+  // x/y, brighter, bigger, with an outline), so keeping the duplicate in the
+  // faded base trace changes nothing visually but leaves two coincident,
+  // equally-hoverable points at that spot. Plotly's own nearest-point hover
+  // has no reason to prefer the overlay's copy over the faded one in that
+  // case, so a hover could just as easily surface the faded duplicate. This
+  // trace-level `hoverinfo: 'skip'` is not enough on its own to prevent that
+  // (the vendored gl2d bundle does not exclude a 'skip' scattergl trace from
+  // hover/click point-picking), so the fix is to never plot the duplicate at
+  // all once the highlight overlay owns it.
+  const highlightSet = new Set(highlighted);
+  const highlightedFamilies = new Set(highlighted.map((i) => data.familyOf[i]));
+
   const traces = [];
   for (const family of data.families) {
     const x = [];
@@ -130,6 +148,7 @@ export function buildFigure(data, view, state, env) {
     const text = [];
     for (let i = 0; i < data.n; i += 1) {
       if (!view.visible[i] || data.familyOf[i] !== family) continue;
+      if (highlightSet.has(i)) continue;
       const rawX = data.t[axis][i];
       x.push(rawX == null ? band.sentinel : rawX);
       y.push(data.t.viewers[i]);
@@ -146,6 +165,7 @@ export function buildFigure(data, view, state, env) {
       y,
       customdata,
       text,
+      hoverinfo: 'all',
       hovertemplate: '%{text}<extra></extra>',
       marker: {
         color: FAMILY_COLORS[theme][family],
@@ -153,7 +173,11 @@ export function buildFigure(data, view, state, env) {
         opacity: view.hasSelection ? 0.15 : 1,
         line: { width: 0 },
       },
-      visible: x.length > 0 ? true : 'legendonly',
+      // A family whose only dots are all currently highlighted has x.length
+      // 0 here (they moved to the overlay trace below), but its dots are
+      // still fully visible on the chart -- so its legend entry must not
+      // read as hidden/off the way an actually-filtered-out family does.
+      visible: x.length > 0 || highlightedFamilies.has(family) ? true : 'legendonly',
     });
   }
 
@@ -164,10 +188,6 @@ export function buildFigure(data, view, state, env) {
   const hcolor = [];
   const hsize = [];
   const hsymbol = [];
-  // `view.highlighted` matches trivially against every visible dot when
-  // nothing is selected (select.js's own semantics); only draw the overlay
-  // once a person/team selection actually exists.
-  const highlighted = view.hasSelection ? view.highlighted : [];
   for (const i of highlighted) {
     const rawX = data.t[axis][i];
     hx.push(rawX == null ? band.sentinel : rawX);
@@ -188,6 +208,7 @@ export function buildFigure(data, view, state, env) {
     y: hy,
     customdata: hcustomdata,
     text: htext,
+    hoverinfo: 'all',
     hovertemplate: '%{text}<extra></extra>',
     marker: {
       color: hcolor,
@@ -212,7 +233,9 @@ export function buildFigure(data, view, state, env) {
       color: ACCENT[theme],
     },
     hovermode: 'closest',
-    hoverdistance: 20,
+    // Wider once a selection exists, so it's easier to snap to a highlighted
+    // dot's tooltip even when the cursor lands a few pixels off it (T3/D-02).
+    hoverdistance: view.hasSelection ? 40 : 20,
     hoverlabel: {
       bgcolor: SURFACE[theme],
       bordercolor: DIVIDER[theme],

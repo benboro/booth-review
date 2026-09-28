@@ -15,6 +15,37 @@ from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
 
+# Computes the click/hover pixel for a telecast's dot from Plotly's own
+# layout (mirrors tests/e2e/test_site_panel_table.py's `_DOT_PIXEL_JS`, but
+# searches every trace rather than only `family:`-prefixed ones, since a
+# highlighted dot lives exclusively in the `highlight` overlay trace): the
+# first trace whose `customdata` holds the telecast index gives the plotted
+# x/y, converted to page pixels via the axes' own `d2p` and the chart div's
+# own size/offset -- never a hardcoded pixel guess.
+_DOT_PIXEL_JS = """
+(customdata) => {
+  const gd = document.getElementById('chart');
+  const layout = gd._fullLayout;
+  const rect = gd.getBoundingClientRect();
+  for (const trace of gd.data) {
+    const idx = trace.customdata.indexOf(customdata);
+    if (idx === -1) continue;
+    return {
+      x: rect.left + layout._size.l + layout.xaxis.d2p(trace.x[idx]),
+      y: rect.top + layout._size.t + layout.yaxis.d2p(trace.y[idx]),
+    };
+  }
+  return null;
+}
+"""
+
+
+def _dot_point(page: Page, customdata: int) -> dict[str, float]:
+    point: dict[str, float] | None = page.evaluate(_DOT_PIXEL_JS, customdata)
+    assert point is not None, f"no dot with customdata {customdata}"
+    return point
+
+
 _TRACES_JS = (
     "() => document.getElementById('chart').data.map(t => ("
     "{meta: t.meta, x: t.x, customdata: t.customdata, text: t.text, opacity: t.marker.opacity}))"
@@ -221,3 +252,50 @@ def test_mobile_page_has_no_horizontal_scroll(
     )
 
     assert widths[0] <= widths[1]
+
+
+def test_highlighted_dots_are_not_duplicated_in_their_faded_family_trace(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """T3/D-02: with nobody selected every dot lives in its family trace as
+    normal. Once a person is selected, each highlighted dot is drawn *only*
+    by the highlight overlay (its family trace drops the now-redundant
+    duplicate) -- otherwise the coincident faded copy underneath and the
+    highlight overlay's own dot would compete equally for hover/click, which
+    is exactly what left them "treated equally" instead of snapping to the
+    highlighted one."""
+    open_app(guarded_page, "")
+    traces = _traces(guarded_page)
+    assert sum(len(t["x"]) for t in _family_traces(traces)) == 12
+    assert len(traces[-1]["x"]) == 0
+
+    guarded_page.evaluate("window.__testHooks.setState({people: ['dale-harlow']})")
+    traces = _traces(guarded_page)
+    highlighted_customdata = set(traces[-1]["customdata"])
+    assert highlighted_customdata == {0, 8}
+    family_customdata = {cd for t in _family_traces(traces) for cd in t["customdata"]}
+    assert family_customdata.isdisjoint(highlighted_customdata)
+    # every non-highlighted dot is still there, just not the highlighted two
+    assert family_customdata == set(range(12)) - highlighted_customdata
+
+
+def test_hover_snaps_to_highlighted_dot_over_a_coincident_faded_dot(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """SITE-04/T3: hovering directly on a highlighted dot's position always
+    reports the highlight overlay trace, never a coincident duplicate in its
+    (now-faded) family trace. Dot 0 is one of Dale Harlow's two highlighted
+    games."""
+    open_app(guarded_page, "")
+    guarded_page.evaluate("window.__testHooks.setState({people: ['dale-harlow']})")
+
+    guarded_page.evaluate(
+        "() => { window.__hoverMeta = null; "
+        "document.getElementById('chart').on('plotly_hover', "
+        "(ev) => { window.__hoverMeta = ev.points[0].data.meta; }); }"
+    )
+    point = _dot_point(guarded_page, 0)
+    guarded_page.mouse.move(point["x"], point["y"])
+    guarded_page.wait_for_function("window.__hoverMeta !== null")
+
+    assert guarded_page.evaluate("window.__hoverMeta") == "highlight"
