@@ -7,6 +7,7 @@ by `guarded_page`/`mobile_page`/`open_app`, per
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -14,6 +15,28 @@ import pytest
 from playwright.sync_api import Page, expect
 
 pytestmark = pytest.mark.e2e
+
+
+def _parse_rgb(css_color: str) -> tuple[float, float, float]:
+    """Parses a `getComputedStyle` `rgb(...)`/`rgba(...)` string into (r, g, b)."""
+    nums = re.findall(r"[\d.]+", css_color)
+    return float(nums[0]), float(nums[1]), float(nums[2])
+
+
+def _relative_luminance(rgb: tuple[float, float, float]) -> float:
+    def channel(c: float) -> float:
+        c = c / 255
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = rgb
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+
+def _contrast_ratio(fg: tuple[float, float, float], bg: tuple[float, float, float]) -> float:
+    """WCAG relative-luminance contrast ratio between two `rgb()` colors."""
+    l1 = _relative_luminance(fg) + 0.05
+    l2 = _relative_luminance(bg) + 0.05
+    return max(l1, l2) / min(l1, l2)
 
 
 def _boxes_intersect(a: dict[str, float], b: dict[str, float]) -> bool:
@@ -435,6 +458,33 @@ def test_network_checklist_rows_are_compact_on_desktop(
     tops = [rows.nth(i).bounding_box()["y"] for i in range(2)]
     gap = tops[1] - tops[0]
     assert gap <= 26, f"adjacent network rows sit {gap}px apart, expected a compact list"
+
+
+def test_clear_all_filters_sits_above_the_first_filter_group_and_meets_contrast(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """The button used to sit at the bottom of the rail (after "Highlight a
+    team") and had no explicit `color`, so it inherited the browser's own
+    default button text color instead of the theme's `--text` token --
+    unreadable in dark mode, since form controls don't inherit `color` from
+    an ancestor the way ordinary elements do. It now leads the rail (in the
+    header area, above every filter group) and explicitly uses the theme
+    color, clearing WCAG AA's 4.5:1 text-contrast minimum."""
+    open_app(guarded_page, "")
+
+    clear_box = guarded_page.locator("#clear-filters").bounding_box()
+    seasons_box = guarded_page.locator("#filter-seasons").bounding_box()
+    assert clear_box is not None
+    assert seasons_box is not None
+    assert clear_box["y"] < seasons_box["y"]
+
+    colors = guarded_page.eval_on_selector(
+        "#clear-filters",
+        "el => { const s = getComputedStyle(el); return [s.color, s.backgroundColor]; }",
+    )
+    fg = _parse_rgb(colors[0])
+    bg = _parse_rgb(colors[1])
+    assert _contrast_ratio(fg, bg) >= 4.5
 
 
 def test_mobile_filters_drawer(mobile_page: Page, open_app: Callable[[Page, str], None]) -> None:
