@@ -77,16 +77,18 @@ function networkLine(data, i) {
   return others.length > 0 ? `${primary} · Also on: ${others.join(', ')}` : primary;
 }
 
-/** Crew list: one `<li>` per crew entry -- name, role label, and a feed label when not main (D-08). */
+/** Crew list: one `<li>` per crew entry, "[Position]: [Name]" (product
+ * notes 2026-09-27), with a parenthetical feed label appended when not main
+ * (D-08), e.g. "Analyst: Taylor Vance (alt-cast)". */
 function buildCrewList(data, i) {
   const ul = document.createElement('ul');
   ul.className = 'panel-crew';
   for (const entry of data.t.crew[i]) {
     const li = document.createElement('li');
     const name = data.lookups.people[entry.person].name;
-    const roleLabel = ROLE_LABELS[entry.role] ?? '';
+    const roleLabel = ROLE_LABELS[entry.role] ?? ROLE_LABELS.unknown;
     const feedLabel = entry.feed !== 'main' ? FEED_LABELS[entry.feed] : '';
-    li.textContent = [name, roleLabel, feedLabel].filter((part) => part !== '').join(' — ');
+    li.textContent = feedLabel !== '' ? `${roleLabel}: ${name} (${feedLabel})` : `${roleLabel}: ${name}`;
     ul.appendChild(li);
   }
   return ul;

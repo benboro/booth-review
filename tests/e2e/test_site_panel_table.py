@@ -171,6 +171,19 @@ def test_open_panel_hook_shows_flag_label(
     assert "CFBD win-probability model break (2025+)" in guarded_page.inner_text("#panel-body")
 
 
+def test_panel_crew_list_is_position_first(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Product notes 2026-09-27: crew entries read "[Position]: [Name]"
+    everywhere crew is listed; the panel previously listed "Name — Role"
+    (name first)."""
+    open_app(guarded_page, "")
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    items = guarded_page.locator("#panel-body .panel-crew li").all_inner_texts()
+    assert "Play-by-play: Dale Harlow" in items
+    assert "Analyst: Dale Harlow Jr." in items
+
+
 def test_open_panel_shows_selected_on_this_game(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
