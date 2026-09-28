@@ -154,6 +154,12 @@ def build_site_data(
         "away_rank",
         "excitement",
         "pregame_x",
+        "game_type",
+        "playoff_round",
+        "home_conference",
+        "away_conference",
+        "home_classification",
+        "away_classification",
     )
     rows = list(plotted.join(games_slim, on="game_id", how="left").iter_rows(named=True))
     unusable = sum(1 for row in rows if not is_usable_value(row["headline_value"]))
@@ -163,6 +169,19 @@ def build_site_data(
         # contract failure on a 0-viewer dot.
         raise VaultStateError(
             f"telecasts: {unusable} plotted row(s) without a usable headline_value"
+        )
+    missing_game_type = sum(1 for row in rows if row["game_type"] is None)
+    if missing_game_type:
+        raise VaultStateError(f"telecasts: {missing_game_type} plotted row(s) without a game_type")
+    missing_fbs_conference = sum(
+        1
+        for row in rows
+        if (row["home_classification"] == "fbs" and row["home_conference"] is None)
+        or (row["away_classification"] == "fbs" and row["away_conference"] is None)
+    )
+    if missing_fbs_conference:
+        raise VaultStateError(
+            f"telecasts: {missing_fbs_conference} plotted row(s) with an FBS side but no conference"
         )
     plotted_ids = {row["telecast_id"] for row in rows}
 
@@ -204,6 +223,7 @@ def build_site_data(
     person_ids: set[str] = set()
     publishers: set[str] = set()
     flag_ids: set[str] = set()
+    conference_is_fbs: dict[str, bool] = {}
 
     for row in rows:
         team_names.add(str(row["home_team"]))
@@ -218,6 +238,12 @@ def build_site_data(
         flag_ids.update(flags_by_telecast.get(row["telecast_id"], []))
         for crow in crew_by_telecast.get(row["telecast_id"], []):
             person_ids.add(str(crow["person_id"]))
+        for side in ("home", "away"):
+            conf = row[f"{side}_conference"]
+            if conf is None:
+                continue
+            is_fbs = row[f"{side}_classification"] == "fbs"
+            conference_is_fbs[conf] = conference_is_fbs.get(conf, False) or is_fbs
 
     for crow in coverage.rows:
         network_id = crow["network_id"]
@@ -234,8 +260,12 @@ def build_site_data(
     person_index = {person_id: i for i, person_id in enumerate(sorted(person_ids))}
     publisher_index = {name: i for i, name in enumerate(sorted(publishers))}
     flag_index = {flag_id: i for i, flag_id in enumerate(sorted(flag_ids))}
+    conference_index = {name: i for i, name in enumerate(sorted(conference_is_fbs))}
 
     teams = [{"name": name} for name in sorted(team_names)]
+    conferences = [
+        {"name": name, "is_fbs": conference_is_fbs[name]} for name in sorted(conference_is_fbs)
+    ]
     networks = [
         {
             "id": network_id,
@@ -300,6 +330,10 @@ def build_site_data(
         "flags": [],
         "combined_feeds": [],
         "crew": [],
+        "game_type": [],
+        "playoff_round": [],
+        "home_conference": [],
+        "away_conference": [],
     }
 
     for row in rows:
@@ -341,6 +375,16 @@ def build_site_data(
                 }
                 for crow in crew_by_telecast.get(telecast_id, [])
             ]
+        )
+        columns["game_type"].append(row["game_type"])
+        columns["playoff_round"].append(row["playoff_round"])
+        home_conf = row["home_conference"]
+        columns["home_conference"].append(
+            conference_index[home_conf] if home_conf is not None else None
+        )
+        away_conf = row["away_conference"]
+        columns["away_conference"].append(
+            conference_index[away_conf] if away_conf is not None else None
         )
 
     # -- coverage: publisher_counts per (season, network), and per-season totals ------------
@@ -398,6 +442,7 @@ def build_site_data(
             "people": people,
             "publishers": publisher_list,
             "flags": flags,
+            "conferences": conferences,
         },
         "telecasts": columns,
         "coverage": coverage_rows,
