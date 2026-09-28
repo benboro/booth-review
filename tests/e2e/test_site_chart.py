@@ -302,6 +302,37 @@ def test_hover_snaps_to_highlighted_dot_over_a_coincident_faded_dot(
     assert guarded_page.evaluate("window.__hoverMeta") == "highlight"
 
 
+def test_faded_dots_take_no_hover_while_a_selection_exists(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """SITE-04: with a selection, faded family traces skip hover entirely, so
+    a hover near a highlighted dot snaps to it rather than to a nearer faded
+    dot. Plotly drops `hoverinfo` whenever `hovertemplate` is set, so this
+    checks the resolved `_fullData`, not just the input trace."""
+    open_app(guarded_page, "")
+    full_js = (
+        "() => document.getElementById('chart')._fullData"
+        ".filter(t => String(t.meta).startsWith('family:')).map(t => t.hoverinfo)"
+    )
+    assert "skip" not in guarded_page.evaluate(full_js)
+
+    guarded_page.evaluate("window.__testHooks.setState({people: ['dale-harlow']})")
+    assert set(guarded_page.evaluate(full_js)) == {"skip"}
+
+    guarded_page.evaluate(
+        "() => { window.__hoverMetas = []; "
+        "document.getElementById('chart').on('plotly_hover', "
+        "(ev) => { window.__hoverMetas.push(ev.points[0].data.meta); }); }"
+    )
+    # Dot 1 is not one of Dale Harlow's games: hovering right on it must never
+    # surface its faded family trace.
+    point = _dot_point(guarded_page, 1)
+    guarded_page.mouse.move(point["x"], point["y"])
+    guarded_page.wait_for_timeout(300)
+    metas = guarded_page.evaluate("window.__hoverMetas")
+    assert all(meta == "highlight" for meta in metas)
+
+
 def test_hover_label_renders_readable_multiline_text_without_literal_markup(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
