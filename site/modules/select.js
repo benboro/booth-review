@@ -1,7 +1,11 @@
 /**
- * Selection semantics (D-05..D-08): hide filters, person/team highlighting,
- * OR/AND across selected people, compare-mode shapes, and the match
- * summary. DOM-free; imports only from ./palette.js.
+ * Selection semantics (D-10..D-19, replacing Phase 4's D-05): the season
+ * range is the only filter that removes a dot; every other filter (Networks,
+ * Kickoff, Conference, School, Bowls/Playoffs) fades a dot that fails it
+ * into an inert state instead. Role still limits only how a person matches,
+ * never which dots pass. Also covers person/compare-mode matching, the
+ * matched-games fill rule (person-or-school, D-12), and the match summary.
+ * DOM-free; imports only from ./palette.js.
  */
 
 import { COMPARE_SYMBOLS, SHARED_SYMBOL } from './palette.js';
@@ -10,8 +14,12 @@ import { COMPARE_SYMBOLS, SHARED_SYMBOL } from './palette.js';
 export const MAX_COMPARE = 4;
 
 /**
- * The default selection/filter state (D-12): all dots, nobody selected,
- * pre-game axis. `seasons`/`networks`/`slots` of `null` mean "unfiltered".
+ * The default selection/filter state (D-12, D-13): all dots, nobody
+ * selected, pre-game axis. `seasons`/`networks`/`slots` of `null` mean
+ * "unfiltered"; `conferences`/`school` of `[]` mean "unfiltered" (D-10,
+ * D-11); `postseason` of `'all'` means "unfiltered" (D-18). There is no
+ * `team` field -- School (`state.school`) replaces the old team highlight
+ * as a fade filter (D-11).
  * @param {object} _data - a `prepareData` result (unused, kept for a
  *   uniform call signature with functions that do need it).
  * @returns {object}
@@ -22,10 +30,12 @@ export function defaultState(_data) {
     compare: false,
     together: false,
     role: null,
-    team: null,
     seasons: null,
     networks: null,
     slots: null,
+    conferences: [],
+    school: [],
+    postseason: 'all',
     axis: 'pregame',
   };
 }
@@ -59,23 +69,32 @@ export function personOnGame(data, i, personIndex, role) {
   return null;
 }
 
-/** Computes visibility for every dot from the season/network/slot hide filters (D-05). */
+/** Computes visibility for every dot from the season range, the only filter that removes a dot (D-13). */
 function computeVisible(data, state) {
   const { n } = data;
   const visible = new Uint8Array(n);
   for (let i = 0; i < n; i += 1) {
-    visible[i] = dotPassesHideFilters(data, state, i) ? 1 : 0;
+    if (state.seasons != null) {
+      const season = data.t.season[i];
+      if (season < state.seasons[0] || season > state.seasons[1]) continue;
+    }
+    visible[i] = 1;
   }
   return visible;
 }
 
-/** Whether dot `i` passes the season/network/slot hide filters (D-05). */
-function dotPassesHideFilters(data, state, i) {
-  const { t } = data;
-  if (state.seasons != null) {
-    const season = t.season[i];
-    if (season < state.seasons[0] || season > state.seasons[1]) return false;
-  }
+/**
+ * Whether dot `i` passes every fade filter (D-13): Networks, Kickoff,
+ * Conference, School, and Bowls/Playoffs. A dot that fails this stays
+ * `visible` -- it renders as the inert filtered-out state (D-14), never
+ * removed. Role is deliberately absent: it never fades a dot (D-13).
+ * @param {object} data - a `prepareData` result.
+ * @param {object} state - shaped like `defaultState(data)`.
+ * @param {number} i - telecast index.
+ * @returns {boolean}
+ */
+export function passesFadeFilters(data, state, i) {
+  const t = data.t;
   if (state.networks != null) {
     const netId = data.lookups.networks[t.network[i]].id;
     if (!state.networks.includes(netId)) return false;
@@ -84,50 +103,85 @@ function dotPassesHideFilters(data, state, i) {
     const slot = t.time_slot[i];
     if (slot == null || !state.slots.includes(slot)) return false;
   }
+  if (state.conferences.length > 0) {
+    const homeConf = t.home_conference[i];
+    const awayConf = t.away_conference[i];
+    const matches = [homeConf, awayConf].some(
+      (idx) => idx != null && state.conferences.includes(data.lookups.conferences[idx].name),
+    );
+    if (!matches) return false;
+  }
+  if (state.school.length > 0) {
+    const awaySlug = data.teamSlugs[t.away_team[i]];
+    const homeSlug = data.teamSlugs[t.home_team[i]];
+    if (!state.school.includes(awaySlug) && !state.school.includes(homeSlug)) return false;
+  }
+  if (state.postseason === 'exclude' && t.game_type[i] !== 'regular') return false;
+  if (state.postseason === 'only' && t.game_type[i] === 'regular') return false;
   return true;
 }
 
-/** Whether dot `i` passes the network/slot filters only, for per-season counts. */
-function dotPassesCountFilters(data, state, i) {
-  const { t } = data;
-  if (state.networks != null) {
-    const netId = data.lookups.networks[t.network[i]].id;
-    if (!state.networks.includes(netId)) return false;
-  }
-  if (state.slots != null) {
-    const slot = t.time_slot[i];
-    if (slot == null || !state.slots.includes(slot)) return false;
-  }
-  return true;
-}
-
-/** Per-season counts under the network/slot filters only (season filter excluded, D-05). */
+/** Per-season counts under every fade filter, season range ignored (D-13). */
 function computeSeasonCounts(data, state) {
   return data.seasons.map((season) => {
     let count = 0;
     for (let i = 0; i < data.n; i += 1) {
       if (data.t.season[i] !== season) continue;
-      if (dotPassesCountFilters(data, state, i)) count += 1;
+      if (passesFadeFilters(data, state, i)) count += 1;
     }
     return [season, count];
   });
 }
 
-/** Builds the match summary for the current selection and highlighted set. */
-function buildSummary(data, state, highlighted, altGames, personIndexes, teamIdx) {
-  const hasSelection = state.people.length > 0 || state.team !== null;
+/**
+ * Whether the network filter excludes every one of `family`'s networks
+ * (its legend chip reads as off).
+ * @param {object} data - a `prepareData` result.
+ * @param {object} state - shaped like `defaultState(data)`.
+ * @param {string} family - a key in `FAMILY_ORDER`.
+ * @returns {boolean}
+ */
+export function familyToggledOff(data, state, family) {
+  if (state.networks == null) return false;
+  const famIds = (data.networksByFamily.get(family) ?? []).map((idx) => data.lookups.networks[idx].id);
+  return !famIds.some((id) => state.networks.includes(id));
+}
+
+/**
+ * Computes the next `networks` value from toggling a legend chip's family
+ * (D-16): reproduces the app's own legend-click handling exactly, so the
+ * legend chip and the Networks filter checklist always agree. Starting
+ * from "every network selected" (`state.networks == null`), toggling a
+ * family off removes just that family's ids; toggling any family back on
+ * when some (not all) families are off adds that family's ids back in.
+ * @param {object} data - a `prepareData` result.
+ * @param {object} state - shaped like `defaultState(data)`.
+ * @param {string} family - a key in `FAMILY_ORDER`.
+ * @returns {string[]} the next `state.networks` value.
+ */
+export function toggleFamilyNetworks(data, state, family) {
+  const current = state.networks ?? data.primaryNetworks.map((idx) => data.lookups.networks[idx].id);
+  const famIds = (data.networksByFamily.get(family) ?? []).map((idx) => data.lookups.networks[idx].id);
+  const everyFamIdIncluded = famIds.every((id) => current.includes(id));
+  return everyFamIdIncluded
+    ? current.filter((id) => !famIds.includes(id))
+    : Array.from(new Set([...current, ...famIds]));
+}
+
+/** Builds the match summary for the current selection and matched/highlighted set. */
+function buildSummary(data, state, matched, altGames, personIndexes, hasSelection) {
   if (!hasSelection) return { kind: 'none' };
 
-  if (highlighted.length > 0) {
-    const seasonsOfHighlighted = highlighted.map((i) => data.t.season[i]);
+  if (matched.length > 0) {
+    const seasonsOfMatched = matched.map((i) => data.t.season[i]);
     const networkNames = new Set(
-      highlighted.map((i) => data.lookups.networks[data.t.network[i]].name),
+      matched.map((i) => data.lookups.networks[data.t.network[i]].name),
     );
     return {
       kind: 'matches',
-      count: highlighted.length,
-      seasonMin: Math.min(...seasonsOfHighlighted),
-      seasonMax: Math.max(...seasonsOfHighlighted),
+      count: matched.length,
+      seasonMin: Math.min(...seasonsOfMatched),
+      seasonMax: Math.max(...seasonsOfMatched),
       networks: Array.from(networkNames).sort((a, b) => a.localeCompare(b)),
       altCount: altGames.size,
     };
@@ -141,18 +195,19 @@ function buildSummary(data, state, highlighted, altGames, personIndexes, teamIdx
   }
 
   const names = state.people.map((id) => data.lookups.people[data.personIndexById.get(id)].name);
-  let selectionLabel = names.join(' + ');
-  if (teamIdx !== null) {
-    const teamName = data.lookups.teams[teamIdx].name;
-    selectionLabel = selectionLabel ? `${selectionLabel} + ${teamName}` : teamName;
-  }
+  const schoolNames = state.school.map(
+    (slug) => data.lookups.teams[data.teamIndexBySlug.get(slug)].name,
+  );
+  const selectionLabel = [...names, ...schoolNames].join(' + ');
   return { kind: 'filtered-out', selectionLabel };
 }
 
 /**
- * Computes the full view for the current data and selection/filter state:
- * which dots are visible, which are highlighted, their compare-mode
- * symbols, per-season counts, and the match summary (D-05..D-08).
+ * Computes the full view for the current data and selection/filter state
+ * (D-10..D-19): which dots are visible (season range only), which pass
+ * every fade filter, which are person-matched, which rows fill the
+ * matched-games table, their compare-mode symbols, per-season counts, and
+ * the match summary.
  * @param {object} data - a `prepareData` result.
  * @param {object} state - shaped like `defaultState(data)`.
  * @returns {object}
@@ -161,12 +216,22 @@ export function computeView(data, state) {
   const { n } = data;
   const visible = computeVisible(data, state);
   let visibleCount = 0;
-  for (let i = 0; i < n; i += 1) if (visible[i]) visibleCount += 1;
+
+  const passesFilters = new Uint8Array(n);
+  let passingCount = 0;
+  for (let i = 0; i < n; i += 1) {
+    if (visible[i]) visibleCount += 1;
+    if (visible[i] && passesFadeFilters(data, state, i)) {
+      passesFilters[i] = 1;
+      passingCount += 1;
+    }
+  }
 
   const seasonCounts = computeSeasonCounts(data, state);
 
   const personIndexes = state.people.map((id) => data.personIndexById.get(id));
-  const teamIdx = state.team !== null ? data.teamIndexBySlug.get(state.team) : null;
+  const hasPersonSelection = state.people.length > 0;
+  const hasSelection = hasPersonSelection || state.school.length > 0;
 
   const peopleOnGame = new Map();
   const altGames = new Set();
@@ -177,21 +242,17 @@ export function computeView(data, state) {
     const results = personIndexes.map((pIdx) => personOnGame(data, i, pIdx, state.role));
 
     let personMatch = true;
-    if (state.people.length > 0) {
+    if (hasPersonSelection) {
       personMatch = state.together
         ? results.every((r) => r != null)
         : results.some((r) => r != null);
     }
 
-    let teamMatch = true;
-    if (teamIdx !== null) {
-      teamMatch = data.t.away_team[i] === teamIdx || data.t.home_team[i] === teamIdx;
-    }
+    if (personMatch) matchedUnfiltered += 1;
 
-    const match = personMatch && teamMatch;
-    if (match) matchedUnfiltered += 1;
-
-    if (visible[i] && match) {
+    // D-14: a person-matched dot that fails a fade filter is filtered out,
+    // not highlighted -- the filter always wins.
+    if (hasPersonSelection && passesFilters[i] && personMatch) {
       highlighted.push(i);
       const onGame = [];
       let hasAlt = false;
@@ -205,6 +266,20 @@ export function computeView(data, state) {
       if (onGame.length > 0) peopleOnGame.set(i, onGame);
       if (hasAlt) altGames.add(i);
     }
+  }
+
+  // D-12: the matched-games table fills when a person is selected (its rows
+  // are exactly `highlighted`) or, absent a person, when School is set (its
+  // rows are every dot that passes the fade filters). Every other filter
+  // alone never fills it (no-bulk rule).
+  let matched;
+  if (hasPersonSelection) {
+    matched = highlighted;
+  } else if (state.school.length > 0) {
+    matched = [];
+    for (let i = 0; i < n; i += 1) if (passesFilters[i]) matched.push(i);
+  } else {
+    matched = [];
   }
 
   const symbols = new Map();
@@ -226,13 +301,17 @@ export function computeView(data, state) {
     }
   }
 
-  const summary = buildSummary(data, state, highlighted, altGames, personIndexes, teamIdx);
+  const summary = buildSummary(data, state, matched, altGames, personIndexes, hasSelection);
 
   return {
     visible,
+    passesFilters,
     visibleCount,
-    hasSelection: state.people.length > 0 || state.team !== null,
+    passingCount,
+    hasPersonSelection,
+    hasSelection,
     highlighted,
+    matched,
     peopleOnGame,
     altGames,
     symbols,

@@ -121,6 +121,15 @@ export function prepareData(raw) {
     keys: [normalizeName(team.name)],
   }));
 
+  // FBS conference names, alphabetical (D-10): the Conference filter's list
+  // scope. FCS conferences (is_fbs false) are left out entirely -- School
+  // reuses teamSlugs/teamIndexBySlug/teamKeys unchanged (D-11), so nothing
+  // else needs a name->index map here.
+  const fbsConferences = lookups.conferences
+    .filter((c) => c.is_fbs)
+    .map((c) => c.name)
+    .sort((a, b) => a.localeCompare(b));
+
   return {
     raw,
     n,
@@ -143,6 +152,7 @@ export function prepareData(raw) {
     xRange,
     peopleKeys,
     teamKeys,
+    fbsConferences,
   };
 }
 

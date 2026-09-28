@@ -218,7 +218,7 @@ export function initTopbar({ data, getState, setState }) {
   });
 
   els.clearSelection.addEventListener('click', () => {
-    setState({ people: [], team: null, compare: false, together: false });
+    setState({ people: [], compare: false, together: false });
   });
 }
 
@@ -314,7 +314,7 @@ function renderSummary(view) {
 export function renderTopbar({ data, state, view }) {
   renderChips(data, state);
   renderToggles(state);
-  els.clearSelection.hidden = state.people.length === 0 && state.team == null;
+  els.clearSelection.hidden = state.people.length === 0;
   renderShapeLegend(data, state, view);
   renderSummary(view);
 

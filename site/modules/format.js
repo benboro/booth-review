@@ -24,6 +24,21 @@ export const SLOT_LABELS = {
   prime: 'Prime time (6 PM ET or later)',
 };
 
+/** Short time-slot labels for the tooltip/panel (D-19). */
+export const SLOT_SHORT_LABELS = {
+  noon: 'Noon',
+  afternoon: 'Afternoon',
+  prime: 'Prime time',
+};
+
+/** Detail-panel labels for a playoff telecast's round (D-17). */
+export const CFP_ROUND_LABELS = {
+  first_round: 'CFP first round',
+  quarterfinal: 'CFP quarterfinal',
+  semifinal: 'CFP semifinal',
+  championship: 'CFP championship',
+};
+
 /** Crew role filter labels (SITE-07). Sideline/other is role "unknown". */
 export const ROLE_LABELS = {
   pbp: 'Play-by-play',
@@ -61,14 +76,11 @@ export function formatDate(ymd) {
 }
 
 /**
- * True when an ET calendar date (`YYYY-MM-DD`) falls on a Saturday. Used to
- * gate the time-slot label ("Prime time"/"Afternoon"/"Noon"): those labels
- * describe a Saturday scheduling pattern and are misleading on any other
- * day (weeknight games, bowls/CFP games played on other days of the week).
- * The site-data contract has no `season_type`/`week` field per telecast
- * (docs/site-data.md), so this weekday check is the only signal available
- * to approximate "regular-season Saturday game" -- it does not catch a
- * bowl/playoff game that happens to fall on a Saturday.
+ * True when an ET calendar date (`YYYY-MM-DD`) falls on a Saturday. This is
+ * only the weekday half of the time-slot label's gate; callers never call
+ * this alone to decide whether to show "Prime time"/"Afternoon"/"Noon" --
+ * they gate on `game_type` through `showsTimeSlot` below (D-19), which also
+ * excludes bowl/playoff games that happen to fall on a Saturday.
  * @param {string} ymd - e.g. "2019-09-07".
  * @returns {boolean}
  */
@@ -76,6 +88,57 @@ export function isSaturday(ymd) {
   const [year, month, day] = ymd.split('-').map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.getUTCDay() === 6;
+}
+
+/**
+ * Whether the time-slot label ("Prime time"/"Afternoon"/"Noon") should show
+ * for telecast `i` (D-19): only a regular-season game, with a recorded
+ * time slot, on a Saturday. This replaces the Saturday-only proxy that let
+ * a Saturday bowl game through.
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @returns {boolean}
+ */
+export function showsTimeSlot(data, i) {
+  const t = data.t;
+  return t.game_type[i] === 'regular' && t.time_slot[i] != null && isSaturday(t.date[i]);
+}
+
+/**
+ * Labels telecast `i`'s game type for the detail panel (D-17): null for a
+ * regular-season game (no label shown), "Bowl" for a non-CFP postseason
+ * game, and the specific CFP round (falling back to "College Football
+ * Playoff" when the round itself isn't recorded) for a playoff game.
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @returns {string|null}
+ */
+export function gameTypeLabel(data, i) {
+  const t = data.t;
+  const type = t.game_type[i];
+  if (type === 'regular') return null;
+  if (type === 'bowl') return 'Bowl';
+  const round = t.playoff_round[i];
+  return round != null ? (CFP_ROUND_LABELS[round] ?? 'College Football Playoff') : 'College Football Playoff';
+}
+
+/**
+ * Formats telecast `i`'s conference line for the detail panel (D-09):
+ * away vs. home, matching `formatMatchup`'s "Away at Home" order. A side
+ * with no recorded conference reads "Not recorded"; when neither side has
+ * one, returns null (no row shown).
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @returns {string|null}
+ */
+export function conferenceLine(data, i) {
+  const t = data.t;
+  const homeIdx = t.home_conference[i];
+  const awayIdx = t.away_conference[i];
+  if (homeIdx == null && awayIdx == null) return null;
+  const away = awayIdx != null ? data.lookups.conferences[awayIdx].name : 'Not recorded';
+  const home = homeIdx != null ? data.lookups.conferences[homeIdx].name : 'Not recorded';
+  return `${away} vs ${home}`;
 }
 
 /**

@@ -1,7 +1,13 @@
-"""In-browser proof of D-05..D-08, SITE-10, and SITE-12 semantics.
+"""In-browser proof of D-08, SITE-10, SITE-12, and the D-10..D-19 filter/
+fade/matched-games semantics (D-13: only the season range removes a dot;
+every other filter fades one; D-14: a person-matched dot that fails a fade
+filter is filtered out, the filter wins; D-09/D-10: era-correct conference
+membership; D-11: School is a fade filter, not a highlight; D-12: the
+matched-games table fills on person-or-school; D-17..D-19: game_type backs
+the bowl/playoff control and the time-slot label).
 
 No app.js exists yet (plan 04-07's job), so these tests exercise the served
-pure JS modules (data.js, select.js, url-state.js) directly via
+pure JS modules (data.js, select.js, format.js, url-state.js) directly via
 `page.evaluate` -- RESEARCH Pattern 5 -- against the fixture served by
 `guarded_page`/`site_url`. Every scenario below is worked out by hand against
 `tests/fixtures/contract/site-data.fixture.json`'s 12 dots and 10 people.
@@ -24,12 +30,54 @@ async (partial) => {
   const data = D.prepareData(raw);
   const state = Object.assign(S.defaultState(data), partial);
   const view = S.computeView(data, state);
+  const passesFilters = [];
+  view.passesFilters.forEach((v, i) => { if (v) passesFilters.push(i); });
   return {
     highlighted: view.highlighted,
+    matched: view.matched,
     visibleCount: view.visibleCount,
+    passingCount: view.passingCount,
+    passesFilters,
+    hasSelection: view.hasSelection,
+    hasPersonSelection: view.hasPersonSelection,
     altGames: Array.from(view.altGames).sort((a, b) => a - b),
     symbols: Object.fromEntries(Array.from(view.symbols.entries())),
+    seasonCounts: view.seasonCounts,
+    summary: view.summary,
   };
+}
+"""
+
+_FORMAT_JS = """
+async ([fnName, i]) => {
+  const D = await import('./modules/data.js');
+  const F = await import('./modules/format.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  return F[fnName](data, i);
+}
+"""
+
+_FBS_CONFERENCES_JS = """
+async () => {
+  const D = await import('./modules/data.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  return data.fbsConferences;
+}
+"""
+
+_TOGGLE_FAMILY_JS = """
+async (family) => {
+  const D = await import('./modules/data.js');
+  const S = await import('./modules/select.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  const state = S.defaultState(data);
+  const once = S.toggleFamilyNetworks(data, state, family);
+  const twice = S.toggleFamilyNetworks(data, { ...state, networks: once }, family);
+  const allIds = data.primaryNetworks.map((idx) => data.lookups.networks[idx].id).sort();
+  return { once, twiceIsAllIds: [...twice].sort().join(',') === allIds.join(',') };
 }
 """
 
@@ -139,28 +187,176 @@ def test_multi_person_or_default_and_together_mode_and_compare_symbols(
     }
 
 
-def test_team_highlight_and_person_intersection(guarded_page: Page, site_url: str) -> None:
-    """D-05: a team selection highlights every one of its games; combined
-    with a person, the highlight is their intersection."""
+def test_school_filter_fades_not_highlights(guarded_page: Page, site_url: str) -> None:
+    """D-11: School is a multi-select, OR-within fade filter, not a
+    highlight -- it fills the matched-games table on its own (D-12) but
+    never highlights a dot."""
     _load(guarded_page, site_url)
-    assert _highlighted(guarded_page, {"team": "northfield"}) == [0, 4, 8]
-    assert _highlighted(guarded_page, {"team": "northfield", "people": ["casey-lund"]}) == [4]
+    view = _view(guarded_page, {"school": ["northfield"]})
+    assert view["passesFilters"] == [0, 4, 8]
+    assert view["highlighted"] == []
+    assert view["matched"] == [0, 4, 8]
+    assert view["hasSelection"] is True
+    assert view["hasPersonSelection"] is False
+
+    or_view = _view(guarded_page, {"school": ["northfield", "maplecrest"]})
+    assert or_view["passesFilters"] == [0, 3, 4, 7, 8, 11]
 
 
-def test_hide_filters_remove_dots_and_shrink_visible_count(
+def test_school_and_person_combine_highlight_within_school(
     guarded_page: Page, site_url: str
 ) -> None:
-    """D-05: season/network/slot filters hide dots (reduce visibleCount and
-    intersect with highlighting); they never widen a person's own matches."""
+    """D-11: person highlighting still stacks on top of a School fade
+    filter -- highlighted is that person's games within the school's
+    passing set, and matched mirrors highlighted whenever a person is
+    selected (D-12)."""
     _load(guarded_page, site_url)
-    net_view = _view(guarded_page, {"networks": ["net-a"], "people": ["dale-harlow"]})
-    assert net_view["visibleCount"] == 3
-    assert net_view["highlighted"] == [0, 8]
+    view = _view(guarded_page, {"school": ["northfield"], "people": ["casey-lund"]})
+    assert view["highlighted"] == [4]
+    assert view["matched"] == view["highlighted"]
 
-    slot_view = _view(guarded_page, {"slots": ["prime"]})
-    assert slot_view["visibleCount"] == 4
 
-    assert _highlighted(guarded_page, {"seasons": [2025, 2026], "people": ["dale-harlow"]}) == [8]
+def test_season_range_is_the_only_filter_that_removes_dots(
+    guarded_page: Page, site_url: str
+) -> None:
+    """D-13: the season range shrinks visibleCount; every other filter
+    leaves visibleCount at 12 and only narrows passesFilters, never
+    removing a dot."""
+    _load(guarded_page, site_url)
+    season_view = _view(guarded_page, {"seasons": [2025, 2025]})
+    assert season_view["visibleCount"] == 4
+
+    net_view = _view(guarded_page, {"networks": ["net-a"]})
+    assert net_view["visibleCount"] == 12
+    assert net_view["passesFilters"] == [0, 4, 8]
+
+
+def test_conference_filter_or_within_era_correct_membership(
+    guarded_page: Page, site_url: str
+) -> None:
+    """D-09/D-10: Northfield was Pac-12 in 2019 and Big Ten from 2025 --
+    the fixture's own era-correct membership test case -- and the
+    Conference filter is OR within a multi-select."""
+    _load(guarded_page, site_url)
+    assert _view(guarded_page, {"conferences": ["Big Ten"]})["passesFilters"] == [1, 4, 5, 8]
+    assert _view(guarded_page, {"conferences": ["Pac-12"]})["passesFilters"] == [0]
+    assert _view(guarded_page, {"conferences": ["Big Ten", "Pac-12"]})["passesFilters"] == [
+        0,
+        1,
+        4,
+        5,
+        8,
+    ]
+
+
+def test_fcs_conference_never_listed(guarded_page: Page, site_url: str) -> None:
+    """D-10: fbsConferences holds only FBS conferences (plus FBS
+    Independents); the fixture's Missouri Valley (is_fbs false) is left
+    out, and the list is alphabetical."""
+    _load(guarded_page, site_url)
+    fbs_conferences = guarded_page.evaluate(_FBS_CONFERENCES_JS)
+    assert "Missouri Valley" not in fbs_conferences
+    assert fbs_conferences == sorted(fbs_conferences)
+    assert "Big Ten" in fbs_conferences
+    assert "FBS Independents" in fbs_conferences
+
+
+def test_postseason_exclude_and_only(guarded_page: Page, site_url: str) -> None:
+    """D-17/D-18: the three-way Bowls/Playoffs control is backed by
+    game_type; excluded games fade, per D-13."""
+    _load(guarded_page, site_url)
+    excluded = _view(guarded_page, {"postseason": "exclude"})["passesFilters"]
+    assert excluded == [i for i in range(12) if i not in (5, 7)]
+    assert _view(guarded_page, {"postseason": "only"})["passesFilters"] == [5, 7]
+
+
+def test_filter_wins_over_person_highlight(guarded_page: Page, site_url: str) -> None:
+    """D-14: pat-rowan calls the playoff game at index 5, but it fails the
+    postseason=exclude fade filter and is absent from highlighted -- the
+    filter wins."""
+    _load(guarded_page, site_url)
+    view = _view(guarded_page, {"people": ["pat-rowan"], "postseason": "exclude"})
+    assert view["highlighted"] == [2, 10]
+    assert 5 not in view["highlighted"]
+
+
+def test_matched_fills_on_school_alone_not_other_filters(
+    guarded_page: Page, site_url: str
+) -> None:
+    """D-12: the matched-games table fills when School is set even with no
+    person selected; Conference/Networks/Kickoff/Bowls-Playoffs alone never
+    fill it (no-bulk rule)."""
+    _load(guarded_page, site_url)
+    assert _view(guarded_page, {"school": ["northfield"]})["matched"] == [0, 4, 8]
+    assert _view(guarded_page, {"conferences": ["Big Ten"]})["matched"] == []
+    assert _view(guarded_page, {"networks": ["net-a"]})["matched"] == []
+    assert _view(guarded_page, {"postseason": "only"})["matched"] == []
+
+
+def test_role_never_fades_only_limits_person_matching(
+    guarded_page: Page, site_url: str
+) -> None:
+    """D-13: Role stays what it is today -- it limits how a person matches,
+    never which dots pass the fade filters, with or without a person
+    selected."""
+    _load(guarded_page, site_url)
+    unfiltered = _view(guarded_page, {})["passesFilters"]
+    assert _view(guarded_page, {"role": "analyst"})["passesFilters"] == unfiltered
+
+
+def test_season_counts_use_fade_filters_and_ignore_season_range(
+    guarded_page: Page, site_url: str
+) -> None:
+    """Per-season counts count only dots passing the fade filters, and the
+    season range itself never changes them."""
+    _load(guarded_page, site_url)
+    net_counts = dict(_view(guarded_page, {"networks": ["net-a"]})["seasonCounts"])
+    assert net_counts == {2019: 1, 2021: 0, 2025: 1, 2026: 1}
+
+    unfiltered_counts = _view(guarded_page, {})["seasonCounts"]
+    ranged_counts = _view(guarded_page, {"seasons": [2025, 2025]})["seasonCounts"]
+    assert unfiltered_counts == ranged_counts
+
+
+def test_shows_time_slot_gates_on_game_type_and_saturday(
+    guarded_page: Page, site_url: str
+) -> None:
+    """D-19: the time-slot label shows only for a regular-season Saturday
+    game, via one shared helper -- never a Saturday bowl/playoff game or a
+    non-Saturday game, and never with no recorded slot."""
+    _load(guarded_page, site_url)
+    assert guarded_page.evaluate(_FORMAT_JS, ["showsTimeSlot", 0]) is True
+    assert guarded_page.evaluate(_FORMAT_JS, ["showsTimeSlot", 7]) is False
+    assert guarded_page.evaluate(_FORMAT_JS, ["showsTimeSlot", 5]) is False
+    assert guarded_page.evaluate(_FORMAT_JS, ["showsTimeSlot", 3]) is False
+
+
+def test_game_type_label(guarded_page: Page, site_url: str) -> None:
+    """D-17: the panel's game-type label distinguishes a CFP round from a
+    plain bowl, and is omitted (null) for a regular-season game."""
+    _load(guarded_page, site_url)
+    assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeLabel", 5]) == "CFP semifinal"
+    assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeLabel", 7]) == "Bowl"
+    assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeLabel", 0]) is None
+
+
+def test_conference_line_is_away_first(guarded_page: Page, site_url: str) -> None:
+    """D-09: the panel's conference row reads away vs. home, matching
+    formatMatchup's "Away at Home" order (amended 2026-09-28)."""
+    _load(guarded_page, site_url)
+    assert guarded_page.evaluate(_FORMAT_JS, ["conferenceLine", 0]) == "SEC vs Pac-12"
+
+
+def test_toggle_family_networks_matches_legend_click_semantics(
+    guarded_page: Page, site_url: str
+) -> None:
+    """D-16: toggleFamilyNetworks reproduces the app's legend-click handling
+    exactly, so a legend chip and the Networks filter checklist always
+    agree."""
+    _load(guarded_page, site_url)
+    result = guarded_page.evaluate(_TOGGLE_FAMILY_JS, "fox")
+    assert sorted(result["once"]) == ["net-a", "net-c", "net-d"]
+    assert result["twiceIsAllIds"] is True
 
 
 def test_search_people_matches_name_and_variant(guarded_page: Page, site_url: str) -> None:
