@@ -5,6 +5,7 @@ schemas), exercising every documented behavior deterministically.
 
 from __future__ import annotations
 
+import ast
 import json
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -617,10 +618,48 @@ def test_written_file_never_contains_the_cfbd_key(
     assert "fake-test-key-should-never-appear" not in text
 
 
-def test_site_data_module_never_imports_load_cfbd_key() -> None:
-    build_dir = Path("src/booth_review/build")
-    for path in build_dir.glob("*.py"):
-        assert "load_cfbd_key" not in path.read_text(encoding="utf-8"), path
+# build/site_assembly.py is the one deliberate exception (T-04-13/SITE-19):
+# its key-leak guard needs the key to grep the assembled dist/site output,
+# covered by tests/test_cli_site.py's key-leak tests.
+_KEY_READER_ALLOWLIST = {"site_assembly.py": "check_no_key_leak"}
+
+
+def test_no_build_module_reads_the_cfbd_key() -> None:
+    """WR-10: no module anywhere under build/ (current or future) may read
+    the CFBD key, except the allowlisted key-leak guard."""
+    offenders = [
+        path.relative_to("src/booth_review/build").as_posix()
+        for path in sorted(Path("src/booth_review/build").rglob("*.py"))
+        if path.name not in _KEY_READER_ALLOWLIST
+        and "load_cfbd_key" in path.read_text(encoding="utf-8")
+    ]
+    assert offenders == []
+
+
+def test_site_assembly_reads_the_key_only_inside_its_leak_guard() -> None:
+    """WR-10: the allowlisted module calls `load_cfbd_key` only from its
+    guard function, never anywhere else in the module."""
+    tree = ast.parse(Path("src/booth_review/build/site_assembly.py").read_text(encoding="utf-8"))
+    callers: set[str] = set()
+    for func in ast.walk(tree):
+        if not isinstance(func, ast.FunctionDef):
+            continue
+        for node in ast.walk(func):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "load_cfbd_key"
+            ):
+                callers.add(func.name)
+    all_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "load_cfbd_key"
+    ]
+    assert callers == {_KEY_READER_ALLOWLIST["site_assembly.py"]}
+    assert len(all_calls) == 1
 
 
 # -- CR-02: a plotted row with no usable headline value fails cleanly --------------------------

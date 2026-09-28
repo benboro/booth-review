@@ -1,2 +1,7 @@
 # Force LF everywhere (recommended for cross-platform teams)
 * text=auto eol=lf
+
+# Vendored third-party bundle: bytes must never be normalized, since its
+# SHA-256 is pinned (site/vendor/plotly-gl2d-4.1.1.min.js.sha256) and tested
+# in tests/test_site_vendor.py.
+site/vendor/*.js -text linguist-vendored

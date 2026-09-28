@@ -18,15 +18,15 @@
       { "name": "Maplecrest" }
     ],
     "networks": [
-      { "id": "net-a", "name": "Alpha Sports", "family": "alpha" },
-      { "id": "net-b", "name": "Beta Network", "family": "beta" },
+      { "id": "net-a", "name": "Alpha Sports", "family": "disney" },
+      { "id": "net-b", "name": "Beta Network", "family": "fox" },
       { "id": "net-c", "name": "Conference Network", "family": "conference" },
       { "id": "net-d", "name": "Other Network", "family": "other" }
     ],
     "people": [
       { "id": "dale-harlow", "name": "Dale Harlow", "variants": ["Dale Harlow"], "usual_role": "pbp" },
       { "id": "dale-harlow-jr", "name": "Dale Harlow Jr.", "variants": ["Dale Harlow Jr."], "usual_role": "analyst" },
-      { "id": "kris-venn", "name": "Kris Venn", "variants": ["Kris Venn"], "usual_role": "pbp" },
+      { "id": "kris-venn", "name": "Kris Venn", "variants": ["Kris Venn", "Kristopher Venn"], "usual_role": "pbp" },
       { "id": "jax-venn", "name": "Jax Venn", "variants": ["Jax Venn"], "usual_role": "analyst" },
       { "id": "pat-rowan", "name": "Pat Rowan", "variants": ["Pat Rowan"], "usual_role": "pbp" },
       { "id": "sam-delgado", "name": "Sam Delgado", "variants": ["Sam Delgado"], "usual_role": "analyst" },

@@ -18,3 +18,17 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run mypy src
       - run: uv run pytest
+      # The site's CFBD key-leak guard only greps when a key is configured.
+      # CI holds no real key (and never gets one as a secret), so this step
+      # sets a synthetic canary instead: any build path that read the
+      # configured key into dist/site would embed the canary and fail the
+      # build, and the grep below fails the step if the guard was skipped.
+      - name: Site build key-leak guard (synthetic canary key)
+        env:
+          CFBD_API_KEY: ci-canary-not-a-real-cfbd-key
+        run: |
+          out="$(uv run booth-review site --fixture --out dist/site)"
+          printf '%s\n' "$out"
+          printf '%s\n' "$out" | grep -qx 'cfbd key check: passed'
+      - run: uv run playwright install --with-deps chromium
+      - run: uv run pytest -m e2e

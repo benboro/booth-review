@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="description" content="An interactive scatter of rated college football broadcasts by network, announcer, and matchup quality.">
+<meta name="site-data-version" content="__SITE_DATA_VERSION__">
+<title>booth-review · college football broadcast crews and viewership</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="app">
+<noscript>
+  <p>The chart needs JavaScript. The methodology and coverage pages work without it: <a href="methodology.html">Methodology</a>, <a href="coverage.html">Coverage</a>.</p>
+</noscript>
+
+<header id="topbar">
+  <a href="index.html" class="site-title">booth-review</a>
+
+  <div class="search-field">
+    <label for="person-search" class="visually-hidden">Search announcers</label>
+    <input type="text" id="person-search" role="combobox" aria-controls="person-results" aria-expanded="false" aria-autocomplete="list" placeholder="Search announcers — try &quot;Gus Johnson&quot;" autocomplete="off">
+    <ul id="person-results" role="listbox" hidden></ul>
+  </div>
+
+  <ul id="chips" aria-label="Selected people"></ul>
+
+  <div class="toggle-group">
+    <button type="button" id="compare-toggle" class="toggle" aria-pressed="false">Compare people</button>
+    <p id="compare-help" class="helper">Compare up to 4 people — each gets its own shape.</p>
+    <button type="button" id="together-toggle" class="toggle" aria-pressed="false">Called together</button>
+    <p id="together-help" class="helper">Show only games where everyone selected shared the booth.</p>
+    <button type="button" id="clear-selection">Clear selection</button>
+  </div>
+
+  <p id="compare-note" hidden>Compare mode holds up to 4 people.</p>
+
+  <div id="summary" aria-live="polite">
+    <span id="summary-count" class="summary-count"></span>
+    <span id="summary-detail"></span>
+  </div>
+
+  <button type="button" id="filters-button" class="mobile-only">Filters</button>
+</header>
+
+<aside id="rail" aria-label="Filters">
+  <div class="rail-header">
+    <h2>Filters</h2>
+    <button type="button" id="clear-filters">Clear all filters</button>
+    <button type="button" id="rail-toggle" aria-expanded="true" aria-controls="rail-body">▾</button>
+    <button type="button" id="rail-close" class="mobile-only" aria-label="Close filters">×</button>
+  </div>
+  <div id="rail-body">
+    <section id="filter-seasons">
+      <h3>Seasons</h3>
+      <label for="season-from">From</label>
+      <select id="season-from"></select>
+      <label for="season-to">To</label>
+      <select id="season-to"></select>
+      <details id="season-counts-details">
+        <summary>Games per season</summary>
+        <ul id="season-counts"></ul>
+      </details>
+    </section>
+
+    <section id="filter-networks">
+      <h3>Networks</h3>
+    </section>
+
+    <section id="filter-slots">
+      <h3>Kickoff time</h3>
+      <label><input type="checkbox" name="slot" value="noon"> Noon (before 2 PM ET)</label>
+      <label><input type="checkbox" name="slot" value="afternoon"> Afternoon (2–6 PM ET)</label>
+      <label><input type="checkbox" name="slot" value="prime"> Prime time (6 PM ET or later)</label>
+    </section>
+
+    <section id="filter-role">
+      <h3>Role</h3>
+      <label><input type="checkbox" name="role" value="pbp"> Play-by-play</label>
+      <label><input type="checkbox" name="role" value="analyst"> Analyst</label>
+    </section>
+
+    <section id="filter-team">
+      <h3>Highlight a team</h3>
+      <label for="team-search">Highlight a team</label>
+      <input type="text" id="team-search" role="combobox" aria-controls="team-results" aria-expanded="false" aria-autocomplete="list" placeholder="Search teams" autocomplete="off">
+      <ul id="team-results" role="listbox" hidden></ul>
+      <span id="team-chip"></span>
+    </section>
+  </div>
+</aside>
+
+<main id="chart-area">
+  <div id="axis-toggle" class="segmented" role="group" aria-label="X-axis">
+    <button type="button" data-axis="pregame" aria-pressed="true">Pre-game (spread)</button>
+    <button type="button" data-axis="excitement" aria-pressed="false">Excitement (CFBD)</button>
+  </div>
+
+  <div id="chart"></div>
+
+  <ul id="shape-legend" hidden></ul>
+
+  <p id="excitement-caption" class="caption" hidden>2025+ excitement uses CFBD's new win-probability model; see <a href="methodology.html#the-2025-excitement-break">methodology</a>.</p>
+
+  <p id="era-note" class="caption">Nielsen changed how it measures viewing in 2020, 2025, and 2026, so compare seasons with care; see <a href="methodology.html#measurement-eras">methodology</a>.</p>
+
+  <div id="load-error" class="error-banner" role="alert" hidden>
+    <p>Couldn't load the site data.</p>
+    <p>Check your connection and reload the page. If this keeps happening, the data file may have moved — try the site's homepage.</p>
+  </div>
+</main>
+
+<section id="matched-games">
+  <h2>Matched games</h2>
+
+  <div id="table-empty" class="empty-state">
+    <h3>Nothing selected</h3>
+    <p>Select an announcer or team above to see their games here.</p>
+    <p>Try the search box, or highlight a team from the filters.</p>
+  </div>
+
+  <table id="games-table" class="games-table" hidden>
+    <thead>
+      <tr>
+        <th scope="col"><button type="button" data-sort="date" aria-sort="none">Date <span class="sort-glyph"></span></button></th>
+        <th scope="col">Matchup</th>
+        <th scope="col">Network</th>
+        <th scope="col">Crew</th>
+        <th scope="col"><button type="button" data-sort="viewers" aria-sort="none">Viewers <span class="sort-glyph"></span></button></th>
+        <th scope="col">Source</th>
+        <th scope="col">Details</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<aside id="detail-panel" class="drawer" role="dialog" aria-modal="false" aria-labelledby="panel-title" hidden>
+  <button type="button" id="panel-close" aria-label="Close details">×</button>
+  <h2 id="panel-title"></h2>
+  <div id="panel-body"></div>
+</aside>
+
+<footer id="site-footer" class="site-footer"><!-- booth-review:footer --></footer>
+
+<script src="vendor/plotly-gl2d-4.1.1.min.js" integrity="sha256-PbH4ylyQYma9arLu7vnjweP0XFhEUpZXw1Jewq18d+Q=" crossorigin="anonymous"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
