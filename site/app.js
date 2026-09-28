@@ -245,7 +245,15 @@ async function bootstrap() {
       setState,
       getView: () => ({
         visibleCount: lastView.visibleCount,
+        passingCount: lastView.passingCount,
+        passesFilters: Array.from(lastView.passesFilters).reduce((acc, v, i) => {
+          if (v) acc.push(i);
+          return acc;
+        }, []),
+        hasSelection: lastView.hasSelection,
+        hasPersonSelection: lastView.hasPersonSelection,
         highlighted: lastView.highlighted,
+        matched: lastView.matched,
         symbols: Object.fromEntries(lastView.symbols),
         altGames: [...lastView.altGames],
         seasonCounts: lastView.seasonCounts,

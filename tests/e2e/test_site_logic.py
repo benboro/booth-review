@@ -280,9 +280,7 @@ def test_filter_wins_over_person_highlight(guarded_page: Page, site_url: str) ->
     assert 5 not in view["highlighted"]
 
 
-def test_matched_fills_on_school_alone_not_other_filters(
-    guarded_page: Page, site_url: str
-) -> None:
+def test_matched_fills_on_school_alone_not_other_filters(guarded_page: Page, site_url: str) -> None:
     """D-12: the matched-games table fills when School is set even with no
     person selected; Conference/Networks/Kickoff/Bowls-Playoffs alone never
     fill it (no-bulk rule)."""
@@ -293,9 +291,7 @@ def test_matched_fills_on_school_alone_not_other_filters(
     assert _view(guarded_page, {"postseason": "only"})["matched"] == []
 
 
-def test_role_never_fades_only_limits_person_matching(
-    guarded_page: Page, site_url: str
-) -> None:
+def test_role_never_fades_only_limits_person_matching(guarded_page: Page, site_url: str) -> None:
     """D-13: Role stays what it is today -- it limits how a person matches,
     never which dots pass the fade filters, with or without a person
     selected."""
@@ -318,9 +314,7 @@ def test_season_counts_use_fade_filters_and_ignore_season_range(
     assert unfiltered_counts == ranged_counts
 
 
-def test_shows_time_slot_gates_on_game_type_and_saturday(
-    guarded_page: Page, site_url: str
-) -> None:
+def test_shows_time_slot_gates_on_game_type_and_saturday(guarded_page: Page, site_url: str) -> None:
     """D-19: the time-slot label shows only for a regular-season Saturday
     game, via one shared helper -- never a Saturday bowl/playoff game or a
     non-Saturday game, and never with no recorded slot."""
@@ -373,6 +367,7 @@ def test_search_people_matches_name_and_variant(guarded_page: Page, site_url: st
 
 def test_url_state_round_trips(guarded_page: Page, site_url: str) -> None:
     """SITE-12: the default state encodes to '', and a fully-populated state
+    -- including the new conferences/school/postseason params, no team --
     round-trips through encodeState/decodeState unchanged."""
     _load(guarded_page, site_url)
     assert guarded_page.evaluate(_ENCODE_DEFAULT_JS) == ""
@@ -382,7 +377,9 @@ def test_url_state_round_trips(guarded_page: Page, site_url: str) -> None:
         "compare": True,
         "together": True,
         "role": "analyst",
-        "team": "northfield",
+        "conferences": ["Big Ten", "Pac-12"],
+        "school": ["northfield", "lakeview"],
+        "postseason": "exclude",
         "seasons": [2021, 2025],
         "networks": ["net-a", "net-b"],
         "slots": ["noon", "prime"],
@@ -391,6 +388,107 @@ def test_url_state_round_trips(guarded_page: Page, site_url: str) -> None:
     round_trip = guarded_page.evaluate(_ROUND_TRIP_JS, full_state)
     assert round_trip["encoded"] != ""
     assert round_trip["decoded"] == round_trip["state"]
+    assert "team=" not in round_trip["encoded"]
+
+
+_CONFERENCES_ROUND_TRIP_JS = """
+async (partial) => {
+  const D = await import('./modules/data.js');
+  const S = await import('./modules/select.js');
+  const U = await import('./modules/url-state.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  const state = Object.assign(S.defaultState(data), partial);
+  const encoded = U.encodeState(state, data);
+  return { encoded, decoded: U.decodeState(encoded, data) };
+}
+"""
+
+
+def test_conferences_encode_in_fbs_conferences_order(guarded_page: Page, site_url: str) -> None:
+    """D-10: conferences encode/decode ordered by data.fbsConferences, not
+    selection order."""
+    _load(guarded_page, site_url)
+    result = guarded_page.evaluate(
+        _CONFERENCES_ROUND_TRIP_JS, {"conferences": ["Pac-12", "Big Ten"]}
+    )
+    assert result["encoded"] == "?conferences=Big%20Ten,Pac-12"
+    assert result["decoded"]["conferences"] == ["Big Ten", "Pac-12"]
+
+
+def test_school_encodes_in_team_index_order(guarded_page: Page, site_url: str) -> None:
+    """D-11: school encodes/decodes ordered by team index."""
+    _load(guarded_page, site_url)
+    result = guarded_page.evaluate(
+        _CONFERENCES_ROUND_TRIP_JS, {"school": ["lakeview", "northfield"]}
+    )
+    assert result["encoded"] == "?school=northfield,lakeview"
+    assert result["decoded"]["school"] == ["northfield", "lakeview"]
+
+
+_DECODE_SEARCH_JS = """
+async (search) => {
+  const D = await import('./modules/data.js');
+  const U = await import('./modules/url-state.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  return U.decodeState(search, data);
+}
+"""
+
+
+def test_decode_conferences_reorders_to_fbs_conferences_order(
+    guarded_page: Page, site_url: str
+) -> None:
+    """D-10: a raw conferences value in any order reorders to fbsConferences
+    order on decode, and `+` reads as a space (form encoding)."""
+    _load(guarded_page, site_url)
+    decoded = guarded_page.evaluate(_DECODE_SEARCH_JS, "?conferences=SEC,Big+Ten")
+    assert decoded["conferences"] == ["Big Ten", "SEC"]
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        ("?conferences=Missouri%20Valley", []),
+        ("?conferences=%", []),
+        ("?school=../x", []),
+    ],
+)
+def test_decode_conferences_and_school_never_throw_on_bad_input(
+    guarded_page: Page, open_app: Any, query: str, expected: list[str]
+) -> None:
+    """T-04.1-05: an FCS conference, a malformed escape, and a path-shaped
+    school value all decode to an empty list rather than throwing or
+    matching anything."""
+    open_app(guarded_page, query)
+    state = guarded_page.evaluate("window.__testHooks.getState()")
+    key = "conferences" if "conferences" in query else "school"
+    assert state[key] == expected
+
+
+def test_legacy_team_link_migrates_to_school_fade_not_highlight(
+    guarded_page: Page, open_app: Any
+) -> None:
+    """Pitfall 4: an old `?team=<slug>` link decodes into a one-element
+    school selection -- fading other games, never highlighting -- through
+    the identical path a fresh School selection takes."""
+    open_app(guarded_page, "?team=northfield")
+    state = guarded_page.evaluate("window.__testHooks.getState()")
+    assert state["school"] == ["northfield"]
+    view = guarded_page.evaluate("window.__testHooks.getView()")
+    assert view["highlighted"] == []
+    assert view["matched"] == [0, 4, 8]
+
+
+def test_legacy_team_unions_with_a_fresh_school_param_legacy_first(
+    guarded_page: Page, open_app: Any
+) -> None:
+    """Pitfall 4: `?team=northfield&school=lakeview` unions both into
+    school, legacy first."""
+    open_app(guarded_page, "?team=northfield&school=lakeview")
+    state = guarded_page.evaluate("window.__testHooks.getState()")
+    assert state["school"] == ["northfield", "lakeview"]
 
 
 _COMMA_ID_ROUND_TRIP_JS = """
@@ -415,18 +513,23 @@ async () => {
         "?networks=%E0%A4%A",
         "?seasons=%&slot=%&mode=%&role=%&axis=%",
         "?%=x&people=dale-harlow,%25",
+        "?conferences=%",
+        "?conferences=Missouri%20Valley",
+        "?school=../x",
+        "?postseason=%3Cscript%3E",
+        "?team=nope&school=%",
     ],
 )
 def test_crafted_url_never_breaks_the_app(guarded_page: Page, open_app: Any, query: str) -> None:
-    """CR-01: a malformed percent-escape in any param drops just that value;
-    the app still boots (no URIError from a second decode), and a valid id
-    next to a malformed one is kept."""
+    """CR-01/T-04.1-05: a malformed percent-escape in any param drops just
+    that value; the app still boots (no URIError from a second decode), and
+    a valid id next to a malformed one is kept."""
     open_app(guarded_page, query)
     assert guarded_page.evaluate("window.__testHooks.failed") is None
     assert guarded_page.locator("#load-error").is_hidden()
     state = guarded_page.evaluate("window.__testHooks.getState()")
     assert state["people"] == (["dale-harlow"] if "dale-harlow" in query else [])
-    assert state["team"] is None
+    assert state["school"] == []
 
 
 def test_url_state_keeps_a_comma_inside_an_id(guarded_page: Page, site_url: str) -> None:

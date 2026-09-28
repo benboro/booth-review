@@ -10,6 +10,16 @@
  * first, then percent-decodes each piece exactly once. So an id holding a
  * comma (`%2C`) is never split in two, and a malformed escape (e.g. a lone
  * `%`) just drops that one value instead of throwing `URIError`.
+ *
+ * Params (SITE-12, D-09..D-19): `people`, `mode`, `role`, `conferences`
+ * (comma-separated names, ordered/filtered by `data.fbsConferences`),
+ * `school` (comma-separated team slugs, ordered by team index), `postseason`
+ * (`exclude`/`only`; omitted at the default `all`), `seasons`, `networks`,
+ * `slot`, `axis`. There is no `team` param on encode -- `school` replaces
+ * it (D-11, Pitfall 4). The legacy `team` param is still *decoded*: a valid
+ * slug is unioned into `school` (legacy first) through the exact same path
+ * a fresh `school` value takes, so an old shared link fades rather than
+ * highlights, matching a School-filter selection made through the UI.
  */
 
 import { MAX_COMPARE, defaultState } from './select.js';
@@ -47,7 +57,17 @@ export function encodeState(state, data) {
 
   if (state.role != null) params.push(['role', state.role]);
 
-  if (state.team != null) params.push(['team', encodeURIComponent(state.team)]);
+  if (state.conferences.length > 0) {
+    const ordered = data.fbsConferences.filter((name) => state.conferences.includes(name));
+    params.push(['conferences', ordered.map(encodeURIComponent).join(',')]);
+  }
+
+  if (state.school.length > 0) {
+    const ordered = data.teamSlugs.filter((slug) => state.school.includes(slug));
+    params.push(['school', ordered.map(encodeURIComponent).join(',')]);
+  }
+
+  if (state.postseason !== 'all') params.push(['postseason', state.postseason]);
 
   if (
     state.seasons != null &&
@@ -194,6 +214,28 @@ function decodeSlots(raw) {
   return ordered.length > 0 ? ordered : null;
 }
 
+/** Decodes the `conferences` param (D-10): unknown/FCS names dropped, deduped, canonicalized to `data.fbsConferences` order. */
+function decodeConferences(raw, data) {
+  if (!raw) return [];
+  const names = [];
+  for (const piece of raw.split(',')) {
+    const name = safeDecode(piece);
+    if (name != null && data.fbsConferences.includes(name) && !names.includes(name)) names.push(name);
+  }
+  return data.fbsConferences.filter((name) => names.includes(name));
+}
+
+/** Decodes the `school` param (D-11): unknown slugs dropped, deduped, canonicalized to team-index order. */
+function decodeSchool(raw, data) {
+  if (!raw) return [];
+  const slugs = [];
+  for (const piece of raw.split(',')) {
+    const slug = safeDecode(piece);
+    if (slug != null && data.teamIndexBySlug.has(slug) && !slugs.includes(slug)) slugs.push(slug);
+  }
+  return data.teamSlugs.filter((slug) => slugs.includes(slug));
+}
+
 /**
  * Decodes a query string into a selection/filter state, validated against
  * `data`'s own lookups. Never throws on malformed input; unrecognized
@@ -221,8 +263,20 @@ export function decodeState(search, data) {
   const rawRole = scalarParam(params, 'role');
   state.role = rawRole === 'pbp' || rawRole === 'analyst' ? rawRole : null;
 
+  state.conferences = decodeConferences(params.get('conferences') ?? null, data);
+
+  // Legacy Phase 4 `?team=<slug>` link (Pitfall 4): a valid slug is unioned
+  // into `school` -- legacy first -- so it takes the exact same fade-filter
+  // path a fresh School selection does. There is no separate "highlight"
+  // code path for it; `state.team` no longer exists (D-11).
+  state.school = decodeSchool(params.get('school') ?? null, data);
   const teamSlug = scalarParam(params, 'team');
-  state.team = teamSlug != null && data.teamIndexBySlug.has(teamSlug) ? teamSlug : null;
+  if (teamSlug != null && data.teamIndexBySlug.has(teamSlug) && !state.school.includes(teamSlug)) {
+    state.school = [teamSlug, ...state.school];
+  }
+
+  const rawPostseason = scalarParam(params, 'postseason');
+  state.postseason = rawPostseason === 'exclude' || rawPostseason === 'only' ? rawPostseason : 'all';
 
   state.seasons = decodeSeasons(scalarParam(params, 'seasons'), data);
   state.networks = decodeNetworks(params.get('networks') ?? null, data);
