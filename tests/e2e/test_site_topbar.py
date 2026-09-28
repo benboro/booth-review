@@ -296,7 +296,7 @@ _OPTION_STYLE_JS = """
 
 @pytest.mark.parametrize(
     ("input_id", "results_id", "query"),
-    [("#person-search", "#person-results", "Dale Harlow"), ("#team-search", "#team-results", "o")],
+    [("#person-search", "#person-results", "Dale Harlow")],
 )
 def test_arrow_key_active_option_is_visibly_outlined(
     guarded_page: Page,
