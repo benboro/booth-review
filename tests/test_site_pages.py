@@ -176,3 +176,37 @@ def test_methodology_describes_the_slim_tooltip() -> None:
         "kickoff time, the networks, the crew, and the viewer count." in text
     )
     assert "Click or tap the dot to open its detail panel" in text
+
+
+_BLOB = "https://github.com/benboro/booth-review/blob/main/"
+
+
+@pytest.mark.parametrize(
+    ("href", "expected"),
+    [
+        ("known-gaps.md", "#known-gaps"),
+        ("known-gaps.md#scope", "#scope"),
+        ("sources/506.md", f"{_BLOB}docs/sources/506.md"),
+        ("PLAN.md#build-phases", f"{_BLOB}docs/PLAN.md#build-phases"),
+        ("../AGENTS.md", f"{_BLOB}AGENTS.md"),
+        ("/README.md", f"{_BLOB}README.md"),
+        ("https://example.com/README.md", "https://example.com/README.md"),
+        ("//example.com/notes.md", "//example.com/notes.md"),
+        ("../../outside.md", "../../outside.md"),
+    ],
+)
+def test_render_methodology_resolves_md_links_against_docs(
+    tmp_path: Path, href: str, expected: str
+) -> None:
+    """WR-08: relative `.md` links resolve against docs/ (subdirectories and
+    `..` kept, `#fragment` kept), known-gaps.md links become in-page anchors,
+    and absolute URLs or paths outside the repo are never rewritten."""
+    (tmp_path / "methodology.md").write_text(
+        f"# Methodology\n\nSee [the link]({href}).\n\n<!-- include: known-gaps.md -->\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "known-gaps.md").write_text("# Known Gaps\n\n## Scope\n\ntext\n", encoding="utf-8")
+
+    result = render_methodology(tmp_path, _fixture_site())
+
+    assert f'<a href="{expected}">the link</a>' in result

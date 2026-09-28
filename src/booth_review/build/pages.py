@@ -13,9 +13,11 @@ project. Output lives in `dist/site/` until Phase 5 deploys it.
 from __future__ import annotations
 
 import html
+import posixpath
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 
 import markdown
 
@@ -45,9 +47,9 @@ _CSP = (
 _INCLUDE_MARKER = "<!-- include: known-gaps.md -->"
 _ATX_HEADING_RE = re.compile(r"^(#{1,6})(\s.*)$")
 _FENCE_RE = re.compile(r"^```")
-_MD_HREF_RE = re.compile(r'href="([^"]+\.md)"')
+_MD_HREF_RE = re.compile(r'href="([^"#?]+\.md)(#[^"]*)?"')
 
-_GITHUB_DOCS_BASE = "https://github.com/benboro/booth-review/blob/main/docs/"
+_GITHUB_BLOB_BASE = "https://github.com/benboro/booth-review/blob/main/"
 _EN_DASH = "\N{EN DASH}"
 
 
@@ -149,18 +151,32 @@ def _known_gaps_body(text: str) -> str:
 
 
 def _rewrite_relative_md_links(rendered_html: str) -> str:
-    """`href="known-gaps.md"` becomes the in-page `#known-gaps` anchor
-    (its content is spliced in, not a separate page); any other relative
-    `.md` href points at this file's own GitHub blob, since no other
-    `docs/*.md` file is rendered into the site.
+    """Point the rendered methodology's relative `.md` links somewhere that
+    exists on the site (WR-08).
+
+    Each relative href is resolved against `docs/` (where methodology.md
+    lives), keeping any `#fragment`: `known-gaps.md` becomes an in-page
+    anchor (its content is spliced in, not a separate page) -- `#known-gaps`,
+    or the fragment itself for `known-gaps.md#x`; any other in-repo `.md`
+    file points at its own GitHub blob, subdirectories included
+    (`sources/506.md` -> `.../blob/main/docs/sources/506.md`). Absolute URLs
+    (any scheme or host) and paths that climb out of the repo are left
+    untouched.
     """
 
     def _replace(match: re.Match[str]) -> str:
-        href = match.group(1)
-        if href == "known-gaps.md":
-            return 'href="#known-gaps"'
-        name = href.rsplit("/", 1)[-1]
-        return f'href="{_GITHUB_DOCS_BASE}{name}"'
+        href, fragment = match.group(1), match.group(2) or ""
+        parts = urlsplit(href)
+        if parts.scheme or parts.netloc:
+            return match.group(0)
+        repo_path = posixpath.normpath(
+            href.lstrip("/") if href.startswith("/") else posixpath.join("docs", href)
+        )
+        if repo_path == ".." or repo_path.startswith("../"):
+            return match.group(0)
+        if repo_path == "docs/known-gaps.md":
+            return f'href="{fragment or "#known-gaps"}"'
+        return f'href="{_GITHUB_BLOB_BASE}{repo_path}{fragment}"'
 
     return _MD_HREF_RE.sub(_replace, rendered_html)
 
