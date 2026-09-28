@@ -9,6 +9,13 @@ way. Every assertion below carries only counts: no person name, id, team
 name, or row ever appears in an assertion message, a print, or a test id
 (AGENTS.md: the vault is private and never goes into fixtures, logs, or
 commit messages; T-04-38 in this plan's own threat register).
+
+Every `assert` compares plain local ints/bools only, computed on an earlier
+line (WR-09): pytest's assertion rewriting prints the repr of every
+sub-expression on failure (`where 3 = len([{'id': ..., 'name': ...}])`), so
+an assert that calls `len(people)` or reads `page.url` inline would dump
+vault records into the test log. `tests/test_realdata_assert_hygiene.py`
+enforces this.
 """
 
 from __future__ import annotations
@@ -160,18 +167,20 @@ def test_real_every_person_highlights_exactly_their_games(
     promise over all people, reported as counts only."""
     real_open_app(real_guarded_page, "")
     expected_sets = _python_highlighted_sets(real_raw)
-    people = real_raw["lookups"]["people"]
-    assert len(expected_sets) == len(people)
+    n_people = len(real_raw["lookups"]["people"])
+    n_expected = len(expected_sets)
+    assert n_expected == n_people, "expected-set count differs from people count"
 
     actual: list[list[int]] = real_guarded_page.evaluate(_HIGHLIGHT_ALL_PEOPLE_JS)
-    assert len(actual) == len(people)
+    n_actual = len(actual)
+    assert n_actual == n_people, "browser result count differs from people count"
 
     mismatches = 0
     for expected_set, actual_list in zip(expected_sets, actual, strict=True):
         if sorted(expected_set) != actual_list:
             mismatches += 1
 
-    assert mismatches == 0, f"{mismatches} of {len(people)} people mismatched"
+    assert mismatches == 0, f"{mismatches} of {n_people} people mismatched"
 
 
 def test_real_default_url_is_clean(
@@ -179,4 +188,5 @@ def test_real_default_url_is_clean(
 ) -> None:
     """D-12: default load leaves no query string."""
     real_open_app(real_guarded_page, "")
-    assert "?" not in real_guarded_page.url
+    has_query = "?" in real_guarded_page.url
+    assert has_query is False, "default load left a query string"
