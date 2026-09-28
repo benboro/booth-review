@@ -23,14 +23,14 @@ class HostPolicy:
 
     min_interval_s: float
     jitter_s: float
-    retry_mode: Literal["standard", "connect_only"]
+    retry_mode: Literal["standard", "budgeted"]
 
 
 HOST_POLICIES: dict[str, HostPolicy] = {
     "506sports.com": HostPolicy(min_interval_s=10.0, jitter_s=0.0, retry_mode="standard"),
     "ratingsreference.com": HostPolicy(min_interval_s=2.0, jitter_s=1.0, retry_mode="standard"),
     "api.collegefootballdata.com": HostPolicy(
-        min_interval_s=1.0, jitter_s=0.0, retry_mode="connect_only"
+        min_interval_s=1.0, jitter_s=0.0, retry_mode="budgeted"
     ),
 }
 

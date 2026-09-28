@@ -352,3 +352,52 @@ def test_is_due_dropped_main_slot_is_still_caught_by_a_backup_slot() -> None:
     last = datetime(2026, 10, 1, 0, 5, tzinfo=UTC)
     state = _state_with_last_success(last)
     assert is_due(state, datetime(2026, 10, 4, 16, 0, tzinfo=UTC), "schedule") is True
+
+
+# -- retry_pending: a transient CFBD failure is retried at backup slots ----------------
+
+
+def test_is_due_retry_pending_makes_a_backup_slot_due() -> None:
+    # Sun 2026-10-04 10:00 ET main slot's CFBD step hit a 502; the backup
+    # slots that follow retry it instead of waiting for Wednesday.
+    state = JobState(
+        season=2026,
+        last_success_at=datetime(2026, 10, 1, 0, 5, tzinfo=UTC),
+        last_attempt_at=datetime(2026, 10, 4, 14, 5, tzinfo=UTC),
+        last_status="attention",
+        last_window_start=None,
+        retry_pending=True,
+    )
+    assert is_due(state, datetime(2026, 10, 4, 16, 0, tzinfo=UTC), "schedule") is True
+
+
+def test_load_state_without_retry_pending_defaults_false(tmp_path: Path) -> None:
+    # A state file written by v0.2.2, before the field existed.
+    path = tmp_path / "job_state.json"
+    path.write_text(
+        '{"version": 1, "season": 2026, "last_status": "attention", '
+        '"last_attempt_at": "2026-09-27T18:01:39Z"}',
+        encoding="utf-8",
+    )
+    assert load_state(path).retry_pending is False
+
+
+def test_load_state_bad_retry_pending_raises(tmp_path: Path) -> None:
+    path = tmp_path / "job_state.json"
+    path.write_text('{"retry_pending": "yes"}', encoding="utf-8")
+    with pytest.raises(VaultStateError):
+        load_state(path)
+
+
+def test_save_state_round_trips_retry_pending(tmp_path: Path) -> None:
+    path = tmp_path / "job_state.json"
+    state = JobState(
+        season=2026,
+        last_success_at=None,
+        last_attempt_at=datetime(2026, 10, 4, 14, 5, tzinfo=UTC),
+        last_status="attention",
+        last_window_start=None,
+        retry_pending=True,
+    )
+    save_state(path, state)
+    assert load_state(path) == state

@@ -7,6 +7,7 @@ from collections.abc import Callable
 
 import httpx2
 import pytest
+import stamina
 
 from booth_review.config import USER_AGENT
 from booth_review.errors import (
@@ -336,26 +337,75 @@ def test_ratingsref_retries_503_503_200() -> None:
     assert call_count["n"] == 3
 
 
-def test_cfbd_no_retry_on_503() -> None:
-    log: list[httpx2.Request] = []
-    call_count = {"n": 0}
+def _cfbd_status_handler(statuses: list[int], call_count: dict[str, int]) -> Handler:
+    """Serve CFBD robots as allow-all, then `statuses` in order for /games
+    (repeating the last one), with a 200 once the list runs out."""
 
     def handler(request: httpx2.Request) -> httpx2.Response:
-        log.append(request)
         url = str(request.url)
         if url == "https://api.collegefootballdata.com/robots.txt":
             status, body, headers = ALLOW_ALL_ROBOTS
             return httpx2.Response(status, content=body, headers=headers, request=request)
         if url == "https://api.collegefootballdata.com/games?year=2025":
+            n = call_count["n"]
             call_count["n"] += 1
-            return httpx2.Response(503, content=b"busy", request=request)
+            status = statuses[min(n, len(statuses) - 1)]
+            return httpx2.Response(status, content=b"[]", request=request)
         raise AssertionError(f"unexpected url {url}")
 
-    client = _client(handler)
+    return handler
+
+
+@pytest.mark.parametrize("gateway_status", [502, 503])
+def test_cfbd_retries_gateway_status_then_succeeds(gateway_status: int) -> None:
+    call_count = {"n": 0}
+    client = _client(_cfbd_status_handler([gateway_status, gateway_status, 200], call_count))
 
     resp = client.fetch("https://api.collegefootballdata.com/games?year=2025")
 
-    assert resp.status_code == 503
+    assert resp.status_code == 200
+    assert call_count["n"] == 3
+
+
+def test_cfbd_gateway_retries_stop_at_three_attempts_and_return_last_response() -> None:
+    call_count = {"n": 0}
+    client = _client(_cfbd_status_handler([502], call_count))
+
+    # cap=True keeps the client's own attempt count instead of the suite's
+    # testing-mode override, so this pins the real limit.
+    with stamina.set_testing(True, attempts=10, cap=True):
+        resp = client.fetch("https://api.collegefootballdata.com/games?year=2025")
+
+    assert resp.status_code == 502
+    assert call_count["n"] == 3
+
+
+@pytest.mark.parametrize("status", [500, 504, 429])
+def test_cfbd_no_retry_on_status_the_api_may_have_counted(status: int) -> None:
+    call_count = {"n": 0}
+    client = _client(_cfbd_status_handler([status, 200], call_count))
+
+    resp = client.fetch("https://api.collegefootballdata.com/games?year=2025")
+
+    assert resp.status_code == status
+    assert call_count["n"] == 1
+
+
+def test_cfbd_no_retry_on_read_timeout() -> None:
+    call_count = {"n": 0}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        url = str(request.url)
+        if url == "https://api.collegefootballdata.com/robots.txt":
+            status, body, headers = ALLOW_ALL_ROBOTS
+            return httpx2.Response(status, content=body, headers=headers, request=request)
+        call_count["n"] += 1
+        raise httpx2.ReadTimeout("slow", request=request)
+
+    client = _client(handler)
+
+    with pytest.raises(FetchError):
+        client.fetch("https://api.collegefootballdata.com/games?year=2025")
     assert call_count["n"] == 1
 
 
