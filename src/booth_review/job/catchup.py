@@ -72,6 +72,9 @@ class JobState:
     last_status: str | None
     """One of "ok", "attention", "failed", or None (never attempted)."""
     last_window_start: datetime | None
+    retry_pending: bool = False
+    """True when the last attempt's CFBD step hit a transient failure (a 5xx,
+    429, or network error), so the next backup slot retries it (`is_due`)."""
 
 
 _EMPTY_STATE = JobState(
@@ -106,12 +109,17 @@ def load_state(path: Path) -> JobState:
             f"invalid job state in {path}: last_status must be one of {sorted(_STATUSES)}"
         )
 
+    retry_pending = data.get("retry_pending", False)
+    if not isinstance(retry_pending, bool):
+        raise VaultStateError(f"invalid job state in {path}: retry_pending must be a bool")
+
     return JobState(
         season=season,
         last_success_at=_parse_dt(data, "last_success_at", path=path),
         last_attempt_at=_parse_dt(data, "last_attempt_at", path=path),
         last_status=last_status,
         last_window_start=_parse_dt(data, "last_window_start", path=path),
+        retry_pending=retry_pending,
     )
 
 
@@ -124,6 +132,7 @@ def save_state(path: Path, state: JobState) -> None:
         "last_attempt_at": _format_dt(state.last_attempt_at),
         "last_status": state.last_status,
         "last_window_start": _format_dt(state.last_window_start),
+        "retry_pending": state.retry_pending,
     }
     atomic_write_json(path, payload)
 
@@ -231,14 +240,18 @@ def is_due(state: JobState, now: datetime, trigger: Trigger) -> bool:
     collect, and the caller should exit as a cheap no-op (`EXIT_NOTHING_DUE`
     in job/runner.py) before any CFBD, RR, or vault write.
 
-    Measuring from the last attempt rather than the last success means each
-    main slot gets at most one scheduled attempt: the backup slots exist to
-    catch a *dropped* main slot, not to re-run a step that keeps failing
-    (which would re-send the full CFBD and RR refresh every two hours). A
-    failed attempt is retried at the next main slot, or by a manual run.
+    Measuring from the last attempt rather than the last success means a
+    main slot whose attempt failed for a lasting reason (a revoked key, the
+    budget floor) is retried at the next main slot, or by a manual run, not
+    at every backup slot. The exception is `state.retry_pending`: a CFBD
+    outage (a 5xx, 429, or network error) usually clears within hours, so
+    every backup slot retries until a run gets past it. A 2026-09-27 CFBD
+    502 otherwise left the week's data stale from Sunday to Wednesday.
     `last_success_at` still drives the missed-slot count.
     """
     if trigger == "manual":
+        return True
+    if state.retry_pending:
         return True
     since = state.last_attempt_at or state.last_success_at
     if since is None:

@@ -30,8 +30,10 @@ every run that gets as far as the state save, failed steps included), not
 the last success: each main slot gets at most one scheduled attempt, so a
 step that keeps failing is retried at the next main slot (or by a manual
 run, which is always due) instead of re-running the whole job at every
-backup slot. A run that stops with exit 3 before the state save records no
-attempt, so the next backup slot retries it.
+backup slot. The exception is a transient CFBD failure (a 5xx, 429, or network
+error, `_is_transient_cfbd_error`): the saved state's `retry_pending` makes
+every backup slot retry until a run gets past it. A run that stops with exit 3
+before the state save records no attempt, so the next backup slot retries it.
 """
 
 from __future__ import annotations
@@ -43,7 +45,13 @@ from typing import TypeVar
 
 from booth_review.audit.completeness import SOURCES
 from booth_review.config import CFBD_FLOOR_DEFAULT
-from booth_review.errors import ParseError, VaultCommitError, VaultStateError
+from booth_review.errors import (
+    FetchError,
+    ParseError,
+    RobotsUnavailableError,
+    VaultCommitError,
+    VaultStateError,
+)
 from booth_review.job.attention import (
     AttentionItem,
     cfbd_failed,
@@ -130,6 +138,19 @@ class JobRunResult:
     window: CatchupWindow | None
 
 
+def _is_transient_cfbd_error(exc: Exception) -> bool:
+    """Whether a CFBD step failure is an outage a later backup slot may clear:
+    a network error (FetchError with no status), a 5xx or 429 that survived
+    the client's own retries, or robots.txt answering 5xx. A 4xx, budget
+    refusal, or anything else is not, since retrying it changes nothing."""
+    if isinstance(exc, RobotsUnavailableError):
+        return True
+    if isinstance(exc, FetchError):
+        status = exc.status_code
+        return status is None or status >= 500 or status == 429
+    return False
+
+
 def _check_required_state(runtime: Runtime) -> None:
     paths = runtime.paths
     missing = [name for name in REQUIRED_LEDGER_FILES if not (paths.ledger / name).is_file()]
@@ -213,6 +234,7 @@ class ScheduledJob:
         items: list[AttentionItem] = []
         counts: dict[str, int] = {}
         any_failed = False
+        retry_pending = False
 
         try:
             if season is not None:
@@ -226,7 +248,7 @@ class ScheduledJob:
                 if cfbd_result is None:
                     any_failed = True
                 else:
-                    cfbd_failed, cfbd_counts = cfbd_result
+                    cfbd_failed, retry_pending, cfbd_counts = cfbd_result
                     any_failed = any_failed or cfbd_failed
                     counts.update({f"cfbd_{key}": value for key, value in cfbd_counts.items()})
 
@@ -284,6 +306,7 @@ class ScheduledJob:
                 last_attempt_at=now,
                 last_status=status,
                 last_window_start=window.start,
+                retry_pending=retry_pending,
             )
             try:
                 self._save_state(new_state, window, window_season, items)
@@ -338,12 +361,15 @@ class ScheduledJob:
 
     def _run_cfbd_step(
         self, season: int, items: list[AttentionItem]
-    ) -> tuple[bool, dict[str, int]]:
+    ) -> tuple[bool, bool, dict[str, int]]:
+        """Returns (failed, transient, counts); `transient` marks a failure
+        the next backup slot should retry (`_is_transient_cfbd_error`)."""
         assert self._runtime.budget is not None
         collector = CfbdCollector(self._runtime.cache, self._runtime.budget, self._token)
         before = dict(self._runtime.cache.counters)
         summaries: list[BatchSummary] = []
         failed = False
+        transient = False
 
         try:
             if not self._dry_run:
@@ -358,6 +384,7 @@ class ScheduledJob:
             raise
         except Exception as exc:
             failed = True
+            transient = _is_transient_cfbd_error(exc)
             items.append(cfbd_step_failed(error_type_name(exc)))
 
         # run_requests records a 4xx (other than 429) as failed and carries on
@@ -397,7 +424,7 @@ class ScheduledJob:
                     items.append(push_failed("cfbd"))
                     raise
 
-        return failed, counts
+        return failed, transient, counts
 
     # -- Ratings Reference refresh step ---------------------------------------
 
