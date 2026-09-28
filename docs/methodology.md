@@ -68,8 +68,9 @@ kept in this project's data but are not plotted as their own dots in v1.
 
 Kickoff time slots, used by the kickoff-time filter and shown in a Saturday
 game's detail panel, are defined as: **noon** (before 2:00 PM ET),
-**afternoon** (2:00 PM up to but not including 6:00 PM ET), and **prime**
-(6:00 PM ET or later).
+**afternoon** (2:00 PM up to but not including 6:00 PM ET), **prime time**
+(6:00 PM up to but not including 10:00 PM ET), and **after dark** (10:00 PM
+ET or later, including kickoffs after midnight).
 
 ## Measurement eras
 

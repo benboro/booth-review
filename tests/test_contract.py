@@ -35,6 +35,11 @@ def test_fixture_validates() -> None:
         assert len(getattr(site_data.telecasts, name)) == n, name
 
 
+def test_fixture_has_a_late_time_slot() -> None:
+    data = _load_fixture()
+    assert "late" in data["telecasts"]["time_slot"]
+
+
 def _add_unknown_top_level_key(data: dict[str, Any]) -> dict[str, Any]:
     data["unexpected_top_level_field"] = "nope"
     return data
@@ -119,6 +124,16 @@ def _schema_version_1_0_0(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _schema_version_1_1_0(data: dict[str, Any]) -> dict[str, Any]:
+    data["schema_version"] = "1.1.0"
+    return data
+
+
+def _time_slot_evening_not_in_enum(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["time_slot"][0] = "evening"
+    return data
+
+
 _BROKEN_VARIANTS = [
     pytest.param(_add_unknown_top_level_key, id="unknown-top-level-key"),
     pytest.param(_add_unknown_telecast_column, id="unknown-telecast-column"),
@@ -136,6 +151,8 @@ _BROKEN_VARIANTS = [
     pytest.param(_playoff_round_on_non_playoff_game, id="playoff-round-on-non-playoff-game"),
     pytest.param(_conference_entry_with_extra_key, id="conference-entry-with-extra-key"),
     pytest.param(_schema_version_1_0_0, id="schema-version-1-0-0"),
+    pytest.param(_schema_version_1_1_0, id="schema-version-1-1-0"),
+    pytest.param(_time_slot_evening_not_in_enum, id="time-slot-evening-not-in-enum"),
 ]
 
 

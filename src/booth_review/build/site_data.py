@@ -44,6 +44,8 @@ _MEASUREMENT_FLAG_LABEL = "Nielsen+Adobe"
 _COMBINED_FLAG_LABEL = "Combined across feeds"
 _NOON_HOUR = 14
 _PRIME_HOUR = 18
+_LATE_HOUR = 22
+_LATE_NIGHT_END_HOUR = 5
 
 
 def _as_int(value: object) -> int:
@@ -54,21 +56,31 @@ def _as_str_list(value: object) -> list[str]:
     return [str(item) for item in value] if isinstance(value, list) else []
 
 
-def time_slot(kickoff_et: str | None) -> Literal["noon", "afternoon", "prime"] | None:
+def time_slot(kickoff_et: str | None) -> Literal["noon", "afternoon", "prime", "late"] | None:
     """docs/site-data.md's time-slot boundaries, read off `kickoff_et`'s own
     ET wall-clock hour -- the string already carries the ET UTC offset, so no
-    timezone conversion happens here: before 14:00 is "noon", 14:00 up to
-    (not including) 18:00 is "afternoon", 18:00 or later is "prime"; a null
-    kickoff is a null time_slot.
+    timezone conversion happens here (D-20/D-26):
+
+    - **"late"** ("After dark") -- 00:00 up to (not including) 05:00 ET (a
+      kickoff after midnight, e.g. a Hawaii home game), OR 22:00 ET or later.
+    - **"noon"** -- 05:00 up to (not including) 14:00 ET.
+    - **"afternoon"** -- 14:00 up to (not including) 18:00 ET.
+    - **"prime"** -- 18:00 up to (not including) 22:00 ET.
+
+    A null kickoff is a null time_slot.
     """
     if kickoff_et is None:
         return None
     hour = datetime.fromisoformat(kickoff_et).hour
+    if hour < _LATE_NIGHT_END_HOUR:
+        return "late"
     if hour < _NOON_HOUR:
         return "noon"
     if hour < _PRIME_HOUR:
         return "afternoon"
-    return "prime"
+    if hour < _LATE_HOUR:
+        return "prime"
+    return "late"
 
 
 def _through_week(

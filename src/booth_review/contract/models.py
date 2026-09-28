@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-SCHEMA_VERSION = "1.1.0"
+SCHEMA_VERSION = "1.2.0"
 
 
 class TeamRef(BaseModel):
@@ -96,7 +96,7 @@ class TelecastColumns(BaseModel):
     season: list[int]
     date: list[str]
     kickoff: list[str | None]
-    time_slot: list[Literal["noon", "afternoon", "prime"] | None]
+    time_slot: list[Literal["noon", "afternoon", "prime", "late"] | None]
     away_team: list[int]
     home_team: list[int]
     neutral: list[bool]
@@ -143,7 +143,7 @@ class CoverageRow(BaseModel):
 class SiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["1.1.0"]
+    schema_version: Literal["1.2.0"]
     generated_at: str
     freshness: Freshness
     lookups: Lookups

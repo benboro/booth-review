@@ -671,7 +671,8 @@
                 "enum": [
                   "noon",
                   "afternoon",
-                  "prime"
+                  "prime",
+                  "late"
                 ],
                 "type": "string"
               },
@@ -725,7 +726,7 @@
       "type": "object"
     }
   },
-  "$id": "booth-review/site-data/1.1.0",
+  "$id": "booth-review/site-data/1.2.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -747,7 +748,7 @@
       "$ref": "#/$defs/Lookups"
     },
     "schema_version": {
-      "const": "1.1.0",
+      "const": "1.2.0",
       "title": "Schema Version",
       "type": "string"
     },

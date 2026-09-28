@@ -18,7 +18,7 @@ immediately, in parallel with Phase 3's real joins.
 `site-data.json` is **one versioned columnar JSON file** (D-13), not an array
 of per-telecast objects:
 
-- `schema_version` — the contract version (currently `"1.1.0"`). See
+- `schema_version` — the contract version (currently `"1.2.0"`). See
   Versioning below.
 - `generated_at` — ISO UTC timestamp of the build that produced the file.
 - `freshness` — `{ season, crews_through_week, viewership_through_week }`,
@@ -59,7 +59,7 @@ describes when the value is `null` instead of coerced to a placeholder like
 | `season` | int | never null | SITE-06 |
 | `date` | str, ET calendar date, `YYYY-MM-DD` | never null | SITE-04, SITE-06 |
 | `kickoff` | str \| null, ET ISO datetime with UTC offset | null when kickoff time is unknown | SITE-04 |
-| `time_slot` | `"noon"` \| `"afternoon"` \| `"prime"` \| null | null exactly when `kickoff` is null | SITE-11 |
+| `time_slot` | `"noon"` \| `"afternoon"` \| `"prime"` \| `"late"` \| null | null exactly when `kickoff` is null | SITE-11 |
 | `away_team` | int, index into `lookups.teams` | never null | SITE-01, SITE-09 |
 | `home_team` | int, index into `lookups.teams` | never null | SITE-01, SITE-09 |
 | `neutral` | bool | never null | SITE-04 |
@@ -87,11 +87,14 @@ describes when the value is `null` instead of coerced to a placeholder like
 
 ### `time_slot` boundaries
 
-`time_slot` is derived from `kickoff`'s ET local time:
+`time_slot` is derived from `kickoff`'s ET local time (D-20/D-26):
 
-- **`noon`** — kickoff before **14:00** ET.
+- **`noon`** — kickoff from **05:00** up to (but not including) **14:00** ET.
 - **`afternoon`** — kickoff from **14:00** up to (but not including) **18:00** ET.
-- **`prime`** — kickoff at **18:00** ET or later.
+- **`prime`** — kickoff from **18:00** up to (but not including) **22:00** ET.
+- **`late`** ("After dark") — kickoff at **22:00** ET or later, plus
+  **00:00–04:59** ET for a game that kicks off after midnight (e.g. a Hawaii
+  home game) — that game is an after-dark game, not "noon".
 - **`null`** — kickoff time is unknown (`kickoff` is also null in this case).
 
 ### Crew role and feed
@@ -175,7 +178,8 @@ only their derived, display-safe outputs (`game_type`, `playoff_round`, the
 - **Adding a field, or adding a new value to an existing enum/Literal**,
   bumps the **minor** version — for example, `1.0.0` → `1.1.0` added
   `game_type`, `playoff_round`, `home_conference`, `away_conference`, and
-  `lookups.conferences` (D-09/D-17).
+  `lookups.conferences` (D-09/D-17); `1.1.0` → `1.2.0` added the `late`
+  time_slot value (D-20).
 - **Removing a field, renaming a field, or changing a field's type**
   (including narrowing an enum) bumps the **major** version (`1.0.0` →
   `2.0.0`).
@@ -204,3 +208,5 @@ team at index 0 plays in `home_conference`/`away_conference` index 4,
 telecast index 7 (a Saturday game with a prime-time kickoff, `game_type`
 `"bowl"`); and a CFP semifinal at telecast index 5 (`game_type` `"playoff"`,
 `playoff_round` `"semifinal"`).
+
+As of v1.2.0 telecast index 2 has a 22:30 ET Saturday kickoff (`late`).
