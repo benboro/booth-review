@@ -25,7 +25,7 @@
 import { MAX_COMPARE, defaultState } from './select.js';
 
 /** Canonical time-slot order used both for encoding and decoding the `slot` param. */
-const SLOT_ORDER = ['noon', 'afternoon', 'prime'];
+const SLOT_ORDER = ['noon', 'afternoon', 'prime', 'late'];
 
 /** Whether a network id array equals the full set of primary network ids, order-independent. */
 function isAllPrimaryNetworks(networkIds, allPrimaryIds) {
@@ -206,7 +206,7 @@ function decodeNetworks(raw, data) {
   return canonical;
 }
 
-/** Decodes the `slot` param: unknown values dropped, canonicalized to noon/afternoon/prime order. */
+/** Decodes the `slot` param: unknown values dropped, canonicalized to noon/afternoon/prime/late order. */
 function decodeSlots(raw) {
   if (!raw) return null;
   const pieces = raw.split(',');

@@ -17,18 +17,20 @@ const MONTHS = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
-/** Time-slot filter labels, long form (D-11, SITE-11). */
+/** Time-slot filter labels, long form (D-11, SITE-11, D-20: four slots). */
 export const SLOT_LABELS = {
   noon: 'Noon (before 2 PM ET)',
   afternoon: 'Afternoon (2–6 PM ET)',
-  prime: 'Prime time (6 PM ET or later)',
+  prime: 'Prime time (6–10 PM ET)',
+  late: 'After dark (10 PM ET or later)',
 };
 
-/** Short time-slot labels for the tooltip/panel (D-19). */
+/** Short time-slot labels for the tooltip/panel (D-19, D-20: four slots). */
 export const SLOT_SHORT_LABELS = {
   noon: 'Noon',
   afternoon: 'Afternoon',
   prime: 'Prime time',
+  late: 'After dark',
 };
 
 /** Detail-panel labels for a playoff telecast's round (D-17). */
