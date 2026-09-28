@@ -183,6 +183,23 @@ def test_y_axis_ticks_show_thousands_as_k_below_one_million(
     assert not any(re.search(r"0\.\dM", text) for text in texts)
 
 
+def test_axis_titles_render_for_both_axes(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """CR-02: Plotly 4 drops a bare-string axis title, so both titles must be
+    passed as `{text: ...}` and actually render in the SVG; the x title
+    follows the axis toggle."""
+    open_app(guarded_page, "")
+    x_title = guarded_page.locator(".g-xtitle text").all_text_contents()
+    y_title = guarded_page.locator(".g-ytitle text").all_text_contents()
+    assert x_title == ["Closing spread (points) — closer games to the right"]
+    assert y_title == ["Viewers (log scale)"]
+
+    guarded_page.click('#axis-toggle button[data-axis="excitement"]')
+    guarded_page.wait_for_function("location.search === '?axis=excitement'")
+    assert guarded_page.locator(".g-xtitle text").all_text_contents() == ["Excitement index (CFBD)"]
+
+
 def test_legend_click_toggles_family_and_updates_networks_url(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:

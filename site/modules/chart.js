@@ -236,7 +236,9 @@ export function buildFigure(data, view, state, env) {
       font: { color: ACCENT[theme] },
     },
     xaxis: {
-      title: XAXIS_TITLES[axis],
+      // Plotly >= 3 takes only the object form; a bare string title is
+      // silently dropped (CR-02).
+      title: { text: XAXIS_TITLES[axis] },
       range: band.range,
       tickmode: 'array',
       tickvals: band.tickvals,
@@ -247,7 +249,7 @@ export function buildFigure(data, view, state, env) {
     },
     yaxis: {
       type: 'log',
-      title: 'Viewers (log scale)',
+      title: { text: 'Viewers (log scale)' },
       tickmode: 'array',
       tickvals: yTicks.tickvals,
       ticktext: yTicks.ticktext,
