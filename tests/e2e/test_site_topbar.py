@@ -245,3 +245,47 @@ def test_summary_never_reads_like_a_ranking(
     guarded_page.click("#together-toggle")
     guarded_page.wait_for_function("location.search.includes('together')")
     _assert_clean()
+
+
+_OPTION_STYLE_JS = """
+(el) => {
+  const cs = getComputedStyle(el);
+  return {
+    outlineStyle: cs.outlineStyle,
+    outlineWidth: cs.outlineWidth,
+    paddingLeft: cs.paddingLeft,
+    cursor: cs.cursor,
+  };
+}
+"""
+
+
+@pytest.mark.parametrize(
+    ("input_id", "results_id", "query"),
+    [("#person-search", "#person-results", "Dale Harlow"), ("#team-search", "#team-results", "o")],
+)
+def test_arrow_key_active_option_is_visibly_outlined(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    input_id: str,
+    results_id: str,
+    query: str,
+) -> None:
+    """WR-07 (WCAG 2.4.7): the bare `<li role="option">` results get padding
+    and a pointer, and the arrow-key active option (`aria-selected="true"`)
+    shows a visible outline; the other options don't."""
+    open_app(guarded_page, "")
+    guarded_page.fill(input_id, query)
+    options = guarded_page.locator(f"{results_id} li[role='option']:not([aria-disabled])")
+    expect(options.nth(1)).to_be_visible()
+
+    guarded_page.press(input_id, "ArrowDown")
+    expect(options.nth(0)).to_have_attribute("aria-selected", "true")
+
+    active = options.nth(0).evaluate(_OPTION_STYLE_JS)
+    inactive = options.nth(1).evaluate(_OPTION_STYLE_JS)
+    assert active["outlineStyle"] == "solid"
+    assert active["outlineWidth"] == "2px"
+    assert inactive["outlineStyle"] == "none"
+    assert inactive["paddingLeft"] == "16px"
+    assert inactive["cursor"] == "pointer"

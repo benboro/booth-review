@@ -137,14 +137,21 @@ h1, h2, h3 {
   width: 100%;
 }
 
-.option,
-.listbox li {
+/* Search-result options, as topbar.js/filters.js build them: bare
+   `<li role="option">` children of the `role="listbox"` lists (no class). The
+   arrow-key active option carries `aria-selected="true"` (WR-07, WCAG 2.4.7). */
+[role="listbox"] > li[role="option"] {
   font: var(--font-label);
   padding: var(--space-sm) var(--space-md);
   cursor: pointer;
 }
 
-.option[aria-selected="true"] {
+[role="listbox"] > li[role="option"][aria-disabled="true"] {
+  color: var(--muted);
+  cursor: default;
+}
+
+[role="listbox"] > li[role="option"][aria-selected="true"] {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
