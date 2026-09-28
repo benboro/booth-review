@@ -404,6 +404,7 @@ def test_scheduled_job_cfbd_401_is_attention_exit4_success_not_advanced(
     saved_state = load_state(paths.job_state)
     assert saved_state.last_success_at == prior_success  # not advanced
     assert saved_state.last_status == "attention"
+    assert saved_state.retry_pending is False  # a revoked key won't fix itself
 
 
 # -- WR-02: the RR lastmod log (jsonl) is accepted and committed ----------------------------------
@@ -657,6 +658,71 @@ def test_scheduled_job_backup_slot_after_failed_attempt_is_exit5_no_requests(
     assert result.exit_code == 5
     assert handle.requests == []
     assert paths.job_state.read_bytes() == before_bytes
+
+
+def test_scheduled_job_cfbd_502_sets_retry_pending_and_next_backup_slot_retries(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    prior_success = datetime(2026, 10, 1, 0, 5, tzinfo=UTC)  # Wed 2026-09-30 20:05 ET
+    save_state(
+        paths.job_state,
+        JobState(
+            season=2026,
+            last_success_at=prior_success,
+            last_attempt_at=prior_success,
+            last_status="ok",
+            last_window_start=prior_success,
+        ),
+    )
+
+    # Sunday 10:00 ET main slot: CFBD's gateway answers 502 on every attempt.
+    main_slot = datetime(2026, 10, 4, 14, 5, tzinfo=UTC)
+    down = _cfbd_ok_responses(2026)
+    games_url = "https://api.collegefootballdata.com/games?seasonType=both&year=2026"
+    down[games_url] = (502, b"<html>Bad Gateway</html>", {})
+    down["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
+    down[SITEMAP_URL] = (200, _empty_sitemap_xml(), {})
+    handle = mock_transport_factory(down)
+    runtime = _runtime(paths, handle, now=lambda: main_slot, fake_clock=fake_clock)
+    result = ScheduledJob(
+        runtime, token="test-token", now=lambda: main_slot, trigger="schedule"
+    ).run()
+
+    assert result.exit_code == 4
+    assert [item.kind for item in result.items if item.kind == "cfbd_step_failed"] == [
+        "cfbd_step_failed"
+    ]
+    state = load_state(paths.job_state)
+    assert state.retry_pending is True
+    assert state.last_success_at == prior_success
+
+    # The 16:00 ET backup slot is due again and, with CFBD back, clears the flag.
+    backup_slot = datetime(2026, 10, 4, 20, 0, tzinfo=UTC)
+    up = _cfbd_ok_responses(2026)
+    up["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
+    up[SITEMAP_URL] = (200, _empty_sitemap_xml(), {})
+    handle = mock_transport_factory(up)
+    runtime = _runtime(paths, handle, now=lambda: backup_slot, fake_clock=fake_clock)
+    result = ScheduledJob(
+        runtime, token="test-token", now=lambda: backup_slot, trigger="schedule"
+    ).run()
+
+    assert result.exit_code != 5
+    assert any(req.url == games_url for req in handle.requests)
+    assert result.counts["cfbd_failed"] == 0
+    state = load_state(paths.job_state)
+    assert state.retry_pending is False
+    assert state.last_success_at == backup_slot
+
+    # With the flag cleared, the next backup slot is a no-op again.
+    later = datetime(2026, 10, 4, 22, 0, tzinfo=UTC)
+    handle = mock_transport_factory({})
+    runtime = _runtime(paths, handle, now=lambda: later, fake_clock=fake_clock)
+    result = ScheduledJob(runtime, token="test-token", now=lambda: later, trigger="schedule").run()
+    assert result.exit_code == 5
+    assert handle.requests == []
 
 
 def test_scheduled_job_manual_trigger_always_runs_even_with_no_main_slot_due(

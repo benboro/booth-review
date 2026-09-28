@@ -18,8 +18,9 @@
 # job.catchup.SCHEDULE knows about; `booth-review job run --trigger schedule`
 # treats every other slot as a cheap no-op (exit 5) whenever no main slot has
 # occurred since the last attempt, so a dropped main slot still gets picked
-# up within hours at almost no cost, while a main slot whose run failed is
-# retried at the next main slot rather than at every backup slot.
+# up within hours at almost no cost. A main slot whose run failed is retried
+# at the next main slot rather than at every backup slot, unless the CFBD step
+# hit an outage (5xx, 429, network error): then every backup slot retries it.
 name: collect-2026
 
 on:
