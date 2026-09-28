@@ -216,6 +216,30 @@ def test_table_empty_state_by_default(
     assert guarded_page.locator("#games-table tbody tr").count() == 0
 
 
+def test_sort_header_label_is_not_duplicated_and_details_button_never_wraps(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Regression (screenshot 2026-09-27): `<th>Date <button>Date ...`
+    duplicated the sortable column's own label ("Date Date ▲"); the label
+    now lives only inside the button. The per-row Details button must
+    render its text on a single line -- never wrapping mid-word
+    ("Detail\\ns") the way it did in a narrow column."""
+    open_app(guarded_page, "")
+
+    date_header_text = guarded_page.inner_text('th:has(button[data-sort="date"])')
+    assert date_header_text.count("Date") == 1
+    viewers_header_text = guarded_page.inner_text('th:has(button[data-sort="viewers"])')
+    assert viewers_header_text.count("Viewers") == 1
+
+    guarded_page.evaluate("window.__testHooks.setState({people: ['dale-harlow']})")
+    button = guarded_page.locator("#games-table tbody button", has_text="Details").first
+    white_space = button.evaluate("el => getComputedStyle(el).whiteSpace")
+    assert white_space == "nowrap"
+    box = button.bounding_box()
+    assert box is not None
+    assert box["height"] <= 30, f"Details button is {box['height']}px tall, expected a single line"
+
+
 def test_table_sorts_by_date_then_viewers(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:

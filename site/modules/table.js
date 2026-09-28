@@ -124,6 +124,7 @@ function buildRow(data, state, onDetails, i) {
   const detailsTd = document.createElement('td');
   const button = document.createElement('button');
   button.type = 'button';
+  button.className = 'details-button';
   button.textContent = 'Details';
   button.setAttribute('aria-label', `Details for ${formatMatchup(data, i, {})}`);
   button.addEventListener('click', () => onDetails(i));
