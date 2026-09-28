@@ -183,69 +183,81 @@ async function bootstrap() {
     return;
   }
 
-  data = prepareData(raw);
-  state = decodeState(location.search, data);
+  // Anything past the parse can still throw -- a payload that doesn't fit
+  // the shape prepareData expects, a render with Plotly missing (the bundle
+  // failed to load or its SRI hash drifted), or a future bug -- and would
+  // otherwise leave an empty chart with no explanation (WR-04).
+  try {
+    if (typeof window.Plotly?.react !== 'function') {
+      throw new Error('Plotly bundle not loaded');
+    }
+    data = prepareData(raw);
+    state = decodeState(location.search, data);
 
-  initTopbar({ data, getState: () => state, setState });
-  renderers.push(renderTopbar);
+    initTopbar({ data, getState: () => state, setState });
+    renderers.push(renderTopbar);
 
-  initFilters({ data, getState: () => state, setState });
-  renderers.push(renderFilters);
+    initFilters({ data, getState: () => state, setState });
+    renderers.push(renderFilters);
 
-  renderers.push(tableRenderer);
+    renderers.push(tableRenderer);
 
-  if (axisToggleEl) {
-    axisToggleEl.addEventListener('click', (ev) => {
-      const button = ev.target.closest('button[data-axis]');
-      if (!button) return;
-      setState({ axis: button.dataset.axis });
+    if (axisToggleEl) {
+      axisToggleEl.addEventListener('click', (ev) => {
+        const button = ev.target.closest('button[data-axis]');
+        if (!button) return;
+        setState({ axis: button.dataset.axis });
+      });
+    }
+
+    darkMedia.addEventListener('change', () => render());
+    mobileMedia.addEventListener('change', () => render());
+
+    // The graph div only gains its `.on()` event-emitter API once Plotly has
+    // rendered into it at least once, so the first render must come first.
+    render();
+
+    bindChartEvents(chartEl, {
+      onLegendClick(key) {
+        const current = state.networks ?? allPrimaryNetworkIds();
+        const famIds = familyNetworkIds(key);
+        const everyFamIdIncluded = famIds.every((id) => current.includes(id));
+        const next = everyFamIdIncluded
+          ? current.filter((id) => !famIds.includes(id))
+          : Array.from(new Set([...current, ...famIds]));
+        setState({ networks: next });
+      },
+      onLegendDoubleClick(key) {
+        const current = state.networks ?? allPrimaryNetworkIds();
+        const famIds = familyNetworkIds(key);
+        const isExactlyFamily = current.length === famIds.length && famIds.every((id) => current.includes(id));
+        setState({ networks: isExactlyFamily ? null : famIds });
+      },
+      onPointClick(i) {
+        openDetailPanel(i);
+      },
     });
+
+    window.__testHooks = {
+      ready: true,
+      data,
+      getState: () => structuredClone(state),
+      setState,
+      getView: () => ({
+        visibleCount: lastView.visibleCount,
+        highlighted: lastView.highlighted,
+        symbols: Object.fromEntries(lastView.symbols),
+        altGames: [...lastView.altGames],
+        seasonCounts: lastView.seasonCounts,
+        summary: lastView.summary,
+      }),
+      renderers,
+      openPanel: (i) => openDetailPanel(i),
+    };
+  } catch (err) {
+    console.error('booth-review: the chart failed to start', err);
+    showLoadError();
   }
-
-  darkMedia.addEventListener('change', () => render());
-  mobileMedia.addEventListener('change', () => render());
-
-  // The graph div only gains its `.on()` event-emitter API once Plotly has
-  // rendered into it at least once, so the first render must come first.
-  render();
-
-  bindChartEvents(chartEl, {
-    onLegendClick(key) {
-      const current = state.networks ?? allPrimaryNetworkIds();
-      const famIds = familyNetworkIds(key);
-      const everyFamIdIncluded = famIds.every((id) => current.includes(id));
-      const next = everyFamIdIncluded
-        ? current.filter((id) => !famIds.includes(id))
-        : Array.from(new Set([...current, ...famIds]));
-      setState({ networks: next });
-    },
-    onLegendDoubleClick(key) {
-      const current = state.networks ?? allPrimaryNetworkIds();
-      const famIds = familyNetworkIds(key);
-      const isExactlyFamily = current.length === famIds.length && famIds.every((id) => current.includes(id));
-      setState({ networks: isExactlyFamily ? null : famIds });
-    },
-    onPointClick(i) {
-      openDetailPanel(i);
-    },
-  });
-
-  window.__testHooks = {
-    ready: true,
-    data,
-    getState: () => structuredClone(state),
-    setState,
-    getView: () => ({
-      visibleCount: lastView.visibleCount,
-      highlighted: lastView.highlighted,
-      symbols: Object.fromEntries(lastView.symbols),
-      altGames: [...lastView.altGames],
-      seasonCounts: lastView.seasonCounts,
-      summary: lastView.summary,
-    }),
-    renderers,
-    openPanel: (i) => openDetailPanel(i),
-  };
 }
 
 bootstrap();

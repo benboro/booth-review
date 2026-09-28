@@ -395,6 +395,38 @@ def test_missing_site_data_shows_load_error(guarded_page: Page, site_url: str) -
     assert "Couldn't load the site data." in guarded_page.inner_text("#load-error")
 
 
+def test_plotly_failing_to_load_shows_load_error(guarded_page: Page, site_url: str) -> None:
+    """WR-04: if the Plotly bundle never loads (blocked, or an SRI mismatch),
+    the first render can't run -- the app shows #load-error instead of an
+    empty chart."""
+    guarded_page.route("**/vendor/plotly-*.js", lambda route: route.abort())
+    guarded_page.goto(f"{site_url}/index.html")
+    guarded_page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+
+    assert guarded_page.evaluate("window.__testHooks.failed") is True
+    assert guarded_page.is_visible("#load-error")
+    assert guarded_page.is_hidden("#chart")
+
+
+def test_payload_that_breaks_prepare_data_shows_load_error(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    """WR-04: a parseable site-data.json whose shape still breaks startup
+    (here: no crew column) shows #load-error rather than failing silently."""
+    mutated = json.loads(json.dumps(fixture_raw))
+    del mutated["telecasts"]["crew"]
+    body = json.dumps(mutated)
+    guarded_page.route(
+        "**/site-data.json*",
+        lambda route: route.fulfill(status=200, content_type="application/json", body=body),
+    )
+    guarded_page.goto(f"{site_url}/index.html")
+    guarded_page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+
+    assert guarded_page.evaluate("window.__testHooks.failed") is True
+    assert guarded_page.is_visible("#load-error")
+
+
 def test_mobile_layout_disables_drag_zoom_and_moves_legend_below(
     mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
