@@ -171,6 +171,18 @@ def test_y_axis_ticks_use_short_labels_not_raw_exponents(
     assert not any(re.search(r"e[+-]?\d", text) for text in texts)
 
 
+def test_y_axis_ticks_show_thousands_as_k_below_one_million(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Below 1M, ticks read "500K"/"200K" -- never "0.5M"/"0.2M" -- and stay
+    "1M"/"2M"/... at/above 1M."""
+    open_app(guarded_page, "")
+    texts = guarded_page.locator(".ytick text").all_text_contents()
+    assert any("500K" in text for text in texts)
+    assert any("1M" in text for text in texts)
+    assert not any(re.search(r"0\.\dM", text) for text in texts)
+
+
 def test_legend_click_toggles_family_and_updates_networks_url(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:

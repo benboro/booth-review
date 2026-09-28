@@ -179,9 +179,12 @@ function logTickCandidates() {
   return candidates;
 }
 
-/** Labels a single log-axis tick value, "K" below 100,000 and "M" at/above. */
+/** Labels a single log-axis tick value, "K" below 1,000,000 and "M" at/above
+ * (e.g. "500K", "200K", "100K", then "1M", "2M", ...) -- values in the
+ * hundreds-of-thousands read clearer as whole thousands than as a fraction
+ * of a million. */
 function logTickLabel(value) {
-  if (value < 100000) return `${value / 1000}K`;
+  if (value < 1000000) return `${value / 1000}K`;
   return `${value / 1000000}M`;
 }
 
