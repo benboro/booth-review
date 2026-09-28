@@ -21,6 +21,7 @@ import {
   formatKickoff,
   formatMatchup,
   formatViewers,
+  isSaturday,
   measurementLabel,
 } from './format.js';
 
@@ -59,11 +60,16 @@ function externalLink(href, text) {
   return a;
 }
 
-/** date · kickoff ET · time-slot line, matching the hover's own ordering. */
+/** date · kickoff ET · time-slot line. The time-slot label ("Prime time",
+ * "Afternoon", "Noon") describes a Saturday scheduling pattern and is
+ * omitted for any non-Saturday game (weeknight games, and -- best-effort,
+ * since the site-data contract has no `season_type`/`week` field per
+ * telecast -- most bowl/CFP games, which are rarely played on a Saturday;
+ * see `isSaturday`'s own doc comment for that limitation). */
 function dateLine(data, i) {
   const t = data.t;
   const parts = [formatDate(t.date[i]), formatKickoff(t.kickoff[i]) ?? 'Kickoff time not recorded'];
-  if (t.time_slot[i] != null) parts.push(SLOT_LABELS[t.time_slot[i]]);
+  if (t.time_slot[i] != null && isSaturday(t.date[i])) parts.push(SLOT_LABELS[t.time_slot[i]]);
   return parts.join(' · ');
 }
 

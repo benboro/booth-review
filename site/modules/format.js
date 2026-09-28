@@ -61,6 +61,24 @@ export function formatDate(ymd) {
 }
 
 /**
+ * True when an ET calendar date (`YYYY-MM-DD`) falls on a Saturday. Used to
+ * gate the time-slot label ("Prime time"/"Afternoon"/"Noon"): those labels
+ * describe a Saturday scheduling pattern and are misleading on any other
+ * day (weeknight games, bowls/CFP games played on other days of the week).
+ * The site-data contract has no `season_type`/`week` field per telecast
+ * (docs/site-data.md), so this weekday check is the only signal available
+ * to approximate "regular-season Saturday game" -- it does not catch a
+ * bowl/playoff game that happens to fall on a Saturday.
+ * @param {string} ymd - e.g. "2019-09-07".
+ * @returns {boolean}
+ */
+export function isSaturday(ymd) {
+  const [year, month, day] = ymd.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCDay() === 6;
+}
+
+/**
  * Formats an ET kickoff ISO datetime as a 12-hour clock string, reading the
  * hour/minute directly from the string's own components (the value is
  * already ET; it is never converted to the browser's timezone).

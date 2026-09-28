@@ -184,6 +184,28 @@ def test_panel_crew_list_is_position_first(
     assert "Analyst: Dale Harlow Jr." in items
 
 
+def test_panel_time_slot_shown_only_for_saturday_games(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Time-slot labels ("Noon", "Prime time", ...) describe a Saturday
+    scheduling pattern; dot 0 (a Saturday game) shows its slot, dot 5 (a
+    Thursday game, per `tests/fixtures/contract/site-data.fixture.json`'s
+    date) does not. The site-data contract has no `season_type`/`week`
+    field per telecast, so a weekday check is the best-effort signal
+    available -- see `site/modules/format.js`'s `isSaturday` for the
+    documented limitation (it can't separately catch a bowl/playoff game
+    that happens to fall on a Saturday)."""
+    open_app(guarded_page, "")
+
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    assert "Noon (before 2 PM ET)" in guarded_page.inner_text("#panel-body")
+
+    guarded_page.evaluate("window.__testHooks.openPanel(5)")
+    body = guarded_page.inner_text("#panel-body")
+    assert "Prime time" not in body
+    assert "Thu, Nov 20, 2025" in body
+
+
 def test_open_panel_shows_selected_on_this_game(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
