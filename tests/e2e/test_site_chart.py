@@ -6,6 +6,7 @@ SITE-19; D-01..D-04, D-12) -- proven against the fixture build served by
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable
 from typing import Any
@@ -299,3 +300,52 @@ def test_hover_snaps_to_highlighted_dot_over_a_coincident_faded_dot(
     guarded_page.wait_for_function("window.__hoverMeta !== null")
 
     assert guarded_page.evaluate("window.__hoverMeta") == "highlight"
+
+
+def test_hover_label_renders_readable_multiline_text_without_literal_markup(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """T-04-06: the rendered hover label is multi-line (the template's own
+    `<br>` tags render as real line breaks) and never shows literal markup
+    text like `<br>` or `&lt;br&gt;` (previously the whole joined string,
+    including those tags, was HTML-escaped before being handed to Plotly)."""
+    open_app(guarded_page, "")
+    point = _dot_point(guarded_page, 0)
+    guarded_page.mouse.move(point["x"], point["y"])
+    guarded_page.wait_for_selector(".hoverlayer .hovertext")
+
+    lines = guarded_page.locator(".hoverlayer .hovertext tspan").all_text_contents()
+    joined = "".join(lines)
+    assert len(lines) >= 4, "expected a multi-line hover label"
+    assert "<" not in joined
+    assert "&lt;" not in joined
+    assert "Lakeview" in joined
+
+
+def test_hover_label_resists_injection_from_a_mutated_team_name(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+) -> None:
+    """SITE-19/T-04-06: a malicious team name renders as literal text in the
+    hover label (matching the panel/table injection guarantee in
+    tests/e2e/test_site_panel_table.py::test_injection_resistant_team_name_and_javascript_url),
+    never as a real `<img>` element, and its `onerror` never executes."""
+    mutated = json.loads(json.dumps(fixture_raw))
+    mutated["lookups"]["teams"][0]["name"] = '<img src=x onerror="window.__xss=1">'
+    body = json.dumps(mutated)
+
+    guarded_page.route(
+        "**/site-data.json*",
+        lambda route: route.fulfill(status=200, content_type="application/json", body=body),
+    )
+    open_app(guarded_page, "")
+
+    point = _dot_point(guarded_page, 0)
+    guarded_page.mouse.move(point["x"], point["y"])
+    guarded_page.wait_for_selector(".hoverlayer .hovertext")
+
+    assert guarded_page.evaluate("window.__xss") is None
+    assert guarded_page.locator(".hoverlayer img").count() == 0
+    text = "".join(guarded_page.locator(".hoverlayer .hovertext tspan").all_text_contents())
+    assert "<img" in text

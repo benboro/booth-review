@@ -51,8 +51,14 @@ export function naBand(data, axis) {
 }
 
 /**
- * Builds the escaped, `<br>`-joined hover text for one telecast, in the
- * UI-SPEC's hover order (SITE-04, D-02, D-04).
+ * Builds the `<br>`-joined hover text for one telecast, in the UI-SPEC's
+ * hover order (SITE-04, D-02, D-04). Each line is built from untrusted data
+ * (team/crew/network names) and escaped *individually* before being joined
+ * with the literal `<br>` separators Plotly's pseudo-HTML hover renderer
+ * expects (T-04-06): escaping the fully-joined string instead would also
+ * escape those `<br>` tags themselves, so Plotly would render the whole
+ * tooltip as one unbroken line of visible `&lt;br&gt;` markup rather than
+ * as actual line breaks.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
  * @param {"pregame"|"excitement"} axis - the currently active axis.
@@ -63,11 +69,11 @@ export function hoverText(data, i, axis, selectedNames) {
   const t = data.t;
   const lines = [];
 
-  lines.push(formatMatchup(data, i, { withScore: true }));
+  lines.push(`<b>${escapeHover(formatMatchup(data, i, { withScore: true }))}</b>`);
 
   const dateParts = [formatDate(t.date[i]), formatKickoff(t.kickoff[i]) ?? 'Kickoff time not recorded'];
   if (t.time_slot[i] != null) dateParts.push(SLOT_SHORT[t.time_slot[i]]);
-  lines.push(dateParts.join(' · '));
+  lines.push(escapeHover(dateParts.join(' · ')));
 
   const primaryNetwork = data.lookups.networks[t.network[i]];
   const otherOutletNames = t.outlets[i]
@@ -75,30 +81,34 @@ export function hoverText(data, i, axis, selectedNames) {
     .map((idx) => data.lookups.networks[idx].name);
   let networkLine = primaryNetwork.name;
   if (otherOutletNames.length > 0) networkLine += ` (also ${otherOutletNames.join(', ')})`;
-  lines.push(networkLine);
+  lines.push(escapeHover(networkLine));
 
   const crew = crewByRole(data, i);
   const crewParts = [];
   if (crew.pbp.length > 0) crewParts.push(`PBP: ${crew.pbp.join(', ')}`);
   if (crew.analyst.length > 0) crewParts.push(`Analyst: ${crew.analyst.join(', ')}`);
-  lines.push(crewParts.length > 0 ? crewParts.join(' · ') : 'Crew not recorded');
+  lines.push(escapeHover(crewParts.length > 0 ? crewParts.join(' · ') : 'Crew not recorded'));
 
-  lines.push(`Viewers: ${formatViewers(t.viewers[i])} · ${measurementLabel(t.measurement_type[i])}`);
+  lines.push(
+    escapeHover(`Viewers: ${formatViewers(t.viewers[i])} · ${measurementLabel(t.measurement_type[i])}`),
+  );
 
   const otherAxis = axis === 'pregame' ? 'excitement' : 'pregame';
-  lines.push(`${formatAxisValue(axis, t[axis][i])} · ${formatAxisValue(otherAxis, t[otherAxis][i])}`);
+  lines.push(
+    escapeHover(`${formatAxisValue(axis, t[axis][i])} · ${formatAxisValue(otherAxis, t[otherAxis][i])}`),
+  );
 
   const flagLabels = t.flags[i].map((idx) => data.lookups.flags[idx].label);
   const combined = t.combined_feeds[i];
   if (flagLabels.length > 0 || combined != null) {
     const flagParts = [...flagLabels];
     if (combined != null) flagParts.push(`Combined across ${combined} feeds`);
-    lines.push(flagParts.join(' · '));
+    lines.push(escapeHover(flagParts.join(' · ')));
   }
 
-  if (selectedNames.length > 0) lines.push(`Selected: ${selectedNames.join(', ')}`);
+  if (selectedNames.length > 0) lines.push(escapeHover(`Selected: ${selectedNames.join(', ')}`));
 
-  return escapeHover(lines.join('<br>'));
+  return lines.join('<br>');
 }
 
 /** Selected-people names on telecast `i`, from `view.peopleOnGame` (empty when nobody's selected). */
