@@ -487,6 +487,23 @@ def test_clear_all_filters_sits_above_the_first_filter_group_and_meets_contrast(
     assert _contrast_ratio(fg, bg) >= 4.5
 
 
+def test_chrome_buttons_use_the_theme_text_color_in_dark_mode(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Buttons don't inherit `color`, so without a base rule the rail and
+    panel controls fall back to the UA's button text color, which is
+    unreadable against the dark theme's background."""
+    guarded_page.emulate_media(color_scheme="dark")
+    open_app(guarded_page, "")
+    colors = guarded_page.evaluate(
+        "() => { const body = getComputedStyle(document.body).color; "
+        "return ['#rail-toggle', '#rail-close', '#panel-close', '#filters-button']"
+        ".map(sel => [sel, getComputedStyle(document.querySelector(sel)).color, body]); }"
+    )
+    for selector, color, body_color in colors:
+        assert color == body_color, selector
+
+
 def test_mobile_filters_drawer(mobile_page: Page, open_app: Callable[[Page, str], None]) -> None:
     """SITE-18: the phone Filters(N) button opens a bottom-sheet drawer with 44px tap targets."""
     open_app(mobile_page, "")

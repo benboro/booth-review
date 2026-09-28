@@ -56,6 +56,12 @@ a {
   text-decoration: underline;
 }
 
+/* Form controls take the UA's own text color rather than inheriting it, which
+   is unreadable on the dark theme; element-level so any id/class rule wins. */
+button {
+  color: inherit;
+}
+
 [hidden] {
   display: none !important;
 }
