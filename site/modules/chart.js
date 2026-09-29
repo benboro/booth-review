@@ -239,27 +239,65 @@ export function buildFigure(data, view, state, env) {
   const hsize = [];
   const hsymbol = [];
   const hlineWidth = [];
-  // D-31: a scattergl non-circle symbol (square/diamond/triangle-up/star)
-  // is drawn from an SDF glyph atlas (regl-scatter2d), and a
+  // D-33 halo: a separate scattergl trace holding just the non-circle
+  // highlight points (same x/y/symbol), pushed immediately before the
+  // highlight trace below.
+  const haloX = [];
+  const haloY = [];
+  const haloSymbol = [];
+  const haloSize = [];
+  // D-31/D-33: a scattergl non-circle symbol (square/diamond/triangle-up/
+  // star) is drawn from an SDF glyph atlas (regl-scatter2d), and a
   // `marker.line` border on one of those glyphs antialiases into a
   // speckled fringe just outside the shape's edge -- confirmed empirically
-  // (04.1-13-SUMMARY.md: 1 ring-speckle pixel per diamond marker with the
-  // pre-fix 1.5px border, 0 with it removed). Circles are drawn
+  // (04.1-13-SUMMARY.md: 1 ring-speckle pixel per diamond marker with a
+  // 1.5px `marker.line` border, 0 with it removed). Circles are drawn
   // analytically and never show the artifact, so they keep the accent
-  // border; every other symbol drops to line width 0 and gets a larger
-  // size instead, so the highlight still reads as distinct from the
-  // 15%-faded family dots without an outline.
+  // `marker.line` border directly. Every other symbol instead gets a
+  // solid ACCENT-filled "halo" trace underneath it (meta 'highlight-halo',
+  // built just below): the same point, ~3px larger, `line.width` 0,
+  // `hoverinfo: 'skip'` and `hovertemplate: null` so it never takes a
+  // hover or a click. That restores the same accent border the circles
+  // have without ever setting `marker.line` on an SDF glyph.
   for (const i of highlighted) {
     const rawX = data.t[axis][i];
-    hx.push(rawX == null ? band.sentinel : rawX);
-    hy.push(data.t.viewers[i]);
+    const x = rawX == null ? band.sentinel : rawX;
+    const y = data.t.viewers[i];
+    hx.push(x);
+    hy.push(y);
     hcustomdata.push(i);
     if (usePlotlyText) htext.push(hoverText(data, i, hoverOpts));
     hcolor.push(FAMILY_COLORS[theme][data.familyOf[i]]);
     const symbol = view.symbols.get(i) ?? 'circle';
     hsymbol.push(symbol);
-    hsize.push(symbol === 'circle' ? 10 : symbol === 'star' ? 15 : 12);
+    const size = symbol === 'circle' ? 10 : symbol === 'star' ? 15 : 12;
+    hsize.push(size);
     hlineWidth.push(symbol === 'circle' ? 1.5 : 0);
+    if (symbol !== 'circle') {
+      haloX.push(x);
+      haloY.push(y);
+      haloSymbol.push(symbol);
+      haloSize.push(size + 3);
+    }
+  }
+  if (haloX.length > 0) {
+    traces.push({
+      type: 'scattergl',
+      mode: 'markers',
+      meta: 'highlight-halo',
+      showlegend: false,
+      x: haloX,
+      y: haloY,
+      hoverinfo: 'skip',
+      hovertemplate: null,
+      marker: {
+        symbol: haloSymbol,
+        size: haloSize,
+        color: ACCENT[theme],
+        opacity: 1,
+        line: { width: 0 },
+      },
+    });
   }
   traces.push({
     type: 'scattergl',

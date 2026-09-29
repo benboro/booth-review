@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import re
 from collections.abc import Callable
 from typing import Any
@@ -1281,15 +1282,15 @@ def _speckle_count(
     center_px: float,
     center_py: float,
     theme: str,
-    ring_base_half: float,
+    ring_inner_radius: float,
     other_points: list[dict[str, Any]],
 ) -> int:
     """Screenshots a 40x40 box centered on one highlight marker and returns
-    the ring-speckle pixel count starting `ring_base_half + 3` px from
-    center (D-31/D-33: for a non-circle point this must be measured outside
-    the halo's own outer edge -- `(size + 3) / 2` -- not the bare highlight
-    glyph's edge, so the halo's own solid accent ring is never itself
-    counted as a speckle)."""
+    the ring-speckle pixel count from `ring_inner_radius` px from center out
+    to the crop's own edge (D-31/D-33: the caller is responsible for
+    placing `ring_inner_radius` outside the halo's own visible shape, not
+    just outside a naive circular half-size -- see `_halo_ring_inner_radius`
+    below)."""
     clip_x = center_px - 20
     clip_y = center_py - 20
     shot = page.screenshot(clip={"x": clip_x, "y": clip_y, "width": 40, "height": 40})
@@ -1300,9 +1301,27 @@ def _speckle_count(
     ]
     count = page.evaluate(
         _RING_SPECKLE_JS,
-        [data_url, _ACCENT[theme], _PAGE_BG[theme], ring_base_half + 3, 20, others],
+        [data_url, _ACCENT[theme], _PAGE_BG[theme], ring_inner_radius, 20, others],
     )
     return int(count)
+
+
+def _halo_ring_inner_radius(size: float) -> float:
+    """The D-31 speckle ring's inner radius for a non-circle highlight point
+    of highlight `size` (D-33): must clear the halo's own visible shape
+    (`(size + 3) / 2` half-size), not just a naive circular boundary at
+    that half-size. Square and diamond halos are drawn with their
+    bounding-box side equal to the marker `size` value (confirmed
+    empirically against this real build), so a square's own corner sits
+    `sqrt(2)` times its half-side from center -- about 41% farther out than
+    the half-size alone. Multiplying by `sqrt(2)` plus a 2px anti-aliasing
+    allowance keeps the ring outside every shape's own corner (empirically
+    confirmed against every non-circle shape in `_COMPARE_ALL_SHAPES_QUERY`,
+    both themes: the farthest accent-colored pixel measured for any shape
+    was 10.63px from center against a computed boundary of 12.61-14.73px)
+    without needing a per-symbol lookup table."""
+    halo_half = (size + 3) / 2
+    return halo_half * math.sqrt(2) + 2
 
 
 def _boxes_overlap(a: dict[str, Any], b: dict[str, Any], pad: float = 4) -> bool:
@@ -1356,9 +1375,13 @@ def test_compare_shapes_have_no_edge_speckles(
         if any(_boxes_overlap(point, other) for other in others):
             continue
         tested += 1
-        halo_half = (point["size"] + 3) / 2
         total += _speckle_count(
-            guarded_page, point["px"], point["py"], color_scheme, halo_half, others
+            guarded_page,
+            point["px"],
+            point["py"],
+            color_scheme,
+            _halo_ring_inner_radius(point["size"]),
+            others,
         )
 
     assert tested > 0, "no non-circle highlight marker was testable in this fixture selection"
