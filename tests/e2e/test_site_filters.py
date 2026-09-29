@@ -805,6 +805,45 @@ def test_postseason_all_games_clears_the_url_param(
     assert sorted(_visible_customdata(guarded_page)) == list(range(12))
 
 
+def test_postseason_keyboard_arrow_and_home_end_move_focus_and_selection(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """WR-05: `role="radiogroup"`/`role="radio"` on `#postseason-options`
+    promises the WAI-ARIA APG radiogroup keyboard pattern -- roving tabindex
+    (only the selected radio is Tab-reachable) plus ArrowRight/Home/End
+    moving both focus and selection together."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "postseason")
+
+    all_btn = "[data-postseason='all']"
+    exclude_btn = "[data-postseason='exclude']"
+    only_btn = "[data-postseason='only']"
+
+    assert guarded_page.get_attribute(all_btn, "tabindex") == "0"
+    assert guarded_page.get_attribute(exclude_btn, "tabindex") == "-1"
+    assert guarded_page.get_attribute(only_btn, "tabindex") == "-1"
+
+    guarded_page.focus(all_btn)
+    guarded_page.keyboard.press("ArrowRight")
+    guarded_page.wait_for_function("location.search.includes('postseason=exclude')")
+    assert guarded_page.evaluate("() => document.activeElement.dataset.postseason") == "exclude"
+    assert guarded_page.get_attribute(exclude_btn, "aria-checked") == "true"
+    assert guarded_page.get_attribute(exclude_btn, "tabindex") == "0"
+    assert guarded_page.get_attribute(all_btn, "tabindex") == "-1"
+
+    guarded_page.keyboard.press("End")
+    guarded_page.wait_for_function("location.search.includes('postseason=only')")
+    assert guarded_page.evaluate("() => document.activeElement.dataset.postseason") == "only"
+    assert guarded_page.get_attribute(only_btn, "aria-checked") == "true"
+    assert guarded_page.get_attribute(only_btn, "tabindex") == "0"
+
+    guarded_page.keyboard.press("Home")
+    guarded_page.wait_for_function("!location.search.includes('postseason=')")
+    assert guarded_page.evaluate("() => document.activeElement.dataset.postseason") == "all"
+    assert guarded_page.get_attribute(all_btn, "aria-checked") == "true"
+    assert guarded_page.get_attribute(all_btn, "tabindex") == "0"
+
+
 def test_desktop_chart_never_overlaps_matched_games_table_on_page_scroll(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:

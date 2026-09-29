@@ -45,6 +45,9 @@ const SECTION_POPOVERS = [
 /** Toolbar trigger names, in toolbar order -- also `#trigger-{name}`'s id suffix. */
 const TRIGGER_NAMES = ['announcers', 'seasons', 'networks', 'kickoff', 'role', 'conference', 'school', 'postseason'];
 
+/** Bowls/Playoffs radio values, in the DOM order they appear in `#postseason-options`. */
+const POSTSEASON_ORDER = ['all', 'exclude', 'only'];
+
 /** DOM element references, populated once by `initFilters`. */
 let els = null;
 
@@ -228,6 +231,42 @@ function bindChecklistKeyboard(searchInput, listEl) {
     } else {
       searchInput.focus();
     }
+  });
+}
+
+/**
+ * Wires the WAI-ARIA APG radiogroup keyboard pattern to the Bowls/Playoffs
+ * `role="radio"` buttons (roving tabindex; ArrowLeft/ArrowUp and
+ * ArrowRight/ArrowDown move focus and selection together; Home/End jump to
+ * the first/last option) -- required because `role="radiogroup"`/`role="radio"`
+ * promise this behavior to assistive tech (WR-05).
+ */
+function bindPostseasonKeyboard(setState) {
+  els.postseasonOptions.addEventListener('keydown', (ev) => {
+    const key = ev.key;
+    if (!['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown', 'Home', 'End'].includes(key)) return;
+    const target = ev.target;
+    if (!(target instanceof HTMLElement) || !target.dataset.postseason) return;
+    const idx = POSTSEASON_ORDER.indexOf(target.dataset.postseason);
+    if (idx === -1) return;
+    ev.preventDefault();
+
+    let nextIdx;
+    if (key === 'Home') {
+      nextIdx = 0;
+    } else if (key === 'End') {
+      nextIdx = POSTSEASON_ORDER.length - 1;
+    } else if (key === 'ArrowRight' || key === 'ArrowDown') {
+      nextIdx = (idx + 1) % POSTSEASON_ORDER.length;
+    } else {
+      nextIdx = (idx - 1 + POSTSEASON_ORDER.length) % POSTSEASON_ORDER.length;
+    }
+
+    const nextValue = POSTSEASON_ORDER[nextIdx];
+    setState({ postseason: nextValue });
+    // setState -> render() runs synchronously, so renderPostseason has
+    // already synced tabindex/aria-checked by the time this runs.
+    els.postseasonOptions.querySelector(`[data-postseason="${nextValue}"]`)?.focus();
   });
 }
 
@@ -418,6 +457,7 @@ export function initFilters({ data, getState, setState }) {
     if (!btn) return;
     setState({ postseason: btn.dataset.postseason });
   });
+  bindPostseasonKeyboard(setState);
 
   els.clearFilters.addEventListener('click', () => {
     setState({
@@ -534,10 +574,17 @@ function renderSchool(data, state) {
   els.schoolChips.replaceChildren(...items);
 }
 
-/** Syncs the Bowls/Playoffs radio group's `aria-checked` from `state.postseason` (D-18). */
+/**
+ * Syncs the Bowls/Playoffs radio group's `aria-checked` from `state.postseason`
+ * (D-18), and its roving `tabindex` (WR-05): only the selected radio is a tab
+ * stop, per the WAI-ARIA APG radiogroup pattern `bindPostseasonKeyboard` wires
+ * the arrow-key/Home/End half of.
+ */
 function renderPostseason(state) {
   for (const btn of els.postseasonOptions.querySelectorAll('[data-postseason]')) {
-    btn.setAttribute('aria-checked', String(btn.dataset.postseason === state.postseason));
+    const checked = btn.dataset.postseason === state.postseason;
+    btn.setAttribute('aria-checked', String(checked));
+    btn.tabIndex = checked ? 0 : -1;
   }
 }
 
