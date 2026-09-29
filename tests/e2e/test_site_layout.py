@@ -411,6 +411,46 @@ def test_clear_all_filters_is_distinct_and_aa_in_both_themes(
         assert styles["clearBorderTop"] != styles["trigBorderTop"], scheme
 
 
+def test_clear_selection_is_distinct_and_aa(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-30: Clear selection reads as its own kind of control -- a dashed
+    secondary treatment, not the toggle's border style and not
+    Clear all filters' `--reset` red -- and clears WCAG AA in both themes."""
+    for scheme in ("light", "dark"):
+        guarded_page.emulate_media(color_scheme=scheme)
+        open_app(guarded_page, "")
+        _add_person_by_query(guarded_page, "Dale Harlow")
+
+        styles = guarded_page.evaluate(
+            "() => { "
+            "const cs = getComputedStyle(document.getElementById('clear-selection')); "
+            "const ct = getComputedStyle(document.getElementById('compare-toggle')); "
+            "const cf = getComputedStyle(document.getElementById('clear-filters')); "
+            "const bodyBg = getComputedStyle(document.body).backgroundColor; "
+            "return { csBorderStyle: cs.borderTopStyle, csColor: cs.color, "
+            "csBorderColor: cs.borderTopColor, csBg: cs.backgroundColor, "
+            "ctBorderStyle: ct.borderTopStyle, cfColor: cf.color, "
+            "cfBorderColor: cf.borderTopColor, bodyBg }; }"
+        )
+        assert styles["csBorderStyle"] != styles["ctBorderStyle"], scheme
+        assert styles["csColor"] != styles["cfColor"], scheme
+        assert styles["csBorderColor"] != styles["cfBorderColor"], scheme
+
+        fg = _parse_rgb(styles["csColor"])
+        bg = _parse_rgb(styles["csBg"])
+        assert _contrast_ratio(fg, bg) >= 4.5, scheme
+
+        border = _parse_rgb(styles["csBorderColor"])
+        effective_bg = _parse_rgb(styles["bodyBg"])
+        assert _contrast_ratio(border, effective_bg) >= 3, scheme
+
+        has_toggle_class = guarded_page.eval_on_selector(
+            "#clear-selection", "el => el.classList.contains('toggle')"
+        )
+        assert has_toggle_class is False, scheme
+
+
 @pytest.mark.parametrize(("width", "height"), [(1280, 800), (390, 844)])
 def test_page_has_side_gutters(
     guarded_page: Page,
