@@ -1,26 +1,52 @@
 /**
- * Left filter rail: season range with per-season counts, the family-nested
- * network checklist, time slot, role, and the team highlight combobox, plus
- * Clear all filters, desktop/tablet rail collapse, and the phone "Filters
- * (N)" bottom-sheet drawer (SITE-06, SITE-07, SITE-09, SITE-11, SITE-18;
- * D-05, D-06, D-08, D-09).
+ * Filter toolbar: an Announcers popover plus seven filter popovers (Seasons,
+ * Networks, Kickoff, Role, Conference, School, Bowls/Playoffs) above the
+ * chart, plus "Clear all filters" and a full-height phone bottom sheet that
+ * stacks every section, Announcers first (SITE-20, SITE-21, SITE-22,
+ * SITE-24, SITE-27; D-02, D-03, D-10, D-11, D-18, D-21, D-27).
  *
- * `initFilters(ctx)` builds the dynamic parts of the rail (the network
- * checklist, the role helper line) once and binds every DOM event listener;
+ * D-21: the Announcers popover holds the moved person-search combobox
+ * (`site/modules/topbar.js` still owns its search/add-person behavior; this
+ * module only places its `#filter-announcers` section and reports its
+ * trigger label/active state). D-27: "Clear all filters" also clears
+ * `state.people`/`compare`/`together`, and the phone `Filters(N)` badge
+ * counts selected people too.
+ *
+ * `initFilters(ctx)` builds the dynamic parts of the toolbar (the network
+ * checklist, the conference/school checklists, the role helper line) once
+ * and binds every DOM event listener, including the native `popover`
+ * open/close mechanics and the desktop/mobile section placement;
  * `renderFilters(ctx)` is a pure DOM update called every render cycle from
  * app.js -- the same init-once/render-every-time split topbar.js uses. DOM
  * is built only with createElement/textContent/replaceChildren -- never any
- * markup-injecting DOM API (T-04-31). Typed team-search text is only ever
- * used as a search key, never rendered as markup; network/team names always
- * land in the DOM via textContent.
+ * markup-injecting DOM API (T-04-31). Typed conference/school search text is
+ * only ever used as a search key, never rendered as markup; conference/team
+ * names always land in the DOM via textContent.
  */
 
-import { searchTeams } from './data.js';
+import { normalizeName } from './data.js';
 import { FAMILY_LABELS } from './palette.js';
-
-const DEBOUNCE_MS = 120;
+import { SLOT_SHORT_LABELS, ROLE_LABELS } from './format.js';
 
 const ROLE_HELPER_TEXT = 'Limits matches to main-broadcast play-by-play or analyst roles.';
+
+/** Section element id -> the popover id it lives in on desktop, in toolbar order (D-02, D-21). */
+const SECTION_POPOVERS = [
+  ['filter-announcers', 'pop-announcers'],
+  ['filter-seasons', 'pop-seasons'],
+  ['filter-networks', 'pop-networks'],
+  ['filter-slots', 'pop-kickoff'],
+  ['filter-role', 'pop-role'],
+  ['filter-conference', 'pop-conference'],
+  ['filter-school', 'pop-school'],
+  ['filter-postseason', 'pop-postseason'],
+];
+
+/** Toolbar trigger names, in toolbar order -- also `#trigger-{name}`'s id suffix. */
+const TRIGGER_NAMES = ['announcers', 'seasons', 'networks', 'kickoff', 'role', 'conference', 'school', 'postseason'];
+
+/** Bowls/Playoffs radio values, in the DOM order they appear in `#postseason-options`. */
+const POSTSEASON_ORDER = ['all', 'exclude', 'only'];
 
 /** DOM element references, populated once by `initFilters`. */
 let els = null;
@@ -31,14 +57,14 @@ let networkCheckboxes = new Map();
 /** family key -> its checkbox element, populated once by `buildNetworkChecklist`. */
 let familyCheckboxes = new Map();
 
-/** Debounce timer id for the team search input. */
-let teamDebounceTimer = null;
+/** conference name -> its checkbox element, populated once by `buildConferenceList`. */
+let conferenceCheckboxes = new Map();
 
-/** The options currently rendered in `#team-results` (empty when closed or showing "no matches"). */
-let teamOptions = [];
+/** team slug -> its checkbox element, populated once by `buildSchoolList`. */
+let schoolCheckboxes = new Map();
 
-/** Index of the team option the user has moved to with ArrowUp/ArrowDown, or -1. */
-let teamActiveIndex = -1;
+/** team slug -> its search keys (from `data.teamKeys`), populated once by `buildSchoolList`. */
+let schoolKeysBySlug = new Map();
 
 /** Network ids for every primary network in a given family. */
 function familyNetworkIds(data, familyKeyVal) {
@@ -112,12 +138,136 @@ function buildNetworkChecklist(data) {
   els.networksSection.replaceChildren(...(heading ? [heading] : []), ...groups);
 }
 
-/** Appends the D-08 role-filter helper line once, under the static role checkboxes. */
+/** Appends the role-filter helper line once, under the static role checkboxes (SITE-07). */
 function buildRoleHelper() {
   const p = document.createElement('p');
   p.className = 'helper';
   p.textContent = ROLE_HELPER_TEXT;
   els.roleSection.appendChild(p);
+}
+
+/** Builds the Conference popover's checklist once, from `data.fbsConferences` (D-10). */
+function buildConferenceList(data) {
+  conferenceCheckboxes = new Map();
+  const rows = data.fbsConferences.map((name) => {
+    const label = document.createElement('label');
+    label.className = 'check-row';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.name = 'conference';
+    checkbox.value = name;
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(` ${name}`));
+    conferenceCheckboxes.set(name, checkbox);
+    return label;
+  });
+  els.conferenceList.append(...rows);
+}
+
+/** Builds the School popover's checklist once, from every team, sorted by name (D-11). */
+function buildSchoolList(data) {
+  schoolCheckboxes = new Map();
+  schoolKeysBySlug = new Map();
+  const sortedTeams = data.teamKeys.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const rows = sortedTeams.map((team) => {
+    const label = document.createElement('label');
+    label.className = 'check-row';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.name = 'school';
+    checkbox.value = team.slug;
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(` ${team.name}`));
+    schoolCheckboxes.set(team.slug, checkbox);
+    schoolKeysBySlug.set(team.slug, team.keys);
+    return label;
+  });
+  els.schoolList.append(...rows);
+}
+
+/** Hides checklist rows whose keys (via `keysFor`) don't contain the normalized query. */
+function filterChecklist(listEl, query, keysFor) {
+  const q = normalizeName(query);
+  for (const row of listEl.querySelectorAll('label.check-row')) {
+    const checkbox = row.querySelector('input[type="checkbox"]');
+    if (q === '') {
+      row.hidden = false;
+      continue;
+    }
+    const keys = keysFor(checkbox);
+    row.hidden = !keys.some((k) => k.includes(q));
+  }
+}
+
+/** Every checkbox in `listEl` whose row is currently visible, in DOM order. */
+function visibleCheckboxes(listEl) {
+  return Array.from(listEl.querySelectorAll('label.check-row'))
+    .filter((row) => !row.hidden)
+    .map((row) => row.querySelector('input[type="checkbox"]'));
+}
+
+/** Wires ArrowUp/ArrowDown keyboard navigation between a search input and its checklist. */
+function bindChecklistKeyboard(searchInput, listEl) {
+  searchInput.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'ArrowDown') return;
+    const boxes = visibleCheckboxes(listEl);
+    if (boxes.length === 0) return;
+    ev.preventDefault();
+    boxes[0].focus();
+  });
+
+  listEl.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
+    const target = ev.target;
+    if (!(target instanceof HTMLInputElement) || target.type !== 'checkbox') return;
+    const boxes = visibleCheckboxes(listEl);
+    const idx = boxes.indexOf(target);
+    if (idx === -1) return;
+    ev.preventDefault();
+    if (ev.key === 'ArrowDown') {
+      if (idx < boxes.length - 1) boxes[idx + 1].focus();
+    } else if (idx > 0) {
+      boxes[idx - 1].focus();
+    } else {
+      searchInput.focus();
+    }
+  });
+}
+
+/**
+ * Wires the WAI-ARIA APG radiogroup keyboard pattern to the Bowls/Playoffs
+ * `role="radio"` buttons (roving tabindex; ArrowLeft/ArrowUp and
+ * ArrowRight/ArrowDown move focus and selection together; Home/End jump to
+ * the first/last option) -- required because `role="radiogroup"`/`role="radio"`
+ * promise this behavior to assistive tech (WR-05).
+ */
+function bindPostseasonKeyboard(setState) {
+  els.postseasonOptions.addEventListener('keydown', (ev) => {
+    const key = ev.key;
+    if (!['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown', 'Home', 'End'].includes(key)) return;
+    const target = ev.target;
+    if (!(target instanceof HTMLElement) || !target.dataset.postseason) return;
+    const idx = POSTSEASON_ORDER.indexOf(target.dataset.postseason);
+    if (idx === -1) return;
+    ev.preventDefault();
+
+    let nextIdx;
+    if (key === 'Home') {
+      nextIdx = 0;
+    } else if (key === 'End') {
+      nextIdx = POSTSEASON_ORDER.length - 1;
+    } else if (key === 'ArrowRight' || key === 'ArrowDown') {
+      nextIdx = (idx + 1) % POSTSEASON_ORDER.length;
+    } else {
+      nextIdx = (idx - 1 + POSTSEASON_ORDER.length) % POSTSEASON_ORDER.length;
+    }
+
+    const nextValue = POSTSEASON_ORDER[nextIdx];
+    setState({ postseason: nextValue });
+    // setState -> render() runs synchronously, so renderPostseason has
+    // already synced tabindex/aria-checked by the time this runs.
+    els.postseasonOptions.querySelector(`[data-postseason="${nextValue}"]`)?.focus();
+  });
 }
 
 /** Applies a family/network checkbox change to state, in lookup order (D-06). */
@@ -159,101 +309,114 @@ function handleRoleChange(setState, ev) {
   }
 }
 
-/** Closes and clears the team-search results listbox. */
-function closeTeamOptions() {
-  els.teamResults.hidden = true;
-  els.teamResults.replaceChildren();
-  els.teamSearch.setAttribute('aria-expanded', 'false');
-  els.teamSearch.removeAttribute('aria-activedescendant');
-  teamOptions = [];
-  teamActiveIndex = -1;
+/** Reads the checked Conference checkboxes into a state patch, in `data.fbsConferences` order (D-10). */
+function handleConferenceChange(data, setState) {
+  const checked = new Set();
+  for (const [name, cb] of conferenceCheckboxes) if (cb.checked) checked.add(name);
+  setState({ conferences: data.fbsConferences.filter((name) => checked.has(name)) });
 }
 
-/** Renders the team-search results listbox for a non-empty query. */
-function renderTeamOptions(results) {
-  if (results.length === 0) {
-    const li = document.createElement('li');
-    li.setAttribute('role', 'option');
-    li.setAttribute('aria-disabled', 'true');
-    li.textContent = 'No matching teams';
-    els.teamResults.replaceChildren(li);
-  } else {
-    const items = results.map((r, i) => {
-      const li = document.createElement('li');
-      li.id = `team-opt-${i}`;
-      li.setAttribute('role', 'option');
-      li.setAttribute('aria-selected', 'false');
-      li.dataset.teamSlug = r.slug;
-      li.textContent = r.name;
-      return li;
-    });
-    els.teamResults.replaceChildren(...items);
-  }
-  els.teamResults.hidden = false;
-  els.teamSearch.setAttribute('aria-expanded', 'true');
+/** Reads the checked School checkboxes into a state patch (D-11). */
+function handleSchoolChange(setState) {
+  const checked = [];
+  for (const [slug, cb] of schoolCheckboxes) if (cb.checked) checked.push(slug);
+  setState({ school: checked });
 }
 
-/** Re-runs the team search for the input's current value and re-renders the listbox. */
-function updateTeamOptions(data, rawValue) {
-  const query = rawValue.trim();
-  if (query === '') {
-    closeTeamOptions();
-    return;
-  }
-  const results = searchTeams(data, query, 8);
-  teamOptions = results;
-  teamActiveIndex = -1;
-  renderTeamOptions(results);
+/** Positions a filter popover under its trigger button, clamped to stay on-screen (Pitfall 2). */
+function positionPopover(popover, trigger) {
+  const rect = trigger.getBoundingClientRect();
+  popover.style.top = `${rect.bottom + 4}px`;
+  const maxLeft = Math.max(8, window.innerWidth - popover.offsetWidth - 8);
+  popover.style.left = `${Math.max(8, Math.min(rect.left, maxLeft))}px`;
 }
 
-/** Syncs `aria-selected`/`aria-activedescendant` to the current `teamActiveIndex`. */
-function updateTeamActiveDescendant() {
-  const options = els.teamResults.querySelectorAll('li[role="option"]:not([aria-disabled])');
-  options.forEach((li, i) => {
-    li.setAttribute('aria-selected', String(i === teamActiveIndex));
+/** The first focusable element inside a popover: its search input, else its first input/button. */
+function firstFocusable(container) {
+  return container.querySelector('input, button, [tabindex]:not([tabindex="-1"])');
+}
+
+/** Wires open/close focus management and (for filter popovers) positioning for one popover. */
+function bindPopoverMechanics(popover) {
+  const isFilterPopover = popover.classList.contains('filter-popover');
+  popover.addEventListener('toggle', (ev) => {
+    const trigger = document.querySelector(`[popovertarget="${popover.id}"]`);
+    if (ev.newState === 'open') {
+      if (trigger) trigger.setAttribute('aria-expanded', 'true');
+      if (isFilterPopover && trigger) positionPopover(popover, trigger);
+      const focusable = firstFocusable(popover);
+      if (focusable) focusable.focus();
+    } else {
+      if (trigger) trigger.setAttribute('aria-expanded', 'false');
+      const active = document.activeElement;
+      if (trigger && (popover.contains(active) || active === document.body)) {
+        trigger.focus();
+      }
+    }
   });
-  const activeLi = options[teamActiveIndex];
-  if (activeLi) {
-    els.teamSearch.setAttribute('aria-activedescendant', activeLi.id);
-  } else {
-    els.teamSearch.removeAttribute('aria-activedescendant');
+}
+
+/** Repositions every currently-open filter popover (window scroll/resize, Pitfall 2). */
+function repositionOpenPopovers() {
+  for (const popover of document.querySelectorAll('.filter-popover:popover-open')) {
+    const trigger = document.querySelector(`[popovertarget="${popover.id}"]`);
+    if (trigger) positionPopover(popover, trigger);
   }
 }
 
-/** Sets the team highlight, then resets the search field (SITE-09). */
-function chooseTeam(setState, slug) {
-  setState({ team: slug });
-  els.teamSearch.value = '';
-  closeTeamOptions();
+/**
+ * Moves "Clear all filters" and every filter section between the desktop
+ * popovers and the phone bottom sheet, closing any open popover first.
+ * @param {boolean} isMobile
+ */
+function placeSections(isMobile) {
+  for (const popover of document.querySelectorAll('.filter-popover:popover-open, .filters-sheet:popover-open')) {
+    popover.hidePopover();
+  }
+  if (isMobile) {
+    els.sheetClearSlot.appendChild(els.clearFilters);
+    for (const [sectionId] of SECTION_POPOVERS) {
+      els.sheetBody.appendChild(document.getElementById(sectionId));
+    }
+  } else {
+    els.toolbar.insertBefore(els.clearFilters, els.toolbar.firstChild);
+    for (const [sectionId, popoverId] of SECTION_POPOVERS) {
+      document.getElementById(popoverId).appendChild(document.getElementById(sectionId));
+    }
+  }
 }
 
-/** Closes the phone filters drawer and returns focus to the button that opened it (SITE-18). */
-function closeDrawer() {
-  document.body.classList.remove('filters-open');
-  els.filtersButton.focus();
-}
-
-/** Binds every rail DOM event listener once. `getState` always returns the latest state. */
+/** Binds every toolbar/popover/sheet DOM event listener once. `getState` always returns the latest state. */
 export function initFilters({ data, getState, setState }) {
   els = {
+    toolbar: document.getElementById('toolbar'),
     seasonFrom: document.getElementById('season-from'),
     seasonTo: document.getElementById('season-to'),
     seasonCounts: document.getElementById('season-counts'),
     networksSection: document.getElementById('filter-networks'),
     slotsSection: document.getElementById('filter-slots'),
     roleSection: document.getElementById('filter-role'),
-    teamSearch: document.getElementById('team-search'),
-    teamResults: document.getElementById('team-results'),
-    teamChip: document.getElementById('team-chip'),
+    conferenceSearch: document.getElementById('conference-search'),
+    conferenceList: document.getElementById('conference-list'),
+    schoolSearch: document.getElementById('school-search'),
+    schoolChips: document.getElementById('school-chips'),
+    schoolList: document.getElementById('school-list'),
+    postseasonOptions: document.getElementById('postseason-options'),
     clearFilters: document.getElementById('clear-filters'),
-    railToggle: document.getElementById('rail-toggle'),
-    railClose: document.getElementById('rail-close'),
     filtersButton: document.getElementById('filters-button'),
+    filtersShowResults: document.getElementById('filters-show-results'),
+    sheetClearSlot: document.querySelector('.sheet-clear-slot'),
+    sheetBody: document.querySelector('.sheet-body'),
+    triggers: Object.fromEntries(
+      TRIGGER_NAMES.map((name) => [name, document.getElementById(`trigger-${name}`)]),
+    ),
   };
 
   buildSeasonSelects(data);
   buildNetworkChecklist(data);
   buildRoleHelper();
+  buildConferenceList(data);
+  buildSchoolList(data);
 
   const onSeasonChange = () => {
     const from = Number(els.seasonFrom.value);
@@ -271,83 +434,66 @@ export function initFilters({ data, getState, setState }) {
 
   els.roleSection.addEventListener('change', (ev) => handleRoleChange(setState, ev));
 
-  els.teamSearch.addEventListener('input', () => {
-    const value = els.teamSearch.value;
-    window.clearTimeout(teamDebounceTimer);
-    teamDebounceTimer = window.setTimeout(() => updateTeamOptions(data, value), DEBOUNCE_MS);
+  els.conferenceList.addEventListener('change', () => handleConferenceChange(data, setState));
+  els.conferenceSearch.addEventListener('input', () => {
+    filterChecklist(els.conferenceList, els.conferenceSearch.value, (cb) => [normalizeName(cb.value)]);
   });
+  bindChecklistKeyboard(els.conferenceSearch, els.conferenceList);
 
-  els.teamSearch.addEventListener('keydown', (ev) => {
-    if (ev.key === 'ArrowDown') {
-      if (els.teamResults.hidden || teamOptions.length === 0) return;
-      ev.preventDefault();
-      teamActiveIndex = Math.min(teamActiveIndex + 1, teamOptions.length - 1);
-      updateTeamActiveDescendant();
-    } else if (ev.key === 'ArrowUp') {
-      if (els.teamResults.hidden || teamOptions.length === 0) return;
-      ev.preventDefault();
-      teamActiveIndex = Math.max(teamActiveIndex - 1, 0);
-      updateTeamActiveDescendant();
-    } else if (ev.key === 'Enter') {
-      if (teamActiveIndex >= 0 && teamOptions[teamActiveIndex]) {
-        ev.preventDefault();
-        chooseTeam(setState, teamOptions[teamActiveIndex].slug);
-      }
-    } else if (ev.key === 'Escape') {
-      closeTeamOptions();
-    }
+  els.schoolList.addEventListener('change', () => handleSchoolChange(setState));
+  els.schoolSearch.addEventListener('input', () => {
+    filterChecklist(els.schoolList, els.schoolSearch.value, (cb) => schoolKeysBySlug.get(cb.value) ?? []);
   });
+  bindChecklistKeyboard(els.schoolSearch, els.schoolList);
 
-  els.teamResults.addEventListener('click', (ev) => {
-    const li = ev.target.closest('li[role="option"]');
-    if (!li || !li.dataset.teamSlug) return;
-    chooseTeam(setState, li.dataset.teamSlug);
-  });
-
-  document.addEventListener('click', (ev) => {
-    if (els.teamResults.hidden) return;
-    if (els.teamResults.contains(ev.target) || ev.target === els.teamSearch) return;
-    closeTeamOptions();
-  });
-
-  els.teamChip.addEventListener('click', (ev) => {
+  els.schoolChips.addEventListener('click', (ev) => {
     const btn = ev.target.closest('.chip-remove');
-    if (!btn) return;
-    setState({ team: null });
+    if (!btn || !btn.dataset.slug) return;
+    setState({ school: getState().school.filter((slug) => slug !== btn.dataset.slug) });
   });
+
+  els.postseasonOptions.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('[data-postseason]');
+    if (!btn) return;
+    setState({ postseason: btn.dataset.postseason });
+  });
+  bindPostseasonKeyboard(setState);
 
   els.clearFilters.addEventListener('click', () => {
-    setState({ seasons: null, networks: null, slots: null, role: null });
+    setState({
+      seasons: null,
+      networks: null,
+      slots: null,
+      role: null,
+      conferences: [],
+      school: [],
+      postseason: 'all',
+      // D-27 (overrides the earlier "people are not cleared" proposal):
+      // Clear all filters also removes every selected announcer, compare
+      // mode, and called-together. "Clear selection" in the chip row still
+      // clears only the people.
+      people: [],
+      compare: false,
+      together: false,
+    });
   });
 
-  els.railToggle.addEventListener('click', () => {
-    const collapsed = document.body.classList.toggle('rail-collapsed');
-    els.railToggle.setAttribute('aria-expanded', String(!collapsed));
-    els.railToggle.textContent = collapsed ? '▸' : '▾';
+  els.filtersShowResults.addEventListener('click', () => {
+    document.getElementById('filters-sheet').hidePopover();
   });
 
-  const tabletMedia = window.matchMedia('(min-width: 641px) and (max-width: 1024px)');
-  if (tabletMedia.matches) {
-    document.body.classList.add('rail-collapsed');
-    els.railToggle.setAttribute('aria-expanded', 'false');
-    els.railToggle.textContent = '▸';
+  for (const popover of document.querySelectorAll('.filter-popover, .filters-sheet')) {
+    bindPopoverMechanics(popover);
   }
+  window.addEventListener('scroll', repositionOpenPopovers, { passive: true });
+  window.addEventListener('resize', repositionOpenPopovers);
 
-  els.filtersButton.addEventListener('click', () => {
-    document.body.classList.add('filters-open');
-    els.railClose.focus();
-  });
-
-  els.railClose.addEventListener('click', () => closeDrawer());
-
-  document.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Escape' && document.body.classList.contains('filters-open')) {
-      closeDrawer();
-    }
-  });
+  const mobileMedia = window.matchMedia('(max-width: 640px)');
+  placeSections(mobileMedia.matches);
+  mobileMedia.addEventListener('change', (ev) => placeSections(ev.matches));
 }
 
-/** Renders the season range selects and the D-05 per-season counts list. */
+/** Renders the season range selects and the per-season counts list (D-13 counts). */
 function renderSeasons(data, state, view) {
   const [minSeason, maxSeason] = state.seasons ?? [data.seasonMin, data.seasonMax];
   els.seasonFrom.value = String(minSeason);
@@ -396,41 +542,127 @@ function renderRole(state) {
   }
 }
 
-/** Renders the `#team-chip` for the current team highlight, or clears it (SITE-09). */
-function renderTeamChip(data, state) {
-  if (state.team == null) {
-    els.teamChip.className = '';
-    els.teamChip.replaceChildren();
-    return;
+/** Syncs the Conference checklist's checked state from `state.conferences` (D-10). */
+function renderConferences(state) {
+  for (const [name, cb] of conferenceCheckboxes) {
+    cb.checked = state.conferences.includes(name);
   }
-  const idx = data.teamIndexBySlug.get(state.team);
-  const team = data.lookups.teams[idx];
-  els.teamChip.className = 'chip';
-
-  const nameSpan = document.createElement('span');
-  nameSpan.textContent = team.name;
-
-  const removeBtn = document.createElement('button');
-  removeBtn.type = 'button';
-  removeBtn.className = 'chip-remove';
-  removeBtn.textContent = '×';
-  removeBtn.setAttribute('aria-label', `Remove ${team.name}`);
-
-  els.teamChip.replaceChildren(nameSpan, removeBtn);
 }
 
-/** Counts the active hide-filters plus the team highlight, for the mobile Filters(N) button. */
+/** Syncs the School checklist's checked state and `#school-chips` from `state.school` (D-11). */
+function renderSchool(data, state) {
+  for (const [slug, cb] of schoolCheckboxes) {
+    cb.checked = state.school.includes(slug);
+  }
+  const items = state.school.map((slug) => {
+    const idx = data.teamIndexBySlug.get(slug);
+    const team = data.lookups.teams[idx];
+    const li = document.createElement('li');
+    li.className = 'chip';
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = team.name;
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'chip-remove';
+    removeBtn.textContent = '×';
+    removeBtn.setAttribute('aria-label', `Remove ${team.name}`);
+    removeBtn.dataset.slug = slug;
+    li.appendChild(nameSpan);
+    li.appendChild(removeBtn);
+    return li;
+  });
+  els.schoolChips.replaceChildren(...items);
+}
+
+/**
+ * Syncs the Bowls/Playoffs radio group's `aria-checked` from `state.postseason`
+ * (D-18), and its roving `tabindex` (WR-05): only the selected radio is a tab
+ * stop, per the WAI-ARIA APG radiogroup pattern `bindPostseasonKeyboard` wires
+ * the arrow-key/Home/End half of.
+ */
+function renderPostseason(state) {
+  for (const btn of els.postseasonOptions.querySelectorAll('[data-postseason]')) {
+    const checked = btn.dataset.postseason === state.postseason;
+    btn.setAttribute('aria-checked', String(checked));
+    btn.tabIndex = checked ? 0 : -1;
+  }
+}
+
+/** A toolbar trigger's label and active state, from `state` (D-02 copywriting). */
+function triggerInfo(name, data, state) {
+  if (name === 'announcers') {
+    if (state.people.length === 0) return { label: 'Announcers', active: false };
+    return { label: `Announcers · ${state.people.length}`, active: true };
+  }
+  if (name === 'seasons') {
+    if (state.seasons == null) return { label: 'Seasons', active: false };
+    const [a, b] = state.seasons;
+    return { label: `Seasons ${a}–${b}`, active: true };
+  }
+  if (name === 'networks') {
+    if (state.networks == null) return { label: 'Networks', active: false };
+    return { label: `Networks · ${state.networks.length}`, active: true };
+  }
+  if (name === 'kickoff') {
+    if (state.slots == null) return { label: 'Kickoff', active: false };
+    const label =
+      state.slots.length === 1 ? `Kickoff: ${SLOT_SHORT_LABELS[state.slots[0]]}` : `Kickoff · ${state.slots.length}`;
+    return { label, active: true };
+  }
+  if (name === 'role') {
+    if (state.role == null) return { label: 'Role', active: false };
+    return { label: `Role: ${ROLE_LABELS[state.role]}`, active: true };
+  }
+  if (name === 'conference') {
+    if (state.conferences.length === 0) return { label: 'Conference', active: false };
+    const label =
+      state.conferences.length === 1 ? `Conference: ${state.conferences[0]}` : `Conference · ${state.conferences.length}`;
+    return { label, active: true };
+  }
+  if (name === 'school') {
+    if (state.school.length === 0) return { label: 'School', active: false };
+    if (state.school.length === 1) {
+      const idx = data.teamIndexBySlug.get(state.school[0]);
+      return { label: `School: ${data.lookups.teams[idx].name}`, active: true };
+    }
+    return { label: `School · ${state.school.length}`, active: true };
+  }
+  if (name === 'postseason') {
+    if (state.postseason === 'all') return { label: 'Bowls/Playoffs', active: false };
+    const label = state.postseason === 'exclude' ? 'Bowls/Playoffs: Exclude' : 'Bowls/Playoffs: Only';
+    return { label, active: true };
+  }
+  return { label: name, active: false };
+}
+
+/** Renders every toolbar trigger's label and `data-active` state (D-02). */
+function renderTriggers(data, state) {
+  for (const name of TRIGGER_NAMES) {
+    const btn = els.triggers[name];
+    const { label, active } = triggerInfo(name, data, state);
+    btn.textContent = label;
+    btn.dataset.active = active ? 'true' : 'false';
+  }
+}
+
+/** Counts the active filters, for the mobile Filters(N) button (extends SITE-18's rail-era count).
+ * D-27: also counts every selected announcer, since the phone Announcers
+ * picker lives inside this same Filters sheet and "Clear all filters"
+ * clears people too. */
 function activeFilterCount(state) {
   let n = 0;
   if (state.seasons != null) n += 1;
   if (state.networks != null) n += 1;
   if (state.slots != null) n += 1;
   if (state.role != null) n += 1;
-  if (state.team != null) n += 1;
+  if (state.conferences.length > 0) n += 1;
+  if (state.school.length > 0) n += 1;
+  if (state.postseason !== 'all') n += 1;
+  n += state.people.length;
   return n;
 }
 
-/** Renders the `#filters-button` label (SITE-18). */
+/** Renders the `#filters-button` label (SITE-18, D-03). */
 function renderFiltersButton(state) {
   const n = activeFilterCount(state);
   els.filtersButton.textContent = n > 0 ? `Filters (${n})` : 'Filters';
@@ -442,6 +674,9 @@ export function renderFilters({ data, state, view }) {
   renderNetworks(data, state);
   renderSlots(state);
   renderRole(state);
-  renderTeamChip(data, state);
+  renderConferences(state);
+  renderSchool(data, state);
+  renderPostseason(state);
+  renderTriggers(data, state);
   renderFiltersButton(state);
 }

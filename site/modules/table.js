@@ -1,8 +1,12 @@
 /**
  * Matched-games table: the screen-reader and phone fallback for the chart's
- * current selection (D-11, SITE-13, T16). Rows only for `view.highlighted`,
- * and only while a person or team is selected -- otherwise `#table-empty`'s
- * "Nothing selected" prompt shows instead (D-11's anti-bulk-copy rule).
+ * current selection (D-06, D-12, SITE-13, SITE-22, SITE-26, T16). Rows come
+ * from `computeView`'s own matched-games list -- a person's highlighted
+ * games, or (absent a person) every game passing the fade filters once a
+ * School filter is set -- and only while a person or school is selected;
+ * otherwise `#table-empty`'s "Nothing selected" prompt shows instead (D-12's
+ * anti-bulk-copy rule). The whole row opens the detail panel on click or
+ * Enter (D-06); there is no separate Details column.
  *
  * DOM is built only with createElement/textContent/replaceChildren -- never
  * any markup-injecting DOM API (T-04-34). Every href passes through
@@ -18,6 +22,7 @@ import {
   measurementLabel,
 } from './format.js';
 import { safeHref } from './panel.js';
+import { currentTheme, makePill } from './pill.js';
 import { personOnGame } from './select.js';
 
 const tableEl = document.getElementById('games-table');
@@ -96,10 +101,35 @@ function buildSourceCell(data, i) {
   return td;
 }
 
-/** Builds one `<tr>` for telecast `i`. */
+/** Builds one `<tr>` for telecast `i`. The whole row is the click/Enter
+ * target that opens the detail panel (D-06); a click on a link inside the
+ * row (the Source cell) follows the link instead. */
 function buildRow(data, state, onDetails, i) {
   const t = data.t;
   const tr = document.createElement('tr');
+  tr.className = 'row-link';
+  tr.tabIndex = 0;
+  tr.setAttribute('aria-label', `Details for ${formatMatchup(data, i, {})}`);
+  tr.addEventListener('click', (ev) => {
+    if (ev.target instanceof Element && ev.target.closest('a')) return;
+    onDetails(i);
+  });
+  // `keyup`, not `keydown` (D-06 bug fix): `onDetails` moves focus to
+  // `#panel-close` (panel.js openPanel). If that happened during this row's
+  // own `keydown` handler, the still-pending `keyup` for the same physical
+  // Enter press would then be dispatched to the now-focused `#panel-close`
+  // button -- and a browser natively synthesizes a click from a focused
+  // button's own Enter `keyup`, immediately closing the panel this same
+  // keypress just opened (confirmed empirically: a trusted `click` fired on
+  // `#panel-close` right after the row's Enter press). Handling this on
+  // `keyup` instead means our own handler runs on the *last* event of the
+  // physical keypress, so there is no further keyup left to leak to the
+  // newly focused button once focus moves.
+  tr.addEventListener('keyup', (ev) => {
+    if (ev.key !== 'Enter') return;
+    if (ev.target instanceof Element && ev.target.closest('a')) return;
+    onDetails(i);
+  });
 
   const dateTd = document.createElement('td');
   dateTd.className = 'num';
@@ -111,7 +141,8 @@ function buildRow(data, state, onDetails, i) {
   tr.appendChild(matchupTd);
 
   const networkTd = document.createElement('td');
-  networkTd.textContent = data.lookups.networks[t.network[i]].name;
+  const net = data.lookups.networks[t.network[i]];
+  networkTd.appendChild(makePill(net.name, net.family, currentTheme()));
   tr.appendChild(networkTd);
 
   const crewTd = document.createElement('td');
@@ -128,16 +159,6 @@ function buildRow(data, state, onDetails, i) {
   tr.appendChild(viewersTd);
 
   tr.appendChild(buildSourceCell(data, i));
-
-  const detailsTd = document.createElement('td');
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'details-button';
-  button.textContent = 'Details';
-  button.setAttribute('aria-label', `Details for ${formatMatchup(data, i, {})}`);
-  button.addEventListener('click', () => onDetails(i));
-  detailsTd.appendChild(button);
-  tr.appendChild(detailsTd);
 
   return tr;
 }
@@ -168,7 +189,7 @@ function renderSortHeaders(sort) {
 
 /**
  * Renders the matched-games table (or its empty state) from the current
- * data/state/view (D-11, SITE-13).
+ * data/state/view (D-12, SITE-13, SITE-22).
  * @param {{data: object, view: object, state: object, sort: {key: "date"|"viewers", dir: "asc"|"desc"}, onSort: (key: string) => void, onDetails: (i: number) => void}} args
  */
 export function renderTable({ data, view, state, sort, onSort, onDetails }) {
@@ -186,6 +207,6 @@ export function renderTable({ data, view, state, sort, onSort, onDetails }) {
   emptyEl.hidden = true;
   tableEl.hidden = false;
 
-  const rows = [...view.highlighted].sort((a, b) => compareRows(data, sort, a, b));
+  const rows = [...view.matched].sort((a, b) => compareRows(data, sort, a, b));
   tbody.replaceChildren(...rows.map((i) => buildRow(data, state, onDetails, i)));
 }

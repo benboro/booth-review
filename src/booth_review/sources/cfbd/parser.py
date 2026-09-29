@@ -66,6 +66,8 @@ class CfbdGame:
     away_points: int | None
     excitement_index: float | None
     notes: str | None
+    is_cfp: bool = False
+    playoff_round: str | None = None
 
 
 def parse_games(content: bytes) -> list[CfbdGame]:
@@ -78,6 +80,13 @@ def parse_games(content: bytes) -> list[CfbdGame]:
         _require(row, "homeTeam", kind="game")
         _require(row, "awayTeam", kind="game")
         start_date_raw = _require(row, "startDate", kind="game")
+        # Source: the CFBD /games "playoff" object, non-null only for CFP
+        # games (competition="cfp"); VERIFIED against the real vault this
+        # session (booth-review, phase 04.1 research).
+        playoff = row.get("playoff")
+        is_cfp = isinstance(playoff, dict)
+        playoff_round_raw = playoff.get("round") if isinstance(playoff, dict) else None
+        playoff_round = playoff_round_raw if isinstance(playoff_round_raw, str) else None
         games.append(
             CfbdGame(
                 id=row["id"],
@@ -102,6 +111,8 @@ def parse_games(content: bytes) -> list[CfbdGame]:
                 away_points=row.get("awayPoints"),
                 excitement_index=row.get("excitementIndex"),
                 notes=row.get("notes"),
+                is_cfp=is_cfp,
+                playoff_round=playoff_round,
             )
         )
     return games

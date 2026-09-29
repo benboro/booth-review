@@ -1,9 +1,10 @@
 /**
  * Detail panel: full per-telecast facts, credits, and source links (SITE-05,
- * SITE-17, D-02, D-04, D-07, D-08, D-10, D-16). A right-side drawer on
- * desktop and a bottom sheet on phones (both styled by `.drawer` in
- * style.css); opened by a chart dot click or a matched-games table row's
- * Details button, closed by `#panel-close` or Escape.
+ * SITE-17, D-01, D-02, D-04, D-07, D-08, D-09, D-10, D-16, D-17). A push
+ * grid column on desktop/tablet and a bottom sheet on phones (styled by
+ * `#detail-panel`/`.panel-inner` in style.css); opened by a chart dot click
+ * or clicking/pressing Enter on a matched-games table row, closed by
+ * `#panel-close` or Escape.
  *
  * DOM is built only with createElement/textContent/replaceChildren -- never
  * any markup-injecting DOM API (T-04-34). Every href passes through
@@ -16,26 +17,42 @@ import {
   FEED_LABELS,
   ROLE_LABELS,
   SLOT_LABELS,
+  conferenceLine,
   formatAxisValue,
   formatDate,
   formatKickoff,
   formatMatchup,
   formatViewers,
-  isSaturday,
+  gameTypeLabel,
   measurementLabel,
+  showsTimeSlot,
 } from './format.js';
+import { currentTheme, makePill } from './pill.js';
 
 /** The element focus should return to once the panel closes, or null. */
 let previouslyFocused = null;
 
-/** `closePanel`'s pending post-transition hide, or null (WR-03). */
+/** `closePanel`'s pending fallback hide timer, or null (WR-03, D-24). */
 let hideTimer = null;
 
-/** Cancels a pending post-close hide, so it can't fire after a reopen. */
+/** The one-shot `transitionend`/`transitioncancel` listener `closePanel`
+ * registered on `#detail-panel`, or null (WR-03, D-24). Tracked so
+ * `cancelPendingHide` can remove it before a reopen fires it late. */
+let hideListenerTarget = null;
+let hideListener = null;
+
+/** Cancels a pending post-close hide -- both the fallback timer and the
+ * transition-event listener -- so neither can fire after a reopen (WR-03). */
 function cancelPendingHide() {
   if (hideTimer !== null) {
     window.clearTimeout(hideTimer);
     hideTimer = null;
+  }
+  if (hideListenerTarget !== null && hideListener !== null) {
+    hideListenerTarget.removeEventListener('transitionend', hideListener);
+    hideListenerTarget.removeEventListener('transitioncancel', hideListener);
+    hideListenerTarget = null;
+    hideListener = null;
   }
 }
 
@@ -72,26 +89,36 @@ function externalLink(href, text) {
 }
 
 /** date · kickoff ET · time-slot line. The time-slot label ("Prime time",
- * "Afternoon", "Noon") describes a Saturday scheduling pattern and is
- * omitted for any non-Saturday game (weeknight games, and -- best-effort,
- * since the site-data contract has no `season_type`/`week` field per
- * telecast -- most bowl/CFP games, which are rarely played on a Saturday;
- * see `isSaturday`'s own doc comment for that limitation). */
+ * "Afternoon", "Noon") is gated on `showsTimeSlot` (D-19): only a
+ * regular-season Saturday game shows it, so a Saturday bowl/CFP game never
+ * gets a misleading scheduling-pattern label. */
 function dateLine(data, i) {
   const t = data.t;
   const parts = [formatDate(t.date[i]), formatKickoff(t.kickoff[i]) ?? 'Kickoff time not recorded'];
-  if (t.time_slot[i] != null && isSaturday(t.date[i])) parts.push(SLOT_LABELS[t.time_slot[i]]);
+  if (showsTimeSlot(data, i)) parts.push(SLOT_LABELS[t.time_slot[i]]);
   return parts.join(' · ');
 }
 
-/** Primary network, then "Also on: ..." for any other outlets. */
-function networkLine(data, i) {
+/** Networks paragraph: "Network: " + a pill per network, primary first, then
+ * "Also on: " + a pill per other outlet (SITE-26). Full names and any
+ * parenthetical notes are kept -- the panel is where they belong. */
+function buildNetworksParagraph(data, i, theme) {
   const t = data.t;
-  const primary = data.lookups.networks[t.network[i]].name;
-  const others = t.outlets[i]
-    .filter((idx) => idx !== t.network[i])
-    .map((idx) => data.lookups.networks[idx].name);
-  return others.length > 0 ? `${primary} · Also on: ${others.join(', ')}` : primary;
+  const p = document.createElement('p');
+  p.className = 'panel-networks';
+  p.appendChild(document.createTextNode('Network: '));
+  const primaryNet = data.lookups.networks[t.network[i]];
+  p.appendChild(makePill(primaryNet.name, primaryNet.family, theme));
+  const others = t.outlets[i].filter((idx) => idx !== t.network[i]);
+  if (others.length > 0) {
+    p.appendChild(document.createTextNode(' · Also on: '));
+    others.forEach((idx, pos) => {
+      if (pos > 0) p.appendChild(document.createTextNode(' '));
+      const net = data.lookups.networks[idx];
+      p.appendChild(makePill(net.name, net.family, theme));
+    });
+  }
+  return p;
 }
 
 /** Crew list: one `<li>` per crew entry, "[Position]: [Name]" (product
@@ -207,15 +234,29 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
   dateP.textContent = dateLine(data, i);
   children.push(dateP);
 
+  const gameType = gameTypeLabel(data, i);
+  if (gameType != null) {
+    const gameTypeP = document.createElement('p');
+    gameTypeP.className = 'panel-game-type';
+    gameTypeP.textContent = gameType;
+    children.push(gameTypeP);
+  }
+
   if (t.neutral[i]) {
     const neutralP = document.createElement('p');
     neutralP.textContent = 'Neutral site';
     children.push(neutralP);
   }
 
-  const networkP = document.createElement('p');
-  networkP.textContent = networkLine(data, i);
-  children.push(networkP);
+  const conferences = conferenceLine(data, i);
+  if (conferences != null) {
+    const conferencesP = document.createElement('p');
+    conferencesP.className = 'panel-conferences';
+    conferencesP.textContent = `Conference: ${conferences}`;
+    children.push(conferencesP);
+  }
+
+  children.push(buildNetworksParagraph(data, i, currentTheme()));
 
   const crewHeading = document.createElement('h3');
   crewHeading.textContent = 'Crew';
@@ -277,29 +318,82 @@ export function openPanel(i, ctx) {
   // A reopen inside closePanel's 150ms slide-out window would otherwise be
   // re-hidden when that stale timer fires (WR-03).
   cancelPendingHide();
+  const wasHidden = panelEl.hidden;
   panelEl.hidden = false;
+  // Unhiding and adding `body.panel-open` in the same frame would start the
+  // width transition from `display: none`'s implicit 0 with no paint in
+  // between, so the browser can coalesce it away entirely -- force a reflow
+  // first so the 0-width state is committed before the class (and the
+  // transition to 360px/320px) is applied (Pattern 1).
+  if (wasHidden) void panelEl.offsetWidth;
   document.body.classList.add('panel-open');
   document.getElementById('panel-close').focus();
 }
 
 /**
  * Closes the panel: removes `body.panel-open` immediately (driving the CSS
- * slide-out), hides `#detail-panel` after the 150ms transition (immediately
- * under `prefers-reduced-motion`), and restores focus to whatever was
+ * slide-out), hides `#detail-panel` and restores focus to whatever was
  * focused before the panel opened.
+ *
+ * D-24 (original bug, desktop/tablet): a bare 150ms hide timer raced the
+ * CSS `width` transition -- setting `hidden` (display:none) at the same
+ * ~150ms mark as the transition's own natural end frequently interrupted it
+ * first, so the browser fired `transitioncancel` instead of `transitionend`
+ * for the tracked property, and app.js's `transitionend`-only resize
+ * listener never ran (confirmed empirically: a diagnostic listener logged
+ * `transitioncancel` for `width` at the transition's expected end time on
+ * every close).
+ *
+ * D-32 (desktop/tablet mechanism): `#detail-panel`'s own `width` no longer
+ * transitions at all (style.css's "Detail panel" section) -- the grid
+ * column snaps to 0 in the same frame `body.panel-open` is removed, so
+ * there is no transition left to wait for. The panel hides immediately,
+ * the same way the old reduced-motion path always did, so the chart's own
+ * resize (app.js, scheduled on the very next animation frame) sees the
+ * final collapsed width at once instead of ~150ms later. This keeps D-24:
+ * with nothing left to race, the panel can never end up stuck mid-close.
+ *
+ * Phones keep the original mechanism unchanged: hiding is driven by the
+ * bottom sheet's own `transform` transition's one-shot event
+ * (`transitionend` on a full close, `transitioncancel` on an interrupted
+ * one -- e.g. a close fired mid-transition), with a longer fallback timer
+ * only for the case where no transition event ever fires at all (e.g. the
+ * panel was already off-screen), and hides immediately under
+ * `prefers-reduced-motion`.
  */
 export function closePanel() {
   document.body.classList.remove('panel-open');
 
   const panelEl = document.getElementById('detail-panel');
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const isPhone = window.matchMedia('(max-width: 640px)').matches;
+
+  cancelPendingHide();
+
   const hide = () => {
-    hideTimer = null;
+    cancelPendingHide();
     panelEl.hidden = true;
   };
-  cancelPendingHide();
-  if (reducedMotion) hide();
-  else hideTimer = window.setTimeout(hide, 150);
+
+  if (!isPhone || reducedMotion) {
+    // Desktop/tablet: no transition left to wait for (D-32). Phones under
+    // reduced motion: same immediate-hide behavior as before.
+    hide();
+  } else {
+    // Phones only, motion allowed: wait for the bottom sheet's own
+    // `transform` transition to actually finish.
+    const onTransitionEvent = (ev) => {
+      if (ev.target !== panelEl || ev.propertyName !== 'transform') return;
+      hide();
+    };
+    hideListenerTarget = panelEl;
+    hideListener = onTransitionEvent;
+    panelEl.addEventListener('transitionend', onTransitionEvent);
+    panelEl.addEventListener('transitioncancel', onTransitionEvent);
+    // Fallback: guarantees the panel still hides even if neither transition
+    // event ever fires (belt-and-suspenders, not the primary mechanism).
+    hideTimer = window.setTimeout(hide, 300);
+  }
 
   if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
     previouslyFocused.focus();

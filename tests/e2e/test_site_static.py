@@ -74,7 +74,7 @@ def test_site_data_json_is_reachable_and_matches_the_contract_version(
     guarded_page.goto(f"{site_url}/index.html")
     response = guarded_page.request.get(f"{site_url}/site-data.json")
     assert response.status == 200
-    assert response.json()["schema_version"] == "1.0.0"
+    assert response.json()["schema_version"] == "1.2.0"
 
 
 _BOX_JS = """
@@ -113,10 +113,21 @@ def test_secondary_pages_do_not_inherit_the_chart_grid(
 
 def test_chart_page_keeps_its_grid(guarded_page: Page, site_url: str) -> None:
     """WR-05: scoping the grid to `body.app` leaves the chart page's own
-    rail + chart layout in place."""
+    toolbar + chart layout in place (04.1-04: the left rail was replaced by
+    a full-width toolbar row above the chart, D-01/D-02). At desktop widths
+    the grid carries a dedicated "panel" column beside the chart row only
+    -- never beside the table row (D-23, replacing plan 04.1-05's
+    both-rows span)."""
     guarded_page.set_viewport_size({"width": 1400, "height": 900})
     guarded_page.goto(f"{site_url}/index.html")
     assert guarded_page.evaluate("getComputedStyle(document.body).display") == "grid"
-    rail = guarded_page.evaluate(_BOX_JS, "#rail")
-    assert rail["x"] == 0
-    assert rail["width"] == 280
+    toolbar = guarded_page.evaluate(_BOX_JS, "#toolbar")
+    assert toolbar["x"] == 0
+    assert toolbar["width"] == 1400
+
+    grid_areas = guarded_page.evaluate("getComputedStyle(document.body).gridTemplateAreas")
+    collapsed = " ".join(grid_areas.split())
+    assert "selection" in collapsed
+    assert "main panel" in collapsed
+    assert "table table" in collapsed
+    assert "table panel" not in collapsed

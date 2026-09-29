@@ -1,6 +1,6 @@
-"""Filter-rail browser tests (SITE-06, SITE-07, SITE-09, SITE-11, SITE-12,
-SITE-18; D-05, D-06, D-08, D-09) -- proven against the fixture build served
-by `guarded_page`/`mobile_page`/`open_app`, per
+"""Filter toolbar browser tests (SITE-20, SITE-21, SITE-22, SITE-24, SITE-27;
+D-02, D-03, D-10, D-11, D-13, D-18) -- proven against the fixture build
+served by `guarded_page`/`mobile_page`/`open_app`, per
 `tests/fixtures/contract/site-data.fixture.json`'s 12 dots and 10 people.
 """
 
@@ -63,7 +63,9 @@ def _highlighted(page: Page) -> list[int]:
 
 
 def _visible_customdata(page: Page) -> list[int]:
-    """Every telecast index currently plotted in a family trace (not the highlight overlay)."""
+    """Every telecast index currently plotted in an *active* family trace
+    (passes every fade filter, not highlighted) -- excludes the inert traces
+    (D-14/D-15) and the highlight overlay."""
     js = """
     () => document.getElementById('chart').data
       .filter((t) => typeof t.meta === 'string' && t.meta.startsWith('family:'))
@@ -78,28 +80,42 @@ def _options(page: Page, results_id: str) -> Any:
 
 
 def _add_person_by_query(page: Page, query: str, index: int = 0) -> None:
-    """Types `query` into the person search, waits out the debounce, and clicks the option."""
+    """Opens the Announcers popover (D-21), types `query` into the person
+    search, waits for `#person-results` to reflect it (D-28's synchronous
+    filter, no debounce), and clicks the unchecked option."""
+    if not page.locator("#pop-announcers").evaluate("(el) => el.matches(':popover-open')"):
+        _open_filter(page, "announcers")
     page.fill("#person-search", query)
-    option = _options(page, "person-results").nth(index)
+    trimmed = query.strip()
+    page.wait_for_function(
+        "(q) => document.getElementById('person-results').dataset.query === q", arg=trimmed
+    )
+    option = page.locator("#person-results li[role='option'][aria-selected='false']").nth(index)
     expect(option).to_be_visible()
     option.click()
 
 
-def _pick_team(page: Page, query: str) -> None:
-    """Types `query` into the team search, waits out the debounce, and clicks the first option."""
-    page.fill("#team-search", query)
-    option = _options(page, "team-results").first
-    expect(option).to_be_visible()
-    option.click()
+def _open_filter(page: Page, name: str) -> None:
+    """Clicks `#trigger-{name}` and waits for its `#pop-{name}` popover to
+    open (D-02). The native `toggle` event (which filters.js uses to set
+    `aria-expanded` and move focus) fires asynchronously relative to
+    `:popover-open` becoming true, so this also waits for `aria-expanded`
+    before returning -- otherwise a caller reading it right after this
+    returns can race the still-pending event."""
+    page.click(f"#trigger-{name}")
+    page.wait_for_function(f"document.getElementById('pop-{name}').matches(':popover-open')")
+    page.wait_for_function(
+        f"document.getElementById('trigger-{name}').getAttribute('aria-expanded') === 'true'"
+    )
 
 
 def test_season_counts_hidden_until_disclosure_opened(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """The per-season counts list is noisy by default, so it stays behind a
-    collapsed `<details>` disclosure and is invisible until opened (SITE-06
-    still requires the counts to exist, just not to always show)."""
+    collapsed `<details>` disclosure and is invisible until opened."""
     open_app(guarded_page, "")
+    _open_filter(guarded_page, "seasons")
     assert guarded_page.locator("#season-counts-details").get_attribute("open") is None
     expect(guarded_page.locator("#season-counts")).to_be_hidden()
     assert guarded_page.inner_text("#season-counts") == ""
@@ -109,9 +125,10 @@ def test_season_counts_hidden_until_disclosure_opened(
 
 
 def test_default_season_counts(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
-    """SITE-06: every season lists its rated-telecast count on first load,
-    once the "Games per season" disclosure is opened."""
+    """Every season lists its rated-telecast count on first load, once the
+    "Games per season" disclosure is opened."""
     open_app(guarded_page, "")
+    _open_filter(guarded_page, "seasons")
     guarded_page.click("#season-counts-details summary")
     text = guarded_page.inner_text("#season-counts")
     assert "2019: 2 rated telecasts" in text
@@ -123,8 +140,10 @@ def test_default_season_counts(guarded_page: Page, open_app: Callable[[Page, str
 def test_season_range_hides_dots_and_leaves_counts_unchanged(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-05: the season range hides dots but never changes the counts list."""
+    """D-13: the season range is the only filter that removes dots; it never
+    changes the per-season counts list."""
     open_app(guarded_page, "")
+    _open_filter(guarded_page, "seasons")
     guarded_page.select_option("#season-from", "2025")
     guarded_page.select_option("#season-to", "2026")
     guarded_page.wait_for_function("location.search.includes('seasons=2025-2026')")
@@ -179,30 +198,36 @@ def test_blank_season_select_value_is_ignored(
     assert guarded_page.evaluate("window.__testHooks.getState().seasons") == [2021, 2025]
 
 
-def test_unchecking_fox_family_updates_total_and_counts(
+def test_unchecking_fox_family_fades_its_dots_into_the_inert_trace(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-06: unchecking a family box hides its networks and its dots feed the per-season counts."""
+    """D-13: unchecking a family box fades its networks' dots (moves them to
+    the inert trace) rather than removing them -- `visibleCount` (season-only
+    removal) is unchanged; only the active/passing count drops."""
     open_app(guarded_page, "")
+    _open_filter(guarded_page, "networks")
     guarded_page.uncheck("input[data-family-checkbox='fox']")
     guarded_page.wait_for_function("location.search.includes('networks=')")
 
-    assert _visible_count(guarded_page) == 9
-    guarded_page.click("#season-counts-details summary")
-    assert "2019: 1 rated telecast" in guarded_page.inner_text("#season-counts")
+    assert _visible_count(guarded_page) == 12
+    active = _visible_customdata(guarded_page)
+    assert len(active) == 9
+    assert 1 not in active
 
 
 def test_isolating_a_single_network_via_family_checkboxes(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-06: unchecking every other family leaves a single network ("ESPN2 only"-style) selected."""
+    """Unchecking every other family leaves a single network ("ESPN2 only"-style) active."""
     open_app(guarded_page, "")
+    _open_filter(guarded_page, "networks")
     guarded_page.uncheck("input[data-family-checkbox='disney']")
     guarded_page.uncheck("input[data-family-checkbox='conference']")
     guarded_page.uncheck("input[data-family-checkbox='other']")
     guarded_page.wait_for_function("location.search.includes('networks=net-b')")
 
-    assert _visible_count(guarded_page) == 3
+    assert _visible_count(guarded_page) == 12
+    assert sorted(_visible_customdata(guarded_page)) == [1, 5, 9]
 
 
 def test_unchecking_one_network_leaves_family_indeterminate(
@@ -210,8 +235,8 @@ def test_unchecking_one_network_leaves_family_indeterminate(
     open_app: Callable[[Page, str], None],
     fixture_raw: dict[str, Any],
 ) -> None:
-    """D-06: with a second Disney network in play, unchecking just that one
-    network hides only its own dot and leaves the family box indeterminate."""
+    """With a second Disney network in play, unchecking just that one
+    network fades only its own dot and leaves the family box indeterminate."""
     mutated = json.loads(json.dumps(fixture_raw))
     mutated["lookups"]["networks"].append(
         {"id": "net-e", "name": "Gamma Sports", "family": "disney"}
@@ -230,6 +255,7 @@ def test_unchecking_one_network_leaves_family_indeterminate(
     before = _visible_customdata(guarded_page)
     assert 4 in before
 
+    _open_filter(guarded_page, "networks")
     guarded_page.uncheck("input[data-network-id='net-e']")
     guarded_page.wait_for_function("location.search.includes('networks=')")
 
@@ -243,24 +269,77 @@ def test_unchecking_one_network_leaves_family_indeterminate(
     assert family_checkbox.evaluate("(el) => el.indeterminate") is True
 
 
-def test_prime_time_slot_hides_unknown_kickoff(
+def test_prime_time_slot_fades_non_matching_including_unknown_kickoff(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """SITE-11: checking a slot hides non-matching dots, including the one with unknown kickoff."""
+    """D-13: checking a slot fades non-matching dots, including the one with
+    unknown kickoff, rather than removing them."""
     open_app(guarded_page, "")
+    _open_filter(guarded_page, "kickoff")
     guarded_page.check("input[name='slot'][value='prime']")
     guarded_page.wait_for_function("location.search.includes('slot=prime')")
 
-    assert _visible_count(guarded_page) == 4
+    assert _visible_count(guarded_page) == 12
+    assert sorted(_visible_customdata(guarded_page)) == [5, 7, 9]
+
+
+def test_after_dark_slot_passes_only_the_late_kickoff(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-20/D-26: the After dark checkbox writes slot=late and fades every
+    dot except the one late-kickoff telecast (index 2, 22:30 ET). Its
+    detail panel shows the After dark label."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "kickoff")
+    guarded_page.check("input[name='slot'][value='late']")
+    guarded_page.wait_for_function("location.search.includes('slot=late')")
+
+    assert _visible_count(guarded_page) == 12
+    assert sorted(_visible_customdata(guarded_page)) == [2]
+
+    guarded_page.evaluate("window.__testHooks.openPanel(2)")
+    assert "After dark (10 PM ET or later)" in guarded_page.inner_text("#panel-body")
+
+
+def test_legacy_prime_link_still_decodes(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-20: an existing ?slot=prime link still decodes; the prime checkbox
+    is checked, the new late checkbox is not, and the URL is left alone."""
+    open_app(guarded_page, "?slot=prime")
+
+    assert guarded_page.is_checked("input[name='slot'][value='prime']") is True
+    assert guarded_page.is_checked("input[name='slot'][value='late']") is False
+    assert guarded_page.evaluate("location.search") == "?slot=prime"
+
+
+def test_prime_and_late_together_encode_canonically(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-20: checking late then prime encodes slot=prime,late (canonical
+    SLOT_ORDER order) and the Kickoff trigger reads the count form; late
+    alone reads its short label."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "kickoff")
+
+    guarded_page.check("input[name='slot'][value='late']")
+    guarded_page.wait_for_function("location.search.includes('slot=late')")
+    assert guarded_page.inner_text("#trigger-kickoff") == "Kickoff: After dark"
+
+    guarded_page.check("input[name='slot'][value='prime']")
+    guarded_page.wait_for_function("location.search.includes('slot=prime,late')")
+    assert guarded_page.inner_text("#trigger-kickoff") == "Kickoff · 2"
 
 
 def test_role_filter_limits_taylor_vance_to_her_main_feed_role(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """SITE-07, D-08: a role filter matches only main-feed entries with that role."""
+    """D-13: Role never fades or removes a dot on its own -- it limits how a
+    person matches."""
     open_app(guarded_page, "")
     _add_person_by_query(guarded_page, "Taylor Vance")
 
+    _open_filter(guarded_page, "role")
     guarded_page.check("input[name='role'][value='pbp']")
     guarded_page.wait_for_function("location.search.includes('role=pbp')")
     assert _highlighted(guarded_page) == []
@@ -277,156 +356,502 @@ def test_role_filter_limits_taylor_vance_to_her_main_feed_role(
 def test_role_filter_never_matches_sideline_crew(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-08: a sideline/unknown-role person never matches a PBP or analyst role filter."""
+    """A sideline/unknown-role person never matches a PBP or analyst role filter."""
     open_app(guarded_page, "")
     _add_person_by_query(guarded_page, "Robin Teague")
 
+    _open_filter(guarded_page, "role")
     guarded_page.check("input[name='role'][value='analyst']")
     guarded_page.wait_for_function("location.search.includes('role=analyst')")
     assert _highlighted(guarded_page) == []
 
 
-def test_team_search_highlights_and_intersects_with_person(
-    guarded_page: Page, open_app: Callable[[Page, str], None]
-) -> None:
-    """SITE-09, D-05: picking a team highlights its games; adding a person intersects."""
-    open_app(guarded_page, "")
-    _pick_team(guarded_page, "north")
-    guarded_page.wait_for_function("location.search.includes('team=northfield')")
-    assert sorted(_highlighted(guarded_page)) == [0, 4, 8]
-
-    _add_person_by_query(guarded_page, "Casey Lund")
-    assert _highlighted(guarded_page) == [4]
-
-
 def test_reload_restores_full_filter_state(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """SITE-12: seasons, networks, slot, role, and team all survive a reload."""
+    """SITE-12: seasons, networks, slot, role, and school all survive a reload."""
     open_app(guarded_page, "")
+
+    _open_filter(guarded_page, "seasons")
     guarded_page.select_option("#season-from", "2021")
     guarded_page.select_option("#season-to", "2026")
     guarded_page.wait_for_function("location.search.includes('seasons=2021-2026')")
 
+    _open_filter(guarded_page, "networks")
     guarded_page.uncheck("input[data-family-checkbox='other']")
     guarded_page.wait_for_function("location.search.includes('networks=')")
 
+    _open_filter(guarded_page, "kickoff")
     guarded_page.check("input[name='slot'][value='prime']")
     guarded_page.wait_for_function("location.search.includes('slot=prime')")
 
+    _open_filter(guarded_page, "role")
     guarded_page.check("input[name='role'][value='analyst']")
     guarded_page.wait_for_function("location.search.includes('role=analyst')")
 
-    _pick_team(guarded_page, "north")
-    guarded_page.wait_for_function("location.search.includes('team=northfield')")
+    _open_filter(guarded_page, "school")
+    guarded_page.check("#school-list input[value='northfield']")
+    guarded_page.wait_for_function("location.search.includes('school=northfield')")
 
     url = guarded_page.evaluate("location.search")
-    fragments = ("seasons=2021-2026", "networks=", "slot=prime", "role=analyst", "team=northfield")
+    fragments = (
+        "seasons=2021-2026",
+        "networks=",
+        "slot=prime",
+        "role=analyst",
+        "school=northfield",
+    )
     for fragment in fragments:
         assert fragment in url
 
     before_visible = _visible_count(guarded_page)
-    before_highlighted = _highlighted(guarded_page)
+    before_active = sorted(_visible_customdata(guarded_page))
 
     guarded_page.reload()
     guarded_page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
 
-    assert guarded_page.input_value("#season-from") == "2021"
-    assert guarded_page.input_value("#season-to") == "2026"
-    assert guarded_page.is_checked("input[data-family-checkbox='other']") is False
-    assert guarded_page.is_checked("input[name='slot'][value='prime']") is True
-    assert guarded_page.is_checked("input[name='role'][value='analyst']") is True
-    assert "Northfield" in guarded_page.inner_text("#team-chip")
+    assert guarded_page.evaluate("() => document.getElementById('season-from').value") == "2021"
+    assert guarded_page.evaluate("() => document.getElementById('season-to').value") == "2026"
+    assert (
+        guarded_page.evaluate(
+            "() => document.querySelector(\"input[data-family-checkbox='other']\").checked"
+        )
+        is False
+    )
+    assert (
+        guarded_page.evaluate(
+            "() => document.querySelector(\"input[name='slot'][value='prime']\").checked"
+        )
+        is True
+    )
+    assert (
+        guarded_page.evaluate(
+            "() => document.querySelector(\"input[name='role'][value='analyst']\").checked"
+        )
+        is True
+    )
+    assert (
+        guarded_page.evaluate(
+            "() => document.querySelector(\"#school-list input[value='northfield']\").checked"
+        )
+        is True
+    )
+    assert "Northfield" in guarded_page.evaluate(
+        "() => document.getElementById('school-chips').textContent"
+    )
 
     assert _visible_count(guarded_page) == before_visible
-    assert _highlighted(guarded_page) == before_highlighted
+    assert sorted(_visible_customdata(guarded_page)) == before_active
 
 
-def test_clear_all_filters_restores_dots_and_keeps_team(
+def test_clear_all_filters_resets_every_filter_and_the_url(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """Clear all filters resets seasons/networks/slots/role but leaves the team highlight."""
+    """Clear all filters resets seasons/networks/slots/role/conferences/school/postseason
+    back to `location.search === ''` when no person is selected."""
     open_app(guarded_page, "")
-    _pick_team(guarded_page, "north")
-    guarded_page.wait_for_function("location.search.includes('team=northfield')")
 
-    guarded_page.uncheck("input[data-family-checkbox='other']")
-    guarded_page.wait_for_function("location.search.includes('networks=')")
+    _open_filter(guarded_page, "school")
+    guarded_page.check("#school-list input[value='northfield']")
+    guarded_page.wait_for_function("location.search.includes('school=northfield')")
+
+    _open_filter(guarded_page, "postseason")
+    guarded_page.click("[data-postseason='only']")
+    guarded_page.wait_for_function("location.search.includes('postseason=only')")
+
+    _open_filter(guarded_page, "kickoff")
     guarded_page.check("input[name='slot'][value='prime']")
     guarded_page.wait_for_function("location.search.includes('slot=prime')")
 
     guarded_page.click("#clear-filters")
-    guarded_page.wait_for_function("location.search === '?team=northfield'")
+    guarded_page.wait_for_function("location.search === ''")
 
     assert _visible_count(guarded_page) == 12
-    assert sorted(_highlighted(guarded_page)) == [0, 4, 8]
+    view = _view(guarded_page)
+    assert view["passingCount"] == 12
+    assert view["hasSelection"] is False
 
 
-def test_desktop_rail_toggle_collapses(
+def test_clear_all_filters_also_clears_people(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-09: the desktop rail collapses via its chevron toggle."""
+    """D-27 (overrides the earlier "people are not cleared" proposal): Clear
+    all filters removes every selected announcer, compare mode, and
+    called-together, alongside the ordinary filter reset."""
     open_app(guarded_page, "")
-    expect(guarded_page.locator("#rail-body")).to_be_visible()
 
-    guarded_page.click("#rail-toggle")
-    expect(guarded_page.locator("#rail-body")).to_be_hidden()
-    assert guarded_page.get_attribute("#rail-toggle", "aria-expanded") == "false"
+    _add_person_by_query(guarded_page, "Dale Harlow")
+    guarded_page.click("#compare-toggle")
+    guarded_page.wait_for_function("location.search.includes('mode=compare')")
+
+    _open_filter(guarded_page, "school")
+    guarded_page.check("#school-list input[value='northfield']")
+    guarded_page.wait_for_function("location.search.includes('school=northfield')")
+
+    guarded_page.click("#clear-filters")
+    guarded_page.wait_for_function("location.search === ''")
+
+    state = guarded_page.evaluate("window.__testHooks.getState()")
+    assert state["people"] == []
+    assert state["school"] == []
+    assert state["compare"] is False
+    assert state["together"] is False
+    expect(guarded_page.locator("#selection-row")).to_be_hidden()
 
 
-def test_desktop_rail_scrolls_independently_and_keeps_chart_in_view(
+def test_phone_filters_button_count_includes_selected_people(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-27: the phone `Filters(N)` badge counts selected announcers too,
+    since the Announcers picker lives inside the same Filters sheet."""
+    open_app(mobile_page, "?people=dale-harlow")
+    expect(mobile_page.locator("#filters-button")).to_have_text("Filters (1)")
+
+
+def test_toolbar_order_and_clear_all_contrast(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """The rail gets its own scrollbar and stays pinned near the top of the
-    viewport, so scrolling it (even to its own bottom) never carries the
-    chart out of view with it (previously the whole page scrolled together:
-    no independent rail scrollbar, and scrolling to the bottom of the rail
-    scrolled the chart off-screen with it). `#chart-area` itself is never
-    `position: sticky` (regression, see
-    test_desktop_chart_never_overlaps_matched_games_table_on_page_scroll
-    below for the bug that caused)."""
-    guarded_page.set_viewport_size({"width": 1280, "height": 600})
+    """D-02/SITE-27: "Clear all filters" is the first visible toolbar item,
+    followed by the Announcers trigger and the seven filter triggers in
+    order (D-21). D-25: its computed color against the *toolbar's own*
+    background (its own background is transparent) clears WCAG AA's 4.5:1
+    minimum, and its color/border-top-color differ from a plain filter
+    trigger's -- a style distinct from the filter buttons, not the Phase 4
+    low-contrast secondary tone."""
     open_app(guarded_page, "")
 
-    overflow_y = guarded_page.eval_on_selector("#rail", "el => getComputedStyle(el).overflowY")
-    assert overflow_y in ("auto", "scroll")
-    chart_area_position = guarded_page.eval_on_selector(
-        "#chart-area", "el => getComputedStyle(el).position"
+    ids = guarded_page.evaluate(
+        "() => Array.from(document.querySelectorAll('#toolbar > *'))"
+        ".filter((el) => getComputedStyle(el).display !== 'none').map((el) => el.id)"
     )
-    assert chart_area_position != "sticky"
+    assert ids == [
+        "clear-filters",
+        "trigger-announcers",
+        "trigger-seasons",
+        "trigger-networks",
+        "trigger-kickoff",
+        "trigger-role",
+        "trigger-conference",
+        "trigger-school",
+        "trigger-postseason",
+    ]
 
-    viewport_height = guarded_page.evaluate("window.innerHeight")
-    rail_height = guarded_page.eval_on_selector("#rail", "el => el.getBoundingClientRect().height")
-    assert rail_height <= viewport_height + 1
+    styles = guarded_page.evaluate(
+        "() => { const toolbarBg = getComputedStyle(document.getElementById('toolbar'))"
+        ".backgroundColor; "
+        "const clear = getComputedStyle(document.getElementById('clear-filters')); "
+        "const trig = getComputedStyle(document.getElementById('trigger-seasons')); "
+        "return { toolbarBg, clearColor: clear.color, clearBorderTop: clear.borderTopColor, "
+        "trigColor: trig.color, trigBorderTop: trig.borderTopColor }; }"
+    )
+    fg = _parse_rgb(styles["clearColor"])
+    bg = _parse_rgb(styles["toolbarBg"])
+    assert _contrast_ratio(fg, bg) >= 4.5
+    assert styles["clearColor"] != styles["trigColor"]
+    assert styles["clearBorderTop"] != styles["trigBorderTop"]
 
-    guarded_page.eval_on_selector("#rail", "el => { el.scrollTop = el.scrollHeight; }")
-    scroll_top = guarded_page.eval_on_selector("#rail", "el => el.scrollTop")
-    assert scroll_top > 0, "the rail did not scroll internally -- it has no overflow of its own"
 
-    assert guarded_page.evaluate("window.scrollY") == 0
-
-    chart_box = guarded_page.locator("#chart").bounding_box()
-    assert chart_box is not None
-    assert 0 <= chart_box["y"] < viewport_height
-
-
-@pytest.mark.parametrize("collapse_rail", [False, True], ids=["rail-open", "rail-collapsed"])
-def test_desktop_chart_never_overlaps_matched_games_table_on_page_scroll(
-    guarded_page: Page, open_app: Callable[[Page, str], None], collapse_rail: bool
+def test_chrome_buttons_use_the_theme_text_color_in_dark_mode(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """Regression (screenshot 2026-09-27): 11ac9b5 made `#chart-area`
-    `position: sticky` alongside the rail, which pinned the chart over the
-    "Matched games" table once the *page itself* (not the rail) was
-    scrolled far enough down -- a sticky box keeps floating at `top: 0` for
-    as long as its own grid row is still in the scrollport, and the chart's
-    row is taller than most viewports. `#chart-area` must stay in normal
-    flow so the table always sits below it, whether the rail is open or
-    collapsed."""
+    """Buttons don't inherit `color`, so without an explicit rule the toolbar/
+    sheet/panel controls fall back to the UA's button text color, unreadable
+    against the dark theme's background. "Clear all filters" no longer
+    belongs in this list (D-25 gives it its own distinct `--reset` color);
+    Clear selection (D-25a) takes its place, checked with a person selected
+    so it's visible."""
+    guarded_page.emulate_media(color_scheme="dark")
+    open_app(guarded_page, "")
+    _add_person_by_query(guarded_page, "Dale Harlow")
+    colors = guarded_page.evaluate(
+        "() => { const body = getComputedStyle(document.body).color; "
+        "return ['#filters-button', '#panel-close', '#trigger-seasons', '#clear-selection']"
+        ".map(sel => [sel, getComputedStyle(document.querySelector(sel)).color, body]); }"
+    )
+    for selector, color, body_color in colors:
+        assert color == body_color, selector
+
+
+@pytest.mark.parametrize(
+    ("query", "trigger_id", "expected_text"),
+    [
+        ("?seasons=2019-2025", "trigger-seasons", "Seasons 2019–2025"),  # noqa: RUF001
+        ("?networks=net-a", "trigger-networks", "Networks · 1"),
+        ("?conferences=SEC", "trigger-conference", "Conference: SEC"),
+        ("?conferences=SEC,Big+Ten", "trigger-conference", "Conference · 2"),
+        ("?school=northfield", "trigger-school", "School: Northfield"),
+        ("?postseason=only", "trigger-postseason", "Bowls/Playoffs: Only"),
+    ],
+)
+def test_active_trigger_shows_a_summary_and_is_marked_active(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    query: str,
+    trigger_id: str,
+    expected_text: str,
+) -> None:
+    """D-02: a filter button with an active value is highlighted and reads a
+    short summary."""
+    open_app(guarded_page, query)
+    trigger = guarded_page.locator(f"#{trigger_id}")
+    expect(trigger).to_have_text(expected_text)
+    assert trigger.get_attribute("data-active") == "true"
+
+
+def test_popover_opens_focuses_search_and_positions_below_trigger(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-02: opening a filter popover sets `aria-expanded`, moves focus into
+    it, and positions it under its trigger button."""
+    open_app(guarded_page, "")
+    trigger = guarded_page.locator("#trigger-conference")
+    _open_filter(guarded_page, "conference")
+
+    assert trigger.get_attribute("aria-expanded") == "true"
+    assert guarded_page.evaluate("() => document.activeElement.id") == "conference-search"
+
+    trigger_box = trigger.bounding_box()
+    popover_box = guarded_page.locator("#pop-conference").bounding_box()
+    assert trigger_box is not None
+    assert popover_box is not None
+    assert popover_box["y"] >= trigger_box["y"] + trigger_box["height"] - 1
+
+
+def test_popover_closes_on_escape_and_returns_focus(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-02: Esc closes an open popover and returns focus to its trigger."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "conference")
+
+    guarded_page.keyboard.press("Escape")
+    guarded_page.wait_for_function(
+        "!document.getElementById('pop-conference').matches(':popover-open')"
+    )
+    guarded_page.wait_for_function(
+        "document.getElementById('trigger-conference').getAttribute('aria-expanded') === 'false'"
+    )
+    assert guarded_page.evaluate("() => document.activeElement.id") == "trigger-conference"
+
+
+def test_popover_closes_on_outside_click(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-02: clicking outside an open popover closes it (native light-dismiss)."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "conference")
+
+    guarded_page.click("#era-note")
+    guarded_page.wait_for_function(
+        "!document.getElementById('pop-conference').matches(':popover-open')"
+    )
+
+
+def test_escape_closes_only_the_popover_when_the_detail_panel_is_also_open(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """With a person selected and the detail panel open, Esc while a popover
+    is open closes only the popover -- the panel stays open."""
+    open_app(guarded_page, "")
+    guarded_page.evaluate("() => window.__testHooks.openPanel(0)")
+    guarded_page.wait_for_function("document.body.classList.contains('panel-open')")
+
+    _open_filter(guarded_page, "conference")
+    guarded_page.keyboard.press("Escape")
+    guarded_page.wait_for_function(
+        "!document.getElementById('pop-conference').matches(':popover-open')"
+    )
+    assert guarded_page.evaluate("() => document.body.classList.contains('panel-open')") is True
+
+
+def test_conference_checklist_lists_only_fbs_conferences_present_plus_independents(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-10: the checklist holds only FBS conferences present in the data
+    plus FBS Independents, alphabetical -- Missouri Valley (FCS) is excluded."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "conference")
+    labels = guarded_page.eval_on_selector_all(
+        "#conference-list label.check-row",
+        "els => els.map((el) => el.textContent.trim())",
+    )
+    assert labels == ["Big Ten", "FBS Independents", "Mountain West", "Pac-12", "SEC"]
+
+
+def test_conference_filter_matches_either_team_in_season_and_is_era_correct(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-10: a game matches when either team was in a selected conference
+    that season -- Telecast 0 (Northfield, 2019, Pac-12) is not a Big Ten
+    match (the USC case: conference membership is season-scoped)."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "conference")
+    guarded_page.check("#conference-list input[value='Big Ten']")
+    guarded_page.wait_for_function("location.search.includes('conferences=Big%20Ten')")
+
+    active = sorted(_visible_customdata(guarded_page))
+    assert active == [1, 4, 5, 8]
+    assert 0 not in active
+
+    guarded_page.fill("#conference-search", "pac")
+    visible_rows = guarded_page.locator("#conference-list label.check-row:visible")
+    expect(visible_rows).to_have_count(1)
+    assert "Pac-12" in visible_rows.inner_text()
+
+
+def test_school_filter_fades_without_highlighting(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-11: School fades non-matching games; it never highlights."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "school")
+    guarded_page.check("#school-list input[value='northfield']")
+    guarded_page.wait_for_function("location.search.includes('school=northfield')")
+
+    assert sorted(_visible_customdata(guarded_page)) == [0, 4, 8]
+    assert _highlighted(guarded_page) == []
+
+
+def test_legacy_team_link_migrates_into_school_as_a_fade_filter(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """A legacy Phase 4 `?team=` link decodes straight into the School
+    filter (a fade, not a highlight -- Pitfall 4)."""
+    open_app(guarded_page, "?team=northfield")
+    assert (
+        guarded_page.evaluate(
+            "() => document.querySelector(\"#school-list input[value='northfield']\").checked"
+        )
+        is True
+    )
+    expect(guarded_page.locator("#trigger-school")).to_have_text("School: Northfield")
+    assert _highlighted(guarded_page) == []
+
+
+def test_school_chip_remove_clears_the_filter(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "school")
+    guarded_page.check("#school-list input[value='northfield']")
+    guarded_page.wait_for_function("location.search.includes('school=northfield')")
+
+    guarded_page.click("#school-chips button.chip-remove")
+    guarded_page.wait_for_function("location.search === ''")
+    assert (
+        guarded_page.evaluate(
+            "() => document.querySelector(\"#school-list input[value='northfield']\").checked"
+        )
+        is False
+    )
+
+
+def test_school_search_keyboard_arrowdown_focuses_first_row_and_space_checks_it(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """The searchable checklist's keyboard path: ArrowDown from the search
+    input focuses the first visible checkbox, Space checks it natively."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "school")
+    guarded_page.focus("#school-search")
+    guarded_page.keyboard.press("ArrowDown")
+    assert guarded_page.evaluate("() => document.activeElement.value") == "boulder-pass"
+
+    guarded_page.keyboard.press("Space")
+    guarded_page.wait_for_function("location.search.includes('school=boulder-pass')")
+    assert (
+        guarded_page.evaluate(
+            "() => document.querySelector(\"#school-list input[value='boulder-pass']\").checked"
+        )
+        is True
+    )
+
+
+def test_postseason_only_isolates_bowl_and_playoff_games(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-18: "Only bowls & playoffs" leaves just the bowl/playoff dots active."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "postseason")
+    guarded_page.click("[data-postseason='only']")
+    guarded_page.wait_for_function("location.search.includes('postseason=only')")
+
+    assert sorted(_visible_customdata(guarded_page)) == [5, 7]
+    assert guarded_page.get_attribute("[data-postseason='only']", "aria-checked") == "true"
+
+
+def test_postseason_exclude_fades_bowl_and_playoff_games(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-18: "Exclude bowls & playoffs" fades exactly the bowl/playoff dots."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "postseason")
+    guarded_page.click("[data-postseason='exclude']")
+    guarded_page.wait_for_function("location.search.includes('postseason=exclude')")
+
+    active = sorted(_visible_customdata(guarded_page))
+    assert 5 not in active
+    assert 7 not in active
+    assert len(active) == 10
+
+
+def test_postseason_all_games_clears_the_url_param(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?postseason=only")
+    _open_filter(guarded_page, "postseason")
+    guarded_page.click("[data-postseason='all']")
+    guarded_page.wait_for_function("!location.search.includes('postseason=')")
+    assert sorted(_visible_customdata(guarded_page)) == list(range(12))
+
+
+def test_postseason_keyboard_arrow_and_home_end_move_focus_and_selection(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """WR-05: `role="radiogroup"`/`role="radio"` on `#postseason-options`
+    promises the WAI-ARIA APG radiogroup keyboard pattern -- roving tabindex
+    (only the selected radio is Tab-reachable) plus ArrowRight/Home/End
+    moving both focus and selection together."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "postseason")
+
+    all_btn = "[data-postseason='all']"
+    exclude_btn = "[data-postseason='exclude']"
+    only_btn = "[data-postseason='only']"
+
+    assert guarded_page.get_attribute(all_btn, "tabindex") == "0"
+    assert guarded_page.get_attribute(exclude_btn, "tabindex") == "-1"
+    assert guarded_page.get_attribute(only_btn, "tabindex") == "-1"
+
+    guarded_page.focus(all_btn)
+    guarded_page.keyboard.press("ArrowRight")
+    guarded_page.wait_for_function("location.search.includes('postseason=exclude')")
+    assert guarded_page.evaluate("() => document.activeElement.dataset.postseason") == "exclude"
+    assert guarded_page.get_attribute(exclude_btn, "aria-checked") == "true"
+    assert guarded_page.get_attribute(exclude_btn, "tabindex") == "0"
+    assert guarded_page.get_attribute(all_btn, "tabindex") == "-1"
+
+    guarded_page.keyboard.press("End")
+    guarded_page.wait_for_function("location.search.includes('postseason=only')")
+    assert guarded_page.evaluate("() => document.activeElement.dataset.postseason") == "only"
+    assert guarded_page.get_attribute(only_btn, "aria-checked") == "true"
+    assert guarded_page.get_attribute(only_btn, "tabindex") == "0"
+
+    guarded_page.keyboard.press("Home")
+    guarded_page.wait_for_function("!location.search.includes('postseason=')")
+    assert guarded_page.evaluate("() => document.activeElement.dataset.postseason") == "all"
+    assert guarded_page.get_attribute(all_btn, "aria-checked") == "true"
+    assert guarded_page.get_attribute(all_btn, "tabindex") == "0"
+
+
+def test_desktop_chart_never_overlaps_matched_games_table_on_page_scroll(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Regression (screenshot 2026-09-27): the chart must stay in normal
+    flow (never sticky/fixed) so the table always sits below it after
+    scrolling."""
     guarded_page.set_viewport_size({"width": 1280, "height": 700})
     open_app(guarded_page, "")
-    if collapse_rail:
-        guarded_page.click("#rail-toggle")
-        expect(guarded_page.locator("#rail-body")).to_be_hidden()
 
     guarded_page.locator("#matched-games").scroll_into_view_if_needed()
 
@@ -439,6 +864,38 @@ def test_desktop_chart_never_overlaps_matched_games_table_on_page_scroll(
     )
 
 
+def test_desktop_chart_never_overlaps_matched_games_table_on_page_scroll_at_800x900(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Same regression check at a second, narrower desktop/tablet viewport."""
+    guarded_page.set_viewport_size({"width": 800, "height": 900})
+    open_app(guarded_page, "")
+
+    guarded_page.locator("#matched-games").scroll_into_view_if_needed()
+
+    chart_box = guarded_page.locator("#chart").bounding_box()
+    table_box = guarded_page.locator("#matched-games").bounding_box()
+    assert chart_box is not None
+    assert table_box is not None
+    assert not _boxes_intersect(chart_box, table_box)
+
+
+@pytest.mark.parametrize("width", [1280, 800, 390])
+def test_toolbar_never_overlaps_matched_games_table(
+    guarded_page: Page, open_app: Callable[[Page, str], None], width: int
+) -> None:
+    """The left-rail-over-table defect (SITE-20) cannot recur: the toolbar
+    and the matched-games table never intersect at any width."""
+    guarded_page.set_viewport_size({"width": width, "height": 900})
+    open_app(guarded_page, "")
+
+    toolbar_box = guarded_page.locator("#toolbar").bounding_box()
+    table_box = guarded_page.locator("#games-table, #table-empty").first.bounding_box()
+    assert toolbar_box is not None
+    assert table_box is not None
+    assert not _boxes_intersect(toolbar_box, table_box)
+
+
 def test_network_family_group_has_no_leftover_ua_padding_on_desktop(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
@@ -449,6 +906,7 @@ def test_network_family_group_has_no_leftover_ua_padding_on_desktop(
     this read as oversized gaps between "network entries." Each single-
     network family group's total rendered height must stay compact."""
     open_app(guarded_page, "")
+    _open_filter(guarded_page, "networks")
 
     family_groups = guarded_page.locator(".family-group")
     count = family_groups.count()
@@ -473,10 +931,9 @@ def test_network_checklist_rows_are_compact_on_desktop(
     open_app: Callable[[Page, str], None],
     fixture_raw: dict[str, Any],
 ) -> None:
-    """Within one family, adjacent network checkbox rows are tightly spaced
-    (the `<li>`'s own `xs` margin governs, not the generic filter-row `sm`
-    label margin doubling up on top of it). The stock fixture has only one
-    network per family, so a second `disney` network is added the same way
+    """Within one family, adjacent network checkbox rows are tightly spaced.
+    The stock fixture has only one network per family, so a second `disney`
+    network is added the same way
     `test_unchecking_one_network_leaves_family_indeterminate` does, to get
     two `<li>` rows inside one `.network-list`."""
     mutated = json.loads(json.dumps(fixture_raw))
@@ -493,6 +950,7 @@ def test_network_checklist_rows_are_compact_on_desktop(
         lambda route: route.fulfill(status=200, content_type="application/json", body=body),
     )
     open_app(guarded_page, "")
+    _open_filter(guarded_page, "networks")
 
     rows = guarded_page.locator(
         "fieldset.family-group:has(input[data-family-checkbox='disney']) .network-list li"
@@ -504,74 +962,72 @@ def test_network_checklist_rows_are_compact_on_desktop(
     assert gap <= 26, f"adjacent network rows sit {gap}px apart, expected a compact list"
 
 
-def test_clear_all_filters_sits_above_the_first_filter_group_and_meets_contrast(
-    guarded_page: Page, open_app: Callable[[Page, str], None]
-) -> None:
-    """The button used to sit at the bottom of the rail (after "Highlight a
-    team") and had no explicit `color`, so it inherited the browser's own
-    default button text color instead of the theme's `--text` token --
-    unreadable in dark mode, since form controls don't inherit `color` from
-    an ancestor the way ordinary elements do. It now leads the rail (in the
-    header area, above every filter group) and explicitly uses the theme
-    color, clearing WCAG AA's 4.5:1 text-contrast minimum."""
-    open_app(guarded_page, "")
-
-    clear_box = guarded_page.locator("#clear-filters").bounding_box()
-    seasons_box = guarded_page.locator("#filter-seasons").bounding_box()
-    assert clear_box is not None
-    assert seasons_box is not None
-    assert clear_box["y"] < seasons_box["y"]
-
-    colors = guarded_page.eval_on_selector(
-        "#clear-filters",
-        "el => { const s = getComputedStyle(el); return [s.color, s.backgroundColor]; }",
-    )
-    fg = _parse_rgb(colors[0])
-    bg = _parse_rgb(colors[1])
-    assert _contrast_ratio(fg, bg) >= 4.5
-
-
-def test_chrome_buttons_use_the_theme_text_color_in_dark_mode(
-    guarded_page: Page, open_app: Callable[[Page, str], None]
-) -> None:
-    """Buttons don't inherit `color`, so without a base rule the rail and
-    panel controls fall back to the UA's button text color, which is
-    unreadable against the dark theme's background."""
-    guarded_page.emulate_media(color_scheme="dark")
-    open_app(guarded_page, "")
-    colors = guarded_page.evaluate(
-        "() => { const body = getComputedStyle(document.body).color; "
-        "return ['#rail-toggle', '#rail-close', '#panel-close', '#filters-button']"
-        ".map(sel => [sel, getComputedStyle(document.querySelector(sel)).color, body]); }"
-    )
-    for selector, color, body_color in colors:
-        assert color == body_color, selector
-
-
-def test_mobile_filters_drawer(mobile_page: Page, open_app: Callable[[Page, str], None]) -> None:
-    """SITE-18: the phone Filters(N) button opens a bottom-sheet drawer with 44px tap targets."""
+def test_mobile_filters_sheet(mobile_page: Page, open_app: Callable[[Page, str], None]) -> None:
+    """D-03: the phone Filters(N) button opens a full-height bottom sheet
+    with every filter section stacked, Clear all on top and Show results at
+    the bottom."""
     open_app(mobile_page, "")
     filters_button = mobile_page.locator("#filters-button")
     expect(filters_button).to_be_visible()
-    expect(mobile_page.locator("#rail")).to_be_hidden()
+    for name in (
+        "announcers",
+        "seasons",
+        "networks",
+        "kickoff",
+        "role",
+        "conference",
+        "school",
+        "postseason",
+    ):
+        expect(mobile_page.locator(f"#trigger-{name}")).to_be_hidden()
 
     filters_button.click()
-    expect(mobile_page.locator("#rail")).to_be_visible()
-    assert mobile_page.evaluate("() => document.activeElement.id") == "rail-close"
+    mobile_page.wait_for_function(
+        "document.getElementById('filters-sheet').matches(':popover-open')"
+    )
+    # The native `toggle` event (which moves focus) fires asynchronously
+    # relative to `:popover-open` becoming true, so wait for the focus move
+    # itself rather than racing it.
+    mobile_page.wait_for_function("document.activeElement.id === 'clear-filters'")
 
-    mobile_page.keyboard.press("Escape")
-    expect(mobile_page.locator("#rail")).to_be_hidden()
-    assert mobile_page.evaluate("() => document.activeElement.id") == "filters-button"
+    section_order = mobile_page.evaluate(
+        "() => Array.from(document.querySelector('.sheet-body').children).map((el) => el.id)"
+    )
+    assert section_order == [
+        "filter-announcers",
+        "filter-seasons",
+        "filter-networks",
+        "filter-slots",
+        "filter-role",
+        "filter-conference",
+        "filter-school",
+        "filter-postseason",
+    ]
 
-    filters_button.click()
     mobile_page.check("input[name='slot'][value='prime']")
     mobile_page.wait_for_function("location.search.includes('slot=prime')")
     expect(filters_button).to_have_text("Filters (1)")
 
-    tappable = mobile_page.locator("#rail button:visible, #rail label:visible")
+    mobile_page.click("#filters-show-results")
+    mobile_page.wait_for_function(
+        "!document.getElementById('filters-sheet').matches(':popover-open')"
+    )
+
+    filters_button.click()
+    mobile_page.wait_for_function(
+        "document.getElementById('filters-sheet').matches(':popover-open')"
+    )
+    tappable = mobile_page.locator("#filters-sheet button:visible, #filters-sheet label:visible")
     count = tappable.count()
     assert count > 0
     for i in range(count):
         box = tappable.nth(i).bounding_box()
         assert box is not None
         assert box["height"] >= 44
+
+
+def test_mobile_filters_button_badge_reflects_school_filter(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(mobile_page, "?school=northfield")
+    expect(mobile_page.locator("#filters-button")).to_have_text("Filters (1)")

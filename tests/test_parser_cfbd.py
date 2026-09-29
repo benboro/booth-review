@@ -80,6 +80,46 @@ def test_parse_games_notes_kept_verbatim_for_postseason() -> None:
     assert postseason_game.notes == "Example Championship Bowl"
 
 
+def test_parse_games_is_cfp_and_playoff_round_from_playoff_object() -> None:
+    content = (FIXTURES / "games.json").read_bytes()
+    games = parse_games(content)
+    by_id = {g.id: g for g in games}
+
+    assert by_id[401520004].is_cfp is True
+    assert by_id[401520004].playoff_round == "semifinal"
+    for game_id in (401520001, 401520002, 401520003):
+        assert by_id[game_id].is_cfp is False
+        assert by_id[game_id].playoff_round is None
+
+
+def test_parse_games_no_playoff_key_parses_to_not_cfp() -> None:
+    data = json.loads((FIXTURES / "games.json").read_bytes())
+    del data[0]["playoff"]
+    games = parse_games(json.dumps(data).encode("utf-8"))
+    assert games[0].is_cfp is False
+    assert games[0].playoff_round is None
+
+
+def test_parse_games_playoff_missing_round_is_cfp_with_null_round() -> None:
+    data = json.loads((FIXTURES / "games.json").read_bytes())
+    playoff_row = next(row for row in data if row["id"] == 401520004)
+    del playoff_row["playoff"]["round"]
+    games = parse_games(json.dumps(data).encode("utf-8"))
+    playoff_game = next(g for g in games if g.id == 401520004)
+    assert playoff_game.is_cfp is True
+    assert playoff_game.playoff_round is None
+
+
+def test_parse_games_playoff_non_string_round_is_cfp_with_null_round() -> None:
+    data = json.loads((FIXTURES / "games.json").read_bytes())
+    playoff_row = next(row for row in data if row["id"] == 401520004)
+    playoff_row["playoff"]["round"] = 3
+    games = parse_games(json.dumps(data).encode("utf-8"))
+    playoff_game = next(g for g in games if g.id == 401520004)
+    assert playoff_game.is_cfp is True
+    assert playoff_game.playoff_round is None
+
+
 def test_parse_games_missing_required_key_raises_named_field() -> None:
     data = json.loads((FIXTURES / "games.json").read_bytes())
     del data[0]["homeTeam"]

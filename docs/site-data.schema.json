@@ -1,5 +1,24 @@
 {
   "$defs": {
+    "ConferenceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "is_fbs": {
+          "title": "Is Fbs",
+          "type": "boolean"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "is_fbs"
+      ],
+      "title": "ConferenceRef",
+      "type": "object"
+    },
     "CoverageRow": {
       "additionalProperties": false,
       "properties": {
@@ -204,6 +223,13 @@
     "Lookups": {
       "additionalProperties": false,
       "properties": {
+        "conferences": {
+          "items": {
+            "$ref": "#/$defs/ConferenceRef"
+          },
+          "title": "Conferences",
+          "type": "array"
+        },
         "flags": {
           "items": {
             "$ref": "#/$defs/FlagRef"
@@ -245,7 +271,8 @@
         "networks",
         "people",
         "publishers",
-        "flags"
+        "flags",
+        "conferences"
       ],
       "title": "Lookups",
       "type": "object"
@@ -329,6 +356,20 @@
       "additionalProperties": false,
       "description": "One list per display field; index i across every list is one dot.\n\nSee docs/site-data.md for the field-by-field contract (null rules, the\nSITE requirement each field serves, and the time-slot boundaries).",
       "properties": {
+        "away_conference": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Away Conference",
+          "type": "array"
+        },
         "away_points": {
           "items": {
             "anyOf": [
@@ -419,6 +460,32 @@
           "title": "Flags",
           "type": "array"
         },
+        "game_type": {
+          "items": {
+            "enum": [
+              "regular",
+              "bowl",
+              "playoff"
+            ],
+            "type": "string"
+          },
+          "title": "Game Type",
+          "type": "array"
+        },
+        "home_conference": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Home Conference",
+          "type": "array"
+        },
         "home_points": {
           "items": {
             "anyOf": [
@@ -504,6 +571,26 @@
           "title": "Outlets",
           "type": "array"
         },
+        "playoff_round": {
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "first_round",
+                  "quarterfinal",
+                  "semifinal",
+                  "championship"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Playoff Round",
+          "type": "array"
+        },
         "pregame": {
           "items": {
             "anyOf": [
@@ -584,7 +671,8 @@
                 "enum": [
                   "noon",
                   "afternoon",
-                  "prime"
+                  "prime",
+                  "late"
                 ],
                 "type": "string"
               },
@@ -628,13 +716,17 @@
         "pregame",
         "flags",
         "combined_feeds",
-        "crew"
+        "crew",
+        "game_type",
+        "playoff_round",
+        "home_conference",
+        "away_conference"
       ],
       "title": "TelecastColumns",
       "type": "object"
     }
   },
-  "$id": "booth-review/site-data/1.0.0",
+  "$id": "booth-review/site-data/1.2.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -656,7 +748,7 @@
       "$ref": "#/$defs/Lookups"
     },
     "schema_version": {
-      "const": "1.0.0",
+      "const": "1.2.0",
       "title": "Schema Version",
       "type": "string"
     },

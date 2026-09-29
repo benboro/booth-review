@@ -25,18 +25,48 @@ export const FAMILY_ORDER = [
 ];
 
 /**
- * Legend display label per family key.
+ * Legend display label per family key (D-04): the networks in the family,
+ * slash-delimited, never the parent company. Label rule: the family's
+ * flagship broadcast network first, then its one or two most-carried cable
+ * networks, in on-air short brands; the "conference" family (Pac-12
+ * Network, Mountain West Network, CUSA Digital) names its two main
+ * networks.
  * @type {Record<string, string>}
  */
 export const FAMILY_LABELS = {
-  disney: 'Disney (ABC/ESPN)',
-  fox: 'Fox (FOX/FS1/BTN)',
-  cbs: 'CBS',
-  nbc: 'NBC (NBC/Peacock)',
+  disney: 'ABC/ESPN',
+  fox: 'FOX/FS1/BTN',
+  cbs: 'CBS/CBSSN',
+  nbc: 'NBC/Peacock',
   cw: 'The CW',
-  wbd: 'Warner Bros. Discovery (TBS/TNT)',
-  conference: 'Conference networks',
+  wbd: 'TBS/TNT',
+  conference: 'Pac-12 Net/MW Net',
   other: 'Other',
+};
+
+/**
+ * WCAG-AA text color per family, same in both themes (D-04, SITE-26): only
+ * `disney` and `conference` clear 4.5:1 with white; every other family
+ * clears it with black. Verified against the real sRGB relative-luminance
+ * formula for every family/theme fill in FAMILY_COLORS (UI-SPEC Color):
+ * disney #0072B2 -> white 5.19:1 (both themes); fox #009E73 -> black
+ * 6.14:1 (both); cbs light #BD8300 -> black 6.41:1, dark #E69F00 -> black
+ * 9.32:1; nbc light #C972A2 -> black 6.41:1, dark #CC79A7 -> black 6.86:1;
+ * cw light #1D96DB -> black 6.44:1, dark #56B4E9 -> black 9.10:1; wbd
+ * #D55E00 -> black 5.43:1 (both); conference light #000000 -> white
+ * 21.0:1, dark #696969 -> white 5.49:1; other light #8F8F8F -> black
+ * 6.49:1, dark #999999 -> black 7.37:1.
+ * @type {Record<string, string>}
+ */
+export const PILL_TEXT_COLOR = {
+  disney: '#FFFFFF',
+  fox: '#000000',
+  cbs: '#000000',
+  nbc: '#000000',
+  cw: '#000000',
+  wbd: '#000000',
+  conference: '#FFFFFF',
+  other: '#000000',
 };
 
 /**

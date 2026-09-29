@@ -59,6 +59,8 @@ def _game(**overrides: object) -> CfbdGame:
         "away_points": 17,
         "excitement_index": None,
         "notes": None,
+        "is_cfp": False,
+        "playoff_round": None,
     }
     defaults.update(overrides)
     return CfbdGame(**defaults)  # type: ignore[arg-type]
@@ -246,6 +248,56 @@ def test_postseason_game_uses_latest_regular_week_not_the_final_poll(
     assert row["home_rank"] == 2
     assert row["away_rank"] == 4
     assert row["rank_poll"] == "Playoff Committee Rankings"
+
+
+# -- game_type / playoff_round (D-17) ------------------------------------------------------
+
+
+def test_regular_season_game_is_game_type_regular() -> None:
+    game = _game(season_type="regular")
+    sources = [_sources(games=[game])]
+
+    frame = build_games_frame(sources)
+
+    row = frame.row(0, named=True)
+    assert row["game_type"] == "regular"
+    assert row["playoff_round"] is None
+
+
+def test_non_cfp_postseason_game_is_game_type_bowl() -> None:
+    game = _game(season_type="postseason", is_cfp=False)
+    sources = [_sources(games=[game])]
+
+    frame = build_games_frame(sources)
+
+    row = frame.row(0, named=True)
+    assert row["game_type"] == "bowl"
+    assert row["playoff_round"] is None
+
+
+@pytest.mark.parametrize(
+    "round_value", ["first_round", "quarterfinal", "semifinal", "championship"]
+)
+def test_cfp_game_is_game_type_playoff_with_round(round_value: str) -> None:
+    game = _game(season_type="postseason", is_cfp=True, playoff_round=round_value)
+    sources = [_sources(games=[game])]
+
+    frame = build_games_frame(sources)
+
+    row = frame.row(0, named=True)
+    assert row["game_type"] == "playoff"
+    assert row["playoff_round"] == round_value
+
+
+def test_cfp_game_with_unknown_round_gives_null_playoff_round() -> None:
+    game = _game(season_type="postseason", is_cfp=True, playoff_round="round_of_64")
+    sources = [_sources(games=[game])]
+
+    frame = build_games_frame(sources)
+
+    row = frame.row(0, named=True)
+    assert row["game_type"] == "playoff"
+    assert row["playoff_round"] is None
 
 
 # -- date_et / kickoff_et -----------------------------------------------------------------

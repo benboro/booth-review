@@ -45,6 +45,26 @@ def test_time_slot_at_18_is_prime() -> None:
     assert time_slot("2025-01-01T18:00:00-05:00") == "prime"
 
 
+def test_time_slot_at_21_59_is_prime() -> None:
+    assert time_slot("2025-01-01T21:59:00-05:00") == "prime"
+
+
+def test_time_slot_at_22_is_late() -> None:
+    assert time_slot("2025-01-01T22:00:00-05:00") == "late"
+
+
+def test_time_slot_at_23_30_is_late() -> None:
+    assert time_slot("2025-01-01T23:30:00-05:00") == "late"
+
+
+def test_time_slot_after_midnight_is_late() -> None:
+    assert time_slot("2025-01-01T00:30:00-05:00") == "late"
+
+
+def test_time_slot_at_5_is_noon() -> None:
+    assert time_slot("2025-01-01T05:00:00-05:00") == "noon"
+
+
 def test_time_slot_null_kickoff_is_null() -> None:
     assert time_slot(None) is None
 
@@ -81,6 +101,8 @@ def _game_row(**overrides: object) -> dict[str, object]:
         "home_rank": 5,
         "away_rank": None,
         "rank_poll": "AP Top 25",
+        "game_type": "regular",
+        "playoff_round": None,
     }
     defaults.update(overrides)
     return defaults
@@ -260,6 +282,7 @@ def small_tables() -> BuildTables:
             away_rank=None,
             excitement=9.9,
             pregame_x=-1.0,
+            game_type="bowl",
         ),
     ]
     telecasts = [
@@ -660,6 +683,220 @@ def test_site_assembly_reads_the_key_only_inside_its_leak_guard() -> None:
     ]
     assert callers == {_KEY_READER_ALLOWLIST["site_assembly.py"]}
     assert len(all_calls) == 1
+
+
+# -- conferences / game_type / playoff_round (D-09/D-17) -------------------------------------
+
+
+def test_conferences_lookup_sorted_and_is_fbs_from_classification(build_reference: Path) -> None:
+    games = [
+        _game_row(
+            game_id=10,
+            home_team="Team A",
+            home_classification="fbs",
+            home_conference="Zulu Conference",
+            away_team="Team B",
+            away_classification="fbs",
+            away_conference="Alpha Conference",
+        ),
+        _game_row(
+            game_id=11,
+            date_et=date(2024, 9, 21),
+            home_team="Team C",
+            home_classification="fcs",
+            home_conference="Echo Conference",
+            away_team="Team D",
+            away_classification="fbs",
+            away_conference="Alpha Conference",
+        ),
+    ]
+    telecasts = [
+        _telecast_row(telecast_id="10-net-a", game_id=10),
+        _telecast_row(
+            telecast_id="11-net-a",
+            game_id=11,
+            date_et=date(2024, 9, 21),
+            headline_claim_id="claim-11",
+            headline_value=100.0,
+            rr_telecast_ids=["cfb-example-11"],
+            rr_record_urls=["https://example.com/r11"],
+        ),
+    ]
+    tables = _build_tables(
+        games_rows=games,
+        telecast_rows=telecasts,
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+    payload = _site(tables, build_reference)
+    conferences = payload["lookups"]["conferences"]
+    assert [c["name"] for c in conferences] == [
+        "Alpha Conference",
+        "Echo Conference",
+        "Zulu Conference",
+    ]
+    by_name = {c["name"]: c["is_fbs"] for c in conferences}
+    assert by_name["Alpha Conference"] is True
+    assert by_name["Zulu Conference"] is True
+    assert by_name["Echo Conference"] is False
+
+
+def test_same_team_different_conference_across_seasons_gets_different_index(
+    build_reference: Path,
+) -> None:
+    games = [
+        _game_row(
+            game_id=20,
+            home_team="Wandering State",
+            home_conference="Old Conference",
+        ),
+        _game_row(
+            game_id=21,
+            date_et=date(2024, 9, 21),
+            home_team="Wandering State",
+            home_conference="New Conference",
+        ),
+    ]
+    telecasts = [
+        _telecast_row(telecast_id="20-net-a", game_id=20),
+        _telecast_row(
+            telecast_id="21-net-a",
+            game_id=21,
+            date_et=date(2024, 9, 21),
+            headline_claim_id="claim-21",
+            headline_value=100.0,
+            rr_telecast_ids=["cfb-example-21"],
+            rr_record_urls=["https://example.com/r21"],
+        ),
+    ]
+    tables = _build_tables(
+        games_rows=games,
+        telecast_rows=telecasts,
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+    payload = _site(tables, build_reference)
+    conference_index = {c["name"]: i for i, c in enumerate(payload["lookups"]["conferences"])}
+    home_conference = payload["telecasts"]["home_conference"]
+    assert home_conference[0] == conference_index["Old Conference"]
+    assert home_conference[1] == conference_index["New Conference"]
+    assert home_conference[0] != home_conference[1]
+
+
+def test_alphabetically_first_conference_emits_index_zero_not_none(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    payload = _site(small_tables, build_reference)
+    assert payload["lookups"]["conferences"][0]["name"] == "Fixture Conference"
+    assert payload["telecasts"]["home_conference"][0] == 0
+    assert payload["telecasts"]["away_conference"][0] == 0
+
+
+def test_null_conference_on_fcs_side_yields_none_and_does_not_raise(build_reference: Path) -> None:
+    games = [_game_row(game_id=30, away_classification="fcs", away_conference=None)]
+    telecasts = [_telecast_row(telecast_id="30-net-a", game_id=30)]
+    tables = _build_tables(
+        games_rows=games,
+        telecast_rows=telecasts,
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+    payload = _site(tables, build_reference)
+    assert payload["telecasts"]["away_conference"][0] is None
+
+
+def test_game_type_and_playoff_round_passthrough_for_a_bowl(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    payload = _site(small_tables, build_reference)
+    assert payload["telecasts"]["game_type"][2] == "bowl"
+    assert payload["telecasts"]["playoff_round"][2] is None
+
+
+def test_game_type_and_playoff_round_passthrough_for_a_cfp_quarterfinal(
+    build_reference: Path,
+) -> None:
+    games = [
+        _game_row(
+            game_id=40,
+            season_type="postseason",
+            game_type="playoff",
+            playoff_round="quarterfinal",
+        )
+    ]
+    telecasts = [_telecast_row(telecast_id="40-net-a", game_id=40)]
+    tables = _build_tables(
+        games_rows=games,
+        telecast_rows=telecasts,
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+    payload = _site(tables, build_reference)
+    assert payload["telecasts"]["game_type"][0] == "playoff"
+    assert payload["telecasts"]["playoff_round"][0] == "quarterfinal"
+
+
+def test_plotted_row_without_game_type_raises_vault_state_error(build_reference: Path) -> None:
+    from booth_review.errors import VaultStateError
+
+    games = [_game_row(game_id=50, game_type=None)]
+    telecasts = [_telecast_row(telecast_id="50-net-a", game_id=50)]
+    tables = _build_tables(
+        games_rows=games,
+        telecast_rows=telecasts,
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+
+    with pytest.raises(VaultStateError, match="without a game_type"):
+        _site(tables, build_reference)
+
+
+def test_fbs_home_side_with_no_conference_raises_vault_state_error(build_reference: Path) -> None:
+    from booth_review.errors import VaultStateError
+
+    games = [_game_row(game_id=60, home_conference=None)]
+    telecasts = [_telecast_row(telecast_id="60-net-a", game_id=60)]
+    tables = _build_tables(
+        games_rows=games,
+        telecast_rows=telecasts,
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+
+    with pytest.raises(VaultStateError) as excinfo:
+        _site(tables, build_reference)
+
+    message = str(excinfo.value)
+    assert "with an FBS side but no conference" in message
+    assert "Fixture Home" not in message
+
+
+def test_fbs_away_side_with_no_conference_raises_vault_state_error(build_reference: Path) -> None:
+    from booth_review.errors import VaultStateError
+
+    games = [_game_row(game_id=61, away_conference=None)]
+    telecasts = [_telecast_row(telecast_id="61-net-a", game_id=61)]
+    tables = _build_tables(
+        games_rows=games,
+        telecast_rows=telecasts,
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+
+    with pytest.raises(VaultStateError) as excinfo:
+        _site(tables, build_reference)
+
+    message = str(excinfo.value)
+    assert "with an FBS side but no conference" in message
+    assert "Fixture Away" not in message
 
 
 # -- CR-02: a plotted row with no usable headline value fails cleanly --------------------------

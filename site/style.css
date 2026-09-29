@@ -24,6 +24,10 @@
   --text: #111827;
   --muted: #4B5563;
   --error: #B3261E;
+  /* D-25: "Clear all filters" own accent color -- the same verified pair as
+     --error today, kept as its own token so the two can diverge later
+     without also changing the error banner's color. */
+  --reset: #B3261E;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -35,6 +39,7 @@
     --text: #E5E7EB;
     --muted: #9CA3AF;
     --error: #F2B8B5;
+    --reset: #F2B8B5;
   }
 }
 
@@ -88,12 +93,13 @@ h1, h2, h3 {
 
 /* ---------- Top bar ---------- */
 
+/* D-21: the top bar now holds only the site title -- the person search
+   moved into the toolbar's Announcers popover, and the chips/toggles/
+   summary moved into #selection-bar below the toolbar (see that section). */
 #topbar {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
   align-items: center;
-  gap: var(--space-md);
-  min-height: 64px;
+  min-height: 56px;
   padding: 0 var(--space-lg);
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -105,12 +111,17 @@ h1, h2, h3 {
   text-decoration: none;
 }
 
+/* D-28: a flex column so #person-results (flex: 1 1 auto) can grow to fill
+   the popover/sheet section around it. */
 .search-field {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
-.search-field input,
-#team-search {
+.search-field input {
   font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--border);
@@ -120,27 +131,53 @@ h1, h2, h3 {
   width: 100%;
 }
 
-.search-field input:focus,
-#team-search:focus {
+.search-field input:focus {
   border-color: var(--accent);
 }
 
-#person-results,
-#team-results {
+/* D-28: #person-results is an always-rendered Excel AutoFilter-style list,
+   laid out as a flex-column child of `.search-field`/`#filter-announcers`
+   (both flex columns, see "Filter popovers" below) so it grows to fill the
+   ~60vh popover instead of the old absolute-positioned ~1-row clip. */
+#person-results {
   list-style: none;
-  margin: 0;
+  margin: var(--space-sm) 0 0 0;
   padding: 0;
-  position: absolute;
-  z-index: 10;
+  position: static;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   background: var(--bg);
   border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+#conference-search,
+#school-search {
+  font: var(--font-body);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
   width: 100%;
 }
 
-/* Search-result options, as topbar.js/filters.js build them: bare
-   `<li role="option">` children of the `role="listbox"` lists (no class). The
-   arrow-key active option carries `aria-selected="true"` (WR-07, WCAG 2.4.7). */
+#conference-search:focus,
+#school-search:focus {
+  border-color: var(--accent);
+}
+
+/* D-28: #person-results' options, as topbar.js builds them: `<li
+   role="option">` children of the `role="listbox"` list, each holding a
+   `.option-check` box plus `.option-name`/`.option-variant`/`.option-role`
+   spans. `aria-selected` now means *checked* (in `state.people`); the
+   arrow-key active row is a separate `.is-active` class (WR-07, WCAG
+   2.4.7). */
 [role="listbox"] > li[role="option"] {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
   font: var(--font-label);
   padding: var(--space-sm) var(--space-md);
   cursor: pointer;
@@ -151,9 +188,50 @@ h1, h2, h3 {
   cursor: default;
 }
 
-[role="listbox"] > li[role="option"][aria-selected="true"] {
+[role="listbox"] > li[role="option"].is-active {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+}
+
+.option-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--muted);
+  border-radius: 2px;
+}
+
+li[role="option"][aria-selected="true"] .option-check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+li[role="option"][aria-selected="true"] .option-check::after {
+  content: "✓" / "";
+  color: var(--bg);
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* ---------- Selection bar (D-21) ---------- */
+
+/* The chips, Compare/Called together/Clear selection row, and the summary
+   line all live here now, below the toolbar -- filling the empty band the
+   user flagged between the filters and the plot (D-25). `min-width: 0` lets
+   its flex children shrink instead of forcing the whole page wider. */
+#selection-bar {
+  padding: var(--space-sm) var(--space-lg);
+  min-width: 0;
+}
+
+.selection-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
 }
 
 #chips {
@@ -163,6 +241,8 @@ h1, h2, h3 {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-sm);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .chip {
@@ -174,6 +254,17 @@ h1, h2, h3 {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 999px;
+  max-width: 100%;
+}
+
+/* The chip's name span (topbar.js's bare, unclassed `<span>` -- the only
+   other span a chip can hold is `.chip-glyph`, in compare mode) truncates
+   instead of forcing the chip -- and the whole row -- wider than the
+   viewport (D-21: "chips never run off the right edge"). */
+.chip > span:not(.chip-glyph) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chip-remove {
@@ -186,6 +277,7 @@ h1, h2, h3 {
 
 .toggle-group {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm);
 }
@@ -200,9 +292,31 @@ h1, h2, h3 {
   cursor: pointer;
 }
 
+/* D-30: an unmistakable pressed state -- a filled accent background with
+   inverse (var(--bg)) text, at least 14:1 in both themes, plus the reserved
+   check slot below. `font-weight` stays unchanged so bolding the label text
+   never resizes the button (which would itself shift the row this fix is
+   meant to stop moving). */
 .toggle[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--bg);
   border-color: var(--accent);
-  color: var(--accent);
+}
+
+/* D-30: a reserved check slot present in both pressed states (`::before` on
+   the bare `[aria-pressed]` attribute selector, matching `"true"` or
+   `"false"`) so the button's own width never changes when Compare/Called
+   together toggles -- only `visibility` flips. */
+.toggle[aria-pressed]::before {
+  content: "✓" / "";
+  display: inline-block;
+  width: 1em;
+  margin-right: var(--space-xs);
+  visibility: hidden;
+}
+
+.toggle[aria-pressed="true"]::before {
+  visibility: visible;
 }
 
 .toggle:disabled {
@@ -210,7 +324,32 @@ h1, h2, h3 {
   cursor: not-allowed;
 }
 
+/* D-30: Clear selection is its own kind of control -- a dashed secondary
+   treatment, never the toggle's filled/outlined look and never Clear all
+   filters' `--reset` red, so the two "clear" actions read as distinct.
+   Dashed `--muted` on `--bg` clears 3:1 in both themes (about 7.5:1 light,
+   7.3:1 dark). The explicit `background`/`color` (D-25a) keeps dark mode
+   from ever falling back to the UA's own white button face. */
+#clear-selection {
+  font: var(--font-label);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg);
+  color: var(--text);
+  border: 1px dashed var(--muted);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#clear-selection::before {
+  content: "×" / "";
+  margin-right: var(--space-xs);
+}
+
 .chip-glyph {
+  display: inline-block;
+  flex: none;
+  width: 1em;
+  text-align: center;
   font-size: 12px;
 }
 
@@ -235,47 +374,135 @@ h1, h2, h3 {
 .summary-count {
   font: var(--font-display);
   font-weight: var(--weight-semibold);
+  white-space: nowrap;
 }
 
+/* D-21: the summary sits on one line under the chip row and never wraps
+   into a narrow column; `column-gap` (not the row-wrapping `gap`) keeps the
+   count and detail from touching if they do wrap on a very narrow phone. */
 #summary {
-  text-align: right;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-sm);
+  text-align: left;
+  margin-top: var(--space-xs);
+  /* A flex container forms its own formatting context (no CSS2.1 "strut"),
+     so with no selection both #summary-count and #summary-detail are empty
+     text and the whole box collapses to 0 height -- appearing "hidden" to
+     a real visitor and to Playwright's own visibility check alike (Rule 1,
+     found while writing test_site_layout.py's
+     test_selection_row_hidden_with_no_people). A block #summary (its
+     pre-flex shape) never had this problem, since an empty inline "strut"
+     still reserves one line of height. */
+  min-height: 1.5em;
 }
 
+#summary-detail {
+  min-width: 0;
+}
+
+/* `#filters-button`'s visibility comes from `.mobile-only` below; this rule
+   is only its shape. */
 #filters-button {
-  display: none;
   font: var(--font-label);
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--bg);
+  color: var(--text);
   cursor: pointer;
+}
+
+.desktop-only {
+}
+
+.mobile-only {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .desktop-only {
+    display: none;
+  }
+
+  .mobile-only {
+    display: inline-block;
+  }
 }
 
 /* ---------- Layout grid ---------- */
 
 /* The chart page only (`<body class="app">` in index.html). methodology.html
    and coverage.html share this stylesheet but have none of the grid-area ids,
-   so a bare `body` grid auto-placed their header/main/footer into the 280px
-   rail column (WR-05); they keep normal block flow instead. */
+   so a bare `body` grid auto-placed their header/main/footer into the
+   toolbar row (WR-05); they keep normal block flow instead. Single-column
+   base (mobile default): the toolbar replaces the rail entirely (D-02). The
+   `min-width: 641px` block below adds the panel column that pushes the
+   chart/table aside on tablet and desktop (D-01, SITE-20); phones keep the
+   detail panel as a `position: fixed` bottom sheet (see "Detail panel"
+   below), so no panel column is ever added at that width. */
 body.app {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   grid-template-areas:
-    "topbar topbar"
-    "rail   main"
-    "table  table"
-    "footer footer";
-  gap: var(--space-lg);
+    "topbar"
+    "toolbar"
+    "selection"
+    "main"
+    "table"
+    "footer";
+  /* D-25: no row/column gap here -- every block below (the selection bar,
+     the chart area, the table) pads its own content instead, so nothing
+     leaves a second, unstyled band on top of that padding (the reported
+     "empty vertical space between the toolbar and the plot"). This also
+     removes the permanent column gap that used to sit beside the closed
+     detail-panel column at >=641px. */
+  gap: 0;
 }
 
 #topbar { grid-area: topbar; }
-#rail { grid-area: rail; }
+#toolbar { grid-area: toolbar; }
+#selection-bar { grid-area: selection; }
 #chart-area { grid-area: main; }
 #matched-games { grid-area: table; }
 #site-footer { grid-area: footer; }
+#detail-panel { grid-area: panel; }
+
+/* Tablet/desktop: a real two-column grid, but the panel column spans only
+   the chart row (D-23: replaces plan 04.1-05's both-rows span -- opening
+   the panel narrows only the chart, never the matched-games table, which
+   always stays full width). The column always exists structurally; only
+   its own content width (below, "Detail panel") animates open/closed --
+   never animate `grid-template-columns` itself (Pitfall 1: interpolating a
+   grid track size fires the vendored Plotly bundle's internal
+   ResizeObserver repeatedly mid-transition, causing visible chart jank). */
+@media (min-width: 641px) {
+  body.app {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "topbar  topbar"
+      "toolbar toolbar"
+      "selection selection"
+      "main    panel"
+      "table   table"
+      "footer  footer";
+  }
+}
 
 #chart-area {
-  padding-top: var(--space-xl);
+  /* D-25: side gutters (>=16px) plus a small top pad -- the selection bar
+     above already supplies its own vertical space, so this no longer needs
+     the old `--space-xl` top pad to avoid crowding the toolbar. */
+  padding: var(--space-sm) var(--space-lg) 0;
+  /* Regression (2026-09-27): `#chart-area` must stay in normal flow, never
+     a floating/pinned position -- making it sticky alongside the old left
+     filter column (11ac9b5) pinned it over the "Matched games" table once
+     the *page* itself was scrolled far enough, since a floating box keeps
+     tracking the viewport top for as long as its own grid row is in the
+     scrollport, and the chart's row is taller than the viewport on most
+     screens (D-05, SITE-20). */
+  position: static;
 }
 
 /* Grid items default to min-width: auto, so the Plotly SVG's own width would
@@ -285,72 +512,241 @@ body.app {
   min-width: 0;
 }
 
-/* ---------- Rail ---------- */
+/* ---------- Toolbar ---------- */
 
-#rail {
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  padding: var(--space-lg);
-}
-
-/* Desktop/tablet (>640px): the rail gets its own scrollbar and stays pinned
-   near the top of the viewport, so scrolling the rail (down to its own
-   bottom) never pushes the chart out of view. `#chart-area` stays in normal
-   flow (never sticky, regression 2026-09-27): making it `position: sticky`
-   too (11ac9b5) pinned it over the "Matched games" table once the *page*
-   itself was scrolled far enough, since a sticky box keeps floating at
-   `top: 0` for as long as its own grid row is in the scrollport -- and the
-   chart's row is taller than the viewport on most screens. The phone media
-   query below replaces `#rail`'s `position` with its own `fixed`
-   bottom-sheet rule, so this never reaches the ≤640px drawer. */
-@media (min-width: 641px) {
-  #rail {
-    position: sticky;
-    top: 0;
-    align-self: start;
-    max-height: 100vh;
-    overflow-y: auto;
-  }
-}
-
-.rail-header {
+#toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-sm);
-  row-gap: var(--space-sm);
+  min-height: 48px;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  /* Never sticky or fixed -- scrolls with the page like any other block
+     (D-02). */
 }
 
-#rail-toggle {
-  border: none;
-  background: none;
+.filter-trigger {
+  font: var(--font-label);
+  padding: 6px var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  /* Regression: form controls don't inherit `color` from an ancestor like
+     `body` -- the UA stylesheet sets an explicit color for `<button>`
+     itself, which wins over inheritance. Without this, the button rendered
+     in the browser's default button-text color instead of the theme's
+     `--text` token, failing WCAG AA 4.5:1 in dark mode against `--bg`. */
+  color: var(--text);
   cursor: pointer;
-  font: var(--font-heading);
 }
 
-#rail-close {
-  display: none;
+.filter-trigger::after {
+  content: " ▾";
 }
 
-body.rail-collapsed #rail-body {
-  display: none;
+.filter-trigger[data-active="true"],
+.filter-trigger[aria-expanded="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
 }
 
-body.rail-collapsed #rail {
-  padding-bottom: var(--space-md);
+/* D-25b: "Clear all filters" gets a style distinct from the plain filter
+   triggers above -- an outlined accent, never the same look as the filter
+   buttons -- while it also clears the selected announcers (D-27). An
+   outlined `--reset` treatment rather than a filled one, so it doesn't read
+   as more prominent than the primary filter controls. Contrast against the
+   toolbar's `--surface` background (#F4F5F7 light / #1E2126 dark):
+   `--reset` on light is ~6.0:1, on dark ~9.5:1 -- both clear WCAG AA's
+   4.5:1 minimum. */
+#clear-filters {
+  font: var(--font-label);
+  font-weight: var(--weight-semibold);
+  padding: 6px var(--space-sm);
+  border: 1px solid var(--reset);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--reset);
+  cursor: pointer;
 }
 
-#rail-body section {
-  margin-bottom: var(--space-lg);
+#clear-filters:focus-visible,
+.filter-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
-#rail-body label {
+/* ---------- Filter popovers ---------- */
+
+.filter-popover {
+  position: fixed;
+  /* Overrides the UA default `[popover]` style (`inset: 0`, which would
+     otherwise stretch the popover to fill the viewport) -- positioned
+     explicitly every time it opens, via filters.js's `positionPopover`
+     (Pitfall 2: a `[popover]` element is promoted to the top layer, so its
+     original position in the grid/flow is irrelevant to where it renders). */
+  inset: auto;
+  margin: 0;
+  width: max-content;
+  min-width: 240px;
+  max-width: min(360px, calc(100vw - 16px));
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: var(--space-md);
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.filter-popover h3 {
+  margin: 0 0 var(--space-sm) 0;
+}
+
+/* D-28: #pop-announcers is a tall flex column (~60vh) so its list can fill
+   it, instead of the shared `.filter-popover` max-height clip other
+   (short-content) popovers use. Gated on `:popover-open` (like
+   `.filters-sheet:popover-open` below): an unconditional `display: flex`
+   here would out-specificity the UA stylesheet's `[popover]:not(:popover-
+   open) { display: none }` rule (an id selector beats it regardless of
+   source order), leaving the popover always rendered and blocking clicks
+   even while "closed". */
+#pop-announcers:popover-open {
+  height: 60vh;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#filter-announcers {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.filter-popover label,
+.sheet-body label {
   font: var(--font-label);
   display: flex;
   align-items: center;
   gap: var(--space-xs);
   margin-bottom: var(--space-sm);
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 4px 0;
+  margin-bottom: 0;
+}
+
+#postseason-options.segmented button[aria-checked="true"] {
+  border-bottom: 2px solid var(--accent);
+  color: var(--accent);
+}
+
+#school-chips {
+  list-style: none;
+  margin: var(--space-sm) 0 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+/* ---------- Mobile filters bottom sheet ---------- */
+
+.filters-sheet:popover-open {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  max-width: none;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  padding: 0;
+  border: none;
+}
+
+.sheet-header,
+.sheet-footer {
+  flex: none;
+  padding: var(--space-md);
+  background: var(--surface);
+}
+
+.sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+
+.sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-md);
+}
+
+.sheet-body section {
+  padding-bottom: var(--space-lg);
+  margin-bottom: var(--space-lg);
+  border-bottom: 1px solid var(--border);
+}
+
+/* D-28: inside the phone Filters sheet, cap the announcer list's own height
+   so the sheet's other sections stay reachable below it. */
+.sheet-body #person-results {
+  max-height: 50vh;
+}
+
+.sheet-footer {
+  border-top: 1px solid var(--border);
+}
+
+.sheet-footer #filters-show-results {
+  display: block;
+  width: 100%;
+  font: var(--font-label);
+  padding: var(--space-sm) var(--space-md);
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--bg);
+  cursor: pointer;
+}
+
+/* ---------- Filter sections (network checklist/family-group) ---------- */
+
+/* Every checkbox now lives inside a filter popover or the mobile sheet --
+   scoped globally rather than to the since-removed left filter column's
+   body wrapper. */
+input[type="checkbox"] {
+  accent-color: var(--accent);
+  /* Resets the browser's own UA margin around checkboxes (e.g. Chromium's
+     default ~3px top/bottom), which -- inside a `display: flex` label --
+     doesn't collapse with anything and was inflating every filter row's
+     height beyond its intended compact spacing (SITE-18's mobile tap-target
+     rule below restores height there via `min-height`, not margin). */
+  margin: 0;
+}
+
+#filter-seasons,
+#filter-networks,
+#filter-slots,
+#filter-role,
+#filter-conference,
+#filter-school,
+#filter-postseason {
+  margin-bottom: var(--space-lg);
 }
 
 .network-list,
@@ -389,31 +785,16 @@ body.rail-collapsed #rail {
   margin-bottom: var(--space-xs);
 }
 
-/* The label wrapping each checkbox carries its own `#rail-body label`
-   margin-bottom (space-sm, 8px) for standalone filter rows (slots, role);
-   inside the network list that stacked on top of the `<li>`'s own
-   margin-bottom, roughly doubling the intended gap between rows. The `<li>`
-   already supplies the compact spacing for this list, so the label itself
-   contributes none here. (Needs the `#rail-body` prefix to out-specificity
-   the ID-selector rule above -- a bare `.network-list label` rule loses to
-   it regardless of source order.) */
-#rail-body .network-list label {
+/* The label wrapping each checkbox carries its own `.filter-popover
+   label`/`.sheet-body label` margin-bottom (space-sm, 8px) for standalone
+   filter rows (slots, role); inside the network list that stacked on top of
+   the `<li>`'s own margin-bottom, roughly doubling the intended gap between
+   rows. The `<li>` already supplies the compact spacing for this list, so
+   the label itself contributes none here. (Needs the `#filter-networks`
+   prefix to out-specificity the generic rule above -- a bare `.network-list
+   label` rule loses to it regardless of source order.) */
+#filter-networks .network-list label {
   margin-bottom: 0;
-}
-
-#rail-body input[type="checkbox"] {
-  accent-color: var(--accent);
-  /* Resets the browser's own UA margin around checkboxes (e.g. Chromium's
-     default ~3px top/bottom), which -- inside a `display: flex` label --
-     doesn't collapse with anything and was inflating every filter row's
-     height beyond its intended compact spacing (SITE-18's mobile tap-target
-     rule below restores height there via `min-height`, not margin). */
-  margin: 0;
-}
-
-#team-chip.chip {
-  display: inline-flex;
-  margin-top: var(--space-sm);
 }
 
 #season-counts-details summary {
@@ -435,22 +816,110 @@ body.rail-collapsed #rail {
   color: var(--muted);
 }
 
-#clear-filters {
-  font: var(--font-label);
+/* ---------- Chart tooltip (D-22) ---------- */
+
+/* The default TOOLTIP_MODE 'html' tooltip (site/modules/tooltip.js),
+   replacing Plotly's own hover label so a network name can render as a real
+   filled pill (SITE-26). `pointer-events: none` so it can never steal hover
+   or a click from the dots underneath it. */
+/* D-29: the 2px border is family-colored via an inline `borderColor`
+   (tooltip.js's `renderTooltipContent`) -- the token here is only the
+   pre-hover/no-JS fallback. */
+.chart-tooltip {
+  position: fixed;
+  z-index: 30;
+  pointer-events: none;
+  max-width: 320px;
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg);
-  /* Regression: form controls don't inherit `color` from an ancestor like
-     `body` -- the UA stylesheet sets an explicit color for `<button>`
-     itself, which wins over inheritance. Without this, the button rendered
-     in the browser's default button-text color instead of the theme's
-     `--text` token, failing WCAG AA 4.5:1 in dark mode against `--bg`. */
+  background: var(--surface);
   color: var(--text);
-  cursor: pointer;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  font: var(--font-label);
+}
+
+.chart-tooltip .tooltip-title {
+  display: block;
+  font-weight: var(--weight-semibold);
+}
+
+.tooltip-networks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  margin: var(--space-xs) 0;
+}
+
+.tooltip-hint {
+  color: var(--muted);
+  margin-top: var(--space-xs);
 }
 
 /* ---------- Chart area ---------- */
+
+/* `#chart-area`'s own children stack top-to-bottom in flex-column flow (not
+   grid) so the ≤640px media query below can reorder the legend row below
+   the chart via `order`, without touching the rest of the page's grid. */
+#chart-area {
+  display: flex;
+  flex-direction: column;
+}
+
+/* D-08: reserved slot for Phase 04.2's chart-tab bar -- stays in the DOM
+   for that phase to fill, but collapses to 0 height while it's empty
+   (D-25: "the empty chart-tab slot has 0 height"). Once a tab bar lands
+   inside it, `:not(:empty)` restores the fixed height so no reflow happens
+   at that point either. */
+.chart-tabs-slot {
+  min-height: 0;
+}
+
+.chart-tabs-slot:not(:empty) {
+  min-height: 40px;
+}
+
+/* D-04: the HTML chip legend replacing Plotly's built-in legend. */
+.legend-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 40px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* SITE-26: shared filled text-pill treatment (legend chips, panel/table
+   network pills -- pill.js's `makePill`). */
+.pill {
+  display: inline-block;
+  font: var(--font-label);
+  padding: 2px var(--space-sm);
+  border-radius: 999px;
+  white-space: nowrap;
+  border: 2px solid transparent;
+}
+
+.legend-chip {
+  cursor: pointer;
+  font: inherit;
+}
+
+/* Toggled off (D-16): legend.js clears the inline fill so this rule's
+   transparent background/--text color shows through; only the chip's own
+   inline `border-color` (the family color) is kept. */
+.legend-chip[aria-pressed="false"] {
+  background: transparent;
+  color: var(--text);
+}
+
+.legend-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 .segmented {
   display: inline-flex;
@@ -500,7 +969,7 @@ body.rail-collapsed #rail {
 /* ---------- Matched games table ---------- */
 
 #matched-games {
-  padding: 0 var(--space-lg) var(--space-xl) var(--space-lg);
+  padding: var(--space-lg) var(--space-lg) var(--space-xl);
 }
 
 .empty-state {
@@ -563,12 +1032,19 @@ body.rail-collapsed #rail {
   font: var(--font-label);
 }
 
-/* Regression: a bare `<button>Details</button>` wraps mid-word ("Detail\ns")
-   once its column is narrower than the word -- the table has no
-   `table-layout: fixed`, so forcing `white-space: nowrap` here just widens
-   the column to fit the word instead of wrapping it. */
-.details-button {
-  white-space: nowrap;
+/* D-06: the whole row is the click/Enter target that opens the detail
+   panel -- there is no separate Details button/column any more. */
+.games-table tr.row-link {
+  cursor: pointer;
+}
+
+.games-table tr.row-link:hover {
+  background: var(--surface);
+}
+
+.games-table tr.row-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .badge {
@@ -579,29 +1055,116 @@ body.rail-collapsed #rail {
   border-radius: 999px;
 }
 
-/* ---------- Detail panel / drawer ---------- */
+/* ---------- Detail panel ---------- */
 
-.drawer {
-  position: fixed;
-  top: 64px;
-  right: 0;
-  bottom: 0;
-  width: 360px;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
-  padding: var(--space-lg);
-  transform: translateX(100%);
-  transition: transform 150ms ease-out;
-  overflow-y: auto;
-  z-index: 20;
+/* Tablet/desktop (≥641px): a push grid column, not an overlay (D-01), and
+   beside the chart only -- the panel's grid area spans just the "main" row
+   (D-23: replaces plan 04.1-05's both-rows span). `align-self: stretch`
+   makes `#detail-panel` exactly as tall as that row, which #chart-area
+   alone sizes (an absolutely positioned `.panel-inner` contributes no
+   height of its own, so it can never make the row taller than the chart).
+   D-32: the column's own `width` no longer animates -- it snaps 0 <->
+   360px/320px in the same frame `body.panel-open` toggles, so the chart's
+   own resize (app.js) can start the instant the class changes instead of
+   waiting out a ~150ms CSS transition first. The slide motion moves onto
+   `.panel-inner`'s own `transform` instead: compositor-only, triggers no
+   layout of its own (Pitfall 1), and is clipped to the (already
+   final-width) column by `#detail-panel`'s `overflow: hidden`, so it still
+   reads as the panel sliding in/out even though the column itself never
+   moves. `.panel-inner` fills the column via absolute positioning and
+   scrolls internally (`overflow-y: auto`) when its content runs longer
+   than the chart area, so it can never overlap the chart, the legend
+   chips, or the table (D-01, D-23, SITE-20). This is not the chart (D-05
+   still holds: the chart itself is never sticky). Phones (≤640px) keep the
+   panel as a true `position: fixed` overlay bottom sheet instead, below --
+   the one place an overlay is still correct, since nothing else needs that
+   screen region at the same time. */
+@media (min-width: 641px) {
+  #detail-panel {
+    position: relative;
+    width: 0;
+    min-width: 0;
+    align-self: stretch;
+    overflow: hidden;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+  }
+
+  body.panel-open #detail-panel {
+    width: 360px;
+  }
+
+  .panel-inner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 360px;
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: var(--space-lg);
+    transform: translateX(100%);
+    transition: transform 150ms ease-out;
+  }
+
+  body.panel-open .panel-inner {
+    transform: none;
+  }
 }
 
-body.panel-open .drawer {
-  transform: none;
+/* Tablet (641-1024px): narrower panel, unchanged token from Phase 4. */
+@media (min-width: 641px) and (max-width: 1024px) {
+  body.panel-open #detail-panel {
+    width: 320px;
+  }
+
+  .panel-inner {
+    width: 320px;
+  }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .drawer {
+@media (min-width: 641px) and (prefers-reduced-motion: reduce) {
+  .panel-inner {
+    transition: none;
+  }
+}
+
+/* Phones (≤640px): the one place a `position: fixed` overlay bottom sheet
+   is still correct (unchanged mechanism from Phase 4). */
+@media (max-width: 640px) {
+  #detail-panel {
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 55vh;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    transform: translateY(100%);
+    transition: transform 150ms ease-out;
+    overflow: hidden;
+    z-index: 20;
+  }
+
+  body.panel-open #detail-panel {
+    transform: none;
+  }
+
+  .panel-inner {
+    width: auto;
+    height: 100%;
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: var(--space-lg);
+  }
+}
+
+@media (max-width: 640px) and (prefers-reduced-motion: reduce) {
+  #detail-panel {
     transition: none;
   }
 }
@@ -689,89 +1252,68 @@ body.panel-open .drawer {
 /* ---------- Tablet (641px–1024px) ---------- */
 
 @media (max-width: 1024px) {
-  body.app.rail-collapsed {
-    grid-template-columns: 0 minmax(0, 1fr);
-  }
-
-  .drawer {
-    width: 320px;
-  }
+  /* Toolbar buttons wrap onto a second line (`#toolbar`'s own `flex-wrap`
+     above) rather than scrolling horizontally. The tablet detail-panel
+     width (320px) is set by the "Detail panel" section's own
+     `(min-width: 641px) and (max-width: 1024px)` block above. */
 }
 
 /* ---------- Phones (≤640px) ---------- */
 
 @media (max-width: 640px) {
-  body.app {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "topbar"
-      "main"
-      "table"
-      "footer";
+  /* D-25: a narrower gutter than the desktop `--space-lg` (24px), still
+     >=16px, so content is never flush with the screen edge. */
+  #selection-bar,
+  #chart-area,
+  #matched-games {
+    padding-left: var(--space-md);
+    padding-right: var(--space-md);
   }
 
-  #topbar {
-    grid-template-columns: 1fr;
-    align-items: stretch;
+  /* Phone table overflow (deferred-items.md, folded into this plan's Task 2
+     step 5): `.games-table` has no `table-layout: fixed`, so a row with the
+     fixed-width Source cell's two links can force the table's natural
+     content width past `#matched-games`'s own container width, growing
+     `document.documentElement.scrollWidth` past the viewport and scrolling
+     the whole page sideways (SITE-20's "nothing overlaps/scrolls the page
+     at any width"). Scoping the horizontal scroll to `#matched-games`
+     itself keeps rows tappable (D-06's whole-row click still works inside
+     a scrolled container) while the page itself never scrolls. */
+  #matched-games {
+    overflow-x: auto;
+    max-width: 100%;
   }
 
-  #summary {
-    text-align: left;
+  /* D-04: on phones the legend chip row renders below the chart, not above
+     it -- `#chart-area`'s flex-column order, not a separate grid area. */
+  #legend-chips {
+    order: 1;
   }
 
-  #filters-button {
-    display: inline-block;
+  #shape-legend,
+  #chart-area .caption,
+  #load-error {
+    order: 2;
   }
 
-  #rail {
-    display: none;
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    max-height: 85vh;
-    overflow: auto;
-    z-index: 30;
-    border-top-left-radius: 12px;
-    border-top-right-radius: 12px;
-  }
-
-  body.filters-open #rail {
-    display: block;
-  }
-
-  #rail-close {
-    display: inline-block;
-  }
-
-  .drawer {
-    top: auto;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    width: 100%;
-    height: 55vh;
-    border-top-left-radius: 12px;
-    border-top-right-radius: 12px;
-    transform: translateY(100%);
-  }
-
-  body.panel-open .drawer {
-    transform: none;
-  }
+  /* The phone bottom-sheet `#detail-panel` rules live in the "Detail panel"
+     section's own `(max-width: 640px)` block above. */
 
   button,
   .toggle,
   .chip,
   .chip-remove,
+  #clear-selection,
   input[type="checkbox"] + label,
-  #rail-body label,
+  .sheet-body label,
+  .check-row,
+  #person-results > li[role="option"],
   .games-table th button,
   .shape-legend li,
-  #rail-toggle,
-  #rail-close,
   #panel-close,
-  .segmented button {
+  .segmented button,
+  .legend-chip,
+  .games-table tr.row-link {
     min-height: 44px;
     min-width: 44px;
   }

@@ -1,27 +1,47 @@
 /**
  * Chart building and rendering (SITE-01, SITE-03, SITE-04, SITE-12, SITE-18,
- * D-01..D-04, D-12): one `scattergl` trace per network family plus a
- * highlight overlay drawn last, the D-03 n/a strip, log-axis ticks, hover
- * text, and the phone/desktop layout.
+ * SITE-23, SITE-25, SITE-26, D-01..D-04, D-08, D-12, D-14, D-15, D-22): two
+ * `scattergl` traces per network family -- an "active" trace (dots that
+ * pass every fade filter) and an "inert" trace (dots that fail one, D-14) --
+ * plus a highlight overlay drawn last, the D-03 n/a strip, log-axis ticks,
+ * the UI-SPEC's minimal hover content, and the phone/desktop layout.
+ * Plotly's own legend is off everywhere (`showlegend: false`); the HTML
+ * chip row in `legend.js` replaces it (D-04).
+ *
+ * `TOOLTIP_MODE` (D-22) picks which of two hover paths `buildFigure` wires
+ * up, both fed by the same `tooltip.js` `tooltipModel`:
+ *   - 'html' (default): active/highlight traces carry no `text` array and
+ *     set `hoverinfo: 'none'`/`hovertemplate: null` (or `'skip'`/`null` for
+ *     a person-faded active trace, D-15) -- `hoverinfo: 'none'` still fires
+ *     `plotly_hover`/`plotly_click` with no Plotly-drawn label, so
+ *     `app.js` can show `tooltip.js`'s custom HTML tooltip instead.
+ *   - 'plotly': the exact pre-D-22 trace config -- `text` arrays built by
+ *     `hoverText` below and `hovertemplate: '%{text}<extra></extra>'` --
+ *     restoring Plotly's own pseudo-HTML hover label.
+ * Reverting to 'plotly' is a one-line edit of the constant below; both
+ * paths are covered by `tests/e2e/test_site_chart.py`.
+ *
+ * The inert trace's `hoverinfo: 'skip'` is paired with `hovertemplate: null`
+ * on the same trace update -- both are required to actually suppress hover
+ * in this vendored Plotly build (the project's own 04-11 finding, STATE.md)
+ * -- so an inert dot never takes a hover or a click (D-15). This trace's
+ * config is unaffected by `TOOLTIP_MODE`.
  *
  * `window.Plotly` is referenced only inside `renderChart`/`bindChartEvents`
  * (never at module scope), so `buildFigure`/`naBand`/`hoverText` stay
  * importable from node for quick checks.
  */
 
-import { ACCENT, DIVIDER, FAMILY_COLORS, FAMILY_LABELS, PAGE_BG, SURFACE } from './palette.js';
-import {
-  crewByRole,
-  escapeHover,
-  formatDate,
-  formatKickoff,
-  formatMatchup,
-  formatViewers,
-  logTicks,
-  niceLinearTicks,
-  ROLE_LABELS,
-  stripNetworkNote,
-} from './format.js';
+import { ACCENT, DIVIDER, FAMILY_COLORS, PAGE_BG, SURFACE, familyKey } from './palette.js';
+import { escapeHover, logTicks, niceLinearTicks } from './format.js';
+import { tooltipModel } from './tooltip.js';
+
+/**
+ * One-line fallback switch (D-22): set to 'plotly' to restore Plotly's own
+ * hovertemplate label; both paths are covered by
+ * tests/e2e/test_site_chart.py.
+ */
+export const TOOLTIP_MODE = 'html';
 
 /** X-axis chart titles (distinct from format.js's shorter AXIS_LABELS toggle copy). */
 const XAXIS_TITLES = {
@@ -56,153 +76,160 @@ export function naBand(data, axis) {
 }
 
 /**
- * Builds the `<br>`-joined hover text for one telecast: kept deliberately
- * minimal (matchup+score, date+kickoff, networks, crew, viewers, and a
- * closing hint to open the detail panel) -- every other fact (time slot,
- * measurement/scoring source, axis values, flags, combined-feed notes) is
- * dropped from the tooltip and lives only in the detail panel (SITE-04,
- * SITE-05, D-02, D-04; product notes 2026-09-27). Each line is built from
- * untrusted data (team/crew/network names) and escaped *individually*
- * before being joined with the literal `<br>` separators Plotly's
- * pseudo-HTML hover renderer expects (T-04-06): escaping the fully-joined
- * string instead would also escape those `<br>` tags themselves, so Plotly
- * would render the whole tooltip as one unbroken line of visible
- * `&lt;br&gt;` markup rather than as actual line breaks.
+ * Builds the `<br>`-joined hover text for one telecast (D-22 'plotly'
+ * fallback mode only -- the default 'html' mode never calls this and never
+ * builds a `text` array at all). Built from the same `tooltip.js`
+ * `tooltipModel` the default HTML tooltip renders, so the two modes can
+ * never drift on content/order: matchup+score, date+kickoff (with a
+ * time-slot label only for a regular-season Saturday game, D-19),
+ * slash-delimited networks (primary first, each colored by its own family --
+ * the stand-in for a filled pill in this text-only mode, since Plotly's
+ * hover renderer can't draw one, SITE-26), one "Position: Name" line per
+ * main-feed crew member, viewers, the active axis value, and a closing
+ * "Click for details →" hint. Conferences, game type, the full outlet list,
+ * the measurement-type badge, era/event flags, and any scoring-source/
+ * methodology note are panel-only (SITE-25) -- never repeated here. Each
+ * line is built from untrusted data (team/crew/network names) and escaped
+ * individually before being joined with the literal `<br>` separators
+ * Plotly's pseudo-HTML hover renderer expects (T-04-06): escaping the
+ * fully-joined string instead would also escape those `<br>` tags
+ * themselves, so Plotly would render the whole tooltip as one unbroken line
+ * of visible `&lt;br&gt;` markup rather than as actual line breaks.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
- * @param {string[]} selectedNames - names of currently selected people on this game.
+ * @param {{axis: "pregame"|"excitement", theme: "light"|"dark"}} opts
  * @returns {string}
  */
-export function hoverText(data, i, selectedNames) {
-  const t = data.t;
+export function hoverText(data, i, { axis, theme }) {
+  const model = tooltipModel(data, i, { axis });
   const lines = [];
 
-  lines.push(`<b>${escapeHover(formatMatchup(data, i, { withScore: true }))}</b>`);
+  lines.push(`<b>${escapeHover(model.title)}</b>`);
+  lines.push(escapeHover(model.dateLine));
 
-  const dateParts = [formatDate(t.date[i]), formatKickoff(t.kickoff[i]) ?? 'Kickoff time not recorded'];
-  lines.push(escapeHover(dateParts.join(' · ')));
+  // Slash-delimited, primary first, no spaces around '/' (D-25); each name
+  // is colored by its own family, standing in for a filled pill (SITE-26).
+  // The color comes only from the FAMILY_COLORS constant, never from data.
+  const networkSpans = model.networks.map((net) => {
+    const name = escapeHover(net.name);
+    const color = FAMILY_COLORS[theme][familyKey(net.family)];
+    return `<span style="color:${color}">${name}</span>`;
+  });
+  lines.push(networkSpans.join('/'));
 
-  const primaryNetwork = data.lookups.networks[t.network[i]];
-  const otherOutletNames = t.outlets[i]
-    .filter((idx) => idx !== t.network[i])
-    .map((idx) => data.lookups.networks[idx].name);
-  // Slash-delimited, primary first (e.g. "ABC / ESPN2"), with any nested
-  // methodology parenthetical (e.g. "(regional insert package)") stripped --
-  // tooltip-only; the fuller name still shows in the panel/table.
-  const networkNames = [primaryNetwork.name, ...otherOutletNames].map(stripNetworkNote);
-  lines.push(escapeHover(networkNames.join(' / ')));
+  for (const line of model.crewLines) lines.push(escapeHover(line));
 
-  const crew = crewByRole(data, i);
-  const crewParts = [];
-  if (crew.pbp.length > 0) crewParts.push(`PBP: ${crew.pbp.join(', ')}`);
-  if (crew.analyst.length > 0) crewParts.push(`Analyst: ${crew.analyst.join(', ')}`);
-  // Role "unknown" (sideline/other) main-feed crew still counts as crew on
-  // file: without it a sideline-only dot would read "Crew not recorded"
-  // (CR-04).
-  if (crew.other.length > 0) crewParts.push(`${ROLE_LABELS.unknown}: ${crew.other.join(', ')}`);
-  lines.push(escapeHover(crewParts.length > 0 ? crewParts.join(' · ') : 'Crew not recorded'));
-
-  lines.push(escapeHover(`Viewers: ${formatViewers(t.viewers[i])}`));
-
-  if (selectedNames.length > 0) lines.push(escapeHover(`Selected: ${selectedNames.join(', ')}`));
-
-  lines.push(escapeHover('Click or tap for details'));
+  lines.push(escapeHover(model.viewersLine));
+  lines.push(escapeHover(model.axisLine));
+  lines.push(escapeHover(model.hint));
 
   return lines.join('<br>');
 }
 
-/** Selected-people names on telecast `i`, from `view.peopleOnGame` (empty when nobody's selected). */
-function selectedNamesFor(data, view, i) {
-  const onGame = view.peopleOnGame.get(i);
-  if (!onGame) return [];
-  return onGame.map((personIndex) => data.lookups.people[personIndex].name);
-}
-
-/** Whether the network filter excludes every one of `family`'s networks (its legend entry reads as off). */
-function familyToggledOff(data, state, family) {
-  if (state.networks == null) return false;
-  const famIds = (data.networksByFamily.get(family) ?? []).map((idx) => data.lookups.networks[idx].id);
-  return !famIds.some((id) => state.networks.includes(id));
-}
-
 /**
  * Builds the full Plotly figure (traces, layout, config) for the current
- * data/view/state/env (SITE-01, SITE-03, SITE-04, SITE-18).
+ * data/view/state/env (SITE-01, SITE-03, SITE-04, SITE-18, SITE-23, D-14,
+ * D-22). Each family contributes two traces -- pushed inert-first, then
+ * active-first, so the trace count stays constant across a re-render for a
+ * clean `Plotly.react` diff -- followed by the highlight overlay, always
+ * last. `env.tooltipMode` (falling back to the module's own `TOOLTIP_MODE`)
+ * picks the active/highlight traces' hover config; see the header comment.
  * @param {object} data - a `prepareData` result.
  * @param {object} view - a `computeView` result.
  * @param {object} state - shaped like `defaultState(data)`.
- * @param {{theme: "light"|"dark", mobile: boolean, revision: number}} env
+ * @param {{theme: "light"|"dark", mobile: boolean, revision: number, tooltipMode?: "html"|"plotly"}} env
  * @returns {{traces: object[], layout: object, config: object}}
  */
 export function buildFigure(data, view, state, env) {
   const axis = state.axis;
   const band = naBand(data, axis);
   const theme = env.theme;
+  const hoverOpts = { axis, theme };
+  const tooltipMode = env.tooltipMode ?? TOOLTIP_MODE;
 
   // `view.highlighted` matches trivially against every visible dot when
   // nothing is selected (select.js's own semantics); only draw the overlay
-  // once a person/team selection actually exists.
+  // once a person/school selection actually exists.
   const highlighted = view.hasSelection ? view.highlighted : [];
   // Once a selection exists, a highlighted dot is dropped from its own
-  // family (base) trace, since the highlight overlay below already draws it,
-  // and the faded base traces stop taking hover and clicks entirely
+  // family (active) trace, since the highlight overlay below already draws
+  // it, and the faded active traces stop taking hover and clicks entirely
   // (`hoverinfo: 'skip'`), so a hover near a highlighted dot always snaps to
   // it instead of a nearer faded one. Plotly only honours `hoverinfo` when
   // `hovertemplate` is unset, so a skipped trace sets it to null.
   const highlightSet = new Set(highlighted);
 
-  const traces = [];
+  // D-22: html mode never needs a per-dot hover string at all (the custom
+  // tooltip renders straight from `tooltipModel` on `plotly_hover`, in
+  // app.js) -- only the plotly-fallback mode calls `hoverText` and carries a
+  // `text` array on the active/highlight traces.
+  const usePlotlyText = tooltipMode === 'plotly';
+  const activeHoverInfo = usePlotlyText
+    ? (view.hasPersonSelection ? 'skip' : 'all')
+    : (view.hasPersonSelection ? 'skip' : 'none');
+  const activeHoverTemplate = usePlotlyText && !view.hasPersonSelection ? '%{text}<extra></extra>' : null;
+
+  const inertTraces = [];
+  const activeTraces = [];
   for (const family of data.families) {
-    const x = [];
-    const y = [];
-    const customdata = [];
-    const text = [];
+    const active = { x: [], y: [], customdata: [], text: [] };
+    const inert = { x: [], y: [] };
     for (let i = 0; i < data.n; i += 1) {
       if (!view.visible[i] || data.familyOf[i] !== family) continue;
       if (highlightSet.has(i)) continue;
       const rawX = data.t[axis][i];
-      x.push(rawX == null ? band.sentinel : rawX);
-      y.push(data.t.viewers[i]);
-      customdata.push(i);
-      text.push(hoverText(data, i, selectedNamesFor(data, view, i)));
+      const x = rawX == null ? band.sentinel : rawX;
+      const y = data.t.viewers[i];
+      if (view.passesFilters[i]) {
+        active.x.push(x);
+        active.y.push(y);
+        active.customdata.push(i);
+        if (usePlotlyText) active.text.push(hoverText(data, i, hoverOpts));
+      } else {
+        // Filtered-out: no customdata/text needed -- this trace never
+        // hovers or clicks (D-15).
+        inert.x.push(x);
+        inert.y.push(y);
+      }
     }
-    // Plotly's scatter defaults turn a zero-point trace into `visible:
-    // false`, which drops its legend entry entirely -- so a family emptied
-    // by the season range, by being toggled off, or because every dot
-    // moved to the highlight overlay would vanish from the legend and could
-    // never be clicked back on (CR-03). One `null` placeholder point keeps
-    // the entry; Plotly never draws or hovers a null point.
-    if (x.length === 0) {
-      x.push(null);
-      y.push(null);
-      customdata.push(null);
-      text.push('');
-    }
-    traces.push({
+    inertTraces.push({
       type: 'scattergl',
       mode: 'markers',
-      name: FAMILY_LABELS[family],
+      meta: `inert:${family}`,
+      showlegend: false,
+      x: inert.x,
+      y: inert.y,
+      hoverinfo: 'skip',
+      hovertemplate: null,
+      marker: {
+        color: DIVIDER[theme],
+        size: 6,
+        opacity: 0.08,
+        line: { width: 0 },
+      },
+    });
+    activeTraces.push({
+      type: 'scattergl',
+      mode: 'markers',
       meta: `family:${family}`,
-      legendgroup: family,
-      x,
-      y,
-      customdata,
-      text,
-      hoverinfo: view.hasSelection ? 'skip' : 'all',
-      hovertemplate: view.hasSelection ? null : '%{text}<extra></extra>',
+      showlegend: false,
+      x: active.x,
+      y: active.y,
+      customdata: active.customdata,
+      ...(usePlotlyText ? { text: active.text } : {}),
+      hoverinfo: activeHoverInfo,
+      hovertemplate: activeHoverTemplate,
+      hoverlabel: { bordercolor: FAMILY_COLORS[theme][family] },
       marker: {
         color: FAMILY_COLORS[theme][family],
         size: 6,
-        opacity: view.hasSelection ? 0.15 : 1,
+        opacity: view.hasPersonSelection ? 0.15 : 1,
         line: { width: 0 },
       },
-      // The legend entry mirrors the network filter the legend itself
-      // toggles: greyed out only when none of the family's networks is
-      // selected, never merely because the season range or the highlight
-      // overlay left this trace with no dots of its own.
-      visible: familyToggledOff(data, state, family) ? 'legendonly' : true,
     });
   }
+
+  const traces = [...inertTraces, ...activeTraces];
 
   const hx = [];
   const hy = [];
@@ -211,16 +238,66 @@ export function buildFigure(data, view, state, env) {
   const hcolor = [];
   const hsize = [];
   const hsymbol = [];
+  const hlineWidth = [];
+  // D-33 halo: a separate scattergl trace holding just the non-circle
+  // highlight points (same x/y/symbol), pushed immediately before the
+  // highlight trace below.
+  const haloX = [];
+  const haloY = [];
+  const haloSymbol = [];
+  const haloSize = [];
+  // D-31/D-33: a scattergl non-circle symbol (square/diamond/triangle-up/
+  // star) is drawn from an SDF glyph atlas (regl-scatter2d), and a
+  // `marker.line` border on one of those glyphs antialiases into a
+  // speckled fringe just outside the shape's edge -- confirmed empirically
+  // (04.1-13-SUMMARY.md: 1 ring-speckle pixel per diamond marker with a
+  // 1.5px `marker.line` border, 0 with it removed). Circles are drawn
+  // analytically and never show the artifact, so they keep the accent
+  // `marker.line` border directly. Every other symbol instead gets a
+  // solid ACCENT-filled "halo" trace underneath it (meta 'highlight-halo',
+  // built just below): the same point, ~3px larger, `line.width` 0,
+  // `hoverinfo: 'skip'` and `hovertemplate: null` so it never takes a
+  // hover or a click. That restores the same accent border the circles
+  // have without ever setting `marker.line` on an SDF glyph.
   for (const i of highlighted) {
     const rawX = data.t[axis][i];
-    hx.push(rawX == null ? band.sentinel : rawX);
-    hy.push(data.t.viewers[i]);
+    const x = rawX == null ? band.sentinel : rawX;
+    const y = data.t.viewers[i];
+    hx.push(x);
+    hy.push(y);
     hcustomdata.push(i);
-    htext.push(hoverText(data, i, selectedNamesFor(data, view, i)));
+    if (usePlotlyText) htext.push(hoverText(data, i, hoverOpts));
     hcolor.push(FAMILY_COLORS[theme][data.familyOf[i]]);
     const symbol = view.symbols.get(i) ?? 'circle';
     hsymbol.push(symbol);
-    hsize.push(symbol === 'star' ? 13 : 10);
+    const size = symbol === 'circle' ? 10 : symbol === 'star' ? 15 : 12;
+    hsize.push(size);
+    hlineWidth.push(symbol === 'circle' ? 1.5 : 0);
+    if (symbol !== 'circle') {
+      haloX.push(x);
+      haloY.push(y);
+      haloSymbol.push(symbol);
+      haloSize.push(size + 3);
+    }
+  }
+  if (haloX.length > 0) {
+    traces.push({
+      type: 'scattergl',
+      mode: 'markers',
+      meta: 'highlight-halo',
+      showlegend: false,
+      x: haloX,
+      y: haloY,
+      hoverinfo: 'skip',
+      hovertemplate: null,
+      marker: {
+        symbol: haloSymbol,
+        size: haloSize,
+        color: ACCENT[theme],
+        opacity: 1,
+        line: { width: 0 },
+      },
+    });
   }
   traces.push({
     type: 'scattergl',
@@ -230,15 +307,16 @@ export function buildFigure(data, view, state, env) {
     x: hx,
     y: hy,
     customdata: hcustomdata,
-    text: htext,
-    hoverinfo: 'all',
-    hovertemplate: '%{text}<extra></extra>',
+    ...(usePlotlyText ? { text: htext } : {}),
+    hoverinfo: usePlotlyText ? 'all' : 'none',
+    hovertemplate: usePlotlyText ? '%{text}<extra></extra>' : null,
+    hoverlabel: { bordercolor: hcolor },
     marker: {
       color: hcolor,
       size: hsize,
       symbol: hsymbol,
       opacity: 1,
-      line: { width: 1.5, color: ACCENT[theme] },
+      line: { width: hlineWidth, color: ACCENT[theme] },
     },
   });
 
@@ -255,6 +333,7 @@ export function buildFigure(data, view, state, env) {
       size: 14,
       color: ACCENT[theme],
     },
+    showlegend: false,
     hovermode: 'closest',
     // Wider once a selection exists, so it's easier to snap to a highlighted
     // dot's tooltip even when the cursor lands a few pixels off it (T3/D-02).
@@ -311,12 +390,11 @@ export function buildFigure(data, view, state, env) {
         font: { size: 14 },
       },
     ],
-    // Low enough on phones to clear the two-line x-axis title (XAXIS_TITLES_MOBILE).
-    legend: env.mobile
-      ? { orientation: 'h', x: 0, y: -0.36, yanchor: 'top' }
-      : { orientation: 'v', x: 1.02, y: 1 },
     dragmode: env.mobile ? false : 'zoom',
-    margin: { l: 70, r: env.mobile ? 24 : 170, t: 24, b: 60 },
+    // D-04: the 170px right margin only ever made room for Plotly's own
+    // legend; the HTML chip row above the chart replaced it, so the margin
+    // is the same narrow width at every screen size now.
+    margin: { l: 70, r: 24, t: 24, b: 60 },
   };
 
   const config = {
@@ -346,33 +424,31 @@ export function renderChart(gd, figure) {
 }
 
 /**
- * Binds the chart's Plotly event handlers once: legend click/double-click
- * (family toggle, D-01/D-05) and point click (detail panel hook, wired in
- * plan 04-10).
+ * Binds the chart's Plotly event handlers once: point click (detail panel
+ * hook) and hover/unhover (D-22: `app.js` uses these to drive the custom
+ * HTML tooltip in the default mode; `hoverinfo: 'none'` on the html-mode
+ * active/highlight traces still fires `plotly_hover`/`plotly_unhover` with
+ * no Plotly-drawn label -- only `hoverinfo: 'skip'` on an inert/faded trace
+ * suppresses the event entirely, D-15). Plotly's own legend-click/
+ * double-click events have no handler here -- the HTML chip legend
+ * (`legend.js`) is a plain DOM click listener wired in `app.js`, entirely
+ * outside Plotly's own event system, since every trace now sets
+ * `showlegend: false` (D-04).
  * @param {HTMLElement} gd
- * @param {{onLegendClick?: (key: string) => void, onLegendDoubleClick?: (key: string) => void, onPointClick?: (customdata: number) => void}} handlers
+ * @param {{onPointClick?: (customdata: number) => void, onPointHover?: (customdata: number, ev: object) => void, onPointUnhover?: () => void}} handlers
  */
 export function bindChartEvents(gd, handlers = {}) {
-  const { onLegendClick, onLegendDoubleClick, onPointClick } = handlers;
-
-  gd.on('plotly_legendclick', (ev) => {
-    const meta = gd.data[ev.curveNumber]?.meta;
-    if (typeof meta === 'string' && meta.startsWith('family:')) {
-      onLegendClick?.(meta.slice('family:'.length));
-    }
-    return false;
-  });
-
-  gd.on('plotly_legenddoubleclick', (ev) => {
-    const meta = gd.data[ev.curveNumber]?.meta;
-    if (typeof meta === 'string' && meta.startsWith('family:')) {
-      onLegendDoubleClick?.(meta.slice('family:'.length));
-    }
-    return false;
-  });
+  const { onPointClick, onPointHover, onPointUnhover } = handlers;
 
   gd.on('plotly_click', (ev) => {
     const point = ev.points && ev.points[0];
     if (point) onPointClick?.(point.customdata);
   });
+
+  gd.on('plotly_hover', (ev) => {
+    const point = ev.points && ev.points[0];
+    if (point && point.customdata != null) onPointHover?.(point.customdata, ev);
+  });
+
+  gd.on('plotly_unhover', () => onPointUnhover?.());
 }
