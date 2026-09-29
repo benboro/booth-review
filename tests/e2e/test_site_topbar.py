@@ -43,10 +43,15 @@ def _search(page: Page, query: str) -> None:
 
 
 def _add_person_by_query(page: Page, query: str, index: int = 0) -> None:
-    """Opens the Announcers popover, types `query`, waits out the 120ms
-    debounce, and clicks the option at `index`."""
+    """Opens the Announcers popover, types `query`, waits for
+    `#person-results` to reflect it (D-28's synchronous filter, no
+    debounce), and clicks the unchecked option at `index`."""
     _search(page, query)
-    option = _options(page).nth(index)
+    trimmed = query.strip()
+    page.wait_for_function(
+        "(q) => document.getElementById('person-results').dataset.query === q", arg=trimmed
+    )
+    option = page.locator("#person-results li[role='option'][aria-selected='false']").nth(index)
     expect(option).to_be_visible()
     option.click()
 
@@ -110,6 +115,158 @@ def test_venn_query_lists_kris_and_jax_as_separate_options(
     joined = " ".join(options.all_text_contents())
     assert "Kris Venn" in joined
     assert "Jax Venn" in joined
+
+
+def test_announcer_list_shows_everyone_when_search_is_empty(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-28: with the search empty, #person-results lists every announcer,
+    alphabetically, all unchecked -- the Excel AutoFilter-style full list,
+    not the old empty-until-typed combobox."""
+    open_app(guarded_page, "")
+    _open_announcers(guarded_page)
+    options = _options(guarded_page)
+    expect(options).to_have_count(10)
+    names = guarded_page.locator("#person-results li[role='option'] .option-name").all_inner_texts()
+    assert names == [
+        "Casey Lund",
+        "Dale Harlow",
+        "Dale Harlow Jr.",
+        "Jamie Oaks",
+        "Jax Venn",
+        "Kris Venn",
+        "Pat Rowan",
+        "Robin Teague",
+        "Sam Delgado",
+        "Taylor Vance",
+    ]
+    for i in range(10):
+        expect(options.nth(i)).to_have_attribute("aria-selected", "false")
+
+
+def test_announcer_list_checks_selected_people(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-28: with a person selected via the URL, the empty-search list still
+    shows all 10 options, and exactly that person's option is checked."""
+    open_app(guarded_page, "?people=kris-venn")
+    _open_announcers(guarded_page)
+    options = _options(guarded_page)
+    expect(options).to_have_count(10)
+    checked = guarded_page.locator("#person-results li[role='option'][aria-selected='true']")
+    expect(checked).to_have_count(1)
+    assert "Kris Venn" in checked.first.inner_text()
+
+
+def test_announcer_list_filters_by_variant(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-28: typing a name variant filters #person-results to the matching
+    option, and clearing the input restores the full alphabetical list."""
+    open_app(guarded_page, "")
+    _open_announcers(guarded_page)
+    guarded_page.fill("#person-search", "kristopher")
+    guarded_page.wait_for_function(
+        "document.getElementById('person-results').dataset.query === 'kristopher'"
+    )
+    options = _options(guarded_page)
+    expect(options).to_have_count(1)
+    assert "Kris Venn" in options.first.inner_text()
+
+    guarded_page.fill("#person-search", "")
+    guarded_page.wait_for_function("document.getElementById('person-results').dataset.query === ''")
+    expect(_options(guarded_page)).to_have_count(10)
+
+
+def test_announcer_pick_clears_search_and_refocuses(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-28: picking a name (Enter, no arrow key, on a query with no active
+    row) adds the best-ranked unchecked match, clears the search, and
+    refocuses the input, so "Dale" -> Dale Harlow -> "Kris" -> Kris Venn
+    leaves both selected, with the popover still open."""
+    open_app(guarded_page, "")
+    _open_announcers(guarded_page)
+    guarded_page.fill("#person-search", "Dale")
+    guarded_page.wait_for_function(
+        "document.getElementById('person-results').dataset.query === 'Dale'"
+    )
+    guarded_page.press("#person-search", "Enter")
+    guarded_page.wait_for_function("location.search === '?people=dale-harlow'")
+    assert guarded_page.input_value("#person-search") == ""
+    assert guarded_page.evaluate("() => document.activeElement.id") == "person-search"
+
+    guarded_page.fill("#person-search", "Kris")
+    guarded_page.wait_for_function(
+        "document.getElementById('person-results').dataset.query === 'Kris'"
+    )
+    option = guarded_page.locator("#person-results li[role='option'][aria-selected='false']").first
+    expect(option).to_be_visible()
+    assert "Kris Venn" in option.inner_text()
+    option.click()
+    guarded_page.wait_for_function("location.search === '?people=dale-harlow,kris-venn'")
+
+    chips = guarded_page.locator("#chips .chip")
+    expect(chips).to_have_count(2)
+    assert chips.nth(0).inner_text().startswith("Dale Harlow")
+    assert not chips.nth(0).inner_text().startswith("Dale Harlow Jr.")
+    assert chips.nth(1).inner_text().startswith("Kris Venn")
+    assert guarded_page.locator("#pop-announcers").evaluate("(el) => el.matches(':popover-open')")
+
+
+def test_announcer_uncheck_removes_person(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-28: clicking a checked option removes that person and leaves focus
+    in the search input; arrowing to a checked option and pressing Enter
+    removes it too."""
+    open_app(guarded_page, "?people=dale-harlow,kris-venn")
+    _open_announcers(guarded_page)
+
+    dale_row = guarded_page.locator(
+        "#person-results li[role='option'][data-person-id='dale-harlow']"
+    )
+    expect(dale_row).to_have_attribute("aria-selected", "true")
+    dale_row.click()
+    guarded_page.wait_for_function("location.search === '?people=kris-venn'")
+    chips = guarded_page.locator("#chips .chip")
+    expect(chips).to_have_count(1)
+    assert chips.first.inner_text().startswith("Kris Venn")
+    assert guarded_page.evaluate("() => document.activeElement.id") == "person-search"
+
+    kris_row = guarded_page.locator("#person-results li[role='option'][data-person-id='kris-venn']")
+    expect(kris_row).to_have_attribute("aria-selected", "true")
+    # Alphabetical order: Casey(0) Dale Harlow(1) Dale Harlow Jr.(2)
+    # Jamie Oaks(3) Jax Venn(4) Kris Venn(5) -- 6 ArrowDown presses from -1.
+    for _ in range(6):
+        guarded_page.press("#person-search", "ArrowDown")
+    guarded_page.press("#person-search", "Enter")
+    guarded_page.wait_for_function("location.search === ''")
+    expect(guarded_page.locator("#chips .chip")).to_have_count(0)
+
+
+def test_announcer_compare_cap_unchanged(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-28/D-07: the 4-person compare cap and #compare-note still hold
+    through the new list -- a 5th unchecked pick in compare mode adds no
+    one."""
+    open_app(guarded_page, "")
+    for query in ["Dale Harlow", "Dale Harlow Jr.", "Kris Venn", "Jax Venn"]:
+        _add_person_by_query(guarded_page, query)
+
+    guarded_page.click("#compare-toggle")
+    guarded_page.wait_for_function("location.search.includes('mode=compare')")
+
+    _open_announcers(guarded_page)
+    fifth = guarded_page.locator("#person-results li[role='option'][data-person-id='pat-rowan']")
+    expect(fifth).to_have_attribute("aria-selected", "false")
+    fifth.click()
+
+    chips = guarded_page.locator("#chips .chip")
+    expect(chips).to_have_count(4)
+    assert guarded_page.is_visible("#compare-note")
+    assert "Compare mode holds up to 4 people." in guarded_page.inner_text("#compare-note")
 
 
 def test_alt_cast_selection_notes_it_in_the_summary(
@@ -320,16 +477,25 @@ def test_arrow_key_active_option_is_visibly_outlined(
     query: str,
 ) -> None:
     """WR-07 (WCAG 2.4.7): the bare `<li role="option">` results get padding
-    and a pointer, and the arrow-key active option (`aria-selected="true"`)
-    shows a visible outline; the other options don't."""
+    and a pointer, and the arrow-key active option (identified by the
+    `is-active` class, D-28 -- `aria-selected` now means checked, not
+    active) shows a visible outline; the other options don't."""
     open_app(guarded_page, "")
     _open_announcers(guarded_page)
     guarded_page.fill(input_id, query)
+    guarded_page.wait_for_function(
+        "(q) => document.getElementById('person-results').dataset.query === q", arg=query
+    )
     options = guarded_page.locator(f"{results_id} li[role='option']:not([aria-disabled])")
     expect(options.nth(1)).to_be_visible()
 
     guarded_page.press(input_id, "ArrowDown")
-    expect(options.nth(0)).to_have_attribute("aria-selected", "true")
+    active_class = options.nth(0).get_attribute("class") or ""
+    assert "is-active" in active_class
+    inactive_class = options.nth(1).get_attribute("class") or ""
+    assert "is-active" not in inactive_class
+    active_descendant = guarded_page.get_attribute("#person-search", "aria-activedescendant")
+    assert active_descendant == options.nth(0).get_attribute("id")
 
     active = options.nth(0).evaluate(_OPTION_STYLE_JS)
     inactive = options.nth(1).evaluate(_OPTION_STYLE_JS)

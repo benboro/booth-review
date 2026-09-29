@@ -81,11 +81,16 @@ def _options(page: Page, results_id: str) -> Any:
 
 def _add_person_by_query(page: Page, query: str, index: int = 0) -> None:
     """Opens the Announcers popover (D-21), types `query` into the person
-    search, waits out the debounce, and clicks the option."""
+    search, waits for `#person-results` to reflect it (D-28's synchronous
+    filter, no debounce), and clicks the unchecked option."""
     if not page.locator("#pop-announcers").evaluate("(el) => el.matches(':popover-open')"):
         _open_filter(page, "announcers")
     page.fill("#person-search", query)
-    option = _options(page, "person-results").nth(index)
+    trimmed = query.strip()
+    page.wait_for_function(
+        "(q) => document.getElementById('person-results').dataset.query === q", arg=trimmed
+    )
+    option = page.locator("#person-results li[role='option'][aria-selected='false']").nth(index)
     expect(option).to_be_visible()
     option.click()
 

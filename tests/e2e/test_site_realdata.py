@@ -316,6 +316,41 @@ def test_real_time_slots_match_kickoff_hours(
     print(f"After-dark (late) telecast count: {late}")
 
 
+_ANNOUNCER_LIST_JS = """
+() => {
+  const results = document.getElementById('person-results');
+  const rowCount = results.querySelectorAll('li[role="option"]:not([aria-disabled])').length;
+  const peopleCount = window.__testHooks.data.lookups.people.length;
+  const input = document.getElementById('person-search');
+  const start = performance.now();
+  input.value = 'a';
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  const elapsedMs = performance.now() - start;
+  const filteredCount = results.querySelectorAll('li[role="option"]:not([aria-disabled])').length;
+  return [rowCount, peopleCount, filteredCount, elapsedMs];
+}
+"""
+
+
+def test_real_announcer_list_lists_everyone(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """D-28: with the search empty, #person-results lists every real
+    announcer, and one synchronous filter pass (D-28: no debounce) stays
+    well under 100ms -- counts and a timing number only."""
+    real_open_app(real_guarded_page, "")
+    real_guarded_page.click("#trigger-announcers")
+    real_guarded_page.wait_for_function(
+        "document.getElementById('pop-announcers').matches(':popover-open')"
+    )
+    result: list[float] = real_guarded_page.evaluate(_ANNOUNCER_LIST_JS)
+    row_count, people_count, filtered_count, elapsed_ms = result
+    assert row_count == people_count, "row count differs from people count"
+    assert elapsed_ms < 100, "one filter pass took too long"
+    assert filtered_count > 0, "filtering matched zero rows"
+    assert filtered_count <= people_count, "filtered count exceeds people count"
+
+
 def test_real_playoff_counts_fit_the_bracket(
     real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
 ) -> None:

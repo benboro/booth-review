@@ -40,7 +40,8 @@ def _contrast_ratio(fg: tuple[float, float, float], bg: tuple[float, float, floa
 
 def _add_person_by_query(page: Page, query: str, index: int = 0) -> None:
     """Opens the Announcers popover (D-21) if it isn't already open, types
-    `query` into the person search, waits out the debounce, and clicks the
+    `query` into the person search, waits for `#person-results` to reflect
+    it (D-28's synchronous filter, no debounce), and clicks the unchecked
     option at `index`."""
     if not page.locator("#pop-announcers").evaluate("(el) => el.matches(':popover-open')"):
         page.click("#trigger-announcers")
@@ -49,7 +50,11 @@ def _add_person_by_query(page: Page, query: str, index: int = 0) -> None:
             "document.getElementById('trigger-announcers').getAttribute('aria-expanded') === 'true'"
         )
     page.fill("#person-search", query)
-    option = page.locator("#person-results li[role='option']:not([aria-disabled])").nth(index)
+    trimmed = query.strip()
+    page.wait_for_function(
+        "(q) => document.getElementById('person-results').dataset.query === q", arg=trimmed
+    )
+    option = page.locator("#person-results li[role='option'][aria-selected='false']").nth(index)
     expect(option).to_be_visible()
     option.click()
 
@@ -62,7 +67,11 @@ def _add_person_via_sheet(page: Page, query: str, index: int = 0) -> None:
         page.click("#filters-button")
         page.wait_for_function("document.getElementById('filters-sheet').matches(':popover-open')")
     page.fill("#person-search", query)
-    option = page.locator("#person-results li[role='option']:not([aria-disabled])").nth(index)
+    trimmed = query.strip()
+    page.wait_for_function(
+        "(q) => document.getElementById('person-results').dataset.query === q", arg=trimmed
+    )
+    option = page.locator("#person-results li[role='option'][aria-selected='false']").nth(index)
     expect(option).to_be_visible()
     option.click()
 
@@ -133,6 +142,71 @@ def test_announcers_trigger_opens_a_searchable_popover(
         "!document.getElementById('pop-announcers').matches(':popover-open')"
     )
     assert guarded_page.evaluate("() => document.activeElement.id") == "trigger-announcers"
+
+
+def test_announcers_popover_is_tall_and_list_fills_it(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-28: the desktop popover is about 60vh tall, and #person-results
+    fills it via its own scroll -- not the ~1-row absolute-positioned clip
+    in 04.1-gap2-announcers-screenshot.png."""
+    guarded_page.set_viewport_size({"width": 1280, "height": 800})
+    open_app(guarded_page, "")
+    guarded_page.click("#trigger-announcers")
+    guarded_page.wait_for_function(
+        "document.getElementById('pop-announcers').matches(':popover-open')"
+    )
+
+    info = guarded_page.evaluate(
+        "() => { const pop = document.getElementById('pop-announcers'); "
+        "const results = document.getElementById('person-results'); "
+        "const popRect = pop.getBoundingClientRect(); "
+        "const resultsRect = results.getBoundingClientRect(); "
+        "const style = getComputedStyle(results); "
+        "return { innerHeight: window.innerHeight, popHeight: popRect.height, "
+        "popBottom: popRect.bottom, resultsHeight: results.clientHeight, "
+        "resultsBottom: resultsRect.bottom, resultsPosition: style.position, "
+        "resultsOverflowY: style.overflowY }; }"
+    )
+    assert info["popHeight"] >= 0.55 * info["innerHeight"]
+    assert abs(info["popBottom"] - info["resultsBottom"]) <= 24
+    assert info["resultsHeight"] >= 0.5 * info["popHeight"]
+    assert info["resultsPosition"] != "absolute"
+    assert info["resultsOverflowY"] in ("auto", "scroll")
+
+
+def test_phone_sheet_announcer_list_matches_desktop(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-28: the phone Filters sheet's Announcers section shows the same
+    full alphabetical list with the search empty, every row is at least
+    44px tall, and picking a name still clears the search."""
+    open_app(mobile_page, "")
+    mobile_page.click("#filters-button")
+    mobile_page.wait_for_function(
+        "document.getElementById('filters-sheet').matches(':popover-open')"
+    )
+
+    options = mobile_page.locator("#person-results li[role='option']:not([aria-disabled])")
+    expect(options).to_have_count(10)
+
+    heights = mobile_page.evaluate(
+        "() => Array.from(document.querySelectorAll("
+        "'#person-results li[role=\"option\"]')).map((el) => el.getBoundingClientRect().height)"
+    )
+    assert len(heights) == 10
+    for h in heights:
+        assert h >= 44 - 0.5
+
+    mobile_page.fill("#person-search", "Dale")
+    mobile_page.wait_for_function(
+        "document.getElementById('person-results').dataset.query === 'Dale'"
+    )
+    option = mobile_page.locator("#person-results li[role='option'][aria-selected='false']").first
+    expect(option).to_be_visible()
+    option.click()
+    mobile_page.wait_for_function("location.search === '?people=dale-harlow'")
+    assert mobile_page.input_value("#person-search") == ""
 
 
 def test_no_topbar_search_remains(
