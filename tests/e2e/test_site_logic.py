@@ -358,6 +358,16 @@ def test_game_type_kind(guarded_page: Page, site_url: str) -> None:
     assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeKind", 0]) is None
     assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeKind", 5]) == "playoff"
     assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeKind", 7]) == "bowl"
+    # IN-01: kind and label come from one helper, so they never disagree.
+    assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeInfo", 0]) is None
+    assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeInfo", 5]) == {
+        "kind": "playoff",
+        "label": "CFP semifinal",
+    }
+    assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeInfo", 7]) == {
+        "kind": "bowl",
+        "label": "Bowl",
+    }
 
 
 def test_conference_line_is_away_first(guarded_page: Page, site_url: str) -> None:

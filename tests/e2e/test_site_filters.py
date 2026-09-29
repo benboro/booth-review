@@ -1209,7 +1209,11 @@ def test_group_reset_sits_right_of_title_and_is_disabled_at_default(
 
     # Playwright treats aria-disabled as not-enabled, so force the click (a real user can click it).
     reset.click(force=True)
-    guarded_page.wait_for_timeout(100)
+    # Flush two animation frames (any state change would have rendered and
+    # replaced the URL by then) instead of sleeping a fixed time.
+    guarded_page.evaluate(
+        "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
+    )
     assert guarded_page.evaluate("() => location.search") == ""
     assert guarded_page.evaluate("() => !!document.activeElement.closest('.filter-popover')")
     assert guarded_page.locator(f"#pop-{name}").evaluate("el => el.matches(':popover-open')")
@@ -1246,6 +1250,49 @@ def test_group_reset_resets_only_its_own_group(
     assert guarded_page.locator(f"#trigger-{other_trigger}").get_attribute("data-active") == "true"
     assert reset.get_attribute("aria-disabled") == "true"
     assert guarded_page.evaluate("() => !!document.activeElement.closest('.filter-popover')")
+
+
+def test_announcers_reset_is_active_for_compare_mode_without_people(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """IN-02: `?mode=compare` with no people selected is a non-default
+    Announcers state (its Reset clears compare/together), so the Reset must
+    be enabled and clear it."""
+    open_app(guarded_page, "?mode=compare")
+    assert _search_has_param(guarded_page, "mode")
+    _open_filter(guarded_page, "announcers")
+
+    reset = guarded_page.locator("#filter-announcers .group-reset")
+    assert reset.get_attribute("aria-disabled") == "false"
+    reset.click()
+    guarded_page.wait_for_function("location.search === ''")
+    assert reset.get_attribute("aria-disabled") == "true"
+
+
+_RESET_ARIA_LABELS = {
+    "announcers": "Reset Announcers",
+    "seasons": "Reset Seasons",
+    "networks": "Reset Networks",
+    "kickoff": "Reset Kickoff time",
+    "role": "Reset Role",
+    "conference": "Reset conference filter",
+    "school": "Reset school filter",
+    "postseason": "Reset bowls and playoffs filter",
+}
+
+
+def test_group_reset_aria_labels_read_naturally(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """IN-03: each Reset's accessible name starts with the visible "Reset"
+    (WCAG 2.5.3) and names its group the way it reads aloud, not the
+    section's "Filter by ..." heading."""
+    open_app(guarded_page, "")
+    labels = guarded_page.evaluate(
+        "() => Object.fromEntries(Array.from(document.querySelectorAll('.group-reset'))"
+        ".map((el) => [el.dataset.reset, el.getAttribute('aria-label')]))"
+    )
+    assert labels == _RESET_ARIA_LABELS
 
 
 def test_group_reset_networks_header_survives_checklist_build(

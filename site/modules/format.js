@@ -107,36 +107,48 @@ export function showsTimeSlot(data, i) {
 }
 
 /**
+ * The single source for telecast `i`'s game type (D-17, notes-4 A1/A2a): null
+ * for a regular-season game (nothing to show), otherwise the icon `kind` --
+ * 'bowl' for a non-CFP postseason game, 'playoff' for a College Football
+ * Playoff game -- and its visible `label`: "Bowl", or the specific CFP round
+ * (falling back to "College Football Playoff" when the round itself isn't
+ * recorded). `gameTypeKind` and `gameTypeLabel` are thin views of this, so
+ * the two can never disagree.
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @returns {{kind: "bowl"|"playoff", label: string}|null}
+ */
+export function gameTypeInfo(data, i) {
+  const t = data.t;
+  const type = t.game_type[i];
+  if (type === 'regular') return null;
+  if (type === 'bowl') return { kind: 'bowl', label: 'Bowl' };
+  const round = t.playoff_round[i];
+  const label = round != null ? (CFP_ROUND_LABELS[round] ?? 'College Football Playoff') : 'College Football Playoff';
+  return { kind: 'playoff', label };
+}
+
+/**
  * Labels telecast `i`'s game type for the detail panel (D-17): null for a
  * regular-season game (no label shown), "Bowl" for a non-CFP postseason
- * game, and the specific CFP round (falling back to "College Football
- * Playoff" when the round itself isn't recorded) for a playoff game.
+ * game, and the specific CFP round for a playoff game.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
  * @returns {string|null}
  */
 export function gameTypeLabel(data, i) {
-  const t = data.t;
-  const type = t.game_type[i];
-  if (type === 'regular') return null;
-  if (type === 'bowl') return 'Bowl';
-  const round = t.playoff_round[i];
-  return round != null ? (CFP_ROUND_LABELS[round] ?? 'College Football Playoff') : 'College Football Playoff';
+  return gameTypeInfo(data, i)?.label ?? null;
 }
 
 /**
- * The DOM-free kind behind telecast `i`'s game-type icon (notes-4 A1/A2a):
- * null for a regular-season game (no icon), 'bowl' for a non-CFP postseason
- * game, and 'playoff' for a College Football Playoff game. Pairs with
- * `gameTypeLabel`, which supplies the visible text.
+ * The DOM-free kind behind telecast `i`'s game-type icon: null for a
+ * regular-season game (no icon), 'bowl', or 'playoff'.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
  * @returns {"bowl"|"playoff"|null}
  */
 export function gameTypeKind(data, i) {
-  const type = data.t.game_type[i];
-  if (type === 'regular') return null;
-  return type === 'bowl' ? 'bowl' : 'playoff';
+  return gameTypeInfo(data, i)?.kind ?? null;
 }
 
 /**

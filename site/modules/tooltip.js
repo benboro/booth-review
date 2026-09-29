@@ -25,8 +25,7 @@ import {
   formatKickoff,
   formatMatchup,
   formatViewers,
-  gameTypeKind,
-  gameTypeLabel,
+  gameTypeInfo,
   ROLE_LABELS,
   stripNetworkNote,
 } from './format.js';
@@ -71,9 +70,9 @@ export function tooltipModel(data, i, { axis }) {
   const title = formatMatchup(data, i, { withScore: true });
 
   const dateText = [formatDate(t.date[i]), formatKickoff(t.kickoff[i]) ?? 'Kickoff time not recorded'].join(' · ');
-  const kind = gameTypeKind(data, i);
-  const gameType = kind
-    ? { kind, label: gameTypeLabel(data, i), iconLabel: kind === 'bowl' ? 'Bowl game' : gameTypeLabel(data, i) }
+  const info = gameTypeInfo(data, i);
+  const gameType = info
+    ? { kind: info.kind, label: info.label, iconLabel: info.kind === 'bowl' ? 'Bowl game' : info.label }
     : null;
   const dateLine = gameType ? `${dateText} · ${gameType.label}` : dateText;
 
@@ -129,10 +128,12 @@ export function renderTooltipContent(el, model, theme) {
   dateLine.appendChild(document.createTextNode(model.dateText));
   if (model.gameType) {
     // Icon only: no visible text, so the icon carries the meaning through
-    // its own accessible name.
+    // its own accessible name. If it can't be built, fall back to the text
+    // label rather than dropping the marker.
+    const icon = makeGameTypeIcon(model.gameType.kind, model.gameType.iconLabel);
     const type = document.createElement('span');
     type.className = 'tooltip-game-type';
-    type.appendChild(makeGameTypeIcon(model.gameType.kind, model.gameType.iconLabel));
+    type.appendChild(icon ?? document.createTextNode(model.gameType.label));
     dateLine.appendChild(document.createTextNode(' · '));
     dateLine.appendChild(type);
   }

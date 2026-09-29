@@ -712,7 +712,14 @@ function renderFiltersButton(state) {
 function renderGroupResets(data, state) {
   for (const btn of document.querySelectorAll('.group-reset')) {
     const name = btn.dataset.reset;
-    btn.setAttribute('aria-disabled', triggerInfo(name, data, state).active ? 'false' : 'true');
+    // The Announcers Reset also clears compare / called-together, so it is
+    // live for `?mode=compare` with no one selected (the toolbar trigger's
+    // own active state is left alone).
+    const active =
+      name === 'announcers'
+        ? state.people.length > 0 || state.compare || state.together
+        : triggerInfo(name, data, state).active;
+    btn.setAttribute('aria-disabled', active ? 'false' : 'true');
   }
 }
 
