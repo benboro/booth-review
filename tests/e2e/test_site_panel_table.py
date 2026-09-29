@@ -509,6 +509,110 @@ def test_opening_the_panel_pushes_the_chart_and_never_overlaps(
     assert table_box["x"] + table_box["width"] <= panel_box["x"]
 
 
+@pytest.mark.parametrize(("width", "height"), [(1280, 800), (800, 900)])
+def test_closing_the_panel_restores_the_chart_width_every_time(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    width: int,
+    height: int,
+) -> None:
+    """D-24: every close path -- the close button, Escape, a close mid-
+    transition, a table-row-opened panel, and a panel swap -- restores the
+    chart to exactly its pre-open width. `panelResizes` alone isn't proof (a
+    resize can fire and still leave the chart at the wrong width if a later
+    close never resizes at all); this polls the chart's own geometry."""
+    guarded_page.set_viewport_size({"width": width, "height": height})
+    open_app(guarded_page, "?people=dale-harlow")
+    expect(guarded_page.locator("#games-table")).to_be_visible()
+
+    w0 = _chart_svg_width(guarded_page)
+    min_shrink = 250 if width >= 1280 else 200
+
+    def _wait_for_shrink() -> None:
+        guarded_page.wait_for_function(
+            "(args) => { "
+            "const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width; "
+            "return (args.before - w) >= args.minShrink; }",
+            arg={"before": w0, "minShrink": min_shrink},
+            timeout=3000,
+        )
+
+    def _wait_for_close() -> None:
+        guarded_page.wait_for_function(
+            "(target) => { "
+            "const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width; "
+            "return Math.abs(w - target) <= 1; }",
+            arg=w0,
+            timeout=3000,
+        )
+        guarded_page.wait_for_function("document.getElementById('detail-panel').hidden === true")
+
+    # (a) openPanel(0) + #panel-close click
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    _wait_for_shrink()
+    guarded_page.click("#panel-close")
+    _wait_for_close()
+
+    # (b) openPanel(0) + Escape
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    _wait_for_shrink()
+    guarded_page.keyboard.press("Escape")
+    _wait_for_close()
+
+    # (c) openPanel(0) then close 50ms later, mid-transition (no shrink wait --
+    # the whole point is closing before the open transition finishes).
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    guarded_page.wait_for_timeout(50)
+    guarded_page.click("#panel-close")
+    _wait_for_close()
+
+    # (d) a table row click opens the panel, then #panel-close closes it.
+    first_row = guarded_page.locator("#games-table tbody tr").first
+    first_row.click()
+    _wait_for_shrink()
+    guarded_page.click("#panel-close")
+    _wait_for_close()
+
+    # (e) openPanel(0) -> openPanel(8) swap -> close
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    _wait_for_shrink()
+    guarded_page.evaluate("window.__testHooks.openPanel(8)")
+    guarded_page.click("#panel-close")
+    _wait_for_close()
+
+
+def test_closing_the_panel_restores_the_chart_width_under_reduced_motion(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-24: under reduced motion the panel hides immediately with no
+    transition event ever firing; the rAF-driven resize path
+    (`resizeChartForPanelIfNoTransition`) plus the ResizeObserver debounce
+    still restore the chart's width after a close."""
+    guarded_page.emulate_media(reduced_motion="reduce")
+    guarded_page.set_viewport_size({"width": 1280, "height": 800})
+    open_app(guarded_page, "?people=dale-harlow")
+    expect(guarded_page.locator("#games-table")).to_be_visible()
+
+    w0 = _chart_svg_width(guarded_page)
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    guarded_page.wait_for_function(
+        "(target) => { "
+        "const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width; "
+        "return (target - w) >= 200; }",
+        arg=w0,
+        timeout=3000,
+    )
+    guarded_page.click("#panel-close")
+    guarded_page.wait_for_function(
+        "(target) => { "
+        "const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width; "
+        "return Math.abs(w - target) <= 1; }",
+        arg=w0,
+        timeout=3000,
+    )
+    guarded_page.wait_for_function("document.getElementById('detail-panel').hidden === true")
+
+
 def test_panel_inner_stays_visible_in_its_own_column_while_scrolled_to_the_table(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
