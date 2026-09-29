@@ -918,7 +918,12 @@ input[type="checkbox"] {
   color: var(--game-bowl);
 }
 
-.panel-game-type .game-type-icon {
+/* A CFP game at a bowl shows two icons; keep a small gap between them. */
+.game-type-icon + .game-type-icon {
+  margin-left: var(--space-xs);
+}
+
+.panel-game-type .game-type-icon:last-of-type {
   margin-right: var(--space-xs);
 }
 

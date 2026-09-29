@@ -363,10 +363,58 @@ def test_game_type_kind(guarded_page: Page, site_url: str) -> None:
     assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeInfo", 5]) == {
         "kind": "playoff",
         "label": "CFP semifinal",
+        "atBowl": True,
     }
     assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeInfo", 7]) == {
         "kind": "bowl",
         "label": "Bowl",
+        "atBowl": False,
+    }
+
+
+_GAME_TYPE_VARIANT_JS = """
+async ([gameType, round]) => {
+  const D = await import('./modules/data.js');
+  const F = await import('./modules/format.js');
+  const raw = await (await fetch('site-data.json')).json();
+  raw.telecasts.game_type[0] = gameType;
+  raw.telecasts.playoff_round[0] = round;
+  const data = D.prepareData(raw);
+  return F.gameTypeInfo(data, 0);
+}
+"""
+
+
+@pytest.mark.parametrize(
+    ("game_type", "round_", "label", "at_bowl"),
+    [
+        ("playoff", "first_round", "CFP first round", False),
+        ("playoff", "quarterfinal", "CFP quarterfinal", True),
+        ("playoff", "semifinal", "CFP semifinal", True),
+        ("playoff", "championship", "CFP championship", False),
+        ("playoff", None, "College Football Playoff", False),
+        ("bowl", None, "Bowl", False),
+    ],
+)
+def test_game_type_at_bowl_rule(
+    guarded_page: Page,
+    site_url: str,
+    game_type: str,
+    round_: str | None,
+    label: str,
+    at_bowl: bool,
+) -> None:
+    """F3: a CFP quarterfinal or semifinal is played at a New Year's Six bowl,
+    so `atBowl` is true for exactly those two rounds. First-round games are on
+    campus, the championship is its own site, and a playoff game with no
+    recorded round is never assumed to be at a bowl. A non-CFP bowl is the
+    'bowl' kind already, so `atBowl` stays false (no second icon)."""
+    _load(guarded_page, site_url)
+    info = guarded_page.evaluate(_GAME_TYPE_VARIANT_JS, [game_type, round_])
+    assert info == {
+        "kind": "bowl" if game_type == "bowl" else "playoff",
+        "label": label,
+        "atBowl": at_bowl,
     }
 
 

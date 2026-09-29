@@ -25,6 +25,7 @@ import {
   formatKickoff,
   formatMatchup,
   formatViewers,
+  gameTypeIcons,
   gameTypeInfo,
   ROLE_LABELS,
   stripNetworkNote,
@@ -55,14 +56,14 @@ const EDGE_MARGIN = 8;
  * slot, the full outlet list, the measurement-type badge, era/event flags,
  * and any scoring-source note are panel-only (SITE-25) -- never repeated
  * here. `dateText` is the date and kickoff only; `gameType` the postseason
- * marker, which `renderTooltipContent` draws as an icon alone (`iconLabel` is
- * its accessible name); and `dateLine` the date plus the text `label` as one
+ * marker, which `renderTooltipContent` draws as `icons` alone (a CFP game at a
+ * bowl has two; `iconLabel` is their one accessible name); and `dateLine` the date plus the text `label` as one
  * plain string for the text-only fallback (`chart.js#hoverText`), which can't
  * draw an SVG.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
  * @param {{axis: "pregame"|"excitement"}} opts
- * @returns {{title: string, dateText: string, gameType: {kind: "bowl"|"playoff", label: string, iconLabel: string}|null, dateLine: string, networks: {name: string, family: string}[], crewLines: string[], viewersLine: string, axisLine: string, hint: string}}
+ * @returns {{title: string, dateText: string, gameType: {icons: ("bowl"|"playoff")[], label: string, iconLabel: string}|null, dateLine: string, networks: {name: string, family: string}[], crewLines: string[], viewersLine: string, axisLine: string, hint: string}}
  */
 export function tooltipModel(data, i, { axis }) {
   const t = data.t;
@@ -72,7 +73,11 @@ export function tooltipModel(data, i, { axis }) {
   const dateText = [formatDate(t.date[i]), formatKickoff(t.kickoff[i]) ?? 'Kickoff time not recorded'].join(' · ');
   const info = gameTypeInfo(data, i);
   const gameType = info
-    ? { kind: info.kind, label: info.label, iconLabel: info.kind === 'bowl' ? 'Bowl game' : info.label }
+    ? {
+        icons: gameTypeIcons(info),
+        label: info.label,
+        iconLabel: info.kind === 'bowl' ? 'Bowl game' : info.atBowl ? `${info.label}, bowl game` : info.label,
+      }
     : null;
   const dateLine = gameType ? `${dateText} · ${gameType.label}` : dateText;
 
@@ -127,13 +132,20 @@ export function renderTooltipContent(el, model, theme) {
   const dateLine = document.createElement('div');
   dateLine.appendChild(document.createTextNode(model.dateText));
   if (model.gameType) {
-    // Icon only: no visible text, so the icon carries the meaning through
-    // its own accessible name. If it can't be built, fall back to the text
-    // label rather than dropping the marker.
-    const icon = makeGameTypeIcon(model.gameType.kind, model.gameType.iconLabel);
+    // Icons only: no visible text, so the wrapper carries the meaning as one
+    // accessible image (the SVGs are aria-hidden), whether there is one icon
+    // or two. If any icon can't be built, fall back to the plain text label
+    // rather than dropping the marker.
+    const icons = model.gameType.icons.map((kind) => makeGameTypeIcon(kind));
     const type = document.createElement('span');
     type.className = 'tooltip-game-type';
-    type.appendChild(icon ?? document.createTextNode(model.gameType.label));
+    if (icons.every((icon) => icon != null)) {
+      type.setAttribute('role', 'img');
+      type.setAttribute('aria-label', model.gameType.iconLabel);
+      type.replaceChildren(...icons);
+    } else {
+      type.textContent = model.gameType.label;
+    }
     dateLine.appendChild(document.createTextNode(' · '));
     dateLine.appendChild(type);
   }

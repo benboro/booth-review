@@ -358,13 +358,49 @@ def test_panel_game_type_line_has_matching_icon_before_label(
 
     guarded_page.evaluate("window.__testHooks.openPanel(5)")
     playoff = guarded_page.locator("#panel-body .panel-game-type")
-    assert playoff.locator("svg.game-type-icon").get_attribute("data-kind") == "playoff"
+    # F3: a semifinal is played at a bowl, so the trophy is followed by the bowl icon.
+    assert playoff.locator("svg.game-type-icon").first.get_attribute("data-kind") == "playoff"
     assert playoff.evaluate("el => el.firstElementChild.tagName.toLowerCase()") == "svg"
     assert "CFP semifinal" in playoff.inner_text()
 
     guarded_page.evaluate("window.__testHooks.openPanel(0)")
     assert guarded_page.locator("#panel-body .panel-game-type").count() == 0
     assert "Noon (before 2 PM ET)" in guarded_page.inner_text("#panel-body")
+
+
+@pytest.mark.parametrize(
+    ("round_", "kinds", "text"),
+    [
+        ("first_round", ["playoff"], "CFP first round"),
+        ("quarterfinal", ["playoff", "bowl"], "CFP quarterfinal"),
+        ("semifinal", ["playoff", "bowl"], "CFP semifinal"),
+        ("championship", ["playoff"], "CFP championship"),
+        (None, ["playoff"], "College Football Playoff"),
+    ],
+)
+def test_panel_cfp_game_at_a_bowl_shows_both_icons_before_label(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    serve_round: Callable[[Page, str | None], None],
+    round_: str | None,
+    kinds: list[str],
+    text: str,
+) -> None:
+    """F3: a CFP quarterfinal or semifinal is played at a bowl, so the panel's
+    game-type line reads "[trophy][bowl] CFP semifinal"; first round,
+    championship and an unrecorded round show the trophy alone. Every icon is
+    aria-hidden and the visible label text is unchanged."""
+    serve_round(guarded_page, round_)
+    open_app(guarded_page, "")
+    guarded_page.evaluate("window.__testHooks.openPanel(5)")
+    line = guarded_page.locator("#panel-body .panel-game-type")
+    icons = line.locator("svg.game-type-icon")
+    assert icons.evaluate_all("els => els.map(e => e.dataset.kind)") == kinds
+    assert icons.evaluate_all("els => els.map(e => e.getAttribute('aria-hidden'))") == [
+        "true"
+    ] * len(kinds)
+    assert line.evaluate("el => el.textContent") == text
+    assert line.evaluate("el => el.lastChild.nodeType") == 3  # the label text follows the icons
 
 
 def test_panel_and_table_network_pills_have_wcag_aa_colors(

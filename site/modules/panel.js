@@ -23,6 +23,7 @@ import {
   formatKickoff,
   formatMatchup,
   formatViewers,
+  gameTypeIcons,
   gameTypeInfo,
   measurementLabel,
   showsTimeSlot,
@@ -239,10 +240,10 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
   if (gameType != null) {
     const gameTypeP = document.createElement('p');
     gameTypeP.className = 'panel-game-type';
-    // The icon is decorative here (the label is visible text beside it); if
-    // it can't be built the line still shows the label.
-    const icon = makeGameTypeIcon(gameType.kind);
-    gameTypeP.replaceChildren(...(icon ? [icon] : []), document.createTextNode(gameType.label));
+    // The icons are decorative here (the label is visible text beside them);
+    // one that can't be built is skipped, so the line always shows the label.
+    const icons = gameTypeIcons(gameType).map((kind) => makeGameTypeIcon(kind));
+    gameTypeP.replaceChildren(...icons.filter((icon) => icon != null), document.createTextNode(gameType.label));
     children.push(gameTypeP);
   }
 

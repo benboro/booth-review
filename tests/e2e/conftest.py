@@ -16,6 +16,7 @@ never goes into fixtures or logs).
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import queue
@@ -142,6 +143,23 @@ def site_url(site_dist: Path) -> Iterator[str]:
 def fixture_raw(site_dist: Path) -> dict[str, Any]:
     """The built site-data.json, parsed (the same content the browser fetches)."""
     return json.loads((site_dist / "site-data.json").read_text(encoding="utf-8"))  # type: ignore[no-any-return]
+
+
+@pytest.fixture
+def serve_round(fixture_raw: dict[str, Any]) -> Callable[[Page, str | None], None]:
+    """Returns `serve(page, round_)`: makes `page` load the synthetic contract
+    fixture with telecast 5's (the only CFP game's) `playoff_round` replaced by
+    `round_`, so a test can see every CFP round without growing the shared
+    fixture (whose 12-dot counts many tests rely on). Call it before opening
+    the app; a later route wins over the origin guard's catch-all.
+    """
+
+    def _serve(page: Page, round_: str | None) -> None:
+        raw = copy.deepcopy(fixture_raw)
+        raw["telecasts"]["playoff_round"][5] = round_
+        page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+
+    return _serve
 
 
 def _install_guard(page: Page, site_url: str) -> tuple[list[str], list[str]]:
