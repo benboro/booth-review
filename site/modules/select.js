@@ -236,7 +236,6 @@ export function computeView(data, state) {
   const peopleOnGame = new Map();
   const altGames = new Set();
   const highlighted = [];
-  let matchedUnfiltered = 0;
 
   for (let i = 0; i < n; i += 1) {
     const results = personIndexes.map((pIdx) => personOnGame(data, i, pIdx, state.role));
@@ -247,8 +246,6 @@ export function computeView(data, state) {
         ? results.every((r) => r != null)
         : results.some((r) => r != null);
     }
-
-    if (personMatch) matchedUnfiltered += 1;
 
     // D-14: a person-matched dot that fails a fade filter is filtered out,
     // not highlighted -- the filter always wins.
@@ -316,7 +313,6 @@ export function computeView(data, state) {
     altGames,
     symbols,
     seasonCounts,
-    matchedUnfiltered,
     summary,
   };
 }
