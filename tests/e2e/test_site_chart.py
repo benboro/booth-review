@@ -14,7 +14,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from playwright.sync_api import Page
+from playwright.sync_api import Page, expect
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 pytestmark = pytest.mark.e2e
@@ -1384,3 +1384,101 @@ def test_compare_highlight_trace_config(
         width = line_width[i] if isinstance(line_width, list) else line_width
         assert width == 0, f"non-circle point {i} ({symbol}) has marker.line.width {width}"
         assert sizes[i] >= 12, f"non-circle point {i} ({symbol}) has size {sizes[i]} < 12"
+
+
+# ---------- D-29: space-separated tooltip pills, family-colored border ----------
+
+# `FAMILY_COLORS[theme]` for the three families exercised below (palette.js
+# literal hex, as `rgb(...)` -- disney/fox are shared between themes; only
+# `other` differs light `#8F8F8F` vs dark `#999999`).
+_BORDER_COLOR = {
+    "light": {"disney": "rgb(0, 114, 178)", "fox": "rgb(0, 158, 115)", "other": "rgb(143, 143, 143)"},
+    "dark": {"disney": "rgb(0, 114, 178)", "fox": "rgb(0, 158, 115)", "other": "rgb(153, 153, 153)"},
+}
+
+
+def test_html_tooltip_pills_are_space_separated(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-29: the tooltip's network pills are visually separated only by the
+    flex row's own gap -- no `.tooltip-sep` element, and no literal "/" in
+    the row's text."""
+    open_app(guarded_page, "")
+    _hover_dot(guarded_page, 4)
+
+    assert guarded_page.locator("#chart-tooltip .tooltip-sep").count() == 0
+    networks_text = guarded_page.inner_text("#chart-tooltip .tooltip-networks")
+    assert "/" not in networks_text
+
+    pills = guarded_page.locator("#chart-tooltip .tooltip-networks .pill")
+    expect(pills).to_have_count(2)
+    box0 = pills.nth(0).bounding_box()
+    box1 = pills.nth(1).bounding_box()
+    assert box0 is not None
+    assert box1 is not None
+    gap = box1["x"] - (box0["x"] + box0["width"])
+    assert 4 <= gap <= 12, gap
+
+
+@pytest.mark.parametrize("color_scheme", ["light", "dark"])
+def test_html_tooltip_border_is_primary_family_color(
+    guarded_page: Page, open_app: Callable[[Page, str], None], color_scheme: str
+) -> None:
+    """D-29: the tooltip's ~2px border is the primary network's own family
+    color, in both themes and whether or not a person is selected."""
+    guarded_page.emulate_media(color_scheme=color_scheme)
+    open_app(guarded_page, "")
+
+    _hover_dot(guarded_page, 0)
+    styles = guarded_page.eval_on_selector(
+        "#chart-tooltip",
+        "el => { const s = getComputedStyle(el); return [s.borderTopWidth, s.borderTopColor]; }",
+    )
+    assert styles[0] == "2px"
+    assert styles[1] == _BORDER_COLOR[color_scheme]["disney"]
+
+    _hover_dot(guarded_page, 1)
+    styles = guarded_page.eval_on_selector(
+        "#chart-tooltip", "el => getComputedStyle(el).borderTopColor"
+    )
+    assert styles == _BORDER_COLOR[color_scheme]["fox"]
+
+    _hover_dot(guarded_page, 7)
+    styles = guarded_page.eval_on_selector(
+        "#chart-tooltip", "el => getComputedStyle(el).borderTopColor"
+    )
+    assert styles == _BORDER_COLOR[color_scheme]["other"]
+
+    open_app(guarded_page, "?people=dale-harlow")
+    _hover_dot(guarded_page, 0)
+    styles = guarded_page.eval_on_selector(
+        "#chart-tooltip", "el => getComputedStyle(el).borderTopColor"
+    )
+    assert styles == _BORDER_COLOR[color_scheme]["disney"]
+
+
+def test_plotly_tooltip_border_is_primary_family_color(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-29: the plotly-fallback hover label's own border stroke matches the
+    primary network's family color too, with or without a highlight."""
+    open_app(guarded_page, "")
+    _use_plotly_tooltip(guarded_page)
+
+    point = _dot_point(guarded_page, 0)
+    guarded_page.mouse.move(point["x"], point["y"])
+    guarded_page.wait_for_selector(".hoverlayer .hovertext path")
+    stroke = guarded_page.eval_on_selector(
+        ".hoverlayer .hovertext path", "el => getComputedStyle(el).stroke"
+    )
+    assert stroke == _BORDER_COLOR["light"]["disney"]
+
+    open_app(guarded_page, "?people=dale-harlow")
+    _use_plotly_tooltip(guarded_page)
+    point = _dot_point(guarded_page, 0)
+    guarded_page.mouse.move(point["x"], point["y"])
+    guarded_page.wait_for_selector(".hoverlayer .hovertext path")
+    stroke = guarded_page.eval_on_selector(
+        ".hoverlayer .hovertext path", "el => getComputedStyle(el).stroke"
+    )
+    assert stroke == _BORDER_COLOR["light"]["disney"]
