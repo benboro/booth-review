@@ -113,6 +113,116 @@ def _chart_svg_width(page: Page) -> float:
     return width
 
 
+# D-32: the panel and chart must move together -- the chart reaches its final
+# width within one transition length (250ms fixture / 350ms real, see
+# test_site_realdata.py) of the panel's own open or close starting.
+_MAX_PANEL_RESIZE_MS = 250
+
+# Waits for the chart's own SVG width to actually move away from `start`
+# and then stop changing across 3 consecutive animation frames, resolving
+# with that stable width -- used only to *learn* the panel's own open width
+# once, untimed, before the timed open/close pair below measures against it.
+# The `start`/`changed` gate matters: without it, "3 consecutive unchanged
+# rAF reads" trivially passes on the very first frames (before the CSS
+# transition has visibly moved anything yet), silently returning the
+# pre-open width instead of the true open width (confirmed empirically
+# with a temporary diagnostic before writing this gate).
+_WAIT_STABLE_WIDTH_JS = """
+(start) => new Promise((resolve) => {
+  let last = null;
+  let stableCount = 0;
+  let changed = false;
+  const t0 = performance.now();
+  function check() {
+    const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width;
+    if (!changed && Math.abs(w - start) > 0.5) changed = true;
+    if (changed) {
+      if (last !== null && Math.abs(w - last) < 0.5) {
+        stableCount += 1;
+      } else {
+        stableCount = 0;
+      }
+      last = w;
+      if (stableCount >= 3) {
+        resolve(w);
+        return;
+      }
+    }
+    if (performance.now() - t0 > 5000) {
+      resolve(w);
+      return;
+    }
+    requestAnimationFrame(check);
+  }
+  requestAnimationFrame(check);
+})
+"""
+
+# Times one panel open or close: records t0, triggers it, then polls the
+# chart's own SVG width every animation frame until it reaches `target`
+# (within 1px) or 2000ms elapses -- returning the elapsed ms either way, so a
+# regression shows as a clean failure rather than a Playwright timeout.
+_TIMED_TRANSITION_JS = """
+(args) => new Promise((resolve) => {
+  const t0 = performance.now();
+  if (args.trigger === 'open') {
+    window.__testHooks.openPanel(0);
+  } else {
+    document.getElementById('panel-close').click();
+  }
+  function poll() {
+    const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width;
+    const elapsed = performance.now() - t0;
+    if (Math.abs(w - args.target) <= 1 || elapsed > 2000) {
+      resolve(Math.round(elapsed));
+      return;
+    }
+    requestAnimationFrame(poll);
+  }
+  requestAnimationFrame(poll);
+})
+"""
+
+
+@pytest.mark.parametrize(("width", "height"), [(1280, 800), (800, 900)])
+def test_chart_tracks_the_panel_within_one_transition(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    width: int,
+    height: int,
+) -> None:
+    """D-32: the chart reaches its final width within one transition length
+    (250ms) of the panel opening or closing -- not the ~1s lag the user
+    reported. An untimed open/close pair first learns the panel's own stable
+    open width (`wOpen`), so the timed pair below measures only the
+    open/close-to-settled-width delay itself."""
+    guarded_page.set_viewport_size({"width": width, "height": height})
+    open_app(guarded_page, "?people=dale-harlow")
+    expect(guarded_page.locator("#games-table")).to_be_visible()
+
+    w0 = _chart_svg_width(guarded_page)
+
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    w_open = guarded_page.evaluate(_WAIT_STABLE_WIDTH_JS, w0)
+    guarded_page.click("#panel-close")
+    guarded_page.wait_for_function(
+        "(target) => { "
+        "const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width; "
+        "return Math.abs(w - target) <= 1; }",
+        arg=w0,
+        timeout=3000,
+    )
+    guarded_page.wait_for_function("document.getElementById('detail-panel').hidden === true")
+
+    open_ms: int = guarded_page.evaluate(
+        _TIMED_TRANSITION_JS, {"target": w_open, "trigger": "open"}
+    )
+    close_ms: int = guarded_page.evaluate(_TIMED_TRANSITION_JS, {"target": w0, "trigger": "close"})
+
+    assert open_ms <= _MAX_PANEL_RESIZE_MS, f"open_ms={open_ms}"
+    assert close_ms <= _MAX_PANEL_RESIZE_MS, f"close_ms={close_ms}"
+
+
 def test_click_dot_opens_panel_with_both_rr_record_links(
     guarded_page: Page,
     open_app: Callable[[Page, str], None],
