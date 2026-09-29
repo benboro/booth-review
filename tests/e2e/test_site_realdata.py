@@ -270,6 +270,52 @@ def test_real_big_ten_is_era_correct(
     assert from_2024 > 0, "no USC telecast from 2024 on passed the Big Ten filter"
 
 
+_TIME_SLOTS_MATCH_KICKOFF_HOURS_JS = """
+() => {
+  const data = window.__testHooks.data;
+  const knownSlots = new Set(['noon', 'afternoon', 'prime', 'late']);
+  let mismatches = 0;
+  let unknown = 0;
+  let late = 0;
+  for (let i = 0; i < data.n; i += 1) {
+    const kickoff = data.t.kickoff[i];
+    const actual = data.t.time_slot[i];
+    let expected;
+    if (kickoff === null) {
+      expected = null;
+    } else {
+      const hour = Number(kickoff.slice(11, 13));
+      if (hour < 5) expected = 'late';
+      else if (hour < 14) expected = 'noon';
+      else if (hour < 18) expected = 'afternoon';
+      else if (hour < 22) expected = 'prime';
+      else expected = 'late';
+    }
+    if (actual !== null && !knownSlots.has(actual)) unknown += 1;
+    if (actual !== expected) mismatches += 1;
+    if (actual === 'late') late += 1;
+  }
+  return [mismatches, unknown, late];
+}
+"""
+
+
+def test_real_time_slots_match_kickoff_hours(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """D-20/D-26: every real telecast's `time_slot` matches the four-slot
+    rule derived from its own ET kickoff hour (hour < 5 or >= 22 -> late,
+    < 14 -> noon, < 18 -> afternoon, < 22 -> prime; a null kickoff is a null
+    slot), and every non-null slot is one of the four known values --
+    counts only."""
+    real_open_app(real_guarded_page, "")
+    result: list[int] = real_guarded_page.evaluate(_TIME_SLOTS_MATCH_KICKOFF_HOURS_JS)
+    mismatches, unknown, late = result
+    assert mismatches == 0, f"{mismatches} telecasts had a time_slot inconsistent with kickoff"
+    assert unknown == 0, f"{unknown} telecasts had a time_slot outside the four known values"
+    print(f"After-dark (late) telecast count: {late}")
+
+
 def test_real_playoff_counts_fit_the_bracket(
     real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
 ) -> None:
