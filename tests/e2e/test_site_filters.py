@@ -1119,3 +1119,293 @@ def test_popover_reopen_after_resize_paints_anchored(
     )
     guarded_page.set_viewport_size({"width": 900, "height": 720})
     _assert_first_frame_anchored(guarded_page, "school")
+
+
+# ---------------------------------------------------------------------------
+# A4: per-group Reset buttons
+# ---------------------------------------------------------------------------
+
+# (trigger name, section id, a non-default URL param, that param's key)
+_RESET_GROUPS = [
+    ("announcers", "filter-announcers", "people=pat-rowan", "people"),
+    ("seasons", "filter-seasons", "seasons=2021-2026", "seasons"),
+    ("networks", "filter-networks", "networks=net-a", "networks"),
+    ("kickoff", "filter-slots", "slot=noon", "slot"),
+    ("role", "filter-role", "role=pbp", "role"),
+    ("conference", "filter-conference", "conferences=SEC", "conferences"),
+    ("school", "filter-school", "school=northfield", "school"),
+    ("postseason", "filter-postseason", "postseason=only", "postseason"),
+]
+
+_RESET_IDS = [group[0] for group in _RESET_GROUPS]
+
+
+def _search_has_param(page: Page, key: str) -> bool:
+    return bool(page.evaluate("(k) => new URLSearchParams(location.search).has(k)", key))
+
+
+def test_popover_open_focus_skips_group_reset(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """A4: adding a Reset button to each popover header must not steal the
+    open-time focus -- every popover still focuses the same first control as
+    before (its search field / combobox / first checkbox / first radio), and
+    focus never lands on a Reset button or its header."""
+    open_app(guarded_page, "")
+
+    expected: dict[str, str] = {
+        "announcers": "el.id === 'person-search'",
+        "conference": "el.id === 'conference-search'",
+        "school": "el.id === 'school-search'",
+        "postseason": "el.dataset.postseason === 'all'",
+        "kickoff": "el.tagName === 'INPUT' && el.value === 'noon'",
+        "role": "el.tagName === 'INPUT' && el.value === 'pbp'",
+        "networks": "el.matches('input[type=\"checkbox\"]') && !!el.closest('#filter-networks')",
+    }
+    for name in _RESET_IDS:
+        _open_filter(guarded_page, name)
+        if name in expected:
+            assert guarded_page.evaluate(
+                f"(() => {{ const el = document.activeElement; return {expected[name]}; }})()"
+            ), name
+        assert (
+            guarded_page.evaluate(
+                "() => document.activeElement.closest('.group-reset, .section-head')"
+            )
+            is None
+        ), name
+        guarded_page.keyboard.press("Escape")
+        guarded_page.wait_for_function(
+            f"!document.getElementById('pop-{name}').matches(':popover-open')"
+        )
+
+
+@pytest.mark.parametrize(("name", "section", "param", "key"), _RESET_GROUPS, ids=_RESET_IDS)
+def test_group_reset_sits_right_of_title_and_is_disabled_at_default(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    name: str,
+    section: str,
+    param: str,
+    key: str,
+) -> None:
+    """A4: each popover header has a Reset button at the right of the title;
+    at the group's default it reads aria-disabled and clicking it is a no-op
+    that leaves focus inside the open popover (never on <body>)."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, name)
+
+    reset = guarded_page.locator(f"#{section} .group-reset")
+    expect(reset).to_be_visible()
+    assert reset.get_attribute("aria-disabled") == "true"
+    assert reset.inner_text() == "Reset"
+    assert reset.get_attribute("aria-label", timeout=1000).startswith("Reset ")
+
+    h3_box = guarded_page.locator(f"#{section} .section-head h3").bounding_box()
+    reset_box = reset.bounding_box()
+    assert h3_box is not None
+    assert reset_box is not None
+    assert reset_box["x"] > h3_box["x"] + h3_box["width"]
+
+    # Playwright treats aria-disabled as not-enabled, so force the click (a real user can click it).
+    reset.click(force=True)
+    guarded_page.wait_for_timeout(100)
+    assert guarded_page.evaluate("() => location.search") == ""
+    assert guarded_page.evaluate("() => !!document.activeElement.closest('.filter-popover')")
+    assert guarded_page.locator(f"#pop-{name}").evaluate("el => el.matches(':popover-open')")
+
+
+@pytest.mark.parametrize(("name", "section", "param", "key"), _RESET_GROUPS, ids=_RESET_IDS)
+def test_group_reset_resets_only_its_own_group(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    name: str,
+    section: str,
+    param: str,
+    key: str,
+) -> None:
+    """A4: with this group and one other group non-default, Reset is enabled;
+    clicking it returns only this group to default (trigger inactive, URL
+    param gone), leaves the other group alone, and disables itself again."""
+    other = "postseason=only" if name == "role" else "role=pbp"
+    other_key = other.split("=")[0]
+    other_trigger = "postseason" if name == "role" else "role"
+    open_app(guarded_page, f"?{param}&{other}")
+    _open_filter(guarded_page, name)
+
+    reset = guarded_page.locator(f"#{section} .group-reset")
+    assert reset.get_attribute("aria-disabled") == "false"
+    assert guarded_page.locator(f"#trigger-{name}").get_attribute("data-active") == "true"
+
+    reset.click()
+    guarded_page.wait_for_function(
+        f"document.getElementById('trigger-{name}').dataset.active === 'false'"
+    )
+    assert not _search_has_param(guarded_page, key)
+    assert _search_has_param(guarded_page, other_key)
+    assert guarded_page.locator(f"#trigger-{other_trigger}").get_attribute("data-active") == "true"
+    assert reset.get_attribute("aria-disabled") == "true"
+    assert guarded_page.evaluate("() => !!document.activeElement.closest('.filter-popover')")
+
+
+def test_group_reset_networks_header_survives_checklist_build(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """A4: `buildNetworkChecklist` rebuilds #filter-networks; its header
+    wrapper (title + Reset) must be kept as the first child."""
+    open_app(guarded_page, "")
+    head = guarded_page.locator("#filter-networks > .section-head")
+    assert head.count() == 1
+    assert head.locator("h3").inner_text() == "Networks"
+    assert head.locator(".group-reset").count() == 1
+    assert (
+        guarded_page.evaluate(
+            "() => document.getElementById('filter-networks').firstElementChild.className"
+        )
+        == "section-head"
+    )
+
+
+def test_group_reset_and_clear_all_stay_consistent(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """A4: Clear all filters still resets every group (and people), leaving
+    every Reset disabled."""
+    open_app(guarded_page, "?people=pat-rowan&role=pbp&school=northfield&postseason=only")
+    guarded_page.click("#clear-filters")
+    guarded_page.wait_for_function("location.search === ''")
+    states = guarded_page.evaluate(
+        "() => Array.from(document.querySelectorAll('.group-reset'))"
+        ".map((el) => el.getAttribute('aria-disabled'))"
+    )
+    assert states == ["true"] * 8
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_group_reset_text_meets_aa_contrast_enabled_and_disabled(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    scheme: str,
+) -> None:
+    """A4: the Reset text (enabled --reset, dimmed --muted) clears WCAG AA
+    4.5:1 against the popover background in both themes -- dimming is by
+    color, never opacity."""
+    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
+    open_app(guarded_page, "?role=pbp")
+    colors = guarded_page.evaluate(
+        "() => ({"
+        " bg: getComputedStyle(document.getElementById('pop-role')).backgroundColor,"
+        " enabled: getComputedStyle(document.querySelector('#filter-role .group-reset')).color,"
+        " disabled: getComputedStyle(document.querySelector('#filter-slots .group-reset')).color,"
+        " opacity: getComputedStyle(document.querySelector('#filter-slots .group-reset')).opacity,"
+        "})"
+    )
+    bg = _parse_rgb(colors["bg"])
+    assert _contrast_ratio(_parse_rgb(colors["enabled"]), bg) >= 4.5
+    assert _contrast_ratio(_parse_rgb(colors["disabled"]), bg) >= 4.5
+    assert colors["enabled"] != colors["disabled"]
+    assert colors["opacity"] == "1"
+
+
+def test_group_reset_takes_no_label_rule_styling(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """A4: the Reset is a plain button -- the `.filter-popover label` rules
+    (display flex, margin-bottom) never apply to it, and its font is the
+    shared label font."""
+    open_app(guarded_page, "")
+    result = guarded_page.evaluate(
+        """() => {
+          const btn = document.querySelector('#filter-role .group-reset');
+          const probe = document.createElement('span');
+          probe.style.font = 'var(--font-label)';
+          document.body.appendChild(probe);
+          const want = getComputedStyle(probe);
+          const got = getComputedStyle(btn);
+          const out = {
+            marginBottom: got.marginBottom,
+            display: got.display,
+            font: [got.fontFamily, got.fontSize, got.fontWeight],
+            want: [want.fontFamily, want.fontSize, want.fontWeight],
+          };
+          probe.remove();
+          return out;
+        }"""
+    )
+    assert result["marginBottom"] == "0px"
+    assert result["display"] != "flex"
+    assert result["font"] == result["want"]
+
+
+@pytest.mark.parametrize(("name", "section", "param", "key"), _RESET_GROUPS, ids=_RESET_IDS)
+def test_group_reset_focus_outline_is_not_clipped(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    name: str,
+    section: str,
+    param: str,
+    key: str,
+) -> None:
+    """A4: a keyboard-focused Reset shows a solid focus ring, and the ring
+    (2px outline + 2px offset) lies fully inside the popover's padding box --
+    including the `overflow: hidden` Announcers popover."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, name)
+
+    is_reset = "() => document.activeElement.classList.contains('group-reset')"
+    if name == "seasons":
+        # Seasons has no first-focus target: focus stays on the trigger, so Tab
+        # moves forward into the popover's first control -- the Reset.
+        guarded_page.keyboard.press("Tab")
+    else:
+        for _ in range(3):
+            if guarded_page.evaluate(is_reset):
+                break
+            guarded_page.keyboard.press("Shift+Tab")
+    assert guarded_page.evaluate(is_reset), name
+
+    geometry = guarded_page.evaluate(
+        f"""() => {{
+          const btn = document.activeElement;
+          const pop = document.getElementById('pop-{name}');
+          const b = btn.getBoundingClientRect();
+          const p = pop.getBoundingClientRect();
+          const padLeft = p.left + pop.clientLeft;
+          const padTop = p.top + pop.clientTop;
+          return {{
+            focusVisible: btn.matches(':focus-visible'),
+            outlineStyle: getComputedStyle(btn).outlineStyle,
+            leftGap: b.left - 4 - padLeft,
+            rightGap: padLeft + pop.clientWidth - (b.right + 4),
+            topGap: b.top - 4 - padTop,
+            bottomGap: padTop + pop.clientHeight - (b.bottom + 4),
+          }};
+        }}"""
+    )
+    assert geometry["focusVisible"], name
+    assert geometry["outlineStyle"] == "solid", name
+    for edge in ("leftGap", "rightGap", "topGap", "bottomGap"):
+        assert geometry[edge] >= -0.5, (name, edge, geometry)
+
+
+def test_group_reset_in_phone_sheet_sections(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """A4: every phone-sheet section heading has a Reset at its right, and it
+    resets that group."""
+    open_app(mobile_page, "?role=pbp")
+    mobile_page.click("#filters-button")
+    mobile_page.wait_for_function(
+        "document.getElementById('filters-sheet').matches(':popover-open')"
+    )
+    counts = mobile_page.evaluate(
+        "() => Array.from(document.querySelectorAll('.sheet-body section'))"
+        ".map((s) => s.querySelectorAll(':scope > .section-head .group-reset').length)"
+    )
+    assert counts == [1] * 8
+
+    reset = mobile_page.locator("#filter-role .group-reset")
+    assert reset.get_attribute("aria-disabled") == "false"
+    reset.click()
+    mobile_page.wait_for_function("!new URLSearchParams(location.search).has('role')")
+    assert reset.get_attribute("aria-disabled") == "true"

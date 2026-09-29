@@ -602,8 +602,44 @@ body.app {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
-.filter-popover h3 {
+/* A4: every filter section's header row -- the title with a per-group Reset at
+   the right. Carries the heading's old bottom margin; `flex: none` keeps it from
+   shrinking inside the Announcers flex column. */
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
   margin: 0 0 var(--space-sm) 0;
+  flex: none;
+}
+
+.section-head h3 {
+  margin: 0;
+}
+
+/* Reset is a plain <button>, never a <label>, so the label rules below don't
+   touch it. Dimmed by color (--muted), not opacity, to stay AA-legible;
+   aria-disabled (not disabled) keeps it focusable. The 2px outline + 2px
+   offset fit inside the popover's 16px padding, so no ancestor clips it. */
+.group-reset {
+  font: var(--font-label);
+  background: transparent;
+  border: none;
+  padding: 2px var(--space-xs);
+  margin: 0;
+  cursor: pointer;
+  color: var(--reset);
+}
+
+.group-reset[aria-disabled="true"] {
+  color: var(--muted);
+  cursor: default;
+}
+
+.group-reset:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* D-28: #pop-announcers is a tall flex column (~60vh) so its list can fill

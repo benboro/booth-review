@@ -54,7 +54,10 @@
 
 <div id="pop-announcers" class="filter-popover" popover="auto" role="dialog" aria-label="Announcers">
   <section id="filter-announcers">
-    <h3>Announcers</h3>
+    <div class="section-head">
+      <h3>Announcers</h3>
+      <button type="button" class="group-reset" data-reset="announcers" aria-label="Reset Announcers" aria-disabled="true">Reset</button>
+    </div>
     <div class="search-field">
       <label for="person-search" class="visually-hidden">Search announcers</label>
       <input type="text" id="person-search" role="combobox" aria-controls="person-results" aria-expanded="true" aria-autocomplete="list" placeholder="Type a name, or pick from the list" autocomplete="off">
@@ -65,7 +68,10 @@
 
 <div id="pop-seasons" class="filter-popover" popover="auto" role="dialog" aria-label="Seasons">
   <section id="filter-seasons">
-    <h3>Seasons</h3>
+    <div class="section-head">
+      <h3>Seasons</h3>
+      <button type="button" class="group-reset" data-reset="seasons" aria-label="Reset Seasons" aria-disabled="true">Reset</button>
+    </div>
     <label for="season-from">From</label>
     <select id="season-from"></select>
     <label for="season-to">To</label>
@@ -79,13 +85,19 @@
 
 <div id="pop-networks" class="filter-popover" popover="auto" role="dialog" aria-label="Networks">
   <section id="filter-networks">
-    <h3>Networks</h3>
+    <div class="section-head">
+      <h3>Networks</h3>
+      <button type="button" class="group-reset" data-reset="networks" aria-label="Reset Networks" aria-disabled="true">Reset</button>
+    </div>
   </section>
 </div>
 
 <div id="pop-kickoff" class="filter-popover" popover="auto" role="dialog" aria-label="Kickoff time">
   <section id="filter-slots">
-    <h3>Kickoff time</h3>
+    <div class="section-head">
+      <h3>Kickoff time</h3>
+      <button type="button" class="group-reset" data-reset="kickoff" aria-label="Reset Kickoff time" aria-disabled="true">Reset</button>
+    </div>
     <label><input type="checkbox" name="slot" value="noon"> Noon (before 2 PM ET)</label>
     <label><input type="checkbox" name="slot" value="afternoon"> Afternoon (2–6 PM ET)</label>
     <label><input type="checkbox" name="slot" value="prime"> Prime time (6–10 PM ET)</label>
@@ -95,7 +107,10 @@
 
 <div id="pop-role" class="filter-popover" popover="auto" role="dialog" aria-label="Role">
   <section id="filter-role">
-    <h3>Role</h3>
+    <div class="section-head">
+      <h3>Role</h3>
+      <button type="button" class="group-reset" data-reset="role" aria-label="Reset Role" aria-disabled="true">Reset</button>
+    </div>
     <label><input type="checkbox" name="role" value="pbp"> Play-by-play</label>
     <label><input type="checkbox" name="role" value="analyst"> Analyst</label>
   </section>
@@ -103,7 +118,10 @@
 
 <div id="pop-conference" class="filter-popover" popover="auto" role="dialog" aria-label="Conference">
   <section id="filter-conference">
-    <h3>Filter by conference</h3>
+    <div class="section-head">
+      <h3>Filter by conference</h3>
+      <button type="button" class="group-reset" data-reset="conference" aria-label="Reset Filter by conference" aria-disabled="true">Reset</button>
+    </div>
     <label for="conference-search" class="visually-hidden">Search conferences</label>
     <input type="search" id="conference-search" placeholder="Search conferences" autocomplete="off">
     <p class="helper">Matches when either team was in a selected conference that season.</p>
@@ -115,7 +133,10 @@
 
 <div id="pop-school" class="filter-popover" popover="auto" role="dialog" aria-label="School">
   <section id="filter-school">
-    <h3>Filter by school</h3>
+    <div class="section-head">
+      <h3>Filter by school</h3>
+      <button type="button" class="group-reset" data-reset="school" aria-label="Reset Filter by school" aria-disabled="true">Reset</button>
+    </div>
     <label for="school-search" class="visually-hidden">Search schools</label>
     <input type="search" id="school-search" placeholder="Search schools" autocomplete="off">
     <p class="helper">Fades games that don't involve a selected school. Doesn't highlight — combine with an announcer search to do both.</p>
@@ -128,7 +149,10 @@
 
 <div id="pop-postseason" class="filter-popover" popover="auto" role="dialog" aria-label="Bowls/Playoffs">
   <section id="filter-postseason">
-    <h3>Bowls/Playoffs</h3>
+    <div class="section-head">
+      <h3>Bowls/Playoffs</h3>
+      <button type="button" class="group-reset" data-reset="postseason" aria-label="Reset Bowls/Playoffs" aria-disabled="true">Reset</button>
+    </div>
     <div id="postseason-options" class="segmented" role="radiogroup" aria-label="Bowls/Playoffs">
       <button type="button" role="radio" aria-checked="false" tabindex="0" data-postseason="all">All games</button>
       <button type="button" role="radio" aria-checked="false" tabindex="-1" data-postseason="exclude">Exclude bowls & playoffs</button>

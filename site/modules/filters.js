@@ -45,6 +45,22 @@ const SECTION_POPOVERS = [
 /** Toolbar trigger names, in toolbar order -- also `#trigger-{name}`'s id suffix. */
 const TRIGGER_NAMES = ['announcers', 'seasons', 'networks', 'kickoff', 'role', 'conference', 'school', 'postseason'];
 
+/**
+ * Per-group reset patches (A4), keyed by trigger name and applied through
+ * `setState` like every other filter change. "Clear all filters" is built from
+ * this same map, so the two can never drift.
+ */
+const GROUP_RESETS = {
+  announcers: { people: [], compare: false, together: false },
+  seasons: { seasons: null },
+  networks: { networks: null },
+  kickoff: { slots: null },
+  role: { role: null },
+  conference: { conferences: [] },
+  school: { school: [] },
+  postseason: { postseason: 'all' },
+};
+
 /** Bowls/Playoffs radio values, in the DOM order they appear in `#postseason-options`. */
 const POSTSEASON_ORDER = ['all', 'exclude', 'only'];
 
@@ -96,7 +112,9 @@ function buildSeasonSelects(data) {
 
 /** Builds the family-nested network checklist once, from `data.families`/`networksByFamily` (D-06). */
 function buildNetworkChecklist(data) {
-  const heading = els.networksSection.querySelector('h3');
+  // A4: keep the `.section-head` (title + Reset) as the preserved first child, not a bare h3.
+  const heading =
+    els.networksSection.querySelector('.section-head') ?? els.networksSection.querySelector('h3');
   networkCheckboxes = new Map();
   familyCheckboxes = new Map();
 
@@ -331,9 +349,16 @@ function positionPopover(popover, trigger) {
   popover.style.left = `${Math.max(8, Math.min(rect.left, maxLeft))}px`;
 }
 
-/** The first focusable element inside a popover: its search input, else its first input/button. */
+/**
+ * The first focusable element inside a popover: its search input, else its first
+ * input/button. The per-group Reset button (A4) is skipped on purpose: it is a
+ * secondary action, so the first focus belongs to the group's own control. It
+ * stays in the normal Tab order (Shift+Tab from that first control reaches it).
+ */
 function firstFocusable(container) {
-  return container.querySelector('input, button, [tabindex]:not([tabindex="-1"])');
+  return container.querySelector(
+    'input, button:not(.group-reset), [tabindex]:not([tabindex="-1"]):not(.group-reset)',
+  );
 }
 
 /** Wires open/close focus management and (for filter popovers) `beforetoggle` positioning for one popover. */
@@ -475,22 +500,22 @@ export function initFilters({ data, getState, setState }) {
   bindPostseasonKeyboard(setState);
 
   els.clearFilters.addEventListener('click', () => {
-    setState({
-      seasons: null,
-      networks: null,
-      slots: null,
-      role: null,
-      conferences: [],
-      school: [],
-      postseason: 'all',
-      // D-27 (overrides the earlier "people are not cleared" proposal):
-      // Clear all filters also removes every selected announcer, compare
-      // mode, and called-together. "Clear selection" in the chip row still
-      // clears only the people.
-      people: [],
-      compare: false,
-      together: false,
-    });
+    // D-27 (overrides the earlier "people are not cleared" proposal): Clear all
+    // filters also removes every selected announcer, compare mode, and
+    // called-together (the `announcers` reset). "Clear selection" in the chip
+    // row still clears only the people.
+    setState(structuredClone(Object.assign({}, ...Object.values(GROUP_RESETS))));
+  });
+
+  // A4: one delegated listener for every per-group Reset (desktop popovers and
+  // phone-sheet sections). `aria-disabled` (not `disabled`) keeps the button
+  // focusable, so clicking it at default is a no-op and focus stays put.
+  document.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.group-reset');
+    if (!btn || btn.getAttribute('aria-disabled') === 'true') return;
+    const name = btn.dataset.reset;
+    if (!Object.hasOwn(GROUP_RESETS, name)) return;
+    setState(structuredClone(GROUP_RESETS[name]));
   });
 
   els.filtersShowResults.addEventListener('click', () => {
@@ -683,6 +708,14 @@ function renderFiltersButton(state) {
   els.filtersButton.textContent = n > 0 ? `Filters (${n})` : 'Filters';
 }
 
+/** Dims each group's Reset button (`aria-disabled`) while that group is at its default (A4). */
+function renderGroupResets(data, state) {
+  for (const btn of document.querySelectorAll('.group-reset')) {
+    const name = btn.dataset.reset;
+    btn.setAttribute('aria-disabled', triggerInfo(name, data, state).active ? 'false' : 'true');
+  }
+}
+
 /** Pure DOM update from the current data/state/view, called every render cycle. */
 export function renderFilters({ data, state, view }) {
   renderSeasons(data, state, view);
@@ -693,5 +726,6 @@ export function renderFilters({ data, state, view }) {
   renderSchool(data, state);
   renderPostseason(state);
   renderTriggers(data, state);
+  renderGroupResets(data, state);
   renderFiltersButton(state);
 }
