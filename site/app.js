@@ -38,7 +38,6 @@ const excitementCaptionEl = document.getElementById('excitement-caption');
 const panelBodyEl = document.getElementById('panel-body');
 const panelTitleEl = document.getElementById('panel-title');
 const panelCloseEl = document.getElementById('panel-close');
-const panelEl = document.getElementById('detail-panel');
 
 const darkMedia = window.matchMedia('(prefers-color-scheme: dark)');
 const mobileMedia = window.matchMedia('(max-width: 640px)');
@@ -51,21 +50,78 @@ const hoverNoneMedia = window.matchMedia('(hover: none)');
  * is the only way a test flips it to `'plotly'` at runtime. */
 let tooltipMode = TOOLTIP_MODE;
 
-/** Number of times `Plotly.Plots.resize` has *finished* for the detail
- * panel's own open/close (belt-and-suspenders alongside
- * `config.responsive: true`'s internal ResizeObserver, Pattern 1) --
- * exposed on `__testHooks` so a test can wait deterministically instead of
- * guessing a transition's timing. `Plotly.Plots.resize` returns a Promise
- * (a `scattergl` redraw is a WebGL draw call, scheduled for a later
- * animation frame, not synchronous), so the counter increments only once
- * the resize itself has actually completed -- incrementing synchronously
- * on call would let a test's wait resolve before the chart visually
- * caught up to its new container width. */
+/** Number of times the chart has actually been resized for the detail
+ * panel's own open/close (D-32: a direct `Plotly.relayout({autosize:
+ * true})` call -- see `resizeChartForPanel` below) -- exposed on
+ * `__testHooks` so a test can wait deterministically instead of guessing a
+ * transition's timing. `relayout` returns a Promise (a `scattergl` redraw
+ * is a WebGL draw call, scheduled for a later animation frame, not
+ * synchronous), so the counter increments only once the resize itself has
+ * actually completed -- incrementing synchronously on call would let a
+ * test's wait resolve before the chart visually caught up to its new
+ * container width. */
 let panelResizes = 0;
 
-/** Resizes the chart for the panel's own width change, and counts it once the resize itself settles. */
+/** #chart-area's own container width, last recorded by the ResizeObserver
+ * below, or null before its first callback (D-24). */
+let lastChartAreaWidth = null;
+
+/** Trailing debounce timer for the ResizeObserver below (D-24). */
+let chartAreaResizeTimer = null;
+
+/** The container width `resizeChartForPanel` most recently actually
+ * resized the chart to, or null before the first resize (D-32). Checked
+ * fresh against `#chart-area`'s *current* width on every call -- whether
+ * from the immediate rAF-scheduled path below or the ResizeObserver's own
+ * debounced catch-all -- so a call that finds nothing has changed since
+ * the last real resize is a cheap no-op (a width/compare read) instead of
+ * a redundant `scattergl` redraw (Pitfall 1: this is exactly how the old
+ * code's transitionend-triggered resize and its ResizeObserver-debounced
+ * resize could both fire for the same width change). */
+let lastResizedWidth = null;
+
+const chartAreaEl = document.getElementById('chart-area');
+
+/** `#chart-area`'s current content-box width, matching what the
+ * ResizeObserver's own `contentRect.width` reports (border-box
+ * `getBoundingClientRect().width` minus horizontal padding) -- or null
+ * when `#chart-area` isn't in the DOM. */
+function chartAreaContentWidth() {
+  if (!chartAreaEl) return null;
+  const style = window.getComputedStyle(chartAreaEl);
+  const paddingX = parseFloat(style.paddingLeft || '0') + parseFloat(style.paddingRight || '0');
+  return Math.round(chartAreaEl.getBoundingClientRect().width - paddingX);
+}
+
+/**
+ * Resizes the chart for `#chart-area`'s current width (D-32): a direct
+ * `Plotly.relayout({autosize: true})` call. The vendored bundle's own
+ * `Plotly.Plots` resize helper wraps this exact same relayout call in a
+ * further 100ms `setTimeout`, which was the largest single contributor to
+ * the measured panel-to-chart lag (04.1-15-SUMMARY.md) -- so that helper is
+ * bypassed entirely. `relayout({autosize: true})` only recomputes size when
+ * the graph div's `layout.width`/`layout.height` are *not* already set --
+ * Plotly bakes in numeric values after every draw (confirmed by reading the
+ * vendored resize helper's own source, which deletes them for the same
+ * reason before its own relayout call) -- so those are deleted first.
+ *
+ * A no-op when `#chart-area`'s width hasn't actually changed since the
+ * last real resize, so a call from the debounced ResizeObserver catch-all
+ * below that finds the immediate rAF path already handled this exact width
+ * costs only a width read, not a redundant redraw.
+ */
 function resizeChartForPanel() {
-  const result = window.Plotly?.Plots?.resize?.(chartEl);
+  const width = chartAreaContentWidth();
+  if (width !== null) {
+    lastChartAreaWidth = width;
+    if (width === lastResizedWidth) return;
+    lastResizedWidth = width;
+  }
+  if (chartEl?.layout) {
+    delete chartEl.layout.width;
+    delete chartEl.layout.height;
+  }
+  const result = window.Plotly?.relayout?.(chartEl, { autosize: true });
   if (result && typeof result.then === 'function') {
     result.then(
       () => { panelResizes += 1; },
@@ -76,49 +132,36 @@ function resizeChartForPanel() {
   }
 }
 
-if (panelEl) {
-  // The deterministic desktop/tablet path: once the panel column's own
-  // `width` transition finishes (or is cancelled -- D-24, see panel.js
-  // closePanel's own comment: a close can interrupt the transition,
-  // firing `transitioncancel` instead of `transitionend` for the same
-  // property), resize the chart for its new container width (Pattern 1).
-  // Guarded to this element/property so a transition on some other
-  // panel-inner property (or a future added property) doesn't double-fire
-  // it.
-  const onPanelWidthTransition = (ev) => {
-    if (ev.target !== panelEl || ev.propertyName !== 'width') return;
-    resizeChartForPanel();
-  };
-  panelEl.addEventListener('transitionend', onPanelWidthTransition);
-  panelEl.addEventListener('transitioncancel', onPanelWidthTransition);
+/** Schedules `resizeChartForPanel` for the next animation frame -- called
+ * right after the panel's own `body.panel-open` class toggle (D-32), once
+ * that frame's layout (the now-instant grid column snap) is committed.
+ * Called from both `openDetailPanel` and `hideDetailPanel` on every
+ * viewport: it's cheap and harmless on phones, where `#chart-area`'s width
+ * never changes. */
+function scheduleChartResize() {
+  window.requestAnimationFrame(resizeChartForPanel);
 }
 
-/** #chart-area's own container width, last recorded by the ResizeObserver
- * below, or null before its first callback (D-24). */
-let lastChartAreaWidth = null;
-
-/** Trailing debounce timer for the ResizeObserver below (D-24). */
-let chartAreaResizeTimer = null;
-
-const chartAreaEl = document.getElementById('chart-area');
 if (chartAreaEl && typeof ResizeObserver === 'function') {
-  // D-24 belt-and-suspenders: every other resize trigger above is tied to a
-  // specific event (a transition ending, a reduced-motion/phone rAF call),
-  // so a path that doesn't fit any of those still leaves the chart stale.
-  // Observing the chart's own container directly catches every width
-  // change however it happened -- panel open/close by any path, a window
-  // resize, a future gutter change -- with one mechanism.
+  // D-24 belt-and-suspenders: the immediate rAF path above covers every
+  // panel open/close, but a path that doesn't fit that (e.g. a user
+  // dragging the window edge) still leaves the chart stale. Observing the
+  // chart's own container directly catches every width change however it
+  // happened, with one mechanism.
   //
   // Pitfall (RESEARCH Pitfall 1): never call Plotly's resize on every
-  // ResizeObserver frame -- during a continuous width change (e.g. the
-  // panel's own CSS transition, or a user dragging the window edge) that
-  // fires once per animation frame, and a scattergl redraw on every frame
-  // is the exact mid-transition jank Pitfall 1 describes. The first
-  // callback only records the container's initial width (ResizeObserver
-  // always fires once immediately on `observe()`); every later callback
-  // compares against the last recorded width and returns early when
-  // unchanged, otherwise records the new width and debounces the actual
-  // resize call by 100ms so it runs exactly once after the width settles.
+  // ResizeObserver frame -- during a continuous width change (e.g. a user
+  // dragging the window edge) that fires once per animation frame, and a
+  // scattergl redraw on every frame is the exact mid-drag jank Pitfall 1
+  // describes. The first callback only records the container's initial
+  // width (ResizeObserver always fires once immediately on `observe()`);
+  // every later callback compares against the last recorded width and
+  // returns early when unchanged, otherwise records the new width and
+  // debounces the actual resize call by 100ms so it runs exactly once
+  // after the width settles -- and even then, `resizeChartForPanel`'s own
+  // `lastResizedWidth` check (above) makes that debounced call a no-op
+  // when the immediate rAF path already resized to this exact width, so a
+  // panel open/close never schedules a redundant second redraw.
   const chartAreaObserver = new ResizeObserver((entries) => {
     const entry = entries[0];
     if (!entry) return;
@@ -177,28 +220,19 @@ let openPanelIndex = null;
 /** The matched-games table's own sort state (kept out of the URL, D-11/SITE-13). */
 let sort = { key: 'date', dir: 'asc' };
 
-/** No `transitionend` fires when the panel's width change is instant
- * (reduced motion) or the panel is a phone bottom sheet with no width
- * transition of its own -- these paths need their own resize call, since
- * the `transitionend` listener above never runs for them (Pattern 1). */
-function resizeChartForPanelIfNoTransition() {
-  if (!reducedMotionMedia.matches && !mobileMedia.matches) return;
-  window.requestAnimationFrame(resizeChartForPanel);
-}
-
 /** Opens the detail panel on telecast `i` and remembers it's open, for `render`'s own refresh (D-10). */
 function openDetailPanel(i) {
   hideTooltip();
   openPanelIndex = i;
   openPanel(i, { data, state, view: lastView });
-  resizeChartForPanelIfNoTransition();
+  scheduleChartResize();
 }
 
 /** Closes the detail panel and forgets it's open. */
 function hideDetailPanel() {
   openPanelIndex = null;
   closePanel();
-  resizeChartForPanelIfNoTransition();
+  scheduleChartResize();
 }
 
 /** Pushed into `renderers`: renders the matched-games table and wires its sort headers and Details buttons. */

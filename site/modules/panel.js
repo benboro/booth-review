@@ -332,33 +332,41 @@ export function openPanel(i, ctx) {
 
 /**
  * Closes the panel: removes `body.panel-open` immediately (driving the CSS
- * slide-out), hides `#detail-panel` once its own width/transform transition
- * actually finishes (immediately under `prefers-reduced-motion`), and
- * restores focus to whatever was focused before the panel opened.
+ * slide-out), hides `#detail-panel` and restores focus to whatever was
+ * focused before the panel opened.
  *
- * D-24: a bare 150ms hide timer raced the CSS transition -- setting
- * `hidden` (display:none) at the same ~150ms mark as the transition's own
- * natural end frequently interrupted it first, so the browser fired
- * `transitioncancel` instead of `transitionend` for the tracked property,
- * and app.js's `transitionend`-only resize listener never ran (confirmed
- * empirically: a diagnostic listener logged `transitioncancel` for `width`
- * at the transition's expected end time on every close). Hiding is now
- * driven by the transition's own one-shot event (`transitionend` on a full
- * close, `transitioncancel` on an interrupted one -- e.g. a close fired
- * mid-transition, or this same race) instead of an independent timer, with
- * a longer fallback timer only for the case where no transition event ever
- * fires at all (e.g. the panel was already at width 0).
+ * D-24 (original bug, desktop/tablet): a bare 150ms hide timer raced the
+ * CSS `width` transition -- setting `hidden` (display:none) at the same
+ * ~150ms mark as the transition's own natural end frequently interrupted it
+ * first, so the browser fired `transitioncancel` instead of `transitionend`
+ * for the tracked property, and app.js's `transitionend`-only resize
+ * listener never ran (confirmed empirically: a diagnostic listener logged
+ * `transitioncancel` for `width` at the transition's expected end time on
+ * every close).
+ *
+ * D-32 (desktop/tablet mechanism): `#detail-panel`'s own `width` no longer
+ * transitions at all (style.css's "Detail panel" section) -- the grid
+ * column snaps to 0 in the same frame `body.panel-open` is removed, so
+ * there is no transition left to wait for. The panel hides immediately,
+ * the same way the old reduced-motion path always did, so the chart's own
+ * resize (app.js, scheduled on the very next animation frame) sees the
+ * final collapsed width at once instead of ~150ms later. This keeps D-24:
+ * with nothing left to race, the panel can never end up stuck mid-close.
+ *
+ * Phones keep the original mechanism unchanged: hiding is driven by the
+ * bottom sheet's own `transform` transition's one-shot event
+ * (`transitionend` on a full close, `transitioncancel` on an interrupted
+ * one -- e.g. a close fired mid-transition), with a longer fallback timer
+ * only for the case where no transition event ever fires at all (e.g. the
+ * panel was already off-screen), and hides immediately under
+ * `prefers-reduced-motion`.
  */
 export function closePanel() {
   document.body.classList.remove('panel-open');
 
   const panelEl = document.getElementById('detail-panel');
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  // Phones transition `transform` (the bottom-sheet slide), desktop/tablet
-  // transition `width` (the push-layout column) -- see style.css's
-  // "Detail panel" section.
   const isPhone = window.matchMedia('(max-width: 640px)').matches;
-  const propertyName = isPhone ? 'transform' : 'width';
 
   cancelPendingHide();
 
@@ -367,11 +375,15 @@ export function closePanel() {
     panelEl.hidden = true;
   };
 
-  if (reducedMotion) {
+  if (!isPhone || reducedMotion) {
+    // Desktop/tablet: no transition left to wait for (D-32). Phones under
+    // reduced motion: same immediate-hide behavior as before.
     hide();
   } else {
+    // Phones only, motion allowed: wait for the bottom sheet's own
+    // `transform` transition to actually finish.
     const onTransitionEvent = (ev) => {
-      if (ev.target !== panelEl || ev.propertyName !== propertyName) return;
+      if (ev.target !== panelEl || ev.propertyName !== 'transform') return;
       hide();
     };
     hideListenerTarget = panelEl;

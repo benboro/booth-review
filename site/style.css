@@ -1063,15 +1063,22 @@ input[type="checkbox"] {
    makes `#detail-panel` exactly as tall as that row, which #chart-area
    alone sizes (an absolutely positioned `.panel-inner` contributes no
    height of its own, so it can never make the row taller than the chart).
-   The column's own width still animates 0 -> 360px/320px; `.panel-inner`
-   fills the column via absolute positioning and scrolls internally
-   (`overflow-y: auto`) when its content runs longer than the chart area,
-   so it can never overlap the chart, the legend chips, or the table (D-01,
-   D-23, SITE-20). This is not the chart (D-05 still holds: the chart
-   itself is never sticky). Phones (≤640px) keep the panel as a true
-   `position: fixed` overlay bottom sheet instead, below -- the one place an
-   overlay is still correct, since nothing else needs that screen region at
-   the same time. */
+   D-32: the column's own `width` no longer animates -- it snaps 0 <->
+   360px/320px in the same frame `body.panel-open` toggles, so the chart's
+   own resize (app.js) can start the instant the class changes instead of
+   waiting out a ~150ms CSS transition first. The slide motion moves onto
+   `.panel-inner`'s own `transform` instead: compositor-only, triggers no
+   layout of its own (Pitfall 1), and is clipped to the (already
+   final-width) column by `#detail-panel`'s `overflow: hidden`, so it still
+   reads as the panel sliding in/out even though the column itself never
+   moves. `.panel-inner` fills the column via absolute positioning and
+   scrolls internally (`overflow-y: auto`) when its content runs longer
+   than the chart area, so it can never overlap the chart, the legend
+   chips, or the table (D-01, D-23, SITE-20). This is not the chart (D-05
+   still holds: the chart itself is never sticky). Phones (≤640px) keep the
+   panel as a true `position: fixed` overlay bottom sheet instead, below --
+   the one place an overlay is still correct, since nothing else needs that
+   screen region at the same time. */
 @media (min-width: 641px) {
   #detail-panel {
     position: relative;
@@ -1081,7 +1088,6 @@ input[type="checkbox"] {
     overflow: hidden;
     background: var(--surface);
     border-left: 1px solid var(--border);
-    transition: width 150ms ease-out;
   }
 
   body.panel-open #detail-panel {
@@ -1097,6 +1103,12 @@ input[type="checkbox"] {
     overflow-y: auto;
     box-sizing: border-box;
     padding: var(--space-lg);
+    transform: translateX(100%);
+    transition: transform 150ms ease-out;
+  }
+
+  body.panel-open .panel-inner {
+    transform: none;
   }
 }
 
@@ -1112,7 +1124,7 @@ input[type="checkbox"] {
 }
 
 @media (min-width: 641px) and (prefers-reduced-motion: reduce) {
-  #detail-panel {
+  .panel-inner {
     transition: none;
   }
 }
