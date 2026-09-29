@@ -630,3 +630,11 @@ def test_toggling_compare_does_not_shift_the_row(
     for key in ("compare", "together", "clear"):
         assert abs(before[key]["x"] - after[key]["x"]) <= 0.5, key
         assert abs(before[key]["width"] - after[key]["width"]) <= 0.5, key
+
+
+def test_summary_detail_lists_networks_most_telecasts_first(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """A6: the summary line lists the dominant network first, not alphabetically."""
+    open_app(guarded_page, "?people=pat-rowan")
+    assert "Conference Network, Beta Network" in guarded_page.inner_text("#summary-detail")

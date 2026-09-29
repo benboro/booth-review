@@ -174,15 +174,20 @@ function buildSummary(data, state, matched, altGames, personIndexes, hasSelectio
 
   if (matched.length > 0) {
     const seasonsOfMatched = matched.map((i) => data.t.season[i]);
-    const networkNames = new Set(
-      matched.map((i) => data.lookups.networks[data.t.network[i]].name),
-    );
+    // A6: networks ordered by matched-telecast count (most first), ties alphabetical.
+    const networkCounts = new Map();
+    for (const i of matched) {
+      const name = data.lookups.networks[data.t.network[i]].name;
+      networkCounts.set(name, (networkCounts.get(name) ?? 0) + 1);
+    }
     return {
       kind: 'matches',
       count: matched.length,
       seasonMin: Math.min(...seasonsOfMatched),
       seasonMax: Math.max(...seasonsOfMatched),
-      networks: Array.from(networkNames).sort((a, b) => a.localeCompare(b)),
+      networks: Array.from(networkCounts.keys()).sort(
+        (a, b) => networkCounts.get(b) - networkCounts.get(a) || a.localeCompare(b),
+      ),
       altCount: altGames.size,
     };
   }

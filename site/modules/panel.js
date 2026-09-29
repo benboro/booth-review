@@ -23,10 +23,12 @@ import {
   formatKickoff,
   formatMatchup,
   formatViewers,
-  gameTypeLabel,
+  gameTypeIcons,
+  gameTypeInfo,
   measurementLabel,
   showsTimeSlot,
 } from './format.js';
+import { makeGameTypeIcon } from './icons.js';
 import { currentTheme, makePill } from './pill.js';
 
 /** The element focus should return to once the panel closes, or null. */
@@ -234,11 +236,14 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
   dateP.textContent = dateLine(data, i);
   children.push(dateP);
 
-  const gameType = gameTypeLabel(data, i);
+  const gameType = gameTypeInfo(data, i);
   if (gameType != null) {
     const gameTypeP = document.createElement('p');
     gameTypeP.className = 'panel-game-type';
-    gameTypeP.textContent = gameType;
+    // The icons are decorative here (the label is visible text beside them);
+    // one that can't be built is skipped, so the line always shows the label.
+    const icons = gameTypeIcons(gameType).map((kind) => makeGameTypeIcon(kind));
+    gameTypeP.replaceChildren(...icons.filter((icon) => icon != null), document.createTextNode(gameType.label));
     children.push(gameTypeP);
   }
 

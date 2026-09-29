@@ -350,6 +350,74 @@ def test_game_type_label(guarded_page: Page, site_url: str) -> None:
     assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeLabel", 0]) is None
 
 
+def test_game_type_kind(guarded_page: Page, site_url: str) -> None:
+    """A1: gameTypeKind is the DOM-free enum behind the icon: null for a
+    regular-season game, 'playoff' for a CFP game, 'bowl' for any other
+    postseason game."""
+    _load(guarded_page, site_url)
+    assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeKind", 0]) is None
+    assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeKind", 5]) == "playoff"
+    assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeKind", 7]) == "bowl"
+    # IN-01: kind and label come from one helper, so they never disagree.
+    assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeInfo", 0]) is None
+    assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeInfo", 5]) == {
+        "kind": "playoff",
+        "label": "CFP semifinal",
+        "atBowl": True,
+    }
+    assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeInfo", 7]) == {
+        "kind": "bowl",
+        "label": "Bowl",
+        "atBowl": False,
+    }
+
+
+_GAME_TYPE_VARIANT_JS = """
+async ([gameType, round]) => {
+  const D = await import('./modules/data.js');
+  const F = await import('./modules/format.js');
+  const raw = await (await fetch('site-data.json')).json();
+  raw.telecasts.game_type[0] = gameType;
+  raw.telecasts.playoff_round[0] = round;
+  const data = D.prepareData(raw);
+  return F.gameTypeInfo(data, 0);
+}
+"""
+
+
+@pytest.mark.parametrize(
+    ("game_type", "round_", "label", "at_bowl"),
+    [
+        ("playoff", "first_round", "CFP first round", False),
+        ("playoff", "quarterfinal", "CFP quarterfinal", True),
+        ("playoff", "semifinal", "CFP semifinal", True),
+        ("playoff", "championship", "CFP championship", False),
+        ("playoff", None, "College Football Playoff", False),
+        ("bowl", None, "Bowl", False),
+    ],
+)
+def test_game_type_at_bowl_rule(
+    guarded_page: Page,
+    site_url: str,
+    game_type: str,
+    round_: str | None,
+    label: str,
+    at_bowl: bool,
+) -> None:
+    """F3: a CFP quarterfinal or semifinal is played at a New Year's Six bowl,
+    so `atBowl` is true for exactly those two rounds. First-round games are on
+    campus, the championship is its own site, and a playoff game with no
+    recorded round is never assumed to be at a bowl. A non-CFP bowl is the
+    'bowl' kind already, so `atBowl` stays false (no second icon)."""
+    _load(guarded_page, site_url)
+    info = guarded_page.evaluate(_GAME_TYPE_VARIANT_JS, [game_type, round_])
+    assert info == {
+        "kind": "bowl" if game_type == "bowl" else "playoff",
+        "label": label,
+        "atBowl": at_bowl,
+    }
+
+
 def test_conference_line_is_away_first(guarded_page: Page, site_url: str) -> None:
     """D-09: the panel's conference row reads away vs. home, matching
     formatMatchup's "Away at Home" order (amended 2026-09-28)."""
@@ -562,3 +630,16 @@ def test_url_state_keeps_a_comma_inside_an_id(guarded_page: Page, site_url: str)
     whose own comma encodes to `%2C` round-trips as one id, not two."""
     _load(guarded_page, site_url)
     assert guarded_page.evaluate(_COMMA_ID_ROUND_TRIP_JS) == ["harlow,dale", "kris-venn"]
+
+
+def test_summary_networks_ordered_by_matched_count_then_alphabetical(
+    guarded_page: Page, site_url: str
+) -> None:
+    """A6: networks list dominant first (matched-telecast count desc), ties alphabetical."""
+    _load(guarded_page, site_url)
+    pat = _view(guarded_page, {"people": ["pat-rowan"]})["summary"]["networks"]
+    assert pat == ["Conference Network", "Beta Network"]
+    robin = _view(guarded_page, {"people": ["robin-teague"]})["summary"]["networks"]
+    assert robin == ["Other Network", "Alpha Sports"]
+    tie = _view(guarded_page, {"people": ["jamie-oaks"]})["summary"]["networks"]
+    assert tie == ["Alpha Sports", "Other Network"]

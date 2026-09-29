@@ -45,6 +45,22 @@ const SECTION_POPOVERS = [
 /** Toolbar trigger names, in toolbar order -- also `#trigger-{name}`'s id suffix. */
 const TRIGGER_NAMES = ['announcers', 'seasons', 'networks', 'kickoff', 'role', 'conference', 'school', 'postseason'];
 
+/**
+ * Per-group reset patches (A4), keyed by trigger name and applied through
+ * `setState` like every other filter change. "Clear all filters" is built from
+ * this same map, so the two can never drift.
+ */
+const GROUP_RESETS = {
+  announcers: { people: [], compare: false, together: false },
+  seasons: { seasons: null },
+  networks: { networks: null },
+  kickoff: { slots: null },
+  role: { role: null },
+  conference: { conferences: [] },
+  school: { school: [] },
+  postseason: { postseason: 'all' },
+};
+
 /** Bowls/Playoffs radio values, in the DOM order they appear in `#postseason-options`. */
 const POSTSEASON_ORDER = ['all', 'exclude', 'only'];
 
@@ -96,7 +112,9 @@ function buildSeasonSelects(data) {
 
 /** Builds the family-nested network checklist once, from `data.families`/`networksByFamily` (D-06). */
 function buildNetworkChecklist(data) {
-  const heading = els.networksSection.querySelector('h3');
+  // A4: keep the `.section-head` (title + Reset) as the preserved first child, not a bare h3.
+  const heading =
+    els.networksSection.querySelector('.section-head') ?? els.networksSection.querySelector('h3');
   networkCheckboxes = new Map();
   familyCheckboxes = new Map();
 
@@ -331,19 +349,41 @@ function positionPopover(popover, trigger) {
   popover.style.left = `${Math.max(8, Math.min(rect.left, maxLeft))}px`;
 }
 
-/** The first focusable element inside a popover: its search input, else its first input/button. */
+/**
+ * The first focusable element inside a popover: its search input, else its first
+ * input/button. The per-group Reset button (A4) is skipped on purpose: it is a
+ * secondary action, so the first focus belongs to the group's own control. It
+ * stays in the normal Tab order (Shift+Tab from that first control reaches it).
+ */
 function firstFocusable(container) {
-  return container.querySelector('input, button, [tabindex]:not([tabindex="-1"])');
+  return container.querySelector(
+    'input, button:not(.group-reset), [tabindex]:not([tabindex="-1"]):not(.group-reset)',
+  );
 }
 
-/** Wires open/close focus management and (for filter popovers) positioning for one popover. */
+/** Wires open/close focus management and (for filter popovers) `beforetoggle` positioning for one popover. */
 function bindPopoverMechanics(popover) {
   const isFilterPopover = popover.classList.contains('filter-popover');
+  if (isFilterPopover) {
+    // A5: position BEFORE the popover is shown. `toggle` is queued after the popover is
+    // shown, so the first frame painted at the static (0,0) position or at a stale
+    // top/left from the previous open. Sync call: top is exact, but left is unclamped
+    // because offsetWidth is 0 while the popover is still display:none. The rAF refine
+    // runs in the first rendering update after show, before paint, so the clamp is exact.
+    popover.addEventListener('beforetoggle', (ev) => {
+      if (ev.newState !== 'open') return;
+      const trigger = document.querySelector(`[popovertarget="${popover.id}"]`);
+      if (!trigger) return;
+      positionPopover(popover, trigger);
+      requestAnimationFrame(() => {
+        if (popover.matches(':popover-open')) positionPopover(popover, trigger);
+      });
+    });
+  }
   popover.addEventListener('toggle', (ev) => {
     const trigger = document.querySelector(`[popovertarget="${popover.id}"]`);
     if (ev.newState === 'open') {
       if (trigger) trigger.setAttribute('aria-expanded', 'true');
-      if (isFilterPopover && trigger) positionPopover(popover, trigger);
       const focusable = firstFocusable(popover);
       if (focusable) focusable.focus();
     } else {
@@ -460,22 +500,22 @@ export function initFilters({ data, getState, setState }) {
   bindPostseasonKeyboard(setState);
 
   els.clearFilters.addEventListener('click', () => {
-    setState({
-      seasons: null,
-      networks: null,
-      slots: null,
-      role: null,
-      conferences: [],
-      school: [],
-      postseason: 'all',
-      // D-27 (overrides the earlier "people are not cleared" proposal):
-      // Clear all filters also removes every selected announcer, compare
-      // mode, and called-together. "Clear selection" in the chip row still
-      // clears only the people.
-      people: [],
-      compare: false,
-      together: false,
-    });
+    // D-27 (overrides the earlier "people are not cleared" proposal): Clear all
+    // filters also removes every selected announcer, compare mode, and
+    // called-together (the `announcers` reset). "Clear selection" in the chip
+    // row still clears only the people.
+    setState(structuredClone(Object.assign({}, ...Object.values(GROUP_RESETS))));
+  });
+
+  // A4: one delegated listener for every per-group Reset (desktop popovers and
+  // phone-sheet sections). `aria-disabled` (not `disabled`) keeps the button
+  // focusable, so clicking it at default is a no-op and focus stays put.
+  document.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.group-reset');
+    if (!btn || btn.getAttribute('aria-disabled') === 'true') return;
+    const name = btn.dataset.reset;
+    if (!Object.hasOwn(GROUP_RESETS, name)) return;
+    setState(structuredClone(GROUP_RESETS[name]));
   });
 
   els.filtersShowResults.addEventListener('click', () => {
@@ -668,6 +708,21 @@ function renderFiltersButton(state) {
   els.filtersButton.textContent = n > 0 ? `Filters (${n})` : 'Filters';
 }
 
+/** Dims each group's Reset button (`aria-disabled`) while that group is at its default (A4). */
+function renderGroupResets(data, state) {
+  for (const btn of document.querySelectorAll('.group-reset')) {
+    const name = btn.dataset.reset;
+    // The Announcers Reset also clears compare / called-together, so it is
+    // live for `?mode=compare` with no one selected (the toolbar trigger's
+    // own active state is left alone).
+    const active =
+      name === 'announcers'
+        ? state.people.length > 0 || state.compare || state.together
+        : triggerInfo(name, data, state).active;
+    btn.setAttribute('aria-disabled', active ? 'false' : 'true');
+  }
+}
+
 /** Pure DOM update from the current data/state/view, called every render cycle. */
 export function renderFilters({ data, state, view }) {
   renderSeasons(data, state, view);
@@ -678,5 +733,6 @@ export function renderFilters({ data, state, view }) {
   renderSchool(data, state);
   renderPostseason(state);
   renderTriggers(data, state);
+  renderGroupResets(data, state);
   renderFiltersButton(state);
 }

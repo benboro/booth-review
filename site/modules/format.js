@@ -41,6 +41,16 @@ export const CFP_ROUND_LABELS = {
   championship: 'CFP championship',
 };
 
+/**
+ * CFP rounds played at a bowl (F3). The playoff's quarterfinals and
+ * semifinals are always hosted by the New Year's Six bowls, so a game in one
+ * of these rounds is both a playoff game and a bowl game. First-round games
+ * are on campus sites and the championship is its own event, so neither
+ * counts; a playoff game with no recorded round is never assumed to be at a
+ * bowl. Page-only: this is derived from `playoff_round`, not a contract field.
+ */
+export const CFP_BOWL_ROUNDS = new Set(['quarterfinal', 'semifinal']);
+
 /** Crew role filter labels (SITE-07). Sideline/other is role "unknown". */
 export const ROLE_LABELS = {
   pbp: 'Play-by-play',
@@ -107,21 +117,61 @@ export function showsTimeSlot(data, i) {
 }
 
 /**
+ * The single source for telecast `i`'s game type (D-17, notes-4 A1/A2a): null
+ * for a regular-season game (nothing to show), otherwise the icon `kind` --
+ * 'bowl' for a non-CFP postseason game, 'playoff' for a College Football
+ * Playoff game -- and its visible `label`: "Bowl", or the specific CFP round
+ * (falling back to "College Football Playoff" when the round itself isn't
+ * recorded). `atBowl` is true for a CFP game also played at a bowl
+ * (`CFP_BOWL_ROUNDS`), which shows the bowl icon before the trophy; it is false
+ * for a plain bowl, whose `kind` is already 'bowl'. `gameTypeKind`,
+ * `gameTypeLabel` and `gameTypeIcons` are thin views of this, so they can
+ * never disagree.
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @returns {{kind: "bowl"|"playoff", label: string, atBowl: boolean}|null}
+ */
+export function gameTypeInfo(data, i) {
+  const t = data.t;
+  const type = t.game_type[i];
+  if (type === 'regular') return null;
+  if (type === 'bowl') return { kind: 'bowl', label: 'Bowl', atBowl: false };
+  const round = t.playoff_round[i];
+  const label = round != null ? (CFP_ROUND_LABELS[round] ?? 'College Football Playoff') : 'College Football Playoff';
+  return { kind: 'playoff', label, atBowl: CFP_BOWL_ROUNDS.has(round) };
+}
+
+/**
  * Labels telecast `i`'s game type for the detail panel (D-17): null for a
  * regular-season game (no label shown), "Bowl" for a non-CFP postseason
- * game, and the specific CFP round (falling back to "College Football
- * Playoff" when the round itself isn't recorded) for a playoff game.
+ * game, and the specific CFP round for a playoff game.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
  * @returns {string|null}
  */
 export function gameTypeLabel(data, i) {
-  const t = data.t;
-  const type = t.game_type[i];
-  if (type === 'regular') return null;
-  if (type === 'bowl') return 'Bowl';
-  const round = t.playoff_round[i];
-  return round != null ? (CFP_ROUND_LABELS[round] ?? 'College Football Playoff') : 'College Football Playoff';
+  return gameTypeInfo(data, i)?.label ?? null;
+}
+
+/**
+ * The DOM-free kind behind telecast `i`'s game-type icon: null for a
+ * regular-season game (no icon), 'bowl', or 'playoff'.
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @returns {"bowl"|"playoff"|null}
+ */
+export function gameTypeKind(data, i) {
+  return gameTypeInfo(data, i)?.kind ?? null;
+}
+
+/**
+ * The icon kinds to draw for a `gameTypeInfo` result, in order: 'bowl' first
+ * for a CFP game played at a bowl, then the game's own kind.
+ * @param {{kind: "bowl"|"playoff", atBowl: boolean}} info
+ * @returns {("bowl"|"playoff")[]}
+ */
+export function gameTypeIcons(info) {
+  return info.atBowl ? ['bowl', info.kind] : [info.kind];
 }
 
 /**

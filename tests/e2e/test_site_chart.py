@@ -564,7 +564,8 @@ def test_hover_text_stays_minimal_and_drops_methodology_notes(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """SITE-25 (product notes 2026-09-27): the tooltip carries only the
-    matchup+score, date+kickoff(+slot), networks, crew, viewers, the active
+    matchup+score, date+kickoff (+ Bowl / CFP round for postseason games,
+    never a time-slot label), networks, crew, viewers, the active
     axis value, and a closing "Click for details →" hint -- the
     measurement/scoring-source label, conferences, game type, and
     flags/combined-feed notes are dropped from the tooltip (they still show
@@ -580,7 +581,7 @@ def test_hover_text_stays_minimal_and_drops_methodology_notes(
     dot0 = _hover_text(traces, 0)
     assert "Lakeview 20 at Northfield 27" in dot0
     assert "Sat, Sep 7, 2019" in dot0
-    assert "Noon" in dot0
+    assert "Noon" not in dot0
     assert dot0.endswith("Click for details →")
     assert "Measurement" not in dot0
     assert "Source" not in dot0
@@ -999,14 +1000,178 @@ def test_html_tooltip_content_is_minimal_with_network_pills(
 def test_html_tooltip_slot_label_follows_d19(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-19/D-22: telecast 7 is a Saturday bowl game -- the time-slot label
-    never shows for a non-regular-season game, in either tooltip mode."""
+    """D-19/D-22 (amended by notes-4 A1 and its follow-up): the tooltip never
+    shows a time-slot label, and a bowl or CFP game is marked by an icon only
+    (no visible "Bowl"/round text). The icon is then the only carrier of
+    meaning, so its wrapper is one accessible image (role="img" + aria-label)
+    around aria-hidden SVGs; a regular-season game shows no icon."""
     open_app(guarded_page, "")
-    _hover_dot(guarded_page, 7)
+    icon = "#chart-tooltip svg.game-type-icon"
 
+    _hover_dot(guarded_page, 7)
     text = guarded_page.inner_text("#chart-tooltip")
     assert "Prime time" not in text
     assert "After dark" not in text
+    assert "Bowl" not in text
+    bowl = guarded_page.locator(f'{icon}[data-kind="bowl"]')
+    assert bowl.count() == 1
+    assert bowl.get_attribute("aria-hidden") == "true"
+    marker = guarded_page.locator("#chart-tooltip .tooltip-game-type")
+    assert marker.get_attribute("role") == "img"
+    assert marker.get_attribute("aria-label") == "Bowl game"
+    assert guarded_page.locator(icon).count() == 1
+
+    _hover_dot(guarded_page, 5)
+    guarded_page.wait_for_selector(f'{icon}[data-kind="playoff"]')
+    # F3: the fixture's CFP game is a semifinal, played at a bowl, so it shows
+    # the bowl icon then the trophy under one labeled wrapper.
+    assert guarded_page.locator(icon).count() == 2
+    assert "CFP semifinal" not in guarded_page.inner_text("#chart-tooltip")
+
+    _hover_dot(guarded_page, 0)
+    guarded_page.wait_for_function(
+        "document.querySelector('#chart-tooltip .tooltip-title')?.textContent.includes('Lakeview')"
+    )
+    text = guarded_page.inner_text("#chart-tooltip")
+    for label in ("Noon", "Afternoon", "Prime time", "After dark"):
+        assert label not in text
+    assert guarded_page.locator(icon).count() == 0
+
+
+def _rgb_of(page: Page, selector: str, prop: str) -> tuple[float, float, float]:
+    css: str = page.locator(selector).first.evaluate(f"el => getComputedStyle(el).{prop}")
+    match = re.match(r"rgba?\((\d+), (\d+), (\d+)", css)
+    assert match, css
+    return (float(match[1]), float(match[2]), float(match[3]))
+
+
+def _luminance(rgb: tuple[float, float, float]) -> float:
+    def channel(c: float) -> float:
+        c /= 255
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    return 0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2])
+
+
+def _ratio(a: tuple[float, float, float], b: tuple[float, float, float]) -> float:
+    hi, lo = sorted((_luminance(a) + 0.05, _luminance(b) + 0.05), reverse=True)
+    return hi / lo
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_game_type_icons_have_own_colors_meeting_non_text_contrast(
+    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
+) -> None:
+    """WCAG 1.4.11: the trophy (playoff) and bowl icons carry their own
+    colors, distinct from each other and from the text color, and each
+    reaches 3:1 against both the tooltip and the detail-panel background in
+    both themes."""
+    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
+    open_app(guarded_page, "")
+    icon_colors: dict[str, tuple[float, float, float]] = {}
+
+    for kind, index in (("bowl", 7), ("playoff", 5)):
+        _hover_dot(guarded_page, index)
+        guarded_page.wait_for_selector(f'#chart-tooltip svg.game-type-icon[data-kind="{kind}"]')
+        icon = f'#chart-tooltip svg.game-type-icon[data-kind="{kind}"]'
+        fg = _rgb_of(guarded_page, icon, "color")
+        bg = _rgb_of(guarded_page, "#chart-tooltip", "backgroundColor")
+        assert _ratio(fg, bg) >= 3, (scheme, kind, "tooltip")
+        icon_colors[kind] = fg
+
+        guarded_page.evaluate(f"window.__testHooks.openPanel({index})")
+        panel_icon = f'#panel-body .panel-game-type svg.game-type-icon[data-kind="{kind}"]'
+        assert _rgb_of(guarded_page, panel_icon, "color") == fg
+        panel_bg = _rgb_of(guarded_page, "#detail-panel", "backgroundColor")
+        assert _ratio(fg, panel_bg) >= 3, (scheme, kind, "panel")
+
+    assert icon_colors["bowl"] != icon_colors["playoff"]
+    text = _rgb_of(guarded_page, "#chart-tooltip", "color")
+    assert all(color != text for color in icon_colors.values())
+
+
+@pytest.mark.parametrize(
+    ("round_", "kinds", "name"),
+    [
+        ("first_round", ["playoff"], "CFP first round"),
+        ("quarterfinal", ["bowl", "playoff"], "CFP quarterfinal, bowl game"),
+        ("semifinal", ["bowl", "playoff"], "CFP semifinal, bowl game"),
+        ("championship", ["playoff"], "CFP championship"),
+        (None, ["playoff"], "College Football Playoff"),
+    ],
+)
+def test_html_tooltip_cfp_game_at_a_bowl_shows_both_icons(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    serve_round: Callable[[Page, str | None], None],
+    round_: str | None,
+    kinds: list[str],
+    name: str,
+) -> None:
+    """F3: a CFP quarterfinal or semifinal is played at a bowl, so its tooltip
+    marker is the bowl icon then the trophy; first round, championship and an
+    unrecorded round show the trophy alone. The two icons are aria-hidden
+    under one wrapper carrying the single accessible name; the visible text
+    is unchanged (icons only)."""
+    serve_round(guarded_page, round_)
+    open_app(guarded_page, "")
+    _hover_dot(guarded_page, 5)
+    icons = guarded_page.locator("#chart-tooltip .tooltip-game-type svg.game-type-icon")
+    guarded_page.wait_for_selector("#chart-tooltip .tooltip-game-type svg.game-type-icon")
+    assert icons.evaluate_all("els => els.map(e => e.dataset.kind)") == kinds
+    assert icons.evaluate_all("els => els.map(e => e.getAttribute('aria-hidden'))") == [
+        "true"
+    ] * len(kinds)
+    marker = guarded_page.locator("#chart-tooltip .tooltip-game-type")
+    assert marker.get_attribute("role") == "img"
+    assert marker.get_attribute("aria-label") == name
+    assert "CFP" not in guarded_page.inner_text("#chart-tooltip")
+    assert guarded_page.locator("#chart-tooltip [role='img']").count() == 1
+
+
+def test_html_tooltip_falls_back_to_text_when_an_icon_cannot_be_built(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """WR-01 / F3: if any icon in the marker can't be built (unknown kind),
+    the tooltip shows the plain text label in an unlabeled span instead of a
+    partial or empty marker."""
+    open_app(guarded_page, "")
+    result = guarded_page.evaluate(
+        """
+        async () => {
+          const T = await import('./modules/tooltip.js');
+          const el = document.createElement('div');
+          const model = {
+            title: 't', dateText: 'd', dateLine: 'd',
+            networks: [{ name: 'N', family: 'other' }], crewLines: [],
+            viewersLine: 'v', axisLine: 'a', hint: 'h',
+            gameType: { icons: ['playoff', 'nope'], label: 'CFP semifinal', iconLabel: 'x' },
+          };
+          T.renderTooltipContent(el, model, 'light');
+          const span = el.querySelector('.tooltip-game-type');
+          return {
+            text: span.textContent,
+            svgs: span.querySelectorAll('svg').length,
+            role: span.getAttribute('role'),
+          };
+        }
+        """
+    )
+    assert result == {"text": "CFP semifinal", "svgs": 0, "role": None}
+
+
+def test_plotly_fallback_tooltip_shows_game_type_text_without_slot_label(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """A1: the plotly-hovertemplate fallback shows the same text (no slot
+    label, the Bowl / CFP round name) -- text only, it cannot draw an icon."""
+    open_app(guarded_page, "")
+    _use_plotly_tooltip(guarded_page)
+    traces = _traces(guarded_page)
+
+    assert "Noon" not in _hover_text(traces, 0)
+    assert "CFP semifinal" in _hover_text(traces, 5)
+    assert "Bowl" in _hover_text(traces, 7)
 
 
 def test_html_tooltip_hides_on_mouse_out_scroll_and_panel_open(

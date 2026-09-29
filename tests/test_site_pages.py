@@ -173,7 +173,8 @@ def test_methodology_describes_the_slim_tooltip() -> None:
     text = re.sub(r"\s+", " ", _METHODOLOGY_MD.read_text(encoding="utf-8"))
     assert (
         "A dot's tooltip is kept short: the matchup and final score, the date and "
-        "kickoff time, the networks, the crew, and the viewer count." in text
+        "kickoff time (with a bowl or trophy icon for postseason games), "
+        "the networks, the crew, and the viewer count." in text
     )
     assert "Click or tap the dot to open its detail panel" in text
 
