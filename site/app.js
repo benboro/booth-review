@@ -396,12 +396,24 @@ async function bootstrap() {
         const point = ev.points && ev.points[0];
         let clientX;
         let clientY;
-        if (point && point.x != null && point.y != null) {
-          const layout = chartEl._fullLayout;
-          const rect = chartEl.getBoundingClientRect();
-          clientX = rect.left + layout._size.l + layout.xaxis.d2p(point.x);
-          clientY = rect.top + layout._size.t + layout.yaxis.d2p(point.y);
-        } else {
+        // The point-based position math below reaches into undocumented
+        // Plotly internals (`_fullLayout`, `_size`, `.d2p`). If a vendored
+        // Plotly version reshapes or drops any of them, fall through to the
+        // hover event's own client coordinates rather than letting the
+        // exception silently swallow the tooltip (Plotly's event dispatch
+        // does not surface a throwing listener to the user).
+        try {
+          if (point && point.x != null && point.y != null && chartEl._fullLayout) {
+            const layout = chartEl._fullLayout;
+            const rect = chartEl.getBoundingClientRect();
+            clientX = rect.left + layout._size.l + layout.xaxis.d2p(point.x);
+            clientY = rect.top + layout._size.t + layout.yaxis.d2p(point.y);
+          }
+        } catch {
+          clientX = undefined;
+          clientY = undefined;
+        }
+        if (clientX == null || clientY == null) {
           clientX = ev.event?.clientX;
           clientY = ev.event?.clientY;
         }
