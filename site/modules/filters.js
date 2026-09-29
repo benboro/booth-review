@@ -336,14 +336,29 @@ function firstFocusable(container) {
   return container.querySelector('input, button, [tabindex]:not([tabindex="-1"])');
 }
 
-/** Wires open/close focus management and (for filter popovers) positioning for one popover. */
+/** Wires open/close focus management and (for filter popovers) `beforetoggle` positioning for one popover. */
 function bindPopoverMechanics(popover) {
   const isFilterPopover = popover.classList.contains('filter-popover');
+  if (isFilterPopover) {
+    // A5: position BEFORE the popover is shown. `toggle` is queued after the popover is
+    // shown, so the first frame painted at the static (0,0) position or at a stale
+    // top/left from the previous open. Sync call: top is exact, but left is unclamped
+    // because offsetWidth is 0 while the popover is still display:none. The rAF refine
+    // runs in the first rendering update after show, before paint, so the clamp is exact.
+    popover.addEventListener('beforetoggle', (ev) => {
+      if (ev.newState !== 'open') return;
+      const trigger = document.querySelector(`[popovertarget="${popover.id}"]`);
+      if (!trigger) return;
+      positionPopover(popover, trigger);
+      requestAnimationFrame(() => {
+        if (popover.matches(':popover-open')) positionPopover(popover, trigger);
+      });
+    });
+  }
   popover.addEventListener('toggle', (ev) => {
     const trigger = document.querySelector(`[popovertarget="${popover.id}"]`);
     if (ev.newState === 'open') {
       if (trigger) trigger.setAttribute('aria-expanded', 'true');
-      if (isFilterPopover && trigger) positionPopover(popover, trigger);
       const focusable = firstFocusable(popover);
       if (focusable) focusable.focus();
     } else {

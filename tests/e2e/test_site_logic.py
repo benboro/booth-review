@@ -562,3 +562,16 @@ def test_url_state_keeps_a_comma_inside_an_id(guarded_page: Page, site_url: str)
     whose own comma encodes to `%2C` round-trips as one id, not two."""
     _load(guarded_page, site_url)
     assert guarded_page.evaluate(_COMMA_ID_ROUND_TRIP_JS) == ["harlow,dale", "kris-venn"]
+
+
+def test_summary_networks_ordered_by_matched_count_then_alphabetical(
+    guarded_page: Page, site_url: str
+) -> None:
+    """A6: networks list dominant first (matched-telecast count desc), ties alphabetical."""
+    _load(guarded_page, site_url)
+    pat = _view(guarded_page, {"people": ["pat-rowan"]})["summary"]["networks"]
+    assert pat == ["Conference Network", "Beta Network"]
+    robin = _view(guarded_page, {"people": ["robin-teague"]})["summary"]["networks"]
+    assert robin == ["Other Network", "Alpha Sports"]
+    tie = _view(guarded_page, {"people": ["jamie-oaks"]})["summary"]["networks"]
+    assert tie == ["Alpha Sports", "Other Network"]

@@ -1031,3 +1031,91 @@ def test_mobile_filters_button_badge_reflects_school_filter(
 ) -> None:
     open_app(mobile_page, "?school=northfield")
     expect(mobile_page.locator("#filters-button")).to_have_text("Filters (1)")
+
+
+_POPOVER_TRIGGERS = (
+    "announcers",
+    "seasons",
+    "networks",
+    "kickoff",
+    "role",
+    "conference",
+    "school",
+    "postseason",
+)
+
+_FIRST_BOX_PROBE_JS = """
+(id) => {
+  window.__first = null;
+  const pop = document.getElementById(id);
+  const trigger = document.querySelector(`[popovertarget="${id}"]`);
+  const ro = new ResizeObserver(() => {
+    if (window.__first || !pop.matches(':popover-open')) return;
+    const r = pop.getBoundingClientRect();
+    const t = trigger.getBoundingClientRect();
+    window.__first = {
+      top: r.top,
+      left: r.left,
+      width: r.width,
+      expectTop: t.bottom + 4,
+      expectLeft: Math.max(8, Math.min(t.left, Math.max(8, innerWidth - r.width - 8))),
+    };
+    ro.disconnect();
+  });
+  ro.observe(pop);
+}
+"""
+
+
+def _assert_first_frame_anchored(page: Page, name: str) -> None:
+    """Opens `#trigger-{name}` and asserts the popover's first rendered box is
+    anchored under its trigger (A5). A ResizeObserver fires in the first
+    rendering update where the popover has a box -- after every rAF callback
+    and layout, before paint -- so it sees what the first painted frame shows.
+    (A capture-phase `beforetoggle` + rAF probe would sample before the app's
+    own rAF refine and fail falsely.)"""
+    popover_id = f"pop-{name}"
+    page.evaluate(_FIRST_BOX_PROBE_JS, popover_id)
+    page.click(f"#trigger-{name}")
+    page.wait_for_function("() => window.__first !== null")
+    first = page.evaluate("() => window.__first")
+    assert abs(first["top"] - first["expectTop"]) < 1, (name, first)
+    assert abs(first["left"] - first["expectLeft"]) < 1, (name, first)
+    page.keyboard.press("Escape")
+    page.wait_for_function(f"!document.getElementById('{popover_id}').matches(':popover-open')")
+
+
+def test_popover_first_open_paints_anchored_at_1280(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """A5: on one fresh load every popover's first frame is anchored under its
+    trigger, never at the top-left."""
+    open_app(guarded_page, "")
+    for name in _POPOVER_TRIGGERS:
+        _assert_first_frame_anchored(guarded_page, name)
+
+
+def test_popover_first_open_paints_anchored_at_1040_right_edge_clamp(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """A5: at 1040px wide the right-edge clamp applies to School and
+    Bowls/Playoffs; their first frame must already be clamped."""
+    guarded_page.set_viewport_size({"width": 1040, "height": 720})
+    open_app(guarded_page, "")
+    for name in _POPOVER_TRIGGERS:
+        _assert_first_frame_anchored(guarded_page, name)
+
+
+def test_popover_reopen_after_resize_paints_anchored(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """A5: a reopen after a viewport resize must not first paint at the stale
+    inline top/left from the previous open."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "school")
+    guarded_page.keyboard.press("Escape")
+    guarded_page.wait_for_function(
+        "!document.getElementById('pop-school').matches(':popover-open')"
+    )
+    guarded_page.set_viewport_size({"width": 900, "height": 720})
+    _assert_first_frame_anchored(guarded_page, "school")

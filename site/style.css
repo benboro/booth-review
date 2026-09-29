@@ -583,8 +583,9 @@ body.app {
   position: fixed;
   /* Overrides the UA default `[popover]` style (`inset: 0`, which would
      otherwise stretch the popover to fill the viewport) -- positioned
-     explicitly every time it opens, via filters.js's `positionPopover`
-     (Pitfall 2: a `[popover]` element is promoted to the top layer, so its
+     explicitly every time it opens, via filters.js's `positionPopover` called
+     from `beforetoggle` (sync + rAF refine, so the first painted frame is
+     already anchored) (Pitfall 2: a `[popover]` element is promoted to the top layer, so its
      original position in the grid/flow is irrelevant to where it renders). */
   inset: auto;
   margin: 0;
