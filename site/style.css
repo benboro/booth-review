@@ -786,6 +786,9 @@ input[type="checkbox"] {
    replacing Plotly's own hover label so a network name can render as a real
    filled pill (SITE-26). `pointer-events: none` so it can never steal hover
    or a click from the dots underneath it. */
+/* D-29: the 2px border is family-colored via an inline `borderColor`
+   (tooltip.js's `renderTooltipContent`) -- the token here is only the
+   pre-hover/no-JS fallback. */
 .chart-tooltip {
   position: fixed;
   z-index: 30;
@@ -794,7 +797,7 @@ input[type="checkbox"] {
   padding: var(--space-sm) var(--space-md);
   background: var(--surface);
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: 6px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   font: var(--font-label);
@@ -811,10 +814,6 @@ input[type="checkbox"] {
   align-items: center;
   gap: var(--space-xs);
   margin: var(--space-xs) 0;
-}
-
-.tooltip-sep {
-  color: var(--muted);
 }
 
 .tooltip-hint {

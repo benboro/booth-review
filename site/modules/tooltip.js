@@ -31,6 +31,7 @@ import {
   stripNetworkNote,
 } from './format.js';
 import { makePill } from './pill.js';
+import { FAMILY_COLORS, familyKey } from './palette.js';
 
 /** The single `#chart-tooltip` element, created lazily on first use. */
 let tooltipEl = null;
@@ -92,11 +93,16 @@ export function tooltipModel(data, i, { axis }) {
 
 /**
  * Rebuilds `el`'s children from `model` (`replaceChildren`, never an
- * incremental append) -- a title, a slash-delimited row of `pill.js` pills
- * (SITE-26), one line per date/crew/viewers/axis fact, and a closing hint.
- * Every string is assigned via `textContent`/`makePill` (which itself only
- * uses `textContent`), so a malicious team/crew/network name can never
- * become a real element (T-04.1-25).
+ * incremental append) -- a title, a space-separated row of `pill.js` pills
+ * (SITE-26, D-29 -- the `.tooltip-networks` flex row's own gap is the only
+ * visible separator between pills, no separator element or text), one line
+ * per date/crew/viewers/axis fact, and a closing hint. Every string is
+ * assigned via `textContent`/`makePill` (which itself only uses
+ * `textContent`), so a malicious team/crew/network name can never become a
+ * real element (T-04.1-25). Also sets `el`'s own border color to the
+ * primary network's (`model.networks[0]`, always first per `tooltipModel`)
+ * family color (D-29, T-04.1-43): resolved only through `FAMILY_COLORS` /
+ * `familyKey`, never a raw data string, matching `pill.js`'s own pattern.
  * @param {HTMLElement} el
  * @param {ReturnType<typeof tooltipModel>} model
  * @param {"light"|"dark"} theme
@@ -115,17 +121,14 @@ export function renderTooltipContent(el, model, theme) {
 
   const networksRow = document.createElement('div');
   networksRow.className = 'tooltip-networks';
-  model.networks.forEach((net, idx) => {
-    if (idx > 0) {
-      const sep = document.createElement('span');
-      sep.className = 'tooltip-sep';
-      sep.setAttribute('aria-hidden', 'true');
-      sep.textContent = '/';
-      networksRow.appendChild(sep);
-    }
+  model.networks.forEach((net) => {
     networksRow.appendChild(makePill(net.name, net.family, theme));
   });
   children.push(networksRow);
+
+  const primaryFamily = familyKey(model.networks[0].family);
+  el.style.borderColor = FAMILY_COLORS[theme][primaryFamily];
+  el.dataset.family = primaryFamily;
 
   for (const line of model.crewLines) {
     const crewLine = document.createElement('div');

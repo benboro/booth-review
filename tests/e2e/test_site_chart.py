@@ -1392,8 +1392,16 @@ def test_compare_highlight_trace_config(
 # literal hex, as `rgb(...)` -- disney/fox are shared between themes; only
 # `other` differs light `#8F8F8F` vs dark `#999999`).
 _BORDER_COLOR = {
-    "light": {"disney": "rgb(0, 114, 178)", "fox": "rgb(0, 158, 115)", "other": "rgb(143, 143, 143)"},
-    "dark": {"disney": "rgb(0, 114, 178)", "fox": "rgb(0, 158, 115)", "other": "rgb(153, 153, 153)"},
+    "light": {
+        "disney": "rgb(0, 114, 178)",
+        "fox": "rgb(0, 158, 115)",
+        "other": "rgb(143, 143, 143)",
+    },
+    "dark": {
+        "disney": "rgb(0, 114, 178)",
+        "fox": "rgb(0, 158, 115)",
+        "other": "rgb(153, 153, 153)",
+    },
 }
 
 
