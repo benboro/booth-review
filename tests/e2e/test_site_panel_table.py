@@ -358,8 +358,8 @@ def test_panel_game_type_line_has_matching_icon_before_label(
 
     guarded_page.evaluate("window.__testHooks.openPanel(5)")
     playoff = guarded_page.locator("#panel-body .panel-game-type")
-    # F3: a semifinal is played at a bowl, so the trophy is followed by the bowl icon.
-    assert playoff.locator("svg.game-type-icon").first.get_attribute("data-kind") == "playoff"
+    # F3: a semifinal is played at a bowl, so the bowl icon comes first, then the trophy.
+    assert playoff.locator("svg.game-type-icon").first.get_attribute("data-kind") == "bowl"
     assert playoff.evaluate("el => el.firstElementChild.tagName.toLowerCase()") == "svg"
     assert "CFP semifinal" in playoff.inner_text()
 
@@ -372,8 +372,8 @@ def test_panel_game_type_line_has_matching_icon_before_label(
     ("round_", "kinds", "text"),
     [
         ("first_round", ["playoff"], "CFP first round"),
-        ("quarterfinal", ["playoff", "bowl"], "CFP quarterfinal"),
-        ("semifinal", ["playoff", "bowl"], "CFP semifinal"),
+        ("quarterfinal", ["bowl", "playoff"], "CFP quarterfinal"),
+        ("semifinal", ["bowl", "playoff"], "CFP semifinal"),
         ("championship", ["playoff"], "CFP championship"),
         (None, ["playoff"], "College Football Playoff"),
     ],
@@ -387,7 +387,7 @@ def test_panel_cfp_game_at_a_bowl_shows_both_icons_before_label(
     text: str,
 ) -> None:
     """F3: a CFP quarterfinal or semifinal is played at a bowl, so the panel's
-    game-type line reads "[trophy][bowl] CFP semifinal"; first round,
+    game-type line reads "[bowl][trophy] CFP semifinal"; first round,
     championship and an unrecorded round show the trophy alone. Every icon is
     aria-hidden and the visible label text is unchanged."""
     serve_round(guarded_page, round_)

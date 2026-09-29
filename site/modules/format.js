@@ -123,7 +123,7 @@ export function showsTimeSlot(data, i) {
  * Playoff game -- and its visible `label`: "Bowl", or the specific CFP round
  * (falling back to "College Football Playoff" when the round itself isn't
  * recorded). `atBowl` is true for a CFP game also played at a bowl
- * (`CFP_BOWL_ROUNDS`), which shows the bowl icon after the trophy; it is false
+ * (`CFP_BOWL_ROUNDS`), which shows the bowl icon before the trophy; it is false
  * for a plain bowl, whose `kind` is already 'bowl'. `gameTypeKind`,
  * `gameTypeLabel` and `gameTypeIcons` are thin views of this, so they can
  * never disagree.
@@ -165,13 +165,13 @@ export function gameTypeKind(data, i) {
 }
 
 /**
- * The icon kinds to draw for a `gameTypeInfo` result, in order: the game's own
- * kind, then 'bowl' for a CFP game played at a bowl.
+ * The icon kinds to draw for a `gameTypeInfo` result, in order: 'bowl' first
+ * for a CFP game played at a bowl, then the game's own kind.
  * @param {{kind: "bowl"|"playoff", atBowl: boolean}} info
  * @returns {("bowl"|"playoff")[]}
  */
 export function gameTypeIcons(info) {
-  return info.atBowl ? [info.kind, 'bowl'] : [info.kind];
+  return info.atBowl ? ['bowl', info.kind] : [info.kind];
 }
 
 /**

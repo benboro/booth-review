@@ -1024,7 +1024,7 @@ def test_html_tooltip_slot_label_follows_d19(
     _hover_dot(guarded_page, 5)
     guarded_page.wait_for_selector(f'{icon}[data-kind="playoff"]')
     # F3: the fixture's CFP game is a semifinal, played at a bowl, so it shows
-    # the trophy then the bowl icon under one labeled wrapper.
+    # the bowl icon then the trophy under one labeled wrapper.
     assert guarded_page.locator(icon).count() == 2
     assert "CFP semifinal" not in guarded_page.inner_text("#chart-tooltip")
 
@@ -1094,8 +1094,8 @@ def test_game_type_icons_have_own_colors_meeting_non_text_contrast(
     ("round_", "kinds", "name"),
     [
         ("first_round", ["playoff"], "CFP first round"),
-        ("quarterfinal", ["playoff", "bowl"], "CFP quarterfinal, bowl game"),
-        ("semifinal", ["playoff", "bowl"], "CFP semifinal, bowl game"),
+        ("quarterfinal", ["bowl", "playoff"], "CFP quarterfinal, bowl game"),
+        ("semifinal", ["bowl", "playoff"], "CFP semifinal, bowl game"),
         ("championship", ["playoff"], "CFP championship"),
         (None, ["playoff"], "College Football Playoff"),
     ],
@@ -1109,7 +1109,7 @@ def test_html_tooltip_cfp_game_at_a_bowl_shows_both_icons(
     name: str,
 ) -> None:
     """F3: a CFP quarterfinal or semifinal is played at a bowl, so its tooltip
-    marker is the trophy then the bowl icon; first round, championship and an
+    marker is the bowl icon then the trophy; first round, championship and an
     unrecorded round show the trophy alone. The two icons are aria-hidden
     under one wrapper carrying the single accessible name; the visible text
     is unchanged (icons only)."""
