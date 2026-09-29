@@ -23,10 +23,12 @@ import {
   formatKickoff,
   formatMatchup,
   formatViewers,
+  gameTypeKind,
   gameTypeLabel,
   measurementLabel,
   showsTimeSlot,
 } from './format.js';
+import { makeGameTypeIcon } from './icons.js';
 import { currentTheme, makePill } from './pill.js';
 
 /** The element focus should return to once the panel closes, or null. */
@@ -238,7 +240,7 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
   if (gameType != null) {
     const gameTypeP = document.createElement('p');
     gameTypeP.className = 'panel-game-type';
-    gameTypeP.textContent = gameType;
+    gameTypeP.replaceChildren(makeGameTypeIcon(gameTypeKind(data, i)), document.createTextNode(gameType));
     children.push(gameTypeP);
   }
 

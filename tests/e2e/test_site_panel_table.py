@@ -341,6 +341,32 @@ def test_panel_shows_conferences_game_type_and_gated_slot_label(
     assert "CFP semifinal" in body5
 
 
+def test_panel_game_type_line_has_matching_icon_before_label(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """A2a: a bowl or playoff game's game-type line shows its icon first,
+    then the label; a regular-season game has no game-type line and keeps
+    the long slot label on the panel's date line (A1 is tooltip-only)."""
+    open_app(guarded_page, "")
+
+    guarded_page.evaluate("window.__testHooks.openPanel(7)")
+    bowl = guarded_page.locator("#panel-body .panel-game-type")
+    assert bowl.locator("svg.game-type-icon").get_attribute("data-kind") == "bowl"
+    assert bowl.locator("svg.game-type-icon").get_attribute("aria-hidden") == "true"
+    assert bowl.evaluate("el => el.firstElementChild.tagName.toLowerCase()") == "svg"
+    assert "Bowl" in bowl.inner_text()
+
+    guarded_page.evaluate("window.__testHooks.openPanel(5)")
+    playoff = guarded_page.locator("#panel-body .panel-game-type")
+    assert playoff.locator("svg.game-type-icon").get_attribute("data-kind") == "playoff"
+    assert playoff.evaluate("el => el.firstElementChild.tagName.toLowerCase()") == "svg"
+    assert "CFP semifinal" in playoff.inner_text()
+
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    assert guarded_page.locator("#panel-body .panel-game-type").count() == 0
+    assert "Noon (before 2 PM ET)" in guarded_page.inner_text("#panel-body")
+
+
 def test_panel_and_table_network_pills_have_wcag_aa_colors(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:

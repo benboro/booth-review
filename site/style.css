@@ -869,6 +869,10 @@ input[type="checkbox"] {
   margin-right: var(--space-xs);
 }
 
+.panel-game-type .game-type-icon {
+  margin-right: var(--space-xs);
+}
+
 /* ---------- Chart area ---------- */
 
 /* `#chart-area`'s own children stack top-to-bottom in flex-column flow (not
