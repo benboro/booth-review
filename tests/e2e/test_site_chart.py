@@ -7,6 +7,7 @@ D-15, D-16) -- proven against the fixture build served by
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 from collections.abc import Callable
@@ -1180,3 +1181,206 @@ def test_tooltip_mode_trace_config(
             assert meta == "highlight"
             assert t["hovertemplate"] == "%{text}<extra></extra>"
             assert len(t["text"]) == len(t["customdata"]) > 0
+
+
+# D-31: mirrors `site/modules/palette.js`'s ACCENT/PAGE_BG tokens -- a pure
+# JS module can't be imported from a Python test, so these are the same hex
+# literals, kept in sync by `test_compare_highlight_trace_config` and
+# `test_compare_shapes_have_no_edge_speckles` both exercising the real
+# built page (never a hand-rendered swatch).
+_ACCENT = {"light": "#111827", "dark": "#E5E7EB"}
+_PAGE_BG = {"light": "#FFFFFF", "dark": "#14161A"}
+
+# The fixture compare selection that assigns every COMPARE_SYMBOLS shape
+# plus the shared-game star (04.1-CONTEXT.md interfaces, confirmed against
+# `window.__testHooks.getView().symbols` rather than assumed): kris-venn,
+# sam-delgado, dale-harlow, casey-lund, in that selection order.
+_COMPARE_ALL_SHAPES_QUERY = "?people=kris-venn,sam-delgado,dale-harlow,casey-lund&mode=compare"
+
+# Reads every point on the highlight trace (`data.at(-1)`, `meta:
+# 'highlight'`) -- its raw x (to detect the D-03 n/a-strip sentinel), its
+# per-point symbol/size, and its page pixel via the same d2p conversion
+# `_DOT_PIXEL_JS` uses.
+_HIGHLIGHT_POINTS_JS = """
+() => {
+  const gd = document.getElementById('chart');
+  const layout = gd._fullLayout;
+  const rect = gd.getBoundingClientRect();
+  const trace = gd.data.at(-1);
+  const sentinel = gd.layout.annotations[0].x;
+  const out = [];
+  for (let i = 0; i < trace.x.length; i += 1) {
+    const symbol = Array.isArray(trace.marker.symbol)
+      ? trace.marker.symbol[i] : trace.marker.symbol;
+    const size = Array.isArray(trace.marker.size) ? trace.marker.size[i] : trace.marker.size;
+    out.push({
+      customdata: trace.customdata[i],
+      naSentinel: trace.x[i] === sentinel,
+      symbol,
+      size,
+      px: rect.left + layout._size.l + layout.xaxis.d2p(trace.x[i]),
+      py: rect.top + layout._size.t + layout.yaxis.d2p(trace.y[i]),
+    });
+  }
+  return out;
+}
+"""
+
+# Decodes a base64 PNG data URL (a `page.screenshot(clip=...)` capture)
+# through an in-page `Image`/canvas (CSP allows `img-src data: blob:`, so no
+# Pillow dependency is needed) and counts "speckle" pixels in the ring from
+# `innerR` to `outerR` px from the image center: within RGB distance 60 of
+# the theme's accent color and at least 60 away from the theme's page
+# background. Pixels within `other.half + 3` px of another highlighted
+# point's own center (translated into this crop's local coordinates) are
+# excluded, so a marker close enough to sit inside this 40x40 crop never
+# contaminates the count.
+_RING_SPECKLE_JS = """
+([dataUrl, accentHex, bgHex, innerR, outerR, others]) => new Promise((resolve) => {
+  const hexToRgb = (h) => [
+    parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16),
+  ];
+  const accent = hexToRgb(accentHex);
+  const bg = hexToRgb(bgHex);
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const data = ctx.getImageData(0, 0, img.width, img.height).data;
+    const cx = img.width / 2;
+    const cy = img.height / 2;
+    let count = 0;
+    for (let py = 0; py < img.height; py += 1) {
+      for (let px = 0; px < img.width; px += 1) {
+        const dist = Math.hypot(px - cx, py - cy);
+        if (dist < innerR || dist > outerR) continue;
+        let skip = false;
+        for (const o of others) {
+          if (Math.hypot(px - o.x, py - o.y) < o.half + 3) { skip = true; break; }
+        }
+        if (skip) continue;
+        const idx = (py * img.width + px) * 4;
+        const dAccent = Math.hypot(data[idx] - accent[0], data[idx + 1] - accent[1],
+          data[idx + 2] - accent[2]);
+        const dBg = Math.hypot(data[idx] - bg[0], data[idx + 1] - bg[1], data[idx + 2] - bg[2]);
+        if (dAccent < 60 && dBg >= 60) count += 1;
+      }
+    }
+    resolve(count);
+  };
+  img.src = dataUrl;
+})
+"""
+
+
+def _speckle_count(
+    page: Page,
+    center_px: float,
+    center_py: float,
+    theme: str,
+    marker_half: float,
+    other_points: list[dict[str, Any]],
+) -> int:
+    """Screenshots a 40x40 box centered on one highlight marker and returns
+    the ring-speckle pixel count around it (D-31)."""
+    clip_x = center_px - 20
+    clip_y = center_py - 20
+    shot = page.screenshot(clip={"x": clip_x, "y": clip_y, "width": 40, "height": 40})
+    data_url = "data:image/png;base64," + base64.b64encode(shot).decode("ascii")
+    others = [
+        {"x": other["px"] - clip_x, "y": other["py"] - clip_y, "half": other["size"] / 2}
+        for other in other_points
+    ]
+    count = page.evaluate(
+        _RING_SPECKLE_JS,
+        [data_url, _ACCENT[theme], _PAGE_BG[theme], marker_half + 3, 20, others],
+    )
+    return int(count)
+
+
+def _boxes_overlap(a: dict[str, Any], b: dict[str, Any], pad: float = 4) -> bool:
+    """Whether two highlight markers' own boxes (size, padded by `pad` on
+    each side) overlap -- a point this close to another is skipped entirely
+    rather than tested, since its own 40x40 crop would be contaminated no
+    matter how the ring-pixel exclusion above is tuned."""
+    half_a = a["size"] / 2 + pad
+    half_b = b["size"] / 2 + pad
+    return abs(a["px"] - b["px"]) < half_a + half_b and abs(a["py"] - b["py"]) < half_a + half_b
+
+
+@pytest.mark.parametrize("color_scheme", ["light", "dark"])
+def test_compare_shapes_have_no_edge_speckles(
+    guarded_page: Page, open_app: Callable[[Page, str], None], color_scheme: str
+) -> None:
+    """D-31: in compare mode, every non-circle highlight marker (square,
+    diamond, triangle-up, star) renders with no accent-colored speckle
+    pixels in the ring just outside its own edge, in both themes.
+
+    Diagnosed empirically against this real headless build before writing
+    the assertion (04.1-13-SUMMARY.md): headless Chromium (SwiftShader)
+    does reproduce a small version of the artifact -- 1 ring-speckle pixel
+    on each of the fixture's two diamond markers (2 total), zero on the
+    square/triangle-up/star markers, with the pre-fix 1.5px accent
+    `marker.line` border; 0 total with the border removed. Confirms the
+    UAT's suspected cause (04.1-CONTEXT.md interfaces) rather than assuming
+    it.
+    """
+    guarded_page.set_viewport_size({"width": 1280, "height": 800})
+    guarded_page.emulate_media(color_scheme=color_scheme)
+    open_app(guarded_page, _COMPARE_ALL_SHAPES_QUERY)
+    guarded_page.locator("#chart").scroll_into_view_if_needed()
+    points = guarded_page.evaluate(_HIGHLIGHT_POINTS_JS)
+    # Move the mouse off the chart first so no tooltip/hover label is
+    # showing in any of the screenshots below.
+    guarded_page.mouse.move(5, 5)
+    guarded_page.wait_for_timeout(100)
+
+    total = 0
+    tested = 0
+    for point in points:
+        if point["symbol"] == "circle" or point["naSentinel"]:
+            continue
+        others = [p for p in points if p["customdata"] != point["customdata"]]
+        if any(_boxes_overlap(point, other) for other in others):
+            continue
+        tested += 1
+        total += _speckle_count(
+            guarded_page, point["px"], point["py"], color_scheme, point["size"] / 2, others
+        )
+
+    assert tested > 0, "no non-circle highlight marker was testable in this fixture selection"
+    assert total == 0, f"{total} speckle pixel(s) found around compare-mode highlight markers"
+
+
+def test_compare_highlight_trace_config(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-31: the highlight trace (`data.at(-1)`, `meta: 'highlight'`) never
+    sets a `marker.line` width above 0 on a non-circle compare-mode point --
+    `marker.line.width` is either an array (0 at every non-circle index) or
+    a scalar 0 -- and every non-circle highlight marker is at least 12px so
+    it still reads as highlighted without the border."""
+    open_app(guarded_page, _COMPARE_ALL_SHAPES_QUERY)
+    trace = guarded_page.evaluate(
+        "() => { const t = document.getElementById('chart').data.at(-1); "
+        "return { meta: t.meta, symbol: t.marker.symbol, size: t.marker.size, "
+        "lineWidth: t.marker.line.width }; }"
+    )
+    assert trace["meta"] == "highlight"
+    symbols = trace["symbol"]
+    sizes = trace["size"]
+    line_width = trace["lineWidth"]
+    assert isinstance(symbols, list) and len(symbols) > 0
+    assert any(symbol != "circle" for symbol in symbols), (
+        "fixture selection has no non-circle compare shape to check"
+    )
+
+    for i, symbol in enumerate(symbols):
+        if symbol == "circle":
+            continue
+        width = line_width[i] if isinstance(line_width, list) else line_width
+        assert width == 0, f"non-circle point {i} ({symbol}) has marker.line.width {width}"
+        assert sizes[i] >= 12, f"non-circle point {i} ({symbol}) has size {sizes[i]} < 12"
