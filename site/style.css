@@ -292,9 +292,31 @@ li[role="option"][aria-selected="true"] .option-check::after {
   cursor: pointer;
 }
 
+/* D-30: an unmistakable pressed state -- a filled accent background with
+   inverse (var(--bg)) text, at least 14:1 in both themes, plus the reserved
+   check slot below. `font-weight` stays unchanged so bolding the label text
+   never resizes the button (which would itself shift the row this fix is
+   meant to stop moving). */
 .toggle[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--bg);
   border-color: var(--accent);
-  color: var(--accent);
+}
+
+/* D-30: a reserved check slot present in both pressed states (`::before` on
+   the bare `[aria-pressed]` attribute selector, matching `"true"` or
+   `"false"`) so the button's own width never changes when Compare/Called
+   together toggles -- only `visibility` flips. */
+.toggle[aria-pressed]::before {
+  content: "✓" / "";
+  display: inline-block;
+  width: 1em;
+  margin-right: var(--space-xs);
+  visibility: hidden;
+}
+
+.toggle[aria-pressed="true"]::before {
+  visibility: visible;
 }
 
 .toggle:disabled {
@@ -302,18 +324,32 @@ li[role="option"][aria-selected="true"] .option-check::after {
   cursor: not-allowed;
 }
 
-/* D-25a: an explicit rule so dark mode never falls back to the UA's own
-   white button face -- unreadable text was the reported defect. `.toggle`
-   (above) already covers this now that `#clear-selection` carries that
-   class too, but this keeps the fix in force even if that class ever
-   drops. */
+/* D-30: Clear selection is its own kind of control -- a dashed secondary
+   treatment, never the toggle's filled/outlined look and never Clear all
+   filters' `--reset` red, so the two "clear" actions read as distinct.
+   Dashed `--muted` on `--bg` clears 3:1 in both themes (about 7.5:1 light,
+   7.3:1 dark). The explicit `background`/`color` (D-25a) keeps dark mode
+   from ever falling back to the UA's own white button face. */
 #clear-selection {
+  font: var(--font-label);
+  padding: var(--space-sm) var(--space-md);
   background: var(--bg);
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px dashed var(--muted);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#clear-selection::before {
+  content: "×" / "";
+  margin-right: var(--space-xs);
 }
 
 .chip-glyph {
+  display: inline-block;
+  flex: none;
+  width: 1em;
+  text-align: center;
   font-size: 12px;
 }
 

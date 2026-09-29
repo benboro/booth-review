@@ -280,13 +280,15 @@ function renderChips(data, state) {
     const li = document.createElement('li');
     li.className = 'chip';
 
-    if (state.compare) {
-      const glyph = document.createElement('span');
-      glyph.className = 'chip-glyph';
-      glyph.setAttribute('aria-hidden', 'true');
-      glyph.textContent = COMPARE_GLYPHS[position] ?? '';
-      li.appendChild(glyph);
-    }
+    // D-30: this slot is always present (never conditional on
+    // `state.compare`) so toggling Compare only changes its text, never
+    // whether the chip has one -- the fixed-width `.chip-glyph` CSS rule
+    // then means toggling Compare shifts no chip or toggle button.
+    const glyph = document.createElement('span');
+    glyph.className = 'chip-glyph';
+    glyph.setAttribute('aria-hidden', 'true');
+    glyph.textContent = state.compare ? (COMPARE_GLYPHS[position] ?? '') : '';
+    li.appendChild(glyph);
 
     const nameSpan = document.createElement('span');
     nameSpan.textContent = person.name;
