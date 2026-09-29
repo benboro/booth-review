@@ -474,39 +474,76 @@ def test_table_row_link_click_follows_the_link_and_does_not_open_the_panel(
 
 
 @pytest.mark.parametrize(("width", "height", "min_shrink"), [(1280, 800, 250), (800, 900, 200)])
-def test_opening_the_panel_pushes_the_chart_and_never_overlaps(
+def test_panel_opens_beside_the_chart_only(
     guarded_page: Page,
     open_app: Callable[[Page, str], None],
     width: int,
     height: int,
     min_shrink: int,
 ) -> None:
-    """D-01, SITE-20: opening the panel narrows the chart through a real
-    grid column (Plotly resizes) and never overlaps the chart, the legend
-    chips, or the table -- the table's own right edge stays clear of the
-    panel's left edge too."""
+    """D-23, SITE-20: opening the panel narrows only the chart through a real
+    grid column (Plotly resizes) -- the matched-games table stays exactly
+    where and how wide it was. The panel never overlaps the chart, the
+    legend chips, or the table, sits above the table (not beside it), and
+    matches the chart area's own height (replaces plan 04.1-05's
+    both-rows-span behavior)."""
     guarded_page.set_viewport_size({"width": width, "height": height})
     open_app(guarded_page, "?people=dale-harlow")
     expect(guarded_page.locator("#games-table")).to_be_visible()
 
-    before = _chart_svg_width(guarded_page)
-    guarded_page.evaluate("window.__testHooks.openPanel(0)")
-    guarded_page.wait_for_function("window.__testHooks.panelResizes > 0")
-    after = _chart_svg_width(guarded_page)
-    assert before - after >= min_shrink, f"chart width only shrank by {before - after}px"
+    before_chart_width = _chart_svg_width(guarded_page)
+    table_box_before = guarded_page.locator("#games-table").bounding_box()
+    chart_area_box_before = guarded_page.locator("#chart-area").bounding_box()
+    legend_box_before = guarded_page.locator("#legend-chips").bounding_box()
+    assert table_box_before is not None
+    assert chart_area_box_before is not None
+    assert legend_box_before is not None
 
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    guarded_page.wait_for_function(
+        "(args) => { "
+        "const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width; "
+        "return (args.before - w) >= args.minShrink; }",
+        arg={"before": before_chart_width, "minShrink": min_shrink},
+        timeout=3000,
+    )
+
+    table_box = guarded_page.locator("#games-table").bounding_box()
+    chart_area_box = guarded_page.locator("#chart-area").bounding_box()
     panel_box = guarded_page.locator("#detail-panel").bounding_box()
     chart_box = guarded_page.locator("#chart").bounding_box()
     legend_box = guarded_page.locator("#legend-chips").bounding_box()
-    table_box = guarded_page.locator("#games-table").bounding_box()
+    matched_games_box = guarded_page.locator("#matched-games").bounding_box()
+    assert table_box is not None
+    assert chart_area_box is not None
     assert panel_box is not None
     assert chart_box is not None
     assert legend_box is not None
-    assert table_box is not None
+    assert matched_games_box is not None
+
+    # The table stays exactly where and how wide it was -- the panel narrows
+    # only the chart (D-23).
+    table_right = table_box["x"] + table_box["width"]
+    table_right_before = table_box_before["x"] + table_box_before["width"]
+    assert abs(table_box["x"] - table_box_before["x"]) <= 1
+    assert abs(table_right - table_right_before) <= 1
+    assert abs(table_box["width"] - table_box_before["width"]) <= 1
+
     assert not _boxes_intersect(panel_box, chart_box)
     assert not _boxes_intersect(panel_box, legend_box)
     assert not _boxes_intersect(panel_box, table_box)
-    assert table_box["x"] + table_box["width"] <= panel_box["x"]
+    assert panel_box["y"] + panel_box["height"] <= matched_games_box["y"] + 1
+    assert abs(panel_box["height"] - chart_area_box["height"]) <= 2
+
+    # #chart-area's own height tracks the chart plot's fixed height, plus
+    # whatever the D-04 chip legend row needs (`flex-wrap: wrap`, pre-
+    # existing, unrelated to this plan's panel geometry) -- at the tablet
+    # width the narrower chart area can wrap the legend chips onto an
+    # extra line. Any #chart-area height change beyond that legend-driven
+    # growth would mean the panel geometry itself is pushing the chart row
+    # taller, which D-23 forbids.
+    legend_growth = max(0.0, legend_box["height"] - legend_box_before["height"])
+    assert abs(chart_area_box["height"] - chart_area_box_before["height"]) <= legend_growth + 2
 
 
 @pytest.mark.parametrize(("width", "height"), [(1280, 800), (800, 900)])
@@ -613,24 +650,95 @@ def test_closing_the_panel_restores_the_chart_width_under_reduced_motion(
     guarded_page.wait_for_function("document.getElementById('detail-panel').hidden === true")
 
 
-def test_panel_inner_stays_visible_in_its_own_column_while_scrolled_to_the_table(
+def test_table_row_click_scrolls_chart_and_panel_into_view(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-01: the sticky `.panel-inner` stays visible inside the panel's own
-    column even after scrolling down to click a table row far below the
-    fold -- a table-row click far down the page still shows the panel."""
+    """D-23: a table row can be far below the fold; clicking it opens the
+    panel beside the chart and scrolls both into view."""
     guarded_page.set_viewport_size({"width": 1280, "height": 800})
     open_app(guarded_page, "?people=dale-harlow")
 
-    last_row = guarded_page.locator("#games-table tbody tr").last
-    last_row.scroll_into_view_if_needed()
-    last_row.click()
+    first_row = guarded_page.locator("#games-table tbody tr").first
+    matchup = first_row.locator("td").nth(1).inner_text()
+
+    guarded_page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+    first_row.click()
+
+    guarded_page.wait_for_function(
+        "() => { "
+        "const top = document.getElementById('chart-area').getBoundingClientRect().top; "
+        "return top >= -1 && top < window.innerHeight; }",
+        timeout=3000,
+    )
+
+    panel_box = guarded_page.locator("#detail-panel").bounding_box()
+    assert panel_box is not None
+    viewport_width = guarded_page.evaluate("window.innerWidth")
+    viewport_height = guarded_page.evaluate("window.innerHeight")
+    viewport_box = {"x": 0, "y": 0, "width": viewport_width, "height": viewport_height}
+    assert _boxes_intersect(panel_box, viewport_box)
+    assert guarded_page.inner_text("#panel-title") == matchup
+
+
+def test_long_panel_content_scrolls_inside_the_panel(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-23: longer panel content scrolls inside the panel and never makes
+    the chart row taller -- dot 7 (a flag, a combined-feeds note, and a
+    3-person crew: the fixture's richest panel body) is the stress case."""
+    guarded_page.set_viewport_size({"width": 1280, "height": 800})
+    open_app(guarded_page, "?people=dale-harlow")
+
+    chart_area_box_before = guarded_page.locator("#chart-area").bounding_box()
+    assert chart_area_box_before is not None
+
+    guarded_page.evaluate("window.__testHooks.openPanel(7)")
     guarded_page.wait_for_function("document.body.classList.contains('panel-open')")
 
+    overflow_y = guarded_page.evaluate(
+        "getComputedStyle(document.querySelector('.panel-inner')).overflowY"
+    )
+    assert overflow_y == "auto"
+
+    panel_box = guarded_page.locator("#detail-panel").bounding_box()
     inner_box = guarded_page.locator(".panel-inner").bounding_box()
+    chart_area_box = guarded_page.locator("#chart-area").bounding_box()
+    assert panel_box is not None
     assert inner_box is not None
-    viewport_height = guarded_page.evaluate("window.innerHeight")
-    assert 0 <= inner_box["y"] < viewport_height
+    assert chart_area_box is not None
+    assert abs(inner_box["height"] - panel_box["height"]) <= 1
+    assert abs(chart_area_box["height"] - chart_area_box_before["height"]) <= 2
+
+    overflows = guarded_page.evaluate(
+        "() => { const el = document.querySelector('.panel-inner'); "
+        "return el.scrollHeight > el.clientHeight + 1; }"
+    )
+    if overflows:
+        before_scroll_y = guarded_page.evaluate("window.scrollY")
+        guarded_page.evaluate("document.querySelector('.panel-inner').scrollTop = 40")
+        after_scroll_top = guarded_page.evaluate("document.querySelector('.panel-inner').scrollTop")
+        after_scroll_y = guarded_page.evaluate("window.scrollY")
+        assert after_scroll_top > 0
+        assert after_scroll_y == before_scroll_y
+
+
+def test_phone_table_never_scrolls_the_page(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Phone table overflow (deferred-items.md, folded into this plan's Task
+    2 step 5): a filled matched-games table on a phone scrolls inside its
+    own container, never the page (SITE-20, sign-off step 10's "no
+    horizontal scroll"). Tapping a row still opens the bottom sheet (D-06)."""
+    open_app(mobile_page, "?people=dale-harlow")
+    expect(mobile_page.locator("#games-table")).to_be_visible()
+
+    scroll_width = mobile_page.evaluate("document.documentElement.scrollWidth")
+    inner_width = mobile_page.evaluate("window.innerWidth")
+    assert scroll_width <= inner_width
+
+    first_row = mobile_page.locator("#games-table tbody tr").first
+    first_row.tap()
+    mobile_page.wait_for_function("document.body.classList.contains('panel-open')")
 
 
 def test_mobile_tap_opens_bottom_sheet_with_44px_close(

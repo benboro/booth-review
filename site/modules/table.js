@@ -114,7 +114,18 @@ function buildRow(data, state, onDetails, i) {
     if (ev.target instanceof Element && ev.target.closest('a')) return;
     onDetails(i);
   });
-  tr.addEventListener('keydown', (ev) => {
+  // `keyup`, not `keydown` (D-06 bug fix): `onDetails` moves focus to
+  // `#panel-close` (panel.js openPanel). If that happened during this row's
+  // own `keydown` handler, the still-pending `keyup` for the same physical
+  // Enter press would then be dispatched to the now-focused `#panel-close`
+  // button -- and a browser natively synthesizes a click from a focused
+  // button's own Enter `keyup`, immediately closing the panel this same
+  // keypress just opened (confirmed empirically: a trusted `click` fired on
+  // `#panel-close` right after the row's Enter press). Handling this on
+  // `keyup` instead means our own handler runs on the *last* event of the
+  // physical keypress, so there is no further keyup left to leak to the
+  // newly focused button once focus moves.
+  tr.addEventListener('keyup', (ev) => {
     if (ev.key !== 'Enter') return;
     if (ev.target instanceof Element && ev.target.closest('a')) return;
     onDetails(i);

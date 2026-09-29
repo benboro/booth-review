@@ -392,14 +392,14 @@ body.app {
 #site-footer { grid-area: footer; }
 #detail-panel { grid-area: panel; }
 
-/* Tablet/desktop: a real two-column grid, the panel column spanning both the
-   chart row AND the table row (D-01: opening the panel narrows both, per
-   the locked decision -- this refines the UI-SPEC's grid, which spans only
-   the chart row). The column always exists structurally; only its own
-   content width (below, "Detail panel") animates open/closed -- never
-   animate `grid-template-columns` itself (Pitfall 1: interpolating a grid
-   track size fires the vendored Plotly bundle's internal ResizeObserver
-   repeatedly mid-transition, causing visible chart jank). */
+/* Tablet/desktop: a real two-column grid, but the panel column spans only
+   the chart row (D-23: replaces plan 04.1-05's both-rows span -- opening
+   the panel narrows only the chart, never the matched-games table, which
+   always stays full width). The column always exists structurally; only
+   its own content width (below, "Detail panel") animates open/closed --
+   never animate `grid-template-columns` itself (Pitfall 1: interpolating a
+   grid track size fires the vendored Plotly bundle's internal
+   ResizeObserver repeatedly mid-transition, causing visible chart jank). */
 @media (min-width: 641px) {
   body.app {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -408,7 +408,7 @@ body.app {
       "toolbar toolbar"
       "selection selection"
       "main    panel"
-      "table   panel"
+      "table   table"
       "footer  footer";
   }
 }
@@ -952,12 +952,17 @@ input[type="checkbox"] {
 
 /* ---------- Detail panel ---------- */
 
-/* Tablet/desktop (≥641px): a push grid column, not an overlay (D-01). The
-   column's own width animates 0 -> 360px/320px; its content is
-   `.panel-inner`, `position: sticky` inside that column so it stays in view
-   while the page scrolls past a tall table, without ever leaving its own
-   column -- it can never overlap the chart, the legend chips, or the table
-   (D-01, SITE-20). This is not the chart (D-05 still holds: the chart
+/* Tablet/desktop (≥641px): a push grid column, not an overlay (D-01), and
+   beside the chart only -- the panel's grid area spans just the "main" row
+   (D-23: replaces plan 04.1-05's both-rows span). `align-self: stretch`
+   makes `#detail-panel` exactly as tall as that row, which #chart-area
+   alone sizes (an absolutely positioned `.panel-inner` contributes no
+   height of its own, so it can never make the row taller than the chart).
+   The column's own width still animates 0 -> 360px/320px; `.panel-inner`
+   fills the column via absolute positioning and scrolls internally
+   (`overflow-y: auto`) when its content runs longer than the chart area,
+   so it can never overlap the chart, the legend chips, or the table (D-01,
+   D-23, SITE-20). This is not the chart (D-05 still holds: the chart
    itself is never sticky). Phones (≤640px) keep the panel as a true
    `position: fixed` overlay bottom sheet instead, below -- the one place an
    overlay is still correct, since nothing else needs that screen region at
@@ -967,6 +972,7 @@ input[type="checkbox"] {
     position: relative;
     width: 0;
     min-width: 0;
+    align-self: stretch;
     overflow: hidden;
     background: var(--surface);
     border-left: 1px solid var(--border);
@@ -978,10 +984,11 @@ input[type="checkbox"] {
   }
 
   .panel-inner {
-    position: sticky;
+    position: absolute;
     top: 0;
+    left: 0;
+    bottom: 0;
     width: 360px;
-    max-height: 100vh;
     overflow-y: auto;
     box-sizing: border-box;
     padding: var(--space-lg);
@@ -1144,6 +1151,20 @@ input[type="checkbox"] {
   #matched-games {
     padding-left: var(--space-md);
     padding-right: var(--space-md);
+  }
+
+  /* Phone table overflow (deferred-items.md, folded into this plan's Task 2
+     step 5): `.games-table` has no `table-layout: fixed`, so a row with the
+     fixed-width Source cell's two links can force the table's natural
+     content width past `#matched-games`'s own container width, growing
+     `document.documentElement.scrollWidth` past the viewport and scrolling
+     the whole page sideways (SITE-20's "nothing overlaps/scrolls the page
+     at any width"). Scoping the horizontal scroll to `#matched-games`
+     itself keeps rows tappable (D-06's whole-row click still works inside
+     a scrolled container) while the page itself never scrolls. */
+  #matched-games {
+    overflow-x: auto;
+    max-width: 100%;
   }
 
   /* D-04: on phones the legend chip row renders below the chart, not above

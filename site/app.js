@@ -217,6 +217,16 @@ function tableRenderer({ data, state, view }) {
     },
     onDetails(i) {
       openDetailPanel(i);
+      // D-23: a table row can be far below the fold; bring the chart and
+      // the panel beside it into view. Chart dot clicks don't need this --
+      // the chart is already visible when a dot is clicked. Phones keep
+      // the bottom sheet, which needs no scroll of its own.
+      if (!mobileMedia.matches) {
+        document.getElementById('chart-area').scrollIntoView({
+          block: 'start',
+          behavior: reducedMotionMedia.matches ? 'auto' : 'smooth',
+        });
+      }
     },
   });
 }
