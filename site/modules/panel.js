@@ -32,14 +32,27 @@ import { currentTheme, makePill } from './pill.js';
 /** The element focus should return to once the panel closes, or null. */
 let previouslyFocused = null;
 
-/** `closePanel`'s pending post-transition hide, or null (WR-03). */
+/** `closePanel`'s pending fallback hide timer, or null (WR-03, D-24). */
 let hideTimer = null;
 
-/** Cancels a pending post-close hide, so it can't fire after a reopen. */
+/** The one-shot `transitionend`/`transitioncancel` listener `closePanel`
+ * registered on `#detail-panel`, or null (WR-03, D-24). Tracked so
+ * `cancelPendingHide` can remove it before a reopen fires it late. */
+let hideListenerTarget = null;
+let hideListener = null;
+
+/** Cancels a pending post-close hide -- both the fallback timer and the
+ * transition-event listener -- so neither can fire after a reopen (WR-03). */
 function cancelPendingHide() {
   if (hideTimer !== null) {
     window.clearTimeout(hideTimer);
     hideTimer = null;
+  }
+  if (hideListenerTarget !== null && hideListener !== null) {
+    hideListenerTarget.removeEventListener('transitionend', hideListener);
+    hideListenerTarget.removeEventListener('transitioncancel', hideListener);
+    hideListenerTarget = null;
+    hideListener = null;
   }
 }
 
@@ -319,22 +332,56 @@ export function openPanel(i, ctx) {
 
 /**
  * Closes the panel: removes `body.panel-open` immediately (driving the CSS
- * slide-out), hides `#detail-panel` after the 150ms transition (immediately
- * under `prefers-reduced-motion`), and restores focus to whatever was
- * focused before the panel opened.
+ * slide-out), hides `#detail-panel` once its own width/transform transition
+ * actually finishes (immediately under `prefers-reduced-motion`), and
+ * restores focus to whatever was focused before the panel opened.
+ *
+ * D-24: a bare 150ms hide timer raced the CSS transition -- setting
+ * `hidden` (display:none) at the same ~150ms mark as the transition's own
+ * natural end frequently interrupted it first, so the browser fired
+ * `transitioncancel` instead of `transitionend` for the tracked property,
+ * and app.js's `transitionend`-only resize listener never ran (confirmed
+ * empirically: a diagnostic listener logged `transitioncancel` for `width`
+ * at the transition's expected end time on every close). Hiding is now
+ * driven by the transition's own one-shot event (`transitionend` on a full
+ * close, `transitioncancel` on an interrupted one -- e.g. a close fired
+ * mid-transition, or this same race) instead of an independent timer, with
+ * a longer fallback timer only for the case where no transition event ever
+ * fires at all (e.g. the panel was already at width 0).
  */
 export function closePanel() {
   document.body.classList.remove('panel-open');
 
   const panelEl = document.getElementById('detail-panel');
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Phones transition `transform` (the bottom-sheet slide), desktop/tablet
+  // transition `width` (the push-layout column) -- see style.css's
+  // "Detail panel" section.
+  const isPhone = window.matchMedia('(max-width: 640px)').matches;
+  const propertyName = isPhone ? 'transform' : 'width';
+
+  cancelPendingHide();
+
   const hide = () => {
-    hideTimer = null;
+    cancelPendingHide();
     panelEl.hidden = true;
   };
-  cancelPendingHide();
-  if (reducedMotion) hide();
-  else hideTimer = window.setTimeout(hide, 150);
+
+  if (reducedMotion) {
+    hide();
+  } else {
+    const onTransitionEvent = (ev) => {
+      if (ev.target !== panelEl || ev.propertyName !== propertyName) return;
+      hide();
+    };
+    hideListenerTarget = panelEl;
+    hideListener = onTransitionEvent;
+    panelEl.addEventListener('transitionend', onTransitionEvent);
+    panelEl.addEventListener('transitioncancel', onTransitionEvent);
+    // Fallback: guarantees the panel still hides even if neither transition
+    // event ever fires (belt-and-suspenders, not the primary mechanism).
+    hideTimer = window.setTimeout(hide, 300);
+  }
 
   if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
     previouslyFocused.focus();

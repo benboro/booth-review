@@ -78,14 +78,61 @@ function resizeChartForPanel() {
 
 if (panelEl) {
   // The deterministic desktop/tablet path: once the panel column's own
-  // `width` transition finishes, resize the chart for its new container
-  // width (Pattern 1). Guarded to this element/property so a transition on
-  // some other panel-inner property (or a future added property) doesn't
-  // double-fire it.
-  panelEl.addEventListener('transitionend', (ev) => {
+  // `width` transition finishes (or is cancelled -- D-24, see panel.js
+  // closePanel's own comment: a close can interrupt the transition,
+  // firing `transitioncancel` instead of `transitionend` for the same
+  // property), resize the chart for its new container width (Pattern 1).
+  // Guarded to this element/property so a transition on some other
+  // panel-inner property (or a future added property) doesn't double-fire
+  // it.
+  const onPanelWidthTransition = (ev) => {
     if (ev.target !== panelEl || ev.propertyName !== 'width') return;
     resizeChartForPanel();
+  };
+  panelEl.addEventListener('transitionend', onPanelWidthTransition);
+  panelEl.addEventListener('transitioncancel', onPanelWidthTransition);
+}
+
+/** #chart-area's own container width, last recorded by the ResizeObserver
+ * below, or null before its first callback (D-24). */
+let lastChartAreaWidth = null;
+
+/** Trailing debounce timer for the ResizeObserver below (D-24). */
+let chartAreaResizeTimer = null;
+
+const chartAreaEl = document.getElementById('chart-area');
+if (chartAreaEl && typeof ResizeObserver === 'function') {
+  // D-24 belt-and-suspenders: every other resize trigger above is tied to a
+  // specific event (a transition ending, a reduced-motion/phone rAF call),
+  // so a path that doesn't fit any of those still leaves the chart stale.
+  // Observing the chart's own container directly catches every width
+  // change however it happened -- panel open/close by any path, a window
+  // resize, a future gutter change -- with one mechanism.
+  //
+  // Pitfall (RESEARCH Pitfall 1): never call Plotly's resize on every
+  // ResizeObserver frame -- during a continuous width change (e.g. the
+  // panel's own CSS transition, or a user dragging the window edge) that
+  // fires once per animation frame, and a scattergl redraw on every frame
+  // is the exact mid-transition jank Pitfall 1 describes. The first
+  // callback only records the container's initial width (ResizeObserver
+  // always fires once immediately on `observe()`); every later callback
+  // compares against the last recorded width and returns early when
+  // unchanged, otherwise records the new width and debounces the actual
+  // resize call by 100ms so it runs exactly once after the width settles.
+  const chartAreaObserver = new ResizeObserver((entries) => {
+    const entry = entries[0];
+    if (!entry) return;
+    const width = Math.round(entry.contentRect.width);
+    if (lastChartAreaWidth === null) {
+      lastChartAreaWidth = width;
+      return;
+    }
+    if (width === lastChartAreaWidth) return;
+    lastChartAreaWidth = width;
+    window.clearTimeout(chartAreaResizeTimer);
+    chartAreaResizeTimer = window.setTimeout(resizeChartForPanel, 100);
   });
+  chartAreaObserver.observe(chartAreaEl);
 }
 
 // Registered here, at module-evaluation time. This listener runs during
