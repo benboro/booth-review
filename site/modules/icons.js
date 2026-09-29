@@ -5,8 +5,14 @@
  * HTML tooltip (`tooltip.js`) and the detail panel (`panel.js`); the path data
  * lives here only.
  *
- * Decorative: each icon is `aria-hidden="true"` because its label ("Bowl", the
- * CFP round name) is always rendered as visible text beside it. Built with
+ * Colors come from CSS (`.game-type-icon[data-kind]` in style.css), never from
+ * here: the icons only draw in `currentColor`.
+ *
+ * Decorative by default: the icon is `aria-hidden="true"` because its label
+ * ("Bowl", the CFP round name) is rendered as visible text beside it (the
+ * detail panel). Pass `label` when the icon stands alone (the chart tooltip,
+ * which shows the icon only): it then becomes `role="img"` with that
+ * `aria-label` instead, and is not hidden from assistive tech. Built with
  * `createElementNS` + `setAttribute` from the constant path data below --
  * never any markup-injecting DOM API (T-04.1-25) -- and never from a data
  * string, so a malicious value can't become an element or attribute.
@@ -37,9 +43,11 @@ const ICON_PATHS = {
 /**
  * Builds the decorative icon for a game-type kind.
  * @param {"bowl"|"playoff"} kind - from `format.js#gameTypeKind`.
+ * @param {string} [label] - when given, the icon is an accessible image with
+ *   this accessible name instead of decorative.
  * @returns {SVGSVGElement|null} null for an unknown kind.
  */
-export function makeGameTypeIcon(kind) {
+export function makeGameTypeIcon(kind, label) {
   const paths = ICON_PATHS[kind];
   if (!paths) return null;
 
@@ -48,7 +56,12 @@ export function makeGameTypeIcon(kind) {
   svg.setAttribute('width', '1em');
   svg.setAttribute('height', '1em');
   svg.setAttribute('fill', 'currentColor');
-  svg.setAttribute('aria-hidden', 'true');
+  if (label) {
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', label);
+  } else {
+    svg.setAttribute('aria-hidden', 'true');
+  }
   svg.setAttribute('focusable', 'false');
   svg.setAttribute('class', 'game-type-icon');
   svg.setAttribute('data-kind', kind);

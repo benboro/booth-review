@@ -28,6 +28,12 @@
      --error today, kept as its own token so the two can diverge later
      without also changing the error banner's color. */
   --reset: #B3261E;
+  /* Game-type icon colors (notes-4 A1/A2a follow-up): trophy = gold, bowl =
+     bronze/copper. Each reaches 3:1 non-text contrast (WCAG 1.4.11) against
+     --surface, the tooltip and detail-panel background: light 3.67 / 5.03,
+     dark 9.90 / 5.13. */
+  --game-playoff: #A37800;
+  --game-bowl: #A8501C;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -40,6 +46,8 @@
     --muted: #9CA3AF;
     --error: #F2B8B5;
     --reset: #F2B8B5;
+    --game-playoff: #F5C518;
+    --game-bowl: #CD7F32;
   }
 }
 
@@ -895,14 +903,19 @@ input[type="checkbox"] {
 }
 
 /* Bowl / playoff icon (notes-4 A1/A2a): inline SVG in `currentColor` from
-   icons.js, shared by the tooltip and the detail panel. */
+   icons.js, shared by the tooltip and the detail panel. Each kind takes its
+   own color from the tokens above. */
 .game-type-icon {
   vertical-align: -0.125em;
   flex: none;
 }
 
-.tooltip-game-type .game-type-icon {
-  margin-right: var(--space-xs);
+.game-type-icon[data-kind="playoff"] {
+  color: var(--game-playoff);
+}
+
+.game-type-icon[data-kind="bowl"] {
+  color: var(--game-bowl);
 }
 
 .panel-game-type .game-type-icon {

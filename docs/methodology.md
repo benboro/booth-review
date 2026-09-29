@@ -18,7 +18,7 @@ the hover, the detail panel, and the matched-games table. No dot is ever
 colored by an individual announcer or crew.
 
 A dot's tooltip is kept short: the matchup and final score, the date and
-kickoff time (marked Bowl or with the playoff round for postseason games), the
+kickoff time (with a bowl or trophy icon for postseason games), the
 networks, the crew, and the viewer count. Click or tap the
 dot to open its detail panel, which also has the measurement label, both
 x-axis values, any flags, and, for a Saturday game, its time slot.

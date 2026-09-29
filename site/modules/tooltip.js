@@ -47,20 +47,23 @@ const EDGE_MARGIN = 8;
 /**
  * Builds the shared, DOM-free content model for telecast `i`'s tooltip: the
  * UI-SPEC's minimal line order -- matchup+score, date+kickoff (a bowl or
- * playoff game appends its game type, "Bowl" / the CFP round, notes-4 A1; the
+ * playoff game appends its game type, shown as an icon only in the HTML
+ * tooltip and as the "Bowl" / CFP round text in the fallback, notes-4 A1; the
  * time-slot label is panel-only), slash-delimited networks (primary first,
  * each already stripped of any nested methodology parenthetical), one
  * "Position: Name" line per main-feed crew member, viewers, the active axis
  * value, and a closing "Click for details →" hint. Conferences, the time
  * slot, the full outlet list, the measurement-type badge, era/event flags,
  * and any scoring-source note are panel-only (SITE-25) -- never repeated
- * here. `dateText` is the date and kickoff only, `gameType` the postseason
- * marker (drawn with an icon by `renderTooltipContent`), and `dateLine` both
- * as one plain string for the text-only fallback (`chart.js#hoverText`).
+ * here. `dateText` is the date and kickoff only; `gameType` the postseason
+ * marker, which `renderTooltipContent` draws as an icon alone (`iconLabel` is
+ * its accessible name); and `dateLine` the date plus the text `label` as one
+ * plain string for the text-only fallback (`chart.js#hoverText`), which can't
+ * draw an SVG.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
  * @param {{axis: "pregame"|"excitement"}} opts
- * @returns {{title: string, dateText: string, gameType: {kind: "bowl"|"playoff", label: string}|null, dateLine: string, networks: {name: string, family: string}[], crewLines: string[], viewersLine: string, axisLine: string, hint: string}}
+ * @returns {{title: string, dateText: string, gameType: {kind: "bowl"|"playoff", label: string, iconLabel: string}|null, dateLine: string, networks: {name: string, family: string}[], crewLines: string[], viewersLine: string, axisLine: string, hint: string}}
  */
 export function tooltipModel(data, i, { axis }) {
   const t = data.t;
@@ -69,7 +72,9 @@ export function tooltipModel(data, i, { axis }) {
 
   const dateText = [formatDate(t.date[i]), formatKickoff(t.kickoff[i]) ?? 'Kickoff time not recorded'].join(' · ');
   const kind = gameTypeKind(data, i);
-  const gameType = kind ? { kind, label: gameTypeLabel(data, i) } : null;
+  const gameType = kind
+    ? { kind, label: gameTypeLabel(data, i), iconLabel: kind === 'bowl' ? 'Bowl game' : gameTypeLabel(data, i) }
+    : null;
   const dateLine = gameType ? `${dateText} · ${gameType.label}` : dateText;
 
   const primaryNetwork = data.lookups.networks[t.network[i]];
@@ -123,10 +128,11 @@ export function renderTooltipContent(el, model, theme) {
   const dateLine = document.createElement('div');
   dateLine.appendChild(document.createTextNode(model.dateText));
   if (model.gameType) {
+    // Icon only: no visible text, so the icon carries the meaning through
+    // its own accessible name.
     const type = document.createElement('span');
     type.className = 'tooltip-game-type';
-    type.appendChild(makeGameTypeIcon(model.gameType.kind));
-    type.appendChild(document.createTextNode(model.gameType.label));
+    type.appendChild(makeGameTypeIcon(model.gameType.kind, model.gameType.iconLabel));
     dateLine.appendChild(document.createTextNode(' · '));
     dateLine.appendChild(type);
   }
