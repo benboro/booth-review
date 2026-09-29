@@ -217,27 +217,3 @@ export function searchPeople(data, query, limit = 8) {
   );
   return matches.slice(0, limit).map(({ _rank, ...rest }) => rest);
 }
-
-/**
- * Searches teams by name, accent- and case-insensitively, with the same
- * ranking as `searchPeople`.
- * @param {object} data - a `prepareData` result.
- * @param {string} query
- * @param {number} [limit]
- * @returns {{index: number, slug: string, name: string}[]}
- */
-export function searchTeams(data, query, limit = 8) {
-  const normalizedQuery = normalizeName(query);
-  if (normalizedQuery === '') return [];
-  const matches = [];
-  for (const team of data.lookups.teams) {
-    const index = data.teamIndexBySlug.get(slugify(team.name));
-    const rank = candidateRank(normalizeName(team.name), normalizedQuery);
-    if (rank === -1) continue;
-    matches.push({ index, slug: data.teamSlugs[index], name: team.name, _rank: rank });
-  }
-  matches.sort(
-    (a, b) => a._rank - b._rank || a.name.localeCompare(b.name) || a.slug.localeCompare(b.slug),
-  );
-  return matches.slice(0, limit).map(({ _rank, ...rest }) => rest);
-}
