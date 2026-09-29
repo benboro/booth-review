@@ -310,6 +310,15 @@ h1, h2, h3 {
   column-gap: var(--space-sm);
   text-align: left;
   margin-top: var(--space-xs);
+  /* A flex container forms its own formatting context (no CSS2.1 "strut"),
+     so with no selection both #summary-count and #summary-detail are empty
+     text and the whole box collapses to 0 height -- appearing "hidden" to
+     a real visitor and to Playwright's own visibility check alike (Rule 1,
+     found while writing test_site_layout.py's
+     test_selection_row_hidden_with_no_people). A block #summary (its
+     pre-flex shape) never had this problem, since an empty inline "strut"
+     still reserves one line of height. */
+  min-height: 1.5em;
 }
 
 #summary-detail {

@@ -508,9 +508,11 @@ def test_toolbar_order_and_clear_all_contrast(
 ) -> None:
     """D-02/SITE-27: "Clear all filters" is the first visible toolbar item,
     followed by the Announcers trigger and the seven filter triggers in
-    order (D-21), and its computed color against the toolbar background
-    clears WCAG AA's 4.5:1 minimum -- the Phase 4 defect was a low-contrast
-    secondary tone."""
+    order (D-21). D-25: its computed color against the *toolbar's own*
+    background (its own background is transparent) clears WCAG AA's 4.5:1
+    minimum, and its color/border-top-color differ from a plain filter
+    trigger's -- a style distinct from the filter buttons, not the Phase 4
+    low-contrast secondary tone."""
     open_app(guarded_page, "")
 
     ids = guarded_page.evaluate(
@@ -529,13 +531,19 @@ def test_toolbar_order_and_clear_all_contrast(
         "trigger-postseason",
     ]
 
-    colors = guarded_page.eval_on_selector(
-        "#clear-filters",
-        "el => { const s = getComputedStyle(el); return [s.color, s.backgroundColor]; }",
+    styles = guarded_page.evaluate(
+        "() => { const toolbarBg = getComputedStyle(document.getElementById('toolbar'))"
+        ".backgroundColor; "
+        "const clear = getComputedStyle(document.getElementById('clear-filters')); "
+        "const trig = getComputedStyle(document.getElementById('trigger-seasons')); "
+        "return { toolbarBg, clearColor: clear.color, clearBorderTop: clear.borderTopColor, "
+        "trigColor: trig.color, trigBorderTop: trig.borderTopColor }; }"
     )
-    fg = _parse_rgb(colors[0])
-    bg = _parse_rgb(colors[1])
+    fg = _parse_rgb(styles["clearColor"])
+    bg = _parse_rgb(styles["toolbarBg"])
     assert _contrast_ratio(fg, bg) >= 4.5
+    assert styles["clearColor"] != styles["trigColor"]
+    assert styles["clearBorderTop"] != styles["trigBorderTop"]
 
 
 def test_chrome_buttons_use_the_theme_text_color_in_dark_mode(
@@ -543,9 +551,10 @@ def test_chrome_buttons_use_the_theme_text_color_in_dark_mode(
 ) -> None:
     """Buttons don't inherit `color`, so without an explicit rule the toolbar/
     sheet/panel controls fall back to the UA's button text color, unreadable
-    against the dark theme's background. `#clear-filters` no longer belongs
-    here (D-25 gives it its own distinct `--reset` color); `#clear-selection`
-    (D-25a) takes its place, checked with a person selected so it's visible."""
+    against the dark theme's background. "Clear all filters" no longer
+    belongs in this list (D-25 gives it its own distinct `--reset` color);
+    Clear selection (D-25a) takes its place, checked with a person selected
+    so it's visible."""
     guarded_page.emulate_media(color_scheme="dark")
     open_app(guarded_page, "")
     _add_person_by_query(guarded_page, "Dale Harlow")
