@@ -111,8 +111,14 @@ h1, h2, h3 {
   text-decoration: none;
 }
 
+/* D-28: a flex column so #person-results (flex: 1 1 auto) can grow to fill
+   the popover/sheet section around it. */
 .search-field {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
 }
 
 .search-field input {
@@ -129,15 +135,21 @@ h1, h2, h3 {
   border-color: var(--accent);
 }
 
+/* D-28: #person-results is an always-rendered Excel AutoFilter-style list,
+   laid out as a flex-column child of `.search-field`/`#filter-announcers`
+   (both flex columns, see "Filter popovers" below) so it grows to fill the
+   ~60vh popover instead of the old absolute-positioned ~1-row clip. */
 #person-results {
   list-style: none;
-  margin: 0;
+  margin: var(--space-sm) 0 0 0;
   padding: 0;
-  position: absolute;
-  z-index: 10;
+  position: static;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   background: var(--bg);
   border: 1px solid var(--border);
-  width: 100%;
+  border-radius: 4px;
 }
 
 #conference-search,
@@ -156,10 +168,16 @@ h1, h2, h3 {
   border-color: var(--accent);
 }
 
-/* Search-result options, as topbar.js/filters.js build them: bare
-   `<li role="option">` children of the `role="listbox"` lists (no class). The
-   arrow-key active option carries `aria-selected="true"` (WR-07, WCAG 2.4.7). */
+/* D-28: #person-results' options, as topbar.js builds them: `<li
+   role="option">` children of the `role="listbox"` list, each holding a
+   `.option-check` box plus `.option-name`/`.option-variant`/`.option-role`
+   spans. `aria-selected` now means *checked* (in `state.people`); the
+   arrow-key active row is a separate `.is-active` class (WR-07, WCAG
+   2.4.7). */
 [role="listbox"] > li[role="option"] {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
   font: var(--font-label);
   padding: var(--space-sm) var(--space-md);
   cursor: pointer;
@@ -170,9 +188,32 @@ h1, h2, h3 {
   cursor: default;
 }
 
-[role="listbox"] > li[role="option"][aria-selected="true"] {
+[role="listbox"] > li[role="option"].is-active {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+}
+
+.option-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--muted);
+  border-radius: 2px;
+}
+
+li[role="option"][aria-selected="true"] .option-check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+li[role="option"][aria-selected="true"] .option-check::after {
+  content: "✓" / "";
+  color: var(--bg);
+  font-size: 12px;
+  line-height: 1;
 }
 
 /* ---------- Selection bar (D-21) ---------- */
@@ -528,6 +569,29 @@ body.app {
   margin: 0 0 var(--space-sm) 0;
 }
 
+/* D-28: #pop-announcers is a tall flex column (~60vh) so its list can fill
+   it, instead of the shared `.filter-popover` max-height clip other
+   (short-content) popovers use. Gated on `:popover-open` (like
+   `.filters-sheet:popover-open` below): an unconditional `display: flex`
+   here would out-specificity the UA stylesheet's `[popover]:not(:popover-
+   open) { display: none }` rule (an id selector beats it regardless of
+   source order), leaving the popover always rendered and blocking clicks
+   even while "closed". */
+#pop-announcers:popover-open {
+  height: 60vh;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#filter-announcers {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
 .filter-popover label,
 .sheet-body label {
   font: var(--font-label);
@@ -600,6 +664,12 @@ body.app {
   padding-bottom: var(--space-lg);
   margin-bottom: var(--space-lg);
   border-bottom: 1px solid var(--border);
+}
+
+/* D-28: inside the phone Filters sheet, cap the announcer list's own height
+   so the sheet's other sections stay reachable below it. */
+.sheet-body #person-results {
+  max-height: 50vh;
 }
 
 .sheet-footer {
@@ -1190,6 +1260,7 @@ input[type="checkbox"] {
   input[type="checkbox"] + label,
   .sheet-body label,
   .check-row,
+  #person-results > li[role="option"],
   .games-table th button,
   .shape-legend li,
   #panel-close,

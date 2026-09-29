@@ -57,8 +57,8 @@
     <h3>Announcers</h3>
     <div class="search-field">
       <label for="person-search" class="visually-hidden">Search announcers</label>
-      <input type="text" id="person-search" role="combobox" aria-controls="person-results" aria-expanded="false" aria-autocomplete="list" placeholder="Search announcers — try &quot;Gus Johnson&quot;" autocomplete="off">
-      <ul id="person-results" role="listbox" hidden></ul>
+      <input type="text" id="person-search" role="combobox" aria-controls="person-results" aria-expanded="true" aria-autocomplete="list" placeholder="Type a name, or pick from the list" autocomplete="off">
+      <ul id="person-results" role="listbox" aria-multiselectable="true" aria-label="Announcers"></ul>
     </div>
   </section>
 </div>
@@ -178,7 +178,7 @@
   <div id="table-empty" class="empty-state">
     <h3>Nothing selected</h3>
     <p>Select an announcer or a school to see their games here.</p>
-    <p>Try the search box, or pick a school from the School filter.</p>
+    <p>Pick an announcer from the Announcers filter, or a school from the School filter.</p>
   </div>
 
   <table id="games-table" class="games-table" hidden>
