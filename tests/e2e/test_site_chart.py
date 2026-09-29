@@ -435,12 +435,13 @@ def test_legend_chip_row_sits_below_the_chart_on_mobile(
 def test_chart_tabs_slot_is_reserved_and_empty(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-08: a 40px slot is reserved above the legend row for Phase 04.2's
-    chart-tab bar; this phase leaves it empty."""
+    """D-08/D-25: a slot stays in the DOM above the legend row for Phase
+    04.2's chart-tab bar, but collapses to 0 height while it's empty this
+    phase (D-25: "the empty chart-tab slot has 0 height")."""
     open_app(guarded_page, "")
     box = guarded_page.locator("#chart-tabs").bounding_box()
     assert box is not None
-    assert box["height"] == 40
+    assert box["height"] == 0
     assert guarded_page.locator("#chart-tabs").locator("*").count() == 0
 
     legend_box = guarded_page.locator("#legend-chips").bounding_box()

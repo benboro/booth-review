@@ -24,6 +24,10 @@
   --text: #111827;
   --muted: #4B5563;
   --error: #B3261E;
+  /* D-25: "Clear all filters" own accent color -- the same verified pair as
+     --error today, kept as its own token so the two can diverge later
+     without also changing the error banner's color. */
+  --reset: #B3261E;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -35,6 +39,7 @@
     --text: #E5E7EB;
     --muted: #9CA3AF;
     --error: #F2B8B5;
+    --reset: #F2B8B5;
   }
 }
 
@@ -88,12 +93,13 @@ h1, h2, h3 {
 
 /* ---------- Top bar ---------- */
 
+/* D-21: the top bar now holds only the site title -- the person search
+   moved into the toolbar's Announcers popover, and the chips/toggles/
+   summary moved into #selection-bar below the toolbar (see that section). */
 #topbar {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
   align-items: center;
-  gap: var(--space-md);
-  min-height: 64px;
+  min-height: 56px;
   padding: 0 var(--space-lg);
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -169,6 +175,24 @@ h1, h2, h3 {
   outline-offset: -2px;
 }
 
+/* ---------- Selection bar (D-21) ---------- */
+
+/* The chips, Compare/Called together/Clear selection row, and the summary
+   line all live here now, below the toolbar -- filling the empty band the
+   user flagged between the filters and the plot (D-25). `min-width: 0` lets
+   its flex children shrink instead of forcing the whole page wider. */
+#selection-bar {
+  padding: var(--space-sm) var(--space-lg);
+  min-width: 0;
+}
+
+.selection-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
 #chips {
   list-style: none;
   margin: 0;
@@ -176,6 +200,8 @@ h1, h2, h3 {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-sm);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .chip {
@@ -187,6 +213,17 @@ h1, h2, h3 {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 999px;
+  max-width: 100%;
+}
+
+/* The chip's name span (topbar.js's bare, unclassed `<span>` -- the only
+   other span a chip can hold is `.chip-glyph`, in compare mode) truncates
+   instead of forcing the chip -- and the whole row -- wider than the
+   viewport (D-21: "chips never run off the right edge"). */
+.chip > span:not(.chip-glyph) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chip-remove {
@@ -199,6 +236,7 @@ h1, h2, h3 {
 
 .toggle-group {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm);
 }
@@ -221,6 +259,17 @@ h1, h2, h3 {
 .toggle:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* D-25a: an explicit rule so dark mode never falls back to the UA's own
+   white button face -- unreadable text was the reported defect. `.toggle`
+   (above) already covers this now that `#clear-selection` carries that
+   class too, but this keeps the fix in force even if that class ever
+   drops. */
+#clear-selection {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
 }
 
 .chip-glyph {
@@ -248,10 +297,23 @@ h1, h2, h3 {
 .summary-count {
   font: var(--font-display);
   font-weight: var(--weight-semibold);
+  white-space: nowrap;
 }
 
+/* D-21: the summary sits on one line under the chip row and never wraps
+   into a narrow column; `column-gap` (not the row-wrapping `gap`) keeps the
+   count and detail from touching if they do wrap on a very narrow phone. */
 #summary {
-  text-align: right;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-sm);
+  text-align: left;
+  margin-top: var(--space-xs);
+}
+
+#summary-detail {
+  min-width: 0;
 }
 
 /* `#filters-button`'s visibility comes from `.mobile-only` below; this rule
@@ -300,14 +362,22 @@ body.app {
   grid-template-areas:
     "topbar"
     "toolbar"
+    "selection"
     "main"
     "table"
     "footer";
-  gap: var(--space-lg);
+  /* D-25: no row/column gap here -- every block below (the selection bar,
+     the chart area, the table) pads its own content instead, so nothing
+     leaves a second, unstyled band on top of that padding (the reported
+     "empty vertical space between the toolbar and the plot"). This also
+     removes the permanent column gap that used to sit beside the closed
+     detail-panel column at >=641px. */
+  gap: 0;
 }
 
 #topbar { grid-area: topbar; }
 #toolbar { grid-area: toolbar; }
+#selection-bar { grid-area: selection; }
 #chart-area { grid-area: main; }
 #matched-games { grid-area: table; }
 #site-footer { grid-area: footer; }
@@ -327,6 +397,7 @@ body.app {
     grid-template-areas:
       "topbar  topbar"
       "toolbar toolbar"
+      "selection selection"
       "main    panel"
       "table   panel"
       "footer  footer";
@@ -334,7 +405,10 @@ body.app {
 }
 
 #chart-area {
-  padding-top: var(--space-xl);
+  /* D-25: side gutters (>=16px) plus a small top pad -- the selection bar
+     above already supplies its own vertical space, so this no longer needs
+     the old `--space-xl` top pad to avoid crowding the toolbar. */
+  padding: var(--space-sm) var(--space-lg) 0;
   /* Regression (2026-09-27): `#chart-area` must stay in normal flow, never
      a floating/pinned position -- making it sticky alongside the old left
      filter column (11ac9b5) pinned it over the "Matched games" table once
@@ -367,7 +441,6 @@ body.app {
      (D-02). */
 }
 
-#clear-filters,
 .filter-trigger {
   font: var(--font-label);
   padding: 6px var(--space-sm);
@@ -378,9 +451,7 @@ body.app {
      `body` -- the UA stylesheet sets an explicit color for `<button>`
      itself, which wins over inheritance. Without this, the button rendered
      in the browser's default button-text color instead of the theme's
-     `--text` token, failing WCAG AA 4.5:1 in dark mode against `--bg`.
-     SITE-27: "Clear all filters" always uses this default text color, never
-     the low-contrast `--muted` token. */
+     `--text` token, failing WCAG AA 4.5:1 in dark mode against `--bg`. */
   color: var(--text);
   cursor: pointer;
 }
@@ -393,6 +464,25 @@ body.app {
 .filter-trigger[aria-expanded="true"] {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+}
+
+/* D-25b: "Clear all filters" gets a style distinct from the plain filter
+   triggers above -- an outlined accent, never the same look as the filter
+   buttons -- while it also clears the selected announcers (D-27). An
+   outlined `--reset` treatment rather than a filled one, so it doesn't read
+   as more prominent than the primary filter controls. Contrast against the
+   toolbar's `--surface` background (#F4F5F7 light / #1E2126 dark):
+   `--reset` on light is ~6.0:1, on dark ~9.5:1 -- both clear WCAG AA's
+   4.5:1 minimum. */
+#clear-filters {
+  font: var(--font-label);
+  font-weight: var(--weight-semibold);
+  padding: 6px var(--space-sm);
+  border: 1px solid var(--reset);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--reset);
+  cursor: pointer;
 }
 
 #clear-filters:focus-visible,
@@ -663,10 +753,17 @@ input[type="checkbox"] {
   flex-direction: column;
 }
 
-/* D-08: reserved slot for Phase 04.2's chart-tab bar, empty this phase.
-   Fixed height so no reflow happens once tabs land there. */
+/* D-08: reserved slot for Phase 04.2's chart-tab bar -- stays in the DOM
+   for that phase to fill, but collapses to 0 height while it's empty
+   (D-25: "the empty chart-tab slot has 0 height"). Once a tab bar lands
+   inside it, `:not(:empty)` restores the fixed height so no reflow happens
+   at that point either. */
 .chart-tabs-slot {
-  height: 40px;
+  min-height: 0;
+}
+
+.chart-tabs-slot:not(:empty) {
+  min-height: 40px;
 }
 
 /* D-04: the HTML chip legend replacing Plotly's built-in legend. */
@@ -758,7 +855,7 @@ input[type="checkbox"] {
 /* ---------- Matched games table ---------- */
 
 #matched-games {
-  padding: 0 var(--space-lg) var(--space-xl) var(--space-lg);
+  padding: var(--space-lg) var(--space-lg) var(--space-xl);
 }
 
 .empty-state {
@@ -1031,13 +1128,13 @@ input[type="checkbox"] {
 /* ---------- Phones (≤640px) ---------- */
 
 @media (max-width: 640px) {
-  #topbar {
-    grid-template-columns: 1fr;
-    align-items: stretch;
-  }
-
-  #summary {
-    text-align: left;
+  /* D-25: a narrower gutter than the desktop `--space-lg` (24px), still
+     >=16px, so content is never flush with the screen edge. */
+  #selection-bar,
+  #chart-area,
+  #matched-games {
+    padding-left: var(--space-md);
+    padding-right: var(--space-md);
   }
 
   /* D-04: on phones the legend chip row renders below the chart, not above
@@ -1059,6 +1156,7 @@ input[type="checkbox"] {
   .toggle,
   .chip,
   .chip-remove,
+  #clear-selection,
   input[type="checkbox"] + label,
   .sheet-body label,
   .check-row,
