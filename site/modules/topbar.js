@@ -1,13 +1,17 @@
 /**
- * Top bar: person search combobox, selected-people chips, the Compare
- * people / Called together toggles, the compare shape legend, Clear
- * selection, and the counts-only match summary line (SITE-02, SITE-08,
- * SITE-10, D-07, D-08, A1).
+ * Announcer search, selected-people chips, the Compare people / Called
+ * together toggles, the compare shape legend, Clear selection, and the
+ * counts-only match summary line (SITE-02, SITE-08, SITE-10, D-07, D-08, A1).
+ *
+ * D-21: the search combobox now lives in the toolbar's Announcers popover
+ * (`#pop-announcers`/`#filter-announcers`); the chips, toggles, and summary
+ * live in `#selection-bar`'s `#selection-row` (hidden while no one is
+ * selected) below the toolbar.
  *
  * `initTopbar(ctx)` binds every DOM event listener once; `renderTopbar(ctx)`
  * is a pure DOM update driven by the current state/view, called every render
  * cycle from app.js. DOM is built only with createElement/textContent/
- * replaceChildren -- never any markup-injecting DOM API (T-04-28). Typed
+ * replaceChildren -- never any markup-injecting DOM API (T-04.1-29). Typed
  * search text is only ever used as a search key, never rendered as markup,
  * and person/team names always land in the DOM via textContent.
  */
@@ -149,10 +153,12 @@ export function initTopbar({ data, getState, setState }) {
   els = {
     input: document.getElementById('person-search'),
     results: document.getElementById('person-results'),
+    selectionRow: document.getElementById('selection-row'),
     chips: document.getElementById('chips'),
     compareToggle: document.getElementById('compare-toggle'),
     compareHelp: document.getElementById('compare-help'),
     togetherToggle: document.getElementById('together-toggle'),
+    togetherHelp: document.getElementById('together-help'),
     clearSelection: document.getElementById('clear-selection'),
     compareNote: document.getElementById('compare-note'),
     summaryCount: document.getElementById('summary-count'),
@@ -262,9 +268,14 @@ function renderToggles(state) {
   const overLimit = state.people.length > MAX_COMPARE;
   els.compareToggle.disabled = overLimit;
   els.compareHelp.textContent = overLimit ? `${BASE_COMPARE_HELP}${OVER_LIMIT_SUFFIX}` : BASE_COMPARE_HELP;
+  // The helper text moved from a visible paragraph to an aria-describedby
+  // span (D-21, to keep the chip row compact); a `title` tooltip keeps the
+  // same copy available on hover/long-press.
+  els.compareToggle.title = els.compareHelp.textContent;
 
   els.togetherToggle.setAttribute('aria-pressed', String(state.together));
   els.togetherToggle.disabled = state.people.length < 2;
+  els.togetherToggle.title = els.togetherHelp.textContent;
 }
 
 /** Renders the compare-mode shape legend (D-07), visible only in compare mode with people selected. */
@@ -312,6 +323,7 @@ function renderSummary(view) {
 
 /** Pure DOM update from the current state/view, called every render cycle. */
 export function renderTopbar({ data, state, view }) {
+  els.selectionRow.hidden = state.people.length === 0;
   renderChips(data, state);
   renderToggles(state);
   els.clearSelection.hidden = state.people.length === 0;

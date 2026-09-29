@@ -25,12 +25,26 @@ def _options(page: Page) -> Locator:
     return page.locator("#person-results li[role='option']:not([aria-disabled])")
 
 
+def _open_announcers(page: Page) -> None:
+    """Opens the Announcers popover (D-21) if it isn't already open, the
+    same wait pattern `test_site_filters.py`'s `_open_filter` uses."""
+    if page.locator("#pop-announcers").evaluate("(el) => el.matches(':popover-open')"):
+        return
+    page.click("#trigger-announcers")
+    page.wait_for_function("document.getElementById('pop-announcers').matches(':popover-open')")
+    page.wait_for_function(
+        "document.getElementById('trigger-announcers').getAttribute('aria-expanded') === 'true'"
+    )
+
+
 def _search(page: Page, query: str) -> None:
+    _open_announcers(page)
     page.fill("#person-search", query)
 
 
 def _add_person_by_query(page: Page, query: str, index: int = 0) -> None:
-    """Types `query`, waits out the 120ms debounce, and clicks the option at `index`."""
+    """Opens the Announcers popover, types `query`, waits out the 120ms
+    debounce, and clicks the option at `index`."""
     _search(page, query)
     option = _options(page).nth(index)
     expect(option).to_be_visible()
@@ -309,6 +323,7 @@ def test_arrow_key_active_option_is_visibly_outlined(
     and a pointer, and the arrow-key active option (`aria-selected="true"`)
     shows a visible outline; the other options don't."""
     open_app(guarded_page, "")
+    _open_announcers(guarded_page)
     guarded_page.fill(input_id, query)
     options = guarded_page.locator(f"{results_id} li[role='option']:not([aria-disabled])")
     expect(options.nth(1)).to_be_visible()

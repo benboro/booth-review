@@ -1,9 +1,16 @@
 /**
- * Filter toolbar: seven popover filters (Seasons, Networks, Kickoff, Role,
- * Conference, School, Bowls/Playoffs) above the chart, plus "Clear all
- * filters" and a full-height phone bottom sheet that stacks every section
- * (SITE-20, SITE-21, SITE-22, SITE-24, SITE-27; D-02, D-03, D-10, D-11,
- * D-18).
+ * Filter toolbar: an Announcers popover plus seven filter popovers (Seasons,
+ * Networks, Kickoff, Role, Conference, School, Bowls/Playoffs) above the
+ * chart, plus "Clear all filters" and a full-height phone bottom sheet that
+ * stacks every section, Announcers first (SITE-20, SITE-21, SITE-22,
+ * SITE-24, SITE-27; D-02, D-03, D-10, D-11, D-18, D-21, D-27).
+ *
+ * D-21: the Announcers popover holds the moved person-search combobox
+ * (`site/modules/topbar.js` still owns its search/add-person behavior; this
+ * module only places its `#filter-announcers` section and reports its
+ * trigger label/active state). D-27: "Clear all filters" also clears
+ * `state.people`/`compare`/`together`, and the phone `Filters(N)` badge
+ * counts selected people too.
  *
  * `initFilters(ctx)` builds the dynamic parts of the toolbar (the network
  * checklist, the conference/school checklists, the role helper line) once
@@ -23,8 +30,9 @@ import { SLOT_SHORT_LABELS, ROLE_LABELS } from './format.js';
 
 const ROLE_HELPER_TEXT = 'Limits matches to main-broadcast play-by-play or analyst roles.';
 
-/** Section element id -> the popover id it lives in on desktop, in toolbar order (D-02). */
+/** Section element id -> the popover id it lives in on desktop, in toolbar order (D-02, D-21). */
 const SECTION_POPOVERS = [
+  ['filter-announcers', 'pop-announcers'],
   ['filter-seasons', 'pop-seasons'],
   ['filter-networks', 'pop-networks'],
   ['filter-slots', 'pop-kickoff'],
@@ -35,7 +43,7 @@ const SECTION_POPOVERS = [
 ];
 
 /** Toolbar trigger names, in toolbar order -- also `#trigger-{name}`'s id suffix. */
-const TRIGGER_NAMES = ['seasons', 'networks', 'kickoff', 'role', 'conference', 'school', 'postseason'];
+const TRIGGER_NAMES = ['announcers', 'seasons', 'networks', 'kickoff', 'role', 'conference', 'school', 'postseason'];
 
 /** DOM element references, populated once by `initFilters`. */
 let els = null;
@@ -420,6 +428,13 @@ export function initFilters({ data, getState, setState }) {
       conferences: [],
       school: [],
       postseason: 'all',
+      // D-27 (overrides the earlier "people are not cleared" proposal):
+      // Clear all filters also removes every selected announcer, compare
+      // mode, and called-together. "Clear selection" in the chip row still
+      // clears only the people.
+      people: [],
+      compare: false,
+      together: false,
     });
   });
 
@@ -528,6 +543,10 @@ function renderPostseason(state) {
 
 /** A toolbar trigger's label and active state, from `state` (D-02 copywriting). */
 function triggerInfo(name, data, state) {
+  if (name === 'announcers') {
+    if (state.people.length === 0) return { label: 'Announcers', active: false };
+    return { label: `Announcers · ${state.people.length}`, active: true };
+  }
   if (name === 'seasons') {
     if (state.seasons == null) return { label: 'Seasons', active: false };
     const [a, b] = state.seasons;
@@ -579,7 +598,10 @@ function renderTriggers(data, state) {
   }
 }
 
-/** Counts the active filters, for the mobile Filters(N) button (extends SITE-18's rail-era count). */
+/** Counts the active filters, for the mobile Filters(N) button (extends SITE-18's rail-era count).
+ * D-27: also counts every selected announcer, since the phone Announcers
+ * picker lives inside this same Filters sheet and "Clear all filters"
+ * clears people too. */
 function activeFilterCount(state) {
   let n = 0;
   if (state.seasons != null) n += 1;
@@ -589,6 +611,7 @@ function activeFilterCount(state) {
   if (state.conferences.length > 0) n += 1;
   if (state.school.length > 0) n += 1;
   if (state.postseason !== 'all') n += 1;
+  n += state.people.length;
   return n;
 }
 

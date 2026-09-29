@@ -16,34 +16,12 @@
 
 <header id="topbar">
   <a href="index.html" class="site-title">booth-review</a>
-
-  <div class="search-field">
-    <label for="person-search" class="visually-hidden">Search announcers</label>
-    <input type="text" id="person-search" role="combobox" aria-controls="person-results" aria-expanded="false" aria-autocomplete="list" placeholder="Search announcers — try &quot;Gus Johnson&quot;" autocomplete="off">
-    <ul id="person-results" role="listbox" hidden></ul>
-  </div>
-
-  <ul id="chips" aria-label="Selected people"></ul>
-
-  <div class="toggle-group">
-    <button type="button" id="compare-toggle" class="toggle" aria-pressed="false">Compare people</button>
-    <p id="compare-help" class="helper">Compare up to 4 people — each gets its own shape.</p>
-    <button type="button" id="together-toggle" class="toggle" aria-pressed="false">Called together</button>
-    <p id="together-help" class="helper">Show only games where everyone selected shared the booth.</p>
-    <button type="button" id="clear-selection">Clear selection</button>
-  </div>
-
-  <p id="compare-note" hidden>Compare mode holds up to 4 people.</p>
-
-  <div id="summary" aria-live="polite">
-    <span id="summary-count" class="summary-count"></span>
-    <span id="summary-detail"></span>
-  </div>
 </header>
 
 <nav id="toolbar" aria-label="Filters">
   <button type="button" id="clear-filters">Clear all filters</button>
   <button type="button" id="filters-button" class="mobile-only" popovertarget="filters-sheet" aria-haspopup="dialog" aria-expanded="false">Filters</button>
+  <button type="button" class="filter-trigger desktop-only" id="trigger-announcers" popovertarget="pop-announcers" aria-haspopup="dialog" aria-expanded="false">Announcers</button>
   <button type="button" class="filter-trigger desktop-only" id="trigger-seasons" popovertarget="pop-seasons" aria-haspopup="dialog" aria-expanded="false">Seasons</button>
   <button type="button" class="filter-trigger desktop-only" id="trigger-networks" popovertarget="pop-networks" aria-haspopup="dialog" aria-expanded="false">Networks</button>
   <button type="button" class="filter-trigger desktop-only" id="trigger-kickoff" popovertarget="pop-kickoff" aria-haspopup="dialog" aria-expanded="false">Kickoff</button>
@@ -52,6 +30,38 @@
   <button type="button" class="filter-trigger desktop-only" id="trigger-school" popovertarget="pop-school" aria-haspopup="dialog" aria-expanded="false">School</button>
   <button type="button" class="filter-trigger desktop-only" id="trigger-postseason" popovertarget="pop-postseason" aria-haspopup="dialog" aria-expanded="false">Bowls/Playoffs</button>
 </nav>
+
+<section id="selection-bar" aria-label="Selected announcers and match summary">
+  <div id="selection-row" class="selection-row" hidden>
+    <ul id="chips" aria-label="Selected people"></ul>
+
+    <div class="toggle-group">
+      <button type="button" id="compare-toggle" class="toggle" aria-pressed="false" aria-describedby="compare-help">Compare people</button>
+      <span id="compare-help" class="visually-hidden">Compare up to 4 people — each gets its own shape.</span>
+      <button type="button" id="together-toggle" class="toggle" aria-pressed="false" aria-describedby="together-help">Called together</button>
+      <span id="together-help" class="visually-hidden">Show only games where everyone selected shared the booth.</span>
+      <button type="button" id="clear-selection" class="toggle">Clear selection</button>
+    </div>
+  </div>
+
+  <p id="compare-note" hidden>Compare mode holds up to 4 people.</p>
+
+  <div id="summary" aria-live="polite">
+    <span id="summary-count" class="summary-count"></span>
+    <span id="summary-detail"></span>
+  </div>
+</section>
+
+<div id="pop-announcers" class="filter-popover" popover="auto" role="dialog" aria-label="Announcers">
+  <section id="filter-announcers">
+    <h3>Announcers</h3>
+    <div class="search-field">
+      <label for="person-search" class="visually-hidden">Search announcers</label>
+      <input type="text" id="person-search" role="combobox" aria-controls="person-results" aria-expanded="false" aria-autocomplete="list" placeholder="Search announcers — try &quot;Gus Johnson&quot;" autocomplete="off">
+      <ul id="person-results" role="listbox" hidden></ul>
+    </div>
+  </section>
+</div>
 
 <div id="pop-seasons" class="filter-popover" popover="auto" role="dialog" aria-label="Seasons">
   <section id="filter-seasons">

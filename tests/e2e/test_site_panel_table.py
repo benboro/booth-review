@@ -67,7 +67,14 @@ def _tap_dot(page: Page, customdata: int) -> None:
 
 
 def _add_person_by_query(page: Page, query: str, index: int = 0) -> None:
-    """Types `query` into the person search, waits out the debounce, and clicks the option."""
+    """Opens the Announcers popover (D-21), types `query` into the person
+    search, waits out the debounce, and clicks the option."""
+    if not page.locator("#pop-announcers").evaluate("(el) => el.matches(':popover-open')"):
+        page.click("#trigger-announcers")
+        page.wait_for_function("document.getElementById('pop-announcers').matches(':popover-open')")
+        page.wait_for_function(
+            "document.getElementById('trigger-announcers').getAttribute('aria-expanded') === 'true'"
+        )
     page.fill("#person-search", query)
     option = page.locator("#person-results li[role='option']:not([aria-disabled])").nth(index)
     expect(option).to_be_visible()
@@ -261,7 +268,10 @@ def test_panel_swap_close_and_escape_restore_focus(
     whatever was focused before the panel opened."""
     open_app(guarded_page, "")
 
-    guarded_page.focus("#person-search")
+    # D-21: #person-search now lives inside the closed Announcers popover, so
+    # it can't take focus; #trigger-seasons stands in as "whatever was
+    # focused before the panel opened."
+    guarded_page.focus("#trigger-seasons")
     guarded_page.evaluate("window.__testHooks.openPanel(0)")
     guarded_page.evaluate("window.__testHooks.openPanel(8)")
     assert "Northfield 24 at Ironpeak 17" in guarded_page.inner_text("#panel-title")
@@ -269,12 +279,12 @@ def test_panel_swap_close_and_escape_restore_focus(
 
     guarded_page.click("#panel-close")
     guarded_page.wait_for_function("document.getElementById('detail-panel').hidden === true")
-    assert guarded_page.evaluate("document.activeElement.id") == "person-search"
+    assert guarded_page.evaluate("document.activeElement.id") == "trigger-seasons"
 
     guarded_page.evaluate("window.__testHooks.openPanel(0)")
     guarded_page.keyboard.press("Escape")
     guarded_page.wait_for_function("document.getElementById('detail-panel').hidden === true")
-    assert guarded_page.evaluate("document.activeElement.id") == "person-search"
+    assert guarded_page.evaluate("document.activeElement.id") == "trigger-seasons"
 
 
 def test_reopening_the_panel_during_the_close_transition_keeps_it_shown(

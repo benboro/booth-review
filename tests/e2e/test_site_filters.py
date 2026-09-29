@@ -80,7 +80,10 @@ def _options(page: Page, results_id: str) -> Any:
 
 
 def _add_person_by_query(page: Page, query: str, index: int = 0) -> None:
-    """Types `query` into the person search, waits out the debounce, and clicks the option."""
+    """Opens the Announcers popover (D-21), types `query` into the person
+    search, waits out the debounce, and clicks the option."""
+    if not page.locator("#pop-announcers").evaluate("(el) => el.matches(':popover-open')"):
+        _open_filter(page, "announcers")
     page.fill("#person-search", query)
     option = _options(page, "person-results").nth(index)
     expect(option).to_be_visible()
@@ -464,13 +467,50 @@ def test_clear_all_filters_resets_every_filter_and_the_url(
     assert view["hasSelection"] is False
 
 
+def test_clear_all_filters_also_clears_people(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-27 (overrides the earlier "people are not cleared" proposal): Clear
+    all filters removes every selected announcer, compare mode, and
+    called-together, alongside the ordinary filter reset."""
+    open_app(guarded_page, "")
+
+    _add_person_by_query(guarded_page, "Dale Harlow")
+    guarded_page.click("#compare-toggle")
+    guarded_page.wait_for_function("location.search.includes('mode=compare')")
+
+    _open_filter(guarded_page, "school")
+    guarded_page.check("#school-list input[value='northfield']")
+    guarded_page.wait_for_function("location.search.includes('school=northfield')")
+
+    guarded_page.click("#clear-filters")
+    guarded_page.wait_for_function("location.search === ''")
+
+    state = guarded_page.evaluate("window.__testHooks.getState()")
+    assert state["people"] == []
+    assert state["school"] == []
+    assert state["compare"] is False
+    assert state["together"] is False
+    expect(guarded_page.locator("#selection-row")).to_be_hidden()
+
+
+def test_phone_filters_button_count_includes_selected_people(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-27: the phone `Filters(N)` badge counts selected announcers too,
+    since the Announcers picker lives inside the same Filters sheet."""
+    open_app(mobile_page, "?people=dale-harlow")
+    expect(mobile_page.locator("#filters-button")).to_have_text("Filters (1)")
+
+
 def test_toolbar_order_and_clear_all_contrast(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-02/SITE-27: "Clear all filters" is the first visible toolbar item,
-    followed by the seven filter triggers in order, and its computed color
-    against the toolbar background clears WCAG AA's 4.5:1 minimum -- the
-    Phase 4 defect was a low-contrast secondary tone."""
+    followed by the Announcers trigger and the seven filter triggers in
+    order (D-21), and its computed color against the toolbar background
+    clears WCAG AA's 4.5:1 minimum -- the Phase 4 defect was a low-contrast
+    secondary tone."""
     open_app(guarded_page, "")
 
     ids = guarded_page.evaluate(
@@ -479,6 +519,7 @@ def test_toolbar_order_and_clear_all_contrast(
     )
     assert ids == [
         "clear-filters",
+        "trigger-announcers",
         "trigger-seasons",
         "trigger-networks",
         "trigger-kickoff",
@@ -502,12 +543,15 @@ def test_chrome_buttons_use_the_theme_text_color_in_dark_mode(
 ) -> None:
     """Buttons don't inherit `color`, so without an explicit rule the toolbar/
     sheet/panel controls fall back to the UA's button text color, unreadable
-    against the dark theme's background."""
+    against the dark theme's background. `#clear-filters` no longer belongs
+    here (D-25 gives it its own distinct `--reset` color); `#clear-selection`
+    (D-25a) takes its place, checked with a person selected so it's visible."""
     guarded_page.emulate_media(color_scheme="dark")
     open_app(guarded_page, "")
+    _add_person_by_query(guarded_page, "Dale Harlow")
     colors = guarded_page.evaluate(
         "() => { const body = getComputedStyle(document.body).color; "
-        "return ['#filters-button', '#panel-close', '#trigger-seasons', '#clear-filters']"
+        "return ['#filters-button', '#panel-close', '#trigger-seasons', '#clear-selection']"
         ".map(sel => [sel, getComputedStyle(document.querySelector(sel)).color, body]); }"
     )
     for selector, color, body_color in colors:
@@ -872,7 +916,16 @@ def test_mobile_filters_sheet(mobile_page: Page, open_app: Callable[[Page, str],
     open_app(mobile_page, "")
     filters_button = mobile_page.locator("#filters-button")
     expect(filters_button).to_be_visible()
-    for name in ("seasons", "networks", "kickoff", "role", "conference", "school", "postseason"):
+    for name in (
+        "announcers",
+        "seasons",
+        "networks",
+        "kickoff",
+        "role",
+        "conference",
+        "school",
+        "postseason",
+    ):
         expect(mobile_page.locator(f"#trigger-{name}")).to_be_hidden()
 
     filters_button.click()
@@ -888,6 +941,7 @@ def test_mobile_filters_sheet(mobile_page: Page, open_app: Callable[[Page, str],
         "() => Array.from(document.querySelector('.sheet-body').children).map((el) => el.id)"
     )
     assert section_order == [
+        "filter-announcers",
         "filter-seasons",
         "filter-networks",
         "filter-slots",
