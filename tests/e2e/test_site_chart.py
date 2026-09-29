@@ -1281,11 +1281,15 @@ def _speckle_count(
     center_px: float,
     center_py: float,
     theme: str,
-    marker_half: float,
+    ring_base_half: float,
     other_points: list[dict[str, Any]],
 ) -> int:
     """Screenshots a 40x40 box centered on one highlight marker and returns
-    the ring-speckle pixel count around it (D-31)."""
+    the ring-speckle pixel count starting `ring_base_half + 3` px from
+    center (D-31/D-33: for a non-circle point this must be measured outside
+    the halo's own outer edge -- `(size + 3) / 2` -- not the bare highlight
+    glyph's edge, so the halo's own solid accent ring is never itself
+    counted as a speckle)."""
     clip_x = center_px - 20
     clip_y = center_py - 20
     shot = page.screenshot(clip={"x": clip_x, "y": clip_y, "width": 40, "height": 40})
@@ -1296,7 +1300,7 @@ def _speckle_count(
     ]
     count = page.evaluate(
         _RING_SPECKLE_JS,
-        [data_url, _ACCENT[theme], _PAGE_BG[theme], marker_half + 3, 20, others],
+        [data_url, _ACCENT[theme], _PAGE_BG[theme], ring_base_half + 3, 20, others],
     )
     return int(count)
 
@@ -1327,6 +1331,11 @@ def test_compare_shapes_have_no_edge_speckles(
     `marker.line` border; 0 total with the border removed. Confirms the
     UAT's suspected cause (04.1-CONTEXT.md interfaces) rather than assuming
     it.
+
+    D-33 brought a solid accent halo back around these same markers, so the
+    ring measured here now starts outside the halo's own outer edge
+    (`(size + 3) / 2 + 3`), not the bare highlight glyph's edge -- the
+    halo's own expected solid ring must never be mistaken for a speckle.
     """
     guarded_page.set_viewport_size({"width": 1280, "height": 800})
     guarded_page.emulate_media(color_scheme=color_scheme)
@@ -1347,12 +1356,83 @@ def test_compare_shapes_have_no_edge_speckles(
         if any(_boxes_overlap(point, other) for other in others):
             continue
         tested += 1
+        halo_half = (point["size"] + 3) / 2
         total += _speckle_count(
-            guarded_page, point["px"], point["py"], color_scheme, point["size"] / 2, others
+            guarded_page, point["px"], point["py"], color_scheme, halo_half, others
         )
 
     assert tested > 0, "no non-circle highlight marker was testable in this fixture selection"
     assert total == 0, f"{total} speckle pixel(s) found around compare-mode highlight markers"
+
+
+def _border_pixel_count(
+    page: Page,
+    center_px: float,
+    center_py: float,
+    theme: str,
+    marker_half: float,
+    halo_half: float,
+    other_points: list[dict[str, Any]],
+) -> int:
+    """Screenshots a 40x40 box centered on one highlight marker and counts
+    ACCENT-colored pixels in the band between the highlight glyph's own
+    half-size and the halo's half-size (D-33) -- the halo's own visible
+    border, reusing the same in-page pixel decode `_RING_SPECKLE_JS` uses
+    for the D-31 speckle count, just with the band's inner/outer radii
+    swapped to the border's own expected location instead of just past
+    it."""
+    clip_x = center_px - 20
+    clip_y = center_py - 20
+    shot = page.screenshot(clip={"x": clip_x, "y": clip_y, "width": 40, "height": 40})
+    data_url = "data:image/png;base64," + base64.b64encode(shot).decode("ascii")
+    others = [
+        {"x": other["px"] - clip_x, "y": other["py"] - clip_y, "half": other["size"] / 2}
+        for other in other_points
+    ]
+    count = page.evaluate(
+        _RING_SPECKLE_JS,
+        [data_url, _ACCENT[theme], _PAGE_BG[theme], marker_half, halo_half, others],
+    )
+    return int(count)
+
+
+@pytest.mark.parametrize("color_scheme", ["light", "dark"])
+def test_compare_shapes_have_accent_halo_border(
+    guarded_page: Page, open_app: Callable[[Page, str], None], color_scheme: str
+) -> None:
+    """D-33: in compare mode, every non-circle highlight marker (square,
+    diamond, triangle-up, star) shows a solid ACCENT-colored halo border --
+    the same border the circle highlight markers already carry via
+    `marker.line` -- in the band between the marker's own edge and the
+    halo's outer edge, in both themes. Restored as a separate halo trace
+    (D-33) so it never reintroduces the D-31 SDF-glyph speckle fringe a
+    `marker.line` border on these symbols caused."""
+    guarded_page.set_viewport_size({"width": 1280, "height": 800})
+    guarded_page.emulate_media(color_scheme=color_scheme)
+    open_app(guarded_page, _COMPARE_ALL_SHAPES_QUERY)
+    guarded_page.locator("#chart").scroll_into_view_if_needed()
+    points = guarded_page.evaluate(_HIGHLIGHT_POINTS_JS)
+    guarded_page.mouse.move(5, 5)
+    guarded_page.wait_for_timeout(100)
+
+    tested = 0
+    for point in points:
+        if point["symbol"] == "circle" or point["naSentinel"]:
+            continue
+        others = [p for p in points if p["customdata"] != point["customdata"]]
+        if any(_boxes_overlap(point, other) for other in others):
+            continue
+        tested += 1
+        marker_half = point["size"] / 2
+        halo_half = (point["size"] + 3) / 2
+        border_pixels = _border_pixel_count(
+            guarded_page, point["px"], point["py"], color_scheme, marker_half, halo_half, others
+        )
+        assert border_pixels > 0, (
+            f"no ACCENT halo border pixels found around customdata {point['customdata']}"
+        )
+
+    assert tested > 0, "no non-circle highlight marker was testable in this fixture selection"
 
 
 def test_compare_highlight_trace_config(
@@ -1384,6 +1464,112 @@ def test_compare_highlight_trace_config(
         width = line_width[i] if isinstance(line_width, list) else line_width
         assert width == 0, f"non-circle point {i} ({symbol}) has marker.line.width {width}"
         assert sizes[i] >= 12, f"non-circle point {i} ({symbol}) has size {sizes[i]} < 12"
+
+
+def test_compare_halo_trace_config(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-33: with at least one non-circle highlight point, a halo trace
+    (`meta: 'highlight-halo'`) sits at `gd.data.at(-2)`, immediately before
+    the `highlight` trace at `gd.data.at(-1)`. It carries exactly the
+    non-circle highlight points, with the same x/y and symbol, a solid
+    ACCENT[theme] fill, each point's own highlight size + 3, `line.width`
+    0, `opacity` 1, and is inert to hover/click (`hoverinfo: 'skip'`,
+    `hovertemplate: null`). The highlight trace itself is unchanged: still
+    `line.width` 0 on every non-circle point and >= 12px."""
+    guarded_page.emulate_media(color_scheme="light")
+    open_app(guarded_page, _COMPARE_ALL_SHAPES_QUERY)
+    result = guarded_page.evaluate(
+        "() => { const gd = document.getElementById('chart'); "
+        "const highlight = gd.data.at(-1); "
+        "const halo = gd.data.at(-2); "
+        "return { highlightMeta: highlight.meta, haloMeta: halo.meta, "
+        "haloX: halo.x, haloY: halo.y, haloSymbol: halo.marker.symbol, "
+        "haloSize: halo.marker.size, haloColor: halo.marker.color, "
+        "haloLineWidth: halo.marker.line.width, haloOpacity: halo.marker.opacity, "
+        "haloHoverinfo: halo.hoverinfo, haloHovertemplate: halo.hovertemplate, "
+        "haloShowlegend: halo.showlegend, "
+        "highlightX: highlight.x, highlightY: highlight.y, "
+        "highlightSymbol: highlight.marker.symbol, "
+        "highlightSize: highlight.marker.size, "
+        "highlightLineWidth: highlight.marker.line.width }; }"
+    )
+
+    assert result["highlightMeta"] == "highlight"
+    assert result["haloMeta"] == "highlight-halo"
+    assert result["haloShowlegend"] is False
+    assert result["haloHoverinfo"] == "skip"
+    assert not result["haloHovertemplate"]
+    assert result["haloOpacity"] == 1
+
+    # The halo's points are exactly the non-circle highlight points, same
+    # x/y and symbol, in the same order.
+    non_circle_idx = [i for i, s in enumerate(result["highlightSymbol"]) if s != "circle"]
+    assert len(non_circle_idx) > 0, "fixture selection has no non-circle compare shape to check"
+    assert len(result["haloX"]) == len(non_circle_idx)
+    for halo_i, hi in enumerate(non_circle_idx):
+        assert result["haloX"][halo_i] == result["highlightX"][hi]
+        assert result["haloY"][halo_i] == result["highlightY"][hi]
+        assert result["haloSymbol"][halo_i] == result["highlightSymbol"][hi]
+
+        halo_size = (
+            result["haloSize"][halo_i]
+            if isinstance(result["haloSize"], list)
+            else result["haloSize"]
+        )
+        highlight_size = (
+            result["highlightSize"][hi]
+            if isinstance(result["highlightSize"], list)
+            else result["highlightSize"]
+        )
+        assert halo_size == highlight_size + 3
+
+        halo_line_width = (
+            result["haloLineWidth"][halo_i]
+            if isinstance(result["haloLineWidth"], list)
+            else result["haloLineWidth"]
+        )
+        assert halo_line_width == 0
+
+    halo_color = result["haloColor"]
+    halo_colors = halo_color if isinstance(halo_color, list) else [halo_color] * len(non_circle_idx)
+    assert all(c == _ACCENT["light"] for c in halo_colors)
+
+    # The highlight trace itself is unchanged by the halo's addition: still
+    # line.width 0 and size >= 12 on every non-circle point.
+    for hi in non_circle_idx:
+        hl_width = (
+            result["highlightLineWidth"][hi]
+            if isinstance(result["highlightLineWidth"], list)
+            else result["highlightLineWidth"]
+        )
+        assert hl_width == 0
+        hl_size = (
+            result["highlightSize"][hi]
+            if isinstance(result["highlightSize"], list)
+            else result["highlightSize"]
+        )
+        assert hl_size >= 12
+
+
+def test_no_halo_trace_with_no_selection(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-33: with no non-circle highlight points (nobody selected here), the
+    halo trace either doesn't exist or has zero points -- either way,
+    `data.at(-1)` is still the `highlight` trace, unchanged from before this
+    plan."""
+    open_app(guarded_page, "")
+    result = guarded_page.evaluate(
+        "() => { const gd = document.getElementById('chart'); "
+        "const highlight = gd.data.at(-1); "
+        "const halo = gd.data.find(t => t.meta === 'highlight-halo'); "
+        "return { highlightMeta: highlight.meta, highlightX: highlight.x, "
+        "haloXLength: halo ? halo.x.length : 0 }; }"
+    )
+    assert result["highlightMeta"] == "highlight"
+    assert result["highlightX"] == []
+    assert result["haloXLength"] == 0
 
 
 # ---------- D-29: space-separated tooltip pills, family-colored border ----------
