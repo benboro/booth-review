@@ -564,7 +564,8 @@ def test_hover_text_stays_minimal_and_drops_methodology_notes(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """SITE-25 (product notes 2026-09-27): the tooltip carries only the
-    matchup+score, date+kickoff(+slot), networks, crew, viewers, the active
+    matchup+score, date+kickoff (+ Bowl / CFP round for postseason games,
+    never a time-slot label), networks, crew, viewers, the active
     axis value, and a closing "Click for details →" hint -- the
     measurement/scoring-source label, conferences, game type, and
     flags/combined-feed notes are dropped from the tooltip (they still show
@@ -580,7 +581,7 @@ def test_hover_text_stays_minimal_and_drops_methodology_notes(
     dot0 = _hover_text(traces, 0)
     assert "Lakeview 20 at Northfield 27" in dot0
     assert "Sat, Sep 7, 2019" in dot0
-    assert "Noon" in dot0
+    assert "Noon" not in dot0
     assert dot0.endswith("Click for details →")
     assert "Measurement" not in dot0
     assert "Source" not in dot0
@@ -999,14 +1000,50 @@ def test_html_tooltip_content_is_minimal_with_network_pills(
 def test_html_tooltip_slot_label_follows_d19(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-19/D-22: telecast 7 is a Saturday bowl game -- the time-slot label
-    never shows for a non-regular-season game, in either tooltip mode."""
+    """D-19/D-22 (amended by notes-4 A1): the tooltip never shows a time-slot
+    label. A bowl appends "Bowl" and a CFP game its round, each with a
+    decorative currentColor icon; a regular-season game shows neither."""
     open_app(guarded_page, "")
-    _hover_dot(guarded_page, 7)
+    icon = "#chart-tooltip svg.game-type-icon"
 
+    _hover_dot(guarded_page, 7)
     text = guarded_page.inner_text("#chart-tooltip")
     assert "Prime time" not in text
     assert "After dark" not in text
+    assert "Bowl" in text
+    bowl_icons = guarded_page.locator(f'{icon}[data-kind="bowl"][aria-hidden="true"]')
+    assert bowl_icons.count() == 1
+    assert guarded_page.locator(icon).count() == 1
+
+    _hover_dot(guarded_page, 5)
+    guarded_page.wait_for_function(
+        "document.getElementById('chart-tooltip').textContent.includes('CFP semifinal')"
+    )
+    assert guarded_page.locator(f'{icon}[data-kind="playoff"]').count() == 1
+    assert guarded_page.locator(icon).count() == 1
+
+    _hover_dot(guarded_page, 0)
+    guarded_page.wait_for_function(
+        "document.querySelector('#chart-tooltip .tooltip-title')?.textContent.includes('Lakeview')"
+    )
+    text = guarded_page.inner_text("#chart-tooltip")
+    for label in ("Noon", "Afternoon", "Prime time", "After dark"):
+        assert label not in text
+    assert guarded_page.locator(icon).count() == 0
+
+
+def test_plotly_fallback_tooltip_shows_game_type_text_without_slot_label(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """A1: the plotly-hovertemplate fallback shows the same text (no slot
+    label, the Bowl / CFP round name) -- text only, it cannot draw an icon."""
+    open_app(guarded_page, "")
+    _use_plotly_tooltip(guarded_page)
+    traces = _traces(guarded_page)
+
+    assert "Noon" not in _hover_text(traces, 0)
+    assert "CFP semifinal" in _hover_text(traces, 5)
+    assert "Bowl" in _hover_text(traces, 7)
 
 
 def test_html_tooltip_hides_on_mouse_out_scroll_and_panel_open(

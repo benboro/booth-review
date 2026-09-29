@@ -25,11 +25,12 @@ import {
   formatKickoff,
   formatMatchup,
   formatViewers,
+  gameTypeKind,
+  gameTypeLabel,
   ROLE_LABELS,
-  showsTimeSlot,
-  SLOT_SHORT_LABELS,
   stripNetworkNote,
 } from './format.js';
+import { makeGameTypeIcon } from './icons.js';
 import { makePill } from './pill.js';
 import { FAMILY_COLORS, familyKey } from './palette.js';
 
@@ -45,27 +46,31 @@ const EDGE_MARGIN = 8;
 
 /**
  * Builds the shared, DOM-free content model for telecast `i`'s tooltip: the
- * UI-SPEC's minimal line order -- matchup+score, date+kickoff (with a
- * time-slot label only for a regular-season Saturday game, D-19),
- * slash-delimited networks (primary first, each already stripped of any
- * nested methodology parenthetical), one "Position: Name" line per
- * main-feed crew member, viewers, the active axis value, and a closing
- * "Click for details →" hint. Conferences, game type, the full outlet list,
- * the measurement-type badge, era/event flags, and any scoring-source note
- * are panel-only (SITE-25) -- never repeated here.
+ * UI-SPEC's minimal line order -- matchup+score, date+kickoff (a bowl or
+ * playoff game appends its game type, "Bowl" / the CFP round, notes-4 A1; the
+ * time-slot label is panel-only), slash-delimited networks (primary first,
+ * each already stripped of any nested methodology parenthetical), one
+ * "Position: Name" line per main-feed crew member, viewers, the active axis
+ * value, and a closing "Click for details →" hint. Conferences, the time
+ * slot, the full outlet list, the measurement-type badge, era/event flags,
+ * and any scoring-source note are panel-only (SITE-25) -- never repeated
+ * here. `dateText` is the date and kickoff only, `gameType` the postseason
+ * marker (drawn with an icon by `renderTooltipContent`), and `dateLine` both
+ * as one plain string for the text-only fallback (`chart.js#hoverText`).
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
  * @param {{axis: "pregame"|"excitement"}} opts
- * @returns {{title: string, dateLine: string, networks: {name: string, family: string}[], crewLines: string[], viewersLine: string, axisLine: string, hint: string}}
+ * @returns {{title: string, dateText: string, gameType: {kind: "bowl"|"playoff", label: string}|null, dateLine: string, networks: {name: string, family: string}[], crewLines: string[], viewersLine: string, axisLine: string, hint: string}}
  */
 export function tooltipModel(data, i, { axis }) {
   const t = data.t;
 
   const title = formatMatchup(data, i, { withScore: true });
 
-  const dateParts = [formatDate(t.date[i]), formatKickoff(t.kickoff[i]) ?? 'Kickoff time not recorded'];
-  if (showsTimeSlot(data, i)) dateParts.push(SLOT_SHORT_LABELS[t.time_slot[i]]);
-  const dateLine = dateParts.join(' · ');
+  const dateText = [formatDate(t.date[i]), formatKickoff(t.kickoff[i]) ?? 'Kickoff time not recorded'].join(' · ');
+  const kind = gameTypeKind(data, i);
+  const gameType = kind ? { kind, label: gameTypeLabel(data, i) } : null;
+  const dateLine = gameType ? `${dateText} · ${gameType.label}` : dateText;
 
   const primaryNetwork = data.lookups.networks[t.network[i]];
   const otherOutlets = t.outlets[i]
@@ -88,7 +93,7 @@ export function tooltipModel(data, i, { axis }) {
   const axisLine = formatAxisValue(axis, t[axis][i]);
   const hint = 'Click for details →';
 
-  return { title, dateLine, networks, crewLines, viewersLine, axisLine, hint };
+  return { title, dateText, gameType, dateLine, networks, crewLines, viewersLine, axisLine, hint };
 }
 
 /**
@@ -116,7 +121,15 @@ export function renderTooltipContent(el, model, theme) {
   children.push(title);
 
   const dateLine = document.createElement('div');
-  dateLine.textContent = model.dateLine;
+  dateLine.appendChild(document.createTextNode(model.dateText));
+  if (model.gameType) {
+    const type = document.createElement('span');
+    type.className = 'tooltip-game-type';
+    type.appendChild(makeGameTypeIcon(model.gameType.kind));
+    type.appendChild(document.createTextNode(model.gameType.label));
+    dateLine.appendChild(document.createTextNode(' · '));
+    dateLine.appendChild(type);
+  }
   children.push(dateLine);
 
   const networksRow = document.createElement('div');

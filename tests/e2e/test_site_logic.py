@@ -350,6 +350,16 @@ def test_game_type_label(guarded_page: Page, site_url: str) -> None:
     assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeLabel", 0]) is None
 
 
+def test_game_type_kind(guarded_page: Page, site_url: str) -> None:
+    """A1: gameTypeKind is the DOM-free enum behind the icon: null for a
+    regular-season game, 'playoff' for a CFP game, 'bowl' for any other
+    postseason game."""
+    _load(guarded_page, site_url)
+    assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeKind", 0]) is None
+    assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeKind", 5]) == "playoff"
+    assert guarded_page.evaluate(_FORMAT_JS, ["gameTypeKind", 7]) == "bowl"
+
+
 def test_conference_line_is_away_first(guarded_page: Page, site_url: str) -> None:
     """D-09: the panel's conference row reads away vs. home, matching
     formatMatchup's "Away at Home" order (amended 2026-09-28)."""

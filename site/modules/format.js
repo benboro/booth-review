@@ -125,6 +125,21 @@ export function gameTypeLabel(data, i) {
 }
 
 /**
+ * The DOM-free kind behind telecast `i`'s game-type icon (notes-4 A1/A2a):
+ * null for a regular-season game (no icon), 'bowl' for a non-CFP postseason
+ * game, and 'playoff' for a College Football Playoff game. Pairs with
+ * `gameTypeLabel`, which supplies the visible text.
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @returns {"bowl"|"playoff"|null}
+ */
+export function gameTypeKind(data, i) {
+  const type = data.t.game_type[i];
+  if (type === 'regular') return null;
+  return type === 'bowl' ? 'bowl' : 'playoff';
+}
+
+/**
  * Formats telecast `i`'s conference line for the detail panel (D-09):
  * away vs. home, matching `formatMatchup`'s "Away at Home" order. A side
  * with no recorded conference reads "Not recorded"; when neither side has

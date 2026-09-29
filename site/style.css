@@ -858,6 +858,17 @@ input[type="checkbox"] {
   margin-top: var(--space-xs);
 }
 
+/* Bowl / playoff icon (notes-4 A1/A2a): inline SVG in `currentColor` from
+   icons.js, shared by the tooltip and the detail panel. */
+.game-type-icon {
+  vertical-align: -0.125em;
+  flex: none;
+}
+
+.tooltip-game-type .game-type-icon {
+  margin-right: var(--space-xs);
+}
+
 /* ---------- Chart area ---------- */
 
 /* `#chart-area`'s own children stack top-to-bottom in flex-column flow (not

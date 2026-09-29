@@ -80,13 +80,15 @@ export function naBand(data, axis) {
  * fallback mode only -- the default 'html' mode never calls this and never
  * builds a `text` array at all). Built from the same `tooltip.js`
  * `tooltipModel` the default HTML tooltip renders, so the two modes can
- * never drift on content/order: matchup+score, date+kickoff (with a
- * time-slot label only for a regular-season Saturday game, D-19),
+ * never drift on content/order: matchup+score, date+kickoff (a bowl or
+ * playoff game appends its "Bowl" / CFP round name as plain text, since this
+ * mode can't draw the HTML tooltip's icon -- and emoji glyphs vary by OS;
+ * the time-slot label is panel-only, notes-4 A1),
  * slash-delimited networks (primary first, each colored by its own family --
  * the stand-in for a filled pill in this text-only mode, since Plotly's
  * hover renderer can't draw one, SITE-26), one "Position: Name" line per
  * main-feed crew member, viewers, the active axis value, and a closing
- * "Click for details →" hint. Conferences, game type, the full outlet list,
+ * "Click for details →" hint. Conferences, the time slot, the full outlet list,
  * the measurement-type badge, era/event flags, and any scoring-source/
  * methodology note are panel-only (SITE-25) -- never repeated here. Each
  * line is built from untrusted data (team/crew/network names) and escaped
