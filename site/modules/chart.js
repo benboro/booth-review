@@ -238,6 +238,17 @@ export function buildFigure(data, view, state, env) {
   const hcolor = [];
   const hsize = [];
   const hsymbol = [];
+  const hlineWidth = [];
+  // D-31: a scattergl non-circle symbol (square/diamond/triangle-up/star)
+  // is drawn from an SDF glyph atlas (regl-scatter2d), and a
+  // `marker.line` border on one of those glyphs antialiases into a
+  // speckled fringe just outside the shape's edge -- confirmed empirically
+  // (04.1-13-SUMMARY.md: 1 ring-speckle pixel per diamond marker with the
+  // pre-fix 1.5px border, 0 with it removed). Circles are drawn
+  // analytically and never show the artifact, so they keep the accent
+  // border; every other symbol drops to line width 0 and gets a larger
+  // size instead, so the highlight still reads as distinct from the
+  // 15%-faded family dots without an outline.
   for (const i of highlighted) {
     const rawX = data.t[axis][i];
     hx.push(rawX == null ? band.sentinel : rawX);
@@ -247,7 +258,8 @@ export function buildFigure(data, view, state, env) {
     hcolor.push(FAMILY_COLORS[theme][data.familyOf[i]]);
     const symbol = view.symbols.get(i) ?? 'circle';
     hsymbol.push(symbol);
-    hsize.push(symbol === 'star' ? 13 : 10);
+    hsize.push(symbol === 'circle' ? 10 : symbol === 'star' ? 15 : 12);
+    hlineWidth.push(symbol === 'circle' ? 1.5 : 0);
   }
   traces.push({
     type: 'scattergl',
@@ -266,7 +278,7 @@ export function buildFigure(data, view, state, env) {
       size: hsize,
       symbol: hsymbol,
       opacity: 1,
-      line: { width: 1.5, color: ACCENT[theme] },
+      line: { width: hlineWidth, color: ACCENT[theme] },
     },
   });
 
