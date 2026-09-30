@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = "1.3.0"
+SCHEMA_VERSION = "1.4.0"
 
 
 class TeamRef(BaseModel):
@@ -129,6 +129,9 @@ class TelecastColumns(BaseModel):
     source_url: list[str | None]
     rr_urls: list[list[str]]
     s506_url: list[str | None]
+    # 04.3 D-11: a hand-confirmed crew's own cited source; null for 506 crews; both set or both null
+    crew_source_url: list[str | None]
+    crew_source_label: list[str | None]
     excitement: list[float | None]
     pregame: list[float | None]
     flags: list[list[int]]
@@ -150,6 +153,8 @@ class CoverageRow(BaseModel):
     rated_telecasts: int
     matched_game: int
     matched_crew: int
+    # of matched_crew, how many crews came from data/reference/crew_overrides.csv (D-13)
+    matched_crew_patched: int
     match_rate: float | None = None
     headline_present: int
     excitement_present: int
@@ -162,7 +167,7 @@ class CoverageRow(BaseModel):
 class SiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["1.3.0"]
+    schema_version: Literal["1.4.0"]
     generated_at: str
     freshness: Freshness
     lookups: Lookups
@@ -229,6 +234,20 @@ class SiteData(BaseModel):
                 raise ValueError(f"telecasts.away_conference[{i}]: conference index out of range")
             if tc.playoff_round[i] is not None and tc.game_type[i] != "playoff":
                 raise ValueError(f"telecasts.playoff_round[{i}]: set on a non-playoff game")
+            source_url = tc.crew_source_url[i]
+            source_label = tc.crew_source_label[i]
+            if (source_url is None) != (source_label is None):
+                raise ValueError(
+                    f"telecasts.crew_source_label[{i}]: must be set together with crew_source_url"
+                )
+            if source_url is not None and source_label is not None:
+                if not (
+                    source_url.startswith(("https://", "http://"))
+                    and not any(ch.isspace() for ch in source_url)
+                ):
+                    raise ValueError(f"telecasts.crew_source_url[{i}]: must be an http(s) URL")
+                if not source_label.strip():
+                    raise ValueError(f"telecasts.crew_source_label[{i}]: must not be empty")
             bowl = tc.bowl[i]
             if bowl is not None:
                 if not 0 <= bowl < num_bowls:
@@ -239,6 +258,10 @@ class SiteData(BaseModel):
         for i, row in enumerate(self.coverage):
             if row.network is not None and not 0 <= row.network < num_networks:
                 raise ValueError(f"coverage[{i}].network: network index out of range")
+            if row.matched_crew_patched < 0:
+                raise ValueError(f"coverage[{i}].matched_crew_patched: must not be negative")
+            if row.matched_crew_patched > row.matched_crew:
+                raise ValueError(f"coverage[{i}].matched_crew_patched: exceeds matched_crew")
 
         return self
 

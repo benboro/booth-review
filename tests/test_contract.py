@@ -148,6 +148,52 @@ def _schema_version_1_2_0(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _schema_version_1_3_0(data: dict[str, Any]) -> dict[str, Any]:
+    data["schema_version"] = "1.3.0"
+    return data
+
+
+def _crew_source_label_missing(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew_source_label"][3] = None
+    return data
+
+
+def _crew_source_url_missing(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew_source_url"][3] = None
+    return data
+
+
+def _crew_source_url_javascript(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew_source_url"][3] = "javascript:alert(1)"
+    return data
+
+
+def _crew_source_url_ftp(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew_source_url"][3] = "ftp://x"
+    return data
+
+
+def _crew_source_label_empty(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew_source_label"][3] = ""
+    return data
+
+
+def _matched_crew_patched_exceeds(data: dict[str, Any]) -> dict[str, Any]:
+    row = data["coverage"][0]
+    row["matched_crew_patched"] = row["matched_crew"] + 1
+    return data
+
+
+def _missing_crew_source_url_column(data: dict[str, Any]) -> dict[str, Any]:
+    del data["telecasts"]["crew_source_url"]
+    return data
+
+
+def _missing_matched_crew_patched(data: dict[str, Any]) -> dict[str, Any]:
+    del data["coverage"][0]["matched_crew_patched"]
+    return data
+
+
 def _bowl_index_out_of_range(data: dict[str, Any]) -> dict[str, Any]:
     data["telecasts"]["bowl"][7] = len(data["lookups"]["bowls"])
     return data
@@ -194,6 +240,15 @@ _BROKEN_VARIANTS = [
     pytest.param(_schema_version_1_1_0, id="schema-version-1-1-0"),
     pytest.param(_time_slot_evening_not_in_enum, id="time-slot-evening-not-in-enum"),
     pytest.param(_schema_version_1_2_0, id="schema-version-1-2-0"),
+    pytest.param(_schema_version_1_3_0, id="schema-version-1-3-0"),
+    pytest.param(_crew_source_label_missing, id="crew-source-label-missing"),
+    pytest.param(_crew_source_url_missing, id="crew-source-url-missing"),
+    pytest.param(_crew_source_url_javascript, id="crew-source-url-javascript"),
+    pytest.param(_crew_source_url_ftp, id="crew-source-url-ftp"),
+    pytest.param(_crew_source_label_empty, id="crew-source-label-empty"),
+    pytest.param(_matched_crew_patched_exceeds, id="matched-crew-patched-exceeds"),
+    pytest.param(_missing_crew_source_url_column, id="missing-crew-source-url-column"),
+    pytest.param(_missing_matched_crew_patched, id="missing-matched-crew-patched"),
     pytest.param(_bowl_index_out_of_range, id="bowl-index-out-of-range"),
     pytest.param(_bowl_core_not_in_name, id="bowl-core-not-in-name"),
     pytest.param(_bowl_on_regular_game, id="bowl-on-regular-game"),
@@ -235,3 +290,24 @@ def test_fixture_has_no_cfbd_only_fields() -> None:
         "is_cfp",
     }
     assert cfbd_only.isdisjoint(TelecastColumns.model_fields)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "prefix"),
+    [
+        (_crew_source_label_missing, "telecasts.crew_source_label[3]"),
+        (_crew_source_url_missing, "telecasts.crew_source_label[3]"),
+        (_crew_source_url_javascript, "telecasts.crew_source_url[3]: must be an http(s) URL"),
+        (_crew_source_url_ftp, "telecasts.crew_source_url[3]: must be an http(s) URL"),
+        (_crew_source_label_empty, "telecasts.crew_source_label[3]: must not be empty"),
+        (_matched_crew_patched_exceeds, "coverage[0].matched_crew_patched: exceeds matched_crew"),
+    ],
+)
+def test_crew_source_errors_name_column_and_index_only(mutate: Any, prefix: str) -> None:
+    data = mutate(copy.deepcopy(_load_fixture()))
+    with pytest.raises(ValidationError) as exc:
+        validate_site_data(data)
+    message = str(exc.value)
+    assert prefix in message
+    assert "example.com/crew-source" not in message
+    assert "Example Network PR" not in message

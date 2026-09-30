@@ -1184,3 +1184,40 @@ def test_freshness_unpatched_crew_advances_stamp(build_reference: Path) -> None:
     )
     payload = _site(tables, build_reference)
     assert payload["freshness"]["crews_through_week"] == "3"
+
+
+def test_crew_source_fields_emit_at_their_index_and_null_otherwise(build_reference: Path) -> None:
+    games = [_game_row(game_id=1), _game_row(game_id=2, week=3, date_et=date(2024, 9, 21))]
+    telecasts = [
+        _telecast_row(telecast_id="1-net-a", game_id=1),
+        _telecast_row(
+            telecast_id="2-net-a",
+            game_id=2,
+            date_et=date(2024, 9, 21),
+            headline_claim_id="claim-2",
+            headline_value=100.0,
+            rr_telecast_ids=["cfb-example-2"],
+            rr_record_urls=["https://example.com/r2"],
+            crew_patched=True,
+            crew_source_url="https://example.com/crew-source",
+            crew_source_label="Example Network PR",
+        ),
+    ]
+    tables = _build_tables(
+        games_rows=games,
+        telecast_rows=telecasts,
+        flag_rows=[
+            {"telecast_id": "1-net-a", "flag_id": "rr-fixture-era-2", "kind": "era"},
+            {"telecast_id": "2-net-a", "flag_id": "rr-fixture-era-2", "kind": "era"},
+        ],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+    payload = _site(tables, build_reference)
+    columns = payload["telecasts"]
+    assert columns["crew_source_url"] == [None, "https://example.com/crew-source"]
+    assert columns["crew_source_label"] == [None, "Example Network PR"]
+    assert columns["s506_url"][0] == "https://506sports.com/ncaaf.php?yr=2024&wk=1"
+    all_row = next(r for r in payload["coverage"] if r["network"] is None)
+    assert all_row["matched_crew"] == 2
+    assert all_row["matched_crew_patched"] == 1

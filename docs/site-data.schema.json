@@ -76,6 +76,10 @@
           "title": "Matched Crew",
           "type": "integer"
         },
+        "matched_crew_patched": {
+          "title": "Matched Crew Patched",
+          "type": "integer"
+        },
         "matched_game": {
           "title": "Matched Game",
           "type": "integer"
@@ -117,6 +121,7 @@
         "rated_telecasts",
         "matched_game",
         "matched_crew",
+        "matched_crew_patched",
         "headline_present",
         "excitement_present",
         "pregame_present",
@@ -473,6 +478,34 @@
           "title": "Crew",
           "type": "array"
         },
+        "crew_source_label": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Crew Source Label",
+          "type": "array"
+        },
+        "crew_source_url": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Crew Source Url",
+          "type": "array"
+        },
         "date": {
           "items": {
             "type": "string"
@@ -756,6 +789,8 @@
         "source_url",
         "rr_urls",
         "s506_url",
+        "crew_source_url",
+        "crew_source_label",
         "excitement",
         "pregame",
         "flags",
@@ -771,7 +806,7 @@
       "type": "object"
     }
   },
-  "$id": "booth-review/site-data/1.3.0",
+  "$id": "booth-review/site-data/1.4.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -793,7 +828,7 @@
       "$ref": "#/$defs/Lookups"
     },
     "schema_version": {
-      "const": "1.3.0",
+      "const": "1.4.0",
       "title": "Schema Version",
       "type": "string"
     },

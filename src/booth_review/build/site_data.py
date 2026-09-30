@@ -376,6 +376,8 @@ def build_site_data(
         "source_url": [],
         "rr_urls": [],
         "s506_url": [],
+        "crew_source_url": [],
+        "crew_source_label": [],
         "excitement": [],
         "pregame": [],
         "flags": [],
@@ -414,6 +416,8 @@ def build_site_data(
         columns["source_url"].append(row["headline_source_url"])
         columns["rr_urls"].append(list(row["rr_record_urls"]))
         columns["s506_url"].append(row["s506_url"])
+        columns["crew_source_url"].append(row.get("crew_source_url"))
+        columns["crew_source_label"].append(row.get("crew_source_label"))
         columns["excitement"].append(row["excitement"])
         columns["pregame"].append(row["pregame_x"])
         columns["flags"].append([flag_index[f] for f in flags_by_telecast.get(telecast_id, [])])
@@ -485,6 +489,7 @@ def build_site_data(
                 "rated_telecasts": rated_telecasts,
                 "matched_game": rated_telecasts,
                 "matched_crew": _as_int(crow["matched_crew"]),
+                "matched_crew_patched": _as_int(crow.get("crew_patched")),
                 "match_rate": crow["match_rate"],
                 "headline_present": _as_int(crow["headline_present"]),
                 "excitement_present": _as_int(crow["excitement_present"]),

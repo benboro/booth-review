@@ -18,7 +18,7 @@ immediately, in parallel with Phase 3's real joins.
 `site-data.json` is **one versioned columnar JSON file** (D-13), not an array
 of per-telecast objects:
 
-- `schema_version` — the contract version (currently `"1.3.0"`). See
+- `schema_version` — the contract version (currently `"1.4.0"`). See
   Versioning below.
 - `generated_at` — ISO UTC timestamp of the build that produced the file.
 - `freshness` — `{ season, crews_through_week, viewership_through_week }`,
@@ -75,6 +75,8 @@ describes when the value is `null` instead of coerced to a placeholder like
 | `source_url` | str \| null | null when the figure's original source URL isn't known | SITE-05, SITE-17 |
 | `rr_urls` | list[str], never empty | every merged Ratings Reference record URL for this telecast (JOIN-05); a duplicate-record merge keeps both | SITE-05 |
 | `s506_url` | str \| null | null when no 506 page is linked | SITE-05 |
+| `crew_source_url` | str \| null, http(s) URL | null for a 506 crew; set only with `crew_source_label` for a hand-confirmed crew (the crew's own cited source) | SITE-32 |
+| `crew_source_label` | str \| null, non-empty | null for a 506 crew; a short public label for the cited source, set only with `crew_source_url` | SITE-32 |
 | `excitement` | float \| null | null when CFBD's `excitementIndex` is missing — **never coerced to 0** (FLAG-04) | SITE-03, SITE-04 |
 | `pregame` | float \| null, `-\|closing spread\|` (SPIKE-04) | null when the closing spread isn't known | SITE-03 |
 | `flags` | list[int], indexes into `lookups.flags` | empty list when no flag applies | SITE-04, FLAG-01, FLAG-02, FLAG-03, FLAG-04 |
@@ -182,7 +184,9 @@ only their derived, display-safe outputs (`game_type`, `playoff_round`, the
   `game_type`, `playoff_round`, `home_conference`, `away_conference`, and
   `lookups.conferences` (D-09/D-17); `1.1.0` → `1.2.0` added the `late`
   time_slot value (D-20); `1.2.0` -> `1.3.0` added `lookups.bowls` and
-  `telecasts.bowl` (D-19).
+  `telecasts.bowl` (D-19); `1.3.0` -> `1.4.0` added `telecasts.crew_source_url`,
+  `telecasts.crew_source_label` (SITE-32, 04.3 D-11) and
+  `coverage[].matched_crew_patched` (AUDIT-04, D-13).
 - **Removing a field, renaming a field, or changing a field's type**
   (including narrowing an enum) bumps the **major** version (`1.0.0` →
   `2.0.0`).
@@ -215,3 +219,5 @@ telecast index 7 (a Saturday game with a prime-time kickoff, `game_type`
 As of v1.2.0 telecast index 2 has a 22:30 ET Saturday kickoff (`late`).
 
 As of v1.3.0 telecast 7 (bowl) points at a sponsor-prefixed bowl and telecast 5 (CFP semifinal) at a sponsor-suffixed bowl; the CFP-not-at-a-bowl and unnamed-bowl cases are covered by route-mutated payloads in the e2e suite.
+
+As of v1.4.0 telecast 3 carries a crew-source pair (a patched crew with no 506 listing); every coverage row has `matched_crew_patched` 0 because the fixture has no coverage row for that telecast's season.
