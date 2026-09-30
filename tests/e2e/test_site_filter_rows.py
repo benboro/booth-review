@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Callable
+from itertools import pairwise
 from typing import Any
 
 import pytest
@@ -275,3 +276,65 @@ def test_row_pitch_unchanged(guarded_page: Page, open_app: Callable[[Page, str],
     _open_filter(page, "conference")
     c = _box(_conf_item(page, "FBS Independents"))["y"] - _box(_conf_item(page, "Big Ten"))["y"]
     assert abs(c - CONFERENCE_PITCH) <= 1, f"conference pitch {c}"
+
+
+def test_postseason_options_stack_vertically(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-35: the three Bowls/Playoffs options are one row each with a count column."""
+    guarded_page.set_viewport_size({"width": 1280, "height": 800})
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "postseason")
+    boxes = [
+        _box(guarded_page.locator(f"[data-postseason='{v}']")) for v in ("all", "exclude", "only")
+    ]
+    lefts = [b["x"] for b in boxes]
+    assert max(lefts) - min(lefts) <= 1
+    for upper, lower in pairwise(boxes):
+        assert lower["y"] >= upper["y"] + upper["height"] - 1
+    rights = [
+        _box(guarded_page.locator(f"[data-postseason='{v}'] .option-count"))
+        for v in ("all", "exclude", "only")
+    ]
+    edges = [b["x"] + b["width"] for b in rights]
+    assert max(edges) - min(edges) <= 1
+    sizes: list[float] = guarded_page.eval_on_selector(
+        "#pop-postseason", "el => [el.scrollWidth, el.clientWidth]"
+    )
+    assert sizes[0] <= sizes[1]
+
+
+def test_postseason_arrow_down_and_up_move_selection(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-35: Up/Down move focus and selection through the radio list."""
+    guarded_page.set_viewport_size({"width": 1280, "height": 800})
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "postseason")
+    guarded_page.focus("[data-postseason='all']")
+    guarded_page.keyboard.press("ArrowDown")
+    guarded_page.wait_for_function("location.search.includes('postseason=exclude')")
+    exclude = guarded_page.locator("[data-postseason='exclude']")
+    assert exclude.get_attribute("aria-checked") == "true"
+    assert exclude.get_attribute("tabindex") == "0"
+    assert guarded_page.evaluate("document.activeElement.dataset.postseason") == "exclude"
+    guarded_page.keyboard.press("ArrowUp")
+    guarded_page.wait_for_function("!location.search.includes('postseason=')")
+    allb = guarded_page.locator("[data-postseason='all']")
+    assert allb.get_attribute("aria-checked") == "true"
+    assert guarded_page.evaluate("document.activeElement.dataset.postseason") == "all"
+
+
+def test_postseason_rows_meet_touch_target_on_phone(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-35: each phone-sheet option is at least 44px tall."""
+    open_app(mobile_page, "")
+    mobile_page.click("#filters-button")
+    mobile_page.wait_for_function(
+        "document.getElementById('filters-sheet').matches(':popover-open')"
+    )
+    for value in ("all", "exclude", "only"):
+        btn = mobile_page.locator(f"[data-postseason='{value}']")
+        btn.scroll_into_view_if_needed()
+        assert _box(btn)["height"] >= 44

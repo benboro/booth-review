@@ -1910,3 +1910,39 @@ def test_plotly_tooltip_border_is_primary_family_color(
         ".hoverlayer .hovertext path", "el => getComputedStyle(el).stroke"
     )
     assert stroke == _BORDER_COLOR["light"]["disney"]
+
+
+def _token_rgb(page: Page, name: str) -> tuple[float, float, float]:
+    css: str = page.evaluate(
+        "(n) => { const s = document.createElement('span'); s.style.color = `var(${n})`;"
+        "document.body.append(s); const c = getComputedStyle(s).color; s.remove(); return c; }",
+        name,
+    )
+    match = re.match(r"rgba?\((\d+), (\d+), (\d+)", css)
+    assert match, css
+    return (float(match[1]), float(match[2]), float(match[3]))
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_dashed_legend_chip_text_follows_its_toggle(
+    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
+) -> None:
+    """D-37: a dashed chip reads --text when on and --muted-weak when off."""
+    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
+    open_app(guarded_page, "?people=dale-harlow")
+    sel = '#legend-chips button[data-family="fox"]'
+    chip = guarded_page.locator(sel)
+    expect(chip).to_have_attribute("data-offered", "false")
+    expect(chip).to_have_attribute("aria-pressed", "true")
+    bg = _token_rgb(guarded_page, "--bg")
+    on = _rgb_of(guarded_page, sel, "color")
+    assert on == _token_rgb(guarded_page, "--text")
+    assert _ratio(on, bg) >= 4.5
+    chip.click()
+    expect(chip).to_have_attribute("aria-pressed", "false")
+    off = _rgb_of(guarded_page, sel, "color")
+    assert off == _token_rgb(guarded_page, "--muted-weak")
+    assert _ratio(off, bg) >= 4.5
+    disney = '#legend-chips button[data-family="disney"]'
+    disney_color: str = guarded_page.locator(disney).evaluate("el => getComputedStyle(el).color")
+    assert disney_color == _PILL_CONTRAST["disney"][1]

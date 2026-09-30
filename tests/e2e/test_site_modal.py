@@ -100,3 +100,55 @@ def test_other_flags_still_listed(
         "CFBD win-probability model break (2025+)"
         in guarded_page.locator("#panel-body").inner_text()
     )
+
+
+SCROLLERS = """
+() => {
+  const dialog = document.getElementById('detail-panel');
+  return [dialog, ...dialog.querySelectorAll('*')]
+    .filter((el) => {
+      const oy = getComputedStyle(el).overflowY;
+      return (oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 1;
+    })
+    .map((el) => el.className || el.tagName);
+}
+"""
+
+
+def _open_sized(
+    page: Page, open_app: Callable[[Page, str], None], width: int, height: int, index: int
+) -> None:
+    page.set_viewport_size({"width": width, "height": height})
+    open_app(page, "")
+    page.evaluate(f"window.__testHooks.openPanel({index})")
+
+
+def test_modal_has_one_scroller_when_content_is_long(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-38: .panel-inner is the only scroll container; the dialog never scrolls."""
+    _open_sized(guarded_page, open_app, 1280, 480, 7)
+    assert guarded_page.evaluate(SCROLLERS) == ["panel-inner"]
+    sizes: list[float] = guarded_page.eval_on_selector(
+        "#detail-panel", "el => [el.scrollHeight, el.clientHeight]"
+    )
+    assert sizes[0] <= sizes[1] + 1
+
+
+def test_modal_has_no_scroller_when_content_fits(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-38: a short panel in a tall viewport has no scrollbar at all."""
+    _open_sized(guarded_page, open_app, 1280, 1400, 0)
+    assert guarded_page.evaluate(SCROLLERS) == []
+
+
+def test_phone_sheet_has_at_most_one_scroller(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-38: on the phone sheet the dialog itself never scrolls."""
+    open_app(mobile_page, "")
+    mobile_page.evaluate("window.__testHooks.openPanel(7)")
+    found: list[str] = mobile_page.evaluate(SCROLLERS)
+    assert found in ([], ["panel-inner"])
+    assert "DIALOG" not in found

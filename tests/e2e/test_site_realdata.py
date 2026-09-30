@@ -445,3 +445,36 @@ def test_real_announcers_list_fits(
     scroll_width, client_width, wrapped = result
     assert scroll_width <= client_width, "the announcer list scrolls sideways"
     assert wrapped == 0, "a Play-by-play label wrapped"
+
+
+_SCROLLERS_JS = """
+() => {
+  const dialog = document.getElementById('detail-panel');
+  const over = (el) => {
+    const oy = getComputedStyle(el).overflowY;
+    return (oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 1;
+  };
+  const count = [dialog, ...dialog.querySelectorAll('*')].filter(over).length;
+  return [count, over(dialog) ? 1 : 0];
+}
+"""
+
+
+def test_real_modal_never_shows_two_scrollers(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """D-38: on the real build no sampled panel shows more than one scroller and
+    the dialog itself never scrolls -- numbers only."""
+    real_guarded_page.set_viewport_size({"width": 1280, "height": 480})
+    real_open_app(real_guarded_page, "")
+    total: int = real_guarded_page.evaluate("window.__testHooks.data.telecasts.season.length")
+    worst = 0
+    dialog_scrolls = 0
+    for i in range(0, total, 25):
+        real_guarded_page.evaluate(f"window.__testHooks.openPanel({i})")
+        count, dialog_scrolled = real_guarded_page.evaluate(_SCROLLERS_JS)
+        worst = max(worst, count)
+        dialog_scrolls += dialog_scrolled
+        real_guarded_page.evaluate("window.__testHooks.closePanel()")
+    assert worst <= 1
+    assert dialog_scrolls == 0
