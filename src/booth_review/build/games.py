@@ -17,6 +17,9 @@ picked by running `python -m booth_review.build.games` against the real
 2014-2026 vault: offset 0 agreed with 506's own printed rank digit 96.2% of
 the time (3275/3403 comparisons) against offset -1's 23.8% (748/3149) -- see
 the Phase 3 Plan 07 SUMMARY for the full per-season breakdown.
+
+CFBD `notes` is carried as the last column for the private bowl review file
+(D-19); it never reaches site data. games.parquet stays in the private vault.
 """
 
 from __future__ import annotations
@@ -65,6 +68,7 @@ GAMES_SCHEMA: dict[str, pl.DataType] = {
     "rank_poll": pl.Utf8(),
     "game_type": pl.Utf8(),
     "playoff_round": pl.Utf8(),
+    "notes": pl.Utf8(),
 }
 
 # CFBD's exact poll-name strings (confirmed against the real 2014-2026 vault,
@@ -233,6 +237,7 @@ def build_games_frame(sources: Sequence[SeasonSources]) -> pl.DataFrame:
                     "rank_poll": rank_poll,
                     "game_type": _game_type(game),
                     "playoff_round": _playoff_round(game),
+                    "notes": game.notes,
                 }
             )
 

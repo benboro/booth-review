@@ -37,9 +37,14 @@ export function initLegend({ listEl, onToggle }) {
  * Rebuilds `#legend-chips`'s children from `data.families`, syncing each
  * chip's `aria-pressed` and fill/border styling to whether the Networks
  * filter currently excludes every one of that family's networks (D-16).
- * @param {{data: object, state: object}} args
+ *
+ * D-16: a chip whose family has no offered channel under the current filters
+ * (`view.facets.networks` sums to 0) is greyed via `data-offered="false"`,
+ * not hidden, because the legend also explains the chart colors; it keeps
+ * its `aria-pressed` and still toggles the family.
+ * @param {{data: object, state: object, view?: object}} args
  */
-export function renderLegend({ data, state }) {
+export function renderLegend({ data, state, view }) {
   const listEl = document.getElementById('legend-chips');
   if (!listEl) return;
   const theme = currentTheme();
@@ -52,7 +57,17 @@ export function renderLegend({ data, state }) {
     button.textContent = FAMILY_LABELS[family];
     const pressed = !familyToggledOff(data, state, family);
     button.setAttribute('aria-pressed', String(pressed));
-    if (pressed) {
+    const counts = view?.facets?.networks;
+    const offered = !counts
+      || (data.networksByFamily.get(family) ?? []).reduce((sum, idx) => sum + (counts[idx] ?? 0), 0) > 0;
+    button.dataset.offered = String(offered);
+    if (!offered) {
+      // Greyed by CSS (`[data-offered="false"]`): no inline fill or text color
+      // so the stylesheet applies; the border keeps the family color.
+      button.style.backgroundColor = '';
+      button.style.color = '';
+      button.style.borderColor = FAMILY_COLORS[theme][family];
+    } else if (pressed) {
       button.style.backgroundColor = FAMILY_COLORS[theme][family];
       button.style.color = PILL_TEXT_COLOR[family];
       button.style.borderColor = '';

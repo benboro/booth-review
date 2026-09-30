@@ -160,6 +160,24 @@ def test_zero_excitement_stays_zero_not_null() -> None:
     assert frame.row(0, named=True)["excitement"] == 0.0
 
 
+def test_notes_are_carried_into_the_vault_frame() -> None:
+    frame = build_games_frame(
+        [
+            _sources(
+                games=[
+                    _game(id=1, notes="SYNTHETIC HARBOR NOTE"),
+                    _game(id=2, notes=None),
+                ]
+            )
+        ]
+    )
+
+    assert frame.filter(frame["game_id"] == 1).row(0, named=True)["notes"] == (
+        "SYNTHETIC HARBOR NOTE"
+    )
+    assert frame.filter(frame["game_id"] == 2).row(0, named=True)["notes"] is None
+
+
 # -- Closing spread, spread_provider, pregame_x -------------------------------------------
 
 

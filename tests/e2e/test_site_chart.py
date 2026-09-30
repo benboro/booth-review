@@ -138,10 +138,12 @@ def _hover_text(traces: list[dict[str, Any]], index: int) -> str:
     raise AssertionError(f"no dot with customdata {index}")
 
 
-def _hover_dot(page: Page, customdata: int) -> dict[str, float]:
+def _hover_dot(
+    page: Page, customdata: int, *, wait_for: str = "#chart-tooltip:not([hidden])"
+) -> dict[str, float]:
     """Moves the mouse onto telecast `customdata`'s dot and waits for the
-    D-22 HTML tooltip to show. Returns the dot's own pixel, for a caller
-    that needs it afterward.
+    D-22 HTML tooltip (or the `wait_for` selector) to show. Returns the
+    dot's own pixel, for a caller that needs it afterward.
 
     Two vendored-Plotly quirks confirmed empirically this session, both
     specific to a page that has scrolled (D-22's own close-on-scroll feature
@@ -174,7 +176,7 @@ def _hover_dot(page: Page, customdata: int) -> dict[str, float]:
     for attempt in range(2):
         page.mouse.move(point["x"], point["y"])
         try:
-            page.wait_for_selector("#chart-tooltip:not([hidden])", timeout=3000)
+            page.wait_for_selector(wait_for, timeout=3000)
             return point
         except PlaywrightTimeoutError:
             if attempt == 1:
@@ -396,6 +398,42 @@ def test_legend_chip_enter_key_toggles_family(
     assert "net-a" not in guarded_page.url
 
 
+def test_legend_chip_greyed_when_family_has_no_offered_channel(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-16: with only dale-harlow (net-a) picked, other chips grey out but stay toggles."""
+    open_app(guarded_page, "?people=dale-harlow")
+    disney = guarded_page.locator('#legend-chips button[data-family="disney"]')
+    expect(disney).to_have_attribute("data-offered", "true")
+    for family in ("fox", "conference", "other"):
+        chip = guarded_page.locator(f'#legend-chips button[data-family="{family}"]')
+        expect(chip).to_have_attribute("data-offered", "false")
+        expect(chip).to_have_attribute("aria-pressed", "true")
+        style = chip.evaluate(
+            "el => { const s = getComputedStyle(el);"
+            " return [s.backgroundColor, s.borderTopStyle]; }"
+        )
+        assert style[0] in ("rgba(0, 0, 0, 0)", "transparent")
+        assert style[1] == "dashed"
+
+    fox = guarded_page.locator('#legend-chips button[data-family="fox"]')
+    fox.click()
+    guarded_page.wait_for_function("window.__testHooks.getState().networks !== null")
+    expect(guarded_page.locator('#legend-chips button[data-family="fox"]')).to_have_attribute(
+        "aria-pressed", "false"
+    )
+
+
+def test_legend_chips_all_offered_by_default(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    values = guarded_page.locator("#legend-chips button").evaluate_all(
+        "els => els.map(el => el.dataset.offered)"
+    )
+    assert values == ["true"] * 4
+
+
 @pytest.mark.parametrize("query", ["?seasons=2021-2021", "?school=northfield"])
 def test_legend_chips_all_read_pressed_when_a_non_network_filter_is_active(
     guarded_page: Page, open_app: Callable[[Page, str], None], query: str
@@ -537,7 +575,7 @@ def test_inert_dots_take_no_hover_and_are_not_clickable(
 
     guarded_page.mouse.click(point["x"], point["y"])
     guarded_page.wait_for_timeout(200)
-    assert guarded_page.evaluate("document.getElementById('detail-panel').hidden") is True
+    assert guarded_page.evaluate("document.getElementById('detail-panel').open") is False
 
 
 def test_person_matched_dot_that_fails_a_filter_renders_as_filtered_out(
@@ -1084,6 +1122,8 @@ def test_game_type_icons_have_own_colors_meeting_non_text_contrast(
         assert _rgb_of(guarded_page, panel_icon, "color") == fg
         panel_bg = _rgb_of(guarded_page, "#detail-panel", "backgroundColor")
         assert _ratio(fg, panel_bg) >= 3, (scheme, kind, "panel")
+        # The modal makes the page inert, so close it before the next hover.
+        guarded_page.click("#panel-close")
 
     assert icon_colors["bowl"] != icon_colors["playoff"]
     text = _rgb_of(guarded_page, "#chart-tooltip", "color")
@@ -1191,7 +1231,7 @@ def test_html_tooltip_hides_on_mouse_out_scroll_and_panel_open(
 
     _hover_dot(guarded_page, 0)
     guarded_page.mouse.click(point["x"], point["y"])
-    guarded_page.wait_for_function("document.body.classList.contains('panel-open')")
+    guarded_page.wait_for_function("document.getElementById('detail-panel').open")
     assert guarded_page.is_hidden("#chart-tooltip")
 
 
@@ -1287,7 +1327,7 @@ def test_mobile_tap_opens_panel_without_a_hover_tooltip(
     open_app(mobile_page, "")
     point = _dot_point(mobile_page, 0)
     mobile_page.touchscreen.tap(point["x"], point["y"])
-    mobile_page.wait_for_function("document.body.classList.contains('panel-open')")
+    mobile_page.wait_for_function("document.getElementById('detail-panel').open")
     assert mobile_page.is_hidden("#chart-tooltip")
 
 
@@ -1598,6 +1638,14 @@ def test_compare_shapes_have_accent_halo_border(
     guarded_page.set_viewport_size({"width": 1280, "height": 800})
     guarded_page.emulate_media(color_scheme=color_scheme)
     open_app(guarded_page, _COMPARE_ALL_SHAPES_QUERY)
+    # This is a pixel-fidelity check on the glyph edges; the stable scrollbar
+    # gutter (SITE-28) shifts the chart by a half pixel, which this
+    # band-counting decode is sensitive to, so it is switched off here.
+    guarded_page.evaluate(
+        "() => { document.documentElement.style.scrollbarGutter = 'auto'; "
+        "window.dispatchEvent(new Event('resize')); }"
+    )
+    guarded_page.wait_for_timeout(500)
     guarded_page.locator("#chart").scroll_into_view_if_needed()
     points = guarded_page.evaluate(_HIGHLIGHT_POINTS_JS)
     guarded_page.mouse.move(5, 5)
@@ -1864,3 +1912,262 @@ def test_plotly_tooltip_border_is_primary_family_color(
         ".hoverlayer .hovertext path", "el => getComputedStyle(el).stroke"
     )
     assert stroke == _BORDER_COLOR["light"]["disney"]
+
+
+def _token_rgb(page: Page, name: str) -> tuple[float, float, float]:
+    css: str = page.evaluate(
+        "(n) => { const s = document.createElement('span'); s.style.color = `var(${n})`;"
+        "document.body.append(s); const c = getComputedStyle(s).color; s.remove(); return c; }",
+        name,
+    )
+    match = re.match(r"rgba?\((\d+), (\d+), (\d+)", css)
+    assert match, css
+    return (float(match[1]), float(match[2]), float(match[3]))
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_dashed_legend_chip_text_follows_its_toggle(
+    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
+) -> None:
+    """D-37: a dashed chip reads --text when on and --muted-weak when off."""
+    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
+    open_app(guarded_page, "?people=dale-harlow")
+    sel = '#legend-chips button[data-family="fox"]'
+    chip = guarded_page.locator(sel)
+    expect(chip).to_have_attribute("data-offered", "false")
+    expect(chip).to_have_attribute("aria-pressed", "true")
+    bg = _token_rgb(guarded_page, "--bg")
+    on = _rgb_of(guarded_page, sel, "color")
+    assert on == _token_rgb(guarded_page, "--text")
+    assert _ratio(on, bg) >= 4.5
+    chip.click()
+    expect(chip).to_have_attribute("aria-pressed", "false")
+    off = _rgb_of(guarded_page, sel, "color")
+    assert off == _token_rgb(guarded_page, "--muted-weak")
+    assert _ratio(off, bg) >= 4.5
+    disney = '#legend-chips button[data-family="disney"]'
+    disney_color: str = guarded_page.locator(disney).evaluate("el => getComputedStyle(el).color")
+    assert disney_color == _PILL_CONTRAST["disney"][1]
+
+
+# --- Hover ring (notes-6) ---------------------------------------------------
+
+
+def _rgb(hex_color: str) -> str:
+    """`#RRGGBB` as the `rgb(r, g, b)` string getComputedStyle returns."""
+    r, g, b = (int(hex_color[i : i + 2], 16) for i in (1, 3, 5))
+    return f"rgb({r}, {g}, {b})"
+
+
+def _ring_box(page: Page) -> dict[str, Any]:
+    """The hover ring's bounding box plus its `dataset.index`."""
+    result: dict[str, Any] = page.evaluate(
+        "() => { const el = document.getElementById('chart-hover-ring');"
+        " const r = el.getBoundingClientRect();"
+        " return {x: r.x, y: r.y, width: r.width, height: r.height, index: el.dataset.index}; }"
+    )
+    return result
+
+
+def _center(box: dict[str, Any]) -> tuple[float, float]:
+    return box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+
+
+def _assert_ring_on(page: Page, index: int, point: dict[str, float]) -> dict[str, Any]:
+    box = _ring_box(page)
+    assert box["index"] == str(index)
+    cx, cy = _center(box)
+    assert abs(cx - point["x"]) <= 1.5
+    assert abs(cy - point["y"]) <= 1.5
+    return box
+
+
+_RING = "#chart-hover-ring"
+_RING_VISIBLE = "#chart-hover-ring:not([hidden])"
+
+
+@pytest.mark.parametrize("color_scheme", ["light", "dark"])
+def test_hover_ring_marks_the_hovered_dot(
+    guarded_page: Page, open_app: Callable[[Page, str], None], color_scheme: str
+) -> None:
+    """notes-6: hovering an active dot draws an accent ring centered on it, in both
+    themes, and it clears when the pointer leaves."""
+    guarded_page.emulate_media(color_scheme=color_scheme)  # type: ignore[arg-type]
+    open_app(guarded_page, "")
+    point = _hover_dot(guarded_page, 0)
+    guarded_page.wait_for_selector(_RING_VISIBLE, timeout=3000)
+    box = _assert_ring_on(guarded_page, 0, point)
+    assert box["width"] == box["height"]
+    assert box["width"] >= 12
+    style = guarded_page.eval_on_selector(
+        _RING,
+        "el => { const s = getComputedStyle(el); return [s.borderTopColor, s.pointerEvents]; }",
+    )
+    assert style[0] == _rgb(_ACCENT[color_scheme])
+    assert style[1] == "none"
+    guarded_page.mouse.move(5, 5)
+    guarded_page.wait_for_selector(f"{_RING}[hidden]", state="attached")
+
+
+def test_hover_ring_follows_the_hovered_dot(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """notes-6: moving to another dot moves the ring to that dot's own pixel."""
+    open_app(guarded_page, "")
+    _hover_dot(guarded_page, 0)
+    point = _hover_dot(guarded_page, 1)
+    guarded_page.wait_for_selector(_RING_VISIBLE, timeout=3000)
+    _assert_ring_on(guarded_page, 1, point)
+
+
+def test_hover_ring_clears_on_scroll_and_modal_open(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-22 close triggers: scroll and opening the detail modal both clear the ring."""
+    open_app(guarded_page, "")
+    _hover_dot(guarded_page, 0)
+    guarded_page.wait_for_selector(_RING_VISIBLE, timeout=3000)
+    guarded_page.evaluate("window.scrollBy(0, 40)")
+    guarded_page.wait_for_selector(f"{_RING}[hidden]", state="attached")
+
+    point = _hover_dot(guarded_page, 0)
+    guarded_page.wait_for_selector(_RING_VISIBLE, timeout=3000)
+    guarded_page.mouse.click(point["x"], point["y"])
+    guarded_page.wait_for_function("document.getElementById('detail-panel').open")
+    assert guarded_page.is_hidden(_RING)
+
+
+def test_hover_ring_clears_on_zoom(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """A zoom's plotly_relayout moves dots out from under the ring, so it clears."""
+    open_app(guarded_page, "")
+    _hover_dot(guarded_page, 0)
+    guarded_page.wait_for_selector(_RING_VISIBLE, timeout=3000)
+    guarded_page.evaluate(
+        "() => { const gd = document.getElementById('chart');"
+        " const r = gd._fullLayout.xaxis.range;"
+        " return window.Plotly.relayout(gd, {'xaxis.range': [r[0], r[0] + (r[1] - r[0]) / 2]}); }"
+    )
+    guarded_page.wait_for_selector(f"{_RING}[hidden]", state="attached")
+
+
+_COUNTERS_JS = """
+() => {
+  const gd = document.getElementById('chart');
+  const counts = {};
+  for (const name of ['react', 'restyle', 'relayout', 'update', 'redraw', 'newPlot']) {
+    counts[name] = 0;
+    const orig = window.Plotly[name];
+    window.Plotly[name] = function (...args) { counts[name] += 1; return orig.apply(this, args); };
+  }
+  counts.plotly_relayout = 0;
+  gd.on('plotly_relayout', () => { counts.plotly_relayout += 1; });
+  window.__hoverCounts = counts;
+  const rect = (id) => JSON.stringify(document.getElementById(id).getBoundingClientRect());
+  window.__hoverSnapshot = () => ({
+    traces: gd.data.length,
+    layout: JSON.stringify(gd.layout),
+    chart: rect('chart'),
+    area: rect('chart-area'),
+    sw: document.documentElement.scrollWidth,
+    sh: document.documentElement.scrollHeight,
+  });
+  window.__hoverBefore = window.__hoverSnapshot();
+}
+"""
+
+
+def test_hover_ring_makes_no_plotly_call_and_shifts_nothing(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """04.2 D-01: showing/hiding the ring calls no Plotly API, fires no
+    plotly_relayout, and leaves traces, layout, and page geometry untouched."""
+    open_app(guarded_page, "")
+    guarded_page.locator("#chart").scroll_into_view_if_needed()
+    guarded_page.evaluate(_COUNTERS_JS)
+    _hover_dot(guarded_page, 0)
+    guarded_page.wait_for_selector(_RING_VISIBLE, timeout=3000)
+    guarded_page.mouse.move(5, 5)
+    guarded_page.wait_for_selector(f"{_RING}[hidden]", state="attached")
+    counts = guarded_page.evaluate("window.__hoverCounts")
+    assert all(v == 0 for v in counts.values()), counts
+    assert guarded_page.evaluate(
+        "JSON.stringify(window.__hoverSnapshot()) === JSON.stringify(window.__hoverBefore)"
+    )
+
+
+def test_hover_ring_never_shows_on_inert_or_faded_dots(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-15: an inert or person-faded dot takes no hover, so it never gets the ring."""
+    open_app(guarded_page, "?networks=net-a")
+    inert = _inert_dot_point(guarded_page, "inert:fox", 0)
+    guarded_page.mouse.move(5, 5)
+    guarded_page.mouse.move(inert["x"], inert["y"])
+    guarded_page.wait_for_timeout(300)
+    assert guarded_page.is_hidden(_RING)
+
+    open_app(guarded_page, "?people=dale-harlow")
+    faded = _dot_point(guarded_page, 1)
+    guarded_page.mouse.move(5, 5)
+    guarded_page.mouse.move(faded["x"], faded["y"])
+    guarded_page.wait_for_timeout(300)
+    assert guarded_page.is_hidden(_RING)
+    _hover_dot(guarded_page, 0)
+    guarded_page.wait_for_selector(_RING_VISIBLE, timeout=3000)
+
+
+@pytest.mark.parametrize("color_scheme", ["light", "dark"])
+def test_hover_ring_on_compare_shapes_clears_the_halo(
+    guarded_page: Page, open_app: Callable[[Page, str], None], color_scheme: str
+) -> None:
+    """D-31/D-33: a hovered compare shape gets a ring that clears its halo's
+    corners, and the highlight trace gains no marker.line (no speckles)."""
+    guarded_page.emulate_media(color_scheme=color_scheme)  # type: ignore[arg-type]
+    open_app(guarded_page, _COMPARE_ALL_SHAPES_QUERY)
+    points: list[dict[str, Any]] = guarded_page.evaluate(_HIGHLIGHT_POINTS_JS)
+    target = next(
+        (
+            p
+            for p in points
+            if p["symbol"] != "circle"
+            and not p["naSentinel"]
+            and not any(_boxes_overlap(p, o) for o in points if o is not p)
+        ),
+        None,
+    )
+    assert target is not None, "no testable non-circle compare point"
+    line_js = (
+        "() => { const t = document.getElementById('chart').data.at(-1);"
+        " return [JSON.stringify(t.marker.line), document.getElementById('chart').data.length]; }"
+    )
+    before = guarded_page.evaluate(line_js)
+    point = _hover_dot(guarded_page, target["customdata"])
+    guarded_page.wait_for_selector(_RING_VISIBLE, timeout=3000)
+    box = _assert_ring_on(guarded_page, target["customdata"], point)
+    assert box["width"] >= (target["size"] + 3) * math.sqrt(2) + 4
+    assert guarded_page.evaluate(line_js) == before
+
+
+def test_hover_ring_shows_in_plotly_fallback_mode(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """The ring is independent of TOOLTIP_MODE: it shows beside Plotly's own label."""
+    open_app(guarded_page, "")
+    _use_plotly_tooltip(guarded_page)
+    point = _hover_dot(guarded_page, 0, wait_for=_RING_VISIBLE)
+    _assert_ring_on(guarded_page, 0, point)
+    assert guarded_page.locator(".hoverlayer .hovertext").count() >= 1
+    assert guarded_page.is_hidden("#chart-tooltip")
+
+
+def test_hover_ring_never_shows_on_touch(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-22: a touch device keeps tap-to-open and never sees the ring."""
+    open_app(mobile_page, "")
+    point = _dot_point(mobile_page, 0)
+    mobile_page.touchscreen.tap(point["x"], point["y"])
+    mobile_page.wait_for_function("document.getElementById('detail-panel').open")
+    assert mobile_page.is_hidden(_RING)

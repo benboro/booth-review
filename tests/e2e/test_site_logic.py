@@ -44,6 +44,17 @@ async (partial) => {
     symbols: Object.fromEntries(Array.from(view.symbols.entries())),
     seasonCounts: view.seasonCounts,
     summary: view.summary,
+    facets: view.facets === undefined ? null : {
+      total: view.facets.total,
+      seasons: Object.fromEntries(view.facets.seasons),
+      networks: Array.from(view.facets.networks),
+      slots: view.facets.slots,
+      conferences: Object.fromEntries(view.facets.conferences),
+      schools: Array.from(view.facets.schools),
+      postseason: view.facets.postseason,
+      role: view.facets.role,
+      people: Array.from(view.facets.people),
+    },
   };
 }
 """
@@ -643,3 +654,98 @@ def test_summary_networks_ordered_by_matched_count_then_alphabetical(
     assert robin == ["Other Network", "Alpha Sports"]
     tie = _view(guarded_page, {"people": ["jamie-oaks"]})["summary"]["networks"]
     assert tie == ["Alpha Sports", "Other Network"]
+
+
+def _facets(page: Page, partial: dict[str, Any]) -> dict[str, Any]:
+    facets = _view(page, partial)["facets"]
+    assert facets is not None, "view.facets is missing"
+    return facets  # type: ignore[no-any-return]
+
+
+def test_facet_default_state_counts(guarded_page: Page, site_url: str) -> None:
+    """Default state: every telecast counts once in each facet (D-12)."""
+    _load(guarded_page, site_url)
+    facets = _facets(guarded_page, {})
+    assert facets["total"] == 12
+    assert facets["networks"] == [3, 3, 3, 3]
+    assert facets["postseason"] == {"all": 12, "exclude": 10, "only": 2}
+    assert facets["seasons"] == {"2019": 2, "2021": 2, "2025": 4, "2026": 4}
+    assert facets["slots"] == {"noon": 3, "afternoon": 4, "prime": 3, "late": 1}
+    assert facets["role"] == {"pbp": 11, "analyst": 10}
+
+
+def test_facet_selected_person_narrows_other_facets_not_people(
+    guarded_page: Page, site_url: str
+) -> None:
+    """D-09: dale-harlow (dots 0 and 8, both net-a) narrows every facet but
+    the People facet, which ignores the person constraint."""
+    _load(guarded_page, site_url)
+    default = _facets(guarded_page, {})
+    facets = _facets(guarded_page, {"people": ["dale-harlow"]})
+    assert facets["total"] == 2
+    assert facets["networks"] == [2, 0, 0, 0]
+    assert facets["seasons"] == {"2019": 1, "2021": 0, "2025": 0, "2026": 1}
+    assert facets["people"] == default["people"]
+
+
+def test_facet_ignores_only_its_own_constraint(guarded_page: Page, site_url: str) -> None:
+    """D-08: checking a network never changes the Networks counts but does
+    change every other facet's."""
+    _load(guarded_page, site_url)
+    default = _facets(guarded_page, {})
+    facets = _facets(guarded_page, {"networks": ["net-b"]})
+    assert facets["networks"] == default["networks"]
+    assert facets["seasons"] == {"2019": 1, "2021": 0, "2025": 1, "2026": 1}
+    assert facets["total"] == 3
+
+
+def test_facet_union_versus_together_versus_compare(guarded_page: Page, site_url: str) -> None:
+    """D-10: several announcers are a union by default and in compare mode,
+    an intersection in called-together mode."""
+    _load(guarded_page, site_url)
+    people = ["dale-harlow", "robin-teague"]
+    union = _facets(guarded_page, {"people": people})
+    together = _facets(guarded_page, {"people": people, "together": True})
+    compare = _facets(guarded_page, {"people": people, "compare": True})
+    assert union["networks"] == [2, 0, 0, 2]
+    assert together["networks"] == [1, 0, 0, 0]
+    assert compare["networks"] == union["networks"]
+
+
+def test_facet_role_limits_person_match_and_role_facet_ignores_state_role(
+    guarded_page: Page, site_url: str
+) -> None:
+    """D-10: pat-rowan is play-by-play on dots 2, 5, 10; Role limits how the
+    person matches, and the Role facet reports both roles regardless."""
+    _load(guarded_page, site_url)
+    as_pbp = _facets(guarded_page, {"people": ["pat-rowan"], "role": "pbp"})
+    as_analyst = _facets(guarded_page, {"people": ["pat-rowan"], "role": "analyst"})
+    assert as_pbp["networks"] == [0, 1, 2, 0]
+    assert as_analyst["networks"] == [0, 0, 0, 0]
+    assert as_pbp["role"] == {"pbp": 3, "analyst": 0}
+    assert as_analyst["role"] == as_pbp["role"]
+
+
+def test_facet_season_range_constrains_other_facets_only(guarded_page: Page, site_url: str) -> None:
+    """A season range narrows non-season facets; the Seasons facet ignores it."""
+    _load(guarded_page, site_url)
+    facets = _facets(guarded_page, {"seasons": [2019, 2019]})
+    assert facets["networks"] == [1, 1, 0, 0]
+    assert facets["seasons"] == {"2019": 2, "2021": 2, "2025": 4, "2026": 4}
+
+
+def test_facet_season_counts_derive_from_seasons_facet(guarded_page: Page, site_url: str) -> None:
+    """seasonCounts is the Seasons facet, so it is person-aware (D-14)."""
+    _load(guarded_page, site_url)
+    view = _view(guarded_page, {"people": ["dale-harlow"]})
+    assert dict(view["seasonCounts"]) == {2019: 1, 2021: 0, 2025: 0, 2026: 1}
+    for season, count in view["seasonCounts"]:
+        assert view["facets"]["seasons"][str(season)] == count
+
+
+def test_facet_people_counts_reflect_other_filters(guarded_page: Page, site_url: str) -> None:
+    """People counts are telecasts per person under the other filters."""
+    _load(guarded_page, site_url)
+    facets = _facets(guarded_page, {"networks": ["net-a"]})
+    # net-a dots are 0, 4, 8: people 0,1 (dots 0, 8), 7,8 (dot 4), 6 (dot 8).
+    assert facets["people"] == [2, 2, 0, 0, 0, 0, 1, 1, 1, 0]

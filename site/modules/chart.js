@@ -435,12 +435,13 @@ export function renderChart(gd, figure) {
  * double-click events have no handler here -- the HTML chip legend
  * (`legend.js`) is a plain DOM click listener wired in `app.js`, entirely
  * outside Plotly's own event system, since every trace now sets
- * `showlegend: false` (D-04).
+ * `showlegend: false` (D-04). `plotly_relayout` (zoom/pan/resize) calls
+ * `onRelayout` so app.js can clear the hover ring.
  * @param {HTMLElement} gd
- * @param {{onPointClick?: (customdata: number) => void, onPointHover?: (customdata: number, ev: object) => void, onPointUnhover?: () => void}} handlers
+ * @param {{onPointClick?: (customdata: number) => void, onPointHover?: (customdata: number, ev: object) => void, onPointUnhover?: () => void, onRelayout?: () => void}} handlers
  */
 export function bindChartEvents(gd, handlers = {}) {
-  const { onPointClick, onPointHover, onPointUnhover } = handlers;
+  const { onPointClick, onPointHover, onPointUnhover, onRelayout } = handlers;
 
   gd.on('plotly_click', (ev) => {
     const point = ev.points && ev.points[0];
@@ -453,4 +454,7 @@ export function bindChartEvents(gd, handlers = {}) {
   });
 
   gd.on('plotly_unhover', () => onPointUnhover?.());
+
+  // Zoom, pan and autosize all move dots out from under the hover ring.
+  gd.on('plotly_relayout', () => onRelayout?.());
 }

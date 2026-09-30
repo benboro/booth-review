@@ -23,6 +23,8 @@
   --accent: #111827;
   --text: #111827;
   --muted: #4B5563;
+  /* Greyed (count 0) options and legend chips. Only for --bg surfaces, never --surface. */
+  --muted-weak: #6B7280;
   --error: #B3261E;
   /* D-25: "Clear all filters" own accent color -- the same verified pair as
      --error today, kept as its own token so the two can diverge later
@@ -34,6 +36,10 @@
      dark 9.90 / 5.13. */
   --game-playoff: #A37800;
   --game-bowl: #A8501C;
+  /* D-34: violet special-filter hue for the Announcers button (not an
+     Okabe-Ito family color). 5.70/5.22 on --bg/--surface; filled 5.70. */
+  --special: #7C3AED;
+  --on-special: #FFFFFF;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -44,10 +50,13 @@
     --accent: #E5E7EB;
     --text: #E5E7EB;
     --muted: #9CA3AF;
+    --muted-weak: #7B8492;
     --error: #F2B8B5;
     --reset: #F2B8B5;
     --game-playoff: #F5C518;
     --game-bowl: #CD7F32;
+    --special: #A78BFA;
+    --on-special: #111827;
   }
 }
 
@@ -233,6 +242,14 @@ li[role="option"][aria-selected="true"] .option-check::after {
 #selection-bar {
   padding: var(--space-sm) var(--space-lg);
   min-width: 0;
+  /* D-33: reserve the one-person band height (measured 82.6px at 1280 and
+     800: 2 x 8px padding + chip row + 20px summary line) so the legend
+     chips and chart do not move when a person is added or cleared. The
+     reserve carries ~5px of headroom because font metrics differ across
+     machines (CI's fonts render the band ~0.6px taller than 83px). This
+     overrides the 04.1 D-25 collapse-when-empty behavior for this band
+     only; a wrapped multi-person chip row may still grow it. */
+  min-height: 88px;
 }
 
 .selection-row {
@@ -380,7 +397,8 @@ li[role="option"][aria-selected="true"] .option-check::after {
 }
 
 .summary-count {
-  font: var(--font-display);
+  /* D-33: 20px title (was the 28px display size). */
+  font: var(--font-heading);
   font-weight: var(--weight-semibold);
   white-space: nowrap;
 }
@@ -445,11 +463,8 @@ li[role="option"][aria-selected="true"] .option-check::after {
    and coverage.html share this stylesheet but have none of the grid-area ids,
    so a bare `body` grid auto-placed their header/main/footer into the
    toolbar row (WR-05); they keep normal block flow instead. Single-column
-   base (mobile default): the toolbar replaces the rail entirely (D-02). The
-   `min-width: 641px` block below adds the panel column that pushes the
-   chart/table aside on tablet and desktop (D-01, SITE-20); phones keep the
-   detail panel as a `position: fixed` bottom sheet (see "Detail panel"
-   below), so no panel column is ever added at that width. */
+   base at every width: the detail view is a modal dialog (see "Detail modal"
+   below), never a grid column, so opening it cannot change the layout. */
 body.app {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -465,7 +480,7 @@ body.app {
      leaves a second, unstyled band on top of that padding (the reported
      "empty vertical space between the toolbar and the plot"). This also
      removes the permanent column gap that used to sit beside the closed
-     detail-panel column at >=641px. */
+     detail-panel column (removed; the detail view is a modal). */
   gap: 0;
 }
 
@@ -475,28 +490,6 @@ body.app {
 #chart-area { grid-area: main; }
 #matched-games { grid-area: table; }
 #site-footer { grid-area: footer; }
-#detail-panel { grid-area: panel; }
-
-/* Tablet/desktop: a real two-column grid, but the panel column spans only
-   the chart row (D-23: replaces plan 04.1-05's both-rows span -- opening
-   the panel narrows only the chart, never the matched-games table, which
-   always stays full width). The column always exists structurally; only
-   its own content width (below, "Detail panel") animates open/closed --
-   never animate `grid-template-columns` itself (Pitfall 1: interpolating a
-   grid track size fires the vendored Plotly bundle's internal
-   ResizeObserver repeatedly mid-transition, causing visible chart jank). */
-@media (min-width: 641px) {
-  body.app {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "topbar  topbar"
-      "toolbar toolbar"
-      "selection selection"
-      "main    panel"
-      "table   table"
-      "footer  footer";
-  }
-}
 
 #chart-area {
   /* D-25: side gutters (>=16px) plus a small top pad -- the selection bar
@@ -585,6 +578,24 @@ body.app {
   outline-offset: 2px;
 }
 
+/* D-34: the Announcers button is the special filter -- violet outline and
+   text at rest, filled when people are selected. Distinct from the red
+   --reset "Clear all filters". */
+#trigger-announcers {
+  border-color: var(--special);
+  color: var(--special);
+}
+
+#trigger-announcers[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--special) 12%, var(--bg));
+}
+
+#trigger-announcers[data-active="true"] {
+  background: var(--special);
+  border-color: var(--special);
+  color: var(--on-special);
+}
+
 /* ---------- Filter popovers ---------- */
 
 .filter-popover {
@@ -666,6 +677,37 @@ body.app {
   overflow: hidden;
 }
 
+/* D-32: wide enough that "Play-by-play" stays on one line; the max-width
+   override is needed because .filter-popover caps at 360px. */
+#pop-announcers {
+  width: min(440px, calc(100vw - 16px));
+  max-width: min(440px, calc(100vw - 16px));
+}
+
+/* D-32: the list never scrolls sideways; long names wrap in their own column. */
+#person-results {
+  overflow-x: hidden;
+}
+
+#person-results .option-name,
+#person-results .option-variant {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+#person-results .option-name {
+  flex: 1 1 auto;
+}
+
+#person-results .option-role,
+#person-results .option-count {
+  flex: none;
+}
+
+#person-results .option-role {
+  white-space: nowrap;
+}
+
 #filter-announcers {
   display: flex;
   flex-direction: column;
@@ -688,11 +730,6 @@ body.app {
   gap: var(--space-sm);
   padding: 4px 0;
   margin-bottom: 0;
-}
-
-#postseason-options.segmented button[aria-checked="true"] {
-  border-bottom: 2px solid var(--accent);
-  color: var(--accent);
 }
 
 #school-chips {
@@ -784,6 +821,200 @@ input[type="checkbox"] {
   margin: 0;
 }
 
+/* ---------- Faceted options (D-08..D-15) ---------- */
+
+.check-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  /* The row spacing lives on the row, not on its label (D-29): a label margin sits inside
+     the centered flex box and pushed the label 4px above the Only button. */
+  margin-bottom: var(--space-sm);
+}
+
+.filter-popover .check-item > .check-row,
+.sheet-body .check-item > .check-row {
+  margin-bottom: 0;
+}
+
+/* Channel rows get their spacing from the <li>. */
+.network-list .check-item {
+  margin-bottom: 0;
+}
+
+.family-item > .check-row,
+#filter-networks .check-row {
+  padding: 0;
+}
+
+.check-item[hidden] {
+  display: none;
+}
+
+.check-item > .check-row {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.option-count {
+  margin-left: auto;
+  min-width: 5ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/* Greyed (count 0): color only, so the checkbox keeps its accent and stays clickable. */
+.is-zero,
+.is-zero .option-count {
+  color: var(--muted-weak);
+}
+
+/* ---------- Bowls/Playoffs radio list (D-35) ---------- */
+
+.radio-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.radio-list button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: 4px 0;
+  border: none;
+  background: none;
+  font: var(--font-label);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.radio-list button::before {
+  content: "";
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--muted);
+  border-radius: 50%;
+}
+
+.radio-list button[aria-checked="true"]::before {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 3px var(--bg);
+}
+
+.radio-list .option-count {
+  margin-left: auto;
+  min-width: 5ch;
+  text-align: right;
+}
+
+/* ---------- Only shortcut (SITE-31, D-23..D-27) ---------- */
+
+/* Never display:none / visibility:hidden: the button must stay in the Tab order while unseen. */
+.only-btn {
+  flex: none;
+  background: none;
+  border: 0;
+  /* One fixed box holds "Only" and "All" so a row's count never shifts (D-31). */
+  width: 3.25em;
+  box-sizing: border-box;
+  text-align: center;
+  padding: 0 var(--space-xs);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+}
+
+/* D-30: :has(:focus-visible), not :focus-within, so a mouse click (or a popover opening
+   on a mouse click) does not pin the button; keyboard focus still shows it. */
+.check-item:hover .only-btn,
+.check-item:has(:focus-visible) .only-btn {
+  opacity: 1;
+}
+
+.only-btn:hover {
+  color: var(--text);
+}
+
+.only-btn:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.only-btn[hidden] {
+  display: none;
+}
+
+/* Touch: always shown, quiet, 44px target at the row's right edge. Popovers and the phone
+   sheet sit on --bg, so --muted-weak (at least 3:1 there) is the right grey. */
+@media (hover: none) {
+  .only-btn {
+    opacity: 1;
+    color: var(--muted-weak);
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+#pop-conference,
+#pop-school {
+  width: 280px;
+}
+
+/* Room for the Only button beside the name and count (plan 04.2-10). */
+#pop-conference {
+  width: 330px;
+}
+
+/* D-28: the Networks popover fits its visible rows. The count column is fixed so a count
+   change alone never changes the width. */
+#pop-networks {
+  width: max-content;
+  min-width: 240px;
+  max-width: min(360px, calc(100vw - 16px));
+}
+
+#filter-networks .option-count {
+  flex: none;
+  width: 7ch;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  #pop-networks,
+  #pop-conference,
+  #pop-school,
+  #pop-announcers {
+    width: auto;
+  }
+}
+
+/* Legend chip for a family with no matching games (plan 04.2-09). #chart-area
+   sits on --bg, so --muted-weak is the right grey. */
+.legend-chip[data-offered="false"] {
+  background: transparent;
+  border-style: dashed;
+  border-width: 2px;
+}
+
+#person-results .option-count,
+#person-results li.is-zero,
+#person-results li.is-zero .option-name {
+  color: var(--muted-weak);
+}
+
 #filter-seasons,
 #filter-networks,
 #filter-slots,
@@ -812,6 +1043,8 @@ input[type="checkbox"] {
 }
 
 .family-group legend {
+  width: 100%;
+  box-sizing: border-box;
   padding: 0;
   margin: 0;
   font: var(--font-label);
@@ -882,6 +1115,19 @@ input[type="checkbox"] {
   border-radius: 6px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   font: var(--font-label);
+}
+
+/* notes-6: the hovered-dot ring is a DOM overlay, not a Plotly trace or
+   marker.line -- no restyle/relayout per hover (04.2 D-01), no D-31 edge
+   speckles. Fixed and out of flow, so nothing on the page shifts. */
+.chart-hover-ring {
+  position: fixed;
+  z-index: 29;
+  pointer-events: none;
+  box-sizing: border-box;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--bg);
 }
 
 .chart-tooltip .tooltip-title {
@@ -986,6 +1232,15 @@ input[type="checkbox"] {
   color: var(--text);
 }
 
+/* D-37: a dashed (not offered) chip reads lighter when on, grey when off. */
+.legend-chip[data-offered="false"][aria-pressed="true"] {
+  color: var(--text);
+}
+
+.legend-chip[data-offered="false"][aria-pressed="false"] {
+  color: var(--muted-weak);
+}
+
 .legend-chip:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -1016,6 +1271,36 @@ input[type="checkbox"] {
 #chart {
   min-height: 520px;
   background: var(--bg);
+  position: relative;
+}
+
+/* D-14: empty-state note over the chart; never shifts layout. */
+.season-empty-note {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-md);
+  pointer-events: none;
+  z-index: 2;
+  font: var(--font-label);
+}
+
+.season-empty-note[hidden] {
+  display: none;
+}
+
+.season-empty-title {
+  color: var(--text);
+  margin: 0;
+}
+
+.season-empty-hint {
+  color: var(--muted);
+  margin: 0;
 }
 
 .shape-legend,
@@ -1125,126 +1410,128 @@ input[type="checkbox"] {
   border-radius: 999px;
 }
 
-/* ---------- Detail panel ---------- */
+/* ---------- Detail modal ---------- */
 
-/* Tablet/desktop (≥641px): a push grid column, not an overlay (D-01), and
-   beside the chart only -- the panel's grid area spans just the "main" row
-   (D-23: replaces plan 04.1-05's both-rows span). `align-self: stretch`
-   makes `#detail-panel` exactly as tall as that row, which #chart-area
-   alone sizes (an absolutely positioned `.panel-inner` contributes no
-   height of its own, so it can never make the row taller than the chart).
-   D-32: the column's own `width` no longer animates -- it snaps 0 <->
-   360px/320px in the same frame `body.panel-open` toggles, so the chart's
-   own resize (app.js) can start the instant the class changes instead of
-   waiting out a ~150ms CSS transition first. The slide motion moves onto
-   `.panel-inner`'s own `transform` instead: compositor-only, triggers no
-   layout of its own (Pitfall 1), and is clipped to the (already
-   final-width) column by `#detail-panel`'s `overflow: hidden`, so it still
-   reads as the panel sliding in/out even though the column itself never
-   moves. `.panel-inner` fills the column via absolute positioning and
-   scrolls internally (`overflow-y: auto`) when its content runs longer
-   than the chart area, so it can never overlap the chart, the legend
-   chips, or the table (D-01, D-23, SITE-20). This is not the chart (D-05
-   still holds: the chart itself is never sticky). Phones (≤640px) keep the
-   panel as a true `position: fixed` overlay bottom sheet instead, below --
-   the one place an overlay is still correct, since nothing else needs that
-   screen region at the same time. */
-@media (min-width: 641px) {
-  #detail-panel {
-    position: relative;
-    width: 0;
-    min-width: 0;
-    align-self: stretch;
-    overflow: hidden;
-    background: var(--surface);
-    border-left: 1px solid var(--border);
+/* SITE-28: a native <dialog> opened with showModal(). Centered on desktop and
+   tablet, a bottom sheet on phones. The stable scrollbar gutter plus the
+   scroll lock keep the page from shifting when it opens (D-01, D-03). Never
+   give #detail-panel an unconditional `display`: it would defeat the closed
+   dialog's display:none (Pitfall 3). */
+html {
+  scrollbar-gutter: stable;
+}
+
+html:has(#detail-panel[open]) {
+  overflow: hidden;
+}
+
+#detail-panel {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  width: min(560px, calc(100vw - 32px));
+  max-width: none;
+  max-height: 85vh;
+  overflow: hidden;
+}
+
+/* D-38: one scroller, .panel-inner; the dialog never scrolls. Gated on [open]. */
+#detail-panel[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+#detail-panel .panel-inner {
+  padding: var(--space-lg);
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+#detail-panel::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+
+#chart:focus:not(:focus-visible) {
+  outline: none;
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
   }
-
-  body.panel-open #detail-panel {
-    width: 360px;
-  }
-
-  .panel-inner {
-    position: absolute;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: 360px;
-    overflow-y: auto;
-    box-sizing: border-box;
-    padding: var(--space-lg);
-    transform: translateX(100%);
-    transition: transform 150ms ease-out;
-  }
-
-  body.panel-open .panel-inner {
+  to {
+    opacity: 1;
     transform: none;
   }
 }
 
-/* Tablet (641-1024px): narrower panel, unchanged token from Phase 4. */
-@media (min-width: 641px) and (max-width: 1024px) {
-  body.panel-open #detail-panel {
-    width: 320px;
+@keyframes scrim-in {
+  from {
+    opacity: 0;
   }
-
-  .panel-inner {
-    width: 320px;
+  to {
+    opacity: 1;
   }
 }
 
-@media (min-width: 641px) and (prefers-reduced-motion: reduce) {
-  .panel-inner {
-    transition: none;
+@media (prefers-reduced-motion: no-preference) {
+  #detail-panel[open] {
+    animation: modal-in 120ms ease-out;
+  }
+
+  #detail-panel[open]::backdrop {
+    animation: scrim-in 120ms ease-out;
   }
 }
 
-/* Phones (≤640px): the one place a `position: fixed` overlay bottom sheet
-   is still correct (unchanged mechanism from Phase 4). */
+/* Phones (<=640px): the same dialog as a bottom sheet. */
 @media (max-width: 640px) {
   #detail-panel {
     position: fixed;
-    top: auto;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    inset: auto 0 0 0;
+    margin: 0;
     width: 100%;
+    max-width: 100%;
     height: 55vh;
-    background: var(--surface);
-    border-top: 1px solid var(--border);
-    border-top-left-radius: 12px;
-    border-top-right-radius: 12px;
-    transform: translateY(100%);
-    transition: transform 150ms ease-out;
-    overflow: hidden;
-    z-index: 20;
-  }
-
-  body.panel-open #detail-panel {
-    transform: none;
-  }
-
-  .panel-inner {
-    width: auto;
-    height: 100%;
-    overflow-y: auto;
-    box-sizing: border-box;
-    padding: var(--space-lg);
+    max-height: 55vh;
+    border-radius: 12px 12px 0 0;
+    border-width: 1px 0 0 0;
   }
 }
 
-@media (max-width: 640px) and (prefers-reduced-motion: reduce) {
-  #detail-panel {
-    transition: none;
-  }
+/* Bowl lines (D-20, D-21): the core name reads first, the sponsor recedes. */
+.panel-game-type + .panel-game-type {
+  margin-top: var(--space-xs);
 }
 
+.panel-bowl .bowl-sponsor {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.panel-bowl .bowl-core {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Sticky inside the one scroller (D-38), so the only visible close control
+   stays in view while the body scrolls (review WR-04). The surface fill keeps
+   text scrolling underneath from showing through it. */
 #panel-close {
   border: none;
-  background: none;
+  background: var(--surface);
   cursor: pointer;
   font: var(--font-heading);
   float: right;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 #panel-body h3 {
@@ -1319,18 +1606,16 @@ input[type="checkbox"] {
   overflow-x: auto;
 }
 
-/* ---------- Tablet (641px–1024px) ---------- */
-
-@media (max-width: 1024px) {
-  /* Toolbar buttons wrap onto a second line (`#toolbar`'s own `flex-wrap`
-     above) rather than scrolling horizontally. The tablet detail-panel
-     width (320px) is set by the "Detail panel" section's own
-     `(min-width: 641px) and (max-width: 1024px)` block above. */
-}
-
 /* ---------- Phones (≤640px) ---------- */
 
 @media (max-width: 640px) {
+  /* D-33: one-person band height on a 390px phone (44px touch targets wrap
+     the chip and button rows), measured 226px, plus headroom for font
+     metrics that differ across machines. */
+  #selection-bar {
+    min-height: 232px;
+  }
+
   /* D-25: a narrower gutter than the desktop `--space-lg` (24px), still
      >=16px, so content is never flush with the screen edge. */
   #selection-bar,
@@ -1366,7 +1651,7 @@ input[type="checkbox"] {
     order: 2;
   }
 
-  /* The phone bottom-sheet `#detail-panel` rules live in the "Detail panel"
+  /* The phone bottom-sheet `#detail-panel` rules live in the "Detail modal"
      section's own `(max-width: 640px)` block above. */
 
   button,
@@ -1377,11 +1662,13 @@ input[type="checkbox"] {
   input[type="checkbox"] + label,
   .sheet-body label,
   .check-row,
+  .only-btn,
   #person-results > li[role="option"],
   .games-table th button,
   .shape-legend li,
   #panel-close,
   .segmented button,
+  .radio-list button,
   .legend-chip,
   .games-table tr.row-link {
     min-height: 44px;

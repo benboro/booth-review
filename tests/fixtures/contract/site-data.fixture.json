@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.2.0",
+  "schema_version": "1.3.0",
   "generated_at": "2026-01-01T00:00:00Z",
   "freshness": {
     "season": 2026,
@@ -199,6 +199,16 @@
       {
         "name": "SEC",
         "is_fbs": true
+      }
+    ],
+    "bowls": [
+      {
+        "name": "Acme Harbor Bowl",
+        "core": "Harbor Bowl"
+      },
+      {
+        "name": "Summit Bowl Game presented by Northwind",
+        "core": "Summit Bowl"
       }
     ]
   },
@@ -798,6 +808,20 @@
       5,
       3,
       1
+    ],
+    "bowl": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      1,
+      null,
+      0,
+      null,
+      null,
+      null,
+      null
     ]
   },
   "coverage": [

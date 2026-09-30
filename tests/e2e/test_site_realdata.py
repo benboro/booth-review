@@ -351,105 +351,26 @@ def test_real_announcer_list_lists_everyone(
     assert filtered_count <= people_count, "filtered count exceeds people count"
 
 
-# D-32: 350ms = the fixture check's 250ms plus a small scattergl redraw
-# allowance for the real build's much larger point count.
-_MAX_REAL_PANEL_RESIZE_MS = 350
-
 _CHART_SVG_WIDTH_JS = (
     "() => document.querySelector('#chart .main-svg').getBoundingClientRect().width"
 )
 
-# See test_site_panel_table.py's own copy of this helper for the `start`/
-# `changed` gate's rationale (a naive "3 unchanged rAF reads" trivially
-# passes before the CSS transition visibly starts, returning the pre-open
-# width instead of the true one).
-_WAIT_STABLE_WIDTH_JS = """
-(start) => new Promise((resolve) => {
-  let last = null;
-  let stableCount = 0;
-  let changed = false;
-  const t0 = performance.now();
-  function check() {
-    const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width;
-    if (!changed && Math.abs(w - start) > 0.5) changed = true;
-    if (changed) {
-      if (last !== null && Math.abs(w - last) < 0.5) {
-        stableCount += 1;
-      } else {
-        stableCount = 0;
-      }
-      last = w;
-      if (stableCount >= 3) {
-        resolve(w);
-        return;
-      }
-    }
-    if (performance.now() - t0 > 5000) {
-      resolve(w);
-      return;
-    }
-    requestAnimationFrame(check);
-  }
-  requestAnimationFrame(check);
-})
-"""
 
-_TIMED_TRANSITION_JS = """
-(args) => new Promise((resolve) => {
-  const t0 = performance.now();
-  if (args.trigger === 'open') {
-    window.__testHooks.openPanel(0);
-  } else {
-    document.getElementById('panel-close').click();
-  }
-  function poll() {
-    const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width;
-    const elapsed = performance.now() - t0;
-    if (Math.abs(w - args.target) <= 1 || elapsed > 2000) {
-      resolve(Math.round(elapsed));
-      return;
-    }
-    requestAnimationFrame(poll);
-  }
-  requestAnimationFrame(poll);
-})
-"""
-
-
-def test_real_chart_tracks_the_panel(
+def test_real_chart_width_unchanged_when_the_modal_opens(
     real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-32: the same panel-open/close-to-settled-chart-width timing check as
-    the fixture build (test_site_panel_table.py), run on the real vault
-    build's full scattergl point count with a small redraw allowance (350ms
-    vs. the fixture's 250ms). The evaluate calls return plain ints only
+    """D-01: opening the detail modal on the real build leaves the chart's
+    width as it was. The evaluate calls return plain numbers/bools only
     (WR-09) -- no vault record ever appears in an assertion."""
     real_open_app(real_guarded_page, "")
 
     w0: float = real_guarded_page.evaluate(_CHART_SVG_WIDTH_JS)
     real_guarded_page.evaluate("window.__testHooks.openPanel(0)")
-    w_open: float = real_guarded_page.evaluate(_WAIT_STABLE_WIDTH_JS, w0)
-    real_guarded_page.click("#panel-close")
-    real_guarded_page.wait_for_function(
-        "(target) => { "
-        "const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width; "
-        "return Math.abs(w - target) <= 1; }",
-        arg=w0,
-        timeout=3000,
-    )
-    real_guarded_page.wait_for_function("document.getElementById('detail-panel').hidden === true")
+    is_open: bool = real_guarded_page.evaluate("document.getElementById('detail-panel').open")
+    w_open: float = real_guarded_page.evaluate(_CHART_SVG_WIDTH_JS)
 
-    open_ms: int = real_guarded_page.evaluate(
-        _TIMED_TRANSITION_JS, {"target": w_open, "trigger": "open"}
-    )
-    close_ms: int = real_guarded_page.evaluate(
-        _TIMED_TRANSITION_JS, {"target": w0, "trigger": "close"}
-    )
-    print(f"D-32 real-data panel resize: open={open_ms}ms close={close_ms}ms")
-
-    max_ms = _MAX_REAL_PANEL_RESIZE_MS
-    assert open_ms <= max_ms, f"open_ms={open_ms}"
-    assert close_ms <= max_ms, f"close_ms={close_ms}"
+    assert is_open
+    assert w_open == w0
 
 
 def test_real_playoff_counts_fit_the_bracket(
@@ -469,3 +390,93 @@ def test_real_playoff_counts_fit_the_bracket(
     assert regular_with_round == 0, "a regular-season telecast carried a playoff_round"
     assert over_before_2024 == 0, "a pre-2024 season exceeded the 3-game CFP bracket size"
     assert over_2024_plus == 0, "a 2024-or-later season exceeded the 11-game CFP bracket size"
+
+
+_FACET_TIMING_JS = """
+async () => {
+  const { computeView } = await import(new URL('./modules/select.js', location.href).href);
+  const hooks = window.__testHooks;
+  const data = hooks.data;
+  const state = hooks.getState();
+  state.people = data.lookups.people.slice(0, 3).map((p) => p.id);
+  computeView(data, state);
+  const runs = 20;
+  const start = performance.now();
+  for (let i = 0; i < runs; i += 1) computeView(data, state);
+  return (performance.now() - start) / runs;
+}
+"""
+
+
+def test_real_facet_pass_is_fast(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """T-04.2-26: the per-render facet pass stays cheap on real data. Asserts
+    on a local timing number only; nothing from the vault is printed."""
+    real_open_app(real_guarded_page, "")
+    mean_ms: float = real_guarded_page.evaluate(_FACET_TIMING_JS)
+    assert mean_ms <= 20, "mean computeView time (facets included) exceeded 20 ms"
+
+
+_ANNOUNCER_FIT_JS = """
+() => {
+  const results = document.getElementById('person-results');
+  const wrapped = Array.from(results.querySelectorAll('.option-role')).filter(
+    (e) => e.textContent === 'Play-by-play'
+      && e.getBoundingClientRect().height > 1.5 * parseFloat(getComputedStyle(e).lineHeight)
+  ).length;
+  return [results.scrollWidth, results.clientWidth, wrapped];
+}
+"""
+
+
+def test_real_announcers_list_fits(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """D-32: on the real build the Announcers list never scrolls sideways and
+    no Play-by-play label wraps -- numbers only."""
+    real_guarded_page.set_viewport_size({"width": 1280, "height": 800})
+    real_open_app(real_guarded_page, "")
+    real_guarded_page.click("#trigger-announcers")
+    real_guarded_page.wait_for_function(
+        "document.getElementById('pop-announcers').matches(':popover-open')"
+    )
+    result: list[float] = real_guarded_page.evaluate(_ANNOUNCER_FIT_JS)
+    scroll_width, client_width, wrapped = result
+    assert scroll_width <= client_width, "the announcer list scrolls sideways"
+    assert wrapped == 0, "a Play-by-play label wrapped"
+
+
+_SCROLLERS_JS = """
+() => {
+  const dialog = document.getElementById('detail-panel');
+  const over = (el) => {
+    const oy = getComputedStyle(el).overflowY;
+    return (oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 1;
+  };
+  const count = [dialog, ...dialog.querySelectorAll('*')].filter(over).length;
+  return [count, over(dialog) ? 1 : 0];
+}
+"""
+
+
+def test_real_modal_never_shows_two_scrollers(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+    real_raw: dict[str, Any],
+) -> None:
+    """D-38: on the real build no sampled panel shows more than one scroller and
+    the dialog itself never scrolls -- numbers only."""
+    real_guarded_page.set_viewport_size({"width": 1280, "height": 480})
+    real_open_app(real_guarded_page, "")
+    total = len(real_raw["telecasts"]["season"])
+    worst = 0
+    dialog_scrolls = 0
+    for i in range(0, total, 25):
+        real_guarded_page.evaluate(f"window.__testHooks.openPanel({i})")
+        count, dialog_scrolled = real_guarded_page.evaluate(_SCROLLERS_JS)
+        worst = max(worst, count)
+        dialog_scrolls += dialog_scrolled
+        real_guarded_page.evaluate("window.__testHooks.closePanel()")
+    assert worst <= 1
+    assert dialog_scrolls == 0

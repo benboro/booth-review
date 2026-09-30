@@ -64,6 +64,9 @@ const GROUP_RESETS = {
 /** Bowls/Playoffs radio values, in the DOM order they appear in `#postseason-options`. */
 const POSTSEASON_ORDER = ['all', 'exclude', 'only'];
 
+/** The latest `view`, kept so the delegated Only handlers can read facet counts (D-24). */
+let lastView = null;
+
 /** DOM element references, populated once by `initFilters`. */
 let els = null;
 
@@ -97,17 +100,104 @@ function networksInLookupOrder(data, idSet) {
   return data.lookups.networks.map((net) => net.id).filter((id) => idSet.has(id));
 }
 
-/** Builds the season-range `<select>` options once, from `data.seasons`. */
-function buildSeasonSelects(data) {
-  const optionsFor = () =>
-    data.seasons.map((season) => {
-      const opt = document.createElement('option');
-      opt.value = String(season);
-      opt.textContent = String(season);
-      return opt;
-    });
-  els.seasonFrom.replaceChildren(...optionsFor());
-  els.seasonTo.replaceChildren(...optionsFor());
+/** Signature of the season options last written to the two selects (D-14), so re-renders skip identical writes. */
+let seasonOptionsSignature = '';
+
+/** The "(N)" count span plus its screen-reader twin, appended to every faceted row (D-12). */
+function makeCountSpans() {
+  const visible = document.createElement('span');
+  visible.className = 'option-count';
+  visible.setAttribute('aria-hidden', 'true');
+  const sr = document.createElement('span');
+  sr.className = 'visually-hidden option-count-sr';
+  return [visible, sr];
+}
+
+/** Writes a count into a row's two count spans (textContent only) and toggles `is-zero` on `zeroEl`. */
+function setCount(container, count, zeroEl = container) {
+  const visible = container.querySelector('.option-count');
+  const sr = container.querySelector('.option-count-sr');
+  const text = `(${count})`;
+  if (visible && visible.textContent !== text) visible.textContent = text;
+  const srText = `, ${count} rated ${count === 1 ? 'telecast' : 'telecasts'}`;
+  if (sr && sr.textContent !== srText) sr.textContent = srText;
+  zeroEl.classList.toggle('is-zero', count === 0);
+}
+
+/** Combines the two independent hide reasons of a `.check-item` row: text search and facets (Pitfall 7). */
+function syncRowHidden(item) {
+  item.hidden = item.dataset.searchHidden === 'true' || item.dataset.facetHidden === 'true';
+}
+
+/** Sets a row's facet-hidden flag and re-syncs its `hidden` attribute. */
+function setFacetHidden(item, hidden) {
+  item.dataset.facetHidden = hidden ? 'true' : 'false';
+  syncRowHidden(item);
+}
+
+/**
+ * Builds one checklist row: `div.check-item > label.check-row > (input, name, counts)`.
+ * @param {HTMLInputElement} checkbox
+ * @param {string} name
+ */
+function makeCheckItem(checkbox, name) {
+  const item = document.createElement('div');
+  item.className = 'check-item';
+  const label = document.createElement('label');
+  label.className = 'check-row';
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'option-name';
+  nameSpan.textContent = name;
+  label.append(checkbox, nameSpan, ...makeCountSpans());
+  item.appendChild(label);
+  return item;
+}
+
+/**
+ * D-11 amendment ("all but a few"): a non-null Networks pick is "narrowed" (its
+ * impossible checked options stay visible, greyed) only when the checked channels
+ * are no more than the unchecked ones. A tie counts as narrowed; 3 of 4 is
+ * default-like, so impossible rows hide instead of greying.
+ */
+function networksPickNarrowed(data, state) {
+  return state.networks != null && 2 * state.networks.length <= allPrimaryNetworkIds(data).length;
+}
+
+/**
+ * D-36: the one row-hiding rule shared by renderNetworks and the Networks trigger
+ * count. A channel row is hidden when the other filters leave it no games, unless
+ * it is a checked explicit pick in a narrowed list (then it stays, greyed).
+ */
+function networkRowHidden(count, checked, narrowed) {
+  return count === 0 && !(narrowed && checked);
+}
+
+/**
+ * D-36: how many Networks rows are shown, and how many of those are checked.
+ * Iterates `data.primaryNetworks` only; missing facets count every row as shown.
+ */
+function shownNetworkCounts(data, state, view) {
+  const currentIds = state.networks ?? allPrimaryNetworkIds(data);
+  const narrowed = networksPickNarrowed(data, state);
+  let shown = 0;
+  let checkedShown = 0;
+  for (const idx of data.primaryNetworks) {
+    const net = data.lookups.networks[idx];
+    const checked = currentIds.includes(net.id);
+    const count = view?.facets?.networks?.[idx] ?? 1;
+    if (networkRowHidden(count, checked, narrowed)) continue;
+    shown += 1;
+    if (checked) checkedShown += 1;
+  }
+  return { shown, checked: checkedShown };
+}
+
+/**
+ * Seasons menus are (re)populated by `renderSeasons` (D-14); the init pass only
+ * resets the signature so the first render writes them.
+ */
+function buildSeasonSelects() {
+  seasonOptionsSignature = '';
 }
 
 /** Builds the family-nested network checklist once, from `data.families`/`networksByFamily` (D-06). */
@@ -123,13 +213,12 @@ function buildNetworkChecklist(data) {
     fieldset.className = 'family-group';
 
     const legend = document.createElement('legend');
-    const familyLabel = document.createElement('label');
     const familyCheckbox = document.createElement('input');
     familyCheckbox.type = 'checkbox';
     familyCheckbox.dataset.familyCheckbox = familyKeyVal;
-    familyLabel.appendChild(familyCheckbox);
-    familyLabel.appendChild(document.createTextNode(` ${FAMILY_LABELS[familyKeyVal]}`));
-    legend.appendChild(familyLabel);
+    const familyItem = makeCheckItem(familyCheckbox, FAMILY_LABELS[familyKeyVal]);
+    familyItem.classList.add('family-item');
+    legend.appendChild(familyItem);
     fieldset.appendChild(legend);
     familyCheckboxes.set(familyKeyVal, familyCheckbox);
 
@@ -139,13 +228,10 @@ function buildNetworkChecklist(data) {
     for (const idx of netIdxs) {
       const net = data.lookups.networks[idx];
       const li = document.createElement('li');
-      const label = document.createElement('label');
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.dataset.networkId = net.id;
-      label.appendChild(checkbox);
-      label.appendChild(document.createTextNode(` ${net.name}`));
-      li.appendChild(label);
+      li.appendChild(makeCheckItem(checkbox, net.name));
       list.appendChild(li);
       networkCheckboxes.set(net.id, checkbox);
     }
@@ -154,6 +240,103 @@ function buildNetworkChecklist(data) {
   });
 
   els.networksSection.replaceChildren(...(heading ? [heading] : []), ...groups);
+}
+
+/** Channel ids of a family that have games under the other filters (count > 0), in lookup order (D-24). */
+function offeredFamilyIds(data, familyKeyVal, view) {
+  const counts = view?.facets?.networks;
+  return (data.networksByFamily.get(familyKeyVal) ?? [])
+    .filter((idx) => (counts ? counts[idx] > 0 : true))
+    .map((idx) => data.lookups.networks[idx].id);
+}
+
+/** One "Only" button, a sibling of the row's label (never nested in it), built with textContent only. */
+function makeOnlyButton(group, key, value) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'only-btn';
+  btn.textContent = 'Only';
+  btn.dataset.onlyGroup = group;
+  btn.dataset[key] = value;
+  return btn;
+}
+
+/** Appends an Only button to every Networks channel, family, Conference and Kickoff row (D-23). */
+function buildOnlyButtons() {
+  for (const [id, cb] of networkCheckboxes) {
+    cb.closest('.check-item').appendChild(makeOnlyButton('networks', 'onlyNetwork', id));
+  }
+  for (const [family, cb] of familyCheckboxes) {
+    cb.closest('.check-item').appendChild(makeOnlyButton('networks', 'onlyFamily', family));
+  }
+  for (const [name, cb] of conferenceCheckboxes) {
+    cb.closest('.check-item').appendChild(makeOnlyButton('conference', 'onlyConference', name));
+  }
+  for (const cb of els.slotsSection.querySelectorAll('input[name="slot"]')) {
+    cb.closest('.check-item').appendChild(makeOnlyButton('kickoff', 'onlySlot', cb.value));
+  }
+}
+
+const SAME_SET = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+
+/** True when the button's option is already the sole selection, so it reads "All" (D-25). */
+function onlyIsSole(btn, data, state, view) {
+  const d = btn.dataset;
+  if (d.onlyNetwork) return state.networks != null && SAME_SET(state.networks, [d.onlyNetwork]);
+  if (d.onlyFamily) {
+    const offered = offeredFamilyIds(data, d.onlyFamily, view);
+    return state.networks != null && offered.length > 0 && SAME_SET(state.networks, offered);
+  }
+  if (d.onlySlot) return state.slots != null && SAME_SET(state.slots, [d.onlySlot]);
+  if (d.onlyConference) return SAME_SET(state.conferences, [d.onlyConference]);
+  return false;
+}
+
+/** Delegated click handler for one section's Only/All buttons (D-24, D-25, D-27). */
+function handleOnlyClick(data, getState, setState, ev) {
+  const btn = ev.target.closest('.only-btn');
+  if (!btn) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  const d = btn.dataset;
+  const resetKey = d.onlyGroup;
+  if (onlyIsSole(btn, data, getState(), lastView)) {
+    setState(structuredClone(GROUP_RESETS[resetKey]));
+  } else if (d.onlyNetwork) {
+    setState({ networks: [d.onlyNetwork] });
+  } else if (d.onlyFamily) {
+    setState({ networks: offeredFamilyIds(data, d.onlyFamily, lastView) });
+  } else if (d.onlySlot) {
+    setState({ slots: [d.onlySlot] });
+  } else if (d.onlyConference) {
+    setState({ conferences: [d.onlyConference] });
+  }
+}
+
+/** Syncs every Only button's text and accessible name ("All" when sole), hiding empty family buttons. */
+function renderOnlyButtons(data, state, view) {
+  const allLabels = {
+    networks: 'Show all networks',
+    conference: 'Show all conferences',
+    kickoff: 'Show all kickoff times',
+  };
+  const netNames = new Map(data.lookups.networks.map((n) => [n.id, n.name]));
+  for (const btn of document.querySelectorAll('.only-btn')) {
+    const d = btn.dataset;
+    if (d.onlyFamily) btn.hidden = offeredFamilyIds(data, d.onlyFamily, view).length === 0;
+    const sole = onlyIsSole(btn, data, state, view);
+    const name = d.onlyNetwork
+      ? netNames.get(d.onlyNetwork)
+      : d.onlyFamily
+        ? FAMILY_LABELS[d.onlyFamily]
+        : d.onlySlot
+          ? SLOT_SHORT_LABELS[d.onlySlot]
+          : d.onlyConference;
+    const text = sole ? 'All' : 'Only';
+    const label = sole ? allLabels[d.onlyGroup] : `Show only ${name}`;
+    if (btn.textContent !== text) btn.textContent = text;
+    if (btn.getAttribute('aria-label') !== label) btn.setAttribute('aria-label', label);
+  }
 }
 
 /** Appends the role-filter helper line once, under the static role checkboxes (SITE-07). */
@@ -168,16 +351,12 @@ function buildRoleHelper() {
 function buildConferenceList(data) {
   conferenceCheckboxes = new Map();
   const rows = data.fbsConferences.map((name) => {
-    const label = document.createElement('label');
-    label.className = 'check-row';
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.name = 'conference';
     checkbox.value = name;
-    label.appendChild(checkbox);
-    label.appendChild(document.createTextNode(` ${name}`));
     conferenceCheckboxes.set(name, checkbox);
-    return label;
+    return makeCheckItem(checkbox, name);
   });
   els.conferenceList.append(...rows);
 }
@@ -188,17 +367,13 @@ function buildSchoolList(data) {
   schoolKeysBySlug = new Map();
   const sortedTeams = data.teamKeys.slice().sort((a, b) => a.name.localeCompare(b.name));
   const rows = sortedTeams.map((team) => {
-    const label = document.createElement('label');
-    label.className = 'check-row';
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.name = 'school';
     checkbox.value = team.slug;
-    label.appendChild(checkbox);
-    label.appendChild(document.createTextNode(` ${team.name}`));
     schoolCheckboxes.set(team.slug, checkbox);
     schoolKeysBySlug.set(team.slug, team.keys);
-    return label;
+    return makeCheckItem(checkbox, team.name);
   });
   els.schoolList.append(...rows);
 }
@@ -206,22 +381,22 @@ function buildSchoolList(data) {
 /** Hides checklist rows whose keys (via `keysFor`) don't contain the normalized query. */
 function filterChecklist(listEl, query, keysFor) {
   const q = normalizeName(query);
-  for (const row of listEl.querySelectorAll('label.check-row')) {
-    const checkbox = row.querySelector('input[type="checkbox"]');
+  for (const item of listEl.querySelectorAll('.check-item')) {
+    const checkbox = item.querySelector('input[type="checkbox"]');
     if (q === '') {
-      row.hidden = false;
-      continue;
+      item.dataset.searchHidden = 'false';
+    } else {
+      item.dataset.searchHidden = keysFor(checkbox).some((k) => k.includes(q)) ? 'false' : 'true';
     }
-    const keys = keysFor(checkbox);
-    row.hidden = !keys.some((k) => k.includes(q));
+    syncRowHidden(item);
   }
 }
 
 /** Every checkbox in `listEl` whose row is currently visible, in DOM order. */
 function visibleCheckboxes(listEl) {
-  return Array.from(listEl.querySelectorAll('label.check-row'))
-    .filter((row) => !row.hidden)
-    .map((row) => row.querySelector('input[type="checkbox"]'));
+  return Array.from(listEl.querySelectorAll('.check-item:not([hidden])')).map((item) =>
+    item.querySelector('input[type="checkbox"]'),
+  );
 }
 
 /** Wires ArrowUp/ArrowDown keyboard navigation between a search input and its checklist. */
@@ -357,7 +532,7 @@ function positionPopover(popover, trigger) {
  */
 function firstFocusable(container) {
   return container.querySelector(
-    'input, button:not(.group-reset), [tabindex]:not([tabindex="-1"]):not(.group-reset)',
+    'input, button:not(.group-reset):not(.only-btn), [tabindex]:not([tabindex="-1"]):not(.group-reset):not(.only-btn)',
   );
 }
 
@@ -433,6 +608,8 @@ export function initFilters({ data, getState, setState }) {
     seasonFrom: document.getElementById('season-from'),
     seasonTo: document.getElementById('season-to'),
     seasonCounts: document.getElementById('season-counts'),
+    seasonEmptyNote: document.getElementById('season-empty-note'),
+    seasonEmptyTitle: document.querySelector('#season-empty-note .season-empty-title'),
     networksSection: document.getElementById('filter-networks'),
     slotsSection: document.getElementById('filter-slots'),
     roleSection: document.getElementById('filter-role'),
@@ -452,23 +629,36 @@ export function initFilters({ data, getState, setState }) {
     ),
   };
 
-  buildSeasonSelects(data);
+  buildSeasonSelects();
   buildNetworkChecklist(data);
   buildRoleHelper();
   buildConferenceList(data);
   buildSchoolList(data);
+  buildOnlyButtons();
 
-  const onSeasonChange = () => {
-    const from = Number(els.seasonFrom.value);
-    const to = Number(els.seasonTo.value);
+  const onSeasonChange = (ev) => {
+    let from = Number(els.seasonFrom.value);
+    let to = Number(els.seasonTo.value);
     // A blank select reads as Number('') === 0; never turn that into a range (WR-13).
     if (!Number.isInteger(from) || !Number.isInteger(to) || from <= 0 || to <= 0) return;
-    setState({ seasons: [from, to] });
+    // With no season filter set, the menus show the facet-clamped range (D-14),
+    // but the untouched end still means "no limit": commit the data's own bound
+    // for it, so a one-sided edit never removes dots the visitor didn't exclude
+    // or puts a range they didn't pick into the URL (D-15, review WR-01).
+    if (getState().seasons == null) {
+      if (ev.target === els.seasonTo) from = data.seasonMin;
+      else to = data.seasonMax;
+    }
+    setState({ seasons: from === data.seasonMin && to === data.seasonMax ? null : [from, to] });
   };
   els.seasonFrom.addEventListener('change', onSeasonChange);
   els.seasonTo.addEventListener('change', onSeasonChange);
 
   els.networksSection.addEventListener('change', (ev) => handleNetworksChange(data, getState, setState, ev));
+  const onOnlyClick = (ev) => handleOnlyClick(data, getState, setState, ev);
+  els.networksSection.addEventListener('click', onOnlyClick);
+  els.slotsSection.addEventListener('click', onOnlyClick);
+  els.conferenceList.addEventListener('click', onOnlyClick);
 
   els.slotsSection.addEventListener('change', () => handleSlotsChange(setState));
 
@@ -533,66 +723,152 @@ export function initFilters({ data, getState, setState }) {
   mobileMedia.addEventListener('change', (ev) => placeSections(ev.matches));
 }
 
-/** Renders the season range selects and the per-season counts list (D-13 counts). */
+/** Sum of `facets.seasons` over the inclusive range [from, to]. */
+function seasonRangeTotal(facetSeasons, from, to) {
+  let sum = 0;
+  for (const [season, count] of facetSeasons) if (season >= from && season <= to) sum += count;
+  return sum;
+}
+
+/**
+ * Renders the season range selects (D-14: only seasons with matching games plus
+ * the selected ends), the per-season counts list, and the empty-state note.
+ */
 function renderSeasons(data, state, view) {
-  const [minSeason, maxSeason] = state.seasons ?? [data.seasonMin, data.seasonMax];
+  const facetSeasons = view.facets.seasons;
+  const matching = data.seasons.filter((s) => facetSeasons.get(s) > 0);
+  const fallback = matching.length === 0;
+  const offeredSet = new Set(fallback ? data.seasons : matching);
+  for (const end of state.seasons ?? []) offeredSet.add(end);
+  const offered = Array.from(offeredSet).sort((a, b) => a - b);
+  const labels = offered.map((s) => (!fallback && facetSeasons.get(s) === 0 ? `${s} (0)` : String(s)));
+
+  const signature = `${offered.join(',')}|${labels.join(',')}`;
+  if (signature !== seasonOptionsSignature) {
+    const optionsFor = () =>
+      offered.map((season, i) => {
+        const opt = document.createElement('option');
+        opt.value = String(season);
+        opt.textContent = labels[i];
+        return opt;
+      });
+    els.seasonFrom.replaceChildren(...optionsFor());
+    els.seasonTo.replaceChildren(...optionsFor());
+    seasonOptionsSignature = signature;
+  }
+
+  // Display only: `state.seasons` stays null until the visitor changes a menu.
+  const [minSeason, maxSeason] = state.seasons ?? [offered[0], offered[offered.length - 1]];
   els.seasonFrom.value = String(minSeason);
   els.seasonTo.value = String(maxSeason);
 
   const items = view.seasonCounts.map(([season, count]) => {
     const li = document.createElement('li');
-    if (season < minSeason || season > maxSeason) li.className = 'out-of-range';
+    if (state.seasons != null && (season < state.seasons[0] || season > state.seasons[1])) {
+      li.className = 'out-of-range';
+    }
     const word = count === 1 ? 'rated telecast' : 'rated telecasts';
     li.textContent = `${season}: ${count} ${word}`;
     return li;
   });
   els.seasonCounts.replaceChildren(...items);
+
+  // D-14 empty state: the range holds nothing, though other seasons would.
+  let showNote = false;
+  if (state.seasons != null) {
+    const [from, to] = state.seasons;
+    const inRange = seasonRangeTotal(facetSeasons, from, to);
+    const overall = seasonRangeTotal(facetSeasons, -Infinity, Infinity);
+    showNote = inRange === 0 && overall > 0;
+    if (showNote) {
+      els.seasonEmptyTitle.textContent =
+        from === to ? `No games in ${from} for this selection` : `No games in ${from}–${to} for this selection`;
+    }
+  }
+  els.seasonEmptyNote.hidden = !showNote;
 }
 
-/** Syncs the network checklist's checked/indeterminate state from `state.networks` (D-06). */
-function renderNetworks(data, state) {
+/**
+ * Syncs the network checklist from `state.networks` and `view.facets.networks`
+ * (D-08, D-11): counts on every row; an impossible channel hides unless it is an
+ * explicit pick in a narrowed list, in which case it stays checked and greyed.
+ */
+function renderNetworks(data, state, view) {
   const currentIds = state.networks ?? allPrimaryNetworkIds(data);
+  const narrowed = networksPickNarrowed(data, state);
   for (const familyKeyVal of data.families) {
     const netIdxs = data.networksByFamily.get(familyKeyVal) ?? [];
     let checkedCount = 0;
+    let visibleCount = 0;
+    let visibleChecked = 0;
+    let familyTotal = 0;
     for (const idx of netIdxs) {
       const net = data.lookups.networks[idx];
       const checkbox = networkCheckboxes.get(net.id);
       const checked = currentIds.includes(net.id);
       checkbox.checked = checked;
       if (checked) checkedCount += 1;
+      const count = view.facets.networks[idx];
+      familyTotal += count;
+      const hidden = networkRowHidden(count, checked, narrowed);
+      const item = checkbox.closest('.check-item');
+      setFacetHidden(item, hidden);
+      setCount(item, count);
+      if (!hidden) {
+        visibleCount += 1;
+        if (checked) visibleChecked += 1;
+      }
     }
     const familyCheckbox = familyCheckboxes.get(familyKeyVal);
-    familyCheckbox.checked = netIdxs.length > 0 && checkedCount === netIdxs.length;
-    familyCheckbox.indeterminate = checkedCount > 0 && checkedCount < netIdxs.length;
+    const familyItem = familyCheckbox.closest('.check-item');
+    const familyHidden = netIdxs.length > 0 && visibleCount === 0;
+    setFacetHidden(familyItem, familyHidden);
+    familyCheckbox.closest('fieldset').hidden = familyHidden;
+    setCount(familyItem, familyTotal);
+    const total = visibleCount > 0 ? visibleCount : netIdxs.length;
+    const on = visibleCount > 0 ? visibleChecked : checkedCount;
+    familyCheckbox.checked = netIdxs.length > 0 && on === total;
+    familyCheckbox.indeterminate = on > 0 && on < total;
   }
 }
 
-/** Syncs the time-slot checkboxes from `state.slots` (SITE-11). */
-function renderSlots(state) {
+/** Syncs the time-slot checkboxes and their counts (SITE-11, D-13: never hidden, never disabled). */
+function renderSlots(state, view) {
   for (const cb of els.slotsSection.querySelectorAll('input[name="slot"]')) {
     cb.checked = state.slots != null && state.slots.includes(cb.value);
+    setCount(cb.closest('.check-item') ?? cb.closest('label'), view.facets.slots[cb.value] ?? 0);
   }
 }
 
-/** Syncs the role checkboxes from `state.role` (SITE-07). */
-function renderRole(state) {
+/** Syncs the role checkboxes and their counts (SITE-07, D-13). */
+function renderRole(state, view) {
   for (const cb of els.roleSection.querySelectorAll('input[name="role"]')) {
     cb.checked = state.role === cb.value;
+    setCount(cb.closest('label'), view.facets.role[cb.value] ?? 0);
   }
 }
 
-/** Syncs the Conference checklist's checked state from `state.conferences` (D-10). */
-function renderConferences(state) {
+/** Syncs the Conference checklist's checked state and counts (D-10, D-11). */
+function renderConferences(state, view) {
   for (const [name, cb] of conferenceCheckboxes) {
-    cb.checked = state.conferences.includes(name);
+    const checked = state.conferences.includes(name);
+    cb.checked = checked;
+    const count = view.facets.conferences.get(name) ?? 0;
+    const item = cb.closest('.check-item');
+    setFacetHidden(item, count === 0 && !checked);
+    setCount(item, count);
   }
 }
 
-/** Syncs the School checklist's checked state and `#school-chips` from `state.school` (D-11). */
-function renderSchool(data, state) {
+/** Syncs the School checklist (checked, counts, facet hiding) and `#school-chips` (D-11). */
+function renderSchool(data, state, view) {
   for (const [slug, cb] of schoolCheckboxes) {
-    cb.checked = state.school.includes(slug);
+    const checked = state.school.includes(slug);
+    cb.checked = checked;
+    const count = view.facets.schools[data.teamIndexBySlug.get(slug)] ?? 0;
+    const item = cb.closest('.check-item');
+    setFacetHidden(item, count === 0 && !checked);
+    setCount(item, count);
   }
   const items = state.school.map((slug) => {
     const idx = data.teamIndexBySlug.get(slug);
@@ -616,20 +892,22 @@ function renderSchool(data, state) {
 
 /**
  * Syncs the Bowls/Playoffs radio group's `aria-checked` from `state.postseason`
- * (D-18), and its roving `tabindex` (WR-05): only the selected radio is a tab
- * stop, per the WAI-ARIA APG radiogroup pattern `bindPostseasonKeyboard` wires
- * the arrow-key/Home/End half of.
+ * (D-18), its roving `tabindex` (WR-05: only the selected radio is a tab stop,
+ * per the WAI-ARIA APG radiogroup pattern `bindPostseasonKeyboard` wires the
+ * arrow-key/Home/End half of), and each option's count (D-13: never hidden).
  */
-function renderPostseason(state) {
+function renderPostseason(state, view) {
   for (const btn of els.postseasonOptions.querySelectorAll('[data-postseason]')) {
     const checked = btn.dataset.postseason === state.postseason;
     btn.setAttribute('aria-checked', String(checked));
     btn.tabIndex = checked ? 0 : -1;
+    setCount(btn, view.facets.postseason[btn.dataset.postseason] ?? 0);
   }
 }
 
-/** A toolbar trigger's label and active state, from `state` (D-02 copywriting). */
-function triggerInfo(name, data, state) {
+/** A toolbar trigger's label and active state, from `state` (D-02 copywriting).
+ * D-36: the Networks count is the checked rows among the rows shown in the list. */
+function triggerInfo(name, data, state, view) {
   if (name === 'announcers') {
     if (state.people.length === 0) return { label: 'Announcers', active: false };
     return { label: `Announcers · ${state.people.length}`, active: true };
@@ -641,7 +919,9 @@ function triggerInfo(name, data, state) {
   }
   if (name === 'networks') {
     if (state.networks == null) return { label: 'Networks', active: false };
-    return { label: `Networks · ${state.networks.length}`, active: true };
+    const { shown, checked } = shownNetworkCounts(data, state, view);
+    if (checked === shown) return { label: 'Networks', active: false };
+    return { label: `Networks · ${checked}`, active: true };
   }
   if (name === 'kickoff') {
     if (state.slots == null) return { label: 'Kickoff', active: false };
@@ -676,10 +956,10 @@ function triggerInfo(name, data, state) {
 }
 
 /** Renders every toolbar trigger's label and `data-active` state (D-02). */
-function renderTriggers(data, state) {
+function renderTriggers(data, state, view) {
   for (const name of TRIGGER_NAMES) {
     const btn = els.triggers[name];
-    const { label, active } = triggerInfo(name, data, state);
+    const { label, active } = triggerInfo(name, data, state, view);
     btn.textContent = label;
     btn.dataset.active = active ? 'true' : 'false';
   }
@@ -688,11 +968,12 @@ function renderTriggers(data, state) {
 /** Counts the active filters, for the mobile Filters(N) button (extends SITE-18's rail-era count).
  * D-27: also counts every selected announcer, since the phone Announcers
  * picker lives inside this same Filters sheet and "Clear all filters"
- * clears people too. */
-function activeFilterCount(state) {
+ * clears people too. Networks counts exactly when its trigger shows a count
+ * (D-36), so the badge and the Networks button never disagree (review WR-02). */
+function activeFilterCount(data, state, view) {
   let n = 0;
   if (state.seasons != null) n += 1;
-  if (state.networks != null) n += 1;
+  if (triggerInfo('networks', data, state, view).active) n += 1;
   if (state.slots != null) n += 1;
   if (state.role != null) n += 1;
   if (state.conferences.length > 0) n += 1;
@@ -703,36 +984,42 @@ function activeFilterCount(state) {
 }
 
 /** Renders the `#filters-button` label (SITE-18, D-03). */
-function renderFiltersButton(state) {
-  const n = activeFilterCount(state);
+function renderFiltersButton(data, state, view) {
+  const n = activeFilterCount(data, state, view);
   els.filtersButton.textContent = n > 0 ? `Filters (${n})` : 'Filters';
 }
 
 /** Dims each group's Reset button (`aria-disabled`) while that group is at its default (A4). */
-function renderGroupResets(data, state) {
+function renderGroupResets(data, state, view) {
   for (const btn of document.querySelectorAll('.group-reset')) {
     const name = btn.dataset.reset;
     // The Announcers Reset also clears compare / called-together, so it is
     // live for `?mode=compare` with no one selected (the toolbar trigger's
-    // own active state is left alone).
+    // own active state is left alone). The Networks Reset stays live while any
+    // pick is stored (D-15), even one D-36 shows without a count, since that
+    // pick is still in the URL and Reset is how the visitor removes it.
     const active =
       name === 'announcers'
         ? state.people.length > 0 || state.compare || state.together
-        : triggerInfo(name, data, state).active;
+        : name === 'networks'
+          ? state.networks != null
+          : triggerInfo(name, data, state, view).active;
     btn.setAttribute('aria-disabled', active ? 'false' : 'true');
   }
 }
 
 /** Pure DOM update from the current data/state/view, called every render cycle. */
 export function renderFilters({ data, state, view }) {
+  lastView = view;
   renderSeasons(data, state, view);
-  renderNetworks(data, state);
-  renderSlots(state);
-  renderRole(state);
-  renderConferences(state);
-  renderSchool(data, state);
-  renderPostseason(state);
-  renderTriggers(data, state);
-  renderGroupResets(data, state);
-  renderFiltersButton(state);
+  renderNetworks(data, state, view);
+  renderSlots(state, view);
+  renderRole(state, view);
+  renderConferences(state, view);
+  renderSchool(data, state, view);
+  renderPostseason(state, view);
+  renderOnlyButtons(data, state, view);
+  renderTriggers(data, state, view);
+  renderGroupResets(data, state, view);
+  renderFiltersButton(data, state, view);
 }

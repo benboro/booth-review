@@ -72,6 +72,13 @@ class VaultCommitError(BoothReviewError):
     """Raised when committing or pushing the data vault fails."""
 
 
+class BowlCrosswalkError(VaultStateError):
+    """Raised when a plotted postseason game has no bowls.csv row.
+
+    The message is count-only: it never carries a bowl name or a CFBD note.
+    """
+
+
 class VaultBusyError(VaultStateError):
     """Raised when another booth-review process holds the vault lock past the timeout."""
 

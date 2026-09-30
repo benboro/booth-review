@@ -917,6 +917,9 @@ def _build(args: argparse.Namespace) -> int:
         f"join rate {rate:.1f}%, merges {outcome.counts.get('duplicate_merges', 0)}, "
         f"blocked {'yes' if exit_blocked else 'no'}"
     )
+    bowl_names_unknown = outcome.counts.get("bowl_names_unknown", 0)
+    if bowl_names_unknown > 0:
+        print(f"bowl names unknown {bowl_names_unknown}")
     if outcome.accepted:
         print("accepted new baseline")
     for reason in outcome.reasons:

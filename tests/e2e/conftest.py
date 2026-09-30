@@ -162,6 +162,36 @@ def serve_round(fixture_raw: dict[str, Any]) -> Callable[[Page, str | None], Non
     return _serve
 
 
+@pytest.fixture
+def serve_bowl(fixture_raw: dict[str, Any]) -> Callable[..., None]:
+    """Returns `serve(page, *, index, bowl, round_=None, neutral=None,
+    bowls=None)`: loads the synthetic fixture with telecast `index`'s bowl
+    (and optionally playoff_round, neutral, and lookups.bowls) replaced. Keeps
+    the 12-dot fixture unchanged for other tests.
+    """
+
+    def _serve(
+        page: Page,
+        *,
+        index: int,
+        bowl: int | None,
+        round_: str | None = None,
+        neutral: bool | None = None,
+        bowls: list[dict[str, str]] | None = None,
+    ) -> None:
+        raw = copy.deepcopy(fixture_raw)
+        raw["telecasts"]["bowl"][index] = bowl
+        if round_ is not None:
+            raw["telecasts"]["playoff_round"][index] = round_
+        if neutral is not None:
+            raw["telecasts"]["neutral"][index] = neutral
+        if bowls is not None:
+            raw["lookups"]["bowls"] = bowls
+        page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+
+    return _serve
+
+
 def _install_guard(page: Page, site_url: str) -> tuple[list[str], list[str]]:
     """Wires `page` to abort and record any request leaving `site_url`'s
     origin (SITE-19), and to record any console error mentioning CSP.

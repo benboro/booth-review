@@ -1,10 +1,11 @@
 /**
  * Detail panel: full per-telecast facts, credits, and source links (SITE-05,
- * SITE-17, D-01, D-02, D-04, D-07, D-08, D-09, D-10, D-16, D-17). A push
- * grid column on desktop/tablet and a bottom sheet on phones (styled by
- * `#detail-panel`/`.panel-inner` in style.css); opened by a chart dot click
- * or clicking/pressing Enter on a matched-games table row, closed by
- * `#panel-close` or Escape.
+ * SITE-17, SITE-28, D-01..D-06, D-08, D-09, D-10, D-16, D-17). A native
+ * `<dialog>` opened with `showModal()`: a centered modal on desktop/tablet and
+ * a bottom sheet on phones (styled by `#detail-panel`/`.panel-inner` in
+ * style.css). Opened by a chart dot click or clicking/pressing Enter on a
+ * matched-games table row; closed by `#panel-close`, Escape (native), or a
+ * backdrop click. It never changes the page layout or scroll position.
  *
  * DOM is built only with createElement/textContent/replaceChildren -- never
  * any markup-injecting DOM API (T-04-34). Every href passes through
@@ -12,6 +13,7 @@
  * `source_url` that isn't a plain http(s) URL never becomes a clickable
  * link.
  */
+
 
 import {
   FEED_LABELS,
@@ -23,7 +25,6 @@ import {
   formatKickoff,
   formatMatchup,
   formatViewers,
-  gameTypeIcons,
   gameTypeInfo,
   measurementLabel,
   showsTimeSlot,
@@ -31,32 +32,16 @@ import {
 import { makeGameTypeIcon } from './icons.js';
 import { currentTheme, makePill } from './pill.js';
 
-/** The element focus should return to once the panel closes, or null. */
-let previouslyFocused = null;
+/** The element focus returns to when the dialog closes, or null. */
+let opener = null;
 
-/** `closePanel`'s pending fallback hide timer, or null (WR-03, D-24). */
-let hideTimer = null;
+/** Counts `showModal()` calls; the `close` handler acts once per session. */
+let openSession = 0;
+let handledSession = 0;
 
-/** The one-shot `transitionend`/`transitioncancel` listener `closePanel`
- * registered on `#detail-panel`, or null (WR-03, D-24). Tracked so
- * `cancelPendingHide` can remove it before a reopen fires it late. */
-let hideListenerTarget = null;
-let hideListener = null;
+/** Whether the latest pointerdown on the dialog landed on the backdrop itself. */
+let pointerDownOnBackdrop = false;
 
-/** Cancels a pending post-close hide -- both the fallback timer and the
- * transition-event listener -- so neither can fire after a reopen (WR-03). */
-function cancelPendingHide() {
-  if (hideTimer !== null) {
-    window.clearTimeout(hideTimer);
-    hideTimer = null;
-  }
-  if (hideListenerTarget !== null && hideListener !== null) {
-    hideListenerTarget.removeEventListener('transitionend', hideListener);
-    hideListenerTarget.removeEventListener('transitioncancel', hideListener);
-    hideListenerTarget = null;
-    hideListener = null;
-  }
-}
 
 /**
  * Returns `url` unchanged when it parses as an `http:`/`https:` URL, else
@@ -148,33 +133,56 @@ function selectedOnGameText(data, view, i) {
   return `Selected on this game: ${names.join(', ')}`;
 }
 
-/** Viewers paragraph: figure + measurement label, with the D-02 badge appended for Nielsen+Adobe. */
+/** First flag of `kind` on telecast `i`, or null. */
+function flagOfKind(data, i, kind) {
+  for (const idx of data.t.flags[i]) {
+    const flag = data.lookups.flags[idx];
+    if (flag.kind === kind) return flag;
+  }
+  return null;
+}
+
+/** Viewers paragraph: figure + measurement label. For Nielsen+Adobe the D-02
+ * badge is the only place the label appears (D-39), linked to the measurement
+ * flag's source when that passes `safeHref`. */
 function buildViewersParagraph(data, i) {
   const t = data.t;
   const p = document.createElement('p');
-  p.appendChild(
-    document.createTextNode(
-      `Viewers: ${formatViewers(t.viewers[i])} · ${measurementLabel(t.measurement_type[i])}`,
-    ),
-  );
   if (t.measurement_type[i] === 'nielsen_adobe') {
-    p.appendChild(document.createTextNode(' '));
-    const badge = document.createElement('span');
+    p.appendChild(document.createTextNode(`Viewers: ${formatViewers(t.viewers[i])} · `));
+    const flag = flagOfKind(data, i, 'measurement');
+    const badge =
+      (flag && externalLink(flag.source_url, 'Nielsen + Adobe (streaming)')) ??
+      document.createElement('span');
     badge.className = 'badge';
-    badge.textContent = 'Nielsen + Adobe (streaming)';
+    if (badge.textContent === '') badge.textContent = 'Nielsen + Adobe (streaming)';
     p.appendChild(badge);
+  } else {
+    p.appendChild(
+      document.createTextNode(
+        `Viewers: ${formatViewers(t.viewers[i])} · ${measurementLabel(t.measurement_type[i])}`,
+      ),
+    );
   }
   return p;
 }
 
-/** Flags list: each label, linked to its own `source_url` when that passes `safeHref` (D-04). */
+/** Flags list: each label, linked to its own `source_url` when that passes
+ * `safeHref` (D-04). Measurement flags for Nielsen+Adobe and combined flags
+ * for a telecast with a feed count are shown elsewhere (D-39), so skipped. */
 function buildFlagsList(data, i) {
-  const flagIdxs = data.t.flags[i];
-  if (flagIdxs.length === 0) return null;
+  const t = data.t;
+  const flags = t.flags[i]
+    .map((idx) => data.lookups.flags[idx])
+    .filter(
+      (flag) =>
+        !(flag.kind === 'measurement' && t.measurement_type[i] === 'nielsen_adobe') &&
+        !(flag.kind === 'combined' && t.combined_feeds[i] != null),
+    );
+  if (flags.length === 0) return null;
   const ul = document.createElement('ul');
   ul.className = 'panel-flags';
-  for (const flagIdx of flagIdxs) {
-    const flag = data.lookups.flags[flagIdx];
+  for (const flag of flags) {
     const li = document.createElement('li');
     const link = externalLink(flag.source_url, flag.label);
     li.appendChild(link ?? document.createTextNode(flag.label));
@@ -217,11 +225,68 @@ function buildLinksList(data, i) {
 }
 
 /**
+ * "[icon] label" game-type line. A decorative icon that can't be built is
+ * skipped so the label always shows.
+ * @param {string} kind
+ * @param {string} label
+ * @returns {HTMLParagraphElement}
+ */
+function buildLabelLine(kind, label) {
+  const p = document.createElement('p');
+  p.className = 'panel-game-type';
+  const icon = makeGameTypeIcon(kind);
+  p.replaceChildren(...(icon ? [icon] : []), document.createTextNode(label));
+  return p;
+}
+
+/**
+ * Bowl line (D-20, D-21): bowl icon, then the official name with the core
+ * name bold in --text and the sponsor text around it in --muted. textContent
+ * only, so a hostile name renders as literal text.
+ * @param {{name: string, core: string}} bowl
+ * @returns {HTMLParagraphElement}
+ */
+function buildBowlLine(bowl) {
+  const p = document.createElement('p');
+  p.className = 'panel-game-type panel-bowl';
+  const parts = [];
+  const icon = makeGameTypeIcon('bowl');
+  if (icon) parts.push(icon);
+  const at = bowl.name.indexOf(bowl.core);
+  const span = (cls, text) => {
+    const el = document.createElement(cls === 'bowl-core' ? 'strong' : 'span');
+    el.className = cls;
+    el.textContent = text;
+    return el;
+  };
+  if (at < 0) {
+    const plain = document.createElement('span');
+    plain.style.fontWeight = '400';
+    plain.style.color = 'var(--text)';
+    plain.textContent = bowl.name;
+    parts.push(plain);
+  } else {
+    if (at > 0) parts.push(span('bowl-sponsor', bowl.name.slice(0, at)));
+    parts.push(span('bowl-core', bowl.core));
+    const rest = bowl.name.slice(at + bowl.core.length);
+    if (rest) parts.push(span('bowl-sponsor', rest));
+  }
+  p.replaceChildren(...parts);
+  return p;
+}
+
+/**
  * Renders the full detail-panel body for telecast `i` into `bodyEl`, and
  * its title into `titleEl` (SITE-05, D-02, D-04, D-07, D-08, D-16). Pure DOM
  * update -- safe to call again for a different `i` while the panel is
  * already open (D-10 swap), or to refresh the currently open panel after a
  * selection changes elsewhere in the app.
+ * Game type (D-20, D-21): a bowl game (or CFP quarterfinal/semifinal) shows
+ * its named bowl line first, then a "[trophy] CFP round" line; a named bowl
+ * replaces "Neutral site".
+ * D-39: an empty crew reads "Crew not listed" (the missing crews themselves are
+ * a data-join issue, out of scope: see the championship-crews todo); the
+ * Nielsen+Adobe label shows once (the badge) and combined feeds show as one line.
  * @param {HTMLElement} bodyEl
  * @param {HTMLElement} titleEl
  * @param {{data: object, i: number, state: object, view: object}} ctx
@@ -237,17 +302,25 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
   children.push(dateP);
 
   const gameType = gameTypeInfo(data, i);
-  if (gameType != null) {
-    const gameTypeP = document.createElement('p');
-    gameTypeP.className = 'panel-game-type';
-    // The icons are decorative here (the label is visible text beside them);
-    // one that can't be built is skipped, so the line always shows the label.
-    const icons = gameTypeIcons(gameType).map((kind) => makeGameTypeIcon(kind));
-    gameTypeP.replaceChildren(...icons.filter((icon) => icon != null), document.createTextNode(gameType.label));
-    children.push(gameTypeP);
+  const bowlIdx = t.bowl?.[i] ?? null;
+  const bowl = bowlIdx != null ? (data.lookups.bowls?.[bowlIdx] ?? null) : null;
+  let namedBowlLine = false;
+  if (gameType != null && (gameType.kind === 'bowl' || gameType.atBowl)) {
+    if (bowl) {
+      children.push(buildBowlLine(bowl));
+      namedBowlLine = true;
+    } else {
+      children.push(buildLabelLine('bowl', 'Bowl'));
+    }
+  } else if (bowl) {
+    children.push(buildBowlLine(bowl));
+    namedBowlLine = true;
+  }
+  if (gameType != null && gameType.kind === 'playoff') {
+    children.push(buildLabelLine('playoff', gameType.label));
   }
 
-  if (t.neutral[i]) {
+  if (t.neutral[i] && !namedBowlLine) {
     const neutralP = document.createElement('p');
     neutralP.textContent = 'Neutral site';
     children.push(neutralP);
@@ -265,7 +338,14 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
 
   const crewHeading = document.createElement('h3');
   crewHeading.textContent = 'Crew';
-  children.push(crewHeading, buildCrewList(data, i));
+  if (t.crew[i].length === 0) {
+    const emptyP = document.createElement('p');
+    emptyP.className = 'panel-crew-empty';
+    emptyP.textContent = 'Crew not listed';
+    children.push(crewHeading, emptyP);
+  } else {
+    children.push(crewHeading, buildCrewList(data, i));
+  }
 
   const selectedText = selectedOnGameText(data, view, i);
   if (selectedText) {
@@ -292,7 +372,11 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
 
   if (t.combined_feeds[i] != null) {
     const combinedP = document.createElement('p');
-    combinedP.textContent = `Combined across ${t.combined_feeds[i]} feeds`;
+    const combinedText = `Combined across ${t.combined_feeds[i]} feeds`;
+    const combinedFlag = flagOfKind(data, i, 'combined');
+    const combinedLink = combinedFlag && externalLink(combinedFlag.source_url, combinedText);
+    if (combinedLink) combinedP.appendChild(combinedLink);
+    else combinedP.textContent = combinedText;
     children.push(combinedP);
   }
 
@@ -304,104 +388,60 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
 }
 
 /**
- * Opens the panel on telecast `i` (or swaps its contents when it's already
- * open, D-10): renders, unhides `#detail-panel`, adds `body.panel-open`,
- * remembers the pre-open focus target the first time, and focuses the
- * close button.
+ * Binds the dialog's close mechanics once: the x button, backdrop click (only
+ * when the press also began on the backdrop, so a text drag-select ending
+ * there does not close it), and the native `close` event, which reports
+ * `onClosed` and returns focus to the opener (or `#chart`).
+ * @param {{onClosed: () => void}} opts
+ */
+export function initPanel({ onClosed }) {
+  const dialog = document.getElementById('detail-panel');
+  document.getElementById('panel-close').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('pointerdown', (ev) => {
+    pointerDownOnBackdrop = ev.target === dialog;
+  });
+  dialog.addEventListener('click', (ev) => {
+    if (ev.target === dialog && pointerDownOnBackdrop) dialog.close();
+    pointerDownOnBackdrop = false;
+  });
+  dialog.addEventListener('close', () => {
+    // `close` is queued as a task, so a close and reopen in the same task
+    // delivers it while the dialog is open again; that event is stale, and
+    // acting on it would forget the open panel and its opener (review WR-03).
+    // Under load an earlier session's event can also land after the next
+    // session has closed, so two events see a closed dialog: handle each
+    // session once, or the second would find no opener and focus #chart.
+    if (dialog.open || handledSession === openSession) return;
+    handledSession = openSession;
+    onClosed();
+    const target = opener && opener.isConnected ? opener : document.getElementById('chart');
+    opener = null;
+    if (target) target.focus({ preventScroll: true });
+  });
+}
+
+/**
+ * Opens the modal on telecast `i`, or swaps its contents when it is already
+ * open (D-10). Closes any open popover first; the opener is the focused
+ * element, or `#chart` when focus sat on the body (a dot click).
  * @param {number} i
  * @param {{data: object, state: object, view: object}} ctx
  */
 export function openPanel(i, ctx) {
-  const panelEl = document.getElementById('detail-panel');
+  const dialog = document.getElementById('detail-panel');
   const titleEl = document.getElementById('panel-title');
   const bodyEl = document.getElementById('panel-body');
   renderPanel(bodyEl, titleEl, { data: ctx.data, i, state: ctx.state, view: ctx.view });
-
-  if (!document.body.classList.contains('panel-open')) {
-    previouslyFocused = document.activeElement;
-  }
-  // A reopen inside closePanel's 150ms slide-out window would otherwise be
-  // re-hidden when that stale timer fires (WR-03).
-  cancelPendingHide();
-  const wasHidden = panelEl.hidden;
-  panelEl.hidden = false;
-  // Unhiding and adding `body.panel-open` in the same frame would start the
-  // width transition from `display: none`'s implicit 0 with no paint in
-  // between, so the browser can coalesce it away entirely -- force a reflow
-  // first so the 0-width state is committed before the class (and the
-  // transition to 360px/320px) is applied (Pattern 1).
-  if (wasHidden) void panelEl.offsetWidth;
-  document.body.classList.add('panel-open');
-  document.getElementById('panel-close').focus();
+  if (dialog.open) return;
+  for (const el of document.querySelectorAll(':popover-open')) el.hidePopover();
+  const active = document.activeElement;
+  opener = active && active !== document.body ? active : document.getElementById('chart');
+  openSession += 1;
+  dialog.showModal();
 }
 
-/**
- * Closes the panel: removes `body.panel-open` immediately (driving the CSS
- * slide-out), hides `#detail-panel` and restores focus to whatever was
- * focused before the panel opened.
- *
- * D-24 (original bug, desktop/tablet): a bare 150ms hide timer raced the
- * CSS `width` transition -- setting `hidden` (display:none) at the same
- * ~150ms mark as the transition's own natural end frequently interrupted it
- * first, so the browser fired `transitioncancel` instead of `transitionend`
- * for the tracked property, and app.js's `transitionend`-only resize
- * listener never ran (confirmed empirically: a diagnostic listener logged
- * `transitioncancel` for `width` at the transition's expected end time on
- * every close).
- *
- * D-32 (desktop/tablet mechanism): `#detail-panel`'s own `width` no longer
- * transitions at all (style.css's "Detail panel" section) -- the grid
- * column snaps to 0 in the same frame `body.panel-open` is removed, so
- * there is no transition left to wait for. The panel hides immediately,
- * the same way the old reduced-motion path always did, so the chart's own
- * resize (app.js, scheduled on the very next animation frame) sees the
- * final collapsed width at once instead of ~150ms later. This keeps D-24:
- * with nothing left to race, the panel can never end up stuck mid-close.
- *
- * Phones keep the original mechanism unchanged: hiding is driven by the
- * bottom sheet's own `transform` transition's one-shot event
- * (`transitionend` on a full close, `transitioncancel` on an interrupted
- * one -- e.g. a close fired mid-transition), with a longer fallback timer
- * only for the case where no transition event ever fires at all (e.g. the
- * panel was already off-screen), and hides immediately under
- * `prefers-reduced-motion`.
- */
+/** Closes the modal if open; the `close` event handler restores focus. */
 export function closePanel() {
-  document.body.classList.remove('panel-open');
-
-  const panelEl = document.getElementById('detail-panel');
-  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const isPhone = window.matchMedia('(max-width: 640px)').matches;
-
-  cancelPendingHide();
-
-  const hide = () => {
-    cancelPendingHide();
-    panelEl.hidden = true;
-  };
-
-  if (!isPhone || reducedMotion) {
-    // Desktop/tablet: no transition left to wait for (D-32). Phones under
-    // reduced motion: same immediate-hide behavior as before.
-    hide();
-  } else {
-    // Phones only, motion allowed: wait for the bottom sheet's own
-    // `transform` transition to actually finish.
-    const onTransitionEvent = (ev) => {
-      if (ev.target !== panelEl || ev.propertyName !== 'transform') return;
-      hide();
-    };
-    hideListenerTarget = panelEl;
-    hideListener = onTransitionEvent;
-    panelEl.addEventListener('transitionend', onTransitionEvent);
-    panelEl.addEventListener('transitioncancel', onTransitionEvent);
-    // Fallback: guarantees the panel still hides even if neither transition
-    // event ever fires (belt-and-suspenders, not the primary mechanism).
-    hideTimer = window.setTimeout(hide, 300);
-  }
-
-  if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
-    previouslyFocused.focus();
-  }
-  previouslyFocused = null;
+  const dialog = document.getElementById('detail-panel');
+  if (dialog.open) dialog.close();
 }

@@ -40,6 +40,20 @@ def test_fixture_has_a_late_time_slot() -> None:
     assert "late" in data["telecasts"]["time_slot"]
 
 
+def test_fixture_has_a_named_bowl() -> None:
+    data = _load_fixture()
+    assert any(b is not None for b in data["telecasts"]["bowl"])
+    assert data["lookups"]["bowls"]
+
+
+def test_bowl_error_never_echoes_the_name() -> None:
+    data = _bowl_core_not_in_name(copy.deepcopy(_load_fixture()))
+    name = data["lookups"]["bowls"][0]["name"]
+    with pytest.raises(ValidationError) as exc:
+        validate_site_data(data)
+    assert name not in str(exc.value)
+
+
 def _add_unknown_top_level_key(data: dict[str, Any]) -> dict[str, Any]:
     data["unexpected_top_level_field"] = "nope"
     return data
@@ -129,6 +143,32 @@ def _schema_version_1_1_0(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _schema_version_1_2_0(data: dict[str, Any]) -> dict[str, Any]:
+    data["schema_version"] = "1.2.0"
+    return data
+
+
+def _bowl_index_out_of_range(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["bowl"][7] = len(data["lookups"]["bowls"])
+    return data
+
+
+def _bowl_core_not_in_name(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["bowls"][0]["core"] = "Zzz Unrelated"
+    return data
+
+
+def _bowl_on_regular_game(data: dict[str, Any]) -> dict[str, Any]:
+    # index 0 is game_type "regular" in the fixture.
+    data["telecasts"]["bowl"][0] = 0
+    return data
+
+
+def _bowl_empty_core(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["bowls"][0]["core"] = ""
+    return data
+
+
 def _time_slot_evening_not_in_enum(data: dict[str, Any]) -> dict[str, Any]:
     data["telecasts"]["time_slot"][0] = "evening"
     return data
@@ -153,6 +193,11 @@ _BROKEN_VARIANTS = [
     pytest.param(_schema_version_1_0_0, id="schema-version-1-0-0"),
     pytest.param(_schema_version_1_1_0, id="schema-version-1-1-0"),
     pytest.param(_time_slot_evening_not_in_enum, id="time-slot-evening-not-in-enum"),
+    pytest.param(_schema_version_1_2_0, id="schema-version-1-2-0"),
+    pytest.param(_bowl_index_out_of_range, id="bowl-index-out-of-range"),
+    pytest.param(_bowl_core_not_in_name, id="bowl-core-not-in-name"),
+    pytest.param(_bowl_on_regular_game, id="bowl-on-regular-game"),
+    pytest.param(_bowl_empty_core, id="bowl-empty-core"),
 ]
 
 

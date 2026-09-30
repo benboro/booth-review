@@ -98,10 +98,10 @@
       <h3>Kickoff time</h3>
       <button type="button" class="group-reset" data-reset="kickoff" aria-label="Reset Kickoff time" aria-disabled="true">Reset</button>
     </div>
-    <label><input type="checkbox" name="slot" value="noon"> Noon (before 2 PM ET)</label>
-    <label><input type="checkbox" name="slot" value="afternoon"> Afternoon (2–6 PM ET)</label>
-    <label><input type="checkbox" name="slot" value="prime"> Prime time (6–10 PM ET)</label>
-    <label><input type="checkbox" name="slot" value="late"> After dark (10 PM ET or later)</label>
+    <div class="check-item"><label class="check-row"><input type="checkbox" name="slot" value="noon"> <span class="option-name">Noon (before 2 PM ET)</span><span class="option-count" aria-hidden="true"></span><span class="visually-hidden option-count-sr"></span></label></div>
+    <div class="check-item"><label class="check-row"><input type="checkbox" name="slot" value="afternoon"> <span class="option-name">Afternoon (2–6 PM ET)</span><span class="option-count" aria-hidden="true"></span><span class="visually-hidden option-count-sr"></span></label></div>
+    <div class="check-item"><label class="check-row"><input type="checkbox" name="slot" value="prime"> <span class="option-name">Prime time (6–10 PM ET)</span><span class="option-count" aria-hidden="true"></span><span class="visually-hidden option-count-sr"></span></label></div>
+    <div class="check-item"><label class="check-row"><input type="checkbox" name="slot" value="late"> <span class="option-name">After dark (10 PM ET or later)</span><span class="option-count" aria-hidden="true"></span><span class="visually-hidden option-count-sr"></span></label></div>
   </section>
 </div>
 
@@ -111,8 +111,8 @@
       <h3>Role</h3>
       <button type="button" class="group-reset" data-reset="role" aria-label="Reset Role" aria-disabled="true">Reset</button>
     </div>
-    <label><input type="checkbox" name="role" value="pbp"> Play-by-play</label>
-    <label><input type="checkbox" name="role" value="analyst"> Analyst</label>
+    <label><input type="checkbox" name="role" value="pbp"> <span class="option-name">Play-by-play</span><span class="option-count" aria-hidden="true"></span><span class="visually-hidden option-count-sr"></span></label>
+    <label><input type="checkbox" name="role" value="analyst"> <span class="option-name">Analyst</span><span class="option-count" aria-hidden="true"></span><span class="visually-hidden option-count-sr"></span></label>
   </section>
 </div>
 
@@ -153,10 +153,10 @@
       <h3>Bowls/Playoffs</h3>
       <button type="button" class="group-reset" data-reset="postseason" aria-label="Reset bowls and playoffs filter" aria-disabled="true">Reset</button>
     </div>
-    <div id="postseason-options" class="segmented" role="radiogroup" aria-label="Bowls/Playoffs">
-      <button type="button" role="radio" aria-checked="false" tabindex="0" data-postseason="all">All games</button>
-      <button type="button" role="radio" aria-checked="false" tabindex="-1" data-postseason="exclude">Exclude bowls & playoffs</button>
-      <button type="button" role="radio" aria-checked="false" tabindex="-1" data-postseason="only">Only bowls & playoffs</button>
+    <div id="postseason-options" class="radio-list" role="radiogroup" aria-label="Bowls/Playoffs">
+      <button type="button" role="radio" aria-checked="false" tabindex="0" data-postseason="all">All games<span class="option-count" aria-hidden="true"></span><span class="visually-hidden option-count-sr"></span></button>
+      <button type="button" role="radio" aria-checked="false" tabindex="-1" data-postseason="exclude">Exclude bowls & playoffs<span class="option-count" aria-hidden="true"></span><span class="visually-hidden option-count-sr"></span></button>
+      <button type="button" role="radio" aria-checked="false" tabindex="-1" data-postseason="only">Only bowls & playoffs<span class="option-count" aria-hidden="true"></span><span class="visually-hidden option-count-sr"></span></button>
     </div>
   </section>
 </div>
@@ -182,7 +182,7 @@
     <button type="button" data-axis="excitement" aria-pressed="false">Excitement (CFBD)</button>
   </div>
 
-  <div id="chart"></div>
+  <div id="chart" tabindex="-1"><div id="season-empty-note" class="season-empty-note" role="status" hidden><p class="season-empty-title"></p><p class="season-empty-hint">Widen the season range or reset Seasons.</p></div></div>
 
   <ul id="shape-legend" hidden></ul>
 
@@ -220,13 +220,13 @@
   </table>
 </section>
 
-<aside id="detail-panel" role="dialog" aria-modal="false" aria-labelledby="panel-title" hidden>
+<dialog id="detail-panel" aria-labelledby="panel-title">
   <div class="panel-inner">
     <button type="button" id="panel-close" aria-label="Close details">×</button>
     <h2 id="panel-title"></h2>
     <div id="panel-body"></div>
   </div>
-</aside>
+</dialog>
 
 <footer id="site-footer" class="site-footer"><!-- booth-review:footer --></footer>
 

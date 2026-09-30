@@ -25,9 +25,10 @@ from typing import TYPE_CHECKING, Literal
 import polars as pl
 from pydantic import ValidationError
 
+from booth_review.build.bowls import load_bowls
 from booth_review.config import DataPaths
 from booth_review.contract.models import SCHEMA_VERSION, SiteData, validate_site_data
-from booth_review.errors import VaultStateError
+from booth_review.errors import BowlCrosswalkError, VaultStateError
 from booth_review.flags.era import load_eras
 from booth_review.flags.events import load_event_flags
 from booth_review.resolve.headline import is_usable_value
@@ -42,6 +43,8 @@ _FEED_ORDER: dict[str, int] = {"main": 0, "alt": 1, "spanish": 2}
 _UNMAPPED_NETWORK_ID = "unmapped"
 _MEASUREMENT_FLAG_LABEL = "Nielsen+Adobe"
 _COMBINED_FLAG_LABEL = "Combined across feeds"
+_POSTSEASON_TYPES = frozenset({"bowl", "playoff"})
+_CFP_AT_BOWL_ROUNDS = frozenset({"quarterfinal", "semifinal"})
 _NOON_HOUR = 14
 _PRIME_HOUR = 18
 _LATE_HOUR = 22
@@ -195,6 +198,40 @@ def build_site_data(
         raise VaultStateError(
             f"telecasts: {missing_fbs_conference} plotted row(s) with an FBS side but no conference"
         )
+    bowl_entries = load_bowls(reference_directory)
+    missing_bowl = 0
+    bowl_disagreements = 0
+    for row in rows:
+        if row["game_type"] not in _POSTSEASON_TYPES:
+            continue
+        entry = bowl_entries.get(int(row["game_id"]))
+        if entry is None:
+            missing_bowl += 1
+            continue
+        if row["game_type"] == "bowl":
+            expects_at_bowl = True
+        else:
+            expects_at_bowl = row["playoff_round"] in _CFP_AT_BOWL_ROUNDS
+        if entry.at_bowl != expects_at_bowl:
+            bowl_disagreements += 1
+    if missing_bowl:
+        raise BowlCrosswalkError(
+            f"telecasts: {missing_bowl} plotted postseason row(s) without a bowls.csv entry; "
+            "see interim/review_bowls.csv"
+        )
+    if bowl_disagreements:
+        raise VaultStateError(
+            f"bowls.csv: {bowl_disagreements} row(s) disagree with the game's type (at_bowl)"
+        )
+    bowl_pairs: set[tuple[str, str]] = set()
+    for row in rows:
+        if row["game_type"] not in _POSTSEASON_TYPES:
+            continue
+        found = bowl_entries[int(row["game_id"])]
+        if found.at_bowl and found.official_name is not None and found.core_name is not None:
+            bowl_pairs.add((found.official_name, found.core_name))
+    bowls_lookup = sorted(bowl_pairs)
+    bowl_index = {pair: i for i, pair in enumerate(bowls_lookup)}
     plotted_ids = {row["telecast_id"] for row in rows}
 
     crew_by_telecast: dict[str, list[dict[str, object]]] = {}
@@ -346,6 +383,7 @@ def build_site_data(
         "playoff_round": [],
         "home_conference": [],
         "away_conference": [],
+        "bowl": [],
     }
 
     for row in rows:
@@ -398,6 +436,17 @@ def build_site_data(
         columns["away_conference"].append(
             conference_index[away_conf] if away_conf is not None else None
         )
+        bowl_entry = (
+            bowl_entries.get(int(row["game_id"])) if row["game_type"] in _POSTSEASON_TYPES else None
+        )
+        if (
+            bowl_entry is not None
+            and bowl_entry.official_name is not None
+            and bowl_entry.core_name is not None
+        ):
+            columns["bowl"].append(bowl_index[(bowl_entry.official_name, bowl_entry.core_name)])
+        else:
+            columns["bowl"].append(None)
 
     # -- coverage: publisher_counts per (season, network), and per-season totals ------------
     publisher_counts_by_key: dict[tuple[int, str], dict[str, int]] = {}
@@ -455,6 +504,7 @@ def build_site_data(
             "publishers": publisher_list,
             "flags": flags,
             "conferences": conferences,
+            "bowls": [{"name": n, "core": c} for n, c in bowls_lookup],
         },
         "telecasts": columns,
         "coverage": coverage_rows,

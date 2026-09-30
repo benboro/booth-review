@@ -1,5 +1,27 @@
 {
   "$defs": {
+    "BowlRef": {
+      "additionalProperties": false,
+      "description": "A bowl's display names: the official name for that season (with any\nsponsor) and the core name (D-17/D-19). Never a raw CFBD note.",
+      "properties": {
+        "core": {
+          "minLength": 1,
+          "title": "Core",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "core"
+      ],
+      "title": "BowlRef",
+      "type": "object"
+    },
     "ConferenceRef": {
       "additionalProperties": false,
       "properties": {
@@ -223,6 +245,13 @@
     "Lookups": {
       "additionalProperties": false,
       "properties": {
+        "bowls": {
+          "items": {
+            "$ref": "#/$defs/BowlRef"
+          },
+          "title": "Bowls",
+          "type": "array"
+        },
         "conferences": {
           "items": {
             "$ref": "#/$defs/ConferenceRef"
@@ -272,7 +301,8 @@
         "people",
         "publishers",
         "flags",
-        "conferences"
+        "conferences",
+        "bowls"
       ],
       "title": "Lookups",
       "type": "object"
@@ -403,6 +433,20 @@
             "type": "integer"
           },
           "title": "Away Team",
+          "type": "array"
+        },
+        "bowl": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Bowl",
           "type": "array"
         },
         "combined_feeds": {
@@ -720,13 +764,14 @@
         "game_type",
         "playoff_round",
         "home_conference",
-        "away_conference"
+        "away_conference",
+        "bowl"
       ],
       "title": "TelecastColumns",
       "type": "object"
     }
   },
-  "$id": "booth-review/site-data/1.2.0",
+  "$id": "booth-review/site-data/1.3.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -748,7 +793,7 @@
       "$ref": "#/$defs/Lookups"
     },
     "schema_version": {
-      "const": "1.2.0",
+      "const": "1.3.0",
       "title": "Schema Version",
       "type": "string"
     },

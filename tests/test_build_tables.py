@@ -123,6 +123,7 @@ def test_write_tables_writes_parquet_and_review_csvs_and_returns_sorted_paths(
         "processed/listing_links.parquet",
         "processed/people.parquet",
         "processed/telecast_people.parquet",
+        "interim/review_bowls.csv",
         "interim/review_unmatched.csv",
         "interim/review_unresolved_teams.csv",
         "interim/review_headline_disagreements.csv",

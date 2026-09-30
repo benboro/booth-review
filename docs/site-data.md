@@ -18,7 +18,7 @@ immediately, in parallel with Phase 3's real joins.
 `site-data.json` is **one versioned columnar JSON file** (D-13), not an array
 of per-telecast objects:
 
-- `schema_version` — the contract version (currently `"1.2.0"`). See
+- `schema_version` — the contract version (currently `"1.3.0"`). See
   Versioning below.
 - `generated_at` — ISO UTC timestamp of the build that produced the file.
 - `freshness` — `{ season, crews_through_week, viewership_through_week }`,
@@ -84,6 +84,7 @@ describes when the value is `null` instead of coerced to a placeholder like
 | `playoff_round` | `"first_round"` \| `"quarterfinal"` \| `"semifinal"` \| `"championship"` \| null | null unless `game_type` is `"playoff"`, in which case it holds the CFP round when CFBD's own `playoff.round` value is one of these four; an unrecognized round string is also null | SITE-24, SITE-25 |
 | `home_conference` | int \| null, index into `lookups.conferences` | null when CFBD reports no conference for the home side (e.g. some FCS opponents) | SITE-21, SITE-25 |
 | `away_conference` | int \| null, index into `lookups.conferences` | null when CFBD reports no conference for the away side | SITE-21, SITE-25 |
+| `bowl` | int \| null, index into `lookups.bowls` | non-null only for a game played at a named bowl; never set on a regular-season game; display name only, the raw CFBD note never ships | SITE-30 |
 
 ### `time_slot` boundaries
 
@@ -123,6 +124,7 @@ Each `crew` entry is `{ person: int, role, feed }`:
 - **`flags`**: `{ id, kind, label, source_url }` — `kind` is `"era"`,
   `"event"`, `"measurement"`, `"model_break"`, or `"combined"`; `source_url`
   is null when a flag has no single citable source.
+- **`bowls`**: `{ name, core }` — `name` is the official bowl name for that season with sponsor, `core` is the core bowl name and is always a substring of `name` (D-17/D-19). Never a raw CFBD note.
 - **`conferences`**: `{ name, is_fbs }` — one entry per distinct conference
   name that appears as a plotted telecast's `home_conference` or
   `away_conference` (D-09). `name` is CFBD's own per-game conference string
@@ -179,7 +181,8 @@ only their derived, display-safe outputs (`game_type`, `playoff_round`, the
   bumps the **minor** version — for example, `1.0.0` → `1.1.0` added
   `game_type`, `playoff_round`, `home_conference`, `away_conference`, and
   `lookups.conferences` (D-09/D-17); `1.1.0` → `1.2.0` added the `late`
-  time_slot value (D-20).
+  time_slot value (D-20); `1.2.0` -> `1.3.0` added `lookups.bowls` and
+  `telecasts.bowl` (D-19).
 - **Removing a field, renaming a field, or changing a field's type**
   (including narrowing an enum) bumps the **major** version (`1.0.0` →
   `2.0.0`).
@@ -210,3 +213,5 @@ telecast index 7 (a Saturday game with a prime-time kickoff, `game_type`
 `playoff_round` `"semifinal"`).
 
 As of v1.2.0 telecast index 2 has a 22:30 ET Saturday kickoff (`late`).
+
+As of v1.3.0 telecast 7 (bowl) points at a sponsor-prefixed bowl and telecast 5 (CFP semifinal) at a sponsor-suffixed bowl; the CFP-not-at-a-bowl and unnamed-bowl cases are covered by route-mutated payloads in the e2e suite.
