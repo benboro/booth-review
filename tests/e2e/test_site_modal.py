@@ -1,0 +1,102 @@
+"""Detail-modal gap-round-1 browser tests (D-38, D-39; D-38 tests are added later
+by plan 04.2-16). Proven against the synthetic contract fixture, route-mutated
+where a case needs data the fixture lacks.
+"""
+
+from __future__ import annotations
+
+import copy
+from collections.abc import Callable
+from typing import Any
+
+import pytest
+from playwright.sync_api import Page, expect
+
+pytestmark = pytest.mark.e2e
+
+
+def _serve_patched(
+    page: Page, fixture_raw: dict[str, Any], patch: Callable[[dict[str, Any]], None]
+) -> None:
+    """Serves a deep copy of the fixture, mutated by `patch`, as site-data.json."""
+    raw = copy.deepcopy(fixture_raw)
+    patch(raw)
+    page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+
+
+def _open(
+    page: Page,
+    open_app: Callable[[Page, str], None],
+    index: int,
+    fixture_raw: dict[str, Any] | None = None,
+    patch: Callable[[dict[str, Any]], None] | None = None,
+) -> str:
+    page.set_viewport_size({"width": 1280, "height": 800})
+    if fixture_raw is not None and patch is not None:
+        _serve_patched(page, fixture_raw, patch)
+    open_app(page, "")
+    page.evaluate(f"window.__testHooks.openPanel({index})")
+    return page.locator("#panel-body").inner_text()
+
+
+def test_empty_crew_shows_crew_not_listed(
+    guarded_page: Page, open_app: Callable[[Page, str], None], fixture_raw: dict[str, Any]
+) -> None:
+    """D-39: an empty crew reads 'Crew not listed', never a bare heading."""
+
+    def patch(raw: dict[str, Any]) -> None:
+        raw["telecasts"]["crew"][3] = []
+
+    _open(guarded_page, open_app, 3, fixture_raw, patch)
+    heading = guarded_page.locator("#panel-body h3", has_text="Crew")
+    expect(heading).to_have_count(1)
+    expect(heading.locator("xpath=following-sibling::*[1]")).to_have_text("Crew not listed")
+    expect(guarded_page.locator("#panel-body .panel-crew li")).to_have_count(0)
+
+
+def test_nielsen_adobe_label_shows_once(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-39: the Nielsen + Adobe label appears once, as the linked badge."""
+    text = _open(guarded_page, open_app, 5)
+    assert text.count("Nielsen + Adobe") == 1
+    assert "Nielsen+Adobe measurement" not in text
+    badge = guarded_page.locator("#panel-body .badge")
+    expect(badge).to_have_text("Nielsen + Adobe (streaming)")
+    expect(badge).to_have_attribute("href", "https://example.com/measurement-nielsen-adobe")
+
+
+def test_combined_feeds_line_shows_once(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-39: one 'Combined across 3 feeds' line, linked to the flag's source."""
+    text = _open(guarded_page, open_app, 7)
+    assert text.count("Combined across") == 1
+    assert "Combined across 3 feeds" in text
+    assert "(MegaCast)" not in text
+    link = guarded_page.locator("#panel-body a:has-text('Combined across 3 feeds')")
+    expect(link).to_have_attribute("href", "https://example.com/combined-megacast")
+
+
+def test_combined_flag_kept_without_feed_count(
+    guarded_page: Page, open_app: Callable[[Page, str], None], fixture_raw: dict[str, Any]
+) -> None:
+    """D-39: with no feed count, the combined flag still lists with its label."""
+
+    def patch(raw: dict[str, Any]) -> None:
+        raw["telecasts"]["combined_feeds"][7] = None
+
+    text = _open(guarded_page, open_app, 7, fixture_raw, patch)
+    assert text.count("Combined across feeds (MegaCast)") == 1
+
+
+def test_other_flags_still_listed(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-39 guard: era and model_break flags still list."""
+    assert "Nielsen out-of-home (Aug 2020)" in _open(guarded_page, open_app, 1)
+    guarded_page.evaluate("window.__testHooks.openPanel(11)")
+    assert (
+        "CFBD win-probability model break (2025+)"
+        in guarded_page.locator("#panel-body").inner_text()
+    )
