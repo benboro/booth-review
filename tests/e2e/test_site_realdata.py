@@ -416,3 +416,32 @@ def test_real_facet_pass_is_fast(
     real_open_app(real_guarded_page, "")
     mean_ms: float = real_guarded_page.evaluate(_FACET_TIMING_JS)
     assert mean_ms <= 20, "mean computeView time (facets included) exceeded 20 ms"
+
+
+_ANNOUNCER_FIT_JS = """
+() => {
+  const results = document.getElementById('person-results');
+  const wrapped = Array.from(results.querySelectorAll('.option-role')).filter(
+    (e) => e.textContent === 'Play-by-play'
+      && e.getBoundingClientRect().height > 1.5 * parseFloat(getComputedStyle(e).lineHeight)
+  ).length;
+  return [results.scrollWidth, results.clientWidth, wrapped];
+}
+"""
+
+
+def test_real_announcers_list_fits(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """D-32: on the real build the Announcers list never scrolls sideways and
+    no Play-by-play label wraps -- numbers only."""
+    real_guarded_page.set_viewport_size({"width": 1280, "height": 800})
+    real_open_app(real_guarded_page, "")
+    real_guarded_page.click("#trigger-announcers")
+    real_guarded_page.wait_for_function(
+        "document.getElementById('pop-announcers').matches(':popover-open')"
+    )
+    result: list[float] = real_guarded_page.evaluate(_ANNOUNCER_FIT_JS)
+    scroll_width, client_width, wrapped = result
+    assert scroll_width <= client_width, "the announcer list scrolls sideways"
+    assert wrapped == 0, "a Play-by-play label wrapped"
