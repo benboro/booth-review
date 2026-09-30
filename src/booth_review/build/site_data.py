@@ -346,6 +346,7 @@ def build_site_data(
         "playoff_round": [],
         "home_conference": [],
         "away_conference": [],
+        "bowl": [],
     }
 
     for row in rows:
@@ -398,6 +399,8 @@ def build_site_data(
         columns["away_conference"].append(
             conference_index[away_conf] if away_conf is not None else None
         )
+        # Plan 04.2-04 resolves bowl from data/reference/bowls.csv.
+        columns["bowl"].append(None)
 
     # -- coverage: publisher_counts per (season, network), and per-season totals ------------
     publisher_counts_by_key: dict[tuple[int, str], dict[str, int]] = {}
@@ -455,6 +458,7 @@ def build_site_data(
             "publishers": publisher_list,
             "flags": flags,
             "conferences": conferences,
+            "bowls": [],
         },
         "telecasts": columns,
         "coverage": coverage_rows,
