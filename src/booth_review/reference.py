@@ -3,7 +3,9 @@
 data/reference is public (`.gitignore` allows it explicitly, `data/README.md`
 lists it as always committed). Every table declares its exact columns so no
 game-level row, crew, figure, or free text beyond the declared columns can be
-added by accident (D-05, D-06 public-table safety): a header that doesn't
+added by accident (D-05, D-06 public-table safety; the one documented
+exception is crew_overrides.csv, 04.3 D-01, whose rows each cite a public
+source_url): a header that doesn't
 match exactly is rejected, a row with more cells than the header is rejected,
 and a cell that a spreadsheet would read as a formula is rejected -- naming
 only the file and line number, never the offending content, so an error

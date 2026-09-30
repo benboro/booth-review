@@ -5,7 +5,9 @@ here is committed with the rest of the repo, unlike everything else under
 `data/` (which lives in the private vault instead — see the top-level
 `AGENTS.md`). Names, network mappings, and dated era boundaries are public
 facts; who called which specific game is not, so no table here ever holds a
-game-level row (D-05) — override tables hold pointers and reason codes only,
+game-level row (D-05), with one documented exception: the hand-confirmed
+crews in `crew_overrides.csv`, each cited to a public source that already
+publishes it (04.3 D-01). Override tables hold pointers and reason codes only,
 never a crew, a figure, or matchup text (D-06). Every table is read through
 `reference.read_reference_csv`, which rejects a header that doesn't match
 exactly, a row with extra columns, or a cell that could be read as a
@@ -27,14 +29,15 @@ gitignored).
 | `primary_network_overrides.csv` | A per-game override of the rights-holder rule's own primary-network pick, for a neutral-site or bowl-game exception | `cfbd_game_id, network_id, reason` | Hand, from the primary-network review | `resolve.networks.load_primary_overrides` |
 | `combined_figures.csv` | Hand-confirmed pointers marking a Ratings Reference figure as combined across simulcast feeds (D-09), since `composite_of`/`carrier_network` are never populated in this project's range | `rr_telecast_id, decision, feeds, reason` | Hand, from the combined-figure candidate review (`interim/review_combined.csv` in the vault); `alt_listed` candidates are pre-filled `combined` by `python -m booth_review.build.combined`, outlier-only candidates are left blank for the user | `build.combined.load_combined_figures` |
 | `bowls.csv` | Display names for bowl games, keyed by CFBD game id: the official name for that season (sponsor included) and the core bowl name, plus whether the game was played at a bowl (D-17) | `cfbd_game_id, official_name, core_name, at_bowl` | Hand, from the private vault review file `interim/review_bowls.csv` | `build.bowls.load_bowls` |
+| `crew_overrides.csv` | Hand-confirmed main-feed booth crews for plotted telecasts 506 Sports does not list (every CFP national championship and other gaps), one row per crew member, each citing the public source that names the booth (04.3 D-01/D-02) | `cfbd_game_id, network_id, crew_position, person_id, role, reason, source_kind, source_name, source_url` | Hand, after the user accepts each proposal from the private vault draft (`interim/crew_overrides_draft.csv`), using the build's gap list `interim/review_crew_overrides.csv` | `build.crew_overrides.load_crew_overrides` |
 
 ## Rules every table here follows
 
-- **Names-only, never game-level (D-05):** `people.csv`, `people_reviewed.csv`,
+- **Names-only, never game-level (D-05; sole exception `crew_overrides.csv`, below):** `people.csv`, `people_reviewed.csv`,
   `team_crosswalk.csv`, and `networks.csv` describe people, teams, and
   networks in the abstract — never which crew called which game, a viewer
   figure, or a headline value.
-- **Override tables are pointers, not data (D-06):** `game_overrides.csv`,
+- **Override tables are pointers, not data (D-06; sole exception `crew_overrides.csv`, below):** `game_overrides.csv`,
   `person_overrides.csv`, `primary_network_overrides.csv`, and
   `combined_figures.csv` identify *which* record a hand decision applies to
   (a CFBD game id, a 506 season/week/row pointer, a Ratings Reference record
@@ -42,6 +45,14 @@ gitignored).
   text, or figures behind that decision. `bowls.csv` is keyed by CFBD game id
   and holds only public bowl names reviewed by hand, never CFBD notes text;
   empty names with `at_bowl=true` mean the name is unknown.
+- **One documented exception (04.3 D-01):** `crew_overrides.csv` records a
+  telecast's main-feed booth only when a public source (network press
+  release, school game notes, or a reputable outlet; never 506 Sports) names
+  it; every row carries that `source_url`, roles come from the source, and
+  `tests/test_reference_tables.py` allow-lists exactly this one table.
+  Vocabularies: `reason` is `no-506-listing | no-506-crew | correction`,
+  `source_kind` is `press-release | school | outlet`, `role` is
+  `pbp | analyst`.
 - **`person_id` values are never renamed (D-01):** a later name change is
   recorded as a new variant on the same `person_id`, never a rewrite of the
   id itself, since ids appear in shareable site URLs.
