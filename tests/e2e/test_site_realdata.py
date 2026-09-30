@@ -461,13 +461,15 @@ _SCROLLERS_JS = """
 
 
 def test_real_modal_never_shows_two_scrollers(
-    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+    real_raw: dict[str, Any],
 ) -> None:
     """D-38: on the real build no sampled panel shows more than one scroller and
     the dialog itself never scrolls -- numbers only."""
     real_guarded_page.set_viewport_size({"width": 1280, "height": 480})
     real_open_app(real_guarded_page, "")
-    total: int = real_guarded_page.evaluate("window.__testHooks.data.telecasts.season.length")
+    total = len(real_raw["telecasts"]["season"])
     worst = 0
     dialog_scrolls = 0
     for i in range(0, total, 25):
