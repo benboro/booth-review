@@ -64,6 +64,9 @@ const GROUP_RESETS = {
 /** Bowls/Playoffs radio values, in the DOM order they appear in `#postseason-options`. */
 const POSTSEASON_ORDER = ['all', 'exclude', 'only'];
 
+/** The latest `view`, kept so the delegated Only handlers can read facet counts (D-24). */
+let lastView = null;
+
 /** DOM element references, populated once by `initFilters`. */
 let els = null;
 
@@ -208,6 +211,103 @@ function buildNetworkChecklist(data) {
   });
 
   els.networksSection.replaceChildren(...(heading ? [heading] : []), ...groups);
+}
+
+/** Channel ids of a family that have games under the other filters (count > 0), in lookup order (D-24). */
+function offeredFamilyIds(data, familyKeyVal, view) {
+  const counts = view?.facets?.networks;
+  return (data.networksByFamily.get(familyKeyVal) ?? [])
+    .filter((idx) => (counts ? counts[idx] > 0 : true))
+    .map((idx) => data.lookups.networks[idx].id);
+}
+
+/** One "Only" button, a sibling of the row's label (never nested in it), built with textContent only. */
+function makeOnlyButton(group, key, value) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'only-btn';
+  btn.textContent = 'Only';
+  btn.dataset.onlyGroup = group;
+  btn.dataset[key] = value;
+  return btn;
+}
+
+/** Appends an Only button to every Networks channel, family, Conference and Kickoff row (D-23). */
+function buildOnlyButtons() {
+  for (const [id, cb] of networkCheckboxes) {
+    cb.closest('.check-item').appendChild(makeOnlyButton('networks', 'onlyNetwork', id));
+  }
+  for (const [family, cb] of familyCheckboxes) {
+    cb.closest('.check-item').appendChild(makeOnlyButton('networks', 'onlyFamily', family));
+  }
+  for (const [name, cb] of conferenceCheckboxes) {
+    cb.closest('.check-item').appendChild(makeOnlyButton('conference', 'onlyConference', name));
+  }
+  for (const cb of els.slotsSection.querySelectorAll('input[name="slot"]')) {
+    cb.closest('.check-item').appendChild(makeOnlyButton('kickoff', 'onlySlot', cb.value));
+  }
+}
+
+const SAME_SET = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+
+/** True when the button's option is already the sole selection, so it reads "All" (D-25). */
+function onlyIsSole(btn, data, state, view) {
+  const d = btn.dataset;
+  if (d.onlyNetwork) return state.networks != null && SAME_SET(state.networks, [d.onlyNetwork]);
+  if (d.onlyFamily) {
+    const offered = offeredFamilyIds(data, d.onlyFamily, view);
+    return state.networks != null && offered.length > 0 && SAME_SET(state.networks, offered);
+  }
+  if (d.onlySlot) return state.slots != null && SAME_SET(state.slots, [d.onlySlot]);
+  if (d.onlyConference) return SAME_SET(state.conferences, [d.onlyConference]);
+  return false;
+}
+
+/** Delegated click handler for one section's Only/All buttons (D-24, D-25, D-27). */
+function handleOnlyClick(data, getState, setState, ev) {
+  const btn = ev.target.closest('.only-btn');
+  if (!btn) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  const d = btn.dataset;
+  const resetKey = d.onlyGroup;
+  if (onlyIsSole(btn, data, getState(), lastView)) {
+    setState(structuredClone(GROUP_RESETS[resetKey]));
+  } else if (d.onlyNetwork) {
+    setState({ networks: [d.onlyNetwork] });
+  } else if (d.onlyFamily) {
+    setState({ networks: offeredFamilyIds(data, d.onlyFamily, lastView) });
+  } else if (d.onlySlot) {
+    setState({ slots: [d.onlySlot] });
+  } else if (d.onlyConference) {
+    setState({ conferences: [d.onlyConference] });
+  }
+}
+
+/** Syncs every Only button's text and accessible name ("All" when sole), hiding empty family buttons. */
+function renderOnlyButtons(data, state, view) {
+  const allLabels = {
+    networks: 'Show all networks',
+    conference: 'Show all conferences',
+    kickoff: 'Show all kickoff times',
+  };
+  const netNames = new Map(data.lookups.networks.map((n) => [n.id, n.name]));
+  for (const btn of document.querySelectorAll('.only-btn')) {
+    const d = btn.dataset;
+    if (d.onlyFamily) btn.hidden = offeredFamilyIds(data, d.onlyFamily, view).length === 0;
+    const sole = onlyIsSole(btn, data, state, view);
+    const name = d.onlyNetwork
+      ? netNames.get(d.onlyNetwork)
+      : d.onlyFamily
+        ? FAMILY_LABELS[d.onlyFamily]
+        : d.onlySlot
+          ? SLOT_SHORT_LABELS[d.onlySlot]
+          : d.onlyConference;
+    const text = sole ? 'All' : 'Only';
+    const label = sole ? allLabels[d.onlyGroup] : `Show only ${name}`;
+    if (btn.textContent !== text) btn.textContent = text;
+    if (btn.getAttribute('aria-label') !== label) btn.setAttribute('aria-label', label);
+  }
 }
 
 /** Appends the role-filter helper line once, under the static role checkboxes (SITE-07). */
@@ -403,7 +503,7 @@ function positionPopover(popover, trigger) {
  */
 function firstFocusable(container) {
   return container.querySelector(
-    'input, button:not(.group-reset), [tabindex]:not([tabindex="-1"]):not(.group-reset)',
+    'input, button:not(.group-reset):not(.only-btn), [tabindex]:not([tabindex="-1"]):not(.group-reset):not(.only-btn)',
   );
 }
 
@@ -505,6 +605,7 @@ export function initFilters({ data, getState, setState }) {
   buildRoleHelper();
   buildConferenceList(data);
   buildSchoolList(data);
+  buildOnlyButtons();
 
   const onSeasonChange = () => {
     const from = Number(els.seasonFrom.value);
@@ -517,6 +618,10 @@ export function initFilters({ data, getState, setState }) {
   els.seasonTo.addEventListener('change', onSeasonChange);
 
   els.networksSection.addEventListener('change', (ev) => handleNetworksChange(data, getState, setState, ev));
+  const onOnlyClick = (ev) => handleOnlyClick(data, getState, setState, ev);
+  els.networksSection.addEventListener('click', onOnlyClick);
+  els.slotsSection.addEventListener('click', onOnlyClick);
+  els.conferenceList.addEventListener('click', onOnlyClick);
 
   els.slotsSection.addEventListener('change', () => handleSlotsChange(setState));
 
@@ -860,6 +965,7 @@ function renderGroupResets(data, state) {
 
 /** Pure DOM update from the current data/state/view, called every render cycle. */
 export function renderFilters({ data, state, view }) {
+  lastView = view;
   renderSeasons(data, state, view);
   renderNetworks(data, state, view);
   renderSlots(state, view);
@@ -867,6 +973,7 @@ export function renderFilters({ data, state, view }) {
   renderConferences(state, view);
   renderSchool(data, state, view);
   renderPostseason(state, view);
+  renderOnlyButtons(data, state, view);
   renderTriggers(data, state);
   renderGroupResets(data, state);
   renderFiltersButton(state);

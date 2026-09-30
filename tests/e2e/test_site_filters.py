@@ -1809,3 +1809,214 @@ def test_facet_view_exposes_plain_json_facets(
     facets = _view(guarded_page)["facets"]
     assert facets["seasons"] == {"2019": 2, "2021": 2, "2025": 4, "2026": 4}
     assert facets["networks"] == [3, 3, 3, 3]
+
+
+# ---------- "Only" / "All" shortcut (SITE-31, D-23..D-27) ----------
+
+
+def _only_btn(item: Any) -> Any:
+    return item.locator(".only-btn")
+
+
+def _state(page: Page) -> dict[str, Any]:
+    result: dict[str, Any] = page.evaluate("window.__testHooks.getState()")
+    return result
+
+
+def _slot_item(page: Page, slot: str) -> Any:
+    return page.locator(f".check-item:has(input[name='slot'][value='{slot}'])")
+
+
+def _conf_item(page: Page, name: str) -> Any:
+    return page.locator(f".check-item:has(input[name='conference'][value='{name}'])")
+
+
+def test_only_channel_selects_it_and_all_restores(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-24/D-25: Only on a channel selects it; the same button then reads All and resets."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "networks")
+    btn = _only_btn(_net_item(guarded_page, "net-b"))
+    expect(btn).to_have_text("Only")
+    expect(btn).to_have_attribute("aria-label", "Show only Beta Network")
+    btn.click()
+    assert _state(guarded_page)["networks"] == ["net-b"]
+    assert "networks=net-b" in guarded_page.evaluate("location.search")
+    expect(btn).to_have_text("All")
+    expect(btn).to_have_attribute("aria-label", "Show all networks")
+    expect(guarded_page.locator("#trigger-networks")).to_have_text("Networks · 1")
+    expect(guarded_page.locator(".legend-chip[data-family='fox']")).to_have_attribute(
+        "aria-pressed", "true"
+    )
+    expect(guarded_page.locator(".legend-chip[data-family='disney']")).to_have_attribute(
+        "aria-pressed", "false"
+    )
+    btn.click()
+    assert _state(guarded_page)["networks"] is None
+    assert "networks=" not in guarded_page.evaluate("location.search")
+
+
+def test_only_family_selects_only_offered_channels(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+) -> None:
+    """D-24: Only on a family selects its channels that have games under the other filters."""
+    mutated = json.loads(json.dumps(fixture_raw))
+    fox = mutated["lookups"]["networks"][1]["family"]
+    mutated["lookups"]["networks"][3]["family"] = fox
+    body = json.dumps(mutated)
+    guarded_page.route(
+        "**/site-data.json*",
+        lambda route: route.fulfill(status=200, content_type="application/json", body=body),
+    )
+    open_app(guarded_page, "?people=kris-venn")
+    _open_filter(guarded_page, "networks")
+    expect(_net_item(guarded_page, "net-d")).to_be_hidden()
+    _only_btn(_fam_item(guarded_page, fox)).click()
+    assert _state(guarded_page)["networks"] == ["net-b"]
+
+    guarded_page.evaluate("window.__testHooks.setState({ people: [], networks: null })")
+    _only_btn(_fam_item(guarded_page, fox)).click()
+    assert _state(guarded_page)["networks"] == ["net-b", "net-d"]
+    expect(_only_btn(_fam_item(guarded_page, fox))).to_have_text("All")
+
+
+def test_only_kickoff_selects_slot_and_all_draws_unchecked(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-25 correction: All on a slot sets slots null and every box renders unchecked."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "kickoff")
+    btn = _only_btn(_slot_item(guarded_page, "prime"))
+    expect(btn).to_have_attribute("aria-label", "Show only Prime time")
+    btn.click()
+    assert _state(guarded_page)["slots"] == ["prime"]
+    expect(guarded_page.locator("#trigger-kickoff")).to_have_text("Kickoff: Prime time")
+    expect(btn).to_have_attribute("aria-label", "Show all kickoff times")
+    btn.click()
+    assert _state(guarded_page)["slots"] is None
+    expect(guarded_page.locator("input[name='slot']:checked")).to_have_count(0)
+
+
+def test_only_conference_replaces_picks_and_all_clears(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?conferences=SEC,Big+Ten")
+    _open_filter(guarded_page, "conference")
+    item = _conf_item(guarded_page, "Pac-12")
+    expect(item).to_be_visible()
+    _only_btn(item).click()
+    assert _state(guarded_page)["conferences"] == ["Pac-12"]
+    expect(_only_btn(item)).to_have_text("All")
+    expect(_only_btn(item)).to_have_attribute("aria-label", "Show all conferences")
+    _only_btn(item).click()
+    assert _state(guarded_page)["conferences"] == []
+
+
+def test_only_undone_by_group_reset_and_clear_all(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "networks")
+    _only_btn(_net_item(guarded_page, "net-b")).click()
+    guarded_page.click("#filter-networks .group-reset")
+    assert _state(guarded_page)["networks"] is None
+    _only_btn(_net_item(guarded_page, "net-b")).click()
+    guarded_page.evaluate("document.getElementById('clear-filters').click()")
+    assert _state(guarded_page)["networks"] is None
+
+
+def test_only_click_toggles_no_checkbox_keeps_popover_and_focus(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "kickoff")
+    btn = _only_btn(_slot_item(guarded_page, "noon"))
+    btn.click()
+    assert guarded_page.evaluate("document.getElementById('pop-kickoff').matches(':popover-open')")
+    assert guarded_page.evaluate("document.activeElement.classList.contains('only-btn')")
+    assert _state(guarded_page)["slots"] == ["noon"]
+    expect(guarded_page.locator("input[name='slot']:checked")).to_have_count(1)
+
+
+def test_only_buttons_exist_only_in_networks_conference_kickoff(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    for sel in ("#filter-school", "#filter-role", "#filter-postseason", "#person-results"):
+        expect(guarded_page.locator(f"{sel} .only-btn")).to_have_count(0)
+    for sel in ("#filter-networks", "#conference-list", "#filter-slots"):
+        assert guarded_page.locator(f"{sel} .only-btn").count() > 0
+    assert guarded_page.evaluate(
+        "[...document.querySelectorAll('.only-btn')]"
+        ".every(b => b.parentElement.classList.contains('check-item'))"
+    )
+    assert guarded_page.evaluate("document.querySelectorAll('label .only-btn').length") == 0
+
+
+def test_only_family_button_hidden_when_no_channel_offered(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """A family row shown only via a greyed pick has nothing to select, so no Only button."""
+    open_app(guarded_page, "?people=dale-harlow&networks=net-b")
+    _open_filter(guarded_page, "networks")
+    expect(_fam_item(guarded_page, "fox")).to_be_visible()
+    expect(_only_btn(_fam_item(guarded_page, "fox"))).to_be_hidden()
+    expect(_only_btn(_net_item(guarded_page, "net-b"))).to_be_visible()
+
+
+def test_only_button_reveal_on_desktop(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "kickoff")
+    item = _slot_item(guarded_page, "prime")
+    btn = _only_btn(item)
+    assert not guarded_page.evaluate("matchMedia('(hover: none)').matches")
+
+    def opacity() -> str:
+        return str(btn.evaluate("el => getComputedStyle(el).opacity"))
+
+    guarded_page.mouse.move(0, 0)
+    assert opacity() == "0"
+    item.hover()
+    assert opacity() == "1"
+    guarded_page.mouse.move(0, 0)
+    assert opacity() == "0"
+    btn.focus()
+    guarded_page.keyboard.press("Shift+Tab")
+    guarded_page.keyboard.press("Tab")
+    assert guarded_page.evaluate("document.activeElement.classList.contains('only-btn')")
+    assert opacity() == "1"
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_only_button_touch_contrast_and_target(
+    mobile_page: Page, open_app: Callable[[Page, str], None], scheme: str
+) -> None:
+    mobile_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
+    open_app(mobile_page, "")
+    assert mobile_page.evaluate("matchMedia('(hover: none)').matches")
+    mobile_page.click("#filters-button")
+    mobile_page.wait_for_function(
+        "document.getElementById('filters-sheet').matches(':popover-open')"
+    )
+    btn = _only_btn(_slot_item(mobile_page, "prime"))
+    btn.scroll_into_view_if_needed()
+    assert btn.evaluate("el => getComputedStyle(el).opacity") == "1"
+    color = btn.evaluate("el => getComputedStyle(el).color")
+    muted_weak = mobile_page.evaluate(
+        "(() => { const s = document.createElement('span');"
+        "s.style.color = 'var(--muted-weak)'; document.body.append(s);"
+        "const c = getComputedStyle(s).color; s.remove(); return c; })()"
+    )
+    assert color == muted_weak
+    bg = mobile_page.evaluate("getComputedStyle(document.body).backgroundColor")
+    assert _contrast_ratio(_parse_rgb(color), _parse_rgb(bg)) >= 3.0
+    box = btn.bounding_box()
+    row = _slot_item(mobile_page, "prime").bounding_box()
+    assert box is not None and row is not None
+    assert box["width"] >= 44 and box["height"] >= 44
+    assert abs((box["x"] + box["width"]) - (row["x"] + row["width"])) <= 1
