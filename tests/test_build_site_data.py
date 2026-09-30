@@ -995,3 +995,130 @@ def test_unmapped_network_coverage_row_points_at_the_unmapped_lookup(
     assert len(all_rows) == 1
     assert len(unmapped_rows) == 1
     assert unmapped_rows[0]["publisher_counts"] == {"Unmapped Publisher Example": 1}
+
+
+# -- bowl-name crosswalk (04.2-04) -----------------------------------------------------------
+
+_BOWL_HEADER = "cfbd_game_id,official_name,core_name,at_bowl\n"
+
+
+def _bowl_reference(tmp_path: Path, build_reference: Path, rows: str) -> Path:
+    import shutil
+
+    reference = tmp_path / "reference"
+    shutil.copytree(build_reference, reference)
+    (reference / "bowls.csv").write_text(_BOWL_HEADER + rows, encoding="utf-8")
+    return reference
+
+
+def _postseason_tables(specs: list[tuple[int, str, str | None]], **extra: object) -> BuildTables:
+    """One plotted telecast per (game_id, game_type, playoff_round) spec."""
+    games = [
+        _game_row(
+            game_id=gid,
+            season_type="postseason" if gtype != "regular" else "regular",
+            game_type=gtype,
+            playoff_round=rnd,
+            **extra,
+        )
+        for gid, gtype, rnd in specs
+    ]
+    telecasts = [_telecast_row(telecast_id=f"{gid}-net-a", game_id=gid) for gid, _, _ in specs]
+    return _build_tables(
+        games_rows=games,
+        telecast_rows=telecasts,
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+
+
+def test_named_bowl_resolves_into_lookup(tmp_path: Path, build_reference: Path) -> None:
+    ref = _bowl_reference(tmp_path, build_reference, "70,Zebra Harbor Bowl,Harbor Bowl,true\n")
+    payload = _site(_postseason_tables([(70, "bowl", None)]), ref)
+    assert payload["lookups"]["bowls"] == [{"name": "Zebra Harbor Bowl", "core": "Harbor Bowl"}]
+    assert payload["telecasts"]["bowl"] == [0]
+
+
+def test_bowl_lookup_is_deduplicated_and_sorted(tmp_path: Path, build_reference: Path) -> None:
+    ref = _bowl_reference(
+        tmp_path,
+        build_reference,
+        "70,Zeta Bowl,Zeta Bowl,true\n71,Alpha Bowl,Alpha Bowl,true\n72,Zeta Bowl,Zeta Bowl,true\n",
+    )
+    payload = _site(
+        _postseason_tables([(70, "bowl", None), (71, "bowl", None), (72, "bowl", None)]), ref
+    )
+    assert [b["name"] for b in payload["lookups"]["bowls"]] == ["Alpha Bowl", "Zeta Bowl"]
+    assert payload["telecasts"]["bowl"] == [1, 0, 1]
+
+
+def test_cfp_quarterfinal_at_bowl_and_first_round_not(
+    tmp_path: Path, build_reference: Path
+) -> None:
+    ref = _bowl_reference(
+        tmp_path,
+        build_reference,
+        "80,Fixture Quarter Bowl,Quarter Bowl,true\n81,,,false\n",
+    )
+    payload = _site(
+        _postseason_tables([(80, "playoff", "quarterfinal"), (81, "playoff", "first_round")]),
+        ref,
+    )
+    assert payload["telecasts"]["bowl"] == [0, None]
+
+
+def test_unknown_name_row_is_null(tmp_path: Path, build_reference: Path) -> None:
+    ref = _bowl_reference(tmp_path, build_reference, "70,,,true\n")
+    payload = _site(_postseason_tables([(70, "bowl", None)]), ref)
+    assert payload["lookups"]["bowls"] == []
+    assert payload["telecasts"]["bowl"] == [None]
+
+
+def test_regular_game_ignores_a_crosswalk_row(tmp_path: Path, build_reference: Path) -> None:
+    ref = _bowl_reference(tmp_path, build_reference, "70,Zebra Harbor Bowl,Harbor Bowl,true\n")
+    payload = _site(_postseason_tables([(70, "regular", None)]), ref)
+    assert payload["telecasts"]["bowl"] == [None]
+    assert payload["lookups"]["bowls"] == []
+
+
+def test_missing_crosswalk_row_raises_count_only(tmp_path: Path, build_reference: Path) -> None:
+    from booth_review.errors import BowlCrosswalkError
+
+    ref = _bowl_reference(tmp_path, build_reference, "")
+    tables = _postseason_tables([(70, "bowl", None)], home_team="SENTINEL ZEBRA HARBOR BOWL NOTE")
+    with pytest.raises(BowlCrosswalkError, match="1 plotted postseason row") as info:
+        _site(tables, ref)
+    assert "SENTINEL" not in str(info.value)
+    assert "see interim/review_bowls.csv" in str(info.value)
+
+
+@pytest.mark.parametrize(
+    ("spec", "row"),
+    [
+        ((70, "bowl", None), "70,,,false\n"),
+        ((70, "playoff", "quarterfinal"), "70,,,false\n"),
+        ((70, "playoff", "semifinal"), "70,,,false\n"),
+        ((70, "playoff", "first_round"), "70,Zebra Bowl,Zebra Bowl,true\n"),
+        ((70, "playoff", "championship"), "70,,,true\n"),
+    ],
+)
+def test_at_bowl_disagreement_raises(
+    tmp_path: Path, build_reference: Path, spec: tuple[int, str, str | None], row: str
+) -> None:
+    from booth_review.errors import VaultStateError
+
+    ref = _bowl_reference(tmp_path, build_reference, row)
+    with pytest.raises(VaultStateError, match=r"1 row\(s\) disagree with the game's type"):
+        _site(_postseason_tables([spec]), ref)
+
+
+def test_notes_sentinel_never_ships(tmp_path: Path, build_reference: Path) -> None:
+    ref = _bowl_reference(tmp_path, build_reference, "70,Zebra Harbor Bowl,Harbor Bowl,true\n")
+    tables = _postseason_tables([(70, "bowl", None)], notes="SENTINEL ZEBRA HARBOR BOWL NOTE")
+    site = build_site_data(tables, build_coverage(tables), ref, _GENERATED_AT)
+    paths = DataPaths(vault=tmp_path / "vault")
+    write_site_data(paths, site)
+    text = (paths.vault / "processed/site-data.json").read_text(encoding="utf-8")
+    assert "Zebra Harbor Bowl" in text
+    assert "SENTINEL" not in text
