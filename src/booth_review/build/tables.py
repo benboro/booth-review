@@ -34,6 +34,7 @@ from booth_review.build.crew_overrides import (
     apply_crew_overrides,
     crew_gap_rows,
     load_crew_overrides,
+    unmatched_506_keys,
 )
 from booth_review.build.games import build_games_frame
 from booth_review.build.io import write_parquet_atomic, write_review_csv
@@ -295,11 +296,12 @@ def assemble_tables(
     )
     telecasts = override_result.telecasts
     telecast_people = override_result.telecast_people
-    unmatched_506_dates = {
-        row.date_et for row in telecast_build.unmatched_rows if row.source == "sports506"
-    }
     crew_gap_review = crew_gap_rows(
-        telecasts_pre, games, telecast_people_pre, override_result.statuses, unmatched_506_dates
+        telecasts_pre,
+        games,
+        telecast_people_pre,
+        override_result.statuses,
+        unmatched_506_keys(telecast_build.unmatched_rows, networks),
     )
 
     unmatched_review_rows: list[dict[str, object]] = [

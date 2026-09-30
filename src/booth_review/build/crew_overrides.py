@@ -12,7 +12,7 @@ build-time failures are count-only (D-04). Nothing here ever echoes a cell.
 from __future__ import annotations
 
 import re
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,6 +22,8 @@ from booth_review.contract.models import crew_source_url_problem
 from booth_review.errors import CrewOverrideError, ReferenceTableError
 from booth_review.people.registry import PeopleRegistry
 from booth_review.reference import read_reference_csv_numbered
+from booth_review.resolve.diagnose import UnmatchedRow
+from booth_review.resolve.networks import NetworkTable, primary_network
 
 CREW_OVERRIDE_COLUMNS = (
     "cfbd_game_id",
@@ -303,17 +305,38 @@ REVIEW_CREW_GAPS_COLUMNS = (
 _HAS_506_CREW_STATUSES = frozenset({"redundant", "differs", "correction"})
 
 
+def unmatched_506_keys(
+    unmatched_rows: Iterable[UnmatchedRow], networks: NetworkTable
+) -> set[tuple[str, str]]:
+    """(date_et ISO string, network_id) for each 506 listing the build could
+    not match to a game, its network resolved through networks.csv the same
+    way a matched listing's is (primary_network). A listing whose network does
+    not resolve adds no key: it cannot be tied to any one telecast.
+    """
+    keys: set[tuple[str, str]] = set()
+    for row in unmatched_rows:
+        if row.source != "sports506" or not row.network_raw:
+            continue
+        network_id = primary_network([row.network_raw], row.season, networks).network_id
+        if network_id is not None:
+            keys.add((row.date_et, network_id))
+    return keys
+
+
 def crew_gap_rows(
     telecasts: pl.DataFrame,
     games: pl.DataFrame,
     telecast_people: pl.DataFrame,
     statuses: Mapping[str, str],
-    unmatched_506_dates: Collection[str],
+    unmatched_506: Collection[tuple[str, str]],
 ) -> list[dict[str, object]]:
     """One row per plotted main telecast with no 506 main crew, classified, plus
     one has-506-crew row per redundant/differs/correction override (D-05, D-09).
 
     Pass the PRE-override frames so the gap set is "no 506 main crew".
+    `join-miss-suspect` needs an unmatched 506 listing on the telecast's date
+    AND network (see unmatched_506_keys); a same-day listing on another
+    network is no evidence that this telecast's join missed.
     Vault-only (interim/review_crew_overrides.csv); never logged or published.
     Callers and tests never hard-code a gap count.
     """
@@ -332,7 +355,7 @@ def crew_gap_rows(
             gap_kind = "no-506-crew"
         elif telecast_id in non_main:
             gap_kind = "main-crew-missing"
-        elif tel["date_et"].isoformat() in unmatched_506_dates:
+        elif (tel["date_et"].isoformat(), tel["network_id"]) in unmatched_506:
             gap_kind = "join-miss-suspect"
         else:
             gap_kind = "no-506-listing"

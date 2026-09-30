@@ -268,12 +268,15 @@ from booth_review.build.crew_overrides import (  # noqa: E402
     REVIEW_CREW_GAPS_COLUMNS,
     apply_crew_overrides,
     crew_gap_rows,
+    unmatched_506_keys,
 )
 from booth_review.build.games import GAMES_SCHEMA  # noqa: E402
 from booth_review.build.people_links import TELECAST_PEOPLE_SCHEMA  # noqa: E402
 from booth_review.build.telecasts import TELECASTS_SCHEMA  # noqa: E402
 from booth_review.errors import CrewOverrideError  # noqa: E402
 from booth_review.people.registry import PeopleRegistry, Person  # noqa: E402
+from booth_review.resolve.diagnose import UnmatchedRow  # noqa: E402
+from booth_review.resolve.networks import NetworkRow, NetworkTable  # noqa: E402
 
 _DATE = dt.date(2020, 1, 2)
 
@@ -491,7 +494,7 @@ def test_no_overrides_returns_inputs_unchanged() -> None:
 
 def _games() -> pl.DataFrame:
     rows = []
-    for game_id in (1, 2, 3, 4, 5, 6, 7):
+    for game_id in (1, 2, 3, 4, 5, 6, 7, 8):
         row: dict[str, object] = dict.fromkeys(GAMES_SCHEMA)
         row.update(
             game_id=game_id,
@@ -515,16 +518,19 @@ def test_gap_rows_classify_every_plotted_crewless_main_telecast() -> None:
             _tel(5, plotted=False),
             _tel(6, telecast_id="6-net-a-alt", feed_type="alt"),
             _tel(7, crew_matched=True),
+            # Same date as an unmatched 506 listing, but that listing is on net-a.
+            _tel(8, telecast_id="8-net-b", network_id="net-b", date_et=dt.date(2020, 1, 3)),
         ],
         [_tp("2-net-a", "p-x", feed="alt")],
     )
-    rows = crew_gap_rows(tels, _games(), people, {}, {"2020-01-03"})
+    rows = crew_gap_rows(tels, _games(), people, {}, {("2020-01-03", "net-a")})
     kinds = {row["cfbd_game_id"]: row["gap_kind"] for row in rows}
     assert kinds == {
         1: "no-506-crew",
         2: "main-crew-missing",
         3: "join-miss-suspect",
         4: "no-506-listing",
+        8: "no-506-listing",
     }
     by_id = {row["cfbd_game_id"]: row for row in rows}
     assert by_id[2]["other_feed_crew"] is True
@@ -550,3 +556,42 @@ def test_gap_rows_sorted_by_season_date_game_network() -> None:
     )
     rows = crew_gap_rows(tels, _games(), people, {}, set())
     assert [r["cfbd_game_id"] for r in rows] == [3, 1, 2]
+
+
+def _unmatched(source: str, network_raw: str, date_et: str = "2020-01-03") -> UnmatchedRow:
+    return UnmatchedRow(
+        source=source,
+        season=2019,
+        pointer="ptr",
+        date_et=date_et,
+        away_raw=_SENTINEL,
+        home_raw="Home",
+        network_raw=network_raw,
+        confidence="none",
+        reason="none",
+    )
+
+
+def test_unmatched_506_keys_resolve_the_network_through_the_crosswalk() -> None:
+    networks = NetworkTable(
+        [
+            NetworkRow(
+                "Net A", "net-a", "Network A", "fam-a", "broadcast", "main", None, None, None
+            ),
+            NetworkRow(
+                "NETA", "net-a", "Network A", "fam-a", "broadcast", "main", None, None, None
+            ),
+            NetworkRow("Net B", "net-b", "Network B", "fam-b", "cable", "main", None, None, None),
+        ]
+    )
+    rows = [
+        _unmatched("sports506", "NETA"),  # a variant spelling maps to net-a
+        _unmatched("sports506", "Net B", date_et="2020-01-04"),
+        _unmatched("sports506", _SENTINEL),  # unmapped network: no key, never a guess
+        _unmatched("sports506", ""),
+        _unmatched("ratingsref", "Net B"),  # only 506 listings count
+    ]
+    assert unmatched_506_keys(rows, networks) == {
+        ("2020-01-03", "net-a"),
+        ("2020-01-04", "net-b"),
+    }
