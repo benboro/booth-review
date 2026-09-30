@@ -244,10 +244,12 @@ li[role="option"][aria-selected="true"] .option-check::after {
   min-width: 0;
   /* D-33: reserve the one-person band height (measured 82.6px at 1280 and
      800: 2 x 8px padding + chip row + 20px summary line) so the legend
-     chips and chart do not move when a person is added or cleared. This
+     chips and chart do not move when a person is added or cleared. The
+     reserve carries ~5px of headroom because font metrics differ across
+     machines (CI's fonts render the band ~0.6px taller than 83px). This
      overrides the 04.1 D-25 collapse-when-empty behavior for this band
      only; a wrapped multi-person chip row may still grow it. */
-  min-height: 83px;
+  min-height: 88px;
 }
 
 .selection-row {
@@ -1608,9 +1610,10 @@ html:has(#detail-panel[open]) {
 
 @media (max-width: 640px) {
   /* D-33: one-person band height on a 390px phone (44px touch targets wrap
-     the chip and button rows). */
+     the chip and button rows), measured 226px, plus headroom for font
+     metrics that differ across machines. */
   #selection-bar {
-    min-height: 226px;
+    min-height: 232px;
   }
 
   /* D-25: a narrower gutter than the desktop `--space-lg` (24px), still
