@@ -14,6 +14,9 @@ why it was blocked.
 Site data is assembled and validated before anything is written, and before
 `--accept-baseline` records a new baseline, so a run that fails validation
 never leaves a new baseline (or half-updated processed tables) behind.
+An incomplete bowls crosswalk (a plotted postseason game with no bowls.csv
+row) still writes the interim review files, so `interim/review_bowls.csv` is
+there to fill, then aborts before any processed, audit, or baseline write.
 """
 
 from __future__ import annotations
@@ -42,6 +45,7 @@ from booth_review.build.regression import (
 from booth_review.build.site_data import build_site_data, write_site_data
 from booth_review.build.tables import BuildTables, assemble_tables, write_tables
 from booth_review.config import DataPaths
+from booth_review.errors import BowlCrosswalkError
 from booth_review.vault import VaultRepo, batch_message
 
 
@@ -78,6 +82,7 @@ def _build_counts(tables: BuildTables, result: RegressionResult) -> dict[str, in
         "join08_rate_x10000": (round(join08_rate * 10000) if join08_rate is not None else 0),
         "duplicate_merges": totals.get("duplicate_merges", 0),
         "combined_figures": totals.get("combined_combined", 0),
+        "bowl_names_unknown": totals.get("bowl_names_unknown", 0),
         "review_rows_total": review_rows_total,
         "compared_seasons": result.compared_seasons,
     }
@@ -112,11 +117,15 @@ def run_build(
         # Assemble and validate site data first (WR-01): if it raises, the
         # run aborts before any processed table, audit file, or new
         # baseline is written.
-        site = (
-            build_site_data(tables, coverage, reference_directory, generated_at)
-            if write_data
-            else None
-        )
+        try:
+            site = (
+                build_site_data(tables, coverage, reference_directory, generated_at)
+                if write_data
+                else None
+            )
+        except BowlCrosswalkError:
+            write_tables(paths, tables, processed=False)
+            raise
 
         written: list[str] = []
         # A blocked build writes only the interim review files, never the

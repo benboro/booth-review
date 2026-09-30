@@ -12,12 +12,13 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 import polars as pl
 
+from booth_review.build.bowls import BowlEntry, load_bowls
 from booth_review.build.combined import (
     REVIEW_COMBINED_COLUMNS,
     CombinedCandidate,
@@ -166,6 +167,54 @@ def _build_diagnostics(counts: dict[int, dict[str, int]]) -> BuildDiagnostics:
     )
 
 
+REVIEW_BOWLS_COLUMNS = (
+    "cfbd_game_id",
+    "season",
+    "date_et",
+    "game_type",
+    "playoff_round",
+    "away_team",
+    "home_team",
+    "raw_note",
+)
+
+_POSTSEASON_GAME_TYPES = ("bowl", "playoff")
+
+
+def _plotted_postseason_games(telecasts: pl.DataFrame, games: pl.DataFrame) -> pl.DataFrame:
+    """Games of plotted bowl/CFP telecasts, one row per game, sorted by season then id."""
+    plotted_ids = telecasts.filter(pl.col("plotted"))["game_id"].unique()
+    return games.filter(
+        pl.col("game_id").is_in(plotted_ids.implode())
+        & pl.col("game_type").is_in(_POSTSEASON_GAME_TYPES)
+    ).sort(["season", "game_id"])
+
+
+def bowl_review_rows(
+    telecasts: pl.DataFrame, games: pl.DataFrame, bowls: Mapping[int, BowlEntry]
+) -> list[dict[str, object]]:
+    """One row per plotted postseason game with no bowls.csv row, with its
+    raw CFBD note as the fill aid. Vault-only (interim/); never published.
+    """
+    rows: list[dict[str, object]] = []
+    for game in _plotted_postseason_games(telecasts, games).iter_rows(named=True):
+        if game["game_id"] in bowls:
+            continue
+        rows.append(
+            {
+                "cfbd_game_id": game["game_id"],
+                "season": game["season"],
+                "date_et": game["date_et"],
+                "game_type": game["game_type"],
+                "playoff_round": game["playoff_round"],
+                "away_team": game["away_team"],
+                "home_team": game["home_team"],
+                "raw_note": game["notes"],
+            }
+        )
+    return rows
+
+
 def assemble_tables(
     paths: DataPaths, reference_directory: Path, seasons: Sequence[int] | None = None
 ) -> BuildTables:
@@ -237,7 +286,11 @@ def assemble_tables(
         dict(row) for row in unresolved_rows(telecast_build.unresolved_rows)
     ]
 
+    bowl_entries = load_bowls(reference_directory)
+    bowl_rows = bowl_review_rows(telecasts, games, bowl_entries)
+
     review_rows: dict[str, tuple[tuple[str, ...], list[dict[str, object]]]] = {
+        "review_bowls": (REVIEW_BOWLS_COLUMNS, bowl_rows),
         "review_unmatched": (UNMATCHED_COLUMNS, unmatched_review_rows),
         "review_unresolved_teams": (UNRESOLVED_COLUMNS, unresolved_review_rows),
         "review_headline_disagreements": (HEADLINE_DISAGREEMENT_COLUMNS, disagreement_rows),
@@ -271,6 +324,14 @@ def assemble_tables(
     )
     merged_totals["combined_orphan_decisions"] = orphan_decision_count(
         combined_candidates, combined_decisions
+    )
+    merged_totals["bowls_missing"] = len(bowl_rows)
+    merged_totals["bowl_names_unknown"] = sum(
+        1
+        for game in _plotted_postseason_games(telecasts, games).iter_rows(named=True)
+        if (entry := bowl_entries.get(game["game_id"])) is not None
+        and entry.at_bowl
+        and entry.official_name is None
     )
     diagnostics = replace(diagnostics, totals=merged_totals)
 
