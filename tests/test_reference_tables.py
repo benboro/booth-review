@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 
+from booth_review.build.bowls import BOWL_COLUMNS, load_bowls
 from booth_review.flags.era import ERA_COLUMNS, load_eras
 from booth_review.flags.events import EVENT_COLUMNS, load_event_flags
 from booth_review.people.registry import (
@@ -64,6 +65,7 @@ KNOWN_TABLES: dict[str, tuple[tuple[str, ...] | None, Loader | None]] = {
     "networks.csv": (NETWORK_COLUMNS, load_networks),
     "primary_network_overrides.csv": (PRIMARY_OVERRIDE_COLUMNS, load_primary_overrides),
     "combined_figures.csv": (_COMBINED_COLUMNS, _load_combined_figures),
+    "bowls.csv": (BOWL_COLUMNS, load_bowls),
 }
 
 # Column names that would signal a game-level row (who called which game, a

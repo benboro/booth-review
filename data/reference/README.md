@@ -26,6 +26,7 @@ gitignored).
 | `networks.csv` | Outlet-string-to-network mapping and each network's rights-holder precedence tier (JOIN-06) | `variant, network_id, display_name, family, tier, feed_type, season_from, season_to, priority` | Hand, from the network-diagnose review | `resolve.networks.load_networks` |
 | `primary_network_overrides.csv` | A per-game override of the rights-holder rule's own primary-network pick, for a neutral-site or bowl-game exception | `cfbd_game_id, network_id, reason` | Hand, from the primary-network review | `resolve.networks.load_primary_overrides` |
 | `combined_figures.csv` | Hand-confirmed pointers marking a Ratings Reference figure as combined across simulcast feeds (D-09), since `composite_of`/`carrier_network` are never populated in this project's range | `rr_telecast_id, decision, feeds, reason` | Hand, from the combined-figure candidate review (`interim/review_combined.csv` in the vault); `alt_listed` candidates are pre-filled `combined` by `python -m booth_review.build.combined`, outlier-only candidates are left blank for the user | `build.combined.load_combined_figures` |
+| `bowls.csv` | Display names for bowl games, keyed by CFBD game id: the official name for that season (sponsor included) and the core bowl name, plus whether the game was played at a bowl (D-17) | `cfbd_game_id, official_name, core_name, at_bowl` | Hand, from the private vault review file `interim/review_bowls.csv` | `build.bowls.load_bowls` |
 
 ## Rules every table here follows
 
@@ -38,7 +39,9 @@ gitignored).
   `combined_figures.csv` identify *which* record a hand decision applies to
   (a CFBD game id, a 506 season/week/row pointer, a Ratings Reference record
   URL or slug) plus a short reason code — never the crew names, matchup
-  text, or figures behind that decision.
+  text, or figures behind that decision. `bowls.csv` is keyed by CFBD game id
+  and holds only public bowl names reviewed by hand, never CFBD notes text;
+  empty names with `at_bowl=true` mean the name is unknown.
 - **`person_id` values are never renamed (D-01):** a later name change is
   recorded as a new variant on the same `person_id`, never a rewrite of the
   id itself, since ids appear in shareable site URLs.
