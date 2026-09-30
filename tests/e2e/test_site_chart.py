@@ -396,6 +396,42 @@ def test_legend_chip_enter_key_toggles_family(
     assert "net-a" not in guarded_page.url
 
 
+def test_legend_chip_greyed_when_family_has_no_offered_channel(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-16: with only dale-harlow (net-a) picked, other chips grey out but stay toggles."""
+    open_app(guarded_page, "?people=dale-harlow")
+    disney = guarded_page.locator('#legend-chips button[data-family="disney"]')
+    expect(disney).to_have_attribute("data-offered", "true")
+    for family in ("fox", "conference", "other"):
+        chip = guarded_page.locator(f'#legend-chips button[data-family="{family}"]')
+        expect(chip).to_have_attribute("data-offered", "false")
+        expect(chip).to_have_attribute("aria-pressed", "true")
+        style = chip.evaluate(
+            "el => { const s = getComputedStyle(el);"
+            " return [s.backgroundColor, s.borderTopStyle]; }"
+        )
+        assert style[0] in ("rgba(0, 0, 0, 0)", "transparent")
+        assert style[1] == "dashed"
+
+    fox = guarded_page.locator('#legend-chips button[data-family="fox"]')
+    fox.click()
+    guarded_page.wait_for_function("window.__testHooks.getState().networks !== null")
+    expect(guarded_page.locator('#legend-chips button[data-family="fox"]')).to_have_attribute(
+        "aria-pressed", "false"
+    )
+
+
+def test_legend_chips_all_offered_by_default(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    values = guarded_page.locator("#legend-chips button").evaluate_all(
+        "els => els.map(el => el.dataset.offered)"
+    )
+    assert values == ["true"] * 4
+
+
 @pytest.mark.parametrize("query", ["?seasons=2021-2021", "?school=northfield"])
 def test_legend_chips_all_read_pressed_when_a_non_network_filter_is_active(
     guarded_page: Page, open_app: Callable[[Page, str], None], query: str
