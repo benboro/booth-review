@@ -128,12 +128,41 @@ def test_headers_and_loaders(name: str) -> None:
     loader(REFERENCE_DIR)  # must not raise
 
 
+# A row keyed to one game or telecast that also names a person, a role, or a
+# crew slot records who called which game, even with no forbidden column name.
+# (person_overrides.csv keys on a 506 row pointer, not a game: D-06 allows it.)
+_GAME_KEY_COLUMNS: frozenset[str] = frozenset({"cfbd_game_id", "rr_telecast_id", "telecast_id"})
+_CREW_COLUMNS: frozenset[str] = frozenset({"person_id", "role", "crew_position"})
+
+
+def _game_level_columns(header: set[str]) -> set[str]:
+    found = set(_FORBIDDEN_COLUMNS & header)
+    if header & _GAME_KEY_COLUMNS and header & _CREW_COLUMNS:
+        found |= header & (_GAME_KEY_COLUMNS | _CREW_COLUMNS)
+    return found
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        ({"cfbd_game_id", "official_name"}, set()),
+        ({"season", "pointer", "position", "person_id"}, set()),
+        ({"cfbd_game_id", "person_id"}, {"cfbd_game_id", "person_id"}),
+        ({"rr_telecast_id", "role"}, {"rr_telecast_id", "role"}),
+        ({"network_id", "crew_raw"}, {"crew_raw"}),
+    ],
+)
+def test_game_level_columns_detects_who_called_which_game(
+    header: set[str], expected: set[str]
+) -> None:
+    assert _game_level_columns(header) == expected
+
+
 def test_no_game_level_columns() -> None:
     for path in sorted(REFERENCE_DIR.glob("*.csv")):
         if path.name in _D05_EXCEPTIONS:
             continue
-        header = set(_header(path))
-        overlap = _FORBIDDEN_COLUMNS & header
+        overlap = _game_level_columns(set(_header(path)))
         assert not overlap, f"{path.name}: game-level column(s) found: {sorted(overlap)}"
 
 
@@ -148,8 +177,13 @@ def test_person_override_ids_exist() -> None:
         assert row["person_id"] in people_ids, f"unknown person_id in person_overrides.csv: {row!r}"
 
 
-def test_d05_exceptions_are_exactly_crew_overrides() -> None:
-    assert frozenset({"crew_overrides.csv"}) == _D05_EXCEPTIONS
+def test_d05_exceptions_are_exactly_the_tables_with_game_level_columns() -> None:
+    # Every exception must still earn it (a stale entry would silently exempt
+    # a table), and no other table may carry game-level columns.
+    with_game_level = {
+        path.name for path in REFERENCE_DIR.glob("*.csv") if _game_level_columns(set(_header(path)))
+    }
+    assert with_game_level == _D05_EXCEPTIONS
 
 
 def test_crew_override_rows_have_source_url() -> None:

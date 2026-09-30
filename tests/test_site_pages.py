@@ -126,16 +126,19 @@ def test_render_coverage_table_structure() -> None:
 
 def test_render_coverage_has_hand_confirmed_column() -> None:
     """D-13, AUDIT-04: the patched-crew count sits right after 'Matched with crew'."""
-    site = _fixture_site()
-    result = render_coverage(site)
+    payload = copy.deepcopy(_load_fixture())
+    coverage = payload["coverage"]
+    assert isinstance(coverage, list)
+    all_row = next(r for r in coverage if r["season"] == 2026 and r["network"] is None)
+    all_row.update(rated_telecasts=4, matched_game=4, matched_crew=4, matched_crew_patched=3)
+    result = render_coverage(validate_site_data(payload))
 
     assert (
         '<th scope="col">Matched with crew</th><th scope="col">Of which hand-confirmed</th>'
         in result
     )
-    for row in (r for r in site.coverage if r.network is None):
-        assert f"<td>{row.matched_crew}</td><td>{row.matched_crew_patched}</td>" in result
-    assert "<td>0</td><td>0</td>" in result or any(r.matched_crew_patched for r in site.coverage)
+    # Season, rated, matched to a game, matched with crew, then the patched count.
+    assert "<tr><td>2026</td><td>4</td><td>4</td><td>4</td><td>3</td>" in result
 
 
 def test_render_coverage_escapes_network_name() -> None:
