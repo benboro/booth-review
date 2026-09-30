@@ -13,9 +13,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = "1.2.0"
+SCHEMA_VERSION = "1.3.0"
 
 
 class TeamRef(BaseModel):
@@ -37,6 +37,22 @@ class ConferenceRef(BaseModel):
 
     name: str
     is_fbs: bool
+
+
+class BowlRef(BaseModel):
+    """A bowl's display names: the official name for that season (with any
+    sponsor) and the core name (D-17/D-19). Never a raw CFBD note."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    name: str = Field(min_length=1)
+    core: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _core_in_name(self) -> BowlRef:
+        if self.core not in self.name:
+            raise ValueError("bowl core name must be a substring of its name")
+        return self
 
 
 class PersonRef(BaseModel):
@@ -82,6 +98,7 @@ class Lookups(BaseModel):
     publishers: list[str]
     flags: list[FlagRef]
     conferences: list[ConferenceRef]
+    bowls: list[BowlRef]
 
 
 class TelecastColumns(BaseModel):
@@ -121,6 +138,8 @@ class TelecastColumns(BaseModel):
     playoff_round: list[Literal["first_round", "quarterfinal", "semifinal", "championship"] | None]
     home_conference: list[int | None]
     away_conference: list[int | None]
+    # Index into lookups.bowls; non-null only for a game played at a named bowl.
+    bowl: list[int | None]
 
 
 class CoverageRow(BaseModel):
@@ -143,7 +162,7 @@ class CoverageRow(BaseModel):
 class SiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["1.2.0"]
+    schema_version: Literal["1.3.0"]
     generated_at: str
     freshness: Freshness
     lookups: Lookups
@@ -174,6 +193,7 @@ class SiteData(BaseModel):
         num_publishers = len(self.lookups.publishers)
         num_flags = len(self.lookups.flags)
         num_conferences = len(self.lookups.conferences)
+        num_bowls = len(self.lookups.bowls)
 
         for i in range(n):
             if not 0 <= tc.away_team[i] < num_teams:
@@ -209,6 +229,12 @@ class SiteData(BaseModel):
                 raise ValueError(f"telecasts.away_conference[{i}]: conference index out of range")
             if tc.playoff_round[i] is not None and tc.game_type[i] != "playoff":
                 raise ValueError(f"telecasts.playoff_round[{i}]: set on a non-playoff game")
+            bowl = tc.bowl[i]
+            if bowl is not None:
+                if not 0 <= bowl < num_bowls:
+                    raise ValueError(f"telecasts.bowl[{i}]: bowl index out of range")
+                if tc.game_type[i] == "regular":
+                    raise ValueError(f"telecasts.bowl[{i}]: set on a regular game")
 
         for i, row in enumerate(self.coverage):
             if row.network is not None and not 0 <= row.network < num_networks:
