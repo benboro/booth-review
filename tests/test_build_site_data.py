@@ -1186,6 +1186,31 @@ def test_freshness_unpatched_crew_advances_stamp(build_reference: Path) -> None:
     assert payload["freshness"]["crews_through_week"] == "3"
 
 
+@pytest.mark.parametrize(
+    ("reason", "status"), [("no-506-crew", "differs"), ("correction", "correction")]
+)
+def test_freshness_counts_an_override_on_a_crew_506_listed(reason: str, status: str) -> None:
+    from dataclasses import replace
+
+    from booth_review.build.crew_overrides import CrewOverride, apply_crew_overrides
+    from booth_review.build.site_data import _build_freshness
+    from booth_review.people.registry import PeopleRegistry, Person
+
+    tables = _patched_freshness_tables(
+        second_season_type="regular", second_week=3, second_patched=False
+    )
+    override = CrewOverride(
+        2, "net-a", (("p-a", "pbp"),), reason, "press-release", "Example PR", "https://example.com/"
+    )
+    registry = PeopleRegistry({"p-a": Person("p-a", "P A", ("p-a",), "unknown", None)})
+    result = apply_crew_overrides(
+        tables.telecasts, tables.telecast_people, {(2, "net-a"): override}, registry, {}
+    )
+    assert result.statuses == {"2-net-a": status}
+    overridden = replace(tables, telecasts=result.telecasts, telecast_people=result.telecast_people)
+    assert _build_freshness(overridden)["crews_through_week"] == "3"
+
+
 def test_crew_source_fields_emit_at_their_index_and_null_otherwise(build_reference: Path) -> None:
     games = [_game_row(game_id=1), _game_row(game_id=2, week=3, date_et=date(2024, 9, 21))]
     telecasts = [

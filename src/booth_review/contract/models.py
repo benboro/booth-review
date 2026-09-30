@@ -179,7 +179,8 @@ class CoverageRow(BaseModel):
     rated_telecasts: int
     matched_game: int
     matched_crew: int
-    # of matched_crew, how many crews came from data/reference/crew_overrides.csv (D-13)
+    # of matched_crew, how many had no 506 main crew and took theirs from
+    # data/reference/crew_overrides.csv (status `patched`, D-13)
     matched_crew_patched: int
     match_rate: float | None = None
     headline_present: int

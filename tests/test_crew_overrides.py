@@ -317,12 +317,15 @@ def test_redundant_when_506_lists_same_people_and_alt_rows_kept() -> None:
     )
     assert result.statuses == {"1001-net-a": "redundant"}
     assert result.counts["redundant"] == 1
+    assert result.counts["rows"] == 0
     assert result.season_counts == _COUNTS
-    main = result.telecast_people.filter(pl.col("feed_type") == "main")
-    assert set(main["source"]) == {"crew_override"}
-    assert result.telecast_people.filter(pl.col("feed_type") == "alt")["person_id"].to_list() == [
-        "p-x"
-    ]
+    # 506 already lists this booth: its rows and 506 attribution stay untouched.
+    assert result.telecast_people.equals(people)
+    tel = result.telecasts.to_dicts()[0]
+    assert tel["crew_matched"] is True
+    assert tel["crew_patched"] is False
+    assert tel["crew_source_url"] is None
+    assert tel["crew_source_label"] is None
 
 
 @pytest.mark.parametrize(
@@ -336,7 +339,63 @@ def test_differing_506_crew_loses_to_override(reason: str, status: str, key: str
     )
     assert result.statuses == {"1001-net-a": status}
     assert result.counts[key] == 1
+    assert result.counts["patched"] == 0
     assert "p-z" not in result.telecast_people["person_id"].to_list()
+    assert set(result.telecast_people["source"]) == {"crew_override"}
+    assert result.season_counts == _COUNTS
+    # 506 listed a crew, so this is not a patch; the shown crew still cites its source.
+    tel = result.telecasts.to_dicts()[0]
+    assert tel["crew_matched"] is True
+    assert tel["crew_patched"] is False
+    assert tel["crew_source_url"] == "https://example.com/pr/1"
+    assert tel["crew_source_label"] == "Example Press Room"
+
+
+def test_status_follows_the_pre_override_506_match() -> None:
+    # 506 matched a crew but no main rows linked: not a patch, and no count bump.
+    tels, people = _frames([_tel(1001, crew_matched=True)], [])
+    result = apply_crew_overrides(
+        tels, people, {(1001, "net-a"): _override()}, _registry("p-a", "p-b"), _COUNTS
+    )
+    assert result.statuses == {"1001-net-a": "differs"}
+    assert result.season_counts == _COUNTS
+    assert result.telecasts.to_dicts()[0]["crew_patched"] is False
+
+
+def test_crew_matched_without_crew_patched_is_the_pre_override_506_match() -> None:
+    tels, people = _frames(
+        [
+            _tel(1001),
+            _tel(1002, telecast_id="1002-net-a", crew_matched=True),
+            _tel(1003, telecast_id="1003-net-a", crew_matched=True),
+            _tel(1004, telecast_id="1004-net-a", crew_matched=True),
+        ],
+        [
+            _tp("1002-net-a", "p-a", position=0),
+            _tp("1002-net-a", "p-b", position=1),
+            _tp("1003-net-a", "p-z"),
+            _tp("1004-net-a", "p-z"),
+        ],
+    )
+    overrides = {
+        (1001, "net-a"): _override(1001),
+        (1002, "net-a"): _override(1002),
+        (1003, "net-a"): _override(1003, reason="no-506-crew"),
+        (1004, "net-a"): _override(1004, reason="correction"),
+    }
+    result = apply_crew_overrides(tels, people, overrides, _registry("p-a", "p-b"), _COUNTS)
+    assert result.statuses == {
+        "1001-net-a": "patched",
+        "1002-net-a": "redundant",
+        "1003-net-a": "differs",
+        "1004-net-a": "correction",
+    }
+    out = result.telecasts.sort("telecast_id")
+    assert out.select(pl.col("crew_matched") & ~pl.col("crew_patched")).to_series().to_list() == (
+        tels.sort("telecast_id")["crew_matched"].to_list()
+    )
+    assert out["crew_patched"].to_list() == [True, False, False, False]
+    assert out["crew_source_url"].is_null().to_list() == [False, True, False, False]
 
 
 def test_unknown_person_is_a_count_only_failure() -> None:

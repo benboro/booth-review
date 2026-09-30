@@ -128,7 +128,11 @@ def _build_freshness(tables: BuildTables) -> dict[str, object]:
         if info is not None:
             game_by_telecast[row["telecast_id"]] = info
 
-    # Patched crews (04.3 crew_overrides.csv) never advance the 506 crews stamp.
+    # The 506 crews stamp keys on the pre-override 506 match: a telecast 506
+    # listed a main crew for. apply_crew_overrides flips crew_matched only for
+    # status `patched` (506 listed no main crew) and marks exactly those
+    # crew_patched, so this is that match; redundant, correction, and differs
+    # overrides sit on crews 506 did list and still advance the stamp.
     crew_filter = pl.col("crew_matched")
     if "crew_patched" in season_telecasts.columns:
         crew_filter = crew_filter & ~pl.col("crew_patched").fill_null(False)

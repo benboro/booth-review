@@ -75,7 +75,7 @@ describes when the value is `null` instead of coerced to a placeholder like
 | `source_url` | str \| null | null when the figure's original source URL isn't known | SITE-05, SITE-17 |
 | `rr_urls` | list[str], never empty | every merged Ratings Reference record URL for this telecast (JOIN-05); a duplicate-record merge keeps both | SITE-05 |
 | `s506_url` | str \| null | null when no 506 page is linked | SITE-05 |
-| `crew_source_url` | str \| null, http(s) URL with a host, never 506 Sports | null for a 506 crew; set only with `crew_source_label` for a hand-confirmed crew (the crew's own cited source) | SITE-32 |
+| `crew_source_url` | str \| null, http(s) URL with a host, never 506 Sports | null for a 506 crew, including one a `crew_overrides.csv` row only confirms; set only with `crew_source_label` when the shown crew comes from `crew_overrides.csv` instead of 506 (a patch, correction, or differing crew; the crew's own cited source) | SITE-32 |
 | `crew_source_label` | str \| null, non-empty | null for a 506 crew; a short public label for the cited source, set only with `crew_source_url` | SITE-32 |
 | `excitement` | float \| null | null when CFBD's `excitementIndex` is missing — **never coerced to 0** (FLAG-04) | SITE-03, SITE-04 |
 | `pregame` | float \| null, `-\|closing spread\|` (SPIKE-04) | null when the closing spread isn't known | SITE-03 |

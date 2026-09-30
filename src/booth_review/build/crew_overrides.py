@@ -157,6 +157,14 @@ def apply_crew_overrides(
     """Replace the main-feed crew of each override telecast with the override's
     full booth (D-08); the override always wins (D-09). Alt and Spanish rows
     are kept. Failures are count-only (D-04). Inputs are not mutated.
+
+    Status follows the PRE-override 506 match. `patched`: 506 listed no main
+    crew; the only status that sets `crew_patched` and flips `crew_matched`.
+    `redundant`: 506 lists the same people; the 506 rows and attribution are
+    kept untouched. `correction`/`differs`: 506 lists another crew; the
+    override's booth replaces it. Every status but `redundant` carries the
+    `crew_source_url`/`crew_source_label` pair, since the shown crew is the
+    override's. So `crew_matched & ~crew_patched` is exactly the 506 match.
     """
     new_counts = {season: dict(counts) for season, counts in copy.deepcopy(season_counts).items()}
     counts = dict.fromkeys(("applied", "patched", "redundant", "differs", "corrections", "rows"), 0)
@@ -200,9 +208,9 @@ def apply_crew_overrides(
         telecast_id = target["telecast_id"]
         current = existing_main.get(telecast_id, set())
         wanted = {person_id for person_id, _ in override.people}
-        if not current:
+        if not target["crew_matched"]:
             status = "patched"
-            if target["rated"] and not target["crew_matched"]:
+            if target["rated"]:
                 bucket = new_counts.setdefault(target["season"], {})
                 bucket["rated_with_crew"] = bucket.get("rated_with_crew", 0) + 1
                 bucket["records_with_crew"] = bucket.get("records_with_crew", 0) + len(
@@ -213,6 +221,8 @@ def apply_crew_overrides(
         else:
             status = "correction" if override.reason == "correction" else "differs"
         statuses[telecast_id] = status
+        if status == "redundant":
+            continue  # 506 already lists this booth; keep its rows and attribution.
         for position, (person_id, role) in enumerate(override.people):
             new_rows.append(
                 {
@@ -226,9 +236,10 @@ def apply_crew_overrides(
                 }
             )
 
-    patched_ids = list(statuses)
+    patched_ids = [tid for tid, status in statuses.items() if status == "patched"]
+    sourced_ids = [tid for tid, status in statuses.items() if status != "redundant"]
     kept = telecast_people.filter(
-        ~(pl.col("telecast_id").is_in(patched_ids) & (pl.col("feed_type") == "main"))
+        ~(pl.col("telecast_id").is_in(sourced_ids) & (pl.col("feed_type") == "main"))
     )
     added = pl.DataFrame(new_rows, schema=telecast_people.schema)
     people_out = pl.concat([kept, added]).sort(["telecast_id", "person_id", "feed_type"])
@@ -241,15 +252,16 @@ def apply_crew_overrides(
             frame = frame.with_columns(pl.lit(None, dtype=pl.Utf8).alias(column))
     url_by_id = {by_key[key]["telecast_id"]: o.source_url for key, o in overrides.items()}
     label_by_id = {by_key[key]["telecast_id"]: o.source_name for key, o in overrides.items()}
-    hit = pl.col("telecast_id").is_in(patched_ids)
+    patched = pl.col("telecast_id").is_in(patched_ids)
+    sourced = pl.col("telecast_id").is_in(sourced_ids)
     telecasts_out = frame.with_columns(
-        pl.when(hit).then(True).otherwise(pl.col("crew_matched")).alias("crew_matched"),
-        pl.when(hit).then(True).otherwise(pl.col("crew_patched")).alias("crew_patched"),
-        pl.when(hit)
+        pl.when(patched).then(True).otherwise(pl.col("crew_matched")).alias("crew_matched"),
+        pl.when(patched).then(True).otherwise(pl.col("crew_patched")).alias("crew_patched"),
+        pl.when(sourced)
         .then(pl.col("telecast_id").replace_strict(url_by_id, default=None, return_dtype=pl.Utf8))
         .otherwise(pl.col("crew_source_url"))
         .alias("crew_source_url"),
-        pl.when(hit)
+        pl.when(sourced)
         .then(pl.col("telecast_id").replace_strict(label_by_id, default=None, return_dtype=pl.Utf8))
         .otherwise(pl.col("crew_source_label"))
         .alias("crew_source_label"),
