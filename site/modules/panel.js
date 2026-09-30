@@ -35,6 +35,10 @@ import { currentTheme, makePill } from './pill.js';
 /** The element focus returns to when the dialog closes, or null. */
 let opener = null;
 
+/** Counts `showModal()` calls; the `close` handler acts once per session. */
+let openSession = 0;
+let handledSession = 0;
+
 /** Whether the latest pointerdown on the dialog landed on the backdrop itself. */
 let pointerDownOnBackdrop = false;
 
@@ -404,7 +408,11 @@ export function initPanel({ onClosed }) {
     // `close` is queued as a task, so a close and reopen in the same task
     // delivers it while the dialog is open again; that event is stale, and
     // acting on it would forget the open panel and its opener (review WR-03).
-    if (dialog.open) return;
+    // Under load an earlier session's event can also land after the next
+    // session has closed, so two events see a closed dialog: handle each
+    // session once, or the second would find no opener and focus #chart.
+    if (dialog.open || handledSession === openSession) return;
+    handledSession = openSession;
     onClosed();
     const target = opener && opener.isConnected ? opener : document.getElementById('chart');
     opener = null;
@@ -428,6 +436,7 @@ export function openPanel(i, ctx) {
   for (const el of document.querySelectorAll(':popover-open')) el.hidePopover();
   const active = document.activeElement;
   opener = active && active !== document.body ? active : document.getElementById('chart');
+  openSession += 1;
   dialog.showModal();
 }
 

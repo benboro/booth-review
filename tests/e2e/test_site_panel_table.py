@@ -477,6 +477,29 @@ def test_closing_and_immediately_reopening_the_modal_keeps_it_open(
     expect(guarded_page.locator("#panel-close")).to_be_visible()
 
 
+def test_a_late_close_event_from_an_earlier_session_does_not_steal_focus(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """`close` is delivered as a task, so under load the previous session's
+    event can land after the next session has also closed. Both events then
+    see a closed dialog; the second must not treat the consumed opener as
+    missing and move focus to #chart (flaky CI failure of the Escape step in
+    test_panel_swap_close_and_escape_restore_focus)."""
+    open_app(guarded_page, "")
+    guarded_page.focus("#trigger-seasons")
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    # Close, reopen, and close again in one task: two close events queue and
+    # both arrive with the dialog closed.
+    guarded_page.evaluate(
+        "() => { window.__testHooks.closePanel(); window.__testHooks.openPanel(1);"
+        " document.getElementById('detail-panel').close(); }"
+    )
+    guarded_page.wait_for_timeout(300)
+
+    assert guarded_page.evaluate("document.getElementById('detail-panel').open") is False
+    assert guarded_page.evaluate("document.activeElement.id") == "trigger-seasons"
+
+
 def test_table_empty_state_by_default(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
