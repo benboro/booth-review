@@ -1122,3 +1122,65 @@ def test_notes_sentinel_never_ships(tmp_path: Path, build_reference: Path) -> No
     text = (paths.vault / "processed/site-data.json").read_text(encoding="utf-8")
     assert "Zebra Harbor Bowl" in text
     assert "SENTINEL" not in text
+
+
+def _patched_freshness_tables(
+    *, second_season_type: str, second_week: int, second_patched: bool
+) -> BuildTables:
+    games = [
+        _game_row(game_id=1, week=2),
+        _game_row(
+            game_id=2,
+            week=second_week,
+            season_type=second_season_type,
+            date_et=date(2024, 9, 21),
+        ),
+    ]
+    telecasts = [
+        _telecast_row(telecast_id="1-net-a", game_id=1),
+        _telecast_row(
+            telecast_id="2-net-a",
+            game_id=2,
+            date_et=date(2024, 9, 21),
+            headline_claim_id="claim-2",
+            headline_value=100.0,
+            rr_telecast_ids=["cfb-example-2"],
+            rr_record_urls=["https://example.com/r2"],
+            crew_patched=second_patched,
+        ),
+    ]
+    return _build_tables(
+        games_rows=games,
+        telecast_rows=telecasts,
+        flag_rows=[
+            {"telecast_id": "1-net-a", "flag_id": "rr-fixture-era-2", "kind": "era"},
+            {"telecast_id": "2-net-a", "flag_id": "rr-fixture-era-2", "kind": "era"},
+        ],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+
+
+def test_freshness_crews_stamp_ignores_patched_crews(build_reference: Path) -> None:
+    tables = _patched_freshness_tables(
+        second_season_type="regular", second_week=3, second_patched=True
+    )
+    payload = _site(tables, build_reference)
+    assert payload["freshness"]["crews_through_week"] == "2"
+    assert payload["freshness"]["viewership_through_week"] == "3"
+
+
+def test_freshness_patched_postseason_crew_is_not_postseason(build_reference: Path) -> None:
+    tables = _patched_freshness_tables(
+        second_season_type="postseason", second_week=1, second_patched=True
+    )
+    payload = _site(tables, build_reference)
+    assert payload["freshness"]["crews_through_week"] == "2"
+
+
+def test_freshness_unpatched_crew_advances_stamp(build_reference: Path) -> None:
+    tables = _patched_freshness_tables(
+        second_season_type="regular", second_week=3, second_patched=False
+    )
+    payload = _site(tables, build_reference)
+    assert payload["freshness"]["crews_through_week"] == "3"

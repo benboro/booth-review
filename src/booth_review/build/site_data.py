@@ -128,9 +128,11 @@ def _build_freshness(tables: BuildTables) -> dict[str, object]:
         if info is not None:
             game_by_telecast[row["telecast_id"]] = info
 
-    crew_ids: set[str] = set(
-        season_telecasts.filter(pl.col("crew_matched"))["telecast_id"].to_list()
-    )
+    # Patched crews (04.3 crew_overrides.csv) never advance the 506 crews stamp.
+    crew_filter = pl.col("crew_matched")
+    if "crew_patched" in season_telecasts.columns:
+        crew_filter = crew_filter & ~pl.col("crew_patched").fill_null(False)
+    crew_ids: set[str] = set(season_telecasts.filter(crew_filter)["telecast_id"].to_list())
     viewership_ids: set[str] = set(
         season_telecasts.filter(pl.col("plotted"))["telecast_id"].to_list()
     )
