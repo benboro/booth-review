@@ -1,4 +1,18 @@
 cfbd_game_id,network_id,crew_position,person_id,role,reason,source_kind,source_name,source_url
+400548147,espn2,0,mark-neely,pbp,no-506-listing,school,Akron Athletics game notes,https://gozips.com/documents/download/2018/7/19/Game9_BGSU_110414.pdf
+400548147,espn2,1,ray-bentley,analyst,no-506-listing,school,Akron Athletics game notes,https://gozips.com/documents/download/2018/7/19/Game9_BGSU_110414.pdf
+400548148,espnu,0,mike-couzens,pbp,no-506-listing,school,Kent State Athletics game notes,https://kentstatesports.com/documents/download/2014/11/4/2014_Toledo_notes.pdf
+400548148,espnu,1,john-congemi,analyst,no-506-listing,school,Kent State Athletics game notes,https://kentstatesports.com/documents/download/2014/11/4/2014_Toledo_notes.pdf
+400548151,espnu,0,mark-neely,pbp,no-506-listing,school,Akron Athletics game notes,https://gozips.com/documents/download/2018/7/19/Game10_Buffalo_111114.pdf
+400548151,espnu,1,ray-bentley,analyst,no-506-listing,school,Akron Athletics game notes,https://gozips.com/documents/download/2018/7/19/Game10_Buffalo_111114.pdf
+400548152,espn2,0,dave-lamont,pbp,no-506-listing,school,Toledo Athletics game notes,https://utrockets.com/documents/download/2014/11/6/2957230_toledo_notes_niu_game.pdf
+400548152,espn2,1,desmond-howard,analyst,no-506-listing,school,Toledo Athletics game notes,https://utrockets.com/documents/download/2014/11/6/2957230_toledo_notes_niu_game.pdf
+400548154,espn2,0,tom-hart,pbp,no-506-listing,school,Bowling Green Athletics game notes,https://bgsufalcons.com/documents/download/2014/11/10/2014_Bowling_Green_notes.pdf
+400548154,espn2,1,david-diaz-infante,analyst,no-506-listing,school,Bowling Green Athletics game notes,https://bgsufalcons.com/documents/download/2014/11/10/2014_Bowling_Green_notes.pdf
+400548159,espn2,0,dave-lamont,pbp,no-506-listing,school,Toledo Athletics game notes,https://utrockets.com/documents/download/2014/11/17/2981418_toledo_notes_bgsu_game.pdf
+400548159,espn2,1,ray-bentley,analyst,no-506-listing,school,Toledo Athletics game notes,https://utrockets.com/documents/download/2014/11/17/2981418_toledo_notes_bgsu_game.pdf
+400548461,cbs,0,verne-lundquist,pbp,no-506-listing,press-release,CBS Sports release via Navy Athletics,https://navysports.com/news/2014/12/11/cbs_sports_broadcasts_115th_army_navy_college_football_classic_on_saturday_dec_13.aspx?path=me
+400548461,cbs,1,gary-danielson,analyst,no-506-listing,press-release,CBS Sports release via Navy Athletics,https://navysports.com/news/2014/12/11/cbs_sports_broadcasts_115th_army_navy_college_football_classic_on_saturday_dec_13.aspx?path=me
 400610325,espn,0,chris-fowler,pbp,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/espn-cfp-megacast-more-than-12-ways-to-follow-national-championship-across-espn-platforms/
 400610325,espn,1,kirk-herbstreit,analyst,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/espn-cfp-megacast-more-than-12-ways-to-follow-national-championship-across-espn-platforms/
 400852743,espn,0,chris-fowler,pbp,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/espns-megacast-returns-for-college-football-playoff-national-championship/
