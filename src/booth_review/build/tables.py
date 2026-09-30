@@ -448,10 +448,12 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     totals = tables.diagnostics.totals
     print(
-        "crew overrides applied/redundant/differs: "
+        "crew overrides applied/patched/redundant/differs/corrections: "
         f"{totals.get('crew_overrides_applied', 0)}/"
+        f"{totals.get('crew_overrides_patched', 0)}/"
         f"{totals.get('crew_overrides_redundant', 0)}/"
-        f"{totals.get('crew_overrides_differs', 0)}"
+        f"{totals.get('crew_overrides_differs', 0)}/"
+        f"{totals.get('crew_overrides_corrections', 0)}"
     )
     print(f"crew gaps unpatched: {totals.get('crew_gaps_unpatched', 0)}")
     print(

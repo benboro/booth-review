@@ -922,8 +922,13 @@ def _build(args: argparse.Namespace) -> int:
         print(f"bowl names unknown {bowl_names_unknown}")
     if (n := outcome.counts.get("crew_overrides_applied", 0)) > 0:
         print(f"crew overrides applied {n}")
+    if (n := outcome.counts.get("crew_overrides_patched", 0)) > 0:
+        print(f"crew overrides patching a telecast 506 gave no crew: {n}")
     if (n := outcome.counts.get("crew_overrides_redundant", 0)) > 0:
         print(f"crew overrides now redundant: {n}")
+    if (n := outcome.counts.get("crew_overrides_corrections", 0)) > 0:
+        # A correction deliberately replaces a crew 506 publishes; always say so.
+        print(f"crew overrides correcting 506: {n} (see interim/review_crew_overrides.csv)")
     if (n := outcome.counts.get("crew_overrides_differs", 0)) > 0:
         print(f"crew overrides differing from 506: {n} (see interim/review_crew_overrides.csv)")
     print(f"crew gaps unpatched {outcome.counts.get('crew_gaps_unpatched', 0)}")

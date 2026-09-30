@@ -139,6 +139,8 @@ def test_override_patches_a_telecast_with_no_506_crew(
     assert people.height == 2
     assert set(people["source"].to_list()) == {"crew_override"}
     assert after.counts["crew_overrides_applied"] == 1
+    assert after.counts["crew_overrides_patched"] == 1
+    assert after.counts["crew_overrides_corrections"] == 0
     assert after.counts["records_with_crew"] == before.counts["records_with_crew"] + records
     assert after.counts["crew_gaps_unpatched"] == before.counts["crew_gaps_unpatched"] - 1
 
@@ -186,6 +188,45 @@ def test_differing_override_is_a_warning_not_a_failure(
     assert "crew gaps unpatched" in out
     gap = [r for r in _gap_rows(git_vault) if r["cfbd_game_id"] == "500001"]
     assert [(r["gap_kind"], r["override_status"]) for r in gap] == [("has-506-crew", "differs")]
+
+
+def test_patch_and_correction_counts_reach_the_build_output(
+    git_vault: DataPaths,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    reference = _vault(git_vault, tmp_path, monkeypatch)
+    _baseline(git_vault, reference)
+    listed = _telecast(git_vault, 500001)
+    assert listed["crew_matched"]
+    current = set(_people_for(git_vault, listed["telecast_id"])["person_id"].to_list())
+    wanted = [p for p in ("dale-harlow", "kris-venn") if p not in current]
+    assert len(wanted) == 2
+    assert not _telecast(git_vault, 500005)["crew_matched"]
+
+    url = "https://example.com/a"
+    _write_overrides(
+        reference,
+        [
+            f"500001,ecn,0,{wanted[0]},pbp,correction,outlet,Outlet,{url}\n",
+            f"500001,ecn,1,{wanted[1]},analyst,correction,outlet,Outlet,{url}\n",
+            f"500005,ecn,0,jac-collinsworth,pbp,no-506-listing,press-release,PR,{_URL}\n",
+            f"500005,ecn,1,cris-collinsworth,analyst,no-506-listing,press-release,PR,{_URL}\n",
+        ],
+    )
+    outcome = _baseline(git_vault, reference)
+    assert outcome.counts["crew_overrides_applied"] == 2
+    assert outcome.counts["crew_overrides_patched"] == 1
+    assert outcome.counts["crew_overrides_corrections"] == 1
+    assert outcome.counts["crew_overrides_differs"] == 0
+
+    capsys.readouterr()
+    assert main(["build", "--no-commit"]) == 0
+    out = capsys.readouterr().out
+    assert "crew overrides patching a telecast 506 gave no crew: 1" in out
+    assert "crew overrides correcting 506: 1" in out
+    assert "crew overrides differing from 506" not in out
 
 
 def test_unknown_person_fails_count_only_and_writes_no_site_data(
