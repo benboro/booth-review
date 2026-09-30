@@ -19,7 +19,7 @@ from booth_review.errors import ReferenceTableError
 from booth_review.people.normalize import fold_person
 from booth_review.people.roles import Role
 from booth_review.people.slugs import assign_slug, slugify
-from booth_review.reference import read_reference_csv, write_reference_csv
+from booth_review.reference import read_reference_csv_numbered, write_reference_csv
 from booth_review.resolve.names import csv_safe, csv_unsafe
 
 PEOPLE_COLUMNS = ("person_id", "canonical_name", "variants", "usual_role", "role_override")
@@ -160,11 +160,11 @@ def load_people(reference_dir: Path) -> PeopleRegistry:
     blank, meaning "no override").
     """
     path = reference_dir / "people.csv"
-    raw_rows = read_reference_csv(path, PEOPLE_COLUMNS, required=False)
+    raw_rows = read_reference_csv_numbered(path, PEOPLE_COLUMNS, required=False)
 
     persons: dict[str, Person] = {}
     variant_owner: dict[str, str] = {}
-    for line_no, raw in enumerate(raw_rows, start=2):
+    for line_no, raw in raw_rows:
         person_id = raw["person_id"]
         if not _PERSON_ID_RE.match(person_id):
             raise ReferenceTableError(
@@ -237,10 +237,10 @@ def load_reviewed(reference_dir: Path) -> list[ReviewedPair]:
     name_a/name_b pass through csv_unsafe (see write_reviewed).
     """
     path = reference_dir / "people_reviewed.csv"
-    raw_rows = read_reference_csv(path, REVIEWED_COLUMNS, required=False)
+    raw_rows = read_reference_csv_numbered(path, REVIEWED_COLUMNS, required=False)
 
     pairs: list[ReviewedPair] = []
-    for line_no, raw in enumerate(raw_rows, start=2):
+    for line_no, raw in raw_rows:
         decision = raw["decision"]
         if decision not in _DECISIONS:
             raise ReferenceTableError(f"{path.name}: line {line_no}: invalid decision {decision!r}")
@@ -301,10 +301,10 @@ def load_person_overrides(reference_dir: Path) -> list[PersonOverride]:
     invalid person_id slug, or a reason outside two-people|other.
     """
     path = reference_dir / "person_overrides.csv"
-    raw_rows = read_reference_csv(path, PERSON_OVERRIDE_COLUMNS, required=False)
+    raw_rows = read_reference_csv_numbered(path, PERSON_OVERRIDE_COLUMNS, required=False)
 
     overrides: list[PersonOverride] = []
-    for line_no, raw in enumerate(raw_rows, start=2):
+    for line_no, raw in raw_rows:
         try:
             season = int(raw["season"])
         except ValueError:

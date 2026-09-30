@@ -22,7 +22,7 @@ import polars as pl
 from booth_review.contract.models import crew_source_url_problem
 from booth_review.errors import CrewOverrideError, ReferenceTableError
 from booth_review.people.registry import PeopleRegistry
-from booth_review.reference import read_reference_csv
+from booth_review.reference import read_reference_csv_numbered
 
 CREW_OVERRIDE_COLUMNS = (
     "cfbd_game_id",
@@ -63,14 +63,14 @@ class CrewOverride:
 def load_crew_overrides(reference_dir: Path) -> dict[tuple[int, str], CrewOverride]:
     """Read crew_overrides.csv (not required) into (game id, network id) -> CrewOverride."""
     path = reference_dir / "crew_overrides.csv"
-    raw_rows = read_reference_csv(path, CREW_OVERRIDE_COLUMNS, required=False)
+    raw_rows = read_reference_csv_numbered(path, CREW_OVERRIDE_COLUMNS, required=False)
 
     def fail(line_no: int, what: str) -> ReferenceTableError:
         return ReferenceTableError(f"{path.name}: line {line_no}: {what}")
 
     # key -> list of (line_no, position, person_id, role, reason, kind, name, url)
     grouped: dict[tuple[int, str], list[tuple[int, int, str, str, str, str, str, str]]] = {}
-    for line_no, raw in enumerate(raw_rows, start=2):
+    for line_no, raw in raw_rows:
         try:
             game_id = int(raw["cfbd_game_id"])
         except ValueError:
@@ -123,8 +123,10 @@ def load_crew_overrides(reference_dir: Path) -> dict[tuple[int, str], CrewOverri
     overrides: dict[tuple[int, str], CrewOverride] = {}
     for (game_id, network_id), rows in grouped.items():
         ordered = sorted(rows, key=lambda row: row[1])
-        if [row[1] for row in ordered] != list(range(len(ordered))):
-            raise fail(rows[0][0], "crew_position must run contiguously from 0")
+        for expected, row in enumerate(ordered):
+            if row[1] != expected:
+                # Cite the first row that breaks the 0, 1, 2, ... run.
+                raise fail(row[0], "crew_position must run contiguously from 0")
         _, _, _, _, reason, kind, name, url = ordered[0]
         overrides[(game_id, network_id)] = CrewOverride(
             cfbd_game_id=game_id,

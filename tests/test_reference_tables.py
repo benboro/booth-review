@@ -31,7 +31,7 @@ from booth_review.people.registry import (
     load_person_overrides,
     load_reviewed,
 )
-from booth_review.reference import read_reference_csv
+from booth_review.reference import read_reference_csv, read_reference_csv_numbered
 from booth_review.resolve.networks import (
     NETWORK_COLUMNS,
     PRIMARY_OVERRIDE_COLUMNS,
@@ -153,8 +153,8 @@ def test_d05_exceptions_are_exactly_crew_overrides() -> None:
 
 
 def test_crew_override_rows_have_source_url() -> None:
-    rows = read_reference_csv(REFERENCE_DIR / "crew_overrides.csv", CREW_OVERRIDE_COLUMNS)
-    for line_no, row in enumerate(rows, start=2):
+    rows = read_reference_csv_numbered(REFERENCE_DIR / "crew_overrides.csv", CREW_OVERRIDE_COLUMNS)
+    for line_no, row in rows:
         problem = crew_source_url_problem(row["source_url"])
         assert problem is None, f"crew_overrides.csv line {line_no}: source_url {problem}"
 
@@ -162,8 +162,8 @@ def test_crew_override_rows_have_source_url() -> None:
 def test_crew_override_person_ids_exist() -> None:
     people_rows = read_reference_csv(REFERENCE_DIR / "people.csv", PEOPLE_COLUMNS)
     people_ids = {row["person_id"] for row in people_rows}
-    rows = read_reference_csv(REFERENCE_DIR / "crew_overrides.csv", CREW_OVERRIDE_COLUMNS)
-    for line_no, row in enumerate(rows, start=2):
+    rows = read_reference_csv_numbered(REFERENCE_DIR / "crew_overrides.csv", CREW_OVERRIDE_COLUMNS)
+    for line_no, row in rows:
         assert row["person_id"] in people_ids, (
             f"crew_overrides.csv line {line_no}: unknown person_id"
         )

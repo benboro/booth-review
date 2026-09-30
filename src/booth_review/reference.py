@@ -53,6 +53,20 @@ def read_reference_csv(
     are skipped. A row with more cells than the header, or any cell
     beginning with =, +, -, @, a tab, or a carriage return, raises
     ReferenceTableError naming the file and line number only.
+
+    A loader that reports its own per-row errors uses
+    `read_reference_csv_numbered` instead, so its line numbers stay right
+    when the file has blank spacer rows.
+    """
+    return [row for _, row in read_reference_csv_numbered(path, columns, required=required)]
+
+
+def read_reference_csv_numbered(
+    path: Path, columns: tuple[str, ...], *, required: bool = False
+) -> list[tuple[int, dict[str, str]]]:
+    """`read_reference_csv`, with each row paired with the physical line it
+    starts on (the header is line 1; skipped blank rows still count), so a
+    loader's error cites the line a user sees in an editor.
     """
     if not path.is_file():
         if required:
@@ -72,8 +86,14 @@ def read_reference_csv(
                 f"{path.name}: header {tuple(header)!r} does not match expected {columns!r}"
             )
 
-        rows: list[dict[str, str]] = []
-        for line_no, raw_row in enumerate(reader, start=2):
+        rows: list[tuple[int, dict[str, str]]] = []
+        # reader.line_num counts physical lines read so far, blank rows
+        # included, so a row starts one line past where the last one ended
+        # (a quoted cell can carry a newline, so a row may span lines).
+        last_line = reader.line_num
+        for raw_row in reader:
+            line_no = last_line + 1
+            last_line = reader.line_num
             if not raw_row or all(cell.strip() == "" for cell in raw_row):
                 continue
             if len(raw_row) > len(columns):
@@ -87,7 +107,12 @@ def read_reference_csv(
                     raise ReferenceTableError(
                         f"{path.name}: line {line_no}: cell begins with a disallowed character"
                     )
-            rows.append({col: value.strip() for col, value in zip(columns, values, strict=True)})
+            rows.append(
+                (
+                    line_no,
+                    {col: value.strip() for col, value in zip(columns, values, strict=True)},
+                )
+            )
         return rows
 
 

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from booth_review.errors import ReferenceTableError
-from booth_review.reference import read_reference_csv
+from booth_review.reference import read_reference_csv_numbered
 
 BOWL_COLUMNS = ("cfbd_game_id", "official_name", "core_name", "at_bowl")
 
@@ -30,13 +30,13 @@ class BowlEntry:
 def load_bowls(reference_dir: Path) -> dict[int, BowlEntry]:
     """Read bowls.csv (not required) into cfbd_game_id -> BowlEntry."""
     path = reference_dir / "bowls.csv"
-    raw_rows = read_reference_csv(path, BOWL_COLUMNS, required=False)
+    raw_rows = read_reference_csv_numbered(path, BOWL_COLUMNS, required=False)
 
     def fail(line_no: int, what: str) -> ReferenceTableError:
         return ReferenceTableError(f"{path.name}: line {line_no}: {what}")
 
     entries: dict[int, BowlEntry] = {}
-    for line_no, raw in enumerate(raw_rows, start=2):
+    for line_no, raw in raw_rows:
         try:
             game_id = int(raw["cfbd_game_id"])
         except ValueError:

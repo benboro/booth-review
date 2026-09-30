@@ -165,12 +165,39 @@ def test_same_person_twice_rejected(tmp_path: Path) -> None:
     assert _SENTINEL not in str(exc.value)
 
 
-def test_non_contiguous_positions_rejected(tmp_path: Path) -> None:
-    rows = [_row(person_id=_SENTINEL), _row(crew_position=2, person_id="p-b", role="analyst")]
+@pytest.mark.parametrize(
+    ("positions", "line"),
+    [
+        ((0, 2), 3),  # the gap is at the second row
+        ((2, 1), 3),  # no position 0: the lowest position's row breaks the run
+        ((0, 1, 3), 4),
+    ],
+)
+def test_non_contiguous_positions_cite_the_breaking_row(
+    tmp_path: Path, positions: tuple[int, ...], line: int
+) -> None:
+    rows = [
+        _row(crew_position=position, person_id=f"p-{index}", role="analyst" if index else "pbp")
+        for index, position in enumerate(positions)
+    ]
+    rows[0]["person_id"] = _SENTINEL
     with pytest.raises(ReferenceTableError) as exc:
         load_crew_overrides(_write(tmp_path, rows))
-    assert "crew_overrides.csv: line 2" in str(exc.value)
-    assert _SENTINEL not in str(exc.value)
+    assert str(exc.value) == (
+        f"crew_overrides.csv: line {line}: crew_position must run contiguously from 0"
+    )
+
+
+def test_error_line_counts_blank_spacer_rows(tmp_path: Path) -> None:
+    rows = _two_rows()
+    rows[1]["source_url"] = f"https://506sports.com/{_SENTINEL}"
+    rows[0]["source_url"] = rows[1]["source_url"]
+    path = _write(tmp_path, rows) / "crew_overrides.csv"
+    header, first, second = path.read_text(encoding="utf-8").splitlines()
+    path.write_text(f"{header}\n\n\n{first}\n\n{second}\n", encoding="utf-8")
+    with pytest.raises(ReferenceTableError) as exc:
+        load_crew_overrides(tmp_path)
+    assert str(exc.value) == "crew_overrides.csv: line 4: source_url must not cite 506 Sports"
 
 
 @pytest.mark.parametrize(
