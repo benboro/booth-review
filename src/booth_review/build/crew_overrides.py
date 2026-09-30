@@ -63,6 +63,7 @@ class CrewOverride:
     source_kind: str
     source_name: str
     source_url: str
+    line: int = 0  # the telecast's first row in crew_overrides.csv; 0 when not loaded from it
 
 
 def _parse_ascii_int(cell: str) -> int | None:
@@ -151,6 +152,7 @@ def load_crew_overrides(reference_dir: Path) -> dict[tuple[int, str], CrewOverri
             source_kind=kind,
             source_name=name,
             source_url=url,
+            line=min(row[0] for row in ordered),
         )
     return overrides
 
@@ -162,6 +164,9 @@ class CrewOverrideResult:
     season_counts: dict[int, dict[str, int]]
     statuses: dict[str, str]  # telecast_id -> patched | redundant | differs | correction
     counts: dict[str, int]  # applied, patched, redundant, differs, corrections, rows
+    # crew_overrides.csv lines of `differs` overrides: 506 lists another crew
+    # and the row is not marked `correction`, so the user must check it.
+    differs_lines: tuple[int, ...] = ()
 
 
 def apply_crew_overrides(
@@ -219,6 +224,7 @@ def apply_crew_overrides(
         existing_main.setdefault(row["telecast_id"], set()).add(row["person_id"])
 
     statuses: dict[str, str] = {}
+    differs_lines: list[int] = []
     new_rows: list[dict[str, object]] = []
     for key, override in overrides.items():
         target = by_key[key]
@@ -237,6 +243,8 @@ def apply_crew_overrides(
             status = "redundant"
         else:
             status = "correction" if override.reason == "correction" else "differs"
+        if status == "differs":
+            differs_lines.append(override.line)
         statuses[telecast_id] = status
         if status == "redundant":
             continue  # 506 already lists this booth; keep its rows and attribution.
@@ -284,7 +292,9 @@ def apply_crew_overrides(
     counts["differs"] = sum(1 for v in statuses.values() if v == "differs")
     counts["corrections"] = sum(1 for v in statuses.values() if v == "correction")
     counts["rows"] = len(new_rows)
-    return CrewOverrideResult(telecasts_out, people_out, new_counts, statuses, counts)
+    return CrewOverrideResult(
+        telecasts_out, people_out, new_counts, statuses, counts, tuple(sorted(differs_lines))
+    )
 
 
 REVIEW_CREW_GAPS_COLUMNS = (

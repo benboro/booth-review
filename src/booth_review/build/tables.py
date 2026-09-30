@@ -118,6 +118,8 @@ class BuildTables:
     telecast_people: pl.DataFrame
     diagnostics: BuildDiagnostics
     review_rows: dict[str, tuple[tuple[str, ...], list[dict[str, object]]]]
+    # crew_overrides.csv lines whose crew differs from 506's without `correction`.
+    crew_override_differs_lines: tuple[int, ...] = ()
 
 
 def _combined_review_row(
@@ -377,6 +379,7 @@ def assemble_tables(
         telecast_people=telecast_people,
         diagnostics=diagnostics,
         review_rows=review_rows,
+        crew_override_differs_lines=override_result.differs_lines,
     )
 
 

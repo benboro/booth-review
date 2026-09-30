@@ -52,7 +52,11 @@ gitignored).
   `tests/test_reference_tables.py` allow-lists exactly this one table.
   Vocabularies: `reason` is `no-506-listing | no-506-crew | correction`,
   `source_kind` is `press-release | school | outlet`, `role` is
-  `pbp | analyst`, with exactly one `pbp` row per telecast.
+  `pbp | analyst`, with exactly one `pbp` row per telecast. The override
+  always wins, but when 506 lists a different booth and the row's reason is
+  not `correction`, `booth-review build` prints a warning citing the row's
+  line (without blocking): mark it `correction` if the source is right, or
+  fix the row if 506 is.
 - **`person_id` values are never renamed (D-01):** a later name change is
   recorded as a new variant on the same `person_id`, never a rewrite of the
   id itself, since ids appear in shareable site URLs.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -67,6 +68,7 @@ def test_valid_telecast_loads_as_one_override(tmp_path: Path) -> None:
             source_kind="press-release",
             source_name="Example Press Room",
             source_url="https://example.com/pr/1",
+            line=2,  # the telecast's first row in the file, whatever its position
         )
     }
 
@@ -404,10 +406,16 @@ def test_redundant_when_506_lists_same_people_and_alt_rows_kept() -> None:
 def test_differing_506_crew_loses_to_override(reason: str, status: str, key: str) -> None:
     tels, people = _frames([_tel(1001, crew_matched=True)], [_tp("1001-net-a", "p-z")])
     result = apply_crew_overrides(
-        tels, people, {(1001, "net-a"): _override(reason=reason)}, _registry("p-a", "p-b"), _COUNTS
+        tels,
+        people,
+        {(1001, "net-a"): replace(_override(reason=reason), line=7)},
+        _registry("p-a", "p-b"),
+        _COUNTS,
     )
     assert result.statuses == {"1001-net-a": status}
     assert result.counts[key] == 1
+    # Only an unlabeled disagreement is flagged for the user; a correction is deliberate.
+    assert result.differs_lines == ((7,) if status == "differs" else ())
     assert result.counts["patched"] == 0
     assert "p-z" not in result.telecast_people["person_id"].to_list()
     assert set(result.telecast_people["source"]) == {"crew_override"}

@@ -931,6 +931,17 @@ def _build(args: argparse.Namespace) -> int:
         print(f"crew overrides correcting 506: {n} (see interim/review_crew_overrides.csv)")
     if (n := outcome.counts.get("crew_overrides_differs", 0)) > 0:
         print(f"crew overrides differing from 506: {n} (see interim/review_crew_overrides.csv)")
+    # An override whose booth disagrees with the crew 506 lists, without
+    # reason `correction`, is either mislabeled or 506 has a newer crew. The
+    # override still wins and the build is not blocked; flag each row so the
+    # user decides. Only public crew_overrides.csv line numbers are printed.
+    for line in outcome.crew_override_differs_lines:
+        print(
+            f"warning: crew_overrides.csv line {line}: booth differs from the crew 506 lists "
+            "but reason is not correction; set reason to correction if the override is "
+            "right, or fix the row if 506 is",
+            file=sys.stderr,
+        )
     print(f"crew gaps unpatched {outcome.counts.get('crew_gaps_unpatched', 0)}")
     if outcome.accepted:
         print("accepted new baseline")

@@ -199,9 +199,16 @@ def test_differing_override_is_a_warning_not_a_failure(
     )
     capsys.readouterr()
     assert main(["build", "--no-commit"]) == 0
-    out = capsys.readouterr().out
+    captured = capsys.readouterr()
+    out = captured.out
     assert "crew overrides differing from 506: 1" in out
     assert "crew gaps unpatched" in out
+    # Flagged per row by its public crew_overrides.csv line, without blocking.
+    assert (
+        "warning: crew_overrides.csv line 2: booth differs from the crew 506 lists "
+        "but reason is not correction" in captured.err
+    )
+    assert captured.err.count("warning: crew_overrides.csv") == 1
     gap = [r for r in _gap_rows(git_vault) if r["cfbd_game_id"] == "500001"]
     assert [(r["gap_kind"], r["override_status"]) for r in gap] == [("has-506-crew", "differs")]
 
@@ -243,6 +250,7 @@ def test_patch_and_correction_counts_reach_the_build_output(
     assert "crew overrides patching a telecast 506 gave no crew: 1" in out
     assert "crew overrides correcting 506: 1" in out
     assert "crew overrides differing from 506" not in out
+    assert outcome.crew_override_differs_lines == ()
 
 
 def test_unknown_person_fails_count_only_and_writes_no_site_data(
