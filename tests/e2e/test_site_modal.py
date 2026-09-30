@@ -152,3 +152,24 @@ def test_phone_sheet_has_at_most_one_scroller(
     found: list[str] = mobile_page.evaluate(SCROLLERS)
     assert found in ([], ["panel-inner"])
     assert "DIALOG" not in found
+
+
+def test_close_then_reopen_in_one_task_keeps_the_panel_live(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """WR-03: `close` fires as a queued task, so a close and reopen in the same
+    task must not let the stale event forget the open panel: a later render
+    still refreshes it."""
+    _open(guarded_page, open_app, 0)
+    guarded_page.evaluate(
+        """() => new Promise((resolve) => {
+          window.__testHooks.closePanel();
+          window.__testHooks.openPanel(1);
+          setTimeout(resolve, 50);
+        })"""
+    )
+    expect(guarded_page.locator("#detail-panel")).to_have_attribute("open", "")
+    body = guarded_page.locator("#panel-body")
+    expect(body).to_contain_text("Spread: 7.0 · Excitement: 6.8")
+    guarded_page.evaluate("window.__testHooks.setState({ axis: 'excitement' })")
+    expect(body).to_contain_text("Excitement: 6.8 · Spread: 7.0")

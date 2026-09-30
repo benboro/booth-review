@@ -401,6 +401,10 @@ export function initPanel({ onClosed }) {
     pointerDownOnBackdrop = false;
   });
   dialog.addEventListener('close', () => {
+    // `close` is queued as a task, so a close and reopen in the same task
+    // delivers it while the dialog is open again; that event is stale, and
+    // acting on it would forget the open panel and its opener (review WR-03).
+    if (dialog.open) return;
     onClosed();
     const target = opener && opener.isConnected ? opener : document.getElementById('chart');
     opener = null;
