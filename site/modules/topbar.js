@@ -17,6 +17,15 @@
  * that person, clears the search, and refocuses the input; picking a
  * checked row removes them and keeps the search text.
  *
+ * D-08/D-09/D-11 (SITE-29): each row also carries a count (`view.facets.people`,
+ * the person's telecasts under every other active filter and Role, ignoring
+ * the person constraint itself, so selecting someone never changes the listed
+ * set, in any match mode). A person with count 0 who is not checked is left
+ * out of the list; a checked one stays, greyed, "(0)". The prebuilt rows are
+ * never rebuilt: counts and `is-zero` are synced in place, and `renderList`
+ * re-runs only when the set of facet-hidden ids changes, so the list keeps
+ * its scroll position and active row across unrelated renders.
+ *
  * `initTopbar(ctx)` binds every DOM event listener once; `renderTopbar(ctx)`
  * is a pure DOM update driven by the current state/view, called every render
  * cycle from app.js. DOM is built only with createElement/textContent/
@@ -54,6 +63,12 @@ let activeIndex = -1;
 
 /** Selection key the compare-note was last shown for, or null when hidden (D-07). */
 let compareNoteStickyKey = null;
+
+/** Person ids whose count is 0 and who are not checked: left out of the list (D-11). */
+let facetHiddenIds = new Set();
+
+/** Sorted, joined `facetHiddenIds`, so `renderTopbar` knows when the offered set changed. */
+let facetSignature = null;
 
 /** A key identifying the current people/compare selection, for the compare-note sticky logic. */
 function personSelectionKey(state) {
@@ -94,6 +109,15 @@ function buildOptionRows(data) {
     roleSpan.textContent = roleLabel ? ` – ${roleLabel}` : '';
     li.appendChild(roleSpan);
 
+    const countSpan = document.createElement('span');
+    countSpan.className = 'option-count';
+    countSpan.setAttribute('aria-hidden', 'true');
+    li.appendChild(countSpan);
+
+    const countSr = document.createElement('span');
+    countSr.className = 'visually-hidden option-count-sr';
+    li.appendChild(countSr);
+
     optionsById.set(p.id, li);
     return li;
   });
@@ -111,9 +135,11 @@ function renderList(rawValue) {
   let rows;
   const variantById = new Map();
   if (query === '') {
-    rows = allRowsOrdered;
+    rows = allRowsOrdered.filter((li) => !facetHiddenIds.has(li.dataset.personId));
   } else {
-    const results = searchPeople(dataRef, query, Infinity);
+    const results = searchPeople(dataRef, query, Infinity).filter(
+      (r) => !facetHiddenIds.has(r.id),
+    );
     rows = results.map((r) => optionsById.get(r.id));
     for (const r of results) variantById.set(r.id, r.matchedVariant);
   }
@@ -128,7 +154,7 @@ function renderList(rawValue) {
     const li = document.createElement('li');
     li.setAttribute('role', 'option');
     li.setAttribute('aria-disabled', 'true');
-    li.textContent = 'No matching announcers';
+    li.textContent = query === '' ? 'No announcers match these filters' : 'No matching announcers';
     els.results.replaceChildren(li);
     currentRows = [];
   } else {
@@ -376,6 +402,32 @@ function renderPersonList(state) {
   }
 }
 
+/** Syncs every row's count and `is-zero` from `view.facets.people` (D-09/D-11),
+ * and re-renders the list only when the facet-hidden set changed. */
+function renderPersonFacets(state, view) {
+  const counts = view.facets?.people;
+  if (!counts) return;
+  const hidden = new Set();
+  for (const [id, li] of optionsById) {
+    const count = counts[dataRef.personIndexById.get(id)] ?? 0;
+    const selected = state.people.includes(id);
+    const text = `(${count})`;
+    const visible = li.querySelector('.option-count');
+    if (visible.textContent !== text) visible.textContent = text;
+    const srText = `, ${count} rated ${count === 1 ? 'telecast' : 'telecasts'}`;
+    const sr = li.querySelector('.option-count-sr');
+    if (sr.textContent !== srText) sr.textContent = srText;
+    li.classList.toggle('is-zero', count === 0 && selected);
+    if (count === 0 && !selected) hidden.add(id);
+  }
+  const signature = [...hidden].sort().join(',');
+  if (signature !== facetSignature) {
+    facetSignature = signature;
+    facetHiddenIds = hidden;
+    renderList(els.input.value);
+  }
+}
+
 /** Pure DOM update from the current state/view, called every render cycle. */
 export function renderTopbar({ data, state, view }) {
   els.selectionRow.hidden = state.people.length === 0;
@@ -385,6 +437,7 @@ export function renderTopbar({ data, state, view }) {
   renderShapeLegend(data, state, view);
   renderSummary(view);
   renderPersonList(state);
+  renderPersonFacets(state, view);
 
   const currentKey = personSelectionKey(state);
   if (compareNoteStickyKey !== null && currentKey !== compareNoteStickyKey) {

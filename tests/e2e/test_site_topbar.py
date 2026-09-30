@@ -638,3 +638,123 @@ def test_summary_detail_lists_networks_most_telecasts_first(
     """A6: the summary line lists the dominant network first, not alphabetically."""
     open_app(guarded_page, "?people=pat-rowan")
     assert "Conference Network, Beta Network" in guarded_page.inner_text("#summary-detail")
+
+
+def _listed_ids(page: Page) -> list[str]:
+    ids: list[str] = page.locator("#person-results li[data-person-id]").evaluate_all(
+        "els => els.map(el => el.dataset.personId)"
+    )
+    return sorted(ids)
+
+
+def _row_count(page: Page, person_id: str) -> str:
+    return page.locator(
+        f"#person-results li[data-person-id='{person_id}'] .option-count"
+    ).inner_text()
+
+
+_NET_B_PEOPLE = ["jax-venn", "kris-venn", "pat-rowan", "taylor-vance"]
+
+
+def test_facet_announcers_narrow_to_people_on_the_other_filters(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-09/D-12: net-b games (dots 1, 5, 9) list only their crews, with counts."""
+    open_app(guarded_page, "?networks=net-b")
+    _open_announcers(guarded_page)
+    assert _listed_ids(guarded_page) == _NET_B_PEOPLE
+    assert _row_count(guarded_page, "kris-venn") == "(2)"
+    assert _row_count(guarded_page, "jax-venn") == "(2)"
+    assert _row_count(guarded_page, "pat-rowan") == "(1)"
+    assert _row_count(guarded_page, "taylor-vance") == "(1)"
+    expect(guarded_page.locator("#person-results li[data-person-id='dale-harlow']")).to_have_count(
+        0
+    )
+
+
+def test_facet_announcers_selecting_a_person_keeps_the_listed_set(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-08: picking someone never changes which announcers are listed."""
+    open_app(guarded_page, "?networks=net-b")
+    _open_announcers(guarded_page)
+    guarded_page.locator("#person-results li[data-person-id='kris-venn']").click()
+    guarded_page.wait_for_function("location.search.includes('people=kris-venn')")
+    assert _listed_ids(guarded_page) == _NET_B_PEOPLE
+
+
+def test_facet_announcers_selected_zero_count_person_stays_greyed(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-11/D-15: a checked person with no games left stays listed, greyed, (0), in the URL."""
+    open_app(guarded_page, "?networks=net-b&people=dale-harlow")
+    _open_announcers(guarded_page)
+    row = guarded_page.locator("#person-results li[data-person-id='dale-harlow']")
+    expect(row).to_have_attribute("aria-selected", "true")
+    expect(row).to_have_class(re.compile(r"\bis-zero\b"))
+    assert _row_count(guarded_page, "dale-harlow") == "(0)"
+    assert "dale-harlow" in guarded_page.evaluate("location.search")
+    assert "dale-harlow" in _listed_ids(guarded_page)
+
+
+def test_facet_announcers_role_changes_counts(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Role narrows the list: net-b analysts are jax-venn (2) and taylor-vance (1)."""
+    open_app(guarded_page, "?networks=net-b&role=analyst")
+    _open_announcers(guarded_page)
+    assert _listed_ids(guarded_page) == ["jax-venn", "taylor-vance"]
+    assert _row_count(guarded_page, "jax-venn") == "(2)"
+    assert _row_count(guarded_page, "taylor-vance") == "(1)"
+
+
+def test_facet_announcers_called_together_keeps_the_listed_set(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-08/D-10: called-together with two people does not change the list."""
+    open_app(guarded_page, "?networks=net-b&people=kris-venn,jax-venn")
+    _open_announcers(guarded_page)
+    before = _listed_ids(guarded_page)
+    guarded_page.evaluate("() => window.__testHooks.setState({ together: true })")
+    guarded_page.wait_for_function("window.__testHooks.getState().together === true")
+    assert _listed_ids(guarded_page) == before == _NET_B_PEOPLE
+
+
+def test_facet_announcers_search_and_empty_messages(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Search combines with the facet set; the two empty messages differ."""
+    open_app(guarded_page, "?networks=net-b")
+    _search(guarded_page, "venn")
+    guarded_page.wait_for_function(
+        "document.getElementById('person-results').dataset.query === 'venn'"
+    )
+    assert _listed_ids(guarded_page) == ["jax-venn", "kris-venn"]
+
+    _search(guarded_page, "casey")
+    guarded_page.wait_for_function(
+        "document.getElementById('person-results').dataset.query === 'casey'"
+    )
+    assert guarded_page.inner_text("#person-results") == "No matching announcers"
+
+    open_app(guarded_page, "?networks=net-c&postseason=only")
+    _open_announcers(guarded_page)
+    assert guarded_page.inner_text("#person-results") == "No announcers match these filters"
+
+
+def test_facet_announcers_scroll_survives_unrelated_renders(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """A render that leaves the offered set alone does not rebuild the list."""
+    open_app(guarded_page, "")
+    _open_announcers(guarded_page)
+    guarded_page.evaluate(
+        "() => { const el = document.getElementById('person-results');"
+        " el.style.maxHeight = '80px'; el.style.overflowY = 'auto'; el.scrollTop = 60; }"
+    )
+    before = guarded_page.evaluate("document.getElementById('person-results').scrollTop")
+    assert before > 0
+    guarded_page.evaluate("() => window.__testHooks.setState({ axis: 'excitement' })")
+    guarded_page.wait_for_function("window.__testHooks.getState().axis === 'excitement'")
+    after = guarded_page.evaluate("document.getElementById('person-results').scrollTop")
+    assert after == before
