@@ -68,12 +68,17 @@ current state.
 
 After building the real crosswalk, pointer-only overrides, and the joins in
 this phase, the project's own full rebuild (2014–2026) measures **100.0%**
-RR-to-game and **98.8%** RR-to-game-plus-crew (3,416 of 3,459 in-scope
+RR-to-game and **99.7%** RR-to-game-plus-crew (3,451 of 3,460 in-scope
 rated records), comfortably above the 95% target for both. Every season in
 range individually clears 95% game-plus-crew match as well; the lowest is
-2014 at 95.6%. The remaining 43 of 3,459 in-scope records (1.2%) without a
-matched crew are concentrated in 506 listings that never named a crew for an
-otherwise-rated game, not a game this project failed to find. This phase also draws a stratified, hand-checked sample of
+2014 at 98.0%. The remaining 9 of 3,460 in-scope records (0.3%) without a
+crew are telecasts for which no listed crew exists and no public source named
+the booth, not a game this project failed to find. As of the last build, 34
+plotted telecasts take their crew from a hand-confirmed public source instead
+of a 506 listing, including every College Football Playoff national
+championship, which 506 never lists. They count toward the game-plus-crew
+rate above; counting 506 crews alone, the rate is 98.8% (3,417 of 3,460).
+9 plotted telecasts still have no listed crew. This phase also draws a stratified, hand-checked sample of
 50 telecasts across seasons and networks for a user to confirm; the user
 confirmed all 50 rows against their Ratings Reference record and 506 page,
 for a JOIN-08 sample precision of 50/50 (100%). This project's

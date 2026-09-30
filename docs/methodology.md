@@ -189,6 +189,12 @@ in.
 **506 Sports.** Crew listings — who called each telecast — come from
 [506sports.com](https://506sports.com).
 
+Crews come from 506 Sports, except a small set of telecasts 506 never lists,
+including every College Football Playoff national championship. For those, the
+booth was confirmed by hand from a public source, such as the network's press
+release, and each such dot's detail view links that source in place of the 506
+listing.
+
 **CollegeFootballData.com.** Game data, rankings, closing spreads, and
 excitement values come from CollegeFootballData.com. Every place this data
 appears is credited with the phrase "Data provided by CollegeFootballData.com" linked to
