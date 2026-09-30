@@ -193,6 +193,39 @@ def test_non_contiguous_positions_cite_the_breaking_row(
     )
 
 
+@pytest.mark.parametrize(
+    ("roles", "line"),
+    [
+        (("analyst", "analyst"), 2),  # no pbp: cite the telecast's first row
+        (("analyst",), 2),
+        (("pbp", "pbp"), 3),  # two pbp: cite the second
+        (("pbp", "analyst", "pbp"), 4),
+    ],
+)
+def test_telecast_must_have_exactly_one_pbp_row(
+    tmp_path: Path, roles: tuple[str, ...], line: int
+) -> None:
+    rows = [
+        _row(crew_position=index, person_id=f"p-{index}", role=role)
+        for index, role in enumerate(roles)
+    ]
+    rows[0]["person_id"] = _SENTINEL
+    with pytest.raises(ReferenceTableError) as exc:
+        load_crew_overrides(_write(tmp_path, rows))
+    assert str(exc.value) == (
+        f"crew_overrides.csv: line {line}: each telecast must have exactly one pbp row"
+    )
+
+
+def test_pbp_need_not_be_first_position(tmp_path: Path) -> None:
+    rows = [
+        _row(role="analyst"),
+        _row(crew_position=1, person_id="p-b", role="pbp"),
+    ]
+    loaded = load_crew_overrides(_write(tmp_path, rows))
+    assert loaded[(1001, "net-a")].people == (("p-a", "analyst"), ("p-b", "pbp"))
+
+
 def test_error_line_counts_blank_spacer_rows(tmp_path: Path) -> None:
     rows = _two_rows()
     rows[1]["source_url"] = f"https://506sports.com/{_SENTINEL}"

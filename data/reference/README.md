@@ -52,7 +52,7 @@ gitignored).
   `tests/test_reference_tables.py` allow-lists exactly this one table.
   Vocabularies: `reason` is `no-506-listing | no-506-crew | correction`,
   `source_kind` is `press-release | school | outlet`, `role` is
-  `pbp | analyst`.
+  `pbp | analyst`, with exactly one `pbp` row per telecast.
 - **`person_id` values are never renamed (D-01):** a later name change is
   recorded as a new variant on the same `person_id`, never a rewrite of the
   id itself, since ids appear in shareable site URLs.

@@ -133,6 +133,13 @@ def load_crew_overrides(reference_dir: Path) -> dict[tuple[int, str], CrewOverri
             if row[1] != expected:
                 # Cite the first row that breaks the 0, 1, 2, ... run.
                 raise fail(row[0], "crew_position must run contiguously from 0")
+        # A booth needs exactly one play-by-play voice; anything else is
+        # almost certainly a typo in the role column. Cite the second pbp
+        # row, or the telecast's first row when it has none.
+        pbp_lines = [row[0] for row in ordered if row[3] == "pbp"]
+        if len(pbp_lines) != 1:
+            line = pbp_lines[1] if pbp_lines else min(row[0] for row in ordered)
+            raise fail(line, "each telecast must have exactly one pbp row")
         _, _, _, _, reason, kind, name, url = ordered[0]
         overrides[(game_id, network_id)] = CrewOverride(
             cfbd_game_id=game_id,
