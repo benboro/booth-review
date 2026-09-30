@@ -390,3 +390,29 @@ def test_real_playoff_counts_fit_the_bracket(
     assert regular_with_round == 0, "a regular-season telecast carried a playoff_round"
     assert over_before_2024 == 0, "a pre-2024 season exceeded the 3-game CFP bracket size"
     assert over_2024_plus == 0, "a 2024-or-later season exceeded the 11-game CFP bracket size"
+
+
+_FACET_TIMING_JS = """
+async () => {
+  const { computeView } = await import(new URL('./modules/select.js', location.href).href);
+  const hooks = window.__testHooks;
+  const data = hooks.data;
+  const state = hooks.getState();
+  state.people = data.lookups.people.slice(0, 3).map((p) => p.id);
+  computeView(data, state);
+  const runs = 20;
+  const start = performance.now();
+  for (let i = 0; i < runs; i += 1) computeView(data, state);
+  return (performance.now() - start) / runs;
+}
+"""
+
+
+def test_real_facet_pass_is_fast(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """T-04.2-26: the per-render facet pass stays cheap on real data. Asserts
+    on a local timing number only; nothing from the vault is printed."""
+    real_open_app(real_guarded_page, "")
+    mean_ms: float = real_guarded_page.evaluate(_FACET_TIMING_JS)
+    assert mean_ms <= 20, "mean computeView time (facets included) exceeded 20 ms"
