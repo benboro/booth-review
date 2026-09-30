@@ -230,6 +230,36 @@ def test_stratified_sample_draws_only_plotted_telecasts() -> None:
     assert all(row.telecast_id != "99-net-a" for row in result)
 
 
+def test_stratified_sample_leaves_out_crews_from_crew_overrides() -> None:
+    games, telecasts = _make_season_telecasts(2024, {"net-a": 3}, game_offset=0)
+    telecasts.append(
+        _telecast_row(telecast_id="97-net-a", game_id=97, season=2024, crew_patched=True)
+    )
+    telecasts.append(_telecast_row(telecast_id="98-net-a", game_id=98, season=2024))
+    games += [_game_row(game_id=97, season=2024), _game_row(game_id=98, season=2024)]
+    telecast_people = [
+        # A correction/differs override: 506 listed a crew, the override replaced it.
+        _telecast_people_row(telecast_id="98-net-a", s506_pointer=None, source="crew_override"),
+        # An alt-feed row alone never excludes a telecast.
+        _telecast_people_row(
+            telecast_id="1-net-a", feed_type="alt", s506_pointer=None, source="crew_override"
+        ),
+    ]
+
+    result = stratified_sample(
+        _telecasts_frame(telecasts),
+        _telecast_people_frame(telecast_people),
+        _people_frame([]),
+        _games_frame(games),
+        size=10,
+        seed=1,
+    )
+    drawn = {row.telecast_id for row in result}
+    assert drawn.isdisjoint({"97-net-a", "98-net-a"})
+    assert len(drawn) == 3
+    assert "1-net-a" in drawn
+
+
 def test_stratified_sample_allocates_at_least_two_per_season() -> None:
     games_a, telecasts_a = _make_season_telecasts(2020, {"net-a": 2}, game_offset=0)
     games_b, telecasts_b = _make_season_telecasts(2021, {"net-a": 20}, game_offset=100)
