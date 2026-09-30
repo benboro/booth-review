@@ -60,6 +60,14 @@ class CrewOverride:
     source_url: str
 
 
+def _parse_ascii_int(cell: str) -> int | None:
+    """Plain ASCII digits only: int() alone would also take "1_000", signs,
+    surrounding whitespace, and non-ASCII (Unicode) digits."""
+    if not (cell.isascii() and cell.isdecimal()):
+        return None
+    return int(cell)
+
+
 def load_crew_overrides(reference_dir: Path) -> dict[tuple[int, str], CrewOverride]:
     """Read crew_overrides.csv (not required) into (game id, network id) -> CrewOverride."""
     path = reference_dir / "crew_overrides.csv"
@@ -71,16 +79,14 @@ def load_crew_overrides(reference_dir: Path) -> dict[tuple[int, str], CrewOverri
     # key -> list of (line_no, position, person_id, role, reason, kind, name, url)
     grouped: dict[tuple[int, str], list[tuple[int, int, str, str, str, str, str, str]]] = {}
     for line_no, raw in raw_rows:
-        try:
-            game_id = int(raw["cfbd_game_id"])
-        except ValueError:
-            raise fail(line_no, "cfbd_game_id must be an integer") from None
-        try:
-            position = int(raw["crew_position"])
-        except ValueError:
-            raise fail(line_no, "crew_position must be an integer") from None
-        if position < 0:
-            raise fail(line_no, "crew_position must not be negative")
+        game_id = _parse_ascii_int(raw["cfbd_game_id"])
+        if game_id is None:
+            raise fail(line_no, "cfbd_game_id must be an integer")
+        # No sign is accepted, so a position is never negative (and
+        # read_reference_csv already rejects a cell starting with "-").
+        position = _parse_ascii_int(raw["crew_position"])
+        if position is None:
+            raise fail(line_no, "crew_position must be an integer")
         network_id = raw["network_id"]
         if not _NETWORK_ID_RE.match(network_id):
             raise fail(line_no, "network_id must be a lowercase slug")

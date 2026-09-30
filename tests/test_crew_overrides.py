@@ -90,7 +90,12 @@ def test_reordered_column_rejected(tmp_path: Path) -> None:
 _BAD_CELLS = [
     ("cfbd_game_id", _SENTINEL),
     ("crew_position", _SENTINEL),
+    ("cfbd_game_id", "1_001"),
+    ("cfbd_game_id", "\u0661\u0660\u0660\u0661"),  # Arabic-Indic digits for 1001
+    ("cfbd_game_id", "+1001"),
     ("crew_position", "-1"),
+    ("crew_position", "1_0"),
+    ("crew_position", "\uff11"),  # fullwidth digit one
     ("network_id", f"Bad_{_SENTINEL}"),
     ("person_id", ""),
     ("role", _SENTINEL),
