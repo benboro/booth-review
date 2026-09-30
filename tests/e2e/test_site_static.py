@@ -97,7 +97,9 @@ def test_secondary_pages_do_not_inherit_the_chart_grid(
     guarded_page.goto(f"{site_url}/{page_name}")
 
     assert guarded_page.evaluate("getComputedStyle(document.body).display") == "block"
-    viewport = guarded_page.evaluate("document.documentElement.clientWidth")
+    # The html box excludes the stable scrollbar gutter (SITE-28), which
+    # headless Chromium reserves even with its scrollbars hidden.
+    viewport = guarded_page.evaluate("document.documentElement.getBoundingClientRect().width")
 
     footer = guarded_page.evaluate(_BOX_JS, "footer")
     assert footer["x"] == 0
@@ -111,23 +113,23 @@ def test_secondary_pages_do_not_inherit_the_chart_grid(
     assert abs((main["x"] + main["width"] / 2) - viewport / 2) <= 1
 
 
-def test_chart_page_keeps_its_grid(guarded_page: Page, site_url: str) -> None:
+@pytest.mark.parametrize("width", [1400, 800])
+def test_chart_page_keeps_its_grid(guarded_page: Page, site_url: str, width: int) -> None:
     """WR-05: scoping the grid to `body.app` leaves the chart page's own
     toolbar + chart layout in place (04.1-04: the left rail was replaced by
-    a full-width toolbar row above the chart, D-01/D-02). At desktop widths
-    the grid carries a dedicated "panel" column beside the chart row only
-    -- never beside the table row (D-23, replacing plan 04.1-05's
-    both-rows span)."""
-    guarded_page.set_viewport_size({"width": 1400, "height": 900})
+    a full-width toolbar row above the chart, D-01/D-02). The detail view is
+    a modal dialog, so the grid carries no "panel" area at any width."""
+    guarded_page.set_viewport_size({"width": width, "height": 900})
     guarded_page.goto(f"{site_url}/index.html")
     assert guarded_page.evaluate("getComputedStyle(document.body).display") == "grid"
     toolbar = guarded_page.evaluate(_BOX_JS, "#toolbar")
     assert toolbar["x"] == 0
-    assert toolbar["width"] == 1400
+    html_width = guarded_page.evaluate("document.documentElement.getBoundingClientRect().width")
+    assert toolbar["width"] == html_width
+    assert width - 16 <= html_width <= width
 
     grid_areas = guarded_page.evaluate("getComputedStyle(document.body).gridTemplateAreas")
     collapsed = " ".join(grid_areas.split())
+    assert "panel" not in collapsed
     assert "selection" in collapsed
-    assert "main panel" in collapsed
-    assert "table table" in collapsed
-    assert "table panel" not in collapsed
+    assert "table" in collapsed

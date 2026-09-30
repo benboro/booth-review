@@ -537,7 +537,7 @@ def test_inert_dots_take_no_hover_and_are_not_clickable(
 
     guarded_page.mouse.click(point["x"], point["y"])
     guarded_page.wait_for_timeout(200)
-    assert guarded_page.evaluate("document.getElementById('detail-panel').hidden") is True
+    assert guarded_page.evaluate("document.getElementById('detail-panel').open") is False
 
 
 def test_person_matched_dot_that_fails_a_filter_renders_as_filtered_out(
@@ -1084,6 +1084,8 @@ def test_game_type_icons_have_own_colors_meeting_non_text_contrast(
         assert _rgb_of(guarded_page, panel_icon, "color") == fg
         panel_bg = _rgb_of(guarded_page, "#detail-panel", "backgroundColor")
         assert _ratio(fg, panel_bg) >= 3, (scheme, kind, "panel")
+        # The modal makes the page inert, so close it before the next hover.
+        guarded_page.click("#panel-close")
 
     assert icon_colors["bowl"] != icon_colors["playoff"]
     text = _rgb_of(guarded_page, "#chart-tooltip", "color")
@@ -1191,7 +1193,7 @@ def test_html_tooltip_hides_on_mouse_out_scroll_and_panel_open(
 
     _hover_dot(guarded_page, 0)
     guarded_page.mouse.click(point["x"], point["y"])
-    guarded_page.wait_for_function("document.body.classList.contains('panel-open')")
+    guarded_page.wait_for_function("document.getElementById('detail-panel').open")
     assert guarded_page.is_hidden("#chart-tooltip")
 
 
@@ -1287,7 +1289,7 @@ def test_mobile_tap_opens_panel_without_a_hover_tooltip(
     open_app(mobile_page, "")
     point = _dot_point(mobile_page, 0)
     mobile_page.touchscreen.tap(point["x"], point["y"])
-    mobile_page.wait_for_function("document.body.classList.contains('panel-open')")
+    mobile_page.wait_for_function("document.getElementById('detail-panel').open")
     assert mobile_page.is_hidden("#chart-tooltip")
 
 
@@ -1598,6 +1600,14 @@ def test_compare_shapes_have_accent_halo_border(
     guarded_page.set_viewport_size({"width": 1280, "height": 800})
     guarded_page.emulate_media(color_scheme=color_scheme)
     open_app(guarded_page, _COMPARE_ALL_SHAPES_QUERY)
+    # This is a pixel-fidelity check on the glyph edges; the stable scrollbar
+    # gutter (SITE-28) shifts the chart by a half pixel, which this
+    # band-counting decode is sensitive to, so it is switched off here.
+    guarded_page.evaluate(
+        "() => { document.documentElement.style.scrollbarGutter = 'auto'; "
+        "window.dispatchEvent(new Event('resize')); }"
+    )
+    guarded_page.wait_for_timeout(500)
     guarded_page.locator("#chart").scroll_into_view_if_needed()
     points = guarded_page.evaluate(_HIGHLIGHT_POINTS_JS)
     guarded_page.mouse.move(5, 5)

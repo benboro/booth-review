@@ -97,130 +97,11 @@ def _row_texts(page: Page) -> list[str]:
     return page.locator("#games-table tbody tr").all_inner_texts()
 
 
-def _boxes_intersect(a: dict[str, float], b: dict[str, float]) -> bool:
-    return (
-        a["x"] < b["x"] + b["width"]
-        and a["x"] + a["width"] > b["x"]
-        and a["y"] < b["y"] + b["height"]
-        and a["y"] + a["height"] > b["y"]
-    )
-
-
 def _chart_svg_width(page: Page) -> float:
     width: float = page.evaluate(
         "() => document.querySelector('#chart .main-svg').getBoundingClientRect().width"
     )
     return width
-
-
-# D-32: the panel and chart must move together -- the chart reaches its final
-# width within one transition length (250ms fixture / 350ms real, see
-# test_site_realdata.py) of the panel's own open or close starting.
-_MAX_PANEL_RESIZE_MS = 250
-
-# Waits for the chart's own SVG width to actually move away from `start`
-# and then stop changing across 3 consecutive animation frames, resolving
-# with that stable width -- used only to *learn* the panel's own open width
-# once, untimed, before the timed open/close pair below measures against it.
-# The `start`/`changed` gate matters: without it, "3 consecutive unchanged
-# rAF reads" trivially passes on the very first frames (before the CSS
-# transition has visibly moved anything yet), silently returning the
-# pre-open width instead of the true open width (confirmed empirically
-# with a temporary diagnostic before writing this gate).
-_WAIT_STABLE_WIDTH_JS = """
-(start) => new Promise((resolve) => {
-  let last = null;
-  let stableCount = 0;
-  let changed = false;
-  const t0 = performance.now();
-  function check() {
-    const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width;
-    if (!changed && Math.abs(w - start) > 0.5) changed = true;
-    if (changed) {
-      if (last !== null && Math.abs(w - last) < 0.5) {
-        stableCount += 1;
-      } else {
-        stableCount = 0;
-      }
-      last = w;
-      if (stableCount >= 3) {
-        resolve(w);
-        return;
-      }
-    }
-    if (performance.now() - t0 > 5000) {
-      resolve(w);
-      return;
-    }
-    requestAnimationFrame(check);
-  }
-  requestAnimationFrame(check);
-})
-"""
-
-# Times one panel open or close: records t0, triggers it, then polls the
-# chart's own SVG width every animation frame until it reaches `target`
-# (within 1px) or 2000ms elapses -- returning the elapsed ms either way, so a
-# regression shows as a clean failure rather than a Playwright timeout.
-_TIMED_TRANSITION_JS = """
-(args) => new Promise((resolve) => {
-  const t0 = performance.now();
-  if (args.trigger === 'open') {
-    window.__testHooks.openPanel(0);
-  } else {
-    document.getElementById('panel-close').click();
-  }
-  function poll() {
-    const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width;
-    const elapsed = performance.now() - t0;
-    if (Math.abs(w - args.target) <= 1 || elapsed > 2000) {
-      resolve(Math.round(elapsed));
-      return;
-    }
-    requestAnimationFrame(poll);
-  }
-  requestAnimationFrame(poll);
-})
-"""
-
-
-@pytest.mark.parametrize(("width", "height"), [(1280, 800), (800, 900)])
-def test_chart_tracks_the_panel_within_one_transition(
-    guarded_page: Page,
-    open_app: Callable[[Page, str], None],
-    width: int,
-    height: int,
-) -> None:
-    """D-32: the chart reaches its final width within one transition length
-    (250ms) of the panel opening or closing -- not the ~1s lag the user
-    reported. An untimed open/close pair first learns the panel's own stable
-    open width (`wOpen`), so the timed pair below measures only the
-    open/close-to-settled-width delay itself."""
-    guarded_page.set_viewport_size({"width": width, "height": height})
-    open_app(guarded_page, "?people=dale-harlow")
-    expect(guarded_page.locator("#games-table")).to_be_visible()
-
-    w0 = _chart_svg_width(guarded_page)
-
-    guarded_page.evaluate("window.__testHooks.openPanel(0)")
-    w_open = guarded_page.evaluate(_WAIT_STABLE_WIDTH_JS, w0)
-    guarded_page.click("#panel-close")
-    guarded_page.wait_for_function(
-        "(target) => { "
-        "const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width; "
-        "return Math.abs(w - target) <= 1; }",
-        arg=w0,
-        timeout=3000,
-    )
-    guarded_page.wait_for_function("document.getElementById('detail-panel').hidden === true")
-
-    open_ms: int = guarded_page.evaluate(
-        _TIMED_TRANSITION_JS, {"target": w_open, "trigger": "open"}
-    )
-    close_ms: int = guarded_page.evaluate(_TIMED_TRANSITION_JS, {"target": w0, "trigger": "close"})
-
-    assert open_ms <= _MAX_PANEL_RESIZE_MS, f"open_ms={open_ms}"
-    assert close_ms <= _MAX_PANEL_RESIZE_MS, f"close_ms={close_ms}"
 
 
 def test_click_dot_opens_panel_with_both_rr_record_links(
@@ -233,7 +114,7 @@ def test_click_dot_opens_panel_with_both_rr_record_links(
     open_app(guarded_page, "")
     _click_dot(guarded_page, 4)
 
-    assert guarded_page.evaluate("document.body.classList.contains('panel-open')") is True
+    assert guarded_page.evaluate("document.getElementById('detail-panel').open") is True
     rr_urls = fixture_raw["telecasts"]["rr_urls"][4]
     assert len(rr_urls) == 2
     for i, url in enumerate(rr_urls, start=1):
@@ -452,33 +333,53 @@ def test_panel_swap_close_and_escape_restore_focus(
     guarded_page.evaluate("window.__testHooks.openPanel(0)")
     guarded_page.evaluate("window.__testHooks.openPanel(8)")
     assert "Northfield 24 at Ironpeak 17" in guarded_page.inner_text("#panel-title")
-    assert guarded_page.evaluate("document.body.classList.contains('panel-open')") is True
+    assert guarded_page.evaluate("document.getElementById('detail-panel').open") is True
 
     guarded_page.click("#panel-close")
-    guarded_page.wait_for_function("document.getElementById('detail-panel').hidden === true")
-    assert guarded_page.evaluate("document.activeElement.id") == "trigger-seasons"
+    guarded_page.wait_for_function("document.getElementById('detail-panel').open === false")
+    guarded_page.wait_for_function("document.activeElement.id === 'trigger-seasons'")
 
     guarded_page.evaluate("window.__testHooks.openPanel(0)")
     guarded_page.keyboard.press("Escape")
-    guarded_page.wait_for_function("document.getElementById('detail-panel').hidden === true")
-    assert guarded_page.evaluate("document.activeElement.id") == "trigger-seasons"
+    guarded_page.wait_for_function("document.getElementById('detail-panel').open === false")
+    guarded_page.wait_for_function("document.activeElement.id === 'trigger-seasons'")
 
 
-def test_reopening_the_panel_during_the_close_transition_keeps_it_shown(
+def test_focus_returns_to_chart_after_a_dot_open_and_to_the_row_after_a_row_open(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """WR-03: closing the panel schedules a 150 ms post-transition hide; an
-    immediate reopen (e.g. clicking another row) must cancel it, or the
-    stale timer hides the reopened panel while `panel-open` stays set."""
+    """D-02: a dot click leaves focus on <body>, so focus returns to #chart;
+    a row open returns focus to that row (matched by its index)."""
+    open_app(guarded_page, "")
+    _click_dot(guarded_page, 4)
+    guarded_page.keyboard.press("Escape")
+    guarded_page.wait_for_function("document.getElementById('detail-panel').open === false")
+    guarded_page.wait_for_function("document.activeElement.id === 'chart'")
+
+    guarded_page.evaluate("window.__testHooks.setState({people: ['dale-harlow']})")
+
+    row = guarded_page.locator("#games-table tbody tr").first
+    row.focus()
+    row.press("Enter")
+    expect(guarded_page.locator("#detail-panel")).to_be_visible()
+    guarded_page.click("#panel-close")
+    guarded_page.wait_for_function("document.getElementById('detail-panel').open === false")
+    guarded_page.wait_for_function("document.activeElement.tagName === 'TR'")
+
+
+def test_closing_and_immediately_reopening_the_modal_keeps_it_open(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Closing then reopening in the same task leaves the dialog open (no
+    stale hide path can re-close it)."""
     open_app(guarded_page, "")
     guarded_page.evaluate("window.__testHooks.openPanel(0)")
     guarded_page.evaluate(
         "() => { document.getElementById('panel-close').click(); window.__testHooks.openPanel(1); }"
     )
-    guarded_page.wait_for_timeout(400)
+    guarded_page.wait_for_timeout(300)
 
-    assert guarded_page.evaluate("document.getElementById('detail-panel').hidden") is False
-    assert guarded_page.evaluate("document.body.classList.contains('panel-open')") is True
+    assert guarded_page.evaluate("document.getElementById('detail-panel').open") is True
     expect(guarded_page.locator("#panel-close")).to_be_visible()
 
 
@@ -622,7 +523,7 @@ def test_table_row_click_and_enter_open_the_panel_no_details_column(
     assert "Lakeview" in guarded_page.inner_text("#panel-title")
 
     guarded_page.click("#panel-close")
-    guarded_page.wait_for_function("document.getElementById('detail-panel').hidden === true")
+    guarded_page.wait_for_function("document.getElementById('detail-panel').open === false")
 
     second_row = guarded_page.locator("#games-table tbody tr").nth(1)
     second_row.focus()
@@ -650,253 +551,214 @@ def test_table_row_link_click_follows_the_link_and_does_not_open_the_panel(
     expect(guarded_page.locator("#detail-panel")).to_be_hidden()
 
 
-@pytest.mark.parametrize(("width", "height", "min_shrink"), [(1280, 800, 250), (800, 900, 200)])
-def test_panel_opens_beside_the_chart_only(
+_SNAPSHOT_JS = """
+() => {
+  const box = (id) => {
+    const r = document.getElementById(id).getBoundingClientRect();
+    return [r.x, r.y, r.width, r.height];
+  };
+  return {
+    chart: document.querySelector('#chart .main-svg').getBoundingClientRect().width,
+    chartArea: box('chart-area'),
+    matched: box('matched-games'),
+    scrollY: window.scrollY,
+  };
+}
+"""
+
+
+def _snapshot(page: Page) -> dict[str, Any]:
+    snap: dict[str, Any] = page.evaluate(_SNAPSHOT_JS)
+    return snap
+
+
+def _dialog_open(page: Page) -> bool:
+    opened: bool = page.evaluate("document.getElementById('detail-panel').open")
+    return opened
+
+
+def _close_by_backdrop(page: Page) -> None:
+    page.mouse.click(4, 4)
+
+
+@pytest.mark.parametrize(("width", "height"), [(1400, 900), (800, 900)])
+def test_modal_opens_centered_and_leaves_the_layout_unchanged(
     guarded_page: Page,
     open_app: Callable[[Page, str], None],
     width: int,
     height: int,
-    min_shrink: int,
 ) -> None:
-    """D-23, SITE-20: opening the panel narrows only the chart through a real
-    grid column (Plotly resizes) -- the matched-games table stays exactly
-    where and how wide it was. The panel never overlaps the chart, the
-    legend chips, or the table, sits above the table (not beside it), and
-    matches the chart area's own height (replaces plan 04.1-05's
-    both-rows-span behavior)."""
+    """D-01, D-04, D-06: opening from a dot or a table row leaves the chart,
+    #chart-area, the table box, and scrollY exactly as they were; the dialog
+    is centered, min(560, viewport - 32) wide, and at most 85vh tall."""
     guarded_page.set_viewport_size({"width": width, "height": height})
-    open_app(guarded_page, "?people=dale-harlow")
-    expect(guarded_page.locator("#games-table")).to_be_visible()
+    open_app(guarded_page, "")
 
-    before_chart_width = _chart_svg_width(guarded_page)
-    table_box_before = guarded_page.locator("#games-table").bounding_box()
-    chart_area_box_before = guarded_page.locator("#chart-area").bounding_box()
-    legend_box_before = guarded_page.locator("#legend-chips").bounding_box()
-    assert table_box_before is not None
-    assert chart_area_box_before is not None
-    assert legend_box_before is not None
-
-    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    before = _snapshot(guarded_page)
+    _click_dot(guarded_page, 4)
+    assert _snapshot(guarded_page) == before
+    assert _dialog_open(guarded_page)
     guarded_page.wait_for_function(
-        "(args) => { "
-        "const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width; "
-        "return (args.before - w) >= args.minShrink; }",
-        arg={"before": before_chart_width, "minShrink": min_shrink},
-        timeout=3000,
+        "document.getElementById('detail-panel').getAnimations().length === 0"
     )
 
-    table_box = guarded_page.locator("#games-table").bounding_box()
-    chart_area_box = guarded_page.locator("#chart-area").bounding_box()
-    panel_box = guarded_page.locator("#detail-panel").bounding_box()
-    chart_box = guarded_page.locator("#chart").bounding_box()
-    legend_box = guarded_page.locator("#legend-chips").bounding_box()
-    matched_games_box = guarded_page.locator("#matched-games").bounding_box()
-    assert table_box is not None
-    assert chart_area_box is not None
-    assert panel_box is not None
-    assert chart_box is not None
-    assert legend_box is not None
-    assert matched_games_box is not None
+    box = guarded_page.locator("#detail-panel").bounding_box()
+    assert box is not None
+    # Centered in the viewport minus the reserved scrollbar gutter (at most
+    # 15px on a classic-scrollbar browser, so the center may sit 7.5px left).
+    assert abs(box["x"] + box["width"] / 2 - width / 2) <= 8
+    assert abs(box["width"] - min(560, width - 32)) <= 1
+    assert box["height"] <= 0.85 * height + 1
 
-    # The table stays exactly where and how wide it was -- the panel narrows
-    # only the chart (D-23).
-    table_right = table_box["x"] + table_box["width"]
-    table_right_before = table_box_before["x"] + table_box_before["width"]
-    assert abs(table_box["x"] - table_box_before["x"]) <= 1
-    assert abs(table_right - table_right_before) <= 1
-    assert abs(table_box["width"] - table_box_before["width"]) <= 1
-
-    assert not _boxes_intersect(panel_box, chart_box)
-    assert not _boxes_intersect(panel_box, legend_box)
-    assert not _boxes_intersect(panel_box, table_box)
-    assert panel_box["y"] + panel_box["height"] <= matched_games_box["y"] + 1
-    assert abs(panel_box["height"] - chart_area_box["height"]) <= 2
-
-    # #chart-area's own height tracks the chart plot's fixed height, plus
-    # whatever the D-04 chip legend row needs (`flex-wrap: wrap`, pre-
-    # existing, unrelated to this plan's panel geometry) -- at the tablet
-    # width the narrower chart area can wrap the legend chips onto an
-    # extra line. Any #chart-area height change beyond that legend-driven
-    # growth would mean the panel geometry itself is pushing the chart row
-    # taller, which D-23 forbids.
-    legend_growth = max(0.0, legend_box["height"] - legend_box_before["height"])
-    assert abs(chart_area_box["height"] - chart_area_box_before["height"]) <= legend_growth + 2
-
-
-@pytest.mark.parametrize(("width", "height"), [(1280, 800), (800, 900)])
-def test_closing_the_panel_restores_the_chart_width_every_time(
-    guarded_page: Page,
-    open_app: Callable[[Page, str], None],
-    width: int,
-    height: int,
-) -> None:
-    """D-24: every close path -- the close button, Escape, a close mid-
-    transition, a table-row-opened panel, and a panel swap -- restores the
-    chart to exactly its pre-open width. `panelResizes` alone isn't proof (a
-    resize can fire and still leave the chart at the wrong width if a later
-    close never resizes at all); this polls the chart's own geometry."""
-    guarded_page.set_viewport_size({"width": width, "height": height})
-    open_app(guarded_page, "?people=dale-harlow")
-    expect(guarded_page.locator("#games-table")).to_be_visible()
-
-    w0 = _chart_svg_width(guarded_page)
-    min_shrink = 250 if width >= 1280 else 200
-
-    def _wait_for_shrink() -> None:
-        guarded_page.wait_for_function(
-            "(args) => { "
-            "const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width; "
-            "return (args.before - w) >= args.minShrink; }",
-            arg={"before": w0, "minShrink": min_shrink},
-            timeout=3000,
-        )
-
-    def _wait_for_close() -> None:
-        guarded_page.wait_for_function(
-            "(target) => { "
-            "const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width; "
-            "return Math.abs(w - target) <= 1; }",
-            arg=w0,
-            timeout=3000,
-        )
-        guarded_page.wait_for_function("document.getElementById('detail-panel').hidden === true")
-
-    # (a) openPanel(0) + #panel-close click
-    guarded_page.evaluate("window.__testHooks.openPanel(0)")
-    _wait_for_shrink()
-    guarded_page.click("#panel-close")
-    _wait_for_close()
-
-    # (b) openPanel(0) + Escape
-    guarded_page.evaluate("window.__testHooks.openPanel(0)")
-    _wait_for_shrink()
     guarded_page.keyboard.press("Escape")
-    _wait_for_close()
+    assert not _dialog_open(guarded_page)
 
-    # (c) openPanel(0) then close 50ms later, mid-transition (no shrink wait --
-    # the whole point is closing before the open transition finishes).
-    guarded_page.evaluate("window.__testHooks.openPanel(0)")
-    guarded_page.wait_for_timeout(50)
-    guarded_page.click("#panel-close")
-    _wait_for_close()
-
-    # (d) a table row click opens the panel, then #panel-close closes it.
-    first_row = guarded_page.locator("#games-table tbody tr").first
-    first_row.click()
-    _wait_for_shrink()
-    guarded_page.click("#panel-close")
-    _wait_for_close()
-
-    # (e) openPanel(0) -> openPanel(8) swap -> close
-    guarded_page.evaluate("window.__testHooks.openPanel(0)")
-    _wait_for_shrink()
-    guarded_page.evaluate("window.__testHooks.openPanel(8)")
-    guarded_page.click("#panel-close")
-    _wait_for_close()
+    guarded_page.evaluate("window.__testHooks.setState({people: ['dale-harlow']})")
+    expect(guarded_page.locator("#games-table")).to_be_visible()
+    guarded_page.locator("#games-table tbody tr").first.scroll_into_view_if_needed()
+    before_row = _snapshot(guarded_page)
+    guarded_page.locator("#games-table tbody tr").first.locator("td").nth(1).click()
+    assert _snapshot(guarded_page) == before_row
+    assert _dialog_open(guarded_page)
 
 
-def test_closing_the_panel_restores_the_chart_width_under_reduced_motion(
-    guarded_page: Page, open_app: Callable[[Page, str], None]
+@pytest.mark.parametrize(("width", "height"), [(1400, 900), (800, 900)])
+def test_layout_unchanged_across_every_open_and_close_path(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    width: int,
+    height: int,
 ) -> None:
-    """D-24: under reduced motion the panel hides immediately with no
-    transition event ever firing; the rAF-driven resize path
-    (`resizeChartForPanelIfNoTransition`) plus the ResizeObserver debounce
-    still restore the chart's width after a close."""
-    guarded_page.emulate_media(reduced_motion="reduce")
-    guarded_page.set_viewport_size({"width": 1280, "height": 800})
+    """D-01, D-02: the x button, Escape, a backdrop click, a row-opened modal,
+    and a swap all leave the layout and scroll position untouched."""
+    guarded_page.set_viewport_size({"width": width, "height": height})
     open_app(guarded_page, "?people=dale-harlow")
     expect(guarded_page.locator("#games-table")).to_be_visible()
+    row = guarded_page.locator("#games-table tbody tr").first
+    row.scroll_into_view_if_needed()
+    before = _snapshot(guarded_page)
 
-    w0 = _chart_svg_width(guarded_page)
+    def _check(expect_open: bool) -> None:
+        assert _snapshot(guarded_page) == before
+        assert _dialog_open(guarded_page) is expect_open
+
     guarded_page.evaluate("window.__testHooks.openPanel(0)")
-    guarded_page.wait_for_function(
-        "(target) => { "
-        "const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width; "
-        "return (target - w) >= 200; }",
-        arg=w0,
-        timeout=3000,
-    )
+    _check(True)
     guarded_page.click("#panel-close")
-    guarded_page.wait_for_function(
-        "(target) => { "
-        "const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width; "
-        "return Math.abs(w - target) <= 1; }",
-        arg=w0,
-        timeout=3000,
-    )
-    guarded_page.wait_for_function("document.getElementById('detail-panel').hidden === true")
+    _check(False)
 
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    guarded_page.keyboard.press("Escape")
+    _check(False)
 
-def test_table_row_click_scrolls_chart_and_panel_into_view(
-    guarded_page: Page, open_app: Callable[[Page, str], None]
-) -> None:
-    """D-23: a table row can be far below the fold; clicking it opens the
-    panel beside the chart and scrolls both into view."""
-    guarded_page.set_viewport_size({"width": 1280, "height": 800})
-    open_app(guarded_page, "?people=dale-harlow")
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    _close_by_backdrop(guarded_page)
+    _check(False)
 
-    first_row = guarded_page.locator("#games-table tbody tr").first
-    matchup = first_row.locator("td").nth(1).inner_text()
-
-    guarded_page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-    first_row.click()
-
-    guarded_page.wait_for_function(
-        "() => { "
-        "const top = document.getElementById('chart-area').getBoundingClientRect().top; "
-        "return top >= -1 && top < window.innerHeight; }",
-        timeout=3000,
-    )
-
-    panel_box = guarded_page.locator("#detail-panel").bounding_box()
-    assert panel_box is not None
-    viewport_width = guarded_page.evaluate("window.innerWidth")
-    viewport_height = guarded_page.evaluate("window.innerHeight")
-    viewport_box = {"x": 0, "y": 0, "width": viewport_width, "height": viewport_height}
-    assert _boxes_intersect(panel_box, viewport_box)
-    assert guarded_page.inner_text("#panel-title") == matchup
-
-
-def test_long_panel_content_scrolls_inside_the_panel(
-    guarded_page: Page, open_app: Callable[[Page, str], None]
-) -> None:
-    """D-23: longer panel content scrolls inside the panel and never makes
-    the chart row taller -- dot 7 (a flag, a combined-feeds note, and a
-    3-person crew: the fixture's richest panel body) is the stress case."""
-    guarded_page.set_viewport_size({"width": 1280, "height": 800})
-    open_app(guarded_page, "?people=dale-harlow")
-
-    chart_area_box_before = guarded_page.locator("#chart-area").bounding_box()
-    assert chart_area_box_before is not None
+    row.locator("td").nth(1).click()
+    _check(True)
+    guarded_page.click("#panel-close")
+    _check(False)
 
     guarded_page.evaluate("window.__testHooks.openPanel(7)")
-    guarded_page.wait_for_function("document.body.classList.contains('panel-open')")
+    guarded_page.evaluate("window.__testHooks.openPanel(5)")
+    _check(True)
+    guarded_page.click("#panel-close")
+    _check(False)
 
-    overflow_y = guarded_page.evaluate(
-        "getComputedStyle(document.querySelector('.panel-inner')).overflowY"
+
+def test_drag_select_ending_on_backdrop_does_not_close(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Pitfall 4: a press inside the dialog that is released on the backdrop
+    (a text drag-select) must not close it."""
+    guarded_page.set_viewport_size({"width": 1400, "height": 900})
+    open_app(guarded_page, "")
+    guarded_page.evaluate("window.__testHooks.openPanel(7)")
+    body_box = guarded_page.locator("#panel-body").bounding_box()
+    assert body_box is not None
+
+    guarded_page.mouse.move(body_box["x"] + 20, body_box["y"] + 10)
+    guarded_page.mouse.down()
+    guarded_page.mouse.move(4, 4, steps=5)
+    guarded_page.mouse.up()
+
+    assert _dialog_open(guarded_page)
+
+
+def test_table_row_open_scrolls_nothing(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-06: opening from a table row does not scroll the page."""
+    guarded_page.set_viewport_size({"width": 1280, "height": 800})
+    open_app(guarded_page, "?people=dale-harlow")
+    first_row = guarded_page.locator("#games-table tbody tr").first
+    first_row.scroll_into_view_if_needed()
+    before = guarded_page.evaluate("window.scrollY")
+
+    first_row.locator("td").nth(1).click()
+
+    assert _dialog_open(guarded_page)
+    assert guarded_page.evaluate("window.scrollY") == before
+
+
+def test_long_panel_content_scrolls_inside_the_modal(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-03, D-04: long content scrolls inside the dialog, the dialog stays
+    within 85vh, and wheeling over the backdrop never scrolls the page."""
+    guarded_page.set_viewport_size({"width": 1280, "height": 400})
+    open_app(guarded_page, "?people=dale-harlow")
+    guarded_page.evaluate("window.__testHooks.openPanel(7)")
+
+    assert (
+        guarded_page.evaluate("getComputedStyle(document.querySelector('.panel-inner')).overflowY")
+        == "auto"
     )
-    assert overflow_y == "auto"
-
     panel_box = guarded_page.locator("#detail-panel").bounding_box()
-    inner_box = guarded_page.locator(".panel-inner").bounding_box()
-    chart_area_box = guarded_page.locator("#chart-area").bounding_box()
     assert panel_box is not None
-    assert inner_box is not None
-    assert chart_area_box is not None
-    assert abs(inner_box["height"] - panel_box["height"]) <= 1
-    assert abs(chart_area_box["height"] - chart_area_box_before["height"]) <= 2
-
-    overflows = guarded_page.evaluate(
+    assert panel_box["height"] <= 0.85 * 400 + 1
+    assert guarded_page.evaluate(
         "() => { const el = document.querySelector('.panel-inner'); "
         "return el.scrollHeight > el.clientHeight + 1; }"
     )
-    if overflows:
-        before_scroll_y = guarded_page.evaluate("window.scrollY")
-        guarded_page.evaluate("document.querySelector('.panel-inner').scrollTop = 40")
-        after_scroll_top = guarded_page.evaluate("document.querySelector('.panel-inner').scrollTop")
-        after_scroll_y = guarded_page.evaluate("window.scrollY")
-        assert after_scroll_top > 0
-        assert after_scroll_y == before_scroll_y
+    guarded_page.evaluate("document.querySelector('.panel-inner').scrollTop = 40")
+    assert guarded_page.evaluate("document.querySelector('.panel-inner').scrollTop") > 0
+
+    before = guarded_page.evaluate("window.scrollY")
+    guarded_page.mouse.move(4, 4)
+    guarded_page.mouse.wheel(0, 400)
+    guarded_page.wait_for_timeout(150)
+    assert guarded_page.evaluate("window.scrollY") == before
+
+
+def test_modal_makes_the_page_inert_and_closes_popovers(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-03: opening the modal closes an open filter popover and hides the
+    tooltip, and nothing behind the backdrop receives a click."""
+    guarded_page.set_viewport_size({"width": 1400, "height": 900})
+    open_app(guarded_page, "")
+    guarded_page.click("#trigger-seasons")
+    guarded_page.wait_for_function(
+        "document.getElementById('pop-seasons').matches(':popover-open')"
+    )
+
+    guarded_page.evaluate("window.__testHooks.openPanel(7)")
+    assert (
+        guarded_page.evaluate("document.getElementById('pop-seasons').matches(':popover-open')")
+        is False
+    )
+    assert guarded_page.evaluate("document.querySelector('.chart-tooltip')?.hidden ?? true") is True
+
+    box = guarded_page.locator("#trigger-networks").bounding_box()
+    assert box is not None
+    guarded_page.mouse.click(box["x"] + 4, box["y"] + 4)
+    assert (
+        guarded_page.evaluate("document.getElementById('pop-networks').matches(':popover-open')")
+        is False
+    )
+    assert _dialog_open(guarded_page) is False  # the click landed on the backdrop, closing it
 
 
 def test_phone_table_never_scrolls_the_page(
@@ -915,7 +777,7 @@ def test_phone_table_never_scrolls_the_page(
 
     first_row = mobile_page.locator("#games-table tbody tr").first
     first_row.tap()
-    mobile_page.wait_for_function("document.body.classList.contains('panel-open')")
+    mobile_page.wait_for_function("document.getElementById('detail-panel').open")
 
 
 def test_mobile_tap_opens_bottom_sheet_with_44px_close(
@@ -925,20 +787,17 @@ def test_mobile_tap_opens_bottom_sheet_with_44px_close(
     bottom sheet pinned to the viewport's bottom, with a 44px close button."""
     open_app(mobile_page, "")
     _tap_dot(mobile_page, 4)
-    mobile_page.wait_for_function("document.body.classList.contains('panel-open')")
-    # The bottom sheet's own slide-in is a 150ms `transform` transition
-    # (Task 2); wait for it to finish before measuring, or a bounding box
-    # read moments after the class is added can catch it mid-slide.
+    mobile_page.wait_for_function("document.getElementById('detail-panel').open")
     mobile_page.wait_for_function(
-        "getComputedStyle(document.getElementById('detail-panel')).transform === 'none'"
+        "document.getElementById('detail-panel').getAnimations().length === 0"
     )
-
     box = mobile_page.locator("#detail-panel").bounding_box()
     assert box is not None
     viewport_width = mobile_page.evaluate("window.innerWidth")
     viewport_height = mobile_page.evaluate("window.innerHeight")
-    assert abs(box["width"] - viewport_width) <= 2
-    assert abs((box["y"] + box["height"]) - viewport_height) <= 2
+    assert abs(box["width"] - viewport_width) <= 1
+    assert abs((box["y"] + box["height"]) - viewport_height) <= 1
+    assert abs(box["height"] - 0.55 * viewport_height) <= 2
 
     close_box = mobile_page.locator("#panel-close").bounding_box()
     assert close_box is not None

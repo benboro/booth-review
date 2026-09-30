@@ -351,105 +351,26 @@ def test_real_announcer_list_lists_everyone(
     assert filtered_count <= people_count, "filtered count exceeds people count"
 
 
-# D-32: 350ms = the fixture check's 250ms plus a small scattergl redraw
-# allowance for the real build's much larger point count.
-_MAX_REAL_PANEL_RESIZE_MS = 350
-
 _CHART_SVG_WIDTH_JS = (
     "() => document.querySelector('#chart .main-svg').getBoundingClientRect().width"
 )
 
-# See test_site_panel_table.py's own copy of this helper for the `start`/
-# `changed` gate's rationale (a naive "3 unchanged rAF reads" trivially
-# passes before the CSS transition visibly starts, returning the pre-open
-# width instead of the true one).
-_WAIT_STABLE_WIDTH_JS = """
-(start) => new Promise((resolve) => {
-  let last = null;
-  let stableCount = 0;
-  let changed = false;
-  const t0 = performance.now();
-  function check() {
-    const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width;
-    if (!changed && Math.abs(w - start) > 0.5) changed = true;
-    if (changed) {
-      if (last !== null && Math.abs(w - last) < 0.5) {
-        stableCount += 1;
-      } else {
-        stableCount = 0;
-      }
-      last = w;
-      if (stableCount >= 3) {
-        resolve(w);
-        return;
-      }
-    }
-    if (performance.now() - t0 > 5000) {
-      resolve(w);
-      return;
-    }
-    requestAnimationFrame(check);
-  }
-  requestAnimationFrame(check);
-})
-"""
 
-_TIMED_TRANSITION_JS = """
-(args) => new Promise((resolve) => {
-  const t0 = performance.now();
-  if (args.trigger === 'open') {
-    window.__testHooks.openPanel(0);
-  } else {
-    document.getElementById('panel-close').click();
-  }
-  function poll() {
-    const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width;
-    const elapsed = performance.now() - t0;
-    if (Math.abs(w - args.target) <= 1 || elapsed > 2000) {
-      resolve(Math.round(elapsed));
-      return;
-    }
-    requestAnimationFrame(poll);
-  }
-  requestAnimationFrame(poll);
-})
-"""
-
-
-def test_real_chart_tracks_the_panel(
+def test_real_chart_width_unchanged_when_the_modal_opens(
     real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-32: the same panel-open/close-to-settled-chart-width timing check as
-    the fixture build (test_site_panel_table.py), run on the real vault
-    build's full scattergl point count with a small redraw allowance (350ms
-    vs. the fixture's 250ms). The evaluate calls return plain ints only
+    """D-01: opening the detail modal on the real build leaves the chart's
+    width as it was. The evaluate calls return plain numbers/bools only
     (WR-09) -- no vault record ever appears in an assertion."""
     real_open_app(real_guarded_page, "")
 
     w0: float = real_guarded_page.evaluate(_CHART_SVG_WIDTH_JS)
     real_guarded_page.evaluate("window.__testHooks.openPanel(0)")
-    w_open: float = real_guarded_page.evaluate(_WAIT_STABLE_WIDTH_JS, w0)
-    real_guarded_page.click("#panel-close")
-    real_guarded_page.wait_for_function(
-        "(target) => { "
-        "const w = document.querySelector('#chart .main-svg').getBoundingClientRect().width; "
-        "return Math.abs(w - target) <= 1; }",
-        arg=w0,
-        timeout=3000,
-    )
-    real_guarded_page.wait_for_function("document.getElementById('detail-panel').hidden === true")
+    is_open: bool = real_guarded_page.evaluate("document.getElementById('detail-panel').open")
+    w_open: float = real_guarded_page.evaluate(_CHART_SVG_WIDTH_JS)
 
-    open_ms: int = real_guarded_page.evaluate(
-        _TIMED_TRANSITION_JS, {"target": w_open, "trigger": "open"}
-    )
-    close_ms: int = real_guarded_page.evaluate(
-        _TIMED_TRANSITION_JS, {"target": w0, "trigger": "close"}
-    )
-    print(f"D-32 real-data panel resize: open={open_ms}ms close={close_ms}ms")
-
-    max_ms = _MAX_REAL_PANEL_RESIZE_MS
-    assert open_ms <= max_ms, f"open_ms={open_ms}"
-    assert close_ms <= max_ms, f"close_ms={close_ms}"
+    assert is_open
+    assert w_open == w0
 
 
 def test_real_playoff_counts_fit_the_bracket(

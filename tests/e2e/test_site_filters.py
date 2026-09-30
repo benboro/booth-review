@@ -647,21 +647,21 @@ def test_popover_closes_on_outside_click(
     )
 
 
-def test_escape_closes_only_the_popover_when_the_detail_panel_is_also_open(
+def test_opening_the_modal_closes_the_popover_and_escape_returns_focus(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """With a person selected and the detail panel open, Esc while a popover
-    is open closes only the popover -- the panel stays open."""
+    """D-03: opening the detail modal closes an open filter popover; Escape
+    then closes the modal."""
     open_app(guarded_page, "")
-    guarded_page.evaluate("() => window.__testHooks.openPanel(0)")
-    guarded_page.wait_for_function("document.body.classList.contains('panel-open')")
-
     _open_filter(guarded_page, "conference")
-    guarded_page.keyboard.press("Escape")
+    guarded_page.evaluate("() => window.__testHooks.openPanel(0)")
     guarded_page.wait_for_function(
         "!document.getElementById('pop-conference').matches(':popover-open')"
     )
-    assert guarded_page.evaluate("() => document.body.classList.contains('panel-open')") is True
+    assert guarded_page.evaluate("document.getElementById('detail-panel').open") is True
+
+    guarded_page.keyboard.press("Escape")
+    guarded_page.wait_for_function("document.getElementById('detail-panel').open === false")
 
 
 def test_conference_checklist_lists_only_fbs_conferences_present_plus_independents(
