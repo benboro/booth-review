@@ -97,17 +97,75 @@ function networksInLookupOrder(data, idSet) {
   return data.lookups.networks.map((net) => net.id).filter((id) => idSet.has(id));
 }
 
-/** Builds the season-range `<select>` options once, from `data.seasons`. */
-function buildSeasonSelects(data) {
-  const optionsFor = () =>
-    data.seasons.map((season) => {
-      const opt = document.createElement('option');
-      opt.value = String(season);
-      opt.textContent = String(season);
-      return opt;
-    });
-  els.seasonFrom.replaceChildren(...optionsFor());
-  els.seasonTo.replaceChildren(...optionsFor());
+/** Signature of the season options last written to the two selects (D-14), so re-renders skip identical writes. */
+let seasonOptionsSignature = '';
+
+/** The "(N)" count span plus its screen-reader twin, appended to every faceted row (D-12). */
+function makeCountSpans() {
+  const visible = document.createElement('span');
+  visible.className = 'option-count';
+  visible.setAttribute('aria-hidden', 'true');
+  const sr = document.createElement('span');
+  sr.className = 'visually-hidden option-count-sr';
+  return [visible, sr];
+}
+
+/** Writes a count into a row's two count spans (textContent only) and toggles `is-zero` on `zeroEl`. */
+function setCount(container, count, zeroEl = container) {
+  const visible = container.querySelector('.option-count');
+  const sr = container.querySelector('.option-count-sr');
+  const text = `(${count})`;
+  if (visible && visible.textContent !== text) visible.textContent = text;
+  const srText = `, ${count} rated ${count === 1 ? 'telecast' : 'telecasts'}`;
+  if (sr && sr.textContent !== srText) sr.textContent = srText;
+  zeroEl.classList.toggle('is-zero', count === 0);
+}
+
+/** Combines the two independent hide reasons of a `.check-item` row: text search and facets (Pitfall 7). */
+function syncRowHidden(item) {
+  item.hidden = item.dataset.searchHidden === 'true' || item.dataset.facetHidden === 'true';
+}
+
+/** Sets a row's facet-hidden flag and re-syncs its `hidden` attribute. */
+function setFacetHidden(item, hidden) {
+  item.dataset.facetHidden = hidden ? 'true' : 'false';
+  syncRowHidden(item);
+}
+
+/**
+ * Builds one checklist row: `div.check-item > label.check-row > (input, name, counts)`.
+ * @param {HTMLInputElement} checkbox
+ * @param {string} name
+ */
+function makeCheckItem(checkbox, name) {
+  const item = document.createElement('div');
+  item.className = 'check-item';
+  const label = document.createElement('label');
+  label.className = 'check-row';
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'option-name';
+  nameSpan.textContent = name;
+  label.append(checkbox, nameSpan, ...makeCountSpans());
+  item.appendChild(label);
+  return item;
+}
+
+/**
+ * D-11 amendment ("all but a few"): a non-null Networks pick is "narrowed" (its
+ * impossible checked options stay visible, greyed) only when the checked channels
+ * are no more than the unchecked ones. A tie counts as narrowed; 3 of 4 is
+ * default-like, so impossible rows hide instead of greying.
+ */
+function networksPickNarrowed(data, state) {
+  return state.networks != null && 2 * state.networks.length <= allPrimaryNetworkIds(data).length;
+}
+
+/**
+ * Seasons menus are (re)populated by `renderSeasons` (D-14); the init pass only
+ * resets the signature so the first render writes them.
+ */
+function buildSeasonSelects() {
+  seasonOptionsSignature = '';
 }
 
 /** Builds the family-nested network checklist once, from `data.families`/`networksByFamily` (D-06). */
@@ -123,13 +181,12 @@ function buildNetworkChecklist(data) {
     fieldset.className = 'family-group';
 
     const legend = document.createElement('legend');
-    const familyLabel = document.createElement('label');
     const familyCheckbox = document.createElement('input');
     familyCheckbox.type = 'checkbox';
     familyCheckbox.dataset.familyCheckbox = familyKeyVal;
-    familyLabel.appendChild(familyCheckbox);
-    familyLabel.appendChild(document.createTextNode(` ${FAMILY_LABELS[familyKeyVal]}`));
-    legend.appendChild(familyLabel);
+    const familyItem = makeCheckItem(familyCheckbox, FAMILY_LABELS[familyKeyVal]);
+    familyItem.classList.add('family-item');
+    legend.appendChild(familyItem);
     fieldset.appendChild(legend);
     familyCheckboxes.set(familyKeyVal, familyCheckbox);
 
@@ -139,13 +196,10 @@ function buildNetworkChecklist(data) {
     for (const idx of netIdxs) {
       const net = data.lookups.networks[idx];
       const li = document.createElement('li');
-      const label = document.createElement('label');
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.dataset.networkId = net.id;
-      label.appendChild(checkbox);
-      label.appendChild(document.createTextNode(` ${net.name}`));
-      li.appendChild(label);
+      li.appendChild(makeCheckItem(checkbox, net.name));
       list.appendChild(li);
       networkCheckboxes.set(net.id, checkbox);
     }
@@ -168,16 +222,12 @@ function buildRoleHelper() {
 function buildConferenceList(data) {
   conferenceCheckboxes = new Map();
   const rows = data.fbsConferences.map((name) => {
-    const label = document.createElement('label');
-    label.className = 'check-row';
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.name = 'conference';
     checkbox.value = name;
-    label.appendChild(checkbox);
-    label.appendChild(document.createTextNode(` ${name}`));
     conferenceCheckboxes.set(name, checkbox);
-    return label;
+    return makeCheckItem(checkbox, name);
   });
   els.conferenceList.append(...rows);
 }
@@ -188,17 +238,13 @@ function buildSchoolList(data) {
   schoolKeysBySlug = new Map();
   const sortedTeams = data.teamKeys.slice().sort((a, b) => a.name.localeCompare(b.name));
   const rows = sortedTeams.map((team) => {
-    const label = document.createElement('label');
-    label.className = 'check-row';
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.name = 'school';
     checkbox.value = team.slug;
-    label.appendChild(checkbox);
-    label.appendChild(document.createTextNode(` ${team.name}`));
     schoolCheckboxes.set(team.slug, checkbox);
     schoolKeysBySlug.set(team.slug, team.keys);
-    return label;
+    return makeCheckItem(checkbox, team.name);
   });
   els.schoolList.append(...rows);
 }
@@ -206,22 +252,22 @@ function buildSchoolList(data) {
 /** Hides checklist rows whose keys (via `keysFor`) don't contain the normalized query. */
 function filterChecklist(listEl, query, keysFor) {
   const q = normalizeName(query);
-  for (const row of listEl.querySelectorAll('label.check-row')) {
-    const checkbox = row.querySelector('input[type="checkbox"]');
+  for (const item of listEl.querySelectorAll('.check-item')) {
+    const checkbox = item.querySelector('input[type="checkbox"]');
     if (q === '') {
-      row.hidden = false;
-      continue;
+      item.dataset.searchHidden = 'false';
+    } else {
+      item.dataset.searchHidden = keysFor(checkbox).some((k) => k.includes(q)) ? 'false' : 'true';
     }
-    const keys = keysFor(checkbox);
-    row.hidden = !keys.some((k) => k.includes(q));
+    syncRowHidden(item);
   }
 }
 
 /** Every checkbox in `listEl` whose row is currently visible, in DOM order. */
 function visibleCheckboxes(listEl) {
-  return Array.from(listEl.querySelectorAll('label.check-row'))
-    .filter((row) => !row.hidden)
-    .map((row) => row.querySelector('input[type="checkbox"]'));
+  return Array.from(listEl.querySelectorAll('.check-item:not([hidden])')).map((item) =>
+    item.querySelector('input[type="checkbox"]'),
+  );
 }
 
 /** Wires ArrowUp/ArrowDown keyboard navigation between a search input and its checklist. */
@@ -433,6 +479,8 @@ export function initFilters({ data, getState, setState }) {
     seasonFrom: document.getElementById('season-from'),
     seasonTo: document.getElementById('season-to'),
     seasonCounts: document.getElementById('season-counts'),
+    seasonEmptyNote: document.getElementById('season-empty-note'),
+    seasonEmptyTitle: document.querySelector('#season-empty-note .season-empty-title'),
     networksSection: document.getElementById('filter-networks'),
     slotsSection: document.getElementById('filter-slots'),
     roleSection: document.getElementById('filter-role'),
@@ -452,7 +500,7 @@ export function initFilters({ data, getState, setState }) {
     ),
   };
 
-  buildSeasonSelects(data);
+  buildSeasonSelects();
   buildNetworkChecklist(data);
   buildRoleHelper();
   buildConferenceList(data);
@@ -533,66 +581,152 @@ export function initFilters({ data, getState, setState }) {
   mobileMedia.addEventListener('change', (ev) => placeSections(ev.matches));
 }
 
-/** Renders the season range selects and the per-season counts list (D-13 counts). */
+/** Sum of `facets.seasons` over the inclusive range [from, to]. */
+function seasonRangeTotal(facetSeasons, from, to) {
+  let sum = 0;
+  for (const [season, count] of facetSeasons) if (season >= from && season <= to) sum += count;
+  return sum;
+}
+
+/**
+ * Renders the season range selects (D-14: only seasons with matching games plus
+ * the selected ends), the per-season counts list, and the empty-state note.
+ */
 function renderSeasons(data, state, view) {
-  const [minSeason, maxSeason] = state.seasons ?? [data.seasonMin, data.seasonMax];
+  const facetSeasons = view.facets.seasons;
+  const matching = data.seasons.filter((s) => facetSeasons.get(s) > 0);
+  const fallback = matching.length === 0;
+  const offeredSet = new Set(fallback ? data.seasons : matching);
+  for (const end of state.seasons ?? []) offeredSet.add(end);
+  const offered = Array.from(offeredSet).sort((a, b) => a - b);
+  const labels = offered.map((s) => (!fallback && facetSeasons.get(s) === 0 ? `${s} (0)` : String(s)));
+
+  const signature = `${offered.join(',')}|${labels.join(',')}`;
+  if (signature !== seasonOptionsSignature) {
+    const optionsFor = () =>
+      offered.map((season, i) => {
+        const opt = document.createElement('option');
+        opt.value = String(season);
+        opt.textContent = labels[i];
+        return opt;
+      });
+    els.seasonFrom.replaceChildren(...optionsFor());
+    els.seasonTo.replaceChildren(...optionsFor());
+    seasonOptionsSignature = signature;
+  }
+
+  // Display only: `state.seasons` stays null until the visitor changes a menu.
+  const [minSeason, maxSeason] = state.seasons ?? [offered[0], offered[offered.length - 1]];
   els.seasonFrom.value = String(minSeason);
   els.seasonTo.value = String(maxSeason);
 
   const items = view.seasonCounts.map(([season, count]) => {
     const li = document.createElement('li');
-    if (season < minSeason || season > maxSeason) li.className = 'out-of-range';
+    if (state.seasons != null && (season < state.seasons[0] || season > state.seasons[1])) {
+      li.className = 'out-of-range';
+    }
     const word = count === 1 ? 'rated telecast' : 'rated telecasts';
     li.textContent = `${season}: ${count} ${word}`;
     return li;
   });
   els.seasonCounts.replaceChildren(...items);
+
+  // D-14 empty state: the range holds nothing, though other seasons would.
+  let showNote = false;
+  if (state.seasons != null) {
+    const [from, to] = state.seasons;
+    const inRange = seasonRangeTotal(facetSeasons, from, to);
+    const overall = seasonRangeTotal(facetSeasons, -Infinity, Infinity);
+    showNote = inRange === 0 && overall > 0;
+    if (showNote) {
+      els.seasonEmptyTitle.textContent =
+        from === to ? `No games in ${from} for this selection` : `No games in ${from}–${to} for this selection`;
+    }
+  }
+  els.seasonEmptyNote.hidden = !showNote;
 }
 
-/** Syncs the network checklist's checked/indeterminate state from `state.networks` (D-06). */
-function renderNetworks(data, state) {
+/**
+ * Syncs the network checklist from `state.networks` and `view.facets.networks`
+ * (D-08, D-11): counts on every row; an impossible channel hides unless it is an
+ * explicit pick in a narrowed list, in which case it stays checked and greyed.
+ */
+function renderNetworks(data, state, view) {
   const currentIds = state.networks ?? allPrimaryNetworkIds(data);
+  const narrowed = networksPickNarrowed(data, state);
   for (const familyKeyVal of data.families) {
     const netIdxs = data.networksByFamily.get(familyKeyVal) ?? [];
     let checkedCount = 0;
+    let visibleCount = 0;
+    let visibleChecked = 0;
+    let familyTotal = 0;
     for (const idx of netIdxs) {
       const net = data.lookups.networks[idx];
       const checkbox = networkCheckboxes.get(net.id);
       const checked = currentIds.includes(net.id);
       checkbox.checked = checked;
       if (checked) checkedCount += 1;
+      const count = view.facets.networks[idx];
+      familyTotal += count;
+      const hidden = count === 0 && !(narrowed && checked);
+      const item = checkbox.closest('.check-item');
+      setFacetHidden(item, hidden);
+      setCount(item, count);
+      if (!hidden) {
+        visibleCount += 1;
+        if (checked) visibleChecked += 1;
+      }
     }
     const familyCheckbox = familyCheckboxes.get(familyKeyVal);
-    familyCheckbox.checked = netIdxs.length > 0 && checkedCount === netIdxs.length;
-    familyCheckbox.indeterminate = checkedCount > 0 && checkedCount < netIdxs.length;
+    const familyItem = familyCheckbox.closest('.check-item');
+    const familyHidden = netIdxs.length > 0 && visibleCount === 0;
+    setFacetHidden(familyItem, familyHidden);
+    familyCheckbox.closest('fieldset').hidden = familyHidden;
+    setCount(familyItem, familyTotal);
+    const total = visibleCount > 0 ? visibleCount : netIdxs.length;
+    const on = visibleCount > 0 ? visibleChecked : checkedCount;
+    familyCheckbox.checked = netIdxs.length > 0 && on === total;
+    familyCheckbox.indeterminate = on > 0 && on < total;
   }
 }
 
-/** Syncs the time-slot checkboxes from `state.slots` (SITE-11). */
-function renderSlots(state) {
+/** Syncs the time-slot checkboxes and their counts (SITE-11, D-13: never hidden, never disabled). */
+function renderSlots(state, view) {
   for (const cb of els.slotsSection.querySelectorAll('input[name="slot"]')) {
     cb.checked = state.slots != null && state.slots.includes(cb.value);
+    setCount(cb.closest('.check-item') ?? cb.closest('label'), view.facets.slots[cb.value] ?? 0);
   }
 }
 
-/** Syncs the role checkboxes from `state.role` (SITE-07). */
-function renderRole(state) {
+/** Syncs the role checkboxes and their counts (SITE-07, D-13). */
+function renderRole(state, view) {
   for (const cb of els.roleSection.querySelectorAll('input[name="role"]')) {
     cb.checked = state.role === cb.value;
+    setCount(cb.closest('label'), view.facets.role[cb.value] ?? 0);
   }
 }
 
-/** Syncs the Conference checklist's checked state from `state.conferences` (D-10). */
-function renderConferences(state) {
+/** Syncs the Conference checklist's checked state and counts (D-10, D-11). */
+function renderConferences(state, view) {
   for (const [name, cb] of conferenceCheckboxes) {
-    cb.checked = state.conferences.includes(name);
+    const checked = state.conferences.includes(name);
+    cb.checked = checked;
+    const count = view.facets.conferences.get(name) ?? 0;
+    const item = cb.closest('.check-item');
+    setFacetHidden(item, count === 0 && !checked);
+    setCount(item, count);
   }
 }
 
-/** Syncs the School checklist's checked state and `#school-chips` from `state.school` (D-11). */
-function renderSchool(data, state) {
+/** Syncs the School checklist (checked, counts, facet hiding) and `#school-chips` (D-11). */
+function renderSchool(data, state, view) {
   for (const [slug, cb] of schoolCheckboxes) {
-    cb.checked = state.school.includes(slug);
+    const checked = state.school.includes(slug);
+    cb.checked = checked;
+    const count = view.facets.schools[data.teamIndexBySlug.get(slug)] ?? 0;
+    const item = cb.closest('.check-item');
+    setFacetHidden(item, count === 0 && !checked);
+    setCount(item, count);
   }
   const items = state.school.map((slug) => {
     const idx = data.teamIndexBySlug.get(slug);
@@ -616,15 +750,16 @@ function renderSchool(data, state) {
 
 /**
  * Syncs the Bowls/Playoffs radio group's `aria-checked` from `state.postseason`
- * (D-18), and its roving `tabindex` (WR-05): only the selected radio is a tab
- * stop, per the WAI-ARIA APG radiogroup pattern `bindPostseasonKeyboard` wires
- * the arrow-key/Home/End half of.
+ * (D-18), its roving `tabindex` (WR-05: only the selected radio is a tab stop,
+ * per the WAI-ARIA APG radiogroup pattern `bindPostseasonKeyboard` wires the
+ * arrow-key/Home/End half of), and each option's count (D-13: never hidden).
  */
-function renderPostseason(state) {
+function renderPostseason(state, view) {
   for (const btn of els.postseasonOptions.querySelectorAll('[data-postseason]')) {
     const checked = btn.dataset.postseason === state.postseason;
     btn.setAttribute('aria-checked', String(checked));
     btn.tabIndex = checked ? 0 : -1;
+    setCount(btn, view.facets.postseason[btn.dataset.postseason] ?? 0);
   }
 }
 
@@ -726,12 +861,12 @@ function renderGroupResets(data, state) {
 /** Pure DOM update from the current data/state/view, called every render cycle. */
 export function renderFilters({ data, state, view }) {
   renderSeasons(data, state, view);
-  renderNetworks(data, state);
-  renderSlots(state);
-  renderRole(state);
-  renderConferences(state);
-  renderSchool(data, state);
-  renderPostseason(state);
+  renderNetworks(data, state, view);
+  renderSlots(state, view);
+  renderRole(state, view);
+  renderConferences(state, view);
+  renderSchool(data, state, view);
+  renderPostseason(state, view);
   renderTriggers(data, state);
   renderGroupResets(data, state);
   renderFiltersButton(state);

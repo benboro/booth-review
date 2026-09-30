@@ -23,6 +23,8 @@
   --accent: #111827;
   --text: #111827;
   --muted: #4B5563;
+  /* Greyed (count 0) options and legend chips. Only for --bg surfaces, never --surface. */
+  --muted-weak: #6B7280;
   --error: #B3261E;
   /* D-25: "Clear all filters" own accent color -- the same verified pair as
      --error today, kept as its own token so the two can diverge later
@@ -44,6 +46,7 @@
     --accent: #E5E7EB;
     --text: #E5E7EB;
     --muted: #9CA3AF;
+    --muted-weak: #7B8492;
     --error: #F2B8B5;
     --reset: #F2B8B5;
     --game-playoff: #F5C518;
@@ -759,6 +762,81 @@ input[type="checkbox"] {
   margin: 0;
 }
 
+/* ---------- Faceted options (D-08..D-15) ---------- */
+
+.check-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.family-item > .check-row,
+#filter-networks .check-row {
+  padding: 0;
+}
+
+.check-item[hidden] {
+  display: none;
+}
+
+.check-item > .check-row {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.option-count {
+  margin-left: auto;
+  min-width: 5ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/* Greyed (count 0): color only, so the checkbox keeps its accent and stays clickable. */
+.is-zero,
+.is-zero .option-count {
+  color: var(--muted-weak);
+}
+
+.segmented .option-count {
+  margin-left: var(--space-xs);
+  min-width: 0;
+}
+
+#pop-networks,
+#pop-conference,
+#pop-school,
+#pop-announcers {
+  width: 280px;
+}
+
+@media (max-width: 640px) {
+  #pop-networks,
+  #pop-conference,
+  #pop-school,
+  #pop-announcers {
+    width: auto;
+  }
+}
+
+/* Legend chip for a family with no matching games (plan 04.2-09). #chart-area
+   sits on --bg, so --muted-weak is the right grey. */
+.legend-chip[data-offered="false"] {
+  background: transparent;
+  border-style: dashed;
+  border-width: 2px;
+  color: var(--muted-weak);
+}
+
+#person-results .option-count,
+#person-results li.is-zero,
+#person-results li.is-zero .option-name {
+  color: var(--muted-weak);
+}
+
 #filter-seasons,
 #filter-networks,
 #filter-slots,
@@ -991,6 +1069,36 @@ input[type="checkbox"] {
 #chart {
   min-height: 520px;
   background: var(--bg);
+  position: relative;
+}
+
+/* D-14: empty-state note over the chart; never shifts layout. */
+.season-empty-note {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-md);
+  pointer-events: none;
+  z-index: 2;
+  font: var(--font-label);
+}
+
+.season-empty-note[hidden] {
+  display: none;
+}
+
+.season-empty-title {
+  color: var(--text);
+  margin: 0;
+}
+
+.season-empty-hint {
+  color: var(--muted);
+  margin: 0;
 }
 
 .shape-legend,
