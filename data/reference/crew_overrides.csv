@@ -3,14 +3,30 @@ cfbd_game_id,network_id,crew_position,person_id,role,reason,source_kind,source_n
 400610325,espn,1,kirk-herbstreit,analyst,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/espn-cfp-megacast-more-than-12-ways-to-follow-national-championship-across-espn-platforms/
 400852743,espn,0,chris-fowler,pbp,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/espns-megacast-returns-for-college-football-playoff-national-championship/
 400852743,espn,1,kirk-herbstreit,analyst,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/espns-megacast-returns-for-college-football-playoff-national-championship/
+400869385,bein-sports,0,matt-martucci,pbp,no-506-crew,school,UTSA Athletics game preview,https://goutsa.com/news/2016/10/14/utsa-to-travel-to-rice-for-saturday-night-tilt
+400869385,bein-sports,1,brett-romberg,analyst,no-506-crew,school,UTSA Athletics game preview,https://goutsa.com/news/2016/10/14/utsa-to-travel-to-rice-for-saturday-night-tilt
+400869386,bein-sports,0,matt-martucci,pbp,no-506-crew,school,Charlotte Athletics game notes,https://charlotte49ers.com/documents/download/2016/10/19/CHA_game_notes_MAR.pdf
+400869386,bein-sports,1,brett-romberg,analyst,no-506-crew,school,Charlotte Athletics game notes,https://charlotte49ers.com/documents/download/2016/10/19/CHA_game_notes_MAR.pdf
+400869398,bein-sports,0,matt-martucci,pbp,no-506-crew,school,FIU Athletics game notes,https://fiusports.com/documents/2016/11/1/FIUat_WKU_GM10.pdf
+400869398,bein-sports,1,brett-romberg,analyst,no-506-crew,school,FIU Athletics game notes,https://fiusports.com/documents/2016/11/1/FIUat_WKU_GM10.pdf
+400869417,bein-sports,0,matt-martucci,pbp,no-506-crew,school,FAU Athletics game notes,https://fausports.com/documents/download/2018/6/11/2016_Football_Game_Notes.pdf
+400869417,bein-sports,1,brett-romberg,analyst,no-506-crew,school,FAU Athletics game notes,https://fausports.com/documents/download/2018/6/11/2016_Football_Game_Notes.pdf
 400876570,espn,0,chris-fowler,pbp,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/espn-presents-megacast-production-college-football-playoff-national-championship-presented-att-clemson-vs-alabama/
 400876570,espn,1,kirk-herbstreit,analyst,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/espn-presents-megacast-production-college-football-playoff-national-championship-presented-att-clemson-vs-alabama/
+400938618,bein-sports,0,mike-gleason,pbp,no-506-crew,school,UAB Athletics game preview,https://uabsports.com/news/2017/9/21/football-uab-opens-c-usa-action-on-the-road-at-north-texas.aspx
+400938618,bein-sports,1,donovan-mcnabb,analyst,no-506-crew,school,UAB Athletics game preview,https://uabsports.com/news/2017/9/21/football-uab-opens-c-usa-action-on-the-road-at-north-texas.aspx
+400938622,bein-sports,0,mike-gleason,pbp,no-506-crew,school,FIU Athletics game notes,https://fiusports.com/documents/2017/9/28/2017_09_30_Charlotte.pdf
+400938622,bein-sports,1,donovan-mcnabb,analyst,no-506-crew,school,FIU Athletics game notes,https://fiusports.com/documents/2017/9/28/2017_09_30_Charlotte.pdf
+400944993,espnu,0,doug-sherman,pbp,no-506-crew,school,WMU Athletics game preview,https://wmubroncos.com/news/2017/10/3/wmu-football-heads-to-buffalo-for-first-mac-road-game.aspx
+400944993,espnu,1,dustin-fox,analyst,no-506-crew,school,WMU Athletics game preview,https://wmubroncos.com/news/2017/10/3/wmu-football-heads-to-buffalo-for-first-mac-road-game.aspx
 400953415,espn,0,chris-fowler,pbp,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/espns-megacast-presents-20-productions-college-football-playoff-national-championship-presented-att-featuring-georgia-vs-alabama/
 400953415,espn,1,kirk-herbstreit,analyst,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/espns-megacast-presents-20-productions-college-football-playoff-national-championship-presented-att-featuring-georgia-vs-alabama/
 401032087,espn,0,chris-fowler,pbp,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/espns-fifth-college-football-playoff-national-championship-megacast-to-feature-multiple-new-presentations-highlighting-the-networks-best-innovation-and-technology/
 401032087,espn,1,kirk-herbstreit,analyst,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/espns-fifth-college-football-playoff-national-championship-megacast-to-feature-multiple-new-presentations-highlighting-the-networks-best-innovation-and-technology/
 401135295,espn,0,chris-fowler,pbp,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/espn-presents-the-college-football-playoff-national-championship-through-cutting-edge-technology/
 401135295,espn,1,kirk-herbstreit,analyst,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/espn-presents-the-college-football-playoff-national-championship-through-cutting-edge-technology/
+401240041,espn2,0,lincoln-rose,pbp,no-506-crew,school,UTSA Athletics game preview,https://goutsa.com/news/2020/09/17/utsa-to-welcome-sfa-to-alamodome-for-home-opener
+401240041,espn2,1,ladarrin-mclane,analyst,no-506-crew,school,UTSA Athletics game preview,https://goutsa.com/news/2020/09/17/utsa-to-welcome-sfa-to-alamodome-for-home-opener
 401240174,espn,0,chris-fowler,pbp,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/espns-megacast-returns-with-14-presentations-for-college-football-playoff-national-championship-on-monday-jan-11/
 401240174,espn,1,kirk-herbstreit,analyst,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/espns-megacast-returns-with-14-presentations-for-college-football-playoff-national-championship-on-monday-jan-11/
 401331242,espn,0,chris-fowler,pbp,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/espns-megacast-returns-monday-with-more-than-a-dozen-presentations-for-2022-college-football-playoff-national-championship-presented-by-att/
