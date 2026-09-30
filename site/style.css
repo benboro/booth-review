@@ -36,6 +36,10 @@
      dark 9.90 / 5.13. */
   --game-playoff: #A37800;
   --game-bowl: #A8501C;
+  /* D-34: violet special-filter hue for the Announcers button (not an
+     Okabe-Ito family color). 5.70/5.22 on --bg/--surface; filled 5.70. */
+  --special: #7C3AED;
+  --on-special: #FFFFFF;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -51,6 +55,8 @@
     --reset: #F2B8B5;
     --game-playoff: #F5C518;
     --game-bowl: #CD7F32;
+    --special: #A78BFA;
+    --on-special: #111827;
   }
 }
 
@@ -236,6 +242,12 @@ li[role="option"][aria-selected="true"] .option-check::after {
 #selection-bar {
   padding: var(--space-sm) var(--space-lg);
   min-width: 0;
+  /* D-33: reserve the one-person band height (measured 82.6px at 1280 and
+     800: 2 x 8px padding + chip row + 20px summary line) so the legend
+     chips and chart do not move when a person is added or cleared. This
+     overrides the 04.1 D-25 collapse-when-empty behavior for this band
+     only; a wrapped multi-person chip row may still grow it. */
+  min-height: 83px;
 }
 
 .selection-row {
@@ -383,7 +395,8 @@ li[role="option"][aria-selected="true"] .option-check::after {
 }
 
 .summary-count {
-  font: var(--font-display);
+  /* D-33: 20px title (was the 28px display size). */
+  font: var(--font-heading);
   font-weight: var(--weight-semibold);
   white-space: nowrap;
 }
@@ -563,6 +576,24 @@ body.app {
   outline-offset: 2px;
 }
 
+/* D-34: the Announcers button is the special filter -- violet outline and
+   text at rest, filled when people are selected. Distinct from the red
+   --reset "Clear all filters". */
+#trigger-announcers {
+  border-color: var(--special);
+  color: var(--special);
+}
+
+#trigger-announcers[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--special) 12%, var(--bg));
+}
+
+#trigger-announcers[data-active="true"] {
+  background: var(--special);
+  border-color: var(--special);
+  color: var(--on-special);
+}
+
 /* ---------- Filter popovers ---------- */
 
 .filter-popover {
@@ -642,6 +673,37 @@ body.app {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* D-32: wide enough that "Play-by-play" stays on one line; the max-width
+   override is needed because .filter-popover caps at 360px. */
+#pop-announcers {
+  width: min(440px, calc(100vw - 16px));
+  max-width: min(440px, calc(100vw - 16px));
+}
+
+/* D-32: the list never scrolls sideways; long names wrap in their own column. */
+#person-results {
+  overflow-x: hidden;
+}
+
+#person-results .option-name,
+#person-results .option-variant {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+#person-results .option-name {
+  flex: 1 1 auto;
+}
+
+#person-results .option-role,
+#person-results .option-count {
+  flex: none;
+}
+
+#person-results .option-role {
+  white-space: nowrap;
 }
 
 #filter-announcers {
@@ -872,8 +934,7 @@ input[type="checkbox"] {
 }
 
 #pop-conference,
-#pop-school,
-#pop-announcers {
+#pop-school {
   width: 280px;
 }
 
@@ -1477,6 +1538,12 @@ html:has(#detail-panel[open]) {
 /* ---------- Phones (≤640px) ---------- */
 
 @media (max-width: 640px) {
+  /* D-33: one-person band height on a 390px phone (44px touch targets wrap
+     the chip and button rows). */
+  #selection-bar {
+    min-height: 226px;
+  }
+
   /* D-25: a narrower gutter than the desktop `--space-lg` (24px), still
      >=16px, so content is never flush with the screen edge. */
   #selection-bar,

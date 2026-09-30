@@ -89,7 +89,7 @@ def test_announcer_roles_have_no_dash_and_play_by_play_never_wraps(
         "#person-results .option-role", "els => els.map(e => e.textContent)"
     )
     assert texts
-    assert all(t in ("", "Play-by-play", "Analyst") for t in texts)
+    assert all(t in ("", "Play-by-play", "Analyst", "Sideline/other") for t in texts)
     wrapped: int = guarded_page.eval_on_selector_all(
         "#person-results .option-role",
         "els => els.filter(e => e.textContent === 'Play-by-play' && "

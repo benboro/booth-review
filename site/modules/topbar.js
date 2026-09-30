@@ -106,7 +106,7 @@ function buildOptionRows(data) {
     const roleLabel = ROLE_LABELS[p.usual_role] ?? '';
     const roleSpan = document.createElement('span');
     roleSpan.className = 'option-role';
-    roleSpan.textContent = roleLabel ? ` – ${roleLabel}` : '';
+    roleSpan.textContent = roleLabel;
     li.appendChild(roleSpan);
 
     const countSpan = document.createElement('span');
