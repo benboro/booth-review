@@ -768,6 +768,19 @@ input[type="checkbox"] {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
+  /* The row spacing lives on the row, not on its label (D-29): a label margin sits inside
+     the centered flex box and pushed the label 4px above the Only button. */
+  margin-bottom: var(--space-sm);
+}
+
+.filter-popover .check-item > .check-row,
+.sheet-body .check-item > .check-row {
+  margin-bottom: 0;
+}
+
+/* Channel rows get their spacing from the <li>. */
+.network-list .check-item {
+  margin-bottom: 0;
 }
 
 .family-item > .check-row,
@@ -813,6 +826,10 @@ input[type="checkbox"] {
   flex: none;
   background: none;
   border: 0;
+  /* One fixed box holds "Only" and "All" so a row's count never shifts (D-31). */
+  width: 3.25em;
+  box-sizing: border-box;
+  text-align: center;
   padding: 0 var(--space-xs);
   font: inherit;
   font-size: 14px;
@@ -822,8 +839,10 @@ input[type="checkbox"] {
   opacity: 0;
 }
 
+/* D-30: :has(:focus-visible), not :focus-within, so a mouse click (or a popover opening
+   on a mouse click) does not pin the button; keyboard focus still shows it. */
 .check-item:hover .only-btn,
-.check-item:focus-within .only-btn {
+.check-item:has(:focus-visible) .only-btn {
   opacity: 1;
 }
 
@@ -852,7 +871,6 @@ input[type="checkbox"] {
   }
 }
 
-#pop-networks,
 #pop-conference,
 #pop-school,
 #pop-announcers {
@@ -860,9 +878,22 @@ input[type="checkbox"] {
 }
 
 /* Room for the Only button beside the name and count (plan 04.2-10). */
-#pop-networks,
 #pop-conference {
   width: 330px;
+}
+
+/* D-28: the Networks popover fits its visible rows. The count column is fixed so a count
+   change alone never changes the width. */
+#pop-networks {
+  width: max-content;
+  min-width: 240px;
+  max-width: min(360px, calc(100vw - 16px));
+}
+
+#filter-networks .option-count {
+  flex: none;
+  width: 7ch;
+  min-width: 0;
 }
 
 @media (max-width: 640px) {
@@ -917,6 +948,8 @@ input[type="checkbox"] {
 }
 
 .family-group legend {
+  width: 100%;
+  box-sizing: border-box;
   padding: 0;
   margin: 0;
   font: var(--font-label);
