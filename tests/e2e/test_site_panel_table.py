@@ -213,13 +213,15 @@ def test_panel_shows_conferences_game_type_and_gated_slot_label(
 
     guarded_page.evaluate("window.__testHooks.openPanel(7)")
     body7 = guarded_page.inner_text("#panel-body")
-    assert "Bowl" in body7
+    assert "Acme Harbor Bowl" in body7
+    assert "Neutral site" not in body7
     assert "Prime time" not in body7
     assert "Sat, Dec 6, 2025" in body7
 
     guarded_page.evaluate("window.__testHooks.openPanel(5)")
     body5 = guarded_page.inner_text("#panel-body")
     assert "CFP semifinal" in body5
+    assert "Summit Bowl Game presented by Northwind" in body5
 
 
 def test_panel_game_type_line_has_matching_icon_before_label(
@@ -231,18 +233,35 @@ def test_panel_game_type_line_has_matching_icon_before_label(
     open_app(guarded_page, "")
 
     guarded_page.evaluate("window.__testHooks.openPanel(7)")
-    bowl = guarded_page.locator("#panel-body .panel-game-type")
+    lines = guarded_page.locator("#panel-body .panel-game-type")
+    assert lines.count() == 1
+    bowl = lines.first
+    assert bowl.get_attribute("class") == "panel-game-type panel-bowl"
     assert bowl.locator("svg.game-type-icon").get_attribute("data-kind") == "bowl"
     assert bowl.locator("svg.game-type-icon").get_attribute("aria-hidden") == "true"
-    assert bowl.evaluate("el => el.firstElementChild.tagName.toLowerCase()") == "svg"
-    assert "Bowl" in bowl.inner_text()
+    assert bowl.evaluate(
+        "el => [...el.children].map(c => c.tagName.toLowerCase() + '.' + c.getAttribute('class'))"
+    ) == [
+        "svg.game-type-icon",
+        "span.bowl-sponsor",
+        "strong.bowl-core",
+    ]
+    assert bowl.locator(".bowl-sponsor").text_content() == "Acme "
+    assert bowl.locator(".bowl-core").text_content() == "Harbor Bowl"
 
     guarded_page.evaluate("window.__testHooks.openPanel(5)")
-    playoff = guarded_page.locator("#panel-body .panel-game-type")
-    # F3: a semifinal is played at a bowl, so the bowl icon comes first, then the trophy.
-    assert playoff.locator("svg.game-type-icon").first.get_attribute("data-kind") == "bowl"
-    assert playoff.evaluate("el => el.firstElementChild.tagName.toLowerCase()") == "svg"
-    assert "CFP semifinal" in playoff.inner_text()
+    lines = guarded_page.locator("#panel-body .panel-game-type")
+    assert lines.count() == 2
+    first, second = lines.nth(0), lines.nth(1)
+    # F3: a semifinal is played at a bowl: bowl line first, then the trophy line.
+    assert first.get_attribute("class") == "panel-game-type panel-bowl"
+    assert first.locator("svg.game-type-icon").get_attribute("data-kind") == "bowl"
+    assert first.locator(".bowl-core").text_content() == "Summit Bowl"
+    assert first.locator(".bowl-sponsor").text_content() == " Game presented by Northwind"
+    assert second.locator("svg.game-type-icon").get_attribute("data-kind") == "playoff"
+    assert second.evaluate("el => el.textContent") == "CFP semifinal"
+    assert "·" not in first.text_content()
+    assert "·" not in second.text_content()
 
     guarded_page.evaluate("window.__testHooks.openPanel(0)")
     assert guarded_page.locator("#panel-body .panel-game-type").count() == 0
@@ -250,38 +269,113 @@ def test_panel_game_type_line_has_matching_icon_before_label(
 
 
 @pytest.mark.parametrize(
-    ("round_", "kinds", "text"),
+    ("round_", "neutral", "lines"),
     [
-        ("first_round", ["playoff"], "CFP first round"),
-        ("quarterfinal", ["bowl", "playoff"], "CFP quarterfinal"),
-        ("semifinal", ["bowl", "playoff"], "CFP semifinal"),
-        ("championship", ["playoff"], "CFP championship"),
-        (None, ["playoff"], "College Football Playoff"),
+        ("first_round", False, [(["playoff"], "CFP first round")]),
+        ("first_round", True, [(["playoff"], "CFP first round")]),
+        ("quarterfinal", False, [(["bowl"], "Bowl"), (["playoff"], "CFP quarterfinal")]),
+        ("semifinal", False, [(["bowl"], "Bowl"), (["playoff"], "CFP semifinal")]),
+        ("championship", True, [(["playoff"], "CFP championship")]),
+        ("unrecorded_round", False, [(["playoff"], "College Football Playoff")]),
     ],
 )
-def test_panel_cfp_game_at_a_bowl_shows_both_icons_before_label(
+def test_panel_cfp_game_without_a_named_bowl_shows_generic_lines(
     guarded_page: Page,
     open_app: Callable[[Page, str], None],
-    serve_round: Callable[[Page, str | None], None],
+    serve_bowl: Callable[..., None],
     round_: str | None,
-    kinds: list[str],
-    text: str,
+    neutral: bool,
+    lines: list[tuple[list[str], str]],
 ) -> None:
-    """F3: a CFP quarterfinal or semifinal is played at a bowl, so the panel's
-    game-type line reads "[bowl][trophy] CFP semifinal"; first round,
-    championship and an unrecorded round show the trophy alone. Every icon is
-    aria-hidden and the visible label text is unchanged."""
-    serve_round(guarded_page, round_)
+    """D-21: with the bowl name unknown (bowl null), a CFP quarterfinal or
+    semifinal shows "[bowl] Bowl" then the trophy line; other rounds show the
+    trophy line alone. "Neutral site" follows when the game is neutral (no
+    named bowl line replaced it). Icons are aria-hidden."""
+    serve_bowl(guarded_page, index=5, bowl=None, round_=round_, neutral=neutral)
     open_app(guarded_page, "")
     guarded_page.evaluate("window.__testHooks.openPanel(5)")
-    line = guarded_page.locator("#panel-body .panel-game-type")
-    icons = line.locator("svg.game-type-icon")
-    assert icons.evaluate_all("els => els.map(e => e.dataset.kind)") == kinds
-    assert icons.evaluate_all("els => els.map(e => e.getAttribute('aria-hidden'))") == [
-        "true"
-    ] * len(kinds)
-    assert line.evaluate("el => el.textContent") == text
-    assert line.evaluate("el => el.lastChild.nodeType") == 3  # the label text follows the icons
+    rows = guarded_page.locator("#panel-body .panel-game-type")
+    assert rows.count() == len(lines)
+    for n, (kinds, text) in enumerate(lines):
+        line = rows.nth(n)
+        icons = line.locator("svg.game-type-icon")
+        assert icons.evaluate_all("els => els.map(e => e.dataset.kind)") == kinds
+        assert icons.evaluate_all("els => els.map(e => e.getAttribute('aria-hidden'))") == [
+            "true"
+        ] * len(kinds)
+        assert line.evaluate("el => el.textContent") == text
+        assert line.evaluate("el => el.lastChild.nodeType") == 3
+        assert line.locator(".bowl-core").count() == 0
+    body = guarded_page.inner_text("#panel-body")
+    assert ("Neutral site" in body) is neutral
+
+
+def test_panel_unknown_bowl_name_keeps_neutral_site(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    serve_bowl: Callable[..., None],
+) -> None:
+    """D-18/D-21: a bowl with no known name shows a plain "[bowl] Bowl" line
+    and keeps "Neutral site" when the game is neutral; a regular-season
+    neutral game has no game-type line but shows "Neutral site"."""
+    serve_bowl(guarded_page, index=7, bowl=None)
+    open_app(guarded_page, "")
+    guarded_page.evaluate("window.__testHooks.openPanel(7)")
+    lines = guarded_page.locator("#panel-body .panel-game-type")
+    assert lines.count() == 1
+    assert lines.first.evaluate("el => el.textContent") == "Bowl"
+    assert lines.first.locator(".bowl-core").count() == 0
+    assert "Neutral site" in guarded_page.inner_text("#panel-body")
+
+    guarded_page.evaluate("window.__testHooks.openPanel(3)")
+    assert guarded_page.locator("#panel-body .panel-game-type").count() == 0
+    assert "Neutral site" in guarded_page.inner_text("#panel-body")
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_panel_bowl_core_and_sponsor_colors(
+    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
+) -> None:
+    """D-20: the core name is bold in --text, the sponsor text is --muted."""
+    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
+    open_app(guarded_page, "")
+    guarded_page.evaluate("window.__testHooks.openPanel(7)")
+    css = """() => {
+        const probe = (v) => { const e = document.createElement('span');
+            e.style.color = `var(${v})`; document.body.appendChild(e);
+            const c = getComputedStyle(e).color; e.remove(); return c; };
+        const core = getComputedStyle(document.querySelector('#panel-body .bowl-core'));
+        const sp = getComputedStyle(document.querySelector('#panel-body .bowl-sponsor'));
+        return {core: core.color, weight: core.fontWeight, sp: sp.color,
+                text: probe('--text'), muted: probe('--muted')};
+    }"""
+    got = guarded_page.evaluate(css)
+    assert got["core"] == got["text"]
+    assert got["weight"] == "600"
+    assert got["sp"] == got["muted"]
+
+
+def test_panel_bowl_name_is_rendered_as_literal_text(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    serve_bowl: Callable[..., None],
+) -> None:
+    """T-04.2-28: a malicious bowl name renders as literal text and never runs."""
+    evil = '<img src=x onerror="window.__xss=1">Harbor Bowl'
+    serve_bowl(
+        guarded_page,
+        index=7,
+        bowl=0,
+        bowls=[
+            {"name": evil, "core": "Harbor Bowl"},
+            {"name": "Summit Bowl", "core": "Summit Bowl"},
+        ],
+    )
+    open_app(guarded_page, "")
+    guarded_page.evaluate("window.__testHooks.openPanel(7)")
+    assert "<img" in guarded_page.locator("#panel-body .panel-bowl").inner_text()
+    assert guarded_page.locator("#panel-body .panel-bowl img").count() == 0
+    assert guarded_page.evaluate("window.__xss") is None
 
 
 def test_panel_and_table_network_pills_have_wcag_aa_colors(

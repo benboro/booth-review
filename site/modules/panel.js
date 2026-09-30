@@ -25,7 +25,6 @@ import {
   formatKickoff,
   formatMatchup,
   formatViewers,
-  gameTypeIcons,
   gameTypeInfo,
   measurementLabel,
   showsTimeSlot,
@@ -199,11 +198,65 @@ function buildLinksList(data, i) {
 }
 
 /**
+ * "[icon] label" game-type line. A decorative icon that can't be built is
+ * skipped so the label always shows.
+ * @param {string} kind
+ * @param {string} label
+ * @returns {HTMLParagraphElement}
+ */
+function buildLabelLine(kind, label) {
+  const p = document.createElement('p');
+  p.className = 'panel-game-type';
+  const icon = makeGameTypeIcon(kind);
+  p.replaceChildren(...(icon ? [icon] : []), document.createTextNode(label));
+  return p;
+}
+
+/**
+ * Bowl line (D-20, D-21): bowl icon, then the official name with the core
+ * name bold in --text and the sponsor text around it in --muted. textContent
+ * only, so a hostile name renders as literal text.
+ * @param {{name: string, core: string}} bowl
+ * @returns {HTMLParagraphElement}
+ */
+function buildBowlLine(bowl) {
+  const p = document.createElement('p');
+  p.className = 'panel-game-type panel-bowl';
+  const parts = [];
+  const icon = makeGameTypeIcon('bowl');
+  if (icon) parts.push(icon);
+  const at = bowl.name.indexOf(bowl.core);
+  const span = (cls, text) => {
+    const el = document.createElement(cls === 'bowl-core' ? 'strong' : 'span');
+    el.className = cls;
+    el.textContent = text;
+    return el;
+  };
+  if (at < 0) {
+    const plain = document.createElement('span');
+    plain.style.fontWeight = '400';
+    plain.style.color = 'var(--text)';
+    plain.textContent = bowl.name;
+    parts.push(plain);
+  } else {
+    if (at > 0) parts.push(span('bowl-sponsor', bowl.name.slice(0, at)));
+    parts.push(span('bowl-core', bowl.core));
+    const rest = bowl.name.slice(at + bowl.core.length);
+    if (rest) parts.push(span('bowl-sponsor', rest));
+  }
+  p.replaceChildren(...parts);
+  return p;
+}
+
+/**
  * Renders the full detail-panel body for telecast `i` into `bodyEl`, and
  * its title into `titleEl` (SITE-05, D-02, D-04, D-07, D-08, D-16). Pure DOM
  * update -- safe to call again for a different `i` while the panel is
  * already open (D-10 swap), or to refresh the currently open panel after a
  * selection changes elsewhere in the app.
+ * Game type (D-20, D-21): a bowl game (or CFP quarterfinal/semifinal) shows
+ * its named bowl line first, then a "[trophy] CFP round" line; a named bowl
+ * replaces "Neutral site".
  * @param {HTMLElement} bodyEl
  * @param {HTMLElement} titleEl
  * @param {{data: object, i: number, state: object, view: object}} ctx
@@ -219,17 +272,25 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
   children.push(dateP);
 
   const gameType = gameTypeInfo(data, i);
-  if (gameType != null) {
-    const gameTypeP = document.createElement('p');
-    gameTypeP.className = 'panel-game-type';
-    // The icons are decorative here (the label is visible text beside them);
-    // one that can't be built is skipped, so the line always shows the label.
-    const icons = gameTypeIcons(gameType).map((kind) => makeGameTypeIcon(kind));
-    gameTypeP.replaceChildren(...icons.filter((icon) => icon != null), document.createTextNode(gameType.label));
-    children.push(gameTypeP);
+  const bowlIdx = t.bowl?.[i] ?? null;
+  const bowl = bowlIdx != null ? (data.lookups.bowls?.[bowlIdx] ?? null) : null;
+  let namedBowlLine = false;
+  if (gameType != null && (gameType.kind === 'bowl' || gameType.atBowl)) {
+    if (bowl) {
+      children.push(buildBowlLine(bowl));
+      namedBowlLine = true;
+    } else {
+      children.push(buildLabelLine('bowl', 'Bowl'));
+    }
+  } else if (bowl) {
+    children.push(buildBowlLine(bowl));
+    namedBowlLine = true;
+  }
+  if (gameType != null && gameType.kind === 'playoff') {
+    children.push(buildLabelLine('playoff', gameType.label));
   }
 
-  if (t.neutral[i]) {
+  if (t.neutral[i] && !namedBowlLine) {
     const neutralP = document.createElement('p');
     neutralP.textContent = 'Neutral site';
     children.push(neutralP);
