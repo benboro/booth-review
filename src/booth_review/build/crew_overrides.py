@@ -259,17 +259,11 @@ def apply_crew_overrides(
     added = pl.DataFrame(new_rows, schema=telecast_people.schema)
     people_out = pl.concat([kept, added]).sort(["telecast_id", "person_id", "feed_type"])
 
-    frame = telecasts
-    if "crew_patched" not in frame.columns:
-        frame = frame.with_columns(pl.lit(False).alias("crew_patched"))
-    for column in ("crew_source_url", "crew_source_label"):
-        if column not in frame.columns:
-            frame = frame.with_columns(pl.lit(None, dtype=pl.Utf8).alias(column))
     url_by_id = {by_key[key]["telecast_id"]: o.source_url for key, o in overrides.items()}
     label_by_id = {by_key[key]["telecast_id"]: o.source_name for key, o in overrides.items()}
     patched = pl.col("telecast_id").is_in(patched_ids)
     sourced = pl.col("telecast_id").is_in(sourced_ids)
-    telecasts_out = frame.with_columns(
+    telecasts_out = telecasts.with_columns(
         pl.when(patched).then(True).otherwise(pl.col("crew_matched")).alias("crew_matched"),
         pl.when(patched).then(True).otherwise(pl.col("crew_patched")).alias("crew_patched"),
         pl.when(sourced)

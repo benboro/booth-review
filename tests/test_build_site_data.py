@@ -134,6 +134,7 @@ def _telecast_row(**overrides: object) -> dict[str, object]:
         "kickoff_et": "2024-09-14T13:30:00-04:00",
         "crew_matched": True,
         "crew_network_mismatch": False,
+        "crew_patched": False,  # the build always writes a bool here
         "combined_feeds": None,
         "plotted": True,
         "headline_claim_id": "claim-1",

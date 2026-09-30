@@ -183,7 +183,7 @@ def build_coverage(tables: BuildTables) -> CoverageReport:
         bucket["rated_telecasts"] += 1
         if row["crew_matched"]:
             bucket["matched_crew"] += 1
-            if row.get("crew_patched"):
+            if row["crew_patched"]:
                 bucket["crew_patched"] += 1
 
         has_headline = row["headline_claim_id"] is not None
