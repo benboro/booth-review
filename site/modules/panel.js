@@ -129,33 +129,56 @@ function selectedOnGameText(data, view, i) {
   return `Selected on this game: ${names.join(', ')}`;
 }
 
-/** Viewers paragraph: figure + measurement label, with the D-02 badge appended for Nielsen+Adobe. */
+/** First flag of `kind` on telecast `i`, or null. */
+function flagOfKind(data, i, kind) {
+  for (const idx of data.t.flags[i]) {
+    const flag = data.lookups.flags[idx];
+    if (flag.kind === kind) return flag;
+  }
+  return null;
+}
+
+/** Viewers paragraph: figure + measurement label. For Nielsen+Adobe the D-02
+ * badge is the only place the label appears (D-39), linked to the measurement
+ * flag's source when that passes `safeHref`. */
 function buildViewersParagraph(data, i) {
   const t = data.t;
   const p = document.createElement('p');
-  p.appendChild(
-    document.createTextNode(
-      `Viewers: ${formatViewers(t.viewers[i])} · ${measurementLabel(t.measurement_type[i])}`,
-    ),
-  );
   if (t.measurement_type[i] === 'nielsen_adobe') {
-    p.appendChild(document.createTextNode(' '));
-    const badge = document.createElement('span');
+    p.appendChild(document.createTextNode(`Viewers: ${formatViewers(t.viewers[i])} · `));
+    const flag = flagOfKind(data, i, 'measurement');
+    const badge =
+      (flag && externalLink(flag.source_url, 'Nielsen + Adobe (streaming)')) ??
+      document.createElement('span');
     badge.className = 'badge';
-    badge.textContent = 'Nielsen + Adobe (streaming)';
+    if (badge.textContent === '') badge.textContent = 'Nielsen + Adobe (streaming)';
     p.appendChild(badge);
+  } else {
+    p.appendChild(
+      document.createTextNode(
+        `Viewers: ${formatViewers(t.viewers[i])} · ${measurementLabel(t.measurement_type[i])}`,
+      ),
+    );
   }
   return p;
 }
 
-/** Flags list: each label, linked to its own `source_url` when that passes `safeHref` (D-04). */
+/** Flags list: each label, linked to its own `source_url` when that passes
+ * `safeHref` (D-04). Measurement flags for Nielsen+Adobe and combined flags
+ * for a telecast with a feed count are shown elsewhere (D-39), so skipped. */
 function buildFlagsList(data, i) {
-  const flagIdxs = data.t.flags[i];
-  if (flagIdxs.length === 0) return null;
+  const t = data.t;
+  const flags = t.flags[i]
+    .map((idx) => data.lookups.flags[idx])
+    .filter(
+      (flag) =>
+        !(flag.kind === 'measurement' && t.measurement_type[i] === 'nielsen_adobe') &&
+        !(flag.kind === 'combined' && t.combined_feeds[i] != null),
+    );
+  if (flags.length === 0) return null;
   const ul = document.createElement('ul');
   ul.className = 'panel-flags';
-  for (const flagIdx of flagIdxs) {
-    const flag = data.lookups.flags[flagIdx];
+  for (const flag of flags) {
     const li = document.createElement('li');
     const link = externalLink(flag.source_url, flag.label);
     li.appendChild(link ?? document.createTextNode(flag.label));
@@ -257,6 +280,9 @@ function buildBowlLine(bowl) {
  * Game type (D-20, D-21): a bowl game (or CFP quarterfinal/semifinal) shows
  * its named bowl line first, then a "[trophy] CFP round" line; a named bowl
  * replaces "Neutral site".
+ * D-39: an empty crew reads "Crew not listed" (the missing crews themselves are
+ * a data-join issue, out of scope: see the championship-crews todo); the
+ * Nielsen+Adobe label shows once (the badge) and combined feeds show as one line.
  * @param {HTMLElement} bodyEl
  * @param {HTMLElement} titleEl
  * @param {{data: object, i: number, state: object, view: object}} ctx
@@ -308,7 +334,14 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
 
   const crewHeading = document.createElement('h3');
   crewHeading.textContent = 'Crew';
-  children.push(crewHeading, buildCrewList(data, i));
+  if (t.crew[i].length === 0) {
+    const emptyP = document.createElement('p');
+    emptyP.className = 'panel-crew-empty';
+    emptyP.textContent = 'Crew not listed';
+    children.push(crewHeading, emptyP);
+  } else {
+    children.push(crewHeading, buildCrewList(data, i));
+  }
 
   const selectedText = selectedOnGameText(data, view, i);
   if (selectedText) {
@@ -335,7 +368,11 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
 
   if (t.combined_feeds[i] != null) {
     const combinedP = document.createElement('p');
-    combinedP.textContent = `Combined across ${t.combined_feeds[i]} feeds`;
+    const combinedText = `Combined across ${t.combined_feeds[i]} feeds`;
+    const combinedFlag = flagOfKind(data, i, 'combined');
+    const combinedLink = combinedFlag && externalLink(combinedFlag.source_url, combinedText);
+    if (combinedLink) combinedP.appendChild(combinedLink);
+    else combinedP.textContent = combinedText;
     children.push(combinedP);
   }
 
