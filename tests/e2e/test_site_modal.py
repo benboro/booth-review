@@ -46,6 +46,8 @@ def test_empty_crew_shows_crew_not_listed(
 
     def patch(raw: dict[str, Any]) -> None:
         raw["telecasts"]["crew"][3] = []
+        raw["telecasts"]["crew_source_url"][3] = None
+        raw["telecasts"]["crew_source_label"][3] = None
 
     _open(guarded_page, open_app, 3, fixture_raw, patch)
     heading = guarded_page.locator("#panel-body h3", has_text="Crew")
@@ -113,6 +115,53 @@ SCROLLERS = """
     .map((el) => el.className || el.tagName);
 }
 """
+
+
+def test_crew_source_replaces_506_link(
+    guarded_page: Page, open_app: Callable[[Page, str], None], fixture_raw: dict[str, Any]
+) -> None:
+    """D-11: a dot with a 506 listing and a crew source shows only the crew source."""
+
+    def patch(raw: dict[str, Any]) -> None:
+        raw["telecasts"]["crew_source_url"][2] = "https://example.com/crew-source/2"
+        raw["telecasts"]["crew_source_label"][2] = "Example Network PR"
+
+    _open(guarded_page, open_app, 2, fixture_raw, patch)
+    body = guarded_page.locator("#panel-body")
+    expect(body.locator("a:has-text('Crew source: Example Network PR')")).to_have_count(1)
+    expect(body.locator("a:has-text('View 506 Sports listing')")).to_have_count(0)
+
+
+def test_unsafe_crew_source_url_renders_plain_text(
+    guarded_page: Page, open_app: Callable[[Page, str], None], fixture_raw: dict[str, Any]
+) -> None:
+    """T-04.3-10: a non-http(s) crew-source URL degrades to text, no link, no arrow."""
+
+    def patch(raw: dict[str, Any]) -> None:
+        raw["telecasts"]["crew_source_url"][3] = "javascript:alert(1)"
+
+    _open(guarded_page, open_app, 3, fixture_raw, patch)
+    body = guarded_page.locator("#panel-body")
+    expect(body.locator("a:has-text('Crew source')")).to_have_count(0)
+    links = body.locator(".panel-links").inner_text()
+    assert "Crew source: Example Network PR" in links
+    assert "Crew source: Example Network PR ↗" not in links
+    expect(body.locator("a:has-text('View 506 Sports listing')")).to_have_count(0)
+
+
+def test_payload_without_crew_source_columns_keeps_506_link(
+    guarded_page: Page, open_app: Callable[[Page, str], None], fixture_raw: dict[str, Any]
+) -> None:
+    """A payload lacking the crew-source columns behaves as before."""
+
+    def patch(raw: dict[str, Any]) -> None:
+        del raw["telecasts"]["crew_source_url"]
+        del raw["telecasts"]["crew_source_label"]
+
+    _open(guarded_page, open_app, 2, fixture_raw, patch)
+    body = guarded_page.locator("#panel-body")
+    expect(body.locator("a:has-text('View 506 Sports listing')")).to_have_count(1)
+    expect(body.locator("a:has-text('Crew source')")).to_have_count(0)
 
 
 def _open_sized(

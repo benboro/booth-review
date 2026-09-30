@@ -144,6 +144,25 @@ def test_open_panel_hook_shows_source_and_506_link_variants(
     assert guarded_page.locator("#panel-body a:has-text('View 506 Sports listing')").count() == 0
 
 
+def test_open_panel_shows_crew_source_link_for_patched_crew(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+) -> None:
+    """SITE-32, D-11: a patched crew credits its own source, last in Links,
+    and the 506 listing link is hidden."""
+    open_app(guarded_page, "")
+    guarded_page.evaluate("window.__testHooks.openPanel(3)")
+    link = guarded_page.locator("#panel-body a:has-text('Crew source: Example Network PR ↗')")
+    expect(link).to_have_count(1)
+    expect(link).to_have_attribute("href", fixture_raw["telecasts"]["crew_source_url"][3])
+    expect(link).to_have_attribute("target", "_blank")
+    expect(link).to_have_attribute("rel", "noopener noreferrer")
+    assert guarded_page.locator("#panel-body a:has-text('View 506 Sports listing')").count() == 0
+    last = guarded_page.locator("#panel-body .panel-links li").last
+    expect(last).to_contain_text("Crew source: Example Network PR")
+
+
 def test_open_panel_hook_shows_nielsen_adobe_badge(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
