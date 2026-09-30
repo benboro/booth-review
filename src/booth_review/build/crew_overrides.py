@@ -11,7 +11,6 @@ build-time failures are count-only (D-04). Nothing here ever echoes a cell.
 
 from __future__ import annotations
 
-import copy
 import re
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass
@@ -181,7 +180,7 @@ def apply_crew_overrides(
     `crew_source_url`/`crew_source_label` pair, since the shown crew is the
     override's. So `crew_matched & ~crew_patched` is exactly the 506 match.
     """
-    new_counts = {season: dict(counts) for season, counts in copy.deepcopy(season_counts).items()}
+    new_counts = {season: dict(counts) for season, counts in season_counts.items()}
     counts = dict.fromkeys(("applied", "patched", "redundant", "differs", "corrections", "rows"), 0)
     if not overrides:
         return CrewOverrideResult(telecasts, telecast_people, new_counts, {}, counts)
