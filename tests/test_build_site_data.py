@@ -1237,7 +1237,18 @@ def test_crew_source_fields_emit_at_their_index_and_null_otherwise(build_referen
             {"telecast_id": "2-net-a", "flag_id": "rr-fixture-era-2", "kind": "era"},
         ],
         people_rows=_people_rows(),
-        telecast_people_rows=[],
+        # A patched telecast always carries the override's main-feed booth.
+        telecast_people_rows=[
+            {
+                "telecast_id": "2-net-a",
+                "person_id": "mike-golic-jr",
+                "role": "pbp",
+                "feed_type": "main",
+                "crew_position": 0,
+                "s506_pointer": None,
+                "source": "crew_override",
+            }
+        ],
     )
     payload = _site(tables, build_reference)
     columns = payload["telecasts"]

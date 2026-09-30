@@ -18,7 +18,11 @@ from pathlib import Path
 
 import polars as pl
 
-from booth_review.contract.models import crew_source_url_problem
+from booth_review.contract.models import (
+    CREW_SOURCE_LABEL_MAX_LEN,
+    crew_source_label_problem,
+    crew_source_url_problem,
+)
 from booth_review.errors import CrewOverrideError, ReferenceTableError
 from booth_review.people.registry import PeopleRegistry
 from booth_review.reference import read_reference_csv_numbered
@@ -44,7 +48,7 @@ CREW_SOURCE_KINDS = frozenset({"press-release", "school", "outlet"})
 CREW_OVERRIDE_ROLES = frozenset({"pbp", "analyst"})
 # The telecast_people.source value for override rows.
 CREW_OVERRIDE_SOURCE = "crew_override"
-SOURCE_NAME_MAX_LEN = 60
+SOURCE_NAME_MAX_LEN = CREW_SOURCE_LABEL_MAX_LEN  # source_name becomes crew_source_label
 
 # Same slug pattern as resolve/networks.py _NETWORK_ID_RE.
 _NETWORK_ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
@@ -110,12 +114,9 @@ def load_crew_overrides(reference_dir: Path) -> dict[tuple[int, str], CrewOverri
         if url_problem is not None:
             raise fail(line_no, f"source_url {url_problem}")
         name = raw["source_name"]
-        if not name:
-            raise fail(line_no, "source_name must not be empty")
-        if len(name) > SOURCE_NAME_MAX_LEN:
-            raise fail(line_no, f"source_name must be at most {SOURCE_NAME_MAX_LEN} characters")
-        if "<" in name or ">" in name:
-            raise fail(line_no, "source_name must not contain < or >")
+        name_problem = crew_source_label_problem(name)
+        if name_problem is not None:
+            raise fail(line_no, f"source_name {name_problem}")
 
         rows = grouped.setdefault((game_id, network_id), [])
         if any(existing[1] == position for existing in rows):

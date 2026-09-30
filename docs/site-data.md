@@ -75,8 +75,8 @@ describes when the value is `null` instead of coerced to a placeholder like
 | `source_url` | str \| null | null when the figure's original source URL isn't known | SITE-05, SITE-17 |
 | `rr_urls` | list[str], never empty | every merged Ratings Reference record URL for this telecast (JOIN-05); a duplicate-record merge keeps both | SITE-05 |
 | `s506_url` | str \| null | null when no 506 page is linked | SITE-05 |
-| `crew_source_url` | str \| null, http(s) URL with a host, never 506 Sports | null for a 506 crew, including one a `crew_overrides.csv` row only confirms; set only with `crew_source_label` when the shown crew comes from `crew_overrides.csv` instead of 506 (a patch, correction, or differing crew; the crew's own cited source) | SITE-32 |
-| `crew_source_label` | str \| null, non-empty | null for a 506 crew; a short public label for the cited source, set only with `crew_source_url` | SITE-32 |
+| `crew_source_url` | str \| null, http(s) URL with a host, never 506 Sports | null for a 506 crew, including one a `crew_overrides.csv` row only confirms; set only with `crew_source_label` when the shown crew comes from `crew_overrides.csv` instead of 506 (a patch, correction, or differing crew; the crew's own cited source), and then `crew` lists at least one main-feed entry | SITE-32 |
+| `crew_source_label` | str \| null, non-empty, at most 60 characters, no `<` or `>` | null for a 506 crew; a short public label for the cited source, set only with `crew_source_url` (the same rule the `crew_overrides.csv` loader applies to `source_name`) | SITE-32 |
 | `excitement` | float \| null | null when CFBD's `excitementIndex` is missing — **never coerced to 0** (FLAG-04) | SITE-03, SITE-04 |
 | `pregame` | float \| null, `-\|closing spread\|` (SPIKE-04) | null when the closing spread isn't known | SITE-03 |
 | `flags` | list[int], indexes into `lookups.flags` | empty list when no flag applies | SITE-04, FLAG-01, FLAG-02, FLAG-03, FLAG-04 |
@@ -149,7 +149,9 @@ are null before either has a value.
 
 One `CoverageRow` per `(season, network)`, plus one season-total row per
 season with `network` null: `season`, `network`, `rated_telecasts`,
-`matched_game`, `matched_crew`, `match_rate` (null when there's nothing to
+`matched_game`, `matched_crew`, `matched_crew_patched` (how many of
+`matched_crew` are hand-confirmed crews from `crew_overrides.csv`; never more
+than `matched_crew`), `match_rate` (null when there's nothing to
 divide), `headline_present`, `excitement_present`, `pregame_present`,
 `duplicate_merges`, `combined_figures`, and `publisher_counts` (a
 publisher-name-to-count map). This is AUDIT-01's table, exposed to the site
@@ -220,4 +222,4 @@ As of v1.2.0 telecast index 2 has a 22:30 ET Saturday kickoff (`late`).
 
 As of v1.3.0 telecast 7 (bowl) points at a sponsor-prefixed bowl and telecast 5 (CFP semifinal) at a sponsor-suffixed bowl; the CFP-not-at-a-bowl and unnamed-bowl cases are covered by route-mutated payloads in the e2e suite.
 
-As of v1.4.0 telecast 3 carries a crew-source pair (a patched crew with no 506 listing); every coverage row has `matched_crew_patched` 0 because the fixture has no coverage row for that telecast's season.
+As of v1.4.0 telecast 3 (2021) carries a crew-source pair (a patched crew with no 506 listing). The fixture's 2021 coverage rows count it: the season-total row and the row for its network each have `matched_crew_patched` 1; every 2026 row has 0.

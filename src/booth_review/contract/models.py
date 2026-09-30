@@ -20,6 +20,9 @@ SCHEMA_VERSION = "1.4.0"
 
 _S506_HOST = "506sports.com"
 
+# The longest crew-source label (crew_overrides.csv source_name) allowed.
+CREW_SOURCE_LABEL_MAX_LEN = 60
+
 
 def crew_source_url_problem(url: str) -> str | None:
     """Why `url` cannot cite a hand-confirmed crew, or None when it can.
@@ -41,6 +44,22 @@ def crew_source_url_problem(url: str) -> str | None:
     host = host.rstrip(".")
     if host == _S506_HOST or host.endswith("." + _S506_HOST):
         return "must not cite 506 Sports"
+    return None
+
+
+def crew_source_label_problem(label: str) -> str | None:
+    """Why `label` cannot name a crew's cited source, or None when it can.
+
+    Non-empty, at most CREW_SOURCE_LABEL_MAX_LEN characters, and no `<` or
+    `>`. The crew-override loader (source_name) and the contract share this
+    check. The message never echoes the label.
+    """
+    if not label.strip():
+        return "must not be empty"
+    if len(label) > CREW_SOURCE_LABEL_MAX_LEN:
+        return f"must be at most {CREW_SOURCE_LABEL_MAX_LEN} characters"
+    if "<" in label or ">" in label:
+        return "must not contain < or >"
     return None
 
 
@@ -271,8 +290,16 @@ class SiteData(BaseModel):
                 problem = crew_source_url_problem(source_url)
                 if problem is not None:
                     raise ValueError(f"telecasts.crew_source_url[{i}]: {problem}")
-                if not source_label.strip():
-                    raise ValueError(f"telecasts.crew_source_label[{i}]: must not be empty")
+                label_problem = crew_source_label_problem(source_label)
+                if label_problem is not None:
+                    raise ValueError(f"telecasts.crew_source_label[{i}]: {label_problem}")
+                # The pair cites the crew shown, which is always a main-feed
+                # booth from crew_overrides.csv (04.3 D-03).
+                if not any(entry.feed == "main" for entry in tc.crew[i]):
+                    raise ValueError(
+                        f"telecasts.crew[{i}]: must list a main-feed crew when "
+                        "crew_source_url is set"
+                    )
             bowl = tc.bowl[i]
             if bowl is not None:
                 if not 0 <= bowl < num_bowls:

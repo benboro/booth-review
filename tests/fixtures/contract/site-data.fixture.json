@@ -905,6 +905,55 @@
         "Ratings Blog Example": 1,
         "Wiki Editor Example": 1
       }
+    },
+    {
+      "season": 2021,
+      "network": 2,
+      "rated_telecasts": 1,
+      "matched_game": 1,
+      "matched_crew": 1,
+      "matched_crew_patched": 0,
+      "match_rate": 1.0,
+      "headline_present": 1,
+      "excitement_present": 0,
+      "pregame_present": 1,
+      "duplicate_merges": 0,
+      "combined_figures": 0,
+      "publisher_counts": {
+        "Wiki Editor Example": 1
+      }
+    },
+    {
+      "season": 2021,
+      "network": 3,
+      "rated_telecasts": 1,
+      "matched_game": 1,
+      "matched_crew": 1,
+      "matched_crew_patched": 1,
+      "match_rate": 1.0,
+      "headline_present": 1,
+      "excitement_present": 1,
+      "pregame_present": 0,
+      "duplicate_merges": 0,
+      "combined_figures": 0,
+      "publisher_counts": {}
+    },
+    {
+      "season": 2021,
+      "network": null,
+      "rated_telecasts": 2,
+      "matched_game": 2,
+      "matched_crew": 2,
+      "matched_crew_patched": 1,
+      "match_rate": null,
+      "headline_present": 2,
+      "excitement_present": 1,
+      "pregame_present": 1,
+      "duplicate_merges": 0,
+      "combined_figures": 0,
+      "publisher_counts": {
+        "Wiki Editor Example": 1
+      }
     }
   ]
 }
