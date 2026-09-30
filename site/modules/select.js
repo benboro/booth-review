@@ -5,6 +5,9 @@
  * into an inert state instead. Role still limits only how a person matches,
  * never which dots pass. Also covers person/compare-mode matching, the
  * matched-games fill rule (person-or-school, D-12), and the match summary.
+ * Also computes faceted option counts (D-08..D-12, `computeFacets`): each
+ * facet counts rated telecasts passing every active constraint except its
+ * own. Facets are pure counts and never change which dots are drawn or faded.
  * DOM-free; imports only from ./palette.js.
  */
 
@@ -83,6 +86,47 @@ function computeVisible(data, state) {
   return visible;
 }
 
+/** True when Networks excludes dot `i`. */
+function failsNetworks(data, state, i) {
+  if (state.networks == null) return false;
+  const netId = data.lookups.networks[data.t.network[i]].id;
+  return !state.networks.includes(netId);
+}
+
+/** True when Kickoff excludes dot `i` (a null slot fails any active Kickoff filter). */
+function failsSlots(data, state, i) {
+  if (state.slots == null) return false;
+  const slot = data.t.time_slot[i];
+  return slot == null || !state.slots.includes(slot);
+}
+
+/** True when Conference excludes dot `i` (neither team's conference selected). */
+function failsConferences(data, state, i) {
+  if (state.conferences.length === 0) return false;
+  const t = data.t;
+  const matches = [t.home_conference[i], t.away_conference[i]].some(
+    (idx) => idx != null && state.conferences.includes(data.lookups.conferences[idx].name),
+  );
+  return !matches;
+}
+
+/** True when School excludes dot `i` (neither team selected). */
+function failsSchool(data, state, i) {
+  if (state.school.length === 0) return false;
+  const t = data.t;
+  const awaySlug = data.teamSlugs[t.away_team[i]];
+  const homeSlug = data.teamSlugs[t.home_team[i]];
+  return !state.school.includes(awaySlug) && !state.school.includes(homeSlug);
+}
+
+/** True when Bowls/Playoffs excludes dot `i`. */
+function failsPostseason(data, state, i) {
+  const gameType = data.t.game_type[i];
+  if (state.postseason === 'exclude') return gameType !== 'regular';
+  if (state.postseason === 'only') return gameType === 'regular';
+  return false;
+}
+
 /**
  * Whether dot `i` passes every fade filter (D-13): Networks, Kickoff,
  * Conference, School, and Bowls/Playoffs. A dot that fails this stays
@@ -94,43 +138,117 @@ function computeVisible(data, state) {
  * @returns {boolean}
  */
 export function passesFadeFilters(data, state, i) {
-  const t = data.t;
-  if (state.networks != null) {
-    const netId = data.lookups.networks[t.network[i]].id;
-    if (!state.networks.includes(netId)) return false;
-  }
-  if (state.slots != null) {
-    const slot = t.time_slot[i];
-    if (slot == null || !state.slots.includes(slot)) return false;
-  }
-  if (state.conferences.length > 0) {
-    const homeConf = t.home_conference[i];
-    const awayConf = t.away_conference[i];
-    const matches = [homeConf, awayConf].some(
-      (idx) => idx != null && state.conferences.includes(data.lookups.conferences[idx].name),
-    );
-    if (!matches) return false;
-  }
-  if (state.school.length > 0) {
-    const awaySlug = data.teamSlugs[t.away_team[i]];
-    const homeSlug = data.teamSlugs[t.home_team[i]];
-    if (!state.school.includes(awaySlug) && !state.school.includes(homeSlug)) return false;
-  }
-  if (state.postseason === 'exclude' && t.game_type[i] !== 'regular') return false;
-  if (state.postseason === 'only' && t.game_type[i] === 'regular') return false;
-  return true;
+  return !(
+    failsNetworks(data, state, i) ||
+    failsSlots(data, state, i) ||
+    failsConferences(data, state, i) ||
+    failsSchool(data, state, i) ||
+    failsPostseason(data, state, i)
+  );
 }
 
-/** Per-season counts under every fade filter, season range ignored (D-13). */
-function computeSeasonCounts(data, state) {
-  return data.seasons.map((season) => {
-    let count = 0;
-    for (let i = 0; i < data.n; i += 1) {
-      if (data.t.season[i] !== season) continue;
-      if (passesFadeFilters(data, state, i)) count += 1;
+/**
+ * The one copy of the person-match rule (D-10): true when nobody is
+ * selected, else the union (`some`) of per-person matches, or the
+ * intersection (`every`) in called-together mode. Compare mode is a union.
+ * @param {object} data - a `prepareData` result.
+ * @param {object} state - shaped like `defaultState(data)`.
+ * @param {number[]} personIndexes - lookup indexes of `state.people`.
+ * @param {number} i - telecast index.
+ * @param {"pbp"|"analyst"|null} role
+ * @returns {boolean}
+ */
+function personMatches(data, state, personIndexes, i, role) {
+  if (personIndexes.length === 0) return true;
+  const test = (pIdx) => personOnGame(data, i, pIdx, role) != null;
+  return state.together ? personIndexes.every(test) : personIndexes.some(test);
+}
+
+const BIT_SEASON = 1;
+const BIT_NET = 2;
+const BIT_SLOT = 4;
+const BIT_CONF = 8;
+const BIT_SCHOOL = 16;
+const BIT_POST = 32;
+const BIT_PERSON = 64;
+
+/**
+ * Faceted option counts (D-08..D-12): for every filter option, the number
+ * of rated telecasts passing every active constraint except that facet's
+ * own. One pass over the dots builds a per-dot fail bitmask; a dot counts
+ * toward a facet iff its mask has no bit outside that facet's own. Role is
+ * not a dot constraint; it only feeds the person match and the Role facet.
+ * @param {object} data - a `prepareData` result.
+ * @param {object} state - shaped like `defaultState(data)`.
+ * @returns {object} `{ total, seasons, networks, slots, conferences,
+ *   schools, postseason, role, people }`.
+ */
+export function computeFacets(data, state) {
+  const { n, t } = data;
+  const personIndexes = state.people.map((id) => data.personIndexById.get(id));
+  const hasPeople = personIndexes.length > 0;
+
+  const seasons = new Map(data.seasons.map((s) => [s, 0]));
+  const networks = new Int32Array(data.lookups.networks.length);
+  const slots = { noon: 0, afternoon: 0, prime: 0, late: 0 };
+  const conferences = new Map();
+  const schools = new Int32Array(data.lookups.teams.length);
+  const postseason = { all: 0, exclude: 0, only: 0 };
+  const role = { pbp: 0, analyst: 0 };
+  const people = new Int32Array(data.lookups.people.length);
+  let total = 0;
+
+  for (let i = 0; i < n; i += 1) {
+    let mask = 0;
+    if (state.seasons != null) {
+      const season = t.season[i];
+      if (season < state.seasons[0] || season > state.seasons[1]) mask |= BIT_SEASON;
     }
-    return [season, count];
-  });
+    if (failsNetworks(data, state, i)) mask |= BIT_NET;
+    if (failsSlots(data, state, i)) mask |= BIT_SLOT;
+    if (failsConferences(data, state, i)) mask |= BIT_CONF;
+    if (failsSchool(data, state, i)) mask |= BIT_SCHOOL;
+    if (failsPostseason(data, state, i)) mask |= BIT_POST;
+    if (hasPeople && !personMatches(data, state, personIndexes, i, state.role)) mask |= BIT_PERSON;
+
+    if (mask === 0) total += 1;
+    if ((mask & ~BIT_SEASON) === 0) seasons.set(t.season[i], (seasons.get(t.season[i]) ?? 0) + 1);
+    if ((mask & ~BIT_NET) === 0) networks[t.network[i]] += 1;
+    if ((mask & ~BIT_SLOT) === 0 && t.time_slot[i] != null) slots[t.time_slot[i]] += 1;
+    if ((mask & ~BIT_CONF) === 0) {
+      const names = new Set();
+      for (const idx of [t.home_conference[i], t.away_conference[i]]) {
+        if (idx != null) names.add(data.lookups.conferences[idx].name);
+      }
+      for (const name of names) conferences.set(name, (conferences.get(name) ?? 0) + 1);
+    }
+    if ((mask & ~BIT_SCHOOL) === 0) {
+      schools[t.home_team[i]] += 1;
+      if (t.away_team[i] !== t.home_team[i]) schools[t.away_team[i]] += 1;
+    }
+    if ((mask & ~BIT_POST) === 0) {
+      postseason.all += 1;
+      if (t.game_type[i] === 'regular') postseason.exclude += 1;
+      else postseason.only += 1;
+    }
+    if ((mask & ~BIT_PERSON) === 0) {
+      for (const r of ['pbp', 'analyst']) {
+        if (hasPeople) {
+          if (personMatches(data, state, personIndexes, i, r)) role[r] += 1;
+        } else if (t.crew[i].some((e) => e.feed === 'main' && e.role === r)) {
+          role[r] += 1;
+        }
+      }
+      const seen = new Set();
+      for (const entry of t.crew[i]) {
+        if (seen.has(entry.person)) continue;
+        seen.add(entry.person);
+        if (personOnGame(data, i, entry.person, state.role) != null) people[entry.person] += 1;
+      }
+    }
+  }
+
+  return { total, seasons, networks, slots, conferences, schools, postseason, role, people };
 }
 
 /**
@@ -232,7 +350,8 @@ export function computeView(data, state) {
     }
   }
 
-  const seasonCounts = computeSeasonCounts(data, state);
+  const facets = computeFacets(data, state);
+  const seasonCounts = data.seasons.map((season) => [season, facets.seasons.get(season)]);
 
   const personIndexes = state.people.map((id) => data.personIndexById.get(id));
   const hasPersonSelection = state.people.length > 0;
@@ -243,18 +362,14 @@ export function computeView(data, state) {
   const highlighted = [];
 
   for (let i = 0; i < n; i += 1) {
-    const results = personIndexes.map((pIdx) => personOnGame(data, i, pIdx, state.role));
-
-    let personMatch = true;
-    if (hasPersonSelection) {
-      personMatch = state.together
-        ? results.every((r) => r != null)
-        : results.some((r) => r != null);
-    }
-
     // D-14: a person-matched dot that fails a fade filter is filtered out,
     // not highlighted -- the filter always wins.
-    if (hasPersonSelection && passesFilters[i] && personMatch) {
+    if (
+      hasPersonSelection &&
+      passesFilters[i] &&
+      personMatches(data, state, personIndexes, i, state.role)
+    ) {
+      const results = personIndexes.map((pIdx) => personOnGame(data, i, pIdx, state.role));
       highlighted.push(i);
       const onGame = [];
       let hasAlt = false;
@@ -318,6 +433,7 @@ export function computeView(data, state) {
     altGames,
     symbols,
     seasonCounts,
+    facets,
     summary,
   };
 }
