@@ -445,11 +445,8 @@ li[role="option"][aria-selected="true"] .option-check::after {
    and coverage.html share this stylesheet but have none of the grid-area ids,
    so a bare `body` grid auto-placed their header/main/footer into the
    toolbar row (WR-05); they keep normal block flow instead. Single-column
-   base (mobile default): the toolbar replaces the rail entirely (D-02). The
-   `min-width: 641px` block below adds the panel column that pushes the
-   chart/table aside on tablet and desktop (D-01, SITE-20); phones keep the
-   detail panel as a `position: fixed` bottom sheet (see "Detail panel"
-   below), so no panel column is ever added at that width. */
+   base at every width: the detail view is a modal dialog (see "Detail modal"
+   below), never a grid column, so opening it cannot change the layout. */
 body.app {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -465,7 +462,7 @@ body.app {
      leaves a second, unstyled band on top of that padding (the reported
      "empty vertical space between the toolbar and the plot"). This also
      removes the permanent column gap that used to sit beside the closed
-     detail-panel column at >=641px. */
+     detail-panel column (removed; the detail view is a modal). */
   gap: 0;
 }
 
@@ -475,28 +472,6 @@ body.app {
 #chart-area { grid-area: main; }
 #matched-games { grid-area: table; }
 #site-footer { grid-area: footer; }
-#detail-panel { grid-area: panel; }
-
-/* Tablet/desktop: a real two-column grid, but the panel column spans only
-   the chart row (D-23: replaces plan 04.1-05's both-rows span -- opening
-   the panel narrows only the chart, never the matched-games table, which
-   always stays full width). The column always exists structurally; only
-   its own content width (below, "Detail panel") animates open/closed --
-   never animate `grid-template-columns` itself (Pitfall 1: interpolating a
-   grid track size fires the vendored Plotly bundle's internal
-   ResizeObserver repeatedly mid-transition, causing visible chart jank). */
-@media (min-width: 641px) {
-  body.app {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "topbar  topbar"
-      "toolbar toolbar"
-      "selection selection"
-      "main    panel"
-      "table   table"
-      "footer  footer";
-  }
-}
 
 #chart-area {
   /* D-25: side gutters (>=16px) plus a small top pad -- the selection bar
@@ -1125,118 +1100,105 @@ input[type="checkbox"] {
   border-radius: 999px;
 }
 
-/* ---------- Detail panel ---------- */
+/* ---------- Detail modal ---------- */
 
-/* Tablet/desktop (≥641px): a push grid column, not an overlay (D-01), and
-   beside the chart only -- the panel's grid area spans just the "main" row
-   (D-23: replaces plan 04.1-05's both-rows span). `align-self: stretch`
-   makes `#detail-panel` exactly as tall as that row, which #chart-area
-   alone sizes (an absolutely positioned `.panel-inner` contributes no
-   height of its own, so it can never make the row taller than the chart).
-   D-32: the column's own `width` no longer animates -- it snaps 0 <->
-   360px/320px in the same frame `body.panel-open` toggles, so the chart's
-   own resize (app.js) can start the instant the class changes instead of
-   waiting out a ~150ms CSS transition first. The slide motion moves onto
-   `.panel-inner`'s own `transform` instead: compositor-only, triggers no
-   layout of its own (Pitfall 1), and is clipped to the (already
-   final-width) column by `#detail-panel`'s `overflow: hidden`, so it still
-   reads as the panel sliding in/out even though the column itself never
-   moves. `.panel-inner` fills the column via absolute positioning and
-   scrolls internally (`overflow-y: auto`) when its content runs longer
-   than the chart area, so it can never overlap the chart, the legend
-   chips, or the table (D-01, D-23, SITE-20). This is not the chart (D-05
-   still holds: the chart itself is never sticky). Phones (≤640px) keep the
-   panel as a true `position: fixed` overlay bottom sheet instead, below --
-   the one place an overlay is still correct, since nothing else needs that
-   screen region at the same time. */
-@media (min-width: 641px) {
-  #detail-panel {
-    position: relative;
-    width: 0;
-    min-width: 0;
-    align-self: stretch;
-    overflow: hidden;
-    background: var(--surface);
-    border-left: 1px solid var(--border);
+/* SITE-28: a native <dialog> opened with showModal(). Centered on desktop and
+   tablet, a bottom sheet on phones. The stable scrollbar gutter plus the
+   scroll lock keep the page from shifting when it opens (D-01, D-03). Never
+   give #detail-panel an unconditional `display`: it would defeat the closed
+   dialog's display:none (Pitfall 3). */
+html {
+  scrollbar-gutter: stable;
+}
+
+html:has(#detail-panel[open]) {
+  overflow: hidden;
+}
+
+#detail-panel {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  width: min(560px, calc(100vw - 32px));
+  max-width: none;
+  max-height: 85vh;
+}
+
+#detail-panel .panel-inner {
+  padding: var(--space-lg);
+  max-height: inherit;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+#detail-panel::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+
+#chart:focus:not(:focus-visible) {
+  outline: none;
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
   }
-
-  body.panel-open #detail-panel {
-    width: 360px;
-  }
-
-  .panel-inner {
-    position: absolute;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: 360px;
-    overflow-y: auto;
-    box-sizing: border-box;
-    padding: var(--space-lg);
-    transform: translateX(100%);
-    transition: transform 150ms ease-out;
-  }
-
-  body.panel-open .panel-inner {
+  to {
+    opacity: 1;
     transform: none;
   }
 }
 
-/* Tablet (641-1024px): narrower panel, unchanged token from Phase 4. */
-@media (min-width: 641px) and (max-width: 1024px) {
-  body.panel-open #detail-panel {
-    width: 320px;
+@keyframes scrim-in {
+  from {
+    opacity: 0;
   }
-
-  .panel-inner {
-    width: 320px;
+  to {
+    opacity: 1;
   }
 }
 
-@media (min-width: 641px) and (prefers-reduced-motion: reduce) {
-  .panel-inner {
-    transition: none;
+@media (prefers-reduced-motion: no-preference) {
+  #detail-panel[open] {
+    animation: modal-in 120ms ease-out;
+  }
+
+  #detail-panel[open]::backdrop {
+    animation: scrim-in 120ms ease-out;
   }
 }
 
-/* Phones (≤640px): the one place a `position: fixed` overlay bottom sheet
-   is still correct (unchanged mechanism from Phase 4). */
+/* Phones (<=640px): the same dialog as a bottom sheet. */
 @media (max-width: 640px) {
   #detail-panel {
     position: fixed;
-    top: auto;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    inset: auto 0 0 0;
+    margin: 0;
     width: 100%;
+    max-width: 100%;
     height: 55vh;
-    background: var(--surface);
-    border-top: 1px solid var(--border);
-    border-top-left-radius: 12px;
-    border-top-right-radius: 12px;
-    transform: translateY(100%);
-    transition: transform 150ms ease-out;
-    overflow: hidden;
-    z-index: 20;
-  }
-
-  body.panel-open #detail-panel {
-    transform: none;
-  }
-
-  .panel-inner {
-    width: auto;
-    height: 100%;
-    overflow-y: auto;
-    box-sizing: border-box;
-    padding: var(--space-lg);
+    max-height: 55vh;
+    border-radius: 12px 12px 0 0;
+    border-width: 1px 0 0 0;
   }
 }
 
-@media (max-width: 640px) and (prefers-reduced-motion: reduce) {
-  #detail-panel {
-    transition: none;
-  }
+/* Bowl lines (D-20, D-21): the core name reads first, the sponsor recedes. */
+.panel-game-type + .panel-game-type {
+  margin-top: var(--space-xs);
+}
+
+.panel-bowl .bowl-sponsor {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.panel-bowl .bowl-core {
+  color: var(--text);
+  font-weight: 600;
 }
 
 #panel-close {
@@ -1319,15 +1281,6 @@ input[type="checkbox"] {
   overflow-x: auto;
 }
 
-/* ---------- Tablet (641px–1024px) ---------- */
-
-@media (max-width: 1024px) {
-  /* Toolbar buttons wrap onto a second line (`#toolbar`'s own `flex-wrap`
-     above) rather than scrolling horizontally. The tablet detail-panel
-     width (320px) is set by the "Detail panel" section's own
-     `(min-width: 641px) and (max-width: 1024px)` block above. */
-}
-
 /* ---------- Phones (≤640px) ---------- */
 
 @media (max-width: 640px) {
@@ -1366,7 +1319,7 @@ input[type="checkbox"] {
     order: 2;
   }
 
-  /* The phone bottom-sheet `#detail-panel` rules live in the "Detail panel"
+  /* The phone bottom-sheet `#detail-panel` rules live in the "Detail modal"
      section's own `(max-width: 640px)` block above. */
 
   button,

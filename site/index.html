@@ -182,7 +182,7 @@
     <button type="button" data-axis="excitement" aria-pressed="false">Excitement (CFBD)</button>
   </div>
 
-  <div id="chart"></div>
+  <div id="chart" tabindex="-1"></div>
 
   <ul id="shape-legend" hidden></ul>
 
@@ -220,13 +220,13 @@
   </table>
 </section>
 
-<aside id="detail-panel" role="dialog" aria-modal="false" aria-labelledby="panel-title" hidden>
+<dialog id="detail-panel" aria-labelledby="panel-title">
   <div class="panel-inner">
     <button type="button" id="panel-close" aria-label="Close details">×</button>
     <h2 id="panel-title"></h2>
     <div id="panel-body"></div>
   </div>
-</aside>
+</dialog>
 
 <footer id="site-footer" class="site-footer"><!-- booth-review:footer --></footer>
 
