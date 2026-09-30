@@ -173,3 +173,45 @@ def test_close_then_reopen_in_one_task_keeps_the_panel_live(
     expect(body).to_contain_text("Spread: 7.0 · Excitement: 6.8")
     guarded_page.evaluate("window.__testHooks.setState({ axis: 'excitement' })")
     expect(body).to_contain_text("Excitement: 6.8 · Spread: 7.0")
+
+
+CLOSE_IN_VIEW = """
+() => {
+  const inner = document.querySelector('#detail-panel .panel-inner');
+  inner.scrollTop = inner.scrollHeight;
+  const port = inner.getBoundingClientRect();
+  const btn = document.getElementById('panel-close').getBoundingClientRect();
+  const hit = document.elementFromPoint(btn.x + btn.width / 2, btn.y + btn.height / 2);
+  return {
+    scrolled: inner.scrollTop > 0,
+    inside: btn.top >= port.top - 1 && btn.bottom <= port.bottom + 1,
+    onTop: hit === document.getElementById('panel-close'),
+    size: [btn.width, btn.height],
+  };
+}
+"""
+
+
+def test_close_button_stays_in_view_when_the_modal_scrolls(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """WR-04: scrolled to the bottom of a long panel, the x is still in view
+    and on top, and clicking it closes the modal."""
+    _open_sized(guarded_page, open_app, 1280, 400, 7)
+    found = guarded_page.evaluate(CLOSE_IN_VIEW)
+    assert found["scrolled"] and found["inside"] and found["onTop"]
+    assert guarded_page.evaluate(SCROLLERS) == ["panel-inner"]
+    guarded_page.click("#panel-close")
+    assert guarded_page.evaluate("document.getElementById('detail-panel').open") is False
+
+
+def test_phone_close_button_stays_in_view_and_keeps_its_target(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """WR-04 on the phone sheet: the x stays in view after scrolling, at 44px."""
+    open_app(mobile_page, "")
+    mobile_page.evaluate("window.__testHooks.openPanel(7)")
+    found = mobile_page.evaluate(CLOSE_IN_VIEW)
+    assert found["scrolled"] and found["inside"] and found["onTop"]
+    assert found["size"][0] >= 44 and found["size"][1] >= 44
+    assert mobile_page.evaluate(SCROLLERS) == ["panel-inner"]

@@ -1505,12 +1505,18 @@ html:has(#detail-panel[open]) {
   font-weight: 600;
 }
 
+/* Sticky inside the one scroller (D-38), so the only visible close control
+   stays in view while the body scrolls (review WR-04). The surface fill keeps
+   text scrolling underneath from showing through it. */
 #panel-close {
   border: none;
-  background: none;
+  background: var(--surface);
   cursor: pointer;
   font: var(--font-heading);
   float: right;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 #panel-body h3 {
