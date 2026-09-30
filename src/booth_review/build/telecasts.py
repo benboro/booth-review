@@ -120,6 +120,10 @@ _COUNT_KEYS: tuple[str, ...] = (
     "rated_telecasts",
     "rated_with_crew",
     "records_with_crew",
+    # records_with_crew as the 506 join alone left it: apply_crew_overrides
+    # (04.3) raises records_with_crew for a patched crew but never this, so
+    # the AUDIT-03 guard can still see a 506 crew that disappears (IN-06).
+    "records_with_506_crew",
     "duplicate_merges",
     "listings_total",
     "listings_matched",
@@ -611,6 +615,7 @@ def build_telecasts(
             season_counts["rated_telecasts"] += delta.rated_telecasts
             season_counts["rated_with_crew"] += delta.rated_with_crew
             season_counts["records_with_crew"] += delta.records_with_crew
+            season_counts["records_with_506_crew"] += delta.records_with_crew
             season_counts["duplicate_merges"] += delta.duplicate_merges
             season_counts["unmapped_outlets"] += delta.unmapped_outlets
 

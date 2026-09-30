@@ -272,6 +272,7 @@ from booth_review.build.crew_overrides import (  # noqa: E402
 )
 from booth_review.build.games import GAMES_SCHEMA  # noqa: E402
 from booth_review.build.people_links import TELECAST_PEOPLE_SCHEMA  # noqa: E402
+from booth_review.build.regression import SeasonMetrics, check_regression  # noqa: E402
 from booth_review.build.telecasts import TELECASTS_SCHEMA  # noqa: E402
 from booth_review.errors import CrewOverrideError  # noqa: E402
 from booth_review.people.registry import PeopleRegistry, Person  # noqa: E402
@@ -595,3 +596,36 @@ def test_unmatched_506_keys_resolve_the_network_through_the_crosswalk() -> None:
         ("2020-01-03", "net-a"),
         ("2020-01-04", "net-b"),
     }
+
+
+def test_override_covering_a_lost_506_crew_still_trips_the_regression_guard() -> None:
+    def metrics(counts: dict[str, int]) -> SeasonMetrics:
+        return SeasonMetrics(
+            season=2019,
+            rr_records=20,
+            rated_telecasts=10,
+            records_with_crew=counts["records_with_crew"],
+            records_with_506_crew=counts["records_with_506_crew"],
+            match_rate=None,
+            sports506_pages=1,
+            rr_records_cached=20,
+            cfbd_files=1,
+        )
+
+    # Accepted build: 506 listed the crew of telecast 1001 (2 RR records).
+    accepted = {"rated_with_crew": 5, "records_with_crew": 11, "records_with_506_crew": 11}
+    # Later, 506 drops that crew, so the 506 join alone counts 2 fewer records...
+    tels, people = _frames([_tel(1001)], [])
+    lost = {2019: {"rated_with_crew": 4, "records_with_crew": 9, "records_with_506_crew": 9}}
+    # ...and an override now patches the same telecast.
+    result = apply_crew_overrides(
+        tels, people, {(1001, "net-a"): _override()}, _registry("p-a", "p-b"), lost
+    )
+    assert result.statuses == {"1001-net-a": "patched"}
+    after = result.season_counts[2019]
+    assert after["records_with_crew"] == accepted["records_with_crew"]  # the override hides it
+    assert after["records_with_506_crew"] == 9  # the 506-only count does not
+
+    verdict = check_regression([metrics(after)], {2019: metrics(accepted)}, None)
+    assert verdict.blocked is True
+    assert verdict.reasons == ("season 2019: records_with_506_crew 9 below baseline 11",)

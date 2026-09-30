@@ -88,6 +88,14 @@ def _people_for(paths: DataPaths, telecast_id: str) -> pl.DataFrame:
     )
 
 
+def _metrics_row(paths: DataPaths, season: int) -> dict[str, str]:
+    with (paths.audit / "build_metrics.csv").open(encoding="utf-8", newline="") as fh:
+        for row in csv.DictReader(fh):
+            if row["season"] == str(season):
+                return row
+    raise AssertionError("no build_metrics row")
+
+
 def _baseline(git_vault: DataPaths, reference: Path) -> BuildOutcome:
     return run_build(git_vault, reference, commit=False, accept_baseline=False)
 
@@ -125,6 +133,7 @@ def test_override_patches_a_telecast_with_no_506_crew(
     season = target["season"]
     matched_before = int(_coverage_all(git_vault, season)["matched_crew"])
     records = len(target["rr_telecast_ids"])
+    metrics_before = _metrics_row(git_vault, season)
 
     _write_overrides(
         reference,
@@ -142,6 +151,13 @@ def test_override_patches_a_telecast_with_no_506_crew(
     assert after.counts["crew_overrides_patched"] == 1
     assert after.counts["crew_overrides_corrections"] == 0
     assert after.counts["records_with_crew"] == before.counts["records_with_crew"] + records
+    # The AUDIT-03 metrics keep a 506-only count the override never raises.
+    metrics_after = _metrics_row(git_vault, season)
+    assert int(metrics_after["records_with_crew"]) == (
+        int(metrics_before["records_with_crew"]) + records
+    )
+    assert metrics_after["records_with_506_crew"] == metrics_before["records_with_506_crew"]
+    assert int(metrics_before["records_with_506_crew"]) == int(metrics_before["records_with_crew"])
     assert after.counts["crew_gaps_unpatched"] == before.counts["crew_gaps_unpatched"] - 1
 
     coverage = _coverage_all(git_vault, season)
