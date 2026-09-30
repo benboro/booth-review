@@ -806,11 +806,63 @@ input[type="checkbox"] {
   min-width: 0;
 }
 
+/* ---------- Only shortcut (SITE-31, D-23..D-27) ---------- */
+
+/* Never display:none / visibility:hidden: the button must stay in the Tab order while unseen. */
+.only-btn {
+  flex: none;
+  background: none;
+  border: 0;
+  padding: 0 var(--space-xs);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.check-item:hover .only-btn,
+.check-item:focus-within .only-btn {
+  opacity: 1;
+}
+
+.only-btn:hover {
+  color: var(--text);
+}
+
+.only-btn:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.only-btn[hidden] {
+  display: none;
+}
+
+/* Touch: always shown, quiet, 44px target at the row's right edge. Popovers and the phone
+   sheet sit on --bg, so --muted-weak (at least 3:1 there) is the right grey. */
+@media (hover: none) {
+  .only-btn {
+    opacity: 1;
+    color: var(--muted-weak);
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
 #pop-networks,
 #pop-conference,
 #pop-school,
 #pop-announcers {
   width: 280px;
+}
+
+/* Room for the Only button beside the name and count (plan 04.2-10). */
+#pop-networks,
+#pop-conference {
+  width: 330px;
 }
 
 @media (max-width: 640px) {
@@ -1438,6 +1490,7 @@ html:has(#detail-panel[open]) {
   input[type="checkbox"] + label,
   .sheet-body label,
   .check-row,
+  .only-btn,
   #person-results > li[role="option"],
   .games-table th button,
   .shape-legend li,
