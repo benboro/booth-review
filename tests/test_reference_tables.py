@@ -20,6 +20,7 @@ import pytest
 
 from booth_review.build.bowls import BOWL_COLUMNS, load_bowls
 from booth_review.build.crew_overrides import CREW_OVERRIDE_COLUMNS, load_crew_overrides
+from booth_review.contract.models import crew_source_url_problem
 from booth_review.flags.era import ERA_COLUMNS, load_eras
 from booth_review.flags.events import EVENT_COLUMNS, load_event_flags
 from booth_review.people.registry import (
@@ -154,10 +155,8 @@ def test_d05_exceptions_are_exactly_crew_overrides() -> None:
 def test_crew_override_rows_have_source_url() -> None:
     rows = read_reference_csv(REFERENCE_DIR / "crew_overrides.csv", CREW_OVERRIDE_COLUMNS)
     for line_no, row in enumerate(rows, start=2):
-        url = row["source_url"]
-        assert url.startswith(("http://", "https://")), (
-            f"crew_overrides.csv line {line_no}: source_url must be an http(s) URL"
-        )
+        problem = crew_source_url_problem(row["source_url"])
+        assert problem is None, f"crew_overrides.csv line {line_no}: source_url {problem}"
 
 
 def test_crew_override_person_ids_exist() -> None:

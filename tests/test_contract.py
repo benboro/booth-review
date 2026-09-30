@@ -173,6 +173,21 @@ def _crew_source_url_ftp(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _crew_source_url_no_host(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew_source_url"][3] = "https://"
+    return data
+
+
+def _crew_source_url_506(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew_source_url"][3] = "https://506sports.com/wiki/2024_week_1"
+    return data
+
+
+def _crew_source_url_506_subdomain(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew_source_url"][3] = "http://WWW.506Sports.com/x"
+    return data
+
+
 def _crew_source_label_empty(data: dict[str, Any]) -> dict[str, Any]:
     data["telecasts"]["crew_source_label"][3] = ""
     return data
@@ -245,6 +260,9 @@ _BROKEN_VARIANTS = [
     pytest.param(_crew_source_url_missing, id="crew-source-url-missing"),
     pytest.param(_crew_source_url_javascript, id="crew-source-url-javascript"),
     pytest.param(_crew_source_url_ftp, id="crew-source-url-ftp"),
+    pytest.param(_crew_source_url_no_host, id="crew-source-url-no-host"),
+    pytest.param(_crew_source_url_506, id="crew-source-url-506"),
+    pytest.param(_crew_source_url_506_subdomain, id="crew-source-url-506-subdomain"),
     pytest.param(_crew_source_label_empty, id="crew-source-label-empty"),
     pytest.param(_matched_crew_patched_exceeds, id="matched-crew-patched-exceeds"),
     pytest.param(_missing_crew_source_url_column, id="missing-crew-source-url-column"),
@@ -299,6 +317,12 @@ def test_fixture_has_no_cfbd_only_fields() -> None:
         (_crew_source_url_missing, "telecasts.crew_source_label[3]"),
         (_crew_source_url_javascript, "telecasts.crew_source_url[3]: must be an http(s) URL"),
         (_crew_source_url_ftp, "telecasts.crew_source_url[3]: must be an http(s) URL"),
+        (_crew_source_url_no_host, "telecasts.crew_source_url[3]: must be an http(s) URL"),
+        (_crew_source_url_506, "telecasts.crew_source_url[3]: must not cite 506 Sports"),
+        (
+            _crew_source_url_506_subdomain,
+            "telecasts.crew_source_url[3]: must not cite 506 Sports",
+        ),
         (_crew_source_label_empty, "telecasts.crew_source_label[3]: must not be empty"),
         (_matched_crew_patched_exceeds, "coverage[0].matched_crew_patched: exceeds matched_crew"),
     ],
@@ -311,3 +335,4 @@ def test_crew_source_errors_name_column_and_index_only(mutate: Any, prefix: str)
     assert prefix in message
     assert "example.com/crew-source" not in message
     assert "Example Network PR" not in message
+    assert "506sports.com/" not in message.lower()

@@ -19,6 +19,7 @@ from pathlib import Path
 
 import polars as pl
 
+from booth_review.contract.models import crew_source_url_problem
 from booth_review.errors import CrewOverrideError, ReferenceTableError
 from booth_review.people.registry import PeopleRegistry
 from booth_review.reference import read_reference_csv
@@ -46,7 +47,6 @@ SOURCE_NAME_MAX_LEN = 60
 
 # Same slug pattern as resolve/networks.py _NETWORK_ID_RE.
 _NETWORK_ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-_WHITESPACE_RE = re.compile(r"\s")
 
 
 @dataclass(frozen=True)
@@ -99,10 +99,9 @@ def load_crew_overrides(reference_dir: Path) -> dict[tuple[int, str], CrewOverri
         url = raw["source_url"]
         if not url:
             raise fail(line_no, "source_url must not be empty")
-        if not url.startswith(("https://", "http://")):
-            raise fail(line_no, "source_url must start with https:// or http://")
-        if _WHITESPACE_RE.search(url):
-            raise fail(line_no, "source_url must not contain whitespace")
+        url_problem = crew_source_url_problem(url)
+        if url_problem is not None:
+            raise fail(line_no, f"source_url {url_problem}")
         name = raw["source_name"]
         if not name:
             raise fail(line_no, "source_name must not be empty")

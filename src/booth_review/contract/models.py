@@ -12,10 +12,36 @@ snapshot of the build output, never mutated after validation.
 from __future__ import annotations
 
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 SCHEMA_VERSION = "1.4.0"
+
+_S506_HOST = "506sports.com"
+
+
+def crew_source_url_problem(url: str) -> str | None:
+    """Why `url` cannot cite a hand-confirmed crew, or None when it can.
+
+    A crew source must be an http(s) URL with a host, and never 506 Sports
+    (04.3 D-01: an override records a crew some other public source
+    publishes). The crew-override loader and the contract share this check.
+    The message never echoes the URL.
+    """
+    if any(ch.isspace() for ch in url):
+        return "must not contain whitespace"
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname
+    except ValueError:
+        return "must be an http(s) URL with a host"
+    if parts.scheme not in {"http", "https"} or not host:
+        return "must be an http(s) URL with a host"
+    host = host.rstrip(".")
+    if host == _S506_HOST or host.endswith("." + _S506_HOST):
+        return "must not cite 506 Sports"
+    return None
 
 
 class TeamRef(BaseModel):
@@ -241,11 +267,9 @@ class SiteData(BaseModel):
                     f"telecasts.crew_source_label[{i}]: must be set together with crew_source_url"
                 )
             if source_url is not None and source_label is not None:
-                if not (
-                    source_url.startswith(("https://", "http://"))
-                    and not any(ch.isspace() for ch in source_url)
-                ):
-                    raise ValueError(f"telecasts.crew_source_url[{i}]: must be an http(s) URL")
+                problem = crew_source_url_problem(source_url)
+                if problem is not None:
+                    raise ValueError(f"telecasts.crew_source_url[{i}]: {problem}")
                 if not source_label.strip():
                     raise ValueError(f"telecasts.crew_source_label[{i}]: must not be empty")
             bowl = tc.bowl[i]

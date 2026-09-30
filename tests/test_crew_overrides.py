@@ -100,6 +100,11 @@ _BAD_CELLS = [
     ("source_url", ""),
     ("source_url", f"ftp://{_SENTINEL}"),
     ("source_url", f"https://example.com/{_SENTINEL} x"),
+    ("source_url", "https://"),
+    ("source_url", f"https:///{_SENTINEL}"),
+    ("source_url", f"https://506sports.com/{_SENTINEL}"),
+    ("source_url", f"https://www.506sports.com/{_SENTINEL}"),
+    ("source_url", f"https://[{_SENTINEL}"),
     ("source_name", ""),
     ("source_name", _SENTINEL * 5),
     ("source_name", f"<b>{_SENTINEL}</b>"),
@@ -117,6 +122,26 @@ def test_bad_cell_is_rejected_with_file_and_line_only(
     message = str(exc.value)
     assert "crew_overrides.csv: line" in message
     assert _SENTINEL not in message
+
+
+@pytest.mark.parametrize(
+    "url", ["https://506sports.com/wiki/x", "http://WWW.506Sports.com./wiki/x"]
+)
+def test_506_sports_source_is_rejected(tmp_path: Path, url: str) -> None:
+    rows = _two_rows()
+    for row in rows:
+        row["source_url"] = url
+    with pytest.raises(ReferenceTableError) as exc:
+        load_crew_overrides(_write(tmp_path, rows))
+    assert str(exc.value) == "crew_overrides.csv: line 2: source_url must not cite 506 Sports"
+
+
+def test_lookalike_host_is_not_506_sports(tmp_path: Path) -> None:
+    rows = _two_rows()
+    for row in rows:
+        row["source_url"] = "https://not506sports.com/pr/1"
+    loaded = load_crew_overrides(_write(tmp_path, rows))
+    assert loaded[(1001, "net-a")].source_url == "https://not506sports.com/pr/1"
 
 
 def _sentinel_rows(**second: object) -> list[dict[str, str]]:
