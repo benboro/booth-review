@@ -11,11 +11,16 @@ build-time failures are count-only (D-04). Nothing here ever echoes a cell.
 
 from __future__ import annotations
 
+import copy
 import re
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from booth_review.errors import ReferenceTableError
+import polars as pl
+
+from booth_review.errors import CrewOverrideError, ReferenceTableError
+from booth_review.people.registry import PeopleRegistry
 from booth_review.reference import read_reference_csv
 
 CREW_OVERRIDE_COLUMNS = (
@@ -132,3 +137,203 @@ def load_crew_overrides(reference_dir: Path) -> dict[tuple[int, str], CrewOverri
             source_url=url,
         )
     return overrides
+
+
+@dataclass(frozen=True)
+class CrewOverrideResult:
+    telecasts: pl.DataFrame
+    telecast_people: pl.DataFrame
+    season_counts: dict[int, dict[str, int]]
+    statuses: dict[str, str]  # telecast_id -> patched | redundant | differs | correction
+    counts: dict[str, int]  # applied, patched, redundant, differs, corrections, rows
+
+
+def apply_crew_overrides(
+    telecasts: pl.DataFrame,
+    telecast_people: pl.DataFrame,
+    overrides: Mapping[tuple[int, str], CrewOverride],
+    registry: PeopleRegistry,
+    season_counts: Mapping[int, Mapping[str, int]],
+) -> CrewOverrideResult:
+    """Replace the main-feed crew of each override telecast with the override's
+    full booth (D-08); the override always wins (D-09). Alt and Spanish rows
+    are kept. Failures are count-only (D-04). Inputs are not mutated.
+    """
+    new_counts = {season: dict(counts) for season, counts in copy.deepcopy(season_counts).items()}
+    counts = dict.fromkeys(("applied", "patched", "redundant", "differs", "corrections", "rows"), 0)
+    if not overrides:
+        return CrewOverrideResult(telecasts, telecast_people, new_counts, {}, counts)
+
+    unknown = sum(
+        1
+        for override in overrides.values()
+        for person_id, _ in override.people
+        if person_id not in registry.persons
+    )
+    if unknown:
+        raise CrewOverrideError(f"crew_overrides.csv: {unknown} row(s) name an unknown person_id")
+
+    mains = telecasts.filter((pl.col("feed_type") == "main") & pl.col("plotted").fill_null(False))
+    by_key = {
+        (row["game_id"], row["network_id"]): row
+        for row in mains.select(
+            "telecast_id", "game_id", "network_id", "season", "rated", "crew_matched"
+        )
+        .join(telecasts.select("telecast_id", "rr_telecast_ids"), on="telecast_id")
+        .iter_rows(named=True)
+    }
+    unplotted = sum(
+        len(override.people) for key, override in overrides.items() if key not in by_key
+    )
+    if unplotted:
+        raise CrewOverrideError(
+            f"crew_overrides.csv: {unplotted} row(s) name a telecast the build does not plot"
+        )
+
+    existing_main: dict[str, set[str]] = {}
+    for row in telecast_people.filter(pl.col("feed_type") == "main").iter_rows(named=True):
+        existing_main.setdefault(row["telecast_id"], set()).add(row["person_id"])
+
+    statuses: dict[str, str] = {}
+    new_rows: list[dict[str, object]] = []
+    for key, override in overrides.items():
+        target = by_key[key]
+        telecast_id = target["telecast_id"]
+        current = existing_main.get(telecast_id, set())
+        wanted = {person_id for person_id, _ in override.people}
+        if not current:
+            status = "patched"
+            if target["rated"] and not target["crew_matched"]:
+                bucket = new_counts.setdefault(target["season"], {})
+                bucket["rated_with_crew"] = bucket.get("rated_with_crew", 0) + 1
+                bucket["records_with_crew"] = bucket.get("records_with_crew", 0) + len(
+                    target["rr_telecast_ids"] or []
+                )
+        elif current == wanted:
+            status = "redundant"
+        else:
+            status = "correction" if override.reason == "correction" else "differs"
+        statuses[telecast_id] = status
+        for position, (person_id, role) in enumerate(override.people):
+            new_rows.append(
+                {
+                    "telecast_id": telecast_id,
+                    "person_id": person_id,
+                    "role": role,
+                    "feed_type": "main",
+                    "crew_position": position,
+                    "s506_pointer": None,
+                    "source": CREW_OVERRIDE_SOURCE,
+                }
+            )
+
+    patched_ids = list(statuses)
+    kept = telecast_people.filter(
+        ~(pl.col("telecast_id").is_in(patched_ids) & (pl.col("feed_type") == "main"))
+    )
+    added = pl.DataFrame(new_rows, schema=telecast_people.schema)
+    people_out = pl.concat([kept, added]).sort(["telecast_id", "person_id", "feed_type"])
+
+    frame = telecasts
+    if "crew_patched" not in frame.columns:
+        frame = frame.with_columns(pl.lit(False).alias("crew_patched"))
+    for column in ("crew_source_url", "crew_source_label"):
+        if column not in frame.columns:
+            frame = frame.with_columns(pl.lit(None, dtype=pl.Utf8).alias(column))
+    url_by_id = {by_key[key]["telecast_id"]: o.source_url for key, o in overrides.items()}
+    label_by_id = {by_key[key]["telecast_id"]: o.source_name for key, o in overrides.items()}
+    hit = pl.col("telecast_id").is_in(patched_ids)
+    telecasts_out = frame.with_columns(
+        pl.when(hit).then(True).otherwise(pl.col("crew_matched")).alias("crew_matched"),
+        pl.when(hit).then(True).otherwise(pl.col("crew_patched")).alias("crew_patched"),
+        pl.when(hit)
+        .then(pl.col("telecast_id").replace_strict(url_by_id, default=None, return_dtype=pl.Utf8))
+        .otherwise(pl.col("crew_source_url"))
+        .alias("crew_source_url"),
+        pl.when(hit)
+        .then(pl.col("telecast_id").replace_strict(label_by_id, default=None, return_dtype=pl.Utf8))
+        .otherwise(pl.col("crew_source_label"))
+        .alias("crew_source_label"),
+    )
+
+    counts["applied"] = len(statuses)
+    counts["patched"] = sum(1 for v in statuses.values() if v == "patched")
+    counts["redundant"] = sum(1 for v in statuses.values() if v == "redundant")
+    counts["differs"] = sum(1 for v in statuses.values() if v == "differs")
+    counts["corrections"] = sum(1 for v in statuses.values() if v == "correction")
+    counts["rows"] = len(new_rows)
+    return CrewOverrideResult(telecasts_out, people_out, new_counts, statuses, counts)
+
+
+REVIEW_CREW_GAPS_COLUMNS = (
+    "cfbd_game_id",
+    "network_id",
+    "season",
+    "date_et",
+    "game_type",
+    "playoff_round",
+    "away_team",
+    "home_team",
+    "gap_kind",
+    "s506_pointer",
+    "other_feed_crew",
+    "crew_network_mismatch",
+    "override_status",
+)
+
+_HAS_506_CREW_STATUSES = frozenset({"redundant", "differs", "correction"})
+
+
+def crew_gap_rows(
+    telecasts: pl.DataFrame,
+    games: pl.DataFrame,
+    telecast_people: pl.DataFrame,
+    statuses: Mapping[str, str],
+    unmatched_506_dates: Collection[str],
+) -> list[dict[str, object]]:
+    """One row per plotted main telecast with no 506 main crew, classified, plus
+    one has-506-crew row per redundant/differs/correction override (D-05, D-09).
+
+    Pass the PRE-override frames so the gap set is "no 506 main crew".
+    Vault-only (interim/review_crew_overrides.csv); never logged or published.
+    Callers and tests never hard-code a gap count.
+    """
+    non_main = set(telecast_people.filter(pl.col("feed_type") != "main")["telecast_id"].to_list())
+    game_by_id = {row["game_id"]: row for row in games.iter_rows(named=True)}
+    rows: list[dict[str, object]] = []
+    plotted_main = telecasts.filter((pl.col("feed_type") == "main") & pl.col("plotted"))
+    for tel in plotted_main.iter_rows(named=True):
+        telecast_id = tel["telecast_id"]
+        status = statuses.get(telecast_id)
+        if tel["crew_matched"]:
+            if status not in _HAS_506_CREW_STATUSES:
+                continue
+            gap_kind = "has-506-crew"
+        elif tel["s506_pointer"] is not None:
+            gap_kind = "no-506-crew"
+        elif telecast_id in non_main:
+            gap_kind = "main-crew-missing"
+        elif tel["date_et"].isoformat() in unmatched_506_dates:
+            gap_kind = "join-miss-suspect"
+        else:
+            gap_kind = "no-506-listing"
+        game = game_by_id.get(tel["game_id"], {})
+        rows.append(
+            {
+                "cfbd_game_id": tel["game_id"],
+                "network_id": tel["network_id"],
+                "season": tel["season"],
+                "date_et": tel["date_et"],
+                "game_type": game.get("game_type"),
+                "playoff_round": game.get("playoff_round"),
+                "away_team": game.get("away_team"),
+                "home_team": game.get("home_team"),
+                "gap_kind": gap_kind,
+                "s506_pointer": tel["s506_pointer"],
+                "other_feed_crew": telecast_id in non_main,
+                "crew_network_mismatch": tel["crew_network_mismatch"],
+                "override_status": status if status is not None else "missing",
+            }
+        )
+    rows.sort(key=lambda r: (r["season"], r["date_et"], r["cfbd_game_id"], r["network_id"]))
+    return rows
