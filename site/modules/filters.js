@@ -164,6 +164,35 @@ function networksPickNarrowed(data, state) {
 }
 
 /**
+ * D-36: the one row-hiding rule shared by renderNetworks and the Networks trigger
+ * count. A channel row is hidden when the other filters leave it no games, unless
+ * it is a checked explicit pick in a narrowed list (then it stays, greyed).
+ */
+function networkRowHidden(count, checked, narrowed) {
+  return count === 0 && !(narrowed && checked);
+}
+
+/**
+ * D-36: how many Networks rows are shown, and how many of those are checked.
+ * Iterates `data.primaryNetworks` only; missing facets count every row as shown.
+ */
+function shownNetworkCounts(data, state, view) {
+  const currentIds = state.networks ?? allPrimaryNetworkIds(data);
+  const narrowed = networksPickNarrowed(data, state);
+  let shown = 0;
+  let checkedShown = 0;
+  for (const idx of data.primaryNetworks) {
+    const net = data.lookups.networks[idx];
+    const checked = currentIds.includes(net.id);
+    const count = view?.facets?.networks?.[idx] ?? 1;
+    if (networkRowHidden(count, checked, narrowed)) continue;
+    shown += 1;
+    if (checked) checkedShown += 1;
+  }
+  return { shown, checked: checkedShown };
+}
+
+/**
  * Seasons menus are (re)populated by `renderSeasons` (D-14); the init pass only
  * resets the signature so the first render writes them.
  */
@@ -773,7 +802,7 @@ function renderNetworks(data, state, view) {
       if (checked) checkedCount += 1;
       const count = view.facets.networks[idx];
       familyTotal += count;
-      const hidden = count === 0 && !(narrowed && checked);
+      const hidden = networkRowHidden(count, checked, narrowed);
       const item = checkbox.closest('.check-item');
       setFacetHidden(item, hidden);
       setCount(item, count);
@@ -868,8 +897,9 @@ function renderPostseason(state, view) {
   }
 }
 
-/** A toolbar trigger's label and active state, from `state` (D-02 copywriting). */
-function triggerInfo(name, data, state) {
+/** A toolbar trigger's label and active state, from `state` (D-02 copywriting).
+ * D-36: the Networks count is the checked rows among the rows shown in the list. */
+function triggerInfo(name, data, state, view) {
   if (name === 'announcers') {
     if (state.people.length === 0) return { label: 'Announcers', active: false };
     return { label: `Announcers · ${state.people.length}`, active: true };
@@ -881,7 +911,9 @@ function triggerInfo(name, data, state) {
   }
   if (name === 'networks') {
     if (state.networks == null) return { label: 'Networks', active: false };
-    return { label: `Networks · ${state.networks.length}`, active: true };
+    const { shown, checked } = shownNetworkCounts(data, state, view);
+    if (checked === shown) return { label: 'Networks', active: false };
+    return { label: `Networks · ${checked}`, active: true };
   }
   if (name === 'kickoff') {
     if (state.slots == null) return { label: 'Kickoff', active: false };
@@ -916,10 +948,10 @@ function triggerInfo(name, data, state) {
 }
 
 /** Renders every toolbar trigger's label and `data-active` state (D-02). */
-function renderTriggers(data, state) {
+function renderTriggers(data, state, view) {
   for (const name of TRIGGER_NAMES) {
     const btn = els.triggers[name];
-    const { label, active } = triggerInfo(name, data, state);
+    const { label, active } = triggerInfo(name, data, state, view);
     btn.textContent = label;
     btn.dataset.active = active ? 'true' : 'false';
   }
@@ -949,7 +981,7 @@ function renderFiltersButton(state) {
 }
 
 /** Dims each group's Reset button (`aria-disabled`) while that group is at its default (A4). */
-function renderGroupResets(data, state) {
+function renderGroupResets(data, state, view) {
   for (const btn of document.querySelectorAll('.group-reset')) {
     const name = btn.dataset.reset;
     // The Announcers Reset also clears compare / called-together, so it is
@@ -958,7 +990,9 @@ function renderGroupResets(data, state) {
     const active =
       name === 'announcers'
         ? state.people.length > 0 || state.compare || state.together
-        : triggerInfo(name, data, state).active;
+        : name === 'networks'
+          ? state.networks != null
+          : triggerInfo(name, data, state, view).active;
     btn.setAttribute('aria-disabled', active ? 'false' : 'true');
   }
 }
@@ -974,7 +1008,7 @@ export function renderFilters({ data, state, view }) {
   renderSchool(data, state, view);
   renderPostseason(state, view);
   renderOnlyButtons(data, state, view);
-  renderTriggers(data, state);
-  renderGroupResets(data, state);
+  renderTriggers(data, state, view);
+  renderGroupResets(data, state, view);
   renderFiltersButton(state);
 }
