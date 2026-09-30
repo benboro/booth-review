@@ -1802,6 +1802,35 @@ def test_facet_seasons_reset_clears_range_and_hides_note(
     assert _season_options(guarded_page, "season-from") == ["2019", "2026"]
 
 
+def test_facet_seasons_one_sided_edit_keeps_untouched_end_at_data_bound(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """WR-01: with no season filter, the menus clamp to 2021-2026 under net-c
+    (D-14), but changing only To must not commit the clamped From: the 2019
+    dots stay, and the URL records the range the visitor actually set (D-15)."""
+    open_app(guarded_page, "?networks=net-c")
+    _open_filter(guarded_page, "seasons")
+    assert guarded_page.input_value("#season-from") == "2021"
+    guarded_page.select_option("#season-to", "2025")
+    assert guarded_page.evaluate("window.__testHooks.getState().seasons") == [2019, 2025]
+    assert "seasons=2019-2025" in guarded_page.evaluate("location.search")
+    guarded_page.evaluate("window.__testHooks.setState({ networks: null })")
+    assert _visible_count(guarded_page) == 8
+
+
+def test_facet_seasons_one_sided_edit_to_the_data_bound_sets_no_filter(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """WR-01: picking To=2026 with From untouched spans every season, so no
+    season filter is stored and nothing lands in the URL."""
+    open_app(guarded_page, "?networks=net-c")
+    _open_filter(guarded_page, "seasons")
+    guarded_page.select_option("#season-to", "2026")
+    assert guarded_page.evaluate("window.__testHooks.getState().seasons") is None
+    assert "seasons=" not in guarded_page.evaluate("location.search")
+    expect(guarded_page.locator("#trigger-seasons")).to_have_text("Seasons")
+
+
 def test_facet_view_exposes_plain_json_facets(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:

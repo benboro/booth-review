@@ -636,12 +636,20 @@ export function initFilters({ data, getState, setState }) {
   buildSchoolList(data);
   buildOnlyButtons();
 
-  const onSeasonChange = () => {
-    const from = Number(els.seasonFrom.value);
-    const to = Number(els.seasonTo.value);
+  const onSeasonChange = (ev) => {
+    let from = Number(els.seasonFrom.value);
+    let to = Number(els.seasonTo.value);
     // A blank select reads as Number('') === 0; never turn that into a range (WR-13).
     if (!Number.isInteger(from) || !Number.isInteger(to) || from <= 0 || to <= 0) return;
-    setState({ seasons: [from, to] });
+    // With no season filter set, the menus show the facet-clamped range (D-14),
+    // but the untouched end still means "no limit": commit the data's own bound
+    // for it, so a one-sided edit never removes dots the visitor didn't exclude
+    // or puts a range they didn't pick into the URL (D-15, review WR-01).
+    if (getState().seasons == null) {
+      if (ev.target === els.seasonTo) from = data.seasonMin;
+      else to = data.seasonMax;
+    }
+    setState({ seasons: from === data.seasonMin && to === data.seasonMax ? null : [from, to] });
   };
   els.seasonFrom.addEventListener('change', onSeasonChange);
   els.seasonTo.addEventListener('change', onSeasonChange);
