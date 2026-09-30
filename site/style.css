@@ -1115,6 +1115,19 @@ input[type="checkbox"] {
   font: var(--font-label);
 }
 
+/* notes-6: the hovered-dot ring is a DOM overlay, not a Plotly trace or
+   marker.line -- no restyle/relayout per hover (04.2 D-01), no D-31 edge
+   speckles. Fixed and out of flow, so nothing on the page shifts. */
+.chart-hover-ring {
+  position: fixed;
+  z-index: 29;
+  pointer-events: none;
+  box-sizing: border-box;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
 .chart-tooltip .tooltip-title {
   display: block;
   font-weight: var(--weight-semibold);

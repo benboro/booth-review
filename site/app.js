@@ -12,9 +12,11 @@
  * D-22: `tooltipMode` (default `chart.js`'s `TOOLTIP_MODE`) drives the
  * custom HTML tooltip shown on `plotly_hover`/hidden on `plotly_unhover` --
  * only when the pointer has real hover capability (`hoverNoneMedia`); a
- * touch device keeps tap-to-open-panel and never sees it. `hideTooltip()` is
- * also called at the start of every `render()`, when the detail panel
- * opens, on page scroll, and when the pointer leaves the chart entirely.
+ * touch device keeps tap-to-open-panel and never sees it. The hover ring
+ * (notes-6) marks the hovered dot in both modes. `clearHover()` (tooltip +
+ * ring) runs at the start of every `render()`, when the detail panel opens,
+ * on page scroll/resize, on zoom/pan (`plotly_relayout`), and when the
+ * pointer leaves the chart entirely.
  */
 
 import { prepareData } from './modules/data.js';
@@ -27,6 +29,12 @@ import { initLegend, renderLegend } from './modules/legend.js';
 import { renderPanel, openPanel, closePanel, initPanel } from './modules/panel.js';
 import { renderTable } from './modules/table.js';
 import { showTooltip, hideTooltip } from './modules/tooltip.js';
+import {
+  showHoverRing,
+  hideHoverRing,
+  ringSpecFromPoint,
+  hoverRingDiameter,
+} from './modules/hover-ring.js';
 
 const versionMeta = document.querySelector('meta[name="site-data-version"]');
 const version = versionMeta ? versionMeta.content : '';
@@ -53,11 +61,48 @@ let tooltipMode = TOOLTIP_MODE;
 // dot's own screen position moves under it) and when the pointer leaves the
 // chart entirely (a `plotly_unhover` for the exact hovered dot already
 // covers moving off *that* dot, but not e.g. a fast flick straight off the
-// chart's edge). `render()`/`openDetailPanel` call `hideTooltip()` directly,
+// chart's edge). `render()`/`openDetailPanel` call `clearHover()` directly,
 // below.
-window.addEventListener('scroll', () => hideTooltip(), { passive: true });
+/** Hides the hover tooltip and the hover ring together. */
+function clearHover() {
+  hideTooltip();
+  hideHoverRing();
+}
+
+window.addEventListener('scroll', () => clearHover(), { passive: true });
+window.addEventListener('resize', () => clearHover(), { passive: true });
 if (chartEl) {
-  chartEl.addEventListener('mouseleave', () => hideTooltip());
+  chartEl.addEventListener('mouseleave', () => clearHover());
+}
+
+/**
+ * The hovered dot's client-pixel position, shared by the tooltip and the ring.
+ * The point-based math reaches into undocumented Plotly internals
+ * (`_fullLayout`, `_size`, `.d2p`). If a vendored Plotly version reshapes or
+ * drops any of them, fall through to the hover event's own client coordinates
+ * rather than letting the exception silently swallow the hover (Plotly's
+ * event dispatch does not surface a throwing listener to the user).
+ */
+function pointClientPosition(ev) {
+  const point = ev.points && ev.points[0];
+  let clientX;
+  let clientY;
+  try {
+    if (point && point.x != null && point.y != null && chartEl._fullLayout) {
+      const layout = chartEl._fullLayout;
+      const rect = chartEl.getBoundingClientRect();
+      clientX = rect.left + layout._size.l + layout.xaxis.d2p(point.x);
+      clientY = rect.top + layout._size.t + layout.yaxis.d2p(point.y);
+    }
+  } catch {
+    clientX = undefined;
+    clientY = undefined;
+  }
+  if (clientX == null || clientY == null) {
+    clientX = ev.event?.clientX;
+    clientY = ev.event?.clientY;
+  }
+  return { clientX, clientY };
 }
 
 /** Renderers other plans (04-08..04-10) push into: called every render with {data, state, view, setState}. */
@@ -76,7 +121,7 @@ let sort = { key: 'date', dir: 'asc' };
 
 /** Opens the detail panel on telecast `i` and remembers it's open, for `render`'s own refresh (D-10). */
 function openDetailPanel(i) {
-  hideTooltip();
+  clearHover();
   openPanelIndex = i;
   openPanel(i, { data, state, view: lastView });
 }
@@ -126,7 +171,7 @@ function currentEnv() {
 /** Recomputes the view, re-renders the chart, syncs the axis UI and the URL, and runs every registered renderer. */
 function render() {
   revision += 1;
-  hideTooltip();
+  clearHover();
   const view = computeView(data, state);
   lastView = view;
 
@@ -240,35 +285,20 @@ async function bootstrap() {
         openDetailPanel(i);
       },
       onPointHover(i, ev) {
-        if (tooltipMode !== 'html' || hoverNoneMedia.matches) return;
-        const point = ev.points && ev.points[0];
-        let clientX;
-        let clientY;
-        // The point-based position math below reaches into undocumented
-        // Plotly internals (`_fullLayout`, `_size`, `.d2p`). If a vendored
-        // Plotly version reshapes or drops any of them, fall through to the
-        // hover event's own client coordinates rather than letting the
-        // exception silently swallow the tooltip (Plotly's event dispatch
-        // does not surface a throwing listener to the user).
-        try {
-          if (point && point.x != null && point.y != null && chartEl._fullLayout) {
-            const layout = chartEl._fullLayout;
-            const rect = chartEl.getBoundingClientRect();
-            clientX = rect.left + layout._size.l + layout.xaxis.d2p(point.x);
-            clientY = rect.top + layout._size.t + layout.yaxis.d2p(point.y);
-          }
-        } catch {
-          clientX = undefined;
-          clientY = undefined;
+        if (hoverNoneMedia.matches) return;
+        const { clientX, clientY } = pointClientPosition(ev);
+        if (Number.isFinite(clientX) && Number.isFinite(clientY)) {
+          const { size, symbol } = ringSpecFromPoint(ev.points && ev.points[0]);
+          showHoverRing({ i, clientX, clientY, diameter: hoverRingDiameter(size, symbol) });
         }
-        if (clientX == null || clientY == null) {
-          clientX = ev.event?.clientX;
-          clientY = ev.event?.clientY;
-        }
+        if (tooltipMode !== 'html') return;
         showTooltip(data, i, { axis: state.axis, theme: currentEnv().theme, clientX, clientY });
       },
       onPointUnhover() {
-        hideTooltip();
+        clearHover();
+      },
+      onRelayout() {
+        clearHover();
       },
     });
 
@@ -313,7 +343,7 @@ async function bootstrap() {
       setTooltipMode(mode) {
         if (mode !== 'html' && mode !== 'plotly') return;
         tooltipMode = mode;
-        hideTooltip();
+        clearHover();
         render();
       },
       get tooltipMode() {
