@@ -968,11 +968,12 @@ function renderTriggers(data, state, view) {
 /** Counts the active filters, for the mobile Filters(N) button (extends SITE-18's rail-era count).
  * D-27: also counts every selected announcer, since the phone Announcers
  * picker lives inside this same Filters sheet and "Clear all filters"
- * clears people too. */
-function activeFilterCount(state) {
+ * clears people too. Networks counts exactly when its trigger shows a count
+ * (D-36), so the badge and the Networks button never disagree (review WR-02). */
+function activeFilterCount(data, state, view) {
   let n = 0;
   if (state.seasons != null) n += 1;
-  if (state.networks != null) n += 1;
+  if (triggerInfo('networks', data, state, view).active) n += 1;
   if (state.slots != null) n += 1;
   if (state.role != null) n += 1;
   if (state.conferences.length > 0) n += 1;
@@ -983,8 +984,8 @@ function activeFilterCount(state) {
 }
 
 /** Renders the `#filters-button` label (SITE-18, D-03). */
-function renderFiltersButton(state) {
-  const n = activeFilterCount(state);
+function renderFiltersButton(data, state, view) {
+  const n = activeFilterCount(data, state, view);
   els.filtersButton.textContent = n > 0 ? `Filters (${n})` : 'Filters';
 }
 
@@ -994,7 +995,9 @@ function renderGroupResets(data, state, view) {
     const name = btn.dataset.reset;
     // The Announcers Reset also clears compare / called-together, so it is
     // live for `?mode=compare` with no one selected (the toolbar trigger's
-    // own active state is left alone).
+    // own active state is left alone). The Networks Reset stays live while any
+    // pick is stored (D-15), even one D-36 shows without a count, since that
+    // pick is still in the URL and Reset is how the visitor removes it.
     const active =
       name === 'announcers'
         ? state.people.length > 0 || state.compare || state.together
@@ -1018,5 +1021,5 @@ export function renderFilters({ data, state, view }) {
   renderOnlyButtons(data, state, view);
   renderTriggers(data, state, view);
   renderGroupResets(data, state, view);
-  renderFiltersButton(state);
+  renderFiltersButton(data, state, view);
 }

@@ -61,6 +61,23 @@ def test_networks_count_absent_when_every_shown_row_is_checked(
     assert reset.get_attribute("aria-disabled") == "false"
 
 
+def test_phone_filters_badge_agrees_with_networks_trigger(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """WR-02: the phone badge counts Networks only when its trigger shows a
+    count (D-36), so a stored pick with every shown row checked adds nothing;
+    the pick stays in the URL and the Reset stays live (D-15)."""
+    open_app(mobile_page, "?people=kris-venn&networks=net-b,net-c,net-d")
+    expect(_trigger(mobile_page)).to_have_text("Networks")
+    expect(mobile_page.locator("#filters-button")).to_have_text("Filters (1)")
+    assert "networks=net-b,net-c,net-d" in mobile_page.evaluate("location.search")
+    reset = mobile_page.locator(".group-reset[data-reset='networks']")
+    assert reset.get_attribute("aria-disabled") == "false"
+    mobile_page.evaluate("window.__testHooks.setState({ networks: ['net-b'] })")
+    expect(_trigger(mobile_page)).to_have_text("Networks · 1")
+    expect(mobile_page.locator("#filters-button")).to_have_text("Filters (2)")
+
+
 def test_networks_count_ignores_hidden_family_chip_toggle(
     guarded_page: Page,
     open_app: Callable[[Page, str], None],
