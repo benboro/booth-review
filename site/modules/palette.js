@@ -110,6 +110,66 @@ export const PAGE_BG = { light: '#FFFFFF', dark: '#14161A' };
 /** UI chrome secondary-surface token per theme (rail, top bar, panel, table header). */
 export const SURFACE = { light: '#F4F5F7', dark: '#1E2126' };
 
+/** The --muted text token per theme; neutral bar fill for non-network bars (D-16). */
+export const MUTED = { light: '#4B5563', dark: '#9CA3AF' };
+
+/**
+ * Mixes two `#RRGGBB` colors per channel: `round(w*a + (1-w)*b)`, uppercase.
+ * Tone B of a bar is `mixHex(toneA, PAGE_BG, 0.55)` (D-16): light muted gives
+ * `#9CA2A9`, dark muted gives `#5F646C`.
+ * @param {string} a
+ * @param {string} b
+ * @param {number} weightA - weight of `a`, 0..1.
+ * @returns {string}
+ */
+export function mixHex(a, b, weightA) {
+  const channel = (hex, i) => Number.parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);
+  let out = '#';
+  for (let i = 0; i < 3; i += 1) {
+    const v = Math.round(weightA * channel(a, i) + (1 - weightA) * channel(b, i));
+    out += v.toString(16).padStart(2, '0');
+  }
+  return out.toUpperCase();
+}
+
+function luminance(hex) {
+  const lin = (c) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const r = lin(Number.parseInt(hex.slice(1, 3), 16));
+  const g = lin(Number.parseInt(hex.slice(3, 5), 16));
+  const b = lin(Number.parseInt(hex.slice(5, 7), 16));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/**
+ * WCAG contrast ratio between two `#RRGGBB` colors.
+ * @param {string} hexA
+ * @param {string} hexB
+ * @returns {number}
+ */
+export function contrastRatio(hexA, hexB) {
+  const la = luminance(hexA);
+  const lb = luminance(hexB);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+/**
+ * Text color for a fill: `#000000` or `#FFFFFF`, whichever contrasts more,
+ * or null when even the better one is below 4.5:1 (the segment then carries
+ * no in-bar text, D-16). Light muted `#4B5563` -> white; its Tone B `#9CA2A9`
+ * -> black; dark muted `#9CA3AF` -> black; its Tone B `#5F646C` -> white.
+ * @param {string} hex
+ * @returns {string|null}
+ */
+export function readableTextOn(hex) {
+  const black = contrastRatio(hex, '#000000');
+  const white = contrastRatio(hex, '#FFFFFF');
+  const best = black >= white ? '#000000' : '#FFFFFF';
+  return Math.max(black, white) >= 4.5 ? best : null;
+}
+
 /**
  * Compare-mode marker symbols, assigned to selected people in selection
  * order (D-07). Named symbols only -- numeric codes misrender in scattergl.
