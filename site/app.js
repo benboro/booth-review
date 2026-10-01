@@ -28,6 +28,7 @@ import { initFilters, renderFilters } from './modules/filters.js';
 import { initLegend, renderLegend } from './modules/legend.js';
 import { renderPanel, openPanel, closePanel, initPanel } from './modules/panel.js';
 import { renderTable } from './modules/table.js';
+import { initChartTabs, renderChartTabs } from './modules/chart-tabs.js';
 import { showTooltip, hideTooltip } from './modules/tooltip.js';
 import {
   showHoverRing,
@@ -262,6 +263,9 @@ async function bootstrap() {
       onToggle: (family) => setState({ networks: toggleFamilyNetworks(data, state, family) }),
     });
     renderers.push(renderLegend);
+
+    initChartTabs({ data, getState: () => state, setState });
+    renderers.push(renderChartTabs);
 
     renderers.push(tableRenderer);
 
