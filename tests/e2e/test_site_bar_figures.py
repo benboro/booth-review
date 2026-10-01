@@ -876,7 +876,7 @@ def test_total_text_has_room_in_the_range(
     layout = out["figure"]["layout"]
     rows = out["model"]["rows"]
     if fn == "barsModel":
-        peak = max(r["total"] for r in rows) * 100
+        peak = max(r["total"] for r in rows)
         length = env["width"] - layout["margin"]["l"] - layout["margin"]["r"]
         top = layout["xaxis"]["range"][1]
         assert top >= peak * 1.12 - 1e-9

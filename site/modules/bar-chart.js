@@ -22,6 +22,11 @@
  * butterfly's two halves). Only the overlay traces carry text and customdata,
  * so hover and click resolve to the announcer; the pieces use hoverinfo 'skip'.
  *
+ * D-29 (supersedes the UI-SPEC's "total count not drawn outside"): every
+ * stacked row shows its total just past the bar's outer end, as an annotation
+ * built only from the integer count (T-04.4-45). D-31 (refines D-24): a simple
+ * announcer bar takes its main network family's color.
+ *
  * Name safety (T-04.4-13): every name goes through `escapeHover` before it
  * enters a Plotly string.
  */
@@ -77,21 +82,67 @@ function truncate(text, max) {
 
 /**
  * Tone A / Tone B fills for a row (D-16): a network row uses its family
- * color, every other row the violet special-filter pair (D-24, superseding
- * D-16's neutral ink tone).
- * @param {{family: string|null}} row
+ * color, an announcer row its main family color (D-31), every other row the
+ * violet special-filter pair (D-24, superseding D-16's neutral ink tone).
+ * @param {{family: string|null, mainFamily?: string|null}} row
  * @param {'light'|'dark'} theme
  * @returns {{a: string, b: string}}
  */
 export function barTones(row, theme) {
-  const base =
-    row.family != null ? FAMILY_COLORS[theme][familyKey(row.family)] : SPECIAL[theme];
+  const family = row.family ?? row.mainFamily ?? null;
+  const base = family != null ? FAMILY_COLORS[theme][familyKey(family)] : SPECIAL[theme];
   return { a: base, b: mixHex(base, PAGE_BG[theme], 0.55) };
 }
 
-/** The padded x-axis maximum for a count, with room for outside text. */
-function padded(max, factor) {
-  return Math.max(max, 1) * factor;
+/**
+ * The x-axis maximum for a count (D-29): the padding factor, or more when the
+ * total's text (about 7.6px per digit plus a 4px offset and margin) would not
+ * fit in the `lengthPx` of axis past the longest bar.
+ * @param {number} max
+ * @param {number} lengthPx - drawn length of the axis.
+ * @param {number} factor
+ * @returns {number}
+ */
+export function rangeTop(max, lengthPx, factor) {
+  const peak = Math.max(max, 1);
+  const reserve = Math.ceil(CHAR_PX * String(peak).length) + 8;
+  const length = Math.max(lengthPx, reserve * 2);
+  return peak * Math.max(factor, length / (length - reserve));
+}
+
+/**
+ * Total annotations (D-29): one per row whose total is above zero, just past
+ * the bar's outer end. Text is `String()` of an integer count, never a name
+ * (T-04.4-45); `captureevents: false` keeps them out of row-label clicks.
+ * @param {object[]} rows
+ * @param {(row: object) => number} totalOf
+ * @param {'left'|'right'} side - 'left' is the reversed butterfly half.
+ * @param {'light'|'dark'} theme
+ * @param {string} axis - x axis id the total is positioned on.
+ * @returns {object[]}
+ */
+export function totalAnnotations(rows, totalOf, side, theme, axis) {
+  const out = [];
+  rows.forEach((row, i) => {
+    const total = totalOf(row);
+    if (!(total > 0)) return;
+    out.push({
+      name: 'total',
+      xref: axis,
+      yref: 'y',
+      x: total,
+      y: i,
+      xanchor: side === 'left' ? 'right' : 'left',
+      xshift: side === 'left' ? -4 : 4,
+      yanchor: 'middle',
+      text: String(total),
+      showarrow: false,
+      captureevents: false,
+      borderpad: 0,
+      font: { size: 14, color: ACCENT[theme] },
+    });
+  });
+  return out;
 }
 
 /** Integer ticks only: these are counts. */
@@ -335,7 +386,11 @@ export function buildBarFigure(model, rows, env) {
 
   const layout = baseLayout(theme, env, rows, pitch, margin, bargap);
   layout.barmode = stacked ? 'stack' : 'group';
-  layout.xaxis = xAxis(theme, [0, padded(maxTotal, stacked ? 1.02 : 1.12)], {});
+  layout.xaxis = xAxis(
+    theme,
+    [0, rangeTop(maxTotal, env.width - margin.l - margin.r, 1.12)],
+    {},
+  );
   if (family) layout.xaxis3 = overlayAxis('x', layout.xaxis.range);
   layout.annotations = rows.map((row, i) => {
     const text = escapeHover(labels[i]);
@@ -357,6 +412,11 @@ export function buildBarFigure(model, rows, env) {
       font,
     });
   });
+  if (stacked) {
+    layout.annotations = layout.annotations.concat(
+      totalAnnotations(rows, (r) => r.total, 'right', theme, 'x'),
+    );
+  }
   return { traces, layout, config: { ...CONFIG } };
 }
 
@@ -414,10 +474,10 @@ export function buildButterflyFigure(model, rows, env) {
     (m, r) => Math.max(m, r.sides[0].total, r.sides[1].total),
     0,
   );
-  const top = Math.max(maxSide, 1) * 1.1;
 
   const gapPx = mobile ? 0 : spineGapPx(longest);
   const g = mobile ? 0 : Math.min(0.4, gapPx / Math.max(1, env.width - 16));
+  const top = rangeTop(maxSide, (env.width - 16) * (0.5 - g / 2), 1.1);
 
   const layout = baseLayout(theme, env, rows, pitch, margin, bargap);
   layout.barmode = stacked ? 'stack' : 'group';
@@ -470,6 +530,12 @@ export function buildButterflyFigure(model, rows, env) {
     font: { size: 14, color: ACCENT[theme], weight: 600 },
   }));
   layout.annotations = rowLabels.concat(headers);
+  if (stacked) {
+    layout.annotations = layout.annotations.concat(
+      totalAnnotations(rows, (r) => r.sides[0].total, 'left', theme, 'x'),
+      totalAnnotations(rows, (r) => r.sides[1].total, 'right', theme, 'x2'),
+    );
+  }
   return { traces, layout, config: { ...CONFIG } };
 }
 
