@@ -178,6 +178,63 @@ export function readableTextOn(hex) {
 }
 
 /**
+ * Text color that reads at 4.5:1 over every one of `hexes` (a label that spans
+ * several channel shades, D-23): black or white, whichever has the higher
+ * minimum contrast, or null when even that minimum is under 4.5 or the list
+ * is empty.
+ * @param {string[]} hexes
+ * @returns {string|null}
+ */
+export function readableTextOnAll(hexes) {
+  if (hexes.length === 0) return null;
+  const floor = (text) => Math.min(...hexes.map((h) => contrastRatio(h, text)));
+  const black = floor('#000000');
+  const white = floor('#FFFFFF');
+  const best = black >= white ? '#000000' : '#FFFFFF';
+  return Math.max(black, white) >= 4.5 ? best : null;
+}
+
+const SHADE_LADDER = [
+  ['#FFFFFF', 0.6],
+  ['#000000', 0.6],
+  ['#FFFFFF', 0.35],
+  ['#000000', 0.35],
+  ['#FFFFFF', 0.8],
+  ['#000000', 0.8],
+  ['#FFFFFF', 0.2],
+  ['#000000', 0.2],
+  ['#FFFFFF', 0.5],
+  ['#000000', 0.5],
+];
+
+/**
+ * Channel shades of a family color (D-23): the stacked Announcers chart draws
+ * one bar per network family and sub-shades each announcer segment by channel.
+ * Shade 0 is the family color itself, so a one-channel family looks unchanged.
+ * Further shades walk a fixed lighter/darker ladder of mixes with white or
+ * black (`mixHex(base, toward, w)`, w the base weight); a candidate is skipped unless it has at least 1.15:1 contrast with
+ * every shade already accepted (this drops the darker steps of a black base).
+ * If the ladder runs out, the accepted list repeats cyclically.
+ * @param {string} family - a `familyKey` value.
+ * @param {'light'|'dark'} theme
+ * @param {number} n - how many shades.
+ * @returns {string[]}
+ */
+export function channelShades(family, theme, n) {
+  if (n <= 0) return [];
+  const base = FAMILY_COLORS[theme][familyKey(family)];
+  const accepted = [base];
+  for (const [toward, w] of SHADE_LADDER) {
+    if (accepted.length >= n) break;
+    const candidate = mixHex(base, toward, w);
+    if (accepted.every((a) => contrastRatio(a, candidate) >= 1.15)) accepted.push(candidate);
+  }
+  const out = [];
+  for (let i = 0; i < n; i += 1) out.push(accepted[i % accepted.length]);
+  return out;
+}
+
+/**
  * Compare-mode marker symbols, assigned to selected people in selection
  * order (D-07). Named symbols only -- numeric codes misrender in scattergl.
  * @type {string[]}
