@@ -1819,3 +1819,26 @@ html:has(#detail-panel[open]) {
     min-height: 44px;
   }
 }
+
+/* Bars/Butterfly counts list rows: label and count on one line (SITE-34) */
+.counts-list > li > button,
+.counts-list > li > .counts-plain {
+  display: inline-flex;
+  gap: var(--space-sm);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.counts-list .counts-n {
+  font-weight: 600;
+}
+
+.counts-list .counts-side {
+  color: var(--muted);
+}
+
+/* The bars click layer and row-label annotations are clickable (D-18). */
+#bars-chart .nsewdrag,
+#bars-chart g.annotation[data-index] .annotation-text-g {
+  cursor: pointer;
+}
