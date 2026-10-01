@@ -1246,6 +1246,141 @@ input[type="checkbox"] {
   outline-offset: 2px;
 }
 
+.chart-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  min-height: 40px;
+}
+
+.chart-tab {
+  font: var(--font-label);
+  padding: var(--space-sm) var(--space-md);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.chart-tab[aria-selected="true"] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.chart-tab[aria-disabled="true"] {
+  color: var(--muted-weak);
+  cursor: not-allowed;
+  border-bottom-color: transparent;
+}
+
+.chart-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tab-hint {
+  min-height: 24px;
+  margin: 0;
+  font: var(--font-label);
+  color: var(--muted);
+}
+
+/* D-14/D-17: both control sets share one grid cell so the slot never shifts. */
+.chart-controls {
+  display: grid;
+}
+
+.chart-controls > #axis-toggle,
+.chart-controls > .bar-controls {
+  grid-area: 1 / 1;
+  justify-self: start;
+}
+
+.bar-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  align-items: center;
+}
+
+.group-by {
+  display: inline-flex;
+  gap: var(--space-sm);
+  align-items: center;
+  margin-bottom: var(--space-md);
+}
+
+.group-by-label {
+  font: var(--font-label);
+  color: var(--muted);
+}
+
+.is-concealed {
+  visibility: hidden;
+}
+
+.bars-title {
+  font: var(--font-body);
+  font-weight: 600;
+  margin: 0 0 var(--space-sm);
+}
+
+.bars-chart-box {
+  min-height: 520px;
+  position: relative;
+  background: var(--bg);
+}
+
+#bars-chart {
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.bars-footer {
+  display: flex;
+  gap: var(--space-md);
+  align-items: center;
+  margin-top: var(--space-sm);
+}
+
+.bars-captions p {
+  font: var(--font-label);
+  color: var(--muted);
+  margin: 0 0 4px;
+}
+
+.counts-list {
+  list-style: none;
+  padding: 0;
+  font: var(--font-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.counts-list li {
+  margin-bottom: 4px;
+}
+
+.counts-list button {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.counts-list button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.counts-list ol {
+  list-style: none;
+  padding-left: var(--space-md);
+}
+
 .segmented {
   display: inline-flex;
   border: 1px solid var(--border);
@@ -1668,10 +1803,19 @@ html:has(#detail-panel[open]) {
   .shape-legend li,
   #panel-close,
   .segmented button,
+  .chart-tab,
+  .counts-list button,
+  #bars-show-all,
   .radio-list button,
   .legend-chip,
   .games-table tr.row-link {
     min-height: 44px;
     min-width: 44px;
+  }
+}
+
+@media (max-width: 640px) {
+  .chart-tabs {
+    min-height: 44px;
   }
 }

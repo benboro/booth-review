@@ -173,16 +173,48 @@
 </div>
 
 <main id="chart-area">
-  <div id="chart-tabs" class="chart-tabs-slot" aria-hidden="true"></div>
+  <div id="chart-tabs" class="chart-tabs-slot chart-tabs" role="tablist" aria-label="Chart view">
+    <button type="button" role="tab" class="chart-tab" id="tab-scatter" data-view="scatter" aria-controls="chart-panel" aria-selected="true" tabindex="0">Scatter</button>
+    <button type="button" role="tab" class="chart-tab" id="tab-bars" data-view="bars" aria-controls="chart-panel" aria-selected="false" tabindex="-1">Bars</button>
+    <button type="button" role="tab" class="chart-tab" id="tab-butterfly" data-view="butterfly" aria-controls="chart-panel" aria-selected="false" tabindex="-1">Butterfly</button>
+  </div>
+  <p id="tab-hint" class="tab-hint" role="status"></p>
 
   <ul id="legend-chips" class="legend-chips" aria-label="Network families: select to show or fade"></ul>
 
-  <div id="axis-toggle" class="segmented" role="group" aria-label="X-axis">
-    <button type="button" data-axis="pregame" aria-pressed="true">Pre-game (spread)</button>
-    <button type="button" data-axis="excitement" aria-pressed="false">Excitement (CFBD)</button>
+  <div id="chart-controls" class="chart-controls">
+    <div id="axis-toggle" class="segmented" role="group" aria-label="X-axis">
+      <button type="button" data-axis="pregame" aria-pressed="true">Pre-game (spread)</button>
+      <button type="button" data-axis="excitement" aria-pressed="false">Excitement (CFBD)</button>
+    </div>
+    <div id="bar-controls" class="bar-controls is-concealed">
+      <div id="bar-style-toggle" class="segmented" role="group" aria-label="Bar style">
+        <button type="button" data-bars="simple" aria-pressed="true">Simple</button>
+        <button type="button" data-bars="stacked" aria-pressed="false">Stacked</button>
+      </div>
+      <div id="group-by" class="group-by">
+        <span id="group-by-label" class="group-by-label">Group by:</span>
+        <div id="group-by-toggle" class="segmented" role="group" aria-label="Group bars by">
+          <button type="button" data-group="announcers" aria-pressed="true">Announcers</button>
+          <button type="button" data-group="teams" aria-pressed="false">Teams</button>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <div id="chart" tabindex="-1"><div id="season-empty-note" class="season-empty-note" role="status" hidden><p class="season-empty-title"></p><p class="season-empty-hint">Widen the season range or reset Seasons.</p></div></div>
+  <div id="chart-panel" role="tabpanel" aria-labelledby="tab-scatter">
+    <div id="chart" tabindex="-1"><div id="season-empty-note" class="season-empty-note" role="status" hidden><p class="season-empty-title"></p><p class="season-empty-hint">Widen the season range or reset Seasons.</p></div></div>
+    <section id="bars-panel" hidden>
+      <h2 id="bars-title" class="bars-title"></h2>
+      <div id="bars-chart-box" class="bars-chart-box">
+        <div id="bars-chart" role="img" aria-label=""></div>
+        <div id="bars-note" class="season-empty-note" role="status" hidden><p class="season-empty-title"></p><p class="season-empty-hint"></p></div>
+      </div>
+      <div id="bars-footer" class="bars-footer"><button type="button" id="bars-show-all" class="toggle" aria-expanded="false" aria-controls="bars-chart" hidden></button><p id="bars-rowcount" class="caption"></p></div>
+      <div id="bars-captions" class="bars-captions"></div>
+      <details id="bars-data"><summary>Counts as a list</summary><ol id="bars-counts" class="counts-list"></ol></details>
+    </section>
+  </div>
 
   <ul id="shape-legend" hidden></ul>
 
