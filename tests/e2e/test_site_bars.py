@@ -79,15 +79,63 @@ def _wait_points(page: Page, n: int) -> None:
 # ---------------------------------------------------------------- render
 
 
+def test_title_names_school_and_drilled_announcer(guarded_page: Page, open_app: OpenApp) -> None:
+    """D-21 (notes-7): drilling an announcer keeps the school in the title, and a
+    Group-by round trip keeps both."""
+    page = guarded_page
+    open_app(page, NORTHFIELD)
+    title = page.locator("#bars-title")
+    assert title.inner_text() == "Announcers by rated telecasts with Northfield"
+    _click_bar(page, 0)
+    page.wait_for_function("window.__testHooks.getState().people.length === 1")
+    both = "with Dale Harlow and Northfield"
+    assert title.inner_text() == f"Announcers by rated telecasts {both}"
+    aria = page.locator("#bars-chart").get_attribute("aria-label")
+    assert aria is not None
+    assert aria.startswith(f"Bar chart: announcers by rated telecasts {both}")
+    page.locator('#group-by-toggle button[data-group="teams"]').click()
+    page.wait_for_function("document.getElementById('bars-title').textContent.startsWith('Teams')")
+    assert title.inner_text() == f"Teams by rated telecasts {both}"
+    page.locator('#group-by-toggle button[data-group="announcers"]').click()
+    page.wait_for_function(
+        "document.getElementById('bars-title').textContent.startsWith('Announcers')"
+    )
+    assert title.inner_text() == f"Announcers by rated telecasts {both}"
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        (
+            "?people=kris-venn,jax-venn&mode=together&view=bars",
+            "Teams by rated telecasts with Kris Venn and Jax Venn",
+        ),
+        (
+            "?people=kris-venn,pat-rowan&mode=compare&view=bars",
+            "Teams by rated telecasts with Kris Venn or Pat Rowan",
+        ),
+        (
+            "?school=northfield,lakeview&people=dale-harlow&view=butterfly",
+            "Announcers: Northfield and Lakeview with Dale Harlow",
+        ),
+    ],
+)
+def test_title_joiners_follow_compare_and_together(
+    guarded_page: Page, open_app: OpenApp, query: str, expected: str
+) -> None:
+    open_app(guarded_page, query)
+    assert guarded_page.locator("#bars-title").inner_text() == expected
+
+
 def test_simple_bars_render_title_aria_and_counts(guarded_page: Page, open_app: OpenApp) -> None:
     open_app(guarded_page, NORTHFIELD)
     page = guarded_page
     assert page.locator("#bars-title").inner_text() == (
-        "Announcers by rated telecasts · Northfield"
+        "Announcers by rated telecasts with Northfield"
     )
     assert len(_bar_boxes(page)) == 5
     assert page.locator("#bars-chart").get_attribute("aria-label") == (
-        "Bar chart: announcers by rated telecasts, Northfield, 2019–2026. "  # noqa: RUF001 - en dash is the real copy
+        "Bar chart: announcers by rated telecasts with Northfield, 2019–2026. "  # noqa: RUF001 - en dash is the real copy
         "Showing 5 of 5. Top: Dale Harlow · PBP 2, Dale Harlow Jr. · Analyst 2, "
         "Casey Lund · PBP 1."
     )

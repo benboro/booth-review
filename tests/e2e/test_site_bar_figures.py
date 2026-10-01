@@ -54,7 +54,10 @@ _TITLE_FLY = "(c) => c.C.chartTitle(c.fly, c.data, c.state)"
 
 _BARS_TITLES: list[tuple[dict[str, Any], str]] = [
     ({"school": ["northfield"]}, "Announcers by rated telecasts with Northfield"),
-    ({"school": ["northfield"], "bars": "stacked"}, "Network families by announcer with Northfield"),
+    (
+        {"school": ["northfield"], "bars": "stacked"},
+        "Network families by announcer with Northfield",
+    ),
     ({"people": ["kris-venn"]}, "Teams by rated telecasts with Kris Venn"),
     ({"people": ["kris-venn"], "bars": "stacked"}, "Conferences by team with Kris Venn"),
     ({"networks": ["net-a", "net-b"]}, "Teams by rated telecasts on Alpha Sports or Beta Network"),
@@ -365,7 +368,9 @@ def test_family_caption_and_counts_text(
         multichannel,
     )
     assert fly[0] == _STACK_SUM and _SHADE_CAPTION in fly
-    plain = _run(page, site_url, {"school": ["northfield"], "bars": "stacked"}, cap.format(m="bars"))
+    plain = _run(
+        page, site_url, {"school": ["northfield"], "bars": "stacked"}, cap.format(m="bars")
+    )
     assert _SHADE_CAPTION in plain  # stacked Announcers are family rows on the shared fixture too
     simple = _run(page, site_url, {"school": ["northfield"]}, cap.format(m="bars"))
     assert _SHADE_CAPTION not in simple
