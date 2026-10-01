@@ -315,3 +315,92 @@ def test_resizing_on_the_bars_tab_raises_no_errors(
         guarded_page.set_viewport_size({"width": width, "height": 800})
         guarded_page.wait_for_timeout(200)
     assert errors == []
+
+
+# --- D-22: one baseline and height across the controls row -----------------
+
+BAR_VIEW = "?school=northfield&networks=net-a&view=bars"
+FLY_VIEW = "?school=northfield,lakeview&people=kris-venn,pat-rowan&view=butterfly"
+VIEWPORTS = [("guarded_page", 1280), ("guarded_page", 800), ("mobile_page", 390)]
+
+_ROW_METRICS_JS = """() => {
+  const segs = Array.from(document.querySelectorAll('#bar-controls .segmented'))
+    .filter((s) => getComputedStyle(s).visibility !== 'hidden');
+  const textBottom = (el) => {
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    return r.getBoundingClientRect().bottom;
+  };
+  return {
+    segs: segs.map((s) => {
+      const b = s.getBoundingClientRect();
+      return {
+        top: b.top, height: b.height,
+        texts: Array.from(s.querySelectorAll('button')).map(textBottom),
+      };
+    }),
+    label: textBottom(document.getElementById('group-by-label')),
+  };
+}"""
+
+
+def _viewport_page(request: pytest.FixtureRequest, fixture: str, width: int) -> Page:
+    page: Page = request.getfixturevalue(fixture)
+    if fixture == "guarded_page":
+        page.set_viewport_size({"width": width, "height": 900})
+    return page
+
+
+@pytest.mark.parametrize(("fixture", "width"), VIEWPORTS)
+@pytest.mark.parametrize("query", [BAR_VIEW, FLY_VIEW])
+def test_bar_controls_share_one_baseline_and_height(
+    request: pytest.FixtureRequest,
+    open_app: Callable[[Page, str], None],
+    fixture: str,
+    width: int,
+    query: str,
+) -> None:
+    page = _viewport_page(request, fixture, width)
+    open_app(page, query)
+    assert not _is_concealed(page, "#group-by")
+    m = page.evaluate(_ROW_METRICS_JS)
+    segs = m["segs"]
+    assert segs
+    assert max(s["height"] for s in segs) - min(s["height"] for s in segs) <= 0.5
+    lines: list[list[dict[str, Any]]] = []
+    for seg in sorted(segs, key=lambda s: s["top"]):
+        if lines and abs(lines[-1][0]["top"] - seg["top"]) <= 2:
+            lines[-1].append(seg)
+        else:
+            lines.append([seg])
+    assert len(lines) == 1 if width >= 800 else len(lines) <= 2
+    for line in lines:
+        assert max(s["top"] for s in line) - min(s["top"] for s in line) <= 0.5
+        bottoms = [b for s in line for b in s["texts"]]
+        if line[-1] is segs[-1] or line is lines[-1]:
+            bottoms.append(m["label"])
+        assert max(bottoms) - min(bottoms) <= 1, bottoms
+
+
+_FOOTPRINT_JS = """() => document.getElementById('chart-panel').getBoundingClientRect().top
+  - document.getElementById('chart-controls').getBoundingClientRect().top"""
+
+
+@pytest.mark.parametrize(("fixture", "width"), VIEWPORTS)
+def test_controls_footprint_is_fixed(
+    request: pytest.FixtureRequest,
+    open_app: Callable[[Page, str], None],
+    fixture: str,
+    width: int,
+) -> None:
+    page = _viewport_page(request, fixture, width)
+    values: dict[str, float] = {}
+    for name, query in (
+        ("scatter", "?school=northfield"),
+        ("bars", "?school=northfield&view=bars"),
+        ("bars-group", BAR_VIEW),
+        ("butterfly", FLY_VIEW),
+    ):
+        open_app(page, query)
+        values[name] = page.evaluate(_FOOTPRINT_JS)
+    assert max(values.values()) - min(values.values()) <= 1, values
