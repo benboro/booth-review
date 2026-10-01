@@ -330,14 +330,22 @@ export function buildButterflyFigure(model, rows, env) {
       font,
     });
   });
+  // A phone half is ~170px wide and a title grows away from the spine, so cap
+  // its length by the half's width (bold 14px, ~12px per wide capital).
+  const headerMax = mobile
+    ? Math.min(SPINE_LABEL_MAX, Math.floor((env.width - 16) / 2 / 12) - 1)
+    : SPINE_LABEL_MAX;
+  // D-26: each side title sits against the spine edge of its own half.
   const headers = [0, 1].map((side) => ({
     xref: 'paper',
     yref: 'paper',
-    x: side === 0 ? 0 : 1,
-    xanchor: side === 0 ? 'left' : 'right',
+    x: side === 0 ? 0.5 - g / 2 : 0.5 + g / 2,
+    xanchor: side === 0 ? 'right' : 'left',
+    xshift: mobile ? (side === 0 ? -4 : 4) : 0,
+    borderpad: 0,
     y: 1,
     yanchor: 'bottom',
-    text: escapeHover(model.sides[side].name),
+    text: escapeHover(truncate(model.sides[side].name, headerMax)),
     showarrow: false,
     captureevents: false,
     font: { size: 14, color: ACCENT[theme], weight: 600 },

@@ -586,9 +586,7 @@ def test_violet_text_contrast(guarded_page: Page, site_url: str, theme: str) -> 
         }""",
         theme,
     )
-    expected = (
-        ("#FFFFFF", "#000000") if theme == "light" else ("#000000", "#FFFFFF")
-    )
+    expected = ("#FFFFFF", "#000000") if theme == "light" else ("#000000", "#FFFFFF")
     assert (want["a"], want["b"]) == expected
     assert want["ra"] >= 4.5 and want["rb"] >= 4.5
     out = _figure(
@@ -1071,11 +1069,11 @@ def test_rendered_butterfly_side_name_is_escaped(
 
 
 @pytest.mark.parametrize("mobile", [False, True])
-def test_butterfly_headers_hug_the_spine(
-    guarded_page: Page, site_url: str, mobile: bool
-) -> None:
+def test_butterfly_headers_hug_the_spine(guarded_page: Page, site_url: str, mobile: bool) -> None:
     env = {**_PHONE, "width": 358} if mobile else _DESKTOP
-    out = _figure(guarded_page, site_url, {"school": ["northfield", "lakeview"]}, "butterflyModel", env)
+    out = _figure(
+        guarded_page, site_url, {"school": ["northfield", "lakeview"]}, "butterflyModel", env
+    )
     layout = out["figure"]["layout"]
     left, right = layout["annotations"][-2:]
     g = 0 if mobile else layout["xaxis2"]["domain"][0] - 0.5
