@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Callable
+from itertools import pairwise
 from typing import Any
 
 import pytest
@@ -728,7 +729,7 @@ def test_stacked_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
     assert len(figure["traces"]) == depth
     for k, trace in enumerate(figure["traces"]):
         assert set(trace["marker"]["color"]) == {"#7C3AED" if k % 2 == 0 else "#B793F5"}
-        assert trace["marker"]["line"] == {"width": 1, "color": "#FFFFFF"}
+        assert trace["marker"]["line"] == {"width": 3, "color": "#FFFFFF"}  # D-28
         for i, row in enumerate(rows):
             if k < len(row["segments"]):
                 assert trace["x"][i] == row["segments"][k]["count"]
@@ -962,7 +963,7 @@ def test_butterfly_stacked_figure_matches_bars_builder(guarded_page: Page, site_
     assert figure["layout"]["barmode"] == "stack"
     assert figure["layout"]["uniformtext"] == {"mode": "hide", "minsize": 14}
     for trace in figure["traces"]:
-        assert trace["marker"]["line"] == {"width": 1, "color": "#FFFFFF"}
+        assert trace["marker"]["line"] == {"width": 3, "color": "#FFFFFF"}  # D-28
         assert trace["textposition"] == "inside"
     assert {t["xaxis"] for t in figure["traces"]} == {"x", "x2"}
 
@@ -1002,7 +1003,7 @@ def test_butterfly_side_name_escaped_in_figure(guarded_page: Page, site_url: str
 # --------------------------------------------------------------------------
 
 _RENDER_JS = """
-async ([partial, fn, env, longLabels, sideName]) => {
+async ([partial, fn, env, longLabels, sideName, inflate]) => {
   const D = await import('./modules/data.js');
   const S = await import('./modules/select.js');
   const B = await import('./modules/bars.js');
@@ -1012,6 +1013,16 @@ async ([partial, fn, env, longLabels, sideName]) => {
   const state = Object.assign(S.defaultState(data), partial);
   const view = S.computeView(data, state);
   const model = B[fn](data, view, state);
+  if (inflate && inflate !== 1) {
+    const side = (o) => {
+      o.total *= inflate;
+      (o.segments ?? []).forEach((g) => {
+        g.count *= inflate;
+        (g.channels ?? []).forEach((c) => { c.count *= inflate; });
+      });
+    };
+    model.rows.forEach((r) => { side(r); (r.sides ?? []).forEach(side); });
+  }
   if (longLabels) {
     model.rows.forEach((r, i) => { r.label = `Long Announcer Name Number ${i} PBP`; });
   }
@@ -1057,6 +1068,9 @@ async ([partial, fn, env, longLabels, sideName]) => {
     scrollWidth: gd.scrollWidth,
     clientWidth: gd.clientWidth,
     gdLeft: gdRect.left,
+    gdTop: gdRect.top,
+    figAnnos: figure.layout.annotations.map(
+      (a) => ({ name: a.name ?? null, y: a.y, xref: a.xref })),
     gdRight: gdRect.right,
     plotLeft: gdRect.left + full._size.l,
     plotRight: gdRect.left + full._size.l + full._size.w,
@@ -1080,11 +1094,14 @@ def _render(
     long_labels: bool = False,
     side_name: str = "",
     raw: dict[str, Any] | None = None,
+    inflate: int = 1,
 ) -> dict[str, Any]:
     if raw is not None:
         page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
     open_app(page, "")
-    out: dict[str, Any] = page.evaluate(_RENDER_JS, [partial, fn, env, long_labels, side_name])
+    out: dict[str, Any] = page.evaluate(
+        _RENDER_JS, [partial, fn, env, long_labels, side_name, inflate]
+    )
     return out
 
 
@@ -1399,7 +1416,7 @@ def test_family_stack_figure_shape(
     for k, t in enumerate(overlays):
         assert t["xaxis"] == "x3"
         assert t["marker"]["color"] == _TRANSPARENT
-        assert t["marker"]["line"] == {"width": 1, "color": "#FFFFFF"}
+        assert t["marker"]["line"] == {"width": 3, "color": "#FFFFFF"}  # D-28
         assert t["customdata"][0] == {"r": 0, "s": k, "side": None}
     layout = figure["layout"]
     x3 = layout["xaxis3"]
@@ -1514,7 +1531,7 @@ def test_rendered_family_segments_align_with_channel_pieces(
             assert max(p["r"] for p in mine) == pytest.approx(over["r"], abs=1)
             assert [_hex(p["fill"]) for p in mine] == [shades[c["shade"]] for c in chans]
             assert _hex(over["stroke"]) == bg
-            assert over["sw"] == pytest.approx(1, abs=0.01)
+            assert over["sw"] == pytest.approx(2 if width < 600 else 3, abs=0.01)  # D-28
     assert out["shades"][0][0] == "#0072B2"
 
 
@@ -1604,3 +1621,136 @@ def test_rendered_family_segment_markup_creates_no_element(
         }"""
     )
     assert imgs == 0
+
+
+# --------------------------------------------------------------------------
+# D-28 segment gaps and D-29 total placement, measured on the rendered chart
+# --------------------------------------------------------------------------
+
+_PIXELS_JS = """
+async ([b64, ys]) => {
+  const img = new Image();
+  img.src = 'data:image/png;base64,' + b64;
+  await img.decode();
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  return {
+    width: img.width,
+    rows: ys.map((y) => Array.from(ctx.getImageData(0, y, img.width, 1).data)),
+  };
+}
+"""
+
+_PAGE_BG = {"light": (255, 255, 255), "dark": (20, 22, 26)}
+_STACK_CASES = [
+    (_FAM_BARS, "barsModel", True),
+    (_FAM_FLY, "butterflyModel", True),
+    ({"people": ["kris-venn"], "bars": "stacked"}, "barsModel", False),
+    ({"people": ["kris-venn", "pat-rowan"], "bars": "stacked"}, "butterflyModel", False),
+]
+
+
+def _bg_run(rgba: list[int], x: float, half: int, bg: tuple[int, int, int]) -> int:
+    """Longest run of page-background pixels within +-half px of column x."""
+    best = run = 0
+    for px in range(max(0, round(x) - half), min(len(rgba) // 4, round(x) + half + 1)):
+        if all(abs(rgba[px * 4 + c] - bg[c]) <= 6 for c in range(3)):
+            run += 1
+            best = max(best, run)
+        else:
+            run = 0
+    return best
+
+
+@pytest.mark.parametrize("theme", _THEMES)
+@pytest.mark.parametrize("width", [1280, 800, 358])
+@pytest.mark.parametrize(("partial", "fn", "multi"), _STACK_CASES)
+def test_rendered_stacked_segment_gaps(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    request: pytest.FixtureRequest,
+    theme: str,
+    width: int,
+    partial: dict[str, Any],
+    fn: str,
+    multi: bool,
+) -> None:
+    import base64
+
+    guarded_page.emulate_media(color_scheme=theme)  # type: ignore[arg-type]
+    raw = request.getfixturevalue("multichannel") if multi else None
+    env = {"theme": theme, "mobile": width < 600, "revision": 1, "width": width}
+    out = _render(guarded_page, open_app, partial, fn, env, raw=raw)
+    guarded_page.add_style_tag(content="#test-bars .bars text { display: none !important; }")
+    spine = (out["x1End"] + out["x2Start"]) / 2 if fn == "butterflyModel" else 0
+    announcer: list[tuple[int, float]] = []  # (row, x relative to the chart)
+    channel: list[tuple[int, float]] = []
+    for (row, _side), g in _row_groups(out, fn, spine).items():
+        segs = g["overlay"] or g["piece"]
+        edges = [(a["r"] + b["l"]) / 2 for a, b in pairwise(segs)]
+        announcer += [(row, e - out["gdLeft"]) for e in edges]
+        if g["overlay"]:
+            pieces = g["piece"]
+            for a, b in pairwise(pieces):
+                e = (a["r"] + b["l"]) / 2
+                if all(abs(e - x) > 2 for x in edges):
+                    channel.append((row, e - out["gdLeft"]))
+    assert announcer
+    assert channel or not multi
+    png = guarded_page.locator("#test-bars").screenshot()
+    ys = [round(out["centers"][i] - out["gdTop"]) for i in range(out["rowCount"])]
+    shot = guarded_page.evaluate(_PIXELS_JS, [base64.b64encode(png).decode(), ys])
+    assert shot["width"] == round(out["gdRight"] - out["gdLeft"])  # device scale 1
+    bg = _PAGE_BG[theme]
+    need = 2 if width < 600 else 3
+    for row, x in announcer:
+        run = _bg_run(shot["rows"][row], x, 6, bg)
+        assert run >= need, (row, x, run)
+    for row, x in channel:
+        assert _bg_run(shot["rows"][row], x, 2, bg) == 0, (row, x)
+
+
+@pytest.mark.parametrize("inflate", [1, 100])
+@pytest.mark.parametrize("width", [1280, 800, 358])
+@pytest.mark.parametrize(("partial", "fn", "multi"), _STACK_CASES)
+def test_rendered_stacked_totals_sit_past_the_bar_end(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    request: pytest.FixtureRequest,
+    width: int,
+    partial: dict[str, Any],
+    fn: str,
+    multi: bool,
+    inflate: int,
+) -> None:
+    raw = request.getfixturevalue("multichannel") if multi else None
+    env = {"theme": "light", "mobile": width < 600, "revision": 1, "width": width}
+    out = _render(guarded_page, open_app, partial, fn, env, raw=raw, inflate=inflate)
+    n = out["rowCount"]
+    first = n + (2 if fn == "butterflyModel" else 0)
+    spine = (out["x1End"] + out["x2Start"]) / 2 if fn == "butterflyModel" else 0
+    groups = _row_groups(out, fn, spine)
+    by_index = {a["index"]: a for a in out["annos"]}
+    others = [a for a in out["annos"] if a["index"] < first]
+    totals = out["figAnnos"][first:]
+    assert totals
+    assert all(t["name"] == "total" for t in totals)
+    for k, t in enumerate(totals):
+        anno = by_index[first + k]
+        assert anno["text"] == str(round(float(anno["text"])))
+        row, left = t["y"], t["xref"] == "x" and fn == "butterflyModel"
+        g = groups[(row, 0 if left or fn == "barsModel" else 1)]
+        paths = g["piece"] + g["overlay"]
+        assert abs((anno["t"] + anno["b"]) / 2 - out["centers"][row]) <= 3
+        if left:
+            outer = min(p["l"] for p in paths)
+            assert 0 <= outer - anno["r"] <= 12, (row, anno, outer)
+        else:
+            outer = max(p["r"] for p in paths)
+            assert 0 <= anno["l"] - outer <= 12, (row, anno, outer)
+        assert out["gdLeft"] <= anno["l"] and anno["r"] <= out["gdRight"]
+        assert not any(_overlaps(anno, bar) for bar in out["bars"])
+        assert not any(_overlaps(anno, other) for other in others)
