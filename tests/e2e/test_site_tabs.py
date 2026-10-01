@@ -408,7 +408,7 @@ def test_controls_footprint_is_fixed(
 
 # --- D-25: Both | PBP | Analyst control, one state with the Role filter ------
 
-_ROWS_JS = "window.__testHooks.getBarsModel().rows.map(r => [r.name, r.total])"
+_ROWS_JS = "window.__testHooks.getBarsModel().rows.map(r => [r.label, r.total])"
 _ROLE_PRESSED_JS = """() => Array.from(document.querySelectorAll('#bar-role-toggle button'))
   .map((b) => [b.textContent, b.getAttribute('aria-pressed')])"""
 PBP_ROWS = [["Dale Harlow · PBP", 2], ["Casey Lund · PBP", 1]]

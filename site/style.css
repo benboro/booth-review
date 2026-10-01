@@ -1844,6 +1844,17 @@ html:has(#detail-panel[open]) {
   .chart-tabs {
     min-height: 44px;
   }
+
+  /* D-25: tighter gap and button padding so Simple/Stacked and Both/PBP/Analyst
+     share the first line and Group-by takes the second. */
+  .bar-controls {
+    gap: var(--space-sm);
+  }
+
+  .bar-controls .segmented button {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
 }
 
 /* Bars/Butterfly counts list rows: label and count on one line (SITE-34) */

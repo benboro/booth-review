@@ -1,6 +1,8 @@
 /**
  * Chart tabs: the Scatter | Bars | Butterfly tablist, its hint row, and the
- * Bar style / Group-by controls (SITE-33, D-10, D-12, D-13, D-14, D-17).
+ * Bar style / Both-PBP-Analyst / Group-by controls (SITE-33, D-10, D-12, D-13,
+ * D-14, D-17, D-25). The role control reads and writes the one `state.role` the
+ * Role filter popover uses, so the two always agree.
  *
  * Init once (`initChartTabs`: delegated listeners), render every cycle
  * (`renderChartTabs`: syncs attributes to state). Every change goes through
@@ -121,6 +123,13 @@ export function initChartTabs({ setState }) {
       if (button) setState({ bars: button.dataset.bars });
     });
   }
+  const roleToggle = document.getElementById('bar-role-toggle');
+  if (roleToggle) {
+    roleToggle.addEventListener('click', (ev) => {
+      const button = ev.target.closest('button[data-role]');
+      if (button) setState({ role: button.dataset.role || null });
+    });
+  }
   const groupToggle = document.getElementById('group-by-toggle');
   if (groupToggle) {
     groupToggle.addEventListener('click', (ev) => {
@@ -171,6 +180,10 @@ export function renderChartTabs({ data, state }) {
 
   for (const button of document.querySelectorAll('#bar-style-toggle button[data-bars]')) {
     button.setAttribute('aria-pressed', String(button.dataset.bars === state.bars));
+  }
+
+  for (const button of document.querySelectorAll('#bar-role-toggle button[data-role]')) {
+    button.setAttribute('aria-pressed', String((button.dataset.role || null) === state.role));
   }
 
   const butterfly = state.view === 'butterfly';
