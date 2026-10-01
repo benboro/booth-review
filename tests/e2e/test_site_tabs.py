@@ -187,3 +187,131 @@ def test_scatter_tab_shows_axis_toggle_and_conceals_bar_controls(
     open_app(guarded_page, "")
     assert not _is_concealed(guarded_page, "#axis-toggle")
     assert _is_concealed(guarded_page, "#bar-controls")
+
+
+# --- Task 3: chart panel branching ----------------------------------------
+
+
+def _visible(page: Page, selector: str) -> bool:
+    return page.locator(selector).is_visible()
+
+
+def test_stale_bars_tab_stays_selected_and_shows_the_note(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?view=bars")
+    assert _attr(guarded_page, "#tab-bars", "aria-selected") == "true"
+    assert _attr(guarded_page, "#tab-bars", "aria-disabled") == "true"
+    assert not _visible(guarded_page, "#chart")
+    assert _visible(guarded_page, "#bars-panel")
+    assert _visible(guarded_page, "#bars-note")
+    assert guarded_page.locator("#bars-note .season-empty-title").inner_text() == BARS_HINT
+    assert guarded_page.locator("#bars-note .season-empty-hint").inner_text() == (
+        "Pick a school, narrow Networks, or select an announcer to see counts."
+    )
+    for selector in ("#bars-title", "#bars-footer", "#bars-captions", "#bars-data"):
+        assert not _visible(guarded_page, selector), selector
+    assert "view=bars" in guarded_page.evaluate("() => location.search")
+    assert _box(guarded_page, "#bars-chart-box")["height"] >= 520
+
+
+def test_restoring_the_filter_brings_the_bars_panel_back(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?view=bars")
+    guarded_page.evaluate("() => window.__testHooks.setState({ school: ['northfield'] })")
+    assert not _visible(guarded_page, "#bars-note")
+    assert guarded_page.locator("#bars-title").evaluate("e => !e.hidden")
+    assert guarded_page.locator("#bars-footer").evaluate("e => !e.hidden")
+    assert guarded_page.locator("#bars-captions").evaluate("e => !e.hidden")
+    assert guarded_page.locator("#bars-data").evaluate("e => !e.hidden")
+    guarded_page.evaluate("() => window.__testHooks.setState({ school: [] })")
+    assert _visible(guarded_page, "#bars-note")
+    assert _attr(guarded_page, "#tab-bars", "aria-selected") == "true"
+
+
+def test_stale_butterfly_copy(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
+    open_app(guarded_page, "?view=butterfly&school=northfield")
+    assert guarded_page.locator("#bars-note .season-empty-title").inner_text() == BUTTERFLY_HINT
+    assert guarded_page.locator("#bars-note .season-empty-hint").inner_text() == (
+        "Select two schools or two announcers to compare them."
+    )
+
+
+def test_tab_switching_never_shifts_the_chart_chrome(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?school=northfield,lakeview")
+    before = {s: _box(guarded_page, s) for s in ("#legend-chips", "#chart-controls", "#tab-hint")}
+    for view in ("bars", "butterfly", "scatter"):
+        guarded_page.locator(f"#tab-{view}").click()
+        assert _state(guarded_page)["view"] == view
+        for selector, box in before.items():
+            now = _box(guarded_page, selector)
+            assert now["y"] == box["y"], (view, selector)
+            assert now["height"] == box["height"], (view, selector)
+    guarded_page.locator("#tab-bars").click()
+    assert _box(guarded_page, "#bars-chart-box")["height"] >= 520
+
+
+def test_scatter_works_after_first_loading_on_a_bar_tab(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, ONE_SCHOOL + "&view=bars")
+    guarded_page.locator("#tab-scatter").click()
+    assert _visible(guarded_page, "#chart")
+    guarded_page.wait_for_function("() => document.querySelector('#chart .main-svg')")
+    widths = guarded_page.evaluate(
+        "() => ({svg: document.querySelector('#chart .main-svg').getBoundingClientRect().width,"
+        " box: document.getElementById('chart').clientWidth})"
+    )
+    assert abs(widths["svg"] - widths["box"]) <= 1
+
+    guarded_page.locator("#chart").scroll_into_view_if_needed()
+    point = guarded_page.evaluate(
+        """() => {
+          const gd = document.getElementById('chart');
+          const layout = gd._fullLayout;
+          const rect = gd.getBoundingClientRect();
+          for (const t of gd.data) {
+            if (!t.customdata) continue;
+            return {
+              x: rect.left + layout._size.l + layout.xaxis.d2p(t.x[0]),
+              y: rect.top + layout._size.t + layout.yaxis.d2p(t.y[0]),
+            };
+          }
+          return null;
+        }"""
+    )
+    assert point is not None
+    guarded_page.mouse.move(5, 5)
+    guarded_page.mouse.move(point["x"], point["y"])
+    guarded_page.wait_for_selector("#chart-tooltip:not([hidden])", timeout=5000)
+
+
+def test_scatter_only_captions_hide_on_bar_tabs(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, ONE_SCHOOL + "&axis=excitement")
+    assert _visible(guarded_page, "#excitement-caption")
+    assert _visible(guarded_page, "#era-note")
+    guarded_page.locator("#tab-bars").click()
+    for selector in ("#excitement-caption", "#era-note", "#shape-legend"):
+        assert not _visible(guarded_page, selector), selector
+    assert "axis=excitement" in guarded_page.evaluate("() => location.search")
+    guarded_page.locator("#tab-scatter").click()
+    assert _visible(guarded_page, "#excitement-caption")
+    assert _visible(guarded_page, "#era-note")
+
+
+def test_resizing_on_the_bars_tab_raises_no_errors(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    errors: list[str] = []
+    guarded_page.on("pageerror", lambda exc: errors.append(str(exc)))
+    guarded_page.on("console", lambda msg: errors.append(msg.text) if msg.type == "error" else None)
+    open_app(guarded_page, ONE_SCHOOL + "&view=bars")
+    for width in (800, 1280):
+        guarded_page.set_viewport_size({"width": width, "height": 800})
+        guarded_page.wait_for_timeout(200)
+    assert errors == []
