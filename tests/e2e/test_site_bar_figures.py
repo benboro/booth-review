@@ -537,6 +537,56 @@ def test_palette_helpers(guarded_page: Page, site_url: str) -> None:
     assert out["plainTones"] == {"a": "#7C3AED", "b": "#B793F5"}
 
 
+def test_channel_shades(guarded_page: Page, site_url: str) -> None:
+    guarded_page.goto(f"{site_url}/")
+    out = guarded_page.evaluate(
+        """async () => {
+          const P = await import('./modules/palette.js');
+          const res = { pairs: [], base: [], same: true, n1: [], n0: null };
+          for (const theme of ['light', 'dark']) {
+            for (const fam of P.FAMILY_ORDER) {
+              const s = P.channelShades(fam, theme, 5);
+              res.base.push([s[0], P.FAMILY_COLORS[theme][fam]]);
+              res.same = res.same
+                && JSON.stringify(s) === JSON.stringify(P.channelShades(fam, theme, 5));
+              res.pairs.push([fam, theme, new Set(s).size, s.length,
+                Math.min(...s.flatMap((a, i) => s.slice(i + 1).map((b) => P.contrastRatio(a, b))))]);
+            }
+          }
+          res.n1 = P.channelShades('disney', 'light', 1);
+          res.n0 = P.channelShades('disney', 'light', 0);
+          return res;
+        }"""
+    )
+    assert all(a == b for a, b in out["base"])
+    assert out["same"]
+    assert len(out["pairs"]) == 16
+    for fam, theme, distinct, length, worst in out["pairs"]:
+        assert distinct == length == 5, (fam, theme)
+        assert worst >= 1.15, (fam, theme, worst)
+    assert out["n1"] == ["#0072B2"]
+    assert out["n0"] == []
+
+
+def test_readable_text_on_all(guarded_page: Page, site_url: str) -> None:
+    guarded_page.goto(f"{site_url}/")
+    out = guarded_page.evaluate(
+        """async () => {
+          const P = await import('./modules/palette.js');
+          return {
+            one: [P.readableTextOnAll(['#0072B2']), P.readableTextOn('#0072B2')],
+            empty: P.readableTextOnAll([]),
+            ok: P.readableTextOnAll(['#0072B2', '#004A73']),
+            bad: P.readableTextOnAll(['#000000', '#FFFFFF']),
+          };
+        }"""
+    )
+    assert out["one"][0] == out["one"][1]
+    assert out["empty"] is None
+    assert out["ok"] == "#FFFFFF"
+    assert out["bad"] is None
+
+
 _THEMES = ["light", "dark"]
 _VIOLET_CASES = [
     ({"school": ["northfield"]}, "barsModel"),
