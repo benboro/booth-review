@@ -44,6 +44,8 @@ controls for matchup quality, network, time slot, and era) is the whole point
 of this page's warning. The causal question is out of scope for this release
 and is planned as a future model-driven milestone, not part of this chart.
 
+The Bars and Butterfly views count assignments, not quality. Every bar is a number of rated telecasts, never a viewer figure, and announcers are never ranked by audience. Bars are ordered by how many telecasts an announcer, team, network, or conference has in the current filters, which is a count of assignments, not a ranking of skill. In a stacked bar a telecast counts once for every announcer (or team) in it, so a bar can be longer than its number of telecasts.
+
 ## Which games are included
 
 A game is in scope if at least one participating team was FBS that season —

@@ -480,3 +480,70 @@ def test_real_modal_never_shows_two_scrollers(
         real_guarded_page.evaluate("window.__testHooks.closePanel()")
     assert worst <= 1
     assert dialog_scrolls == 0
+
+
+_BARS_REAL_JS = """
+async () => {
+  const bars = await import(new URL('./modules/bars.js', location.href).href);
+  const sel = await import(new URL('./modules/select.js', location.href).href);
+  const data = window.__testHooks.data;
+  const base = sel.defaultState(data);
+  let announcerMismatch = 0;
+  let stackedMismatch = 0;
+  let sharedOver = 0;
+  let viewersHits = 0;
+  let maxMs = 0;
+  const teamGames = (view, slug) => {
+    const idx = data.teamIndexBySlug.get(slug);
+    return bars.passingIndices(view).filter(
+      (i) => data.t.home_team[i] === idx || data.t.away_team[i] === idx
+    ).length;
+  };
+  const count = Math.min(10, data.teamSlugs.length);
+  for (let k = 0; k < count; k += 1) {
+    const state = { ...base, school: [data.teamSlugs[k]] };
+    const t0 = performance.now();
+    const view = sel.computeView(data, state);
+    const model = bars.barsModel(data, view, state);
+    maxMs = Math.max(maxMs, performance.now() - t0);
+    for (const row of model.rows) {
+      const idx = data.personIndexById.get(row.target.id);
+      if (row.total !== view.facets.people[idx]) announcerMismatch += 1;
+    }
+    if (JSON.stringify(model).includes('viewers')) viewersHits += 1;
+    const stackedState = { ...state, bars: 'stacked' };
+    const stacked = bars.barsModel(data, view, stackedState);
+    for (const row of stacked.rows) {
+      const sum = row.segments.reduce((acc, s) => acc + s.count, 0);
+      if (row.total !== sum) stackedMismatch += 1;
+    }
+    if (JSON.stringify(stacked).includes('viewers')) viewersHits += 1;
+    if (k + 1 < data.teamSlugs.length) {
+      const pair = { ...base, school: [data.teamSlugs[k], data.teamSlugs[k + 1]] };
+      const pv = sel.computeView(data, pair);
+      const fly = bars.butterflyModel(data, pv, pair);
+      const left = teamGames(pv, data.teamSlugs[k]);
+      const right = teamGames(pv, data.teamSlugs[k + 1]);
+      if (fly.shared > left || fly.shared > right) sharedOver += 1;
+      if (JSON.stringify(fly).includes('viewers')) viewersHits += 1;
+    }
+  }
+  return [announcerMismatch, stackedMismatch, sharedOver, viewersHits, maxMs];
+}
+"""
+
+
+def test_real_bars_counts_match_facets(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """Bar totals agree with the facet counts, stacked totals with their
+    segments, butterfly shared counts fit both sides, no model carries a viewer
+    figure, and a model builds quickly -- integers and a timing only."""
+    real_open_app(real_guarded_page, "")
+    result: list[float] = real_guarded_page.evaluate(_BARS_REAL_JS)
+    announcer_mismatch, stacked_mismatch, shared_over, viewers_hits, max_ms = result
+    assert announcer_mismatch == 0, "an announcer bar total differed from its facet count"
+    assert stacked_mismatch == 0, "a stacked row total differed from its segment sum"
+    assert shared_over == 0, "a butterfly shared count exceeded a side"
+    assert viewers_hits == 0, "a bar model carried a viewer figure"
+    assert max_ms < 100, "building a bar model took 100 ms or more"
