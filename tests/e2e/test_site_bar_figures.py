@@ -46,7 +46,7 @@ _TITLE_FLY = "(c) => c.C.chartTitle(c.fly, c.data, c.state)"
 
 _BARS_TITLES: list[tuple[dict[str, Any], str]] = [
     ({"school": ["northfield"]}, "Announcers by rated telecasts · Northfield"),
-    ({"school": ["northfield"], "bars": "stacked"}, "Networks by announcer · Northfield"),
+    ({"school": ["northfield"], "bars": "stacked"}, "Network families by announcer · Northfield"),
     ({"people": ["kris-venn"]}, "Teams by rated telecasts · Kris Venn"),
     ({"people": ["kris-venn"], "bars": "stacked"}, "Conferences by team · Kris Venn"),
     ({"networks": ["net-a", "net-b"]}, "Teams by rated telecasts · 2 networks"),
@@ -79,7 +79,7 @@ _FLY_TITLES: list[tuple[dict[str, Any], str]] = [
     ),
     (
         {"school": ["northfield", "lakeview"], "bars": "stacked"},
-        "Networks by announcer: Northfield and Lakeview",
+        "Network families by announcer: Northfield and Lakeview",
     ),
     ({"people": ["kris-venn", "pat-rowan"]}, "Teams: Kris Venn and Pat Rowan"),
     (
@@ -200,7 +200,7 @@ def test_tooltip_lines(guarded_page: Page, site_url: str) -> None:
         "(c) => c.C.tooltipLines(c.bars, c.bars.rows, { r: 0, s: 0, side: null }, {})",
     )
     assert stacked[0] == {"text": "Dale Harlow · PBP", "kind": "title"}
-    assert stacked[1] == {"text": "2 rated telecasts on Alpha Sports", "kind": "body"}
+    assert stacked[1] == {"text": "2 rated telecasts on ABC/ESPN", "kind": "body"}
     fly = _run(
         page,
         site_url,

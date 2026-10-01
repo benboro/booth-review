@@ -18,6 +18,7 @@ const NOUNS = {
   person: ['announcer', 'announcers'],
   team: ['team', 'teams'],
   network: ['network', 'networks'],
+  family: ['network family', 'network families'],
   conference: ['conference', 'conferences'],
 };
 
@@ -79,14 +80,14 @@ export function scopeText(data, state, group) {
 
 function subject(model) {
   if (model.rowKind === 'person') return 'Announcers by rated telecasts';
-  if (model.rowKind === 'network') return 'Networks by announcer';
+  if (model.rowKind === 'family') return 'Network families by announcer';
   if (model.rowKind === 'team') return 'Teams by rated telecasts';
   return 'Conferences by team';
 }
 
 function butterflySubject(model) {
   if (model.rowKind === 'person') return 'Announcers';
-  if (model.rowKind === 'network') return 'Networks by announcer';
+  if (model.rowKind === 'family') return 'Network families by announcer';
   if (model.rowKind === 'team') return 'Teams';
   return 'Conferences by team';
 }
@@ -208,7 +209,7 @@ function drillPhrase(target, name) {
   if (target == null) return name;
   if (target.kind === 'person') return `Add ${name} as a filter`;
   if (target.kind === 'team') return `Add ${name} to the School filter`;
-  if (target.kind === 'network') return `Show only ${name}`;
+  if (target.kind === 'network' || target.kind === 'family') return `Show only ${name}`;
   return `Add ${name} to the Conference filter`;
 }
 

@@ -102,13 +102,13 @@ def test_simple_bars_render_title_aria_and_counts(guarded_page: Page, open_app: 
     assert page.locator("#bars-chart").get_attribute("role") == "img"
 
 
-def test_stacked_bars_network_row_has_pill_and_segments(
+def test_stacked_bars_family_row_has_pill_and_segments(
     guarded_page: Page, open_app: OpenApp
 ) -> None:
     open_app(guarded_page, NORTHFIELD + "&bars=stacked")
     page = guarded_page
     row = page.locator("#bars-counts > li > button").first
-    assert row.get_attribute("aria-label") == "Show only Alpha Sports, 7 rated telecasts"
+    assert row.get_attribute("aria-label") == "Show only ABC/ESPN, 7 rated telecasts"
     assert row.locator('span.pill[data-family="disney"]').count() == 1
     assert page.locator("#bars-counts > li ol button").count() == 5
     assert page.locator("#bars-captions p").count() >= 1
@@ -243,7 +243,7 @@ def test_stacked_segment_and_network_label_drill(guarded_page: Page, open_app: O
     _click_bar(page, 0)
     page.wait_for_function("window.__testHooks.getState().people.length === 1")
     open_app(page, NORTHFIELD + "&bars=stacked")
-    _label(page, "Alpha Sports").click()
+    _label(page, "ABC/ESPN").click()
     page.wait_for_function("window.__testHooks.getState().networks !== null")
     assert "networks=net-a" in page.url
 
