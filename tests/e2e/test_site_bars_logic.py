@@ -657,3 +657,79 @@ def test_drill_keeps_the_grouping(guarded_page: Page, site_url: str) -> None:
     )
     assert patch["people"] == ["dale-harlow"]
     assert patch["group"] is None
+
+
+# --------------------------------------------------------------------------
+# D-31: simple announcer rows carry their main network family
+# --------------------------------------------------------------------------
+
+_THREE_SCHOOLS = ["ironpeak", "foxhollow", "stonebridge"]
+
+
+def _main(model: dict[str, Any]) -> list[tuple[str, int, Any]]:
+    return [(r["label"], r["total"], r["mainFamily"]) for r in model["rows"]]
+
+
+def test_simple_announcer_rows_carry_main_family(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    model = _model(guarded_page, "barsModel", {"school": _THREE_SCHOOLS})["model"]
+    assert _main(model) == [
+        ("Kris Venn · PBP", 3, "fox"),
+        ("Robin Teague · Other", 3, "other"),
+        ("Jax Venn · Analyst", 2, "fox"),
+        ("Casey Lund · PBP", 1, "other"),
+        ("Dale Harlow · PBP", 1, "disney"),
+        ("Dale Harlow Jr. · Analyst", 1, "disney"),
+        ("Pat Rowan · PBP", 1, "fox"),
+        ("Sam Delgado · Analyst", 1, "conference"),
+        ("Taylor Vance · Analyst", 1, "fox"),
+    ]
+    # The family pill is drawn for any row with `family`, so it stays null.
+    assert all(r["family"] is None for r in model["rows"])
+
+
+def test_main_family_tie_breaks_by_family_order(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    model = _model(guarded_page, "barsModel", {"school": ["lakeview", "maplecrest"]})["model"]
+    by_label = {r["label"]: r["mainFamily"] for r in model["rows"]}
+    assert by_label["Jamie Oaks · Analyst"] == "disney"
+    assert by_label["Casey Lund · PBP"] == "other"
+
+
+def test_main_family_honors_the_role_filter(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    model = _model(guarded_page, "barsModel", {"school": _THREE_SCHOOLS, "role": "analyst"})[
+        "model"
+    ]
+    by_label = {r["label"]: r["mainFamily"] for r in model["rows"]}
+    assert by_label["Sam Delgado · Analyst"] == "conference"
+    assert by_label["Jax Venn · Analyst"] == "fox"
+
+
+def test_butterfly_main_family_uses_both_sides(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    state = {"school": ["lakeview", "maplecrest"]}
+    bars = _model(guarded_page, "barsModel", state)["model"]
+    fly = _model(guarded_page, "butterflyModel", state)["model"]
+    want = {r["key"]: r["mainFamily"] for r in bars["rows"]}
+    got = {r["key"]: r["mainFamily"] for r in fly["rows"]}
+    assert got == want
+    by_label = {r["label"]: r["mainFamily"] for r in fly["rows"]}
+    assert by_label["Casey Lund · PBP"] == "other"
+    assert by_label["Jamie Oaks · Analyst"] == "disney"
+
+
+def test_non_announcer_rows_have_no_main_family(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    cases = [
+        ("barsModel", {"people": ["kris-venn"]}),
+        ("barsModel", {"people": ["kris-venn"], "bars": "stacked"}),
+        ("barsModel", {"school": ["northfield"], "bars": "stacked"}),
+        ("butterflyModel", {"people": ["kris-venn", "pat-rowan"]}),
+        ("butterflyModel", {"people": ["kris-venn", "pat-rowan"], "bars": "stacked"}),
+        ("butterflyModel", {"school": ["northfield", "lakeview"], "bars": "stacked"}),
+    ]
+    for fn, state in cases:
+        model = _model(guarded_page, fn, state)["model"]
+        assert model["rows"], (fn, state)
+        assert all(r.get("mainFamily") is None for r in model["rows"]), (fn, state)
