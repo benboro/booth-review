@@ -30,8 +30,8 @@ from booth_review.contract.models import SiteData, validate_site_data
 from booth_review.errors import MissingApiKeyError, SiteBuildError
 from booth_review.transport.cache import atomic_write_bytes
 
-PLOTLY_BUNDLE = "vendor/plotly-gl2d-4.1.1.min.js"
-PLOTLY_SHA256 = "3db1f8ca5c906266bd6ab2eeeef9e3c1e3f45c5844529657c3525ec2ad7c77e4"
+PLOTLY_BUNDLE = "vendor/plotly-4.1.1.min.js"
+PLOTLY_SHA256 = "3b6e15d45dbb7fca5bd2094291e961ddc5472cd887009e6009a56dab668d721f"
 COPY_SUFFIXES = frozenset({".html", ".js", ".css"})
 BUILD_MARKER = ".booth-review-site"
 VERSION_TOKEN = "__SITE_DATA_VERSION__"
