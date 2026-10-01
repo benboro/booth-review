@@ -298,6 +298,83 @@ export function barsModel(data, view, state) {
 }
 
 /**
+ * The Butterfly model (D-05..D-09), or null unless exactly two schools or
+ * two announcers are selected. Per-side sets ignore `together`: each side is
+ * the passing games that subject appears in; `shared` counts games in both.
+ * @param {object} data - a `prepareData` result.
+ * @param {object} view - a `computeView` result.
+ * @param {object} state
+ * @returns {object|null}
+ */
+export function butterflyModel(data, view, state) {
+  const ctx = chartContext(data, state);
+  if (!ctx.butterflyEnabled) return null;
+  const group = ctx.butterflyGroup;
+  const spec = rowSpec(data, group, state.bars, state.role);
+  let sides;
+  let sets;
+  if (group === 'announcers') {
+    const base = gamesForBars(view);
+    sides = state.school.map((slug) => ({
+      key: `t:${slug}`,
+      name: data.lookups.teams[data.teamIndexBySlug.get(slug)].name,
+      kind: 'school',
+    }));
+    sets = state.school.map((slug) => {
+      const idx = data.teamIndexBySlug.get(slug);
+      return base.filter((i) => data.t.home_team[i] === idx || data.t.away_team[i] === idx);
+    });
+  } else {
+    const base = passingIndices(view);
+    sides = state.people.map((id) => ({
+      key: `p:${id}`,
+      name: data.lookups.people[data.personIndexById.get(id)].name,
+      kind: 'person',
+    }));
+    sets = state.people.map((id) => {
+      const idx = data.personIndexById.get(id);
+      return base.filter((i) => personOnGame(data, i, idx, state.role) != null);
+    });
+  }
+  const inRight = new Set(sets[1]);
+  const shared = sets[0].filter((i) => inRight.has(i)).length;
+
+  const left = spec.build(sets[0]);
+  const right = spec.build(sets[1]);
+  const rows = new Map();
+  const empty = { total: 0, segments: [] };
+  for (const [side, list] of [[0, left], [1, right]]) {
+    for (const row of list) {
+      let merged = rows.get(row.key);
+      if (!merged) {
+        merged = {
+          key: row.key,
+          name: row.name,
+          label: row.label,
+          family: row.family,
+          total: 0,
+          target: row.target,
+          sides: [{ ...empty }, { ...empty }],
+        };
+        rows.set(row.key, merged);
+      }
+      merged.sides[side] = { total: row.total, segments: row.segments };
+      merged.total += row.total;
+    }
+  }
+  return {
+    kind: 'butterfly',
+    group,
+    mode: state.bars,
+    rowKind: spec.rowKind,
+    segmentKind: spec.segmentKind,
+    sides,
+    shared,
+    rows: Array.from(rows.values()).sort(byCount((r) => r.total)),
+  };
+}
+
+/**
  * The rows to draw: the top `TOP_N` until expanded (D-03).
  * @param {object[]} rows
  * @param {boolean} expanded
@@ -305,4 +382,48 @@ export function barsModel(data, view, state) {
  */
 export function visibleRows(rows, expanded) {
   return expanded ? rows : rows.slice(0, TOP_N);
+}
+
+/**
+ * The setState patch for clicking a row or segment (D-18), or null when the
+ * click would do nothing (already applied, over the compare cap, or not a
+ * filterable target). Keeps the current Group-by so a click never flips the
+ * chart's grouping.
+ * @param {object} data - a `prepareData` result.
+ * @param {object} state
+ * @param {object|null} target
+ * @returns {object|null}
+ */
+export function drillPatch(data, state, target) {
+  if (target == null) return null;
+  let patch = null;
+  if (target.kind === 'person') {
+    if (state.people.includes(target.id)) return null;
+    if (state.compare && state.people.length >= MAX_COMPARE) return null;
+    patch = { people: [...state.people, target.id] };
+  } else if (target.kind === 'team') {
+    if (state.school.includes(target.slug)) return null;
+    patch = { school: [...state.school, target.slug] };
+  } else if (target.kind === 'network') {
+    if (state.networks && state.networks.length === 1 && state.networks[0] === target.id) {
+      return null;
+    }
+    patch = { networks: [target.id] };
+  } else if (target.kind === 'conference') {
+    if (!data.fbsConferences.includes(target.name)) return null;
+    if (state.conferences.includes(target.name)) return null;
+    patch = { conferences: [...state.conferences, target.name] };
+  } else {
+    return null;
+  }
+  const butterfly = state.view === 'butterfly';
+  const before = chartContext(data, state);
+  const after = chartContext(data, { ...state, ...patch });
+  const choice = butterfly ? after.butterflyGroupChoice : after.groupChoice;
+  if (choice) {
+    const was = butterfly ? before.butterflyGroup : before.group;
+    const keep = was === 'teams' ? 'teams' : null;
+    if (keep !== (state.group ?? null)) patch.group = keep;
+  }
+  return patch;
 }
