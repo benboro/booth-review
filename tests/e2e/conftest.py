@@ -162,6 +162,42 @@ def serve_round(fixture_raw: dict[str, Any]) -> Callable[[Page, str | None], Non
     return _serve
 
 
+def multichannel_raw(
+    fixture_raw: dict[str, Any], *, also_move_zero: bool = False
+) -> dict[str, Any]:
+    """Synthetic two-channel family: a copy of the contract fixture plus a fifth
+    network `net-e` (disney family) that carries telecast 8 (and telecast 0 when
+    `also_move_zero`). Keeps the 12-dot fixture unchanged for other tests
+    (AGENTS.md: tests use synthetic fixtures; never vault data).
+    """
+    raw = copy.deepcopy(fixture_raw)
+    raw["lookups"]["networks"].append({"id": "net-e", "name": "Echo Sports", "family": "disney"})
+    raw["telecasts"]["network"][8] = 4
+    if also_move_zero:
+        raw["telecasts"]["network"][0] = 4
+    return raw
+
+
+@pytest.fixture
+def multichannel(fixture_raw: dict[str, Any]) -> dict[str, Any]:
+    """The synthetic two-channel override (telecast 8 on `net-e`)."""
+    return multichannel_raw(fixture_raw)
+
+
+@pytest.fixture
+def serve_multichannel(fixture_raw: dict[str, Any]) -> Callable[..., None]:
+    """Returns `serve(page, also_move_zero=False)`: makes `page` load the
+    synthetic two-channel fixture (see `multichannel_raw`). Call it before
+    opening the app.
+    """
+
+    def _serve(page: Page, also_move_zero: bool = False) -> None:
+        raw = multichannel_raw(fixture_raw, also_move_zero=also_move_zero)
+        page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+
+    return _serve
+
+
 @pytest.fixture
 def serve_bowl(fixture_raw: dict[str, Any]) -> Callable[..., None]:
     """Returns `serve(page, *, index, bowl, round_=None, neutral=None,

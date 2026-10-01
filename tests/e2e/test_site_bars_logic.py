@@ -13,6 +13,7 @@ import json
 from typing import Any
 
 import pytest
+from conftest import multichannel_raw
 from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
@@ -258,18 +259,125 @@ def test_simple_announcer_bars_for_a_school(guarded_page: Page, site_url: str) -
         assert out["personFacets"][person] == row["total"]
 
 
-def test_stacked_announcer_bars_are_networks(guarded_page: Page, site_url: str) -> None:
+def _channels(segment: dict[str, Any]) -> list[tuple[str, str, int, int]]:
+    return [(c["id"], c["name"], c["count"], c["shade"]) for c in segment["channels"]]
+
+
+def _segs(row: dict[str, Any]) -> list[tuple[str, int, list[tuple[str, str, int, int]]]]:
+    return [(s["label"], s["count"], _channels(s)) for s in row["segments"]]
+
+
+_A = ("net-a", "Alpha Sports")
+_E = ("net-e", "Echo Sports")
+
+_M_NORTHFIELD = [
+    ("Dale Harlow · PBP", 2, [(*_A, 1, 0), (*_E, 1, 1)]),
+    ("Dale Harlow Jr. · Analyst", 2, [(*_A, 1, 0), (*_E, 1, 1)]),
+    ("Casey Lund · PBP", 1, [(*_A, 1, 0)]),
+    ("Jamie Oaks · Analyst", 1, [(*_A, 1, 0)]),
+    ("Robin Teague · Other", 1, [(*_E, 1, 1)]),
+]
+
+
+def test_stacked_announcer_bars_are_families(guarded_page: Page, site_url: str) -> None:
     _load(guarded_page, site_url)
     model = _model(guarded_page, "barsModel", {"school": ["northfield"], "bars": "stacked"})[
         "model"
     ]
-    assert (model["rowKind"], model["segmentKind"]) == ("network", "person")
+    assert (model["rowKind"], model["segmentKind"]) == ("family", "person")
     assert len(model["rows"]) == 1
     row = model["rows"][0]
-    assert (row["label"], row["family"], row["total"]) == ("Alpha Sports", "disney", 7)
-    assert row["target"] == {"kind": "network", "id": "net-a"}
-    assert [(s["label"], s["count"]) for s in row["segments"]] == _NORTHFIELD_ANNOUNCERS
+    assert (row["key"], row["label"], row["family"], row["total"]) == (
+        "f:disney",
+        "ABC/ESPN",
+        "disney",
+        7,
+    )
+    assert row["shadeCount"] == 1
+    assert row["target"] == {"kind": "family", "family": "disney", "ids": ["net-a"]}
+    assert _segs(row) == [(label, n, [(*_A, n, 0)]) for label, n, _ in _M_NORTHFIELD]
     assert row["segments"][0]["target"] == {"kind": "person", "id": "dale-harlow"}
+
+
+def test_family_row_splits_announcers_by_channel(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    raw = multichannel_raw(fixture_raw)
+    model = _model(guarded_page, "barsModel", {"school": ["northfield"], "bars": "stacked"}, raw)[
+        "model"
+    ]
+    assert (model["rowKind"], model["segmentKind"]) == ("family", "person")
+    assert len(model["rows"]) == 1
+    row = model["rows"][0]
+    assert (row["key"], row["name"], row["label"], row["family"], row["total"]) == (
+        "f:disney",
+        "ABC/ESPN",
+        "ABC/ESPN",
+        "disney",
+        7,
+    )
+    assert row["shadeCount"] == 2
+    assert row["target"] == {"kind": "family", "family": "disney", "ids": ["net-a", "net-e"]}
+    assert _segs(row) == _M_NORTHFIELD
+    assert [s["key"] for s in row["segments"]] == [
+        "p:dale-harlow",
+        "p:dale-harlow-jr",
+        "p:casey-lund",
+        "p:jamie-oaks",
+        "p:robin-teague",
+    ]
+    for seg in row["segments"]:
+        assert seg["target"] == {"kind": "person", "id": seg["key"][2:]}
+        assert sum(c["count"] for c in seg["channels"]) == seg["count"]
+
+
+def test_channel_shade_follows_data_wide_order(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    raw = multichannel_raw(fixture_raw, also_move_zero=True)
+    model = _model(guarded_page, "barsModel", {"school": ["northfield"], "bars": "stacked"}, raw)[
+        "model"
+    ]
+    row = model["rows"][0]
+    for seg in row["segments"]:
+        for c in seg["channels"]:
+            assert c["shade"] == (0 if c["id"] == "net-e" else 1)
+    by_label = {s["label"]: s for s in row["segments"]}
+    assert _channels(by_label["Dale Harlow · PBP"]) == [(*_E, 2, 0)]
+    assert _channels(by_label["Casey Lund · PBP"]) == [(*_A, 1, 1)]
+
+
+def test_family_rows_respect_the_role_filter(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    raw = multichannel_raw(fixture_raw)
+    model = _model(
+        guarded_page,
+        "barsModel",
+        {"school": ["northfield"], "bars": "stacked", "role": "pbp"},
+        raw,
+    )["model"]
+    assert len(model["rows"]) == 1
+    row = model["rows"][0]
+    assert (row["key"], row["total"]) == ("f:disney", 3)
+    assert _segs(row) == [
+        ("Dale Harlow · PBP", 2, [(*_A, 1, 0), (*_E, 1, 1)]),
+        ("Casey Lund · PBP", 1, [(*_A, 1, 0)]),
+    ]
+
+
+def test_simple_rows_carry_no_channels(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    model = _model(guarded_page, "barsModel", {"school": ["northfield"]})["model"]
+    assert all("channels" not in r and "shadeCount" not in r for r in model["rows"])
+    stacked = _model(guarded_page, "barsModel", {"people": ["kris-venn"], "bars": "stacked"})[
+        "model"
+    ]
+    assert all("shadeCount" not in r for r in stacked["rows"])
+    assert all("channels" not in s for r in stacked["rows"] for s in r["segments"])
 
 
 def test_simple_team_bars_for_an_announcer(guarded_page: Page, site_url: str) -> None:
@@ -421,11 +529,11 @@ def test_butterfly_stacked_mirrors_bars_rows(guarded_page: Page, site_url: str) 
         "butterflyModel",
         {"school": ["northfield", "lakeview"], "bars": "stacked"},
     )["model"]
-    assert (schools["rowKind"], schools["segmentKind"]) == ("network", "person")
+    assert (schools["rowKind"], schools["segmentKind"]) == ("family", "person")
     names = {r["label"]: r for r in schools["rows"]}
-    alpha = names["Alpha Sports"]
-    assert alpha["sides"][0]["total"] == 7
-    assert [s["count"] for s in alpha["sides"][0]["segments"]] == [2, 2, 1, 1, 1]
+    disney = names["ABC/ESPN"]
+    assert disney["sides"][0]["total"] == 7
+    assert [s["count"] for s in disney["sides"][0]["segments"]] == [2, 2, 1, 1, 1]
     people = _model(
         guarded_page,
         "butterflyModel",
@@ -438,6 +546,41 @@ def test_butterfly_stacked_mirrors_bars_rows(guarded_page: Page, site_url: str) 
         ("Foxhollow", 2),
         ("Lakeview", 1),
     ]
+
+
+def test_butterfly_stacked_family_rows_with_channels(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    raw = multichannel_raw(fixture_raw)
+    model = _model(
+        guarded_page,
+        "butterflyModel",
+        {"school": ["northfield", "lakeview"], "bars": "stacked"},
+        raw,
+    )["model"]
+    assert model["rowKind"] == "family"
+    assert [s["name"] for s in model["sides"]] == ["Northfield", "Lakeview"]
+    assert model["shared"] == 2
+    assert [r["key"] for r in model["rows"]] == ["f:disney", "f:fox"]
+    disney, fox = model["rows"]
+    assert (disney["total"], disney["shadeCount"]) == (11, 2)
+    assert disney["target"] == {"kind": "family", "family": "disney", "ids": ["net-a", "net-e"]}
+    assert disney["sides"][0]["total"] == 7
+    assert _segs(disney["sides"][0]) == _M_NORTHFIELD
+    assert disney["sides"][1]["total"] == 4
+    assert _segs(disney["sides"][1]) == [
+        ("Casey Lund · PBP", 1, [(*_A, 1, 0)]),
+        ("Dale Harlow · PBP", 1, [(*_A, 1, 0)]),
+        ("Dale Harlow Jr. · Analyst", 1, [(*_A, 1, 0)]),
+        ("Jamie Oaks · Analyst", 1, [(*_A, 1, 0)]),
+    ]
+    assert (fox["label"], fox["total"], fox["shadeCount"]) == ("FOX/FS1/BTN", 2, 1)
+    assert fox["target"] == {"kind": "family", "family": "fox", "ids": ["net-b"]}
+    assert (fox["sides"][0]["total"], fox["sides"][0]["segments"]) == (0, [])
+    assert fox["sides"][1]["total"] == 2
+    b_ch = [(*("net-b", "Beta Network"), 1, 0)]
+    assert _segs(fox["sides"][1]) == [("Jax Venn · Analyst", 1, b_ch), ("Kris Venn · PBP", 1, b_ch)]
 
 
 @pytest.mark.parametrize(
@@ -482,6 +625,11 @@ def test_drill_patches(guarded_page: Page, site_url: str) -> None:
     net = {"kind": "network", "id": "net-a"}
     assert _drill(p, {"school": ["northfield"]}, net) == {"networks": ["net-a"]}
     assert _drill(p, {"networks": ["net-a"]}, net) is None
+    fam = {"kind": "family", "family": "disney", "ids": ["net-a", "net-e"]}
+    stacked = {"school": ["northfield"], "view": "bars", "bars": "stacked"}
+    assert _drill(p, stacked, fam) == {"networks": ["net-a", "net-e"]}
+    assert _drill(p, {**stacked, "networks": ["net-e", "net-a"]}, fam) is None
+    assert _drill(p, stacked, {**fam, "ids": []}) is None
     sec = {"kind": "conference", "name": "SEC"}
     assert _drill(p, {"conferences": ["Big Ten"]}, sec) == {"conferences": ["Big Ten", "SEC"]}
     assert _drill(p, {"conferences": ["SEC"]}, sec) is None
