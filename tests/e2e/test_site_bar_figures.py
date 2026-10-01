@@ -36,7 +36,15 @@ async ([partial, body]) => {
 """
 
 
-def _run(page: Page, site_url: str, partial: dict[str, Any], body: str) -> Any:
+def _run(
+    page: Page,
+    site_url: str,
+    partial: dict[str, Any],
+    body: str,
+    raw: dict[str, Any] | None = None,
+) -> Any:
+    if raw is not None:
+        page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
     page.goto(f"{site_url}/")
     return page.evaluate(_RUN_JS, [partial, body])
 
@@ -200,7 +208,10 @@ def test_caption_lines(guarded_page: Page, site_url: str) -> None:
     page = guarded_page
     cap = "(c) => c.C.captionLines(c.bars ?? c.fly, (c.bars ?? c.fly).rows)"
     assert _run(page, site_url, {"school": ["northfield"]}, cap) == []
-    assert _run(page, site_url, {"school": ["northfield"], "bars": "stacked"}, cap) == [_STACK_SUM]
+    assert _run(page, site_url, {"school": ["northfield"], "bars": "stacked"}, cap) == [
+        _STACK_SUM,
+        _SHADE_CAPTION,
+    ]
     assert _run(page, site_url, {"people": ["kris-venn"]}, cap) == [_TEAM_COUNT]
     assert _run(page, site_url, {"people": ["kris-venn"], "bars": "stacked"}, cap) == [_TEAM_COUNT]
     fly = _run(
@@ -268,6 +279,109 @@ def test_tooltip_lines(guarded_page: Page, site_url: str) -> None:
         }""",
     )
     assert [line["kind"] for line in conf] == ["title", "body"]
+
+
+_SHADE_CAPTION = (
+    "Shades within a network family's bar mark its channels. "
+    "Hover or tap a segment for each channel's count."
+)
+
+
+def test_family_tooltip_lines(
+    guarded_page: Page, site_url: str, multichannel: dict[str, Any]
+) -> None:
+    page = guarded_page
+    body = "(c) => c.C.tooltipLines(c.{m}, c.{m}.rows, {ref}, {opts})"
+    stacked = {"school": ["northfield"], "bars": "stacked"}
+    ref0 = _run(
+        page,
+        site_url,
+        stacked,
+        body.format(m="bars", ref="{ r: 0, s: 0, side: null }", opts="{}"),
+        multichannel,
+    )
+    assert ref0 == [
+        {"text": "Dale Harlow · PBP", "kind": "title"},
+        {"text": "Alpha Sports: 1", "kind": "body", "shade": 0},
+        {"text": "Echo Sports: 1", "kind": "body", "shade": 1},
+        {"text": "2 rated telecasts on ABC/ESPN", "kind": "body"},
+        {"text": "Click to filter →", "kind": "hint"},
+    ]
+    touch = _run(
+        page,
+        site_url,
+        stacked,
+        body.format(m="bars", ref="{ r: 0, s: 0, side: null }", opts="{ touch: true }"),
+        multichannel,
+    )
+    assert touch[-1] == {"text": "Tap again to filter →", "kind": "hint"}
+    robin = _run(
+        page,
+        site_url,
+        stacked,
+        body.format(m="bars", ref="{ r: 0, s: 4, side: null }", opts="{}"),
+        multichannel,
+    )
+    assert robin == [
+        {"text": "Robin Teague · Other", "kind": "title"},
+        {"text": "Echo Sports: 1", "kind": "body", "shade": 1},
+        {"text": "1 rated telecast on ABC/ESPN", "kind": "body"},
+        {"text": "Click to filter →", "kind": "hint"},
+    ]
+    fly = _run(
+        page,
+        site_url,
+        {"school": ["northfield", "lakeview"], "bars": "stacked"},
+        body.format(m="fly", ref="{ r: 0, s: 0, side: 1 }", opts="{}"),
+        multichannel,
+    )
+    assert fly == [
+        {"text": "Casey Lund · PBP", "kind": "title"},
+        {"text": "Alpha Sports: 1", "kind": "body", "shade": 0},
+        {"text": "Lakeview: 1 rated telecast on ABC/ESPN", "kind": "body"},
+        {"text": "Click to filter →", "kind": "hint"},
+    ]
+
+
+def test_family_caption_and_counts_text(
+    guarded_page: Page, site_url: str, multichannel: dict[str, Any]
+) -> None:
+    page = guarded_page
+    cap = "(c) => c.C.captionLines(c.{m}, c.{m}.rows)"
+    bars = _run(
+        page,
+        site_url,
+        {"school": ["northfield"], "bars": "stacked"},
+        cap.format(m="bars"),
+        multichannel,
+    )
+    assert bars == [_STACK_SUM, _SHADE_CAPTION]
+    fly = _run(
+        page,
+        site_url,
+        {"school": ["northfield", "lakeview"], "bars": "stacked"},
+        cap.format(m="fly"),
+        multichannel,
+    )
+    assert fly[0] == _STACK_SUM and _SHADE_CAPTION in fly
+    plain = _run(page, site_url, {"school": ["northfield"], "bars": "stacked"}, cap.format(m="bars"))
+    assert _SHADE_CAPTION in plain  # stacked Announcers are family rows on the shared fixture too
+    simple = _run(page, site_url, {"school": ["northfield"]}, cap.format(m="bars"))
+    assert _SHADE_CAPTION not in simple
+    out = _run(
+        page,
+        site_url,
+        {"school": ["northfield"]},
+        """(c) => ({
+          line: c.C.channelLineText({ name: 'Alpha Sports', count: 1 }),
+          name: c.C.countsListName({ kind: 'family', family: 'disney', ids: ['net-a'] },
+                                   'ABC/ESPN', 7),
+        })""",
+    )
+    assert out == {
+        "line": "Alpha Sports 1",
+        "name": "Show only ABC/ESPN, 7 rated telecasts",
+    }
 
 
 def test_counts_list_names(guarded_page: Page, site_url: str) -> None:
