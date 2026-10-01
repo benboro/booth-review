@@ -22,11 +22,13 @@ import {
   captionLines,
   tooltipLines,
   countsListName,
+  channelLineText,
   butterflyRowText,
   butterflyCountsName,
   ariaSummary,
 } from './bar-copy.js';
 import { barTones, buildBarFigure, buildButterflyFigure, renderBars, bindBarEvents } from './bar-chart.js';
+import { channelShades } from './palette.js';
 import { makePill, currentTheme } from './pill.js';
 import { showTextTooltip, hideTooltip } from './tooltip.js';
 
@@ -79,6 +81,13 @@ function refKey(ref) {
   return `${ref.r}/${ref.s}/${ref.side ?? ''}`;
 }
 
+/** Adds each channel line's swatch color (palette constants only, never data) for family rows. */
+function withSwatches(lines, row, theme) {
+  if (row.family == null || !row.shadeCount) return lines;
+  const shades = channelShades(row.family, theme, row.shadeCount);
+  return lines.map((line) => (Number.isInteger(line.shade) && shades[line.shade] ? { ...line, swatch: shades[line.shade] } : line));
+}
+
 function onPointClick(ref, ev) {
   const target = targetFor(ref);
   if (hoverNone()) {
@@ -88,7 +97,11 @@ function onPointClick(ref, ev) {
     if (tapKey !== pendingTapKey) {
       pendingTapKey = tapKey;
       pendingTapAt = now;
-      const lines = tooltipLines(lastModel, lastShownRows, ref, { touch: true });
+      const lines = withSwatches(
+        tooltipLines(lastModel, lastShownRows, ref, { touch: true }),
+        lastShownRows[ref.r],
+        currentTheme(),
+      );
       const tone = barTones(lastShownRows[ref.r], currentTheme());
       showTextTooltip(lines, {
         theme: currentTheme(),
@@ -106,7 +119,11 @@ function onPointClick(ref, ev) {
 
 function onPointHover(ref, ev) {
   if (hoverNone()) return;
-  const lines = tooltipLines(lastModel, lastShownRows, ref, { touch: false });
+  const lines = withSwatches(
+    tooltipLines(lastModel, lastShownRows, ref, { touch: false }),
+    lastShownRows[ref.r],
+    currentTheme(),
+  );
   const tone = barTones(lastShownRows[ref.r], currentTheme());
   showTextTooltip(lines, {
     theme: currentTheme(),
@@ -178,7 +195,7 @@ function makeButton(ref, key, aria) {
   return button;
 }
 
-function segmentList(segments, r, side, rowKey, prefix) {
+function segmentList(segments, r, side, rowKey, prefix, shades = null) {
   const ol = document.createElement('ol');
   ol.className = 'counts-sublist';
   if (prefix) {
@@ -196,6 +213,20 @@ function segmentList(segments, r, side, rowKey, prefix) {
       li.appendChild(b);
     } else {
       li.textContent = text;
+    }
+    if (shades && seg.channels && seg.channels.length > 0) {
+      const chans = document.createElement('ol');
+      chans.className = 'counts-channels';
+      for (const ch of seg.channels) {
+        const item = document.createElement('li');
+        const chip = document.createElement('span');
+        chip.className = 'counts-swatch';
+        chip.setAttribute('aria-hidden', 'true');
+        if (shades[ch.shade]) chip.style.backgroundColor = shades[ch.shade];
+        item.append(chip, document.createTextNode(channelLineText(ch)));
+        chans.appendChild(item);
+      }
+      li.appendChild(chans);
     }
     ol.appendChild(li);
   });
@@ -227,14 +258,15 @@ function buildCountsList(model, rows, theme) {
       li.appendChild(span);
     }
     if (model.segmentKind != null) {
+      const shades = row.family != null && row.shadeCount ? channelShades(row.family, theme, row.shadeCount) : null;
       if (fly) {
         [0, 1].forEach((side) => {
           if (row.sides[side].segments.length > 0) {
-            li.appendChild(segmentList(row.sides[side].segments, r, side, row.key, model.sides[side].name));
+            li.appendChild(segmentList(row.sides[side].segments, r, side, row.key, model.sides[side].name, shades));
           }
         });
       } else {
-        li.appendChild(segmentList(row.segments, r, null, row.key, null));
+        li.appendChild(segmentList(row.segments, r, null, row.key, null, shades));
       }
     }
     return li;

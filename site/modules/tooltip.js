@@ -224,16 +224,25 @@ function placeTooltip(el, clientX, clientY) {
 
 /**
  * Shows plain text lines in the shared tooltip (Bars/Butterfly, D-16).
- * @param {{text: string, kind: 'title'|'body'|'hint'}[]} lines
+ * @param {{text: string, kind: 'title'|'body'|'hint', swatch?: string}[]} lines
  * @param {{theme: string, borderColor: string, clientX: number, clientY: number}} opts
  */
 export function showTextTooltip(lines, { borderColor, clientX, clientY }) {
   const el = ensureTooltipEl();
-  const children = lines.map(({ text, kind }) => {
+  const children = lines.map(({ text, kind, swatch }) => {
     const node = document.createElement(kind === 'title' ? 'strong' : 'div');
     if (kind === 'title') node.className = 'tooltip-title';
     if (kind === 'hint') node.className = 'tooltip-hint';
-    node.textContent = text;
+    if (swatch) {
+      const chip = document.createElement('span');
+      chip.className = 'tooltip-swatch';
+      chip.setAttribute('aria-hidden', 'true');
+      chip.style.backgroundColor = swatch;
+      node.appendChild(chip);
+      node.appendChild(document.createTextNode(text));
+    } else {
+      node.textContent = text;
+    }
     return node;
   });
   el.replaceChildren(...children);

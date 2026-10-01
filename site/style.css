@@ -1381,6 +1381,21 @@ input[type="checkbox"] {
   padding-left: var(--space-md);
 }
 
+.tooltip-swatch,
+.counts-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: var(--space-xs);
+  vertical-align: middle;
+  outline: 1px solid var(--border);
+}
+
+.counts-list ol.counts-channels {
+  padding-left: var(--space-md);
+}
+
 .segmented {
   display: inline-flex;
   border: 1px solid var(--border);
