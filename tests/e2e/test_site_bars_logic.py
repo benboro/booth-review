@@ -364,3 +364,148 @@ def test_visible_rows_limit(
 ) -> None:
     _load(guarded_page, site_url)
     assert guarded_page.evaluate(_VISIBLE_JS, [count, expanded]) == shown
+
+
+# --------------------------------------------------------------------------
+# Task 3: Butterfly model and drill-in patches
+# --------------------------------------------------------------------------
+
+
+def _sides(model: dict[str, Any]) -> list[tuple[str, int, int]]:
+    return [(r["label"], r["sides"][0]["total"], r["sides"][1]["total"]) for r in model["rows"]]
+
+
+def test_butterfly_two_schools(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    model = _model(guarded_page, "butterflyModel", {"school": ["northfield", "lakeview"]})["model"]
+    assert [s["name"] for s in model["sides"]] == ["Northfield", "Lakeview"]
+    assert [s["kind"] for s in model["sides"]] == ["school", "school"]
+    assert model["shared"] == 2
+    assert _sides(model) == [
+        ("Dale Harlow · PBP", 2, 1),
+        ("Dale Harlow Jr. · Analyst", 2, 1),
+        ("Casey Lund · PBP", 1, 1),
+        ("Jamie Oaks · Analyst", 1, 1),
+        ("Jax Venn · Analyst", 0, 1),
+        ("Kris Venn · PBP", 0, 1),
+        ("Robin Teague · Other", 1, 0),
+    ]
+    assert all(r["total"] == r["sides"][0]["total"] + r["sides"][1]["total"] for r in model["rows"])
+
+
+def test_butterfly_two_announcers_and_together_is_ignored(
+    guarded_page: Page, site_url: str
+) -> None:
+    _load(guarded_page, site_url)
+    people = ["kris-venn", "pat-rowan"]
+    model = _model(guarded_page, "butterflyModel", {"people": people})["model"]
+    assert [s["name"] for s in model["sides"]] == ["Kris Venn", "Pat Rowan"]
+    assert [s["kind"] for s in model["sides"]] == ["person", "person"]
+    assert model["shared"] == 0
+    assert _sides(model) == [
+        ("Cedar Hollow", 1, 2),
+        ("Foxhollow", 2, 1),
+        ("Boulder Pass", 0, 2),
+        ("Ironpeak", 1, 1),
+        ("Lakeview", 1, 0),
+        ("Stonebridge", 1, 0),
+    ]
+    together = _model(guarded_page, "butterflyModel", {"people": people, "together": True})["model"]
+    assert together == model
+
+
+def test_butterfly_stacked_mirrors_bars_rows(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    schools = _model(
+        guarded_page,
+        "butterflyModel",
+        {"school": ["northfield", "lakeview"], "bars": "stacked"},
+    )["model"]
+    assert (schools["rowKind"], schools["segmentKind"]) == ("network", "person")
+    names = {r["label"]: r for r in schools["rows"]}
+    alpha = names["Alpha Sports"]
+    assert alpha["sides"][0]["total"] == 7
+    assert [s["count"] for s in alpha["sides"][0]["segments"]] == [2, 2, 1, 1, 1]
+    people = _model(
+        guarded_page,
+        "butterflyModel",
+        {"people": ["kris-venn", "pat-rowan"], "bars": "stacked"},
+    )["model"]
+    assert (people["rowKind"], people["segmentKind"]) == ("conference", "team")
+    sec = next(r for r in people["rows"] if r["label"] == "SEC")
+    assert sec["sides"][0]["total"] == 3
+    assert [(s["label"], s["count"]) for s in sec["sides"][0]["segments"]] == [
+        ("Foxhollow", 2),
+        ("Lakeview", 1),
+    ]
+
+
+@pytest.mark.parametrize(
+    "partial",
+    [
+        {"school": ["northfield"]},
+        {"school": ["northfield", "lakeview", "ironpeak"]},
+        {"people": ["kris-venn"]},
+    ],
+)
+def test_butterfly_is_null_without_exactly_two_subjects(
+    guarded_page: Page, site_url: str, partial: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    assert _model(guarded_page, "butterflyModel", partial)["model"] is None
+
+
+def _drill(page: Page, partial: dict[str, Any], target: dict[str, Any] | None) -> Any:
+    return page.evaluate(_DRILL_JS, [partial, target])
+
+
+def test_drill_patches(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    p = guarded_page
+    school = {"school": ["northfield"]}
+    person = {"kind": "person", "id": "dale-harlow"}
+    assert _drill(p, school, person) == {"people": ["dale-harlow"]}
+    assert _drill(p, {**school, "people": ["dale-harlow"]}, person) is None
+    full = ["dale-harlow", "kris-venn", "pat-rowan", "casey-lund"]
+    assert (
+        _drill(
+            p, {**school, "compare": True, "people": full}, {"kind": "person", "id": "jamie-oaks"}
+        )
+        is None
+    )
+    team = {"kind": "team", "slug": "lakeview"}
+    assert _drill(p, {"people": ["kris-venn"], "school": ["northfield"]}, team)["school"] == [
+        "northfield",
+        "lakeview",
+    ]
+    assert _drill(p, {"school": ["lakeview"]}, team) is None
+    net = {"kind": "network", "id": "net-a"}
+    assert _drill(p, {"school": ["northfield"]}, net) == {"networks": ["net-a"]}
+    assert _drill(p, {"networks": ["net-a"]}, net) is None
+    sec = {"kind": "conference", "name": "SEC"}
+    assert _drill(p, {"conferences": ["Big Ten"]}, sec) == {"conferences": ["Big Ten", "SEC"]}
+    assert _drill(p, {"conferences": ["SEC"]}, sec) is None
+    assert _drill(p, {}, {"kind": "conference", "name": "Missouri Valley"}) is None
+    assert _drill(p, {}, None) is None
+
+
+def test_drill_keeps_the_grouping(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    # networks narrowed -> teams group; adding a school makes Group-by a choice,
+    # and the click must not flip the chart from Teams to Announcers.
+    patch = _drill(
+        guarded_page,
+        {"view": "bars", "networks": ["net-a"]},
+        {"kind": "team", "slug": "northfield"},
+    )
+    assert patch["school"] == ["northfield"]
+    assert patch["group"] == "teams"
+    # school only (announcers, stored group 'teams' but unresolved): person drill
+    # makes teams apply too, staying on Announcers (group null).
+    patch = _drill(
+        guarded_page,
+        {"view": "bars", "school": ["northfield"], "group": "teams"},
+        {"kind": "person", "id": "dale-harlow"},
+    )
+    assert patch["people"] == ["dale-harlow"]
+    assert patch["group"] is None
