@@ -1,6 +1,6 @@
 /**
  * Bars and Butterfly counting core (SITE-33..36, D-01..D-18). DOM-free;
- * imports only from ./select.js. Every value is a count of rated telecasts
+ * imports only from ./select.js and ./palette.js. Every value is a count of rated telecasts
  * (D-01): this module never reads `viewers` and no model carries one.
  *
  * Games counted are exactly those passing every filter, narrowed to the
@@ -9,11 +9,16 @@
  * ties by bare name (D-03); announcer rows share one list labeled
  * `Name · PBP`/`Analyst`/`PBP/Analyst` (D-04). The butterfly (D-05..D-09)
  * mirrors the Bars rows for exactly two schools or two announcers.
+ * Stacked announcer rows are one per network family (D-23, superseding D-15's
+ * per-channel rows): segments are announcers, each carrying per-channel counts
+ * and a stable `shade` index (`familyChannelOrder`); a `family` row's drill
+ * target sets Networks to the family's offered channels (`offeredFamilyIds`).
  * `chartContext` decides which tabs apply and the Group-by (D-07, D-11) and
  * `drillPatch` builds the setState patch for a row/segment click (D-18).
  */
 
-import { MAX_COMPARE, personOnGame } from './select.js';
+import { FAMILY_LABELS, familyKey } from './palette.js';
+import { MAX_COMPARE, offeredFamilyIds, personOnGame } from './select.js';
 
 /** Rows shown before "show all" (D-03). */
 export const TOP_N = 15;
@@ -103,8 +108,44 @@ function byCount(countOf) {
   };
 }
 
-/** Counts announcers over `games` (the computeFacets per-person `seen` rule). Returns segments. */
-function countAnnouncers(data, games, role) {
+const channelOrderCache = new WeakMap();
+
+/**
+ * A family's primary network indexes ordered by data-wide telecast count
+ * (highest first, ties by lookup order), so a channel keeps one shade in every
+ * row and filter state (D-23).
+ * @param {object} data - a `prepareData` result.
+ * @param {string} family - a `familyKey` value.
+ * @returns {number[]}
+ */
+export function familyChannelOrder(data, family) {
+  let cache = channelOrderCache.get(data);
+  if (!cache) {
+    const counts = new Map();
+    for (let i = 0; i < data.t.network.length; i += 1) {
+      const net = data.t.network[i];
+      counts.set(net, (counts.get(net) ?? 0) + 1);
+    }
+    cache = { counts, orders: new Map() };
+    channelOrderCache.set(data, cache);
+  }
+  let order = cache.orders.get(family);
+  if (!order) {
+    const base = data.networksByFamily.get(family) ?? [];
+    order = base
+      .map((idx, pos) => ({ idx, pos, n: cache.counts.get(idx) ?? 0 }))
+      .sort((a, b) => b.n - a.n || a.pos - b.pos)
+      .map((e) => e.idx);
+    cache.orders.set(family, order);
+  }
+  return order;
+}
+
+/**
+ * Counts announcers over `games` (the computeFacets per-person `seen` rule).
+ * Returns segments; with `withChannels` each also carries per-channel counts.
+ */
+function countAnnouncers(data, games, role, { withChannels = false, family = null } = {}) {
   const acc = new Map();
   for (const i of games) {
     const seen = new Set();
@@ -114,10 +155,14 @@ function countAnnouncers(data, games, role) {
       if (personOnGame(data, i, entry.person, role) == null) continue;
       let rec = acc.get(entry.person);
       if (!rec) {
-        rec = { count: 0, main: new Set(), alt: new Set() };
+        rec = { count: 0, main: new Set(), alt: new Set(), nets: new Map() };
         acc.set(entry.person, rec);
       }
       rec.count += 1;
+      if (withChannels) {
+        const net = data.t.network[i];
+        rec.nets.set(net, (rec.nets.get(net) ?? 0) + 1);
+      }
       for (const e of data.t.crew[i]) {
         if (e.person !== entry.person) continue;
         if (e.feed === 'main') rec.main.add(e.role);
@@ -129,13 +174,23 @@ function countAnnouncers(data, games, role) {
   for (const [person, rec] of acc) {
     const { id, name } = data.lookups.people[person];
     const roles = Array.from(rec.main.size > 0 ? rec.main : rec.alt);
-    segments.push({
+    const seg = {
       key: `p:${id}`,
       name,
       label: announcerLabel(name, roles),
       count: rec.count,
       target: { kind: 'person', id },
-    });
+    };
+    if (withChannels) {
+      const order = familyChannelOrder(data, family);
+      seg.channels = Array.from(rec.nets, ([net, count]) => ({
+        id: data.lookups.networks[net].id,
+        name: data.lookups.networks[net].name,
+        count,
+        shade: order.indexOf(net),
+      })).sort((a, b) => a.shade - b.shade);
+    }
+    segments.push(seg);
   }
   return segments.sort(byCount((s) => s.count));
 }
@@ -188,27 +243,28 @@ function teamRows(data, games) {
   }));
 }
 
-/** Stacked announcer rows: networks, each stacked by announcer (D-15). */
-function networkRows(data, games, role) {
-  const byNetwork = new Map();
+/** Stacked announcer rows: network families, each stacked by announcer with per-channel counts (D-23). */
+function familyRows(data, games, role, view) {
+  const byFamily = new Map();
   for (const i of games) {
-    const net = data.t.network[i];
-    if (!byNetwork.has(net)) byNetwork.set(net, []);
-    byNetwork.get(net).push(i);
+    const family = familyKey(data.lookups.networks[data.t.network[i]].family);
+    if (!byFamily.has(family)) byFamily.set(family, []);
+    byFamily.get(family).push(i);
   }
   const rows = [];
-  for (const [net, list] of byNetwork) {
-    const segments = countAnnouncers(data, list, role);
+  for (const [family, list] of byFamily) {
+    const segments = countAnnouncers(data, list, role, { withChannels: true, family });
     const total = segments.reduce((sum, s) => sum + s.count, 0);
     if (total === 0) continue;
-    const { id, name, family } = data.lookups.networks[net];
+    const label = FAMILY_LABELS[family];
     rows.push({
-      key: `n:${id}`,
-      name,
-      label: name,
+      key: `f:${family}`,
+      name: label,
+      label,
       family,
       total,
-      target: { kind: 'network', id },
+      shadeCount: familyChannelOrder(data, family).length,
+      target: { kind: 'family', family, ids: offeredFamilyIds(data, family, view) },
       segments,
     });
   }
@@ -265,10 +321,10 @@ function conferenceRows(data, games) {
 }
 
 /** Shape of the rows for a group/mode: `{ rowKind, segmentKind, build(games) }`. */
-function rowSpec(data, group, mode, role) {
+function rowSpec(data, group, mode, role, view) {
   if (group === 'announcers') {
     return mode === 'stacked'
-      ? { rowKind: 'network', segmentKind: 'person', build: (g) => networkRows(data, g, role) }
+      ? { rowKind: 'family', segmentKind: 'person', build: (g) => familyRows(data, g, role, view) }
       : { rowKind: 'person', segmentKind: null, build: (g) => announcerRows(data, g, role) };
   }
   return mode === 'stacked'
@@ -286,7 +342,7 @@ function rowSpec(data, group, mode, role) {
 export function barsModel(data, view, state) {
   const ctx = chartContext(data, state);
   if (!ctx.barsEnabled) return null;
-  const spec = rowSpec(data, ctx.group, state.bars, state.role);
+  const spec = rowSpec(data, ctx.group, state.bars, state.role, view);
   return {
     kind: 'bars',
     group: ctx.group,
@@ -310,7 +366,7 @@ export function butterflyModel(data, view, state) {
   const ctx = chartContext(data, state);
   if (!ctx.butterflyEnabled) return null;
   const group = ctx.butterflyGroup;
-  const spec = rowSpec(data, group, state.bars, state.role);
+  const spec = rowSpec(data, group, state.bars, state.role, view);
   let sides;
   let sets;
   if (group === 'announcers') {
@@ -356,6 +412,7 @@ export function butterflyModel(data, view, state) {
           target: row.target,
           sides: [{ ...empty }, { ...empty }],
         };
+        if (row.shadeCount != null) merged.shadeCount = row.shadeCount;
         rows.set(row.key, merged);
       }
       merged.sides[side] = { total: row.total, segments: row.segments };
@@ -409,6 +466,12 @@ export function drillPatch(data, state, target) {
       return null;
     }
     patch = { networks: [target.id] };
+  } else if (target.kind === 'family') {
+    const ids = target.ids ?? [];
+    if (ids.length === 0) return null;
+    const cur = state.networks;
+    if (cur && cur.length === ids.length && ids.every((id) => cur.includes(id))) return null;
+    patch = { networks: [...ids] };
   } else if (target.kind === 'conference') {
     if (!data.fbsConferences.includes(target.name)) return null;
     if (state.conferences.includes(target.name)) return null;

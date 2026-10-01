@@ -443,3 +443,18 @@ export function computeView(data, state) {
     summary,
   };
 }
+
+/**
+ * Channel ids of a family that have games under the other filters (count > 0),
+ * in lookup order (04.2 D-24); the family drill-in reuses it (04.4 D-23).
+ * @param {object} data - a `prepareData` result.
+ * @param {string} familyKeyVal - a `familyKey` value.
+ * @param {object} [view] - a `computeView` result; all channels when missing.
+ * @returns {string[]}
+ */
+export function offeredFamilyIds(data, familyKeyVal, view) {
+  const counts = view?.facets?.networks;
+  return (data.networksByFamily.get(familyKeyVal) ?? [])
+    .filter((idx) => (counts ? counts[idx] > 0 : true))
+    .map((idx) => data.lookups.networks[idx].id);
+}
