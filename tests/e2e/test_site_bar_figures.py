@@ -1240,7 +1240,7 @@ def test_family_stack_figure_shape(
     assert colors == {"#0072B2", "#66AAD1"}  # net-a shade 0, net-e shade 1
     for k, t in enumerate(overlays):
         assert t["xaxis"] == "x3"
-        assert set(t["marker"]["color"]) == {_TRANSPARENT}
+        assert t["marker"]["color"] == _TRANSPARENT
         assert t["marker"]["line"] == {"width": 1, "color": "#FFFFFF"}
         assert t["customdata"][0] == {"r": 0, "s": k, "side": None}
     layout = figure["layout"]
@@ -1335,6 +1335,9 @@ def test_rendered_family_segments_align_with_channel_pieces(
     assert (n_pieces, n_over) == ((7, 5) if fn == "barsModel" else (13, 11))
     bg = {"light": "#FFFFFF", "dark": "#14161A"}[theme]
     for key, segs in expected.items():
+        if not segs:
+            assert key not in groups
+            continue
         g = groups[key]
         row_index, side = key
         shades = out["shades"][row_index]
