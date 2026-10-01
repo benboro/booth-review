@@ -15,9 +15,11 @@
  * target sets Networks to the family's offered channels (`offeredFamilyIds`).
  * `chartContext` decides which tabs apply and the Group-by (D-07, D-11) and
  * `drillPatch` builds the setState patch for a row/segment click (D-18).
+ * Simple announcer rows carry `mainFamily` (D-31): the network family with the
+ * most of the announcer's counted games, over both sides on the Butterfly.
  */
 
-import { FAMILY_LABELS, familyKey } from './palette.js';
+import { FAMILY_LABELS, FAMILY_ORDER, familyKey } from './palette.js';
 import { MAX_COMPARE, offeredFamilyIds, personOnGame } from './select.js';
 
 /** Rows shown before "show all" (D-03). */
@@ -142,10 +144,35 @@ export function familyChannelOrder(data, family) {
 }
 
 /**
- * Counts announcers over `games` (the computeFacets per-person `seen` rule).
- * Returns segments; with `withChannels` each also carries per-channel counts.
+ * The family key with the highest count, ties broken by FAMILY_ORDER (D-31).
+ * @param {Map<string, number>} counts - family key to counted games.
+ * @returns {string|null}
  */
-function countAnnouncers(data, games, role, { withChannels = false, family = null } = {}) {
+export function mainFamilyOf(counts) {
+  let best = null;
+  let bestN = 0;
+  for (const [key, n] of counts) {
+    const better =
+      n > bestN || (n === bestN && best != null && FAMILY_ORDER.indexOf(key) < FAMILY_ORDER.indexOf(best));
+    if (better) {
+      best = key;
+      bestN = n;
+    }
+  }
+  return best;
+}
+
+/**
+ * Counts announcers over `games` (the computeFacets per-person `seen` rule).
+ * Returns segments; with `withChannels` each also carries per-channel counts,
+ * with `withMainFamily` the main network family (D-31).
+ */
+function countAnnouncers(
+  data,
+  games,
+  role,
+  { withChannels = false, family = null, withMainFamily = false } = {},
+) {
   const acc = new Map();
   for (const i of games) {
     const seen = new Set();
@@ -155,10 +182,14 @@ function countAnnouncers(data, games, role, { withChannels = false, family = nul
       if (personOnGame(data, i, entry.person, role) == null) continue;
       let rec = acc.get(entry.person);
       if (!rec) {
-        rec = { count: 0, main: new Set(), alt: new Set(), nets: new Map() };
+        rec = { count: 0, main: new Set(), alt: new Set(), nets: new Map(), fams: new Map() };
         acc.set(entry.person, rec);
       }
       rec.count += 1;
+      if (withMainFamily) {
+        const fam = familyKey(data.lookups.networks[data.t.network[i]].family);
+        rec.fams.set(fam, (rec.fams.get(fam) ?? 0) + 1);
+      }
       if (withChannels) {
         const net = data.t.network[i];
         rec.nets.set(net, (rec.nets.get(net) ?? 0) + 1);
@@ -181,6 +212,7 @@ function countAnnouncers(data, games, role, { withChannels = false, family = nul
       count: rec.count,
       target: { kind: 'person', id },
     };
+    if (withMainFamily) seg.mainFamily = mainFamilyOf(rec.fams);
     if (withChannels) {
       const order = familyChannelOrder(data, family);
       seg.channels = Array.from(rec.nets, ([net, count]) => ({
@@ -219,11 +251,12 @@ function countTeams(data, games) {
 
 /** Simple announcer rows: one row per announcer. */
 function announcerRows(data, games, role) {
-  return countAnnouncers(data, games, role).map((s) => ({
+  return countAnnouncers(data, games, role, { withMainFamily: true }).map((s) => ({
     key: s.key,
     name: s.name,
     label: s.label,
     family: null,
+    mainFamily: s.mainFamily,
     total: s.count,
     target: s.target,
     segments: [],
@@ -237,6 +270,7 @@ function teamRows(data, games) {
     name: s.name,
     label: s.label,
     family: null,
+    mainFamily: null,
     total: s.count,
     target: s.target,
     segments: [],
@@ -262,6 +296,7 @@ function familyRows(data, games, role, view) {
       name: label,
       label,
       family,
+      mainFamily: null,
       total,
       shadeCount: familyChannelOrder(data, family).length,
       target: { kind: 'family', family, ids: offeredFamilyIds(data, family, view) },
@@ -312,6 +347,7 @@ function conferenceRows(data, games) {
       name: label,
       label,
       family: null,
+      mainFamily: null,
       total: segments.reduce((sum, s) => sum + s.count, 0),
       target,
       segments,
@@ -395,6 +431,12 @@ export function butterflyModel(data, view, state) {
   const inRight = new Set(sets[1]);
   const shared = sets[0].filter((i) => inRight.has(i)).length;
 
+  // D-31: a person row's main family covers both sides' games, each game once.
+  const mainByKey = new Map();
+  if (spec.rowKind === 'person') {
+    const union = Array.from(new Set([...sets[0], ...sets[1]])).sort((a, b) => a - b);
+    for (const row of spec.build(union)) mainByKey.set(row.key, row.mainFamily);
+  }
   const left = spec.build(sets[0]);
   const right = spec.build(sets[1]);
   const rows = new Map();
@@ -408,6 +450,7 @@ export function butterflyModel(data, view, state) {
           name: row.name,
           label: row.label,
           family: row.family,
+          mainFamily: spec.rowKind === 'person' ? (mainByKey.get(row.key) ?? null) : null,
           total: 0,
           target: row.target,
           sides: [{ ...empty }, { ...empty }],
