@@ -8,6 +8,7 @@ Builder tests import the DOM-free modules into the served page; tests with
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Callable
 from typing import Any
 
@@ -465,7 +466,7 @@ def test_copy_never_mentions_viewers(guarded_page: Page, site_url: str) -> None:
 # --------------------------------------------------------------------------
 
 _FIG_JS = """
-async ([partial, fn, env]) => {
+async ([partial, fn, env, inflate]) => {
   const D = await import('./modules/data.js');
   const S = await import('./modules/select.js');
   const B = await import('./modules/bars.js');
@@ -475,6 +476,16 @@ async ([partial, fn, env]) => {
   const state = Object.assign(S.defaultState(data), partial);
   const view = S.computeView(data, state);
   const model = B[fn](data, view, state);
+  if (inflate && inflate !== 1) {
+    const side = (o) => {
+      o.total *= inflate;
+      (o.segments ?? []).forEach((g) => {
+        g.count *= inflate;
+        (g.channels ?? []).forEach((c) => { c.count *= inflate; });
+      });
+    };
+    model.rows.forEach((r) => { side(r); (r.sides ?? []).forEach(side); });
+  }
   const rows = B.visibleRows(model.rows, false);
   const build = fn === 'barsModel' ? F.buildBarFigure : F.buildButterflyFigure;
   return { model, figure: build(model, rows, env) };
@@ -492,11 +503,12 @@ def _figure(
     fn: str = "barsModel",
     env: dict[str, Any] | None = None,
     raw: dict[str, Any] | None = None,
+    inflate: int = 1,
 ) -> dict[str, Any]:
     if raw is not None:
         page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
     page.goto(f"{site_url}/")
-    out: dict[str, Any] = page.evaluate(_FIG_JS, [partial, fn, env or _DESKTOP])
+    out: dict[str, Any] = page.evaluate(_FIG_JS, [partial, fn, env or _DESKTOP, inflate])
     assert "viewer" not in json.dumps(out["figure"]).lower()  # D-01
     return out
 
@@ -524,6 +536,8 @@ def test_palette_helpers(guarded_page: Page, site_url: str) -> None:
             netTones: F.barTones({ family: 'disney' }, 'light'),
             netMix: P.mixHex('#0072B2', '#FFFFFF', 0.55),
             plainTones: F.barTones({ family: null }, 'light'),
+            mainTones: F.barTones({ family: null, mainFamily: 'fox' }, 'light'),
+            mainMix: P.mixHex('#009E73', '#FFFFFF', 0.55),
           };
         }"""
     )
@@ -538,6 +552,7 @@ def test_palette_helpers(guarded_page: Page, site_url: str) -> None:
     assert out["worst"] >= 4.5
     assert out["netTones"] == {"a": "#0072B2", "b": out["netMix"]}
     assert out["plainTones"] == {"a": "#7C3AED", "b": "#B793F5"}
+    assert out["mainTones"] == {"a": "#009E73", "b": out["mainMix"]}  # D-31
 
 
 def test_channel_shades(guarded_page: Page, site_url: str) -> None:
@@ -593,7 +608,6 @@ def test_readable_text_on_all(guarded_page: Page, site_url: str) -> None:
 
 _THEMES = ["light", "dark"]
 _VIOLET_CASES = [
-    ({"school": ["northfield"]}, "barsModel"),
     ({"people": ["kris-venn"]}, "barsModel"),
     ({"people": ["kris-venn"], "bars": "stacked"}, "barsModel"),
     ({"people": ["kris-venn", "pat-rowan"]}, "butterflyModel"),
@@ -661,7 +675,7 @@ def test_rendered_violet_matches_css_token(
     out = _render(
         guarded_page,
         open_app,
-        {"school": ["northfield"]},
+        {"people": ["kris-venn"]},
         "barsModel",
         {**_DESKTOP, "theme": theme},
     )
@@ -689,7 +703,8 @@ def test_simple_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
     assert (trace["type"], trace["orientation"], trace["textposition"]) == ("bar", "h", "outside")
     assert trace["x"] == [r["total"] for r in rows]
     assert trace["y"] == [r["key"] for r in rows]
-    assert set(trace["marker"]["color"]) == {"#7C3AED"}  # Tone A only (violet, D-24)
+    # D-31: Northfield's games are all net-a (Disney), so announcer bars are Disney blue.
+    assert set(trace["marker"]["color"]) == {"#0072B2"}
     assert trace["hoverinfo"] == "none"
     assert trace["customdata"] == [{"r": i, "s": -1, "side": None} for i in range(len(rows))]
     layout = figure["layout"]
@@ -727,9 +742,152 @@ def test_stacked_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
                 assert trace["customdata"][i] is None
                 assert trace["text"][i] == ""
     # Non-FBS conference rows have no target, so their labels are not clickable.
-    assert [a["captureevents"] for a in layout["annotations"]] == [
+    # D-29 appends total annotations after the row labels; those never capture events.
+    n = len(rows)
+    assert [a["captureevents"] for a in layout["annotations"][:n]] == [
         r["target"] is not None for r in rows
     ]
+    assert all(a["name"] == "total" for a in layout["annotations"][n:])
+
+
+_MAIN_FAMILY_LIGHT = [
+    "#009E73", "#8F8F8F", "#009E73", "#8F8F8F", "#0072B2",
+    "#0072B2", "#009E73", "#000000", "#009E73",
+]  # fmt: skip
+_MAIN_FAMILY_DARK = [
+    "#009E73", "#999999", "#009E73", "#999999", "#0072B2",
+    "#0072B2", "#009E73", "#696969", "#009E73",
+]  # fmt: skip
+
+
+@pytest.mark.parametrize("theme", _THEMES)
+def test_simple_announcer_bars_use_main_family_color(
+    guarded_page: Page, site_url: str, theme: str
+) -> None:
+    out = _figure(
+        guarded_page,
+        site_url,
+        {"school": ["ironpeak", "foxhollow", "stonebridge"]},
+        env={**_DESKTOP, "theme": theme},
+    )
+    (trace,) = out["figure"]["traces"]
+    assert trace["marker"]["color"] == (
+        _MAIN_FAMILY_LIGHT if theme == "light" else _MAIN_FAMILY_DARK
+    )
+    accent = {"light": "#111827", "dark": "#E5E7EB"}[theme]
+    assert trace["textposition"] == "outside"
+    assert trace["textfont"]["color"] == accent
+
+
+def test_butterfly_announcer_bars_use_main_family_color(guarded_page: Page, site_url: str) -> None:
+    out = _figure(guarded_page, site_url, {"school": ["lakeview", "maplecrest"]}, "butterflyModel")
+    left, right = out["figure"]["traces"]
+    by_label = {r["label"]: i for i, r in enumerate(out["model"]["rows"])}
+    casey = by_label["Casey Lund · PBP"]
+    jamie = by_label["Jamie Oaks · Analyst"]
+    for trace in (left, right):
+        assert trace["marker"]["color"][casey] == "#8F8F8F"
+        assert trace["marker"]["color"][jamie] == "#0072B2"
+
+
+def _totals(figure: dict[str, Any], axis: str) -> list[tuple[int, str]]:
+    return [
+        (a["y"], a["text"])
+        for a in figure["layout"]["annotations"]
+        if a.get("name") == "total" and a["xref"] == axis
+    ]
+
+
+@pytest.mark.parametrize(
+    ("partial", "expected"),
+    [
+        ({"school": ["northfield"], "bars": "stacked"}, [(0, "7")]),
+        (
+            {"people": ["kris-venn"], "bars": "stacked"},
+            [(0, "3"), (1, "1"), (2, "1"), (3, "1")],
+        ),
+    ],
+)
+def test_stacked_totals_on_bars(
+    guarded_page: Page, site_url: str, partial: dict[str, Any], expected: list[tuple[int, str]]
+) -> None:
+    out = _figure(guarded_page, site_url, partial)
+    annos = out["figure"]["layout"]["annotations"]
+    n = len(out["model"]["rows"])
+    assert [a.get("name") for a in annos[:n]] == [None] * n
+    totals = annos[n:]
+    assert [(a["y"], a["text"]) for a in totals] == expected
+    for a in totals:
+        assert a["name"] == "total" and a["xref"] == "x" and a["yref"] == "y"
+        assert a["x"] == int(a["text"])
+        assert a["xanchor"] == "left" and a["showarrow"] is False
+        assert a["captureevents"] is False
+    simple = _figure(guarded_page, site_url, {"school": ["northfield"]})
+    assert not any(a.get("name") == "total" for a in simple["figure"]["layout"]["annotations"])
+
+
+@pytest.mark.parametrize(
+    ("partial", "left", "right"),
+    [
+        (
+            {"school": ["northfield", "lakeview"], "bars": "stacked"},
+            [(0, "7")],
+            [(0, "4"), (1, "2")],
+        ),
+        (
+            {"people": ["kris-venn", "pat-rowan"], "bars": "stacked"},
+            [(0, "1"), (1, "3"), (2, "1"), (3, "1")],
+            [(0, "4"), (1, "1"), (2, "1")],
+        ),
+    ],
+)
+def test_stacked_totals_on_butterfly(
+    guarded_page: Page,
+    site_url: str,
+    partial: dict[str, Any],
+    left: list[tuple[int, str]],
+    right: list[tuple[int, str]],
+) -> None:
+    out = _figure(guarded_page, site_url, partial, "butterflyModel")
+    figure = out["figure"]
+    n = len(out["model"]["rows"])
+    annos = figure["layout"]["annotations"]
+    assert [a["yref"] for a in annos[n : n + 2]] == ["paper", "paper"]  # side titles
+    assert _totals(figure, "x") == left
+    assert _totals(figure, "x2") == right
+    for a in annos[n + 2 :]:
+        assert a["name"] == "total" and a["captureevents"] is False
+        assert (a["xanchor"] == "right") == (a["xref"] == "x")
+
+
+@pytest.mark.parametrize("env", [_DESKTOP, {**_DESKTOP, "width": 800}, _PHONE])
+@pytest.mark.parametrize(
+    ("partial", "fn"),
+    [
+        ({"people": ["kris-venn"], "bars": "stacked"}, "barsModel"),
+        ({"people": ["kris-venn"]}, "barsModel"),
+        ({"people": ["kris-venn", "pat-rowan"], "bars": "stacked"}, "butterflyModel"),
+    ],
+)
+def test_total_text_has_room_in_the_range(
+    guarded_page: Page, site_url: str, env: dict[str, Any], partial: dict[str, Any], fn: str
+) -> None:
+    out = _figure(guarded_page, site_url, partial, fn, env, inflate=100)
+    layout = out["figure"]["layout"]
+    rows = out["model"]["rows"]
+    if fn == "barsModel":
+        peak = max(r["total"] for r in rows) * 100
+        length = env["width"] - layout["margin"]["l"] - layout["margin"]["r"]
+        top = layout["xaxis"]["range"][1]
+        assert top >= peak * 1.12 - 1e-9
+    else:
+        peak = max(max(r["sides"][0]["total"], r["sides"][1]["total"]) for r in rows)
+        dom = layout["xaxis"]["domain"]
+        length = (env["width"] - 16) * (dom[1] - dom[0])
+        top = layout["xaxis2"]["range"][1]
+        assert top >= peak * 1.1 - 1e-9
+    reserve = math.ceil(7.6 * len(str(peak))) + 8
+    assert top >= peak * length / (length - reserve) - 1e-9
 
 
 def test_network_rows_use_family_color(guarded_page: Page, site_url: str) -> None:
