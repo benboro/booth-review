@@ -45,22 +45,55 @@ _TITLE_BARS = "(c) => c.C.chartTitle(c.bars, c.data, c.state)"
 _TITLE_FLY = "(c) => c.C.chartTitle(c.fly, c.data, c.state)"
 
 _BARS_TITLES: list[tuple[dict[str, Any], str]] = [
-    ({"school": ["northfield"]}, "Announcers by rated telecasts · Northfield"),
-    ({"school": ["northfield"], "bars": "stacked"}, "Network families by announcer · Northfield"),
-    ({"people": ["kris-venn"]}, "Teams by rated telecasts · Kris Venn"),
-    ({"people": ["kris-venn"], "bars": "stacked"}, "Conferences by team · Kris Venn"),
-    ({"networks": ["net-a", "net-b"]}, "Teams by rated telecasts · 2 networks"),
+    ({"school": ["northfield"]}, "Announcers by rated telecasts with Northfield"),
+    ({"school": ["northfield"], "bars": "stacked"}, "Network families by announcer with Northfield"),
+    ({"people": ["kris-venn"]}, "Teams by rated telecasts with Kris Venn"),
+    ({"people": ["kris-venn"], "bars": "stacked"}, "Conferences by team with Kris Venn"),
+    ({"networks": ["net-a", "net-b"]}, "Teams by rated telecasts on Alpha Sports or Beta Network"),
+    (
+        {"networks": ["net-a", "net-b", "net-c", "net-d"]},
+        "Teams by rated telecasts on 4 networks",
+    ),
+    ({"networks": []}, "Teams by rated telecasts on no networks"),
     (
         {"school": ["northfield", "lakeview"]},
-        "Announcers by rated telecasts · Northfield and Lakeview",
+        "Announcers by rated telecasts with Northfield or Lakeview",
     ),
     (
         {"school": ["northfield", "lakeview", "ironpeak"]},
-        "Announcers by rated telecasts · 3 schools",
+        "Announcers by rated telecasts with Northfield or Lakeview or Ironpeak",
     ),
     (
         {"school": ["northfield"], "networks": ["net-a"], "group": "teams"},
-        "Teams by rated telecasts · Alpha Sports",
+        "Teams by rated telecasts with Northfield on Alpha Sports",
+    ),
+    (
+        {"school": ["northfield"], "people": ["dale-harlow"]},
+        "Announcers by rated telecasts with Dale Harlow and Northfield",
+    ),
+    (
+        {"school": ["northfield"], "people": ["dale-harlow"], "group": "teams"},
+        "Teams by rated telecasts with Dale Harlow and Northfield",
+    ),
+    (
+        {"people": ["kris-venn", "jax-venn"], "together": True},
+        "Teams by rated telecasts with Kris Venn and Jax Venn",
+    ),
+    (
+        {"people": ["kris-venn", "pat-rowan"], "compare": True},
+        "Teams by rated telecasts with Kris Venn or Pat Rowan",
+    ),
+    (
+        {"people": ["kris-venn", "pat-rowan"]},
+        "Teams by rated telecasts with Kris Venn or Pat Rowan",
+    ),
+    (
+        {
+            "people": ["kris-venn", "jax-venn"],
+            "together": True,
+            "school": ["ironpeak", "foxhollow"],
+        },
+        "Announcers by rated telecasts with (Kris Venn and Jax Venn) and (Ironpeak or Foxhollow)",
     ),
 ]
 
@@ -85,6 +118,23 @@ _FLY_TITLES: list[tuple[dict[str, Any], str]] = [
     (
         {"people": ["kris-venn", "pat-rowan"], "bars": "stacked"},
         "Conferences by team: Kris Venn and Pat Rowan",
+    ),
+    (
+        {"school": ["northfield", "lakeview"], "people": ["dale-harlow"]},
+        "Announcers: Northfield and Lakeview with Dale Harlow",
+    ),
+    (
+        {"people": ["kris-venn", "pat-rowan"], "school": ["ironpeak"]},
+        "Teams: Kris Venn and Pat Rowan with Ironpeak",
+    ),
+    (
+        {
+            "school": ["northfield", "lakeview"],
+            "people": ["kris-venn", "jax-venn"],
+            "together": True,
+            "group": "teams",
+        },
+        "Teams: Kris Venn and Jax Venn with Northfield or Lakeview",
     ),
 ]
 
@@ -248,11 +298,11 @@ def test_aria_summaries(guarded_page: Page, site_url: str) -> None:
     page = guarded_page
     aria = "(c) => c.C.ariaSummary(c.bars ?? c.fly, c.data, c.state, (c.bars ?? c.fly).rows.length)"
     assert _run(page, site_url, {"school": ["northfield"]}, aria) == (
-        "Bar chart: announcers by rated telecasts, Northfield, 2019\u20132026. Showing 5 of 5. "
+        "Bar chart: announcers by rated telecasts with Northfield, 2019\u20132026. Showing 5 of 5. "
         "Top: Dale Harlow · PBP 2, Dale Harlow Jr. · Analyst 2, Casey Lund · PBP 1."
     )
     one_year = _run(page, site_url, {"school": ["northfield"], "seasons": [2025, 2025]}, aria)
-    assert "Northfield, 2025." in one_year
+    assert "with Northfield, 2025." in one_year
     fly = _run(
         page,
         site_url,
@@ -260,7 +310,7 @@ def test_aria_summaries(guarded_page: Page, site_url: str) -> None:
         "(c) => c.C.ariaSummary(c.fly, c.data, c.state, c.fly.rows.length)",
     )
     assert fly == (
-        "Butterfly chart: announcers for Northfield and Lakeview, 2019\u20132026. Showing 7 of 7. "
+        "Butterfly chart: announcers: Northfield and Lakeview, 2019\u20132026. Showing 7 of 7. "
         "2 games include both. Top: Dale Harlow · PBP 2 and 1, Dale Harlow Jr. · Analyst 2 and 1."
     )
     zero = _run(
