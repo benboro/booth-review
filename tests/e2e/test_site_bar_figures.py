@@ -534,7 +534,100 @@ def test_palette_helpers(guarded_page: Page, site_url: str) -> None:
     # always >= sqrt(21) ~ 4.58), so readableTextOn's null branch is a guard only.
     assert out["worst"] >= 4.5
     assert out["netTones"] == {"a": "#0072B2", "b": out["netMix"]}
-    assert out["plainTones"] == {"a": "#4B5563", "b": "#9CA2A9"}
+    assert out["plainTones"] == {"a": "#7C3AED", "b": "#B793F5"}
+
+
+_THEMES = ["light", "dark"]
+_VIOLET_CASES = [
+    ({"school": ["northfield"]}, "barsModel"),
+    ({"people": ["kris-venn"]}, "barsModel"),
+    ({"people": ["kris-venn"], "bars": "stacked"}, "barsModel"),
+    ({"people": ["kris-venn", "pat-rowan"]}, "butterflyModel"),
+    ({"people": ["kris-venn", "pat-rowan"], "bars": "stacked"}, "butterflyModel"),
+]
+
+
+@pytest.mark.parametrize("theme", _THEMES)
+@pytest.mark.parametrize(("partial", "fn"), _VIOLET_CASES)
+def test_non_network_bars_are_violet(
+    guarded_page: Page, site_url: str, theme: str, partial: dict[str, Any], fn: str
+) -> None:
+    guarded_page.goto(f"{site_url}/")
+    tones = guarded_page.evaluate(
+        """async (theme) => {
+          const P = await import('./modules/palette.js');
+          const mix = (h, bg) => P.mixHex(h, bg, 0.55);
+          return {
+            a: P.SPECIAL[theme], b: mix(P.SPECIAL[theme], P.PAGE_BG[theme]),
+            ma: P.MUTED[theme], mb: mix(P.MUTED[theme], P.PAGE_BG[theme]),
+          };
+        }""",
+        theme,
+    )
+    out = _figure(guarded_page, site_url, partial, fn, {**_DESKTOP, "theme": theme})
+    colors: set[str] = set()
+    for trace in out["figure"]["traces"]:
+        colors |= {c for c in trace["marker"]["color"]}
+    assert colors <= {tones["a"], tones["b"]}
+    assert colors
+    assert not colors & {tones["ma"], tones["mb"]}
+
+
+@pytest.mark.parametrize("theme", _THEMES)
+def test_violet_text_contrast(guarded_page: Page, site_url: str, theme: str) -> None:
+    guarded_page.goto(f"{site_url}/")
+    want = guarded_page.evaluate(
+        """async (theme) => {
+          const P = await import('./modules/palette.js');
+          const b = P.mixHex(P.SPECIAL[theme], P.PAGE_BG[theme], 0.55);
+          return { a: P.readableTextOn(P.SPECIAL[theme]), b: P.readableTextOn(b),
+                   ra: P.contrastRatio(P.SPECIAL[theme], P.readableTextOn(P.SPECIAL[theme])),
+                   rb: P.contrastRatio(b, P.readableTextOn(b)) };
+        }""",
+        theme,
+    )
+    expected = (
+        ("#FFFFFF", "#000000") if theme == "light" else ("#000000", "#FFFFFF")
+    )
+    assert (want["a"], want["b"]) == expected
+    assert want["ra"] >= 4.5 and want["rb"] >= 4.5
+    out = _figure(
+        guarded_page,
+        site_url,
+        {"people": ["kris-venn"], "bars": "stacked"},
+        env={**_DESKTOP, "theme": theme},
+    )
+    for k, trace in enumerate(out["figure"]["traces"]):
+        assert set(trace["textfont"]["color"]) == {expected[k % 2]}
+
+
+@pytest.mark.parametrize("theme", _THEMES)
+def test_rendered_violet_matches_css_token(
+    guarded_page: Page, open_app: Callable[[Page, str], None], theme: str
+) -> None:
+    guarded_page.emulate_media(color_scheme=theme)  # type: ignore[arg-type]
+    out = _render(
+        guarded_page,
+        open_app,
+        {"school": ["northfield"]},
+        "barsModel",
+        {**_DESKTOP, "theme": theme},
+    )
+    assert out["bars"]
+    res = guarded_page.evaluate(
+        """async () => {
+          const P = await import('./modules/palette.js');
+          const css = getComputedStyle(document.documentElement)
+            .getPropertyValue('--special').trim().toUpperCase();
+          const fill = getComputedStyle(
+            document.querySelector('#test-bars .bars .point path')).fill;
+          const hex = '#' + fill.match(/\\d+/g).slice(0, 3)
+            .map((n) => Number(n).toString(16).padStart(2, '0')).join('').toUpperCase();
+          return { css, hex, light: P.SPECIAL.light, dark: P.SPECIAL.dark };
+        }"""
+    )
+    assert res["css"] == res[theme]
+    assert res["hex"] == res[theme]
 
 
 def test_simple_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
@@ -544,7 +637,7 @@ def test_simple_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
     assert (trace["type"], trace["orientation"], trace["textposition"]) == ("bar", "h", "outside")
     assert trace["x"] == [r["total"] for r in rows]
     assert trace["y"] == [r["key"] for r in rows]
-    assert set(trace["marker"]["color"]) == {"#4B5563"}  # Tone A only
+    assert set(trace["marker"]["color"]) == {"#7C3AED"}  # Tone A only (violet, D-24)
     assert trace["hoverinfo"] == "none"
     assert trace["customdata"] == [{"r": i, "s": -1, "side": None} for i in range(len(rows))]
     layout = figure["layout"]
@@ -567,7 +660,7 @@ def test_stacked_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
     depth = max(len(r["segments"]) for r in rows)
     assert len(figure["traces"]) == depth
     for k, trace in enumerate(figure["traces"]):
-        assert set(trace["marker"]["color"]) == {"#4B5563" if k % 2 == 0 else "#9CA2A9"}
+        assert set(trace["marker"]["color"]) == {"#7C3AED" if k % 2 == 0 else "#B793F5"}
         assert trace["marker"]["line"] == {"width": 1, "color": "#FFFFFF"}
         for i, row in enumerate(rows):
             if k < len(row["segments"]):
