@@ -1289,6 +1289,14 @@ input[type="checkbox"] {
 /* D-14/D-17: both control sets share one grid cell so the slot never shifts. */
 .chart-controls {
   display: grid;
+  /* D-22: the row's bottom spacing lives here, not on each control, so no
+     control's margin box shifts its text off the shared baseline. */
+  margin-bottom: var(--space-md);
+}
+
+.chart-controls .segmented,
+.chart-controls .group-by {
+  margin-bottom: 0;
 }
 
 .chart-controls > #axis-toggle,
@@ -1301,13 +1309,14 @@ input[type="checkbox"] {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-md);
-  align-items: center;
+  /* D-22: one baseline for every control in the row. */
+  align-items: baseline;
 }
 
 .group-by {
   display: inline-flex;
   gap: var(--space-sm);
-  align-items: center;
+  align-items: baseline;
   margin-bottom: var(--space-md);
 }
 
@@ -1408,13 +1417,15 @@ input[type="checkbox"] {
   font: var(--font-label);
   padding: var(--space-sm) var(--space-md);
   border: none;
+  /* D-22: pressed and unpressed buttons are the same height. */
+  border-bottom: 2px solid transparent;
   background: var(--bg);
   color: var(--text);
   cursor: pointer;
 }
 
 .segmented button[aria-pressed="true"] {
-  border-bottom: 2px solid var(--accent);
+  border-bottom-color: var(--accent);
   color: var(--accent);
 }
 
