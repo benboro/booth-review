@@ -175,6 +175,11 @@ export function captionLines(model, shownRows) {
       'Each game counts once for every team in it, so team totals can add up to more than the number of games.',
     );
   }
+  if (model.rowKind === 'family') {
+    lines.push(
+      "Shades within a network family's bar mark its channels. Hover or tap a segment for each channel's count.",
+    );
+  }
   if (model.kind === 'butterfly') lines.push(sharedCaption(model.shared));
   if (shownRows.some((row) => row.target == null)) {
     lines.push("Non-FBS and unlisted conferences can't be used as a filter.");
@@ -192,12 +197,21 @@ export function segmentText(seg) {
 }
 
 /**
+ * In-tooltip text of one channel line of a family segment.
+ * @param {{name: string, count: number}} ch
+ * @returns {string}
+ */
+export function channelLineText(ch) {
+  return `${ch.name} ${ch.count}`;
+}
+
+/**
  * Tooltip lines for a point reference.
  * @param {object} model
  * @param {object[]} shownRows
  * @param {{r: number, s: number, side: number|null}} ref
  * @param {{touch?: boolean}} [opts]
- * @returns {{text: string, kind: 'title'|'body'|'hint'}[]}
+ * @returns {{text: string, kind: 'title'|'body'|'hint', shade?: number}[]}
  */
 export function tooltipLines(model, shownRows, ref, { touch = false } = {}) {
   const row = shownRows[ref.r];
@@ -210,6 +224,9 @@ export function tooltipLines(model, shownRows, ref, { touch = false } = {}) {
     const seg = (side ? side.segments : row.segments)[ref.s];
     const count = telecastCount(seg.count);
     lines.push({ text: seg.label, kind: 'title' });
+    for (const ch of seg.channels ?? []) {
+      lines.push({ text: `${ch.name}: ${ch.count}`, kind: 'body', shade: ch.shade });
+    }
     lines.push({
       text: sideName ? `${sideName}: ${count} on ${row.name}` : `${count} on ${row.name}`,
       kind: 'body',

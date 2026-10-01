@@ -261,7 +261,8 @@ def test_tooltip_lines(guarded_page: Page, site_url: str) -> None:
         "(c) => c.C.tooltipLines(c.bars, c.bars.rows, { r: 0, s: 0, side: null }, {})",
     )
     assert stacked[0] == {"text": "Dale Harlow · PBP", "kind": "title"}
-    assert stacked[1] == {"text": "2 rated telecasts on ABC/ESPN", "kind": "body"}
+    assert stacked[1] == {"text": "Alpha Sports: 2", "kind": "body", "shade": 0}
+    assert stacked[2] == {"text": "2 rated telecasts on ABC/ESPN", "kind": "body"}
     fly = _run(
         page,
         site_url,
