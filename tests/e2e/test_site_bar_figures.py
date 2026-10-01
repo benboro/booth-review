@@ -152,7 +152,12 @@ def test_caption_lines(guarded_page: Page, site_url: str) -> None:
     assert _run(page, site_url, {"school": ["northfield"], "bars": "stacked"}, cap) == [_STACK_SUM]
     assert _run(page, site_url, {"people": ["kris-venn"]}, cap) == [_TEAM_COUNT]
     assert _run(page, site_url, {"people": ["kris-venn"], "bars": "stacked"}, cap) == [_TEAM_COUNT]
-    fly = _run(page, site_url, {"school": ["northfield", "lakeview"]}, "(c) => c.C.captionLines(c.fly, c.fly.rows)")
+    fly = _run(
+        page,
+        site_url,
+        {"school": ["northfield", "lakeview"]},
+        "(c) => c.C.captionLines(c.fly, c.fly.rows)",
+    )
     assert fly == ["2 games include both."]
     out = _run(
         page,
@@ -247,7 +252,12 @@ def test_aria_summaries(guarded_page: Page, site_url: str) -> None:
     )
     one_year = _run(page, site_url, {"school": ["northfield"], "seasons": [2025, 2025]}, aria)
     assert "Northfield, 2025." in one_year
-    fly = _run(page, site_url, {"school": ["northfield", "lakeview"]}, aria)
+    fly = _run(
+        page,
+        site_url,
+        {"school": ["northfield", "lakeview"]},
+        "(c) => c.C.ariaSummary(c.fly, c.data, c.state, c.fly.rows.length)",
+    )
     assert fly == (
         "Butterfly chart: announcers for Northfield and Lakeview, 2019–2026. Showing 7 of 7. "
         "2 games include both. Top: Dale Harlow · PBP 2 and 1, Dale Harlow Jr. · Analyst 2 and 1."
