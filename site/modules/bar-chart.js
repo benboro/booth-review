@@ -7,7 +7,7 @@
  * draws a per-telecast audience figure. D-06: butterfly stacked rows use the
  * same rank-layer trace builder as Bars, per side. D-15: row labels are plain
  * 14/400 annotations; the bar fill carries a network row's family color.
- * D-16: Tone A / Tone B alternation, 1px page-background separators, in-bar
+ * D-16: Tone A / Tone B alternation (violet for non-network rows, D-24), 1px page-background separators, in-bar
  * text only where it fits (uniformtext hide) and reads at 4.5:1. D-18: every
  * labelled row with a drill target is a clickable annotation and every point
  * carries customdata `{r, s, side}`. D-20: phones put each label on its own
@@ -18,7 +18,7 @@
  * enters a Plotly string.
  */
 
-import { ACCENT, DIVIDER, FAMILY_COLORS, MUTED, PAGE_BG, familyKey, mixHex, readableTextOn } from './palette.js';
+import { ACCENT, DIVIDER, FAMILY_COLORS, MUTED, PAGE_BG, SPECIAL, familyKey, mixHex, readableTextOn } from './palette.js';
 import { escapeHover, niceLinearTicks } from './format.js';
 import { segmentText } from './bar-copy.js';
 
@@ -57,14 +57,15 @@ function truncate(text, max) {
 
 /**
  * Tone A / Tone B fills for a row (D-16): a network row uses its family
- * color, every other row the neutral muted pair.
+ * color, every other row the violet special-filter pair (D-24, superseding
+ * D-16's neutral ink tone).
  * @param {{family: string|null}} row
  * @param {'light'|'dark'} theme
  * @returns {{a: string, b: string}}
  */
 export function barTones(row, theme) {
   const base =
-    row.family != null ? FAMILY_COLORS[theme][familyKey(row.family)] : MUTED[theme];
+    row.family != null ? FAMILY_COLORS[theme][familyKey(row.family)] : SPECIAL[theme];
   return { a: base, b: mixHex(base, PAGE_BG[theme], 0.55) };
 }
 

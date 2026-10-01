@@ -110,8 +110,15 @@ export const PAGE_BG = { light: '#FFFFFF', dark: '#14161A' };
 /** UI chrome secondary-surface token per theme (rail, top bar, panel, table header). */
 export const SURFACE = { light: '#F4F5F7', dark: '#1E2126' };
 
-/** The --muted text token per theme; neutral bar fill for non-network bars (D-16). */
+/** The --muted text token per theme (axis ticks and zero lines; not a bar fill). */
 export const MUTED = { light: '#4B5563', dark: '#9CA3AF' };
+
+/**
+ * Mirrors the `--special` CSS token (the Announcers toolbar button's violet, D-34); the
+ * fill for announcer, team, and conference bars (04.4 D-24). A rendered test keeps the
+ * two equal.
+ */
+export const SPECIAL = { light: '#7C3AED', dark: '#A78BFA' };
 
 /**
  * Mixes two `#RRGGBB` colors per channel: `round(w*a + (1-w)*b)`, uppercase.
