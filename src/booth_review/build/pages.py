@@ -257,6 +257,7 @@ def render_coverage(site: SiteData) -> str:
         f"<td>{row.rated_telecasts}</td>"
         f"<td>{row.matched_game}</td>"
         f"<td>{row.matched_crew}</td>"
+        f"<td>{row.matched_crew_patched}</td>"
         f"<td>{_pct(row.match_rate)}</td>"
         f"<td>{row.excitement_present}</td>"
         f"<td>{row.pregame_present}</td>"
@@ -272,6 +273,7 @@ def render_coverage(site: SiteData) -> str:
         '<th scope="col">Rated telecasts</th>'
         '<th scope="col">Matched to a game</th>'
         '<th scope="col">Matched with crew</th>'
+        '<th scope="col">Of which hand-confirmed</th>'
         '<th scope="col">Match rate</th>'
         '<th scope="col">Excitement present</th>'
         '<th scope="col">Pre-game present</th>'

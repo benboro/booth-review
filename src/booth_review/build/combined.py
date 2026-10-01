@@ -37,7 +37,7 @@ from booth_review.build.io import write_review_csv
 from booth_review.build.sources import load_all_sources
 from booth_review.config import DataPaths
 from booth_review.errors import ReferenceTableError
-from booth_review.reference import read_reference_csv, reference_dir
+from booth_review.reference import read_reference_csv_numbered, reference_dir
 from booth_review.resolve.overrides import pointer_for_listing
 from booth_review.sources.sports506.parser import Listing506
 from booth_review.vault import VaultRepo
@@ -145,10 +145,10 @@ def load_combined_figures(reference_directory: Path) -> dict[str, CombinedDecisi
     row, a non-integer feeds value, or a duplicate rr_telecast_id.
     """
     path = reference_directory / "combined_figures.csv"
-    raw_rows = read_reference_csv(path, COMBINED_COLUMNS, required=False)
+    raw_rows = read_reference_csv_numbered(path, COMBINED_COLUMNS, required=False)
 
     decisions: dict[str, CombinedDecision] = {}
-    for line_no, raw in enumerate(raw_rows, start=2):
+    for line_no, raw in raw_rows:
         rr_telecast_id = raw["rr_telecast_id"]
         if not _RR_ID_RE.match(rr_telecast_id):
             raise ReferenceTableError(

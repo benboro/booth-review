@@ -9,7 +9,7 @@
  *
  * DOM is built only with createElement/textContent/replaceChildren -- never
  * any markup-injecting DOM API (T-04-34). Every href passes through
- * `safeHref` first (T-04-35): a telecast's `source_url`/`s506_url`/flag
+ * `safeHref` first (T-04-35): a telecast's `source_url`/`s506_url`/`crew_source_url`/flag
  * `source_url` that isn't a plain http(s) URL never becomes a clickable
  * link.
  */
@@ -191,7 +191,7 @@ function buildFlagsList(data, i) {
   return ul;
 }
 
-/** Links section: every RR record, the original source (or its absence), and the 506 listing. */
+/** Links section: every RR record, the original source (or its absence), then the crew's own source for a hand-confirmed crew (04.3 D-11) or else the 506 listing. */
 function buildLinksList(data, i) {
   const t = data.t;
   const ul = document.createElement('ul');
@@ -214,11 +214,22 @@ function buildLinksList(data, i) {
   sourceLi.appendChild(sourceLink ?? document.createTextNode('Original source not recorded'));
   ul.appendChild(sourceLi);
 
-  const s506Link = externalLink(t.s506_url[i], 'View 506 Sports listing ↗');
-  if (s506Link) {
+  const crewSourceLabel = t.crew_source_label?.[i] ?? null;
+  const crewSourceUrl = t.crew_source_url?.[i] ?? null;
+  if (crewSourceLabel != null) {
     const li = document.createElement('li');
-    li.appendChild(s506Link);
+    li.appendChild(
+      externalLink(crewSourceUrl, `Crew source: ${crewSourceLabel} ↗`) ??
+        document.createTextNode(`Crew source: ${crewSourceLabel}`),
+    );
     ul.appendChild(li);
+  } else {
+    const s506Link = externalLink(t.s506_url[i], 'View 506 Sports listing ↗');
+    if (s506Link) {
+      const li = document.createElement('li');
+      li.appendChild(s506Link);
+      ul.appendChild(li);
+    }
   }
 
   return ul;

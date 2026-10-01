@@ -12,10 +12,55 @@ snapshot of the build output, never mutated after validation.
 from __future__ import annotations
 
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = "1.3.0"
+SCHEMA_VERSION = "1.4.0"
+
+_S506_HOST = "506sports.com"
+
+# The longest crew-source label (crew_overrides.csv source_name) allowed.
+CREW_SOURCE_LABEL_MAX_LEN = 60
+
+
+def crew_source_url_problem(url: str) -> str | None:
+    """Why `url` cannot cite a hand-confirmed crew, or None when it can.
+
+    A crew source must be an http(s) URL with a host, and never 506 Sports
+    (04.3 D-01: an override records a crew some other public source
+    publishes). The crew-override loader and the contract share this check.
+    The message never echoes the URL.
+    """
+    if any(ch.isspace() for ch in url):
+        return "must not contain whitespace"
+    try:
+        parts = urlsplit(url)
+        host = parts.hostname
+    except ValueError:
+        return "must be an http(s) URL with a host"
+    if parts.scheme not in {"http", "https"} or not host:
+        return "must be an http(s) URL with a host"
+    host = host.rstrip(".")
+    if host == _S506_HOST or host.endswith("." + _S506_HOST):
+        return "must not cite 506 Sports"
+    return None
+
+
+def crew_source_label_problem(label: str) -> str | None:
+    """Why `label` cannot name a crew's cited source, or None when it can.
+
+    Non-empty, at most CREW_SOURCE_LABEL_MAX_LEN characters, and no `<` or
+    `>`. The crew-override loader (source_name) and the contract share this
+    check. The message never echoes the label.
+    """
+    if not label.strip():
+        return "must not be empty"
+    if len(label) > CREW_SOURCE_LABEL_MAX_LEN:
+        return f"must be at most {CREW_SOURCE_LABEL_MAX_LEN} characters"
+    if "<" in label or ">" in label:
+        return "must not contain < or >"
+    return None
 
 
 class TeamRef(BaseModel):
@@ -129,6 +174,9 @@ class TelecastColumns(BaseModel):
     source_url: list[str | None]
     rr_urls: list[list[str]]
     s506_url: list[str | None]
+    # 04.3 D-11: a hand-confirmed crew's own cited source; null for 506 crews; both set or both null
+    crew_source_url: list[str | None]
+    crew_source_label: list[str | None]
     excitement: list[float | None]
     pregame: list[float | None]
     flags: list[list[int]]
@@ -150,6 +198,9 @@ class CoverageRow(BaseModel):
     rated_telecasts: int
     matched_game: int
     matched_crew: int
+    # of matched_crew, how many had no 506 main crew and took theirs from
+    # data/reference/crew_overrides.csv (status `patched`, D-13)
+    matched_crew_patched: int
     match_rate: float | None = None
     headline_present: int
     excitement_present: int
@@ -162,7 +213,7 @@ class CoverageRow(BaseModel):
 class SiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["1.3.0"]
+    schema_version: Literal["1.4.0"]
     generated_at: str
     freshness: Freshness
     lookups: Lookups
@@ -229,6 +280,26 @@ class SiteData(BaseModel):
                 raise ValueError(f"telecasts.away_conference[{i}]: conference index out of range")
             if tc.playoff_round[i] is not None and tc.game_type[i] != "playoff":
                 raise ValueError(f"telecasts.playoff_round[{i}]: set on a non-playoff game")
+            source_url = tc.crew_source_url[i]
+            source_label = tc.crew_source_label[i]
+            if (source_url is None) != (source_label is None):
+                raise ValueError(
+                    f"telecasts.crew_source_label[{i}]: must be set together with crew_source_url"
+                )
+            if source_url is not None and source_label is not None:
+                problem = crew_source_url_problem(source_url)
+                if problem is not None:
+                    raise ValueError(f"telecasts.crew_source_url[{i}]: {problem}")
+                label_problem = crew_source_label_problem(source_label)
+                if label_problem is not None:
+                    raise ValueError(f"telecasts.crew_source_label[{i}]: {label_problem}")
+                # The pair cites the crew shown, which is always a main-feed
+                # booth from crew_overrides.csv (04.3 D-03).
+                if not any(entry.feed == "main" for entry in tc.crew[i]):
+                    raise ValueError(
+                        f"telecasts.crew[{i}]: must list a main-feed crew when "
+                        "crew_source_url is set"
+                    )
             bowl = tc.bowl[i]
             if bowl is not None:
                 if not 0 <= bowl < num_bowls:
@@ -239,6 +310,10 @@ class SiteData(BaseModel):
         for i, row in enumerate(self.coverage):
             if row.network is not None and not 0 <= row.network < num_networks:
                 raise ValueError(f"coverage[{i}].network: network index out of range")
+            if row.matched_crew_patched < 0:
+                raise ValueError(f"coverage[{i}].matched_crew_patched: must not be negative")
+            if row.matched_crew_patched > row.matched_crew:
+                raise ValueError(f"coverage[{i}].matched_crew_patched: exceeds matched_crew")
 
         return self
 

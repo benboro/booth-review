@@ -29,6 +29,13 @@ from booth_review.build.combined import (
     load_combined_figures,
     orphan_decision_count,
 )
+from booth_review.build.crew_overrides import (
+    REVIEW_CREW_GAPS_COLUMNS,
+    apply_crew_overrides,
+    crew_gap_rows,
+    load_crew_overrides,
+    unmatched_506_keys,
+)
 from booth_review.build.games import build_games_frame
 from booth_review.build.io import write_parquet_atomic, write_review_csv
 from booth_review.build.people_links import (
@@ -111,6 +118,8 @@ class BuildTables:
     telecast_people: pl.DataFrame
     diagnostics: BuildDiagnostics
     review_rows: dict[str, tuple[tuple[str, ...], list[dict[str, object]]]]
+    # crew_overrides.csv lines whose crew differs from 506's without `correction`.
+    crew_override_differs_lines: tuple[int, ...] = ()
 
 
 def _combined_review_row(
@@ -279,6 +288,24 @@ def assemble_tables(
     people = people_links.people
     telecast_people = people_links.telecast_people
 
+    # 04.3 D-13: overrides land after the 506 crews are linked and before the
+    # diagnostics, so patched crews reach coverage, JOIN-08, metrics, site data.
+    telecasts_pre = telecasts
+    telecast_people_pre = telecast_people
+    crew_overrides = load_crew_overrides(reference_directory)
+    override_result = apply_crew_overrides(
+        telecasts, telecast_people, crew_overrides, registry, telecast_build.counts
+    )
+    telecasts = override_result.telecasts
+    telecast_people = override_result.telecast_people
+    crew_gap_review = crew_gap_rows(
+        telecasts_pre,
+        games,
+        telecast_people_pre,
+        override_result.statuses,
+        unmatched_506_keys(telecast_build.unmatched_rows, networks),
+    )
+
     unmatched_review_rows: list[dict[str, object]] = [
         dict(unmatched_row(row)) for row in telecast_build.unmatched_rows
     ]
@@ -291,6 +318,7 @@ def assemble_tables(
 
     review_rows: dict[str, tuple[tuple[str, ...], list[dict[str, object]]]] = {
         "review_bowls": (REVIEW_BOWLS_COLUMNS, bowl_rows),
+        "review_crew_overrides": (REVIEW_CREW_GAPS_COLUMNS, crew_gap_review),
         "review_unmatched": (UNMATCHED_COLUMNS, unmatched_review_rows),
         "review_unresolved_teams": (UNRESOLVED_COLUMNS, unresolved_review_rows),
         "review_headline_disagreements": (HEADLINE_DISAGREEMENT_COLUMNS, disagreement_rows),
@@ -305,7 +333,7 @@ def assemble_tables(
         ),
     }
 
-    diagnostics = _build_diagnostics(telecast_build.counts)
+    diagnostics = _build_diagnostics(override_result.season_counts)
     merged_totals = dict(diagnostics.totals)
     merged_totals.update({f"people_{key}": value for key, value in people_links.counts.items()})
     merged_totals["combined_candidates_alt_listed"] = sum(
@@ -324,6 +352,12 @@ def assemble_tables(
     )
     merged_totals["combined_orphan_decisions"] = orphan_decision_count(
         combined_candidates, combined_decisions
+    )
+    merged_totals.update(
+        {f"crew_overrides_{key}": value for key, value in override_result.counts.items()}
+    )
+    merged_totals["crew_gaps_unpatched"] = sum(
+        1 for r in crew_gap_review if r["override_status"] == "missing"
     )
     merged_totals["bowls_missing"] = len(bowl_rows)
     merged_totals["bowl_names_unknown"] = sum(
@@ -345,6 +379,7 @@ def assemble_tables(
         telecast_people=telecast_people,
         diagnostics=diagnostics,
         review_rows=review_rows,
+        crew_override_differs_lines=override_result.differs_lines,
     )
 
 
@@ -417,6 +452,15 @@ def main(argv: Sequence[str] | None = None) -> None:
     print(f"era disagreements: {len(tables.review_rows['review_era_disagreements'][1])}")
 
     totals = tables.diagnostics.totals
+    print(
+        "crew overrides applied/patched/redundant/differs/corrections: "
+        f"{totals.get('crew_overrides_applied', 0)}/"
+        f"{totals.get('crew_overrides_patched', 0)}/"
+        f"{totals.get('crew_overrides_redundant', 0)}/"
+        f"{totals.get('crew_overrides_differs', 0)}/"
+        f"{totals.get('crew_overrides_corrections', 0)}"
+    )
+    print(f"crew gaps unpatched: {totals.get('crew_gaps_unpatched', 0)}")
     print(
         "people rows by role (pbp/analyst/unknown): "
         f"{totals.get('people_rows_role_pbp', 0)}/"

@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from booth_review.errors import ReferenceTableError
-from booth_review.reference import read_reference_csv
+from booth_review.reference import read_reference_csv_numbered
 
 NETWORK_COLUMNS = (
     "variant",
@@ -232,13 +232,13 @@ def load_networks(reference_dir: Path, *, required: bool = False) -> NetworkTabl
     primary_network); a non-blank priority must parse as an integer.
     """
     path = reference_dir / "networks.csv"
-    raw_rows = read_reference_csv(path, NETWORK_COLUMNS, required=required)
+    raw_rows = read_reference_csv_numbered(path, NETWORK_COLUMNS, required=required)
 
     rows: list[NetworkRow] = []
     variant_ranges: dict[str, list[tuple[int | None, int | None, str]]] = {}
     network_identity: dict[str, tuple[str, str, Tier, int | None]] = {}
 
-    for line_no, raw in enumerate(raw_rows, start=2):
+    for line_no, raw in raw_rows:
         network_id = raw["network_id"]
         if not _NETWORK_ID_RE.match(network_id):
             raise ReferenceTableError(
@@ -385,10 +385,10 @@ def load_primary_overrides(reference_dir: Path) -> dict[int, str]:
     in networks.csv is checked by `check_primary_overrides`.
     """
     path = reference_dir / "primary_network_overrides.csv"
-    raw_rows = read_reference_csv(path, PRIMARY_OVERRIDE_COLUMNS, required=False)
+    raw_rows = read_reference_csv_numbered(path, PRIMARY_OVERRIDE_COLUMNS, required=False)
 
     overrides: dict[int, str] = {}
-    for line_no, raw in enumerate(raw_rows, start=2):
+    for line_no, raw in raw_rows:
         reason = raw["reason"]
         if reason not in _OVERRIDE_REASONS:
             raise ReferenceTableError(f"{path.name}: line {line_no}: invalid reason {reason!r}")

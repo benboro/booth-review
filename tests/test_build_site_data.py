@@ -134,6 +134,7 @@ def _telecast_row(**overrides: object) -> dict[str, object]:
         "kickoff_et": "2024-09-14T13:30:00-04:00",
         "crew_matched": True,
         "crew_network_mismatch": False,
+        "crew_patched": False,  # the build always writes a bool here
         "combined_feeds": None,
         "plotted": True,
         "headline_claim_id": "claim-1",
@@ -1122,3 +1123,138 @@ def test_notes_sentinel_never_ships(tmp_path: Path, build_reference: Path) -> No
     text = (paths.vault / "processed/site-data.json").read_text(encoding="utf-8")
     assert "Zebra Harbor Bowl" in text
     assert "SENTINEL" not in text
+
+
+def _patched_freshness_tables(
+    *, second_season_type: str, second_week: int, second_patched: bool
+) -> BuildTables:
+    games = [
+        _game_row(game_id=1, week=2),
+        _game_row(
+            game_id=2,
+            week=second_week,
+            season_type=second_season_type,
+            date_et=date(2024, 9, 21),
+        ),
+    ]
+    telecasts = [
+        _telecast_row(telecast_id="1-net-a", game_id=1),
+        _telecast_row(
+            telecast_id="2-net-a",
+            game_id=2,
+            date_et=date(2024, 9, 21),
+            headline_claim_id="claim-2",
+            headline_value=100.0,
+            rr_telecast_ids=["cfb-example-2"],
+            rr_record_urls=["https://example.com/r2"],
+            crew_patched=second_patched,
+        ),
+    ]
+    return _build_tables(
+        games_rows=games,
+        telecast_rows=telecasts,
+        flag_rows=[
+            {"telecast_id": "1-net-a", "flag_id": "rr-fixture-era-2", "kind": "era"},
+            {"telecast_id": "2-net-a", "flag_id": "rr-fixture-era-2", "kind": "era"},
+        ],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+
+
+def test_freshness_crews_stamp_ignores_patched_crews(build_reference: Path) -> None:
+    tables = _patched_freshness_tables(
+        second_season_type="regular", second_week=3, second_patched=True
+    )
+    payload = _site(tables, build_reference)
+    assert payload["freshness"]["crews_through_week"] == "2"
+    assert payload["freshness"]["viewership_through_week"] == "3"
+
+
+def test_freshness_patched_postseason_crew_is_not_postseason(build_reference: Path) -> None:
+    tables = _patched_freshness_tables(
+        second_season_type="postseason", second_week=1, second_patched=True
+    )
+    payload = _site(tables, build_reference)
+    assert payload["freshness"]["crews_through_week"] == "2"
+
+
+def test_freshness_unpatched_crew_advances_stamp(build_reference: Path) -> None:
+    tables = _patched_freshness_tables(
+        second_season_type="regular", second_week=3, second_patched=False
+    )
+    payload = _site(tables, build_reference)
+    assert payload["freshness"]["crews_through_week"] == "3"
+
+
+@pytest.mark.parametrize(
+    ("reason", "status"), [("no-506-crew", "differs"), ("correction", "correction")]
+)
+def test_freshness_counts_an_override_on_a_crew_506_listed(reason: str, status: str) -> None:
+    from dataclasses import replace
+
+    from booth_review.build.crew_overrides import CrewOverride, apply_crew_overrides
+    from booth_review.build.site_data import _build_freshness
+    from booth_review.people.registry import PeopleRegistry, Person
+
+    tables = _patched_freshness_tables(
+        second_season_type="regular", second_week=3, second_patched=False
+    )
+    override = CrewOverride(
+        2, "net-a", (("p-a", "pbp"),), reason, "press-release", "Example PR", "https://example.com/"
+    )
+    registry = PeopleRegistry({"p-a": Person("p-a", "P A", ("p-a",), "unknown", None)})
+    result = apply_crew_overrides(
+        tables.telecasts, tables.telecast_people, {(2, "net-a"): override}, registry, {}
+    )
+    assert result.statuses == {"2-net-a": status}
+    overridden = replace(tables, telecasts=result.telecasts, telecast_people=result.telecast_people)
+    assert _build_freshness(overridden)["crews_through_week"] == "3"
+
+
+def test_crew_source_fields_emit_at_their_index_and_null_otherwise(build_reference: Path) -> None:
+    games = [_game_row(game_id=1), _game_row(game_id=2, week=3, date_et=date(2024, 9, 21))]
+    telecasts = [
+        _telecast_row(telecast_id="1-net-a", game_id=1),
+        _telecast_row(
+            telecast_id="2-net-a",
+            game_id=2,
+            date_et=date(2024, 9, 21),
+            headline_claim_id="claim-2",
+            headline_value=100.0,
+            rr_telecast_ids=["cfb-example-2"],
+            rr_record_urls=["https://example.com/r2"],
+            crew_patched=True,
+            crew_source_url="https://example.com/crew-source",
+            crew_source_label="Example Network PR",
+        ),
+    ]
+    tables = _build_tables(
+        games_rows=games,
+        telecast_rows=telecasts,
+        flag_rows=[
+            {"telecast_id": "1-net-a", "flag_id": "rr-fixture-era-2", "kind": "era"},
+            {"telecast_id": "2-net-a", "flag_id": "rr-fixture-era-2", "kind": "era"},
+        ],
+        people_rows=_people_rows(),
+        # A patched telecast always carries the override's main-feed booth.
+        telecast_people_rows=[
+            {
+                "telecast_id": "2-net-a",
+                "person_id": "mike-golic-jr",
+                "role": "pbp",
+                "feed_type": "main",
+                "crew_position": 0,
+                "s506_pointer": None,
+                "source": "crew_override",
+            }
+        ],
+    )
+    payload = _site(tables, build_reference)
+    columns = payload["telecasts"]
+    assert columns["crew_source_url"] == [None, "https://example.com/crew-source"]
+    assert columns["crew_source_label"] == [None, "Example Network PR"]
+    assert columns["s506_url"][0] == "https://506sports.com/ncaaf.php?yr=2024&wk=1"
+    all_row = next(r for r in payload["coverage"] if r["network"] is None)
+    assert all_row["matched_crew"] == 2
+    assert all_row["matched_crew_patched"] == 1

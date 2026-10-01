@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Literal
 
 from booth_review.errors import ReferenceTableError
-from booth_review.reference import read_reference_csv
+from booth_review.reference import read_reference_csv_numbered
 from booth_review.resolve.names import normalize_team
 from booth_review.sources.cfbd.parser import CfbdGame
 
@@ -89,11 +89,11 @@ def load_team_crosswalk(reference_dir: Path) -> list[TeamCrosswalkRow]:
     otherwise silently use whichever row came first).
     """
     path = reference_dir / "team_crosswalk.csv"
-    raw_rows = read_reference_csv(path, TEAM_CROSSWALK_COLUMNS, required=False)
+    raw_rows = read_reference_csv_numbered(path, TEAM_CROSSWALK_COLUMNS, required=False)
 
     rows: list[TeamCrosswalkRow] = []
     seen: dict[tuple[str, str], list[tuple[int | None, int | None, int]]] = {}
-    for line_no, raw in enumerate(raw_rows, start=2):
+    for line_no, raw in raw_rows:
         source = raw["source"]
         if source not in _SOURCES:
             raise ReferenceTableError(f"{path.name}: line {line_no}: invalid source {source!r}")

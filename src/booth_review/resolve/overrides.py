@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 from booth_review.errors import ReferenceTableError
-from booth_review.reference import read_reference_csv
+from booth_review.reference import read_reference_csv_numbered
 from booth_review.sources.ratingsref.parser import RRRecord
 from booth_review.sources.sports506.parser import Listing506
 
@@ -75,10 +75,10 @@ def load_game_overrides(reference_dir: Path) -> dict[tuple[str, int, str], GameO
     cfbd_game_id, or a duplicate (source, season, pointer) key.
     """
     path = reference_dir / "game_overrides.csv"
-    raw_rows = read_reference_csv(path, GAME_OVERRIDE_COLUMNS, required=False)
+    raw_rows = read_reference_csv_numbered(path, GAME_OVERRIDE_COLUMNS, required=False)
 
     overrides: dict[tuple[str, int, str], GameOverride] = {}
-    for line_no, raw in enumerate(raw_rows, start=2):
+    for line_no, raw in raw_rows:
         source = raw["source"]
         if source not in _SOURCES:
             raise ReferenceTableError(f"{path.name}: line {line_no}: invalid source {source!r}")

@@ -41,10 +41,18 @@ METRIC_COLUMNS: tuple[str, ...] = (
     "rr_records",
     "rated_telecasts",
     "records_with_crew",
+    "records_with_506_crew",
     "match_rate",
     "sports506_pages",
     "rr_records_cached",
     "cfbd_files",
+)
+
+# The header of a baseline accepted before records_with_506_crew existed
+# (04.3 IN-06). It still loads; that metric then has no baseline yet, so it
+# is not compared until the next --accept-baseline writes it.
+_LEGACY_METRIC_COLUMNS: tuple[str, ...] = tuple(
+    column for column in METRIC_COLUMNS if column != "records_with_506_crew"
 )
 
 _REGRESSION_COLUMNS: tuple[str, ...] = ("season", "metric", "baseline", "current", "status")
@@ -73,6 +81,8 @@ class SeasonMetrics:
     rr_records: int
     rated_telecasts: int
     records_with_crew: int
+    # None only when loaded from a legacy baseline that predates the column.
+    records_with_506_crew: int | None
     match_rate: float | None
     sports506_pages: int
     rr_records_cached: int
@@ -95,6 +105,8 @@ def build_metrics(tables: BuildTables, paths: DataPaths) -> list[SeasonMetrics]:
 
     `rr_records`/`rated_telecasts`/`records_with_crew`/`match_rate` come from
     `tables.diagnostics` (the same counts `build.tables.main` prints);
+    `records_with_506_crew` is `records_with_crew` before crew overrides, so
+    an override covering a lost 506 crew cannot hide the loss;
     `sports506_pages`/`rr_records_cached`/`cfbd_files` are read straight from
     the vault's raw cache, independent of anything the build itself joined,
     so a regression in raw collection is caught even if the join layer would
@@ -122,6 +134,7 @@ def build_metrics(tables: BuildTables, paths: DataPaths) -> list[SeasonMetrics]:
                 rr_records=diag.get("rr_records", 0),
                 rated_telecasts=diag.get("rated_telecasts", 0),
                 records_with_crew=diag.get("records_with_crew", 0),
+                records_with_506_crew=diag.get("records_with_506_crew", 0),
                 match_rate=tables.diagnostics.join08_by_season.get(season),
                 sports506_pages=sports506_pages,
                 rr_records_cached=rr_records_cached,
@@ -138,6 +151,7 @@ def _metrics_rows(metrics: Sequence[SeasonMetrics]) -> list[dict[str, object]]:
             "rr_records": m.rr_records,
             "rated_telecasts": m.rated_telecasts,
             "records_with_crew": m.records_with_crew,
+            "records_with_506_crew": m.records_with_506_crew,
             "match_rate": m.match_rate,
             "sports506_pages": m.sports506_pages,
             "rr_records_cached": m.rr_records_cached,
@@ -150,9 +164,10 @@ def _metrics_rows(metrics: Sequence[SeasonMetrics]) -> list[dict[str, object]]:
 def load_baseline(paths: DataPaths) -> dict[int, SeasonMetrics] | None:
     """Read `audit/build_baseline.csv` into {season: SeasonMetrics}.
 
-    Returns None when the file is missing (nothing accepted yet). Raises
-    VaultStateError, naming only the file and line, on a header that doesn't
-    match METRIC_COLUMNS exactly, a non-integer count, or a duplicate season
+    Returns None when the file is missing (nothing accepted yet). A legacy
+    header (no `records_with_506_crew`) loads with that metric as None. Raises
+    VaultStateError, naming only the file and line, on a header that matches
+    neither METRIC_COLUMNS nor the legacy header, a non-integer count, or a duplicate season
     (T-03-40: a tampered or corrupt baseline never silently passes or is
     treated as absent).
     """
@@ -167,20 +182,21 @@ def load_baseline(paths: DataPaths) -> dict[int, SeasonMetrics] | None:
                 header = next(reader)
             except StopIteration:
                 raise VaultStateError(f"{path}: empty baseline file") from None
-            if tuple(header) != METRIC_COLUMNS:
+            columns = tuple(header)
+            if columns not in (METRIC_COLUMNS, _LEGACY_METRIC_COLUMNS):
                 raise VaultStateError(
-                    f"{path}: header {tuple(header)!r} does not match expected {METRIC_COLUMNS!r}"
+                    f"{path}: header {columns!r} does not match expected {METRIC_COLUMNS!r}"
                 )
 
             result: dict[int, SeasonMetrics] = {}
             for line_no, raw_row in enumerate(reader, start=2):
                 if not raw_row or all(cell.strip() == "" for cell in raw_row):
                     continue
-                if len(raw_row) != len(METRIC_COLUMNS):
+                if len(raw_row) != len(columns):
                     raise VaultStateError(
-                        f"{path}: line {line_no}: expected {len(METRIC_COLUMNS)} columns"
+                        f"{path}: line {line_no}: expected {len(columns)} columns"
                     )
-                values = dict(zip(METRIC_COLUMNS, raw_row, strict=True))
+                values = dict(zip(columns, raw_row, strict=True))
                 try:
                     season = int(values["season"])
                     metrics = SeasonMetrics(
@@ -188,6 +204,11 @@ def load_baseline(paths: DataPaths) -> dict[int, SeasonMetrics] | None:
                         rr_records=int(values["rr_records"]),
                         rated_telecasts=int(values["rated_telecasts"]),
                         records_with_crew=int(values["records_with_crew"]),
+                        records_with_506_crew=(
+                            int(values["records_with_506_crew"])
+                            if "records_with_506_crew" in values
+                            else None
+                        ),
                         match_rate=(
                             float(values["match_rate"]) if values["match_rate"] != "" else None
                         ),
@@ -265,8 +286,10 @@ def _match_rate_dropped(
 
 
 def _count_dropped(
-    season: int, metric: str, current: int | None, baseline: int
+    season: int, metric: str, current: int | None, baseline: int | None
 ) -> tuple[bool, str | None]:
+    if baseline is None:
+        return False, None  # a metric the accepted baseline predates: nothing to compare
     if current is None or current < baseline:
         return True, f"season {season}: {metric} {current} below baseline {baseline}"
     return False, None

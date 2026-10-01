@@ -450,3 +450,35 @@ def test_build_coverage_on_real_vault_shaped_fixture(
     written = write_coverage(build_vault, report)
     for rel_path in written:
         assert (build_vault.vault / rel_path).is_file()
+
+
+def _patched_tables(patched: list[object]) -> BuildTables:
+    games = [_game_row(game_id=i + 1) for i in range(len(patched))]
+    telecasts = [
+        _telecast_row(
+            telecast_id=f"{i + 1}-net-a",
+            game_id=i + 1,
+            crew_matched=True,
+            crew_patched=value,
+        )
+        for i, value in enumerate(patched)
+    ]
+    return _build_tables(
+        games,
+        telecasts,
+        diagnostics=_diagnostics({2024: {}}, {2024: None}),
+    )
+
+
+def test_crew_patched_counts_separately_but_stays_in_matched_crew() -> None:
+    report = build_coverage(_patched_tables([True, False, None]))
+    for network in ("net-a", "ALL"):
+        row = _row(report, 2024, network)
+        assert row["matched_crew"] == 3
+        assert row["crew_patched"] == 1
+        assert row["crew_rate"] == 1.0
+
+
+def test_crew_patched_column_follows_matched_crew() -> None:
+    index = COVERAGE_COLUMNS.index("matched_crew")
+    assert COVERAGE_COLUMNS[index + 1] == "crew_patched"

@@ -78,6 +78,10 @@ TELECASTS_SCHEMA: dict[str, pl.DataType] = {
     "kickoff_et": pl.Utf8(),
     "crew_matched": pl.Boolean(),
     "crew_network_mismatch": pl.Boolean(),
+    # Filled by build.crew_overrides.apply_crew_overrides (04.3 D-11/D-13).
+    "crew_patched": pl.Boolean(),
+    "crew_source_url": pl.Utf8(),
+    "crew_source_label": pl.Utf8(),
     "combined_feeds": pl.Int32(),
     # Filled by build.viewership.apply_headlines (Plan 08 Task 2); left
     # nullable here.
@@ -116,6 +120,10 @@ _COUNT_KEYS: tuple[str, ...] = (
     "rated_telecasts",
     "rated_with_crew",
     "records_with_crew",
+    # records_with_crew as the 506 join alone left it: apply_crew_overrides
+    # (04.3) raises records_with_crew for a patched crew but never this, so
+    # the AUDIT-03 guard can still see a 506 crew that disappears (IN-06).
+    "records_with_506_crew",
     "duplicate_merges",
     "listings_total",
     "listings_matched",
@@ -303,6 +311,9 @@ def _finalize_telecast(
         "kickoff_et": kickoff_et,
         "crew_matched": crew_matched,
         "crew_network_mismatch": draft.crew_network_mismatch,
+        "crew_patched": False,
+        "crew_source_url": None,
+        "crew_source_label": None,
         "combined_feeds": _combined_feeds([record for record, _ in draft.records]),
         "plotted": False,
         "headline_claim_id": None,
@@ -604,6 +615,7 @@ def build_telecasts(
             season_counts["rated_telecasts"] += delta.rated_telecasts
             season_counts["rated_with_crew"] += delta.rated_with_crew
             season_counts["records_with_crew"] += delta.records_with_crew
+            season_counts["records_with_506_crew"] += delta.records_with_crew
             season_counts["duplicate_merges"] += delta.duplicate_merges
             season_counts["unmapped_outlets"] += delta.unmapped_outlets
 

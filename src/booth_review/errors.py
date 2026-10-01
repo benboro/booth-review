@@ -79,6 +79,13 @@ class BowlCrosswalkError(VaultStateError):
     """
 
 
+class CrewOverrideError(VaultStateError):
+    """A crew override names an unknown person or a telecast the build does not plot (D-04).
+
+    The message is count-only: it never carries a game id, a matchup, or a crew name.
+    """
+
+
 class VaultBusyError(VaultStateError):
     """Raised when another booth-review process holds the vault lock past the timeout."""
 

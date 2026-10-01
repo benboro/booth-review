@@ -64,6 +64,7 @@ def _metrics(season: int, **overrides: object) -> SeasonMetrics:
         "rr_records": 100,
         "rated_telecasts": 80,
         "records_with_crew": 75,
+        "records_with_506_crew": 75,
         "match_rate": 0.9375,
         "sports506_pages": 18,
         "rr_records_cached": 100,
@@ -107,6 +108,7 @@ def test_build_metrics_reads_diagnostics_and_raw_counts(tmp_path: Path) -> None:
                 "rr_records": 343,
                 "rated_telecasts": 300,
                 "records_with_crew": 280,
+                "records_with_506_crew": 270,
             }
         },
         join08_by_season={2024: 0.9},
@@ -120,6 +122,7 @@ def test_build_metrics_reads_diagnostics_and_raw_counts(tmp_path: Path) -> None:
     assert m.rr_records == 343
     assert m.rated_telecasts == 300
     assert m.records_with_crew == 280
+    assert m.records_with_506_crew == 270
     assert m.match_rate == 0.9
     assert m.sports506_pages == 18
     assert m.rr_records_cached == 343
@@ -161,6 +164,86 @@ def test_load_baseline_round_trips_accept_baseline(tmp_path: Path) -> None:
     assert loaded[2025].match_rate is None
 
 
+def test_load_baseline_rejects_a_506_crew_count_that_is_not_an_integer(tmp_path: Path) -> None:
+    paths = DataPaths(vault=tmp_path / "vault")
+    paths.audit.mkdir(parents=True, exist_ok=True)
+    header = ",".join(METRIC_COLUMNS)
+    (paths.audit / "build_baseline.csv").write_text(
+        f"{header}\n2024,100,80,75,,0.9,18,100,6\n", encoding="utf-8"
+    )
+
+    with pytest.raises(VaultStateError):
+        load_baseline(paths)
+
+
+def _legacy_baseline(paths: DataPaths, rows: list[str]) -> None:
+    """A baseline accepted before records_with_506_crew existed (04.3 IN-06)."""
+    paths.audit.mkdir(parents=True, exist_ok=True)
+    header = ",".join(c for c in METRIC_COLUMNS if c != "records_with_506_crew")
+    body = "".join(f"{row}\n" for row in rows)
+    (paths.audit / "build_baseline.csv").write_text(f"{header}\n{body}", encoding="utf-8")
+
+
+def test_legacy_baseline_loads_with_no_506_crew_baseline(tmp_path: Path) -> None:
+    paths = DataPaths(vault=tmp_path / "vault")
+    _legacy_baseline(paths, ["2024,100,80,75,0.9375,18,100,6"])
+
+    loaded = load_baseline(paths)
+
+    assert loaded == {2024: _metrics(2024, records_with_506_crew=None)}
+
+
+def test_legacy_baseline_never_blocks_on_the_new_metric(tmp_path: Path) -> None:
+    paths = DataPaths(vault=tmp_path / "vault")
+    _legacy_baseline(paths, ["2024,100,80,75,0.9375,18,100,6"])
+    baseline = load_baseline(paths)
+    # Far below records_with_crew: there is simply no accepted 506-only count yet.
+    current = [_metrics(2024, records_with_506_crew=0)]
+
+    result = check_regression(current, baseline, None)
+    assert result.blocked is False
+    assert result.reasons == ()
+
+    written = write_regression_report(paths, current, baseline, None, result)
+    assert written == ["audit/regression.csv"]
+    text = (paths.vault / "audit/regression.csv").read_text(encoding="utf-8")
+    assert "2024,records_with_506_crew,,0,ok" in text.splitlines()
+
+
+def test_legacy_baseline_still_blocks_on_the_old_metrics(tmp_path: Path) -> None:
+    paths = DataPaths(vault=tmp_path / "vault")
+    _legacy_baseline(paths, ["2024,100,80,75,0.9375,18,100,6"])
+    current = [_metrics(2024, records_with_crew=70)]
+
+    result = check_regression(current, load_baseline(paths), None)
+
+    assert result.blocked is True
+    assert result.reasons == ("season 2024: records_with_crew 70 below baseline 75",)
+
+
+def test_accepting_after_a_legacy_baseline_writes_the_new_column(tmp_path: Path) -> None:
+    paths = DataPaths(vault=tmp_path / "vault")
+    _legacy_baseline(paths, ["2024,100,80,75,0.9375,18,100,6"])
+
+    accept_baseline(paths, [_metrics(2024, records_with_506_crew=72)])
+
+    loaded = load_baseline(paths)
+    assert loaded is not None
+    assert loaded[2024].records_with_506_crew == 72
+
+
+def test_lost_506_crew_covered_by_an_override_still_blocks() -> None:
+    # 506 dropped a crew worth 2 records; an override patched the same
+    # telecast, so records_with_crew (and JOIN-08) did not move.
+    baseline = {2024: _metrics(2024)}
+    current = [_metrics(2024, records_with_506_crew=73)]
+
+    result = check_regression(current, baseline, None)
+
+    assert result.blocked is True
+    assert result.reasons == ("season 2024: records_with_506_crew 73 below baseline 75",)
+
+
 def test_load_baseline_rejects_wrong_header(tmp_path: Path) -> None:
     paths = DataPaths(vault=tmp_path / "vault")
     paths.audit.mkdir(parents=True, exist_ok=True)
@@ -177,7 +260,7 @@ def test_load_baseline_rejects_non_integer_count(tmp_path: Path) -> None:
     paths.audit.mkdir(parents=True, exist_ok=True)
     header = ",".join(METRIC_COLUMNS)
     (paths.audit / "build_baseline.csv").write_text(
-        f"{header}\n2024,not-a-number,80,75,0.9,18,100,6\n", encoding="utf-8"
+        f"{header}\n2024,not-a-number,80,75,75,0.9,18,100,6\n", encoding="utf-8"
     )
 
     with pytest.raises(VaultStateError):
@@ -188,7 +271,7 @@ def test_load_baseline_rejects_duplicate_season(tmp_path: Path) -> None:
     paths = DataPaths(vault=tmp_path / "vault")
     paths.audit.mkdir(parents=True, exist_ok=True)
     header = ",".join(METRIC_COLUMNS)
-    row = "2024,100,80,75,0.9,18,100,6"
+    row = "2024,100,80,75,75,0.9,18,100,6"
     (paths.audit / "build_baseline.csv").write_text(f"{header}\n{row}\n{row}\n", encoding="utf-8")
 
     with pytest.raises(VaultStateError):
@@ -301,6 +384,7 @@ def test_increases_in_every_metric_never_block() -> None:
             rr_records=150,
             rated_telecasts=90,
             records_with_crew=85,
+            records_with_506_crew=85,
             match_rate=0.99,
             sports506_pages=20,
             rr_records_cached=150,
@@ -384,8 +468,8 @@ def test_write_regression_report_lists_every_compared_metric(tmp_path: Path) -> 
     text = (paths.vault / "audit/regression.csv").read_text(encoding="utf-8")
     lines = text.splitlines()
     assert lines[0] == "season,metric,baseline,current,status"
-    # 7 baseline metrics + 3 completeness metrics = 10 data rows.
-    assert len(lines) - 1 == 10
+    # 8 baseline metrics + 3 completeness metrics = 11 data rows.
+    assert len(lines) - 1 == 11
     assert any("rated_telecasts" in line and "blocked" in line for line in lines[1:])
 
 

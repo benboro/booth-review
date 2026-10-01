@@ -66,6 +66,9 @@ class BuildOutcome:
     counts: dict[str, int]
     written: tuple[str, ...]
     committed: bool
+    # crew_overrides.csv lines whose crew differs from 506's without
+    # `correction`: flagged for the user, never a reason to block.
+    crew_override_differs_lines: tuple[int, ...] = ()
 
 
 def _build_counts(tables: BuildTables, result: RegressionResult) -> dict[str, int]:
@@ -83,6 +86,12 @@ def _build_counts(tables: BuildTables, result: RegressionResult) -> dict[str, in
         "duplicate_merges": totals.get("duplicate_merges", 0),
         "combined_figures": totals.get("combined_combined", 0),
         "bowl_names_unknown": totals.get("bowl_names_unknown", 0),
+        "crew_overrides_applied": totals.get("crew_overrides_applied", 0),
+        "crew_overrides_patched": totals.get("crew_overrides_patched", 0),
+        "crew_overrides_redundant": totals.get("crew_overrides_redundant", 0),
+        "crew_overrides_differs": totals.get("crew_overrides_differs", 0),
+        "crew_overrides_corrections": totals.get("crew_overrides_corrections", 0),
+        "crew_gaps_unpatched": totals.get("crew_gaps_unpatched", 0),
         "review_rows_total": review_rows_total,
         "compared_seasons": result.compared_seasons,
     }
@@ -170,4 +179,5 @@ def run_build(
         counts=counts,
         written=tuple(sorted(set(written))),
         committed=committed,
+        crew_override_differs_lines=tables.crew_override_differs_lines,
     )

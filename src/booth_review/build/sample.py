@@ -15,6 +15,7 @@ from typing import Any
 
 import polars as pl
 
+from booth_review.build.crew_overrides import CREW_OVERRIDE_SOURCE
 from booth_review.build.io import write_review_csv
 from booth_review.config import DataPaths
 from booth_review.vault import VaultRepo
@@ -148,8 +149,23 @@ def stratified_sample(
     then topped up so at least `min(10, available)` sampled telecasts have a
     non-exact `match_confidence`. Deterministic for a given `seed`; a
     different seed draws a different sample from the same inputs.
+
+    JOIN-08 measures the 506 join, so a telecast whose main crew came from
+    data/reference/crew_overrides.csv (04.3: `crew_patched`, or main rows
+    with source `crew_override`) is never drawn; it has no 506 crew to check.
     """
-    plotted = telecasts.filter(pl.col("plotted"))
+    override_ids = set(
+        telecast_people.filter(
+            (pl.col("feed_type") == "main") & (pl.col("source") == CREW_OVERRIDE_SOURCE)
+        )["telecast_id"].to_list()
+    )
+    if "crew_patched" in telecasts.columns:  # a pre-04.3 telecasts.parquet has no column
+        override_ids.update(
+            telecasts.filter(pl.col("crew_patched").fill_null(False))["telecast_id"].to_list()
+        )
+    plotted = telecasts.filter(
+        pl.col("plotted") & ~pl.col("telecast_id").is_in(sorted(override_ids))
+    )
     games_by_id = {row["game_id"]: row for row in games.iter_rows(named=True)}
 
     by_season: dict[int, list[dict[str, Any]]] = {}

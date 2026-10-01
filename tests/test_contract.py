@@ -16,7 +16,14 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from booth_review.contract.models import SITE_DATA_FIELDS, TelecastColumns, validate_site_data
+from booth_review.build import crew_overrides
+from booth_review.contract.models import (
+    CREW_SOURCE_LABEL_MAX_LEN,
+    SITE_DATA_FIELDS,
+    TelecastColumns,
+    crew_source_label_problem,
+    validate_site_data,
+)
 from booth_review.contract.schema import SCHEMA_PATH, render_schema
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "contract" / "site-data.fixture.json"
@@ -148,6 +155,87 @@ def _schema_version_1_2_0(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _schema_version_1_3_0(data: dict[str, Any]) -> dict[str, Any]:
+    data["schema_version"] = "1.3.0"
+    return data
+
+
+def _crew_source_label_missing(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew_source_label"][3] = None
+    return data
+
+
+def _crew_source_url_missing(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew_source_url"][3] = None
+    return data
+
+
+def _crew_source_url_javascript(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew_source_url"][3] = "javascript:alert(1)"
+    return data
+
+
+def _crew_source_url_ftp(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew_source_url"][3] = "ftp://x"
+    return data
+
+
+def _crew_source_url_no_host(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew_source_url"][3] = "https://"
+    return data
+
+
+def _crew_source_url_506(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew_source_url"][3] = "https://506sports.com/wiki/2024_week_1"
+    return data
+
+
+def _crew_source_url_506_subdomain(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew_source_url"][3] = "http://WWW.506Sports.com/x"
+    return data
+
+
+def _crew_source_label_empty(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew_source_label"][3] = ""
+    return data
+
+
+def _crew_source_label_markup(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew_source_label"][3] = "<b>PR</b>"
+    return data
+
+
+def _crew_source_label_too_long(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew_source_label"][3] = "P" * 61
+    return data
+
+
+def _crew_source_without_crew(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew"][3] = []
+    return data
+
+
+def _crew_source_with_alt_crew_only(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["crew"][3] = [{"person": 6, "role": "analyst", "feed": "alt"}]
+    return data
+
+
+def _matched_crew_patched_exceeds(data: dict[str, Any]) -> dict[str, Any]:
+    row = data["coverage"][0]
+    row["matched_crew_patched"] = row["matched_crew"] + 1
+    return data
+
+
+def _missing_crew_source_url_column(data: dict[str, Any]) -> dict[str, Any]:
+    del data["telecasts"]["crew_source_url"]
+    return data
+
+
+def _missing_matched_crew_patched(data: dict[str, Any]) -> dict[str, Any]:
+    del data["coverage"][0]["matched_crew_patched"]
+    return data
+
+
 def _bowl_index_out_of_range(data: dict[str, Any]) -> dict[str, Any]:
     data["telecasts"]["bowl"][7] = len(data["lookups"]["bowls"])
     return data
@@ -194,6 +282,22 @@ _BROKEN_VARIANTS = [
     pytest.param(_schema_version_1_1_0, id="schema-version-1-1-0"),
     pytest.param(_time_slot_evening_not_in_enum, id="time-slot-evening-not-in-enum"),
     pytest.param(_schema_version_1_2_0, id="schema-version-1-2-0"),
+    pytest.param(_schema_version_1_3_0, id="schema-version-1-3-0"),
+    pytest.param(_crew_source_label_missing, id="crew-source-label-missing"),
+    pytest.param(_crew_source_url_missing, id="crew-source-url-missing"),
+    pytest.param(_crew_source_url_javascript, id="crew-source-url-javascript"),
+    pytest.param(_crew_source_url_ftp, id="crew-source-url-ftp"),
+    pytest.param(_crew_source_url_no_host, id="crew-source-url-no-host"),
+    pytest.param(_crew_source_url_506, id="crew-source-url-506"),
+    pytest.param(_crew_source_url_506_subdomain, id="crew-source-url-506-subdomain"),
+    pytest.param(_crew_source_label_empty, id="crew-source-label-empty"),
+    pytest.param(_crew_source_label_markup, id="crew-source-label-markup"),
+    pytest.param(_crew_source_label_too_long, id="crew-source-label-too-long"),
+    pytest.param(_crew_source_without_crew, id="crew-source-without-crew"),
+    pytest.param(_crew_source_with_alt_crew_only, id="crew-source-with-alt-crew-only"),
+    pytest.param(_matched_crew_patched_exceeds, id="matched-crew-patched-exceeds"),
+    pytest.param(_missing_crew_source_url_column, id="missing-crew-source-url-column"),
+    pytest.param(_missing_matched_crew_patched, id="missing-matched-crew-patched"),
     pytest.param(_bowl_index_out_of_range, id="bowl-index-out-of-range"),
     pytest.param(_bowl_core_not_in_name, id="bowl-core-not-in-name"),
     pytest.param(_bowl_on_regular_game, id="bowl-on-regular-game"),
@@ -235,3 +339,62 @@ def test_fixture_has_no_cfbd_only_fields() -> None:
         "is_cfp",
     }
     assert cfbd_only.isdisjoint(TelecastColumns.model_fields)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "prefix"),
+    [
+        (_crew_source_label_missing, "telecasts.crew_source_label[3]"),
+        (_crew_source_url_missing, "telecasts.crew_source_label[3]"),
+        (_crew_source_url_javascript, "telecasts.crew_source_url[3]: must be an http(s) URL"),
+        (_crew_source_url_ftp, "telecasts.crew_source_url[3]: must be an http(s) URL"),
+        (_crew_source_url_no_host, "telecasts.crew_source_url[3]: must be an http(s) URL"),
+        (_crew_source_url_506, "telecasts.crew_source_url[3]: must not cite 506 Sports"),
+        (
+            _crew_source_url_506_subdomain,
+            "telecasts.crew_source_url[3]: must not cite 506 Sports",
+        ),
+        (_crew_source_label_empty, "telecasts.crew_source_label[3]: must not be empty"),
+        (_crew_source_label_markup, "telecasts.crew_source_label[3]: must not contain < or >"),
+        (
+            _crew_source_label_too_long,
+            "telecasts.crew_source_label[3]: must be at most 60 characters",
+        ),
+        (_crew_source_without_crew, "telecasts.crew[3]: must list a main-feed crew"),
+        (_crew_source_with_alt_crew_only, "telecasts.crew[3]: must list a main-feed crew"),
+        (_matched_crew_patched_exceeds, "coverage[0].matched_crew_patched: exceeds matched_crew"),
+    ],
+)
+def test_crew_source_errors_name_column_and_index_only(mutate: Any, prefix: str) -> None:
+    data = mutate(copy.deepcopy(_load_fixture()))
+    with pytest.raises(ValidationError) as exc:
+        validate_site_data(data)
+    message = str(exc.value)
+    assert prefix in message
+    assert "example.com/crew-source" not in message
+    assert "Example Network PR" not in message
+    assert "506sports.com/" not in message.lower()
+
+
+def test_crew_source_label_rule_is_shared_with_the_loader() -> None:
+    assert crew_overrides.SOURCE_NAME_MAX_LEN == CREW_SOURCE_LABEL_MAX_LEN
+    assert crew_source_label_problem("Example Network PR") is None
+    assert crew_source_label_problem("P" * CREW_SOURCE_LABEL_MAX_LEN) is None
+    assert crew_source_label_problem("  ") == "must not be empty"
+
+
+def test_fixture_patched_crews_are_counted_in_their_season_coverage() -> None:
+    """Every fixture telecast with a crew source has a season-total coverage
+    row that counts at least one hand-confirmed crew (the v1.4.0 fixture once
+    had a patched telecast in a season with no coverage row at all)."""
+    data = _load_fixture()
+    telecasts = data["telecasts"]
+    patched_seasons = {
+        season
+        for season, url in zip(telecasts["season"], telecasts["crew_source_url"], strict=True)
+        if url is not None
+    }
+    assert patched_seasons
+    totals = {row["season"]: row for row in data["coverage"] if row["network"] is None}
+    for season in patched_seasons:
+        assert totals[season]["matched_crew_patched"] >= 1

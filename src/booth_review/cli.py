@@ -920,6 +920,29 @@ def _build(args: argparse.Namespace) -> int:
     bowl_names_unknown = outcome.counts.get("bowl_names_unknown", 0)
     if bowl_names_unknown > 0:
         print(f"bowl names unknown {bowl_names_unknown}")
+    if (n := outcome.counts.get("crew_overrides_applied", 0)) > 0:
+        print(f"crew overrides applied {n}")
+    if (n := outcome.counts.get("crew_overrides_patched", 0)) > 0:
+        print(f"crew overrides patching a telecast 506 gave no crew: {n}")
+    if (n := outcome.counts.get("crew_overrides_redundant", 0)) > 0:
+        print(f"crew overrides now redundant: {n}")
+    if (n := outcome.counts.get("crew_overrides_corrections", 0)) > 0:
+        # A correction deliberately replaces a crew 506 publishes; always say so.
+        print(f"crew overrides correcting 506: {n} (see interim/review_crew_overrides.csv)")
+    if (n := outcome.counts.get("crew_overrides_differs", 0)) > 0:
+        print(f"crew overrides differing from 506: {n} (see interim/review_crew_overrides.csv)")
+    # An override whose booth disagrees with the crew 506 lists, without
+    # reason `correction`, is either mislabeled or 506 has a newer crew. The
+    # override still wins and the build is not blocked; flag each row so the
+    # user decides. Only public crew_overrides.csv line numbers are printed.
+    for line in outcome.crew_override_differs_lines:
+        print(
+            f"warning: crew_overrides.csv line {line}: booth differs from the crew 506 lists "
+            "but reason is not correction; set reason to correction if the override is "
+            "right, or fix the row if 506 is",
+            file=sys.stderr,
+        )
+    print(f"crew gaps unpatched {outcome.counts.get('crew_gaps_unpatched', 0)}")
     if outcome.accepted:
         print("accepted new baseline")
     for reason in outcome.reasons:

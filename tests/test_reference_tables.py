@@ -2,6 +2,8 @@
 only known files, an exact header match to each table's own column
 constant, a working loader, no game-level column name in any header, and
 every person_overrides.csv person_id resolving to a real people.csv row.
+crew_overrides.csv is the one documented exception to D-05/D-06 (04.3 D-01):
+its rows carry hand-confirmed booths, each cited to a public source_url.
 
 Runs against the real data/reference/ folder (not a synthetic fixture) --
 this is the guard over what actually gets published.
@@ -17,6 +19,8 @@ from pathlib import Path
 import pytest
 
 from booth_review.build.bowls import BOWL_COLUMNS, load_bowls
+from booth_review.build.crew_overrides import CREW_OVERRIDE_COLUMNS, load_crew_overrides
+from booth_review.contract.models import crew_source_url_problem
 from booth_review.flags.era import ERA_COLUMNS, load_eras
 from booth_review.flags.events import EVENT_COLUMNS, load_event_flags
 from booth_review.people.registry import (
@@ -27,7 +31,7 @@ from booth_review.people.registry import (
     load_person_overrides,
     load_reviewed,
 )
-from booth_review.reference import read_reference_csv
+from booth_review.reference import read_reference_csv, read_reference_csv_numbered
 from booth_review.resolve.networks import (
     NETWORK_COLUMNS,
     PRIMARY_OVERRIDE_COLUMNS,
@@ -66,7 +70,14 @@ KNOWN_TABLES: dict[str, tuple[tuple[str, ...] | None, Loader | None]] = {
     "primary_network_overrides.csv": (PRIMARY_OVERRIDE_COLUMNS, load_primary_overrides),
     "combined_figures.csv": (_COMBINED_COLUMNS, _load_combined_figures),
     "bowls.csv": (BOWL_COLUMNS, load_bowls),
+    "crew_overrides.csv": (CREW_OVERRIDE_COLUMNS, load_crew_overrides),
 }
+
+# 04.3 D-01: the one documented exception to Phase 3 D-05/D-06. Each row records a
+# main-feed booth that a cited public source (network press release, school game
+# notes, reputable outlet) already publishes; source_url is mandatory. No other
+# table may record who called which game.
+_D05_EXCEPTIONS: frozenset[str] = frozenset({"crew_overrides.csv"})
 
 # Column names that would signal a game-level row (who called which game, a
 # figure, a matchup) leaking into a names-only or pointer-only public table
@@ -117,10 +128,41 @@ def test_headers_and_loaders(name: str) -> None:
     loader(REFERENCE_DIR)  # must not raise
 
 
+# A row keyed to one game or telecast that also names a person, a role, or a
+# crew slot records who called which game, even with no forbidden column name.
+# (person_overrides.csv keys on a 506 row pointer, not a game: D-06 allows it.)
+_GAME_KEY_COLUMNS: frozenset[str] = frozenset({"cfbd_game_id", "rr_telecast_id", "telecast_id"})
+_CREW_COLUMNS: frozenset[str] = frozenset({"person_id", "role", "crew_position"})
+
+
+def _game_level_columns(header: set[str]) -> set[str]:
+    found = set(_FORBIDDEN_COLUMNS & header)
+    if header & _GAME_KEY_COLUMNS and header & _CREW_COLUMNS:
+        found |= header & (_GAME_KEY_COLUMNS | _CREW_COLUMNS)
+    return found
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        ({"cfbd_game_id", "official_name"}, set()),
+        ({"season", "pointer", "position", "person_id"}, set()),
+        ({"cfbd_game_id", "person_id"}, {"cfbd_game_id", "person_id"}),
+        ({"rr_telecast_id", "role"}, {"rr_telecast_id", "role"}),
+        ({"network_id", "crew_raw"}, {"crew_raw"}),
+    ],
+)
+def test_game_level_columns_detects_who_called_which_game(
+    header: set[str], expected: set[str]
+) -> None:
+    assert _game_level_columns(header) == expected
+
+
 def test_no_game_level_columns() -> None:
     for path in sorted(REFERENCE_DIR.glob("*.csv")):
-        header = set(_header(path))
-        overlap = _FORBIDDEN_COLUMNS & header
+        if path.name in _D05_EXCEPTIONS:
+            continue
+        overlap = _game_level_columns(set(_header(path)))
         assert not overlap, f"{path.name}: game-level column(s) found: {sorted(overlap)}"
 
 
@@ -133,6 +175,32 @@ def test_person_override_ids_exist() -> None:
     )
     for row in override_rows:
         assert row["person_id"] in people_ids, f"unknown person_id in person_overrides.csv: {row!r}"
+
+
+def test_d05_exceptions_are_exactly_the_tables_with_game_level_columns() -> None:
+    # Every exception must still earn it (a stale entry would silently exempt
+    # a table), and no other table may carry game-level columns.
+    with_game_level = {
+        path.name for path in REFERENCE_DIR.glob("*.csv") if _game_level_columns(set(_header(path)))
+    }
+    assert with_game_level == _D05_EXCEPTIONS
+
+
+def test_crew_override_rows_have_source_url() -> None:
+    rows = read_reference_csv_numbered(REFERENCE_DIR / "crew_overrides.csv", CREW_OVERRIDE_COLUMNS)
+    for line_no, row in rows:
+        problem = crew_source_url_problem(row["source_url"])
+        assert problem is None, f"crew_overrides.csv line {line_no}: source_url {problem}"
+
+
+def test_crew_override_person_ids_exist() -> None:
+    people_rows = read_reference_csv(REFERENCE_DIR / "people.csv", PEOPLE_COLUMNS)
+    people_ids = {row["person_id"] for row in people_rows}
+    rows = read_reference_csv_numbered(REFERENCE_DIR / "crew_overrides.csv", CREW_OVERRIDE_COLUMNS)
+    for line_no, row in rows:
+        assert row["person_id"] in people_ids, (
+            f"crew_overrides.csv line {line_no}: unknown person_id"
+        )
 
 
 # -- not accidentally gitignored (same pattern as tests/test_gitignore.py) ---------------------
