@@ -51,31 +51,48 @@ function personName(data, id) {
 }
 
 /**
- * The `{scope}` text of a Bars title.
+ * The names after "with" in a title (D-21): announcers (joined by "and" when
+ * called together, else "or"), then schools (joined by "or"). When both groups
+ * show, a group of 2+ names is parenthesised and the groups join with "and".
  * @param {object} data
  * @param {object} state
- * @param {string} group - 'announcers' | 'teams'.
+ * @param {{omit?: 'people'|'schools'|null}} [opts] - A group the chart's sides already name.
+ * @returns {string} '' when nothing is left to name.
+ */
+export function subjectPhrase(data, state, { omit = null } = {}) {
+  const groups = [];
+  if (omit !== 'people' && state.people.length > 0) {
+    const names = state.people.map((id) => personName(data, id));
+    groups.push({ names, joiner: state.together ? ' and ' : ' or ' });
+  }
+  if (omit !== 'schools' && state.school.length > 0) {
+    groups.push({ names: state.school.map((slug) => teamName(data, slug)), joiner: ' or ' });
+  }
+  const wrap = groups.length > 1;
+  return groups
+    .map(({ names, joiner }) => {
+      const text = names.join(joiner);
+      return wrap && names.length > 1 ? `(${text})` : text;
+    })
+    .join(' and ');
+}
+
+/**
+ * The " on <networks>" tail of a title, or '' when the Networks filter is not narrowed.
+ * @param {object} data
+ * @param {object} state
  * @returns {string}
  */
-export function scopeText(data, state, group) {
-  if (group === 'announcers') {
-    const names = state.school.map((slug) => teamName(data, slug));
-    if (names.length === 1) return names[0];
-    if (names.length === 2) return `${names[0]} and ${names[1]}`;
-    return `${names.length} schools`;
-  }
-  if (state.networks !== null) {
-    const n = state.networks.length;
-    if (n === 0) return 'no networks';
-    if (n === 1) {
-      const found = data.lookups.networks.find((net) => net.id === state.networks[0]);
-      return found ? found.name : state.networks[0];
-    }
-    return `${n} networks`;
-  }
-  const n = state.people.length;
-  if (n === 1) return personName(data, state.people[0]);
-  return `${n} announcers`;
+export function networkPhrase(data, state) {
+  if (state.networks === null) return '';
+  const n = state.networks.length;
+  if (n === 0) return ' on no networks';
+  if (n > 3) return ` on ${n} networks`;
+  const names = state.networks.map((id) => {
+    const found = data.lookups.networks.find((net) => net.id === id);
+    return found ? found.name : id;
+  });
+  return ` on ${names.join(' or ')}`;
 }
 
 function subject(model) {
@@ -100,10 +117,15 @@ function butterflySubject(model) {
  * @returns {string}
  */
 export function chartTitle(model, data, state) {
+  const nets = networkPhrase(data, state);
   if (model.kind === 'butterfly') {
-    return `${butterflySubject(model)}: ${model.sides[0].name} and ${model.sides[1].name}`;
+    const omit = model.group === 'announcers' ? 'schools' : 'people';
+    const phrase = subjectPhrase(data, state, { omit });
+    const head = `${butterflySubject(model)}: ${model.sides[0].name} and ${model.sides[1].name}`;
+    return `${head}${phrase ? ` with ${phrase}` : ''}${nets}`;
   }
-  return `${subject(model)} · ${scopeText(data, state, model.group)}`;
+  const phrase = subjectPhrase(data, state);
+  return `${subject(model)}${phrase ? ` with ${phrase}` : ''}${nets}`;
 }
 
 /**
@@ -261,13 +283,8 @@ export function ariaSummary(model, data, state, shownCount) {
   const range = lo === hi ? `${lo}` : `${lo}–${hi}`;
   const total = model.rows.length;
   const lower = (s) => s.charAt(0).toLowerCase() + s.slice(1);
-  let head;
-  if (model.kind === 'butterfly') {
-    const subj = lower(butterflySubject(model));
-    head = `Butterfly chart: ${subj} for ${model.sides[0].name} and ${model.sides[1].name}, ${range}.`;
-  } else {
-    head = `Bar chart: ${lower(subject(model))}, ${scopeText(data, state, model.group)}, ${range}.`;
-  }
+  const title = lower(chartTitle(model, data, state));
+  const head = `${model.kind === 'butterfly' ? 'Butterfly' : 'Bar'} chart: ${title}, ${range}.`;
   let out = `${head} Showing ${shownCount} of ${total}.`;
   if (model.kind === 'butterfly') out += ` ${sharedCaption(model.shared)}`;
   if (shownCount > 0) {
