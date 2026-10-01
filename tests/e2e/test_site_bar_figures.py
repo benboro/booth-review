@@ -491,7 +491,10 @@ def _figure(
     partial: dict[str, Any],
     fn: str = "barsModel",
     env: dict[str, Any] | None = None,
+    raw: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if raw is not None:
+        page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
     page.goto(f"{site_url}/")
     out: dict[str, Any] = page.evaluate(_FIG_JS, [partial, fn, env or _DESKTOP])
     assert "viewer" not in json.dumps(out["figure"]).lower()  # D-01
@@ -550,7 +553,8 @@ def test_channel_shades(guarded_page: Page, site_url: str) -> None:
               res.same = res.same
                 && JSON.stringify(s) === JSON.stringify(P.channelShades(fam, theme, 5));
               res.pairs.push([fam, theme, new Set(s).size, s.length,
-                Math.min(...s.flatMap((a, i) => s.slice(i + 1).map((b) => P.contrastRatio(a, b))))]);
+                Math.min(...s.flatMap((a, i) =>
+                  s.slice(i + 1).map((b) => P.contrastRatio(a, b))))]);
             }
           }
           res.n1 = P.channelShades('disney', 'light', 1);
@@ -731,8 +735,7 @@ def test_stacked_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
 def test_network_rows_use_family_color(guarded_page: Page, site_url: str) -> None:
     out = _figure(guarded_page, site_url, {"school": ["northfield"], "bars": "stacked"})
     first = out["figure"]["traces"][0]
-    assert set(first["marker"]["color"]) == {"#0072B2"}
-    assert set(out["figure"]["traces"][1]["marker"]["color"]) == {"#73B1D5"}
+    assert set(first["marker"]["color"]) == {"#0072B2"}  # shade 0 is the family color
 
 
 def test_phone_bar_figure_layout(guarded_page: Page, site_url: str) -> None:
@@ -872,6 +875,14 @@ async ([partial, fn, env, longLabels, sideName]) => {
   };
   const bars = Array.from(gd.querySelectorAll('.bars .point path'))
     .map(rect).filter((r) => r.w > 0.5);
+  const paths = Array.from(gd.querySelectorAll('.bars .point path')).map((el) => {
+    const cs = getComputedStyle(el);
+    return { ...rect(el), fill: cs.fill, fo: Number(cs.fillOpacity), stroke: cs.stroke,
+             sw: Number.parseFloat(cs.strokeWidth) };
+  }).filter((r) => r.w > 0.5);
+  const P = await import('./modules/palette.js');
+  const shades = rows.map((r) => (r.family != null && r.shadeCount != null
+    ? P.channelShades(r.family, env.theme, r.shadeCount) : null));
   const expected = figure.traces.reduce(
     (n, t) => n + t.x.filter((v) => v > 0).length, 0);
   const annos = Array.from(gd.querySelectorAll('g.annotation')).map((el) => ({
@@ -880,7 +891,8 @@ async ([partial, fn, env, longLabels, sideName]) => {
   const gdRect = gd.getBoundingClientRect();
   const center = (i) => gdRect.top + full._size.t + full.yaxis.d2p(i);
   const out = {
-    bars, expected, annos,
+    bars, expected, annos, paths, shades,
+    model: { rowKind: model.rowKind, rows: JSON.parse(JSON.stringify(rows)) },
     rowCount: rows.length,
     centers: rows.map((_, i) => center(i)),
     imgs: gd.querySelectorAll('img').length,
@@ -909,7 +921,10 @@ def _render(
     env: dict[str, Any],
     long_labels: bool = False,
     side_name: str = "",
+    raw: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if raw is not None:
+        page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
     open_app(page, "")
     out: dict[str, Any] = page.evaluate(_RENDER_JS, [partial, fn, env, long_labels, side_name])
     return out
@@ -1187,3 +1202,244 @@ def test_rendered_butterfly_headers_hug_the_spine(
         assert abs(right["l"] - out["x2Start"]) <= 2
     assert left["r"] <= right["l"]
     assert left["l"] >= out["gdLeft"] - 1 and right["r"] <= out["gdRight"] + 1
+
+
+# --------------------------------------------------------------------------
+# D-23: family bars with channel shades under announcer segments (Plan 10)
+# --------------------------------------------------------------------------
+
+_FAM_BARS = {"school": ["northfield"], "bars": "stacked"}
+_FAM_FLY = {"school": ["northfield", "lakeview"], "bars": "stacked"}
+_TRANSPARENT = "rgba(0,0,0,0)"
+
+
+def _split_traces(figure: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    pieces = [t for t in figure["traces"] if t["hoverinfo"] == "skip"]
+    overlays = [t for t in figure["traces"] if t["hoverinfo"] == "none"]
+    assert len(pieces) + len(overlays) == len(figure["traces"])
+    return pieces, overlays
+
+
+def _nonzero(traces: list[dict[str, Any]], axis: str) -> int:
+    return sum(1 for t in traces if t["xaxis"] == axis for v in t["x"] if v > 0)
+
+
+def test_family_stack_figure_shape(
+    guarded_page: Page, site_url: str, multichannel: dict[str, Any]
+) -> None:
+    out = _figure(guarded_page, site_url, _FAM_BARS, raw=multichannel)
+    figure = out["figure"]
+    pieces, overlays = _split_traces(figure)
+    assert _nonzero(pieces, "x") == 7
+    assert _nonzero(overlays, "x3") == 5
+    assert {t["xaxis"] for t in pieces} == {"x"}
+    for t in pieces:
+        assert t["marker"]["line"]["width"] == 0
+        assert not any(t.get("text", []))
+    colors = {c for t in pieces for c in t["marker"]["color"]}
+    assert colors == {"#0072B2", "#66AAD1"}  # net-a shade 0, net-e shade 1
+    for k, t in enumerate(overlays):
+        assert t["xaxis"] == "x3"
+        assert set(t["marker"]["color"]) == {_TRANSPARENT}
+        assert t["marker"]["line"] == {"width": 1, "color": "#FFFFFF"}
+        assert t["customdata"][0] == {"r": 0, "s": k, "side": None}
+    layout = figure["layout"]
+    x3 = layout["xaxis3"]
+    assert x3["overlaying"] == "x" and x3["anchor"] == "y"
+    assert x3["visible"] is False and x3["fixedrange"] is True
+    assert x3["range"] == layout["xaxis"]["range"]
+
+
+def test_family_butterfly_figure_shape(
+    guarded_page: Page, site_url: str, multichannel: dict[str, Any]
+) -> None:
+    out = _figure(guarded_page, site_url, _FAM_FLY, "butterflyModel", raw=multichannel)
+    figure = out["figure"]
+    pieces, overlays = _split_traces(figure)
+    assert _nonzero(pieces, "x") + _nonzero(pieces, "x2") == 13
+    assert _nonzero(overlays, "x3") + _nonzero(overlays, "x4") == 11
+    assert {t["xaxis"] for t in pieces} == {"x", "x2"}
+    assert {t["xaxis"] for t in overlays} == {"x3", "x4"}
+    sides = {
+        t["customdata"][i]["side"]
+        for t in overlays
+        for i in range(len(t["x"]))
+        if t["customdata"][i] is not None
+    }
+    assert sides == {0, 1}
+    layout = figure["layout"]
+    assert layout["xaxis3"]["overlaying"] == "x"
+    assert layout["xaxis4"]["overlaying"] == "x2"
+    assert layout["xaxis3"]["range"] == layout["xaxis"]["range"]
+    assert layout["xaxis4"]["range"] == layout["xaxis2"]["range"]
+    assert layout["meta"]["rowCount"] == len(out["model"]["rows"])
+
+
+def test_conference_stack_still_uses_stack_traces(guarded_page: Page, site_url: str) -> None:
+    out = _figure(guarded_page, site_url, {"people": ["kris-venn"], "bars": "stacked"})
+    assert "xaxis3" not in out["figure"]["layout"]
+    assert all(t["hoverinfo"] == "none" for t in out["figure"]["traces"])
+
+
+def _hex(rgb: str) -> str:
+    nums = [int(v) for v in rgb[rgb.index("(") + 1 : rgb.index(")")].split(",")[:3]]
+    return "#" + "".join(f"{v:02X}" for v in nums)
+
+
+def _row_groups(out: dict[str, Any], fn: str, spine: float) -> dict[tuple[int, int], Any]:
+    """Pieces and overlay paths grouped by (row, side), ordered away from the spine/zero."""
+    groups: dict[tuple[int, int], dict[str, list[dict[str, Any]]]] = {}
+    for p in out["paths"]:
+        yc = (p["t"] + p["b"]) / 2
+        row = min(range(out["rowCount"]), key=lambda i: abs(out["centers"][i] - yc))
+        side = 0 if fn == "barsModel" or (p["l"] + p["r"]) / 2 < spine else 1
+        kind = "overlay" if p["fo"] == 0 else "piece"
+        groups.setdefault((row, side), {"piece": [], "overlay": []})[kind].append(p)
+    for g in groups.values():
+        for lst in g.values():
+            lst.sort(key=lambda p: p["l"])
+    return groups
+
+
+def _expected_segments(out: dict[str, Any], fn: str) -> dict[tuple[int, int], list[Any]]:
+    exp: dict[tuple[int, int], list[Any]] = {}
+    for i, row in enumerate(out["model"]["rows"]):
+        sides = [row] if fn == "barsModel" else row["sides"]
+        for side, src in enumerate(sides):
+            exp[(i, side)] = [s for s in src["segments"] if s["count"] > 0]
+    return exp
+
+
+@pytest.mark.parametrize("theme", _THEMES)
+@pytest.mark.parametrize("width", [1280, 800, 358])
+@pytest.mark.parametrize(
+    ("partial", "fn"), [(_FAM_BARS, "barsModel"), (_FAM_FLY, "butterflyModel")]
+)
+def test_rendered_family_segments_align_with_channel_pieces(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    multichannel: dict[str, Any],
+    theme: str,
+    width: int,
+    partial: dict[str, Any],
+    fn: str,
+) -> None:
+    env = {"theme": theme, "mobile": width < 600, "revision": 1, "width": width}
+    out = _render(guarded_page, open_app, partial, fn, env, raw=multichannel)
+    assert len(out["bars"]) == out["expected"]
+    spine = (out["x1End"] + out["x2Start"]) / 2 if fn == "butterflyModel" else 0
+    groups = _row_groups(out, fn, spine)
+    expected = _expected_segments(out, fn)
+    n_pieces = sum(len(g["piece"]) for g in groups.values())
+    n_over = sum(len(g["overlay"]) for g in groups.values())
+    assert (n_pieces, n_over) == ((7, 5) if fn == "barsModel" else (13, 11))
+    bg = {"light": "#FFFFFF", "dark": "#14161A"}[theme]
+    for key, segs in expected.items():
+        g = groups[key]
+        row_index, side = key
+        shades = out["shades"][row_index]
+        # Left butterfly side runs right-to-left: walk from the spine outward.
+        rev = fn == "butterflyModel" and side == 0
+        pieces = sorted(g["piece"], key=lambda p: -p["l"] if rev else p["l"])
+        overlays = sorted(g["overlay"], key=lambda p: -p["l"] if rev else p["l"])
+        assert len(overlays) == len(segs)
+        cursor = 0
+        for seg, over in zip(segs, overlays, strict=True):
+            chans = [c for c in seg["channels"] if c["count"] > 0]
+            mine = pieces[cursor : cursor + len(chans)]
+            cursor += len(chans)
+            assert len(mine) == len(chans)
+            assert min(p["l"] for p in mine) == pytest.approx(over["l"], abs=1)
+            assert max(p["r"] for p in mine) == pytest.approx(over["r"], abs=1)
+            assert [_hex(p["fill"]) for p in mine] == [shades[c["shade"]] for c in chans]
+            assert _hex(over["stroke"]) == bg
+            assert over["sw"] == pytest.approx(1, abs=0.01)
+    assert out["shades"][0][0] == "#0072B2"
+
+
+@pytest.mark.parametrize(
+    ("partial", "fn"), [(_FAM_BARS, "barsModel"), (_FAM_FLY, "butterflyModel")]
+)
+def test_rendered_family_segment_events(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    multichannel: dict[str, Any],
+    partial: dict[str, Any],
+    fn: str,
+) -> None:
+    page = guarded_page
+    page.route("**/site-data.json*", lambda route: route.fulfill(json=multichannel))
+    open_app(page, "")
+    page.evaluate(
+        """async ([partial, fn]) => {
+          const D = await import('./modules/data.js');
+          const S = await import('./modules/select.js');
+          const B = await import('./modules/bars.js');
+          const F = await import('./modules/bar-chart.js');
+          const raw = await (await fetch('site-data.json')).json();
+          const data = D.prepareData(raw);
+          const state = Object.assign(S.defaultState(data), partial);
+          const model = B[fn](data, S.computeView(data, state), state);
+          const build = fn === 'barsModel' ? F.buildBarFigure : F.buildButterflyFigure;
+          const fig = build(model, model.rows,
+            { theme: 'light', mobile: false, revision: 1, width: 1000 });
+          const gd = document.createElement('div');
+          gd.id = 'test-bars';
+          gd.style.cssText = 'width:1000px;position:relative;';
+          document.body.appendChild(gd);
+          await F.renderBars(gd, fig);
+          window.__ev = { clicks: [], hovers: [] };
+          F.bindBarEvents(gd, {
+            onPointClick: (ref) => window.__ev.clicks.push(ref),
+            onPointHover: (ref) => window.__ev.hovers.push(ref),
+          });
+        }""",
+        [partial, fn],
+    )
+    page.locator("#test-bars").scroll_into_view_if_needed()
+    boxes = page.evaluate(
+        """() => Array.from(document.querySelectorAll('#test-bars .bars .point path'))
+          .filter((el) => getComputedStyle(el).fillOpacity === '0')
+          .map((el) => { const r = el.getBoundingClientRect();
+            return { x: r.left, y: r.top, w: r.width, h: r.height }; })
+          .filter((r) => r.w > 0.5)"""
+    )
+    # Segment 0 of row 0 (Bars) is the widest-first bar; pick the first overlay path in DOM order.
+    box = boxes[0]
+    cx, cy = box["x"] + box["w"] / 2, box["y"] + box["h"] / 2
+    page.mouse.move(cx - 3, cy)
+    page.mouse.move(cx, cy)
+    page.mouse.click(cx, cy)
+    ev = page.evaluate("window.__ev")
+    assert ev["clicks"], ev
+    assert ev["hovers"], ev
+    ref = ev["clicks"][0]
+    assert ref["r"] == 0 and ref["s"] >= 0
+    assert ev["hovers"][-1] == ref
+    if fn == "barsModel":
+        assert ref == {"r": 0, "s": 0, "side": None}
+    else:
+        assert ref["side"] in (0, 1)
+
+
+def test_rendered_family_segment_markup_creates_no_element(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    imgs = guarded_page.evaluate(
+        """async () => {
+          const F = await import('./modules/bar-chart.js');
+          const seg = { key: 'k', label: '<img src=x onerror=alert(1)>', count: 1, target: null,
+                        channels: [{ id: 'a', name: 'A', count: 1, shade: 0 }] };
+          const row = { key: 'f:disney', label: 'ABC/ESPN', family: 'disney', total: 1,
+                        shadeCount: 1, target: null, segments: [seg] };
+          const fig = F.buildBarFigure({ mode: 'stacked', rowKind: 'family' }, [row],
+            { theme: 'light', mobile: false, revision: 1, width: 700 });
+          const gd = document.createElement('div');
+          gd.style.width = '700px';
+          document.body.appendChild(gd);
+          await F.renderBars(gd, fig);
+          return gd.querySelectorAll('img').length;
+        }"""
+    )
+    assert imgs == 0
