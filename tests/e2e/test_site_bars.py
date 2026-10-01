@@ -537,3 +537,201 @@ def test_no_viewer_text_and_no_page_errors(guarded_page: Page, open_app: OpenApp
             _hover_bar(page, 0)
             assert "viewer" not in page.locator("#chart-tooltip").inner_text().lower()
     assert errors == []
+
+
+# ---------------------------------------------------------------- D-23 family bars
+
+FAMILY = NORTHFIELD + "&bars=stacked"
+FAMILY_FLY = "?school=northfield,lakeview&view=butterfly&bars=stacked"
+FAMILY_URLS = [FAMILY, FAMILY_FLY]
+# On the two-channel fixture the first 7 drawn points are channel pieces; the
+# overlay announcer segments follow (hover and click resolve on these).
+FIRST_SEGMENT = 7
+
+
+def _hover_segment(page: Page, k: int = 0) -> None:
+    page.mouse.move(2, 2)
+    box = _bar_boxes(page)[FIRST_SEGMENT + k]
+    page.mouse.move(box["x"] + box["w"] / 2, box["y"] + box["h"] / 2, steps=4)
+    page.wait_for_selector("#chart-tooltip:not([hidden])")
+
+
+def _segment_center(page: Page, k: int = 0) -> tuple[float, float]:
+    box = _bar_boxes(page)[FIRST_SEGMENT + k]
+    return box["x"] + box["w"] / 2, box["y"] + box["h"] / 2
+
+
+def _computed_shades(page: Page, family: str, n: int) -> list[str]:
+    return page.evaluate(  # type: ignore[no-any-return]
+        """async ([family, n]) => {
+          const P = await import('./modules/palette.js');
+          const T = await import('./modules/pill.js');
+          return P.channelShades(family, T.currentTheme(), n).map((hex) => {
+            const d = document.createElement('div');
+            d.style.backgroundColor = hex;
+            document.body.appendChild(d);
+            const c = getComputedStyle(d).backgroundColor;
+            d.remove();
+            return c;
+          });
+        }""",
+        [family, n],
+    )
+
+
+def test_family_bars_render_with_channel_counts(
+    guarded_page: Page, open_app: OpenApp, serve_multichannel: Callable[..., None]
+) -> None:
+    page = guarded_page
+    serve_multichannel(page)
+    open_app(page, FAMILY)
+    assert page.locator("#bars-chart g.annotation-text-g", has_text="ABC/ESPN").count() >= 1
+    page.locator("#bars-data summary").click()
+    row = page.locator("#bars-counts > li").first
+    assert row.locator('span.pill[data-family="disney"]').count() == 1
+    assert row.locator("> button .counts-n").text_content() == "7"
+    assert row.locator("ol.counts-sublist > li > button").all_text_contents() == [
+        "Dale Harlow · PBP 2",
+        "Dale Harlow Jr. · Analyst 2",
+        "Casey Lund · PBP 1",
+        "Jamie Oaks · Analyst 1",
+        "Robin Teague · Other 1",
+    ]
+    first = row.locator("ol.counts-sublist > li").first
+    assert first.locator("ol.counts-channels > li").all_text_contents() == [
+        "Alpha Sports 1",
+        "Echo Sports 1",
+    ]
+    colors = first.locator(".counts-swatch").evaluate_all(
+        "els => els.map(e => getComputedStyle(e).backgroundColor)"
+    )
+    assert colors == _computed_shades(page, "disney", 2)
+    assert page.locator("#bars-captions").inner_text().count("Shades within") == 1
+
+
+def test_family_segment_tooltip_lists_channels(
+    guarded_page: Page, open_app: OpenApp, serve_multichannel: Callable[..., None]
+) -> None:
+    page = guarded_page
+    serve_multichannel(page)
+    open_app(page, FAMILY)
+    _hover_segment(page)
+    assert _tooltip_lines(page) == [
+        "Dale Harlow · PBP",
+        "Alpha Sports: 1",
+        "Echo Sports: 1",
+        "2 rated telecasts on ABC/ESPN",
+        "Click to filter →",
+    ]
+    assert page.locator("#chart-tooltip .tooltip-swatch").count() == 2
+    colors = page.locator("#chart-tooltip .tooltip-swatch").evaluate_all(
+        "els => els.map(e => getComputedStyle(e).backgroundColor)"
+    )
+    assert colors == _computed_shades(page, "disney", 2)
+
+
+def test_family_label_drill_sets_family_channels(
+    guarded_page: Page, open_app: OpenApp, serve_multichannel: Callable[..., None]
+) -> None:
+    page = guarded_page
+    serve_multichannel(page)
+    open_app(page, FAMILY)
+    _label(page, "ABC/ESPN").click()
+    page.wait_for_function("window.__testHooks.getState().networks !== null")
+    assert sorted(_state(page)["networks"]) == ["net-a", "net-e"]
+    assert "net-a" in page.url
+    assert "net-e" in page.url
+    page.click("#trigger-networks")
+    page.wait_for_function("document.getElementById('pop-networks').matches(':popover-open')")
+    only = page.locator(".check-item:has(input[data-family-checkbox='disney']) .only-btn")
+    assert only.inner_text().strip() == "All"
+    page.locator('.group-reset[data-reset="networks"]').click()
+    page.keyboard.press("Escape")
+    page.wait_for_function("window.__testHooks.getState().networks === null")
+
+
+def test_family_segment_click_selects_announcer(
+    guarded_page: Page, open_app: OpenApp, serve_multichannel: Callable[..., None]
+) -> None:
+    page = guarded_page
+    serve_multichannel(page)
+    open_app(page, FAMILY)
+    page.mouse.move(2, 2)
+    x, y = _segment_center(page)
+    page.mouse.click(x, y)
+    page.wait_for_function("window.__testHooks.getState().people.length === 1")
+    assert _state(page)["people"] == ["dale-harlow"]
+
+
+def test_family_butterfly_mirrors_channels(
+    guarded_page: Page, open_app: OpenApp, serve_multichannel: Callable[..., None]
+) -> None:
+    page = guarded_page
+    serve_multichannel(page)
+    open_app(page, FAMILY_FLY)
+    assert (
+        page.locator("#bars-title").inner_text()
+        == "Network families by announcer: Northfield and Lakeview"
+    )
+    page.locator("#bars-data summary").click()
+    labels = page.locator("#bars-counts > li > button").evaluate_all(
+        "els => els.map(e => e.getAttribute('aria-label'))"
+    )
+    assert labels == [
+        "Show only ABC/ESPN, Northfield 7, Lakeview 4 rated telecasts",
+        "Show only FOX/FS1/BTN, Northfield 0, Lakeview 2 rated telecasts",
+    ]
+    side = page.locator("#bars-counts > li").first.locator("ol.counts-sublist").first
+    first = side.locator("> li:not(.counts-side)").first
+    assert "Dale Harlow" in first.locator("> button").text_content()
+    assert first.locator("ol.counts-channels > li").all_text_contents() == [
+        "Alpha Sports 1",
+        "Echo Sports 1",
+    ]
+
+
+def test_family_touch_two_tap(
+    mobile_page: Page, open_app: OpenApp, serve_multichannel: Callable[..., None]
+) -> None:
+    page = mobile_page
+    serve_multichannel(page)
+    open_app(page, FAMILY)
+    x, y = _segment_center(page)
+    page.touchscreen.tap(x, y)
+    page.wait_for_selector("#chart-tooltip:not([hidden])")
+    lines = _tooltip_lines(page)
+    assert "Alpha Sports: 1" in lines
+    assert "Echo Sports: 1" in lines
+    assert lines[-1] == "Tap again to filter →"
+    page.wait_for_timeout(600)
+    assert _state(page)["people"] == []
+    page.touchscreen.tap(x, y)
+    page.wait_for_function("window.__testHooks.getState().people.length === 1")
+    assert _state(page)["people"] == ["dale-harlow"]
+    open_app(page, FAMILY)
+    box = _label(page, "ABC/ESPN").bounding_box()
+    assert box is not None
+    page.touchscreen.tap(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.wait_for_function("window.__testHooks.getState().networks !== null")
+
+
+@pytest.mark.parametrize("query", FAMILY_URLS)
+def test_family_views_show_no_viewer_text(
+    guarded_page: Page,
+    open_app: OpenApp,
+    serve_multichannel: Callable[..., None],
+    query: str,
+) -> None:
+    page = guarded_page
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+    serve_multichannel(page)
+    open_app(page, query)
+    assert "viewer" not in _bars_text(page).lower()
+    page.mouse.move(2, 2)
+    box = _bar_boxes(page)[FIRST_SEGMENT if query == FAMILY else -1]
+    page.mouse.move(box["x"] + box["w"] / 2, box["y"] + box["h"] / 2, steps=4)
+    page.wait_for_selector("#chart-tooltip:not([hidden])")
+    assert "viewer" not in page.locator("#chart-tooltip").inner_text().lower()
+    assert errors == []
