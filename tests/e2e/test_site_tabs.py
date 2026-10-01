@@ -404,3 +404,80 @@ def test_controls_footprint_is_fixed(
         open_app(page, query)
         values[name] = page.evaluate(_FOOTPRINT_JS)
     assert max(values.values()) - min(values.values()) <= 1, values
+
+
+# --- D-25: Both | PBP | Analyst control, one state with the Role filter ------
+
+_ROWS_JS = "window.__testHooks.getBarsModel().rows.map(r => [r.name, r.total])"
+_ROLE_PRESSED_JS = """() => Array.from(document.querySelectorAll('#bar-role-toggle button'))
+  .map((b) => [b.textContent, b.getAttribute('aria-pressed')])"""
+PBP_ROWS = [["Dale Harlow · PBP", 2], ["Casey Lund · PBP", 1]]
+ANALYST_ROWS = [["Dale Harlow Jr. · Analyst", 2], ["Jamie Oaks · Analyst", 1]]
+
+
+def test_role_control_sets_state_url_and_role_filter(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    page = guarded_page
+    open_app(page, ONE_SCHOOL + "&view=bars")
+    assert _attr(page, '#bar-role-toggle button[data-role=""]', "aria-pressed") == "true"
+    assert len(page.evaluate(_ROWS_JS)) == 5
+    page.locator('#bar-role-toggle button[data-role="pbp"]').click()
+    assert _state(page)["role"] == "pbp"
+    assert "role=pbp" in page.evaluate("() => location.search")
+    assert page.evaluate(
+        "() => document.querySelector('#filter-role input[value=\"pbp\"]').checked"
+    )
+    assert page.evaluate(_ROWS_JS) == PBP_ROWS
+    page.locator('#bar-role-toggle button[data-role=""]').click()
+    assert _state(page)["role"] is None
+    assert "role=" not in page.evaluate("() => location.search")
+    assert len(page.evaluate(_ROWS_JS)) == 5
+
+
+def test_role_filter_popover_drives_the_role_control(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    page = guarded_page
+    open_app(page, ONE_SCHOOL + "&view=bars")
+    page.click("#trigger-role")
+    page.locator('#filter-role input[value="analyst"]').check()
+    assert _state(page)["role"] == "analyst"
+    assert page.evaluate(_ROLE_PRESSED_JS) == [
+        ["Both", "false"],
+        ["PBP", "false"],
+        ["Analyst", "true"],
+    ]
+    assert page.evaluate(_ROWS_JS) == ANALYST_ROWS
+
+
+def test_role_control_from_url_and_on_butterfly(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    page = guarded_page
+    open_app(page, ONE_SCHOOL + "&view=bars&role=analyst")
+    assert page.evaluate(_ROLE_PRESSED_JS)[2] == ["Analyst", "true"]
+    open_app(page, "?people=kris-venn,pat-rowan&view=butterfly")
+    assert not _is_concealed(page, "#bar-role-toggle")
+    page.locator('#bar-role-toggle button[data-role="pbp"]').click()
+    assert _state(page)["role"] == "pbp"
+    open_app(page, "")
+    assert _is_concealed(page, "#bar-role-toggle")
+
+
+def test_role_control_is_keyboard_operable(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    page = guarded_page
+    open_app(page, ONE_SCHOOL + "&view=bars")
+    page.locator('#bar-role-toggle button[data-role=""]').focus()
+    page.keyboard.press("Tab")
+    page.keyboard.press("Enter")
+    assert _state(page)["role"] == "pbp"
+
+
+def test_role_limits_selected_announcer_games(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?people=dale-harlow&view=bars&role=analyst")
+    assert guarded_page.locator("#bars-note").is_visible()
