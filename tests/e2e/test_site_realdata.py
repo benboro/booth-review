@@ -547,3 +547,77 @@ def test_real_bars_counts_match_facets(
     assert shared_over == 0, "a butterfly shared count exceeded a side"
     assert viewers_hits == 0, "a bar model carried a viewer figure"
     assert max_ms < 100, "building a bar model took 100 ms or more"
+
+
+_FAMILY_REAL_JS = """
+async () => {
+  const bars = await import(new URL('./modules/bars.js', location.href).href);
+  const copy = await import(new URL('./modules/bar-copy.js', location.href).href);
+  const sel = await import(new URL('./modules/select.js', location.href).href);
+  const data = window.__testHooks.data;
+  const base = sel.defaultState(data);
+  let segmentMismatch = 0;
+  let nonFamilyRows = 0;
+  let badShades = 0;
+  let untaggedPbp = 0;
+  let badTitles = 0;
+  let viewersHits = 0;
+  const count = Math.min(10, data.teamSlugs.length);
+  for (let k = 0; k < count; k += 1) {
+    const slug = data.teamSlugs[k];
+    const schoolName = data.lookups.teams[data.teamIndexBySlug.get(slug)].name;
+    const state = { ...base, school: [slug] };
+    const view = sel.computeView(data, state);
+    const stacked = bars.barsModel(data, view, { ...state, bars: 'stacked' });
+    if (stacked) {
+      for (const row of stacked.rows) {
+        if (!row.key.startsWith('f:')) nonFamilyRows += 1;
+        for (const seg of row.segments) {
+          const sum = (seg.channels || []).reduce((acc, c) => acc + c.count, 0);
+          if (seg.count !== sum) segmentMismatch += 1;
+          for (const c of seg.channels || []) {
+            if (c.shade < 0 || c.shade >= row.shadeCount) badShades += 1;
+          }
+        }
+      }
+      if (JSON.stringify(stacked).includes('viewers')) viewersHits += 1;
+    }
+    const pbpState = { ...state, role: 'pbp' };
+    const pbpView = sel.computeView(data, pbpState);
+    const simple = bars.barsModel(data, pbpView, pbpState);
+    if (!simple || simple.rows.length === 0) continue;
+    for (const row of simple.rows) {
+      if (!row.label.includes('PBP')) untaggedPbp += 1;
+    }
+    if (JSON.stringify(simple).includes('viewers')) viewersHits += 1;
+    const id = simple.rows[0].target.id;
+    const personName = data.lookups.people[data.personIndexById.get(id)].name;
+    for (const group of ['announcers', 'teams']) {
+      const drilled = { ...state, people: [id], group };
+      const dv = sel.computeView(data, drilled);
+      const model = bars.barsModel(data, dv, drilled);
+      if (!model) continue;
+      const title = copy.chartTitle(model, data, drilled);
+      if (!title.includes(schoolName) || !title.includes(personName)) badTitles += 1;
+      if (JSON.stringify(model).includes('viewers')) viewersHits += 1;
+    }
+  }
+  return [segmentMismatch, nonFamilyRows, badShades, untaggedPbp, badTitles, viewersHits];
+}
+"""
+
+
+def test_real_family_bars_roles_and_titles(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """Family rows, role filtering, and drill-in titles hold on the real data --
+    integers only; names are compared inside the browser."""
+    real_open_app(real_guarded_page, "")
+    result: list[int] = real_guarded_page.evaluate(_FAMILY_REAL_JS)
+    segment_mismatch, non_family_rows, bad_shades, untagged_pbp, bad_titles, viewers_hits = result
+    assert segment_mismatch == 0, "a segment count differed from its channel sum"
+    assert non_family_rows == 0, "a stacked Announcers row was not a family row"
+    assert bad_shades == 0, "a channel shade was out of range"
+    assert untagged_pbp == 0, "a PBP-filtered row was not PBP-tagged"
+    assert bad_titles == 0, "a drill-in title missed the school or the announcer"
+    assert viewers_hits == 0, "a bar model carried a viewer figure"
