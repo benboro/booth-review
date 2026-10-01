@@ -738,7 +738,7 @@ def test_butterfly_simple_figure_shape(guarded_page: Page, site_url: str) -> Non
     annos = layout["annotations"]
     assert len(annos) == len(rows) + 2
     assert [a["text"] for a in annos[-2:]] == ["Northfield", "Lakeview"]
-    assert (annos[-2]["xanchor"], annos[-1]["xanchor"]) == ("left", "right")
+    assert (annos[-2]["xanchor"], annos[-1]["xanchor"]) == ("right", "left")
     assert layout["meta"]["rowCount"] == 7
 
 
@@ -793,7 +793,7 @@ def test_butterfly_side_name_escaped_in_figure(guarded_page: Page, site_url: str
 # --------------------------------------------------------------------------
 
 _RENDER_JS = """
-async ([partial, fn, env, longLabels, extraHtml]) => {
+async ([partial, fn, env, longLabels, sideName]) => {
   const D = await import('./modules/data.js');
   const S = await import('./modules/select.js');
   const B = await import('./modules/bars.js');
@@ -805,6 +805,9 @@ async ([partial, fn, env, longLabels, extraHtml]) => {
   const model = B[fn](data, view, state);
   if (longLabels) {
     model.rows.forEach((r, i) => { r.label = `Long Announcer Name Number ${i} PBP`; });
+  }
+  if (sideName && model.sides) {
+    model.sides.forEach((side) => { side.name = sideName; });
   }
   const rows = B.visibleRows(model.rows, false);
   const build = fn === 'barsModel' ? F.buildBarFigure : F.buildButterflyFigure;
@@ -824,7 +827,7 @@ async ([partial, fn, env, longLabels, extraHtml]) => {
   const expected = figure.traces.reduce(
     (n, t) => n + t.x.filter((v) => v > 0).length, 0);
   const annos = Array.from(gd.querySelectorAll('g.annotation')).map((el) => ({
-    text: el.textContent, ...rect(el) }));
+    text: el.textContent, index: Number(el.getAttribute('data-index')), ...rect(el) }));
   const full = gd._fullLayout;
   const gdRect = gd.getBoundingClientRect();
   const center = (i) => gdRect.top + full._size.t + full.yaxis.d2p(i);
@@ -835,6 +838,8 @@ async ([partial, fn, env, longLabels, extraHtml]) => {
     imgs: gd.querySelectorAll('img').length,
     scrollWidth: gd.scrollWidth,
     clientWidth: gd.clientWidth,
+    gdLeft: gdRect.left,
+    gdRight: gdRect.right,
     plotLeft: gdRect.left + full._size.l,
     plotRight: gdRect.left + full._size.l + full._size.w,
     height: gd.getBoundingClientRect().height,
@@ -855,9 +860,10 @@ def _render(
     fn: str,
     env: dict[str, Any],
     long_labels: bool = False,
+    side_name: str = "",
 ) -> dict[str, Any]:
     open_app(page, "")
-    out: dict[str, Any] = page.evaluate(_RENDER_JS, [partial, fn, env, long_labels, ""])
+    out: dict[str, Any] = page.evaluate(_RENDER_JS, [partial, fn, env, long_labels, side_name])
     return out
 
 
@@ -1062,3 +1068,74 @@ def test_rendered_butterfly_side_name_is_escaped(
     )
     assert res["bold"] == 0
     assert "<b>x</b>" in res["texts"]
+
+
+@pytest.mark.parametrize("mobile", [False, True])
+def test_butterfly_headers_hug_the_spine(
+    guarded_page: Page, site_url: str, mobile: bool
+) -> None:
+    env = {**_PHONE, "width": 358} if mobile else _DESKTOP
+    out = _figure(guarded_page, site_url, {"school": ["northfield", "lakeview"]}, "butterflyModel", env)
+    layout = out["figure"]["layout"]
+    left, right = layout["annotations"][-2:]
+    g = 0 if mobile else layout["xaxis2"]["domain"][0] - 0.5
+    assert left["x"] == pytest.approx(0.5 - g)
+    assert right["x"] == pytest.approx(0.5 + g)
+    assert (left["xanchor"], right["xanchor"]) == ("right", "left")
+    assert left["borderpad"] == 0 and right["borderpad"] == 0
+    assert (left.get("xshift", 0), right.get("xshift", 0)) == ((-4, 4) if mobile else (0, 0))
+    guarded_page.goto(f"{site_url}/")
+    text = guarded_page.evaluate(
+        """async () => {
+          const F = await import('./modules/bar-chart.js');
+          const side = () => ({ total: 1, segments: [] });
+          const row = { key: 'k', name: 'x', label: 'x', family: null, total: 2, target: null,
+                        sides: [side(), side()] };
+          const model = { mode: 'simple', sides: [{ name: 'A'.repeat(40) }, { name: 'B' }] };
+          const fig = F.buildButterflyFigure(model, [row], { theme: 'light', mobile: false,
+                                                             revision: 1, width: 1000 });
+          return fig.layout.annotations[1].text;
+        }"""
+    )
+    assert text == "A" * 21 + "\u2026"
+
+
+_HEADER_CASES = [
+    {"school": ["northfield", "lakeview"]},
+    {"people": ["kris-venn", "pat-rowan"]},
+]
+
+
+@pytest.mark.parametrize("long_name", [False, True])
+@pytest.mark.parametrize("stacked", [False, True])
+@pytest.mark.parametrize("partial", _HEADER_CASES)
+@pytest.mark.parametrize("width", [1280, 800, 358])
+def test_rendered_butterfly_headers_hug_the_spine(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    width: int,
+    partial: dict[str, Any],
+    stacked: bool,
+    long_name: bool,
+) -> None:
+    mobile = width == 358
+    env = {**_DESKTOP, "width": width, "mobile": mobile}
+    out = _render(
+        guarded_page,
+        open_app,
+        {**partial, **({"bars": "stacked"} if stacked else {})},
+        "butterflyModel",
+        env,
+        side_name="N" * 40 if long_name else "",
+    )
+    n = out["rowCount"]
+    by_index = {a["index"]: a for a in out["annos"]}
+    left, right = by_index[n], by_index[n + 1]
+    if mobile:
+        assert out["x1End"] - 7 <= left["r"] <= out["x1End"] + 1
+        assert out["x2Start"] - 1 <= right["l"] <= out["x2Start"] + 7
+    else:
+        assert abs(left["r"] - out["x1End"]) <= 2
+        assert abs(right["l"] - out["x2Start"]) <= 2
+    assert left["r"] <= right["l"]
+    assert left["l"] >= out["gdLeft"] - 1 and right["r"] <= out["gdRight"] + 1
