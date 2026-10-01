@@ -30,6 +30,7 @@ import { renderPanel, openPanel, closePanel, initPanel } from './modules/panel.j
 import { renderTable } from './modules/table.js';
 import { initChartTabs, renderChartTabs, STALE_COPY } from './modules/chart-tabs.js';
 import { chartContext } from './modules/bars.js';
+import { initBarsPanel, renderBarsPanel, lastBarsModel, resetBarsTap } from './modules/bars-panel.js';
 import { showTooltip, hideTooltip } from './modules/tooltip.js';
 import {
   showHoverRing,
@@ -75,6 +76,7 @@ let tooltipMode = TOOLTIP_MODE;
 // below.
 /** Hides the hover tooltip and the hover ring together. */
 function clearHover() {
+  resetBarsTap();
   hideTooltip();
   hideHoverRing();
 }
@@ -207,6 +209,14 @@ function render() {
     if (barsPanelEl) barsPanelEl.hidden = false;
     const applies = state.view === 'bars' ? ctx.barsEnabled : ctx.butterflyEnabled;
     renderBarsShell(applies);
+    if (applies) {
+      renderBarsPanel({
+        data,
+        state,
+        view,
+        env: { ...currentEnv(), width: document.getElementById('bars-chart').clientWidth },
+      });
+    }
     lastPanel = 'bars';
   }
 
@@ -349,6 +359,16 @@ async function bootstrap() {
     initChartTabs({ data, getState: () => state, setState });
     renderers.push(renderChartTabs);
 
+    initBarsPanel({ data, getState: () => state, setState, rerender: render });
+
+    let resizeTimer = null;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if (state.view === 'butterfly' && !mobileMedia.matches) render();
+      }, 150);
+    });
+
     renderers.push(tableRenderer);
 
     if (axisToggleEl) {
@@ -370,6 +390,7 @@ async function bootstrap() {
       ready: true,
       data,
       getState: () => structuredClone(state),
+      getBarsModel: () => structuredClone(lastBarsModel()),
       setState,
       getView: () => ({
         visibleCount: lastView.visibleCount,
