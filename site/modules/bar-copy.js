@@ -14,23 +14,13 @@ export const EMPTY_COPY = {
   hint: 'Widen the season range or reset a filter.',
 };
 
-/**
- * Bar-style toggle labels by what the rows are (D-31). Labels only: the URL
- * values stay `simple` / `stacked`.
- */
-export const BAR_STYLE_LABELS = Object.freeze({
-  announcers: Object.freeze({ simple: 'by Announcer', stacked: 'by Network' }),
-  teams: Object.freeze({ simple: 'by Team', stacked: 'by Conference' }),
+/** Grouping control labels by `by` value (04.6 D-21). */
+export const BY_LABELS = Object.freeze({
+  announcer: 'by Announcer',
+  network: 'by Network',
+  team: 'by Team',
+  conference: 'by Conference',
 });
-
-/**
- * The label pair for a Group-by value: announcers for 'announcers', else teams.
- * @param {string|null|undefined} group
- * @returns {{simple: string, stacked: string}}
- */
-export function barStyleLabels(group) {
-  return group === 'announcers' ? BAR_STYLE_LABELS.announcers : BAR_STYLE_LABELS.teams;
-}
 
 const NOUNS = {
   person: ['announcer', 'announcers'],

@@ -188,21 +188,19 @@
       <button type="button" data-axis="excitement" aria-pressed="false">Excitement (CFBD)</button>
     </div>
     <div id="bar-controls" class="bar-controls is-concealed">
-      <div id="bar-style-toggle" class="segmented" role="group" aria-label="Bar style">
-        <button type="button" data-bars="simple" aria-pressed="true"><span class="bar-style-labels"><span data-rows="announcers">by Announcer</span><span data-rows="teams" class="is-concealed">by Team</span></span></button>
-        <button type="button" data-bars="stacked" aria-pressed="false"><span class="bar-style-labels"><span data-rows="announcers">by Network</span><span data-rows="teams" class="is-concealed">by Conference</span></span></button>
+      <div id="group-by-toggle" class="segmented by-toggle" role="group" aria-label="Group bars">
+        <span class="by-sizer" aria-hidden="true"><span>by Announcer</span><span>by Network</span><span>by Team</span><span>by Conference</span></span>
+        <span class="by-buttons">
+          <button type="button" data-by="announcer" aria-pressed="true"><span class="by-prefix">by </span>Announcer</button>
+          <button type="button" data-by="network" aria-pressed="false"><span class="by-prefix">by </span>Network</button>
+          <button type="button" data-by="team" aria-pressed="false"><span class="by-prefix">by </span>Team</button>
+          <button type="button" data-by="conference" aria-pressed="false" aria-label="by Conference"><span class="by-prefix">by </span><span class="by-long">Conference</span><span class="by-short">Conf.</span></button>
+        </span>
       </div>
       <div id="bar-role-toggle" class="segmented" role="group" aria-label="Announcer role">
         <button type="button" data-role="" aria-pressed="true">Both</button>
         <button type="button" data-role="pbp" aria-pressed="false" aria-label="Play-by-play"><span class="role-pill" data-role="pbp" aria-hidden="true">PBP</span></button>
         <button type="button" data-role="analyst" aria-pressed="false" aria-label="Analyst"><span class="role-pill" data-role="analyst" aria-hidden="true">Analyst</span></button>
-      </div>
-      <div id="group-by" class="group-by">
-        <span id="group-by-label" class="group-by-label">Group by:</span>
-        <div id="group-by-toggle" class="segmented" role="group" aria-label="Group bars by">
-          <button type="button" data-group="announcers" aria-pressed="true">Announcers</button>
-          <button type="button" data-group="teams" aria-pressed="false">Teams</button>
-        </div>
       </div>
     </div>
   </div>

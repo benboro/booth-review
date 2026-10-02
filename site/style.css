@@ -1300,8 +1300,7 @@ input[type="checkbox"] {
   margin-bottom: var(--space-md);
 }
 
-.chart-controls .segmented,
-.chart-controls .group-by {
+.chart-controls .segmented {
   margin-bottom: 0;
 }
 
@@ -1319,15 +1318,46 @@ input[type="checkbox"] {
   align-items: baseline;
 }
 
-/* D-31: both labels share one grid cell, so each style button keeps the width of
-   its longer label and swapping the label set moves nothing in the row. */
-.bar-style-labels {
+/* 04.6 D-22: one grouping control with a fixed outer width. A hidden sizer holds all
+   four labels so the box is sized for four options; fewer visible buttons stretch to
+   fill it, so the control's edges and the role control never move. */
+.segmented.by-toggle {
   display: inline-grid;
-  justify-items: center;
 }
 
-.bar-style-labels > span {
+.by-toggle > .by-sizer,
+.by-toggle > .by-buttons {
   grid-area: 1 / 1;
+}
+
+.by-sizer {
+  display: flex;
+  visibility: hidden;
+  height: 0;
+  overflow: hidden;
+}
+
+.by-sizer > span {
+  font: var(--font-label);
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.by-buttons {
+  display: flex;
+}
+
+.by-buttons > button {
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+
+.by-buttons > button[hidden] {
+  display: none;
+}
+
+.by-short {
+  display: none;
 }
 
 /* Tighter side padding at every width keeps the row on one line at 800 with the
@@ -1335,18 +1365,6 @@ input[type="checkbox"] {
 .bar-controls .segmented button {
   padding-left: 12px;
   padding-right: 12px;
-}
-
-.group-by {
-  display: inline-flex;
-  gap: var(--space-sm);
-  align-items: baseline;
-  margin-bottom: var(--space-md);
-}
-
-.group-by-label {
-  font: var(--font-label);
-  color: var(--muted);
 }
 
 .is-concealed {
@@ -1942,9 +1960,44 @@ html:has(#detail-panel[open]) {
     min-height: 44px;
   }
 
-  /* D-25: tighter gap so the controls pack onto as few lines as possible. */
-  .bar-controls {
-    gap: var(--space-sm);
+  /* 04.6 D-24: exactly two fixed rows: grouping control full width, then the role
+     control. Row 2 stays reserved (the concealed role control keeps its box). */
+  .chart-controls > .bar-controls {
+    justify-self: stretch;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-sm);
+  }
+
+  .segmented.by-toggle {
+    display: flex;
+    width: 100%;
+  }
+
+  .by-sizer {
+    display: none;
+  }
+
+  .by-buttons {
+    width: 100%;
+  }
+
+  .by-buttons > button {
+    flex: 1 1 auto;
+    min-width: 44px;
+    padding: 0 4px;
+  }
+
+  .by-prefix {
+    display: none;
+  }
+
+  .by-long {
+    display: none;
+  }
+
+  .by-short {
+    display: inline;
   }
 }
 
