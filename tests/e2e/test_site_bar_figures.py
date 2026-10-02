@@ -57,11 +57,11 @@ _TITLE_FLY = "(c) => c.C.chartTitle(c.fly, c.data, c.state)"
 _BARS_TITLES: list[tuple[dict[str, Any], str]] = [
     ({"school": ["northfield"]}, "Announcers by rated telecasts with Northfield"),
     (
-        {"school": ["northfield"], "bars": "stacked"},
+        {"school": ["northfield"], "by": "network"},
         "Network families by announcer with Northfield",
     ),
     ({"people": ["kris-venn"]}, "Teams by rated telecasts with Kris Venn"),
-    ({"people": ["kris-venn"], "bars": "stacked"}, "Conferences by team with Kris Venn"),
+    ({"people": ["kris-venn"], "by": "conference"}, "Conferences by team with Kris Venn"),
     ({"networks": ["net-a", "net-b"]}, "Teams by rated telecasts on Alpha Sports or Beta Network"),
     (
         {"networks": ["net-a", "net-b", "net-c", "net-d"]},
@@ -77,7 +77,7 @@ _BARS_TITLES: list[tuple[dict[str, Any], str]] = [
         "Announcers by rated telecasts with Northfield or Lakeview or Ironpeak",
     ),
     (
-        {"school": ["northfield"], "networks": ["net-a"], "group": "teams"},
+        {"school": ["northfield"], "networks": ["net-a"], "by": "team"},
         "Teams by rated telecasts with Northfield on Alpha Sports",
     ),
     (
@@ -85,7 +85,7 @@ _BARS_TITLES: list[tuple[dict[str, Any], str]] = [
         "Announcers by rated telecasts with Dale Harlow and Northfield",
     ),
     (
-        {"school": ["northfield"], "people": ["dale-harlow"], "group": "teams"},
+        {"school": ["northfield"], "people": ["dale-harlow"], "by": "team"},
         "Teams by rated telecasts with Dale Harlow and Northfield",
     ),
     (
@@ -124,12 +124,12 @@ _FLY_TITLES: list[tuple[dict[str, Any], str]] = [
         "Announcers: Northfield and Lakeview",
     ),
     (
-        {"school": ["northfield", "lakeview"], "bars": "stacked"},
+        {"school": ["northfield", "lakeview"], "by": "network"},
         "Network families by announcer: Northfield and Lakeview",
     ),
     ({"people": ["kris-venn", "pat-rowan"]}, "Teams: Kris Venn and Pat Rowan"),
     (
-        {"people": ["kris-venn", "pat-rowan"], "bars": "stacked"},
+        {"people": ["kris-venn", "pat-rowan"], "by": "conference"},
         "Conferences by team: Kris Venn and Pat Rowan",
     ),
     (
@@ -145,7 +145,7 @@ _FLY_TITLES: list[tuple[dict[str, Any], str]] = [
             "school": ["northfield", "lakeview"],
             "people": ["kris-venn", "jax-venn"],
             "together": True,
-            "group": "teams",
+            "by": "team",
         },
         "Teams: Kris Venn and Jax Venn with Northfield or Lakeview",
     ),
@@ -213,12 +213,12 @@ def test_caption_lines(guarded_page: Page, site_url: str) -> None:
     page = guarded_page
     cap = "(c) => c.C.captionLines(c.bars ?? c.fly, (c.bars ?? c.fly).rows)"
     assert _run(page, site_url, {"school": ["northfield"]}, cap) == []
-    assert _run(page, site_url, {"school": ["northfield"], "bars": "stacked"}, cap) == [
+    assert _run(page, site_url, {"school": ["northfield"], "by": "network"}, cap) == [
         _STACK_SUM,
         _SHADE_CAPTION,
     ]
     assert _run(page, site_url, {"people": ["kris-venn"]}, cap) == [_TEAM_COUNT]
-    assert _run(page, site_url, {"people": ["kris-venn"], "bars": "stacked"}, cap) == [_TEAM_COUNT]
+    assert _run(page, site_url, {"people": ["kris-venn"], "by": "conference"}, cap) == [_TEAM_COUNT]
     fly = _run(
         page,
         site_url,
@@ -236,7 +236,7 @@ def test_caption_lines(guarded_page: Page, site_url: str) -> None:
     non = _run(
         page,
         site_url,
-        {"school": ["maplecrest"], "group": "teams", "networks": ["net-d"], "bars": "stacked"},
+        {"school": ["maplecrest"], "networks": ["net-d"], "by": "conference"},
         cap,
     )
     assert _NON_FILTER in non
@@ -262,7 +262,7 @@ def test_tooltip_lines(guarded_page: Page, site_url: str) -> None:
     stacked = _run(
         page,
         site_url,
-        {"school": ["northfield"], "bars": "stacked"},
+        {"school": ["northfield"], "by": "network"},
         "(c) => c.C.tooltipLines(c.bars, c.bars.rows, { r: 0, s: 0, side: null }, {})",
     )
     assert stacked[0] == {"text": "Dale Harlow · PBP", "kind": "title"}
@@ -278,7 +278,7 @@ def test_tooltip_lines(guarded_page: Page, site_url: str) -> None:
     conf = _run(
         page,
         site_url,
-        {"school": ["maplecrest"], "group": "teams", "networks": ["net-d"], "bars": "stacked"},
+        {"school": ["maplecrest"], "networks": ["net-d"], "by": "conference"},
         """(c) => {
           const i = c.bars.rows.findIndex((r) => r.target == null);
           return c.C.tooltipLines(c.bars, c.bars.rows, { r: i, s: -1, side: null }, {});
@@ -298,7 +298,7 @@ def test_family_tooltip_lines(
 ) -> None:
     page = guarded_page
     body = "(c) => c.C.tooltipLines(c.{m}, c.{m}.rows, {ref}, {opts})"
-    stacked = {"school": ["northfield"], "bars": "stacked"}
+    stacked = {"school": ["northfield"], "by": "network"}
     ref0 = _run(
         page,
         site_url,
@@ -337,7 +337,7 @@ def test_family_tooltip_lines(
     fly = _run(
         page,
         site_url,
-        {"school": ["northfield", "lakeview"], "bars": "stacked"},
+        {"school": ["northfield", "lakeview"], "by": "network"},
         body.format(m="fly", ref="{ r: 0, s: 0, side: 1 }", opts="{}"),
         multichannel,
     )
@@ -357,7 +357,7 @@ def test_family_caption_and_counts_text(
     bars = _run(
         page,
         site_url,
-        {"school": ["northfield"], "bars": "stacked"},
+        {"school": ["northfield"], "by": "network"},
         cap.format(m="bars"),
         multichannel,
     )
@@ -365,14 +365,12 @@ def test_family_caption_and_counts_text(
     fly = _run(
         page,
         site_url,
-        {"school": ["northfield", "lakeview"], "bars": "stacked"},
+        {"school": ["northfield", "lakeview"], "by": "network"},
         cap.format(m="fly"),
         multichannel,
     )
     assert fly[0] == _STACK_SUM and _SHADE_CAPTION in fly
-    plain = _run(
-        page, site_url, {"school": ["northfield"], "bars": "stacked"}, cap.format(m="bars")
-    )
+    plain = _run(page, site_url, {"school": ["northfield"], "by": "network"}, cap.format(m="bars"))
     assert _SHADE_CAPTION in plain  # stacked Announcers are family rows on the shared fixture too
     simple = _run(page, site_url, {"school": ["northfield"]}, cap.format(m="bars"))
     assert _SHADE_CAPTION not in simple
@@ -610,9 +608,9 @@ def test_readable_text_on_all(guarded_page: Page, site_url: str) -> None:
 _THEMES = ["light", "dark"]
 _VIOLET_CASES = [
     ({"people": ["kris-venn"]}, "barsModel"),
-    ({"people": ["kris-venn"], "bars": "stacked"}, "barsModel"),
+    ({"people": ["kris-venn"], "by": "conference"}, "barsModel"),
     ({"people": ["kris-venn", "pat-rowan"]}, "butterflyModel"),
-    ({"people": ["kris-venn", "pat-rowan"], "bars": "stacked"}, "butterflyModel"),
+    ({"people": ["kris-venn", "pat-rowan"], "by": "conference"}, "butterflyModel"),
 ]
 
 
@@ -661,7 +659,7 @@ def test_violet_text_contrast(guarded_page: Page, site_url: str, theme: str) -> 
     out = _figure(
         guarded_page,
         site_url,
-        {"people": ["kris-venn"], "bars": "stacked"},
+        {"people": ["kris-venn"], "by": "conference"},
         env={**_DESKTOP, "theme": theme},
     )
     for k, trace in enumerate(out["figure"]["traces"]):
@@ -720,7 +718,7 @@ def test_simple_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
 
 
 def test_stacked_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
-    out = _figure(guarded_page, site_url, {"people": ["kris-venn"], "bars": "stacked"})
+    out = _figure(guarded_page, site_url, {"people": ["kris-venn"], "by": "conference"})
     figure, rows = out["figure"], out["model"]["rows"]
     layout = figure["layout"]
     assert layout["barmode"] == "stack"
@@ -802,9 +800,9 @@ def _totals(figure: dict[str, Any], axis: str) -> list[tuple[int, str]]:
 @pytest.mark.parametrize(
     ("partial", "expected"),
     [
-        ({"school": ["northfield"], "bars": "stacked"}, [(0, "7")]),
+        ({"school": ["northfield"], "by": "network"}, [(0, "7")]),
         (
-            {"people": ["kris-venn"], "bars": "stacked"},
+            {"people": ["kris-venn"], "by": "conference"},
             [(0, "3"), (1, "1"), (2, "1"), (3, "1")],
         ),
     ],
@@ -831,12 +829,12 @@ def test_stacked_totals_on_bars(
     ("partial", "left", "right"),
     [
         (
-            {"school": ["northfield", "lakeview"], "bars": "stacked"},
+            {"school": ["northfield", "lakeview"], "by": "network"},
             [(0, "7")],
             [(0, "4"), (1, "2")],
         ),
         (
-            {"people": ["kris-venn", "pat-rowan"], "bars": "stacked"},
+            {"people": ["kris-venn", "pat-rowan"], "by": "conference"},
             [(0, "1"), (1, "3"), (2, "1"), (3, "1")],
             [(0, "4"), (1, "1"), (2, "1")],
         ),
@@ -865,9 +863,9 @@ def test_stacked_totals_on_butterfly(
 @pytest.mark.parametrize(
     ("partial", "fn"),
     [
-        ({"people": ["kris-venn"], "bars": "stacked"}, "barsModel"),
+        ({"people": ["kris-venn"], "by": "conference"}, "barsModel"),
         ({"people": ["kris-venn"]}, "barsModel"),
-        ({"people": ["kris-venn", "pat-rowan"], "bars": "stacked"}, "butterflyModel"),
+        ({"people": ["kris-venn", "pat-rowan"], "by": "conference"}, "butterflyModel"),
     ],
 )
 def test_total_text_has_room_in_the_range(
@@ -892,7 +890,7 @@ def test_total_text_has_room_in_the_range(
 
 
 def test_network_rows_use_family_color(guarded_page: Page, site_url: str) -> None:
-    out = _figure(guarded_page, site_url, {"school": ["northfield"], "bars": "stacked"})
+    out = _figure(guarded_page, site_url, {"school": ["northfield"], "by": "network"})
     first = out["figure"]["traces"][0]
     assert set(first["marker"]["color"]) == {"#0072B2"}  # shade 0 is the family color
 
@@ -956,7 +954,7 @@ def test_butterfly_stacked_figure_matches_bars_builder(guarded_page: Page, site_
     out = _figure(
         guarded_page,
         site_url,
-        {"people": ["kris-venn", "pat-rowan"], "bars": "stacked"},
+        {"people": ["kris-venn", "pat-rowan"], "by": "conference"},
         "butterflyModel",
     )
     figure = out["figure"]
@@ -1148,7 +1146,7 @@ def _row_annos(out: dict[str, Any]) -> list[dict[str, Any]]:
 def test_rendered_bars_geometry_desktop(
     guarded_page: Page, open_app: Callable[[Page, str], None], stacked: bool
 ) -> None:
-    partial = {"school": ["northfield"], **({"bars": "stacked"} if stacked else {})}
+    partial = {"school": ["northfield"], **({"by": "network"} if stacked else {})}
     out = _render(guarded_page, open_app, partial, "barsModel", _DESKTOP)
     assert len(out["bars"]) == out["expected"]
     for anno in _row_annos(out):
@@ -1163,7 +1161,7 @@ def test_rendered_bars_geometry_desktop(
 def test_rendered_bars_geometry_phone(
     guarded_page: Page, open_app: Callable[[Page, str], None], stacked: bool
 ) -> None:
-    partial = {"school": ["northfield"], **({"bars": "stacked"} if stacked else {})}
+    partial = {"school": ["northfield"], **({"by": "network"} if stacked else {})}
     out = _render(guarded_page, open_app, partial, "barsModel", _PHONE, long_labels=True)
     assert len(out["bars"]) == out["expected"]
     for i, anno in enumerate(_row_annos(out)):
@@ -1280,7 +1278,7 @@ def test_rendered_butterfly_stacked_spine_has_no_overlap(
     out = _render(
         guarded_page,
         open_app,
-        {"people": ["kris-venn", "pat-rowan"], "bars": "stacked"},
+        {"people": ["kris-venn", "pat-rowan"], "by": "conference"},
         "butterflyModel",
         _DESKTOP,
         long_labels=True,
@@ -1389,7 +1387,10 @@ def test_rendered_butterfly_headers_hug_the_spine(
     out = _render(
         guarded_page,
         open_app,
-        {**partial, **({"bars": "stacked"} if stacked else {})},
+        {
+            **partial,
+            **({"by": "conference" if "people" in partial else "network"} if stacked else {}),
+        },
         "butterflyModel",
         env,
         side_name="N" * 40 if long_name else "",
@@ -1411,8 +1412,8 @@ def test_rendered_butterfly_headers_hug_the_spine(
 # D-23: family bars with channel shades under announcer segments (Plan 10)
 # --------------------------------------------------------------------------
 
-_FAM_BARS = {"school": ["northfield"], "bars": "stacked"}
-_FAM_FLY = {"school": ["northfield", "lakeview"], "bars": "stacked"}
+_FAM_BARS = {"school": ["northfield"], "by": "network"}
+_FAM_FLY = {"school": ["northfield", "lakeview"], "by": "network"}
 _TRANSPARENT = "rgba(0,0,0,0)"
 
 
@@ -1479,7 +1480,7 @@ def test_family_butterfly_figure_shape(
 
 
 def test_conference_stack_still_uses_stack_traces(guarded_page: Page, site_url: str) -> None:
-    out = _figure(guarded_page, site_url, {"people": ["kris-venn"], "bars": "stacked"})
+    out = _figure(guarded_page, site_url, {"people": ["kris-venn"], "by": "conference"})
     assert "xaxis3" not in out["figure"]["layout"]
     assert all(t["hoverinfo"] == "none" for t in out["figure"]["traces"])
 
@@ -1704,8 +1705,8 @@ _PAGE_BG = {"light": (255, 255, 255), "dark": (20, 22, 26)}
 _STACK_CASES = [
     (_FAM_BARS, "barsModel", True),
     (_FAM_FLY, "butterflyModel", True),
-    ({"people": ["kris-venn"], "bars": "stacked"}, "barsModel", False),
-    ({"people": ["kris-venn", "pat-rowan"], "bars": "stacked"}, "butterflyModel", False),
+    ({"people": ["kris-venn"], "by": "conference"}, "barsModel", False),
+    ({"people": ["kris-venn", "pat-rowan"], "by": "conference"}, "butterflyModel", False),
 ]
 
 

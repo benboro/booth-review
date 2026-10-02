@@ -93,10 +93,10 @@ def test_title_names_school_and_drilled_announcer(guarded_page: Page, open_app: 
     aria = page.locator("#bars-chart").get_attribute("aria-label")
     assert aria is not None
     assert aria.startswith(f"Bar chart: announcers by rated telecasts {both}")
-    page.locator('#group-by-toggle button[data-group="teams"]').click()
+    page.locator('#group-by-toggle button[data-by="team"]').click()
     page.wait_for_function("document.getElementById('bars-title').textContent.startsWith('Teams')")
     assert title.inner_text() == f"Teams by rated telecasts {both}"
-    page.locator('#group-by-toggle button[data-group="announcers"]').click()
+    page.locator('#group-by-toggle button[data-by="announcer"]').click()
     page.wait_for_function(
         "document.getElementById('bars-title').textContent.startsWith('Announcers')"
     )
@@ -153,7 +153,7 @@ def test_simple_bars_render_title_aria_and_counts(guarded_page: Page, open_app: 
 def test_stacked_bars_family_row_has_pill_and_segments(
     guarded_page: Page, open_app: OpenApp
 ) -> None:
-    open_app(guarded_page, NORTHFIELD + "&bars=stacked")
+    open_app(guarded_page, NORTHFIELD + "&by=network")
     page = guarded_page
     row = page.locator("#bars-counts > li > button").first
     assert row.get_attribute("aria-label") == "Show only ABC/ESPN, 7 rated telecasts"
@@ -250,8 +250,8 @@ def test_show_all_expands_and_resets(
     assert page.locator("#bars-rowcount").inner_text() == f"Showing all {rows} teams"
     _wait_points(page, rows)
     assert page.url == before
-    page.locator('#bar-controls button[data-bars="stacked"]').click()
-    page.locator('#bar-controls button[data-bars="simple"]').click()
+    page.locator('#bar-controls button[data-by="conference"]').click()
+    page.locator('#bar-controls button[data-by="team"]').click()
     assert page.locator("#bars-show-all").inner_text() == f"Show all {rows}"
     assert len(_bar_boxes(page)) == 15
 
@@ -325,11 +325,11 @@ def test_hover_tooltip_and_click_drill(guarded_page: Page, open_app: OpenApp) ->
 
 
 def test_stacked_segment_and_network_label_drill(guarded_page: Page, open_app: OpenApp) -> None:
-    open_app(guarded_page, NORTHFIELD + "&bars=stacked")
+    open_app(guarded_page, NORTHFIELD + "&by=network")
     page = guarded_page
     _click_bar(page, 0)
     page.wait_for_function("window.__testHooks.getState().people.length === 1")
-    open_app(page, NORTHFIELD + "&bars=stacked")
+    open_app(page, NORTHFIELD + "&by=network")
     _label(page, "ABC/ESPN").click()
     page.wait_for_function("window.__testHooks.getState().networks !== null")
     assert "networks=net-a" in page.url
@@ -343,13 +343,13 @@ def test_team_bar_click_adds_school_and_keeps_teams(guarded_page: Page, open_app
     _click_bar(page, idx)
     page.wait_for_function("window.__testHooks.getState().school.length === 1")
     assert "school=foxhollow" in page.url
-    assert "group=teams" in page.url
+    assert "by=team" in page.url
 
 
 def test_conference_label_drills_and_non_fbs_does_not(
     guarded_page: Page, open_app: OpenApp
 ) -> None:
-    open_app(guarded_page, "?people=kris-venn&view=bars&bars=stacked")
+    open_app(guarded_page, "?people=kris-venn&view=bars&by=conference")
     page = guarded_page
     _label(page, "SEC").click()
     page.wait_for_function("window.__testHooks.getState().conferences.length === 1")
@@ -357,7 +357,7 @@ def test_conference_label_drills_and_non_fbs_does_not(
 
     open_app(
         page,
-        "?school=maplecrest&networks=net-d&group=teams&view=bars&bars=stacked",
+        "?school=maplecrest&networks=net-d&by=conference&view=bars",
     )
     before = page.url
     _label(page, "Missouri Valley").click(force=True)
@@ -383,7 +383,7 @@ def test_compare_cap_blocks_drill(guarded_page: Page, open_app: OpenApp) -> None
     open_app(
         guarded_page,
         "?people=dale-harlow,kris-venn,pat-rowan,casey-lund&mode=compare"
-        "&school=northfield&view=bars&group=announcers",
+        "&school=northfield&view=bars",
     )
     page = guarded_page
     before = _state(page)["people"]
@@ -456,9 +456,9 @@ def test_touch_label_tap_drills_immediately(mobile_page: Page, open_app: OpenApp
 
 PHONE_URLS = [
     NORTHFIELD,
-    NORTHFIELD + "&bars=stacked",
+    NORTHFIELD + "&by=network",
     FLY,
-    FLY + "&bars=stacked",
+    FLY + "&by=network",
 ]
 
 
@@ -513,7 +513,7 @@ def test_phone_touch_targets_are_44px(
             assert box["height"] >= 43.5, (sel, i, box)
     # D-30: with announcer rows the role and style controls are visible too.
     open_app(page, "?school=northfield&view=bars")
-    for sel in ("#bar-role-toggle button", "#bar-style-toggle button"):
+    for sel in ("#bar-role-toggle button", "#group-by-toggle button:not([hidden])"):
         loc = page.locator(sel)
         assert loc.count() > 0, sel
         for i in range(loc.count()):
@@ -558,11 +558,11 @@ def test_desktop_resize_rerenders_butterfly(guarded_page: Page, open_app: OpenAp
 
 SCENARIOS = [
     NORTHFIELD,
-    NORTHFIELD + "&bars=stacked",
+    NORTHFIELD + "&by=network",
     "?people=kris-venn&view=bars",
-    "?people=kris-venn&view=bars&bars=stacked",
+    "?people=kris-venn&view=bars&by=conference",
     FLY,
-    FLY + "&bars=stacked",
+    FLY + "&by=network",
     "?people=kris-venn,pat-rowan&mode=together&view=bars",
     "?view=bars",
 ]
@@ -590,8 +590,8 @@ def test_no_viewer_text_and_no_page_errors(guarded_page: Page, open_app: OpenApp
 
 # ---------------------------------------------------------------- D-23 family bars
 
-FAMILY = NORTHFIELD + "&bars=stacked"
-FAMILY_FLY = "?school=northfield,lakeview&view=butterfly&bars=stacked"
+FAMILY = NORTHFIELD + "&by=network"
+FAMILY_FLY = "?school=northfield,lakeview&view=butterfly&by=network"
 FAMILY_URLS = [FAMILY, FAMILY_FLY]
 # On the two-channel fixture the first 7 drawn points are channel pieces; the
 # overlay announcer segments follow (hover and click resolve on these).

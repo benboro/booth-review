@@ -172,14 +172,14 @@ def test_bar_controls_replace_the_axis_toggle_without_shifting_layout(
     assert not _is_concealed(guarded_page, "#bar-controls")
     assert _is_concealed(guarded_page, "#axis-toggle")
     assert _box(guarded_page, "#axis-toggle")["height"] == axis_before["height"]
-    assert _is_concealed(guarded_page, "#group-by")
+    assert not _is_concealed(guarded_page, "#group-by-toggle")
 
-    guarded_page.locator('#bar-style-toggle button[data-bars="stacked"]').click()
-    assert "bars=stacked" in guarded_page.evaluate("() => location.search")
-    assert _attr(guarded_page, '#bar-style-toggle button[data-bars="stacked"]', "aria-pressed") == (
+    guarded_page.locator('#group-by-toggle button[data-by="network"]').click()
+    assert "by=network" in guarded_page.evaluate("() => location.search")
+    assert _attr(guarded_page, '#group-by-toggle button[data-by="network"]', "aria-pressed") == (
         "true"
     )
-    assert _attr(guarded_page, '#bar-style-toggle button[data-bars="simple"]', "aria-pressed") == (
+    assert _attr(guarded_page, '#group-by-toggle button[data-by="announcer"]', "aria-pressed") == (
         "false"
     )
 
@@ -188,13 +188,13 @@ def test_group_by_shows_with_two_subjects_and_drives_the_url(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(guarded_page, TWO_SUBJECTS + "&view=bars")
-    assert not _is_concealed(guarded_page, "#group-by")
-    announcers = '#group-by-toggle button[data-group="announcers"]'
+    assert not _is_concealed(guarded_page, "#group-by-toggle")
+    announcers = '#group-by-toggle button[data-by="announcer"]'
     assert _attr(guarded_page, announcers, "aria-pressed") == "true"
-    guarded_page.locator('#group-by-toggle button[data-group="teams"]').click()
-    assert "group=teams" in guarded_page.evaluate("() => location.search")
+    guarded_page.locator('#group-by-toggle button[data-by="team"]').click()
+    assert "by=team" in guarded_page.evaluate("() => location.search")
     guarded_page.locator(announcers).click()
-    assert "group=" not in guarded_page.evaluate("() => location.search")
+    assert "by=" not in guarded_page.evaluate("() => location.search")
 
 
 def test_scatter_tab_shows_axis_toggle_and_conceals_bar_controls(
@@ -363,7 +363,6 @@ _ROW_METRICS_JS = """() => {
         texts: Array.from(s.querySelectorAll('button')).map(textBottom),
       };
     }),
-    label: textBottom(document.getElementById('group-by-label')),
   };
 }"""
 
@@ -389,7 +388,7 @@ def test_bar_controls_share_one_baseline_and_height(
 ) -> None:
     page = _viewport_page(request, fixture, width)
     open_app(page, query)
-    assert not _is_concealed(page, "#group-by")
+    assert not _is_concealed(page, "#group-by-toggle")
     m = page.evaluate(_ROW_METRICS_JS)
     segs = m["segs"]
     assert segs
@@ -405,8 +404,6 @@ def test_bar_controls_share_one_baseline_and_height(
     for line in lines:
         assert max(s["top"] for s in line) - min(s["top"] for s in line) <= 0.5
         bottoms = [b for s in line for b in s["texts"]]
-        if line[-1] is segs[-1] or line is lines[-1]:
-            bottoms.append(m["label"])
         assert max(bottoms) - min(bottoms) <= 1, bottoms
 
 
@@ -429,7 +426,7 @@ def test_controls_footprint_is_fixed(
         ("bars-group", BAR_VIEW),
         ("butterfly", FLY_VIEW),
         ("bars-team-rows", "?people=kris-venn&view=bars"),
-        ("bars-group-teams", BAR_VIEW + "&group=teams"),
+        ("bars-group-teams", BAR_VIEW + "&by=team"),
         ("fly-announcers", "?people=kris-venn,pat-rowan&view=butterfly"),
     ):
         open_app(page, query)
@@ -519,75 +516,81 @@ def test_role_limits_selected_announcer_games(
 
 # --- D-31: contextual bar-style labels ---------------------------------------
 
-ANNOUNCER_LABELS = ("by Announcer", "by Network")
-TEAM_LABELS = ("by Team", "by Conference")
+BY_LABELS = {
+    "announcer": "by Announcer",
+    "network": "by Network",
+    "team": "by Team",
+    "conference": "by Conference",
+}
+ANNOUNCER_OPTIONS = ["announcer", "network"]
+TEAM_OPTIONS = ["team", "conference"]
 
 
-def test_bar_style_label_constants(
-    guarded_page: Page, open_app: Callable[[Page, str], None]
-) -> None:
+def test_by_label_constants(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
     open_app(guarded_page, ONE_SCHOOL + "&view=bars")
     got = guarded_page.evaluate(
         """async () => {
           const m = await import('./modules/bar-copy.js');
-          return [m.BAR_STYLE_LABELS, m.barStyleLabels('announcers'),
-                  m.barStyleLabels('teams'), m.barStyleLabels(null)];
+          return m.BY_LABELS;
         }"""
     )
-    announcers = {"simple": "by Announcer", "stacked": "by Network"}
-    teams = {"simple": "by Team", "stacked": "by Conference"}
-    assert got[0] == {"announcers": announcers, "teams": teams}
-    assert got[1:] == [announcers, teams, teams]
-    spans = guarded_page.evaluate(
-        "() => Array.from(document.querySelectorAll('#bar-style-toggle span[data-rows]'))"
+    assert got == {
+        "announcer": "by Announcer",
+        "network": "by Network",
+        "team": "by Team",
+        "conference": "by Conference",
+    }
+    sizer = guarded_page.evaluate(
+        "() => Array.from(document.querySelectorAll('#group-by-toggle .by-sizer > span'))"
         ".map((s) => s.textContent)"
     )
-    assert sorted(spans) == sorted([*ANNOUNCER_LABELS, *TEAM_LABELS])
+    assert sorted(sizer) == sorted(got.values())
 
 
 @pytest.mark.parametrize(
-    ("query", "labels"),
+    ("query", "options"),
     [
-        ("?school=northfield&view=bars", ANNOUNCER_LABELS),
-        ("?school=northfield&view=bars&bars=stacked", ANNOUNCER_LABELS),
-        ("?people=kris-venn&view=bars", TEAM_LABELS),
-        ("?networks=net-a&view=bars", TEAM_LABELS),
-        (TWO_SUBJECTS + "&view=bars", ANNOUNCER_LABELS),
-        (TWO_SUBJECTS + "&view=bars&group=teams", TEAM_LABELS),
-        ("?school=northfield,lakeview&view=butterfly", ANNOUNCER_LABELS),
-        ("?people=kris-venn,pat-rowan&view=butterfly", TEAM_LABELS),
+        ("?school=northfield&view=bars", ANNOUNCER_OPTIONS),
+        ("?school=northfield&view=bars&by=network", ANNOUNCER_OPTIONS),
+        ("?people=kris-venn&view=bars", TEAM_OPTIONS),
+        ("?networks=net-a&view=bars", TEAM_OPTIONS),
+        (TWO_SUBJECTS + "&view=bars", [*ANNOUNCER_OPTIONS, *TEAM_OPTIONS]),
+        (TWO_SUBJECTS + "&view=bars&by=team", [*ANNOUNCER_OPTIONS, *TEAM_OPTIONS]),
+        ("?school=northfield,lakeview&view=butterfly", ANNOUNCER_OPTIONS),
+        ("?people=kris-venn,pat-rowan&view=butterfly", TEAM_OPTIONS),
     ],
 )
-def test_bar_style_labels_follow_the_rows(
+def test_by_options_follow_the_rows(
     guarded_page: Page,
     open_app: Callable[[Page, str], None],
     query: str,
-    labels: tuple[str, str],
+    options: list[str],
 ) -> None:
     open_app(guarded_page, query)
-    for bars, label in zip(("simple", "stacked"), labels, strict=True):
-        button = guarded_page.locator(f'#bar-style-toggle button[data-bars="{bars}"]')
-        assert button.inner_text() == label
-        named = guarded_page.get_by_role("button", name=label, exact=True)
+    shown = guarded_page.evaluate(
+        "() => Array.from(document.querySelectorAll('#group-by-toggle button:not([hidden])'))"
+        ".map((b) => b.dataset.by)"
+    )
+    assert shown == options
+    for by in options:
+        named = guarded_page.get_by_role("button", name=BY_LABELS[by], exact=True)
         assert named.count() == 1
-        assert named.get_attribute("data-bars") == bars
+        assert named.get_attribute("data-by") == by
 
 
-def test_bar_style_url_values_unchanged(
-    guarded_page: Page, open_app: Callable[[Page, str], None]
-) -> None:
+def test_by_url_values(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
     page = guarded_page
     open_app(page, "?people=kris-venn&view=bars")
     page.get_by_role("button", name="by Conference", exact=True).click()
-    assert _state(page)["bars"] == "stacked"
-    assert "bars=stacked" in page.evaluate("() => location.search")
+    assert _state(page)["by"] == "conference"
+    assert "by=conference" in page.evaluate("() => location.search")
     assert page.evaluate("() => window.__testHooks.getBarsModel().rowKind") == "conference"
     page.get_by_role("button", name="by Team", exact=True).click()
-    assert "bars=" not in page.evaluate("() => location.search")
+    assert "by=" not in page.evaluate("() => location.search")
 
 
 @pytest.mark.parametrize(("fixture", "width"), VIEWPORTS[:2])
-def test_bar_style_labels_do_not_shift_the_row(
+def test_by_labels_do_not_shift_the_row(
     request: pytest.FixtureRequest,
     open_app: Callable[[Page, str], None],
     fixture: str,
@@ -595,12 +598,7 @@ def test_bar_style_labels_do_not_shift_the_row(
 ) -> None:
     page = _viewport_page(request, fixture, width)
     open_app(page, BAR_VIEW)
-    selectors = (
-        '#bar-style-toggle button[data-bars="simple"]',
-        '#bar-style-toggle button[data-bars="stacked"]',
-        "#bar-role-toggle",
-        "#group-by",
-    )
+    selectors = ("#group-by-toggle", "#bar-role-toggle")
 
     def record() -> list[float]:
         out: list[float] = []
@@ -610,8 +608,7 @@ def test_bar_style_labels_do_not_shift_the_row(
         return out
 
     before = record()
-    page.locator('#group-by-toggle button[data-group="teams"]').click()
-    assert page.locator('#bar-style-toggle button[data-bars="simple"]').inner_text() == "by Team"
+    page.locator('#group-by-toggle button[data-by="team"]').click()
     after = record()
     assert all(abs(a - b) <= 0.5 for a, b in zip(before, after, strict=True)), (before, after)
 
@@ -620,19 +617,19 @@ def test_bar_style_labels_do_not_shift_the_row(
 
 _ROLE_VISIBLE = [
     "?school=northfield&view=bars",
-    "?school=northfield&view=bars&bars=stacked",
+    "?school=northfield&view=bars&by=network",
     TWO_SUBJECTS + "&view=bars",
     "?school=northfield,lakeview&view=butterfly",
-    "?school=northfield,lakeview&view=butterfly&bars=stacked",
+    "?school=northfield,lakeview&view=butterfly&by=network",
     FLY_VIEW,
 ]
 _ROLE_CONCEALED = [
     "?people=kris-venn&view=bars",
-    "?people=kris-venn&view=bars&bars=stacked",
+    "?people=kris-venn&view=bars&by=conference",
     "?networks=net-a&view=bars",
-    TWO_SUBJECTS + "&view=bars&group=teams",
+    TWO_SUBJECTS + "&view=bars&by=team",
     "?people=kris-venn,pat-rowan&view=butterfly",
-    FLY_VIEW + "&group=teams",
+    FLY_VIEW + "&by=team",
 ]
 
 
@@ -656,10 +653,10 @@ def test_role_control_follows_group_by(
     page = guarded_page
     open_app(page, TWO_SUBJECTS + "&view=bars")
     height = _box(page, "#bar-controls")["height"]
-    page.locator('#group-by-toggle button[data-group="teams"]').click()
+    page.locator('#group-by-toggle button[data-by="team"]').click()
     assert _is_concealed(page, "#bar-role-toggle")
     assert _box(page, "#bar-controls")["height"] == height
-    page.locator('#group-by-toggle button[data-group="announcers"]').click()
+    page.locator('#group-by-toggle button[data-by="announcer"]').click()
     assert not _is_concealed(page, "#bar-role-toggle")
     assert _box(page, "#bar-controls")["height"] == height
 
@@ -668,8 +665,8 @@ def test_concealed_role_control_is_out_of_tab_order(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     page = guarded_page
-    open_app(page, TWO_SUBJECTS + "&view=bars&group=teams")
-    page.locator('#bar-style-toggle button[data-bars="stacked"]').focus()
+    open_app(page, TWO_SUBJECTS + "&view=bars&by=team")
+    page.locator('#group-by-toggle button[data-by="network"]').focus()
     page.keyboard.press("Tab")
     assert page.evaluate("() => !!document.activeElement.closest('#bar-role-toggle')") is False
     assert page.evaluate("() => !!document.activeElement.closest('#group-by-toggle')") is True

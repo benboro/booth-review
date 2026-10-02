@@ -510,7 +510,7 @@ async () => {
       if (row.total !== view.facets.people[idx]) announcerMismatch += 1;
     }
     if (JSON.stringify(model).includes('viewers')) viewersHits += 1;
-    const stackedState = { ...state, bars: 'stacked' };
+    const stackedState = { ...state, by: 'network' };
     const stacked = bars.barsModel(data, view, stackedState);
     for (const row of stacked.rows) {
       const sum = row.segments.reduce((acc, s) => acc + s.count, 0);
@@ -567,7 +567,7 @@ async () => {
     const schoolName = data.lookups.teams[data.teamIndexBySlug.get(slug)].name;
     const state = { ...base, school: [slug] };
     const view = sel.computeView(data, state);
-    const stacked = bars.barsModel(data, view, { ...state, bars: 'stacked' });
+    const stacked = bars.barsModel(data, view, { ...state, by: 'network' });
     if (stacked) {
       for (const row of stacked.rows) {
         if (!row.key.startsWith('f:')) nonFamilyRows += 1;
@@ -666,7 +666,7 @@ async () => {
       }
       if (JSON.stringify(simple).includes('viewers')) viewersHits += 1;
     }
-    const stacked = bars.barsModel(data, view, { ...state, bars: 'stacked' });
+    const stacked = bars.barsModel(data, view, { ...state, by: 'network' });
     if (stacked) {
       for (const row of stacked.rows) {
         if (row.total !== segSum(row.segments)) stackedTotalDiffers += 1;
@@ -676,7 +676,7 @@ async () => {
     if (k < 9 && k + 1 < data.teamSlugs.length) {
       const pair = {
         ...base,
-        bars: 'stacked',
+        by: 'network',
         school: [data.teamSlugs[k], data.teamSlugs[k + 1]],
       };
       const pv = sel.computeView(data, pair);
