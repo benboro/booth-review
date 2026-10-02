@@ -30,7 +30,7 @@ import {
   stripNetworkNote,
 } from './format.js';
 import { makeGameTypeIcon } from './icons.js';
-import { makePill, makeRolePill, nameWithRoles, ROLE_PILL_TEXT } from './pill.js';
+import { makePill, makeRolePill, nameWithRoles, roleKey, ROLE_PILL_TEXT } from './pill.js';
 import { FAMILY_COLORS, familyKey } from './palette.js';
 
 /** The single `#chart-tooltip` element, created lazily on first use. */
@@ -90,7 +90,7 @@ export function tooltipModel(data, i, { axis, selected = new Set() }) {
   }));
 
   const crew = crewEntries(data, i, { mainOnly: true, selected });
-  const crewLines = crew.map((entry) => `${entry.name} (${ROLE_PILL_TEXT[entry.role] ?? ROLE_PILL_TEXT.unknown})`);
+  const crewLines = crew.map((entry) => `${entry.name} (${ROLE_PILL_TEXT[roleKey(entry.role)]})`);
   if (crewLines.length === 0) crewLines.push('Crew not recorded');
 
   const viewersLine = `Viewers: ${formatViewers(t.viewers[i])}`;

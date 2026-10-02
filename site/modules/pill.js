@@ -28,12 +28,22 @@ export const ROLE_PILL_NAMES = Object.freeze({
 });
 
 /**
+ * Folds any value to a known role key by allowlist (never an object-property
+ * lookup on raw input, so "constructor" or "__proto__" cannot resolve).
+ * @param {unknown} role
+ * @returns {"pbp"|"analyst"|"unknown"}
+ */
+export function roleKey(role) {
+  return role === 'pbp' || role === 'analyst' ? role : 'unknown';
+}
+
+/**
  * Builds a role pill (`span.role-pill`).
  * @param {string} role - "pbp", "analyst", or anything else (folded to "unknown").
  * @returns {HTMLSpanElement}
  */
 export function makeRolePill(role) {
-  const key = role === 'pbp' || role === 'analyst' ? role : 'unknown';
+  const key = roleKey(role);
   const span = document.createElement('span');
   span.className = 'role-pill';
   span.dataset.role = key;

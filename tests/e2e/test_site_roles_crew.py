@@ -84,6 +84,20 @@ def _composite(top: list[int], under: tuple[float, float, float]) -> tuple[float
     return tuple(top[i] * a + under[i] * (1 - a) for i in range(3))  # type: ignore[return-value]
 
 
+def test_role_key_allowlists_prototype_names(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    keys = guarded_page.evaluate(
+        """async () => {
+          const { roleKey } = await import(new URL('./modules/pill.js', location.href).href);
+          return ['pbp', 'analyst', 'constructor', '__proto__', 'toString', '', null, undefined, 7]
+            .map((r) => roleKey(r));
+        }"""
+    )
+    assert keys == ["pbp", "analyst"] + ["unknown"] * 7
+
+
 def test_make_role_pill_text_name_and_safety(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
@@ -91,7 +105,8 @@ def test_make_role_pill_text_name_and_safety(
     rows = guarded_page.evaluate(
         """async () => {
           const { makeRolePill } = await import(new URL('./modules/pill.js', location.href).href);
-          return ['pbp', 'analyst', 'unknown', '<img src=x onerror=alert(1)>'].map((r) => {
+          const roles = ['pbp', 'analyst', 'unknown', '<img src=x onerror=alert(1)>', 'constructor'];
+          return roles.map((r) => {
             const s = makeRolePill(r);
             return { cls: s.className, role: s.dataset.role, roleAttr: s.getAttribute('role'),
                      label: s.getAttribute('aria-label'), text: s.textContent,
@@ -102,6 +117,7 @@ def test_make_role_pill_text_name_and_safety(
     expected = [
         ("pbp", "PBP", "PBP, play-by-play"),
         ("analyst", "Analyst", "Analyst"),
+        ("unknown", "Sideline", "Sideline"),
         ("unknown", "Sideline", "Sideline"),
         ("unknown", "Sideline", "Sideline"),
     ]
@@ -164,7 +180,10 @@ def test_role_control_pills(guarded_page: Page, open_app: Callable[[Page, str], 
     both = toggle.locator('button[data-role=""]')
     assert both.locator(".role-pill").count() == 0
     assert (both.text_content() or "").strip() == "Both"
-    for role, label, text in (("pbp", "PBP, play-by-play", "PBP"), ("analyst", "Analyst", "Analyst")):
+    for role, label, text in (
+        ("pbp", "PBP, play-by-play", "PBP"),
+        ("analyst", "Analyst", "Analyst"),
+    ):
         btn = toggle.locator(f'button[data-role="{role}"]')
         pills = btn.locator(".role-pill")
         assert pills.count() == 1
