@@ -44,6 +44,20 @@ export function makeRolePill(role) {
 }
 
 /**
+ * Wraps a name node and its role pills in one `span.name-with-roles` that
+ * cannot break inside (SITE-38): a pill never wraps onto a line without its
+ * announcer. The unit itself still wraps whole between people.
+ * @param {Node[]} nodes - the name node(s) followed by the pill(s).
+ * @returns {HTMLSpanElement}
+ */
+export function nameWithRoles(...nodes) {
+  const span = document.createElement('span');
+  span.className = 'name-with-roles';
+  span.append(...nodes);
+  return span;
+}
+
+/**
  * The current color-scheme theme, read live from the browser (not cached),
  * matching `app.js`'s own `darkMedia` check.
  * @returns {"light"|"dark"}

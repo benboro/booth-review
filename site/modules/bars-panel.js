@@ -29,7 +29,7 @@ import {
 } from './bar-copy.js';
 import { barTones, buildBarFigure, buildButterflyFigure, renderBars, bindBarEvents } from './bar-chart.js';
 import { channelShades } from './palette.js';
-import { makePill, makeRolePill, currentTheme } from './pill.js';
+import { makePill, makeRolePill, nameWithRoles, currentTheme } from './pill.js';
 import { showTextTooltip, hideTooltip } from './tooltip.js';
 
 let expanded = false;
@@ -179,7 +179,7 @@ function labelNode(row, theme) {
   if (row.family != null) return makePill(row.label, row.family, theme);
   const span = document.createElement('span');
   span.className = 'counts-label';
-  span.append(nameNode(row.label), ...(row.roles ?? []).map(makeRolePill));
+  span.append(nameOrUnit(row.label, row.roles));
   return span;
 }
 
@@ -188,6 +188,13 @@ function nameNode(text) {
   const name = document.createElement('span');
   name.textContent = text;
   return name;
+}
+
+/** Name plus its role pills in one unbreakable unit (SITE-38). */
+function nameOrUnit(text, roles) {
+  const name = nameNode(text);
+  if (!roles || roles.length === 0) return name;
+  return nameWithRoles(name, ...roles.map(makeRolePill));
 }
 
 function makeButton(ref, key, aria) {
@@ -213,7 +220,7 @@ function segmentList(segments, r, side, rowKey, prefix, shades = null) {
   }
   segments.forEach((seg, s) => {
     const li = document.createElement('li');
-    const nodes = [nameNode(seg.label), ...(seg.roles ?? []).map(makeRolePill), document.createTextNode(` ${seg.count}`)];
+    const nodes = [nameOrUnit(seg.label, seg.roles), document.createTextNode(` ${seg.count}`)];
     if (seg.target != null) {
       const b = makeButton({ r, s, side }, `${rowKey}/${seg.key}/${side ?? ''}`, countsListName(seg.target, seg.name, seg.count));
       b.replaceChildren(...nodes);
@@ -248,7 +255,7 @@ function buildCountsList(model, rows, theme) {
     if (fly) {
       const text = document.createElement('span');
       text.className = 'counts-label';
-      text.append(nameNode(row.label), ...(row.roles ?? []).map(makeRolePill), document.createTextNode(butterflySideText(row, model)));
+      text.append(nameOrUnit(row.label, row.roles), document.createTextNode(butterflySideText(row, model)));
       content.push(text);
     } else {
       content.push(labelNode(row, theme), countSpan(row.total));

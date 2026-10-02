@@ -31,7 +31,7 @@ import {
   showsTimeSlot,
 } from './format.js';
 import { makeGameTypeIcon } from './icons.js';
-import { currentTheme, makePill, makeRolePill } from './pill.js';
+import { currentTheme, makePill, makeRolePill, nameWithRoles } from './pill.js';
 
 /** The element focus returns to when the dialog closes, or null. */
 let opener = null;
@@ -122,7 +122,7 @@ function buildCrewList(data, i, selected) {
     const name = document.createElement('span');
     name.className = entry.selected ? 'crew-name is-selected' : 'crew-name';
     name.textContent = entry.name;
-    li.append(name, makeRolePill(entry.role));
+    li.append(nameWithRoles(name, makeRolePill(entry.role)));
     if (entry.feed !== 'main') {
       const feed = document.createElement('span');
       feed.className = 'crew-feed';

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import copy
 import re
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 from playwright.sync_api import Page
@@ -288,7 +290,10 @@ def test_modal_crew_box_wraps_all_feeds(
     alt = items.nth(2)
     assert (alt.text_content() or "").endswith("Analyst (alt-cast)")
     kids = alt.evaluate("(el) => [...el.children].map(c => c.className)")
-    assert kids == ["crew-name", "role-pill", "crew-feed"]
+    assert kids == ["name-with-roles", "crew-feed"]
+    assert alt.locator(".name-with-roles").evaluate(
+        "(el) => [...el.children].map(c => c.className)"
+    ) == ["crew-name", "role-pill"]
     border = boxes.evaluate("(el) => getComputedStyle(el).borderTopColor")
     assert border == _token(guarded_page, "--special")
     guarded_page.evaluate("window.__testHooks.openPanel(8)")
@@ -315,3 +320,46 @@ def test_crew_name_markup_is_text(
         }"""
     )
     assert result == {"bold": 0, "text": "<b>x</b>"}
+
+
+@pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
+@pytest.mark.parametrize("width", [1280, 360])
+def test_table_crew_pills_stay_on_their_names_line(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+    width: int,
+) -> None:
+    """SITE-38: a role pill never wraps onto a line without its announcer.
+
+    Long names force the crew cell to wrap; each pill's top must equal the
+    top of its name's last line box, and the cell must not overflow
+    horizontally (decision: `.name-with-roles { white-space: nowrap }`).
+    """
+    raw = copy.deepcopy(fixture_raw)
+    for person in raw["lookups"]["people"]:
+        person["name"] = f"{person['name']} Featherstone-Wellington"
+    guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+    guarded_page.set_viewport_size({"width": width, "height": 800})
+    open_app(guarded_page, "?people=dale-harlow")
+    cells = guarded_page.locator("#games-table tbody tr td:has(.name-with-roles)")
+    assert cells.count() > 0
+    result = cells.first.evaluate(
+        """(td) => {
+          const units = [...td.querySelectorAll('.name-with-roles')];
+          return {
+            overflow: td.scrollWidth > td.clientWidth + 1,
+            pages: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+            units: units.map((u) => {
+              const name = u.querySelector('.crew-name').getClientRects();
+              const lastLineTop = name[name.length - 1].top;
+              return [...u.querySelectorAll('.role-pill')].map(
+                (p) => Math.abs(p.getBoundingClientRect().top - lastLineTop) < 8,
+              );
+            }),
+          };
+        }"""
+    )
+    assert result["units"], "expected crew units"
+    assert all(all(u) for u in result["units"])
+    assert not result["overflow"]

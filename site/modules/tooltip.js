@@ -30,7 +30,7 @@ import {
   stripNetworkNote,
 } from './format.js';
 import { makeGameTypeIcon } from './icons.js';
-import { makePill, makeRolePill, ROLE_PILL_TEXT } from './pill.js';
+import { makePill, makeRolePill, nameWithRoles, ROLE_PILL_TEXT } from './pill.js';
 import { FAMILY_COLORS, familyKey } from './palette.js';
 
 /** The single `#chart-tooltip` element, created lazily on first use. */
@@ -171,7 +171,7 @@ export function renderTooltipContent(el, model, theme) {
       const name = document.createElement('span');
       name.className = entry.selected ? 'crew-name is-selected' : 'crew-name';
       name.textContent = entry.name;
-      line.append(name, makeRolePill(entry.role));
+      line.append(nameWithRoles(name, makeRolePill(entry.role)));
       box.appendChild(line);
     }
     children.push(box);
@@ -252,7 +252,12 @@ export function showTextTooltip(lines, { borderColor, clientX, clientY }) {
     } else {
       node.textContent = text;
     }
-    for (const role of roles ?? []) node.appendChild(makeRolePill(role));
+    if (roles && roles.length > 0) {
+      // Keep the last text and the pills in one unbreakable unit (SITE-38).
+      const last = node.lastChild;
+      const unit = nameWithRoles(...(last ? [last] : []), ...roles.map(makeRolePill));
+      node.appendChild(unit);
+    }
     return node;
   });
   el.replaceChildren(...children);

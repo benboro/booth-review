@@ -21,7 +21,7 @@ import {
   measurementLabel,
 } from './format.js';
 import { safeHref } from './panel.js';
-import { currentTheme, makePill, makeRolePill } from './pill.js';
+import { currentTheme, makePill, makeRolePill, nameWithRoles } from './pill.js';
 import { personOnGame } from './select.js';
 
 const tableEl = document.getElementById('games-table');
@@ -53,7 +53,7 @@ function buildCrewCell(td, data, state, i) {
     const name = document.createElement('span');
     name.className = 'crew-name';
     name.textContent = entry.name;
-    nodes.push(name, makeRolePill(entry.role));
+    nodes.push(nameWithRoles(name, makeRolePill(entry.role)));
   }
   for (const personId of state.people) {
     const personIndex = data.personIndexById.get(personId);
