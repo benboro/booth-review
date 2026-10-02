@@ -7,7 +7,7 @@
  * person-matched games when someone is selected (D-02). Crew matching goes
  * only through select.js's `personOnGame`. Rows sort by count descending,
  * ties by bare name (D-03); announcer rows share one list labeled
- * `Name · PBP`/`Analyst`/`PBP/Analyst` (D-04). The butterfly (D-05..D-09)
+ * with the bare name; roles ride along as data (D-04, D-28). The butterfly (D-05..D-09)
  * mirrors the Bars rows for exactly two schools or two announcers.
  * Stacked announcer rows are one per network family (D-23, superseding D-15's
  * per-channel rows): segments are announcers, each carrying per-channel counts
@@ -28,14 +28,49 @@ export const TOP_N = 15;
 /** Row key for games whose conference is unknown (D-15). */
 export const NO_CONFERENCE_KEY = 'c:__none__';
 
-/** Role tags appended to announcer labels (D-04). */
-export const ROLE_TAGS = { pbp: 'PBP', analyst: 'Analyst', unknown: 'Other' };
+/** Announcer roles in display order (04.6 D-18). */
+export const ROLE_ORDER = ['pbp', 'analyst', 'unknown'];
 
-const ROLE_ORDER = ['pbp', 'analyst', 'unknown'];
+/** Grouping options in their fixed display order (04.6 D-21). */
+export const BY_ORDER = ['announcer', 'network', 'team', 'conference'];
 
 /**
- * Which bar tabs apply, and the Group-by choice (D-07, D-11, D-13).
- * `state.group` keeps the raw preference; the resolved value is returned.
+ * Splits a `by` value into the row group preference and bar style (04.6 D-27).
+ * @param {string|null} by - null | 'announcer' | 'network' | 'team' | 'conference'.
+ * @returns {{pref: 'announcers'|'teams', mode: 'simple'|'stacked'}}
+ */
+export function byParts(by) {
+  if (by === 'network') return { pref: 'announcers', mode: 'stacked' };
+  if (by === 'team') return { pref: 'teams', mode: 'simple' };
+  if (by === 'conference') return { pref: 'teams', mode: 'stacked' };
+  return { pref: 'announcers', mode: 'simple' };
+}
+
+/**
+ * Joins a resolved group and mode back into a `by` value (04.6 D-26).
+ * @param {'announcers'|'teams'} group
+ * @param {'simple'|'stacked'} mode
+ * @returns {'announcer'|'network'|'team'|'conference'}
+ */
+export function byFrom(group, mode) {
+  if (group === 'announcers') return mode === 'stacked' ? 'network' : 'announcer';
+  return mode === 'stacked' ? 'conference' : 'team';
+}
+
+/**
+ * The setState patch for clicking a grouping option: the first applicable
+ * option is the default and is stored as null (04.6 D-27).
+ * @param {string} clicked
+ * @param {string[]} options - applicable options in display order.
+ * @returns {{by: string|null}}
+ */
+export function byPatch(clicked, options) {
+  return { by: clicked === options[0] ? null : clicked };
+}
+
+/**
+ * Which bar tabs apply, and the grouping choice (D-07, D-11, D-13; 04.6 D-21).
+ * `state.by` keeps the raw preference; the resolved values are returned.
  * @param {object} _data - a `prepareData` result (unused).
  * @param {object} state
  * @returns {object}
@@ -43,7 +78,8 @@ const ROLE_ORDER = ['pbp', 'analyst', 'unknown'];
 export function chartContext(_data, state) {
   const announcersApply = state.school.length > 0;
   const teamsApply = state.networks !== null || state.people.length > 0;
-  const preferTeams = state.group === 'teams';
+  const { pref, mode } = byParts(state.by);
+  const preferTeams = pref === 'teams';
   const groupChoice = announcersApply && teamsApply;
   let group = 'teams';
   if (groupChoice) group = preferTeams ? 'teams' : 'announcers';
@@ -56,13 +92,23 @@ export function chartContext(_data, state) {
   if (butterflyGroupChoice) butterflyGroup = preferTeams ? 'teams' : 'announcers';
   else if (twoSchools) butterflyGroup = 'announcers';
 
+  const optionsFor = (choice, g) => {
+    if (choice) return [...BY_ORDER];
+    return g === 'announcers' ? ['announcer', 'network'] : ['team', 'conference'];
+  };
+
   return {
     barsEnabled: announcersApply || teamsApply,
     groupChoice,
     group,
+    mode,
+    byOptions: optionsFor(groupChoice, group),
+    by: byFrom(group, mode),
     butterflyEnabled: twoSchools || twoPeople,
     butterflyGroupChoice,
     butterflyGroup,
+    butterflyByOptions: optionsFor(butterflyGroupChoice, butterflyGroup),
+    butterflyBy: byFrom(butterflyGroup, mode),
   };
 }
 
@@ -90,14 +136,12 @@ export function gamesForBars(view) {
 }
 
 /**
- * Announcer row label (D-04): `Name · PBP`, `Name · PBP/Analyst`, ...
- * @param {string} name
+ * Roles in display order (D-18); unknown values are dropped.
  * @param {string[]} roles - roles present, any order.
- * @returns {string}
+ * @returns {string[]}
  */
-export function announcerLabel(name, roles) {
-  const tags = ROLE_ORDER.filter((r) => roles.includes(r)).map((r) => ROLE_TAGS[r]);
-  return tags.length > 0 ? `${name} · ${tags.join('/')}` : name;
+export function orderedRoles(roles) {
+  return ROLE_ORDER.filter((r) => roles.includes(r));
 }
 
 /** Sort comparator: count descending, ties by bare name, then key. */
@@ -208,7 +252,8 @@ function countAnnouncers(
     const seg = {
       key: `p:${id}`,
       name,
-      label: announcerLabel(name, roles),
+      label: name,
+      roles: orderedRoles(roles),
       count: rec.count,
       target: { kind: 'person', id },
     };
@@ -255,6 +300,7 @@ function announcerRows(data, games, role) {
     key: s.key,
     name: s.name,
     label: s.label,
+    roles: s.roles,
     family: null,
     mainFamily: s.mainFamily,
     total: s.count,
@@ -269,6 +315,7 @@ function teamRows(data, games) {
     key: s.key,
     name: s.name,
     label: s.label,
+    roles: [],
     family: null,
     mainFamily: null,
     total: s.count,
@@ -295,6 +342,7 @@ function familyRows(data, games, role, view) {
       key: `f:${family}`,
       name: label,
       label,
+      roles: [],
       family,
       mainFamily: null,
       total,
@@ -346,6 +394,7 @@ function conferenceRows(data, games) {
       key,
       name: label,
       label,
+      roles: [],
       family: null,
       mainFamily: null,
       total: segments.reduce((sum, s) => sum + s.count, 0),
@@ -378,11 +427,11 @@ function rowSpec(data, group, mode, role, view) {
 export function barsModel(data, view, state) {
   const ctx = chartContext(data, state);
   if (!ctx.barsEnabled) return null;
-  const spec = rowSpec(data, ctx.group, state.bars, state.role, view);
+  const spec = rowSpec(data, ctx.group, ctx.mode, state.role, view);
   return {
     kind: 'bars',
     group: ctx.group,
-    mode: state.bars,
+    mode: ctx.mode,
     rowKind: spec.rowKind,
     segmentKind: spec.segmentKind,
     rows: spec.build(gamesForBars(view)),
@@ -402,7 +451,7 @@ export function butterflyModel(data, view, state) {
   const ctx = chartContext(data, state);
   if (!ctx.butterflyEnabled) return null;
   const group = ctx.butterflyGroup;
-  const spec = rowSpec(data, group, state.bars, state.role, view);
+  const spec = rowSpec(data, group, ctx.mode, state.role, view);
   let sides;
   let sets;
   if (group === 'announcers') {
@@ -431,7 +480,7 @@ export function butterflyModel(data, view, state) {
   const inRight = new Set(sets[1]);
   const shared = sets[0].filter((i) => inRight.has(i)).length;
 
-  // D-31: a person row's main family and role-tagged label cover both sides'
+  // D-31: a person row's main family and union roles cover both sides'
   // games, each game once.
   const unionByKey = new Map();
   if (spec.rowKind === 'person') {
@@ -449,7 +498,8 @@ export function butterflyModel(data, view, state) {
         merged = {
           key: row.key,
           name: row.name,
-          label: unionByKey.get(row.key)?.label ?? row.label,
+          label: row.label,
+          roles: unionByKey.get(row.key)?.roles ?? row.roles ?? [],
           family: row.family,
           mainFamily: spec.rowKind === 'person' ? (unionByKey.get(row.key)?.mainFamily ?? null) : null,
           total: 0,
@@ -466,7 +516,7 @@ export function butterflyModel(data, view, state) {
   return {
     kind: 'butterfly',
     group,
-    mode: state.bars,
+    mode: ctx.mode,
     rowKind: spec.rowKind,
     segmentKind: spec.segmentKind,
     sides,
@@ -488,8 +538,8 @@ export function visibleRows(rows, expanded) {
 /**
  * The setState patch for clicking a row or segment (D-18), or null when the
  * click would do nothing (already applied, over the compare cap, or not a
- * filterable target). Keeps the current Group-by so a click never flips the
- * chart's grouping.
+ * filterable target). Keeps the shown grouping (`by`, 04.6 D-26) so a click
+ * never flips the chart's grouping.
  * @param {object} data - a `prepareData` result.
  * @param {object} state
  * @param {object|null} target
@@ -529,8 +579,9 @@ export function drillPatch(data, state, target) {
   const choice = butterfly ? after.butterflyGroupChoice : after.groupChoice;
   if (choice) {
     const was = butterfly ? before.butterflyGroup : before.group;
-    const keep = was === 'teams' ? 'teams' : null;
-    if (keep !== (state.group ?? null)) patch.group = keep;
+    const wasBy = byFrom(was, byParts(state.by).mode);
+    const keep = wasBy === 'announcer' ? null : wasBy;
+    if (keep !== (state.by ?? null)) patch.by = keep;
   }
   return patch;
 }

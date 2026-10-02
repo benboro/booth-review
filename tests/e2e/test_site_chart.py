@@ -623,7 +623,10 @@ def test_hover_text_stays_minimal_and_drops_methodology_notes(
     assert "Measurement" not in dot0
     assert "Source" not in dot0
     assert "Selected:" not in dot0
-    assert "(" not in dot0
+    # Only the crew lines carry a parenthetical (the role), never a methodology note.
+    assert "(" not in "".join(
+        ln for ln in dot0.split("<br>") if not ln.endswith(("(PBP)", "(Analyst)"))
+    )
 
     dot5 = _hover_text(traces, 5)
     assert "Nielsen + Adobe" not in dot5
@@ -687,18 +690,18 @@ def test_hover_text_strips_nested_network_notes(
     assert "regional insert package" not in dot0
 
 
-def test_hover_text_crew_lines_use_position_colon_name_format(
+def test_hover_text_crew_lines_use_name_then_role(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """SITE-25/CONTEXT "Claude's Discretion": one "Position: Name" line per
-    main-feed crew member, pbp before analyst before sideline/other."""
+    """Plotly-fallback hover text: one "Name (Role)" line per main-feed crew
+    member, pbp before analyst before sideline/other."""
     open_app(guarded_page, "")
     _use_plotly_tooltip(guarded_page)
     traces = _traces(guarded_page)
     lines = _hover_text(traces, 0).split("<br>")
-    assert "Play-by-play: Dale Harlow" in lines
-    assert "Analyst: Dale Harlow Jr." in lines
-    assert lines.index("Play-by-play: Dale Harlow") < lines.index("Analyst: Dale Harlow Jr.")
+    assert "Dale Harlow (PBP)" in lines
+    assert "Dale Harlow Jr. (Analyst)" in lines
+    assert lines.index("Dale Harlow (PBP)") < lines.index("Dale Harlow Jr. (Analyst)")
 
 
 def test_hover_text_shows_the_active_axis_value_and_closing_hint(
@@ -709,7 +712,7 @@ def test_hover_text_shows_the_active_axis_value_and_closing_hint(
     open_app(guarded_page, "")
     _use_plotly_tooltip(guarded_page)
     dot11 = _hover_text(_traces(guarded_page), 11)
-    assert "Spread: 1.5" in dot11
+    assert "Spread: Stonebridge \u22121.5" in dot11
     assert "Excitement:" not in dot11
     assert dot11.endswith("Click for details →")
 
@@ -1008,7 +1011,8 @@ def test_html_tooltip_content_is_minimal_with_network_pills(
 
     text = guarded_page.inner_text("#chart-tooltip")
     assert "Lakeview 20 at Northfield 27" in text
-    assert "Play-by-play: Dale Harlow" in text
+    assert "Dale Harlow" in text
+    assert "Play-by-play:" not in text
     assert "Click for details →" in text
     assert "Conference" not in text
     assert "Bowl" not in text
@@ -1165,7 +1169,7 @@ def test_html_tooltip_cfp_game_at_a_bowl_shows_both_icons(
     assert marker.get_attribute("role") == "img"
     assert marker.get_attribute("aria-label") == name
     assert "CFP" not in guarded_page.inner_text("#chart-tooltip")
-    assert guarded_page.locator("#chart-tooltip [role='img']").count() == 1
+    assert guarded_page.locator("#chart-tooltip .tooltip-game-type[role='img']").count() == 1
 
 
 def test_html_tooltip_falls_back_to_text_when_an_icon_cannot_be_built(
@@ -1182,7 +1186,7 @@ def test_html_tooltip_falls_back_to_text_when_an_icon_cannot_be_built(
           const el = document.createElement('div');
           const model = {
             title: 't', dateText: 'd', dateLine: 'd',
-            networks: [{ name: 'N', family: 'other' }], crewLines: [],
+            networks: [{ name: 'N', family: 'other' }], crew: [], crewLines: [],
             viewersLine: 'v', axisLine: 'a', hint: 'h',
             gameType: { icons: ['playoff', 'nope'], label: 'CFP semifinal', iconLabel: 'x' },
           };

@@ -32,6 +32,7 @@ import { initChartTabs, renderChartTabs, STALE_COPY } from './modules/chart-tabs
 import { chartContext } from './modules/bars.js';
 import { initBarsPanel, renderBarsPanel, lastBarsModel, resetBarsTap } from './modules/bars-panel.js';
 import { showTooltip, hideTooltip } from './modules/tooltip.js';
+import { selectedPersonIndexes } from './modules/format.js';
 import {
   showHoverRing,
   hideHoverRing,
@@ -283,7 +284,13 @@ function bindScatterEvents() {
         showHoverRing({ i, clientX, clientY, diameter: hoverRingDiameter(size, symbol) });
       }
       if (tooltipMode !== 'html') return;
-      showTooltip(data, i, { axis: state.axis, theme: currentEnv().theme, clientX, clientY });
+      showTooltip(data, i, {
+        axis: state.axis,
+        theme: currentEnv().theme,
+        clientX,
+        clientY,
+        selected: selectedPersonIndexes(data, state),
+      });
     },
     onPointUnhover() {
       clearHover();

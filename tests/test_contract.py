@@ -376,6 +376,53 @@ def test_crew_source_errors_name_column_and_index_only(mutate: Any, prefix: str)
     assert "506sports.com/" not in message.lower()
 
 
+def _spread_mismatch(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["home_spread"][4] = 9.5
+    return data
+
+
+def _spread_null_with_pregame(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["home_spread"][0] = None
+    return data
+
+
+def _spread_with_null_pregame(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["home_spread"][3] = 2.0
+    return data
+
+
+def _spread_column_short(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["home_spread"].pop()
+    return data
+
+
+@pytest.mark.parametrize(
+    ("mutate", "prefix"),
+    [
+        (_spread_mismatch, "telecasts.home_spread[4]"),
+        (_spread_null_with_pregame, "telecasts.home_spread[0]"),
+        (_spread_with_null_pregame, "telecasts.home_spread[3]"),
+        (_spread_column_short, "telecasts.home_spread: length 11 does not match"),
+    ],
+)
+def test_home_spread_errors_name_column_and_index_only(mutate: Any, prefix: str) -> None:
+    data = mutate(copy.deepcopy(_load_fixture()))
+    with pytest.raises(ValidationError) as exc:
+        validate_site_data(data)
+    message = str(exc.value)
+    assert prefix in message
+    assert "9.5" not in message
+    assert "2.0" not in message
+
+
+def test_home_spread_pickem_validates_with_either_zero_sign() -> None:
+    for pregame in (-0.0, 0.0):
+        data = copy.deepcopy(_load_fixture())
+        data["telecasts"]["home_spread"][9] = 0.0
+        data["telecasts"]["pregame"][9] = pregame
+        validate_site_data(data)
+
+
 def test_crew_source_label_rule_is_shared_with_the_loader() -> None:
     assert crew_overrides.SOURCE_NAME_MAX_LEN == CREW_SOURCE_LABEL_MAX_LEN
     assert crew_source_label_problem("Example Network PR") is None
@@ -385,7 +432,7 @@ def test_crew_source_label_rule_is_shared_with_the_loader() -> None:
 
 def test_fixture_patched_crews_are_counted_in_their_season_coverage() -> None:
     """Every fixture telecast with a crew source has a season-total coverage
-    row that counts at least one hand-confirmed crew (the v1.4.0 fixture once
+    row that counts at least one hand-confirmed crew (the v1.5.0 fixture once
     had a patched telecast in a season with no coverage row at all)."""
     data = _load_fixture()
     telecasts = data["telecasts"]

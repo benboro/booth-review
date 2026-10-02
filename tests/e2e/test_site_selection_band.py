@@ -79,20 +79,29 @@ def test_announcers_popover_is_wider_and_never_scrolls_sideways(
     assert sizes[0] <= sizes[1]
 
 
-def test_announcer_roles_have_no_dash_and_play_by_play_never_wraps(
+def test_announcer_role_pills_never_wrap(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     guarded_page.set_viewport_size({"width": 1280, "height": 800})
     open_app(guarded_page, "")
     _open_announcers(guarded_page)
-    texts: list[str] = guarded_page.eval_on_selector_all(
-        "#person-results .option-role", "els => els.map(e => e.textContent)"
-    )
-    assert texts
-    assert all(t in ("", "Play-by-play", "Analyst", "Sideline/other") for t in texts)
-    wrapped: int = guarded_page.eval_on_selector_all(
+    pills: list[list[str]] = guarded_page.eval_on_selector_all(
         "#person-results .option-role",
-        "els => els.filter(e => e.textContent === 'Play-by-play' && "
+        "els => els.map(e => Array.from(e.querySelectorAll('.role-pill')).map(p => p.textContent))",
+    )
+    assert pills
+    # Every row carries exactly one pill; an unrecognized usual_role gets the
+    # grey Sideline pill rather than a blank cell (D-16).
+    assert all(len(p) == 1 and p[0] in ("PBP", "Analyst", "Sideline") for p in pills)
+    assert {"PBP", "Analyst", "Sideline"} <= {p[0] for p in pills}
+    rights: list[int] = guarded_page.eval_on_selector_all(
+        "#person-results .option-role",
+        "els => els.map(e => Math.round(e.getBoundingClientRect().right))",
+    )
+    assert len(set(rights)) == 1  # role cells stay right-aligned with the count column
+    wrapped: int = guarded_page.eval_on_selector_all(
+        "#person-results .option-role .role-pill",
+        "els => els.filter(e => "
         "e.getBoundingClientRect().height > 1.5 * parseFloat(getComputedStyle(e).lineHeight))"
         ".length",
     )

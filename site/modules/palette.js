@@ -101,6 +101,9 @@ export const FAMILY_COLORS = {
 /** UI chrome accent token per theme (search focus ring, active states, highlight outline). */
 export const ACCENT = { light: '#111827', dark: '#E5E7EB' };
 
+/** Result-vs-spread zero line: a step darker than DIVIDER gridlines, lighter than MUTED text (D-02). */
+export const ZERO_LINE = { light: '#9CA3AF', dark: '#6B7280' };
+
 /** UI chrome divider/border token per theme. */
 export const DIVIDER = { light: '#E2E4E9', dark: '#2A2E35' };
 

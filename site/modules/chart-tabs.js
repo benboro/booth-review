@@ -1,11 +1,12 @@
 /**
  * Chart tabs: the Scatter | Bars | Butterfly tablist, its hint row, and the
- * Bar style / Both-PBP-Analyst / Group-by controls (SITE-33, D-10, D-12, D-13,
- * D-14, D-17, D-25, D-30, D-31). The bar-style labels name what the bars split
- * into for the current rows (D-31; URL values stay simple/stacked), and the role
- * control is concealed unless announcers are the rows or segments (D-30 refines
- * D-25; a concealed role still applies and stays editable in the toolbar). The role control reads and writes the one `state.role` the
- * Role filter popover uses, so the two always agree.
+ * grouping / Both-PBP-Analyst controls (SITE-33, D-10, D-12, D-13, D-14,
+ * D-17, D-25, D-30; 04.6 D-21). One grouping control (`state.by`) shows only
+ * the options that apply to the current subjects, and the role control is
+ * concealed unless announcers are the rows or segments (D-30 refines D-25; a
+ * concealed role still applies and stays editable in the toolbar). The role
+ * control reads and writes the one `state.role` the Role filter popover uses,
+ * so the two always agree.
  *
  * Init once (`initChartTabs`: delegated listeners), render every cycle
  * (`renderChartTabs`: syncs attributes to state). Every change goes through
@@ -16,8 +17,7 @@
  * allowlisted again by setState -> decodeState (T-04.4-10).
  */
 
-import { chartContext } from './bars.js';
-import { BAR_STYLE_LABELS } from './bar-copy.js';
+import { byPatch, chartContext } from './bars.js';
 
 export const TAB_HINTS = {
   bars: 'Pick a school, network, or announcer',
@@ -60,7 +60,7 @@ function showHintFor(tab) {
  * Wires the delegated listeners once.
  * @param {{data: object, getState: () => object, setState: (patch: object) => void}} deps
  */
-export function initChartTabs({ setState }) {
+export function initChartTabs({ data, getState, setState }) {
   const tabs = tabsEl();
   if (!tabs) return;
 
@@ -120,13 +120,6 @@ export function initChartTabs({ setState }) {
     if (!ev.target.closest('#chart-tabs')) setHint('');
   });
 
-  const styleToggle = document.getElementById('bar-style-toggle');
-  if (styleToggle) {
-    styleToggle.addEventListener('click', (ev) => {
-      const button = ev.target.closest('button[data-bars]');
-      if (button) setState({ bars: button.dataset.bars });
-    });
-  }
   const roleToggle = document.getElementById('bar-role-toggle');
   if (roleToggle) {
     roleToggle.addEventListener('click', (ev) => {
@@ -137,8 +130,12 @@ export function initChartTabs({ setState }) {
   const groupToggle = document.getElementById('group-by-toggle');
   if (groupToggle) {
     groupToggle.addEventListener('click', (ev) => {
-      const button = ev.target.closest('button[data-group]');
-      if (button) setState({ group: button.dataset.group === 'teams' ? 'teams' : null });
+      const button = ev.target.closest('button[data-by]');
+      if (!button) return;
+      const state = getState();
+      const ctx = chartContext(data, state);
+      const options = state.view === 'butterfly' ? ctx.butterflyByOptions : ctx.byOptions;
+      setState(byPatch(button.dataset.by, options));
     });
   }
 }
@@ -186,27 +183,18 @@ export function renderChartTabs({ data, state }) {
   if (axisToggle) axisToggle.classList.toggle('is-concealed', !scatter);
   if (barControls) barControls.classList.toggle('is-concealed', scatter);
 
-  for (const button of document.querySelectorAll('#bar-style-toggle button[data-bars]')) {
-    button.setAttribute('aria-pressed', String(button.dataset.bars === state.bars));
-  }
-
   for (const button of document.querySelectorAll('#bar-role-toggle button[data-role]')) {
     button.setAttribute('aria-pressed', String((button.dataset.role || null) === state.role));
   }
 
   const butterfly = state.view === 'butterfly';
-  const choice = butterfly ? ctx.butterflyGroupChoice : ctx.groupChoice;
+  const options = butterfly ? ctx.butterflyByOptions : ctx.byOptions;
+  const selected = butterfly ? ctx.butterflyBy : ctx.by;
   const group = butterfly ? ctx.butterflyGroup : ctx.group;
-  for (const span of document.querySelectorAll('#bar-style-toggle button[data-bars] span[data-rows]')) {
-    const button = span.closest('button');
-    span.textContent = BAR_STYLE_LABELS[span.dataset.rows][button.dataset.bars];
-    span.classList.toggle('is-concealed', span.dataset.rows !== group);
+  for (const button of document.querySelectorAll('#group-by-toggle button[data-by]')) {
+    button.hidden = !options.includes(button.dataset.by);
+    button.setAttribute('aria-pressed', String(button.dataset.by === selected));
   }
   const roleToggle = document.getElementById('bar-role-toggle');
   if (roleToggle) roleToggle.classList.toggle('is-concealed', group !== 'announcers');
-  const groupBy = document.getElementById('group-by');
-  if (groupBy) groupBy.classList.toggle('is-concealed', !choice);
-  for (const button of document.querySelectorAll('#group-by-toggle button[data-group]')) {
-    button.setAttribute('aria-pressed', String(button.dataset.group === group));
-  }
 }

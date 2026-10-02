@@ -591,6 +591,20 @@
           "title": "Home Rank",
           "type": "array"
         },
+        "home_spread": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Home Spread",
+          "type": "array"
+        },
         "home_team": {
           "items": {
             "type": "integer"
@@ -793,6 +807,7 @@
         "crew_source_label",
         "excitement",
         "pregame",
+        "home_spread",
         "flags",
         "combined_feeds",
         "crew",
@@ -806,7 +821,7 @@
       "type": "object"
     }
   },
-  "$id": "booth-review/site-data/1.4.0",
+  "$id": "booth-review/site-data/1.5.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -828,7 +843,7 @@
       "$ref": "#/$defs/Lookups"
     },
     "schema_version": {
-      "const": "1.4.0",
+      "const": "1.5.0",
       "title": "Schema Version",
       "type": "string"
     },

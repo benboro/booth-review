@@ -132,9 +132,9 @@ to excitement mode, a caption appears under the x-axis noting the break.
 Affected dots look identical to any other dot — the flag is informational
 only and never changes a dot's size, color, or shape.
 
-## The x-axis: pre-game spread and excitement
+## The x-axis: pre-game spread, result vs spread, and excitement
 
-The chart's x-axis can show one of two different measures of "how close this
+The chart's x-axis can show one of three different measures of "how close this
 game was expected to be," and the choice between them matters for what a dot
 placement can and cannot explain.
 
@@ -153,8 +153,11 @@ explain the initial decision to watch, since it is not available until the
 outcome is already known. This is why pre-game spread, not excitement, is
 the chart's default measure.
 
-A telecast missing either value — its closing spread was not recorded, or
-CFBD did not compute an excitement value for it — is shown in a narrow "N/A"
+**Result vs spread (a toggle):** Result vs spread plots the winner's closing spread: negative when the favorite won, positive for an upset. Like excitement it uses the outcome, so it cannot explain the decision to tune in; Pre-game stays the default for that reason. Games with no closing line or no final score sit in the N/A strip.
+
+A telecast missing either value — its closing spread was not recorded, CFBD
+did not compute an excitement value for it, or it has no final score yet
+(Result vs spread) — is shown in a narrow "N/A"
 strip at the left edge of the chart, still plotted at its real viewers value.
 An N/A-strip dot is never plotted at zero and never dropped from the chart;
 it behaves identically to any other dot under every filter, highlight, and

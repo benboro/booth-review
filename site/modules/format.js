@@ -68,6 +68,7 @@ export const FEED_LABELS = {
 /** X-axis toggle labels (D-12). */
 export const AXIS_LABELS = {
   pregame: 'Pre-game (spread)',
+  result: 'Result vs spread',
   excitement: 'Excitement (CFBD)',
 };
 
@@ -257,27 +258,92 @@ export function formatMatchup(data, i, options = {}) {
   return `${awayPrefix}${awayTeam}${awayScore} ${separator} ${homePrefix}${homeTeam}${homeScore}`;
 }
 
+const CREW_ROLE_ORDER = { pbp: 0, analyst: 1 };
+
 /**
- * Groups a telecast's main-feed crew by role. Alt/spanish entries are
- * listed separately by the panel, not here.
+ * Structured crew lines for telecast `i`. With `mainOnly`, keeps only
+ * main-feed entries ordered pbp, analyst, then the rest (stable); otherwise
+ * every entry in data order.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
- * @returns {{pbp: string[], analyst: string[], other: string[]}}
+ * @param {{mainOnly?: boolean, selected?: Set<number>}} [opts]
+ * @returns {{person: number, name: string, role: string, feed: string, selected: boolean}[]}
  */
-export function crewByRole(data, i) {
-  const result = { pbp: [], analyst: [], other: [] };
-  for (const entry of data.t.crew[i]) {
-    if (entry.feed !== 'main') continue;
-    const name = data.lookups.people[entry.person].name;
-    if (entry.role === 'pbp') result.pbp.push(name);
-    else if (entry.role === 'analyst') result.analyst.push(name);
-    else result.other.push(name);
+export function crewEntries(data, i, { mainOnly = false, selected = new Set() } = {}) {
+  let entries = data.t.crew[i].map((entry) => ({
+    person: entry.person,
+    name: data.lookups.people[entry.person].name,
+    role: entry.role,
+    feed: entry.feed,
+    selected: selected.has(entry.person),
+  }));
+  if (mainOnly) {
+    entries = entries.filter((entry) => entry.feed === 'main');
+    const rank = (entry) => CREW_ROLE_ORDER[entry.role] ?? 2;
+    entries = entries
+      .map((entry, idx) => ({ entry, idx }))
+      .sort((a, b) => rank(a.entry) - rank(b.entry) || a.idx - b.idx)
+      .map(({ entry }) => entry);
+  }
+  return entries;
+}
+
+/**
+ * Data indexes of the people in `state.people` (ids not in the data skipped).
+ * @param {object} data - a `prepareData` result.
+ * @param {{people: string[]}} state
+ * @returns {Set<number>}
+ */
+export function selectedPersonIndexes(data, state) {
+  const result = new Set();
+  for (const id of state.people ?? []) {
+    const idx = data.personIndexById.get(id);
+    if (idx !== undefined) result.add(idx);
   }
   return result;
 }
 
+/** Typographic minus used in all spread copy. */
+export const MINUS = '\u2212';
+
+/**
+ * Spread line copy naming the favorite (pregame) or the winner (result).
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @param {"pregame"|"result"} mode
+ * @returns {string} e.g. "Spread: Northfield \u22123.5", "Spread: Pick'em".
+ */
+export function spreadLabel(data, i, mode) {
+  const t = data.t;
+  const s = t.home_spread?.[i] ?? null;
+  if (s == null) return 'Spread: not available';
+  const home = data.lookups.teams[t.home_team[i]].name;
+  const away = data.lookups.teams[t.away_team[i]].name;
+  if (mode === 'pregame') {
+    if (s === 0) return "Spread: Pick'em";
+    return `Spread: ${s < 0 ? home : away} ${MINUS}${Math.abs(s).toFixed(1)}`;
+  }
+  const x = t.result[i];
+  if (x == null) return 'Spread: final score not recorded';
+  if (s === 0) return "Spread: Pick'em";
+  const winner = t.home_points[i] > t.away_points[i] ? home : away;
+  return `Spread: ${winner} ${x < 0 ? MINUS : '+'}${Math.abs(x).toFixed(1)}`;
+}
+
+/**
+ * Axis line text for the tooltip and modal.
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @param {"pregame"|"result"|"excitement"} axis
+ * @returns {string}
+ */
+export function axisValueText(data, i, axis) {
+  if (axis === 'excitement') return formatAxisValue('excitement', data.t.excitement[i]);
+  return spreadLabel(data, i, axis);
+}
+
 /** Short axis value labels, distinct from the longer AXIS_LABELS toggle copy. */
-const AXIS_VALUE_LABELS = { pregame: 'Spread', excitement: 'Excitement' };
+const AXIS_VALUE_LABELS = { pregame: 'Spread', result: 'Spread', excitement: 'Excitement' };
 
 /**
  * Formats a single axis value for hover/panel display. Pre-game values are

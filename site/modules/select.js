@@ -23,9 +23,8 @@ export const MAX_COMPARE = 4;
  * D-11); `postseason` of `'all'` means "unfiltered" (D-18). There is no
  * `team` field -- School (`state.school`) replaces the old team highlight
  * as a fade filter (D-11). `view` is the chart tab (`'scatter'`/`'bars'`/
- * `'butterfly'`), `bars` the bar style (`'simple'`/`'stacked'`), and `group`
- * the Group-by preference (`'teams'`, or null for the default Announcers)
- * (D-13).
+ * `'butterfly'`) and `by` the bar grouping (null = by Announcer, else
+ * `'network'` | `'team'` | `'conference'`; 04.6 D-27).
  * @param {object} _data - a `prepareData` result (unused, kept for a
  *   uniform call signature with functions that do need it).
  * @returns {object}
@@ -44,8 +43,7 @@ export function defaultState(_data) {
     postseason: 'all',
     axis: 'pregame',
     view: 'scatter',
-    bars: 'simple',
-    group: null,
+    by: null,
   };
 }
 

@@ -202,7 +202,7 @@ def test_open_panel_hook_shows_flag_label(
     assert "CFBD win-probability model break (2025+)" in guarded_page.inner_text("#panel-body")
 
 
-def test_panel_crew_list_is_position_first(
+def test_panel_crew_list_is_name_first_with_pills(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """Product notes 2026-09-27: crew entries read "[Position]: [Name]"
@@ -210,9 +210,13 @@ def test_panel_crew_list_is_position_first(
     (name first)."""
     open_app(guarded_page, "")
     guarded_page.evaluate("window.__testHooks.openPanel(0)")
-    items = guarded_page.locator("#panel-body .panel-crew li").all_inner_texts()
-    assert "Play-by-play: Dale Harlow" in items
-    assert "Analyst: Dale Harlow Jr." in items
+    items = guarded_page.locator("#panel-body .crew-box li").all_inner_texts()
+    assert "Dale HarlowPBP" in items
+    assert "Dale Harlow Jr.Analyst" in items
+    for text, role in (("Dale HarlowPBP", "pbp"), ("Dale Harlow Jr.Analyst", "analyst")):
+        li = guarded_page.locator("#panel-body .crew-box li", has_text=text)
+        assert li.locator(".role-pill").count() == 1
+        assert li.locator(".role-pill").get_attribute("data-role") == role
 
 
 def test_panel_shows_conferences_game_type_and_gated_slot_label(
@@ -621,8 +625,15 @@ def test_sideline_role_crew_shows_in_table_and_hover(
     rows = _row_texts(guarded_page)
     assert len(rows) == 3
     for row in rows:
-        assert "Sideline/other: Robin Teague" in row
+        assert "Sideline/other:" not in row
         assert "Crew not recorded" not in row
+    for i in range(3):
+        cell = guarded_page.locator("#games-table tbody tr").nth(i).locator("td").nth(3)
+        pill = cell.locator(".crew-name", has_text="Robin Teague").locator(
+            "xpath=following-sibling::*[1]"
+        )
+        assert pill.get_attribute("data-role") == "unknown"
+        assert (pill.text_content() or "") == "Sideline"
 
     # D-22: the default TOOLTIP_MODE ('html') carries no `text` array on any
     # trace -- the custom tooltip renders straight from `tooltipModel`
@@ -638,7 +649,7 @@ def test_sideline_role_crew_shows_in_table_and_hover(
     )
     assert len(hover_texts) == 3
     for text in hover_texts:
-        assert "Sideline/other: Robin Teague" in text
+        assert "Robin Teague (Sideline)" in text
         assert "Crew not recorded" not in text
 
 
@@ -988,3 +999,18 @@ def test_injection_resistant_team_name_conference_name_and_javascript_url(
     )
     assert len(hrefs) > 0
     assert all(not (href or "").startswith("javascript:") for href in hrefs)
+
+
+def test_table_crew_cell_pills_follow_pbp_then_analyst(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?people=dale-harlow")
+    expect(guarded_page.locator("#games-table")).to_be_visible()
+    cell = guarded_page.locator("#games-table tbody tr").first.locator("td").nth(3)
+    roles = cell.locator(".role-pill").evaluate_all("els => els.map(e => e.dataset.role)")
+    assert roles[0] == "pbp"
+    assert "analyst" in roles
+    assert roles.index("pbp") < roles.index("analyst")
+    text = cell.inner_text()
+    assert "PBP:" not in text
+    assert "Analyst:" not in text

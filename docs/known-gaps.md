@@ -179,3 +179,11 @@ in force at kickoff). Looking ahead, Nielsen's planned Aug 31, 2026
 enhanced co-viewing addition is tracked as a dated era boundary the moment
 it takes effect, by air date, the same way every other measurement break in
 this project is handled.
+
+## Conference networks show very few dots
+
+Conference networks such as the Pac-12 Network are rarely Nielsen-rated, and
+when they are, the figure is rarely reported publicly. They therefore appear
+on the chart with very few dots even though many games aired there. For the
+Pac-12 Network, 506 Sports lists 318 telecasts across 2014–2026, but only 1 has
+a published Ratings Reference viewer figure, so the chart shows 1 dot.

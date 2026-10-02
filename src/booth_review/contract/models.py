@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = "1.4.0"
+SCHEMA_VERSION = "1.5.0"
 
 _S506_HOST = "506sports.com"
 
@@ -179,6 +179,9 @@ class TelecastColumns(BaseModel):
     crew_source_label: list[str | None]
     excitement: list[float | None]
     pregame: list[float | None]
+    # 04.6 D-08: closing spread from the HOME team's side (CFBD sign: negative = home favored);
+    # null iff pregame is null; pregame == -abs(home_spread)
+    home_spread: list[float | None]
     flags: list[list[int]]
     combined_feeds: list[int | None]
     crew: list[list[CrewEntry]]
@@ -213,7 +216,7 @@ class CoverageRow(BaseModel):
 class SiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["1.4.0"]
+    schema_version: Literal["1.5.0"]
     generated_at: str
     freshness: Freshness
     lookups: Lookups
@@ -300,6 +303,13 @@ class SiteData(BaseModel):
                         f"telecasts.crew[{i}]: must list a main-feed crew when "
                         "crew_source_url is set"
                     )
+            spread = tc.home_spread[i]
+            if (spread is None) != (tc.pregame[i] is None):
+                raise ValueError(f"telecasts.home_spread[{i}]: must be set together with pregame")
+            if spread is not None and tc.pregame[i] != -abs(spread):
+                raise ValueError(
+                    f"telecasts.home_spread[{i}]: pregame must equal -abs(home_spread)"
+                )
             bowl = tc.bowl[i]
             if bowl is not None:
                 if not 0 <= bowl < num_bowls:

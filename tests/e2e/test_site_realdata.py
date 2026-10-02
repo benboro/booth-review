@@ -421,9 +421,8 @@ def test_real_facet_pass_is_fast(
 _ANNOUNCER_FIT_JS = """
 () => {
   const results = document.getElementById('person-results');
-  const wrapped = Array.from(results.querySelectorAll('.option-role')).filter(
-    (e) => e.textContent === 'Play-by-play'
-      && e.getBoundingClientRect().height > 1.5 * parseFloat(getComputedStyle(e).lineHeight)
+  const wrapped = Array.from(results.querySelectorAll('.option-role .role-pill')).filter(
+    (e) => e.getBoundingClientRect().height > 1.5 * parseFloat(getComputedStyle(e).lineHeight)
   ).length;
   return [results.scrollWidth, results.clientWidth, wrapped];
 }
@@ -434,7 +433,7 @@ def test_real_announcers_list_fits(
     real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
 ) -> None:
     """D-32: on the real build the Announcers list never scrolls sideways and
-    no Play-by-play label wraps -- numbers only."""
+    no role pill wraps -- numbers only."""
     real_guarded_page.set_viewport_size({"width": 1280, "height": 800})
     real_open_app(real_guarded_page, "")
     real_guarded_page.click("#trigger-announcers")
@@ -444,7 +443,7 @@ def test_real_announcers_list_fits(
     result: list[float] = real_guarded_page.evaluate(_ANNOUNCER_FIT_JS)
     scroll_width, client_width, wrapped = result
     assert scroll_width <= client_width, "the announcer list scrolls sideways"
-    assert wrapped == 0, "a Play-by-play label wrapped"
+    assert wrapped == 0, "a role pill wrapped"
 
 
 _SCROLLERS_JS = """
@@ -511,7 +510,7 @@ async () => {
       if (row.total !== view.facets.people[idx]) announcerMismatch += 1;
     }
     if (JSON.stringify(model).includes('viewers')) viewersHits += 1;
-    const stackedState = { ...state, bars: 'stacked' };
+    const stackedState = { ...state, by: 'network' };
     const stacked = bars.barsModel(data, view, stackedState);
     for (const row of stacked.rows) {
       const sum = row.segments.reduce((acc, s) => acc + s.count, 0);
@@ -568,7 +567,7 @@ async () => {
     const schoolName = data.lookups.teams[data.teamIndexBySlug.get(slug)].name;
     const state = { ...base, school: [slug] };
     const view = sel.computeView(data, state);
-    const stacked = bars.barsModel(data, view, { ...state, bars: 'stacked' });
+    const stacked = bars.barsModel(data, view, { ...state, by: 'network' });
     if (stacked) {
       for (const row of stacked.rows) {
         if (!row.key.startsWith('f:')) nonFamilyRows += 1;
@@ -587,7 +586,7 @@ async () => {
     const simple = bars.barsModel(data, pbpView, pbpState);
     if (!simple || simple.rows.length === 0) continue;
     for (const row of simple.rows) {
-      if (!row.label.includes('PBP')) untaggedPbp += 1;
+      if (!(row.roles || []).includes('pbp') || row.label.includes('PBP')) untaggedPbp += 1;
     }
     if (JSON.stringify(simple).includes('viewers')) viewersHits += 1;
     const id = simple.rows[0].target.id;
@@ -667,7 +666,7 @@ async () => {
       }
       if (JSON.stringify(simple).includes('viewers')) viewersHits += 1;
     }
-    const stacked = bars.barsModel(data, view, { ...state, bars: 'stacked' });
+    const stacked = bars.barsModel(data, view, { ...state, by: 'network' });
     if (stacked) {
       for (const row of stacked.rows) {
         if (row.total !== segSum(row.segments)) stackedTotalDiffers += 1;
@@ -677,7 +676,7 @@ async () => {
     if (k < 9 && k + 1 < data.teamSlugs.length) {
       const pair = {
         ...base,
-        bars: 'stacked',
+        by: 'network',
         school: [data.teamSlugs[k], data.teamSlugs[k + 1]],
       };
       const pv = sel.computeView(data, pair);
@@ -710,3 +709,51 @@ def test_real_main_family_and_stacked_totals(
     assert stacked_total_differs == 0, "a stacked row total differed from its segment sum"
     assert side_total_differs == 0, "a butterfly side total differed from its segment sum"
     assert viewers_hits == 0, "a bar model carried a viewer figure"
+
+
+_RESULT_REAL_JS = """
+() => {
+  const t = window.__testHooks.data.t;
+  const n = t.season.length;
+  let spreadVsPregame = 0;
+  let pregameNotMirrored = 0;
+  let resultWithoutInputs = 0;
+  let resultMissing = 0;
+  let wrongMagnitude = 0;
+  let negativeZero = 0;
+  for (let i = 0; i < n; i += 1) {
+    const hs = t.home_spread[i];
+    const pg = t.pregame[i];
+    const hp = t.home_points[i];
+    const ap = t.away_points[i];
+    const r = t.result[i];
+    const decided = hp != null && ap != null && hp !== ap;
+    if ((hs == null) !== (pg == null)) spreadVsPregame += 1;
+    if (hs != null && pg != null && pg !== -Math.abs(hs)) pregameNotMirrored += 1;
+    if (r != null && (hs == null || !decided)) resultWithoutInputs += 1;
+    if (hs != null && decided && r == null) resultMissing += 1;
+    if (r != null && hs != null && Math.abs(r) !== Math.abs(hs)) wrongMagnitude += 1;
+    if (Object.is(r, -0)) negativeZero += 1;
+  }
+  return [spreadVsPregame, pregameNotMirrored, resultWithoutInputs, resultMissing,
+          wrongMagnitude, negativeZero];
+}
+"""
+
+
+def test_real_home_spread_and_result_counts(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """D-02, D-06, D-08: on the real build home_spread and pregame agree, and the
+    derived result axis is set exactly when a line, a score, and a winner exist,
+    with the line's magnitude -- integers only."""
+    real_open_app(real_guarded_page, "")
+    counts: list[int] = real_guarded_page.evaluate(_RESULT_REAL_JS)
+    spread_vs_pregame, pregame_not_mirrored, result_without_inputs = counts[:3]
+    result_missing, wrong_magnitude, negative_zero = counts[3:]
+    assert spread_vs_pregame == 0, "home_spread and pregame disagreed on null-ness"
+    assert pregame_not_mirrored == 0, "pregame was not the favorite-signed home_spread"
+    assert result_without_inputs == 0, "a result was set without a line, score, or winner"
+    assert result_missing == 0, "a decided game with a line had no result"
+    assert wrong_magnitude == 0, "a result's magnitude differed from its line"
+    assert negative_zero == 0, "a result was negative zero"

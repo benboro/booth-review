@@ -37,7 +37,8 @@
 
 import { searchPeople } from './data.js';
 import { MAX_COMPARE } from './select.js';
-import { summaryCopy, ROLE_LABELS } from './format.js';
+import { summaryCopy } from './format.js';
+import { makeRolePill } from './pill.js';
 import { COMPARE_GLYPHS, SHARED_GLYPH } from './palette.js';
 
 const BASE_COMPARE_HELP = 'Compare up to 4 people — each gets its own shape.';
@@ -103,10 +104,9 @@ function buildOptionRows(data) {
     variantSpan.className = 'option-variant';
     li.appendChild(variantSpan);
 
-    const roleLabel = ROLE_LABELS[p.usual_role] ?? '';
     const roleSpan = document.createElement('span');
     roleSpan.className = 'option-role';
-    roleSpan.textContent = roleLabel;
+    roleSpan.appendChild(makeRolePill(p.usual_role));
     li.appendChild(roleSpan);
 
     const countSpan = document.createElement('span');

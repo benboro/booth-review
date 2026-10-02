@@ -267,6 +267,7 @@ def small_tables() -> BuildTables:
             away_rank=None,
             excitement=None,
             pregame_x=None,
+            closing_spread=None,
         ),
         _game_row(
             game_id=3,
@@ -283,6 +284,7 @@ def small_tables() -> BuildTables:
             away_rank=None,
             excitement=9.9,
             pregame_x=-1.0,
+            closing_spread=-1.0,
             game_type="bowl",
         ),
     ]
@@ -1258,3 +1260,35 @@ def test_crew_source_fields_emit_at_their_index_and_null_otherwise(build_referen
     all_row = next(r for r in payload["coverage"] if r["network"] is None)
     assert all_row["matched_crew"] == 2
     assert all_row["matched_crew_patched"] == 1
+
+
+def test_home_spread_emits_closing_spread_and_pregame_is_its_negative_magnitude(
+    build_reference: Path,
+) -> None:
+    games = [
+        _game_row(game_id=1, closing_spread=-6.5, pregame_x=-6.5),
+        _game_row(game_id=2, week=3, date_et=date(2024, 9, 21), closing_spread=3.0, pregame_x=-3.0),
+        _game_row(
+            game_id=3,
+            week=4,
+            date_et=date(2024, 9, 28),
+            closing_spread=None,
+            pregame_x=None,
+            spread_provider=None,
+        ),
+    ]
+    telecasts = [
+        _telecast_row(telecast_id="1-net-a", game_id=1),
+        _telecast_row(telecast_id="2-net-a", game_id=2, date_et=date(2024, 9, 21)),
+        _telecast_row(telecast_id="3-net-a", game_id=3, date_et=date(2024, 9, 28)),
+    ]
+    tables = _build_tables(
+        games_rows=games,
+        telecast_rows=telecasts,
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+    columns = _site(tables, build_reference)["telecasts"]
+    assert columns["home_spread"] == [-6.5, 3.0, None]
+    assert columns["pregame"] == [-6.5, -3.0, None]

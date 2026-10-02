@@ -111,8 +111,8 @@
       <h3>Role</h3>
       <button type="button" class="group-reset" data-reset="role" aria-label="Reset Role" aria-disabled="true">Reset</button>
     </div>
-    <label><input type="checkbox" name="role" value="pbp"> <span class="option-name">Play-by-play</span><span class="option-count" aria-hidden="true"></span><span class="visually-hidden option-count-sr"></span></label>
-    <label><input type="checkbox" name="role" value="analyst"> <span class="option-name">Analyst</span><span class="option-count" aria-hidden="true"></span><span class="visually-hidden option-count-sr"></span></label>
+    <label><input type="checkbox" name="role" value="pbp"> <span class="option-name"><span class="role-pill" data-role="pbp" role="img" aria-label="PBP, play-by-play">PBP</span></span><span class="option-count" aria-hidden="true"></span><span class="visually-hidden option-count-sr"></span></label>
+    <label><input type="checkbox" name="role" value="analyst"> <span class="option-name"><span class="role-pill" data-role="analyst" role="img" aria-label="Analyst">Analyst</span></span><span class="option-count" aria-hidden="true"></span><span class="visually-hidden option-count-sr"></span></label>
   </section>
 </div>
 
@@ -183,26 +183,25 @@
   <ul id="legend-chips" class="legend-chips" aria-label="Network families: select to show or fade"></ul>
 
   <div id="chart-controls" class="chart-controls">
-    <div id="axis-toggle" class="segmented" role="group" aria-label="X-axis">
-      <button type="button" data-axis="pregame" aria-pressed="true">Pre-game (spread)</button>
-      <button type="button" data-axis="excitement" aria-pressed="false">Excitement (CFBD)</button>
+    <div id="axis-toggle" class="segmented" role="group" aria-label="X-axis measure">
+      <button type="button" data-axis="pregame" aria-pressed="true" aria-label="Pre-game (spread)"><span class="axis-long">Pre-game (spread)</span><span class="axis-short">Pre-game</span></button>
+      <button type="button" data-axis="result" aria-pressed="false" aria-label="Result vs spread"><span class="axis-long">Result vs spread</span><span class="axis-short">Result</span></button>
+      <button type="button" data-axis="excitement" aria-pressed="false" aria-label="Excitement (CFBD)"><span class="axis-long">Excitement (CFBD)</span><span class="axis-short">Excitement</span></button>
     </div>
     <div id="bar-controls" class="bar-controls is-concealed">
-      <div id="bar-style-toggle" class="segmented" role="group" aria-label="Bar style">
-        <button type="button" data-bars="simple" aria-pressed="true"><span class="bar-style-labels"><span data-rows="announcers">by Announcer</span><span data-rows="teams" class="is-concealed">by Team</span></span></button>
-        <button type="button" data-bars="stacked" aria-pressed="false"><span class="bar-style-labels"><span data-rows="announcers">by Network</span><span data-rows="teams" class="is-concealed">by Conference</span></span></button>
+      <div id="group-by-toggle" class="segmented by-toggle" role="group" aria-label="Group bars">
+        <span class="by-sizer" aria-hidden="true"><span>by Announcer</span><span>by Network</span><span>by Team</span><span>by Conference</span></span>
+        <span class="by-buttons">
+          <button type="button" data-by="announcer" aria-pressed="true"><span class="by-prefix">by </span>Announcer</button>
+          <button type="button" data-by="network" aria-pressed="false"><span class="by-prefix">by </span>Network</button>
+          <button type="button" data-by="team" aria-pressed="false"><span class="by-prefix">by </span>Team</button>
+          <button type="button" data-by="conference" aria-pressed="false" aria-label="by Conference"><span class="by-prefix">by </span><span class="by-long">Conference</span><span class="by-short">Conf.</span></button>
+        </span>
       </div>
       <div id="bar-role-toggle" class="segmented" role="group" aria-label="Announcer role">
         <button type="button" data-role="" aria-pressed="true">Both</button>
-        <button type="button" data-role="pbp" aria-pressed="false">PBP</button>
-        <button type="button" data-role="analyst" aria-pressed="false">Analyst</button>
-      </div>
-      <div id="group-by" class="group-by">
-        <span id="group-by-label" class="group-by-label">Group by:</span>
-        <div id="group-by-toggle" class="segmented" role="group" aria-label="Group bars by">
-          <button type="button" data-group="announcers" aria-pressed="true">Announcers</button>
-          <button type="button" data-group="teams" aria-pressed="false">Teams</button>
-        </div>
+        <button type="button" data-role="pbp" aria-pressed="false" aria-label="PBP, play-by-play"><span class="role-pill" data-role="pbp" aria-hidden="true">PBP</span></button>
+        <button type="button" data-role="analyst" aria-pressed="false" aria-label="Analyst"><span class="role-pill" data-role="analyst" aria-hidden="true">Analyst</span></button>
       </div>
     </div>
   </div>

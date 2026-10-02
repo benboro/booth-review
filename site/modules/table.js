@@ -14,15 +14,14 @@
  */
 
 import {
-  ROLE_LABELS,
-  crewByRole,
+  crewEntries,
   formatDate,
   formatMatchup,
   formatViewers,
   measurementLabel,
 } from './format.js';
 import { safeHref } from './panel.js';
-import { currentTheme, makePill } from './pill.js';
+import { currentTheme, makePill, makeRolePill, nameWithRoles } from './pill.js';
 import { personOnGame } from './select.js';
 
 const tableEl = document.getElementById('games-table');
@@ -45,20 +44,26 @@ function bindHeaderListeners() {
   viewersSortButton.addEventListener('click', () => currentOnSort?.('viewers'));
 }
 
-/** Main-feed "PBP: ... · Analyst: ... · Sideline/other: ..." text, plus any selected alt-cast person appended (D-08, CR-04). */
-function crewCellText(data, state, i) {
-  const crew = crewByRole(data, i);
-  const parts = [];
-  if (crew.pbp.length > 0) parts.push(`PBP: ${crew.pbp.join(', ')}`);
-  if (crew.analyst.length > 0) parts.push(`Analyst: ${crew.analyst.join(', ')}`);
-  if (crew.other.length > 0) parts.push(`${ROLE_LABELS.unknown}: ${crew.other.join(', ')}`);
+/** Fills the crew cell: main-feed "Name [pill]" entries joined by " · " (pbp, analyst, other), plus any selected alt-cast person appended as text (D-08, D-17, CR-04). */
+function buildCrewCell(td, data, state, i) {
+  const nodes = [];
+  const sep = () => document.createTextNode(' · ');
+  for (const entry of crewEntries(data, i, { mainOnly: true })) {
+    if (nodes.length > 0) nodes.push(sep());
+    const name = document.createElement('span');
+    name.className = 'crew-name';
+    name.textContent = entry.name;
+    nodes.push(nameWithRoles(name, makeRolePill(entry.role)));
+  }
   for (const personId of state.people) {
     const personIndex = data.personIndexById.get(personId);
     if (personOnGame(data, i, personIndex, state.role) === 'alt') {
-      parts.push(`${data.lookups.people[personIndex].name} (alt-cast)`);
+      if (nodes.length > 0) nodes.push(sep());
+      nodes.push(document.createTextNode(`${data.lookups.people[personIndex].name} (alt-cast)`));
     }
   }
-  return parts.length > 0 ? parts.join(' · ') : 'Crew not recorded';
+  if (nodes.length === 0) td.textContent = 'Crew not recorded';
+  else td.replaceChildren(...nodes);
 }
 
 /** Source cell: the publisher link (or "Original source not recorded"), then Ratings Reference link(s). */
@@ -146,7 +151,7 @@ function buildRow(data, state, onDetails, i) {
   tr.appendChild(networkTd);
 
   const crewTd = document.createElement('td');
-  crewTd.textContent = crewCellText(data, state, i);
+  buildCrewCell(crewTd, data, state, i);
   tr.appendChild(crewTd);
 
   const viewersTd = document.createElement('td');

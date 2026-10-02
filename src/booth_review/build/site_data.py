@@ -173,6 +173,7 @@ def build_site_data(
         "away_rank",
         "excitement",
         "pregame_x",
+        "closing_spread",
         "game_type",
         "playoff_round",
         "home_conference",
@@ -382,6 +383,7 @@ def build_site_data(
         "crew_source_label": [],
         "excitement": [],
         "pregame": [],
+        "home_spread": [],
         "flags": [],
         "combined_feeds": [],
         "crew": [],
@@ -422,6 +424,7 @@ def build_site_data(
         columns["crew_source_label"].append(row["crew_source_label"])
         columns["excitement"].append(row["excitement"])
         columns["pregame"].append(row["pregame_x"])
+        columns["home_spread"].append(row["closing_spread"])
         columns["flags"].append([flag_index[f] for f in flags_by_telecast.get(telecast_id, [])])
         columns["combined_feeds"].append(row["combined_feeds"])
         columns["crew"].append(
