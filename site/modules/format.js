@@ -68,6 +68,7 @@ export const FEED_LABELS = {
 /** X-axis toggle labels (D-12). */
 export const AXIS_LABELS = {
   pregame: 'Pre-game (spread)',
+  result: 'Result vs spread',
   excitement: 'Excitement (CFBD)',
 };
 
@@ -302,8 +303,47 @@ export function selectedPersonIndexes(data, state) {
   return result;
 }
 
+/** Typographic minus used in all spread copy. */
+export const MINUS = '\u2212';
+
+/**
+ * Spread line copy naming the favorite (pregame) or the winner (result).
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @param {"pregame"|"result"} mode
+ * @returns {string} e.g. "Spread: Northfield \u22123.5", "Spread: Pick'em".
+ */
+export function spreadLabel(data, i, mode) {
+  const t = data.t;
+  const s = t.home_spread?.[i] ?? null;
+  if (s == null) return 'Spread: not available';
+  const home = data.lookups.teams[t.home_team[i]].name;
+  const away = data.lookups.teams[t.away_team[i]].name;
+  if (mode === 'pregame') {
+    if (s === 0) return "Spread: Pick'em";
+    return `Spread: ${s < 0 ? home : away} ${MINUS}${Math.abs(s).toFixed(1)}`;
+  }
+  const x = t.result[i];
+  if (x == null) return 'Spread: final score not recorded';
+  if (s === 0) return "Spread: Pick'em";
+  const winner = t.home_points[i] > t.away_points[i] ? home : away;
+  return `Spread: ${winner} ${x < 0 ? MINUS : '+'}${Math.abs(x).toFixed(1)}`;
+}
+
+/**
+ * Axis line text for the tooltip and modal.
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @param {"pregame"|"result"|"excitement"} axis
+ * @returns {string}
+ */
+export function axisValueText(data, i, axis) {
+  if (axis === 'excitement') return formatAxisValue('excitement', data.t.excitement[i]);
+  return spreadLabel(data, i, axis);
+}
+
 /** Short axis value labels, distinct from the longer AXIS_LABELS toggle copy. */
-const AXIS_VALUE_LABELS = { pregame: 'Spread', excitement: 'Excitement' };
+const AXIS_VALUE_LABELS = { pregame: 'Spread', result: 'Spread', excitement: 'Excitement' };
 
 /**
  * Formats a single axis value for hover/panel display. Pre-game values are

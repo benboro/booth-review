@@ -94,7 +94,7 @@ export function encodeState(state, data) {
     params.push(['slot', ordered.join(',')]);
   }
 
-  if (state.axis === 'excitement') params.push(['axis', 'excitement']);
+  if (state.axis === 'result' || state.axis === 'excitement') params.push(['axis', state.axis]);
   if (state.view === 'bars' || state.view === 'butterfly') params.push(['view', state.view]);
   if (state.by) params.push(['by', state.by]);
 
@@ -285,7 +285,8 @@ export function decodeState(search, data) {
   state.seasons = decodeSeasons(scalarParam(params, 'seasons'), data);
   state.networks = decodeNetworks(params.get('networks') ?? null, data);
   state.slots = decodeSlots(scalarParam(params, 'slot'));
-  state.axis = scalarParam(params, 'axis') === 'excitement' ? 'excitement' : 'pregame';
+  const rawAxis = scalarParam(params, 'axis');
+  state.axis = rawAxis === 'result' || rawAxis === 'excitement' ? rawAxis : 'pregame';
   // view/by are enum-allowlisted but never checked for applicability
   // (D-12): a stale `?view=bars` must survive a setState round trip.
   const rawView = scalarParam(params, 'view');

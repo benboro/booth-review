@@ -49,6 +49,20 @@ function nonNullRange(values) {
 }
 
 /**
+ * Winner-signed closing line for the Result vs spread axis (D-02, D-06):
+ * favorite won -> negative, underdog won -> positive, pick'em -> 0, never -0.
+ * @param {number|null} spread - HOME-side closing line (negative = home favored).
+ * @param {number|null} hp - home points.
+ * @param {number|null} ap - away points.
+ * @returns {number|null} null when there is no line, no score, or a tie.
+ */
+function resultX(spread, hp, ap) {
+  if (spread == null || hp == null || ap == null || hp === ap) return null;
+  const x = hp > ap ? spread : -spread;
+  return x === 0 ? 0 : x;
+}
+
+/**
  * Prepares a validated site-data.json payload for selection, search, and
  * charting: builds every index and derived value the rest of the app needs
  * so it never has to re-scan the raw columns.
@@ -57,8 +71,15 @@ function nonNullRange(values) {
  */
 export function prepareData(raw) {
   const lookups = raw.lookups;
-  const t = raw.telecasts;
-  const n = t.season.length;
+  const n = raw.telecasts.season.length;
+  // home_spread arrived in v1.5.0; older payloads simply have no result axis (D-08).
+  const homeSpread = raw.telecasts.home_spread ?? new Array(n).fill(null);
+  const result = new Array(n);
+  for (let i = 0; i < n; i += 1) {
+    result[i] = resultX(homeSpread[i], raw.telecasts.home_points[i], raw.telecasts.away_points[i]);
+  }
+  // Derived column lives on a copy so raw.telecasts is never mutated.
+  const t = { ...raw.telecasts, result };
 
   const familyOf = new Array(n);
   for (let i = 0; i < n; i += 1) {
@@ -105,6 +126,7 @@ export function prepareData(raw) {
 
   const xRange = {
     pregame: nonNullRange(t.pregame),
+    result: nonNullRange(result),
     excitement: nonNullRange(t.excitement),
   };
 
