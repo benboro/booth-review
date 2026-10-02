@@ -105,7 +105,8 @@ def test_make_role_pill_text_name_and_safety(
     rows = guarded_page.evaluate(
         """async () => {
           const { makeRolePill } = await import(new URL('./modules/pill.js', location.href).href);
-          const roles = ['pbp', 'analyst', 'unknown', '<img src=x onerror=alert(1)>', 'constructor'];
+          const roles = ['pbp', 'analyst', 'unknown', 'constructor',
+            '<img src=x onerror=alert(1)>'];
           return roles.map((r) => {
             const s = makeRolePill(r);
             return { cls: s.className, role: s.dataset.role, roleAttr: s.getAttribute('role'),
