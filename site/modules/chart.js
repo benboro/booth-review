@@ -32,8 +32,8 @@
  * importable from node for quick checks.
  */
 
-import { ACCENT, DIVIDER, FAMILY_COLORS, PAGE_BG, SURFACE, familyKey } from './palette.js';
-import { escapeHover, logTicks, niceLinearTicks } from './format.js';
+import { ACCENT, DIVIDER, FAMILY_COLORS, MUTED, PAGE_BG, SURFACE, familyKey } from './palette.js';
+import { MINUS, escapeHover, logTicks, niceLinearTicks } from './format.js';
 import { tooltipModel } from './tooltip.js';
 
 /**
@@ -46,12 +46,14 @@ export const TOOLTIP_MODE = 'html';
 /** X-axis chart titles (distinct from format.js's shorter AXIS_LABELS toggle copy). */
 const XAXIS_TITLES = {
   pregame: 'Closing spread (points) — closer games to the right',
+  result: "Winner's closing spread (points): upsets to the right",
   excitement: 'Excitement index (CFBD)',
 };
 
 /** Phone x-axis titles: the long pre-game title is wider than a phone screen, so it wraps (Plotly titles never wrap on their own). */
 const XAXIS_TITLES_MOBILE = {
   pregame: 'Closing spread (points)<br>closer games to the right',
+  result: "Winner's closing spread (pts)<br>upsets to the right",
   excitement: XAXIS_TITLES.excitement,
 };
 
@@ -60,18 +62,27 @@ const XAXIS_TITLES_MOBILE = {
  * missing values, the numeric-axis divider, the plotted range, and tick
  * values/labels that never fall inside the band.
  * @param {object} data - a `prepareData` result.
- * @param {"pregame"|"excitement"} axis
+ * @param {"pregame"|"result"|"excitement"} axis
  * @returns {{sentinel: number, divider: number, range: [number, number], tickvals: number[], ticktext: string[]}}
  */
 export function naBand(data, axis) {
-  const [lo, hi] = data.xRange[axis];
+  let [lo, hi] = data.xRange[axis] || [null, null];
+  if (lo == null || hi == null) [lo, hi] = [-1, 1];
+  if (axis === 'result') {
+    lo = Math.min(lo, 0);
+    hi = Math.max(hi, 0);
+  }
   const span = Math.max(hi - lo, 1);
   const w = 0.06 * span;
   const sentinel = lo - 1.5 * w;
   const divider = lo - 0.75 * w;
   const range = [lo - 2.25 * w, hi + 0.03 * span];
   const tickvals = niceLinearTicks(lo, hi, 6);
-  const ticktext = tickvals.map((v) => (axis === 'pregame' ? String(Math.abs(v)) : String(v)));
+  const ticktext = tickvals.map((v) => {
+    if (axis === 'pregame') return String(Math.abs(v));
+    if (axis === 'result') return v > 0 ? `+${v}` : v < 0 ? `${MINUS}${Math.abs(v)}` : '0';
+    return String(v);
+  });
   return { sentinel, divider, range, tickvals, ticktext };
 }
 
@@ -396,8 +407,29 @@ export function buildFigure(data, view, state, env) {
     // D-04: the 170px right margin only ever made room for Plotly's own
     // legend; the HTML chip row above the chart replaced it, so the margin
     // is the same narrow width at every screen size now.
-    margin: { l: 70, r: 24, t: 24, b: 60 },
+    margin: { l: 70, r: 24, t: axis === 'result' ? 40 : 24, b: 60 },
   };
+
+  // D-02: result mode only -- appended so shapes[0]/annotations[0] stay the
+  // N/A divider and label.
+  if (axis === 'result') {
+    layout.shapes.push({
+      type: 'line',
+      xref: 'x',
+      x0: 0,
+      x1: 0,
+      yref: 'paper',
+      y0: 0,
+      y1: 1,
+      layer: 'below',
+      line: { width: 1, color: DIVIDER[theme], dash: 'dash' },
+    });
+    const caption = { xref: 'x', x: 0, yref: 'paper', y: 1, yanchor: 'bottom', showarrow: false, captureevents: false, font: { size: env.mobile ? 10 : 14, color: MUTED[theme] } };
+    layout.annotations.push(
+      { ...caption, text: '← favorite won', xanchor: 'right', xshift: -6 },
+      { ...caption, text: 'underdog won →', xanchor: 'left', xshift: 6 },
+    );
+  }
 
   const config = {
     responsive: true,

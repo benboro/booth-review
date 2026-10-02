@@ -190,3 +190,99 @@ def test_modal_shows_result_spread_copy(
     text = body.inner_text()
     assert "Spread: Boulder Pass -3" not in text
     assert "-0" not in text.replace(M, "")
+
+
+_LAYOUT_JS = "() => { const l = document.getElementById('chart').layout; return l; }"
+_XS_JS = """
+() => {
+  const gd = document.getElementById('chart');
+  const byIdx = {};
+  let sentinelCount = 0;
+  const sentinel = gd.layout.annotations[0].x;
+  for (const t of gd.data) {
+    t.x.forEach((x, k) => {
+      if (x === sentinel) sentinelCount += 1;
+      if (t.meta && String(t.meta).startsWith('family:')) byIdx[t.customdata[k]] = [x, t.y[k]];
+    });
+  }
+  return { byIdx, sentinel, sentinelCount };
+}
+"""
+
+
+def test_result_axis_layout(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
+    open_app(guarded_page, "?axis=result")
+    layout = guarded_page.evaluate(_LAYOUT_JS)
+    assert layout["xaxis"]["title"]["text"] == (
+        "Winner's closing spread (points): upsets to the right"
+    )
+    vals, texts = layout["xaxis"]["tickvals"], layout["xaxis"]["ticktext"]
+    assert 0 in vals
+    assert texts[vals.index(0)] == "0"
+    for v, t in zip(vals, texts, strict=True):
+        if v < 0:
+            assert t.startswith(M)
+        elif v > 0:
+            assert t.startswith("+")
+    assert layout["shapes"][0]["x0"] != 0
+    assert any(
+        s["x0"] == 0 and s["x1"] == 0 and s["line"]["dash"] == "dash" for s in layout["shapes"][1:]
+    )
+    assert layout["annotations"][0]["text"] == "N/A"
+    assert [a["text"] for a in layout["annotations"][1:]] == [
+        "← favorite won",
+        "underdog won →",
+    ]
+    revisions = set()
+    for q in ("", "?axis=result", "?axis=excitement"):
+        open_app(guarded_page, q)
+        revisions.add(
+            guarded_page.evaluate("() => document.getElementById('chart').layout.uirevision")
+        )
+    assert len(revisions) == 3
+    open_app(guarded_page, "")
+    pre = guarded_page.evaluate(_LAYOUT_JS)
+    assert len(pre["shapes"]) == 1
+    assert [a["text"] for a in pre["annotations"]] == ["N/A"]
+
+
+def test_result_axis_layout_on_phone(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(mobile_page, "?axis=result")
+    title = mobile_page.evaluate(_LAYOUT_JS)["xaxis"]["title"]["text"]
+    assert "<br>" in title
+
+
+def test_result_axis_na_strip(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
+    open_app(guarded_page, "?axis=result")
+    got = guarded_page.evaluate(_XS_JS)
+    by_idx, sentinel = got["byIdx"], got["sentinel"]
+    for i in ("2", "3", "10"):
+        assert by_idx[i][0] == sentinel
+        assert by_idx[i][1] > 0
+    assert by_idx["1"][0] == 7.0
+    assert by_idx["8"][0] == -6.5
+    open_app(guarded_page, "?axis=result&school=northfield")
+    faded = guarded_page.evaluate(_XS_JS)
+    assert faded["sentinelCount"] == 3
+
+
+@pytest.mark.parametrize("width", [1280, 360])
+def test_captions_not_clipped(
+    guarded_page: Page, open_app: Callable[[Page, str], None], width: int
+) -> None:
+    guarded_page.set_viewport_size({"width": width, "height": 800})
+    open_app(guarded_page, "?axis=result")
+    boxes = guarded_page.evaluate(
+        """() => {
+          const svg = document.querySelector('#chart svg.main-svg').getBoundingClientRect();
+          return [...document.querySelectorAll('#chart .annotation')]
+            .filter((a) => /won/.test(a.textContent))
+            .map((a) => { const r = a.getBoundingClientRect();
+              return { l: r.left - svg.left, r: svg.right - r.right, t: r.top - svg.top }; });
+        }"""
+    )
+    assert len(boxes) == 2
+    for b in boxes:
+        assert b["l"] >= 0 and b["r"] >= 0 and b["t"] >= 0
