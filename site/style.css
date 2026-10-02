@@ -1347,6 +1347,12 @@ input[type="checkbox"] {
   visibility: hidden;
 }
 
+/* A concealed bars chart collapses so the empty/stale note sits in the 520px box
+   at the top of the panel, however tall the previous figure was. */
+#bars-chart.is-concealed {
+  max-height: 0;
+}
+
 .bars-title {
   font: var(--font-body);
   font-weight: 600;

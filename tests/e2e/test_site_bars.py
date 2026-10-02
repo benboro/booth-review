@@ -256,6 +256,45 @@ def test_show_all_expands_and_resets(
     assert len(_bar_boxes(page)) == 15
 
 
+def test_note_sits_in_the_stated_area_after_show_all(
+    guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
+) -> None:
+    """WR-02: the empty and stale notes stay inside the 520px box even after a
+    tall "Show all" chart was on screen.
+    """
+    _serve_many_teams(guarded_page, fixture_raw)
+    open_app(guarded_page, "?networks=net-a,net-b,net-c&view=bars")
+    page = guarded_page
+    rows = page.evaluate("window.__testHooks.getBarsModel().rows.length")
+    page.locator("#bars-show-all").click()
+    _wait_points(page, rows)
+    tall = page.locator("#bars-chart-box").bounding_box()
+    assert tall is not None and tall["height"] > 600
+
+    def check_note() -> None:
+        box = page.locator("#bars-chart-box").bounding_box()
+        note = page.locator("#bars-note").bounding_box()
+        assert box is not None and note is not None
+        assert 500 <= box["height"] <= 540
+        assert note["y"] + note["height"] <= box["y"] + box["height"]
+        assert note["y"] + note["height"] / 2 - box["y"] < 300
+
+    page.evaluate("window.__testHooks.setState({ view: 'butterfly' })")
+    page.wait_for_selector("#bars-note:not([hidden])")
+    check_note()
+    page.evaluate("window.__testHooks.setState({ view: 'bars' })")
+    page.wait_for_selector("#bars-note", state="hidden")
+    toggle = page.locator("#bars-show-all")
+    if toggle.inner_text().startswith("Show all"):
+        toggle.click()
+    _wait_points(page, rows)
+    page.evaluate(
+        "window.__testHooks.setState({ people: ['kris-venn', 'pat-rowan'], together: true })"
+    )
+    page.wait_for_selector("#bars-note:not([hidden])")
+    check_note()
+
+
 def test_model_hook_has_no_viewers(guarded_page: Page, open_app: OpenApp) -> None:
     open_app(guarded_page, NORTHFIELD)
     model = guarded_page.evaluate("window.__testHooks.getBarsModel()")
