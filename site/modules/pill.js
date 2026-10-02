@@ -12,19 +12,19 @@
  */
 
 import { FAMILY_COLORS, PILL_TEXT_COLOR, familyKey } from './palette.js';
-import { ROLE_LABELS } from './format.js';
 
 /*
  * Role pills (D-14..D-16, T-04.1-25): PBP is a solid violet pill, Analyst a
  * violet outline pill, anything else a grey "Sideline" outline pill. Colors
  * come only from CSS tokens (they follow the theme); the role is allowlisted
- * before it reaches dataset/aria-label and text is set via textContent.
+ * before it reaches dataset/aria-label and text is set via textContent. Each
+ * accessible name begins with the visible text (WCAG 2.5.3 Label in Name).
  */
 export const ROLE_PILL_TEXT = Object.freeze({ pbp: 'PBP', analyst: 'Analyst', unknown: 'Sideline' });
 export const ROLE_PILL_NAMES = Object.freeze({
-  pbp: ROLE_LABELS.pbp,
-  analyst: ROLE_LABELS.analyst,
-  unknown: ROLE_LABELS.unknown,
+  pbp: 'PBP, play-by-play',
+  analyst: 'Analyst',
+  unknown: 'Sideline',
 });
 
 /**

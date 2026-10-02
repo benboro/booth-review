@@ -100,10 +100,10 @@ def test_make_role_pill_text_name_and_safety(
         }"""
     )
     expected = [
-        ("pbp", "PBP", "Play-by-play"),
+        ("pbp", "PBP", "PBP, play-by-play"),
         ("analyst", "Analyst", "Analyst"),
-        ("unknown", "Sideline", "Sideline/other"),
-        ("unknown", "Sideline", "Sideline/other"),
+        ("unknown", "Sideline", "Sideline"),
+        ("unknown", "Sideline", "Sideline"),
     ]
     for row, (role, text, label) in zip(rows, expected, strict=True):
         assert row["cls"] == "role-pill"
@@ -164,7 +164,7 @@ def test_role_control_pills(guarded_page: Page, open_app: Callable[[Page, str], 
     both = toggle.locator('button[data-role=""]')
     assert both.locator(".role-pill").count() == 0
     assert (both.text_content() or "").strip() == "Both"
-    for role, label, text in (("pbp", "Play-by-play", "PBP"), ("analyst", "Analyst", "Analyst")):
+    for role, label, text in (("pbp", "PBP, play-by-play", "PBP"), ("analyst", "Analyst", "Analyst")):
         btn = toggle.locator(f'button[data-role="{role}"]')
         pills = btn.locator(".role-pill")
         assert pills.count() == 1
@@ -186,7 +186,7 @@ def test_role_filter_popover_pills(
     assert labels.count() == 2
     for i in range(2):
         assert labels.nth(i).locator(".role-pill").count() == 1
-    assert guarded_page.get_by_role("checkbox", name="Play-by-play").count() == 1
+    assert guarded_page.get_by_role("checkbox", name="PBP, play-by-play").count() == 1
     assert guarded_page.get_by_role("checkbox", name="Analyst").count() == 1
 
 
