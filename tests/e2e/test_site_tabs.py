@@ -373,7 +373,8 @@ def test_bar_controls_share_one_baseline_and_height(
             lines[-1].append(seg)
         else:
             lines.append([seg])
-    assert len(lines) == 1 if width >= 800 else len(lines) <= 2
+    # D-31's locked labels need 423px on the first line; 343px are available at 390.
+    assert len(lines) == 1 if width >= 800 else len(lines) <= 3
     for line in lines:
         assert max(s["top"] for s in line) - min(s["top"] for s in line) <= 0.5
         bottoms = [b for s in line for b in s["texts"]]
@@ -400,6 +401,9 @@ def test_controls_footprint_is_fixed(
         ("bars", "?school=northfield&view=bars"),
         ("bars-group", BAR_VIEW),
         ("butterfly", FLY_VIEW),
+        ("bars-team-rows", "?people=kris-venn&view=bars"),
+        ("bars-group-teams", BAR_VIEW + "&group=teams"),
+        ("fly-announcers", "?people=kris-venn,pat-rowan&view=butterfly"),
     ):
         open_app(page, query)
         values[name] = page.evaluate(_FOOTPRINT_JS)
@@ -457,10 +461,13 @@ def test_role_control_from_url_and_on_butterfly(
     page = guarded_page
     open_app(page, ONE_SCHOOL + "&view=bars&role=analyst")
     assert page.evaluate(_ROLE_PRESSED_JS)[2] == ["Analyst", "true"]
-    open_app(page, "?people=kris-venn,pat-rowan&view=butterfly")
+    open_app(page, "?school=northfield,lakeview&view=butterfly")
     assert not _is_concealed(page, "#bar-role-toggle")
     page.locator('#bar-role-toggle button[data-role="pbp"]').click()
     assert _state(page)["role"] == "pbp"
+    # D-30 refines D-25: team rows hide the control.
+    open_app(page, "?people=kris-venn,pat-rowan&view=butterfly")
+    assert _is_concealed(page, "#bar-role-toggle")
     open_app(page, "")
     assert _is_concealed(page, "#bar-role-toggle")
 
@@ -481,3 +488,176 @@ def test_role_limits_selected_announcer_games(
 ) -> None:
     open_app(guarded_page, "?people=dale-harlow&view=bars&role=analyst")
     assert guarded_page.locator("#bars-note").is_visible()
+
+
+# --- D-31: contextual bar-style labels ---------------------------------------
+
+ANNOUNCER_LABELS = ("by Announcer", "by Network")
+TEAM_LABELS = ("by Team", "by Conference")
+
+
+def test_bar_style_label_constants(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, ONE_SCHOOL + "&view=bars")
+    got = guarded_page.evaluate(
+        """async () => {
+          const m = await import('./modules/bar-copy.js');
+          return [m.BAR_STYLE_LABELS, m.barStyleLabels('announcers'),
+                  m.barStyleLabels('teams'), m.barStyleLabels(null)];
+        }"""
+    )
+    announcers = {"simple": "by Announcer", "stacked": "by Network"}
+    teams = {"simple": "by Team", "stacked": "by Conference"}
+    assert got[0] == {"announcers": announcers, "teams": teams}
+    assert got[1:] == [announcers, teams, teams]
+    spans = guarded_page.evaluate(
+        "() => Array.from(document.querySelectorAll('#bar-style-toggle span[data-rows]'))"
+        ".map((s) => s.textContent)"
+    )
+    assert sorted(spans) == sorted([*ANNOUNCER_LABELS, *TEAM_LABELS])
+
+
+@pytest.mark.parametrize(
+    ("query", "labels"),
+    [
+        ("?school=northfield&view=bars", ANNOUNCER_LABELS),
+        ("?school=northfield&view=bars&bars=stacked", ANNOUNCER_LABELS),
+        ("?people=kris-venn&view=bars", TEAM_LABELS),
+        ("?networks=net-a&view=bars", TEAM_LABELS),
+        (TWO_SUBJECTS + "&view=bars", ANNOUNCER_LABELS),
+        (TWO_SUBJECTS + "&view=bars&group=teams", TEAM_LABELS),
+        ("?school=northfield,lakeview&view=butterfly", ANNOUNCER_LABELS),
+        ("?people=kris-venn,pat-rowan&view=butterfly", TEAM_LABELS),
+    ],
+)
+def test_bar_style_labels_follow_the_rows(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    query: str,
+    labels: tuple[str, str],
+) -> None:
+    open_app(guarded_page, query)
+    for bars, label in zip(("simple", "stacked"), labels, strict=True):
+        button = guarded_page.locator(f'#bar-style-toggle button[data-bars="{bars}"]')
+        assert button.inner_text() == label
+        named = guarded_page.get_by_role("button", name=label, exact=True)
+        assert named.count() == 1
+        assert named.get_attribute("data-bars") == bars
+
+
+def test_bar_style_url_values_unchanged(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    page = guarded_page
+    open_app(page, "?people=kris-venn&view=bars")
+    page.get_by_role("button", name="by Conference", exact=True).click()
+    assert _state(page)["bars"] == "stacked"
+    assert "bars=stacked" in page.evaluate("() => location.search")
+    assert page.evaluate("() => window.__testHooks.getBarsModel().rowKind") == "conference"
+    page.get_by_role("button", name="by Team", exact=True).click()
+    assert "bars=" not in page.evaluate("() => location.search")
+
+
+@pytest.mark.parametrize(("fixture", "width"), VIEWPORTS[:2])
+def test_bar_style_labels_do_not_shift_the_row(
+    request: pytest.FixtureRequest,
+    open_app: Callable[[Page, str], None],
+    fixture: str,
+    width: int,
+) -> None:
+    page = _viewport_page(request, fixture, width)
+    open_app(page, BAR_VIEW)
+    selectors = (
+        '#bar-style-toggle button[data-bars="simple"]',
+        '#bar-style-toggle button[data-bars="stacked"]',
+        "#bar-role-toggle",
+        "#group-by",
+    )
+
+    def record() -> list[float]:
+        out: list[float] = []
+        for sel in selectors:
+            box = _box(page, sel)
+            out += [box["x"], box["width"]]
+        return out
+
+    before = record()
+    page.locator('#group-by-toggle button[data-group="teams"]').click()
+    assert page.locator('#bar-style-toggle button[data-bars="simple"]').inner_text() == "by Team"
+    after = record()
+    assert all(abs(a - b) <= 0.5 for a, b in zip(before, after, strict=True)), (before, after)
+
+
+# --- D-30: role control only when announcers are the rows --------------------
+
+_ROLE_VISIBLE = [
+    "?school=northfield&view=bars",
+    "?school=northfield&view=bars&bars=stacked",
+    TWO_SUBJECTS + "&view=bars",
+    "?school=northfield,lakeview&view=butterfly",
+    "?school=northfield,lakeview&view=butterfly&bars=stacked",
+    FLY_VIEW,
+]
+_ROLE_CONCEALED = [
+    "?people=kris-venn&view=bars",
+    "?people=kris-venn&view=bars&bars=stacked",
+    "?networks=net-a&view=bars",
+    TWO_SUBJECTS + "&view=bars&group=teams",
+    "?people=kris-venn,pat-rowan&view=butterfly",
+    FLY_VIEW + "&group=teams",
+]
+
+
+@pytest.mark.parametrize(
+    ("query", "concealed"),
+    [(q, False) for q in _ROLE_VISIBLE] + [(q, True) for q in _ROLE_CONCEALED],
+)
+def test_role_control_shows_only_for_announcer_rows(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    query: str,
+    concealed: bool,
+) -> None:
+    open_app(guarded_page, query)
+    assert _is_concealed(guarded_page, "#bar-role-toggle") is concealed
+
+
+def test_role_control_follows_group_by(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    page = guarded_page
+    open_app(page, TWO_SUBJECTS + "&view=bars")
+    height = _box(page, "#bar-controls")["height"]
+    page.locator('#group-by-toggle button[data-group="teams"]').click()
+    assert _is_concealed(page, "#bar-role-toggle")
+    assert _box(page, "#bar-controls")["height"] == height
+    page.locator('#group-by-toggle button[data-group="announcers"]').click()
+    assert not _is_concealed(page, "#bar-role-toggle")
+    assert _box(page, "#bar-controls")["height"] == height
+
+
+def test_concealed_role_control_is_out_of_tab_order(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    page = guarded_page
+    open_app(page, TWO_SUBJECTS + "&view=bars&group=teams")
+    page.locator('#bar-style-toggle button[data-bars="stacked"]').focus()
+    page.keyboard.press("Tab")
+    assert page.evaluate("() => !!document.activeElement.closest('#bar-role-toggle')") is False
+    assert page.evaluate("() => !!document.activeElement.closest('#group-by-toggle')") is True
+
+
+def test_hidden_role_control_keeps_the_role(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    page = guarded_page
+    open_app(page, "?people=dale-harlow&view=bars&role=pbp")
+    assert _is_concealed(page, "#bar-role-toggle")
+    assert "role=pbp" in page.evaluate("() => location.search")
+    assert _state(page)["role"] == "pbp"
+    assert "Role:" in page.locator("#trigger-role").inner_text()
+    page.click("#trigger-role")
+    page.locator('#filter-role input[value="analyst"]').check()
+    assert _state(page)["role"] == "analyst"
+    assert page.locator("#bars-note").is_visible()
