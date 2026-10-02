@@ -70,8 +70,10 @@ def _title(page: Page) -> dict[str, Any]:
     return page.evaluate(  # type: ignore[no-any-return]
         """() => {
           const t = document.querySelector('#chart-tooltip .tooltip-title');
-          const own = Array.from(t.childNodes).filter((n) => n.nodeType === 3)
-            .map((n) => n.textContent).join('');
+          // The title text and pills share one `.name-with-roles` unit (SITE-38).
+          const clone = t.cloneNode(true);
+          clone.querySelectorAll('.role-pill').forEach((p) => p.remove());
+          const own = clone.textContent;
           const pills = Array.from(t.querySelectorAll('.role-pill'))
             .map((p) => [p.dataset.role, p.textContent]);
           return {own, pills};
@@ -196,8 +198,10 @@ def test_both_roles_tooltip_has_two_pills_in_order(guarded_page: Page, open_app:
           const lines = C.tooltipLines(model, rows, {r: 0, s: -1, side: null});
           T.showTextTooltip(lines, {borderColor: '#888', clientX: 50, clientY: 50});
           const t = document.querySelector('#chart-tooltip .tooltip-title');
-          const own = Array.from(t.childNodes).filter((n) => n.nodeType === 3)
-            .map((n) => n.textContent).join('');
+          // The title text and pills share one `.name-with-roles` unit (SITE-38).
+          const clone = t.cloneNode(true);
+          clone.querySelectorAll('.role-pill').forEach((p) => p.remove());
+          const own = clone.textContent;
           return {
             own,
             name: rows[0].label,
