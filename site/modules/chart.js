@@ -32,7 +32,7 @@
  * importable from node for quick checks.
  */
 
-import { ACCENT, DIVIDER, FAMILY_COLORS, MUTED, PAGE_BG, SURFACE, familyKey } from './palette.js';
+import { ACCENT, DIVIDER, FAMILY_COLORS, MUTED, PAGE_BG, SURFACE, ZERO_LINE, familyKey } from './palette.js';
 import { MINUS, escapeHover, logTicks, niceLinearTicks } from './format.js';
 import { tooltipModel } from './tooltip.js';
 
@@ -422,7 +422,7 @@ export function buildFigure(data, view, state, env) {
       y0: 0,
       y1: 1,
       layer: 'below',
-      line: { width: 1, color: DIVIDER[theme], dash: 'dash' },
+      line: { width: 1.5, color: ZERO_LINE[theme], dash: 'solid' },
     });
     const caption = { xref: 'x', x: 0, yref: 'paper', y: 1, yanchor: 'bottom', showarrow: false, captureevents: false, font: { size: env.mobile ? 10 : 14, color: MUTED[theme] } };
     layout.annotations.push(

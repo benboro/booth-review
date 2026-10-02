@@ -227,7 +227,7 @@ def test_result_axis_layout(guarded_page: Page, open_app: Callable[[Page, str], 
             assert t.startswith("+")
     assert layout["shapes"][0]["x0"] != 0
     assert any(
-        s["x0"] == 0 and s["x1"] == 0 and s["line"]["dash"] == "dash" for s in layout["shapes"][1:]
+        s["x0"] == 0 and s["x1"] == 0 and s["line"]["dash"] == "solid" for s in layout["shapes"][1:]
     )
     assert layout["annotations"][0]["text"] == "N/A"
     assert [a["text"] for a in layout["annotations"][1:]] == [
@@ -245,6 +245,20 @@ def test_result_axis_layout(guarded_page: Page, open_app: Callable[[Page, str], 
     pre = guarded_page.evaluate(_LAYOUT_JS)
     assert len(pre["shapes"]) == 1
     assert [a["text"] for a in pre["annotations"]] == ["N/A"]
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_zero_line_is_solid_and_stronger_than_gridlines(
+    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
+) -> None:
+    """D-02: the zero line is solid, heavier, and a different color than the grid."""
+    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
+    open_app(guarded_page, "?axis=result")
+    layout = guarded_page.evaluate(_LAYOUT_JS)
+    zero = next(s for s in layout["shapes"][1:] if s["x0"] == 0 and s["x1"] == 0)
+    assert zero["line"]["dash"] == "solid"
+    assert zero["line"]["width"] > 1
+    assert zero["line"]["color"] != layout["xaxis"]["gridcolor"]
 
 
 def test_result_axis_layout_on_phone(
