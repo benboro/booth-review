@@ -20,7 +20,7 @@
 
 import {
   crewEntries,
-  formatAxisValue,
+  axisValueText,
   formatDate,
   formatKickoff,
   formatMatchup,
@@ -61,7 +61,7 @@ const EDGE_MARGIN = 8;
  * draw an SVG.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
- * @param {{axis: "pregame"|"excitement", selected?: Set<number>}} opts
+ * @param {{axis: "pregame"|"result"|"excitement", selected?: Set<number>}} opts
  * @returns {{crew: {name: string, role: string, selected: boolean}[], title: string, dateText: string, gameType: {icons: ("bowl"|"playoff")[], label: string, iconLabel: string}|null, dateLine: string, networks: {name: string, family: string}[], crewLines: string[], viewersLine: string, axisLine: string, hint: string}}
  */
 export function tooltipModel(data, i, { axis, selected = new Set() }) {
@@ -94,7 +94,7 @@ export function tooltipModel(data, i, { axis, selected = new Set() }) {
   if (crewLines.length === 0) crewLines.push('Crew not recorded');
 
   const viewersLine = `Viewers: ${formatViewers(t.viewers[i])}`;
-  const axisLine = formatAxisValue(axis, t[axis][i]);
+  const axisLine = axisValueText(data, i, axis);
   const hint = 'Click for details →';
 
   return { title, dateText, gameType, dateLine, networks, crew, crewLines, viewersLine, axisLine, hint };
@@ -272,7 +272,7 @@ export function showTextTooltip(lines, { borderColor, clientX, clientY }) {
  * element reports zero size.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
- * @param {{axis: "pregame"|"excitement", theme: "light"|"dark", clientX: number, clientY: number}} opts
+ * @param {{axis: "pregame"|"result"|"excitement", theme: "light"|"dark", clientX: number, clientY: number}} opts
  */
 export function showTooltip(data, i, { axis, theme, clientX, clientY, selected }) {
   const el = ensureTooltipEl();

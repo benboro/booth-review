@@ -712,7 +712,7 @@ def test_hover_text_shows_the_active_axis_value_and_closing_hint(
     open_app(guarded_page, "")
     _use_plotly_tooltip(guarded_page)
     dot11 = _hover_text(_traces(guarded_page), 11)
-    assert "Spread: 1.5" in dot11
+    assert "Spread: Stonebridge \u22121.5" in dot11
     assert "Excitement:" not in dot11
     assert dot11.endswith("Click for details →")
 

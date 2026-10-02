@@ -20,7 +20,7 @@ import {
   SLOT_LABELS,
   conferenceLine,
   crewEntries,
-  formatAxisValue,
+  axisValueText,
   formatDate,
   formatKickoff,
   formatMatchup,
@@ -383,9 +383,12 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
     children.push(publishedP);
   }
 
-  const otherAxis = state.axis === 'pregame' ? 'excitement' : 'pregame';
+  const spreadText = axisValueText(data, i, state.axis === 'result' ? 'result' : 'pregame');
+  const excitementText = axisValueText(data, i, 'excitement');
   const axisP = document.createElement('p');
-  axisP.textContent = `${formatAxisValue(state.axis, t[state.axis][i])} · ${formatAxisValue(otherAxis, t[otherAxis][i])}`;
+  axisP.textContent = state.axis === 'excitement'
+    ? `${excitementText} · ${spreadText}`
+    : `${spreadText} · ${excitementText}`;
   children.push(axisP);
 
   const flagsList = buildFlagsList(data, i);
