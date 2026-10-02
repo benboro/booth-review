@@ -23,13 +23,13 @@ import {
   tooltipLines,
   countsListName,
   channelLineText,
-  butterflyRowText,
+  butterflySideText,
   butterflyCountsName,
   ariaSummary,
 } from './bar-copy.js';
 import { barTones, buildBarFigure, buildButterflyFigure, renderBars, bindBarEvents } from './bar-chart.js';
 import { channelShades } from './palette.js';
-import { makePill, currentTheme } from './pill.js';
+import { makePill, makeRolePill, currentTheme } from './pill.js';
 import { showTextTooltip, hideTooltip } from './tooltip.js';
 
 let expanded = false;
@@ -179,8 +179,15 @@ function labelNode(row, theme) {
   if (row.family != null) return makePill(row.label, row.family, theme);
   const span = document.createElement('span');
   span.className = 'counts-label';
-  span.textContent = row.label;
+  span.append(nameNode(row.label), ...(row.roles ?? []).map(makeRolePill));
   return span;
+}
+
+/** Name text in its own span so role pills can follow it (D-16). */
+function nameNode(text) {
+  const name = document.createElement('span');
+  name.textContent = text;
+  return name;
 }
 
 function makeButton(ref, key, aria) {
@@ -206,13 +213,13 @@ function segmentList(segments, r, side, rowKey, prefix, shades = null) {
   }
   segments.forEach((seg, s) => {
     const li = document.createElement('li');
-    const text = `${seg.label} ${seg.count}`;
+    const nodes = [nameNode(seg.label), ...(seg.roles ?? []).map(makeRolePill), document.createTextNode(` ${seg.count}`)];
     if (seg.target != null) {
       const b = makeButton({ r, s, side }, `${rowKey}/${seg.key}/${side ?? ''}`, countsListName(seg.target, seg.name, seg.count));
-      b.textContent = text;
+      b.replaceChildren(...nodes);
       li.appendChild(b);
     } else {
-      li.textContent = text;
+      li.replaceChildren(...nodes);
     }
     if (shades && seg.channels && seg.channels.length > 0) {
       const chans = document.createElement('ol');
@@ -241,7 +248,7 @@ function buildCountsList(model, rows, theme) {
     if (fly) {
       const text = document.createElement('span');
       text.className = 'counts-label';
-      text.textContent = butterflyRowText(row, model);
+      text.append(nameNode(row.label), ...(row.roles ?? []).map(makeRolePill), document.createTextNode(butterflySideText(row, model)));
       content.push(text);
     } else {
       content.push(labelNode(row, theme), countSpan(row.total));

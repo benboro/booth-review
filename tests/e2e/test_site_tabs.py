@@ -439,8 +439,8 @@ def test_controls_footprint_is_fixed(
 _ROWS_JS = "window.__testHooks.getBarsModel().rows.map(r => [r.label, r.total])"
 _ROLE_PRESSED_JS = """() => Array.from(document.querySelectorAll('#bar-role-toggle button'))
   .map((b) => [b.textContent, b.getAttribute('aria-pressed')])"""
-PBP_ROWS = [["Dale Harlow · PBP", 2], ["Casey Lund · PBP", 1]]
-ANALYST_ROWS = [["Dale Harlow Jr. · Analyst", 2], ["Jamie Oaks · Analyst", 1]]
+PBP_ROWS = [["Dale Harlow", 2], ["Casey Lund", 1]]
+ANALYST_ROWS = [["Dale Harlow Jr.", 2], ["Jamie Oaks", 1]]
 
 
 def test_role_control_sets_state_url_and_role_filter(

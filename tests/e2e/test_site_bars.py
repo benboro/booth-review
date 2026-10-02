@@ -136,8 +136,8 @@ def test_simple_bars_render_title_aria_and_counts(guarded_page: Page, open_app: 
     assert len(_bar_boxes(page)) == 5
     assert page.locator("#bars-chart").get_attribute("aria-label") == (
         "Bar chart: announcers by rated telecasts with Northfield, 2019–2026. "  # noqa: RUF001 - en dash is the real copy
-        "Showing 5 of 5. Top: Dale Harlow · PBP 2, Dale Harlow Jr. · Analyst 2, "
-        "Casey Lund · PBP 1."
+        "Showing 5 of 5. Top: Dale Harlow (PBP) 2, Dale Harlow Jr. (Analyst) 2, "
+        "Casey Lund (PBP) 1."
     )
     assert page.locator("#bars-rowcount").inner_text() == "Showing all 5 announcers"
     assert page.locator("#bars-show-all").is_hidden()
@@ -179,9 +179,9 @@ def test_butterfly_title_caption_and_counts(guarded_page: Page, open_app: OpenAp
     assert "2 games include both." in page.locator("#bars-captions").inner_text()
     items = page.locator("#bars-counts > li")
     assert items.count() == 7
-    assert items.first.locator("button").text_content() == (
-        "Dale Harlow · PBP: Northfield 2, Lakeview 1 rated telecasts"
-    )
+    label = items.first.locator("button .counts-label")
+    assert label.text_content() == "Dale HarlowPBP: Northfield 2, Lakeview 1 rated telecasts"
+    assert label.locator('.role-pill[data-role="pbp"]').count() == 1
 
 
 def test_empty_selection_shows_note(guarded_page: Page, open_app: OpenApp) -> None:
@@ -309,7 +309,7 @@ def test_hover_tooltip_and_click_drill(guarded_page: Page, open_app: OpenApp) ->
     page = guarded_page
     _hover_bar(page, 0)
     assert _tooltip_lines(page) == [
-        "Dale Harlow · PBP",
+        "Dale HarlowPBP",
         "2 rated telecasts",
         "Click to filter →",
     ]
@@ -445,7 +445,7 @@ def test_touch_two_tap_drill(mobile_page: Page, open_app: OpenApp) -> None:
 def test_touch_label_tap_drills_immediately(mobile_page: Page, open_app: OpenApp) -> None:
     open_app(mobile_page, NORTHFIELD)
     page = mobile_page
-    label = _label(page, "Dale Harlow ·")
+    label = _label(page, "Dale Harlow")
     box = label.bounding_box()
     assert box is not None
     page.touchscreen.tap(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
@@ -639,13 +639,17 @@ def test_family_bars_render_with_channel_counts(
     row = page.locator("#bars-counts > li").first
     assert row.locator('span.pill[data-family="disney"]').count() == 1
     assert row.locator("> button .counts-n").text_content() == "7"
-    assert row.locator("ol.counts-sublist > li > button").all_text_contents() == [
-        "Dale Harlow · PBP 2",
-        "Dale Harlow Jr. · Analyst 2",
-        "Casey Lund · PBP 1",
-        "Jamie Oaks · Analyst 1",
-        "Robin Teague · Other 1",
+    seg_buttons = row.locator("ol.counts-sublist > li > button")
+    assert seg_buttons.all_text_contents() == [
+        "Dale HarlowPBP 2",
+        "Dale Harlow Jr.Analyst 2",
+        "Casey LundPBP 1",
+        "Jamie OaksAnalyst 1",
+        "Robin TeagueSideline 1",
     ]
+    assert [
+        seg_buttons.nth(i).locator(".role-pill").get_attribute("data-role") for i in range(5)
+    ] == ["pbp", "analyst", "pbp", "analyst", "unknown"]
     first = row.locator("ol.counts-sublist > li").first
     assert first.locator("ol.counts-channels > li").all_text_contents() == [
         "Alpha Sports 1",
@@ -666,7 +670,7 @@ def test_family_segment_tooltip_lists_channels(
     open_app(page, FAMILY)
     _hover_segment(page)
     assert _tooltip_lines(page) == [
-        "Dale Harlow · PBP",
+        "Dale HarlowPBP",
         "Alpha Sports: 1",
         "Echo Sports: 1",
         "2 rated telecasts on ABC/ESPN",
@@ -784,3 +788,11 @@ def test_family_views_show_no_viewer_text(
     page.wait_for_selector("#chart-tooltip:not([hidden])")
     assert "viewer" not in page.locator("#chart-tooltip").inner_text().lower()
     assert errors == []
+
+
+def test_bar_tooltip_title_has_role_pill(guarded_page: Page, open_app: OpenApp) -> None:
+    open_app(guarded_page, NORTHFIELD)
+    _hover_bar(guarded_page, 0)
+    title = guarded_page.locator("#chart-tooltip .tooltip-title").first
+    assert title.text_content() == "Dale HarlowPBP"
+    assert title.locator(".role-pill").count() == 1
