@@ -283,24 +283,62 @@ def test_result_axis_na_strip(guarded_page: Page, open_app: Callable[[Page, str]
     assert faded["sentinelCount"] == 3
 
 
+_CAPTION_BOXES_JS = """() => {
+  const svg = document.querySelector('#chart svg.main-svg').getBoundingClientRect();
+  return [...document.querySelectorAll('#chart .annotation')]
+    .filter((a) => /won/.test(a.textContent))
+    .map((a) => { const r = a.getBoundingClientRect();
+      return { l: r.left - svg.left, r: svg.right - r.right, t: r.top - svg.top }; });
+}"""
+
+
+def _assert_captions_inside(page: Page) -> None:
+    """Both zero-line captions lie fully inside the chart SVG. Polled, since
+    `fitZeroCaptions` nudges them in a relayout right after the draw."""
+    page.wait_for_function(
+        """() => {
+          const svg = document.querySelector('#chart svg.main-svg');
+          if (!svg) return false;
+          const box = svg.getBoundingClientRect();
+          const caps = [...document.querySelectorAll('#chart .annotation')]
+            .filter((a) => /won/.test(a.textContent));
+          return caps.length === 2 && caps.every((a) => {
+            const r = a.getBoundingClientRect();
+            return r.left >= box.left && r.right <= box.right && r.top >= box.top;
+          });
+        }""",
+        timeout=5000,
+    )
+    boxes = page.evaluate(_CAPTION_BOXES_JS)
+    assert len(boxes) == 2
+    for b in boxes:
+        assert b["l"] >= 0 and b["r"] >= 0 and b["t"] >= 0
+
+
+@pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
 @pytest.mark.parametrize("width", [1280, 360])
 def test_captions_not_clipped(
     guarded_page: Page, open_app: Callable[[Page, str], None], width: int
 ) -> None:
     guarded_page.set_viewport_size({"width": width, "height": 800})
     open_app(guarded_page, "?axis=result")
-    boxes = guarded_page.evaluate(
-        """() => {
-          const svg = document.querySelector('#chart svg.main-svg').getBoundingClientRect();
-          return [...document.querySelectorAll('#chart .annotation')]
-            .filter((a) => /won/.test(a.textContent))
-            .map((a) => { const r = a.getBoundingClientRect();
-              return { l: r.left - svg.left, r: svg.right - r.right, t: r.top - svg.top }; });
-        }"""
+    _assert_captions_inside(guarded_page)
+
+
+@pytest.mark.parametrize("font_setting", ["default", "wide"], indirect=True)
+@pytest.mark.parametrize("edge", ["right", "left"])
+def test_captions_stay_inside_when_zero_hugs_an_edge(
+    guarded_page: Page, open_app: Callable[[Page, str], None], edge: str
+) -> None:
+    """A range that puts zero right at a plot edge (a zoom, or a lopsided
+    season) slides the caption on that side back inside the chart."""
+    guarded_page.set_viewport_size({"width": 360, "height": 800})
+    open_app(guarded_page, "?axis=result")
+    rng = "[-30, 0.5]" if edge == "right" else "[-0.5, 30]"
+    guarded_page.evaluate(
+        f"() => window.Plotly.relayout(document.getElementById('chart'), {{'xaxis.range': {rng}}})"
     )
-    assert len(boxes) == 2
-    for b in boxes:
-        assert b["l"] >= 0 and b["r"] >= 0 and b["t"] >= 0
+    _assert_captions_inside(guarded_page)
 
 
 def test_toggle_has_three_buttons_in_order(

@@ -457,6 +457,49 @@ export function renderChart(gd, figure) {
   window.Plotly.react(gd, figure.traces, figure.layout, figure.config);
 }
 
+/** D-02 caption gap from the zero line, in px; `fitZeroCaptions` only ever
+ * shrinks it (toward or past the line) when the caption would leave the SVG. */
+const ZERO_CAPTION_GAP = 6;
+/** Breathing room kept between a nudged caption and the SVG edge, in px. */
+const ZERO_CAPTION_EDGE_PAD = 2;
+
+/**
+ * Keeps the result-mode zero-line captions inside the chart. They hang off
+ * x = 0 by `ZERO_CAPTION_GAP`, so when zero sits near an edge (a narrow
+ * phone, a zoom, a lopsided range) a caption can run past the SVG and clip.
+ * Measures each caption where it was actually drawn (so the real font
+ * decides), works out where it would sit at the normal gap, and slides it
+ * back in by exactly the overflow -- or back out to the normal gap once
+ * there is room again. Idempotent: it only relayouts when the wanted shift
+ * differs from the current one, so binding it to `plotly_afterplot` cannot
+ * loop.
+ * @param {HTMLElement} gd
+ */
+export function fitZeroCaptions(gd) {
+  const anns = gd.layout?.annotations;
+  const svg = gd.querySelector('svg.main-svg');
+  if (!Array.isArray(anns) || !svg) return;
+  const box = svg.getBoundingClientRect();
+  const update = {};
+  anns.forEach((ann, k) => {
+    const side = ann.text === '← favorite won' ? -1 : ann.text === 'underdog won →' ? 1 : 0;
+    if (side === 0) return;
+    const el = gd.querySelector(`.annotation[data-index="${k}"]`);
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const shift = ann.xshift ?? side * ZERO_CAPTION_GAP;
+    const base = side * ZERO_CAPTION_GAP;
+    // Overflow past the near SVG edge if the caption sat at the normal gap.
+    const overflow =
+      side > 0
+        ? rect.right + (base - shift) - (box.right - ZERO_CAPTION_EDGE_PAD)
+        : box.left + ZERO_CAPTION_EDGE_PAD - (rect.left + (base - shift));
+    const want = overflow > 0 ? base - side * overflow : base;
+    if (Math.abs(want - shift) > 0.5) update[`annotations[${k}].xshift`] = want;
+  });
+  if (Object.keys(update).length > 0) window.Plotly.relayout(gd, update);
+}
+
 /**
  * Binds the chart's Plotly event handlers once: point click (detail panel
  * hook) and hover/unhover (D-22: `app.js` uses these to drive the custom
@@ -489,4 +532,10 @@ export function bindChartEvents(gd, handlers = {}) {
 
   // Zoom, pan and autosize all move dots out from under the hover ring.
   gd.on('plotly_relayout', () => onRelayout?.());
+
+  // D-02: every draw (react, resize, zoom) re-fits the zero-line captions.
+  gd.on('plotly_afterplot', () => fitZeroCaptions(gd));
+  // Bound after the first render (`.on` only exists then), so that draw's
+  // afterplot may already have fired.
+  fitZeroCaptions(gd);
 }
