@@ -1623,6 +1623,34 @@ def test_rendered_family_segment_markup_creates_no_element(
     assert imgs == 0
 
 
+def test_stacked_segment_text_escapes_markup_in_both_builders(
+    guarded_page: Page, site_url: str
+) -> None:
+    """CR-01: a scraped name with markup is literal text in segment `text`."""
+    guarded_page.goto(f"{site_url}/")
+    out = guarded_page.evaluate(
+        """async () => {
+          const F = await import('./modules/bar-chart.js');
+          const env = { theme: 'light', mobile: false, revision: 1, width: 700 };
+          const plain = { key: 'k', label: '<b>Y</b>', count: 2, target: null };
+          const person = { key: 'p:1', name: 'n', label: 'n', family: null, total: 2,
+                           target: null, segments: [plain] };
+          const seg = { key: 's', label: '<a href="https://x">X</a>', count: 3, target: null,
+                        channels: [{ id: 'a', name: 'A', count: 3, shade: 0 }] };
+          const fam = { key: 'f:disney', label: 'ABC/ESPN', family: 'disney', total: 3,
+                        shadeCount: 1, target: null, segments: [seg] };
+          const a = F.buildBarFigure({ mode: 'stacked', rowKind: 'person' }, [person], env);
+          const b = F.buildBarFigure({ mode: 'stacked', rowKind: 'family' }, [fam], env);
+          const texts = (fig) => fig.traces.flatMap((t) => (t.text ? t.text : []));
+          return { a: texts(a), b: texts(b) };
+        }"""
+    )
+    assert "&lt;b&gt;Y&lt;/b&gt; 2" in out["a"]
+    assert '&lt;a href="https://x"&gt;X&lt;/a&gt; 3' in out["b"]
+    for t in out["a"] + out["b"]:
+        assert "<" not in t
+
+
 # --------------------------------------------------------------------------
 # D-28 segment gaps and D-29 total placement, measured on the rendered chart
 # --------------------------------------------------------------------------
