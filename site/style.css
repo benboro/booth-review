@@ -1331,6 +1331,10 @@ input[type="checkbox"] {
 }
 
 .by-sizer {
+  /* After the buttons in order-modified order, so the grid's baseline comes from the
+     visible button text, not this zero-height sizer (which sat the box 23px low in the
+     baseline-aligned controls row). */
+  order: 1;
   display: flex;
   visibility: hidden;
   height: 0;
