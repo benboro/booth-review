@@ -7,7 +7,7 @@
  * person-matched games when someone is selected (D-02). Crew matching goes
  * only through select.js's `personOnGame`. Rows sort by count descending,
  * ties by bare name (D-03); announcer rows share one list labeled
- * `Name · PBP`/`Analyst`/`PBP/Analyst` (D-04). The butterfly (D-05..D-09)
+ * with the bare name; roles ride along as data (D-04, D-28). The butterfly (D-05..D-09)
  * mirrors the Bars rows for exactly two schools or two announcers.
  * Stacked announcer rows are one per network family (D-23, superseding D-15's
  * per-channel rows): segments are announcers, each carrying per-channel counts
