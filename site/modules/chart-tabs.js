@@ -1,7 +1,10 @@
 /**
  * Chart tabs: the Scatter | Bars | Butterfly tablist, its hint row, and the
  * Bar style / Both-PBP-Analyst / Group-by controls (SITE-33, D-10, D-12, D-13,
- * D-14, D-17, D-25). The role control reads and writes the one `state.role` the
+ * D-14, D-17, D-25, D-30, D-31). The bar-style labels name what the bars split
+ * into for the current rows (D-31; URL values stay simple/stacked), and the role
+ * control is concealed unless announcers are the rows or segments (D-30 refines
+ * D-25; a concealed role still applies and stays editable in the toolbar). The role control reads and writes the one `state.role` the
  * Role filter popover uses, so the two always agree.
  *
  * Init once (`initChartTabs`: delegated listeners), render every cycle
@@ -14,6 +17,7 @@
  */
 
 import { chartContext } from './bars.js';
+import { BAR_STYLE_LABELS } from './bar-copy.js';
 
 export const TAB_HINTS = {
   bars: 'Pick a school, network, or announcer',
@@ -189,6 +193,13 @@ export function renderChartTabs({ data, state }) {
   const butterfly = state.view === 'butterfly';
   const choice = butterfly ? ctx.butterflyGroupChoice : ctx.groupChoice;
   const group = butterfly ? ctx.butterflyGroup : ctx.group;
+  for (const span of document.querySelectorAll('#bar-style-toggle button[data-bars] span[data-rows]')) {
+    const button = span.closest('button');
+    span.textContent = BAR_STYLE_LABELS[span.dataset.rows][button.dataset.bars];
+    span.classList.toggle('is-concealed', span.dataset.rows !== group);
+  }
+  const roleToggle = document.getElementById('bar-role-toggle');
+  if (roleToggle) roleToggle.classList.toggle('is-concealed', group !== 'announcers');
   const groupBy = document.getElementById('group-by');
   if (groupBy) groupBy.classList.toggle('is-concealed', !choice);
   for (const button of document.querySelectorAll('#group-by-toggle button[data-group]')) {

@@ -1313,6 +1313,24 @@ input[type="checkbox"] {
   align-items: baseline;
 }
 
+/* D-31: both labels share one grid cell, so each style button keeps the width of
+   its longer label and swapping the label set moves nothing in the row. */
+.bar-style-labels {
+  display: inline-grid;
+  justify-items: center;
+}
+
+.bar-style-labels > span {
+  grid-area: 1 / 1;
+}
+
+/* Tighter side padding at every width keeps the row on one line at 800 with the
+   longer D-31 labels. */
+.bar-controls .segmented button {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
 .group-by {
   display: inline-flex;
   gap: var(--space-sm);
@@ -1845,15 +1863,9 @@ html:has(#detail-panel[open]) {
     min-height: 44px;
   }
 
-  /* D-25: tighter gap and button padding so Simple/Stacked and Both/PBP/Analyst
-     share the first line and Group-by takes the second. */
+  /* D-25: tighter gap so the controls pack onto as few lines as possible. */
   .bar-controls {
     gap: var(--space-sm);
-  }
-
-  .bar-controls .segmented button {
-    padding-left: 12px;
-    padding-right: 12px;
   }
 }
 
