@@ -7,7 +7,7 @@
  * draws a per-telecast audience figure. D-06: butterfly stacked rows use the
  * same rank-layer trace builder as Bars, per side. D-15: row labels are plain
  * 14/400 annotations; the bar fill carries a network row's family color.
- * D-16: Tone A / Tone B alternation (violet for non-network rows, D-24), 1px page-background separators, in-bar
+ * D-16: Tone A / Tone B alternation (violet for non-network rows, D-24), page-background separators (D-28: 3px desktop, 2px phone), in-bar
  * text only where it fits (uniformtext hide) and reads at 4.5:1. D-18: every
  * labelled row with a drill target is a clickable annotation and every point
  * carries customdata `{r, s, side}`. D-20: phones put each label on its own
@@ -63,6 +63,10 @@ const PHONE_BARS_PITCH = 44;
 const PHONE_BARS_THICKNESS = 22;
 const PHONE_FLY_PITCH = 64;
 const PHONE_FLY_THICKNESS = 32;
+// D-28: a page-background stroke centered on each segment edge leaves a gap as
+// wide as the stroke; channel pieces inside one announcer keep line width 0 so
+// they stay flush. Supersedes D-16's 1px separators.
+const SEGMENT_GAP = { desktop: 3, phone: 2 };
 const LABEL_LINE = 18;
 const LABEL_GAP = 2;
 
@@ -176,7 +180,7 @@ function simpleTrace(rows, totalOf, side, theme, xaxis) {
  * Stacked bars as one trace per segment rank (D-16, D-06). Shared by Bars and
  * both butterfly sides, so the styling cannot drift.
  */
-function stackTraces(rows, segmentsOf, side, theme, xaxis) {
+function stackTraces(rows, segmentsOf, side, theme, xaxis, gap) {
   const segs = rows.map(segmentsOf);
   const depth = segs.reduce((m, list) => Math.max(m, list.length), 0);
   const traces = [];
@@ -199,7 +203,7 @@ function stackTraces(rows, segmentsOf, side, theme, xaxis) {
       constraintext: 'inside',
       cliponaxis: false,
       textfont: { size: 14, color: textColors.map((c) => c ?? '#000000') },
-      marker: { color: tones, line: { width: 1, color: PAGE_BG[theme] } },
+      marker: { color: tones, line: { width: gap, color: PAGE_BG[theme] } },
       hoverinfo: 'none',
       showlegend: false,
       customdata: segs.map((list, r) => (list[k] ? { r, s: k, side } : null)),
@@ -221,9 +225,10 @@ const TRANSPARENT = 'rgba(0,0,0,0)';
  * @param {'light'|'dark'} theme
  * @param {string} pieceAxis - x axis id for the pieces.
  * @param {string} overlayAxis - x axis id (overlaying `pieceAxis`) for the segments.
+ * @param {number} gap - separator stroke width in px (D-28).
  * @returns {object[]}
  */
-function familyStackTraces(rows, sideOf, side, theme, pieceAxis, overlayAxis) {
+function familyStackTraces(rows, sideOf, side, theme, pieceAxis, overlayAxis, gap) {
   const shades = rows.map((row) => channelShades(row.family, theme, row.shadeCount ?? 1));
   const segs = rows.map((row) => sideOf(row).segments);
   const pieces = segs.map((list, i) =>
@@ -271,7 +276,7 @@ function familyStackTraces(rows, sideOf, side, theme, pieceAxis, overlayAxis) {
       constraintext: 'inside',
       cliponaxis: false,
       textfont: { size: 14, color: textColors.map((c) => c ?? '#000000') },
-      marker: { color: TRANSPARENT, line: { width: 1, color: PAGE_BG[theme] } },
+      marker: { color: TRANSPARENT, line: { width: gap, color: PAGE_BG[theme] } },
       hoverinfo: 'none',
       showlegend: false,
       customdata: segs.map((list, r) => (list[k] ? { r, s: k, side } : null)),
@@ -369,6 +374,7 @@ function gapFor(pitch, thickness) {
 export function buildBarFigure(model, rows, env) {
   const { theme, mobile } = env;
   const stacked = model.mode === 'stacked';
+  const gap = mobile ? SEGMENT_GAP.phone : SEGMENT_GAP.desktop;
   const labels = rows.map((r) => truncate(r.label, LABEL_MAX));
   const longest = labels.reduce((m, l) => Math.max(m, l.length), 0);
   const pitch = mobile ? PHONE_BARS_PITCH : DESKTOP_PITCH;
@@ -379,8 +385,8 @@ export function buildBarFigure(model, rows, env) {
 
   const family = stacked && model.rowKind === 'family';
   let traces;
-  if (family) traces = familyStackTraces(rows, (r) => r, null, theme, 'x', 'x3');
-  else if (stacked) traces = stackTraces(rows, (r) => r.segments, null, theme, 'x');
+  if (family) traces = familyStackTraces(rows, (r) => r, null, theme, 'x', 'x3', gap);
+  else if (stacked) traces = stackTraces(rows, (r) => r.segments, null, theme, 'x', gap);
   else traces = [simpleTrace(rows, (r) => r.total, null, theme, 'x')];
   const maxTotal = rows.reduce((m, r) => Math.max(m, r.total), 0);
 
@@ -444,6 +450,7 @@ export function spineGapPx(longest) {
 export function buildButterflyFigure(model, rows, env) {
   const { theme, mobile } = env;
   const stacked = model.mode === 'stacked';
+  const gap = mobile ? SEGMENT_GAP.phone : SEGMENT_GAP.desktop;
   const labelMax = mobile ? LABEL_MAX : SPINE_LABEL_MAX;
   const labels = rows.map((r) => truncate(r.label, labelMax));
   const longest = labels.reduce((m, l) => Math.max(m, l.length), 0);
@@ -460,11 +467,11 @@ export function buildButterflyFigure(model, rows, env) {
       const wrapped = rows.map((r, i) => ({ ...r, __side: sideRows[side][i] }));
       const over = side === 0 ? 'x3' : 'x4';
       traces = traces.concat(
-        familyStackTraces(wrapped, (r) => r.__side, side, theme, axis, over),
+        familyStackTraces(wrapped, (r) => r.__side, side, theme, axis, over, gap),
       );
     } else if (stacked) {
       const wrapped = rows.map((r, i) => ({ ...r, __side: sideRows[side][i] }));
-      traces = traces.concat(stackTraces(wrapped, (r) => r.__side.segments, side, theme, axis));
+      traces = traces.concat(stackTraces(wrapped, (r) => r.__side.segments, side, theme, axis, gap));
     } else {
       const wrapped = rows.map((r, i) => ({ ...r, __side: sideRows[side][i] }));
       traces.push(simpleTrace(wrapped, (r) => r.__side.total, side, theme, axis));
