@@ -80,6 +80,22 @@ def test_clicking_a_disabled_tab_shows_its_hint_without_switching(
     assert _hint(guarded_page) == ""
 
 
+def test_tablist_keeps_exactly_one_tab_stop_after_render(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """WR-04: focusing a disabled tab, then re-rendering, leaves one tabindex=0."""
+    count_js = "() => document.querySelectorAll('#chart-tabs [role=tab][tabindex=\"0\"]').length"
+    open_app(guarded_page, ONE_SCHOOL)
+    guarded_page.locator("#tab-butterfly").click(force=True)
+    guarded_page.evaluate("() => window.__testHooks.setState({ networks: [] })")
+    assert guarded_page.evaluate("() => document.activeElement.id") == "tab-butterfly"
+    assert guarded_page.evaluate(count_js) == 1
+    guarded_page.evaluate("() => document.activeElement.blur()")
+    guarded_page.evaluate("() => window.__testHooks.setState({ school: ['northfield'] })")
+    assert guarded_page.evaluate(count_js) == 1
+    assert _attr(guarded_page, "#tab-scatter", "tabindex") == "0"
+
+
 def test_hover_and_blur_deliver_and_clear_the_hint(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:

@@ -153,13 +153,17 @@ export function renderChartTabs({ data, state }) {
   const ctx = chartContext(data, state);
   const enabled = { scatter: true, bars: ctx.barsEnabled, butterfly: ctx.butterflyEnabled };
   const focused = document.activeElement;
+  // Roving tabindex (WR-04): one Tab stop. The focused tab keeps it while focus
+  // is inside the tablist (a focused disabled tab included); otherwise the
+  // selected tab holds it.
+  const focusInside = tabs.contains(focused);
 
   for (const tab of allTabs()) {
     const view = tab.dataset.view;
     if (!VIEWS.includes(view)) continue;
     const selected = view === state.view;
     tab.setAttribute('aria-selected', String(selected));
-    tab.setAttribute('tabindex', selected || tab === focused ? '0' : '-1');
+    tab.setAttribute('tabindex', (focusInside ? tab === focused : selected) ? '0' : '-1');
     if (enabled[view]) {
       tab.removeAttribute('aria-disabled');
       tab.removeAttribute('title');
