@@ -28,6 +28,9 @@ import { initFilters, renderFilters } from './modules/filters.js';
 import { initLegend, renderLegend } from './modules/legend.js';
 import { renderPanel, openPanel, closePanel, initPanel } from './modules/panel.js';
 import { renderTable } from './modules/table.js';
+import { initChartTabs, renderChartTabs, STALE_COPY } from './modules/chart-tabs.js';
+import { chartContext } from './modules/bars.js';
+import { initBarsPanel, renderBarsPanel, lastBarsModel, resetBarsTap } from './modules/bars-panel.js';
 import { showTooltip, hideTooltip } from './modules/tooltip.js';
 import {
   showHoverRing,
@@ -45,6 +48,14 @@ const axisToggleEl = document.getElementById('axis-toggle');
 const excitementCaptionEl = document.getElementById('excitement-caption');
 const panelBodyEl = document.getElementById('panel-body');
 const panelTitleEl = document.getElementById('panel-title');
+const barsPanelEl = document.getElementById('bars-panel');
+const barsNoteEl = document.getElementById('bars-note');
+const eraNoteEl = document.getElementById('era-note');
+const shapeLegendEl = document.getElementById('shape-legend');
+// Hidden when the selected bar tab no longer applies (D-12); the note shows instead.
+const barsOnlyEls = ['bars-title', 'bars-footer', 'bars-captions', 'bars-data'].map((id) =>
+  document.getElementById(id),
+);
 
 const darkMedia = window.matchMedia('(prefers-color-scheme: dark)');
 const mobileMedia = window.matchMedia('(max-width: 640px)');
@@ -65,6 +76,7 @@ let tooltipMode = TOOLTIP_MODE;
 // below.
 /** Hides the hover tooltip and the hover ring together. */
 function clearHover() {
+  resetBarsTap();
   hideTooltip();
   hideHoverRing();
 }
@@ -112,6 +124,11 @@ let data = null;
 let state = null;
 let lastView = null;
 let revision = 0;
+
+/** Whether the scatter's Plotly event handlers are bound (needs one rendered scatter first). */
+let scatterBound = false;
+/** Which panel the last render showed: 'scatter' | 'bars'. */
+let lastPanel = null;
 
 /** Telecast index the detail panel currently shows, or null when it's closed. */
 let openPanelIndex = null;
@@ -175,7 +192,33 @@ function render() {
   const view = computeView(data, state);
   lastView = view;
 
-  renderChart(chartEl, buildFigure(data, view, state, currentEnv()));
+  const ctx = chartContext(data, state);
+  if (state.view === 'scatter') {
+    chartEl.hidden = false;
+    if (barsPanelEl) barsPanelEl.hidden = true;
+    renderChart(chartEl, buildFigure(data, view, state, currentEnv()));
+    // The div had no width while hidden (research A4); re-measure once on return.
+    if (lastPanel === 'bars') window.Plotly.Plots.resize(chartEl);
+    if (!scatterBound) {
+      bindScatterEvents();
+      scatterBound = true;
+    }
+    lastPanel = 'scatter';
+  } else {
+    chartEl.hidden = true;
+    if (barsPanelEl) barsPanelEl.hidden = false;
+    const applies = state.view === 'bars' ? ctx.barsEnabled : ctx.butterflyEnabled;
+    renderBarsShell(applies);
+    if (applies) {
+      renderBarsPanel({
+        data,
+        state,
+        view,
+        env: { ...currentEnv(), width: document.getElementById('bars-chart').clientWidth },
+      });
+    }
+    lastPanel = 'bars';
+  }
 
   if (axisToggleEl) {
     for (const button of axisToggleEl.querySelectorAll('button[data-axis]')) {
@@ -183,8 +226,9 @@ function render() {
     }
   }
   if (excitementCaptionEl) {
-    excitementCaptionEl.hidden = state.axis !== 'excitement';
+    excitementCaptionEl.hidden = state.axis !== 'excitement' || state.view !== 'scatter';
   }
+  if (eraNoteEl) eraNoteEl.hidden = state.view !== 'scatter';
 
   history.replaceState(null, '', location.pathname + encodeState(state, data));
 
@@ -199,6 +243,55 @@ function render() {
   for (const renderer of renderers) {
     renderer({ data, state, view, setState });
   }
+  if (state.view !== 'scatter' && shapeLegendEl) shapeLegendEl.hidden = true;
+}
+
+/**
+ * Bars/Butterfly panel shell: when the selected tab no longer applies (D-12) the
+ * note shows the stale-tab copy in place at the same 520px height; otherwise the
+ * note hides and the panel's own elements show. Plan 05 renders the bars here.
+ */
+function renderBarsShell(applies) {
+  const chartBox = document.getElementById('bars-chart');
+  if (applies) {
+    if (barsNoteEl) barsNoteEl.hidden = true;
+    for (const el of barsOnlyEls) if (el) el.hidden = false;
+    if (chartBox) chartBox.classList.remove('is-concealed');
+    return;
+  }
+  const copy = STALE_COPY[state.view];
+  if (barsNoteEl) {
+    barsNoteEl.querySelector('.season-empty-title').textContent = copy.title;
+    barsNoteEl.querySelector('.season-empty-hint').textContent = copy.hint;
+    barsNoteEl.hidden = false;
+  }
+  for (const el of barsOnlyEls) if (el) el.hidden = true;
+  if (chartBox) chartBox.classList.add('is-concealed');
+}
+
+/** Binds the scatter's Plotly events; runs once, after the first scatter render. */
+function bindScatterEvents() {
+  bindChartEvents(chartEl, {
+    onPointClick(i) {
+      openDetailPanel(i);
+    },
+    onPointHover(i, ev) {
+      if (hoverNoneMedia.matches) return;
+      const { clientX, clientY } = pointClientPosition(ev);
+      if (Number.isFinite(clientX) && Number.isFinite(clientY)) {
+        const { size, symbol } = ringSpecFromPoint(ev.points && ev.points[0]);
+        showHoverRing({ i, clientX, clientY, diameter: hoverRingDiameter(size, symbol) });
+      }
+      if (tooltipMode !== 'html') return;
+      showTooltip(data, i, { axis: state.axis, theme: currentEnv().theme, clientX, clientY });
+    },
+    onPointUnhover() {
+      clearHover();
+    },
+    onRelayout() {
+      clearHover();
+    },
+  });
 }
 
 /**
@@ -263,6 +356,19 @@ async function bootstrap() {
     });
     renderers.push(renderLegend);
 
+    initChartTabs({ data, getState: () => state, setState });
+    renderers.push(renderChartTabs);
+
+    initBarsPanel({ data, getState: () => state, setState, rerender: render });
+
+    let resizeTimer = null;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if (state.view === 'butterfly' && !mobileMedia.matches) render();
+      }, 150);
+    });
+
     renderers.push(tableRenderer);
 
     if (axisToggleEl) {
@@ -280,32 +386,11 @@ async function bootstrap() {
     // rendered into it at least once, so the first render must come first.
     render();
 
-    bindChartEvents(chartEl, {
-      onPointClick(i) {
-        openDetailPanel(i);
-      },
-      onPointHover(i, ev) {
-        if (hoverNoneMedia.matches) return;
-        const { clientX, clientY } = pointClientPosition(ev);
-        if (Number.isFinite(clientX) && Number.isFinite(clientY)) {
-          const { size, symbol } = ringSpecFromPoint(ev.points && ev.points[0]);
-          showHoverRing({ i, clientX, clientY, diameter: hoverRingDiameter(size, symbol) });
-        }
-        if (tooltipMode !== 'html') return;
-        showTooltip(data, i, { axis: state.axis, theme: currentEnv().theme, clientX, clientY });
-      },
-      onPointUnhover() {
-        clearHover();
-      },
-      onRelayout() {
-        clearHover();
-      },
-    });
-
     window.__testHooks = {
       ready: true,
       data,
       getState: () => structuredClone(state),
+      getBarsModel: () => structuredClone(lastBarsModel()),
       setState,
       getView: () => ({
         visibleCount: lastView.visibleCount,
@@ -335,6 +420,9 @@ async function bootstrap() {
         summary: lastView.summary,
       }),
       renderers,
+      get lastPanel() {
+        return lastPanel;
+      },
       openPanel: (i) => openDetailPanel(i),
       closePanel: () => hideDetailPanel(),
       // D-22: the only way a test flips the tooltip's mode at runtime,

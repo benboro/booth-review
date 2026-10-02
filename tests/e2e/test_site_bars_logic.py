@@ -1,0 +1,761 @@
+"""In-browser proof of the Bars/Butterfly logic core (SITE-33..36, D-01..D-18).
+
+Every expectation is hand-worked against the 12-telecast synthetic fixture
+(`tests/fixtures/contract/site-data.fixture.json`). The modules under test
+(`bars.js`, plus the `view`/`bars`/`group` params in `url-state.js`) are DOM-free,
+so they are imported straight into the served page via `page.evaluate`.
+"""
+
+from __future__ import annotations
+
+import copy
+import json
+from typing import Any
+
+import pytest
+from conftest import multichannel_raw
+from playwright.sync_api import Page
+
+pytestmark = pytest.mark.e2e
+
+_ENCODE_JS = """
+async (partial) => {
+  const D = await import('./modules/data.js');
+  const S = await import('./modules/select.js');
+  const U = await import('./modules/url-state.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  const state = Object.assign(S.defaultState(data), partial);
+  const encoded = U.encodeState(state, data);
+  const decoded = U.decodeState(encoded, data);
+  return { encoded, decoded, again: U.encodeState(decoded, data) };
+}
+"""
+
+_DECODE_JS = """
+async (search) => {
+  const D = await import('./modules/data.js');
+  const U = await import('./modules/url-state.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  return U.decodeState(search, data);
+}
+"""
+
+_CTX_JS = """
+async (partial) => {
+  const D = await import('./modules/data.js');
+  const S = await import('./modules/select.js');
+  const B = await import('./modules/bars.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  const state = Object.assign(S.defaultState(data), partial);
+  return B.chartContext(data, state);
+}
+"""
+
+# Runs one bars.js model builder over the page's data, optionally against a
+# replacement raw payload (for the null-conference case).
+_MODEL_JS = """
+async ([fn, partial, rawOverride]) => {
+  const D = await import('./modules/data.js');
+  const S = await import('./modules/select.js');
+  const B = await import('./modules/bars.js');
+  const raw = rawOverride ?? await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  const state = Object.assign(S.defaultState(data), partial);
+  const view = S.computeView(data, state);
+  const model = B[fn](data, view, state);
+  const personFacets = Array.from(view.facets.people);
+  return { model, personFacets, ids: data.lookups.people.map((p) => p.id) };
+}
+"""
+
+_VISIBLE_JS = """
+async ([count, expanded]) => {
+  const B = await import('./modules/bars.js');
+  const rows = Array.from({ length: count }, (_, i) => ({ key: `r${i}` }));
+  return B.visibleRows(rows, expanded).length;
+}
+"""
+
+_LABEL_JS = """
+async () => {
+  const B = await import('./modules/bars.js');
+  return {
+    both: B.announcerLabel('Joe Davis', ['pbp', 'analyst']),
+    pbp: B.announcerLabel('A', ['pbp']),
+    other: B.announcerLabel('B', ['unknown']),
+    none: B.announcerLabel('C', []),
+    top: B.TOP_N,
+    none_key: B.NO_CONFERENCE_KEY,
+  };
+}
+"""
+
+_DRILL_JS = """
+async ([partial, target]) => {
+  const D = await import('./modules/data.js');
+  const S = await import('./modules/select.js');
+  const B = await import('./modules/bars.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  const state = Object.assign(S.defaultState(data), partial);
+  return B.drillPatch(data, state, target);
+}
+"""
+
+
+def _load(page: Page, site_url: str) -> None:
+    page.goto(f"{site_url}/")
+
+
+def _model(page: Page, fn: str, partial: dict[str, Any], raw: Any = None) -> dict[str, Any]:
+    out = page.evaluate(_MODEL_JS, [fn, partial, raw])
+    assert "viewers" not in json.dumps(out["model"])  # D-01
+    return out
+
+
+def _rows(model: dict[str, Any]) -> list[tuple[str, int]]:
+    return [(r["label"], r["total"]) for r in model["rows"]]
+
+
+# --------------------------------------------------------------------------
+# Task 1: URL params and chartContext
+# --------------------------------------------------------------------------
+
+
+def test_default_state_still_encodes_empty(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    out = guarded_page.evaluate(_ENCODE_JS, {})
+    assert out["encoded"] == ""
+    assert out["decoded"]["view"] == "scatter"
+    assert out["decoded"]["bars"] == "simple"
+    assert out["decoded"]["group"] is None
+
+
+def test_view_bars_group_encode_and_round_trip(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    one = guarded_page.evaluate(_ENCODE_JS, {"view": "bars"})
+    assert one["encoded"] == "?view=bars"
+    full = guarded_page.evaluate(
+        _ENCODE_JS,
+        {"axis": "excitement", "view": "butterfly", "bars": "stacked", "group": "teams"},
+    )
+    assert full["encoded"] == "?axis=excitement&view=butterfly&bars=stacked&group=teams"
+    for out in (one, full):
+        assert out["again"] == out["encoded"]
+    assert full["decoded"]["view"] == "butterfly"
+    assert full["decoded"]["bars"] == "stacked"
+    assert full["decoded"]["group"] == "teams"
+
+
+def test_junk_view_params_fall_to_defaults(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    junk = guarded_page.evaluate(_DECODE_JS, "?view=nonsense&bars=x&group=y")
+    assert (junk["view"], junk["bars"], junk["group"]) == ("scatter", "simple", None)
+    assert guarded_page.evaluate(_DECODE_JS, "?group=announcers")["group"] is None
+
+
+def test_stale_view_is_never_rejected_for_applicability(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    assert guarded_page.evaluate(_DECODE_JS, "?view=bars")["view"] == "bars"
+    assert guarded_page.evaluate(_DECODE_JS, "?view=butterfly")["view"] == "butterfly"
+
+
+_CTX_CASES: list[tuple[dict[str, Any], dict[str, Any]]] = [
+    ({}, {"barsEnabled": False, "butterflyEnabled": False}),
+    (
+        {"school": ["northfield"]},
+        {"barsEnabled": True, "group": "announcers", "groupChoice": False},
+    ),
+    ({"networks": ["net-a"]}, {"barsEnabled": True, "group": "teams"}),
+    ({"networks": []}, {"barsEnabled": True, "group": "teams"}),
+    ({"people": ["kris-venn"]}, {"barsEnabled": True, "group": "teams"}),
+    (
+        {"school": ["northfield"], "people": ["kris-venn"]},
+        {"groupChoice": True, "group": "announcers"},
+    ),
+    (
+        {"school": ["northfield"], "people": ["kris-venn"], "group": "teams"},
+        {"groupChoice": True, "group": "teams"},
+    ),
+    (
+        {"school": ["northfield", "lakeview"]},
+        {"butterflyEnabled": True, "butterflyGroup": "announcers", "butterflyGroupChoice": False},
+    ),
+    (
+        {"people": ["kris-venn", "pat-rowan"]},
+        {"butterflyEnabled": True, "butterflyGroup": "teams"},
+    ),
+    (
+        {"people": ["kris-venn", "pat-rowan", "casey-lund"]},
+        {"butterflyEnabled": False},
+    ),
+    (
+        {"school": ["northfield", "lakeview"], "people": ["kris-venn", "pat-rowan"]},
+        {"butterflyGroupChoice": True, "butterflyGroup": "announcers"},
+    ),
+    (
+        {
+            "school": ["northfield", "lakeview"],
+            "people": ["kris-venn", "pat-rowan"],
+            "group": "teams",
+        },
+        {"butterflyGroupChoice": True, "butterflyGroup": "teams"},
+    ),
+]
+
+
+@pytest.mark.parametrize(("partial", "expected"), _CTX_CASES)
+def test_chart_context_matrix(
+    guarded_page: Page, site_url: str, partial: dict[str, Any], expected: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    ctx = guarded_page.evaluate(_CTX_JS, partial)
+    for key, value in expected.items():
+        assert ctx[key] == value, (partial, key, ctx)
+
+
+# --------------------------------------------------------------------------
+# Task 2: Bars tab counting model
+# --------------------------------------------------------------------------
+
+_NORTHFIELD_ANNOUNCERS = [
+    ("Dale Harlow · PBP", 2),
+    ("Dale Harlow Jr. · Analyst", 2),
+    ("Casey Lund · PBP", 1),
+    ("Jamie Oaks · Analyst", 1),
+    ("Robin Teague · Other", 1),
+]
+
+
+def test_announcer_labels_and_constants(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    out = guarded_page.evaluate(_LABEL_JS)
+    assert out["both"] == "Joe Davis · PBP/Analyst"
+    assert out["pbp"] == "A · PBP"
+    assert out["other"] == "B · Other"
+    assert out["none"] == "C"
+    assert out["top"] == 15
+    assert out["none_key"] == "c:__none__"
+
+
+def test_bars_is_null_without_a_subject(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    assert _model(guarded_page, "barsModel", {})["model"] is None
+
+
+def test_simple_announcer_bars_for_a_school(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    out = _model(guarded_page, "barsModel", {"school": ["northfield"]})
+    model = out["model"]
+    assert (model["group"], model["mode"], model["rowKind"]) == ("announcers", "simple", "person")
+    assert _rows(model) == _NORTHFIELD_ANNOUNCERS
+    assert model["rows"][0]["target"] == {"kind": "person", "id": "dale-harlow"}
+    # D-02 cross-check: same counts as the existing facet rule.
+    for row in model["rows"]:
+        person = out["ids"].index(row["target"]["id"])
+        assert out["personFacets"][person] == row["total"]
+
+
+def _channels(segment: dict[str, Any]) -> list[tuple[str, str, int, int]]:
+    return [(c["id"], c["name"], c["count"], c["shade"]) for c in segment["channels"]]
+
+
+def _segs(row: dict[str, Any]) -> list[tuple[str, int, list[tuple[str, str, int, int]]]]:
+    return [(s["label"], s["count"], _channels(s)) for s in row["segments"]]
+
+
+_A = ("net-a", "Alpha Sports")
+_E = ("net-e", "Echo Sports")
+
+_M_NORTHFIELD = [
+    ("Dale Harlow · PBP", 2, [(*_A, 1, 0), (*_E, 1, 1)]),
+    ("Dale Harlow Jr. · Analyst", 2, [(*_A, 1, 0), (*_E, 1, 1)]),
+    ("Casey Lund · PBP", 1, [(*_A, 1, 0)]),
+    ("Jamie Oaks · Analyst", 1, [(*_A, 1, 0)]),
+    ("Robin Teague · Other", 1, [(*_E, 1, 1)]),
+]
+
+
+def test_stacked_announcer_bars_are_families(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    model = _model(guarded_page, "barsModel", {"school": ["northfield"], "bars": "stacked"})[
+        "model"
+    ]
+    assert (model["rowKind"], model["segmentKind"]) == ("family", "person")
+    assert len(model["rows"]) == 1
+    row = model["rows"][0]
+    assert (row["key"], row["label"], row["family"], row["total"]) == (
+        "f:disney",
+        "ABC/ESPN",
+        "disney",
+        7,
+    )
+    assert row["shadeCount"] == 1
+    assert row["target"] == {"kind": "family", "family": "disney", "ids": ["net-a"]}
+    assert _segs(row) == [(label, n, [(*_A, n, 0)]) for label, n, _ in _M_NORTHFIELD]
+    assert row["segments"][0]["target"] == {"kind": "person", "id": "dale-harlow"}
+
+
+def test_family_row_splits_announcers_by_channel(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    raw = multichannel_raw(fixture_raw)
+    model = _model(guarded_page, "barsModel", {"school": ["northfield"], "bars": "stacked"}, raw)[
+        "model"
+    ]
+    assert (model["rowKind"], model["segmentKind"]) == ("family", "person")
+    assert len(model["rows"]) == 1
+    row = model["rows"][0]
+    assert (row["key"], row["name"], row["label"], row["family"], row["total"]) == (
+        "f:disney",
+        "ABC/ESPN",
+        "ABC/ESPN",
+        "disney",
+        7,
+    )
+    assert row["shadeCount"] == 2
+    assert row["target"] == {"kind": "family", "family": "disney", "ids": ["net-a", "net-e"]}
+    assert _segs(row) == _M_NORTHFIELD
+    assert [s["key"] for s in row["segments"]] == [
+        "p:dale-harlow",
+        "p:dale-harlow-jr",
+        "p:casey-lund",
+        "p:jamie-oaks",
+        "p:robin-teague",
+    ]
+    for seg in row["segments"]:
+        assert seg["target"] == {"kind": "person", "id": seg["key"][2:]}
+        assert sum(c["count"] for c in seg["channels"]) == seg["count"]
+
+
+def test_channel_shade_follows_data_wide_order(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    raw = multichannel_raw(fixture_raw, also_move_zero=True)
+    model = _model(guarded_page, "barsModel", {"school": ["northfield"], "bars": "stacked"}, raw)[
+        "model"
+    ]
+    row = model["rows"][0]
+    for seg in row["segments"]:
+        for c in seg["channels"]:
+            assert c["shade"] == (0 if c["id"] == "net-e" else 1)
+    by_label = {s["label"]: s for s in row["segments"]}
+    assert _channels(by_label["Dale Harlow · PBP"]) == [(*_E, 2, 0)]
+    assert _channels(by_label["Casey Lund · PBP"]) == [(*_A, 1, 1)]
+
+
+def test_family_rows_respect_the_role_filter(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    raw = multichannel_raw(fixture_raw)
+    model = _model(
+        guarded_page,
+        "barsModel",
+        {"school": ["northfield"], "bars": "stacked", "role": "pbp"},
+        raw,
+    )["model"]
+    assert len(model["rows"]) == 1
+    row = model["rows"][0]
+    assert (row["key"], row["total"]) == ("f:disney", 3)
+    assert _segs(row) == [
+        ("Dale Harlow · PBP", 2, [(*_A, 1, 0), (*_E, 1, 1)]),
+        ("Casey Lund · PBP", 1, [(*_A, 1, 0)]),
+    ]
+
+
+def test_simple_rows_carry_no_channels(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    model = _model(guarded_page, "barsModel", {"school": ["northfield"]})["model"]
+    assert all("channels" not in r and "shadeCount" not in r for r in model["rows"])
+    stacked = _model(guarded_page, "barsModel", {"people": ["kris-venn"], "bars": "stacked"})[
+        "model"
+    ]
+    assert all("shadeCount" not in r for r in stacked["rows"])
+    assert all("channels" not in s for r in stacked["rows"] for s in r["segments"])
+
+
+def test_simple_team_bars_for_an_announcer(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    model = _model(guarded_page, "barsModel", {"people": ["kris-venn"]})["model"]
+    assert (model["group"], model["rowKind"]) == ("teams", "team")
+    assert _rows(model) == [
+        ("Foxhollow", 2),
+        ("Cedar Hollow", 1),
+        ("Ironpeak", 1),
+        ("Lakeview", 1),
+        ("Stonebridge", 1),
+    ]
+    assert model["rows"][0]["target"] == {"kind": "team", "slug": "foxhollow"}
+
+
+def test_stacked_team_bars_are_era_correct_conferences(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    model = _model(guarded_page, "barsModel", {"people": ["kris-venn"], "bars": "stacked"})["model"]
+    assert (model["rowKind"], model["segmentKind"]) == ("conference", "team")
+    assert _rows(model) == [
+        ("SEC", 3),
+        ("Big Ten", 1),
+        ("FBS Independents", 1),
+        ("Mountain West", 1),
+    ]
+    sec = model["rows"][0]
+    assert [(s["label"], s["count"]) for s in sec["segments"]] == [
+        ("Foxhollow", 2),
+        ("Lakeview", 1),
+    ]
+    assert sec["target"] == {"kind": "conference", "name": "SEC"}
+
+
+def test_non_fbs_conference_row_has_no_target(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    model = _model(
+        guarded_page,
+        "barsModel",
+        {"school": ["maplecrest"], "group": "teams", "networks": ["net-d"], "bars": "stacked"},
+    )["model"]
+    row = next(r for r in model["rows"] if r["label"] == "Missouri Valley")
+    assert row["target"] is None
+    assert [s["label"] for s in row["segments"]] == ["Maplecrest"]
+
+
+def test_null_conference_row(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    raw = copy.deepcopy(fixture_raw)
+    raw["telecasts"]["home_conference"][3] = None  # Maplecrest at home, game 3
+    _load(guarded_page, site_url)
+    model = _model(
+        guarded_page,
+        "barsModel",
+        {"school": ["maplecrest"], "group": "teams", "networks": ["net-d"], "bars": "stacked"},
+        raw,
+    )["model"]
+    row = next(r for r in model["rows"] if r["key"] == "c:__none__")
+    assert (row["label"], row["target"]) == ("No conference", None)
+
+
+def test_alt_feed_counts_and_role_filter_drops_it(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    rows = _rows(_model(guarded_page, "barsModel", {"school": ["maplecrest"]})["model"])
+    assert ("Taylor Vance · Analyst", 1) in rows
+    only_pbp = _rows(
+        _model(guarded_page, "barsModel", {"school": ["maplecrest"], "role": "pbp"})["model"]
+    )
+    names = " ".join(label for label, _ in only_pbp)
+    assert "Taylor Vance" not in names
+    assert "Robin Teague" not in names
+
+
+def test_called_together_narrows_the_counted_games(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    people = ["kris-venn", "pat-rowan"]
+    together = _model(guarded_page, "barsModel", {"people": people, "together": True})["model"]
+    assert together["rows"] == []
+    union = _model(guarded_page, "barsModel", {"people": people})["model"]
+    # games 1, 6, 9 and 2, 5, 10 -> 12 team slots, Cedar Hollow 3 times.
+    assert sum(r["total"] for r in union["rows"]) == 12
+    assert ("Cedar Hollow", 3) in _rows(union)
+
+
+@pytest.mark.parametrize(
+    ("count", "expanded", "shown"),
+    [(20, False, 15), (20, True, 20), (15, False, 15), (15, True, 15)],
+)
+def test_visible_rows_limit(
+    guarded_page: Page, site_url: str, count: int, expanded: bool, shown: int
+) -> None:
+    _load(guarded_page, site_url)
+    assert guarded_page.evaluate(_VISIBLE_JS, [count, expanded]) == shown
+
+
+# --------------------------------------------------------------------------
+# Task 3: Butterfly model and drill-in patches
+# --------------------------------------------------------------------------
+
+
+def _sides(model: dict[str, Any]) -> list[tuple[str, int, int]]:
+    return [(r["label"], r["sides"][0]["total"], r["sides"][1]["total"]) for r in model["rows"]]
+
+
+def test_butterfly_two_schools(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    model = _model(guarded_page, "butterflyModel", {"school": ["northfield", "lakeview"]})["model"]
+    assert [s["name"] for s in model["sides"]] == ["Northfield", "Lakeview"]
+    assert [s["kind"] for s in model["sides"]] == ["school", "school"]
+    assert model["shared"] == 2
+    assert _sides(model) == [
+        ("Dale Harlow · PBP", 2, 1),
+        ("Dale Harlow Jr. · Analyst", 2, 1),
+        ("Casey Lund · PBP", 1, 1),
+        ("Jamie Oaks · Analyst", 1, 1),
+        ("Jax Venn · Analyst", 0, 1),
+        ("Kris Venn · PBP", 0, 1),
+        ("Robin Teague · Other", 1, 0),
+    ]
+    assert all(r["total"] == r["sides"][0]["total"] + r["sides"][1]["total"] for r in model["rows"])
+
+
+def test_butterfly_two_announcers_and_together_is_ignored(
+    guarded_page: Page, site_url: str
+) -> None:
+    _load(guarded_page, site_url)
+    people = ["kris-venn", "pat-rowan"]
+    model = _model(guarded_page, "butterflyModel", {"people": people})["model"]
+    assert [s["name"] for s in model["sides"]] == ["Kris Venn", "Pat Rowan"]
+    assert [s["kind"] for s in model["sides"]] == ["person", "person"]
+    assert model["shared"] == 0
+    assert _sides(model) == [
+        ("Cedar Hollow", 1, 2),
+        ("Foxhollow", 2, 1),
+        ("Boulder Pass", 0, 2),
+        ("Ironpeak", 1, 1),
+        ("Lakeview", 1, 0),
+        ("Stonebridge", 1, 0),
+    ]
+    together = _model(guarded_page, "butterflyModel", {"people": people, "together": True})["model"]
+    assert together == model
+
+
+def test_butterfly_stacked_mirrors_bars_rows(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    schools = _model(
+        guarded_page,
+        "butterflyModel",
+        {"school": ["northfield", "lakeview"], "bars": "stacked"},
+    )["model"]
+    assert (schools["rowKind"], schools["segmentKind"]) == ("family", "person")
+    names = {r["label"]: r for r in schools["rows"]}
+    disney = names["ABC/ESPN"]
+    assert disney["sides"][0]["total"] == 7
+    assert [s["count"] for s in disney["sides"][0]["segments"]] == [2, 2, 1, 1, 1]
+    people = _model(
+        guarded_page,
+        "butterflyModel",
+        {"people": ["kris-venn", "pat-rowan"], "bars": "stacked"},
+    )["model"]
+    assert (people["rowKind"], people["segmentKind"]) == ("conference", "team")
+    sec = next(r for r in people["rows"] if r["label"] == "SEC")
+    assert sec["sides"][0]["total"] == 3
+    assert [(s["label"], s["count"]) for s in sec["sides"][0]["segments"]] == [
+        ("Foxhollow", 2),
+        ("Lakeview", 1),
+    ]
+
+
+def test_butterfly_stacked_family_rows_with_channels(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    raw = multichannel_raw(fixture_raw)
+    model = _model(
+        guarded_page,
+        "butterflyModel",
+        {"school": ["northfield", "lakeview"], "bars": "stacked"},
+        raw,
+    )["model"]
+    assert model["rowKind"] == "family"
+    assert [s["name"] for s in model["sides"]] == ["Northfield", "Lakeview"]
+    assert model["shared"] == 2
+    assert [r["key"] for r in model["rows"]] == ["f:disney", "f:fox"]
+    disney, fox = model["rows"]
+    assert (disney["total"], disney["shadeCount"]) == (11, 2)
+    assert disney["target"] == {"kind": "family", "family": "disney", "ids": ["net-a", "net-e"]}
+    assert disney["sides"][0]["total"] == 7
+    assert _segs(disney["sides"][0]) == _M_NORTHFIELD
+    assert disney["sides"][1]["total"] == 4
+    assert _segs(disney["sides"][1]) == [
+        ("Casey Lund · PBP", 1, [(*_A, 1, 0)]),
+        ("Dale Harlow · PBP", 1, [(*_A, 1, 0)]),
+        ("Dale Harlow Jr. · Analyst", 1, [(*_A, 1, 0)]),
+        ("Jamie Oaks · Analyst", 1, [(*_A, 1, 0)]),
+    ]
+    assert (fox["label"], fox["total"], fox["shadeCount"]) == ("FOX/FS1/BTN", 2, 1)
+    assert fox["target"] == {"kind": "family", "family": "fox", "ids": ["net-b"]}
+    assert (fox["sides"][0]["total"], fox["sides"][0]["segments"]) == (0, [])
+    assert fox["sides"][1]["total"] == 2
+    b_ch = [(*("net-b", "Beta Network"), 1, 0)]
+    assert _segs(fox["sides"][1]) == [("Jax Venn · Analyst", 1, b_ch), ("Kris Venn · PBP", 1, b_ch)]
+
+
+@pytest.mark.parametrize(
+    "partial",
+    [
+        {"school": ["northfield"]},
+        {"school": ["northfield", "lakeview", "ironpeak"]},
+        {"people": ["kris-venn"]},
+    ],
+)
+def test_butterfly_is_null_without_exactly_two_subjects(
+    guarded_page: Page, site_url: str, partial: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    assert _model(guarded_page, "butterflyModel", partial)["model"] is None
+
+
+def _drill(page: Page, partial: dict[str, Any], target: dict[str, Any] | None) -> Any:
+    return page.evaluate(_DRILL_JS, [partial, target])
+
+
+def test_drill_patches(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    p = guarded_page
+    school = {"school": ["northfield"]}
+    person = {"kind": "person", "id": "dale-harlow"}
+    assert _drill(p, school, person) == {"people": ["dale-harlow"]}
+    assert _drill(p, {**school, "people": ["dale-harlow"]}, person) is None
+    full = ["dale-harlow", "kris-venn", "pat-rowan", "casey-lund"]
+    assert (
+        _drill(
+            p, {**school, "compare": True, "people": full}, {"kind": "person", "id": "jamie-oaks"}
+        )
+        is None
+    )
+    team = {"kind": "team", "slug": "lakeview"}
+    assert _drill(p, {"people": ["kris-venn"], "school": ["northfield"]}, team)["school"] == [
+        "northfield",
+        "lakeview",
+    ]
+    assert _drill(p, {"school": ["lakeview"]}, team) is None
+    net = {"kind": "network", "id": "net-a"}
+    assert _drill(p, {"school": ["northfield"]}, net) == {"networks": ["net-a"]}
+    assert _drill(p, {"networks": ["net-a"]}, net) is None
+    fam = {"kind": "family", "family": "disney", "ids": ["net-a", "net-e"]}
+    stacked = {"school": ["northfield"], "view": "bars", "bars": "stacked"}
+    assert _drill(p, stacked, fam) == {"networks": ["net-a", "net-e"]}
+    assert _drill(p, {**stacked, "networks": ["net-e", "net-a"]}, fam) is None
+    assert _drill(p, stacked, {**fam, "ids": []}) is None
+    sec = {"kind": "conference", "name": "SEC"}
+    assert _drill(p, {"conferences": ["Big Ten"]}, sec) == {"conferences": ["Big Ten", "SEC"]}
+    assert _drill(p, {"conferences": ["SEC"]}, sec) is None
+    assert _drill(p, {}, {"kind": "conference", "name": "Missouri Valley"}) is None
+    assert _drill(p, {}, None) is None
+
+
+def test_drill_keeps_the_grouping(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    # networks narrowed -> teams group; adding a school makes Group-by a choice,
+    # and the click must not flip the chart from Teams to Announcers.
+    patch = _drill(
+        guarded_page,
+        {"view": "bars", "networks": ["net-a"]},
+        {"kind": "team", "slug": "northfield"},
+    )
+    assert patch["school"] == ["northfield"]
+    assert patch["group"] == "teams"
+    # school only (announcers, stored group 'teams' but unresolved): person drill
+    # makes teams apply too, staying on Announcers (group null).
+    patch = _drill(
+        guarded_page,
+        {"view": "bars", "school": ["northfield"], "group": "teams"},
+        {"kind": "person", "id": "dale-harlow"},
+    )
+    assert patch["people"] == ["dale-harlow"]
+    assert patch["group"] is None
+
+
+# --------------------------------------------------------------------------
+# D-31: simple announcer rows carry their main network family
+# --------------------------------------------------------------------------
+
+_THREE_SCHOOLS = ["ironpeak", "foxhollow", "stonebridge"]
+
+
+def _main(model: dict[str, Any]) -> list[tuple[str, int, Any]]:
+    return [(r["label"], r["total"], r["mainFamily"]) for r in model["rows"]]
+
+
+def test_simple_announcer_rows_carry_main_family(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    model = _model(guarded_page, "barsModel", {"school": _THREE_SCHOOLS})["model"]
+    assert _main(model) == [
+        ("Kris Venn · PBP", 3, "fox"),
+        ("Robin Teague · Other", 3, "other"),
+        ("Jax Venn · Analyst", 2, "fox"),
+        ("Casey Lund · PBP", 1, "other"),
+        ("Dale Harlow · PBP", 1, "disney"),
+        ("Dale Harlow Jr. · Analyst", 1, "disney"),
+        ("Pat Rowan · PBP", 1, "fox"),
+        ("Sam Delgado · Analyst", 1, "conference"),
+        ("Taylor Vance · Analyst", 1, "fox"),
+    ]
+    # The family pill is drawn for any row with `family`, so it stays null.
+    assert all(r["family"] is None for r in model["rows"])
+
+
+def test_main_family_tie_breaks_by_family_order(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    model = _model(guarded_page, "barsModel", {"school": ["lakeview", "maplecrest"]})["model"]
+    by_label = {r["label"]: r["mainFamily"] for r in model["rows"]}
+    assert by_label["Jamie Oaks · Analyst"] == "disney"
+    assert by_label["Casey Lund · PBP"] == "other"
+
+
+def test_main_family_honors_the_role_filter(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    model = _model(guarded_page, "barsModel", {"school": _THREE_SCHOOLS, "role": "analyst"})[
+        "model"
+    ]
+    by_label = {r["label"]: r["mainFamily"] for r in model["rows"]}
+    assert by_label["Sam Delgado · Analyst"] == "conference"
+    assert by_label["Jax Venn · Analyst"] == "fox"
+
+
+def test_butterfly_main_family_uses_both_sides(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    state = {"school": ["lakeview", "maplecrest"]}
+    bars = _model(guarded_page, "barsModel", state)["model"]
+    fly = _model(guarded_page, "butterflyModel", state)["model"]
+    want = {r["key"]: r["mainFamily"] for r in bars["rows"]}
+    got = {r["key"]: r["mainFamily"] for r in fly["rows"]}
+    assert got == want
+    by_label = {r["label"]: r["mainFamily"] for r in fly["rows"]}
+    assert by_label["Casey Lund · PBP"] == "other"
+    assert by_label["Jamie Oaks · Analyst"] == "disney"
+
+
+def test_non_announcer_rows_have_no_main_family(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    cases = [
+        ("barsModel", {"people": ["kris-venn"]}),
+        ("barsModel", {"people": ["kris-venn"], "bars": "stacked"}),
+        ("barsModel", {"school": ["northfield"], "bars": "stacked"}),
+        ("butterflyModel", {"people": ["kris-venn", "pat-rowan"]}),
+        ("butterflyModel", {"people": ["kris-venn", "pat-rowan"], "bars": "stacked"}),
+        ("butterflyModel", {"school": ["northfield", "lakeview"], "bars": "stacked"}),
+    ]
+    for fn, state in cases:
+        model = _model(guarded_page, fn, state)["model"]
+        assert model["rows"], (fn, state)
+        assert all(r.get("mainFamily") is None for r in model["rows"]), (fn, state)
+
+
+def test_butterfly_row_label_unions_roles_from_both_sides(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    """WR-01. Kris Venn calls Lakeview's game 9 as PBP and Stonebridge's game 6
+    as Analyst (changed below), so the one merged row reads `PBP/Analyst`, not
+    the role of whichever side built the row first. Hand count: 1 game a side.
+    """
+    raw = copy.deepcopy(fixture_raw)
+    kris = next(i for i, p in enumerate(raw["lookups"]["people"]) if p["name"] == "Kris Venn")
+    entry = next(c for c in raw["telecasts"]["crew"][6] if c["person"] == kris)
+    assert entry["role"] == "pbp"
+    entry["role"] = "analyst"
+    _load(guarded_page, site_url)
+    state = {"school": ["lakeview", "stonebridge"]}
+    fly = _model(guarded_page, "butterflyModel", state, raw)["model"]
+    row = next(r for r in fly["rows"] if r["name"] == "Kris Venn")
+    assert row["label"] == "Kris Venn · PBP/Analyst"
+    assert [s["total"] for s in row["sides"]] == [1, 1]
+    swapped = _model(guarded_page, "butterflyModel", {"school": ["stonebridge", "lakeview"]}, raw)[
+        "model"
+    ]
+    assert next(r for r in swapped["rows"] if r["name"] == "Kris Venn")["label"] == (
+        "Kris Venn · PBP/Analyst"
+    )

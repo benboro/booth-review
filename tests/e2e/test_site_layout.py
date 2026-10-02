@@ -465,6 +465,7 @@ def test_page_has_side_gutters(
     open_app(guarded_page, "")
 
     for selector in (
+        "#chart-tabs",
         "#legend-chips",
         "#axis-toggle",
         "#chart",
@@ -486,16 +487,17 @@ def test_page_has_side_gutters(
 def test_no_empty_band_between_toolbar_and_chart(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-25d/D-08: with nothing selected, the empty chart-tab slot collapses
-    to 0 height, and the gap between the toolbar and the legend row is no
-    more than the (still-visible) selection bar's own height plus a small
-    gutter -- not the old empty band."""
+    """D-25d/D-08: Phase 04.4 D-10 fills the chart-tab slot (40px), and the gap
+    between the toolbar and the legend row is no more than the selection bar,
+    the tabs, the hint row, and a small gutter -- not the old empty band."""
     guarded_page.set_viewport_size({"width": 1280, "height": 800})
     open_app(guarded_page, "")
 
     chart_tabs_box = guarded_page.locator("#chart-tabs").bounding_box()
     assert chart_tabs_box is not None
-    assert chart_tabs_box["height"] == 0
+    assert chart_tabs_box["height"] == 40
+    tab_hint_box = guarded_page.locator("#tab-hint").bounding_box()
+    assert tab_hint_box is not None
 
     toolbar_box = guarded_page.locator("#toolbar").bounding_box()
     legend_box = guarded_page.locator("#legend-chips").bounding_box()
@@ -505,4 +507,6 @@ def test_no_empty_band_between_toolbar_and_chart(
     assert selection_bar_box is not None
 
     gap = legend_box["y"] - (toolbar_box["y"] + toolbar_box["height"])
-    assert gap <= selection_bar_box["height"] + 16
+    assert gap <= (
+        selection_bar_box["height"] + chart_tabs_box["height"] + tab_hint_box["height"] + 16
+    )

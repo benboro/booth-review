@@ -183,7 +183,7 @@ def test_bundle_digest_mismatch_exits_3_and_names_digest(
 ) -> None:
     tainted_src = site_env / "site_src_bad_bundle"
     shutil.copytree(SITE_SRC, tainted_src)
-    bundle_path = tainted_src / "vendor" / "plotly-gl2d-4.1.1.min.js"
+    bundle_path = tainted_src / "vendor" / "plotly-4.1.1.min.js"
     corrupted = bytearray(bundle_path.read_bytes())
     corrupted[0] ^= 0xFF
     bundle_path.write_bytes(bytes(corrupted))

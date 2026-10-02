@@ -26,6 +26,7 @@
 
 import { normalizeName } from './data.js';
 import { FAMILY_LABELS } from './palette.js';
+import { offeredFamilyIds } from './select.js';
 import { SLOT_SHORT_LABELS, ROLE_LABELS } from './format.js';
 
 const ROLE_HELPER_TEXT = 'Limits matches to main-broadcast play-by-play or analyst roles.';
@@ -240,14 +241,6 @@ function buildNetworkChecklist(data) {
   });
 
   els.networksSection.replaceChildren(...(heading ? [heading] : []), ...groups);
-}
-
-/** Channel ids of a family that have games under the other filters (count > 0), in lookup order (D-24). */
-function offeredFamilyIds(data, familyKeyVal, view) {
-  const counts = view?.facets?.networks;
-  return (data.networksByFamily.get(familyKeyVal) ?? [])
-    .filter((idx) => (counts ? counts[idx] > 0 : true))
-    .map((idx) => data.lookups.networks[idx].id);
 }
 
 /** One "Only" button, a sibling of the row's label (never nested in it), built with textContent only. */

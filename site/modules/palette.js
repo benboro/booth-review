@@ -110,6 +110,130 @@ export const PAGE_BG = { light: '#FFFFFF', dark: '#14161A' };
 /** UI chrome secondary-surface token per theme (rail, top bar, panel, table header). */
 export const SURFACE = { light: '#F4F5F7', dark: '#1E2126' };
 
+/** The --muted text token per theme (axis ticks and zero lines; not a bar fill). */
+export const MUTED = { light: '#4B5563', dark: '#9CA3AF' };
+
+/**
+ * Mirrors the `--special` CSS token (the Announcers toolbar button's violet, D-34); the
+ * fill for announcer, team, and conference bars (04.4 D-24). A rendered test keeps the
+ * two equal.
+ */
+export const SPECIAL = { light: '#7C3AED', dark: '#A78BFA' };
+
+/**
+ * Mixes two `#RRGGBB` colors per channel: `round(w*a + (1-w)*b)`, uppercase.
+ * Tone B of a bar is `mixHex(toneA, PAGE_BG, 0.55)` (D-16): light muted gives
+ * `#9CA2A9`, dark muted gives `#5F646C`.
+ * @param {string} a
+ * @param {string} b
+ * @param {number} weightA - weight of `a`, 0..1.
+ * @returns {string}
+ */
+export function mixHex(a, b, weightA) {
+  const channel = (hex, i) => Number.parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);
+  let out = '#';
+  for (let i = 0; i < 3; i += 1) {
+    const v = Math.round(weightA * channel(a, i) + (1 - weightA) * channel(b, i));
+    out += v.toString(16).padStart(2, '0');
+  }
+  return out.toUpperCase();
+}
+
+function luminance(hex) {
+  const lin = (c) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const r = lin(Number.parseInt(hex.slice(1, 3), 16));
+  const g = lin(Number.parseInt(hex.slice(3, 5), 16));
+  const b = lin(Number.parseInt(hex.slice(5, 7), 16));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/**
+ * WCAG contrast ratio between two `#RRGGBB` colors.
+ * @param {string} hexA
+ * @param {string} hexB
+ * @returns {number}
+ */
+export function contrastRatio(hexA, hexB) {
+  const la = luminance(hexA);
+  const lb = luminance(hexB);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+/**
+ * Text color for a fill: `#000000` or `#FFFFFF`, whichever contrasts more,
+ * or null when even the better one is below 4.5:1 (the segment then carries
+ * no in-bar text, D-16). Light muted `#4B5563` -> white; its Tone B `#9CA2A9`
+ * -> black; dark muted `#9CA3AF` -> black; its Tone B `#5F646C` -> white.
+ * @param {string} hex
+ * @returns {string|null}
+ */
+export function readableTextOn(hex) {
+  const black = contrastRatio(hex, '#000000');
+  const white = contrastRatio(hex, '#FFFFFF');
+  const best = black >= white ? '#000000' : '#FFFFFF';
+  return Math.max(black, white) >= 4.5 ? best : null;
+}
+
+/**
+ * Text color that reads at 4.5:1 over every one of `hexes` (a label that spans
+ * several channel shades, D-23): black or white, whichever has the higher
+ * minimum contrast, or null when even that minimum is under 4.5 or the list
+ * is empty.
+ * @param {string[]} hexes
+ * @returns {string|null}
+ */
+export function readableTextOnAll(hexes) {
+  if (hexes.length === 0) return null;
+  const floor = (text) => Math.min(...hexes.map((h) => contrastRatio(h, text)));
+  const black = floor('#000000');
+  const white = floor('#FFFFFF');
+  const best = black >= white ? '#000000' : '#FFFFFF';
+  return Math.max(black, white) >= 4.5 ? best : null;
+}
+
+const SHADE_LADDER = [
+  ['#FFFFFF', 0.6],
+  ['#000000', 0.6],
+  ['#FFFFFF', 0.35],
+  ['#000000', 0.35],
+  ['#FFFFFF', 0.8],
+  ['#000000', 0.8],
+  ['#FFFFFF', 0.2],
+  ['#000000', 0.2],
+  ['#FFFFFF', 0.5],
+  ['#000000', 0.5],
+];
+
+/**
+ * Channel shades of a family color (D-23): the stacked Announcers chart draws
+ * one bar per network family and sub-shades each announcer segment by channel.
+ * Shade 0 is the family color itself, so a one-channel family looks unchanged.
+ * Further shades walk a fixed lighter/darker ladder of mixes with white or
+ * black (`mixHex(base, toward, w)`, w the base weight); a candidate is skipped unless it has at least 1.15:1 contrast with
+ * every shade already accepted (this drops the darker steps of a black base).
+ * If the ladder runs out, the accepted list repeats cyclically.
+ * @param {string} family - a `familyKey` value.
+ * @param {'light'|'dark'} theme
+ * @param {number} n - how many shades.
+ * @returns {string[]}
+ */
+export function channelShades(family, theme, n) {
+  if (n <= 0) return [];
+  const base = FAMILY_COLORS[theme][familyKey(family)];
+  const accepted = [base];
+  for (const [toward, w] of SHADE_LADDER) {
+    if (accepted.length >= n) break;
+    const candidate = mixHex(base, toward, w);
+    if (accepted.every((a) => contrastRatio(a, candidate) >= 1.15)) accepted.push(candidate);
+  }
+  const out = [];
+  for (let i = 0; i < n; i += 1) out.push(accepted[i % accepted.length]);
+  return out;
+}
+
 /**
  * Compare-mode marker symbols, assigned to selected people in selection
  * order (D-07). Named symbols only -- numeric codes misrender in scattergl.

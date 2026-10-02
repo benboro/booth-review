@@ -202,6 +202,57 @@ export function ensureTooltipEl() {
 }
 
 /**
+ * Positions `el` (already unhidden) beside `(clientX, clientY)`: OFFSET px
+ * right of and below, flipping left/above near the right/bottom edge, always
+ * clamped EDGE_MARGIN px inside the viewport.
+ */
+function placeTooltip(el, clientX, clientY) {
+  const width = el.offsetWidth;
+  const height = el.offsetHeight;
+
+  let left = clientX + OFFSET;
+  if (left + width > window.innerWidth - EDGE_MARGIN) left = clientX - OFFSET - width;
+  left = Math.max(EDGE_MARGIN, Math.min(left, window.innerWidth - EDGE_MARGIN - width));
+
+  let top = clientY + OFFSET;
+  if (top + height > window.innerHeight - EDGE_MARGIN) top = clientY - OFFSET - height;
+  top = Math.max(EDGE_MARGIN, Math.min(top, window.innerHeight - EDGE_MARGIN - height));
+
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+}
+
+/**
+ * Shows plain text lines in the shared tooltip (Bars/Butterfly, D-16).
+ * @param {{text: string, kind: 'title'|'body'|'hint', swatch?: string}[]} lines
+ * @param {{theme: string, borderColor: string, clientX: number, clientY: number}} opts
+ */
+export function showTextTooltip(lines, { borderColor, clientX, clientY }) {
+  const el = ensureTooltipEl();
+  const children = lines.map(({ text, kind, swatch }) => {
+    const node = document.createElement(kind === 'title' ? 'strong' : 'div');
+    if (kind === 'title') node.className = 'tooltip-title';
+    if (kind === 'hint') node.className = 'tooltip-hint';
+    if (swatch) {
+      const chip = document.createElement('span');
+      chip.className = 'tooltip-swatch';
+      chip.setAttribute('aria-hidden', 'true');
+      chip.style.backgroundColor = swatch;
+      node.appendChild(chip);
+      node.appendChild(document.createTextNode(text));
+    } else {
+      node.textContent = text;
+    }
+    return node;
+  });
+  el.replaceChildren(...children);
+  el.style.borderColor = borderColor;
+  delete el.dataset.family;
+  el.hidden = false;
+  placeTooltip(el, clientX, clientY);
+}
+
+/**
  * Renders telecast `i`'s tooltip content and positions it beside the
  * hovered point at `(clientX, clientY)`: `OFFSET`px right of and below the
  * point by default, flipping to the left/above when it would cross within
@@ -218,19 +269,7 @@ export function showTooltip(data, i, { axis, theme, clientX, clientY }) {
   renderTooltipContent(el, tooltipModel(data, i, { axis }), theme);
   el.hidden = false;
 
-  const width = el.offsetWidth;
-  const height = el.offsetHeight;
-
-  let left = clientX + OFFSET;
-  if (left + width > window.innerWidth - EDGE_MARGIN) left = clientX - OFFSET - width;
-  left = Math.max(EDGE_MARGIN, Math.min(left, window.innerWidth - EDGE_MARGIN - width));
-
-  let top = clientY + OFFSET;
-  if (top + height > window.innerHeight - EDGE_MARGIN) top = clientY - OFFSET - height;
-  top = Math.max(EDGE_MARGIN, Math.min(top, window.innerHeight - EDGE_MARGIN - height));
-
-  el.style.left = `${left}px`;
-  el.style.top = `${top}px`;
+  placeTooltip(el, clientX, clientY);
 }
 
 /** Hides the tooltip (a no-op before the first `showTooltip` call). */

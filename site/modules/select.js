@@ -22,7 +22,10 @@ export const MAX_COMPARE = 4;
  * "unfiltered"; `conferences`/`school` of `[]` mean "unfiltered" (D-10,
  * D-11); `postseason` of `'all'` means "unfiltered" (D-18). There is no
  * `team` field -- School (`state.school`) replaces the old team highlight
- * as a fade filter (D-11).
+ * as a fade filter (D-11). `view` is the chart tab (`'scatter'`/`'bars'`/
+ * `'butterfly'`), `bars` the bar style (`'simple'`/`'stacked'`), and `group`
+ * the Group-by preference (`'teams'`, or null for the default Announcers)
+ * (D-13).
  * @param {object} _data - a `prepareData` result (unused, kept for a
  *   uniform call signature with functions that do need it).
  * @returns {object}
@@ -40,6 +43,9 @@ export function defaultState(_data) {
     school: [],
     postseason: 'all',
     axis: 'pregame',
+    view: 'scatter',
+    bars: 'simple',
+    group: null,
   };
 }
 
@@ -436,4 +442,19 @@ export function computeView(data, state) {
     facets,
     summary,
   };
+}
+
+/**
+ * Channel ids of a family that have games under the other filters (count > 0),
+ * in lookup order (04.2 D-24); the family drill-in reuses it (04.4 D-23).
+ * @param {object} data - a `prepareData` result.
+ * @param {string} familyKeyVal - a `familyKey` value.
+ * @param {object} [view] - a `computeView` result; all channels when missing.
+ * @returns {string[]}
+ */
+export function offeredFamilyIds(data, familyKeyVal, view) {
+  const counts = view?.facets?.networks;
+  return (data.networksByFamily.get(familyKeyVal) ?? [])
+    .filter((idx) => (counts ? counts[idx] > 0 : true))
+    .map((idx) => data.lookups.networks[idx].id);
 }
