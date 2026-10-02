@@ -342,9 +342,17 @@ VIEWPORTS = [("guarded_page", 1280), ("guarded_page", 800), ("mobile_page", 390)
 _ROW_METRICS_JS = """() => {
   const segs = Array.from(document.querySelectorAll('#bar-controls .segmented'))
     .filter((s) => getComputedStyle(s).visibility !== 'hidden');
+  // Bottom of the first rendered text run. A range over an element's contents
+  // would also count an inline-grid wrapper's line box (the style buttons), whose
+  // bottom differs from a bare text run's by the font's own metrics, so it is not
+  // a baseline measure; a text node's bottom is baseline + descent in one font.
   const textBottom = (el) => {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => (n.parentElement.closest('.is-concealed') || !n.data.trim())
+        ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+    });
     const r = document.createRange();
-    r.selectNodeContents(el);
+    r.selectNodeContents(walker.nextNode());
     return r.getBoundingClientRect().bottom;
   };
   return {
@@ -367,6 +375,9 @@ def _viewport_page(request: pytest.FixtureRequest, fixture: str, width: int) -> 
     return page
 
 
+@pytest.mark.usefixtures("font_setting")
+# No `wide` here: its letter-spacing deliberately overflows the one-line row at 800.
+@pytest.mark.parametrize("font_setting", ["default", "dejavu"], indirect=True)
 @pytest.mark.parametrize(("fixture", "width"), VIEWPORTS)
 @pytest.mark.parametrize("query", [BAR_VIEW, FLY_VIEW])
 def test_bar_controls_share_one_baseline_and_height(

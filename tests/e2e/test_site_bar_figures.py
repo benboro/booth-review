@@ -973,12 +973,34 @@ def test_butterfly_desktop_spine_gap_grows_with_labels(guarded_page: Page, site_
     out = guarded_page.evaluate(
         """async () => {
           const F = await import('./modules/bar-chart.js');
-          return [F.spineGapPx(5), F.spineGapPx(22), F.spineGapPx(30)];
+          const w = (n) => F.textWidth('W'.repeat(n));
+          return [F.spineGapPx(w(5)), F.spineGapPx(w(22)), F.spineGapPx(w(30))];
         }"""
     )
     assert out[0] == 160
     assert out[1] > 160
     assert out[2] > out[1]
+
+
+@pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
+def test_text_width_tracks_the_rendered_font(guarded_page: Page, site_url: str) -> None:
+    """`textWidth` must agree with what the browser lays out in the page's font."""
+    guarded_page.goto(f"{site_url}/")
+    out = guarded_page.evaluate(
+        """async () => {
+          const F = await import('./modules/bar-chart.js');
+          const text = 'Long Announcer Name Number 12 PBP';
+          const probe = document.createElement('span');
+          probe.style.cssText = 'font:14px/1.4 ' + getComputedStyle(document.body).fontFamily
+            + ';white-space:pre;position:absolute;visibility:hidden';
+          probe.textContent = text;
+          document.body.appendChild(probe);
+          const real = probe.getBoundingClientRect().width;
+          probe.remove();
+          return { real, measured: F.textWidth(text), estimate: 7.6 * text.length };
+        }"""
+    )
+    assert out["measured"] == pytest.approx(out["real"], abs=1.5)
 
 
 def test_butterfly_side_name_escaped_in_figure(guarded_page: Page, site_url: str) -> None:
@@ -1085,6 +1107,9 @@ async ([partial, fn, env, longLabels, sideName, inflate]) => {
 """
 
 
+GEOMETRY_FONTS = ["default", "dejavu", "wide"]
+
+
 def _render(
     page: Page,
     open_app: Callable[[Page, str], None],
@@ -1118,6 +1143,7 @@ def _row_annos(out: dict[str, Any]) -> list[dict[str, Any]]:
     return out["annos"][: out["rowCount"]]
 
 
+@pytest.mark.parametrize("font_setting", GEOMETRY_FONTS, indirect=True)
 @pytest.mark.parametrize("stacked", [False, True])
 def test_rendered_bars_geometry_desktop(
     guarded_page: Page, open_app: Callable[[Page, str], None], stacked: bool
@@ -1218,6 +1244,7 @@ def test_rendered_bind_bar_events(
     assert ev["labels"] == [0]
 
 
+@pytest.mark.parametrize("font_setting", GEOMETRY_FONTS, indirect=True)
 @pytest.mark.parametrize("width", [1280, 800])
 @pytest.mark.parametrize("long_labels", [False, True])
 def test_rendered_butterfly_spine_desktop(
@@ -1246,6 +1273,7 @@ def test_rendered_butterfly_spine_desktop(
     assert abs((out["x1End"] - out["x1Start"]) - (out["x2End"] - out["x2Start"])) <= 2
 
 
+@pytest.mark.parametrize("font_setting", GEOMETRY_FONTS, indirect=True)
 def test_rendered_butterfly_stacked_spine_has_no_overlap(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:

@@ -264,25 +264,66 @@ def _assert_guard_clean(off_origin: list[str], csp_errors: list[str]) -> None:
         raise AssertionError(f"Content-Security-Policy violations logged: {csp_errors}")
 
 
+# CSS injected before the app loads, per font setting. The CI runner
+# (ubuntu-latest) has no Noto Sans, so `system-ui` resolves to a wider face there
+# than on a dev machine; `dejavu` stands in for it, and `wide` adds letter-spacing
+# to catch any font-dependent sizing that happens to fit DejaVu.
+FONT_CSS: dict[str, str] = {
+    "default": "",
+    "dejavu": ':root { --font-family: "DejaVu Sans", sans-serif !important; }',
+    "wide": (
+        ':root { --font-family: "DejaVu Sans", sans-serif !important; }'
+        " body, button, input { letter-spacing: 0.4px; }"
+    ),
+}
+
+
 @pytest.fixture
-def guarded_page(page: Page, site_url: str) -> Iterator[Page]:
+def font_setting(request: pytest.FixtureRequest) -> str:
+    """The font stack the page renders in. Geometry tests parametrize this
+    indirectly over several settings; everything else gets the local default.
+    """
+    return str(getattr(request, "param", "default"))
+
+
+def _apply_font(page: Page, setting: str) -> None:
+    """Force the page's font stack (no-op for `default`). The page's CSP blocks
+    injected `<style>` elements, so the override is appended to the served
+    `style.css` instead. Call after `_install_guard`: the last-registered
+    matching route wins.
+    """
+    css = FONT_CSS[setting]
+    if not css:
+        return
+
+    def _route(route: Route) -> None:
+        response = route.fetch()
+        route.fulfill(response=response, body=response.text() + "\n" + css)
+
+    page.route("**/style.css*", _route)
+
+
+@pytest.fixture
+def guarded_page(page: Page, site_url: str, font_setting: str) -> Iterator[Page]:
     """`page`, wired to abort and record any request leaving `site_url`'s
     origin (SITE-19), and to record any console error mentioning CSP.
     Teardown fails the test if either list is non-empty.
     """
     off_origin, csp_errors = _install_guard(page, site_url)
+    _apply_font(page, font_setting)
     yield page
     _assert_guard_clean(off_origin, csp_errors)
 
 
 @pytest.fixture
-def mobile_page(browser: Browser, site_url: str) -> Iterator[Page]:
+def mobile_page(browser: Browser, site_url: str, font_setting: str) -> Iterator[Page]:
     """A guarded `page` from a fresh mobile context (390x844, touch, D-15/SITE-18)."""
     context = browser.new_context(
         viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True
     )
     page = context.new_page()
     off_origin, csp_errors = _install_guard(page, site_url)
+    _apply_font(page, font_setting)
     try:
         yield page
     finally:
