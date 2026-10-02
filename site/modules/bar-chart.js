@@ -52,7 +52,14 @@ const FONT_FAMILY =
 
 const LABEL_MAX = 30;
 const SPINE_LABEL_MAX = 22;
+// Pixel caps beside the character caps: a wide font can make a label within its
+// character cap too wide for the margin or spine gap it has to fit in.
+const LABEL_MAX_PX = 224;
+const SPINE_LABEL_MAX_PX = 200;
+// Fallback width per character at 14px, used only when there is no DOM to
+// measure in. The page's font is never assumed: `textWidth` measures it.
 const CHAR_PX = 7.6;
+const CHART_FONT_SIZE = 14;
 const MARGIN_T = 32;
 const MARGIN_B = 40;
 const DESKTOP_PITCH = 32;
@@ -84,6 +91,64 @@ function truncate(text, max) {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
+/** The page's own font family (the chart text must match what is measured). */
+function chartFontFamily() {
+  if (typeof document === 'undefined' || !document.body) return FONT_FAMILY;
+  return getComputedStyle(document.body).fontFamily || FONT_FAMILY;
+}
+
+let measureCtx = null;
+const measureCache = new Map();
+
+/**
+ * Rendered width in px of `text` in the page's font, by canvas `measureText`
+ * with the body's computed family and letter-spacing, so the same call is right
+ * under any system font. Falls back to `CHAR_PX` per character (scaled by size)
+ * when there is no DOM or canvas.
+ * @param {string} text
+ * @param {{size?: number, weight?: number}} [opts]
+ * @returns {number}
+ */
+export function textWidth(text, { size = CHART_FONT_SIZE, weight = 400 } = {}) {
+  const str = String(text);
+  const fallback = CHAR_PX * (size / CHART_FONT_SIZE) * str.length;
+  if (typeof document === 'undefined' || !document.body) return fallback;
+  if (measureCtx === null) measureCtx = document.createElement('canvas').getContext('2d');
+  if (measureCtx == null) return fallback;
+  const cs = getComputedStyle(document.body);
+  const spacing = Number.parseFloat(cs.letterSpacing) || 0;
+  const font = `${weight} ${size}px ${cs.fontFamily || FONT_FAMILY}`;
+  const key = `${font}|${spacing}|${str}`;
+  let width = measureCache.get(key);
+  if (width === undefined) {
+    measureCtx.font = font;
+    width = measureCtx.measureText(str).width + spacing * str.length;
+    if (measureCache.size > 2000) measureCache.clear();
+    measureCache.set(key, width);
+  }
+  return width;
+}
+
+/**
+ * `truncate` that also keeps the text within `maxPx` as rendered.
+ * @param {string} text
+ * @param {number} maxChars
+ * @param {number} maxPx
+ * @param {{size?: number, weight?: number}} [opts]
+ * @returns {string}
+ */
+function truncateFit(text, maxChars, maxPx, opts) {
+  let n = Math.min(text.length, maxChars);
+  const candidate = (len) => (len < text.length ? `${text.slice(0, len - 1)}…` : text);
+  while (n > 1 && textWidth(candidate(n), opts) > maxPx) n -= 1;
+  return candidate(n);
+}
+
+/** Width in px of the widest of `labels`. */
+function widest(labels, opts) {
+  return labels.reduce((m, l) => Math.max(m, textWidth(l, opts)), 0);
+}
+
 /**
  * Tone A / Tone B fills for a row (D-16): a network row uses its family
  * color, an announcer row its main family color (D-31), every other row the
@@ -100,8 +165,8 @@ export function barTones(row, theme) {
 
 /**
  * The x-axis maximum for a count (D-29): the padding factor, or more when the
- * total's text (about 7.6px per digit plus a 4px offset and margin) would not
- * fit in the `lengthPx` of axis past the longest bar.
+ * total's text (measured in the page font, plus a 4px offset and margin) would
+ * not fit in the `lengthPx` of axis past the longest bar.
  * @param {number} max
  * @param {number} lengthPx - drawn length of the axis.
  * @param {number} factor
@@ -109,7 +174,7 @@ export function barTones(row, theme) {
  */
 export function rangeTop(max, lengthPx, factor) {
   const peak = Math.max(max, 1);
-  const reserve = Math.ceil(CHAR_PX * String(peak).length) + 8;
+  const reserve = Math.ceil(textWidth(String(peak))) + 8;
   const length = Math.max(lengthPx, reserve * 2);
   return peak * Math.max(factor, length / (length - reserve));
 }
@@ -317,7 +382,7 @@ function baseLayout(theme, env, rows, pitch, margin, bargap) {
     datarevision: env.revision,
     paper_bgcolor: PAGE_BG[theme],
     plot_bgcolor: PAGE_BG[theme],
-    font: { family: FONT_FAMILY, size: 14, color: ACCENT[theme] },
+    font: { family: chartFontFamily(), size: CHART_FONT_SIZE, color: ACCENT[theme] },
     showlegend: false,
     hovermode: 'closest',
     clickmode: 'event',
@@ -375,13 +440,14 @@ export function buildBarFigure(model, rows, env) {
   const { theme, mobile } = env;
   const stacked = model.mode === 'stacked';
   const gap = mobile ? SEGMENT_GAP.phone : SEGMENT_GAP.desktop;
-  const labels = rows.map((r) => truncate(r.label, LABEL_MAX));
-  const longest = labels.reduce((m, l) => Math.max(m, l.length), 0);
+  const labels = rows.map((r) => (mobile
+    ? truncate(r.label, LABEL_MAX)
+    : truncateFit(r.label, LABEL_MAX, LABEL_MAX_PX)));
   const pitch = mobile ? PHONE_BARS_PITCH : DESKTOP_PITCH;
   const bargap = mobile ? gapFor(PHONE_BARS_PITCH, PHONE_BARS_THICKNESS) : DESKTOP_BARGAP;
   const margin = mobile
     ? { l: 8, r: 8, t: MARGIN_T, b: MARGIN_B }
-    : { l: Math.min(240, 16 + Math.ceil(CHAR_PX * longest)), r: 48, t: MARGIN_T, b: MARGIN_B };
+    : { l: Math.min(240, 16 + Math.ceil(widest(labels))), r: 48, t: MARGIN_T, b: MARGIN_B };
 
   const family = stacked && model.rowKind === 'family';
   let traces;
@@ -427,15 +493,15 @@ export function buildBarFigure(model, rows, env) {
 }
 
 /**
- * Desktop spine gap in px: wide enough for the longest spine label (about
- * 7.6px per character at 14px, plus padding), never under the UI-SPEC's 160.
- * The UI-SPEC's fixed 160px overlapped labels of 30 characters (04.4-01
- * spike), hence the label-driven size.
- * @param {number} longest - characters in the longest spine label.
+ * Desktop spine gap in px: wide enough for the longest spine label as rendered
+ * (plus padding), never under the UI-SPEC's 160. The UI-SPEC's fixed 160px
+ * overlapped labels of 30 characters (04.4-01 spike), and a per-character
+ * estimate overlapped them again in a wider font, hence the measured size.
+ * @param {number} longestPx - rendered width of the longest spine label.
  * @returns {number}
  */
-export function spineGapPx(longest) {
-  return Math.max(160, Math.ceil(CHAR_PX * longest) + 24);
+export function spineGapPx(longestPx) {
+  return Math.max(160, Math.ceil(longestPx) + 24);
 }
 
 /**
@@ -452,8 +518,9 @@ export function buildButterflyFigure(model, rows, env) {
   const stacked = model.mode === 'stacked';
   const gap = mobile ? SEGMENT_GAP.phone : SEGMENT_GAP.desktop;
   const labelMax = mobile ? LABEL_MAX : SPINE_LABEL_MAX;
-  const labels = rows.map((r) => truncate(r.label, labelMax));
-  const longest = labels.reduce((m, l) => Math.max(m, l.length), 0);
+  const labels = rows.map((r) => (mobile
+    ? truncate(r.label, labelMax)
+    : truncateFit(r.label, labelMax, SPINE_LABEL_MAX_PX)));
   const pitch = mobile ? PHONE_FLY_PITCH : DESKTOP_PITCH;
   const bargap = mobile ? gapFor(PHONE_FLY_PITCH, PHONE_FLY_THICKNESS) : DESKTOP_BARGAP;
   const margin = { l: 8, r: 8, t: MARGIN_T, b: MARGIN_B };
@@ -482,7 +549,7 @@ export function buildButterflyFigure(model, rows, env) {
     0,
   );
 
-  const gapPx = mobile ? 0 : spineGapPx(longest);
+  const gapPx = mobile ? 0 : spineGapPx(widest(labels));
   const g = mobile ? 0 : Math.min(0.4, gapPx / Math.max(1, env.width - 16));
   const top = rangeTop(maxSide, (env.width - 16) * (0.5 - g / 2), 1.1);
 
@@ -517,10 +584,9 @@ export function buildButterflyFigure(model, rows, env) {
     });
   });
   // A phone half is ~170px wide and a title grows away from the spine, so cap
-  // its length by the half's width (bold 14px, ~12px per wide capital).
-  const headerMax = mobile
-    ? Math.min(SPINE_LABEL_MAX, Math.floor((env.width - 16) / 2 / 12) - 1)
-    : SPINE_LABEL_MAX;
+  // its rendered width (bold 14px) by the half's width.
+  const headerPx = mobile ? Math.max(0, (env.width - 16) / 2 - 12) : Infinity;
+  const headerFont = { weight: 600 };
   // D-26: each side title sits against the spine edge of its own half.
   const headers = [0, 1].map((side) => ({
     xref: 'paper',
@@ -531,7 +597,7 @@ export function buildButterflyFigure(model, rows, env) {
     borderpad: 0,
     y: 1,
     yanchor: 'bottom',
-    text: escapeHover(truncate(model.sides[side].name, headerMax)),
+    text: escapeHover(truncateFit(model.sides[side].name, SPINE_LABEL_MAX, headerPx, headerFont)),
     showarrow: false,
     captureevents: false,
     font: { size: 14, color: ACCENT[theme], weight: 600 },
