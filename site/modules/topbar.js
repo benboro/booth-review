@@ -106,7 +106,7 @@ function buildOptionRows(data) {
 
     const roleSpan = document.createElement('span');
     roleSpan.className = 'option-role';
-    if (p.usual_role === 'pbp' || p.usual_role === 'analyst') roleSpan.appendChild(makeRolePill(p.usual_role));
+    roleSpan.appendChild(makeRolePill(p.usual_role));
     li.appendChild(roleSpan);
 
     const countSpan = document.createElement('span');

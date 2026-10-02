@@ -90,8 +90,15 @@ def test_announcer_role_pills_never_wrap(
         "els => els.map(e => Array.from(e.querySelectorAll('.role-pill')).map(p => p.textContent))",
     )
     assert pills
-    assert all(len(p) <= 1 and all(t in ("PBP", "Analyst") for t in p) for p in pills)
-    assert any(pills)
+    # Every row carries exactly one pill; an unrecognized usual_role gets the
+    # grey Sideline pill rather than a blank cell (D-16).
+    assert all(len(p) == 1 and p[0] in ("PBP", "Analyst", "Sideline") for p in pills)
+    assert {"PBP", "Analyst", "Sideline"} <= {p[0] for p in pills}
+    rights: list[int] = guarded_page.eval_on_selector_all(
+        "#person-results .option-role",
+        "els => els.map(e => Math.round(e.getBoundingClientRect().right))",
+    )
+    assert len(set(rights)) == 1  # role cells stay right-aligned with the count column
     wrapped: int = guarded_page.eval_on_selector_all(
         "#person-results .option-role .role-pill",
         "els => els.filter(e => "
