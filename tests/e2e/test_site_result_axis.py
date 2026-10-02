@@ -7,6 +7,7 @@ All spread copy uses the U+2212 minus glyph.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 
 import pytest
@@ -286,3 +287,66 @@ def test_captions_not_clipped(
     assert len(boxes) == 2
     for b in boxes:
         assert b["l"] >= 0 and b["r"] >= 0 and b["t"] >= 0
+
+
+def test_toggle_has_three_buttons_in_order(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    buttons = guarded_page.locator("#axis-toggle button")
+    assert buttons.evaluate_all("els => els.map(e => e.dataset.axis)") == [
+        "pregame",
+        "result",
+        "excitement",
+    ]
+    assert buttons.evaluate_all("els => els.map(e => e.getAttribute('aria-label'))") == [
+        "Pre-game (spread)",
+        "Result vs spread",
+        "Excitement (CFBD)",
+    ]
+    assert buttons.evaluate_all("els => els.map(e => e.getAttribute('aria-pressed'))") == [
+        "true",
+        "false",
+        "false",
+    ]
+
+
+def test_result_axis_url_round_trip(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    guarded_page.locator("#axis-toggle button[data-axis=result]").click()
+    expect(guarded_page).to_have_url(re.compile(r"[?&]axis=result"))
+    guarded_page.reload()
+    guarded_page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+    expect(guarded_page.locator("#axis-toggle button[data-axis=result]")).to_have_attribute(
+        "aria-pressed", "true"
+    )
+    guarded_page.locator("#axis-toggle button[data-axis=pregame]").click()
+    expect(guarded_page).not_to_have_url(re.compile(r"axis="))
+
+
+@pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
+@pytest.mark.parametrize("width", [360, 390])
+def test_axis_toggle_fits_one_row_on_phones(
+    guarded_page: Page, open_app: Callable[[Page, str], None], width: int
+) -> None:
+    guarded_page.set_viewport_size({"width": width, "height": 800})
+    open_app(guarded_page, "")
+    info = guarded_page.evaluate(
+        """() => {
+          const bs = [...document.querySelectorAll('#axis-toggle button')];
+          const rects = bs.map((b) => b.getBoundingClientRect());
+          return {
+            tops: rects.map((r) => Math.round(r.top)),
+            heights: rects.map((r) => r.height),
+            overflow: bs.some((b) => b.scrollWidth > b.clientWidth),
+            group: document.getElementById('axis-toggle').scrollWidth
+              > document.getElementById('axis-toggle').clientWidth,
+          };
+        }"""
+    )
+    assert len(set(info["tops"])) == 1
+    assert all(h >= 44 for h in info["heights"])
+    assert not info["overflow"]
+    assert not info["group"]

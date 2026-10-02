@@ -183,9 +183,10 @@
   <ul id="legend-chips" class="legend-chips" aria-label="Network families: select to show or fade"></ul>
 
   <div id="chart-controls" class="chart-controls">
-    <div id="axis-toggle" class="segmented" role="group" aria-label="X-axis">
-      <button type="button" data-axis="pregame" aria-pressed="true">Pre-game (spread)</button>
-      <button type="button" data-axis="excitement" aria-pressed="false">Excitement (CFBD)</button>
+    <div id="axis-toggle" class="segmented" role="group" aria-label="X-axis measure">
+      <button type="button" data-axis="pregame" aria-pressed="true" aria-label="Pre-game (spread)"><span class="axis-long">Pre-game (spread)</span><span class="axis-short">Pre-game</span></button>
+      <button type="button" data-axis="result" aria-pressed="false" aria-label="Result vs spread"><span class="axis-long">Result vs spread</span><span class="axis-short">Result</span></button>
+      <button type="button" data-axis="excitement" aria-pressed="false" aria-label="Excitement (CFBD)"><span class="axis-long">Excitement (CFBD)</span><span class="axis-short">Excitement</span></button>
     </div>
     <div id="bar-controls" class="bar-controls is-concealed">
       <div id="group-by-toggle" class="segmented by-toggle" role="group" aria-label="Group bars">

@@ -1310,6 +1310,10 @@ input[type="checkbox"] {
   justify-self: start;
 }
 
+.axis-short {
+  display: none;
+}
+
 .bar-controls {
   display: flex;
   flex-wrap: wrap;
@@ -1979,6 +1983,24 @@ html:has(#detail-panel[open]) {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     row-gap: var(--space-sm);
+  }
+
+  #axis-toggle {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    width: 100%;
+  }
+
+  #axis-toggle .axis-long {
+    display: none;
+  }
+
+  #axis-toggle .axis-short {
+    display: inline;
+  }
+
+  #axis-toggle button {
+    padding: 0 4px;
   }
 
   .segmented.by-toggle {
