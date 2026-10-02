@@ -54,7 +54,11 @@ freeze recorded exactly which ten and why, and no other 506 gap was waived.
 Separately, a small share of 506 listings carry no announcing crew at all
 (mostly smaller-audience and streaming-only games); those telecasts, when
 otherwise rated, are counted as coverage gaps rather than silently dropped
-— see the crew-match rate below.
+— see the crew-match rate below. During the season, crews for the newest
+week appear once its 506 pages are saved by hand and imported; a second,
+automated crew source was evaluated and none was adopted. Until then those
+dots read "Crew not listed", and the "crews through week N" stamp shows how
+far crews reach.
 
 ## Matching: game and game-plus-crew rates
 
