@@ -621,3 +621,92 @@ def test_real_family_bars_roles_and_titles(
     assert untagged_pbp == 0, "a PBP-filtered row was not PBP-tagged"
     assert bad_titles == 0, "a drill-in title missed the school or the announcer"
     assert viewers_hits == 0, "a bar model carried a viewer figure"
+
+
+_MAIN_FAMILY_REAL_JS = """
+async () => {
+  const bars = await import(new URL('./modules/bars.js', location.href).href);
+  const sel = await import(new URL('./modules/select.js', location.href).href);
+  const pal = await import(new URL('./modules/palette.js', location.href).href);
+  const data = window.__testHooks.data;
+  const base = sel.defaultState(data);
+  let notFamily = 0;
+  let familyDiffers = 0;
+  let stackedTotalDiffers = 0;
+  let sideTotalDiffers = 0;
+  let viewersHits = 0;
+  const segSum = (segments) => segments.reduce((acc, s) => acc + s.count, 0);
+  const recount = (view, state, personIndex) => {
+    const tally = new Map();
+    for (const i of bars.gamesForBars(view)) {
+      if (sel.personOnGame(data, i, personIndex, state.role) == null) continue;
+      const fam = pal.familyKey(data.lookups.networks[data.t.network[i]].family);
+      tally.set(fam, (tally.get(fam) || 0) + 1);
+    }
+    let best = null;
+    let bestN = 0;
+    for (const fam of pal.FAMILY_ORDER) {
+      const n = tally.get(fam) || 0;
+      if (n > bestN) {
+        best = fam;
+        bestN = n;
+      }
+    }
+    return best;
+  };
+  const count = Math.min(10, data.teamSlugs.length);
+  for (let k = 0; k < count; k += 1) {
+    const state = { ...base, school: [data.teamSlugs[k]] };
+    const view = sel.computeView(data, state);
+    const simple = bars.barsModel(data, view, state);
+    if (simple) {
+      for (const row of simple.rows) {
+        if (!pal.FAMILY_ORDER.includes(row.mainFamily)) notFamily += 1;
+        const p = data.personIndexById.get(row.target.id);
+        if (row.mainFamily !== recount(view, state, p)) familyDiffers += 1;
+      }
+      if (JSON.stringify(simple).includes('viewers')) viewersHits += 1;
+    }
+    const stacked = bars.barsModel(data, view, { ...state, bars: 'stacked' });
+    if (stacked) {
+      for (const row of stacked.rows) {
+        if (row.total !== segSum(row.segments)) stackedTotalDiffers += 1;
+      }
+      if (JSON.stringify(stacked).includes('viewers')) viewersHits += 1;
+    }
+    if (k < 9 && k + 1 < data.teamSlugs.length) {
+      const pair = {
+        ...base,
+        bars: 'stacked',
+        school: [data.teamSlugs[k], data.teamSlugs[k + 1]],
+      };
+      const pv = sel.computeView(data, pair);
+      const fly = bars.butterflyModel(data, pv, pair);
+      if (fly) {
+        for (const row of fly.rows) {
+          for (const side of row.sides) {
+            if (side.total !== segSum(side.segments)) sideTotalDiffers += 1;
+          }
+        }
+        if (JSON.stringify(fly).includes('viewers')) viewersHits += 1;
+      }
+    }
+  }
+  return [notFamily, familyDiffers, stackedTotalDiffers, sideTotalDiffers, viewersHits];
+}
+"""
+
+
+def test_real_main_family_and_stacked_totals(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """Main-family colors match an independent recount and stacked totals equal
+    their segment sums on the real data -- integers only."""
+    real_open_app(real_guarded_page, "")
+    result: list[int] = real_guarded_page.evaluate(_MAIN_FAMILY_REAL_JS)
+    not_family, family_differs, stacked_total_differs, side_total_differs, viewers_hits = result
+    assert not_family == 0, "a simple row's main family was not a known family"
+    assert family_differs == 0, "a row's main family differed from the recount"
+    assert stacked_total_differs == 0, "a stacked row total differed from its segment sum"
+    assert side_total_differs == 0, "a butterfly side total differed from its segment sum"
+    assert viewers_hits == 0, "a bar model carried a viewer figure"
