@@ -2,10 +2,11 @@
  * Chart tabs: the Scatter | Bars | Butterfly tablist, its hint row, and the
  * grouping / Both-PBP-Analyst controls (SITE-33, D-10, D-12, D-13, D-14,
  * D-17, D-25, D-30; 04.6 D-21). One grouping control (`state.by`) shows only
- * the options that apply to the current subjects, and the role
-control is concealed unless announcers are the rows or segments (D-30 refines
- * D-25; a concealed role still applies and stays editable in the toolbar). The role control reads and writes the one `state.role` the
- * Role filter popover uses, so the two always agree.
+ * the options that apply to the current subjects, and the role control is
+ * concealed unless announcers are the rows or segments (D-30 refines D-25; a
+ * concealed role still applies and stays editable in the toolbar). The role
+ * control reads and writes the one `state.role` the Role filter popover uses,
+ * so the two always agree.
  *
  * Init once (`initChartTabs`: delegated listeners), render every cycle
  * (`renderChartTabs`: syncs attributes to state). Every change goes through
