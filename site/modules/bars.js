@@ -431,11 +431,12 @@ export function butterflyModel(data, view, state) {
   const inRight = new Set(sets[1]);
   const shared = sets[0].filter((i) => inRight.has(i)).length;
 
-  // D-31: a person row's main family covers both sides' games, each game once.
-  const mainByKey = new Map();
+  // D-31: a person row's main family and role-tagged label cover both sides'
+  // games, each game once.
+  const unionByKey = new Map();
   if (spec.rowKind === 'person') {
     const union = Array.from(new Set([...sets[0], ...sets[1]])).sort((a, b) => a - b);
-    for (const row of spec.build(union)) mainByKey.set(row.key, row.mainFamily);
+    for (const row of spec.build(union)) unionByKey.set(row.key, row);
   }
   const left = spec.build(sets[0]);
   const right = spec.build(sets[1]);
@@ -448,9 +449,9 @@ export function butterflyModel(data, view, state) {
         merged = {
           key: row.key,
           name: row.name,
-          label: row.label,
+          label: unionByKey.get(row.key)?.label ?? row.label,
           family: row.family,
-          mainFamily: spec.rowKind === 'person' ? (mainByKey.get(row.key) ?? null) : null,
+          mainFamily: spec.rowKind === 'person' ? (unionByKey.get(row.key)?.mainFamily ?? null) : null,
           total: 0,
           target: row.target,
           sides: [{ ...empty }, { ...empty }],

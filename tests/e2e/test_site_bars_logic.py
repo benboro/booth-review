@@ -733,3 +733,29 @@ def test_non_announcer_rows_have_no_main_family(guarded_page: Page, site_url: st
         model = _model(guarded_page, fn, state)["model"]
         assert model["rows"], (fn, state)
         assert all(r.get("mainFamily") is None for r in model["rows"]), (fn, state)
+
+
+def test_butterfly_row_label_unions_roles_from_both_sides(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    """WR-01. Kris Venn calls Lakeview's game 9 as PBP and Stonebridge's game 6
+    as Analyst (changed below), so the one merged row reads `PBP/Analyst`, not
+    the role of whichever side built the row first. Hand count: 1 game a side.
+    """
+    raw = copy.deepcopy(fixture_raw)
+    kris = next(i for i, p in enumerate(raw["lookups"]["people"]) if p["name"] == "Kris Venn")
+    entry = next(c for c in raw["telecasts"]["crew"][6] if c["person"] == kris)
+    assert entry["role"] == "pbp"
+    entry["role"] = "analyst"
+    _load(guarded_page, site_url)
+    state = {"school": ["lakeview", "stonebridge"]}
+    fly = _model(guarded_page, "butterflyModel", state, raw)["model"]
+    row = next(r for r in fly["rows"] if r["name"] == "Kris Venn")
+    assert row["label"] == "Kris Venn · PBP/Analyst"
+    assert [s["total"] for s in row["sides"]] == [1, 1]
+    swapped = _model(guarded_page, "butterflyModel", {"school": ["stonebridge", "lakeview"]}, raw)[
+        "model"
+    ]
+    assert next(r for r in swapped["rows"] if r["name"] == "Kris Venn")["label"] == (
+        "Kris Venn · PBP/Analyst"
+    )
