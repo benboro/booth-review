@@ -472,6 +472,16 @@ def test_phone_touch_targets_are_44px(
             box = loc.nth(i).bounding_box()
             assert box is not None
             assert box["height"] >= 43.5, (sel, i, box)
+    # D-30: with announcer rows the role and style controls are visible too.
+    open_app(page, "?school=northfield&view=bars")
+    for sel in ("#bar-role-toggle button", "#bar-style-toggle button"):
+        loc = page.locator(sel)
+        assert loc.count() > 0, sel
+        for i in range(loc.count()):
+            assert loc.nth(i).is_visible(), (sel, i)
+            box = loc.nth(i).bounding_box()
+            assert box is not None
+            assert box["height"] >= 43.5 and box["width"] >= 43.5, (sel, i, box)
 
 
 def test_controls_height_is_stable(mobile_page: Page, open_app: OpenApp) -> None:
