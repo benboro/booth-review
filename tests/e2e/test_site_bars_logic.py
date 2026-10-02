@@ -130,8 +130,9 @@ def test_default_state_still_encodes_empty(guarded_page: Page, site_url: str) ->
     out = guarded_page.evaluate(_ENCODE_JS, {})
     assert out["encoded"] == ""
     assert out["decoded"]["view"] == "scatter"
-    assert out["decoded"]["bars"] == "simple"
-    assert out["decoded"]["group"] is None
+    assert out["decoded"]["by"] is None
+    assert "bars" not in out["decoded"]
+    assert "group" not in out["decoded"]
 
 
 def test_view_bars_group_encode_and_round_trip(guarded_page: Page, site_url: str) -> None:
@@ -140,21 +141,88 @@ def test_view_bars_group_encode_and_round_trip(guarded_page: Page, site_url: str
     assert one["encoded"] == "?view=bars"
     full = guarded_page.evaluate(
         _ENCODE_JS,
-        {"axis": "excitement", "view": "butterfly", "bars": "stacked", "group": "teams"},
+        {"axis": "excitement", "view": "butterfly", "by": "conference"},
     )
-    assert full["encoded"] == "?axis=excitement&view=butterfly&bars=stacked&group=teams"
+    assert full["encoded"] == "?axis=excitement&view=butterfly&by=conference"
     for out in (one, full):
         assert out["again"] == out["encoded"]
     assert full["decoded"]["view"] == "butterfly"
-    assert full["decoded"]["bars"] == "stacked"
-    assert full["decoded"]["group"] == "teams"
+    assert full["decoded"]["by"] == "conference"
 
 
 def test_junk_view_params_fall_to_defaults(guarded_page: Page, site_url: str) -> None:
     _load(guarded_page, site_url)
-    junk = guarded_page.evaluate(_DECODE_JS, "?view=nonsense&bars=x&group=y")
-    assert (junk["view"], junk["bars"], junk["group"]) == ("scatter", "simple", None)
-    assert guarded_page.evaluate(_DECODE_JS, "?group=announcers")["group"] is None
+    junk = guarded_page.evaluate(_DECODE_JS, "?view=nonsense&by=junk")
+    assert (junk["view"], junk["by"]) == ("scatter", None)
+    assert guarded_page.evaluate(_DECODE_JS, "?by=announcer")["by"] is None
+    assert guarded_page.evaluate(_DECODE_JS, "?by=%")["by"] is None
+    legacy = guarded_page.evaluate(_DECODE_JS, "?bars=stacked&group=teams")
+    assert legacy["by"] is None
+    assert "bars" not in legacy
+    assert "group" not in legacy
+
+
+_BY_HELPERS_JS = """
+async () => {
+  const B = await import('./modules/bars.js');
+  return {
+    parts: [null, 'announcer', 'network', 'team', 'conference'].map((b) => B.byParts(b)),
+    from: [['announcers', 'simple'], ['announcers', 'stacked'], ['teams', 'simple'],
+           ['teams', 'stacked']].map(([g, m]) => B.byFrom(g, m)),
+    patches: [
+      B.byPatch('team', ['team', 'conference']),
+      B.byPatch('team', B.BY_ORDER),
+      B.byPatch('announcer', B.BY_ORDER),
+      B.byPatch('conference', ['team', 'conference']),
+    ],
+    order: B.BY_ORDER,
+  };
+}
+"""
+
+
+def test_by_helpers(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    out = guarded_page.evaluate(_BY_HELPERS_JS)
+    assert out["order"] == ["announcer", "network", "team", "conference"]
+    assert out["parts"] == [
+        {"pref": "announcers", "mode": "simple"},
+        {"pref": "announcers", "mode": "simple"},
+        {"pref": "announcers", "mode": "stacked"},
+        {"pref": "teams", "mode": "simple"},
+        {"pref": "teams", "mode": "stacked"},
+    ]
+    assert out["from"] == ["announcer", "network", "team", "conference"]
+    assert out["patches"] == [{"by": None}, {"by": "team"}, {"by": None}, {"by": "conference"}]
+
+
+_BY_CTX_CASES: list[tuple[dict[str, Any], dict[str, Any]]] = [
+    ({"school": ["northfield"]}, {"byOptions": ["announcer", "network"], "by": "announcer"}),
+    ({"people": ["kris-venn"]}, {"byOptions": ["team", "conference"], "by": "team"}),
+    (
+        {"school": ["northfield"], "people": ["kris-venn"]},
+        {"byOptions": ["announcer", "network", "team", "conference"]},
+    ),
+    (
+        {"school": ["northfield", "lakeview"], "people": ["kris-venn", "pat-rowan"]},
+        {"butterflyByOptions": ["announcer", "network", "team", "conference"]},
+    ),
+    ({"school": ["northfield"], "by": "network"}, {"by": "network", "mode": "stacked"}),
+    # D-26: the subject went away; the stacked position is kept.
+    ({"people": ["kris-venn"], "by": "network"}, {"by": "conference", "mode": "stacked"}),
+    ({"school": ["northfield"], "by": "conference"}, {"by": "network", "mode": "stacked"}),
+    ({"school": ["northfield"], "by": "team"}, {"by": "announcer", "mode": "simple"}),
+]
+
+
+@pytest.mark.parametrize(("partial", "expected"), _BY_CTX_CASES)
+def test_chart_context_by_options(
+    guarded_page: Page, site_url: str, partial: dict[str, Any], expected: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    ctx = guarded_page.evaluate(_CTX_JS, partial)
+    for key, value in expected.items():
+        assert ctx[key] == value, key
 
 
 def test_stale_view_is_never_rejected_for_applicability(guarded_page: Page, site_url: str) -> None:
@@ -177,7 +245,7 @@ _CTX_CASES: list[tuple[dict[str, Any], dict[str, Any]]] = [
         {"groupChoice": True, "group": "announcers"},
     ),
     (
-        {"school": ["northfield"], "people": ["kris-venn"], "group": "teams"},
+        {"school": ["northfield"], "people": ["kris-venn"], "by": "team"},
         {"groupChoice": True, "group": "teams"},
     ),
     (
@@ -200,7 +268,7 @@ _CTX_CASES: list[tuple[dict[str, Any], dict[str, Any]]] = [
         {
             "school": ["northfield", "lakeview"],
             "people": ["kris-venn", "pat-rowan"],
-            "group": "teams",
+            "by": "team",
         },
         {"butterflyGroupChoice": True, "butterflyGroup": "teams"},
     ),
@@ -281,9 +349,7 @@ _M_NORTHFIELD = [
 
 def test_stacked_announcer_bars_are_families(guarded_page: Page, site_url: str) -> None:
     _load(guarded_page, site_url)
-    model = _model(guarded_page, "barsModel", {"school": ["northfield"], "bars": "stacked"})[
-        "model"
-    ]
+    model = _model(guarded_page, "barsModel", {"school": ["northfield"], "by": "network"})["model"]
     assert (model["rowKind"], model["segmentKind"]) == ("family", "person")
     assert len(model["rows"]) == 1
     row = model["rows"][0]
@@ -304,7 +370,7 @@ def test_family_row_splits_announcers_by_channel(
 ) -> None:
     _load(guarded_page, site_url)
     raw = multichannel_raw(fixture_raw)
-    model = _model(guarded_page, "barsModel", {"school": ["northfield"], "bars": "stacked"}, raw)[
+    model = _model(guarded_page, "barsModel", {"school": ["northfield"], "by": "network"}, raw)[
         "model"
     ]
     assert (model["rowKind"], model["segmentKind"]) == ("family", "person")
@@ -337,7 +403,7 @@ def test_channel_shade_follows_data_wide_order(
 ) -> None:
     _load(guarded_page, site_url)
     raw = multichannel_raw(fixture_raw, also_move_zero=True)
-    model = _model(guarded_page, "barsModel", {"school": ["northfield"], "bars": "stacked"}, raw)[
+    model = _model(guarded_page, "barsModel", {"school": ["northfield"], "by": "network"}, raw)[
         "model"
     ]
     row = model["rows"][0]
@@ -357,7 +423,7 @@ def test_family_rows_respect_the_role_filter(
     model = _model(
         guarded_page,
         "barsModel",
-        {"school": ["northfield"], "bars": "stacked", "role": "pbp"},
+        {"school": ["northfield"], "by": "network", "role": "pbp"},
         raw,
     )["model"]
     assert len(model["rows"]) == 1
@@ -373,7 +439,7 @@ def test_simple_rows_carry_no_channels(guarded_page: Page, site_url: str) -> Non
     _load(guarded_page, site_url)
     model = _model(guarded_page, "barsModel", {"school": ["northfield"]})["model"]
     assert all("channels" not in r and "shadeCount" not in r for r in model["rows"])
-    stacked = _model(guarded_page, "barsModel", {"people": ["kris-venn"], "bars": "stacked"})[
+    stacked = _model(guarded_page, "barsModel", {"people": ["kris-venn"], "by": "conference"})[
         "model"
     ]
     assert all("shadeCount" not in r for r in stacked["rows"])
@@ -396,7 +462,9 @@ def test_simple_team_bars_for_an_announcer(guarded_page: Page, site_url: str) ->
 
 def test_stacked_team_bars_are_era_correct_conferences(guarded_page: Page, site_url: str) -> None:
     _load(guarded_page, site_url)
-    model = _model(guarded_page, "barsModel", {"people": ["kris-venn"], "bars": "stacked"})["model"]
+    model = _model(guarded_page, "barsModel", {"people": ["kris-venn"], "by": "conference"})[
+        "model"
+    ]
     assert (model["rowKind"], model["segmentKind"]) == ("conference", "team")
     assert _rows(model) == [
         ("SEC", 3),
@@ -417,7 +485,7 @@ def test_non_fbs_conference_row_has_no_target(guarded_page: Page, site_url: str)
     model = _model(
         guarded_page,
         "barsModel",
-        {"school": ["maplecrest"], "group": "teams", "networks": ["net-d"], "bars": "stacked"},
+        {"school": ["maplecrest"], "networks": ["net-d"], "by": "conference"},
     )["model"]
     row = next(r for r in model["rows"] if r["label"] == "Missouri Valley")
     assert row["target"] is None
@@ -433,7 +501,7 @@ def test_null_conference_row(
     model = _model(
         guarded_page,
         "barsModel",
-        {"school": ["maplecrest"], "group": "teams", "networks": ["net-d"], "bars": "stacked"},
+        {"school": ["maplecrest"], "networks": ["net-d"], "by": "conference"},
         raw,
     )["model"]
     row = next(r for r in model["rows"] if r["key"] == "c:__none__")
@@ -527,7 +595,7 @@ def test_butterfly_stacked_mirrors_bars_rows(guarded_page: Page, site_url: str) 
     schools = _model(
         guarded_page,
         "butterflyModel",
-        {"school": ["northfield", "lakeview"], "bars": "stacked"},
+        {"school": ["northfield", "lakeview"], "by": "network"},
     )["model"]
     assert (schools["rowKind"], schools["segmentKind"]) == ("family", "person")
     names = {r["label"]: r for r in schools["rows"]}
@@ -537,7 +605,7 @@ def test_butterfly_stacked_mirrors_bars_rows(guarded_page: Page, site_url: str) 
     people = _model(
         guarded_page,
         "butterflyModel",
-        {"people": ["kris-venn", "pat-rowan"], "bars": "stacked"},
+        {"people": ["kris-venn", "pat-rowan"], "by": "conference"},
     )["model"]
     assert (people["rowKind"], people["segmentKind"]) == ("conference", "team")
     sec = next(r for r in people["rows"] if r["label"] == "SEC")
@@ -556,7 +624,7 @@ def test_butterfly_stacked_family_rows_with_channels(
     model = _model(
         guarded_page,
         "butterflyModel",
-        {"school": ["northfield", "lakeview"], "bars": "stacked"},
+        {"school": ["northfield", "lakeview"], "by": "network"},
         raw,
     )["model"]
     assert model["rowKind"] == "family"
@@ -626,7 +694,7 @@ def test_drill_patches(guarded_page: Page, site_url: str) -> None:
     assert _drill(p, {"school": ["northfield"]}, net) == {"networks": ["net-a"]}
     assert _drill(p, {"networks": ["net-a"]}, net) is None
     fam = {"kind": "family", "family": "disney", "ids": ["net-a", "net-e"]}
-    stacked = {"school": ["northfield"], "view": "bars", "bars": "stacked"}
+    stacked = {"school": ["northfield"], "view": "bars", "by": "network"}
     assert _drill(p, stacked, fam) == {"networks": ["net-a", "net-e"]}
     assert _drill(p, {**stacked, "networks": ["net-e", "net-a"]}, fam) is None
     assert _drill(p, stacked, {**fam, "ids": []}) is None
@@ -647,16 +715,16 @@ def test_drill_keeps_the_grouping(guarded_page: Page, site_url: str) -> None:
         {"kind": "team", "slug": "northfield"},
     )
     assert patch["school"] == ["northfield"]
-    assert patch["group"] == "teams"
+    assert patch["by"] == "team"
     # school only (announcers, stored group 'teams' but unresolved): person drill
     # makes teams apply too, staying on Announcers (group null).
     patch = _drill(
         guarded_page,
-        {"view": "bars", "school": ["northfield"], "group": "teams"},
+        {"view": "bars", "school": ["northfield"], "by": "team"},
         {"kind": "person", "id": "dale-harlow"},
     )
     assert patch["people"] == ["dale-harlow"]
-    assert patch["group"] is None
+    assert patch["by"] is None
 
 
 # --------------------------------------------------------------------------
@@ -723,11 +791,11 @@ def test_non_announcer_rows_have_no_main_family(guarded_page: Page, site_url: st
     _load(guarded_page, site_url)
     cases = [
         ("barsModel", {"people": ["kris-venn"]}),
-        ("barsModel", {"people": ["kris-venn"], "bars": "stacked"}),
-        ("barsModel", {"school": ["northfield"], "bars": "stacked"}),
+        ("barsModel", {"people": ["kris-venn"], "by": "conference"}),
+        ("barsModel", {"school": ["northfield"], "by": "network"}),
         ("butterflyModel", {"people": ["kris-venn", "pat-rowan"]}),
-        ("butterflyModel", {"people": ["kris-venn", "pat-rowan"], "bars": "stacked"}),
-        ("butterflyModel", {"school": ["northfield", "lakeview"], "bars": "stacked"}),
+        ("butterflyModel", {"people": ["kris-venn", "pat-rowan"], "by": "conference"}),
+        ("butterflyModel", {"school": ["northfield", "lakeview"], "by": "network"}),
     ]
     for fn, state in cases:
         model = _model(guarded_page, fn, state)["model"]

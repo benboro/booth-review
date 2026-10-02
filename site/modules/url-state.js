@@ -15,8 +15,9 @@
  * (comma-separated names, ordered/filtered by `data.fbsConferences`),
  * `school` (comma-separated team slugs, ordered by team index), `postseason`
  * (`exclude`/`only`; omitted at the default `all`), `seasons`, `networks`,
- * `slot`, `axis`, `view` (`bars`/`butterfly`), `bars` (`stacked`), `group`
- * (`teams`); each of the last three is omitted at its default (D-13). There is no `team` param on encode -- `school` replaces
+ * `slot`, `axis`, `view` (`bars`/`butterfly`), `by` (`network`/`team`/`conference`);
+ * each of the last two is omitted at its default (D-13). The old `bars` and
+ * `group` params are ignored (04.6 D-27). There is no `team` param on encode -- `school` replaces
  * it (D-11, Pitfall 4). The legacy `team` param is still *decoded*: a valid
  * slug is unioned into `school` (legacy first) through the exact same path
  * a fresh `school` value takes, so an old shared link fades rather than
@@ -95,8 +96,7 @@ export function encodeState(state, data) {
 
   if (state.axis === 'excitement') params.push(['axis', 'excitement']);
   if (state.view === 'bars' || state.view === 'butterfly') params.push(['view', state.view]);
-  if (state.bars === 'stacked') params.push(['bars', 'stacked']);
-  if (state.group === 'teams') params.push(['group', 'teams']);
+  if (state.by) params.push(['by', state.by]);
 
   if (params.length === 0) return '';
   return `?${params.map(([key, value]) => `${key}=${value}`).join('&')}`;
@@ -286,12 +286,12 @@ export function decodeState(search, data) {
   state.networks = decodeNetworks(params.get('networks') ?? null, data);
   state.slots = decodeSlots(scalarParam(params, 'slot'));
   state.axis = scalarParam(params, 'axis') === 'excitement' ? 'excitement' : 'pregame';
-  // view/bars/group are enum-allowlisted but never checked for applicability
+  // view/by are enum-allowlisted but never checked for applicability
   // (D-12): a stale `?view=bars` must survive a setState round trip.
   const rawView = scalarParam(params, 'view');
   state.view = rawView === 'bars' || rawView === 'butterfly' ? rawView : 'scatter';
-  state.bars = scalarParam(params, 'bars') === 'stacked' ? 'stacked' : 'simple';
-  state.group = scalarParam(params, 'group') === 'teams' ? 'teams' : null;
+  const rawBy = scalarParam(params, 'by');
+  state.by = ['network', 'team', 'conference'].includes(rawBy) ? rawBy : null;
 
   return state;
 }

@@ -292,7 +292,7 @@ export function renderBarsPanel({ data, state, view, env }) {
   const key = [
     state.view,
     model.group,
-    state.bars,
+    model.mode,
     state.school.join(','),
     state.people.join(','),
     JSON.stringify(state.networks),
