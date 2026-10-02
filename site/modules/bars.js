@@ -28,10 +28,8 @@ export const TOP_N = 15;
 /** Row key for games whose conference is unknown (D-15). */
 export const NO_CONFERENCE_KEY = 'c:__none__';
 
-/** Role tags appended to announcer labels (D-04). */
-export const ROLE_TAGS = { pbp: 'PBP', analyst: 'Analyst', unknown: 'Other' };
-
-const ROLE_ORDER = ['pbp', 'analyst', 'unknown'];
+/** Announcer roles in display order (04.6 D-18). */
+export const ROLE_ORDER = ['pbp', 'analyst', 'unknown'];
 
 /** Grouping options in their fixed display order (04.6 D-21). */
 export const BY_ORDER = ['announcer', 'network', 'team', 'conference'];
@@ -138,14 +136,12 @@ export function gamesForBars(view) {
 }
 
 /**
- * Announcer row label (D-04): `Name · PBP`, `Name · PBP/Analyst`, ...
- * @param {string} name
+ * Roles in display order (D-18); unknown values are dropped.
  * @param {string[]} roles - roles present, any order.
- * @returns {string}
+ * @returns {string[]}
  */
-export function announcerLabel(name, roles) {
-  const tags = ROLE_ORDER.filter((r) => roles.includes(r)).map((r) => ROLE_TAGS[r]);
-  return tags.length > 0 ? `${name} · ${tags.join('/')}` : name;
+export function orderedRoles(roles) {
+  return ROLE_ORDER.filter((r) => roles.includes(r));
 }
 
 /** Sort comparator: count descending, ties by bare name, then key. */
@@ -256,7 +252,8 @@ function countAnnouncers(
     const seg = {
       key: `p:${id}`,
       name,
-      label: announcerLabel(name, roles),
+      label: name,
+      roles: orderedRoles(roles),
       count: rec.count,
       target: { kind: 'person', id },
     };
@@ -303,6 +300,7 @@ function announcerRows(data, games, role) {
     key: s.key,
     name: s.name,
     label: s.label,
+    roles: s.roles,
     family: null,
     mainFamily: s.mainFamily,
     total: s.count,
@@ -317,6 +315,7 @@ function teamRows(data, games) {
     key: s.key,
     name: s.name,
     label: s.label,
+    roles: [],
     family: null,
     mainFamily: null,
     total: s.count,
@@ -343,6 +342,7 @@ function familyRows(data, games, role, view) {
       key: `f:${family}`,
       name: label,
       label,
+      roles: [],
       family,
       mainFamily: null,
       total,
@@ -394,6 +394,7 @@ function conferenceRows(data, games) {
       key,
       name: label,
       label,
+      roles: [],
       family: null,
       mainFamily: null,
       total: segments.reduce((sum, s) => sum + s.count, 0),
@@ -479,7 +480,7 @@ export function butterflyModel(data, view, state) {
   const inRight = new Set(sets[1]);
   const shared = sets[0].filter((i) => inRight.has(i)).length;
 
-  // D-31: a person row's main family and role-tagged label cover both sides'
+  // D-31: a person row's main family and union roles cover both sides'
   // games, each game once.
   const unionByKey = new Map();
   if (spec.rowKind === 'person') {
@@ -497,7 +498,8 @@ export function butterflyModel(data, view, state) {
         merged = {
           key: row.key,
           name: row.name,
-          label: unionByKey.get(row.key)?.label ?? row.label,
+          label: row.label,
+          roles: unionByKey.get(row.key)?.roles ?? row.roles ?? [],
           family: row.family,
           mainFamily: spec.rowKind === 'person' ? (unionByKey.get(row.key)?.mainFamily ?? null) : null,
           total: 0,

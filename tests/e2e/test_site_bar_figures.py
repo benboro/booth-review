@@ -254,7 +254,7 @@ def test_tooltip_lines(guarded_page: Page, site_url: str) -> None:
         ]""",
     )
     assert simple[0] == [
-        {"text": "Dale Harlow · PBP", "kind": "title"},
+        {"text": "Dale Harlow", "kind": "title", "roles": ["pbp"]},
         {"text": "2 rated telecasts", "kind": "body"},
         {"text": "Click to filter →", "kind": "hint"},
     ]
@@ -265,7 +265,7 @@ def test_tooltip_lines(guarded_page: Page, site_url: str) -> None:
         {"school": ["northfield"], "by": "network"},
         "(c) => c.C.tooltipLines(c.bars, c.bars.rows, { r: 0, s: 0, side: null }, {})",
     )
-    assert stacked[0] == {"text": "Dale Harlow · PBP", "kind": "title"}
+    assert stacked[0] == {"text": "Dale Harlow", "kind": "title", "roles": ["pbp"]}
     assert stacked[1] == {"text": "Alpha Sports: 2", "kind": "body", "shade": 0}
     assert stacked[2] == {"text": "2 rated telecasts on ABC/ESPN", "kind": "body"}
     fly = _run(
@@ -307,7 +307,7 @@ def test_family_tooltip_lines(
         multichannel,
     )
     assert ref0 == [
-        {"text": "Dale Harlow · PBP", "kind": "title"},
+        {"text": "Dale Harlow", "kind": "title", "roles": ["pbp"]},
         {"text": "Alpha Sports: 1", "kind": "body", "shade": 0},
         {"text": "Echo Sports: 1", "kind": "body", "shade": 1},
         {"text": "2 rated telecasts on ABC/ESPN", "kind": "body"},
@@ -329,7 +329,7 @@ def test_family_tooltip_lines(
         multichannel,
     )
     assert robin == [
-        {"text": "Robin Teague · Other", "kind": "title"},
+        {"text": "Robin Teague", "kind": "title", "roles": ["unknown"]},
         {"text": "Echo Sports: 1", "kind": "body", "shade": 1},
         {"text": "1 rated telecast on ABC/ESPN", "kind": "body"},
         {"text": "Click to filter →", "kind": "hint"},
@@ -342,7 +342,7 @@ def test_family_tooltip_lines(
         multichannel,
     )
     assert fly == [
-        {"text": "Casey Lund · PBP", "kind": "title"},
+        {"text": "Casey Lund", "kind": "title", "roles": ["pbp"]},
         {"text": "Alpha Sports: 1", "kind": "body", "shade": 0},
         {"text": "Lakeview: 1 rated telecast on ABC/ESPN", "kind": "body"},
         {"text": "Click to filter →", "kind": "hint"},
@@ -409,7 +409,7 @@ def test_counts_list_names(guarded_page: Page, site_url: str) -> None:
         "team": "Add Foxhollow to the School filter, 2 rated telecasts",
         "network": "Show only Alpha Sports, 7 rated telecasts",
         "conf": "Add SEC to the Conference filter, 3 rated telecasts",
-        "text": "Dale Harlow · PBP: Northfield 2, Lakeview 1 rated telecasts",
+        "text": "Dale Harlow (PBP): Northfield 2, Lakeview 1 rated telecasts",
         "name": "Add Dale Harlow as a filter, Northfield 2, Lakeview 1 rated telecasts",
     }
 
@@ -419,7 +419,7 @@ def test_aria_summaries(guarded_page: Page, site_url: str) -> None:
     aria = "(c) => c.C.ariaSummary(c.bars ?? c.fly, c.data, c.state, (c.bars ?? c.fly).rows.length)"
     assert _run(page, site_url, {"school": ["northfield"]}, aria) == (
         "Bar chart: announcers by rated telecasts with Northfield, 2019\u20132026. Showing 5 of 5. "
-        "Top: Dale Harlow · PBP 2, Dale Harlow Jr. · Analyst 2, Casey Lund · PBP 1."
+        "Top: Dale Harlow (PBP) 2, Dale Harlow Jr. (Analyst) 2, Casey Lund (PBP) 1."
     )
     one_year = _run(page, site_url, {"school": ["northfield"], "seasons": [2025, 2025]}, aria)
     assert "with Northfield, 2025." in one_year
@@ -431,7 +431,7 @@ def test_aria_summaries(guarded_page: Page, site_url: str) -> None:
     )
     assert fly == (
         "Butterfly chart: announcers: Northfield and Lakeview, 2019\u20132026. Showing 7 of 7. "
-        "2 games include both. Top: Dale Harlow · PBP 2 and 1, Dale Harlow Jr. · Analyst 2 and 1."
+        "2 games include both. Top: Dale Harlow (PBP) 2 and 1, Dale Harlow Jr. (Analyst) 2 and 1."
     )
     zero = _run(
         page,
@@ -782,8 +782,8 @@ def test_butterfly_announcer_bars_use_main_family_color(guarded_page: Page, site
     out = _figure(guarded_page, site_url, {"school": ["lakeview", "maplecrest"]}, "butterflyModel")
     left, right = out["figure"]["traces"]
     by_label = {r["label"]: i for i, r in enumerate(out["model"]["rows"])}
-    casey = by_label["Casey Lund · PBP"]
-    jamie = by_label["Jamie Oaks · Analyst"]
+    casey = by_label["Casey Lund"]
+    jamie = by_label["Jamie Oaks"]
     for trace in (left, right):
         assert trace["marker"]["color"][casey] == "#8F8F8F"
         assert trace["marker"]["color"][jamie] == "#0072B2"

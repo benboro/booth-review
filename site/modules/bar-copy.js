@@ -7,6 +7,7 @@
  */
 
 import { TOP_N } from './bars.js';
+import { ROLE_PILL_TEXT } from './pill.js';
 
 /** Shown when the filters leave no rows (UI-SPEC empty state). */
 export const EMPTY_COPY = {
@@ -205,6 +206,16 @@ export function segmentText(seg) {
 }
 
 /**
+ * Plain-text role suffix for screen-reader strings, e.g. ' (PBP, Analyst)' (D-15).
+ * @param {string[]} [roles]
+ * @returns {string}
+ */
+export function roleSuffix(roles = []) {
+  if (roles.length === 0) return '';
+  return ` (${roles.map((r) => ROLE_PILL_TEXT[r] ?? ROLE_PILL_TEXT.unknown).join(', ')})`;
+}
+
+/**
  * In-tooltip text of one channel line of a family segment.
  * @param {{name: string, count: number}} ch
  * @returns {string}
@@ -231,7 +242,7 @@ export function tooltipLines(model, shownRows, ref, { touch = false } = {}) {
   if (ref.s >= 0) {
     const seg = (side ? side.segments : row.segments)[ref.s];
     const count = telecastCount(seg.count);
-    lines.push({ text: seg.label, kind: 'title' });
+    lines.push({ text: seg.name ?? seg.label, kind: 'title', roles: seg.roles ?? [] });
     for (const ch of seg.channels ?? []) {
       lines.push({ text: `${ch.name}: ${ch.count}`, kind: 'body', shade: ch.shade });
     }
@@ -242,7 +253,7 @@ export function tooltipLines(model, shownRows, ref, { touch = false } = {}) {
     target = seg.target;
   } else {
     const count = telecastCount(side ? side.total : row.total);
-    lines.push({ text: row.label, kind: 'title' });
+    lines.push({ text: row.label, kind: 'title', roles: row.roles ?? [] });
     lines.push({ text: sideName ? `${sideName}: ${count}` : count, kind: 'body' });
     target = row.target;
   }
@@ -282,7 +293,17 @@ function sideCounts(row, model) {
  * @returns {string}
  */
 export function butterflyRowText(row, model) {
-  return `${row.label}: ${sideCounts(row, model)} rated telecasts`;
+  return `${row.label}${roleSuffix(row.roles)}${butterflySideText(row, model)}`;
+}
+
+/**
+ * The part of a butterfly counts-list row after the name and pills.
+ * @param {object} row
+ * @param {object} model
+ * @returns {string}
+ */
+export function butterflySideText(row, model) {
+  return `: ${sideCounts(row, model)} rated telecasts`;
 }
 
 /**
@@ -316,8 +337,8 @@ export function ariaSummary(model, data, state, shownCount) {
     const top = model.rows.slice(0, Math.min(model.kind === 'butterfly' ? 2 : 3, shownCount));
     const parts = top.map((row) =>
       model.kind === 'butterfly'
-        ? `${row.label} ${row.sides[0].total} and ${row.sides[1].total}`
-        : `${row.label} ${row.total}`,
+        ? `${row.label}${roleSuffix(row.roles)} ${row.sides[0].total} and ${row.sides[1].total}`
+        : `${row.label}${roleSuffix(row.roles)} ${row.total}`,
     );
     out += ` Top: ${parts.join(', ')}.`;
   }
