@@ -17,9 +17,9 @@
 
 import {
   FEED_LABELS,
-  ROLE_LABELS,
   SLOT_LABELS,
   conferenceLine,
+  crewEntries,
   formatAxisValue,
   formatDate,
   formatKickoff,
@@ -27,10 +27,11 @@ import {
   formatViewers,
   gameTypeInfo,
   measurementLabel,
+  selectedPersonIndexes,
   showsTimeSlot,
 } from './format.js';
 import { makeGameTypeIcon } from './icons.js';
-import { currentTheme, makePill } from './pill.js';
+import { currentTheme, makePill, makeRolePill } from './pill.js';
 
 /** The element focus returns to when the dialog closes, or null. */
 let opener = null;
@@ -108,21 +109,30 @@ function buildNetworksParagraph(data, i, theme) {
   return p;
 }
 
-/** Crew list: one `<li>` per crew entry, "[Position]: [Name]" (product
- * notes 2026-09-27), with a parenthetical feed label appended when not main
- * (D-08), e.g. "Analyst: Taylor Vance (alt-cast)". */
-function buildCrewList(data, i) {
+/** Crew list in one violet `.crew-box`: one `<li>` per crew entry, "Name [pill]",
+ * with " (alt-cast)" etc. after the pill for a non-main feed (D-10). Selected
+ * announcers are bold (D-11). */
+function buildCrewList(data, i, selected) {
+  const box = document.createElement('div');
+  box.className = 'crew-box';
   const ul = document.createElement('ul');
   ul.className = 'panel-crew';
-  for (const entry of data.t.crew[i]) {
+  for (const entry of crewEntries(data, i, { selected })) {
     const li = document.createElement('li');
-    const name = data.lookups.people[entry.person].name;
-    const roleLabel = ROLE_LABELS[entry.role] ?? ROLE_LABELS.unknown;
-    const feedLabel = entry.feed !== 'main' ? FEED_LABELS[entry.feed] : '';
-    li.textContent = feedLabel !== '' ? `${roleLabel}: ${name} (${feedLabel})` : `${roleLabel}: ${name}`;
+    const name = document.createElement('span');
+    name.className = entry.selected ? 'crew-name is-selected' : 'crew-name';
+    name.textContent = entry.name;
+    li.append(name, makeRolePill(entry.role));
+    if (entry.feed !== 'main') {
+      const feed = document.createElement('span');
+      feed.className = 'crew-feed';
+      feed.textContent = ` (${FEED_LABELS[entry.feed]})`;
+      li.appendChild(feed);
+    }
     ul.appendChild(li);
   }
-  return ul;
+  box.appendChild(ul);
+  return box;
 }
 
 /** "Selected on this game: ..." line (D-07), or null when nobody selected is on this dot. */
@@ -295,7 +305,7 @@ function buildBowlLine(bowl) {
  * Game type (D-20, D-21): a bowl game (or CFP quarterfinal/semifinal) shows
  * its named bowl line first, then a "[trophy] CFP round" line; a named bowl
  * replaces "Neutral site".
- * D-39: an empty crew reads "Crew not listed" (the missing crews themselves are
+ * D-39: an empty crew reads "Crew not recorded" (the missing crews themselves are
  * a data-join issue, out of scope: see the championship-crews todo); the
  * Nielsen+Adobe label shows once (the badge) and combined feeds show as one line.
  * @param {HTMLElement} bodyEl
@@ -351,11 +361,11 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
   crewHeading.textContent = 'Crew';
   if (t.crew[i].length === 0) {
     const emptyP = document.createElement('p');
-    emptyP.className = 'panel-crew-empty';
-    emptyP.textContent = 'Crew not listed';
+    emptyP.className = 'panel-crew-empty crew-missing';
+    emptyP.textContent = 'Crew not recorded';
     children.push(crewHeading, emptyP);
   } else {
-    children.push(crewHeading, buildCrewList(data, i));
+    children.push(crewHeading, buildCrewList(data, i, selectedPersonIndexes(data, state)));
   }
 
   const selectedText = selectedOnGameText(data, view, i);

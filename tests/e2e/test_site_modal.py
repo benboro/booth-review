@@ -42,7 +42,7 @@ def _open(
 def test_empty_crew_shows_crew_not_listed(
     guarded_page: Page, open_app: Callable[[Page, str], None], fixture_raw: dict[str, Any]
 ) -> None:
-    """D-39: an empty crew reads 'Crew not listed', never a bare heading."""
+    """D-39: an empty crew reads 'Crew not recorded', never a bare heading."""
 
     def patch(raw: dict[str, Any]) -> None:
         raw["telecasts"]["crew"][3] = []
@@ -52,7 +52,7 @@ def test_empty_crew_shows_crew_not_listed(
     _open(guarded_page, open_app, 3, fixture_raw, patch)
     heading = guarded_page.locator("#panel-body h3", has_text="Crew")
     expect(heading).to_have_count(1)
-    expect(heading.locator("xpath=following-sibling::*[1]")).to_have_text("Crew not listed")
+    expect(heading.locator("xpath=following-sibling::*[1]")).to_have_text("Crew not recorded")
     expect(guarded_page.locator("#panel-body .panel-crew li")).to_have_count(0)
 
 

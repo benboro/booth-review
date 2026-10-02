@@ -1520,6 +1520,14 @@ input[type="checkbox"] {
   color: var(--muted);
 }
 
+.crew-box .panel-crew {
+  margin: 0;
+}
+
+.crew-box .panel-crew li:last-child {
+  margin-bottom: 0;
+}
+
 .segmented {
   display: inline-flex;
   border: 1px solid var(--border);

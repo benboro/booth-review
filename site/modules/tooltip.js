@@ -19,7 +19,7 @@
  */
 
 import {
-  crewByRole,
+  crewEntries,
   formatAxisValue,
   formatDate,
   formatKickoff,
@@ -27,11 +27,10 @@ import {
   formatViewers,
   gameTypeIcons,
   gameTypeInfo,
-  ROLE_LABELS,
   stripNetworkNote,
 } from './format.js';
 import { makeGameTypeIcon } from './icons.js';
-import { makePill } from './pill.js';
+import { makePill, makeRolePill, ROLE_PILL_TEXT } from './pill.js';
 import { FAMILY_COLORS, familyKey } from './palette.js';
 
 /** The single `#chart-tooltip` element, created lazily on first use. */
@@ -62,10 +61,10 @@ const EDGE_MARGIN = 8;
  * draw an SVG.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
- * @param {{axis: "pregame"|"excitement"}} opts
- * @returns {{title: string, dateText: string, gameType: {icons: ("bowl"|"playoff")[], label: string, iconLabel: string}|null, dateLine: string, networks: {name: string, family: string}[], crewLines: string[], viewersLine: string, axisLine: string, hint: string}}
+ * @param {{axis: "pregame"|"excitement", selected?: Set<number>}} opts
+ * @returns {{crew: {name: string, role: string, selected: boolean}[], title: string, dateText: string, gameType: {icons: ("bowl"|"playoff")[], label: string, iconLabel: string}|null, dateLine: string, networks: {name: string, family: string}[], crewLines: string[], viewersLine: string, axisLine: string, hint: string}}
  */
-export function tooltipModel(data, i, { axis }) {
+export function tooltipModel(data, i, { axis, selected = new Set() }) {
   const t = data.t;
 
   const title = formatMatchup(data, i, { withScore: true });
@@ -90,19 +89,15 @@ export function tooltipModel(data, i, { axis }) {
     family: net.family,
   }));
 
-  const crew = crewByRole(data, i);
-  const crewLines = [
-    ...crew.pbp.map((name) => `${ROLE_LABELS.pbp}: ${name}`),
-    ...crew.analyst.map((name) => `${ROLE_LABELS.analyst}: ${name}`),
-    ...crew.other.map((name) => `${ROLE_LABELS.unknown}: ${name}`),
-  ];
+  const crew = crewEntries(data, i, { mainOnly: true, selected });
+  const crewLines = crew.map((entry) => `${entry.name} (${ROLE_PILL_TEXT[entry.role] ?? ROLE_PILL_TEXT.unknown})`);
   if (crewLines.length === 0) crewLines.push('Crew not recorded');
 
   const viewersLine = `Viewers: ${formatViewers(t.viewers[i])}`;
   const axisLine = formatAxisValue(axis, t[axis][i]);
   const hint = 'Click for details →';
 
-  return { title, dateText, gameType, dateLine, networks, crewLines, viewersLine, axisLine, hint };
+  return { title, dateText, gameType, dateLine, networks, crew, crewLines, viewersLine, axisLine, hint };
 }
 
 /**
@@ -162,10 +157,24 @@ export function renderTooltipContent(el, model, theme) {
   el.style.borderColor = FAMILY_COLORS[theme][primaryFamily];
   el.dataset.family = primaryFamily;
 
-  for (const line of model.crewLines) {
-    const crewLine = document.createElement('div');
-    crewLine.textContent = line;
-    children.push(crewLine);
+  if ((model.crew ?? []).length === 0) {
+    const missing = document.createElement('div');
+    missing.className = 'crew-missing';
+    missing.textContent = 'Crew not recorded';
+    children.push(missing);
+  } else {
+    const box = document.createElement('div');
+    box.className = 'crew-box';
+    for (const entry of model.crew) {
+      const line = document.createElement('div');
+      line.className = 'crew-line';
+      const name = document.createElement('span');
+      name.className = entry.selected ? 'crew-name is-selected' : 'crew-name';
+      name.textContent = entry.name;
+      line.append(name, makeRolePill(entry.role));
+      box.appendChild(line);
+    }
+    children.push(box);
   }
 
   const viewersLine = document.createElement('div');
@@ -224,12 +233,12 @@ function placeTooltip(el, clientX, clientY) {
 
 /**
  * Shows plain text lines in the shared tooltip (Bars/Butterfly, D-16).
- * @param {{text: string, kind: 'title'|'body'|'hint', swatch?: string}[]} lines
+ * @param {{text: string, kind: 'title'|'body'|'hint', swatch?: string, roles?: string[]}[]} lines
  * @param {{theme: string, borderColor: string, clientX: number, clientY: number}} opts
  */
 export function showTextTooltip(lines, { borderColor, clientX, clientY }) {
   const el = ensureTooltipEl();
-  const children = lines.map(({ text, kind, swatch }) => {
+  const children = lines.map(({ text, kind, swatch, roles }) => {
     const node = document.createElement(kind === 'title' ? 'strong' : 'div');
     if (kind === 'title') node.className = 'tooltip-title';
     if (kind === 'hint') node.className = 'tooltip-hint';
@@ -243,6 +252,7 @@ export function showTextTooltip(lines, { borderColor, clientX, clientY }) {
     } else {
       node.textContent = text;
     }
+    for (const role of roles ?? []) node.appendChild(makeRolePill(role));
     return node;
   });
   el.replaceChildren(...children);
@@ -264,9 +274,9 @@ export function showTextTooltip(lines, { borderColor, clientX, clientY }) {
  * @param {number} i - telecast index.
  * @param {{axis: "pregame"|"excitement", theme: "light"|"dark", clientX: number, clientY: number}} opts
  */
-export function showTooltip(data, i, { axis, theme, clientX, clientY }) {
+export function showTooltip(data, i, { axis, theme, clientX, clientY, selected }) {
   const el = ensureTooltipEl();
-  renderTooltipContent(el, tooltipModel(data, i, { axis }), theme);
+  renderTooltipContent(el, tooltipModel(data, i, { axis, selected }), theme);
   el.hidden = false;
 
   placeTooltip(el, clientX, clientY);

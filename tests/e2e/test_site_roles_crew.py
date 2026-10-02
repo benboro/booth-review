@@ -205,3 +205,113 @@ def test_selection_row_box(
     assert style["p"] == "8px"
     assert row.locator("#summary").count() == 0
     assert row.locator("#compare-note").count() == 0
+
+
+_SHOW_TOOLTIP_JS = """
+async ([i, selectedIds]) => {
+  const { showTooltip } = await import(new URL('./modules/tooltip.js', location.href).href);
+  const data = window.__testHooks.data;
+  const selected = new Set(selectedIds.map((id) => data.personIndexById.get(id)));
+  showTooltip(data, i, { axis: 'pregame', theme: 'light', clientX: 200, clientY: 200, selected });
+}
+"""
+
+
+@pytest.mark.parametrize("scheme", _SCHEMES)
+def test_tooltip_crew_box_and_pills(
+    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
+) -> None:
+    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
+    open_app(guarded_page, "")
+    guarded_page.evaluate(_SHOW_TOOLTIP_JS, [0, []])
+    box = guarded_page.locator("#chart-tooltip .crew-box")
+    assert box.count() == 1
+    lines = box.locator(".crew-line")
+    assert lines.count() == 2
+    assert lines.nth(0).locator(".crew-name").text_content() == "Dale Harlow"
+    assert lines.nth(0).locator(".role-pill").get_attribute("data-role") == "pbp"
+    assert lines.nth(1).locator(".crew-name").text_content() == "Dale Harlow Jr."
+    assert lines.nth(1).locator(".role-pill").get_attribute("data-role") == "analyst"
+    assert "Play-by-play:" not in guarded_page.inner_text("#chart-tooltip")
+    border = box.evaluate("(el) => getComputedStyle(el).borderTopColor")
+    assert border == _token(guarded_page, "--special")
+
+
+@pytest.mark.parametrize("scheme", _SCHEMES)
+def test_tooltip_selected_name_is_bold(
+    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
+) -> None:
+    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
+    open_app(guarded_page, "?people=dale-harlow")
+    guarded_page.evaluate(_SHOW_TOOLTIP_JS, [0, ["dale-harlow"]])
+    weights = guarded_page.locator("#chart-tooltip .crew-name").evaluate_all(
+        "els => els.map(e => getComputedStyle(e).fontWeight)"
+    )
+    assert weights == ["600", "400"]
+
+
+@pytest.mark.parametrize("scheme", _SCHEMES)
+def test_crew_not_recorded_has_no_box(
+    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
+) -> None:
+    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
+    open_app(guarded_page, "")
+    guarded_page.evaluate(
+        """async () => {
+          const { tooltipModel, renderTooltipContent, ensureTooltipEl } =
+            await import(new URL('./modules/tooltip.js', location.href).href);
+          const model = tooltipModel(window.__testHooks.data, 0, { axis: 'pregame' });
+          model.crew = [];
+          const el = ensureTooltipEl();
+          renderTooltipContent(el, model, 'light');
+          el.hidden = false;
+        }"""
+    )
+    assert guarded_page.locator("#chart-tooltip .crew-box").count() == 0
+    missing = guarded_page.locator("#chart-tooltip .crew-missing")
+    assert missing.text_content() == "Crew not recorded"
+    assert missing.evaluate("(el) => getComputedStyle(el).color") == _token(guarded_page, "--muted")
+
+
+@pytest.mark.parametrize("scheme", _SCHEMES)
+def test_modal_crew_box_wraps_all_feeds(
+    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
+) -> None:
+    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
+    open_app(guarded_page, "")
+    # Telecast 7 has an alt-cast analyst; telecast 8 has an unknown-role person.
+    guarded_page.evaluate("window.__testHooks.openPanel(7)")
+    boxes = guarded_page.locator("#panel-body .crew-box")
+    assert boxes.count() == 1
+    items = boxes.locator("li")
+    assert items.count() == 3
+    alt = items.nth(2)
+    assert (alt.text_content() or "").endswith("Analyst (alt-cast)")
+    kids = alt.evaluate("(el) => [...el.children].map(c => c.className)")
+    assert kids == ["crew-name", "role-pill", "crew-feed"]
+    border = boxes.evaluate("(el) => getComputedStyle(el).borderTopColor")
+    assert border == _token(guarded_page, "--special")
+    guarded_page.evaluate("window.__testHooks.openPanel(8)")
+    pill = guarded_page.locator("#panel-body .crew-box li .role-pill[data-role=unknown]")
+    assert pill.count() == 1
+    assert pill.text_content() == "Sideline"
+
+
+def test_crew_name_markup_is_text(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    result = guarded_page.evaluate(
+        """async () => {
+          const { tooltipModel, renderTooltipContent } =
+            await import(new URL('./modules/tooltip.js', location.href).href);
+          const data = structuredClone(window.__testHooks.data);
+          data.personIndexById = window.__testHooks.data.personIndexById;
+          data.lookups.people[0].name = '<b>x</b>';
+          const div = document.createElement('div');
+          renderTooltipContent(div, tooltipModel(data, 0, { axis: 'pregame' }), 'light');
+          return { bold: div.querySelectorAll('b').length,
+                   text: div.querySelector('.crew-name').textContent };
+        }"""
+    )
+    assert result == {"bold": 0, "text": "<b>x</b>"}
