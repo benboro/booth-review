@@ -840,6 +840,108 @@ def test_summary_networks_ordered_by_matched_count_then_alphabetical(
     assert tie == ["Alpha Sports", "Other Network"]
 
 
+_SUMMARY_COPY_JS = """
+async (summary) => {
+  const F = await import('./modules/format.js');
+  return F.summaryCopy(summary);
+}
+"""
+
+
+@pytest.mark.parametrize(
+    ("partial", "kind", "count", "total"),
+    [
+        ({"people": ["dale-harlow"]}, "matches", 2, None),
+        ({"school": ["northfield"]}, "matches", 3, 12),
+        ({"networks": ["net-a"]}, "matches", 3, 12),
+        ({"seasons": [2025, 2025]}, "matches", 4, 12),
+        ({"people": ["dale-harlow"], "seasons": [2026, 2026]}, "matches", 1, 12),
+    ],
+)
+def test_summary_reads_n_of_m_whenever_a_filter_is_active(
+    guarded_page: Page,
+    site_url: str,
+    partial: dict[str, Any],
+    kind: str,
+    count: int,
+    total: int | None,
+) -> None:
+    """04.7 D-09: `of` is the whole dataset when a filter is active, else null."""
+    _load(guarded_page, site_url)
+    summary = _view(guarded_page, partial)["summary"]
+    assert summary["kind"] == kind
+    assert summary["count"] == count
+    assert summary["of"] == total
+
+
+def test_role_alone_is_not_a_filter_for_the_summary(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    assert _view(guarded_page, {})["summary"] == {"kind": "none"}
+    assert _view(guarded_page, {"role": "pbp"})["summary"] == {"kind": "none"}
+
+
+def test_summary_shows_for_filters_alone_without_filling_the_table(
+    guarded_page: Page, site_url: str
+) -> None:
+    """04.7 D-09: filter-only states get a summary; matched stays empty (no-bulk rule)."""
+    _load(guarded_page, site_url)
+    view = _view(guarded_page, {"networks": ["net-a"]})
+    summary = view["summary"]
+    assert view["matched"] == []
+    assert summary["count"] == 3
+    assert summary["of"] == 12
+    assert (summary["seasonMin"], summary["seasonMax"]) == (2019, 2026)
+    assert summary["networks"] == ["Alpha Sports"]
+
+
+def test_fade_and_hide_give_the_same_summary(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    fade = _view(guarded_page, {"seasons": [2025, 2025]})["summary"]
+    hide = _view(guarded_page, {"seasons": [2025, 2025], "dots": "hide"})["summary"]
+    assert fade == hide
+
+
+def test_filter_only_zero_matches_has_its_own_kind(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    summary = _view(guarded_page, {"slots": ["late"], "postseason": "only"})["summary"]
+    assert summary["kind"] == "no-filter-match"
+
+
+def test_head_to_head_selection_label_names_the_matchup(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    state = {"school": ["northfield", "lakeview"], "h2h": True, "people": ["kris-venn"]}
+    summary = _view(guarded_page, state)["summary"]
+    assert summary == {
+        "kind": "filtered-out",
+        "selectionLabel": "Kris Venn + Northfield vs Lakeview",
+    }
+    summary = _view(guarded_page, {**state, "h2h": False})["summary"]
+    assert summary["kind"] == "matches"
+    assert summary["count"] == 1
+    assert summary["of"] == 12
+
+
+def test_summary_copy_formats_n_of_m(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    base = {"kind": "matches", "seasonMin": 2014, "seasonMax": 2025, "networks": ["ESPN", "FOX"]}
+    big = {**base, "count": 312, "of": 4210, "altCount": 0}
+    assert guarded_page.evaluate(_SUMMARY_COPY_JS, big) == {
+        "count": "312 of 4,210 rated telecasts",
+        "detail": "2014\u20132025 \u00b7 ESPN, FOX",
+    }
+    one = {**base, "count": 1, "of": 4210, "altCount": 0}
+    assert guarded_page.evaluate(_SUMMARY_COPY_JS, one)["count"] == "1 of 4,210 rated telecasts"
+    alone = {**base, "count": 1, "of": None, "altCount": 0}
+    assert guarded_page.evaluate(_SUMMARY_COPY_JS, alone)["count"] == "1 rated telecast"
+    assert guarded_page.evaluate(_SUMMARY_COPY_JS, {"kind": "no-filter-match"}) == {
+        "count": "",
+        "detail": (
+            "No rated telecasts match these filters. "
+            "Widen the seasons or clear a filter to see games."
+        ),
+    }
+
+
 def _facets(page: Page, partial: dict[str, Any]) -> dict[str, Any]:
     facets = _view(page, partial)["facets"]
     assert facets is not None, "view.facets is missing"

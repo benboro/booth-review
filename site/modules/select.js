@@ -309,9 +309,16 @@ export function toggleFamilyNetworks(data, state, family) {
     : Array.from(new Set([...current, ...famIds]));
 }
 
-/** Builds the match summary for the current selection and matched/highlighted set. */
-function buildSummary(data, state, matched, altGames, personIndexes, hasSelection) {
-  if (!hasSelection) return { kind: 'none' };
+/**
+ * Builds the match summary for the current selection and the summary set
+ * (D-09, 04.7). `summarySet` is the matched games when something is selected,
+ * else the filter-passing games when a filter is active, else empty. `of` is
+ * the whole-dataset count when a filter is active (null otherwise). Counts
+ * only -- never a viewer statistic (A1).
+ */
+function buildSummary(data, state, summarySet, altGames, personIndexes, hasSelection, filterActive) {
+  if (!hasSelection && !filterActive) return { kind: 'none' };
+  const matched = summarySet;
 
   if (matched.length > 0) {
     const seasonsOfMatched = matched.map((i) => data.t.season[i]);
@@ -330,8 +337,11 @@ function buildSummary(data, state, matched, altGames, personIndexes, hasSelectio
         (a, b) => networkCounts.get(b) - networkCounts.get(a) || a.localeCompare(b),
       ),
       altCount: altGames.size,
+      of: filterActive ? data.n : null,
     };
   }
+
+  if (!hasSelection) return { kind: 'no-filter-match' };
 
   if (state.people.length === 1) {
     const games = data.gamesByPerson.get(personIndexes[0]) ?? [];
@@ -344,7 +354,9 @@ function buildSummary(data, state, matched, altGames, personIndexes, hasSelectio
   const schoolNames = state.school.map(
     (slug) => data.lookups.teams[data.teamIndexBySlug.get(slug)].name,
   );
-  const selectionLabel = [...names, ...schoolNames].join(' + ');
+  const schoolParts =
+    state.h2h === true && schoolNames.length === 2 ? [schoolNames.join(' vs ')] : schoolNames;
+  const selectionLabel = [...names, ...schoolParts].join(' + ');
   return { kind: 'filtered-out', selectionLabel };
 }
 
@@ -441,7 +453,28 @@ export function computeView(data, state) {
     }
   }
 
-  const summary = buildSummary(data, state, matched, altGames, personIndexes, hasSelection);
+  // Role and people are deliberately not filters (04.1 D-13).
+  const filterActive =
+    state.seasons != null ||
+    state.networks != null ||
+    state.slots != null ||
+    state.conferences.length > 0 ||
+    state.school.length > 0 ||
+    state.postseason !== 'all';
+  let summarySet = matched;
+  if (!hasSelection && filterActive) {
+    summarySet = [];
+    for (let i = 0; i < n; i += 1) if (passesFilters[i]) summarySet.push(i);
+  }
+  const summary = buildSummary(
+    data,
+    state,
+    summarySet,
+    altGames,
+    personIndexes,
+    hasSelection,
+    filterActive,
+  );
 
   return {
     visible,
@@ -450,6 +483,8 @@ export function computeView(data, state) {
     passingCount,
     hasPersonSelection,
     hasSelection,
+    filterActive,
+    totalCount: n,
     highlighted,
     matched,
     peopleOnGame,

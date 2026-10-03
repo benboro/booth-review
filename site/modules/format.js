@@ -460,13 +460,25 @@ export function escapeHover(s) {
 export function summaryCopy(summary) {
   if (summary.kind === 'matches') {
     const n = summary.count;
-    const count = n === 1 ? '1 rated telecast' : `${n} rated telecasts`;
+    const count =
+      summary.of != null
+        ? `${n.toLocaleString('en-US')} of ${summary.of.toLocaleString('en-US')} rated telecasts`
+        : n === 1
+          ? '1 rated telecast'
+          : `${n} rated telecasts`;
     let detail = `${summary.seasonMin}–${summary.seasonMax} · ${summary.networks.join(', ')}`;
     if (summary.altCount > 0) {
       const gameWord = summary.altCount === 1 ? 'game' : 'games';
       detail += ` · includes ${summary.altCount} alt-cast ${gameWord}`;
     }
     return { count, detail };
+  }
+  if (summary.kind === 'no-filter-match') {
+    return {
+      count: '',
+      detail:
+        'No rated telecasts match these filters. Widen the seasons or clear a filter to see games.',
+    };
   }
   if (summary.kind === 'no-rated') {
     return {
