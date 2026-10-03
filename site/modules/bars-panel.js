@@ -308,6 +308,7 @@ export function renderBarsPanel({ data, state, view, env }) {
     model.group,
     model.mode,
     state.school.join(','),
+    String(state.h2h === true),
     state.people.join(','),
     JSON.stringify(state.networks),
   ].join('|');

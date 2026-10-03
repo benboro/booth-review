@@ -85,7 +85,9 @@ export function chartContext(_data, state) {
   if (groupChoice) group = preferTeams ? 'teams' : 'announcers';
   else if (announcersApply) group = 'announcers';
 
-  const twoSchools = state.school.length === 2;
+  // Head-to-head makes the two schools one matchup subject, so only two
+  // announcers can trigger the Butterfly (04.7 D-15).
+  const twoSchools = state.school.length === 2 && state.h2h !== true;
   const twoPeople = state.people.length === 2;
   const butterflyGroupChoice = twoSchools && twoPeople;
   let butterflyGroup = 'teams';
