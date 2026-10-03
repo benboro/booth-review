@@ -96,10 +96,6 @@
           "default": null,
           "title": "Network"
         },
-        "pregame_present": {
-          "title": "Pregame Present",
-          "type": "integer"
-        },
         "publisher_counts": {
           "additionalProperties": {
             "type": "integer"
@@ -114,6 +110,10 @@
         "season": {
           "title": "Season",
           "type": "integer"
+        },
+        "spread_present": {
+          "title": "Spread Present",
+          "type": "integer"
         }
       },
       "required": [
@@ -124,7 +124,7 @@
         "matched_crew_patched",
         "headline_present",
         "excitement_present",
-        "pregame_present",
+        "spread_present",
         "duplicate_merges",
         "combined_figures",
         "publisher_counts"
@@ -682,20 +682,6 @@
           "title": "Playoff Round",
           "type": "array"
         },
-        "pregame": {
-          "items": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "title": "Pregame",
-          "type": "array"
-        },
         "publisher": {
           "items": {
             "anyOf": [
@@ -806,7 +792,6 @@
         "crew_source_url",
         "crew_source_label",
         "excitement",
-        "pregame",
         "home_spread",
         "flags",
         "combined_feeds",
@@ -821,7 +806,7 @@
       "type": "object"
     }
   },
-  "$id": "booth-review/site-data/1.5.0",
+  "$id": "booth-review/site-data/2.0.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -843,7 +828,7 @@
       "$ref": "#/$defs/Lookups"
     },
     "schema_version": {
-      "const": "1.5.0",
+      "const": "2.0.0",
       "title": "Schema Version",
       "type": "string"
     },
