@@ -360,6 +360,8 @@ async function bootstrap() {
     initLegend({
       listEl: document.getElementById('legend-chips'),
       onToggle: (family) => setState({ networks: toggleFamilyNetworks(data, state, family) }),
+      switchEl: document.getElementById('dots-toggle'),
+      onDots: (dots) => setState({ dots }),
     });
     renderers.push(renderLegend);
 
