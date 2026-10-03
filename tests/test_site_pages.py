@@ -96,6 +96,15 @@ def test_render_methodology_includes_known_gaps_demoted_and_no_marker() -> None:
     assert 'href="style.css"' in result
 
 
+def test_render_methodology_explains_how_filters_display() -> None:
+    result = render_methodology(REPO_ROOT / "docs", _fixture_site())
+
+    assert 'id="how-filters-display"' in result
+    assert "always hides" in result
+    assert "Head-to-head" in result
+    assert "fades the games it excludes" in result
+
+
 def test_render_methodology_raises_without_marker(tmp_path: Path) -> None:
     (tmp_path / "methodology.md").write_text(
         "# Methodology\n\nNo include marker on this page.\n", encoding="utf-8"

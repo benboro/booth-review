@@ -75,6 +75,20 @@ game's detail panel, are defined as: **noon** (before 2:00 PM ET),
 (6:00 PM up to but not including 10:00 PM ET), and **after dark** (10:00 PM
 ET or later, including kickoffs after midnight).
 
+## How filters display
+
+By default a filter fades the games it excludes instead of removing them: the
+faded dots keep their network color, so the rest of the field stays visible as
+context. The Hide switch at the end of the network legend row removes them
+instead. The Networks filter, set from the legend chips or the Networks menu,
+always hides. With an announcer selected, their games are drawn at full
+strength, other games that pass the filters are partly transparent, and games
+that fail a filter are fainter still. The summary line, the Bars and Butterfly
+charts, the per-season counts, and the matched-games table count only the games
+that pass every filter, whether the excluded games are faded or hidden. With
+exactly two schools selected, Head-to-head keeps only the games between them.
+None of this changes the axes or uses viewership as an input.
+
 ## Measurement eras
 
 Nielsen, the source of nearly every viewership figure on this chart, changed
