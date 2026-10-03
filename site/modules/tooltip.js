@@ -61,7 +61,7 @@ const EDGE_MARGIN = 8;
  * draw an SVG.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
- * @param {{axis: "pregame"|"result"|"excitement", selected?: Set<number>}} opts
+ * @param {{axis: "spread"|"excitement", selected?: Set<number>}} opts
  * @returns {{crew: {name: string, role: string, selected: boolean}[], title: string, dateText: string, gameType: {icons: ("bowl"|"playoff")[], label: string, iconLabel: string}|null, dateLine: string, networks: {name: string, family: string}[], crewLines: string[], viewersLine: string, axisLine: string, hint: string}}
  */
 export function tooltipModel(data, i, { axis, selected = new Set() }) {
@@ -277,7 +277,7 @@ export function showTextTooltip(lines, { borderColor, clientX, clientY }) {
  * element reports zero size.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
- * @param {{axis: "pregame"|"result"|"excitement", theme: "light"|"dark", clientX: number, clientY: number}} opts
+ * @param {{axis: "spread"|"excitement", theme: "light"|"dark", clientX: number, clientY: number}} opts
  */
 export function showTooltip(data, i, { axis, theme, clientX, clientY, selected }) {
   const el = ensureTooltipEl();

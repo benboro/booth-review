@@ -18,7 +18,7 @@ export const MAX_COMPARE = 4;
 
 /**
  * The default selection/filter state (D-12, D-13): all dots, nobody
- * selected, pre-game axis. `seasons`/`networks`/`slots` of `null` mean
+ * selected, Spread axis. `seasons`/`networks`/`slots` of `null` mean
  * "unfiltered"; `conferences`/`school` of `[]` mean "unfiltered" (D-10,
  * D-11); `postseason` of `'all'` means "unfiltered" (D-18). There is no
  * `team` field -- School (`state.school`) replaces the old team highlight
@@ -43,7 +43,7 @@ export function defaultState(_data) {
     conferences: [],
     school: [],
     postseason: 'all',
-    axis: 'pregame',
+    axis: 'spread',
     view: 'scatter',
     by: null,
     dots: 'fade',

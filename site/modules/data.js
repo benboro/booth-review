@@ -49,14 +49,14 @@ function nonNullRange(values) {
 }
 
 /**
- * Winner-signed closing line for the Result vs spread axis (D-02, D-06):
+ * Winner-signed closing line for the Spread axis (04.6 D-02, 04.8 D-10):
  * favorite won -> negative, underdog won -> positive, pick'em -> 0, never -0.
  * @param {number|null} spread - HOME-side closing line (negative = home favored).
  * @param {number|null} hp - home points.
  * @param {number|null} ap - away points.
  * @returns {number|null} null when there is no line, no score, or a tie.
  */
-function resultX(spread, hp, ap) {
+function spreadX(spread, hp, ap) {
   if (spread == null || hp == null || ap == null || hp === ap) return null;
   const x = hp > ap ? spread : -spread;
   return x === 0 ? 0 : x;
@@ -72,14 +72,17 @@ function resultX(spread, hp, ap) {
 export function prepareData(raw) {
   const lookups = raw.lookups;
   const n = raw.telecasts.season.length;
-  // home_spread arrived in v1.5.0; older payloads simply have no result axis (D-08).
-  const homeSpread = raw.telecasts.home_spread ?? new Array(n).fill(null);
-  const result = new Array(n);
+  // home_spread is required since contract v2.0.0 (04.8 D-03).
+  if (!Array.isArray(raw.telecasts.home_spread)) {
+    throw new Error('site-data.json: telecasts.home_spread is missing (contract v2.0.0)');
+  }
+  const homeSpread = raw.telecasts.home_spread;
+  const spread = new Array(n);
   for (let i = 0; i < n; i += 1) {
-    result[i] = resultX(homeSpread[i], raw.telecasts.home_points[i], raw.telecasts.away_points[i]);
+    spread[i] = spreadX(homeSpread[i], raw.telecasts.home_points[i], raw.telecasts.away_points[i]);
   }
   // Derived column lives on a copy so raw.telecasts is never mutated.
-  const t = { ...raw.telecasts, result };
+  const t = { ...raw.telecasts, spread };
 
   const familyOf = new Array(n);
   for (let i = 0; i < n; i += 1) {
@@ -125,8 +128,7 @@ export function prepareData(raw) {
   const [viewersMin, viewersMax] = nonNullRange(t.viewers);
 
   const xRange = {
-    pregame: nonNullRange(t.pregame),
-    result: nonNullRange(result),
+    spread: nonNullRange(spread),
     excitement: nonNullRange(t.excitement),
   };
 
