@@ -1,10 +1,10 @@
 """In-browser proof of D-08, SITE-10, SITE-12, and the D-10..D-19 filter/
-fade/matched-games semantics (D-13: only the season range removes a dot;
-every other filter fades one; D-14: a person-matched dot that fails a fade
-filter is filtered out, the filter wins; D-09/D-10: era-correct conference
-membership; D-11: School is a fade filter, not a highlight; D-12: the
-matched-games table fills on person-or-school; D-17..D-19: game_type backs
-the bowl/playoff control and the time-slot label).
+fade/matched-games semantics (SITE-41 / 04.7 D-06, D-07: filters fade a
+dot by default and hide it in Hide mode, Networks always hides; D-14: a
+person-matched dot that fails a filter is filtered out, the filter wins;
+D-09/D-10: era-correct conference membership; D-11: School is a fade filter,
+not a highlight; D-12: the matched-games table fills on person-or-school;
+D-17..D-19: game_type backs the bowl/playoff control and the time-slot label).
 
 No app.js exists yet (plan 04-07's job), so these tests exercise the served
 pure JS modules (data.js, select.js, format.js, url-state.js) directly via
@@ -201,7 +201,7 @@ def test_multi_person_or_default_and_together_mode_and_compare_symbols(
 def test_school_filter_fades_not_highlights(guarded_page: Page, site_url: str) -> None:
     """D-11: School is a multi-select, OR-within fade filter, not a
     highlight -- it fills the matched-games table on its own (D-12) but
-    never highlights a dot."""
+    never highlights a dot (it fades by default, 04.7 D-06)."""
     _load(guarded_page, site_url)
     view = _view(guarded_page, {"school": ["northfield"]})
     assert view["passesFilters"] == [0, 4, 8]
@@ -227,19 +227,117 @@ def test_school_and_person_combine_highlight_within_school(
     assert view["matched"] == view["highlighted"]
 
 
-def test_season_range_is_the_only_filter_that_removes_dots(
+def test_seasons_fade_by_default_hide_removes_and_networks_always_hides(
     guarded_page: Page, site_url: str
 ) -> None:
-    """D-13: the season range shrinks visibleCount; every other filter
-    leaves visibleCount at 12 and only narrows passesFilters, never
-    removing a dot."""
+    """SITE-41 / 04.7 D-06, D-07: the season range fades by default (reversing
+    04.1 D-13) and removes dots only in Hide mode; Networks hides in both."""
     _load(guarded_page, site_url)
-    season_view = _view(guarded_page, {"seasons": [2025, 2025]})
-    assert season_view["visibleCount"] == 4
+    fade = _view(guarded_page, {"seasons": [2025, 2025]})
+    assert fade["visibleCount"] == 12
+    assert fade["passingCount"] == 4
+    assert fade["passesFilters"] == [4, 5, 6, 7]
+    hide = _view(guarded_page, {"seasons": [2025, 2025], "dots": "hide"})
+    assert hide["visibleCount"] == 4
+    assert hide["passesFilters"] == [4, 5, 6, 7]
 
-    net_view = _view(guarded_page, {"networks": ["net-a"]})
-    assert net_view["visibleCount"] == 12
-    assert net_view["passesFilters"] == [0, 4, 8]
+    for extra in ({}, {"dots": "hide"}):
+        net_view = _view(guarded_page, {"networks": ["net-a"], **extra})
+        assert net_view["visibleCount"] == 3
+        assert net_view["passesFilters"] == [0, 4, 8]
+
+
+@pytest.mark.parametrize(
+    ("patch", "passes"),
+    [
+        ({"slots": ["late"]}, [2]),
+        ({"conferences": ["Big Ten"]}, [1, 4, 5, 8]),
+        ({"school": ["northfield"]}, [0, 4, 8]),
+        ({"postseason": "only"}, [5, 7]),
+        ({"seasons": [2025, 2025]}, [4, 5, 6, 7]),
+    ],
+)
+def test_every_fade_filter_follows_the_switch(
+    guarded_page: Page, site_url: str, patch: dict[str, Any], passes: list[int]
+) -> None:
+    """04.7 D-05, D-06: Fade draws every dot, Hide draws only passing dots;
+    passesFilters, season counts, and facets never depend on the mode."""
+    _load(guarded_page, site_url)
+    fade = _view(guarded_page, {**patch})
+    hide = _view(guarded_page, {**patch, "dots": "hide"})
+    assert fade["passesFilters"] == passes
+    assert fade["visibleCount"] == 12
+    assert hide["visibleCount"] == len(passes)
+    assert hide["passesFilters"] == fade["passesFilters"]
+    assert hide["seasonCounts"] == fade["seasonCounts"]
+    assert hide["facets"] == fade["facets"]
+
+
+def test_only_the_exact_hide_value_hides(guarded_page: Page, site_url: str) -> None:
+    """04.7 D-10: any dots value other than the exact string 'hide' fades."""
+    _load(guarded_page, site_url)
+    assert _view(guarded_page, {"dots": "bogus", "seasons": [2025, 2025]})["visibleCount"] == 12
+
+
+def test_hide_keeps_passing_dots_that_are_not_the_announcers(
+    guarded_page: Page, site_url: str
+) -> None:
+    """04.7 D-05: Hide removes only dots failing a filter; passing dots the
+    selected announcer did not call stay drawn."""
+    _load(guarded_page, site_url)
+    partial = {"people": ["dale-harlow"], "seasons": [2026, 2026]}
+    hide = _view(guarded_page, {**partial, "dots": "hide"})
+    assert hide["visibleCount"] == 4
+    assert hide["passesFilters"] == [8, 9, 10, 11]
+    assert hide["highlighted"] == [8]
+    fade = _view(guarded_page, partial)
+    assert fade["visibleCount"] == 12
+    assert fade["highlighted"] == [8]
+
+
+_H2H = {"school": ["northfield", "lakeview"], "h2h": True}
+
+
+def test_head_to_head_keeps_only_games_between_the_two_schools(
+    guarded_page: Page, site_url: str
+) -> None:
+    """04.7 D-14, D-12: Head-to-head ANDs exactly two schools; a stale h2h
+    with one or three schools behaves as Either team."""
+    _load(guarded_page, site_url)
+    view = _view(guarded_page, _H2H)
+    assert view["passesFilters"] == [0, 4]
+    assert view["matched"] == [0, 4]
+    assert view["visibleCount"] == 12
+    assert _view(guarded_page, {**_H2H, "dots": "hide"})["visibleCount"] == 2
+    assert _view(guarded_page, {**_H2H, "h2h": False})["passesFilters"] == [0, 4, 8, 9]
+    assert _view(guarded_page, {"school": ["northfield"], "h2h": True})["passesFilters"] == [
+        0,
+        4,
+        8,
+    ]
+    three = {"school": ["northfield", "lakeview", "ironpeak"], "h2h": True}
+    assert _view(guarded_page, three)["passesFilters"] == [0, 1, 4, 5, 8, 9]
+
+
+def test_head_to_head_person_highlight_stays_within_the_matchup(
+    guarded_page: Page, site_url: str
+) -> None:
+    """04.7 D-14: person highlighting stacks on the head-to-head set."""
+    _load(guarded_page, site_url)
+    assert _view(guarded_page, {**_H2H, "people": ["casey-lund"]})["highlighted"] == [4]
+
+
+def test_head_to_head_facets_school_counts_ignore_school_others_narrow(
+    guarded_page: Page, site_url: str
+) -> None:
+    """04.7 D-14, 04.2 D-08: School's own counts ignore School; every other
+    facet narrows to the head-to-head games."""
+    _load(guarded_page, site_url)
+    facets = _view(guarded_page, _H2H)["facets"]
+    assert facets["schools"] == _view(guarded_page, {})["facets"]["schools"]
+    assert facets["seasons"] == {"2019": 1, "2021": 0, "2025": 1, "2026": 0}
+    assert facets["networks"] == [2, 0, 0, 0]
+    assert facets["total"] == 2
 
 
 def test_conference_filter_or_within_era_correct_membership(
@@ -274,7 +372,7 @@ def test_fcs_conference_never_listed(guarded_page: Page, site_url: str) -> None:
 
 def test_postseason_exclude_and_only(guarded_page: Page, site_url: str) -> None:
     """D-17/D-18: the three-way Bowls/Playoffs control is backed by
-    game_type; excluded games fade, per D-13."""
+    game_type; excluded games fade (SITE-41 / 04.7 D-06)."""
     _load(guarded_page, site_url)
     excluded = _view(guarded_page, {"postseason": "exclude"})["passesFilters"]
     assert excluded == [i for i in range(12) if i not in (5, 7)]
@@ -303,7 +401,7 @@ def test_matched_fills_on_school_alone_not_other_filters(guarded_page: Page, sit
 
 
 def test_role_never_fades_only_limits_person_matching(guarded_page: Page, site_url: str) -> None:
-    """D-13: Role stays what it is today -- it limits how a person matches,
+    """04.7 D-06: Role stays what it is today -- it limits how a person matches,
     never which dots pass the fade filters, with or without a person
     selected."""
     _load(guarded_page, site_url)
@@ -314,8 +412,8 @@ def test_role_never_fades_only_limits_person_matching(guarded_page: Page, site_u
 def test_season_counts_use_fade_filters_and_ignore_season_range(
     guarded_page: Page, site_url: str
 ) -> None:
-    """Per-season counts count only dots passing the fade filters, and the
-    season range itself never changes them."""
+    """Per-season counts count only dots passing the non-season filters, and
+    the season range itself never changes them, in Fade or Hide (04.7 D-06)."""
     _load(guarded_page, site_url)
     net_counts = dict(_view(guarded_page, {"networks": ["net-a"]})["seasonCounts"])
     assert net_counts == {2019: 1, 2021: 0, 2025: 1, 2026: 1}

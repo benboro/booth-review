@@ -1,13 +1,13 @@
 /**
- * Selection semantics (D-10..D-19, replacing Phase 4's D-05): the season
- * range is the only filter that removes a dot; every other filter (Networks,
- * Kickoff, Conference, School, Bowls/Playoffs) fades a dot that fails it
- * into an inert state instead. Role still limits only how a person matches,
- * never which dots pass. Also covers person/compare-mode matching, the
+ * Selection semantics (D-10..D-19, 04.7 D-05..D-07, D-14): filters (Seasons,
+ * Kickoff, Conference, School, Bowls/Playoffs) fade a dot that fails them by
+ * default and hide it in Hide mode (`state.dots === 'hide'`); Networks always
+ * hides. Head-to-head narrows School to games between exactly two schools.
+ * Role still limits only how a person matches, never which dots pass. Also covers person/compare-mode matching, the
  * matched-games fill rule (person-or-school, D-12), and the match summary.
  * Also computes faceted option counts (D-08..D-12, `computeFacets`): each
  * facet counts rated telecasts passing every active constraint except its
- * own. Facets are pure counts and never change which dots are drawn or faded.
+ * own. Facets and counts never depend on Fade vs Hide.
  * DOM-free; imports only from ./palette.js.
  */
 
@@ -24,7 +24,9 @@ export const MAX_COMPARE = 4;
  * `team` field -- School (`state.school`) replaces the old team highlight
  * as a fade filter (D-11). `view` is the chart tab (`'scatter'`/`'bars'`/
  * `'butterfly'`) and `by` the bar grouping (null = by Announcer, else
- * `'network'` | `'team'` | `'conference'`; 04.6 D-27).
+ * `'network'` | `'team'` | `'conference'`; 04.6 D-27). `dots` is the Fade |
+ * Hide view setting (`'fade'` | `'hide'`, 04.7 D-10); `h2h` is Head-to-head
+ * for exactly two schools (04.7 D-14).
  * @param {object} _data - a `prepareData` result (unused, kept for a
  *   uniform call signature with functions that do need it).
  * @returns {object}
@@ -44,6 +46,8 @@ export function defaultState(_data) {
     axis: 'pregame',
     view: 'scatter',
     by: null,
+    dots: 'fade',
+    h2h: false,
   };
 }
 
@@ -76,18 +80,28 @@ export function personOnGame(data, i, personIndex, role) {
   return null;
 }
 
-/** Computes visibility for every dot from the season range, the only filter that removes a dot (D-13). */
+/**
+ * The drawn mask (04.7 D-05..D-07): Networks always hides a dot; the other
+ * filters hide it only in Hide mode (the exact string 'hide'), else it stays
+ * drawn and merely fades.
+ */
 function computeVisible(data, state) {
   const { n } = data;
   const visible = new Uint8Array(n);
+  const hide = state.dots === 'hide';
   for (let i = 0; i < n; i += 1) {
-    if (state.seasons != null) {
-      const season = data.t.season[i];
-      if (season < state.seasons[0] || season > state.seasons[1]) continue;
-    }
+    if (failsNetworks(data, state, i)) continue;
+    if (hide && failsFadeable(data, state, i)) continue;
     visible[i] = 1;
   }
   return visible;
+}
+
+/** True when the season range excludes dot `i`. */
+function failsSeasons(data, state, i) {
+  if (state.seasons == null) return false;
+  const season = data.t.season[i];
+  return season < state.seasons[0] || season > state.seasons[1];
 }
 
 /** True when Networks excludes dot `i`. */
@@ -114,13 +128,17 @@ function failsConferences(data, state, i) {
   return !matches;
 }
 
-/** True when School excludes dot `i` (neither team selected). */
+/**
+ * True when School excludes dot `i`: neither team selected (Either team), or,
+ * under Head-to-head with exactly two schools, not both teams selected (D-14).
+ */
 function failsSchool(data, state, i) {
   if (state.school.length === 0) return false;
   const t = data.t;
-  const awaySlug = data.teamSlugs[t.away_team[i]];
-  const homeSlug = data.teamSlugs[t.home_team[i]];
-  return !state.school.includes(awaySlug) && !state.school.includes(homeSlug);
+  const awayIn = state.school.includes(data.teamSlugs[t.away_team[i]]);
+  const homeIn = state.school.includes(data.teamSlugs[t.home_team[i]]);
+  if (state.h2h === true && state.school.length === 2) return !(awayIn && homeIn);
+  return !(awayIn || homeIn);
 }
 
 /** True when Bowls/Playoffs excludes dot `i`. */
@@ -131,24 +149,28 @@ function failsPostseason(data, state, i) {
   return false;
 }
 
+/** True when any filter that fades (everything except Networks and Role) excludes dot `i`. */
+function failsFadeable(data, state, i) {
+  return (
+    failsSeasons(data, state, i) ||
+    failsSlots(data, state, i) ||
+    failsConferences(data, state, i) ||
+    failsSchool(data, state, i) ||
+    failsPostseason(data, state, i)
+  );
+}
+
 /**
- * Whether dot `i` passes every fade filter (D-13): Networks, Kickoff,
- * Conference, School, and Bowls/Playoffs. A dot that fails this stays
- * `visible` -- it renders as the inert filtered-out state (D-14), never
- * removed. Role is deliberately absent: it never fades a dot (D-13).
+ * Whether dot `i` passes every filter: Seasons, Networks, Kickoff,
+ * Conference, School, and Bowls/Playoffs (04.7 D-06). Independent of the
+ * Fade/Hide mode. Role is deliberately absent: it never fades a dot.
  * @param {object} data - a `prepareData` result.
  * @param {object} state - shaped like `defaultState(data)`.
  * @param {number} i - telecast index.
  * @returns {boolean}
  */
 export function passesFadeFilters(data, state, i) {
-  return !(
-    failsNetworks(data, state, i) ||
-    failsSlots(data, state, i) ||
-    failsConferences(data, state, i) ||
-    failsSchool(data, state, i) ||
-    failsPostseason(data, state, i)
-  );
+  return !failsNetworks(data, state, i) && !failsFadeable(data, state, i);
 }
 
 /**
@@ -204,10 +226,7 @@ export function computeFacets(data, state) {
 
   for (let i = 0; i < n; i += 1) {
     let mask = 0;
-    if (state.seasons != null) {
-      const season = t.season[i];
-      if (season < state.seasons[0] || season > state.seasons[1]) mask |= BIT_SEASON;
-    }
+    if (failsSeasons(data, state, i)) mask |= BIT_SEASON;
     if (failsNetworks(data, state, i)) mask |= BIT_NET;
     if (failsSlots(data, state, i)) mask |= BIT_SLOT;
     if (failsConferences(data, state, i)) mask |= BIT_CONF;
@@ -331,8 +350,8 @@ function buildSummary(data, state, matched, altGames, personIndexes, hasSelectio
 
 /**
  * Computes the full view for the current data and selection/filter state
- * (D-10..D-19): which dots are visible (season range only), which pass
- * every fade filter, which are person-matched, which rows fill the
+ * (D-10..D-19, 04.7): which dots are drawn (filters fade by default and
+ * hide in Hide mode; Networks always hides), which pass every filter, which are person-matched, which rows fill the
  * matched-games table, their compare-mode symbols, per-season counts, and
  * the match summary.
  * @param {object} data - a `prepareData` result.
@@ -348,7 +367,7 @@ export function computeView(data, state) {
   let passingCount = 0;
   for (let i = 0; i < n; i += 1) {
     if (visible[i]) visibleCount += 1;
-    if (visible[i] && passesFadeFilters(data, state, i)) {
+    if (passesFadeFilters(data, state, i)) {
       passesFilters[i] = 1;
       passingCount += 1;
     }
