@@ -98,6 +98,26 @@ def _traces(page: Page) -> list[dict[str, Any]]:
     return result
 
 
+def _dot_opacity(page: Page) -> dict[str, float]:
+    """The exported DOT_OPACITY tier constant, imported in-page."""
+    result: dict[str, float] = page.evaluate(
+        "() => import('./modules/chart.js').then((m) => ({...m.DOT_OPACITY}))"
+    )
+    return result
+
+
+def _marker_color(page: Page, meta: str) -> str:
+    result: str = page.evaluate(
+        "(meta) => document.getElementById('chart').data.find((t) => t.meta === meta).marker.color",
+        meta,
+    )
+    return result
+
+
+def _inert_total(traces: list[dict[str, Any]]) -> int:
+    return sum(len(t["x"]) for t in _inert_traces(traces))
+
+
 def _layout(page: Page) -> dict[str, Any]:
     result: dict[str, Any] = page.evaluate("() => document.getElementById('chart').layout")
     return result
@@ -358,11 +378,11 @@ def test_legend_chip_labels_are_slash_delimited_network_names(
     assert _chip_pressed_states(guarded_page) == ["true"] * len(_LEGEND_CHIP_LABELS)
 
 
-def test_legend_chip_click_toggles_family_and_moves_its_dots_to_inert(
+def test_legend_chip_click_toggles_family_and_hides_its_dots(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-16: clicking a legend chip toggles that family in the Networks
-    filter, fades its dots to inert, round-trips through the URL, and
+    filter, hides its dots (D-07), round-trips through the URL, and
     clicking it again clears the filter."""
     open_app(guarded_page, "")
     fox_chip = guarded_page.locator('#legend-chips button[data-family="fox"]')
@@ -376,7 +396,7 @@ def test_legend_chip_click_toggles_family_and_moves_its_dots_to_inert(
 
     traces = _traces(guarded_page)
     assert _dot_count(_family_traces(traces)) == 9
-    assert sum(len(t["x"]) for t in _inert_traces(traces)) == 3
+    assert sum(len(t["x"]) for t in _inert_traces(traces)) == 0
 
     fox_chip.click()
     guarded_page.wait_for_function("location.search === ''")
@@ -517,32 +537,37 @@ def test_set_state_people_highlights_and_fades_family_traces(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """SITE-02/SITE-12: selecting a person highlights exactly their games and
-    fades every other passing dot to 15% opacity, keeping its color."""
+    fades every other passing dot to the person-faded tier (D-02), keeping its color."""
     open_app(guarded_page, "")
     guarded_page.evaluate("window.__testHooks.setState({people: ['dale-harlow']})")
 
     traces = _traces(guarded_page)
     assert sorted(traces[-1]["customdata"]) == [0, 8]
     for t in _family_traces(traces):
-        assert t["opacity"] == 0.15
+        assert t["opacity"] == _dot_opacity(guarded_page)["activeUnderPerson"]
     assert guarded_page.url.endswith("?people=dale-harlow")
 
 
-def test_networks_filter_fades_non_matching_families_to_inert(
+def test_networks_filter_hides_and_fade_filters_keep_family_color(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-13/D-14/SITE-23: `?networks=net-a` only removes nothing -- it fades
-    the other 9 dots into their family's inert trace, grey at ~8% opacity,
-    with hover fully suppressed on the resolved `_fullData` (both
-    `hoverinfo: 'skip'` and `hovertemplate: null` are required, the 04-11
-    finding)."""
+    """D-07/D-01/D-03: `?networks=net-a` hides the other dots (no inert
+    points); a fade filter such as `?slot=late` draws failing dots in their
+    own family color at the inert tier, with hover fully suppressed on the
+    resolved `_fullData` (both `hoverinfo: 'skip'` and `hovertemplate: null`
+    are required, the 04-11 finding)."""
     open_app(guarded_page, "?networks=net-a")
     traces = _traces(guarded_page)
-    inert = _inert_traces(traces)
-    assert sum(len(t["x"]) for t in inert) == 9
-    for t in inert:
-        assert t["opacity"] == 0.08
+    assert sum(len(t["x"]) for t in _inert_traces(traces)) == 0
     assert _dot_count(_family_traces(traces)) == 3
+
+    open_app(guarded_page, "?slot=late")
+    tiers = _dot_opacity(guarded_page)
+    traces = _traces(guarded_page)
+    fox = next(t for t in _inert_traces(traces) if t["meta"] == "inert:fox")
+    assert len(fox["x"]) == 3
+    assert fox["opacity"] == tiers["inert"]
+    assert _marker_color(guarded_page, "inert:fox") == "#009E73"
 
     full = guarded_page.evaluate(
         "() => document.getElementById('chart')._fullData"
@@ -561,7 +586,7 @@ def test_inert_dots_take_no_hover_and_are_not_clickable(
 ) -> None:
     """D-15: a filtered-out dot never fires `plotly_hover` and a click on its
     exact pixel leaves the detail panel closed."""
-    open_app(guarded_page, "?networks=net-a")
+    open_app(guarded_page, "?slot=late")
     guarded_page.evaluate(
         "() => { window.__hoverMetas = []; "
         "document.getElementById('chart').on('plotly_hover', "
@@ -595,6 +620,12 @@ def test_person_matched_dot_that_fails_a_filter_renders_as_filtered_out(
     disney_inert = next(t for t in _inert_traces(traces) if t["meta"] == "inert:disney")
     assert -3.5 in disney_inert["x"]  # dot 0's pregame spread
     assert -6.5 in disney_inert["x"]  # dot 8's pregame spread
+    # Filter wins (04.1 D-14) at the person-faded inert tier (04.7 D-02),
+    # still in the family's own color (D-01).
+    assert disney_inert["opacity"] == _dot_opacity(guarded_page)["inertUnderPerson"]
+    assert _marker_color(guarded_page, "inert:disney") == _marker_color(
+        guarded_page, "family:disney"
+    )
 
 
 def test_hover_text_stays_minimal_and_drops_methodology_notes(
@@ -1260,9 +1291,9 @@ def test_html_tooltip_never_shows_for_inert_or_person_faded_dots(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-15 (carried forward): a filtered-out dot never shows the tooltip,
-    and neither does a person-faded (15%-opacity) active dot -- only the
+    and neither does a person-faded (50%-opacity) active dot -- only the
     highlighted dot does."""
-    open_app(guarded_page, "?networks=net-a")
+    open_app(guarded_page, "?slot=late")
     inert_point = _inert_dot_point(guarded_page, "inert:fox", 0)
     guarded_page.mouse.move(inert_point["x"], inert_point["y"])
     guarded_page.wait_for_timeout(300)
@@ -1270,7 +1301,7 @@ def test_html_tooltip_never_shows_for_inert_or_person_faded_dots(
 
     open_app(guarded_page, "?people=dale-harlow")
     # Dot 1 passes the filters but isn't one of Dale Harlow's two highlighted
-    # games (0, 8), so it's a 15%-faded active dot, not highlighted.
+    # games (0, 8), so it's a 50%-faded active dot, not highlighted.
     point1 = _dot_point(guarded_page, 1)
     guarded_page.mouse.move(point1["x"], point1["y"])
     guarded_page.wait_for_timeout(300)
@@ -2104,7 +2135,7 @@ def test_hover_ring_never_shows_on_inert_or_faded_dots(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-15: an inert or person-faded dot takes no hover, so it never gets the ring."""
-    open_app(guarded_page, "?networks=net-a")
+    open_app(guarded_page, "?slot=late")
     inert = _inert_dot_point(guarded_page, "inert:fox", 0)
     guarded_page.mouse.move(5, 5)
     guarded_page.mouse.move(inert["x"], inert["y"])
@@ -2174,3 +2205,165 @@ def test_hover_ring_never_shows_on_touch(
     mobile_page.touchscreen.tap(point["x"], point["y"])
     mobile_page.wait_for_function("document.getElementById('detail-panel').open")
     assert mobile_page.is_hidden(_RING)
+
+
+_RANGES_JS = (
+    "() => { const l = document.getElementById('chart')._fullLayout;"
+    " return [l.xaxis.range.slice(), l.yaxis.range.slice()]; }"
+)
+
+
+def test_dot_opacity_tiers_match_the_ui_spec_and_are_ordered(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-02: the one place the literal tier values are pinned."""
+    open_app(guarded_page, "")
+    tiers = _dot_opacity(guarded_page)
+    assert tiers == {"active": 1, "activeUnderPerson": 0.5, "inert": 0.3, "inertUnderPerson": 0.15}
+    assert tiers["active"] > tiers["activeUnderPerson"] > tiers["inert"] > tiers["inertUnderPerson"]
+
+
+def test_dot_tiers_stay_separable_in_both_themes(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """UI-SPEC: every adjacent tier pair and each faint tier against the page
+    background keeps a composite contrast ratio of at least 1.10."""
+    open_app(guarded_page, "")
+    minima: dict[str, float] = guarded_page.evaluate(
+        """async () => {
+          const chart = await import('./modules/chart.js');
+          const pal = await import('./modules/palette.js');
+          const O = chart.DOT_OPACITY;
+          const out = {};
+          const note = (k, v) => { out[k] = Math.min(out[k] ?? Infinity, v); };
+          for (const theme of ['light', 'dark']) {
+            const bg = pal.PAGE_BG[theme];
+            for (const color of Object.values(pal.FAMILY_COLORS[theme])) {
+              const c = (o) => pal.mixHex(color, bg, o);
+              note('active_vs_inert', pal.contrastRatio(c(O.active), c(O.inert)));
+              const r = (a, b) => pal.contrastRatio(c(a), c(b));
+              note('active_vs_activeUnderPerson', r(O.active, O.activeUnderPerson));
+              note('under_person_pair', r(O.activeUnderPerson, O.inertUnderPerson));
+              note('inert_vs_bg', pal.contrastRatio(c(O.inert), bg));
+              note('inertUnderPerson_vs_bg', pal.contrastRatio(c(O.inertUnderPerson), bg));
+            }
+          }
+          return out;
+        }"""
+    )
+    assert len(minima) == 5
+    for pair, ratio in minima.items():
+        assert ratio >= 1.10, (pair, ratio)
+
+
+def test_fade_mode_tiers_without_an_announcer(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-01/D-02: failing dots keep their family color at the inert tier."""
+    open_app(guarded_page, "?slot=late")
+    tiers = _dot_opacity(guarded_page)
+    traces = _traces(guarded_page)
+    assert _inert_total(traces) == 11
+    for t in _inert_traces(traces):
+        assert t["opacity"] == tiers["inert"]
+    conference = next(t for t in _family_traces(traces) if t["meta"] == "family:conference")
+    assert conference["customdata"] == [2]
+    assert conference["opacity"] == tiers["active"]
+    assert _marker_color(guarded_page, "inert:fox") == "#009E73"
+
+
+def test_fade_mode_tiers_with_an_announcer_on_a_filter(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-02: with an announcer selected, passing dots drop to 0.5 and failing
+    dots to 0.15; the announcer's own dot sits in the highlight overlay."""
+    open_app(guarded_page, "?seasons=2026-2026&people=dale-harlow")
+    tiers = _dot_opacity(guarded_page)
+    traces = _traces(guarded_page)
+    assert _inert_total(traces) == 8
+    for t in _inert_traces(traces):
+        assert t["opacity"] == tiers["inertUnderPerson"]
+    family = _family_traces(traces)
+    assert _dot_count(family) == 3
+    for t in family:
+        assert t["opacity"] == tiers["activeUnderPerson"]
+    assert traces[-1]["meta"] == "highlight"
+    assert traces[-1]["customdata"] == [8]
+
+
+def test_hide_mode_drops_filter_failures_but_keeps_the_announcer_pass_tier(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-05: Hide empties the inert traces; the 0.5 tier still shows."""
+    open_app(guarded_page, "?seasons=2026-2026&people=dale-harlow&dots=hide")
+    tiers = _dot_opacity(guarded_page)
+    traces = _traces(guarded_page)
+    assert _inert_total(traces) == 0
+    family = _family_traces(traces)
+    assert _dot_count(family) == 3
+    for t in family:
+        assert t["opacity"] == tiers["activeUnderPerson"]
+
+
+@pytest.mark.parametrize("query", ["?networks=net-a", "?networks=net-a&dots=hide"])
+def test_networks_hide_in_both_modes(
+    guarded_page: Page, open_app: Callable[[Page, str], None], query: str
+) -> None:
+    """D-07: Networks always removes the other dots."""
+    open_app(guarded_page, query)
+    traces = _traces(guarded_page)
+    assert _inert_total(traces) == 0
+    assert sorted(cd for t in _family_traces(traces) for cd in t["customdata"]) == [0, 4, 8]
+
+
+def test_seasons_fade_in_fade_mode_and_hide_in_hide_mode(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?seasons=2025-2025")
+    traces = _traces(guarded_page)
+    assert _inert_total(traces) == 8
+    assert _dot_count(_family_traces(traces)) == 4
+
+    open_app(guarded_page, "?seasons=2025-2025&dots=hide")
+    traces = _traces(guarded_page)
+    assert _inert_total(traces) == 0
+    assert _dot_count(_family_traces(traces)) == 4
+
+
+def test_trace_count_is_constant_across_fade_and_hide(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?slot=late")
+    fade = len(_traces(guarded_page))
+    open_app(guarded_page, "?slot=late&dots=hide")
+    assert len(_traces(guarded_page)) == fade
+
+
+@pytest.mark.parametrize("query", ["", "?axis=excitement"])
+def test_axes_never_move_with_filters_or_mode(
+    guarded_page: Page, open_app: Callable[[Page, str], None], query: str
+) -> None:
+    """D-08: filters, Fade/Hide, and head-to-head never change axis ranges."""
+    open_app(guarded_page, query)
+    original = guarded_page.evaluate(_RANGES_JS)
+    for patch in (
+        "{seasons: [2025, 2025]}",
+        "{dots: 'hide'}",
+        "{networks: ['net-a']}",
+        "{networks: null, school: ['northfield', 'lakeview'], h2h: true}",
+    ):
+        guarded_page.evaluate(f"window.__testHooks.setState({patch})")
+        guarded_page.wait_for_timeout(150)
+        assert guarded_page.evaluate(_RANGES_JS) == original, patch
+
+
+@pytest.mark.parametrize("query", ["?slot=late", "?seasons=2026-2026&people=dale-harlow"])
+def test_faded_traces_draw_under_every_active_trace(
+    guarded_page: Page, open_app: Callable[[Page, str], None], query: str
+) -> None:
+    """D-03: all inert traces come before every family trace."""
+    open_app(guarded_page, query)
+    metas = [str(t["meta"]) for t in _traces(guarded_page)]
+    inert = [i for i, m in enumerate(metas) if m.startswith("inert:")]
+    family = [i for i, m in enumerate(metas) if m.startswith("family:")]
+    assert max(inert) < min(family)
