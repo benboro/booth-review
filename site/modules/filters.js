@@ -3,7 +3,9 @@
  * Networks, Kickoff, Role, Conference, School, Bowls/Playoffs) above the
  * chart, plus "Clear all filters" and a full-height phone bottom sheet that
  * stacks every section, Announcers first (SITE-20, SITE-21, SITE-22,
- * SITE-24, SITE-27; D-02, D-03, D-10, D-11, D-18, D-21, D-27).
+ * SITE-24, SITE-27; D-02, D-03, D-10, D-11, D-18, D-21, D-27). The School popover
+ * also holds the Either team / Head-to-head control, shown with exactly two
+ * schools (04.7 D-11..D-14).
  *
  * D-21: the Announcers popover holds the moved person-search combobox
  * (`site/modules/topbar.js` still owns its search/add-person behavior; this
@@ -58,7 +60,7 @@ const GROUP_RESETS = {
   kickoff: { slots: null },
   role: { role: null },
   conference: { conferences: [] },
-  school: { school: [] },
+  school: { school: [], h2h: false },
   postseason: { postseason: 'all' },
 };
 
@@ -206,6 +208,7 @@ function buildNetworkChecklist(data) {
   // A4: keep the `.section-head` (title + Reset) as the preserved first child, not a bare h3.
   const heading =
     els.networksSection.querySelector('.section-head') ?? els.networksSection.querySelector('h3');
+  const helper = els.networksSection.querySelector('.helper');
   networkCheckboxes = new Map();
   familyCheckboxes = new Map();
 
@@ -240,7 +243,11 @@ function buildNetworkChecklist(data) {
     return fieldset;
   });
 
-  els.networksSection.replaceChildren(...(heading ? [heading] : []), ...groups);
+  els.networksSection.replaceChildren(
+    ...(heading ? [heading] : []),
+    ...(helper ? [helper] : []),
+    ...groups,
+  );
 }
 
 /** One "Only" button, a sibling of the row's label (never nested in it), built with textContent only. */
@@ -520,12 +527,13 @@ function positionPopover(popover, trigger) {
 /**
  * The first focusable element inside a popover: its search input, else its first
  * input/button. The per-group Reset button (A4) is skipped on purpose: it is a
- * secondary action, so the first focus belongs to the group's own control. It
+ * secondary action, so the first focus belongs to the group's own control; the School
+ * Head-to-head buttons are skipped too (hidden with <2 schools, and the search comes first). It
  * stays in the normal Tab order (Shift+Tab from that first control reaches it).
  */
 function firstFocusable(container) {
   return container.querySelector(
-    'input, button:not(.group-reset):not(.only-btn), [tabindex]:not([tabindex="-1"]):not(.group-reset):not(.only-btn)',
+    'input, button:not(.group-reset):not(.only-btn):not([data-match]), [tabindex]:not([tabindex="-1"]):not(.group-reset):not(.only-btn)',
   );
 }
 
@@ -610,6 +618,7 @@ export function initFilters({ data, getState, setState }) {
     conferenceList: document.getElementById('conference-list'),
     schoolSearch: document.getElementById('school-search'),
     schoolChips: document.getElementById('school-chips'),
+    schoolMatch: document.getElementById('school-match'),
     schoolList: document.getElementById('school-list'),
     postseasonOptions: document.getElementById('postseason-options'),
     clearFilters: document.getElementById('clear-filters'),
@@ -669,6 +678,12 @@ export function initFilters({ data, getState, setState }) {
   });
   bindChecklistKeyboard(els.schoolSearch, els.schoolList);
 
+  els.schoolMatch.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('button[data-match]');
+    if (!btn) return;
+    setState({ h2h: btn.dataset.match === 'both' });
+  });
+
   els.schoolChips.addEventListener('click', (ev) => {
     const btn = ev.target.closest('.chip-remove');
     if (!btn || !btn.dataset.slug) return;
@@ -709,7 +724,10 @@ export function initFilters({ data, getState, setState }) {
     bindPopoverMechanics(popover);
   }
   window.addEventListener('scroll', repositionOpenPopovers, { passive: true });
-  window.addEventListener('resize', repositionOpenPopovers);
+  window.addEventListener('resize', () => {
+    if (lastView) fitSchoolTrigger(data, getState(), lastView);
+    repositionOpenPopovers();
+  });
 
   const mobileMedia = window.matchMedia('(max-width: 640px)');
   placeSections(mobileMedia.matches);
@@ -855,6 +873,10 @@ function renderConferences(state, view) {
 
 /** Syncs the School checklist (checked, counts, facet hiding) and `#school-chips` (D-11). */
 function renderSchool(data, state, view) {
+  els.schoolMatch.hidden = state.school.length !== 2;
+  for (const btn of els.schoolMatch.querySelectorAll('button[data-match]')) {
+    btn.setAttribute('aria-pressed', String((btn.dataset.match === 'both') === (state.h2h === true)));
+  }
   for (const [slug, cb] of schoolCheckboxes) {
     const checked = state.school.includes(slug);
     cb.checked = checked;
@@ -934,6 +956,10 @@ function triggerInfo(name, data, state, view) {
   }
   if (name === 'school') {
     if (state.school.length === 0) return { label: 'School', active: false };
+    if (state.h2h === true && state.school.length === 2) {
+      const [a, b] = state.school.map((slug) => data.lookups.teams[data.teamIndexBySlug.get(slug)].name);
+      return { label: `School: ${a} vs ${b}`, active: true };
+    }
     if (state.school.length === 1) {
       const idx = data.teamIndexBySlug.get(state.school[0]);
       return { label: `School: ${data.lookups.teams[idx].name}`, active: true };
@@ -955,7 +981,55 @@ function renderTriggers(data, state, view) {
     const { label, active } = triggerInfo(name, data, state, view);
     btn.textContent = label;
     btn.dataset.active = active ? 'true' : 'false';
+    if (name === 'school') {
+      if (state.h2h === true && state.school.length === 2) {
+        btn.setAttribute('title', label);
+        btn.setAttribute('aria-label', label);
+      } else {
+        btn.removeAttribute('title');
+        btn.removeAttribute('aria-label');
+      }
+    }
   }
+  fitSchoolTrigger(data, state, view);
+}
+
+/**
+ * Keeps a Head-to-head "School: A vs B" label from re-wrapping the toolbar
+ * (SITE-20). The label may grow only into the free space at the end of the
+ * School button's toolbar line, measured with the Either-team label ("School · 2")
+ * in place, so toggling Head-to-head moves no other button and nothing below the
+ * toolbar. A longer label truncates with an ellipsis; the full text is the
+ * button's `title` and `aria-label` (renderTriggers). Runs after every trigger
+ * label is written, and again on resize, since the free space depends on both.
+ */
+function fitSchoolTrigger(data, state, view) {
+  const btn = els.triggers.school;
+  btn.style.removeProperty('min-width');
+  btn.style.removeProperty('max-width');
+  // Phones hide the toolbar triggers (the Filters sheet replaces them).
+  if (!(state.h2h === true && state.school.length === 2) || btn.offsetParent === null) return;
+  const h2hLabel = btn.textContent;
+  const cssMax = parseFloat(getComputedStyle(btn).maxWidth);
+  btn.textContent = triggerInfo('school', data, { ...state, h2h: false }, view).label;
+  const base = btn.getBoundingClientRect();
+  let lineRight = base.right;
+  for (const el of els.toolbar.children) {
+    if (el.offsetParent === null) continue;
+    const rect = el.getBoundingClientRect();
+    if (Math.abs(rect.top - base.top) < 1) lineRight = Math.max(lineRight, rect.right);
+  }
+  const toolbarStyle = getComputedStyle(els.toolbar);
+  const contentRight =
+    els.toolbar.getBoundingClientRect().right -
+    parseFloat(toolbarStyle.paddingRight) -
+    parseFloat(toolbarStyle.borderRightWidth);
+  // 1px under the measured room absorbs sub-pixel rounding.
+  const room = Math.max(0, Math.floor(contentRight - lineRight) - 1);
+  const width = Math.floor(base.width) + room;
+  btn.style.minWidth = `${Math.floor(base.width)}px`;
+  btn.style.maxWidth = `${Number.isFinite(cssMax) ? Math.min(cssMax, width) : width}px`;
+  btn.textContent = h2hLabel;
 }
 
 /** Counts the active filters, for the mobile Filters(N) button (extends SITE-18's rail-era count).
@@ -1015,4 +1089,7 @@ export function renderFilters({ data, state, view }) {
   renderTriggers(data, state, view);
   renderGroupResets(data, state, view);
   renderFiltersButton(data, state, view);
+  // Last, once every trigger label (and so the toolbar's wrap) and the School
+  // popover's own content are final: an open popover stays under its trigger.
+  repositionOpenPopovers();
 }

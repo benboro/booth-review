@@ -16,7 +16,9 @@
  * `school` (comma-separated team slugs, ordered by team index), `postseason`
  * (`exclude`/`only`; omitted at the default `all`), `seasons`, `networks`,
  * `slot`, `axis`, `view` (`bars`/`butterfly`), `by` (`network`/`team`/`conference`);
- * each of the last two is omitted at its default (D-13). The old `bars` and
+ * each of the last two is omitted at its default (D-13). `h2h` (`1`, only with
+ * exactly two schools; omitted at Either team) and `dots` (`hide`; omitted at
+ * the Fade default; 04.7 D-10, D-14). The old `bars` and
  * `group` params are ignored (04.6 D-27). There is no `team` param on encode -- `school` replaces
  * it (D-11, Pitfall 4). The legacy `team` param is still *decoded*: a valid
  * slug is unioned into `school` (legacy first) through the exact same path
@@ -68,6 +70,7 @@ export function encodeState(state, data) {
     const ordered = data.teamSlugs.filter((slug) => state.school.includes(slug));
     params.push(['school', ordered.map(encodeURIComponent).join(',')]);
   }
+  if (state.h2h === true && state.school.length === 2) params.push(['h2h', '1']);
 
   if (state.postseason !== 'all') params.push(['postseason', state.postseason]);
 
@@ -97,6 +100,7 @@ export function encodeState(state, data) {
   if (state.axis === 'result' || state.axis === 'excitement') params.push(['axis', state.axis]);
   if (state.view === 'bars' || state.view === 'butterfly') params.push(['view', state.view]);
   if (state.by) params.push(['by', state.by]);
+  if (state.dots === 'hide') params.push(['dots', 'hide']);
 
   if (params.length === 0) return '';
   return `?${params.map(([key, value]) => `${key}=${value}`).join('&')}`;
@@ -279,6 +283,11 @@ export function decodeState(search, data) {
     state.school = [teamSlug, ...state.school];
   }
 
+  // Head-to-head only means something with exactly two (already allowlisted)
+  // schools; checked after the legacy `team` union so the count is final. A
+  // stale h2h snaps back through setState and is not restored (04.7 D-12).
+  state.h2h = scalarParam(params, 'h2h') === '1' && state.school.length === 2;
+
   const rawPostseason = scalarParam(params, 'postseason');
   state.postseason = rawPostseason === 'exclude' || rawPostseason === 'only' ? rawPostseason : 'all';
 
@@ -293,6 +302,8 @@ export function decodeState(search, data) {
   state.view = rawView === 'bars' || rawView === 'butterfly' ? rawView : 'scatter';
   const rawBy = scalarParam(params, 'by');
   state.by = ['network', 'team', 'conference'].includes(rawBy) ? rawBy : null;
+  // Fade is the default; only the literal 'hide' selects Hide (04.7 D-10).
+  state.dots = scalarParam(params, 'dots') === 'hide' ? 'hide' : 'fade';
 
   return state;
 }
