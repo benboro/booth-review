@@ -474,6 +474,51 @@ def test_summary_never_reads_like_a_ranking(
     guarded_page.wait_for_function("location.search.includes('together')")
     _assert_clean()
 
+    open_app(guarded_page, "?networks=net-a")
+    _assert_clean()
+
+    open_app(guarded_page, "?school=northfield,lakeview&h2h=1")
+    _assert_clean()
+
+
+def test_summary_reads_n_of_m_for_a_filter_alone(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """04.7 D-09: a filter alone reads 'N of M'; Fade/Hide never changes N or M."""
+    detail = f"2019{chr(0x2013)}2026 {chr(0x00B7)} Alpha Sports"
+    for query in ("?networks=net-a", "?networks=net-a&dots=hide"):
+        open_app(guarded_page, query)
+        assert guarded_page.inner_text("#summary-count") == "3 of 12 rated telecasts"
+        assert guarded_page.inner_text("#summary-detail") == detail
+
+
+def test_summary_n_of_m_with_an_announcer_on_a_filter(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?people=dale-harlow&seasons=2026-2026")
+    assert guarded_page.inner_text("#summary-count") == "1 of 12 rated telecasts"
+
+
+def test_summary_filter_only_no_match_copy(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?slot=late&postseason=only")
+    assert guarded_page.inner_text("#summary-count") == ""
+    assert guarded_page.inner_text("#summary-detail") == (
+        "No rated telecasts match these filters. Widen the seasons or clear a filter to see games."
+    )
+
+
+def test_summary_clears_when_the_last_filter_is_cleared(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?networks=net-a")
+    assert guarded_page.inner_text("#summary-count") != ""
+    guarded_page.click("#clear-filters")
+    guarded_page.wait_for_function("location.search === ''")
+    assert guarded_page.inner_text("#summary-count") == ""
+    assert guarded_page.inner_text("#summary-detail") == ""
+
 
 _OPTION_STYLE_JS = """
 (el) => {
