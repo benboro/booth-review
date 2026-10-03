@@ -2,7 +2,9 @@
  * Chart building and rendering (SITE-01, SITE-03, SITE-04, SITE-12, SITE-18,
  * SITE-23, SITE-25, SITE-26, D-01..D-04, D-08, D-12, D-14, D-15, D-22): two
  * `scattergl` traces per network family -- an "active" trace (dots that
- * pass every fade filter) and an "inert" trace (dots that fail one, D-14) --
+ * pass every filter) and an "inert" trace (dots that fail one, drawn in the
+ * family color at the fail tier, D-01/D-02, never hoverable, D-03; Hide mode
+ * and Networks leave them undrawn upstream in select.js) --
  * plus a highlight overlay drawn last, the D-03 n/a strip, log-axis ticks,
  * the UI-SPEC's minimal hover content, and the phone/desktop layout.
  * Plotly's own legend is off everywhere (`showlegend: false`); the HTML
@@ -42,6 +44,18 @@ import { tooltipModel } from './tooltip.js';
  * tests/e2e/test_site_chart.py.
  */
 export const TOOLTIP_MODE = 'html';
+
+/**
+ * Dot opacity tiers (04.7 UI-SPEC tuning of D-02's 100/45/25/15 targets).
+ * Order must stay active > activeUnderPerson > inert > inertUnderPerson;
+ * retune here in one line.
+ */
+export const DOT_OPACITY = Object.freeze({
+  active: 1,
+  activeUnderPerson: 0.5,
+  inert: 0.3,
+  inertUnderPerson: 0.15,
+});
 
 /** X-axis chart titles (distinct from format.js's shorter AXIS_LABELS toggle copy). */
 const XAXIS_TITLES = {
@@ -215,9 +229,9 @@ export function buildFigure(data, view, state, env) {
       hoverinfo: 'skip',
       hovertemplate: null,
       marker: {
-        color: DIVIDER[theme],
+        color: FAMILY_COLORS[theme][family],
         size: 6,
-        opacity: 0.08,
+        opacity: view.hasPersonSelection ? DOT_OPACITY.inertUnderPerson : DOT_OPACITY.inert,
         line: { width: 0 },
       },
     });
@@ -236,7 +250,7 @@ export function buildFigure(data, view, state, env) {
       marker: {
         color: FAMILY_COLORS[theme][family],
         size: 6,
-        opacity: view.hasPersonSelection ? 0.15 : 1,
+        opacity: view.hasPersonSelection ? DOT_OPACITY.activeUnderPerson : DOT_OPACITY.active,
         line: { width: 0 },
       },
     });
