@@ -584,6 +584,86 @@ def test_url_state_round_trips(guarded_page: Page, site_url: str) -> None:
     assert "team=" not in round_trip["encoded"]
 
 
+def test_dots_and_h2h_round_trip_and_are_omitted_at_default(
+    guarded_page: Page, site_url: str
+) -> None:
+    """04.7 D-10, D-14: dots=hide and h2h=1 round-trip; the defaults omit both
+    and h2h is never encoded without exactly two schools."""
+    _load(guarded_page, site_url)
+    assert guarded_page.evaluate(_ENCODE_DEFAULT_JS) == ""
+
+    hide = guarded_page.evaluate(_ROUND_TRIP_JS, {"dots": "hide"})
+    assert hide["encoded"] == "?dots=hide"
+    assert hide["decoded"]["dots"] == "hide"
+    assert guarded_page.evaluate(_ROUND_TRIP_JS, {"dots": "fade"})["encoded"] == ""
+
+    both = guarded_page.evaluate(
+        _ROUND_TRIP_JS, {"school": ["northfield", "lakeview"], "h2h": True}
+    )
+    assert both["encoded"] == "?school=northfield,lakeview&h2h=1"
+    assert both["decoded"]["h2h"] is True
+
+    for school in (["northfield"], ["northfield", "lakeview", "ironpeak"]):
+        stale = guarded_page.evaluate(_ROUND_TRIP_JS, {"school": school, "h2h": True})
+        assert "h2h" not in stale["encoded"]
+        assert stale["decoded"]["h2h"] is False
+
+
+@pytest.mark.parametrize(
+    ("query", "key", "expected"),
+    [
+        ("?h2h=1&school=northfield", "h2h", False),
+        ("?h2h=yes&school=northfield,lakeview", "h2h", False),
+        ("?h2h=1&school=northfield,nowhere", "h2h", False),
+        ("?h2h=1&school=lakeview,northfield", "h2h", True),
+        ("?team=lakeview&school=northfield&h2h=1", "h2h", True),
+        ("?dots=bogus", "dots", "fade"),
+        ("?dots=HIDE", "dots", "fade"),
+        ("?dots=", "dots", "fade"),
+        ("?dots=hide", "dots", "hide"),
+    ],
+)
+def test_decode_allowlists_dots_and_h2h(
+    guarded_page: Page, site_url: str, query: str, key: str, expected: Any
+) -> None:
+    """T-04.7-01: dots is 'hide' only for the literal 'hide'; h2h is true only
+    for the literal '1' with exactly two valid schools."""
+    _load(guarded_page, site_url)
+    assert guarded_page.evaluate(_DECODE_SEARCH_JS, query)[key] == expected
+
+
+_SNAP_BACK_JS = """
+async () => {
+  const D = await import('./modules/data.js');
+  const S = await import('./modules/select.js');
+  const U = await import('./modules/url-state.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  const setState = (state, school) =>
+    U.decodeState(U.encodeState({ ...state, school }, data), data);
+  const base = Object.assign(S.defaultState(data), {
+    school: ['northfield', 'lakeview'],
+    h2h: true,
+  });
+  const three = setState(base, ['northfield', 'lakeview', 'ironpeak']);
+  const back = setState(three, ['northfield', 'lakeview']);
+  const removed = setState(base, ['northfield']);
+  return { start: setState(base, base.school).h2h, three: three.h2h, back: back.h2h,
+           removed: removed.h2h };
+}
+"""
+
+
+def test_head_to_head_snaps_back_when_the_school_count_changes(
+    guarded_page: Page, site_url: str
+) -> None:
+    """04.7 D-12: a third school or a removal drops h2h through the setState
+    round trip, and re-adding a second school does not restore it."""
+    _load(guarded_page, site_url)
+    result = guarded_page.evaluate(_SNAP_BACK_JS)
+    assert result == {"start": True, "three": False, "back": False, "removed": False}
+
+
 _CONFERENCES_ROUND_TRIP_JS = """
 async (partial) => {
   const D = await import('./modules/data.js');
@@ -720,6 +800,11 @@ async () => {
         "?school=../x",
         "?postseason=%3Cscript%3E",
         "?team=nope&school=%",
+        "?h2h=1&school=northfield",
+        "?dots=bogus",
+        "?dots=hide&h2h=1",
+        "?h2h=1&school=northfield,lakeview,ironpeak",
+        "?h2h=1&dots=hide&school=northfield,lakeview&seasons=2025-2025&networks=none",
     ],
 )
 def test_crafted_url_never_breaks_the_app(guarded_page: Page, open_app: Any, query: str) -> None:
@@ -731,7 +816,8 @@ def test_crafted_url_never_breaks_the_app(guarded_page: Page, open_app: Any, que
     assert guarded_page.locator("#load-error").is_hidden()
     state = guarded_page.evaluate("window.__testHooks.getState()")
     assert state["people"] == (["dale-harlow"] if "dale-harlow" in query else [])
-    assert state["school"] == []
+    if "northfield" not in query:
+        assert state["school"] == []
 
 
 def test_url_state_keeps_a_comma_inside_an_id(guarded_page: Page, site_url: str) -> None:
