@@ -137,25 +137,30 @@ def test_default_season_counts(guarded_page: Page, open_app: Callable[[Page, str
     assert "2026: 4 rated telecasts" in text
 
 
-def test_season_range_hides_dots_and_leaves_counts_unchanged(
+def test_season_range_fades_dots_by_default_and_leaves_counts_unchanged(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-13: the season range is the only filter that removes dots; it never
-    changes the per-season counts list."""
+    """04.7 D-06: the season range fades dots by default and removes them only
+    in Hide mode; it never changes the per-season counts list."""
     open_app(guarded_page, "")
     _open_filter(guarded_page, "seasons")
     guarded_page.select_option("#season-from", "2025")
     guarded_page.select_option("#season-to", "2026")
     guarded_page.wait_for_function("location.search.includes('seasons=2025-2026')")
 
+    assert _visible_count(guarded_page) == 12
+    assert _view(guarded_page)["passingCount"] == 8
+    guarded_page.evaluate("window.__testHooks.setState({ dots: 'hide' })")
+    guarded_page.wait_for_function("location.search.includes('dots=hide')")
     assert _visible_count(guarded_page) == 8
+    assert _view(guarded_page)["passingCount"] == 8
     guarded_page.click("#season-counts-details summary")
     text = guarded_page.inner_text("#season-counts")
     assert "2019: 2 rated telecasts" in text
 
 
 @pytest.mark.parametrize(
-    ("query", "expected_seasons", "selects", "visible"),
+    ("query", "expected_seasons", "selects", "passing"),
     [
         # Entirely past the last data season: falls back to unfiltered.
         ("?seasons=2030-2040", None, ("2019", "2026"), 12),
@@ -173,7 +178,7 @@ def test_season_link_snaps_to_data_seasons_the_selects_can_show(
     query: str,
     expected_seasons: list[int] | None,
     selects: tuple[str, str],
-    visible: int,
+    passing: int,
 ) -> None:
     """WR-13: a seasons link never decodes to an inverted range or to a
     season neither `<select>` offers (which blanked both selects and hid
@@ -182,7 +187,7 @@ def test_season_link_snaps_to_data_seasons_the_selects_can_show(
     assert guarded_page.evaluate("window.__testHooks.getState().seasons") == expected_seasons
     assert guarded_page.input_value("#season-from") == selects[0]
     assert guarded_page.input_value("#season-to") == selects[1]
-    assert _visible_count(guarded_page) == visible
+    assert _view(guarded_page)["passingCount"] == passing
 
 
 def test_blank_season_select_value_is_ignored(
@@ -198,18 +203,18 @@ def test_blank_season_select_value_is_ignored(
     assert guarded_page.evaluate("window.__testHooks.getState().seasons") == [2021, 2025]
 
 
-def test_unchecking_fox_family_fades_its_dots_into_the_inert_trace(
+def test_unchecking_fox_family_hides_its_dots(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-13: unchecking a family box fades its networks' dots (moves them to
-    the inert trace) rather than removing them -- `visibleCount` (season-only
-    removal) is unchanged; only the active/passing count drops."""
+    """04.7 D-07: Networks always hides -- unchecking a family box removes its
+    networks' dots, so `visibleCount` and `passingCount` both drop to 9."""
     open_app(guarded_page, "")
     _open_filter(guarded_page, "networks")
     guarded_page.uncheck("input[data-family-checkbox='fox']")
     guarded_page.wait_for_function("location.search.includes('networks=')")
 
-    assert _visible_count(guarded_page) == 12
+    assert _visible_count(guarded_page) == 9
+    assert _view(guarded_page)["passingCount"] == 9
     active = _visible_customdata(guarded_page)
     assert len(active) == 9
     assert 1 not in active
@@ -226,7 +231,7 @@ def test_isolating_a_single_network_via_family_checkboxes(
     guarded_page.uncheck("input[data-family-checkbox='other']")
     guarded_page.wait_for_function("location.search.includes('networks=net-b')")
 
-    assert _visible_count(guarded_page) == 12
+    assert _visible_count(guarded_page) == 3
     assert sorted(_visible_customdata(guarded_page)) == [1, 5, 9]
 
 
@@ -272,7 +277,7 @@ def test_unchecking_one_network_leaves_family_indeterminate(
 def test_prime_time_slot_fades_non_matching_including_unknown_kickoff(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-13: checking a slot fades non-matching dots, including the one with
+    """04.7 D-06: checking a slot fades non-matching dots, including the one with
     unknown kickoff, rather than removing them."""
     open_app(guarded_page, "")
     _open_filter(guarded_page, "kickoff")
@@ -1815,7 +1820,7 @@ def test_facet_seasons_one_sided_edit_keeps_untouched_end_at_data_bound(
     assert guarded_page.evaluate("window.__testHooks.getState().seasons") == [2019, 2025]
     assert "seasons=2019-2025" in guarded_page.evaluate("location.search")
     guarded_page.evaluate("window.__testHooks.setState({ networks: null })")
-    assert _visible_count(guarded_page) == 8
+    assert _view(guarded_page)["passingCount"] == 8
 
 
 def test_facet_seasons_one_sided_edit_to_the_data_bound_sets_no_filter(
