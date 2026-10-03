@@ -942,6 +942,23 @@ def test_summary_copy_formats_n_of_m(guarded_page: Page, site_url: str) -> None:
     }
 
 
+def test_summary_copy_caps_a_long_network_list(guarded_page: Page, site_url: str) -> None:
+    """WR-01: a broad filter can pass games on many networks; the detail names the
+    first three (most telecasts first) and counts the rest, so it never wraps the
+    selection band. Three or fewer are listed in full."""
+    _load(guarded_page, site_url)
+    base = {"kind": "matches", "seasonMin": 2014, "seasonMax": 2025, "count": 900, "of": 4210}
+    three = {**base, "networks": ["ESPN", "FOX", "ABC"], "altCount": 0}
+    assert guarded_page.evaluate(_SUMMARY_COPY_JS, three)["detail"] == (
+        "2014\u20132025 \u00b7 ESPN, FOX, ABC"
+    )
+    networks = ["ESPN", "FOX", "ABC", "CBS", "NBC", "FS1", "ESPN2"]
+    many = {**base, "networks": networks, "altCount": 2}
+    assert guarded_page.evaluate(_SUMMARY_COPY_JS, many)["detail"] == (
+        "2014\u20132025 \u00b7 ESPN, FOX, ABC +4 more \u00b7 includes 2 alt-cast games"
+    )
+
+
 def _facets(page: Page, partial: dict[str, Any]) -> dict[str, Any]:
     facets = _view(page, partial)["facets"]
     assert facets is not None, "view.facets is missing"

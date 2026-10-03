@@ -451,6 +451,26 @@ export function escapeHover(s) {
 }
 
 /**
+ * How many networks the summary detail names before "+N more". A broad filter
+ * can pass games on 20 networks; listing them all wraps the line past the
+ * selection band's reserved height and moves the chart (SITE-20, D-33). Three
+ * names plus the count keep the line inside that reserve at 800px.
+ */
+export const SUMMARY_NETWORK_LIMIT = 3;
+
+/**
+ * The summary detail's network list, most telecasts first (A6): every name when
+ * there are at most `SUMMARY_NETWORK_LIMIT`, else the first ones and "+N more".
+ * @param {string[]} networks
+ * @returns {string}
+ */
+function summaryNetworks(networks) {
+  if (networks.length <= SUMMARY_NETWORK_LIMIT) return networks.join(', ');
+  const more = networks.length - SUMMARY_NETWORK_LIMIT;
+  return `${networks.slice(0, SUMMARY_NETWORK_LIMIT).join(', ')} +${more} more`;
+}
+
+/**
  * Turns a `computeView` summary object into display copy (UI-SPEC
  * Copywriting Contract, match summary line variants). Counts only --
  * never a computed or printed viewer statistic of any kind (anti-feature A1).
@@ -466,7 +486,7 @@ export function summaryCopy(summary) {
         : n === 1
           ? '1 rated telecast'
           : `${n} rated telecasts`;
-    let detail = `${summary.seasonMin}–${summary.seasonMax} · ${summary.networks.join(', ')}`;
+    let detail = `${summary.seasonMin}–${summary.seasonMax} · ${summaryNetworks(summary.networks)}`;
     if (summary.altCount > 0) {
       const gameWord = summary.altCount === 1 ? 'game' : 'games';
       detail += ` · includes ${summary.altCount} alt-cast ${gameWord}`;
