@@ -1214,6 +1214,31 @@ input[type="checkbox"] {
   padding: 0;
 }
 
+/* D-04: legend chips plus the Fade | Hide switch at the row's end. */
+.legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-md);
+  row-gap: var(--space-sm);
+}
+
+.dots-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-inline-start: auto;
+}
+
+.dots-caption {
+  font: var(--font-label);
+  color: var(--muted);
+}
+
+.dots-toggle .segmented {
+  margin-bottom: 0;
+}
+
 /* SITE-26: shared filled text-pill treatment (legend chips, panel/table
    network pills -- pill.js's `makePill`). */
 .pill {
@@ -1585,6 +1610,20 @@ input[type="checkbox"] {
   font: var(--font-label);
 }
 
+/* 04.7 D-06: a boxed note stays legible over faded dots. */
+#season-empty-note {
+  inset: auto;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: max-content;
+  max-width: calc(100% - var(--space-xl));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: var(--space-sm) var(--space-md);
+}
+
 .season-empty-note[hidden] {
   display: none;
 }
@@ -1937,8 +1976,18 @@ html:has(#detail-panel[open]) {
 
   /* D-04: on phones the legend chip row renders below the chart, not above
      it -- `#chart-area`'s flex-column order, not a separate grid area. */
-  #legend-chips {
+  #legend-row {
     order: 1;
+  }
+
+  .dots-toggle {
+    margin-inline-start: 0;
+    flex-basis: 100%;
+  }
+
+  .dots-toggle .segmented,
+  .dots-toggle .segmented button {
+    flex: 1;
   }
 
   #shape-legend,
