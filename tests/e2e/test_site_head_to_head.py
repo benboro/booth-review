@@ -149,6 +149,76 @@ def test_long_matchup_label_truncates_without_overlap(
         )
 
 
+_GEOMETRY_JS = """
+() => {
+  const box = (id) => document.getElementById(id).getBoundingClientRect();
+  const trigger = box('trigger-school');
+  const pop = box('pop-school');
+  return {
+    toolbarHeight: box('toolbar').height,
+    chartTop: box('chart-area').top,
+    triggerLeft: trigger.left,
+    triggerBottom: trigger.bottom,
+    popLeft: pop.left,
+    popTop: pop.top,
+    popWidth: pop.width,
+    innerWidth: window.innerWidth,
+  };
+}
+"""
+
+
+def _settled_geometry(page: Page) -> dict[str, float]:
+    # Two animation frames, so the popover's rAF position clamp has run.
+    page.evaluate("() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")
+    result: dict[str, float] = page.evaluate(_GEOMETRY_JS)
+    return result
+
+
+def _assert_popover_under_trigger(geometry: dict[str, float]) -> None:
+    """The popover sits 4px under the School trigger, its left clamped on-screen
+    (filters.js `positionPopover`)."""
+    assert geometry["popTop"] == pytest.approx(geometry["triggerBottom"] + 4, abs=1)
+    max_left = max(8, geometry["innerWidth"] - geometry["popWidth"] - 8)
+    expected_left = max(8, min(geometry["triggerLeft"], max_left))
+    assert geometry["popLeft"] == pytest.approx(expected_left, abs=1)
+
+
+@pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
+@pytest.mark.parametrize("width", [900, 1024])
+def test_toggling_head_to_head_keeps_the_toolbar_and_the_open_popover_in_place(
+    guarded_page: Page, open_app: Callable[[Page, str], None], width: int
+) -> None:
+    """SITE-20: "School · 2" -> "School: Northfield vs Lakeview" must not re-wrap the
+    toolbar or move the chart, and the open School popover stays under its button.
+    With the default font at these widths, the full label is wider than the room
+    left on the School button's toolbar line, so it truncates instead (a wider font
+    can wrap School onto the second line first, where the label fits)."""
+    guarded_page.set_viewport_size({"width": width, "height": 900})
+    open_app(guarded_page, PAIR)
+    _open_school(guarded_page)
+    before = _settled_geometry(guarded_page)
+    _assert_popover_under_trigger(before)
+
+    guarded_page.click("#school-match [data-match='both']")
+    _wait_search(guarded_page, "location.search.includes('h2h=1')")
+    after = _settled_geometry(guarded_page)
+    assert guarded_page.locator("#pop-school").evaluate("e => e.matches(':popover-open')")
+    assert after["toolbarHeight"] == before["toolbarHeight"]
+    assert after["chartTop"] == before["chartTop"]
+    assert after["triggerLeft"] == before["triggerLeft"]
+    _assert_popover_under_trigger(after)
+    trigger = guarded_page.locator("#trigger-school")
+    assert trigger.get_attribute("title") == "School: Northfield vs Lakeview"
+
+    guarded_page.click("#school-match [data-match='either']")
+    _wait_search(guarded_page, "!location.search.includes('h2h')")
+    back = _settled_geometry(guarded_page)
+    assert back["toolbarHeight"] == before["toolbarHeight"]
+    assert back["chartTop"] == before["chartTop"]
+    _assert_popover_under_trigger(back)
+
+
 def test_school_reset_and_clear_all_turn_head_to_head_off(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:

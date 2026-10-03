@@ -547,7 +547,10 @@ body.app {
      `--text` token, failing WCAG AA 4.5:1 in dark mode against `--bg`. */
   color: var(--text);
   cursor: pointer;
-  /* A long "School: A vs B" label truncates instead of widening the toolbar (04.7 D-13). */
+  /* A long "School: A vs B" label truncates instead of widening the toolbar
+     (04.7 D-13). Under Head-to-head, filters.js `fitSchoolTrigger` narrows the
+     School button further, to the room left on its toolbar line, so toggling
+     Head-to-head never re-wraps the toolbar (SITE-20). */
   max-width: 320px;
   overflow: hidden;
   text-overflow: ellipsis;
