@@ -6,7 +6,7 @@ plotted rule draws its headline requirement from, minus the headline-present
 filter itself (this table reports headline_present as one of its own
 columns).
 
-Excitement and pregame completeness are computed only against the FBS-scoped
+Excitement and closing-spread completeness are computed only against the FBS-scoped
 `games` frame telecasts join to (research Pitfall 3): CFBD's own all-division
 null rate is far higher and would misrepresent this project's actual
 coverage. A missing value is counted as missing, never coerced to zero or
@@ -48,7 +48,7 @@ COVERAGE_COLUMNS: tuple[str, ...] = (
     "match_rate",
     "headline_present",
     "excitement_present",
-    "pregame_present",
+    "spread_present",
     "points_present",
     "ranks_present",
     "unranked_games",
@@ -76,7 +76,7 @@ _BUCKET_KEYS: tuple[str, ...] = (
     "crew_patched",
     "headline_present",
     "excitement_present",
-    "pregame_present",
+    "spread_present",
     "points_present",
     "ranks_present",
     "unranked_games",
@@ -159,7 +159,13 @@ def build_coverage(tables: BuildTables) -> CoverageReport:
 
     eligible = telecasts.filter(pl.col("rated") & (pl.col("feed_type") == "main"))
     games_slim = games.select(
-        "game_id", "excitement", "pregame_x", "home_points", "away_points", "home_rank", "away_rank"
+        "game_id",
+        "excitement",
+        "closing_spread",
+        "home_points",
+        "away_points",
+        "home_rank",
+        "away_rank",
     )
     joined = eligible.join(games_slim, on="game_id", how="left")
 
@@ -191,8 +197,8 @@ def build_coverage(tables: BuildTables) -> CoverageReport:
             bucket["headline_present"] += 1
         if row["excitement"] is not None:
             bucket["excitement_present"] += 1
-        if row["pregame_x"] is not None:
-            bucket["pregame_present"] += 1
+        if row["closing_spread"] is not None:
+            bucket["spread_present"] += 1
         if row["home_points"] is not None and row["away_points"] is not None:
             bucket["points_present"] += 1
         home_rank_present = row["home_rank"] is not None
@@ -237,7 +243,7 @@ def build_coverage(tables: BuildTables) -> CoverageReport:
                 "match_rate": None,
                 "headline_present": bucket["headline_present"],
                 "excitement_present": bucket["excitement_present"],
-                "pregame_present": bucket["pregame_present"],
+                "spread_present": bucket["spread_present"],
                 "points_present": bucket["points_present"],
                 "ranks_present": bucket["ranks_present"],
                 "unranked_games": bucket["unranked_games"],
@@ -272,7 +278,7 @@ def build_coverage(tables: BuildTables) -> CoverageReport:
                 "match_rate": diagnostics.join08_by_season.get(season),
                 "headline_present": summed["headline_present"],
                 "excitement_present": summed["excitement_present"],
-                "pregame_present": summed["pregame_present"],
+                "spread_present": summed["spread_present"],
                 "points_present": summed["points_present"],
                 "ranks_present": summed["ranks_present"],
                 "unranked_games": summed["unranked_games"],
