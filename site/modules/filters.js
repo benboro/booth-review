@@ -3,7 +3,9 @@
  * Networks, Kickoff, Role, Conference, School, Bowls/Playoffs) above the
  * chart, plus "Clear all filters" and a full-height phone bottom sheet that
  * stacks every section, Announcers first (SITE-20, SITE-21, SITE-22,
- * SITE-24, SITE-27; D-02, D-03, D-10, D-11, D-18, D-21, D-27).
+ * SITE-24, SITE-27; D-02, D-03, D-10, D-11, D-18, D-21, D-27). The School popover
+ * also holds the Either team / Head-to-head control, shown with exactly two
+ * schools (04.7 D-11..D-14).
  *
  * D-21: the Announcers popover holds the moved person-search combobox
  * (`site/modules/topbar.js` still owns its search/add-person behavior; this
@@ -58,7 +60,7 @@ const GROUP_RESETS = {
   kickoff: { slots: null },
   role: { role: null },
   conference: { conferences: [] },
-  school: { school: [] },
+  school: { school: [], h2h: false },
   postseason: { postseason: 'all' },
 };
 
@@ -525,12 +527,13 @@ function positionPopover(popover, trigger) {
 /**
  * The first focusable element inside a popover: its search input, else its first
  * input/button. The per-group Reset button (A4) is skipped on purpose: it is a
- * secondary action, so the first focus belongs to the group's own control. It
+ * secondary action, so the first focus belongs to the group's own control; the School
+ * Head-to-head buttons are skipped too (hidden with <2 schools, and the search comes first). It
  * stays in the normal Tab order (Shift+Tab from that first control reaches it).
  */
 function firstFocusable(container) {
   return container.querySelector(
-    'input, button:not(.group-reset):not(.only-btn), [tabindex]:not([tabindex="-1"]):not(.group-reset):not(.only-btn)',
+    'input, button:not(.group-reset):not(.only-btn):not([data-match]), [tabindex]:not([tabindex="-1"]):not(.group-reset):not(.only-btn)',
   );
 }
 
@@ -615,6 +618,7 @@ export function initFilters({ data, getState, setState }) {
     conferenceList: document.getElementById('conference-list'),
     schoolSearch: document.getElementById('school-search'),
     schoolChips: document.getElementById('school-chips'),
+    schoolMatch: document.getElementById('school-match'),
     schoolList: document.getElementById('school-list'),
     postseasonOptions: document.getElementById('postseason-options'),
     clearFilters: document.getElementById('clear-filters'),
@@ -673,6 +677,12 @@ export function initFilters({ data, getState, setState }) {
     filterChecklist(els.schoolList, els.schoolSearch.value, (cb) => schoolKeysBySlug.get(cb.value) ?? []);
   });
   bindChecklistKeyboard(els.schoolSearch, els.schoolList);
+
+  els.schoolMatch.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('button[data-match]');
+    if (!btn) return;
+    setState({ h2h: btn.dataset.match === 'both' });
+  });
 
   els.schoolChips.addEventListener('click', (ev) => {
     const btn = ev.target.closest('.chip-remove');
@@ -860,6 +870,12 @@ function renderConferences(state, view) {
 
 /** Syncs the School checklist (checked, counts, facet hiding) and `#school-chips` (D-11). */
 function renderSchool(data, state, view) {
+  const wasHidden = els.schoolMatch.hidden;
+  els.schoolMatch.hidden = state.school.length !== 2;
+  for (const btn of els.schoolMatch.querySelectorAll('button[data-match]')) {
+    btn.setAttribute('aria-pressed', String((btn.dataset.match === 'both') === (state.h2h === true)));
+  }
+  if (wasHidden !== els.schoolMatch.hidden) repositionOpenPopovers();
   for (const [slug, cb] of schoolCheckboxes) {
     const checked = state.school.includes(slug);
     cb.checked = checked;
@@ -939,6 +955,10 @@ function triggerInfo(name, data, state, view) {
   }
   if (name === 'school') {
     if (state.school.length === 0) return { label: 'School', active: false };
+    if (state.h2h === true && state.school.length === 2) {
+      const [a, b] = state.school.map((slug) => data.lookups.teams[data.teamIndexBySlug.get(slug)].name);
+      return { label: `School: ${a} vs ${b}`, active: true };
+    }
     if (state.school.length === 1) {
       const idx = data.teamIndexBySlug.get(state.school[0]);
       return { label: `School: ${data.lookups.teams[idx].name}`, active: true };
@@ -960,6 +980,15 @@ function renderTriggers(data, state, view) {
     const { label, active } = triggerInfo(name, data, state, view);
     btn.textContent = label;
     btn.dataset.active = active ? 'true' : 'false';
+    if (name === 'school') {
+      if (state.h2h === true && state.school.length === 2) {
+        btn.setAttribute('title', label);
+        btn.setAttribute('aria-label', label);
+      } else {
+        btn.removeAttribute('title');
+        btn.removeAttribute('aria-label');
+      }
+    }
   }
 }
 

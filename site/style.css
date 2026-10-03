@@ -547,6 +547,11 @@ body.app {
      `--text` token, failing WCAG AA 4.5:1 in dark mode against `--bg`. */
   color: var(--text);
   cursor: pointer;
+  /* A long "School: A vs B" label truncates instead of widening the toolbar (04.7 D-13). */
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .filter-trigger::after {
@@ -979,6 +984,21 @@ input[type="checkbox"] {
   width: 280px;
 }
 
+/* Head-to-head control at the top of the School popover (04.7 D-11). */
+#school-match {
+  display: flex;
+  width: 100%;
+  margin-bottom: var(--space-sm);
+}
+
+#school-match[hidden] {
+  display: none;
+}
+
+#school-match button {
+  flex: 1;
+}
+
 /* Room for the Only button beside the name and count (plan 04.2-10). */
 #pop-conference {
   width: 330px;
@@ -1005,6 +1025,10 @@ input[type="checkbox"] {
 }
 
 @media (max-width: 640px) {
+  .filter-trigger {
+    max-width: 100%;
+  }
+
   #pop-networks,
   #pop-conference,
   #pop-school,
