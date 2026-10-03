@@ -206,6 +206,7 @@ function buildNetworkChecklist(data) {
   // A4: keep the `.section-head` (title + Reset) as the preserved first child, not a bare h3.
   const heading =
     els.networksSection.querySelector('.section-head') ?? els.networksSection.querySelector('h3');
+  const helper = els.networksSection.querySelector('.helper');
   networkCheckboxes = new Map();
   familyCheckboxes = new Map();
 
@@ -240,7 +241,11 @@ function buildNetworkChecklist(data) {
     return fieldset;
   });
 
-  els.networksSection.replaceChildren(...(heading ? [heading] : []), ...groups);
+  els.networksSection.replaceChildren(
+    ...(heading ? [heading] : []),
+    ...(helper ? [helper] : []),
+    ...groups,
+  );
 }
 
 /** One "Only" button, a sibling of the row's label (never nested in it), built with textContent only. */
