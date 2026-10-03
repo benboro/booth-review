@@ -12,6 +12,10 @@
  * init-once/render-every-time split `filters.js`/`topbar.js` already use.
  * DOM is built only with createElement/textContent/replaceChildren -- never
  * any markup-injecting DOM API (T-04-31/T-04-34).
+ *
+ * The Fade | Hide switch (`#dots-toggle`) lives beside the list in
+ * `#legend-row`, outside the rebuilt `<ul>`. Its rule: Networks always hides
+ * games; other filters fade unless Hide is on. It is concealed off Scatter.
  */
 
 import { familyToggledOff } from './select.js';
@@ -23,9 +27,18 @@ import { currentTheme } from './pill.js';
  * present now or rebuilt later by `renderLegend`. Native `<button>`
  * elements already give Enter/Space activation for free, so no separate
  * `keydown` handler is needed.
- * @param {{listEl: HTMLElement, onToggle: (family: string) => void}} args
+ * @param {{listEl: HTMLElement, onToggle: (family: string) => void,
+ *   switchEl?: HTMLElement|null, onDots?: (value: string) => void}} args
  */
-export function initLegend({ listEl, onToggle }) {
+export function initLegend({ listEl, onToggle, switchEl, onDots }) {
+  if (switchEl) {
+    switchEl.addEventListener('click', (ev) => {
+      const button = ev.target.closest('button[data-dots]');
+      if (!button) return;
+      const value = button.dataset.dots;
+      if (value === 'fade' || value === 'hide') onDots(value);
+    });
+  }
   listEl.addEventListener('click', (ev) => {
     const button = ev.target.closest('button[data-family]');
     if (!button) return;
@@ -83,4 +96,12 @@ export function renderLegend({ data, state, view }) {
     return li;
   });
   listEl.replaceChildren(...items);
+  const toggleEl = document.getElementById('dots-toggle');
+  if (toggleEl) {
+    const mode = state.dots === 'hide' ? 'hide' : 'fade';
+    for (const button of toggleEl.querySelectorAll('button[data-dots]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.dots === mode));
+    }
+    toggleEl.classList.toggle('is-concealed', state.view !== 'scatter');
+  }
 }

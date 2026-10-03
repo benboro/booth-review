@@ -37,6 +37,39 @@ export const STALE_COPY = {
 
 const VIEWS = ['scatter', 'bars', 'butterfly'];
 
+/** Hint on the Butterfly tab while Head-to-head blocks the two-school comparison (04.7 D-15). */
+export const H2H_BUTTERFLY_HINT = 'Switch School to Either team to compare two schools';
+
+function headToHeadBlocksButterfly(state) {
+  return state.h2h === true && state.school.length === 2 && state.people.length !== 2;
+}
+
+/**
+ * Title and hover/focus hint of a disabled tab.
+ * @param {string} view
+ * @param {object} state
+ * @returns {string}
+ */
+export function tabHint(view, state) {
+  if (view === 'butterfly' && headToHeadBlocksButterfly(state)) return H2H_BUTTERFLY_HINT;
+  return TAB_HINTS[view] || '';
+}
+
+/**
+ * Stale-panel copy for the active view, aware of Head-to-head.
+ * @param {object} state
+ * @returns {{title: string, hint: string}}
+ */
+export function staleCopy(state) {
+  if (state.view === 'butterfly' && headToHeadBlocksButterfly(state)) {
+    return {
+      title: H2H_BUTTERFLY_HINT,
+      hint: 'Head-to-head keeps only the games between the two schools. Select two announcers to compare them in these games.',
+    };
+  }
+  return STALE_COPY[state.view];
+}
+
 function tabsEl() {
   return document.getElementById('chart-tabs');
 }
@@ -52,7 +85,7 @@ function setHint(text) {
 
 function showHintFor(tab) {
   if (tab && tab.getAttribute('aria-disabled') === 'true') {
-    setHint(TAB_HINTS[tab.dataset.view] || '');
+    setHint(tab.getAttribute('title') || '');
   }
 }
 
@@ -167,7 +200,7 @@ export function renderChartTabs({ data, state }) {
       tab.removeAttribute('aria-describedby');
     } else {
       tab.setAttribute('aria-disabled', 'true');
-      tab.setAttribute('title', TAB_HINTS[view]);
+      tab.setAttribute('title', tabHint(view, state));
       tab.setAttribute('aria-describedby', 'tab-hint');
     }
     if (selected) {

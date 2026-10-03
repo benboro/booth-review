@@ -59,9 +59,27 @@ function personName(data, id) {
   return data.lookups.people[data.personIndexById.get(id)].name;
 }
 
+function isMatchup(state) {
+  return state.h2h === true && state.school.length === 2;
+}
+
+/**
+ * The " in A vs B games" phrase for a Head-to-head matchup (04.7 D-16).
+ * @param {object} data
+ * @param {object} state
+ * @returns {string} '' unless Head-to-head is on with exactly two schools.
+ */
+export function matchupPhrase(data, state) {
+  if (!isMatchup(state)) return '';
+  const [a, b] = state.school;
+  return `in ${teamName(data, a)} vs ${teamName(data, b)} games`;
+}
+
 /**
  * The names after "with" in a title (D-21): announcers (joined by "and" when
- * called together, else "or"), then schools (joined by "or"). When both groups
+ * called together, else "or"), then schools (joined by "or"; Either team keeps
+ * this join, 04.4 D-21). Under Head-to-head the schools are named by
+ * `matchupPhrase` instead and are skipped here. When both groups
  * show, a group of 2+ names is parenthesised and the groups join with "and".
  * @param {object} data
  * @param {object} state
@@ -74,7 +92,7 @@ export function subjectPhrase(data, state, { omit = null } = {}) {
     const names = state.people.map((id) => personName(data, id));
     groups.push({ names, joiner: state.together ? ' and ' : ' or ' });
   }
-  if (omit !== 'schools' && state.school.length > 0) {
+  if (omit !== 'schools' && !isMatchup(state) && state.school.length > 0) {
     groups.push({ names: state.school.map((slug) => teamName(data, slug)), joiner: ' or ' });
   }
   const wrap = groups.length > 1;
@@ -119,7 +137,8 @@ function butterflySubject(model) {
 }
 
 /**
- * Chart title for a Bars or Butterfly model.
+ * Chart title for a Bars or Butterfly model: subject, matchup (Head-to-head
+ * only), people, networks. Either team keeps the "or" join (04.4 D-21).
  * @param {object} model
  * @param {object} data
  * @param {object} state
@@ -127,14 +146,16 @@ function butterflySubject(model) {
  */
 export function chartTitle(model, data, state) {
   const nets = networkPhrase(data, state);
+  const matchup = matchupPhrase(data, state);
+  const matchupTail = matchup ? ` ${matchup}` : '';
   if (model.kind === 'butterfly') {
     const omit = model.group === 'announcers' ? 'schools' : 'people';
     const phrase = subjectPhrase(data, state, { omit });
     const head = `${butterflySubject(model)}: ${model.sides[0].name} and ${model.sides[1].name}`;
-    return `${head}${phrase ? ` with ${phrase}` : ''}${nets}`;
+    return `${head}${matchupTail}${phrase ? ` with ${phrase}` : ''}${nets}`;
   }
   const phrase = subjectPhrase(data, state);
-  return `${subject(model)}${phrase ? ` with ${phrase}` : ''}${nets}`;
+  return `${subject(model)}${matchupTail}${phrase ? ` with ${phrase}` : ''}${nets}`;
 }
 
 /**

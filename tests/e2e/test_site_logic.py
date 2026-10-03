@@ -1,10 +1,10 @@
 """In-browser proof of D-08, SITE-10, SITE-12, and the D-10..D-19 filter/
-fade/matched-games semantics (D-13: only the season range removes a dot;
-every other filter fades one; D-14: a person-matched dot that fails a fade
-filter is filtered out, the filter wins; D-09/D-10: era-correct conference
-membership; D-11: School is a fade filter, not a highlight; D-12: the
-matched-games table fills on person-or-school; D-17..D-19: game_type backs
-the bowl/playoff control and the time-slot label).
+fade/matched-games semantics (SITE-41 / 04.7 D-06, D-07: filters fade a
+dot by default and hide it in Hide mode, Networks always hides; D-14: a
+person-matched dot that fails a filter is filtered out, the filter wins;
+D-09/D-10: era-correct conference membership; D-11: School is a fade filter,
+not a highlight; D-12: the matched-games table fills on person-or-school;
+D-17..D-19: game_type backs the bowl/playoff control and the time-slot label).
 
 No app.js exists yet (plan 04-07's job), so these tests exercise the served
 pure JS modules (data.js, select.js, format.js, url-state.js) directly via
@@ -201,7 +201,7 @@ def test_multi_person_or_default_and_together_mode_and_compare_symbols(
 def test_school_filter_fades_not_highlights(guarded_page: Page, site_url: str) -> None:
     """D-11: School is a multi-select, OR-within fade filter, not a
     highlight -- it fills the matched-games table on its own (D-12) but
-    never highlights a dot."""
+    never highlights a dot (it fades by default, 04.7 D-06)."""
     _load(guarded_page, site_url)
     view = _view(guarded_page, {"school": ["northfield"]})
     assert view["passesFilters"] == [0, 4, 8]
@@ -227,19 +227,117 @@ def test_school_and_person_combine_highlight_within_school(
     assert view["matched"] == view["highlighted"]
 
 
-def test_season_range_is_the_only_filter_that_removes_dots(
+def test_seasons_fade_by_default_hide_removes_and_networks_always_hides(
     guarded_page: Page, site_url: str
 ) -> None:
-    """D-13: the season range shrinks visibleCount; every other filter
-    leaves visibleCount at 12 and only narrows passesFilters, never
-    removing a dot."""
+    """SITE-41 / 04.7 D-06, D-07: the season range fades by default (reversing
+    04.1 D-13) and removes dots only in Hide mode; Networks hides in both."""
     _load(guarded_page, site_url)
-    season_view = _view(guarded_page, {"seasons": [2025, 2025]})
-    assert season_view["visibleCount"] == 4
+    fade = _view(guarded_page, {"seasons": [2025, 2025]})
+    assert fade["visibleCount"] == 12
+    assert fade["passingCount"] == 4
+    assert fade["passesFilters"] == [4, 5, 6, 7]
+    hide = _view(guarded_page, {"seasons": [2025, 2025], "dots": "hide"})
+    assert hide["visibleCount"] == 4
+    assert hide["passesFilters"] == [4, 5, 6, 7]
 
-    net_view = _view(guarded_page, {"networks": ["net-a"]})
-    assert net_view["visibleCount"] == 12
-    assert net_view["passesFilters"] == [0, 4, 8]
+    for extra in ({}, {"dots": "hide"}):
+        net_view = _view(guarded_page, {"networks": ["net-a"], **extra})
+        assert net_view["visibleCount"] == 3
+        assert net_view["passesFilters"] == [0, 4, 8]
+
+
+@pytest.mark.parametrize(
+    ("patch", "passes"),
+    [
+        ({"slots": ["late"]}, [2]),
+        ({"conferences": ["Big Ten"]}, [1, 4, 5, 8]),
+        ({"school": ["northfield"]}, [0, 4, 8]),
+        ({"postseason": "only"}, [5, 7]),
+        ({"seasons": [2025, 2025]}, [4, 5, 6, 7]),
+    ],
+)
+def test_every_fade_filter_follows_the_switch(
+    guarded_page: Page, site_url: str, patch: dict[str, Any], passes: list[int]
+) -> None:
+    """04.7 D-05, D-06: Fade draws every dot, Hide draws only passing dots;
+    passesFilters, season counts, and facets never depend on the mode."""
+    _load(guarded_page, site_url)
+    fade = _view(guarded_page, {**patch})
+    hide = _view(guarded_page, {**patch, "dots": "hide"})
+    assert fade["passesFilters"] == passes
+    assert fade["visibleCount"] == 12
+    assert hide["visibleCount"] == len(passes)
+    assert hide["passesFilters"] == fade["passesFilters"]
+    assert hide["seasonCounts"] == fade["seasonCounts"]
+    assert hide["facets"] == fade["facets"]
+
+
+def test_only_the_exact_hide_value_hides(guarded_page: Page, site_url: str) -> None:
+    """04.7 D-10: any dots value other than the exact string 'hide' fades."""
+    _load(guarded_page, site_url)
+    assert _view(guarded_page, {"dots": "bogus", "seasons": [2025, 2025]})["visibleCount"] == 12
+
+
+def test_hide_keeps_passing_dots_that_are_not_the_announcers(
+    guarded_page: Page, site_url: str
+) -> None:
+    """04.7 D-05: Hide removes only dots failing a filter; passing dots the
+    selected announcer did not call stay drawn."""
+    _load(guarded_page, site_url)
+    partial = {"people": ["dale-harlow"], "seasons": [2026, 2026]}
+    hide = _view(guarded_page, {**partial, "dots": "hide"})
+    assert hide["visibleCount"] == 4
+    assert hide["passesFilters"] == [8, 9, 10, 11]
+    assert hide["highlighted"] == [8]
+    fade = _view(guarded_page, partial)
+    assert fade["visibleCount"] == 12
+    assert fade["highlighted"] == [8]
+
+
+_H2H = {"school": ["northfield", "lakeview"], "h2h": True}
+
+
+def test_head_to_head_keeps_only_games_between_the_two_schools(
+    guarded_page: Page, site_url: str
+) -> None:
+    """04.7 D-14, D-12: Head-to-head ANDs exactly two schools; a stale h2h
+    with one or three schools behaves as Either team."""
+    _load(guarded_page, site_url)
+    view = _view(guarded_page, _H2H)
+    assert view["passesFilters"] == [0, 4]
+    assert view["matched"] == [0, 4]
+    assert view["visibleCount"] == 12
+    assert _view(guarded_page, {**_H2H, "dots": "hide"})["visibleCount"] == 2
+    assert _view(guarded_page, {**_H2H, "h2h": False})["passesFilters"] == [0, 4, 8, 9]
+    assert _view(guarded_page, {"school": ["northfield"], "h2h": True})["passesFilters"] == [
+        0,
+        4,
+        8,
+    ]
+    three = {"school": ["northfield", "lakeview", "ironpeak"], "h2h": True}
+    assert _view(guarded_page, three)["passesFilters"] == [0, 1, 4, 5, 8, 9]
+
+
+def test_head_to_head_person_highlight_stays_within_the_matchup(
+    guarded_page: Page, site_url: str
+) -> None:
+    """04.7 D-14: person highlighting stacks on the head-to-head set."""
+    _load(guarded_page, site_url)
+    assert _view(guarded_page, {**_H2H, "people": ["casey-lund"]})["highlighted"] == [4]
+
+
+def test_head_to_head_facets_school_counts_ignore_school_others_narrow(
+    guarded_page: Page, site_url: str
+) -> None:
+    """04.7 D-14, 04.2 D-08: School's own counts ignore School; every other
+    facet narrows to the head-to-head games."""
+    _load(guarded_page, site_url)
+    facets = _view(guarded_page, _H2H)["facets"]
+    assert facets["schools"] == _view(guarded_page, {})["facets"]["schools"]
+    assert facets["seasons"] == {"2019": 1, "2021": 0, "2025": 1, "2026": 0}
+    assert facets["networks"] == [2, 0, 0, 0]
+    assert facets["total"] == 2
 
 
 def test_conference_filter_or_within_era_correct_membership(
@@ -274,7 +372,7 @@ def test_fcs_conference_never_listed(guarded_page: Page, site_url: str) -> None:
 
 def test_postseason_exclude_and_only(guarded_page: Page, site_url: str) -> None:
     """D-17/D-18: the three-way Bowls/Playoffs control is backed by
-    game_type; excluded games fade, per D-13."""
+    game_type; excluded games fade (SITE-41 / 04.7 D-06)."""
     _load(guarded_page, site_url)
     excluded = _view(guarded_page, {"postseason": "exclude"})["passesFilters"]
     assert excluded == [i for i in range(12) if i not in (5, 7)]
@@ -303,7 +401,7 @@ def test_matched_fills_on_school_alone_not_other_filters(guarded_page: Page, sit
 
 
 def test_role_never_fades_only_limits_person_matching(guarded_page: Page, site_url: str) -> None:
-    """D-13: Role stays what it is today -- it limits how a person matches,
+    """04.7 D-06: Role stays what it is today -- it limits how a person matches,
     never which dots pass the fade filters, with or without a person
     selected."""
     _load(guarded_page, site_url)
@@ -314,8 +412,8 @@ def test_role_never_fades_only_limits_person_matching(guarded_page: Page, site_u
 def test_season_counts_use_fade_filters_and_ignore_season_range(
     guarded_page: Page, site_url: str
 ) -> None:
-    """Per-season counts count only dots passing the fade filters, and the
-    season range itself never changes them."""
+    """Per-season counts count only dots passing the non-season filters, and
+    the season range itself never changes them, in Fade or Hide (04.7 D-06)."""
     _load(guarded_page, site_url)
     net_counts = dict(_view(guarded_page, {"networks": ["net-a"]})["seasonCounts"])
     assert net_counts == {2019: 1, 2021: 0, 2025: 1, 2026: 1}
@@ -486,6 +584,86 @@ def test_url_state_round_trips(guarded_page: Page, site_url: str) -> None:
     assert "team=" not in round_trip["encoded"]
 
 
+def test_dots_and_h2h_round_trip_and_are_omitted_at_default(
+    guarded_page: Page, site_url: str
+) -> None:
+    """04.7 D-10, D-14: dots=hide and h2h=1 round-trip; the defaults omit both
+    and h2h is never encoded without exactly two schools."""
+    _load(guarded_page, site_url)
+    assert guarded_page.evaluate(_ENCODE_DEFAULT_JS) == ""
+
+    hide = guarded_page.evaluate(_ROUND_TRIP_JS, {"dots": "hide"})
+    assert hide["encoded"] == "?dots=hide"
+    assert hide["decoded"]["dots"] == "hide"
+    assert guarded_page.evaluate(_ROUND_TRIP_JS, {"dots": "fade"})["encoded"] == ""
+
+    both = guarded_page.evaluate(
+        _ROUND_TRIP_JS, {"school": ["northfield", "lakeview"], "h2h": True}
+    )
+    assert both["encoded"] == "?school=northfield,lakeview&h2h=1"
+    assert both["decoded"]["h2h"] is True
+
+    for school in (["northfield"], ["northfield", "lakeview", "ironpeak"]):
+        stale = guarded_page.evaluate(_ROUND_TRIP_JS, {"school": school, "h2h": True})
+        assert "h2h" not in stale["encoded"]
+        assert stale["decoded"]["h2h"] is False
+
+
+@pytest.mark.parametrize(
+    ("query", "key", "expected"),
+    [
+        ("?h2h=1&school=northfield", "h2h", False),
+        ("?h2h=yes&school=northfield,lakeview", "h2h", False),
+        ("?h2h=1&school=northfield,nowhere", "h2h", False),
+        ("?h2h=1&school=lakeview,northfield", "h2h", True),
+        ("?team=lakeview&school=northfield&h2h=1", "h2h", True),
+        ("?dots=bogus", "dots", "fade"),
+        ("?dots=HIDE", "dots", "fade"),
+        ("?dots=", "dots", "fade"),
+        ("?dots=hide", "dots", "hide"),
+    ],
+)
+def test_decode_allowlists_dots_and_h2h(
+    guarded_page: Page, site_url: str, query: str, key: str, expected: Any
+) -> None:
+    """T-04.7-01: dots is 'hide' only for the literal 'hide'; h2h is true only
+    for the literal '1' with exactly two valid schools."""
+    _load(guarded_page, site_url)
+    assert guarded_page.evaluate(_DECODE_SEARCH_JS, query)[key] == expected
+
+
+_SNAP_BACK_JS = """
+async () => {
+  const D = await import('./modules/data.js');
+  const S = await import('./modules/select.js');
+  const U = await import('./modules/url-state.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  const setState = (state, school) =>
+    U.decodeState(U.encodeState({ ...state, school }, data), data);
+  const base = Object.assign(S.defaultState(data), {
+    school: ['northfield', 'lakeview'],
+    h2h: true,
+  });
+  const three = setState(base, ['northfield', 'lakeview', 'ironpeak']);
+  const back = setState(three, ['northfield', 'lakeview']);
+  const removed = setState(base, ['northfield']);
+  return { start: setState(base, base.school).h2h, three: three.h2h, back: back.h2h,
+           removed: removed.h2h };
+}
+"""
+
+
+def test_head_to_head_snaps_back_when_the_school_count_changes(
+    guarded_page: Page, site_url: str
+) -> None:
+    """04.7 D-12: a third school or a removal drops h2h through the setState
+    round trip, and re-adding a second school does not restore it."""
+    _load(guarded_page, site_url)
+    result = guarded_page.evaluate(_SNAP_BACK_JS)
+    assert result == {"start": True, "three": False, "back": False, "removed": False}
+
+
 _CONFERENCES_ROUND_TRIP_JS = """
 async (partial) => {
   const D = await import('./modules/data.js');
@@ -622,6 +800,11 @@ async () => {
         "?school=../x",
         "?postseason=%3Cscript%3E",
         "?team=nope&school=%",
+        "?h2h=1&school=northfield",
+        "?dots=bogus",
+        "?dots=hide&h2h=1",
+        "?h2h=1&school=northfield,lakeview,ironpeak",
+        "?h2h=1&dots=hide&school=northfield,lakeview&seasons=2025-2025&networks=none",
     ],
 )
 def test_crafted_url_never_breaks_the_app(guarded_page: Page, open_app: Any, query: str) -> None:
@@ -633,7 +816,8 @@ def test_crafted_url_never_breaks_the_app(guarded_page: Page, open_app: Any, que
     assert guarded_page.locator("#load-error").is_hidden()
     state = guarded_page.evaluate("window.__testHooks.getState()")
     assert state["people"] == (["dale-harlow"] if "dale-harlow" in query else [])
-    assert state["school"] == []
+    if "northfield" not in query:
+        assert state["school"] == []
 
 
 def test_url_state_keeps_a_comma_inside_an_id(guarded_page: Page, site_url: str) -> None:
@@ -654,6 +838,125 @@ def test_summary_networks_ordered_by_matched_count_then_alphabetical(
     assert robin == ["Other Network", "Alpha Sports"]
     tie = _view(guarded_page, {"people": ["jamie-oaks"]})["summary"]["networks"]
     assert tie == ["Alpha Sports", "Other Network"]
+
+
+_SUMMARY_COPY_JS = """
+async (summary) => {
+  const F = await import('./modules/format.js');
+  return F.summaryCopy(summary);
+}
+"""
+
+
+@pytest.mark.parametrize(
+    ("partial", "kind", "count", "total"),
+    [
+        ({"people": ["dale-harlow"]}, "matches", 2, None),
+        ({"school": ["northfield"]}, "matches", 3, 12),
+        ({"networks": ["net-a"]}, "matches", 3, 12),
+        ({"seasons": [2025, 2025]}, "matches", 4, 12),
+        ({"people": ["dale-harlow"], "seasons": [2026, 2026]}, "matches", 1, 12),
+    ],
+)
+def test_summary_reads_n_of_m_whenever_a_filter_is_active(
+    guarded_page: Page,
+    site_url: str,
+    partial: dict[str, Any],
+    kind: str,
+    count: int,
+    total: int | None,
+) -> None:
+    """04.7 D-09: `of` is the whole dataset when a filter is active, else null."""
+    _load(guarded_page, site_url)
+    summary = _view(guarded_page, partial)["summary"]
+    assert summary["kind"] == kind
+    assert summary["count"] == count
+    assert summary["of"] == total
+
+
+def test_role_alone_is_not_a_filter_for_the_summary(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    assert _view(guarded_page, {})["summary"] == {"kind": "none"}
+    assert _view(guarded_page, {"role": "pbp"})["summary"] == {"kind": "none"}
+
+
+def test_summary_shows_for_filters_alone_without_filling_the_table(
+    guarded_page: Page, site_url: str
+) -> None:
+    """04.7 D-09: filter-only states get a summary; matched stays empty (no-bulk rule)."""
+    _load(guarded_page, site_url)
+    view = _view(guarded_page, {"networks": ["net-a"]})
+    summary = view["summary"]
+    assert view["matched"] == []
+    assert summary["count"] == 3
+    assert summary["of"] == 12
+    assert (summary["seasonMin"], summary["seasonMax"]) == (2019, 2026)
+    assert summary["networks"] == ["Alpha Sports"]
+
+
+def test_fade_and_hide_give_the_same_summary(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    fade = _view(guarded_page, {"seasons": [2025, 2025]})["summary"]
+    hide = _view(guarded_page, {"seasons": [2025, 2025], "dots": "hide"})["summary"]
+    assert fade == hide
+
+
+def test_filter_only_zero_matches_has_its_own_kind(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    summary = _view(guarded_page, {"slots": ["late"], "postseason": "only"})["summary"]
+    assert summary["kind"] == "no-filter-match"
+
+
+def test_head_to_head_selection_label_names_the_matchup(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    state = {"school": ["northfield", "lakeview"], "h2h": True, "people": ["kris-venn"]}
+    summary = _view(guarded_page, state)["summary"]
+    assert summary == {
+        "kind": "filtered-out",
+        "selectionLabel": "Kris Venn + Northfield vs Lakeview",
+    }
+    summary = _view(guarded_page, {**state, "h2h": False})["summary"]
+    assert summary["kind"] == "matches"
+    assert summary["count"] == 1
+    assert summary["of"] == 12
+
+
+def test_summary_copy_formats_n_of_m(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    base = {"kind": "matches", "seasonMin": 2014, "seasonMax": 2025, "networks": ["ESPN", "FOX"]}
+    big = {**base, "count": 312, "of": 4210, "altCount": 0}
+    assert guarded_page.evaluate(_SUMMARY_COPY_JS, big) == {
+        "count": "312 of 4,210 rated telecasts",
+        "detail": "2014\u20132025 \u00b7 ESPN, FOX",
+    }
+    one = {**base, "count": 1, "of": 4210, "altCount": 0}
+    assert guarded_page.evaluate(_SUMMARY_COPY_JS, one)["count"] == "1 of 4,210 rated telecasts"
+    alone = {**base, "count": 1, "of": None, "altCount": 0}
+    assert guarded_page.evaluate(_SUMMARY_COPY_JS, alone)["count"] == "1 rated telecast"
+    assert guarded_page.evaluate(_SUMMARY_COPY_JS, {"kind": "no-filter-match"}) == {
+        "count": "",
+        "detail": (
+            "No rated telecasts match these filters. "
+            "Widen the seasons or clear a filter to see games."
+        ),
+    }
+
+
+def test_summary_copy_caps_a_long_network_list(guarded_page: Page, site_url: str) -> None:
+    """WR-01: a broad filter can pass games on many networks; the detail names the
+    first three (most telecasts first) and counts the rest, so it never wraps the
+    selection band. Three or fewer are listed in full."""
+    _load(guarded_page, site_url)
+    base = {"kind": "matches", "seasonMin": 2014, "seasonMax": 2025, "count": 900, "of": 4210}
+    three = {**base, "networks": ["ESPN", "FOX", "ABC"], "altCount": 0}
+    assert guarded_page.evaluate(_SUMMARY_COPY_JS, three)["detail"] == (
+        "2014\u20132025 \u00b7 ESPN, FOX, ABC"
+    )
+    networks = ["ESPN", "FOX", "ABC", "CBS", "NBC", "FS1", "ESPN2"]
+    many = {**base, "networks": networks, "altCount": 2}
+    assert guarded_page.evaluate(_SUMMARY_COPY_JS, many)["detail"] == (
+        "2014\u20132025 \u00b7 ESPN, FOX, ABC +4 more \u00b7 includes 2 alt-cast games"
+    )
 
 
 def _facets(page: Page, partial: dict[str, Any]) -> dict[str, Any]:

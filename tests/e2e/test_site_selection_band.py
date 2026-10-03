@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import copy
 import re
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 from playwright.sync_api import Page
@@ -135,6 +137,45 @@ def test_selection_band_height_is_fixed(
     assert abs(_height(guarded_page, "#selection-bar") - h0) <= 0.5
     guarded_page.click("#clear-selection")
     assert abs(_y(guarded_page, "#legend-chips") - y0) <= 0.5
+
+
+_FAMILIES = ["disney", "fox", "cbs", "nbc", "cw", "wbd", "conference", "other"]
+
+
+def _many_networks_raw(fixture_raw: dict[str, Any]) -> dict[str, Any]:
+    """The contract fixture with every telecast on its own long-named network, so a
+    broad filter passes games on many networks (as on the real data, where a
+    Kickoff filter alone passes games on about 20). Synthetic names only."""
+    raw = copy.deepcopy(fixture_raw)
+    count = len(raw["telecasts"]["network"])
+    raw["lookups"]["networks"] = [
+        {
+            "id": f"net-{k}",
+            "name": f"Regional Sports Network {k + 1}",
+            "family": _FAMILIES[k % len(_FAMILIES)],
+        }
+        for k in range(count)
+    ]
+    raw["telecasts"]["network"] = list(range(count))
+    return raw
+
+
+def test_a_broad_filter_alone_does_not_grow_the_selection_band(
+    guarded_page: Page, open_app: Callable[[Page, str], None], fixture_raw: dict[str, Any]
+) -> None:
+    """WR-01 / SITE-20: the filter-only "N of M" summary caps its network list, so a
+    filter passing games on many networks keeps the band height and the chart in place."""
+    raw = _many_networks_raw(fixture_raw)
+    guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+    guarded_page.set_viewport_size({"width": 800, "height": 800})
+    open_app(guarded_page, "")
+    band = _height(guarded_page, "#selection-bar")
+    chart_top = _y(guarded_page, "#chart-area")
+    open_app(guarded_page, "?slot=afternoon,prime,late")
+    assert guarded_page.inner_text("#summary-count") == "8 of 12 rated telecasts"
+    assert guarded_page.inner_text("#summary-detail").endswith(" +5 more")
+    assert abs(_height(guarded_page, "#selection-bar") - band) <= 0.5
+    assert abs(_y(guarded_page, "#chart-area") - chart_top) <= 0.5
 
 
 def test_selection_band_height_is_fixed_on_phone(

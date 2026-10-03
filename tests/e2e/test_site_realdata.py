@@ -418,6 +418,107 @@ def test_real_facet_pass_is_fast(
     assert mean_ms <= 20, "mean computeView time (facets included) exceeded 20 ms"
 
 
+_FADE_HIDE_REAL_JS = """
+async () => {
+  const { computeView, defaultState } = await import(
+    new URL('./modules/select.js', location.href).href
+  );
+  const data = window.__testHooks.data;
+  const t = data.t;
+  const pairCounts = new Map();
+  for (let i = 0; i < data.n; i += 1) {
+    const a = Math.min(t.home_team[i], t.away_team[i]);
+    const b = Math.max(t.home_team[i], t.away_team[i]);
+    if (a === b) continue;
+    const key = a * 100000 + b;
+    pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
+  }
+  let bestKey = -1;
+  let bestCount = 0;
+  for (const [key, count] of pairCounts) {
+    if (count > bestCount) { bestKey = key; bestCount = count; }
+  }
+  const pairA = Math.floor(bestKey / 100000);
+  const pairB = bestKey % 100000;
+  const h2hState = {
+    school: [data.teamSlugs[pairA], data.teamSlugs[pairB]],
+    h2h: true,
+  };
+  const states = data.seasons.map((s) => ({ seasons: [s, s] }));
+  states.push({ postseason: 'only' }, { postseason: 'exclude' }, { slots: ['late'] }, h2hState);
+  const fade = (s) => ({ ...defaultState(data), ...s, dots: 'fade' });
+  const hide = (s) => ({ ...defaultState(data), ...s, dots: 'hide' });
+  const facetKey = (f) => JSON.stringify([
+    Array.from(f.seasons), Array.from(f.networks), Array.from(f.schools), Array.from(f.people),
+  ]);
+  let countDiffers = 0;
+  let facetsDiffer = 0;
+  let fadeNotAll = 0;
+  let hideFailing = 0;
+  let outsidePair = 0;
+  for (const s of states) {
+    const vf = computeView(data, fade(s));
+    const vh = computeView(data, hide(s));
+    if (vf.passingCount !== vh.passingCount) countDiffers += 1;
+    if (facetKey(vf.facets) !== facetKey(vh.facets)) facetsDiffer += 1;
+    if (vf.visibleCount !== data.n) fadeNotAll += 1;
+    for (let i = 0; i < data.n; i += 1) {
+      if (vh.visible[i] === 1 && vh.passesFilters[i] === 0) hideFailing += 1;
+    }
+  }
+  const hv = computeView(data, hide(h2hState));
+  for (let i = 0; i < data.n; i += 1) {
+    if (hv.passesFilters[i] !== 1) continue;
+    const a = Math.min(t.home_team[i], t.away_team[i]);
+    const b = Math.max(t.home_team[i], t.away_team[i]);
+    if (a !== pairA || b !== pairB) outsidePair += 1;
+  }
+  const tooFew = hv.passingCount < 2 ? 1 : 0;
+  const netId = data.lookups.networks[data.primaryNetworks[0]].id;
+  const ns = { networks: [netId] };
+  const nf = computeView(data, fade(ns));
+  const nh = computeView(data, hide(ns));
+  const netMismatch = (nf.visibleCount !== nf.passingCount ? 1 : 0)
+    + (nh.visibleCount !== nh.passingCount ? 1 : 0);
+  const hs = hide(h2hState);
+  computeView(data, hs);
+  const runs = 20;
+  const start = performance.now();
+  for (let i = 0; i < runs; i += 1) computeView(data, hs);
+  const meanMs = (performance.now() - start) / runs;
+  return [countDiffers, facetsDiffer, fadeNotAll, hideFailing, outsidePair, tooFew, netMismatch,
+          meanMs];
+}
+"""
+
+
+def test_real_fade_hide_and_head_to_head_counts(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """D-05, D-06, D-07, D-14: on the real build Fade and Hide never change the
+    passing count or facets, Fade draws every dot, Hide draws only passing dots,
+    Networks hides in both, and Head-to-head keeps only the pair's games -- integers
+    and one timing only."""
+    real_open_app(real_guarded_page, "")
+    result: list[float] = real_guarded_page.evaluate(_FADE_HIDE_REAL_JS)
+    count_differs = result[0]
+    facets_differ = result[1]
+    fade_not_all = result[2]
+    hide_failing = result[3]
+    outside_pair = result[4]
+    too_few = result[5]
+    net_mismatch = result[6]
+    mean_ms = result[7]
+    assert count_differs == 0, "Fade and Hide gave different passing counts"
+    assert facets_differ == 0, "Fade and Hide gave different facets"
+    assert fade_not_all == 0, "a Fade state without Networks drew fewer than every dot"
+    assert hide_failing == 0, "Hide drew a dot that fails a filter"
+    assert outside_pair == 0, "Head-to-head passed a dot outside the selected pair"
+    assert too_few == 0, "Head-to-head passed fewer than two games"
+    assert net_mismatch == 0, "a Networks state drew dots that did not pass"
+    assert mean_ms <= 20, "mean computeView time under Hide + Head-to-head exceeded 20 ms"
+
+
 _ANNOUNCER_FIT_JS = """
 () => {
   const results = document.getElementById('person-results');

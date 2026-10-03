@@ -275,6 +275,50 @@ _CTX_CASES: list[tuple[dict[str, Any], dict[str, Any]]] = [
         },
         {"butterflyGroupChoice": True, "butterflyGroup": "teams"},
     ),
+    (
+        {"school": ["northfield", "lakeview"], "h2h": True},
+        {
+            "barsEnabled": True,
+            "group": "announcers",
+            "byOptions": ["announcer", "network"],
+            "butterflyEnabled": False,
+        },
+    ),
+    (
+        {
+            "school": ["northfield", "lakeview"],
+            "h2h": True,
+            "people": ["dale-harlow", "casey-lund"],
+        },
+        {"butterflyEnabled": True, "butterflyGroupChoice": False, "butterflyGroup": "teams"},
+    ),
+    (
+        {"school": ["northfield", "lakeview"], "h2h": False},
+        {"butterflyEnabled": True, "butterflyGroup": "announcers"},
+    ),
+    # D-15: a matchup keeps the Bars grouping to by Announcer | by Network, even
+    # when a person or a Networks pick would otherwise offer by Team / Conference.
+    (
+        {"school": ["northfield", "lakeview"], "h2h": True, "people": ["dale-harlow"]},
+        {"groupChoice": False, "group": "announcers", "byOptions": ["announcer", "network"]},
+    ),
+    (
+        {"school": ["northfield", "lakeview"], "h2h": True, "networks": ["net-a"]},
+        {"groupChoice": False, "group": "announcers", "byOptions": ["announcer", "network"]},
+    ),
+    (
+        {
+            "school": ["northfield", "lakeview"],
+            "h2h": True,
+            "people": ["dale-harlow"],
+            "by": "conference",
+        },
+        {"group": "announcers", "byOptions": ["announcer", "network"], "by": "network"},
+    ),
+    (
+        {"school": ["northfield", "lakeview"], "h2h": False, "people": ["dale-harlow"]},
+        {"groupChoice": True, "byOptions": ["announcer", "network", "team", "conference"]},
+    ),
 ]
 
 
@@ -840,3 +884,89 @@ def test_butterfly_row_label_unions_roles_from_both_sides(
     swapped_row = next(r for r in swapped["rows"] if r["name"] == "Kris Venn")
     assert swapped_row["label"] == "Kris Venn"
     assert swapped_row["roles"] == ["pbp", "analyst"]
+
+
+_TITLE_JS = """
+async (partial) => {
+  const D = await import('./modules/data.js');
+  const S = await import('./modules/select.js');
+  const B = await import('./modules/bars.js');
+  const C = await import('./modules/bar-copy.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  const state = Object.assign(S.defaultState(data), partial);
+  const view = S.computeView(data, state);
+  const model = state.view === 'butterfly' ? B.butterflyModel(data, view, state)
+    : B.barsModel(data, view, state);
+  return {
+    title: C.chartTitle(model, data, state),
+    games: B.gamesForBars(view),
+    matchup: C.matchupPhrase(data, state),
+  };
+}
+"""
+
+_H2H = {"school": ["northfield", "lakeview"], "h2h": True}
+_MATCHUP = "in Northfield vs Lakeview games"
+
+
+def test_head_to_head_bars_count_only_the_matchup(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    out = guarded_page.evaluate(_TITLE_JS, {**_H2H, "view": "bars"})
+    assert sorted(out["games"]) == [0, 4]
+
+
+@pytest.mark.parametrize(
+    ("partial", "expected"),
+    [
+        ({"view": "bars"}, f"Announcers by rated telecasts {_MATCHUP}"),
+        (
+            {"view": "bars", "people": ["dale-harlow"]},
+            f"Announcers by rated telecasts {_MATCHUP} with Dale Harlow",
+        ),
+        (
+            {"view": "bars", "people": ["dale-harlow"], "networks": ["net-a"]},
+            f"Announcers by rated telecasts {_MATCHUP} with Dale Harlow on Alpha Sports",
+        ),
+        ({"view": "bars", "by": "network"}, f"Network families by announcer {_MATCHUP}"),
+    ],
+)
+def test_head_to_head_titles_name_the_matchup(
+    guarded_page: Page, site_url: str, partial: dict[str, Any], expected: str
+) -> None:
+    _load(guarded_page, site_url)
+    assert guarded_page.evaluate(_TITLE_JS, {**_H2H, **partial})["title"] == expected
+
+
+def test_head_to_head_butterfly_title_names_the_matchup(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    title = guarded_page.evaluate(
+        _TITLE_JS, {**_H2H, "people": ["dale-harlow", "casey-lund"], "view": "butterfly"}
+    )["title"]
+    assert "Dale Harlow and Casey Lund in Northfield vs Lakeview games" in title
+    assert " or " not in title
+
+
+def test_either_team_titles_keep_the_or_join(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    title = guarded_page.evaluate(
+        _TITLE_JS,
+        {"school": ["northfield", "lakeview"], "networks": ["net-a"], "view": "bars"},
+    )["title"]
+    assert "Northfield or Lakeview" in title
+    assert "vs" not in title
+
+
+def test_matchup_phrase_needs_exactly_two_schools(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    one = guarded_page.evaluate(_TITLE_JS, {"school": ["northfield"], "h2h": True, "view": "bars"})
+    assert one["matchup"] == ""
+    two = guarded_page.evaluate(_TITLE_JS, {**_H2H, "view": "bars"})
+    assert two["matchup"] == _MATCHUP
+
+
+def test_team_bar_drill_is_a_no_op_under_head_to_head(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    assert (
+        _drill(guarded_page, {**_H2H, "view": "bars"}, {"kind": "team", "slug": "lakeview"}) is None
+    )

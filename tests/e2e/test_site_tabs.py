@@ -15,6 +15,8 @@ pytestmark = pytest.mark.e2e
 
 BARS_HINT = "Pick a school, network, or announcer"
 BUTTERFLY_HINT = "Pick exactly two schools or two announcers"
+H2H_HINT = "Switch School to Either team to compare two schools"
+H2H_URL = "?school=northfield,lakeview&h2h=1"
 ONE_SCHOOL = "?school=northfield"
 TWO_SUBJECTS = "?school=northfield&networks=net-a"
 
@@ -685,3 +687,73 @@ def test_hidden_role_control_keeps_the_role(
     page.locator('#filter-role input[value="analyst"]').check()
     assert _state(page)["role"] == "analyst"
     assert page.locator("#bars-note").is_visible()
+
+
+def test_head_to_head_disables_the_school_butterfly_with_its_hint(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, H2H_URL)
+    assert _attr(guarded_page, "#tab-butterfly", "aria-disabled") == "true"
+    assert _attr(guarded_page, "#tab-butterfly", "title") == H2H_HINT
+    assert _attr(guarded_page, "#tab-bars", "aria-disabled") is None
+
+
+def test_head_to_head_hint_shows_on_hover_focus_and_click(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, H2H_URL)
+    guarded_page.locator("#tab-butterfly").hover()
+    assert _hint(guarded_page) == H2H_HINT
+    guarded_page.mouse.move(600, 600)
+    assert _hint(guarded_page) == ""
+    guarded_page.locator("#tab-butterfly").focus()
+    assert _hint(guarded_page) == H2H_HINT
+    guarded_page.locator("#tab-scatter").focus()
+    guarded_page.locator("#tab-butterfly").click(force=True)
+    assert _hint(guarded_page) == H2H_HINT
+    assert _attr(guarded_page, "#tab-butterfly", "aria-selected") == "false"
+    assert _state(guarded_page)["view"] == "scatter"
+
+
+def test_two_announcers_keep_the_butterfly_under_head_to_head(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, f"{H2H_URL}&people=dale-harlow,casey-lund")
+    assert _attr(guarded_page, "#tab-butterfly", "aria-disabled") is None
+    guarded_page.locator("#tab-butterfly").click()
+    assert _state(guarded_page)["view"] == "butterfly"
+    assert _attr(guarded_page, "#tab-butterfly", "aria-selected") == "true"
+
+
+def test_legacy_butterfly_hint_is_unchanged_without_head_to_head(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, ONE_SCHOOL)
+    assert _attr(guarded_page, "#tab-butterfly", "title") == BUTTERFLY_HINT
+
+
+def test_stale_copy_is_state_aware(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    out = guarded_page.evaluate(
+        """async () => {
+          const T = await import('./modules/chart-tabs.js');
+          const two = ['northfield', 'lakeview'];
+          return {
+            h2h: T.staleCopy({ view: 'butterfly', school: two, h2h: true, people: [] }),
+            plain: T.staleCopy({ view: 'butterfly', school: [], h2h: false, people: [] }),
+            bars: T.staleCopy({ view: 'bars', school: two, h2h: true, people: [] }),
+            stale: T.STALE_COPY,
+          };
+        }"""
+    )
+    assert out["h2h"] == {
+        "title": H2H_HINT,
+        "hint": (
+            "Head-to-head keeps only the games between the two schools. "
+            "Select two announcers to compare them in these games."
+        ),
+    }
+    assert out["plain"] == out["stale"]["butterfly"]
+    assert out["bars"] == out["stale"]["bars"]
