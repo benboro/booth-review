@@ -28,7 +28,7 @@ import { initFilters, renderFilters } from './modules/filters.js';
 import { initLegend, renderLegend } from './modules/legend.js';
 import { renderPanel, openPanel, closePanel, initPanel } from './modules/panel.js';
 import { renderTable } from './modules/table.js';
-import { initChartTabs, renderChartTabs, STALE_COPY } from './modules/chart-tabs.js';
+import { initChartTabs, renderChartTabs, staleCopy } from './modules/chart-tabs.js';
 import { chartContext } from './modules/bars.js';
 import { initBarsPanel, renderBarsPanel, lastBarsModel, resetBarsTap } from './modules/bars-panel.js';
 import { showTooltip, hideTooltip } from './modules/tooltip.js';
@@ -260,7 +260,7 @@ function renderBarsShell(applies) {
     if (chartBox) chartBox.classList.remove('is-concealed');
     return;
   }
-  const copy = STALE_COPY[state.view];
+  const copy = staleCopy(state);
   if (barsNoteEl) {
     barsNoteEl.querySelector('.season-empty-title').textContent = copy.title;
     barsNoteEl.querySelector('.season-empty-hint').textContent = copy.hint;
