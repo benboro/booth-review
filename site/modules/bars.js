@@ -80,7 +80,11 @@ export function chartContext(_data, state) {
   const teamsApply = state.networks !== null || state.people.length > 0;
   const { pref, mode } = byParts(state.by);
   const preferTeams = pref === 'teams';
-  const groupChoice = announcersApply && teamsApply;
+  // Head-to-head makes the two schools one matchup subject: the Bars group by
+  // announcer or network only (04.7 D-15), even with a person or Networks set,
+  // since "by Team" would always draw the same two schools.
+  const matchup = state.h2h === true && state.school.length === 2;
+  const groupChoice = announcersApply && teamsApply && !matchup;
   let group = 'teams';
   if (groupChoice) group = preferTeams ? 'teams' : 'announcers';
   else if (announcersApply) group = 'announcers';

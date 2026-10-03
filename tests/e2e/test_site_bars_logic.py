@@ -296,6 +296,29 @@ _CTX_CASES: list[tuple[dict[str, Any], dict[str, Any]]] = [
         {"school": ["northfield", "lakeview"], "h2h": False},
         {"butterflyEnabled": True, "butterflyGroup": "announcers"},
     ),
+    # D-15: a matchup keeps the Bars grouping to by Announcer | by Network, even
+    # when a person or a Networks pick would otherwise offer by Team / Conference.
+    (
+        {"school": ["northfield", "lakeview"], "h2h": True, "people": ["dale-harlow"]},
+        {"groupChoice": False, "group": "announcers", "byOptions": ["announcer", "network"]},
+    ),
+    (
+        {"school": ["northfield", "lakeview"], "h2h": True, "networks": ["net-a"]},
+        {"groupChoice": False, "group": "announcers", "byOptions": ["announcer", "network"]},
+    ),
+    (
+        {
+            "school": ["northfield", "lakeview"],
+            "h2h": True,
+            "people": ["dale-harlow"],
+            "by": "conference",
+        },
+        {"group": "announcers", "byOptions": ["announcer", "network"], "by": "network"},
+    ),
+    (
+        {"school": ["northfield", "lakeview"], "h2h": False, "people": ["dale-harlow"]},
+        {"groupChoice": True, "byOptions": ["announcer", "network", "team", "conference"]},
+    ),
 ]
 
 
