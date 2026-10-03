@@ -1,4 +1,4 @@
-"""04.6 SITE-40: the Result vs spread axis, data and copy half.
+"""04.8 SITE-43: the Spread axis (winner-signed closing line, the default): data, copy, layout.
 
 Exercises the served pure modules (data.js, format.js, url-state.js,
 tooltip.js) against the synthetic fixture, plus the modal's spread copy.
@@ -32,10 +32,12 @@ async () => {
   const before = JSON.stringify(raw.telecasts);
   const data = D.prepareData(raw);
   return {
-    result: data.t.result,
-    negZero: data.t.result.some((v) => Object.is(v, -0)),
-    range: data.xRange.result,
-    rawHasResult: 'result' in raw.telecasts,
+    spread: data.t.spread,
+    negZero: data.t.spread.some((v) => Object.is(v, -0)),
+    range: data.xRange.spread,
+    rawHasSpread: 'spread' in raw.telecasts,
+    hasPregame: 'pregame' in data.xRange,
+    hasResult: 'result' in data.xRange,
     unchanged: JSON.stringify(raw.telecasts) === before,
   };
 }
@@ -46,8 +48,12 @@ async () => {
   const D = await import('./modules/data.js');
   const raw = await (await fetch('site-data.json')).json();
   delete raw.telecasts.home_spread;
-  const data = D.prepareData(raw);
-  return data.t.result;
+  try {
+    D.prepareData(raw);
+    return null;
+  } catch (e) {
+    return String(e.message);
+  }
 }
 """
 
@@ -58,9 +64,8 @@ async () => {
   const raw = await (await fetch('site-data.json')).json();
   const data = D.prepareData(raw);
   const out = {};
-  for (const i of [0, 1, 2, 3, 7, 8, 11]) {
-    out[i] = [F.spreadLabel(data, i, 'pregame'), F.spreadLabel(data, i, 'result')];
-  }
+  for (const i of [0, 1, 2, 3, 7, 8, 10, 11]) out[i] = F.spreadLabel(data, i);
+  out.arity = F.spreadLabel.length;
   out.exc0 = F.axisValueText(data, 0, 'excitement');
   out.exc2 = F.axisValueText(data, 2, 'excitement');
   return out;
@@ -72,14 +77,16 @@ async () => {
   const D = await import('./modules/data.js');
   const F = await import('./modules/format.js');
   const raw = await (await fetch('site-data.json')).json();
-  raw.telecasts.home_spread[0] = 0;
-  raw.telecasts.pregame[0] = 0;
+  raw.telecasts.home_spread[9] = 0;
+  raw.telecasts.home_spread[2] = 0;
+  raw.telecasts.home_spread[10] = 0;
   const data = D.prepareData(raw);
   return {
-    pre: F.spreadLabel(data, 0, 'pregame'),
-    res: F.spreadLabel(data, 0, 'result'),
-    x: data.t.result[0],
-    negZero: Object.is(data.t.result[0], -0),
+    decided: F.spreadLabel(data, 9),
+    noScore: F.spreadLabel(data, 2),
+    tied: F.spreadLabel(data, 10),
+    x: data.t.spread[9],
+    negZero: Object.is(data.t.spread[9], -0),
   };
 }
 """
@@ -92,13 +99,17 @@ async () => {
   const raw = await (await fetch('site-data.json')).json();
   const data = D.prepareData(raw);
   const base = S.defaultState(data);
+  const dec = (q) => U.decodeState(q, data).axis;
   return {
-    result: U.decodeState('?axis=result', data).axis,
-    excitement: U.decodeState('?axis=excitement', data).axis,
-    junk: U.decodeState('?axis=junk', data).axis,
-    pct: U.decodeState('?axis=%', data).axis,
-    encResult: U.encodeState({ ...base, axis: 'result' }, data),
-    encPregame: U.encodeState({ ...base, axis: 'pregame' }, data),
+    defaultAxis: base.axis,
+    result: dec('?axis=result'),
+    pregame: dec('?axis=pregame'),
+    excitement: dec('?axis=excitement'),
+    junk: dec('?axis=junk'),
+    pct: dec('?axis=%'),
+    empty: dec(''),
+    encDefault: U.encodeState(base, data),
+    encExcitement: U.encodeState({ ...base, axis: 'excitement' }, data),
   };
 }
 """
@@ -109,62 +120,88 @@ async (args) => {
   const T = await import('./modules/tooltip.js');
   const raw = await (await fetch('site-data.json')).json();
   const data = D.prepareData(raw);
-  return args.map((i) => T.tooltipModel(data, i, { axis: 'result' }).axisLine);
+  return args.map((i) => T.tooltipModel(data, i, { axis: 'spread' }).axisLine);
 }
 """
 
-EXPECTED_RESULT = [-3.5, 7.0, None, None, -1.0, -14.0, 5.5, 3.0, -6.5, 0.5, None, -1.5]
+EXPECTED_SPREAD = [-3.5, 7.0, None, None, -1.0, -14.0, 5.5, 3.0, -6.5, 0.5, None, -1.5]
 
 
-def test_result_x_is_the_winner_signed_closing_line(app_page: Page) -> None:
+def test_spread_x_is_the_winner_signed_closing_line(app_page: Page) -> None:
     out = app_page.evaluate(_DATA_JS)
-    assert out["result"] == EXPECTED_RESULT
+    assert out["spread"] == EXPECTED_SPREAD
     assert out["negZero"] is False
     assert out["range"] == [-14, 7]
-    assert out["rawHasResult"] is False
+    assert out["rawHasSpread"] is False
+    assert out["hasPregame"] is False
+    assert out["hasResult"] is False
     assert out["unchanged"] is True
 
 
-def test_missing_home_spread_column_gives_all_null_result(app_page: Page) -> None:
-    assert app_page.evaluate(_NO_SPREAD_JS) == [None] * 12
+def test_missing_home_spread_fails_to_load(
+    app_page: Page, guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    message = app_page.evaluate(_NO_SPREAD_JS)
+    assert message is not None
+    assert "home_spread" in message
+
+    def strip(route) -> None:  # type: ignore[no-untyped-def]
+        response = route.fetch()
+        payload = response.json()
+        del payload["telecasts"]["home_spread"]
+        route.fulfill(response=response, json=payload)
+
+    guarded_page.route("**/site-data.json*", strip)
+    guarded_page.goto(guarded_page.url.split("?")[0])
+    expect(guarded_page.locator("#load-error")).to_be_visible()
+    guarded_page.wait_for_function("window.__testHooks && window.__testHooks.failed != null")
 
 
-def test_spread_copy_names_the_favorite_or_the_winner(app_page: Page) -> None:
+def test_spread_copy_names_the_winner(app_page: Page) -> None:
     out = app_page.evaluate(_COPY_JS)
-    assert out["0"] == [f"Spread: Northfield {M}3.5"] * 2
-    assert out["1"] == [f"Spread: Foxhollow {M}7.0", "Spread: Ironpeak +7.0"]
-    assert out["2"] == [f"Spread: Boulder Pass {M}2.0", "Spread: final score not recorded"]
-    assert out["3"] == ["Spread: not available"] * 2
-    assert out["7"] == [f"Spread: Maplecrest {M}3.0", "Spread: Boulder Pass +3.0"]
-    assert out["8"] == [f"Spread: Northfield {M}6.5"] * 2
-    assert out["11"] == [f"Spread: Stonebridge {M}1.5"] * 2
+    assert out["arity"] == 2
+    assert out["0"] == f"Spread: Northfield {M}3.5"
+    assert out["1"] == "Spread: Ironpeak +7.0"
+    assert out["3"] == "Spread: not available"
+    assert out["7"] == "Spread: Boulder Pass +3.0"
+    assert out["8"] == f"Spread: Northfield {M}6.5"
+    assert out["11"] == f"Spread: Stonebridge {M}1.5"
     assert out["exc0"] == "Excitement: 5.2"
     assert out["exc2"] == "Excitement (CFBD): not available"
 
 
+def test_undecided_dots_name_the_favorite_and_the_reason(app_page: Page) -> None:
+    out = app_page.evaluate(_COPY_JS)
+    assert out["2"] == f"Spread: Boulder Pass {M}2.0 (no final score yet)"
+    assert out["10"] == f"Spread: Boulder Pass {M}2.5 (game tied)"
+    pick = app_page.evaluate(_PICKEM_JS)
+    assert pick["noScore"] == "Spread: Pick'em (no final score yet)"
+    assert pick["tied"] == "Spread: Pick'em (game tied)"
+
+
 def test_pickem_reads_pickem_and_never_negative_zero(app_page: Page) -> None:
     out = app_page.evaluate(_PICKEM_JS)
-    assert out["pre"] == "Spread: Pick'em"
-    assert out["res"] == "Spread: Pick'em"
+    assert out["decided"] == "Spread: Pick'em"
     assert out["x"] == 0
     assert out["negZero"] is False
 
 
 def test_axis_url_value_round_trips_and_falls_back(app_page: Page) -> None:
     out = app_page.evaluate(_URL_JS)
-    assert out["result"] == "result"
+    assert out["defaultAxis"] == "spread"
     assert out["excitement"] == "excitement"
-    assert out["junk"] == "pregame"
-    assert out["pct"] == "pregame"
-    assert out["encResult"] == "?axis=result"
-    assert out["encPregame"] == ""
+    for key in ("result", "pregame", "junk", "pct", "empty"):
+        assert out[key] == "spread"
+    assert out["encDefault"] == ""
+    assert out["encExcitement"] == "?axis=excitement"
 
 
-def test_tooltip_model_spread_copy_in_result_mode(app_page: Page) -> None:
-    lines = app_page.evaluate(_TOOLTIP_JS, [7, 2, 3])
+def test_tooltip_model_spread_copy_in_spread_mode(app_page: Page) -> None:
+    lines = app_page.evaluate(_TOOLTIP_JS, [7, 2, 10, 3])
     assert lines == [
         "Spread: Boulder Pass +3.0",
-        "Spread: final score not recorded",
+        f"Spread: Boulder Pass {M}2.0 (no final score yet)",
+        f"Spread: Boulder Pass {M}2.5 (game tied)",
         "Spread: not available",
     ]
     assert not any("-0" in line or "Pass -3" in line for line in lines)
@@ -174,17 +211,18 @@ def test_tooltip_model_spread_copy_in_result_mode(app_page: Page) -> None:
     ("idx", "expected"),
     [
         (7, "Spread: Boulder Pass +3.0"),
-        (2, "Spread: final score not recorded"),
+        (2, f"Spread: Boulder Pass {M}2.0 (no final score yet)"),
+        (10, f"Spread: Boulder Pass {M}2.5 (game tied)"),
         (3, "Spread: not available"),
     ],
 )
-def test_modal_shows_result_spread_copy(
+def test_modal_shows_spread_copy(
     guarded_page: Page,
     open_app: Callable[[Page, str], None],
     idx: int,
     expected: str,
 ) -> None:
-    open_app(guarded_page, "?axis=result")
+    open_app(guarded_page, "")
     guarded_page.evaluate(f"window.__testHooks.openPanel({idx})")
     body = guarded_page.locator("#panel-body")
     expect(body).to_contain_text(expected)
@@ -211,12 +249,11 @@ _XS_JS = """
 """
 
 
-def test_result_axis_layout(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
-    open_app(guarded_page, "?axis=result")
+def test_spread_axis_layout(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
+    open_app(guarded_page, "")
     layout = guarded_page.evaluate(_LAYOUT_JS)
-    assert layout["xaxis"]["title"]["text"] == (
-        "Winner's closing spread (points): upsets to the right"
-    )
+    assert layout["xaxis"]["title"]["text"] == "Winner's closing spread (points)"
+    assert layout["margin"]["t"] == 40
     vals, texts = layout["xaxis"]["tickvals"], layout["xaxis"]["ticktext"]
     assert 0 in vals
     assert texts[vals.index(0)] == "0"
@@ -234,17 +271,18 @@ def test_result_axis_layout(guarded_page: Page, open_app: Callable[[Page, str], 
         "← favorite won",
         "underdog won →",
     ]
-    revisions = set()
+    revisions = []
     for q in ("", "?axis=result", "?axis=excitement"):
         open_app(guarded_page, q)
-        revisions.add(
+        revisions.append(
             guarded_page.evaluate("() => document.getElementById('chart').layout.uirevision")
         )
-    assert len(revisions) == 3
-    open_app(guarded_page, "")
-    pre = guarded_page.evaluate(_LAYOUT_JS)
-    assert len(pre["shapes"]) == 1
-    assert [a["text"] for a in pre["annotations"]] == ["N/A"]
+    assert revisions[0] == revisions[1]
+    assert len(set(revisions)) == 2
+    exc = guarded_page.evaluate(_LAYOUT_JS)
+    assert len(exc["shapes"]) == 1
+    assert [a["text"] for a in exc["annotations"]] == ["N/A"]
+    assert exc["margin"]["t"] == 40
 
 
 @pytest.mark.parametrize("scheme", ["light", "dark"])
@@ -253,7 +291,7 @@ def test_zero_line_is_solid_and_stronger_than_gridlines(
 ) -> None:
     """D-02: the zero line is solid, heavier, and a different color than the grid."""
     guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
-    open_app(guarded_page, "?axis=result")
+    open_app(guarded_page, "")
     layout = guarded_page.evaluate(_LAYOUT_JS)
     zero = next(s for s in layout["shapes"][1:] if s["x0"] == 0 and s["x1"] == 0)
     assert zero["line"]["dash"] == "solid"
@@ -261,16 +299,26 @@ def test_zero_line_is_solid_and_stronger_than_gridlines(
     assert zero["line"]["color"] != layout["xaxis"]["gridcolor"]
 
 
-def test_result_axis_layout_on_phone(
+def test_spread_axis_title_is_one_line_on_phone(
     mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    open_app(mobile_page, "?axis=result")
+    open_app(mobile_page, "")
     title = mobile_page.evaluate(_LAYOUT_JS)["xaxis"]["title"]["text"]
-    assert "<br>" in title
+    assert "<br>" not in title
+    box = mobile_page.evaluate(
+        """() => {
+          const t = document.querySelector('#chart .g-xtitle text');
+          const r = t.getBoundingClientRect();
+          return { l: r.left, r: r.right, lines: t.querySelectorAll('tspan').length };
+        }"""
+    )
+    assert box["lines"] <= 1
+    assert box["l"] >= 0
+    assert box["r"] <= 390
 
 
-def test_result_axis_na_strip(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
-    open_app(guarded_page, "?axis=result")
+def test_spread_axis_na_strip(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
+    open_app(guarded_page, "")
     got = guarded_page.evaluate(_XS_JS)
     by_idx, sentinel = got["byIdx"], got["sentinel"]
     for i in ("2", "3", "10"):
@@ -278,7 +326,8 @@ def test_result_axis_na_strip(guarded_page: Page, open_app: Callable[[Page, str]
         assert by_idx[i][1] > 0
     assert by_idx["1"][0] == 7.0
     assert by_idx["8"][0] == -6.5
-    open_app(guarded_page, "?axis=result&school=northfield")
+    assert got["sentinelCount"] == 3
+    open_app(guarded_page, "?school=northfield")
     faded = guarded_page.evaluate(_XS_JS)
     assert faded["sentinelCount"] == 3
 
@@ -321,7 +370,7 @@ def test_captions_not_clipped(
     guarded_page: Page, open_app: Callable[[Page, str], None], width: int
 ) -> None:
     guarded_page.set_viewport_size({"width": width, "height": 800})
-    open_app(guarded_page, "?axis=result")
+    open_app(guarded_page, "")
     _assert_captions_inside(guarded_page)
 
 
@@ -333,7 +382,7 @@ def test_captions_stay_inside_when_zero_hugs_an_edge(
     """A range that puts zero right at a plot edge (a zoom, or a lopsided
     season) slides the caption on that side back inside the chart."""
     guarded_page.set_viewport_size({"width": 360, "height": 800})
-    open_app(guarded_page, "?axis=result")
+    open_app(guarded_page, "")
     rng = "[-30, 0.5]" if edge == "right" else "[-0.5, 30]"
     guarded_page.evaluate(
         f"() => window.Plotly.relayout(document.getElementById('chart'), {{'xaxis.range': {rng}}})"
@@ -341,41 +390,39 @@ def test_captions_stay_inside_when_zero_hugs_an_edge(
     _assert_captions_inside(guarded_page)
 
 
-def test_toggle_has_three_buttons_in_order(
+def test_toggle_has_two_buttons_in_order(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(guarded_page, "")
     buttons = guarded_page.locator("#axis-toggle button")
-    assert buttons.evaluate_all("els => els.map(e => e.dataset.axis)") == [
-        "pregame",
-        "result",
-        "excitement",
-    ]
+    assert buttons.evaluate_all("els => els.map(e => e.dataset.axis)") == ["spread", "excitement"]
     assert buttons.evaluate_all("els => els.map(e => e.getAttribute('aria-label'))") == [
-        "Pre-game (spread)",
-        "Result vs spread",
+        "Spread",
         "Excitement (CFBD)",
     ]
     assert buttons.evaluate_all("els => els.map(e => e.getAttribute('aria-pressed'))") == [
         "true",
         "false",
-        "false",
     ]
 
 
-def test_result_axis_url_round_trip(
+def test_spread_axis_url_round_trip(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(guarded_page, "")
-    guarded_page.locator("#axis-toggle button[data-axis=result]").click()
-    expect(guarded_page).to_have_url(re.compile(r"[?&]axis=result"))
+    guarded_page.locator("#axis-toggle button[data-axis=excitement]").click()
+    expect(guarded_page).to_have_url(re.compile(r"[?&]axis=excitement"))
     guarded_page.reload()
     guarded_page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
-    expect(guarded_page.locator("#axis-toggle button[data-axis=result]")).to_have_attribute(
+    expect(guarded_page.locator("#axis-toggle button[data-axis=excitement]")).to_have_attribute(
         "aria-pressed", "true"
     )
-    guarded_page.locator("#axis-toggle button[data-axis=pregame]").click()
+    guarded_page.locator("#axis-toggle button[data-axis=spread]").click()
     expect(guarded_page).not_to_have_url(re.compile(r"axis="))
+    open_app(guarded_page, "?axis=pregame")
+    expect(guarded_page.locator("#axis-toggle button[data-axis=spread]")).to_have_attribute(
+        "aria-pressed", "true"
+    )
 
 
 @pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
