@@ -103,6 +103,8 @@ def test_render_methodology_explains_how_filters_display() -> None:
     assert "always hides" in result
     assert "Head-to-head" in result
     assert "fades the games it excludes" in result
+    # The per-season counts are facet counts: every filter but the season range.
+    assert "except the season range itself" in result
 
 
 def test_render_methodology_raises_without_marker(tmp_path: Path) -> None:

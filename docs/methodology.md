@@ -83,10 +83,13 @@ context. The Hide switch at the end of the network legend row removes them
 instead. The Networks filter, set from the legend chips or the Networks menu,
 always hides. With an announcer selected, their games are drawn at full
 strength, other games that pass the filters are partly transparent, and games
-that fail a filter are fainter still. The summary line, the Bars and Butterfly
-charts, the per-season counts, and the matched-games table count only the games
-that pass every filter, whether the excluded games are faded or hidden. With
-exactly two schools selected, Head-to-head keeps only the games between them.
+that fail a filter are fainter still. The summary line and the Bars and
+Butterfly charts count only the games that pass every filter, whether the
+excluded games are faded or hidden. The per-season counts in the Seasons filter
+apply every filter except the season range itself, so seasons outside the range
+keep their counts. The matched-games table fills once an announcer or a school
+is selected, and lists the games that pass every filter. With exactly two
+schools selected, Head-to-head keeps only the games between them.
 None of this changes the axes or uses viewership as an input.
 
 ## Measurement eras
