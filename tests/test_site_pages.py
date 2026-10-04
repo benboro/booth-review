@@ -105,6 +105,15 @@ def test_render_methodology_explains_how_filters_display() -> None:
     assert "fades the games it excludes" in result
     # The per-season counts are facet counts: every filter but the season range.
     assert "except the season range itself" in result
+    for phrase in (
+        "Named games.",
+        "grouped by franchise",
+        "latest name",
+        "first regular-season meeting",
+        "conference-championship",
+        "or a named game",
+    ):
+        assert phrase in result
 
 
 def test_render_methodology_explains_the_spread_axis() -> None:
