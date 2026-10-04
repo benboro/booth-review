@@ -160,6 +160,26 @@ def _schema_version_1_3_0(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _schema_version_1_5_0(data: dict[str, Any]) -> dict[str, Any]:
+    data["schema_version"] = "1.5.0"
+    return data
+
+
+def _legacy_pregame_column(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["pregame"] = [None] * len(data["telecasts"]["season"])
+    return data
+
+
+def _legacy_pregame_present(data: dict[str, Any]) -> dict[str, Any]:
+    data["coverage"][0]["pregame_present"] = data["coverage"][0].pop("spread_present")
+    return data
+
+
+def _drop_home_spread_column(data: dict[str, Any]) -> dict[str, Any]:
+    del data["telecasts"]["home_spread"]
+    return data
+
+
 def _crew_source_label_missing(data: dict[str, Any]) -> dict[str, Any]:
     data["telecasts"]["crew_source_label"][3] = None
     return data
@@ -283,6 +303,10 @@ _BROKEN_VARIANTS = [
     pytest.param(_time_slot_evening_not_in_enum, id="time-slot-evening-not-in-enum"),
     pytest.param(_schema_version_1_2_0, id="schema-version-1-2-0"),
     pytest.param(_schema_version_1_3_0, id="schema-version-1-3-0"),
+    pytest.param(_schema_version_1_5_0, id="schema-version-1-5-0"),
+    pytest.param(_legacy_pregame_column, id="legacy-pregame-column"),
+    pytest.param(_legacy_pregame_present, id="legacy-pregame-present"),
+    pytest.param(_drop_home_spread_column, id="missing-home-spread"),
     pytest.param(_crew_source_label_missing, id="crew-source-label-missing"),
     pytest.param(_crew_source_url_missing, id="crew-source-url-missing"),
     pytest.param(_crew_source_url_javascript, id="crew-source-url-javascript"),
@@ -376,21 +400,6 @@ def test_crew_source_errors_name_column_and_index_only(mutate: Any, prefix: str)
     assert "506sports.com/" not in message.lower()
 
 
-def _spread_mismatch(data: dict[str, Any]) -> dict[str, Any]:
-    data["telecasts"]["home_spread"][4] = 9.5
-    return data
-
-
-def _spread_null_with_pregame(data: dict[str, Any]) -> dict[str, Any]:
-    data["telecasts"]["home_spread"][0] = None
-    return data
-
-
-def _spread_with_null_pregame(data: dict[str, Any]) -> dict[str, Any]:
-    data["telecasts"]["home_spread"][3] = 2.0
-    return data
-
-
 def _spread_column_short(data: dict[str, Any]) -> dict[str, Any]:
     data["telecasts"]["home_spread"].pop()
     return data
@@ -399,9 +408,6 @@ def _spread_column_short(data: dict[str, Any]) -> dict[str, Any]:
 @pytest.mark.parametrize(
     ("mutate", "prefix"),
     [
-        (_spread_mismatch, "telecasts.home_spread[4]"),
-        (_spread_null_with_pregame, "telecasts.home_spread[0]"),
-        (_spread_with_null_pregame, "telecasts.home_spread[3]"),
         (_spread_column_short, "telecasts.home_spread: length 11 does not match"),
     ],
 )
@@ -411,15 +417,12 @@ def test_home_spread_errors_name_column_and_index_only(mutate: Any, prefix: str)
         validate_site_data(data)
     message = str(exc.value)
     assert prefix in message
-    assert "9.5" not in message
-    assert "2.0" not in message
 
 
 def test_home_spread_pickem_validates_with_either_zero_sign() -> None:
-    for pregame in (-0.0, 0.0):
+    for spread in (-0.0, 0.0):
         data = copy.deepcopy(_load_fixture())
-        data["telecasts"]["home_spread"][9] = 0.0
-        data["telecasts"]["pregame"][9] = pregame
+        data["telecasts"]["home_spread"][9] = spread
         validate_site_data(data)
 
 

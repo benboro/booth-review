@@ -6,6 +6,7 @@ fixtures.
 
 from __future__ import annotations
 
+import dataclasses
 import shutil
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -273,7 +274,8 @@ def test_null_excitement_counts_as_missing_not_zero(small_tables: BuildTables) -
     net_a = _row(report, 2024, "net-a")
     # Game 1 has excitement=5.0, game 2 has excitement=None: only 1 should count present.
     assert net_a["excitement_present"] == 1
-    assert net_a["pregame_present"] == 1
+    assert net_a["spread_present"] == 1
+    assert "pregame_present" not in net_a
     assert net_a["points_present"] == 1
 
 
@@ -484,3 +486,19 @@ def test_crew_patched_counts_separately_but_stays_in_matched_crew() -> None:
 def test_crew_patched_column_follows_matched_crew() -> None:
     index = COVERAGE_COLUMNS.index("matched_crew")
     assert COVERAGE_COLUMNS[index + 1] == "crew_patched"
+
+
+def test_spread_present_counts_the_closing_spread_not_pregame_x(
+    small_tables: BuildTables,
+) -> None:
+    games = small_tables.games.with_columns(
+        pl.when(pl.col("game_id") == 1)
+        .then(-1.0)
+        .otherwise(None)
+        .cast(pl.Float64)
+        .alias("closing_spread"),
+        pl.lit(None, dtype=pl.Float64).alias("pregame_x"),
+    )
+    tables = dataclasses.replace(small_tables, games=games)
+    net_a = _row(build_coverage(tables), 2024, "net-a")
+    assert net_a["spread_present"] == 1

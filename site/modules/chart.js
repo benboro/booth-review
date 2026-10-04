@@ -59,16 +59,8 @@ export const DOT_OPACITY = Object.freeze({
 
 /** X-axis chart titles (distinct from format.js's shorter AXIS_LABELS toggle copy). */
 const XAXIS_TITLES = {
-  pregame: 'Closing spread (points) — closer games to the right',
-  result: "Winner's closing spread (points): upsets to the right",
+  spread: "Winner's closing spread (points)",
   excitement: 'Excitement index (CFBD)',
-};
-
-/** Phone x-axis titles: the long pre-game title is wider than a phone screen, so it wraps (Plotly titles never wrap on their own). */
-const XAXIS_TITLES_MOBILE = {
-  pregame: 'Closing spread (points)<br>closer games to the right',
-  result: "Winner's closing spread (pts)<br>upsets to the right",
-  excitement: XAXIS_TITLES.excitement,
 };
 
 /**
@@ -76,13 +68,13 @@ const XAXIS_TITLES_MOBILE = {
  * missing values, the numeric-axis divider, the plotted range, and tick
  * values/labels that never fall inside the band.
  * @param {object} data - a `prepareData` result.
- * @param {"pregame"|"result"|"excitement"} axis
+ * @param {"spread"|"excitement"} axis
  * @returns {{sentinel: number, divider: number, range: [number, number], tickvals: number[], ticktext: string[]}}
  */
 export function naBand(data, axis) {
   let [lo, hi] = data.xRange[axis] || [null, null];
   if (lo == null || hi == null) [lo, hi] = [-1, 1];
-  if (axis === 'result') {
+  if (axis === 'spread') {
     lo = Math.min(lo, 0);
     hi = Math.max(hi, 0);
   }
@@ -93,8 +85,7 @@ export function naBand(data, axis) {
   const range = [lo - 2.25 * w, hi + 0.03 * span];
   const tickvals = niceLinearTicks(lo, hi, 6);
   const ticktext = tickvals.map((v) => {
-    if (axis === 'pregame') return String(Math.abs(v));
-    if (axis === 'result') return v > 0 ? `+${v}` : v < 0 ? `${MINUS}${Math.abs(v)}` : '0';
+    if (axis === 'spread') return v > 0 ? `+${v}` : v < 0 ? `${MINUS}${Math.abs(v)}` : '0';
     return String(v);
   });
   return { sentinel, divider, range, tickvals, ticktext };
@@ -124,7 +115,7 @@ export function naBand(data, axis) {
  * of visible `&lt;br&gt;` markup rather than as actual line breaks.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
- * @param {{axis: "pregame"|"excitement", theme: "light"|"dark"}} opts
+ * @param {{axis: "spread"|"excitement", theme: "light"|"dark"}} opts
  * @returns {string}
  */
 export function hoverText(data, i, { axis, theme }) {
@@ -373,7 +364,7 @@ export function buildFigure(data, view, state, env) {
     xaxis: {
       // Plotly >= 3 takes only the object form; a bare string title is
       // silently dropped (CR-02).
-      title: { text: (env.mobile ? XAXIS_TITLES_MOBILE : XAXIS_TITLES)[axis] },
+      title: { text: XAXIS_TITLES[axis] },
       range: band.range,
       tickmode: 'array',
       tickvals: band.tickvals,
@@ -421,12 +412,12 @@ export function buildFigure(data, view, state, env) {
     // D-04: the 170px right margin only ever made room for Plotly's own
     // legend; the HTML chip row above the chart replaced it, so the margin
     // is the same narrow width at every screen size now.
-    margin: { l: 70, r: 24, t: axis === 'result' ? 40 : 24, b: 60 },
+    margin: { l: 70, r: 24, t: 40, b: 60 },
   };
 
-  // D-02: result mode only -- appended so shapes[0]/annotations[0] stay the
+  // D-02: Spread axis only -- appended so shapes[0]/annotations[0] stay the
   // N/A divider and label.
-  if (axis === 'result') {
+  if (axis === 'spread') {
     layout.shapes.push({
       type: 'line',
       xref: 'x',
@@ -478,7 +469,7 @@ const ZERO_CAPTION_GAP = 6;
 const ZERO_CAPTION_EDGE_PAD = 2;
 
 /**
- * Keeps the result-mode zero-line captions inside the chart. They hang off
+ * Keeps the Spread-axis zero-line captions inside the chart. They hang off
  * x = 0 by `ZERO_CAPTION_GAP`, so when zero sits near an edge (a narrow
  * phone, a zoom, a lopsided range) a caption can run past the SVG and clip.
  * Measures each caption where it was actually drawn (so the real font
@@ -495,14 +486,25 @@ export function fitZeroCaptions(gd) {
   if (!Array.isArray(anns) || !svg) return;
   const box = svg.getBoundingClientRect();
   const update = {};
+  // Zero off the plotted range (a zoom, a pan): Plotly hides or clamps the
+  // caption, so its measured box does not follow xshift and chasing it would
+  // relayout forever. Park the shift at the normal gap and measure nothing.
+  const range = gd._fullLayout?.xaxis?.range;
+  const zeroInView = !range || (Math.min(...range) <= 0 && Math.max(...range) >= 0);
   anns.forEach((ann, k) => {
     const side = ann.text === '← favorite won' ? -1 : ann.text === 'underdog won →' ? 1 : 0;
     if (side === 0) return;
+    const base = side * ZERO_CAPTION_GAP;
+    if (!zeroInView) {
+      if (ann.xshift != null && Math.abs(ann.xshift - base) > 0.5) {
+        update[`annotations[${k}].xshift`] = base;
+      }
+      return;
+    }
     const el = gd.querySelector(`.annotation[data-index="${k}"]`);
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const shift = ann.xshift ?? side * ZERO_CAPTION_GAP;
-    const base = side * ZERO_CAPTION_GAP;
+    const shift = ann.xshift ?? base;
     // Overflow past the near SVG edge if the caption sat at the normal gap.
     const overflow =
       side > 0

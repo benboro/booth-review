@@ -18,7 +18,7 @@ immediately, in parallel with Phase 3's real joins.
 `site-data.json` is **one versioned columnar JSON file** (D-13), not an array
 of per-telecast objects:
 
-- `schema_version` — the contract version (currently `"1.5.0"`). See
+- `schema_version` — the contract version (currently `"2.0.0"`). See
   Versioning below.
 - `generated_at` — ISO UTC timestamp of the build that produced the file.
 - `freshness` — `{ season, crews_through_week, viewership_through_week }`,
@@ -78,8 +78,7 @@ describes when the value is `null` instead of coerced to a placeholder like
 | `crew_source_url` | str \| null, http(s) URL with a host, never 506 Sports | null for a 506 crew, including one a `crew_overrides.csv` row only confirms; set only with `crew_source_label` when the shown crew comes from `crew_overrides.csv` instead of 506 (a patch, correction, or differing crew; the crew's own cited source), and then `crew` lists at least one main-feed entry | SITE-32 |
 | `crew_source_label` | str \| null, non-empty, at most 60 characters, no `<` or `>` | null for a 506 crew; a short public label for the cited source, set only with `crew_source_url` (the same rule the `crew_overrides.csv` loader applies to `source_name`) | SITE-32 |
 | `excitement` | float \| null | null when CFBD's `excitementIndex` is missing — **never coerced to 0** (FLAG-04) | SITE-03, SITE-04 |
-| `pregame` | float \| null, `-\|closing spread\|` (SPIKE-04); equals `-abs(home_spread)` | null when the closing spread isn't known | SITE-03 |
-| `home_spread` | float \| null. Closing spread from the home team's side, CFBD sign (negative = home favored, positive = away favored, 0 = pick'em). Same consensus-first provider as `pregame`. Null iff `pregame` is null | null when the closing spread isn't known | SITE-40 |
+| `home_spread` | float \| null. Closing spread from the home team's side, CFBD sign (negative = home favored, positive = away favored, 0 = pick'em). Consensus provider first, else the most frequent provider | null when the closing spread isn't known | SITE-40, SITE-43 |
 | `flags` | list[int], indexes into `lookups.flags` | empty list when no flag applies | SITE-04, FLAG-01, FLAG-02, FLAG-03, FLAG-04 |
 | `combined_feeds` | int \| null, `>= 2` when set | null unless this figure combines viewers across feeds (D-08) | SITE-04 |
 | `crew` | list of `{person, role, feed}` | empty list when no crew is known; each entry's `person` is an index into `lookups.people` | SITE-04, SITE-07, SITE-10 |
@@ -153,7 +152,7 @@ season with `network` null: `season`, `network`, `rated_telecasts`,
 `matched_game`, `matched_crew`, `matched_crew_patched` (how many of
 `matched_crew` are hand-confirmed crews from `crew_overrides.csv`; never more
 than `matched_crew`), `match_rate` (null when there's nothing to
-divide), `headline_present`, `excitement_present`, `pregame_present`,
+divide), `headline_present`, `excitement_present`, `spread_present` (telecasts whose game has a closing spread),
 `duplicate_merges`, `combined_figures`, and `publisher_counts` (a
 publisher-name-to-count map). This is AUDIT-01's table, exposed to the site
 for SITE-16.
@@ -178,7 +177,7 @@ raw CFBD `playoff` object, `venue`, and win probability still never ship —
 only their derived, display-safe outputs (`game_type`, `playoff_round`, the
 `is_fbs` flag) do.
 
-`home_spread` is shown in the chart (the favorite and the winner's line in the tooltip and modal, and the Result vs spread axis), so it is a display field; the raw CFBD `spread` column name stays on the test guard's banned list.
+`home_spread` is shown in the chart (the winner's line in the tooltip and modal, and the Spread axis), so it is a display field; the raw CFBD `spread` column name stays on the test guard's banned list.
 
 ## Versioning
 
@@ -192,7 +191,10 @@ only their derived, display-safe outputs (`game_type`, `playoff_round`, the
   `telecasts.bowl` (D-19); `1.3.0` -> `1.4.0` added `telecasts.crew_source_url`,
   `telecasts.crew_source_label` (SITE-32, 04.3 D-11) and
   `coverage[].matched_crew_patched` (AUDIT-04, D-13); `1.4.0 -> 1.5.0` added
-  `telecasts.home_spread` (SITE-40, 04.6 D-08); minor bump, additive.
+  `telecasts.home_spread` (SITE-40, 04.6 D-08); minor bump, additive;
+  `1.5.0 -> 2.0.0` removed `telecasts.pregame` (the client derives the Spread axis
+  from `home_spread`) and renamed `coverage[].pregame_present` to `spread_present`
+  (SITE-43, 04.8 D-01/D-02); a major bump because a field was removed.
 - **Removing a field, renaming a field, or changing a field's type**
   (including narrowing an enum) bumps the **major** version (`1.0.0` →
   `2.0.0`).
@@ -228,4 +230,4 @@ As of v1.3.0 telecast 7 (bowl) points at a sponsor-prefixed bowl and telecast 5 
 
 As of v1.4.0 telecast 3 (2021) carries a crew-source pair (a patched crew with no 506 listing). The fixture's 2021 coverage rows count it: the season-total row and the row for its network each have `matched_crew_patched` 1; every 2026 row has 0.
 
-As of v1.5.0 the fixture's `home_spread` column is `[-3.5, 7.0, -2.0, null, -1.0, -14.0, 5.5, -3.0, 6.5, -0.5, -2.5, 1.5]` (every `pregame` value unchanged). By telecast index: 0 home favorite won; 1 away favorite, home won (upset); 2 line but no final score; 3 no line; 4 home favorite won; 5 home favorite won; 6 away favorite, home won; 7 home favorite, away won; 8 away favorite won; 9 home favorite, away won; 10 tie (20-20); 11 away favorite won.
+As of v2.0.0 there is no `pregame` column; the fixture's `home_spread` column is unchanged: `[-3.5, 7.0, -2.0, null, -1.0, -14.0, 5.5, -3.0, 6.5, -0.5, -2.5, 1.5]`. By telecast index: 0 home favorite won; 1 away favorite, home won (upset); 2 line but no final score; 3 no line; 4 home favorite won; 5 home favorite won; 6 away favorite, home won; 7 home favorite, away won; 8 away favorite won; 9 home favorite, away won; 10 tie (20-20); 11 away favorite won.

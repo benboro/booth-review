@@ -67,8 +67,7 @@ export const FEED_LABELS = {
 
 /** X-axis toggle labels (D-12). */
 export const AXIS_LABELS = {
-  pregame: 'Pre-game (spread)',
-  result: 'Result vs spread',
+  spread: 'Spread',
   excitement: 'Excitement (CFBD)',
 };
 
@@ -307,56 +306,56 @@ export function selectedPersonIndexes(data, state) {
 export const MINUS = '\u2212';
 
 /**
- * Spread line copy naming the favorite (pregame) or the winner (result).
+ * Spread line copy (04.8 D-04, D-05): a decided game names the winner and the
+ * winner-signed line; a game with no decided result names the favorite and why.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
- * @param {"pregame"|"result"} mode
- * @returns {string} e.g. "Spread: Northfield \u22123.5", "Spread: Pick'em".
+ * @returns {string} e.g. "Spread: Northfield \u22123.5", "Spread: Pick'em",
+ *   "Spread: Boulder Pass \u22122.0 (no final score yet)".
  */
-export function spreadLabel(data, i, mode) {
+export function spreadLabel(data, i) {
   const t = data.t;
-  const s = t.home_spread?.[i] ?? null;
+  const s = t.home_spread[i];
   if (s == null) return 'Spread: not available';
   const home = data.lookups.teams[t.home_team[i]].name;
   const away = data.lookups.teams[t.away_team[i]].name;
-  if (mode === 'pregame') {
+  const x = t.spread[i];
+  if (x != null) {
     if (s === 0) return "Spread: Pick'em";
-    return `Spread: ${s < 0 ? home : away} ${MINUS}${Math.abs(s).toFixed(1)}`;
+    const winner = t.home_points[i] > t.away_points[i] ? home : away;
+    return `Spread: ${winner} ${x < 0 ? MINUS : '+'}${Math.abs(x).toFixed(1)}`;
   }
-  const x = t.result[i];
-  if (x == null) return 'Spread: final score not recorded';
-  if (s === 0) return "Spread: Pick'em";
-  const winner = t.home_points[i] > t.away_points[i] ? home : away;
-  return `Spread: ${winner} ${x < 0 ? MINUS : '+'}${Math.abs(x).toFixed(1)}`;
+  const reason = t.home_points[i] == null || t.away_points[i] == null ? 'no final score yet' : 'game tied';
+  if (s === 0) return `Spread: Pick'em (${reason})`;
+  return `Spread: ${s < 0 ? home : away} ${MINUS}${Math.abs(s).toFixed(1)} (${reason})`;
 }
 
 /**
  * Axis line text for the tooltip and modal.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
- * @param {"pregame"|"result"|"excitement"} axis
+ * @param {"spread"|"excitement"} axis
  * @returns {string}
  */
 export function axisValueText(data, i, axis) {
   if (axis === 'excitement') return formatAxisValue('excitement', data.t.excitement[i]);
-  return spreadLabel(data, i, axis);
+  return spreadLabel(data, i);
 }
 
 /** Short axis value labels, distinct from the longer AXIS_LABELS toggle copy. */
-const AXIS_VALUE_LABELS = { pregame: 'Spread', result: 'Spread', excitement: 'Excitement' };
+const AXIS_VALUE_LABELS = { spread: 'Spread', excitement: 'Excitement' };
 
 /**
- * Formats a single axis value for hover/panel display. Pre-game values are
- * shown as a positive spread magnitude; null is never coerced to a number.
- * @param {"pregame"|"excitement"} axis
+ * Formats a single axis value for hover/panel display; null is never coerced
+ * to a number.
+ * @param {"spread"|"excitement"} axis
  * @param {number|null} value
- * @returns {string} e.g. "Spread: 3.5", "Excitement: 8.4", or "...: not available".
+ * @returns {string} e.g. "Excitement: 8.4" or "...: not available".
  */
 export function formatAxisValue(axis, value) {
   if (value == null) return `${AXIS_LABELS[axis]}: not available`;
   const label = AXIS_VALUE_LABELS[axis];
-  const num = axis === 'pregame' ? Math.abs(value) : value;
-  return `${label}: ${num.toFixed(1)}`;
+  return `${label}: ${value.toFixed(1)}`;
 }
 
 /** The full 1-2-5 tick sequence from 10,000 to 100,000,000. */

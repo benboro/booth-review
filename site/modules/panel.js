@@ -383,7 +383,7 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
     children.push(publishedP);
   }
 
-  const spreadText = axisValueText(data, i, state.axis === 'result' ? 'result' : 'pregame');
+  const spreadText = axisValueText(data, i, 'spread');
   const excitementText = axisValueText(data, i, 'excitement');
   const axisP = document.createElement('p');
   axisP.textContent = state.axis === 'excitement'

@@ -172,7 +172,6 @@ def build_site_data(
         "home_rank",
         "away_rank",
         "excitement",
-        "pregame_x",
         "closing_spread",
         "game_type",
         "playoff_round",
@@ -382,7 +381,6 @@ def build_site_data(
         "crew_source_url": [],
         "crew_source_label": [],
         "excitement": [],
-        "pregame": [],
         "home_spread": [],
         "flags": [],
         "combined_feeds": [],
@@ -423,7 +421,6 @@ def build_site_data(
         columns["crew_source_url"].append(row["crew_source_url"])
         columns["crew_source_label"].append(row["crew_source_label"])
         columns["excitement"].append(row["excitement"])
-        columns["pregame"].append(row["pregame_x"])
         columns["home_spread"].append(row["closing_spread"])
         columns["flags"].append([flag_index[f] for f in flags_by_telecast.get(telecast_id, [])])
         columns["combined_feeds"].append(row["combined_feeds"])
@@ -498,7 +495,7 @@ def build_site_data(
                 "match_rate": crow["match_rate"],
                 "headline_present": _as_int(crow["headline_present"]),
                 "excitement_present": _as_int(crow["excitement_present"]),
-                "pregame_present": _as_int(crow["pregame_present"]),
+                "spread_present": _as_int(crow["spread_present"]),
                 "duplicate_merges": _as_int(crow["duplicate_merges"]),
                 "combined_figures": _as_int(crow["combined_figures"]),
                 "publisher_counts": pub_counts,

@@ -2,16 +2,16 @@
 
 This page explains what the chart on this site can and cannot say, in plain
 language. It covers what is plotted, why the sample is not a random sample of
-college football, how measurement changed over the years in scope, why the
-x-axis has two different meanings depending on the toggle, and where the
+college football, how measurement changed over the years in scope, what
+the two x-axis measures mean, and where the
 figures on the chart come from.
 
 ## What this chart shows
 
 Each dot is one rated national telecast of an FBS college football game, from
 the 2014 season onward. The y-axis is viewers, on a log scale. The x-axis
-defaults to the pre-game closing spread and can be toggled to CFBD's
-post-game excitement measure instead. Dots are colored by network family —
+defaults to the winner's closing point spread (see below) and can be toggled
+to CFBD's post-game excitement measure instead. Dots are colored by network family —
 for example, the Disney family groups ABC and the ESPN networks under one
 color — but the specific network that carried a telecast is always named in
 the hover, the detail panel, and the matched-games table. No dot is ever
@@ -149,36 +149,35 @@ to excitement mode, a caption appears under the x-axis noting the break.
 Affected dots look identical to any other dot — the flag is informational
 only and never changes a dot's size, color, or shape.
 
-## The x-axis: pre-game spread, result vs spread, and excitement
+## The x-axis: spread and excitement
 
-The chart's x-axis can show one of three different measures of "how close this
-game was expected to be," and the choice between them matters for what a dot
-placement can and cannot explain.
+The chart's x-axis can show one of two different measures of "how close this
+game was expected to be or turned out to be," and the choice between them
+matters for what a dot placement can and cannot explain.
 
-**Pre-game (the default):** x is the negative absolute value of the game's
-closing point spread, so a game expected to be closer sits further to the
-right and a bigger expected blowout (in either team's favor) sits further to
-the left. This measure is known before kickoff, which makes it the
-appropriate control for a viewer's decision to tune in — nobody decides to
-watch a game based on how exciting it turned out to be, because that
-information does not exist yet at kickoff.
+**Spread (the default):** x is the winner's closing point spread: negative
+when the favorite won, positive when the underdog won (an upset), and 0 for a
+pick'em. A solid zero line is captioned "← favorite won" and "underdog won →".
+The distance from the zero line is the line's size, known before kickoff, so
+games expected to be close sit near the middle on both sides. The side shows
+the result: left when the favorite won, right for an upset. Read the distance
+for the tune-in question, and the side for how the game turned out. The
+closing spread comes from CFBD's betting lines (consensus provider first).
 
 **Excitement (CFBD, the toggle):** this measure is calculated from what
 actually happened during the game, after the fact. It can help explain
 whether an audience stayed tuned in as the game unfolded, but it cannot
 explain the initial decision to watch, since it is not available until the
-outcome is already known. This is why pre-game spread, not excitement, is
-the chart's default measure.
+outcome is already known. Only the Spread's distance is known at kickoff,
+which is why Spread is the chart's default measure.
 
-**Result vs spread (a toggle):** Result vs spread plots the winner's closing spread: negative when the favorite won, positive for an upset. Like excitement it uses the outcome, so it cannot explain the decision to tune in; Pre-game stays the default for that reason. Games with no closing line or no final score sit in the N/A strip.
-
-A telecast missing either value — its closing spread was not recorded, CFBD
-did not compute an excitement value for it, or it has no final score yet
-(Result vs spread) — is shown in a narrow "N/A"
-strip at the left edge of the chart, still plotted at its real viewers value.
-An N/A-strip dot is never plotted at zero and never dropped from the chart;
-it behaves identically to any other dot under every filter, highlight, and
-hover.
+A telecast missing the value for the selected measure (no closing line, no
+final score yet, or a tied game for Spread; no CFBD excitement value for
+Excitement) is shown in a narrow "N/A" strip at the left edge of the chart,
+still plotted at its real viewers value. An N/A-strip dot is never plotted at
+zero and never dropped from the chart; it behaves identically to any other dot
+under every filter, highlight, and hover. A game whose score has not arrived
+yet moves into place on the next data update.
 
 ## Booth announcers only
 

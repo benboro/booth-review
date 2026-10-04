@@ -217,11 +217,11 @@ def _use_plotly_tooltip(page: Page) -> None:
     )
 
 
-def test_default_load_shows_all_dots_no_selection_pregame_axis(
+def test_default_load_shows_all_dots_no_selection_spread_axis(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-12: first load with no query shows all 12 dots, nobody highlighted,
-    and the pre-game axis, with a clean URL."""
+    and the Spread axis, with a clean URL."""
     open_app(guarded_page, "")
     traces = _traces(guarded_page)
     family_traces = _family_traces(traces)
@@ -237,7 +237,7 @@ def test_default_load_shows_all_dots_no_selection_pregame_axis(
     assert len(traces[-1]["x"]) == 0
     assert "?" not in guarded_page.url
     assert (
-        guarded_page.get_attribute('#axis-toggle button[data-axis="pregame"]', "aria-pressed")
+        guarded_page.get_attribute('#axis-toggle button[data-axis="spread"]', "aria-pressed")
         == "true"
     )
     assert guarded_page.is_hidden("#excitement-caption")
@@ -248,15 +248,17 @@ def test_default_load_shows_all_dots_no_selection_pregame_axis(
 def test_na_strip_places_missing_x_dots_in_the_reserved_band(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-03: dot 3 (pregame) / dot 2 (excitement) sit left of the divider,
-    everything else sits to its right, and the strip is labelled N/A."""
+    """D-08: dots 2, 3, 10 (Spread: no score, no line, tie) / dot 2 (excitement)
+    sit left of the divider, everything else sits to its right, and the strip
+    is labelled N/A."""
     open_app(guarded_page, "")
     layout = _layout(guarded_page)
     divider = layout["shapes"][0]["x0"]
     points = _dot_x_by_customdata(_traces(guarded_page))
-    assert points[3] < divider
+    for missing in (2, 3, 10):
+        assert points[missing] < divider
     for customdata, x in points.items():
-        if customdata != 3:
+        if customdata not in (2, 3, 10):
             assert x > divider
     assert any(a["text"] == "N/A" for a in layout["annotations"])
 
@@ -326,7 +328,7 @@ def test_axis_titles_render_for_both_axes(
     open_app(guarded_page, "")
     x_title = guarded_page.locator(".g-xtitle text").all_text_contents()
     y_title = guarded_page.locator(".g-ytitle text").all_text_contents()
-    assert x_title == ["Closing spread (points) — closer games to the right"]
+    assert x_title == ["Winner's closing spread (points)"]
     assert y_title == ["Viewers (log scale)"]
 
     guarded_page.click('#axis-toggle button[data-axis="excitement"]')
@@ -337,9 +339,8 @@ def test_axis_titles_render_for_both_axes(
 def test_mobile_x_axis_title_fits_the_screen_and_clears_the_legend(
     mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """CR-02 follow-up: once the titles render, the long pre-game title is
-    wider than a 390px phone, so on phones it wraps onto two lines, stays
-    inside the viewport, and sits above the (below-chart) HTML chip legend
+    """CR-02 follow-up / D-09: the Spread title fits one line on a 390px phone,
+    stays inside the viewport, and sits above the (below-chart) HTML chip legend
     (D-04: Plotly's own `.legend` is off everywhere now)."""
     open_app(mobile_page, "")
     boxes = mobile_page.evaluate(
@@ -355,7 +356,9 @@ def test_mobile_x_axis_title_fits_the_screen_and_clears_the_legend(
     # bounding box and the immediately-following flex item's box -- the two
     # can land a fraction of a pixel apart with no real overlap.
     assert title["bottom"] <= legend["top"] + 1
-    assert mobile_page.locator(".g-xtitle text tspan").count() >= 2
+    assert mobile_page.locator(".g-xtitle text tspan").count() <= 1
+    title_text = mobile_page.evaluate("document.getElementById('chart').layout.xaxis.title.text")
+    assert "<br>" not in title_text
 
 
 _LEGEND_CHIP_LABELS = ["ABC/ESPN", "FOX/FS1/BTN", "Pac-12 Net/MW Net", "Other"]
@@ -618,8 +621,8 @@ def test_person_matched_dot_that_fails_a_filter_renders_as_filtered_out(
     assert len(traces[-1]["x"]) == 0
 
     disney_inert = next(t for t in _inert_traces(traces) if t["meta"] == "inert:disney")
-    assert -3.5 in disney_inert["x"]  # dot 0's pregame spread
-    assert -6.5 in disney_inert["x"]  # dot 8's pregame spread
+    assert -3.5 in disney_inert["x"]  # dot 0's spread (home favorite won)
+    assert -6.5 in disney_inert["x"]  # dot 8's spread (away favorite won)
     # Filter wins (04.1 D-14) at the person-faded inert tier (04.7 D-02),
     # still in the family's own color (D-01).
     assert disney_inert["opacity"] == _dot_opacity(guarded_page)["inertUnderPerson"]
@@ -1468,13 +1471,22 @@ _HIGHLIGHT_POINTS_JS = """
 
 # Decodes a base64 PNG data URL (a `page.screenshot(clip=...)` capture)
 # through an in-page `Image`/canvas (CSP allows `img-src data: blob:`, so no
-# Pillow dependency is needed) and counts "speckle" pixels in the ring from
-# `innerR` to `outerR` px from the image center: within RGB distance 60 of
-# the theme's accent color and at least 60 away from the theme's page
-# background. Pixels within `other.half + 3` px of another highlighted
-# point's own center (translated into this crop's local coordinates) are
-# excluded, so a marker close enough to sit inside this 40x40 crop never
-# contaminates the count.
+# Pillow dependency is needed) and counts accent-like pixels in the ring from
+# `innerR` to `outerR` px from the image center. A pixel counts when it is at
+# least 60 (RGB distance) away from the theme's page background and either
+# within 60 of the theme's accent color or closer to the accent than half its
+# distance to the background (an anti-aliased accent edge blended toward the
+# page). Pixels within `other.half + 3` px of another highlighted point's own
+# center (translated into this crop's local coordinates) are excluded, so a
+# marker close enough to sit inside this 40x40 crop never contaminates the
+# count.
+#
+# The predicate is color-only, so it cannot tell the accent from any other
+# dark-on-light (or light-on-dark) ink: the light theme's `conference` family
+# fill `#000000` sits 49 from ACCENT `#111827`, and `--muted` text (light
+# `#4B5563`, dark `#9CA3AF`) passes the half-distance clause in both themes.
+# A bare count is therefore not proof of a halo; the halo-border test compares
+# each marker's count against the same crop with the halo trace hidden.
 _RING_SPECKLE_JS = """
 ([dataUrl, accentHex, bgHex, innerR, outerR, others]) => new Promise((resolve) => {
   const hexToRgb = (h) => [
@@ -1506,7 +1518,10 @@ _RING_SPECKLE_JS = """
         const dAccent = Math.hypot(data[idx] - accent[0], data[idx + 1] - accent[1],
           data[idx + 2] - accent[2]);
         const dBg = Math.hypot(data[idx] - bg[0], data[idx + 1] - bg[1], data[idx + 2] - bg[2]);
-        if (dAccent < 60 && dBg >= 60) count += 1;
+        // Anti-aliased halo edge pixels blend toward the page background (a spiky
+        // star's tips land on fractional pixels); count a pixel that is more than
+        // two-thirds accent as well as one that is nearly pure accent.
+        if ((dAccent < 60 || dAccent < dBg * 0.5) && dBg >= 60) count += 1;
       }
     }
     resolve(count);
@@ -1627,6 +1642,26 @@ def test_compare_shapes_have_no_edge_speckles(
     assert total == 0, f"{total} speckle pixel(s) found around compare-mode highlight markers"
 
 
+# Sets the D-33 halo trace's (`gd.data.at(-2)`, `meta: 'highlight-halo'`)
+# marker opacity, leaving every other trace and the layout untouched, so the
+# halo-border test can measure the same crops with and without the halo.
+# Resolves false when the halo trace is not where D-33 puts it.
+_SET_HALO_OPACITY_JS = """
+(opacity) => {
+  const gd = document.getElementById('chart');
+  const index = gd.data.length - 2;
+  if (index < 0 || gd.data[index].meta !== 'highlight-halo') return false;
+  return window.Plotly.restyle(gd, { 'marker.opacity': opacity }, [index]).then(() => true);
+}
+"""
+
+# The fewest band pixels the halo must add around each non-circle marker.
+# Measured on the fixture compare selection, the halo adds 5-38 per marker
+# (the light-theme star: 15 with the halo, 2 without); a star halo shrunk to
+# the star's own size adds only 1, which a bare `> 0` difference would pass.
+_MIN_HALO_BORDER_PIXELS = 3
+
+
 def _border_pixel_count(
     page: Page,
     center_px: float,
@@ -1637,12 +1672,14 @@ def _border_pixel_count(
     other_points: list[dict[str, Any]],
 ) -> int:
     """Screenshots a 40x40 box centered on one highlight marker and counts
-    ACCENT-colored pixels in the band between the highlight glyph's own
+    accent-like pixels in the band between the highlight glyph's own
     half-size and the halo's half-size (D-33) -- the halo's own visible
     border, reusing the same in-page pixel decode `_RING_SPECKLE_JS` uses
     for the D-31 speckle count, just with the band's inner/outer radii
     swapped to the border's own expected location instead of just past
-    it."""
+    it. The count also picks up a near-accent marker fill (see the
+    `_RING_SPECKLE_JS` comment), so callers compare it against the count
+    with the halo hidden rather than reading it alone."""
     clip_x = center_px - 20
     clip_y = center_py - 20
     shot = page.screenshot(clip={"x": clip_x, "y": clip_y, "width": 40, "height": 40})
@@ -1685,24 +1722,42 @@ def test_compare_shapes_have_accent_halo_border(
     guarded_page.mouse.move(5, 5)
     guarded_page.wait_for_timeout(100)
 
-    tested = 0
-    for point in points:
-        if point["symbol"] == "circle" or point["naSentinel"]:
-            continue
-        others = [p for p in points if p["customdata"] != point["customdata"]]
-        if any(_boxes_overlap(point, other) for other in others):
-            continue
-        tested += 1
-        marker_half = point["size"] / 2
-        halo_half = (point["size"] + 3) / 2
-        border_pixels = _border_pixel_count(
-            guarded_page, point["px"], point["py"], color_scheme, marker_half, halo_half, others
-        )
-        assert border_pixels > 0, (
-            f"no ACCENT halo border pixels found around customdata {point['customdata']}"
-        )
+    def band_counts() -> dict[Any, int]:
+        counts: dict[Any, int] = {}
+        for point in points:
+            if point["symbol"] == "circle" or point["naSentinel"]:
+                continue
+            others = [p for p in points if p["customdata"] != point["customdata"]]
+            if any(_boxes_overlap(point, other) for other in others):
+                continue
+            counts[point["customdata"]] = _border_pixel_count(
+                guarded_page,
+                point["px"],
+                point["py"],
+                color_scheme,
+                point["size"] / 2,
+                (point["size"] + 3) / 2,
+                others,
+            )
+        return counts
 
-    assert tested > 0, "no non-circle highlight marker was testable in this fixture selection"
+    with_halo = band_counts()
+    assert with_halo, "no non-circle highlight marker was testable in this fixture selection"
+
+    # A near-accent marker fill (the light theme's black `conference` star)
+    # counts in the band with or without a halo, so each marker's count is
+    # compared against the same crop with the halo trace hidden: the
+    # difference is the halo's own border.
+    assert guarded_page.evaluate(_SET_HALO_OPACITY_JS, 0), "halo trace not found at data.at(-2)"
+    guarded_page.wait_for_timeout(300)
+    without_halo = band_counts()
+
+    for customdata, count in with_halo.items():
+        added = count - without_halo[customdata]
+        assert added >= _MIN_HALO_BORDER_PIXELS, (
+            f"halo adds only {added} ACCENT border pixel(s) around customdata {customdata} "
+            f"({count} with the halo, {without_halo[customdata]} without)"
+        )
 
 
 def test_compare_highlight_trace_config(
@@ -2084,6 +2139,26 @@ def test_hover_ring_clears_on_zoom(
         " return window.Plotly.relayout(gd, {'xaxis.range': [r[0], r[0] + (r[1] - r[0]) / 2]}); }"
     )
     guarded_page.wait_for_selector(f"{_RING}[hidden]", state="attached")
+
+
+def test_zero_captions_settle_when_zoomed_off_zero(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Regression: zooming so x = 0 leaves the range must not start an endless
+    afterplot -> relayout loop in fitZeroCaptions; the relayout count settles."""
+    open_app(guarded_page, "")
+    guarded_page.evaluate(
+        "() => { const gd = document.getElementById('chart');"
+        " window.__relayouts = 0;"
+        " gd.on('plotly_relayout', () => { window.__relayouts += 1; });"
+        " const r = gd._fullLayout.xaxis.range;"
+        " return window.Plotly.relayout(gd, {'xaxis.range': [r[0], r[0] + (r[1] - r[0]) / 4]}); }"
+    )
+    guarded_page.wait_for_timeout(500)
+    first = guarded_page.evaluate("window.__relayouts")
+    guarded_page.wait_for_timeout(500)
+    assert guarded_page.evaluate("window.__relayouts") == first
+    assert first <= 3
 
 
 _COUNTERS_JS = """

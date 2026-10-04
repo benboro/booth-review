@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.5.0",
+  "schema_version": "2.0.0",
   "generated_at": "2026-01-01T00:00:00Z",
   "freshness": {
     "season": 2026,
@@ -573,20 +573,6 @@
       4.4,
       3.0
     ],
-    "pregame": [
-      -3.5,
-      -7.0,
-      -2.0,
-      null,
-      -1.0,
-      -14.0,
-      -5.5,
-      -3.0,
-      -6.5,
-      -0.5,
-      -2.5,
-      -1.5
-    ],
     "home_spread": [
       -3.5,
       7.0,
@@ -877,7 +863,7 @@
       "match_rate": 1.0,
       "headline_present": 1,
       "excitement_present": 1,
-      "pregame_present": 1,
+      "spread_present": 1,
       "duplicate_merges": 0,
       "combined_figures": 0,
       "publisher_counts": {
@@ -894,7 +880,7 @@
       "match_rate": 1.0,
       "headline_present": 1,
       "excitement_present": 1,
-      "pregame_present": 1,
+      "spread_present": 1,
       "duplicate_merges": 0,
       "combined_figures": 0,
       "publisher_counts": {
@@ -911,7 +897,7 @@
       "match_rate": null,
       "headline_present": 4,
       "excitement_present": 4,
-      "pregame_present": 4,
+      "spread_present": 4,
       "duplicate_merges": 0,
       "combined_figures": 0,
       "publisher_counts": {
@@ -930,7 +916,7 @@
       "match_rate": 1.0,
       "headline_present": 1,
       "excitement_present": 0,
-      "pregame_present": 1,
+      "spread_present": 1,
       "duplicate_merges": 0,
       "combined_figures": 0,
       "publisher_counts": {
@@ -947,7 +933,7 @@
       "match_rate": 1.0,
       "headline_present": 1,
       "excitement_present": 1,
-      "pregame_present": 0,
+      "spread_present": 0,
       "duplicate_merges": 0,
       "combined_figures": 0,
       "publisher_counts": {}
@@ -962,7 +948,7 @@
       "match_rate": null,
       "headline_present": 2,
       "excitement_present": 1,
-      "pregame_present": 1,
+      "spread_present": 1,
       "duplicate_merges": 0,
       "combined_figures": 0,
       "publisher_counts": {

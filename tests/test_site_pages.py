@@ -107,6 +107,28 @@ def test_render_methodology_explains_how_filters_display() -> None:
     assert "except the season range itself" in result
 
 
+def test_render_methodology_explains_the_spread_axis() -> None:
+    result = render_methodology(REPO_ROOT / "docs", _fixture_site())
+
+    assert "The x-axis: spread and excitement" in result
+    assert "favorite won" in result
+    assert "underdog won" in result
+    assert "before kickoff" in result
+    assert "tied" in result
+    assert "Pre-game" not in result
+    assert "Result vs spread" not in result
+    assert "negative absolute value" not in result
+    # The chart draws the zero line solid (chart.js `dash: 'solid'`).
+    assert "dashed" not in result
+
+
+def test_render_coverage_header_reads_spread() -> None:
+    result = render_coverage(_fixture_site())
+
+    assert '<th scope="col">Spread</th>' in result
+    assert "Pre-game present" not in result
+
+
 def test_render_methodology_raises_without_marker(tmp_path: Path) -> None:
     (tmp_path / "methodology.md").write_text(
         "# Methodology\n\nNo include marker on this page.\n", encoding="utf-8"

@@ -234,7 +234,7 @@ async ([i, selectedIds]) => {
   const { showTooltip } = await import(new URL('./modules/tooltip.js', location.href).href);
   const data = window.__testHooks.data;
   const selected = new Set(selectedIds.map((id) => data.personIndexById.get(id)));
-  showTooltip(data, i, { axis: 'pregame', theme: 'light', clientX: 200, clientY: 200, selected });
+  showTooltip(data, i, { axis: 'spread', theme: 'light', clientX: 200, clientY: 200, selected });
 }
 """
 
@@ -282,7 +282,7 @@ def test_crew_not_recorded_has_no_box(
         """async () => {
           const { tooltipModel, renderTooltipContent, ensureTooltipEl } =
             await import(new URL('./modules/tooltip.js', location.href).href);
-          const model = tooltipModel(window.__testHooks.data, 0, { axis: 'pregame' });
+          const model = tooltipModel(window.__testHooks.data, 0, { axis: 'spread' });
           model.crew = [];
           const el = ensureTooltipEl();
           renderTooltipContent(el, model, 'light');
@@ -334,7 +334,7 @@ def test_crew_name_markup_is_text(
           data.personIndexById = window.__testHooks.data.personIndexById;
           data.lookups.people[0].name = '<b>x</b>';
           const div = document.createElement('div');
-          renderTooltipContent(div, tooltipModel(data, 0, { axis: 'pregame' }), 'light');
+          renderTooltipContent(div, tooltipModel(data, 0, { axis: 'spread' }), 'light');
           return { bold: div.querySelectorAll('b').length,
                    text: div.querySelector('.crew-name').textContent };
         }"""

@@ -219,10 +219,10 @@ def test_close_then_reopen_in_one_task_keeps_the_panel_live(
     )
     expect(guarded_page.locator("#detail-panel")).to_have_attribute("open", "")
     body = guarded_page.locator("#panel-body")
-    expect(body).to_contain_text("Spread: Foxhollow \u22127.0 · Excitement: 6.8")
+    expect(body).to_contain_text("Spread: Ironpeak +7.0 · Excitement: 6.8")
     guarded_page.evaluate("window.__testHooks.setState({ axis: 'excitement' })")
-    expect(body).to_contain_text("Excitement: 6.8 · Spread: Foxhollow \u22127.0")
-    guarded_page.evaluate("window.__testHooks.setState({ axis: 'result' })")
+    expect(body).to_contain_text("Excitement: 6.8 · Spread: Ironpeak +7.0")
+    guarded_page.evaluate("window.__testHooks.setState({ axis: 'spread' })")
     expect(body).to_contain_text("Spread: Ironpeak +7.0 · Excitement: 6.8")
 
 

@@ -260,7 +260,7 @@ def render_coverage(site: SiteData) -> str:
         f"<td>{row.matched_crew_patched}</td>"
         f"<td>{_pct(row.match_rate)}</td>"
         f"<td>{row.excitement_present}</td>"
-        f"<td>{row.pregame_present}</td>"
+        f"<td>{row.spread_present}</td>"
         f"<td>{row.duplicate_merges}</td>"
         f"<td>{row.combined_figures}</td>"
         "</tr>"
@@ -276,7 +276,7 @@ def render_coverage(site: SiteData) -> str:
         '<th scope="col">Of which hand-confirmed</th>'
         '<th scope="col">Match rate</th>'
         '<th scope="col">Excitement present</th>'
-        '<th scope="col">Pre-game present</th>'
+        '<th scope="col">Spread</th>'
         '<th scope="col">Duplicate merges</th>'
         '<th scope="col">Combined figures</th>'
         "</tr></thead>"

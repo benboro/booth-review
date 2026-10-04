@@ -1262,7 +1262,7 @@ def test_crew_source_fields_emit_at_their_index_and_null_otherwise(build_referen
     assert all_row["matched_crew_patched"] == 1
 
 
-def test_home_spread_emits_closing_spread_and_pregame_is_its_negative_magnitude(
+def test_home_spread_emits_closing_spread_and_no_pregame_column(
     build_reference: Path,
 ) -> None:
     games = [
@@ -1291,4 +1291,4 @@ def test_home_spread_emits_closing_spread_and_pregame_is_its_negative_magnitude(
     )
     columns = _site(tables, build_reference)["telecasts"]
     assert columns["home_spread"] == [-6.5, 3.0, None]
-    assert columns["pregame"] == [-6.5, -3.0, None]
+    assert "pregame" not in columns
