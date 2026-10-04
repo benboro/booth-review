@@ -13,7 +13,7 @@ from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
 
-BARS_HINT = "Pick a school, network, or announcer"
+BARS_HINT = "Pick a school, network, announcer, or game"
 BUTTERFLY_HINT = "Pick exactly two schools or two announcers"
 H2H_HINT = "Switch School to Either team to compare two schools"
 H2H_URL = "?school=northfield,lakeview&h2h=1"
@@ -225,7 +225,7 @@ def test_stale_bars_tab_stays_selected_and_shows_the_note(
     assert _visible(guarded_page, "#bars-note")
     assert guarded_page.locator("#bars-note .season-empty-title").inner_text() == BARS_HINT
     assert guarded_page.locator("#bars-note .season-empty-hint").inner_text() == (
-        "Pick a school, narrow Networks, or select an announcer to see counts."
+        "Pick a school or a game, narrow Networks, or select an announcer to see counts."
     )
     for selector in ("#bars-title", "#bars-footer", "#bars-captions", "#bars-data"):
         assert not _visible(guarded_page, selector), selector

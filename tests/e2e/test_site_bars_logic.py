@@ -983,7 +983,7 @@ _NF = {"view": "bars", "school": ["northfield"]}
             "Announcers by rated telecasts of the Harbor Bowl with Northfield",
         ),
         (
-            {"view": "bars", "people": ["kris-venn"], "game": "bridge-game"},
+            {"view": "bars", "people": ["kris-venn"], "by": "team", "game": "bridge-game"},
             "Teams by rated telecasts of The Bridge Game with Kris Venn",
         ),
         (
@@ -993,6 +993,18 @@ _NF = {"view": "bars", "school": ["northfield"]}
         (
             {**_NF, "by": "network", "game": "lakeshore"},
             "Network families by announcer in the Lakeshore Rivalry with Northfield",
+        ),
+        (
+            {"view": "bars", "game": "harbor-bowl"},
+            "Announcers by rated telecasts of the Harbor Bowl",
+        ),
+        (
+            {"view": "bars", "game": "lakeshore", "by": "network"},
+            "Network families by announcer in the Lakeshore Rivalry",
+        ),
+        (
+            {"view": "bars", "game": "cfp-semifinal"},
+            "Announcers by rated telecasts of CFP semifinals",
         ),
         (
             {**_NF, "game": "cfp-semifinal"},
@@ -1007,7 +1019,7 @@ _NF = {"view": "bars", "school": ["northfield"]}
             "Announcers by rated telecasts of CFP first round games with Northfield",
         ),
         (
-            {"view": "bars", "people": ["dale-harlow"], "game": "lakeshore"},
+            {"view": "bars", "people": ["dale-harlow"], "by": "team", "game": "lakeshore"},
             "Teams by rated telecasts of the Lakeshore Rivalry with Dale Harlow",
         ),
         (

@@ -75,8 +75,11 @@ export function byPatch(clicked, options) {
  * @param {object} state
  * @returns {object}
  */
-export function chartContext(_data, state) {
-  const announcersApply = state.school.length > 0;
+export function chartContext(data, state) {
+  // A named Game pick counts like a School for the announcers grouping (04.9 D-18); it adds
+  // no Butterfly trigger. Unknown slugs never reach state (url-state allowlist), but check anyway.
+  const gamePicked = state.game != null && data.gameIndexBySlug.has(state.game);
+  const announcersApply = state.school.length > 0 || gamePicked;
   const teamsApply = state.networks !== null || state.people.length > 0;
   const { pref, mode } = byParts(state.by);
   const preferTeams = pref === 'teams';
