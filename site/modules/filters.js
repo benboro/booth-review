@@ -725,7 +725,6 @@ export function initFilters({ data, getState, setState }) {
   }
   window.addEventListener('scroll', repositionOpenPopovers, { passive: true });
   window.addEventListener('resize', () => {
-    if (lastView) fitSchoolTrigger(data, getState(), lastView);
     repositionOpenPopovers();
   });
 
@@ -981,55 +980,10 @@ function renderTriggers(data, state, view) {
     const { label, active } = triggerInfo(name, data, state, view);
     btn.textContent = label;
     btn.dataset.active = active ? 'true' : 'false';
-    if (name === 'school') {
-      if (state.h2h === true && state.school.length === 2) {
-        btn.setAttribute('title', label);
-        btn.setAttribute('aria-label', label);
-      } else {
-        btn.removeAttribute('title');
-        btn.removeAttribute('aria-label');
-      }
-    }
+    // The full label is always available; long ones truncate in their grid cell (04.9 D-21).
+    btn.setAttribute('title', label);
+    btn.setAttribute('aria-label', label);
   }
-  fitSchoolTrigger(data, state, view);
-}
-
-/**
- * Keeps a Head-to-head "School: A vs B" label from re-wrapping the toolbar
- * (SITE-20). The label may grow only into the free space at the end of the
- * School button's toolbar line, measured with the Either-team label ("School · 2")
- * in place, so toggling Head-to-head moves no other button and nothing below the
- * toolbar. A longer label truncates with an ellipsis; the full text is the
- * button's `title` and `aria-label` (renderTriggers). Runs after every trigger
- * label is written, and again on resize, since the free space depends on both.
- */
-function fitSchoolTrigger(data, state, view) {
-  const btn = els.triggers.school;
-  btn.style.removeProperty('min-width');
-  btn.style.removeProperty('max-width');
-  // Phones hide the toolbar triggers (the Filters sheet replaces them).
-  if (!(state.h2h === true && state.school.length === 2) || btn.offsetParent === null) return;
-  const h2hLabel = btn.textContent;
-  const cssMax = parseFloat(getComputedStyle(btn).maxWidth);
-  btn.textContent = triggerInfo('school', data, { ...state, h2h: false }, view).label;
-  const base = btn.getBoundingClientRect();
-  let lineRight = base.right;
-  for (const el of els.toolbar.children) {
-    if (el.offsetParent === null) continue;
-    const rect = el.getBoundingClientRect();
-    if (Math.abs(rect.top - base.top) < 1) lineRight = Math.max(lineRight, rect.right);
-  }
-  const toolbarStyle = getComputedStyle(els.toolbar);
-  const contentRight =
-    els.toolbar.getBoundingClientRect().right -
-    parseFloat(toolbarStyle.paddingRight) -
-    parseFloat(toolbarStyle.borderRightWidth);
-  // 1px under the measured room absorbs sub-pixel rounding.
-  const room = Math.max(0, Math.floor(contentRight - lineRight) - 1);
-  const width = Math.floor(base.width) + room;
-  btn.style.minWidth = `${Math.floor(base.width)}px`;
-  btn.style.maxWidth = `${Number.isFinite(cssMax) ? Math.min(cssMax, width) : width}px`;
-  btn.textContent = h2hLabel;
 }
 
 /** Counts the active filters, for the mobile Filters(N) button (extends SITE-18's rail-era count).
