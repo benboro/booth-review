@@ -1509,7 +1509,10 @@ _RING_SPECKLE_JS = """
         const dAccent = Math.hypot(data[idx] - accent[0], data[idx + 1] - accent[1],
           data[idx + 2] - accent[2]);
         const dBg = Math.hypot(data[idx] - bg[0], data[idx + 1] - bg[1], data[idx + 2] - bg[2]);
-        if (dAccent < 60 && dBg >= 60) count += 1;
+        // Anti-aliased halo edge pixels blend toward the page background (a spiky
+        // star's tips land on fractional pixels); count a pixel that is more than
+        // two-thirds accent as well as one that is nearly pure accent.
+        if ((dAccent < 60 || dAccent < dBg * 0.5) && dBg >= 60) count += 1;
       }
     }
     resolve(count);
