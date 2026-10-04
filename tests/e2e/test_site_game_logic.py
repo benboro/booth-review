@@ -215,6 +215,30 @@ def test_search_matches_spaced_and_hyphenated(
     assert loaded.evaluate(_MATCH_JS, [[name, query]]) == [hit]
 
 
+_ROW_TITLE_JS = """
+async () => {
+  const F = await import('./modules/format.js');
+  const riv = { label: 'Lakeshore Rivalry', teams: ['Northfield', 'Lakeview'] };
+  const bowl = { label: 'Harbor Bowl' };
+  return [
+    F.gameRowTitle(riv, false),
+    F.gameRowTitle(riv, true),
+    F.gameRowTitle(bowl, false),
+    F.gameRowTitle(bowl, true),
+  ];
+}
+"""
+
+
+def test_game_row_title(loaded: Page) -> None:
+    assert loaded.evaluate(_ROW_TITLE_JS) == [
+        "Northfield vs Lakeview",
+        "Lakeshore Rivalry: Northfield vs Lakeview",
+        None,
+        "Harbor Bowl",
+    ]
+
+
 def test_title_phrases(loaded: Page) -> None:
     assert _games(loaded)["phrases"] == [
         "the Harbor Bowl",

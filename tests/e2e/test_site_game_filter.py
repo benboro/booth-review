@@ -9,6 +9,7 @@ Northfield and Lakeview, The Bridge Game between Stonebridge and Maplecrest).
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable
 from typing import Any
 
@@ -202,6 +203,57 @@ def test_rivalry_tooltip_is_desktop_only(
     assert rivalry.get_attribute("title") == "Northfield vs Lakeview"
     assert "Northfield" not in (rivalry.get_attribute("aria-label") or "")
     assert _row(guarded_page, "harbor-bowl").get_attribute("title") is None
+
+
+_LONG_RIVALRY = "Lakeshore Rivalry for the Very Long Invented Trophy Name"
+_LONG_BOWL = "Harbor Bowl Presented by a Very Long Invented Name"
+
+
+def _serve_long_names(page: Page, fixture_raw: dict[str, Any]) -> None:
+    raw = copy.deepcopy(fixture_raw)
+    raw["lookups"]["rivalries"][1]["name"] = _LONG_RIVALRY
+    franchise = raw["lookups"]["bowl_franchises"][0]
+    assert franchise["slug"] == "harbor-bowl"
+    franchise["name"] = _LONG_BOWL
+    franchise["former"] = [*franchise["former"], "Harbor Bowl"]
+    page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+
+
+def test_truncated_rows_show_the_full_name_on_hover(
+    guarded_page: Page, open_app: Callable[[Page, str], None], fixture_raw: dict[str, Any]
+) -> None:
+    # WR-03: a desktop row cut off by the ellipsis carries its full name in title;
+    # a rivalry keeps its teams after the name. Short rows are unchanged.
+    _serve_long_names(guarded_page, fixture_raw)
+    open_app(guarded_page, "")
+    _open_game(guarded_page)
+    truncated = guarded_page.evaluate(
+        """(slugs) => slugs.map((s) => {
+          const l = document.querySelector(`[data-game="${s}"] .game-label`);
+          return l.scrollWidth > l.clientWidth;
+        })""",
+        ["lakeshore", "harbor-bowl", "bridge-game", "summit-bowl"],
+    )
+    assert truncated == [True, True, False, False]
+    assert _row(guarded_page, "lakeshore").get_attribute("title") == (
+        f"{_LONG_RIVALRY}: Northfield vs Lakeview"
+    )
+    assert _row(guarded_page, "harbor-bowl").get_attribute("title") == _LONG_BOWL
+    assert _row(guarded_page, "bridge-game").get_attribute("title") == ("Stonebridge vs Maplecrest")
+    assert _row(guarded_page, "summit-bowl").get_attribute("title") is None
+
+
+def test_phone_truncated_rows_carry_no_title(
+    mobile_page: Page, open_app: Callable[[Page, str], None], fixture_raw: dict[str, Any]
+) -> None:
+    _serve_long_names(mobile_page, fixture_raw)
+    open_app(mobile_page, "")
+    mobile_page.click("#filters-button")
+    rivalry = _row(mobile_page, "lakeshore")
+    rivalry.scroll_into_view_if_needed()
+    assert rivalry.get_attribute("title") is None
+    assert _row(mobile_page, "harbor-bowl").get_attribute("title") is None
+    assert "Northfield" not in rivalry.inner_text()
 
 
 def test_phone_rows_carry_no_team_text(

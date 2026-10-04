@@ -31,7 +31,7 @@
 import { gameKeyMatches, gameSearchKey, normalizeName } from './data.js';
 import { FAMILY_LABELS } from './palette.js';
 import { offeredFamilyIds } from './select.js';
-import { SLOT_SHORT_LABELS, ROLE_LABELS } from './format.js';
+import { SLOT_SHORT_LABELS, ROLE_LABELS, gameRowTitle } from './format.js';
 
 const ROLE_HELPER_TEXT = 'Limits matches to main-broadcast play-by-play or analyst roles.';
 
@@ -94,6 +94,9 @@ let schoolKeysBySlug = new Map();
 
 /** game slug -> its radio row button, populated once by `buildGameList`. */
 let gameRows = new Map();
+
+/** game slug -> its `data.games` entry, populated once by `buildGameList`. */
+let gameBySlug = new Map();
 
 /** Section order and header text of the Game list (04.9 D-02). */
 const GAME_SECTIONS = [
@@ -398,6 +401,7 @@ function buildSchoolList(data) {
 /** Builds the Game popover's sectioned radio list once, from `data.games` (04.9 D-02). */
 function buildGameList(data) {
   gameRows = new Map();
+  gameBySlug = new Map(data.games.map((g) => [g.slug, g]));
   const groups = [];
   for (const [section, header] of GAME_SECTIONS) {
     const games = data.games.filter((g) => g.section === section);
@@ -456,6 +460,28 @@ function syncGameChrome(query) {
   }
   const stop = rows.find((r) => r.getAttribute('aria-checked') === 'true') ?? rows[0];
   for (const btn of gameRows.values()) btn.tabIndex = btn === stop ? 0 : -1;
+  syncGameTooltips();
+}
+
+/**
+ * Desktop-only hover titles on Game rows (D-06, WR-03): rivalry rows name their
+ * teams, and a row whose label is cut off by the ellipsis also gets its full
+ * name. Truncation is measured, so this reruns whenever rows can change size or
+ * visibility: on every render and search, when the popover or sheet opens, and
+ * on resize. Without hover (phones), no row has a title.
+ */
+function syncGameTooltips() {
+  const hoverCapable = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  // Measure every row before writing any title, so layout is read once.
+  const tips = Array.from(gameRows, ([slug, row]) => {
+    if (!hoverCapable) return [row, null];
+    const label = row.querySelector('.game-label');
+    return [row, gameRowTitle(gameBySlug.get(slug), label.scrollWidth > label.clientWidth)];
+  });
+  for (const [row, tip] of tips) {
+    if (tip) row.setAttribute('title', tip);
+    else row.removeAttribute('title');
+  }
 }
 
 /** Hides Game rows whose search keys do not contain the folded query (04.9 D-04). */
@@ -865,9 +891,16 @@ export function initFilters({ data, getState, setState }) {
   for (const popover of document.querySelectorAll('.filter-popover, .filters-sheet')) {
     bindPopoverMechanics(popover);
   }
+  // Row labels only have a measurable width while their container is shown (WR-03).
+  for (const id of ['pop-game', 'filters-sheet']) {
+    document.getElementById(id).addEventListener('toggle', (ev) => {
+      if (ev.newState === 'open') syncGameTooltips();
+    });
+  }
   window.addEventListener('scroll', repositionOpenPopovers, { passive: true });
   window.addEventListener('resize', () => {
     repositionOpenPopovers();
+    syncGameTooltips();
   });
 
   const mobileMedia = window.matchMedia('(max-width: 640px)');
@@ -1063,11 +1096,11 @@ function renderPostseason(state, view) {
 
 /**
  * Syncs the Game radio list (04.9 D-03, D-05, D-06, D-19): aria-checked, counts,
- * zero-count rows hidden unless they are the pick, and the desktop-only rivalry
- * tooltip. The pick stays checked and greyed at (0) when other filters empty it.
+ * zero-count rows hidden unless they are the pick, and (via syncGameChrome) the
+ * desktop-only row tooltips. The pick stays checked and greyed at (0) when other
+ * filters empty it.
  */
 function renderGame(data, state, view) {
-  const hoverCapable = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
   for (const game of data.games) {
     const row = gameRows.get(game.slug);
     const checked = game.slug === state.game;
@@ -1075,8 +1108,6 @@ function renderGame(data, state, view) {
     const count = view.facets.games[game.index] ?? 0;
     setCount(row, count);
     setFacetHidden(row, count === 0 && !checked);
-    if (game.teams && hoverCapable) row.setAttribute('title', `${game.teams[0]} vs ${game.teams[1]}`);
-    else row.removeAttribute('title');
   }
   syncGameChrome(els.gameSearch.value);
 }

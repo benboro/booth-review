@@ -87,6 +87,20 @@ export function gameTitlePhrase(game) {
   return `the ${game.label}`;
 }
 
+/**
+ * Desktop hover title for a Game row (D-06, WR-03): a rivalry shows its two
+ * teams, prefixed with its full name when the visible label is truncated; any
+ * other row gets its full name only when truncated, else no title (null).
+ * @param {{label: string, teams?: string[]}} game
+ * @param {boolean} truncated - whether the row's label is cut off by an ellipsis.
+ * @returns {string|null}
+ */
+export function gameRowTitle(game, truncated) {
+  const teams = game.teams ? `${game.teams[0]} vs ${game.teams[1]}` : null;
+  if (truncated) return teams ? `${game.label}: ${teams}` : game.label;
+  return teams;
+}
+
 /** Crew role filter labels (SITE-07). Sideline/other is role "unknown". */
 export const ROLE_LABELS = {
   pbp: 'Play-by-play',
