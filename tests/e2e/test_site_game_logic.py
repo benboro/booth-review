@@ -273,3 +273,66 @@ def test_hook_exposes_games_facet(
     games = guarded_page.evaluate("window.__testHooks.getView().facets.games")
     assert len(games) == 8
     assert all(isinstance(x, int) for x in games)
+
+
+_URL_JS = """
+async ({ search, partial }) => {
+  const D = await import('./modules/data.js');
+  const S = await import('./modules/select.js');
+  const U = await import('./modules/url-state.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  const out = {};
+  if (search !== null) {
+    const st = U.decodeState(search, data);
+    out.game = st.game;
+    out.school = st.school;
+    out.h2h = st.h2h;
+    out.postseason = st.postseason;
+  }
+  if (partial !== null) {
+    const st = Object.assign(S.defaultState(data), partial);
+    out.encoded = U.encodeState(st, data);
+    out.roundTrip = U.decodeState(out.encoded, data).game;
+  }
+  out.defaultEncoded = U.encodeState(S.defaultState(data), data);
+  return out;
+}
+"""
+
+
+def _url(page: Page, search: str | None, partial: dict[str, Any] | None) -> dict[str, Any]:
+    result: dict[str, Any] = page.evaluate(_URL_JS, {"search": search, "partial": partial})
+    return result
+
+
+def test_game_encodes_only_when_picked(loaded: Page) -> None:
+    r = _url(loaded, None, {"game": "harbor-bowl"})
+    assert "game=harbor-bowl" in r["encoded"]
+    assert r["encoded"].count("=") == 1
+    assert "game" not in r["defaultEncoded"]
+
+
+@pytest.mark.parametrize("slug", _SLUGS)
+def test_game_round_trips(loaded: Page, slug: str) -> None:
+    r = _url(loaded, f"?game={slug}", {"game": slug})
+    assert r["game"] == slug
+    assert r["roundTrip"] == slug
+
+
+def test_game_keeps_other_params(loaded: Page) -> None:
+    r = _url(loaded, "?game=lakeshore&school=northfield&h2h=1", None)
+    assert r["game"] == "lakeshore"
+    assert r["school"] == ["northfield"]
+    assert r["h2h"] is False
+    r = _url(loaded, "?game=harbor-bowl&postseason=exclude", None)
+    assert r["game"] == "harbor-bowl"
+    assert r["postseason"] == "exclude"
+
+
+@pytest.mark.parametrize(
+    "search",
+    ["?game=nope", "?game=%3Cscript%3E", "?game=%", "?game=", "?game=Harbor-Bowl"],
+)
+def test_bad_game_decodes_to_no_pick(loaded: Page, search: str) -> None:
+    assert _url(loaded, search, None)["game"] is None

@@ -18,7 +18,9 @@
  * `slot`, `axis` (`excitement`; Spread is the default and is omitted), `view` (`bars`/`butterfly`), `by` (`network`/`team`/`conference`);
  * each of the last two is omitted at its default (D-13). `h2h` (`1`, only with
  * exactly two schools; omitted at Either team) and `dots` (`hide`; omitted at
- * the Fade default; 04.7 D-10, D-14). The old `bars` and
+ * the Fade default; 04.7 D-10, D-14). `game` (one named-game slug: a bowl franchise,
+ * a rivalry, or a CFP round; allowlisted against `data.gameIndexBySlug`; omitted when
+ * no game is picked; 04.9 D-20). The old `bars` and
  * `group` params are ignored (04.6 D-27). There is no `team` param on encode -- `school` replaces
  * it (D-11, Pitfall 4). The legacy `team` param is still *decoded*: a valid
  * slug is unioned into `school` (legacy first) through the exact same path
@@ -73,6 +75,7 @@ export function encodeState(state, data) {
   if (state.h2h === true && state.school.length === 2) params.push(['h2h', '1']);
 
   if (state.postseason !== 'all') params.push(['postseason', state.postseason]);
+  if (state.game != null) params.push(['game', encodeURIComponent(state.game)]);
 
   if (
     state.seasons != null &&
@@ -290,6 +293,8 @@ export function decodeState(search, data) {
 
   const rawPostseason = scalarParam(params, 'postseason');
   state.postseason = rawPostseason === 'exclude' || rawPostseason === 'only' ? rawPostseason : 'all';
+  const rawGame = scalarParam(params, 'game');
+  state.game = rawGame != null && data.gameIndexBySlug.has(rawGame) ? rawGame : null;
 
   state.seasons = decodeSeasons(scalarParam(params, 'seasons'), data);
   state.networks = decodeNetworks(params.get('networks') ?? null, data);
