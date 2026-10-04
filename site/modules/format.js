@@ -51,6 +51,39 @@ export const CFP_ROUND_LABELS = {
  */
 export const CFP_BOWL_ROUNDS = new Set(['quarterfinal', 'semifinal']);
 
+/**
+ * The four playoff entries of the Game picker, in fixed order (D-11). Picker
+ * labels differ from the detail-panel `CFP_ROUND_LABELS` on purpose (UI-SPEC).
+ */
+export const CFP_GAME_DEFS = Object.freeze([
+  Object.freeze({ slug: 'cfp-national-championship', label: 'CFP National Championship', round: 'championship', phrase: 'CFP national championships' }),
+  Object.freeze({ slug: 'cfp-semifinal', label: 'CFP Semifinal', round: 'semifinal', phrase: 'CFP semifinals' }),
+  Object.freeze({ slug: 'cfp-quarterfinal', label: 'CFP Quarterfinal', round: 'quarterfinal', phrase: 'CFP quarterfinals' }),
+  Object.freeze({ slug: 'cfp-first-round', label: 'CFP First Round', round: 'first_round', phrase: 'CFP first round games' }),
+]);
+
+/** New Year's Six bowl franchise slugs, listed first among bowls (D-09). */
+export const NEW_YEARS_SIX = Object.freeze([
+  'rose-bowl',
+  'sugar-bowl',
+  'orange-bowl',
+  'cotton-bowl',
+  'fiesta-bowl',
+  'peach-bowl',
+]);
+
+/**
+ * Title phrase for a game (D-18): CFP entries use their plural phrase, a label
+ * starting with the case-sensitive 'The ' stays as is, else 'the {label}'.
+ * @param {{kind: string, label: string, phrase?: string}} game
+ * @returns {string}
+ */
+export function gameTitlePhrase(game) {
+  if (game.kind === 'cfp') return game.phrase;
+  if (game.label.startsWith('The ')) return game.label;
+  return `the ${game.label}`;
+}
+
 /** Crew role filter labels (SITE-07). Sideline/other is role "unknown". */
 export const ROLE_LABELS = {
   pbp: 'Play-by-play',
@@ -497,6 +530,12 @@ export function summaryCopy(summary) {
       count: '',
       detail:
         'No rated telecasts match these filters. Widen the seasons or clear a filter to see games.',
+    };
+  }
+  if (summary.kind === 'no-game-match') {
+    return {
+      count: '',
+      detail: `No telecasts of ${summary.phrase} match these filters. Widen the seasons or clear a filter to see games.`,
     };
   }
   if (summary.kind === 'no-rated') {
