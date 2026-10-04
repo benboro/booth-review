@@ -118,6 +118,8 @@ def test_render_methodology_explains_the_spread_axis() -> None:
     assert "Pre-game" not in result
     assert "Result vs spread" not in result
     assert "negative absolute value" not in result
+    # The chart draws the zero line solid (chart.js `dash: 'solid'`).
+    assert "dashed" not in result
 
 
 def test_render_coverage_header_reads_spread() -> None:

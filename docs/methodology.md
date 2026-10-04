@@ -157,7 +157,7 @@ matters for what a dot placement can and cannot explain.
 
 **Spread (the default):** x is the winner's closing point spread: negative
 when the favorite won, positive when the underdog won (an upset), and 0 for a
-pick'em. A dashed zero line is captioned "← favorite won" and "underdog won →".
+pick'em. A solid zero line is captioned "← favorite won" and "underdog won →".
 The distance from the zero line is the line's size, known before kickoff, so
 games expected to be close sit near the middle on both sides. The side shows
 the result: left when the favorite won, right for an upset. Read the distance
