@@ -37,17 +37,31 @@ export function slugify(s) {
 }
 
 /**
- * Search-key normalizer for named games: normalizeName, then U+02BB,
- * apostrophes (U+0027, U+2018, U+2019), and hyphens (U+002D, U+2010-U+2014)
- * removed, whitespace collapsed.
+ * Search-key normalizer for named games: normalizeName, then U+02BB and
+ * apostrophes (U+0027, U+2018, U+2019) removed, and every other run of
+ * characters that is not a letter or digit (hyphens, dashes, commas,
+ * parentheses, "&") read as one space (04.9 WR-01).
  * @param {string} s
- * @returns {string} e.g. "Hawaiʻi Bowl" -> "hawaii bowl", "Pop-Tarts Bowl" -> "poptarts bowl".
+ * @returns {string} e.g. "Hawaiʻi Bowl" -> "hawaii bowl", "Pop-Tarts Bowl" -> "pop tarts bowl".
  */
 export function gameSearchKey(s) {
   return normalizeName(s)
-    .replace(/[\u02BB'\u2018\u2019\u002D\u2010-\u2014]/g, '')
-    .replace(/\s+/g, ' ')
+    .replace(/[\u02BB'\u2018\u2019]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();
+}
+
+/**
+ * Whether a folded query (from gameSearchKey) is found in a folded key: as a
+ * substring, or with spaces ignored on both sides, so "army navy", "armynavy"
+ * and "army-navy" all find "Army-Navy Game" (04.9 D-04, WR-01).
+ * @param {string} key
+ * @param {string} query - already folded; '' matches everything.
+ * @returns {boolean}
+ */
+export function gameKeyMatches(key, query) {
+  if (key.includes(query)) return true;
+  return key.replaceAll(' ', '').includes(query.replaceAll(' ', ''));
 }
 
 /** Computes [min, max] over the non-null values of an array, or [null, null] if none. */

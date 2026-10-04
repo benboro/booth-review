@@ -172,13 +172,47 @@ def test_search_keys(loaded: Page) -> None:
         "hawaii bowl",
         "dukes mayo bowl",
         "dukes mayo bowl",
-        "poptarts bowl",
+        "pop tarts bowl",
         "rate bowl",
     ]
     assert "bayside bowl" in g["keys"]["harbor-bowl"]
     assert "northfield" in g["keys"]["lakeshore"]
     assert "lakeview" in g["keys"]["lakeshore"]
     assert g["teams"]["lakeshore"] == ["Northfield", "Lakeview"]
+
+
+_MATCH_JS = """
+async (pairs) => {
+  const D = await import('./modules/data.js');
+  return pairs.map(([name, query]) =>
+    D.gameKeyMatches(D.gameSearchKey(name), D.gameSearchKey(query)));
+}
+"""
+
+
+@pytest.mark.parametrize(
+    ("name", "query", "hit"),
+    [
+        # Separators read as spaces (WR-01): the natural spaced query finds the name.
+        ("Pine-Ridge Game", "pine ridge", True),
+        ("Glass-Jar Bowl", "glass jar", True),
+        ("Plain, Old-Timey Feud", "plain old timey", True),
+        ("Governor's Mug (NF\u2013LV)", "nf lv", True),
+        # The hyphen-dropped and hyphenated spellings still match.
+        ("Glass-Jar Bowl", "glassjar", True),
+        ("Pine-Ridge Game", "pine-ridge", True),
+        ("Plain, Old-Timey Feud", "oldtimey", True),
+        # Apostrophes and the okina are still dropped, not spaced.
+        ("Duke's Mayo Bowl", "dukes", True),
+        ("Hawai\u02bbi Bowl", "hawaii", True),
+        ("Glass-Jar Bowl", "jar glass", False),
+        ("Pine-Ridge Game", "zzz", False),
+    ],
+)
+def test_search_matches_spaced_and_hyphenated(
+    loaded: Page, name: str, query: str, hit: bool
+) -> None:
+    assert loaded.evaluate(_MATCH_JS, [[name, query]]) == [hit]
 
 
 def test_title_phrases(loaded: Page) -> None:

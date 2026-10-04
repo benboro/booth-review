@@ -28,7 +28,7 @@
  * names always land in the DOM via textContent.
  */
 
-import { gameSearchKey, normalizeName } from './data.js';
+import { gameKeyMatches, gameSearchKey, normalizeName } from './data.js';
 import { FAMILY_LABELS } from './palette.js';
 import { offeredFamilyIds } from './select.js';
 import { SLOT_SHORT_LABELS, ROLE_LABELS } from './format.js';
@@ -463,7 +463,8 @@ function filterGameRows(data, query) {
   const q = gameSearchKey(query);
   for (const game of data.games) {
     const row = gameRows.get(game.slug);
-    row.dataset.searchHidden = q !== '' && !game.keys.some((k) => k.includes(q)) ? 'true' : 'false';
+    row.dataset.searchHidden =
+      q !== '' && !game.keys.some((k) => gameKeyMatches(k, q)) ? 'true' : 'false';
     syncRowHidden(row);
   }
   syncGameChrome(query);

@@ -143,6 +143,9 @@ def test_search_filters_rows_headers_and_empty_line(
         "maplecrest": (["RIVALRIES"], ["The Bridge Game (1)"]),
         "north": (["RIVALRIES"], ["Lakeshore Rivalry (2)"]),
         "semi": (["PLAYOFF"], ["CFP Semifinal (1)"]),
+        # Spaces and separators are ignored when matching (WR-01).
+        "north-field": (["RIVALRIES"], ["Lakeshore Rivalry (2)"]),
+        "bridge  game": (["RIVALRIES"], ["The Bridge Game (1)"]),
     }
     for query, (headers, rows) in cases.items():
         search.fill(query)
