@@ -1471,13 +1471,22 @@ _HIGHLIGHT_POINTS_JS = """
 
 # Decodes a base64 PNG data URL (a `page.screenshot(clip=...)` capture)
 # through an in-page `Image`/canvas (CSP allows `img-src data: blob:`, so no
-# Pillow dependency is needed) and counts "speckle" pixels in the ring from
-# `innerR` to `outerR` px from the image center: within RGB distance 60 of
-# the theme's accent color and at least 60 away from the theme's page
-# background. Pixels within `other.half + 3` px of another highlighted
-# point's own center (translated into this crop's local coordinates) are
-# excluded, so a marker close enough to sit inside this 40x40 crop never
-# contaminates the count.
+# Pillow dependency is needed) and counts accent-like pixels in the ring from
+# `innerR` to `outerR` px from the image center. A pixel counts when it is at
+# least 60 (RGB distance) away from the theme's page background and either
+# within 60 of the theme's accent color or closer to the accent than half its
+# distance to the background (an anti-aliased accent edge blended toward the
+# page). Pixels within `other.half + 3` px of another highlighted point's own
+# center (translated into this crop's local coordinates) are excluded, so a
+# marker close enough to sit inside this 40x40 crop never contaminates the
+# count.
+#
+# The predicate is color-only, so it cannot tell the accent from any other
+# dark-on-light (or light-on-dark) ink: the light theme's `conference` family
+# fill `#000000` sits 49 from ACCENT `#111827`, and `--muted` text (light
+# `#4B5563`, dark `#9CA3AF`) passes the half-distance clause in both themes.
+# A bare count is therefore not proof of a halo; the halo-border test compares
+# each marker's count against the same crop with the halo trace hidden.
 _RING_SPECKLE_JS = """
 ([dataUrl, accentHex, bgHex, innerR, outerR, others]) => new Promise((resolve) => {
   const hexToRgb = (h) => [
@@ -1633,6 +1642,26 @@ def test_compare_shapes_have_no_edge_speckles(
     assert total == 0, f"{total} speckle pixel(s) found around compare-mode highlight markers"
 
 
+# Sets the D-33 halo trace's (`gd.data.at(-2)`, `meta: 'highlight-halo'`)
+# marker opacity, leaving every other trace and the layout untouched, so the
+# halo-border test can measure the same crops with and without the halo.
+# Resolves false when the halo trace is not where D-33 puts it.
+_SET_HALO_OPACITY_JS = """
+(opacity) => {
+  const gd = document.getElementById('chart');
+  const index = gd.data.length - 2;
+  if (index < 0 || gd.data[index].meta !== 'highlight-halo') return false;
+  return window.Plotly.restyle(gd, { 'marker.opacity': opacity }, [index]).then(() => true);
+}
+"""
+
+# The fewest band pixels the halo must add around each non-circle marker.
+# Measured on the fixture compare selection, the halo adds 5-38 per marker
+# (the light-theme star: 15 with the halo, 2 without); a star halo shrunk to
+# the star's own size adds only 1, which a bare `> 0` difference would pass.
+_MIN_HALO_BORDER_PIXELS = 3
+
+
 def _border_pixel_count(
     page: Page,
     center_px: float,
@@ -1643,12 +1672,14 @@ def _border_pixel_count(
     other_points: list[dict[str, Any]],
 ) -> int:
     """Screenshots a 40x40 box centered on one highlight marker and counts
-    ACCENT-colored pixels in the band between the highlight glyph's own
+    accent-like pixels in the band between the highlight glyph's own
     half-size and the halo's half-size (D-33) -- the halo's own visible
     border, reusing the same in-page pixel decode `_RING_SPECKLE_JS` uses
     for the D-31 speckle count, just with the band's inner/outer radii
     swapped to the border's own expected location instead of just past
-    it."""
+    it. The count also picks up a near-accent marker fill (see the
+    `_RING_SPECKLE_JS` comment), so callers compare it against the count
+    with the halo hidden rather than reading it alone."""
     clip_x = center_px - 20
     clip_y = center_py - 20
     shot = page.screenshot(clip={"x": clip_x, "y": clip_y, "width": 40, "height": 40})
@@ -1691,24 +1722,42 @@ def test_compare_shapes_have_accent_halo_border(
     guarded_page.mouse.move(5, 5)
     guarded_page.wait_for_timeout(100)
 
-    tested = 0
-    for point in points:
-        if point["symbol"] == "circle" or point["naSentinel"]:
-            continue
-        others = [p for p in points if p["customdata"] != point["customdata"]]
-        if any(_boxes_overlap(point, other) for other in others):
-            continue
-        tested += 1
-        marker_half = point["size"] / 2
-        halo_half = (point["size"] + 3) / 2
-        border_pixels = _border_pixel_count(
-            guarded_page, point["px"], point["py"], color_scheme, marker_half, halo_half, others
-        )
-        assert border_pixels > 0, (
-            f"no ACCENT halo border pixels found around customdata {point['customdata']}"
-        )
+    def band_counts() -> dict[Any, int]:
+        counts: dict[Any, int] = {}
+        for point in points:
+            if point["symbol"] == "circle" or point["naSentinel"]:
+                continue
+            others = [p for p in points if p["customdata"] != point["customdata"]]
+            if any(_boxes_overlap(point, other) for other in others):
+                continue
+            counts[point["customdata"]] = _border_pixel_count(
+                guarded_page,
+                point["px"],
+                point["py"],
+                color_scheme,
+                point["size"] / 2,
+                (point["size"] + 3) / 2,
+                others,
+            )
+        return counts
 
-    assert tested > 0, "no non-circle highlight marker was testable in this fixture selection"
+    with_halo = band_counts()
+    assert with_halo, "no non-circle highlight marker was testable in this fixture selection"
+
+    # A near-accent marker fill (the light theme's black `conference` star)
+    # counts in the band with or without a halo, so each marker's count is
+    # compared against the same crop with the halo trace hidden: the
+    # difference is the halo's own border.
+    assert guarded_page.evaluate(_SET_HALO_OPACITY_JS, 0), "halo trace not found at data.at(-2)"
+    guarded_page.wait_for_timeout(300)
+    without_halo = band_counts()
+
+    for customdata, count in with_halo.items():
+        added = count - without_halo[customdata]
+        assert added >= _MIN_HALO_BORDER_PIXELS, (
+            f"halo adds only {added} ACCENT border pixel(s) around customdata {customdata} "
+            f"({count} with the halo, {without_halo[customdata]} without)"
+        )
 
 
 def test_compare_highlight_trace_config(
