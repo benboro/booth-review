@@ -11,6 +11,7 @@ snapshot of the build output, never mutated after validation.
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -319,6 +320,23 @@ class SiteData(BaseModel):
         for k in range(num_franchises):
             if k not in referenced_franchises:
                 raise ValueError(f"lookups.bowl_franchises[{k}]: not referenced by any bowl")
+        # A franchise's label is its latest core name, so it must be the core of
+        # one of its own bowls (04.9 D-08, WR-05).
+        cores_by_franchise: dict[int, set[str]] = {}
+        for bowl_ref in self.lookups.bowls:
+            cores_by_franchise.setdefault(bowl_ref.franchise, set()).add(bowl_ref.core)
+        for k, franchise_ref in enumerate(self.lookups.bowl_franchises):
+            if franchise_ref.name not in cores_by_franchise.get(k, set()):
+                raise ValueError(
+                    f"lookups.bowl_franchises[{k}].name: not the core name of any of its bowls"
+                )
+        # Two Game rows with one label would be indistinguishable in the picker,
+        # the toolbar summary, and titles (WR-05). Compared case-insensitively.
+        labels = [f.name.casefold() for f in self.lookups.bowl_franchises]
+        labels += [r.name.casefold() for r in self.lookups.rivalries]
+        duplicated = sum(n - 1 for n in Counter(labels).values() if n > 1)
+        if duplicated:
+            raise ValueError(f"lookups: {duplicated} named game(s) repeat another's display name")
         slugs = [f.slug for f in self.lookups.bowl_franchises]
         slugs += [r.slug for r in self.lookups.rivalries]
         if len(set(slugs)) != len(slugs) or any(s in RESERVED_GAME_SLUGS for s in slugs):

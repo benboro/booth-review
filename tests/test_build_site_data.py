@@ -1361,15 +1361,39 @@ def test_renamed_bowl_is_one_franchise_with_former_name(
 def test_same_names_in_different_franchises_stay_apart(
     tmp_path: Path, build_reference: Path
 ) -> None:
+    # Both franchises once used one name; the second was renamed later, so their
+    # latest names (the labels) differ while the shared-name bowls stay apart.
+    ref = _bowl_reference(
+        tmp_path,
+        build_reference,
+        "70,Twin Bowl,Twin Bowl,true,twin-bowl-a\n71,Twin Bowl,Twin Bowl,true,twin-bowl-b\n"
+        "72,Later Bowl,Later Bowl,true,twin-bowl-b\n",
+    )
+    games = [_bowl_game(70, 2018), _bowl_game(71, 2018), _bowl_game(72, 2021)]
+    payload = _site(_two_game_tables(games), ref)
+    assert len(payload["lookups"]["bowls"]) == 3
+    assert [b["franchise"] for b in payload["lookups"]["bowls"]] == [1, 0, 1]
+    assert [f["name"] for f in payload["lookups"]["bowl_franchises"]] == [
+        "Twin Bowl",
+        "Later Bowl",
+    ]
+    assert len(set(payload["telecasts"]["bowl"])) == 3
+
+
+def test_two_franchises_with_one_latest_name_fail_count_only(
+    tmp_path: Path, build_reference: Path
+) -> None:
+    from booth_review.errors import VaultStateError
+
     ref = _bowl_reference(
         tmp_path,
         build_reference,
         "70,Twin Bowl,Twin Bowl,true,twin-bowl-a\n71,Twin Bowl,Twin Bowl,true,twin-bowl-b\n",
     )
-    payload = _site(_two_game_tables([_bowl_game(70, 2018), _bowl_game(71, 2018)]), ref)
-    assert len(payload["lookups"]["bowls"]) == 2
-    assert [b["franchise"] for b in payload["lookups"]["bowls"]] == [0, 1]
-    assert sorted(payload["telecasts"]["bowl"]) == [0, 1]
+    with pytest.raises(VaultStateError) as info:
+        _site(_two_game_tables([_bowl_game(70, 2018), _bowl_game(71, 2018)]), ref)
+    assert "1 named game(s) repeat another's display name" in str(info.value)
+    assert "Twin" not in str(info.value)
 
 
 def _rivalry_reference(tmp_path: Path, build_reference: Path, rows: str) -> Path:

@@ -399,6 +399,34 @@ def _rivalry_article_before_the_name(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _duplicate_rivalry_name(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][1]["name"] = "the bridge GAME"
+    return data
+
+
+def _rivalry_name_matches_franchise(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][1]["name"] = "Summit Bowl"
+    return data
+
+
+def _duplicate_franchise_name(data: dict[str, Any]) -> dict[str, Any]:
+    # Both franchises labeled "Summit Bowl"; each bowl's core is still one of
+    # its franchise's names, so only the distinct-name check can catch it.
+    harbor = data["lookups"]["bowl_franchises"][0]
+    harbor["name"] = "Summit Bowl"
+    harbor["former"] = ["Bayside Bowl", "Harbor Bowl"]
+    data["lookups"]["bowls"][0]["core"] = "Summit Bowl"
+    data["lookups"]["bowls"][0]["name"] = "Acme Summit Bowl"
+    return data
+
+
+def _franchise_name_not_a_core(data: dict[str, Any]) -> dict[str, Any]:
+    harbor = data["lookups"]["bowl_franchises"][0]
+    harbor["name"] = "Newer Bowl"
+    harbor["former"] = ["Bayside Bowl", "Harbor Bowl"]
+    return data
+
+
 _BROKEN_VARIANTS = [
     pytest.param(_add_unknown_top_level_key, id="unknown-top-level-key"),
     pytest.param(_add_unknown_telecast_column, id="unknown-telecast-column"),
@@ -466,6 +494,10 @@ _BROKEN_VARIANTS = [
     pytest.param(_rivalry_article_capitalized, id="rivalry-article-capitalized"),
     pytest.param(_rivalry_article_empty_string, id="rivalry-article-empty-string"),
     pytest.param(_rivalry_article_before_the_name, id="rivalry-article-before-the-name"),
+    pytest.param(_duplicate_rivalry_name, id="duplicate-rivalry-name"),
+    pytest.param(_rivalry_name_matches_franchise, id="rivalry-name-matches-franchise"),
+    pytest.param(_duplicate_franchise_name, id="duplicate-franchise-name"),
+    pytest.param(_franchise_name_not_a_core, id="franchise-name-not-a-core"),
 ]
 
 
@@ -488,6 +520,10 @@ _NAMED_GAME_VARIANTS = [
     _rivalry_teams_mismatch,
     _rivalry_index_out_of_range,
     _unreferenced_rivalry,
+    _duplicate_rivalry_name,
+    _rivalry_name_matches_franchise,
+    _duplicate_franchise_name,
+    _franchise_name_not_a_core,
 ]
 
 
@@ -498,6 +534,24 @@ def test_named_game_errors_never_echo_names(mutate: Any) -> None:
         validate_site_data(broken)
     for word in ("Lakeshore", "Bridge", "Harbor", "Summit"):
         assert word not in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (_duplicate_rivalry_name, "lookups: 1 named game(s) repeat another's display name"),
+        (_rivalry_name_matches_franchise, "lookups: 1 named game(s) repeat another's display name"),
+        (_duplicate_franchise_name, "lookups: 1 named game(s) repeat another's display name"),
+        (
+            _franchise_name_not_a_core,
+            "lookups.bowl_franchises[0].name: not the core name of any of its bowls",
+        ),
+    ],
+)
+def test_named_game_label_checks_are_count_or_index_only(mutate: Any, message: str) -> None:
+    with pytest.raises(ValidationError) as exc:
+        validate_site_data(mutate(copy.deepcopy(_load_fixture())))
+    assert message in str(exc.value)
 
 
 def test_schema_file_matches_models() -> None:
