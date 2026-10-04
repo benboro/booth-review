@@ -8,6 +8,8 @@ inside their cell, and every trigger carries its full label in `title` and
 
 from __future__ import annotations
 
+import copy
+import json
 from collections.abc import Callable
 from typing import Any
 
@@ -27,6 +29,8 @@ WORST_CASE_PATCHES: list[tuple[str, dict[str, Any]]] = [
     ("school-h2h", {"school": ["northfield", "lakeview"], "h2h": True}),
     ("school-one", {"school": ["cedar-hollow"], "h2h": False}),
     ("postseason", {"postseason": "exclude"}),
+    ("game-round", {"game": "cfp-national-championship"}),
+    ("game-rivalry", {"game": "bridge-game"}),
     ("people", {"people": ["dale-harlow", "dale-harlow-jr", "casey-lund"]}),
 ]
 RESET: dict[str, Any] = {
@@ -38,6 +42,7 @@ RESET: dict[str, Any] = {
     "school": [],
     "h2h": False,
     "postseason": "all",
+    "game": None,
     "people": [],
 }
 
@@ -84,6 +89,30 @@ def test_toolbar_height_and_chart_top_never_change(
     assert _geometry(guarded_page) == baseline, "all together"
     _set(guarded_page, WORST_CASE_PATCHES[-1][1])
     assert _geometry(guarded_page)["toolbarHeight"] == baseline["toolbarHeight"]
+
+
+@pytest.mark.parametrize("width", [800, 900, 1024])
+def test_long_rivalry_name_never_changes_toolbar_height(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+    width: int,
+) -> None:
+    mutated = copy.deepcopy(fixture_raw)
+    long_name = "The Extraordinarily Long Rivalry Game"  # 37 characters
+    mutated["lookups"]["rivalries"][0]["name"] = long_name + "!!!"
+    mutated["lookups"]["rivalries"][0]["slug"] = "long-rivalry"
+    body = json.dumps(mutated)
+    guarded_page.route(
+        "**/site-data.json*",
+        lambda route: route.fulfill(status=200, content_type="application/json", body=body),
+    )
+    guarded_page.set_viewport_size({"width": width, "height": 900})
+    open_app(guarded_page)
+    baseline = _geometry(guarded_page)
+    _set(guarded_page, {"game": "long-rivalry"})
+    assert guarded_page.locator("#trigger-game").inner_text().startswith("Game: The Extra")
+    assert _geometry(guarded_page) == baseline
 
 
 def test_triggers_carry_full_label_in_title_and_aria_label(
@@ -133,3 +162,21 @@ def test_grid_has_room_for_ten_cells(
           .map((b) => Math.round(b.offsetTop))"""
     )
     assert len(set(tops)) == 1
+
+
+@pytest.mark.parametrize("width", [800, 900, 1024, 1280])
+def test_toolbar_rows_with_game_button(
+    guarded_page: Page, open_app: Callable[[Page, str], None], width: int
+) -> None:
+    """Ten visible cells: one row at 1280px, two rows at 800, 900, and 1024px."""
+    guarded_page.set_viewport_size({"width": width, "height": 900})
+    open_app(guarded_page)
+    js = """() => [...document.querySelectorAll('#toolbar > button')]
+      .filter((b) => b.offsetParent !== null).map((b) => Math.round(b.offsetTop))"""
+    tops: list[int] = guarded_page.evaluate(js)
+    assert len(tops) == 10
+    assert len(set(tops)) == (1 if width == 1280 else 2)
+    if width == 1280:
+        _set(guarded_page, {"game": "cfp-national-championship"})
+        tops = guarded_page.evaluate(js)
+        assert len(set(tops)) == 1
