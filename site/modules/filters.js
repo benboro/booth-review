@@ -442,7 +442,25 @@ function visibleGameRows() {
 }
 
 /**
- * Hides empty section groups, shows the no-match line, and recomputes the roving
+ * The empty-list line (04.9 D-04, WR-04), or null while any row shows. A row
+ * hides for two reasons, search and a zero count, so the line says which: no
+ * game matches the query at all, games match but the other filters leave them
+ * at zero, or (no query) the other filters leave every game at zero.
+ * @param {string} query - the raw search box text.
+ * @param {number} visible - rows currently shown.
+ * @param {boolean} anySearchMatch - whether any row matches the query.
+ * @returns {string|null}
+ */
+function gameEmptyLine(query, visible, anySearchMatch) {
+  if (visible > 0) return null;
+  const q = query.trim();
+  if (q === '') return 'No games match these filters.';
+  const shown = q.length > GAME_QUERY_ECHO_MAX ? `${q.slice(0, GAME_QUERY_ECHO_MAX)}...` : q;
+  return anySearchMatch ? `No games match "${shown}" with these filters.` : `No games match "${shown}".`;
+}
+
+/**
+ * Hides empty section groups, shows the empty-list line, and recomputes the roving
  * tab stop: the checked visible row, else the first visible row (04.9 D-03, D-04).
  */
 function syncGameChrome(query) {
@@ -450,10 +468,12 @@ function syncGameChrome(query) {
     group.hidden = group.querySelector('[data-game]:not([hidden])') == null;
   }
   const rows = visibleGameRows();
-  const q = query.trim();
-  if (q !== '' && rows.length === 0) {
-    const shown = q.length > GAME_QUERY_ECHO_MAX ? `${q.slice(0, GAME_QUERY_ECHO_MAX)}...` : q;
-    els.gameEmpty.textContent = `No games match "${shown}".`;
+  const anySearchMatch = Array.from(gameRows.values()).some(
+    (r) => r.dataset.searchHidden !== 'true',
+  );
+  const line = gameEmptyLine(query, rows.length, anySearchMatch);
+  if (line != null) {
+    els.gameEmpty.textContent = line;
     els.gameEmpty.hidden = false;
   } else {
     els.gameEmpty.hidden = true;

@@ -166,6 +166,36 @@ def test_search_filters_rows_headers_and_empty_line(
     assert guarded_page.locator("#game-empty").is_hidden()
 
 
+def test_empty_line_tells_search_misses_from_filtered_out_games(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    # WR-04: Harbor Bowl matches "harbor" but Exclude bowls & playoffs leaves it at 0.
+    open_app(guarded_page, "?postseason=exclude")
+    _open_game(guarded_page)
+    search = guarded_page.locator("#game-search")
+    search.fill("harbor")
+    assert _rows(guarded_page) == []
+    assert guarded_page.inner_text("#game-empty") == 'No games match "harbor" with these filters.'
+    search.fill("zzz")
+    assert guarded_page.inner_text("#game-empty") == 'No games match "zzz".'
+    search.fill("lakeshore")
+    assert _rows(guarded_page) == ["Lakeshore Rivalry (2)"]
+    assert guarded_page.locator("#game-empty").is_hidden()
+
+
+def test_empty_line_when_filters_leave_no_game_and_no_query(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    # 2021 has no named-game telecast in the fixture, so every row is at zero.
+    open_app(guarded_page, "?seasons=2021-2021")
+    _open_game(guarded_page)
+    assert _rows(guarded_page) == []
+    assert _headers(guarded_page) == []
+    assert guarded_page.inner_text("#game-empty") == "No games match these filters."
+    guarded_page.locator("#game-search").fill("bridge")
+    assert guarded_page.inner_text("#game-empty") == 'No games match "bridge" with these filters.'
+
+
 def test_keyboard_moves_selection_without_wrapping(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
