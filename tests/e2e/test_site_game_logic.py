@@ -37,9 +37,9 @@ async (mutation) => {
     summitIndex: data.gameIndexBySlug.get('summit-bowl'),
     dotGames: data.dotGames,
     searchKeys: [
-      D.gameSearchKey('Hawaiʻi Bowl'),
+      D.gameSearchKey('Hawai\\u02BBi Bowl'),
       D.gameSearchKey("Duke's Mayo Bowl"),
-      D.gameSearchKey('Duke’s Mayo Bowl'),
+      D.gameSearchKey('Duke\\u2019s Mayo Bowl'),
       D.gameSearchKey('Pop-Tarts Bowl'),
       D.gameSearchKey('  Rate   BOWL '),
     ],
