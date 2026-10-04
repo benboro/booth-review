@@ -13,7 +13,7 @@ one was attempted. Every fixture here serves only the synthetic contract
 fixture -- never real collected data (AGENTS.md: the vault is private and
 never goes into fixtures or logs).
 
-The suite runs in parallel with `uv run pytest -m e2e -n auto`. Each xdist
+The suite runs in parallel with `uv run pytest -m e2e -n 4`. Each xdist
 worker builds its own `site_dist` under its own `tmp_path_factory` basetemp
 (about 0.5 s, so per-worker builds are cheaper than a cross-process lock) and
 serves it from its own `http.server` subprocess on an OS-assigned port. Session

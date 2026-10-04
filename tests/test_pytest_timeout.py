@@ -39,7 +39,7 @@ def test_a_hung_test_fails_at_the_timeout(tmp_path: Path) -> None:
 
 
 def test_a_hung_test_fails_at_the_timeout_under_xdist(tmp_path: Path) -> None:
-    """Guard the 5-minute limit under `-n auto` (the e2e suite runs in xdist workers)."""
+    """Guard the 5-minute limit under `-n 4` (the e2e suite runs in xdist workers)."""
     (tmp_path / "test_hang.py").write_text(
         "import time\n\ndef test_hang():\n    time.sleep(60)\n", encoding="utf-8"
     )

@@ -80,8 +80,8 @@ model, and build phases; read the relevant section before starting a phase.
 - Use uv for everything: `uv sync`, `uv run pytest`, `uv run ruff check .`,
   `uv run ruff format .`, `uv run mypy src`. Add dependencies with `uv add` or
   `uv add --dev`, not pip.
-- Run the browser tests in parallel with `uv run pytest -m e2e -n auto`
-  (pytest-xdist); drop `-n auto` or add `-p no:xdist` to debug a test serially.
+- Run the browser tests in parallel with `uv run pytest -m e2e -n 4` (pytest-xdist);
+  drop `-n 4` or add `-p no:xdist` to debug a test serially.
 - Do not prefix shell commands with `cd` to the repo root; the working directory is
   already the root.
 

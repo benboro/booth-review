@@ -31,4 +31,4 @@ jobs:
           printf '%s\n' "$out"
           printf '%s\n' "$out" | grep -qx 'cfbd key check: passed'
       - run: uv run playwright install --with-deps chromium
-      - run: uv run pytest -m e2e -n auto
+      - run: uv run pytest -m e2e -n 4
