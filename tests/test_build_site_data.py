@@ -1406,6 +1406,27 @@ def test_rivalry_tags_first_regular_meeting_only(tmp_path: Path, build_reference
     ]
 
 
+def test_title_game_before_rivalry_game_is_untagged_and_counted(
+    tmp_path: Path, build_reference: Path
+) -> None:
+    ref = _rivalry_reference(
+        tmp_path, build_reference, "the-game,The Game,Fixture Home,Fixture Away,,\n"
+    )
+    title = {**_meeting(1, 14), "notes": "SENTINEL ZEBRA Championship"}
+    tables = _two_game_tables([title, _meeting(2, 28)])
+    counts: dict[str, int] = {}
+    site = build_site_data(tables, build_coverage(tables), ref, _GENERATED_AT, counts=counts)
+    payload = site.model_dump(mode="json")
+    assert payload["telecasts"]["rivalry"] == [None, 0]
+    assert counts == {
+        "rivalry_games_tagged": 1,
+        "rivalry_telecasts_tagged": 1,
+        "rivalry_title_games_excluded": 1,
+        "rivalry_rematches_demoted": 0,
+    }
+    assert "SENTINEL" not in json.dumps(payload)
+
+
 def test_rivalry_without_plotted_telecast_is_dropped(tmp_path: Path, build_reference: Path) -> None:
     ref = _rivalry_reference(
         tmp_path,

@@ -87,7 +87,7 @@ describes when the value is `null` instead of coerced to a placeholder like
 | `home_conference` | int \| null, index into `lookups.conferences` | null when CFBD reports no conference for the home side (e.g. some FCS opponents) | SITE-21, SITE-25 |
 | `away_conference` | int \| null, index into `lookups.conferences` | null when CFBD reports no conference for the away side | SITE-21, SITE-25 |
 | `bowl` | int \| null, index into `lookups.bowls` | non-null only for a game played at a named bowl; never set on a regular-season game; display name only, the raw CFBD note never ships | SITE-30 |
-| `rivalry` | int \| null, index into `lookups.rivalries` | non-null only on a regular-season game that is the first meeting of a curated rivalry's two teams in that season; a conference-championship or postseason rematch is null; resolved at build time from `data/reference/rivalries.csv`, never from CFBD notes | SITE-45 |
+| `rivalry` | int \| null, index into `lookups.rivalries` | non-null only on a regular-season game that is the first meeting of a curated rivalry's two teams in that season, not counting conference championship games; a conference championship game (marked by CFBD from 2022 on, so null even when it comes before the rivalry game or is the only meeting) or a postseason meeting is null, and for earlier seasons a later rematch is null; resolved at build time from `data/reference/rivalries.csv`. The build reads CFBD's private game notes only as a yes/no test for a title game; no notes text ships | SITE-45 |
 
 ### `time_slot` boundaries
 

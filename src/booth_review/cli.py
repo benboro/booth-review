@@ -917,6 +917,15 @@ def _build(args: argparse.Namespace) -> int:
         f"join rate {rate:.1f}%, merges {outcome.counts.get('duplicate_merges', 0)}, "
         f"blocked {'yes' if exit_blocked else 'no'}"
     )
+    if "rivalry_games_tagged" in outcome.counts:
+        # D-13: title games excluded via CFBD notes (2022 on) and later meetings
+        # demoted by the first-meeting rule. Counts only.
+        print(
+            f"rivalries: {outcome.counts['rivalry_games_tagged']} games tagged "
+            f"({outcome.counts['rivalry_telecasts_tagged']} plotted telecasts), "
+            f"title games excluded {outcome.counts['rivalry_title_games_excluded']}, "
+            f"rematches demoted {outcome.counts['rivalry_rematches_demoted']}"
+        )
     bowl_names_unknown = outcome.counts.get("bowl_names_unknown", 0)
     if bowl_names_unknown > 0:
         print(f"bowl names unknown {bowl_names_unknown}")

@@ -33,6 +33,7 @@ def _games(rows: list[dict[str, Any]]) -> pl.DataFrame:
             "home_id": pl.Int64,
             "away_id": pl.Int64,
             "game_type": pl.String,
+            "notes": pl.String,
         },
     )
 
@@ -44,6 +45,7 @@ def _g(
     home: tuple[str, int] = (NF, 1),
     away: tuple[str, int] = (LV, 2),
     game_type: str = "regular",
+    notes: str | None = None,
 ) -> dict[str, Any]:
     return {
         "game_id": game_id,
@@ -54,6 +56,7 @@ def _g(
         "home_id": home[1],
         "away_id": away[1],
         "game_type": game_type,
+        "notes": notes,
     }
 
 
@@ -132,6 +135,7 @@ def test_franchise_ignores_unnamed_not_at_bowl_and_unplotted() -> None:
 
 
 def test_title_rematch_is_demoted() -> None:
+    # A title game without a title note (seasons before 2022): the fallback rule.
     games = _games(
         [
             _g(10, datetime(2024, 9, 7, 17, tzinfo=UTC)),
@@ -141,6 +145,69 @@ def test_title_rematch_is_demoted() -> None:
     res = resolve_rivalry_games(games, [_riv()])
     assert res.by_game == {10: "lake-cup"}
     assert res.rematches_demoted == 1
+
+
+# Invented notes text: only the case-insensitive "championship" test matters.
+_TITLE_NOTE = "Harbor Conference CHAMPIONSHIP Game"
+
+
+def test_title_game_before_rivalry_game_is_excluded() -> None:
+    # The title game is played a week before the rivalry game (both "regular").
+    games = _games(
+        [
+            _g(10, datetime(2026, 12, 5, 17, tzinfo=UTC), notes=_TITLE_NOTE),
+            _g(11, datetime(2026, 12, 12, 20, tzinfo=UTC)),
+        ]
+    )
+    res = resolve_rivalry_games(games, [_riv()])
+    assert res.by_game == {11: "lake-cup"}
+    assert res.title_games_excluded == 1
+    assert res.rematches_demoted == 0
+
+
+def test_title_game_as_only_meeting_is_not_tagged() -> None:
+    games = _games([_g(10, datetime(2025, 12, 6, 17, tzinfo=UTC), notes=_TITLE_NOTE)])
+    res = resolve_rivalry_games(games, [_riv()])
+    assert res.by_game == {}
+    assert res.title_games_excluded == 1
+    assert res.rematches_demoted == 0
+
+
+def test_title_game_after_rivalry_game_is_excluded_not_demoted() -> None:
+    games = _games(
+        [
+            _g(10, datetime(2024, 10, 12, 17, tzinfo=UTC)),
+            _g(11, datetime(2024, 12, 7, 17, tzinfo=UTC), notes=_TITLE_NOTE.lower()),
+        ]
+    )
+    res = resolve_rivalry_games(games, [_riv()])
+    assert res.by_game == {10: "lake-cup"}
+    assert res.title_games_excluded == 1
+    assert res.rematches_demoted == 0
+
+
+def test_other_notes_do_not_exclude() -> None:
+    games = _games([_g(10, datetime(2024, 9, 7, 17, tzinfo=UTC), notes="Harbor Classic")])
+    res = resolve_rivalry_games(games, [_riv()])
+    assert res.by_game == {10: "lake-cup"}
+    assert res.title_games_excluded == 0
+
+
+def test_title_note_on_other_pair_not_counted() -> None:
+    games = _games(
+        [
+            _g(10, datetime(2024, 9, 7, 17, tzinfo=UTC)),
+            _g(
+                11,
+                datetime(2024, 12, 7, 17, tzinfo=UTC),
+                home=("Eastport", 3),
+                notes=_TITLE_NOTE,
+            ),
+        ]
+    )
+    res = resolve_rivalry_games(games, [_riv()])
+    assert res.by_game == {10: "lake-cup"}
+    assert res.title_games_excluded == 0
 
 
 def test_bowl_meeting_not_tagged_regular_is() -> None:

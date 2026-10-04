@@ -3,8 +3,9 @@
 data/reference/rivalries.csv holds well-known named rivalries: a stable id,
 the current name, two CFBD canonical team names, and optional season limits.
 The build counts only the first regular-season meeting of the pair in a
-season, so a conference-championship or postseason rematch is not the rivalry
-game. Errors cite file and line only, never a name.
+season, after skipping the conference title games CFBD's notes mark (2022 on;
+see build.named_games), so a title game is never the rivalry game. For earlier
+seasons a later rematch is demoted. Errors cite file and line only, never a name.
 """
 
 from __future__ import annotations

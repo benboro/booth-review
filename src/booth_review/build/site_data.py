@@ -156,10 +156,15 @@ def build_site_data(
     coverage: CoverageReport,
     reference_directory: Path,
     generated_at: datetime,
+    *,
+    counts: dict[str, int] | None = None,
 ) -> SiteData:
     """Assemble every plotted telecast (D-10) into the D-13 columnar
     SiteData, validated by the D-14 contract (`validate_site_data`) before
     returning. Never writes anything -- see `write_site_data`.
+
+    When `counts` is given, the rivalry resolution's counts (D-13) are added
+    to it for the build summary: numbers only, never a name.
     """
     eras = {era.era_id: era for era in load_eras(reference_directory)}
     event_flags = {flag.flag_id: flag for flag in load_event_flags(reference_directory)}
@@ -585,6 +590,11 @@ def build_site_data(
         "telecasts": columns,
         "coverage": coverage_rows,
     }
+    if counts is not None:
+        counts["rivalry_games_tagged"] = len(rivalry_resolution.by_game)
+        counts["rivalry_telecasts_tagged"] = sum(1 for v in columns["rivalry"] if v is not None)
+        counts["rivalry_title_games_excluded"] = rivalry_resolution.title_games_excluded
+        counts["rivalry_rematches_demoted"] = rivalry_resolution.rematches_demoted
     try:
         return validate_site_data(payload)
     except ValidationError as exc:

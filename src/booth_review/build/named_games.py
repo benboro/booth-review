@@ -1,11 +1,14 @@
 """Named-game build rules: D-07/D-08 franchise grouping and D-13 rivalry resolution.
 
-Pure functions over the bowl crosswalk and the games table. Reads no free-text
-CFBD fields. Every error is count-only: it never names a team or a bowl.
+Pure functions over the bowl crosswalk and the games table. The only free-text
+CFBD field read is the private `notes` column, as a build-time yes/no test for a
+conference title game (D-13); its text never leaves this module. Every error is
+count-only: it never names a team or a bowl.
 """
 
 from __future__ import annotations
 
+import re
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -24,10 +27,17 @@ class Franchise:
     former: tuple[str, ...]
 
 
+# A conference title game carries "championship" in CFBD's notes, which CFBD
+# fills for them from the 2022 season on. Matched case-insensitively and only
+# as a yes/no test; the notes text is never stored, shipped, or printed.
+_TITLE_GAME_NOTE = re.compile(r"championship", re.IGNORECASE)
+
+
 @dataclass(frozen=True)
 class RivalryResolution:
     by_game: dict[int, str]
     rematches_demoted: int
+    title_games_excluded: int
 
 
 def build_franchises(
@@ -74,7 +84,11 @@ def build_franchises(
 
 
 def resolve_rivalry_games(games: pl.DataFrame, rivalries: Sequence[Rivalry]) -> RivalryResolution:
-    """Tag the first regular-season meeting of each rivalry pair per season (D-13)."""
+    """Tag the first regular-season meeting of each rivalry pair per season (D-13).
+
+    Conference title games marked in CFBD's notes are skipped before the
+    first-meeting rule runs and counted in `title_games_excluded`.
+    """
     ids_by_name: dict[str, set[int]] = defaultdict(set)
     for team_col, id_col in (("home_team", "home_id"), ("away_team", "away_id")):
         for name, team_id in games.select(team_col, id_col).unique().iter_rows():
@@ -116,12 +130,21 @@ def resolve_rivalry_games(games: pl.DataFrame, rivalries: Sequence[Rivalry]) -> 
     seen: set[tuple[int, frozenset[int]]] = set()
     by_game: dict[int, str] = {}
     demoted = 0
-    for game_id, season, home_id, away_id in regular.select(
-        "game_id", "season", "home_id", "away_id"
+    excluded = 0
+    for game_id, season, home_id, away_id, notes in regular.select(
+        "game_id", "season", "home_id", "away_id", "notes"
     ).iter_rows():
         pair = frozenset((home_id, away_id))
         hit = by_pair.get(pair)
         if hit is None:
+            continue
+        # CFBD labels conference title games "regular". One marked by its notes is
+        # never the rivalry game and does not use up the season's first meeting, so
+        # a title game played before the rivalry game (or instead of it) stays
+        # untagged. Seasons whose notes don't mark title games fall back on the
+        # first-meeting rule below, which demotes a later rematch.
+        if notes is not None and _TITLE_GAME_NOTE.search(notes):
+            excluded += 1
             continue
         key = (season, pair)
         if key in seen:
@@ -133,7 +156,7 @@ def resolve_rivalry_games(games: pl.DataFrame, rivalries: Sequence[Rivalry]) -> 
         if hit.season_to is not None and season > hit.season_to:
             continue
         by_game[game_id] = hit.rivalry_id
-    return RivalryResolution(by_game, demoted)
+    return RivalryResolution(by_game, demoted, excluded)
 
 
 def check_game_slugs(franchise_slugs: Iterable[str], rivalry_ids: Iterable[str]) -> None:

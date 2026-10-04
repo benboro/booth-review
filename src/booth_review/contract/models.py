@@ -241,7 +241,8 @@ class TelecastColumns(BaseModel):
     # Index into lookups.bowls; non-null only for a game played at a named bowl.
     bowl: list[int | None]
     # Index into lookups.rivalries; non-null only for the first regular-season meeting of a
-    # curated rivalry's two teams in a season (04.9 D-13), resolved by the build
+    # curated rivalry's two teams in a season, conference title games excluded (04.9 D-13),
+    # resolved by the build
     rivalry: list[int | None]
 
 
