@@ -282,6 +282,103 @@ def _time_slot_evening_not_in_enum(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _schema_version_2_0_0(data: dict[str, Any]) -> dict[str, Any]:
+    data["schema_version"] = "2.0.0"
+    return data
+
+
+def _missing_rivalry_column(data: dict[str, Any]) -> dict[str, Any]:
+    del data["telecasts"]["rivalry"]
+    return data
+
+
+def _missing_bowl_franchises(data: dict[str, Any]) -> dict[str, Any]:
+    del data["lookups"]["bowl_franchises"]
+    return data
+
+
+def _missing_rivalries(data: dict[str, Any]) -> dict[str, Any]:
+    del data["lookups"]["rivalries"]
+    return data
+
+
+def _bowl_without_franchise(data: dict[str, Any]) -> dict[str, Any]:
+    del data["lookups"]["bowls"][0]["franchise"]
+    return data
+
+
+def _bowl_franchise_out_of_range(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["bowls"][0]["franchise"] = 9
+    return data
+
+
+def _bowl_core_not_franchise_name(data: dict[str, Any]) -> dict[str, Any]:
+    # "Harbor" is still a substring of the official name.
+    data["lookups"]["bowls"][0]["core"] = "Harbor"
+    return data
+
+
+def _unreferenced_franchise(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["bowl_franchises"].append({"slug": "extra-bowl", "name": "Extra", "former": []})
+    return data
+
+
+def _franchise_slug_not_kebab(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["bowl_franchises"][0]["slug"] = "Harbor Bowl"
+    return data
+
+
+def _slug_collision(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][0]["slug"] = data["lookups"]["bowl_franchises"][0]["slug"]
+    return data
+
+
+def _reserved_cfp_slug(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][0]["slug"] = "cfp-semifinal"
+    return data
+
+
+def _former_contains_name(data: dict[str, Any]) -> dict[str, Any]:
+    franchise = data["lookups"]["bowl_franchises"][0]
+    franchise["former"].append(franchise["name"])
+    return data
+
+
+def _rivalry_teams_equal(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][1]["teams"] = [1, 1]
+    return data
+
+
+def _rivalry_team_out_of_range(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][1]["teams"] = [0, 99]
+    return data
+
+
+def _rivalry_teams_not_ascending(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][1]["teams"] = [1, 0]
+    return data
+
+
+def _rivalry_on_playoff(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["rivalry"][5] = 0
+    return data
+
+
+def _rivalry_teams_mismatch(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["rivalry"][1] = 1
+    return data
+
+
+def _rivalry_index_out_of_range(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["rivalry"][0] = 7
+    return data
+
+
+def _unreferenced_rivalry(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["rivalry"][11] = None
+    return data
+
+
 _BROKEN_VARIANTS = [
     pytest.param(_add_unknown_top_level_key, id="unknown-top-level-key"),
     pytest.param(_add_unknown_telecast_column, id="unknown-telecast-column"),
@@ -326,6 +423,25 @@ _BROKEN_VARIANTS = [
     pytest.param(_bowl_core_not_in_name, id="bowl-core-not-in-name"),
     pytest.param(_bowl_on_regular_game, id="bowl-on-regular-game"),
     pytest.param(_bowl_empty_core, id="bowl-empty-core"),
+    pytest.param(_schema_version_2_0_0, id="schema-version-2-0-0"),
+    pytest.param(_missing_rivalry_column, id="missing-rivalry-column"),
+    pytest.param(_missing_bowl_franchises, id="missing-bowl-franchises"),
+    pytest.param(_missing_rivalries, id="missing-rivalries"),
+    pytest.param(_bowl_without_franchise, id="bowl-without-franchise"),
+    pytest.param(_bowl_franchise_out_of_range, id="bowl-franchise-out-of-range"),
+    pytest.param(_bowl_core_not_franchise_name, id="bowl-core-not-franchise-name"),
+    pytest.param(_unreferenced_franchise, id="unreferenced-franchise"),
+    pytest.param(_franchise_slug_not_kebab, id="franchise-slug-not-kebab"),
+    pytest.param(_slug_collision, id="slug-collision"),
+    pytest.param(_reserved_cfp_slug, id="reserved-cfp-slug"),
+    pytest.param(_former_contains_name, id="former-contains-name"),
+    pytest.param(_rivalry_teams_equal, id="rivalry-teams-equal"),
+    pytest.param(_rivalry_team_out_of_range, id="rivalry-team-out-of-range"),
+    pytest.param(_rivalry_teams_not_ascending, id="rivalry-teams-not-ascending"),
+    pytest.param(_rivalry_on_playoff, id="rivalry-on-playoff"),
+    pytest.param(_rivalry_teams_mismatch, id="rivalry-teams-mismatch"),
+    pytest.param(_rivalry_index_out_of_range, id="rivalry-index-out-of-range"),
+    pytest.param(_unreferenced_rivalry, id="unreferenced-rivalry"),
 ]
 
 
@@ -335,6 +451,29 @@ def test_broken_variant_raises(mutate: Any) -> None:
     broken = mutate(data)
     with pytest.raises(ValidationError):
         validate_site_data(broken)
+
+
+_NAMED_GAME_VARIANTS = [
+    _bowl_franchise_out_of_range,
+    _bowl_core_not_franchise_name,
+    _unreferenced_franchise,
+    _slug_collision,
+    _reserved_cfp_slug,
+    _rivalry_team_out_of_range,
+    _rivalry_on_playoff,
+    _rivalry_teams_mismatch,
+    _rivalry_index_out_of_range,
+    _unreferenced_rivalry,
+]
+
+
+@pytest.mark.parametrize("mutate", _NAMED_GAME_VARIANTS)
+def test_named_game_errors_never_echo_names(mutate: Any) -> None:
+    broken = mutate(copy.deepcopy(_load_fixture()))
+    with pytest.raises(ValidationError) as exc:
+        validate_site_data(broken)
+    for word in ("Lakeshore", "Bridge", "Harbor", "Summit"):
+        assert word not in str(exc.value)
 
 
 def test_schema_file_matches_models() -> None:

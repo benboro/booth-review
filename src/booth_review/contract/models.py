@@ -16,9 +16,16 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = "2.0.0"
+SCHEMA_VERSION = "2.1.0"
 
 _S506_HOST = "506sports.com"
+
+# Franchise and rivalry slugs are URL values: kebab-case, one shared namespace
+# with the four slugs the client reserves for CFP rounds (04.9 D-16).
+GAME_SLUG_PATTERN = r"^[a-z0-9]+(-[a-z0-9]+)*$"
+RESERVED_GAME_SLUGS = frozenset(
+    {"cfp-national-championship", "cfp-semifinal", "cfp-quarterfinal", "cfp-first-round"}
+)
 
 # The longest crew-source label (crew_overrides.csv source_name) allowed.
 CREW_SOURCE_LABEL_MAX_LEN = 60
@@ -92,11 +99,51 @@ class BowlRef(BaseModel):
 
     name: str = Field(min_length=1)
     core: str = Field(min_length=1)
+    # Index into lookups.bowl_franchises (04.9 D-07).
+    franchise: int
 
     @model_validator(mode="after")
     def _core_in_name(self) -> BowlRef:
         if self.core not in self.name:
             raise ValueError("bowl core name must be a substring of its name")
+        return self
+
+
+class BowlFranchiseRef(BaseModel):
+    """A bowl franchise: the latest core name, older core names for search
+    only, and a permanent URL slug (04.9 D-07)."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    slug: str = Field(pattern=GAME_SLUG_PATTERN)
+    name: str = Field(min_length=1)
+    former: list[str]
+
+    @model_validator(mode="after")
+    def _former_names(self) -> BowlFranchiseRef:
+        if any(not f for f in self.former):
+            raise ValueError("former names must not be empty")
+        if len(set(self.former)) != len(self.former):
+            raise ValueError("former names must not repeat")
+        if self.name in self.former:
+            raise ValueError("former names must not include the current name")
+        return self
+
+
+class RivalryRef(BaseModel):
+    """A curated rivalry: slug, display name, and its two teams as ascending
+    indexes into lookups.teams (04.9 D-13)."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    slug: str = Field(pattern=GAME_SLUG_PATTERN)
+    name: str = Field(min_length=1)
+    teams: list[int] = Field(min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def _teams_ascending(self) -> RivalryRef:
+        if self.teams[0] >= self.teams[1]:
+            raise ValueError("rivalry teams must be two distinct ascending indexes")
         return self
 
 
@@ -144,6 +191,8 @@ class Lookups(BaseModel):
     flags: list[FlagRef]
     conferences: list[ConferenceRef]
     bowls: list[BowlRef]
+    bowl_franchises: list[BowlFranchiseRef]
+    rivalries: list[RivalryRef]
 
 
 class TelecastColumns(BaseModel):
@@ -191,6 +240,9 @@ class TelecastColumns(BaseModel):
     away_conference: list[int | None]
     # Index into lookups.bowls; non-null only for a game played at a named bowl.
     bowl: list[int | None]
+    # Index into lookups.rivalries; non-null only for the first regular-season meeting of a
+    # curated rivalry's two teams in a season (04.9 D-13), resolved by the build
+    rivalry: list[int | None]
 
 
 class CoverageRow(BaseModel):
@@ -216,7 +268,7 @@ class CoverageRow(BaseModel):
 class SiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["2.0.0"]
+    schema_version: Literal["2.1.0"]
     generated_at: str
     freshness: Freshness
     lookups: Lookups
@@ -248,6 +300,28 @@ class SiteData(BaseModel):
         num_flags = len(self.lookups.flags)
         num_conferences = len(self.lookups.conferences)
         num_bowls = len(self.lookups.bowls)
+        num_rivalries = len(self.lookups.rivalries)
+        num_franchises = len(self.lookups.bowl_franchises)
+
+        referenced_franchises: set[int] = set()
+        for j, bowl_ref in enumerate(self.lookups.bowls):
+            if not 0 <= bowl_ref.franchise < num_franchises:
+                raise ValueError(f"lookups.bowls[{j}].franchise: franchise index out of range")
+            referenced_franchises.add(bowl_ref.franchise)
+            franchise_ref = self.lookups.bowl_franchises[bowl_ref.franchise]
+            if bowl_ref.core != franchise_ref.name and bowl_ref.core not in franchise_ref.former:
+                raise ValueError(f"lookups.bowls[{j}].core: not a name of its franchise")
+        for k in range(num_franchises):
+            if k not in referenced_franchises:
+                raise ValueError(f"lookups.bowl_franchises[{k}]: not referenced by any bowl")
+        slugs = [f.slug for f in self.lookups.bowl_franchises]
+        slugs += [r.slug for r in self.lookups.rivalries]
+        if len(set(slugs)) != len(slugs) or any(s in RESERVED_GAME_SLUGS for s in slugs):
+            raise ValueError("lookups: duplicate or reserved game slug")
+        for k, rivalry_ref in enumerate(self.lookups.rivalries):
+            if any(not 0 <= t < num_teams for t in rivalry_ref.teams):
+                raise ValueError(f"lookups.rivalries[{k}].teams: team index out of range")
+        referenced_rivalries: set[int] = set()
 
         for i in range(n):
             if not 0 <= tc.away_team[i] < num_teams:
@@ -309,6 +383,20 @@ class SiteData(BaseModel):
                     raise ValueError(f"telecasts.bowl[{i}]: bowl index out of range")
                 if tc.game_type[i] == "regular":
                     raise ValueError(f"telecasts.bowl[{i}]: set on a regular game")
+            rivalry = tc.rivalry[i]
+            if rivalry is not None:
+                if not 0 <= rivalry < num_rivalries:
+                    raise ValueError(f"telecasts.rivalry[{i}]: rivalry index out of range")
+                if tc.game_type[i] != "regular":
+                    raise ValueError(f"telecasts.rivalry[{i}]: set on a non-regular game")
+                pair = sorted([tc.home_team[i], tc.away_team[i]])
+                if pair != self.lookups.rivalries[rivalry].teams:
+                    raise ValueError(f"telecasts.rivalry[{i}]: teams do not match the rivalry")
+                referenced_rivalries.add(rivalry)
+
+        for k in range(num_rivalries):
+            if k not in referenced_rivalries:
+                raise ValueError(f"lookups.rivalries[{k}]: not referenced by any telecast")
 
         for i, row in enumerate(self.coverage):
             if row.network is not None and not 0 <= row.network < num_networks:

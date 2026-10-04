@@ -26,6 +26,12 @@ import polars as pl
 from pydantic import ValidationError
 
 from booth_review.build.bowls import load_bowls
+from booth_review.build.named_games import (
+    build_franchises,
+    check_game_slugs,
+    resolve_rivalry_games,
+)
+from booth_review.build.rivalries import load_rivalries
 from booth_review.config import DataPaths
 from booth_review.contract.models import SCHEMA_VERSION, SiteData, validate_site_data
 from booth_review.errors import BowlCrosswalkError, VaultStateError
@@ -227,15 +233,43 @@ def build_site_data(
         raise VaultStateError(
             f"bowls.csv: {bowl_disagreements} row(s) disagree with the game's type (at_bowl)"
         )
-    bowl_pairs: set[tuple[str, str]] = set()
+    season_by_game = {
+        int(row["game_id"]): int(row["season"])
+        for row in rows
+        if row["game_type"] in _POSTSEASON_TYPES
+    }
+    franchises = build_franchises(bowl_entries, season_by_game)
+    franchise_slugs = sorted(franchises)
+    franchise_index = {slug: i for i, slug in enumerate(franchise_slugs)}
+    # Keyed by official name, core name, and franchise, so two bowls that share
+    # both names but belong to different franchises stay apart (04.9 D-07).
+    bowl_triples: set[tuple[str, str, str]] = set()
     for row in rows:
         if row["game_type"] not in _POSTSEASON_TYPES:
             continue
         found = bowl_entries[int(row["game_id"])]
-        if found.at_bowl and found.official_name is not None and found.core_name is not None:
-            bowl_pairs.add((found.official_name, found.core_name))
-    bowls_lookup = sorted(bowl_pairs)
-    bowl_index = {pair: i for i, pair in enumerate(bowls_lookup)}
+        if (
+            found.at_bowl
+            and found.official_name is not None
+            and found.core_name is not None
+            and found.franchise is not None
+        ):
+            bowl_triples.add((found.official_name, found.core_name, found.franchise))
+    bowls_lookup = sorted(bowl_triples)
+    bowl_index = {triple: i for i, triple in enumerate(bowls_lookup)}
+
+    rivalries = load_rivalries(reference_directory)
+    check_game_slugs(franchise_slugs, [r.rivalry_id for r in rivalries])
+    rivalry_resolution = resolve_rivalry_games(tables.games, rivalries)
+    tagged_ids = {
+        rivalry_resolution.by_game[int(row["game_id"])]
+        for row in rows
+        if int(row["game_id"]) in rivalry_resolution.by_game
+    }
+    used_rivalries = sorted(
+        (r for r in rivalries if r.rivalry_id in tagged_ids), key=lambda r: r.rivalry_id
+    )
+    rivalry_index = {r.rivalry_id: i for i, r in enumerate(used_rivalries)}
     plotted_ids = {row["telecast_id"] for row in rows}
 
     crew_by_telecast: dict[str, list[dict[str, object]]] = {}
@@ -313,6 +347,22 @@ def build_site_data(
     person_index = {person_id: i for i, person_id in enumerate(sorted(person_ids))}
     publisher_index = {name: i for i, name in enumerate(sorted(publishers))}
     flag_index = {flag_id: i for i, flag_id in enumerate(sorted(flag_ids))}
+    unmatched_rivalry_teams = sum(
+        1 for r in used_rivalries if r.team_a not in team_index or r.team_b not in team_index
+    )
+    if unmatched_rivalry_teams:
+        raise VaultStateError(
+            f"rivalries.csv: {unmatched_rivalry_teams} rivalr(ies) whose team names differ "
+            "from their plotted games"
+        )
+    rivalries_lookup = [
+        {
+            "slug": r.rivalry_id,
+            "name": r.name,
+            "teams": sorted([team_index[r.team_a], team_index[r.team_b]]),
+        }
+        for r in used_rivalries
+    ]
     conference_index = {name: i for i, name in enumerate(sorted(conference_is_fbs))}
 
     teams = [{"name": name} for name in sorted(team_names)]
@@ -390,6 +440,7 @@ def build_site_data(
         "home_conference": [],
         "away_conference": [],
         "bowl": [],
+        "rivalry": [],
     }
 
     for row in rows:
@@ -451,10 +502,15 @@ def build_site_data(
             bowl_entry is not None
             and bowl_entry.official_name is not None
             and bowl_entry.core_name is not None
+            and bowl_entry.franchise is not None
         ):
-            columns["bowl"].append(bowl_index[(bowl_entry.official_name, bowl_entry.core_name)])
+            columns["bowl"].append(
+                bowl_index[(bowl_entry.official_name, bowl_entry.core_name, bowl_entry.franchise)]
+            )
         else:
             columns["bowl"].append(None)
+        tagged = rivalry_resolution.by_game.get(int(row["game_id"]))
+        columns["rivalry"].append(rivalry_index[tagged] if tagged is not None else None)
 
     # -- coverage: publisher_counts per (season, network), and per-season totals ------------
     publisher_counts_by_key: dict[tuple[int, str], dict[str, int]] = {}
@@ -513,7 +569,18 @@ def build_site_data(
             "publishers": publisher_list,
             "flags": flags,
             "conferences": conferences,
-            "bowls": [{"name": n, "core": c} for n, c in bowls_lookup],
+            "bowls": [
+                {"name": n, "core": c, "franchise": franchise_index[f]} for n, c, f in bowls_lookup
+            ],
+            "bowl_franchises": [
+                {
+                    "slug": slug,
+                    "name": franchises[slug].name,
+                    "former": list(franchises[slug].former),
+                }
+                for slug in franchise_slugs
+            ],
+            "rivalries": rivalries_lookup,
         },
         "telecasts": columns,
         "coverage": coverage_rows,

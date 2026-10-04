@@ -390,8 +390,8 @@ def test_panel_bowl_name_is_rendered_as_literal_text(
         index=7,
         bowl=0,
         bowls=[
-            {"name": evil, "core": "Harbor Bowl"},
-            {"name": "Summit Bowl", "core": "Summit Bowl"},
+            {"name": evil, "core": "Harbor Bowl", "franchise": 0},
+            {"name": "Summit Bowl", "core": "Summit Bowl", "franchise": 1},
         ],
     )
     open_app(guarded_page, "")
