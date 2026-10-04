@@ -217,11 +217,11 @@ def _use_plotly_tooltip(page: Page) -> None:
     )
 
 
-def test_default_load_shows_all_dots_no_selection_pregame_axis(
+def test_default_load_shows_all_dots_no_selection_spread_axis(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-12: first load with no query shows all 12 dots, nobody highlighted,
-    and the pre-game axis, with a clean URL."""
+    and the Spread axis, with a clean URL."""
     open_app(guarded_page, "")
     traces = _traces(guarded_page)
     family_traces = _family_traces(traces)
@@ -237,7 +237,7 @@ def test_default_load_shows_all_dots_no_selection_pregame_axis(
     assert len(traces[-1]["x"]) == 0
     assert "?" not in guarded_page.url
     assert (
-        guarded_page.get_attribute('#axis-toggle button[data-axis="pregame"]', "aria-pressed")
+        guarded_page.get_attribute('#axis-toggle button[data-axis="spread"]', "aria-pressed")
         == "true"
     )
     assert guarded_page.is_hidden("#excitement-caption")
@@ -248,15 +248,17 @@ def test_default_load_shows_all_dots_no_selection_pregame_axis(
 def test_na_strip_places_missing_x_dots_in_the_reserved_band(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-03: dot 3 (pregame) / dot 2 (excitement) sit left of the divider,
-    everything else sits to its right, and the strip is labelled N/A."""
+    """D-08: dots 2, 3, 10 (Spread: no score, no line, tie) / dot 2 (excitement)
+    sit left of the divider, everything else sits to its right, and the strip
+    is labelled N/A."""
     open_app(guarded_page, "")
     layout = _layout(guarded_page)
     divider = layout["shapes"][0]["x0"]
     points = _dot_x_by_customdata(_traces(guarded_page))
-    assert points[3] < divider
+    for missing in (2, 3, 10):
+        assert points[missing] < divider
     for customdata, x in points.items():
-        if customdata != 3:
+        if customdata not in (2, 3, 10):
             assert x > divider
     assert any(a["text"] == "N/A" for a in layout["annotations"])
 
@@ -326,7 +328,7 @@ def test_axis_titles_render_for_both_axes(
     open_app(guarded_page, "")
     x_title = guarded_page.locator(".g-xtitle text").all_text_contents()
     y_title = guarded_page.locator(".g-ytitle text").all_text_contents()
-    assert x_title == ["Closing spread (points) — closer games to the right"]
+    assert x_title == ["Winner's closing spread (points)"]
     assert y_title == ["Viewers (log scale)"]
 
     guarded_page.click('#axis-toggle button[data-axis="excitement"]')
@@ -337,9 +339,8 @@ def test_axis_titles_render_for_both_axes(
 def test_mobile_x_axis_title_fits_the_screen_and_clears_the_legend(
     mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """CR-02 follow-up: once the titles render, the long pre-game title is
-    wider than a 390px phone, so on phones it wraps onto two lines, stays
-    inside the viewport, and sits above the (below-chart) HTML chip legend
+    """CR-02 follow-up / D-09: the Spread title fits one line on a 390px phone,
+    stays inside the viewport, and sits above the (below-chart) HTML chip legend
     (D-04: Plotly's own `.legend` is off everywhere now)."""
     open_app(mobile_page, "")
     boxes = mobile_page.evaluate(
@@ -355,7 +356,9 @@ def test_mobile_x_axis_title_fits_the_screen_and_clears_the_legend(
     # bounding box and the immediately-following flex item's box -- the two
     # can land a fraction of a pixel apart with no real overlap.
     assert title["bottom"] <= legend["top"] + 1
-    assert mobile_page.locator(".g-xtitle text tspan").count() >= 2
+    assert mobile_page.locator(".g-xtitle text tspan").count() <= 1
+    title_text = mobile_page.evaluate("document.getElementById('chart').layout.xaxis.title.text")
+    assert "<br>" not in title_text
 
 
 _LEGEND_CHIP_LABELS = ["ABC/ESPN", "FOX/FS1/BTN", "Pac-12 Net/MW Net", "Other"]
@@ -618,8 +621,8 @@ def test_person_matched_dot_that_fails_a_filter_renders_as_filtered_out(
     assert len(traces[-1]["x"]) == 0
 
     disney_inert = next(t for t in _inert_traces(traces) if t["meta"] == "inert:disney")
-    assert -3.5 in disney_inert["x"]  # dot 0's pregame spread
-    assert -6.5 in disney_inert["x"]  # dot 8's pregame spread
+    assert -3.5 in disney_inert["x"]  # dot 0's spread (home favorite won)
+    assert -6.5 in disney_inert["x"]  # dot 8's spread (away favorite won)
     # Filter wins (04.1 D-14) at the person-faded inert tier (04.7 D-02),
     # still in the family's own color (D-01).
     assert disney_inert["opacity"] == _dot_opacity(guarded_page)["inertUnderPerson"]
@@ -2084,6 +2087,26 @@ def test_hover_ring_clears_on_zoom(
         " return window.Plotly.relayout(gd, {'xaxis.range': [r[0], r[0] + (r[1] - r[0]) / 2]}); }"
     )
     guarded_page.wait_for_selector(f"{_RING}[hidden]", state="attached")
+
+
+def test_zero_captions_settle_when_zoomed_off_zero(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Regression: zooming so x = 0 leaves the range must not start an endless
+    afterplot -> relayout loop in fitZeroCaptions; the relayout count settles."""
+    open_app(guarded_page, "")
+    guarded_page.evaluate(
+        "() => { const gd = document.getElementById('chart');"
+        " window.__relayouts = 0;"
+        " gd.on('plotly_relayout', () => { window.__relayouts += 1; });"
+        " const r = gd._fullLayout.xaxis.range;"
+        " return window.Plotly.relayout(gd, {'xaxis.range': [r[0], r[0] + (r[1] - r[0]) / 4]}); }"
+    )
+    guarded_page.wait_for_timeout(500)
+    first = guarded_page.evaluate("window.__relayouts")
+    guarded_page.wait_for_timeout(500)
+    assert guarded_page.evaluate("window.__relayouts") == first
+    assert first <= 3
 
 
 _COUNTERS_JS = """
