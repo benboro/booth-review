@@ -1002,7 +1002,7 @@ def test_unmapped_network_coverage_row_points_at_the_unmapped_lookup(
 
 # -- bowl-name crosswalk (04.2-04) -----------------------------------------------------------
 
-_BOWL_HEADER = "cfbd_game_id,official_name,core_name,at_bowl\n"
+_BOWL_HEADER = "cfbd_game_id,official_name,core_name,at_bowl,franchise\n"
 
 
 def _bowl_reference(tmp_path: Path, build_reference: Path, rows: str) -> Path:
@@ -1037,7 +1037,9 @@ def _postseason_tables(specs: list[tuple[int, str, str | None]], **extra: object
 
 
 def test_named_bowl_resolves_into_lookup(tmp_path: Path, build_reference: Path) -> None:
-    ref = _bowl_reference(tmp_path, build_reference, "70,Zebra Harbor Bowl,Harbor Bowl,true\n")
+    ref = _bowl_reference(
+        tmp_path, build_reference, "70,Zebra Harbor Bowl,Harbor Bowl,true,harbor-bowl\n"
+    )
     payload = _site(_postseason_tables([(70, "bowl", None)]), ref)
     assert payload["lookups"]["bowls"] == [{"name": "Zebra Harbor Bowl", "core": "Harbor Bowl"}]
     assert payload["telecasts"]["bowl"] == [0]
@@ -1047,7 +1049,9 @@ def test_bowl_lookup_is_deduplicated_and_sorted(tmp_path: Path, build_reference:
     ref = _bowl_reference(
         tmp_path,
         build_reference,
-        "70,Zeta Bowl,Zeta Bowl,true\n71,Alpha Bowl,Alpha Bowl,true\n72,Zeta Bowl,Zeta Bowl,true\n",
+        "70,Zeta Bowl,Zeta Bowl,true,zeta-bowl\n"
+        "71,Alpha Bowl,Alpha Bowl,true,alpha-bowl\n"
+        "72,Zeta Bowl,Zeta Bowl,true,zeta-bowl\n",
     )
     payload = _site(
         _postseason_tables([(70, "bowl", None), (71, "bowl", None), (72, "bowl", None)]), ref
@@ -1062,7 +1066,7 @@ def test_cfp_quarterfinal_at_bowl_and_first_round_not(
     ref = _bowl_reference(
         tmp_path,
         build_reference,
-        "80,Fixture Quarter Bowl,Quarter Bowl,true\n81,,,false\n",
+        "80,Fixture Quarter Bowl,Quarter Bowl,true,quarter-bowl\n81,,,false,\n",
     )
     payload = _site(
         _postseason_tables([(80, "playoff", "quarterfinal"), (81, "playoff", "first_round")]),
@@ -1072,14 +1076,16 @@ def test_cfp_quarterfinal_at_bowl_and_first_round_not(
 
 
 def test_unknown_name_row_is_null(tmp_path: Path, build_reference: Path) -> None:
-    ref = _bowl_reference(tmp_path, build_reference, "70,,,true\n")
+    ref = _bowl_reference(tmp_path, build_reference, "70,,,true,\n")
     payload = _site(_postseason_tables([(70, "bowl", None)]), ref)
     assert payload["lookups"]["bowls"] == []
     assert payload["telecasts"]["bowl"] == [None]
 
 
 def test_regular_game_ignores_a_crosswalk_row(tmp_path: Path, build_reference: Path) -> None:
-    ref = _bowl_reference(tmp_path, build_reference, "70,Zebra Harbor Bowl,Harbor Bowl,true\n")
+    ref = _bowl_reference(
+        tmp_path, build_reference, "70,Zebra Harbor Bowl,Harbor Bowl,true,harbor-bowl\n"
+    )
     payload = _site(_postseason_tables([(70, "regular", None)]), ref)
     assert payload["telecasts"]["bowl"] == [None]
     assert payload["lookups"]["bowls"] == []
@@ -1099,11 +1105,11 @@ def test_missing_crosswalk_row_raises_count_only(tmp_path: Path, build_reference
 @pytest.mark.parametrize(
     ("spec", "row"),
     [
-        ((70, "bowl", None), "70,,,false\n"),
-        ((70, "playoff", "quarterfinal"), "70,,,false\n"),
-        ((70, "playoff", "semifinal"), "70,,,false\n"),
-        ((70, "playoff", "first_round"), "70,Zebra Bowl,Zebra Bowl,true\n"),
-        ((70, "playoff", "championship"), "70,,,true\n"),
+        ((70, "bowl", None), "70,,,false,\n"),
+        ((70, "playoff", "quarterfinal"), "70,,,false,\n"),
+        ((70, "playoff", "semifinal"), "70,,,false,\n"),
+        ((70, "playoff", "first_round"), "70,Zebra Bowl,Zebra Bowl,true,zebra-bowl\n"),
+        ((70, "playoff", "championship"), "70,,,true,\n"),
     ],
 )
 def test_at_bowl_disagreement_raises(
@@ -1117,7 +1123,9 @@ def test_at_bowl_disagreement_raises(
 
 
 def test_notes_sentinel_never_ships(tmp_path: Path, build_reference: Path) -> None:
-    ref = _bowl_reference(tmp_path, build_reference, "70,Zebra Harbor Bowl,Harbor Bowl,true\n")
+    ref = _bowl_reference(
+        tmp_path, build_reference, "70,Zebra Harbor Bowl,Harbor Bowl,true,harbor-bowl\n"
+    )
     tables = _postseason_tables([(70, "bowl", None)], notes="SENTINEL ZEBRA HARBOR BOWL NOTE")
     site = build_site_data(tables, build_coverage(tables), ref, _GENERATED_AT)
     paths = DataPaths(vault=tmp_path / "vault")

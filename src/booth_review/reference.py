@@ -17,6 +17,7 @@ from __future__ import annotations
 import csv
 import io
 import os
+import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -27,6 +28,9 @@ from booth_review.transport.cache import atomic_write_bytes
 # Sheets (classic CSV/formula injection) when opened in a spreadsheet. Same
 # prefixes as resolve.names.csv_safe, restated locally rather than imported
 # so this foundational module never depends on a later-plan package.
+# Stable ASCII kebab ids for named games; never renamed once shipped.
+SLUG_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+
 _FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
 
