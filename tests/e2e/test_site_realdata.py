@@ -812,49 +812,46 @@ def test_real_main_family_and_stacked_totals(
     assert viewers_hits == 0, "a bar model carried a viewer figure"
 
 
-_RESULT_REAL_JS = """
+_SPREAD_REAL_JS = """
 () => {
   const t = window.__testHooks.data.t;
   const n = t.season.length;
-  let spreadVsPregame = 0;
-  let pregameNotMirrored = 0;
-  let resultWithoutInputs = 0;
-  let resultMissing = 0;
+  const pregamePresent = 'pregame' in t ? 1 : 0;
+  const homeSpreadNotArray = Array.isArray(t.home_spread) && t.home_spread.length === n ? 0 : 1;
+  let spreadWithoutInputs = 0;
+  let spreadMissing = 0;
   let wrongMagnitude = 0;
   let negativeZero = 0;
   for (let i = 0; i < n; i += 1) {
     const hs = t.home_spread[i];
-    const pg = t.pregame[i];
     const hp = t.home_points[i];
     const ap = t.away_points[i];
-    const r = t.result[i];
+    const x = t.spread[i];
     const decided = hp != null && ap != null && hp !== ap;
-    if ((hs == null) !== (pg == null)) spreadVsPregame += 1;
-    if (hs != null && pg != null && pg !== -Math.abs(hs)) pregameNotMirrored += 1;
-    if (r != null && (hs == null || !decided)) resultWithoutInputs += 1;
-    if (hs != null && decided && r == null) resultMissing += 1;
-    if (r != null && hs != null && Math.abs(r) !== Math.abs(hs)) wrongMagnitude += 1;
-    if (Object.is(r, -0)) negativeZero += 1;
+    if (x != null && (hs == null || !decided)) spreadWithoutInputs += 1;
+    if (hs != null && decided && x == null) spreadMissing += 1;
+    if (x != null && hs != null && Math.abs(x) !== Math.abs(hs)) wrongMagnitude += 1;
+    if (Object.is(x, -0)) negativeZero += 1;
   }
-  return [spreadVsPregame, pregameNotMirrored, resultWithoutInputs, resultMissing,
+  return [pregamePresent, homeSpreadNotArray, spreadWithoutInputs, spreadMissing,
           wrongMagnitude, negativeZero];
 }
 """
 
 
-def test_real_home_spread_and_result_counts(
+def test_real_home_spread_and_spread_axis_counts(
     real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-02, D-06, D-08: on the real build home_spread and pregame agree, and the
-    derived result axis is set exactly when a line, a score, and a winner exist,
-    with the line's magnitude -- integers only."""
+    """04.8 D-01, D-03, D-10: on the real build the site data has no pregame
+    column, home_spread is a full column, and the derived spread x is set exactly
+    when a line, a score, and a winner exist, with the line's magnitude -- integers only."""
     real_open_app(real_guarded_page, "")
-    counts: list[int] = real_guarded_page.evaluate(_RESULT_REAL_JS)
-    spread_vs_pregame, pregame_not_mirrored, result_without_inputs = counts[:3]
-    result_missing, wrong_magnitude, negative_zero = counts[3:]
-    assert spread_vs_pregame == 0, "home_spread and pregame disagreed on null-ness"
-    assert pregame_not_mirrored == 0, "pregame was not the favorite-signed home_spread"
-    assert result_without_inputs == 0, "a result was set without a line, score, or winner"
-    assert result_missing == 0, "a decided game with a line had no result"
-    assert wrong_magnitude == 0, "a result's magnitude differed from its line"
-    assert negative_zero == 0, "a result was negative zero"
+    counts: list[int] = real_guarded_page.evaluate(_SPREAD_REAL_JS)
+    pregame_present, home_spread_not_array, spread_without_inputs = counts[:3]
+    spread_missing, wrong_magnitude, negative_zero = counts[3:]
+    assert pregame_present == 0, "site data still carries pregame"
+    assert home_spread_not_array == 0, "home_spread is not a full column"
+    assert spread_without_inputs == 0, "a spread x was set without a line, score, or winner"
+    assert spread_missing == 0, "a decided game with a line had no spread x"
+    assert wrong_magnitude == 0, "a spread x's magnitude differed from its line"
+    assert negative_zero == 0, "a spread x was negative zero"
