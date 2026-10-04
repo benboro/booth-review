@@ -486,14 +486,25 @@ export function fitZeroCaptions(gd) {
   if (!Array.isArray(anns) || !svg) return;
   const box = svg.getBoundingClientRect();
   const update = {};
+  // Zero off the plotted range (a zoom, a pan): Plotly hides or clamps the
+  // caption, so its measured box does not follow xshift and chasing it would
+  // relayout forever. Park the shift at the normal gap and measure nothing.
+  const range = gd._fullLayout?.xaxis?.range;
+  const zeroInView = !range || (Math.min(...range) <= 0 && Math.max(...range) >= 0);
   anns.forEach((ann, k) => {
     const side = ann.text === '← favorite won' ? -1 : ann.text === 'underdog won →' ? 1 : 0;
     if (side === 0) return;
+    const base = side * ZERO_CAPTION_GAP;
+    if (!zeroInView) {
+      if (ann.xshift != null && Math.abs(ann.xshift - base) > 0.5) {
+        update[`annotations[${k}].xshift`] = base;
+      }
+      return;
+    }
     const el = gd.querySelector(`.annotation[data-index="${k}"]`);
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const shift = ann.xshift ?? side * ZERO_CAPTION_GAP;
-    const base = side * ZERO_CAPTION_GAP;
+    const shift = ann.xshift ?? base;
     // Overflow past the near SVG edge if the caption sat at the normal gap.
     const overflow =
       side > 0
