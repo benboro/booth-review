@@ -29,6 +29,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-playwright>=0.9.0",
     "pytest-socket>=0.8.1",
+    "pytest-timeout>=2.4.0",
     "pyyaml>=6.0.3",
     "ruff>=0.16.9",
     "types-markdown>=3.10.2.20260712",
@@ -58,6 +59,9 @@ select = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--disable-socket --allow-unix-socket -m \"not e2e\""
+# A hung browser test (e.g. a Plotly redraw loop) fails after 5 minutes instead
+# of blocking the run for hours; the slowest real test takes well under that.
+timeout = 300
 markers = [
     "e2e: browser smoke tests against dist/site (pytest-playwright + Chromium); run with -m e2e",
 ]
