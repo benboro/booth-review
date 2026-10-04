@@ -116,7 +116,7 @@ def test_toolbar_names_the_matchup(
 
     open_app(guarded_page, PAIR)
     assert guarded_page.locator("#trigger-school").inner_text().startswith("School · 2")
-    assert guarded_page.locator("#trigger-school").get_attribute("title") is None
+    assert guarded_page.locator("#trigger-school").get_attribute("title") == "School · 2"
 
 
 def test_long_matchup_label_truncates_without_overlap(
@@ -138,7 +138,10 @@ def test_long_matchup_label_truncates_without_overlap(
         guarded_page.set_viewport_size({"width": width, "height": 900})
         open_app(guarded_page, url)
         trigger = guarded_page.locator("#trigger-school")
-        assert _box(guarded_page, "#trigger-school")["width"] <= 322
+        # Equal grid cells (04.9 D-21): the long label does not widen its button.
+        assert _box(guarded_page, "#trigger-school")["width"] == pytest.approx(
+            _box(guarded_page, "#trigger-role")["width"], abs=1
+        )
         assert trigger.evaluate("e => e.scrollWidth > e.clientWidth")
         assert trigger.evaluate("e => getComputedStyle(e).textOverflow") == "ellipsis"
         toolbar = _box(guarded_page, "#toolbar")
@@ -191,9 +194,8 @@ def test_toggling_head_to_head_keeps_the_toolbar_and_the_open_popover_in_place(
 ) -> None:
     """SITE-20: "School · 2" -> "School: Northfield vs Lakeview" must not re-wrap the
     toolbar or move the chart, and the open School popover stays under its button.
-    With the default font at these widths, the full label is wider than the room
-    left on the School button's toolbar line, so it truncates instead (a wider font
-    can wrap School onto the second line first, where the label fits)."""
+    The School button's grid cell, not a free-space cap, keeps the toolbar fixed:
+    the longer label truncates inside the cell (04.9 D-21)."""
     guarded_page.set_viewport_size({"width": width, "height": 900})
     open_app(guarded_page, PAIR)
     _open_school(guarded_page)
