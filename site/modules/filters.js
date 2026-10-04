@@ -1,11 +1,13 @@
 /**
- * Filter toolbar: an Announcers popover plus seven filter popovers (Seasons,
- * Networks, Kickoff, Role, Conference, School, Bowls/Playoffs) above the
+ * Filter toolbar: an Announcers popover plus eight filter popovers (Seasons,
+ * Networks, Kickoff, Role, Conference, School, Bowls/Playoffs, Game) above the
  * chart, plus "Clear all filters" and a full-height phone bottom sheet that
  * stacks every section, Announcers first (SITE-20, SITE-21, SITE-22,
  * SITE-24, SITE-27; D-02, D-03, D-10, D-11, D-18, D-21, D-27). The School popover
  * also holds the Either team / Head-to-head control, shown with exactly two
- * schools (04.7 D-11..D-14).
+ * schools (04.7 D-11..D-14). The Game popover is a searchable, sectioned radio
+ * list of named games (playoff rounds, bowls, rivalries) built from `data.games`
+ * (04.9 D-01..D-06); one pick at a time, written only through setState.
  *
  * D-21: the Announcers popover holds the moved person-search combobox
  * (`site/modules/topbar.js` still owns its search/add-person behavior; this
@@ -26,7 +28,7 @@
  * names always land in the DOM via textContent.
  */
 
-import { normalizeName } from './data.js';
+import { gameSearchKey, normalizeName } from './data.js';
 import { FAMILY_LABELS } from './palette.js';
 import { offeredFamilyIds } from './select.js';
 import { SLOT_SHORT_LABELS, ROLE_LABELS } from './format.js';
@@ -43,10 +45,11 @@ const SECTION_POPOVERS = [
   ['filter-conference', 'pop-conference'],
   ['filter-school', 'pop-school'],
   ['filter-postseason', 'pop-postseason'],
+  ['filter-game', 'pop-game'],
 ];
 
 /** Toolbar trigger names, in toolbar order -- also `#trigger-{name}`'s id suffix. */
-const TRIGGER_NAMES = ['announcers', 'seasons', 'networks', 'kickoff', 'role', 'conference', 'school', 'postseason'];
+const TRIGGER_NAMES = ['announcers', 'seasons', 'networks', 'kickoff', 'role', 'conference', 'school', 'postseason', 'game'];
 
 /**
  * Per-group reset patches (A4), keyed by trigger name and applied through
@@ -62,6 +65,7 @@ const GROUP_RESETS = {
   conference: { conferences: [] },
   school: { school: [], h2h: false },
   postseason: { postseason: 'all' },
+  game: { game: null },
 };
 
 /** Bowls/Playoffs radio values, in the DOM order they appear in `#postseason-options`. */
@@ -87,6 +91,19 @@ let schoolCheckboxes = new Map();
 
 /** team slug -> its search keys (from `data.teamKeys`), populated once by `buildSchoolList`. */
 let schoolKeysBySlug = new Map();
+
+/** game slug -> its radio row button, populated once by `buildGameList`. */
+let gameRows = new Map();
+
+/** Section order and header text of the Game list (04.9 D-02). */
+const GAME_SECTIONS = [
+  ['playoff', 'PLAYOFF'],
+  ['bowls', 'BOWLS'],
+  ['rivalries', 'RIVALRIES'],
+];
+
+/** The longest query echoed in the empty-search line (04.9 D-04). */
+const GAME_QUERY_ECHO_MAX = 40;
 
 /** Network ids for every primary network in a given family. */
 function familyNetworkIds(data, familyKeyVal) {
@@ -378,6 +395,118 @@ function buildSchoolList(data) {
   els.schoolList.append(...rows);
 }
 
+/** Builds the Game popover's sectioned radio list once, from `data.games` (04.9 D-02). */
+function buildGameList(data) {
+  gameRows = new Map();
+  const groups = [];
+  for (const [section, header] of GAME_SECTIONS) {
+    const games = data.games.filter((g) => g.section === section);
+    if (games.length === 0) continue;
+    const group = document.createElement('div');
+    group.setAttribute('role', 'group');
+    group.dataset.gameSection = section;
+    const head = document.createElement('div');
+    head.className = 'game-section-head';
+    head.id = `game-head-${section}`;
+    head.textContent = header;
+    group.setAttribute('aria-labelledby', head.id);
+    group.appendChild(head);
+    for (const game of games) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.setAttribute('role', 'radio');
+      btn.setAttribute('aria-checked', 'false');
+      btn.tabIndex = -1;
+      btn.dataset.game = game.slug;
+      btn.dataset.searchHidden = 'false';
+      btn.dataset.facetHidden = 'false';
+      const label = document.createElement('span');
+      label.className = 'game-label';
+      label.textContent = game.label;
+      btn.append(label, ...makeCountSpans());
+      group.appendChild(btn);
+      gameRows.set(game.slug, btn);
+    }
+    groups.push(group);
+  }
+  els.gameOptions.replaceChildren(...groups);
+}
+
+/** Every Game row currently visible, in DOM order. */
+function visibleGameRows() {
+  return Array.from(els.gameOptions.querySelectorAll('[data-game]:not([hidden])'));
+}
+
+/**
+ * Hides empty section groups, shows the no-match line, and recomputes the roving
+ * tab stop: the checked visible row, else the first visible row (04.9 D-03, D-04).
+ */
+function syncGameChrome(query) {
+  for (const group of els.gameOptions.querySelectorAll('[data-game-section]')) {
+    group.hidden = group.querySelector('[data-game]:not([hidden])') == null;
+  }
+  const rows = visibleGameRows();
+  const q = query.trim();
+  if (q !== '' && rows.length === 0) {
+    const shown = q.length > GAME_QUERY_ECHO_MAX ? `${q.slice(0, GAME_QUERY_ECHO_MAX)}...` : q;
+    els.gameEmpty.textContent = `No games match "${shown}".`;
+    els.gameEmpty.hidden = false;
+  } else {
+    els.gameEmpty.hidden = true;
+  }
+  const stop = rows.find((r) => r.getAttribute('aria-checked') === 'true') ?? rows[0];
+  for (const btn of gameRows.values()) btn.tabIndex = btn === stop ? 0 : -1;
+}
+
+/** Hides Game rows whose search keys do not contain the folded query (04.9 D-04). */
+function filterGameRows(data, query) {
+  const q = gameSearchKey(query);
+  for (const game of data.games) {
+    const row = gameRows.get(game.slug);
+    row.dataset.searchHidden = q !== '' && !game.keys.some((k) => k.includes(q)) ? 'true' : 'false';
+    syncRowHidden(row);
+  }
+  syncGameChrome(query);
+}
+
+/**
+ * Radiogroup keyboard for the Game list (04.9 D-03): arrows move focus and
+ * selection together across visible rows without wrapping; Home/End jump to the
+ * ends; ArrowUp from the first row returns to the search box; ArrowDown in the
+ * search box focuses the first visible row.
+ */
+function bindGameKeyboard(setState) {
+  els.gameSearch.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'ArrowDown') return;
+    const rows = visibleGameRows();
+    if (rows.length === 0) return;
+    ev.preventDefault();
+    rows[0].focus();
+  });
+  els.gameOptions.addEventListener('keydown', (ev) => {
+    const key = ev.key;
+    if (!['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown', 'Home', 'End'].includes(key)) return;
+    const target = ev.target;
+    if (!(target instanceof HTMLElement) || !target.dataset.game) return;
+    const rows = visibleGameRows();
+    const idx = rows.indexOf(target);
+    if (idx === -1) return;
+    ev.preventDefault();
+    let next;
+    if (key === 'Home') next = 0;
+    else if (key === 'End') next = rows.length - 1;
+    else if (key === 'ArrowDown' || key === 'ArrowRight') next = Math.min(idx + 1, rows.length - 1);
+    else if (idx === 0) {
+      els.gameSearch.focus();
+      return;
+    } else next = idx - 1;
+    const slug = rows[next].dataset.game;
+    setState({ game: slug });
+    // setState -> render() runs synchronously, so the roving tabindex is current.
+    gameRows.get(slug)?.focus();
+  });
+}
+
 /** Hides checklist rows whose keys (via `keysFor`) don't contain the normalized query. */
 function filterChecklist(listEl, query, keysFor) {
   const q = normalizeName(query);
@@ -621,6 +750,9 @@ export function initFilters({ data, getState, setState }) {
     schoolMatch: document.getElementById('school-match'),
     schoolList: document.getElementById('school-list'),
     postseasonOptions: document.getElementById('postseason-options'),
+    gameSearch: document.getElementById('game-search'),
+    gameOptions: document.getElementById('game-options'),
+    gameEmpty: document.getElementById('game-empty'),
     clearFilters: document.getElementById('clear-filters'),
     filtersButton: document.getElementById('filters-button'),
     filtersShowResults: document.getElementById('filters-show-results'),
@@ -636,6 +768,7 @@ export function initFilters({ data, getState, setState }) {
   buildRoleHelper();
   buildConferenceList(data);
   buildSchoolList(data);
+  buildGameList(data);
   buildOnlyButtons();
 
   const onSeasonChange = (ev) => {
@@ -696,6 +829,14 @@ export function initFilters({ data, getState, setState }) {
     setState({ postseason: btn.dataset.postseason });
   });
   bindPostseasonKeyboard(setState);
+
+  els.gameSearch.addEventListener('input', () => filterGameRows(data, els.gameSearch.value));
+  els.gameOptions.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('[data-game]');
+    if (!btn) return;
+    setState({ game: btn.dataset.game });
+  });
+  bindGameKeyboard(setState);
 
   els.clearFilters.addEventListener('click', () => {
     // D-27 (overrides the earlier "people are not cleared" proposal): Clear all
@@ -919,6 +1060,26 @@ function renderPostseason(state, view) {
   }
 }
 
+/**
+ * Syncs the Game radio list (04.9 D-03, D-05, D-06, D-19): aria-checked, counts,
+ * zero-count rows hidden unless they are the pick, and the desktop-only rivalry
+ * tooltip. The pick stays checked and greyed at (0) when other filters empty it.
+ */
+function renderGame(data, state, view) {
+  const hoverCapable = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  for (const game of data.games) {
+    const row = gameRows.get(game.slug);
+    const checked = game.slug === state.game;
+    row.setAttribute('aria-checked', String(checked));
+    const count = view.facets.games[game.index] ?? 0;
+    setCount(row, count);
+    setFacetHidden(row, count === 0 && !checked);
+    if (game.teams && hoverCapable) row.setAttribute('title', `${game.teams[0]} vs ${game.teams[1]}`);
+    else row.removeAttribute('title');
+  }
+  syncGameChrome(els.gameSearch.value);
+}
+
 /** A toolbar trigger's label and active state, from `state` (D-02 copywriting).
  * D-36: the Networks count is the checked rows among the rows shown in the list. */
 function triggerInfo(name, data, state, view) {
@@ -970,6 +1131,11 @@ function triggerInfo(name, data, state, view) {
     const label = state.postseason === 'exclude' ? 'Bowls/Playoffs: Exclude' : 'Bowls/Playoffs: Only';
     return { label, active: true };
   }
+  if (name === 'game') {
+    const idx = state.game != null ? data.gameIndexBySlug.get(state.game) : undefined;
+    if (idx === undefined) return { label: 'Game', active: false };
+    return { label: `Game: ${data.games[idx].label}`, active: true };
+  }
   return { label: name, active: false };
 }
 
@@ -1000,6 +1166,7 @@ function activeFilterCount(data, state, view) {
   if (state.conferences.length > 0) n += 1;
   if (state.school.length > 0) n += 1;
   if (state.postseason !== 'all') n += 1;
+  if (triggerInfo('game', data, state, view).active) n += 1;
   n += state.people.length;
   return n;
 }
@@ -1039,6 +1206,7 @@ export function renderFilters({ data, state, view }) {
   renderConferences(state, view);
   renderSchool(data, state, view);
   renderPostseason(state, view);
+  renderGame(data, state, view);
   renderOnlyButtons(data, state, view);
   renderTriggers(data, state, view);
   renderGroupResets(data, state, view);

@@ -856,6 +856,70 @@ input[type="checkbox"] {
   margin: 0;
 }
 
+/* ---------- Game popover (04.9 D-02, D-06) ---------- */
+
+#pop-game {
+  min-width: 280px;
+}
+
+/* The head and search box stay put while the list scrolls; the negative offsets cancel the
+   popover's own padding so no row shows above them. */
+.game-sticky {
+  position: sticky;
+  top: calc(-1 * var(--space-md));
+  z-index: 1;
+  background: var(--bg);
+  margin: calc(-1 * var(--space-md)) calc(-1 * var(--space-md)) 0;
+  padding: var(--space-md) var(--space-md) var(--space-sm);
+  border-bottom: 1px solid var(--border);
+}
+
+.sheet-body .game-sticky {
+  position: static;
+  margin: 0;
+  padding: 0 0 var(--space-sm);
+  border-bottom: none;
+}
+
+.game-sticky .section-head {
+  margin-bottom: var(--space-sm);
+}
+
+#game-search {
+  width: 100%;
+  height: 40px;
+  box-sizing: border-box;
+}
+
+.game-section-head {
+  font: var(--font-label);
+  font-weight: var(--weight-semibold);
+  color: var(--muted);
+  padding: var(--space-sm) 0 var(--space-xs);
+}
+
+#game-options [role="group"]:first-child .game-section-head {
+  padding-top: var(--space-sm);
+}
+
+#game-options button {
+  min-height: 32px;
+  gap: var(--space-md);
+}
+
+.game-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.radio-list [hidden],
+#game-options [role="group"][hidden] {
+  display: none;
+}
+
 /* ---------- Faceted options (D-08..D-15) ---------- */
 
 .check-item {
@@ -2079,6 +2143,14 @@ html:has(#detail-panel[open]) {
 }
 
 @media (max-width: 640px) {
+  #game-search {
+    height: 44px;
+  }
+
+  #game-options button {
+    min-height: 44px;
+  }
+
   .chart-tabs {
     min-height: 44px;
   }

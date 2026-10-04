@@ -29,6 +29,7 @@
   <button type="button" class="filter-trigger desktop-only" id="trigger-conference" popovertarget="pop-conference" aria-haspopup="dialog" aria-expanded="false">Conference</button>
   <button type="button" class="filter-trigger desktop-only" id="trigger-school" popovertarget="pop-school" aria-haspopup="dialog" aria-expanded="false">School</button>
   <button type="button" class="filter-trigger desktop-only" id="trigger-postseason" popovertarget="pop-postseason" aria-haspopup="dialog" aria-expanded="false">Bowls/Playoffs</button>
+  <button type="button" class="filter-trigger desktop-only" id="trigger-game" popovertarget="pop-game" aria-haspopup="dialog" aria-expanded="false">Game</button>
 </nav>
 
 <section id="selection-bar" aria-label="Selected announcers and match summary">
@@ -163,6 +164,21 @@
   </section>
 </div>
 
+<div id="pop-game" class="filter-popover" popover="auto" role="dialog" aria-label="Game">
+  <section id="filter-game">
+    <div class="game-sticky">
+      <div class="section-head">
+        <h3>Game</h3>
+        <button type="button" class="group-reset" data-reset="game" aria-label="Reset game filter" aria-disabled="true">Reset</button>
+      </div>
+      <label for="game-search" class="visually-hidden">Search games</label>
+      <input type="search" id="game-search" placeholder="Search bowls and rivalries..." aria-label="Search games" autocomplete="off">
+    </div>
+    <p id="game-empty" class="helper" role="status" hidden></p>
+    <div id="game-options" class="radio-list" role="radiogroup" aria-label="Game"></div>
+  </section>
+</div>
+
 <div id="filters-sheet" class="filters-sheet" popover="auto" role="dialog" aria-labelledby="filters-sheet-title">
   <div class="sheet-header">
     <h2 id="filters-sheet-title">Filters</h2>
@@ -247,7 +263,7 @@
 
   <div id="table-empty" class="empty-state">
     <h3>Nothing selected</h3>
-    <p>Select an announcer or a school to see their games here.</p>
+    <p>Select an announcer, a school, or a game to list matching games.</p>
     <p>Pick an announcer from the Announcers filter, or a school from the School filter.</p>
   </div>
 
