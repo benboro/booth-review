@@ -228,6 +228,25 @@ def test_title_phrases(loaded: Page) -> None:
 
 
 @pytest.mark.parametrize(
+    ("mutation", "phrase"),
+    [
+        # Curated article (WR-02): a standalone or possessive name takes none.
+        ("raw.lookups.rivalries[1].article = null;", "Lakeshore Rivalry"),
+        (
+            "raw.lookups.rivalries[1].article = null;"
+            'raw.lookups.rivalries[1].name = "Old Pete\'s Paddle";',
+            "Old Pete's Paddle",
+        ),
+        ("raw.lookups.rivalries[1].name = 'Lakeshore Brawl';", "the Lakeshore Brawl"),
+    ],
+)
+def test_rivalry_title_phrase_follows_the_curated_article(
+    loaded: Page, mutation: str, phrase: str
+) -> None:
+    assert _games(loaded, mutation)["phrases"][2] == phrase
+
+
+@pytest.mark.parametrize(
     "mutation",
     [
         "delete raw.telecasts.rivalry;",

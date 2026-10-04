@@ -1378,7 +1378,7 @@ def _rivalry_reference(tmp_path: Path, build_reference: Path, rows: str) -> Path
     reference = tmp_path / "reference"
     shutil.copytree(build_reference, reference)
     (reference / "rivalries.csv").write_text(
-        "rivalry_id,name,team_a,team_b,season_from,season_to\n" + rows, encoding="utf-8"
+        "rivalry_id,name,article,team_a,team_b,season_from,season_to\n" + rows, encoding="utf-8"
     )
     return reference
 
@@ -1397,12 +1397,22 @@ def _meeting(
 
 def test_rivalry_tags_first_regular_meeting_only(tmp_path: Path, build_reference: Path) -> None:
     ref = _rivalry_reference(
-        tmp_path, build_reference, "the-game,The Game,Fixture Home,Fixture Away,,\n"
+        tmp_path, build_reference, "the-game,The Game,,Fixture Home,Fixture Away,,\n"
     )
     payload = _site(_two_game_tables([_meeting(1, 14), _meeting(2, 28)]), ref)
     assert payload["telecasts"]["rivalry"] == [0, None]
     assert payload["lookups"]["rivalries"] == [
-        {"slug": "the-game", "name": "The Game", "teams": [0, 1]}
+        {"slug": "the-game", "name": "The Game", "article": None, "teams": [0, 1]}
+    ]
+
+
+def test_rivalry_article_ships_in_lookup(tmp_path: Path, build_reference: Path) -> None:
+    ref = _rivalry_reference(
+        tmp_path, build_reference, "lake-cup,Lake Cup,the,Fixture Home,Fixture Away,,\n"
+    )
+    payload = _site(_two_game_tables([_meeting(1, 14)]), ref)
+    assert payload["lookups"]["rivalries"] == [
+        {"slug": "lake-cup", "name": "Lake Cup", "article": "the", "teams": [0, 1]}
     ]
 
 
@@ -1410,7 +1420,7 @@ def test_title_game_before_rivalry_game_is_untagged_and_counted(
     tmp_path: Path, build_reference: Path
 ) -> None:
     ref = _rivalry_reference(
-        tmp_path, build_reference, "the-game,The Game,Fixture Home,Fixture Away,,\n"
+        tmp_path, build_reference, "the-game,The Game,,Fixture Home,Fixture Away,,\n"
     )
     title = {**_meeting(1, 14), "notes": "SENTINEL ZEBRA Championship"}
     tables = _two_game_tables([title, _meeting(2, 28)])
@@ -1431,7 +1441,8 @@ def test_rivalry_without_plotted_telecast_is_dropped(tmp_path: Path, build_refer
     ref = _rivalry_reference(
         tmp_path,
         build_reference,
-        "the-game,The Game,Fixture Home,Fixture Away,,\nother,Other,Fixture Home,Third Team,,\n",
+        "the-game,The Game,,Fixture Home,Fixture Away,,\n"
+        "other,Other,the,Fixture Home,Third Team,,\n",
     )
     games = [_meeting(1, 14), {**_meeting(2, 21, away="Third Team"), "away_id": 300}]
     tables = _build_tables(
@@ -1451,7 +1462,7 @@ def test_rivalry_team_missing_from_games_raises_count_only(
     from booth_review.errors import VaultStateError
 
     ref = _rivalry_reference(
-        tmp_path, build_reference, "the-game,The Game,SENTINEL ZEBRA,Fixture Away,,\n"
+        tmp_path, build_reference, "the-game,The Game,,SENTINEL ZEBRA,Fixture Away,,\n"
     )
     with pytest.raises(VaultStateError, match="1 team name") as info:
         _site(_two_game_tables([_meeting(1, 14)]), ref)

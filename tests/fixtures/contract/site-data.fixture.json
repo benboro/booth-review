@@ -231,6 +231,7 @@
       {
         "slug": "bridge-game",
         "name": "The Bridge Game",
+        "article": null,
         "teams": [
           6,
           7
@@ -239,6 +240,7 @@
       {
         "slug": "lakeshore",
         "name": "Lakeshore Rivalry",
+        "article": "the",
         "teams": [
           0,
           1

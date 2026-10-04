@@ -1,7 +1,8 @@
 """Curated named FBS rivalries loader (D-12/D-13).
 
 data/reference/rivalries.csv holds well-known named rivalries: a stable id,
-the current name, two CFBD canonical team names, and optional season limits.
+the current name, whether titles put "the" before it (`article`), two CFBD
+canonical team names, and optional season limits.
 The build counts only the first regular-season meeting of the pair in a
 season, after skipping the conference title games CFBD's notes mark (2022 on;
 see build.named_games), so a title game is never the rivalry game. For earlier
@@ -16,7 +17,19 @@ from pathlib import Path
 from booth_review.errors import ReferenceTableError
 from booth_review.reference import SLUG_PATTERN, read_reference_csv_numbered
 
-RIVALRY_COLUMNS = ("rivalry_id", "name", "team_a", "team_b", "season_from", "season_to")
+RIVALRY_COLUMNS = (
+    "rivalry_id",
+    "name",
+    "article",
+    "team_a",
+    "team_b",
+    "season_from",
+    "season_to",
+)
+
+# `article` is "the" when titles read "of the {name}" (the Iron Bowl) and empty
+# when the name stands alone (Bedlam, or a name that already starts with "The ").
+ARTICLE_VALUES = frozenset({"", "the"})
 
 RESERVED_RIVALRY_IDS = frozenset(
     {"cfp-national-championship", "cfp-semifinal", "cfp-quarterfinal", "cfp-first-round"}
@@ -27,6 +40,7 @@ RESERVED_RIVALRY_IDS = frozenset(
 class Rivalry:
     rivalry_id: str
     name: str
+    article: str | None
     team_a: str
     team_b: str
     season_from: int | None
@@ -68,6 +82,11 @@ def load_rivalries(reference_dir: Path) -> list[Rivalry]:
             raise fail(line_no, "name must not contain < or >")
         if name.casefold() in names:
             raise fail(line_no, "duplicate name")
+        article = raw["article"]
+        if article not in ARTICLE_VALUES:
+            raise fail(line_no, "article must be 'the' or empty")
+        if article and name.startswith("The "):
+            raise fail(line_no, "article must be empty when the name starts with 'The '")
         if team_a == team_b:
             raise fail(line_no, "team_a and team_b must differ")
         pair = frozenset((team_a, team_b))
@@ -80,5 +99,7 @@ def load_rivalries(reference_dir: Path) -> list[Rivalry]:
         ids.add(rivalry_id)
         names.add(name.casefold())
         pairs.add(pair)
-        rivalries.append(Rivalry(rivalry_id, name, team_a, team_b, season_from, season_to))
+        rivalries.append(
+            Rivalry(rivalry_id, name, article or None, team_a, team_b, season_from, season_to)
+        )
     return rivalries

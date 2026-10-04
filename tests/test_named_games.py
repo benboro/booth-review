@@ -64,6 +64,7 @@ def _riv(**kw: Any) -> Rivalry:
     base: dict[str, Any] = {
         "rivalry_id": "lake-cup",
         "name": "Lake Cup",
+        "article": "the",
         "team_a": NF,
         "team_b": LV,
         "season_from": None,

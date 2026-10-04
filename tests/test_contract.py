@@ -379,6 +379,26 @@ def _unreferenced_rivalry(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _rivalry_article_missing(data: dict[str, Any]) -> dict[str, Any]:
+    del data["lookups"]["rivalries"][1]["article"]
+    return data
+
+
+def _rivalry_article_capitalized(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][1]["article"] = "The"
+    return data
+
+
+def _rivalry_article_empty_string(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][1]["article"] = ""
+    return data
+
+
+def _rivalry_article_before_the_name(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][0]["article"] = "the"
+    return data
+
+
 _BROKEN_VARIANTS = [
     pytest.param(_add_unknown_top_level_key, id="unknown-top-level-key"),
     pytest.param(_add_unknown_telecast_column, id="unknown-telecast-column"),
@@ -442,6 +462,10 @@ _BROKEN_VARIANTS = [
     pytest.param(_rivalry_teams_mismatch, id="rivalry-teams-mismatch"),
     pytest.param(_rivalry_index_out_of_range, id="rivalry-index-out-of-range"),
     pytest.param(_unreferenced_rivalry, id="unreferenced-rivalry"),
+    pytest.param(_rivalry_article_missing, id="rivalry-article-missing"),
+    pytest.param(_rivalry_article_capitalized, id="rivalry-article-capitalized"),
+    pytest.param(_rivalry_article_empty_string, id="rivalry-article-empty-string"),
+    pytest.param(_rivalry_article_before_the_name, id="rivalry-article-before-the-name"),
 ]
 
 

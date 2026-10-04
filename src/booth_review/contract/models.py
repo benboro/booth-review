@@ -131,19 +131,23 @@ class BowlFranchiseRef(BaseModel):
 
 
 class RivalryRef(BaseModel):
-    """A curated rivalry: slug, display name, and its two teams as ascending
-    indexes into lookups.teams (04.9 D-13)."""
+    """A curated rivalry: slug, display name, the article titles put before the
+    name ("the" or null), and its two teams as ascending indexes into
+    lookups.teams (04.9 D-13, D-18)."""
 
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
     slug: str = Field(pattern=GAME_SLUG_PATTERN)
     name: str = Field(min_length=1)
+    article: Literal["the"] | None
     teams: list[int] = Field(min_length=2, max_length=2)
 
     @model_validator(mode="after")
     def _teams_ascending(self) -> RivalryRef:
         if self.teams[0] >= self.teams[1]:
             raise ValueError("rivalry teams must be two distinct ascending indexes")
+        if self.article is not None and self.name.startswith("The "):
+            raise ValueError("rivalry article must be null when the name starts with 'The '")
         return self
 
 

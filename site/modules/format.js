@@ -73,13 +73,16 @@ export const NEW_YEARS_SIX = Object.freeze([
 ]);
 
 /**
- * Title phrase for a game (D-18): CFP entries use their plural phrase, a label
- * starting with the case-sensitive 'The ' stays as is, else 'the {label}'.
- * @param {{kind: string, label: string, phrase?: string}} game
+ * Title phrase for a game (D-18): CFP entries use their plural phrase; a
+ * rivalry takes its curated article ('the Iron Bowl', 'Bedlam', 'The Game';
+ * WR-02); a bowl label starting with the case-sensitive 'The ' stays as is,
+ * else 'the {label}'.
+ * @param {{kind: string, label: string, phrase?: string, article?: string|null}} game
  * @returns {string}
  */
 export function gameTitlePhrase(game) {
   if (game.kind === 'cfp') return game.phrase;
+  if (game.kind === 'rivalry') return game.article === 'the' ? `the ${game.label}` : game.label;
   if (game.label.startsWith('The ')) return game.label;
   return `the ${game.label}`;
 }

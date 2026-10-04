@@ -221,6 +221,9 @@ export function prepareData(raw) {
     kind: 'rivalry',
     section: 'rivalries',
     rivalry,
+    // Curated in rivalries.csv (WR-02): 'the' for "the Iron Bowl", null for
+    // a name that stands alone ("Bedlam", "The Game").
+    article: r.article === 'the' ? 'the' : null,
     teams: r.teams.map((ti) => lookups.teams[ti].name),
     keys: [r.name, ...r.teams.map((ti) => lookups.teams[ti].name)].map(gameSearchKey),
   }));

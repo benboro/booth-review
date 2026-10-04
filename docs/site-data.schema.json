@@ -426,8 +426,20 @@
     },
     "RivalryRef": {
       "additionalProperties": false,
-      "description": "A curated rivalry: slug, display name, and its two teams as ascending\nindexes into lookups.teams (04.9 D-13).",
+      "description": "A curated rivalry: slug, display name, the article titles put before the\nname (\"the\" or null), and its two teams as ascending indexes into\nlookups.teams (04.9 D-13, D-18).",
       "properties": {
+        "article": {
+          "anyOf": [
+            {
+              "const": "the",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Article"
+        },
         "name": {
           "minLength": 1,
           "title": "Name",
@@ -451,6 +463,7 @@
       "required": [
         "slug",
         "name",
+        "article",
         "teams"
       ],
       "title": "RivalryRef",

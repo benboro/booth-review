@@ -364,6 +364,7 @@ def build_site_data(
         {
             "slug": r.rivalry_id,
             "name": r.name,
+            "article": r.article,
             "teams": sorted([team_index[r.team_a], team_index[r.team_b]]),
         }
         for r in used_rivalries

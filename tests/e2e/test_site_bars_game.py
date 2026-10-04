@@ -7,6 +7,7 @@ the CFP Semifinal one (game 5), so the Bars count only that game's crew. Head-to
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable
 from typing import Any
 
@@ -81,6 +82,20 @@ def test_cfp_round_pick_uses_the_plural_form(
     open_app(guarded_page, "?game=cfp-semifinal&view=bars")
     assert _title(guarded_page) == "Announcers by rated telecasts of CFP semifinals"
     assert _model(guarded_page, {"game": "cfp-semifinal"})["games"] == [5]
+
+
+def test_rivalry_without_article_reads_naturally_in_titles(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+) -> None:
+    # WR-02: a rivalry whose curated article is null is never "the {name}".
+    raw = copy.deepcopy(fixture_raw)
+    raw["lookups"]["rivalries"][1]["name"] = "Glassjaw"
+    raw["lookups"]["rivalries"][1]["article"] = None
+    guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+    open_app(guarded_page, "?game=lakeshore&view=bars")
+    assert _title(guarded_page) == "Announcers by rated telecasts of Glassjaw"
 
 
 def test_game_with_networks_keeps_the_group_choice(
