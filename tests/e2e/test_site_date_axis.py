@@ -367,6 +367,21 @@ _FIG_JS = """
 """
 
 
+_HOME_JS = """
+async (base) => {
+  const { gutterPads } = await import('./modules/gutter.js');
+  const plotW = document.getElementById('chart').clientWidth - 94;
+  const [padLo, padHi] = gutterPads(base[1] - base[0], plotW);
+  return [base[0] - padLo, base[1] + padHi];
+}
+"""
+
+
+def _home(page: Page, base: list[float]) -> list[float]:
+    """The padded home range (04.12 D-01): `base` plus the pixel gutter at this width."""
+    return page.evaluate(_HOME_JS, base)  # type: ignore[no-any-return]
+
+
 def _fig(page: Page) -> dict:  # type: ignore[type-arg]
     page.evaluate(_WAIT_TWO_FRAMES)
     page.wait_for_timeout(150)
@@ -400,7 +415,7 @@ def test_no_na_strip_and_all_dots_plotted(date_page: Page) -> None:
 
 def test_gap_dividers_rendered(date_page: Page) -> None:
     f = _fig(date_page)
-    assert f["layoutRange"] == [0, 278]
+    assert f["layoutRange"] == pytest.approx(_home(date_page, [0, 278]), abs=1e-6)
     assert [s["x"] for s in f["shapes"]] == [76.5, 149.5, 243.5]
     assert all(s["layer"] == "below" and s["width"] == 1 for s in f["shapes"])
     assert len({s["color"] for s in f["shapes"]}) == 1
@@ -421,8 +436,11 @@ def test_season_filter_limits_x_axis_fade_and_hide(date_page: Page, dots: str) -
     base = _fig(date_page)
     date_page.evaluate(_STATE_JS, {"seasons": [2025, 2026], "dots": dots})
     f = _fig(date_page)
-    assert f["layoutRange"] == [153, 278]
-    assert f["minallowed"] == 153 and f["maxallowed"] == 278
+    home = _home(date_page, [153, 278])
+    assert f["layoutRange"] == pytest.approx(home, abs=1e-6)
+    assert home[0] < 153 and home[1] > 278
+    assert f["minallowed"] == pytest.approx(home[0], abs=1e-6)
+    assert f["maxallowed"] == pytest.approx(home[1], abs=1e-6)
     assert f["xs"] and min(f["xs"]) >= 153
     assert [a["name"] for a in f["anns"] if a["name"]] == ["season-2025", "season-2026"]
     assert [s["x"] for s in f["shapes"]] == [243.5]
@@ -432,8 +450,9 @@ def test_season_filter_limits_x_axis_fade_and_hide(date_page: Page, dots: str) -
 def test_single_season_range(date_page: Page) -> None:
     date_page.evaluate(_STATE_JS, {"seasons": [2025, 2025]})
     f = _fig(date_page)
-    assert f["layoutRange"] == [153, 240]
-    assert f["range"] == [153, 240]
+    home = _home(date_page, [153, 240])
+    assert f["layoutRange"] == pytest.approx(home, abs=1e-6)
+    assert f["range"] == pytest.approx(home, abs=1e-6)
 
 
 def test_spread_range_ignores_season_filter(
@@ -637,7 +656,8 @@ def test_pan_past_filtered_range_is_clamped_by_minallowed(date_page: Page) -> No
     date_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [100, 300]})
     _settle(date_page)
     lo, hi = date_page.evaluate("document.getElementById('chart')._fullLayout.xaxis.range")
-    assert lo >= 153 - 1e-6 and hi <= 278 + 1e-6
+    home = _home(date_page, [153, 278])
+    assert lo >= home[0] - 1e-6 and hi <= home[1] + 1e-6
 
 
 def test_autoscale_restores_filtered_range(date_page: Page) -> None:
@@ -653,7 +673,7 @@ def test_autoscale_restores_filtered_range(date_page: Page) -> None:
         " return { r: gd._fullLayout.xaxis.range, auto: gd._fullLayout.xaxis.autorange }; }"
     )
     assert res["auto"] is False
-    assert res["r"] == [153, 278]
+    assert res["r"] == pytest.approx(_home(date_page, [153, 278]), abs=1e-6)
 
 
 # -- double-click / Reset axes after an axis or season change (CR-01) ---------
@@ -686,10 +706,11 @@ def test_double_click_after_switching_to_date_restores_full_range(
     open_app(guarded_page, "")
     guarded_page.locator('#axis-toggle button[data-axis="date"]').click()
     _settle(guarded_page)
-    assert guarded_page.evaluate(_XRANGE_JS) == [0, 278]
-    assert _double_click_plot(guarded_page) == pytest.approx([0, 278], abs=1e-6)
+    home = _home(guarded_page, [0, 278])
+    assert guarded_page.evaluate(_XRANGE_JS) == pytest.approx(home, abs=1e-6)
+    assert _double_click_plot(guarded_page) == pytest.approx(home, abs=1e-6)
     # A second double-click must not get stuck on a stale range either.
-    assert _double_click_plot(guarded_page) == pytest.approx([0, 278], abs=1e-6)
+    assert _double_click_plot(guarded_page) == pytest.approx(home, abs=1e-6)
 
 
 def test_reset_axes_button_after_switching_to_date_restores_full_range(
@@ -704,7 +725,9 @@ def test_reset_axes_button_after_switching_to_date_restores_full_range(
     guarded_page.locator("#chart").hover()
     guarded_page.locator('#chart .modebar-btn[data-attr="zoom"][data-val="reset"]').click()
     _settle(guarded_page)
-    assert guarded_page.evaluate(_XRANGE_JS) == pytest.approx([0, 278], abs=1e-6)
+    assert guarded_page.evaluate(_XRANGE_JS) == pytest.approx(
+        _home(guarded_page, [0, 278]), abs=1e-6
+    )
 
 
 def test_double_click_after_clearing_season_filter_restores_full_range(
@@ -713,12 +736,15 @@ def test_double_click_after_clearing_season_filter_restores_full_range(
     guarded_page.set_viewport_size({"width": 1280, "height": 900})
     open_app(guarded_page, "?axis=date&seasons=2025-2026")
     _settle(guarded_page)
-    assert guarded_page.evaluate(_XRANGE_JS) == [153, 278]
+    assert guarded_page.evaluate(_XRANGE_JS) == pytest.approx(
+        _home(guarded_page, [153, 278]), abs=1e-6
+    )
     guarded_page.evaluate(_STATE_JS, {"seasons": None})
     _settle(guarded_page)
-    assert guarded_page.evaluate(_XRANGE_JS) == [0, 278]
-    assert _double_click_plot(guarded_page) == pytest.approx([0, 278], abs=1e-6)
-    assert _double_click_plot(guarded_page) == pytest.approx([0, 278], abs=1e-6)
+    home = _home(guarded_page, [0, 278])
+    assert guarded_page.evaluate(_XRANGE_JS) == pytest.approx(home, abs=1e-6)
+    assert _double_click_plot(guarded_page) == pytest.approx(home, abs=1e-6)
+    assert _double_click_plot(guarded_page) == pytest.approx(home, abs=1e-6)
 
 
 def test_double_click_after_spread_to_excitement_restores_excitement_range(
@@ -762,10 +788,9 @@ def test_season_change_resets_zoom_other_filters_keep_it(date_page: Page) -> Non
     assert kept == pytest.approx(zoomed, abs=1e-6)
     date_page.evaluate(_STATE_JS, {"school": [], "seasons": [2025, 2026]})
     _settle(date_page)
-    assert date_page.evaluate("document.getElementById('chart')._fullLayout.xaxis.range") == [
-        153,
-        278,
-    ]
+    assert date_page.evaluate(
+        "document.getElementById('chart')._fullLayout.xaxis.range"
+    ) == pytest.approx(_home(date_page, [153, 278]), abs=1e-6)
     date_page.evaluate(_STATE_JS, {"axis": "spread", "seasons": None})
     _settle(date_page)
     rng = date_page.evaluate("document.getElementById('chart').layout.xaxis.range")

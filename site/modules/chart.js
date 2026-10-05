@@ -45,6 +45,7 @@ import { ACCENT, DIVIDER, DOT_OUTLINE, FAMILY_COLORS, MUTED, PAGE_BG, SURFACE, Z
 import { MINUS, escapeHover, logTicks, niceLinearTicks } from './format.js';
 import { tooltipModel } from './tooltip.js';
 import { dateAxisLabels, gapDividers, seasonRange, shownBlocks } from './date-axis.js';
+import { gutterPads } from './gutter.js';
 
 /**
  * One-line fallback switch (D-22): set to 'plotly' to restore Plotly's own
@@ -77,9 +78,12 @@ const XAXIS_TITLES = {
  * values/labels that never fall inside the band.
  * @param {object} data - a `prepareData` result.
  * @param {"spread"|"excitement"|"date"} axis
+ * @param {number} [plotPx] - plot width in screen pixels; when given, the range
+ *   carries a 10px gutter (04.12 D-02) measured from the n/a sentinel and the max,
+ *   never smaller than the legacy pads. Omitted keeps the legacy range.
  * @returns {{sentinel: number, divider: number, range: [number, number], tickvals: number[], ticktext: string[]}}
  */
-export function naBand(data, axis) {
+export function naBand(data, axis, plotPx) {
   let [lo, hi] = data.xRange[axis] || [null, null];
   if (lo == null || hi == null) [lo, hi] = [-1, 1];
   if (axis === 'spread') {
@@ -90,7 +94,11 @@ export function naBand(data, axis) {
   const w = 0.06 * span;
   const sentinel = lo - 1.5 * w;
   const divider = lo - 0.75 * w;
-  const range = [lo - 2.25 * w, hi + 0.03 * span];
+  let range = [lo - 2.25 * w, hi + 0.03 * span];
+  if (plotPx !== undefined) {
+    const [padLo, padHi] = gutterPads(hi - sentinel, plotPx, { minLo: 0.75 * w, minHi: 0.03 * span });
+    range = [sentinel - padLo, hi + padHi];
+  }
   const tickvals = niceLinearTicks(lo, hi, 6);
   const ticktext = tickvals.map((v) => {
     if (axis === 'spread') return v > 0 ? `+${v}` : v < 0 ? `${MINUS}${Math.abs(v)}` : '0';
@@ -164,14 +172,17 @@ export function hoverText(data, i, { axis, theme }) {
  * @param {object} data - a `prepareData` result.
  * @param {object} view - a `computeView` result.
  * @param {object} state - shaped like `defaultState(data)`.
- * @param {{theme: "light"|"dark", mobile: boolean, revision: number, tooltipMode?: "html"|"plotly"}} env
+ * @param {{theme: "light"|"dark", mobile: boolean, revision: number, tooltipMode?: "html"|"plotly", plotWidth?: number}} env
  * @returns {{traces: object[], layout: object, config: object, dateAxis: object|null}}
  */
 export function buildFigure(data, view, state, env) {
   const axis = state.axis;
   const isDate = axis === 'date';
+  const plotPx = env.plotWidth ?? (env.mobile ? 266 : 1138);
   // Pitfall 9: naBand never sees 'date'; a harmless band keeps every path off a sentinel.
-  const band = isDate ? { sentinel: 0, divider: 0, range: [0, 1], tickvals: [], ticktext: [] } : naBand(data, axis);
+  const band = isDate
+    ? { sentinel: 0, divider: 0, range: [0, 1], tickvals: [], ticktext: [] }
+    : naBand(data, axis, plotPx);
   // Date x: the numeric dateX column (never the string `t.date`); a dot outside
   // the season filter is not drawn on this axis (D-12).
   const outOfSeasons = (i) =>
@@ -370,8 +381,14 @@ export function buildFigure(data, view, state, env) {
   let dateAxis = null;
   if (isDate) {
     const blocks = shownBlocks(data.dateAxis, state.seasons);
-    const range = seasonRange(data.dateAxis, state.seasons);
-    const labels = dateAxisLabels(blocks, range, env.plotWidth ?? (env.mobile ? 266 : 1138), { mobile: env.mobile });
+    const base = seasonRange(data.dateAxis, state.seasons);
+    // 04.12 D-01/D-03: DATE_PAD stays block geometry; the outer gutter is measured
+    // from the block edge. Inter-season gaps are not plot edges and get no gutter,
+    // and a zoom-box edge is not padded. This padded range also feeds the pan
+    // limits (minallowed/maxallowed) and the Autoscale put-back.
+    const [padLo, padHi] = gutterPads(base[1] - base[0], plotPx);
+    const range = [base[0] - padLo, base[1] + padHi];
+    const labels = dateAxisLabels(blocks, range, plotPx, { mobile: env.mobile });
     dateAxis = { blocks, range, mobile: env.mobile, labels };
   }
 
@@ -425,6 +442,10 @@ export function buildFigure(data, view, state, env) {
       tickmode: 'array',
       tickvals: yTicks.tickvals,
       ticktext: yTicks.ticktext,
+      // 04.12 D-04 check: the x1.4 log pad is log10(1.4) = 0.146 decade per side; at the
+      // 420px minimum plot height (#chart min-height 520 minus margins 100) a 3-decade
+      // viewer spread still leaves about 18.7px, over twice the 9px star+halo
+      // half-extent, so y needs no gutter (e2e test_site_gutter.py checks >= 10px).
       range: [Math.log10(data.viewersMin / 1.4), Math.log10(data.viewersMax * 1.4)],
       gridcolor: DIVIDER[theme],
       fixedrange: env.mobile,
