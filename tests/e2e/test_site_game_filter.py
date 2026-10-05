@@ -585,17 +585,62 @@ def test_collapsed_section_with_the_pick_shows_hint(
     assert guarded_page.locator("#game-head-playoff .game-picked-hint").is_hidden()
 
 
+# Opens a popover by clicking its trigger and snapshots the Game sections in the same
+# task, before the queued `toggle` event and before any frame paints (WR-01). A reset
+# that waits for `toggle` would still show the stale collapsed state here.
+_REOPEN_SNAPSHOT_JS = """
+([triggerId, popId]) => {
+  document.getElementById(triggerId).click();
+  const sections = ['playoff', 'bowls', 'rivalries'];
+  return {
+    open: document.getElementById(popId).matches(':popover-open'),
+    expanded: sections.map((s) =>
+      document.getElementById(`game-head-${s}`).getAttribute('aria-expanded')),
+    rowsHidden: sections.map((s) => document.getElementById(`game-rows-${s}`).hidden),
+    hints: [...document.querySelectorAll('#game-options .game-picked-hint')]
+      .filter((h) => !h.hidden).length,
+  };
+}
+"""
+
+_ALL_OPEN_SNAPSHOT = {
+    "open": True,
+    "expanded": ["true"] * 3,
+    "rowsHidden": [False] * 3,
+    "hints": 0,
+}
+
+
 def test_reopen_starts_all_sections_open(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(guarded_page, "?game=summit-bowl")
     _open_game(guarded_page)
     _head(guarded_page, "bowls").click()
+    assert guarded_page.locator("#game-head-bowls .game-picked-hint").is_visible()
     guarded_page.keyboard.press("Escape")
     guarded_page.wait_for_function("!document.getElementById('pop-game').matches(':popover-open')")
-    _open_game(guarded_page)
-    assert _expanded(guarded_page) == ["true"] * 3
-    assert guarded_page.locator("#game-options .game-picked-hint:visible").count() == 0
+    snapshot = guarded_page.evaluate(_REOPEN_SNAPSHOT_JS, ["trigger-game", "pop-game"])
+    assert snapshot == _ALL_OPEN_SNAPSHOT
+
+
+def test_phone_sheet_reopen_starts_all_sections_open(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(mobile_page, "?game=summit-bowl")
+    mobile_page.click("#filters-button")
+    mobile_page.wait_for_function(
+        "document.getElementById('filters-sheet').matches(':popover-open')"
+    )
+    _head(mobile_page, "bowls").scroll_into_view_if_needed()
+    _head(mobile_page, "bowls").tap()
+    assert _head(mobile_page, "bowls").get_attribute("aria-expanded") == "false"
+    mobile_page.click("#filters-show-results")
+    mobile_page.wait_for_function(
+        "!document.getElementById('filters-sheet').matches(':popover-open')"
+    )
+    snapshot = mobile_page.evaluate(_REOPEN_SNAPSHOT_JS, ["filters-button", "filters-sheet"])
+    assert snapshot == _ALL_OPEN_SNAPSHOT
 
 
 def test_reset_and_clear_all_clear_the_game_search(

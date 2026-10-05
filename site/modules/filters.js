@@ -515,11 +515,15 @@ function clearGameSearch(data) {
   filterGameRows(data, '');
 }
 
-/** Opens every section again (04.10 D-04): called whenever the popover or sheet opens. */
+/**
+ * Opens every section again (04.10 D-04): called from `beforetoggle` whenever the
+ * popover or sheet is about to open. The container is still hidden then, so the
+ * tooltip measurement is left to the `toggle` handler (IN-06).
+ */
 function resetGameCollapse() {
   collapsedSections.clear();
   searchCollapsed.clear();
-  syncGameChrome(els.gameSearch.value);
+  syncGameChrome(els.gameSearch.value, { measure: false });
 }
 
 /**
@@ -543,8 +547,11 @@ function gameEmptyLine(query, visible, anySearchMatch) {
 /**
  * Hides empty section groups, shows the empty-list line, and recomputes the roving
  * tab stop: the checked visible row, else the first visible row (04.9 D-03, D-04).
+ * @param {string} query - the raw search box text.
+ * @param {{measure?: boolean}} [opts] - `measure: false` skips the tooltip pass,
+ *   for callers that run while the list is hidden and measure after it shows.
  */
-function syncGameChrome(query) {
+function syncGameChrome(query, { measure = true } = {}) {
   for (const group of els.gameOptions.querySelectorAll('[data-game-section]')) {
     group.hidden = group.querySelector('[data-game]:not([hidden])') == null;
   }
@@ -579,7 +586,7 @@ function syncGameChrome(query) {
   }
   const stop = rows.find((r) => r.getAttribute('aria-checked') === 'true') ?? rows[0];
   for (const btn of gameRows.values()) btn.tabIndex = btn === stop ? 0 : -1;
-  syncGameTooltips();
+  if (measure) syncGameTooltips();
 }
 
 /**
@@ -1017,12 +1024,18 @@ export function initFilters({ data, getState, setState }) {
   for (const popover of document.querySelectorAll('.filter-popover, .filters-sheet')) {
     bindPopoverMechanics(popover);
   }
-  // Row labels only have a measurable width while their container is shown (WR-03).
+  // D-04: reopen with every section open. `beforetoggle` runs synchronously before
+  // the show, so the first painted frame is already all-open; `toggle` is queued
+  // after the show and would paint one stale collapsed frame (04.10 WR-01, same
+  // reason as the A5 positioning). Row labels only have a measurable width once
+  // the container is shown, so the tooltip pass stays in `toggle` (WR-03).
   for (const id of ['pop-game', 'filters-sheet']) {
-    document.getElementById(id).addEventListener('toggle', (ev) => {
-      if (ev.newState !== 'open') return;
-      resetGameCollapse();
-      syncGameTooltips();
+    const pop = document.getElementById(id);
+    pop.addEventListener('beforetoggle', (ev) => {
+      if (ev.newState === 'open') resetGameCollapse();
+    });
+    pop.addEventListener('toggle', (ev) => {
+      if (ev.newState === 'open') syncGameTooltips();
     });
   }
   window.addEventListener('scroll', repositionOpenPopovers, { passive: true });
