@@ -494,6 +494,12 @@ function toggleGameSection(section) {
   syncGameChrome(els.gameSearch.value);
 }
 
+/** Empties the Game search box and restores the full list and the pre-search collapse state (IN-07). */
+function clearGameSearch(data) {
+  els.gameSearch.value = '';
+  filterGameRows(data, '');
+}
+
 /** Opens every section again (04.10 D-04): called whenever the popover or sheet opens. */
 function resetGameCollapse() {
   collapsedSections.clear();
@@ -535,6 +541,11 @@ function syncGameChrome(query) {
     const collapsed = sectionCollapsed(head.dataset.section, searching);
     document.getElementById(head.getAttribute('aria-controls')).hidden = collapsed;
     head.setAttribute('aria-expanded', String(!collapsed));
+    // D-05: a collapsed section holding the pick says so (decorative; the pick is
+    // announced on the toolbar trigger).
+    const rowsEl = document.getElementById(head.getAttribute('aria-controls'));
+    const holdsPick = rowsEl.querySelector('[data-game][aria-checked="true"]') != null;
+    head.querySelector('.game-picked-hint').hidden = !(collapsed && holdsPick);
   }
   const rows = visibleGameRows();
   const anySearchMatch = Array.from(gameRows.values()).some(
@@ -965,6 +976,7 @@ export function initFilters({ data, getState, setState }) {
     // called-together (the `announcers` reset). "Clear selection" in the chip
     // row still clears only the people.
     setState(structuredClone(Object.assign({}, ...Object.values(GROUP_RESETS))));
+    clearGameSearch(data);
   });
 
   // A4: one delegated listener for every per-group Reset (desktop popovers and
@@ -976,6 +988,7 @@ export function initFilters({ data, getState, setState }) {
     const name = btn.dataset.reset;
     if (!Object.hasOwn(GROUP_RESETS, name)) return;
     setState(structuredClone(GROUP_RESETS[name]));
+    if (name === 'game') clearGameSearch(data);
   });
 
   els.filtersShowResults.addEventListener('click', () => {

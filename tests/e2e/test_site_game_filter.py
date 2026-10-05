@@ -529,3 +529,105 @@ def test_collapse_is_not_remembered(
     open_app(guarded_page, "")
     _open_game(guarded_page)
     assert _expanded(guarded_page) == ["true"] * 3
+
+
+def test_search_expands_matching_sections_and_restores_on_clear(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    _open_game(guarded_page)
+    _head(guarded_page, "bowls").click()
+    search = guarded_page.locator("#game-search")
+    search.fill("harbor")
+    assert _head(guarded_page, "bowls").get_attribute("aria-expanded") == "true"
+    assert _row(guarded_page, "harbor-bowl").is_visible()
+    assert _headers(guarded_page) == ["BOWLS"]
+    search.fill("")
+    assert _expanded(guarded_page) == ["true", "false", "true"]
+    assert _rows(guarded_page) == DEFAULT_ROWS[:1] + DEFAULT_ROWS[3:]
+
+
+def test_header_click_during_search_becomes_the_baseline(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    _open_game(guarded_page)
+    search = guarded_page.locator("#game-search")
+    search.fill("bridge")
+    _head(guarded_page, "rivalries").click()
+    assert _head(guarded_page, "rivalries").get_attribute("aria-expanded") == "false"
+    assert _row(guarded_page, "bridge-game").is_hidden()
+    search.fill("")
+    assert _expanded(guarded_page) == ["true", "true", "false"]
+
+
+def test_collapsed_section_with_the_pick_shows_hint(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    _open_game(guarded_page)
+    _row(guarded_page, "summit-bowl").click()
+    _wait_url(guarded_page, "location.search.includes('game=summit-bowl')")
+    hint = guarded_page.locator("#game-head-bowls .game-picked-hint")
+    head = _head(guarded_page, "bowls")
+    assert hint.is_hidden()
+    expanded_height = head.bounding_box()["height"]  # type: ignore[index]
+    head.click()
+    assert hint.is_visible()
+    assert hint.inner_text() == "1 picked"
+    assert head.locator(".game-section-name").inner_text() == "BOWLS"
+    assert hint.get_attribute("aria-hidden") == "true"
+    assert guarded_page.get_by_role("button", name="BOWLS", exact=True).count() == 1
+    assert head.bounding_box()["height"] == expanded_height  # type: ignore[index]
+    head.click()
+    assert hint.is_hidden()
+    _head(guarded_page, "playoff").click()
+    assert guarded_page.locator("#game-head-playoff .game-picked-hint").is_hidden()
+
+
+def test_reopen_starts_all_sections_open(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?game=summit-bowl")
+    _open_game(guarded_page)
+    _head(guarded_page, "bowls").click()
+    guarded_page.keyboard.press("Escape")
+    guarded_page.wait_for_function("!document.getElementById('pop-game').matches(':popover-open')")
+    _open_game(guarded_page)
+    assert _expanded(guarded_page) == ["true"] * 3
+    assert guarded_page.locator("#game-options .game-picked-hint:visible").count() == 0
+
+
+def test_reset_and_clear_all_clear_the_game_search(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?game=lakeshore")
+    _open_game(guarded_page)
+    guarded_page.locator("#game-search").fill("bridge")
+    guarded_page.click("#pop-game .group-reset")
+    _wait_url(guarded_page, "!location.search.includes('game=')")
+    assert guarded_page.input_value("#game-search") == ""
+    assert _rows(guarded_page) == DEFAULT_ROWS
+
+    open_app(guarded_page, "?game=lakeshore")
+    _open_game(guarded_page)
+    guarded_page.locator("#game-search").fill("bridge")
+    guarded_page.keyboard.press("Escape")
+    guarded_page.click("#clear-filters")
+    _wait_url(guarded_page, "!location.search.includes('game=')")
+    _open_game(guarded_page)
+    assert guarded_page.input_value("#game-search") == ""
+    assert _rows(guarded_page) == DEFAULT_ROWS
+
+
+def test_other_group_reset_keeps_the_game_search(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?school=northfield")
+    _open_game(guarded_page)
+    guarded_page.locator("#game-search").fill("bridge")
+    guarded_page.evaluate(
+        "() => document.querySelector('#pop-school .group-reset, [data-reset=\"school\"]').click()"
+    )
+    _wait_url(guarded_page, "!location.search.includes('school=')")
+    assert guarded_page.input_value("#game-search") == "bridge"
