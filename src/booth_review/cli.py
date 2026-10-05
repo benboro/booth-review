@@ -40,6 +40,7 @@ from booth_review.build.site_assembly import (
     site_source_dir,
 )
 from booth_review.config import CFBD_FLOOR_DEFAULT, DataPaths, load_cfbd_key
+from booth_review.deploy.publish import SUBDIR_DEFAULT, publish_site
 from booth_review.errors import BoothReviewError, FreezeRefusedError, SiteBuildError
 from booth_review.job.attention import build_attention_body
 from booth_review.job.runner import EXIT_NOTHING_DUE, JOB_CFBD_MAX_CALLS, JobRunResult, ScheduledJob
@@ -251,6 +252,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="use the synthetic contract fixture instead of the vault's processed/site-data.json",
     )
     site_cmd.add_argument("--out", type=Path, default=Path("dist/site"))
+    site_cmd.add_argument(
+        "--require-key-check",
+        action="store_true",
+        help="AUTO-05: exit 3 when the CFBD key check was skipped (no key configured)",
+    )
+
+    deploy_cmd = sub.add_parser(
+        "deploy",
+        help="AUTO-03: mirror an assembled site into booth-review/ of a checked-out target "
+        "repo; does nothing unless PUBLISH_ENABLED is true",
+    )
+    deploy_cmd.add_argument("--site", type=Path, required=True)
+    deploy_cmd.add_argument("--target", type=Path, required=True)
+    deploy_cmd.add_argument("--subdir", default=SUBDIR_DEFAULT)
 
     review = sub.add_parser(
         "review", help="Phase 3 review tools: teams, people, networks, combined"
@@ -995,6 +1010,12 @@ def _site(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 3
+    if args.require_key_check and not result.key_checked:
+        print(
+            "cfbd key check: skipped (no key configured); --require-key-check set",
+            file=sys.stderr,
+        )
+        return 3
     prefix = "site (fixture):" if args.fixture else "site:"
     print(
         f"{prefix} {result.telecasts} telecasts, {result.people} people, "
@@ -1004,6 +1025,44 @@ def _site(args: argparse.Namespace) -> int:
         "cfbd key check: passed"
         if result.key_checked
         else "cfbd key check: skipped (no key configured)"
+    )
+    return 0
+
+
+# -- deploy (AUTO-03) ----------------------------------------------------------------------
+
+
+def _deploy(args: argparse.Namespace) -> int:
+    """Mirror an assembled site into the target checkout. Output is count-only."""
+    try:
+        result = publish_site(args.site, args.target, subdir=args.subdir)
+    except ValueError:
+        print("error: invalid --subdir", file=sys.stderr)
+        return 2
+    except BoothReviewError:
+        raise
+    except Exception as exc:
+        if os.environ.get("BOOTH_REVIEW_DEBUG"):
+            raise
+        print(
+            f"error: unexpected {type(exc).__name__} during deploy; details withheld "
+            "(set BOOTH_REVIEW_DEBUG=1 to see the traceback)",
+            file=sys.stderr,
+        )
+        return 3
+    if result.status == "skipped":
+        print("deploy skipped: publishing disabled")
+        return 0
+    short = (result.bundle_sha256 or "")[:12]
+    if result.status == "no_change":
+        print(f"deploy: no change (bundle {short}, files {result.files})")
+    else:
+        print(
+            f"deploy: published bundle {short} (files {result.files}, attempts {result.attempts})"
+        )
+    print(
+        "outside booth-review unchanged: yes "
+        f"(before {(result.outside_before or '')[:12]}, after {(result.outside_after or '')[:12]})"
     )
     return 0
 
@@ -1099,6 +1158,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _build(args)
         if args.command == "site":
             return _site(args)
+        if args.command == "deploy":
+            return _deploy(args)
         if args.command == "review":
             if args.review_command == "teams":
                 return _review_teams(args)
