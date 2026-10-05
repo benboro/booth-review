@@ -8,14 +8,20 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+import pytest
+
 from booth_review.config import DataPaths
 from booth_review.resolve.diagnose import (
     UNMATCHED_COLUMNS,
     UNRESOLVED_TEAM_COLUMNS,
+    counts_as_unresolved,
+    is_placeholder_team,
     main,
     run_match_diagnostic,
+    track_unresolved,
     write_team_review,
 )
+from booth_review.resolve.teams import ResolvedTeam
 
 SPIKE_FIXTURES = Path(__file__).parent / "fixtures" / "spike"
 REFERENCE_FIXTURES = Path(__file__).parent / "fixtures" / "reference"
@@ -151,3 +157,46 @@ def test_main_reports_the_builds_own_join08_rate(
     crew_lines = [line for line in out.splitlines() if "plus-crew" in line]
     assert len(crew_lines) == 1
     assert expected in crew_lines[0]
+
+
+# -- Which unresolved names need a crosswalk row --------------------------------
+
+UNRESOLVED = ResolvedTeam(team_id=None, canonical=None, method="unresolved")
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "Rose Bowl winner",
+        "Fiesta Bowl winner (in Miami)",
+        "Peach Bowl Winner (in Arlington TX)",
+        "Loser of Game 3",
+        "TBD",
+        " tba ",
+    ],
+)
+def test_placeholder_team_slots_are_not_crosswalk_candidates(raw: str) -> None:
+    assert is_placeholder_team(raw)
+    assert not counts_as_unresolved(raw, UNRESOLVED, by_override=False)
+
+
+@pytest.mark.parametrize(
+    "raw", ["Winston-Salem State", "Tbilisi Tech", "Rose-Hulman", "Wake Forest"]
+)
+def test_real_team_names_are_not_placeholders(raw: str) -> None:
+    assert not is_placeholder_team(raw)
+    assert counts_as_unresolved(raw, UNRESOLVED, by_override=False)
+
+
+def test_override_matched_row_names_need_no_crosswalk_row() -> None:
+    """A row game_overrides.csv already ties to a game is resolved by hand."""
+    counts: dict[tuple[str, str], dict[str, int]] = {}
+    track_unresolved(counts, "sports506", "Mystery U", 2024, UNRESOLVED, by_override=True)
+    assert counts == {}
+    track_unresolved(counts, "sports506", "Mystery U", 2024, UNRESOLVED, by_override=False)
+    assert counts[("sports506", "Mystery U")]["count"] == 1
+
+
+def test_resolved_names_are_never_counted() -> None:
+    resolved = ResolvedTeam(team_id=1, canonical="Alpha", method="crosswalk")
+    assert not counts_as_unresolved("Alpha", resolved, by_override=False)
