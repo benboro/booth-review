@@ -110,3 +110,11 @@ class SiteBuildError(BoothReviewError):
     Messages never carry a data value (a team, person, or figure) or the
     CFBD key -- only counts, paths, or contract locations (D-14, SITE-19).
     """
+
+
+class KeyLeakError(SiteBuildError):
+    """The CFBD key was found in assembled site output."""
+
+
+class DeployError(BoothReviewError):
+    """The deploy refused or failed; the message is count-only."""
