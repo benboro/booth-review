@@ -8,6 +8,7 @@
 
 import { FAMILY_ORDER, familyKey } from './palette.js';
 import { CFP_GAME_DEFS, NEW_YEARS_SIX } from './format.js';
+import { buildDateAxis } from './date-axis.js';
 
 /**
  * Normalizes a name for matching: Unicode NFKD decomposition, combining
@@ -129,7 +130,12 @@ export function prepareData(raw) {
     spread[i] = spreadX(homeSpread[i], raw.telecasts.home_points[i], raw.telecasts.away_points[i]);
   }
   // Derived column lives on a copy so raw.telecasts is never mutated.
-  const t = { ...raw.telecasts, spread };
+  const { dateX, axis: dateAxis } = buildDateAxis(
+    raw.telecasts.season,
+    raw.telecasts.date,
+    raw.telecasts.kickoff,
+  );
+  const t = { ...raw.telecasts, spread, dateX };
 
   const familyOf = new Array(n);
   for (let i = 0; i < n; i += 1) {
@@ -294,6 +300,7 @@ export function prepareData(raw) {
     viewersMin,
     viewersMax,
     xRange,
+    dateAxis,
     peopleKeys,
     teamKeys,
     fbsConferences,
