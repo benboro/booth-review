@@ -109,10 +109,29 @@ def week_windows(games: Sequence[CfbdGame], season: int) -> dict[str, tuple[date
     return windows
 
 
+def _entry_time(entry: dict[str, object]) -> str | None:
+    """The browser save time when the manifest line has one, else the import time."""
+    for key in ("saved_at", "fetched_at"):
+        value = entry.get(key)
+        if isinstance(value, str):
+            return value
+    return None
+
+
 def find_506_gaps(
     paths: DataPaths, season: int, games: Sequence[CfbdGame], now: datetime
 ) -> Gaps506:
-    """Name the played 506 week pages for `season` that are missing or stale."""
+    """Name the played 506 week pages for `season` that are missing or stale.
+
+    CFBD's week windows are the label source, so a played week no cached page's
+    nav links yet (WR-06) is still reported missing. A label is dropped only
+    when some cached page with a non-empty nav was saved after that week was
+    played and its nav does not list the week; that stops a CFBD week 506 never
+    built (such as a mis-split "0") from producing a permanent, unclearable
+    "missing" line. Staleness compares the page's browser save time (`saved_at`,
+    falling back to the import time `fetched_at`) with when the week was played
+    (WR-07).
+    """
     windows = week_windows(games, season)
 
     season_dir = paths.raw / "sports506" / str(season)
@@ -123,17 +142,8 @@ def find_506_gaps(
             if label is not None:
                 cached_by_label[label] = cached_path.name
 
-    if cached_by_label:
-        discovered: set[str] = set()
-        for name in cached_by_label.values():
-            html = (season_dir / name).read_bytes()
-            discovered.update(discover_season_weeks(html, season).labels)
-        labels = [label for label in WEEK_LABELS if label in windows and label in discovered]
-    else:
-        labels = [label for label in WEEK_LABELS if label in windows]
-
     manifest_prefix = f"sports506/{season}/"
-    latest_fetch_by_label: dict[str, str] = {}
+    latest_entry_by_label: dict[str, dict[str, object]] = {}
     for manifest_entry in Manifest(paths.manifest).entries():
         entry_path = manifest_entry.get("path")
         if not isinstance(entry_path, str) or not entry_path.startswith(manifest_prefix):
@@ -144,19 +154,40 @@ def find_506_gaps(
         fetched_at = manifest_entry.get("fetched_at")
         if not isinstance(fetched_at, str):
             continue
-        current = latest_fetch_by_label.get(label)
-        if current is None or fetched_at > current:
-            latest_fetch_by_label[label] = fetched_at
+        current = latest_entry_by_label.get(label)
+        if current is None or fetched_at > str(current["fetched_at"]):
+            latest_entry_by_label[label] = manifest_entry
+
+    # (save time, nav labels) for every cached page whose nav is non-empty.
+    nav_pages: list[tuple[datetime | None, set[str]]] = []
+    for label, name in cached_by_label.items():
+        nav = set(discover_season_weeks((season_dir / name).read_bytes(), season).labels)
+        if not nav:
+            continue
+        entry = latest_entry_by_label.get(label)
+        saved = _entry_time(entry) if entry is not None else None
+        saved_dt = datetime.strptime(saved, _TIME_FMT).replace(tzinfo=UTC) if saved else None
+        nav_pages.append((saved_dt, nav))
+
+    def _dropped_by_nav(label: str, played_at: datetime) -> bool:
+        return any(
+            saved_dt is not None and saved_dt > played_at and label not in nav
+            for saved_dt, nav in nav_pages
+        )
 
     missing: list[str] = []
     stale: list[str] = []
     judged = 0
 
-    for label in labels:
+    for label in WEEK_LABELS:
+        if label not in windows:
+            continue
         _first_kickoff, last_kickoff = windows[label]
         played_at = last_kickoff + GAME_LENGTH
         if now <= played_at:
             continue  # not yet played
+        if _dropped_by_nav(label, played_at):
+            continue  # 506 built its nav after this week and never listed it
 
         judged += 1
 
@@ -164,12 +195,12 @@ def find_506_gaps(
             missing.append(label)
             continue
 
-        latest_fetch = latest_fetch_by_label.get(label)
-        if latest_fetch is None:
+        entry = latest_entry_by_label.get(label)
+        saved = _entry_time(entry) if entry is not None else None
+        if saved is None:
             continue  # cached with no manifest entry: not reported stale
 
-        fetched_dt = datetime.strptime(latest_fetch, _TIME_FMT).replace(tzinfo=UTC)
-        if fetched_dt < played_at:
+        if datetime.strptime(saved, _TIME_FMT).replace(tzinfo=UTC) < played_at:
             stale.append(label)
 
     return Gaps506(season=season, missing=missing, stale=stale, judged=judged)
