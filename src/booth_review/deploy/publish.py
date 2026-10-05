@@ -3,7 +3,8 @@
 Every safety rule lives here so it can be tested offline against local bare
 repos: the PUBLISH_ENABLED gate, the CFBD key re-grep, symlink refusal, the
 staged-path guard, the idempotence skip, the before/after proof that nothing
-outside the subdirectory changed, and a race-tolerant push.
+outside the subdirectory changed, the check that the committed subdirectory
+holds exactly the site's files, and a race-tolerant push.
 
 D-02 refinement: a rejected push is retried by re-applying the mirror on the
 fresh tip (fetch, hard reset, re-mirror, re-guard) rather than pull-rebase.
@@ -151,6 +152,27 @@ def _mirror(site: Path, target: Path, subdir: str, files: list[Path]) -> None:
         shutil.copy2(path, out)
 
 
+def _check_committed_tree(target: Path, subdir: str, site: Path, files: list[Path]) -> None:
+    """WR-04: the committed `<subdir>/` must hold exactly the mirrored files.
+
+    Catches anything the target repo's ignore rules or attributes could drop
+    from the commit while the deploy still reported success. Count-only.
+    """
+    committed = {
+        name
+        for name in _git_ok(
+            target, "ls-tree", "-r", "--name-only", "-z", "HEAD", "--", subdir
+        ).stdout.split("\0")
+        if name
+    }
+    expected = {f"{subdir}/{path.relative_to(site).as_posix()}" for path in files}
+    differing = len(committed ^ expected)
+    if differing:
+        raise DeployError(
+            f"deploy refused: committed tree differs from the site ({differing} paths)"
+        )
+
+
 def publish_site(
     site: Path,
     target: Path,
@@ -190,10 +212,13 @@ def publish_site(
         before = tree_hash_excluding(target, subdir)
 
         _mirror(site, target, subdir, files)
-        _git_ok(target, "add", "-A", "--", subdir)
+        # -f: the target's .gitignore / info/exclude must never drop a site
+        # file from the commit (WR-04); the path guard still bounds the add.
+        _git_ok(target, "add", "-A", "-f", "--", subdir)
         check_staged_paths(target, subdir)
 
         if _git(target, "diff", "--cached", "--quiet").returncode == 0:
+            _check_committed_tree(target, subdir, site, files)
             return DeployResult("no_change", len(files), bundle, before, before, attempt)
 
         message = batch_message("deploy", "booth-review", f"bundle {short}", {"files": len(files)})
@@ -211,6 +236,7 @@ def publish_site(
         after = tree_hash_excluding(target, subdir)
         if before != after:
             raise DeployError("deploy refused: content outside the subdir changed")
+        _check_committed_tree(target, subdir, site, files)
 
         if before_push is not None:
             before_push(attempt)

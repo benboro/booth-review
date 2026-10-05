@@ -168,6 +168,55 @@ def test_symlink_in_site_refused(remote: Path, target: Path, tmp_path: Path) -> 
     assert _remote_count(remote) == count
 
 
+def test_target_ignore_rules_never_drop_site_files(
+    remote: Path, target: Path, tmp_path: Path
+) -> None:
+    # WR-04: the target repo's ignore rules (root .gitignore, info/exclude)
+    # must not silently drop a site file from the deploy commit.
+    seed = _clone(remote, tmp_path / "ignore-seed")
+    (seed / ".gitignore").write_text("*.json\nvendor/\n", encoding="utf-8")
+    _git(seed, "add", ".gitignore")
+    _git(seed, "commit", "-q", "-m", "ignore")
+    _git(seed, "push", "-q", "origin", "HEAD:refs/heads/master")
+    (target / ".git" / "info" / "exclude").write_text("*.map\n", encoding="utf-8")
+    site = _site(
+        tmp_path,
+        {
+            "index.html": "<html>",
+            "site-data.json": "{}",
+            "vendor/lib.js": "v=1",
+            "app.js.map": "{}",
+        },
+    )
+    result = publish_site(site, target, env=ENABLED)
+    assert result.status == "published"
+    mirrored = sorted(p for p in _remote_tree(remote) if p.startswith("booth-review/"))
+    assert mirrored == [
+        "booth-review/app.js.map",
+        "booth-review/index.html",
+        "booth-review/site-data.json",
+        "booth-review/vendor/lib.js",
+    ]
+
+
+def test_committed_tree_mismatch_refuses_push(
+    remote: Path, target: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # WR-04: whatever drops a mirrored file before the commit, the deploy
+    # compares the committed subdir with the site and refuses to push.
+    original = publish._mirror
+
+    def lossy(site: Path, tgt: Path, subdir: str, files: list[Path]) -> None:
+        original(site, tgt, subdir, files)
+        (tgt / subdir / "app.js").unlink()
+
+    monkeypatch.setattr(publish, "_mirror", lossy)
+    count = _remote_count(remote)
+    with pytest.raises(DeployError, match=r"committed tree differs from the site \(1 paths\)"):
+        publish_site(_site(tmp_path), target, env=ENABLED)
+    assert _remote_count(remote) == count
+
+
 def _publish_once(remote: Path, target: Path, tmp_path: Path) -> dict[str, str]:
     publish_site(_site(tmp_path), target, env=ENABLED)
     tree = _remote_tree(remote)
