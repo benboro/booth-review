@@ -10,6 +10,7 @@ end-to-end via `main([...])`. No test ever sends a request to
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
@@ -83,8 +84,17 @@ def _seed_cfbd_ledger(paths, *, month: str, remaining: int = 900) -> None:
     paths.cfbd_ledger.write_text(json.dumps(line) + "\n", encoding="utf-8")
 
 
+def _freeze_seasons(paths, seasons) -> None:
+    years = sorted(seasons)
+    paths.frozen.write_text(
+        json.dumps({"sports506": years, "ratingsref": years, "cfbd": years}), encoding="utf-8"
+    )
+
+
 def _seed_required_state(paths, *, cfbd_month: str, cfbd_remaining: int = 900) -> None:
-    """rr_lastmod.json and cfbd_ledger.jsonl; frozen.json is already seeded by git_vault."""
+    """rr_lastmod.json and cfbd_ledger.jsonl, with 2014-2025 frozen (IN-02 checks every
+    past season on every run); frozen.json itself is already seeded by git_vault."""
+    _freeze_seasons(paths, range(2014, 2026))
     paths.rr_lastmod.write_text("{}", encoding="utf-8")
     _seed_cfbd_ledger(paths, month=cfbd_month, remaining=cfbd_remaining)
 
@@ -288,7 +298,7 @@ def test_scheduled_job_cfbd_budget_floor_is_attention_rr_still_runs_exit4(
 
     saved_state = load_state(paths.job_state)
     assert saved_state.last_success_at == prior_success  # not advanced
-    assert saved_state.last_status == "attention"
+    assert saved_state.last_status == "failed"  # IN-05
 
 
 # -- CR-01: a new month with no ledger line yet calls /info before the data calls --------------
@@ -403,7 +413,7 @@ def test_scheduled_job_cfbd_401_is_attention_exit4_success_not_advanced(
 
     saved_state = load_state(paths.job_state)
     assert saved_state.last_success_at == prior_success  # not advanced
-    assert saved_state.last_status == "attention"
+    assert saved_state.last_status == "failed"  # IN-05
     assert saved_state.retry_pending is False  # a revoked key won't fix itself
 
 
@@ -415,6 +425,7 @@ def test_scheduled_job_accepts_jsonl_only_lastmod_ledger_and_commits_it(
 ) -> None:
     paths = git_vault
     _seed_cfbd_ledger(paths, month="2026-10")
+    _freeze_seasons(paths, range(2014, 2026))
     paths.rr_lastmod_log.write_text("", encoding="utf-8")  # a post-0.2.2 vault: no .json
     now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
     _precache_cfbd_season(paths, 2026)
@@ -916,7 +927,7 @@ def test_scheduled_job_unexpected_506_step_error_is_count_only_attention_state_s
     saved_state = load_state(paths.job_state)
     assert saved_state.last_attempt_at == now_value
     assert saved_state.last_success_at is None  # a failed step never advances success
-    assert saved_state.last_status == "attention"
+    assert saved_state.last_status == "failed"  # IN-05
 
 
 def test_scheduled_job_unexpected_rr_step_error_still_runs_506_step(
@@ -1011,3 +1022,513 @@ def test_scheduled_job_commit_vault_state_error_still_propagates(
 
     with pytest.raises(VaultStateError):
         job.run()
+
+
+# -- update mode (Plan 05-07): build, site, deploy_ready, staleness, run report ------------------
+
+_REPO_ROOT = Path(__file__).parent.parent
+_SPIKE_DIR = Path(__file__).parent / "fixtures" / "spike"
+_BUILD_DIR = Path(__file__).parent / "fixtures" / "build"
+_REFERENCE_DIR = Path(__file__).parent / "fixtures" / "reference"
+UPDATE_NOW = datetime(2025, 10, 8, 12, 0, tzinfo=UTC)
+_KEY_CANARY = "SENTINEL-UPDATE-KEY-ABC"
+_COUNT_KINDS = {"people_review_due", "unresolved_teams", "sports506_missing", "sports506_stale"}
+
+
+def _git(paths, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(paths.vault), *args], check=True, capture_output=True, text=True
+    ).stdout
+
+
+def _update_cfbd_responses(season: int = 2025) -> dict[str, tuple[int, bytes, dict[str, str]]]:
+    """The build fixture's own bytes as CFBD's answers, so the refresh leaves the
+    season inputs byte-identical."""
+    base = "https://api.collegefootballdata.com"
+    files = {
+        "/games": _SPIKE_DIR / "cfbd_games_2025.json",
+        "/games/media": _BUILD_DIR / "cfbd" / "media_2025.json",
+        "/lines": _BUILD_DIR / "cfbd" / "lines_2025.json",
+        "/metrics/wp/pregame": _BUILD_DIR / "cfbd" / "wp_pregame_2025.json",
+        "/rankings": _BUILD_DIR / "cfbd" / "rankings_2025.json",
+    }
+    responses: dict[str, tuple[int, bytes, dict[str, str]]] = {
+        f"{base}/robots.txt": (404, b"nf", {}),
+        "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
+        SITEMAP_URL: (200, _empty_sitemap_xml(), {}),
+    }
+    for path, fixture in files.items():
+        responses[f"{base}{path}?seasonType=both&year={season}"] = (200, fixture.read_bytes(), {})
+    responses[f"{base}/teams/fbs?year={season}"] = (
+        200,
+        (_BUILD_DIR / "cfbd" / "teams_fbs_2025.json").read_bytes(),
+        {},
+    )
+    return responses
+
+
+@pytest.fixture
+def update_vault(git_vault, tmp_path, monkeypatch):
+    """A git vault ready for `ScheduledJob(update=True)` at UPDATE_NOW: the 2025 build
+    inputs, a cached RR sitemap, the required ledgers, 2014-2024 frozen, and one
+    accepted baseline from a plain build."""
+    from test_cli_build import _seed_build_raw
+
+    from booth_review.build.pipeline import run_build
+
+    paths = git_vault
+    _seed_build_raw(paths)
+    reference = tmp_path / "reference_ext"
+    shutil.copytree(_REFERENCE_DIR, reference)
+    with (reference / "networks.csv").open("a", encoding="utf-8", newline="") as fh:
+        fh.write("ECN,ecn,Example Cable Network,family-ecn,cable,main,,,\n")
+        fh.write("ECN2,ecn2,Example Cable Network 2,family-ecn,cable,main,,,\n")
+        fh.write("ESPN,espn,ESPN,family-espn,cable,main,,,\n")
+        fh.write("ESPN2,espn2,ESPN2,family-espn,cable,main,,,\n")
+        fh.write("ESPNU,espnu,ESPNU,family-espn,cable,main,,,\n")
+        fh.write("ESPN Deportes,espn-deportes,ESPN Deportes,family-espn,cable,spanish,,,\n")
+    monkeypatch.setenv("BOOTH_REVIEW_REFERENCE", str(reference))
+    monkeypatch.setenv("BOOTH_REVIEW_SITE_SRC", str(_REPO_ROOT / "site"))
+    monkeypatch.setenv("BOOTH_REVIEW_DOCS", str(_REPO_ROOT / "docs"))
+    monkeypatch.setenv("CFBD_API_KEY", _KEY_CANARY)
+
+    _seed_required_state(paths, cfbd_month="2025-10")
+    _freeze_seasons(paths, range(2014, 2025))
+    sitemap = paths.raw / "ratingsref" / "sitemap" / "2025-10-01.xml"
+    sitemap.parent.mkdir(parents=True, exist_ok=True)
+    sitemap.write_bytes(_empty_sitemap_xml())
+    run_build(paths, reference, commit=False, accept_baseline=True)
+    _git(paths, "add", "-A")
+    _git(paths, "commit", "-q", "-m", "test: seed update vault")
+    _git(paths, "push", "-q", "origin", "main")
+    return paths
+
+
+def _update_job(paths, handle, fake_clock, tmp_path, *, now=UPDATE_NOW, trigger="manual", **kw):
+    runtime = _runtime(paths, handle, now=lambda: now, fake_clock=fake_clock)
+    kw.setdefault("token", "test-token")
+    kw.setdefault("site_out", tmp_path / "site-out")
+    return ScheduledJob(runtime, now=lambda: now, trigger=trigger, update=True, **kw)
+
+
+def _kinds(result) -> set[str]:
+    return {item.kind for item in result.items}
+
+
+def _build_commits(paths) -> int:
+    return _git(paths, "log", "--format=%s").count("build: all")
+
+
+def test_update_requires_site_out(git_vault, mock_transport_factory, fake_clock) -> None:
+    runtime = _runtime(
+        git_vault, mock_transport_factory({}), now=lambda: UPDATE_NOW, fake_clock=fake_clock
+    )
+    with pytest.raises(ValueError):
+        ScheduledJob(runtime, token=None, now=lambda: UPDATE_NOW, trigger="manual", update=True)
+
+
+def test_update_clean_run_builds_assembles_and_reports_deploy_ready(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, capsys
+) -> None:
+    paths = update_vault
+    before = _build_commits(paths)
+    handle = mock_transport_factory(_update_cfbd_responses())
+    job = _update_job(paths, handle, fake_clock, tmp_path)
+    result = job.run()
+
+    assert result.deploy_ready is True
+    assert result.exit_code in (0, 4)
+    assert _kinds(result) <= _COUNT_KINDS | {"cfbd_remaining", "missed_runs", "failed_attempts"}
+    assert (tmp_path / "site-out" / "index.html").is_file()
+    assert load_state(paths.job_state).last_build_at == UPDATE_NOW
+    assert _build_commits(paths) == before + 1
+    out = capsys.readouterr().out
+    assert "build: telecasts " in out
+    assert "build: season 2025 " in out
+    assert "review: people new " in out
+    assert "cfbd key check: passed" in out
+    assert _KEY_CANARY not in out
+
+
+def test_update_regression_block_holds_deploy_and_keeps_site_data(
+    update_vault, mock_transport_factory, fake_clock, tmp_path
+) -> None:
+    paths = update_vault
+    site_data = paths.processed / "site-data.json"
+    before = site_data.read_bytes()
+    state_before = load_state(paths.job_state)
+    next(iter(sorted((paths.raw / "ratingsref" / "telecast" / "2025").glob("*.json")))).unlink()
+
+    handle = mock_transport_factory(_update_cfbd_responses())
+    result = _update_job(paths, handle, fake_clock, tmp_path).run()
+
+    assert result.deploy_ready is False
+    assert "build_blocked" in _kinds(result)
+    assert result.exit_code == 4
+    assert site_data.read_bytes() == before
+    assert load_state(paths.job_state).last_build_at == state_before.last_build_at
+    assert not (tmp_path / "site-out").exists()
+
+
+def test_update_missing_bowl_row_is_a_count_item_and_deploy_stays_ready(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
+) -> None:
+    paths = update_vault
+    reference = tmp_path / "reference_nobowls"
+    shutil.copytree(Path(__import__("os").environ["BOOTH_REVIEW_REFERENCE"]), reference)
+    (reference / "bowls.csv").write_text(
+        "cfbd_game_id,official_name,core_name,at_bowl,franchise\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("BOOTH_REVIEW_REFERENCE", str(reference))
+
+    handle = mock_transport_factory(_update_cfbd_responses())
+    result = _update_job(paths, handle, fake_clock, tmp_path).run()
+
+    assert "bowls_missing" in _kinds(result)
+    assert result.deploy_ready is True
+
+
+def test_update_people_review_and_missing_506_never_hold_the_deploy(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
+) -> None:
+    paths = update_vault
+    from booth_review.build.pipeline import BuildOutcome
+
+    real = __import__("booth_review.job.runner", fromlist=["run_build"]).run_build
+
+    def _with_review(*args, **kwargs) -> BuildOutcome:
+        outcome = real(*args, **kwargs)
+        counts = {**outcome.counts, "review_people_new": 3}
+        return BuildOutcome(
+            blocked=outcome.blocked,
+            accepted=outcome.accepted,
+            reasons=outcome.reasons,
+            counts=counts,
+            written=outcome.written,
+            committed=outcome.committed,
+        )
+
+    monkeypatch.setattr("booth_review.job.runner.run_build", _with_review)
+    handle = mock_transport_factory(_update_cfbd_responses())
+    result = _update_job(paths, handle, fake_clock, tmp_path).run()
+
+    assert "people_review_due" in _kinds(result)
+    assert "sports506_missing" in _kinds(result)
+    assert result.deploy_ready is True
+
+
+def test_update_key_check_skipped_holds_deploy(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
+) -> None:
+    monkeypatch.delenv("CFBD_API_KEY", raising=False)
+    handle = mock_transport_factory(_update_cfbd_responses())
+    result = _update_job(update_vault, handle, fake_clock, tmp_path).run()
+
+    assert "site_key_check_skipped" in _kinds(result)
+    assert result.deploy_ready is False
+    assert result.exit_code == 4
+
+
+def test_update_key_leak_records_item_saves_state_exit3(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
+) -> None:
+    from booth_review.errors import KeyLeakError
+
+    def _leak(**kwargs):
+        raise KeyLeakError("CFBD key found in build output: x; output removed")
+
+    monkeypatch.setattr("booth_review.job.runner.assemble_site", _leak)
+    handle = mock_transport_factory(_update_cfbd_responses())
+    result = _update_job(update_vault, handle, fake_clock, tmp_path).run()
+
+    assert "site_key_check_failed" in _kinds(result)
+    assert result.exit_code == 3
+    assert result.deploy_ready is False
+    assert load_state(update_vault.job_state).last_attempt_at == UPDATE_NOW
+
+
+def test_update_build_state_error_is_an_item_and_collection_still_succeeds(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
+) -> None:
+    def _boom(*args, **kwargs):
+        raise VaultStateError("secret detail that must not print")
+
+    monkeypatch.setattr("booth_review.job.runner.run_build", _boom)
+    handle = mock_transport_factory(_update_cfbd_responses())
+    result = _update_job(update_vault, handle, fake_clock, tmp_path).run()
+
+    lines = [item.line for item in result.items if item.kind == "build_step_failed"]
+    assert lines == ["build step failed: VaultStateError"]
+    assert result.deploy_ready is False
+    assert load_state(update_vault.job_state).last_success_at == UPDATE_NOW
+
+
+def test_update_build_commit_error_is_push_failed_exit3(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
+) -> None:
+    def _boom(*args, **kwargs):
+        raise VaultCommitError("git subcommand push exited 1")
+
+    monkeypatch.setattr("booth_review.job.runner.run_build", _boom)
+    handle = mock_transport_factory(_update_cfbd_responses())
+    result = _update_job(update_vault, handle, fake_clock, tmp_path).run()
+
+    assert result.exit_code == 3
+    assert "push_failed" in _kinds(result)
+    assert any(item.line == "vault push failed at step build" for item in result.items)
+
+
+@pytest.mark.parametrize("missing", ["audit/build_baseline.csv", "raw/ratingsref/sitemap"])
+def test_update_missing_build_state_fails_before_any_request(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, missing
+) -> None:
+    paths = update_vault
+    target = paths.vault / missing
+    if target.is_dir():
+        shutil.rmtree(target)
+    else:
+        target.unlink()
+    head = _git(paths, "rev-parse", "HEAD")
+    handle = mock_transport_factory(_update_cfbd_responses())
+
+    with pytest.raises(VaultStateError):
+        _update_job(paths, handle, fake_clock, tmp_path).run()
+
+    assert handle.requests == []
+    assert _git(paths, "rev-parse", "HEAD") == head
+
+
+def test_non_update_run_does_not_build_or_assemble(
+    update_vault, mock_transport_factory, fake_clock, tmp_path
+) -> None:
+    paths = update_vault
+    before = _build_commits(paths)
+    handle = mock_transport_factory(_update_cfbd_responses())
+    runtime = _runtime(paths, handle, now=lambda: UPDATE_NOW, fake_clock=fake_clock)
+    result = ScheduledJob(
+        runtime, token="test-token", now=lambda: UPDATE_NOW, trigger="manual"
+    ).run()
+
+    assert result.deploy_ready is False
+    assert _build_commits(paths) == before
+    assert not (tmp_path / "site-out").exists()
+    assert load_state(paths.job_state).last_build_at is None
+
+
+# -- Task 2: staleness, run report, cfbd remaining, IN-02/04/05 -----------------------------------
+
+
+def _save_build_state(paths, last_build_at, *, last_attempt_at=None) -> None:
+    save_state(
+        paths.job_state,
+        JobState(
+            season=2025,
+            last_success_at=last_attempt_at or last_build_at,
+            last_attempt_at=last_attempt_at or last_build_at,
+            last_status="ok",
+            last_window_start=last_build_at,
+            retry_pending=False,
+            last_build_at=last_build_at,
+        ),
+    )
+
+
+def test_update_nothing_due_stale_build_exits_4_stale_only_writes_nothing(
+    update_vault, mock_transport_factory, fake_clock, tmp_path
+) -> None:
+    paths = update_vault
+    # Last attempt after the most recent main slot, so a backup slot has nothing due.
+    now = datetime(2025, 10, 9, 12, 0, tzinfo=UTC)  # Thursday, after Wednesday 20:00 ET
+    _save_build_state(paths, datetime(2025, 10, 4, 12, 0, tzinfo=UTC))
+    paths_state = paths.job_state
+    save_state(
+        paths_state,
+        JobState(
+            season=2025,
+            last_success_at=datetime(2025, 10, 9, 1, 0, tzinfo=UTC),
+            last_attempt_at=datetime(2025, 10, 9, 1, 0, tzinfo=UTC),
+            last_status="ok",
+            last_window_start=datetime(2025, 10, 4, 12, 0, tzinfo=UTC),
+            retry_pending=False,
+            last_build_at=datetime(2025, 10, 4, 12, 0, tzinfo=UTC),
+        ),
+    )
+    _git(paths, "add", "-A")
+    _git(paths, "commit", "-q", "-m", "test: state")
+    head = _git(paths, "rev-parse", "HEAD")
+    handle = mock_transport_factory(_update_cfbd_responses())
+
+    result = _update_job(paths, handle, fake_clock, tmp_path, now=now, trigger="schedule").run()
+
+    assert result.exit_code == 4
+    assert result.stale_only is True
+    assert "build_stale" in _kinds(result)
+    assert handle.requests == []
+    assert _git(paths, "rev-parse", "HEAD") == head
+    assert _git(paths, "status", "--porcelain") == ""
+    assert not (tmp_path / "site-out").exists()
+
+
+def test_update_nothing_due_fresh_build_exits_5(
+    update_vault, mock_transport_factory, fake_clock, tmp_path
+) -> None:
+    paths = update_vault
+    now = datetime(2025, 10, 9, 12, 0, tzinfo=UTC)
+    stamp = datetime(2025, 10, 9, 1, 0, tzinfo=UTC)
+    _save_build_state(paths, stamp)
+    handle = mock_transport_factory(_update_cfbd_responses())
+
+    result = _update_job(paths, handle, fake_clock, tmp_path, now=now, trigger="schedule").run()
+
+    assert result.exit_code == 5
+    assert result.stale_only is False
+    assert handle.requests == []
+
+
+def test_update_trail_staleness_item_does_not_change_deploy_ready(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
+) -> None:
+    from datetime import date
+
+    monkeypatch.setattr(
+        "booth_review.job.runner.newest_listed", lambda paths, season: (date(2026, 6, 1), 9)
+    )
+    handle = mock_transport_factory(_update_cfbd_responses())
+    result = _update_job(update_vault, handle, fake_clock, tmp_path).run()
+
+    assert "plotted_trails_listed" in _kinds(result)
+    assert result.deploy_ready is True
+
+
+def test_update_staleness_helper_error_is_an_item_and_state_still_saved(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
+) -> None:
+    def _boom(paths, season):
+        raise ValueError("secret detail")
+
+    monkeypatch.setattr("booth_review.job.runner.newest_listed", _boom)
+    handle = mock_transport_factory(_update_cfbd_responses())
+    result = _update_job(update_vault, handle, fake_clock, tmp_path).run()
+
+    assert [i.line for i in result.items if i.kind == "staleness_step_failed"] == [
+        "staleness step failed: ValueError"
+    ]
+    assert load_state(update_vault.job_state).last_attempt_at == UPDATE_NOW
+
+
+def test_update_run_appends_one_count_only_report_line_in_the_state_commit(
+    update_vault, mock_transport_factory, fake_clock, tmp_path
+) -> None:
+    paths = update_vault
+    handle = mock_transport_factory(_update_cfbd_responses())
+    _update_job(paths, handle, fake_clock, tmp_path).run()
+
+    lines = (paths.ledger / "run_reports.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    report = json.loads(lines[0])
+    assert set(report) == {
+        "run_at",
+        "trigger",
+        "update",
+        "deploy_ready",
+        "cfbd_remaining_start",
+        "cfbd_remaining_end",
+        "attention",
+        "counts",
+    }
+    assert report["update"] is True
+    assert report["deploy_ready"] is True
+    assert all(isinstance(v, int) and not isinstance(v, bool) for v in report["counts"].values())
+    assert isinstance(report["attention"], int)
+    assert _KEY_CANARY not in lines[0]
+    changed = _git(paths, "show", "--name-only", "--format=%s", "HEAD").splitlines()
+    assert changed[0].startswith("job: state")
+    assert {"ledger/job_state.json", "ledger/run_reports.jsonl"} <= set(changed[1:])
+
+
+def test_update_run_logs_cfbd_remaining_at_start_and_end(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, capsys
+) -> None:
+    handle = mock_transport_factory(_update_cfbd_responses())
+    _update_job(update_vault, handle, fake_clock, tmp_path).run()
+    out = capsys.readouterr().out
+    assert "cfbd remaining at start: " in out
+    assert "cfbd remaining at end: " in out
+
+
+def test_state_commit_failure_adds_push_failed_state_exit3(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+    responses = _cfbd_ok_responses(2026)
+    responses["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
+    responses[SITEMAP_URL] = (200, _empty_sitemap_xml(), {})
+    handle = mock_transport_factory(responses)
+    runtime = _runtime(paths, handle, now=lambda: now_value, fake_clock=fake_clock)
+    real_commit = runtime.vault.commit_batch
+
+    def _commit(message, *, paths):
+        if message.startswith("job: state"):
+            raise VaultCommitError("git subcommand push exited 1")
+        return real_commit(message, paths=paths)
+
+    monkeypatch.setattr(runtime.vault, "commit_batch", _commit)
+    result = ScheduledJob(runtime, token="t", now=lambda: now_value, trigger="manual").run()
+
+    assert result.exit_code == 3
+    assert any(i.line == "vault push failed at step state" for i in result.items)
+
+
+def test_failed_slots_add_a_failed_attempts_item(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    success = datetime(2026, 9, 20, 12, 0, tzinfo=UTC)
+    attempt = datetime(2026, 10, 5, 12, 0, tzinfo=UTC)
+    save_state(
+        paths.job_state,
+        JobState(
+            season=2026,
+            last_success_at=success,
+            last_attempt_at=attempt,
+            last_status="failed",
+            last_window_start=success,
+            retry_pending=False,
+        ),
+    )
+    now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+    responses = _cfbd_ok_responses(2026)
+    responses["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
+    responses[SITEMAP_URL] = (200, _empty_sitemap_xml(), {})
+    handle = mock_transport_factory(responses)
+    runtime = _runtime(paths, handle, now=lambda: now_value, fake_clock=fake_clock)
+    result = ScheduledJob(runtime, token="t", now=lambda: now_value, trigger="manual").run()
+
+    assert "failed_attempts" in _kinds(result)
+
+
+def test_past_freeze_check_runs_in_season_and_names_only_unfrozen_seasons(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    now_value = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+    responses = _cfbd_ok_responses(2026)
+    responses["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
+    responses[SITEMAP_URL] = (200, _empty_sitemap_xml(), {})
+
+    _seed_required_state(paths, cfbd_month="2026-10")
+    handle = mock_transport_factory(responses)
+    runtime = _runtime(paths, handle, now=lambda: now_value, fake_clock=fake_clock)
+    clean = ScheduledJob(runtime, token="t", now=lambda: now_value, trigger="manual").run()
+    assert "season_past_freeze" not in _kinds(clean)
+
+    _freeze_seasons(paths, [y for y in range(2014, 2026) if y != 2024])
+    handle = mock_transport_factory(responses)
+    runtime = _runtime(paths, handle, now=lambda: now_value, fake_clock=fake_clock)
+    result = ScheduledJob(runtime, token="t", now=lambda: now_value, trigger="manual").run()
+    lines = [i.line for i in result.items if i.kind == "season_past_freeze"]
+    assert len(lines) == 1
+    assert lines[0].startswith("season 2024 is past its freeze date")
