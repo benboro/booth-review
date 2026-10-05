@@ -411,6 +411,7 @@ async function bootstrap() {
         }, []),
         hasSelection: lastView.hasSelection,
         filterActive: lastView.filterActive,
+        sizeFilterActive: lastView.sizeFilterActive,
         hasPersonSelection: lastView.hasPersonSelection,
         hasGameSelection: lastView.hasGameSelection,
         highlighted: lastView.highlighted,

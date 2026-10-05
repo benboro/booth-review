@@ -392,7 +392,8 @@ function buildSummary(data, state, summarySet, altGames, personIndexes, hasSelec
  * (D-10..D-19, 04.7): which dots are drawn (filters fade by default and
  * hide in Hide mode; Networks always hides), which pass every filter, which are person-matched, which rows fill the
  * matched-games table, their compare-mode symbols, per-season counts, and
- * the match summary.
+ * the match summary. The result's `filterActive` drives the summary; `sizeFilterActive`
+ * is for dot sizing only (seasons ignored on the Date axis).
  * @param {object} data - a `prepareData` result.
  * @param {object} state - shaped like `defaultState(data)`.
  * @returns {object}
@@ -491,6 +492,18 @@ export function computeView(data, state) {
     state.school.length > 0 ||
     hasGameSelection ||
     state.postseason !== 'all';
+  // SITE-50 (04.12 D-05/D-06): on Date, out-of-range seasons are off the axis (04.11 D-12),
+  // so a seasons-only filter picks nothing out and must not enlarge dots; filterActive
+  // still drives the summary (D-07).
+  const otherFilterActive =
+    state.networks != null ||
+    state.slots != null ||
+    state.conferences.length > 0 ||
+    state.school.length > 0 ||
+    hasGameSelection ||
+    state.postseason !== 'all';
+  const sizeFilterActive =
+    otherFilterActive || (state.seasons != null && state.axis !== 'date');
   let summarySet = matched;
   if (!hasSelection && filterActive) {
     summarySet = [];
@@ -515,6 +528,7 @@ export function computeView(data, state) {
     hasGameSelection,
     hasSelection,
     filterActive,
+    sizeFilterActive,
     totalCount: n,
     highlighted,
     matched,
