@@ -186,7 +186,7 @@ function currentEnv() {
     mobile: mobileMedia.matches,
     revision,
     tooltipMode,
-    plotWidth: chartEl && chartEl.clientWidth - 94 > 0 ? chartEl.clientWidth - 94 : undefined,
+    chartWidth: chartEl ? chartEl.clientWidth : undefined,
   };
 }
 

@@ -66,6 +66,16 @@ export const DOT_OPACITY = Object.freeze({
   inertUnderPerson: 0.15,
 });
 
+/**
+ * The scatter's plot margins (D-04: the same narrow right margin at every
+ * screen size). The plot width that converts the 04.12 pixel gutter into data
+ * units is the chart width minus `l` and `r`, so this is the one copy.
+ */
+export const MARGIN = Object.freeze({ l: 70, r: 24, t: 40, b: 60 });
+
+/** Chart widths assumed before the chart div has been measured (a 360px phone, a 1232px desktop). */
+const FALLBACK_CHART_WIDTH = { mobile: 360, desktop: 1232 };
+
 /** X-axis chart titles (distinct from format.js's shorter AXIS_LABELS toggle copy). */
 const XAXIS_TITLES = {
   spread: "Winner's closing spread (points)",
@@ -172,13 +182,17 @@ export function hoverText(data, i, { axis, theme }) {
  * @param {object} data - a `prepareData` result.
  * @param {object} view - a `computeView` result.
  * @param {object} state - shaped like `defaultState(data)`.
- * @param {{theme: "light"|"dark", mobile: boolean, revision: number, tooltipMode?: "html"|"plotly", plotWidth?: number}} env
+ * `env.chartWidth` is the chart div's width in px; the plot width is that
+ * minus `MARGIN.l`/`MARGIN.r`, with a phone/desktop fallback while unmeasured.
+ * @param {{theme: "light"|"dark", mobile: boolean, revision: number, tooltipMode?: "html"|"plotly", chartWidth?: number}} env
  * @returns {{traces: object[], layout: object, config: object, dateAxis: object|null}}
  */
 export function buildFigure(data, view, state, env) {
   const axis = state.axis;
   const isDate = axis === 'date';
-  const plotPx = env.plotWidth ?? (env.mobile ? 266 : 1138);
+  const measuredPx = (env.chartWidth ?? 0) - MARGIN.l - MARGIN.r;
+  const plotPx =
+    measuredPx > 0 ? measuredPx : (env.mobile ? FALLBACK_CHART_WIDTH.mobile : FALLBACK_CHART_WIDTH.desktop) - MARGIN.l - MARGIN.r;
   // Pitfall 9: naBand never sees 'date'; a harmless band keeps every path off a sentinel.
   const band = isDate
     ? { sentinel: 0, divider: 0, range: [0, 1], tickvals: [], ticktext: [] }
@@ -388,7 +402,11 @@ export function buildFigure(data, view, state, env) {
     // limits (minallowed/maxallowed) and the Autoscale put-back.
     const [padLo, padHi] = gutterPads(base[1] - base[0], plotPx);
     const range = [base[0] - padLo, base[1] + padHi];
-    const labels = dateAxisLabels(blocks, range, plotPx, { mobile: env.mobile });
+    const labels = dateAxisLabels(blocks, range, plotPx, {
+      mobile: env.mobile,
+      marginLeft: MARGIN.l,
+      marginRight: MARGIN.r,
+    });
     dateAxis = { blocks, range, mobile: env.mobile, labels };
   }
 
@@ -507,7 +525,7 @@ export function buildFigure(data, view, state, env) {
     // D-04: the 170px right margin only ever made room for Plotly's own
     // legend; the HTML chip row above the chart replaced it, so the margin
     // is the same narrow width at every screen size now.
-    margin: { l: 70, r: 24, t: 40, b: 60 },
+    margin: { ...MARGIN },
   };
 
   // D-02: Spread axis only -- appended so shapes[0]/annotations[0] stay the
@@ -730,6 +748,8 @@ export function fitDateAxis(gd) {
   }
   const want = dateAxisLabels(meta.blocks, xa.range, xa._length, {
     mobile: meta.mobile,
+    marginLeft: MARGIN.l,
+    marginRight: MARGIN.r,
     measure: seasonLabelMeasurer(gd),
   });
   const update = {};

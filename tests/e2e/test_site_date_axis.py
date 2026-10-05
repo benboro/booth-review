@@ -370,7 +370,9 @@ _FIG_JS = """
 _HOME_JS = """
 async (base) => {
   const { gutterPads } = await import('./modules/gutter.js');
-  const plotW = document.getElementById('chart').clientWidth - 94;
+  // Plotly's drawn plot width, not a copy of the app's margins, so a margin
+  // the app forgets to subtract shows up as a range mismatch (04.12 WR-02).
+  const plotW = document.getElementById('chart')._fullLayout._size.w;
   const [padLo, padHi] = gutterPads(base[1] - base[0], plotW);
   return [base[0] - padLo, base[1] + padHi];
 }
