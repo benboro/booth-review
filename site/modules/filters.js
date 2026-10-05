@@ -29,9 +29,10 @@
  */
 
 import { gameKeyMatches, gameSearchKey, normalizeName } from './data.js';
+import { makeCaretIcon, makeGameTypeIcon } from './icons.js';
 import { FAMILY_LABELS } from './palette.js';
 import { offeredFamilyIds } from './select.js';
-import { SLOT_SHORT_LABELS, ROLE_LABELS, gameRowTitle } from './format.js';
+import { NEW_YEARS_SIX, SLOT_SHORT_LABELS, ROLE_LABELS, gameRowTitle } from './format.js';
 
 const ROLE_HELPER_TEXT = 'Limits matches to main-broadcast play-by-play or analyst roles.';
 
@@ -98,12 +99,21 @@ let gameRows = new Map();
 /** game slug -> its `data.games` entry, populated once by `buildGameList`. */
 let gameBySlug = new Map();
 
-/** Section order and header text of the Game list (04.9 D-02). */
+/** Section order, header text and header icon kind of the Game list (04.9 D-02, 04.10 D-03). */
 const GAME_SECTIONS = [
-  ['playoff', 'PLAYOFF'],
-  ['bowls', 'BOWLS'],
-  ['rivalries', 'RIVALRIES'],
+  ['playoff', 'PLAYOFF', 'playoff'],
+  ['bowls', 'BOWLS', 'bowl'],
+  ['rivalries', 'RIVALRIES', 'rivalry'],
 ];
+
+/**
+ * Game sections the viewer collapsed (the pre-search baseline), and the ones
+ * collapsed by a header click during a search. In memory only: neither is ever
+ * stored or put in the URL, and every open of the popover or sheet starts with
+ * both empty (04.10 D-04, D-05).
+ */
+let collapsedSections = new Set();
+let searchCollapsed = new Set();
 
 /** The longest query echoed in the empty-search line (04.9 D-04). */
 const GAME_QUERY_ECHO_MAX = 40;
@@ -403,18 +413,49 @@ function buildGameList(data) {
   gameRows = new Map();
   gameBySlug = new Map(data.games.map((g) => [g.slug, g]));
   const groups = [];
-  for (const [section, header] of GAME_SECTIONS) {
+  for (const [section, header, iconKind] of GAME_SECTIONS) {
     const games = data.games.filter((g) => g.section === section);
     if (games.length === 0) continue;
     const group = document.createElement('div');
     group.setAttribute('role', 'group');
     group.dataset.gameSection = section;
-    const head = document.createElement('div');
+    const head = document.createElement('button');
+    head.type = 'button';
     head.className = 'game-section-head';
     head.id = `game-head-${section}`;
-    head.textContent = header;
+    head.dataset.section = section;
+    head.setAttribute('aria-expanded', 'true');
+    head.setAttribute('aria-controls', `game-rows-${section}`);
+    const name = document.createElement('span');
+    name.className = 'game-section-name';
+    name.textContent = header;
+    const hint = document.createElement('span');
+    hint.className = 'game-picked-hint';
+    hint.setAttribute('aria-hidden', 'true');
+    hint.hidden = true;
+    hint.textContent = '1 picked';
+    const icon = makeGameTypeIcon(iconKind);
+    head.append(makeCaretIcon(), ...(icon ? [icon] : []), name, hint);
     group.setAttribute('aria-labelledby', head.id);
-    group.appendChild(head);
+    const rowsEl = document.createElement('div');
+    rowsEl.className = 'game-rows';
+    rowsEl.id = `game-rows-${section}`;
+    group.append(head, rowsEl);
+    // D-07/D-08: the New Year's Six rows sit in one gold band at the top of BOWLS,
+    // built only when at least one NY6 franchise is in the data.
+    let band = null;
+    if (section === 'bowls' && games.some((g) => NEW_YEARS_SIX.includes(g.slug))) {
+      band = document.createElement('div');
+      band.className = 'game-ny6';
+      band.setAttribute('role', 'group');
+      band.setAttribute('aria-label', "New Year's Six");
+      const bandLabel = document.createElement('div');
+      bandLabel.className = 'game-ny6-label';
+      bandLabel.setAttribute('aria-hidden', 'true');
+      bandLabel.textContent = "New Year's Six";
+      band.appendChild(bandLabel);
+      rowsEl.appendChild(band);
+    }
     for (const game of games) {
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -428,7 +469,7 @@ function buildGameList(data) {
       label.className = 'game-label';
       label.textContent = game.label;
       btn.append(label, ...makeCountSpans());
-      group.appendChild(btn);
+      (band != null && NEW_YEARS_SIX.includes(game.slug) ? band : rowsEl).appendChild(btn);
       gameRows.set(game.slug, btn);
     }
     groups.push(group);
@@ -436,9 +477,54 @@ function buildGameList(data) {
   els.gameOptions.replaceChildren(...groups);
 }
 
-/** Every Game row currently visible, in DOM order. */
+/** Whether the search box holds a query (the same test `filterGameRows` uses). */
+function isSearching(query) {
+  return gameSearchKey(query) !== '';
+}
+
+/**
+ * Whether a section's rows are collapsed: the per-search state while a query is
+ * active, the viewer's own baseline otherwise (04.10 D-05).
+ */
+function sectionCollapsed(section, searching) {
+  return searching ? searchCollapsed.has(section) : collapsedSections.has(section);
+}
+
+/** Every Game row currently reachable by keyboard, in DOM order (collapse-aware). */
 function visibleGameRows() {
-  return Array.from(els.gameOptions.querySelectorAll('[data-game]:not([hidden])'));
+  return Array.from(els.gameOptions.querySelectorAll('[data-game]:not([hidden])')).filter(
+    (r) => !r.closest('.game-rows').hidden,
+  );
+}
+
+/** Toggles one section's header: collapses or expands it visibly, and records it as the baseline. */
+function toggleGameSection(section) {
+  const searching = isSearching(els.gameSearch.value);
+  const next = !sectionCollapsed(section, searching);
+  if (searching) {
+    if (next) searchCollapsed.add(section);
+    else searchCollapsed.delete(section);
+  }
+  if (next) collapsedSections.add(section);
+  else collapsedSections.delete(section);
+  syncGameChrome(els.gameSearch.value);
+}
+
+/** Empties the Game search box and restores the full list and the pre-search collapse state (IN-07). */
+function clearGameSearch(data) {
+  els.gameSearch.value = '';
+  filterGameRows(data, '');
+}
+
+/**
+ * Opens every section again (04.10 D-04): called from `beforetoggle` whenever the
+ * popover or sheet is about to open. The container is still hidden then, so the
+ * tooltip measurement is left to the `toggle` handler (IN-06).
+ */
+function resetGameCollapse() {
+  collapsedSections.clear();
+  searchCollapsed.clear();
+  syncGameChrome(els.gameSearch.value, { measure: false });
 }
 
 /**
@@ -462,16 +548,37 @@ function gameEmptyLine(query, visible, anySearchMatch) {
 /**
  * Hides empty section groups, shows the empty-list line, and recomputes the roving
  * tab stop: the checked visible row, else the first visible row (04.9 D-03, D-04).
+ * @param {string} query - the raw search box text.
+ * @param {{measure?: boolean}} [opts] - `measure: false` skips the tooltip pass,
+ *   for callers that run while the list is hidden and measure after it shows.
  */
-function syncGameChrome(query) {
+function syncGameChrome(query, { measure = true } = {}) {
   for (const group of els.gameOptions.querySelectorAll('[data-game-section]')) {
     group.hidden = group.querySelector('[data-game]:not([hidden])') == null;
+  }
+  // D-09: the NY6 band hides whole when search or facets leave it no visible row.
+  for (const band of els.gameOptions.querySelectorAll('.game-ny6')) {
+    band.hidden = band.querySelector('[data-game]:not([hidden])') == null;
+  }
+  // Collapse is a separate hide dimension: it never empties a group or the list.
+  const shown = els.gameOptions.querySelectorAll('[data-game]:not([hidden])').length;
+  const searching = isSearching(query);
+  if (!searching) searchCollapsed.clear();
+  for (const head of els.gameOptions.querySelectorAll('.game-section-head')) {
+    const collapsed = sectionCollapsed(head.dataset.section, searching);
+    document.getElementById(head.getAttribute('aria-controls')).hidden = collapsed;
+    head.setAttribute('aria-expanded', String(!collapsed));
+    // D-05: a collapsed section holding the pick says so (decorative; the pick is
+    // announced on the toolbar trigger).
+    const rowsEl = document.getElementById(head.getAttribute('aria-controls'));
+    const holdsPick = rowsEl.querySelector('[data-game][aria-checked="true"]') != null;
+    head.querySelector('.game-picked-hint').hidden = !(collapsed && holdsPick);
   }
   const rows = visibleGameRows();
   const anySearchMatch = Array.from(gameRows.values()).some(
     (r) => r.dataset.searchHidden !== 'true',
   );
-  const line = gameEmptyLine(query, rows.length, anySearchMatch);
+  const line = gameEmptyLine(query, shown, anySearchMatch);
   if (line != null) {
     els.gameEmpty.textContent = line;
     els.gameEmpty.hidden = false;
@@ -480,7 +587,7 @@ function syncGameChrome(query) {
   }
   const stop = rows.find((r) => r.getAttribute('aria-checked') === 'true') ?? rows[0];
   for (const btn of gameRows.values()) btn.tabIndex = btn === stop ? 0 : -1;
-  syncGameTooltips();
+  if (measure) syncGameTooltips();
 }
 
 /**
@@ -877,8 +984,17 @@ export function initFilters({ data, getState, setState }) {
   });
   bindPostseasonKeyboard(setState);
 
-  els.gameSearch.addEventListener('input', () => filterGameRows(data, els.gameSearch.value));
+  els.gameSearch.addEventListener('input', () => {
+    filterGameRows(data, els.gameSearch.value);
+    // Typing alone can make the Game Reset live (04.10 IN-03); no render runs here.
+    if (lastView) renderGroupResets(data, getState(), lastView);
+  });
   els.gameOptions.addEventListener('click', (ev) => {
+    const head = ev.target.closest('.game-section-head');
+    if (head) {
+      toggleGameSection(head.dataset.section);
+      return;
+    }
     const btn = ev.target.closest('[data-game]');
     if (!btn) return;
     setState({ game: btn.dataset.game });
@@ -890,6 +1006,9 @@ export function initFilters({ data, getState, setState }) {
     // filters also removes every selected announcer, compare mode, and
     // called-together (the `announcers` reset). "Clear selection" in the chip
     // row still clears only the people.
+    // Empty the search first: setState renders synchronously, so the Game Reset
+    // is then dimmed against the cleared box (04.10 IN-03).
+    clearGameSearch(data);
     setState(structuredClone(Object.assign({}, ...Object.values(GROUP_RESETS))));
   });
 
@@ -901,6 +1020,7 @@ export function initFilters({ data, getState, setState }) {
     if (!btn || btn.getAttribute('aria-disabled') === 'true') return;
     const name = btn.dataset.reset;
     if (!Object.hasOwn(GROUP_RESETS, name)) return;
+    if (name === 'game') clearGameSearch(data);
     setState(structuredClone(GROUP_RESETS[name]));
   });
 
@@ -911,9 +1031,17 @@ export function initFilters({ data, getState, setState }) {
   for (const popover of document.querySelectorAll('.filter-popover, .filters-sheet')) {
     bindPopoverMechanics(popover);
   }
-  // Row labels only have a measurable width while their container is shown (WR-03).
+  // D-04: reopen with every section open. `beforetoggle` runs synchronously before
+  // the show, so the first painted frame is already all-open; `toggle` is queued
+  // after the show and would paint one stale collapsed frame (04.10 WR-01, same
+  // reason as the A5 positioning). Row labels only have a measurable width once
+  // the container is shown, so the tooltip pass stays in `toggle` (WR-03).
   for (const id of ['pop-game', 'filters-sheet']) {
-    document.getElementById(id).addEventListener('toggle', (ev) => {
+    const pop = document.getElementById(id);
+    pop.addEventListener('beforetoggle', (ev) => {
+      if (ev.newState === 'open') resetGameCollapse();
+    });
+    pop.addEventListener('toggle', (ev) => {
       if (ev.newState === 'open') syncGameTooltips();
     });
   }
@@ -1237,13 +1365,17 @@ function renderGroupResets(data, state, view) {
     // live for `?mode=compare` with no one selected (the toolbar trigger's
     // own active state is left alone). The Networks Reset stays live while any
     // pick is stored (D-15), even one D-36 shows without a count, since that
-    // pick is still in the URL and Reset is how the visitor removes it.
+    // pick is still in the URL and Reset is how the visitor removes it. The
+    // Game Reset is also live while the search box holds text, since Reset
+    // clears that too (IN-07, 04.10 IN-03).
     const active =
       name === 'announcers'
         ? state.people.length > 0 || state.compare || state.together
         : name === 'networks'
           ? state.networks != null
-          : triggerInfo(name, data, state, view).active;
+          : name === 'game'
+            ? triggerInfo(name, data, state, view).active || els.gameSearch.value !== ''
+            : triggerInfo(name, data, state, view).active;
     btn.setAttribute('aria-disabled', active ? 'false' : 'true');
   }
 }

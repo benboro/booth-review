@@ -26,6 +26,7 @@ import {
   formatMatchup,
   formatViewers,
   gameTypeInfo,
+  rivalryName,
   measurementLabel,
   selectedPersonIndexes,
   showsTimeSlot,
@@ -297,6 +298,26 @@ function buildBowlLine(bowl) {
 }
 
 /**
+ * Rivalry line (04.10 D-11): crossed-swords icon, then the rivalry name bold
+ * in --text. textContent only, so a hostile name renders as literal text.
+ * @param {string} name
+ * @returns {HTMLParagraphElement}
+ */
+function buildRivalryLine(name) {
+  const p = document.createElement('p');
+  p.className = 'panel-game-type panel-rivalry';
+  const parts = [];
+  const icon = makeGameTypeIcon('rivalry');
+  if (icon) parts.push(icon);
+  const strong = document.createElement('strong');
+  strong.className = 'rivalry-name';
+  strong.textContent = name;
+  parts.push(strong);
+  p.replaceChildren(...parts);
+  return p;
+}
+
+/**
  * Renders the full detail-panel body for telecast `i` into `bodyEl`, and
  * its title into `titleEl` (SITE-05, D-02, D-04, D-07, D-08, D-16). Pure DOM
  * update -- safe to call again for a different `i` while the panel is
@@ -304,7 +325,8 @@ function buildBowlLine(bowl) {
  * selection changes elsewhere in the app.
  * Game type (D-20, D-21): a bowl game (or CFP quarterfinal/semifinal) shows
  * its named bowl line first, then a "[trophy] CFP round" line; a named bowl
- * replaces "Neutral site".
+ * replaces "Neutral site". A named rivalry (04.10 D-11) shows its own line and
+ * never suppresses "Neutral site".
  * D-39: an empty crew reads "Crew not recorded" (the missing crews themselves are
  * a data-join issue, out of scope: see the championship-crews todo); the
  * Nielsen+Adobe label shows once (the badge) and combined feeds show as one line.
@@ -340,6 +362,9 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
   if (gameType != null && gameType.kind === 'playoff') {
     children.push(buildLabelLine('playoff', gameType.label));
   }
+
+  const rivalry = rivalryName(data, i);
+  if (rivalry != null) children.push(buildRivalryLine(rivalry));
 
   if (t.neutral[i] && !namedBowlLine) {
     const neutralP = document.createElement('p');

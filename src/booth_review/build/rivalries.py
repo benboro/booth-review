@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from booth_review.contract.models import RESERVED_GAME_SLUGS
 from booth_review.errors import ReferenceTableError
 from booth_review.reference import SLUG_PATTERN, read_reference_csv_numbered
 
@@ -30,10 +31,6 @@ RIVALRY_COLUMNS = (
 # `article` is "the" when titles read "of the {name}" (the Iron Bowl) and empty
 # when the name stands alone (Bedlam, or a name that already starts with "The ").
 ARTICLE_VALUES = frozenset({"", "the"})
-
-RESERVED_RIVALRY_IDS = frozenset(
-    {"cfp-national-championship", "cfp-semifinal", "cfp-quarterfinal", "cfp-first-round"}
-)
 
 
 @dataclass(frozen=True)
@@ -71,7 +68,7 @@ def load_rivalries(reference_dir: Path) -> list[Rivalry]:
         rivalry_id = raw["rivalry_id"]
         if not SLUG_PATTERN.fullmatch(rivalry_id):
             raise fail(line_no, "rivalry_id must be lowercase ASCII words joined by single hyphens")
-        if rivalry_id in RESERVED_RIVALRY_IDS:
+        if rivalry_id in RESERVED_GAME_SLUGS:
             raise fail(line_no, "rivalry_id is reserved for a CFP round")
         if rivalry_id in ids:
             raise fail(line_no, "duplicate rivalry_id")

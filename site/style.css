@@ -36,6 +36,8 @@
      dark 9.90 / 5.13. */
   --game-playoff: #A37800;
   --game-bowl: #A8501C;
+  --game-rivalry: #B42318;
+  --game-playoff-text: #7A5A00;
   /* D-34: violet special-filter hue for the Announcers button (not an
      Okabe-Ito family color). 5.70/5.22 on --bg/--surface; filled 5.70. */
   --special: #7C3AED;
@@ -55,6 +57,8 @@
     --reset: #F2B8B5;
     --game-playoff: #F5C518;
     --game-bowl: #CD7F32;
+    --game-rivalry: #F97066;
+    --game-playoff-text: #F5C518;
     --special: #A78BFA;
     --on-special: #111827;
   }
@@ -917,17 +921,48 @@ input[type="checkbox"] {
 }
 
 .game-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-height: 32px;
+  padding: var(--space-sm) 0 var(--space-xs);
+  margin: 0;
+  background: none;
+  border: none;
   font: var(--font-label);
   font-weight: var(--weight-semibold);
   color: var(--muted);
-  padding: var(--space-sm) 0 var(--space-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Touch browsers keep :hover after a tap, which would read as a state (04.10 IN-04). */
+@media (hover: hover) {
+  .game-section-head:hover {
+    background: var(--surface);
+  }
+}
+
+.game-caret {
+  flex: none;
+}
+
+.game-section-head[aria-expanded="false"] .game-caret {
+  transform: rotate(-90deg);
+}
+
+.game-picked-hint {
+  margin-left: auto;
+  font-weight: 400;
+  color: var(--muted);
 }
 
 #game-options [role="group"]:first-child .game-section-head {
   padding-top: var(--space-sm);
 }
 
-#game-options button {
+#game-options [role="radio"] {
   min-height: 32px;
   gap: var(--space-md);
 }
@@ -938,6 +973,31 @@ input[type="checkbox"] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.game-ny6 {
+  border-top: 1px solid var(--game-playoff);
+  border-bottom: 1px solid var(--game-playoff);
+  background: #F8F4EB;
+  background: color-mix(in srgb, var(--game-playoff) 8%, transparent);
+  padding: 0 0 var(--space-xs);
+  margin-bottom: var(--space-xs);
+}
+
+@media (prefers-color-scheme: dark) {
+  .game-ny6 {
+    background: #26241A;
+    background: color-mix(in srgb, var(--game-playoff) 8%, transparent);
+  }
+}
+
+.game-ny6-label {
+  font: var(--font-label);
+  font-weight: 400;
+  font-style: italic;
+  line-height: 1.4;
+  color: var(--game-playoff-text);
+  padding: var(--space-xs) 0 0 var(--space-sm);
 }
 
 .radio-list [hidden],
@@ -1005,7 +1065,7 @@ input[type="checkbox"] {
   margin: 0;
 }
 
-.radio-list button {
+.radio-list button:not(.game-section-head) {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
@@ -1019,7 +1079,7 @@ input[type="checkbox"] {
   cursor: pointer;
 }
 
-.radio-list button::before {
+.radio-list button:not(.game-section-head)::before {
   content: "";
   flex: none;
   width: 16px;
@@ -1028,7 +1088,7 @@ input[type="checkbox"] {
   border-radius: 50%;
 }
 
-.radio-list button[aria-checked="true"]::before {
+.radio-list button:not(.game-section-head)[aria-checked="true"]::before {
   border-color: var(--accent);
   background: var(--accent);
   box-shadow: inset 0 0 0 3px var(--bg);
@@ -1313,12 +1373,20 @@ input[type="checkbox"] {
   color: var(--game-bowl);
 }
 
+.game-type-icon[data-kind="rivalry"] {
+  color: var(--game-rivalry);
+}
+
 /* A CFP game at a bowl shows two icons; keep a small gap between them. */
 .game-type-icon + .game-type-icon {
   margin-left: var(--space-xs);
 }
 
 .panel-game-type .game-type-icon:last-of-type {
+  margin-right: var(--space-xs);
+}
+
+.tooltip-game-type .game-type-icon:last-of-type {
   margin-right: var(--space-xs);
 }
 
@@ -1998,6 +2066,11 @@ html:has(#detail-panel[open]) {
   font-weight: 600;
 }
 
+.panel-rivalry .rivalry-name {
+  color: var(--text);
+  font-weight: 600;
+}
+
 /* Sticky inside the one scroller (D-38), so the only visible close control
    stays in view while the body scrolls (review WR-04). The surface fill keeps
    text scrolling underneath from showing through it. */
@@ -2172,7 +2245,8 @@ html:has(#detail-panel[open]) {
     height: 44px;
   }
 
-  #game-options button {
+  #game-options [role="radio"],
+  #game-options .game-section-head {
     min-height: 44px;
   }
 

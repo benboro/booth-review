@@ -409,6 +409,7 @@ async function bootstrap() {
           return acc;
         }, []),
         hasSelection: lastView.hasSelection,
+        filterActive: lastView.filterActive,
         hasPersonSelection: lastView.hasPersonSelection,
         hasGameSelection: lastView.hasGameSelection,
         highlighted: lastView.highlighted,

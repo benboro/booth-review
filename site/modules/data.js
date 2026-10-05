@@ -52,6 +52,17 @@ export function gameSearchKey(s) {
 }
 
 /**
+ * Library sort key for a named game's label: a leading "The " is dropped
+ * (case-insensitive) so "The Game" sorts under G while still displaying as
+ * "The Game" (04.10 D-06).
+ * @param {string} label
+ * @returns {string}
+ */
+export function gameSortKey(label) {
+  return label.replace(/^the\s+/i, '');
+}
+
+/**
  * Whether a folded query (from gameSearchKey) is found in a folded key: as a
  * substring, or with spaces ignored on both sides, so "army navy", "armynavy"
  * and "army-navy" all find "Army-Navy Game" (04.9 D-04, WR-01).
@@ -213,7 +224,10 @@ export function prepareData(raw) {
     return k === -1 ? NEW_YEARS_SIX.length : k;
   };
   bowlGames.sort(
-    (a, b) => nysRank(a.slug) - nysRank(b.slug) || a.label.localeCompare(b.label),
+    (a, b) =>
+      nysRank(a.slug) - nysRank(b.slug) ||
+      gameSortKey(a.label).localeCompare(gameSortKey(b.label)) ||
+      a.label.localeCompare(b.label),
   );
   const rivalryGames = lookups.rivalries.map((r, rivalry) => ({
     slug: r.slug,
@@ -227,7 +241,11 @@ export function prepareData(raw) {
     teams: r.teams.map((ti) => lookups.teams[ti].name),
     keys: [r.name, ...r.teams.map((ti) => lookups.teams[ti].name)].map(gameSearchKey),
   }));
-  rivalryGames.sort((a, b) => a.label.localeCompare(b.label));
+  rivalryGames.sort(
+    (a, b) =>
+      gameSortKey(a.label).localeCompare(gameSortKey(b.label)) ||
+      a.label.localeCompare(b.label),
+  );
   const games = [...cfpGames, ...bowlGames, ...rivalryGames];
   games.forEach((g, index) => {
     g.index = index;

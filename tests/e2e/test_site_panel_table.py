@@ -286,9 +286,69 @@ def test_panel_game_type_line_has_matching_icon_before_label(
     assert "·" not in first.text_content()
     assert "·" not in second.text_content()
 
+    # D-11: telecast 0 is the Lakeshore Rivalry: one rivalry line, no bowl/CFP line.
     guarded_page.evaluate("window.__testHooks.openPanel(0)")
-    assert guarded_page.locator("#panel-body .panel-game-type").count() == 0
+    lines = guarded_page.locator("#panel-body .panel-game-type")
+    assert lines.count() == 1
+    assert lines.get_attribute("class") == "panel-game-type panel-rivalry"
+    assert lines.locator("svg.game-type-icon").get_attribute("data-kind") == "rivalry"
+    name = lines.locator("strong")
+    assert name.text_content() == "Lakeshore Rivalry"
+    assert name.evaluate("el => getComputedStyle(el).fontWeight") == "600"
     assert "Noon (before 2 PM ET)" in guarded_page.inner_text("#panel-body")
+
+    guarded_page.evaluate("window.__testHooks.openPanel(11)")
+    assert (
+        guarded_page.locator("#panel-body .panel-rivalry strong").text_content()
+        == "The Bridge Game"
+    )
+
+    # A regular, neutral, non-rivalry game keeps "Neutral site" and has no line.
+    guarded_page.evaluate("window.__testHooks.openPanel(3)")
+    assert guarded_page.locator("#panel-body .panel-game-type").count() == 0
+    assert "Neutral site" in guarded_page.inner_text("#panel-body")
+
+
+def test_panel_neutral_site_rivalry_keeps_neutral_site(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+) -> None:
+    """D-11: a neutral-site rivalry shows the rivalry line and "Neutral site"."""
+    raw = json.loads(json.dumps(fixture_raw))
+    raw["telecasts"]["neutral"][0] = True
+    guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+    open_app(guarded_page, "")
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    assert (
+        guarded_page.locator("#panel-body .panel-rivalry strong").text_content()
+        == "Lakeshore Rivalry"
+    )
+    assert "Neutral site" in guarded_page.inner_text("#panel-body")
+
+
+def test_panel_hostile_rivalry_name_is_literal_text(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+) -> None:
+    """T-04.10-01: a hostile rivalry name is literal text in the modal."""
+    dialogs: list[str] = []
+
+    def _record_dialog(dialog: object) -> None:
+        dialogs.append(dialog.message)  # type: ignore[attr-defined]
+        dialog.dismiss()  # type: ignore[attr-defined]
+
+    guarded_page.on("dialog", _record_dialog)
+    payload = "<img src=x onerror=alert(1)>"
+    raw = json.loads(json.dumps(fixture_raw))
+    raw["lookups"]["rivalries"][1]["name"] = payload
+    guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+    open_app(guarded_page, "")
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    assert guarded_page.locator("#panel-body .panel-rivalry strong").text_content() == payload
+    assert guarded_page.locator("#panel-body img").count() == 0
+    assert dialogs == []
 
 
 @pytest.mark.parametrize(

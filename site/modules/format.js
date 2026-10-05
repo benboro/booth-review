@@ -175,8 +175,8 @@ export function showsTimeSlot(data, i) {
  * recorded). `atBowl` is true for a CFP game also played at a bowl
  * (`CFP_BOWL_ROUNDS`), which shows the bowl icon before the trophy; it is false
  * for a plain bowl, whose `kind` is already 'bowl'. `gameTypeKind`,
- * `gameTypeLabel` and `gameTypeIcons` are thin views of this, so they can
- * never disagree.
+ * `gameTypeLabel` and `namedGameInfo` are views of this, so they can never
+ * disagree.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
  * @returns {{kind: "bowl"|"playoff", label: string, atBowl: boolean}|null}
@@ -215,13 +215,38 @@ export function gameTypeKind(data, i) {
 }
 
 /**
- * The icon kinds to draw for a `gameTypeInfo` result, in order: 'bowl' first
- * for a CFP game played at a bowl, then the game's own kind.
- * @param {{kind: "bowl"|"playoff", atBowl: boolean}} info
- * @returns {("bowl"|"playoff")[]}
+ * Telecast `i`'s rivalry name (04.10 D-11/D-12), read from
+ * `lookups.rivalries`; null when the game is not a named rivalry.
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @returns {string|null}
  */
-export function gameTypeIcons(info) {
-  return info.atBowl ? ['bowl', info.kind] : [info.kind];
+export function rivalryName(data, i) {
+  return data.lookups.rivalries?.[data.t.rivalry?.[i]]?.name ?? null;
+}
+
+/**
+ * The one source for the name shown beside a named game's icons in the hover
+ * tooltip, its plotly-fallback text, and (via `rivalryName`) the modal (04.10
+ * D-10). A rivalry shows its name; a bowl its core name (never the sponsor);
+ * a CFP game at a bowl "<core> · <round>"; a CFP game elsewhere its round
+ * label; a regular non-rivalry game null. A rivalry game is always regular
+ * season, so the rivalry branch never collides with a bowl or CFP branch.
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @returns {{icons: ("bowl"|"playoff"|"rivalry")[], text: string}|null}
+ */
+export function namedGameInfo(data, i) {
+  const rivalry = rivalryName(data, i);
+  if (rivalry != null) return { icons: ['rivalry'], text: rivalry };
+  const info = gameTypeInfo(data, i);
+  if (info == null) return null;
+  const core = data.lookups.bowls?.[data.t.bowl?.[i]]?.core ?? null;
+  if (info.kind === 'bowl') return { icons: ['bowl'], text: core ?? 'Bowl' };
+  if (info.atBowl) {
+    return { icons: ['bowl', 'playoff'], text: core ? `${core} \u00b7 ${info.label}` : info.label };
+  }
+  return { icons: ['playoff'], text: info.label };
 }
 
 /**

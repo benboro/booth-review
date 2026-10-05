@@ -973,3 +973,38 @@ def test_real_named_game_toolbar_stable_at_1024(
     assert picked
     assert toolbar_after == toolbar_before
     assert top_after == top_before
+
+
+_NY6_BAND_JS = """
+() => {
+  const want = ['rose-bowl', 'sugar-bowl', 'orange-bowl',
+    'cotton-bowl', 'fiesta-bowl', 'peach-bowl'];
+  const rows = [...document.querySelectorAll('#game-options .game-ny6 [data-game]')];
+  const got = rows.map((r) => r.dataset.game);
+  return {
+    bands: document.querySelectorAll('#game-options .game-ny6').length,
+    rows: rows.filter((r) => r.offsetParent !== null).length,
+    inOrder: got.length === want.length && got.every((s, i) => s === want[i]),
+  };
+}
+"""
+
+
+def test_real_ny6_band_holds_the_six_bowls(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """D-07, RESEARCH Open Question 3: bowls.csv carries all six New Year's Six
+    franchises, so the default view's band holds six rows in NEW_YEARS_SIX order.
+    Counts and one boolean only."""
+    real_open_app(real_guarded_page, "")
+    real_guarded_page.click("#trigger-game")
+    real_guarded_page.wait_for_function(
+        "document.getElementById('pop-game').matches(':popover-open')"
+    )
+    result: dict[str, Any] = real_guarded_page.evaluate(_NY6_BAND_JS)
+    bands = result["bands"]
+    rows = result["rows"]
+    in_order = result["inOrder"]
+    assert bands == 1, "expected exactly one New Year's Six band"
+    assert rows == 6, "expected six visible rows in the band"
+    assert in_order is True, "band rows were not in NEW_YEARS_SIX order"

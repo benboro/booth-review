@@ -1052,3 +1052,64 @@ def test_facet_people_counts_reflect_other_filters(guarded_page: Page, site_url:
     facets = _facets(guarded_page, {"networks": ["net-a"]})
     # net-a dots are 0, 4, 8: people 0,1 (dots 0, 8), 7,8 (dot 4), 6 (dot 8).
     assert facets["people"] == [2, 2, 0, 0, 0, 0, 1, 1, 1, 0]
+
+
+def test_named_game_info_and_rivalry_name(guarded_page: Page, site_url: str) -> None:
+    """D-10/D-12: one DOM-free helper names every named game: a rivalry by its
+    name, a bowl by its core name, a CFP game at a bowl by core + round."""
+    _load(guarded_page, site_url)
+    named = "namedGameInfo"
+    assert guarded_page.evaluate(_FORMAT_JS, [named, 0]) == {
+        "icons": ["rivalry"],
+        "text": "Lakeshore Rivalry",
+    }
+    assert guarded_page.evaluate(_FORMAT_JS, [named, 11]) == {
+        "icons": ["rivalry"],
+        "text": "The Bridge Game",
+    }
+    assert guarded_page.evaluate(_FORMAT_JS, [named, 7]) == {
+        "icons": ["bowl"],
+        "text": "Harbor Bowl",
+    }
+    assert guarded_page.evaluate(_FORMAT_JS, [named, 5]) == {
+        "icons": ["bowl", "playoff"],
+        "text": "Summit Bowl · CFP semifinal",
+    }
+    assert guarded_page.evaluate(_FORMAT_JS, [named, 1]) is None
+    assert guarded_page.evaluate(_FORMAT_JS, [named, 3]) is None
+    assert guarded_page.evaluate(_FORMAT_JS, ["rivalryName", 0]) == "Lakeshore Rivalry"
+    assert guarded_page.evaluate(_FORMAT_JS, ["rivalryName", 3]) is None
+
+
+_NAMED_VARIANT_JS = """
+async ([index, field, value]) => {
+  const D = await import('./modules/data.js');
+  const F = await import('./modules/format.js');
+  const raw = await (await fetch('site-data.json')).json();
+  raw.telecasts[field][index] = value;
+  const data = D.prepareData(raw);
+  return F.namedGameInfo(data, index);
+}
+"""
+
+
+@pytest.mark.parametrize(
+    ("index", "field", "value", "expected"),
+    [
+        (7, "bowl", None, {"icons": ["bowl"], "text": "Bowl"}),
+        (5, "playoff_round", "first_round", {"icons": ["playoff"], "text": "CFP first round"}),
+        (5, "playoff_round", None, {"icons": ["playoff"], "text": "College Football Playoff"}),
+    ],
+)
+def test_named_game_info_fallbacks(
+    guarded_page: Page,
+    site_url: str,
+    index: int,
+    field: str,
+    value: Any,
+    expected: dict[str, Any],
+) -> None:
+    """An unknown bowl falls back to 'Bowl'; a CFP game not at a bowl shows the
+    round label alone."""
+    _load(guarded_page, site_url)
+    assert guarded_page.evaluate(_NAMED_VARIANT_JS, [index, field, value]) == expected

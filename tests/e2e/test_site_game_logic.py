@@ -90,8 +90,8 @@ _SLUGS = [
     "cfp-first-round",
     "harbor-bowl",
     "summit-bowl",
-    "lakeshore",
     "bridge-game",
+    "lakeshore",
 ]
 
 _REORDER = """
@@ -138,9 +138,35 @@ def test_game_list_order_and_labels(loaded: Page) -> None:
         "CFP First Round",
         "Harbor Bowl",
         "Summit Bowl",
-        "Lakeshore Rivalry",
         "The Bridge Game",
+        "Lakeshore Rivalry",
     ]
+
+
+_RIVALRY_NAMES_JS = """
+async (names) => {
+  const D = await import('./modules/data.js');
+  const raw = await (await fetch('site-data.json')).json();
+  raw.lookups.rivalries.forEach((r, i) => { r.name = names[i]; });
+  return D.prepareData(raw).games.filter((g) => g.section === 'rivalries')
+    .map((g) => g.label);
+}
+"""
+
+
+@pytest.mark.parametrize(
+    ("names", "expected"),
+    [
+        # D-06: the key drops a leading "The ", the label is unchanged.
+        (["The Zebra Cup", "Alpha Trophy"], ["Alpha Trophy", "The Zebra Cup"]),
+        (["the Game", "Hat Trick"], ["the Game", "Hat Trick"]),
+        (["Hat Trick", "the Game"], ["the Game", "Hat Trick"]),
+    ],
+)
+def test_rivalries_sort_without_leading_the(
+    loaded: Page, names: list[str], expected: list[str]
+) -> None:
+    assert loaded.evaluate(_RIVALRY_NAMES_JS, names) == expected
 
 
 def test_slug_index_and_dot_memberships(loaded: Page) -> None:
@@ -149,9 +175,9 @@ def test_slug_index_and_dot_memberships(loaded: Page) -> None:
     dg = g["dotGames"]
     assert dg[5] == [1, 5]
     assert dg[7] == [4]
-    assert dg[0] == [6]
-    assert dg[4] == [6]
-    assert dg[11] == [7]
+    assert dg[0] == [7]
+    assert dg[4] == [7]
+    assert dg[11] == [6]
     assert dg[3] == []
 
 
@@ -285,20 +311,20 @@ def test_missing_v210_fields_throw(loaded: Page, mutation: str) -> None:
 def test_default_state_and_facets(loaded: Page) -> None:
     v = _view(loaded, {})
     assert v["defaultGame"] is None
-    assert v["games"] == [0, 1, 0, 0, 1, 1, 2, 1]
+    assert v["games"] == [0, 1, 0, 0, 1, 1, 1, 2]
     assert v["matched"] == []
     assert v["hasSelection"] is False
 
 
 def test_facets_postseason_exclude(loaded: Page) -> None:
-    assert _view(loaded, {"postseason": "exclude"})["games"] == [0, 0, 0, 0, 0, 0, 2, 1]
+    assert _view(loaded, {"postseason": "exclude"})["games"] == [0, 0, 0, 0, 0, 0, 1, 2]
 
 
 def test_game_pick_fills_table_and_summary(loaded: Page) -> None:
     v = _view(loaded, {"game": "lakeshore"})
     assert v["passing"] == [0, 4]
     assert v["total"] == 2
-    assert v["games"] == [0, 1, 0, 0, 1, 1, 2, 1]
+    assert v["games"] == [0, 1, 0, 0, 1, 1, 1, 2]
     assert v["matched"] == [0, 4]
     assert v["hasSelection"] is True
     assert v["summary"]["kind"] == "matches"

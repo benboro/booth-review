@@ -34,7 +34,7 @@
  * importable from node for quick checks.
  */
 
-import { ACCENT, DIVIDER, FAMILY_COLORS, MUTED, PAGE_BG, SURFACE, ZERO_LINE, familyKey } from './palette.js';
+import { ACCENT, DIVIDER, DOT_OUTLINE, FAMILY_COLORS, MUTED, PAGE_BG, SURFACE, ZERO_LINE, familyKey } from './palette.js';
 import { MINUS, escapeHover, logTicks, niceLinearTicks } from './format.js';
 import { tooltipModel } from './tooltip.js';
 
@@ -96,10 +96,11 @@ export function naBand(data, axis) {
  * fallback mode only -- the default 'html' mode never calls this and never
  * builds a `text` array at all). Built from the same `tooltip.js`
  * `tooltipModel` the default HTML tooltip renders, so the two modes can
- * never drift on content/order: matchup+score, date+kickoff (a bowl or
- * playoff game appends its "Bowl" / CFP round name as plain text, since this
- * mode can't draw the HTML tooltip's icon -- and emoji glyphs vary by OS;
- * the time-slot label is panel-only, notes-4 A1),
+ * never drift on content/order: matchup+score, date+kickoff (a named game
+ * appends `namedGameInfo().text` -- the rivalry name, the bowl core name, or
+ * "core · round" -- as plain text, since this mode can't draw the HTML
+ * tooltip's icons -- and emoji glyphs vary by OS; the time-slot label is
+ * panel-only, notes-4 A1),
  * slash-delimited networks (primary first, each colored by its own family --
  * the stand-in for a filled pill in this text-only mode, since Plotly's
  * hover renderer can't draw one, SITE-26), one "Position: Name" line per
@@ -240,9 +241,14 @@ export function buildFigure(data, view, state, env) {
       hoverlabel: { bordercolor: FAMILY_COLORS[theme][family] },
       marker: {
         color: FAMILY_COLORS[theme][family],
-        size: 6,
+        // D-13/D-14 (04.10): with a filter active, passing dots take the announcer-selected
+        // size; filtered-out (inert) dots stay 6; under a person this trace holds the
+        // passing-not-theirs dots, which stay inert at activeUnderPerson opacity.
+        // Enlarged dots also get a 1px black outline (theme-independent) to separate
+        // overlapping 10px dots; unfiltered 6px dots stay borderless.
+        size: view.filterActive ? 10 : 6,
         opacity: view.hasPersonSelection ? DOT_OPACITY.activeUnderPerson : DOT_OPACITY.active,
-        line: { width: 0 },
+        line: { width: view.filterActive ? 1 : 0, color: DOT_OUTLINE },
       },
     });
   }

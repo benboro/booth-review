@@ -239,6 +239,27 @@ def serve_bowl(fixture_raw: dict[str, Any]) -> Callable[..., None]:
     return _serve
 
 
+@pytest.fixture
+def serve_ny6(fixture_raw: dict[str, Any]) -> Callable[[Page, dict[str, str]], None]:
+    """Returns `serve(page, renames)`: loads the synthetic fixture with bowl
+    franchise slugs renamed (old slug -> New Year's Six slug), so a test can see
+    the NY6 band. Keeps the shared 12-dot fixture unchanged (RESEARCH Pitfall 6).
+    Call it before opening the app.
+    """
+
+    def _serve(page: Page, renames: dict[str, str]) -> None:
+        raw = copy.deepcopy(fixture_raw)
+        franchises = raw["lookups"]["bowl_franchises"]
+        known = {f["slug"] for f in franchises}
+        for old in renames:
+            assert old in known, old
+        for f in franchises:
+            f["slug"] = renames.get(f["slug"], f["slug"])
+        page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+
+    return _serve
+
+
 def _install_guard(page: Page, site_url: str) -> tuple[list[str], list[str]]:
     """Wires `page` to abort and record any request leaving `site_url`'s
     origin (SITE-19), and to record any console error mentioning CSP.
