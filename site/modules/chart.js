@@ -96,10 +96,11 @@ export function naBand(data, axis) {
  * fallback mode only -- the default 'html' mode never calls this and never
  * builds a `text` array at all). Built from the same `tooltip.js`
  * `tooltipModel` the default HTML tooltip renders, so the two modes can
- * never drift on content/order: matchup+score, date+kickoff (a bowl or
- * playoff game appends its "Bowl" / CFP round name as plain text, since this
- * mode can't draw the HTML tooltip's icon -- and emoji glyphs vary by OS;
- * the time-slot label is panel-only, notes-4 A1),
+ * never drift on content/order: matchup+score, date+kickoff (a named game
+ * appends `namedGameInfo().text` -- the rivalry name, the bowl core name, or
+ * "core · round" -- as plain text, since this mode can't draw the HTML
+ * tooltip's icons -- and emoji glyphs vary by OS; the time-slot label is
+ * panel-only, notes-4 A1),
  * slash-delimited networks (primary first, each colored by its own family --
  * the stand-in for a filled pill in this text-only mode, since Plotly's
  * hover renderer can't draw one, SITE-26), one "Position: Name" line per
