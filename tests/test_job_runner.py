@@ -1169,7 +1169,11 @@ def test_update_regression_block_holds_deploy_and_keeps_site_data(
     assert "build_blocked" in _kinds(result)
     assert result.exit_code == 4
     assert site_data.read_bytes() == before
-    assert load_state(paths.job_state).last_build_at == state_before.last_build_at
+    state_after = load_state(paths.job_state)
+    assert state_after.last_build_at == state_before.last_build_at
+    # D-09 / WR-06: a guard-blocked build is attention, not a failed run.
+    assert state_after.last_status == "attention"
+    assert state_after.last_success_at == UPDATE_NOW
     assert not (tmp_path / "site-out").exists()
 
 
@@ -1247,10 +1251,14 @@ def test_update_key_leak_records_item_saves_state_exit3(
     assert "site_key_check_failed" in _kinds(result)
     assert result.exit_code == 3
     assert result.deploy_ready is False
-    assert load_state(update_vault.job_state).last_attempt_at == UPDATE_NOW
+    state = load_state(update_vault.job_state)
+    assert state.last_attempt_at == UPDATE_NOW
+    # WR-06: a key leak is a failed run, so it never counts as a success.
+    assert state.last_status == "failed"
+    assert state.last_success_at != UPDATE_NOW
 
 
-def test_update_build_state_error_is_an_item_and_collection_still_succeeds(
+def test_update_build_state_error_is_an_item_and_a_failed_run(
     update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
 ) -> None:
     def _boom(*args, **kwargs):
@@ -1258,12 +1266,39 @@ def test_update_build_state_error_is_an_item_and_collection_still_succeeds(
 
     monkeypatch.setattr("booth_review.job.runner.run_build", _boom)
     handle = mock_transport_factory(_update_cfbd_responses())
+    before = load_state(update_vault.job_state)
     result = _update_job(update_vault, handle, fake_clock, tmp_path).run()
 
     lines = [item.line for item in result.items if item.kind == "build_step_failed"]
     assert lines == ["build step failed: VaultStateError"]
     assert result.deploy_ready is False
-    assert load_state(update_vault.job_state).last_success_at == UPDATE_NOW
+    assert result.exit_code == 4
+    # WR-06: a crashed build produced no site, so the run is not a success.
+    state = load_state(update_vault.job_state)
+    assert state.last_status == "failed"
+    assert state.last_success_at == before.last_success_at
+    assert state.last_attempt_at == UPDATE_NOW
+
+
+def test_update_site_step_crash_is_a_failed_run(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
+) -> None:
+    def _boom(**kwargs):
+        raise OSError("secret detail that must not print")
+
+    monkeypatch.setattr("booth_review.job.runner.assemble_site", _boom)
+    handle = mock_transport_factory(_update_cfbd_responses())
+    before = load_state(update_vault.job_state)
+    result = _update_job(update_vault, handle, fake_clock, tmp_path).run()
+
+    assert [i.line for i in result.items if i.kind == "site_step_failed"] == [
+        "site step failed: OSError"
+    ]
+    assert result.deploy_ready is False
+    assert result.exit_code == 4
+    state = load_state(update_vault.job_state)
+    assert state.last_status == "failed"
+    assert state.last_success_at == before.last_success_at
 
 
 def test_update_build_commit_error_is_push_failed_exit3(
