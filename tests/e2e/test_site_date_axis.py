@@ -621,13 +621,21 @@ def test_labels_recompute_on_zoom_and_resize(date_page: Page) -> None:
     assert out["tickOk"] and out["annOk"]
 
 
-def test_autoscale_and_pan_clamp_to_filtered_range(date_page: Page) -> None:
+def test_pan_past_filtered_range_is_clamped_by_minallowed(date_page: Page) -> None:
+    """Plotly's own `minallowed`/`maxallowed` (set by buildFigure) do the clamping;
+    fitDateAxis has no clamp of its own."""
     date_page.evaluate(_STATE_JS, {"seasons": [2025, 2026]})
     _settle(date_page)
     date_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [100, 300]})
     _settle(date_page)
     lo, hi = date_page.evaluate("document.getElementById('chart')._fullLayout.xaxis.range")
     assert lo >= 153 - 1e-6 and hi <= 278 + 1e-6
+
+
+def test_autoscale_restores_filtered_range(date_page: Page) -> None:
+    """fitDateAxis turns Plotly's autorange back into the filtered seasons' range."""
+    date_page.evaluate(_STATE_JS, {"seasons": [2025, 2026]})
+    _settle(date_page)
     date_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [160, 200]})
     _settle(date_page)
     date_page.evaluate(_RELAYOUT_JS, {"xaxis.autorange": True})

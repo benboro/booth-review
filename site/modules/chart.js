@@ -654,12 +654,14 @@ export function seasonLabelMeasurer(gd) {
 }
 
 /**
- * Keeps the Date-axis label rows, range and clamp right after every draw,
+ * Keeps the Date-axis label rows and home range right after every draw,
  * zoom, pan, and resize (D-11, D-12, D-13). Reads the shown blocks from
  * `gd.boothDateAxis` (null off the Date axis, where this is a no-op). Writes
- * the x range only when Plotly autoscaled it or a pan left the filtered
- * seasons (then the range lands inside, so the next pass is a no-op), and
- * otherwise relayouts only the tick and season-label values that differ from
+ * the x range only when Plotly autoscaled it (Autoscale, or a double-click
+ * that autosizes), putting back the filtered seasons; pans and zooms never
+ * leave them because `buildFigure` sets `xaxis.minallowed`/`maxallowed`,
+ * which Plotly applies before drawing, so there is nothing to clamp here.
+ * Otherwise relayouts only the tick and season-label values that differ from
  * the pure `dateAxisLabels` rule. Compare-before-relayout means the
  * `plotly_afterplot` this triggers finds nothing to change: it never loops.
  * @param {HTMLElement} gd
@@ -668,17 +670,8 @@ export function fitDateAxis(gd) {
   const meta = gd.boothDateAxis;
   const xa = gd._fullLayout?.xaxis;
   if (!meta || !xa || !xa.range) return;
-  const [m0, m1] = meta.range;
   if (gd.layout?.xaxis?.autorange === true) {
     window.Plotly.relayout(gd, { 'xaxis.range': meta.range.slice(), 'xaxis.autorange': false });
-    return;
-  }
-  const [r0, r1] = xa.range;
-  if (r0 < m0 - 1e-6 || r1 > m1 + 1e-6) {
-    let lo = Math.max(r0, m0);
-    let hi = Math.min(r1, m1);
-    if (hi - lo < 1) [lo, hi] = [m0, m1];
-    window.Plotly.relayout(gd, { 'xaxis.range': [lo, hi] });
     return;
   }
   const want = dateAxisLabels(meta.blocks, xa.range, xa._length, {
