@@ -226,6 +226,8 @@ export function dateAxisLabels(blocks, range, plotPx, { mobile = false, marginLe
 
   const fontSize = mobile ? 10 : 14;
   const charPx = 0.62 * fontSize;
+  // Plotly's annotation box is about 2.5px wider than its text (measured at 10px bold).
+  const BOX_PAD = 2.5;
   const leftLimit = -marginLeft + 2;
   const rightLimit = plotPx + marginRight - 2;
   const toPx = (x) => (x - lo) * pxPerUnit;
@@ -239,6 +241,7 @@ export function dateAxisLabels(blocks, range, plotPx, { mobile = false, marginLe
   });
   const full = (s) => String(s);
   const short = (s) => `'${String(s).slice(-2)}`;
+  const bare = (s) => String(s).slice(-2);
   const result = entries.map((en) => ({
     season: en.block.season,
     x: en.x,
@@ -248,8 +251,13 @@ export function dateAxisLabels(blocks, range, plotPx, { mobile = false, marginLe
   }));
   if (blocks.length === 1) return { tier, tickvals, ticktext, twoDigit: false, seasons: result };
 
-  const run = (twoDigit) => {
-    const fmt = twoDigit ? short : full;
+  // Forms tried in order: full year, '24, then bare 24 when even the apostrophe form
+  // cannot fit (13 seasons on a 360px phone). Only the last form may hide a label.
+  const forms = [full, short, bare];
+  const run = (formIndex) => {
+    const fmt = forms[formIndex];
+    const twoDigit = formIndex > 0;
+    const lastForm = formIndex === forms.length - 1;
     const gap = twoDigit ? 1 : 2;
     let active = entries.map((en, i) => (en.overlaps ? i : -1)).filter((i) => i >= 0);
     const placed = new Map();
@@ -260,13 +268,13 @@ export function dateAxisLabels(blocks, range, plotPx, { mobile = false, marginLe
         c: entries[i].c,
         a: entries[i].a,
         b: entries[i].b,
-        w: charPx * fmt(entries[i].block.season).length,
+        w: charPx * fmt(entries[i].block.season).length + BOX_PAD,
       }));
       const { centers, invalid } = placeRow(items, gap, leftLimit, rightLimit);
       placed.clear();
       active.forEach((i, k) => placed.set(i, centers[k]));
       if (!invalid.some(Boolean)) return { ok: true, placed, hidden };
-      if (!twoDigit) return { ok: false };
+      if (!lastForm) return { ok: false };
       for (const i of active.filter((_, k) => invalid[k])) hidden.add(i);
       active = active.filter((i) => !hidden.has(i));
     }
@@ -275,13 +283,14 @@ export function dateAxisLabels(blocks, range, plotPx, { mobile = false, marginLe
     return { ok: true, placed, hidden };
   };
 
-  let twoDigit = false;
-  let outcome = run(false);
-  if (!outcome.ok) {
-    twoDigit = true;
-    outcome = run(true);
+  let formIndex = 0;
+  let outcome = run(0);
+  while (!outcome.ok) {
+    formIndex += 1;
+    outcome = run(formIndex);
   }
-  const fmt = twoDigit ? short : full;
+  const twoDigit = formIndex > 0;
+  const fmt = forms[formIndex];
   const seasons = result.map((r, i) => {
     const center = outcome.placed.get(i);
     const hide = outcome.hidden.has(i) || center === undefined;

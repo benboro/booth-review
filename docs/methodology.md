@@ -3,7 +3,7 @@
 This page explains what the chart on this site can and cannot say, in plain
 language. It covers what is plotted, why the sample is not a random sample of
 college football, how measurement changed over the years in scope, what
-the two x-axis measures mean, and where the
+the x-axis options mean, and where the
 figures on the chart come from.
 
 ## What this chart shows
@@ -11,7 +11,7 @@ figures on the chart come from.
 Each dot is one rated national telecast of an FBS college football game, from
 the 2014 season onward. The y-axis is viewers, on a log scale. The x-axis
 defaults to the winner's closing point spread (see below) and can be toggled
-to CFBD's post-game excitement measure instead. Dots are colored by network family —
+to CFBD's post-game excitement measure or to the game's date instead. Dots are colored by network family —
 for example, the Disney family groups ABC and the ESPN networks under one
 color — but the specific network that carried a telecast is always named in
 the hover, the detail panel, and the matched-games table. No dot is ever
@@ -151,11 +151,12 @@ to excitement mode, a caption appears under the x-axis noting the break.
 Affected dots look identical to any other dot — the flag is informational
 only and never changes a dot's size, color, or shape.
 
-## The x-axis: spread and excitement
+## The x-axis: spread, excitement, and date
 
-The chart's x-axis can show one of two different measures of "how close this
-game was expected to be or turned out to be," and the choice between them
-matters for what a dot placement can and cannot explain.
+The chart's x-axis can show one of three options. Two are different measures
+of "how close this game was expected to be or turned out to be," and the
+choice between them matters for what a dot placement can and cannot explain.
+The third is the game's date.
 
 **Spread (the default):** x is the winner's closing point spread: negative
 when the favorite won, positive when the underdog won (an upset), and 0 for a
@@ -172,6 +173,20 @@ whether an audience stayed tuned in as the game unfolded, but it cannot
 explain the initial decision to watch, since it is not available until the
 outcome is already known. Only the Spread's distance is known at kickoff,
 which is why Spread is the chart's default measure.
+
+**Date (the third option):** each dot sits at the day its game aired in
+Eastern time, nudged within the day by its kickoff time (a game with no listed
+kickoff sits at midday). Seasons sit side by side, each trimmed to its own
+first and last telecast, so the offseason takes no space and the current
+season's block widens as games are added. A faint line marks the gap between
+seasons; that gap is compressed space, not real days. Under the axis, one row
+names each season (two-digit years such as '24 on narrow screens) and a second
+row shows month ticks, month names, or dates, depending on how much room there
+is. Bowl and playoff games sit at the end of their own season's block. On this
+option only, picking a season range shows just those seasons on the axis,
+while every other filter fades or hides dots as usual. The Date axis has no
+N/A strip because every telecast has a date, and its tooltip and detail panel
+show both the spread and excitement values.
 
 A telecast missing the value for the selected measure (no closing line, no
 final score yet, or a tied game for Spread; no CFBD excitement value for

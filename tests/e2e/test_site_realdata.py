@@ -1008,3 +1008,153 @@ def test_real_ny6_band_holds_the_six_bowls(
     assert bands == 1, "expected exactly one New Year's Six band"
     assert rows == 6, "expected six visible rows in the band"
     assert in_order is True, "band rows were not in NEW_YEARS_SIX order"
+
+
+_WAIT_TWO_FRAMES = "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
+
+# Counts and booleans only: nothing returned here names a team, person, or game.
+_DATE_FACTS_JS = """
+() => {
+  const gd = document.getElementById('chart');
+  const blocks = window.__testHooks.data.dateAxis.blocks;
+  const range = gd.layout.xaxis.range;
+  let plotted = 0;
+  let outside = 0;
+  for (const t of gd.data) {
+    if (!String(t.meta).startsWith('family:')) continue;
+    for (const x of t.x) {
+      if (x === null || x === undefined) continue;
+      plotted += 1;
+      if (x < range[0] - 1e-9 || x > range[1] + 1e-9) outside += 1;
+    }
+  }
+  const anns = (gd.layout.annotations || []).filter((a) => a.name && a.name.startsWith('season-'));
+  const byStart = {};
+  for (const b of blocks) byStart[b.season] = b;
+  return {
+    plotted,
+    outside,
+    annotations: anns.length,
+    dividers: (gd.layout.shapes || []).length,
+    blockCount: blocks.length,
+    rangeLo: range[0],
+    rangeHi: range[1],
+    firstStart: blocks[0].start,
+    lastEnd: blocks[blocks.length - 1].end,
+    start2024: byStart[2024] ? byStart[2024].start : null,
+    end2026: byStart[2026] ? byStart[2026].end : null,
+  };
+}
+"""
+
+
+def test_real_date_axis_plots_every_telecast(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+    real_raw: dict[str, Any],
+) -> None:
+    """SITE-48: the Date axis plots every telecast, one label per season, one divider per gap."""
+    real_guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    real_open_app(real_guarded_page, "?axis=date")
+    real_guarded_page.evaluate(_WAIT_TWO_FRAMES)
+    facts: dict[str, Any] = real_guarded_page.evaluate(_DATE_FACTS_JS)
+    total = len(real_raw["telecasts"]["season"])
+    seasons = len(set(real_raw["telecasts"]["season"]))
+    plotted = int(facts["plotted"])
+    annotations = int(facts["annotations"])
+    dividers = int(facts["dividers"])
+    expected_dividers = seasons - 1
+    range_ok = facts["rangeLo"] == facts["firstStart"] and facts["rangeHi"] == facts["lastEnd"]
+    assert plotted == total
+    assert annotations == seasons
+    assert dividers == expected_dividers
+    assert range_ok
+
+
+def test_real_date_axis_follows_season_filter(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+    real_raw: dict[str, Any],
+) -> None:
+    """SITE-48: a 2024-2026 season filter limits the Date axis to those blocks."""
+    real_guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    real_open_app(real_guarded_page, "?axis=date")
+    real_guarded_page.evaluate("() => window.__testHooks.setState({seasons: [2024, 2026]})")
+    real_guarded_page.evaluate(_WAIT_TWO_FRAMES)
+    facts: dict[str, Any] = real_guarded_page.evaluate(_DATE_FACTS_JS)
+    in_scope = sum(1 for s in real_raw["telecasts"]["season"] if 2024 <= s <= 2026)
+    annotations = int(facts["annotations"])
+    plotted = int(facts["plotted"])
+    outside = int(facts["outside"])
+    range_ok = facts["rangeLo"] == facts["start2024"] and facts["rangeHi"] == facts["end2026"]
+    assert annotations == 3
+    assert range_ok
+    assert outside == 0
+    assert plotted == in_scope
+
+
+_PHONE_LABELS_JS = """
+() => {
+  const svg = document.querySelector('#chart svg.main-svg').getBoundingClientRect();
+  const boxes = [...document.querySelectorAll('#chart .annotation')]
+    .filter((el) => /^'?\\d{2,4}$/.test(el.textContent.trim()))
+    .map((el) => { const r = el.getBoundingClientRect();
+      return { l: r.left, r: r.right, w: r.width }; })
+    .sort((a, b) => a.l - b.l);
+  let overlaps = 0;
+  for (let i = 1; i < boxes.length; i++) if (boxes[i].l < boxes[i - 1].r - 0.5) overlaps += 1;
+  return {
+    count: boxes.length,
+    zeroWidth: boxes.filter((b) => !(b.w > 0)).length,
+    overlaps,
+    outside: boxes.filter((b) => b.l < svg.left - 0.5 || b.r > svg.right + 0.5).length,
+  };
+}
+"""
+
+
+def test_real_phone_shows_all_season_labels(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+    real_raw: dict[str, Any],
+) -> None:
+    """SITE-48: at a 360px phone every season label is visible, none overlap."""
+    real_guarded_page.set_viewport_size({"width": 360, "height": 800})
+    real_open_app(real_guarded_page, "?axis=date")
+    real_guarded_page.evaluate(_WAIT_TWO_FRAMES)
+    real_guarded_page.wait_for_timeout(200)
+    facts: dict[str, Any] = real_guarded_page.evaluate(_PHONE_LABELS_JS)
+    seasons = len(set(real_raw["telecasts"]["season"]))
+    count = int(facts["count"])
+    zero_width = int(facts["zeroWidth"])
+    overlaps = int(facts["overlaps"])
+    outside = int(facts["outside"])
+    assert count == seasons
+    assert zero_width == 0
+    assert overlaps == 0
+    assert outside == 0
+
+
+def test_real_single_season_shows_dates_on_desktop(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+) -> None:
+    """SITE-48: one season on desktop labels its lower row with dates like "Sep 6"."""
+    real_guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    real_open_app(real_guarded_page, "?axis=date")
+    real_guarded_page.evaluate("() => window.__testHooks.setState({seasons: [2025, 2025]})")
+    real_guarded_page.evaluate(_WAIT_TWO_FRAMES)
+    real_guarded_page.wait_for_timeout(200)
+    facts: dict[str, Any] = real_guarded_page.evaluate(
+        """() => {
+          const texts = document.getElementById('chart').layout.xaxis.ticktext
+            .filter((t) => t !== '');
+          const ok = texts.every((t) => /^[A-Z][a-z]{2} \\d{1,2}$/.test(t));
+          return { count: texts.length, ok };
+        }"""
+    )
+    count = int(facts["count"])
+    all_match = bool(facts["ok"])
+    has_labels = count > 0
+    assert has_labels
+    assert all_match
