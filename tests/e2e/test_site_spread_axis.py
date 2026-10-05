@@ -390,18 +390,24 @@ def test_captions_stay_inside_when_zero_hugs_an_edge(
     _assert_captions_inside(guarded_page)
 
 
-def test_toggle_has_two_buttons_in_order(
+def test_toggle_has_three_buttons_in_order(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(guarded_page, "")
     buttons = guarded_page.locator("#axis-toggle button")
-    assert buttons.evaluate_all("els => els.map(e => e.dataset.axis)") == ["spread", "excitement"]
+    assert buttons.evaluate_all("els => els.map(e => e.dataset.axis)") == [
+        "spread",
+        "excitement",
+        "date",
+    ]
     assert buttons.evaluate_all("els => els.map(e => e.getAttribute('aria-label'))") == [
         "Spread",
         "Excitement (CFBD)",
+        "Date",
     ]
     assert buttons.evaluate_all("els => els.map(e => e.getAttribute('aria-pressed'))") == [
         "true",
+        "false",
         "false",
     ]
 

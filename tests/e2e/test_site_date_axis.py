@@ -680,3 +680,27 @@ def test_hook_noop_off_date(guarded_page: Page, open_app: Callable[[Page, str], 
     guarded_page.wait_for_timeout(300)
     assert guarded_page.evaluate("window.__relayouts") == 0
     assert guarded_page.evaluate("document.getElementById('chart').boothDateAxis") is None
+
+
+def test_date_button_click_round_trip(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    date_btn = guarded_page.locator('#axis-toggle button[data-axis="date"]')
+    date_btn.click()
+    guarded_page.wait_for_function("() => location.search === '?axis=date'")
+    expect(date_btn).to_have_attribute("aria-pressed", "true")
+    guarded_page.reload()
+    guarded_page.wait_for_function("() => window.__testHooks && window.__testHooks.data")
+    expect(date_btn).to_have_attribute("aria-pressed", "true")
+    title = guarded_page.evaluate(
+        "() => { const l = document.getElementById('chart').layout;"
+        " return l && l.xaxis && l.xaxis.title && l.xaxis.title.text; }"
+    )
+    assert not title
+    guarded_page.locator('#axis-toggle button[data-axis="spread"]').click()
+    guarded_page.wait_for_function("() => !location.search.includes('axis=')")
+    open_app(guarded_page, "?axis=dates")
+    expect(guarded_page.locator('#axis-toggle button[data-axis="spread"]')).to_have_attribute(
+        "aria-pressed", "true"
+    )
