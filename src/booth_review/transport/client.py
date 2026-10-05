@@ -27,6 +27,12 @@ from booth_review.transport.types import FetchResponse, Validators
 
 logger = logging.getLogger("booth_review.transport")
 
+# The HTTP library logs every request URL, query string included, at INFO. This
+# module's own fetch line records host, path, status and size, which is all the
+# run logs may carry (AUTO-05).
+for _http_logger in ("httpx", "httpx2", "httpcore"):
+    logging.getLogger(_http_logger).setLevel(logging.WARNING)
+
 RobotsListener = Callable[[str, FetchResponse], None]
 
 _RETRY_ATTEMPTS = 4
