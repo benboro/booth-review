@@ -38,7 +38,9 @@ def _clone(remote: Path, dest: Path) -> Path:
 @pytest.fixture
 def remote(tmp_path: Path, isolated_git_env: None, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("CFBD_API_KEY", raising=False)
+    # A configured key is required for the deploy's key re-grep (WR-01); the
+    # synthetic canary never appears in the default site files.
+    monkeypatch.setenv("CFBD_API_KEY", CANARY)
     monkeypatch.delenv("PUBLISH_ENABLED", raising=False)
     bare = tmp_path / "remote.git"
     subprocess.run(
@@ -263,6 +265,29 @@ def test_key_in_site_refuses_deploy(
     assert _remote_count(remote) == count
     captured = capsys.readouterr()
     assert CANARY not in captured.out + captured.err
+
+
+def test_no_key_configured_refuses_deploy(
+    remote: Path,
+    target: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # WR-01: with no CFBD key (env empty, no .env in the cwd) the key check
+    # cannot run, so the deploy must refuse instead of publishing unchecked.
+    monkeypatch.delenv("CFBD_API_KEY", raising=False)
+    assert not (tmp_path / ".env").exists()
+    count = _remote_count(remote)
+    with pytest.raises(DeployError, match="key check could not run"):
+        publish_site(_site(tmp_path), target, env=ENABLED)
+    assert _remote_count(remote) == count
+
+    monkeypatch.setenv("PUBLISH_ENABLED", "true")
+    code = main(["deploy", "--site", str(_site(tmp_path)), "--target", str(target)])
+    assert code == 3
+    assert "key check could not run" in capsys.readouterr().err
+    assert _remote_count(remote) == count
 
 
 @pytest.mark.parametrize("subdir", ["", ".", "../x", "Booth"])

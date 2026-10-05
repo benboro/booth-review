@@ -168,7 +168,10 @@ def publish_site(
     # file under the subdir" and wipe the live site; refuse before any git step.
     if not site.is_dir() or not (site / BUILD_MARKER).is_file():
         raise DeployError("deploy refused: site directory is missing or not an assembled build")
-    check_no_key_leak(site)
+    # WR-01 / D-10: the key re-grep is mandatory; with no key configured it
+    # cannot run, so refuse rather than publish unchecked output.
+    if not check_no_key_leak(site):
+        raise DeployError("deploy refused: no CFBD key configured, so the key check could not run")
     _refuse_symlinks(site)
     files = _site_files(site)
     if not files or not (site / "index.html").is_file():
