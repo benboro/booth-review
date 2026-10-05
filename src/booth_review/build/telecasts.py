@@ -32,6 +32,7 @@ from booth_review.people.normalize import is_placeholder
 from booth_review.resolve.diagnose import (
     UnmatchedRow,
     UnresolvedTeamRow,
+    counts_as_unresolved,
     suggest_canonical,
     track_unresolved,
 )
@@ -524,13 +525,20 @@ def build_telecasts(
 
         records_by_game: dict[int, list[tuple[RRRecord, MatchConfidence]]] = {}
         for record in season_sources.rr_records:
+            match = match_record_to_game(record, index, resolver, overrides)
+            by_override = match.source == "override"
             for team_slug in record.telecast.teams:
                 resolved = resolver.resolve("ratingsref", team_slug, season)
-                track_unresolved(unresolved_counts, "ratingsref", team_slug, season, resolved)
-                if resolved.method == "unresolved":
+                track_unresolved(
+                    unresolved_counts,
+                    "ratingsref",
+                    team_slug,
+                    season,
+                    resolved,
+                    by_override=by_override,
+                )
+                if counts_as_unresolved(team_slug, resolved, by_override=by_override):
                     season_counts["unresolved_team_names"] += 1
-
-            match = match_record_to_game(record, index, resolver, overrides)
             if match.excluded:
                 season_counts["rr_excluded"] += 1
                 continue
@@ -559,13 +567,15 @@ def build_telecasts(
 
         listings_by_game: dict[int, list[tuple[Listing506, MatchConfidence]]] = {}
         for listing in season_sources.listings:
+            match = match_listing_to_game(listing, index, resolver, overrides)
+            by_override = match.source == "override"
             for raw in (listing.away_raw, listing.home_raw):
                 resolved = resolver.resolve("sports506", raw, season)
-                track_unresolved(unresolved_counts, "sports506", raw, season, resolved)
-                if resolved.method == "unresolved":
+                track_unresolved(
+                    unresolved_counts, "sports506", raw, season, resolved, by_override=by_override
+                )
+                if counts_as_unresolved(raw, resolved, by_override=by_override):
                     season_counts["unresolved_team_names"] += 1
-
-            match = match_listing_to_game(listing, index, resolver, overrides)
             if match.excluded:
                 continue
             season_counts["listings_total"] += 1

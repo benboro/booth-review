@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import csv
 import io
+import re
 import sys
 from collections import Counter
 from collections.abc import Mapping, Sequence
@@ -174,8 +175,10 @@ def run_match_diagnostic(
 
     unresolved_counts: dict[tuple[str, str], dict[str, int]] = {}
 
-    def _track_unresolved(source: str, raw: str, season: int, resolved: ResolvedTeam) -> None:
-        track_unresolved(unresolved_counts, source, raw, season, resolved)
+    def _track_unresolved(
+        source: str, raw: str, season: int, resolved: ResolvedTeam, *, by_override: bool
+    ) -> None:
+        track_unresolved(unresolved_counts, source, raw, season, resolved, by_override=by_override)
 
     listings_total = 0
     listings_matched = 0
@@ -185,8 +188,13 @@ def run_match_diagnostic(
     for season in all_seasons:
         for listing in listings_by_season[season]:
             match = match_listing_to_game(listing, index, resolver, overrides)
-            _track_unresolved("sports506", listing.away_raw, season, match.away_resolved)
-            _track_unresolved("sports506", listing.home_raw, season, match.home_resolved)
+            by_override = match.source == "override"
+            _track_unresolved(
+                "sports506", listing.away_raw, season, match.away_resolved, by_override=by_override
+            )
+            _track_unresolved(
+                "sports506", listing.home_raw, season, match.home_resolved, by_override=by_override
+            )
 
             if match.excluded:
                 continue
@@ -229,11 +237,16 @@ def run_match_diagnostic(
     for season in all_seasons:
         for record in records_by_season[season]:
             rr_records_count += 1
+            match = match_record_to_game(record, index, resolver, overrides)
             for team_slug in record.telecast.teams:
                 resolved = resolver.resolve("ratingsref", team_slug, season)
-                _track_unresolved("ratingsref", team_slug, season, resolved)
-
-            match = match_record_to_game(record, index, resolver, overrides)
+                _track_unresolved(
+                    "ratingsref",
+                    team_slug,
+                    season,
+                    resolved,
+                    by_override=match.source == "override",
+                )
 
             if match.excluded:
                 rr_excluded += 1
@@ -315,19 +328,40 @@ def _write_csv(path: Path, columns: tuple[str, ...], rows: list[dict[str, str]])
     atomic_write_bytes(path, buf.getvalue().encode("utf-8"))
 
 
+# A slot a source fills before the game exists ("Rose Bowl winner", "Fiesta
+# Bowl winner (in Miami)", "TBD"): not a team, so never a crosswalk candidate.
+_PLACEHOLDER_TEAM_RE = re.compile(r"\b(?:winner|loser)\b|^\s*(?:tba|tbd)\s*$", re.IGNORECASE)
+
+
+def is_placeholder_team(raw: str) -> bool:
+    """True for a team slot written before the game was set, never a real team."""
+    return _PLACEHOLDER_TEAM_RE.search(raw) is not None
+
+
+def counts_as_unresolved(raw: str, resolved: ResolvedTeam, *, by_override: bool) -> bool:
+    """Whether an unresolved name needs a crosswalk row: not when a hand
+    override in game_overrides.csv already ties its row to a game, and not
+    when it is a placeholder slot. Shared by track_unresolved and
+    build.telecasts's unresolved_team_names count so both agree.
+    """
+    return resolved.method == "unresolved" and not by_override and not is_placeholder_team(raw)
+
+
 def track_unresolved(
     unresolved_counts: dict[tuple[str, str], dict[str, int]],
     source: str,
     raw: str,
     season: int,
     resolved: ResolvedTeam,
+    *,
+    by_override: bool = False,
 ) -> None:
     """Tally one (source, raw) name resolution outcome into `unresolved_counts`
-    (mutated in place) when `resolved` is "unresolved"; a no-op otherwise.
+    (mutated in place) when counts_as_unresolved says so; a no-op otherwise.
     Shared by run_match_diagnostic's own scan and build.telecasts's (Plan 08)
     so both accumulate unresolved-name evidence the same way.
     """
-    if resolved.method != "unresolved":
+    if not counts_as_unresolved(raw, resolved, by_override=by_override):
         return
     key = (source, raw)
     entry = unresolved_counts.setdefault(
