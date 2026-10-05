@@ -1,9 +1,10 @@
 """The desktop toolbar is a grid of equal cells, so no filter label re-wraps it.
 
 SITE-20 (toggling a filter moves nothing) and 04.9 D-21: above 640px the toolbar's
-row count depends only on the viewport width. Long labels truncate with an ellipsis
-inside their cell, and every trigger carries its full label in `title` and
-`aria-label`.
+row count depends only on the viewport width and the visitor's font. toolbar-fit.js
+sizes the cells from the widest resting label in that font, so resting labels never
+truncate; long active summaries truncate with an ellipsis inside their cell, and
+every trigger carries its full label in `title` and `aria-label`.
 """
 
 from __future__ import annotations
@@ -130,53 +131,118 @@ def test_triggers_carry_full_label_in_title_and_aria_label(
         assert trigger.get_attribute("aria-label") == label
 
 
+@pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
 @pytest.mark.parametrize("width", [800, 900, 1024, 1280])
 def test_rest_labels_do_not_truncate(
     guarded_page: Page, open_app: Callable[[Page, str], None], width: int
 ) -> None:
     guarded_page.set_viewport_size({"width": width, "height": 900})
     open_app(guarded_page)
-    truncated = guarded_page.evaluate(
+    assert _truncated(guarded_page) == []
+
+
+def _truncated(page: Page) -> list[str]:
+    """Visible toolbar buttons whose label does not fit. `scrollWidth` rounds to
+    whole pixels and missed a 0.24px clip that showed "Bowls/Playoff…", so each
+    button is also compared, to the sub-pixel, with its own `max-content` width
+    (measured and restored in one task, so nothing repaints)."""
+    result: list[str] = page.evaluate(
         """() => [...document.querySelectorAll('#toolbar > button')]
-          .filter((b) => b.offsetParent !== null && b.scrollWidth > b.clientWidth)
+          .filter((b) => b.offsetParent !== null)
+          .filter((b) => {
+            if (b.scrollWidth > b.clientWidth) return true;
+            const width = b.getBoundingClientRect().width;
+            b.style.width = 'max-content';
+            const needed = b.getBoundingClientRect().width;
+            b.style.width = '';
+            return needed > width + 0.01;
+          })
           .map((b) => b.textContent)"""
     )
-    assert truncated == []
+    return result
 
 
+_VISIBLE_TOPS_JS = """() => [...document.querySelectorAll('#toolbar > button')]
+  .filter((b) => b.offsetParent !== null).map((b) => Math.round(b.offsetTop))"""
+
+_CELL_MIN_JS = (
+    "() => document.getElementById('toolbar').style.getPropertyValue('--toolbar-cell-min')"
+)
+
+
+@pytest.mark.parametrize("font_setting", ["narrow"], indirect=True)
 def test_grid_has_room_for_ten_cells(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """Nine filters plus Clear all fit one row at 1280px. Plan 04.9-08 adds the tenth
-    cell (Game) and re-asserts the row count with it present."""
+    """With a font narrow enough for the 116px floor, all ten cells (nine filters
+    plus Clear all) fit one row at 1280px, and picking a long game keeps it there."""
     guarded_page.set_viewport_size({"width": 1280, "height": 900})
     open_app(guarded_page)
+    assert int(guarded_page.evaluate(_CELL_MIN_JS).removesuffix("px")) <= 116
     columns = guarded_page.evaluate(
         "() => getComputedStyle(document.getElementById('toolbar'))"
         ".gridTemplateColumns.split(' ').length"
     )
     assert columns >= 10
-    tops = guarded_page.evaluate(
-        """() => [...document.querySelectorAll('#toolbar > button')]
-          .filter((b) => b.offsetParent !== null)
-          .map((b) => Math.round(b.offsetTop))"""
-    )
+    tops: list[int] = guarded_page.evaluate(_VISIBLE_TOPS_JS)
+    assert len(tops) == 10
     assert len(set(tops)) == 1
+    _set(guarded_page, {"game": "cfp-national-championship"})
+    assert len(set(guarded_page.evaluate(_VISIBLE_TOPS_JS))) == 1
+    assert _truncated(guarded_page) == ["Game: CFP National Championship"]
 
 
+@pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide", "narrow"], indirect=True)
 @pytest.mark.parametrize("width", [800, 900, 1024, 1280])
 def test_toolbar_rows_with_game_button(
-    guarded_page: Page, open_app: Callable[[Page, str], None], width: int
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    width: int,
+    font_setting: str,
 ) -> None:
-    """Ten visible cells: one row at 1280px, two rows at 800, 900, and 1024px."""
+    """Ten visible cells, two rows at 800, 900, and 1024px on every font. At 1280px
+    the row count follows the font: one row for a narrow font, two for DejaVu Sans
+    (whose resting "Clear all filters" needs a wider cell than ten fit), and either
+    for the machine's own default. Whatever it is, toggling filters never changes it,
+    and no resting label truncates."""
     guarded_page.set_viewport_size({"width": width, "height": 900})
     open_app(guarded_page)
-    js = """() => [...document.querySelectorAll('#toolbar > button')]
-      .filter((b) => b.offsetParent !== null).map((b) => Math.round(b.offsetTop))"""
-    tops: list[int] = guarded_page.evaluate(js)
+    tops: list[int] = guarded_page.evaluate(_VISIBLE_TOPS_JS)
     assert len(tops) == 10
-    assert len(set(tops)) == (1 if width == 1280 else 2)
-    if width == 1280:
-        _set(guarded_page, {"game": "cfp-national-championship"})
-        tops = guarded_page.evaluate(js)
-        assert len(set(tops)) == 1
+    rows = len(set(tops))
+    if width < 1280:
+        assert rows == 2
+    elif font_setting == "narrow":
+        assert rows == 1
+    elif font_setting in ("dejavu", "wide"):
+        assert rows == 2
+    else:
+        assert rows in (1, 2)
+    assert _truncated(guarded_page) == []
+
+    cell_min = guarded_page.evaluate(_CELL_MIN_JS)
+    for _name, patch in WORST_CASE_PATCHES:
+        _set(guarded_page, patch)
+        assert len(set(guarded_page.evaluate(_VISIBLE_TOPS_JS))) == rows
+        _set(guarded_page, RESET)
+    assert guarded_page.evaluate(_CELL_MIN_JS) == cell_min
+    assert len(set(guarded_page.evaluate(_VISIBLE_TOPS_JS))) == rows
+
+
+@pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
+def test_cell_width_comes_from_resting_labels_only(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """The cell width is measured from the resting labels, never a live summary: a
+    page opened with long active labels gets the same cells as a plain one, and the
+    resting labels fit once those filters are cleared."""
+    guarded_page.set_viewport_size({"width": 1024, "height": 900})
+    open_app(guarded_page)
+    plain = guarded_page.evaluate(_CELL_MIN_JS)
+    assert plain.endswith("px")
+
+    open_app(guarded_page, "?game=cfp-national-championship&postseason=exclude")
+    assert guarded_page.locator("#trigger-game").inner_text().startswith("Game: CFP")
+    assert guarded_page.evaluate(_CELL_MIN_JS) == plain
+    _set(guarded_page, RESET)
+    assert _truncated(guarded_page) == []
