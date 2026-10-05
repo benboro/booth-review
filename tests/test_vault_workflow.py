@@ -400,14 +400,24 @@ def test_deploy_expected_uses_the_deploy_gate(step: object) -> None:
 
 
 def _fake_gh(tmp_path: Path) -> tuple[dict[str, str], Path]:
-    """A stand-in `gh` that logs each call and reports open issue #7."""
+    """A stand-in `gh` that logs each call and reports open issue #7 (or
+    $FAKE_ISSUE when set), whose body and last comment come from the files
+    $FAKE_BODY and $FAKE_COMMENT (the fake skips gh's own --jq step)."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     log = tmp_path / "gh.log"
     gh = bin_dir / "gh"
     gh.write_text(
-        '#!/usr/bin/env bash\necho "$*" >> "$GH_LOG"\n'
-        'if [ "$1 $2" = "issue list" ]; then echo 7; fi\n',
+        "#!/usr/bin/env bash\n"
+        'echo "$*" >> "$GH_LOG"\n'
+        'case "$1 $2" in\n'
+        '  "issue list") echo "${FAKE_ISSUE-7}" ;;\n'
+        '  "issue view")\n'
+        '    case "$*" in\n'
+        '      *"--json body"*) cat "$FAKE_BODY" 2>/dev/null || true ;;\n'
+        '      *"--json comments"*) cat "$FAKE_COMMENT" 2>/dev/null || true ;;\n'
+        "    esac ;;\n"
+        "esac\n",
         encoding="utf-8",
     )
     gh.chmod(0o755)
@@ -590,3 +600,84 @@ def test_without_attributes_the_same_scenario_raises_and_leaves_no_rebase_in_pro
     assert "rebase in progress" not in status.stdout
     assert not (vault / ".git" / "rebase-merge").exists()
     assert not (vault / ".git" / "rebase-apply").exists()
+
+
+# -- WR-07: a stale-only backup run never repeats an identical comment -----------------------------
+
+_STALE_REPORT = (
+    "Counts only. Updated 2026-10-08 16:00 UTC\n"
+    "- last successful build is 5 days old (limit 4)\n"
+    "- newest plotted 2026 telecast trails the newest listed one: 3 listed after it"
+)
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+@pytest.mark.parametrize(
+    ("issue", "body", "comment", "action"),
+    [
+        # The main run already wrote these items into the body (plus others).
+        (
+            "7",
+            "Counts only. Updated 2026-10-08 00:05 UTC\n"
+            "- 506 2026 weeks to save: 6\n"
+            "- last successful build is 5 days old (limit 4)\n"
+            "- newest plotted 2026 telecast trails the newest listed one: 3 listed after it\n"
+            "\nrun: https://example.invalid/r/1",
+            "",
+            "none",
+        ),
+        # An earlier backup slot already commented the same items (CRLF too).
+        (
+            "7",
+            "Counts only.\n- something else: 1",
+            "Counts only. Updated 2026-10-08 14:00 UTC\r\n"
+            "- last successful build is 5 days old (limit 4)\r\n"
+            "- newest plotted 2026 telecast trails the newest listed one: 3 listed after it\r\n"
+            "\r\nrun: https://example.invalid/r/0",
+            "none",
+        ),
+        # The build-age line moved on since the last post: comment once.
+        (
+            "7",
+            "Counts only.\n- last successful build is 4 days old (limit 4)",
+            "",
+            "comment",
+        ),
+        # Only part of the report was posted before.
+        (
+            "7",
+            "Counts only.\n- last successful build is 5 days old (limit 4)",
+            "",
+            "comment",
+        ),
+        # No open issue: open one.
+        ("", "", "", "create"),
+    ],
+    ids=["in-body", "in-last-comment", "changed", "partial", "no-issue"],
+)
+def test_stale_only_run_comments_only_when_the_report_changed(
+    issue: str, body: str, comment: str, action: str, tmp_path: Path
+) -> None:
+    env, log = _fake_gh(tmp_path)
+    (tmp_path / "issue-body.md").write_text(body, encoding="utf-8", newline="")
+    (tmp_path / "issue-comment.md").write_text(comment, encoding="utf-8", newline="")
+    (tmp_path / "attention.md").write_text(_STALE_REPORT, encoding="utf-8")
+    env.update(
+        {
+            "FAKE_ISSUE": issue,
+            "FAKE_BODY": str(tmp_path / "issue-body.md"),
+            "FAKE_COMMENT": str(tmp_path / "issue-comment.md"),
+            "JOB_CODE": "4",
+            "DEPLOY_CODE": "",
+            "DEPLOY_EXPECTED": "false",
+            "STALE_ONLY": "true",
+        }
+    )
+    code, _outputs = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    calls = log.read_text(encoding="utf-8").splitlines()
+    commented = [c for c in calls if c.startswith("issue comment ")]
+    created = [c for c in calls if c.startswith("issue create ")]
+    assert not any(c.startswith(("issue close", "issue edit 7")) for c in calls)
+    assert len(commented) == (1 if action == "comment" else 0)
+    assert len(created) == (1 if action == "create" else 0)
