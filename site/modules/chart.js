@@ -408,6 +408,7 @@ export function buildFigure(data, view, state, env) {
             ticks: 'outside',
             ticklen: 4,
             tickcolor: ZERO_LINE[theme],
+            tickangle: 0,
             tickfont: { size: env.mobile ? 10 : 14, color: MUTED[theme] },
             showgrid: false,
           }

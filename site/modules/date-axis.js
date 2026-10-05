@@ -178,6 +178,22 @@ function lowerRow(blocks, lo, hi, tier) {
 }
 
 /**
+ * True when neighbouring lower-row labels clear each other by `minGap` px.
+ * @param {{tickvals: number[], ticktext: string[]}} row
+ * @returns {boolean}
+ */
+function labelsFit(row, pxPerUnit, charPx, boxPad, minGap) {
+  const { tickvals, ticktext } = row;
+  for (let i = 1; i < tickvals.length; i += 1) {
+    const wPrev = charPx * ticktext[i - 1].length + boxPad;
+    const wCur = charPx * ticktext[i].length + boxPad;
+    const dist = (tickvals[i] - tickvals[i - 1]) * pxPerUnit;
+    if (dist - (wPrev + wCur) / 2 < minGap) return false;
+  }
+  return true;
+}
+
+/**
  * Places labels left to right, then pulls them back inside the right limit,
  * and reports which cannot sit validly (outside the limits or off their block).
  * @param {{c: number, a: number, b: number, w: number}[]} items - desired px
@@ -221,13 +237,19 @@ function placeRow(items, gapPx, leftLimit, rightLimit) {
 export function dateAxisLabels(blocks, range, plotPx, { mobile = false, marginLeft = 70, marginRight = 24 } = {}) {
   const [lo, hi] = range;
   const pxPerUnit = plotPx / (hi - lo);
-  const tier = tierFor(pxPerUnit);
-  const { tickvals, ticktext } = lowerRow(blocks, lo, hi, tier);
-
   const fontSize = mobile ? 10 : 14;
   const charPx = 0.62 * fontSize;
   // Plotly's annotation box is about 2.5px wider than its text (measured at 10px bold).
   const BOX_PAD = 2.5;
+  // Tick labels never rotate (tickangle 0), so a tier is only usable when every
+  // neighbouring pair of its labels sits flat with at least this many px between them.
+  let tier = tierFor(pxPerUnit);
+  let row = lowerRow(blocks, lo, hi, tier);
+  while (tier < 4 && !labelsFit(row, pxPerUnit, charPx + 0, BOX_PAD, 8)) {
+    tier += 1;
+    row = lowerRow(blocks, lo, hi, tier);
+  }
+  const { tickvals, ticktext } = row;
   const leftLimit = -marginLeft + 2;
   const rightLimit = plotPx + marginRight - 2;
   const toPx = (x) => (x - lo) * pxPerUnit;

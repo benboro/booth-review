@@ -704,3 +704,58 @@ def test_date_button_click_round_trip(
     expect(guarded_page.locator('#axis-toggle button[data-axis="spread"]')).to_have_attribute(
         "aria-pressed", "true"
     )
+
+
+_TICK_BOXES_JS = """
+() => {
+  const rect = (el) => { const r = el.getBoundingClientRect();
+    return { l: r.left, r: r.right, t: r.top, b: r.bottom, text: el.textContent.trim() }; };
+  const ticks = [...document.querySelectorAll('#chart .xtick text')]
+    .map(rect).filter((b) => b.text !== '').sort((a, b) => a.l - b.l);
+  const anns = [...document.querySelectorAll('#chart .annotation')]
+    .map(rect).filter((b) => /^\\d{2,4}$/.test(b.text) || /^'\\d{2}$/.test(b.text));
+  return { ticks, anns, angle: document.getElementById('chart')._fullLayout.xaxis.tickangle };
+}
+"""
+
+
+def _overlap(a: dict, b: dict) -> bool:  # type: ignore[type-arg]
+    return a["l"] < b["r"] and b["l"] < a["r"] and a["t"] < b["b"] and b["t"] < a["b"]
+
+
+def test_date_xaxis_tickangle_is_zero(date_page: Page) -> None:
+    _settle(date_page)
+    assert date_page.evaluate(_TICK_BOXES_JS)["angle"] == 0
+
+
+def test_date_tick_labels_flat_and_clear_of_season_row(date_page: Page) -> None:
+    _settle(date_page)
+    out = date_page.evaluate(_TICK_BOXES_JS)
+    assert out["ticks"], "expected labelled lower-row ticks on the fixture Date view"
+    assert out["anns"]
+    for t in out["ticks"]:
+        # Flat 14px text boxes are ~19px tall; a rotated label box is taller.
+        assert (t["b"] - t["t"]) < 24, t
+        assert not any(_overlap(t, a) for a in out["anns"]), t
+    for a, b in pairwise(out["ticks"]):
+        assert a["r"] + 8 <= b["l"] + 0.5, (a, b)
+
+
+_TIER_FIT_JS = """
+async () => {
+  const A = await import('./modules/date-axis.js');
+  const season = [2025, 2025];
+  const { axis } = A.buildDateAxis(season, ['2025-09-13', '2025-12-06'], [null, null]);
+  const b = axis.blocks[0];
+  const span = b.end - b.start;
+  const at = (ppd) => A.dateAxisLabels([b], [b.start, b.end], ppd * span, { mobile: false });
+  // "Sep 13" boxes are ~55px at 14px; weekly ticks 7 days apart need 7*ppd >= ~63.
+  return { fits: at(9.5).tier, justUnder: at(8.5).tier, text: at(8.5).ticktext };
+}
+"""
+
+
+def test_weekly_just_under_fit_threshold_drops_to_next_tier(app_page: Page) -> None:
+    out = app_page.evaluate(_TIER_FIT_JS)
+    assert out["fits"] == 1
+    assert out["justUnder"] == 2
