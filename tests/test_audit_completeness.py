@@ -153,7 +153,7 @@ _SLUG = "cfb-alpha-vs-beta-2025-09-06"
 def _seed_complete_season(
     paths: DataPaths, season: int = 2025, nav: list[str] | None = None
 ) -> None:
-    labels = nav if nav is not None else ["0", "1"]
+    labels = nav if nav is not None else ["0", "1", "B"]
     for label in labels:
         _write_506_page(paths, season, label, _page(season, label, nav_labels=labels))
     _write_all_cfbd_endpoints(paths, season)
@@ -183,7 +183,7 @@ def test_build_completeness_all_sources_complete(vault_paths: DataPaths) -> None
 
 def test_check_506_no_cached_pages_is_incomplete() -> None:
     paths = DataPaths(vault=Path("/nonexistent-for-this-test"))
-    cell = check_506(paths, 2025)
+    cell = check_506(paths, 2025, now=_NOW)
     assert cell.complete is False
     assert cell.reasons == ["no pages imported"]
     assert cell.counts == {"expected": 0, "cached": 0, "smoke_failed": 0, "missing": 0, "extra": 0}
@@ -195,7 +195,7 @@ def test_check_506_smoke_check_failure(vault_paths: DataPaths) -> None:
     _write_506_page(vault_paths, season, "0", _bad_crew_page(season, "0", nav_labels=nav))
     _write_506_page(vault_paths, season, "1", _page(season, "1", nav_labels=nav))
 
-    cell = check_506(vault_paths, season)
+    cell = check_506(vault_paths, season, now=_NOW)
 
     assert cell.complete is False
     assert cell.counts["smoke_failed"] == 1
@@ -209,7 +209,7 @@ def test_check_506_missing_nav_week(vault_paths: DataPaths) -> None:
     # Only week 0 is actually cached, but its own nav claims week 1 exists too.
     _write_506_page(vault_paths, season, "0", _page(season, "0", nav_labels=nav))
 
-    cell = check_506(vault_paths, season)
+    cell = check_506(vault_paths, season, now=_NOW)
 
     assert cell.complete is False
     assert cell.counts["missing"] == 1
@@ -221,14 +221,14 @@ def test_check_506_2020_style_short_nav_is_complete_when_fully_imported(
     vault_paths: DataPaths,
 ) -> None:
     season = 2020
-    nav = [str(n) for n in range(12)]  # an irregular, 12-week season
+    nav = [*(str(n) for n in range(12)), "B"]  # an irregular, 12-week season plus bowls
     for label in nav:
         _write_506_page(vault_paths, season, label, _page(season, label, nav_labels=nav))
 
-    cell = check_506(vault_paths, season)
+    cell = check_506(vault_paths, season, now=_NOW)
 
     assert cell.complete is True
-    assert cell.counts["expected"] == 12
+    assert cell.counts["expected"] == 13
     assert cell.counts["missing"] == 0
 
 
@@ -378,3 +378,184 @@ def test_build_completeness_no_http_client_import() -> None:
     assert "transport.client" not in source
     assert "make_client" not in source
     assert "PoliteClient" not in source
+
+
+# -- WR-08 / WR-09: in-season staleness and CFBD-week cross-check --------------------------------
+
+
+def _game(game_id: int, season: int, week: int, kickoff: str, season_type: str = "regular") -> dict:
+    return {
+        "id": game_id,
+        "season": season,
+        "week": week,
+        "seasonType": season_type,
+        "startDate": kickoff,
+        "homeTeam": f"Home{game_id}",
+        "awayTeam": f"Away{game_id}",
+    }
+
+
+def _manifest_line(paths: DataPaths, path: str, **times: str) -> None:
+    paths.manifest.parent.mkdir(parents=True, exist_ok=True)
+    with paths.manifest.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"path": path, **times}) + "\n")
+
+
+def _fetch_all_endpoints(paths: DataPaths, season: int, fetched_at: str) -> None:
+    for name in CFBD_SEASON_ENDPOINTS:
+        _manifest_line(paths, f"cfbd/{name}/{season}.json", fetched_at=fetched_at)
+
+
+def test_check_cfbd_in_season_fetch_before_season_end_is_incomplete(
+    vault_paths: DataPaths,
+) -> None:
+    season = 2026
+    _write_all_cfbd_endpoints(vault_paths, season)
+    _fetch_all_endpoints(vault_paths, season, "2027-02-02T00:00:00Z")
+    _manifest_line(vault_paths, "cfbd/games/2026.json", fetched_at="2026-11-01T00:00:00Z")
+
+    # The newest entry for each file decides, so the later February fetch wins.
+    assert check_cfbd(vault_paths, season).complete is True
+
+    vault_paths.manifest.unlink()
+    _fetch_all_endpoints(vault_paths, season, "2027-02-02T00:00:00Z")
+    stale = [n for n in CFBD_SEASON_ENDPOINTS if n != "games"]
+    vault_paths.manifest.unlink()
+    for name in stale:
+        _manifest_line(vault_paths, f"cfbd/{name}/{season}.json", fetched_at="2027-02-02T00:00:00Z")
+    _manifest_line(vault_paths, "cfbd/games/2026.json", fetched_at="2026-11-01T00:00:00Z")
+
+    cell = check_cfbd(vault_paths, season)
+    assert cell.complete is False
+    assert cell.reasons == ["fetched before season end: games"]
+    assert cell.details["fetched_before_end"] == ["games"]
+    assert cell.counts["fetched_before_end"] == 1
+
+
+def test_check_cfbd_in_season_fetched_after_season_end_is_complete(
+    vault_paths: DataPaths,
+) -> None:
+    season = 2026
+    _write_all_cfbd_endpoints(vault_paths, season)
+    _fetch_all_endpoints(vault_paths, season, "2027-02-01T00:00:00Z")
+
+    cell = check_cfbd(vault_paths, season)
+
+    assert cell.complete is True
+    assert cell.counts["fetched_before_end"] == 0
+
+
+def test_check_cfbd_in_season_without_manifest_entries_is_incomplete(
+    vault_paths: DataPaths,
+) -> None:
+    _write_all_cfbd_endpoints(vault_paths, 2026)
+
+    cell = check_cfbd(vault_paths, 2026)
+
+    assert cell.complete is False
+    assert cell.counts["fetched_before_end"] == 6
+
+
+def test_check_cfbd_pre_in_season_ignores_manifest(vault_paths: DataPaths) -> None:
+    _write_all_cfbd_endpoints(vault_paths, 2025)
+
+    cell = check_cfbd(vault_paths, 2025)
+
+    assert cell.complete is True
+    assert "fetched_before_end" not in cell.counts
+
+
+def test_check_506_in_season_page_saved_before_games_finished_is_incomplete(
+    vault_paths: DataPaths,
+) -> None:
+    season = 2026
+    nav = ["5", "B"]
+    for label in nav:
+        _write_506_page(vault_paths, season, label, _page(season, label, nav_labels=nav))
+    _write_cfbd(vault_paths, season, "games", [_game(1, season, 5, "2026-10-03T16:00:00Z")])
+    _manifest_line(vault_paths, "sports506/2026/wk-05.html", fetched_at="2026-10-03T12:00:00Z")
+    _manifest_line(vault_paths, "sports506/2026/wk-B.html", fetched_at="2026-10-03T12:00:00Z")
+
+    cell = check_506(vault_paths, season, now=datetime(2026, 10, 10, tzinfo=UTC))
+
+    assert cell.complete is False
+    assert "saved before games finished: 5" in cell.reasons
+
+
+def test_check_506_in_season_page_saved_after_games_is_complete(vault_paths: DataPaths) -> None:
+    season = 2026
+    nav = ["5", "B"]
+    for label in nav:
+        _write_506_page(vault_paths, season, label, _page(season, label, nav_labels=nav))
+    _write_cfbd(vault_paths, season, "games", [_game(1, season, 5, "2026-10-03T16:00:00Z")])
+    _manifest_line(vault_paths, "sports506/2026/wk-05.html", fetched_at="2026-10-09T12:00:00Z")
+
+    cell = check_506(vault_paths, season, now=datetime(2026, 10, 10, tzinfo=UTC))
+
+    assert cell.complete is True
+
+
+def test_check_506_cfbd_played_week_not_in_nav_is_incomplete(vault_paths: DataPaths) -> None:
+    season = 2025
+    nav = ["1", "B"]
+    for label in nav:
+        _write_506_page(vault_paths, season, label, _page(season, label, nav_labels=nav))
+    _write_cfbd(
+        vault_paths,
+        season,
+        "games",
+        [
+            _game(1, season, 1, "2025-09-06T16:00:00Z"),
+            _game(2, season, 7, "2025-10-18T16:00:00Z"),
+        ],
+    )
+
+    cell = check_506(vault_paths, season, now=_NOW)
+
+    assert cell.complete is False
+    assert "cfbd weeks not in nav: 7" in cell.reasons
+    assert cell.details["not_in_nav"] == ["7"]
+
+
+def test_check_506_missing_bowl_week_in_nav_is_incomplete(vault_paths: DataPaths) -> None:
+    season = 2025
+    _write_506_page(vault_paths, season, "1", _page(season, "1", nav_labels=["1"]))
+
+    cell = check_506(vault_paths, season, now=_NOW)
+
+    assert cell.complete is False
+    assert "bowl week B not in nav" in cell.reasons
+
+
+def test_check_506_week_zero_not_in_nav_is_tolerated_when_week_one_is(
+    vault_paths: DataPaths,
+) -> None:
+    season = 2025
+    nav = ["1", "B"]
+    for label in nav:
+        _write_506_page(vault_paths, season, label, _page(season, label, nav_labels=nav))
+    _write_cfbd(
+        vault_paths,
+        season,
+        "games",
+        [
+            _game(1, season, 1, "2025-08-23T16:00:00Z"),
+            _game(2, season, 1, "2025-09-03T16:00:00Z"),
+        ],
+    )
+
+    cell = check_506(vault_paths, season, now=_NOW)
+
+    assert cell.complete is True
+    assert cell.details["not_in_nav"] == []
+
+
+def test_check_506_without_cfbd_games_skips_week_cross_check(vault_paths: DataPaths) -> None:
+    season = 2025
+    nav = ["1", "B"]
+    for label in nav:
+        _write_506_page(vault_paths, season, label, _page(season, label, nav_labels=nav))
+
+    cell = check_506(vault_paths, season, now=_NOW)
+
+    assert cell.complete is True
