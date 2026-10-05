@@ -36,3 +36,31 @@ def test_a_hung_test_fails_at_the_timeout(tmp_path: Path) -> None:
     )
     assert result.returncode == 1
     assert "Timeout" in result.stdout
+
+
+def test_a_hung_test_fails_at_the_timeout_under_xdist(tmp_path: Path) -> None:
+    """Guard the 5-minute limit under `-n 4` (the e2e suite runs in xdist workers)."""
+    (tmp_path / "test_hang.py").write_text(
+        "import time\n\ndef test_hang():\n    time.sleep(60)\n", encoding="utf-8"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "--timeout=1",
+            "-n",
+            "2",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "Timeout" in result.stdout
+    assert "crashed" not in result.stdout.lower()

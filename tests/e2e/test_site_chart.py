@@ -1258,7 +1258,7 @@ def test_html_tooltip_hides_on_mouse_out_scroll_and_panel_open(
     detail panel opens."""
     open_app(guarded_page, "")
 
-    point = _hover_dot(guarded_page, 0)
+    _hover_dot(guarded_page, 0)
     guarded_page.mouse.move(5, 5)
     guarded_page.wait_for_selector("#chart-tooltip[hidden]", state="attached")
 
@@ -1266,7 +1266,8 @@ def test_html_tooltip_hides_on_mouse_out_scroll_and_panel_open(
     guarded_page.evaluate("window.scrollBy(0, 40)")
     guarded_page.wait_for_selector("#chart-tooltip[hidden]", state="attached")
 
-    _hover_dot(guarded_page, 0)
+    # Click the position measured after the scroll, not the pre-scroll pixel.
+    point = _hover_dot(guarded_page, 0)
     guarded_page.mouse.click(point["x"], point["y"])
     guarded_page.wait_for_function("document.getElementById('detail-panel').open")
     assert guarded_page.is_hidden("#chart-tooltip")

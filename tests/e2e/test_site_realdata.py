@@ -16,6 +16,10 @@ sub-expression on failure (`where 3 = len([{'id': ..., 'name': ...}])`), so
 an assert that calls `len(people)` or reads `page.url` inline would dump
 vault records into the test log. `tests/test_realdata_assert_hygiene.py`
 enforces this.
+
+Under `-n 4` each worker that runs these tests builds its own real site from
+the read-only `processed/site-data.json` (`booth-review site` takes no vault
+lock), so workers never contend on the vault.
 """
 
 from __future__ import annotations

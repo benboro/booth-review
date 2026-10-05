@@ -12,6 +12,13 @@ request leaving the site's own origin (D-15, SITE-19) and fails the test if
 one was attempted. Every fixture here serves only the synthetic contract
 fixture -- never real collected data (AGENTS.md: the vault is private and
 never goes into fixtures or logs).
+
+The suite runs in parallel with `uv run pytest -m e2e -n 4`. Each xdist
+worker builds its own `site_dist` under its own `tmp_path_factory` basetemp
+(about 0.5 s, so per-worker builds are cheaper than a cross-process lock) and
+serves it from its own `http.server` subprocess on an OS-assigned port. Session
+fixtures here must keep both properties: no fixed paths under `dist/` and no
+fixed ports.
 """
 
 from __future__ import annotations
@@ -58,7 +65,10 @@ def _chromium_available(playwright: Playwright) -> None:
 
 @pytest.fixture(scope="session")
 def site_dist(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Build dist/site from the synthetic contract fixture (D-14/D-15)."""
+    """Build dist/site from the synthetic contract fixture (D-14/D-15).
+
+    Per xdist worker: each worker's basetemp is its own.
+    """
     out = tmp_path_factory.mktemp("site") / "site"
     returncode = main(["site", "--fixture", "--out", str(out)])
     assert returncode == 0, f"booth-review site --fixture exited {returncode}"
