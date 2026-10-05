@@ -24,7 +24,7 @@ import os
 import re
 import subprocess
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path, PurePosixPath
 
 from booth_review.errors import VaultBusyError, VaultCommitError, VaultStateError
@@ -59,14 +59,18 @@ class _LockHandle:
 # deadlock on their own flock. fcntl.flock is POSIX-only; this project runs
 # on Linux (developer machines and ubuntu-latest CI/Actions runners), so no
 # Windows fallback is provided.
+# Pull-rebase-push rounds a rejected push gets before commit_batch gives up.
+_PUSH_ROUNDS = 3
+
 _VAULT_LOCKS: dict[Path, _LockHandle] = {}
 
 
 class VaultRepo:
     """Wraps `git` operations against a single data-vault working copy."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, sleep: Callable[[float], None] = time.sleep) -> None:
         self._path = path
+        self._sleep = sleep
 
     def _run(self, *args: str) -> subprocess.CompletedProcess[str]:
         # GIT_TERMINAL_PROMPT=0 plus stdin=DEVNULL keep an unauthenticated
@@ -245,24 +249,32 @@ class VaultRepo:
         return True
 
     def _push_with_retry(self) -> None:
-        push_result = self._run("push")
-        if push_result.returncode == 0:
-            return
+        """Up to 3 rounds of push; a rejected push is followed by pull --rebase.
 
-        # --autostash: an unrelated dirty tracked file elsewhere in the
-        # working copy must never block this retry.
-        pull_result = self._run("pull", "--rebase", "--autostash")
-        if pull_result.returncode != 0:
-            # Never leave the vault mid-rebase (T-02-03); ignore the abort's
-            # own exit code, it's best-effort cleanup.
-            self._run("rebase", "--abort")
-            raise VaultCommitError(
-                f"git subcommand pull --rebase exited {pull_result.returncode} "
-                "(rebase aborted; local commit kept, not pushed)"
-            )
+        Backoff of 1s then 2s sits between rounds. The update pipeline adds a
+        build commit to every run, so a single retry is too thin against the
+        user's local runs pushing at the same time.
+        """
+        for round_number in range(1, _PUSH_ROUNDS + 1):
+            push_result = self._run("push")
+            if push_result.returncode == 0:
+                return
 
-        retry_result = self._run("push")
-        if retry_result.returncode != 0:
-            raise VaultCommitError(
-                f"git subcommand push exited {retry_result.returncode} (after pull --rebase)"
-            )
+            # --autostash: an unrelated dirty tracked file elsewhere in the
+            # working copy must never block this retry.
+            pull_result = self._run("pull", "--rebase", "--autostash")
+            if pull_result.returncode != 0:
+                # Never leave the vault mid-rebase (T-02-03); ignore the abort's
+                # own exit code, it's best-effort cleanup.
+                self._run("rebase", "--abort")
+                raise VaultCommitError(
+                    f"git subcommand pull --rebase exited {pull_result.returncode} "
+                    "(rebase aborted; local commit kept, not pushed)"
+                )
+
+            if round_number == _PUSH_ROUNDS:
+                raise VaultCommitError(
+                    f"git subcommand push exited {push_result.returncode} "
+                    f"(after {_PUSH_ROUNDS} pull --rebase rounds)"
+                )
+            self._sleep(float(round_number))

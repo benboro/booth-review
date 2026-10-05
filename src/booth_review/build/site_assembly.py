@@ -27,7 +27,7 @@ from booth_review.build import pages
 from booth_review.build.site_data import _contract_error_summary
 from booth_review.config import load_cfbd_key
 from booth_review.contract.models import SiteData, validate_site_data
-from booth_review.errors import MissingApiKeyError, SiteBuildError
+from booth_review.errors import KeyLeakError, MissingApiKeyError, SiteBuildError
 from booth_review.transport.cache import atomic_write_bytes
 
 PLOTLY_BUNDLE = "vendor/plotly-4.1.1.min.js"
@@ -162,7 +162,7 @@ def check_no_key_leak(out_dir: Path) -> bool:
         if needle in path.read_bytes():
             relative = path.relative_to(out_dir)
             shutil.rmtree(out_dir)
-            raise SiteBuildError(f"CFBD key found in build output: {relative}; output removed")
+            raise KeyLeakError(f"CFBD key found in build output: {relative}; output removed")
     return True
 
 

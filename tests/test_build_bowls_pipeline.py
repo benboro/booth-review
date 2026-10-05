@@ -13,13 +13,15 @@ import polars as pl
 import pytest
 from test_cli_build import _seed_build_raw
 
+from booth_review.build import site_data as site_data_module
 from booth_review.build.bowls import BowlEntry
 from booth_review.build.games import GAMES_SCHEMA
 from booth_review.build.pipeline import run_build
 from booth_review.build.tables import REVIEW_BOWLS_COLUMNS, bowl_review_rows
 from booth_review.build.telecasts import TELECASTS_SCHEMA
 from booth_review.config import DataPaths
-from booth_review.errors import BowlCrosswalkError
+from booth_review.contract.models import validate_site_data
+from booth_review.errors import BowlCrosswalkError, VaultStateError
 
 _REFERENCE_FIXTURES = Path(__file__).parent / "fixtures" / "reference"
 _SENTINEL = "SENTINEL ZEBRA HARBOR BOWL NOTE"
@@ -127,3 +129,71 @@ def test_no_unknown_names_counts_zero(git_vault: DataPaths, tmp_path: Path) -> N
     )
     outcome = run_build(git_vault, reference, commit=False, accept_baseline=False)
     assert outcome.counts["bowl_names_unknown"] == 0
+
+
+def test_lenient_build_goes_through_a_missing_crosswalk_row(
+    git_vault: DataPaths, tmp_path: Path
+) -> None:
+    reference = _vault_with_sentinel_note(git_vault, tmp_path, "")
+    outcome = run_build(
+        git_vault, reference, commit=False, accept_baseline=False, bowl_crosswalk="lenient"
+    )
+    assert outcome.counts["bowls_missing"] == 1
+    assert outcome.counts["bowls_no_franchise"] == 0
+    site_file = git_vault.vault / "processed" / "site-data.json"
+    site = json.loads(site_file.read_text(encoding="utf-8"))
+    validate_site_data(site)
+    assert site["lookups"]["bowls"] == []
+    assert all(value is None for value in site["telecasts"]["bowl"])
+    assert _SENTINEL not in site_file.read_text(encoding="utf-8")
+
+
+def test_lenient_build_counts_an_at_bowl_row_without_franchise(
+    git_vault: DataPaths, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reference = _vault_with_sentinel_note(git_vault, tmp_path, "")
+    monkeypatch.setattr(
+        site_data_module,
+        "load_bowls",
+        lambda _ref: {500007: BowlEntry("Zebra Ridge Bowl", "Ridge Bowl", True, None)},
+    )
+    outcome = run_build(
+        git_vault, reference, commit=False, accept_baseline=False, bowl_crosswalk="lenient"
+    )
+    assert outcome.counts["bowls_no_franchise"] == 1
+
+
+def test_lenient_at_bowl_disagreement_still_aborts(git_vault: DataPaths, tmp_path: Path) -> None:
+    reference = _vault_with_sentinel_note(git_vault, tmp_path, "500007,,,false,\n")
+    with pytest.raises(VaultStateError):
+        run_build(
+            git_vault, reference, commit=False, accept_baseline=False, bowl_crosswalk="lenient"
+        )
+
+
+_COUNT_KEYS = (
+    "current_season",
+    "games_current_season",
+    "games_final_current_season",
+    "telecasts_current_season",
+    "rated_current_season",
+    "plotted_current_season",
+    "bowls_missing",
+    "bowls_no_franchise",
+    "review_people_new",
+    "review_unresolved_teams",
+)
+
+
+def test_outcome_counts_carry_the_job_fields_as_ints(git_vault: DataPaths, tmp_path: Path) -> None:
+    reference = _vault_with_sentinel_note(
+        git_vault, tmp_path, "500007,Zebra Ridge Bowl,Ridge Bowl,true,ridge-bowl\n"
+    )
+    outcome = run_build(git_vault, reference, commit=False, accept_baseline=False)
+    for key in _COUNT_KEYS:
+        value = outcome.counts[key]
+        assert isinstance(value, int)
+        assert not isinstance(value, bool)
+    assert outcome.counts["current_season"] == 2025
+    assert outcome.counts["games_current_season"] > 0
+    assert outcome.counts["plotted_current_season"] <= outcome.counts["telecasts_current_season"]

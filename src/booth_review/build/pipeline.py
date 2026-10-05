@@ -23,8 +23,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Literal
 
 import polars as pl
 
@@ -46,6 +47,7 @@ from booth_review.build.site_data import build_site_data, write_site_data
 from booth_review.build.tables import BuildTables, assemble_tables, write_tables
 from booth_review.config import DataPaths
 from booth_review.errors import BowlCrosswalkError
+from booth_review.transport.cache import Manifest
 from booth_review.vault import VaultRepo, batch_message
 
 
@@ -71,8 +73,78 @@ class BuildOutcome:
     crew_override_differs_lines: tuple[int, ...] = ()
 
 
+# A preliminary headline figure older than this many days is listed in
+# interim/review_preliminary_headlines.csv (PITFALLS: preliminary figures settle).
+PRELIMINARY_STALE_DAYS = 10
+_PRELIMINARY_COLUMNS = ("telecast_id", "date_et", "claim_id")
+
+_MANIFEST_TIME_FMT = "%Y-%m-%dT%H:%M:%SZ"
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+
+
+def input_stamp(paths: DataPaths) -> datetime:
+    """The newest change to a collected input, from the request manifest.
+
+    An entry counts as a change when it wrote a cached file (non-null path and
+    sha256) whose sha256 differs from the previous entry for the same path; the
+    first entry for a path is a change. Identical inputs give an identical
+    stamp, so a rebuild with nothing new is byte-identical (D-02 idempotence),
+    and a refresh that returns the same bytes does not move it.
+    """
+    last_sha: dict[str, str] = {}
+    newest = _EPOCH
+    for entry in Manifest(paths.manifest).entries():
+        path = entry.get("path")
+        sha = entry.get("sha256")
+        fetched_at = entry.get("fetched_at")
+        if path is None or sha is None or fetched_at is None:
+            continue
+        previous = last_sha.get(path)
+        last_sha[path] = sha
+        if previous == sha:
+            continue
+        stamp = datetime.strptime(fetched_at, _MANIFEST_TIME_FMT).replace(tzinfo=UTC)
+        newest = max(newest, stamp)
+    return newest
+
+
+def _stale_preliminary_headlines(
+    tables: BuildTables, generated_at: datetime
+) -> list[dict[str, object]]:
+    """Plotted telecasts whose headline figure is still preliminary more than
+    PRELIMINARY_STALE_DAYS before `generated_at`. Ids and dates only."""
+    cutoff = generated_at.date() - timedelta(days=PRELIMINARY_STALE_DAYS)
+    plotted = tables.telecasts.filter(pl.col("plotted") & (pl.col("date_et") < cutoff)).select(
+        "telecast_id", "date_et"
+    )
+    stale = (
+        tables.viewership.filter(pl.col("is_headline") & (pl.col("status") == "preliminary"))
+        .select("telecast_id", "claim_id")
+        .join(plotted, on="telecast_id", how="inner")
+        .sort(["telecast_id", "claim_id"])
+    )
+    return [
+        {
+            "telecast_id": row["telecast_id"],
+            "date_et": row["date_et"].isoformat(),
+            "claim_id": row["claim_id"],
+        }
+        for row in stale.iter_rows(named=True)
+    ]
+
+
 def _build_counts(tables: BuildTables, result: RegressionResult) -> dict[str, int]:
     totals = tables.diagnostics.totals
+    games = tables.games
+    newest_season = games["season"].max() if games.height else None
+    current_season = int(str(newest_season)) if newest_season is not None else 0
+    games_now = games.filter(pl.col("season") == current_season)
+    telecasts_now = tables.telecasts.filter(pl.col("season") == current_season)
+
+    def review_count(key: str) -> int:
+        entry = tables.review_rows.get(key)
+        return len(entry[1]) if entry is not None else 0
+
     join08_rate = tables.diagnostics.join08_rate
     review_rows_total = sum(len(rows) for _columns, rows in tables.review_rows.values())
     return {
@@ -93,6 +165,20 @@ def _build_counts(tables: BuildTables, result: RegressionResult) -> dict[str, in
         "crew_overrides_corrections": totals.get("crew_overrides_corrections", 0),
         "crew_gaps_unpatched": totals.get("crew_gaps_unpatched", 0),
         "review_rows_total": review_rows_total,
+        "current_season": current_season,
+        "games_current_season": int(games_now.height),
+        "games_final_current_season": int(
+            games_now.filter(
+                pl.col("home_points").is_not_null() & pl.col("away_points").is_not_null()
+            ).height
+        ),
+        "telecasts_current_season": int(telecasts_now.height),
+        "rated_current_season": int(telecasts_now.filter(pl.col("rated")).height),
+        "plotted_current_season": int(telecasts_now.filter(pl.col("plotted")).height),
+        "bowls_missing": int(totals.get("bowls_missing", 0)),
+        "bowls_no_franchise": 0,
+        "review_people_new": review_count("review_people_new"),
+        "review_unresolved_teams": review_count("review_unresolved_teams"),
         "compared_seasons": result.compared_seasons,
     }
 
@@ -104,6 +190,7 @@ def run_build(
     commit: bool,
     accept_baseline: bool,
     now: datetime | None = None,
+    bowl_crosswalk: Literal["strict", "lenient"] = "strict",
 ) -> BuildOutcome:
     """Rebuild every processed table from raw, write the coverage/regression
     audits, gate `processed/site-data.json` on the regression guard, and
@@ -111,10 +198,15 @@ def run_build(
     """
     vault = VaultRepo(paths.vault)
     vault.check()
-    generated_at = now if now is not None else datetime.now(UTC)
+    generated_at = now if now is not None else input_stamp(paths)
 
     with vault.lock():
         tables = assemble_tables(paths, reference_directory)
+        stale_preliminary = _stale_preliminary_headlines(tables, generated_at)
+        tables.review_rows["review_preliminary_headlines"] = (
+            _PRELIMINARY_COLUMNS,
+            stale_preliminary,
+        )
         coverage = build_coverage(tables)
 
         metrics: Sequence[SeasonMetrics] = build_metrics(tables, paths)
@@ -130,7 +222,12 @@ def run_build(
         try:
             site = (
                 build_site_data(
-                    tables, coverage, reference_directory, generated_at, counts=site_counts
+                    tables,
+                    coverage,
+                    reference_directory,
+                    generated_at,
+                    counts=site_counts,
+                    bowl_crosswalk=bowl_crosswalk,
                 )
                 if write_data
                 else None
@@ -159,6 +256,7 @@ def run_build(
 
         counts = _build_counts(tables, result)
         counts.update(site_counts)
+        counts["preliminary_headlines_over_10_days"] = len(stale_preliminary)
 
         committed = False
         if commit:

@@ -38,15 +38,25 @@ before the state save records no attempt, so the next backup slot retries it.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import TypeVar
 
 from booth_review.audit.completeness import SOURCES
+from booth_review.build.pipeline import BuildOutcome, run_build
+from booth_review.build.site_assembly import (
+    SiteBuildResult,
+    assemble_site,
+    docs_dir,
+    site_source_dir,
+)
 from booth_review.config import CFBD_FLOOR_DEFAULT
 from booth_review.errors import (
     FetchError,
+    KeyLeakError,
     ParseError,
     RobotsUnavailableError,
     VaultCommitError,
@@ -54,20 +64,27 @@ from booth_review.errors import (
 )
 from booth_review.job.attention import (
     AttentionItem,
+    bowls_missing,
+    build_blocked,
     cfbd_failed,
     cfbd_remaining,
     cfbd_step_failed,
     error_type_name,
+    failed_attempts,
     has_attention,
     missed_runs,
+    people_review_due,
     push_failed,
     rr_backlog,
     rr_failed,
     rr_step_failed,
     season_past_freeze,
+    site_key_check_failed,
+    site_key_check_skipped,
     sports506_missing,
     sports506_stale,
     step_failed,
+    unresolved_teams,
 )
 from booth_review.job.catchup import (
     CatchupWindow,
@@ -80,8 +97,10 @@ from booth_review.job.catchup import (
     save_state,
 )
 from booth_review.job.gaps506 import find_506_gaps
+from booth_review.job.staleness import newest_listed, newest_plotted, staleness_items
+from booth_review.reference import reference_dir
 from booth_review.runtime import Runtime
-from booth_review.seasons import freeze_date, season_of
+from booth_review.seasons import freeze_date, is_past_freeze_date, season_of
 from booth_review.sources.base import BatchSummary
 from booth_review.sources.cfbd.collector import CfbdCollector
 from booth_review.sources.cfbd.parser import parse_games
@@ -136,6 +155,19 @@ class JobRunResult:
     items: list[AttentionItem]
     counts: dict[str, int]
     window: CatchupWindow | None
+    deploy_ready: bool = False
+    """Update mode only: the build and site both passed with the key check run (D-09/D-10)."""
+    stale_only: bool = False
+    """A nothing-due run that found D-14 staleness: exit 4, nothing written."""
+
+
+# Update mode also needs the accepted build baseline and a cached RR sitemap
+# (never re-crawl the sitemap from scratch, AUTO-02 / Pitfall 4).
+_BASELINE_RELATIVE = "audit/build_baseline.csv"
+
+
+def _remaining_text(value: int | None) -> str:
+    return "unknown" if value is None else str(value)
 
 
 def _is_transient_cfbd_error(exc: Exception) -> bool:
@@ -151,15 +183,22 @@ def _is_transient_cfbd_error(exc: Exception) -> bool:
     return False
 
 
-def _check_required_state(runtime: Runtime) -> None:
+def _check_required_state(runtime: Runtime, *, update: bool = False) -> None:
     paths = runtime.paths
-    missing = [name for name in REQUIRED_LEDGER_FILES if not (paths.ledger / name).is_file()]
+    missing = [
+        f"ledger/{name}" for name in REQUIRED_LEDGER_FILES if not (paths.ledger / name).is_file()
+    ]
     if not lastmod_ledger_exists(paths):
-        missing.insert(0, "rr_lastmod.json(l)")
+        missing.insert(0, "ledger/rr_lastmod.json(l)")
+    if update:
+        if not (paths.vault / _BASELINE_RELATIVE).is_file():
+            missing.append(_BASELINE_RELATIVE)
+        sitemap_dir = paths.raw / "ratingsref" / "sitemap"
+        if not sitemap_dir.is_dir() or not any(sitemap_dir.glob("*.xml")):
+            missing.append("raw/ratingsref/sitemap")
     if missing:
         raise VaultStateError(
-            "job refuses to run: required vault state file(s) missing: "
-            + ", ".join(f"ledger/{name}" for name in missing)
+            "job refuses to run: required vault state file(s) missing: " + ", ".join(missing)
         )
 
 
@@ -202,7 +241,19 @@ class ScheduledJob:
         rr_cap: int = REFRESH_CAP_DEFAULT,
         dry_run: bool = False,
         commit: bool = True,
+        update: bool = False,
+        site_out: Path | None = None,
+        reference_directory: Path | None = None,
+        site_src: Path | None = None,
+        docs: Path | None = None,
     ) -> None:
+        if update and site_out is None:
+            raise ValueError("update mode requires site_out")
+        self._update = update
+        self._site_out = site_out
+        self._reference_directory = reference_directory
+        self._site_src = site_src
+        self._docs = docs
         self._runtime = runtime
         self._token = token
         self._now = now
@@ -214,7 +265,7 @@ class ScheduledJob:
     # -- public entry point ------------------------------------------------
 
     def run(self) -> JobRunResult:
-        _check_required_state(self._runtime)
+        _check_required_state(self._runtime, update=self._update)
 
         paths = self._runtime.paths
         now = self._now()
@@ -227,6 +278,17 @@ class ScheduledJob:
         window = catchup_window(state, now, window_season, self._trigger)
 
         if not is_due(state, now, self._trigger):
+            if self._update:
+                stale_items: list[AttentionItem] = []
+                self._staleness_step(stale_items, state.last_build_at, now, season)
+                if has_attention(stale_items):
+                    return JobRunResult(
+                        exit_code=4,
+                        items=stale_items,
+                        counts={"skipped": 1},
+                        window=window,
+                        stale_only=True,
+                    )
             return JobRunResult(
                 exit_code=EXIT_NOTHING_DUE, items=[], counts={"skipped": 1}, window=window
             )
@@ -235,6 +297,11 @@ class ScheduledJob:
         counts: dict[str, int] = {}
         any_failed = False
         retry_pending = False
+        deploy_ready = False
+        key_leak = False
+        new_last_build_at: datetime | None = None
+        remaining_start = self._remaining(now)
+        print(f"cfbd remaining at start: {_remaining_text(remaining_start)}")
 
         try:
             if season is not None:
@@ -272,31 +339,58 @@ class ScheduledJob:
                     lambda name: step_failed("sports506", name),
                     lambda: self._run_506_gap_step(gap_season, now, items),
                 )
-            else:
-                gap_ok = self._guarded_ok(
+                any_failed = any_failed or not gap_ok
+
+            freeze_ok = self._guarded_ok(
+                items,
+                lambda name: step_failed("freeze", name),
+                lambda: self._check_past_freeze(today, items),
+            )
+            any_failed = any_failed or not freeze_ok
+
+            if self._update and not self._dry_run:
+                outcome = self._guarded(
                     items,
-                    lambda name: step_failed("freeze", name),
-                    lambda: self._check_past_freeze(rr_current_season, items),
+                    lambda name: step_failed("build", name),
+                    lambda: self._run_build_step(items, counts),
+                    passthrough=(VaultCommitError,),
                 )
-            any_failed = any_failed or not gap_ok
+                if outcome is not None and not outcome.blocked:
+                    new_last_build_at = now
+                    site_result = self._guarded(
+                        items,
+                        lambda name: step_failed("site", name),
+                        lambda: self._run_site_step(items),
+                        passthrough=(VaultCommitError,),
+                    )
+                    if site_result is not None:
+                        deploy_ready, key_leak = site_result
+
+            if self._update:
+                self._staleness_step(items, new_last_build_at or state.last_build_at, now, season)
 
             if window.missed_slots > 0:
                 items.append(missed_runs(window.missed_slots))
+            if window.failed_slots > 0:
+                items.append(failed_attempts(window.failed_slots))
 
+            remaining_end: int | None = None
             budget = self._runtime.budget
             if budget is not None:
                 # None both when the month is unknown and when reading the
                 # ledger failed (the latter already added a budget item).
-                remaining = self._guarded(
+                remaining_end = self._guarded(
                     items,
                     lambda name: step_failed("budget", name),
                     lambda: budget.last_known_remaining(now.strftime("%Y-%m")),
                 )
-                if remaining is not None:
-                    items.append(cfbd_remaining(remaining, CFBD_FLOOR_DEFAULT))
+                if remaining_end is not None:
+                    items.append(cfbd_remaining(remaining_end, CFBD_FLOOR_DEFAULT))
+            print(f"cfbd remaining at end: {_remaining_text(remaining_end)}")
         except VaultCommitError:
             return JobRunResult(exit_code=3, items=items, counts=counts, window=window)
 
+        deploy_ready = deploy_ready and not key_leak
         status = "attention" if has_attention(items) else "ok"
 
         if not self._dry_run:
@@ -304,22 +398,154 @@ class ScheduledJob:
                 season=season,
                 last_success_at=now if not any_failed else state.last_success_at,
                 last_attempt_at=now,
-                last_status=status,
+                last_status="failed" if any_failed else status,
                 last_window_start=window.start,
                 retry_pending=retry_pending,
+                last_build_at=new_last_build_at or state.last_build_at,
             )
+            report = {
+                "run_at": now.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "trigger": self._trigger,
+                "update": self._update,
+                "deploy_ready": deploy_ready,
+                "cfbd_remaining_start": remaining_start,
+                "cfbd_remaining_end": remaining_end,
+                "attention": sum(1 for item in items if item.severity == "attention"),
+                "counts": dict(counts),
+            }
             try:
-                self._save_state(new_state, window, window_season, items)
+                self._save_state(new_state, window, window_season, items, report)
             except VaultCommitError:
-                return JobRunResult(exit_code=3, items=items, counts=counts, window=window)
+                items.append(push_failed("state"))
+                return JobRunResult(
+                    exit_code=3, items=items, counts=counts, window=window, deploy_ready=False
+                )
             except VaultStateError:
                 raise
             except Exception as exc:
                 items.append(step_failed("state", error_type_name(exc)))
                 status = "attention"
 
-        exit_code = 4 if status == "attention" else 0
-        return JobRunResult(exit_code=exit_code, items=items, counts=counts, window=window)
+        exit_code = 3 if key_leak else (4 if status == "attention" else 0)
+        return JobRunResult(
+            exit_code=exit_code,
+            items=items,
+            counts=counts,
+            window=window,
+            deploy_ready=deploy_ready,
+        )
+
+    # -- helpers ---------------------------------------------------------------
+
+    def _remaining(self, now: datetime) -> int | None:
+        """The last known CFBD remaining-call count (a ledger read, no call)."""
+        budget = self._runtime.budget
+        if budget is None:
+            return None
+        try:
+            return budget.last_known_remaining(now.strftime("%Y-%m"))
+        except Exception:
+            return None
+
+    # -- build and site (update mode) -----------------------------------------
+
+    def _run_build_step(self, items: list[AttentionItem], counts: dict[str, int]) -> BuildOutcome:
+        reference = self._reference_directory or reference_dir()
+        try:
+            outcome = run_build(
+                self._runtime.paths,
+                reference,
+                commit=self._commit_enabled,
+                accept_baseline=False,
+                bowl_crosswalk="lenient",
+            )
+        except VaultCommitError:
+            items.append(push_failed("build"))
+            raise
+
+        built = outcome.counts
+        blocked = outcome.blocked and not outcome.accepted
+        print(
+            f"build: telecasts {built.get('plotted_telecasts', 0)} plotted, "
+            f"blocked {'yes' if blocked else 'no'}"
+        )
+        print(
+            f"build: season {built.get('current_season', 0)} "
+            f"games {built.get('games_current_season', 0)}, "
+            f"final {built.get('games_final_current_season', 0)}, "
+            f"telecasts {built.get('telecasts_current_season', 0)}, "
+            f"rated {built.get('rated_current_season', 0)}, "
+            f"plotted {built.get('plotted_current_season', 0)}"
+        )
+        people_new = built.get("review_people_new", 0)
+        teams_unresolved = built.get("review_unresolved_teams", 0)
+        bowls = built.get("bowls_missing", 0) + built.get("bowls_no_franchise", 0)
+        print(
+            f"review: people new {people_new}, unresolved teams {teams_unresolved}, "
+            f"bowls missing {bowls}"
+        )
+        counts.update({f"build_{key}": int(value) for key, value in built.items()})
+
+        if blocked:
+            items.append(build_blocked(len(outcome.reasons)))
+        if people_new > 0:
+            items.append(people_review_due(people_new))
+        if teams_unresolved > 0:
+            items.append(unresolved_teams(teams_unresolved))
+        if bowls > 0:
+            items.append(bowls_missing(bowls))
+        return outcome
+
+    def _run_site_step(self, items: list[AttentionItem]) -> tuple[bool, bool]:
+        """Returns (deploy_ready, key_leak)."""
+        assert self._site_out is not None
+        try:
+            result: SiteBuildResult = assemble_site(
+                source=self._runtime.paths.processed / "site-data.json",
+                out_dir=self._site_out,
+                site_src=self._site_src or site_source_dir(),
+                docs=self._docs or docs_dir(),
+            )
+        except KeyLeakError:
+            items.append(site_key_check_failed())
+            return False, True
+        if not result.key_checked:
+            items.append(site_key_check_skipped())
+            return False, False
+        print(f"site: {result.telecasts} telecasts, {len(result.files)} files")
+        print("cfbd key check: passed")
+        return True, False
+
+    # -- staleness (D-14) -------------------------------------------------------
+
+    def _staleness_step(
+        self,
+        items: list[AttentionItem],
+        last_build_at: datetime | None,
+        now: datetime,
+        season: int | None,
+    ) -> None:
+        paths = self._runtime.paths
+
+        def _check() -> None:
+            listed_date: date | None = None
+            listed_count = 0
+            plotted: date | None = None
+            if season is not None:
+                listed_date, listed_count = newest_listed(paths, season)
+                plotted = newest_plotted(paths, season)
+            items.extend(
+                staleness_items(
+                    last_build_at=last_build_at,
+                    now=now,
+                    season=season,
+                    newest_listed=listed_date,
+                    listed_count=listed_count,
+                    newest_plotted=plotted,
+                )
+            )
+
+        self._guarded_ok(items, lambda name: step_failed("staleness", name), _check)
 
     # -- step boundary ---------------------------------------------------------
 
@@ -505,12 +731,15 @@ class ScheduledJob:
         if gaps.stale:
             items.append(sports506_stale(season, gaps.stale))
 
-    # -- off-season past-freeze check -----------------------------------------
+    # -- past-freeze check (IN-02: every run, not only off-season) ---------------
 
-    def _check_past_freeze(self, past_season: int, items: list[AttentionItem]) -> None:
+    def _check_past_freeze(self, today: date, items: list[AttentionItem]) -> None:
         guard = FreezeGuard.load(self._runtime.paths.frozen)
-        if not all(guard.is_frozen(source, past_season) for source in SOURCES):
-            items.append(season_past_freeze(past_season, freeze_date(past_season)))
+        for past_season in range(FIRST_SEASON, season_of(today) + 1):
+            if not is_past_freeze_date(past_season, today):
+                continue
+            if not all(guard.is_frozen(source, past_season) for source in SOURCES):
+                items.append(season_past_freeze(past_season, freeze_date(past_season)))
 
     # -- state save ------------------------------------------------------------
 
@@ -520,9 +749,13 @@ class ScheduledJob:
         window: CatchupWindow,
         window_season: int,
         items: list[AttentionItem],
+        report: dict[str, object],
     ) -> None:
         paths = self._runtime.paths
         save_state(paths.job_state, state)
+        # One count-only line per run (ints, bools, null, fixed strings only).
+        with (paths.ledger / "run_reports.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(report, sort_keys=True) + "\n")
         if self._commit_enabled:
             attention_count = sum(1 for item in items if item.severity == "attention")
             season_label = str(window_season)
@@ -533,5 +766,5 @@ class ScheduledJob:
                     season_label,
                     {"missed": window.missed_slots, "attention": attention_count},
                 ),
-                paths=["ledger/job_state.json"],
+                paths=["ledger/job_state.json", "ledger/run_reports.jsonl"],
             )

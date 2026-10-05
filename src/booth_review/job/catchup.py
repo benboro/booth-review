@@ -72,9 +72,15 @@ class JobState:
     last_status: str | None
     """One of "ok", "attention", "failed", or None (never attempted)."""
     last_window_start: datetime | None
+    """Operator evidence: the window start of the last attempt (the D-11 catch-up
+    drill reads it). `season` likewise records which season the last attempt
+    collected. Neither drives behavior."""
     retry_pending: bool = False
     """True when the last attempt's CFBD step hit a transient failure (a 5xx,
     429, or network error), so the next backup slot retries it (`is_due`)."""
+    last_build_at: datetime | None = None
+    """Set by an update-mode run whose build wrote processed/ unblocked; read by
+    the D-14 staleness check."""
 
 
 _EMPTY_STATE = JobState(
@@ -120,6 +126,7 @@ def load_state(path: Path) -> JobState:
         last_status=last_status,
         last_window_start=_parse_dt(data, "last_window_start", path=path),
         retry_pending=retry_pending,
+        last_build_at=_parse_dt(data, "last_build_at", path=path),
     )
 
 
@@ -133,6 +140,7 @@ def save_state(path: Path, state: JobState) -> None:
         "last_status": state.last_status,
         "last_window_start": _format_dt(state.last_window_start),
         "retry_pending": state.retry_pending,
+        "last_build_at": _format_dt(state.last_build_at),
     }
     atomic_write_json(path, payload)
 
@@ -171,21 +179,21 @@ def scheduled_slots(start: datetime, end: datetime) -> list[datetime]:
     return slots
 
 
-def missed_slots(last_success: datetime | None, now: datetime, trigger: Trigger) -> int:
-    """Count scheduled slots missed since `last_success`.
+def missed_slots(since: datetime | None, now: datetime, trigger: Trigger) -> int:
+    """Count scheduled slots that passed since `since` (the last attempt).
 
-    `last_success=None` (first run) always reports 0 -- there is no prior
-    success to measure a gap from; `catchup_window` handles the first-run
+    `since=None` (first run) always reports 0 -- there is no prior
+    run to measure a gap from; `catchup_window` handles the first-run
     window separately. A `trigger="schedule"` run never counts its own slot
     as missed (it is the run currently servicing that slot); a
     `trigger="manual"` run has no "own slot", so nothing is subtracted.
     """
     _require_aware(now, "now")
-    if last_success is None:
+    if since is None:
         return 0
-    _require_aware(last_success, "last_success")
+    _require_aware(since, "since")
 
-    slots = scheduled_slots(last_success, now)
+    slots = scheduled_slots(since, now)
     count = len(slots)
     if trigger == "schedule" and count >= 1:
         count -= 1
@@ -200,6 +208,8 @@ class CatchupWindow:
     end: datetime
     missed_slots: int
     first_run: bool
+    failed_slots: int = 0
+    """Slots between the last success and a later failed attempt (IN-05)."""
 
 
 def catchup_window(state: JobState, now: datetime, season: int, trigger: Trigger) -> CatchupWindow:
@@ -208,7 +218,8 @@ def catchup_window(state: JobState, now: datetime, season: int, trigger: Trigger
     With no prior success (`state.last_success_at is None`), the window
     starts at July 1 00:00 ET of `season` -- the season's own start -- since
     there is no last-success timestamp to start from. Otherwise it starts at
-    `state.last_success_at`. The window always ends at `now`.
+    `state.last_success_at`. The window always ends at `now`. Missed slots count
+    from the last attempt (IN-05); failed-but-attempted slots count separately.
     """
     _require_aware(now, "now")
     last_success_at = state.last_success_at
@@ -219,11 +230,21 @@ def catchup_window(state: JobState, now: datetime, season: int, trigger: Trigger
         else last_success_at
     )
 
+    last_attempt_at = state.last_attempt_at
+    failed_slots = 0
+    if (
+        last_success_at is not None
+        and last_attempt_at is not None
+        and last_attempt_at > last_success_at
+    ):
+        failed_slots = len(scheduled_slots(last_success_at, last_attempt_at))
+
     return CatchupWindow(
         start=start,
         end=now,
-        missed_slots=missed_slots(state.last_success_at, now, trigger),
+        missed_slots=missed_slots(last_attempt_at or last_success_at, now, trigger),
         first_run=first_run,
+        failed_slots=failed_slots,
     )
 
 

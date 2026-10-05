@@ -11,11 +11,14 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from booth_review.config import CFBD_FLOOR_DEFAULT, DataPaths
+from booth_review.errors import ParseError
+from booth_review.job.gaps506 import GAME_LENGTH, find_506_gaps, week_windows
 from booth_review.sources.cfbd.collector import ENDPOINTS
+from booth_review.sources.cfbd.parser import CfbdGame, parse_games
 from booth_review.sources.ratingsref.lastmod import load_lastmods
 from booth_review.sources.ratingsref.sitemap import SitemapEntry, parse_sitemap
 from booth_review.sources.sports506.weeks import (
@@ -24,10 +27,15 @@ from booth_review.sources.sports506.weeks import (
     smoke_check,
 )
 from booth_review.transport.budget import CfbdBudget
-from booth_review.transport.cache import atomic_write_bytes, atomic_write_json
+from booth_review.transport.cache import Manifest, atomic_write_bytes, atomic_write_json
 
 SOURCES: tuple[str, ...] = ("sports506", "cfbd", "ratingsref")
 CFBD_SEASON_ENDPOINTS: tuple[str, ...] = tuple(ENDPOINTS.keys())
+
+# Seasons from here on are collected in season by the scheduled job, so their
+# inputs must be shown fresh before a freeze; 2014-2025 were all collected after
+# their seasons ended (folded WR-08).
+IN_SEASON_FIRST_SEASON = 2026
 
 # Only up to this many RR telecast ids are surfaced (JSON only, never
 # markdown) for a season with missing records, so a large gap doesn't bloat
@@ -108,9 +116,22 @@ class CompletenessReport:
 # -- 506 -----------------------------------------------------------------------------------
 
 
-def check_506(paths: DataPaths, season: int) -> CellResult:
+def _load_cfbd_games(paths: DataPaths, season: int) -> list[CfbdGame] | None:
+    """The season's CFBD games, or None when the file is absent or unparseable."""
+    path = paths.raw / "cfbd" / "games" / f"{season}.json"
+    if not path.is_file():
+        return None
+    try:
+        return parse_games(path.read_bytes())
+    except ParseError:
+        return None
+
+
+def check_506(paths: DataPaths, season: int, *, now: datetime) -> CellResult:
     """D-05's 506 bar: every week label `season`'s own pages' nav lists is
-    cached and passes the D-03 smoke check.
+    cached and passes the D-03 smoke check. Also cross-checks the nav against
+    CFBD's played weeks (WR-09) and, for in-season seasons, page save times
+    (WR-08).
     """
     season_dir = paths.raw / "sports506" / str(season)
     cached_paths = sorted(season_dir.glob("wk-*.html")) if season_dir.is_dir() else []
@@ -153,6 +174,21 @@ def check_506(paths: DataPaths, season: int) -> CellResult:
     missing = [label for label in expected if label not in cached_by_label]
     extra = [label for label in cached if label not in expected_labels]
 
+    games = _load_cfbd_games(paths, season)
+    stale: list[str] = []
+    not_in_nav: list[str] = []
+    if games is not None:
+        if season >= IN_SEASON_FIRST_SEASON:
+            stale = sorted(find_506_gaps(paths, season, games, now).stale, key=_week_sort_key)
+        for label, (_first, last_kickoff) in week_windows(games, season).items():
+            if now <= last_kickoff + GAME_LENGTH or label in expected_labels:
+                continue
+            if label == "0" and "1" in expected_labels:
+                continue  # 506 folds openers into week 1 in some seasons
+            not_in_nav.append(label)
+        not_in_nav.sort(key=_week_sort_key)
+    bowl_not_in_nav = "B" not in expected_labels
+
     reasons: list[str] = []
     if not expected:
         reasons.append("no week nav discovered in any cached page")
@@ -164,8 +200,22 @@ def check_506(paths: DataPaths, season: int) -> CellResult:
         reasons.append(f"missing weeks: {', '.join(missing)}")
     if smoke_failed:
         reasons.append(f"smoke check failed: {', '.join(smoke_failed)}")
+    if stale:
+        reasons.append(f"saved before games finished: {', '.join(stale)}")
+    if not_in_nav:
+        reasons.append(f"cfbd weeks not in nav: {', '.join(not_in_nav)}")
+    if bowl_not_in_nav:
+        reasons.append("bowl week B not in nav")
 
-    complete = bool(expected) and not unsupported_labels and not missing and not smoke_failed
+    complete = (
+        bool(expected)
+        and not unsupported_labels
+        and not missing
+        and not smoke_failed
+        and not stale
+        and not not_in_nav
+        and not bowl_not_in_nav
+    )
 
     return CellResult(
         season=season,
@@ -178,8 +228,13 @@ def check_506(paths: DataPaths, season: int) -> CellResult:
             "smoke_failed": len(smoke_failed),
             "missing": len(missing),
             "extra": len(extra),
+            "stale": len(stale),
+            "not_in_nav": len(not_in_nav),
+            "bowl_not_in_nav": int(bowl_not_in_nav),
         },
         details={
+            "stale": stale,
+            "not_in_nav": not_in_nav,
             "expected": expected,
             "cached": cached,
             "smoke_failed": smoke_failed,
@@ -191,6 +246,13 @@ def check_506(paths: DataPaths, season: int) -> CellResult:
 
 
 # -- CFBD ----------------------------------------------------------------------------------
+
+
+def _parse_utc(value: str) -> datetime:
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+    except ValueError:
+        return datetime.min.replace(tzinfo=UTC)
 
 
 def check_cfbd(paths: DataPaths, season: int) -> CellResult:
@@ -209,20 +271,43 @@ def check_cfbd(paths: DataPaths, season: int) -> CellResult:
                 ok = True
         (present if ok else missing).append(name)
 
-    complete = not missing
+    fetched_before_end: list[str] = []
+    if season >= IN_SEASON_FIRST_SEASON:
+        # CFP title games finish by about Jan 20; require a fetch from Feb 1 on.
+        season_end = datetime(season + 1, 2, 1, tzinfo=UTC)
+        newest: dict[str, str] = {}
+        for entry in Manifest(paths.manifest).entries():
+            entry_path = entry.get("path")
+            fetched_at = entry.get("fetched_at")
+            if isinstance(entry_path, str) and isinstance(fetched_at, str):
+                newest[entry_path] = max(fetched_at, newest.get(entry_path, ""))
+        for name in CFBD_SEASON_ENDPOINTS:
+            fetched = newest.get(f"cfbd/{name}/{season}.json")
+            if fetched is None or _parse_utc(fetched) < season_end:
+                fetched_before_end.append(name)
+
+    complete = not missing and not fetched_before_end
     reasons = [f"missing/empty endpoints: {', '.join(missing)}"] if missing else []
+    if fetched_before_end:
+        reasons.append(f"fetched before season end: {', '.join(fetched_before_end)}")
+
+    counts = {
+        "total": len(CFBD_SEASON_ENDPOINTS),
+        "present": len(present),
+        "missing": len(missing),
+    }
+    details = {"present": present, "missing": missing}
+    if season >= IN_SEASON_FIRST_SEASON:
+        counts["fetched_before_end"] = len(fetched_before_end)
+        details["fetched_before_end"] = fetched_before_end
 
     return CellResult(
         season=season,
         source="cfbd",
         complete=complete,
         reasons=reasons,
-        counts={
-            "total": len(CFBD_SEASON_ENDPOINTS),
-            "present": len(present),
-            "missing": len(missing),
-        },
-        details={"present": present, "missing": missing},
+        counts=counts,
+        details=details,
     )
 
 
@@ -353,7 +438,7 @@ def build_completeness(
 
     cells: list[CellResult] = []
     for season in seasons:
-        cells.append(check_506(paths, season))
+        cells.append(check_506(paths, season, now=now))
         cells.append(check_cfbd(paths, season))
         cells.append(check_rr(paths, season, entries_by_season.get(season, []), lastmod_keys))
 

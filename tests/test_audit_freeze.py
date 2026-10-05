@@ -49,11 +49,13 @@ def _slug(season: int) -> str:
 
 
 def _seed_complete_season(paths: DataPaths, season: int) -> None:
-    label = "0"
+    labels = ["0", "B"]
     (paths.raw / "sports506" / str(season)).mkdir(parents=True, exist_ok=True)
-    (paths.raw / "sports506" / str(season) / f"wk-{label.zfill(2)}.html").write_bytes(
-        _page(season, label, nav_labels=[label])
-    )
+    for label in labels:
+        name = label if label == "B" else label.zfill(2)
+        (paths.raw / "sports506" / str(season) / f"wk-{name}.html").write_bytes(
+            _page(season, label, nav_labels=labels)
+        )
     for name in CFBD_SEASON_ENDPOINTS:
         endpoint_path = paths.raw / "cfbd" / name / f"{season}.json"
         endpoint_path.parent.mkdir(parents=True, exist_ok=True)
@@ -196,6 +198,31 @@ def test_freeze_seasons_dry_run_writes_nothing(vault_paths: DataPaths) -> None:
     assert vault_paths.frozen.read_bytes() == frozen_before
     assert not (vault_paths.audit / "completeness.json").exists()
     assert not (vault_paths.audit / "freeze.json").exists()
+
+
+def test_freeze_seasons_waiver_for_other_season_refused_nothing_written(
+    vault_paths: DataPaths,
+) -> None:
+    _seed_complete_season(vault_paths, 2020)
+    _seed_complete_season(vault_paths, 2019)
+    before = vault_paths.frozen.read_text(encoding="utf-8")
+
+    with pytest.raises(FreezeRefusedError, match="season 2019") as excinfo:
+        freeze_seasons(vault_paths, [2020], today=_TODAY, waivers=[Waiver(2019, "sports506")])
+
+    assert "2020" not in str(excinfo.value)
+    assert vault_paths.frozen.read_text(encoding="utf-8") == before
+    assert not (vault_paths.audit / "freeze.json").exists()
+
+
+def test_freeze_seasons_unneeded_waiver_not_recorded(vault_paths: DataPaths) -> None:
+    _seed_complete_season(vault_paths, 2020)
+
+    result = freeze_seasons(vault_paths, [2020], today=_TODAY, waivers=[Waiver(2020, "ratingsref")])
+
+    freeze_record = json.loads((vault_paths.audit / "freeze.json").read_text(encoding="utf-8"))
+    assert freeze_record["waivers"] == []
+    assert result.waivers == []
 
 
 # -- parse_waiver ---------------------------------------------------------------------------

@@ -40,6 +40,7 @@ from booth_review.build.site_assembly import (
     site_source_dir,
 )
 from booth_review.config import CFBD_FLOOR_DEFAULT, DataPaths, load_cfbd_key
+from booth_review.deploy.publish import SUBDIR_DEFAULT, publish_site
 from booth_review.errors import BoothReviewError, FreezeRefusedError, SiteBuildError
 from booth_review.job.attention import build_attention_body
 from booth_review.job.runner import EXIT_NOTHING_DUE, JOB_CFBD_MAX_CALLS, JobRunResult, ScheduledJob
@@ -228,6 +229,14 @@ def build_parser() -> argparse.ArgumentParser:
     job_run.add_argument("--attention-out", type=Path, default=None)
     job_run.add_argument("--dry-run", action="store_true")
     job_run.add_argument("--no-commit", action="store_true")
+    job_run.add_argument(
+        "--update",
+        action="store_true",
+        help="also rebuild, assemble the site with a required key check, "
+        "and report deploy readiness",
+    )
+    job_run.add_argument("--site-out", type=Path, default=None)
+    job_run.add_argument("--result-out", type=Path, default=None)
 
     budget = sub.add_parser("budget", help="report and record CFBD budget usage")
     budget.add_argument("--offline", action="store_true")
@@ -251,6 +260,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="use the synthetic contract fixture instead of the vault's processed/site-data.json",
     )
     site_cmd.add_argument("--out", type=Path, default=Path("dist/site"))
+    site_cmd.add_argument(
+        "--require-key-check",
+        action="store_true",
+        help="AUTO-05: exit 3 when the CFBD key check was skipped (no key configured)",
+    )
+
+    deploy_cmd = sub.add_parser(
+        "deploy",
+        help="AUTO-03: mirror an assembled site into booth-review/ of a checked-out target "
+        "repo; does nothing unless PUBLISH_ENABLED is true",
+    )
+    deploy_cmd.add_argument("--site", type=Path, required=True)
+    deploy_cmd.add_argument("--target", type=Path, required=True)
+    deploy_cmd.add_argument("--subdir", default=SUBDIR_DEFAULT)
 
     review = sub.add_parser(
         "review", help="Phase 3 review tools: teams, people, networks, combined"
@@ -802,8 +825,12 @@ def _freeze(args: argparse.Namespace) -> int:
 
 
 def _job_run(args: argparse.Namespace) -> int:
-    """Run one scheduled collect-only pass. Never prints or logs the CFBD key
-    (loaded via config.load_cfbd_key, same as every other live command)."""
+    """Run one scheduled pass (collect-only, or the full update with --update).
+    Never prints or logs the CFBD key (loaded via config.load_cfbd_key, same
+    as every other live command)."""
+    if args.update and args.site_out is None:
+        print("error: --update requires --site-out", file=sys.stderr)
+        return 2
     runtime = build_runtime(
         with_budget=True, floor=CFBD_FLOOR_DEFAULT, max_calls=args.max_cfbd_calls, tag="job"
     )
@@ -817,6 +844,8 @@ def _job_run(args: argparse.Namespace) -> int:
             rr_cap=args.rr_cap,
             dry_run=args.dry_run,
             commit=not args.no_commit,
+            update=args.update,
+            site_out=args.site_out,
         )
         result: JobRunResult = job.run()
 
@@ -828,6 +857,14 @@ def _job_run(args: argparse.Namespace) -> int:
             if body is not None:
                 args.attention_out.parent.mkdir(parents=True, exist_ok=True)
                 args.attention_out.write_text(body, encoding="utf-8")
+
+        if args.result_out is not None:
+            args.result_out.parent.mkdir(parents=True, exist_ok=True)
+            args.result_out.write_text(
+                f"deploy_ready={'true' if result.deploy_ready else 'false'}\n"
+                f"stale_only={'true' if result.stale_only else 'false'}\n",
+                encoding="utf-8",
+            )
 
         return result.exit_code
     finally:
@@ -929,6 +966,8 @@ def _build(args: argparse.Namespace) -> int:
     bowl_names_unknown = outcome.counts.get("bowl_names_unknown", 0)
     if bowl_names_unknown > 0:
         print(f"bowl names unknown {bowl_names_unknown}")
+    if (n := outcome.counts.get("preliminary_headlines_over_10_days", 0)) > 0:
+        print(f"preliminary headlines over 10 days old: {n}")
     if (n := outcome.counts.get("crew_overrides_applied", 0)) > 0:
         print(f"crew overrides applied {n}")
     if (n := outcome.counts.get("crew_overrides_patched", 0)) > 0:
@@ -995,6 +1034,12 @@ def _site(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 3
+    if args.require_key_check and not result.key_checked:
+        print(
+            "cfbd key check: skipped (no key configured); --require-key-check set",
+            file=sys.stderr,
+        )
+        return 3
     prefix = "site (fixture):" if args.fixture else "site:"
     print(
         f"{prefix} {result.telecasts} telecasts, {result.people} people, "
@@ -1004,6 +1049,44 @@ def _site(args: argparse.Namespace) -> int:
         "cfbd key check: passed"
         if result.key_checked
         else "cfbd key check: skipped (no key configured)"
+    )
+    return 0
+
+
+# -- deploy (AUTO-03) ----------------------------------------------------------------------
+
+
+def _deploy(args: argparse.Namespace) -> int:
+    """Mirror an assembled site into the target checkout. Output is count-only."""
+    try:
+        result = publish_site(args.site, args.target, subdir=args.subdir)
+    except ValueError:
+        print("error: invalid --subdir", file=sys.stderr)
+        return 2
+    except BoothReviewError:
+        raise
+    except Exception as exc:
+        if os.environ.get("BOOTH_REVIEW_DEBUG"):
+            raise
+        print(
+            f"error: unexpected {type(exc).__name__} during deploy; details withheld "
+            "(set BOOTH_REVIEW_DEBUG=1 to see the traceback)",
+            file=sys.stderr,
+        )
+        return 3
+    if result.status == "skipped":
+        print("deploy skipped: publishing disabled")
+        return 0
+    short = (result.bundle_sha256 or "")[:12]
+    if result.status == "no_change":
+        print(f"deploy: no change (bundle {short}, files {result.files})")
+    else:
+        print(
+            f"deploy: published bundle {short} (files {result.files}, attempts {result.attempts})"
+        )
+    print(
+        "outside booth-review unchanged: yes "
+        f"(before {(result.outside_before or '')[:12]}, after {(result.outside_after or '')[:12]})"
     )
     return 0
 
@@ -1099,6 +1182,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _build(args)
         if args.command == "site":
             return _site(args)
+        if args.command == "deploy":
+            return _deploy(args)
         if args.command == "review":
             if args.review_command == "teams":
                 return _review_teams(args)

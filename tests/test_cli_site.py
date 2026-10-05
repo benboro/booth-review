@@ -361,3 +361,26 @@ def test_ci_canary_key_makes_the_guard_run_and_catches_an_embedded_key(
     monkeypatch.setenv("BOOTH_REVIEW_SITE_SRC", str(tainted_src))
     assert main(["site", "--fixture", "--out", str(site_env / "out2")]) == 3
     assert not (site_env / "out2").exists()
+
+
+def test_require_key_check_fails_when_skipped(
+    site_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.delenv("CFBD_API_KEY", raising=False)
+    code = main(["site", "--fixture", "--out", str(site_env / "out"), "--require-key-check"])
+    assert code == 3
+    assert (
+        "cfbd key check: skipped (no key configured); --require-key-check set"
+        in capsys.readouterr().err
+    )
+
+
+def test_require_key_check_passes_with_key(
+    site_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("CFBD_API_KEY", _SYNTHETIC_KEY)
+    code = main(["site", "--fixture", "--out", str(site_env / "out"), "--require-key-check"])
+    assert code == 0
+    captured = capsys.readouterr()
+    assert "cfbd key check: passed" in captured.out
+    assert _SYNTHETIC_KEY not in captured.out + captured.err

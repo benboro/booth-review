@@ -13,6 +13,8 @@ from pathlib import Path
 import polars as pl
 import pytest
 
+from booth_review.build import site_data as site_data_module
+from booth_review.build.bowls import BowlEntry
 from booth_review.build.coverage import build_coverage
 from booth_review.build.games import GAMES_SCHEMA
 from booth_review.build.people_links import PEOPLE_SCHEMA, TELECAST_PEOPLE_SCHEMA
@@ -1127,6 +1129,62 @@ def test_at_bowl_disagreement_raises(
         _site(_postseason_tables([spec]), ref)
 
 
+def _lenient_site(tables: BuildTables, reference: Path) -> tuple[dict[str, object], dict[str, int]]:
+    counts: dict[str, int] = {}
+    site = build_site_data(
+        tables, build_coverage(tables), reference, _GENERATED_AT,
+        counts=counts, bowl_crosswalk="lenient",
+    )  # fmt: skip
+    return site.model_dump(mode="json"), counts
+
+
+def test_lenient_missing_crosswalk_row_builds_with_null_bowl(
+    tmp_path: Path, build_reference: Path
+) -> None:
+    ref = _bowl_reference(tmp_path, build_reference, "")
+    payload, counts = _lenient_site(_postseason_tables([(70, "bowl", None)]), ref)
+    assert payload["telecasts"]["bowl"] == [None]
+    assert payload["lookups"]["bowls"] == []
+    assert payload["lookups"]["bowl_franchises"] == []
+    assert counts["bowls_no_franchise"] == 0
+
+
+def _franchiseless_bowls(game_id: int) -> dict[int, BowlEntry]:
+    # bowls.csv's loader rejects a core name without a franchise, so this state
+    # only arises from a caller handing build_site_data an entry directly.
+    return {game_id: BowlEntry("Zebra Bowl", "Zebra Bowl", True, None)}
+
+
+def test_lenient_at_bowl_row_without_franchise_builds_with_null_bowl(
+    tmp_path: Path, build_reference: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ref = _bowl_reference(tmp_path, build_reference, "")
+    monkeypatch.setattr(site_data_module, "load_bowls", lambda _ref: _franchiseless_bowls(70))
+    payload, counts = _lenient_site(_postseason_tables([(70, "bowl", None)]), ref)
+    assert payload["telecasts"]["bowl"] == [None]
+    assert payload["lookups"]["bowl_franchises"] == []
+    assert counts["bowls_no_franchise"] == 1
+
+
+def test_strict_at_bowl_row_without_franchise_still_raises(
+    tmp_path: Path, build_reference: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from booth_review.errors import BowlCrosswalkError
+
+    ref = _bowl_reference(tmp_path, build_reference, "")
+    monkeypatch.setattr(site_data_module, "load_bowls", lambda _ref: _franchiseless_bowls(70))
+    with pytest.raises(BowlCrosswalkError, match="without a franchise"):
+        _site(_postseason_tables([(70, "bowl", None)]), ref)
+
+
+def test_lenient_at_bowl_disagreement_still_raises(tmp_path: Path, build_reference: Path) -> None:
+    from booth_review.errors import VaultStateError
+
+    ref = _bowl_reference(tmp_path, build_reference, "70,,,false,\n")
+    with pytest.raises(VaultStateError, match="disagree with the game's type"):
+        _lenient_site(_postseason_tables([(70, "bowl", None)]), ref)
+
+
 def test_notes_sentinel_never_ships(tmp_path: Path, build_reference: Path) -> None:
     ref = _bowl_reference(
         tmp_path, build_reference, "70,Zebra Harbor Bowl,Harbor Bowl,true,harbor-bowl\n"
@@ -1453,6 +1511,7 @@ def test_title_game_before_rivalry_game_is_untagged_and_counted(
     payload = site.model_dump(mode="json")
     assert payload["telecasts"]["rivalry"] == [None, 0]
     assert counts == {
+        "bowls_no_franchise": 0,
         "rivalry_games_tagged": 1,
         "rivalry_telecasts_tagged": 1,
         "rivalry_title_games_excluded": 1,

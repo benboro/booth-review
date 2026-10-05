@@ -44,7 +44,10 @@ model, and build phases; read the relevant section before starting a phase.
   (no User-Agent changes, retries, or alternate request shapes). Instead, save
   its week pages by hand in a browser (any filename) and bring them into the vault
   with `booth-review import 506 --season <year> [--from <folder>]` (default folder
-  `data/incoming/506/`). It identifies each page by its canonical link and title,
+  `data/incoming/506/`). The importer uses each saved file's modified time as its
+  save time, so save pages from the browser straight into `data/incoming/506/` (or
+  copy with `cp -p`), since a plain copy resets that time. It identifies each page by
+  its canonical link and title,
   validates it, and writes it to the same cache path and manifest shape a live
   fetch would.
 - The scheduled job never fetches 506. It lists 2026 week pages that are missing or

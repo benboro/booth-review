@@ -1,5 +1,5 @@
-"""Tests for the AUTO-01 workflow/gitattributes templates (ops/vault/) and
-the 0.4.0 version bump.
+"""Tests for the AUTO-01/AUTO-03 workflow/gitattributes templates (ops/vault/)
+and version consistency.
 
 `ops/vault/collect.yml` and `ops/vault/gitattributes` are templates: they are
 installed into the *private* data repo's own working copy (Plan 07, with the
@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -56,13 +57,14 @@ def test_workflow_and_ci_parse_as_yaml_with_expected_structure() -> None:
     assert any("JOB_REF" in step.get("name", "") for step in steps)
 
 
-def test_version_is_0_4_0() -> None:
-    assert booth_review.__version__ == "0.4.0"
-
-
-def test_pyproject_declares_0_4_0() -> None:
-    pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
-    assert 'version = "0.4.0"' in pyproject
+def test_version_matches_pyproject_and_lock() -> None:
+    # A patch bump per reference-fix batch changes pyproject.toml, uv.lock and
+    # the literal below (D-04).
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    lock = tomllib.loads(Path("uv.lock").read_text(encoding="utf-8"))
+    locked = next(pkg for pkg in lock["package"] if pkg["name"] == "booth-review")
+    assert booth_review.__version__ == pyproject["project"]["version"] == locked["version"]
+    assert booth_review.__version__ == "0.5.0"
 
 
 # -- collect.yml: schedule / triggers ----------------------------------------------------------
@@ -185,13 +187,76 @@ def test_workflow_job_ref_reaches_the_shell_only_through_env() -> None:
             assert line.strip() in ("JOB_REF: ${{ vars.JOB_REF }}", "ref: ${{ vars.JOB_REF }}")
 
 
+def _steps() -> list[dict[str, object]]:
+    workflow = yaml.safe_load(WORKFLOW_TEXT)
+    steps: list[dict[str, object]] = workflow["jobs"]["collect"]["steps"]
+    return steps
+
+
+@pytest.mark.parametrize("name", ["vars.DEPLOY_REPO", "vars.PUBLISH_ENABLED"])
+def test_deploy_vars_never_appear_inside_a_run_block(name: str) -> None:
+    for step in _steps():
+        assert name not in str(step.get("run", ""))
+    # Outside run blocks they may sit only in env:, with: and if: lines.
+    for line in _non_comment_lines(WORKFLOW_TEXT):
+        if name in line:
+            stripped = line.strip()
+            assert stripped.startswith(
+                ("PUBLISH_ENABLED:", "DEPLOY_REPO:", "repository:", "ssh-key:")
+            ) or stripped.startswith("if:"), stripped
+
+
+def test_deploy_steps_gated_on_publish_enabled_true() -> None:
+    gate = "steps.job.outputs.deploy_ready == 'true' && vars.PUBLISH_ENABLED == 'true'"
+    gated = [s for s in _steps() if s.get("if") == gate]
+    assert {s.get("id") for s in gated} == {None, "deploy"}
+    assert len(gated) == 2
+    assert WORKFLOW_TEXT.count("vars.PUBLISH_ENABLED == 'true'") == 2
+    deploy = next(s for s in gated if s.get("id") == "deploy")
+    assert "booth-review deploy --site" in str(deploy["run"])
+
+
+def test_every_checkout_matches_the_ci_pin() -> None:
+    ci_pins = {pin[1] for pin in _pins(CI_TEXT) if pin[0] == "actions/checkout"}
+    uses = [str(s["uses"]) for s in _steps() if "uses" in s]
+    checkouts = [u for u in uses if u.startswith("actions/checkout@")]
+    assert len(checkouts) == 3
+    assert {u.split("@")[1] for u in checkouts} == ci_pins
+
+
+def test_scratch_key_selection_names_only_the_prod_target() -> None:
+    step = next(s for s in _steps() if s.get("name") == "Check out the deploy target")
+    ssh_key = str(step["with"]["ssh-key"])  # type: ignore[index]
+    assert ssh_key == (
+        "${{ vars.DEPLOY_REPO == 'benboro/benboro.github.io' && secrets.DEPLOY_KEY_PROD"
+        " || secrets.DEPLOY_KEY_SCRATCH }}"
+    )
+    assert WORKFLOW_TEXT.count("site-scratch") == 0
+
+
+def test_job_step_passes_update_flags_and_filters_result_lines() -> None:
+    job = next(s for s in _steps() if s.get("id") == "job")
+    run = str(job["run"])
+    for flag in ("--update", "--site-out", "--result-out", "--attention-out"):
+        assert flag in run
+    assert "grep -E '^(deploy_ready|stale_only)=(true|false)$'" in run
+    assert '>> "$GITHUB_OUTPUT"' in run
+
+
 # -- collect.yml: secret handling ---------------------------------------------------------------
 
 
-def test_workflow_references_cfbd_secret_exactly_once_outside_comments() -> None:
+def test_workflow_secret_references_are_the_exact_expected_set() -> None:
     non_comment = "\n".join(_non_comment_lines(WORKFLOW_TEXT))
-    assert non_comment.count("secrets.") == 1
-    assert "CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}" in WORKFLOW_TEXT
+    found = re.findall(r"secrets\.(\w+)", non_comment)
+    # DEPLOY_KEY_PROD / DEPLOY_KEY_SCRATCH sit in one ssh-key expression.
+    assert sorted(found) == [
+        "CFBD_API_KEY",
+        "CFBD_API_KEY",
+        "DEPLOY_KEY_PROD",
+        "DEPLOY_KEY_SCRATCH",
+    ]
+    assert non_comment.count("CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}") == 2
 
 
 def test_workflow_never_echoes_a_secret() -> None:
@@ -206,6 +271,10 @@ def test_workflow_never_echoes_a_secret() -> None:
 
 def test_workflow_attention_step_uses_gh_issue() -> None:
     assert "gh issue list" in WORKFLOW_TEXT
+    assert "--label booth-review-job" in WORKFLOW_TEXT
+    assert "gh label create booth-review-job" in WORKFLOW_TEXT
+    assert "--force" in WORKFLOW_TEXT
+    assert WORKFLOW_TEXT.count("--label booth-review-job") >= 2
     assert "gh issue edit" in WORKFLOW_TEXT
     assert "gh issue create" in WORKFLOW_TEXT
 
@@ -219,14 +288,13 @@ def test_workflow_attention_step_runs_always_except_code_5_nothing_due() -> None
     assert step["if"] == "always() && steps.job.outputs.code != '5'"
 
 
-def test_workflow_fails_hard_only_outside_0_4_and_5() -> None:
-    workflow = yaml.safe_load(WORKFLOW_TEXT)
-    steps = workflow["jobs"]["collect"]["steps"]
-    step = next(s for s in steps if "hard failure" in s.get("name", ""))
-    condition = step["if"]
-    assert "!= '0'" in condition
-    assert "!= '4'" in condition
-    assert "!= '5'" in condition
+def test_workflow_fails_hard_only_outside_0_4_and_5_or_on_deploy_failure() -> None:
+    step = next(s for s in _steps() if "hard failure" in str(s.get("name", "")))
+    run = str(step["run"])
+    env = step["env"]
+    assert "0|4|5) ;;" in run
+    assert '"$DEPLOY_CODE" != "0"' in run
+    assert set(env) == {"JOB_CODE", "DEPLOY_CODE"}  # type: ignore[arg-type]
 
 
 # -- gitattributes ---------------------------------------------------------------------------

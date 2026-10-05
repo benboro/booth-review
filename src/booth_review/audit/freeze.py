@@ -98,6 +98,12 @@ def freeze_seasons(
                 f"season {season} is not past its freeze date ({freeze_date(season)})"
             )
 
+    for waiver in waivers:
+        if waiver.season not in seasons:
+            raise FreezeRefusedError(
+                f"waiver for season {waiver.season} is not among the seasons being frozen"
+            )
+
     now = datetime(today.year, today.month, today.day, tzinfo=UTC)
     report = build_completeness(paths, seasons, now=now)
     if not dry_run:
@@ -116,6 +122,11 @@ def freeze_seasons(
             f"{len(unwaived_incomplete)} incomplete season/source cell(s) not waived:\n"
             + "\n".join(lines)
         )
+
+    # Only a waiver that covered an incomplete cell is a real waiver; the record
+    # must not list ones that were never needed (IN-03).
+    incomplete_keys = {(cell.season, cell.source) for cell in report.incomplete_cells()}
+    used_waivers = [w for w in waivers if (w.season, w.source) in incomplete_keys]
 
     current = _load_frozen(paths.frozen)
     for source in SOURCES:
@@ -137,11 +148,11 @@ def freeze_seasons(
         record = {
             "frozen_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "seasons": list(seasons),
-            "waivers": [f"{waiver.season}:{waiver.source}" for waiver in waivers],
+            "waivers": [f"{waiver.season}:{waiver.source}" for waiver in used_waivers],
             "completeness_sha256": hashlib.sha256(completeness_bytes).hexdigest(),
         }
         atomic_write_json(paths.audit / "freeze.json", record)
 
     return FreezeResult(
-        seasons_added=seasons_added, already_frozen=already_frozen, waivers=list(waivers)
+        seasons_added=seasons_added, already_frozen=already_frozen, waivers=used_waivers
     )

@@ -146,7 +146,7 @@ def test_sports506_stale_line_format() -> None:
 
 def test_missed_runs_line() -> None:
     item = missed_runs(2)
-    assert item.line == "missed scheduled runs since last success: 2 (caught up this run)"
+    assert item.line == "missed scheduled runs since last attempt: 2 (caught up this run)"
 
 
 def test_season_past_freeze_line() -> None:
@@ -239,3 +239,67 @@ def test_build_attention_body_accepts_exactly_max_lines() -> None:
     body = build_attention_body(items, generated_at=_NOW)
     assert body is not None
     assert len(body.splitlines()) == 60
+
+
+# -- Phase 5 count-only constructors ---------------------------------------------------------
+
+
+def _new_items() -> list[AttentionItem]:
+    from booth_review.job import attention as a
+
+    return [
+        a.build_blocked(2),
+        a.bowls_missing(3),
+        a.people_review_due(4),
+        a.unresolved_teams(5),
+        a.build_stale(5, 4),
+        a.plotted_trails_listed(4, 3),
+        a.plotted_none_listed(7),
+        a.site_key_check_failed(),
+        a.site_key_check_skipped(),
+        a.failed_attempts(1),
+    ]
+
+
+def test_new_constructors_pass_the_whitelist() -> None:
+    body = build_attention_body(_new_items(), generated_at=_NOW)
+    assert body is not None
+    assert len(body.splitlines()) == 11
+
+
+def test_new_constructors_reject_negative_counts() -> None:
+    from booth_review.job import attention as a
+
+    for call in (
+        lambda: a.build_blocked(-1),
+        lambda: a.bowls_missing(-1),
+        lambda: a.people_review_due(-1),
+        lambda: a.unresolved_teams(-1),
+        lambda: a.build_stale(-1, 4),
+        lambda: a.build_stale(1, -4),
+        lambda: a.plotted_trails_listed(-1, 3),
+        lambda: a.plotted_none_listed(-1),
+        lambda: a.failed_attempts(-1),
+    ):
+        with pytest.raises(ValueError):
+            call()
+
+
+def test_new_constructor_severities() -> None:
+    severities = {item.kind: item.severity for item in _new_items()}
+    assert severities.pop("failed_attempts") == "info"
+    assert set(severities.values()) == {"attention"}
+    assert build_blocked_kind() == "build_blocked"
+
+
+def build_blocked_kind() -> str:
+    from booth_review.job.attention import build_blocked
+
+    return build_blocked(2).kind
+
+
+def test_new_step_names_accepted() -> None:
+    for step in ("build", "site", "staleness"):
+        assert step_failed(step, "SiteBuildError").line == f"{step} step failed: SiteBuildError"
+    with pytest.raises(ValueError):
+        step_failed("deploy", "Oops")

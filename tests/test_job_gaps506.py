@@ -57,6 +57,30 @@ def _nav_page(labels: list[str], season: int = 2026) -> bytes:
     return f"<html><body><nav>{anchors}</nav></body></html>".encode()
 
 
+def _append_manifest(
+    vault_paths: DataPaths, week: int, fetched: datetime, saved: datetime | None = None
+) -> None:
+    fmt = "%Y-%m-%dT%H:%M:%SZ"
+    url = f"https://506sports.com/ncaaf.php?yr=2026&wk={week}"
+    Manifest(vault_paths.manifest).append(
+        ManifestEntry(
+            url=url,
+            source="sports506",
+            season=2026,
+            kind="page",
+            fetched_at=fetched.strftime(fmt),
+            status=200,
+            etag=None,
+            last_modified=None,
+            sha256="x" * 8,
+            path=f"sports506/2026/wk-{week:02d}.html",
+            bytes=10,
+            final_url=url,
+            saved_at=saved.strftime(fmt) if saved else None,
+        )
+    )
+
+
 # -- week_windows -------------------------------------------------------------------
 
 
@@ -226,7 +250,7 @@ def test_find_506_gaps_reports_fresh_cache_as_neither_missing_nor_stale(
     assert result.judged == 1
 
 
-def test_find_506_gaps_limits_to_nav_discovered_labels(vault_paths: DataPaths) -> None:
+def test_find_506_gaps_drops_label_a_later_saved_nav_omits(vault_paths: DataPaths) -> None:
     early = _game(week=1, start_date=datetime(2026, 8, 27, 0, 0, tzinfo=UTC))  # -> "0" after split
     late = _game(week=1, start_date=datetime(2026, 8, 31, 16, 0, tzinfo=UTC))  # -> "1" after split
     games = [early, late]
@@ -236,8 +260,9 @@ def test_find_506_gaps_limits_to_nav_discovered_labels(vault_paths: DataPaths) -
     # A different, already-cached week page; its own nav is the season's real
     # week list, which never included a "0" (506 never published one).
     (season_dir / "wk-05.html").write_bytes(_nav_page(["1", "5"]))
-
     now = late.start_date + GAME_LENGTH + timedelta(hours=1)
+    _append_manifest(vault_paths, 5, now - timedelta(minutes=30))
+
     result = find_506_gaps(vault_paths, 2026, games, now)
 
     assert result.missing == ["1"]
@@ -254,3 +279,71 @@ def test_find_506_gaps_no_cached_pages_uses_all_window_labels(vault_paths: DataP
 
     assert sorted(result.missing) == ["0", "1"]
     assert result.judged == 2
+
+
+def test_find_506_gaps_reports_played_week_absent_from_cached_nav(vault_paths: DataPaths) -> None:
+    games = [
+        _game(week=n, start_date=datetime(2026, 9, 5, 0, 0, tzinfo=UTC) + timedelta(weeks=n - 2))
+        for n in (2, 3, 4)
+    ]
+    season_dir = vault_paths.raw / "sports506" / "2026"
+    season_dir.mkdir(parents=True)
+    # Saved before week 4 existed: its nav lists only 0-3.
+    (season_dir / "wk-02.html").write_bytes(_nav_page(["0", "1", "2", "3"]))
+    _append_manifest(vault_paths, 2, datetime(2026, 9, 10, 0, 0, tzinfo=UTC))
+
+    now = games[-1].start_date + GAME_LENGTH + timedelta(hours=1)
+    result = find_506_gaps(vault_paths, 2026, games, now)
+
+    assert "4" in result.missing
+    assert "3" in result.missing
+
+
+def test_find_506_gaps_nav_saved_after_play_may_drop_a_label(vault_paths: DataPaths) -> None:
+    early = _game(week=1, start_date=datetime(2026, 8, 27, 0, 0, tzinfo=UTC))
+    late = _game(week=1, start_date=datetime(2026, 8, 31, 16, 0, tzinfo=UTC))
+    season_dir = vault_paths.raw / "sports506" / "2026"
+    season_dir.mkdir(parents=True)
+    (season_dir / "wk-01.html").write_bytes(_nav_page(["1"]))
+    now = late.start_date + GAME_LENGTH + timedelta(days=2)
+    _append_manifest(vault_paths, 1, now - timedelta(days=1))
+
+    result = find_506_gaps(vault_paths, 2026, [early, late], now)
+
+    assert "0" not in result.missing
+    assert result.missing == []
+
+
+def test_find_506_gaps_stale_uses_save_time_not_import_time(vault_paths: DataPaths) -> None:
+    kickoff = datetime(2026, 10, 3, 0, 0, tzinfo=UTC)
+    games = [_game(week=5, start_date=kickoff)]
+    played_at = kickoff + GAME_LENGTH
+    season_dir = vault_paths.raw / "sports506" / "2026"
+    season_dir.mkdir(parents=True)
+    (season_dir / "wk-05.html").write_bytes(_nav_page(["5"]))
+    _append_manifest(
+        vault_paths,
+        5,
+        fetched=played_at + timedelta(hours=5),
+        saved=played_at - timedelta(hours=2),
+    )
+
+    result = find_506_gaps(vault_paths, 2026, games, played_at + timedelta(hours=6))
+
+    assert result.stale == ["5"]
+
+
+def test_find_506_gaps_stale_falls_back_to_fetched_at_without_saved_at(
+    vault_paths: DataPaths,
+) -> None:
+    kickoff = datetime(2026, 10, 3, 0, 0, tzinfo=UTC)
+    games = [_game(week=5, start_date=kickoff)]
+    played_at = kickoff + GAME_LENGTH
+    season_dir = vault_paths.raw / "sports506" / "2026"
+    season_dir.mkdir(parents=True)
+    (season_dir / "wk-05.html").write_bytes(_nav_page(["5"]))
+    _append_manifest(vault_paths, 5, fetched=played_at - timedelta(hours=1))
+
+    result = find_506_gaps(vault_paths, 2026, games, played_at + timedelta(hours=6))
+
+    assert result.stale == ["5"]

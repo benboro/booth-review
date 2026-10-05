@@ -44,11 +44,13 @@ def _slug(season: int) -> str:
 
 
 def _seed_complete_season(paths: DataPaths, season: int) -> None:
-    label = "0"
+    labels = ["0", "B"]
     (paths.raw / "sports506" / str(season)).mkdir(parents=True, exist_ok=True)
-    (paths.raw / "sports506" / str(season) / f"wk-{label.zfill(2)}.html").write_bytes(
-        _page(season, label, nav_labels=[label])
-    )
+    for label in labels:
+        name = label if label == "B" else label.zfill(2)
+        (paths.raw / "sports506" / str(season) / f"wk-{name}.html").write_bytes(
+            _page(season, label, nav_labels=labels)
+        )
     for name in CFBD_SEASON_ENDPOINTS:
         endpoint_path = paths.raw / "cfbd" / name / f"{season}.json"
         endpoint_path.parent.mkdir(parents=True, exist_ok=True)
