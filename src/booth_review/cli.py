@@ -966,6 +966,8 @@ def _build(args: argparse.Namespace) -> int:
     bowl_names_unknown = outcome.counts.get("bowl_names_unknown", 0)
     if bowl_names_unknown > 0:
         print(f"bowl names unknown {bowl_names_unknown}")
+    if (n := outcome.counts.get("preliminary_headlines_over_10_days", 0)) > 0:
+        print(f"preliminary headlines over 10 days old: {n}")
     if (n := outcome.counts.get("crew_overrides_applied", 0)) > 0:
         print(f"crew overrides applied {n}")
     if (n := outcome.counts.get("crew_overrides_patched", 0)) > 0:

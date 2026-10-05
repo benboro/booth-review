@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
@@ -73,6 +73,11 @@ class BuildOutcome:
     crew_override_differs_lines: tuple[int, ...] = ()
 
 
+# A preliminary headline figure older than this many days is listed in
+# interim/review_preliminary_headlines.csv (PITFALLS: preliminary figures settle).
+PRELIMINARY_STALE_DAYS = 10
+_PRELIMINARY_COLUMNS = ("telecast_id", "date_et", "claim_id")
+
 _MANIFEST_TIME_FMT = "%Y-%m-%dT%H:%M:%SZ"
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
@@ -101,6 +106,31 @@ def input_stamp(paths: DataPaths) -> datetime:
         stamp = datetime.strptime(fetched_at, _MANIFEST_TIME_FMT).replace(tzinfo=UTC)
         newest = max(newest, stamp)
     return newest
+
+
+def _stale_preliminary_headlines(
+    tables: BuildTables, generated_at: datetime
+) -> list[dict[str, object]]:
+    """Plotted telecasts whose headline figure is still preliminary more than
+    PRELIMINARY_STALE_DAYS before `generated_at`. Ids and dates only."""
+    cutoff = generated_at.date() - timedelta(days=PRELIMINARY_STALE_DAYS)
+    plotted = tables.telecasts.filter(pl.col("plotted") & (pl.col("date_et") < cutoff)).select(
+        "telecast_id", "date_et"
+    )
+    stale = (
+        tables.viewership.filter(pl.col("is_headline") & (pl.col("status") == "preliminary"))
+        .select("telecast_id", "claim_id")
+        .join(plotted, on="telecast_id", how="inner")
+        .sort(["telecast_id", "claim_id"])
+    )
+    return [
+        {
+            "telecast_id": row["telecast_id"],
+            "date_et": row["date_et"].isoformat(),
+            "claim_id": row["claim_id"],
+        }
+        for row in stale.iter_rows(named=True)
+    ]
 
 
 def _build_counts(tables: BuildTables, result: RegressionResult) -> dict[str, int]:
@@ -172,6 +202,11 @@ def run_build(
 
     with vault.lock():
         tables = assemble_tables(paths, reference_directory)
+        stale_preliminary = _stale_preliminary_headlines(tables, generated_at)
+        tables.review_rows["review_preliminary_headlines"] = (
+            _PRELIMINARY_COLUMNS,
+            stale_preliminary,
+        )
         coverage = build_coverage(tables)
 
         metrics: Sequence[SeasonMetrics] = build_metrics(tables, paths)
@@ -221,6 +256,7 @@ def run_build(
 
         counts = _build_counts(tables, result)
         counts.update(site_counts)
+        counts["preliminary_headlines_over_10_days"] = len(stale_preliminary)
 
         committed = False
         if commit:
