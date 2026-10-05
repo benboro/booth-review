@@ -637,6 +637,89 @@ def test_autoscale_and_pan_clamp_to_filtered_range(date_page: Page) -> None:
     assert res["r"] == [153, 278]
 
 
+# -- double-click / Reset axes after an axis or season change (CR-01) ---------
+
+_PLOT_SPOT_JS = """
+() => {
+  const gd = document.getElementById('chart');
+  const r = gd.getBoundingClientRect();
+  const s = gd._fullLayout._size;
+  // Top of the plot area, mid-width: above every dot, so a click never lands on one.
+  return { x: r.left + s.l + s.w * 0.5, y: r.top + s.t + 6 };
+}
+"""
+
+_XRANGE_JS = "() => document.getElementById('chart')._fullLayout.xaxis.range.slice()"
+
+
+def _double_click_plot(page: Page) -> list[float]:
+    page.locator("#chart").scroll_into_view_if_needed()
+    spot = page.evaluate(_PLOT_SPOT_JS)
+    page.mouse.dblclick(spot["x"], spot["y"])
+    _settle(page)
+    return page.evaluate(_XRANGE_JS)  # type: ignore[no-any-return]
+
+
+def test_double_click_after_switching_to_date_restores_full_range(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    open_app(guarded_page, "")
+    guarded_page.locator('#axis-toggle button[data-axis="date"]').click()
+    _settle(guarded_page)
+    assert guarded_page.evaluate(_XRANGE_JS) == [0, 278]
+    assert _double_click_plot(guarded_page) == pytest.approx([0, 278], abs=1e-6)
+    # A second double-click must not get stuck on a stale range either.
+    assert _double_click_plot(guarded_page) == pytest.approx([0, 278], abs=1e-6)
+
+
+def test_reset_axes_button_after_switching_to_date_restores_full_range(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    open_app(guarded_page, "")
+    guarded_page.locator('#axis-toggle button[data-axis="date"]').click()
+    _settle(guarded_page)
+    guarded_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [20, 60]})
+    _settle(guarded_page)
+    guarded_page.locator("#chart").hover()
+    guarded_page.locator('#chart .modebar-btn[data-attr="zoom"][data-val="reset"]').click()
+    _settle(guarded_page)
+    assert guarded_page.evaluate(_XRANGE_JS) == pytest.approx([0, 278], abs=1e-6)
+
+
+def test_double_click_after_clearing_season_filter_restores_full_range(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    open_app(guarded_page, "?axis=date&seasons=2025-2026")
+    _settle(guarded_page)
+    assert guarded_page.evaluate(_XRANGE_JS) == [153, 278]
+    guarded_page.evaluate(_STATE_JS, {"seasons": None})
+    _settle(guarded_page)
+    assert guarded_page.evaluate(_XRANGE_JS) == [0, 278]
+    assert _double_click_plot(guarded_page) == pytest.approx([0, 278], abs=1e-6)
+    assert _double_click_plot(guarded_page) == pytest.approx([0, 278], abs=1e-6)
+
+
+def test_double_click_after_spread_to_excitement_restores_excitement_range(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    open_app(guarded_page, "")
+    _settle(guarded_page)
+    spread = guarded_page.evaluate(_XRANGE_JS)
+    guarded_page.locator('#axis-toggle button[data-axis="excitement"]').click()
+    _settle(guarded_page)
+    home = guarded_page.evaluate(_XRANGE_JS)
+    assert home != pytest.approx(spread, abs=1e-6)
+    lo, hi = home
+    quarter = (hi - lo) * 0.25
+    guarded_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [lo + quarter, hi - quarter]})
+    _settle(guarded_page)
+    assert _double_click_plot(guarded_page) == pytest.approx(home, abs=1e-6)
+
+
 def test_season_change_resets_zoom_other_filters_keep_it(date_page: Page) -> None:
     _settle(date_page)
     date_page.locator("#chart").scroll_into_view_if_needed()

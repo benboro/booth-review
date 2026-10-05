@@ -526,12 +526,44 @@ export function buildFigure(data, view, state, env) {
  * call Pattern 2/Pitfall 4 warn against reusing on updates. `figure.traces`/
  * `layout` must already hold fresh array identities for any changed
  * attribute.
+ *
+ * When `uirevision` changes (an axis switch, or a season change on Date) the
+ * new layout range becomes the home view, so it is also re-saved as the
+ * target of double-click and the modebar's "Reset axes" (CR-01).
  * @param {HTMLElement} gd
- * @param {{traces: object[], layout: object, config: object}} figure
+ * @param {{traces: object[], layout: object, config: object, dateAxis?: object|null}} figure
  */
 export function renderChart(gd, figure) {
   gd.boothDateAxis = figure.dateAxis ?? null;
+  const prevRev = gd.layout?.uirevision;
   window.Plotly.react(gd, figure.traces, figure.layout, figure.config);
+  if (prevRev !== undefined && prevRev !== figure.layout.uirevision) resetHomeRanges(gd, figure.layout);
+}
+
+/**
+ * Plotly 4.1.1 records each axis's reset target (`_rangeInitial0/1`, read by
+ * double-click and "Reset axes") only on the graph's first draw and carries it
+ * across every later `Plotly.react`, even when `uirevision` changes. Without
+ * this, after Spread -> Date a reset lands on Spread's numbers (a sliver of
+ * the first season), and after a season change on Date it lands on the old
+ * filter. No public option re-saves it: `doubleClick: 'autosize'` plus
+ * dropping the Reset button would also autoscale Spread/Excitement and the
+ * y axis to the data. So write the private fields, and only when they exist
+ * in the shape Plotly 4.1.1 uses; if a future Plotly renames them this is a
+ * no-op and the CR-01 e2e tests fail on the upgrade.
+ * @param {HTMLElement} gd
+ * @param {object} layout - the layout just passed to `Plotly.react`.
+ */
+function resetHomeRanges(gd, layout) {
+  for (const name of ['xaxis', 'yaxis']) {
+    const ax = gd._fullLayout?.[name];
+    const range = layout[name]?.range;
+    if (!ax || !Array.isArray(range) || range.length !== 2) continue;
+    if (!('_rangeInitial0' in ax) || !('_rangeInitial1' in ax)) continue;
+    ax._rangeInitial0 = range[0];
+    ax._rangeInitial1 = range[1];
+    ax._autorangeInitial = false;
+  }
 }
 
 /** D-02 caption gap from the zero line, in px; `fitZeroCaptions` only ever
