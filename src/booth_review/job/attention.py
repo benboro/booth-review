@@ -68,7 +68,7 @@ def _require_labels(labels: list[str]) -> None:
 
 # Job steps that report a failure through the generic `step_failed`
 # (cfbd and rr keep their own constructors below, with the same line shape).
-_STEP_NAMES = frozenset({"sports506", "freeze", "budget", "state"})
+_STEP_NAMES = frozenset({"sports506", "freeze", "budget", "state", "build", "site", "staleness"})
 
 
 def error_type_name(exc: BaseException) -> str:
@@ -160,11 +160,11 @@ def sports506_stale(season: int, labels: list[str]) -> AttentionItem:
 
 
 def missed_runs(n: int) -> AttentionItem:
-    """`n` scheduled runs were missed since the last success; this run caught up."""
+    """`n` scheduled slots passed with no attempt since the last attempt; this run caught up."""
     _require_non_negative("n", n)
     return AttentionItem(
         kind="missed_runs",
-        line=f"missed scheduled runs since last success: {n} (caught up this run)",
+        line=f"missed scheduled runs since last attempt: {n} (caught up this run)",
         severity="info",
     )
 
@@ -185,6 +185,117 @@ def push_failed(step: str) -> AttentionItem:
     """The vault push failed at `step`."""
     return AttentionItem(
         kind="push_failed", line=f"vault push failed at step {step}", severity="attention"
+    )
+
+
+def build_blocked(n_reasons: int) -> AttentionItem:
+    """D-09: the regression guard blocked the build; `n_reasons` metrics dropped."""
+    _require_non_negative("n_reasons", n_reasons)
+    long_line = (
+        f"build blocked by the regression guard: {n_reasons} metric(s) dropped, deploy held "
+        "(clear locally with build --accept-baseline or a fix plus tag bump)"
+    )
+    line = (
+        long_line
+        if len(long_line) <= _MAX_LINE_LEN
+        else f"build blocked by the regression guard: {n_reasons} metric(s) dropped, deploy held"
+    )
+    return AttentionItem(kind="build_blocked", line=line, severity="attention")
+
+
+def bowls_missing(n: int) -> AttentionItem:
+    """D-07: `n` postseason games have no bowls row."""
+    _require_non_negative("n", n)
+    return AttentionItem(
+        kind="bowls_missing",
+        line=(
+            f"postseason games missing a bowls row: {n} "
+            "(plotted as Bowl, add bowls.csv rows and bump the tag)"
+        ),
+        severity="attention",
+    )
+
+
+def people_review_due(n: int) -> AttentionItem:
+    """D-05/D-06: `n` announcers published as-is, awaiting local review."""
+    _require_non_negative("n", n)
+    return AttentionItem(
+        kind="people_review_due",
+        line=f"announcers awaiting review: {n} (run booth-review review people locally)",
+        severity="attention",
+    )
+
+
+def unresolved_teams(n: int) -> AttentionItem:
+    """D-05: `n` team names did not resolve through the crosswalk."""
+    _require_non_negative("n", n)
+    return AttentionItem(
+        kind="unresolved_teams",
+        line=f"unresolved team names: {n} (run booth-review review teams locally)",
+        severity="attention",
+    )
+
+
+def build_stale(days: int, limit: int) -> AttentionItem:
+    """D-14: the last successful build is `days` old, past `limit`."""
+    _require_non_negative("days", days)
+    _require_non_negative("limit", limit)
+    return AttentionItem(
+        kind="build_stale",
+        line=f"last successful build is {days} days old (limit {limit})",
+        severity="attention",
+    )
+
+
+def plotted_trails_listed(days: int, limit: int) -> AttentionItem:
+    """D-14: the newest plotted telecast trails the newest RR-listed one by `days`."""
+    _require_non_negative("days", days)
+    _require_non_negative("limit", limit)
+    return AttentionItem(
+        kind="plotted_trails_listed",
+        line=(
+            f"newest plotted telecast trails the newest RR-listed one by {days} days "
+            f"(limit {limit})"
+        ),
+        severity="attention",
+    )
+
+
+def plotted_none_listed(n_listed: int) -> AttentionItem:
+    """D-14: RR lists `n_listed` telecasts this season but none are plotted."""
+    _require_non_negative("n_listed", n_listed)
+    return AttentionItem(
+        kind="plotted_none_listed",
+        line=f"RR lists {n_listed} telecasts this season but none are plotted",
+        severity="attention",
+    )
+
+
+def site_key_check_failed() -> AttentionItem:
+    """D-10: the CFBD key was found in the assembled site."""
+    return AttentionItem(
+        kind="site_key_check_failed",
+        line="site key check failed: cfbd key found in the assembled site, deploy held",
+        severity="attention",
+    )
+
+
+def site_key_check_skipped() -> AttentionItem:
+    """D-10: no CFBD key was configured, so the leak check could not run."""
+    return AttentionItem(
+        kind="site_key_check_skipped",
+        line="site key check skipped: no cfbd key configured, deploy held",
+        severity="attention",
+    )
+
+
+def failed_attempts(n: int) -> AttentionItem:
+    """IN-05: `n` scheduled slots since the last success had a run that failed."""
+    _require_non_negative("n", n)
+    return AttentionItem(
+        kind="failed_attempts",
+        line=f"scheduled slots since last success whose run failed: {n}",
+        severity="info",
     )
 
 
