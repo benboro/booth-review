@@ -921,17 +921,45 @@ input[type="checkbox"] {
 }
 
 .game-section-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-height: 32px;
+  padding: var(--space-sm) 0 var(--space-xs);
+  margin: 0;
+  background: none;
+  border: none;
   font: var(--font-label);
   font-weight: var(--weight-semibold);
   color: var(--muted);
-  padding: var(--space-sm) 0 var(--space-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.game-section-head:hover {
+  background: var(--surface);
+}
+
+.game-caret {
+  flex: none;
+}
+
+.game-section-head[aria-expanded="false"] .game-caret {
+  transform: rotate(-90deg);
+}
+
+.game-picked-hint {
+  margin-left: auto;
+  font-weight: 400;
+  color: var(--muted);
 }
 
 #game-options [role="group"]:first-child .game-section-head {
   padding-top: var(--space-sm);
 }
 
-#game-options button {
+#game-options [role="radio"] {
   min-height: 32px;
   gap: var(--space-md);
 }
@@ -1009,7 +1037,7 @@ input[type="checkbox"] {
   margin: 0;
 }
 
-.radio-list button {
+.radio-list button:not(.game-section-head) {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
@@ -1023,7 +1051,7 @@ input[type="checkbox"] {
   cursor: pointer;
 }
 
-.radio-list button::before {
+.radio-list button:not(.game-section-head)::before {
   content: "";
   flex: none;
   width: 16px;
@@ -1032,7 +1060,7 @@ input[type="checkbox"] {
   border-radius: 50%;
 }
 
-.radio-list button[aria-checked="true"]::before {
+.radio-list button:not(.game-section-head)[aria-checked="true"]::before {
   border-color: var(--accent);
   background: var(--accent);
   box-shadow: inset 0 0 0 3px var(--bg);
@@ -2189,7 +2217,8 @@ html:has(#detail-panel[open]) {
     height: 44px;
   }
 
-  #game-options button {
+  #game-options [role="radio"],
+  #game-options .game-section-head {
     min-height: 44px;
   }
 

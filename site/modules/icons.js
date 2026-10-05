@@ -84,3 +84,28 @@ export function makeGameTypeIcon(kind) {
   }
   return svg;
 }
+
+/**
+ * Builds the decorative disclosure caret for a Game section header (04.10
+ * D-03): a chevron pointing down; CSS rotates it for the collapsed state.
+ * Constant path data via `createElementNS`, never a data string.
+ * @returns {SVGSVGElement}
+ */
+export function makeCaretIcon() {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 12 12');
+  svg.setAttribute('width', '12');
+  svg.setAttribute('height', '12');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.5');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  svg.setAttribute('class', 'game-caret');
+  const path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute('d', 'M3 4.5l3 3 3-3');
+  svg.appendChild(path);
+  return svg;
+}

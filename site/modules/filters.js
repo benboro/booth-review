@@ -29,6 +29,7 @@
  */
 
 import { gameKeyMatches, gameSearchKey, normalizeName } from './data.js';
+import { makeCaretIcon, makeGameTypeIcon } from './icons.js';
 import { FAMILY_LABELS } from './palette.js';
 import { offeredFamilyIds } from './select.js';
 import { SLOT_SHORT_LABELS, ROLE_LABELS, gameRowTitle } from './format.js';
@@ -98,12 +99,21 @@ let gameRows = new Map();
 /** game slug -> its `data.games` entry, populated once by `buildGameList`. */
 let gameBySlug = new Map();
 
-/** Section order and header text of the Game list (04.9 D-02). */
+/** Section order, header text and header icon kind of the Game list (04.9 D-02, 04.10 D-03). */
 const GAME_SECTIONS = [
-  ['playoff', 'PLAYOFF'],
-  ['bowls', 'BOWLS'],
-  ['rivalries', 'RIVALRIES'],
+  ['playoff', 'PLAYOFF', 'playoff'],
+  ['bowls', 'BOWLS', 'bowl'],
+  ['rivalries', 'RIVALRIES', 'rivalry'],
 ];
+
+/**
+ * Game sections the viewer collapsed (the pre-search baseline), and the ones
+ * collapsed by a header click during a search. In memory only: neither is ever
+ * stored or put in the URL, and every open of the popover or sheet starts with
+ * both empty (04.10 D-04, D-05).
+ */
+let collapsedSections = new Set();
+let searchCollapsed = new Set();
 
 /** The longest query echoed in the empty-search line (04.9 D-04). */
 const GAME_QUERY_ECHO_MAX = 40;
@@ -403,18 +413,33 @@ function buildGameList(data) {
   gameRows = new Map();
   gameBySlug = new Map(data.games.map((g) => [g.slug, g]));
   const groups = [];
-  for (const [section, header] of GAME_SECTIONS) {
+  for (const [section, header, iconKind] of GAME_SECTIONS) {
     const games = data.games.filter((g) => g.section === section);
     if (games.length === 0) continue;
     const group = document.createElement('div');
     group.setAttribute('role', 'group');
     group.dataset.gameSection = section;
-    const head = document.createElement('div');
+    const head = document.createElement('button');
+    head.type = 'button';
     head.className = 'game-section-head';
     head.id = `game-head-${section}`;
-    head.textContent = header;
+    head.dataset.section = section;
+    head.setAttribute('aria-expanded', 'true');
+    head.setAttribute('aria-controls', `game-rows-${section}`);
+    const name = document.createElement('span');
+    name.className = 'game-section-name';
+    name.textContent = header;
+    const hint = document.createElement('span');
+    hint.className = 'game-picked-hint';
+    hint.setAttribute('aria-hidden', 'true');
+    hint.hidden = true;
+    hint.textContent = '1 picked';
+    head.append(makeCaretIcon(), ...[makeGameTypeIcon(iconKind)].filter(Boolean), name, hint);
     group.setAttribute('aria-labelledby', head.id);
-    group.appendChild(head);
+    const rowsEl = document.createElement('div');
+    rowsEl.className = 'game-rows';
+    rowsEl.id = `game-rows-${section}`;
+    group.append(head, rowsEl);
     for (const game of games) {
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -428,7 +453,7 @@ function buildGameList(data) {
       label.className = 'game-label';
       label.textContent = game.label;
       btn.append(label, ...makeCountSpans());
-      group.appendChild(btn);
+      rowsEl.appendChild(btn);
       gameRows.set(game.slug, btn);
     }
     groups.push(group);
@@ -436,9 +461,44 @@ function buildGameList(data) {
   els.gameOptions.replaceChildren(...groups);
 }
 
-/** Every Game row currently visible, in DOM order. */
+/** Whether the search box holds a query (the same test `filterGameRows` uses). */
+function isSearching(query) {
+  return gameSearchKey(query) !== '';
+}
+
+/**
+ * Whether a section's rows are collapsed: the per-search state while a query is
+ * active, the viewer's own baseline otherwise (04.10 D-05).
+ */
+function sectionCollapsed(section, searching) {
+  return searching ? searchCollapsed.has(section) : collapsedSections.has(section);
+}
+
+/** Every Game row currently reachable by keyboard, in DOM order (collapse-aware). */
 function visibleGameRows() {
-  return Array.from(els.gameOptions.querySelectorAll('[data-game]:not([hidden])'));
+  return Array.from(els.gameOptions.querySelectorAll('[data-game]:not([hidden])')).filter(
+    (r) => !r.closest('.game-rows').hidden,
+  );
+}
+
+/** Toggles one section's header: collapses or expands it visibly, and records it as the baseline. */
+function toggleGameSection(section) {
+  const searching = isSearching(els.gameSearch.value);
+  const next = !sectionCollapsed(section, searching);
+  if (searching) {
+    if (next) searchCollapsed.add(section);
+    else searchCollapsed.delete(section);
+  }
+  if (next) collapsedSections.add(section);
+  else collapsedSections.delete(section);
+  syncGameChrome(els.gameSearch.value);
+}
+
+/** Opens every section again (04.10 D-04): called whenever the popover or sheet opens. */
+function resetGameCollapse() {
+  collapsedSections.clear();
+  searchCollapsed.clear();
+  syncGameChrome(els.gameSearch.value);
 }
 
 /**
@@ -467,11 +527,20 @@ function syncGameChrome(query) {
   for (const group of els.gameOptions.querySelectorAll('[data-game-section]')) {
     group.hidden = group.querySelector('[data-game]:not([hidden])') == null;
   }
+  // Collapse is a separate hide dimension: it never empties a group or the list.
+  const shown = els.gameOptions.querySelectorAll('[data-game]:not([hidden])').length;
+  const searching = isSearching(query);
+  if (!searching) searchCollapsed.clear();
+  for (const head of els.gameOptions.querySelectorAll('.game-section-head')) {
+    const collapsed = sectionCollapsed(head.dataset.section, searching);
+    document.getElementById(head.getAttribute('aria-controls')).hidden = collapsed;
+    head.setAttribute('aria-expanded', String(!collapsed));
+  }
   const rows = visibleGameRows();
   const anySearchMatch = Array.from(gameRows.values()).some(
     (r) => r.dataset.searchHidden !== 'true',
   );
-  const line = gameEmptyLine(query, rows.length, anySearchMatch);
+  const line = gameEmptyLine(query, shown, anySearchMatch);
   if (line != null) {
     els.gameEmpty.textContent = line;
     els.gameEmpty.hidden = false;
@@ -879,6 +948,11 @@ export function initFilters({ data, getState, setState }) {
 
   els.gameSearch.addEventListener('input', () => filterGameRows(data, els.gameSearch.value));
   els.gameOptions.addEventListener('click', (ev) => {
+    const head = ev.target.closest('.game-section-head');
+    if (head) {
+      toggleGameSection(head.dataset.section);
+      return;
+    }
     const btn = ev.target.closest('[data-game]');
     if (!btn) return;
     setState({ game: btn.dataset.game });
@@ -914,7 +988,9 @@ export function initFilters({ data, getState, setState }) {
   // Row labels only have a measurable width while their container is shown (WR-03).
   for (const id of ['pop-game', 'filters-sheet']) {
     document.getElementById(id).addEventListener('toggle', (ev) => {
-      if (ev.newState === 'open') syncGameTooltips();
+      if (ev.newState !== 'open') return;
+      resetGameCollapse();
+      syncGameTooltips();
     });
   }
   window.addEventListener('scroll', repositionOpenPopovers, { passive: true });

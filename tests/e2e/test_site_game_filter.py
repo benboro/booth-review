@@ -34,7 +34,8 @@ _ROWS_JS = """
 """
 _HEADERS_JS = """
 () => [...document.querySelectorAll('#game-options .game-section-head')]
-  .filter((h) => h.offsetParent !== null).map((h) => h.textContent)
+  .filter((h) => h.offsetParent !== null)
+  .map((h) => h.querySelector('.game-section-name').textContent)
 """
 
 
@@ -352,3 +353,179 @@ def test_game_search_has_one_accessible_name(
     search = guarded_page.locator("#game-search")
     assert search.get_attribute("aria-label") is None
     assert guarded_page.get_by_label("Search games").evaluate("(el) => el.id") == "game-search"
+
+
+def _head(page: Page, section: str) -> Any:
+    return page.locator(f"#game-head-{section}")
+
+
+def _expanded(page: Page) -> list[str | None]:
+    return [
+        _head(page, s).get_attribute("aria-expanded") for s in ("playoff", "bowls", "rivalries")
+    ]
+
+
+def _storage_and_search(page: Page) -> tuple[int, int, str]:
+    result: tuple[int, int, str] = tuple(  # type: ignore[assignment]
+        page.evaluate("() => [localStorage.length, sessionStorage.length, location.search]")
+    )
+    return result
+
+
+def test_section_headers_are_toggle_buttons_with_icons(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    _open_game(guarded_page)
+    assert _headers(guarded_page) == ["PLAYOFF", "BOWLS", "RIVALRIES"]
+    info = guarded_page.evaluate(
+        """() => [...document.querySelectorAll('#game-options .game-section-head')].map((h) => ({
+          tag: h.tagName,
+          id: h.id,
+          expanded: h.getAttribute('aria-expanded'),
+          controls: h.getAttribute('aria-controls'),
+          held: document.getElementById(h.getAttribute('aria-controls'))
+            ?.querySelectorAll('[role=radio]').length,
+          kids: [...h.children].slice(0, 2).map((c) => c.getAttribute('class')),
+          kind: h.querySelector('.game-type-icon').dataset.kind,
+          role: h.getAttribute('role'),
+          checked: h.getAttribute('aria-checked'),
+          before: getComputedStyle(h, '::before').content,
+        }))"""
+    )
+    assert [i["tag"] for i in info] == ["BUTTON"] * 3
+    assert [i["id"] for i in info] == [
+        "game-head-playoff",
+        "game-head-bowls",
+        "game-head-rivalries",
+    ]
+    assert all(i["expanded"] == "true" for i in info)
+    assert [i["controls"] for i in info] == [
+        "game-rows-playoff",
+        "game-rows-bowls",
+        "game-rows-rivalries",
+    ]
+    assert all(i["held"] for i in info)
+    assert all(i["kids"] == ["game-caret", "game-type-icon"] for i in info)
+    assert [i["kind"] for i in info] == ["playoff", "bowl", "rivalry"]
+    assert all(i["role"] is None and i["checked"] is None for i in info)
+    assert all(i["before"] == "none" for i in info)
+    assert (
+        guarded_page.get_by_role("button", name="BOWLS", exact=True).evaluate("(el) => el.id")
+        == "game-head-bowls"
+    )
+
+
+def test_collapse_hides_rows_but_keeps_pick_and_filters(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?game=summit-bowl")
+    _open_game(guarded_page)
+    url = guarded_page.url
+    passing = _passing(guarded_page)
+    head = _head(guarded_page, "bowls")
+    head.click()
+    assert head.get_attribute("aria-expanded") == "false"
+    assert guarded_page.locator("#game-rows-bowls").is_hidden()
+    assert _row(guarded_page, "summit-bowl").is_hidden()
+    assert head.is_visible()
+    assert head.locator(".game-caret").evaluate("(el) => getComputedStyle(el).transform") != "none"
+    assert guarded_page.url == url
+    assert _passing(guarded_page) == passing
+    assert _row(guarded_page, "summit-bowl").get_attribute("aria-checked") == "true"
+    assert guarded_page.evaluate("() => document.activeElement.id") == "game-head-bowls"
+    head.click()
+    assert head.get_attribute("aria-expanded") == "true"
+    assert _row(guarded_page, "summit-bowl").is_visible()
+    assert guarded_page.locator("#game-empty").is_hidden()
+
+
+def test_header_keyboard_toggle_keeps_focus(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    _open_game(guarded_page)
+    _head(guarded_page, "bowls").focus()
+    guarded_page.keyboard.press("Enter")
+    assert _head(guarded_page, "bowls").get_attribute("aria-expanded") == "false"
+    guarded_page.keyboard.press("Space")
+    assert _head(guarded_page, "bowls").get_attribute("aria-expanded") == "true"
+    assert guarded_page.evaluate("() => document.activeElement.id") == "game-head-bowls"
+
+
+def test_arrow_keys_skip_collapsed_rows(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    _open_game(guarded_page)
+    _head(guarded_page, "bowls").click()
+    guarded_page.focus("#game-search")
+    guarded_page.keyboard.press("ArrowDown")
+    assert guarded_page.evaluate("() => document.activeElement.dataset.game") == "cfp-semifinal"
+    guarded_page.keyboard.press("ArrowDown")
+    _wait_url(guarded_page, "location.search.includes('game=bridge-game')")
+    assert guarded_page.evaluate("() => document.activeElement.dataset.game") == "bridge-game"
+    assert guarded_page.locator("#game-options [data-game][tabindex='0']").count() == 1
+
+
+def test_all_collapsed_has_no_radio_tab_stop(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    errors: list[str] = []
+    guarded_page.on("pageerror", lambda e: errors.append(str(e)))
+    open_app(guarded_page, "")
+    _open_game(guarded_page)
+    for section in ("playoff", "bowls", "rivalries"):
+        _head(guarded_page, section).click()
+    assert _expanded(guarded_page) == ["false"] * 3
+    assert guarded_page.locator("#game-options [data-game][tabindex='0']").count() == 0
+    assert guarded_page.locator("#game-empty").is_hidden()
+    assert all(_head(guarded_page, s).is_visible() for s in ("playoff", "bowls", "rivalries"))
+    assert errors == []
+
+
+def test_collapse_shifts_nothing_outside_the_popover(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    open_app(guarded_page, "")
+    _open_game(guarded_page)
+    js = """() => {
+      const r = document.getElementById('pop-game').getBoundingClientRect();
+      return [document.getElementById('toolbar').getBoundingClientRect().height,
+        document.getElementById('chart-area').getBoundingClientRect().top, r.top, r.left];
+    }"""
+    before = guarded_page.evaluate(js)
+    for section in ("playoff", "bowls", "rivalries"):
+        _head(guarded_page, section).click()
+        assert guarded_page.evaluate(js) == before
+    for section in ("playoff", "bowls", "rivalries"):
+        _head(guarded_page, section).click()
+        assert guarded_page.evaluate(js) == before
+
+
+def test_phone_headers_are_touch_targets_and_collapse(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(mobile_page, "")
+    mobile_page.click("#filters-button")
+    heads = mobile_page.locator("#game-options .game-section-head")
+    for i in range(heads.count()):
+        heads.nth(i).scroll_into_view_if_needed()
+        assert heads.nth(i).bounding_box()["height"] >= 44  # type: ignore[index]
+    _head(mobile_page, "rivalries").tap()
+    assert _head(mobile_page, "rivalries").get_attribute("aria-expanded") == "false"
+    assert mobile_page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth")
+
+
+def test_collapse_is_not_remembered(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    _open_game(guarded_page)
+    before = _storage_and_search(guarded_page)
+    _head(guarded_page, "bowls").click()
+    assert _storage_and_search(guarded_page) == before
+    open_app(guarded_page, "")
+    _open_game(guarded_page)
+    assert _expanded(guarded_page) == ["true"] * 3
