@@ -621,6 +621,39 @@ export function fitZeroCaptions(gd) {
 }
 
 /**
+ * Returns a function giving a season label's rendered text width in px, or
+ * undefined when no season label is drawn yet (the first draw, where
+ * `dateAxisLabels` falls back to its estimate). Clones a drawn season label's
+ * `<text>` (keeping Plotly's bold tspan and inline font), swaps in each asked
+ * string, measures it in place and removes it at once. Touches no layout, so
+ * calling it from `fitDateAxis` cannot trigger another draw; the widths depend
+ * only on the font, so every pass measures the same and the hook still settles.
+ * @param {HTMLElement} gd
+ * @returns {((text: string) => number) | undefined}
+ */
+export function seasonLabelMeasurer(gd) {
+  const anns = gd.layout?.annotations ?? [];
+  let template = null;
+  for (let k = 0; k < anns.length && !template; k += 1) {
+    if (!String(anns[k].name ?? '').startsWith('season-')) continue;
+    template = gd.querySelector(`.annotation[data-index="${k}"] text`);
+  }
+  if (!template || !template.parentNode) return undefined;
+  const cache = new Map();
+  return (text) => {
+    if (cache.has(text)) return cache.get(text);
+    const probe = template.cloneNode(true);
+    (probe.querySelector('tspan') ?? probe).textContent = text;
+    probe.setAttribute('visibility', 'hidden');
+    template.parentNode.appendChild(probe);
+    const width = probe.getBBox().width;
+    probe.remove();
+    cache.set(text, width);
+    return width;
+  };
+}
+
+/**
  * Keeps the Date-axis label rows, range and clamp right after every draw,
  * zoom, pan, and resize (D-11, D-12, D-13). Reads the shown blocks from
  * `gd.boothDateAxis` (null off the Date axis, where this is a no-op). Writes
@@ -648,7 +681,10 @@ export function fitDateAxis(gd) {
     window.Plotly.relayout(gd, { 'xaxis.range': [lo, hi] });
     return;
   }
-  const want = dateAxisLabels(meta.blocks, xa.range, xa._length, { mobile: meta.mobile });
+  const want = dateAxisLabels(meta.blocks, xa.range, xa._length, {
+    mobile: meta.mobile,
+    measure: seasonLabelMeasurer(gd),
+  });
   const update = {};
   const round4 = (a) => (a ?? []).map((v) => Math.round(v * 1e4) / 1e4);
   const have = gd.layout.xaxis;

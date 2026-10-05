@@ -33,6 +33,7 @@ from typing import Any
 import pytest
 from conftest import _assert_guard_clean, _install_guard, _serve_directory
 from playwright.sync_api import Page
+from test_site_date_axis import SEASON_LABEL_BOXES_JS, force_chart_font
 
 from booth_review.cli import main
 from booth_review.config import DataPaths
@@ -1133,6 +1134,34 @@ def test_real_phone_shows_all_season_labels(
     assert zero_width == 0
     assert overlaps == 0
     assert outside == 0
+
+
+@pytest.mark.parametrize("chart_font", ["default", "dejavu"])
+@pytest.mark.parametrize("width", [641, 700, 800, 900, 1024])
+def test_real_desktop_season_labels_never_overlap(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+    real_raw: dict[str, Any],
+    width: int,
+    chart_font: str,
+) -> None:
+    """WR-01: at desktop widths every season label shows, measured in the DOM,
+    at least 2px clear of its neighbours (also in DejaVu Sans, CI's system-ui)."""
+    force_chart_font(real_guarded_page, chart_font)
+    real_guarded_page.set_viewport_size({"width": width, "height": 900})
+    real_open_app(real_guarded_page, "?axis=date")
+    real_guarded_page.evaluate(_WAIT_TWO_FRAMES)
+    real_guarded_page.wait_for_timeout(400)
+    facts: dict[str, Any] = real_guarded_page.evaluate(SEASON_LABEL_BOXES_JS)
+    seasons = len(set(real_raw["telecasts"]["season"]))
+    count = int(facts["count"])
+    zero_width = int(facts["zeroWidth"])
+    outside = int(facts["outside"])
+    gap_ok = facts["minGap"] is not None and float(facts["minGap"]) >= 2
+    assert count == seasons
+    assert zero_width == 0
+    assert outside == 0
+    assert gap_ok
 
 
 def test_real_single_season_shows_dates_on_desktop(

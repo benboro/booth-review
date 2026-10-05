@@ -230,11 +230,15 @@ function placeRow(items, gapPx, leftLimit, rightLimit) {
  * @param {Block[]} blocks - the shown blocks, ascending.
  * @param {[number, number]} range - visible data x range [lo, hi].
  * @param {number} plotPx - plot width in px.
- * @param {{mobile?: boolean, marginLeft?: number, marginRight?: number}} [opts]
+ * @param {{mobile?: boolean, marginLeft?: number, marginRight?: number,
+ *   measure?: (text: string) => (number|undefined)}} [opts] - `measure` returns a
+ *   season label's rendered text width in px (the chart hook measures the drawn
+ *   annotations); without it, or when it returns a non-finite value, the width is
+ *   estimated from the font size.
  * @returns {{tier: number, tickvals: number[], ticktext: string[], twoDigit: boolean,
  *   seasons: {season: number, x: number, xshift: number, label: string, visible: boolean}[]}}
  */
-export function dateAxisLabels(blocks, range, plotPx, { mobile = false, marginLeft = 70, marginRight = 24 } = {}) {
+export function dateAxisLabels(blocks, range, plotPx, { mobile = false, marginLeft = 70, marginRight = 24, measure } = {}) {
   const [lo, hi] = range;
   const pxPerUnit = plotPx / (hi - lo);
   const fontSize = mobile ? 10 : 14;
@@ -264,6 +268,12 @@ export function dateAxisLabels(blocks, range, plotPx, { mobile = false, marginLe
   const full = (s) => String(s);
   const short = (s) => `'${String(s).slice(-2)}`;
   const bare = (s) => String(s).slice(-2);
+  // Season labels are bold, and bold digits run wider than the estimate in some
+  // fonts (DejaVu Sans, CI's system-ui), so prefer the rendered width.
+  const labelWidth = (text) => {
+    const measured = measure?.(text);
+    return (Number.isFinite(measured) ? measured : charPx * text.length) + BOX_PAD;
+  };
   const result = entries.map((en) => ({
     season: en.block.season,
     x: en.x,
@@ -290,7 +300,7 @@ export function dateAxisLabels(blocks, range, plotPx, { mobile = false, marginLe
         c: entries[i].c,
         a: entries[i].a,
         b: entries[i].b,
-        w: charPx * fmt(entries[i].block.season).length + BOX_PAD,
+        w: labelWidth(fmt(entries[i].block.season)),
       }));
       const { centers, invalid } = placeRow(items, gap, leftLimit, rightLimit);
       placed.clear();

@@ -6,12 +6,13 @@ url-state.js) against the synthetic fixture; nothing here needs a rendered chart
 
 from __future__ import annotations
 
+import copy
 import re
 from collections.abc import Callable
 from itertools import pairwise
 
 import pytest
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Page, Route, expect
 from test_site_chart import _RING_VISIBLE, _hover_dot
 
 pytestmark = pytest.mark.e2e
@@ -502,10 +503,12 @@ def test_tooltip_ring_and_modal_on_date(date_page: Page) -> None:
 _WANT_JS = """
 async () => {
   const A = await import('./modules/date-axis.js');
+  const C = await import('./modules/chart.js');
   const gd = document.getElementById('chart');
   const m = gd.boothDateAxis;
   const xa = gd._fullLayout.xaxis;
-  const want = A.dateAxisLabels(m.blocks, xa.range, xa._length, { mobile: m.mobile });
+  const want = A.dateAxisLabels(m.blocks, xa.range, xa._length,
+    { mobile: m.mobile, measure: C.seasonLabelMeasurer(gd) });
   const r4 = (a) => a.map((v) => Math.round(v * 1e4) / 1e4);
   return {
     tickOk: JSON.stringify(r4(gd.layout.xaxis.tickvals)) === JSON.stringify(r4(want.tickvals))
@@ -842,3 +845,102 @@ def test_weekly_just_under_fit_threshold_drops_to_next_tier(app_page: Page) -> N
     out = app_page.evaluate(_TIER_FIT_JS)
     assert out["fits"] == 1
     assert out["justUnder"] == 2
+
+
+# -- season row measured from the rendered labels (WR-01) ---------------------
+
+# CI's ubuntu runner resolves `system-ui` to DejaVu Sans, whose bold digits are
+# wider than the 0.62em estimate. The chart sets its font in the Plotly layout
+# (inline SVG styles), so the conftest `font_setting` CSS never reaches it; this
+# rule forces every SVG text, Plotly's off-screen measuring SVG included.
+CHART_FONT_CSS: dict[str, str] = {
+    "default": "",
+    "dejavu": 'svg text { font-family: "DejaVu Sans", sans-serif !important; }',
+}
+
+
+def force_chart_font(page: Page, setting: str) -> None:
+    """Appends `CHART_FONT_CSS[setting]` to the served style.css (the page's CSP
+    blocks injected `<style>`). Call before opening the app."""
+    css = CHART_FONT_CSS[setting]
+    if not css:
+        return
+
+    def _route(route: Route) -> None:
+        response = route.fetch()
+        route.fulfill(response=response, body=response.text() + "\n" + css)
+
+    page.route("**/style.css*", _route)
+
+
+# Rendered season labels: each `.annotation`'s own `<text>` box, measured in the
+# DOM (never recomputed from the width estimate).
+SEASON_LABEL_BOXES_JS = """
+() => {
+  const svg = document.querySelector('#chart svg.main-svg').getBoundingClientRect();
+  const boxes = [...document.querySelectorAll('#chart .annotation')]
+    .filter((el) => /^'?\\d{2,4}$/.test(el.textContent.trim()))
+    .map((el) => { const r = el.querySelector('text').getBoundingClientRect();
+      return { l: r.left, r: r.right, w: r.width }; })
+    .sort((a, b) => a.l - b.l);
+  let minGap = Infinity;
+  for (let i = 1; i < boxes.length; i++) minGap = Math.min(minGap, boxes[i].l - boxes[i - 1].r);
+  return {
+    count: boxes.length,
+    zeroWidth: boxes.filter((b) => !(b.w > 0)).length,
+    minGap: boxes.length > 1 ? minGap : null,
+    outside: boxes.filter((b) => b.l < svg.left - 0.5 || b.r > svg.right + 0.5).length,
+  };
+}
+"""
+
+
+def _thirteen_season_raw(raw: dict) -> dict:  # type: ignore[type-arg]
+    """The synthetic fixture reshaped like the real data: 13 seasons, 2014-2025
+    each spanning Aug 30 - Jan 12 and a short 2026 (Sep 5 - Oct 3). Every
+    telecast column repeats the fixture's rows; only season/date/kickoff change.
+    """
+    cols = raw["telecasts"]
+    n = len(cols["season"])
+    seasons: list[int] = []
+    dates: list[str] = []
+    for y in range(2014, 2026):
+        seasons += [y, y]
+        dates += [f"{y}-08-30", f"{y + 1}-01-12"]
+    seasons += [2026, 2026]
+    dates += ["2026-09-05", "2026-10-03"]
+    out = copy.deepcopy(raw)
+    out["telecasts"] = {
+        k: [copy.deepcopy(v[i % n]) for i in range(len(seasons))] for k, v in cols.items()
+    }
+    out["telecasts"]["season"] = seasons
+    out["telecasts"]["date"] = dates
+    out["telecasts"]["kickoff"] = [None] * len(seasons)
+    return out
+
+
+@pytest.mark.parametrize("chart_font", ["default", "dejavu"])
+@pytest.mark.parametrize("width", [641, 700, 800, 900, 1024])
+def test_desktop_13_season_labels_never_overlap_in_dom(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict,  # type: ignore[type-arg]
+    width: int,
+    chart_font: str,
+) -> None:
+    raw = _thirteen_season_raw(fixture_raw)
+    guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+    force_chart_font(guarded_page, chart_font)
+    guarded_page.set_viewport_size({"width": width, "height": 900})
+    open_app(guarded_page, "?axis=date")
+    _settle(guarded_page)
+    out = guarded_page.evaluate(SEASON_LABEL_BOXES_JS)
+    # Measuring never feeds back into another relayout: the hook has settled.
+    guarded_page.evaluate(_COUNT_JS)
+    _settle(guarded_page)
+    assert guarded_page.evaluate("window.__relayouts") == 0
+    assert guarded_page.evaluate(_WANT_JS)["annOk"]
+    assert out["count"] == 13
+    assert out["zeroWidth"] == 0
+    assert out["outside"] == 0
+    assert out["minGap"] >= 2, out
