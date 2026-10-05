@@ -8,6 +8,7 @@ America/New_York is UTC-4 (EDT) through 2026-11-01 02:00 local, then UTC-5
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -401,3 +402,62 @@ def test_save_state_round_trips_retry_pending(tmp_path: Path) -> None:
     )
     save_state(path, state)
     assert load_state(path) == state
+
+
+# -- last_build_at and IN-05 counting ---------------------------------------------------------
+
+
+def test_last_build_at_round_trips_and_defaults(tmp_path: Path) -> None:
+    path = tmp_path / "job_state.json"
+    path.write_text(
+        '{"version": 1, "season": 2026, "last_success_at": null, "last_attempt_at": null, '
+        '"last_status": null, "last_window_start": null}',
+        encoding="utf-8",
+    )
+    assert load_state(path).last_build_at is None
+    built = datetime(2026, 10, 8, 12, 0, tzinfo=UTC)
+    save_state(path, replace(load_state(path), last_build_at=built))
+    assert load_state(path).last_build_at == built
+
+
+def test_invalid_last_build_at_raises(tmp_path: Path) -> None:
+    path = tmp_path / "job_state.json"
+    path.write_text('{"version": 1, "last_build_at": "yesterday"}', encoding="utf-8")
+    with pytest.raises(VaultStateError):
+        load_state(path)
+
+
+def _state(success: datetime, attempt: datetime) -> JobState:
+    return JobState(
+        season=2026,
+        last_success_at=success,
+        last_attempt_at=attempt,
+        last_status="ok",
+        last_window_start=None,
+    )
+
+
+def test_missed_counts_from_last_attempt_when_attempt_equals_success() -> None:
+    sunday = datetime(2026, 10, 4, 10, 30, tzinfo=EASTERN)
+    now = datetime(2026, 10, 8, 9, 0, tzinfo=EASTERN)
+    window = catchup_window(_state(sunday, sunday), now, 2026, "manual")
+    assert window.missed_slots == 1
+    assert window.failed_slots == 0
+    assert window.start == sunday
+
+
+def test_failed_attempt_slot_counts_as_failed_not_missed() -> None:
+    sunday = datetime(2026, 10, 4, 10, 30, tzinfo=EASTERN)
+    wednesday = datetime(2026, 10, 7, 20, 30, tzinfo=EASTERN)
+    now = datetime(2026, 10, 8, 9, 0, tzinfo=EASTERN)
+    window = catchup_window(_state(sunday, wednesday), now, 2026, "manual")
+    assert window.missed_slots == 0
+    assert window.failed_slots == 1
+    assert window.start == sunday
+
+
+def test_schedule_trigger_excludes_its_own_slot() -> None:
+    sunday = datetime(2026, 10, 4, 10, 30, tzinfo=EASTERN)
+    now = datetime(2026, 10, 7, 20, 5, tzinfo=EASTERN)
+    window = catchup_window(_state(sunday, sunday), now, 2026, "schedule")
+    assert window.missed_slots == 0
