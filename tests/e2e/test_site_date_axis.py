@@ -6,11 +6,13 @@ url-state.js) against the synthetic fixture; nothing here needs a rendered chart
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from itertools import pairwise
 
 import pytest
-from playwright.sync_api import Page
+from playwright.sync_api import Page, expect
+from test_site_chart import _RING_VISIBLE, _hover_dot
 
 pytestmark = pytest.mark.e2e
 
@@ -316,3 +318,365 @@ def test_axis_url_round_trip_and_allowlist(app_page: Page) -> None:
     assert out["encDate"] == "?axis=date"
     assert out["encDefault"] == ""
     assert out["encSpread"] == ""
+
+
+# ---------------------------------------------------------------------------
+# Plan 02: the rendered Date axis (buildFigure branch + fitDateAxis hook)
+# ---------------------------------------------------------------------------
+
+_RELAYOUT_JS = "(r) => window.Plotly.relayout(document.getElementById('chart'), r)"
+_WAIT_TWO_FRAMES = "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
+
+_STATE_JS = """
+(patch) => { window.__testHooks.setState(patch); }
+"""
+
+_FIG_JS = """
+() => {
+  const gd = document.getElementById('chart');
+  const l = gd.layout;
+  const xs = [];
+  const byIdx = {};
+  for (const t of gd.data) {
+    for (const x of t.x) xs.push(x);
+    if (t.customdata) t.customdata.forEach((c, k) => { byIdx[c] = t.x[k]; });
+  }
+  const y = gd._fullLayout.yaxis.range.slice();
+  return {
+    title: l.xaxis.title ?? null,
+    range: gd._fullLayout.xaxis.range.slice(),
+    layoutRange: l.xaxis.range.slice(),
+    minallowed: l.xaxis.minallowed,
+    maxallowed: l.xaxis.maxallowed,
+    shapes: (l.shapes ?? []).map((s) => (
+      { x: s.x0, layer: s.layer, width: s.line.width, color: s.line.color })),
+    anns: (l.annotations ?? []).map((a) => ({
+      name: a.name ?? null, text: a.text, yref: a.yref, y: a.y, yanchor: a.yanchor,
+      capture: a.captureevents,
+      visible: a.visible, x: a.x, xshift: a.xshift,
+    })),
+    xs, byIdx, y,
+    uirevision: l.uirevision,
+    traces: gd.data.length,
+    tickvals: l.xaxis.tickvals,
+    ticktext: l.xaxis.ticktext,
+    captionHidden: document.getElementById('excitement-caption')?.hidden ?? true,
+  };
+}
+"""
+
+
+def _fig(page: Page) -> dict:  # type: ignore[type-arg]
+    page.evaluate(_WAIT_TWO_FRAMES)
+    page.wait_for_timeout(150)
+    return page.evaluate(_FIG_JS)  # type: ignore[no-any-return]
+
+
+@pytest.fixture
+def date_page(guarded_page: Page, open_app: Callable[[Page, str], None]) -> Page:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    open_app(guarded_page, "?axis=date")
+    return guarded_page
+
+
+def test_date_axis_has_no_title_zero_line_or_captions(date_page: Page) -> None:
+    f = _fig(date_page)
+    assert f["title"] is None
+    texts = [a["text"] for a in f["anns"]]
+    assert not {"N/A", "← favorite won", "underdog won →"} & set(texts)
+    assert f["captionHidden"] is True
+
+
+def test_no_na_strip_and_all_dots_plotted(date_page: Page) -> None:
+    f = _fig(date_page)
+    date_x = date_page.evaluate("Array.from(window.__testHooks.data.t.dateX)")
+    assert len(f["byIdx"]) + 0 <= len(date_x)
+    assert sorted(f["xs"]) == sorted(date_x)
+    assert len(f["xs"]) == 12
+    assert f["range"][0] <= min(f["xs"]) and f["range"][1] >= max(f["xs"])
+
+
+def test_gap_dividers_rendered(date_page: Page) -> None:
+    f = _fig(date_page)
+    assert f["layoutRange"] == [0, 278]
+    assert [s["x"] for s in f["shapes"]] == [76.5, 149.5, 243.5]
+    assert all(s["layer"] == "below" and s["width"] == 1 for s in f["shapes"])
+    assert len({s["color"] for s in f["shapes"]}) == 1
+
+
+def test_season_annotations_rendered(date_page: Page) -> None:
+    f = _fig(date_page)
+    anns = [a for a in f["anns"] if a["name"]]
+    assert [a["name"] for a in anns] == ["season-2019", "season-2021", "season-2025", "season-2026"]
+    assert all(a["yref"] == "paper" and a["y"] == 0 and a["yanchor"] == "top" for a in anns)
+    assert all(a["capture"] is False for a in anns)
+    assert all(a["text"].startswith("<b>") and a["text"].endswith("</b>") for a in anns)
+    assert anns[0]["text"] == "<b>2019</b>"
+
+
+@pytest.mark.parametrize("dots", ["fade", "hide"])
+def test_season_filter_limits_x_axis_fade_and_hide(date_page: Page, dots: str) -> None:
+    base = _fig(date_page)
+    date_page.evaluate(_STATE_JS, {"seasons": [2025, 2026], "dots": dots})
+    f = _fig(date_page)
+    assert f["layoutRange"] == [153, 278]
+    assert f["minallowed"] == 153 and f["maxallowed"] == 278
+    assert f["xs"] and min(f["xs"]) >= 153
+    assert [a["name"] for a in f["anns"] if a["name"]] == ["season-2025", "season-2026"]
+    assert [s["x"] for s in f["shapes"]] == [243.5]
+    assert f["y"] == base["y"]
+
+
+def test_single_season_range(date_page: Page) -> None:
+    date_page.evaluate(_STATE_JS, {"seasons": [2025, 2025]})
+    f = _fig(date_page)
+    assert f["layoutRange"] == [153, 240]
+    assert f["range"] == [153, 240]
+
+
+def test_spread_range_ignores_season_filter(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    base = _fig(guarded_page)
+    guarded_page.evaluate(_STATE_JS, {"seasons": [2025, 2026]})
+    f = _fig(guarded_page)
+    assert f["layoutRange"] == base["layoutRange"]
+    assert len(f["xs"]) == len(base["xs"])
+    assert f["minallowed"] is None
+
+
+def test_uirevision_keys(date_page: Page) -> None:
+    assert _fig(date_page)["uirevision"] == "date:all"
+    date_page.evaluate(_STATE_JS, {"seasons": [2025, 2026]})
+    assert _fig(date_page)["uirevision"] == "date:2025-2026"
+    date_page.evaluate(_STATE_JS, {"axis": "spread", "seasons": None})
+    assert _fig(date_page)["uirevision"] == "spread"
+
+
+def test_trace_count_constant_across_axes(date_page: Page) -> None:
+    for patch in ({}, {"school": [date_page.evaluate("window.__testHooks.data.teamSlugs[0]")]}):
+        counts = []
+        for axis in ("spread", "excitement", "date"):
+            date_page.evaluate(_STATE_JS, {"axis": axis, **patch})
+            counts.append(_fig(date_page)["traces"])
+        assert len(set(counts)) == 1, counts
+        date_page.evaluate(_STATE_JS, {"school": []})
+
+
+def test_block_geometry_ignores_non_season_filters(date_page: Page) -> None:
+    base = _fig(date_page)
+    slug = date_page.evaluate("window.__testHooks.data.teamSlugs[0]")
+    date_page.evaluate(_STATE_JS, {"school": [slug]})
+    f = _fig(date_page)
+    assert f["layoutRange"] == base["layoutRange"]
+    for k, x in f["byIdx"].items():
+        assert base["byIdx"].get(k, x) == x
+    date_page.evaluate(_STATE_JS, {"school": [], "slots": ["primetime"]})
+    f = _fig(date_page)
+    assert f["layoutRange"] == base["layoutRange"]
+    assert [s["x"] for s in f["shapes"]] == [76.5, 149.5, 243.5]
+
+
+def test_tooltip_ring_and_modal_on_date(date_page: Page) -> None:
+    expected = date_page.evaluate(
+        "async () => { const F = await import('./modules/format.js');"
+        " return F.axisValueText(window.__testHooks.data, 0, 'date'); }"
+    )
+    assert expected.startswith("Spread:") and "Excitement:" in expected
+    point = _hover_dot(date_page, 0)
+    tip = date_page.locator("#chart-tooltip")
+    assert expected in tip.inner_text()
+    assert tip.bounding_box()["width"] <= 320  # type: ignore[index]
+    ring = date_page.locator(_RING_VISIBLE).first
+    if ring.count():
+        box = ring.bounding_box()
+        assert box is not None
+        assert abs(box["x"] + box["width"] / 2 - point["x"]) <= 1.5
+    date_page.evaluate("window.__testHooks.openPanel(0)")
+    expect(date_page.locator("#panel-body")).to_contain_text(expected)
+
+
+# -- fitDateAxis hook --------------------------------------------------------
+
+_WANT_JS = """
+async () => {
+  const A = await import('./modules/date-axis.js');
+  const gd = document.getElementById('chart');
+  const m = gd.boothDateAxis;
+  const xa = gd._fullLayout.xaxis;
+  const want = A.dateAxisLabels(m.blocks, xa.range, xa._length, { mobile: m.mobile });
+  const r4 = (a) => a.map((v) => Math.round(v * 1e4) / 1e4);
+  return {
+    tickOk: JSON.stringify(r4(gd.layout.xaxis.tickvals)) === JSON.stringify(r4(want.tickvals))
+      && JSON.stringify(gd.layout.xaxis.ticktext) === JSON.stringify(want.ticktext),
+    annOk: want.seasons.every((s) => {
+      const a = gd.layout.annotations.find((q) => q.name === 'season-' + s.season);
+      return a && Math.abs(a.x - s.x) < 0.02 && Math.abs(a.xshift - s.xshift) <= 0.5
+        && a.text === '<b>' + s.label + '</b>' && (a.visible ?? true) === s.visible;
+    }),
+    ticktext: gd.layout.xaxis.ticktext,
+    visibleSeasons: want.seasons.filter((s) => s.visible).length,
+  };
+}
+"""
+
+_COUNT_JS = """
+() => {
+  const gd = document.getElementById('chart');
+  window.__relayouts = 0;
+  gd.on('plotly_relayout', () => { window.__relayouts += 1; });
+}
+"""
+
+
+def _settle(page: Page) -> None:
+    page.evaluate(_WAIT_TWO_FRAMES)
+    page.wait_for_timeout(400)
+
+
+def test_fit_hook_matches_pure_rule(date_page: Page) -> None:
+    _settle(date_page)
+    out = date_page.evaluate(_WANT_JS)
+    assert out["tickOk"] and out["annOk"]
+    date_page.evaluate(_STATE_JS, {"seasons": [2025, 2026]})
+    _settle(date_page)
+    out = date_page.evaluate(_WANT_JS)
+    assert out["tickOk"] and out["annOk"]
+
+
+def test_fit_hook_settles(date_page: Page) -> None:
+    _settle(date_page)
+    date_page.evaluate(_COUNT_JS)
+    date_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [153, 200]})
+    _settle(date_page)
+    first = date_page.evaluate("window.__relayouts")
+    date_page.evaluate(_WAIT_TWO_FRAMES)
+    date_page.evaluate(_WAIT_TWO_FRAMES)
+    date_page.wait_for_timeout(300)
+    assert date_page.evaluate("window.__relayouts") == first
+    assert first <= 4
+
+
+def test_label_tiers_desktop_and_phone(
+    date_page: Page, mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    date_page.evaluate(_STATE_JS, {"seasons": [2025, 2025]})
+    _settle(date_page)
+    out = date_page.evaluate(_WANT_JS)
+    texts = [t for t in out["ticktext"] if t]
+    assert texts and all(re.fullmatch(r"[A-Z][a-z]{2} \d{1,2}", t) for t in texts), texts
+
+    mobile_page.set_viewport_size({"width": 360, "height": 800})
+    open_app(mobile_page, "?axis=date")
+    mobile_page.evaluate(_STATE_JS, {"seasons": [2025, 2025]})
+    _settle(mobile_page)
+    texts = [t for t in mobile_page.evaluate(_WANT_JS)["ticktext"] if t]
+    assert texts and all(re.fullmatch(r"[A-Z][a-z]{2}", t) for t in texts), texts
+    mobile_page.evaluate(_STATE_JS, {"seasons": None})
+    _settle(mobile_page)
+    texts = mobile_page.evaluate(_WANT_JS)["ticktext"]
+    assert all(t == "" for t in texts)
+
+
+def test_phone_season_labels_fit_without_overlap(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    mobile_page.set_viewport_size({"width": 360, "height": 800})
+    open_app(mobile_page, "?axis=date")
+    _settle(mobile_page)
+    out = mobile_page.evaluate(_WANT_JS)
+    assert out["visibleSeasons"] == 4
+    boxes = mobile_page.evaluate(
+        """() => {
+          const svg = document.querySelector('#chart svg.main-svg').getBoundingClientRect();
+          return [...document.querySelectorAll('#chart .annotation')]
+            .filter((el) => /^\\d{2,4}$/.test(el.textContent.trim()))
+            .map((el) => { const r = el.getBoundingClientRect();
+              const inside = r.left >= svg.left - 0.5 && r.right <= svg.right + 0.5;
+              return { l: r.left, r: r.right, inside }; })
+            .sort((a, b) => a.l - b.l);
+        }"""
+    )
+    assert len(boxes) == 4
+    assert all(b["inside"] for b in boxes)
+    for a, b in pairwise(boxes):
+        assert a["r"] <= b["l"] + 0.5
+
+
+def test_labels_recompute_on_zoom_and_resize(date_page: Page) -> None:
+    _settle(date_page)
+    before = date_page.evaluate(_WANT_JS)["ticktext"]
+    date_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [153, 200]})
+    _settle(date_page)
+    out = date_page.evaluate(_WANT_JS)
+    assert out["tickOk"] and out["annOk"]
+    assert out["ticktext"] != before
+    date_page.set_viewport_size({"width": 700, "height": 900})
+    _settle(date_page)
+    out = date_page.evaluate(_WANT_JS)
+    assert out["tickOk"] and out["annOk"]
+
+
+def test_autoscale_and_pan_clamp_to_filtered_range(date_page: Page) -> None:
+    date_page.evaluate(_STATE_JS, {"seasons": [2025, 2026]})
+    _settle(date_page)
+    date_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [100, 300]})
+    _settle(date_page)
+    lo, hi = date_page.evaluate("document.getElementById('chart')._fullLayout.xaxis.range")
+    assert lo >= 153 - 1e-6 and hi <= 278 + 1e-6
+    date_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [160, 200]})
+    _settle(date_page)
+    date_page.evaluate(_RELAYOUT_JS, {"xaxis.autorange": True})
+    _settle(date_page)
+    res = date_page.evaluate(
+        "() => { const gd = document.getElementById('chart');"
+        " return { r: gd._fullLayout.xaxis.range, auto: gd._fullLayout.xaxis.autorange }; }"
+    )
+    assert res["auto"] is False
+    assert res["r"] == [153, 278]
+
+
+def test_season_change_resets_zoom_other_filters_keep_it(date_page: Page) -> None:
+    _settle(date_page)
+    date_page.locator("#chart").scroll_into_view_if_needed()
+    box = date_page.evaluate(
+        "() => { const gd = document.getElementById('chart'); const r = gd.getBoundingClientRect();"
+        " const s = gd._fullLayout._size;"
+        " const x = r.left + s.l; const y = r.top + s.t + s.h * 0.5;"
+        " return { x0: x + s.w * 0.3, x1: x + s.w * 0.6, y }; }"
+    )
+    date_page.mouse.move(box["x0"], box["y"])
+    date_page.mouse.down()
+    date_page.mouse.move(box["x1"], box["y"], steps=8)
+    date_page.mouse.up()
+    _settle(date_page)
+    zoomed = date_page.evaluate("document.getElementById('chart')._fullLayout.xaxis.range")
+    assert zoomed[1] - zoomed[0] < 278 * 0.5
+    slug = date_page.evaluate("window.__testHooks.data.teamSlugs[0]")
+    date_page.evaluate(_STATE_JS, {"school": [slug]})
+    _settle(date_page)
+    kept = date_page.evaluate("document.getElementById('chart')._fullLayout.xaxis.range")
+    assert kept == pytest.approx(zoomed, abs=1e-6)
+    date_page.evaluate(_STATE_JS, {"school": [], "seasons": [2025, 2026]})
+    _settle(date_page)
+    assert date_page.evaluate("document.getElementById('chart')._fullLayout.xaxis.range") == [
+        153,
+        278,
+    ]
+    date_page.evaluate(_STATE_JS, {"axis": "spread", "seasons": None})
+    _settle(date_page)
+    rng = date_page.evaluate("document.getElementById('chart').layout.xaxis.range")
+    assert date_page.evaluate(
+        "document.getElementById('chart')._fullLayout.xaxis.range"
+    ) == pytest.approx(rng, abs=1e-6)
+
+
+def test_hook_noop_off_date(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
+    open_app(guarded_page, "")
+    _settle(guarded_page)
+    guarded_page.evaluate(_COUNT_JS)
+    guarded_page.evaluate(_WAIT_TWO_FRAMES)
+    guarded_page.wait_for_timeout(300)
+    assert guarded_page.evaluate("window.__relayouts") == 0
+    assert guarded_page.evaluate("document.getElementById('chart').boothDateAxis") is None
