@@ -23,6 +23,7 @@ def _info(page: Page) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = page.evaluate(
         "() => document.getElementById('chart').data.map(t => ({meta: String(t.meta),"
         " size: t.marker.size, opacity: t.marker.opacity, hoverinfo: t.hoverinfo,"
+        " line: t.marker.line,"
         " n: (t.x || []).length}))"
     )
     return result
@@ -124,3 +125,27 @@ def test_hover_ring_grows_four_pixels_with_the_dot(
     guarded_page.wait_for_selector(_RING_VISIBLE, timeout=3000)
     big = _assert_ring_on(guarded_page, 0, point)["width"]
     assert abs(big - (small + 4)) <= 0.5, (small, big)
+
+
+def test_enlarged_dots_get_a_black_outline_only_when_filtered(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    assert {t["line"]["width"] for t in _family(guarded_page)} == {0}
+    for query in (FILTER, BOTH, HIDE):
+        open_app(guarded_page, query)
+        fam = _family(guarded_page)
+        assert {t["line"]["width"] for t in fam} == {1}, query
+        assert {t["line"]["color"] for t in fam} == {"#000000"}, query
+        assert {t["line"]["width"] for t in _inert(guarded_page)} == {0}, query
+
+
+def test_highlight_keeps_accent_border(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, BOTH)
+    accent = guarded_page.evaluate(
+        "() => document.getElementById('chart').data"
+        ".find(t => t.meta === 'highlight').marker.line.color"
+    )
+    assert accent in ("#111827", "#E5E7EB")

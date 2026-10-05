@@ -34,7 +34,7 @@
  * importable from node for quick checks.
  */
 
-import { ACCENT, DIVIDER, FAMILY_COLORS, MUTED, PAGE_BG, SURFACE, ZERO_LINE, familyKey } from './palette.js';
+import { ACCENT, DIVIDER, DOT_OUTLINE, FAMILY_COLORS, MUTED, PAGE_BG, SURFACE, ZERO_LINE, familyKey } from './palette.js';
 import { MINUS, escapeHover, logTicks, niceLinearTicks } from './format.js';
 import { tooltipModel } from './tooltip.js';
 
@@ -243,9 +243,11 @@ export function buildFigure(data, view, state, env) {
         // D-13/D-14 (04.10): with a filter active, passing dots take the announcer-selected
         // size; filtered-out (inert) dots stay 6; under a person this trace holds the
         // passing-not-theirs dots, which stay inert at activeUnderPerson opacity.
+        // Enlarged dots also get a 1px black outline (theme-independent) to separate
+        // overlapping 10px dots; unfiltered 6px dots stay borderless.
         size: view.filterActive ? 10 : 6,
         opacity: view.hasPersonSelection ? DOT_OPACITY.activeUnderPerson : DOT_OPACITY.active,
-        line: { width: 0 },
+        line: { width: view.filterActive ? 1 : 0, color: DOT_OUTLINE },
       },
     });
   }

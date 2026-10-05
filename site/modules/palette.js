@@ -102,6 +102,9 @@ export const FAMILY_COLORS = {
 export const ACCENT = { light: '#111827', dark: '#E5E7EB' };
 
 /** Result-vs-spread zero line: a step darker than DIVIDER gridlines, lighter than MUTED text (D-02). */
+/** Outline on enlarged (filter-passing) dots; same in light and dark. */
+export const DOT_OUTLINE = '#000000';
+
 export const ZERO_LINE = { light: '#9CA3AF', dark: '#6B7280' };
 
 /** UI chrome divider/border token per theme. */
