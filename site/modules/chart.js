@@ -240,7 +240,10 @@ export function buildFigure(data, view, state, env) {
       hoverlabel: { bordercolor: FAMILY_COLORS[theme][family] },
       marker: {
         color: FAMILY_COLORS[theme][family],
-        size: 6,
+        // D-13/D-14 (04.10): with a filter active, passing dots take the announcer-selected
+        // size; filtered-out (inert) dots stay 6; under a person this trace holds the
+        // passing-not-theirs dots, which stay inert at activeUnderPerson opacity.
+        size: view.filterActive ? 10 : 6,
         opacity: view.hasPersonSelection ? DOT_OPACITY.activeUnderPerson : DOT_OPACITY.active,
         line: { width: 0 },
       },
