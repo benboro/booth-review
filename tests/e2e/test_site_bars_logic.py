@@ -970,3 +970,80 @@ def test_team_bar_drill_is_a_no_op_under_head_to_head(guarded_page: Page, site_u
     assert (
         _drill(guarded_page, {**_H2H, "view": "bars"}, {"kind": "team", "slug": "lakeview"}) is None
     )
+
+
+_NF = {"view": "bars", "school": ["northfield"]}
+
+
+@pytest.mark.parametrize(
+    ("partial", "expected"),
+    [
+        (
+            {**_NF, "game": "harbor-bowl"},
+            "Announcers by rated telecasts of the Harbor Bowl with Northfield",
+        ),
+        (
+            {"view": "bars", "people": ["kris-venn"], "by": "team", "game": "bridge-game"},
+            "Teams by rated telecasts of The Bridge Game with Kris Venn",
+        ),
+        (
+            {"view": "bars", "people": ["kris-venn"], "by": "conference", "game": "harbor-bowl"},
+            "Conferences by team in the Harbor Bowl with Kris Venn",
+        ),
+        (
+            {**_NF, "by": "network", "game": "lakeshore"},
+            "Network families by announcer in the Lakeshore Rivalry with Northfield",
+        ),
+        (
+            {"view": "bars", "game": "harbor-bowl"},
+            "Announcers by rated telecasts of the Harbor Bowl",
+        ),
+        (
+            {"view": "bars", "game": "lakeshore", "by": "network"},
+            "Network families by announcer in the Lakeshore Rivalry",
+        ),
+        (
+            {"view": "bars", "game": "cfp-semifinal"},
+            "Announcers by rated telecasts of CFP semifinals",
+        ),
+        (
+            {**_NF, "game": "cfp-semifinal"},
+            "Announcers by rated telecasts of CFP semifinals with Northfield",
+        ),
+        (
+            {**_NF, "game": "cfp-national-championship"},
+            "Announcers by rated telecasts of CFP national championships with Northfield",
+        ),
+        (
+            {**_NF, "game": "cfp-first-round"},
+            "Announcers by rated telecasts of CFP first round games with Northfield",
+        ),
+        (
+            {"view": "bars", "people": ["dale-harlow"], "by": "team", "game": "lakeshore"},
+            "Teams by rated telecasts of the Lakeshore Rivalry with Dale Harlow",
+        ),
+        (
+            {**_H2H, "view": "bars", "game": "harbor-bowl"},
+            f"Announcers by rated telecasts of the Harbor Bowl {_MATCHUP}",
+        ),
+        (
+            {**_NF, "game": "harbor-bowl", "networks": ["net-a"]},
+            "Announcers by rated telecasts of the Harbor Bowl with Northfield on Alpha Sports",
+        ),
+        (
+            {
+                "view": "butterfly",
+                "people": ["dale-harlow", "casey-lund"],
+                "game": "harbor-bowl",
+            },
+            "Teams: Dale Harlow and Casey Lund of the Harbor Bowl",
+        ),
+    ],
+)
+def test_game_titles_name_the_picked_game(
+    guarded_page: Page, site_url: str, partial: dict[str, Any], expected: str
+) -> None:
+    _load(guarded_page, site_url)
+    title = guarded_page.evaluate(_TITLE_JS, partial)["title"]
+    assert title == expected
+    assert " the " + "The " not in title

@@ -1,11 +1,13 @@
 /**
- * Filter toolbar: an Announcers popover plus seven filter popovers (Seasons,
- * Networks, Kickoff, Role, Conference, School, Bowls/Playoffs) above the
+ * Filter toolbar: an Announcers popover plus eight filter popovers (Seasons,
+ * Networks, Kickoff, Role, Conference, School, Bowls/Playoffs, Game) above the
  * chart, plus "Clear all filters" and a full-height phone bottom sheet that
  * stacks every section, Announcers first (SITE-20, SITE-21, SITE-22,
  * SITE-24, SITE-27; D-02, D-03, D-10, D-11, D-18, D-21, D-27). The School popover
  * also holds the Either team / Head-to-head control, shown with exactly two
- * schools (04.7 D-11..D-14).
+ * schools (04.7 D-11..D-14). The Game popover is a searchable, sectioned radio
+ * list of named games (playoff rounds, bowls, rivalries) built from `data.games`
+ * (04.9 D-01..D-06); one pick at a time, written only through setState.
  *
  * D-21: the Announcers popover holds the moved person-search combobox
  * (`site/modules/topbar.js` still owns its search/add-person behavior; this
@@ -26,10 +28,10 @@
  * names always land in the DOM via textContent.
  */
 
-import { normalizeName } from './data.js';
+import { gameKeyMatches, gameSearchKey, normalizeName } from './data.js';
 import { FAMILY_LABELS } from './palette.js';
 import { offeredFamilyIds } from './select.js';
-import { SLOT_SHORT_LABELS, ROLE_LABELS } from './format.js';
+import { SLOT_SHORT_LABELS, ROLE_LABELS, gameRowTitle } from './format.js';
 
 const ROLE_HELPER_TEXT = 'Limits matches to main-broadcast play-by-play or analyst roles.';
 
@@ -43,10 +45,11 @@ const SECTION_POPOVERS = [
   ['filter-conference', 'pop-conference'],
   ['filter-school', 'pop-school'],
   ['filter-postseason', 'pop-postseason'],
+  ['filter-game', 'pop-game'],
 ];
 
 /** Toolbar trigger names, in toolbar order -- also `#trigger-{name}`'s id suffix. */
-const TRIGGER_NAMES = ['announcers', 'seasons', 'networks', 'kickoff', 'role', 'conference', 'school', 'postseason'];
+const TRIGGER_NAMES = ['announcers', 'seasons', 'networks', 'kickoff', 'role', 'conference', 'school', 'postseason', 'game'];
 
 /**
  * Per-group reset patches (A4), keyed by trigger name and applied through
@@ -62,6 +65,7 @@ const GROUP_RESETS = {
   conference: { conferences: [] },
   school: { school: [], h2h: false },
   postseason: { postseason: 'all' },
+  game: { game: null },
 };
 
 /** Bowls/Playoffs radio values, in the DOM order they appear in `#postseason-options`. */
@@ -87,6 +91,22 @@ let schoolCheckboxes = new Map();
 
 /** team slug -> its search keys (from `data.teamKeys`), populated once by `buildSchoolList`. */
 let schoolKeysBySlug = new Map();
+
+/** game slug -> its radio row button, populated once by `buildGameList`. */
+let gameRows = new Map();
+
+/** game slug -> its `data.games` entry, populated once by `buildGameList`. */
+let gameBySlug = new Map();
+
+/** Section order and header text of the Game list (04.9 D-02). */
+const GAME_SECTIONS = [
+  ['playoff', 'PLAYOFF'],
+  ['bowls', 'BOWLS'],
+  ['rivalries', 'RIVALRIES'],
+];
+
+/** The longest query echoed in the empty-search line (04.9 D-04). */
+const GAME_QUERY_ECHO_MAX = 40;
 
 /** Network ids for every primary network in a given family. */
 function familyNetworkIds(data, familyKeyVal) {
@@ -378,6 +398,162 @@ function buildSchoolList(data) {
   els.schoolList.append(...rows);
 }
 
+/** Builds the Game popover's sectioned radio list once, from `data.games` (04.9 D-02). */
+function buildGameList(data) {
+  gameRows = new Map();
+  gameBySlug = new Map(data.games.map((g) => [g.slug, g]));
+  const groups = [];
+  for (const [section, header] of GAME_SECTIONS) {
+    const games = data.games.filter((g) => g.section === section);
+    if (games.length === 0) continue;
+    const group = document.createElement('div');
+    group.setAttribute('role', 'group');
+    group.dataset.gameSection = section;
+    const head = document.createElement('div');
+    head.className = 'game-section-head';
+    head.id = `game-head-${section}`;
+    head.textContent = header;
+    group.setAttribute('aria-labelledby', head.id);
+    group.appendChild(head);
+    for (const game of games) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.setAttribute('role', 'radio');
+      btn.setAttribute('aria-checked', 'false');
+      btn.tabIndex = -1;
+      btn.dataset.game = game.slug;
+      btn.dataset.searchHidden = 'false';
+      btn.dataset.facetHidden = 'false';
+      const label = document.createElement('span');
+      label.className = 'game-label';
+      label.textContent = game.label;
+      btn.append(label, ...makeCountSpans());
+      group.appendChild(btn);
+      gameRows.set(game.slug, btn);
+    }
+    groups.push(group);
+  }
+  els.gameOptions.replaceChildren(...groups);
+}
+
+/** Every Game row currently visible, in DOM order. */
+function visibleGameRows() {
+  return Array.from(els.gameOptions.querySelectorAll('[data-game]:not([hidden])'));
+}
+
+/**
+ * The empty-list line (04.9 D-04, WR-04), or null while any row shows. A row
+ * hides for two reasons, search and a zero count, so the line says which: no
+ * game matches the query at all, games match but the other filters leave them
+ * at zero, or (no query) the other filters leave every game at zero.
+ * @param {string} query - the raw search box text.
+ * @param {number} visible - rows currently shown.
+ * @param {boolean} anySearchMatch - whether any row matches the query.
+ * @returns {string|null}
+ */
+function gameEmptyLine(query, visible, anySearchMatch) {
+  if (visible > 0) return null;
+  const q = query.trim();
+  if (q === '') return 'No games match these filters.';
+  const shown = q.length > GAME_QUERY_ECHO_MAX ? `${q.slice(0, GAME_QUERY_ECHO_MAX)}...` : q;
+  return anySearchMatch ? `No games match "${shown}" with these filters.` : `No games match "${shown}".`;
+}
+
+/**
+ * Hides empty section groups, shows the empty-list line, and recomputes the roving
+ * tab stop: the checked visible row, else the first visible row (04.9 D-03, D-04).
+ */
+function syncGameChrome(query) {
+  for (const group of els.gameOptions.querySelectorAll('[data-game-section]')) {
+    group.hidden = group.querySelector('[data-game]:not([hidden])') == null;
+  }
+  const rows = visibleGameRows();
+  const anySearchMatch = Array.from(gameRows.values()).some(
+    (r) => r.dataset.searchHidden !== 'true',
+  );
+  const line = gameEmptyLine(query, rows.length, anySearchMatch);
+  if (line != null) {
+    els.gameEmpty.textContent = line;
+    els.gameEmpty.hidden = false;
+  } else {
+    els.gameEmpty.hidden = true;
+  }
+  const stop = rows.find((r) => r.getAttribute('aria-checked') === 'true') ?? rows[0];
+  for (const btn of gameRows.values()) btn.tabIndex = btn === stop ? 0 : -1;
+  syncGameTooltips();
+}
+
+/**
+ * Desktop-only hover titles on Game rows (D-06, WR-03): rivalry rows name their
+ * teams, and a row whose label is cut off by the ellipsis also gets its full
+ * name. Truncation is measured, so this reruns whenever rows can change size or
+ * visibility: on every render and search, when the popover or sheet opens, and
+ * on resize. Without hover (phones), no row has a title.
+ */
+function syncGameTooltips() {
+  const hoverCapable = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  // Measure every row before writing any title, so layout is read once.
+  const tips = Array.from(gameRows, ([slug, row]) => {
+    if (!hoverCapable) return [row, null];
+    const label = row.querySelector('.game-label');
+    return [row, gameRowTitle(gameBySlug.get(slug), label.scrollWidth > label.clientWidth)];
+  });
+  for (const [row, tip] of tips) {
+    if (tip) row.setAttribute('title', tip);
+    else row.removeAttribute('title');
+  }
+}
+
+/** Hides Game rows whose search keys do not contain the folded query (04.9 D-04). */
+function filterGameRows(data, query) {
+  const q = gameSearchKey(query);
+  for (const game of data.games) {
+    const row = gameRows.get(game.slug);
+    row.dataset.searchHidden =
+      q !== '' && !game.keys.some((k) => gameKeyMatches(k, q)) ? 'true' : 'false';
+    syncRowHidden(row);
+  }
+  syncGameChrome(query);
+}
+
+/**
+ * Radiogroup keyboard for the Game list (04.9 D-03): arrows move focus and
+ * selection together across visible rows without wrapping; Home/End jump to the
+ * ends; ArrowUp from the first row returns to the search box; ArrowDown in the
+ * search box focuses the first visible row.
+ */
+function bindGameKeyboard(setState) {
+  els.gameSearch.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'ArrowDown') return;
+    const rows = visibleGameRows();
+    if (rows.length === 0) return;
+    ev.preventDefault();
+    rows[0].focus();
+  });
+  els.gameOptions.addEventListener('keydown', (ev) => {
+    const key = ev.key;
+    if (!['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown', 'Home', 'End'].includes(key)) return;
+    const target = ev.target;
+    if (!(target instanceof HTMLElement) || !target.dataset.game) return;
+    const rows = visibleGameRows();
+    const idx = rows.indexOf(target);
+    if (idx === -1) return;
+    ev.preventDefault();
+    let next;
+    if (key === 'Home') next = 0;
+    else if (key === 'End') next = rows.length - 1;
+    else if (key === 'ArrowDown' || key === 'ArrowRight') next = Math.min(idx + 1, rows.length - 1);
+    else if (idx === 0) {
+      els.gameSearch.focus();
+      return;
+    } else next = idx - 1;
+    const slug = rows[next].dataset.game;
+    setState({ game: slug });
+    // setState -> render() runs synchronously, so the roving tabindex is current.
+    gameRows.get(slug)?.focus();
+  });
+}
+
 /** Hides checklist rows whose keys (via `keysFor`) don't contain the normalized query. */
 function filterChecklist(listEl, query, keysFor) {
   const q = normalizeName(query);
@@ -621,6 +797,9 @@ export function initFilters({ data, getState, setState }) {
     schoolMatch: document.getElementById('school-match'),
     schoolList: document.getElementById('school-list'),
     postseasonOptions: document.getElementById('postseason-options'),
+    gameSearch: document.getElementById('game-search'),
+    gameOptions: document.getElementById('game-options'),
+    gameEmpty: document.getElementById('game-empty'),
     clearFilters: document.getElementById('clear-filters'),
     filtersButton: document.getElementById('filters-button'),
     filtersShowResults: document.getElementById('filters-show-results'),
@@ -636,6 +815,7 @@ export function initFilters({ data, getState, setState }) {
   buildRoleHelper();
   buildConferenceList(data);
   buildSchoolList(data);
+  buildGameList(data);
   buildOnlyButtons();
 
   const onSeasonChange = (ev) => {
@@ -697,6 +877,14 @@ export function initFilters({ data, getState, setState }) {
   });
   bindPostseasonKeyboard(setState);
 
+  els.gameSearch.addEventListener('input', () => filterGameRows(data, els.gameSearch.value));
+  els.gameOptions.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('[data-game]');
+    if (!btn) return;
+    setState({ game: btn.dataset.game });
+  });
+  bindGameKeyboard(setState);
+
   els.clearFilters.addEventListener('click', () => {
     // D-27 (overrides the earlier "people are not cleared" proposal): Clear all
     // filters also removes every selected announcer, compare mode, and
@@ -723,10 +911,16 @@ export function initFilters({ data, getState, setState }) {
   for (const popover of document.querySelectorAll('.filter-popover, .filters-sheet')) {
     bindPopoverMechanics(popover);
   }
+  // Row labels only have a measurable width while their container is shown (WR-03).
+  for (const id of ['pop-game', 'filters-sheet']) {
+    document.getElementById(id).addEventListener('toggle', (ev) => {
+      if (ev.newState === 'open') syncGameTooltips();
+    });
+  }
   window.addEventListener('scroll', repositionOpenPopovers, { passive: true });
   window.addEventListener('resize', () => {
-    if (lastView) fitSchoolTrigger(data, getState(), lastView);
     repositionOpenPopovers();
+    syncGameTooltips();
   });
 
   const mobileMedia = window.matchMedia('(max-width: 640px)');
@@ -920,6 +1114,24 @@ function renderPostseason(state, view) {
   }
 }
 
+/**
+ * Syncs the Game radio list (04.9 D-03, D-05, D-06, D-19): aria-checked, counts,
+ * zero-count rows hidden unless they are the pick, and (via syncGameChrome) the
+ * desktop-only row tooltips. The pick stays checked and greyed at (0) when other
+ * filters empty it.
+ */
+function renderGame(data, state, view) {
+  for (const game of data.games) {
+    const row = gameRows.get(game.slug);
+    const checked = game.slug === state.game;
+    row.setAttribute('aria-checked', String(checked));
+    const count = view.facets.games[game.index] ?? 0;
+    setCount(row, count);
+    setFacetHidden(row, count === 0 && !checked);
+  }
+  syncGameChrome(els.gameSearch.value);
+}
+
 /** A toolbar trigger's label and active state, from `state` (D-02 copywriting).
  * D-36: the Networks count is the checked rows among the rows shown in the list. */
 function triggerInfo(name, data, state, view) {
@@ -971,6 +1183,11 @@ function triggerInfo(name, data, state, view) {
     const label = state.postseason === 'exclude' ? 'Bowls/Playoffs: Exclude' : 'Bowls/Playoffs: Only';
     return { label, active: true };
   }
+  if (name === 'game') {
+    const idx = state.game != null ? data.gameIndexBySlug.get(state.game) : undefined;
+    if (idx === undefined) return { label: 'Game', active: false };
+    return { label: `Game: ${data.games[idx].label}`, active: true };
+  }
   return { label: name, active: false };
 }
 
@@ -981,55 +1198,10 @@ function renderTriggers(data, state, view) {
     const { label, active } = triggerInfo(name, data, state, view);
     btn.textContent = label;
     btn.dataset.active = active ? 'true' : 'false';
-    if (name === 'school') {
-      if (state.h2h === true && state.school.length === 2) {
-        btn.setAttribute('title', label);
-        btn.setAttribute('aria-label', label);
-      } else {
-        btn.removeAttribute('title');
-        btn.removeAttribute('aria-label');
-      }
-    }
+    // The full label is always available; long ones truncate in their grid cell (04.9 D-21).
+    btn.setAttribute('title', label);
+    btn.setAttribute('aria-label', label);
   }
-  fitSchoolTrigger(data, state, view);
-}
-
-/**
- * Keeps a Head-to-head "School: A vs B" label from re-wrapping the toolbar
- * (SITE-20). The label may grow only into the free space at the end of the
- * School button's toolbar line, measured with the Either-team label ("School · 2")
- * in place, so toggling Head-to-head moves no other button and nothing below the
- * toolbar. A longer label truncates with an ellipsis; the full text is the
- * button's `title` and `aria-label` (renderTriggers). Runs after every trigger
- * label is written, and again on resize, since the free space depends on both.
- */
-function fitSchoolTrigger(data, state, view) {
-  const btn = els.triggers.school;
-  btn.style.removeProperty('min-width');
-  btn.style.removeProperty('max-width');
-  // Phones hide the toolbar triggers (the Filters sheet replaces them).
-  if (!(state.h2h === true && state.school.length === 2) || btn.offsetParent === null) return;
-  const h2hLabel = btn.textContent;
-  const cssMax = parseFloat(getComputedStyle(btn).maxWidth);
-  btn.textContent = triggerInfo('school', data, { ...state, h2h: false }, view).label;
-  const base = btn.getBoundingClientRect();
-  let lineRight = base.right;
-  for (const el of els.toolbar.children) {
-    if (el.offsetParent === null) continue;
-    const rect = el.getBoundingClientRect();
-    if (Math.abs(rect.top - base.top) < 1) lineRight = Math.max(lineRight, rect.right);
-  }
-  const toolbarStyle = getComputedStyle(els.toolbar);
-  const contentRight =
-    els.toolbar.getBoundingClientRect().right -
-    parseFloat(toolbarStyle.paddingRight) -
-    parseFloat(toolbarStyle.borderRightWidth);
-  // 1px under the measured room absorbs sub-pixel rounding.
-  const room = Math.max(0, Math.floor(contentRight - lineRight) - 1);
-  const width = Math.floor(base.width) + room;
-  btn.style.minWidth = `${Math.floor(base.width)}px`;
-  btn.style.maxWidth = `${Number.isFinite(cssMax) ? Math.min(cssMax, width) : width}px`;
-  btn.textContent = h2hLabel;
 }
 
 /** Counts the active filters, for the mobile Filters(N) button (extends SITE-18's rail-era count).
@@ -1046,6 +1218,7 @@ function activeFilterCount(data, state, view) {
   if (state.conferences.length > 0) n += 1;
   if (state.school.length > 0) n += 1;
   if (state.postseason !== 'all') n += 1;
+  if (triggerInfo('game', data, state, view).active) n += 1;
   n += state.people.length;
   return n;
 }
@@ -1085,6 +1258,7 @@ export function renderFilters({ data, state, view }) {
   renderConferences(state, view);
   renderSchool(data, state, view);
   renderPostseason(state, view);
+  renderGame(data, state, view);
   renderOnlyButtons(data, state, view);
   renderTriggers(data, state, view);
   renderGroupResets(data, state, view);

@@ -547,10 +547,8 @@ body.app {
      `--text` token, failing WCAG AA 4.5:1 in dark mode against `--bg`. */
   color: var(--text);
   cursor: pointer;
-  /* A long "School: A vs B" label truncates instead of widening the toolbar
-     (04.7 D-13). Under Head-to-head, filters.js `fitSchoolTrigger` narrows the
-     School button further, to the room left on its toolbar line, so toggling
-     Head-to-head never re-wraps the toolbar (SITE-20). */
+  /* Labels truncate in their grid cell; the full label is the button's title
+     and aria-label (04.9 D-21). */
   max-width: 320px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -584,6 +582,54 @@ body.app {
   background: transparent;
   color: var(--reset);
   cursor: pointer;
+}
+
+/* D-21: above 640px the toolbar is a grid of equal cells, so its row count
+   depends only on the viewport width and the visitor's font, never on a
+   filter label. toolbar-fit.js sets `--toolbar-cell-min` to the widest
+   resting label ("Bowls/Playoffs ▾", "Clear all filters", ...) measured in
+   the font the page renders in, so no resting label truncates on a wide
+   font. 116px stays the floor (one row of ten at 1280px on narrow fonts);
+   `min(100%, ...)` keeps a pathological font from overflowing the toolbar. */
+@media (min-width: 641px) {
+  #toolbar {
+    display: grid;
+    grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(100%, max(116px, var(--toolbar-cell-min, 116px))), 1fr)
+    );
+    gap: var(--space-sm);
+    align-items: center;
+  }
+
+  .filter-trigger,
+  #clear-filters {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-left: var(--space-xs);
+    padding-right: var(--space-xs);
+  }
+}
+
+/* toolbar-fit.js's offscreen probes: laid out for measuring, never seen. */
+.toolbar-measure {
+  position: absolute;
+  top: 0;
+  left: -10000px;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.toolbar-measure > span {
+  display: inline-block;
+  box-sizing: content-box;
+  border-color: transparent;
+  white-space: nowrap;
 }
 
 #clear-filters:focus-visible,
@@ -833,6 +879,70 @@ input[type="checkbox"] {
      height beyond its intended compact spacing (SITE-18's mobile tap-target
      rule below restores height there via `min-height`, not margin). */
   margin: 0;
+}
+
+/* ---------- Game popover (04.9 D-02, D-06) ---------- */
+
+#pop-game {
+  min-width: 280px;
+}
+
+/* The head and search box stay put while the list scrolls; the negative offsets cancel the
+   popover's own padding so no row shows above them. */
+.game-sticky {
+  position: sticky;
+  top: calc(-1 * var(--space-md));
+  z-index: 1;
+  background: var(--bg);
+  margin: calc(-1 * var(--space-md)) calc(-1 * var(--space-md)) 0;
+  padding: var(--space-md) var(--space-md) var(--space-sm);
+  border-bottom: 1px solid var(--border);
+}
+
+.sheet-body .game-sticky {
+  position: static;
+  margin: 0;
+  padding: 0 0 var(--space-sm);
+  border-bottom: none;
+}
+
+.game-sticky .section-head {
+  margin-bottom: var(--space-sm);
+}
+
+#game-search {
+  width: 100%;
+  height: 40px;
+  box-sizing: border-box;
+}
+
+.game-section-head {
+  font: var(--font-label);
+  font-weight: var(--weight-semibold);
+  color: var(--muted);
+  padding: var(--space-sm) 0 var(--space-xs);
+}
+
+#game-options [role="group"]:first-child .game-section-head {
+  padding-top: var(--space-sm);
+}
+
+#game-options button {
+  min-height: 32px;
+  gap: var(--space-md);
+}
+
+.game-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.radio-list [hidden],
+#game-options [role="group"][hidden] {
+  display: none;
 }
 
 /* ---------- Faceted options (D-08..D-15) ---------- */
@@ -2058,6 +2168,14 @@ html:has(#detail-panel[open]) {
 }
 
 @media (max-width: 640px) {
+  #game-search {
+    height: 44px;
+  }
+
+  #game-options button {
+    min-height: 44px;
+  }
+
   .chart-tabs {
     min-height: 44px;
   }

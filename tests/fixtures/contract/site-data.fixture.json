@@ -1,5 +1,5 @@
 {
-  "schema_version": "2.0.0",
+  "schema_version": "2.1.0",
   "generated_at": "2026-01-01T00:00:00Z",
   "freshness": {
     "season": 2026,
@@ -204,11 +204,47 @@
     "bowls": [
       {
         "name": "Acme Harbor Bowl",
-        "core": "Harbor Bowl"
+        "core": "Harbor Bowl",
+        "franchise": 0
       },
       {
         "name": "Summit Bowl Game presented by Northwind",
-        "core": "Summit Bowl"
+        "core": "Summit Bowl",
+        "franchise": 1
+      }
+    ],
+    "bowl_franchises": [
+      {
+        "slug": "harbor-bowl",
+        "name": "Harbor Bowl",
+        "former": [
+          "Bayside Bowl"
+        ]
+      },
+      {
+        "slug": "summit-bowl",
+        "name": "Summit Bowl",
+        "former": []
+      }
+    ],
+    "rivalries": [
+      {
+        "slug": "bridge-game",
+        "name": "The Bridge Game",
+        "article": null,
+        "teams": [
+          6,
+          7
+        ]
+      },
+      {
+        "slug": "lakeshore",
+        "name": "Lakeshore Rivalry",
+        "article": "the",
+        "teams": [
+          0,
+          1
+        ]
       }
     ]
   },
@@ -850,6 +886,20 @@
       null,
       null,
       null
+    ],
+    "rivalry": [
+      1,
+      null,
+      null,
+      null,
+      1,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      0
     ]
   },
   "coverage": [

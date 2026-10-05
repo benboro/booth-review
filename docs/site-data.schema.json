@@ -1,5 +1,35 @@
 {
   "$defs": {
+    "BowlFranchiseRef": {
+      "additionalProperties": false,
+      "description": "A bowl franchise: the latest core name, older core names for search\nonly, and a permanent URL slug (04.9 D-07).",
+      "properties": {
+        "former": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Former",
+          "type": "array"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "slug": {
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "title": "Slug",
+          "type": "string"
+        }
+      },
+      "required": [
+        "slug",
+        "name",
+        "former"
+      ],
+      "title": "BowlFranchiseRef",
+      "type": "object"
+    },
     "BowlRef": {
       "additionalProperties": false,
       "description": "A bowl's display names: the official name for that season (with any\nsponsor) and the core name (D-17/D-19). Never a raw CFBD note.",
@@ -9,6 +39,10 @@
           "title": "Core",
           "type": "string"
         },
+        "franchise": {
+          "title": "Franchise",
+          "type": "integer"
+        },
         "name": {
           "minLength": 1,
           "title": "Name",
@@ -17,7 +51,8 @@
       },
       "required": [
         "name",
-        "core"
+        "core",
+        "franchise"
       ],
       "title": "BowlRef",
       "type": "object"
@@ -250,6 +285,13 @@
     "Lookups": {
       "additionalProperties": false,
       "properties": {
+        "bowl_franchises": {
+          "items": {
+            "$ref": "#/$defs/BowlFranchiseRef"
+          },
+          "title": "Bowl Franchises",
+          "type": "array"
+        },
         "bowls": {
           "items": {
             "$ref": "#/$defs/BowlRef"
@@ -292,6 +334,13 @@
           "title": "Publishers",
           "type": "array"
         },
+        "rivalries": {
+          "items": {
+            "$ref": "#/$defs/RivalryRef"
+          },
+          "title": "Rivalries",
+          "type": "array"
+        },
         "teams": {
           "items": {
             "$ref": "#/$defs/TeamRef"
@@ -307,7 +356,9 @@
         "publishers",
         "flags",
         "conferences",
-        "bowls"
+        "bowls",
+        "bowl_franchises",
+        "rivalries"
       ],
       "title": "Lookups",
       "type": "object"
@@ -371,6 +422,51 @@
         "usual_role"
       ],
       "title": "PersonRef",
+      "type": "object"
+    },
+    "RivalryRef": {
+      "additionalProperties": false,
+      "description": "A curated rivalry: slug, display name, the article titles put before the\nname (\"the\" or null), and its two teams as ascending indexes into\nlookups.teams (04.9 D-13, D-18).",
+      "properties": {
+        "article": {
+          "anyOf": [
+            {
+              "const": "the",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Article"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "slug": {
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "title": "Slug",
+          "type": "string"
+        },
+        "teams": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Teams",
+          "type": "array"
+        }
+      },
+      "required": [
+        "slug",
+        "name",
+        "article",
+        "teams"
+      ],
+      "title": "RivalryRef",
       "type": "object"
     },
     "TeamRef": {
@@ -696,6 +792,20 @@
           "title": "Publisher",
           "type": "array"
         },
+        "rivalry": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Rivalry",
+          "type": "array"
+        },
         "rr_urls": {
           "items": {
             "items": {
@@ -800,13 +910,14 @@
         "playoff_round",
         "home_conference",
         "away_conference",
-        "bowl"
+        "bowl",
+        "rivalry"
       ],
       "title": "TelecastColumns",
       "type": "object"
     }
   },
-  "$id": "booth-review/site-data/2.0.0",
+  "$id": "booth-review/site-data/2.1.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -828,7 +939,7 @@
       "$ref": "#/$defs/Lookups"
     },
     "schema_version": {
-      "const": "2.0.0",
+      "const": "2.1.0",
       "title": "Schema Version",
       "type": "string"
     },

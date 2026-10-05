@@ -1,4 +1,4 @@
-cfbd_game_id,official_name,core_name,at_bowl
-3,Zebra Harbor Bowl,Harbor Bowl,true
-40,Fixture Quarterfinal Presented by Zebra,Quarterfinal,true
-500007,Zebra Ridge Bowl,Ridge Bowl,true
+cfbd_game_id,official_name,core_name,at_bowl,franchise
+3,Zebra Harbor Bowl,Harbor Bowl,true,harbor-bowl
+40,Fixture Quarterfinal Presented by Zebra,Quarterfinal,true,fixture-quarterfinal
+500007,Zebra Ridge Bowl,Ridge Bowl,true,ridge-bowl

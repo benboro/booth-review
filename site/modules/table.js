@@ -3,7 +3,7 @@
  * current selection (D-06, D-12, SITE-13, SITE-22, SITE-26, T16). Rows come
  * from `computeView`'s own matched-games list -- a person's highlighted
  * games, or (absent a person) every game passing the fade filters once a
- * School filter is set -- and only while a person or school is selected;
+ * School filter or a named Game pick is set (04.9 D-17) -- and only while a person, a school, or a game is selected;
  * otherwise `#table-empty`'s "Nothing selected" prompt shows instead (D-12's
  * anti-bulk-copy rule). The whole row opens the detail panel on click or
  * Enter (D-06); there is no separate Details column.

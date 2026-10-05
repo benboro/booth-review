@@ -18,7 +18,7 @@ immediately, in parallel with Phase 3's real joins.
 `site-data.json` is **one versioned columnar JSON file** (D-13), not an array
 of per-telecast objects:
 
-- `schema_version` — the contract version (currently `"2.0.0"`). See
+- `schema_version` — the contract version (currently `"2.1.0"`). See
   Versioning below.
 - `generated_at` — ISO UTC timestamp of the build that produced the file.
 - `freshness` — `{ season, crews_through_week, viewership_through_week }`,
@@ -87,6 +87,7 @@ describes when the value is `null` instead of coerced to a placeholder like
 | `home_conference` | int \| null, index into `lookups.conferences` | null when CFBD reports no conference for the home side (e.g. some FCS opponents) | SITE-21, SITE-25 |
 | `away_conference` | int \| null, index into `lookups.conferences` | null when CFBD reports no conference for the away side | SITE-21, SITE-25 |
 | `bowl` | int \| null, index into `lookups.bowls` | non-null only for a game played at a named bowl; never set on a regular-season game; display name only, the raw CFBD note never ships | SITE-30 |
+| `rivalry` | int \| null, index into `lookups.rivalries` | non-null only on a regular-season game that is the first meeting of a curated rivalry's two teams in that season, not counting conference championship games; a conference championship game (marked by CFBD from 2022 on, so null even when it comes before the rivalry game or is the only meeting) or a postseason meeting is null, and for earlier seasons a later rematch is null; resolved at build time from `data/reference/rivalries.csv`. The build reads CFBD's private game notes only as a yes/no test for a title game; no notes text ships | SITE-45 |
 
 ### `time_slot` boundaries
 
@@ -126,7 +127,9 @@ Each `crew` entry is `{ person: int, role, feed }`:
 - **`flags`**: `{ id, kind, label, source_url }` — `kind` is `"era"`,
   `"event"`, `"measurement"`, `"model_break"`, or `"combined"`; `source_url`
   is null when a flag has no single citable source.
-- **`bowls`**: `{ name, core }` — `name` is the official bowl name for that season with sponsor, `core` is the core bowl name and is always a substring of `name` (D-17/D-19). Never a raw CFBD note.
+- **`bowls`**: `{ name, core }` — `name` is the official bowl name for that season with sponsor, `core` is the core bowl name and is always a substring of `name` (D-17/D-19). Never a raw CFBD note. `franchise` is an index into `bowl_franchises`, and `core` is always the franchise's `name` or one of its `former` names.
+- **`bowl_franchises`**: `{ slug, name, former }` — a bowl franchise from the hand-checked `franchise` column of `data/reference/bowls.csv`; `name` is the latest core name and must be the `core` of one of the franchise's `lookups.bowls` entries, `former` the older core names oldest first, for search only; `slug` is a permanent URL value (SITE-44, 04.9 D-07). Franchise and rivalry `name`s are distinct across both lists, compared case-insensitively, so no two Game rows share a label.
+- **`rivalries`**: `{ slug, name, article, teams }` — a curated rivalry from `data/reference/rivalries.csv` with at least one plotted telecast; `article` is `"the"` when titles read "of the {name}" (the Iron Bowl) and null when the name stands alone (Bedlam, Paul Bunyan's Axe) or already starts with "The " (The Game), which must be null; `teams` are two ascending indexes into `lookups.teams` (SITE-45). Franchise and rivalry slugs share one namespace with the four reserved CFP slugs (`cfp-national-championship`, `cfp-semifinal`, `cfp-quarterfinal`, `cfp-first-round`).
 - **`conferences`**: `{ name, is_fbs }` — one entry per distinct conference
   name that appears as a plotted telecast's `home_conference` or
   `away_conference` (D-09). `name` is CFBD's own per-game conference string
@@ -194,7 +197,8 @@ only their derived, display-safe outputs (`game_type`, `playoff_round`, the
   `telecasts.home_spread` (SITE-40, 04.6 D-08); minor bump, additive;
   `1.5.0 -> 2.0.0` removed `telecasts.pregame` (the client derives the Spread axis
   from `home_spread`) and renamed `coverage[].pregame_present` to `spread_present`
-  (SITE-43, 04.8 D-01/D-02); a major bump because a field was removed.
+  (SITE-43, 04.8 D-01/D-02); a major bump because a field was removed;
+  `2.0.0 -> 2.1.0` added `lookups.bowl_franchises`, `lookups.bowls[].franchise`, `lookups.rivalries` (with each rivalry's title `article`), and `telecasts.rivalry` (SITE-44, SITE-45, 04.9 D-16); minor bump, additive.
 - **Removing a field, renaming a field, or changing a field's type**
   (including narrowing an enum) bumps the **major** version (`1.0.0` →
   `2.0.0`).
@@ -231,3 +235,5 @@ As of v1.3.0 telecast 7 (bowl) points at a sponsor-prefixed bowl and telecast 5 
 As of v1.4.0 telecast 3 (2021) carries a crew-source pair (a patched crew with no 506 listing). The fixture's 2021 coverage rows count it: the season-total row and the row for its network each have `matched_crew_patched` 1; every 2026 row has 0.
 
 As of v2.0.0 there is no `pregame` column; the fixture's `home_spread` column is unchanged: `[-3.5, 7.0, -2.0, null, -1.0, -14.0, 5.5, -3.0, 6.5, -0.5, -2.5, 1.5]`. By telecast index: 0 home favorite won; 1 away favorite, home won (upset); 2 line but no final score; 3 no line; 4 home favorite won; 5 home favorite won; 6 away favorite, home won; 7 home favorite, away won; 8 away favorite won; 9 home favorite, away won; 10 tie (20-20); 11 away favorite won.
+
+As of v2.1.0 the two bowls belong to franchises `harbor-bowl` (latest name Harbor Bowl, former name Bayside Bowl: a renamed bowl) and `summit-bowl` (hosting the telecast 5 CFP semifinal); `Lakeshore Rivalry` (Northfield-Lakeview, article `"the"`) tags telecasts 0 and 4; `The Bridge Game` (Stonebridge-Maplecrest, article null) tags telecast 11, while telecast 3 between the same teams (2021-12-04, neutral) is null: it stands for a conference-championship rematch whose regular-season meeting was not rated. The two-season rename itself is exercised with synthetic games in tests/test_named_games.py and tests/test_build_site_data.py.

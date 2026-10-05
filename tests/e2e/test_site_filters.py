@@ -541,6 +541,7 @@ def test_toolbar_order_and_clear_all_contrast(
         "trigger-conference",
         "trigger-school",
         "trigger-postseason",
+        "trigger-game",
     ]
 
     styles = guarded_page.evaluate(
@@ -985,6 +986,7 @@ def test_mobile_filters_sheet(mobile_page: Page, open_app: Callable[[Page, str],
         "conference",
         "school",
         "postseason",
+        "game",
     ):
         expect(mobile_page.locator(f"#trigger-{name}")).to_be_hidden()
 
@@ -1009,6 +1011,7 @@ def test_mobile_filters_sheet(mobile_page: Page, open_app: Callable[[Page, str],
         "filter-conference",
         "filter-school",
         "filter-postseason",
+        "filter-game",
     ]
 
     mobile_page.check("input[name='slot'][value='prime']")
@@ -1285,6 +1288,7 @@ _RESET_ARIA_LABELS = {
     "conference": "Reset conference filter",
     "school": "Reset school filter",
     "postseason": "Reset bowls and playoffs filter",
+    "game": "Reset game filter",
 }
 
 
@@ -1332,7 +1336,7 @@ def test_group_reset_and_clear_all_stay_consistent(
         "() => Array.from(document.querySelectorAll('.group-reset'))"
         ".map((el) => el.getAttribute('aria-disabled'))"
     )
-    assert states == ["true"] * 8
+    assert states == ["true"] * 9
 
 
 @pytest.mark.parametrize("scheme", ["light", "dark"])
@@ -1454,9 +1458,9 @@ def test_group_reset_in_phone_sheet_sections(
     )
     counts = mobile_page.evaluate(
         "() => Array.from(document.querySelectorAll('.sheet-body section'))"
-        ".map((s) => s.querySelectorAll(':scope > .section-head .group-reset').length)"
+        ".map((s) => s.querySelectorAll('.section-head .group-reset').length)"
     )
-    assert counts == [1] * 8
+    assert counts == [1] * 9
 
     reset = mobile_page.locator("#filter-role .group-reset")
     assert reset.get_attribute("aria-disabled") == "false"

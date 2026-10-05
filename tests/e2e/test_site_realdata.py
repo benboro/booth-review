@@ -855,3 +855,117 @@ def test_real_home_spread_and_spread_axis_counts(
     assert spread_missing == 0, "a decided game with a line had no spread x"
     assert wrong_magnitude == 0, "a spread x's magnitude differed from its line"
     assert negative_zero == 0, "a spread x was negative zero"
+
+
+_NAMED_GAME_COUNTS_JS = """
+() => {
+  const data = window.__testHooks.data;
+  const view = window.__testHooks.getView();
+  const counts = view.facets.games;
+  let playoffWithRound = 0;
+  let playoffNullRound = 0;
+  let rivalryOnNonRegular = 0;
+  const rivalrySeasons = new Map();
+  let rivalryTwiceInSeason = 0;
+  for (let i = 0; i < data.n; i += 1) {
+    const gameType = data.t.game_type[i];
+    const round = data.t.playoff_round[i];
+    const riv = data.t.rivalry[i];
+    if (gameType === 'playoff') {
+      if (round === null) playoffNullRound += 1;
+      else playoffWithRound += 1;
+    }
+    if (riv !== null) {
+      if (gameType !== 'regular') rivalryOnNonRegular += 1;
+      const key = riv + ':' + data.t.season[i];
+      const seen = (rivalrySeasons.get(key) || 0) + 1;
+      rivalrySeasons.set(key, seen);
+      if (seen === 2) rivalryTwiceInSeason += 1;
+    }
+  }
+  let cfpTotal = 0;
+  let franchiseWithoutBowl = 0;
+  let gamesWithZeroRows = 0;
+  let rivalCount = 0;
+  const withDots = new Set();
+  for (const memberships of data.dotGames) for (const g of memberships) withDots.add(g);
+  for (const g of data.games) {
+    if (g.kind === 'cfp') cfpTotal += counts[g.index];
+    if (g.kind === 'bowl' && !withDots.has(g.index)) franchiseWithoutBowl += 1;
+    if (g.kind !== 'cfp' && counts[g.index] === 0) gamesWithZeroRows += 1;
+    if (g.kind === 'rivalry') rivalCount += 1;
+  }
+  return {
+    playoffWithRound,
+    cfpTotal,
+    playoffNullRound,
+    rivalryOnNonRegular,
+    rivalryTwiceInSeason,
+    franchiseWithoutBowl,
+    gamesWithZeroRows,
+    rivalCount,
+  };
+}
+"""
+
+
+def test_real_named_game_counts_are_consistent(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """D-11, D-13, D-19: named-game tags on the real build are consistent.
+    The four CFP counts sum to the playoff telecasts with a round, no rivalry
+    sits on a non-regular telecast or twice in one season, every bowl franchise
+    has rows, and no bowl or rivalry game is empty at the default view.
+    Integers only; the null-round count is reported, not asserted."""
+    real_open_app(real_guarded_page, "")
+    counts: dict[str, int] = real_guarded_page.evaluate(_NAMED_GAME_COUNTS_JS)
+    playoff_with_round = counts["playoffWithRound"]
+    cfp_total = counts["cfpTotal"]
+    rivalry_on_non_regular = counts["rivalryOnNonRegular"]
+    rivalry_twice = counts["rivalryTwiceInSeason"]
+    franchise_without_bowl = counts["franchiseWithoutBowl"]
+    zero_rows = counts["gamesWithZeroRows"]
+    rival_count = counts["rivalCount"]
+    assert cfp_total == playoff_with_round, "CFP round counts did not sum to rounded playoffs"
+    assert rivalry_on_non_regular == 0, "a rivalry was tagged on a non-regular telecast"
+    assert rivalry_twice == 0, "a rivalry was tagged twice in one season"
+    assert franchise_without_bowl == 0, "a bowl franchise had no telecast rows"
+    assert zero_rows == 0, "a bowl or rivalry game had zero rows at the default view"
+    assert rival_count > 0, "no rivalry games present"
+
+
+_GEOMETRY_JS = """
+() => [
+  document.getElementById('toolbar').getBoundingClientRect().height,
+  document.getElementById('chart-area').getBoundingClientRect().top,
+]
+"""
+
+_PICK_LONGEST_GAME_JS = """
+() => {
+  const games = window.__testHooks.data.games;
+  let longest = games[0];
+  for (const g of games) if (g.label.length > longest.label.length) longest = g;
+  window.__testHooks.setState({ game: longest.slug });
+  return true;
+}
+"""
+
+
+def test_real_named_game_toolbar_stable_at_1024(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """D-21: picking the longest-label game at 1024px leaves the toolbar
+    height and chart top unchanged. Numbers only."""
+    real_guarded_page.set_viewport_size({"width": 1024, "height": 900})
+    real_open_app(real_guarded_page, "?slot=noon,afternoon,prime,late&seasons=2014-2025")
+    before: list[float] = real_guarded_page.evaluate(_GEOMETRY_JS)
+    toolbar_before = before[0]
+    top_before = before[1]
+    picked: bool = real_guarded_page.evaluate(_PICK_LONGEST_GAME_JS)
+    after: list[float] = real_guarded_page.evaluate(_GEOMETRY_JS)
+    toolbar_after = after[0]
+    top_after = after[1]
+    assert picked
+    assert toolbar_after == toolbar_before
+    assert top_after == top_before

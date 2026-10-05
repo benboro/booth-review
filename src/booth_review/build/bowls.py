@@ -7,6 +7,9 @@ at_bowl=true means the game was at a bowl whose name is explicitly unknown
 (D-18); at_bowl=false rows (CFP first round, national championship) must
 carry no names. Errors cite file and line (and the id scalar for id errors),
 never a name.
+
+The franchise column is a stable kebab slug grouping a bowl across sponsor
+changes and renames (D-07); it is set exactly when core_name is set.
 """
 
 from __future__ import annotations
@@ -15,9 +18,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from booth_review.errors import ReferenceTableError
-from booth_review.reference import read_reference_csv_numbered
+from booth_review.reference import SLUG_PATTERN, read_reference_csv_numbered
 
-BOWL_COLUMNS = ("cfbd_game_id", "official_name", "core_name", "at_bowl")
+BOWL_COLUMNS = ("cfbd_game_id", "official_name", "core_name", "at_bowl", "franchise")
 
 
 @dataclass(frozen=True)
@@ -25,6 +28,7 @@ class BowlEntry:
     official_name: str | None
     core_name: str | None
     at_bowl: bool
+    franchise: str | None = None
 
 
 def load_bowls(reference_dir: Path) -> dict[int, BowlEntry]:
@@ -57,5 +61,12 @@ def load_bowls(reference_dir: Path) -> dict[int, BowlEntry]:
             raise fail(line_no, "official_name and core_name must be set together")
         if official is not None and core is not None and core not in official:
             raise fail(line_no, "core_name is not part of official_name")
-        entries[game_id] = BowlEntry(official, core, at_bowl)
+        franchise = raw["franchise"] or None
+        if core is not None and franchise is None:
+            raise fail(line_no, "franchise must be set when core_name is set")
+        if core is None and franchise is not None:
+            raise fail(line_no, "franchise must be empty when core_name is empty")
+        if franchise is not None and not SLUG_PATTERN.fullmatch(franchise):
+            raise fail(line_no, "franchise must be lowercase ASCII words joined by single hyphens")
+        entries[game_id] = BowlEntry(official, core, at_bowl, franchise)
     return entries

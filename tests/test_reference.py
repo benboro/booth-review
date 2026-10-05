@@ -160,6 +160,7 @@ def _loader_cases() -> list[tuple[str, tuple[str, ...], Callable[[Path], object]
     from booth_review.build.bowls import BOWL_COLUMNS, load_bowls
     from booth_review.build.combined import COMBINED_COLUMNS, load_combined_figures
     from booth_review.build.crew_overrides import CREW_OVERRIDE_COLUMNS, load_crew_overrides
+    from booth_review.build.rivalries import RIVALRY_COLUMNS, load_rivalries
     from booth_review.people.registry import (
         PEOPLE_COLUMNS,
         PERSON_OVERRIDE_COLUMNS,
@@ -179,6 +180,7 @@ def _loader_cases() -> list[tuple[str, tuple[str, ...], Callable[[Path], object]
 
     return [
         ("bowls.csv", BOWL_COLUMNS, load_bowls),
+        ("rivalries.csv", RIVALRY_COLUMNS, load_rivalries),
         ("combined_figures.csv", COMBINED_COLUMNS, load_combined_figures),
         ("crew_overrides.csv", CREW_OVERRIDE_COLUMNS, load_crew_overrides),
         ("people.csv", PEOPLE_COLUMNS, load_people),

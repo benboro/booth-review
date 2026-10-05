@@ -1002,7 +1002,7 @@ def test_unmapped_network_coverage_row_points_at_the_unmapped_lookup(
 
 # -- bowl-name crosswalk (04.2-04) -----------------------------------------------------------
 
-_BOWL_HEADER = "cfbd_game_id,official_name,core_name,at_bowl\n"
+_BOWL_HEADER = "cfbd_game_id,official_name,core_name,at_bowl,franchise\n"
 
 
 def _bowl_reference(tmp_path: Path, build_reference: Path, rows: str) -> Path:
@@ -1037,9 +1037,16 @@ def _postseason_tables(specs: list[tuple[int, str, str | None]], **extra: object
 
 
 def test_named_bowl_resolves_into_lookup(tmp_path: Path, build_reference: Path) -> None:
-    ref = _bowl_reference(tmp_path, build_reference, "70,Zebra Harbor Bowl,Harbor Bowl,true\n")
+    ref = _bowl_reference(
+        tmp_path, build_reference, "70,Zebra Harbor Bowl,Harbor Bowl,true,harbor-bowl\n"
+    )
     payload = _site(_postseason_tables([(70, "bowl", None)]), ref)
-    assert payload["lookups"]["bowls"] == [{"name": "Zebra Harbor Bowl", "core": "Harbor Bowl"}]
+    assert payload["lookups"]["bowls"] == [
+        {"name": "Zebra Harbor Bowl", "core": "Harbor Bowl", "franchise": 0}
+    ]
+    assert payload["lookups"]["bowl_franchises"] == [
+        {"slug": "harbor-bowl", "name": "Harbor Bowl", "former": []}
+    ]
     assert payload["telecasts"]["bowl"] == [0]
 
 
@@ -1047,10 +1054,12 @@ def test_bowl_lookup_is_deduplicated_and_sorted(tmp_path: Path, build_reference:
     ref = _bowl_reference(
         tmp_path,
         build_reference,
-        "70,Zeta Bowl,Zeta Bowl,true\n71,Alpha Bowl,Alpha Bowl,true\n72,Zeta Bowl,Zeta Bowl,true\n",
+        "70,Zeta Bowl,Zeta Bowl,true,zeta-bowl\n"
+        "71,Alpha Bowl,Alpha Bowl,true,alpha-bowl\n"
+        "72,Zeta Bowl,Zeta Bowl,true,zeta-bowl\n",
     )
     payload = _site(
-        _postseason_tables([(70, "bowl", None), (71, "bowl", None), (72, "bowl", None)]), ref
+        _two_game_tables([_bowl_game(70, 2022), _bowl_game(71, 2022), _bowl_game(72, 2023)]), ref
     )
     assert [b["name"] for b in payload["lookups"]["bowls"]] == ["Alpha Bowl", "Zeta Bowl"]
     assert payload["telecasts"]["bowl"] == [1, 0, 1]
@@ -1062,7 +1071,7 @@ def test_cfp_quarterfinal_at_bowl_and_first_round_not(
     ref = _bowl_reference(
         tmp_path,
         build_reference,
-        "80,Fixture Quarter Bowl,Quarter Bowl,true\n81,,,false\n",
+        "80,Fixture Quarter Bowl,Quarter Bowl,true,quarter-bowl\n81,,,false,\n",
     )
     payload = _site(
         _postseason_tables([(80, "playoff", "quarterfinal"), (81, "playoff", "first_round")]),
@@ -1072,14 +1081,16 @@ def test_cfp_quarterfinal_at_bowl_and_first_round_not(
 
 
 def test_unknown_name_row_is_null(tmp_path: Path, build_reference: Path) -> None:
-    ref = _bowl_reference(tmp_path, build_reference, "70,,,true\n")
+    ref = _bowl_reference(tmp_path, build_reference, "70,,,true,\n")
     payload = _site(_postseason_tables([(70, "bowl", None)]), ref)
     assert payload["lookups"]["bowls"] == []
     assert payload["telecasts"]["bowl"] == [None]
 
 
 def test_regular_game_ignores_a_crosswalk_row(tmp_path: Path, build_reference: Path) -> None:
-    ref = _bowl_reference(tmp_path, build_reference, "70,Zebra Harbor Bowl,Harbor Bowl,true\n")
+    ref = _bowl_reference(
+        tmp_path, build_reference, "70,Zebra Harbor Bowl,Harbor Bowl,true,harbor-bowl\n"
+    )
     payload = _site(_postseason_tables([(70, "regular", None)]), ref)
     assert payload["telecasts"]["bowl"] == [None]
     assert payload["lookups"]["bowls"] == []
@@ -1099,11 +1110,11 @@ def test_missing_crosswalk_row_raises_count_only(tmp_path: Path, build_reference
 @pytest.mark.parametrize(
     ("spec", "row"),
     [
-        ((70, "bowl", None), "70,,,false\n"),
-        ((70, "playoff", "quarterfinal"), "70,,,false\n"),
-        ((70, "playoff", "semifinal"), "70,,,false\n"),
-        ((70, "playoff", "first_round"), "70,Zebra Bowl,Zebra Bowl,true\n"),
-        ((70, "playoff", "championship"), "70,,,true\n"),
+        ((70, "bowl", None), "70,,,false,\n"),
+        ((70, "playoff", "quarterfinal"), "70,,,false,\n"),
+        ((70, "playoff", "semifinal"), "70,,,false,\n"),
+        ((70, "playoff", "first_round"), "70,Zebra Bowl,Zebra Bowl,true,zebra-bowl\n"),
+        ((70, "playoff", "championship"), "70,,,true,\n"),
     ],
 )
 def test_at_bowl_disagreement_raises(
@@ -1117,7 +1128,9 @@ def test_at_bowl_disagreement_raises(
 
 
 def test_notes_sentinel_never_ships(tmp_path: Path, build_reference: Path) -> None:
-    ref = _bowl_reference(tmp_path, build_reference, "70,Zebra Harbor Bowl,Harbor Bowl,true\n")
+    ref = _bowl_reference(
+        tmp_path, build_reference, "70,Zebra Harbor Bowl,Harbor Bowl,true,harbor-bowl\n"
+    )
     tables = _postseason_tables([(70, "bowl", None)], notes="SENTINEL ZEBRA HARBOR BOWL NOTE")
     site = build_site_data(tables, build_coverage(tables), ref, _GENERATED_AT)
     paths = DataPaths(vault=tmp_path / "vault")
@@ -1292,3 +1305,197 @@ def test_home_spread_emits_closing_spread_and_no_pregame_column(
     columns = _site(tables, build_reference)["telecasts"]
     assert columns["home_spread"] == [-6.5, 3.0, None]
     assert "pregame" not in columns
+
+
+# -- bowl franchises and curated rivalries (04.9-05) ----------------------------------------
+
+
+def _two_game_tables(rows: list[dict[str, object]]) -> BuildTables:
+    telecasts = [
+        _telecast_row(
+            telecast_id=f"{r['game_id']}-net-a",
+            game_id=r["game_id"],
+            season=r["season"],
+            date_et=r["date_et"],
+        )
+        for r in rows
+    ]
+    return _build_tables(
+        games_rows=rows,
+        telecast_rows=telecasts,
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+
+
+def _bowl_game(game_id: int, season: int) -> dict[str, object]:
+    return _game_row(
+        game_id=game_id,
+        season=season,
+        season_type="postseason",
+        game_type="bowl",
+        start_utc=datetime(season, 12, 28, 17, 0, tzinfo=UTC),
+        date_et=date(season, 12, 28),
+    )
+
+
+def test_renamed_bowl_is_one_franchise_with_former_name(
+    tmp_path: Path, build_reference: Path
+) -> None:
+    ref = _bowl_reference(
+        tmp_path,
+        build_reference,
+        "70,Acme Bayside Bowl,Bayside Bowl,true,harbor-bowl\n"
+        "71,Acme Harbor Bowl,Harbor Bowl,true,harbor-bowl\n",
+    )
+    tables = _two_game_tables([_bowl_game(70, 2018), _bowl_game(71, 2021)])
+    payload = _site(tables, ref)
+    assert payload["lookups"]["bowl_franchises"] == [
+        {"slug": "harbor-bowl", "name": "Harbor Bowl", "former": ["Bayside Bowl"]}
+    ]
+    assert [b["franchise"] for b in payload["lookups"]["bowls"]] == [0, 0]
+    assert len(payload["lookups"]["bowls"]) == 2
+
+
+def test_same_names_in_different_franchises_stay_apart(
+    tmp_path: Path, build_reference: Path
+) -> None:
+    # Both franchises once used one name; the second was renamed later, so their
+    # latest names (the labels) differ while the shared-name bowls stay apart.
+    ref = _bowl_reference(
+        tmp_path,
+        build_reference,
+        "70,Twin Bowl,Twin Bowl,true,twin-bowl-a\n71,Twin Bowl,Twin Bowl,true,twin-bowl-b\n"
+        "72,Later Bowl,Later Bowl,true,twin-bowl-b\n",
+    )
+    games = [_bowl_game(70, 2018), _bowl_game(71, 2018), _bowl_game(72, 2021)]
+    payload = _site(_two_game_tables(games), ref)
+    assert len(payload["lookups"]["bowls"]) == 3
+    assert [b["franchise"] for b in payload["lookups"]["bowls"]] == [1, 0, 1]
+    assert [f["name"] for f in payload["lookups"]["bowl_franchises"]] == [
+        "Twin Bowl",
+        "Later Bowl",
+    ]
+    assert len(set(payload["telecasts"]["bowl"])) == 3
+
+
+def test_two_franchises_with_one_latest_name_fail_count_only(
+    tmp_path: Path, build_reference: Path
+) -> None:
+    from booth_review.errors import VaultStateError
+
+    ref = _bowl_reference(
+        tmp_path,
+        build_reference,
+        "70,Twin Bowl,Twin Bowl,true,twin-bowl-a\n71,Twin Bowl,Twin Bowl,true,twin-bowl-b\n",
+    )
+    with pytest.raises(VaultStateError) as info:
+        _site(_two_game_tables([_bowl_game(70, 2018), _bowl_game(71, 2018)]), ref)
+    assert "1 named game(s) repeat another's display name" in str(info.value)
+    assert "Twin" not in str(info.value)
+
+
+def _rivalry_reference(tmp_path: Path, build_reference: Path, rows: str) -> Path:
+    import shutil
+
+    reference = tmp_path / "reference"
+    shutil.copytree(build_reference, reference)
+    (reference / "rivalries.csv").write_text(
+        "rivalry_id,name,article,team_a,team_b,season_from,season_to\n" + rows, encoding="utf-8"
+    )
+    return reference
+
+
+def _meeting(
+    game_id: int, day: int, home: str = "Fixture Home", away: str = "Fixture Away"
+) -> dict[str, object]:
+    return _game_row(
+        game_id=game_id,
+        start_utc=datetime(2024, 9, day, 17, 30, tzinfo=UTC),
+        date_et=date(2024, 9, day),
+        home_team=home,
+        away_team=away,
+    )
+
+
+def test_rivalry_tags_first_regular_meeting_only(tmp_path: Path, build_reference: Path) -> None:
+    ref = _rivalry_reference(
+        tmp_path, build_reference, "the-game,The Game,,Fixture Home,Fixture Away,,\n"
+    )
+    payload = _site(_two_game_tables([_meeting(1, 14), _meeting(2, 28)]), ref)
+    assert payload["telecasts"]["rivalry"] == [0, None]
+    assert payload["lookups"]["rivalries"] == [
+        {"slug": "the-game", "name": "The Game", "article": None, "teams": [0, 1]}
+    ]
+
+
+def test_rivalry_article_ships_in_lookup(tmp_path: Path, build_reference: Path) -> None:
+    ref = _rivalry_reference(
+        tmp_path, build_reference, "lake-cup,Lake Cup,the,Fixture Home,Fixture Away,,\n"
+    )
+    payload = _site(_two_game_tables([_meeting(1, 14)]), ref)
+    assert payload["lookups"]["rivalries"] == [
+        {"slug": "lake-cup", "name": "Lake Cup", "article": "the", "teams": [0, 1]}
+    ]
+
+
+def test_title_game_before_rivalry_game_is_untagged_and_counted(
+    tmp_path: Path, build_reference: Path
+) -> None:
+    ref = _rivalry_reference(
+        tmp_path, build_reference, "the-game,The Game,,Fixture Home,Fixture Away,,\n"
+    )
+    title = {**_meeting(1, 14), "notes": "SENTINEL ZEBRA Championship"}
+    tables = _two_game_tables([title, _meeting(2, 28)])
+    counts: dict[str, int] = {}
+    site = build_site_data(tables, build_coverage(tables), ref, _GENERATED_AT, counts=counts)
+    payload = site.model_dump(mode="json")
+    assert payload["telecasts"]["rivalry"] == [None, 0]
+    assert counts == {
+        "rivalry_games_tagged": 1,
+        "rivalry_telecasts_tagged": 1,
+        "rivalry_title_games_excluded": 1,
+        "rivalry_rematches_demoted": 0,
+    }
+    assert "SENTINEL" not in json.dumps(payload)
+
+
+def test_rivalry_without_plotted_telecast_is_dropped(tmp_path: Path, build_reference: Path) -> None:
+    ref = _rivalry_reference(
+        tmp_path,
+        build_reference,
+        "the-game,The Game,,Fixture Home,Fixture Away,,\n"
+        "other,Other,the,Fixture Home,Third Team,,\n",
+    )
+    games = [_meeting(1, 14), {**_meeting(2, 21, away="Third Team"), "away_id": 300}]
+    tables = _build_tables(
+        games_rows=games,
+        telecast_rows=[_telecast_row()],
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+    payload = _site(tables, ref)
+    assert [r["slug"] for r in payload["lookups"]["rivalries"]] == ["the-game"]
+
+
+def test_rivalry_team_missing_from_games_raises_count_only(
+    tmp_path: Path, build_reference: Path
+) -> None:
+    from booth_review.errors import VaultStateError
+
+    ref = _rivalry_reference(
+        tmp_path, build_reference, "the-game,The Game,,SENTINEL ZEBRA,Fixture Away,,\n"
+    )
+    with pytest.raises(VaultStateError, match="1 team name") as info:
+        _site(_two_game_tables([_meeting(1, 14)]), ref)
+    assert "SENTINEL" not in str(info.value)
+
+
+def test_header_only_rivalries_emit_empty_lookup(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    payload = _site(small_tables, build_reference)
+    assert payload["lookups"]["rivalries"] == []
+    assert set(payload["telecasts"]["rivalry"]) == {None}

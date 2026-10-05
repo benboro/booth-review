@@ -87,9 +87,11 @@ that fail a filter are fainter still. The summary line and the Bars and
 Butterfly charts count only the games that pass every filter, whether the
 excluded games are faded or hidden. The per-season counts in the Seasons filter
 apply every filter except the season range itself, so seasons outside the range
-keep their counts. The matched-games table fills once an announcer or a school
-is selected, and lists the games that pass every filter. With exactly two
-schools selected, Head-to-head keeps only the games between them.
+keep their counts. The matched-games table fills once an announcer, a school, or a named game is selected,
+and lists the games that pass every filter. With exactly two schools selected, Head-to-head keeps only the games between them.
+
+**Named games.** The Game filter picks one named game and shows every rated telecast of it. Bowls are grouped by franchise and shown under their latest name, so a renamed bowl is one entry and searching an old name finds it. The CFP entries are the four playoff rounds, and a semifinal or quarterfinal played at a bowl appears under both its round and that bowl. Rivalries come from a curated list of well-known named FBS rivalries and count only the first regular-season meeting of the two teams each season, never a conference championship game. CFBD marks conference title games from 2022 on, so from then a title game is left out even when it comes before the rivalry game or replaces it. For earlier seasons the first-meeting rule alone applies, so a later conference-championship rematch is left out. Postseason meetings never count. The matched-games table lists the games that pass every filter, and the filter combines with the others like any other.
+
 None of this changes the axes or uses viewership as an input.
 
 ## Measurement eras

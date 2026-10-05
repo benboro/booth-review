@@ -126,9 +126,12 @@ def run_build(
         # Assemble and validate site data first (WR-01): if it raises, the
         # run aborts before any processed table, audit file, or new
         # baseline is written.
+        site_counts: dict[str, int] = {}
         try:
             site = (
-                build_site_data(tables, coverage, reference_directory, generated_at)
+                build_site_data(
+                    tables, coverage, reference_directory, generated_at, counts=site_counts
+                )
                 if write_data
                 else None
             )
@@ -155,6 +158,7 @@ def run_build(
             written.extend(write_site_data(paths, site))
 
         counts = _build_counts(tables, result)
+        counts.update(site_counts)
 
         committed = False
         if commit:

@@ -7,6 +7,7 @@
  */
 
 import { FAMILY_ORDER, familyKey } from './palette.js';
+import { CFP_GAME_DEFS, NEW_YEARS_SIX } from './format.js';
 
 /**
  * Normalizes a name for matching: Unicode NFKD decomposition, combining
@@ -33,6 +34,34 @@ export function slugify(s) {
   return normalizeName(s)
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Search-key normalizer for named games: normalizeName, then U+02BB and
+ * apostrophes (U+0027, U+2018, U+2019) removed, and every other run of
+ * characters that is not a letter or digit (hyphens, dashes, commas,
+ * parentheses, "&") read as one space (04.9 WR-01).
+ * @param {string} s
+ * @returns {string} e.g. "Hawaiʻi Bowl" -> "hawaii bowl", "Pop-Tarts Bowl" -> "pop tarts bowl".
+ */
+export function gameSearchKey(s) {
+  return normalizeName(s)
+    .replace(/[\u02BB'\u2018\u2019]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+/**
+ * Whether a folded query (from gameSearchKey) is found in a folded key: as a
+ * substring, or with spaces ignored on both sides, so "army navy", "armynavy"
+ * and "army-navy" all find "Army-Navy Game" (04.9 D-04, WR-01).
+ * @param {string} key
+ * @param {string} query - already folded; '' matches everything.
+ * @returns {boolean}
+ */
+export function gameKeyMatches(key, query) {
+  if (key.includes(query)) return true;
+  return key.replaceAll(' ', '').includes(query.replaceAll(' ', ''));
 }
 
 /** Computes [min, max] over the non-null values of an array, or [null, null] if none. */
@@ -75,6 +104,13 @@ export function prepareData(raw) {
   // home_spread is required since contract v2.0.0 (04.8 D-03).
   if (!Array.isArray(raw.telecasts.home_spread)) {
     throw new Error('site-data.json: telecasts.home_spread is missing (contract v2.0.0)');
+  }
+  if (
+    !Array.isArray(raw.telecasts.rivalry) ||
+    !Array.isArray(lookups.bowl_franchises) ||
+    !Array.isArray(lookups.rivalries)
+  ) {
+    throw new Error('site-data.json: named-game fields are missing (contract v2.1.0)');
   }
   const homeSpread = raw.telecasts.home_spread;
   const spread = new Array(n);
@@ -154,6 +190,72 @@ export function prepareData(raw) {
     .map((c) => c.name)
     .sort((a, b) => a.localeCompare(b));
 
+  // Named games (04.9): playoff rounds, bowl franchises, curated rivalries.
+  const cfpGames = CFP_GAME_DEFS.map((d) => ({
+    slug: d.slug,
+    label: d.label,
+    kind: 'cfp',
+    section: 'playoff',
+    round: d.round,
+    phrase: d.phrase,
+    keys: [gameSearchKey(d.label)],
+  }));
+  const bowlGames = lookups.bowl_franchises.map((f, franchise) => ({
+    slug: f.slug,
+    label: f.name,
+    kind: 'bowl',
+    section: 'bowls',
+    franchise,
+    keys: [f.name, ...f.former].map(gameSearchKey),
+  }));
+  const nysRank = (slug) => {
+    const k = NEW_YEARS_SIX.indexOf(slug);
+    return k === -1 ? NEW_YEARS_SIX.length : k;
+  };
+  bowlGames.sort(
+    (a, b) => nysRank(a.slug) - nysRank(b.slug) || a.label.localeCompare(b.label),
+  );
+  const rivalryGames = lookups.rivalries.map((r, rivalry) => ({
+    slug: r.slug,
+    label: r.name,
+    kind: 'rivalry',
+    section: 'rivalries',
+    rivalry,
+    // Curated in rivalries.csv (WR-02): 'the' for "the Iron Bowl", null for
+    // a name that stands alone ("Bedlam", "The Game").
+    article: r.article === 'the' ? 'the' : null,
+    teams: r.teams.map((ti) => lookups.teams[ti].name),
+    keys: [r.name, ...r.teams.map((ti) => lookups.teams[ti].name)].map(gameSearchKey),
+  }));
+  rivalryGames.sort((a, b) => a.label.localeCompare(b.label));
+  const games = [...cfpGames, ...bowlGames, ...rivalryGames];
+  games.forEach((g, index) => {
+    g.index = index;
+  });
+  const gameIndexBySlug = new Map(games.map((g) => [g.slug, g.index]));
+  const gameByRound = new Map();
+  const gameByFranchise = new Map();
+  const gameByRivalry = new Map();
+  for (const g of games) {
+    if (g.kind === 'cfp') gameByRound.set(g.round, g.index);
+    else if (g.kind === 'bowl') gameByFranchise.set(g.franchise, g.index);
+    else gameByRivalry.set(g.rivalry, g.index);
+  }
+  const dotGames = new Array(n);
+  for (let i = 0; i < n; i += 1) {
+    const memberships = [];
+    const round = t.playoff_round[i];
+    if (round != null && gameByRound.has(round)) memberships.push(gameByRound.get(round));
+    const bowl = t.bowl[i];
+    if (bowl != null) {
+      const gi = gameByFranchise.get(lookups.bowls[bowl].franchise);
+      if (gi !== undefined) memberships.push(gi);
+    }
+    const riv = t.rivalry[i];
+    if (riv != null) memberships.push(gameByRivalry.get(riv));
+    dotGames[i] = memberships;
+  }
+
   return {
     raw,
     n,
@@ -177,6 +279,9 @@ export function prepareData(raw) {
     peopleKeys,
     teamKeys,
     fbsConferences,
+    games,
+    gameIndexBySlug,
+    dotGames,
   };
 }
 

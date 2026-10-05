@@ -93,7 +93,7 @@ def _vault_with_sentinel_note(git_vault: DataPaths, tmp_path: Path, bowls_rows: 
         fh.write("ESPNU,espnu,ESPNU,family-espn,cable,main,,,\n")
         fh.write("ESPN Deportes,espn-deportes,ESPN Deportes,family-espn,cable,spanish,,,\n")
     (reference / "bowls.csv").write_text(
-        "cfbd_game_id,official_name,core_name,at_bowl\n" + bowls_rows, encoding="utf-8"
+        "cfbd_game_id,official_name,core_name,at_bowl,franchise\n" + bowls_rows, encoding="utf-8"
     )
     return reference
 
@@ -114,7 +114,7 @@ def test_missing_crosswalk_row_writes_review_file_then_fails_count_only(
 
 
 def test_unknown_name_is_counted(git_vault: DataPaths, tmp_path: Path) -> None:
-    reference = _vault_with_sentinel_note(git_vault, tmp_path, "500007,,,true\n")
+    reference = _vault_with_sentinel_note(git_vault, tmp_path, "500007,,,true,\n")
     outcome = run_build(git_vault, reference, commit=False, accept_baseline=False)
     assert outcome.counts["bowl_names_unknown"] == 1
     site = (git_vault.vault / "processed" / "site-data.json").read_text(encoding="utf-8")
@@ -123,7 +123,7 @@ def test_unknown_name_is_counted(git_vault: DataPaths, tmp_path: Path) -> None:
 
 def test_no_unknown_names_counts_zero(git_vault: DataPaths, tmp_path: Path) -> None:
     reference = _vault_with_sentinel_note(
-        git_vault, tmp_path, "500007,Zebra Ridge Bowl,Ridge Bowl,true\n"
+        git_vault, tmp_path, "500007,Zebra Ridge Bowl,Ridge Bowl,true,ridge-bowl\n"
     )
     outcome = run_build(git_vault, reference, commit=False, accept_baseline=False)
     assert outcome.counts["bowl_names_unknown"] == 0

@@ -20,14 +20,14 @@
 import { byPatch, chartContext } from './bars.js';
 
 export const TAB_HINTS = {
-  bars: 'Pick a school, network, or announcer',
+  bars: 'Pick a school, network, announcer, or game',
   butterfly: 'Pick exactly two schools or two announcers',
 };
 
 export const STALE_COPY = {
   bars: {
-    title: 'Pick a school, network, or announcer',
-    hint: 'Pick a school, narrow Networks, or select an announcer to see counts.',
+    title: 'Pick a school, network, announcer, or game',
+    hint: 'Pick a school or a game, narrow Networks, or select an announcer to see counts.',
   },
   butterfly: {
     title: 'Pick exactly two schools or two announcers',

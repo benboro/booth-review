@@ -282,6 +282,151 @@ def _time_slot_evening_not_in_enum(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _schema_version_2_0_0(data: dict[str, Any]) -> dict[str, Any]:
+    data["schema_version"] = "2.0.0"
+    return data
+
+
+def _missing_rivalry_column(data: dict[str, Any]) -> dict[str, Any]:
+    del data["telecasts"]["rivalry"]
+    return data
+
+
+def _missing_bowl_franchises(data: dict[str, Any]) -> dict[str, Any]:
+    del data["lookups"]["bowl_franchises"]
+    return data
+
+
+def _missing_rivalries(data: dict[str, Any]) -> dict[str, Any]:
+    del data["lookups"]["rivalries"]
+    return data
+
+
+def _bowl_without_franchise(data: dict[str, Any]) -> dict[str, Any]:
+    del data["lookups"]["bowls"][0]["franchise"]
+    return data
+
+
+def _bowl_franchise_out_of_range(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["bowls"][0]["franchise"] = 9
+    return data
+
+
+def _bowl_core_not_franchise_name(data: dict[str, Any]) -> dict[str, Any]:
+    # "Harbor" is still a substring of the official name.
+    data["lookups"]["bowls"][0]["core"] = "Harbor"
+    return data
+
+
+def _unreferenced_franchise(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["bowl_franchises"].append({"slug": "extra-bowl", "name": "Extra", "former": []})
+    return data
+
+
+def _franchise_slug_not_kebab(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["bowl_franchises"][0]["slug"] = "Harbor Bowl"
+    return data
+
+
+def _slug_collision(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][0]["slug"] = data["lookups"]["bowl_franchises"][0]["slug"]
+    return data
+
+
+def _reserved_cfp_slug(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][0]["slug"] = "cfp-semifinal"
+    return data
+
+
+def _former_contains_name(data: dict[str, Any]) -> dict[str, Any]:
+    franchise = data["lookups"]["bowl_franchises"][0]
+    franchise["former"].append(franchise["name"])
+    return data
+
+
+def _rivalry_teams_equal(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][1]["teams"] = [1, 1]
+    return data
+
+
+def _rivalry_team_out_of_range(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][1]["teams"] = [0, 99]
+    return data
+
+
+def _rivalry_teams_not_ascending(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][1]["teams"] = [1, 0]
+    return data
+
+
+def _rivalry_on_playoff(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["rivalry"][5] = 0
+    return data
+
+
+def _rivalry_teams_mismatch(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["rivalry"][1] = 1
+    return data
+
+
+def _rivalry_index_out_of_range(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["rivalry"][0] = 7
+    return data
+
+
+def _unreferenced_rivalry(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["rivalry"][11] = None
+    return data
+
+
+def _rivalry_article_missing(data: dict[str, Any]) -> dict[str, Any]:
+    del data["lookups"]["rivalries"][1]["article"]
+    return data
+
+
+def _rivalry_article_capitalized(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][1]["article"] = "The"
+    return data
+
+
+def _rivalry_article_empty_string(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][1]["article"] = ""
+    return data
+
+
+def _rivalry_article_before_the_name(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][0]["article"] = "the"
+    return data
+
+
+def _duplicate_rivalry_name(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][1]["name"] = "the bridge GAME"
+    return data
+
+
+def _rivalry_name_matches_franchise(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["rivalries"][1]["name"] = "Summit Bowl"
+    return data
+
+
+def _duplicate_franchise_name(data: dict[str, Any]) -> dict[str, Any]:
+    # Both franchises labeled "Summit Bowl"; each bowl's core is still one of
+    # its franchise's names, so only the distinct-name check can catch it.
+    harbor = data["lookups"]["bowl_franchises"][0]
+    harbor["name"] = "Summit Bowl"
+    harbor["former"] = ["Bayside Bowl", "Harbor Bowl"]
+    data["lookups"]["bowls"][0]["core"] = "Summit Bowl"
+    data["lookups"]["bowls"][0]["name"] = "Acme Summit Bowl"
+    return data
+
+
+def _franchise_name_not_a_core(data: dict[str, Any]) -> dict[str, Any]:
+    harbor = data["lookups"]["bowl_franchises"][0]
+    harbor["name"] = "Newer Bowl"
+    harbor["former"] = ["Bayside Bowl", "Harbor Bowl"]
+    return data
+
+
 _BROKEN_VARIANTS = [
     pytest.param(_add_unknown_top_level_key, id="unknown-top-level-key"),
     pytest.param(_add_unknown_telecast_column, id="unknown-telecast-column"),
@@ -326,6 +471,33 @@ _BROKEN_VARIANTS = [
     pytest.param(_bowl_core_not_in_name, id="bowl-core-not-in-name"),
     pytest.param(_bowl_on_regular_game, id="bowl-on-regular-game"),
     pytest.param(_bowl_empty_core, id="bowl-empty-core"),
+    pytest.param(_schema_version_2_0_0, id="schema-version-2-0-0"),
+    pytest.param(_missing_rivalry_column, id="missing-rivalry-column"),
+    pytest.param(_missing_bowl_franchises, id="missing-bowl-franchises"),
+    pytest.param(_missing_rivalries, id="missing-rivalries"),
+    pytest.param(_bowl_without_franchise, id="bowl-without-franchise"),
+    pytest.param(_bowl_franchise_out_of_range, id="bowl-franchise-out-of-range"),
+    pytest.param(_bowl_core_not_franchise_name, id="bowl-core-not-franchise-name"),
+    pytest.param(_unreferenced_franchise, id="unreferenced-franchise"),
+    pytest.param(_franchise_slug_not_kebab, id="franchise-slug-not-kebab"),
+    pytest.param(_slug_collision, id="slug-collision"),
+    pytest.param(_reserved_cfp_slug, id="reserved-cfp-slug"),
+    pytest.param(_former_contains_name, id="former-contains-name"),
+    pytest.param(_rivalry_teams_equal, id="rivalry-teams-equal"),
+    pytest.param(_rivalry_team_out_of_range, id="rivalry-team-out-of-range"),
+    pytest.param(_rivalry_teams_not_ascending, id="rivalry-teams-not-ascending"),
+    pytest.param(_rivalry_on_playoff, id="rivalry-on-playoff"),
+    pytest.param(_rivalry_teams_mismatch, id="rivalry-teams-mismatch"),
+    pytest.param(_rivalry_index_out_of_range, id="rivalry-index-out-of-range"),
+    pytest.param(_unreferenced_rivalry, id="unreferenced-rivalry"),
+    pytest.param(_rivalry_article_missing, id="rivalry-article-missing"),
+    pytest.param(_rivalry_article_capitalized, id="rivalry-article-capitalized"),
+    pytest.param(_rivalry_article_empty_string, id="rivalry-article-empty-string"),
+    pytest.param(_rivalry_article_before_the_name, id="rivalry-article-before-the-name"),
+    pytest.param(_duplicate_rivalry_name, id="duplicate-rivalry-name"),
+    pytest.param(_rivalry_name_matches_franchise, id="rivalry-name-matches-franchise"),
+    pytest.param(_duplicate_franchise_name, id="duplicate-franchise-name"),
+    pytest.param(_franchise_name_not_a_core, id="franchise-name-not-a-core"),
 ]
 
 
@@ -335,6 +507,51 @@ def test_broken_variant_raises(mutate: Any) -> None:
     broken = mutate(data)
     with pytest.raises(ValidationError):
         validate_site_data(broken)
+
+
+_NAMED_GAME_VARIANTS = [
+    _bowl_franchise_out_of_range,
+    _bowl_core_not_franchise_name,
+    _unreferenced_franchise,
+    _slug_collision,
+    _reserved_cfp_slug,
+    _rivalry_team_out_of_range,
+    _rivalry_on_playoff,
+    _rivalry_teams_mismatch,
+    _rivalry_index_out_of_range,
+    _unreferenced_rivalry,
+    _duplicate_rivalry_name,
+    _rivalry_name_matches_franchise,
+    _duplicate_franchise_name,
+    _franchise_name_not_a_core,
+]
+
+
+@pytest.mark.parametrize("mutate", _NAMED_GAME_VARIANTS)
+def test_named_game_errors_never_echo_names(mutate: Any) -> None:
+    broken = mutate(copy.deepcopy(_load_fixture()))
+    with pytest.raises(ValidationError) as exc:
+        validate_site_data(broken)
+    for word in ("Lakeshore", "Bridge", "Harbor", "Summit"):
+        assert word not in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (_duplicate_rivalry_name, "lookups: 1 named game(s) repeat another's display name"),
+        (_rivalry_name_matches_franchise, "lookups: 1 named game(s) repeat another's display name"),
+        (_duplicate_franchise_name, "lookups: 1 named game(s) repeat another's display name"),
+        (
+            _franchise_name_not_a_core,
+            "lookups.bowl_franchises[0].name: not the core name of any of its bowls",
+        ),
+    ],
+)
+def test_named_game_label_checks_are_count_or_index_only(mutate: Any, message: str) -> None:
+    with pytest.raises(ValidationError) as exc:
+        validate_site_data(mutate(copy.deepcopy(_load_fixture())))
+    assert message in str(exc.value)
 
 
 def test_schema_file_matches_models() -> None:

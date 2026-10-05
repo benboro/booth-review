@@ -20,6 +20,7 @@ import pytest
 
 from booth_review.build.bowls import BOWL_COLUMNS, load_bowls
 from booth_review.build.crew_overrides import CREW_OVERRIDE_COLUMNS, load_crew_overrides
+from booth_review.build.rivalries import RIVALRY_COLUMNS, load_rivalries
 from booth_review.contract.models import crew_source_url_problem
 from booth_review.flags.era import ERA_COLUMNS, load_eras
 from booth_review.flags.events import EVENT_COLUMNS, load_event_flags
@@ -70,6 +71,7 @@ KNOWN_TABLES: dict[str, tuple[tuple[str, ...] | None, Loader | None]] = {
     "primary_network_overrides.csv": (PRIMARY_OVERRIDE_COLUMNS, load_primary_overrides),
     "combined_figures.csv": (_COMBINED_COLUMNS, _load_combined_figures),
     "bowls.csv": (BOWL_COLUMNS, load_bowls),
+    "rivalries.csv": (RIVALRY_COLUMNS, load_rivalries),
     "crew_overrides.csv": (CREW_OVERRIDE_COLUMNS, load_crew_overrides),
 }
 
@@ -201,6 +203,16 @@ def test_crew_override_person_ids_exist() -> None:
         assert row["person_id"] in people_ids, (
             f"crew_overrides.csv line {line_no}: unknown person_id"
         )
+
+
+def test_rivalry_teams_use_canonical_crosswalk_names() -> None:
+    rivalries = load_rivalries(REFERENCE_DIR)
+    assert rivalries
+    crosswalk = read_reference_csv(REFERENCE_DIR / "team_crosswalk.csv", TEAM_CROSSWALK_COLUMNS)
+    non_canonical = {row["variant"] for row in crosswalk if row["variant"] != row["canonical"]}
+    for rivalry in rivalries:
+        assert rivalry.team_a not in non_canonical, f"{rivalry.rivalry_id}: team_a is a variant"
+        assert rivalry.team_b not in non_canonical, f"{rivalry.rivalry_id}: team_b is a variant"
 
 
 # -- not accidentally gitignored (same pattern as tests/test_gitignore.py) ---------------------

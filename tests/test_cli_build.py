@@ -242,6 +242,20 @@ def test_accept_baseline_on_a_blocked_build_writes_new_baseline_and_site_data(
     assert baseline is not None
 
 
+def test_build_summary_prints_rivalry_counts_only(
+    build_git_vault: DataPaths, capsys: pytest.CaptureFixture[str]
+) -> None:
+    capsys.readouterr()
+    assert main(["build", "--accept-baseline"]) == 0
+    out = capsys.readouterr().out
+    line = next(ln for ln in out.splitlines() if ln.startswith("rivalries: "))
+    assert re.fullmatch(
+        r"rivalries: \d+ games tagged \(\d+ plotted telecasts\), "
+        r"title games excluded \d+, rematches demoted \d+",
+        line,
+    )
+
+
 def test_regression_reasons_name_only_season_and_metric(
     build_git_vault: DataPaths, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -322,7 +336,7 @@ def test_cli_build_json_output_round_trips(build_git_vault: DataPaths) -> None:
     paths = build_git_vault
     main(["build", "--no-commit"])
     body = json.loads((paths.vault / "processed" / "site-data.json").read_text(encoding="utf-8"))
-    assert body["schema_version"] == "2.0.0"
+    assert body["schema_version"] == "2.1.0"
 
 
 # -- WR-01 / WR-02: ordering and scope of a blocked or failing build ---------------------------

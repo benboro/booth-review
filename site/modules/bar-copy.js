@@ -7,6 +7,7 @@
  */
 
 import { TOP_N } from './bars.js';
+import { gameTitlePhrase } from './format.js';
 import { ROLE_PILL_TEXT } from './pill.js';
 
 /** Shown when the filters leave no rows (UI-SPEC empty state). */
@@ -122,6 +123,24 @@ export function networkPhrase(data, state) {
   return ` on ${names.join(' or ')}`;
 }
 
+/**
+ * The " of the Harbor Bowl" / " in the Harbor Bowl" game phrase of a title (04.9 D-18).
+ * @param {object} data
+ * @param {object} state
+ * @param {string} [preposition]
+ * @returns {string} '' when no (known) game is picked.
+ */
+export function gamePhrase(data, state, preposition = 'of') {
+  if (state.game == null) return '';
+  const index = data.gameIndexBySlug.get(state.game);
+  if (index === undefined) return '';
+  return `${preposition} ${gameTitlePhrase(data.games[index])}`;
+}
+
+function gamePreposition(model) {
+  return model.rowKind === 'family' || model.rowKind === 'conference' ? 'in' : 'of';
+}
+
 function subject(model) {
   if (model.rowKind === 'person') return 'Announcers by rated telecasts';
   if (model.rowKind === 'family') return 'Network families by announcer';
@@ -137,8 +156,8 @@ function butterflySubject(model) {
 }
 
 /**
- * Chart title for a Bars or Butterfly model: subject, matchup (Head-to-head
- * only), people, networks. Either team keeps the "or" join (04.4 D-21).
+ * Chart title for a Bars or Butterfly model: subject, game (04.9 D-18), matchup
+ * (Head-to-head only), people, networks. Either team keeps the "or" join (04.4 D-21).
  * @param {object} model
  * @param {object} data
  * @param {object} state
@@ -148,14 +167,16 @@ export function chartTitle(model, data, state) {
   const nets = networkPhrase(data, state);
   const matchup = matchupPhrase(data, state);
   const matchupTail = matchup ? ` ${matchup}` : '';
+  const game = gamePhrase(data, state, gamePreposition(model));
+  const gameTail = game ? ` ${game}` : '';
   if (model.kind === 'butterfly') {
     const omit = model.group === 'announcers' ? 'schools' : 'people';
     const phrase = subjectPhrase(data, state, { omit });
     const head = `${butterflySubject(model)}: ${model.sides[0].name} and ${model.sides[1].name}`;
-    return `${head}${matchupTail}${phrase ? ` with ${phrase}` : ''}${nets}`;
+    return `${head}${gameTail}${matchupTail}${phrase ? ` with ${phrase}` : ''}${nets}`;
   }
   const phrase = subjectPhrase(data, state);
-  return `${subject(model)}${matchupTail}${phrase ? ` with ${phrase}` : ''}${nets}`;
+  return `${subject(model)}${gameTail}${matchupTail}${phrase ? ` with ${phrase}` : ''}${nets}`;
 }
 
 /**
