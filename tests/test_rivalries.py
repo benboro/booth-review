@@ -5,12 +5,15 @@ Team and rivalry names below are invented.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 
 from booth_review.build.rivalries import RIVALRY_COLUMNS, Rivalry, load_rivalries
+from booth_review.contract.models import GAME_SLUG_PATTERN, RESERVED_GAME_SLUGS
 from booth_review.errors import ReferenceTableError
+from booth_review.reference import SLUG_PATTERN
 from booth_review.transport.cache import atomic_write_bytes
 
 HEADER = "rivalry_id,name,article,team_a,team_b,season_from,season_to\n"
@@ -112,9 +115,7 @@ def test_rejects_angle_brackets(tmp_path: Path, name: str) -> None:
     _rejects(tmp_path, f"a,{name},,Northfield,Lakeview,,\n")
 
 
-@pytest.mark.parametrize(
-    "rid", ["cfp-national-championship", "cfp-semifinal", "cfp-quarterfinal", "cfp-first-round"]
-)
+@pytest.mark.parametrize("rid", sorted(RESERVED_GAME_SLUGS))
 def test_rejects_reserved_id(tmp_path: Path, rid: str) -> None:
     text = _rejects(tmp_path, f"{rid},Zebra Cup,,Northfield,Lakeview,,\n")
     assert rid not in text
@@ -145,3 +146,17 @@ def test_rejects_article_before_a_the_name(tmp_path: Path) -> None:
 def test_the_name_with_empty_article_loads(tmp_path: Path) -> None:
     (row,) = load_rivalries(_write(tmp_path, "a,The Zebra Cup,,Northfield,Lakeview,,\n"))
     assert row.article is None
+
+
+def test_slug_pattern_copies_agree() -> None:
+    assert SLUG_PATTERN.pattern == GAME_SLUG_PATTERN
+
+
+def test_reserved_slugs_match_client_cfp_defs() -> None:
+    js = Path(__file__).resolve().parents[1] / "site" / "modules" / "format.js"
+    text = js.read_text(encoding="utf-8")
+    block = text[text.index("export const CFP_GAME_DEFS") :]
+    block = block[: block.index("]);")]
+    slugs = re.findall(r"slug: '([a-z0-9-]+)'", block)
+    assert len(slugs) == 4
+    assert set(slugs) == RESERVED_GAME_SLUGS

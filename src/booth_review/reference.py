@@ -24,13 +24,13 @@ from pathlib import Path
 from booth_review.errors import ReferenceTableError
 from booth_review.transport.cache import atomic_write_bytes
 
+# Stable ASCII kebab ids for named games; never renamed once shipped.
+SLUG_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+
 # A cell starting with any of these is interpreted as a formula by Excel/
 # Sheets (classic CSV/formula injection) when opened in a spreadsheet. Same
 # prefixes as resolve.names.csv_safe, restated locally rather than imported
 # so this foundational module never depends on a later-plan package.
-# Stable ASCII kebab ids for named games; never renamed once shipped.
-SLUG_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-
 _FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
 

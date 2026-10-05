@@ -16,7 +16,8 @@ from dataclasses import dataclass
 import polars as pl
 
 from booth_review.build.bowls import BowlEntry
-from booth_review.build.rivalries import RESERVED_RIVALRY_IDS, Rivalry
+from booth_review.build.rivalries import Rivalry
+from booth_review.contract.models import RESERVED_GAME_SLUGS
 from booth_review.errors import BowlCrosswalkError, VaultStateError
 
 
@@ -43,7 +44,11 @@ class RivalryResolution:
 def build_franchises(
     entries: Mapping[int, BowlEntry], season_by_game: Mapping[int, int]
 ) -> dict[str, Franchise]:
-    """Group plotted bowl rows by franchise; label with the latest-season core name."""
+    """Group plotted bowl rows by franchise; label with the latest-season core name.
+
+    Only plotted rows contribute, by design: the Game picker lists only games that
+    can appear on the chart (see docs/site-data.md).
+    """
     rows: list[tuple[int, int, str, str | None]] = []  # season, game_id, core, franchise
     for game_id, season in season_by_game.items():
         entry = entries.get(game_id)
@@ -163,6 +168,6 @@ def check_game_slugs(franchise_slugs: Iterable[str], rivalry_ids: Iterable[str])
     """Fail when slugs repeat across franchises and rivalries or use a CFP slug."""
     counts = Counter(franchise_slugs)
     counts.update(rivalry_ids)
-    bad = sum(1 for slug, n in counts.items() if n > 1 or slug in RESERVED_RIVALRY_IDS)
+    bad = sum(1 for slug, n in counts.items() if n > 1 or slug in RESERVED_GAME_SLUGS)
     if bad:
         raise VaultStateError(f"named games: {bad} slug(s) collide or use a reserved CFP slug")
