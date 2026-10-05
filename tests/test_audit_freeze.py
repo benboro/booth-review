@@ -200,6 +200,31 @@ def test_freeze_seasons_dry_run_writes_nothing(vault_paths: DataPaths) -> None:
     assert not (vault_paths.audit / "freeze.json").exists()
 
 
+def test_freeze_seasons_waiver_for_other_season_refused_nothing_written(
+    vault_paths: DataPaths,
+) -> None:
+    _seed_complete_season(vault_paths, 2020)
+    _seed_complete_season(vault_paths, 2019)
+    before = vault_paths.frozen.read_text(encoding="utf-8")
+
+    with pytest.raises(FreezeRefusedError, match="season 2019") as excinfo:
+        freeze_seasons(vault_paths, [2020], today=_TODAY, waivers=[Waiver(2019, "sports506")])
+
+    assert "2020" not in str(excinfo.value)
+    assert vault_paths.frozen.read_text(encoding="utf-8") == before
+    assert not (vault_paths.audit / "freeze.json").exists()
+
+
+def test_freeze_seasons_unneeded_waiver_not_recorded(vault_paths: DataPaths) -> None:
+    _seed_complete_season(vault_paths, 2020)
+
+    result = freeze_seasons(vault_paths, [2020], today=_TODAY, waivers=[Waiver(2020, "ratingsref")])
+
+    freeze_record = json.loads((vault_paths.audit / "freeze.json").read_text(encoding="utf-8"))
+    assert freeze_record["waivers"] == []
+    assert result.waivers == []
+
+
 # -- parse_waiver ---------------------------------------------------------------------------
 
 

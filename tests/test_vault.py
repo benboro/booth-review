@@ -268,7 +268,7 @@ def test_commit_batch_raises_after_second_push_rejection(
     vault_repo_env: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _remote, vault = vault_repo_env
-    repo = VaultRepo(vault)
+    repo = VaultRepo(vault, sleep=lambda _seconds: None)
     (vault / "raw").mkdir()
     (vault / "raw" / "a.html").write_text("a\n", encoding="utf-8")
 
@@ -286,6 +286,87 @@ def test_commit_batch_raises_after_second_push_rejection(
     )
     with pytest.raises(VaultCommitError):
         repo.commit_batch(message)
+
+
+def _competing_clone(tmp_path: Path, remote: Path) -> Path:
+    second = tmp_path / "second-clone"
+    _run_ok(["git", "clone", "-q", str(remote), str(second)])
+    _run_ok(["git", "-C", str(second), "config", "user.name", "Second Bot"])
+    _run_ok(["git", "-C", str(second), "config", "user.email", "second-bot@example.com"])
+    return second
+
+
+def _competing_push(second: Path, name: str) -> None:
+    _run_ok(["git", "-C", str(second), "pull", "-q", "--rebase"])
+    (second / name).write_text(f"{name}\n", encoding="utf-8")
+    _run_ok(["git", "-C", str(second), "add", name])
+    _run_ok(["git", "-C", str(second), "commit", "-q", "-m", f"init: {name}"])
+    _run_ok(["git", "-C", str(second), "push", "-q"])
+
+
+def _race_after_pulls(repo: VaultRepo, second: Path, pulls_to_race: int) -> None:
+    """After each of the first `pulls_to_race` pull --rebase calls, a competing
+    clone pushes, so the next push of `repo` is rejected again."""
+    real_run = repo._run
+    pulls = 0
+
+    def racing_run(*args: str) -> subprocess.CompletedProcess[str]:
+        nonlocal pulls
+        result = real_run(*args)
+        if args[:2] == ("pull", "--rebase"):
+            pulls += 1
+            if pulls <= pulls_to_race:
+                _competing_push(second, f"race-{pulls}.txt")
+        return result
+
+    repo._run = racing_run  # type: ignore[method-assign]
+
+
+def test_commit_batch_succeeds_on_third_push_round(
+    tmp_path: Path, vault_repo_env: tuple[Path, Path]
+) -> None:
+    remote, vault = vault_repo_env
+    second = _competing_clone(tmp_path, remote)
+    _competing_push(second, "first.txt")  # round 1's push is rejected
+
+    sleeps: list[float] = []
+    repo = VaultRepo(vault, sleep=sleeps.append)
+    _race_after_pulls(repo, second, pulls_to_race=1)  # round 2's push is rejected too
+    (vault / "raw").mkdir()
+    (vault / "raw" / "a.html").write_text("a\n", encoding="utf-8")
+
+    message = batch_message(
+        "collect", "sports506", "2025", {"fetched": 1, "cached": 0, "not_modified": 0}
+    )
+    assert repo.commit_batch(message) is True
+
+    assert sleeps == [1.0, 2.0]
+    assert _remote_head_subject(remote) == message
+    assert _remote_log_count(remote) == 4  # seed + first + race-1 + this commit
+
+
+def test_commit_batch_raises_after_three_rejected_rounds_without_rebase_left(
+    tmp_path: Path, vault_repo_env: tuple[Path, Path]
+) -> None:
+    remote, vault = vault_repo_env
+    second = _competing_clone(tmp_path, remote)
+    _competing_push(second, "first.txt")
+
+    sleeps: list[float] = []
+    repo = VaultRepo(vault, sleep=sleeps.append)
+    _race_after_pulls(repo, second, pulls_to_race=3)
+    (vault / "raw").mkdir()
+    (vault / "raw" / "a.html").write_text("a\n", encoding="utf-8")
+
+    message = batch_message(
+        "collect", "sports506", "2025", {"fetched": 1, "cached": 0, "not_modified": 0}
+    )
+    with pytest.raises(VaultCommitError, match="after 3 pull --rebase rounds"):
+        repo.commit_batch(message)
+
+    assert sleeps == [1.0, 2.0]
+    assert not (vault / ".git" / "rebase-merge").exists()
+    assert not (vault / ".git" / "rebase-apply").exists()
 
 
 # -- lock() -------------------------------------------------------------------------
