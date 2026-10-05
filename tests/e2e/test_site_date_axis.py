@@ -391,7 +391,8 @@ def test_date_axis_has_no_title_zero_line_or_captions(date_page: Page) -> None:
 def test_no_na_strip_and_all_dots_plotted(date_page: Page) -> None:
     f = _fig(date_page)
     date_x = date_page.evaluate("Array.from(window.__testHooks.data.t.dateX)")
-    assert len(f["byIdx"]) + 0 <= len(date_x)
+    # Every dot passes in the default state, so each telecast is drawn exactly once.
+    assert len(f["byIdx"]) == len(date_x)
     assert sorted(f["xs"]) == sorted(date_x)
     assert len(f["xs"]) == 12
     assert f["range"][0] <= min(f["xs"]) and f["range"][1] >= max(f["xs"])
@@ -490,10 +491,10 @@ def test_tooltip_ring_and_modal_on_date(date_page: Page) -> None:
     assert expected in tip.inner_text()
     assert tip.bounding_box()["width"] <= 320  # type: ignore[index]
     ring = date_page.locator(_RING_VISIBLE).first
-    if ring.count():
-        box = ring.bounding_box()
-        assert box is not None
-        assert abs(box["x"] + box["width"] / 2 - point["x"]) <= 1.5
+    expect(ring).to_be_visible()
+    box = ring.bounding_box()
+    assert box is not None
+    assert abs(box["x"] + box["width"] / 2 - point["x"]) <= 1.5
     date_page.evaluate("window.__testHooks.openPanel(0)")
     expect(date_page.locator("#panel-body")).to_contain_text(expected)
 
@@ -519,6 +520,9 @@ async () => {
         && a.text === '<b>' + s.label + '</b>' && (a.visible ?? true) === s.visible;
     }),
     ticktext: gd.layout.xaxis.ticktext,
+    tier: want.tier,
+    renderedTicks: [...document.querySelectorAll('#chart .xtick text')]
+      .map((el) => el.textContent),
     visibleSeasons: want.seasons.filter((s) => s.visible).length,
   };
 }
@@ -578,8 +582,12 @@ def test_label_tiers_desktop_and_phone(
     assert texts and all(re.fullmatch(r"[A-Z][a-z]{2}", t) for t in texts), texts
     mobile_page.evaluate(_STATE_JS, {"seasons": None})
     _settle(mobile_page)
-    texts = mobile_page.evaluate(_WANT_JS)["ticktext"]
-    assert all(t == "" for t in texts)
+    out = mobile_page.evaluate(_WANT_JS)
+    # All four fixture seasons at 360px: tier 4, month ticks drawn but unlabeled.
+    assert out["tier"] == 4
+    assert out["ticktext"], "tier 4 draws month ticks"
+    assert all(t == "" for t in out["ticktext"])
+    assert all(t == "" for t in out["renderedTicks"]), out["renderedTicks"]
 
 
 def test_phone_season_labels_fit_without_overlap(
