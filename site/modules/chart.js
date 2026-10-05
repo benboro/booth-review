@@ -592,7 +592,7 @@ export function renderChart(gd, figure) {
   // edit, so a later home input would snap the zoom back (04.11 D-13).
   const awayFromHome = sameRev && Array.isArray(prevHome) && Array.isArray(live) && !sameRange(live, prevHome);
   const layout = awayFromHome
-    ? { ...figure.layout, xaxis: { ...figure.layout.xaxis, range: live.slice() } }
+    ? { ...figure.layout, xaxis: { ...figure.layout.xaxis, range: keepInLimits(live, figure.layout.xaxis) } }
     : figure.layout;
   window.Plotly.react(gd, figure.traces, layout, figure.config);
   if ((prevRev !== undefined && !sameRev) || homeMoved) resetHomeRanges(gd, figure.layout);
@@ -603,6 +603,26 @@ export function renderChart(gd, figure) {
     }
   }
   gd.boothHomeX = Array.isArray(home) ? home.slice() : undefined;
+}
+
+/**
+ * The kept zoom `range`, shifted (at its own width) inside the axis's pan
+ * limits, or the whole limits when it is wider. A widening resize narrows the
+ * Date limits, and Plotly would otherwise clamp only the drawn range and leave
+ * the input range disagreeing with it (04.12 WR-03). Axes without limits keep
+ * the range as is.
+ * @param {number[]} range - the live [lo, hi].
+ * @param {{minallowed?: number, maxallowed?: number}} xaxis - the new layout's x axis.
+ * @returns {number[]}
+ */
+function keepInLimits(range, xaxis) {
+  const { minallowed: min, maxallowed: max } = xaxis;
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return range.slice();
+  const width = range[1] - range[0];
+  if (width >= max - min) return [min, max];
+  if (range[0] < min) return [min, min + width];
+  if (range[1] > max) return [max - width, max];
+  return range.slice();
 }
 
 /** True when two [lo, hi] ranges agree to within float noise. */

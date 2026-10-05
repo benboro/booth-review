@@ -372,6 +372,44 @@ def test_resize_on_bars_tab_keeps_the_scatter_zoom(
     assert page.evaluate(_XRANGE_JS) == pytest.approx(zoomed, abs=1e-6)
 
 
+_KEPT_JS = """
+() => {
+  const gd = document.getElementById('chart');
+  const l = gd.layout.xaxis;
+  return {
+    live: gd._fullLayout.xaxis.range.slice(),
+    input: l.range.slice(),
+    lo: l.minallowed,
+    hi: l.maxallowed,
+  };
+}
+"""
+
+
+@pytest.mark.parametrize("edge", ["left", "right"])
+def test_widening_resize_clamps_a_kept_zoom_inside_the_pan_limits(
+    guarded_page: Page, open_app: Callable[[Page, str], None], edge: str
+) -> None:
+    """WR-03: a zoom pinned to an edge stays inside the narrower limits, at its width."""
+    guarded_page.set_viewport_size({"width": 700, "height": 900})
+    open_app(guarded_page, "?axis=date")
+    _settle(guarded_page)
+    home = guarded_page.evaluate("() => document.getElementById('chart').boothHomeX.slice()")
+    zoom = [home[0], home[0] + 50] if edge == "left" else [home[1] - 50, home[1]]
+    guarded_page.evaluate("(r) => Plotly.relayout('chart', {'xaxis.range': r})", zoom)
+    _settle(guarded_page)
+    guarded_page.set_viewport_size({"width": 1400, "height": 900})
+    _settle(guarded_page)
+    got = guarded_page.evaluate(_KEPT_JS)
+    assert got["lo"] > home[0] and got["hi"] < home[1], "widening must narrow the limits"
+    assert got["input"] == pytest.approx(got["live"], abs=1e-9)
+    assert got["live"][0] >= got["lo"] - 1e-9
+    assert got["live"][1] <= got["hi"] + 1e-9
+    assert got["live"][1] - got["live"][0] == pytest.approx(50, abs=1e-6)
+    pinned = got["live"][0] if edge == "left" else got["live"][1]
+    assert pinned == pytest.approx(got["lo"] if edge == "left" else got["hi"], abs=1e-9)
+
+
 @pytest.mark.parametrize("query", ["?axis=date", ""])
 def test_phone_rotation_recomputes_gutter(
     mobile_page: Page, open_app: Callable[[Page, str], None], query: str
