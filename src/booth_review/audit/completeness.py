@@ -32,6 +32,13 @@ from booth_review.transport.cache import Manifest, atomic_write_bytes, atomic_wr
 SOURCES: tuple[str, ...] = ("sports506", "cfbd", "ratingsref")
 CFBD_SEASON_ENDPOINTS: tuple[str, ...] = tuple(ENDPOINTS.keys())
 
+# Season-static CFBD endpoints: FBS membership is fixed before a season starts,
+# so the scheduled job fetches these once (job.runner.JOB_CFBD_ONCE) and never
+# again. For an in-season season a fetch at any time counts; the season-end
+# freshness bar applies only to the endpoints the job re-fetches every run.
+# Otherwise a 2026+ cell could never pass without a hand re-fetch (WR-05).
+CFBD_STATIC_ENDPOINTS: tuple[str, ...] = ("teams_fbs",)
+
 # Seasons from here on are collected in season by the scheduled job, so their
 # inputs must be shown fresh before a freeze; 2014-2025 were all collected after
 # their seasons ended (folded WR-08).
@@ -256,7 +263,12 @@ def _parse_utc(value: str) -> datetime:
 
 
 def check_cfbd(paths: DataPaths, season: int) -> CellResult:
-    """D-05's CFBD bar: all six season endpoints cached and non-empty."""
+    """D-05's CFBD bar: all six season endpoints cached and non-empty.
+
+    For seasons collected in season (2026+), each endpoint also needs a fetch
+    on record: from Feb 1 after the season for the endpoints the job re-fetches,
+    at any time for the season-static ones (CFBD_STATIC_ENDPOINTS).
+    """
     present: list[str] = []
     missing: list[str] = []
     for name in CFBD_SEASON_ENDPOINTS:
@@ -283,7 +295,9 @@ def check_cfbd(paths: DataPaths, season: int) -> CellResult:
                 newest[entry_path] = max(fetched_at, newest.get(entry_path, ""))
         for name in CFBD_SEASON_ENDPOINTS:
             fetched = newest.get(f"cfbd/{name}/{season}.json")
-            if fetched is None or _parse_utc(fetched) < season_end:
+            needs_post_season = name not in CFBD_STATIC_ENDPOINTS
+            stale = needs_post_season and fetched is not None and _parse_utc(fetched) < season_end
+            if fetched is None or stale:
                 fetched_before_end.append(name)
 
     complete = not missing and not fetched_before_end

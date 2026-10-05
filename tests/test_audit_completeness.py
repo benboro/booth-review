@@ -14,6 +14,7 @@ from pathlib import Path
 
 from booth_review.audit.completeness import (
     CFBD_SEASON_ENDPOINTS,
+    CFBD_STATIC_ENDPOINTS,
     build_completeness,
     cfbd_ledger_months,
     check_506,
@@ -22,6 +23,7 @@ from booth_review.audit.completeness import (
     write_completeness,
 )
 from booth_review.config import CFBD_FLOOR_DEFAULT, DataPaths
+from booth_review.job.runner import JOB_CFBD_ONCE, JOB_CFBD_REFRESH
 from booth_review.sources.ratingsref.sitemap import parse_sitemap
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sports506"
@@ -454,6 +456,48 @@ def test_check_cfbd_in_season_without_manifest_entries_is_incomplete(
 
     assert cell.complete is False
     assert cell.counts["fetched_before_end"] == 6
+
+
+def test_check_cfbd_in_season_static_endpoint_fetched_in_season_is_complete(
+    vault_paths: DataPaths,
+) -> None:
+    # WR-05: the job fetches teams_fbs once, early in the season, and never
+    # again, so only the re-fetched endpoints carry the season-end bar.
+    season = 2026
+    _write_all_cfbd_endpoints(vault_paths, season)
+    for name in CFBD_SEASON_ENDPOINTS:
+        fetched_at = "2026-08-20T00:00:00Z" if name == "teams_fbs" else "2027-02-02T00:00:00Z"
+        _manifest_line(vault_paths, f"cfbd/{name}/{season}.json", fetched_at=fetched_at)
+
+    cell = check_cfbd(vault_paths, season)
+
+    assert cell.complete is True
+    assert cell.reasons == []
+    assert cell.counts["fetched_before_end"] == 0
+
+
+def test_check_cfbd_in_season_static_endpoint_still_needs_a_fetch_on_record(
+    vault_paths: DataPaths,
+) -> None:
+    season = 2026
+    _write_all_cfbd_endpoints(vault_paths, season)
+    for name in CFBD_SEASON_ENDPOINTS:
+        if name != "teams_fbs":
+            _manifest_line(
+                vault_paths, f"cfbd/{name}/{season}.json", fetched_at="2027-02-02T00:00:00Z"
+            )
+
+    cell = check_cfbd(vault_paths, season)
+
+    assert cell.complete is False
+    assert cell.details["fetched_before_end"] == ["teams_fbs"]
+
+
+def test_static_endpoints_are_exactly_the_jobs_fetch_once_set() -> None:
+    # The exemption must track what the job actually never re-fetches.
+    assert CFBD_STATIC_ENDPOINTS == JOB_CFBD_ONCE
+    assert set(JOB_CFBD_REFRESH) | set(CFBD_STATIC_ENDPOINTS) == set(CFBD_SEASON_ENDPOINTS)
+    assert not set(JOB_CFBD_REFRESH) & set(CFBD_STATIC_ENDPOINTS)
 
 
 def test_check_cfbd_pre_in_season_ignores_manifest(vault_paths: DataPaths) -> None:

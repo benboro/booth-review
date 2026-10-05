@@ -355,7 +355,12 @@ class ScheduledJob:
                     lambda: self._run_build_step(items, counts),
                     passthrough=(VaultCommitError,),
                 )
-                if outcome is not None and not outcome.blocked:
+                # WR-06: a crashed build or site step, or a key leak, is a
+                # failed run (state, failed_attempts, catch-up window); a
+                # guard-blocked build (D-09) stays attention only.
+                if outcome is None:
+                    any_failed = True
+                elif not outcome.blocked:
                     new_last_build_at = now
                     site_result = self._guarded(
                         items,
@@ -363,8 +368,11 @@ class ScheduledJob:
                         lambda: self._run_site_step(items),
                         passthrough=(VaultCommitError,),
                     )
-                    if site_result is not None:
+                    if site_result is None:
+                        any_failed = True
+                    else:
                         deploy_ready, key_leak = site_result
+                        any_failed = any_failed or key_leak
 
             if self._update:
                 self._staleness_step(items, new_last_build_at or state.last_build_at, now, season)

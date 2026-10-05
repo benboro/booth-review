@@ -11,7 +11,9 @@ involved, matching `tests/test_vault.py`'s own fixture style.
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
 import subprocess
 import tomllib
 from pathlib import Path
@@ -64,7 +66,7 @@ def test_version_matches_pyproject_and_lock() -> None:
     lock = tomllib.loads(Path("uv.lock").read_text(encoding="utf-8"))
     locked = next(pkg for pkg in lock["package"] if pkg["name"] == "booth-review")
     assert booth_review.__version__ == pyproject["project"]["version"] == locked["version"]
-    assert booth_review.__version__ == "0.5.1"
+    assert booth_review.__version__ == "0.5.2"
 
 
 # -- collect.yml: schedule / triggers ----------------------------------------------------------
@@ -197,23 +199,106 @@ def _steps() -> list[dict[str, object]]:
 def test_deploy_vars_never_appear_inside_a_run_block(name: str) -> None:
     for step in _steps():
         assert name not in str(step.get("run", ""))
-    # Outside run blocks they may sit only in env:, with: and if: lines.
+    # Outside run blocks they may sit only in env: and with: lines. Never in an
+    # if: line: Actions expressions compare strings case-insensitively (WR-02).
     for line in _non_comment_lines(WORKFLOW_TEXT):
         if name in line:
             stripped = line.strip()
             assert stripped.startswith(
                 ("PUBLISH_ENABLED:", "DEPLOY_REPO:", "repository:", "ssh-key:")
-            ) or stripped.startswith("if:"), stripped
+            ), stripped
 
 
-def test_deploy_steps_gated_on_publish_enabled_true() -> None:
-    gate = "steps.job.outputs.deploy_ready == 'true' && vars.PUBLISH_ENABLED == 'true'"
-    gated = [s for s in _steps() if s.get("if") == gate]
-    assert {s.get("id") for s in gated} == {None, "deploy"}
+_BASH = shutil.which("bash")
+_DEPLOY_GATE = "steps.job.outputs.deploy_ready == 'true' && steps.gate.outputs.publish == 'yes'"
+
+
+def _step(step_id: str) -> dict[str, object]:
+    return next(s for s in _steps() if s.get("id") == step_id)
+
+
+def _run_step(
+    step: dict[str, object], env: dict[str, str], tmp_path: Path
+) -> tuple[int, dict[str, str]]:
+    """Run a step's `run:` block the way Actions does (bash -eo pipefail) and
+    return its exit code and the key=value lines it wrote to $GITHUB_OUTPUT."""
+    assert _BASH is not None
+    script = tmp_path / "step.sh"
+    script.write_text(str(step["run"]), encoding="utf-8")
+    output = tmp_path / "github_output"
+    output.write_text("", encoding="utf-8")
+    full_env = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "GITHUB_OUTPUT": str(output),
+        "RUNNER_TEMP": str(tmp_path),
+        **env,
+    }
+    result = subprocess.run(
+        [_BASH, "--noprofile", "--norc", "-eo", "pipefail", str(script)],
+        env=full_env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    lines = output.read_text(encoding="utf-8").splitlines()
+    return result.returncode, dict(line.split("=", 1) for line in lines if "=" in line)
+
+
+def test_deploy_steps_gated_on_the_shell_computed_publish_output() -> None:
+    gated = [s for s in _steps() if s.get("if") == _DEPLOY_GATE]
+    assert {s.get("id") for s in gated} == {"target", "deploy"}
     assert len(gated) == 2
-    assert WORKFLOW_TEXT.count("vars.PUBLISH_ENABLED == 'true'") == 2
-    deploy = next(s for s in gated if s.get("id") == "deploy")
+    assert not any("vars.PUBLISH_ENABLED" in str(s.get("if", "")) for s in _steps())
+    deploy = _step("deploy")
     assert "booth-review deploy --site" in str(deploy["run"])
+    # The gate runs before the deploy target is ever checked out.
+    ids = [s.get("id") for s in _steps()]
+    assert ids.index("gate") < ids.index("target") < ids.index("deploy")
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+@pytest.mark.parametrize(
+    ("value", "publish"),
+    [
+        ("true", "yes"),
+        ("True", "no"),
+        ("TRUE", "no"),
+        (" true", "no"),
+        ("true ", "no"),
+        ("1", "no"),
+        ("yes", "no"),
+        ("false", "no"),
+        ("", "no"),
+    ],
+)
+def test_publish_gate_is_exactly_true(value: str, publish: str, tmp_path: Path) -> None:
+    # WR-02: only the exact string `true` opens the gate, matching the CLI.
+    code, outputs = _run_step(
+        _step("gate"),
+        {"PUBLISH_ENABLED": value, "DEPLOY_REPO": "owner/site"},
+        tmp_path,
+    )
+    assert code == 0
+    assert outputs == {"publish": publish}
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+@pytest.mark.parametrize("repo", ["", "owner", "owner/site/extra", "owner/si te"])
+def test_publish_gate_fails_on_a_bad_deploy_repo_when_enabled(repo: str, tmp_path: Path) -> None:
+    code, outputs = _run_step(
+        _step("gate"), {"PUBLISH_ENABLED": "true", "DEPLOY_REPO": repo}, tmp_path
+    )
+    assert code != 0
+    assert "publish" not in outputs
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_publish_gate_ignores_deploy_repo_when_disabled(tmp_path: Path) -> None:
+    code, outputs = _run_step(
+        _step("gate"), {"PUBLISH_ENABLED": "TRUE", "DEPLOY_REPO": ""}, tmp_path
+    )
+    assert code == 0
+    assert outputs == {"publish": "no"}
 
 
 def test_every_checkout_matches_the_ci_pin() -> None:
@@ -294,7 +379,111 @@ def test_workflow_fails_hard_only_outside_0_4_and_5_or_on_deploy_failure() -> No
     env = step["env"]
     assert "0|4|5) ;;" in run
     assert '"$DEPLOY_CODE" != "0"' in run
-    assert set(env) == {"JOB_CODE", "DEPLOY_CODE"}  # type: ignore[arg-type]
+    assert set(env) == {"JOB_CODE", "DEPLOY_CODE", "DEPLOY_EXPECTED"}  # type: ignore[arg-type]
+
+
+# -- WR-03: a due deploy that never ran is a problem, not a clean run ----------------------------
+
+
+def _attention_step() -> dict[str, object]:
+    return next(s for s in _steps() if "attention issue" in str(s.get("name", "")))
+
+
+def _fail_step() -> dict[str, object]:
+    return next(s for s in _steps() if "hard failure" in str(s.get("name", "")))
+
+
+@pytest.mark.parametrize("step", [_attention_step, _fail_step], ids=["attention", "fail"])
+def test_deploy_expected_uses_the_deploy_gate(step: object) -> None:
+    env = step()["env"]  # type: ignore[operator]
+    assert env["DEPLOY_EXPECTED"] == "${{ " + _DEPLOY_GATE + " }}"
+
+
+def _fake_gh(tmp_path: Path) -> tuple[dict[str, str], Path]:
+    """A stand-in `gh` that logs each call and reports open issue #7 (or
+    $FAKE_ISSUE when set), whose body and last comment come from the files
+    $FAKE_BODY and $FAKE_COMMENT (the fake skips gh's own --jq step)."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "gh.log"
+    gh = bin_dir / "gh"
+    gh.write_text(
+        "#!/usr/bin/env bash\n"
+        'echo "$*" >> "$GH_LOG"\n'
+        'case "$1 $2" in\n'
+        '  "issue list") echo "${FAKE_ISSUE-7}" ;;\n'
+        '  "issue view")\n'
+        '    case "$*" in\n'
+        '      *"--json body"*) cat "$FAKE_BODY" 2>/dev/null || true ;;\n'
+        '      *"--json comments"*) cat "$FAKE_COMMENT" 2>/dev/null || true ;;\n'
+        "    esac ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    gh.chmod(0o755)
+    env = {
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '/usr/bin:/bin')}",
+        "GH_LOG": str(log),
+        "GH_TOKEN": "x",
+        "GITHUB_SERVER_URL": "https://example.invalid",
+        "GITHUB_REPOSITORY": "owner/vault",
+        "GITHUB_RUN_ID": "1",
+    }
+    return env, log
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+@pytest.mark.parametrize(
+    ("expected", "deploy_code", "closes"),
+    [
+        ("true", "", False),  # target checkout failed: deploy step skipped
+        ("true", "0", True),
+        ("true", "3", False),
+        ("false", "", True),  # publishing off: no deploy was due
+    ],
+)
+def test_attention_step_never_closes_the_issue_when_a_due_deploy_did_not_run(
+    expected: str, deploy_code: str, closes: bool, tmp_path: Path
+) -> None:
+    env, log = _fake_gh(tmp_path)
+    env.update(
+        {
+            "JOB_CODE": "0",
+            "DEPLOY_CODE": deploy_code,
+            "DEPLOY_EXPECTED": expected,
+            "STALE_ONLY": "false",
+        }
+    )
+    code, _outputs = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    calls = log.read_text(encoding="utf-8").splitlines()
+    assert any(c.startswith("issue close 7") for c in calls) is closes
+    assert any(c.startswith("issue edit 7 ") and "--body-file" in c for c in calls) is not closes
+    if expected == "true" and not deploy_code:
+        body = (tmp_path / "attention-body.md").read_text(encoding="utf-8")
+        assert "deploy did not run" in body
+        assert "the live site was not updated" in body
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+@pytest.mark.parametrize(
+    ("expected", "deploy_code", "fails"),
+    [
+        ("true", "", True),
+        ("true", "0", False),
+        ("true", "3", True),
+        ("false", "", False),
+    ],
+)
+def test_fail_step_fails_when_a_due_deploy_did_not_run(
+    expected: str, deploy_code: str, fails: bool, tmp_path: Path
+) -> None:
+    code, _outputs = _run_step(
+        _fail_step(),
+        {"JOB_CODE": "0", "DEPLOY_CODE": deploy_code, "DEPLOY_EXPECTED": expected},
+        tmp_path,
+    )
+    assert (code != 0) is fails
 
 
 # -- gitattributes ---------------------------------------------------------------------------
@@ -411,3 +600,84 @@ def test_without_attributes_the_same_scenario_raises_and_leaves_no_rebase_in_pro
     assert "rebase in progress" not in status.stdout
     assert not (vault / ".git" / "rebase-merge").exists()
     assert not (vault / ".git" / "rebase-apply").exists()
+
+
+# -- WR-07: a stale-only backup run never repeats an identical comment -----------------------------
+
+_STALE_REPORT = (
+    "Counts only. Updated 2026-10-08 16:00 UTC\n"
+    "- last successful build is 5 days old (limit 4)\n"
+    "- newest plotted 2026 telecast trails the newest listed one: 3 listed after it"
+)
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+@pytest.mark.parametrize(
+    ("issue", "body", "comment", "action"),
+    [
+        # The main run already wrote these items into the body (plus others).
+        (
+            "7",
+            "Counts only. Updated 2026-10-08 00:05 UTC\n"
+            "- 506 2026 weeks to save: 6\n"
+            "- last successful build is 5 days old (limit 4)\n"
+            "- newest plotted 2026 telecast trails the newest listed one: 3 listed after it\n"
+            "\nrun: https://example.invalid/r/1",
+            "",
+            "none",
+        ),
+        # An earlier backup slot already commented the same items (CRLF too).
+        (
+            "7",
+            "Counts only.\n- something else: 1",
+            "Counts only. Updated 2026-10-08 14:00 UTC\r\n"
+            "- last successful build is 5 days old (limit 4)\r\n"
+            "- newest plotted 2026 telecast trails the newest listed one: 3 listed after it\r\n"
+            "\r\nrun: https://example.invalid/r/0",
+            "none",
+        ),
+        # The build-age line moved on since the last post: comment once.
+        (
+            "7",
+            "Counts only.\n- last successful build is 4 days old (limit 4)",
+            "",
+            "comment",
+        ),
+        # Only part of the report was posted before.
+        (
+            "7",
+            "Counts only.\n- last successful build is 5 days old (limit 4)",
+            "",
+            "comment",
+        ),
+        # No open issue: open one.
+        ("", "", "", "create"),
+    ],
+    ids=["in-body", "in-last-comment", "changed", "partial", "no-issue"],
+)
+def test_stale_only_run_comments_only_when_the_report_changed(
+    issue: str, body: str, comment: str, action: str, tmp_path: Path
+) -> None:
+    env, log = _fake_gh(tmp_path)
+    (tmp_path / "issue-body.md").write_text(body, encoding="utf-8", newline="")
+    (tmp_path / "issue-comment.md").write_text(comment, encoding="utf-8", newline="")
+    (tmp_path / "attention.md").write_text(_STALE_REPORT, encoding="utf-8")
+    env.update(
+        {
+            "FAKE_ISSUE": issue,
+            "FAKE_BODY": str(tmp_path / "issue-body.md"),
+            "FAKE_COMMENT": str(tmp_path / "issue-comment.md"),
+            "JOB_CODE": "4",
+            "DEPLOY_CODE": "",
+            "DEPLOY_EXPECTED": "false",
+            "STALE_ONLY": "true",
+        }
+    )
+    code, _outputs = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    calls = log.read_text(encoding="utf-8").splitlines()
+    commented = [c for c in calls if c.startswith("issue comment ")]
+    created = [c for c in calls if c.startswith("issue create ")]
+    assert not any(c.startswith(("issue close", "issue edit 7")) for c in calls)
+    assert len(commented) == (1 if action == "comment" else 0)
+    assert len(created) == (1 if action == "create" else 0)

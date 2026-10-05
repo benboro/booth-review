@@ -25,7 +25,10 @@
 # The job is the full update pipeline: collect, rebuild, build the site, run
 # the CFBD key check, then a gated deploy. Deploy runs only when the job
 # reports deploy_ready=true AND `vars.PUBLISH_ENABLED` is exactly `true`
-# (the CLI re-checks the flag, D-01). `vars.DEPLOY_REPO` names the target
+# (the CLI re-checks the flag, D-01). The gate is computed once, by an exact
+# shell compare in the "Validate the deploy settings" step (`steps.gate`):
+# Actions expressions compare strings case-insensitively, so `True` or
+# `TRUE` would pass a `vars.PUBLISH_ENABLED == 'true'` condition (WR-02). `vars.DEPLOY_REPO` names the target
 # repo: a scratch copy for the dry run, `benboro/benboro.github.io` for launch.
 # Two repo-scoped deploy-key secrets exist, `DEPLOY_KEY_PROD` (for
 # benboro/benboro.github.io) and `DEPLOY_KEY_SCRATCH` (any other DEPLOY_REPO),
@@ -72,17 +75,21 @@ jobs:
           fi
 
       - name: Validate the deploy settings
+        id: gate
         env:
           PUBLISH_ENABLED: ${{ vars.PUBLISH_ENABLED }}
           DEPLOY_REPO: ${{ vars.DEPLOY_REPO }}
         run: |
+          # The only publish gate: an exact, case-sensitive compare (WR-02).
           if [ "$PUBLISH_ENABLED" = "true" ]; then
             if ! printf '%s' "$DEPLOY_REPO" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'; then
               echo "::error::the DEPLOY_REPO variable must be owner/name when publishing is enabled" >&2
               exit 1
             fi
+            echo "publish=yes" >> "$GITHUB_OUTPUT"
           else
             echo "publishing disabled"
+            echo "publish=no" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Checkout vault (self)
@@ -135,7 +142,8 @@ jobs:
           exit 0
 
       - name: Check out the deploy target
-        if: steps.job.outputs.deploy_ready == 'true' && vars.PUBLISH_ENABLED == 'true'
+        id: target
+        if: steps.job.outputs.deploy_ready == 'true' && steps.gate.outputs.publish == 'yes'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ vars.DEPLOY_REPO }}
@@ -145,7 +153,7 @@ jobs:
 
       - name: Deploy (only when publishing is on)
         id: deploy
-        if: steps.job.outputs.deploy_ready == 'true' && vars.PUBLISH_ENABLED == 'true'
+        if: steps.job.outputs.deploy_ready == 'true' && steps.gate.outputs.publish == 'yes'
         working-directory: src
         env:
           PUBLISH_ENABLED: ${{ vars.PUBLISH_ENABLED }}
@@ -164,6 +172,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           JOB_CODE: ${{ steps.job.outputs.code }}
           DEPLOY_CODE: ${{ steps.deploy.outputs.code }}
+          DEPLOY_EXPECTED: ${{ steps.job.outputs.deploy_ready == 'true' && steps.gate.outputs.publish == 'yes' }}
           STALE_ONLY: ${{ steps.job.outputs.stale_only }}
         run: |
           title="booth-review job: needs attention"
@@ -181,6 +190,11 @@ jobs:
             fi
           fi
 
+          # WR-03: a deploy that was due but left no exit code (the target
+          # checkout or uv failed first) is a problem, never a clean run.
+          if [ "$DEPLOY_EXPECTED" = "true" ] && [ -z "$DEPLOY_CODE" ]; then
+            DEPLOY_CODE=setup
+          fi
           problem=false
           if [ "$JOB_CODE" != "0" ]; then problem=true; fi
           if [ -n "$DEPLOY_CODE" ] && [ "$DEPLOY_CODE" != "0" ]; then problem=true; fi
@@ -193,16 +207,42 @@ jobs:
           fi
 
           if [ "$STALE_ONLY" = "true" ]; then
+            # WR-07: D-14 checks staleness at every backup slot, but its items
+            # rarely change between main runs. Comment only when some item line
+            # is missing from the issue's current body or from its last comment,
+            # so an unchanged report never re-notifies at every backup slot.
+            already_posted=false
+            if [ -n "$number" ]; then
+              seen="$RUNNER_TEMP/attention-seen"
+              mkdir -p "$seen"
+              grep '^- ' "$body_file" > "$seen/items.md" || true
+              gh issue view "$number" --repo "$GITHUB_REPOSITORY" --json body \
+                --jq '.body' | tr -d '\r' > "$seen/body.md"
+              gh issue view "$number" --repo "$GITHUB_REPOSITORY" --json comments \
+                --jq '.comments | last | .body // ""' | tr -d '\r' > "$seen/comment.md"
+              if [ -s "$seen/items.md" ]; then
+                for posted in "$seen/body.md" "$seen/comment.md"; do
+                  if ! grep -Fxv -f "$posted" "$seen/items.md" > /dev/null; then
+                    already_posted=true
+                  fi
+                done
+              fi
+            fi
             echo "" >> "$body_file"
             echo "$run_link" >> "$body_file"
-            if [ -n "$number" ]; then
+            if [ "$already_posted" = "true" ]; then
+              echo "stale-only report unchanged since the issue was last updated; no new comment"
+            elif [ -n "$number" ]; then
               gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body-file "$body_file"
             else
               gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" \
                 --label booth-review-job --body-file "$body_file"
             fi
           elif [ "$problem" = "true" ]; then
-            if [ -n "$DEPLOY_CODE" ] && [ "$DEPLOY_CODE" != "0" ]; then
+            if [ "$DEPLOY_CODE" = "setup" ]; then
+              echo "" >> "$body_file"
+              echo "deploy did not run (target checkout or setup failed); the live site was not updated" >> "$body_file"
+            elif [ -n "$DEPLOY_CODE" ] && [ "$DEPLOY_CODE" != "0" ]; then
               echo "" >> "$body_file"
               echo "deploy step exited $DEPLOY_CODE; the live site was not updated" >> "$body_file"
             fi
@@ -225,7 +265,12 @@ jobs:
         env:
           JOB_CODE: ${{ steps.job.outputs.code }}
           DEPLOY_CODE: ${{ steps.deploy.outputs.code }}
+          DEPLOY_EXPECTED: ${{ steps.job.outputs.deploy_ready == 'true' && steps.gate.outputs.publish == 'yes' }}
         run: |
+          if [ "$DEPLOY_EXPECTED" = "true" ] && [ -z "$DEPLOY_CODE" ]; then
+            echo "::error::the deploy was due but did not run (target checkout or setup failed)" >&2
+            exit 1
+          fi
           case "$JOB_CODE" in
             0|4|5) ;;
             *)
