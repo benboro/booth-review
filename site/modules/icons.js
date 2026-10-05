@@ -8,10 +8,10 @@
  * Colors come from CSS (`.game-type-icon[data-kind]` in style.css), never from
  * here: the icons only draw in `currentColor`.
  *
- * Always decorative (`aria-hidden="true"`): the accessible name lives on the
- * caller's wrapper -- the detail panel's visible label text, or the tooltip
- * marker's `role="img"` + `aria-label` (a CFP game at a bowl shows two icons
- * under that one name). Built with
+ * Always decorative (`aria-hidden="true"`): the meaning lives in the visible
+ * text beside the icon -- the detail panel's label or the tooltip's game name
+ * (04.10 D-10; there is no `role="img"` wrapper). Three kinds: bowl, playoff
+ * and rivalry (crossed swords). Built with
  * `createElementNS` + `setAttribute` from the constant path data below --
  * never any markup-injecting DOM API (T-04.1-25) -- and never from a data
  * string, so a malicious value can't become an element or attribute.
@@ -37,11 +37,23 @@ const ICON_PATHS = {
     { d: 'M4.5 3H2.5v1.5a2 2 0 0 0 2 2', stroke: true },
     { d: 'M11.5 3h2v1.5a2 2 0 0 1-2 2', stroke: true },
   ],
+  // Crossed swords (04.10 D-01): two stroked blades crossing near (8,8), a
+  // crossguard and grip per sword, and a small filled pommel at each grip end.
+  rivalry: [
+    { d: 'M2.5 2.5L11 11', stroke: true },
+    { d: 'M9.5 12.5L12.5 9.5', stroke: true },
+    { d: 'M11 11L13 13', stroke: true },
+    { d: 'M13.5 2.5L5 11', stroke: true },
+    { d: 'M6.5 12.5L3.5 9.5', stroke: true },
+    { d: 'M5 11L3 13', stroke: true },
+    { d: 'M13.6 12.7a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8z' },
+    { d: 'M2.4 12.7a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8z' },
+  ],
 };
 
 /**
  * Builds the decorative icon for a game-type kind.
- * @param {"bowl"|"playoff"} kind - from `format.js#gameTypeIcons`.
+ * @param {"bowl"|"playoff"|"rivalry"} kind - from `format.js#gameTypeIcons`.
  * @returns {SVGSVGElement|null} null for an unknown kind.
  */
 export function makeGameTypeIcon(kind) {

@@ -36,6 +36,8 @@
      dark 9.90 / 5.13. */
   --game-playoff: #A37800;
   --game-bowl: #A8501C;
+  --game-rivalry: #B42318;
+  --game-playoff-text: #7A5A00;
   /* D-34: violet special-filter hue for the Announcers button (not an
      Okabe-Ito family color). 5.70/5.22 on --bg/--surface; filled 5.70. */
   --special: #7C3AED;
@@ -55,6 +57,8 @@
     --reset: #F2B8B5;
     --game-playoff: #F5C518;
     --game-bowl: #CD7F32;
+    --game-rivalry: #F97066;
+    --game-playoff-text: #F5C518;
     --special: #A78BFA;
     --on-special: #111827;
   }
@@ -1313,12 +1317,20 @@ input[type="checkbox"] {
   color: var(--game-bowl);
 }
 
+.game-type-icon[data-kind="rivalry"] {
+  color: var(--game-rivalry);
+}
+
 /* A CFP game at a bowl shows two icons; keep a small gap between them. */
 .game-type-icon + .game-type-icon {
   margin-left: var(--space-xs);
 }
 
 .panel-game-type .game-type-icon:last-of-type {
+  margin-right: var(--space-xs);
+}
+
+.tooltip-game-type .game-type-icon:last-of-type {
   margin-right: var(--space-xs);
 }
 
@@ -1994,6 +2006,11 @@ html:has(#detail-panel[open]) {
 }
 
 .panel-bowl .bowl-core {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.panel-rivalry .rivalry-name {
   color: var(--text);
   font-weight: 600;
 }

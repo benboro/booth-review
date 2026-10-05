@@ -225,6 +225,41 @@ export function gameTypeIcons(info) {
 }
 
 /**
+ * Telecast `i`'s rivalry name (04.10 D-11/D-12), read from
+ * `lookups.rivalries`; null when the game is not a named rivalry.
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @returns {string|null}
+ */
+export function rivalryName(data, i) {
+  return data.lookups.rivalries?.[data.t.rivalry?.[i]]?.name ?? null;
+}
+
+/**
+ * The one source for the name shown beside a named game's icons in the hover
+ * tooltip, its plotly-fallback text, and (via `rivalryName`) the modal (04.10
+ * D-10). A rivalry shows its name; a bowl its core name (never the sponsor);
+ * a CFP game at a bowl "<core> · <round>"; a CFP game elsewhere its round
+ * label; a regular non-rivalry game null. A rivalry game is always regular
+ * season, so the rivalry branch never collides with a bowl or CFP branch.
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @returns {{icons: ("bowl"|"playoff"|"rivalry")[], text: string}|null}
+ */
+export function namedGameInfo(data, i) {
+  const rivalry = rivalryName(data, i);
+  if (rivalry != null) return { icons: ['rivalry'], text: rivalry };
+  const info = gameTypeInfo(data, i);
+  if (info == null) return null;
+  const core = data.lookups.bowls?.[data.t.bowl?.[i]]?.core ?? null;
+  if (info.kind === 'bowl') return { icons: ['bowl'], text: core ?? 'Bowl' };
+  if (info.atBowl) {
+    return { icons: ['bowl', 'playoff'], text: core ? `${core} \u00b7 ${info.label}` : info.label };
+  }
+  return { icons: ['playoff'], text: info.label };
+}
+
+/**
  * Formats telecast `i`'s conference line for the detail panel (D-09):
  * away vs. home, matching `formatMatchup`'s "Away at Home" order. A side
  * with no recorded conference reads "Not recorded"; when neither side has
