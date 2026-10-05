@@ -264,9 +264,12 @@ export function buildFigure(data, view, state, env) {
         // passing-not-theirs dots, which stay inert at activeUnderPerson opacity.
         // Enlarged dots also get a 1px black outline (theme-independent) to separate
         // overlapping 10px dots; unfiltered 6px dots stay borderless.
-        size: view.filterActive ? 10 : 6,
+        // 04.12 D-05: sizing reads view.sizeFilterActive, which ignores a seasons-only filter
+        // on the Date axis (seasons there only choose what the axis shows); filterActive
+        // still drives the summary.
+        size: view.sizeFilterActive ? 10 : 6,
         opacity: view.hasPersonSelection ? DOT_OPACITY.activeUnderPerson : DOT_OPACITY.active,
-        line: { width: view.filterActive ? 1 : 0, color: DOT_OUTLINE },
+        line: { width: view.sizeFilterActive ? 1 : 0, color: DOT_OUTLINE },
       },
     });
   }
