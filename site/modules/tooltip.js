@@ -25,8 +25,7 @@ import {
   formatKickoff,
   formatMatchup,
   formatViewers,
-  gameTypeIcons,
-  gameTypeInfo,
+  namedGameInfo,
   stripNetworkNote,
 } from './format.js';
 import { makeGameTypeIcon } from './icons.js';
@@ -45,24 +44,24 @@ const EDGE_MARGIN = 8;
 
 /**
  * Builds the shared, DOM-free content model for telecast `i`'s tooltip: the
- * UI-SPEC's minimal line order -- matchup+score, date+kickoff (a bowl or
- * playoff game appends its game type, shown as an icon only in the HTML
- * tooltip and as the "Bowl" / CFP round text in the fallback, notes-4 A1; the
- * time-slot label is panel-only), slash-delimited networks (primary first,
+ * UI-SPEC's minimal line order -- matchup+score, date+kickoff (a named
+ * game appends its icons plus its name -- rivalry, bowl core name, or CFP
+ * round -- from `format.js#namedGameInfo`, 04.10 D-10; the time-slot label is
+ * panel-only), slash-delimited networks (primary first,
  * each already stripped of any nested methodology parenthetical), one
  * "Position: Name" line per main-feed crew member, viewers, the active axis
  * value, and a closing "Click for details →" hint. Conferences, the time
  * slot, the full outlet list, the measurement-type badge, era/event flags,
  * and any scoring-source note are panel-only (SITE-25) -- never repeated
- * here. `dateText` is the date and kickoff only; `gameType` the postseason
- * marker, which `renderTooltipContent` draws as `icons` alone (a CFP game at a
- * bowl has two; `iconLabel` is their one accessible name); and `dateLine` the date plus the text `label` as one
+ * here. `dateText` is the date and kickoff only; `gameType` the named-game
+ * marker, which `renderTooltipContent` draws as decorative `icons` followed by
+ * the visible `text`; and `dateLine` the date plus that `text` as one
  * plain string for the text-only fallback (`chart.js#hoverText`), which can't
  * draw an SVG.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
  * @param {{axis: "spread"|"excitement", selected?: Set<number>}} opts
- * @returns {{crew: {name: string, role: string, selected: boolean}[], title: string, dateText: string, gameType: {icons: ("bowl"|"playoff")[], label: string, iconLabel: string}|null, dateLine: string, networks: {name: string, family: string}[], crewLines: string[], viewersLine: string, axisLine: string, hint: string}}
+ * @returns {{crew: {name: string, role: string, selected: boolean}[], title: string, dateText: string, gameType: {icons: ("bowl"|"playoff"|"rivalry")[], text: string}|null, dateLine: string, networks: {name: string, family: string}[], crewLines: string[], viewersLine: string, axisLine: string, hint: string}}
  */
 export function tooltipModel(data, i, { axis, selected = new Set() }) {
   const t = data.t;
@@ -70,15 +69,8 @@ export function tooltipModel(data, i, { axis, selected = new Set() }) {
   const title = formatMatchup(data, i, { withScore: true });
 
   const dateText = [formatDate(t.date[i]), formatKickoff(t.kickoff[i]) ?? 'Kickoff time not recorded'].join(' · ');
-  const info = gameTypeInfo(data, i);
-  const gameType = info
-    ? {
-        icons: gameTypeIcons(info),
-        label: info.label,
-        iconLabel: info.kind === 'bowl' ? 'Bowl game' : info.atBowl ? `${info.label}, bowl game` : info.label,
-      }
-    : null;
-  const dateLine = gameType ? `${dateText} · ${gameType.label}` : dateText;
+  const gameType = namedGameInfo(data, i);
+  const dateLine = gameType ? `${dateText} · ${gameType.text}` : dateText;
 
   const primaryNetwork = data.lookups.networks[t.network[i]];
   const otherOutlets = t.outlets[i]
@@ -127,20 +119,14 @@ export function renderTooltipContent(el, model, theme) {
   const dateLine = document.createElement('div');
   dateLine.appendChild(document.createTextNode(model.dateText));
   if (model.gameType) {
-    // Icons only: no visible text, so the wrapper carries the meaning as one
-    // accessible image (the SVGs are aria-hidden), whether there is one icon
-    // or two. If any icon can't be built, fall back to the plain text label
-    // rather than dropping the marker.
+    // The icons are decorative (aria-hidden) and the visible name carries the
+    // meaning (04.10 D-10, reversing 04.2 D-22's icon-only rule). If any icon
+    // can't be built, draw none (never a partial marker); the text still shows.
     const icons = model.gameType.icons.map((kind) => makeGameTypeIcon(kind));
     const type = document.createElement('span');
     type.className = 'tooltip-game-type';
-    if (icons.every((icon) => icon != null)) {
-      type.setAttribute('role', 'img');
-      type.setAttribute('aria-label', model.gameType.iconLabel);
-      type.replaceChildren(...icons);
-    } else {
-      type.textContent = model.gameType.label;
-    }
+    if (icons.every((icon) => icon != null)) type.replaceChildren(...icons);
+    type.appendChild(document.createTextNode(model.gameType.text));
     dateLine.appendChild(document.createTextNode(' · '));
     dateLine.appendChild(type);
   }
