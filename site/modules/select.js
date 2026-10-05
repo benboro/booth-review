@@ -483,18 +483,8 @@ export function computeView(data, state) {
     }
   }
 
-  // Role and people are deliberately not filters (04.1 D-13).
-  const filterActive =
-    state.seasons != null ||
-    state.networks != null ||
-    state.slots != null ||
-    state.conferences.length > 0 ||
-    state.school.length > 0 ||
-    hasGameSelection ||
-    state.postseason !== 'all';
-  // SITE-50 (04.12 D-05/D-06): on Date, out-of-range seasons are off the axis (04.11 D-12),
-  // so a seasons-only filter picks nothing out and must not enlarge dots; filterActive
-  // still drives the summary (D-07).
+  // Every filter except seasons. Role and people are deliberately not filters
+  // (04.1 D-13). A new filter goes here once, so it drives both flags below.
   const otherFilterActive =
     state.networks != null ||
     state.slots != null ||
@@ -502,6 +492,10 @@ export function computeView(data, state) {
     state.school.length > 0 ||
     hasGameSelection ||
     state.postseason !== 'all';
+  const filterActive = state.seasons != null || otherFilterActive;
+  // SITE-50 (04.12 D-05/D-06): on Date, out-of-range seasons are off the axis (04.11 D-12),
+  // so a seasons-only filter picks nothing out and must not enlarge dots; filterActive
+  // still drives the summary (D-07).
   const sizeFilterActive =
     otherFilterActive || (state.seasons != null && state.axis !== 'date');
   let summarySet = matched;
