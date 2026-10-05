@@ -57,7 +57,7 @@ class Env:
         gh = bin_dir / "gh"
         gh.write_text(
             '#!/usr/bin/env bash\necho "$*" >> "$GH_LOG"\n'
-            'if [ "$1 $2" = "variable get" ]; then echo "$GH_TAG"; fi\n',
+            'if [ "$1 $2" = "variable list" ]; then echo "$GH_TAG"; fi\n',
             encoding="utf-8",
         )
         gh.chmod(0o755)
@@ -106,6 +106,11 @@ def test_real_run_tags_origin_and_sets_job_ref(env: Env) -> None:
     assert env.remote_tags() == "v0.5.0"
     assert _git(env.repo, "cat-file", "-t", "v0.5.0") == "tag"
     assert "variable set JOB_REF --repo owner/vault-name --body v0.5.0" in env.gh_calls()
+    # gh 2.45 has no `variable get`; the check must read back through `variable list`.
+    calls = env.gh_calls()
+    readback = "variable list --repo owner/vault-name --json name,value"
+    assert any(c.startswith(readback) for c in calls)
+    assert not any(c.startswith("variable get") for c in calls)
 
 
 def _refused(env: Env, result: subprocess.CompletedProcess[str], tags: str = "") -> None:

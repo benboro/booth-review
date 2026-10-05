@@ -66,5 +66,7 @@ fi
 git tag -a "$tag" -m "release $tag"
 git push origin "$tag"
 gh variable set JOB_REF --repo "$slug" --body "$tag"
-[ "$(gh variable get JOB_REF --repo "$slug")" = "$tag" ] || die "JOB_REF verification failed"
+# `gh variable list --json` rather than `gh variable get`, which gh 2.45 lacks.
+current=$(gh variable list --repo "$slug" --json name,value --jq '.[] | select(.name == "JOB_REF") | .value')
+[ "$current" = "$tag" ] || die "JOB_REF verification failed"
 echo "JOB_REF set to $tag"
