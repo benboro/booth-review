@@ -7,6 +7,7 @@ url-state.js) against the synthetic fixture; nothing here needs a rendered chart
 from __future__ import annotations
 
 from collections.abc import Callable
+from itertools import pairwise
 
 import pytest
 from playwright.sync_api import Page
@@ -124,3 +125,136 @@ def test_t_date_column_untouched(app_page: Page) -> None:
     assert out["date0"] == "2019-09-07"
     assert all(isinstance(d, str) for d in out["dates"])
     assert out["rawHasDateX"] is False
+
+
+_TIER_JS = """
+async () => {
+  const A = await import('./modules/date-axis.js');
+  const { axis } = A.buildDateAxis([2030, 2030], ['2030-08-30', '2031-01-29'], [null, null]);
+  const b = axis.blocks[0];
+  const width = b.end - b.start;
+  const out = { width };
+  for (const px of [1400, 700, 400, 100, 20]) {
+    out[px] = A.dateAxisLabels(axis.blocks, [b.start, b.end], px, { mobile: false });
+  }
+  return out;
+}
+"""
+
+_TICKS_JS = """
+async () => {
+  const A = await import('./modules/date-axis.js');
+  const D = await import('./modules/data.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  const b25 = data.dateAxis.blocks.find((b) => b.season === 2025);
+  const wk = A.dateAxisLabels([b25], [b25.start, b25.end], 1200, { mobile: false });
+  const bi = A.dateAxisLabels([b25], [b25.start, b25.end], 600, { mobile: false });
+  const mo = A.dateAxisLabels([b25], [b25.start, b25.end], 266, { mobile: true });
+  const cut = A.dateAxisLabels([b25], [b25.start + 30, b25.end], 1200, { mobile: false });
+  return { b25, wk, bi, mo, cut, ppd: 1200 / (b25.end - b25.start) };
+}
+"""
+
+_THIRTEEN_JS = """
+async () => {
+  const A = await import('./modules/date-axis.js');
+  const season = [];
+  const date = [];
+  const kickoff = [];
+  for (let y = 2014; y <= 2025; y += 1) {
+    season.push(y, y);
+    date.push(`${y}-08-30`, `${y + 1}-01-12`);
+    kickoff.push(null, null);
+  }
+  season.push(2026, 2026);
+  date.push('2026-09-05', '2026-10-03');
+  kickoff.push(null, null);
+  const { axis } = A.buildDateAxis(season, date, kickoff);
+  const range = A.seasonRange(axis, null);
+  const run = (px, mobile) => A.dateAxisLabels(axis.blocks, range, px, { mobile });
+  return {
+    range,
+    nBlocks: axis.blocks.length,
+    phone: run(266, true),
+    desktop: run(1138, false),
+    again: run(266, true),
+    one: A.dateAxisLabels([axis.blocks[3]], [axis.blocks[3].start, axis.blocks[3].end], 266,
+      { mobile: true }),
+  };
+}
+"""
+
+
+def _boxes(res: dict, plot_px: float, lo: float, hi: float, font: int) -> list[tuple[float, float]]:
+    boxes = []
+    for s in res["seasons"]:
+        if not s["visible"]:
+            continue
+        center = (s["x"] - lo) * plot_px / (hi - lo) + s["xshift"]
+        half = 0.62 * font * len(s["label"]) / 2
+        boxes.append((center - half, center + half))
+    return boxes
+
+
+def test_label_tiers_by_px_per_day(app_page: Page) -> None:
+    out = app_page.evaluate(_TIER_JS)
+    assert out["width"] == 155
+    assert [out[str(px)]["tier"] for px in (1400, 700, 400, 100, 20)] == [1, 2, 3, 4, 5]
+
+
+def test_weekly_and_month_tick_text(app_page: Page) -> None:
+    out = app_page.evaluate(_TICKS_JS)
+    b25 = out["b25"]
+    assert out["wk"]["tier"] == 1
+    assert len(out["wk"]["tickvals"]) == 13
+    assert out["wk"]["ticktext"][0] == "Sep 13"
+    assert out["wk"]["tickvals"][0] == b25["start"] + 1 + 0.5
+    assert out["bi"]["tier"] == 2
+    assert out["bi"]["ticktext"] == out["wk"]["ticktext"][::2]
+    assert out["mo"]["tier"] == 3
+    assert out["mo"]["ticktext"] == ["Oct", "Nov", "Dec"]
+    assert all(b25["start"] <= v <= b25["end"] for v in out["mo"]["tickvals"])
+    # Ticks outside the visible range are dropped.
+    assert all(v >= b25["start"] + 30 for v in out["cut"]["tickvals"])
+    assert len(out["cut"]["tickvals"]) < 13
+    assert all(not any(c.isdigit() and t.startswith("'") for c in t) for t in out["wk"]["ticktext"])
+
+
+def test_phone_13_seasons_two_digit_all_visible_no_overlap(app_page: Page) -> None:
+    out = app_page.evaluate(_THIRTEEN_JS)
+    assert out["nBlocks"] == 13
+    phone = out["phone"]
+    lo, hi = out["range"]
+    assert phone["twoDigit"] is True
+    assert all(s["visible"] for s in phone["seasons"])
+    assert [s["label"][0] for s in phone["seasons"]] == ["'"] * 13
+    boxes = _boxes(phone, 266, lo, hi, 10)
+    assert len(boxes) == 13
+    for (_, r), (left, _) in pairwise(boxes):
+        assert r <= left
+    assert all(left >= -68 and right <= 288 for left, right in boxes)
+    assert all(lo <= s["x"] <= hi for s in phone["seasons"])
+    assert out["again"] == phone
+
+
+def test_desktop_13_seasons_full_years(app_page: Page) -> None:
+    out = app_page.evaluate(_THIRTEEN_JS)
+    desk = out["desktop"]
+    lo, hi = out["range"]
+    assert desk["twoDigit"] is False
+    assert [s["label"] for s in desk["seasons"]] == [str(y) for y in range(2014, 2027)]
+    assert all(s["visible"] for s in desk["seasons"])
+    boxes = _boxes(desk, 1138, lo, hi, 14)
+    for (_, r), (left, _) in pairwise(boxes):
+        assert r <= left
+
+
+def test_single_block_full_year_and_months_at_phone(app_page: Page) -> None:
+    out = app_page.evaluate(_THIRTEEN_JS)
+    one = out["one"]
+    assert len(one["seasons"]) == 1
+    assert one["seasons"][0]["label"] == "2017"
+    assert one["seasons"][0]["xshift"] == 0
+    assert one["twoDigit"] is False
+    assert app_page.evaluate(_TICKS_JS)["mo"]["tier"] == 3
