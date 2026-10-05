@@ -551,17 +551,42 @@ export function buildFigure(data, view, state, env) {
  * `layout` must already hold fresh array identities for any changed
  * attribute.
  *
- * When `uirevision` changes (an axis switch, or a season change on Date) the
- * new layout range becomes the home view, so it is also re-saved as the
- * target of double-click and the modebar's "Reset axes" (CR-01).
+ * The home range is re-saved as the target of double-click and the modebar's
+ * "Reset axes" (CR-01) on a `uirevision` change (axis switch, Date season
+ * change) and when the home x range moves under the same `uirevision` (a width
+ * change moves the pixel gutter, 04.12 D-03). A range the user zoomed or
+ * panned away from home is kept through such a re-render.
  * @param {HTMLElement} gd
  * @param {{traces: object[], layout: object, config: object, dateAxis?: object|null}} figure
  */
 export function renderChart(gd, figure) {
   gd.boothDateAxis = figure.dateAxis ?? null;
+  const home = figure.layout.xaxis.range;
   const prevRev = gd.layout?.uirevision;
-  window.Plotly.react(gd, figure.traces, figure.layout, figure.config);
-  if (prevRev !== undefined && prevRev !== figure.layout.uirevision) resetHomeRanges(gd, figure.layout);
+  const prevHome = gd.boothHomeX;
+  const sameRev = prevRev !== undefined && prevRev === figure.layout.uirevision;
+  const homeMoved = sameRev && Array.isArray(prevHome) && !sameRange(prevHome, home);
+  const live = gd._fullLayout?.xaxis?.range;
+  const awayFromHome = homeMoved && Array.isArray(live) && !sameRange(live, prevHome);
+  const layout = awayFromHome
+    ? { ...figure.layout, xaxis: { ...figure.layout.xaxis, range: live.slice() } }
+    : figure.layout;
+  window.Plotly.react(gd, figure.traces, layout, figure.config);
+  if ((prevRev !== undefined && !sameRev) || homeMoved) resetHomeRanges(gd, figure.layout);
+  if (homeMoved && !awayFromHome) {
+    const now = gd._fullLayout?.xaxis?.range;
+    if (!Array.isArray(now) || !sameRange(now, home)) {
+      window.Plotly.relayout(gd, { 'xaxis.range': home.slice() });
+    }
+  }
+  gd.boothHomeX = Array.isArray(home) ? home.slice() : undefined;
+}
+
+/** True when two [lo, hi] ranges agree to within float noise. */
+function sameRange(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== 2 || b.length !== 2) return false;
+  const tol = 1e-9 * Math.max(1, Math.abs(b[1] - b[0]));
+  return Math.abs(a[0] - b[0]) <= tol && Math.abs(a[1] - b[1]) <= tol;
 }
 
 /**

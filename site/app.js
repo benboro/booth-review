@@ -124,6 +124,9 @@ const renderers = [];
 let data = null;
 let state = null;
 let lastView = null;
+/** The chart width the scatter was last rendered at, and how many width-only re-renders ran (04.12 D-01). */
+let lastScatterWidth = null;
+let scatterResizeRenders = 0;
 let revision = 0;
 
 /** Whether the scatter's Plotly event handlers are bound (needs one rendered scatter first). */
@@ -199,6 +202,7 @@ function render() {
     chartEl.hidden = false;
     if (barsPanelEl) barsPanelEl.hidden = true;
     renderChart(chartEl, buildFigure(data, view, state, currentEnv()));
+    lastScatterWidth = chartEl.clientWidth;
     // The div had no width while hidden (research A4); re-measure once on return.
     if (lastPanel === 'bars') window.Plotly.Plots.resize(chartEl);
     if (!scatterBound) {
@@ -376,6 +380,14 @@ async function bootstrap() {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
         if (state.view === 'butterfly' && !mobileMedia.matches) render();
+        // 04.12 D-01: the gutter is converted from screen px using the plot
+        // width, so a width change must rebuild the range. Height-only
+        // changes (phone URL bar) leave clientWidth alone and do nothing.
+        if (state.view === 'scatter' && chartEl.clientWidth !== lastScatterWidth) {
+          lastScatterWidth = chartEl.clientWidth;
+          scatterResizeRenders += 1;
+          renderChart(chartEl, buildFigure(data, lastView, state, currentEnv()));
+        }
       }, 150);
     });
 
@@ -397,6 +409,9 @@ async function bootstrap() {
     render();
 
     window.__testHooks = {
+      get scatterResizeRenders() {
+        return scatterResizeRenders;
+      },
       ready: true,
       data,
       getState: () => structuredClone(state),

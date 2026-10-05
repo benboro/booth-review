@@ -6,6 +6,13 @@ from collections.abc import Callable
 
 import pytest
 from playwright.sync_api import Page
+from test_site_date_axis import (
+    _STATE_JS,
+    _XRANGE_JS,
+    _double_click_plot,
+    _home,
+    _settle,
+)
 
 pytestmark = pytest.mark.e2e
 
@@ -255,3 +262,107 @@ def test_gutter_clears_largest_marker(
     assert got["star"], "the compare selection must draw a star or this guard is vacuous"
     assert got["max"] == 18
     assert got["max"] / 2 + 1 <= got["gutter"]
+
+
+# ---------------------------------------------------------------------------
+# Resize / rotation (04.12 D-01, D-03)
+# ---------------------------------------------------------------------------
+
+
+def _drag_zoom(page: Page) -> list[float]:
+    page.locator("#chart").scroll_into_view_if_needed()
+    box = page.evaluate(
+        "() => { const gd = document.getElementById('chart'); const r = gd.getBoundingClientRect();"
+        " const s = gd._fullLayout._size;"
+        " const x = r.left + s.l; const y = r.top + s.t + s.h * 0.5;"
+        " return { x0: x + s.w * 0.3, x1: x + s.w * 0.6, y }; }"
+    )
+    page.mouse.move(box["x0"], box["y"])
+    page.mouse.down()
+    page.mouse.move(box["x1"], box["y"], steps=8)
+    page.mouse.up()
+    _settle(page)
+    zoomed: list[float] = page.evaluate(_XRANGE_JS)
+    assert zoomed[1] - zoomed[0] < 278 * 0.5
+    return zoomed
+
+
+def _date_desktop(guarded_page: Page, open_app: Callable[[Page, str], None]) -> Page:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    open_app(guarded_page, "?axis=date")
+    _settle(guarded_page)
+    return guarded_page
+
+
+def test_resize_recomputes_date_home(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    page = _date_desktop(guarded_page, open_app)
+    before = page.evaluate(_XRANGE_JS)
+    page.set_viewport_size({"width": 900, "height": 900})
+    _settle(page)
+    home = _home(page, [0, 278])
+    now = page.evaluate(_XRANGE_JS)
+    assert now == pytest.approx(home, abs=1e-6)
+    assert now != pytest.approx(before, abs=1e-6)
+    lay = page.evaluate(
+        "() => { const l = document.getElementById('chart').layout.xaxis;"
+        " return [l.minallowed, l.maxallowed]; }"
+    )
+    assert lay == pytest.approx(home, abs=1e-6)
+    got = page.evaluate(_EDGE_JS)
+    assert got["left"] >= 9.5, got
+    assert got["right"] >= 9.5, got
+    assert _double_click_plot(page) == pytest.approx(home, abs=1e-6)
+    assert _double_click_plot(page) == pytest.approx(home, abs=1e-6)
+
+
+def test_resize_keeps_a_desktop_zoom(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    page = _date_desktop(guarded_page, open_app)
+    zoomed = _drag_zoom(page)
+    page.set_viewport_size({"width": 1000, "height": 900})
+    _settle(page)
+    assert page.evaluate(_XRANGE_JS) == pytest.approx(zoomed, abs=1e-6)
+    assert _double_click_plot(page) == pytest.approx(_home(page, [0, 278]), abs=1e-6)
+
+
+@pytest.mark.parametrize("query", ["?axis=date", ""])
+def test_phone_rotation_recomputes_gutter(
+    mobile_page: Page, open_app: Callable[[Page, str], None], query: str
+) -> None:
+    open_app(mobile_page, query)
+    mobile_page.set_viewport_size({"width": 844, "height": 390})
+    _settle(mobile_page)
+    got = mobile_page.evaluate(_EDGE_JS)
+    assert got["left"] >= 9.5, got
+    assert got["right"] >= 9.5, got
+    if got["naLeft"] is not None:
+        assert got["naLeft"] >= 9.5, got
+
+
+def test_season_change_after_resize_still_resets_zoom(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    page = _date_desktop(guarded_page, open_app)
+    page.set_viewport_size({"width": 1000, "height": 900})
+    _settle(page)
+    _drag_zoom(page)
+    page.evaluate(_STATE_JS, {"seasons": [2025, 2026]})
+    _settle(page)
+    assert page.evaluate(_XRANGE_JS) == pytest.approx(_home(page, [153, 278]), abs=1e-6)
+
+
+def test_height_only_resize_keeps_range_object(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    page = _date_desktop(guarded_page, open_app)
+    home_x = page.evaluate("() => document.getElementById('chart').boothHomeX.slice()")
+    rng = page.evaluate(_XRANGE_JS)
+    renders = page.evaluate("() => window.__testHooks.scatterResizeRenders")
+    page.set_viewport_size({"width": 1280, "height": 700})
+    _settle(page)
+    assert page.evaluate(_XRANGE_JS) == pytest.approx(rng, abs=1e-9)
+    assert page.evaluate("() => document.getElementById('chart').boothHomeX") == home_x
+    assert page.evaluate("() => window.__testHooks.scatterResizeRenders") == renders
