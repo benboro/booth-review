@@ -656,3 +656,30 @@ def test_atomic_write_bytes_exception_leaves_destination_untouched(
 def test_freeze_guard_load_missing_file_raises_vault_state_error(tmp_path) -> None:
     with pytest.raises(VaultStateError):
         FreezeGuard.load(tmp_path / "missing.json")
+
+
+def _entry(**extra):
+    return cache_module.ManifestEntry(
+        url="https://example.test/a",
+        source="sports506",
+        season=2026,
+        kind="page",
+        fetched_at="2026-10-01T12:00:00Z",
+        status=200,
+        etag=None,
+        last_modified=None,
+        sha256=None,
+        path="p",
+        bytes=1,
+        final_url="https://example.test/a",
+        **extra,
+    )
+
+
+def test_manifest_entry_without_saved_at_omits_the_key() -> None:
+    assert "saved_at" not in json.loads(_entry().to_json())
+
+
+def test_manifest_entry_with_saved_at_serializes_it() -> None:
+    payload = json.loads(_entry(saved_at="2026-10-01T12:00:00Z").to_json())
+    assert payload["saved_at"] == "2026-10-01T12:00:00Z"

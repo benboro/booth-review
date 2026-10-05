@@ -150,12 +150,20 @@ class Sports506Importer:
         self._paths = paths
         self._manifest = Manifest(paths.manifest)
 
-    def _scan(self, incoming_dir: Path, season: int, result: ImportResult) -> dict[str, bytes]:
+    def _scan(
+        self,
+        incoming_dir: Path,
+        season: int,
+        result: ImportResult,
+        saved_mtimes: dict[str, float] | None = None,
+    ) -> dict[str, bytes]:
         """Map week label -> page bytes for every page of `season` in the folder.
 
         Other seasons' pages are left alone. HTML files that aren't 506 week
         pages (a Downloads folder holds plenty) are only counted. Two different
         files claiming the same week are both rejected rather than guessed at.
+        When `saved_mtimes` is given it receives each week's file modified time
+        (the browser's save time).
         """
         found: dict[str, bytes] = {}
         conflicts: set[str] = set()
@@ -173,8 +181,12 @@ class Sports506Importer:
             if label in found and found[label] != content:
                 conflicts.add(label)
             found[label] = content
+            if saved_mtimes is not None:
+                saved_mtimes[label] = path.stat().st_mtime
         for label in sorted(conflicts):
             del found[label]
+            if saved_mtimes is not None:
+                saved_mtimes.pop(label, None)
             result.skipped_invalid.append(
                 SkippedFile(label=label, reason="two different files claim this week")
             )
@@ -218,7 +230,8 @@ class Sports506Importer:
         result = ImportResult(season=season)
         collector = Sports506Collector(self._cache)
         requests_by_label = dict(zip(WEEK_LABELS, collector.plan(season), strict=True))
-        pages = self._scan(incoming_dir, season, result)
+        saved_mtimes: dict[str, float] = {}
+        pages = self._scan(incoming_dir, season, result, saved_mtimes)
         conflicted = {item.label for item in result.skipped_invalid}
 
         result.expected, result.expected_source, result.unsupported_labels = self._expected_weeks(
@@ -253,7 +266,7 @@ class Sports506Importer:
                 )
                 continue
 
-            self._import_one(req, dest, content)
+            self._import_one(req, dest, content, saved_mtimes[label])
             result.imported.append(label)
 
         result.missing = [
@@ -264,9 +277,13 @@ class Sports506Importer:
 
         return result
 
-    def _import_one(self, req: FetchRequest, dest: Path, content: bytes) -> None:
+    def _import_one(
+        self, req: FetchRequest, dest: Path, content: bytes, saved_mtime: float
+    ) -> None:
         atomic_write_bytes(dest, content)
         fetched_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        # The file's own modified time is when the browser saved the page.
+        saved_at = datetime.fromtimestamp(saved_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         entry = ManifestEntry(
             url=req.url,
             source=req.source,
@@ -281,5 +298,6 @@ class Sports506Importer:
             bytes=len(content),
             final_url=req.url,
             origin=_MANUAL_ORIGIN,
+            saved_at=saved_at,
         )
         self._manifest.append(entry)

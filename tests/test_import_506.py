@@ -12,7 +12,9 @@ request raises immediately -- proving the importer never sends one (AGENTS.md:
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -587,3 +589,20 @@ def test_import_506_commit_is_path_scoped_leaves_concurrent_untracked_file_untou
     # form proves the file was never staged by the scoped import commit.
     assert status.strip() != ""
     assert concurrent_file.is_file()
+
+
+def test_import_506_records_incoming_file_mtime_as_saved_at(
+    git_vault, mock_transport_factory, patched_client, tmp_path
+) -> None:
+    paths = git_vault
+    patched_client(mock_transport_factory({}))
+    incoming = tmp_path / "incoming"
+    _write_incoming(incoming, 2025, "1", _importable_page(2025, "1"))
+    saved = datetime(2025, 9, 24, 15, 0, tzinfo=UTC)
+    os.utime(incoming / "2025-wk1.html", (saved.timestamp(), saved.timestamp()))
+
+    main(["import", "506", "--season", "2025", "--from", str(incoming)])
+
+    (line,) = [entry for entry in _manifest_lines(paths) if entry.get("origin") == "manual"]
+    assert line["saved_at"] == "2025-09-24T15:00:00Z"
+    assert line["fetched_at"] != line["saved_at"]

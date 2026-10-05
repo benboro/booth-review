@@ -106,6 +106,10 @@ class ManifestEntry:
     """Optional provenance tag (e.g. "manual" for hand-imported files). Omitted
     from the JSON line when None, so entries written by RawCache itself keep
     their existing fixed key set."""
+    saved_at: str | None = None
+    """The hand-saved file's own modified time (UTC, `%Y-%m-%dT%H:%M:%SZ`); the
+    browser's save time, used by job.gaps506 for staleness (WR-07). Omitted from
+    the JSON line when None."""
 
     def to_json(self) -> str:
         payload: dict[str, Any] = {
@@ -124,6 +128,8 @@ class ManifestEntry:
         }
         if self.origin is not None:
             payload["origin"] = self.origin
+        if self.saved_at is not None:
+            payload["saved_at"] = self.saved_at
         return json.dumps(payload, sort_keys=True)
 
 
