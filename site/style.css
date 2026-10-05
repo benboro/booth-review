@@ -937,8 +937,11 @@ input[type="checkbox"] {
   cursor: pointer;
 }
 
-.game-section-head:hover {
-  background: var(--surface);
+/* Touch browsers keep :hover after a tap, which would read as a state (04.10 IN-04). */
+@media (hover: hover) {
+  .game-section-head:hover {
+    background: var(--surface);
+  }
 }
 
 .game-caret {
