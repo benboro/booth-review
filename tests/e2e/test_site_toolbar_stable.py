@@ -92,6 +92,40 @@ def test_toolbar_height_and_chart_top_never_change(
     assert _geometry(guarded_page)["toolbarHeight"] == baseline["toolbarHeight"]
 
 
+@pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
+@pytest.mark.parametrize("width", [800, 900, 1024])
+def test_date_axis_never_moves_toolbar_or_chart(
+    guarded_page: Page, open_app: Callable[[Page, str], None], width: int
+) -> None:
+    guarded_page.set_viewport_size({"width": width, "height": 900})
+    open_app(guarded_page)
+    baseline = _geometry(guarded_page)
+    _set(guarded_page, {"axis": "date"})
+    assert _geometry(guarded_page) == baseline
+    _set(guarded_page, {"axis": "date", "seasons": [2021, 2025]})
+    assert _geometry(guarded_page) == baseline
+    _set(guarded_page, {"axis": "spread", "seasons": None})
+    assert _geometry(guarded_page) == baseline
+
+
+def test_date_axis_never_moves_toolbar_or_chart_on_phone(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    guarded_page.set_viewport_size({"width": 360, "height": 800})
+    open_app(guarded_page)
+    baseline = _geometry(guarded_page)
+    _set(guarded_page, {"axis": "date"})
+    assert _geometry(guarded_page) == baseline
+    tops: list[int] = guarded_page.evaluate(
+        "() => [...document.querySelectorAll('#axis-toggle button')]"
+        ".map((b) => Math.round(b.getBoundingClientRect().top))"
+    )
+    assert len(tops) == 3
+    assert len(set(tops)) == 1
+    _set(guarded_page, {"axis": "spread"})
+    assert _geometry(guarded_page) == baseline
+
+
 @pytest.mark.parametrize("width", [800, 900, 1024])
 def test_long_rivalry_name_never_changes_toolbar_height(
     guarded_page: Page,

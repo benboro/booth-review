@@ -29,6 +29,13 @@
  * -- so an inert dot never takes a hover or a click (D-15). This trace's
  * config is unaffected by `TOOLTIP_MODE`.
  *
+ * The "date" axis (04.11, SITE-48) plots each dot at `data.t.dateX` over
+ * season blocks: no x title, no N/A strip, no zero line or captions; gap
+ * dividers sit between blocks and two label rows (lower ticks, one season
+ * annotation per block) are kept right by `fitDateAxis` after every draw.
+ * A season filter limits the x range to the shown blocks and drops
+ * out-of-range dots from every trace (trace count unchanged).
+ *
  * `window.Plotly` is referenced only inside `renderChart`/`bindChartEvents`
  * (never at module scope), so `buildFigure`/`naBand`/`hoverText` stay
  * importable from node for quick checks.
@@ -37,6 +44,7 @@
 import { ACCENT, DIVIDER, DOT_OUTLINE, FAMILY_COLORS, MUTED, PAGE_BG, SURFACE, ZERO_LINE, familyKey } from './palette.js';
 import { MINUS, escapeHover, logTicks, niceLinearTicks } from './format.js';
 import { tooltipModel } from './tooltip.js';
+import { dateAxisLabels, gapDividers, seasonRange, shownBlocks } from './date-axis.js';
 
 /**
  * One-line fallback switch (D-22): set to 'plotly' to restore Plotly's own
@@ -68,7 +76,7 @@ const XAXIS_TITLES = {
  * missing values, the numeric-axis divider, the plotted range, and tick
  * values/labels that never fall inside the band.
  * @param {object} data - a `prepareData` result.
- * @param {"spread"|"excitement"} axis
+ * @param {"spread"|"excitement"|"date"} axis
  * @returns {{sentinel: number, divider: number, range: [number, number], tickvals: number[], ticktext: string[]}}
  */
 export function naBand(data, axis) {
@@ -116,7 +124,7 @@ export function naBand(data, axis) {
  * of visible `&lt;br&gt;` markup rather than as actual line breaks.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
- * @param {{axis: "spread"|"excitement", theme: "light"|"dark"}} opts
+ * @param {{axis: "spread"|"excitement"|"date", theme: "light"|"dark"}} opts
  * @returns {string}
  */
 export function hoverText(data, i, { axis, theme }) {
@@ -157,11 +165,21 @@ export function hoverText(data, i, { axis, theme }) {
  * @param {object} view - a `computeView` result.
  * @param {object} state - shaped like `defaultState(data)`.
  * @param {{theme: "light"|"dark", mobile: boolean, revision: number, tooltipMode?: "html"|"plotly"}} env
- * @returns {{traces: object[], layout: object, config: object}}
+ * @returns {{traces: object[], layout: object, config: object, dateAxis: object|null}}
  */
 export function buildFigure(data, view, state, env) {
   const axis = state.axis;
-  const band = naBand(data, axis);
+  const isDate = axis === 'date';
+  // Pitfall 9: naBand never sees 'date'; a harmless band keeps every path off a sentinel.
+  const band = isDate ? { sentinel: 0, divider: 0, range: [0, 1], tickvals: [], ticktext: [] } : naBand(data, axis);
+  // Date x: the numeric dateX column (never the string `t.date`); a dot outside
+  // the season filter is not drawn on this axis (D-12).
+  const outOfSeasons = (i) =>
+    isDate && state.seasons != null && (data.t.season[i] < state.seasons[0] || data.t.season[i] > state.seasons[1]);
+  const xOf = (i) => {
+    const rawX = isDate ? data.t.dateX[i] : data.t[axis][i];
+    return rawX == null ? band.sentinel : rawX;
+  };
   const theme = env.theme;
   const hoverOpts = { axis, theme };
   const tooltipMode = env.tooltipMode ?? TOOLTIP_MODE;
@@ -196,8 +214,8 @@ export function buildFigure(data, view, state, env) {
     for (let i = 0; i < data.n; i += 1) {
       if (!view.visible[i] || data.familyOf[i] !== family) continue;
       if (highlightSet.has(i)) continue;
-      const rawX = data.t[axis][i];
-      const x = rawX == null ? band.sentinel : rawX;
+      if (outOfSeasons(i)) continue;
+      const x = xOf(i);
       const y = data.t.viewers[i];
       if (view.passesFilters[i]) {
         active.x.push(x);
@@ -284,8 +302,8 @@ export function buildFigure(data, view, state, env) {
   // hover or a click. That restores the same accent border the circles
   // have without ever setting `marker.line` on an SDF glyph.
   for (const i of highlighted) {
-    const rawX = data.t[axis][i];
-    const x = rawX == null ? band.sentinel : rawX;
+    if (outOfSeasons(i)) continue;
+    const x = xOf(i);
     const y = data.t.viewers[i];
     hx.push(x);
     hy.push(y);
@@ -346,9 +364,18 @@ export function buildFigure(data, view, state, env) {
 
   const yTicks = logTicks(data.viewersMin, data.viewersMax);
 
+  let dateAxis = null;
+  if (isDate) {
+    const blocks = shownBlocks(data.dateAxis, state.seasons);
+    const range = seasonRange(data.dateAxis, state.seasons);
+    const labels = dateAxisLabels(blocks, range, env.plotWidth ?? (env.mobile ? 266 : 1138), { mobile: env.mobile });
+    dateAxis = { blocks, range, mobile: env.mobile, labels };
+  }
+
   const layout = {
     datarevision: env.revision,
-    uirevision: state.axis,
+    // D-13: on Date a season change resets the zoom, other filters keep it.
+    uirevision: isDate ? 'date:' + (state.seasons ? state.seasons.join('-') : 'all') : state.axis,
     paper_bgcolor: PAGE_BG[theme],
     plot_bgcolor: PAGE_BG[theme],
     font: {
@@ -370,13 +397,23 @@ export function buildFigure(data, view, state, env) {
     xaxis: {
       // Plotly >= 3 takes only the object form; a bare string title is
       // silently dropped (CR-02).
-      title: { text: XAXIS_TITLES[axis] },
-      range: band.range,
+      ...(isDate ? {} : { title: { text: XAXIS_TITLES[axis] } }),
+      range: isDate ? dateAxis.range.slice() : band.range,
+      ...(isDate ? { minallowed: dateAxis.range[0], maxallowed: dateAxis.range[1] } : {}),
       tickmode: 'array',
-      tickvals: band.tickvals,
-      ticktext: band.ticktext,
+      tickvals: isDate ? dateAxis.labels.tickvals : band.tickvals,
+      ticktext: isDate ? dateAxis.labels.ticktext : band.ticktext,
+      ...(isDate
+        ? {
+            ticks: 'outside',
+            ticklen: 4,
+            tickcolor: ZERO_LINE[theme],
+            tickangle: 0,
+            tickfont: { size: env.mobile ? 10 : 14, color: MUTED[theme] },
+            showgrid: false,
+          }
+        : { gridcolor: DIVIDER[theme] }),
       zeroline: false,
-      gridcolor: DIVIDER[theme],
       fixedrange: env.mobile,
     },
     yaxis: {
@@ -389,31 +426,59 @@ export function buildFigure(data, view, state, env) {
       gridcolor: DIVIDER[theme],
       fixedrange: env.mobile,
     },
-    shapes: [
-      {
-        type: 'line',
-        xref: 'x',
-        yref: 'paper',
-        x0: band.divider,
-        x1: band.divider,
-        y0: 0,
-        y1: 1,
-        line: { width: 1, color: DIVIDER[theme] },
-      },
-    ],
-    annotations: [
-      {
-        text: 'N/A',
-        x: band.sentinel,
-        xref: 'x',
-        y: 0,
-        yref: 'paper',
-        yanchor: 'top',
-        yshift: -6,
-        showarrow: false,
-        font: { size: 14 },
-      },
-    ],
+    shapes: isDate
+      ? gapDividers(dateAxis.blocks).map((x) => ({
+          type: 'line',
+          xref: 'x',
+          x0: x,
+          x1: x,
+          yref: 'paper',
+          y0: 0,
+          y1: 1,
+          layer: 'below',
+          line: { width: 1, color: ZERO_LINE[theme] },
+        }))
+      : [
+          {
+            type: 'line',
+            xref: 'x',
+            yref: 'paper',
+            x0: band.divider,
+            x1: band.divider,
+            y0: 0,
+            y1: 1,
+            line: { width: 1, color: DIVIDER[theme] },
+          },
+        ],
+    annotations: isDate
+      ? dateAxis.labels.seasons.map((s) => ({
+          name: `season-${s.season}`,
+          text: `<b>${s.label}</b>`,
+          x: s.x,
+          xshift: s.xshift,
+          visible: s.visible,
+          xref: 'x',
+          y: 0,
+          yref: 'paper',
+          yanchor: 'top',
+          yshift: env.mobile ? -24 : -28,
+          showarrow: false,
+          captureevents: false,
+          font: { size: env.mobile ? 10 : 14, color: ACCENT[theme] },
+        }))
+      : [
+          {
+            text: 'N/A',
+            x: band.sentinel,
+            xref: 'x',
+            y: 0,
+            yref: 'paper',
+            yanchor: 'top',
+            yshift: -6,
+            showarrow: false,
+            font: { size: 14 },
+          },
+        ],
     dragmode: env.mobile ? false : 'zoom',
     // D-04: the 170px right margin only ever made room for Plotly's own
     // legend; the HTML chip row above the chart replaced it, so the margin
@@ -453,7 +518,7 @@ export function buildFigure(data, view, state, env) {
     modeBarButtonsToRemove: ['lasso2d', 'select2d'],
   };
 
-  return { traces, layout, config };
+  return { traces, layout, config, dateAxis: isDate ? { blocks: dateAxis.blocks, range: dateAxis.range, mobile: env.mobile } : null };
 }
 
 /**
@@ -461,11 +526,44 @@ export function buildFigure(data, view, state, env) {
  * call Pattern 2/Pitfall 4 warn against reusing on updates. `figure.traces`/
  * `layout` must already hold fresh array identities for any changed
  * attribute.
+ *
+ * When `uirevision` changes (an axis switch, or a season change on Date) the
+ * new layout range becomes the home view, so it is also re-saved as the
+ * target of double-click and the modebar's "Reset axes" (CR-01).
  * @param {HTMLElement} gd
- * @param {{traces: object[], layout: object, config: object}} figure
+ * @param {{traces: object[], layout: object, config: object, dateAxis?: object|null}} figure
  */
 export function renderChart(gd, figure) {
+  gd.boothDateAxis = figure.dateAxis ?? null;
+  const prevRev = gd.layout?.uirevision;
   window.Plotly.react(gd, figure.traces, figure.layout, figure.config);
+  if (prevRev !== undefined && prevRev !== figure.layout.uirevision) resetHomeRanges(gd, figure.layout);
+}
+
+/**
+ * Plotly 4.1.1 records each axis's reset target (`_rangeInitial0/1`, read by
+ * double-click and "Reset axes") only on the graph's first draw and carries it
+ * across every later `Plotly.react`, even when `uirevision` changes. Without
+ * this, after Spread -> Date a reset lands on Spread's numbers (a sliver of
+ * the first season), and after a season change on Date it lands on the old
+ * filter. No public option re-saves it: `doubleClick: 'autosize'` plus
+ * dropping the Reset button would also autoscale Spread/Excitement and the
+ * y axis to the data. So write the private fields, and only when they exist
+ * in the shape Plotly 4.1.1 uses; if a future Plotly renames them this is a
+ * no-op and the CR-01 e2e tests fail on the upgrade.
+ * @param {HTMLElement} gd
+ * @param {object} layout - the layout just passed to `Plotly.react`.
+ */
+function resetHomeRanges(gd, layout) {
+  for (const name of ['xaxis', 'yaxis']) {
+    const ax = gd._fullLayout?.[name];
+    const range = layout[name]?.range;
+    if (!ax || !Array.isArray(range) || range.length !== 2) continue;
+    if (!('_rangeInitial0' in ax) || !('_rangeInitial1' in ax)) continue;
+    ax._rangeInitial0 = range[0];
+    ax._rangeInitial1 = range[1];
+    ax._autorangeInitial = false;
+  }
 }
 
 /** D-02 caption gap from the zero line, in px; `fitZeroCaptions` only ever
@@ -523,6 +621,87 @@ export function fitZeroCaptions(gd) {
 }
 
 /**
+ * Returns a function giving a season label's rendered text width in px, or
+ * undefined when no season label is drawn yet (the first draw, where
+ * `dateAxisLabels` falls back to its estimate). Clones a drawn season label's
+ * `<text>` (keeping Plotly's bold tspan and inline font), swaps in each asked
+ * string, measures it in place and removes it at once. Touches no layout, so
+ * calling it from `fitDateAxis` cannot trigger another draw; the widths depend
+ * only on the font, so every pass measures the same and the hook still settles.
+ * @param {HTMLElement} gd
+ * @returns {((text: string) => number) | undefined}
+ */
+export function seasonLabelMeasurer(gd) {
+  const anns = gd.layout?.annotations ?? [];
+  let template = null;
+  for (let k = 0; k < anns.length && !template; k += 1) {
+    if (!String(anns[k].name ?? '').startsWith('season-')) continue;
+    template = gd.querySelector(`.annotation[data-index="${k}"] text`);
+  }
+  if (!template || !template.parentNode) return undefined;
+  const cache = new Map();
+  return (text) => {
+    if (cache.has(text)) return cache.get(text);
+    const probe = template.cloneNode(true);
+    (probe.querySelector('tspan') ?? probe).textContent = text;
+    probe.setAttribute('visibility', 'hidden');
+    template.parentNode.appendChild(probe);
+    const width = probe.getBBox().width;
+    probe.remove();
+    cache.set(text, width);
+    return width;
+  };
+}
+
+/**
+ * Keeps the Date-axis label rows and home range right after every draw,
+ * zoom, pan, and resize (D-11, D-12, D-13). Reads the shown blocks from
+ * `gd.boothDateAxis` (null off the Date axis, where this is a no-op). Writes
+ * the x range only when Plotly autoscaled it (Autoscale, or a double-click
+ * that autosizes), putting back the filtered seasons; pans and zooms never
+ * leave them because `buildFigure` sets `xaxis.minallowed`/`maxallowed`,
+ * which Plotly applies before drawing, so there is nothing to clamp here.
+ * Otherwise relayouts only the tick and season-label values that differ from
+ * the pure `dateAxisLabels` rule. Compare-before-relayout means the
+ * `plotly_afterplot` this triggers finds nothing to change: it never loops.
+ * @param {HTMLElement} gd
+ */
+export function fitDateAxis(gd) {
+  const meta = gd.boothDateAxis;
+  const xa = gd._fullLayout?.xaxis;
+  if (!meta || !xa || !xa.range) return;
+  if (gd.layout?.xaxis?.autorange === true) {
+    window.Plotly.relayout(gd, { 'xaxis.range': meta.range.slice(), 'xaxis.autorange': false });
+    return;
+  }
+  const want = dateAxisLabels(meta.blocks, xa.range, xa._length, {
+    mobile: meta.mobile,
+    measure: seasonLabelMeasurer(gd),
+  });
+  const update = {};
+  const round4 = (a) => (a ?? []).map((v) => Math.round(v * 1e4) / 1e4);
+  const have = gd.layout.xaxis;
+  const sameTicks =
+    JSON.stringify(round4(have.tickvals)) === JSON.stringify(round4(want.tickvals)) &&
+    JSON.stringify(have.ticktext ?? []) === JSON.stringify(want.ticktext);
+  if (!sameTicks) {
+    update['xaxis.tickvals'] = want.tickvals;
+    update['xaxis.ticktext'] = want.ticktext;
+  }
+  const anns = gd.layout.annotations ?? [];
+  want.seasons.forEach((s, k) => {
+    const idx = anns.findIndex((a) => a.name === `season-${s.season}`);
+    if (idx < 0) return;
+    const a = anns[idx];
+    if (Math.abs((a.x ?? 0) - s.x) > 0.01) update[`annotations[${idx}].x`] = s.x;
+    if (Math.abs((a.xshift ?? 0) - s.xshift) > 0.5) update[`annotations[${idx}].xshift`] = s.xshift;
+    if (a.text !== `<b>${s.label}</b>`) update[`annotations[${idx}].text`] = `<b>${s.label}</b>`;
+    if ((a.visible ?? true) !== s.visible) update[`annotations[${idx}].visible`] = s.visible;
+  });
+  if (Object.keys(update).length > 0) window.Plotly.relayout(gd, update);
+}
+
+/**
  * Binds the chart's Plotly event handlers once: point click (detail panel
  * hook) and hover/unhover (D-22: `app.js` uses these to drive the custom
  * HTML tooltip in the default mode; `hoverinfo: 'none'` on the html-mode
@@ -556,8 +735,12 @@ export function bindChartEvents(gd, handlers = {}) {
   gd.on('plotly_relayout', () => onRelayout?.());
 
   // D-02: every draw (react, resize, zoom) re-fits the zero-line captions.
-  gd.on('plotly_afterplot', () => fitZeroCaptions(gd));
+  gd.on('plotly_afterplot', () => {
+    fitZeroCaptions(gd);
+    fitDateAxis(gd);
+  });
   // Bound after the first render (`.on` only exists then), so that draw's
   // afterplot may already have fired.
   fitZeroCaptions(gd);
+  fitDateAxis(gd);
 }

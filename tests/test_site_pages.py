@@ -119,7 +119,9 @@ def test_render_methodology_explains_how_filters_display() -> None:
 def test_render_methodology_explains_the_spread_axis() -> None:
     result = render_methodology(REPO_ROOT / "docs", _fixture_site())
 
-    assert "The x-axis: spread and excitement" in result
+    assert "The x-axis: spread, excitement, and date" in result
+    assert "offseason" in result
+    assert "kickoff time" in result
     assert "favorite won" in result
     assert "underdog won" in result
     assert "before kickoff" in result
