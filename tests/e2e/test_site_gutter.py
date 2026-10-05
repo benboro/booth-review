@@ -92,3 +92,166 @@ def test_gutter_pads_degenerate_inputs(app_page: Page) -> None:
         }"""
     )
     assert got == [[2, 1]] * 4
+
+
+# ---------------------------------------------------------------------------
+# Rendered chart: edge gaps, pan limits, filter invariance, y, marker extent
+# ---------------------------------------------------------------------------
+
+_WAIT_TWO_FRAMES = "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
+
+_EDGE_JS = """
+() => {
+  const gd = document.getElementById('chart');
+  const [lo, hi] = gd._fullLayout.xaxis.range;
+  const w = gd._fullLayout._size.w;
+  const xs = [];
+  for (const t of gd.data) for (const x of t.x) if (typeof x === 'number') xs.push(x);
+  const na = (gd.layout.annotations ?? []).find((a) => a.text === 'N/A');
+  const px = (x) => ((x - lo) * w) / (hi - lo);
+  return {
+    n: xs.length,
+    left: px(Math.min(...xs)),
+    right: ((hi - Math.max(...xs)) * w) / (hi - lo),
+    naLeft: na ? px(na.x) : null,
+  };
+}
+"""
+
+_VIEWPORTS = [(1280, 900), (390, 844), (360, 800)]
+_AXES = ["?axis=date", "", "?axis=excitement", "?axis=date&seasons=2025-2025"]
+
+
+def _open_at(
+    request: pytest.FixtureRequest,
+    open_app: Callable[[Page, str], None],
+    size: tuple[int, int],
+    query: str,
+) -> Page:
+    """Open the app at `size`; phones use the touch context, desktop the plain page."""
+    page: Page = request.getfixturevalue("guarded_page" if size[0] > 600 else "mobile_page")
+    page.set_viewport_size({"width": size[0], "height": size[1]})
+    open_app(page, query)
+    page.evaluate(_WAIT_TWO_FRAMES)
+    page.wait_for_timeout(150)
+    return page
+
+
+def _join(axis_query: str, extra: str) -> str:
+    if not extra:
+        return axis_query
+    return f"{axis_query}&{extra}" if axis_query else f"?{extra}"
+
+
+@pytest.mark.parametrize("people", ["", "people=dale-harlow"])
+@pytest.mark.parametrize("size", _VIEWPORTS, ids=lambda s: f"{s[0]}x{s[1]}")
+@pytest.mark.parametrize("axis_query", _AXES)
+def test_edge_dots_clear_gutter(
+    request: pytest.FixtureRequest,
+    open_app: Callable[[Page, str], None],
+    axis_query: str,
+    size: tuple[int, int],
+    people: str,
+) -> None:
+    page = _open_at(request, open_app, size, _join(axis_query, people))
+    got = page.evaluate(_EDGE_JS)
+    assert got["n"] > 0
+    assert got["left"] >= 9.5, got
+    assert got["right"] >= 9.5, got
+    if got["naLeft"] is not None:
+        assert got["naLeft"] >= 9.5, got
+
+
+@pytest.mark.parametrize("size", [(1280, 900), (360, 800)], ids=lambda s: f"{s[0]}x{s[1]}")
+def test_date_pan_limits_are_the_padded_range(
+    request: pytest.FixtureRequest, open_app: Callable[[Page, str], None], size: tuple[int, int]
+) -> None:
+    page = _open_at(request, open_app, size, "?axis=date")
+    got = page.evaluate(
+        """() => {
+          const l = document.getElementById('chart').layout.xaxis;
+          return { range: l.range.slice(), lo: l.minallowed, hi: l.maxallowed };
+        }"""
+    )
+    assert got["lo"] == pytest.approx(got["range"][0], abs=1e-9)
+    assert got["hi"] == pytest.approx(got["range"][1], abs=1e-9)
+    assert got["range"][0] < 0
+    assert got["range"][1] > 278
+
+
+_RANGE_JS = "() => document.getElementById('chart')._fullLayout.xaxis.range.slice()"
+
+
+@pytest.mark.parametrize("query", ["", "?axis=excitement"])
+def test_spread_and_excitement_range_ignores_filters(
+    mobile_page: Page, open_app: Callable[[Page, str], None], query: str
+) -> None:
+    open_app(mobile_page, query)
+    original = mobile_page.evaluate(_RANGE_JS)
+    for patch in (
+        "{seasons: [2025, 2025]}",
+        "{dots: 'hide'}",
+        "{networks: ['net-a']}",
+        "{networks: null, school: ['northfield', 'lakeview'], h2h: true}",
+    ):
+        mobile_page.evaluate(f"window.__testHooks.setState({patch})")
+        mobile_page.wait_for_timeout(150)
+        assert mobile_page.evaluate(_RANGE_JS) == pytest.approx(original, abs=1e-9), patch
+
+
+_Y_JS = """
+() => {
+  const gd = document.getElementById('chart');
+  const [lo, hi] = gd._fullLayout.yaxis.range;
+  const h = gd._fullLayout._size.h;
+  const ys = [];
+  for (const t of gd.data) {
+    for (const y of t.y) if (typeof y === 'number' && y > 0) ys.push(Math.log10(y));
+  }
+  return {
+    top: ((hi - Math.max(...ys)) * h) / (hi - lo),
+    bottom: ((Math.min(...ys) - lo) * h) / (hi - lo),
+  };
+}
+"""
+
+
+@pytest.mark.parametrize("size", [(1280, 900), (360, 800)], ids=lambda s: f"{s[0]}x{s[1]}")
+def test_y_axis_clears_largest_dot(
+    request: pytest.FixtureRequest, open_app: Callable[[Page, str], None], size: tuple[int, int]
+) -> None:
+    """04.12 D-04 record: the unchanged y range already leaves >= 10px top and bottom."""
+    page = _open_at(request, open_app, size, "")
+    got = page.evaluate(_Y_JS)
+    assert got["top"] >= 10, got
+    assert got["bottom"] >= 10, got
+
+
+# Two announcers who share a telecast in the synthetic fixture, so the compare
+# view draws the shared-game star (15px) with its halo (18px).
+_STAR_QUERY = "?people=kris-venn,sam-delgado&mode=compare"
+
+
+def test_gutter_clears_largest_marker(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, _STAR_QUERY)
+    guarded_page.wait_for_timeout(300)
+    got = guarded_page.evaluate(
+        """async () => {
+          const { GUTTER_PX } = await import('./modules/gutter.js');
+          const gd = document.getElementById('chart');
+          let max = 0;
+          for (const t of gd.data) {
+            const s = t.marker?.size;
+            for (const v of Array.isArray(s) ? s : [s]) {
+              if (typeof v === 'number') max = Math.max(max, v);
+            }
+          }
+          const symbols = Object.values(window.__testHooks.getView().symbols ?? {});
+          return { max, gutter: GUTTER_PX, star: symbols.includes('star') };
+        }"""
+    )
+    assert got["star"], "the compare selection must draw a star or this guard is vacuous"
+    assert got["max"] == 18
+    assert got["max"] / 2 + 1 <= got["gutter"]
