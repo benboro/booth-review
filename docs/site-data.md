@@ -20,7 +20,11 @@ of per-telecast objects:
 
 - `schema_version` — the contract version (currently `"2.1.0"`). See
   Versioning below.
-- `generated_at` — ISO UTC timestamp of the build that produced the file.
+- `generated_at` — ISO UTC time of the newest change to a collected input (the
+  newest manifest entry whose content differs from the previous one for the same
+  cached file). The same inputs always give the same value, so a rebuild with
+  nothing new produces identical files. It no longer means wall-clock build time;
+  no site code reads it.
 - `freshness` — `{ season, crews_through_week, viewership_through_week }`,
   the two SITE-14 freshness stamps.
 - `lookups` — small tables (`teams`, `networks`, `people`, `publishers`,

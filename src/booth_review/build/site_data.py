@@ -158,6 +158,7 @@ def build_site_data(
     generated_at: datetime,
     *,
     counts: dict[str, int] | None = None,
+    bowl_crosswalk: Literal["strict", "lenient"] = "strict",
 ) -> SiteData:
     """Assemble every plotted telecast (D-10) into the D-13 columnar
     SiteData, validated by the D-14 contract (`validate_site_data`) before
@@ -165,6 +166,11 @@ def build_site_data(
 
     When `counts` is given, the rivalry resolution's counts (D-13) are added
     to it for the build summary: numbers only, never a name.
+
+    `bowl_crosswalk="lenient"` (the scheduled job) lets a plotted postseason
+    game with no bowls.csv row, or an at-bowl row with no franchise, build
+    with a null bowl instead of aborting (D-07); both are counted. An at_bowl
+    disagreement stays a hard error in both modes.
     """
     eras = {era.era_id: era for era in load_eras(reference_directory)}
     event_flags = {flag.flag_id: flag for flag in load_event_flags(reference_directory)}
@@ -229,7 +235,7 @@ def build_site_data(
             expects_at_bowl = row["playoff_round"] in _CFP_AT_BOWL_ROUNDS
         if entry.at_bowl != expects_at_bowl:
             bowl_disagreements += 1
-    if missing_bowl:
+    if missing_bowl and bowl_crosswalk == "strict":
         raise BowlCrosswalkError(
             f"telecasts: {missing_bowl} plotted postseason row(s) without a bowls.csv entry; "
             "see interim/review_bowls.csv"
@@ -243,6 +249,18 @@ def build_site_data(
         for row in rows
         if row["game_type"] in _POSTSEASON_TYPES
     }
+    bowls_no_franchise = 0
+    if bowl_crosswalk == "lenient":
+        for game_id in list(season_by_game):
+            soft = bowl_entries.get(game_id)
+            if (
+                soft is not None
+                and soft.at_bowl
+                and soft.core_name is not None
+                and soft.franchise is None
+            ):
+                del season_by_game[game_id]
+                bowls_no_franchise += 1
     franchises = build_franchises(bowl_entries, season_by_game)
     franchise_slugs = sorted(franchises)
     franchise_index = {slug: i for i, slug in enumerate(franchise_slugs)}
@@ -252,9 +270,10 @@ def build_site_data(
     for row in rows:
         if row["game_type"] not in _POSTSEASON_TYPES:
             continue
-        found = bowl_entries[int(row["game_id"])]
+        found = bowl_entries.get(int(row["game_id"]))
         if (
-            found.at_bowl
+            found is not None
+            and found.at_bowl
             and found.official_name is not None
             and found.core_name is not None
             and found.franchise is not None
@@ -592,6 +611,7 @@ def build_site_data(
         "coverage": coverage_rows,
     }
     if counts is not None:
+        counts["bowls_no_franchise"] = bowls_no_franchise
         counts["rivalry_games_tagged"] = len(rivalry_resolution.by_game)
         counts["rivalry_telecasts_tagged"] = sum(1 for v in columns["rivalry"] if v is not None)
         counts["rivalry_title_games_excluded"] = rivalry_resolution.title_games_excluded
