@@ -22,8 +22,8 @@ DEFAULT_ROWS = [
     "CFP Semifinal (1)",
     "Harbor Bowl (1)",
     "Summit Bowl (1)",
-    "Lakeshore Rivalry (2)",
     "The Bridge Game (1)",
+    "Lakeshore Rivalry (2)",
 ]
 
 _ROWS_JS = """
@@ -211,9 +211,9 @@ def test_keyboard_moves_selection_without_wrapping(
     assert guarded_page.evaluate("() => document.activeElement.dataset.game") == "harbor-bowl"
 
     guarded_page.keyboard.press("End")
-    _wait_url(guarded_page, "location.search.includes('game=bridge-game')")
+    _wait_url(guarded_page, "location.search.includes('game=lakeshore')")
     guarded_page.keyboard.press("ArrowDown")  # no wrap past the last row
-    assert guarded_page.evaluate("() => document.activeElement.dataset.game") == "bridge-game"
+    assert guarded_page.evaluate("() => document.activeElement.dataset.game") == "lakeshore"
 
     guarded_page.keyboard.press("Home")
     _wait_url(guarded_page, "location.search.includes('game=cfp-semifinal')")
@@ -341,3 +341,14 @@ def test_empty_table_copy_names_games(
     open_app(guarded_page, "")
     text = guarded_page.inner_text("#table-empty")
     assert "Select an announcer, a school, or a game to list matching games." in text
+    assert "Pick an announcer, a school, or a game from the filters above." in text
+    assert "or a school from the School filter" not in text
+
+
+def test_game_search_has_one_accessible_name(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    search = guarded_page.locator("#game-search")
+    assert search.get_attribute("aria-label") is None
+    assert guarded_page.get_by_label("Search games").evaluate("(el) => el.id") == "game-search"
