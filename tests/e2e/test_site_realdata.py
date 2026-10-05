@@ -1049,6 +1049,14 @@ _DATE_FACTS_JS = """
 """
 
 
+def _padded_around(facts: dict[str, Any], lo_key: str, hi_key: str) -> bool:
+    """04.12: the Date range is the season blocks plus a small pixel gutter on each end."""
+    lo, hi = facts["rangeLo"], facts["rangeHi"]
+    start, end = facts[lo_key], facts[hi_key]
+    pad = 0.05 * (end - start)
+    return bool(start - pad <= lo < start and end < hi <= end + pad)
+
+
 def test_real_date_axis_plots_every_telecast(
     real_guarded_page: Page,
     real_open_app: Callable[[Page, str], None],
@@ -1065,7 +1073,7 @@ def test_real_date_axis_plots_every_telecast(
     annotations = int(facts["annotations"])
     dividers = int(facts["dividers"])
     expected_dividers = seasons - 1
-    range_ok = facts["rangeLo"] == facts["firstStart"] and facts["rangeHi"] == facts["lastEnd"]
+    range_ok = _padded_around(facts, "firstStart", "lastEnd")
     assert plotted == total
     assert annotations == seasons
     assert dividers == expected_dividers
@@ -1087,7 +1095,7 @@ def test_real_date_axis_follows_season_filter(
     annotations = int(facts["annotations"])
     plotted = int(facts["plotted"])
     outside = int(facts["outside"])
-    range_ok = facts["rangeLo"] == facts["start2024"] and facts["rangeHi"] == facts["end2026"]
+    range_ok = _padded_around(facts, "start2024", "end2026")
     assert annotations == 3
     assert range_ok
     assert outside == 0
