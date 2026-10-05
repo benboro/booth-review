@@ -665,6 +665,27 @@ def test_reset_and_clear_all_clear_the_game_search(
     assert _rows(guarded_page) == DEFAULT_ROWS
 
 
+def test_game_reset_clears_a_search_with_no_pick(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    _open_game(guarded_page)
+    reset = guarded_page.locator("#pop-game .group-reset")
+    assert reset.get_attribute("aria-disabled") == "true"
+    guarded_page.locator("#game-search").fill("harbor")
+    assert reset.get_attribute("aria-disabled") == "false"
+    reset.click()
+    assert guarded_page.input_value("#game-search") == ""
+    assert _rows(guarded_page) == DEFAULT_ROWS
+    assert reset.get_attribute("aria-disabled") == "true"
+    assert "game=" not in guarded_page.url
+
+    # Emptying the box by hand dims Reset again, with no pick to keep it live.
+    guarded_page.locator("#game-search").fill("harbor")
+    guarded_page.locator("#game-search").fill("")
+    assert reset.get_attribute("aria-disabled") == "true"
+
+
 def test_other_group_reset_keeps_the_game_search(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:

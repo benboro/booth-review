@@ -983,7 +983,11 @@ export function initFilters({ data, getState, setState }) {
   });
   bindPostseasonKeyboard(setState);
 
-  els.gameSearch.addEventListener('input', () => filterGameRows(data, els.gameSearch.value));
+  els.gameSearch.addEventListener('input', () => {
+    filterGameRows(data, els.gameSearch.value);
+    // Typing alone can make the Game Reset live (04.10 IN-03); no render runs here.
+    if (lastView) renderGroupResets(data, getState(), lastView);
+  });
   els.gameOptions.addEventListener('click', (ev) => {
     const head = ev.target.closest('.game-section-head');
     if (head) {
@@ -1001,8 +1005,10 @@ export function initFilters({ data, getState, setState }) {
     // filters also removes every selected announcer, compare mode, and
     // called-together (the `announcers` reset). "Clear selection" in the chip
     // row still clears only the people.
-    setState(structuredClone(Object.assign({}, ...Object.values(GROUP_RESETS))));
+    // Empty the search first: setState renders synchronously, so the Game Reset
+    // is then dimmed against the cleared box (04.10 IN-03).
     clearGameSearch(data);
+    setState(structuredClone(Object.assign({}, ...Object.values(GROUP_RESETS))));
   });
 
   // A4: one delegated listener for every per-group Reset (desktop popovers and
@@ -1013,8 +1019,8 @@ export function initFilters({ data, getState, setState }) {
     if (!btn || btn.getAttribute('aria-disabled') === 'true') return;
     const name = btn.dataset.reset;
     if (!Object.hasOwn(GROUP_RESETS, name)) return;
-    setState(structuredClone(GROUP_RESETS[name]));
     if (name === 'game') clearGameSearch(data);
+    setState(structuredClone(GROUP_RESETS[name]));
   });
 
   els.filtersShowResults.addEventListener('click', () => {
@@ -1358,13 +1364,17 @@ function renderGroupResets(data, state, view) {
     // live for `?mode=compare` with no one selected (the toolbar trigger's
     // own active state is left alone). The Networks Reset stays live while any
     // pick is stored (D-15), even one D-36 shows without a count, since that
-    // pick is still in the URL and Reset is how the visitor removes it.
+    // pick is still in the URL and Reset is how the visitor removes it. The
+    // Game Reset is also live while the search box holds text, since Reset
+    // clears that too (IN-07, 04.10 IN-03).
     const active =
       name === 'announcers'
         ? state.people.length > 0 || state.compare || state.together
         : name === 'networks'
           ? state.networks != null
-          : triggerInfo(name, data, state, view).active;
+          : name === 'game'
+            ? triggerInfo(name, data, state, view).active || els.gameSearch.value !== ''
+            : triggerInfo(name, data, state, view).active;
     btn.setAttribute('aria-disabled', active ? 'false' : 'true');
   }
 }
