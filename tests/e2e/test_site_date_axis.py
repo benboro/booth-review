@@ -258,3 +258,61 @@ def test_single_block_full_year_and_months_at_phone(app_page: Page) -> None:
     assert one["seasons"][0]["xshift"] == 0
     assert one["twoDigit"] is False
     assert app_page.evaluate(_TICKS_JS)["mo"]["tier"] == 3
+
+
+_COPY_JS = """
+async () => {
+  const D = await import('./modules/data.js');
+  const F = await import('./modules/format.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  const rows = [];
+  for (let i = 0; i < data.n; i += 1) {
+    rows.push({
+      date: F.axisValueText(data, i, 'date'),
+      spread: F.axisValueText(data, i, 'spread'),
+      exc: F.axisValueText(data, i, 'excitement'),
+    });
+  }
+  return { rows, label: F.AXIS_LABELS.date };
+}
+"""
+
+_URL_JS = """
+async () => {
+  const D = await import('./modules/data.js');
+  const S = await import('./modules/select.js');
+  const U = await import('./modules/url-state.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  const base = S.defaultState(data);
+  const dec = (q) => U.decodeState(q, data).axis;
+  return {
+    date: dec('?axis=date'),
+    excitement: dec('?axis=excitement'),
+    others: ['?axis=Date', '?axis=dates', '?axis=junk', '?axis=%', ''].map(dec),
+    encDate: U.encodeState({ ...base, axis: 'date' }, data),
+    encDefault: U.encodeState(base, data),
+    encSpread: U.encodeState({ ...base, axis: 'spread' }, data),
+  };
+}
+"""
+
+
+def test_axis_line_shows_spread_and_excitement_on_date(app_page: Page) -> None:
+    out = app_page.evaluate(_COPY_JS)
+    assert out["label"] == "Date"
+    for row in out["rows"]:
+        assert row["date"] == f"{row['spread']} · {row['exc']}"
+    assert out["rows"][3]["date"] == "Spread: not available · Excitement: 4.1"
+    assert out["rows"][2]["date"].endswith(" · Excitement (CFBD): not available")
+
+
+def test_axis_url_round_trip_and_allowlist(app_page: Page) -> None:
+    out = app_page.evaluate(_URL_JS)
+    assert out["date"] == "date"
+    assert out["excitement"] == "excitement"
+    assert out["others"] == ["spread"] * 5
+    assert out["encDate"] == "?axis=date"
+    assert out["encDefault"] == ""
+    assert out["encSpread"] == ""

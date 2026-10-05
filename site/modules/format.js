@@ -119,6 +119,7 @@ export const FEED_LABELS = {
 export const AXIS_LABELS = {
   spread: 'Spread',
   excitement: 'Excitement (CFBD)',
+  date: 'Date',
 };
 
 /**
@@ -409,10 +410,14 @@ export function spreadLabel(data, i) {
  * Axis line text for the tooltip and modal.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
- * @param {"spread"|"excitement"} axis
+ * @param {"spread"|"excitement"|"date"} axis - "date" shows both halves,
+ *   spread first, joined by " \u00b7 ".
  * @returns {string}
  */
 export function axisValueText(data, i, axis) {
+  if (axis === 'date') {
+    return `${spreadLabel(data, i)} \u00b7 ${formatAxisValue('excitement', data.t.excitement[i])}`;
+  }
   if (axis === 'excitement') return formatAxisValue('excitement', data.t.excitement[i]);
   return spreadLabel(data, i);
 }
