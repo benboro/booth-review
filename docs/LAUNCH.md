@@ -50,7 +50,7 @@ line except the last must say "pending", and no private repo name may appear.
 
 - [x] 2026-10-05 Remove-state drill: missing state fails loudly, with no requests made. `tests/test_job_update_drills.py::test_remove_state_drill_fails_loudly_without_requests`
 - [x] 2026-10-05 Key-plant drill: a planted key fails the run hard and deploys nothing. `tests/test_job_update_drills.py::test_key_plant_drill_fails_hard_and_deploys_nothing`
-- [x] 2026-10-05 Logs hold counts only: no names, query strings, or keys. `tests/test_job_update_drills.py::test_update_run_logs_are_count_only`
+- [x] 2026-10-05 Logs hold counts only: no names, query strings, or keys. `tests/test_job_update_drills.py::test_update_run_logs_are_count_only`; Ratings Reference record ids masked in the fetch line: `tests/test_transport_client.py::test_fetch_log_masks_ratingsref_record_ids_and_query_strings`
 - [x] 2026-10-05 CFBD budget: the remaining call count is logged at the start and end of each update run. `tests/test_job_runner.py::test_update_run_logs_cfbd_remaining_at_start_and_end`
 - [x] 2026-10-05 Tests run network-blocked. `tests/test_network_blocked.py::test_unmocked_client_is_blocked_by_pytest_socket`
 - [x] 2026-10-05 Catch-up logic after a skipped slot (unit level; the live drill stays below). evidence: `tests/test_job_catchup.py`

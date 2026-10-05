@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import random
+import re
 import time
 import urllib.robotparser as robotparser
 from collections.abc import Callable, Mapping
@@ -32,6 +33,17 @@ logger = logging.getLogger("booth_review.transport")
 # run logs may carry (AUTO-05).
 for _http_logger in ("httpx", "httpx2", "httpcore"):
     logging.getLogger(_http_logger).setLevel(logging.WARNING)
+
+# A Ratings Reference record path names the matchup (`/api/telecast/cfb-<team>-
+# <team>-<date>.json`), so the fetch line logs the endpoint with the record id
+# masked; the run logs stay counts only (AUTO-05). The manifest keeps the full URL.
+_RECORD_PATH_RE = re.compile(r"^(/api/telecast/)[^/]+$")
+
+
+def _loggable_path(path: str) -> str:
+    """Return `path` with any per-record segment replaced by `<record>`."""
+    return _RECORD_PATH_RE.sub(r"\1<record>", path)
+
 
 RobotsListener = Callable[[str, FetchResponse], None]
 
@@ -209,7 +221,7 @@ class PoliteClient:
         logger.info(
             "fetch host=%s path=%s status=%s bytes=%d",
             host,
-            httpx2.URL(url).path,
+            _loggable_path(httpx2.URL(url).path),
             fetch_resp.status_code,
             len(fetch_resp.content),
         )

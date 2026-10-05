@@ -518,3 +518,37 @@ def test_call_limit_remaining_non_integer_gives_none() -> None:
     resp = client.fetch("https://api.collegefootballdata.com/games?year=2025")
 
     assert resp.call_limit_remaining is None
+
+
+# -- Fetch log line ------------------------------------------------------------------
+
+
+def test_fetch_log_masks_ratingsref_record_ids_and_query_strings(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """AUTO-05: the fetch line names the endpoint, never the matchup or a query."""
+    log: list[httpx2.Request] = []
+    record = "https://ratingsreference.com/api/telecast/cfb-alpha-beta-2026-09-05.json"
+    responses = {
+        "https://ratingsreference.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://ratingsreference.com/sitemap-telecasts.xml": (200, b"<urlset/>", {}),
+        record: (200, b"{}", {}),
+        "https://api.collegefootballdata.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://api.collegefootballdata.com/games?year=2026": (200, b"[]", {}),
+    }
+    client = _client(_recording_handler(responses, log))
+
+    with caplog.at_level("INFO", logger="booth_review.transport"):
+        client.fetch("https://ratingsreference.com/sitemap-telecasts.xml")
+        client.fetch(record)
+        client.fetch("https://api.collegefootballdata.com/games?year=2026")
+
+    lines = [r.getMessage() for r in caplog.records if r.name == "booth_review.transport"]
+    assert any("path=/sitemap-telecasts.xml " in line for line in lines)
+    assert any("path=/api/telecast/<record> " in line for line in lines)
+    assert any("path=/games " in line for line in lines)
+    for line in lines:
+        assert "alpha" not in line
+        assert "beta" not in line
+        assert "?" not in line
+        assert "year=" not in line
