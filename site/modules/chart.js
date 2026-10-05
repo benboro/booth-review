@@ -555,7 +555,8 @@ export function buildFigure(data, view, state, env) {
  * "Reset axes" (CR-01) on a `uirevision` change (axis switch, Date season
  * change) and when the home x range moves under the same `uirevision` (a width
  * change moves the pixel gutter, 04.12 D-03). A range the user zoomed or
- * panned away from home is kept through such a re-render.
+ * panned away from home is kept through such a re-render, and through every
+ * later render under the same `uirevision`.
  * @param {HTMLElement} gd
  * @param {{traces: object[], layout: object, config: object, dateAxis?: object|null}} figure
  */
@@ -567,7 +568,11 @@ export function renderChart(gd, figure) {
   const sameRev = prevRev !== undefined && prevRev === figure.layout.uirevision;
   const homeMoved = sameRev && Array.isArray(prevHome) && !sameRange(prevHome, home);
   const live = gd._fullLayout?.xaxis?.range;
-  const awayFromHome = homeMoved && Array.isArray(live) && !sameRange(live, prevHome);
+  // Every same-revision render while the user is off home re-asserts the live
+  // range, not only one where the home moved: once a width change has passed
+  // the live range as input, Plotly's _preGUI no longer records it as a user
+  // edit, so a later home input would snap the zoom back (04.11 D-13).
+  const awayFromHome = sameRev && Array.isArray(prevHome) && Array.isArray(live) && !sameRange(live, prevHome);
   const layout = awayFromHome
     ? { ...figure.layout, xaxis: { ...figure.layout.xaxis, range: live.slice() } }
     : figure.layout;

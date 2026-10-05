@@ -325,7 +325,51 @@ def test_resize_keeps_a_desktop_zoom(
     page.set_viewport_size({"width": 1000, "height": 900})
     _settle(page)
     assert page.evaluate(_XRANGE_JS) == pytest.approx(zoomed, abs=1e-6)
+    # 04.11 D-13: a non-season filter after the resize still keeps the zoom.
+    page.evaluate(_STATE_JS, {"school": ["northfield"]})
+    _settle(page)
+    assert page.evaluate(_XRANGE_JS) == pytest.approx(zoomed, abs=1e-6)
+    page.evaluate(_STATE_JS, {"school": []})
+    _settle(page)
+    assert page.evaluate(_XRANGE_JS) == pytest.approx(zoomed, abs=1e-6)
     assert _double_click_plot(page) == pytest.approx(_home(page, [0, 278]), abs=1e-6)
+    # Back at home, a later filter leaves the range at home.
+    page.evaluate(_STATE_JS, {"school": ["northfield"]})
+    _settle(page)
+    assert page.evaluate(_XRANGE_JS) == pytest.approx(_home(page, [0, 278]), abs=1e-6)
+
+
+def test_zoom_made_after_a_resize_survives_a_filter(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """A second zoom after a resize kept the first must also survive a filter (D-13)."""
+    page = _date_desktop(guarded_page, open_app)
+    _drag_zoom(page)
+    page.set_viewport_size({"width": 1000, "height": 900})
+    _settle(page)
+    rezoomed = _drag_zoom(page)
+    page.evaluate(_STATE_JS, {"school": ["northfield"]})
+    _settle(page)
+    assert page.evaluate(_XRANGE_JS) == pytest.approx(rezoomed, abs=1e-6)
+    assert _double_click_plot(page) == pytest.approx(_home(page, [0, 278]), abs=1e-6)
+
+
+def test_resize_on_bars_tab_keeps_the_scatter_zoom(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Resizing while Bars shows, then returning and filtering, keeps the zoom (D-13)."""
+    page = _date_desktop(guarded_page, open_app)
+    zoomed = _drag_zoom(page)
+    page.evaluate(_STATE_JS, {"view": "bars"})
+    _settle(page)
+    page.set_viewport_size({"width": 1000, "height": 900})
+    _settle(page)
+    page.evaluate(_STATE_JS, {"view": "scatter"})
+    _settle(page)
+    assert page.evaluate(_XRANGE_JS) == pytest.approx(zoomed, abs=1e-6)
+    page.evaluate(_STATE_JS, {"school": ["northfield"]})
+    _settle(page)
+    assert page.evaluate(_XRANGE_JS) == pytest.approx(zoomed, abs=1e-6)
 
 
 @pytest.mark.parametrize("query", ["?axis=date", ""])
