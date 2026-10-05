@@ -35,7 +35,7 @@ line except the last must say "pending", and no private repo name may appear.
 - [x] 2026-10-05 Publishing: tests hold no scraped fixtures (every HTML fixture is marked synthetic, no browser-saved page). `tests/test_launch_checks.py::test_fixture_pages_are_marked_synthetic`
 - [x] 2026-10-05 Deploy touches only `booth-review/` in the target. `tests/test_deploy_publish.py::test_deploy_touches_only_booth_review`
 - [x] 2026-10-05 Deploy: PUBLISH_ENABLED defaults to false and deploys nothing. `tests/test_deploy_publish.py::test_publishing_disabled_deploys_nothing`
-- [x] 2026-10-05 Deploy: the workflow's deploy steps require `PUBLISH_ENABLED` to be exactly `true`. `tests/test_vault_workflow.py::test_deploy_steps_gated_on_publish_enabled_true`
+- [x] 2026-10-05 Deploy: the workflow's deploy steps require `PUBLISH_ENABLED` to be exactly `true` (a case-sensitive shell compare; `True` or `TRUE` keep publishing off). `tests/test_vault_workflow.py::test_publish_gate_is_exactly_true`
 - [x] 2026-10-05 Publishing off, end to end: an update run then deploy changes nothing. `tests/test_job_update_drills.py::test_publishing_off_deploys_nothing_end_to_end`
 
 ### Attribution
@@ -69,7 +69,7 @@ line except the last must say "pending", and no private repo name may appear.
 
 ## Operating notes
 
-- Variables: `PUBLISH_ENABLED`, `DEPLOY_REPO`, `JOB_REF`. Secrets: `CFBD_API_KEY`, `DEPLOY_KEY_PROD`, `DEPLOY_KEY_SCRATCH`. Deploy keys are repo-scoped, one per target; the workflow picks the production key only when `DEPLOY_REPO` is `benboro/benboro.github.io`.
+- Variables: `PUBLISH_ENABLED`, `DEPLOY_REPO`, `JOB_REF`. Publishing turns on only when `PUBLISH_ENABLED` is exactly `true` (lowercase); any other value, `True` included, keeps it off. Secrets: `CFBD_API_KEY`, `DEPLOY_KEY_PROD`, `DEPLOY_KEY_SCRATCH`. Deploy keys are repo-scoped, one per target; the workflow picks the production key only when `DEPLOY_REPO` is `benboro/benboro.github.io`.
 - Rollout order: set `JOB_REF` to the new tag before installing a workflow that passes new flags.
 - Releasing a reference fix: patch-bump `version` in `pyproject.toml`, run `uv lock`, update the version literal in the workflow test, open a PR, merge, then run `ops/release-job.sh vX.Y.Z` from the merged main.
 - Rollback: set `JOB_REF` to the previous tag.

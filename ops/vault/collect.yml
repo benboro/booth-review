@@ -25,7 +25,10 @@
 # The job is the full update pipeline: collect, rebuild, build the site, run
 # the CFBD key check, then a gated deploy. Deploy runs only when the job
 # reports deploy_ready=true AND `vars.PUBLISH_ENABLED` is exactly `true`
-# (the CLI re-checks the flag, D-01). `vars.DEPLOY_REPO` names the target
+# (the CLI re-checks the flag, D-01). The gate is computed once, by an exact
+# shell compare in the "Validate the deploy settings" step (`steps.gate`):
+# Actions expressions compare strings case-insensitively, so `True` or
+# `TRUE` would pass a `vars.PUBLISH_ENABLED == 'true'` condition (WR-02). `vars.DEPLOY_REPO` names the target
 # repo: a scratch copy for the dry run, `benboro/benboro.github.io` for launch.
 # Two repo-scoped deploy-key secrets exist, `DEPLOY_KEY_PROD` (for
 # benboro/benboro.github.io) and `DEPLOY_KEY_SCRATCH` (any other DEPLOY_REPO),
@@ -72,17 +75,21 @@ jobs:
           fi
 
       - name: Validate the deploy settings
+        id: gate
         env:
           PUBLISH_ENABLED: ${{ vars.PUBLISH_ENABLED }}
           DEPLOY_REPO: ${{ vars.DEPLOY_REPO }}
         run: |
+          # The only publish gate: an exact, case-sensitive compare (WR-02).
           if [ "$PUBLISH_ENABLED" = "true" ]; then
             if ! printf '%s' "$DEPLOY_REPO" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'; then
               echo "::error::the DEPLOY_REPO variable must be owner/name when publishing is enabled" >&2
               exit 1
             fi
+            echo "publish=yes" >> "$GITHUB_OUTPUT"
           else
             echo "publishing disabled"
+            echo "publish=no" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Checkout vault (self)
@@ -135,7 +142,8 @@ jobs:
           exit 0
 
       - name: Check out the deploy target
-        if: steps.job.outputs.deploy_ready == 'true' && vars.PUBLISH_ENABLED == 'true'
+        id: target
+        if: steps.job.outputs.deploy_ready == 'true' && steps.gate.outputs.publish == 'yes'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ vars.DEPLOY_REPO }}
@@ -145,7 +153,7 @@ jobs:
 
       - name: Deploy (only when publishing is on)
         id: deploy
-        if: steps.job.outputs.deploy_ready == 'true' && vars.PUBLISH_ENABLED == 'true'
+        if: steps.job.outputs.deploy_ready == 'true' && steps.gate.outputs.publish == 'yes'
         working-directory: src
         env:
           PUBLISH_ENABLED: ${{ vars.PUBLISH_ENABLED }}

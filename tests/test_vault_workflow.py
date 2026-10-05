@@ -11,7 +11,9 @@ involved, matching `tests/test_vault.py`'s own fixture style.
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
 import subprocess
 import tomllib
 from pathlib import Path
@@ -197,23 +199,106 @@ def _steps() -> list[dict[str, object]]:
 def test_deploy_vars_never_appear_inside_a_run_block(name: str) -> None:
     for step in _steps():
         assert name not in str(step.get("run", ""))
-    # Outside run blocks they may sit only in env:, with: and if: lines.
+    # Outside run blocks they may sit only in env: and with: lines. Never in an
+    # if: line: Actions expressions compare strings case-insensitively (WR-02).
     for line in _non_comment_lines(WORKFLOW_TEXT):
         if name in line:
             stripped = line.strip()
             assert stripped.startswith(
                 ("PUBLISH_ENABLED:", "DEPLOY_REPO:", "repository:", "ssh-key:")
-            ) or stripped.startswith("if:"), stripped
+            ), stripped
 
 
-def test_deploy_steps_gated_on_publish_enabled_true() -> None:
-    gate = "steps.job.outputs.deploy_ready == 'true' && vars.PUBLISH_ENABLED == 'true'"
-    gated = [s for s in _steps() if s.get("if") == gate]
-    assert {s.get("id") for s in gated} == {None, "deploy"}
+_BASH = shutil.which("bash")
+_DEPLOY_GATE = "steps.job.outputs.deploy_ready == 'true' && steps.gate.outputs.publish == 'yes'"
+
+
+def _step(step_id: str) -> dict[str, object]:
+    return next(s for s in _steps() if s.get("id") == step_id)
+
+
+def _run_step(
+    step: dict[str, object], env: dict[str, str], tmp_path: Path
+) -> tuple[int, dict[str, str]]:
+    """Run a step's `run:` block the way Actions does (bash -eo pipefail) and
+    return its exit code and the key=value lines it wrote to $GITHUB_OUTPUT."""
+    assert _BASH is not None
+    script = tmp_path / "step.sh"
+    script.write_text(str(step["run"]), encoding="utf-8")
+    output = tmp_path / "github_output"
+    output.write_text("", encoding="utf-8")
+    full_env = {
+        "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+        "GITHUB_OUTPUT": str(output),
+        "RUNNER_TEMP": str(tmp_path),
+        **env,
+    }
+    result = subprocess.run(
+        [_BASH, "--noprofile", "--norc", "-eo", "pipefail", str(script)],
+        env=full_env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    lines = output.read_text(encoding="utf-8").splitlines()
+    return result.returncode, dict(line.split("=", 1) for line in lines if "=" in line)
+
+
+def test_deploy_steps_gated_on_the_shell_computed_publish_output() -> None:
+    gated = [s for s in _steps() if s.get("if") == _DEPLOY_GATE]
+    assert {s.get("id") for s in gated} == {"target", "deploy"}
     assert len(gated) == 2
-    assert WORKFLOW_TEXT.count("vars.PUBLISH_ENABLED == 'true'") == 2
-    deploy = next(s for s in gated if s.get("id") == "deploy")
+    assert not any("vars.PUBLISH_ENABLED" in str(s.get("if", "")) for s in _steps())
+    deploy = _step("deploy")
     assert "booth-review deploy --site" in str(deploy["run"])
+    # The gate runs before the deploy target is ever checked out.
+    ids = [s.get("id") for s in _steps()]
+    assert ids.index("gate") < ids.index("target") < ids.index("deploy")
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+@pytest.mark.parametrize(
+    ("value", "publish"),
+    [
+        ("true", "yes"),
+        ("True", "no"),
+        ("TRUE", "no"),
+        (" true", "no"),
+        ("true ", "no"),
+        ("1", "no"),
+        ("yes", "no"),
+        ("false", "no"),
+        ("", "no"),
+    ],
+)
+def test_publish_gate_is_exactly_true(value: str, publish: str, tmp_path: Path) -> None:
+    # WR-02: only the exact string `true` opens the gate, matching the CLI.
+    code, outputs = _run_step(
+        _step("gate"),
+        {"PUBLISH_ENABLED": value, "DEPLOY_REPO": "owner/site"},
+        tmp_path,
+    )
+    assert code == 0
+    assert outputs == {"publish": publish}
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+@pytest.mark.parametrize("repo", ["", "owner", "owner/site/extra", "owner/si te"])
+def test_publish_gate_fails_on_a_bad_deploy_repo_when_enabled(repo: str, tmp_path: Path) -> None:
+    code, outputs = _run_step(
+        _step("gate"), {"PUBLISH_ENABLED": "true", "DEPLOY_REPO": repo}, tmp_path
+    )
+    assert code != 0
+    assert "publish" not in outputs
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_publish_gate_ignores_deploy_repo_when_disabled(tmp_path: Path) -> None:
+    code, outputs = _run_step(
+        _step("gate"), {"PUBLISH_ENABLED": "TRUE", "DEPLOY_REPO": ""}, tmp_path
+    )
+    assert code == 0
+    assert outputs == {"publish": "no"}
 
 
 def test_every_checkout_matches_the_ci_pin() -> None:
