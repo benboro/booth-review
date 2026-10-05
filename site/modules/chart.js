@@ -45,6 +45,7 @@ import { ACCENT, DIVIDER, DOT_OUTLINE, FAMILY_COLORS, MUTED, PAGE_BG, SURFACE, Z
 import { MINUS, escapeHover, logTicks, niceLinearTicks } from './format.js';
 import { tooltipModel } from './tooltip.js';
 import { dateAxisLabels, gapDividers, seasonRange, shownBlocks } from './date-axis.js';
+import { gutterPads } from './gutter.js';
 
 /**
  * One-line fallback switch (D-22): set to 'plotly' to restore Plotly's own
@@ -65,6 +66,16 @@ export const DOT_OPACITY = Object.freeze({
   inertUnderPerson: 0.15,
 });
 
+/**
+ * The scatter's plot margins (D-04: the same narrow right margin at every
+ * screen size). The plot width that converts the 04.12 pixel gutter into data
+ * units is the chart width minus `l` and `r`, so this is the one copy.
+ */
+export const MARGIN = Object.freeze({ l: 70, r: 24, t: 40, b: 60 });
+
+/** Chart widths assumed before the chart div has been measured (a 360px phone, a 1232px desktop). */
+const FALLBACK_CHART_WIDTH = { mobile: 360, desktop: 1232 };
+
 /** X-axis chart titles (distinct from format.js's shorter AXIS_LABELS toggle copy). */
 const XAXIS_TITLES = {
   spread: "Winner's closing spread (points)",
@@ -77,9 +88,12 @@ const XAXIS_TITLES = {
  * values/labels that never fall inside the band.
  * @param {object} data - a `prepareData` result.
  * @param {"spread"|"excitement"|"date"} axis
+ * @param {number} [plotPx] - plot width in screen pixels; when given, the range
+ *   carries a 10px gutter (04.12 D-02) measured from the n/a sentinel and the max,
+ *   never smaller than the legacy pads. Omitted keeps the legacy range.
  * @returns {{sentinel: number, divider: number, range: [number, number], tickvals: number[], ticktext: string[]}}
  */
-export function naBand(data, axis) {
+export function naBand(data, axis, plotPx) {
   let [lo, hi] = data.xRange[axis] || [null, null];
   if (lo == null || hi == null) [lo, hi] = [-1, 1];
   if (axis === 'spread') {
@@ -90,7 +104,11 @@ export function naBand(data, axis) {
   const w = 0.06 * span;
   const sentinel = lo - 1.5 * w;
   const divider = lo - 0.75 * w;
-  const range = [lo - 2.25 * w, hi + 0.03 * span];
+  let range = [lo - 2.25 * w, hi + 0.03 * span];
+  if (plotPx !== undefined) {
+    const [padLo, padHi] = gutterPads(hi - sentinel, plotPx, { minLo: 0.75 * w, minHi: 0.03 * span });
+    range = [sentinel - padLo, hi + padHi];
+  }
   const tickvals = niceLinearTicks(lo, hi, 6);
   const ticktext = tickvals.map((v) => {
     if (axis === 'spread') return v > 0 ? `+${v}` : v < 0 ? `${MINUS}${Math.abs(v)}` : '0';
@@ -164,14 +182,21 @@ export function hoverText(data, i, { axis, theme }) {
  * @param {object} data - a `prepareData` result.
  * @param {object} view - a `computeView` result.
  * @param {object} state - shaped like `defaultState(data)`.
- * @param {{theme: "light"|"dark", mobile: boolean, revision: number, tooltipMode?: "html"|"plotly"}} env
+ * `env.chartWidth` is the chart div's width in px; the plot width is that
+ * minus `MARGIN.l`/`MARGIN.r`, with a phone/desktop fallback while unmeasured.
+ * @param {{theme: "light"|"dark", mobile: boolean, revision: number, tooltipMode?: "html"|"plotly", chartWidth?: number}} env
  * @returns {{traces: object[], layout: object, config: object, dateAxis: object|null}}
  */
 export function buildFigure(data, view, state, env) {
   const axis = state.axis;
   const isDate = axis === 'date';
+  const measuredPx = (env.chartWidth ?? 0) - MARGIN.l - MARGIN.r;
+  const plotPx =
+    measuredPx > 0 ? measuredPx : (env.mobile ? FALLBACK_CHART_WIDTH.mobile : FALLBACK_CHART_WIDTH.desktop) - MARGIN.l - MARGIN.r;
   // Pitfall 9: naBand never sees 'date'; a harmless band keeps every path off a sentinel.
-  const band = isDate ? { sentinel: 0, divider: 0, range: [0, 1], tickvals: [], ticktext: [] } : naBand(data, axis);
+  const band = isDate
+    ? { sentinel: 0, divider: 0, range: [0, 1], tickvals: [], ticktext: [] }
+    : naBand(data, axis, plotPx);
   // Date x: the numeric dateX column (never the string `t.date`); a dot outside
   // the season filter is not drawn on this axis (D-12).
   const outOfSeasons = (i) =>
@@ -264,9 +289,12 @@ export function buildFigure(data, view, state, env) {
         // passing-not-theirs dots, which stay inert at activeUnderPerson opacity.
         // Enlarged dots also get a 1px black outline (theme-independent) to separate
         // overlapping 10px dots; unfiltered 6px dots stay borderless.
-        size: view.filterActive ? 10 : 6,
+        // 04.12 D-05: sizing reads view.sizeFilterActive, which ignores a seasons-only filter
+        // on the Date axis (seasons there only choose what the axis shows); filterActive
+        // still drives the summary.
+        size: view.sizeFilterActive ? 10 : 6,
         opacity: view.hasPersonSelection ? DOT_OPACITY.activeUnderPerson : DOT_OPACITY.active,
-        line: { width: view.filterActive ? 1 : 0, color: DOT_OUTLINE },
+        line: { width: view.sizeFilterActive ? 1 : 0, color: DOT_OUTLINE },
       },
     });
   }
@@ -367,8 +395,18 @@ export function buildFigure(data, view, state, env) {
   let dateAxis = null;
   if (isDate) {
     const blocks = shownBlocks(data.dateAxis, state.seasons);
-    const range = seasonRange(data.dateAxis, state.seasons);
-    const labels = dateAxisLabels(blocks, range, env.plotWidth ?? (env.mobile ? 266 : 1138), { mobile: env.mobile });
+    const base = seasonRange(data.dateAxis, state.seasons);
+    // 04.12 D-01/D-03: DATE_PAD stays block geometry; the outer gutter is measured
+    // from the block edge. Inter-season gaps are not plot edges and get no gutter,
+    // and a zoom-box edge is not padded. This padded range also feeds the pan
+    // limits (minallowed/maxallowed) and the Autoscale put-back.
+    const [padLo, padHi] = gutterPads(base[1] - base[0], plotPx);
+    const range = [base[0] - padLo, base[1] + padHi];
+    const labels = dateAxisLabels(blocks, range, plotPx, {
+      mobile: env.mobile,
+      marginLeft: MARGIN.l,
+      marginRight: MARGIN.r,
+    });
     dateAxis = { blocks, range, mobile: env.mobile, labels };
   }
 
@@ -422,6 +460,10 @@ export function buildFigure(data, view, state, env) {
       tickmode: 'array',
       tickvals: yTicks.tickvals,
       ticktext: yTicks.ticktext,
+      // 04.12 D-04 check: the x1.4 log pad is log10(1.4) = 0.146 decade per side; at the
+      // 420px minimum plot height (#chart min-height 520 minus margins 100) a 3-decade
+      // viewer spread still leaves about 18.7px, over twice the 9px star+halo
+      // half-extent, so y needs no gutter (e2e test_site_gutter.py checks >= 10px).
       range: [Math.log10(data.viewersMin / 1.4), Math.log10(data.viewersMax * 1.4)],
       gridcolor: DIVIDER[theme],
       fixedrange: env.mobile,
@@ -483,7 +525,7 @@ export function buildFigure(data, view, state, env) {
     // D-04: the 170px right margin only ever made room for Plotly's own
     // legend; the HTML chip row above the chart replaced it, so the margin
     // is the same narrow width at every screen size now.
-    margin: { l: 70, r: 24, t: 40, b: 60 },
+    margin: { ...MARGIN },
   };
 
   // D-02: Spread axis only -- appended so shapes[0]/annotations[0] stay the
@@ -527,17 +569,67 @@ export function buildFigure(data, view, state, env) {
  * `layout` must already hold fresh array identities for any changed
  * attribute.
  *
- * When `uirevision` changes (an axis switch, or a season change on Date) the
- * new layout range becomes the home view, so it is also re-saved as the
- * target of double-click and the modebar's "Reset axes" (CR-01).
+ * The home range is re-saved as the target of double-click and the modebar's
+ * "Reset axes" (CR-01) on a `uirevision` change (axis switch, Date season
+ * change) and when the home x range moves under the same `uirevision` (a width
+ * change moves the pixel gutter, 04.12 D-03). A range the user zoomed or
+ * panned away from home is kept through such a re-render, and through every
+ * later render under the same `uirevision`.
  * @param {HTMLElement} gd
  * @param {{traces: object[], layout: object, config: object, dateAxis?: object|null}} figure
  */
 export function renderChart(gd, figure) {
   gd.boothDateAxis = figure.dateAxis ?? null;
+  const home = figure.layout.xaxis.range;
   const prevRev = gd.layout?.uirevision;
-  window.Plotly.react(gd, figure.traces, figure.layout, figure.config);
-  if (prevRev !== undefined && prevRev !== figure.layout.uirevision) resetHomeRanges(gd, figure.layout);
+  const prevHome = gd.boothHomeX;
+  const sameRev = prevRev !== undefined && prevRev === figure.layout.uirevision;
+  const homeMoved = sameRev && Array.isArray(prevHome) && !sameRange(prevHome, home);
+  const live = gd._fullLayout?.xaxis?.range;
+  // Every same-revision render while the user is off home re-asserts the live
+  // range, not only one where the home moved: once a width change has passed
+  // the live range as input, Plotly's _preGUI no longer records it as a user
+  // edit, so a later home input would snap the zoom back (04.11 D-13).
+  const awayFromHome = sameRev && Array.isArray(prevHome) && Array.isArray(live) && !sameRange(live, prevHome);
+  const layout = awayFromHome
+    ? { ...figure.layout, xaxis: { ...figure.layout.xaxis, range: keepInLimits(live, figure.layout.xaxis) } }
+    : figure.layout;
+  window.Plotly.react(gd, figure.traces, layout, figure.config);
+  if ((prevRev !== undefined && !sameRev) || homeMoved) resetHomeRanges(gd, figure.layout);
+  if (homeMoved && !awayFromHome) {
+    const now = gd._fullLayout?.xaxis?.range;
+    if (!Array.isArray(now) || !sameRange(now, home)) {
+      window.Plotly.relayout(gd, { 'xaxis.range': home.slice() });
+    }
+  }
+  gd.boothHomeX = Array.isArray(home) ? home.slice() : undefined;
+}
+
+/**
+ * The kept zoom `range`, shifted (at its own width) inside the axis's pan
+ * limits, or the whole limits when it is wider. A widening resize narrows the
+ * Date limits, and Plotly would otherwise clamp only the drawn range and leave
+ * the input range disagreeing with it (04.12 WR-03). Axes without limits keep
+ * the range as is.
+ * @param {number[]} range - the live [lo, hi].
+ * @param {{minallowed?: number, maxallowed?: number}} xaxis - the new layout's x axis.
+ * @returns {number[]}
+ */
+function keepInLimits(range, xaxis) {
+  const { minallowed: min, maxallowed: max } = xaxis;
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return range.slice();
+  const width = range[1] - range[0];
+  if (width >= max - min) return [min, max];
+  if (range[0] < min) return [min, min + width];
+  if (range[1] > max) return [max - width, max];
+  return range.slice();
+}
+
+/** True when two [lo, hi] ranges agree to within float noise. */
+function sameRange(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== 2 || b.length !== 2) return false;
+  const tol = 1e-9 * Math.max(1, Math.abs(b[1] - b[0]));
+  return Math.abs(a[0] - b[0]) <= tol && Math.abs(a[1] - b[1]) <= tol;
 }
 
 /**
@@ -676,6 +768,8 @@ export function fitDateAxis(gd) {
   }
   const want = dateAxisLabels(meta.blocks, xa.range, xa._length, {
     mobile: meta.mobile,
+    marginLeft: MARGIN.l,
+    marginRight: MARGIN.r,
     measure: seasonLabelMeasurer(gd),
   });
   const update = {};

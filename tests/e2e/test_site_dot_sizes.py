@@ -149,3 +149,122 @@ def test_highlight_keeps_accent_border(
         ".find(t => t.meta === 'highlight').marker.line.color"
     )
     assert accent in ("#111827", "#E5E7EB")
+
+
+# SITE-50 (04.12 D-05..D-07): on the Date axis a seasons-only filter must not enlarge
+# dots (out-of-range seasons are already off the axis); sizing reads sizeFilterActive.
+# Fixture facts: northfield has games in 2025; 2025-2026 keeps one dale-harlow game.
+DATE_SEASONS = "?axis=date&seasons=2025-2026"
+DATE_SCHOOL = "?axis=date&seasons=2025-2026&school=northfield"
+DATE_PERSON_SEASONS = "?axis=date&seasons=2025-2026&people=dale-harlow"
+DATE_PERSON = "?axis=date&people=dale-harlow"
+
+
+@pytest.mark.parametrize(
+    ("query", "filter_active", "size_active"),
+    [
+        (DATE_SEASONS, True, False),
+        (DATE_SEASONS + "&dots=hide", True, False),
+        (DATE_SEASONS + "&slot=noon,afternoon", True, True),
+        ("?axis=date&slot=noon,afternoon", True, True),
+        ("?seasons=2025-2026", True, True),
+        ("?axis=excitement&seasons=2025-2026", True, True),
+        ("", False, False),
+        ("?axis=date", False, False),
+    ],
+)
+def test_size_filter_flag_matrix(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    query: str,
+    filter_active: bool,
+    size_active: bool,
+) -> None:
+    open_app(guarded_page, query)
+    view = guarded_page.evaluate(
+        "() => ({f: window.__testHooks.getView().filterActive,"
+        " s: window.__testHooks.getView().sizeFilterActive})"
+    )
+    assert view == {"f": filter_active, "s": size_active}
+
+
+def test_date_seasons_only_summary_still_reads_n_of_m(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, DATE_SEASONS)
+    summary = guarded_page.evaluate("() => window.__testHooks.getView().summary")
+    total = guarded_page.evaluate("() => window.__testHooks.data.n")
+    assert summary["kind"] == "matches"
+    assert summary["of"] == total
+    assert f"of {total}" in guarded_page.inner_text("#summary")
+
+
+@pytest.mark.parametrize("dots", ["", "&dots=hide"])
+def test_date_seasons_only_dots_stay_six(
+    guarded_page: Page, open_app: Callable[[Page, str], None], dots: str
+) -> None:
+    open_app(guarded_page, DATE_SEASONS + dots)
+    fam = _family(guarded_page)
+    assert fam
+    assert {t["size"] for t in fam} == {6}
+    assert {t["line"]["width"] for t in fam} == {0}
+    assert {t["size"] for t in _inert(guarded_page)} <= {6}
+
+
+def test_date_seasons_plus_school_dots_are_ten(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, DATE_SCHOOL)
+    fam = _family(guarded_page)
+    assert sum(t["n"] for t in fam) > 0
+    assert {t["size"] for t in fam} == {10}
+    assert {t["line"]["width"] for t in fam} == {1}
+
+
+@pytest.mark.parametrize("query", ["?seasons=2025-2026", "?axis=excitement&seasons=2025-2026"])
+def test_spread_and_excitement_seasons_only_dots_are_ten(
+    guarded_page: Page, open_app: Callable[[Page, str], None], query: str
+) -> None:
+    open_app(guarded_page, query)
+    fam = _family(guarded_page)
+    assert fam
+    assert {t["size"] for t in fam} == {10}
+    assert {t["line"]["width"] for t in fam} == {1}
+
+
+def test_date_announcer_with_seasons_only_others_stay_six(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, DATE_PERSON)
+    base_opacity = {t["opacity"] for t in _family(guarded_page)}
+    open_app(guarded_page, DATE_PERSON_SEASONS)
+    fam = _family(guarded_page)
+    assert sum(t["n"] for t in fam) > 0
+    assert {t["size"] for t in fam} == {6}
+    assert {t["line"]["width"] for t in fam} == {0}
+    assert {t["opacity"] for t in fam} == base_opacity
+    assert {t["hoverinfo"] for t in fam} == {"skip"}
+    highlight = [t for t in _info(guarded_page) if t["meta"] == "highlight"]
+    assert highlight
+    sizes = {
+        s for t in highlight for s in (t["size"] if isinstance(t["size"], list) else [t["size"]])
+    }
+    assert sizes
+    assert sizes <= {10, 12, 15}
+
+
+def test_date_to_spread_with_seasons_grows_dots(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, DATE_SCHOOL)
+    expected_traces = len(_info(guarded_page))
+    open_app(guarded_page, DATE_SEASONS)
+    assert len(_info(guarded_page)) == expected_traces
+    assert {t["size"] for t in _family(guarded_page)} == {6}
+    guarded_page.evaluate("() => window.__testHooks.setState({axis: 'spread'})")
+    guarded_page.wait_for_function(
+        "() => document.getElementById('chart').data.some("
+        "t => String(t.meta).startsWith('family:') && t.marker.size === 10)"
+    )
+    assert {t["size"] for t in _family(guarded_page)} == {10}
+    assert len(_info(guarded_page)) == expected_traces
