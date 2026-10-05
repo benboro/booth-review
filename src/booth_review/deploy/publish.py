@@ -164,9 +164,15 @@ def publish_site(
     if (env if env is not None else os.environ).get("PUBLISH_ENABLED") != "true":
         return DeployResult("skipped", 0, None, None, None, 0)
 
+    # CR-01: a missing, unmarked, or empty site would mirror as "delete every
+    # file under the subdir" and wipe the live site; refuse before any git step.
+    if not site.is_dir() or not (site / BUILD_MARKER).is_file():
+        raise DeployError("deploy refused: site directory is missing or not an assembled build")
     check_no_key_leak(site)
     _refuse_symlinks(site)
     files = _site_files(site)
+    if not files or not (site / "index.html").is_file():
+        raise DeployError("deploy refused: assembled site has no index.html or no files")
     bundle = bundle_sha256(site)
     short = bundle[:12]
 

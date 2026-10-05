@@ -166,6 +166,35 @@ def test_symlink_in_site_refused(remote: Path, target: Path, tmp_path: Path) -> 
     assert _remote_count(remote) == count
 
 
+def _publish_once(remote: Path, target: Path, tmp_path: Path) -> dict[str, str]:
+    publish_site(_site(tmp_path), target, env=ENABLED)
+    tree = _remote_tree(remote)
+    assert "booth-review/index.html" in tree
+    return tree
+
+
+@pytest.mark.parametrize("shape", ["missing", "empty", "unmarked", "marker_only", "no_index"])
+def test_incomplete_site_refused_and_live_subdir_kept(
+    shape: str, remote: Path, target: Path, tmp_path: Path
+) -> None:
+    # CR-01: a missing or empty site must never mirror as "delete booth-review/".
+    live = _publish_once(remote, target, tmp_path)
+    count = _remote_count(remote)
+    bad = tmp_path / "bad-site"
+    if shape != "missing":
+        bad.mkdir()
+    if shape == "unmarked":
+        (bad / "index.html").write_text("<html>", encoding="utf-8")
+    if shape in ("marker_only", "no_index"):
+        (bad / ".booth-review-site").write_text("", encoding="utf-8")
+    if shape == "no_index":
+        (bad / "app.js").write_text("x=1", encoding="utf-8")
+    with pytest.raises(DeployError, match="deploy refused"):
+        publish_site(bad, target, env=ENABLED)
+    assert _remote_count(remote) == count
+    assert _remote_tree(remote) == live
+
+
 def _dashboard_pusher(remote: Path, tmp_path: Path, times: int | None) -> tuple[list[int], object]:
     other = _clone(remote, tmp_path / "other")
     calls: list[int] = []
