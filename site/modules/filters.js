@@ -434,7 +434,8 @@ function buildGameList(data) {
     hint.setAttribute('aria-hidden', 'true');
     hint.hidden = true;
     hint.textContent = '1 picked';
-    head.append(makeCaretIcon(), ...[makeGameTypeIcon(iconKind)].filter(Boolean), name, hint);
+    const icon = makeGameTypeIcon(iconKind);
+    head.append(makeCaretIcon(), ...(icon ? [icon] : []), name, hint);
     group.setAttribute('aria-labelledby', head.id);
     const rowsEl = document.createElement('div');
     rowsEl.className = 'game-rows';
