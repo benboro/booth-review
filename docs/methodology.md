@@ -180,9 +180,9 @@ kickoff sits at midday). Seasons sit side by side, each trimmed to its own
 first and last telecast, so the offseason takes no space and the current
 season's block widens as games are added. A faint line marks the gap between
 seasons; that gap is compressed space, not real days. Under the axis, one row
-names each season (two-digit years such as '24 on narrow screens) and a second
-row shows month ticks, month names, or dates, depending on how much room there
-is. Bowl and playoff games sit at the end of their own season's block. On this
+names each season (two-digit years on narrow screens, such as '24, or 24 on
+the narrowest phones) and a second row shows month ticks, month names, or
+dates, depending on how much room there is. Bowl and playoff games sit at the end of their own season's block. On this
 option only, picking a season range shows just those seasons on the axis,
 while every other filter fades or hides dots as usual. The Date axis has no
 N/A strip because every telecast has a date, and its tooltip and detail panel
