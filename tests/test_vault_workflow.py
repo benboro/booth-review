@@ -379,7 +379,101 @@ def test_workflow_fails_hard_only_outside_0_4_and_5_or_on_deploy_failure() -> No
     env = step["env"]
     assert "0|4|5) ;;" in run
     assert '"$DEPLOY_CODE" != "0"' in run
-    assert set(env) == {"JOB_CODE", "DEPLOY_CODE"}  # type: ignore[arg-type]
+    assert set(env) == {"JOB_CODE", "DEPLOY_CODE", "DEPLOY_EXPECTED"}  # type: ignore[arg-type]
+
+
+# -- WR-03: a due deploy that never ran is a problem, not a clean run ----------------------------
+
+
+def _attention_step() -> dict[str, object]:
+    return next(s for s in _steps() if "attention issue" in str(s.get("name", "")))
+
+
+def _fail_step() -> dict[str, object]:
+    return next(s for s in _steps() if "hard failure" in str(s.get("name", "")))
+
+
+@pytest.mark.parametrize("step", [_attention_step, _fail_step], ids=["attention", "fail"])
+def test_deploy_expected_uses_the_deploy_gate(step: object) -> None:
+    env = step()["env"]  # type: ignore[operator]
+    assert env["DEPLOY_EXPECTED"] == "${{ " + _DEPLOY_GATE + " }}"
+
+
+def _fake_gh(tmp_path: Path) -> tuple[dict[str, str], Path]:
+    """A stand-in `gh` that logs each call and reports open issue #7."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "gh.log"
+    gh = bin_dir / "gh"
+    gh.write_text(
+        '#!/usr/bin/env bash\necho "$*" >> "$GH_LOG"\n'
+        'if [ "$1 $2" = "issue list" ]; then echo 7; fi\n',
+        encoding="utf-8",
+    )
+    gh.chmod(0o755)
+    env = {
+        "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '/usr/bin:/bin')}",
+        "GH_LOG": str(log),
+        "GH_TOKEN": "x",
+        "GITHUB_SERVER_URL": "https://example.invalid",
+        "GITHUB_REPOSITORY": "owner/vault",
+        "GITHUB_RUN_ID": "1",
+    }
+    return env, log
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+@pytest.mark.parametrize(
+    ("expected", "deploy_code", "closes"),
+    [
+        ("true", "", False),  # target checkout failed: deploy step skipped
+        ("true", "0", True),
+        ("true", "3", False),
+        ("false", "", True),  # publishing off: no deploy was due
+    ],
+)
+def test_attention_step_never_closes_the_issue_when_a_due_deploy_did_not_run(
+    expected: str, deploy_code: str, closes: bool, tmp_path: Path
+) -> None:
+    env, log = _fake_gh(tmp_path)
+    env.update(
+        {
+            "JOB_CODE": "0",
+            "DEPLOY_CODE": deploy_code,
+            "DEPLOY_EXPECTED": expected,
+            "STALE_ONLY": "false",
+        }
+    )
+    code, _outputs = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    calls = log.read_text(encoding="utf-8").splitlines()
+    assert any(c.startswith("issue close 7") for c in calls) is closes
+    assert any(c.startswith("issue edit 7 ") and "--body-file" in c for c in calls) is not closes
+    if expected == "true" and not deploy_code:
+        body = (tmp_path / "attention-body.md").read_text(encoding="utf-8")
+        assert "deploy did not run" in body
+        assert "the live site was not updated" in body
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+@pytest.mark.parametrize(
+    ("expected", "deploy_code", "fails"),
+    [
+        ("true", "", True),
+        ("true", "0", False),
+        ("true", "3", True),
+        ("false", "", False),
+    ],
+)
+def test_fail_step_fails_when_a_due_deploy_did_not_run(
+    expected: str, deploy_code: str, fails: bool, tmp_path: Path
+) -> None:
+    code, _outputs = _run_step(
+        _fail_step(),
+        {"JOB_CODE": "0", "DEPLOY_CODE": deploy_code, "DEPLOY_EXPECTED": expected},
+        tmp_path,
+    )
+    assert (code != 0) is fails
 
 
 # -- gitattributes ---------------------------------------------------------------------------

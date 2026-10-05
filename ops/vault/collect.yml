@@ -172,6 +172,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           JOB_CODE: ${{ steps.job.outputs.code }}
           DEPLOY_CODE: ${{ steps.deploy.outputs.code }}
+          DEPLOY_EXPECTED: ${{ steps.job.outputs.deploy_ready == 'true' && steps.gate.outputs.publish == 'yes' }}
           STALE_ONLY: ${{ steps.job.outputs.stale_only }}
         run: |
           title="booth-review job: needs attention"
@@ -189,6 +190,11 @@ jobs:
             fi
           fi
 
+          # WR-03: a deploy that was due but left no exit code (the target
+          # checkout or uv failed first) is a problem, never a clean run.
+          if [ "$DEPLOY_EXPECTED" = "true" ] && [ -z "$DEPLOY_CODE" ]; then
+            DEPLOY_CODE=setup
+          fi
           problem=false
           if [ "$JOB_CODE" != "0" ]; then problem=true; fi
           if [ -n "$DEPLOY_CODE" ] && [ "$DEPLOY_CODE" != "0" ]; then problem=true; fi
@@ -210,7 +216,10 @@ jobs:
                 --label booth-review-job --body-file "$body_file"
             fi
           elif [ "$problem" = "true" ]; then
-            if [ -n "$DEPLOY_CODE" ] && [ "$DEPLOY_CODE" != "0" ]; then
+            if [ "$DEPLOY_CODE" = "setup" ]; then
+              echo "" >> "$body_file"
+              echo "deploy did not run (target checkout or setup failed); the live site was not updated" >> "$body_file"
+            elif [ -n "$DEPLOY_CODE" ] && [ "$DEPLOY_CODE" != "0" ]; then
               echo "" >> "$body_file"
               echo "deploy step exited $DEPLOY_CODE; the live site was not updated" >> "$body_file"
             fi
@@ -233,7 +242,12 @@ jobs:
         env:
           JOB_CODE: ${{ steps.job.outputs.code }}
           DEPLOY_CODE: ${{ steps.deploy.outputs.code }}
+          DEPLOY_EXPECTED: ${{ steps.job.outputs.deploy_ready == 'true' && steps.gate.outputs.publish == 'yes' }}
         run: |
+          if [ "$DEPLOY_EXPECTED" = "true" ] && [ -z "$DEPLOY_CODE" ]; then
+            echo "::error::the deploy was due but did not run (target checkout or setup failed)" >&2
+            exit 1
+          fi
           case "$JOB_CODE" in
             0|4|5) ;;
             *)
