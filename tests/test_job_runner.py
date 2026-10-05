@@ -170,6 +170,9 @@ def test_job_run_help_lists_all_flags(capsys) -> None:
         "--attention-out",
         "--dry-run",
         "--no-commit",
+        "--update",
+        "--site-out",
+        "--result-out",
     )
     for flag in flags:
         assert flag in out
@@ -1532,3 +1535,188 @@ def test_past_freeze_check_runs_in_season_and_names_only_unfrozen_seasons(
     lines = [i.line for i in result.items if i.kind == "season_past_freeze"]
     assert len(lines) == 1
     assert lines[0].startswith("season 2024 is past its freeze date")
+
+
+# -- Task 3: `job run --update --site-out --result-out` ------------------------------------------
+
+
+def _freeze_cli_clock(monkeypatch, moment: datetime) -> None:
+    class _Frozen(datetime):
+        @classmethod
+        def now(cls, tz: object = None) -> datetime:
+            return moment
+
+    monkeypatch.setattr(cli, "datetime", _Frozen)
+
+
+def _cli_update_setup(paths, monkeypatch, mock_transport_factory, patched_client, moment):
+    _freeze_cli_clock(monkeypatch, moment)
+    real_month = datetime.now(UTC).strftime("%Y-%m")
+    _seed_cfbd_ledger(paths, month=real_month)  # the budget reads the real clock
+    handle = mock_transport_factory(_update_cfbd_responses())
+    patched_client(handle)
+    return handle
+
+
+def test_cli_update_without_site_out_is_a_usage_error_and_sends_nothing(
+    update_vault, mock_transport_factory, patched_client, monkeypatch
+) -> None:
+    handle = _cli_update_setup(
+        update_vault, monkeypatch, mock_transport_factory, patched_client, UPDATE_NOW
+    )
+    assert main(["job", "run", "--trigger", "manual", "--update", "--no-commit"]) == 2
+    assert handle.requests == []
+
+
+def test_cli_update_writes_the_two_line_result_file(
+    update_vault, mock_transport_factory, patched_client, monkeypatch, tmp_path
+) -> None:
+    _cli_update_setup(update_vault, monkeypatch, mock_transport_factory, patched_client, UPDATE_NOW)
+    result_file = tmp_path / "out" / "result.txt"
+    code = main(
+        [
+            "job",
+            "run",
+            "--trigger",
+            "manual",
+            "--no-commit",
+            "--update",
+            "--site-out",
+            str(tmp_path / "site"),
+            "--result-out",
+            str(result_file),
+        ]
+    )
+    assert code in (0, 4)
+    assert result_file.read_text(encoding="utf-8").splitlines() == [
+        "deploy_ready=true",
+        "stale_only=false",
+    ]
+    assert (tmp_path / "site" / "index.html").is_file()
+
+
+def test_cli_nothing_due_stale_run_writes_stale_only_and_attention_file(
+    update_vault, mock_transport_factory, patched_client, monkeypatch, tmp_path
+) -> None:
+    moment = datetime(2025, 10, 9, 12, 0, tzinfo=UTC)
+    _cli_update_setup(update_vault, monkeypatch, mock_transport_factory, patched_client, moment)
+    attempt = datetime(2025, 10, 9, 1, 0, tzinfo=UTC)
+    save_state(
+        update_vault.job_state,
+        JobState(
+            season=2025,
+            last_success_at=attempt,
+            last_attempt_at=attempt,
+            last_status="ok",
+            last_window_start=attempt,
+            retry_pending=False,
+            last_build_at=datetime(2025, 10, 4, 12, 0, tzinfo=UTC),
+        ),
+    )
+    result_file = tmp_path / "result.txt"
+    attention = tmp_path / "attention.md"
+    code = main(
+        [
+            "job",
+            "run",
+            "--trigger",
+            "schedule",
+            "--no-commit",
+            "--update",
+            "--site-out",
+            str(tmp_path / "site"),
+            "--result-out",
+            str(result_file),
+            "--attention-out",
+            str(attention),
+        ]
+    )
+    assert code == 4
+    assert result_file.read_text(encoding="utf-8").splitlines() == [
+        "deploy_ready=false",
+        "stale_only=true",
+    ]
+    assert "days old" in attention.read_text(encoding="utf-8")
+
+
+def test_cli_nothing_due_fresh_run_writes_not_ready_not_stale(
+    update_vault, mock_transport_factory, patched_client, monkeypatch, tmp_path
+) -> None:
+    moment = datetime(2025, 10, 9, 12, 0, tzinfo=UTC)
+    _cli_update_setup(update_vault, monkeypatch, mock_transport_factory, patched_client, moment)
+    attempt = datetime(2025, 10, 9, 1, 0, tzinfo=UTC)
+    _save_build_state(update_vault, attempt)
+    result_file = tmp_path / "result.txt"
+    code = main(
+        [
+            "job",
+            "run",
+            "--trigger",
+            "schedule",
+            "--no-commit",
+            "--update",
+            "--site-out",
+            str(tmp_path / "site"),
+            "--result-out",
+            str(result_file),
+        ]
+    )
+    assert code == 5
+    assert result_file.read_text(encoding="utf-8").splitlines() == [
+        "deploy_ready=false",
+        "stale_only=false",
+    ]
+
+
+def test_cli_update_with_missing_state_exits_3_without_a_result_file(
+    update_vault, mock_transport_factory, patched_client, monkeypatch, tmp_path
+) -> None:
+    _cli_update_setup(update_vault, monkeypatch, mock_transport_factory, patched_client, UPDATE_NOW)
+    (update_vault.vault / "audit" / "build_baseline.csv").unlink()
+    result_file = tmp_path / "result.txt"
+    code = main(
+        [
+            "job",
+            "run",
+            "--trigger",
+            "manual",
+            "--no-commit",
+            "--update",
+            "--site-out",
+            str(tmp_path / "site"),
+            "--result-out",
+            str(result_file),
+        ]
+    )
+    assert code == 3
+    assert not result_file.exists()
+
+
+def test_cli_update_run_never_leaks_the_key_into_output(
+    update_vault, mock_transport_factory, patched_client, monkeypatch, tmp_path, capsys, caplog
+) -> None:
+    _cli_update_setup(update_vault, monkeypatch, mock_transport_factory, patched_client, UPDATE_NOW)
+    with caplog.at_level("DEBUG"):
+        code = main(
+            [
+                "job",
+                "run",
+                "--trigger",
+                "manual",
+                "--no-commit",
+                "--update",
+                "--site-out",
+                str(tmp_path / "site"),
+                "--result-out",
+                str(tmp_path / "result.txt"),
+            ]
+        )
+    assert code in (0, 4)
+    captured = capsys.readouterr()
+    assert _KEY_CANARY not in captured.out
+    assert _KEY_CANARY not in captured.err
+    for record in caplog.records:
+        assert _KEY_CANARY not in record.getMessage()
+    for path in (tmp_path / "site").rglob("*"):
+        if path.is_file():
+            assert _KEY_CANARY.encode() not in path.read_bytes()

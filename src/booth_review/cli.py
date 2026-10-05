@@ -229,6 +229,14 @@ def build_parser() -> argparse.ArgumentParser:
     job_run.add_argument("--attention-out", type=Path, default=None)
     job_run.add_argument("--dry-run", action="store_true")
     job_run.add_argument("--no-commit", action="store_true")
+    job_run.add_argument(
+        "--update",
+        action="store_true",
+        help="also rebuild, assemble the site with a required key check, "
+        "and report deploy readiness",
+    )
+    job_run.add_argument("--site-out", type=Path, default=None)
+    job_run.add_argument("--result-out", type=Path, default=None)
 
     budget = sub.add_parser("budget", help="report and record CFBD budget usage")
     budget.add_argument("--offline", action="store_true")
@@ -817,8 +825,12 @@ def _freeze(args: argparse.Namespace) -> int:
 
 
 def _job_run(args: argparse.Namespace) -> int:
-    """Run one scheduled collect-only pass. Never prints or logs the CFBD key
-    (loaded via config.load_cfbd_key, same as every other live command)."""
+    """Run one scheduled pass (collect-only, or the full update with --update).
+    Never prints or logs the CFBD key (loaded via config.load_cfbd_key, same
+    as every other live command)."""
+    if args.update and args.site_out is None:
+        print("error: --update requires --site-out", file=sys.stderr)
+        return 2
     runtime = build_runtime(
         with_budget=True, floor=CFBD_FLOOR_DEFAULT, max_calls=args.max_cfbd_calls, tag="job"
     )
@@ -832,6 +844,8 @@ def _job_run(args: argparse.Namespace) -> int:
             rr_cap=args.rr_cap,
             dry_run=args.dry_run,
             commit=not args.no_commit,
+            update=args.update,
+            site_out=args.site_out,
         )
         result: JobRunResult = job.run()
 
@@ -843,6 +857,14 @@ def _job_run(args: argparse.Namespace) -> int:
             if body is not None:
                 args.attention_out.parent.mkdir(parents=True, exist_ok=True)
                 args.attention_out.write_text(body, encoding="utf-8")
+
+        if args.result_out is not None:
+            args.result_out.parent.mkdir(parents=True, exist_ok=True)
+            args.result_out.write_text(
+                f"deploy_ready={'true' if result.deploy_ready else 'false'}\n"
+                f"stale_only={'true' if result.stale_only else 'false'}\n",
+                encoding="utf-8",
+            )
 
         return result.exit_code
     finally:
