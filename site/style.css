@@ -972,6 +972,31 @@ input[type="checkbox"] {
   white-space: nowrap;
 }
 
+.game-ny6 {
+  border-top: 1px solid var(--game-playoff);
+  border-bottom: 1px solid var(--game-playoff);
+  background: #F8F4EB;
+  background: color-mix(in srgb, var(--game-playoff) 8%, transparent);
+  padding: 0 0 var(--space-xs);
+  margin-bottom: var(--space-xs);
+}
+
+@media (prefers-color-scheme: dark) {
+  .game-ny6 {
+    background: #26241A;
+    background: color-mix(in srgb, var(--game-playoff) 8%, transparent);
+  }
+}
+
+.game-ny6-label {
+  font: var(--font-label);
+  font-weight: 400;
+  font-style: italic;
+  line-height: 1.4;
+  color: var(--game-playoff-text);
+  padding: var(--space-xs) 0 0 var(--space-sm);
+}
+
 .radio-list [hidden],
 #game-options [role="group"][hidden] {
   display: none;

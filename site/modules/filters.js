@@ -32,7 +32,7 @@ import { gameKeyMatches, gameSearchKey, normalizeName } from './data.js';
 import { makeCaretIcon, makeGameTypeIcon } from './icons.js';
 import { FAMILY_LABELS } from './palette.js';
 import { offeredFamilyIds } from './select.js';
-import { SLOT_SHORT_LABELS, ROLE_LABELS, gameRowTitle } from './format.js';
+import { NEW_YEARS_SIX, SLOT_SHORT_LABELS, ROLE_LABELS, gameRowTitle } from './format.js';
 
 const ROLE_HELPER_TEXT = 'Limits matches to main-broadcast play-by-play or analyst roles.';
 
@@ -440,6 +440,21 @@ function buildGameList(data) {
     rowsEl.className = 'game-rows';
     rowsEl.id = `game-rows-${section}`;
     group.append(head, rowsEl);
+    // D-07/D-08: the New Year's Six rows sit in one gold band at the top of BOWLS,
+    // built only when at least one NY6 franchise is in the data.
+    let band = null;
+    if (section === 'bowls' && games.some((g) => NEW_YEARS_SIX.includes(g.slug))) {
+      band = document.createElement('div');
+      band.className = 'game-ny6';
+      band.setAttribute('role', 'group');
+      band.setAttribute('aria-label', "New Year's Six");
+      const bandLabel = document.createElement('div');
+      bandLabel.className = 'game-ny6-label';
+      bandLabel.setAttribute('aria-hidden', 'true');
+      bandLabel.textContent = "New Year's Six";
+      band.appendChild(bandLabel);
+      rowsEl.appendChild(band);
+    }
     for (const game of games) {
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -453,7 +468,7 @@ function buildGameList(data) {
       label.className = 'game-label';
       label.textContent = game.label;
       btn.append(label, ...makeCountSpans());
-      rowsEl.appendChild(btn);
+      (band != null && NEW_YEARS_SIX.includes(game.slug) ? band : rowsEl).appendChild(btn);
       gameRows.set(game.slug, btn);
     }
     groups.push(group);
@@ -532,6 +547,10 @@ function gameEmptyLine(query, visible, anySearchMatch) {
 function syncGameChrome(query) {
   for (const group of els.gameOptions.querySelectorAll('[data-game-section]')) {
     group.hidden = group.querySelector('[data-game]:not([hidden])') == null;
+  }
+  // D-09: the NY6 band hides whole when search or facets leave it no visible row.
+  for (const band of els.gameOptions.querySelectorAll('.game-ny6')) {
+    band.hidden = band.querySelector('[data-game]:not([hidden])') == null;
   }
   // Collapse is a separate hide dimension: it never empties a group or the list.
   const shown = els.gameOptions.querySelectorAll('[data-game]:not([hidden])').length;
