@@ -585,11 +585,19 @@ body.app {
 }
 
 /* D-21: above 640px the toolbar is a grid of equal cells, so its row count
-   depends only on the viewport width, never on a filter label. */
+   depends only on the viewport width and the visitor's font, never on a
+   filter label. toolbar-fit.js sets `--toolbar-cell-min` to the widest
+   resting label ("Bowls/Playoffs ▾", "Clear all filters", ...) measured in
+   the font the page renders in, so no resting label truncates on a wide
+   font. 116px stays the floor (one row of ten at 1280px on narrow fonts);
+   `min(100%, ...)` keeps a pathological font from overflowing the toolbar. */
 @media (min-width: 641px) {
   #toolbar {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
+    grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(100%, max(116px, var(--toolbar-cell-min, 116px))), 1fr)
+    );
     gap: var(--space-sm);
     align-items: center;
   }
@@ -605,6 +613,23 @@ body.app {
     padding-left: var(--space-xs);
     padding-right: var(--space-xs);
   }
+}
+
+/* toolbar-fit.js's offscreen probes: laid out for measuring, never seen. */
+.toolbar-measure {
+  position: absolute;
+  top: 0;
+  left: -10000px;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.toolbar-measure > span {
+  display: inline-block;
+  box-sizing: content-box;
+  border-color: transparent;
+  white-space: nowrap;
 }
 
 #clear-filters:focus-visible,
