@@ -27,6 +27,13 @@
  * built only from the integer count (T-04.4-45). D-31 (refines D-24): a simple
  * announcer bar takes its main network family's color.
  *
+ * D-15 (04.13): every bar has a solid rated part next to the axis (Butterfly:
+ * toward the spine) and an unrated part after it in the same hue at 25% fill
+ * with a 1.5px full-hue border. Unrated traces are always emitted (zero-length
+ * when there are none) so the trace count never depends on the data's rating
+ * split; they carry the same customdata and no text. Every value is a count of
+ * games, never a viewer figure.
+ *
  * Name safety (T-04.4-13): every name goes through `escapeHover` before it
  * enters a Plotly string.
  */
@@ -220,48 +227,73 @@ function countTicks(max) {
   return ticks.length > 0 ? ticks : [0];
 }
 
-/** One trace of single-color bars for one side (or the only side). */
-function simpleTrace(rows, totalOf, side, theme, xaxis) {
-  const values = rows.map(totalOf);
-  return {
+/**
+ * Style for an unrated part (D-15): the hue at 25% fill, 1.5px border in the
+ * full hue. `tone` is a '#rrggbb' hex.
+ * @param {string} tone
+ * @returns {{color: string, line: {width: number, color: string}}}
+ */
+function unratedStyle(tone) {
+  const hex = String(tone).replace('#', '');
+  const full = hex.length === 3 ? hex.replace(/./g, (c) => c + c) : hex;
+  const n = Number.parseInt(full, 16);
+  const rgba = `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},0.25)`;
+  return { color: rgba, line: { width: 1.5, color: tone } };
+}
+
+const unratedOf = (total, rated) => Math.max(0, (total ?? 0) - (rated ?? 0));
+
+/** Rated and unrated traces of single-color bars for one side (or the only side). */
+function simpleTraces(rows, totalOf, ratedOf, side, theme, xaxis) {
+  const totals = rows.map(totalOf);
+  const rated = rows.map((r, i) => Math.min(totals[i], ratedOf(r) ?? 0));
+  const tones = rows.map((r) => barTones(r, theme).a);
+  const base = {
     type: 'bar',
     orientation: 'h',
     xaxis,
     yaxis: 'y',
-    x: values,
     y: rows.map((r) => r.key),
-    text: values.map((v) => (v > 0 ? String(v) : '')),
-    textposition: 'outside',
     cliponaxis: false,
-    textfont: { size: 14, color: ACCENT[theme] },
-    marker: { color: rows.map((r) => barTones(r, theme).a) },
     hoverinfo: 'none',
     showlegend: false,
-    customdata: rows.map((_, r) => (values[r] > 0 ? { r, s: -1, side } : null)),
+    customdata: rows.map((_, r) => (totals[r] > 0 ? { r, s: -1, side } : null)),
   };
+  const styles = tones.map(unratedStyle);
+  return [
+    { ...base, x: rated, marker: { color: tones, line: { width: 0 } } },
+    {
+      ...base,
+      x: totals.map((t, i) => t - rated[i]),
+      marker: { color: styles.map((st) => st.color), line: { width: 1.5, color: tones } },
+    },
+  ];
 }
 
 /**
- * Stacked bars as one trace per segment rank (D-16, D-06). Shared by Bars and
- * both butterfly sides, so the styling cannot drift.
+ * Stacked bars as rated rank layers then unrated rank layers (D-16, D-06,
+ * D-15). Shared by Bars and both butterfly sides, so the styling cannot drift.
  */
 function stackTraces(rows, segmentsOf, side, theme, xaxis, gap) {
   const segs = rows.map(segmentsOf);
   const depth = segs.reduce((m, list) => Math.max(m, list.length), 0);
-  const traces = [];
+  const ratedTraces = [];
+  const unratedTraces = [];
   for (let k = 0; k < depth; k += 1) {
     const tones = rows.map((row) => {
       const t = barTones(row, theme);
       return k % 2 === 0 ? t.a : t.b;
     });
     const textColors = tones.map((tone) => readableTextOn(tone));
-    traces.push({
+    const customdata = segs.map((list, r) => (list[k] ? { r, s: k, side } : null));
+    const y = rows.map((r) => r.key);
+    ratedTraces.push({
       type: 'bar',
       orientation: 'h',
       xaxis,
       yaxis: 'y',
-      x: segs.map((list) => (list[k] ? list[k].count : 0)),
-      y: rows.map((r) => r.key),
+      x: segs.map((list) => (list[k] ? Math.min(list[k].count, list[k].rated ?? 0) : 0)),
+      y,
       text: segs.map((list, i) => (list[k] && textColors[i] != null ? escapeHover(segmentText(list[k])) : '')),
       textposition: 'inside',
       insidetextanchor: 'middle',
@@ -271,10 +303,25 @@ function stackTraces(rows, segmentsOf, side, theme, xaxis, gap) {
       marker: { color: tones, line: { width: gap, color: PAGE_BG[theme] } },
       hoverinfo: 'none',
       showlegend: false,
-      customdata: segs.map((list, r) => (list[k] ? { r, s: k, side } : null)),
+      customdata,
+    });
+    const styles = tones.map(unratedStyle);
+    unratedTraces.push({
+      type: 'bar',
+      orientation: 'h',
+      xaxis,
+      yaxis: 'y',
+      x: segs.map((list) => (list[k] ? unratedOf(list[k].count, list[k].rated) : 0)),
+      y,
+      text: segs.map(() => ''),
+      cliponaxis: false,
+      marker: { color: styles.map((st) => st.color), line: { width: 1.5, color: tones } },
+      hoverinfo: 'none',
+      showlegend: false,
+      customdata,
     });
   }
-  return traces;
+  return ratedTraces.concat(unratedTraces);
 }
 
 const TRANSPARENT = 'rgba(0,0,0,0)';
@@ -296,29 +343,36 @@ const TRANSPARENT = 'rgba(0,0,0,0)';
 function familyStackTraces(rows, sideOf, side, theme, pieceAxis, overlayAxis, gap) {
   const shades = rows.map((row) => channelShades(row.family, theme, row.shadeCount ?? 1));
   const segs = rows.map((row) => sideOf(row).segments);
-  const pieces = segs.map((list, i) =>
-    list.flatMap((seg) =>
-      (seg.channels ?? [])
-        .filter((c) => c.count > 0)
-        .map((c) => ({ count: c.count, color: shades[i][c.shade] ?? shades[i][0] })),
-    ),
+  // Channels with games, in segment order; the rated and unrated pieces use the
+  // same list so both sets always have the same rank depth.
+  const channelsOf = segs.map((list) =>
+    list.flatMap((seg) => (seg.channels ?? []).filter((c) => c.count > 0)),
   );
+  const pieceDepth = channelsOf.reduce((m, list) => Math.max(m, list.length), 0);
   const traces = [];
-  const pieceDepth = pieces.reduce((m, list) => Math.max(m, list.length), 0);
-  for (let k = 0; k < pieceDepth; k += 1) {
-    traces.push({
-      type: 'bar',
-      orientation: 'h',
-      xaxis: pieceAxis,
-      yaxis: 'y',
-      x: pieces.map((list) => (list[k] ? list[k].count : 0)),
-      y: rows.map((r) => r.key),
-      marker: { color: pieces.map((list, i) => (list[k] ? list[k].color : shades[i][0])), line: { width: 0 } },
-      hoverinfo: 'skip',
-      showlegend: false,
-    });
+  for (const unrated of [false, true]) {
+    for (let k = 0; k < pieceDepth; k += 1) {
+      const colorOf = (i) => (channelsOf[i][k] ? (shades[i][channelsOf[i][k].shade] ?? shades[i][0]) : shades[i][0]);
+      const widthOf = (c) => (unrated ? unratedOf(c.count, c.rated) : Math.min(c.count, c.rated ?? 0));
+      const colors = channelsOf.map((_, i) => colorOf(i));
+      traces.push({
+        type: 'bar',
+        orientation: 'h',
+        xaxis: pieceAxis,
+        yaxis: 'y',
+        x: channelsOf.map((list) => (list[k] ? widthOf(list[k]) : 0)),
+        y: rows.map((r) => r.key),
+        marker: unrated
+          ? { color: colors.map((c) => unratedStyle(c).color), line: { width: 1.5, color: colors } }
+          : { color: colors, line: { width: 0 } },
+        hoverinfo: 'skip',
+        showlegend: false,
+      });
+    }
   }
   const depth = segs.reduce((m, list) => Math.max(m, list.length), 0);
+  const overlays = [];
+  const unratedOverlays = [];
   for (let k = 0; k < depth; k += 1) {
     const textColors = segs.map((list, i) => {
       const seg = list[k];
@@ -328,12 +382,13 @@ function familyStackTraces(rows, sideOf, side, theme, pieceAxis, overlayAxis, ga
         .map((c) => shades[i][c.shade] ?? shades[i][0]);
       return readableTextOnAll(tones);
     });
-    traces.push({
+    const customdata = segs.map((list, r) => (list[k] ? { r, s: k, side } : null));
+    overlays.push({
       type: 'bar',
       orientation: 'h',
       xaxis: overlayAxis,
       yaxis: 'y',
-      x: segs.map((list) => (list[k] ? list[k].count : 0)),
+      x: segs.map((list) => (list[k] ? Math.min(list[k].count, list[k].rated ?? 0) : 0)),
       y: rows.map((r) => r.key),
       text: segs.map((list, i) => (list[k] && textColors[i] != null ? escapeHover(segmentText(list[k])) : '')),
       textposition: 'inside',
@@ -344,10 +399,23 @@ function familyStackTraces(rows, sideOf, side, theme, pieceAxis, overlayAxis, ga
       marker: { color: TRANSPARENT, line: { width: gap, color: PAGE_BG[theme] } },
       hoverinfo: 'none',
       showlegend: false,
-      customdata: segs.map((list, r) => (list[k] ? { r, s: k, side } : null)),
+      customdata,
+    });
+    unratedOverlays.push({
+      type: 'bar',
+      orientation: 'h',
+      xaxis: overlayAxis,
+      yaxis: 'y',
+      x: segs.map((list) => (list[k] ? unratedOf(list[k].count, list[k].rated) : 0)),
+      y: rows.map((r) => r.key),
+      cliponaxis: false,
+      marker: { color: TRANSPARENT, line: { width: gap, color: PAGE_BG[theme] } },
+      hoverinfo: 'none',
+      showlegend: false,
+      customdata,
     });
   }
-  return traces;
+  return traces.concat(overlays, unratedOverlays);
 }
 
 /** An invisible axis overlaying `base` with the same range (D-23 overlay). */
@@ -409,7 +477,7 @@ function baseLayout(theme, env, rows, pitch, margin, bargap) {
 
 function xAxis(theme, range, extra) {
   return {
-    title: { text: 'Rated telecasts', standoff: 4 },
+    title: { text: 'Games', standoff: 4 },
     automargin: false,
     range,
     tickmode: 'array',
@@ -453,11 +521,11 @@ export function buildBarFigure(model, rows, env) {
   let traces;
   if (family) traces = familyStackTraces(rows, (r) => r, null, theme, 'x', 'x3', gap);
   else if (stacked) traces = stackTraces(rows, (r) => r.segments, null, theme, 'x', gap);
-  else traces = [simpleTrace(rows, (r) => r.total, null, theme, 'x')];
+  else traces = simpleTraces(rows, (r) => r.total, (r) => r.rated, null, theme, 'x');
   const maxTotal = rows.reduce((m, r) => Math.max(m, r.total), 0);
 
   const layout = baseLayout(theme, env, rows, pitch, margin, bargap);
-  layout.barmode = stacked ? 'stack' : 'group';
+  layout.barmode = 'stack';
   layout.xaxis = xAxis(
     theme,
     [0, rangeTop(maxTotal, env.width - margin.l - margin.r, 1.12)],
@@ -484,11 +552,9 @@ export function buildBarFigure(model, rows, env) {
       font,
     });
   });
-  if (stacked) {
-    layout.annotations = layout.annotations.concat(
-      totalAnnotations(rows, (r) => r.total, 'right', theme, 'x'),
-    );
-  }
+  layout.annotations = layout.annotations.concat(
+    totalAnnotations(rows, (r) => r.total, 'right', theme, 'x'),
+  );
   return { traces, layout, config: { ...CONFIG } };
 }
 
@@ -541,7 +607,9 @@ export function buildButterflyFigure(model, rows, env) {
       traces = traces.concat(stackTraces(wrapped, (r) => r.__side.segments, side, theme, axis, gap));
     } else {
       const wrapped = rows.map((r, i) => ({ ...r, __side: sideRows[side][i] }));
-      traces.push(simpleTrace(wrapped, (r) => r.__side.total, side, theme, axis));
+      traces = traces.concat(
+        simpleTraces(wrapped, (r) => r.__side.total, (r) => r.__side.rated, side, theme, axis),
+      );
     }
   }
   const maxSide = rows.reduce(
@@ -554,7 +622,7 @@ export function buildButterflyFigure(model, rows, env) {
   const top = rangeTop(maxSide, (env.width - 16) * (0.5 - g / 2), 1.1);
 
   const layout = baseLayout(theme, env, rows, pitch, margin, bargap);
-  layout.barmode = stacked ? 'stack' : 'group';
+  layout.barmode = 'stack';
   layout.xaxis = xAxis(theme, [top, 0], { domain: [0, 0.5 - g / 2], anchor: 'y' });
   layout.xaxis2 = xAxis(theme, [0, top], { domain: [0.5 + g / 2, 1], anchor: 'y' });
   if (family) {
@@ -603,12 +671,10 @@ export function buildButterflyFigure(model, rows, env) {
     font: { size: 14, color: ACCENT[theme], weight: 600 },
   }));
   layout.annotations = rowLabels.concat(headers);
-  if (stacked) {
-    layout.annotations = layout.annotations.concat(
-      totalAnnotations(rows, (r) => r.sides[0].total, 'left', theme, 'x'),
-      totalAnnotations(rows, (r) => r.sides[1].total, 'right', theme, 'x2'),
-    );
-  }
+  layout.annotations = layout.annotations.concat(
+    totalAnnotations(rows, (r) => r.sides[0].total, 'left', theme, 'x'),
+    totalAnnotations(rows, (r) => r.sides[1].total, 'right', theme, 'x2'),
+  );
   return { traces, layout, config: { ...CONFIG } };
 }
 

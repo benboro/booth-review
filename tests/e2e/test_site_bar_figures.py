@@ -55,50 +55,50 @@ _TITLE_BARS = "(c) => c.C.chartTitle(c.bars, c.data, c.state)"
 _TITLE_FLY = "(c) => c.C.chartTitle(c.fly, c.data, c.state)"
 
 _BARS_TITLES: list[tuple[dict[str, Any], str]] = [
-    ({"school": ["northfield"]}, "Announcers by rated telecasts with Northfield"),
+    ({"school": ["northfield"]}, "Announcers by games with Northfield"),
     (
         {"school": ["northfield"], "by": "network"},
-        "Network families by announcer with Northfield",
+        "Networks by games with Northfield",
     ),
-    ({"people": ["kris-venn"]}, "Teams by rated telecasts with Kris Venn"),
-    ({"people": ["kris-venn"], "by": "conference"}, "Conferences by team with Kris Venn"),
-    ({"networks": ["net-a", "net-b"]}, "Teams by rated telecasts on Alpha Sports or Beta Network"),
+    ({"people": ["kris-venn"]}, "Teams by games with Kris Venn"),
+    ({"people": ["kris-venn"], "by": "conference"}, "Conferences by games with Kris Venn"),
+    ({"networks": ["net-a", "net-b"]}, "Teams by games on Alpha Sports or Beta Network"),
     (
         {"networks": ["net-a", "net-b", "net-c", "net-d"]},
-        "Teams by rated telecasts on 4 networks",
+        "Teams by games on 4 networks",
     ),
-    ({"networks": []}, "Teams by rated telecasts on no networks"),
+    ({"networks": []}, "Teams by games on no networks"),
     (
         {"school": ["northfield", "lakeview"]},
-        "Announcers by rated telecasts with Northfield or Lakeview",
+        "Announcers by games with Northfield or Lakeview",
     ),
     (
         {"school": ["northfield", "lakeview", "ironpeak"]},
-        "Announcers by rated telecasts with Northfield or Lakeview or Ironpeak",
+        "Announcers by games with Northfield or Lakeview or Ironpeak",
     ),
     (
         {"school": ["northfield"], "networks": ["net-a"], "by": "team"},
-        "Teams by rated telecasts with Northfield on Alpha Sports",
+        "Teams by games with Northfield on Alpha Sports",
     ),
     (
         {"school": ["northfield"], "people": ["dale-harlow"]},
-        "Announcers by rated telecasts with Dale Harlow and Northfield",
+        "Announcers by games with Dale Harlow and Northfield",
     ),
     (
         {"school": ["northfield"], "people": ["dale-harlow"], "by": "team"},
-        "Teams by rated telecasts with Dale Harlow and Northfield",
+        "Teams by games with Dale Harlow and Northfield",
     ),
     (
         {"people": ["kris-venn", "jax-venn"], "together": True},
-        "Teams by rated telecasts with Kris Venn and Jax Venn",
+        "Teams by games with Kris Venn and Jax Venn",
     ),
     (
         {"people": ["kris-venn", "pat-rowan"], "compare": True},
-        "Teams by rated telecasts with Kris Venn or Pat Rowan",
+        "Teams by games with Kris Venn or Pat Rowan",
     ),
     (
         {"people": ["kris-venn", "pat-rowan"]},
-        "Teams by rated telecasts with Kris Venn or Pat Rowan",
+        "Teams by games with Kris Venn or Pat Rowan",
     ),
     (
         {
@@ -106,7 +106,7 @@ _BARS_TITLES: list[tuple[dict[str, Any], str]] = [
             "together": True,
             "school": ["ironpeak", "foxhollow"],
         },
-        "Announcers by rated telecasts with (Kris Venn and Jax Venn) and (Ironpeak or Foxhollow)",
+        "Announcers by games with (Kris Venn and Jax Venn) and (Ironpeak or Foxhollow)",
     ),
 ]
 
@@ -125,12 +125,12 @@ _FLY_TITLES: list[tuple[dict[str, Any], str]] = [
     ),
     (
         {"school": ["northfield", "lakeview"], "by": "network"},
-        "Network families by announcer: Northfield and Lakeview",
+        "Networks by games: Northfield and Lakeview",
     ),
     ({"people": ["kris-venn", "pat-rowan"]}, "Teams: Kris Venn and Pat Rowan"),
     (
         {"people": ["kris-venn", "pat-rowan"], "by": "conference"},
-        "Conferences by team: Kris Venn and Pat Rowan",
+        "Conferences by games: Kris Venn and Pat Rowan",
     ),
     (
         {"school": ["northfield", "lakeview"], "people": ["dale-harlow"]},
@@ -177,8 +177,8 @@ def test_row_count_caption_and_show_all(guarded_page: Page, site_url: str) -> No
             all20: c.C.showAllLabel(20, false),
             top20: c.C.showAllLabel(20, true),
             none15: c.C.showAllLabel(15, false),
-            count1: c.C.telecastCount(1),
-            count7: c.C.telecastCount(7),
+            count1: c.C.gameCount(1, 1),
+            count7: c.C.gameCount(6, 14),
           };
         }""",
     )
@@ -193,14 +193,15 @@ def test_row_count_caption_and_show_all(guarded_page: Page, site_url: str) -> No
         "all20": "Show all 20",
         "top20": "Show top 15",
         "none15": None,
-        "count1": "1 rated telecast",
-        "count7": "7 rated telecasts",
+        "count1": "1 rated of 1 game",
+        "count7": "6 rated of 14 games",
     }
 
 
+_KEY = "Solid bars are games with a public rating. Outlined bars are games with no public rating."
 _STACK_SUM = (
-    "Each telecast counts once for every announcer in it, so a bar can be longer than its "
-    "number of telecasts."
+    "Each game counts once for every announcer in it, so a bar can be longer than its "
+    "number of games."
 )
 _TEAM_COUNT = (
     "Each game counts once for every team in it, so team totals can add up to more than the "
@@ -212,27 +213,35 @@ _NON_FILTER = "Non-FBS and unlisted conferences can't be used as a filter."
 def test_caption_lines(guarded_page: Page, site_url: str) -> None:
     page = guarded_page
     cap = "(c) => c.C.captionLines(c.bars ?? c.fly, (c.bars ?? c.fly).rows)"
-    assert _run(page, site_url, {"school": ["northfield"]}, cap) == []
+    assert _run(page, site_url, {"school": ["northfield"]}, cap) == [_KEY]
     assert _run(page, site_url, {"school": ["northfield"], "by": "network"}, cap) == [
+        _KEY,
         _STACK_SUM,
         _SHADE_CAPTION,
     ]
-    assert _run(page, site_url, {"people": ["kris-venn"]}, cap) == [_TEAM_COUNT]
-    assert _run(page, site_url, {"people": ["kris-venn"], "by": "conference"}, cap) == [_TEAM_COUNT]
+    assert _run(page, site_url, {"people": ["kris-venn"]}, cap) == [_KEY, _TEAM_COUNT]
+    assert _run(page, site_url, {"people": ["kris-venn"], "by": "conference"}, cap) == [
+        _KEY,
+        _TEAM_COUNT,
+    ]
     fly = _run(
         page,
         site_url,
         {"school": ["northfield", "lakeview"]},
         "(c) => c.C.captionLines(c.fly, c.fly.rows)",
     )
-    assert fly == ["2 games include both."]
+    assert fly == [_KEY, "3 games include both."]
     out = _run(
         page,
         site_url,
         {"school": ["northfield", "lakeview"]},
         """(c) => [0, 1, 2].map((n) => c.C.captionLines({ ...c.fly, shared: n }, []))""",
     )
-    assert out == [["0 games include both."], ["1 game includes both."], ["2 games include both."]]
+    assert out == [
+        [_KEY, "0 games include both."],
+        [_KEY, "1 game includes both."],
+        [_KEY, "2 games include both."],
+    ]
     non = _run(
         page,
         site_url,
@@ -255,7 +264,7 @@ def test_tooltip_lines(guarded_page: Page, site_url: str) -> None:
     )
     assert simple[0] == [
         {"text": "Dale Harlow", "kind": "title", "roles": ["pbp"]},
-        {"text": "2 rated telecasts", "kind": "body"},
+        {"text": "2 rated of 2 games", "kind": "body"},
         {"text": "Click to filter →", "kind": "hint"},
     ]
     assert simple[1][2] == {"text": "Tap again to filter →", "kind": "hint"}
@@ -266,15 +275,15 @@ def test_tooltip_lines(guarded_page: Page, site_url: str) -> None:
         "(c) => c.C.tooltipLines(c.bars, c.bars.rows, { r: 0, s: 0, side: null }, {})",
     )
     assert stacked[0] == {"text": "Dale Harlow", "kind": "title", "roles": ["pbp"]}
-    assert stacked[1] == {"text": "Alpha Sports: 2", "kind": "body", "shade": 0}
-    assert stacked[2] == {"text": "2 rated telecasts on ABC/ESPN", "kind": "body"}
+    assert stacked[1] == {"text": "Alpha Sports: 2 rated of 2 games", "kind": "body", "shade": 0}
+    assert stacked[2] == {"text": "2 rated of 2 games on ABC/ESPN", "kind": "body"}
     fly = _run(
         page,
         site_url,
         {"school": ["northfield", "lakeview"]},
         "(c) => c.C.tooltipLines(c.fly, c.fly.rows, { r: 0, s: -1, side: 0 }, {})",
     )
-    assert fly[1] == {"text": "Northfield: 2 rated telecasts", "kind": "body"}
+    assert fly[1] == {"text": "Northfield: 2 rated of 2 games", "kind": "body"}
     conf = _run(
         page,
         site_url,
@@ -308,9 +317,9 @@ def test_family_tooltip_lines(
     )
     assert ref0 == [
         {"text": "Dale Harlow", "kind": "title", "roles": ["pbp"]},
-        {"text": "Alpha Sports: 1", "kind": "body", "shade": 0},
-        {"text": "Echo Sports: 1", "kind": "body", "shade": 1},
-        {"text": "2 rated telecasts on ABC/ESPN", "kind": "body"},
+        {"text": "Alpha Sports: 1 rated of 1 game", "kind": "body", "shade": 0},
+        {"text": "Echo Sports: 1 rated of 1 game", "kind": "body", "shade": 1},
+        {"text": "2 rated of 2 games on ABC/ESPN", "kind": "body"},
         {"text": "Click to filter →", "kind": "hint"},
     ]
     touch = _run(
@@ -325,13 +334,13 @@ def test_family_tooltip_lines(
         page,
         site_url,
         stacked,
-        body.format(m="bars", ref="{ r: 0, s: 4, side: null }", opts="{}"),
+        body.format(m="bars", ref="{ r: 0, s: 6, side: null }", opts="{}"),
         multichannel,
     )
     assert robin == [
         {"text": "Robin Teague", "kind": "title", "roles": ["unknown"]},
-        {"text": "Echo Sports: 1", "kind": "body", "shade": 1},
-        {"text": "1 rated telecast on ABC/ESPN", "kind": "body"},
+        {"text": "Echo Sports: 1 rated of 1 game", "kind": "body", "shade": 1},
+        {"text": "1 rated of 1 game on ABC/ESPN", "kind": "body"},
         {"text": "Click to filter →", "kind": "hint"},
     ]
     fly = _run(
@@ -343,8 +352,8 @@ def test_family_tooltip_lines(
     )
     assert fly == [
         {"text": "Casey Lund", "kind": "title", "roles": ["pbp"]},
-        {"text": "Alpha Sports: 1", "kind": "body", "shade": 0},
-        {"text": "Lakeview: 1 rated telecast on ABC/ESPN", "kind": "body"},
+        {"text": "Alpha Sports: 1 rated of 1 game", "kind": "body", "shade": 0},
+        {"text": "Lakeview: 1 rated of 1 game on ABC/ESPN", "kind": "body"},
         {"text": "Click to filter →", "kind": "hint"},
     ]
 
@@ -361,7 +370,7 @@ def test_family_caption_and_counts_text(
         cap.format(m="bars"),
         multichannel,
     )
-    assert bars == [_STACK_SUM, _SHADE_CAPTION]
+    assert bars == [_KEY, _STACK_SUM, _SHADE_CAPTION]
     fly = _run(
         page,
         site_url,
@@ -369,7 +378,7 @@ def test_family_caption_and_counts_text(
         cap.format(m="fly"),
         multichannel,
     )
-    assert fly[0] == _STACK_SUM and _SHADE_CAPTION in fly
+    assert fly[0] == _KEY and _STACK_SUM in fly and _SHADE_CAPTION in fly
     plain = _run(page, site_url, {"school": ["northfield"], "by": "network"}, cap.format(m="bars"))
     assert _SHADE_CAPTION in plain  # stacked Announcers are family rows on the shared fixture too
     simple = _run(page, site_url, {"school": ["northfield"]}, cap.format(m="bars"))
@@ -379,14 +388,14 @@ def test_family_caption_and_counts_text(
         site_url,
         {"school": ["northfield"]},
         """(c) => ({
-          line: c.C.channelLineText({ name: 'Alpha Sports', count: 1 }),
+          line: c.C.channelLineText({ name: 'Alpha Sports', count: 1, rated: 1 }),
           name: c.C.countsListName({ kind: 'family', family: 'disney', ids: ['net-a'] },
-                                   'ABC/ESPN', 7),
+                                   'ABC/ESPN', 7, 9),
         })""",
     )
     assert out == {
-        "line": "Alpha Sports 1",
-        "name": "Show only ABC/ESPN, 7 rated telecasts",
+        "line": "Alpha Sports: 1 rated of 1 game",
+        "name": "Show only ABC/ESPN, 7 rated of 9 games",
     }
 
 
@@ -396,21 +405,23 @@ def test_counts_list_names(guarded_page: Page, site_url: str) -> None:
         site_url,
         {"school": ["northfield", "lakeview"]},
         """(c) => ({
-          person: c.C.countsListName({ kind: 'person', id: 'x' }, 'Dale Harlow', 2),
-          team: c.C.countsListName({ kind: 'team', slug: 'x' }, 'Foxhollow', 2),
-          network: c.C.countsListName({ kind: 'network', id: 'x' }, 'Alpha Sports', 7),
-          conf: c.C.countsListName({ kind: 'conference', name: 'SEC' }, 'SEC', 3),
+          person: c.C.countsListName({ kind: 'person', id: 'x' }, 'Dale Harlow', 2, 2),
+          team: c.C.countsListName({ kind: 'team', slug: 'x' }, 'Foxhollow', 2, 3),
+          network: c.C.countsListName({ kind: 'network', id: 'x' }, 'Alpha Sports', 7, 9),
+          conf: c.C.countsListName({ kind: 'conference', name: 'SEC' }, 'SEC', 3, 4),
           text: c.C.butterflyRowText(c.fly.rows[0], c.fly),
           name: c.C.butterflyCountsName(c.fly.rows[0], c.fly),
         })""",
     )
     assert out == {
-        "person": "Add Dale Harlow as a filter, 2 rated telecasts",
-        "team": "Add Foxhollow to the School filter, 2 rated telecasts",
-        "network": "Show only Alpha Sports, 7 rated telecasts",
-        "conf": "Add SEC to the Conference filter, 3 rated telecasts",
-        "text": "Dale Harlow (PBP): Northfield 2, Lakeview 1 rated telecasts",
-        "name": "Add Dale Harlow as a filter, Northfield 2, Lakeview 1 rated telecasts",
+        "person": "Add Dale Harlow as a filter, 2 rated of 2 games",
+        "team": "Add Foxhollow to the School filter, 2 rated of 3 games",
+        "network": "Show only Alpha Sports, 7 rated of 9 games",
+        "conf": "Add SEC to the Conference filter, 3 rated of 4 games",
+        "text": "Dale Harlow (PBP): Northfield 2 rated of 2 games, Lakeview 1 rated of 1 game",
+        "name": (
+            "Add Dale Harlow as a filter, Northfield 2 rated of 2 games, Lakeview 1 rated of 1 game"
+        ),
     }
 
 
@@ -418,8 +429,9 @@ def test_aria_summaries(guarded_page: Page, site_url: str) -> None:
     page = guarded_page
     aria = "(c) => c.C.ariaSummary(c.bars ?? c.fly, c.data, c.state, (c.bars ?? c.fly).rows.length)"
     assert _run(page, site_url, {"school": ["northfield"]}, aria) == (
-        "Bar chart: announcers by rated telecasts with Northfield, 2019\u20132026. Showing 5 of 5. "
-        "Top: Dale Harlow (PBP) 2, Dale Harlow Jr. (Analyst) 2, Casey Lund (PBP) 1."
+        "Bar chart: announcers by games with Northfield, 2019\u20132026. Showing 9 of 9. "
+        "Top: Dale Harlow (PBP) 2 rated of 2 games, Dale Harlow Jr. (Analyst) 2 rated of 2 games, "
+        "Casey Lund (PBP) 1 rated of 1 game."
     )
     one_year = _run(page, site_url, {"school": ["northfield"], "seasons": [2025, 2025]}, aria)
     assert "with Northfield, 2025." in one_year
@@ -430,8 +442,9 @@ def test_aria_summaries(guarded_page: Page, site_url: str) -> None:
         "(c) => c.C.ariaSummary(c.fly, c.data, c.state, c.fly.rows.length)",
     )
     assert fly == (
-        "Butterfly chart: announcers: Northfield and Lakeview, 2019\u20132026. Showing 7 of 7. "
-        "2 games include both. Top: Dale Harlow (PBP) 2 and 1, Dale Harlow Jr. (Analyst) 2 and 1."
+        "Butterfly chart: announcers: Northfield and Lakeview, 2019\u20132026. Showing 10 of 10. "
+        "3 games include both. Top: Dale Harlow (PBP) 2 rated of 2 games and 1 rated of 1 game, "
+        "Dale Harlow Jr. (Analyst) 2 rated of 2 games and 1 rated of 1 game."
     )
     zero = _run(
         page,
@@ -456,7 +469,7 @@ def test_copy_never_mentions_viewers(guarded_page: Page, site_url: str) -> None:
         ])""",
     )
     assert "viewer" not in out.lower()
-    assert "No rated telecasts for this selection" in out
+    assert "No games for this selection." in out
     assert "Widen the season range" in out
 
 
@@ -634,7 +647,10 @@ def test_non_network_bars_are_violet(
     out = _figure(guarded_page, site_url, partial, fn, {**_DESKTOP, "theme": theme})
     colors: set[str] = set()
     for trace in out["figure"]["traces"]:
-        colors |= {c for c in trace["marker"]["color"]}
+        hexes = {c for c in trace["marker"]["color"] if c.startswith("#")}
+        colors |= hexes
+        if not hexes:  # an unrated part: 25% fill, border in the full tone (D-15)
+            assert set(trace["marker"]["line"]["color"]) <= {tones["a"], tones["b"]}
     assert colors <= {tones["a"], tones["b"]}
     assert colors
     assert not colors & {tones["ma"], tones["mb"]}
@@ -662,8 +678,15 @@ def test_violet_text_contrast(guarded_page: Page, site_url: str, theme: str) -> 
         {"people": ["kris-venn"], "by": "conference"},
         env={**_DESKTOP, "theme": theme},
     )
-    for k, trace in enumerate(out["figure"]["traces"]):
+    texted = [t for t in out["figure"]["traces"] if "textfont" in t]  # rated layers only
+    assert texted
+    for k, trace in enumerate(texted):
         assert set(trace["textfont"]["color"]) == {expected[k % 2]}
+    assert all(
+        not t.get("text") or not any(t["text"])
+        for t in out["figure"]["traces"]
+        if "textfont" not in t
+    )
 
 
 @pytest.mark.parametrize("theme", _THEMES)
@@ -698,22 +721,35 @@ def test_rendered_violet_matches_css_token(
 def test_simple_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
     out = _figure(guarded_page, site_url, {"school": ["northfield"]})
     figure, rows = out["figure"], out["model"]["rows"]
-    (trace,) = figure["traces"]
-    assert (trace["type"], trace["orientation"], trace["textposition"]) == ("bar", "h", "outside")
-    assert trace["x"] == [r["total"] for r in rows]
-    assert trace["y"] == [r["key"] for r in rows]
+    n = len(rows)
+    rated, unrated = figure["traces"]  # D-15: always one rated and one unrated trace
+    assert (rated["type"], rated["orientation"]) == ("bar", "h")
+    assert rated["x"] == [r["rated"] for r in rows]
+    assert unrated["x"] == [r["total"] - r["rated"] for r in rows]
+    assert rated["y"] == unrated["y"] == [r["key"] for r in rows]
+    assert any(v == 0 for v in rated["x"]) and any(v > 0 for v in unrated["x"])
     # D-31: Northfield's games are all net-a (Disney), so announcer bars are Disney blue.
-    assert set(trace["marker"]["color"]) == {"#0072B2"}
-    assert trace["hoverinfo"] == "none"
-    assert trace["customdata"] == [{"r": i, "s": -1, "side": None} for i in range(len(rows))]
+    # (the crews of the unrated FOX games take the FOX family's green)
+    assert set(rated["marker"]["color"]) == {"#0072B2", "#009E73"}
+    assert set(unrated["marker"]["color"]) == {"rgba(0,114,178,0.25)", "rgba(0,158,115,0.25)"}
+    assert unrated["marker"]["line"] == {"width": 1.5, "color": rated["marker"]["color"]}
+    assert "text" not in unrated and "text" not in rated
+    assert rated["hoverinfo"] == unrated["hoverinfo"] == "none"
+    assert not rated["showlegend"] and not unrated["showlegend"]
+    refs = [{"r": i, "s": -1, "side": None} for i in range(n)]
+    assert rated["customdata"] == unrated["customdata"] == refs
     layout = figure["layout"]
-    assert layout["yaxis"]["range"] == [4.5, -0.5]  # reversed, one pitch per row
+    assert layout["barmode"] == "stack"
+    assert layout["xaxis"]["title"]["text"] == "Games"
+    assert layout["yaxis"]["range"] == [n - 0.5, -0.5]  # reversed, one pitch per row
     assert layout["yaxis"]["showticklabels"] is False
     assert layout["dragmode"] is False
     assert figure["config"]["displayModeBar"] is False
-    assert layout["height"] == 5 * 32 + 72
-    assert len(layout["annotations"]) == 5
-    assert all(a["captureevents"] is True for a in layout["annotations"])
+    assert layout["height"] == n * 32 + 72
+    annos = layout["annotations"]
+    assert len(annos) == 2 * n  # row labels, then one total of games per row (D-29)
+    assert all(a["captureevents"] is True for a in annos[:n])
+    assert [a["text"] for a in annos[n:]] == [str(r["total"]) for r in rows]
     assert "transition" not in layout
 
 
@@ -724,13 +760,21 @@ def test_stacked_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
     assert layout["barmode"] == "stack"
     assert layout["uniformtext"] == {"mode": "hide", "minsize": 14}
     depth = max(len(r["segments"]) for r in rows)
-    assert len(figure["traces"]) == depth
-    for k, trace in enumerate(figure["traces"]):
+    assert len(figure["traces"]) == 2 * depth  # rated layers, then unrated layers (D-15)
+    for k, un in enumerate(figure["traces"][depth:]):
+        tone = "#7C3AED" if k % 2 == 0 else "#B793F5"
+        assert un["marker"]["line"] == {"width": 1.5, "color": [tone] * len(rows)}
+        assert not any(un["text"])
+        for i, row in enumerate(rows):
+            seg = row["segments"][k] if k < len(row["segments"]) else None
+            assert un["x"][i] == (seg["count"] - seg["rated"] if seg else 0)
+            assert un["customdata"][i] == ({"r": i, "s": k, "side": None} if seg else None)
+    for k, trace in enumerate(figure["traces"][:depth]):
         assert set(trace["marker"]["color"]) == {"#7C3AED" if k % 2 == 0 else "#B793F5"}
         assert trace["marker"]["line"] == {"width": 3, "color": "#FFFFFF"}  # D-28
         for i, row in enumerate(rows):
             if k < len(row["segments"]):
-                assert trace["x"][i] == row["segments"][k]["count"]
+                assert trace["x"][i] == row["segments"][k]["rated"]
                 assert trace["customdata"][i] == {"r": i, "s": k, "side": None}
                 assert (
                     trace["text"][i]
@@ -750,12 +794,12 @@ def test_stacked_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
 
 
 _MAIN_FAMILY_LIGHT = [
-    "#009E73", "#8F8F8F", "#009E73", "#8F8F8F", "#0072B2",
-    "#0072B2", "#009E73", "#000000", "#009E73",
+    "#009E73", "#0072B2", "#8F8F8F", "#0072B2", "#009E73",
+    "#0072B2", "#0072B2", "#0072B2", "#0072B2", "#0072B2", "#009E73",
 ]  # fmt: skip
 _MAIN_FAMILY_DARK = [
-    "#009E73", "#999999", "#009E73", "#999999", "#0072B2",
-    "#0072B2", "#009E73", "#696969", "#009E73",
+    "#009E73", "#0072B2", "#999999", "#0072B2", "#009E73",
+    "#0072B2", "#0072B2", "#0072B2", "#0072B2", "#0072B2", "#009E73",
 ]  # fmt: skip
 
 
@@ -769,24 +813,27 @@ def test_simple_announcer_bars_use_main_family_color(
         {"school": ["ironpeak", "foxhollow", "stonebridge"]},
         env={**_DESKTOP, "theme": theme},
     )
-    (trace,) = out["figure"]["traces"]
-    assert trace["marker"]["color"] == (
-        _MAIN_FAMILY_LIGHT if theme == "light" else _MAIN_FAMILY_DARK
-    )
+    trace, unrated = out["figure"]["traces"]
+    tones = _MAIN_FAMILY_LIGHT if theme == "light" else _MAIN_FAMILY_DARK
+    assert trace["marker"]["color"] == tones
+    assert unrated["marker"]["line"]["color"] == tones  # same hue, outlined (D-15)
     accent = {"light": "#111827", "dark": "#E5E7EB"}[theme]
-    assert trace["textposition"] == "outside"
-    assert trace["textfont"]["color"] == accent
+    totals = [a for a in out["figure"]["layout"]["annotations"] if a.get("name") == "total"]
+    assert totals and all(a["font"]["color"] == accent for a in totals)
 
 
 def test_butterfly_announcer_bars_use_main_family_color(guarded_page: Page, site_url: str) -> None:
     out = _figure(guarded_page, site_url, {"school": ["lakeview", "maplecrest"]}, "butterflyModel")
-    left, right = out["figure"]["traces"]
+    left, left_unrated, right, right_unrated = out["figure"]["traces"]
     by_label = {r["label"]: i for i, r in enumerate(out["model"]["rows"])}
-    casey = by_label["Casey Lund"]
+    casey = by_label["Robin Teague"]  # main family "other" (grey)
     jamie = by_label["Jamie Oaks"]
     for trace in (left, right):
         assert trace["marker"]["color"][casey] == "#8F8F8F"
         assert trace["marker"]["color"][jamie] == "#0072B2"
+    for trace in (left_unrated, right_unrated):
+        assert trace["marker"]["line"]["color"][casey] == "#8F8F8F"
+        assert trace["marker"]["line"]["color"][jamie] == "#0072B2"
 
 
 def _totals(figure: dict[str, Any], axis: str) -> list[tuple[int, str]]:
@@ -800,10 +847,10 @@ def _totals(figure: dict[str, Any], axis: str) -> list[tuple[int, str]]:
 @pytest.mark.parametrize(
     ("partial", "expected"),
     [
-        ({"school": ["northfield"], "by": "network"}, [(0, "7")]),
+        ({"school": ["northfield"], "by": "network"}, [(0, "9"), (1, "2")]),
         (
             {"people": ["kris-venn"], "by": "conference"},
-            [(0, "3"), (1, "1"), (2, "1"), (3, "1")],
+            [(0, "3"), (1, "3"), (2, "1"), (3, "1")],
         ),
     ],
 )
@@ -822,7 +869,10 @@ def test_stacked_totals_on_bars(
         assert a["xanchor"] == "left" and a["showarrow"] is False
         assert a["captureevents"] is False
     simple = _figure(guarded_page, site_url, {"school": ["northfield"]})
-    assert not any(a.get("name") == "total" for a in simple["figure"]["layout"]["annotations"])
+    simple_totals = [
+        a for a in simple["figure"]["layout"]["annotations"] if a.get("name") == "total"
+    ]
+    assert len(simple_totals) == len(simple["model"]["rows"])  # D-29 covers simple bars too
 
 
 @pytest.mark.parametrize(
@@ -830,13 +880,13 @@ def test_stacked_totals_on_bars(
     [
         (
             {"school": ["northfield", "lakeview"], "by": "network"},
-            [(0, "7")],
-            [(0, "4"), (1, "2")],
+            [(0, "9"), (1, "2")],
+            [(0, "4"), (1, "4")],
         ),
         (
             {"people": ["kris-venn", "pat-rowan"], "by": "conference"},
-            [(0, "1"), (1, "3"), (2, "1"), (3, "1")],
-            [(0, "4"), (1, "1"), (2, "1")],
+            [(0, "1"), (1, "3"), (3, "3"), (4, "1")],
+            [(0, "4"), (1, "1"), (2, "4"), (3, "1"), (4, "1"), (5, "1")],
         ),
     ],
 )
@@ -892,15 +942,19 @@ def test_total_text_has_room_in_the_range(
 def test_network_rows_use_family_color(guarded_page: Page, site_url: str) -> None:
     out = _figure(guarded_page, site_url, {"school": ["northfield"], "by": "network"})
     first = out["figure"]["traces"][0]
-    assert set(first["marker"]["color"]) == {"#0072B2"}  # shade 0 is the family color
+    # Shade 0 is each row's family color: ABC/ESPN blue, FOX/FS1/BTN green.
+    assert set(first["marker"]["color"]) == {"#0072B2", "#009E73"}
+    assert first["marker"]["line"] == {"width": 0}
 
 
 def test_phone_bar_figure_layout(guarded_page: Page, site_url: str) -> None:
     out = _figure(guarded_page, site_url, {"school": ["northfield"]}, env=_PHONE)
     layout = out["figure"]["layout"]
     assert layout["margin"]["l"] == 8 and layout["margin"]["r"] == 8
-    assert layout["height"] == 5 * 44 + 72
-    assert all(a["yanchor"] == "bottom" and a["xanchor"] == "left" for a in layout["annotations"])
+    n = len(out["model"]["rows"])
+    assert layout["height"] == n * 44 + 72
+    labels = layout["annotations"][:n]
+    assert all(a["yanchor"] == "bottom" and a["xanchor"] == "left" for a in labels)
 
 
 def test_bar_labels_are_escaped_in_figure(guarded_page: Page, site_url: str) -> None:
@@ -927,27 +981,32 @@ def test_bar_labels_are_escaped_in_figure(guarded_page: Page, site_url: str) -> 
 def test_butterfly_simple_figure_shape(guarded_page: Page, site_url: str) -> None:
     out = _figure(guarded_page, site_url, {"school": ["northfield", "lakeview"]}, "butterflyModel")
     figure, rows = out["figure"], out["model"]["rows"]
-    left, right = figure["traces"]
-    assert left["xaxis"] == "x" and right["xaxis"] == "x2"
-    assert left["x"] == [r["sides"][0]["total"] for r in rows]
-    assert right["x"] == [r["sides"][1]["total"] for r in rows]
-    for i, row in enumerate(rows):
-        for side, trace in enumerate((left, right)):
-            ref = trace["customdata"][i]
-            if row["sides"][side]["total"] == 0:
-                assert ref is None
-            else:
-                assert ref == {"r": i, "s": -1, "side": side}
+    left, left_un, right, right_un = figure["traces"]  # rated then unrated per half (D-15)
+    assert left["xaxis"] == left_un["xaxis"] == "x"
+    assert right["xaxis"] == right_un["xaxis"] == "x2"
+    for side, (rated, unrated) in enumerate(((left, left_un), (right, right_un))):
+        assert rated["x"] == [r["sides"][side]["rated"] for r in rows]
+        assert unrated["x"] == [r["sides"][side]["total"] - r["sides"][side]["rated"] for r in rows]
+        assert unrated["marker"]["line"]["width"] == 1.5
+        for i, row in enumerate(rows):
+            for trace in (rated, unrated):
+                ref = trace["customdata"][i]
+                if row["sides"][side]["total"] == 0:
+                    assert ref is None
+                else:
+                    assert ref == {"r": i, "s": -1, "side": side}
     assert any(r["sides"][0]["total"] == 0 or r["sides"][1]["total"] == 0 for r in rows)
     layout = figure["layout"]
     top = max(max(r["sides"][0]["total"], r["sides"][1]["total"]) for r in rows) * 1.1
     assert layout["xaxis"]["range"] == pytest.approx([top, 0])
     assert layout["xaxis2"]["range"] == pytest.approx([0, top])
+    assert layout["xaxis"]["title"]["text"] == layout["xaxis2"]["title"]["text"] == "Games"
+    n = len(rows)
     annos = layout["annotations"]
-    assert len(annos) == len(rows) + 2
-    assert [a["text"] for a in annos[-2:]] == ["Northfield", "Lakeview"]
-    assert (annos[-2]["xanchor"], annos[-1]["xanchor"]) == ("right", "left")
-    assert layout["meta"]["rowCount"] == 7
+    assert [a["text"] for a in annos[n : n + 2]] == ["Northfield", "Lakeview"]
+    assert (annos[n]["xanchor"], annos[n + 1]["xanchor"]) == ("right", "left")
+    assert all(a["name"] == "total" for a in annos[n + 2 :])
+    assert layout["meta"]["rowCount"] == n == 10
 
 
 def test_butterfly_stacked_figure_matches_bars_builder(guarded_page: Page, site_url: str) -> None:
@@ -960,9 +1019,14 @@ def test_butterfly_stacked_figure_matches_bars_builder(guarded_page: Page, site_
     figure = out["figure"]
     assert figure["layout"]["barmode"] == "stack"
     assert figure["layout"]["uniformtext"] == {"mode": "hide", "minsize": 14}
-    for trace in figure["traces"]:
+    rated = [t for t in figure["traces"] if "textposition" in t]
+    unrated = [t for t in figure["traces"] if "textposition" not in t]
+    assert rated and len(rated) == len(unrated)  # same layers either way (D-15)
+    for trace in rated:
         assert trace["marker"]["line"] == {"width": 3, "color": "#FFFFFF"}  # D-28
         assert trace["textposition"] == "inside"
+    for trace in unrated:
+        assert trace["marker"]["line"]["width"] == 1.5
     assert {t["xaxis"] for t in figure["traces"]} == {"x", "x2"}
 
 
@@ -1341,7 +1405,8 @@ def test_butterfly_headers_hug_the_spine(guarded_page: Page, site_url: str, mobi
         guarded_page, site_url, {"school": ["northfield", "lakeview"]}, "butterflyModel", env
     )
     layout = out["figure"]["layout"]
-    left, right = layout["annotations"][-2:]
+    n = len(out["model"]["rows"])
+    left, right = layout["annotations"][n : n + 2]
     g = 0 if mobile else layout["xaxis2"]["domain"][0] - 0.5
     assert left["x"] == pytest.approx(0.5 - g)
     assert right["x"] == pytest.approx(0.5 + g)
@@ -1424,6 +1489,13 @@ def _split_traces(figure: dict[str, Any]) -> tuple[list[dict[str, Any]], list[di
     return pieces, overlays
 
 
+def _halves(traces: list[dict[str, Any]], axis: str) -> tuple[list[Any], list[Any]]:
+    """The rated and unrated traces on `axis`: always emitted in equal numbers (D-15)."""
+    on = [t for t in traces if t["xaxis"] == axis]
+    assert len(on) % 2 == 0
+    return on[: len(on) // 2], on[len(on) // 2 :]
+
+
 def _nonzero(traces: list[dict[str, Any]], axis: str) -> int:
     return sum(1 for t in traces if t["xaxis"] == axis for v in t["x"] if v > 0)
 
@@ -1434,19 +1506,32 @@ def test_family_stack_figure_shape(
     out = _figure(guarded_page, site_url, _FAM_BARS, raw=multichannel)
     figure = out["figure"]
     pieces, overlays = _split_traces(figure)
-    assert _nonzero(pieces, "x") == 7
-    assert _nonzero(overlays, "x3") == 5
+    rated_p, unrated_p = _halves(pieces, "x")
+    rated_o, unrated_o = _halves(overlays, "x3")
+    assert (_nonzero(rated_p, "x"), _nonzero(unrated_p, "x")) == (7, 4)
+    assert (_nonzero(rated_o, "x3"), _nonzero(unrated_o, "x3")) == (5, 4)
     assert {t["xaxis"] for t in pieces} == {"x"}
-    for t in pieces:
+    for t in rated_p:
         assert t["marker"]["line"]["width"] == 0
         assert not any(t.get("text", []))
-    colors = {c for t in pieces for c in t["marker"]["color"]}
-    assert colors == {"#0072B2", "#66AAD1"}  # net-a shade 0, net-e shade 1
+    for t in unrated_p:
+        assert t["marker"]["line"]["width"] == 1.5
+        assert not any(t.get("text", []))
+    colors = {c for t in rated_p for c in t["marker"]["color"]}
+    assert colors == {"#0072B2", "#66AAD1", "#009E73"}  # net-a, net-e shade 1, FOX family
+    assert {c for t in unrated_p for c in t["marker"]["line"]["color"]} == colors
+    assert all(
+        c.startswith("rgba(") and c.endswith(",0.25)")
+        for t in unrated_p
+        for c in t["marker"]["color"]
+    )
+    depth = len(rated_o)
     for k, t in enumerate(overlays):
         assert t["xaxis"] == "x3"
         assert t["marker"]["color"] == _TRANSPARENT
         assert t["marker"]["line"] == {"width": 3, "color": "#FFFFFF"}  # D-28
-        assert t["customdata"][0] == {"r": 0, "s": k, "side": None}
+        assert t["customdata"][0] == {"r": 0, "s": k % depth, "side": None}
+    assert not any(any(t["text"]) for t in unrated_o if "text" in t)
     layout = figure["layout"]
     x3 = layout["xaxis3"]
     assert x3["overlaying"] == "x" and x3["anchor"] == "y"
@@ -1460,8 +1545,11 @@ def test_family_butterfly_figure_shape(
     out = _figure(guarded_page, site_url, _FAM_FLY, "butterflyModel", raw=multichannel)
     figure = out["figure"]
     pieces, overlays = _split_traces(figure)
-    assert _nonzero(pieces, "x") + _nonzero(pieces, "x2") == 13
-    assert _nonzero(overlays, "x3") + _nonzero(overlays, "x4") == 11
+    counts = [
+        tuple(_nonzero(half, axis) for half in _halves(group, axis))
+        for group, axis in ((pieces, "x"), (pieces, "x2"), (overlays, "x3"), (overlays, "x4"))
+    ]
+    assert counts == [(7, 4), (6, 2), (5, 4), (6, 2)]
     assert {t["xaxis"] for t in pieces} == {"x", "x2"}
     assert {t["xaxis"] for t in overlays} == {"x3", "x4"}
     sides = {
@@ -1477,6 +1565,47 @@ def test_family_butterfly_figure_shape(
     assert layout["xaxis3"]["range"] == layout["xaxis"]["range"]
     assert layout["xaxis4"]["range"] == layout["xaxis2"]["range"]
     assert layout["meta"]["rowCount"] == len(out["model"]["rows"])
+
+
+def test_trace_count_ignores_whether_unrated_games_exist(
+    guarded_page: Page, site_url: str, multichannel: dict[str, Any]
+) -> None:
+    """D-15: unrated traces are always emitted, so the layer count never depends on the data."""
+    guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=multichannel))
+    guarded_page.goto(f"{site_url}/")
+    cases = [
+        ({"school": ["northfield"]}, "barsModel"),
+        ({"people": ["kris-venn"], "by": "conference"}, "barsModel"),
+        ({"school": ["northfield"], "by": "network"}, "barsModel"),
+        ({"school": ["northfield", "lakeview"]}, "butterflyModel"),
+        ({"school": ["northfield", "lakeview"], "by": "network"}, "butterflyModel"),
+    ]
+    for partial, fn in cases:
+        counts = guarded_page.evaluate(
+            """async ([partial, fn]) => {
+              const D = await import('./modules/data.js');
+              const S = await import('./modules/select.js');
+              const B = await import('./modules/bars.js');
+              const F = await import('./modules/bar-chart.js');
+              const raw = await (await fetch('site-data.json')).json();
+              const data = D.prepareData(raw);
+              const state = Object.assign(S.defaultState(data), partial);
+              const env = { theme: 'light', mobile: false, revision: 1, width: 1280 };
+              const build = fn === 'barsModel' ? F.buildBarFigure : F.buildButterflyFigure;
+              const make = () => B[fn](data, S.computeView(data, state), state);
+              const count = (model) => build(model, model.rows, env).traces.length;
+              const full = (o) => {
+                o.rated = o.total ?? o.count;
+                (o.segments ?? []).forEach(full);
+                (o.channels ?? []).forEach((c) => { c.rated = c.count; });
+              };
+              const flat = make();
+              flat.rows.forEach((r) => { full(r); (r.sides ?? []).forEach(full); });
+              return [count(make()), count(flat)];
+            }""",
+            [partial, fn],
+        )
+        assert counts[0] == counts[1], (partial, fn)
 
 
 def test_conference_stack_still_uses_stack_traces(guarded_page: Page, site_url: str) -> None:
@@ -1505,13 +1634,22 @@ def _row_groups(out: dict[str, Any], fn: str, spine: float) -> dict[tuple[int, i
     return groups
 
 
-def _expected_segments(out: dict[str, Any], fn: str) -> dict[tuple[int, int], list[Any]]:
+def _expected_parts(out: dict[str, Any], fn: str) -> dict[tuple[int, int], list[Any]]:
+    """Per (row, side): (segment, rated?) parts in drawing order: every rated part
+    (segment order), then every unrated part (D-15). Zero-width parts are left out."""
     exp: dict[tuple[int, int], list[Any]] = {}
     for i, row in enumerate(out["model"]["rows"]):
         sides = [row] if fn == "barsModel" else row["sides"]
         for side, src in enumerate(sides):
-            exp[(i, side)] = [s for s in src["segments"] if s["count"] > 0]
+            segs = src["segments"]
+            exp[(i, side)] = [(s, True) for s in segs if s["rated"] > 0] + [
+                (s, False) for s in segs if s["count"] - s["rated"] > 0
+            ]
     return exp
+
+
+def _part_channels(seg: dict[str, Any], rated: bool) -> list[dict[str, Any]]:
+    return [c for c in seg["channels"] if (c["rated"] if rated else c["count"] - c["rated"]) > 0]
 
 
 @pytest.mark.parametrize("theme", _THEMES)
@@ -1533,10 +1671,11 @@ def test_rendered_family_segments_align_with_channel_pieces(
     assert len(out["bars"]) == out["expected"]
     spine = (out["x1End"] + out["x2Start"]) / 2 if fn == "butterflyModel" else 0
     groups = _row_groups(out, fn, spine)
-    expected = _expected_segments(out, fn)
+    expected = _expected_parts(out, fn)
     n_pieces = sum(len(g["piece"]) for g in groups.values())
     n_over = sum(len(g["overlay"]) for g in groups.values())
-    assert (n_pieces, n_over) == ((7, 5) if fn == "barsModel" else (13, 11))
+    # 7 + 4 (Bars) and 13 + 6 (Butterfly) pieces; 5 + 4 and 11 + 6 announcer overlays.
+    assert (n_pieces, n_over) == ((11, 9) if fn == "barsModel" else (19, 17))
     bg = {"light": "#FFFFFF", "dark": "#14161A"}[theme]
     for key, segs in expected.items():
         if not segs:
@@ -1551,14 +1690,20 @@ def test_rendered_family_segments_align_with_channel_pieces(
         overlays = sorted(g["overlay"], key=lambda p: -p["l"] if rev else p["l"])
         assert len(overlays) == len(segs)
         cursor = 0
-        for seg, over in zip(segs, overlays, strict=True):
-            chans = [c for c in seg["channels"] if c["count"] > 0]
+        for (seg, rated), over in zip(segs, overlays, strict=True):
+            chans = _part_channels(seg, rated)
             mine = pieces[cursor : cursor + len(chans)]
             cursor += len(chans)
             assert len(mine) == len(chans)
             assert min(p["l"] for p in mine) == pytest.approx(over["l"], abs=1)
             assert max(p["r"] for p in mine) == pytest.approx(over["r"], abs=1)
             assert [_hex(p["fill"]) for p in mine] == [shades[c["shade"]] for c in chans]
+            if rated:  # solid
+                assert all(p["fo"] == pytest.approx(1) for p in mine)
+            else:  # 25% fill with a 1.5px border in the channel shade (D-15)
+                assert all(p["fo"] == pytest.approx(0.25) for p in mine)
+                assert [_hex(p["stroke"]) for p in mine] == [shades[c["shade"]] for c in chans]
+                assert all(p["sw"] == pytest.approx(1.5, abs=0.01) for p in mine)
             assert _hex(over["stroke"]) == bg
             assert over["sw"] == pytest.approx(2 if width < 600 else 3, abs=0.01)  # D-28
     assert out["shades"][0][0] == "#0072B2"
@@ -1746,11 +1891,21 @@ def test_rendered_stacked_segment_gaps(
     announcer: list[tuple[int, float]] = []  # (row, x relative to the chart)
     channel: list[tuple[int, float]] = []
     for (row, _side), g in _row_groups(out, fn, spine).items():
-        segs = g["overlay"] or g["piece"]
+        # Only the solid (rated) block has page-background separators; outlined unrated
+        # parts after it are bordered in their own hue (D-15).
+        solid = [p for p in g["piece"] if p["fo"] > 0.9]
+        if not solid:
+            continue
+        lo, hi = min(p["l"] for p in solid), max(p["r"] for p in solid)
+        segs = (
+            [o for o in g["overlay"] if o["l"] >= lo - 1 and o["r"] <= hi + 1]
+            if g["overlay"]
+            else solid
+        )
         edges = [(a["r"] + b["l"]) / 2 for a, b in pairwise(segs)]
         announcer += [(row, e - out["gdLeft"]) for e in edges]
         if g["overlay"]:
-            pieces = g["piece"]
+            pieces = solid
             for a, b in pairwise(pieces):
                 e = (a["r"] + b["l"]) / 2
                 if all(abs(e - x) > 2 for x in edges):
@@ -1811,3 +1966,60 @@ def test_rendered_stacked_totals_sit_past_the_bar_end(
         assert out["gdLeft"] <= anno["l"] and anno["r"] <= out["gdRight"]
         assert not any(_overlaps(anno, bar) for bar in out["bars"])
         assert not any(_overlaps(anno, other) for other in others)
+
+
+def test_rendered_unrated_part_click_resolves_like_the_rated_part(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-15: hover and click on an outlined unrated part resolve to its segment."""
+    page = guarded_page
+    open_app(page, "")
+    row = page.evaluate(
+        """async () => {
+          const D = await import('./modules/data.js');
+          const S = await import('./modules/select.js');
+          const B = await import('./modules/bars.js');
+          const F = await import('./modules/bar-chart.js');
+          const raw = await (await fetch('site-data.json')).json();
+          const data = D.prepareData(raw);
+          const state = Object.assign(S.defaultState(data), { school: ['northfield'] });
+          const model = B.barsModel(data, S.computeView(data, state), state);
+          const fig = F.buildBarFigure(model, model.rows,
+            { theme: 'light', mobile: false, revision: 1, width: 1000 });
+          const gd = document.createElement('div');
+          gd.id = 'test-bars';
+          gd.style.cssText = 'width:1000px;position:relative;';
+          document.body.appendChild(gd);
+          await F.renderBars(gd, fig);
+          window.__ev = { clicks: [], hovers: [] };
+          F.bindBarEvents(gd, {
+            onPointClick: (ref) => window.__ev.clicks.push(ref),
+            onPointHover: (ref) => window.__ev.hovers.push(ref),
+          });
+          return model.rows.findIndex((r) => r.rated === 0 && r.total > 0);
+        }"""
+    )
+    assert row >= 0  # a bar that is only an unrated part
+    page.locator("#test-bars").scroll_into_view_if_needed()
+    target = page.evaluate(
+        """(row) => {
+          const gd = document.getElementById('test-bars');
+          const cy = gd.getBoundingClientRect().top
+            + gd._fullLayout._size.t + gd._fullLayout.yaxis.d2p(row);
+          const boxes = Array.from(gd.querySelectorAll('.bars .point path'))
+            .map((el) => { const r = el.getBoundingClientRect();
+              return { x: r.left, y: r.top, w: r.width, h: r.height }; })
+            .filter((r) => r.w > 0.5 && Math.abs(r.y + r.h / 2 - cy) < 3);
+          return boxes[0];
+        }""",
+        row,
+    )
+    assert target is not None
+    cx, cy = target["x"] + target["w"] / 2, target["y"] + target["h"] / 2
+    page.mouse.move(cx - 2, cy)
+    page.mouse.move(cx, cy)
+    page.mouse.click(cx, cy)
+    ev = page.evaluate("window.__ev")
+    assert ev["clicks"] and ev["hovers"], ev
+    assert ev["clicks"][0] == {"r": row, "s": -1, "side": None}
+    assert ev["hovers"][-1] == ev["clicks"][0]
