@@ -44,10 +44,10 @@ class RivalryResolution:
 def build_franchises(
     entries: Mapping[int, BowlEntry], season_by_game: Mapping[int, int]
 ) -> dict[str, Franchise]:
-    """Group plotted bowl rows by franchise; label with the latest-season core name.
+    """Group shipped bowl rows by franchise; label with the latest-season core name.
 
-    Only plotted rows contribute, by design: the Game picker lists only games that
-    can appear on the chart (see docs/site-data.md).
+    Every shipped postseason game contributes, rated or not (04.13 D-14), so the
+    Game picker lists every game the chart can show.
     """
     rows: list[tuple[int, int, str, str | None]] = []  # season, game_id, core, franchise
     for game_id, season in season_by_game.items():
@@ -58,7 +58,7 @@ def build_franchises(
 
     missing = sum(1 for _, _, _, franchise in rows if franchise is None)
     if missing:
-        raise BowlCrosswalkError(f"telecasts: {missing} plotted bowl row(s) without a franchise")
+        raise BowlCrosswalkError(f"telecasts: {missing} shipped bowl row(s) without a franchise")
 
     grouped: dict[str, list[tuple[int, int, str]]] = defaultdict(list)
     for season, game_id, core, franchise in rows:

@@ -86,6 +86,10 @@ def build_git_vault(
 
     extended = tmp_path / "reference_ext"
     shutil.copytree(_REFERENCE_FIXTURES, extended)
+    with (extended / "network_rarity.csv").open("a", encoding="utf-8", newline="") as rarity_fh:
+        rarity_fh.write(
+            "ecn,false\necn2,false\nespn,false\nespn2,false\nespnu,false\nespn-deportes,false\n"
+        )
     with (extended / "networks.csv").open("a", encoding="utf-8", newline="") as fh:
         fh.write("ECN,ecn,Example Cable Network,family-ecn,cable,main,,,\n")
         fh.write("ECN2,ecn2,Example Cable Network 2,family-ecn,cable,main,,,\n")

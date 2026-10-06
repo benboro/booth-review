@@ -6,9 +6,11 @@ schemas), exercising every documented behavior deterministically.
 from __future__ import annotations
 
 import ast
+import dataclasses
 import json
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 import pytest
@@ -349,6 +351,80 @@ def small_tables() -> BuildTables:
             rr_telecast_ids=[],
             rr_record_urls=[],
         ),
+        # Unrated, shipped in telecasts_unrated (04.13 D-13): a crewed game on a
+        # rarely-rated network, a crewless one in the Ratings Reference dip, and
+        # an unrated postseason game.
+        _telecast_row(
+            telecast_id="5-net-c",
+            game_id=1,
+            network_id="net-c",
+            outlets=["net-c"],
+            rated=False,
+            plotted=False,
+            headline_claim_id=None,
+            headline_value=None,
+            headline_publisher=None,
+            headline_source_url=None,
+            measurement_type="unknown",
+            rr_current_check=None,
+            rr_telecast_ids=[],
+            rr_record_urls=[],
+        ),
+        _telecast_row(
+            telecast_id="6-net-b",
+            game_id=2,
+            network_id="net-b",
+            outlets=["net-b"],
+            date_et=date(2024, 9, 21),
+            kickoff_et=None,
+            rated=False,
+            crew_matched=False,
+            plotted=False,
+            headline_claim_id=None,
+            headline_value=None,
+            headline_publisher=None,
+            headline_source_url=None,
+            measurement_type="unknown",
+            rr_current_check=None,
+            rr_telecast_ids=[],
+            rr_record_urls=[],
+        ),
+        _telecast_row(
+            telecast_id="7-net-d",
+            game_id=3,
+            network_id="net-d",
+            outlets=["net-d"],
+            date_et=date(2024, 12, 30),
+            kickoff_et="2024-12-30T18:30:00-05:00",
+            rated=False,
+            crew_matched=False,
+            plotted=False,
+            headline_claim_id=None,
+            headline_value=None,
+            headline_publisher=None,
+            headline_source_url=None,
+            measurement_type="unknown",
+            rr_current_check=None,
+            rr_telecast_ids=[],
+            rr_record_urls=[],
+        ),
+        # Unrated with no resolved network: stays out, counted.
+        _telecast_row(
+            telecast_id="8-none",
+            game_id=1,
+            network_id=None,
+            outlets=[],
+            rated=False,
+            plotted=False,
+            headline_claim_id=None,
+            headline_value=None,
+            headline_publisher=None,
+            headline_source_url=None,
+            measurement_type="unknown",
+            rr_current_check=None,
+            rr_telecast_ids=[],
+            rr_record_urls=[],
+        ),
     ]
     flags = [
         {"telecast_id": "1-net-a", "flag_id": "rr-fixture-era-2", "kind": "era"},
@@ -409,6 +485,15 @@ def small_tables() -> BuildTables:
             "s506_pointer": "1:0",
             "source": "registered",
         },
+        {
+            "telecast_id": "5-net-c",
+            "person_id": "mike-golic",
+            "role": "analyst",
+            "feed_type": "main",
+            "crew_position": 0,
+            "s506_pointer": "1:0",
+            "source": "registered",
+        },
     ]
     return _build_tables(
         games_rows=games,
@@ -463,10 +548,11 @@ def test_publisher_null_when_not_known(small_tables: BuildTables, build_referenc
 def test_coverage_only_network_still_enters_lookups_but_not_outlets(
     small_tables: BuildTables, build_reference: Path
 ) -> None:
-    """net-d is never plotted (telecast 4 isn't a dot), but it is a rated
-    main telecast's network, so the coverage table (AUDIT-01) still reports
-    it -- it must appear in lookups.networks (a "coverage network") without
-    ever appearing in any plotted telecast's own network/outlets columns.
+    """net-d is never plotted (telecast 4 isn't a dot; it ships in
+    telecasts_unrated), but it is a rated main telecast's network, so the
+    coverage table (AUDIT-01) still reports it -- it must appear in
+    lookups.networks without ever appearing in any plotted telecast's own
+    network/outlets columns.
     """
     payload = _site(small_tables, build_reference)
     network_ids_by_index = [n["id"] for n in payload["lookups"]["networks"]]
@@ -1103,7 +1189,7 @@ def test_missing_crosswalk_row_raises_count_only(tmp_path: Path, build_reference
 
     ref = _bowl_reference(tmp_path, build_reference, "")
     tables = _postseason_tables([(70, "bowl", None)], home_team="SENTINEL ZEBRA HARBOR BOWL NOTE")
-    with pytest.raises(BowlCrosswalkError, match="1 plotted postseason row") as info:
+    with pytest.raises(BowlCrosswalkError, match="1 shipped postseason row") as info:
         _site(tables, ref)
     assert "SENTINEL" not in str(info.value)
     assert "see interim/review_bowls.csv" in str(info.value)
@@ -1516,11 +1602,15 @@ def test_title_game_before_rivalry_game_is_untagged_and_counted(
         "rivalry_telecasts_tagged": 1,
         "rivalry_title_games_excluded": 1,
         "rivalry_rematches_demoted": 0,
+        "unrated_shipped": 0,
+        "unrated_no_network": 0,
+        "rarely_rated_but_mostly_rated": 0,
+        "not_rarely_rated_but_mostly_unrated": 0,
     }
     assert "SENTINEL" not in json.dumps(payload)
 
 
-def test_rivalry_without_plotted_telecast_is_dropped(tmp_path: Path, build_reference: Path) -> None:
+def test_rivalry_without_shipped_telecast_is_dropped(tmp_path: Path, build_reference: Path) -> None:
     ref = _rivalry_reference(
         tmp_path,
         build_reference,
@@ -1558,3 +1648,158 @@ def test_header_only_rivalries_emit_empty_lookup(
     payload = _site(small_tables, build_reference)
     assert payload["lookups"]["rivalries"] == []
     assert set(payload["telecasts"]["rivalry"]) == {None}
+
+
+# -- 04.13: telecasts_unrated ----------------------------------------------------------------
+
+
+def _unrated_row(**overrides: object) -> dict[str, object]:
+    defaults: dict[str, object] = {
+        "rated": False,
+        "plotted": False,
+        "crew_matched": False,
+        "headline_claim_id": None,
+        "headline_value": None,
+        "headline_publisher": None,
+        "headline_source_url": None,
+        "measurement_type": "unknown",
+        "rr_current_check": None,
+        "rr_telecast_ids": [],
+        "rr_record_urls": [],
+    }
+    defaults.update(overrides)
+    return _telecast_row(**defaults)
+
+
+def _site_with_counts(
+    tables: BuildTables, reference_directory: Path, **kwargs: Any
+) -> tuple[dict[str, Any], dict[str, int]]:
+    counts: dict[str, int] = {}
+    site = build_site_data(
+        tables, build_coverage(tables), reference_directory, _GENERATED_AT, counts=counts, **kwargs
+    )
+    return site.model_dump(mode="json"), counts
+
+
+def test_unrated_block_ships_every_main_feed_game_with_a_network(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    from booth_review.contract.models import UNRATED_FIELDS
+
+    payload, counts = _site_with_counts(small_tables, build_reference)
+    block = payload["telecasts_unrated"]
+    assert set(block) == set(UNRATED_FIELDS)
+    # Sorted by date, kickoff, telecast_id: 4-net-d (rated, alt-only figure),
+    # 5-net-c, 6-net-b, 7-net-d.
+    assert block["date"] == ["2024-09-14", "2024-09-14", "2024-09-21", "2024-12-30"]
+    assert block["cause"] == ["none", "rarely_rated", "rr_dip", "rarely_rated"]
+    assert [len(c) for c in block["crew"]] == [0, 1, 0, 0]
+    assert counts["unrated_shipped"] == len(block["season"]) == 4
+    assert counts["unrated_no_network"] == 1
+    assert isinstance(counts["rarely_rated_but_mostly_rated"], int)
+    assert isinstance(counts["not_rarely_rated_but_mostly_unrated"], int)
+
+
+def test_rated_block_is_unchanged_by_unrated_rows(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    rated_only = dataclasses.replace(
+        small_tables, telecasts=small_tables.telecasts.filter(pl.col("plotted"))
+    )
+    with_unrated = _site(small_tables, build_reference)["telecasts"]
+    without = _site(rated_only, build_reference)["telecasts"]
+    for name in (
+        "season",
+        "date",
+        "kickoff",
+        "viewers",
+        "measurement_type",
+        "source_url",
+        "rr_urls",
+        "combined_feeds",
+        "away_points",
+        "home_points",
+        "excitement",
+        "home_spread",
+        "game_type",
+    ):
+        assert with_unrated[name] == without[name], name
+
+
+def test_unrated_postseason_without_bowl_row_strict_raises_lenient_builds(
+    tmp_path: Path, build_reference: Path
+) -> None:
+    from booth_review.errors import BowlCrosswalkError
+
+    ref = _bowl_reference(tmp_path, build_reference, "")
+    tables = _build_tables(
+        games_rows=[_bowl_game(70, 2022)],
+        telecast_rows=[_unrated_row(telecast_id="70-net-a", game_id=70, season=2022)],
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+    with pytest.raises(BowlCrosswalkError, match="1 shipped postseason row"):
+        _site(tables, ref)
+    payload, counts = _site_with_counts(tables, ref, bowl_crosswalk="lenient")
+    assert payload["telecasts_unrated"]["bowl"] == [None]
+    assert counts["bowls_no_franchise"] == 0
+
+
+def test_unrated_bowl_sets_the_franchise_name_and_moves_the_rated_core_to_former(
+    tmp_path: Path, build_reference: Path
+) -> None:
+    ref = _bowl_reference(
+        tmp_path,
+        build_reference,
+        "70,Acme Bayside Bowl,Bayside Bowl,true,harbor-bowl\n"
+        "71,Acme Harbor Bowl,Harbor Bowl,true,harbor-bowl\n",
+    )
+    tables = _build_tables(
+        games_rows=[_bowl_game(70, 2018), _bowl_game(71, 2021)],
+        telecast_rows=[
+            _telecast_row(telecast_id="70-net-a", game_id=70, season=2018),
+            _unrated_row(telecast_id="71-net-a", game_id=71, season=2021),
+        ],
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+    payload = _site(tables, ref)
+    assert payload["lookups"]["bowl_franchises"] == [
+        {"slug": "harbor-bowl", "name": "Harbor Bowl", "former": ["Bayside Bowl"]}
+    ]
+    assert payload["telecasts_unrated"]["bowl"] == [1]
+
+
+def test_rivalry_whose_only_meeting_is_unrated_is_kept_and_tagged(
+    tmp_path: Path, build_reference: Path
+) -> None:
+    ref = _rivalry_reference(
+        tmp_path, build_reference, "the-game,The Game,,Fixture Home,Fixture Away,,\n"
+    )
+    tables = _build_tables(
+        games_rows=[_meeting(1, 14)],
+        telecast_rows=[_unrated_row(telecast_id="1-net-a", game_id=1)],
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+    payload, counts = _site_with_counts(tables, ref)
+    assert [r["slug"] for r in payload["lookups"]["rivalries"]] == ["the-game"]
+    assert payload["telecasts_unrated"]["rivalry"] == [0]
+    assert payload["telecasts"]["season"] == []
+    assert counts["rivalry_telecasts_tagged"] == 1
+
+
+def test_unrated_games_feed_the_lookups(tmp_path: Path, build_reference: Path) -> None:
+    tables = _build_tables(
+        games_rows=[_meeting(1, 14)],
+        telecast_rows=[_unrated_row(telecast_id="1-net-c", game_id=1, network_id="net-c")],
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+    payload = _site(tables, build_reference)
+    assert [t["name"] for t in payload["lookups"]["teams"]] == ["Fixture Away", "Fixture Home"]
+    assert "net-c" in [n["id"] for n in payload["lookups"]["networks"]]
