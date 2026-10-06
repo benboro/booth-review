@@ -1339,6 +1339,17 @@ input[type="checkbox"] {
   box-shadow: 0 0 0 2px var(--bg);
 }
 
+/* notes-2 #4: the hovered bar group's outline, in the scatter ring's tokens. */
+.bars-hover-outline {
+  position: fixed;
+  z-index: 29;
+  pointer-events: none;
+  box-sizing: border-box;
+  border: 2px solid var(--accent);
+  border-radius: 2px;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
 .chart-tooltip .tooltip-title {
   display: block;
   font-weight: var(--weight-semibold);

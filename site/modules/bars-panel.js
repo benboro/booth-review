@@ -32,6 +32,7 @@ import { barTones, buildBarFigure, buildButterflyFigure, renderBars, bindBarEven
 import { channelShades } from './palette.js';
 import { makePill, makeRolePill, nameWithRoles, currentTheme } from './pill.js';
 import { showTextTooltip, hideTooltip } from './tooltip.js';
+import { showBarOutline, hideBarOutline } from './bar-outline.js';
 
 let expanded = false;
 let expandKey = '';
@@ -56,6 +57,7 @@ export function lastBarsModel() {
 /** Forgets a pending first tap (called at every render and when hover clears). */
 export function resetBarsTap() {
   pendingTapKey = null;
+  hideBarOutline();
 }
 
 function el(id) {
@@ -110,10 +112,12 @@ function onPointClick(ref, ev) {
         clientX: ev.event?.clientX ?? 0,
         clientY: ev.event?.clientY ?? 0,
       });
+      showBarOutline(el('bars-chart'), lastShownRows, ref);
       return;
     }
     pendingTapKey = null;
     hideTooltip();
+    hideBarOutline();
   }
   drill(target);
 }
@@ -132,6 +136,7 @@ function onPointHover(ref, ev) {
     clientX: ev.event.clientX,
     clientY: ev.event.clientY,
   });
+  showBarOutline(el('bars-chart'), lastShownRows, ref);
 }
 
 /**
@@ -151,6 +156,7 @@ export function initBarsPanel(args) {
     if (pendingTapKey != null && !ev.target.closest('#bars-chart')) {
       resetBarsTap();
       hideTooltip();
+      hideBarOutline();
     }
   });
   const list = el('bars-counts');
@@ -349,7 +355,10 @@ export function renderBarsPanel({ data, state, view, env }) {
       onPointHover,
       // On touch the tap tooltip must outlive Plotly's synthetic unhover; it clears on render, scroll, or a tap elsewhere.
       onPointUnhover: () => {
-        if (!hoverNone()) hideTooltip();
+        if (!hoverNone()) {
+          hideTooltip();
+          hideBarOutline();
+        }
       },
       onLabelClick: (rowIndex) => {
         const row = lastShownRows[rowIndex];

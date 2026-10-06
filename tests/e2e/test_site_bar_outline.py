@@ -93,7 +93,10 @@ _OUTLINE_JS = """
 
 def _groups(page: Page) -> list[dict[str, Any]]:
     page.wait_for_function("document.querySelectorAll('#bars-chart .bars .point path').length > 0")
-    return page.evaluate(_GROUPS_JS)  # type: ignore[no-any-return]
+    groups: list[dict[str, Any]] = page.evaluate(_GROUPS_JS)
+    height = page.viewport_size["height"] if page.viewport_size else 720
+    # Only segments whose pieces sit inside the viewport can be hovered or tapped.
+    return [g for g in groups if g["pieces"] and _center(g["pieces"][0])[1] < height - 4]
 
 
 def _outline(page: Page) -> dict[str, Any] | None:
