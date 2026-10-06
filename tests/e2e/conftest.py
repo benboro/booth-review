@@ -42,6 +42,12 @@ from playwright.sync_api import Browser, ConsoleMessage, Error, Page, Playwright
 
 from booth_review.cli import main
 
+# Fixture sizes (04.13-01): 12 rated telecasts plus 8 unrated games. Later plans import
+# these (`from conftest import FIXTURE_GAMES`) instead of hand-writing denominators.
+FIXTURE_RATED = 12
+FIXTURE_UNRATED = 8
+FIXTURE_GAMES = 20
+
 _PORT_RE = re.compile(r"port (\d+)")
 _SERVER_START_TIMEOUT = 15.0
 
@@ -160,7 +166,7 @@ def serve_round(fixture_raw: dict[str, Any]) -> Callable[[Page, str | None], Non
     """Returns `serve(page, round_)`: makes `page` load the synthetic contract
     fixture with telecast 5's (the only CFP game's) `playoff_round` replaced by
     `round_`, so a test can see every CFP round without growing the shared
-    fixture (whose 12-dot counts many tests rely on). Call it before opening
+    fixture (whose 12-rated, 20-game counts many tests rely on). Call it before opening
     the app; a later route wins over the origin guard's catch-all.
     """
 
@@ -175,13 +181,15 @@ def serve_round(fixture_raw: dict[str, Any]) -> Callable[[Page, str | None], Non
 def multichannel_raw(
     fixture_raw: dict[str, Any], *, also_move_zero: bool = False
 ) -> dict[str, Any]:
-    """Synthetic two-channel family: a copy of the contract fixture plus a fifth
-    network `net-e` (disney family) that carries telecast 8 (and telecast 0 when
-    `also_move_zero`). Keeps the 12-dot fixture unchanged for other tests
-    (AGENTS.md: tests use synthetic fixtures; never vault data).
+    """Synthetic two-channel family: a copy of the contract fixture whose fifth
+    network `net-e` (disney family, index 4; since 04.13-01 the fixture itself carries
+    it, for its unrated games, so it is renamed here rather than appended) carries
+    rated telecast 8 (and telecast 0 when `also_move_zero`). Keeps the 12-rated, 20-game fixture
+    unchanged for other tests (AGENTS.md: tests use synthetic fixtures; never vault data).
     """
     raw = copy.deepcopy(fixture_raw)
-    raw["lookups"]["networks"].append({"id": "net-e", "name": "Echo Sports", "family": "disney"})
+    assert raw["lookups"]["networks"][4]["id"] == "net-e"
+    raw["lookups"]["networks"][4] = {"id": "net-e", "name": "Echo Sports", "family": "disney"}
     raw["telecasts"]["network"][8] = 4
     if also_move_zero:
         raw["telecasts"]["network"][0] = 4
@@ -213,8 +221,10 @@ def serve_bowl(fixture_raw: dict[str, Any]) -> Callable[..., None]:
     """Returns `serve(page, *, index, bowl, round_=None, neutral=None,
     bowls=None)`: loads the synthetic fixture with telecast `index`'s bowl
     (and optionally playoff_round, neutral, and lookups.bowls) replaced. Keeps
-    the 12-dot fixture unchanged for other tests. Replacement `bowls` entries
-    must include `franchise` (an index into the fixture's `bowl_franchises`).
+    the 12-rated, 20-game fixture unchanged for other tests. Replacement `bowls`
+    entries must include `franchise` (an index into the fixture's `bowl_franchises`);
+    the unrated block is copied through unchanged and references bowl index 2, so a
+    replacement list should keep at least three entries once the client reads it.
     """
 
     def _serve(
@@ -243,7 +253,7 @@ def serve_bowl(fixture_raw: dict[str, Any]) -> Callable[..., None]:
 def serve_ny6(fixture_raw: dict[str, Any]) -> Callable[[Page, dict[str, str]], None]:
     """Returns `serve(page, renames)`: loads the synthetic fixture with bowl
     franchise slugs renamed (old slug -> New Year's Six slug), so a test can see
-    the NY6 band. Keeps the shared 12-dot fixture unchanged (RESEARCH Pitfall 6).
+    the NY6 band. Keeps the shared 12-rated, 20-game fixture unchanged (RESEARCH Pitfall 6).
     Call it before opening the app.
     """
 

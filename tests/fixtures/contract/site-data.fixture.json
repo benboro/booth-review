@@ -53,6 +53,11 @@
         "id": "net-d",
         "name": "Other Network",
         "family": "other"
+      },
+      {
+        "id": "net-e",
+        "name": "Stream Plus",
+        "family": "disney"
       }
     ],
     "people": [
@@ -136,6 +141,14 @@
           "Taylor Vance"
         ],
         "usual_role": "analyst"
+      },
+      {
+        "id": "morgan-ash",
+        "name": "Morgan Ash",
+        "variants": [
+          "Morgan Ash"
+        ],
+        "usual_role": "analyst"
       }
     ],
     "publishers": [
@@ -211,6 +224,11 @@
         "name": "Summit Bowl Game presented by Northwind",
         "core": "Summit Bowl",
         "franchise": 1
+      },
+      {
+        "name": "Bayside Bowl",
+        "core": "Bayside Bowl",
+        "franchise": 0
       }
     ],
     "bowl_franchises": [
@@ -903,32 +921,343 @@
     ]
   },
   "telecasts_unrated": {
-    "season": [],
-    "date": [],
-    "kickoff": [],
-    "time_slot": [],
-    "away_team": [],
-    "home_team": [],
-    "neutral": [],
-    "away_points": [],
-    "home_points": [],
-    "away_rank": [],
-    "home_rank": [],
-    "network": [],
-    "outlets": [],
-    "s506_url": [],
-    "crew_source_url": [],
-    "crew_source_label": [],
-    "excitement": [],
-    "home_spread": [],
-    "crew": [],
-    "game_type": [],
-    "playoff_round": [],
-    "home_conference": [],
-    "away_conference": [],
-    "bowl": [],
-    "rivalry": [],
-    "cause": []
+    "season": [
+      2019,
+      2021,
+      2021,
+      2021,
+      2021,
+      2025,
+      2025,
+      2026
+    ],
+    "date": [
+      "2019-10-12",
+      "2021-09-18",
+      "2021-10-30",
+      "2021-12-18",
+      "2021-12-28",
+      "2025-08-30",
+      "2025-10-18",
+      "2026-10-03"
+    ],
+    "kickoff": [
+      "2019-10-12T15:30:00-04:00",
+      "2021-09-18T12:00:00-04:00",
+      "2021-10-30T19:00:00-04:00",
+      "2021-12-18T20:00:00-05:00",
+      "2021-12-28T19:00:00-05:00",
+      "2025-08-30T12:00:00-04:00",
+      "2025-10-18T15:30:00-04:00",
+      "2026-10-03T19:30:00-04:00"
+    ],
+    "time_slot": [
+      "afternoon",
+      "noon",
+      "prime",
+      "prime",
+      "prime",
+      "noon",
+      "afternoon",
+      "prime"
+    ],
+    "away_team": [
+      4,
+      0,
+      7,
+      2,
+      1,
+      5,
+      3,
+      2
+    ],
+    "home_team": [
+      5,
+      2,
+      6,
+      3,
+      0,
+      4,
+      1,
+      6
+    ],
+    "neutral": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false
+    ],
+    "away_points": [
+      17,
+      21,
+      14,
+      27,
+      35,
+      10,
+      24,
+      null
+    ],
+    "home_points": [
+      24,
+      28,
+      31,
+      20,
+      38,
+      13,
+      17,
+      null
+    ],
+    "away_rank": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "home_rank": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "network": [
+      1,
+      0,
+      0,
+      4,
+      1,
+      2,
+      4,
+      0
+    ],
+    "outlets": [
+      [
+        1
+      ],
+      [
+        0
+      ],
+      [
+        0
+      ],
+      [
+        4
+      ],
+      [
+        1
+      ],
+      [
+        2
+      ],
+      [
+        4
+      ],
+      [
+        0
+      ]
+    ],
+    "s506_url": [
+      "https://example.com/506/2019/wk20/1",
+      "https://example.com/506/2021/wk21/2",
+      "https://example.com/506/2021/wk22/3",
+      "https://example.com/506/2021/wk23/4",
+      "https://example.com/506/2021/wk24/5",
+      "https://example.com/506/2025/wk25/6",
+      "https://example.com/506/2025/wk26/7",
+      "https://example.com/506/2026/wk27/8"
+    ],
+    "crew_source_url": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "crew_source_label": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "excitement": [
+      null,
+      5.5,
+      4.2,
+      7.1,
+      8.4,
+      3.6,
+      6.3,
+      null
+    ],
+    "home_spread": [
+      null,
+      -3.5,
+      -6.0,
+      2.5,
+      -1.0,
+      -4.5,
+      -6.5,
+      null
+    ],
+    "crew": [
+      [],
+      [
+        {
+          "person": 2,
+          "role": "pbp",
+          "feed": "main"
+        },
+        {
+          "person": 10,
+          "role": "analyst",
+          "feed": "main"
+        }
+      ],
+      [
+        {
+          "person": 7,
+          "role": "pbp",
+          "feed": "main"
+        },
+        {
+          "person": 8,
+          "role": "analyst",
+          "feed": "main"
+        }
+      ],
+      [
+        {
+          "person": 4,
+          "role": "pbp",
+          "feed": "main"
+        }
+      ],
+      [
+        {
+          "person": 4,
+          "role": "pbp",
+          "feed": "main"
+        },
+        {
+          "person": 5,
+          "role": "analyst",
+          "feed": "main"
+        }
+      ],
+      [
+        {
+          "person": 0,
+          "role": "pbp",
+          "feed": "main"
+        },
+        {
+          "person": 1,
+          "role": "analyst",
+          "feed": "main"
+        }
+      ],
+      [],
+      [
+        {
+          "person": 4,
+          "role": "pbp",
+          "feed": "main"
+        },
+        {
+          "person": 5,
+          "role": "analyst",
+          "feed": "main"
+        }
+      ]
+    ],
+    "game_type": [
+      "regular",
+      "regular",
+      "regular",
+      "bowl",
+      "bowl",
+      "regular",
+      "regular",
+      "regular"
+    ],
+    "playoff_round": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "home_conference": [
+      3,
+      0,
+      2,
+      null,
+      null,
+      3,
+      1,
+      2
+    ],
+    "away_conference": [
+      3,
+      0,
+      2,
+      null,
+      null,
+      3,
+      1,
+      1
+    ],
+    "bowl": [
+      null,
+      null,
+      null,
+      null,
+      2,
+      null,
+      null,
+      null
+    ],
+    "rivalry": [
+      null,
+      null,
+      0,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "cause": [
+      "none",
+      "rr_dip",
+      "rr_dip",
+      "rarely_rated",
+      "rr_dip",
+      "rarely_rated",
+      "rarely_rated",
+      "pending"
+    ]
   },
   "coverage": [
     {

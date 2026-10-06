@@ -378,6 +378,7 @@ def _rivalry_index_out_of_range(data: dict[str, Any]) -> dict[str, Any]:
 
 def _unreferenced_rivalry(data: dict[str, Any]) -> dict[str, Any]:
     data["telecasts"]["rivalry"][11] = None
+    data["telecasts_unrated"]["rivalry"][2] = None  # the unrated bridge-game meeting counts too
     return data
 
 

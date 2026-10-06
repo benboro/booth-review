@@ -85,7 +85,8 @@ def test_networks_count_ignores_hidden_family_chip_toggle(
 ) -> None:
     """D-36: a legend chip for a family with no offered channel leaves the count alone."""
     mutated = json.loads(json.dumps(fixture_raw))
-    mutated["lookups"]["networks"].append({"id": "net-e", "name": "Echo Sports", "family": "other"})
+    # net-e (index 4) already exists in the fixture for its unrated games; re-family it.
+    mutated["lookups"]["networks"][4] = {"id": "net-e", "name": "Echo Sports", "family": "other"}
     mutated["lookups"]["networks"].append({"id": "net-f", "name": "Foxtrot TV", "family": "other"})
     mutated["telecasts"]["network"][3] = 4
     mutated["telecasts"]["outlets"][3] = [4]

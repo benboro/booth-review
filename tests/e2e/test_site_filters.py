@@ -1846,7 +1846,7 @@ def test_facet_view_exposes_plain_json_facets(
     open_app(guarded_page, "")
     facets = _view(guarded_page)["facets"]
     assert facets["seasons"] == {"2019": 2, "2021": 2, "2025": 4, "2026": 4}
-    assert facets["networks"] == [3, 3, 3, 3]
+    assert facets["networks"] == [3, 3, 3, 3, 0]
 
 
 # ---------- "Only" / "All" shortcut (SITE-31, D-23..D-27) ----------

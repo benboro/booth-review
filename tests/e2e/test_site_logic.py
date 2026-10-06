@@ -336,7 +336,7 @@ def test_head_to_head_facets_school_counts_ignore_school_others_narrow(
     facets = _view(guarded_page, _H2H)["facets"]
     assert facets["schools"] == _view(guarded_page, {})["facets"]["schools"]
     assert facets["seasons"] == {"2019": 1, "2021": 0, "2025": 1, "2026": 0}
-    assert facets["networks"] == [2, 0, 0, 0]
+    assert facets["networks"] == [2, 0, 0, 0, 0]
     assert facets["total"] == 2
 
 
@@ -970,7 +970,7 @@ def test_facet_default_state_counts(guarded_page: Page, site_url: str) -> None:
     _load(guarded_page, site_url)
     facets = _facets(guarded_page, {})
     assert facets["total"] == 12
-    assert facets["networks"] == [3, 3, 3, 3]
+    assert facets["networks"] == [3, 3, 3, 3, 0]
     assert facets["postseason"] == {"all": 12, "exclude": 10, "only": 2}
     assert facets["seasons"] == {"2019": 2, "2021": 2, "2025": 4, "2026": 4}
     assert facets["slots"] == {"noon": 3, "afternoon": 4, "prime": 3, "late": 1}
@@ -986,7 +986,7 @@ def test_facet_selected_person_narrows_other_facets_not_people(
     default = _facets(guarded_page, {})
     facets = _facets(guarded_page, {"people": ["dale-harlow"]})
     assert facets["total"] == 2
-    assert facets["networks"] == [2, 0, 0, 0]
+    assert facets["networks"] == [2, 0, 0, 0, 0]
     assert facets["seasons"] == {"2019": 1, "2021": 0, "2025": 0, "2026": 1}
     assert facets["people"] == default["people"]
 
@@ -1010,8 +1010,8 @@ def test_facet_union_versus_together_versus_compare(guarded_page: Page, site_url
     union = _facets(guarded_page, {"people": people})
     together = _facets(guarded_page, {"people": people, "together": True})
     compare = _facets(guarded_page, {"people": people, "compare": True})
-    assert union["networks"] == [2, 0, 0, 2]
-    assert together["networks"] == [1, 0, 0, 0]
+    assert union["networks"] == [2, 0, 0, 2, 0]
+    assert together["networks"] == [1, 0, 0, 0, 0]
     assert compare["networks"] == union["networks"]
 
 
@@ -1023,8 +1023,8 @@ def test_facet_role_limits_person_match_and_role_facet_ignores_state_role(
     _load(guarded_page, site_url)
     as_pbp = _facets(guarded_page, {"people": ["pat-rowan"], "role": "pbp"})
     as_analyst = _facets(guarded_page, {"people": ["pat-rowan"], "role": "analyst"})
-    assert as_pbp["networks"] == [0, 1, 2, 0]
-    assert as_analyst["networks"] == [0, 0, 0, 0]
+    assert as_pbp["networks"] == [0, 1, 2, 0, 0]
+    assert as_analyst["networks"] == [0, 0, 0, 0, 0]
     assert as_pbp["role"] == {"pbp": 3, "analyst": 0}
     assert as_analyst["role"] == as_pbp["role"]
 
@@ -1033,7 +1033,7 @@ def test_facet_season_range_constrains_other_facets_only(guarded_page: Page, sit
     """A season range narrows non-season facets; the Seasons facet ignores it."""
     _load(guarded_page, site_url)
     facets = _facets(guarded_page, {"seasons": [2019, 2019]})
-    assert facets["networks"] == [1, 1, 0, 0]
+    assert facets["networks"] == [1, 1, 0, 0, 0]
     assert facets["seasons"] == {"2019": 2, "2021": 2, "2025": 4, "2026": 4}
 
 
@@ -1051,7 +1051,7 @@ def test_facet_people_counts_reflect_other_filters(guarded_page: Page, site_url:
     _load(guarded_page, site_url)
     facets = _facets(guarded_page, {"networks": ["net-a"]})
     # net-a dots are 0, 4, 8: people 0,1 (dots 0, 8), 7,8 (dot 4), 6 (dot 8).
-    assert facets["people"] == [2, 2, 0, 0, 0, 0, 1, 1, 1, 0]
+    assert facets["people"] == [2, 2, 0, 0, 0, 0, 1, 1, 1, 0, 0]
 
 
 def test_named_game_info_and_rivalry_name(guarded_page: Page, site_url: str) -> None:

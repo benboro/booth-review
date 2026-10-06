@@ -44,13 +44,40 @@ Plotly.js reads `telecasts.viewers`, `telecasts.excitement`, and
 `telecasts.network` (mapped to a color through `lookups.networks`) directly
 as parallel arrays.
 
-## Only main-feed rated telecasts with a headline figure are dots
+## Every main-feed game with a resolved network ships
 
-Only telecasts that JOIN-04's headline rule resolved to a figure on the
-main broadcast feed appear as rows in `telecasts` (D-10). An alt-cast-only
-or Spanish-language feed's own figure is kept in the build's processed
-tables but is never plotted in v1 — the fields exist so switching that on
-later is a flag change, not a schema change.
+Every main-feed game whose network resolved appears in one of two blocks (04.13 D-13).
+Games with a figure JOIN-04's headline rule resolved on the main broadcast feed go in
+`telecasts`, with the rules unchanged (D-10). Games with no public viewer figure go in
+`telecasts_unrated`, a slim block of display fields only. Rated rows come first; the
+client appends the unrated block after the rated one, so an unrated game's merged index
+is the rated count plus its own index. An alt-cast-only or Spanish-language feed's own
+figure is kept in the build's processed tables but never makes a game rated in v1, so
+such a game ships as unrated (cause `none`). A game whose network did not resolve ships
+in neither block, and the contract rejects an unrated row whose network is `unmapped`.
+
+### `telecasts_unrated`
+
+One list per display field, index-aligned like `telecasts`. Each field has the same
+meaning as the `telecasts` field of the same name: `season`, `date`, `kickoff`,
+`time_slot`, `away_team`, `home_team`, `neutral`, `away_points`, `home_points`,
+`away_rank`, `home_rank`, `network`, `outlets`, `s506_url`, `crew_source_url`,
+`crew_source_label`, `excitement`, `home_spread`, `crew`, `game_type`, `playoff_round`,
+`home_conference`, `away_conference`, `bowl`, `rivalry`. The rated-only fields
+`viewers`, `measurement_type`, `publisher`, `source_url`, `rr_urls`, `flags`, and
+`combined_feeds` are absent, and so is any game or telecast id (SITE-19, CFBD terms).
+The block rejects any column it does not declare.
+
+`cause` says why the game has no figure, as one of four values; the wording lives in
+the client, never in the data:
+
+- `rarely_rated`: the game's network is flagged rarely rated by hand in
+  `data/reference/network_rarity.csv`.
+- `pending`: a current-season game at or after `freshness.viewership_through_week`, a
+  postseason game after every regular week, or any current-season game when that stamp
+  is null.
+- `rr_dip`: a 2021 to 2024 game on a network not flagged rarely rated.
+- `none`: anything else, including a game whose only figure is an alt-feed figure.
 
 ## Field-by-field contract
 
@@ -132,8 +159,8 @@ Each `crew` entry is `{ person: int, role, feed }`:
   `"event"`, `"measurement"`, `"model_break"`, or `"combined"`; `source_url`
   is null when a flag has no single citable source.
 - **`bowls`**: `{ name, core, franchise }` — `name` is the official bowl name for that season with sponsor, `core` is the core bowl name and is always a substring of `name` (D-17/D-19). Never a raw CFBD note. `franchise` is an index into `bowl_franchises`, and `core` is always the franchise's `name` or one of its `former` names.
-- **`bowl_franchises`**: `{ slug, name, former }` — a bowl franchise from the hand-checked `franchise` column of `data/reference/bowls.csv`; `name` is the latest core name and must be the `core` of one of the franchise's `lookups.bowls` entries, `former` the older core names oldest first, for search only; `slug` is a permanent URL value (SITE-44, 04.9 D-07). Franchise and rivalry `name`s are distinct across both lists, compared case-insensitively, so no two Game rows share a label. `name` and `former` are derived from plotted postseason games only, so a renamed franchise whose newest game has no rated telecast keeps its latest plotted core name, and core names used only by unrated games are not searchable; this is intentional because the Game picker lists only games that can appear on the chart, and the label catches up when the newer game's telecast is rated.
-- **`rivalries`**: `{ slug, name, article, teams }` — a curated rivalry from `data/reference/rivalries.csv` with at least one plotted telecast; `article` is `"the"` when titles read "of the {name}" (the Iron Bowl) and null when the name stands alone (Bedlam, Paul Bunyan's Axe) or already starts with "The " (The Game), which must be null; `teams` are two ascending indexes into `lookups.teams` (SITE-45). Franchise and rivalry slugs share one namespace with the four reserved CFP slugs (`cfp-national-championship`, `cfp-semifinal`, `cfp-quarterfinal`, `cfp-first-round`).
+- **`bowl_franchises`**: `{ slug, name, former }` — a bowl franchise from the hand-checked `franchise` column of `data/reference/bowls.csv`; `name` is the latest core name and must be the `core` of one of the franchise's `lookups.bowls` entries, `former` the older core names oldest first, for search only; `slug` is a permanent URL value (SITE-44, 04.9 D-07). Franchise and rivalry `name`s are distinct across both lists, compared case-insensitively, so no two Game rows share a label. `name` and `former` are derived from every shipped postseason game, rated or not (04.13 D-14), so a bowl's latest core name and its older core names reflect unrated games too.
+- **`rivalries`**: `{ slug, name, article, teams }` — a curated rivalry from `data/reference/rivalries.csv` with at least one shipped game, rated or unrated; `article` is `"the"` when titles read "of the {name}" (the Iron Bowl) and null when the name stands alone (Bedlam, Paul Bunyan's Axe) or already starts with "The " (The Game), which must be null; `teams` are two ascending indexes into `lookups.teams` (SITE-45). Franchise and rivalry slugs share one namespace with the four reserved CFP slugs (`cfp-national-championship`, `cfp-semifinal`, `cfp-quarterfinal`, `cfp-first-round`).
 - **`conferences`**: `{ name, is_fbs }` — one entry per distinct conference
   name that appears as a plotted telecast's `home_conference` or
   `away_conference` (D-09). `name` is CFBD's own per-game conference string
@@ -202,7 +229,8 @@ only their derived, display-safe outputs (`game_type`, `playoff_round`, the
   `1.5.0 -> 2.0.0` removed `telecasts.pregame` (the client derives the Spread axis
   from `home_spread`) and renamed `coverage[].pregame_present` to `spread_present`
   (SITE-43, 04.8 D-01/D-02); a major bump because a field was removed;
-  `2.0.0 -> 2.1.0` added `lookups.bowl_franchises`, `lookups.bowls[].franchise`, `lookups.rivalries` (with each rivalry's title `article`), and `telecasts.rivalry` (SITE-44, SITE-45, 04.9 D-16); minor bump, additive.
+  `2.0.0 -> 2.1.0` added `lookups.bowl_franchises`, `lookups.bowls[].franchise`, `lookups.rivalries` (with each rivalry's title `article`), and `telecasts.rivalry` (SITE-44, SITE-45, 04.9 D-16); minor bump, additive;
+  `2.1.0 -> 2.2.0` added the `telecasts_unrated` block with its `cause` enum (SITE-51, 04.13 D-16); minor bump, additive.
 - **Removing a field, renaming a field, or changing a field's type**
   (including narrowing an enum) bumps the **major** version (`1.0.0` →
   `2.0.0`).
@@ -241,3 +269,14 @@ As of v1.4.0 telecast 3 (2021) carries a crew-source pair (a patched crew with n
 As of v2.0.0 there is no `pregame` column; the fixture's `home_spread` column is unchanged: `[-3.5, 7.0, -2.0, null, -1.0, -14.0, 5.5, -3.0, 6.5, -0.5, -2.5, 1.5]`. By telecast index: 0 home favorite won; 1 away favorite, home won (upset); 2 line but no final score; 3 no line; 4 home favorite won; 5 home favorite won; 6 away favorite, home won; 7 home favorite, away won; 8 away favorite won; 9 home favorite, away won; 10 tie (20-20); 11 away favorite won.
 
 As of v2.1.0 the two bowls belong to franchises `harbor-bowl` (latest name Harbor Bowl, former name Bayside Bowl: a renamed bowl) and `summit-bowl` (hosting the telecast 5 CFP semifinal); `Lakeshore Rivalry` (Northfield-Lakeview, article `"the"`) tags telecasts 0 and 4; `The Bridge Game` (Stonebridge-Maplecrest, article null) tags telecast 11, while telecast 3 between the same teams (2021-12-04, neutral) is null: it stands for a conference-championship rematch whose regular-season meeting was not rated. The two-season rename itself is exercised with synthetic games in tests/test_named_games.py and tests/test_build_site_data.py.
+
+As of v2.2.0 the fixture also holds 12 rated games and 8 unrated games (merged indexes 12 to 19; every excitement and signed-spread value sits strictly inside the rated range, so the Spread and Excitement axes do not move):
+
+- unrated 0 (2019, net-b, crewless): no excitement and no spread, so it is n/a on both axes (the bottom-left corner); cause `none`.
+- unrated 1 (2021): crewed with `morgan-ash`, a person on no rated game; cause `rr_dip`.
+- unrated 2 (2021-10-30, Maplecrest at Stonebridge): the bridge-game's 2021 regular-season meeting, tagged with that rivalry; cause `rr_dip`. Rated telecast 3 stays untagged because it is a conference-championship rematch.
+- unrated 3 (2021 bowl, network `net-e`): a postseason game with no bowl name; cause `rarely_rated`, which wins over `rr_dip`.
+- unrated 4 (2021 bowl, net-b): a bowl named "Bayside Bowl", a former core name of the harbor-bowl franchise now used by a shipped game; cause `rr_dip`.
+- unrated 5 (2025-08-30): before 2025's first rated game; cause `rarely_rated`.
+- unrated 6 (2025, `net-e`, crewless): `net-e` carries only unrated games; cause `rarely_rated`.
+- unrated 7 (2026-10-03): a current-season game not yet rated; cause `pending`.
