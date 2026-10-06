@@ -28,6 +28,7 @@ import {
   gameTypeInfo,
   rivalryName,
   measurementLabel,
+  noRatingLine,
   selectedPersonIndexes,
   showsTimeSlot,
 } from './format.js';
@@ -159,6 +160,14 @@ function flagOfKind(data, i, kind) {
 function buildViewersParagraph(data, i) {
   const t = data.t;
   const p = document.createElement('p');
+  if (!data.rated[i]) {
+    p.appendChild(document.createTextNode(`${noRatingLine(data, i)} · `));
+    const why = document.createElement('a');
+    why.href = 'methodology.html#games-with-no-public-rating';
+    why.textContent = 'Why no rating?';
+    p.appendChild(why);
+    return p;
+  }
   if (t.measurement_type[i] === 'nielsen_adobe') {
     p.appendChild(document.createTextNode(`Viewers: ${formatViewers(t.viewers[i])} · `));
     const flag = flagOfKind(data, i, 'measurement');
@@ -183,6 +192,7 @@ function buildViewersParagraph(data, i) {
  * for a telecast with a feed count are shown elsewhere (D-39), so skipped. */
 function buildFlagsList(data, i) {
   const t = data.t;
+  if (!data.rated[i]) return null;
   const flags = t.flags[i]
     .map((idx) => data.lookups.flags[idx])
     .filter(
@@ -208,7 +218,8 @@ function buildLinksList(data, i) {
   const ul = document.createElement('ul');
   ul.className = 'panel-links';
 
-  const rrUrls = t.rr_urls[i];
+  const rated = Boolean(data.rated[i]);
+  const rrUrls = rated ? t.rr_urls[i] : [];
   rrUrls.forEach((url, idx) => {
     const label =
       rrUrls.length > 1
@@ -219,11 +230,13 @@ function buildLinksList(data, i) {
     ul.appendChild(li);
   });
 
+  if (rated) {
   const sourceLi = document.createElement('li');
   const publisherName = t.publisher[i] != null ? data.lookups.publishers[t.publisher[i]] : null;
   const sourceLink = externalLink(t.source_url[i], `View original source (${publisherName ?? 'publisher unknown'}) ↗`);
   sourceLi.appendChild(sourceLink ?? document.createTextNode('Original source not recorded'));
   ul.appendChild(sourceLi);
+  }
 
   const crewSourceLabel = t.crew_source_label?.[i] ?? null;
   const crewSourceUrl = t.crew_source_url?.[i] ?? null;
@@ -402,7 +415,7 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
 
   children.push(buildViewersParagraph(data, i));
 
-  if (t.publisher[i] != null) {
+  if (data.rated[i] && t.publisher[i] != null) {
     const publishedP = document.createElement('p');
     publishedP.textContent = `Figure first published by ${data.lookups.publishers[t.publisher[i]]}`;
     children.push(publishedP);
@@ -419,7 +432,7 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
   const flagsList = buildFlagsList(data, i);
   if (flagsList) children.push(flagsList);
 
-  if (t.combined_feeds[i] != null) {
+  if (data.rated[i] && t.combined_feeds[i] != null) {
     const combinedP = document.createElement('p');
     const combinedText = `Combined across ${t.combined_feeds[i]} feeds`;
     const combinedFlag = flagOfKind(data, i, 'combined');

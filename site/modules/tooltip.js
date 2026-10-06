@@ -26,6 +26,7 @@ import {
   formatMatchup,
   formatViewers,
   namedGameInfo,
+  noRatingLine,
   stripNetworkNote,
 } from './format.js';
 import { makeGameTypeIcon } from './icons.js';
@@ -85,7 +86,7 @@ export function tooltipModel(data, i, { axis, selected = new Set() }) {
   const crewLines = crew.map((entry) => `${entry.name} (${ROLE_PILL_TEXT[roleKey(entry.role)]})`);
   if (crewLines.length === 0) crewLines.push('Crew not recorded');
 
-  const viewersLine = `Viewers: ${formatViewers(t.viewers[i])}`;
+  const viewersLine = data.rated[i] ? `Viewers: ${formatViewers(t.viewers[i])}` : noRatingLine(data, i);
   const axisLine = axisValueText(data, i, axis);
   const hint = 'Click for details →';
 
