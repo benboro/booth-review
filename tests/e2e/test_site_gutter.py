@@ -183,7 +183,7 @@ def test_date_pan_limits_are_the_padded_range(
     assert got["lo"] == pytest.approx(got["range"][0], abs=1e-9)
     assert got["hi"] == pytest.approx(got["range"][1], abs=1e-9)
     assert got["range"][0] < 0
-    assert got["range"][1] > 278
+    assert got["range"][1] > 330
 
 
 _RANGE_JS = "() => document.getElementById('chart')._fullLayout.xaxis.range.slice()"
@@ -283,7 +283,7 @@ def _drag_zoom(page: Page) -> list[float]:
     page.mouse.up()
     _settle(page)
     zoomed: list[float] = page.evaluate(_XRANGE_JS)
-    assert zoomed[1] - zoomed[0] < 278 * 0.5
+    assert zoomed[1] - zoomed[0] < 330 * 0.5
     return zoomed
 
 
@@ -301,7 +301,7 @@ def test_resize_recomputes_date_home(
     before = page.evaluate(_XRANGE_JS)
     page.set_viewport_size({"width": 900, "height": 900})
     _settle(page)
-    home = _home(page, [0, 278])
+    home = _home(page, [0, 330])
     now = page.evaluate(_XRANGE_JS)
     assert now == pytest.approx(home, abs=1e-6)
     assert now != pytest.approx(before, abs=1e-6)
@@ -332,11 +332,11 @@ def test_resize_keeps_a_desktop_zoom(
     page.evaluate(_STATE_JS, {"school": []})
     _settle(page)
     assert page.evaluate(_XRANGE_JS) == pytest.approx(zoomed, abs=1e-6)
-    assert _double_click_plot(page) == pytest.approx(_home(page, [0, 278]), abs=1e-6)
+    assert _double_click_plot(page) == pytest.approx(_home(page, [0, 330]), abs=1e-6)
     # Back at home, a later filter leaves the range at home.
     page.evaluate(_STATE_JS, {"school": ["northfield"]})
     _settle(page)
-    assert page.evaluate(_XRANGE_JS) == pytest.approx(_home(page, [0, 278]), abs=1e-6)
+    assert page.evaluate(_XRANGE_JS) == pytest.approx(_home(page, [0, 330]), abs=1e-6)
 
 
 def test_zoom_made_after_a_resize_survives_a_filter(
@@ -351,7 +351,7 @@ def test_zoom_made_after_a_resize_survives_a_filter(
     page.evaluate(_STATE_JS, {"school": ["northfield"]})
     _settle(page)
     assert page.evaluate(_XRANGE_JS) == pytest.approx(rezoomed, abs=1e-6)
-    assert _double_click_plot(page) == pytest.approx(_home(page, [0, 278]), abs=1e-6)
+    assert _double_click_plot(page) == pytest.approx(_home(page, [0, 330]), abs=1e-6)
 
 
 def test_resize_on_bars_tab_keeps_the_scatter_zoom(
@@ -433,7 +433,7 @@ def test_season_change_after_resize_still_resets_zoom(
     _drag_zoom(page)
     page.evaluate(_STATE_JS, {"seasons": [2025, 2026]})
     _settle(page)
-    assert page.evaluate(_XRANGE_JS) == pytest.approx(_home(page, [153, 278]), abs=1e-6)
+    assert page.evaluate(_XRANGE_JS) == pytest.approx(_home(page, [191, 330]), abs=1e-6)
 
 
 def test_height_only_resize_keeps_range_object(

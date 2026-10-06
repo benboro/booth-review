@@ -143,11 +143,12 @@ def _highlighted(page: Page, partial: dict[str, Any]) -> list[int]:
 
 def test_same_surname_people_stay_distinct(guarded_page: Page, site_url: str) -> None:
     """dale-harlow / dale-harlow-jr / kris-venn / jax-venn each highlight
-    their own games, never a same-surname person's (the core promise)."""
+    their own games, never a same-surname person's (the core promise).
+    Index 17 and 13 are unrated games that join the same indexed model."""
     _load(guarded_page, site_url)
-    assert _highlighted(guarded_page, {"people": ["dale-harlow"]}) == [0, 8]
-    assert _highlighted(guarded_page, {"people": ["dale-harlow-jr"]}) == [0, 8]
-    assert _highlighted(guarded_page, {"people": ["kris-venn"]}) == [1, 6, 9]
+    assert _highlighted(guarded_page, {"people": ["dale-harlow"]}) == [0, 8, 17]
+    assert _highlighted(guarded_page, {"people": ["dale-harlow-jr"]}) == [0, 8, 17]
+    assert _highlighted(guarded_page, {"people": ["kris-venn"]}) == [1, 6, 9, 13]
     assert _highlighted(guarded_page, {"people": ["jax-venn"]}) == [1, 9]
 
 
@@ -184,7 +185,7 @@ def test_multi_person_or_default_and_together_mode_and_compare_symbols(
     distinct star (D-07)."""
     _load(guarded_page, site_url)
     view = _view(guarded_page, {"people": ["kris-venn", "sam-delgado"]})
-    assert view["highlighted"] == [1, 2, 6, 9, 10]
+    assert view["highlighted"] == [1, 2, 6, 9, 10, 13, 16, 19]
     assert _highlighted(
         guarded_page, {"people": ["kris-venn", "sam-delgado"], "together": True}
     ) == [6]
@@ -196,6 +197,9 @@ def test_multi_person_or_default_and_together_mode_and_compare_symbols(
         "6": "star",
         "9": "circle",
         "10": "square",
+        "13": "circle",
+        "16": "square",
+        "19": "square",
     }
 
 
@@ -205,14 +209,14 @@ def test_school_filter_fades_not_highlights(guarded_page: Page, site_url: str) -
     never highlights a dot (it fades by default, 04.7 D-06)."""
     _load(guarded_page, site_url)
     view = _view(guarded_page, {"school": ["northfield"]})
-    assert view["passesFilters"] == [0, 4, 8]
+    assert view["passesFilters"] == [0, 4, 8, 13, 16]
     assert view["highlighted"] == []
-    assert view["matched"] == [0, 4, 8]
+    assert view["matched"] == [0, 4, 8, 13, 16]
     assert view["hasSelection"] is True
     assert view["hasPersonSelection"] is False
 
     or_view = _view(guarded_page, {"school": ["northfield", "maplecrest"]})
-    assert or_view["passesFilters"] == [0, 3, 4, 7, 8, 11]
+    assert or_view["passesFilters"] == [0, 3, 4, 7, 8, 11, 13, 14, 16]
 
 
 def test_school_and_person_combine_highlight_within_school(
@@ -235,27 +239,27 @@ def test_seasons_fade_by_default_hide_removes_and_networks_always_hides(
     04.1 D-13) and removes dots only in Hide mode; Networks hides in both."""
     _load(guarded_page, site_url)
     fade = _view(guarded_page, {"seasons": [2025, 2025]})
-    assert fade["visibleCount"] == 12
-    assert fade["passingCount"] == 4
-    assert fade["passesFilters"] == [4, 5, 6, 7]
+    assert fade["visibleCount"] == FIXTURE_GAMES
+    assert fade["passingCount"] == 6
+    assert fade["passesFilters"] == [4, 5, 6, 7, 17, 18]
     hide = _view(guarded_page, {"seasons": [2025, 2025], "dots": "hide"})
-    assert hide["visibleCount"] == 4
-    assert hide["passesFilters"] == [4, 5, 6, 7]
+    assert hide["visibleCount"] == 6
+    assert hide["passesFilters"] == [4, 5, 6, 7, 17, 18]
 
     for extra in ({}, {"dots": "hide"}):
         net_view = _view(guarded_page, {"networks": ["net-a"], **extra})
-        assert net_view["visibleCount"] == 3
-        assert net_view["passesFilters"] == [0, 4, 8]
+        assert net_view["visibleCount"] == 6
+        assert net_view["passesFilters"] == [0, 4, 8, 13, 14, 19]
 
 
 @pytest.mark.parametrize(
     ("patch", "passes"),
     [
         ({"slots": ["late"]}, [2]),
-        ({"conferences": ["Big Ten"]}, [1, 4, 5, 8]),
-        ({"school": ["northfield"]}, [0, 4, 8]),
-        ({"postseason": "only"}, [5, 7]),
-        ({"seasons": [2025, 2025]}, [4, 5, 6, 7]),
+        ({"conferences": ["Big Ten"]}, [1, 4, 5, 8, 13]),
+        ({"school": ["northfield"]}, [0, 4, 8, 13, 16]),
+        ({"postseason": "only"}, [5, 7, 15, 16]),
+        ({"seasons": [2025, 2025]}, [4, 5, 6, 7, 17, 18]),
     ],
 )
 def test_every_fade_filter_follows_the_switch(
@@ -267,7 +271,7 @@ def test_every_fade_filter_follows_the_switch(
     fade = _view(guarded_page, {**patch})
     hide = _view(guarded_page, {**patch, "dots": "hide"})
     assert fade["passesFilters"] == passes
-    assert fade["visibleCount"] == 12
+    assert fade["visibleCount"] == FIXTURE_GAMES
     assert hide["visibleCount"] == len(passes)
     assert hide["passesFilters"] == fade["passesFilters"]
     assert hide["seasonCounts"] == fade["seasonCounts"]
@@ -277,7 +281,10 @@ def test_every_fade_filter_follows_the_switch(
 def test_only_the_exact_hide_value_hides(guarded_page: Page, site_url: str) -> None:
     """04.7 D-10: any dots value other than the exact string 'hide' fades."""
     _load(guarded_page, site_url)
-    assert _view(guarded_page, {"dots": "bogus", "seasons": [2025, 2025]})["visibleCount"] == 12
+    assert (
+        _view(guarded_page, {"dots": "bogus", "seasons": [2025, 2025]})["visibleCount"]
+        == FIXTURE_GAMES
+    )
 
 
 def test_hide_keeps_passing_dots_that_are_not_the_announcers(
@@ -288,11 +295,11 @@ def test_hide_keeps_passing_dots_that_are_not_the_announcers(
     _load(guarded_page, site_url)
     partial = {"people": ["dale-harlow"], "seasons": [2026, 2026]}
     hide = _view(guarded_page, {**partial, "dots": "hide"})
-    assert hide["visibleCount"] == 4
-    assert hide["passesFilters"] == [8, 9, 10, 11]
+    assert hide["visibleCount"] == 5
+    assert hide["passesFilters"] == [8, 9, 10, 11, 19]
     assert hide["highlighted"] == [8]
     fade = _view(guarded_page, partial)
-    assert fade["visibleCount"] == 12
+    assert fade["visibleCount"] == FIXTURE_GAMES
     assert fade["highlighted"] == [8]
 
 
@@ -306,18 +313,40 @@ def test_head_to_head_keeps_only_games_between_the_two_schools(
     with one or three schools behaves as Either team."""
     _load(guarded_page, site_url)
     view = _view(guarded_page, _H2H)
-    assert view["passesFilters"] == [0, 4]
-    assert view["matched"] == [0, 4]
-    assert view["visibleCount"] == 12
-    assert _view(guarded_page, {**_H2H, "dots": "hide"})["visibleCount"] == 2
-    assert _view(guarded_page, {**_H2H, "h2h": False})["passesFilters"] == [0, 4, 8, 9]
+    assert view["passesFilters"] == [0, 4, 16]
+    assert view["matched"] == [0, 4, 16]
+    assert view["visibleCount"] == FIXTURE_GAMES
+    assert _view(guarded_page, {**_H2H, "dots": "hide"})["visibleCount"] == 3
+    assert _view(guarded_page, {**_H2H, "h2h": False})["passesFilters"] == [
+        0,
+        4,
+        8,
+        9,
+        13,
+        16,
+        18,
+    ]
     assert _view(guarded_page, {"school": ["northfield"], "h2h": True})["passesFilters"] == [
         0,
         4,
         8,
+        13,
+        16,
     ]
     three = {"school": ["northfield", "lakeview", "ironpeak"], "h2h": True}
-    assert _view(guarded_page, three)["passesFilters"] == [0, 1, 4, 5, 8, 9]
+    assert _view(guarded_page, three)["passesFilters"] == [
+        0,
+        1,
+        4,
+        5,
+        8,
+        9,
+        13,
+        15,
+        16,
+        18,
+        19,
+    ]
 
 
 def test_head_to_head_person_highlight_stays_within_the_matchup(
@@ -336,9 +365,9 @@ def test_head_to_head_facets_school_counts_ignore_school_others_narrow(
     _load(guarded_page, site_url)
     facets = _view(guarded_page, _H2H)["facets"]
     assert facets["schools"] == _view(guarded_page, {})["facets"]["schools"]
-    assert facets["seasons"] == {"2019": 1, "2021": 0, "2025": 1, "2026": 0}
-    assert facets["networks"] == [2, 0, 0, 0, 0]
-    assert facets["total"] == 2
+    assert facets["seasons"] == {"2019": 1, "2021": 1, "2025": 1, "2026": 0}
+    assert facets["networks"] == [2, 1, 0, 0, 0]
+    assert facets["total"] == 3
 
 
 def test_conference_filter_or_within_era_correct_membership(
@@ -348,7 +377,13 @@ def test_conference_filter_or_within_era_correct_membership(
     the fixture's own era-correct membership test case -- and the
     Conference filter is OR within a multi-select."""
     _load(guarded_page, site_url)
-    assert _view(guarded_page, {"conferences": ["Big Ten"]})["passesFilters"] == [1, 4, 5, 8]
+    assert _view(guarded_page, {"conferences": ["Big Ten"]})["passesFilters"] == [
+        1,
+        4,
+        5,
+        8,
+        13,
+    ]
     assert _view(guarded_page, {"conferences": ["Pac-12"]})["passesFilters"] == [0]
     assert _view(guarded_page, {"conferences": ["Big Ten", "Pac-12"]})["passesFilters"] == [
         0,
@@ -356,6 +391,7 @@ def test_conference_filter_or_within_era_correct_membership(
         4,
         5,
         8,
+        13,
     ]
 
 
@@ -376,8 +412,8 @@ def test_postseason_exclude_and_only(guarded_page: Page, site_url: str) -> None:
     game_type; excluded games fade (SITE-41 / 04.7 D-06)."""
     _load(guarded_page, site_url)
     excluded = _view(guarded_page, {"postseason": "exclude"})["passesFilters"]
-    assert excluded == [i for i in range(12) if i not in (5, 7)]
-    assert _view(guarded_page, {"postseason": "only"})["passesFilters"] == [5, 7]
+    assert excluded == [i for i in range(FIXTURE_GAMES) if i not in (5, 7, 15, 16)]
+    assert _view(guarded_page, {"postseason": "only"})["passesFilters"] == [5, 7, 15, 16]
 
 
 def test_filter_wins_over_person_highlight(guarded_page: Page, site_url: str) -> None:
@@ -386,7 +422,7 @@ def test_filter_wins_over_person_highlight(guarded_page: Page, site_url: str) ->
     filter wins."""
     _load(guarded_page, site_url)
     view = _view(guarded_page, {"people": ["pat-rowan"], "postseason": "exclude"})
-    assert view["highlighted"] == [2, 10]
+    assert view["highlighted"] == [2, 10, 19]
     assert 5 not in view["highlighted"]
 
 
@@ -395,7 +431,7 @@ def test_matched_fills_on_school_alone_not_other_filters(guarded_page: Page, sit
     person selected; Conference/Networks/Kickoff/Bowls-Playoffs alone never
     fill it (no-bulk rule)."""
     _load(guarded_page, site_url)
-    assert _view(guarded_page, {"school": ["northfield"]})["matched"] == [0, 4, 8]
+    assert _view(guarded_page, {"school": ["northfield"]})["matched"] == [0, 4, 8, 13, 16]
     assert _view(guarded_page, {"conferences": ["Big Ten"]})["matched"] == []
     assert _view(guarded_page, {"networks": ["net-a"]})["matched"] == []
     assert _view(guarded_page, {"postseason": "only"})["matched"] == []
@@ -417,7 +453,7 @@ def test_season_counts_use_fade_filters_and_ignore_season_range(
     the season range itself never changes them, in Fade or Hide (04.7 D-06)."""
     _load(guarded_page, site_url)
     net_counts = dict(_view(guarded_page, {"networks": ["net-a"]})["seasonCounts"])
-    assert net_counts == {2019: 1, 2021: 0, 2025: 1, 2026: 1}
+    assert net_counts == {2019: 1, 2021: 2, 2025: 1, 2026: 2}
 
     unfiltered_counts = _view(guarded_page, {})["seasonCounts"]
     ranged_counts = _view(guarded_page, {"seasons": [2025, 2025]})["seasonCounts"]
@@ -543,7 +579,7 @@ def test_toggle_family_networks_matches_legend_click_semantics(
     agree."""
     _load(guarded_page, site_url)
     result = guarded_page.evaluate(_TOGGLE_FAMILY_JS, "fox")
-    assert sorted(result["once"]) == ["net-a", "net-c", "net-d"]
+    assert sorted(result["once"]) == ["net-a", "net-c", "net-d", "net-e"]
     assert result["twiceIsAllIds"] is True
 
 
@@ -761,7 +797,7 @@ def test_legacy_team_link_migrates_to_school_fade_not_highlight(
     assert state["school"] == ["northfield"]
     view = guarded_page.evaluate("window.__testHooks.getView()")
     assert view["highlighted"] == []
-    assert view["matched"] == [0, 4, 8]
+    assert view["matched"] == [0, 4, 8, 13, 16]
 
 
 def test_legacy_team_unions_with_a_fresh_school_param_legacy_first(
@@ -918,8 +954,8 @@ def test_head_to_head_selection_label_names_the_matchup(guarded_page: Page, site
     }
     summary = _view(guarded_page, {**state, "h2h": False})["summary"]
     assert summary["kind"] == "matches"
-    assert summary["count"] == 1
-    assert summary["of"] == 12
+    assert summary["count"] == 2
+    assert summary["of"] == FIXTURE_GAMES
 
 
 def test_summary_copy_formats_n_of_m(guarded_page: Page, site_url: str) -> None:
@@ -970,25 +1006,25 @@ def test_facet_default_state_counts(guarded_page: Page, site_url: str) -> None:
     """Default state: every telecast counts once in each facet (D-12)."""
     _load(guarded_page, site_url)
     facets = _facets(guarded_page, {})
-    assert facets["total"] == 12
-    assert facets["networks"] == [3, 3, 3, 3, 0]
-    assert facets["postseason"] == {"all": 12, "exclude": 10, "only": 2}
-    assert facets["seasons"] == {"2019": 2, "2021": 2, "2025": 4, "2026": 4}
-    assert facets["slots"] == {"noon": 3, "afternoon": 4, "prime": 3, "late": 1}
-    assert facets["role"] == {"pbp": 11, "analyst": 10}
+    assert facets["total"] == FIXTURE_GAMES
+    assert facets["networks"] == [6, 5, 4, 3, 2]
+    assert facets["postseason"] == {"all": 20, "exclude": 16, "only": 4}
+    assert facets["seasons"] == {"2019": 3, "2021": 6, "2025": 6, "2026": 5}
+    assert facets["slots"] == {"noon": 5, "afternoon": 6, "prime": 7, "late": 1}
+    assert facets["role"] == {"pbp": 17, "analyst": 15}
 
 
 def test_facet_selected_person_narrows_other_facets_not_people(
     guarded_page: Page, site_url: str
 ) -> None:
-    """D-09: dale-harlow (dots 0 and 8, both net-a) narrows every facet but
+    """D-09: dale-harlow (dots 0 and 8 on net-a, unrated dot 17 on net-c) narrows every facet but
     the People facet, which ignores the person constraint."""
     _load(guarded_page, site_url)
     default = _facets(guarded_page, {})
     facets = _facets(guarded_page, {"people": ["dale-harlow"]})
-    assert facets["total"] == 2
-    assert facets["networks"] == [2, 0, 0, 0, 0]
-    assert facets["seasons"] == {"2019": 1, "2021": 0, "2025": 0, "2026": 1}
+    assert facets["total"] == 3
+    assert facets["networks"] == [2, 0, 1, 0, 0]
+    assert facets["seasons"] == {"2019": 1, "2021": 0, "2025": 1, "2026": 1}
     assert facets["people"] == default["people"]
 
 
@@ -999,8 +1035,8 @@ def test_facet_ignores_only_its_own_constraint(guarded_page: Page, site_url: str
     default = _facets(guarded_page, {})
     facets = _facets(guarded_page, {"networks": ["net-b"]})
     assert facets["networks"] == default["networks"]
-    assert facets["seasons"] == {"2019": 1, "2021": 0, "2025": 1, "2026": 1}
-    assert facets["total"] == 3
+    assert facets["seasons"] == {"2019": 2, "2021": 1, "2025": 1, "2026": 1}
+    assert facets["total"] == 5
 
 
 def test_facet_union_versus_together_versus_compare(guarded_page: Page, site_url: str) -> None:
@@ -1011,7 +1047,7 @@ def test_facet_union_versus_together_versus_compare(guarded_page: Page, site_url
     union = _facets(guarded_page, {"people": people})
     together = _facets(guarded_page, {"people": people, "together": True})
     compare = _facets(guarded_page, {"people": people, "compare": True})
-    assert union["networks"] == [2, 0, 0, 2, 0]
+    assert union["networks"] == [2, 0, 1, 2, 0]
     assert together["networks"] == [1, 0, 0, 0, 0]
     assert compare["networks"] == union["networks"]
 
@@ -1019,14 +1055,14 @@ def test_facet_union_versus_together_versus_compare(guarded_page: Page, site_url
 def test_facet_role_limits_person_match_and_role_facet_ignores_state_role(
     guarded_page: Page, site_url: str
 ) -> None:
-    """D-10: pat-rowan is play-by-play on dots 2, 5, 10; Role limits how the
+    """D-10: pat-rowan is play-by-play on dots 2, 5, 10 and unrated 15, 16, 19; Role limits how the
     person matches, and the Role facet reports both roles regardless."""
     _load(guarded_page, site_url)
     as_pbp = _facets(guarded_page, {"people": ["pat-rowan"], "role": "pbp"})
     as_analyst = _facets(guarded_page, {"people": ["pat-rowan"], "role": "analyst"})
-    assert as_pbp["networks"] == [0, 1, 2, 0, 0]
+    assert as_pbp["networks"] == [1, 2, 2, 0, 1]
     assert as_analyst["networks"] == [0, 0, 0, 0, 0]
-    assert as_pbp["role"] == {"pbp": 3, "analyst": 0}
+    assert as_pbp["role"] == {"pbp": 6, "analyst": 0}
     assert as_analyst["role"] == as_pbp["role"]
 
 
@@ -1034,15 +1070,15 @@ def test_facet_season_range_constrains_other_facets_only(guarded_page: Page, sit
     """A season range narrows non-season facets; the Seasons facet ignores it."""
     _load(guarded_page, site_url)
     facets = _facets(guarded_page, {"seasons": [2019, 2019]})
-    assert facets["networks"] == [1, 1, 0, 0, 0]
-    assert facets["seasons"] == {"2019": 2, "2021": 2, "2025": 4, "2026": 4}
+    assert facets["networks"] == [1, 2, 0, 0, 0]
+    assert facets["seasons"] == {"2019": 3, "2021": 6, "2025": 6, "2026": 5}
 
 
 def test_facet_season_counts_derive_from_seasons_facet(guarded_page: Page, site_url: str) -> None:
     """seasonCounts is the Seasons facet, so it is person-aware (D-14)."""
     _load(guarded_page, site_url)
     view = _view(guarded_page, {"people": ["dale-harlow"]})
-    assert dict(view["seasonCounts"]) == {2019: 1, 2021: 0, 2025: 0, 2026: 1}
+    assert dict(view["seasonCounts"]) == {2019: 1, 2021: 0, 2025: 1, 2026: 1}
     for season, count in view["seasonCounts"]:
         assert view["facets"]["seasons"][str(season)] == count
 
@@ -1051,8 +1087,9 @@ def test_facet_people_counts_reflect_other_filters(guarded_page: Page, site_url:
     """People counts are telecasts per person under the other filters."""
     _load(guarded_page, site_url)
     facets = _facets(guarded_page, {"networks": ["net-a"]})
-    # net-a dots are 0, 4, 8: people 0,1 (dots 0, 8), 7,8 (dot 4), 6 (dot 8).
-    assert facets["people"] == [2, 2, 0, 0, 0, 0, 1, 1, 1, 0, 0]
+    # net-a dots are 0, 4, 8, 13, 14, 19: people 0,1 (dots 0, 8), 7,8 (dots 4, 14),
+    # 6 (dot 8), 2,10 (dot 13), 4,5 (dot 19).
+    assert facets["people"] == [2, 2, 1, 0, 1, 1, 1, 2, 2, 0, 1]
 
 
 def test_named_game_info_and_rivalry_name(guarded_page: Page, site_url: str) -> None:

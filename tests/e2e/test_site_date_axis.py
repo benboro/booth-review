@@ -12,6 +12,7 @@ from collections.abc import Callable
 from itertools import pairwise
 
 import pytest
+from conftest import FIXTURE_RATED
 from playwright.sync_api import Page, Route, expect
 from test_site_chart import _RING_VISIBLE, _hover_dot
 
@@ -92,8 +93,8 @@ def test_date_x_uses_et_kickoff_fraction_and_midday_for_null(app_page: Page) -> 
     x = out["dateX"]
     assert x[0] == pytest.approx(1.5, abs=1e-9)
     assert x[1] == pytest.approx(71 + 15.5 / 24, abs=1e-9)
-    assert x[2] == pytest.approx(81 + 22.5 / 24, abs=1e-9)
-    assert x[3] == pytest.approx(144.5, abs=1e-9)
+    assert x[2] == pytest.approx(95 + 22.5 / 24, abs=1e-9)
+    assert x[3] == pytest.approx(158.5, abs=1e-9)
     blocks = {b[0]: b for b in out["blocks"]}
     for xi, season in zip(x, out["seasons"], strict=True):
         _, start, end = blocks[season]
@@ -102,23 +103,56 @@ def test_date_x_uses_et_kickoff_fraction_and_midday_for_null(app_page: Page) -> 
 
 def test_season_blocks_trim_to_own_span(app_page: Page) -> None:
     out = app_page.evaluate(_FIXTURE_JS)
-    assert out["blocks"] == [[2019, 0, 73], [2021, 80, 146], [2025, 153, 240], [2026, 247, 278]]
+    assert out["blocks"] == [[2019, 0, 73], [2021, 80, 184], [2025, 191, 292], [2026, 299, 330]]
     assert (out["pad"], out["gap"]) == (1, 7)
     assert app_page.evaluate(_SYNTH_JS) == [[0, 3]]
 
 
+_UNRATED_BOUNDS_JS = """
+async () => {
+  const D = await import('./modules/data.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  return {
+    blocks: data.dateAxis.blocks.map((b) => [b.season, b.start, b.end]),
+    d2025: data.t.date[17],
+    d2021: data.t.date[16],
+  };
+}
+"""
+
+
+def test_season_blocks_include_unrated_games(date_page: Page) -> None:
+    """D-06: season blocks come from every shipped game. The 2025 block opens at
+    the unrated Week 0 game (2025-08-30) and the 2021 block closes at the unrated
+    2021-12-28 game; 2019 and 2026 are unchanged, and a Networks filter that hides
+    every unrated game's network moves nothing."""
+    out = date_page.evaluate(_UNRATED_BOUNDS_JS)
+    assert (out["d2025"], out["d2021"]) == ("2025-08-30", "2021-12-28")
+    by = {b[0]: b for b in out["blocks"]}
+    assert (by[2019][1], by[2019][2]) == (0, 73)
+    assert by[2021][2] - by[2021][1] == 104  # 2021-09-18 .. 2021-12-28
+    assert by[2025][2] - by[2025][1] == 101  # 2025-08-30 .. 2025-12-06
+    assert by[2026][2] - by[2026][1] == 31
+    base = _fig(date_page)
+    date_page.evaluate(_STATE_JS, {"networks": ["net-a", "net-b", "net-d"]})
+    f = _fig(date_page)
+    assert f["layoutRange"] == base["layoutRange"]
+    assert [s["x"] for s in f["shapes"]] == [s["x"] for s in base["shapes"]]
+
+
 def test_gap_dividers_sit_at_gap_centers(app_page: Page) -> None:
     out = app_page.evaluate(_FIXTURE_JS)
-    assert out["dividersAll"] == [76.5, 149.5, 243.5]
+    assert out["dividersAll"] == [76.5, 187.5, 295.5]
     assert out["dividersOne"] == []
 
 
 def test_season_range_for_filters(app_page: Page) -> None:
     out = app_page.evaluate(_FIXTURE_JS)
-    assert out["rangeAll"] == [0, 278]
-    assert out["range2526"] == [153, 278]
-    assert out["range21"] == [80, 146]
-    assert out["rangeNone"] == [0, 278]
+    assert out["rangeAll"] == [0, 330]
+    assert out["range2526"] == [191, 330]
+    assert out["range21"] == [80, 184]
+    assert out["rangeNone"] == [0, 330]
     assert out["shown"] == [2025, 2026]
     assert out["shownAll"] == [2019, 2021, 2025, 2026]
 
@@ -210,17 +244,17 @@ def test_weekly_and_month_tick_text(app_page: Page) -> None:
     out = app_page.evaluate(_TICKS_JS)
     b25 = out["b25"]
     assert out["wk"]["tier"] == 1
-    assert len(out["wk"]["tickvals"]) == 13
-    assert out["wk"]["ticktext"][0] == "Sep 13"
+    assert len(out["wk"]["tickvals"]) == 15
+    assert out["wk"]["ticktext"][0] == "Aug 30"
     assert out["wk"]["tickvals"][0] == b25["start"] + 1 + 0.5
     assert out["bi"]["tier"] == 2
     assert out["bi"]["ticktext"] == out["wk"]["ticktext"][::2]
     assert out["mo"]["tier"] == 3
-    assert out["mo"]["ticktext"] == ["Oct", "Nov", "Dec"]
+    assert out["mo"]["ticktext"] == ["Sep", "Oct", "Nov", "Dec"]
     assert all(b25["start"] <= v <= b25["end"] for v in out["mo"]["tickvals"])
     # Ticks outside the visible range are dropped.
     assert all(v >= b25["start"] + 30 for v in out["cut"]["tickvals"])
-    assert len(out["cut"]["tickvals"]) < 13
+    assert len(out["cut"]["tickvals"]) < 15
     assert all(not any(c.isdigit() and t.startswith("'") for c in t) for t in out["wk"]["ticktext"])
 
 
@@ -409,16 +443,17 @@ def test_no_na_strip_and_all_dots_plotted(date_page: Page) -> None:
     f = _fig(date_page)
     date_x = date_page.evaluate("Array.from(window.__testHooks.data.t.dateX)")
     # Every dot passes in the default state, so each telecast is drawn exactly once.
-    assert len(f["byIdx"]) == len(date_x)
-    assert sorted(f["xs"]) == sorted(date_x)
-    assert len(f["xs"]) == 12
+    # The log-axis traces hold rated games only until the band lands (plan 15).
+    assert len(f["byIdx"]) == FIXTURE_RATED
+    assert sorted(f["xs"]) == sorted(date_x[:FIXTURE_RATED])
+    assert len(f["xs"]) == FIXTURE_RATED
     assert f["range"][0] <= min(f["xs"]) and f["range"][1] >= max(f["xs"])
 
 
 def test_gap_dividers_rendered(date_page: Page) -> None:
     f = _fig(date_page)
-    assert f["layoutRange"] == pytest.approx(_home(date_page, [0, 278]), abs=1e-6)
-    assert [s["x"] for s in f["shapes"]] == [76.5, 149.5, 243.5]
+    assert f["layoutRange"] == pytest.approx(_home(date_page, [0, 330]), abs=1e-6)
+    assert [s["x"] for s in f["shapes"]] == [76.5, 187.5, 295.5]
     assert all(s["layer"] == "below" and s["width"] == 1 for s in f["shapes"])
     assert len({s["color"] for s in f["shapes"]}) == 1
 
@@ -438,21 +473,21 @@ def test_season_filter_limits_x_axis_fade_and_hide(date_page: Page, dots: str) -
     base = _fig(date_page)
     date_page.evaluate(_STATE_JS, {"seasons": [2025, 2026], "dots": dots})
     f = _fig(date_page)
-    home = _home(date_page, [153, 278])
+    home = _home(date_page, [191, 330])
     assert f["layoutRange"] == pytest.approx(home, abs=1e-6)
-    assert home[0] < 153 and home[1] > 278
+    assert home[0] < 191 and home[1] > 330
     assert f["minallowed"] == pytest.approx(home[0], abs=1e-6)
     assert f["maxallowed"] == pytest.approx(home[1], abs=1e-6)
-    assert f["xs"] and min(f["xs"]) >= 153
+    assert f["xs"] and min(f["xs"]) >= 191
     assert [a["name"] for a in f["anns"] if a["name"]] == ["season-2025", "season-2026"]
-    assert [s["x"] for s in f["shapes"]] == [243.5]
+    assert [s["x"] for s in f["shapes"]] == [295.5]
     assert f["y"] == base["y"]
 
 
 def test_single_season_range(date_page: Page) -> None:
     date_page.evaluate(_STATE_JS, {"seasons": [2025, 2025]})
     f = _fig(date_page)
-    home = _home(date_page, [153, 240])
+    home = _home(date_page, [191, 292])
     assert f["layoutRange"] == pytest.approx(home, abs=1e-6)
     assert f["range"] == pytest.approx(home, abs=1e-6)
 
@@ -498,7 +533,7 @@ def test_block_geometry_ignores_non_season_filters(date_page: Page) -> None:
     date_page.evaluate(_STATE_JS, {"school": [], "slots": ["primetime"]})
     f = _fig(date_page)
     assert f["layoutRange"] == base["layoutRange"]
-    assert [s["x"] for s in f["shapes"]] == [76.5, 149.5, 243.5]
+    assert [s["x"] for s in f["shapes"]] == [76.5, 187.5, 295.5]
 
 
 def test_tooltip_ring_and_modal_on_date(date_page: Page) -> None:
@@ -576,7 +611,7 @@ def test_fit_hook_matches_pure_rule(date_page: Page) -> None:
 def test_fit_hook_settles(date_page: Page) -> None:
     _settle(date_page)
     date_page.evaluate(_COUNT_JS)
-    date_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [153, 200]})
+    date_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [191, 238]})
     _settle(date_page)
     first = date_page.evaluate("window.__relayouts")
     date_page.evaluate(_WAIT_TWO_FRAMES)
@@ -639,7 +674,7 @@ def test_phone_season_labels_fit_without_overlap(
 def test_labels_recompute_on_zoom_and_resize(date_page: Page) -> None:
     _settle(date_page)
     before = date_page.evaluate(_WANT_JS)["ticktext"]
-    date_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [153, 200]})
+    date_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [191, 238]})
     _settle(date_page)
     out = date_page.evaluate(_WANT_JS)
     assert out["tickOk"] and out["annOk"]
@@ -658,7 +693,7 @@ def test_pan_past_filtered_range_is_clamped_by_minallowed(date_page: Page) -> No
     date_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [100, 300]})
     _settle(date_page)
     lo, hi = date_page.evaluate("document.getElementById('chart')._fullLayout.xaxis.range")
-    home = _home(date_page, [153, 278])
+    home = _home(date_page, [191, 330])
     assert lo >= home[0] - 1e-6 and hi <= home[1] + 1e-6
 
 
@@ -675,7 +710,7 @@ def test_autoscale_restores_filtered_range(date_page: Page) -> None:
         " return { r: gd._fullLayout.xaxis.range, auto: gd._fullLayout.xaxis.autorange }; }"
     )
     assert res["auto"] is False
-    assert res["r"] == pytest.approx(_home(date_page, [153, 278]), abs=1e-6)
+    assert res["r"] == pytest.approx(_home(date_page, [191, 330]), abs=1e-6)
 
 
 # -- double-click / Reset axes after an axis or season change (CR-01) ---------
@@ -708,7 +743,7 @@ def test_double_click_after_switching_to_date_restores_full_range(
     open_app(guarded_page, "")
     guarded_page.locator('#axis-toggle button[data-axis="date"]').click()
     _settle(guarded_page)
-    home = _home(guarded_page, [0, 278])
+    home = _home(guarded_page, [0, 330])
     assert guarded_page.evaluate(_XRANGE_JS) == pytest.approx(home, abs=1e-6)
     assert _double_click_plot(guarded_page) == pytest.approx(home, abs=1e-6)
     # A second double-click must not get stuck on a stale range either.
@@ -728,7 +763,7 @@ def test_reset_axes_button_after_switching_to_date_restores_full_range(
     guarded_page.locator('#chart .modebar-btn[data-attr="zoom"][data-val="reset"]').click()
     _settle(guarded_page)
     assert guarded_page.evaluate(_XRANGE_JS) == pytest.approx(
-        _home(guarded_page, [0, 278]), abs=1e-6
+        _home(guarded_page, [0, 330]), abs=1e-6
     )
 
 
@@ -739,11 +774,11 @@ def test_double_click_after_clearing_season_filter_restores_full_range(
     open_app(guarded_page, "?axis=date&seasons=2025-2026")
     _settle(guarded_page)
     assert guarded_page.evaluate(_XRANGE_JS) == pytest.approx(
-        _home(guarded_page, [153, 278]), abs=1e-6
+        _home(guarded_page, [191, 330]), abs=1e-6
     )
     guarded_page.evaluate(_STATE_JS, {"seasons": None})
     _settle(guarded_page)
-    home = _home(guarded_page, [0, 278])
+    home = _home(guarded_page, [0, 330])
     assert guarded_page.evaluate(_XRANGE_JS) == pytest.approx(home, abs=1e-6)
     assert _double_click_plot(guarded_page) == pytest.approx(home, abs=1e-6)
     assert _double_click_plot(guarded_page) == pytest.approx(home, abs=1e-6)
@@ -782,7 +817,7 @@ def test_season_change_resets_zoom_other_filters_keep_it(date_page: Page) -> Non
     date_page.mouse.up()
     _settle(date_page)
     zoomed = date_page.evaluate("document.getElementById('chart')._fullLayout.xaxis.range")
-    assert zoomed[1] - zoomed[0] < 278 * 0.5
+    assert zoomed[1] - zoomed[0] < 330 * 0.5
     slug = date_page.evaluate("window.__testHooks.data.teamSlugs[0]")
     date_page.evaluate(_STATE_JS, {"school": [slug]})
     _settle(date_page)
@@ -792,7 +827,7 @@ def test_season_change_resets_zoom_other_filters_keep_it(date_page: Page) -> Non
     _settle(date_page)
     assert date_page.evaluate(
         "document.getElementById('chart')._fullLayout.xaxis.range"
-    ) == pytest.approx(_home(date_page, [153, 278]), abs=1e-6)
+    ) == pytest.approx(_home(date_page, [191, 330]), abs=1e-6)
     date_page.evaluate(_STATE_JS, {"axis": "spread", "seasons": None})
     _settle(date_page)
     rng = date_page.evaluate("document.getElementById('chart').layout.xaxis.range")
