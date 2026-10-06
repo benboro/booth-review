@@ -312,7 +312,7 @@ def test_missing_v210_fields_throw(loaded: Page, mutation: str) -> None:
 def test_default_state_and_facets(loaded: Page) -> None:
     v = _view(loaded, {})
     assert v["defaultGame"] is None
-    # 12 rated + 8 unrated: Harbor Bowl = 1 rated + unrated 16 (Bayside) = 2; Bridge Game = 1 rated + unrated 14 = 2
+    # Harbor Bowl = 1 rated + unrated 16 (Bayside) = 2; Bridge Game = 1 rated + unrated 14 = 2
     assert v["games"] == [0, 1, 0, 0, 2, 1, 2, 2]
     assert v["matched"] == []
     assert v["hasSelection"] is False
@@ -335,7 +335,7 @@ def test_game_pick_fills_table_and_summary(loaded: Page) -> None:
     v = _view(loaded, {"game": "lakeshore"})
     assert v["passing"] == [0, 4]
     assert v["total"] == 2
-    # 12 rated + 8 unrated: Harbor Bowl = 1 rated + unrated 16 (Bayside) = 2; Bridge Game = 1 rated + unrated 14 = 2
+    # Harbor Bowl = 1 rated + unrated 16 (Bayside) = 2; Bridge Game = 1 rated + unrated 14 = 2
     assert v["games"] == [0, 1, 0, 0, 2, 1, 2, 2]
     assert v["matched"] == [0, 4]
     assert v["hasSelection"] is True

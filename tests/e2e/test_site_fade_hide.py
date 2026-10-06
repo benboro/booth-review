@@ -173,7 +173,9 @@ def test_phone_switch_wraps_below_the_chips_with_touch_targets(
 def test_empty_range_note_sits_in_a_surface_box_over_faded_dots(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    open_app(guarded_page, "?people=dale-harlow&seasons=2021-2025")
+    open_app(guarded_page, "?people=jax-venn&seasons=2021-2025")
+    # jax-venn works only rated games 1 (2019) and 9 (2026); dale-harlow now has unrated game 17 in
+    # 2025, so he no longer empties this range. The 6 rated dots drawn "inert:" are games 2-7.
     note = guarded_page.locator("#season-empty-note")
     expect(note).to_be_visible()
     styles = guarded_page.evaluate(
