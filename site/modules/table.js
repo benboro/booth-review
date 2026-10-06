@@ -19,6 +19,7 @@ import {
   formatMatchup,
   formatViewers,
   measurementLabel,
+  NO_RATING_LABEL,
 } from './format.js';
 import { safeHref } from './panel.js';
 import { currentTheme, makePill, makeRolePill, nameWithRoles } from './pill.js';
@@ -29,6 +30,9 @@ const emptyEl = document.getElementById('table-empty');
 const tbody = tableEl.querySelector('tbody');
 const dateSortButton = tableEl.querySelector('th button[data-sort="date"]');
 const viewersSortButton = tableEl.querySelector('th button[data-sort="viewers"]');
+const UNRATED_SORT_NOTE = 'Games with no public rating always sort last.';
+viewersSortButton.closest('th').title = UNRATED_SORT_NOTE;
+viewersSortButton.closest('th').setAttribute('aria-description', UNRATED_SORT_NOTE);
 
 /** The current render call's `onSort`, kept so the once-bound header listeners always call the latest one. */
 let currentOnSort = null;
@@ -70,6 +74,11 @@ function buildCrewCell(td, data, state, i) {
 function buildSourceCell(data, i) {
   const t = data.t;
   const td = document.createElement('td');
+  if (!data.rated[i]) {
+    td.className = 'no-rating';
+    td.textContent = 'No figure to cite';
+    return td;
+  }
 
   const publisherName = t.publisher[i] != null ? data.lookups.publishers[t.publisher[i]] : null;
   const sourceHref = safeHref(t.source_url[i]);
@@ -155,12 +164,17 @@ function buildRow(data, state, onDetails, i) {
   tr.appendChild(crewTd);
 
   const viewersTd = document.createElement('td');
-  viewersTd.className = 'num';
-  let viewersText = formatViewers(t.viewers[i]);
-  if (t.measurement_type[i] === 'nielsen_adobe') {
-    viewersText += ` · ${measurementLabel('nielsen_adobe')}`;
+  if (data.rated[i]) {
+    viewersTd.className = 'num';
+    let viewersText = formatViewers(t.viewers[i]);
+    if (t.measurement_type[i] === 'nielsen_adobe') {
+      viewersText += ` · ${measurementLabel('nielsen_adobe')}`;
+    }
+    viewersTd.textContent = viewersText;
+  } else {
+    viewersTd.className = 'no-rating';
+    viewersTd.textContent = NO_RATING_LABEL;
   }
-  viewersTd.textContent = viewersText;
   tr.appendChild(viewersTd);
 
   tr.appendChild(buildSourceCell(data, i));
@@ -171,7 +185,14 @@ function buildRow(data, state, onDetails, i) {
 /** Row order: the active sort key/direction, ties broken by date then telecast index. */
 function compareRows(data, sort, a, b) {
   const t = data.t;
-  let cmp = sort.key === 'date' ? (t.date[a] < t.date[b] ? -1 : t.date[a] > t.date[b] ? 1 : 0) : t.viewers[a] - t.viewers[b];
+  let cmp;
+  if (sort.key === 'date') {
+    cmp = t.date[a] < t.date[b] ? -1 : t.date[a] > t.date[b] ? 1 : 0;
+  } else if (data.rated[a] !== data.rated[b]) {
+    return data.rated[a] ? -1 : 1; // unrated last, in both directions
+  } else {
+    cmp = data.rated[a] ? t.viewers[a] - t.viewers[b] : 0;
+  }
   if (sort.dir === 'desc') cmp = -cmp;
   if (cmp !== 0) return cmp;
   if (t.date[a] !== t.date[b]) return t.date[a] < t.date[b] ? -1 : 1;

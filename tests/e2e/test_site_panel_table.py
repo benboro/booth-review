@@ -452,6 +452,7 @@ def test_panel_bowl_name_is_rendered_as_literal_text(
         bowls=[
             {"name": evil, "core": "Harbor Bowl", "franchise": 0},
             {"name": "Summit Bowl", "core": "Summit Bowl", "franchise": 1},
+            {"name": "Bayside Bowl", "core": "Bayside Bowl", "franchise": 2},
         ],
     )
     open_app(guarded_page, "")
@@ -604,7 +605,7 @@ def test_table_fills_for_school_alone_but_not_for_other_filters_alone(
     league."""
     open_app(guarded_page, "?school=northfield")
     expect(guarded_page.locator("#games-table")).to_be_visible()
-    assert guarded_page.locator("#games-table tbody tr").count() == 3
+    assert guarded_page.locator("#games-table tbody tr").count() == 5  # 3 rated + 2 unrated
 
     open_app(guarded_page, "?networks=net-a")
     expect(guarded_page.locator("#table-empty")).to_be_visible()
@@ -639,14 +640,16 @@ def test_table_sorts_by_date_then_viewers(
     expect(guarded_page.locator("#games-table")).to_be_visible()
 
     rows = _row_texts(guarded_page)
-    assert len(rows) == 2
+    assert len(rows) == 3  # two rated games and unrated 17, interleaved by date
     assert "2019" in rows[0]
-    assert "2026" in rows[1]
+    assert "2025" in rows[1]
+    assert "2026" in rows[2]
 
     guarded_page.click('button[data-sort="viewers"]')
     rows = _row_texts(guarded_page)
     assert "970,000" in rows[0]
     assert "850,000" in rows[1]
+    assert "No public rating" in rows[2]
     assert _aria_sort(guarded_page, "viewers") == "descending"
     assert _aria_sort(guarded_page, "date") == "none"
 
@@ -654,6 +657,7 @@ def test_table_sorts_by_date_then_viewers(
     rows = _row_texts(guarded_page)
     assert "850,000" in rows[0]
     assert "970,000" in rows[1]
+    assert "No public rating" in rows[2]  # unrated stay last in both directions
     assert _aria_sort(guarded_page, "viewers") == "ascending"
 
 
@@ -669,7 +673,7 @@ def test_table_alt_cast_row_and_school_only_rows(
     guarded_page.click("#clear-selection")
     guarded_page.evaluate("window.__testHooks.setState({school: ['northfield']})")
     expect(guarded_page.locator("#games-table")).to_be_visible()
-    assert guarded_page.locator("#games-table tbody tr").count() == 3
+    assert guarded_page.locator("#games-table tbody tr").count() == 5
 
 
 def test_sideline_role_crew_shows_in_table_and_hover(
@@ -1074,3 +1078,87 @@ def test_table_crew_cell_pills_follow_pbp_then_analyst(
     text = cell.inner_text()
     assert "PBP:" not in text
     assert "Analyst:" not in text
+
+
+def _unrated_people_table(page: Page, open_app: Callable[[Page, str], None]) -> None:
+    open_app(page, "?people=pat-rowan")
+    expect(page.locator("#games-table")).to_be_visible()
+
+
+def test_unrated_rows_listed_inline_with_no_rating_cells(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-09: pat-rowan's rated games plus unrated 15, 16, 19 (6 rows); unrated
+    cells read 'No public rating' / 'No figure to cite', muted, not numeric."""
+    _unrated_people_table(guarded_page, open_app)
+    rows = guarded_page.locator("#games-table tbody tr")
+    assert rows.count() == 6
+    unrated = [r for r in rows.all() if "No public rating" in r.inner_text()]
+    assert len(unrated) == 3
+    for row in unrated:
+        viewers = row.locator("td").nth(4)
+        source = row.locator("td").nth(5)
+        assert viewers.inner_text() == "No public rating"
+        assert viewers.get_attribute("class") == "no-rating"
+        assert source.inner_text() == "No figure to cite"
+        assert source.get_attribute("class") == "no-rating"
+        assert source.locator("a").count() == 0
+    unrated[0].click()
+    expect(guarded_page.locator("#detail-panel")).to_be_visible()
+
+
+def test_unrated_rows_sort_by_date_and_last_on_viewers(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-09: date sort interleaves unrated rows; viewers sort puts them last
+    in both directions, ordered by date."""
+    _unrated_people_table(guarded_page, open_app)
+    rows = _row_texts(guarded_page)
+    assert ["No public rating" in r for r in rows] == [False, True, True, False, False, True]
+
+    guarded_page.click('button[data-sort="viewers"]')
+    for _ in range(2):
+        rows = _row_texts(guarded_page)
+        assert ["No public rating" in r for r in rows] == [False] * 3 + [True] * 3
+        assert "Dec 18, 2021" in rows[3]
+        assert "Dec 28, 2021" in rows[4]
+        assert "Oct 3, 2026" in rows[5]
+        guarded_page.click('button[data-sort="viewers"]')
+
+
+def test_viewers_header_notes_unrated_sort_last(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    th = guarded_page.locator('th:has(button[data-sort="viewers"])')
+    note = "Games with no public rating always sort last."
+    assert th.get_attribute("title") == note
+    assert th.get_attribute("aria-description") == note
+
+
+def test_tooltip_model_and_hover_text_for_unrated_games(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-04/D-10: the viewers line becomes 'No public rating . {cause}'."""
+    open_app(guarded_page, "")
+    lines = guarded_page.evaluate(
+        """async () => {
+          const T = await import(new URL('./modules/tooltip.js', location.href).href);
+          const C = await import(new URL('./modules/chart.js', location.href).href);
+          const data = window.__testHooks.data;
+          const m = (i) => T.tooltipModel(data, i, { axis: 'spread' });
+          return {
+            u15: m(15).viewersLine, u12: m(12).viewersLine, c12: m(12).crewLines,
+            u19: m(19).viewersLine, u13: m(13).viewersLine, rated: m(0).viewersLine,
+            hover: C.hoverText ? C.hoverText(data, 15, { axis: 'spread', theme: 'light' }) : null,
+          };
+        }"""
+    )
+    assert lines["u15"] == "No public rating · Stream Plus games are rarely rated"
+    assert lines["u12"] == "No public rating · no figure was published"
+    assert lines["c12"] == ["Crew not recorded"]
+    assert lines["u19"] == "No public rating · viewership not posted yet"
+    assert lines["u13"] == "No public rating · few figures were compiled for 2021\u201324"
+    assert lines["rated"].startswith("Viewers: ")
+    if lines["hover"] is not None:
+        assert "No public rating · Stream Plus games are rarely rated" in lines["hover"]
