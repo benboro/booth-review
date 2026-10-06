@@ -34,6 +34,7 @@ from typing import Any
 import pytest
 from conftest import _assert_guard_clean, _install_guard, _serve_directory
 from playwright.sync_api import Page
+from test_site_band_speckle import OPEN_SYMBOLS_JS, gl_vs_svg_diff
 from test_site_date_axis import SEASON_LABEL_BOXES_JS, force_chart_font
 
 from booth_review.cli import main
@@ -1257,3 +1258,58 @@ def test_real_site_data_stays_inside_the_gzip_budget(real_site_dist: Path) -> No
     print(f"site-data.json raw bytes: {raw_size}, gzip bytes: {gzip_size}")
     within_budget = gzip_size <= _GZIP_BUDGET_BYTES
     assert within_budget
+
+
+_REAL_BAND_JS = """
+async () => {
+  const gd = document.getElementById('chart');
+  const fl = gd._fullLayout;
+  const p = await import('./modules/palette.js');
+  const theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  const traces = gd.data
+    .filter((t) => (t.yaxis ?? 'y') === 'y2')
+    .map((t) => ({
+      x: Array.from(t.x ?? []),
+      y: Array.from(t.y ?? []),
+      marker: JSON.parse(JSON.stringify(t.marker)),
+    }));
+  return {
+    traces,
+    xRange: fl.xaxis.range.slice(),
+    yRange: fl.yaxis2.range.slice(),
+    width: Math.round(fl.xaxis._length),
+    height: Math.round(fl.yaxis2._length),
+    bg: p.SURFACE[theme],
+  };
+}
+"""
+
+# Calibrated (04.13-17) against the real band: the open-symbol band differs from its SVG
+# reference by far more; filled rings stay under this.
+_REAL_BAND_MAX_DIFF = 4000
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+@pytest.mark.parametrize("size", [(1280, 900), (390, 844)])
+def test_real_band_rings_are_clean(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+    theme: str,
+    size: tuple[int, int],
+) -> None:
+    """notes-2 #1: no open symbol on the real chart, and the real band's own traces drawn through
+    GL match their SVG rendering within the calibrated pixel count -- integers only."""
+    real_guarded_page.emulate_media(color_scheme=theme)  # type: ignore[arg-type]
+    real_guarded_page.set_viewport_size({"width": size[0], "height": size[1]})
+    real_open_app(real_guarded_page, "")
+    real_guarded_page.evaluate(
+        "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
+    )
+    open_traces: int = real_guarded_page.evaluate(OPEN_SYMBOLS_JS)
+    spec: dict[str, Any] = real_guarded_page.evaluate(_REAL_BAND_JS)
+    band_traces = len(spec["traces"])
+    differing = gl_vs_svg_diff(real_guarded_page, spec)
+    print(f"real band GL-vs-SVG differing pixels: {differing}, traces: {band_traces}")
+    assert open_traces == 0
+    assert band_traces > 0
+    assert differing <= _REAL_BAND_MAX_DIFF
