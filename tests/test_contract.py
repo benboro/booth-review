@@ -20,7 +20,9 @@ from booth_review.build import crew_overrides
 from booth_review.contract.models import (
     CREW_SOURCE_LABEL_MAX_LEN,
     SITE_DATA_FIELDS,
+    UNRATED_FIELDS,
     TelecastColumns,
+    UnratedColumns,
     crew_source_label_problem,
     validate_site_data,
 )
@@ -665,3 +667,174 @@ def test_fixture_patched_crews_are_counted_in_their_season_coverage() -> None:
     totals = {row["season"]: row for row in data["coverage"] if row["network"] is None}
     for season in patched_seasons:
         assert totals[season]["matched_crew_patched"] >= 1
+
+
+# --- 04.13 D-16: the slim unrated block ---
+
+_RATED_ONLY = {
+    "viewers",
+    "measurement_type",
+    "publisher",
+    "source_url",
+    "rr_urls",
+    "flags",
+    "combined_feeds",
+}
+
+
+def test_unrated_fields_are_display_only() -> None:
+    assert set(UNRATED_FIELDS) == (set(SITE_DATA_FIELDS) - _RATED_ONLY) | {"cause"}
+
+
+def test_site_data_fields_unchanged() -> None:
+    assert len(SITE_DATA_FIELDS) == 32
+    assert SITE_DATA_FIELDS[:3] == ("season", "date", "kickoff")
+    assert SITE_DATA_FIELDS[-1] == "rivalry"
+    assert not set(UnratedColumns.model_fields) & {"cause"} & set(SITE_DATA_FIELDS)
+
+
+def test_unrated_block_has_no_cfbd_only_fields() -> None:
+    banned = {
+        "conference",
+        "venue",
+        "home_win_probability",
+        "spread",
+        "excitement_index_raw",
+        "game_id",
+        "telecast_id",
+        "home_classification",
+        "away_classification",
+        "playoff",
+        "is_cfp",
+    }
+    assert banned.isdisjoint(UNRATED_FIELDS)
+    assert _RATED_ONLY.isdisjoint(UNRATED_FIELDS)
+
+
+def _with_unrated_row(data: dict[str, Any]) -> dict[str, Any]:
+    """The fixture plus a one-row unrated block (a regular 2019 net-b game,
+    crewless, cause none); every unrated variant mutates this row."""
+    data["schema_version"] = "2.2.0"
+    row: dict[str, Any] = {
+        "season": 2019,
+        "date": "2019-10-12",
+        "kickoff": "15:30",
+        "time_slot": "afternoon",
+        "away_team": 4,
+        "home_team": 5,
+        "neutral": False,
+        "away_points": 17,
+        "home_points": 24,
+        "away_rank": None,
+        "home_rank": None,
+        "network": 1,
+        "outlets": [1],
+        "s506_url": None,
+        "crew_source_url": None,
+        "crew_source_label": None,
+        "excitement": None,
+        "home_spread": None,
+        "crew": [],
+        "game_type": "regular",
+        "playoff_round": None,
+        "home_conference": 3,
+        "away_conference": 3,
+        "bowl": None,
+        "rivalry": None,
+        "cause": "none",
+    }
+    data["telecasts_unrated"] = {k: [v] for k, v in row.items()}
+    return data
+
+
+def _unrated(**changes: Any) -> Any:
+    def mutate(data: dict[str, Any]) -> dict[str, Any]:
+        data = _with_unrated_row(data)
+        for column, value in changes.items():
+            data["telecasts_unrated"][column] = [value]
+        return data
+
+    return mutate
+
+
+def _misaligned(data: dict[str, Any]) -> dict[str, Any]:
+    data = _with_unrated_row(data)
+    data["telecasts_unrated"]["cause"] = []
+    return data
+
+
+def _unmapped_network(data: dict[str, Any]) -> dict[str, Any]:
+    data = _with_unrated_row(data)
+    data["lookups"]["networks"].append({"id": "unmapped", "name": "Unmapped", "family": "other"})
+    data["telecasts_unrated"]["network"] = [len(data["lookups"]["networks"]) - 1]
+    return data
+
+
+def _extra_viewers(data: dict[str, Any]) -> dict[str, Any]:
+    data = _with_unrated_row(data)
+    data["telecasts_unrated"]["viewers"] = [1]
+    return data
+
+
+_UNRATED_BROKEN = [
+    pytest.param(_misaligned, "telecasts_unrated.cause", id="misaligned"),
+    pytest.param(_unrated(away_team=99), "telecasts_unrated.away_team[0]", id="away-team"),
+    pytest.param(_unrated(home_team=99), "telecasts_unrated.home_team[0]", id="home-team"),
+    pytest.param(_unrated(network=99), "telecasts_unrated.network[0]", id="network"),
+    pytest.param(_unrated(outlets=[99]), "telecasts_unrated.outlets[0][0]", id="outlet"),
+    pytest.param(
+        _unrated(crew=[{"person": 99, "role": "pbp", "feed": "main"}]),
+        "telecasts_unrated.crew[0][0].person",
+        id="crew-person",
+    ),
+    pytest.param(
+        _unrated(home_conference=99), "telecasts_unrated.home_conference[0]", id="conference"
+    ),
+    pytest.param(_unrated(game_type="bowl", bowl=99), "telecasts_unrated.bowl[0]", id="bowl-range"),
+    pytest.param(_unrated(bowl=0), "telecasts_unrated.bowl[0]: set on a regular", id="bowl-reg"),
+    pytest.param(_unrated(rivalry=99), "telecasts_unrated.rivalry[0]", id="rivalry-range"),
+    pytest.param(
+        _unrated(rivalry=0), "telecasts_unrated.rivalry[0]: teams do not match", id="rivalry-teams"
+    ),
+    pytest.param(
+        _unrated(game_type="bowl", rivalry=0),
+        "telecasts_unrated.rivalry[0]: set on a non-regular",
+        id="rivalry-non-regular",
+    ),
+    pytest.param(
+        _unrated(playoff_round="semifinal"),
+        "telecasts_unrated.playoff_round[0]",
+        id="playoff-round",
+    ),
+    pytest.param(
+        _unrated(crew_source_url="https://example.com/x"),
+        "telecasts_unrated.crew_source_label[0]",
+        id="crew-source-pair",
+    ),
+    pytest.param(_unrated(cause="pending_soon"), "cause", id="bad-cause"),
+    pytest.param(_unmapped_network, "telecasts_unrated.network[0]: an unrated", id="unmapped"),
+    pytest.param(_extra_viewers, "viewers", id="extra-column"),
+]
+
+
+def test_unrated_block_validates() -> None:
+    site_data = validate_site_data(_with_unrated_row(_load_fixture()))
+    assert site_data.telecasts_unrated.cause == ["none"]
+
+
+@pytest.mark.parametrize(("mutate", "needle"), _UNRATED_BROKEN)
+def test_unrated_broken_variant_raises(mutate: Any, needle: str) -> None:
+    broken = mutate(copy.deepcopy(_load_fixture()))
+    with pytest.raises(ValidationError) as exc:
+        validate_site_data(broken)
+    assert needle in str(exc.value)
+
+
+def test_rivalry_referenced_only_by_an_unrated_row_counts() -> None:
+    data = _with_unrated_row(copy.deepcopy(_load_fixture()))
+    rated = data["telecasts"]["rivalry"]
+    assert 1 in rated or 0 in rated
+    # Drop every rated reference to rivalry 0, then reference it from the unrated row.
+    data["telecasts"]["rivalry"] = [None if r == 0 else r for r in rated]
+    data["telecasts_unrated"].update(away_team=[6], home_team=[7], rivalry=[0])
+    validate_site_data(data)

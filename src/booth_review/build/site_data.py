@@ -33,7 +33,12 @@ from booth_review.build.named_games import (
 )
 from booth_review.build.rivalries import load_rivalries
 from booth_review.config import DataPaths
-from booth_review.contract.models import SCHEMA_VERSION, SiteData, validate_site_data
+from booth_review.contract.models import (
+    SCHEMA_VERSION,
+    SiteData,
+    UnratedColumns,
+    validate_site_data,
+)
 from booth_review.errors import BowlCrosswalkError, VaultStateError
 from booth_review.flags.era import load_eras
 from booth_review.flags.events import load_event_flags
@@ -608,6 +613,8 @@ def build_site_data(
             "rivalries": rivalries_lookup,
         },
         "telecasts": columns,
+        # 04.13-03 fills this; empty until then.
+        "telecasts_unrated": {name: [] for name in UnratedColumns.model_fields},
         "coverage": coverage_rows,
     }
     if counts is not None:

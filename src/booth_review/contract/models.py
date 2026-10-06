@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = "2.1.0"
+SCHEMA_VERSION = "2.2.0"
 
 _S506_HOST = "506sports.com"
 
@@ -251,6 +251,48 @@ class TelecastColumns(BaseModel):
     rivalry: list[int | None]
 
 
+class UnratedColumns(BaseModel):
+    """One list per display field; index j across every list is one game with
+    no public viewer figure.
+
+    Rated-only fields (viewers, measurement_type, publisher, source_url,
+    rr_urls, flags, combined_feeds) are absent by design (SITE-19, CFBD terms),
+    and so is any game or telecast id. Declared explicitly, not inherited, so
+    TelecastColumns keeps its field order. See docs/site-data.md.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    season: list[int]
+    date: list[str]
+    kickoff: list[str | None]
+    time_slot: list[Literal["noon", "afternoon", "prime", "late"] | None]
+    away_team: list[int]
+    home_team: list[int]
+    neutral: list[bool]
+    away_points: list[int | None]
+    home_points: list[int | None]
+    away_rank: list[int | None]
+    home_rank: list[int | None]
+    network: list[int]
+    outlets: list[list[int]]
+    s506_url: list[str | None]
+    crew_source_url: list[str | None]
+    crew_source_label: list[str | None]
+    excitement: list[float | None]
+    home_spread: list[float | None]
+    crew: list[list[CrewEntry]]
+    game_type: list[Literal["regular", "bowl", "playoff"]]
+    playoff_round: list[Literal["first_round", "quarterfinal", "semifinal", "championship"] | None]
+    home_conference: list[int | None]
+    away_conference: list[int | None]
+    bowl: list[int | None]
+    rivalry: list[int | None]
+    # 04.13 D-10: why the game has no figure. An enum only; the wording lives in
+    # site/modules/format.js, never in the data.
+    cause: list[Literal["rarely_rated", "pending", "rr_dip", "none"]]
+
+
 class CoverageRow(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
@@ -274,11 +316,12 @@ class CoverageRow(BaseModel):
 class SiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["2.1.0"]
+    schema_version: Literal["2.2.0"]
     generated_at: str
     freshness: Freshness
     lookups: Lookups
     telecasts: TelecastColumns
+    telecasts_unrated: UnratedColumns
     coverage: list[CoverageRow]
 
     @model_validator(mode="after")
@@ -301,11 +344,8 @@ class SiteData(BaseModel):
 
         num_teams = len(self.lookups.teams)
         num_networks = len(self.lookups.networks)
-        num_people = len(self.lookups.people)
         num_publishers = len(self.lookups.publishers)
         num_flags = len(self.lookups.flags)
-        num_conferences = len(self.lookups.conferences)
-        num_bowls = len(self.lookups.bowls)
         num_rivalries = len(self.lookups.rivalries)
         num_franchises = len(self.lookups.bowl_franchises)
 
@@ -347,24 +387,13 @@ class SiteData(BaseModel):
         referenced_rivalries: set[int] = set()
 
         for i in range(n):
-            if not 0 <= tc.away_team[i] < num_teams:
-                raise ValueError(f"telecasts.away_team[{i}]: team index out of range")
-            if not 0 <= tc.home_team[i] < num_teams:
-                raise ValueError(f"telecasts.home_team[{i}]: team index out of range")
-            if not 0 <= tc.network[i] < num_networks:
-                raise ValueError(f"telecasts.network[{i}]: network index out of range")
-            for j, outlet in enumerate(tc.outlets[i]):
-                if not 0 <= outlet < num_networks:
-                    raise ValueError(f"telecasts.outlets[{i}][{j}]: network index out of range")
-            publisher = tc.publisher[i]
-            if publisher is not None and not 0 <= publisher < num_publishers:
-                raise ValueError(f"telecasts.publisher[{i}]: publisher index out of range")
+            self._check_game_row("telecasts", tc, i, referenced_rivalries)
             for j, flag_index in enumerate(tc.flags[i]):
                 if not 0 <= flag_index < num_flags:
                     raise ValueError(f"telecasts.flags[{i}][{j}]: flag index out of range")
-            for j, crew_entry in enumerate(tc.crew[i]):
-                if not 0 <= crew_entry.person < num_people:
-                    raise ValueError(f"telecasts.crew[{i}][{j}].person: person index out of range")
+            publisher = tc.publisher[i]
+            if publisher is not None and not 0 <= publisher < num_publishers:
+                raise ValueError(f"telecasts.publisher[{i}]: publisher index out of range")
             if tc.viewers[i] <= 0:
                 raise ValueError(f"telecasts.viewers[{i}]: must be > 0")
             if not tc.rr_urls[i]:
@@ -372,50 +401,22 @@ class SiteData(BaseModel):
             combined = tc.combined_feeds[i]
             if combined is not None and combined < 2:
                 raise ValueError(f"telecasts.combined_feeds[{i}]: must be null or >= 2")
-            home_conference = tc.home_conference[i]
-            if home_conference is not None and not 0 <= home_conference < num_conferences:
-                raise ValueError(f"telecasts.home_conference[{i}]: conference index out of range")
-            away_conference = tc.away_conference[i]
-            if away_conference is not None and not 0 <= away_conference < num_conferences:
-                raise ValueError(f"telecasts.away_conference[{i}]: conference index out of range")
-            if tc.playoff_round[i] is not None and tc.game_type[i] != "playoff":
-                raise ValueError(f"telecasts.playoff_round[{i}]: set on a non-playoff game")
-            source_url = tc.crew_source_url[i]
-            source_label = tc.crew_source_label[i]
-            if (source_url is None) != (source_label is None):
+
+        uc = self.telecasts_unrated
+        un = len(uc.season)
+        for name in UnratedColumns.model_fields:
+            value = getattr(uc, name)
+            if len(value) != un:
                 raise ValueError(
-                    f"telecasts.crew_source_label[{i}]: must be set together with crew_source_url"
+                    f"telecasts_unrated.{name}: length {len(value)} does not match "
+                    f"telecasts_unrated.season length {un}"
                 )
-            if source_url is not None and source_label is not None:
-                problem = crew_source_url_problem(source_url)
-                if problem is not None:
-                    raise ValueError(f"telecasts.crew_source_url[{i}]: {problem}")
-                label_problem = crew_source_label_problem(source_label)
-                if label_problem is not None:
-                    raise ValueError(f"telecasts.crew_source_label[{i}]: {label_problem}")
-                # The pair cites the crew shown, which is always a main-feed
-                # booth from crew_overrides.csv (04.3 D-03).
-                if not any(entry.feed == "main" for entry in tc.crew[i]):
-                    raise ValueError(
-                        f"telecasts.crew[{i}]: must list a main-feed crew when "
-                        "crew_source_url is set"
-                    )
-            bowl = tc.bowl[i]
-            if bowl is not None:
-                if not 0 <= bowl < num_bowls:
-                    raise ValueError(f"telecasts.bowl[{i}]: bowl index out of range")
-                if tc.game_type[i] == "regular":
-                    raise ValueError(f"telecasts.bowl[{i}]: set on a regular game")
-            rivalry = tc.rivalry[i]
-            if rivalry is not None:
-                if not 0 <= rivalry < num_rivalries:
-                    raise ValueError(f"telecasts.rivalry[{i}]: rivalry index out of range")
-                if tc.game_type[i] != "regular":
-                    raise ValueError(f"telecasts.rivalry[{i}]: set on a non-regular game")
-                pair = sorted([tc.home_team[i], tc.away_team[i]])
-                if pair != self.lookups.rivalries[rivalry].teams:
-                    raise ValueError(f"telecasts.rivalry[{i}]: teams do not match the rivalry")
-                referenced_rivalries.add(rivalry)
+        for i in range(un):
+            self._check_game_row("telecasts_unrated", uc, i, referenced_rivalries)
+            if self.lookups.networks[uc.network[i]].id == "unmapped":
+                raise ValueError(
+                    f"telecasts_unrated.network[{i}]: an unrated game needs a resolved network"
+                )
 
         for k in range(num_rivalries):
             if k not in referenced_rivalries:
@@ -431,6 +432,75 @@ class SiteData(BaseModel):
 
         return self
 
+    def _check_game_row(
+        self,
+        block: str,
+        cols: TelecastColumns | UnratedColumns,
+        i: int,
+        referenced_rivalries: set[int],
+    ) -> None:
+        """The per-row checks both blocks share. Messages carry the block name,
+        column and position only, never a cell value (T-03-04)."""
+        lk = self.lookups
+        num_teams = len(lk.teams)
+        num_networks = len(lk.networks)
+        if not 0 <= cols.away_team[i] < num_teams:
+            raise ValueError(f"{block}.away_team[{i}]: team index out of range")
+        if not 0 <= cols.home_team[i] < num_teams:
+            raise ValueError(f"{block}.home_team[{i}]: team index out of range")
+        if not 0 <= cols.network[i] < num_networks:
+            raise ValueError(f"{block}.network[{i}]: network index out of range")
+        for j, outlet in enumerate(cols.outlets[i]):
+            if not 0 <= outlet < num_networks:
+                raise ValueError(f"{block}.outlets[{i}][{j}]: network index out of range")
+        for j, crew_entry in enumerate(cols.crew[i]):
+            if not 0 <= crew_entry.person < len(lk.people):
+                raise ValueError(f"{block}.crew[{i}][{j}].person: person index out of range")
+        num_conferences = len(lk.conferences)
+        home_conference = cols.home_conference[i]
+        if home_conference is not None and not 0 <= home_conference < num_conferences:
+            raise ValueError(f"{block}.home_conference[{i}]: conference index out of range")
+        away_conference = cols.away_conference[i]
+        if away_conference is not None and not 0 <= away_conference < num_conferences:
+            raise ValueError(f"{block}.away_conference[{i}]: conference index out of range")
+        if cols.playoff_round[i] is not None and cols.game_type[i] != "playoff":
+            raise ValueError(f"{block}.playoff_round[{i}]: set on a non-playoff game")
+        source_url = cols.crew_source_url[i]
+        source_label = cols.crew_source_label[i]
+        if (source_url is None) != (source_label is None):
+            raise ValueError(
+                f"{block}.crew_source_label[{i}]: must be set together with crew_source_url"
+            )
+        if source_url is not None and source_label is not None:
+            problem = crew_source_url_problem(source_url)
+            if problem is not None:
+                raise ValueError(f"{block}.crew_source_url[{i}]: {problem}")
+            label_problem = crew_source_label_problem(source_label)
+            if label_problem is not None:
+                raise ValueError(f"{block}.crew_source_label[{i}]: {label_problem}")
+            # The pair cites the crew shown, which is always a main-feed
+            # booth from crew_overrides.csv (04.3 D-03).
+            if not any(entry.feed == "main" for entry in cols.crew[i]):
+                raise ValueError(
+                    f"{block}.crew[{i}]: must list a main-feed crew when crew_source_url is set"
+                )
+        bowl = cols.bowl[i]
+        if bowl is not None:
+            if not 0 <= bowl < len(lk.bowls):
+                raise ValueError(f"{block}.bowl[{i}]: bowl index out of range")
+            if cols.game_type[i] == "regular":
+                raise ValueError(f"{block}.bowl[{i}]: set on a regular game")
+        rivalry = cols.rivalry[i]
+        if rivalry is not None:
+            if not 0 <= rivalry < len(lk.rivalries):
+                raise ValueError(f"{block}.rivalry[{i}]: rivalry index out of range")
+            if cols.game_type[i] != "regular":
+                raise ValueError(f"{block}.rivalry[{i}]: set on a non-regular game")
+            pair = sorted([cols.home_team[i], cols.away_team[i]])
+            if pair != lk.rivalries[rivalry].teams:
+                raise ValueError(f"{block}.rivalry[{i}]: teams do not match the rivalry")
+            referenced_rivalries.add(rivalry)
+
 
 def validate_site_data(obj: object) -> SiteData:
     """Validate `obj` (a parsed site-data.json body) against the contract."""
@@ -440,3 +510,7 @@ def validate_site_data(obj: object) -> SiteData:
 # Plan 11's display-field allowlist: only these column names may ever appear
 # in the real build's telecasts payload (SITE-19).
 SITE_DATA_FIELDS: tuple[str, ...] = tuple(TelecastColumns.model_fields)
+
+# The unrated block's display-field allowlist (SITE-19): no rated-only field,
+# no CFBD-only field, no game or telecast id.
+UNRATED_FIELDS: tuple[str, ...] = tuple(UnratedColumns.model_fields)

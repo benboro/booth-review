@@ -915,9 +915,368 @@
       ],
       "title": "TelecastColumns",
       "type": "object"
+    },
+    "UnratedColumns": {
+      "additionalProperties": false,
+      "description": "One list per display field; index j across every list is one game with\nno public viewer figure.\n\nRated-only fields (viewers, measurement_type, publisher, source_url,\nrr_urls, flags, combined_feeds) are absent by design (SITE-19, CFBD terms),\nand so is any game or telecast id. Declared explicitly, not inherited, so\nTelecastColumns keeps its field order. See docs/site-data.md.",
+      "properties": {
+        "away_conference": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Away Conference",
+          "type": "array"
+        },
+        "away_points": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Away Points",
+          "type": "array"
+        },
+        "away_rank": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Away Rank",
+          "type": "array"
+        },
+        "away_team": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Away Team",
+          "type": "array"
+        },
+        "bowl": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Bowl",
+          "type": "array"
+        },
+        "cause": {
+          "items": {
+            "enum": [
+              "rarely_rated",
+              "pending",
+              "rr_dip",
+              "none"
+            ],
+            "type": "string"
+          },
+          "title": "Cause",
+          "type": "array"
+        },
+        "crew": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/CrewEntry"
+            },
+            "type": "array"
+          },
+          "title": "Crew",
+          "type": "array"
+        },
+        "crew_source_label": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Crew Source Label",
+          "type": "array"
+        },
+        "crew_source_url": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Crew Source Url",
+          "type": "array"
+        },
+        "date": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Date",
+          "type": "array"
+        },
+        "excitement": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Excitement",
+          "type": "array"
+        },
+        "game_type": {
+          "items": {
+            "enum": [
+              "regular",
+              "bowl",
+              "playoff"
+            ],
+            "type": "string"
+          },
+          "title": "Game Type",
+          "type": "array"
+        },
+        "home_conference": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Home Conference",
+          "type": "array"
+        },
+        "home_points": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Home Points",
+          "type": "array"
+        },
+        "home_rank": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Home Rank",
+          "type": "array"
+        },
+        "home_spread": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Home Spread",
+          "type": "array"
+        },
+        "home_team": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Home Team",
+          "type": "array"
+        },
+        "kickoff": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Kickoff",
+          "type": "array"
+        },
+        "network": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Network",
+          "type": "array"
+        },
+        "neutral": {
+          "items": {
+            "type": "boolean"
+          },
+          "title": "Neutral",
+          "type": "array"
+        },
+        "outlets": {
+          "items": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "title": "Outlets",
+          "type": "array"
+        },
+        "playoff_round": {
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "first_round",
+                  "quarterfinal",
+                  "semifinal",
+                  "championship"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Playoff Round",
+          "type": "array"
+        },
+        "rivalry": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Rivalry",
+          "type": "array"
+        },
+        "s506_url": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "S506 Url",
+          "type": "array"
+        },
+        "season": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Season",
+          "type": "array"
+        },
+        "time_slot": {
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "noon",
+                  "afternoon",
+                  "prime",
+                  "late"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Time Slot",
+          "type": "array"
+        }
+      },
+      "required": [
+        "season",
+        "date",
+        "kickoff",
+        "time_slot",
+        "away_team",
+        "home_team",
+        "neutral",
+        "away_points",
+        "home_points",
+        "away_rank",
+        "home_rank",
+        "network",
+        "outlets",
+        "s506_url",
+        "crew_source_url",
+        "crew_source_label",
+        "excitement",
+        "home_spread",
+        "crew",
+        "game_type",
+        "playoff_round",
+        "home_conference",
+        "away_conference",
+        "bowl",
+        "rivalry",
+        "cause"
+      ],
+      "title": "UnratedColumns",
+      "type": "object"
     }
   },
-  "$id": "booth-review/site-data/2.1.0",
+  "$id": "booth-review/site-data/2.2.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -939,12 +1298,15 @@
       "$ref": "#/$defs/Lookups"
     },
     "schema_version": {
-      "const": "2.1.0",
+      "const": "2.2.0",
       "title": "Schema Version",
       "type": "string"
     },
     "telecasts": {
       "$ref": "#/$defs/TelecastColumns"
+    },
+    "telecasts_unrated": {
+      "$ref": "#/$defs/UnratedColumns"
     }
   },
   "required": [
@@ -953,6 +1315,7 @@
     "freshness",
     "lookups",
     "telecasts",
+    "telecasts_unrated",
     "coverage"
   ],
   "title": "booth-review site data",

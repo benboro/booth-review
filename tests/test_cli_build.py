@@ -336,7 +336,7 @@ def test_cli_build_json_output_round_trips(build_git_vault: DataPaths) -> None:
     paths = build_git_vault
     main(["build", "--no-commit"])
     body = json.loads((paths.vault / "processed" / "site-data.json").read_text(encoding="utf-8"))
-    assert body["schema_version"] == "2.1.0"
+    assert body["schema_version"] == "2.2.0"
 
 
 # -- WR-01 / WR-02: ordering and scope of a blocked or failing build ---------------------------
