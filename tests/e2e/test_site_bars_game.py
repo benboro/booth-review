@@ -52,9 +52,9 @@ def test_game_alone_enables_bars_and_counts_only_that_game(
     assert guarded_page.get_attribute("#tab-bars", "aria-disabled") is None
     assert guarded_page.get_attribute("#tab-butterfly", "aria-disabled") == "true"
     assert guarded_page.locator("#bars-note").is_hidden()
-    assert _title(guarded_page) == "Announcers by rated telecasts of the Harbor Bowl"
+    assert _title(guarded_page) == "Announcers by games of the Harbor Bowl"
     model = _model(guarded_page, {"game": "harbor-bowl"})
-    assert model["games"] == [7]
+    assert model["games"] == [7, 16]  # harbor-bowl: rated game 7 plus unrated game 16
     assert model["ctx"]["group"] == "announcers"
     assert model["ctx"]["groupChoice"] is False
     assert model["ctx"]["byOptions"] == ["announcer", "network"]
@@ -80,7 +80,7 @@ def test_cfp_round_pick_uses_the_plural_form(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(guarded_page, "?game=cfp-semifinal&view=bars")
-    assert _title(guarded_page) == "Announcers by rated telecasts of CFP semifinals"
+    assert _title(guarded_page) == "Announcers by games of CFP semifinals"
     assert _model(guarded_page, {"game": "cfp-semifinal"})["games"] == [5]
 
 
@@ -95,7 +95,7 @@ def test_rivalry_without_article_reads_naturally_in_titles(
     raw["lookups"]["rivalries"][1]["article"] = None
     guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
     open_app(guarded_page, "?game=lakeshore&view=bars")
-    assert _title(guarded_page) == "Announcers by rated telecasts of Glassjaw"
+    assert _title(guarded_page) == "Announcers by games of Glassjaw"
 
 
 def test_game_with_networks_keeps_the_group_choice(
