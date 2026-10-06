@@ -269,7 +269,8 @@ def test_build_summary_prints_games_line_counts_only(
     line = next(ln for ln in out.splitlines() if ln.startswith("games "))
     assert re.fullmatch(
         r"games \d+ shipped \(\d+ rated, \d+ unrated\), "
-        r"\d+ unrated left out for no network, "
+        r"\d+ unrated left out \(no game or no network\), "
+        r"\d+ duplicate unrated dropped, "
         r"rarity audit: \d+ flagged but mostly rated, \d+ unflagged but mostly unrated",
         line,
     )

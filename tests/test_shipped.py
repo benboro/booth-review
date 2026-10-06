@@ -8,10 +8,12 @@ import polars as pl
 import pytest
 
 from booth_review.build.shipped import (
+    left_out_unrated_expr,
     network_rated_counts,
     no_rating_cause,
     rarity_contradictions,
     rarity_verdict,
+    select_unrated_shipped,
     shipped_expr,
     unrated_shipped_expr,
 )
@@ -111,3 +113,38 @@ def test_rarity_contradictions_sums_verdicts() -> None:
     counts = {"a": (30, 10), "b": (30, 2), "c": (30, 5), "d": (5, 0)}
     rarity = {"a": True, "b": False, "c": True, "d": False}
     assert rarity_contradictions(counts, rarity) == (1, 1)
+
+
+_SORT = ["date_et", "kickoff_et", "telecast_id"]
+
+
+def test_select_unrated_shipped_never_ships_a_game_twice() -> None:
+    # WR-01: game 1 has a plotted row, game 2 has two unrated rows, game 3 one.
+    frame = pl.DataFrame(
+        {
+            "telecast_id": ["t1", "t2", "t3", "t4", "t5"],
+            "date_et": ["2024-09-07"] * 5,
+            "kickoff_et": ["12:00", "12:00", "15:00", "12:00", "12:00"],
+            "plotted": [True, False, False, False, False],
+            "feed_type": ["main"] * 5,
+            "game_id": [1, 1, 2, 2, 3],
+            "network_id": ["a"] * 5,
+        }
+    )
+    kept, dropped = select_unrated_shipped(frame, _SORT)
+    assert kept["telecast_id"].to_list() == ["t4", "t5"]
+    assert dropped == 2
+
+
+def test_left_out_is_the_complement_of_the_shipped_predicate() -> None:
+    frame = pl.DataFrame(
+        {
+            "plotted": [False, False, False, True, False, False],
+            "feed_type": ["main", "main", "main", "main", "alt", "main"],
+            "game_id": [1, None, 3, 4, 5, 6],
+            "network_id": ["a", "a", None, None, None, "b"],
+        }
+    )
+    out = frame.with_columns(left=left_out_unrated_expr(), u=unrated_shipped_expr())
+    assert out["left"].to_list() == [False, True, True, False, False, False]
+    assert out["u"].to_list() == [True, False, False, False, False, True]

@@ -36,10 +36,11 @@ from booth_review.build.named_games import (
 )
 from booth_review.build.rivalries import load_rivalries
 from booth_review.build.shipped import (
+    left_out_unrated_expr,
     network_rated_counts,
     no_rating_cause,
     rarity_contradictions,
-    unrated_shipped_expr,
+    select_unrated_shipped,
 )
 from booth_review.config import DataPaths
 from booth_review.contract.models import (
@@ -203,7 +204,18 @@ def build_site_data(
 
     sort_keys = ["date_et", "kickoff_et", "telecast_id"]
     plotted = tables.telecasts.filter(pl.col("plotted")).sort(sort_keys, nulls_last=True)
-    unrated_frame = tables.telecasts.filter(unrated_shipped_expr()).sort(sort_keys, nulls_last=True)
+    repeated_games = (
+        plotted.filter(pl.col("game_id").is_not_null())
+        .group_by("game_id")
+        .len()
+        .filter(pl.col("len") > 1)
+        .height
+    )
+    if repeated_games:
+        raise VaultStateError(
+            f"telecasts: {repeated_games} game(s) have more than one plotted telecast"
+        )
+    unrated_frame, duplicates_dropped = select_unrated_shipped(tables.telecasts, sort_keys)
     freshness = _build_freshness(tables)
     games_slim = tables.games.select(
         "game_id",
@@ -674,11 +686,8 @@ def build_site_data(
             1 for v in (*columns["rivalry"], *unrated_columns["rivalry"]) if v is not None
         )
         counts["unrated_shipped"] = len(unrated_rows)
-        counts["unrated_no_network"] = tables.telecasts.filter(
-            (pl.col("feed_type") == "main")
-            & ~pl.col("plotted").fill_null(False)
-            & pl.col("network_id").is_null()
-        ).height
+        counts["unrated_left_out"] = tables.telecasts.filter(left_out_unrated_expr()).height
+        counts["unrated_duplicates_dropped"] = duplicates_dropped
         flagged_rated, unflagged_unrated = rarity_contradictions(
             network_rated_counts(tables.telecasts), rarity
         )

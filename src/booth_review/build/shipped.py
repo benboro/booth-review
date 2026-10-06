@@ -32,6 +32,35 @@ def unrated_shipped_expr() -> pl.Expr:
     )
 
 
+def left_out_unrated_expr() -> pl.Expr:
+    """Main-feed rows that are not plotted and fail `unrated_shipped_expr`
+    (no game or no network), the exact complement of the shipped predicate
+    (review IN-02). Alt-feed and plotted rows are not left out.
+    """
+    return (
+        (pl.col("feed_type") == "main")
+        & ~pl.col("plotted").fill_null(False)
+        & ~unrated_shipped_expr()
+    )
+
+
+def select_unrated_shipped(
+    telecasts: pl.DataFrame, sort_keys: list[str]
+) -> tuple[pl.DataFrame, int]:
+    """The unrated rows to ship, never putting a game in the site data twice
+    (review WR-01): rows whose game already has a plotted telecast are
+    dropped, and only the first row per game (by `sort_keys`) is kept.
+    Returns (frame sorted by sort_keys, number of eligible rows dropped).
+    """
+    eligible = telecasts.filter(unrated_shipped_expr())
+    plotted_games = telecasts.filter(pl.col("plotted").fill_null(False)).select("game_id")
+    fresh = eligible.join(plotted_games, on="game_id", how="anti")
+    kept = fresh.sort(sort_keys, nulls_last=True).unique(
+        subset="game_id", keep="first", maintain_order=True
+    )
+    return kept, eligible.height - kept.height
+
+
 def shipped_expr() -> pl.Expr:
     """Every row that ships in either block: plotted or unrated-shipped."""
     return pl.col("plotted").fill_null(False) | unrated_shipped_expr()

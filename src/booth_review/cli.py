@@ -960,7 +960,9 @@ def _build(args: argparse.Namespace) -> int:
         unrated = outcome.counts["unrated_shipped"]
         print(
             f"games {plotted + unrated} shipped ({plotted} rated, {unrated} unrated), "
-            f"{outcome.counts.get('unrated_no_network', 0)} unrated left out for no network, "
+            f"{outcome.counts.get('unrated_left_out', 0)} unrated left out "
+            "(no game or no network), "
+            f"{outcome.counts.get('unrated_duplicates_dropped', 0)} duplicate unrated dropped, "
             f"rarity audit: {outcome.counts.get('rarely_rated_but_mostly_rated', 0)} "
             "flagged but mostly rated, "
             f"{outcome.counts.get('not_rarely_rated_but_mostly_unrated', 0)} "

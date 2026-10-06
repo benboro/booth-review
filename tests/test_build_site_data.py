@@ -291,6 +291,44 @@ def small_tables() -> BuildTables:
             closing_spread=-1.0,
             game_type="bowl",
         ),
+        # One game per shipped telecast (04.13 WR-01): the unrated rows below
+        # each sit on their own game, copies of games 1-3 with distinct teams.
+        _game_row(game_id=4, home_team="Fixture Home 4", away_team="Fixture Away 4"),
+        _game_row(game_id=5, home_team="Fixture Home 5", away_team="Fixture Away 5"),
+        _game_row(
+            game_id=6,
+            week=3,
+            date_et=date(2024, 9, 21),
+            kickoff_et=None,
+            home_team="Fixture Home 6",
+            away_team="Fixture Away 6",
+            neutral_site=True,
+            home_points=None,
+            away_points=None,
+            home_rank=None,
+            away_rank=None,
+            excitement=None,
+            pregame_x=None,
+            closing_spread=None,
+        ),
+        _game_row(
+            game_id=500007,
+            week=1,
+            season_type="postseason",
+            date_et=date(2024, 12, 30),
+            kickoff_et="2024-12-30T18:30:00-05:00",
+            home_team="Fixture Bowl Home 7",
+            away_team="Fixture Bowl Away 7",
+            neutral_site=True,
+            home_points=30,
+            away_points=27,
+            home_rank=None,
+            away_rank=None,
+            excitement=9.9,
+            pregame_x=-1.0,
+            closing_spread=-1.0,
+            game_type="bowl",
+        ),
     ]
     telecasts = [
         _telecast_row(
@@ -336,7 +374,7 @@ def small_tables() -> BuildTables:
         # must never appear in lookups.networks either).
         _telecast_row(
             telecast_id="4-net-d",
-            game_id=1,
+            game_id=4,
             network_id="net-d",
             outlets=["net-d"],
             rated=True,
@@ -356,7 +394,7 @@ def small_tables() -> BuildTables:
         # an unrated postseason game.
         _telecast_row(
             telecast_id="5-net-c",
-            game_id=1,
+            game_id=5,
             network_id="net-c",
             outlets=["net-c"],
             rated=False,
@@ -372,7 +410,7 @@ def small_tables() -> BuildTables:
         ),
         _telecast_row(
             telecast_id="6-net-b",
-            game_id=2,
+            game_id=6,
             network_id="net-b",
             outlets=["net-b"],
             date_et=date(2024, 9, 21),
@@ -391,7 +429,7 @@ def small_tables() -> BuildTables:
         ),
         _telecast_row(
             telecast_id="7-net-d",
-            game_id=3,
+            game_id=500007,
             network_id="net-d",
             outlets=["net-d"],
             date_et=date(2024, 12, 30),
@@ -1066,6 +1104,7 @@ def test_unmapped_network_coverage_row_points_at_the_unmapped_lookup(
     unmapped_row = {
         **first,
         "telecast_id": f"{first['game_id']}-unmapped",
+        "game_id": 8,
         "network_id": None,
         "outlets": [],
         "headline_publisher": "Unmapped Publisher Example",
@@ -1073,7 +1112,12 @@ def test_unmapped_network_coverage_row_points_at_the_unmapped_lookup(
     telecasts = pl.concat(
         [small_tables.telecasts, pl.DataFrame([unmapped_row], schema=small_tables.telecasts.schema)]
     )
-    tables = replace(small_tables, telecasts=telecasts)
+    # Its own game, so no game ships twice (04.13 WR-01).
+    extra_game = _games_frame(
+        [_game_row(game_id=8, home_team="Fixture Home 8", away_team="Fixture Away 8")]
+    )
+    games = pl.concat([small_tables.games, extra_game], how="diagonal_relaxed")
+    tables = replace(small_tables, telecasts=telecasts, games=games)
 
     payload = _site(tables, build_reference)
 
@@ -1603,7 +1647,8 @@ def test_title_game_before_rivalry_game_is_untagged_and_counted(
         "rivalry_title_games_excluded": 1,
         "rivalry_rematches_demoted": 0,
         "unrated_shipped": 0,
-        "unrated_no_network": 0,
+        "unrated_left_out": 0,
+        "unrated_duplicates_dropped": 0,
         "rarely_rated_but_mostly_rated": 0,
         "not_rarely_rated_but_mostly_unrated": 0,
     }
@@ -1695,9 +1740,42 @@ def test_unrated_block_ships_every_main_feed_game_with_a_network(
     assert block["cause"] == ["none", "rarely_rated", "rr_dip", "rarely_rated"]
     assert [len(c) for c in block["crew"]] == [0, 1, 0, 0]
     assert counts["unrated_shipped"] == len(block["season"]) == 4
-    assert counts["unrated_no_network"] == 1
+    # Main-feed, not plotted, not shipped: only the one with no network.
+    assert counts["unrated_left_out"] == 1
+    assert counts["unrated_duplicates_dropped"] == 0
     assert isinstance(counts["rarely_rated_but_mostly_rated"], int)
     assert isinstance(counts["not_rarely_rated_but_mostly_unrated"], int)
+
+
+def test_duplicate_unrated_rows_for_one_game_ship_once(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    # WR-01: a second unrated telecast on an already-shipped game is dropped.
+    from booth_review.build.shipped import unrated_shipped_expr
+
+    unrated = small_tables.telecasts.filter(unrated_shipped_expr())
+    extra = unrated.head(1).with_columns(pl.lit("zz-dup").alias("telecast_id"))
+    tables = dataclasses.replace(
+        small_tables, telecasts=pl.concat([small_tables.telecasts, extra], how="diagonal_relaxed")
+    )
+    payload, counts = _site_with_counts(tables, build_reference)
+    assert len(payload["telecasts_unrated"]["season"]) == 4
+    assert counts["unrated_shipped"] == 4
+    assert counts["unrated_duplicates_dropped"] == 1
+
+
+def test_rated_block_repeating_a_game_raises_count_only(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    from booth_review.errors import VaultStateError
+
+    plotted = small_tables.telecasts.filter(pl.col("plotted")).head(1)
+    extra = plotted.with_columns(pl.lit("zz-dup").alias("telecast_id"))
+    tables = dataclasses.replace(
+        small_tables, telecasts=pl.concat([small_tables.telecasts, extra], how="diagonal_relaxed")
+    )
+    with pytest.raises(VaultStateError, match=r"1 game\(s\) have more than one plotted telecast"):
+        _site(tables, build_reference)
 
 
 def test_rated_block_is_unchanged_by_unrated_rows(
