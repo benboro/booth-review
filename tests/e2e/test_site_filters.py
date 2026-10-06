@@ -125,16 +125,18 @@ def test_season_counts_hidden_until_disclosure_opened(
 
 
 def test_default_season_counts(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
-    """Every season lists its rated-telecast count on first load, once the
+    """Every season lists its game count (rated and unrated) on first load, once the
     "Games per season" disclosure is opened."""
     open_app(guarded_page, "")
     _open_filter(guarded_page, "seasons")
     guarded_page.click("#season-counts-details summary")
     text = guarded_page.inner_text("#season-counts")
-    assert "2019: 2 rated telecasts" in text
-    assert "2021: 2 rated telecasts" in text
-    assert "2025: 4 rated telecasts" in text
-    assert "2026: 4 rated telecasts" in text
+    # Rated 2/2/4/4 plus unrated 1/4/2/1 (U0; U1-U4; U5, U6; U7).
+    assert "2019: 3 games" in text
+    assert "2021: 6 games" in text
+    assert "2025: 6 games" in text
+    assert "2026: 5 games" in text
+    assert "telecast" not in text
 
 
 def test_season_range_fades_dots_by_default_and_leaves_counts_unchanged(
@@ -148,28 +150,29 @@ def test_season_range_fades_dots_by_default_and_leaves_counts_unchanged(
     guarded_page.select_option("#season-to", "2026")
     guarded_page.wait_for_function("location.search.includes('seasons=2025-2026')")
 
-    assert _visible_count(guarded_page) == 12
-    assert _view(guarded_page)["passingCount"] == 8
+    # 2025-2026: rated 8 plus unrated U5, U6, U7 = 11 passing of 20 games.
+    assert _visible_count(guarded_page) == 20
+    assert _view(guarded_page)["passingCount"] == 11
     guarded_page.evaluate("window.__testHooks.setState({ dots: 'hide' })")
     guarded_page.wait_for_function("location.search.includes('dots=hide')")
-    assert _visible_count(guarded_page) == 8
-    assert _view(guarded_page)["passingCount"] == 8
+    assert _visible_count(guarded_page) == 11
+    assert _view(guarded_page)["passingCount"] == 11
     guarded_page.click("#season-counts-details summary")
     text = guarded_page.inner_text("#season-counts")
-    assert "2019: 2 rated telecasts" in text
+    assert "2019: 3 games" in text
 
 
 @pytest.mark.parametrize(
     ("query", "expected_seasons", "selects", "passing"),
     [
         # Entirely past the last data season: falls back to unfiltered.
-        ("?seasons=2030-2040", None, ("2019", "2026"), 12),
+        ("?seasons=2030-2040", None, ("2019", "2026"), 20),
         # Ends inside gaps (no 2020/2022-2024 data): snaps onto 2021-2021.
-        ("?seasons=2020-2022", [2021, 2021], ("2021", "2021"), 2),
+        ("?seasons=2020-2022", [2021, 2021], ("2021", "2021"), 6),
         # Wholly inside a gap: no data season in range, unfiltered.
-        ("?seasons=2022-2024", None, ("2019", "2026"), 12),
+        ("?seasons=2022-2024", None, ("2019", "2026"), 20),
         # Reversed and starting before the data: swapped, then snapped.
-        ("?seasons=2020-2000", [2019, 2019], ("2019", "2019"), 2),
+        ("?seasons=2020-2000", [2019, 2019], ("2019", "2019"), 3),
     ],
 )
 def test_season_link_snaps_to_data_seasons_the_selects_can_show(
@@ -207,14 +210,15 @@ def test_unchecking_fox_family_hides_its_dots(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """04.7 D-07: Networks always hides -- unchecking a family box removes its
-    networks' dots, so `visibleCount` and `passingCount` both drop to 9."""
+    networks' dots, so `visibleCount` and `passingCount` both drop to 15 (the 5 net-b
+    games, 3 rated and 2 unrated, are gone); 9 rated dots stay plotted."""
     open_app(guarded_page, "")
     _open_filter(guarded_page, "networks")
     guarded_page.uncheck("input[data-family-checkbox='fox']")
     guarded_page.wait_for_function("location.search.includes('networks=')")
 
-    assert _visible_count(guarded_page) == 9
-    assert _view(guarded_page)["passingCount"] == 9
+    assert _visible_count(guarded_page) == 15
+    assert _view(guarded_page)["passingCount"] == 15
     active = _visible_customdata(guarded_page)
     assert len(active) == 9
     assert 1 not in active
@@ -231,7 +235,7 @@ def test_isolating_a_single_network_via_family_checkboxes(
     guarded_page.uncheck("input[data-family-checkbox='other']")
     guarded_page.wait_for_function("location.search.includes('networks=net-b')")
 
-    assert _visible_count(guarded_page) == 3
+    assert _visible_count(guarded_page) == 5  # net-b: rated 1, 5, 9 plus unrated 12, 16
     assert sorted(_visible_customdata(guarded_page)) == [1, 5, 9]
 
 
@@ -244,7 +248,7 @@ def test_unchecking_one_network_leaves_family_indeterminate(
     network fades only its own dot and leaves the family box indeterminate."""
     mutated = json.loads(json.dumps(fixture_raw))
     mutated["lookups"]["networks"].append(
-        {"id": "net-e", "name": "Gamma Sports", "family": "disney"}
+        {"id": "net-g", "name": "Gamma Sports", "family": "disney"}
     )
     new_idx = len(mutated["lookups"]["networks"]) - 1
     mutated["telecasts"]["network"][4] = new_idx
@@ -261,7 +265,7 @@ def test_unchecking_one_network_leaves_family_indeterminate(
     assert 4 in before
 
     _open_filter(guarded_page, "networks")
-    guarded_page.uncheck("input[data-network-id='net-e']")
+    guarded_page.uncheck("input[data-network-id='net-g']")
     guarded_page.wait_for_function("location.search.includes('networks=')")
 
     after = _visible_customdata(guarded_page)
@@ -284,7 +288,7 @@ def test_prime_time_slot_fades_non_matching_including_unknown_kickoff(
     guarded_page.check("input[name='slot'][value='prime']")
     guarded_page.wait_for_function("location.search.includes('slot=prime')")
 
-    assert _visible_count(guarded_page) == 12
+    assert _visible_count(guarded_page) == 20
     assert sorted(_visible_customdata(guarded_page)) == [5, 7, 9]
 
 
@@ -299,7 +303,7 @@ def test_after_dark_slot_passes_only_the_late_kickoff(
     guarded_page.check("input[name='slot'][value='late']")
     guarded_page.wait_for_function("location.search.includes('slot=late')")
 
-    assert _visible_count(guarded_page) == 12
+    assert _visible_count(guarded_page) == 20
     assert sorted(_visible_customdata(guarded_page)) == [2]
 
     guarded_page.evaluate("window.__testHooks.openPanel(2)")
@@ -473,9 +477,9 @@ def test_clear_all_filters_resets_every_filter_and_the_url(
     guarded_page.click("#clear-filters")
     guarded_page.wait_for_function("location.search === ''")
 
-    assert _visible_count(guarded_page) == 12
+    assert _visible_count(guarded_page) == 20
     view = _view(guarded_page)
-    assert view["passingCount"] == 12
+    assert view["passingCount"] == 20
     assert view["hasSelection"] is False
 
 
@@ -920,6 +924,8 @@ def test_network_family_group_has_no_leftover_ua_padding_on_desktop(
     count = family_groups.count()
     assert count >= 1
     for i in range(count):
+        if family_groups.nth(i).locator(".network-list li").count() != 1:
+            continue  # only single-network groups are compared (disney has two since 04.13)
         box = family_groups.nth(i).bounding_box()
         assert box is not None
         assert box["height"] <= 60, (
@@ -939,24 +945,9 @@ def test_network_checklist_rows_are_compact_on_desktop(
     open_app: Callable[[Page, str], None],
     fixture_raw: dict[str, Any],
 ) -> None:
-    """Within one family, adjacent network checkbox rows are tightly spaced.
-    The stock fixture has only one network per family, so a second `disney`
-    network is added the same way
-    `test_unchecking_one_network_leaves_family_indeterminate` does, to get
-    two `<li>` rows inside one `.network-list`."""
-    mutated = json.loads(json.dumps(fixture_raw))
-    mutated["lookups"]["networks"].append(
-        {"id": "net-e", "name": "Gamma Sports", "family": "disney"}
-    )
-    new_idx = len(mutated["lookups"]["networks"]) - 1
-    mutated["telecasts"]["network"][4] = new_idx
-    mutated["telecasts"]["outlets"][4] = [new_idx]
-    body = json.dumps(mutated)
-
-    guarded_page.route(
-        "**/site-data.json*",
-        lambda route: route.fulfill(status=200, content_type="application/json", body=body),
-    )
+    """Within one family, adjacent network checkbox rows are tightly spaced. Since
+    04.13 the stock fixture's disney family holds two networks (Alpha Sports and
+    Stream Plus), so it gives two `<li>` rows inside one `.network-list`."""
     open_app(guarded_page, "")
     _open_filter(guarded_page, "networks")
 
@@ -1488,34 +1479,40 @@ def test_facet_person_narrows_networks_to_their_family_and_channel(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-09 acceptance case: with only dale-harlow (the Gus Johnson analog) picked,
-    Networks offers only the net-a family and channel."""
+    Networks offers only the channels of his games: net-a (rated 0, 8) and, since
+    04.13, net-c (his unrated game 17)."""
     open_app(guarded_page, "?people=dale-harlow")
     _open_filter(guarded_page, "networks")
     expect(_net_item(guarded_page, "net-a")).to_be_visible()
     expect(_fam_item(guarded_page, "disney")).to_be_visible()
     assert _count_text(_net_item(guarded_page, "net-a")) == "(2)"
-    for net_id in ("net-b", "net-c", "net-d"):
+    expect(_net_item(guarded_page, "net-c")).to_be_visible()
+    assert _count_text(_net_item(guarded_page, "net-c")) == "(1)"
+    for net_id in ("net-b", "net-d", "net-e"):
         expect(_net_item(guarded_page, net_id)).to_be_hidden()
-    for family in ("fox", "conference", "other"):
+    for family in ("fox", "other"):
         expect(_fam_item(guarded_page, family)).to_be_hidden()
 
 
 def test_facet_default_counts_show_on_every_option(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-12: each option shows its count of rated telecasts, and the accessible name says so."""
+    """D-12 / 04.13 D-08: each option shows its count of games (rated and unrated), and the
+    accessible name says so."""
     open_app(guarded_page, "")
     _open_filter(guarded_page, "networks")
-    for net_id in ("net-a", "net-b", "net-c", "net-d"):
-        assert _count_text(_net_item(guarded_page, net_id)) == "(3)"
-    box = guarded_page.get_by_role("checkbox", name=re.compile("Alpha Sports.*3 rated telecasts"))
+    # net-a 3+3, net-b 3+2, net-c 3+1, net-d 3+0, net-e 0+2 (rated + unrated) = 20 games.
+    expected = {"net-a": 6, "net-b": 5, "net-c": 4, "net-d": 3, "net-e": 2}
+    for net_id, n in expected.items():
+        assert _count_text(_net_item(guarded_page, net_id)) == f"({n})"
+    box = guarded_page.get_by_role("checkbox", name=re.compile("Alpha Sports.*6 games"))
     expect(box).to_have_count(1)
 
 
 def test_facet_explicit_networks_pick_made_impossible_stays_greyed(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-11, D-15: 1 of 4 is narrowed, so an impossible pick stays checked, greyed
+    """D-11, D-15: 1 of 5 is narrowed, so an impossible pick stays checked, greyed
     '(0)', in the URL, and returns to normal once the causing person is cleared."""
     open_app(guarded_page, "?people=dale-harlow&networks=net-b")
     _open_filter(guarded_page, "networks")
@@ -1528,13 +1525,13 @@ def test_facet_explicit_networks_pick_made_impossible_stays_greyed(
     expect(box).to_be_enabled()
     expect(_net_item(guarded_page, "net-a")).to_be_visible()
     assert _count_text(_net_item(guarded_page, "net-a")) == "(2)"
-    expect(_net_item(guarded_page, "net-c")).to_be_hidden()
+    expect(_net_item(guarded_page, "net-c")).to_be_visible()  # Dale's unrated game 17
     expect(_net_item(guarded_page, "net-d")).to_be_hidden()
     assert "net-b" in guarded_page.evaluate("location.search")
 
     guarded_page.evaluate("window.__testHooks.setState({ people: [] })")
     expect(item).not_to_have_class(re.compile("is-zero"))
-    assert _count_text(item) == "(3)"
+    assert _count_text(item) == "(5)"  # net-b: rated 1, 5, 9 plus unrated 12, 16
 
 
 def test_facet_networks_tie_counts_as_narrowed(
@@ -1553,11 +1550,11 @@ def test_facet_networks_tie_counts_as_narrowed(
 def test_facet_networks_all_but_a_few_hides_impossible_rows(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-11 amendment: 3 of 4 is default-like, so impossible rows hide instead of grey."""
+    """D-11 amendment: 3 of 5 is default-like, so impossible rows hide instead of grey."""
     open_app(guarded_page, "?people=dale-harlow&networks=net-a,net-b,net-c")
     _open_filter(guarded_page, "networks")
     expect(_net_item(guarded_page, "net-b")).to_be_hidden()
-    expect(_net_item(guarded_page, "net-c")).to_be_hidden()
+    expect(_net_item(guarded_page, "net-c")).to_be_visible()  # Dale's unrated game 17
     expect(_net_item(guarded_page, "net-a")).to_be_visible()
     expect(_net_item(guarded_page, "net-a").locator("input")).to_be_checked()
 
@@ -1638,7 +1635,8 @@ def test_facet_kickoff_zero_counts_grey_but_stay_clickable(
     """D-13: Kickoff never hides or disables an option."""
     open_app(guarded_page, "?people=dale-harlow")
     _open_filter(guarded_page, "kickoff")
-    expected = {"noon": "(1)", "afternoon": "(1)", "prime": "(0)", "late": "(0)"}
+    # Dale: rated 0 (noon), 8 (afternoon) plus unrated 17 (noon).
+    expected = {"noon": "(2)", "afternoon": "(1)", "prime": "(0)", "late": "(0)"}
     for slot, text in expected.items():
         item = guarded_page.locator(f".check-item:has(input[name='slot'][value='{slot}'])")
         expect(item).to_be_visible()
@@ -1665,14 +1663,14 @@ def test_facet_role_counts_show_and_zero_stays_enabled(
 def test_facet_postseason_counts_and_zero_option_selectable(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-13: Bowls/Playoffs shows All (2), Exclude (2), Only (0) greyed but selectable."""
+    """D-13: Bowls/Playoffs shows All (3), Exclude (3), Only (0) greyed but selectable."""
     open_app(guarded_page, "?people=dale-harlow")
     _open_filter(guarded_page, "postseason")
     texts = {
         v: _count_text(guarded_page.locator(f"[data-postseason='{v}']"))
         for v in ("all", "exclude", "only")
     }
-    assert texts == {"all": "(2)", "exclude": "(2)", "only": "(0)"}
+    assert texts == {"all": "(3)", "exclude": "(3)", "only": "(0)"}
     only = guarded_page.locator("[data-postseason='only']")
     expect(only).to_have_class(re.compile("is-zero"))
     only.click()
@@ -1686,14 +1684,15 @@ def test_facet_clear_all_and_reset_restore_defaults(
     open_app(guarded_page, "?people=dale-harlow&networks=net-b")
     _open_filter(guarded_page, "networks")
     guarded_page.click("#pop-networks .group-reset")
-    for net_id in ("net-a", "net-b", "net-c", "net-d"):
-        expect(_net_item(guarded_page, net_id)).to_be_hidden() if net_id != "net-a" else None
+    for net_id in ("net-b", "net-d", "net-e"):  # Dale's games are on net-a and net-c only
+        expect(_net_item(guarded_page, net_id)).to_be_hidden()
     guarded_page.keyboard.press("Escape")
     guarded_page.click("#clear-filters")
     _open_filter(guarded_page, "networks")
-    for net_id in ("net-a", "net-b", "net-c", "net-d"):
+    expected = {"net-a": 6, "net-b": 5, "net-c": 4, "net-d": 3, "net-e": 2}
+    for net_id, n in expected.items():
         expect(_net_item(guarded_page, net_id)).to_be_visible()
-        assert _count_text(_net_item(guarded_page, net_id)) == "(3)"
+        assert _count_text(_net_item(guarded_page, net_id)) == f"({n})"
 
 
 def test_facet_does_not_change_which_dots_pass(
@@ -1706,7 +1705,7 @@ def test_facet_does_not_change_which_dots_pass(
     guarded_page.evaluate("window.__testHooks.setState({ people: [] })")
     assert _view(guarded_page)["passesFilters"] == passing
     assert passing == sorted(passing)
-    assert set(passing) <= {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}
+    assert set(passing) <= set(range(20))  # rated 0-11 and unrated 12-19 pass the same way
 
 
 # ---------- Seasons clamp and empty-state note (D-14) ----------
@@ -1724,8 +1723,9 @@ def test_facet_seasons_offer_only_matching_seasons(
 ) -> None:
     open_app(guarded_page, "?people=dale-harlow")
     _open_filter(guarded_page, "seasons")
-    assert _season_options(guarded_page, "season-from") == ["2019", "2026"]
-    assert _season_options(guarded_page, "season-to") == ["2019", "2026"]
+    # Dale: rated 0 (2019), 8 (2026) plus unrated 17 (2025).
+    assert _season_options(guarded_page, "season-from") == ["2019", "2025", "2026"]
+    assert _season_options(guarded_page, "season-to") == ["2019", "2025", "2026"]
     assert guarded_page.input_value("#season-from") == "2019"
     assert guarded_page.input_value("#season-to") == "2026"
     assert guarded_page.evaluate("window.__testHooks.getState().seasons") is None
@@ -1734,21 +1734,23 @@ def test_facet_seasons_offer_only_matching_seasons(
 def test_facet_seasons_selected_ends_with_no_games_read_zero_and_show_note(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    open_app(guarded_page, "?people=dale-harlow&seasons=2021-2025")
+    # Taylor Vance's games are rated 5 (2025) and 10 (2026), so 2019 and 2021 read zero
+    # and the From menu stops at the first season with games (2025).
+    open_app(guarded_page, "?people=taylor-vance&seasons=2019-2021")
     _open_filter(guarded_page, "seasons")
-    assert _season_options(guarded_page, "season-from") == ["2019", "2021 (0)", "2025 (0)", "2026"]
-    assert guarded_page.input_value("#season-from") == "2021"
-    assert guarded_page.input_value("#season-to") == "2025"
+    assert _season_options(guarded_page, "season-from") == ["2019 (0)", "2021 (0)", "2025"]
+    assert guarded_page.input_value("#season-from") == "2019"
+    assert guarded_page.input_value("#season-to") == "2021"
     note = guarded_page.locator("#season-empty-note")
     expect(note).to_be_visible()
     expect(note.locator(".season-empty-title")).to_have_text(
-        "No games in 2021\u20132025 for this selection"
+        "No games in 2019\u20132021 for this selection"
     )
     expect(note.locator(".season-empty-hint")).to_have_text(
         "Widen the season range or reset Seasons."
     )
-    assert guarded_page.evaluate("window.__testHooks.getState().seasons") == [2021, 2025]
-    assert "seasons=2021-2025" in guarded_page.evaluate("location.search")
+    assert guarded_page.evaluate("window.__testHooks.getState().seasons") == [2019, 2021]
+    assert "seasons=2019-2021" in guarded_page.evaluate("location.search")
 
 
 def test_facet_seasons_single_year_note_wording(
@@ -1782,7 +1784,7 @@ def test_facet_seasons_note_causes_no_layout_shift_and_survives_rerender(
         " return [r.x, r.width, r.height, s.width]; }"
     )
     hidden_geom = guarded_page.evaluate(js)
-    guarded_page.evaluate("window.__testHooks.setState({ seasons: [2021, 2025] })")
+    guarded_page.evaluate("window.__testHooks.setState({ seasons: [2021, 2021] })")
     note = guarded_page.locator("#season-empty-note")
     expect(note).to_be_visible()
     assert guarded_page.evaluate(js) == hidden_geom
@@ -1803,12 +1805,13 @@ def test_facet_seasons_note_causes_no_layout_shift_and_survives_rerender(
 def test_facet_seasons_reset_clears_range_and_hides_note(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    open_app(guarded_page, "?people=dale-harlow&seasons=2021-2025")
+    open_app(guarded_page, "?people=dale-harlow&seasons=2021-2021")
     _open_filter(guarded_page, "seasons")
+    expect(guarded_page.locator("#season-empty-note")).to_be_visible()
     guarded_page.click("#pop-seasons .group-reset")
     expect(guarded_page.locator("#season-empty-note")).to_be_hidden()
     assert guarded_page.evaluate("window.__testHooks.getState().seasons") is None
-    assert _season_options(guarded_page, "season-from") == ["2019", "2026"]
+    assert _season_options(guarded_page, "season-from") == ["2019", "2025", "2026"]
 
 
 def test_facet_seasons_one_sided_edit_keeps_untouched_end_at_data_bound(
@@ -1824,7 +1827,8 @@ def test_facet_seasons_one_sided_edit_keeps_untouched_end_at_data_bound(
     assert guarded_page.evaluate("window.__testHooks.getState().seasons") == [2019, 2025]
     assert "seasons=2019-2025" in guarded_page.evaluate("location.search")
     guarded_page.evaluate("window.__testHooks.setState({ networks: null })")
-    assert _view(guarded_page)["passingCount"] == 8
+    # 2019-2025 under no network filter: rated 2+2+4 plus unrated 1+4+2 = 15 games.
+    assert _view(guarded_page)["passingCount"] == 15
 
 
 def test_facet_seasons_one_sided_edit_to_the_data_bound_sets_no_filter(
@@ -1845,8 +1849,79 @@ def test_facet_view_exposes_plain_json_facets(
 ) -> None:
     open_app(guarded_page, "")
     facets = _view(guarded_page)["facets"]
-    assert facets["seasons"] == {"2019": 2, "2021": 2, "2025": 4, "2026": 4}
-    assert facets["networks"] == [3, 3, 3, 3, 0]
+    assert facets["seasons"] == {"2019": 3, "2021": 6, "2025": 6, "2026": 5}
+    assert facets["networks"] == [6, 5, 4, 3, 2]
+
+
+def test_unrated_only_network_is_counted_and_pickable(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """04.13 D-08: Stream Plus has no rated game, only unrated games 15 and 18; it
+    still lists with a real count and picking it leaves exactly those two games."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "networks")
+    item = _net_item(guarded_page, "net-e")
+    expect(item).to_be_visible()
+    assert _count_text(item) == "(2)"
+    expect(item).not_to_have_class(re.compile("is-zero"))
+    item.locator(".only-btn").click()
+    guarded_page.wait_for_function("location.search.includes('networks=net-e')")
+    assert _view(guarded_page)["passingCount"] == 2
+    assert guarded_page.inner_text("#summary-count") == "0 rated of 2 games"
+
+
+def test_unrated_only_announcer_is_counted_and_pickable(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """04.13 D-08: Morgan Ash works only unrated game 13; the Announcers list shows
+    (1) and selecting him reads '0 rated of 1 game'."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "announcers")
+    row = guarded_page.locator("#person-results li[data-person-id='morgan-ash']")
+    expect(row).to_be_visible()
+    assert str(row.locator(".option-count").inner_text()).strip() == "(1)"
+    expect(row).not_to_have_class(re.compile("is-zero"))
+    _add_person_by_query(guarded_page, "Morgan Ash")
+    guarded_page.wait_for_function("location.search.includes('people=morgan-ash')")
+    assert guarded_page.inner_text("#summary-count") == "0 rated of 1 game"
+
+
+def test_game_picker_counts_the_unrated_bayside_game(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """04.13 D-08: the Harbor Bowl row counts rated game 7 (Acme Harbor Bowl, 2025) and
+    unrated game 16 (Bayside Bowl, 2021); under Seasons 2021-2021 it keeps the Bayside
+    game (count 1) and stays visible."""
+    row_js = "() => document.querySelector('#game-options [data-game=\"harbor-bowl\"]')"
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "game")
+    count = guarded_page.locator("#game-options [data-game='harbor-bowl'] .option-count")
+    assert str(count.inner_text()).strip() == "(2)"
+    guarded_page.keyboard.press("Escape")
+    open_app(guarded_page, "?seasons=2021-2021")
+    _open_filter(guarded_page, "game")
+    assert guarded_page.evaluate(row_js + ".offsetParent !== null")
+    assert str(count.inner_text()).strip() == "(1)"
+
+
+def test_screen_reader_count_suffix_reads_games(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """04.13 D-07: the checkbox accessible name ends ', N games' / ', 1 game' and no
+    facet string says 'telecast'."""
+    open_app(guarded_page, "")
+    _open_filter(guarded_page, "networks")
+    expect(
+        guarded_page.get_by_role("checkbox", name=re.compile("Alpha Sports.*, 6 games"))
+    ).to_have_count(1)
+    expect(
+        guarded_page.get_by_role("checkbox", name=re.compile("Conference Network.*, 4 games"))
+    ).to_have_count(1)
+    guarded_page.evaluate("window.__testHooks.setState({ people: ['dale-harlow'] })")
+    expect(
+        guarded_page.get_by_role("checkbox", name=re.compile("Conference Network.*, 1 game$"))
+    ).to_have_count(1)
+    assert "telecast" not in guarded_page.inner_text("#pop-networks")
 
 
 # ---------- "Only" / "All" shortcut (SITE-31, D-23..D-27) ----------

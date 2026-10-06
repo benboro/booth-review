@@ -152,7 +152,7 @@ function setCount(container, count, zeroEl = container) {
   const sr = container.querySelector('.option-count-sr');
   const text = `(${count})`;
   if (visible && visible.textContent !== text) visible.textContent = text;
-  const srText = `, ${count} rated ${count === 1 ? 'telecast' : 'telecasts'}`;
+  const srText = `, ${count} ${count === 1 ? 'game' : 'games'}`;
   if (sr && sr.textContent !== srText) sr.textContent = srText;
   zeroEl.classList.toggle('is-zero', count === 0);
 }
@@ -1100,7 +1100,7 @@ function renderSeasons(data, state, view) {
     if (state.seasons != null && (season < state.seasons[0] || season > state.seasons[1])) {
       li.className = 'out-of-range';
     }
-    const word = count === 1 ? 'rated telecast' : 'rated telecasts';
+    const word = count === 1 ? 'game' : 'games';
     li.textContent = `${season}: ${count} ${word}`;
     return li;
   });
