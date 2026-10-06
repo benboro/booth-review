@@ -208,7 +208,9 @@ _MAX_DIFF_GRID = 40
 
 _BAND_CASES = [
     ("", "unrated-active:disney"),
-    ("?school=northfield", "unrated-active:disney"),
+    # Under a size filter `unrated-active` is the rated-style 10px dot (notes-2 #5), whose GL
+    # outline sits differently from SVG's centred stroke -- not a ring, and not speckle -- so
+    # only the ring traces are compared.
     ("?school=northfield", "unrated-inert:disney"),
 ]
 

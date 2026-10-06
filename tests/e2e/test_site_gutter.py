@@ -485,14 +485,14 @@ def test_band_markers_clear_band_edges(
     size: tuple[int, int],
     axis_query: str,
 ) -> None:
-    """D-01: a compare star-open (15 + 3 halo) in the band stays size/2 + 1 px inside the edges."""
+    """D-01: a filled compare star (15 + 3 halo) in the band stays size/2 + 1 px inside."""
     page: Page = request.getfixturevalue("guarded_page" if size[0] > 600 else "mobile_page")
     page.set_viewport_size({"width": size[0], "height": size[1]})
     open_app(page, f"?people=pat-rowan,sam-delgado&mode=compare{axis_query}")
     _settle(page)
     got = page.evaluate(_BAND_EDGE_JS)
     pts = got["pts"]
-    assert any(p["symbol"] == "star-open" for p in pts), "compare must draw a shared star-open"
+    assert any(p["symbol"] == "star" for p in pts), "compare must draw a shared star"
     for p in pts:
         # the halo is 3px larger than the glyph (D-33), so its own size is checked as-is
         half = p["size"] / 2 + 1

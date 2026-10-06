@@ -1286,7 +1286,7 @@ async () => {
 
 # Calibrated (04.13-17) against the real band: the open-symbol band differs from its SVG
 # reference by far more; filled rings stay under this.
-_REAL_BAND_MAX_DIFF = 4000
+_REAL_BAND_MAX_DIFF = 2000
 
 
 @pytest.mark.parametrize("theme", ["light", "dark"])

@@ -59,6 +59,14 @@ async () => {
 }
 """
 
+_PALETTE_JS = """
+async () => {
+  const p = await import('./modules/palette.js');
+  const theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return { surface: p.SURFACE[theme], accent: p.ACCENT[theme], outline: p.DOT_OUTLINE };
+}
+"""
+
 _GEOMETRY_JS = """
 () => {
   const gd = document.getElementById('chart');
@@ -202,6 +210,18 @@ def test_band_stays_drawn_when_filters_leave_no_unrated_games(
 # ---------------------------------------------------------------------------
 
 
+def _family_colors(page: Page) -> dict[str, str]:
+    colors: dict[str, str] = page.evaluate(
+        """async () => {
+          const p = await import('./modules/palette.js');
+          const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          const theme = dark ? 'dark' : 'light';
+          return p.FAMILY_COLORS[theme];
+        }"""
+    )
+    return colors
+
+
 @pytest.mark.parametrize("axis_query", _AXES)
 def test_default_unrated_markers(
     guarded_page: Page, open_app: Callable[[Page, str], None], axis_query: str
@@ -211,6 +231,7 @@ def test_default_unrated_markers(
     active = [t for t in traces if t["meta"].startswith("unrated-active:")]
     assert {f"unrated-active:{f}" for f in _FAMILIES} <= {t["meta"] for t in active}
     thin = guarded_page.evaluate(_THIN_JS)
+    surface = guarded_page.evaluate(_PALETTE_JS)["surface"]
     pts = _unrated_points(guarded_page, "unrated-active:")
     assert sorted(pts) == list(range(12, 20))
     by_family = {t["meta"].split(":", 1)[1]: sorted(t["customdata"]) for t in active}
@@ -219,11 +240,14 @@ def test_default_unrated_markers(
     assert by_family["conference"] == [17]
     for t in active:
         assert t["yaxis"] == "y2"
-        assert t["symbol"] == "circle-open"
+        # notes-2 #1: a ring is a filled SURFACE circle with a family-colored line (an open
+        # symbol speckles in scattergl).
+        assert t["symbol"] == "circle"
+        assert t["color"] == surface
         assert t["size"] == 6
         assert t["lineWidth"] == thin[t["meta"].split(":", 1)[1]]
         assert t["opacity"] == 1
-        assert t["lineColor"] == t["color"]
+        assert t["lineColor"] == _family_colors(guarded_page)[t["meta"].split(":", 1)[1]]
 
 
 def test_jitter_is_the_band_y_and_stable_across_reload(
@@ -307,19 +331,79 @@ def test_fade_filter_moves_failing_games_to_inert_and_enlarges_passing(
     passing = sorted(i for t in active for i in t["customdata"])
     assert passing == [13, 16]
     assert sum(len(t["x"]) for t in inert) == 6
+    palette = guarded_page.evaluate(_PALETTE_JS)
+    colors = _family_colors(guarded_page)
+    rated = {t["meta"]: t for t in traces if t["meta"].startswith("family:")}
     for t in active:
+        # notes-2 #5 (amends D-03): a passing unrated game under a filter is its rated twin.
+        family = t["meta"].split(":", 1)[1]
+        assert t["symbol"] is None
         assert t["size"] == 10
-        assert t["lineWidth"] == 2
-        assert t["lineColor"] == t["color"]  # the ring is the outline: no separate black line
+        assert t["color"] == colors[family]
+        assert t["lineWidth"] == 1
+        assert t["lineColor"] == palette["outline"]
+        assert t["opacity"] == rated[f"family:{family}"]["opacity"]
     opacity = guarded_page.evaluate(
         "async () => (await import('./modules/chart.js')).DOT_OPACITY.inert"
     )
+    thin = guarded_page.evaluate(_THIN_JS)
     for t in inert:
         assert t["hoverinfo"] == "skip"
         assert t["hovertemplate"] is None
         assert t["size"] == 6
         assert t["opacity"] == opacity
-        assert t["symbol"] == "circle-open"
+        assert t["symbol"] == "circle"
+        assert t["color"] == palette["surface"]
+        assert t["lineWidth"] == thin[t["meta"].split(":", 1)[1]]
+
+
+def test_date_seasons_only_keeps_unrated_rings_while_spread_fills_them(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """04.12 D-05: a Date seasons-only filter is not a size filter, so rings stay 6px rings;
+    on Spread the same filter fills the passing unrated games like rated dots."""
+    open_app(guarded_page, "?axis=date&seasons=2025-2026")
+    surface = guarded_page.evaluate(_PALETTE_JS)["surface"]
+    date_active = [
+        t
+        for t in _traces(guarded_page)
+        if t["meta"].startswith("unrated-active:") and t["customdata"]
+    ]
+    assert date_active
+    for t in date_active:
+        assert t["symbol"] == "circle"
+        assert t["color"] == surface
+        assert t["size"] == 6
+    open_app(guarded_page, "?seasons=2025-2026")
+    spread_active = [
+        t
+        for t in _traces(guarded_page)
+        if t["meta"].startswith("unrated-active:") and t["customdata"]
+    ]
+    assert spread_active
+    for t in spread_active:
+        assert t["symbol"] is None
+        assert t["size"] == 10
+        assert t["lineWidth"] == 1
+
+
+def test_person_alone_keeps_unrated_games_as_rings_at_the_person_opacity(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """People are not filters: with only an announcer selected the others' unrated games stay
+    rings, at the activeUnderPerson tier."""
+    open_app(guarded_page, "?people=pat-rowan")
+    surface = guarded_page.evaluate(_PALETTE_JS)["surface"]
+    tier = guarded_page.evaluate(
+        "async () => (await import('./modules/chart.js')).DOT_OPACITY.activeUnderPerson"
+    )
+    active = [t for t in _traces(guarded_page) if t["meta"].startswith("unrated-active:")]
+    assert any(t["customdata"] for t in active)
+    for t in active:
+        assert t["symbol"] == "circle"
+        assert t["color"] == surface
+        assert t["size"] == 6
+        assert t["opacity"] == tier
 
 
 def test_active_traces_share_hover_config_with_rated_twins(
@@ -404,25 +488,29 @@ def _highlight(page: Page) -> dict[int, dict[str, Any]]:
     return out
 
 
-def test_compare_open_shapes_and_open_halo(
+def test_compare_filled_shapes_and_filled_halo(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(guarded_page, "?people=pat-rowan,sam-delgado&mode=compare")
     hl = _highlight(guarded_page)
-    assert hl[15] == {"symbol": "circle-open", "size": 10}
-    assert hl[16] == {"symbol": "star-open", "size": 15}
-    assert hl[19] == {"symbol": "star-open", "size": 15}
+    assert hl[15] == {"symbol": "circle", "size": 10}
+    assert hl[16] == {"symbol": "star", "size": 15}
+    assert hl[19] == {"symbol": "star", "size": 15}
     by = _by_meta(guarded_page)
     t = by["highlight-unrated"]
-    assert t["yaxis"] == "y2" and t["lineWidth"] == 2 and t["opacity"] == 1
+    assert t["yaxis"] == "y2" and t["opacity"] == 1
+    # like the rated highlight: circles take the 1.5px ACCENT line, other shapes none
+    widths = dict(zip(t["customdata"], t["lineWidth"], strict=True))
+    assert widths[15] == 1.5 and widths[16] == 0 and widths[19] == 0
+    assert t["lineColor"] == guarded_page.evaluate(_PALETTE_JS)["accent"]
     halo = by["highlight-halo-unrated"]
     assert halo["yaxis"] == "y2"
     assert sorted(halo["x"]) == sorted(
         [hl_x for i, hl_x in zip(t["customdata"], t["x"], strict=True) if i in (16, 19)]
     )
-    assert halo["symbol"] == ["star-open", "star-open"]
+    assert halo["symbol"] == ["star", "star"]
     assert halo["size"] == [18, 18]
-    assert halo["lineWidth"] == 2
+    assert halo["lineWidth"] == 0
     assert halo["hoverinfo"] == "skip"
     accent = guarded_page.evaluate(
         "async () => (await import('./modules/palette.js')).ACCENT.light"
@@ -434,11 +522,11 @@ def test_compare_shared_booth_is_a_star_and_others_get_shapes(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(guarded_page, "?people=kris-venn,morgan-ash&mode=compare")
-    assert _highlight(guarded_page)[13]["symbol"] == "star-open"
+    assert _highlight(guarded_page)[13]["symbol"] == "star"
     open_app(guarded_page, "?people=dale-harlow,kris-venn&mode=compare")
     hl = _highlight(guarded_page)
-    assert hl[17] == {"symbol": "circle-open", "size": 10}
-    assert hl[13]["symbol"] in {"square-open", "diamond-open", "triangle-up-open"}
+    assert hl[17] == {"symbol": "circle", "size": 10}
+    assert hl[13]["symbol"] in {"square", "diamond", "triangle-up"}
     assert hl[13]["size"] == 12
     halo = _by_meta(guarded_page)["highlight-halo-unrated"]
     assert 15 in halo["size"]
@@ -449,10 +537,10 @@ _SPECKLE_QUERY = "?people=kris-venn,sam-delgado,dale-harlow,casey-lund&mode=comp
 
 
 @pytest.mark.parametrize("color_scheme", ["light", "dark"])
-def test_open_compare_shapes_in_the_band_have_no_edge_speckles(
+def test_filled_compare_shapes_in_the_band_have_no_edge_speckles(
     guarded_page: Page, open_app: Callable[[Page, str], None], color_scheme: str
 ) -> None:
-    """D-31 guard on the open traces: no accent speckle beyond the open halo's own shape.
+    """D-31 guard on the band's filled compare shapes: no accent speckle beyond the halo.
 
     Measures with the `_speckle_count` helper of test_site_chart.py (imported, not edited).
     """
@@ -480,7 +568,7 @@ def test_open_compare_shapes_in_the_band_have_no_edge_speckles(
     tested = 0
     total = 0
     for point in points:
-        if point["symbol"] == "circle-open":
+        if point["symbol"] == "circle":
             continue
         others = [p for p in points if p["customdata"] != point["customdata"]]
         if any(_boxes_overlap(point, o) for o in others):
@@ -494,8 +582,8 @@ def test_open_compare_shapes_in_the_band_have_no_edge_speckles(
             _halo_ring_inner_radius(point["size"]),
             others,
         )
-    assert tested > 0, "no open non-circle marker was testable"
-    assert total == 0, f"{total} speckle pixel(s) around open compare markers"
+    assert tested > 0, "no non-circle marker was testable"
+    assert total == 0, f"{total} speckle pixel(s) around filled compare markers"
 
 
 # ---------------------------------------------------------------------------
