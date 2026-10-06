@@ -450,3 +450,53 @@ def test_height_only_resize_keeps_range_object(
     assert page.evaluate(_XRANGE_JS) == pytest.approx(rng, abs=1e-9)
     assert page.evaluate("() => document.getElementById('chart').boothHomeX") == home_x
     assert page.evaluate("() => window.__testHooks.scatterResizeRenders") == renders
+
+
+_BAND_EDGE_JS = """
+() => {
+  const gd = document.getElementById('chart');
+  const fl = gd._fullLayout;
+  const xa = fl.xaxis;
+  const ya = fl.yaxis2;
+  const out = [];
+  for (const t of gd.data) {
+    if (t.yaxis !== 'y2' || !String(t.meta).startsWith('highlight')) continue;
+    const sizes = Array.isArray(t.marker.size) ? t.marker.size : t.x.map(() => t.marker.size);
+    t.x.forEach((x, k) => {
+      out.push({
+        meta: t.meta,
+        symbol: Array.isArray(t.marker.symbol) ? t.marker.symbol[k] : t.marker.symbol,
+        size: sizes[k],
+        px: xa.l2p(xa.d2l(x)),
+        py: ya.l2p(ya.d2l(t.y[k])),
+      });
+    });
+  }
+  return { pts: out, w: xa._length, h: ya._length };
+}
+"""
+
+
+@pytest.mark.parametrize("size", [(1280, 900), (360, 800)], ids=lambda s: f"{s[0]}x{s[1]}")
+@pytest.mark.parametrize("axis_query", ["", "&axis=excitement", "&axis=date"])
+def test_band_markers_clear_band_edges(
+    request: pytest.FixtureRequest,
+    open_app: Callable[[Page, str], None],
+    size: tuple[int, int],
+    axis_query: str,
+) -> None:
+    """D-01: a compare star-open (15 + 3 halo) in the band stays size/2 + 1 px inside the edges."""
+    page: Page = request.getfixturevalue("guarded_page" if size[0] > 600 else "mobile_page")
+    page.set_viewport_size({"width": size[0], "height": size[1]})
+    open_app(page, f"?people=pat-rowan,sam-delgado&mode=compare{axis_query}")
+    _settle(page)
+    got = page.evaluate(_BAND_EDGE_JS)
+    pts = got["pts"]
+    assert any(p["symbol"] == "star-open" for p in pts), "compare must draw a shared star-open"
+    for p in pts:
+        # the halo is 3px larger than the glyph (D-33), so its own size is checked as-is
+        half = p["size"] / 2 + 1
+        assert p["px"] >= half - 0.5, p
+        assert got["w"] - p["px"] >= half - 0.5, p
+        assert p["py"] >= half - 0.5, p
+        assert got["h"] - p["py"] >= half - 0.5, p

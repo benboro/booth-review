@@ -195,8 +195,11 @@ def test_date_seasons_only_summary_still_reads_n_of_m(
     summary = guarded_page.evaluate("() => window.__testHooks.getView().summary")
     total = guarded_page.evaluate("() => window.__testHooks.data.n")
     assert summary["kind"] == "matches"
-    assert summary["of"] == total
-    assert f"of {total}" in guarded_page.inner_text("#summary")
+    # 04.13 D-07: the summary counts games (rated + unrated); `of` became `count`/`rated`
+    # 2025-2026 keeps 11 of the 20 fixture games, 8 of them rated (04.13 D-07: counts are games)
+    assert (summary["count"], summary["rated"]) == (11, 8)
+    assert total == 20
+    assert "8 rated of 11 games" in guarded_page.inner_text("#summary")
 
 
 @pytest.mark.parametrize("dots", ["", "&dots=hide"])

@@ -12,7 +12,7 @@ from collections.abc import Callable
 from itertools import pairwise
 
 import pytest
-from conftest import FIXTURE_RATED
+from conftest import FIXTURE_GAMES, FIXTURE_RATED, FIXTURE_UNRATED
 from playwright.sync_api import Page, Route, expect
 from test_site_chart import _RING_VISIBLE, _hover_dot
 
@@ -371,9 +371,14 @@ _FIG_JS = """
   const gd = document.getElementById('chart');
   const l = gd.layout;
   const xs = [];
+  const logXs = [];
+  const bandXs = [];
   const byIdx = {};
   for (const t of gd.data) {
-    for (const x of t.x) xs.push(x);
+    for (const x of t.x) {
+      xs.push(x);
+      (t.yaxis === 'y2' ? bandXs : logXs).push(x);
+    }
     if (t.customdata) t.customdata.forEach((c, k) => { byIdx[c] = t.x[k]; });
   }
   const y = gd._fullLayout.yaxis.range.slice();
@@ -383,14 +388,15 @@ _FIG_JS = """
     layoutRange: l.xaxis.range.slice(),
     minallowed: l.xaxis.minallowed,
     maxallowed: l.xaxis.maxallowed,
-    shapes: (l.shapes ?? []).map((s) => (
+    // season dividers only: the band's own rect and top line are paper-referenced (plan 07)
+    shapes: (l.shapes ?? []).filter((s) => s.xref === 'x').map((s) => (
       { x: s.x0, layer: s.layer, width: s.line.width, color: s.line.color })),
     anns: (l.annotations ?? []).map((a) => ({
       name: a.name ?? null, text: a.text, yref: a.yref, y: a.y, yanchor: a.yanchor,
       capture: a.captureevents,
       visible: a.visible, x: a.x, xshift: a.xshift,
     })),
-    xs, byIdx, y,
+    xs, logXs, bandXs, byIdx, y,
     uirevision: l.uirevision,
     traces: gd.data.length,
     tickvals: l.xaxis.tickvals,
@@ -443,10 +449,13 @@ def test_no_na_strip_and_all_dots_plotted(date_page: Page) -> None:
     f = _fig(date_page)
     date_x = date_page.evaluate("Array.from(window.__testHooks.data.t.dateX)")
     # Every dot passes in the default state, so each telecast is drawn exactly once.
-    # The log-axis traces hold rated games only until the band lands (plan 15).
-    assert len(f["byIdx"]) == FIXTURE_RATED
-    assert sorted(f["xs"]) == sorted(date_x[:FIXTURE_RATED])
-    assert len(f["xs"]) == FIXTURE_RATED
+    # 12 rated dots on the log axis + 8 unrated dots in the band = all 20 games (04.13).
+    assert len(f["byIdx"]) == FIXTURE_GAMES
+    assert sorted(f["logXs"]) == sorted(date_x[:FIXTURE_RATED])
+    assert sorted(f["bandXs"]) == sorted(date_x[FIXTURE_RATED:])
+    assert len(f["logXs"]) == FIXTURE_RATED
+    assert len(f["bandXs"]) == FIXTURE_UNRATED
+    assert sorted(f["xs"]) == sorted(date_x)
     assert f["range"][0] <= min(f["xs"]) and f["range"][1] >= max(f["xs"])
 
 

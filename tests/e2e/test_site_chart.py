@@ -432,7 +432,10 @@ def test_legend_chip_greyed_when_family_has_no_offered_channel(
     open_app(guarded_page, "?people=dale-harlow")
     disney = guarded_page.locator('#legend-chips button[data-family="disney"]')
     expect(disney).to_have_attribute("data-offered", "true")
-    for family in ("fox", "conference", "other"):
+    # dale-harlow also works unrated game 17 (a conference network), so that chip stays offered
+    conf = guarded_page.locator('#legend-chips button[data-family="conference"]')
+    expect(conf).to_have_attribute("data-offered", "true")
+    for family in ("fox", "other"):
         chip = guarded_page.locator(f'#legend-chips button[data-family="{family}"]')
         expect(chip).to_have_attribute("data-offered", "false")
         expect(chip).to_have_attribute("aria-pressed", "true")
@@ -1460,7 +1463,7 @@ def test_tooltip_mode_trace_config(
 
     html_full = guarded_page.evaluate(full_js)
     for t in html_full:
-        if str(t["meta"]).startswith("inert:"):
+        if str(t["meta"]).startswith(("inert:", "unrated-inert:", "highlight-halo")):
             assert t["hoverinfo"] == "skip"
             assert not t["hovertemplate"]
         else:
@@ -1478,12 +1481,14 @@ def test_tooltip_mode_trace_config(
     plotly_full = guarded_page.evaluate(full_js)
     for t in plotly_full:
         meta = str(t["meta"])
-        if meta.startswith("inert:"):
+        if meta.startswith(("inert:", "unrated-inert:", "highlight-halo")):
             assert t["hoverinfo"] == "skip"
             assert not t["hovertemplate"]
-        elif meta.startswith("family:"):
-            assert t["hovertemplate"] == "%{text}<extra></extra>"
-            assert len(t["text"]) == len(t["customdata"])
+        elif meta.startswith(("family:", "unrated-active:")):
+            # an empty trace (unrated-active:other) has its template reset by Plotly
+            if t["customdata"]:
+                assert t["hovertemplate"] == "%{text}<extra></extra>"
+                assert len(t["text"]) == len(t["customdata"])
 
     # A person selection fades every family trace to 'skip' (D-15) and
     # fills the highlight trace, which now carries the fallback template.
@@ -1491,13 +1496,16 @@ def test_tooltip_mode_trace_config(
     plotly_full_selected = guarded_page.evaluate(full_js)
     for t in plotly_full_selected:
         meta = str(t["meta"])
-        if meta.startswith("inert:") or meta.startswith("family:"):
+        if meta.startswith(("inert:", "family:", "unrated-inert:", "unrated-active:")):
             assert t["hoverinfo"] == "skip"
             assert not t["hovertemplate"]
+        elif meta.startswith("highlight-halo"):
+            assert t["hoverinfo"] == "skip"  # halos are never hoverable
         else:
-            assert meta == "highlight"
-            assert t["hovertemplate"] == "%{text}<extra></extra>"
-            assert len(t["text"]) == len(t["customdata"]) > 0
+            assert meta in ("highlight", "highlight-unrated")
+            if t["customdata"] and len(t["customdata"]) > 0:
+                assert t["hovertemplate"] == "%{text}<extra></extra>"
+                assert len(t["text"]) == len(t["customdata"])
 
 
 # D-31: mirrors `site/modules/palette.js`'s ACCENT/PAGE_BG tokens -- a pure
