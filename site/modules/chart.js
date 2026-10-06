@@ -5,6 +5,10 @@
  * pass every filter) and an "inert" trace (dots that fail one, drawn in the
  * family color at the fail tier, D-01/D-02, never hoverable, D-03; Hide mode
  * and Networks leave them undrawn upstream in select.js) --
+ * plus (04.13) per-family hollow `unrated-inert:`/`unrated-active:` traces on
+ * `yaxis2`, the always-on "No public rating" band under the log axis (D-01),
+ * and two highlight overlays -- `highlight-halo-unrated`/`highlight-unrated`
+ * (open symbols, D-03) then the rated halo and `highlight`, always last --
  * plus a highlight overlay drawn last, the D-03 n/a strip, log-axis ticks,
  * the UI-SPEC's minimal hover content, and the phone/desktop layout.
  * Plotly's own legend is off everywhere (`showlegend: false`); the HTML
@@ -41,7 +45,7 @@
  * importable from node for quick checks.
  */
 
-import { ACCENT, DIVIDER, DOT_OUTLINE, FAMILY_COLORS, MUTED, PAGE_BG, SURFACE, ZERO_LINE, familyKey } from './palette.js';
+import { ACCENT, DIVIDER, DOT_OUTLINE, FAMILY_COLORS, MUTED, PAGE_BG, SURFACE, ZERO_LINE, contrastRatio, familyKey } from './palette.js';
 import { MINUS, escapeHover, logTicks, niceLinearTicks } from './format.js';
 import { tooltipModel } from './tooltip.js';
 import { dateAxisLabels, gapDividers, seasonRange, shownBlocks } from './date-axis.js';
@@ -72,6 +76,37 @@ export const DOT_OPACITY = Object.freeze({
  * units is the chart width minus `l` and `r`, so this is the one copy.
  */
 export const MARGIN = Object.freeze({ l: 70, r: 24, t: 40, b: 60 });
+
+/**
+ * 04.13 D-01 chart-geometry constants for the "No public rating" band, in screen px
+ * like the 04.12 gutter. The 56px floor is two 12px marker rows plus the pads, so
+ * phones keep two rows.
+ */
+export const BAND = Object.freeze({ frac: 0.12, minPx: 56, gapPx: 28, padPx: 12 });
+
+/** Plot height assumed before the chart div is measured: #chart min-height 520 minus MARGIN.t + MARGIN.b. */
+const FALLBACK_PLOT_HEIGHT = 420;
+
+/**
+ * The vertical split of the plot: the log viewers axis on top, a fixed gap row, then
+ * the band, as paper fractions, plus the band's y2 range, padded so a marker never
+ * clips at the band edges.
+ * @param {number} [plotHeightPx] - plot height in screen px; missing or not positive uses 420.
+ * @returns {{plotPx: number, bandPx: number, gapPx: number, bandTop: number, logBottom: number, y2range: [number, number]}}
+ */
+export function bandLayout(plotHeightPx) {
+  const plotPx = plotHeightPx > 0 ? plotHeightPx : FALLBACK_PLOT_HEIGHT;
+  const bandPx = Math.max(BAND.frac * plotPx, BAND.minPx);
+  const interior = bandPx - 2 * BAND.padPx;
+  return {
+    plotPx,
+    bandPx,
+    gapPx: BAND.gapPx,
+    bandTop: bandPx / plotPx,
+    logBottom: (bandPx + BAND.gapPx) / plotPx,
+    y2range: [-BAND.padPx / interior, 1 + BAND.padPx / interior],
+  };
+}
 
 /** Chart widths assumed before the chart div has been measured (a 360px phone, a 1232px desktop). */
 const FALLBACK_CHART_WIDTH = { mobile: 360, desktop: 1232 };
@@ -184,7 +219,7 @@ export function hoverText(data, i, { axis, theme }) {
  * @param {object} state - shaped like `defaultState(data)`.
  * `env.chartWidth` is the chart div's width in px; the plot width is that
  * minus `MARGIN.l`/`MARGIN.r`, with a phone/desktop fallback while unmeasured.
- * @param {{theme: "light"|"dark", mobile: boolean, revision: number, tooltipMode?: "html"|"plotly", chartWidth?: number}} env
+ * @param {{theme: "light"|"dark", mobile: boolean, revision: number, tooltipMode?: "html"|"plotly", chartWidth?: number, chartHeight?: number}} env
  * @returns {{traces: object[], layout: object, config: object, dateAxis: object|null}}
  */
 export function buildFigure(data, view, state, env) {
@@ -206,6 +241,8 @@ export function buildFigure(data, view, state, env) {
     return rawX == null ? band.sentinel : rawX;
   };
   const theme = env.theme;
+  const plotHeight = (env.chartHeight ?? 0) - MARGIN.t - MARGIN.b;
+  const bandGeo = bandLayout(plotHeight);
   const hoverOpts = { axis, theme };
   const tooltipMode = env.tooltipMode ?? TOOLTIP_MODE;
 
@@ -233,16 +270,31 @@ export function buildFigure(data, view, state, env) {
 
   const inertTraces = [];
   const activeTraces = [];
+  const unratedInertTraces = [];
+  const unratedActiveTraces = [];
   for (const family of data.families) {
     const active = { x: [], y: [], customdata: [], text: [] };
     const inert = { x: [], y: [] };
+    const uActive = { x: [], y: [], customdata: [], text: [] };
+    const uInert = { x: [], y: [] };
     for (let i = 0; i < data.n; i += 1) {
       if (!view.visible[i] || data.familyOf[i] !== family) continue;
       if (highlightSet.has(i)) continue;
       if (outOfSeasons(i)) continue;
       const x = xOf(i);
-      // 04.13: unrated games go to the No public rating band (plan 07); the log-axis traces hold rated games only
-      if (!data.rated[i]) continue;
+      // 04.13 D-01/D-05: an unrated game sits in the band at its x, with its fixed jitter as y.
+      if (!data.rated[i]) {
+        if (view.passesFilters[i]) {
+          uActive.x.push(x);
+          uActive.y.push(data.jitter[i]);
+          uActive.customdata.push(i);
+          if (usePlotlyText) uActive.text.push(hoverText(data, i, hoverOpts));
+        } else {
+          uInert.x.push(x);
+          uInert.y.push(data.jitter[i]);
+        }
+        continue;
+      }
       const y = data.t.viewers[i];
       if (view.passesFilters[i]) {
         active.x.push(x);
@@ -299,9 +351,52 @@ export function buildFigure(data, view, state, env) {
         line: { width: view.sizeFilterActive ? 1 : 0, color: DOT_OUTLINE },
       },
     });
+    // D-03: hollow rings in the family color. An open symbol draws only its stroke, so the
+    // ring is the outline (no DOT_OUTLINE); a family under 3:1 against SURFACE gets a 2px ring.
+    const color = FAMILY_COLORS[theme][family];
+    const thin = contrastRatio(color, SURFACE[theme]) < 3 ? 2 : 1.5;
+    unratedInertTraces.push({
+      type: 'scattergl',
+      mode: 'markers',
+      meta: `unrated-inert:${family}`,
+      showlegend: false,
+      yaxis: 'y2',
+      x: uInert.x,
+      y: uInert.y,
+      hoverinfo: 'skip',
+      hovertemplate: null,
+      marker: {
+        symbol: 'circle-open',
+        color,
+        size: 6,
+        opacity: view.hasPersonSelection ? DOT_OPACITY.inertUnderPerson : DOT_OPACITY.inert,
+        line: { width: thin, color },
+      },
+    });
+    unratedActiveTraces.push({
+      type: 'scattergl',
+      mode: 'markers',
+      meta: `unrated-active:${family}`,
+      showlegend: false,
+      yaxis: 'y2',
+      x: uActive.x,
+      y: uActive.y,
+      customdata: uActive.customdata,
+      ...(usePlotlyText ? { text: uActive.text } : {}),
+      hoverinfo: activeHoverInfo,
+      hovertemplate: activeHoverTemplate,
+      hoverlabel: { bordercolor: color },
+      marker: {
+        symbol: 'circle-open',
+        color,
+        size: view.sizeFilterActive ? 10 : 6,
+        opacity: view.hasPersonSelection ? DOT_OPACITY.activeUnderPerson : DOT_OPACITY.active,
+        line: { width: view.sizeFilterActive ? 2 : thin, color },
+      },
+    });
   }
 
-  const traces = [...inertTraces, ...activeTraces];
+  const traces = [...inertTraces, ...unratedInertTraces, ...activeTraces, ...unratedActiveTraces];
 
   const hx = [];
   const hy = [];
@@ -318,6 +413,18 @@ export function buildFigure(data, view, state, env) {
   const haloY = [];
   const haloSymbol = [];
   const haloSize = [];
+  // 04.13: the unrated (band) counterparts, always emitted so the trace count is constant.
+  const ux = [];
+  const uy = [];
+  const ucustomdata = [];
+  const utext = [];
+  const ucolor = [];
+  const usize = [];
+  const usymbol = [];
+  const uhaloX = [];
+  const uhaloY = [];
+  const uhaloSymbol = [];
+  const uhaloSize = [];
   // D-31/D-33: a scattergl non-circle symbol (square/diamond/triangle-up/
   // star) is drawn from an SDF glyph atlas (regl-scatter2d), and a
   // `marker.line` border on one of those glyphs antialiases into a
@@ -334,17 +441,33 @@ export function buildFigure(data, view, state, env) {
   for (const i of highlighted) {
     if (outOfSeasons(i)) continue;
     const x = xOf(i);
-    // 04.13: unrated games go to the No public rating band (plan 07); the log-axis traces hold rated games only
-    if (!data.rated[i]) continue;
+    const symbol = view.symbols.get(i) ?? 'circle';
+    const size = symbol === 'circle' ? 10 : symbol === 'star' ? 15 : 12;
+    if (!data.rated[i]) {
+      // 04.13 D-03: open compare shapes in the band; open symbols draw only a stroke, so the
+      // filled halo can't be reused -- non-circles get an open ACCENT halo under them instead.
+      ux.push(x);
+      uy.push(data.jitter[i]);
+      ucustomdata.push(i);
+      if (usePlotlyText) utext.push(hoverText(data, i, hoverOpts));
+      ucolor.push(FAMILY_COLORS[theme][data.familyOf[i]]);
+      usymbol.push(`${symbol}-open`);
+      usize.push(size);
+      if (symbol !== 'circle') {
+        uhaloX.push(x);
+        uhaloY.push(data.jitter[i]);
+        uhaloSymbol.push(`${symbol}-open`);
+        uhaloSize.push(size + 3);
+      }
+      continue;
+    }
     const y = data.t.viewers[i];
     hx.push(x);
     hy.push(y);
     hcustomdata.push(i);
     if (usePlotlyText) htext.push(hoverText(data, i, hoverOpts));
     hcolor.push(FAMILY_COLORS[theme][data.familyOf[i]]);
-    const symbol = view.symbols.get(i) ?? 'circle';
     hsymbol.push(symbol);
-    const size = symbol === 'circle' ? 10 : symbol === 'star' ? 15 : 12;
     hsize.push(size);
     hlineWidth.push(symbol === 'circle' ? 1.5 : 0);
     if (symbol !== 'circle') {
@@ -354,6 +477,45 @@ export function buildFigure(data, view, state, env) {
       haloSize.push(size + 3);
     }
   }
+  traces.push({
+    type: 'scattergl',
+    mode: 'markers',
+    meta: 'highlight-halo-unrated',
+    showlegend: false,
+    yaxis: 'y2',
+    x: uhaloX,
+    y: uhaloY,
+    hoverinfo: 'skip',
+    hovertemplate: null,
+    marker: {
+      symbol: uhaloSymbol,
+      size: uhaloSize,
+      color: ACCENT[theme],
+      opacity: 1,
+      line: { width: 2, color: ACCENT[theme] },
+    },
+  });
+  traces.push({
+    type: 'scattergl',
+    mode: 'markers',
+    meta: 'highlight-unrated',
+    showlegend: false,
+    yaxis: 'y2',
+    x: ux,
+    y: uy,
+    customdata: ucustomdata,
+    ...(usePlotlyText ? { text: utext } : {}),
+    hoverinfo: usePlotlyText ? 'all' : 'none',
+    hovertemplate: usePlotlyText ? '%{text}<extra></extra>' : null,
+    hoverlabel: { bordercolor: ucolor },
+    marker: {
+      color: ucolor,
+      size: usize,
+      symbol: usymbol,
+      opacity: 1,
+      line: { width: 2, color: ucolor },
+    },
+  });
   if (haloX.length > 0) {
     traces.push({
       type: 'scattergl',
@@ -440,6 +602,7 @@ export function buildFigure(data, view, state, env) {
       // Plotly >= 3 takes only the object form; a bare string title is
       // silently dropped (CR-02).
       ...(isDate ? {} : { title: { text: XAXIS_TITLES[axis] } }),
+      anchor: 'y2',
       range: isDate ? dateAxis.range.slice() : band.range,
       ...(isDate ? { minallowed: dateAxis.range[0], maxallowed: dateAxis.range[1] } : {}),
       tickmode: 'array',
@@ -458,16 +621,26 @@ export function buildFigure(data, view, state, env) {
       zeroline: false,
       fixedrange: env.mobile,
     },
+    yaxis2: {
+      domain: [0, bandGeo.bandTop],
+      range: bandGeo.y2range,
+      anchor: 'x',
+      fixedrange: true,
+      showticklabels: false,
+      showgrid: false,
+      zeroline: false,
+    },
     yaxis: {
+      domain: [bandGeo.logBottom, 1],
       type: 'log',
       title: { text: 'Viewers (log scale)' },
       tickmode: 'array',
       tickvals: yTicks.tickvals,
       ticktext: yTicks.ticktext,
-      // 04.12 D-04 check: the x1.4 log pad is log10(1.4) = 0.146 decade per side; at the
-      // 420px minimum plot height (#chart min-height 520 minus margins 100) a 3-decade
-      // viewer spread still leaves about 18.7px, over twice the 9px star+halo
-      // half-extent, so y needs no gutter (e2e test_site_gutter.py checks >= 10px).
+      // 04.12 D-04 check, recomputed for the band (04.13): the log axis is now plotPx - bandPx -
+      // gapPx tall, 336px at the 420px minimum plot height (420 - 56 - 28). The x1.4 log pad is
+      // log10(1.4) = 0.146 decade per side; a 3-decade viewer spread over 336px leaves about
+      // 14.9px, still over the 9px star+halo half-extent (e2e test_site_gutter.py checks >= 10px).
       range: [Math.log10(data.viewersMin / 1.4), Math.log10(data.viewersMax * 1.4)],
       gridcolor: DIVIDER[theme],
       fixedrange: env.mobile,
@@ -553,6 +726,34 @@ export function buildFigure(data, view, state, env) {
     );
   }
 
+  // 04.13 D-01: the band's SURFACE rectangle and its 1px top edge, appended after the existing
+  // shapes so shapes[0] stays the N/A divider. Paper-referenced strip dividers span the band too.
+  layout.shapes.push(
+    {
+      type: 'rect',
+      xref: 'paper',
+      x0: 0,
+      x1: 1,
+      yref: 'paper',
+      y0: 0,
+      y1: bandGeo.bandTop,
+      fillcolor: SURFACE[theme],
+      line: { width: 0 },
+      layer: 'below',
+    },
+    {
+      type: 'line',
+      xref: 'paper',
+      x0: 0,
+      x1: 1,
+      yref: 'paper',
+      y0: bandGeo.bandTop,
+      y1: bandGeo.bandTop,
+      line: { width: 1, color: DIVIDER[theme] },
+      layer: 'below',
+    },
+  );
+
   const config = {
     responsive: true,
     displaylogo: false,
@@ -564,7 +765,8 @@ export function buildFigure(data, view, state, env) {
     modeBarButtonsToRemove: ['lasso2d', 'select2d'],
   };
 
-  return { traces, layout, config, dateAxis: isDate ? { blocks: dateAxis.blocks, range: dateAxis.range, mobile: env.mobile } : null };
+  const bandInfo = { bandTop: bandGeo.bandTop, logBottom: bandGeo.logBottom, bandPx: bandGeo.bandPx, gapPx: bandGeo.gapPx };
+  return { traces, layout, config, band: bandInfo, dateAxis: isDate ? { blocks: dateAxis.blocks, range: dateAxis.range, mobile: env.mobile } : null };
 }
 
 /**

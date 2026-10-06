@@ -210,9 +210,11 @@ _Y_JS = """
 () => {
   const gd = document.getElementById('chart');
   const [lo, hi] = gd._fullLayout.yaxis.range;
-  const h = gd._fullLayout._size.h;
+  // 04.13: the log axis is only the part above the No public rating band.
+  const h = gd._fullLayout.yaxis._length;
   const ys = [];
   for (const t of gd.data) {
+    if (t.yaxis === 'y2') continue;
     for (const y of t.y) if (typeof y === 'number' && y > 0) ys.push(Math.log10(y));
   }
   return {
@@ -227,7 +229,7 @@ _Y_JS = """
 def test_y_axis_clears_largest_dot(
     request: pytest.FixtureRequest, open_app: Callable[[Page, str], None], size: tuple[int, int]
 ) -> None:
-    """04.12 D-04 record: the unchanged y range already leaves >= 10px top and bottom."""
+    """04.12 D-04 record: the log axis, shorter since the 04.13 band, leaves >= 10px."""
     page = _open_at(request, open_app, size, "")
     got = page.evaluate(_Y_JS)
     assert got["top"] >= 10, got

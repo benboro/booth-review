@@ -1,0 +1,520 @@
+"""SITE-52 (04.13 D-01..D-05): the "No public rating" band, hollow markers, and their rules."""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Callable
+from typing import Any
+
+import pytest
+from playwright.sync_api import Page
+from test_site_chart import (
+    _boxes_overlap,
+    _halo_ring_inner_radius,
+    _speckle_count,
+)
+
+pytestmark = pytest.mark.e2e
+
+_VIEWPORTS = [(1280, 900), (360, 800)]
+_AXES = ["", "?axis=excitement", "?axis=date"]
+_FAMILIES = ["disney", "fox", "conference"]
+
+_WAIT_TWO_FRAMES = "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
+
+_TRACES_JS = """
+() => document.getElementById('chart').data.map((t) => ({
+  meta: String(t.meta),
+  yaxis: t.yaxis ?? 'y',
+  x: Array.from(t.x ?? []),
+  y: Array.from(t.y ?? []),
+  customdata: Array.from(t.customdata ?? []),
+  hoverinfo: t.hoverinfo,
+  hovertemplate: t.hovertemplate ?? null,
+  symbol: t.marker.symbol,
+  size: t.marker.size,
+  opacity: t.marker.opacity,
+  lineWidth: t.marker.line?.width,
+  lineColor: t.marker.line?.color,
+  color: t.marker.color,
+}))
+"""
+
+# The 6px ring width per family: 1.5, or 2 for a family under 3:1 against SURFACE (UI-SPEC Color).
+_THIN_JS = """
+async () => {
+  const p = await import('./modules/palette.js');
+  const theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  const out = {};
+  for (const [f, c] of Object.entries(p.FAMILY_COLORS[theme])) {
+    out[f] = p.contrastRatio(c, p.SURFACE[theme]) < 3 ? 2 : 1.5;
+  }
+  return out;
+}
+"""
+
+_GEOMETRY_JS = """
+() => {
+  const gd = document.getElementById('chart');
+  const fl = gd._fullLayout;
+  return {
+    y2Length: fl.yaxis2._length,
+    y2Offset: fl.yaxis2._offset,
+    logLength: fl.yaxis._length,
+    logOffset: fl.yaxis._offset,
+    plotH: fl._size.h,
+    y2domain: gd.layout.yaxis2.domain.slice(),
+    ydomain: gd.layout.yaxis.domain.slice(),
+    xAnchor: gd.layout.xaxis.anchor,
+    y2: {
+      fixedrange: gd.layout.yaxis2.fixedrange,
+      showticklabels: gd.layout.yaxis2.showticklabels,
+      showgrid: gd.layout.yaxis2.showgrid,
+      zeroline: gd.layout.yaxis2.zeroline,
+    },
+    shape0: gd.layout.shapes[0],
+    shapes: gd.layout.shapes,
+    ann0: gd.layout.annotations[0].text,
+  };
+}
+"""
+
+
+def _open_at(
+    request: pytest.FixtureRequest,
+    open_app: Callable[[Page, str], None],
+    size: tuple[int, int],
+    query: str,
+) -> Page:
+    page: Page = request.getfixturevalue("guarded_page" if size[0] > 600 else "mobile_page")
+    page.set_viewport_size({"width": size[0], "height": size[1]})
+    open_app(page, query)
+    page.evaluate(_WAIT_TWO_FRAMES)
+    page.wait_for_timeout(150)
+    return page
+
+
+def _traces(page: Page) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = page.evaluate(_TRACES_JS)
+    return out
+
+
+def _by_meta(page: Page) -> dict[str, dict[str, Any]]:
+    return {t["meta"]: t for t in _traces(page)}
+
+
+def _unrated_points(page: Page, prefix: str) -> dict[int, dict[str, Any]]:
+    """Merged index -> {x, y, trace} over every trace whose meta starts with `prefix`."""
+    out: dict[int, dict[str, Any]] = {}
+    for t in _traces(page):
+        if t["meta"].startswith(prefix):
+            for k, i in enumerate(t["customdata"]):
+                out[i] = {"x": t["x"][k], "y": t["y"][k], "trace": t}
+    return out
+
+
+# ---------------------------------------------------------------------------
+# bandLayout (pure)
+# ---------------------------------------------------------------------------
+
+
+def test_band_layout_closed_form(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
+    open_app(guarded_page, "")
+    got = guarded_page.evaluate(
+        """async () => {
+          const { bandLayout, BAND } = await import('./modules/chart.js');
+          const c = bandLayout(undefined);
+          return { a: bandLayout(420), b: bandLayout(700), c, d: bandLayout(-5), BAND };
+        }"""
+    )
+    a = got["a"]
+    assert a["bandPx"] == 56
+    assert a["gapPx"] == 28
+    assert a["bandTop"] == pytest.approx(56 / 420)
+    assert a["logBottom"] == pytest.approx(84 / 420)
+    assert a["y2range"] == [pytest.approx(-12 / 32), pytest.approx(1 + 12 / 32)]
+    assert got["b"]["bandPx"] == pytest.approx(84)
+    assert got["c"] == a
+    assert got["d"] == a
+    assert got["BAND"] == {"frac": 0.12, "minPx": 56, "gapPx": 28, "padPx": 12}
+
+
+# ---------------------------------------------------------------------------
+# Band geometry
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("axis_query", _AXES)
+@pytest.mark.parametrize("size", _VIEWPORTS, ids=lambda s: f"{s[0]}x{s[1]}")
+def test_band_geometry(
+    request: pytest.FixtureRequest,
+    open_app: Callable[[Page, str], None],
+    size: tuple[int, int],
+    axis_query: str,
+) -> None:
+    page = _open_at(request, open_app, size, axis_query)
+    got = page.evaluate(_GEOMETRY_JS)
+    assert got["xAnchor"] == "y2"
+    assert got["y2domain"][0] == 0
+    assert got["ydomain"][1] == 1
+    assert got["y2"] == {
+        "fixedrange": True,
+        "showticklabels": False,
+        "showgrid": False,
+        "zeroline": False,
+    }
+    assert got["y2Length"] >= 56 - 0.5
+    expected_band = max(0.12 * got["plotH"], 56)
+    assert got["y2Length"] == pytest.approx(expected_band, abs=1.5)
+    # a fixed 28px gap row between the log axis and the band
+    gap = got["y2Offset"] - (got["logOffset"] + got["logLength"])
+    assert gap == pytest.approx(28, abs=1.5)
+    # band rectangle and top edge are appended after the existing shapes
+    rect = got["shapes"][-2]
+    edge = got["shapes"][-1]
+    assert rect["type"] == "rect" and rect["layer"] == "below" and rect["yref"] == "paper"
+    assert rect["y0"] == 0 and rect["y1"] == pytest.approx(got["y2domain"][1])
+    assert edge["type"] == "line" and edge["y0"] == edge["y1"] == pytest.approx(got["y2domain"][1])
+    assert edge["line"]["width"] == 1
+    if axis_query != "?axis=date":
+        assert got["shape0"]["type"] == "line"
+        assert got["ann0"] == "N/A"
+
+
+def test_band_stays_drawn_when_filters_leave_no_unrated_games(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?networks=net-d&dots=hide")
+    got = guarded_page.evaluate(_GEOMETRY_JS)
+    assert got["y2Length"] >= 55.5
+    unrated = _unrated_points(guarded_page, "unrated-")
+    assert unrated == {}
+
+
+# ---------------------------------------------------------------------------
+# Hollow markers
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("axis_query", _AXES)
+def test_default_unrated_markers(
+    guarded_page: Page, open_app: Callable[[Page, str], None], axis_query: str
+) -> None:
+    open_app(guarded_page, axis_query)
+    traces = _traces(guarded_page)
+    active = [t for t in traces if t["meta"].startswith("unrated-active:")]
+    assert {f"unrated-active:{f}" for f in _FAMILIES} <= {t["meta"] for t in active}
+    thin = guarded_page.evaluate(_THIN_JS)
+    pts = _unrated_points(guarded_page, "unrated-active:")
+    assert sorted(pts) == list(range(12, 20))
+    by_family = {t["meta"].split(":", 1)[1]: sorted(t["customdata"]) for t in active}
+    assert by_family["disney"] == [13, 14, 15, 18, 19]
+    assert by_family["fox"] == [12, 16]
+    assert by_family["conference"] == [17]
+    for t in active:
+        assert t["yaxis"] == "y2"
+        assert t["symbol"] == "circle-open"
+        assert t["size"] == 6
+        assert t["lineWidth"] == thin[t["meta"].split(":", 1)[1]]
+        assert t["opacity"] == 1
+        assert t["lineColor"] == t["color"]
+
+
+def test_jitter_is_the_band_y_and_stable_across_reload(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    # data.js: jitter hashed by unrated-block index (Weyl), merged index 12 is block index 1
+    jit = {i: ((((i - 12 + 1) * 2654435761) & 0xFFFFFFFF) / 4294967296) for i in range(12, 20)}
+    first = _unrated_points(guarded_page, "unrated-active:")
+    for i, p in first.items():
+        assert p["y"] == pytest.approx(jit[i])
+        assert 0 <= p["y"] < 1
+    guarded_page.reload()
+    guarded_page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+    again = _unrated_points(guarded_page, "unrated-active:")
+    assert {i: p["y"] for i, p in again.items()} == {i: p["y"] for i, p in first.items()}
+
+
+@pytest.mark.parametrize("axis_query", ["", "?axis=excitement"])
+def test_game_without_x_sits_at_the_na_sentinel(
+    guarded_page: Page, open_app: Callable[[Page, str], None], axis_query: str
+) -> None:
+    open_app(guarded_page, axis_query)
+    sentinel = guarded_page.evaluate(
+        "() => document.getElementById('chart').layout.annotations[0].x"
+    )
+    pts = _unrated_points(guarded_page, "unrated-active:")
+    assert pts[12]["x"] == pytest.approx(sentinel)
+
+
+@pytest.mark.parametrize("size", _VIEWPORTS, ids=lambda s: f"{s[0]}x{s[1]}")
+@pytest.mark.parametrize("axis_query", _AXES)
+def test_markers_never_clip_at_band_edges(
+    request: pytest.FixtureRequest,
+    open_app: Callable[[Page, str], None],
+    size: tuple[int, int],
+    axis_query: str,
+) -> None:
+    page = _open_at(request, open_app, size, axis_query)
+    got = page.evaluate(
+        """() => {
+          const gd = document.getElementById('chart');
+          const ya = gd._fullLayout.yaxis2;
+          const out = [];
+          for (const t of gd.data) {
+            if (t.yaxis !== 'y2') continue;
+            for (const y of t.y) out.push(ya._length - ya.d2p(y));
+          }
+          return { fromBottom: out, length: ya._length };
+        }"""
+    )
+    assert got["fromBottom"]
+    for from_bottom in got["fromBottom"]:
+        assert from_bottom >= 12 - 0.5
+        assert got["length"] - from_bottom >= 12 - 0.5
+
+
+# ---------------------------------------------------------------------------
+# Filters
+# ---------------------------------------------------------------------------
+
+
+def test_networks_filter_hides_unrated_games_of_other_networks(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?networks=net-a,net-b")
+    seen = {i for t in _traces(guarded_page) for i in t["customdata"]}
+    assert 15 not in seen and 18 not in seen
+    # hidden, not faded: the inert traces do not carry them either (no customdata there)
+    inert = [t for t in _traces(guarded_page) if t["meta"].startswith("unrated-inert:")]
+    assert sum(len(t["x"]) for t in inert) == 0
+
+
+def test_fade_filter_moves_failing_games_to_inert_and_enlarges_passing(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?school=northfield")
+    traces = _traces(guarded_page)
+    active = [t for t in traces if t["meta"].startswith("unrated-active:")]
+    inert = [t for t in traces if t["meta"].startswith("unrated-inert:")]
+    passing = sorted(i for t in active for i in t["customdata"])
+    assert passing == [13, 16]
+    assert sum(len(t["x"]) for t in inert) == 6
+    for t in active:
+        assert t["size"] == 10
+        assert t["lineWidth"] == 2
+        assert t["lineColor"] == t["color"]  # the ring is the outline: no separate black line
+    opacity = guarded_page.evaluate(
+        "async () => (await import('./modules/chart.js')).DOT_OPACITY.inert"
+    )
+    for t in inert:
+        assert t["hoverinfo"] == "skip"
+        assert t["hovertemplate"] is None
+        assert t["size"] == 6
+        assert t["opacity"] == opacity
+        assert t["symbol"] == "circle-open"
+
+
+def test_active_traces_share_hover_config_with_rated_twins(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    for query in ("", "?people=pat-rowan"):
+        open_app(guarded_page, query)
+        by = _by_meta(guarded_page)
+        for family in _FAMILIES:
+            rated = by[f"family:{family}"]
+            unrated = by[f"unrated-active:{family}"]
+            assert unrated["hoverinfo"] == rated["hoverinfo"]
+            assert unrated["hovertemplate"] == rated["hovertemplate"]
+
+
+def test_date_trims_out_of_season_unrated_games_spread_fades_them(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?axis=date&seasons=2025-2026")
+    shown = _unrated_points(guarded_page, "unrated-")
+    n_shown = sum(
+        len(t["x"])
+        for t in _traces(guarded_page)
+        if t["meta"].startswith("unrated-") and t["yaxis"] == "y2"
+    )
+    assert 0 < n_shown < 8, "fixture needs unrated games both inside and outside 2025-2026"
+    assert all(p["x"] >= 191 for p in shown.values())
+    open_app(guarded_page, "?seasons=2025-2026")
+    n_inert = sum(
+        len(t["x"]) for t in _traces(guarded_page) if t["meta"].startswith("unrated-inert:")
+    )
+    assert n_inert == 8 - n_shown
+
+
+# ---------------------------------------------------------------------------
+# Trace count
+# ---------------------------------------------------------------------------
+
+
+_COUNT_QUERIES = [
+    "",
+    "?school=northfield",
+    "?school=northfield&dots=hide",
+    "?people=pat-rowan",
+    "?people=pat-rowan,sam-delgado&mode=compare",
+    "?axis=excitement",
+    "?axis=date",
+    "?axis=date&seasons=2025-2026",
+]
+
+
+def test_trace_count_is_constant_and_names_are_present(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    counts = set()
+    for query in _COUNT_QUERIES:
+        open_app(guarded_page, query)
+        metas = [t["meta"] for t in _traces(guarded_page)]
+        for f in _FAMILIES:
+            assert f"unrated-inert:{f}" in metas
+            assert f"unrated-active:{f}" in metas
+        assert "highlight-halo-unrated" in metas
+        assert "highlight-unrated" in metas
+        assert metas[-1] == "highlight"
+        counts.add(len(metas) - (1 if "highlight-halo" in metas else 0))
+    assert len(counts) == 1, counts
+
+
+# ---------------------------------------------------------------------------
+# Compare mode
+# ---------------------------------------------------------------------------
+
+
+def _highlight(page: Page) -> dict[int, dict[str, Any]]:
+    by = _by_meta(page)
+    out: dict[int, dict[str, Any]] = {}
+    t = by["highlight-unrated"]
+    syms = t["symbol"] if isinstance(t["symbol"], list) else [t["symbol"]] * len(t["x"])
+    sizes = t["size"] if isinstance(t["size"], list) else [t["size"]] * len(t["x"])
+    for k, i in enumerate(t["customdata"]):
+        out[i] = {"symbol": syms[k], "size": sizes[k]}
+    return out
+
+
+def test_compare_open_shapes_and_open_halo(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?people=pat-rowan,sam-delgado&mode=compare")
+    hl = _highlight(guarded_page)
+    assert hl[15] == {"symbol": "circle-open", "size": 10}
+    assert hl[16] == {"symbol": "star-open", "size": 15}
+    assert hl[19] == {"symbol": "star-open", "size": 15}
+    by = _by_meta(guarded_page)
+    t = by["highlight-unrated"]
+    assert t["yaxis"] == "y2" and t["lineWidth"] == 2 and t["opacity"] == 1
+    halo = by["highlight-halo-unrated"]
+    assert halo["yaxis"] == "y2"
+    assert sorted(halo["x"]) == sorted(
+        [hl_x for i, hl_x in zip(t["customdata"], t["x"], strict=True) if i in (16, 19)]
+    )
+    assert halo["symbol"] == ["star-open", "star-open"]
+    assert halo["size"] == [18, 18]
+    assert halo["lineWidth"] == 2
+    assert halo["hoverinfo"] == "skip"
+    accent = guarded_page.evaluate(
+        "async () => (await import('./modules/palette.js')).ACCENT.light"
+    )
+    assert halo["color"] == accent
+
+
+def test_compare_shared_booth_is_a_star_and_others_get_shapes(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?people=kris-venn,morgan-ash&mode=compare")
+    assert _highlight(guarded_page)[13]["symbol"] == "star-open"
+    open_app(guarded_page, "?people=dale-harlow,kris-venn&mode=compare")
+    hl = _highlight(guarded_page)
+    assert hl[17] == {"symbol": "circle-open", "size": 10}
+    assert hl[13]["symbol"] in {"square-open", "diamond-open", "triangle-up-open"}
+    assert hl[13]["size"] == 12
+    halo = _by_meta(guarded_page)["highlight-halo-unrated"]
+    assert 15 in halo["size"]
+    assert halo["symbol"] == [hl[13]["symbol"]]
+
+
+_SPECKLE_QUERY = "?people=kris-venn,sam-delgado,dale-harlow,casey-lund&mode=compare"
+
+
+@pytest.mark.parametrize("color_scheme", ["light", "dark"])
+def test_open_compare_shapes_in_the_band_have_no_edge_speckles(
+    guarded_page: Page, open_app: Callable[[Page, str], None], color_scheme: str
+) -> None:
+    """D-31 guard on the open traces: no accent speckle beyond the open halo's own shape.
+
+    Measures with the `_speckle_count` helper of test_site_chart.py (imported, not edited).
+    """
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    guarded_page.emulate_media(color_scheme=color_scheme)
+    open_app(guarded_page, _SPECKLE_QUERY)
+    guarded_page.locator("#chart").scroll_into_view_if_needed()
+    points = guarded_page.evaluate(
+        """() => {
+          const gd = document.getElementById('chart');
+          const fl = gd._fullLayout;
+          const rect = gd.getBoundingClientRect();
+          const t = gd.data.find((d) => d.meta === 'highlight-unrated');
+          return t.x.map((x, k) => ({
+            customdata: t.customdata[k],
+            symbol: t.marker.symbol[k],
+            size: t.marker.size[k],
+            px: rect.left + fl._size.l + fl.xaxis.d2p(x),
+            py: rect.top + fl.yaxis2._offset + fl.yaxis2.d2p(t.y[k]),
+          }));
+        }"""
+    )
+    guarded_page.mouse.move(5, 5)
+    guarded_page.wait_for_timeout(100)
+    tested = 0
+    total = 0
+    for point in points:
+        if point["symbol"] == "circle-open":
+            continue
+        others = [p for p in points if p["customdata"] != point["customdata"]]
+        if any(_boxes_overlap(point, o) for o in others):
+            continue
+        tested += 1
+        total += _speckle_count(
+            guarded_page,
+            point["px"],
+            point["py"],
+            color_scheme,
+            _halo_ring_inner_radius(point["size"]),
+            others,
+        )
+    assert tested > 0, "no open non-circle marker was testable"
+    assert total == 0, f"{total} speckle pixel(s) around open compare markers"
+
+
+# ---------------------------------------------------------------------------
+# Contrast
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_every_family_ring_color_clears_three_to_one_on_surface(
+    guarded_page: Page, open_app: Callable[[Page, str], None], theme: str
+) -> None:
+    open_app(guarded_page, "")
+    got = guarded_page.evaluate(
+        """async (theme) => {
+          const p = await import('./modules/palette.js');
+          const out = {};
+          for (const [f, c] of Object.entries(p.FAMILY_COLORS[theme])) {
+            out[f] = p.contrastRatio(c, p.SURFACE[theme]);
+          }
+          return out;
+        }""",
+        theme,
+    )
+    # A family under 3:1 gets a 2px ring (see chart.js); never fail on the palette itself.
+    assert got
+    assert all(math.isfinite(v) and v > 1 for v in got.values()), got
+    if theme == "light":
+        assert got["other"] >= 2.5

@@ -187,6 +187,7 @@ function currentEnv() {
     revision,
     tooltipMode,
     chartWidth: chartEl ? chartEl.clientWidth : undefined,
+    chartHeight: chartEl ? chartEl.clientHeight : undefined,
   };
 }
 
