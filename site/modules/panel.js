@@ -231,11 +231,11 @@ function buildLinksList(data, i) {
   });
 
   if (rated) {
-  const sourceLi = document.createElement('li');
-  const publisherName = t.publisher[i] != null ? data.lookups.publishers[t.publisher[i]] : null;
-  const sourceLink = externalLink(t.source_url[i], `View original source (${publisherName ?? 'publisher unknown'}) ↗`);
-  sourceLi.appendChild(sourceLink ?? document.createTextNode('Original source not recorded'));
-  ul.appendChild(sourceLi);
+    const sourceLi = document.createElement('li');
+    const publisherName = t.publisher[i] != null ? data.lookups.publishers[t.publisher[i]] : null;
+    const sourceLink = externalLink(t.source_url[i], `View original source (${publisherName ?? 'publisher unknown'}) ↗`);
+    sourceLi.appendChild(sourceLink ?? document.createTextNode('Original source not recorded'));
+    ul.appendChild(sourceLi);
   }
 
   const crewSourceLabel = t.crew_source_label?.[i] ?? null;

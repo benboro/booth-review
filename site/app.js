@@ -302,6 +302,13 @@ function renderBarsShell(applies) {
 
 /** Binds the scatter's Plotly events; runs once, after the first scatter render. */
 function bindScatterEvents() {
+  // WR-03: Plotly.react is async, so place the band button once the layout is
+  // drawn (first render, width changes, axis switches). Writes no Plotly layout.
+  chartEl.on('plotly_afterplot', () => {
+    const { button, note } = bandInfoEls();
+    if (state.view !== 'scatter' || !button || button.hidden) return;
+    positionBandInfo(chartEl, button, note);
+  });
   bindChartEvents(chartEl, {
     onPointClick(i) {
       openDetailPanel(i);

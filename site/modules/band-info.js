@@ -18,7 +18,10 @@ export function initBandInfo({ button, note }) {
   };
   button.addEventListener('click', () => setOpen(note.hidden, false));
   document.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Escape' && !note.hidden) setOpen(false, true);
+    if (ev.key !== 'Escape' || note.hidden) return;
+    // An open modal dialog owns Escape (IN-03); the note closes on the next press.
+    if (ev.defaultPrevented || document.querySelector('dialog[open]')) return;
+    setOpen(false, true);
   });
   document.addEventListener('pointerdown', (ev) => {
     if (note.hidden) return;
@@ -46,6 +49,7 @@ export function positionBandInfo(chartEl, button, note) {
   if (!fl || !fl.yaxis2 || !fl._size || !button) return;
   const top = fl.yaxis2._offset - BAND.gapPx / 2 - button.offsetHeight / 2;
   const left = fl._size.l + 4;
+  if (!Number.isFinite(top) || !Number.isFinite(left)) return; // WR-03: never write NaNpx
   button.style.top = `${Math.round(top)}px`;
   button.style.left = `${Math.round(left)}px`;
   if (note) {
