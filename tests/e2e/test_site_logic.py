@@ -870,10 +870,12 @@ def test_summary_networks_ordered_by_matched_count_then_alphabetical(
     """A6: networks list dominant first (matched-telecast count desc), ties alphabetical."""
     _load(guarded_page, site_url)
     pat = _view(guarded_page, {"people": ["pat-rowan"]})["summary"]["networks"]
-    assert pat == ["Conference Network", "Beta Network"]
+    # Pat: Beta 2 (rated 5, unrated 16), Conference 2 (rated 2, 10), Alpha 1, Stream Plus 1.
+    assert pat == ["Beta Network", "Conference Network", "Alpha Sports", "Stream Plus"]
     robin = _view(guarded_page, {"people": ["robin-teague"]})["summary"]["networks"]
     assert robin == ["Other Network", "Alpha Sports"]
     tie = _view(guarded_page, {"people": ["jamie-oaks"]})["summary"]["networks"]
+    # Jamie: Alpha 2 (rated 4, unrated 14), Other 1 (rated 7).
     assert tie == ["Alpha Sports", "Other Network"]
 
 
@@ -886,35 +888,73 @@ async (summary) => {
 
 
 @pytest.mark.parametrize(
-    ("partial", "kind", "count", "total"),
+    ("partial", "kind", "count", "rated"),
     [
-        ({"people": ["dale-harlow"]}, "matches", 2, None),
-        ({"school": ["northfield"]}, "matches", 3, 12),
-        ({"networks": ["net-a"]}, "matches", 3, 12),
-        ({"seasons": [2025, 2025]}, "matches", 4, 12),
-        ({"people": ["dale-harlow"], "seasons": [2026, 2026]}, "matches", 1, 12),
+        # No filter or selection: every game, 12 rated of 20.
+        ({}, "all", FIXTURE_GAMES, FIXTURE_RATED),
+        # Networks = [net-e] (Stream Plus): unrated games 15 and 18 only.
+        ({"networks": ["net-e"]}, "matches", 2, 0),
+        # School Northfield: rated 0, 4, 8 plus unrated 13 (U1), 16 (U4) -> 5 games.
+        ({"school": ["northfield"]}, "matches", 5, 3),
+        # net-a: rated 0, 4, 8 plus unrated 13, 14, 19 -> 6 games.
+        ({"networks": ["net-a"]}, "matches", 6, 3),
+        # Season 2025: rated 4-7 plus unrated 17 (U5), 18 (U6) -> 6 games.
+        ({"seasons": [2025, 2025]}, "matches", 6, 4),
+        # Dale Harlow: rated 0, 8 plus unrated 17 -> 3 games; with 2026 only: 8.
+        ({"people": ["dale-harlow"]}, "matches", 3, 2),
+        ({"people": ["dale-harlow"], "seasons": [2026, 2026]}, "matches", 1, 1),
+        # Morgan Ash is on unrated game 13 only; Stream Plus is on unrated 15 and 18.
+        ({"people": ["morgan-ash"]}, "matches", 1, 0),
     ],
 )
-def test_summary_reads_n_of_m_whenever_a_filter_is_active(
+def test_summary_reads_rated_of_games_on_every_view(
     guarded_page: Page,
     site_url: str,
     partial: dict[str, Any],
     kind: str,
     count: int,
-    total: int | None,
+    rated: int,
 ) -> None:
-    """04.7 D-09: `of` is the whole dataset when a filter is active, else null."""
+    """04.13 D-07: `count` is every passing game, `rated` the rated subset."""
     _load(guarded_page, site_url)
     summary = _view(guarded_page, partial)["summary"]
     assert summary["kind"] == kind
     assert summary["count"] == count
-    assert summary["of"] == total
+    assert summary["rated"] == rated
+    assert "of" not in summary
+
+
+_NO_GAMES_PERSON_JS = """
+async () => {
+  const D = await import('./modules/data.js');
+  const S = await import('./modules/select.js');
+  const raw = await (await fetch('site-data.json')).json();
+  raw.lookups.people.push({
+    id: 'nobody-here', name: 'Nobody Here', variants: ['Nobody Here'], usual_role: 'pbp',
+  });
+  const data = D.prepareData(raw);
+  const state = Object.assign(S.defaultState(data), { people: ['nobody-here'] });
+  return S.computeView(data, state).summary;
+}
+"""
+
+
+def test_person_with_no_games_gets_the_no_games_summary(guarded_page: Page, site_url: str) -> None:
+    """04.13 D-07: only a person with no games at all reads 'has no games'."""
+    _load(guarded_page, site_url)
+    summary = guarded_page.evaluate(_NO_GAMES_PERSON_JS)
+    assert summary == {"kind": "no-rated", "name": "Nobody Here"}
+    assert guarded_page.evaluate(_SUMMARY_COPY_JS, summary)["detail"] == (
+        "Nobody Here has no games in this sample."
+    )
 
 
 def test_role_alone_is_not_a_filter_for_the_summary(guarded_page: Page, site_url: str) -> None:
+    """Role alone leaves the summary at the all-games view."""
     _load(guarded_page, site_url)
-    assert _view(guarded_page, {})["summary"] == {"kind": "none"}
-    assert _view(guarded_page, {"role": "pbp"})["summary"] == {"kind": "none"}
+    everything = {"kind": "all", "count": FIXTURE_GAMES, "rated": FIXTURE_RATED}
+    assert _view(guarded_page, {})["summary"] == everything
+    assert _view(guarded_page, {"role": "pbp"})["summary"] == everything
 
 
 def test_summary_shows_for_filters_alone_without_filling_the_table(
@@ -925,8 +965,9 @@ def test_summary_shows_for_filters_alone_without_filling_the_table(
     view = _view(guarded_page, {"networks": ["net-a"]})
     summary = view["summary"]
     assert view["matched"] == []
-    assert summary["count"] == 3
-    assert summary["of"] == 12
+    assert summary["count"] == 6  # net-a: rated 0, 4, 8 plus unrated 13, 14, 19
+    assert summary["rated"] == 3
+    assert "of" not in summary
     assert (summary["seasonMin"], summary["seasonMax"]) == (2019, 2026)
     assert summary["networks"] == ["Alpha Sports"]
 
@@ -955,28 +996,37 @@ def test_head_to_head_selection_label_names_the_matchup(guarded_page: Page, site
     summary = _view(guarded_page, {**state, "h2h": False})["summary"]
     assert summary["kind"] == "matches"
     assert summary["count"] == 2
-    assert summary["of"] == FIXTURE_GAMES
+    assert "of" not in summary
 
 
-def test_summary_copy_formats_n_of_m(guarded_page: Page, site_url: str) -> None:
+def test_summary_copy_formats_rated_of_games(guarded_page: Page, site_url: str) -> None:
     _load(guarded_page, site_url)
     base = {"kind": "matches", "seasonMin": 2014, "seasonMax": 2025, "networks": ["ESPN", "FOX"]}
-    big = {**base, "count": 312, "of": 4210, "altCount": 0}
+    big = {**base, "count": 10583, "rated": 3491, "altCount": 0}
     assert guarded_page.evaluate(_SUMMARY_COPY_JS, big) == {
-        "count": "312 of 4,210 rated telecasts",
+        "count": "3,491 rated of 10,583 games",
         "detail": "2014\u20132025 \u00b7 ESPN, FOX",
     }
-    one = {**base, "count": 1, "of": 4210, "altCount": 0}
-    assert guarded_page.evaluate(_SUMMARY_COPY_JS, one)["count"] == "1 of 4,210 rated telecasts"
-    alone = {**base, "count": 1, "of": None, "altCount": 0}
-    assert guarded_page.evaluate(_SUMMARY_COPY_JS, alone)["count"] == "1 rated telecast"
+    one = {**base, "count": 1, "rated": 1, "altCount": 0}
+    assert guarded_page.evaluate(_SUMMARY_COPY_JS, one)["count"] == "1 rated of 1 game"
+    zero = {**base, "count": 1, "rated": 0, "altCount": 0}
+    assert guarded_page.evaluate(_SUMMARY_COPY_JS, zero)["count"] == "0 rated of 1 game"
+    two = {**base, "count": 2, "rated": 0, "altCount": 0}
+    assert guarded_page.evaluate(_SUMMARY_COPY_JS, two)["count"] == "0 rated of 2 games"
+    everything = {"kind": "all", "count": 20, "rated": 12}
+    assert guarded_page.evaluate(_SUMMARY_COPY_JS, everything) == {
+        "count": "12 rated of 20 games",
+        "detail": "",
+    }
     assert guarded_page.evaluate(_SUMMARY_COPY_JS, {"kind": "no-filter-match"}) == {
         "count": "",
-        "detail": (
-            "No rated telecasts match these filters. "
-            "Widen the seasons or clear a filter to see games."
-        ),
+        "detail": "No games match these filters.",
     }
+    no_games = guarded_page.evaluate(_SUMMARY_COPY_JS, {"kind": "no-rated", "name": "Pat Doe"})
+    assert no_games == {"count": "", "detail": "Pat Doe has no games in this sample."}
+    for summary in (big, everything, {"kind": "no-filter-match"}):
+        copy = guarded_page.evaluate(_SUMMARY_COPY_JS, summary)
+        assert "telecast" not in copy["count"] + copy["detail"]
 
 
 def test_summary_copy_caps_a_long_network_list(guarded_page: Page, site_url: str) -> None:
@@ -984,7 +1034,7 @@ def test_summary_copy_caps_a_long_network_list(guarded_page: Page, site_url: str
     first three (most telecasts first) and counts the rest, so it never wraps the
     selection band. Three or fewer are listed in full."""
     _load(guarded_page, site_url)
-    base = {"kind": "matches", "seasonMin": 2014, "seasonMax": 2025, "count": 900, "of": 4210}
+    base = {"kind": "matches", "seasonMin": 2014, "seasonMax": 2025, "count": 900, "rated": 400}
     three = {**base, "networks": ["ESPN", "FOX", "ABC"], "altCount": 0}
     assert guarded_page.evaluate(_SUMMARY_COPY_JS, three)["detail"] == (
         "2014\u20132025 \u00b7 ESPN, FOX, ABC"

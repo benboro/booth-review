@@ -564,7 +564,7 @@ export function escapeHover(s) {
 export const SUMMARY_NETWORK_LIMIT = 3;
 
 /**
- * The summary detail's network list, most telecasts first (A6): every name when
+ * The summary detail's network list, most games first (A6): every name when
  * there are at most `SUMMARY_NETWORK_LIMIT`, else the first ones and "+N more".
  * @param {string[]} networks
  * @returns {string}
@@ -583,14 +583,10 @@ function summaryNetworks(networks) {
  * @returns {{count: string, detail: string}}
  */
 export function summaryCopy(summary) {
-  if (summary.kind === 'matches') {
+  if (summary.kind === 'all' || summary.kind === 'matches') {
     const n = summary.count;
-    const count =
-      summary.of != null
-        ? `${n.toLocaleString('en-US')} of ${summary.of.toLocaleString('en-US')} rated telecasts`
-        : n === 1
-          ? '1 rated telecast'
-          : `${n} rated telecasts`;
+    const count = `${summary.rated.toLocaleString('en-US')} rated of ${n.toLocaleString('en-US')} ${n === 1 ? 'game' : 'games'}`;
+    if (summary.kind === 'all') return { count, detail: '' };
     let detail = `${summary.seasonMin}–${summary.seasonMax} · ${summaryNetworks(summary.networks)}`;
     if (summary.altCount > 0) {
       const gameWord = summary.altCount === 1 ? 'game' : 'games';
@@ -599,22 +595,18 @@ export function summaryCopy(summary) {
     return { count, detail };
   }
   if (summary.kind === 'no-filter-match') {
-    return {
-      count: '',
-      detail:
-        'No rated telecasts match these filters. Widen the seasons or clear a filter to see games.',
-    };
+    return { count: '', detail: 'No games match these filters.' };
   }
   if (summary.kind === 'no-game-match') {
     return {
       count: '',
-      detail: `No telecasts of ${summary.phrase} match these filters. Widen the seasons or clear a filter to see games.`,
+      detail: `No games of ${summary.phrase} match these filters. Widen the seasons or clear a filter to see games.`,
     };
   }
   if (summary.kind === 'no-rated') {
     return {
       count: '',
-      detail: `${summary.name}: no Nielsen-rated telecasts in this sample. Conference-network and streaming-only games usually aren't rated — see the methodology page.`,
+      detail: `${summary.name} has no games in this sample.`,
     };
   }
   if (summary.kind === 'filtered-out') {

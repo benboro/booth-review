@@ -6,7 +6,7 @@
  * Role still limits only how a person matches, never which dots pass. Also covers person/compare-mode matching, the
  * matched-games fill rule (person-or-school, D-12), and the match summary.
  * Also computes faceted option counts (D-08..D-12, `computeFacets`): each
- * facet counts rated telecasts passing every active constraint except its
+ * facet counts games (rated and unrated, 04.13 D-08) passing every active constraint except its
  * own. Facets and counts never depend on Fade vs Hide.
  * DOM-free; imports only from ./palette.js and ./format.js.
  */
@@ -215,7 +215,7 @@ const BIT_GAME = 128;
 
 /**
  * Faceted option counts (D-08..D-12): for every filter option, the number
- * of rated telecasts passing every active constraint except that facet's
+ * of games (rated and unrated, 04.13 D-08) passing every active constraint except that facet's
  * own. One pass over the dots builds a per-dot fail bitmask; a dot counts
  * toward a facet iff its mask has no bit outside that facet's own. Role is
  * not a dot constraint; it only feeds the person match and the Role facet.
@@ -332,14 +332,17 @@ export function toggleFamilyNetworks(data, state, family) {
 
 /**
  * Builds the match summary for the current selection and the summary set
- * (D-09, 04.7). `summarySet` is the matched games when something is selected,
- * else the filter-passing games when a filter is active, else empty. `of` is
- * the whole-dataset count when a filter is active (null otherwise). Counts
- * only -- never a viewer statistic (A1).
+ * (D-09, 04.7; 04.13 D-07). `summarySet` is the matched games when something
+ * is selected, else every filter-passing game (all games when nothing is
+ * filtered). `count` is games, `rated` the rated subset. Counts only -- never
+ * a viewer statistic (A1).
  */
 function buildSummary(data, state, summarySet, altGames, personIndexes, hasSelection, filterActive) {
-  if (!hasSelection && !filterActive) return { kind: 'none' };
   const matched = summarySet;
+  const ratedOf = (set) => set.reduce((sum, i) => sum + data.rated[i], 0);
+  if (!hasSelection && !filterActive) {
+    return { kind: 'all', count: matched.length, rated: ratedOf(matched) };
+  }
 
   if (matched.length > 0) {
     const seasonsOfMatched = matched.map((i) => data.t.season[i]);
@@ -352,13 +355,13 @@ function buildSummary(data, state, summarySet, altGames, personIndexes, hasSelec
     return {
       kind: 'matches',
       count: matched.length,
+      rated: ratedOf(matched),
       seasonMin: Math.min(...seasonsOfMatched),
       seasonMax: Math.max(...seasonsOfMatched),
       networks: Array.from(networkCounts.keys()).sort(
         (a, b) => networkCounts.get(b) - networkCounts.get(a) || a.localeCompare(b),
       ),
       altCount: altGames.size,
-      of: filterActive ? data.n : null,
     };
   }
 
@@ -499,7 +502,7 @@ export function computeView(data, state) {
   const sizeFilterActive =
     otherFilterActive || (state.seasons != null && state.axis !== 'date');
   let summarySet = matched;
-  if (!hasSelection && filterActive) {
+  if (!hasSelection) {
     summarySet = [];
     for (let i = 0; i < n; i += 1) if (passesFilters[i]) summarySet.push(i);
   }

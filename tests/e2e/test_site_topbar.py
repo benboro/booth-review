@@ -9,6 +9,7 @@ import re
 from collections.abc import Callable
 
 import pytest
+from conftest import FIXTURE_GAMES, FIXTURE_RATED
 from playwright.sync_api import Locator, Page, expect
 
 pytestmark = pytest.mark.e2e
@@ -102,8 +103,11 @@ def test_search_dale_harlow_shows_two_options_and_click_adds_chip(
     assert chips.first.inner_text().startswith("Dale Harlow")
 
     assert sorted(_highlight_customdata(guarded_page)) == [0, 8]
-    assert guarded_page.inner_text("#summary-count") == "2 rated telecasts"
-    expected_detail = f"2019{chr(0x2013)}2026 {chr(0x00B7)} Alpha Sports"
+    assert (
+        guarded_page.inner_text("#summary-count") == "2 rated of 3 games"
+    )  # Dale Harlow: rated 0, 8 plus unrated 17
+    # Unrated game 17 (Dale on the Conference Network) adds a second network.
+    expected_detail = f"2019{chr(0x2013)}2026 {chr(0x00B7)} Alpha Sports, Conference Network"
     assert guarded_page.inner_text("#summary-detail") == expected_detail
 
 
@@ -149,7 +153,7 @@ def test_announcer_list_shows_everyone_when_search_is_empty(
     open_app(guarded_page, "")
     _open_announcers(guarded_page)
     options = _options(guarded_page)
-    expect(options).to_have_count(10)
+    expect(options).to_have_count(11)
     names = guarded_page.locator("#person-results li[role='option'] .option-name").all_inner_texts()
     assert names == [
         "Casey Lund",
@@ -158,12 +162,13 @@ def test_announcer_list_shows_everyone_when_search_is_empty(
         "Jamie Oaks",
         "Jax Venn",
         "Kris Venn",
+        "Morgan Ash",
         "Pat Rowan",
         "Robin Teague",
         "Sam Delgado",
         "Taylor Vance",
     ]
-    for i in range(10):
+    for i in range(11):
         expect(options.nth(i)).to_have_attribute("aria-selected", "false")
 
 
@@ -171,11 +176,11 @@ def test_announcer_list_checks_selected_people(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-28: with a person selected via the URL, the empty-search list still
-    shows all 10 options, and exactly that person's option is checked."""
+    shows all 11 options, and exactly that person's option is checked."""
     open_app(guarded_page, "?people=kris-venn")
     _open_announcers(guarded_page)
     options = _options(guarded_page)
-    expect(options).to_have_count(10)
+    expect(options).to_have_count(11)
     checked = guarded_page.locator("#person-results li[role='option'][aria-selected='true']")
     expect(checked).to_have_count(1)
     assert "Kris Venn" in checked.first.inner_text()
@@ -198,7 +203,7 @@ def test_announcer_list_filters_by_variant(
 
     guarded_page.fill("#person-search", "")
     guarded_page.wait_for_function("document.getElementById('person-results').dataset.query === ''")
-    expect(_options(guarded_page)).to_have_count(10)
+    expect(_options(guarded_page)).to_have_count(11)
 
 
 def test_announcer_pick_clears_search_and_refocuses(
@@ -315,7 +320,17 @@ def test_compare_mode_assigns_shapes_and_shows_shared_booth(
     guarded_page.wait_for_function("location.search.includes('mode=compare')")
 
     symbols = guarded_page.evaluate("() => window.__testHooks.getView().symbols")
-    assert symbols == {"1": "circle", "2": "square", "6": "star", "9": "circle", "10": "square"}
+    # Kris (circle): rated 1, 9, unrated 13; Sam (square): rated 2, 10, unrated 16, 19; shared 6.
+    assert symbols == {
+        "1": "circle",
+        "2": "square",
+        "6": "star",
+        "9": "circle",
+        "10": "square",
+        "13": "circle",
+        "16": "square",
+        "19": "square",
+    }
 
     chips = guarded_page.locator("#chips .chip")
     assert chips.nth(0).inner_text().startswith("●")
@@ -431,7 +446,10 @@ def test_remove_chip_and_clear_selection_reset_state(
     guarded_page.click('button[aria-label="Remove Dale Harlow"]')
     guarded_page.wait_for_function("location.search === ''")
     assert _highlight_customdata(guarded_page) == []
-    assert guarded_page.inner_text("#summary-count") == ""
+    assert (
+        guarded_page.inner_text("#summary-count")
+        == f"{FIXTURE_RATED} rated of {FIXTURE_GAMES} games"
+    )
 
     _add_person_by_query(guarded_page, "Dale Harlow")
     guarded_page.click("#clear-selection")
@@ -484,11 +502,13 @@ def test_summary_never_reads_like_a_ranking(
 def test_summary_reads_n_of_m_for_a_filter_alone(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """04.7 D-09: a filter alone reads 'N of M'; Fade/Hide never changes N or M."""
+    """04.13 D-07: a filter alone reads 'N rated of M games'; Fade/Hide never changes it."""
     detail = f"2019{chr(0x2013)}2026 {chr(0x00B7)} Alpha Sports"
     for query in ("?networks=net-a", "?networks=net-a&dots=hide"):
         open_app(guarded_page, query)
-        assert guarded_page.inner_text("#summary-count") == "3 of 12 rated telecasts"
+        assert (
+            guarded_page.inner_text("#summary-count") == "3 rated of 6 games"
+        )  # net-a: rated 0, 4, 8 plus unrated 13, 14, 19
         assert guarded_page.inner_text("#summary-detail") == detail
 
 
@@ -496,7 +516,9 @@ def test_summary_n_of_m_with_an_announcer_on_a_filter(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(guarded_page, "?people=dale-harlow&seasons=2026-2026")
-    assert guarded_page.inner_text("#summary-count") == "1 of 12 rated telecasts"
+    assert (
+        guarded_page.inner_text("#summary-count") == "1 rated of 1 game"
+    )  # Dale Harlow in 2026: rated 8 only
 
 
 def test_summary_filter_only_no_match_copy(
@@ -504,9 +526,7 @@ def test_summary_filter_only_no_match_copy(
 ) -> None:
     open_app(guarded_page, "?slot=late&postseason=only")
     assert guarded_page.inner_text("#summary-count") == ""
-    assert guarded_page.inner_text("#summary-detail") == (
-        "No rated telecasts match these filters. Widen the seasons or clear a filter to see games."
-    )
+    assert guarded_page.inner_text("#summary-detail") == "No games match these filters."
 
 
 def test_summary_clears_when_the_last_filter_is_cleared(
@@ -516,7 +536,10 @@ def test_summary_clears_when_the_last_filter_is_cleared(
     assert guarded_page.inner_text("#summary-count") != ""
     guarded_page.click("#clear-filters")
     guarded_page.wait_for_function("location.search === ''")
-    assert guarded_page.inner_text("#summary-count") == ""
+    assert (
+        guarded_page.inner_text("#summary-count")
+        == f"{FIXTURE_RATED} rated of {FIXTURE_GAMES} games"
+    )
     assert guarded_page.inner_text("#summary-detail") == ""
 
 
@@ -682,7 +705,9 @@ def test_summary_detail_lists_networks_most_telecasts_first(
 ) -> None:
     """A6: the summary line lists the dominant network first, not alphabetically."""
     open_app(guarded_page, "?people=pat-rowan")
-    assert "Conference Network, Beta Network" in guarded_page.inner_text("#summary-detail")
+    # Pat: Beta 2, Conference 2 (tie, alphabetical), then Alpha 1 and Stream Plus 1.
+    detail = guarded_page.inner_text("#summary-detail")
+    assert "Beta Network, Conference Network, Alpha Sports +1 more" in detail
 
 
 def _listed_ids(page: Page) -> list[str]:
@@ -698,19 +723,20 @@ def _row_count(page: Page, person_id: str) -> str:
     ).inner_text()
 
 
-_NET_B_PEOPLE = ["jax-venn", "kris-venn", "pat-rowan", "taylor-vance"]
+_NET_B_PEOPLE = ["jax-venn", "kris-venn", "pat-rowan", "sam-delgado", "taylor-vance"]
 
 
 def test_facet_announcers_narrow_to_people_on_the_other_filters(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-09/D-12: net-b games (dots 1, 5, 9) list only their crews, with counts."""
+    """D-09/D-12: net-b games (dots 1, 5, 9, unrated 12, 16) list only their crews, with counts."""
     open_app(guarded_page, "?networks=net-b")
     _open_announcers(guarded_page)
     assert _listed_ids(guarded_page) == _NET_B_PEOPLE
     assert _row_count(guarded_page, "kris-venn") == "(2)"
     assert _row_count(guarded_page, "jax-venn") == "(2)"
-    assert _row_count(guarded_page, "pat-rowan") == "(1)"
+    assert _row_count(guarded_page, "pat-rowan") == "(2)"  # rated 5, unrated 16
+    assert _row_count(guarded_page, "sam-delgado") == "(1)"  # unrated 16
     assert _row_count(guarded_page, "taylor-vance") == "(1)"
     expect(guarded_page.locator("#person-results li[data-person-id='dale-harlow']")).to_have_count(
         0
@@ -745,10 +771,11 @@ def test_facet_announcers_selected_zero_count_person_stays_greyed(
 def test_facet_announcers_role_changes_counts(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """Role narrows the list: net-b analysts are jax-venn (2) and taylor-vance (1)."""
+    """Role narrows the list: net-b analysts are jax-venn (2), sam-delgado (1, unrated 16)
+    and taylor-vance (1)."""
     open_app(guarded_page, "?networks=net-b&role=analyst")
     _open_announcers(guarded_page)
-    assert _listed_ids(guarded_page) == ["jax-venn", "taylor-vance"]
+    assert _listed_ids(guarded_page) == ["jax-venn", "sam-delgado", "taylor-vance"]
     assert _row_count(guarded_page, "jax-venn") == "(2)"
     assert _row_count(guarded_page, "taylor-vance") == "(1)"
 
