@@ -39,6 +39,7 @@ cfbd_game_id,official_name,core_name,at_bowl,franchise
 400610228,Birmingham Bowl,Birmingham Bowl,true,birmingham-bowl
 400610325,,,false,
 400852668,Gildan New Mexico Bowl,New Mexico Bowl,true,new-mexico-bowl
+400852683,AutoNation Cure Bowl,Cure Bowl,true,cure-bowl
 400852684,Royal Purple Las Vegas Bowl,Las Vegas Bowl,true,las-vegas-bowl
 400852685,Raycom Media Camellia Bowl,Camellia Bowl,true,camellia-bowl
 400852686,R+L Carriers New Orleans Bowl,New Orleans Bowl,true,new-orleans-bowl
@@ -59,6 +60,7 @@ cfbd_game_id,official_name,core_name,at_bowl,franchise
 400852722,Quick Lane Bowl,Quick Lane Bowl,true,quick-lane-bowl
 400852723,Lockheed Martin Armed Forces Bowl,Armed Forces Bowl,true,armed-forces-bowl
 400852724,Russell Athletic Bowl,Russell Athletic Bowl,true,russell-athletic-bowl
+400852725,NOVA Home Loans Arizona Bowl,Arizona Bowl,true,arizona-bowl
 400852726,AdvoCare V100 Texas Bowl,Texas Bowl,true,texas-bowl
 400852727,Birmingham Bowl,Birmingham Bowl,true,birmingham-bowl
 400852728,Belk Bowl,Belk Bowl,true,belk-bowl
@@ -67,6 +69,7 @@ cfbd_game_id,official_name,core_name,at_bowl,franchise
 400852731,Chick-fil-A Peach Bowl,Peach Bowl,true,peach-bowl
 400852732,Goodyear Cotton Bowl Classic,Cotton Bowl Classic,true,cotton-bowl
 400852733,Capital One Orange Bowl,Orange Bowl,true,orange-bowl
+400852734,Outback Bowl,Outback Bowl,true,outback-bowl
 400852735,Buffalo Wild Wings Citrus Bowl,Citrus Bowl,true,citrus-bowl
 400852736,BattleFrog Fiesta Bowl,Fiesta Bowl,true,fiesta-bowl
 400852737,Rose Bowl Game Presented by Northwestern Mutual,Rose Bowl,true,rose-bowl
@@ -79,6 +82,7 @@ cfbd_game_id,official_name,core_name,at_bowl,franchise
 400876038,Gildan New Mexico Bowl,New Mexico Bowl,true,new-mexico-bowl
 400876039,Las Vegas Bowl Presented by GEICO,Las Vegas Bowl,true,las-vegas-bowl
 400876040,Raycom Media Camellia Bowl,Camellia Bowl,true,camellia-bowl
+400876041,R+L Carriers New Orleans Bowl,New Orleans Bowl,true,new-orleans-bowl
 400876042,Miami Beach Bowl,Miami Beach Bowl,true,miami-beach-bowl
 400876043,Boca Raton Bowl,Boca Raton Bowl,true,boca-raton-bowl
 400876044,San Diego County Credit Union Poinsettia Bowl,Poinsettia Bowl,true,poinsettia-bowl
@@ -96,6 +100,7 @@ cfbd_game_id,official_name,core_name,at_bowl,franchise
 400876096,Motel 6 Cactus Bowl,Cactus Bowl,true,cactus-bowl
 400876097,New Era Pinstripe Bowl,Pinstripe Bowl,true,pinstripe-bowl
 400876098,Russell Athletic Bowl,Russell Athletic Bowl,true,russell-athletic-bowl
+400876099,AdvoCare V100 Texas Bowl,Texas Bowl,true,texas-bowl
 400876100,Birmingham Bowl,Birmingham Bowl,true,birmingham-bowl
 400876101,Belk Bowl,Belk Bowl,true,belk-bowl
 400876102,Valero Alamo Bowl,Alamo Bowl,true,alamo-bowl
@@ -113,18 +118,23 @@ cfbd_game_id,official_name,core_name,at_bowl,franchise
 400876570,,,false,
 400878692,Hyundai Sun Bowl,Sun Bowl,true,sun-bowl
 400903226,Foster Farms Bowl,Foster Farms Bowl,true,foster-farms-bowl
+400903611,AutoNation Cure Bowl,Cure Bowl,true,cure-bowl
+400928102,NOVA Home Loans Arizona Bowl,Arizona Bowl,true,arizona-bowl
 400953322,R+L Carriers New Orleans Bowl,New Orleans Bowl,true,new-orleans-bowl
 400953323,Las Vegas Bowl,Las Vegas Bowl,true,las-vegas-bowl
 400953324,Gildan New Mexico Bowl,New Mexico Bowl,true,new-mexico-bowl
 400953325,Raycom Media Camellia Bowl,Camellia Bowl,true,camellia-bowl
 400953386,Cheribundi Tart Cherry Boca Raton Bowl,Boca Raton Bowl,true,boca-raton-bowl
 400953387,Bad Boy Mowers Gasparilla Bowl,Gasparilla Bowl,true,gasparilla-bowl
+400953388,Bahamas Bowl,Bahamas Bowl,true,bahamas-bowl
+400953389,Famous Idaho Potato Bowl,Famous Idaho Potato Bowl,true,famous-idaho-potato-bowl
 400953390,Birmingham Bowl,Birmingham Bowl,true,birmingham-bowl
 400953391,Lockheed Martin Armed Forces Bowl,Armed Forces Bowl,true,armed-forces-bowl
 400953392,Dollar General Bowl,Dollar General Bowl,true,godaddy-bowl
 400953393,Hawaiʻi Bowl,Hawaiʻi Bowl,true,hawaii-bowl
 400953394,Quick Lane Bowl,Quick Lane Bowl,true,quick-lane-bowl
 400953395,Zaxby's Heart of Dallas Bowl,Heart of Dallas Bowl,true,first-responder-bowl
+400953396,Cactus Bowl,Cactus Bowl,true,cactus-bowl
 400953397,Walk-On's Independence Bowl,Independence Bowl,true,independence-bowl
 400953398,New Era Pinstripe Bowl,Pinstripe Bowl,true,pinstripe-bowl
 400953399,Academy Sports + Outdoors Texas Bowl,Texas Bowl,true,texas-bowl
@@ -137,6 +147,7 @@ cfbd_game_id,official_name,core_name,at_bowl,franchise
 400953406,AutoZone Liberty Bowl,Liberty Bowl,true,liberty-bowl
 400953407,PlayStation Fiesta Bowl,Fiesta Bowl,true,fiesta-bowl
 400953408,Capital One Orange Bowl,Orange Bowl,true,orange-bowl
+400953409,AutoNation Cure Bowl,Cure Bowl,true,cure-bowl
 400953410,Outback Bowl,Outback Bowl,true,outback-bowl
 400953411,Chick-fil-A Peach Bowl,Peach Bowl,true,peach-bowl
 400953412,Rose Bowl Game Presented by Northwestern Mutual,Rose Bowl,true,rose-bowl
@@ -148,6 +159,7 @@ cfbd_game_id,official_name,core_name,at_bowl,franchise
 400954523,DXL Frisco Bowl,Frisco Bowl,true,frisco-bowl
 400959397,San Diego County Credit Union Holiday Bowl,Holiday Bowl,true,holiday-bowl
 400959398,Foster Farms Bowl,Foster Farms Bowl,true,foster-farms-bowl
+400966332,NOVA Home Loans Arizona Bowl,Arizona Bowl,true,arizona-bowl
 401032054,New Mexico Bowl Presented by Progressive,New Mexico Bowl,true,new-mexico-bowl
 401032055,Mitsubishi Motors Las Vegas Bowl,Las Vegas Bowl,true,las-vegas-bowl
 401032056,Raycom Media Camellia Bowl,Camellia Bowl,true,camellia-bowl
@@ -184,6 +196,8 @@ cfbd_game_id,official_name,core_name,at_bowl,franchise
 401032088,Vrbo Citrus Bowl,Citrus Bowl,true,citrus-bowl
 401035250,San Diego County Credit Union Holiday Bowl,Holiday Bowl,true,holiday-bowl
 401035251,Hyundai Sun Bowl,Sun Bowl,true,sun-bowl
+401035252,NOVA Home Loans Arizona Bowl,Arizona Bowl,true,arizona-bowl
+401035253,AutoNation Cure Bowl,Cure Bowl,true,cure-bowl
 401035254,Redbox Bowl,Redbox Bowl,true,foster-farms-bowl
 401135260,Makers Wanted Bahamas Bowl,Bahamas Bowl,true,bahamas-bowl
 401135261,Tropical Smoothie Cafe Frisco Bowl,Frisco Bowl,true,frisco-bowl
@@ -199,6 +213,7 @@ cfbd_game_id,official_name,core_name,at_bowl,franchise
 401135272,Military Bowl Presented by Northrop Grumman,Military Bowl,true,military-bowl
 401135273,New Era Pinstripe Bowl,Pinstripe Bowl,true,pinstripe-bowl
 401135274,Academy Sports + Outdoors Texas Bowl,Texas Bowl,true,texas-bowl
+401135275,Cheez-It Bowl,Cheez-It Bowl,true,cactus-bowl
 401135276,Camping World Bowl,Camping World Bowl,true,russell-athletic-bowl
 401135277,Goodyear Cotton Bowl Classic,Cotton Bowl Classic,true,cotton-bowl
 401135278,Chick-fil-A Peach Bowl,Peach Bowl,true,peach-bowl
@@ -222,6 +237,8 @@ cfbd_game_id,official_name,core_name,at_bowl,franchise
 401136253,San Diego County Credit Union Holiday Bowl,Holiday Bowl,true,holiday-bowl
 401136254,Redbox Bowl,Redbox Bowl,true,foster-farms-bowl
 401136255,Tony the Tiger Sun Bowl,Sun Bowl,true,sun-bowl
+401147693,FBC Mortgage Cure Bowl,Cure Bowl,true,cure-bowl
+401147695,NOVA Home Loans Arizona Bowl,Arizona Bowl,true,arizona-bowl
 401240152,Rose Bowl Game Presented by Capital One,Rose Bowl,true,rose-bowl
 401240173,Allstate Sugar Bowl,Sugar Bowl,true,sugar-bowl
 401240174,,,false,
@@ -238,6 +255,7 @@ cfbd_game_id,official_name,core_name,at_bowl,franchise
 401256140,New Mexico Bowl,New Mexico Bowl,true,new-mexico-bowl
 401256141,Camellia Bowl,Camellia Bowl,true,camellia-bowl
 401256143,FBC Mortgage Cure Bowl,Cure Bowl,true,cure-bowl
+401256144,SERVPRO First Responder Bowl,First Responder Bowl,true,first-responder-bowl
 401256145,LendingTree Bowl,LendingTree Bowl,true,godaddy-bowl
 401256150,Cheez-It Bowl,Cheez-It Bowl,true,russell-athletic-bowl
 401256151,Valero Alamo Bowl,Alamo Bowl,true,alamo-bowl
@@ -247,13 +265,29 @@ cfbd_game_id,official_name,core_name,at_bowl,franchise
 401256197,AutoZone Liberty Bowl,Liberty Bowl,true,liberty-bowl
 401256199,Vrbo Citrus Bowl,Citrus Bowl,true,citrus-bowl
 401268773,Offerpad Arizona Bowl,Arizona Bowl,true,arizona-bowl
+401331164,Bahamas Bowl,Bahamas Bowl,true,bahamas-bowl
+401331165,Tailgreeter Cure Bowl,Cure Bowl,true,cure-bowl
+401331166,RoofClaim.com Boca Raton Bowl,Boca Raton Bowl,true,boca-raton-bowl
+401331167,PUBG Mobile New Mexico Bowl,New Mexico Bowl,true,new-mexico-bowl
 401331168,Radiance Technologies Independence Bowl,Independence Bowl,true,independence-bowl
+401331169,LendingTree Bowl,LendingTree Bowl,true,godaddy-bowl
+401331170,Jimmy Kimmel LA Bowl Presented by Stifel,LA Bowl,true,la-bowl
+401331171,R+L Carriers New Orleans Bowl,New Orleans Bowl,true,new-orleans-bowl
+401331172,Myrtle Beach Bowl Pres. by TaxAct,Myrtle Beach Bowl,true,myrtle-beach-bowl
+401331213,Famous Idaho Potato Bowl,Famous Idaho Potato Bowl,true,famous-idaho-potato-bowl
+401331214,Tropical Smoothie Cafe Frisco Bowl,Frisco Bowl,true,frisco-bowl
 401331215,Lockheed Martin Armed Forces Bowl,Armed Forces Bowl,true,armed-forces-bowl
 401331216,Union Home Mortgage Gasparilla Bowl,Gasparilla Bowl,true,gasparilla-bowl
+401331218,TaxAct Camellia Bowl,Camellia Bowl,true,camellia-bowl
+401331219,Quick Lane Bowl,Quick Lane Bowl,true,quick-lane-bowl
+401331221,TicketSmarter Birmingham Bowl,Birmingham Bowl,true,birmingham-bowl
 401331222,SERVPRO First Responder Bowl,First Responder Bowl,true,first-responder-bowl
 401331223,AutoZone Liberty Bowl,Liberty Bowl,true,liberty-bowl
+401331224,Guaranteed Rate Bowl,Rate Bowl,true,cactus-bowl
+401331226,New Era Pinstripe Bowl,Pinstripe Bowl,true,pinstripe-bowl
 401331227,Cheez-It Bowl,Cheez-It Bowl,true,russell-athletic-bowl
 401331228,Valero Alamo Bowl,Alamo Bowl,true,alamo-bowl
+401331229,Duke's Mayo Bowl,Duke's Mayo Bowl,true,belk-bowl
 401331230,TransPerfect Music City Bowl,Music City Bowl,true,music-city-bowl
 401331231,Chick-fil-A Peach Bowl,Peach Bowl,true,peach-bowl
 401331232,SRS Distribution Las Vegas Bowl,Las Vegas Bowl,true,las-vegas-bowl
@@ -265,11 +299,28 @@ cfbd_game_id,official_name,core_name,at_bowl,franchise
 401331238,PlayStation Fiesta Bowl,Fiesta Bowl,true,fiesta-bowl
 401331239,Rose Bowl Game Presented by Capital One Venture X,Rose Bowl,true,rose-bowl
 401331240,Allstate Sugar Bowl,Sugar Bowl,true,sugar-bowl
+401331241,TaxAct Texas Bowl,Texas Bowl,true,texas-bowl
 401331242,,,false,
 401331654,Tony the Tiger Sun Bowl,Sun Bowl,true,sun-bowl
+401391158,Frisco Football Classic,Frisco Football Classic,true,frisco-football-classic
+401441993,HomeTown Lenders Bahamas Bowl,Bahamas Bowl,true,bahamas-bowl
+401441994,Duluth Trading Cure Bowl,Cure Bowl,true,cure-bowl
+401441995,Wasabi Fenway Bowl,Fenway Bowl,true,fenway-bowl
+401441997,New Mexico Bowl,New Mexico Bowl,true,new-mexico-bowl
+401441998,Camellia Bowl,Camellia Bowl,true,camellia-bowl
 401441999,SRS Distribution Las Vegas Bowl,Las Vegas Bowl,true,las-vegas-bowl
+401442000,SERVPRO First Responder Bowl,First Responder Bowl,true,first-responder-bowl
+401442001,Frisco Bowl Presented by SERVPRO,Frisco Bowl,true,frisco-bowl
+401442002,TicketSmarter Birmingham Bowl,Birmingham Bowl,true,birmingham-bowl
+401442003,Myrtle Beach Bowl,Myrtle Beach Bowl,true,myrtle-beach-bowl
+401442004,Famous Idaho Potato Bowl,Famous Idaho Potato Bowl,true,famous-idaho-potato-bowl
+401442005,Guaranteed Rate Bowl,Rate Bowl,true,cactus-bowl
+401442006,RoofClaim.com Boca Raton Bowl,Boca Raton Bowl,true,boca-raton-bowl
 401442007,Union Home Mortgage Gasparilla Bowl,Gasparilla Bowl,true,gasparilla-bowl
+401442008,Military Bowl Presented by Peraton,Military Bowl,true,military-bowl
+401442009,EasyPost Hawai'i Bowl,Hawai'i Bowl,true,hawaii-bowl
 401442010,,,false,
+401442011,ReliaQuest Bowl,ReliaQuest Bowl,true,outback-bowl
 401442012,Cheez-It Citrus Bowl,Citrus Bowl,true,citrus-bowl
 401442013,Goodyear Cotton Bowl Classic,Cotton Bowl Classic,true,cotton-bowl
 401442014,Rose Bowl Game Presented by Prudential,Rose Bowl,true,rose-bowl
@@ -279,18 +330,29 @@ cfbd_game_id,official_name,core_name,at_bowl,franchise
 401442018,Allstate Sugar Bowl,Sugar Bowl,true,sugar-bowl
 401442019,Capital One Orange Bowl,Orange Bowl,true,orange-bowl
 401442030,AutoZone Liberty Bowl,Liberty Bowl,true,liberty-bowl
+401442031,TaxAct Texas Bowl,Texas Bowl,true,texas-bowl
 401442032,Bad Boy Mowers Pinstripe Bowl,Pinstripe Bowl,true,pinstripe-bowl
 401442033,Cheez-It Bowl,Cheez-It Bowl,true,russell-athletic-bowl
 401442034,Valero Alamo Bowl,Alamo Bowl,true,alamo-bowl
 401442035,Duke's Mayo Bowl,Duke's Mayo Bowl,true,belk-bowl
 401442036,TaxSlayer Gator Bowl,Gator Bowl,true,gator-bowl
+401442037,Quick Lane Bowl,Quick Lane Bowl,true,quick-lane-bowl
+401442038,Jimmy Kimmel LA Bowl Presented by Stifel,LA Bowl,true,la-bowl
+401442039,R+L Carriers New Orleans Bowl,New Orleans Bowl,true,new-orleans-bowl
+401442040,Lockheed Martin Armed Forces Bowl,Armed Forces Bowl,true,armed-forces-bowl
+401442041,LendingTree Bowl,LendingTree Bowl,true,godaddy-bowl
+401442042,Radiance Technologies Independence Bowl,Independence Bowl,true,independence-bowl
+401443542,Tony the Tiger Sun Bowl,Sun Bowl,true,sun-bowl
 401470891,San Diego County Credit Union Holiday Bowl,Holiday Bowl,true,holiday-bowl
 401551469,Famous Toastery Bowl,Famous Toastery Bowl,true,famous-toastery-bowl
+401551731,Avocados From Mexico Cure Bowl,Cure Bowl,true,cure-bowl
 401551732,Isleta New Mexico Bowl,New Mexico Bowl,true,new-mexico-bowl
 401551733,Myrtle Beach Bowl,Myrtle Beach Bowl,true,myrtle-beach-bowl
 401551735,Scooter's Coffee Frisco Bowl,Frisco Bowl,true,frisco-bowl
 401551737,RoofClaim.com Boca Raton Bowl,Boca Raton Bowl,true,boca-raton-bowl
+401551739,76 Birmingham Bowl,Birmingham Bowl,true,birmingham-bowl
 401551741,Camellia Bowl,Camellia Bowl,true,camellia-bowl
+401551742,Lockheed Martin Armed Forces Bowl,Armed Forces Bowl,true,armed-forces-bowl
 401551743,Famous Idaho Potato Bowl,Famous Idaho Potato Bowl,true,famous-idaho-potato-bowl
 401551744,SRS Distribution Las Vegas Bowl,Las Vegas Bowl,true,las-vegas-bowl
 401551746,EasyPost Hawaiʻi Bowl,Hawaiʻi Bowl,true,hawaii-bowl
@@ -313,6 +375,7 @@ cfbd_game_id,official_name,core_name,at_bowl,franchise
 401551767,AutoZone Liberty Bowl,Liberty Bowl,true,liberty-bowl
 401551768,Goodyear Cotton Bowl Classic,Cotton Bowl Classic,true,cotton-bowl
 401551769,Chick-fil-A Peach Bowl,Peach Bowl,true,peach-bowl
+401551770,TransPerfect Music City Bowl,Music City Bowl,true,music-city-bowl
 401551773,Capital One Orange Bowl,Orange Bowl,true,orange-bowl
 401551778,ReliaQuest Bowl,ReliaQuest Bowl,true,outback-bowl
 401551780,Cheez-It Citrus Bowl,Citrus Bowl,true,citrus-bowl
@@ -321,7 +384,10 @@ cfbd_game_id,official_name,core_name,at_bowl,franchise
 401551788,Allstate Sugar Bowl,Sugar Bowl,true,sugar-bowl
 401551789,,,false,
 401551798,Tony the Tiger Sun Bowl,Sun Bowl,true,sun-bowl
+401554566,Barstool Sports Arizona Bowl,Arizona Bowl,true,arizona-bowl
 401581109,DIRECTV Holiday Bowl,Holiday Bowl,true,holiday-bowl
+401677077,IS4S Salute to Veterans Bowl,Salute to Veterans Bowl,true,camellia-bowl
+401677079,Boca Raton Bowl,Boca Raton Bowl,true,boca-raton-bowl
 401677080,Scooter's Coffee Frisco Bowl,Frisco Bowl,true,frisco-bowl
 401677081,Art of Sport LA Bowl,LA Bowl,true,la-bowl
 401677082,R+L Carriers New Orleans Bowl,New Orleans Bowl,true,new-orleans-bowl
@@ -362,6 +428,7 @@ cfbd_game_id,official_name,core_name,at_bowl,franchise
 401677184,Allstate Sugar Bowl,Sugar Bowl,true,sugar-bowl
 401677188,Snoop Dogg Arizona Bowl,Arizona Bowl,true,arizona-bowl
 401677189,Capital One Orange Bowl,Orange Bowl,true,orange-bowl
+401677190,Tony the Tiger Sun Bowl,Sun Bowl,true,sun-bowl
 401677191,Goodyear Cotton Bowl Classic,Cotton Bowl Classic,true,cotton-bowl
 401677192,,,false,
 401729867,DIRECTV Holiday Bowl,Holiday Bowl,true,holiday-bowl
