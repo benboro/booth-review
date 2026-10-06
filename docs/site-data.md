@@ -56,6 +56,13 @@ figure is kept in the build's processed tables but never makes a game rated in v
 such a game ships as unrated (cause `none`). A game whose network did not resolve ships
 in neither block, and the contract rejects an unrated row whose network is `unmapped`.
 
+A game ships once. When a game has a rated row, that row wins and no unrated row of the
+game ships. Otherwise the first unrated main-feed telecast of the game, by date, kickoff
+and telecast, ships, and the build summary counts the rows it dropped. The contract
+rejects a payload in which a game's date, away team and home team appear more than once
+across `telecasts` and `telecasts_unrated`. This is a stricter check, not a change of
+shape, so the schema version stays the same.
+
 ### `telecasts_unrated`
 
 One list per display field, index-aligned like `telecasts`. Each field has the same
@@ -212,6 +219,8 @@ only their derived, display-safe outputs (`game_type`, `playoff_round`, the
 `is_fbs` flag) do.
 
 `home_spread` is shown in the chart (the winner's line in the tooltip and modal, and the Spread axis), so it is a display field; the raw CFBD `spread` column name stays on the test guard's banned list.
+
+Unrated rows carry the same display-only CFBD fields as rated rows (`excitement`, `home_spread`, scores, ranks, and conferences). Each one is shown in the chart, as an x position, in the tooltip, or in the detail panel, under CFBD's 2026-09-25 approval to use its fields in the interactive chart. There is still no bulk download.
 
 ## Versioning
 

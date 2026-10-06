@@ -18,8 +18,8 @@ the hover, the detail panel, and the matched-games table. No dot is ever
 colored by an individual announcer or crew.
 
 A dot's tooltip is kept short: the matchup and final score, the date and
-kickoff time (with a bowl or trophy icon for postseason games), the
-networks, the crew, and the viewer count. Click or tap the
+kickoff time, the named game (the bowl, rivalry, or playoff round, with its icon) on its own line,
+the networks, the crew, and the viewer count. Click or tap the
 dot to open its detail panel, which also has the measurement label, both
 x-axis values, any flags, and, for a Saturday game, its time slot.
 
@@ -44,7 +44,7 @@ controls for matchup quality, network, time slot, and era) is the whole point
 of this page's warning. The causal question is out of scope for this release
 and is planned as a future model-driven milestone, not part of this chart.
 
-The Bars and Butterfly views count assignments, not quality. Every bar is a number of rated telecasts, never a viewer figure, and announcers are never ranked by audience. Bars are ordered by how many telecasts an announcer, team, network family, or conference has in the current filters, which is a count of assignments, not a ranking of skill. In a stacked bar a telecast counts once for every announcer (or team) in it, so a bar can be longer than its number of telecasts.
+The Bars and Butterfly views count assignments, not quality. Every bar is a number of games, never a viewer figure, and announcers are never ranked by audience. Bars are ordered by how many games an announcer, team, network family, or conference has in the current filters, which is a count of assignments, not a ranking of skill. In a stacked bar a game counts once for every announcer (or team) in it, so a bar can be longer than its number of games. Solid parts of a bar are rated games and outlined parts are games with no public rating. One announcer's (or team's) parts stay together in a stacked bar. In a network family bar, the networks named on the family's legend chip take the chip's color and then its shades, in the order the chip lists them (for example ABC, then ESPN), and any other channels follow, most games first.
 
 ## Which games are included
 
@@ -98,7 +98,7 @@ None of this changes the axes or uses viewership as an input.
 
 Besides the rated games the chart plots, the site lists the games that have no public viewer figure, so a network's thin coverage is visible instead of silent.
 
-**What ships.** Every main-feed game that has a matched game and a resolved network, rated or not. A game with no resolved network is left out; it is only counted in the build summary.
+**What ships.** Every main-feed game that has a matched game and a resolved network, rated or not. A game with no resolved network is left out; it is only counted in the build summary. A game shows up once: if it has a rated telecast, only that one is shown, and otherwise only its first unrated main-feed telecast is. The build counts the rest, and the site's data file is rejected if it repeats a game.
 
 **What "rated" means.** A public viewer figure exists for the game's main broadcast.
 
@@ -115,7 +115,7 @@ On the site each game reads "No public rating · {cause}".
 
 **The rarely-rated list.** It is set by hand, one value per network, in `data/reference/network_rarity.csv`, and never computed from a threshold. Every network in `networks.csv` has a row, so a newly mapped network forces a review. The build reports only how many networks have an actual rated share that contradicts their flag, so the list stays auditable.
 
-**Where they appear.** On the chart these games sit in the "No public rating" strip under the plot as hollow rings. In Bars, each bar's outlined part counts them.
+**Where they appear.** On the chart these games sit in the "No public rating" strip under the plot as hollow rings when no filter is active, and for games that fail the filters. With a filter active, the games that pass it are drawn like rated dots, and a selected announcer's games use the same shapes as their rated games. A Date season range alone does not count as a filter here. In Bars, each bar's outlined part counts them.
 
 ## Measurement eras
 
