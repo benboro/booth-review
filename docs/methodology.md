@@ -94,6 +94,29 @@ and lists the games that pass every filter. With exactly two schools selected, H
 
 None of this changes the axes or uses viewership as an input.
 
+## Games with no public rating
+
+Besides the rated games the chart plots, the site lists the games that have no public viewer figure, so a network's thin coverage is visible instead of silent.
+
+**What ships.** Every main-feed game that has a matched game and a resolved network, rated or not. A game with no resolved network is left out; it is only counted in the build summary.
+
+**What "rated" means.** A public viewer figure exists for the game's main broadcast.
+
+**Why a game has no rating.** Each unrated game gets one cause, the first that matches:
+
+1. "{Network} games are rarely rated": the network is on a hand-kept list (below).
+2. "viewership not posted yet": the game is in the current season, in the newest week that has any posted figure or later (the postseason counts as after every regular week). When the season has no posted figure yet, every current-season game qualifies. A week's figures arrive over several days, so a strictly-later rule would flag nothing.
+3. "few figures were compiled for 2021–24": the game is from a season in that range, when Ratings Reference itself compiled far fewer figures (see Known gaps).
+4. "no figure was published": anything else. This also covers the rare game whose only figure is for an alternate feed.
+
+On the site each game reads "No public rating · {cause}".
+
+**Counts.** "N rated of M games" counts the games that pass the current filters or selection: N is how many have a figure, M is all of them, rated or not. Filter counts count every game.
+
+**The rarely-rated list.** It is set by hand, one value per network, in `data/reference/network_rarity.csv`, and never computed from a threshold. Every network in `networks.csv` has a row, so a newly mapped network forces a review. The build reports only how many networks have an actual rated share that contradicts their flag, so the list stays auditable.
+
+**Where they appear.** On the chart these games sit in the "No public rating" strip under the plot as hollow rings. In Bars, each bar's outlined part counts them.
+
 ## Measurement eras
 
 Nielsen, the source of nearly every viewership figure on this chart, changed
