@@ -615,3 +615,142 @@ def test_inert_band_marker_has_no_tooltip_and_no_ring(
     guarded_page.mouse.click(point["x"], point["y"])
     guarded_page.wait_for_timeout(200)
     assert not guarded_page.evaluate("document.getElementById('detail-panel').open")
+
+
+# ---------------------------------------------------------------------------
+# Band label / info button / note (D-01, D-12)
+# ---------------------------------------------------------------------------
+
+_BAND_INFO_JS = """
+() => {
+  const b = document.getElementById('band-info');
+  const gd = document.getElementById('chart');
+  const fl = gd._fullLayout;
+  const c = gd.getBoundingClientRect();
+  const r = b.getBoundingClientRect();
+  const text = b.querySelector('.band-info-text').getBoundingClientRect();
+  return {
+    box: { x: r.x, y: r.y, w: r.width, h: r.height },
+    chartTop: c.top, chartLeft: c.left, chartH: c.height,
+    plotLeft: fl._size.l,
+    gapTop: fl.yaxis2._offset - 28,
+    gapBottom: fl.yaxis2._offset,
+    lineH: parseFloat(getComputedStyle(b).lineHeight),
+    textH: text.height,
+    label: b.textContent.trim(),
+    scrollW: document.documentElement.scrollWidth,
+    clientW: document.documentElement.clientWidth,
+  };
+}
+"""
+
+_MARKER_CENTERS_JS = """
+() => {
+  const gd = document.getElementById('chart');
+  const fl = gd._fullLayout;
+  const c = gd.getBoundingClientRect();
+  const out = [];
+  for (const t of gd.data) {
+    const ya = t.yaxis === 'y2' ? fl.yaxis2 : fl.yaxis;
+    for (let k = 0; k < (t.x ?? []).length; k++) {
+      if (t.x[k] == null || t.y[k] == null) continue;
+      const px = c.left + fl._size.l + fl.xaxis.l2p(t.x[k]);
+      const py = c.top + ya._offset + ya.l2p(t.y[k]);
+      out.push([px, py]);
+    }
+  }
+  return out;
+}
+"""
+
+
+@pytest.mark.parametrize("size", _VIEWPORTS)
+@pytest.mark.parametrize("axis_query", _AXES)
+def test_band_info_button_geometry(
+    request: pytest.FixtureRequest,
+    open_app: Callable[[Page, str], None],
+    size: tuple[int, int],
+    axis_query: str,
+) -> None:
+    page = _open_at(request, open_app, size, axis_query)
+    info = page.evaluate(_BAND_INFO_JS)
+    box = info["box"]
+    assert page.is_visible("#band-info")
+    assert box["w"] >= 44
+    assert box["h"] >= 44
+    assert info["label"].startswith("No public rating")
+    gap_center = info["chartTop"] + (info["gapTop"] + info["gapBottom"]) / 2
+    assert abs(box["y"] + box["h"] / 2 - gap_center) <= 2
+    assert abs(box["x"] - (info["chartLeft"] + info["plotLeft"] + 4)) <= 2
+    assert info["textH"] < 2 * info["lineH"]
+    assert info["scrollW"] <= info["clientW"]
+    for px, py in page.evaluate(_MARKER_CENTERS_JS):
+        inside = box["x"] <= px <= box["x"] + box["w"] and box["y"] <= py <= box["y"] + box["h"]
+        assert not inside
+
+
+def test_band_info_hidden_off_the_scatter(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?school=northfield")
+    assert guarded_page.is_visible("#band-info")
+    guarded_page.click("#band-info")
+    guarded_page.click("#tab-bars")
+    guarded_page.wait_for_timeout(200)
+    assert guarded_page.is_hidden("#band-info")
+    assert guarded_page.is_hidden("#band-note")
+
+
+@pytest.mark.parametrize("size", _VIEWPORTS)
+def test_band_note_toggle_escape_outside_and_no_shift(
+    request: pytest.FixtureRequest, open_app: Callable[[Page, str], None], size: tuple[int, int]
+) -> None:
+    page = _open_at(request, open_app, size, "")
+    assert page.get_attribute("#band-info", "aria-label") == (
+        "Why do some games have no public rating?"
+    )
+    assert page.get_attribute("#band-info", "aria-controls") == "band-note"
+    before = page.evaluate(
+        "() => [document.getElementById('chart').getBoundingClientRect().height,"
+        " document.getElementById('summary').getBoundingClientRect().top + scrollY]"
+    )
+    page.click("#band-info")
+    assert page.get_attribute("#band-info", "aria-expanded") == "true"
+    assert page.is_visible("#band-note")
+    text = page.inner_text("#band-note")
+    for phrase in (
+        "No public rating",
+        "We found no published viewer count for these games.",
+        "The network is rarely rated, such as ESPN+, CBS Sports Network, or SEC Network.",
+        "Few figures were compiled for 2021–24.",
+        "No figure was published.",
+    ):
+        assert phrase in text
+    href = page.get_attribute("#band-note a", "href") or ""
+    assert href.endswith("methodology.html#games-with-no-public-rating")
+    note = page.locator("#band-note").bounding_box()
+    assert note is not None
+    assert note["width"] <= 280
+    assert note["x"] >= 0
+    assert note["x"] + note["width"] <= size[0]
+    after = page.evaluate(
+        "() => [document.getElementById('chart').getBoundingClientRect().height,"
+        " document.getElementById('summary').getBoundingClientRect().top + scrollY]"
+    )
+    assert after == before
+    page.keyboard.press("Escape")
+    assert page.is_hidden("#band-note")
+    assert page.get_attribute("#band-info", "aria-expanded") == "false"
+    assert page.evaluate("document.activeElement.id") == "band-info"
+    page.click("#band-info")
+    assert page.is_visible("#band-note")
+    page.mouse.click(size[0] - 5, 5)
+    assert page.is_hidden("#band-note")
+    page.click("#band-info")
+    page.click("#band-info")
+    assert page.is_hidden("#band-note")
+    page.focus("#band-info")
+    page.keyboard.press("Enter")
+    assert page.is_visible("#band-note")
+    page.keyboard.press("Space")
+    assert page.is_hidden("#band-note")

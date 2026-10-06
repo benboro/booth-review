@@ -2335,3 +2335,88 @@ html:has(#detail-panel[open]) {
 #bars-chart g.annotation[data-index] .annotation-text-g {
   cursor: pointer;
 }
+
+/* 04.13 D-01/D-12: the band's label doubles as a 44px info button in the gap row. */
+.band-info {
+  position: absolute;
+  z-index: 3;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  white-space: nowrap;
+  color: var(--muted);
+  font: var(--font-label);
+  font-weight: var(--weight-regular);
+  cursor: pointer;
+}
+
+.band-info[hidden],
+.band-note[hidden] {
+  display: none;
+}
+
+.band-info:hover .band-info-text {
+  text-decoration: underline;
+}
+
+.band-info-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--muted);
+  border-radius: 50%;
+  font: var(--font-label);
+  font-weight: var(--weight-semibold);
+  line-height: 1;
+}
+
+.band-note {
+  position: absolute;
+  z-index: 3;
+  box-sizing: border-box;
+  max-width: 280px;
+  padding: var(--space-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font: var(--font-label);
+  line-height: 1.5;
+}
+
+.band-note p,
+.band-note ul {
+  margin: 0 0 var(--space-sm) 0;
+}
+
+.band-note p:last-child {
+  margin-bottom: 0;
+}
+
+.band-note ul {
+  padding-left: var(--space-md);
+}
+
+.band-note-title {
+  font-weight: var(--weight-semibold);
+}
+
+.band-note a {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.no-rating {
+  color: var(--muted);
+}
+
+td.no-rating {
+  text-align: left;
+}

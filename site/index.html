@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
-<meta name="description" content="An interactive scatter of rated college football broadcasts by network, announcer, and matchup quality.">
+<meta name="description" content="An interactive scatter of college football games and their public viewer counts by network, announcer, and matchup quality.">
 <meta name="site-data-version" content="__SITE_DATA_VERSION__">
 <title>booth-review · college football broadcast crews and viewership</title>
 <link rel="stylesheet" href="style.css">
@@ -235,7 +235,7 @@
   </div>
 
   <div id="chart-panel" role="tabpanel" aria-labelledby="tab-scatter">
-    <div id="chart" tabindex="-1"><div id="season-empty-note" class="season-empty-note" role="status" hidden><p class="season-empty-title"></p><p class="season-empty-hint">Widen the season range or reset Seasons.</p></div></div>
+    <div id="chart" tabindex="-1"><div id="season-empty-note" class="season-empty-note" role="status" hidden><p class="season-empty-title"></p><p class="season-empty-hint">Widen the season range or reset Seasons.</p></div><button type="button" id="band-info" class="band-info" aria-label="Why do some games have no public rating?" aria-expanded="false" aria-controls="band-note" hidden><span class="band-info-text">No public rating</span><span class="band-info-glyph" aria-hidden="true">i</span></button><div id="band-note" class="band-note" hidden><p class="band-note-title">No public rating</p><p>We found no published viewer count for these games. The reason is shown for each game. The most common ones:</p><ul><li>The network is rarely rated, such as ESPN+, CBS Sports Network, or SEC Network.</li><li>The figure is not posted yet. This is for the newest games of the current season.</li><li>Few figures were compiled for 2021–24.</li><li>No figure was published.</li></ul><p><a href="methodology.html#games-with-no-public-rating">How we count games</a></p></div></div>
     <section id="bars-panel" hidden>
       <h2 id="bars-title" class="bars-title"></h2>
       <div id="bars-chart-box" class="bars-chart-box">
