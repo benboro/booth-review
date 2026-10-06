@@ -35,7 +35,9 @@ from booth_review.people.registry import (
 from booth_review.reference import read_reference_csv, read_reference_csv_numbered
 from booth_review.resolve.networks import (
     NETWORK_COLUMNS,
+    NETWORK_RARITY_COLUMNS,
     PRIMARY_OVERRIDE_COLUMNS,
+    load_network_rarity,
     load_networks,
     load_primary_overrides,
 )
@@ -68,6 +70,7 @@ KNOWN_TABLES: dict[str, tuple[tuple[str, ...] | None, Loader | None]] = {
     "people_reviewed.csv": (REVIEWED_COLUMNS, load_reviewed),
     "person_overrides.csv": (PERSON_OVERRIDE_COLUMNS, load_person_overrides),
     "networks.csv": (NETWORK_COLUMNS, load_networks),
+    "network_rarity.csv": (NETWORK_RARITY_COLUMNS, load_network_rarity),
     "primary_network_overrides.csv": (PRIMARY_OVERRIDE_COLUMNS, load_primary_overrides),
     "combined_figures.csv": (_COMBINED_COLUMNS, _load_combined_figures),
     "bowls.csv": (BOWL_COLUMNS, load_bowls),
