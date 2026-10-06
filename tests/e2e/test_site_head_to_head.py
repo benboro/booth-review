@@ -80,8 +80,10 @@ def test_head_to_head_keeps_only_games_between_the_two_schools(
     _open_school(guarded_page)
     guarded_page.click("#school-match [data-match='both']")
     _wait_search(guarded_page, "location.search.includes('h2h=1')")
-    assert _view(guarded_page)["passesFilters"] == [0, 4]
+    # both-school games: rated 0 and 4 plus unrated 16 (Bayside Bowl between the same two schools)
+    assert _view(guarded_page)["passesFilters"] == [0, 4, 16]
     assert _pressed(guarded_page, "both") == "true"
+    # the active rated trace carries only rated games; unrated 16 is on the unrated-active traces
     assert sorted(_active_customdata(guarded_page)) == [0, 4]
 
 
@@ -238,9 +240,11 @@ def test_matched_games_table_lists_the_head_to_head_games(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(guarded_page, H2H)
-    assert guarded_page.locator("#games-table tbody tr").count() == 2
+    # head-to-head rows: rated 0 and 4 + unrated 16 = 3
+    assert guarded_page.locator("#games-table tbody tr").count() == 3
     open_app(guarded_page, PAIR)
-    assert guarded_page.locator("#games-table tbody tr").count() == 4
+    # either school: rated 0, 4, 8, 9 + unrated 13 (Northfield), 16, 18 (Lakeview) = 7
+    assert guarded_page.locator("#games-table tbody tr").count() == 7
 
 
 def test_head_to_head_facets(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
@@ -255,9 +259,11 @@ def test_head_to_head_facets(guarded_page: Page, open_app: Callable[[Page, str],
     )
     guarded_page.click("#season-counts-details summary")
     text = guarded_page.locator("#season-counts").inner_text()
-    assert "2019: 1 rated telecast" in text
-    assert "2025: 1 rated telecast" in text
-    assert "2021: 1" not in text
+    # games 0 (2019), 4 (2025) and unrated 16 (2021) are the head-to-head games; 2026 has none
+    assert "2019: 1 game" in text
+    assert "2025: 1 game" in text
+    assert "2021: 1 game" in text
+    assert "2026: 0 games" in text
 
 
 def test_switching_to_head_to_head_on_the_butterfly_shows_the_hint(

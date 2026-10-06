@@ -171,7 +171,9 @@ def _loader_cases() -> list[tuple[str, tuple[str, ...], Callable[[Path], object]
     )
     from booth_review.resolve.networks import (
         NETWORK_COLUMNS,
+        NETWORK_RARITY_COLUMNS,
         PRIMARY_OVERRIDE_COLUMNS,
+        load_network_rarity,
         load_networks,
         load_primary_overrides,
     )
@@ -188,12 +190,13 @@ def _loader_cases() -> list[tuple[str, tuple[str, ...], Callable[[Path], object]
         ("person_overrides.csv", PERSON_OVERRIDE_COLUMNS, load_person_overrides),
         ("networks.csv", NETWORK_COLUMNS, load_networks),
         ("primary_network_overrides.csv", PRIMARY_OVERRIDE_COLUMNS, load_primary_overrides),
+        ("network_rarity.csv", NETWORK_RARITY_COLUMNS, load_network_rarity),
         ("game_overrides.csv", GAME_OVERRIDE_COLUMNS, load_game_overrides),
         ("team_crosswalk.csv", TEAM_CROSSWALK_COLUMNS, load_team_crosswalk),
     ]
 
 
-@pytest.mark.parametrize("index", range(10))
+@pytest.mark.parametrize("index", range(12))
 def test_loader_errors_cite_the_physical_line_past_blank_rows(tmp_path: Path, index: int) -> None:
     name, columns, load = _loader_cases()[index]
     bad_row = ",".join(["ZZ BAD"] * len(columns))

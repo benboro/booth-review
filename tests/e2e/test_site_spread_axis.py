@@ -124,7 +124,11 @@ async (args) => {
 }
 """
 
-EXPECTED_SPREAD = [-3.5, 7.0, None, None, -1.0, -14.0, 5.5, 3.0, -6.5, 0.5, None, -1.5]
+# 12 rated games, then the 8 unrated games (merged indices 12..19; 12 and 19 have no spread)
+EXPECTED_SPREAD = [
+    -3.5, 7.0, None, None, -1.0, -14.0, 5.5, 3.0, -6.5, 0.5, None, -1.5,
+    None, -3.5, -6.0, -2.5, -1.0, -4.5, 6.5, None,
+]  # fmt: skip
 
 
 def test_spread_x_is_the_winner_signed_closing_line(app_page: Page) -> None:
@@ -280,7 +284,8 @@ def test_spread_axis_layout(guarded_page: Page, open_app: Callable[[Page, str], 
     assert revisions[0] == revisions[1]
     assert len(set(revisions)) == 2
     exc = guarded_page.evaluate(_LAYOUT_JS)
-    assert len(exc["shapes"]) == 1
+    # 1 existing shape + 2 band shapes (rect + top line) from plan 07
+    assert len(exc["shapes"]) == 3
     assert [a["text"] for a in exc["annotations"]] == ["N/A"]
     assert exc["margin"]["t"] == 40
 
@@ -326,10 +331,11 @@ def test_spread_axis_na_strip(guarded_page: Page, open_app: Callable[[Page, str]
         assert by_idx[i][1] > 0
     assert by_idx["1"][0] == 7.0
     assert by_idx["8"][0] == -6.5
-    assert got["sentinelCount"] == 3
+    # 3 rated n/a games (2, 3, 10) + 2 unrated games with no spread (12, 19)
+    assert got["sentinelCount"] == 5
     open_app(guarded_page, "?school=northfield")
     faded = guarded_page.evaluate(_XS_JS)
-    assert faded["sentinelCount"] == 3
+    assert faded["sentinelCount"] == 5
 
 
 _CAPTION_BOXES_JS = """() => {

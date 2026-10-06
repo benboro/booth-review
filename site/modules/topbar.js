@@ -390,6 +390,8 @@ function renderSummary(view) {
   const { count, detail } = summaryCopy(view.summary);
   els.summaryCount.textContent = count;
   els.summaryDetail.textContent = detail;
+  // The line ends in an ellipsis when it does not fit; the title keeps the full text.
+  els.summaryDetail.title = detail;
 }
 
 /** Syncs every option row's `aria-selected` (checked state) from
@@ -414,7 +416,7 @@ function renderPersonFacets(state, view) {
     const text = `(${count})`;
     const visible = li.querySelector('.option-count');
     if (visible.textContent !== text) visible.textContent = text;
-    const srText = `, ${count} rated ${count === 1 ? 'telecast' : 'telecasts'}`;
+    const srText = `, ${count} ${count === 1 ? 'game' : 'games'}`;
     const sr = li.querySelector('.option-count-sr');
     if (sr.textContent !== srText) sr.textContent = srText;
     li.classList.toggle('is-zero', count === 0 && selected);

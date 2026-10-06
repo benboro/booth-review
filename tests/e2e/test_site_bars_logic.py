@@ -1,7 +1,9 @@
 """In-browser proof of the Bars/Butterfly logic core (SITE-33..36, D-01..D-18).
 
-Every expectation is hand-worked against the 12-telecast synthetic fixture
-(`tests/fixtures/contract/site-data.fixture.json`). The modules under test
+Every expectation is hand-worked against the synthetic fixture
+(`tests/fixtures/contract/site-data.fixture.json`): 12 rated telecasts (games 0-11) and
+8 unrated games (12-19), all counted; each row also carries `rated` (04.13 D-15). The
+modules under test
 (`bars.js`, plus the `view`/`bars`/`group` params in `url-state.js`) are DOM-free,
 so they are imported straight into the served page via `page.evaluate`.
 """
@@ -121,6 +123,13 @@ def _model(page: Page, fn: str, partial: dict[str, Any], raw: Any = None) -> dic
 
 def _rows(model: dict[str, Any]) -> list[tuple[str, int]]:
     return [(r["label"], r["total"]) for r in model["rows"]]
+
+
+def _rated(model: dict[str, Any]) -> list[tuple[str, int, int]]:
+    """(label, rated, total) per row; every row satisfies 0 <= rated <= total."""
+    out = [(r["label"], r["rated"], r["total"]) for r in model["rows"]]
+    assert all(0 <= rated <= total for _, rated, total in out)
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -336,12 +345,30 @@ def test_chart_context_matrix(
 # Task 2: Bars tab counting model
 # --------------------------------------------------------------------------
 
+# Northfield plays rated games 0, 4, 8 and unrated games 13 (Kris Venn, Morgan Ash) and 16
+# (Pat Rowan, Sam Delgado): 9 announcers; those four call only unrated games, so rated is 0.
+# Sorted by total games (rated + unrated), ties by name.
 _NORTHFIELD_ANNOUNCERS = [
     ("Dale Harlow", 2),
     ("Dale Harlow Jr.", 2),
     ("Casey Lund", 1),
     ("Jamie Oaks", 1),
+    ("Kris Venn", 1),
+    ("Morgan Ash", 1),
+    ("Pat Rowan", 1),
     ("Robin Teague", 1),
+    ("Sam Delgado", 1),
+]
+_NORTHFIELD_RATED = [
+    ("Dale Harlow", 2, 2),
+    ("Dale Harlow Jr.", 2, 2),
+    ("Casey Lund", 1, 1),
+    ("Jamie Oaks", 1, 1),
+    ("Kris Venn", 0, 1),
+    ("Morgan Ash", 0, 1),
+    ("Pat Rowan", 0, 1),
+    ("Robin Teague", 1, 1),
+    ("Sam Delgado", 0, 1),
 ]
 
 
@@ -369,6 +396,7 @@ def test_simple_announcer_bars_for_a_school(guarded_page: Page, site_url: str) -
     model = out["model"]
     assert (model["group"], model["mode"], model["rowKind"]) == ("announcers", "simple", "person")
     assert _rows(model) == _NORTHFIELD_ANNOUNCERS
+    assert _rated(model) == _NORTHFIELD_RATED
     assert model["rows"][0]["target"] == {"kind": "person", "id": "dale-harlow"}
     roles = {r["label"]: r["roles"] for r in model["rows"]}
     assert roles["Dale Harlow"] == ["pbp"]
@@ -399,25 +427,36 @@ _M_NORTHFIELD = [
     ("Dale Harlow Jr.", 2, [(*_A, 1, 0), (*_E, 1, 1)]),
     ("Casey Lund", 1, [(*_A, 1, 0)]),
     ("Jamie Oaks", 1, [(*_A, 1, 0)]),
+    ("Kris Venn", 1, [(*_A, 1, 0)]),
+    ("Morgan Ash", 1, [(*_A, 1, 0)]),
     ("Robin Teague", 1, [(*_E, 1, 1)]),
 ]
+# Rated part of each _M_NORTHFIELD announcer: Kris Venn and Morgan Ash call only unrated games.
+_M_NORTHFIELD_RATED = [2, 2, 1, 1, 0, 0, 1]
 
 
 def test_stacked_announcer_bars_are_families(guarded_page: Page, site_url: str) -> None:
     _load(guarded_page, site_url)
     model = _model(guarded_page, "barsModel", {"school": ["northfield"], "by": "network"})["model"]
     assert (model["rowKind"], model["segmentKind"]) == ("family", "person")
-    assert len(model["rows"]) == 1
+    assert [r["key"] for r in model["rows"]] == ["f:disney", "f:fox"]
     row = model["rows"][0]
     assert (row["key"], row["label"], row["family"], row["total"]) == (
         "f:disney",
         "ABC/ESPN",
         "disney",
-        7,
+        9,
     )
-    assert row["shadeCount"] == 1
+    # Disney games 0, 4, 8 (rated) and 13 (unrated): 2 + 2 + 3 + 2 = 9 announcer slots, 7 rated.
+    assert row["rated"] == 7
+    # Stream Plus (net-e) is a second disney channel in the fixture, so the family has 2 shades.
+    assert row["shadeCount"] == 2
+    # Only net-a is offered under this selection (Stream Plus has no Northfield game).
     assert row["target"] == {"kind": "family", "family": "disney", "ids": ["net-a"]}
+    fox = model["rows"][1]
+    assert (fox["key"], fox["total"], fox["rated"]) == ("f:fox", 2, 0)  # game 16: Pat, Sam
     assert _segs(row) == [(label, n, [(*_A, n, 0)]) for label, n, _ in _M_NORTHFIELD]
+    assert [s["rated"] for s in row["segments"]] == _M_NORTHFIELD_RATED
     assert row["segments"][0]["target"] == {"kind": "person", "id": "dale-harlow"}
 
 
@@ -430,15 +469,16 @@ def test_family_row_splits_announcers_by_channel(
         "model"
     ]
     assert (model["rowKind"], model["segmentKind"]) == ("family", "person")
-    assert len(model["rows"]) == 1
+    assert [r["key"] for r in model["rows"]] == ["f:disney", "f:fox"]
     row = model["rows"][0]
     assert (row["key"], row["name"], row["label"], row["family"], row["total"]) == (
         "f:disney",
         "ABC/ESPN",
         "ABC/ESPN",
         "disney",
-        7,
+        9,
     )
+    assert row["rated"] == 7
     assert row["shadeCount"] == 2
     assert row["target"] == {"kind": "family", "family": "disney", "ids": ["net-a", "net-e"]}
     assert _segs(row) == _M_NORTHFIELD
@@ -447,11 +487,15 @@ def test_family_row_splits_announcers_by_channel(
         "p:dale-harlow-jr",
         "p:casey-lund",
         "p:jamie-oaks",
+        "p:kris-venn",
+        "p:morgan-ash",
         "p:robin-teague",
     ]
     for seg in row["segments"]:
         assert seg["target"] == {"kind": "person", "id": seg["key"][2:]}
         assert sum(c["count"] for c in seg["channels"]) == seg["count"]
+        assert sum(c["rated"] for c in seg["channels"]) == seg["rated"]
+        assert all(0 <= c["rated"] <= c["count"] for c in seg["channels"])
 
 
 def test_channel_shade_follows_data_wide_order(
@@ -459,6 +503,9 @@ def test_channel_shade_follows_data_wide_order(
 ) -> None:
     _load(guarded_page, site_url)
     raw = multichannel_raw(fixture_raw, also_move_zero=True)
+    # Data-wide net-e carries games 0, 8 and unrated 15, 18 (4), tying net-a (4, 13, 14, 19), so
+    # move unrated game 14 too: net-e 5 games, net-a 3, and net-e takes shade 0.
+    raw["telecasts_unrated"]["network"][2] = 4
     model = _model(guarded_page, "barsModel", {"school": ["northfield"], "by": "network"}, raw)[
         "model"
     ]
@@ -469,6 +516,71 @@ def test_channel_shade_follows_data_wide_order(
     by_label = {s["label"]: s for s in row["segments"]}
     assert _channels(by_label["Dale Harlow"]) == [(*_E, 2, 0)]
     assert _channels(by_label["Casey Lund"]) == [(*_A, 1, 1)]
+    assert _channels(by_label["Kris Venn"]) == [(*_A, 1, 1)]  # unrated game 13 stays on net-a
+
+
+_ORDER_JS = """
+async ([family, rawOverride]) => {
+  const D = await import('./modules/data.js');
+  const B = await import('./modules/bars.js');
+  const P = await import('./modules/palette.js');
+  const data = D.prepareData(rawOverride);
+  return {
+    order: B.familyChannelOrder(data, family).map((i) => data.lookups.networks[i].id),
+    lead: P.FAMILY_CHANNEL_LEAD,
+    families: P.FAMILY_ORDER,
+  };
+}
+"""
+
+
+def test_chip_lead_networks_take_the_first_shades(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    raw = multichannel_raw(fixture_raw)
+    raw["lookups"]["networks"][0]["id"] = "espn"  # more telecasts than abc
+    raw["lookups"]["networks"][4]["id"] = "abc"
+    out = guarded_page.evaluate(_ORDER_JS, ["disney", raw])
+    assert out["order"] == ["abc", "espn"]
+    model = _model(guarded_page, "barsModel", {"school": ["northfield"], "by": "network"}, raw)[
+        "model"
+    ]
+    shades = {c["id"]: c["shade"] for s in model["rows"][0]["segments"] for c in s["channels"]}
+    assert shades == {"abc": 0, "espn": 1}
+
+
+def test_chip_lead_order_for_the_fox_family_ignores_counts(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    raw = copy.deepcopy(fixture_raw)
+    nets = raw["lookups"]["networks"]
+    nets[1] = {"id": "fs1", "name": "Synthetic One", "family": "fox"}  # most telecasts
+    nets[2] = {"id": "fox", "name": "Synthetic Fox", "family": "fox"}
+    nets[3] = {"id": "big-ten-network", "name": "Synthetic Big", "family": "fox"}
+    nets.append({"id": "fs2", "name": "Synthetic Two", "family": "fox"})  # not on the chip
+    raw["telecasts"]["network"][11] = 5  # networks with no telecast are not listed
+    out = guarded_page.evaluate(_ORDER_JS, ["fox", raw])
+    assert out["order"] == ["fox", "fs1", "big-ten-network", "fs2"]
+
+
+def test_chip_lead_falls_back_to_counts_when_no_chip_network_present(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    out = guarded_page.evaluate(_ORDER_JS, ["disney", multichannel_raw(fixture_raw)])
+    assert out["order"] == ["net-a", "net-e"]
+
+
+def test_chip_lead_constant_covers_every_family(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    out = guarded_page.evaluate(_ORDER_JS, ["disney", fixture_raw])
+    assert sorted(out["lead"]) == sorted(out["families"])
+    assert out["lead"]["other"] == []
+    assert out["lead"]["fox"][:2] == ["fox", "fs1"]
 
 
 def test_family_rows_respect_the_role_filter(
@@ -482,13 +594,15 @@ def test_family_rows_respect_the_role_filter(
         {"school": ["northfield"], "by": "network", "role": "pbp"},
         raw,
     )["model"]
-    assert len(model["rows"]) == 1
+    assert [r["key"] for r in model["rows"]] == ["f:disney", "f:fox"]
     row = model["rows"][0]
-    assert (row["key"], row["total"]) == ("f:disney", 3)
+    assert (row["key"], row["total"], row["rated"]) == ("f:disney", 4, 3)  # + Kris Venn, unrated 13
     assert _segs(row) == [
         ("Dale Harlow", 2, [(*_A, 1, 0), (*_E, 1, 1)]),
         ("Casey Lund", 1, [(*_A, 1, 0)]),
+        ("Kris Venn", 1, [(*_A, 1, 0)]),
     ]
+    assert [s["rated"] for s in row["segments"]] == [2, 1, 0]
 
 
 def test_simple_rows_carry_no_channels(guarded_page: Page, site_url: str) -> None:
@@ -508,10 +622,21 @@ def test_simple_team_bars_for_an_announcer(guarded_page: Page, site_url: str) ->
     assert (model["group"], model["rowKind"]) == ("teams", "team")
     assert _rows(model) == [
         ("Foxhollow", 2),
+        ("Ironpeak", 2),
         ("Cedar Hollow", 1),
-        ("Ironpeak", 1),
         ("Lakeview", 1),
+        ("Northfield", 1),
         ("Stonebridge", 1),
+    ]
+    # Kris Venn: rated games 1, 6, 9 and unrated game 13 (Ironpeak v Northfield), which adds
+    # Northfield and a second Ironpeak with no rated part.
+    assert _rated(model) == [
+        ("Foxhollow", 2, 2),
+        ("Ironpeak", 1, 2),
+        ("Cedar Hollow", 1, 1),
+        ("Lakeview", 1, 1),
+        ("Northfield", 0, 1),
+        ("Stonebridge", 1, 1),
     ]
     assert model["rows"][0]["target"] == {"kind": "team", "slug": "foxhollow"}
 
@@ -523,15 +648,20 @@ def test_stacked_team_bars_are_era_correct_conferences(guarded_page: Page, site_
     ]
     assert (model["rowKind"], model["segmentKind"]) == ("conference", "team")
     assert _rows(model) == [
+        ("Big Ten", 3),
         ("SEC", 3),
-        ("Big Ten", 1),
         ("FBS Independents", 1),
         ("Mountain West", 1),
     ]
-    sec = model["rows"][0]
-    assert [(s["label"], s["count"]) for s in sec["segments"]] == [
-        ("Foxhollow", 2),
-        ("Lakeview", 1),
+    assert _rated(model)[:2] == [("Big Ten", 1, 3), ("SEC", 3, 3)]
+    big_ten, sec = model["rows"][:2]
+    assert [(s["label"], s["count"], s["rated"]) for s in big_ten["segments"]] == [
+        ("Ironpeak", 2, 1),
+        ("Northfield", 1, 0),
+    ]
+    assert [(s["label"], s["count"], s["rated"]) for s in sec["segments"]] == [
+        ("Foxhollow", 2, 2),
+        ("Lakeview", 1, 1),
     ]
     assert sec["target"] == {"kind": "conference", "name": "SEC"}
 
@@ -582,8 +712,10 @@ def test_called_together_narrows_the_counted_games(guarded_page: Page, site_url:
     together = _model(guarded_page, "barsModel", {"people": people, "together": True})["model"]
     assert together["rows"] == []
     union = _model(guarded_page, "barsModel", {"people": people})["model"]
-    # games 1, 6, 9 and 2, 5, 10 -> 12 team slots, Cedar Hollow 3 times.
-    assert sum(r["total"] for r in union["rows"]) == 12
+    # Kris Venn: games 1, 6, 9, 13; Pat Rowan: 2, 5, 10, 15, 16, 19 -> 10 games, 20 team slots
+    # (Cedar Hollow 3 times); games 1, 2, 5, 6, 9, 10 are rated -> 12 rated slots.
+    assert sum(r["total"] for r in union["rows"]) == 20
+    assert sum(r["rated"] for r in union["rows"]) == 12
     assert ("Cedar Hollow", 3) in _rows(union)
 
 
@@ -612,15 +744,38 @@ def test_butterfly_two_schools(guarded_page: Page, site_url: str) -> None:
     model = _model(guarded_page, "butterflyModel", {"school": ["northfield", "lakeview"]})["model"]
     assert [s["name"] for s in model["sides"]] == ["Northfield", "Lakeview"]
     assert [s["kind"] for s in model["sides"]] == ["school", "school"]
-    assert model["shared"] == 2
+    # Games with both schools: 0, 4 and unrated 16.
+    assert model["shared"] == 3
     assert _sides(model) == [
         ("Dale Harlow", 2, 1),
         ("Dale Harlow Jr.", 2, 1),
         ("Casey Lund", 1, 1),
         ("Jamie Oaks", 1, 1),
+        ("Kris Venn", 1, 1),
+        ("Pat Rowan", 1, 1),
+        ("Sam Delgado", 1, 1),
         ("Jax Venn", 0, 1),
-        ("Kris Venn", 0, 1),
+        ("Morgan Ash", 1, 0),
         ("Robin Teague", 1, 0),
+    ]
+    assert [(r["label"], r["rated"]) for r in model["rows"]] == [
+        ("Dale Harlow", 3),
+        ("Dale Harlow Jr.", 3),
+        ("Casey Lund", 2),
+        ("Jamie Oaks", 2),
+        ("Kris Venn", 1),
+        ("Pat Rowan", 0),
+        ("Sam Delgado", 0),
+        ("Jax Venn", 1),
+        ("Morgan Ash", 0),
+        ("Robin Teague", 1),
+    ]
+    assert [(r["sides"][0]["rated"], r["sides"][1]["rated"]) for r in model["rows"]][:5] == [
+        (2, 1),
+        (2, 1),
+        (1, 1),
+        (1, 1),
+        (0, 1),
     ]
     assert all(r["total"] == r["sides"][0]["total"] + r["sides"][1]["total"] for r in model["rows"])
 
@@ -635,12 +790,28 @@ def test_butterfly_two_announcers_and_together_is_ignored(
     assert [s["kind"] for s in model["sides"]] == ["person", "person"]
     assert model["shared"] == 0
     assert _sides(model) == [
+        ("Ironpeak", 2, 3),
+        ("Foxhollow", 2, 2),
         ("Cedar Hollow", 1, 2),
-        ("Foxhollow", 2, 1),
         ("Boulder Pass", 0, 2),
-        ("Ironpeak", 1, 1),
-        ("Lakeview", 1, 0),
-        ("Stonebridge", 1, 0),
+        ("Lakeview", 1, 1),
+        ("Northfield", 1, 1),
+        ("Stonebridge", 1, 1),
+    ]
+    # Sorted by total games (5, 4, 3, 2...), so Ironpeak outranks Foxhollow.
+    assert [(r["label"], r["rated"]) for r in model["rows"]] == [
+        ("Ironpeak", 2),
+        ("Foxhollow", 3),
+        ("Cedar Hollow", 3),
+        ("Boulder Pass", 2),
+        ("Lakeview", 1),
+        ("Northfield", 0),
+        ("Stonebridge", 1),
+    ]
+    assert [(r["sides"][0]["rated"], r["sides"][1]["rated"]) for r in model["rows"]][:3] == [
+        (1, 1),
+        (2, 1),
+        (1, 2),
     ]
     together = _model(guarded_page, "butterflyModel", {"people": people, "together": True})["model"]
     assert together == model
@@ -656,8 +827,11 @@ def test_butterfly_stacked_mirrors_bars_rows(guarded_page: Page, site_url: str) 
     assert (schools["rowKind"], schools["segmentKind"]) == ("family", "person")
     names = {r["label"]: r for r in schools["rows"]}
     disney = names["ABC/ESPN"]
-    assert disney["sides"][0]["total"] == 7
-    assert [s["count"] for s in disney["sides"][0]["segments"]] == [2, 2, 1, 1, 1]
+    assert disney["sides"][0]["total"] == 9
+    assert disney["sides"][0]["rated"] == 7
+    assert disney["total"] == 13  # 9 Northfield + 4 Lakeview
+    assert [s["count"] for s in disney["sides"][0]["segments"]] == [2, 2, 1, 1, 1, 1, 1]
+    assert [s["rated"] for s in disney["sides"][0]["segments"]] == [2, 2, 1, 1, 0, 0, 1]
     people = _model(
         guarded_page,
         "butterflyModel",
@@ -665,11 +839,15 @@ def test_butterfly_stacked_mirrors_bars_rows(guarded_page: Page, site_url: str) 
     )["model"]
     assert (people["rowKind"], people["segmentKind"]) == ("conference", "team")
     sec = next(r for r in people["rows"] if r["label"] == "SEC")
-    assert sec["sides"][0]["total"] == 3
+    assert (sec["sides"][0]["total"], sec["sides"][0]["rated"]) == (3, 3)
     assert [(s["label"], s["count"]) for s in sec["sides"][0]["segments"]] == [
         ("Foxhollow", 2),
         ("Lakeview", 1),
     ]
+    # Big Ten holds Kris Venn's unrated game 13 (Ironpeak v Northfield): 3 games, 1 rated.
+    big_ten = next(r for r in people["rows"] if r["label"] == "Big Ten")
+    assert (big_ten["sides"][0]["total"], big_ten["sides"][0]["rated"]) == (3, 1)
+    assert "No conference" in [r["label"] for r in people["rows"]]  # Pat Rowan's unrated 15, 16
 
 
 def test_butterfly_stacked_family_rows_with_channels(
@@ -685,26 +863,36 @@ def test_butterfly_stacked_family_rows_with_channels(
     )["model"]
     assert model["rowKind"] == "family"
     assert [s["name"] for s in model["sides"]] == ["Northfield", "Lakeview"]
-    assert model["shared"] == 2
+    assert model["shared"] == 3
     assert [r["key"] for r in model["rows"]] == ["f:disney", "f:fox"]
     disney, fox = model["rows"]
-    assert (disney["total"], disney["shadeCount"]) == (11, 2)
+    assert (disney["total"], disney["rated"], disney["shadeCount"]) == (13, 11, 2)
     assert disney["target"] == {"kind": "family", "family": "disney", "ids": ["net-a", "net-e"]}
-    assert disney["sides"][0]["total"] == 7
+    assert (disney["sides"][0]["total"], disney["sides"][0]["rated"]) == (9, 7)
     assert _segs(disney["sides"][0]) == _M_NORTHFIELD
-    assert disney["sides"][1]["total"] == 4
+    assert (disney["sides"][1]["total"], disney["sides"][1]["rated"]) == (4, 4)
     assert _segs(disney["sides"][1]) == [
         ("Casey Lund", 1, [(*_A, 1, 0)]),
         ("Dale Harlow", 1, [(*_A, 1, 0)]),
         ("Dale Harlow Jr.", 1, [(*_A, 1, 0)]),
         ("Jamie Oaks", 1, [(*_A, 1, 0)]),
     ]
-    assert (fox["label"], fox["total"], fox["shadeCount"]) == ("FOX/FS1/BTN", 2, 1)
+    assert (fox["label"], fox["total"], fox["rated"], fox["shadeCount"]) == (
+        "FOX/FS1/BTN",
+        6,
+        2,
+        1,
+    )
     assert fox["target"] == {"kind": "family", "family": "fox", "ids": ["net-b"]}
-    assert (fox["sides"][0]["total"], fox["sides"][0]["segments"]) == (0, [])
-    assert fox["sides"][1]["total"] == 2
+    assert (fox["sides"][0]["total"], fox["sides"][0]["rated"]) == (2, 0)  # unrated 16: Pat, Sam
+    assert (fox["sides"][1]["total"], fox["sides"][1]["rated"]) == (4, 2)
     b_ch = [(*("net-b", "Beta Network"), 1, 0)]
-    assert _segs(fox["sides"][1]) == [("Jax Venn", 1, b_ch), ("Kris Venn", 1, b_ch)]
+    assert _segs(fox["sides"][1]) == [
+        ("Jax Venn", 1, b_ch),
+        ("Kris Venn", 1, b_ch),
+        ("Pat Rowan", 1, b_ch),
+        ("Sam Delgado", 1, b_ch),
+    ]
 
 
 @pytest.mark.parametrize(
@@ -798,16 +986,19 @@ def test_simple_announcer_rows_carry_main_family(guarded_page: Page, site_url: s
     _load(guarded_page, site_url)
     model = _model(guarded_page, "barsModel", {"school": _THREE_SCHOOLS})["model"]
     assert _main(model) == [
-        ("Kris Venn", 3, "fox"),
+        ("Kris Venn", 4, "fox"),
+        ("Pat Rowan", 3, "disney"),
         ("Robin Teague", 3, "other"),
+        ("Casey Lund", 2, "disney"),
         ("Jax Venn", 2, "fox"),
-        ("Casey Lund", 1, "other"),
+        ("Sam Delgado", 2, "disney"),
         ("Dale Harlow", 1, "disney"),
         ("Dale Harlow Jr.", 1, "disney"),
-        ("Pat Rowan", 1, "fox"),
-        ("Sam Delgado", 1, "conference"),
+        ("Jamie Oaks", 1, "disney"),
+        ("Morgan Ash", 1, "disney"),
         ("Taylor Vance", 1, "fox"),
     ]
+    assert [r["rated"] for r in model["rows"]] == [3, 1, 3, 1, 2, 1, 1, 1, 0, 0, 1]
     # The family pill is drawn for any row with `family`, so it stays null.
     assert all(r["family"] is None for r in model["rows"])
 
@@ -816,8 +1007,9 @@ def test_main_family_tie_breaks_by_family_order(guarded_page: Page, site_url: st
     _load(guarded_page, site_url)
     model = _model(guarded_page, "barsModel", {"school": ["lakeview", "maplecrest"]})["model"]
     by_label = {r["label"]: r["mainFamily"] for r in model["rows"]}
+    # Casey Lund has 2 disney and 2 other games here, a tie that FAMILY_ORDER breaks to disney.
     assert by_label["Jamie Oaks"] == "disney"
-    assert by_label["Casey Lund"] == "other"
+    assert by_label["Casey Lund"] == "disney"
 
 
 def test_main_family_honors_the_role_filter(guarded_page: Page, site_url: str) -> None:
@@ -826,7 +1018,7 @@ def test_main_family_honors_the_role_filter(guarded_page: Page, site_url: str) -
         "model"
     ]
     by_label = {r["label"]: r["mainFamily"] for r in model["rows"]}
-    assert by_label["Sam Delgado"] == "conference"
+    assert by_label["Sam Delgado"] == "disney"  # the unrated game 16 outweighs the rated one
     assert by_label["Jax Venn"] == "fox"
 
 
@@ -839,7 +1031,7 @@ def test_butterfly_main_family_uses_both_sides(guarded_page: Page, site_url: str
     got = {r["key"]: r["mainFamily"] for r in fly["rows"]}
     assert got == want
     by_label = {r["label"]: r["mainFamily"] for r in fly["rows"]}
-    assert by_label["Casey Lund"] == "other"
+    assert by_label["Casey Lund"] == "disney"  # 2-2 tie with other goes to FAMILY_ORDER
     assert by_label["Jamie Oaks"] == "disney"
 
 
@@ -913,22 +1105,22 @@ _MATCHUP = "in Northfield vs Lakeview games"
 def test_head_to_head_bars_count_only_the_matchup(guarded_page: Page, site_url: str) -> None:
     _load(guarded_page, site_url)
     out = guarded_page.evaluate(_TITLE_JS, {**_H2H, "view": "bars"})
-    assert sorted(out["games"]) == [0, 4]
+    assert sorted(out["games"]) == [0, 4, 16]  # 16 is unrated
 
 
 @pytest.mark.parametrize(
     ("partial", "expected"),
     [
-        ({"view": "bars"}, f"Announcers by rated telecasts {_MATCHUP}"),
+        ({"view": "bars"}, f"Announcers by games {_MATCHUP}"),
         (
             {"view": "bars", "people": ["dale-harlow"]},
-            f"Announcers by rated telecasts {_MATCHUP} with Dale Harlow",
+            f"Announcers by games {_MATCHUP} with Dale Harlow",
         ),
         (
             {"view": "bars", "people": ["dale-harlow"], "networks": ["net-a"]},
-            f"Announcers by rated telecasts {_MATCHUP} with Dale Harlow on Alpha Sports",
+            f"Announcers by games {_MATCHUP} with Dale Harlow on Alpha Sports",
         ),
-        ({"view": "bars", "by": "network"}, f"Network families by announcer {_MATCHUP}"),
+        ({"view": "bars", "by": "network"}, f"Networks by games {_MATCHUP}"),
     ],
 )
 def test_head_to_head_titles_name_the_matchup(
@@ -980,55 +1172,55 @@ _NF = {"view": "bars", "school": ["northfield"]}
     [
         (
             {**_NF, "game": "harbor-bowl"},
-            "Announcers by rated telecasts of the Harbor Bowl with Northfield",
+            "Announcers by games of the Harbor Bowl with Northfield",
         ),
         (
             {"view": "bars", "people": ["kris-venn"], "by": "team", "game": "bridge-game"},
-            "Teams by rated telecasts of The Bridge Game with Kris Venn",
+            "Teams by games of The Bridge Game with Kris Venn",
         ),
         (
             {"view": "bars", "people": ["kris-venn"], "by": "conference", "game": "harbor-bowl"},
-            "Conferences by team in the Harbor Bowl with Kris Venn",
+            "Conferences by games in the Harbor Bowl with Kris Venn",
         ),
         (
             {**_NF, "by": "network", "game": "lakeshore"},
-            "Network families by announcer in the Lakeshore Rivalry with Northfield",
+            "Networks by games in the Lakeshore Rivalry with Northfield",
         ),
         (
             {"view": "bars", "game": "harbor-bowl"},
-            "Announcers by rated telecasts of the Harbor Bowl",
+            "Announcers by games of the Harbor Bowl",
         ),
         (
             {"view": "bars", "game": "lakeshore", "by": "network"},
-            "Network families by announcer in the Lakeshore Rivalry",
+            "Networks by games in the Lakeshore Rivalry",
         ),
         (
             {"view": "bars", "game": "cfp-semifinal"},
-            "Announcers by rated telecasts of CFP semifinals",
+            "Announcers by games of CFP semifinals",
         ),
         (
             {**_NF, "game": "cfp-semifinal"},
-            "Announcers by rated telecasts of CFP semifinals with Northfield",
+            "Announcers by games of CFP semifinals with Northfield",
         ),
         (
             {**_NF, "game": "cfp-national-championship"},
-            "Announcers by rated telecasts of CFP national championships with Northfield",
+            "Announcers by games of CFP national championships with Northfield",
         ),
         (
             {**_NF, "game": "cfp-first-round"},
-            "Announcers by rated telecasts of CFP first round games with Northfield",
+            "Announcers by games of CFP first round games with Northfield",
         ),
         (
             {"view": "bars", "people": ["dale-harlow"], "by": "team", "game": "lakeshore"},
-            "Teams by rated telecasts of the Lakeshore Rivalry with Dale Harlow",
+            "Teams by games of the Lakeshore Rivalry with Dale Harlow",
         ),
         (
             {**_H2H, "view": "bars", "game": "harbor-bowl"},
-            f"Announcers by rated telecasts of the Harbor Bowl {_MATCHUP}",
+            f"Announcers by games of the Harbor Bowl {_MATCHUP}",
         ),
         (
             {**_NF, "game": "harbor-bowl", "networks": ["net-a"]},
-            "Announcers by rated telecasts of the Harbor Bowl with Northfield on Alpha Sports",
+            "Announcers by games of the Harbor Bowl with Northfield on Alpha Sports",
         ),
         (
             {

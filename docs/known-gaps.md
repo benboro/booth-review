@@ -40,6 +40,7 @@ reflects how much Ratings Reference itself compiled for those four seasons
 across this boundary, since a thinner season here has fewer candidate
 telecasts to plot at all, not necessarily less television coverage. Treat
 any 2021–2024 vs. neighboring-season count comparison with that caveat.
+These games now appear in the 'No public rating' strip, and the counts read 'N rated of M games'.
 
 ## 506 Sports: hand-saved pages and a small number of empty weeks
 
@@ -187,3 +188,8 @@ when they are, the figure is rarely reported publicly. They therefore appear
 on the chart with very few dots even though many games aired there. For the
 Pac-12 Network, 506 Sports lists 318 telecasts across 2014–2026, but only 1 has
 a published Ratings Reference viewer figure, so the chart shows 1 dot.
+These games now appear in the 'No public rating' strip, and the counts read 'N rated of M games'.
+
+## Games with no public rating
+
+Games with no public viewer figure are shown, not dropped: they sit in a "No public rating" strip, each with its cause. See [Games with no public rating](methodology.md#games-with-no-public-rating) for the causes and how the counts work.

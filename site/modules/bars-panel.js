@@ -5,7 +5,7 @@
  * and the strings in bar-copy.js, and turns clicks, taps, and keys into
  * filter patches through `drillPatch` -> `setState`.
  *
- * D-01: every number here is a count of rated telecasts; no viewer figure.
+ * 04.13 D-15: every number here is a count of games (rated of total); no viewer figure.
  * D-03: the Show all expansion lives only in this module's memory and resets
  * when the subject, group, or bar style changes; it never enters the URL.
  * DOM safety (T-04.4-17): createElement/textContent/setAttribute/
@@ -22,6 +22,7 @@ import {
   captionLines,
   tooltipLines,
   countsListName,
+  gameCount,
   channelLineText,
   butterflySideText,
   butterflyCountsName,
@@ -31,6 +32,7 @@ import { barTones, buildBarFigure, buildButterflyFigure, renderBars, bindBarEven
 import { channelShades } from './palette.js';
 import { makePill, makeRolePill, nameWithRoles, currentTheme } from './pill.js';
 import { showTextTooltip, hideTooltip } from './tooltip.js';
+import { showBarOutline, hideBarOutline } from './bar-outline.js';
 
 let expanded = false;
 let expandKey = '';
@@ -55,6 +57,7 @@ export function lastBarsModel() {
 /** Forgets a pending first tap (called at every render and when hover clears). */
 export function resetBarsTap() {
   pendingTapKey = null;
+  hideBarOutline();
 }
 
 function el(id) {
@@ -109,10 +112,12 @@ function onPointClick(ref, ev) {
         clientX: ev.event?.clientX ?? 0,
         clientY: ev.event?.clientY ?? 0,
       });
+      showBarOutline(el('bars-chart'), lastShownRows, ref);
       return;
     }
     pendingTapKey = null;
     hideTooltip();
+    hideBarOutline();
   }
   drill(target);
 }
@@ -131,6 +136,7 @@ function onPointHover(ref, ev) {
     clientX: ev.event.clientX,
     clientY: ev.event.clientY,
   });
+  showBarOutline(el('bars-chart'), lastShownRows, ref);
 }
 
 /**
@@ -150,6 +156,7 @@ export function initBarsPanel(args) {
     if (pendingTapKey != null && !ev.target.closest('#bars-chart')) {
       resetBarsTap();
       hideTooltip();
+      hideBarOutline();
     }
   });
   const list = el('bars-counts');
@@ -168,10 +175,10 @@ export function initBarsPanel(args) {
   }
 }
 
-function countSpan(n) {
+function countSpan(rated, total) {
   const span = document.createElement('span');
   span.className = 'counts-n';
-  span.textContent = String(n);
+  span.textContent = gameCount(rated, total);
   return span;
 }
 
@@ -220,9 +227,9 @@ function segmentList(segments, r, side, rowKey, prefix, shades = null) {
   }
   segments.forEach((seg, s) => {
     const li = document.createElement('li');
-    const nodes = [nameOrUnit(seg.label, seg.roles), document.createTextNode(` ${seg.count}`)];
+    const nodes = [nameOrUnit(seg.label, seg.roles), document.createTextNode(` ${gameCount(seg.rated, seg.count)}`)];
     if (seg.target != null) {
-      const b = makeButton({ r, s, side }, `${rowKey}/${seg.key}/${side ?? ''}`, countsListName(seg.target, seg.name, seg.count));
+      const b = makeButton({ r, s, side }, `${rowKey}/${seg.key}/${side ?? ''}`, countsListName(seg.target, seg.name, seg.rated, seg.count));
       b.replaceChildren(...nodes);
       li.appendChild(b);
     } else {
@@ -258,10 +265,10 @@ function buildCountsList(model, rows, theme) {
       text.append(nameOrUnit(row.label, row.roles), document.createTextNode(butterflySideText(row, model)));
       content.push(text);
     } else {
-      content.push(labelNode(row, theme), countSpan(row.total));
+      content.push(labelNode(row, theme), countSpan(row.rated, row.total));
     }
     if (row.target != null) {
-      const aria = fly ? butterflyCountsName(row, model) : countsListName(row.target, row.name, row.total);
+      const aria = fly ? butterflyCountsName(row, model) : countsListName(row.target, row.name, row.rated, row.total);
       const b = makeButton({ r, s: -1, side: null }, row.key, aria);
       b.replaceChildren(...content);
       li.appendChild(b);
@@ -348,7 +355,10 @@ export function renderBarsPanel({ data, state, view, env }) {
       onPointHover,
       // On touch the tap tooltip must outlive Plotly's synthetic unhover; it clears on render, scroll, or a tap elsewhere.
       onPointUnhover: () => {
-        if (!hoverNone()) hideTooltip();
+        if (!hoverNone()) {
+          hideTooltip();
+          hideBarOutline();
+        }
       },
       onLabelClick: (rowIndex) => {
         const row = lastShownRows[rowIndex];

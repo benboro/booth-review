@@ -188,13 +188,14 @@ def test_phone_sheet_announcer_list_matches_desktop(
     )
 
     options = mobile_page.locator("#person-results li[role='option']:not([aria-disabled])")
-    expect(options).to_have_count(10)
+    # 11 people in the fixture: 10 on rated games + morgan-ash, who is only on unrated game 13
+    expect(options).to_have_count(11)
 
     heights = mobile_page.evaluate(
         "() => Array.from(document.querySelectorAll("
         "'#person-results li[role=\"option\"]')).map((el) => el.getBoundingClientRect().height)"
     )
-    assert len(heights) == 10
+    assert len(heights) == 11  # same 11 options as above
     for h in heights:
         assert h >= 44 - 0.5
 

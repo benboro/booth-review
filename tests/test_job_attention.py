@@ -303,3 +303,12 @@ def test_new_step_names_accepted() -> None:
         assert step_failed(step, "SiteBuildError").line == f"{step} step failed: SiteBuildError"
     with pytest.raises(ValueError):
         step_failed("deploy", "Oops")
+
+
+def test_bowls_missing_says_shown_as_bowl() -> None:
+    from booth_review.job import attention as a
+
+    item = a.bowls_missing(3)
+    assert "shown as Bowl" in item.line
+    assert "plotted" not in item.line
+    assert item.severity == "attention"

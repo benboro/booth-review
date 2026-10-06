@@ -118,7 +118,7 @@ def test_franchise_missing_slug_fails_count_only() -> None:
     entries = {1: _bowl("Bayside Bowl", None)}
     with pytest.raises(BowlCrosswalkError) as exc:
         build_franchises(entries, {1: 2021})
-    assert str(exc.value) == "telecasts: 1 plotted bowl row(s) without a franchise"
+    assert str(exc.value) == "telecasts: 1 shipped bowl row(s) without a franchise"
 
 
 def test_franchise_ignores_unnamed_not_at_bowl_and_unplotted() -> None:

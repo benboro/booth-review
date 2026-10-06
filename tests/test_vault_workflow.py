@@ -66,7 +66,7 @@ def test_version_matches_pyproject_and_lock() -> None:
     lock = tomllib.loads(Path("uv.lock").read_text(encoding="utf-8"))
     locked = next(pkg for pkg in lock["package"] if pkg["name"] == "booth-review")
     assert booth_review.__version__ == pyproject["project"]["version"] == locked["version"]
-    assert booth_review.__version__ == "0.5.3"
+    assert booth_review.__version__ == "0.6.0"
 
 
 # -- collect.yml: schedule / triggers ----------------------------------------------------------

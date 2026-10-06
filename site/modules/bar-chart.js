@@ -16,16 +16,34 @@
  *
  * D-23 (supersedes D-15 for the stacked Announcers view): one bar per network
  * family whose announcer segments are sub-shaded by channel. A trace stack
- * cannot nest two segmentations, so the channel pieces are opaque bars on the
- * base x axis and the announcer segments are transparent bars with the
- * page-background separator on an overlaying x axis (`x3`, or `x3`/`x4` for the
- * butterfly's two halves). Only the overlay traces carry text and customdata,
- * so hover and click resolve to the announcer; the pieces use hoverinfo 'skip'.
+ * cannot nest two segmentations, so every stacked bar (family or plain) is three
+ * layers (04.13 notes-2 #2, #4; review WR-02):
+ *   1. pieces on the base axis (`x`, `x2`): per row, segment by segment, each
+ *      segment's rated channel pieces then its unrated channel pieces, so one
+ *      segment is one contiguous run, never scattered across the bar;
+ *   2. one transparent overlay per segment rank on an overlaying axis (`x3`,
+ *      `x4`): the page-background separator between segments, plus the only
+ *      customdata `{r, s, side}`, so hover and click resolve to the segment;
+ *   3. part-text traces on a second overlaying axis (`x5`, `x6`): two per segment
+ *      rank (rated part, unrated part); the label goes on the wider part (ties to
+ *      rated) in a color readable on that part, so a mostly unrated segment keeps
+ *      its label.
+ * Pieces and text use hoverinfo 'skip'. Every piece carries a 1.5px border in its
+ * own tone (rated: same color as its fill; unrated: 25% fill), except a
+ * zero-width piece, which gets border width 0 so it never paints a sliver.
  *
  * D-29 (supersedes the UI-SPEC's "total count not drawn outside"): every
  * stacked row shows its total just past the bar's outer end, as an annotation
  * built only from the integer count (T-04.4-45). D-31 (refines D-24): a simple
  * announcer bar takes its main network family's color.
+ *
+ * D-15 (04.13): every bar has a solid rated part next to the axis (Butterfly:
+ * toward the spine) and an unrated part after it in the same hue at 25% fill
+ * with a 1.5px full-hue border; the rated part has the same 1.5px border in its
+ * own color so both parts look equally thick (notes-2 #2). Every piece is always
+ * emitted (zero-length when there are none) so the trace count never depends on
+ * the data's rating split. Every value is a count of games, never a viewer
+ * figure.
  *
  * Name safety (T-04.4-13): every name goes through `escapeHover` before it
  * enters a Plotly string.
@@ -41,7 +59,6 @@ import {
   channelShades,
   familyKey,
   mixHex,
-  readableTextOn,
   readableTextOnAll,
 } from './palette.js';
 import { escapeHover, niceLinearTicks } from './format.js';
@@ -71,8 +88,9 @@ const PHONE_BARS_THICKNESS = 22;
 const PHONE_FLY_PITCH = 64;
 const PHONE_FLY_THICKNESS = 32;
 // D-28: a page-background stroke centered on each segment edge leaves a gap as
-// wide as the stroke; channel pieces inside one announcer keep line width 0 so
-// they stay flush. Supersedes D-16's 1px separators.
+// wide as the stroke. That separator stroke belongs to the x3 overlay; every
+// non-empty channel piece carries its own 1.5px tone border, and only
+// zero-width pieces get line width 0. Supersedes D-16's 1px separators.
 const SEGMENT_GAP = { desktop: 3, phone: 2 };
 const LABEL_LINE = 18;
 const LABEL_GAP = 2;
@@ -220,134 +238,188 @@ function countTicks(max) {
   return ticks.length > 0 ? ticks : [0];
 }
 
-/** One trace of single-color bars for one side (or the only side). */
-function simpleTrace(rows, totalOf, side, theme, xaxis) {
-  const values = rows.map(totalOf);
-  return {
+/**
+ * Style for an unrated part (D-15): the hue at 25% fill, 1.5px border in the
+ * full hue. `tone` is a '#rrggbb' hex.
+ * @param {string} tone
+ * @returns {{color: string, line: {width: number, color: string}}}
+ */
+function unratedStyle(tone) {
+  const hex = String(tone).replace('#', '');
+  const full = hex.length === 3 ? hex.replace(/./g, (c) => c + c) : hex;
+  const n = Number.parseInt(full, 16);
+  const rgba = `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},0.25)`;
+  return { color: rgba, line: { width: 1.5, color: tone } };
+}
+
+const unratedOf = (total, rated) => Math.max(0, (total ?? 0) - (rated ?? 0));
+
+/** Border widths for a piece: 1.5px where it has length, 0 where it has none. */
+const borderWidths = (widths) => widths.map((w) => (w > 0 ? 1.5 : 0));
+
+/** Rated and unrated traces of single-color bars for one side (or the only side). */
+function simpleTraces(rows, totalOf, ratedOf, side, theme, xaxis) {
+  const totals = rows.map(totalOf);
+  const rated = rows.map((r, i) => Math.min(totals[i], ratedOf(r) ?? 0));
+  const unrated = totals.map((t, i) => t - rated[i]);
+  const tones = rows.map((r) => barTones(r, theme).a);
+  const base = {
     type: 'bar',
     orientation: 'h',
     xaxis,
     yaxis: 'y',
-    x: values,
     y: rows.map((r) => r.key),
-    text: values.map((v) => (v > 0 ? String(v) : '')),
-    textposition: 'outside',
     cliponaxis: false,
-    textfont: { size: 14, color: ACCENT[theme] },
-    marker: { color: rows.map((r) => barTones(r, theme).a) },
     hoverinfo: 'none',
     showlegend: false,
-    customdata: rows.map((_, r) => (values[r] > 0 ? { r, s: -1, side } : null)),
+    customdata: rows.map((_, r) => (totals[r] > 0 ? { r, s: -1, side } : null)),
   };
-}
-
-/**
- * Stacked bars as one trace per segment rank (D-16, D-06). Shared by Bars and
- * both butterfly sides, so the styling cannot drift.
- */
-function stackTraces(rows, segmentsOf, side, theme, xaxis, gap) {
-  const segs = rows.map(segmentsOf);
-  const depth = segs.reduce((m, list) => Math.max(m, list.length), 0);
-  const traces = [];
-  for (let k = 0; k < depth; k += 1) {
-    const tones = rows.map((row) => {
-      const t = barTones(row, theme);
-      return k % 2 === 0 ? t.a : t.b;
-    });
-    const textColors = tones.map((tone) => readableTextOn(tone));
-    traces.push({
-      type: 'bar',
-      orientation: 'h',
-      xaxis,
-      yaxis: 'y',
-      x: segs.map((list) => (list[k] ? list[k].count : 0)),
-      y: rows.map((r) => r.key),
-      text: segs.map((list, i) => (list[k] && textColors[i] != null ? escapeHover(segmentText(list[k])) : '')),
-      textposition: 'inside',
-      insidetextanchor: 'middle',
-      constraintext: 'inside',
-      cliponaxis: false,
-      textfont: { size: 14, color: textColors.map((c) => c ?? '#000000') },
-      marker: { color: tones, line: { width: gap, color: PAGE_BG[theme] } },
-      hoverinfo: 'none',
-      showlegend: false,
-      customdata: segs.map((list, r) => (list[k] ? { r, s: k, side } : null)),
-    });
-  }
-  return traces;
+  const styles = tones.map(unratedStyle);
+  return [
+    {
+      ...base,
+      x: rated,
+      marker: { color: tones, line: { width: borderWidths(rated), color: tones } },
+    },
+    {
+      ...base,
+      x: unrated,
+      marker: {
+        color: styles.map((st) => st.color),
+        line: { width: borderWidths(unrated), color: tones },
+      },
+    },
+  ];
 }
 
 const TRANSPARENT = 'rgba(0,0,0,0)';
 
 /**
- * Family stacked bars (D-23) for one side: opaque channel-piece traces (one per
- * piece rank, shaded by `channelShades`) plus transparent announcer-segment
- * overlay traces (one per segment rank) that carry the separators, in-bar text,
- * and customdata `{r, s, side}`.
- * @param {object[]} rows - rows wrapped so `sideOf(row)` has `segments`.
- * @param {(row: object) => {segments: object[]}} sideOf
+ * Stacked bars for one side (or the only side) as the three layers described in
+ * the D-23 header note. Shared by plain stacked and family stacked bars, in Bars
+ * and in both Butterfly halves, so the styling cannot drift.
+ * @param {object[]} rows
+ * @param {(row: object) => object[]} segmentsOf
+ * @param {(row: object, i: number, seg: object, k: number) => {count: number, rated: number, tone: string}[]} partsOf
+ *   the pieces of a segment: one per channel with games (family), or one (plain).
  * @param {number|null} side
  * @param {'light'|'dark'} theme
- * @param {string} pieceAxis - x axis id for the pieces.
- * @param {string} overlayAxis - x axis id (overlaying `pieceAxis`) for the segments.
+ * @param {{piece: string, overlay: string, text: string}} axes
  * @param {number} gap - separator stroke width in px (D-28).
  * @returns {object[]}
  */
-function familyStackTraces(rows, sideOf, side, theme, pieceAxis, overlayAxis, gap) {
-  const shades = rows.map((row) => channelShades(row.family, theme, row.shadeCount ?? 1));
-  const segs = rows.map((row) => sideOf(row).segments);
-  const pieces = segs.map((list, i) =>
-    list.flatMap((seg) =>
-      (seg.channels ?? [])
-        .filter((c) => c.count > 0)
-        .map((c) => ({ count: c.count, color: shades[i][c.shade] ?? shades[i][0] })),
-    ),
+function stackedTraces(rows, segmentsOf, partsOf, side, theme, axes, gap) {
+  const bg = PAGE_BG[theme];
+  const y = rows.map((r) => r.key);
+  const segs = rows.map(segmentsOf);
+  const ratedW = (c) => Math.min(c.count, c.rated ?? 0);
+  const parts = segs.map((list, i) => list.map((seg, k) => partsOf(rows[i], i, seg, k)));
+
+  // Layer 1: per row, segment by segment, rated pieces then unrated pieces.
+  const pieceLists = parts.map((rowParts) =>
+    rowParts.flatMap((chans) => [
+      ...chans.map((c) => ({ w: ratedW(c), tone: c.tone, unrated: false })),
+      ...chans.map((c) => ({ w: unratedOf(c.count, c.rated), tone: c.tone, unrated: true })),
+    ]),
   );
+  const pieceDepth = pieceLists.reduce((m, list) => Math.max(m, list.length), 0);
   const traces = [];
-  const pieceDepth = pieces.reduce((m, list) => Math.max(m, list.length), 0);
-  for (let k = 0; k < pieceDepth; k += 1) {
+  for (let j = 0; j < pieceDepth; j += 1) {
+    const cells = pieceLists.map((list, i) => list[j] ?? { w: 0, tone: barTones(rows[i], theme).a, unrated: false });
     traces.push({
       type: 'bar',
       orientation: 'h',
-      xaxis: pieceAxis,
+      xaxis: axes.piece,
       yaxis: 'y',
-      x: pieces.map((list) => (list[k] ? list[k].count : 0)),
-      y: rows.map((r) => r.key),
-      marker: { color: pieces.map((list, i) => (list[k] ? list[k].color : shades[i][0])), line: { width: 0 } },
+      x: cells.map((c) => c.w),
+      y,
+      cliponaxis: false,
+      marker: {
+        color: cells.map((c) => (c.unrated ? unratedStyle(c.tone).color : c.tone)),
+        line: { width: borderWidths(cells.map((c) => c.w)), color: cells.map((c) => c.tone) },
+      },
       hoverinfo: 'skip',
       showlegend: false,
     });
   }
+
+  // Layer 2: one transparent overlay per segment rank (separator, hover, click).
   const depth = segs.reduce((m, list) => Math.max(m, list.length), 0);
   for (let k = 0; k < depth; k += 1) {
-    const textColors = segs.map((list, i) => {
-      const seg = list[k];
-      if (!seg) return null;
-      const tones = (seg.channels ?? [])
-        .filter((c) => c.count > 0)
-        .map((c) => shades[i][c.shade] ?? shades[i][0]);
-      return readableTextOnAll(tones);
-    });
     traces.push({
       type: 'bar',
       orientation: 'h',
-      xaxis: overlayAxis,
+      xaxis: axes.overlay,
       yaxis: 'y',
       x: segs.map((list) => (list[k] ? list[k].count : 0)),
-      y: rows.map((r) => r.key),
-      text: segs.map((list, i) => (list[k] && textColors[i] != null ? escapeHover(segmentText(list[k])) : '')),
-      textposition: 'inside',
-      insidetextanchor: 'middle',
-      constraintext: 'inside',
+      y,
       cliponaxis: false,
-      textfont: { size: 14, color: textColors.map((c) => c ?? '#000000') },
-      marker: { color: TRANSPARENT, line: { width: gap, color: PAGE_BG[theme] } },
+      marker: { color: TRANSPARENT, line: { width: gap, color: bg } },
       hoverinfo: 'none',
       showlegend: false,
       customdata: segs.map((list, r) => (list[k] ? { r, s: k, side } : null)),
     });
   }
+
+  // Layer 3: the label on each segment's wider part (WR-02).
+  for (let k = 0; k < depth; k += 1) {
+    const cells = segs.map((list, i) => {
+      const seg = list[k];
+      if (!seg) return null;
+      const chans = parts[i][k];
+      const rated = chans.filter((c) => ratedW(c) > 0);
+      const unrated = chans.filter((c) => unratedOf(c.count, c.rated) > 0);
+      const rw = rated.reduce((n, c) => n + ratedW(c), 0);
+      const uw = unrated.reduce((n, c) => n + unratedOf(c.count, c.rated), 0);
+      const onRated = rw >= uw;
+      const fills = onRated
+        ? rated.map((c) => c.tone)
+        : unrated.map((c) => mixHex(c.tone, bg, 0.25));
+      const color = seg.count > 0 ? readableTextOnAll(fills) : null;
+      return { rw, uw, onRated, color, text: color != null ? escapeHover(segmentText(seg)) : '' };
+    });
+    for (const unrated of [false, true]) {
+      const mine = cells.map((c) => (c && c.onRated !== unrated ? c : null));
+      traces.push({
+        type: 'bar',
+        orientation: 'h',
+        xaxis: axes.text,
+        yaxis: 'y',
+        x: cells.map((c) => (c ? (unrated ? c.uw : c.rw) : 0)),
+        y,
+        text: mine.map((c) => (c ? c.text : '')),
+        textposition: 'inside',
+        insidetextanchor: 'middle',
+        constraintext: 'inside',
+        cliponaxis: false,
+        textfont: { size: 14, color: mine.map((c) => (c && c.color) || '#000000') },
+        marker: { color: TRANSPARENT, line: { width: 0 } },
+        hoverinfo: 'skip',
+        showlegend: false,
+      });
+    }
+  }
   return traces;
+}
+
+/** Pieces of a plain stacked segment: one, in the segment's Tone A/B (D-16). */
+function plainParts(theme) {
+  return (row, _i, seg, k) => {
+    const t = barTones(row, theme);
+    return [{ count: seg.count, rated: seg.rated ?? 0, tone: k % 2 === 0 ? t.a : t.b }];
+  };
+}
+
+/** Pieces of a family segment: one per channel with games, shaded by `channelShades`. */
+function familyParts(theme) {
+  const cache = new Map();
+  return (row, _i, seg) => {
+    if (!cache.has(row)) cache.set(row, channelShades(row.family, theme, row.shadeCount ?? 1));
+    const shades = cache.get(row);
+    return (seg.channels ?? [])
+      .filter((c) => c.count > 0)
+      .map((c) => ({ count: c.count, rated: c.rated ?? 0, tone: shades[c.shade] ?? shades[0] }));
+  };
 }
 
 /** An invisible axis overlaying `base` with the same range (D-23 overlay). */
@@ -409,7 +481,7 @@ function baseLayout(theme, env, rows, pitch, margin, bargap) {
 
 function xAxis(theme, range, extra) {
   return {
-    title: { text: 'Rated telecasts', standoff: 4 },
+    title: { text: 'Games', standoff: 4 },
     automargin: false,
     range,
     tickmode: 'array',
@@ -451,19 +523,24 @@ export function buildBarFigure(model, rows, env) {
 
   const family = stacked && model.rowKind === 'family';
   let traces;
-  if (family) traces = familyStackTraces(rows, (r) => r, null, theme, 'x', 'x3', gap);
-  else if (stacked) traces = stackTraces(rows, (r) => r.segments, null, theme, 'x', gap);
-  else traces = [simpleTrace(rows, (r) => r.total, null, theme, 'x')];
+  const barAxes = { piece: 'x', overlay: 'x3', text: 'x5' };
+  if (stacked) {
+    const parts = family ? familyParts(theme) : plainParts(theme);
+    traces = stackedTraces(rows, (r) => r.segments, parts, null, theme, barAxes, gap);
+  } else traces = simpleTraces(rows, (r) => r.total, (r) => r.rated, null, theme, 'x');
   const maxTotal = rows.reduce((m, r) => Math.max(m, r.total), 0);
 
   const layout = baseLayout(theme, env, rows, pitch, margin, bargap);
-  layout.barmode = stacked ? 'stack' : 'group';
+  layout.barmode = 'stack';
   layout.xaxis = xAxis(
     theme,
     [0, rangeTop(maxTotal, env.width - margin.l - margin.r, 1.12)],
     {},
   );
-  if (family) layout.xaxis3 = overlayAxis('x', layout.xaxis.range);
+  if (stacked) {
+    layout.xaxis3 = overlayAxis('x', layout.xaxis.range);
+    layout.xaxis5 = overlayAxis('x', layout.xaxis.range);
+  }
   layout.annotations = rows.map((row, i) => {
     const text = escapeHover(labels[i]);
     const font = { size: 14, color: ACCENT[theme] };
@@ -484,11 +561,9 @@ export function buildBarFigure(model, rows, env) {
       font,
     });
   });
-  if (stacked) {
-    layout.annotations = layout.annotations.concat(
-      totalAnnotations(rows, (r) => r.total, 'right', theme, 'x'),
-    );
-  }
+  layout.annotations = layout.annotations.concat(
+    totalAnnotations(rows, (r) => r.total, 'right', theme, 'x'),
+  );
   return { traces, layout, config: { ...CONFIG } };
 }
 
@@ -529,19 +604,20 @@ export function buildButterflyFigure(model, rows, env) {
   const family = stacked && model.rowKind === 'family';
   const sideRows = [0, 1].map((side) => rows.map((r) => r.sides[side]));
   for (const side of [0, 1]) {
-    const axis = side === 0 ? 'x' : 'x2';
-    if (family) {
-      const wrapped = rows.map((r, i) => ({ ...r, __side: sideRows[side][i] }));
-      const over = side === 0 ? 'x3' : 'x4';
+    const wrapped = rows.map((r, i) => ({ ...r, __side: sideRows[side][i] }));
+    if (stacked) {
+      const axes = side === 0
+        ? { piece: 'x', overlay: 'x3', text: 'x5' }
+        : { piece: 'x2', overlay: 'x4', text: 'x6' };
+      const parts = family ? familyParts(theme) : plainParts(theme);
       traces = traces.concat(
-        familyStackTraces(wrapped, (r) => r.__side, side, theme, axis, over, gap),
+        stackedTraces(wrapped, (r) => r.__side.segments, parts, side, theme, axes, gap),
       );
-    } else if (stacked) {
-      const wrapped = rows.map((r, i) => ({ ...r, __side: sideRows[side][i] }));
-      traces = traces.concat(stackTraces(wrapped, (r) => r.__side.segments, side, theme, axis, gap));
     } else {
-      const wrapped = rows.map((r, i) => ({ ...r, __side: sideRows[side][i] }));
-      traces.push(simpleTrace(wrapped, (r) => r.__side.total, side, theme, axis));
+      const axis = side === 0 ? 'x' : 'x2';
+      traces = traces.concat(
+        simpleTraces(wrapped, (r) => r.__side.total, (r) => r.__side.rated, side, theme, axis),
+      );
     }
   }
   const maxSide = rows.reduce(
@@ -554,12 +630,14 @@ export function buildButterflyFigure(model, rows, env) {
   const top = rangeTop(maxSide, (env.width - 16) * (0.5 - g / 2), 1.1);
 
   const layout = baseLayout(theme, env, rows, pitch, margin, bargap);
-  layout.barmode = stacked ? 'stack' : 'group';
+  layout.barmode = 'stack';
   layout.xaxis = xAxis(theme, [top, 0], { domain: [0, 0.5 - g / 2], anchor: 'y' });
   layout.xaxis2 = xAxis(theme, [0, top], { domain: [0.5 + g / 2, 1], anchor: 'y' });
-  if (family) {
+  if (stacked) {
     layout.xaxis3 = overlayAxis('x', layout.xaxis.range);
     layout.xaxis4 = overlayAxis('x2', layout.xaxis2.range);
+    layout.xaxis5 = overlayAxis('x', layout.xaxis.range);
+    layout.xaxis6 = overlayAxis('x2', layout.xaxis2.range);
   }
 
   const font = { size: 14, color: ACCENT[theme] };
@@ -603,12 +681,10 @@ export function buildButterflyFigure(model, rows, env) {
     font: { size: 14, color: ACCENT[theme], weight: 600 },
   }));
   layout.annotations = rowLabels.concat(headers);
-  if (stacked) {
-    layout.annotations = layout.annotations.concat(
-      totalAnnotations(rows, (r) => r.sides[0].total, 'left', theme, 'x'),
-      totalAnnotations(rows, (r) => r.sides[1].total, 'right', theme, 'x2'),
-    );
-  }
+  layout.annotations = layout.annotations.concat(
+    totalAnnotations(rows, (r) => r.sides[0].total, 'left', theme, 'x'),
+    totalAnnotations(rows, (r) => r.sides[1].total, 'right', theme, 'x2'),
+  );
   return { traces, layout, config: { ...CONFIG } };
 }
 

@@ -31,6 +31,7 @@ import { renderTable } from './modules/table.js';
 import { initChartTabs, renderChartTabs, staleCopy } from './modules/chart-tabs.js';
 import { chartContext } from './modules/bars.js';
 import { initBarsPanel, renderBarsPanel, lastBarsModel, resetBarsTap } from './modules/bars-panel.js';
+import { initBandInfo, positionBandInfo, closeBandNote } from './modules/band-info.js';
 import { showTooltip, hideTooltip } from './modules/tooltip.js';
 import { selectedPersonIndexes } from './modules/format.js';
 import {
@@ -104,8 +105,11 @@ function pointClientPosition(ev) {
     if (point && point.x != null && point.y != null && chartEl._fullLayout) {
       const layout = chartEl._fullLayout;
       const rect = chartEl.getBoundingClientRect();
-      clientX = rect.left + layout._size.l + layout.xaxis.d2p(point.x);
-      clientY = rect.top + layout._size.t + layout.yaxis.d2p(point.y);
+      // Each event point carries its own axes, so y2 (band) points anchor on y2.
+      const xa = point.xaxis ?? layout.xaxis;
+      const ya = point.yaxis ?? layout.yaxis;
+      clientX = rect.left + xa._offset + xa.l2p(xa.d2l(point.x));
+      clientY = rect.top + ya._offset + ya.l2p(ya.d2l(point.y));
     }
   } catch {
     clientX = undefined;
@@ -187,7 +191,26 @@ function currentEnv() {
     revision,
     tooltipMode,
     chartWidth: chartEl ? chartEl.clientWidth : undefined,
+    chartHeight: chartEl ? chartEl.clientHeight : undefined,
   };
+}
+
+/** The band's info button and note (04.13 D-12). */
+function bandInfoEls() {
+  return { button: document.getElementById('band-info'), note: document.getElementById('band-note') };
+}
+
+function showBandInfo() {
+  const { button, note } = bandInfoEls();
+  if (!button) return;
+  button.hidden = false;
+  positionBandInfo(chartEl, button, note);
+}
+
+function hideBandInfo() {
+  const els = bandInfoEls();
+  if (els.button) els.button.hidden = true;
+  closeBandNote(els);
 }
 
 /** Recomputes the view, re-renders the chart, syncs the axis UI and the URL, and runs every registered renderer. */
@@ -202,6 +225,7 @@ function render() {
     chartEl.hidden = false;
     if (barsPanelEl) barsPanelEl.hidden = true;
     renderChart(chartEl, buildFigure(data, view, state, currentEnv()));
+    showBandInfo();
     lastScatterWidth = chartEl.clientWidth;
     // The div had no width while hidden (research A4); re-measure once on return.
     if (lastPanel === 'bars') window.Plotly.Plots.resize(chartEl);
@@ -212,6 +236,7 @@ function render() {
     lastPanel = 'scatter';
   } else {
     chartEl.hidden = true;
+    hideBandInfo();
     if (barsPanelEl) barsPanelEl.hidden = false;
     const applies = state.view === 'bars' ? ctx.barsEnabled : ctx.butterflyEnabled;
     renderBarsShell(applies);
@@ -277,6 +302,13 @@ function renderBarsShell(applies) {
 
 /** Binds the scatter's Plotly events; runs once, after the first scatter render. */
 function bindScatterEvents() {
+  // WR-03: Plotly.react is async, so place the band button once the layout is
+  // drawn (first render, width changes, axis switches). Writes no Plotly layout.
+  chartEl.on('plotly_afterplot', () => {
+    const { button, note } = bandInfoEls();
+    if (state.view !== 'scatter' || !button || button.hidden) return;
+    positionBandInfo(chartEl, button, note);
+  });
   bindChartEvents(chartEl, {
     onPointClick(i) {
       openDetailPanel(i);
@@ -370,6 +402,8 @@ async function bootstrap() {
     });
     renderers.push(renderLegend);
 
+    initBandInfo(bandInfoEls());
+
     initChartTabs({ data, getState: () => state, setState });
     renderers.push(renderChartTabs);
 
@@ -387,6 +421,7 @@ async function bootstrap() {
           lastScatterWidth = chartEl.clientWidth;
           scatterResizeRenders += 1;
           renderChart(chartEl, buildFigure(data, lastView, state, currentEnv()));
+          showBandInfo();
         }
       }, 150);
     });
@@ -414,6 +449,8 @@ async function bootstrap() {
       },
       ready: true,
       data,
+      nRated: data.nRated,
+      nGames: data.n,
       getState: () => structuredClone(state),
       getBarsModel: () => structuredClone(lastBarsModel()),
       setState,

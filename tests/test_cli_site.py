@@ -129,7 +129,7 @@ def test_key_check_passed_when_key_set(
     assert exit_code == 0
     output = capsys.readouterr().out
     assert "cfbd key check: passed" in output
-    assert output.splitlines()[0].startswith("site (fixture): 12 telecasts, 10 people,")
+    assert output.splitlines()[0].startswith("site (fixture): 12 telecasts, 11 people,")
 
 
 def test_key_check_skipped_when_no_key(site_env: Path, capsys: pytest.CaptureFixture[str]) -> None:

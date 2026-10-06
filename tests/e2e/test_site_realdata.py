@@ -24,6 +24,7 @@ lock), so workers never contend on the vault.
 
 from __future__ import annotations
 
+import gzip
 import json
 import os
 from collections.abc import Callable, Iterator
@@ -33,6 +34,7 @@ from typing import Any
 import pytest
 from conftest import _assert_guard_clean, _install_guard, _serve_directory
 from playwright.sync_api import Page
+from test_site_band_speckle import OPEN_SYMBOLS_JS, gl_vs_svg_diff
 from test_site_date_axis import SEASON_LABEL_BOXES_JS, force_chart_font
 
 from booth_review.cli import main
@@ -185,15 +187,18 @@ def real_open_app(real_site_url: str) -> Callable[[Page, str], None]:
 
 
 def _python_highlighted_sets(raw: dict[str, Any]) -> list[set[int]]:
-    """Independently computes, for every person index, the set of dot indices
-    they'd highlight with no other filter set: every main-feed entry, plus
-    every alt-feed entry on a combined-feed dot (mirrors select.js's
-    `personOnGame` for `role=null`; a spanish-feed entry never matches)."""
+    """Independently computes, for every person index, the set of game indices
+    (rated first, then the appended unrated games) they'd highlight with no other
+    filter set: every main-feed entry, plus every alt-feed entry on a combined-feed
+    dot (mirrors select.js's `personOnGame` for `role=null`; a spanish-feed entry never matches)."""
     telecasts = raw["telecasts"]
     people = raw["lookups"]["people"]
-    crew = telecasts["crew"]
-    combined_feeds = telecasts["combined_feeds"]
-    n = len(telecasts["season"])
+    crew = list(telecasts["crew"]) + list(raw["telecasts_unrated"]["crew"])
+    # Unrated games carry no combined-feed column, so an alt-feed entry never matches there.
+    combined_feeds = list(telecasts["combined_feeds"]) + [None] * len(
+        raw["telecasts_unrated"]["crew"]
+    )
+    n = len(crew)
 
     result: list[set[int]] = [set() for _ in people]
     for i in range(n):
@@ -1036,7 +1041,8 @@ _DATE_FACTS_JS = """
     plotted,
     outside,
     annotations: anns.length,
-    dividers: (gd.layout.shapes || []).length,
+    // season dividers only: the 04.13 band's own rect and top line are paper-referenced
+    dividers: (gd.layout.shapes || []).filter((s) => s.xref === 'x').length,
     blockCount: blocks.length,
     rangeLo: range[0],
     rangeHi: range[1],
@@ -1195,3 +1201,115 @@ def test_real_single_season_shows_dates_on_desktop(
     has_labels = count > 0
     assert has_labels
     assert all_match
+
+
+_UNRATED_CAUSES = {"rarely_rated", "pending", "rr_dip", "none"}
+_GZIP_BUDGET_BYTES = 1_500_000
+
+
+def test_real_unrated_games_summary_band_and_causes(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+    real_raw: dict[str, Any],
+) -> None:
+    """04.13 D-07, D-16: the shipped games are rated plus unrated, the default summary reads
+    'N rated of M games' with M above N, the band's markers number every unrated game, every
+    cause is one of the four known values, and the page raises no error -- integers only."""
+    page_errors: list[str] = []
+    real_guarded_page.on("pageerror", lambda exc: page_errors.append("error"))
+    real_open_app(real_guarded_page, "")
+    rated = len(real_raw["telecasts"]["season"])
+    unrated = len(real_raw["telecasts_unrated"]["season"])
+    games = rated + unrated
+    expected_summary = f"{rated:,} rated of {games:,} games"
+    summary: str = real_guarded_page.inner_text("#summary-count")
+    summary_ok = summary == expected_summary
+    has_unrated = unrated > 0
+    more_games = games > rated
+    causes = set(real_raw["telecasts_unrated"]["cause"])
+    unknown_causes = len(causes - _UNRATED_CAUSES)
+    cause_rows = len(real_raw["telecasts_unrated"]["cause"])
+    traces: list[dict[str, Any]] = real_guarded_page.evaluate(_TRACES_JS)
+    marker_count = sum(
+        1
+        for t in traces
+        if str(t["meta"]).startswith("unrated-active:")
+        for x in t["x"]
+        if x is not None
+    )
+    n_in_page: int = real_guarded_page.evaluate("window.__testHooks.data.n")
+    errors = len(page_errors)
+    assert has_unrated
+    assert more_games
+    assert summary_ok
+    assert unknown_causes == 0
+    assert cause_rows == unrated
+    assert marker_count == unrated
+    assert n_in_page == games
+    assert errors == 0
+
+
+def test_real_site_data_stays_inside_the_gzip_budget(real_site_dist: Path) -> None:
+    """D-16: site-data.json gzipped at level 9 stays at or under about 1.5 MB. The raw
+    and gzipped sizes are printed as integers."""
+    raw_bytes = (real_site_dist / "site-data.json").read_bytes()
+    raw_size = len(raw_bytes)
+    gzip_size = len(gzip.compress(raw_bytes, 9))
+    print(f"site-data.json raw bytes: {raw_size}, gzip bytes: {gzip_size}")
+    within_budget = gzip_size <= _GZIP_BUDGET_BYTES
+    assert within_budget
+
+
+_REAL_BAND_JS = """
+async () => {
+  const gd = document.getElementById('chart');
+  const fl = gd._fullLayout;
+  const p = await import('./modules/palette.js');
+  const theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  const traces = gd.data
+    .filter((t) => (t.yaxis ?? 'y') === 'y2')
+    .map((t) => ({
+      x: Array.from(t.x ?? []),
+      y: Array.from(t.y ?? []),
+      marker: JSON.parse(JSON.stringify(t.marker)),
+    }));
+  return {
+    traces,
+    xRange: fl.xaxis.range.slice(),
+    yRange: fl.yaxis2.range.slice(),
+    width: Math.round(fl.xaxis._length),
+    height: Math.round(fl.yaxis2._length),
+    bg: p.SURFACE[theme],
+  };
+}
+"""
+
+# Calibrated (04.13-17) against the real band: the open-symbol band differs from its SVG
+# reference by far more; filled rings stay under this.
+_REAL_BAND_MAX_DIFF = 2000
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+@pytest.mark.parametrize("size", [(1280, 900), (390, 844)])
+def test_real_band_rings_are_clean(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+    theme: str,
+    size: tuple[int, int],
+) -> None:
+    """notes-2 #1: no open symbol on the real chart, and the real band's own traces drawn through
+    GL match their SVG rendering within the calibrated pixel count -- integers only."""
+    real_guarded_page.emulate_media(color_scheme=theme)  # type: ignore[arg-type]
+    real_guarded_page.set_viewport_size({"width": size[0], "height": size[1]})
+    real_open_app(real_guarded_page, "")
+    real_guarded_page.evaluate(
+        "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
+    )
+    open_traces: int = real_guarded_page.evaluate(OPEN_SYMBOLS_JS)
+    spec: dict[str, Any] = real_guarded_page.evaluate(_REAL_BAND_JS)
+    band_traces = len(spec["traces"])
+    differing = gl_vs_svg_diff(real_guarded_page, spec)
+    print(f"real band GL-vs-SVG differing pixels: {differing}, traces: {band_traces}")
+    assert open_traces == 0
+    assert band_traces > 0
+    assert differing <= _REAL_BAND_MAX_DIFF

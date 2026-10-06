@@ -86,6 +86,10 @@ def build_git_vault(
 
     extended = tmp_path / "reference_ext"
     shutil.copytree(_REFERENCE_FIXTURES, extended)
+    with (extended / "network_rarity.csv").open("a", encoding="utf-8", newline="") as rarity_fh:
+        rarity_fh.write(
+            "ecn,false\necn2,false\nespn,false\nespn2,false\nespnu,false\nespn-deportes,false\n"
+        )
     with (extended / "networks.csv").open("a", encoding="utf-8", newline="") as fh:
         fh.write("ECN,ecn,Example Cable Network,family-ecn,cable,main,,,\n")
         fh.write("ECN2,ecn2,Example Cable Network 2,family-ecn,cable,main,,,\n")
@@ -250,8 +254,25 @@ def test_build_summary_prints_rivalry_counts_only(
     out = capsys.readouterr().out
     line = next(ln for ln in out.splitlines() if ln.startswith("rivalries: "))
     assert re.fullmatch(
-        r"rivalries: \d+ games tagged \(\d+ plotted telecasts\), "
+        r"rivalries: \d+ games tagged \(\d+ telecasts\), "
         r"title games excluded \d+, rematches demoted \d+",
+        line,
+    )
+
+
+def test_build_summary_prints_games_line_counts_only(
+    build_git_vault: DataPaths, capsys: pytest.CaptureFixture[str]
+) -> None:
+    capsys.readouterr()
+    assert main(["build", "--accept-baseline"]) == 0
+    out = capsys.readouterr().out
+    line = next(ln for ln in out.splitlines() if ln.startswith("games "))
+    assert re.fullmatch(
+        r"games \d+ shipped \(\d+ rated, \d+ unrated\), "
+        r"\d+ unrated left out \(no game or no network\), "
+        r"\d+ duplicate unrated dropped, "
+        r"\d+ duplicate rated dropped, "
+        r"rarity audit: \d+ flagged but mostly rated, \d+ unflagged but mostly unrated",
         line,
     )
 
@@ -336,7 +357,7 @@ def test_cli_build_json_output_round_trips(build_git_vault: DataPaths) -> None:
     paths = build_git_vault
     main(["build", "--no-commit"])
     body = json.loads((paths.vault / "processed" / "site-data.json").read_text(encoding="utf-8"))
-    assert body["schema_version"] == "2.1.0"
+    assert body["schema_version"] == "2.2.0"
 
 
 # -- WR-01 / WR-02: ordering and scope of a blocked or failing build ---------------------------

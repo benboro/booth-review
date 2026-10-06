@@ -286,7 +286,9 @@ def render_coverage(site: SiteData) -> str:
     total_rated = sum(totals_by_season.values())
     intro = (
         f"<p>{total_rated} rated telecasts across {len(seasons)} season(s) and "
-        f"{len(network_indices)} network(s) (counts only). See "
+        f"{len(network_indices)} network(s) (counts only). "
+        "These counts cover rated games only; the chart also shows games with no "
+        "public rating. See "
         '<a href="methodology.html#known-gaps">the methodology page\'s known '
         'gaps section</a> for what "rated" does and does not include.</p>'
     )

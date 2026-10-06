@@ -48,6 +48,11 @@ from booth_review.build.people_links import (
 from booth_review.build.people_links import (
     TELECAST_PEOPLE_SCHEMA as TELECAST_PEOPLE_SCHEMA,
 )
+from booth_review.build.shipped import (
+    network_rated_counts,
+    rarity_verdict,
+    shipped_expr,
+)
 from booth_review.build.sources import load_all_sources
 from booth_review.build.telecasts import build_telecasts
 from booth_review.build.viewership import (
@@ -71,6 +76,7 @@ from booth_review.resolve.diagnose import (
 from booth_review.resolve.games import GameIndex
 from booth_review.resolve.networks import (
     check_primary_overrides,
+    load_network_rarity,
     load_networks,
     load_primary_overrides,
 )
@@ -190,9 +196,11 @@ REVIEW_BOWLS_COLUMNS = (
 _POSTSEASON_GAME_TYPES = ("bowl", "playoff")
 
 
-def _plotted_postseason_games(telecasts: pl.DataFrame, games: pl.DataFrame) -> pl.DataFrame:
-    """Games of plotted bowl/CFP telecasts, one row per game, sorted by season then id."""
-    plotted_ids = telecasts.filter(pl.col("plotted"))["game_id"].unique()
+def _shipped_postseason_games(telecasts: pl.DataFrame, games: pl.DataFrame) -> pl.DataFrame:
+    """Games of shipped (rated or unrated) bowl/CFP telecasts, one row per game,
+    sorted by season then id. Uses the build_site_data predicate (04.13 D-14).
+    """
+    plotted_ids = telecasts.filter(shipped_expr())["game_id"].unique()
     return games.filter(
         pl.col("game_id").is_in(plotted_ids.implode())
         & pl.col("game_type").is_in(_POSTSEASON_GAME_TYPES)
@@ -202,11 +210,11 @@ def _plotted_postseason_games(telecasts: pl.DataFrame, games: pl.DataFrame) -> p
 def bowl_review_rows(
     telecasts: pl.DataFrame, games: pl.DataFrame, bowls: Mapping[int, BowlEntry]
 ) -> list[dict[str, object]]:
-    """One row per plotted postseason game with no bowls.csv row, with its
+    """One row per shipped postseason game with no bowls.csv row, with its
     raw CFBD note as the fill aid. Vault-only (interim/); never published.
     """
     rows: list[dict[str, object]] = []
-    for game in _plotted_postseason_games(telecasts, games).iter_rows(named=True):
+    for game in _shipped_postseason_games(telecasts, games).iter_rows(named=True):
         if game["game_id"] in bowls:
             continue
         rows.append(
@@ -219,6 +227,33 @@ def bowl_review_rows(
                 "away_team": game["away_team"],
                 "home_team": game["home_team"],
                 "raw_note": game["notes"],
+            }
+        )
+    return rows
+
+
+REVIEW_NETWORK_RARITY_COLUMNS = ("network_id", "main_feed_games", "rated", "rarely_rated", "audit")
+
+
+def network_rarity_review_rows(
+    telecasts: pl.DataFrame, rarity: Mapping[str, bool]
+) -> list[dict[str, object]]:
+    """One row per network with main-feed telecasts or a rarity flag, so the
+    hand-set flags can be checked. Vault-only (interim/); never published.
+    """
+    counts = network_rated_counts(telecasts)
+    rows: list[dict[str, object]] = []
+    for network_id in sorted(set(counts) | set(rarity)):
+        games, rated = counts.get(network_id, (0, 0))
+        flag = rarity.get(network_id)
+        verdict = rarity_verdict(games, rated, bool(flag))
+        rows.append(
+            {
+                "network_id": network_id,
+                "main_feed_games": games,
+                "rated": rated,
+                "rarely_rated": "" if flag is None else str(flag).lower(),
+                "audit": "contradicts" if verdict is not None else "",
             }
         )
     return rows
@@ -315,9 +350,14 @@ def assemble_tables(
 
     bowl_entries = load_bowls(reference_directory)
     bowl_rows = bowl_review_rows(telecasts, games, bowl_entries)
+    rarity = load_network_rarity(reference_directory)
 
     review_rows: dict[str, tuple[tuple[str, ...], list[dict[str, object]]]] = {
         "review_bowls": (REVIEW_BOWLS_COLUMNS, bowl_rows),
+        "review_network_rarity": (
+            REVIEW_NETWORK_RARITY_COLUMNS,
+            network_rarity_review_rows(telecasts, rarity),
+        ),
         "review_crew_overrides": (REVIEW_CREW_GAPS_COLUMNS, crew_gap_review),
         "review_unmatched": (UNMATCHED_COLUMNS, unmatched_review_rows),
         "review_unresolved_teams": (UNRESOLVED_COLUMNS, unresolved_review_rows),
@@ -362,7 +402,7 @@ def assemble_tables(
     merged_totals["bowls_missing"] = len(bowl_rows)
     merged_totals["bowl_names_unknown"] = sum(
         1
-        for game in _plotted_postseason_games(telecasts, games).iter_rows(named=True)
+        for game in _shipped_postseason_games(telecasts, games).iter_rows(named=True)
         if (entry := bowl_entries.get(game["game_id"])) is not None
         and entry.at_bowl
         and entry.official_name is None

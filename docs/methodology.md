@@ -18,8 +18,8 @@ the hover, the detail panel, and the matched-games table. No dot is ever
 colored by an individual announcer or crew.
 
 A dot's tooltip is kept short: the matchup and final score, the date and
-kickoff time (with a bowl or trophy icon for postseason games), the
-networks, the crew, and the viewer count. Click or tap the
+kickoff time, the named game (the bowl, rivalry, or playoff round, with its icon) on its own line,
+the networks, the crew, and the viewer count. Click or tap the
 dot to open its detail panel, which also has the measurement label, both
 x-axis values, any flags, and, for a Saturday game, its time slot.
 
@@ -44,7 +44,7 @@ controls for matchup quality, network, time slot, and era) is the whole point
 of this page's warning. The causal question is out of scope for this release
 and is planned as a future model-driven milestone, not part of this chart.
 
-The Bars and Butterfly views count assignments, not quality. Every bar is a number of rated telecasts, never a viewer figure, and announcers are never ranked by audience. Bars are ordered by how many telecasts an announcer, team, network family, or conference has in the current filters, which is a count of assignments, not a ranking of skill. In a stacked bar a telecast counts once for every announcer (or team) in it, so a bar can be longer than its number of telecasts.
+The Bars and Butterfly views count assignments, not quality. Every bar is a number of games, never a viewer figure, and announcers are never ranked by audience. Bars are ordered by how many games an announcer, team, network family, or conference has in the current filters, which is a count of assignments, not a ranking of skill. In a stacked bar a game counts once for every announcer (or team) in it, so a bar can be longer than its number of games. Solid parts of a bar are rated games and outlined parts are games with no public rating. One announcer's (or team's) parts stay together in a stacked bar. In a network family bar, the networks named on the family's legend chip take the chip's color and then its shades, in the order the chip lists them (for example ABC, then ESPN), and any other channels follow, most games first.
 
 ## Which games are included
 
@@ -93,6 +93,29 @@ and lists the games that pass every filter. With exactly two schools selected, H
 **Named games.** The Game filter picks one named game and shows every rated telecast of it. Bowls are grouped by franchise and shown under their latest name, so a renamed bowl is one entry and searching an old name finds it. The CFP entries are the four playoff rounds, and a semifinal or quarterfinal played at a bowl appears under both its round and that bowl. Rivalries come from a curated list of well-known named FBS rivalries and count only the first regular-season meeting of the two teams each season, never a conference championship game. CFBD marks conference title games from 2022 on, so from then a title game is left out even when it comes before the rivalry game or replaces it. For earlier seasons the first-meeting rule alone applies, so a later conference-championship rematch is left out. Postseason meetings never count. The matched-games table lists the games that pass every filter, and the filter combines with the others like any other.
 
 None of this changes the axes or uses viewership as an input.
+
+## Games with no public rating
+
+Besides the rated games the chart plots, the site lists the games that have no public viewer figure, so a network's thin coverage is visible instead of silent.
+
+**What ships.** Every main-feed game that has a matched game and a resolved network, rated or not. A game with no resolved network is left out; it is only counted in the build summary. A game shows up once: if it has a rated telecast, only that one is shown, and otherwise only its first unrated main-feed telecast is. The build counts the rest, and the site's data file is rejected if it repeats a game.
+
+**What "rated" means.** A public viewer figure exists for the game's main broadcast.
+
+**Why a game has no rating.** Each unrated game gets one cause, the first that matches:
+
+1. "{Network} games are rarely rated": the network is on a hand-kept list (below).
+2. "viewership not posted yet": the game is in the current season, in the newest week that has any posted figure or later (the postseason counts as after every regular week). When the season has no posted figure yet, every current-season game qualifies. A week's figures arrive over several days, so a strictly-later rule would flag nothing.
+3. "few figures were compiled for 2021–24": the game is from a season in that range, when Ratings Reference itself compiled far fewer figures (see Known gaps).
+4. "no figure was published": anything else. This also covers the rare game whose only figure is for an alternate feed.
+
+On the site each game reads "No public rating · {cause}".
+
+**Counts.** "N rated of M games" counts the games that pass the current filters or selection: N is how many have a figure, M is all of them, rated or not. Filter counts count every game.
+
+**The rarely-rated list.** It is set by hand, one value per network, in `data/reference/network_rarity.csv`, and never computed from a threshold. Every network in `networks.csv` has a row, so a newly mapped network forces a review. The build reports only how many networks have an actual rated share that contradicts their flag, so the list stays auditable.
+
+**Where they appear.** On the chart these games sit in the "No public rating" strip under the plot as hollow rings when no filter is active, and for games that fail the filters. With a filter active, the games that pass it are drawn like rated dots, and a selected announcer's games use the same shapes as their rated games. A Date season range alone does not count as a filter here. In Bars, each bar's outlined part counts them.
 
 ## Measurement eras
 

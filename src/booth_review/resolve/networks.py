@@ -422,3 +422,57 @@ def check_primary_overrides(overrides: Mapping[int, str], table: NetworkTable) -
             f"primary_network_overrides.csv: {len(unknown)} network_id(s) not in "
             "networks.csv: " + ", ".join(unknown)
         )
+
+
+NETWORK_RARITY_COLUMNS = ("network_id", "rarely_rated")
+
+
+def load_network_rarity(reference_dir: Path) -> dict[str, bool]:
+    """Read network_rarity.csv (required): network_id -> whether that network's
+    games are rarely publicly rated. Hand-set per D-11 (04.13), never computed
+    from a threshold; it drives the "rarely rated network" no-rating cause.
+    Raises ReferenceTableError on an id outside the slug convention, a value
+    other than exactly "true" or "false", or a duplicate network_id. Coverage
+    against networks.csv is checked by `check_network_rarity`.
+    """
+    path = reference_dir / "network_rarity.csv"
+    raw_rows = read_reference_csv_numbered(path, NETWORK_RARITY_COLUMNS, required=True)
+
+    rarity: dict[str, bool] = {}
+    for line_no, raw in raw_rows:
+        network_id = raw["network_id"]
+        if not _NETWORK_ID_RE.match(network_id):
+            raise ReferenceTableError(
+                f"{path.name}: line {line_no}: invalid network_id {network_id!r}"
+            )
+        value = raw["rarely_rated"]
+        if value not in ("true", "false"):
+            raise ReferenceTableError(
+                f"{path.name}: line {line_no}: rarely_rated must be true or false"
+            )
+        if network_id in rarity:
+            raise ReferenceTableError(
+                f"{path.name}: line {line_no}: duplicate network_id {network_id!r}"
+            )
+        rarity[network_id] = value == "true"
+    return rarity
+
+
+def check_network_rarity(rarity: Mapping[str, bool], table: NetworkTable) -> None:
+    """Raise ReferenceTableError when network_rarity.csv names a network_id
+    networks.csv doesn't define, or leaves a networks.csv network_id without a
+    row (so a newly mapped network forces a review).
+    """
+    known = set(table.networks())
+    unknown = sorted(set(rarity) - known)
+    if unknown:
+        raise ReferenceTableError(
+            f"network_rarity.csv: {len(unknown)} network_id(s) not in networks.csv: "
+            + ", ".join(unknown)
+        )
+    missing = sorted(known - set(rarity))
+    if missing:
+        raise ReferenceTableError(
+            f"network_rarity.csv: {len(missing)} networks.csv network_id(s) have no row: "
+            + ", ".join(missing)
+        )

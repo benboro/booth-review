@@ -38,9 +38,11 @@ _DOT_PIXEL_JS = """
     if (!trace.customdata) continue;
     const idx = trace.customdata.indexOf(customdata);
     if (idx === -1) continue;
+    // band (unrated) traces ride y2: use the trace's own y axis offset
+    const ya = layout[trace.yaxis === 'y2' ? 'yaxis2' : 'yaxis'];
     return {
       x: rect.left + layout._size.l + layout.xaxis.d2p(trace.x[idx]),
-      y: rect.top + layout._size.t + layout.yaxis.d2p(trace.y[idx]),
+      y: rect.top + ya._offset + ya.l2p(ya.d2l(trace.y[idx])),
     };
   }
   return null;
@@ -72,7 +74,9 @@ _INERT_DOT_PIXEL_JS = """
   if (!trace || trace.x[index] === undefined) return null;
   return {
     x: rect.left + layout._size.l + layout.xaxis.d2p(trace.x[index]),
-    y: rect.top + layout._size.t + layout.yaxis.d2p(trace.y[index]),
+    y: rect.top + (trace.yaxis === 'y2' ? layout.yaxis2 : layout.yaxis)._offset
+      + (trace.yaxis === 'y2' ? layout.yaxis2 : layout.yaxis).l2p(
+        (trace.yaxis === 'y2' ? layout.yaxis2 : layout.yaxis).d2l(trace.y[index])),
   };
 }
 """
@@ -428,7 +432,10 @@ def test_legend_chip_greyed_when_family_has_no_offered_channel(
     open_app(guarded_page, "?people=dale-harlow")
     disney = guarded_page.locator('#legend-chips button[data-family="disney"]')
     expect(disney).to_have_attribute("data-offered", "true")
-    for family in ("fox", "conference", "other"):
+    # dale-harlow also works unrated game 17 (a conference network), so that chip stays offered
+    conf = guarded_page.locator('#legend-chips button[data-family="conference"]')
+    expect(conf).to_have_attribute("data-offered", "true")
+    for family in ("fox", "other"):
         chip = guarded_page.locator(f'#legend-chips button[data-family="{family}"]')
         expect(chip).to_have_attribute("data-offered", "false")
         expect(chip).to_have_attribute("aria-pressed", "true")
@@ -1215,6 +1222,47 @@ def test_html_tooltip_cfp_game_at_a_bowl_shows_both_icons(
     assert marker.text_content() == name
 
 
+def test_html_tooltip_named_game_sits_on_its_own_line_under_the_date(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """notes-2 #6: the date child holds only the date and kickoff; a named game
+    (bowl, CFP, rivalry) is the next child, a block element; a regular game has
+    none; the tooltip stays within its fixed max width."""
+    open_app(guarded_page, "")
+    probe = """
+      () => {
+        const kids = [...document.querySelector('#chart-tooltip').children];
+        const date = kids[1];
+        const next = kids[2];
+        const marker = document.querySelector('#chart-tooltip .tooltip-game-type');
+        return {
+          dateText: date.textContent,
+          nextIsMarker: next === marker,
+          display: marker ? getComputedStyle(marker).display : null,
+          leftEdge: marker
+            ? marker.getBoundingClientRect().left - date.getBoundingClientRect().left : null,
+          width: document.querySelector('#chart-tooltip').getBoundingClientRect().width,
+        };
+      }
+    """
+    for index in (7, 5, 0):
+        _hover_dot(guarded_page, index)
+        got = guarded_page.evaluate(probe)
+        assert " \u00b7 " in got["dateText"]  # date and kickoff only, one separator
+        assert got["dateText"].count(" \u00b7 ") == 1
+        assert not any(w in got["dateText"] for w in ("Bowl", "Rivalry", "CFP"))
+        assert got["nextIsMarker"] is True
+        assert got["display"] == "block"
+        assert abs(got["leftEdge"]) < 1
+        assert got["width"] <= 320.5
+
+    _hover_dot(guarded_page, 1)
+    guarded_page.wait_for_function(
+        "document.querySelector('#chart-tooltip .tooltip-title')?.textContent.includes('Foxhollow')"
+    )
+    assert guarded_page.evaluate(probe)["nextIsMarker"] is False
+
+
 def test_html_tooltip_falls_back_to_text_when_an_icon_cannot_be_built(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
@@ -1228,7 +1276,7 @@ def test_html_tooltip_falls_back_to_text_when_an_icon_cannot_be_built(
           const T = await import('./modules/tooltip.js');
           const el = document.createElement('div');
           const model = {
-            title: 't', dateText: 'd', dateLine: 'd',
+            title: 't', dateText: 'd',
             networks: [{ name: 'N', family: 'other' }], crew: [], crewLines: [],
             viewersLine: 'v', axisLine: 'a', hint: 'h',
             gameType: { icons: ['playoff', 'nope'], text: 'Summit Bowl \\u00b7 CFP semifinal' },
@@ -1259,6 +1307,10 @@ def test_plotly_fallback_tooltip_shows_game_type_text_without_slot_label(
     assert "Lakeshore Rivalry" in _hover_text(traces, 0)
     assert "Summit Bowl \u00b7 CFP semifinal" in _hover_text(traces, 5)
     assert "Harbor Bowl" in _hover_text(traces, 7)
+    # notes-2 #6: the named game is its own <br> line, not on the date line.
+    lines = _hover_text(traces, 7).split("<br>")
+    assert "Harbor Bowl" not in lines[1]
+    assert lines[2] == "Harbor Bowl"
 
 
 def test_html_tooltip_hides_on_mouse_out_scroll_and_panel_open(
@@ -1456,7 +1508,7 @@ def test_tooltip_mode_trace_config(
 
     html_full = guarded_page.evaluate(full_js)
     for t in html_full:
-        if str(t["meta"]).startswith("inert:"):
+        if str(t["meta"]).startswith(("inert:", "unrated-inert:", "highlight-halo")):
             assert t["hoverinfo"] == "skip"
             assert not t["hovertemplate"]
         else:
@@ -1474,12 +1526,14 @@ def test_tooltip_mode_trace_config(
     plotly_full = guarded_page.evaluate(full_js)
     for t in plotly_full:
         meta = str(t["meta"])
-        if meta.startswith("inert:"):
+        if meta.startswith(("inert:", "unrated-inert:", "highlight-halo")):
             assert t["hoverinfo"] == "skip"
             assert not t["hovertemplate"]
-        elif meta.startswith("family:"):
-            assert t["hovertemplate"] == "%{text}<extra></extra>"
-            assert len(t["text"]) == len(t["customdata"])
+        elif meta.startswith(("family:", "unrated-active:")):
+            # an empty trace (unrated-active:other) has its template reset by Plotly
+            if t["customdata"]:
+                assert t["hovertemplate"] == "%{text}<extra></extra>"
+                assert len(t["text"]) == len(t["customdata"])
 
     # A person selection fades every family trace to 'skip' (D-15) and
     # fills the highlight trace, which now carries the fallback template.
@@ -1487,13 +1541,16 @@ def test_tooltip_mode_trace_config(
     plotly_full_selected = guarded_page.evaluate(full_js)
     for t in plotly_full_selected:
         meta = str(t["meta"])
-        if meta.startswith("inert:") or meta.startswith("family:"):
+        if meta.startswith(("inert:", "family:", "unrated-inert:", "unrated-active:")):
             assert t["hoverinfo"] == "skip"
             assert not t["hovertemplate"]
+        elif meta.startswith("highlight-halo"):
+            assert t["hoverinfo"] == "skip"  # halos are never hoverable
         else:
-            assert meta == "highlight"
-            assert t["hovertemplate"] == "%{text}<extra></extra>"
-            assert len(t["text"]) == len(t["customdata"]) > 0
+            assert meta in ("highlight", "highlight-unrated")
+            if t["customdata"] and len(t["customdata"]) > 0:
+                assert t["hovertemplate"] == "%{text}<extra></extra>"
+                assert len(t["text"]) == len(t["customdata"])
 
 
 # D-31: mirrors `site/modules/palette.js`'s ACCENT/PAGE_BG tokens -- a pure

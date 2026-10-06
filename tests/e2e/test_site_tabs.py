@@ -441,8 +441,12 @@ def test_controls_footprint_is_fixed(
 _ROWS_JS = "window.__testHooks.getBarsModel().rows.map(r => [r.label, r.total])"
 _ROLE_PRESSED_JS = """() => Array.from(document.querySelectorAll('#bar-role-toggle button'))
   .map((b) => [b.textContent, b.getAttribute('aria-pressed')])"""
-PBP_ROWS = [["Dale Harlow", 2], ["Casey Lund", 1]]
-ANALYST_ROWS = [["Dale Harlow Jr.", 2], ["Jamie Oaks", 1]]
+# pbp by total games: Dale Harlow 2, then 1-game ties by name
+# (Casey Lund, Kris Venn, Pat Rowan come from unrated games)
+PBP_ROWS = [["Dale Harlow", 2], ["Casey Lund", 1], ["Kris Venn", 1], ["Pat Rowan", 1]]
+# analyst by total games: Jr. 2, then 1-game ties by name
+# (Morgan Ash and Sam Delgado come from unrated games)
+ANALYST_ROWS = [["Dale Harlow Jr.", 2], ["Jamie Oaks", 1], ["Morgan Ash", 1], ["Sam Delgado", 1]]
 
 
 def test_role_control_sets_state_url_and_role_filter(
@@ -451,7 +455,7 @@ def test_role_control_sets_state_url_and_role_filter(
     page = guarded_page
     open_app(page, ONE_SCHOOL + "&view=bars")
     assert _attr(page, '#bar-role-toggle button[data-role=""]', "aria-pressed") == "true"
-    assert len(page.evaluate(_ROWS_JS)) == 5
+    assert len(page.evaluate(_ROWS_JS)) == 9  # 5 rated-game announcers + 4 more on unrated games
     page.locator('#bar-role-toggle button[data-role="pbp"]').click()
     assert _state(page)["role"] == "pbp"
     assert "role=pbp" in page.evaluate("() => location.search")
@@ -462,7 +466,7 @@ def test_role_control_sets_state_url_and_role_filter(
     page.locator('#bar-role-toggle button[data-role=""]').click()
     assert _state(page)["role"] is None
     assert "role=" not in page.evaluate("() => location.search")
-    assert len(page.evaluate(_ROWS_JS)) == 5
+    assert len(page.evaluate(_ROWS_JS)) == 9  # 5 rated-game announcers + 4 more on unrated games
 
 
 def test_role_filter_popover_drives_the_role_control(

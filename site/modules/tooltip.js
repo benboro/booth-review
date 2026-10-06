@@ -26,6 +26,7 @@ import {
   formatMatchup,
   formatViewers,
   namedGameInfo,
+  noRatingLine,
   stripNetworkNote,
 } from './format.js';
 import { makeGameTypeIcon } from './icons.js';
@@ -45,9 +46,9 @@ const EDGE_MARGIN = 8;
 /**
  * Builds the shared, DOM-free content model for telecast `i`'s tooltip: the
  * UI-SPEC's minimal line order -- matchup+score, date+kickoff (a named
- * game appends its icons plus its name -- rivalry, bowl core name, or CFP
- * round -- from `format.js#namedGameInfo`, 04.10 D-10; the time-slot label is
- * panel-only), slash-delimited networks (primary first,
+ * only; a named game's icons plus its name -- rivalry, bowl core name, or CFP
+ * round, from `format.js#namedGameInfo`, 04.10 D-10 -- sit on their own line
+ * under it, notes-2 #6; the time-slot label is panel-only), slash-delimited networks (primary first,
  * each already stripped of any nested methodology parenthetical), one
  * "Position: Name" line per main-feed crew member, viewers, the active axis
  * value, and a closing "Click for details →" hint. Conferences, the time
@@ -55,13 +56,12 @@ const EDGE_MARGIN = 8;
  * and any scoring-source note are panel-only (SITE-25) -- never repeated
  * here. `dateText` is the date and kickoff only; `gameType` the named-game
  * marker, which `renderTooltipContent` draws as decorative `icons` followed by
- * the visible `text`; and `dateLine` the date plus that `text` as one
- * plain string for the text-only fallback (`chart.js#hoverText`), which can't
- * draw an SVG.
+ * the visible `text` on its own line (`chart.js#hoverText`, the text-only
+ * fallback that can't draw an SVG, puts `text` on its own line too).
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
  * @param {{axis: "spread"|"excitement", selected?: Set<number>}} opts
- * @returns {{crew: {name: string, role: string, selected: boolean}[], title: string, dateText: string, gameType: {icons: ("bowl"|"playoff"|"rivalry")[], text: string}|null, dateLine: string, networks: {name: string, family: string}[], crewLines: string[], viewersLine: string, axisLine: string, hint: string}}
+ * @returns {{crew: {name: string, role: string, selected: boolean}[], title: string, dateText: string, gameType: {icons: ("bowl"|"playoff"|"rivalry")[], text: string}|null, networks: {name: string, family: string}[], crewLines: string[], viewersLine: string, axisLine: string, hint: string}}
  */
 export function tooltipModel(data, i, { axis, selected = new Set() }) {
   const t = data.t;
@@ -70,7 +70,6 @@ export function tooltipModel(data, i, { axis, selected = new Set() }) {
 
   const dateText = [formatDate(t.date[i]), formatKickoff(t.kickoff[i]) ?? 'Kickoff time not recorded'].join(' · ');
   const gameType = namedGameInfo(data, i);
-  const dateLine = gameType ? `${dateText} · ${gameType.text}` : dateText;
 
   const primaryNetwork = data.lookups.networks[t.network[i]];
   const otherOutlets = t.outlets[i]
@@ -85,11 +84,11 @@ export function tooltipModel(data, i, { axis, selected = new Set() }) {
   const crewLines = crew.map((entry) => `${entry.name} (${ROLE_PILL_TEXT[roleKey(entry.role)]})`);
   if (crewLines.length === 0) crewLines.push('Crew not recorded');
 
-  const viewersLine = `Viewers: ${formatViewers(t.viewers[i])}`;
+  const viewersLine = data.rated[i] ? `Viewers: ${formatViewers(t.viewers[i])}` : noRatingLine(data, i);
   const axisLine = axisValueText(data, i, axis);
   const hint = 'Click for details →';
 
-  return { title, dateText, gameType, dateLine, networks, crew, crewLines, viewersLine, axisLine, hint };
+  return { title, dateText, gameType, networks, crew, crewLines, viewersLine, axisLine, hint };
 }
 
 /**
@@ -117,20 +116,19 @@ export function renderTooltipContent(el, model, theme) {
   children.push(title);
 
   const dateLine = document.createElement('div');
-  dateLine.appendChild(document.createTextNode(model.dateText));
+  dateLine.textContent = model.dateText;
+  children.push(dateLine);
   if (model.gameType) {
     // The icons are decorative (aria-hidden) and the visible name carries the
     // meaning (04.10 D-10, reversing 04.2 D-22's icon-only rule). If any icon
     // can't be built, draw none (never a partial marker); the text still shows.
     const icons = model.gameType.icons.map((kind) => makeGameTypeIcon(kind));
-    const type = document.createElement('span');
+    const type = document.createElement('div');
     type.className = 'tooltip-game-type';
     if (icons.every((icon) => icon != null)) type.replaceChildren(...icons);
     type.appendChild(document.createTextNode(model.gameType.text));
-    dateLine.appendChild(document.createTextNode(' · '));
-    dateLine.appendChild(type);
+    children.push(type);
   }
-  children.push(dateLine);
 
   const networksRow = document.createElement('div');
   networksRow.className = 'tooltip-networks';

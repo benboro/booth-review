@@ -155,6 +155,12 @@ def test_render_methodology_raises_when_missing(tmp_path: Path) -> None:
         render_methodology(tmp_path, _fixture_site())
 
 
+def test_render_coverage_says_rated_only_and_links_known_gaps() -> None:
+    result = render_coverage(_fixture_site())
+    assert "These counts cover rated games only;" in result
+    assert result.count('href="methodology.html#known-gaps"') == 1
+
+
 def test_render_coverage_table_structure() -> None:
     site = _fixture_site()
     result = render_coverage(site)
@@ -234,8 +240,8 @@ def test_methodology_describes_the_slim_tooltip() -> None:
     text = re.sub(r"\s+", " ", _METHODOLOGY_MD.read_text(encoding="utf-8"))
     assert (
         "A dot's tooltip is kept short: the matchup and final score, the date and "
-        "kickoff time (with a bowl or trophy icon for postseason games), "
-        "the networks, the crew, and the viewer count." in text
+        "kickoff time, the named game (the bowl, rivalry, or playoff round, with "
+        "its icon) on its own line, the networks, the crew, and the viewer count." in text
     )
     assert "Click or tap the dot to open its detail panel" in text
 

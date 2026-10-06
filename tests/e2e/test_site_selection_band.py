@@ -163,7 +163,7 @@ def _many_networks_raw(fixture_raw: dict[str, Any]) -> dict[str, Any]:
 def test_a_broad_filter_alone_does_not_grow_the_selection_band(
     guarded_page: Page, open_app: Callable[[Page, str], None], fixture_raw: dict[str, Any]
 ) -> None:
-    """WR-01 / SITE-20: the filter-only "N of M" summary caps its network list, so a
+    """WR-01 / SITE-20: the filter-only "N rated of M games" summary caps its network list, so a
     filter passing games on many networks keeps the band height and the chart in place."""
     raw = _many_networks_raw(fixture_raw)
     guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
@@ -172,19 +172,28 @@ def test_a_broad_filter_alone_does_not_grow_the_selection_band(
     band = _height(guarded_page, "#selection-bar")
     chart_top = _y(guarded_page, "#chart-area")
     open_app(guarded_page, "?slot=afternoon,prime,late")
-    assert guarded_page.inner_text("#summary-count") == "8 of 12 rated telecasts"
-    assert guarded_page.inner_text("#summary-detail").endswith(" +5 more")
+    assert (
+        guarded_page.inner_text("#summary-count") == "8 rated of 14 games"
+    )  # slots: rated 8 (1,2,4,5,7-10) + unrated 6 (U0,2,3,4,6,7)
+    assert guarded_page.inner_text("#summary-detail").endswith(
+        " +6 more"
+    )  # 9 networks: 8 rated plus lookup 0, which unrated games add
     assert abs(_height(guarded_page, "#selection-bar") - band) <= 0.5
     assert abs(_y(guarded_page, "#chart-area") - chart_top) <= 0.5
 
 
+@pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
 def test_selection_band_height_is_fixed_on_phone(
     mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
+    # CI renders in DejaVu Sans, where dale-harlow's detail line (two networks since his
+    # unrated game) is wider than a 390px phone; it must stay one line, not grow the band.
     open_app(mobile_page, "")
     y0 = _y(mobile_page, "#chart")
     open_app(mobile_page, "?people=dale-harlow")
     assert abs(_y(mobile_page, "#chart") - y0) <= 0.5
+    detail = mobile_page.locator("#summary-detail")
+    assert detail.get_attribute("title") == detail.inner_text()
 
 
 def test_summary_title_is_smaller(

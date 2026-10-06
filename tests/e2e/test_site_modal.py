@@ -266,3 +266,24 @@ def test_phone_close_button_stays_in_view_and_keeps_its_target(
     assert found["scrolled"] and found["inside"] and found["onTop"]
     assert found["size"][0] >= 44 and found["size"][1] >= 44
     assert mobile_page.evaluate(SCROLLERS) == ["panel-inner"]
+
+
+def test_unrated_modal_shows_cause_and_why_link_without_source_rows(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-04/D-10: an unrated game shows the cause line and a 'Why no rating?'
+    link; no figure, publisher, Ratings Reference, or flag rows; the 506 listing stays."""
+    text = _open(guarded_page, open_app, 16)
+    body = guarded_page.locator("#panel-body")
+    assert "No public rating · few figures were compiled for 2021\u201324" in text
+    why = body.locator("a", has_text="Why no rating?")
+    expect(why).to_have_count(1)
+    assert (why.get_attribute("href") or "").endswith(
+        "methodology.html#games-with-no-public-rating"
+    )
+    assert "Ratings Reference" not in text
+    assert "Original source not recorded" not in text
+    assert "Figure first published by" not in text
+    assert "Viewers:" not in text
+    assert body.locator(".badge, .panel-flags").count() == 0
+    expect(body.locator("a", has_text="View 506 Sports listing")).to_have_count(1)

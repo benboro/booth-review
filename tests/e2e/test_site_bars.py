@@ -1,10 +1,11 @@
 """The Bars and Butterfly tabs in the real page (SITE-34, SITE-35, SITE-36;
 D-01, D-03, D-14, D-18, D-19, D-20).
 
-Hand-worked fixture values: Northfield's five rated telecasts all air on
-Alpha Sports (net-a, Disney family), giving announcer rows Dale Harlow 2,
-Dale Harlow Jr. 2, Casey Lund 1, ...; Kris Venn works 3 games; Northfield
-and Lakeview share 2 games. The Show-all variant is built in-test by
+Hand-worked fixture values (04.13 D-15: every game counts, rated or not): Northfield
+plays 5 games (rated 0, 4, 8; unrated 13, 16), giving 9 announcer rows: Dale Harlow 2,
+Dale Harlow Jr. 2, Casey Lund 1, ... and four who call only unrated games; Kris Venn
+works 4 games (3 rated); Northfield and Lakeview share 3 games. The Show-all variant is
+built in-test by
 appending synthetic teams to a deep copy of the fixture, never real data.
 """
 
@@ -85,22 +86,22 @@ def test_title_names_school_and_drilled_announcer(guarded_page: Page, open_app: 
     page = guarded_page
     open_app(page, NORTHFIELD)
     title = page.locator("#bars-title")
-    assert title.inner_text() == "Announcers by rated telecasts with Northfield"
+    assert title.inner_text() == "Announcers by games with Northfield"
     _click_bar(page, 0)
     page.wait_for_function("window.__testHooks.getState().people.length === 1")
     both = "with Dale Harlow and Northfield"
-    assert title.inner_text() == f"Announcers by rated telecasts {both}"
+    assert title.inner_text() == f"Announcers by games {both}"
     aria = page.locator("#bars-chart").get_attribute("aria-label")
     assert aria is not None
-    assert aria.startswith(f"Bar chart: announcers by rated telecasts {both}")
+    assert aria.startswith(f"Bar chart: announcers by games {both}")
     page.locator('#group-by-toggle button[data-by="team"]').click()
     page.wait_for_function("document.getElementById('bars-title').textContent.startsWith('Teams')")
-    assert title.inner_text() == f"Teams by rated telecasts {both}"
+    assert title.inner_text() == f"Teams by games {both}"
     page.locator('#group-by-toggle button[data-by="announcer"]').click()
     page.wait_for_function(
         "document.getElementById('bars-title').textContent.startsWith('Announcers')"
     )
-    assert title.inner_text() == f"Announcers by rated telecasts {both}"
+    assert title.inner_text() == f"Announcers by games {both}"
 
 
 @pytest.mark.parametrize(
@@ -108,11 +109,11 @@ def test_title_names_school_and_drilled_announcer(guarded_page: Page, open_app: 
     [
         (
             "?people=kris-venn,jax-venn&mode=together&view=bars",
-            "Teams by rated telecasts with Kris Venn and Jax Venn",
+            "Teams by games with Kris Venn and Jax Venn",
         ),
         (
             "?people=kris-venn,pat-rowan&mode=compare&view=bars",
-            "Teams by rated telecasts with Kris Venn or Pat Rowan",
+            "Teams by games with Kris Venn or Pat Rowan",
         ),
         (
             "?school=northfield,lakeview&people=dale-harlow&view=butterfly",
@@ -130,22 +131,21 @@ def test_title_joiners_follow_compare_and_together(
 def test_simple_bars_render_title_aria_and_counts(guarded_page: Page, open_app: OpenApp) -> None:
     open_app(guarded_page, NORTHFIELD)
     page = guarded_page
-    assert page.locator("#bars-title").inner_text() == (
-        "Announcers by rated telecasts with Northfield"
-    )
-    assert len(_bar_boxes(page)) == 5
+    assert page.locator("#bars-title").inner_text() == ("Announcers by games with Northfield")
+    assert len(_bar_boxes(page)) == 9
     assert page.locator("#bars-chart").get_attribute("aria-label") == (
-        "Bar chart: announcers by rated telecasts with Northfield, 2019–2026. "  # noqa: RUF001 - en dash is the real copy
-        "Showing 5 of 5. Top: Dale Harlow (PBP) 2, Dale Harlow Jr. (Analyst) 2, "
-        "Casey Lund (PBP) 1."
+        "Bar chart: announcers by games with Northfield, 2019–2026. "  # noqa: RUF001 - en dash is the real copy
+        "Showing 9 of 9. Top: Dale Harlow (PBP) 2 rated of 2 games, "
+        "Dale Harlow Jr. (Analyst) 2 rated of 2 games, Casey Lund (PBP) 1 rated of 1 game."
     )
-    assert page.locator("#bars-rowcount").inner_text() == "Showing all 5 announcers"
+    assert page.locator("#bars-rowcount").inner_text() == "Showing all 9 announcers"
     assert page.locator("#bars-show-all").is_hidden()
-    assert page.locator("#bars-captions p").count() == 0
+    # The only caption on a simple announcer chart is the always-on key (D-15).
+    assert page.locator("#bars-captions p").count() == 1
     buttons = page.locator("#bars-counts button")
-    assert buttons.count() == 5
+    assert buttons.count() == 9
     assert buttons.first.get_attribute("aria-label") == (
-        "Add Dale Harlow as a filter, 2 rated telecasts"
+        "Add Dale Harlow as a filter, 2 rated of 2 games"
     )
     assert page.locator("#bars-chart").get_attribute("role") == "img"
 
@@ -156,9 +156,9 @@ def test_stacked_bars_family_row_has_pill_and_segments(
     open_app(guarded_page, NORTHFIELD + "&by=network")
     page = guarded_page
     row = page.locator("#bars-counts > li > button").first
-    assert row.get_attribute("aria-label") == "Show only ABC/ESPN, 7 rated telecasts"
+    assert row.get_attribute("aria-label") == "Show only ABC/ESPN, 7 rated of 9 games"
     assert row.locator('span.pill[data-family="disney"]').count() == 1
-    assert page.locator("#bars-counts > li ol button").count() == 5
+    assert page.locator("#bars-counts > li ol button").count() == 9
     assert page.locator("#bars-captions p").count() >= 1
 
 
@@ -167,20 +167,23 @@ def test_team_bars_for_person_keep_matched_games_table(
 ) -> None:
     open_app(guarded_page, "?people=kris-venn&view=bars")
     page = guarded_page
-    assert "Teams by rated telecasts" in page.locator("#bars-title").inner_text()
+    assert "Teams by games" in page.locator("#bars-title").inner_text()
     assert "Each game counts once for every team" in page.locator("#bars-captions").inner_text()
-    assert page.locator("#games-table tbody tr").count() == 3
+    assert page.locator("#games-table tbody tr").count() == 4
 
 
 def test_butterfly_title_caption_and_counts(guarded_page: Page, open_app: OpenApp) -> None:
     open_app(guarded_page, FLY)
     page = guarded_page
     assert page.locator("#bars-title").inner_text() == "Announcers: Northfield and Lakeview"
-    assert "2 games include both." in page.locator("#bars-captions").inner_text()
+    assert "3 games include both." in page.locator("#bars-captions").inner_text()
     items = page.locator("#bars-counts > li")
-    assert items.count() == 7
+    assert items.count() == 10
     label = items.first.locator("button .counts-label")
-    assert label.text_content() == "Dale HarlowPBP: Northfield 2, Lakeview 1 rated telecasts"
+    assert (
+        label.text_content()
+        == "Dale HarlowPBP: Northfield 2 rated of 2 games, Lakeview 1 rated of 1 game"
+    )
     assert label.locator('.role-pill[data-role="pbp"]').count() == 1
 
 
@@ -189,9 +192,7 @@ def test_empty_selection_shows_note(guarded_page: Page, open_app: OpenApp) -> No
     page = guarded_page
     note = page.locator("#bars-note")
     assert note.is_visible()
-    assert note.locator(".season-empty-title").inner_text() == (
-        "No rated telecasts for this selection"
-    )
+    assert note.locator(".season-empty-title").inner_text() == ("No games for this selection.")
     assert note.locator(".season-empty-hint").inner_text() == (
         "Widen the season range or reset a filter."
     )
@@ -205,11 +206,14 @@ def test_legend_toggle_recounts(guarded_page: Page, open_app: OpenApp) -> None:
     page = guarded_page
     chip = page.locator('#legend-chips button[data-family="disney"]')
     chip.click()
-    page.wait_for_selector("#bars-note:not([hidden])")
+    # Hiding the Disney family leaves unrated game 16 on FOX: Pat Rowan and Sam Delgado.
+    _wait_points(page, 2)
+    page.wait_for_function("window.__testHooks.getBarsModel().rows.length === 2")
+    assert len(_bar_boxes(page)) == 2
     chip.click()
     page.wait_for_selector("#bars-note", state="hidden")
-    _wait_points(page, 5)
-    assert len(_bar_boxes(page)) == 5
+    _wait_points(page, 9)
+    assert len(_bar_boxes(page)) == 9
 
 
 def _serve_many_teams(page: Page, fixture_raw: dict[str, Any]) -> None:
@@ -310,7 +314,7 @@ def test_hover_tooltip_and_click_drill(guarded_page: Page, open_app: OpenApp) ->
     _hover_bar(page, 0)
     assert _tooltip_lines(page) == [
         "Dale HarlowPBP",
-        "2 rated telecasts",
+        "2 rated of 2 games",
         "Click to filter →",
     ]
     assert "viewer" not in page.locator("#chart-tooltip").inner_text().lower()
@@ -593,9 +597,11 @@ def test_no_viewer_text_and_no_page_errors(guarded_page: Page, open_app: OpenApp
 FAMILY = NORTHFIELD + "&by=network"
 FAMILY_FLY = "?school=northfield,lakeview&view=butterfly&by=network"
 FAMILY_URLS = [FAMILY, FAMILY_FLY]
-# On the two-channel fixture the first 7 drawn points are channel pieces; the
+# On the two-channel fixture the first 11 drawn points are channel pieces (7 announcer
+# pieces on ABC/ESPN, counting Dale Harlow and Dale Harlow Jr. twice for 2 channels = 9, plus 2
+# on FOX/FS1/BTN); the
 # overlay announcer segments follow (hover and click resolve on these).
-FIRST_SEGMENT = 7
+FIRST_SEGMENT = 11
 
 
 def _hover_segment(page: Page, k: int = 0) -> None:
@@ -638,22 +644,24 @@ def test_family_bars_render_with_channel_counts(
     page.locator("#bars-data summary").click()
     row = page.locator("#bars-counts > li").first
     assert row.locator('span.pill[data-family="disney"]').count() == 1
-    assert row.locator("> button .counts-n").text_content() == "7"
+    assert row.locator("> button .counts-n").text_content() == "7 rated of 9 games"
     seg_buttons = row.locator("ol.counts-sublist > li > button")
     assert seg_buttons.all_text_contents() == [
-        "Dale HarlowPBP 2",
-        "Dale Harlow Jr.Analyst 2",
-        "Casey LundPBP 1",
-        "Jamie OaksAnalyst 1",
-        "Robin TeagueSideline 1",
+        "Dale HarlowPBP 2 rated of 2 games",
+        "Dale Harlow Jr.Analyst 2 rated of 2 games",
+        "Casey LundPBP 1 rated of 1 game",
+        "Jamie OaksAnalyst 1 rated of 1 game",
+        "Kris VennPBP 0 rated of 1 game",
+        "Morgan AshAnalyst 0 rated of 1 game",
+        "Robin TeagueSideline 1 rated of 1 game",
     ]
     assert [
-        seg_buttons.nth(i).locator(".role-pill").get_attribute("data-role") for i in range(5)
-    ] == ["pbp", "analyst", "pbp", "analyst", "unknown"]
+        seg_buttons.nth(i).locator(".role-pill").get_attribute("data-role") for i in range(7)
+    ] == ["pbp", "analyst", "pbp", "analyst", "pbp", "analyst", "unknown"]
     first = row.locator("ol.counts-sublist > li").first
     assert first.locator("ol.counts-channels > li").all_text_contents() == [
-        "Alpha Sports 1",
-        "Echo Sports 1",
+        "Alpha Sports: 1 rated of 1 game",
+        "Echo Sports: 1 rated of 1 game",
     ]
     colors = first.locator(".counts-swatch").evaluate_all(
         "els => els.map(e => getComputedStyle(e).backgroundColor)"
@@ -671,9 +679,9 @@ def test_family_segment_tooltip_lists_channels(
     _hover_segment(page)
     assert _tooltip_lines(page) == [
         "Dale HarlowPBP",
-        "Alpha Sports: 1",
-        "Echo Sports: 1",
-        "2 rated telecasts on ABC/ESPN",
+        "Alpha Sports: 1 rated of 1 game",
+        "Echo Sports: 1 rated of 1 game",
+        "2 rated of 2 games on ABC/ESPN",
         "Click to filter →",
     ]
     assert page.locator("#chart-tooltip .tooltip-swatch").count() == 2
@@ -722,24 +730,21 @@ def test_family_butterfly_mirrors_channels(
     page = guarded_page
     serve_multichannel(page)
     open_app(page, FAMILY_FLY)
-    assert (
-        page.locator("#bars-title").inner_text()
-        == "Network families by announcer: Northfield and Lakeview"
-    )
+    assert page.locator("#bars-title").inner_text() == "Networks by games: Northfield and Lakeview"
     page.locator("#bars-data summary").click()
     labels = page.locator("#bars-counts > li > button").evaluate_all(
         "els => els.map(e => e.getAttribute('aria-label'))"
     )
     assert labels == [
-        "Show only ABC/ESPN, Northfield 7, Lakeview 4 rated telecasts",
-        "Show only FOX/FS1/BTN, Northfield 0, Lakeview 2 rated telecasts",
+        "Show only ABC/ESPN, Northfield 7 rated of 9 games, Lakeview 4 rated of 4 games",
+        "Show only FOX/FS1/BTN, Northfield 0 rated of 2 games, Lakeview 2 rated of 4 games",
     ]
     side = page.locator("#bars-counts > li").first.locator("ol.counts-sublist").first
     first = side.locator("> li:not(.counts-side)").first
     assert "Dale Harlow" in first.locator("> button").text_content()
     assert first.locator("ol.counts-channels > li").all_text_contents() == [
-        "Alpha Sports 1",
-        "Echo Sports 1",
+        "Alpha Sports: 1 rated of 1 game",
+        "Echo Sports: 1 rated of 1 game",
     ]
 
 
@@ -753,8 +758,8 @@ def test_family_touch_two_tap(
     page.touchscreen.tap(x, y)
     page.wait_for_selector("#chart-tooltip:not([hidden])")
     lines = _tooltip_lines(page)
-    assert "Alpha Sports: 1" in lines
-    assert "Echo Sports: 1" in lines
+    assert "Alpha Sports: 1 rated of 1 game" in lines
+    assert "Echo Sports: 1 rated of 1 game" in lines
     assert lines[-1] == "Tap again to filter →"
     page.wait_for_timeout(600)
     assert _state(page)["people"] == []
@@ -796,3 +801,63 @@ def test_bar_tooltip_title_has_role_pill(guarded_page: Page, open_app: OpenApp) 
     title = guarded_page.locator("#chart-tooltip .tooltip-title").first
     assert title.text_content() == "Dale HarlowPBP"
     assert title.locator(".role-pill").count() == 1
+
+
+# ---------------------------------------------------------------- 04.13 D-15 copy
+
+KEY_CAPTION = (
+    "Solid bars are games with a public rating. Outlined bars are games with no public rating."
+)
+
+
+@pytest.mark.parametrize("query", [NORTHFIELD, FLY, NORTHFIELD + "&by=network"])
+def test_key_caption_appears_once_per_chart(
+    guarded_page: Page, open_app: OpenApp, query: str
+) -> None:
+    open_app(guarded_page, query)
+    captions = guarded_page.locator("#bars-captions p").all_text_contents()
+    assert captions.count(KEY_CAPTION) == 1
+
+
+def test_unrated_only_announcer_bar_reads_zero_rated(guarded_page: Page, open_app: OpenApp) -> None:
+    # Analysts only: Dale Harlow Jr. (2), Jamie Oaks (1), Morgan Ash (1, unrated game 13), ...
+    open_app(guarded_page, NORTHFIELD + "&role=analyst")
+    _wait_points(guarded_page, 4)
+    _hover_bar(guarded_page, 2)
+    lines = _tooltip_lines(guarded_page)
+    assert lines[0].startswith("Morgan Ash")
+    assert lines[1] == "0 rated of 1 game"
+
+
+@pytest.mark.parametrize("query", [NORTHFIELD, FLY, NORTHFIELD + "&by=network"])
+def test_no_bars_text_says_telecast(guarded_page: Page, open_app: OpenApp, query: str) -> None:
+    open_app(guarded_page, query)
+    page = guarded_page
+    page.locator("#bars-data summary").click()
+    texts = page.evaluate(
+        """() => {
+          // The Plotly axis title inside #bars-chart is bar-chart.js copy (plan 10), so only
+          // the title, captions, counts list, notes and aria labels are checked here.
+          const out = [];
+          for (const id of ['bars-title', 'bars-captions', 'bars-counts', 'bars-rowcount']) {
+            out.push(document.getElementById(id).innerText);
+          }
+          for (const el of document.querySelectorAll('#bars-panel *')) {
+            out.push(el.getAttribute('aria-label') || '');
+          }
+          out.push(document.getElementById('bars-chart').getAttribute('aria-label') || '');
+          return out;
+        }"""
+    )
+    assert [t for t in texts if "telecast" in t.lower()] == []
+
+
+def test_game_count_wording(guarded_page: Page, open_app: OpenApp) -> None:
+    open_app(guarded_page, NORTHFIELD)
+    out = guarded_page.evaluate(
+        """async () => {
+          const C = await import('./modules/bar-copy.js');
+          return [C.gameCount(1, 1), C.gameCount(6, 14), C.gameCount(0, 1)];
+        }"""
+    )
+    assert out == ["1 rated of 1 game", "6 rated of 14 games", "0 rated of 1 game"]

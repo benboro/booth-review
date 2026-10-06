@@ -39,12 +39,13 @@ def _trigger(page: Page) -> Any:
 def test_networks_count_counts_only_shown_rows(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-36: kris-venn offers net-b and net-c; unchecking net-c leaves one shown row checked."""
+    """D-36: kris-venn offers net-a (unrated game 13), net-b and net-c; unchecking net-c
+    leaves two shown rows checked."""
     open_app(guarded_page, "?people=kris-venn")
     _open_filter(guarded_page, "networks")
     expect(_net_item(guarded_page, "net-d")).to_be_hidden()
     _uncheck(guarded_page, "net-c")
-    expect(_trigger(guarded_page)).to_have_text("Networks · 1")
+    expect(_trigger(guarded_page)).to_have_text("Networks · 2")
     assert _trigger(guarded_page).get_attribute("data-active") == "true"
 
 
@@ -52,10 +53,10 @@ def test_networks_count_absent_when_every_shown_row_is_checked(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-36 with D-15: no count, inactive look, but the pick stays stored and resettable."""
-    open_app(guarded_page, "?people=kris-venn&networks=net-b,net-c,net-d")
+    open_app(guarded_page, "?people=kris-venn&networks=net-a,net-b,net-c")
     expect(_trigger(guarded_page)).to_have_text("Networks")
     assert _trigger(guarded_page).get_attribute("data-active") == "false"
-    assert "networks=net-b,net-c,net-d" in guarded_page.evaluate("location.search")
+    assert "networks=net-a,net-b,net-c" in guarded_page.evaluate("location.search")
     _open_filter(guarded_page, "networks")
     reset = guarded_page.locator("#pop-networks .group-reset")
     assert reset.get_attribute("aria-disabled") == "false"
@@ -67,10 +68,10 @@ def test_phone_filters_badge_agrees_with_networks_trigger(
     """WR-02: the phone badge counts Networks only when its trigger shows a
     count (D-36), so a stored pick with every shown row checked adds nothing;
     the pick stays in the URL and the Reset stays live (D-15)."""
-    open_app(mobile_page, "?people=kris-venn&networks=net-b,net-c,net-d")
+    open_app(mobile_page, "?people=kris-venn&networks=net-a,net-b,net-c")
     expect(_trigger(mobile_page)).to_have_text("Networks")
     expect(mobile_page.locator("#filters-button")).to_have_text("Filters (1)")
-    assert "networks=net-b,net-c,net-d" in mobile_page.evaluate("location.search")
+    assert "networks=net-a,net-b,net-c" in mobile_page.evaluate("location.search")
     reset = mobile_page.locator(".group-reset[data-reset='networks']")
     assert reset.get_attribute("aria-disabled") == "false"
     mobile_page.evaluate("window.__testHooks.setState({ networks: ['net-b'] })")
@@ -83,9 +84,11 @@ def test_networks_count_ignores_hidden_family_chip_toggle(
     open_app: Callable[[Page, str], None],
     fixture_raw: dict[str, Any],
 ) -> None:
-    """D-36: a legend chip for a family with no offered channel leaves the count alone."""
+    """D-36: a legend chip for a family with no offered channel leaves the count alone
+    (Kris Venn is offered no `other`-family channel)."""
     mutated = json.loads(json.dumps(fixture_raw))
-    mutated["lookups"]["networks"].append({"id": "net-e", "name": "Echo Sports", "family": "other"})
+    # net-e (index 4) already exists in the fixture for its unrated games; re-family it.
+    mutated["lookups"]["networks"][4] = {"id": "net-e", "name": "Echo Sports", "family": "other"}
     mutated["lookups"]["networks"].append({"id": "net-f", "name": "Foxtrot TV", "family": "other"})
     mutated["telecasts"]["network"][3] = 4
     mutated["telecasts"]["outlets"][3] = [4]
@@ -99,11 +102,11 @@ def test_networks_count_ignores_hidden_family_chip_toggle(
     open_app(guarded_page, "?people=kris-venn")
     _open_filter(guarded_page, "networks")
     _uncheck(guarded_page, "net-c")
-    expect(_trigger(guarded_page)).to_have_text("Networks · 1")
-    chip = guarded_page.locator('#legend-chips button[data-family="disney"]')
+    expect(_trigger(guarded_page)).to_have_text("Networks · 2")
+    chip = guarded_page.locator('#legend-chips button[data-family="other"]')
     chip.click()
     expect(chip).to_have_attribute("aria-pressed", "false")
-    expect(_trigger(guarded_page)).to_have_text("Networks · 1")
+    expect(_trigger(guarded_page)).to_have_text("Networks · 2")
 
 
 def test_networks_count_includes_greyed_explicit_pick(

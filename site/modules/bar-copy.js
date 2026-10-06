@@ -1,9 +1,9 @@
 /**
  * Display strings for the Bars and Butterfly tabs (SITE-34, SITE-35). Pure and
  * DOM-free; imports only TOP_N from ./bars.js. Every string follows the 04.4
- * UI-SPEC Copywriting Contract exactly. D-01: every number printed here is a
- * count of rated telecasts (or games); no function reads or prints a
- * per-telecast audience figure.
+ * UI-SPEC Copywriting Contract exactly. Every number printed here is a count of
+ * games, rated and unrated (04.13 D-15); no function reads or prints an
+ * audience figure.
  */
 
 import { TOP_N } from './bars.js';
@@ -12,7 +12,7 @@ import { ROLE_PILL_TEXT } from './pill.js';
 
 /** Shown when the filters leave no rows (UI-SPEC empty state). */
 export const EMPTY_COPY = {
-  title: 'No rated telecasts for this selection',
+  title: 'No games for this selection.',
   hint: 'Widen the season range or reset a filter.',
 };
 
@@ -33,12 +33,13 @@ const NOUNS = {
 };
 
 /**
- * `1 rated telecast` / `N rated telecasts`.
- * @param {number} n
+ * `6 rated of 14 games` / `0 rated of 1 game`.
+ * @param {number} rated
+ * @param {number} total
  * @returns {string}
  */
-export function telecastCount(n) {
-  return n === 1 ? '1 rated telecast' : `${n} rated telecasts`;
+export function gameCount(rated, total) {
+  return `${rated} rated of ${total} ${total === 1 ? 'game' : 'games'}`;
 }
 
 /**
@@ -142,17 +143,17 @@ function gamePreposition(model) {
 }
 
 function subject(model) {
-  if (model.rowKind === 'person') return 'Announcers by rated telecasts';
-  if (model.rowKind === 'family') return 'Network families by announcer';
-  if (model.rowKind === 'team') return 'Teams by rated telecasts';
-  return 'Conferences by team';
+  if (model.rowKind === 'person') return 'Announcers by games';
+  if (model.rowKind === 'family') return 'Networks by games';
+  if (model.rowKind === 'team') return 'Teams by games';
+  return 'Conferences by games';
 }
 
 function butterflySubject(model) {
   if (model.rowKind === 'person') return 'Announcers';
-  if (model.rowKind === 'family') return 'Network families by announcer';
+  if (model.rowKind === 'family') return 'Networks by games';
   if (model.rowKind === 'team') return 'Teams';
-  return 'Conferences by team';
+  return 'Conferences by games';
 }
 
 /**
@@ -215,10 +216,12 @@ function sharedCaption(shared) {
  * @returns {string[]}
  */
 export function captionLines(model, shownRows) {
-  const lines = [];
+  const lines = [
+    'Solid bars are games with a public rating. Outlined bars are games with no public rating.',
+  ];
   if (model.segmentKind === 'person') {
     lines.push(
-      'Each telecast counts once for every announcer in it, so a bar can be longer than its number of telecasts.',
+      'Each game counts once for every announcer in it, so a bar can be longer than its number of games.',
     );
   }
   if (model.rowKind === 'team' || model.segmentKind === 'team') {
@@ -259,11 +262,11 @@ export function roleSuffix(roles = []) {
 
 /**
  * In-tooltip text of one channel line of a family segment.
- * @param {{name: string, count: number}} ch
+ * @param {{name: string, count: number, rated: number}} ch
  * @returns {string}
  */
 export function channelLineText(ch) {
-  return `${ch.name} ${ch.count}`;
+  return `${ch.name}: ${gameCount(ch.rated, ch.count)}`;
 }
 
 /**
@@ -283,10 +286,10 @@ export function tooltipLines(model, shownRows, ref, { touch = false } = {}) {
   let target;
   if (ref.s >= 0) {
     const seg = (side ? side.segments : row.segments)[ref.s];
-    const count = telecastCount(seg.count);
+    const count = gameCount(seg.rated, seg.count);
     lines.push({ text: seg.name ?? seg.label, kind: 'title', roles: seg.roles ?? [] });
     for (const ch of seg.channels ?? []) {
-      lines.push({ text: `${ch.name}: ${ch.count}`, kind: 'body', shade: ch.shade });
+      lines.push({ text: channelLineText(ch), kind: 'body', shade: ch.shade });
     }
     lines.push({
       text: sideName ? `${sideName}: ${count} on ${row.name}` : `${count} on ${row.name}`,
@@ -294,7 +297,8 @@ export function tooltipLines(model, shownRows, ref, { touch = false } = {}) {
     });
     target = seg.target;
   } else {
-    const count = telecastCount(side ? side.total : row.total);
+    const src = side ?? row;
+    const count = gameCount(src.rated, src.total);
     lines.push({ text: row.label, kind: 'title', roles: row.roles ?? [] });
     lines.push({ text: sideName ? `${sideName}: ${count}` : count, kind: 'body' });
     target = row.target;
@@ -317,15 +321,17 @@ function drillPhrase(target, name) {
  * Accessible name of a counts-list button.
  * @param {object|null} target
  * @param {string} name
- * @param {number} n
+ * @param {number} rated
+ * @param {number} total
  * @returns {string}
  */
-export function countsListName(target, name, n) {
-  return `${drillPhrase(target, name)}, ${telecastCount(n)}`;
+export function countsListName(target, name, rated, total) {
+  return `${drillPhrase(target, name)}, ${gameCount(rated, total)}`;
 }
 
 function sideCounts(row, model) {
-  return `${model.sides[0].name} ${row.sides[0].total}, ${model.sides[1].name} ${row.sides[1].total}`;
+  const [s0, s1] = row.sides;
+  return `${model.sides[0].name} ${gameCount(s0.rated, s0.total)}, ${model.sides[1].name} ${gameCount(s1.rated, s1.total)}`;
 }
 
 /**
@@ -345,7 +351,7 @@ export function butterflyRowText(row, model) {
  * @returns {string}
  */
 export function butterflySideText(row, model) {
-  return `: ${sideCounts(row, model)} rated telecasts`;
+  return `: ${sideCounts(row, model)}`;
 }
 
 /**
@@ -355,7 +361,7 @@ export function butterflySideText(row, model) {
  * @returns {string}
  */
 export function butterflyCountsName(row, model) {
-  return `${drillPhrase(row.target, row.name)}, ${sideCounts(row, model)} rated telecasts`;
+  return `${drillPhrase(row.target, row.name)}, ${sideCounts(row, model)}`;
 }
 
 /**
@@ -379,8 +385,8 @@ export function ariaSummary(model, data, state, shownCount) {
     const top = model.rows.slice(0, Math.min(model.kind === 'butterfly' ? 2 : 3, shownCount));
     const parts = top.map((row) =>
       model.kind === 'butterfly'
-        ? `${row.label}${roleSuffix(row.roles)} ${row.sides[0].total} and ${row.sides[1].total}`
-        : `${row.label}${roleSuffix(row.roles)} ${row.total}`,
+        ? `${row.label}${roleSuffix(row.roles)} ${gameCount(row.sides[0].rated, row.sides[0].total)} and ${gameCount(row.sides[1].rated, row.sides[1].total)}`
+        : `${row.label}${roleSuffix(row.roles)} ${gameCount(row.rated, row.total)}`,
     );
     out += ` Top: ${parts.join(', ')}.`;
   }

@@ -306,7 +306,33 @@ export function measurementLabel(type) {
  * @returns {string} e.g. "3,200,000".
  */
 export function formatViewers(n) {
+  if (n == null) return NO_RATING_LABEL;
   return n.toLocaleString('en-US');
+}
+
+/** Label for a game with no public rating (04.13). */
+export const NO_RATING_LABEL = 'No public rating';
+
+/**
+ * Why a game has no public rating, in UI-SPEC wording (04.13 D-10).
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @returns {string|null} null for a rated game.
+ */
+export function causeText(data, i) {
+  const cause = data.t.cause[i];
+  if (cause == null) return null;
+  if (cause === 'rarely_rated') {
+    return `${data.lookups.networks[data.t.network[i]].name} games are rarely rated`;
+  }
+  if (cause === 'pending') return 'viewership not posted yet';
+  if (cause === 'rr_dip') return 'few figures were compiled for 2021–24';
+  return 'no figure was published';
+}
+
+/** Full line: "No public rating · {cause}" (plain text; callers use textContent). */
+export function noRatingLine(data, i) {
+  return `${NO_RATING_LABEL} · ${causeText(data, i)}`;
 }
 
 /**
@@ -538,7 +564,7 @@ export function escapeHover(s) {
 export const SUMMARY_NETWORK_LIMIT = 3;
 
 /**
- * The summary detail's network list, most telecasts first (A6): every name when
+ * The summary detail's network list, most games first (A6): every name when
  * there are at most `SUMMARY_NETWORK_LIMIT`, else the first ones and "+N more".
  * @param {string[]} networks
  * @returns {string}
@@ -557,14 +583,10 @@ function summaryNetworks(networks) {
  * @returns {{count: string, detail: string}}
  */
 export function summaryCopy(summary) {
-  if (summary.kind === 'matches') {
+  if (summary.kind === 'all' || summary.kind === 'matches') {
     const n = summary.count;
-    const count =
-      summary.of != null
-        ? `${n.toLocaleString('en-US')} of ${summary.of.toLocaleString('en-US')} rated telecasts`
-        : n === 1
-          ? '1 rated telecast'
-          : `${n} rated telecasts`;
+    const count = `${summary.rated.toLocaleString('en-US')} rated of ${n.toLocaleString('en-US')} ${n === 1 ? 'game' : 'games'}`;
+    if (summary.kind === 'all') return { count, detail: '' };
     let detail = `${summary.seasonMin}–${summary.seasonMax} · ${summaryNetworks(summary.networks)}`;
     if (summary.altCount > 0) {
       const gameWord = summary.altCount === 1 ? 'game' : 'games';
@@ -573,22 +595,18 @@ export function summaryCopy(summary) {
     return { count, detail };
   }
   if (summary.kind === 'no-filter-match') {
-    return {
-      count: '',
-      detail:
-        'No rated telecasts match these filters. Widen the seasons or clear a filter to see games.',
-    };
+    return { count: '', detail: 'No games match these filters.' };
   }
   if (summary.kind === 'no-game-match') {
     return {
       count: '',
-      detail: `No telecasts of ${summary.phrase} match these filters. Widen the seasons or clear a filter to see games.`,
+      detail: `No games of ${summary.phrase} match these filters. Widen the seasons or clear a filter to see games.`,
     };
   }
   if (summary.kind === 'no-rated') {
     return {
       count: '',
-      detail: `${summary.name}: no Nielsen-rated telecasts in this sample. Conference-network and streaming-only games usually aren't rated — see the methodology page.`,
+      detail: `${summary.name} has no games in this sample.`,
     };
   }
   if (summary.kind === 'filtered-out') {
