@@ -12,6 +12,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+from conftest import FIXTURE_GAMES
 from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
@@ -311,25 +312,36 @@ def test_missing_v210_fields_throw(loaded: Page, mutation: str) -> None:
 def test_default_state_and_facets(loaded: Page) -> None:
     v = _view(loaded, {})
     assert v["defaultGame"] is None
-    assert v["games"] == [0, 1, 0, 0, 1, 1, 1, 2]
+    # 12 rated + 8 unrated: Harbor Bowl = 1 rated + unrated 16 (Bayside) = 2; Bridge Game = 1 rated + unrated 14 = 2
+    assert v["games"] == [0, 1, 0, 0, 2, 1, 2, 2]
     assert v["matched"] == []
     assert v["hasSelection"] is False
 
 
 def test_facets_postseason_exclude(loaded: Page) -> None:
-    assert _view(loaded, {"postseason": "exclude"})["games"] == [0, 0, 0, 0, 0, 0, 1, 2]
+    assert _view(loaded, {"postseason": "exclude"})["games"] == [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        2,  # rivalries have no postseason games, so both keep their 2 (rated + unrated)
+    ]
 
 
 def test_game_pick_fills_table_and_summary(loaded: Page) -> None:
     v = _view(loaded, {"game": "lakeshore"})
     assert v["passing"] == [0, 4]
     assert v["total"] == 2
-    assert v["games"] == [0, 1, 0, 0, 1, 1, 1, 2]
+    # 12 rated + 8 unrated: Harbor Bowl = 1 rated + unrated 16 (Bayside) = 2; Bridge Game = 1 rated + unrated 14 = 2
+    assert v["games"] == [0, 1, 0, 0, 2, 1, 2, 2]
     assert v["matched"] == [0, 4]
     assert v["hasSelection"] is True
     assert v["summary"]["kind"] == "matches"
     assert v["summary"]["count"] == 2
-    assert v["summary"]["of"] == 12
+    assert v["summary"]["rated"] == 2  # matched games 0 and 4 are both rated (indices < 12)
 
 
 @pytest.mark.parametrize("slug", ["cfp-semifinal", "summit-bowl"])
@@ -339,7 +351,9 @@ def test_bowl_hosted_semifinal_in_round_and_bowl(loaded: Page, slug: str) -> Non
 
 def test_fade_vs_hide(loaded: Page) -> None:
     assert _view(loaded, {"game": "lakeshore", "dots": "hide"})["visibleCount"] == 2
-    assert _view(loaded, {"game": "lakeshore"})["visibleCount"] == 12
+    assert (
+        _view(loaded, {"game": "lakeshore"})["visibleCount"] == FIXTURE_GAMES
+    )  # fade keeps all 12 rated + 8 unrated drawn
 
 
 def test_game_ands_with_school_without_editing_it(loaded: Page) -> None:
@@ -357,7 +371,7 @@ def test_no_game_match_copy_and_state_untouched(loaded: Page) -> None:
     assert v["passing"] == []
     assert v["summary"] == {"kind": "no-game-match", "phrase": "the Summit Bowl"}
     assert v["copy"]["detail"] == (
-        "No telecasts of the Summit Bowl match these filters. "
+        "No games of the Summit Bowl match these filters. "
         "Widen the seasons or clear a filter to see games."
     )
     assert v["state"]["postseason"] == "exclude"
@@ -366,7 +380,7 @@ def test_no_game_match_copy_and_state_untouched(loaded: Page) -> None:
 
 def test_unknown_slug_is_no_pick(loaded: Page) -> None:
     v = _view(loaded, {"game": "no-such-game"})
-    assert len(v["passing"]) == 12
+    assert len(v["passing"]) == FIXTURE_GAMES  # no pick: 12 rated + 8 unrated all pass
 
 
 def test_hook_exposes_games_facet(

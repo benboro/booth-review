@@ -108,7 +108,9 @@ def test_networks_popover_fits_offered_rows(
     w0 = _width(page, "pop-networks")
     assert w0 > 260, f"fixture width {w0} too near the 240 minimum to measure narrowing"
     assert w0 <= min(360, 1280 - 16)
-    page.goto(page.url.split("?")[0] + "?people=dale-harlow")
+    # dale-harlow now also works unrated game 17 on net-c (the long name), so he no longer narrows
+    # the list; jax-venn is only on net-b games (rated 1 and 9), so net-c drops out of the rows.
+    page.goto(page.url.split("?")[0] + "?people=jax-venn")
     page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
     _open_filter(page, "networks")
     w1 = _width(page, "pop-networks")

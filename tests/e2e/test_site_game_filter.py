@@ -20,9 +20,9 @@ pytestmark = pytest.mark.e2e
 
 DEFAULT_ROWS = [
     "CFP Semifinal (1)",
-    "Harbor Bowl (1)",
+    "Harbor Bowl (2)",  # 1 rated + unrated 16 (Bayside Bowl, same franchise)
     "Summit Bowl (1)",
-    "The Bridge Game (1)",
+    "The Bridge Game (2)",  # 1 rated + unrated 14 (rivalry)
     "Lakeshore Rivalry (2)",
 ]
 
@@ -108,8 +108,9 @@ def test_pick_replaces_the_earlier_pick_and_narrows_the_chart(
     trigger = guarded_page.locator("#trigger-game")
     assert trigger.inner_text().startswith("Game: Harbor Bowl")
     assert trigger.get_attribute("title") == "Game: Harbor Bowl"
-    assert _passing(guarded_page) == 1
-    assert guarded_page.locator("#games-table tbody tr").count() == 1
+    # Harbor Bowl franchise = 1 rated + unrated 16 (Bayside) = 2 games, all listed
+    assert _passing(guarded_page) == 2
+    assert guarded_page.locator("#games-table tbody tr").count() == 2
     assert guarded_page.evaluate(
         "() => document.getElementById('pop-game').matches(':popover-open')"
     )
@@ -141,13 +142,13 @@ def test_search_filters_rows_headers_and_empty_line(
     _open_game(guarded_page)
     search = guarded_page.locator("#game-search")
     cases = {
-        "bayside": (["BOWLS"], ["Harbor Bowl (1)"]),
-        "maplecrest": (["RIVALRIES"], ["The Bridge Game (1)"]),
+        "bayside": (["BOWLS"], ["Harbor Bowl (2)"]),  # 1 rated + unrated 16
+        "maplecrest": (["RIVALRIES"], ["The Bridge Game (2)"]),  # 1 rated + unrated 14
         "north": (["RIVALRIES"], ["Lakeshore Rivalry (2)"]),
         "semi": (["PLAYOFF"], ["CFP Semifinal (1)"]),
         # Spaces and separators are ignored when matching (WR-01).
         "north-field": (["RIVALRIES"], ["Lakeshore Rivalry (2)"]),
-        "bridge  game": (["RIVALRIES"], ["The Bridge Game (1)"]),
+        "bridge  game": (["RIVALRIES"], ["The Bridge Game (2)"]),
     }
     for query, (headers, rows) in cases.items():
         search.fill(query)
@@ -187,8 +188,9 @@ def test_empty_line_tells_search_misses_from_filtered_out_games(
 def test_empty_line_when_filters_leave_no_game_and_no_query(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    # 2021 has no named-game telecast in the fixture, so every row is at zero.
-    open_app(guarded_page, "?seasons=2021-2021")
+    # 2021 + Other Network (net-d) leaves only rated game 3, no named game, so every row is at zero
+    # (the 2021 unrated games 13-16 sit on net-a/net-b/net-e and are filtered out).
+    open_app(guarded_page, "?seasons=2021-2021&networks=net-d")
     _open_game(guarded_page)
     assert _rows(guarded_page) == []
     assert _headers(guarded_page) == []
