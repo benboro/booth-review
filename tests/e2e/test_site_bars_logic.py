@@ -519,6 +519,69 @@ def test_channel_shade_follows_data_wide_order(
     assert _channels(by_label["Kris Venn"]) == [(*_A, 1, 1)]  # unrated game 13 stays on net-a
 
 
+_ORDER_JS = """
+async ([family, rawOverride]) => {
+  const D = await import('./modules/data.js');
+  const B = await import('./modules/bars.js');
+  const P = await import('./modules/palette.js');
+  const data = D.prepareData(rawOverride);
+  return {
+    order: B.familyChannelOrder(data, family).map((i) => data.lookups.networks[i].id),
+    lead: P.FAMILY_CHANNEL_LEAD,
+    families: P.FAMILY_ORDER,
+  };
+}
+"""
+
+
+def test_chip_lead_networks_take_the_first_shades(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    raw = multichannel_raw(fixture_raw)
+    raw["lookups"]["networks"][0]["id"] = "espn"  # more telecasts than abc
+    raw["lookups"]["networks"][4]["id"] = "abc"
+    out = guarded_page.evaluate(_ORDER_JS, ["disney", raw])
+    assert out["order"] == ["abc", "espn"]
+    model = _model(guarded_page, "barsModel", {"school": ["northfield"], "by": "network"}, raw)[
+        "model"
+    ]
+    shades = {c["id"]: c["shade"] for s in model["rows"][0]["segments"] for c in s["channels"]}
+    assert shades == {"abc": 0, "espn": 1}
+
+
+def test_chip_lead_order_for_the_fox_family_ignores_counts(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    raw = copy.deepcopy(fixture_raw)
+    nets = raw["lookups"]["networks"]
+    nets[1] = {"id": "fs1", "name": "Synthetic One", "family": "fox"}  # most telecasts
+    nets[2] = {"id": "fox", "name": "Synthetic Fox", "family": "fox"}
+    nets[3] = {"id": "big-ten-network", "name": "Synthetic Big", "family": "fox"}
+    nets.append({"id": "fs2", "name": "Synthetic Two", "family": "fox"})  # not on the chip
+    out = guarded_page.evaluate(_ORDER_JS, ["fox", raw])
+    assert out["order"] == ["fox", "fs1", "big-ten-network", "fs2"]
+
+
+def test_chip_lead_falls_back_to_counts_when_no_chip_network_present(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    out = guarded_page.evaluate(_ORDER_JS, ["disney", multichannel_raw(fixture_raw)])
+    assert out["order"] == ["net-a", "net-e"]
+
+
+def test_chip_lead_constant_covers_every_family(
+    guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
+) -> None:
+    _load(guarded_page, site_url)
+    out = guarded_page.evaluate(_ORDER_JS, ["disney", fixture_raw])
+    assert sorted(out["lead"]) == sorted(out["families"])
+    assert out["lead"]["other"] == []
+    assert out["lead"]["fox"][:2] == ["fox", "fs1"]
+
+
 def test_family_rows_respect_the_role_filter(
     guarded_page: Page, site_url: str, fixture_raw: dict[str, Any]
 ) -> None:
