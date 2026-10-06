@@ -9,8 +9,14 @@ from typing import Any
 import pytest
 from playwright.sync_api import Page
 from test_site_chart import (
+    _RING,
+    _RING_VISIBLE,
+    _assert_ring_on,
     _boxes_overlap,
+    _dot_point,
     _halo_ring_inner_radius,
+    _hover_dot,
+    _inert_dot_point,
     _speckle_count,
 )
 
@@ -518,3 +524,94 @@ def test_every_family_ring_color_clears_three_to_one_on_surface(
     assert all(math.isfinite(v) and v > 1 for v in got.values()), got
     if theme == "light":
         assert got["other"] >= 2.5
+
+
+# ---------------------------------------------------------------------------
+# Pointer behavior (D-04)
+# ---------------------------------------------------------------------------
+
+_MATCHUP_JS = """
+async (i) => {
+  const m = await import('./modules/format.js');
+  return m.formatMatchup(window.__testHooks.data, i, { withScore: true });
+}
+"""
+
+
+def test_hover_ring_diameter_treats_circle_open_as_a_circle(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    got = guarded_page.evaluate(
+        """async () => {
+          const m = await import('./modules/hover-ring.js');
+          return [m.hoverRingDiameter(6, 'circle-open'), m.hoverRingDiameter(10, 'circle-open'),
+                  m.hoverRingDiameter(6, 'star-open') > 14];
+        }"""
+    )
+    assert got == [14, 18, True]
+
+
+def test_test_hooks_expose_rated_and_game_counts(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    assert guarded_page.evaluate("[window.__testHooks.nRated, window.__testHooks.nGames]") == [
+        12,
+        20,
+    ]
+
+
+@pytest.mark.parametrize(("axis_query", "index"), [("", 17), ("?axis=date", 19), ("", 3)])
+def test_hover_ring_is_centered_on_band_and_rated_markers(
+    guarded_page: Page, open_app: Callable[[Page, str], None], axis_query: str, index: int
+) -> None:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    open_app(guarded_page, axis_query)
+    point = _hover_dot(guarded_page, index)
+    guarded_page.wait_for_selector(_RING_VISIBLE, timeout=3000)
+    box = _assert_ring_on(guarded_page, index, point)
+    assert abs(box["width"] - box["height"]) < 0.5
+    if index >= 12:
+        assert box["width"] == pytest.approx(14, abs=0.5)  # circle-open 6 + 8
+    assert guarded_page.is_visible("#chart-tooltip")
+    tip = guarded_page.locator("#chart-tooltip").bounding_box()
+    assert tip is not None
+    assert abs(tip["x"] - point["x"]) < 400
+
+
+def test_tap_on_band_marker_shows_panel_at_360(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(mobile_page, "")
+    point = _dot_point(mobile_page, 13)
+    mobile_page.touchscreen.tap(point["x"], point["y"])
+    mobile_page.wait_for_function("document.getElementById('detail-panel').open")
+    assert mobile_page.inner_text("#panel-title") == mobile_page.evaluate(_MATCHUP_JS, 13)
+
+
+def test_click_on_band_marker_opens_its_modal(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    point = _hover_dot(guarded_page, 16)
+    guarded_page.mouse.click(point["x"], point["y"])
+    guarded_page.wait_for_function("document.getElementById('detail-panel').open")
+    assert guarded_page.inner_text("#panel-title") == guarded_page.evaluate(_MATCHUP_JS, 16)
+
+
+def test_inert_band_marker_has_no_tooltip_and_no_ring(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?school=northfield")
+    inert = [t for t in _traces(guarded_page) if t["meta"].startswith("unrated-inert:")]
+    meta = next(t["meta"] for t in inert if t["x"])
+    guarded_page.mouse.move(5, 5)
+    point = _inert_dot_point(guarded_page, meta, 0)
+    guarded_page.mouse.move(point["x"], point["y"])
+    guarded_page.wait_for_timeout(400)
+    assert guarded_page.is_hidden("#chart-tooltip")
+    assert guarded_page.is_hidden(_RING)
+    guarded_page.mouse.click(point["x"], point["y"])
+    guarded_page.wait_for_timeout(200)
+    assert not guarded_page.evaluate("document.getElementById('detail-panel').open")

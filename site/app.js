@@ -104,8 +104,11 @@ function pointClientPosition(ev) {
     if (point && point.x != null && point.y != null && chartEl._fullLayout) {
       const layout = chartEl._fullLayout;
       const rect = chartEl.getBoundingClientRect();
-      clientX = rect.left + layout._size.l + layout.xaxis.d2p(point.x);
-      clientY = rect.top + layout._size.t + layout.yaxis.d2p(point.y);
+      // Each event point carries its own axes, so y2 (band) points anchor on y2.
+      const xa = point.xaxis ?? layout.xaxis;
+      const ya = point.yaxis ?? layout.yaxis;
+      clientX = rect.left + xa._offset + xa.l2p(xa.d2l(point.x));
+      clientY = rect.top + ya._offset + ya.l2p(ya.d2l(point.y));
     }
   } catch {
     clientX = undefined;
@@ -415,6 +418,8 @@ async function bootstrap() {
       },
       ready: true,
       data,
+      nRated: data.nRated,
+      nGames: data.n,
       getState: () => structuredClone(state),
       getBarsModel: () => structuredClone(lastBarsModel()),
       setState,

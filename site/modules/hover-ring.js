@@ -24,7 +24,7 @@ let ringEl = null;
  * @returns {number}
  */
 export function hoverRingDiameter(size, symbol) {
-  if (symbol == null || symbol === 'circle') return size + 8;
+  if (symbol == null || symbol === 'circle' || symbol === 'circle-open') return size + 8;
   return Math.ceil((size + 3) * Math.SQRT2) + 8;
 }
 

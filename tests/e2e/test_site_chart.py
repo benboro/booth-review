@@ -38,9 +38,11 @@ _DOT_PIXEL_JS = """
     if (!trace.customdata) continue;
     const idx = trace.customdata.indexOf(customdata);
     if (idx === -1) continue;
+    // band (unrated) traces ride y2: use the trace's own y axis offset
+    const ya = layout[trace.yaxis === 'y2' ? 'yaxis2' : 'yaxis'];
     return {
       x: rect.left + layout._size.l + layout.xaxis.d2p(trace.x[idx]),
-      y: rect.top + layout._size.t + layout.yaxis.d2p(trace.y[idx]),
+      y: rect.top + ya._offset + ya.l2p(ya.d2l(trace.y[idx])),
     };
   }
   return null;
@@ -72,7 +74,9 @@ _INERT_DOT_PIXEL_JS = """
   if (!trace || trace.x[index] === undefined) return null;
   return {
     x: rect.left + layout._size.l + layout.xaxis.d2p(trace.x[index]),
-    y: rect.top + layout._size.t + layout.yaxis.d2p(trace.y[index]),
+    y: rect.top + (trace.yaxis === 'y2' ? layout.yaxis2 : layout.yaxis)._offset
+      + (trace.yaxis === 'y2' ? layout.yaxis2 : layout.yaxis).l2p(
+        (trace.yaxis === 'y2' ? layout.yaxis2 : layout.yaxis).d2l(trace.y[index])),
   };
 }
 """
