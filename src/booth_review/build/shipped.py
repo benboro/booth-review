@@ -44,6 +44,22 @@ def left_out_unrated_expr() -> pl.Expr:
     )
 
 
+def select_plotted_shipped(
+    telecasts: pl.DataFrame, sort_keys: list[str]
+) -> tuple[pl.DataFrame, int]:
+    """The plotted rows to ship, one per game: when a game has more than one
+    plotted telecast the first by `sort_keys` is kept (the same order as the
+    unrated dedup), so one duplicate rated row cannot abort the build. Rows
+    with no game_id are all kept. Returns (frame sorted by sort_keys, number
+    of rows dropped).
+    """
+    plotted = telecasts.filter(pl.col("plotted").fill_null(False)).sort(sort_keys, nulls_last=True)
+    kept = plotted.filter(
+        pl.col("game_id").is_null() | (pl.int_range(pl.len()).over("game_id") == 0)
+    )
+    return kept, plotted.height - kept.height
+
+
 def select_unrated_shipped(
     telecasts: pl.DataFrame, sort_keys: list[str]
 ) -> tuple[pl.DataFrame, int]:

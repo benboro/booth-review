@@ -40,6 +40,7 @@ from booth_review.build.shipped import (
     network_rated_counts,
     no_rating_cause,
     rarity_contradictions,
+    select_plotted_shipped,
     select_unrated_shipped,
 )
 from booth_review.config import DataPaths
@@ -203,18 +204,7 @@ def build_site_data(
     check_network_rarity(rarity, network_table)
 
     sort_keys = ["date_et", "kickoff_et", "telecast_id"]
-    plotted = tables.telecasts.filter(pl.col("plotted")).sort(sort_keys, nulls_last=True)
-    repeated_games = (
-        plotted.filter(pl.col("game_id").is_not_null())
-        .group_by("game_id")
-        .len()
-        .filter(pl.col("len") > 1)
-        .height
-    )
-    if repeated_games:
-        raise VaultStateError(
-            f"telecasts: {repeated_games} game(s) have more than one plotted telecast"
-        )
+    plotted, plotted_duplicates_dropped = select_plotted_shipped(tables.telecasts, sort_keys)
     unrated_frame, duplicates_dropped = select_unrated_shipped(tables.telecasts, sort_keys)
     freshness = _build_freshness(tables)
     games_slim = tables.games.select(
@@ -688,6 +678,7 @@ def build_site_data(
         counts["unrated_shipped"] = len(unrated_rows)
         counts["unrated_left_out"] = tables.telecasts.filter(left_out_unrated_expr()).height
         counts["unrated_duplicates_dropped"] = duplicates_dropped
+        counts["plotted_duplicates_dropped"] = plotted_duplicates_dropped
         flagged_rated, unflagged_unrated = rarity_contradictions(
             network_rated_counts(tables.telecasts), rarity
         )

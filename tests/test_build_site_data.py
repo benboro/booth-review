@@ -1657,6 +1657,7 @@ def test_title_game_before_rivalry_game_is_untagged_and_counted(
         "unrated_shipped": 0,
         "unrated_left_out": 0,
         "unrated_duplicates_dropped": 0,
+        "plotted_duplicates_dropped": 0,
         "rarely_rated_but_mostly_rated": 0,
         "not_rarely_rated_but_mostly_unrated": 0,
     }
@@ -1751,6 +1752,7 @@ def test_unrated_block_ships_every_main_feed_game_with_a_network(
     # Main-feed, not plotted, not shipped: only the one with no network.
     assert counts["unrated_left_out"] == 1
     assert counts["unrated_duplicates_dropped"] == 0
+    assert counts["plotted_duplicates_dropped"] == 0
     assert isinstance(counts["rarely_rated_but_mostly_rated"], int)
     assert isinstance(counts["not_rarely_rated_but_mostly_unrated"], int)
 
@@ -1772,18 +1774,25 @@ def test_duplicate_unrated_rows_for_one_game_ship_once(
     assert counts["unrated_duplicates_dropped"] == 1
 
 
-def test_rated_block_repeating_a_game_raises_count_only(
+def test_rated_block_repeating_a_game_keeps_the_first_and_counts_the_rest(
     small_tables: BuildTables, build_reference: Path
 ) -> None:
-    from booth_review.errors import VaultStateError
-
-    plotted = small_tables.telecasts.filter(pl.col("plotted")).head(1)
-    extra = plotted.with_columns(pl.lit("zz-dup").alias("telecast_id"))
+    # R2-WR-01: a second plotted telecast on one game is dropped, not fatal.
+    baseline, _ = _site_with_counts(small_tables, build_reference)
+    plotted = small_tables.telecasts.filter(pl.col("plotted")).sort(
+        ["date_et", "kickoff_et", "telecast_id"], nulls_last=True
+    )
+    # A later telecast (sorts after every original) on the same game.
+    extra = plotted.head(1).with_columns(
+        pl.lit("zzz-dup").alias("telecast_id"),
+        (pl.col("headline_value") + 1).alias("headline_value"),
+    )
     tables = dataclasses.replace(
         small_tables, telecasts=pl.concat([small_tables.telecasts, extra], how="diagonal_relaxed")
     )
-    with pytest.raises(VaultStateError, match=r"1 game\(s\) have more than one plotted telecast"):
-        _site(tables, build_reference)
+    payload, counts = _site_with_counts(tables, build_reference)
+    assert counts["plotted_duplicates_dropped"] == 1
+    assert payload["telecasts"] == baseline["telecasts"]
 
 
 def test_rated_block_is_unchanged_by_unrated_rows(

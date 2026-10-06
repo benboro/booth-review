@@ -956,13 +956,15 @@ def _build(args: argparse.Namespace) -> int:
     )
     if "unrated_shipped" in outcome.counts:
         # D-11, D-13: counts only, never a name.
-        plotted = outcome.counts.get("plotted_telecasts", 0)
+        plotted_dropped = outcome.counts.get("plotted_duplicates_dropped", 0)
+        plotted = outcome.counts.get("plotted_telecasts", 0) - plotted_dropped
         unrated = outcome.counts["unrated_shipped"]
         print(
             f"games {plotted + unrated} shipped ({plotted} rated, {unrated} unrated), "
             f"{outcome.counts.get('unrated_left_out', 0)} unrated left out "
             "(no game or no network), "
             f"{outcome.counts.get('unrated_duplicates_dropped', 0)} duplicate unrated dropped, "
+            f"{plotted_dropped} duplicate rated dropped, "
             f"rarity audit: {outcome.counts.get('rarely_rated_but_mostly_rated', 0)} "
             "flagged but mostly rated, "
             f"{outcome.counts.get('not_rarely_rated_but_mostly_unrated', 0)} "

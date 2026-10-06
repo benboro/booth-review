@@ -56,7 +56,9 @@ figure is kept in the build's processed tables but never makes a game rated in v
 such a game ships as unrated (cause `none`). A game whose network did not resolve ships
 in neither block, and the contract rejects an unrated row whose network is `unmapped`.
 
-A game ships once. When a game has a rated row, that row wins and no unrated row of the
+A game ships once. When a game has more than one rated row, the first by date, kickoff
+and telecast ships and the build summary counts the rows it dropped
+(`plotted_duplicates_dropped`). When a game has a rated row, that row wins and no unrated row of the
 game ships. Otherwise the first unrated main-feed telecast of the game, by date, kickoff
 and telecast, ships, and the build summary counts the rows it dropped. The contract
 rejects a payload in which a game's date, away team and home team appear more than once

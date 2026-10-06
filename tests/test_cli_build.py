@@ -271,6 +271,7 @@ def test_build_summary_prints_games_line_counts_only(
         r"games \d+ shipped \(\d+ rated, \d+ unrated\), "
         r"\d+ unrated left out \(no game or no network\), "
         r"\d+ duplicate unrated dropped, "
+        r"\d+ duplicate rated dropped, "
         r"rarity audit: \d+ flagged but mostly rated, \d+ unflagged but mostly unrated",
         line,
     )
