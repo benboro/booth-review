@@ -1,7 +1,8 @@
 /**
  * Bars and Butterfly counting core (SITE-33..36, D-01..D-18). DOM-free;
- * imports only from ./select.js and ./palette.js. Every value is a count of rated telecasts
- * (D-01): this module never reads `viewers` and no model carries one.
+ * imports only from ./select.js and ./palette.js. Every value is a count of games, rated and
+ * unrated, with `rated` carried beside each count for the split (04.13 D-15): this module
+ * never reads `viewers` and no model carries one.
  *
  * Games counted are exactly those passing every filter, narrowed to the
  * person-matched games when someone is selected (D-02). Crew matching goes
@@ -235,17 +236,20 @@ function countAnnouncers(
       if (personOnGame(data, i, entry.person, role) == null) continue;
       let rec = acc.get(entry.person);
       if (!rec) {
-        rec = { count: 0, main: new Set(), alt: new Set(), nets: new Map(), fams: new Map() };
+        rec = { count: 0, rated: 0, main: new Set(), alt: new Set(), nets: new Map(), fams: new Map() };
         acc.set(entry.person, rec);
       }
       rec.count += 1;
+      const isRated = data.rated[i] === 1 ? 1 : 0;
+      rec.rated += isRated;
       if (withMainFamily) {
         const fam = familyKey(data.lookups.networks[data.t.network[i]].family);
         rec.fams.set(fam, (rec.fams.get(fam) ?? 0) + 1);
       }
       if (withChannels) {
         const net = data.t.network[i];
-        rec.nets.set(net, (rec.nets.get(net) ?? 0) + 1);
+        const cur = rec.nets.get(net) ?? { count: 0, rated: 0 };
+        rec.nets.set(net, { count: cur.count + 1, rated: cur.rated + isRated });
       }
       for (const e of data.t.crew[i]) {
         if (e.person !== entry.person) continue;
@@ -264,15 +268,17 @@ function countAnnouncers(
       label: name,
       roles: orderedRoles(roles),
       count: rec.count,
+      rated: rec.rated,
       target: { kind: 'person', id },
     };
     if (withMainFamily) seg.mainFamily = mainFamilyOf(rec.fams);
     if (withChannels) {
       const order = familyChannelOrder(data, family);
-      seg.channels = Array.from(rec.nets, ([net, count]) => ({
+      seg.channels = Array.from(rec.nets, ([net, { count, rated }]) => ({
         id: data.lookups.networks[net].id,
         name: data.lookups.networks[net].name,
         count,
+        rated,
         shade: order.indexOf(net),
       })).sort((a, b) => a.shade - b.shade);
     }
@@ -284,19 +290,24 @@ function countAnnouncers(
 /** Counts schools over `games` (each side once; a team playing itself counts once). */
 function countTeams(data, games) {
   const acc = new Map();
-  const bump = (idx) => acc.set(idx, (acc.get(idx) ?? 0) + 1);
+  const bump = (idx, isRated) => {
+    const cur = acc.get(idx) ?? { count: 0, rated: 0 };
+    acc.set(idx, { count: cur.count + 1, rated: cur.rated + isRated });
+  };
   for (const i of games) {
-    bump(data.t.home_team[i]);
-    if (data.t.away_team[i] !== data.t.home_team[i]) bump(data.t.away_team[i]);
+    const isRated = data.rated[i] === 1 ? 1 : 0;
+    bump(data.t.home_team[i], isRated);
+    if (data.t.away_team[i] !== data.t.home_team[i]) bump(data.t.away_team[i], isRated);
   }
   const segments = [];
-  for (const [idx, count] of acc) {
+  for (const [idx, { count, rated }] of acc) {
     const name = data.lookups.teams[idx].name;
     segments.push({
       key: `t:${data.teamSlugs[idx]}`,
       name,
       label: name,
       count,
+      rated,
       target: { kind: 'team', slug: data.teamSlugs[idx] },
     });
   }
@@ -313,6 +324,7 @@ function announcerRows(data, games, role) {
     family: null,
     mainFamily: s.mainFamily,
     total: s.count,
+    rated: s.rated,
     target: s.target,
     segments: [],
   }));
@@ -328,6 +340,7 @@ function teamRows(data, games) {
     family: null,
     mainFamily: null,
     total: s.count,
+    rated: s.rated,
     target: s.target,
     segments: [],
   }));
@@ -345,6 +358,7 @@ function familyRows(data, games, role, view) {
   for (const [family, list] of byFamily) {
     const segments = countAnnouncers(data, list, role, { withChannels: true, family });
     const total = segments.reduce((sum, s) => sum + s.count, 0);
+    const rated = segments.reduce((sum, s) => sum + s.rated, 0);
     if (total === 0) continue;
     const label = FAMILY_LABELS[family];
     rows.push({
@@ -355,6 +369,7 @@ function familyRows(data, games, role, view) {
       family,
       mainFamily: null,
       total,
+      rated,
       shadeCount: familyChannelOrder(data, family).length,
       target: { kind: 'family', family, ids: offeredFamilyIds(data, family, view) },
       segments,
@@ -366,7 +381,7 @@ function familyRows(data, games, role, view) {
 /** Stacked team rows: per-game era-correct conferences, each stacked by team (D-15). */
 function conferenceRows(data, games) {
   const byConf = new Map();
-  const add = (confIdx, teamIdx) => {
+  const add = (confIdx, teamIdx, isRated) => {
     const name = confIdx == null ? null : data.lookups.conferences[confIdx].name;
     const key = name == null ? NO_CONFERENCE_KEY : `c:${name}`;
     let rec = byConf.get(key);
@@ -374,22 +389,25 @@ function conferenceRows(data, games) {
       rec = { name, teams: new Map() };
       byConf.set(key, rec);
     }
-    rec.teams.set(teamIdx, (rec.teams.get(teamIdx) ?? 0) + 1);
+    const cur = rec.teams.get(teamIdx) ?? { count: 0, rated: 0 };
+    rec.teams.set(teamIdx, { count: cur.count + 1, rated: cur.rated + isRated });
   };
   for (const i of games) {
-    add(data.t.home_conference[i], data.t.home_team[i]);
-    if (data.t.away_team[i] !== data.t.home_team[i]) add(data.t.away_conference[i], data.t.away_team[i]);
+    const isRated = data.rated[i] === 1 ? 1 : 0;
+    add(data.t.home_conference[i], data.t.home_team[i], isRated);
+    if (data.t.away_team[i] !== data.t.home_team[i]) add(data.t.away_conference[i], data.t.away_team[i], isRated);
   }
   const rows = [];
   for (const [key, rec] of byConf) {
     const segments = [];
-    for (const [idx, count] of rec.teams) {
+    for (const [idx, { count, rated }] of rec.teams) {
       const name = data.lookups.teams[idx].name;
       segments.push({
         key: `t:${data.teamSlugs[idx]}`,
         name,
         label: name,
         count,
+        rated,
         target: { kind: 'team', slug: data.teamSlugs[idx] },
       });
     }
@@ -407,6 +425,7 @@ function conferenceRows(data, games) {
       family: null,
       mainFamily: null,
       total: segments.reduce((sum, s) => sum + s.count, 0),
+      rated: segments.reduce((sum, s) => sum + s.rated, 0),
       target,
       segments,
     });
@@ -499,7 +518,7 @@ export function butterflyModel(data, view, state) {
   const left = spec.build(sets[0]);
   const right = spec.build(sets[1]);
   const rows = new Map();
-  const empty = { total: 0, segments: [] };
+  const empty = { total: 0, rated: 0, segments: [] };
   for (const [side, list] of [[0, left], [1, right]]) {
     for (const row of list) {
       let merged = rows.get(row.key);
@@ -512,14 +531,16 @@ export function butterflyModel(data, view, state) {
           family: row.family,
           mainFamily: spec.rowKind === 'person' ? (unionByKey.get(row.key)?.mainFamily ?? null) : null,
           total: 0,
+          rated: 0,
           target: row.target,
           sides: [{ ...empty }, { ...empty }],
         };
         if (row.shadeCount != null) merged.shadeCount = row.shadeCount;
         rows.set(row.key, merged);
       }
-      merged.sides[side] = { total: row.total, segments: row.segments };
+      merged.sides[side] = { total: row.total, rated: row.rated, segments: row.segments };
       merged.total += row.total;
+      merged.rated += row.rated;
     }
   }
   return {
