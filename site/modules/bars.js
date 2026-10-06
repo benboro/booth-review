@@ -12,7 +12,7 @@
  * mirrors the Bars rows for exactly two schools or two announcers.
  * Stacked announcer rows are one per network family (D-23, superseding D-15's
  * per-channel rows): segments are announcers, each carrying per-channel counts
- * and a stable `shade` index (`familyChannelOrder`); a `family` row's drill
+ * and a stable `shade` index (`familyChannelOrder`, chip-named networks first); a `family` row's drill
  * target sets Networks to the family's offered channels (`offeredFamilyIds`).
  * `chartContext` decides which tabs apply and the Group-by (D-07, D-11) and
  * `drillPatch` builds the setState patch for a row/segment click (D-18).
@@ -20,7 +20,7 @@
  * most of the announcer's counted games, over both sides on the Butterfly.
  */
 
-import { FAMILY_LABELS, FAMILY_ORDER, familyKey } from './palette.js';
+import { FAMILY_CHANNEL_LEAD, FAMILY_LABELS, FAMILY_ORDER, familyKey } from './palette.js';
 import { MAX_COMPARE, offeredFamilyIds, personOnGame } from './select.js';
 
 /** Rows shown before "show all" (D-03). */
@@ -167,9 +167,11 @@ function byCount(countOf) {
 const channelOrderCache = new WeakMap();
 
 /**
- * A family's primary network indexes ordered by data-wide telecast count
- * (highest first, ties by lookup order), so a channel keeps one shade in every
- * row and filter state (D-23).
+ * A family's primary network indexes: the networks named on the family's
+ * legend chip first, in chip order (FAMILY_CHANNEL_LEAD, so the flagship wears
+ * the chip color), then the rest by data-wide telecast count (highest first,
+ * ties by lookup order). A channel keeps one shade in every row and filter
+ * state (D-23).
  * @param {object} data - a `prepareData` result.
  * @param {string} family - a `familyKey` value.
  * @returns {number[]}
@@ -188,9 +190,14 @@ export function familyChannelOrder(data, family) {
   let order = cache.orders.get(family);
   if (!order) {
     const base = data.networksByFamily.get(family) ?? [];
+    const lead = FAMILY_CHANNEL_LEAD[family] ?? [];
+    const leadRank = (idx) => {
+      const r = lead.indexOf(data.lookups.networks[idx].id);
+      return r < 0 ? lead.length : r;
+    };
     order = base
       .map((idx, pos) => ({ idx, pos, n: cache.counts.get(idx) ?? 0 }))
-      .sort((a, b) => b.n - a.n || a.pos - b.pos)
+      .sort((a, b) => leadRank(a.idx) - leadRank(b.idx) || b.n - a.n || a.pos - b.pos)
       .map((e) => e.idx);
     cache.orders.set(family, order);
   }

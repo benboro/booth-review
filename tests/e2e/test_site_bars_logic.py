@@ -560,6 +560,7 @@ def test_chip_lead_order_for_the_fox_family_ignores_counts(
     nets[2] = {"id": "fox", "name": "Synthetic Fox", "family": "fox"}
     nets[3] = {"id": "big-ten-network", "name": "Synthetic Big", "family": "fox"}
     nets.append({"id": "fs2", "name": "Synthetic Two", "family": "fox"})  # not on the chip
+    raw["telecasts"]["network"][11] = 5  # networks with no telecast are not listed
     out = guarded_page.evaluate(_ORDER_JS, ["fox", raw])
     assert out["order"] == ["fox", "fs1", "big-ten-network", "fs2"]
 

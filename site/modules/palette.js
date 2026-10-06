@@ -45,6 +45,26 @@ export const FAMILY_LABELS = {
 };
 
 /**
+ * Networks named on each family's legend chip (FAMILY_LABELS), as network_ids
+ * in chip order. Channel sub-shading gives these the first shades in this
+ * order, so the flagship always wears the chip's own color (shade 0) and a
+ * channel's shade does not move when counts shift (unrated games made FS1
+ * outnumber FOX); every other channel follows by data-wide game count. A
+ * change to FAMILY_LABELS must update this list.
+ * @type {Readonly<Record<string, readonly string[]>>}
+ */
+export const FAMILY_CHANNEL_LEAD = Object.freeze({
+  disney: Object.freeze(['abc', 'espn']),
+  fox: Object.freeze(['fox', 'fs1', 'big-ten-network']),
+  cbs: Object.freeze(['cbs', 'cbs-sports-network']),
+  nbc: Object.freeze(['nbc', 'peacock']),
+  cw: Object.freeze(['cw']),
+  wbd: Object.freeze(['tbs', 'tnt']),
+  conference: Object.freeze(['pac-12-network', 'mountain-west-network']),
+  other: Object.freeze([]),
+});
+
+/**
  * WCAG-AA text color per family, same in both themes (D-04, SITE-26): only
  * `disney` and `conference` clear 4.5:1 with white; every other family
  * clears it with black. Verified against the real sRGB relative-luminance
