@@ -646,11 +646,12 @@ def test_non_network_bars_are_violet(
     )
     out = _figure(guarded_page, site_url, partial, fn, {**_DESKTOP, "theme": theme})
     colors: set[str] = set()
-    for trace in out["figure"]["traces"]:
+    pieces = [t for t in out["figure"]["traces"] if t["xaxis"] in ("x", "x2")]
+    for trace in pieces:
         hexes = {c for c in trace["marker"]["color"] if c.startswith("#")}
         colors |= hexes
-        if not hexes:  # an unrated part: 25% fill, border in the full tone (D-15)
-            assert set(trace["marker"]["line"]["color"]) <= {tones["a"], tones["b"]}
+        # every piece has a 1.5px border in its full tone, rated or not (04.13 notes-2 #2)
+        assert set(trace["marker"]["line"]["color"]) <= {tones["a"], tones["b"]}
     assert colors <= {tones["a"], tones["b"]}
     assert colors
     assert not colors & {tones["ma"], tones["mb"]}
@@ -678,14 +679,38 @@ def test_violet_text_contrast(guarded_page: Page, site_url: str, theme: str) -> 
         {"people": ["kris-venn"], "by": "conference"},
         env={**_DESKTOP, "theme": theme},
     )
-    texted = [t for t in out["figure"]["traces"] if "textfont" in t]  # rated layers only
-    assert texted
-    for k, trace in enumerate(texted):
-        assert set(trace["textfont"]["color"]) == {expected[k % 2]}
+    # Part-text traces, two per segment rank (rated part, unrated part): the label is on
+    # the wider part only, in a color readable on that part (WR-02).
+    texted = [t for t in out["figure"]["traces"] if t["xaxis"] == "x5"]
+    assert texted and len(texted) % 2 == 0
+    blends = guarded_page.evaluate(
+        """async (theme) => {
+          const P = await import('./modules/palette.js');
+          const a = P.mixHex(P.SPECIAL[theme], P.PAGE_BG[theme], 0.25);
+          const b = P.mixHex(P.mixHex(P.SPECIAL[theme], P.PAGE_BG[theme], 0.55),
+                             P.PAGE_BG[theme], 0.25);
+          return [a, b].map((h) => ({ black: P.contrastRatio(h, '#000000'),
+                                      white: P.contrastRatio(h, '#FFFFFF') }));
+        }""",
+        theme,
+    )
+    seen = 0
+    for i, trace in enumerate(texted):
+        k = i // 2
+        for text, color in zip(trace["text"], trace["textfont"]["color"], strict=True):
+            if not text:
+                continue
+            seen += 1
+            if i % 2 == 0:
+                assert color == expected[k % 2]
+            else:
+                ratios = blends[k % 2]
+                assert ratios["black" if color == "#000000" else "white"] >= 4.5
+    assert seen
     assert all(
         not t.get("text") or not any(t["text"])
         for t in out["figure"]["traces"]
-        if "textfont" not in t
+        if t["xaxis"] != "x5"
     )
 
 
@@ -732,7 +757,13 @@ def test_simple_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
     # (the crews of the unrated FOX games take the FOX family's green)
     assert set(rated["marker"]["color"]) == {"#0072B2", "#009E73"}
     assert set(unrated["marker"]["color"]) == {"rgba(0,114,178,0.25)", "rgba(0,158,115,0.25)"}
-    assert unrated["marker"]["line"] == {"width": 1.5, "color": rated["marker"]["color"]}
+    # Both parts carry a 1.5px border in the full tone, so they look equally thick (notes-2 #2);
+    # a zero-length part has border width 0.
+    for trace, xs in ((rated, rated["x"]), (unrated, unrated["x"])):
+        assert trace["marker"]["line"] == {
+            "width": [1.5 if v > 0 else 0 for v in xs],
+            "color": rated["marker"]["color"],
+        }
     assert "text" not in unrated and "text" not in rated
     assert rated["hoverinfo"] == unrated["hoverinfo"] == "none"
     assert not rated["showlegend"] and not unrated["showlegend"]
@@ -753,6 +784,14 @@ def test_simple_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
     assert "transition" not in layout
 
 
+def _plain_walk(row: dict[str, Any], i: int, figure: dict[str, Any], axis: str) -> list[Any]:
+    """Row `i`'s pieces on `axis` as (length, border tone, unrated?), in drawing order."""
+    return [
+        (t["x"][i], t["marker"]["line"]["color"][i], t["marker"]["color"][i].startswith("rgba("))
+        for t in _on(figure, axis)
+    ]
+
+
 def test_stacked_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
     out = _figure(guarded_page, site_url, {"people": ["kris-venn"], "by": "conference"})
     figure, rows = out["figure"], out["model"]["rows"]
@@ -760,30 +799,35 @@ def test_stacked_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
     assert layout["barmode"] == "stack"
     assert layout["uniformtext"] == {"mode": "hide", "minsize": 14}
     depth = max(len(r["segments"]) for r in rows)
-    assert len(figure["traces"]) == 2 * depth  # rated layers, then unrated layers (D-15)
-    for k, un in enumerate(figure["traces"][depth:]):
-        tone = "#7C3AED" if k % 2 == 0 else "#B793F5"
-        assert un["marker"]["line"] == {"width": 1.5, "color": [tone] * len(rows)}
-        assert not any(un["text"])
+    overlays, texts = _on(figure, "x3"), _on(figure, "x5")
+    assert (len(overlays), len(texts)) == (depth, 2 * depth)
+    for i, row in enumerate(rows):
+        want = []
+        for k, seg in enumerate(row["segments"]):  # each segment: rated part, then unrated part
+            tone = "#7C3AED" if k % 2 == 0 else "#B793F5"
+            want += [(seg["rated"], tone, False), (seg["count"] - seg["rated"], tone, True)]
+        got = _plain_walk(row, i, figure, "x")
+        assert got[: len(want)] == want
+        assert all(w == 0 for w, _, _ in got[len(want) :])
+    for k, trace in enumerate(overlays):
+        assert trace["marker"]["line"] == {"width": 3, "color": "#FFFFFF"}  # D-28
+        assert not any(trace.get("text", []))
         for i, row in enumerate(rows):
             seg = row["segments"][k] if k < len(row["segments"]) else None
-            assert un["x"][i] == (seg["count"] - seg["rated"] if seg else 0)
-            assert un["customdata"][i] == ({"r": i, "s": k, "side": None} if seg else None)
-    for k, trace in enumerate(figure["traces"][:depth]):
-        assert set(trace["marker"]["color"]) == {"#7C3AED" if k % 2 == 0 else "#B793F5"}
-        assert trace["marker"]["line"] == {"width": 3, "color": "#FFFFFF"}  # D-28
+            assert trace["x"][i] == (seg["count"] if seg else 0)
+            assert trace["customdata"][i] == ({"r": i, "s": k, "side": None} if seg else None)
+    for k in range(depth):  # the label sits on the wider part, never both (WR-02)
+        rated_t, unrated_t = texts[2 * k], texts[2 * k + 1]
         for i, row in enumerate(rows):
-            if k < len(row["segments"]):
-                assert trace["x"][i] == row["segments"][k]["rated"]
-                assert trace["customdata"][i] == {"r": i, "s": k, "side": None}
-                assert (
-                    trace["text"][i]
-                    == f"{row['segments'][k]['label']} {row['segments'][k]['count']}"
-                )
-            else:
-                assert trace["x"][i] == 0
-                assert trace["customdata"][i] is None
-                assert trace["text"][i] == ""
+            if k >= len(row["segments"]):
+                assert rated_t["text"][i] == unrated_t["text"][i] == ""
+                continue
+            seg = row["segments"][k]
+            label = f"{seg['label']} {seg['count']}"
+            on_rated = seg["rated"] >= seg["count"] - seg["rated"]
+            shown, hidden = (rated_t, unrated_t) if on_rated else (unrated_t, rated_t)
+            assert hidden["text"][i] == ""
+            assert shown["text"][i] in (label, "")  # "" when no text color reaches 4.5:1
     # Non-FBS conference rows have no target, so their labels are not clickable.
     # D-29 appends total annotations after the row labels; those never capture events.
     n = len(rows)
@@ -944,7 +988,7 @@ def test_network_rows_use_family_color(guarded_page: Page, site_url: str) -> Non
     first = out["figure"]["traces"][0]
     # Shade 0 is each row's family color: ABC/ESPN blue, FOX/FS1/BTN green.
     assert set(first["marker"]["color"]) == {"#0072B2", "#009E73"}
-    assert first["marker"]["line"] == {"width": 0}
+    assert set(first["marker"]["line"]["color"]) == {"#0072B2", "#009E73"}  # border in its own tone
 
 
 def test_phone_bar_figure_layout(guarded_page: Page, site_url: str) -> None:
@@ -987,7 +1031,10 @@ def test_butterfly_simple_figure_shape(guarded_page: Page, site_url: str) -> Non
     for side, (rated, unrated) in enumerate(((left, left_un), (right, right_un))):
         assert rated["x"] == [r["sides"][side]["rated"] for r in rows]
         assert unrated["x"] == [r["sides"][side]["total"] - r["sides"][side]["rated"] for r in rows]
-        assert unrated["marker"]["line"]["width"] == 1.5
+        for trace in (rated, unrated):
+            line = trace["marker"]["line"]
+            assert line["width"] == [1.5 if v > 0 else 0 for v in trace["x"]]
+            assert line["color"] == rated["marker"]["color"]
         for i, row in enumerate(rows):
             for trace in (rated, unrated):
                 ref = trace["customdata"][i]
@@ -1019,15 +1066,14 @@ def test_butterfly_stacked_figure_matches_bars_builder(guarded_page: Page, site_
     figure = out["figure"]
     assert figure["layout"]["barmode"] == "stack"
     assert figure["layout"]["uniformtext"] == {"mode": "hide", "minsize": 14}
-    rated = [t for t in figure["traces"] if "textposition" in t]
-    unrated = [t for t in figure["traces"] if "textposition" not in t]
-    assert rated and len(rated) == len(unrated)  # same layers either way (D-15)
-    for trace in rated:
-        assert trace["marker"]["line"] == {"width": 3, "color": "#FFFFFF"}  # D-28
-        assert trace["textposition"] == "inside"
-    for trace in unrated:
-        assert trace["marker"]["line"]["width"] == 1.5
-    assert {t["xaxis"] for t in figure["traces"]} == {"x", "x2"}
+    assert {t["xaxis"] for t in figure["traces"]} == {"x", "x2", "x3", "x4", "x5", "x6"}
+    for overlay in _on(figure, "x3") + _on(figure, "x4"):
+        assert overlay["marker"]["line"] == {"width": 3, "color": "#FFFFFF"}  # D-28
+    for text in _on(figure, "x5") + _on(figure, "x6"):
+        assert text["textposition"] == "inside"
+    for piece in _on(figure, "x") + _on(figure, "x2"):
+        assert piece["hoverinfo"] == "skip"
+        assert piece["marker"]["line"]["width"] == [1.5 if v > 0 else 0 for v in piece["x"]]
 
 
 def test_butterfly_desktop_spine_gap_grows_with_labels(guarded_page: Page, site_url: str) -> None:
@@ -1482,22 +1528,19 @@ _FAM_FLY = {"school": ["northfield", "lakeview"], "by": "network"}
 _TRANSPARENT = "rgba(0,0,0,0)"
 
 
-def _split_traces(figure: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    pieces = [t for t in figure["traces"] if t["hoverinfo"] == "skip"]
-    overlays = [t for t in figure["traces"] if t["hoverinfo"] == "none"]
-    assert len(pieces) + len(overlays) == len(figure["traces"])
-    return pieces, overlays
+def _on(figure: dict[str, Any], axis: str) -> list[dict[str, Any]]:
+    """The traces on `axis`: pieces on x/x2, segment overlays on x3/x4, part text on x5/x6."""
+    return [t for t in figure["traces"] if t["xaxis"] == axis]
 
 
-def _halves(traces: list[dict[str, Any]], axis: str) -> tuple[list[Any], list[Any]]:
-    """The rated and unrated traces on `axis`: always emitted in equal numbers (D-15)."""
-    on = [t for t in traces if t["xaxis"] == axis]
-    assert len(on) % 2 == 0
-    return on[: len(on) // 2], on[len(on) // 2 :]
-
-
-def _nonzero(traces: list[dict[str, Any]], axis: str) -> int:
-    return sum(1 for t in traces if t["xaxis"] == axis for v in t["x"] if v > 0)
+def _nonzero(traces: list[dict[str, Any]], *, unrated: bool) -> int:
+    """Pieces with length, rated (solid hex fill) or unrated (rgba 25% fill)."""
+    return sum(
+        1
+        for t in traces
+        for v, c in zip(t["x"], t["marker"]["color"], strict=True)
+        if v > 0 and c.startswith("rgba(") == unrated
+    )
 
 
 def test_family_stack_figure_shape(
@@ -1505,38 +1548,40 @@ def test_family_stack_figure_shape(
 ) -> None:
     out = _figure(guarded_page, site_url, _FAM_BARS, raw=multichannel)
     figure = out["figure"]
-    pieces, overlays = _split_traces(figure)
-    rated_p, unrated_p = _halves(pieces, "x")
-    rated_o, unrated_o = _halves(overlays, "x3")
-    assert (_nonzero(rated_p, "x"), _nonzero(unrated_p, "x")) == (7, 4)
-    assert (_nonzero(rated_o, "x3"), _nonzero(unrated_o, "x3")) == (5, 4)
-    assert {t["xaxis"] for t in pieces} == {"x"}
-    for t in rated_p:
-        assert t["marker"]["line"]["width"] == 0
+    pieces, overlays, texts = _on(figure, "x"), _on(figure, "x3"), _on(figure, "x5")
+    assert {t["xaxis"] for t in figure["traces"]} == {"x", "x3", "x5"}
+    assert (_nonzero(pieces, unrated=False), _nonzero(pieces, unrated=True)) == (7, 4)
+    segs = out["model"]["rows"][0]["segments"]
+    depth = max(len(r["segments"]) for r in out["model"]["rows"])
+    assert (len(overlays), len(texts)) == (depth, 2 * depth)  # one per rank; rated + unrated part
+    for t in pieces:
+        assert t["hoverinfo"] == "skip" and "customdata" not in t
         assert not any(t.get("text", []))
-    for t in unrated_p:
-        assert t["marker"]["line"]["width"] == 1.5
-        assert not any(t.get("text", []))
-    colors = {c for t in rated_p for c in t["marker"]["color"]}
+        line = t["marker"]["line"]  # 1.5px border in the piece's own shade (notes-2 #2)
+        assert line["width"] == [1.5 if v > 0 else 0 for v in t["x"]]
+    colors = {c for t in pieces for c in t["marker"]["color"] if c.startswith("#")}
     assert colors == {"#0072B2", "#66AAD1", "#009E73"}  # net-a, net-e shade 1, FOX family
-    assert {c for t in unrated_p for c in t["marker"]["line"]["color"]} == colors
+    assert {c for t in pieces for c in t["marker"]["line"]["color"]} == colors
     assert all(
         c.startswith("rgba(") and c.endswith(",0.25)")
-        for t in unrated_p
+        for t in pieces
         for c in t["marker"]["color"]
+        if not c.startswith("#")
     )
-    depth = len(rated_o)
     for k, t in enumerate(overlays):
-        assert t["xaxis"] == "x3"
         assert t["marker"]["color"] == _TRANSPARENT
         assert t["marker"]["line"] == {"width": 3, "color": "#FFFFFF"}  # D-28
-        assert t["customdata"][0] == {"r": 0, "s": k % depth, "side": None}
-    assert not any(any(t["text"]) for t in unrated_o if "text" in t)
+        assert t["customdata"][0] == {"r": 0, "s": k, "side": None}
+        assert t["x"][0] == (segs[k]["count"] if k < len(segs) else 0)
+        assert not any(t.get("text", []))
+    for t in texts:
+        assert t["hoverinfo"] == "skip" and "customdata" not in t
     layout = figure["layout"]
-    x3 = layout["xaxis3"]
-    assert x3["overlaying"] == "x" and x3["anchor"] == "y"
-    assert x3["visible"] is False and x3["fixedrange"] is True
-    assert x3["range"] == layout["xaxis"]["range"]
+    for name in ("xaxis3", "xaxis5"):
+        axis = layout[name]
+        assert axis["overlaying"] == "x" and axis["anchor"] == "y"
+        assert axis["visible"] is False and axis["fixedrange"] is True
+        assert axis["range"] == layout["xaxis"]["range"]
 
 
 def test_family_butterfly_figure_shape(
@@ -1544,26 +1589,31 @@ def test_family_butterfly_figure_shape(
 ) -> None:
     out = _figure(guarded_page, site_url, _FAM_FLY, "butterflyModel", raw=multichannel)
     figure = out["figure"]
-    pieces, overlays = _split_traces(figure)
     counts = [
-        tuple(_nonzero(half, axis) for half in _halves(group, axis))
-        for group, axis in ((pieces, "x"), (pieces, "x2"), (overlays, "x3"), (overlays, "x4"))
+        (_nonzero(_on(figure, axis), unrated=False), _nonzero(_on(figure, axis), unrated=True))
+        for axis in ("x", "x2")
     ]
-    assert counts == [(7, 4), (6, 2), (5, 4), (6, 2)]
-    assert {t["xaxis"] for t in pieces} == {"x", "x2"}
-    assert {t["xaxis"] for t in overlays} == {"x3", "x4"}
-    sides = {
-        t["customdata"][i]["side"]
-        for t in overlays
-        for i in range(len(t["x"]))
-        if t["customdata"][i] is not None
-    }
-    assert sides == {0, 1}
+    assert counts == [(7, 4), (6, 2)]
+    assert {t["xaxis"] for t in figure["traces"]} == {"x", "x2", "x3", "x4", "x5", "x6"}
+    depth = {0: 0, 1: 0}
+    for r in out["model"]["rows"]:
+        for side in (0, 1):
+            depth[side] = max(depth[side], len(r["sides"][side]["segments"]))
+    for side, (over, text) in enumerate((("x3", "x5"), ("x4", "x6"))):
+        assert len(_on(figure, over)) == depth[side]
+        assert len(_on(figure, text)) == 2 * depth[side]
+        sides = {
+            t["customdata"][i]["side"]
+            for t in _on(figure, over)
+            for i in range(len(t["x"]))
+            if t["customdata"][i] is not None
+        }
+        assert sides == {side}
     layout = figure["layout"]
-    assert layout["xaxis3"]["overlaying"] == "x"
-    assert layout["xaxis4"]["overlaying"] == "x2"
-    assert layout["xaxis3"]["range"] == layout["xaxis"]["range"]
-    assert layout["xaxis4"]["range"] == layout["xaxis2"]["range"]
+    assert layout["xaxis3"]["overlaying"] == layout["xaxis5"]["overlaying"] == "x"
+    assert layout["xaxis4"]["overlaying"] == layout["xaxis6"]["overlaying"] == "x2"
+    assert layout["xaxis3"]["range"] == layout["xaxis5"]["range"] == layout["xaxis"]["range"]
+    assert layout["xaxis4"]["range"] == layout["xaxis6"]["range"] == layout["xaxis2"]["range"]
     assert layout["meta"]["rowCount"] == len(out["model"]["rows"])
 
 
@@ -1610,8 +1660,15 @@ def test_trace_count_ignores_whether_unrated_games_exist(
 
 def test_conference_stack_still_uses_stack_traces(guarded_page: Page, site_url: str) -> None:
     out = _figure(guarded_page, site_url, {"people": ["kris-venn"], "by": "conference"})
-    assert "xaxis3" not in out["figure"]["layout"]
-    assert all(t["hoverinfo"] == "none" for t in out["figure"]["traces"])
+    traces = out["figure"]["traces"]
+    # Plain stacked bars use the same three layers as family bars (pieces, segment overlays,
+    # part text) but one violet piece per part, never channel shades.
+    assert {t["xaxis"] for t in traces} == {"x", "x3", "x5"}
+    assert all(t["hoverinfo"] in ("none", "skip") for t in traces)
+    assert {c for t in _on(out["figure"], "x") for c in t["marker"]["line"]["color"]} <= {
+        "#7C3AED",
+        "#B793F5",
+    }
 
 
 def _hex(rgb: str) -> str:
@@ -1626,7 +1683,9 @@ def _row_groups(out: dict[str, Any], fn: str, spine: float) -> dict[tuple[int, i
         yc = (p["t"] + p["b"]) / 2
         row = min(range(out["rowCount"]), key=lambda i: abs(out["centers"][i] - yc))
         side = 0 if fn == "barsModel" or (p["l"] + p["r"]) / 2 < spine else 1
-        kind = "overlay" if p["fo"] == 0 else "piece"
+        kind = "piece" if p["fo"] > 0 else ("overlay" if p["sw"] > 0 else "text")
+        if kind == "text":  # part-text traces draw nothing, only their label
+            continue
         groups.setdefault((row, side), {"piece": [], "overlay": []})[kind].append(p)
     for g in groups.values():
         for lst in g.values():
@@ -1635,16 +1694,13 @@ def _row_groups(out: dict[str, Any], fn: str, spine: float) -> dict[tuple[int, i
 
 
 def _expected_parts(out: dict[str, Any], fn: str) -> dict[tuple[int, int], list[Any]]:
-    """Per (row, side): (segment, rated?) parts in drawing order: every rated part
-    (segment order), then every unrated part (D-15). Zero-width parts are left out."""
+    """Per (row, side): the segments with games, in drawing order. Each segment is one
+    contiguous run: its rated parts, then its unrated parts (WR-02)."""
     exp: dict[tuple[int, int], list[Any]] = {}
     for i, row in enumerate(out["model"]["rows"]):
         sides = [row] if fn == "barsModel" else row["sides"]
         for side, src in enumerate(sides):
-            segs = src["segments"]
-            exp[(i, side)] = [(s, True) for s in segs if s["rated"] > 0] + [
-                (s, False) for s in segs if s["count"] - s["rated"] > 0
-            ]
+            exp[(i, side)] = [s for s in src["segments"] if s["count"] > 0]
     return exp
 
 
@@ -1674,8 +1730,9 @@ def test_rendered_family_segments_align_with_channel_pieces(
     expected = _expected_parts(out, fn)
     n_pieces = sum(len(g["piece"]) for g in groups.values())
     n_over = sum(len(g["overlay"]) for g in groups.values())
-    # 7 + 4 (Bars) and 13 + 6 (Butterfly) pieces; 5 + 4 and 11 + 6 announcer overlays.
-    assert (n_pieces, n_over) == ((11, 9) if fn == "barsModel" else (19, 17))
+    # 7 + 4 (Bars) and 13 + 6 (Butterfly) pieces; one overlay per announcer segment.
+    segment_count = sum(len(segs) for segs in expected.values())
+    assert (n_pieces, n_over) == ((11, segment_count) if fn == "barsModel" else (19, segment_count))
     bg = {"light": "#FFFFFF", "dark": "#14161A"}[theme]
     for key, segs in expected.items():
         if not segs:
@@ -1690,22 +1747,27 @@ def test_rendered_family_segments_align_with_channel_pieces(
         overlays = sorted(g["overlay"], key=lambda p: -p["l"] if rev else p["l"])
         assert len(overlays) == len(segs)
         cursor = 0
-        for (seg, rated), over in zip(segs, overlays, strict=True):
-            chans = _part_channels(seg, rated)
-            mine = pieces[cursor : cursor + len(chans)]
-            cursor += len(chans)
-            assert len(mine) == len(chans)
+        for seg, over in zip(segs, overlays, strict=True):
+            parts = [(True, _part_channels(seg, True)), (False, _part_channels(seg, False))]
+            n = sum(len(chans) for _, chans in parts)
+            mine = pieces[cursor : cursor + n]
+            cursor += n
+            assert len(mine) == n
             assert min(p["l"] for p in mine) == pytest.approx(over["l"], abs=1)
             assert max(p["r"] for p in mine) == pytest.approx(over["r"], abs=1)
-            assert [_hex(p["fill"]) for p in mine] == [shades[c["shade"]] for c in chans]
-            if rated:  # solid
-                assert all(p["fo"] == pytest.approx(1) for p in mine)
-            else:  # 25% fill with a 1.5px border in the channel shade (D-15)
-                assert all(p["fo"] == pytest.approx(0.25) for p in mine)
-                assert [_hex(p["stroke"]) for p in mine] == [shades[c["shade"]] for c in chans]
-                assert all(p["sw"] == pytest.approx(1.5, abs=0.01) for p in mine)
+            at = 0
+            for rated, chans in parts:  # solid parts first, then outlined parts (WR-02)
+                run = mine[at : at + len(chans)]
+                at += len(chans)
+                assert [_hex(p["fill"]) for p in run] == [shades[c["shade"]] for c in chans]
+                # Every part has a 1.5px border in its channel shade (notes-2 #2).
+                assert [_hex(p["stroke"]) for p in run] == [shades[c["shade"]] for c in chans]
+                assert all(p["sw"] == pytest.approx(1.5, abs=0.01) for p in run)
+                want = 1 if rated else 0.25
+                assert all(p["fo"] == pytest.approx(want) for p in run)
             assert _hex(over["stroke"]) == bg
             assert over["sw"] == pytest.approx(2 if width < 600 else 3, abs=0.01)  # D-28
+        assert cursor == len(pieces)
     assert out["shades"][0][0] == "#0072B2"
 
 
@@ -1891,25 +1953,16 @@ def test_rendered_stacked_segment_gaps(
     announcer: list[tuple[int, float]] = []  # (row, x relative to the chart)
     channel: list[tuple[int, float]] = []
     for (row, _side), g in _row_groups(out, fn, spine).items():
-        # Only the solid (rated) block has page-background separators; outlined unrated
-        # parts after it are bordered in their own hue (D-15).
-        solid = [p for p in g["piece"] if p["fo"] > 0.9]
-        if not solid:
-            continue
-        lo, hi = min(p["l"] for p in solid), max(p["r"] for p in solid)
-        segs = (
-            [o for o in g["overlay"] if o["l"] >= lo - 1 and o["r"] <= hi + 1]
-            if g["overlay"]
-            else solid
-        )
+        # Page-background separators sit between segments only (overlay edges); channel
+        # pieces inside one segment's solid run stay flush (D-28).
+        segs = g["overlay"]
         edges = [(a["r"] + b["l"]) / 2 for a, b in pairwise(segs)]
         announcer += [(row, e - out["gdLeft"]) for e in edges]
-        if g["overlay"]:
-            pieces = solid
-            for a, b in pairwise(pieces):
-                e = (a["r"] + b["l"]) / 2
-                if all(abs(e - x) > 2 for x in edges):
-                    channel.append((row, e - out["gdLeft"]))
+        for a, b in pairwise(sorted(g["piece"], key=lambda p: p["l"])):
+            e = (a["r"] + b["l"]) / 2
+            flush = abs(b["l"] - a["r"]) < 1 and a["fo"] > 0.9 and b["fo"] > 0.9
+            if flush and all(abs(e - x) > 2 for x in edges):
+                channel.append((row, e - out["gdLeft"]))
     assert announcer
     assert channel or not multi
     png = guarded_page.locator("#test-bars").screenshot()

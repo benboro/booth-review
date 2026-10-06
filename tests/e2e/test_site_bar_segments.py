@@ -32,11 +32,12 @@ async ([fn, model, rows, env]) => {
 _PALETTE_JS = """
 async ([theme, family, shadeCount, tones]) => {
   const P = await import('./modules/palette.js');
+  const F = await import('./modules/bar-chart.js');
   const bg = P.PAGE_BG[theme];
   return {
     bg,
     shades: family ? P.channelShades(family, theme, shadeCount) : null,
-    tone: (family == null) ? P.barTones({ family: null }, theme) : null,
+    tone: (family == null) ? F.barTones({ family: null }, theme) : null,
     readable: tones.map((list) => P.readableTextOnAll(list)),
     blend: tones.map((list) => list.map((t) => P.mixHex(t, bg, 0.25))),
   };
@@ -502,3 +503,34 @@ def test_rendered_rated_and_unrated_parts_are_equally_thick(
     for p in hollow:
         assert p["sw"] == pytest.approx(1.5, abs=0.01)
     assert abs(max(p["h"] for p in solid) - max(p["h"] for p in hollow)) <= 0.5
+
+
+def test_rendered_zero_rated_single_channel_segment_paints_no_sliver(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """A segment whose only channel has no rated games draws only its unrated part."""
+    open_app(guarded_page, "")
+    out = guarded_page.evaluate(
+        """async () => {
+          const F = await import('./modules/bar-chart.js');
+          const mk = (key, count, rated) => ({ key, label: key, count, rated, target: null,
+            channels: [{ id: 'c', name: 'c', count, rated, shade: 0 }] });
+          const row = { key: 'f', label: 'F', family: 'disney', total: 5, shadeCount: 1,
+                        target: null, segments: [mk('A', 3, 3), mk('B', 2, 0)] };
+          const fig = F.buildBarFigure({ mode: 'stacked', rowKind: 'family' }, [row],
+            { theme: 'light', mobile: false, revision: 1, width: 700 });
+          const gd = document.createElement('div');
+          gd.style.width = '700px';
+          document.body.appendChild(gd);
+          await F.renderBars(gd, fig);
+          return Array.from(gd.querySelectorAll('.bars .point path')).map((el) => {
+            const r = el.getBoundingClientRect();
+            const cs = getComputedStyle(el);
+            return { w: r.width, fo: Number(cs.fillOpacity),
+                     sw: Number.parseFloat(cs.strokeWidth) || 0, stroke: cs.stroke };
+          });
+        }"""
+    )
+    thin = [p for p in out if p["w"] <= 0.5 and p["fo"] > 0]
+    assert all(p["sw"] == 0 or p["stroke"] == "none" for p in thin)
+    assert [round(p["fo"], 2) for p in out if p["w"] > 0.5 and p["fo"] > 0] == [1, 0.25]
