@@ -1327,7 +1327,7 @@ def test_cause_wording_and_format_viewers_null(guarded_page: Page, site_url: str
     assert r["fv"] == "No public rating"
 
 
-def test_scatter_draws_only_rated_dots(guarded_page: Page, site_url: str) -> None:
-    """Until the band exists the figure holds exactly the rated dots."""
+def test_scatter_draws_rated_dots_and_band_rings(guarded_page: Page, site_url: str) -> None:
+    """The figure holds every rated dot plus one band ring per unrated game."""
     _load(guarded_page, site_url)
-    assert guarded_page.evaluate(_FIGURE_JS) == FIXTURE_RATED
+    assert guarded_page.evaluate(_FIGURE_JS) == FIXTURE_GAMES
