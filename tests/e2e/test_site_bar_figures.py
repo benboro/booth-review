@@ -2023,3 +2023,53 @@ def test_rendered_unrated_part_click_resolves_like_the_rated_part(
     assert ev["clicks"] and ev["hovers"], ev
     assert ev["clicks"][0] == {"r": row, "s": -1, "side": None}
     assert ev["hovers"][-1] == ev["clicks"][0]
+
+
+_SPLIT_JS = """() => {
+  const gd = document.getElementById('bars-chart');
+  const sums = {};
+  let negative = 0;
+  for (const t of gd.data) {
+    if (t.xaxis !== 'x' && t.xaxis !== 'x2') continue; // the overlay axes carry no extra games
+    sums[t.xaxis] ??= t.y.map(() => 0);
+    t.x.forEach((v, i) => { sums[t.xaxis][i] += v; if (v < 0) negative += 1; });
+  }
+  const totals = {};
+  for (const a of gd.layout.annotations) {
+    if (a.name !== 'total') continue;
+    (totals[a.xref] ??= {})[a.y] = Number(a.text);
+  }
+  const keyCaptions = Array.from(document.querySelectorAll('#bars-captions .caption'))
+    .filter((el) => el.textContent.startsWith('Solid bars') && el.getClientRects().length > 0);
+  return { sums, totals, negative, keyCount: keyCaptions.length,
+           scrollWidth: gd.scrollWidth, clientWidth: gd.clientWidth,
+           title: gd.layout.xaxis.title.text };
+}"""
+
+
+@pytest.mark.parametrize("size", [(360, 800), (1280, 900)], ids=["phone", "desktop"])
+@pytest.mark.parametrize(
+    "query",
+    ["?school=northfield&view=bars", "?school=northfield,lakeview&view=butterfly"],
+    ids=["bars", "butterfly"],
+)
+def test_rendered_split_adds_up_at_phone_and_desktop_widths(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    size: tuple[int, int],
+    query: str,
+) -> None:
+    """D-15: no negative parts, rated + unrated == total per row, one key, no overflow."""
+    guarded_page.set_viewport_size({"width": size[0], "height": size[1]})
+    open_app(guarded_page, query)
+    guarded_page.wait_for_selector("#bars-chart .trace.bars .point path")
+    out = guarded_page.evaluate(_SPLIT_JS)
+    assert out["negative"] == 0
+    assert out["title"] == "Games"
+    assert out["keyCount"] == 1
+    assert out["scrollWidth"] <= out["clientWidth"]
+    assert out["sums"]
+    for axis, sums in out["sums"].items():
+        for i, total in enumerate(sums):
+            if total > 0:
+                assert out["totals"].get(axis, {}).get(str(i), out["totals"][axis].get(i)) == total
