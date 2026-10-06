@@ -47,7 +47,9 @@ export function ensureBarOutlineEl() {
 }
 
 /**
- * Outlines the referenced segment's group.
+ * Outlines the referenced segment's group. `rows` must be the drawn
+ * `lastShownRows` order, and the fixed positioning relies on `clearHover`
+ * running on scroll and resize.
  * @param {HTMLElement} gd the Plotly graph div
  * @param {object[]} rows the drawn model rows (same order as the y categories)
  * @param {{r: number, s: number, side?: number|null}} ref

@@ -88,8 +88,9 @@ const PHONE_BARS_THICKNESS = 22;
 const PHONE_FLY_PITCH = 64;
 const PHONE_FLY_THICKNESS = 32;
 // D-28: a page-background stroke centered on each segment edge leaves a gap as
-// wide as the stroke; channel pieces inside one announcer keep line width 0 so
-// they stay flush. Supersedes D-16's 1px separators.
+// wide as the stroke. That separator stroke belongs to the x3 overlay; every
+// non-empty channel piece carries its own 1.5px tone border, and only
+// zero-width pieces get line width 0. Supersedes D-16's 1px separators.
 const SEGMENT_GAP = { desktop: 3, phone: 2 };
 const LABEL_LINE = 18;
 const LABEL_GAP = 2;
