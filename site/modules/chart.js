@@ -241,6 +241,8 @@ export function buildFigure(data, view, state, env) {
       if (highlightSet.has(i)) continue;
       if (outOfSeasons(i)) continue;
       const x = xOf(i);
+      // 04.13: unrated games go to the No public rating band (plan 07); the log-axis traces hold rated games only
+      if (!data.rated[i]) continue;
       const y = data.t.viewers[i];
       if (view.passesFilters[i]) {
         active.x.push(x);
@@ -332,6 +334,8 @@ export function buildFigure(data, view, state, env) {
   for (const i of highlighted) {
     if (outOfSeasons(i)) continue;
     const x = xOf(i);
+    // 04.13: unrated games go to the No public rating band (plan 07); the log-axis traces hold rated games only
+    if (!data.rated[i]) continue;
     const y = data.t.viewers[i];
     hx.push(x);
     hy.push(y);

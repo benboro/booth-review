@@ -306,7 +306,33 @@ export function measurementLabel(type) {
  * @returns {string} e.g. "3,200,000".
  */
 export function formatViewers(n) {
+  if (n == null) return NO_RATING_LABEL;
   return n.toLocaleString('en-US');
+}
+
+/** Label for a game with no public rating (04.13). */
+export const NO_RATING_LABEL = 'No public rating';
+
+/**
+ * Why a game has no public rating, in UI-SPEC wording (04.13 D-10).
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @returns {string|null} null for a rated game.
+ */
+export function causeText(data, i) {
+  const cause = data.t.cause[i];
+  if (cause == null) return null;
+  if (cause === 'rarely_rated') {
+    return `${data.lookups.networks[data.t.network[i]].name} games are rarely rated`;
+  }
+  if (cause === 'pending') return 'viewership not posted yet';
+  if (cause === 'rr_dip') return 'few figures were compiled for 2021–24';
+  return 'no figure was published';
+}
+
+/** Full line: "No public rating · {cause}" (plain text; callers use textContent). */
+export function noRatingLine(data, i) {
+  return `${NO_RATING_LABEL} · ${causeText(data, i)}`;
 }
 
 /**

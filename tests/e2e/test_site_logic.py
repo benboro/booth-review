@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from conftest import FIXTURE_GAMES, FIXTURE_RATED, FIXTURE_UNRATED
 from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
@@ -1113,3 +1114,133 @@ def test_named_game_info_fallbacks(
     round label alone."""
     _load(guarded_page, site_url)
     assert guarded_page.evaluate(_NAMED_VARIANT_JS, [index, field, value]) == expected
+
+
+_MERGE_JS = """
+async () => {
+  const D = await import('./modules/data.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const a = D.prepareData(raw);
+  const b = D.prepareData(raw);
+  const lens = Object.values(a.t).map((c) => c.length);
+  return {
+    n: a.n, nRated: a.nRated, rated: Array.from(a.rated),
+    lensOk: lens.every((l) => l === a.n),
+    viewers: a.t.viewers, rawViewers: raw.telecasts.viewers,
+    rrUrls15: a.t.rr_urls[15], flags15: a.t.flags[15],
+    cause: a.t.cause, jitter: a.jitter, jitter2: b.jitter,
+    rawLen: raw.telecasts.season.length,
+    viewersMin: a.viewersMin, viewersMax: a.viewersMax,
+    xs: a.xRange.spread, xe: a.xRange.excitement,
+    ratedMin: Math.min(...raw.telecasts.viewers.filter((v) => v != null)),
+    ratedMax: Math.max(...raw.telecasts.viewers.filter((v) => v != null)),
+  };
+}
+"""
+
+_MISSING_BLOCK_JS = """
+async () => {
+  const D = await import('./modules/data.js');
+  const raw = await (await fetch('site-data.json')).json();
+  delete raw.telecasts_unrated;
+  try { D.prepareData(raw); return null; } catch (e) { return e.message; }
+}
+"""
+
+_CAUSE_JS = """
+async () => {
+  const D = await import('./modules/data.js');
+  const F = await import('./modules/format.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  return {
+    c: [0, 12, 13, 15, 17, 19].map((i) => F.causeText(data, i)),
+    line: F.noRatingLine(data, 12),
+    fv: F.formatViewers(null),
+  };
+}
+"""
+
+_FIGURE_JS = """
+async () => {
+  const D = await import('./modules/data.js');
+  const S = await import('./modules/select.js');
+  const C = await import('./modules/chart.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  const state = S.defaultState(data);
+  const view = S.computeView(data, state);
+  const fig = C.buildFigure(data, view, state, { theme: 'light', mobile: false, revision: 1 });
+  return fig.traces.reduce((acc, tr) => acc + (Array.isArray(tr.x) ? tr.x.length : 0), 0);
+}
+"""
+
+
+def test_prepare_merges_unrated_block(guarded_page: Page, site_url: str) -> None:
+    """Rated indices stay put; the 8 unrated games append with a rated mask and cause."""
+    _load(guarded_page, site_url)
+    r = guarded_page.evaluate(_MERGE_JS)
+    assert r["n"] == FIXTURE_GAMES
+    assert r["nRated"] == FIXTURE_RATED
+    assert r["rated"] == [1] * FIXTURE_RATED + [0] * FIXTURE_UNRATED
+    assert r["lensOk"]
+    assert r["rawLen"] == FIXTURE_RATED
+    assert r["viewers"][:FIXTURE_RATED] == r["rawViewers"]
+    assert r["viewers"][FIXTURE_RATED:] == [None] * FIXTURE_UNRATED
+    assert r["rrUrls15"] == []
+    assert r["flags15"] == []
+    assert r["cause"][:FIXTURE_RATED] == [None] * FIXTURE_RATED
+    assert r["cause"][FIXTURE_RATED:] == [
+        "none",
+        "rr_dip",
+        "rr_dip",
+        "rarely_rated",
+        "rr_dip",
+        "rarely_rated",
+        "rarely_rated",
+        "pending",
+    ]
+    assert r["viewersMin"] == r["ratedMin"]
+    assert r["viewersMax"] == r["ratedMax"]
+    assert r["xs"] == [-14, 7]
+    assert r["xe"] == [3.0, 9.9]
+
+
+def test_unrated_jitter_is_fixed(guarded_page: Page, site_url: str) -> None:
+    """D-05: jitter is null for rated games, in [0, 1) for unrated, same on every load."""
+    _load(guarded_page, site_url)
+    r = guarded_page.evaluate(_MERGE_JS)
+    assert r["jitter"] == r["jitter2"]
+    assert r["jitter"][:FIXTURE_RATED] == [None] * FIXTURE_RATED
+    tail = r["jitter"][FIXTURE_RATED:]
+    assert all(isinstance(v, float) and 0 <= v < 1 for v in tail)
+    assert len(set(tail)) > 1
+
+
+def test_prepare_rejects_missing_unrated_block(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    msg = guarded_page.evaluate(_MISSING_BLOCK_JS)
+    assert msg is not None
+    assert "telecasts_unrated" in msg
+    assert "v2.2.0" in msg
+
+
+def test_cause_wording_and_format_viewers_null(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    r = guarded_page.evaluate(_CAUSE_JS)
+    assert r["c"] == [
+        None,
+        "no figure was published",
+        "few figures were compiled for 2021\u201324",
+        "Stream Plus games are rarely rated",
+        "Conference Network games are rarely rated",
+        "viewership not posted yet",
+    ]
+    assert r["line"] == "No public rating \u00b7 no figure was published"
+    assert r["fv"] == "No public rating"
+
+
+def test_scatter_draws_only_rated_dots(guarded_page: Page, site_url: str) -> None:
+    """Until the band exists the figure holds exactly the rated dots."""
+    _load(guarded_page, site_url)
+    assert guarded_page.evaluate(_FIGURE_JS) == FIXTURE_RATED

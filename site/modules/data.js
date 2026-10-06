@@ -112,7 +112,6 @@ function spreadX(spread, hp, ap) {
  */
 export function prepareData(raw) {
   const lookups = raw.lookups;
-  const n = raw.telecasts.season.length;
   // home_spread is required since contract v2.0.0 (04.8 D-03).
   if (!Array.isArray(raw.telecasts.home_spread)) {
     throw new Error('site-data.json: telecasts.home_spread is missing (contract v2.0.0)');
@@ -124,18 +123,45 @@ export function prepareData(raw) {
   ) {
     throw new Error('site-data.json: named-game fields are missing (contract v2.1.0)');
   }
-  const homeSpread = raw.telecasts.home_spread;
+  if (!raw.telecasts_unrated || !Array.isArray(raw.telecasts_unrated.cause)) {
+    throw new Error('site-data.json: telecasts_unrated is missing (contract v2.2.0)');
+  }
+  const nRated = raw.telecasts.season.length;
+  const nUnrated = raw.telecasts_unrated.season.length;
+  const n = nRated + nUnrated;
+  // One indexed model (04.13): rated games first (indices 0..nRated-1, the log
+  // axis), then games with no public rating. Built on copies; raw is never mutated.
+  const merged = {};
+  for (const key of Object.keys(raw.telecasts)) {
+    let tail;
+    if (key in raw.telecasts_unrated) {
+      tail = raw.telecasts_unrated[key];
+    } else if (key === 'rr_urls' || key === 'flags') {
+      tail = Array.from({ length: nUnrated }, () => []);
+    } else {
+      tail = new Array(nUnrated).fill(null);
+    }
+    merged[key] = raw.telecasts[key].concat(tail);
+  }
+  merged.cause = new Array(nRated).fill(null).concat(raw.telecasts_unrated.cause);
+  const rated = new Uint8Array(n);
+  rated.fill(1, 0, nRated);
+  // 04.13 D-05: band jitter is fixed per data file, implies no order, and ships
+  // nothing; hashed by the unrated-block index so new rated games never move
+  // band markers.
+  const jitter = new Array(n).fill(null);
+  for (let i = nRated; i < n; i += 1) {
+    jitter[i] = (Math.imul(i - nRated + 1, 2654435761) >>> 0) / 4294967296;
+  }
+  const homeSpread = merged.home_spread;
   const spread = new Array(n);
   for (let i = 0; i < n; i += 1) {
-    spread[i] = spreadX(homeSpread[i], raw.telecasts.home_points[i], raw.telecasts.away_points[i]);
+    spread[i] = spreadX(homeSpread[i], merged.home_points[i], merged.away_points[i]);
   }
-  // Derived column lives on a copy so raw.telecasts is never mutated.
-  const { dateX, axis: dateAxis } = buildDateAxis(
-    raw.telecasts.season,
-    raw.telecasts.date,
-    raw.telecasts.kickoff,
-  );
-  const t = { ...raw.telecasts, spread, dateX };
+  // Derived column lives on a copy so raw.telecasts is never mutated. D-06:
+  // season blocks come from every shipped game.
+  const { dateX, axis: dateAxis } = buildDateAxis(merged.season, merged.date, merged.kickoff);
+  const t = { ...merged, spread, dateX };
 
   const familyOf = new Array(n);
   for (let i = 0; i < n; i += 1) {
@@ -180,6 +206,7 @@ export function prepareData(raw) {
 
   const [viewersMin, viewersMax] = nonNullRange(t.viewers);
 
+  // xRange covers every shipped game: the band sits at the same x.
   const xRange = {
     spread: nonNullRange(spread),
     excitement: nonNullRange(t.excitement),
@@ -283,6 +310,9 @@ export function prepareData(raw) {
   return {
     raw,
     n,
+    nRated,
+    rated,
+    jitter,
     t,
     lookups,
     familyOf,
