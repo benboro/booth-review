@@ -160,9 +160,9 @@ export function naBand(data, axis, plotPx) {
  * fallback mode only -- the default 'html' mode never calls this and never
  * builds a `text` array at all). Built from the same `tooltip.js`
  * `tooltipModel` the default HTML tooltip renders, so the two modes can
- * never drift on content/order: matchup+score, date+kickoff (a named game
- * appends `namedGameInfo().text` -- the rivalry name, the bowl core name, or
- * "core · round" -- as plain text, since this mode can't draw the HTML
+ * never drift on content/order: matchup+score, date+kickoff, then a named
+ * game's `namedGameInfo().text` -- the rivalry name, the bowl core name, or
+ * "core · round" -- as its own line of plain text (notes-2 #6), since this mode can't draw the HTML
  * tooltip's icons -- and emoji glyphs vary by OS; the time-slot label is
  * panel-only, notes-4 A1),
  * slash-delimited networks (primary first, each colored by its own family --
@@ -188,7 +188,8 @@ export function hoverText(data, i, { axis, theme }) {
   const lines = [];
 
   lines.push(`<b>${escapeHover(model.title)}</b>`);
-  lines.push(escapeHover(model.dateLine));
+  lines.push(escapeHover(model.dateText));
+  if (model.gameType) lines.push(escapeHover(model.gameType.text));
 
   // Slash-delimited, primary first, no spaces around '/' (D-25); each name
   // is colored by its own family, standing in for a filled pill (SITE-26).

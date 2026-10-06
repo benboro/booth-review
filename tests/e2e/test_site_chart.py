@@ -1222,6 +1222,47 @@ def test_html_tooltip_cfp_game_at_a_bowl_shows_both_icons(
     assert marker.text_content() == name
 
 
+def test_html_tooltip_named_game_sits_on_its_own_line_under_the_date(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """notes-2 #6: the date child holds only the date and kickoff; a named game
+    (bowl, CFP, rivalry) is the next child, a block element; a regular game has
+    none; the tooltip stays within its fixed max width."""
+    open_app(guarded_page, "")
+    probe = """
+      () => {
+        const kids = [...document.querySelector('#chart-tooltip').children];
+        const date = kids[1];
+        const next = kids[2];
+        const marker = document.querySelector('#chart-tooltip .tooltip-game-type');
+        return {
+          dateText: date.textContent,
+          nextIsMarker: next === marker,
+          display: marker ? getComputedStyle(marker).display : null,
+          leftEdge: marker
+            ? marker.getBoundingClientRect().left - date.getBoundingClientRect().left : null,
+          width: document.querySelector('#chart-tooltip').getBoundingClientRect().width,
+        };
+      }
+    """
+    for index in (7, 5, 0):
+        _hover_dot(guarded_page, index)
+        got = guarded_page.evaluate(probe)
+        assert " \u00b7 " in got["dateText"]  # date and kickoff only, one separator
+        assert got["dateText"].count(" \u00b7 ") == 1
+        assert not any(w in got["dateText"] for w in ("Bowl", "Rivalry", "CFP"))
+        assert got["nextIsMarker"] is True
+        assert got["display"] == "block"
+        assert abs(got["leftEdge"]) < 1
+        assert got["width"] <= 320.5
+
+    _hover_dot(guarded_page, 1)
+    guarded_page.wait_for_function(
+        "document.querySelector('#chart-tooltip .tooltip-title')?.textContent.includes('Foxhollow')"
+    )
+    assert guarded_page.evaluate(probe)["nextIsMarker"] is False
+
+
 def test_html_tooltip_falls_back_to_text_when_an_icon_cannot_be_built(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
@@ -1235,7 +1276,7 @@ def test_html_tooltip_falls_back_to_text_when_an_icon_cannot_be_built(
           const T = await import('./modules/tooltip.js');
           const el = document.createElement('div');
           const model = {
-            title: 't', dateText: 'd', dateLine: 'd',
+            title: 't', dateText: 'd',
             networks: [{ name: 'N', family: 'other' }], crew: [], crewLines: [],
             viewersLine: 'v', axisLine: 'a', hint: 'h',
             gameType: { icons: ['playoff', 'nope'], text: 'Summit Bowl \\u00b7 CFP semifinal' },
@@ -1266,6 +1307,10 @@ def test_plotly_fallback_tooltip_shows_game_type_text_without_slot_label(
     assert "Lakeshore Rivalry" in _hover_text(traces, 0)
     assert "Summit Bowl \u00b7 CFP semifinal" in _hover_text(traces, 5)
     assert "Harbor Bowl" in _hover_text(traces, 7)
+    # notes-2 #6: the named game is its own <br> line, not on the date line.
+    lines = _hover_text(traces, 7).split("<br>")
+    assert "Harbor Bowl" not in lines[1]
+    assert lines[2] == "Harbor Bowl"
 
 
 def test_html_tooltip_hides_on_mouse_out_scroll_and_panel_open(
