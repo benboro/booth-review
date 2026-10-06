@@ -722,7 +722,7 @@ def test_band_note_toggle_escape_outside_and_no_shift(
         "No public rating",
         "We found no published viewer count for these games.",
         "The network is rarely rated, such as ESPN+, CBS Sports Network, or SEC Network.",
-        "Few figures were compiled for 2021–24.",
+        "Few figures were compiled for 2021\u201324.",
         "No figure was published.",
     ):
         assert phrase in text
@@ -754,3 +754,83 @@ def test_band_note_toggle_escape_outside_and_no_shift(
     assert page.is_visible("#band-note")
     page.keyboard.press("Space")
     assert page.is_hidden("#band-note")
+
+
+# ---------------------------------------------------------------------------
+# End to end: band hover / tap -> tooltip -> modal (D-04)
+# ---------------------------------------------------------------------------
+
+_WHY_HREF = "methodology.html#games-with-no-public-rating"
+
+
+@pytest.mark.parametrize(
+    ("axis_query", "index", "line"),
+    [
+        ("", 17, "No public rating · Conference Network games are rarely rated"),
+        ("?axis=date", 19, "No public rating · viewership not posted yet"),
+    ],
+)
+def test_hover_band_marker_shows_cause_tooltip_ring_and_modal(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    axis_query: str,
+    index: int,
+    line: str,
+) -> None:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    open_app(guarded_page, axis_query)
+    point = _hover_dot(guarded_page, index)
+    guarded_page.wait_for_selector(_RING_VISIBLE, timeout=3000)
+    assert line in guarded_page.inner_text("#chart-tooltip")
+    _assert_ring_on(guarded_page, index, point)
+    guarded_page.mouse.click(point["x"], point["y"])
+    guarded_page.wait_for_function("document.getElementById('detail-panel').open")
+    body = guarded_page.locator("#panel-body")
+    assert line in body.inner_text()
+    link = body.locator("a", has_text="Why no rating?")
+    assert (link.get_attribute("href") or "").endswith(_WHY_HREF)
+
+
+def test_tap_band_marker_at_360_shows_cause_line(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(mobile_page, "")
+    point = _dot_point(mobile_page, 13)
+    mobile_page.touchscreen.tap(point["x"], point["y"])
+    mobile_page.wait_for_function("document.getElementById('detail-panel').open")
+    shown = mobile_page.inner_text("#panel-body")
+    assert "No public rating · few figures were compiled for 2021\u201324" in shown
+
+
+def test_compare_faded_unrated_marker_is_inert(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?school=northfield&people=pat-rowan,sam-delgado&mode=compare")
+    inert = [
+        t["meta"]
+        for t in _traces(guarded_page)
+        if t["meta"].startswith("unrated-inert:") and t["x"]
+    ]
+    assert inert, "fixture must leave some unrated games inert under a school filter with compare"
+    guarded_page.mouse.move(5, 5)
+    point = _inert_dot_point(guarded_page, inert[0], 0)
+    guarded_page.mouse.move(point["x"], point["y"])
+    guarded_page.wait_for_timeout(400)
+    assert guarded_page.is_hidden("#chart-tooltip")
+
+
+def test_plotly_tooltip_mode_labels_band_marker_with_cause(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    guarded_page.evaluate("window.__testHooks.setTooltipMode('plotly')")
+    guarded_page.wait_for_function(
+        "document.getElementById('chart').data.at(-1).hovertemplate === '%{text}<extra></extra>'"
+    )
+    point = _dot_point(guarded_page, 12)
+    guarded_page.mouse.move(5, 5)
+    guarded_page.evaluate(_WAIT_TWO_FRAMES)
+    guarded_page.mouse.move(point["x"], point["y"], steps=4)
+    guarded_page.wait_for_selector(".hoverlayer .hovertext", timeout=3000)
+    label = guarded_page.text_content(".hoverlayer .hovertext") or ""
+    assert "No public rating · no figure was published" in label

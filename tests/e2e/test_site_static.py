@@ -133,3 +133,13 @@ def test_chart_page_keeps_its_grid(guarded_page: Page, site_url: str, width: int
     assert "panel" not in collapsed
     assert "selection" in collapsed
     assert "table" in collapsed
+
+
+def test_index_meta_description_names_games_and_public_viewer_counts(
+    guarded_page: Page, site_url: str
+) -> None:
+    """04.13: the description no longer says "rated ... broadcasts"."""
+    guarded_page.goto(f"{site_url}/index.html")
+    content = guarded_page.get_attribute("meta[name=description]", "content") or ""
+    assert "college football games and their public viewer counts" in content
+    assert "rated college football broadcasts" not in content
