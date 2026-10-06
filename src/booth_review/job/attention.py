@@ -210,7 +210,7 @@ def bowls_missing(n: int) -> AttentionItem:
         kind="bowls_missing",
         line=(
             f"postseason games missing a bowls row: {n} "
-            "(plotted as Bowl, add bowls.csv rows and bump the tag)"
+            "(shown as Bowl, add bowls.csv rows and bump the tag)"
         ),
         severity="attention",
     )

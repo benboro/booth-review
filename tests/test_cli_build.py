@@ -254,8 +254,23 @@ def test_build_summary_prints_rivalry_counts_only(
     out = capsys.readouterr().out
     line = next(ln for ln in out.splitlines() if ln.startswith("rivalries: "))
     assert re.fullmatch(
-        r"rivalries: \d+ games tagged \(\d+ plotted telecasts\), "
+        r"rivalries: \d+ games tagged \(\d+ telecasts\), "
         r"title games excluded \d+, rematches demoted \d+",
+        line,
+    )
+
+
+def test_build_summary_prints_games_line_counts_only(
+    build_git_vault: DataPaths, capsys: pytest.CaptureFixture[str]
+) -> None:
+    capsys.readouterr()
+    assert main(["build", "--accept-baseline"]) == 0
+    out = capsys.readouterr().out
+    line = next(ln for ln in out.splitlines() if ln.startswith("games "))
+    assert re.fullmatch(
+        r"games \d+ shipped \(\d+ rated, \d+ unrated\), "
+        r"\d+ unrated left out for no network, "
+        r"rarity audit: \d+ flagged but mostly rated, \d+ unflagged but mostly unrated",
         line,
     )
 

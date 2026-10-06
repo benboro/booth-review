@@ -155,6 +155,12 @@ def test_render_methodology_raises_when_missing(tmp_path: Path) -> None:
         render_methodology(tmp_path, _fixture_site())
 
 
+def test_render_coverage_says_rated_only_and_links_known_gaps() -> None:
+    result = render_coverage(_fixture_site())
+    assert "These counts cover rated games only." in result
+    assert 'href="methodology.html#known-gaps">known gaps</a>' in result
+
+
 def test_render_coverage_table_structure() -> None:
     site = _fixture_site()
     result = render_coverage(site)

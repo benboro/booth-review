@@ -954,12 +954,24 @@ def _build(args: argparse.Namespace) -> int:
         f"join rate {rate:.1f}%, merges {outcome.counts.get('duplicate_merges', 0)}, "
         f"blocked {'yes' if exit_blocked else 'no'}"
     )
+    if "unrated_shipped" in outcome.counts:
+        # D-11, D-13: counts only, never a name.
+        plotted = outcome.counts.get("plotted_telecasts", 0)
+        unrated = outcome.counts["unrated_shipped"]
+        print(
+            f"games {plotted + unrated} shipped ({plotted} rated, {unrated} unrated), "
+            f"{outcome.counts.get('unrated_no_network', 0)} unrated left out for no network, "
+            f"rarity audit: {outcome.counts.get('rarely_rated_but_mostly_rated', 0)} "
+            "flagged but mostly rated, "
+            f"{outcome.counts.get('not_rarely_rated_but_mostly_unrated', 0)} "
+            "unflagged but mostly unrated"
+        )
     if "rivalry_games_tagged" in outcome.counts:
         # D-13: title games excluded via CFBD notes (2022 on) and later meetings
         # demoted by the first-meeting rule. Counts only.
         print(
             f"rivalries: {outcome.counts['rivalry_games_tagged']} games tagged "
-            f"({outcome.counts['rivalry_telecasts_tagged']} plotted telecasts), "
+            f"({outcome.counts['rivalry_telecasts_tagged']} telecasts), "
             f"title games excluded {outcome.counts['rivalry_title_games_excluded']}, "
             f"rematches demoted {outcome.counts['rivalry_rematches_demoted']}"
         )
