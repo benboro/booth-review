@@ -5,10 +5,13 @@
  * pass every filter) and an "inert" trace (dots that fail one, drawn in the
  * family color at the fail tier, D-01/D-02, never hoverable, D-03; Hide mode
  * and Networks leave them undrawn upstream in select.js) --
- * plus (04.13) per-family hollow `unrated-inert:`/`unrated-active:` traces on
- * `yaxis2`, the always-on "No public rating" band under the log axis (D-01),
- * and two highlight overlays -- `highlight-halo-unrated`/`highlight-unrated`
- * (open symbols, D-03) then the rated halo and `highlight`, always last --
+ * plus (04.13) per-family `unrated-inert:`/`unrated-active:` traces on
+ * `yaxis2`, the always-on "No public rating" band under the log axis (D-01):
+ * rings are filled SURFACE circles with a family-colored line (never an open
+ * symbol, whose SDF glyph speckles, notes-2 #1), and with a size filter active
+ * passing unrated games draw like rated dots (notes-2 #5, amends D-03);
+ * two highlight overlays -- `highlight-halo-unrated`/`highlight-unrated`
+ * (styled like the rated highlight) then the rated halo and `highlight`, always last --
  * plus a highlight overlay drawn last, the D-03 n/a strip, log-axis ticks,
  * the UI-SPEC's minimal hover content, and the phone/desktop layout.
  * Plotly's own legend is off everywhere (`showlegend: false`); the HTML
@@ -351,10 +354,20 @@ export function buildFigure(data, view, state, env) {
         line: { width: view.sizeFilterActive ? 1 : 0, color: DOT_OUTLINE },
       },
     });
-    // D-03: hollow rings in the family color. An open symbol draws only its stroke, so the
-    // ring is the outline (no DOT_OUTLINE); a family under 3:1 against SURFACE gets a 2px ring.
+    // D-03 (amended by notes-2 #1/#5): a ring is a filled SURFACE circle with a family-colored
+    // line. A plain circle is drawn analytically, so it stays clean at 6px; the open symbols it
+    // replaces come from the SDF glyph atlas and speckled at real-data density. A family under
+    // 3:1 against SURFACE gets a 2px line.
     const color = FAMILY_COLORS[theme][family];
     const thin = contrastRatio(color, SURFACE[theme]) < 3 ? 2 : 1.5;
+    const ringMarker = (opacity) => ({
+      symbol: 'circle',
+      color: SURFACE[theme],
+      size: 6,
+      opacity,
+      line: { width: thin, color },
+    });
+    const activeOpacity = view.hasPersonSelection ? DOT_OPACITY.activeUnderPerson : DOT_OPACITY.active;
     unratedInertTraces.push({
       type: 'scattergl',
       mode: 'markers',
@@ -365,13 +378,7 @@ export function buildFigure(data, view, state, env) {
       y: uInert.y,
       hoverinfo: 'skip',
       hovertemplate: null,
-      marker: {
-        symbol: 'circle-open',
-        color,
-        size: 6,
-        opacity: view.hasPersonSelection ? DOT_OPACITY.inertUnderPerson : DOT_OPACITY.inert,
-        line: { width: thin, color },
-      },
+      marker: ringMarker(view.hasPersonSelection ? DOT_OPACITY.inertUnderPerson : DOT_OPACITY.inert),
     });
     unratedActiveTraces.push({
       type: 'scattergl',
@@ -386,13 +393,16 @@ export function buildFigure(data, view, state, env) {
       hoverinfo: activeHoverInfo,
       hovertemplate: activeHoverTemplate,
       hoverlabel: { bordercolor: color },
-      marker: {
-        symbol: 'circle-open',
-        color,
-        size: view.sizeFilterActive ? 10 : 6,
-        opacity: view.hasPersonSelection ? DOT_OPACITY.activeUnderPerson : DOT_OPACITY.active,
-        line: { width: view.sizeFilterActive ? 2 : thin, color },
-      },
+      // notes-2 #5 (amends D-03): with a size filter active a passing unrated game draws exactly
+      // like its rated twin (filled 10px family dot, 1px outline); otherwise it stays a ring.
+      marker: view.sizeFilterActive
+        ? {
+            color,
+            size: 10,
+            opacity: activeOpacity,
+            line: { width: 1, color: DOT_OUTLINE },
+          }
+        : ringMarker(activeOpacity),
     });
   }
 
@@ -421,6 +431,7 @@ export function buildFigure(data, view, state, env) {
   const ucolor = [];
   const usize = [];
   const usymbol = [];
+  const ulineWidth = [];
   const uhaloX = [];
   const uhaloY = [];
   const uhaloSymbol = [];
@@ -444,19 +455,20 @@ export function buildFigure(data, view, state, env) {
     const symbol = view.symbols.get(i) ?? 'circle';
     const size = symbol === 'circle' ? 10 : symbol === 'star' ? 15 : 12;
     if (!data.rated[i]) {
-      // 04.13 D-03: open compare shapes in the band; open symbols draw only a stroke, so the
-      // filled halo can't be reused -- non-circles get an open ACCENT halo under them instead.
+      // notes-2 #5: the band's highlighted games draw exactly like rated highlights (filled
+      // compare shapes; circles take the ACCENT line, other shapes the filled ACCENT halo).
       ux.push(x);
       uy.push(data.jitter[i]);
       ucustomdata.push(i);
       if (usePlotlyText) utext.push(hoverText(data, i, hoverOpts));
       ucolor.push(FAMILY_COLORS[theme][data.familyOf[i]]);
-      usymbol.push(`${symbol}-open`);
+      usymbol.push(symbol);
       usize.push(size);
+      ulineWidth.push(symbol === 'circle' ? 1.5 : 0);
       if (symbol !== 'circle') {
         uhaloX.push(x);
         uhaloY.push(data.jitter[i]);
-        uhaloSymbol.push(`${symbol}-open`);
+        uhaloSymbol.push(symbol);
         uhaloSize.push(size + 3);
       }
       continue;
@@ -492,7 +504,7 @@ export function buildFigure(data, view, state, env) {
       size: uhaloSize,
       color: ACCENT[theme],
       opacity: 1,
-      line: { width: 2, color: ACCENT[theme] },
+      line: { width: 0 },
     },
   });
   traces.push({
@@ -513,7 +525,7 @@ export function buildFigure(data, view, state, env) {
       size: usize,
       symbol: usymbol,
       opacity: 1,
-      line: { width: 2, color: ucolor },
+      line: { width: ulineWidth, color: ACCENT[theme] },
     },
   });
   if (haloX.length > 0) {
