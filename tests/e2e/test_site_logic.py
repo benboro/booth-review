@@ -907,7 +907,7 @@ async (summary) => {
         ({"people": ["morgan-ash"]}, "matches", 1, 0),
     ],
 )
-def test_summary_reads_rated_of_games_on_every_view(
+def test_summary_reads_n_of_m_whenever_a_filter_is_active(
     guarded_page: Page,
     site_url: str,
     partial: dict[str, Any],
@@ -999,7 +999,7 @@ def test_head_to_head_selection_label_names_the_matchup(guarded_page: Page, site
     assert "of" not in summary
 
 
-def test_summary_copy_formats_rated_of_games(guarded_page: Page, site_url: str) -> None:
+def test_summary_copy_formats_n_of_m(guarded_page: Page, site_url: str) -> None:
     _load(guarded_page, site_url)
     base = {"kind": "matches", "seasonMin": 2014, "seasonMax": 2025, "networks": ["ESPN", "FOX"]}
     big = {**base, "count": 10583, "rated": 3491, "altCount": 0}
