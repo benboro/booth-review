@@ -182,13 +182,18 @@ def test_a_broad_filter_alone_does_not_grow_the_selection_band(
     assert abs(_y(guarded_page, "#chart-area") - chart_top) <= 0.5
 
 
+@pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
 def test_selection_band_height_is_fixed_on_phone(
     mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
+    # CI renders in DejaVu Sans, where dale-harlow's detail line (two networks since his
+    # unrated game) is wider than a 390px phone; it must stay one line, not grow the band.
     open_app(mobile_page, "")
     y0 = _y(mobile_page, "#chart")
     open_app(mobile_page, "?people=dale-harlow")
     assert abs(_y(mobile_page, "#chart") - y0) <= 0.5
+    detail = mobile_page.locator("#summary-detail")
+    assert detail.get_attribute("title") == detail.inner_text()
 
 
 def test_summary_title_is_smaller(

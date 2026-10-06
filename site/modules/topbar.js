@@ -390,6 +390,8 @@ function renderSummary(view) {
   const { count, detail } = summaryCopy(view.summary);
   els.summaryCount.textContent = count;
   els.summaryDetail.textContent = detail;
+  // The line ends in an ellipsis when it does not fit; the title keeps the full text.
+  els.summaryDetail.title = detail;
 }
 
 /** Syncs every option row's `aria-selected` (checked state) from

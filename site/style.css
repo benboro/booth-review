@@ -434,8 +434,15 @@ li[role="option"][aria-selected="true"] .option-check::after {
   min-height: 1.5em;
 }
 
+/* The detail stays one line and ends in an ellipsis when it does not fit
+   (the full text is in its title), so the band's reserved height holds on a
+   phone in any font: unrated games (04.13) widen a person's network list. */
 #summary-detail {
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* `#filters-button`'s visibility comes from `.mobile-only` below; this rule
