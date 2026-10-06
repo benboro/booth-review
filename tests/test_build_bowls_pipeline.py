@@ -42,20 +42,29 @@ def _game(game_id: int, season: int, game_type: str, note: str | None = None) ->
     return row
 
 
-def _telecast(game_id: int, plotted: bool = True) -> dict[str, object]:
+def _telecast(
+    game_id: int, plotted: bool = True, network_id: str | None = None
+) -> dict[str, object]:
     row: dict[str, object] = dict.fromkeys(TELECASTS_SCHEMA)
-    row.update(telecast_id=f"{game_id}-x", game_id=game_id, plotted=plotted)
+    row.update(
+        telecast_id=f"{game_id}-x",
+        game_id=game_id,
+        plotted=plotted,
+        feed_type="main",
+        network_id=network_id,
+    )
     return row
 
 
-def test_bowl_review_rows_lists_only_missing_plotted_postseason_games() -> None:
+def test_bowl_review_rows_lists_only_missing_shipped_postseason_games() -> None:
     games = pl.DataFrame(
         [
             _game(9, 2025, "bowl", _SENTINEL),
             _game(3, 2024, "playoff"),
             _game(4, 2024, "bowl"),  # has a crosswalk row
             _game(5, 2024, "regular"),
-            _game(6, 2024, "bowl"),  # unplotted
+            _game(6, 2024, "bowl"),  # unrated, no network: not shipped
+            _game(7, 2024, "bowl"),  # unrated, with a network: shipped
         ],
         schema=GAMES_SCHEMA,
     )
@@ -67,13 +76,14 @@ def test_bowl_review_rows_lists_only_missing_plotted_postseason_games() -> None:
             _telecast(4),
             _telecast(5),
             _telecast(6, plotted=False),
+            _telecast(7, plotted=False, network_id="ecn"),
         ],
         schema=TELECASTS_SCHEMA,
     )
     rows = bowl_review_rows(telecasts, games, {4: BowlEntry(None, None, True)})
-    assert [r["cfbd_game_id"] for r in rows] == [3, 9]
+    assert [r["cfbd_game_id"] for r in rows] == [3, 7, 9]
     assert set(rows[0]) == set(REVIEW_BOWLS_COLUMNS)
-    assert rows[1]["raw_note"] == _SENTINEL
+    assert rows[2]["raw_note"] == _SENTINEL
 
 
 def _vault_with_sentinel_note(git_vault: DataPaths, tmp_path: Path, bowls_rows: str) -> Path:
@@ -201,3 +211,23 @@ def test_outcome_counts_carry_the_job_fields_as_ints(git_vault: DataPaths, tmp_p
     assert outcome.counts["current_season"] == 2025
     assert outcome.counts["games_current_season"] > 0
     assert outcome.counts["plotted_current_season"] <= outcome.counts["telecasts_current_season"]
+
+
+def test_network_rarity_review_rows_flags_contradictions_sorted() -> None:
+    from booth_review.build.tables import (
+        REVIEW_NETWORK_RARITY_COLUMNS,
+        network_rarity_review_rows,
+    )
+
+    rows_in = [
+        {**_telecast(i, plotted=False, network_id="aaa"), "rated": i < 2} for i in range(30)
+    ] + [{**_telecast(100 + i, network_id="bbb"), "rated": True} for i in range(3)]
+    telecasts = pl.DataFrame(rows_in, schema=TELECASTS_SCHEMA)
+    rows = network_rarity_review_rows(telecasts, {"aaa": False, "zzz": True})
+    assert [r["network_id"] for r in rows] == ["aaa", "bbb", "zzz"]
+    assert set(rows[0]) == set(REVIEW_NETWORK_RARITY_COLUMNS)
+    assert rows[0]["audit"] == "contradicts"
+    assert rows[0]["rarely_rated"] == "false"
+    assert (rows[0]["main_feed_games"], rows[0]["rated"]) == (30, 2)
+    assert rows[1]["audit"] == "" and rows[1]["rarely_rated"] == ""
+    assert rows[2]["main_feed_games"] == 0 and rows[2]["rarely_rated"] == "true"
