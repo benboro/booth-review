@@ -839,3 +839,24 @@ def test_rivalry_referenced_only_by_an_unrated_row_counts() -> None:
     data["telecasts"]["rivalry"] = [None if r == 0 else r for r in rated]
     data["telecasts_unrated"].update(away_team=[6], home_team=[7], rivalry=[0])
     validate_site_data(data)
+
+
+# --- 04.13 WR-01: a game appears once across both blocks ---
+
+
+def test_game_repeated_across_the_blocks_is_rejected_without_a_cell_value() -> None:
+    data = _with_unrated_row(copy.deepcopy(_load_fixture()))
+    rated = data["telecasts"]
+    for column in ("date", "away_team", "home_team"):
+        data["telecasts_unrated"][column] = [rated[column][0]]
+    with pytest.raises(ValidationError, match="appear more than once") as info:
+        validate_site_data(data)
+    assert rated["date"][0] not in str(info.value)
+
+
+def test_game_repeated_within_the_unrated_block_is_rejected() -> None:
+    data = _with_unrated_row(copy.deepcopy(_load_fixture()))
+    data["telecasts_unrated"] = {k: [v[0], v[0]] for k, v in data["telecasts_unrated"].items()}
+    with pytest.raises(ValidationError, match="appear more than once") as info:
+        validate_site_data(data)
+    assert data["telecasts_unrated"]["date"][0] not in str(info.value)

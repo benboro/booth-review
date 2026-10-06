@@ -1154,7 +1154,12 @@ def _postseason_tables(specs: list[tuple[int, str, str | None]], **extra: object
             season_type="postseason" if gtype != "regular" else "regular",
             game_type=gtype,
             playoff_round=rnd,
-            **extra,
+            # Distinct teams: a game is one (date, away, home) in the contract.
+            **{
+                "home_team": f"Fixture Home {gid}",
+                "away_team": f"Fixture Away {gid}",
+                **extra,
+            },
         )
         for gid, gtype, rnd in specs
     ]
@@ -1525,6 +1530,9 @@ def _bowl_game(game_id: int, season: int) -> dict[str, object]:
         game_type="bowl",
         start_utc=datetime(season, 12, 28, 17, 0, tzinfo=UTC),
         date_et=date(season, 12, 28),
+        # Distinct teams: a game is one (date, away, home) in the contract.
+        home_team=f"Fixture Home {game_id}",
+        away_team=f"Fixture Away {game_id}",
     )
 
 

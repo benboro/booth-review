@@ -418,6 +418,19 @@ class SiteData(BaseModel):
                     f"telecasts_unrated.network[{i}]: an unrated game needs a resolved network"
                 )
 
+        # WR-01: neither block ships a game or telecast id, so a game is its
+        # (date, away_team, home_team); count only, never a value (T-03-04).
+        game_keys = Counter(
+            (cols.date[i], cols.away_team[i], cols.home_team[i])
+            for cols in (tc, uc)
+            for i in range(len(cols.season))
+        )
+        repeated = sum(1 for n in game_keys.values() if n > 1)
+        if repeated:
+            raise ValueError(
+                f"telecasts/telecasts_unrated: {repeated} game(s) appear more than once"
+            )
+
         for k in range(num_rivalries):
             if k not in referenced_rivalries:
                 raise ValueError(f"lookups.rivalries[{k}]: not referenced by any telecast")
