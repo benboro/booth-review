@@ -11,6 +11,7 @@ from itertools import pairwise
 from typing import Any
 
 import pytest
+from conftest import expand_family
 from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
@@ -127,6 +128,8 @@ def test_networks_popover_width_stable_on_clicks(
     open_app(page, query)
     _open_filter(page, "networks")
     w = _width(page, "pop-networks")
+    expand_family(page, "disney")  # 04.16: families open collapsed; expanding keeps the width
+    assert abs(_width(page, "pop-networks") - w) <= 0.5
     item = _net_item(page, "net-a")
     item.locator("input").click()
     assert abs(_width(page, "pop-networks") - w) <= 0.5
@@ -145,7 +148,8 @@ def _row_for(page: Page, kind: str) -> Any:
         return _fam_item(page, "fox")
     if kind == "channel":
         _open_filter(page, "networks")
-        return _net_item(page, "net-b")
+        expand_family(page, "disney")  # 04.16: fox is single-channel, so use a disney channel
+        return _net_item(page, "net-a")
     if kind == "kickoff":
         _open_filter(page, "kickoff")
         return _slot_item(page, "noon")
@@ -172,7 +176,8 @@ def test_family_only_sits_at_the_row_right_edge(
     page.set_viewport_size({"width": 1280, "height": 800})
     open_app(page, "")
     _open_filter(page, "networks")
-    fam, net = _fam_item(page, "fox"), _net_item(page, "net-b")
+    expand_family(page, "disney")  # 04.16: compare against a real expanded channel row
+    fam, net = _fam_item(page, "disney"), _net_item(page, "net-a")
     assert abs(_right(_only_btn(fam)) - _right(_only_btn(net))) <= 1
     assert abs(_right(fam.locator(".option-count")) - _right(net.locator(".option-count"))) <= 1
 
@@ -234,7 +239,7 @@ def test_only_visible_on_tab_focus(
 
 @pytest.mark.parametrize(
     ("kind", "target", "reference"),
-    [("networks", "net-b", "net-a"), ("kickoff", "prime", "noon")],
+    [("networks", "net-e", "net-a"), ("kickoff", "prime", "noon")],
 )
 def test_count_column_stays_put_when_only_turns_all(
     guarded_page: Page,
@@ -248,6 +253,7 @@ def test_count_column_stays_put_when_only_turns_all(
     open_app(page, "")
     _open_filter(page, kind)
     if kind == "networks":
+        expand_family(page, "disney")  # 04.16: channel rows show only once expanded
         row, ref = _net_item(page, target), _net_item(page, reference)
     else:
         row, ref = _slot_item(page, target), _slot_item(page, reference)
