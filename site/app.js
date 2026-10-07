@@ -20,7 +20,7 @@
  */
 
 import { prepareData } from './modules/data.js';
-import { defaultState, computeView, toggleFamilyNetworks, familyOnlyPatch } from './modules/select.js';
+import { defaultState, computeView, toggleFamilyNetworks, familyOnlyPatch, axisPatch, yPatch } from './modules/select.js';
 import { encodeState, decodeState } from './modules/url-state.js';
 import { buildFigure, renderChart, bindChartEvents, TOOLTIP_MODE } from './modules/chart.js';
 import { initTopbar, renderTopbar } from './modules/topbar.js';
@@ -31,7 +31,7 @@ import { renderTable } from './modules/table.js';
 import { initChartTabs, renderChartTabs, staleCopy } from './modules/chart-tabs.js';
 import { chartContext } from './modules/bars.js';
 import { initBarsPanel, renderBarsPanel, lastBarsModel, resetBarsTap } from './modules/bars-panel.js';
-import { initBandInfo, positionBandInfo, closeBandNote } from './modules/band-info.js';
+import { initBandInfo, positionBandInfo, closeBandNote, setBandInfoMode } from './modules/band-info.js';
 import { showTooltip, hideTooltip } from './modules/tooltip.js';
 import { selectedPersonIndexes } from './modules/format.js';
 import {
@@ -47,6 +47,7 @@ const version = versionMeta ? versionMeta.content : '';
 const chartEl = document.getElementById('chart');
 const loadErrorEl = document.getElementById('load-error');
 const axisToggleEl = document.getElementById('axis-toggle');
+const yToggleEl = document.getElementById('y-toggle');
 const excitementCaptionEl = document.getElementById('excitement-caption');
 const panelBodyEl = document.getElementById('panel-body');
 const panelTitleEl = document.getElementById('panel-title');
@@ -225,6 +226,7 @@ function render() {
     chartEl.hidden = false;
     if (barsPanelEl) barsPanelEl.hidden = true;
     renderChart(chartEl, buildFigure(data, view, state, currentEnv()));
+    setBandInfoMode(bandInfoEls(), state.y);
     showBandInfo();
     lastScatterWidth = chartEl.clientWidth;
     // The div had no width while hidden (research A4); re-measure once on return.
@@ -256,8 +258,14 @@ function render() {
       button.setAttribute('aria-pressed', String(button.dataset.axis === state.axis));
     }
   }
+  if (yToggleEl) {
+    for (const button of yToggleEl.querySelectorAll('button[data-y]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.y === state.y));
+    }
+  }
   if (excitementCaptionEl) {
-    excitementCaptionEl.hidden = state.axis !== 'excitement' || state.view !== 'scatter';
+    excitementCaptionEl.hidden =
+      (state.axis !== 'excitement' && state.y !== 'excitement') || state.view !== 'scatter';
   }
   if (eraNoteEl) eraNoteEl.hidden = state.view !== 'scatter';
 
@@ -323,6 +331,7 @@ function bindScatterEvents() {
       if (tooltipMode !== 'html') return;
       showTooltip(data, i, {
         axis: state.axis,
+        y: state.y,
         theme: currentEnv().theme,
         clientX,
         clientY,
@@ -434,7 +443,15 @@ async function bootstrap() {
       axisToggleEl.addEventListener('click', (ev) => {
         const button = ev.target.closest('button[data-axis]');
         if (!button) return;
-        setState({ axis: button.dataset.axis });
+        setState(axisPatch(button.dataset.axis, state));
+      });
+    }
+
+    if (yToggleEl) {
+      yToggleEl.addEventListener('click', (ev) => {
+        const button = ev.target.closest('button[data-y]');
+        if (!button) return;
+        setState(yPatch(button.dataset.y, state));
       });
     }
 
