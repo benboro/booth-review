@@ -15,6 +15,26 @@ from playwright.sync_api import Locator, Page, expect
 pytestmark = pytest.mark.e2e
 
 
+def _click_compare(page: Page) -> None:
+    """Turns Compare on deterministically (SITE-59).
+
+    A still-open Announcers popover can swallow the click as a light dismiss,
+    so close it first; then click once and assert the pressed state before
+    waiting for the URL, so a miss fails fast with the observed state.
+    """
+    if page.evaluate("document.getElementById('pop-announcers').matches(':popover-open')"):
+        page.keyboard.press("Escape")
+        page.wait_for_function(
+            "!document.getElementById('pop-announcers').matches(':popover-open')"
+        )
+    toggle = page.locator("#compare-toggle")
+    expect(toggle).to_be_enabled()
+    expect(toggle).to_have_attribute("aria-pressed", "false")
+    toggle.click()
+    expect(toggle).to_have_attribute("aria-pressed", "true")
+    page.wait_for_function("location.search.includes('mode=compare')", timeout=5000)
+
+
 def _parse_rgb(css_color: str) -> tuple[float, float, float]:
     """Parses a `getComputedStyle` `rgb(...)`/`rgba(...)` string into (r, g, b)."""
     nums = re.findall(r"[\d.]+", css_color)
@@ -283,8 +303,7 @@ def test_announcer_compare_cap_unchanged(
     for query in ["Dale Harlow", "Dale Harlow Jr.", "Kris Venn", "Jax Venn"]:
         _add_person_by_query(guarded_page, query)
 
-    guarded_page.click("#compare-toggle")
-    guarded_page.wait_for_function("location.search.includes('mode=compare')")
+    _click_compare(guarded_page)
 
     _open_announcers(guarded_page)
     fifth = guarded_page.locator("#person-results li[role='option'][data-person-id='pat-rowan']")
@@ -316,8 +335,7 @@ def test_compare_mode_assigns_shapes_and_shows_shared_booth(
     _add_person_by_query(guarded_page, "Kris Venn")
     _add_person_by_query(guarded_page, "Sam Delgado")
 
-    guarded_page.click("#compare-toggle")
-    guarded_page.wait_for_function("location.search.includes('mode=compare')")
+    _click_compare(guarded_page)
 
     symbols = guarded_page.evaluate("() => window.__testHooks.getView().symbols")
     # Kris (circle): rated 1, 9, unrated 13; Sam (square): rated 2, 10, unrated 16, 19; shared 6.
@@ -348,8 +366,7 @@ def test_compare_mode_caps_at_four_people(
     for query in ["Dale Harlow", "Dale Harlow Jr.", "Kris Venn", "Jax Venn"]:
         _add_person_by_query(guarded_page, query)
 
-    guarded_page.click("#compare-toggle")
-    guarded_page.wait_for_function("location.search.includes('mode=compare')")
+    _click_compare(guarded_page)
 
     _add_person_by_query(guarded_page, "Pat Rowan")
 
@@ -381,8 +398,7 @@ def test_reload_restores_compare_and_together_selection(
     open_app(guarded_page, "")
     _add_person_by_query(guarded_page, "Kris Venn")
     _add_person_by_query(guarded_page, "Sam Delgado")
-    guarded_page.click("#compare-toggle")
-    guarded_page.wait_for_function("location.search.includes('mode=')")
+    _click_compare(guarded_page)
     guarded_page.click("#together-toggle")
     guarded_page.wait_for_function("location.search.includes('together')")
 
@@ -484,8 +500,7 @@ def test_summary_never_reads_like_a_ranking(
     _add_person_by_query(guarded_page, "Taylor Vance")
     _assert_clean()
 
-    guarded_page.click("#compare-toggle")
-    guarded_page.wait_for_function("location.search.includes('mode=')")
+    _click_compare(guarded_page)
     _assert_clean()
 
     guarded_page.click("#together-toggle")
@@ -684,8 +699,7 @@ def test_toggling_compare_does_not_shift_the_row(
     assert glyphs_before == [1, 1, 1]
 
     before = guarded_page.evaluate(rects_js)
-    guarded_page.click("#compare-toggle")
-    guarded_page.wait_for_function("location.search.includes('mode=compare')")
+    _click_compare(guarded_page)
     after = guarded_page.evaluate(rects_js)
 
     glyphs_after = guarded_page.evaluate(glyph_counts_js)
