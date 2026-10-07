@@ -1614,10 +1614,29 @@ input[type="checkbox"] {
   margin-bottom: 0;
 }
 
-.chart-controls > #axis-toggle,
+.chart-controls > #scatter-controls,
 .chart-controls > .bar-controls {
   grid-area: 1 / 1;
   justify-self: start;
+}
+
+.scatter-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+}
+
+.axis-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.axis-caption {
+  font: var(--font-label);
+  color: var(--muted);
+  white-space: nowrap;
 }
 
 .axis-short {
@@ -2367,10 +2386,34 @@ html:has(#detail-panel[open]) {
     row-gap: var(--space-sm);
   }
 
+  .scatter-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-sm);
+    width: 100%;
+  }
+
+  .axis-group {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--space-xs);
+  }
+
   #axis-toggle {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     width: 100%;
+  }
+
+  #y-toggle {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    width: 100%;
+  }
+
+  #y-toggle button {
+    padding: 0 4px;
   }
 
   #axis-toggle .axis-long {

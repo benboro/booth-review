@@ -211,9 +211,9 @@ export function renderChartTabs({ data, state }) {
   setHint('');
 
   const scatter = state.view === 'scatter';
-  const axisToggle = document.getElementById('axis-toggle');
+  const scatterControls = document.getElementById('scatter-controls');
   const barControls = document.getElementById('bar-controls');
-  if (axisToggle) axisToggle.classList.toggle('is-concealed', !scatter);
+  if (scatterControls) scatterControls.classList.toggle('is-concealed', !scatter);
   if (barControls) barControls.classList.toggle('is-concealed', scatter);
 
   for (const button of document.querySelectorAll('#bar-role-toggle button[data-role]')) {

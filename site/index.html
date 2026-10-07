@@ -211,10 +211,22 @@
   </div>
 
   <div id="chart-controls" class="chart-controls">
-    <div id="axis-toggle" class="segmented" role="group" aria-label="X-axis measure">
-      <button type="button" data-axis="spread" aria-pressed="true" aria-label="Spread"><span class="axis-long">Spread</span><span class="axis-short">Spread</span></button>
-      <button type="button" data-axis="excitement" aria-pressed="false" aria-label="Excitement (CFBD)"><span class="axis-long">Excitement (CFBD)</span><span class="axis-short">Excitement</span></button>
-      <button type="button" data-axis="date" aria-pressed="false" aria-label="Date"><span class="axis-long">Date</span><span class="axis-short">Date</span></button>
+    <div id="scatter-controls" class="scatter-controls">
+      <div class="axis-group">
+        <span class="axis-caption" aria-hidden="true">X axis</span>
+      <div id="axis-toggle" class="segmented" role="group" aria-label="X-axis measure">
+        <button type="button" data-axis="spread" aria-pressed="true" aria-label="Spread"><span class="axis-long">Spread</span><span class="axis-short">Spread</span></button>
+        <button type="button" data-axis="excitement" aria-pressed="false" aria-label="Excitement (CFBD)"><span class="axis-long">Excitement (CFBD)</span><span class="axis-short">Excitement</span></button>
+        <button type="button" data-axis="date" aria-pressed="false" aria-label="Date"><span class="axis-long">Date</span><span class="axis-short">Date</span></button>
+      </div>
+      </div>
+      <div class="axis-group">
+        <span class="axis-caption" aria-hidden="true">Y axis</span>
+        <div id="y-toggle" class="segmented" role="group" aria-label="Y-axis measure">
+          <button type="button" data-y="viewers" aria-pressed="true">Viewers</button>
+          <button type="button" data-y="excitement" aria-pressed="false">Excitement</button>
+        </div>
+      </div>
     </div>
     <div id="bar-controls" class="bar-controls is-concealed">
       <div id="group-by-toggle" class="segmented by-toggle" role="group" aria-label="Group bars">
