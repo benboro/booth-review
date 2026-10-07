@@ -22,27 +22,32 @@ import { familyToggledOff, familyIsSole } from './select.js';
 import { FAMILY_COLORS, FAMILY_LABELS, PILL_TEXT_COLOR } from './palette.js';
 import { currentTheme } from './pill.js';
 
+/** D-07: two single clicks (or taps) on one pill within this many ms, by input time,
+ * count as a double-click. */
+export const DOUBLE_TAP_MS = 300;
+/** Upper bound on a `detail === 2` click's gap from the first, so a stale first
+ * click (and its `networks` snapshot) never pairs with it (WR-02). */
+export const DOUBLE_CLICK_MAX_MS = 1000;
+
 /**
- * D-05..D-08: a second click on the same pill (event.detail === 2, or a second
- * click within DOUBLE_TAP_MS, which also covers double-tap) shows only that
- * family, like Networks > Only. Detection runs on `click` plus `detail`
- * because a native `dblclick` never fires on pills rebuilt every render. The
+ * D-05..D-08: a second click on the same pill (event.detail === 2 within
+ * DOUBLE_CLICK_MAX_MS, or a second click within DOUBLE_TAP_MS, which also
+ * covers double-tap) shows only that family, like Networks > Only. Detection
+ * runs on `click` plus `detail` because a native `dblclick` never fires on
+ * pills rebuilt every render; gaps are measured with `event.timeStamp`. The
  * first click snapshots `networks` before toggling, so the result comes from
  * the pre-click state. Keyboard clicks (detail 0) never count; detail >= 3 is
- * ignored.
+ * ignored; a click between pills drops the pending first click.
  *
  * Binds one delegated click listener on `listEl` for every legend chip,
  * present now or rebuilt later by `renderLegend`. Native `<button>`
  * elements already give Enter/Space activation for free, so no separate
  * `keydown` handler is needed.
  * @param {{listEl: HTMLElement, onToggle: (family: string) => void,
+ *   onOnly: (family: string, before: string[]|null) => void,
+ *   getNetworks: () => string[]|null,
  *   switchEl?: HTMLElement|null, onDots?: (value: string) => void}} args
  */
-export const DOUBLE_TAP_MS = 300;
-/** Upper bound on a `detail === 2` click's gap from the first, so a stale first
- * click (and its `networks` snapshot) never pairs with it (WR-02). */
-export const DOUBLE_CLICK_MAX_MS = 1000;
-
 export function initLegend({ listEl, onToggle, onOnly, getNetworks, switchEl, onDots }) {
   let last = null;
   if (switchEl) {
