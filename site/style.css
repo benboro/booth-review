@@ -1535,6 +1535,9 @@ input[type="checkbox"] {
 .legend-chip {
   cursor: pointer;
   font: inherit;
+  /* D-07: double-tap zoom off; pan and pinch kept. */
+  touch-action: manipulation;
+  user-select: none;
 }
 
 /* Toggled off (D-16): legend.js clears the inline fill so this rule's

@@ -18,11 +18,19 @@
  * games; other filters fade unless Hide is on. It is concealed off Scatter.
  */
 
-import { familyToggledOff } from './select.js';
+import { familyToggledOff, familyIsSole } from './select.js';
 import { FAMILY_COLORS, FAMILY_LABELS, PILL_TEXT_COLOR } from './palette.js';
 import { currentTheme } from './pill.js';
 
 /**
+ * D-05..D-08: a second click on the same pill (event.detail === 2, or a second
+ * click within DOUBLE_TAP_MS, which also covers double-tap) shows only that
+ * family, like Networks > Only. Detection runs on `click` plus `detail`
+ * because a native `dblclick` never fires on pills rebuilt every render. The
+ * first click snapshots `networks` before toggling, so the result comes from
+ * the pre-click state. Keyboard clicks (detail 0) never count; detail >= 3 is
+ * ignored.
+ *
  * Binds one delegated click listener on `listEl` for every legend chip,
  * present now or rebuilt later by `renderLegend`. Native `<button>`
  * elements already give Enter/Space activation for free, so no separate
@@ -30,7 +38,10 @@ import { currentTheme } from './pill.js';
  * @param {{listEl: HTMLElement, onToggle: (family: string) => void,
  *   switchEl?: HTMLElement|null, onDots?: (value: string) => void}} args
  */
-export function initLegend({ listEl, onToggle, switchEl, onDots }) {
+export const DOUBLE_TAP_MS = 300;
+
+export function initLegend({ listEl, onToggle, onOnly, getNetworks, switchEl, onDots }) {
+  let last = null;
   if (switchEl) {
     switchEl.addEventListener('click', (ev) => {
       const button = ev.target.closest('button[data-dots]');
@@ -42,7 +53,22 @@ export function initLegend({ listEl, onToggle, switchEl, onDots }) {
   listEl.addEventListener('click', (ev) => {
     const button = ev.target.closest('button[data-family]');
     if (!button) return;
-    onToggle(button.dataset.family);
+    const family = button.dataset.family;
+    if (ev.detail >= 3) return;
+    const second = last !== null && last.family === family && ev.detail !== 0
+      && (ev.detail === 2 || performance.now() - last.time <= DOUBLE_TAP_MS);
+    if (second) {
+      const before = last.networksBefore;
+      last = null;
+      onOnly(family, before);
+      return;
+    }
+    if (ev.detail === 0) {
+      last = null;
+    } else {
+      last = { family, time: performance.now(), networksBefore: getNetworks() };
+    }
+    onToggle(family);
   });
 }
 
@@ -70,6 +96,11 @@ export function renderLegend({ data, state, view }) {
     button.textContent = FAMILY_LABELS[family];
     const pressed = !familyToggledOff(data, state, family);
     button.setAttribute('aria-pressed', String(pressed));
+    const hint = familyIsSole(data, view, family, state.networks)
+      ? 'Double-click to show all networks'
+      : `Double-click to show only ${FAMILY_LABELS[family]}`;
+    button.title = hint;
+    button.setAttribute('aria-description', hint);
     const counts = view?.facets?.networks;
     const offered = !counts
       || (data.networksByFamily.get(family) ?? []).reduce((sum, idx) => sum + (counts[idx] ?? 0), 0) > 0;

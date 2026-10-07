@@ -20,7 +20,7 @@
  */
 
 import { prepareData } from './modules/data.js';
-import { defaultState, computeView, toggleFamilyNetworks } from './modules/select.js';
+import { defaultState, computeView, toggleFamilyNetworks, familyOnlyPatch } from './modules/select.js';
 import { encodeState, decodeState } from './modules/url-state.js';
 import { buildFigure, renderChart, bindChartEvents, TOOLTIP_MODE } from './modules/chart.js';
 import { initTopbar, renderTopbar } from './modules/topbar.js';
@@ -397,6 +397,8 @@ async function bootstrap() {
     initLegend({
       listEl: document.getElementById('legend-chips'),
       onToggle: (family) => setState({ networks: toggleFamilyNetworks(data, state, family) }),
+      onOnly: (family, before) => setState(familyOnlyPatch(data, lastView, family, before)),
+      getNetworks: () => structuredClone(state.networks),
       switchEl: document.getElementById('dots-toggle'),
       onDots: (dots) => setState({ dots }),
     });
