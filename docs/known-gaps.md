@@ -50,9 +50,9 @@ per-game Nielsen figures for these four seasons. It checked each
 candidate's reuse terms and robots rules, whether each figure has a free
 page to cite, how many of the missing games it covers, and whether its
 figures match the kind Ratings Reference reports. None has been adopted, so
-these games keep no figure for now. A few publishers' figures closely match
+these games keep no figure for now. Two publishers' figures closely match
 Ratings Reference's, and this project plans to ask whether it may reuse them
-with credit.
+with credit. Nothing is collected from them unless they agree.
 
 These games now appear in the 'No public rating' strip, and the counts read 'N rated of M games'.
 
