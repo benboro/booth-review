@@ -196,6 +196,21 @@ def multichannel_raw(
     return raw
 
 
+def expand_family(page: Page, family: str) -> None:
+    """Expands a Networks family so its channel rows show. Since 04.16 D-10 the
+    families open collapsed, so channel-level tests expand first.
+    """
+    caret = page.locator(
+        f"fieldset.family-group:has(input[data-family-checkbox='{family}']) .family-caret"
+    )
+    caret.click()
+    page.wait_for_function(
+        "(f) => document.querySelector(`.family-caret[data-family='${f}']`)"
+        ".getAttribute('aria-expanded') === 'true'",
+        arg=family,
+    )
+
+
 @pytest.fixture
 def multichannel(fixture_raw: dict[str, Any]) -> dict[str, Any]:
     """The synthetic two-channel override (telecast 8 on `net-e`)."""
