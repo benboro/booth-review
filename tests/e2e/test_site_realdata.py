@@ -1374,3 +1374,103 @@ def test_real_excitement_y_band_and_axis_counts(
     assert covers_max
     assert same_summary
     assert errors == 0
+
+
+_REAL_ENLARGE_JS = """
+async () => {
+  const data = window.__testHooks.data;
+  const frames = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const fams = [];
+  for (const idx of data.primaryNetworks) {
+    const f = data.lookups.networks[idx].family;
+    if (!fams.includes(f)) fams.push(f);
+  }
+  const idsOf = (list) => data.primaryNetworks
+    .map((idx) => data.lookups.networks[idx])
+    .filter((n) => list.includes(n.family))
+    .map((n) => n.id);
+  const base = {
+    people: [], conferences: [], school: [], postseason: 'all', role: null, seasons: null,
+    networks: null, slots: null, together: false, compare: false, dots: 'fade',
+  };
+  const probe = async (patch) => {
+    window.__testHooks.setState({ ...base, ...patch });
+    await frames();
+    const sizes = new Set();
+    for (const t of document.getElementById('chart').data) {
+      if (String(t.meta).startsWith('family:')) sizes.add(t.marker.size);
+    }
+    return { enlarge: window.__testHooks.getView().enlargeDots, sizes: Array.from(sizes) };
+  };
+  const other = fams.includes('other') ? 'other' : fams[fams.length - 1];
+  const out = { families: fams.length };
+  out.a = await probe({});
+  out.b = await probe({ networks: idsOf(fams.filter((f) => f !== other)) });
+  out.c = await probe({ networks: idsOf([fams[0]]) });
+  out.d = await probe({ networks: idsOf([fams[0]]), dots: 'hide' });
+  return out;
+}
+"""
+
+
+def test_real_dot_enlargement_follows_faded_and_family_rules(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+) -> None:
+    """04.16 D-01..D-05: the default view and Networks set to every family but one are not
+    enlarged and keep 6px family traces; one family is enlarged, also in Hide -- booleans and
+    integers only."""
+    real_open_app(real_guarded_page, "")
+    got: dict[str, Any] = real_guarded_page.evaluate(_REAL_ENLARGE_JS)
+    family_count: int = got["families"]
+    if family_count < 5:
+        pytest.skip("fewer than 5 families")
+    default_enlarged: bool = got["a"]["enlarge"]
+    default_sizes: list[int] = got["a"]["sizes"]
+    most_enlarged: bool = got["b"]["enlarge"]
+    most_sizes: list[int] = got["b"]["sizes"]
+    one_enlarged: bool = got["c"]["enlarge"]
+    one_hide_enlarged: bool = got["d"]["enlarge"]
+    default_off = not default_enlarged
+    most_off = not most_enlarged
+    six_only = [6]
+    assert default_off
+    assert default_sizes == six_only
+    assert most_off
+    assert most_sizes == six_only
+    assert one_enlarged
+    assert one_hide_enlarged
+
+
+_REAL_POPOVER_JS = """
+() => {
+  const data = window.__testHooks.data;
+  let multi = 0;
+  for (const idxs of data.networksByFamily.values()) if (idxs.length > 1) multi += 1;
+  const pop = document.getElementById('pop-networks');
+  const carets = Array.from(pop.querySelectorAll('.family-caret'));
+  const expanded = carets.filter((c) => c.getAttribute('aria-expanded') === 'true').length;
+  const visible = Array.from(pop.querySelectorAll('input[data-network-id]'))
+    .filter((el) => el.getClientRects().length > 0).length;
+  return { multi, carets: carets.length, expanded, visible };
+}
+"""
+
+
+def test_real_networks_popover_opens_collapsed(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+) -> None:
+    """04.16 D-10, D-13: the Networks popover opens with one caret per multi-channel family, all
+    collapsed, and no channel checkbox visible -- integers only."""
+    real_open_app(real_guarded_page, "")
+    real_guarded_page.click("#trigger-networks")
+    real_guarded_page.wait_for_selector("#pop-networks .family-caret")
+    got: dict[str, int] = real_guarded_page.evaluate(_REAL_POPOVER_JS)
+    multi = got["multi"]
+    carets = got["carets"]
+    expanded = got["expanded"]
+    visible = got["visible"]
+    assert carets == multi
+    assert expanded == 0
+    assert visible == 0
