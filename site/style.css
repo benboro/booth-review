@@ -1060,6 +1060,19 @@ input[type="checkbox"] {
   display: none;
 }
 
+/* Narrow phones (360px): the hint wraps under the family name instead of widening the row. */
+@media (max-width: 374px) {
+  .family-item > .check-row {
+    flex-wrap: wrap;
+  }
+
+  .family-on-hint {
+    order: 5;
+    flex-basis: calc(100% - 21px);
+    margin-left: 21px;
+  }
+}
+
 .family-item .option-name {
   min-width: 0;
   overflow: hidden;

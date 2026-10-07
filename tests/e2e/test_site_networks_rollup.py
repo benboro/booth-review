@@ -11,8 +11,8 @@ import re
 from collections.abc import Callable
 
 import pytest
-from conftest import expand_family
-from playwright.sync_api import Page, expect
+from conftest import FONT_CSS, _assert_guard_clean, _install_guard, expand_family
+from playwright.sync_api import Browser, Page, Route, expect
 
 pytestmark = pytest.mark.e2e
 
@@ -256,3 +256,44 @@ def test_trigger_label_still_counts_channels(
     assert trigger.inner_text() == label
     guarded_page.locator(CARET).click()
     assert trigger.inner_text() == label
+
+
+def test_narrow_phone_hint_wraps_under_the_name_without_scrolling(
+    browser: Browser, site_url: str, open_app: Callable[[Page, str], None]
+) -> None:
+    """04.16 D-12 at 360px with the widest font: a partly-on family keeps its "N of M on" hint,
+    the hint wraps under the name, and the drawer never scrolls sideways."""
+    context = browser.new_context(
+        viewport={"width": 360, "height": 800}, has_touch=True, is_mobile=True
+    )
+    page = context.new_page()
+    off_origin, csp_errors = _install_guard(page, site_url)
+
+    def _route(route: Route) -> None:
+        response = route.fetch()
+        route.fulfill(response=response, body=response.text() + "\n" + FONT_CSS["wide"])
+
+    page.route("**/style.css*", _route)
+    try:
+        open_app(page, "")
+        _open_sheet(page)
+        page.locator(f"#filters-sheet {CARET}").tap()
+        page.locator("#filters-sheet #family-rows-disney input[data-network-id]").first.uncheck()
+        page.locator(f"#filters-sheet {CARET}").tap()
+        hint = page.locator(f"#filters-sheet {DISNEY_HINT}")
+        expect(hint).to_be_visible()
+        fits = page.evaluate(
+            "(() => { const b = document.querySelector('#filters-sheet .sheet-body');"
+            " return b.scrollWidth <= b.clientWidth; })()"
+        )
+        name_box = page.locator(
+            "#filters-sheet .family-item:has(input[data-family-checkbox='disney']) .option-name"
+        ).bounding_box()
+        hint_box = hint.bounding_box()
+        assert fits
+        assert name_box is not None
+        assert hint_box is not None
+        assert hint_box["y"] >= name_box["y"] + name_box["height"] - 1
+    finally:
+        context.close()
+    _assert_guard_clean(off_origin, csp_errors)
