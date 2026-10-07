@@ -60,10 +60,10 @@ const EDGE_MARGIN = 8;
  * fallback that can't draw an SVG, puts `text` on its own line too).
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
- * @param {{axis: "spread"|"excitement", selected?: Set<number>}} opts
+ * @param {{axis: "spread"|"excitement", y?: "viewers"|"excitement", selected?: Set<number>}} opts
  * @returns {{crew: {name: string, role: string, selected: boolean}[], title: string, dateText: string, gameType: {icons: ("bowl"|"playoff"|"rivalry")[], text: string}|null, networks: {name: string, family: string}[], crewLines: string[], viewersLine: string, axisLine: string, hint: string}}
  */
-export function tooltipModel(data, i, { axis, selected = new Set() }) {
+export function tooltipModel(data, i, { axis, y = 'viewers', selected = new Set() }) {
   const t = data.t;
 
   const title = formatMatchup(data, i, { withScore: true });
@@ -85,7 +85,11 @@ export function tooltipModel(data, i, { axis, selected = new Set() }) {
   if (crewLines.length === 0) crewLines.push('Crew not recorded');
 
   const viewersLine = data.rated[i] ? `Viewers: ${formatViewers(t.viewers[i])}` : noRatingLine(data, i);
-  const axisLine = axisValueText(data, i, axis);
+  // D-17: on Spread x with Excitement y the line shows both plotted measures,
+  // the same form as the Date line. Excitement x cannot pair with Excitement y
+  // (the D-11 swap), and Viewers y is unchanged.
+  const lineAxis = y === 'excitement' && axis === 'spread' ? 'date' : axis;
+  const axisLine = axisValueText(data, i, lineAxis);
   const hint = 'Click for details →';
 
   return { title, dateText, gameType, networks, crew, crewLines, viewersLine, axisLine, hint };
@@ -261,11 +265,11 @@ export function showTextTooltip(lines, { borderColor, clientX, clientY }) {
  * element reports zero size.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
- * @param {{axis: "spread"|"excitement", theme: "light"|"dark", clientX: number, clientY: number}} opts
+ * @param {{axis: "spread"|"excitement", y?: "viewers"|"excitement", theme: "light"|"dark", clientX: number, clientY: number}} opts
  */
-export function showTooltip(data, i, { axis, theme, clientX, clientY, selected }) {
+export function showTooltip(data, i, { axis, y, theme, clientX, clientY, selected }) {
   const el = ensureTooltipEl();
-  renderTooltipContent(el, tooltipModel(data, i, { axis, selected }), theme);
+  renderTooltipContent(el, tooltipModel(data, i, { axis, y, selected }), theme);
   el.hidden = false;
 
   placeTooltip(el, clientX, clientY);
