@@ -9,7 +9,7 @@ figures on the chart come from.
 ## What this chart shows
 
 Each dot is one rated national telecast of an FBS college football game, from
-the 2014 season onward. The y-axis is viewers, on a log scale. The x-axis
+the 2014 season onward. The y-axis is viewers, on a log scale, and can show excitement instead (see [the y-axis section](#the-y-axis-viewers-or-excitement)). The x-axis
 defaults to the winner's closing point spread (see below) and can be toggled
 to CFBD's post-game excitement measure or to the game's date instead. Dots are colored by network family —
 for example, the Disney family groups ABC and the ESPN networks under one
@@ -88,7 +88,7 @@ Butterfly charts count only the games that pass every filter, whether the
 excluded games are faded or hidden. The per-season counts in the Seasons filter
 apply every filter except the season range itself, so seasons outside the range
 keep their counts. The matched-games table fills once an announcer, a school, or a named game is selected,
-and lists the games that pass every filter. With exactly two schools selected, Head-to-head keeps only the games between them.
+and lists the games that pass every filter. Double-clicking (or double-tapping) a network pill shows only that network family, the same as Networks > Only; doing it again on the only family showing brings all networks back. With exactly two schools selected, Head-to-head keeps only the games between them.
 
 **Named games.** The Game filter picks one named game and shows every rated telecast of it. Bowls are grouped by franchise and shown under their latest name, so a renamed bowl is one entry and searching an old name finds it. The CFP entries are the four playoff rounds, and a semifinal or quarterfinal played at a bowl appears under both its round and that bowl. Rivalries come from a curated list of well-known named FBS rivalries and count only the first regular-season meeting of the two teams each season, never a conference championship game. CFBD marks conference title games from 2022 on, so from then a title game is left out even when it comes before the rivalry game or replaces it. For earlier seasons the first-meeting rule alone applies, so a later conference-championship rematch is left out. Postseason meetings never count. The matched-games table lists the games that pass every filter, and the filter combines with the others like any other.
 
@@ -115,7 +115,7 @@ On the site each game reads "No public rating · {cause}".
 
 **The rarely-rated list.** It is set by hand, one value per network, in `data/reference/network_rarity.csv`, and never computed from a threshold. Every network in `networks.csv` has a row, so a newly mapped network forces a review. The build reports only how many networks have an actual rated share that contradicts their flag, so the list stays auditable.
 
-**Where they appear.** On the chart these games sit in the "No public rating" strip under the plot as hollow rings when no filter is active, and for games that fail the filters. With a filter active, the games that pass it are drawn like rated dots, and a selected announcer's games use the same shapes as their rated games. A Date season range alone does not count as a filter here. In Bars, each bar's outlined part counts them.
+**Where they appear.** With the y-axis on Viewers, these games sit in the "No public rating" strip under the plot as hollow rings when no filter is active, and for games that fail the filters. With the y-axis on Excitement, they are filled dots at their excitement value like every other game. With a filter active, the games that pass it are drawn like rated dots, and a selected announcer's games use the same shapes as their rated games. A Date season range alone does not count as a filter here. In Bars, each bar's outlined part counts them.
 
 ## Measurement eras
 
@@ -170,7 +170,7 @@ excitement value from the 2025 season or later is not directly comparable to
 an excitement value from an earlier season, even though both are reported on
 the same numeric scale. Every telecast from the 2025 season onward carries
 this flag in its detail panel, and when the chart's x-axis is set
-to excitement mode, a caption appears under the x-axis noting the break.
+to excitement mode, a caption appears under the axis noting the break. The caption shows whenever excitement is on either axis.
 Affected dots look identical to any other dot — the flag is informational
 only and never changes a dot's size, color, or shape.
 
@@ -218,6 +218,14 @@ still plotted at its real viewers value. An N/A-strip dot is never plotted at
 zero and never dropped from the chart; it behaves identically to any other dot
 under every filter, highlight, and hover. A game whose score has not arrived
 yet moves into place on the next data update.
+
+## The y-axis: viewers or excitement
+
+The y-axis has two choices. **Viewers** is the default, on a log scale. **Excitement** is CFBD's excitement index, on a straight scale from 0 to the highest value in the whole dataset (about 23; only a handful of games sit above 15). The axis does not change when you filter, so a dot never moves because of a filter.
+
+In Excitement mode every game is a filled dot at its excitement value, rated or not. The strip under the plot then holds the games CFBD publishes no excitement index for, and is labeled "No excitement value". The tooltip still shows viewers (or "No public rating" and its reason), and the summary still counts rated games. Read the vertical position the way [the 2025 excitement break](#the-2025-excitement-break) allows.
+
+Excitement cannot be on both axes. Picking it on one axis moves the other back: the x-axis to Spread, or the y-axis to Viewers.
 
 ## Booth announcers only
 

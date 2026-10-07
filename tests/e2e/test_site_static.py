@@ -54,6 +54,8 @@ def test_methodology_page_has_expected_heading_anchors(guarded_page: Page, site_
     guarded_page.goto(f"{site_url}/methodology.html")
     for heading_id in (
         "the-2025-excitement-break",
+        "the-y-axis-viewers-or-excitement",
+        "games-with-no-public-rating",
         "measurement-eras",
         "known-gaps",
         "sources-and-credits",

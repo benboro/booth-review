@@ -85,6 +85,7 @@ def test_render_methodology_includes_known_gaps_demoted_and_no_marker() -> None:
     result = render_methodology(REPO_ROOT / "docs", _fixture_site())
 
     assert 'id="the-2025-excitement-break"' in result
+    assert 'id="the-y-axis-viewers-or-excitement"' in result
     assert 'id="known-gaps"' in result
     assert "include: known-gaps.md" not in result
     assert 'href="#known-gaps"' in result
