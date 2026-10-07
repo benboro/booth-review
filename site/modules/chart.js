@@ -120,6 +120,26 @@ const XAXIS_TITLES = {
   excitement: 'Excitement index (CFBD)',
 };
 
+/** Y-axis chart titles by y mode (04.15 D-09, D-13). */
+const YAXIS_TITLES = {
+  viewers: 'Viewers (log scale)',
+  excitement: 'Excitement index (CFBD)',
+};
+
+/**
+ * The linear Excitement y axis (04.15 D-13): the whole-dataset `xRange.excitement` (no cap,
+ * never filter-dependent, 04.7 D-08) padded by the 04.12 10px gutter, with nice ticks.
+ * @param {object} data - a `prepareData` result.
+ * @param {number} logPx - height in px of the main (non-band) y area.
+ * @returns {{range: [number, number], tickvals: number[], ticktext: string[]}}
+ */
+export function excitementYAxis(data, logPx) {
+  const [lo, hi] = data.xRange.excitement;
+  const [padLo, padHi] = gutterPads(hi - lo, logPx);
+  const tickvals = niceLinearTicks(lo, hi, 6);
+  return { range: [lo - padLo, hi + padHi], tickvals, ticktext: tickvals.map(String) };
+}
+
 /**
  * Computes the reserved n/a-strip band for one axis (D-03): a sentinel x for
  * missing values, the numeric-axis divider, the plotted range, and tick
@@ -183,8 +203,8 @@ export function naBand(data, axis, plotPx) {
  * @param {{axis: "spread"|"excitement"|"date", theme: "light"|"dark"}} opts
  * @returns {string}
  */
-export function hoverText(data, i, { axis, theme }) {
-  const model = tooltipModel(data, i, { axis });
+export function hoverText(data, i, { axis, y, theme }) {
+  const model = tooltipModel(data, i, { axis, y });
   const lines = [];
 
   lines.push(`<b>${escapeHover(model.title)}</b>`);
@@ -247,7 +267,14 @@ export function buildFigure(data, view, state, env) {
   const theme = env.theme;
   const plotHeight = (env.chartHeight ?? 0) - MARGIN.t - MARGIN.b;
   const bandGeo = bandLayout(plotHeight);
-  const hoverOpts = { axis, theme };
+  // 04.15: which measure is on y. The closures keep the family and highlight loops identical
+  // in both modes: in Excitement mode the band holds the games with no excitement value (D-16),
+  // everything else is a regular dot at its excitement (D-14).
+  const yMode = state.y === 'excitement' ? 'excitement' : 'viewers';
+  const yOf = (i) => (yMode === 'excitement' ? data.t.excitement[i] : data.t.viewers[i]);
+  const inBand = (i) => (yMode === 'excitement' ? data.t.excitement[i] == null : !data.rated[i]);
+  const bandY = (i) => (yMode === 'excitement' ? data.bandJitter[i] : data.jitter[i]);
+  const hoverOpts = { axis, y: yMode, theme };
   const tooltipMode = env.tooltipMode ?? TOOLTIP_MODE;
 
   // `view.highlighted` matches trivially against every visible dot when
@@ -287,19 +314,19 @@ export function buildFigure(data, view, state, env) {
       if (outOfSeasons(i)) continue;
       const x = xOf(i);
       // 04.13 D-01/D-05: an unrated game sits in the band at its x, with its fixed jitter as y.
-      if (!data.rated[i]) {
+      if (inBand(i)) {
         if (view.passesFilters[i]) {
           uActive.x.push(x);
-          uActive.y.push(data.jitter[i]);
+          uActive.y.push(bandY(i));
           uActive.customdata.push(i);
           if (usePlotlyText) uActive.text.push(hoverText(data, i, hoverOpts));
         } else {
           uInert.x.push(x);
-          uInert.y.push(data.jitter[i]);
+          uInert.y.push(bandY(i));
         }
         continue;
       }
-      const y = data.t.viewers[i];
+      const y = yOf(i);
       if (view.passesFilters[i]) {
         active.x.push(x);
         active.y.push(y);
@@ -379,7 +406,11 @@ export function buildFigure(data, view, state, env) {
       y: uInert.y,
       hoverinfo: 'skip',
       hovertemplate: null,
-      marker: ringMarker(view.hasPersonSelection ? DOT_OPACITY.inertUnderPerson : DOT_OPACITY.inert),
+      // 04.15 D-14/D-16: in Excitement mode the band holds filled dots like the main traces.
+      marker:
+        yMode === 'excitement'
+          ? { ...inertTraces[inertTraces.length - 1].marker }
+          : ringMarker(view.hasPersonSelection ? DOT_OPACITY.inertUnderPerson : DOT_OPACITY.inert),
     });
     unratedActiveTraces.push({
       type: 'scattergl',
@@ -396,7 +427,9 @@ export function buildFigure(data, view, state, env) {
       hoverlabel: { bordercolor: color },
       // notes-2 #5 (amends D-03): with a size filter active a passing unrated game draws exactly
       // like its rated twin (filled 10px family dot, 1px outline); otherwise it stays a ring.
-      marker: view.sizeFilterActive
+      marker: yMode === 'excitement'
+        ? { ...activeTraces[activeTraces.length - 1].marker }
+        : view.sizeFilterActive
         ? {
             color,
             size: 10,
@@ -455,11 +488,11 @@ export function buildFigure(data, view, state, env) {
     const x = xOf(i);
     const symbol = view.symbols.get(i) ?? 'circle';
     const size = symbol === 'circle' ? 10 : symbol === 'star' ? 15 : 12;
-    if (!data.rated[i]) {
+    if (inBand(i)) {
       // notes-2 #5: the band's highlighted games draw exactly like rated highlights (filled
       // compare shapes; circles take the ACCENT line, other shapes the filled ACCENT halo).
       ux.push(x);
-      uy.push(data.jitter[i]);
+      uy.push(bandY(i));
       ucustomdata.push(i);
       if (usePlotlyText) utext.push(hoverText(data, i, hoverOpts));
       ucolor.push(FAMILY_COLORS[theme][data.familyOf[i]]);
@@ -468,13 +501,13 @@ export function buildFigure(data, view, state, env) {
       ulineWidth.push(symbol === 'circle' ? 1.5 : 0);
       if (symbol !== 'circle') {
         uhaloX.push(x);
-        uhaloY.push(data.jitter[i]);
+        uhaloY.push(bandY(i));
         uhaloSymbol.push(symbol);
         uhaloSize.push(size + 3);
       }
       continue;
     }
-    const y = data.t.viewers[i];
+    const y = yOf(i);
     hx.push(x);
     hy.push(y);
     hcustomdata.push(i);
@@ -570,6 +603,7 @@ export function buildFigure(data, view, state, env) {
   });
 
   const yTicks = logTicks(data.viewersMin, data.viewersMax);
+  const excY = yMode === 'excitement' ? excitementYAxis(data, bandGeo.plotPx * (1 - bandGeo.logBottom)) : null;
 
   let dateAxis = null;
   if (isDate) {
@@ -592,7 +626,10 @@ export function buildFigure(data, view, state, env) {
   const layout = {
     datarevision: env.revision,
     // D-13: on Date a season change resets the zoom, other filters keep it.
-    uirevision: isDate ? 'date:' + (state.seasons ? state.seasons.join('-') : 'all') : state.axis,
+    // 04.15 D-12: a y switch resets the zoom; the suffix is Excitement-only so the default keys hold.
+    uirevision:
+      (isDate ? 'date:' + (state.seasons ? state.seasons.join('-') : 'all') : state.axis) +
+      (yMode === 'excitement' ? ':y-excitement' : ''),
     paper_bgcolor: PAGE_BG[theme],
     plot_bgcolor: PAGE_BG[theme],
     font: {
@@ -643,10 +680,22 @@ export function buildFigure(data, view, state, env) {
       showgrid: false,
       zeroline: false,
     },
-    yaxis: {
+    yaxis: yMode === 'excitement'
+      ? {
+          domain: [bandGeo.logBottom, 1],
+          type: 'linear',
+          title: { text: YAXIS_TITLES.excitement },
+          tickmode: 'array',
+          tickvals: excY.tickvals,
+          ticktext: excY.ticktext,
+          range: excY.range,
+          gridcolor: DIVIDER[theme],
+          fixedrange: env.mobile,
+        }
+      : {
       domain: [bandGeo.logBottom, 1],
       type: 'log',
-      title: { text: 'Viewers (log scale)' },
+      title: { text: YAXIS_TITLES.viewers },
       tickmode: 'array',
       tickvals: yTicks.tickvals,
       ticktext: yTicks.ticktext,
