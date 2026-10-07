@@ -27,7 +27,8 @@ export const MAX_COMPARE = 4;
  * `'butterfly'`) and `by` the bar grouping (null = by Announcer, else
  * `'network'` | `'team'` | `'conference'`; 04.6 D-27). `dots` is the Fade |
  * Hide view setting (`'fade'` | `'hide'`, 04.7 D-10); `h2h` is Head-to-head
- * for exactly two schools (04.7 D-14).
+ * for exactly two schools (04.7 D-14). `y` is the scatter's Y measure
+ * (`'viewers'` | `'excitement'`, 04.15 D-09).
  * @param {object} _data - a `prepareData` result (unused, kept for a
  *   uniform call signature with functions that do need it).
  * @returns {object}
@@ -46,6 +47,7 @@ export function defaultState(_data) {
     postseason: 'all',
     game: null,
     axis: 'spread',
+    y: 'viewers',
     view: 'scatter',
     by: null,
     dots: 'fade',
@@ -551,4 +553,72 @@ export function offeredFamilyIds(data, familyKeyVal, view) {
   return (data.networksByFamily.get(familyKeyVal) ?? [])
     .filter((idx) => (counts ? counts[idx] > 0 : true))
     .map((idx) => data.lookups.networks[idx].id);
+}
+
+/**
+ * Whether two id lists hold the same members, ignoring order.
+ * @param {Array} a
+ * @param {Array} b
+ * @returns {boolean}
+ */
+export function sameSet(a, b) {
+  return a.length === b.length && a.every((x) => b.includes(x));
+}
+
+/**
+ * Whether `networks` is exactly a family's offered channels (so its Only
+ * button reads "All"; 04.2 D-25).
+ * @param {object} data - a `prepareData` result.
+ * @param {object} view - a `computeView` result.
+ * @param {string} family - a `familyKey` value.
+ * @param {string[]|null} networks - `state.networks`.
+ * @returns {boolean}
+ */
+export function familyIsSole(data, view, family, networks) {
+  const offered = offeredFamilyIds(data, family, view);
+  return networks != null && offered.length > 0 && sameSet(networks, offered);
+}
+
+/**
+ * The state patch for a family's Only/All (04.15 D-06, 04.2 D-24/D-25): the
+ * family's offered channels; `networks: null` (All) when they are already the
+ * sole selection; no change when the family offers no channel. The Networks
+ * popover's family button and the legend pill double-click both call this.
+ * The pill double-click passes the `networks` snapshot from before its first
+ * click, so the two single clicks do not make it read as already sole.
+ * @param {object} data - a `prepareData` result.
+ * @param {object} view - a `computeView` result.
+ * @param {string} family - a `familyKey` value.
+ * @param {string[]|null} networksBefore - the `networks` value to judge against.
+ * @returns {{networks: string[]|null}}
+ */
+export function familyOnlyPatch(data, view, family, networksBefore) {
+  const offered = offeredFamilyIds(data, family, view);
+  if (offered.length === 0) return { networks: networksBefore };
+  if (familyIsSole(data, view, family, networksBefore)) return { networks: null };
+  return { networks: offered };
+}
+
+/**
+ * Patch for picking an X axis (04.15 D-11): Excitement on both axes is not
+ * allowed, so picking it on x while y is Excitement moves y to Viewers in the
+ * same patch (two patches would flash an invalid state, and `decodeState`
+ * would undo a bare axis change because y wins in a link, D-12).
+ * @param {string} axis - the picked x axis.
+ * @param {object} state - shaped like `defaultState(data)`.
+ * @returns {object}
+ */
+export function axisPatch(axis, state) {
+  return axis === 'excitement' && state.y === 'excitement' ? { axis, y: 'viewers' } : { axis };
+}
+
+/**
+ * Patch for picking a Y measure (04.15 D-11): picking Excitement while x is
+ * Excitement moves x to Spread in the same patch.
+ * @param {string} y - the picked y measure.
+ * @param {object} state - shaped like `defaultState(data)`.
+ * @returns {object}
+ */
+export function yPatch(y, state) {
+  return y === 'excitement' && state.axis === 'excitement' ? { y, axis: 'spread' } : { y };
 }
