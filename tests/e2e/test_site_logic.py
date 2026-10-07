@@ -621,6 +621,113 @@ def test_url_state_round_trips(guarded_page: Page, site_url: str) -> None:
     assert "team=" not in round_trip["encoded"]
 
 
+_Y_PATCH_JS = """
+async () => {
+  const D = await import('./modules/data.js');
+  const S = await import('./modules/select.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  return {
+    toExcitementWhileY: S.axisPatch('excitement', { y: 'excitement' }),
+    toDateWhileY: S.axisPatch('date', { y: 'excitement' }),
+    toExcitementPlain: S.axisPatch('excitement', { y: 'viewers' }),
+    yWhileX: S.yPatch('excitement', { axis: 'excitement' }),
+    yViewers: S.yPatch('viewers', { axis: 'excitement' }),
+    yPlain: S.yPatch('excitement', { axis: 'date' }),
+    defaultY: S.defaultState(data).y,
+  };
+}
+"""
+
+_FAMILY_ONLY_JS = """
+async () => {
+  const D = await import('./modules/data.js');
+  const S = await import('./modules/select.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  const view = S.computeView(data, S.defaultState(data));
+  const offered = S.offeredFamilyIds(data, 'disney', view);
+  const empty = { facets: { networks: data.lookups.networks.map(() => 0) } };
+  return {
+    offered,
+    fromNull: S.familyOnlyPatch(data, view, 'disney', null),
+    fromSame: S.familyOnlyPatch(data, view, 'disney', [...offered].reverse()),
+    fromOne: S.familyOnlyPatch(data, view, 'disney', [offered[0]]),
+    notOffered: S.familyOnlyPatch(data, empty, 'disney', ['net-b']),
+    notOfferedNull: S.familyOnlyPatch(data, empty, 'disney', null),
+  };
+}
+"""
+
+
+def test_y_param_round_trips_and_is_omitted_at_default(guarded_page: Page, site_url: str) -> None:
+    """04.15 D-12: y=excitement is the only encoded y; Viewers is omitted; y
+    persists with any view and alongside any axis."""
+    _load(guarded_page, site_url)
+    exc = guarded_page.evaluate(_ROUND_TRIP_JS, {"y": "excitement"})
+    assert exc["encoded"] == "?y=excitement"
+    assert exc["decoded"]["y"] == "excitement"
+    assert guarded_page.evaluate(_ROUND_TRIP_JS, {"y": "viewers"})["encoded"] == ""
+    for partial in (
+        {"y": "excitement", "axis": "date"},
+        {"y": "excitement", "axis": "spread", "view": "bars"},
+    ):
+        got = guarded_page.evaluate(_ROUND_TRIP_JS, partial)
+        for key, value in partial.items():
+            assert got["decoded"][key] == value
+
+
+@pytest.mark.parametrize(
+    ("query", "y", "axis"),
+    [
+        ("?y=excitement", "excitement", "spread"),
+        ("?y=log", "viewers", "spread"),
+        ("?y=EXCITEMENT", "viewers", "spread"),
+        ("?y=%", "viewers", "spread"),
+        ("?y=", "viewers", "spread"),
+        ("", "viewers", "spread"),
+        ("?axis=excitement&y=excitement", "excitement", "spread"),
+        ("?axis=date&y=excitement", "excitement", "date"),
+        ("?axis=excitement", "viewers", "excitement"),
+    ],
+)
+def test_decode_allowlists_y_and_y_wins_over_axis(
+    guarded_page: Page, site_url: str, query: str, y: str, axis: str
+) -> None:
+    """T-04.15-06/07, D-12: y is 'excitement' only for that literal; in a link
+    with Excitement on both axes, y wins and x falls back to Spread."""
+    _load(guarded_page, site_url)
+    decoded = guarded_page.evaluate(_DECODE_SEARCH_JS, query)
+    assert (decoded["y"], decoded["axis"]) == (y, axis)
+
+
+def test_axis_and_y_patches_swap_off_excitement(guarded_page: Page, site_url: str) -> None:
+    """04.15 D-11: the swap travels in one patch, never two."""
+    _load(guarded_page, site_url)
+    got = guarded_page.evaluate(_Y_PATCH_JS)
+    assert got["defaultY"] == "viewers"
+    assert got["toExcitementWhileY"] == {"axis": "excitement", "y": "viewers"}
+    assert got["toDateWhileY"] == {"axis": "date"}
+    assert got["toExcitementPlain"] == {"axis": "excitement"}
+    assert got["yWhileX"] == {"y": "excitement", "axis": "spread"}
+    assert got["yViewers"] == {"y": "viewers"}
+    assert got["yPlain"] == {"y": "excitement"}
+
+
+def test_family_only_patch_matches_the_only_button_rule(guarded_page: Page, site_url: str) -> None:
+    """04.15 D-06 / 04.2 D-24, D-25: Only selects the offered channels; a family
+    that is already the sole selection restores all networks; a family with
+    no offered channel changes nothing."""
+    _load(guarded_page, site_url)
+    got = guarded_page.evaluate(_FAMILY_ONLY_JS)
+    assert len(got["offered"]) == 2
+    assert got["fromNull"] == {"networks": got["offered"]}
+    assert got["fromSame"] == {"networks": None}
+    assert got["fromOne"] == {"networks": got["offered"]}
+    assert got["notOffered"] == {"networks": ["net-b"]}
+    assert got["notOfferedNull"] == {"networks": None}
+
+
 def test_dots_and_h2h_round_trip_and_are_omitted_at_default(
     guarded_page: Page, site_url: str
 ) -> None:
@@ -839,6 +946,10 @@ async () => {
         "?team=nope&school=%",
         "?h2h=1&school=northfield",
         "?dots=bogus",
+        "?y=%",
+        "?y=log",
+        "?y=excitement&axis=excitement",
+        "?y=excitement&y=viewers",
         "?dots=hide&h2h=1",
         "?h2h=1&school=northfield,lakeview,ironpeak",
         "?h2h=1&dots=hide&school=northfield,lakeview&seasons=2025-2025&networks=none",
