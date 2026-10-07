@@ -408,7 +408,7 @@ def test_toggle_has_three_buttons_in_order(
     ]
     assert buttons.evaluate_all("els => els.map(e => e.getAttribute('aria-label'))") == [
         "Spread",
-        "Excitement (CFBD)",
+        "Excitement",
         "Date",
     ]
     assert buttons.evaluate_all("els => els.map(e => e.getAttribute('aria-pressed'))") == [
