@@ -405,6 +405,8 @@ def test_legend_chip_click_toggles_family_and_hides_its_dots(
     assert _dot_count(_family_traces(traces)) == 9
     assert sum(len(t["x"]) for t in _inert_traces(traces)) == 0
 
+    # Two clicks on one pill inside 300ms are a double-click (04.15 D-05); space them.
+    guarded_page.wait_for_timeout(350)
     fox_chip.click()
     guarded_page.wait_for_function("location.search === ''")
     assert fox_chip.get_attribute("aria-pressed") == "true"

@@ -210,6 +210,8 @@ def test_legend_toggle_recounts(guarded_page: Page, open_app: OpenApp) -> None:
     _wait_points(page, 2)
     page.wait_for_function("window.__testHooks.getBarsModel().rows.length === 2")
     assert len(_bar_boxes(page)) == 2
+    # Two clicks on one pill inside 300ms are a double-click (04.15 D-05); space them.
+    page.wait_for_timeout(350)
     chip.click()
     page.wait_for_selector("#bars-note", state="hidden")
     _wait_points(page, 9)
