@@ -461,3 +461,20 @@ def test_axis_toggle_fits_one_row_on_phones(
     assert all(h >= 44 for h in info["heights"])
     assert not info["overflow"]
     assert not info["group"]
+    y_info = guarded_page.evaluate(
+        """() => {
+          const rects = [...document.querySelectorAll('#y-toggle button')]
+            .map((b) => b.getBoundingClientRect());
+          const groups = [...document.querySelectorAll('.axis-group')].map((g) => ({
+            wrap: g.scrollWidth > g.clientWidth,
+            tops: [...g.children].map((c) => Math.round(c.getBoundingClientRect().top)),
+            heights: [...g.querySelectorAll('button')]
+              .map((b) => b.getBoundingClientRect().height),
+          }));
+          return {tops: rects.map((r) => Math.round(r.top)), groups};
+        }"""
+    )
+    assert len(y_info["tops"]) == 2 and len(set(y_info["tops"])) == 1
+    for g in y_info["groups"]:
+        assert not g["wrap"]
+        assert all(h >= 44 for h in g["heights"])

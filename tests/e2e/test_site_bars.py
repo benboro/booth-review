@@ -530,7 +530,7 @@ def test_phone_touch_targets_are_44px(
 
 
 def test_controls_height_is_stable(mobile_page: Page, open_app: OpenApp) -> None:
-    open_app(mobile_page, "?school=northfield&view=scatter")
+    open_app(mobile_page, "?school=northfield,lakeview&view=scatter")
     page = mobile_page
     h = page.evaluate("document.getElementById('chart-controls').getBoundingClientRect().height")
     page.locator("#tab-bars").click()
@@ -539,6 +539,17 @@ def test_controls_height_is_stable(mobile_page: Page, open_app: OpenApp) -> None
         "document.getElementById('chart-controls').getBoundingClientRect().height"
     )
     assert abs(h - h_bars) < 1
+    assert abs(h - 100) <= 1
+    for sel in ("#axis-toggle", "#y-toggle"):
+        box = page.locator(sel).bounding_box()
+        assert box is not None
+        assert box["height"] >= 44, (sel, box)
+    page.locator("#tab-butterfly").click()
+    h_fly = page.evaluate(
+        "document.getElementById('chart-controls').getBoundingClientRect().height"
+    )
+    assert abs(h - h_fly) < 1
+    page.locator("#tab-scatter").click()
     page.evaluate("window.__testHooks.setState({networks: ['net-a']})")
     h_net = page.evaluate(
         "document.getElementById('chart-controls').getBoundingClientRect().height"
