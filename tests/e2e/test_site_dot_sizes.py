@@ -381,3 +381,122 @@ def test_date_to_spread_with_seasons_grows_dots(
     )
     assert {t["size"] for t in _family(guarded_page)} == {10}
     assert len(_info(guarded_page)) == expected_traces
+
+
+def _sizes(trace: dict[str, Any]) -> set[int]:
+    size = trace["size"]
+    return set(size) if isinstance(size, list) else {size}
+
+
+def test_person_tiers_follow_the_switch(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """04.16 D-08/D-09: the selected person's games keep their shapes and outline; the
+    others follow the enlarge switch at the same reduced opacity."""
+    open_app(guarded_page, BOTH)
+    on = _info(guarded_page)
+    open_app(guarded_page, "?people=dale-harlow&school=northfield&dots=hide")
+    off = _info(guarded_page)
+    on_fam = [t for t in on if t["meta"].startswith("family:")]
+    off_fam = [t for t in off if t["meta"].startswith("family:")]
+    assert {t["size"] for t in on_fam} == {10}
+    assert {t["line"]["width"] for t in on_fam} == {1}
+    assert {t["size"] for t in off_fam} == {6}
+    assert {t["line"]["width"] for t in off_fam} == {0}
+    tier = guarded_page.evaluate(
+        "async () => (await import('./modules/chart.js')).DOT_OPACITY.activeUnderPerson"
+    )
+    assert {t["opacity"] for t in on_fam} == {tier}
+    assert {t["opacity"] for t in off_fam} == {tier}
+    colors = []
+    for info in (on, off):
+        highlight = [t for t in info if t["meta"] == "highlight"]
+        assert highlight
+        assert all(_sizes(t) <= {10, 12, 15} for t in highlight)
+        colors.append({t["line"]["color"] for t in highlight})
+    assert colors[0] == colors[1]
+
+
+def _relayout(page: Page, js: str) -> None:
+    page.evaluate(
+        "async (js) => { const gd = document.getElementById('chart');"
+        " const L = gd._fullLayout; const f = new Function('gd', 'L', js);"
+        " await window.Plotly.relayout(gd, f(gd, L)); }",
+        js,
+    )
+
+
+@pytest.mark.parametrize("query", ["?school=northfield", "?networks=net-a,net-b,net-c,net-d"])
+def test_zoom_and_pan_never_change_sizes(
+    guarded_page: Page, open_app: Callable[[Page, str], None], query: str
+) -> None:
+    """04.16 D-02: the faded count is over the whole plot, so zooming never resizes."""
+
+    def snapshot() -> tuple[Any, ...]:
+        view = guarded_page.evaluate(
+            "() => ({e: window.__testHooks.getView().enlargeDots,"
+            " d: window.__testHooks.getView().drawnFaded})"
+        )
+        return (view["e"], view["d"], sorted((t["meta"], t["size"]) for t in _family(guarded_page)))
+
+    open_app(guarded_page, query)
+    first = snapshot()
+    narrow = (
+        "const x = L.xaxis.range, y = L.yaxis.range;"
+        " const cx = (x[0] + x[1]) / 2, cy = (y[0] + y[1]) / 2;"
+        " const hx = (x[1] - x[0]) / 4, hy = (y[1] - y[0]) / 4;"
+        " return {'xaxis.range': [cx - hx, cx + hx], 'yaxis.range': [cy - hy, cy + hy]};"
+    )
+    pan = (
+        "const x = L.xaxis.range, y = L.yaxis.range;"
+        " const dx = (x[1] - x[0]) / 8, dy = (y[1] - y[0]) / 8;"
+        " return {'xaxis.range': [x[0] + dx, x[1] + dx], 'yaxis.range': [y[0] + dy, y[1] + dy]};"
+    )
+    reset = "return {'xaxis.autorange': true, 'yaxis.autorange': true};"
+    for step in (narrow, pan, reset):
+        _relayout(guarded_page, step)
+        guarded_page.wait_for_timeout(150)
+        assert snapshot() == first, query
+
+
+def test_band_passing_markers_follow_the_switch(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    def band(page: Page) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = page.evaluate(
+            "() => document.getElementById('chart').data.filter(t =>"
+            " String(t.meta).startsWith('unrated-')).map(t => ({meta: String(t.meta),"
+            " n: (t.x || []).length, size: t.marker.size, color: t.marker.color,"
+            " line: t.marker.line}))"
+        )
+        return out
+
+    open_app(guarded_page, "?school=northfield")
+    traces = band(guarded_page)
+    active = [t for t in traces if t["meta"].startswith("unrated-active:") and t["n"]]
+    assert active
+    family_color = {
+        t["meta"].split(":")[1]: t["line"]["color"]
+        for t in traces
+        if t["meta"].startswith("unrated-inert:")
+    }
+    ring_fill = next(t["color"] for t in traces if t["meta"].startswith("unrated-inert:"))
+    for t in active:
+        assert t["size"] == 10
+        assert t["line"]["width"] == 1
+        assert t["color"] != ring_fill, t
+        assert t["color"] == family_color[t["meta"].split(":")[1]], t
+
+    open_app(guarded_page, "?school=northfield&dots=hide")
+    rings = [t for t in band(guarded_page) if t["meta"].startswith("unrated-active:") and t["n"]]
+    assert rings
+    for t in rings:
+        assert t["size"] == 6
+        assert t["color"] == ring_fill, t
+
+    open_app(guarded_page, "?school=northfield&dots=hide&y=excitement")
+    filled = [t for t in band(guarded_page) if t["meta"].startswith("unrated-active:") and t["n"]]
+    for t in filled:
+        assert t["size"] == 6
+        assert t["line"]["width"] == 0
+        assert t["color"] != ring_fill, t
