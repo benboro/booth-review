@@ -283,6 +283,10 @@ function buildNetworkChecklist(data) {
     hint.className = 'family-on-hint';
     hint.setAttribute('aria-hidden', 'true');
     hint.hidden = true;
+    // aria-describedby may reference an aria-hidden or hidden node, so the "N of M on"
+    // text reaches assistive tech as the checkbox's description without renaming it (WR-01).
+    hint.id = `family-on-${familyKeyVal}`;
+    familyCheckbox.setAttribute('aria-describedby', hint.id);
     familyItem.querySelector('.option-name').after(hint);
     legend.appendChild(familyItem);
     fieldset.appendChild(legend);

@@ -162,6 +162,22 @@ def test_hint_stays_out_of_the_checkbox_name(
     expect(box).to_have_accessible_name(re.compile(r"^ABC/ESPN"))
 
 
+def test_hint_is_the_checkbox_description_for_assistive_tech(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?networks=net-a,net-b")
+    _open_networks(guarded_page)
+    box = guarded_page.locator("input[data-family-checkbox='disney']")
+    expect(guarded_page.locator(DISNEY_HINT)).to_have_attribute("aria-hidden", "true")
+    expect(box).to_have_accessible_description("1 of 2 on")
+    expect(box).to_have_accessible_name(re.compile(r"^ABC/ESPN"))
+    # Expanded: the hint is hidden but the description stays in sync with the selection.
+    guarded_page.locator(CARET).click()
+    expect(box).to_have_accessible_description("1 of 2 on")
+    guarded_page.locator("input[data-network-id='net-e']").check()
+    expect(box).to_have_accessible_description("2 of 2 on")
+
+
 def _x(page: Page, family: str) -> float:
     box = page.locator(f"input[data-family-checkbox='{family}']").bounding_box()
     assert box is not None
@@ -199,8 +215,8 @@ def test_keyboard_enter_and_space_toggle_the_caret(
 ) -> None:
     open_app(guarded_page, "")
     _open_networks(guarded_page)
-    first = guarded_page.evaluate("document.activeElement.matches('input[data-family-checkbox]')")
-    assert first
+    # Focus moves in the queued `toggle` event, so wait for it instead of reading it at once.
+    guarded_page.wait_for_function("document.activeElement.matches('input[data-family-checkbox]')")
     caret = guarded_page.locator(CARET)
     caret.focus()
     guarded_page.keyboard.press("Enter")
