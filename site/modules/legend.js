@@ -39,6 +39,9 @@ import { currentTheme } from './pill.js';
  *   switchEl?: HTMLElement|null, onDots?: (value: string) => void}} args
  */
 export const DOUBLE_TAP_MS = 300;
+/** Upper bound on a `detail === 2` click's gap from the first, so a stale first
+ * click (and its `networks` snapshot) never pairs with it (WR-02). */
+export const DOUBLE_CLICK_MAX_MS = 1000;
 
 export function initLegend({ listEl, onToggle, onOnly, getNetworks, switchEl, onDots }) {
   let last = null;
@@ -52,15 +55,20 @@ export function initLegend({ listEl, onToggle, onOnly, getNetworks, switchEl, on
   }
   listEl.addEventListener('click', (ev) => {
     const button = ev.target.closest('button[data-family]');
-    if (!button) return;
+    if (!button) {
+      // A click in the gaps between pills ends any pending first click (WR-02).
+      last = null;
+      return;
+    }
     const family = button.dataset.family;
     if (ev.detail >= 3) return;
     // The event's own input time, not the handler's wall clock: the first
     // click's synchronous render can block the main thread for 100-300ms on a
     // slow phone, and the queued second tap must not be charged for it (WR-01).
     const t = ev.timeStamp;
+    const gap = last === null ? Infinity : t - last.time;
     const second = last !== null && last.family === family && ev.detail !== 0
-      && (ev.detail === 2 || t - last.time <= DOUBLE_TAP_MS);
+      && (ev.detail === 2 ? gap <= DOUBLE_CLICK_MAX_MS : gap <= DOUBLE_TAP_MS);
     if (second) {
       const before = last.networksBefore;
       last = null;

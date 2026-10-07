@@ -292,3 +292,44 @@ def test_slow_first_render_does_not_eat_the_double_tap_window(
     _cdp_click(cdp, x, y, start + 0.15)
     assert _networks(page) == expected
     assert _pill(page, family).get_attribute("aria-pressed") == "true"
+
+
+def test_stale_first_click_never_pairs_with_a_late_detail_two(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    """WR-02: a `detail: 2` click long after the first click acts on the current state.
+
+    The first click snapshots the family-only `networks`; the user then switches the
+    Networks filter back to All. A `detail: 2` click a second later must not judge
+    against that snapshot (which would restore All); it toggles the family off instead.
+    """
+    page = guarded_page
+    open_app(page, URL)
+    family = _families(page)[0]
+    _synthetic_double(page, family, [1, 2])
+    assert _networks(page) is not None
+    _synthetic_double(page, family, [1])
+    page.evaluate("window.__testHooks.setState({networks: null})")
+    assert _networks(page) is None
+    page.wait_for_timeout(1100)
+    _synthetic_double(page, family, [2])
+    assert _networks(page) is not None
+    assert _pill(page, family).get_attribute("aria-pressed") == "false"
+
+
+def test_click_between_pills_clears_the_pending_first_click(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    """WR-02: a click that misses every pill ends the pending first click."""
+    page = guarded_page
+    open_app(page, URL)
+    family = _families(page)[0]
+    _synthetic_double(page, family, [1])
+    assert _pill(page, family).get_attribute("aria-pressed") == "false"
+    page.evaluate(
+        "document.getElementById('legend-chips')"
+        ".dispatchEvent(new MouseEvent('click', {bubbles: true, detail: 1}))"
+    )
+    _synthetic_double(page, family, [2])
+    assert _networks(page) is None
+    assert _pill(page, family).get_attribute("aria-pressed") == "true"
