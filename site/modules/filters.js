@@ -115,6 +115,13 @@ const GAME_SECTIONS = [
 let collapsedSections = new Set();
 let searchCollapsed = new Set();
 
+/**
+ * Network families the viewer expanded. Empty means every family is collapsed, which
+ * is how each open of the popover or sheet starts (04.16 D-10). In memory only:
+ * never stored or put in the URL.
+ */
+const expandedFamilies = new Set();
+
 /** The longest query echoed in the empty-search line (04.9 D-04). */
 const GAME_QUERY_ECHO_MAX = 40;
 
@@ -252,13 +259,39 @@ function buildNetworkChecklist(data) {
     familyCheckbox.dataset.familyCheckbox = familyKeyVal;
     const familyItem = makeCheckItem(familyCheckbox, FAMILY_LABELS[familyKeyVal]);
     familyItem.classList.add('family-item');
+    const netIdxs = data.networksByFamily.get(familyKeyVal) ?? [];
+    // D-13: caret vs spacer follows the total channel count, so the layout never shifts with facets.
+    if (netIdxs.length > 1) {
+      const caret = document.createElement('button');
+      caret.type = 'button';
+      caret.className = 'family-caret';
+      caret.dataset.family = familyKeyVal;
+      caret.setAttribute('aria-expanded', 'false');
+      caret.setAttribute('aria-controls', `family-rows-${familyKeyVal}`);
+      caret.setAttribute('aria-label', `${FAMILY_LABELS[familyKeyVal]} channels`);
+      caret.title = 'Show channels';
+      caret.appendChild(makeCaretIcon());
+      familyItem.prepend(caret);
+    } else {
+      const spacer = document.createElement('span');
+      spacer.className = 'family-caret-spacer';
+      spacer.setAttribute('aria-hidden', 'true');
+      familyItem.prepend(spacer);
+    }
+    // The hint sits between the name and the count, aria-hidden like the count (04.16 D-12).
+    const hint = document.createElement('span');
+    hint.className = 'family-on-hint';
+    hint.setAttribute('aria-hidden', 'true');
+    hint.hidden = true;
+    familyItem.querySelector('.option-name').after(hint);
     legend.appendChild(familyItem);
     fieldset.appendChild(legend);
     familyCheckboxes.set(familyKeyVal, familyCheckbox);
 
     const list = document.createElement('ul');
     list.className = 'network-list';
-    const netIdxs = data.networksByFamily.get(familyKeyVal) ?? [];
+    list.id = `family-rows-${familyKeyVal}`;
+    list.hidden = true;
     for (const idx of netIdxs) {
       const net = data.lookups.networks[idx];
       const li = document.createElement('li');
@@ -278,6 +311,35 @@ function buildNetworkChecklist(data) {
     ...(helper ? [helper] : []),
     ...groups,
   );
+}
+
+/** Applies `expandedFamilies` to every caret, its channel list and its "N of M on" hint (04.16 D-10..D-13). */
+function syncFamilyRows() {
+  for (const caret of els.networksSection.querySelectorAll('.family-caret')) {
+    const family = caret.dataset.family;
+    const expanded = expandedFamilies.has(family);
+    caret.setAttribute('aria-expanded', String(expanded));
+    caret.title = expanded ? 'Hide channels' : 'Show channels';
+    const list = document.getElementById(`family-rows-${family}`);
+    if (list) list.hidden = !expanded;
+  }
+  for (const [family, checkbox] of familyCheckboxes) {
+    const hint = checkbox.closest('.check-item').querySelector('.family-on-hint');
+    if (hint) hint.hidden = expandedFamilies.has(family) || !checkbox.indeterminate;
+  }
+}
+
+/** Expands or collapses one family. Never touches `state.networks` (D-11). */
+function toggleFamily(family) {
+  if (expandedFamilies.has(family)) expandedFamilies.delete(family);
+  else expandedFamilies.add(family);
+  syncFamilyRows();
+}
+
+/** Collapses every family; called from `beforetoggle` so the first painted frame is collapsed (D-10). */
+function resetNetworkCollapse() {
+  expandedFamilies.clear();
+  syncFamilyRows();
 }
 
 /** One "Only" button, a sibling of the row's label (never nested in it), built with textContent only. */
@@ -816,7 +878,7 @@ function positionPopover(popover, trigger) {
  */
 function firstFocusable(container) {
   return container.querySelector(
-    'input, button:not(.group-reset):not(.only-btn):not([data-match]), [tabindex]:not([tabindex="-1"]):not(.group-reset):not(.only-btn)',
+    'input, button:not(.group-reset):not(.only-btn):not(.family-caret):not([data-match]), [tabindex]:not([tabindex="-1"]):not(.group-reset):not(.only-btn):not(.family-caret)',
   );
 }
 
@@ -945,7 +1007,14 @@ export function initFilters({ data, getState, setState }) {
 
   els.networksSection.addEventListener('change', (ev) => handleNetworksChange(data, getState, setState, ev));
   const onOnlyClick = (ev) => handleOnlyClick(data, getState, setState, ev);
-  els.networksSection.addEventListener('click', onOnlyClick);
+  els.networksSection.addEventListener('click', (ev) => {
+    const caret = ev.target.closest('.family-caret');
+    if (caret) {
+      toggleFamily(caret.dataset.family);
+      return;
+    }
+    onOnlyClick(ev);
+  });
   els.slotsSection.addEventListener('click', onOnlyClick);
   els.conferenceList.addEventListener('click', onOnlyClick);
 
@@ -1043,6 +1112,12 @@ export function initFilters({ data, getState, setState }) {
     });
     pop.addEventListener('toggle', (ev) => {
       if (ev.newState === 'open') syncGameTooltips();
+    });
+  }
+  // 04.16 D-10: families reopen collapsed; same beforetoggle timing as the Game reset above.
+  for (const id of ['pop-networks', 'filters-sheet']) {
+    document.getElementById(id).addEventListener('beforetoggle', (ev) => {
+      if (ev.newState === 'open') resetNetworkCollapse();
     });
   }
   window.addEventListener('scroll', repositionOpenPopovers, { passive: true });
@@ -1162,7 +1237,9 @@ function renderNetworks(data, state, view) {
     const on = visibleCount > 0 ? visibleChecked : checkedCount;
     familyCheckbox.checked = netIdxs.length > 0 && on === total;
     familyCheckbox.indeterminate = on > 0 && on < total;
+    familyItem.querySelector('.family-on-hint').textContent = `${on} of ${total} on`;
   }
+  syncFamilyRows();
 }
 
 /** Syncs the time-slot checkboxes and their counts (SITE-11, D-13: never hidden, never disabled). */

@@ -1012,6 +1012,64 @@ input[type="checkbox"] {
   transform: rotate(-90deg);
 }
 
+/* Networks rollup (04.16 D-10..D-13): caret and same-width spacer at the left of a family row. */
+.family-caret {
+  flex: none;
+  width: 28px;
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .family-caret:hover {
+    color: var(--text);
+  }
+}
+
+.family-caret:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.family-caret[aria-expanded="false"] .game-caret {
+  transform: rotate(-90deg);
+}
+
+.family-caret-spacer {
+  flex: none;
+  width: 28px;
+}
+
+.family-on-hint {
+  flex: none;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-left: var(--space-sm);
+  white-space: nowrap;
+}
+
+.family-on-hint[hidden] {
+  display: none;
+}
+
+.family-item .option-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.network-list[hidden] {
+  display: none;
+}
+
 .game-picked-hint {
   margin-left: auto;
   font-weight: 400;
@@ -1207,6 +1265,13 @@ input[type="checkbox"] {
   .only-btn {
     opacity: 1;
     color: var(--muted-weak);
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .family-caret,
+  .family-caret-spacer {
+    width: 44px;
     min-width: 44px;
     min-height: 44px;
   }
@@ -2347,6 +2412,8 @@ html:has(#detail-panel[open]) {
   .sheet-body label,
   .check-row,
   .only-btn,
+  .family-caret,
+  .family-caret-spacer,
   #person-results > li[role="option"],
   .games-table th button,
   .shape-legend li,
