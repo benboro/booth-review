@@ -1322,8 +1322,14 @@ def test_tooltip_model_adds_excitement_line_for_excitement_y(
             dateOnly: m(both, { axis: 'date' }).axisLine,
             spreadOnly: m(both, { axis: 'spread' }).axisLine,
             spreadViewers: m(both, { axis: 'spread', y: 'viewers' }).axisLine,
-            vRated: [m(both, { axis: 'spread' }).viewersLine, m(both, { axis: 'spread', y: 'excitement' }).viewersLine],
-            vUnrated: [m(unrated, { axis: 'spread' }).viewersLine, m(unrated, { axis: 'spread', y: 'excitement' }).viewersLine],
+            vRated: [
+              m(both, { axis: 'spread' }).viewersLine,
+              m(both, { axis: 'spread', y: 'excitement' }).viewersLine,
+            ],
+            vUnrated: [
+              m(unrated, { axis: 'spread' }).viewersLine,
+              m(unrated, { axis: 'spread', y: 'excitement' }).viewersLine,
+            ],
           };
         }"""
     )
