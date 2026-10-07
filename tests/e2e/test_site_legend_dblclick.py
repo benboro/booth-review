@@ -44,6 +44,17 @@ _SYNTHETIC_CLICKS_ON = """
 }
 """
 
+# A stand-in for a slow phone's first-click render: block the main thread once, after
+# the legend's own handler (and its synchronous render) has run.
+_BLOCK_AFTER_NEXT_CLICK = """
+(ms) => {
+  window.addEventListener('click', () => {
+    const end = performance.now() + ms;
+    while (performance.now() < end) {}
+  }, {once: true});
+}
+"""
+
 
 def _pill(page: Page, family: str) -> Any:
     return page.locator(f"#legend-chips button[data-family='{family}']")
@@ -237,3 +248,47 @@ def test_pill_hint_title_and_aria_description(guarded_page: Page, open_app: Open
     assert pill.get_attribute("title") == "Double-click to show all networks"
     assert pill.get_attribute("aria-description") == "Double-click to show all networks"
     assert page.locator("#legend-row").bounding_box() == before
+
+
+def _cdp_click(cdp: Any, x: float, y: float, timestamp: float) -> None:
+    """One trusted single click (detail 1, as iOS reports each tap) with its input time."""
+    for kind in ("mousePressed", "mouseReleased"):
+        cdp.send(
+            "Input.dispatchMouseEvent",
+            {
+                "type": kind,
+                "x": x,
+                "y": y,
+                "button": "left",
+                "clickCount": 1,
+                "timestamp": timestamp,
+            },
+        )
+
+
+def test_slow_first_render_does_not_eat_the_double_tap_window(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    """WR-01: the window is timed by input time, not by when each handler runs.
+
+    The two taps are 150ms apart by input time, but the first one's handler blocks the
+    main thread for 500ms (a slow phone's render), so the second handler runs well past
+    DOUBLE_TAP_MS of wall-clock time. Each tap is its own trusted CDP dispatch.
+    """
+    page = guarded_page
+    open_app(page, URL)
+    family = _families(page)[0]
+    _synthetic_double(page, family, [1, 2])
+    expected = _networks(page)
+    assert expected is not None
+    open_app(page, URL)
+    box = _pill(page, family).bounding_box()
+    assert box is not None
+    x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    cdp = page.context.new_cdp_session(page)
+    page.evaluate(_BLOCK_AFTER_NEXT_CLICK, 500)
+    start = page.evaluate("Date.now() / 1000")
+    _cdp_click(cdp, x, y, start)
+    _cdp_click(cdp, x, y, start + 0.15)
+    assert _networks(page) == expected
+    assert _pill(page, family).get_attribute("aria-pressed") == "true"

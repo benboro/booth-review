@@ -55,8 +55,12 @@ export function initLegend({ listEl, onToggle, onOnly, getNetworks, switchEl, on
     if (!button) return;
     const family = button.dataset.family;
     if (ev.detail >= 3) return;
+    // The event's own input time, not the handler's wall clock: the first
+    // click's synchronous render can block the main thread for 100-300ms on a
+    // slow phone, and the queued second tap must not be charged for it (WR-01).
+    const t = ev.timeStamp;
     const second = last !== null && last.family === family && ev.detail !== 0
-      && (ev.detail === 2 || performance.now() - last.time <= DOUBLE_TAP_MS);
+      && (ev.detail === 2 || t - last.time <= DOUBLE_TAP_MS);
     if (second) {
       const before = last.networksBefore;
       last = null;
@@ -66,7 +70,7 @@ export function initLegend({ listEl, onToggle, onOnly, getNetworks, switchEl, on
     if (ev.detail === 0) {
       last = null;
     } else {
-      last = { family, time: performance.now(), networksBefore: getNetworks() };
+      last = { family, time: t, networksBefore: getNetworks() };
     }
     onToggle(family);
   });
