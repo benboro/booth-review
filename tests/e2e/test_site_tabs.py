@@ -165,15 +165,21 @@ def test_keyboard_navigation_is_roving_with_manual_activation(
 def test_bar_controls_replace_the_axis_toggle_without_shifting_layout(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    open_app(guarded_page, ONE_SCHOOL)
+    open_app(guarded_page, "?school=northfield,lakeview")
     assert _is_concealed(guarded_page, "#bar-controls")
     assert not _is_concealed(guarded_page, "#axis-toggle")
+    assert not _is_concealed(guarded_page, "#y-toggle")
     axis_before = _box(guarded_page, "#axis-toggle")
 
     guarded_page.locator("#tab-bars").click()
     assert not _is_concealed(guarded_page, "#bar-controls")
     assert _is_concealed(guarded_page, "#axis-toggle")
+    assert _is_concealed(guarded_page, "#y-toggle")
     assert _box(guarded_page, "#axis-toggle")["height"] == axis_before["height"]
+    guarded_page.locator("#tab-butterfly").click()
+    assert _is_concealed(guarded_page, "#axis-toggle")
+    assert _is_concealed(guarded_page, "#y-toggle")
+    guarded_page.locator("#tab-bars").click()
     assert not _is_concealed(guarded_page, "#group-by-toggle")
 
     guarded_page.locator('#group-by-toggle button[data-by="network"]').click()

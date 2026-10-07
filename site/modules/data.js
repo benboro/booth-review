@@ -153,6 +153,12 @@ export function prepareData(raw) {
   for (let i = nRated; i < n; i += 1) {
     jitter[i] = (Math.imul(i - nRated + 1, 2654435761) >>> 0) / 4294967296;
   }
+  // 04.15 D-16: band y for Excitement mode, where rated games with no excitement value also
+  // sit in the band. Unrated values equal `jitter`, so Viewers-mode markers never move.
+  const bandJitter = new Array(n);
+  for (let i = 0; i < n; i += 1) {
+    bandJitter[i] = jitter[i] ?? (Math.imul(i + 1, 2246822519) >>> 0) / 4294967296;
+  }
   const homeSpread = merged.home_spread;
   const spread = new Array(n);
   for (let i = 0; i < n; i += 1) {
@@ -313,6 +319,7 @@ export function prepareData(raw) {
     nRated,
     rated,
     jitter,
+    bandJitter,
     t,
     lookups,
     familyOf,

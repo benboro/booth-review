@@ -6,6 +6,21 @@
 import { BAND } from './chart.js';
 
 /**
+ * D-16: the band label and button aria-label per y mode. Constants only, so the
+ * setter below never writes a data string.
+ */
+const BAND_INFO_COPY = Object.freeze({
+  viewers: Object.freeze({
+    label: 'No public rating',
+    ariaLabel: 'Why do some games have no public rating?',
+  }),
+  excitement: Object.freeze({
+    label: 'No excitement value',
+    ariaLabel: 'Why do some games have no excitement value?',
+  }),
+});
+
+/**
  * Wires the toggle, Escape and outside-press handling. Safe to call once.
  * @param {{button: HTMLElement|null, note: HTMLElement|null}} els
  */
@@ -35,6 +50,29 @@ export function closeBandNote({ button, note }) {
   if (!button || !note) return;
   note.hidden = true;
   button.setAttribute('aria-expanded', 'false');
+}
+
+/**
+ * D-16: swaps the band label, aria-label and the visible note block for the
+ * y mode (anything but 'excitement' is 'viewers'). Closes an open note when
+ * the mode changes. DOM-only: constants and static HTML, never data strings.
+ * @param {{button: HTMLElement|null, note: HTMLElement|null}} els
+ * @param {string} yMode
+ */
+export function setBandInfoMode({ button, note }, yMode) {
+  if (!button || !note) return;
+  const mode = yMode === 'excitement' ? 'excitement' : 'viewers';
+  const previous = button.dataset.yMode;
+  if (previous && previous !== mode) closeBandNote({ button, note });
+  button.dataset.yMode = mode;
+  const copy = BAND_INFO_COPY[mode];
+  const text = button.querySelector('.band-info-text');
+  if (text) text.textContent = copy.label;
+  button.setAttribute('aria-label', copy.ariaLabel);
+  const viewersBlock = note.querySelector('#band-note-viewers');
+  const excitementBlock = note.querySelector('#band-note-excitement');
+  if (viewersBlock) viewersBlock.hidden = mode !== 'viewers';
+  if (excitementBlock) excitementBlock.hidden = mode !== 'excitement';
 }
 
 /**

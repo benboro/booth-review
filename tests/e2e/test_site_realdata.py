@@ -1313,3 +1313,64 @@ def test_real_band_rings_are_clean(
     assert open_traces == 0
     assert band_traces > 0
     assert differing <= _REAL_BAND_MAX_DIFF
+
+
+_REAL_Y_TRACES_JS = """
+async () => {
+  const p = await import('./modules/palette.js');
+  const theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  const gd = document.getElementById('chart');
+  let band = 0;
+  let ringed = 0;
+  for (const t of gd.data) {
+    const meta = String(t.meta);
+    if (meta.startsWith('unrated-') || meta.startsWith('highlight-unrated')) {
+      for (const v of Array.from(t.x ?? [])) if (v !== null && v !== undefined) band += 1;
+    }
+    if (t.marker && t.marker.color === p.SURFACE[theme]) ringed += 1;
+  }
+  const yr = gd._fullLayout.yaxis.range;
+  return { band, ringed, type: gd.layout.yaxis.type, lo: yr[0], hi: yr[1] };
+}
+"""
+
+
+def test_real_excitement_y_band_and_axis_counts(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+    real_raw: dict[str, Any],
+) -> None:
+    """04.15 D-13..D-16: under y=excitement the band holds exactly the games with no excitement
+    value, no marker is drawn with the ring fill, the y axis is linear and covers the payload's
+    excitement maximum, four y switches raise no page error, and the summary count text is the
+    same in both y modes -- integers and booleans only."""
+    page_errors: list[str] = []
+    real_guarded_page.on("pageerror", lambda exc: page_errors.append("error"))
+    values = list(real_raw["telecasts"]["excitement"]) + list(
+        real_raw["telecasts_unrated"]["excitement"]
+    )
+    null_count = sum(1 for v in values if v is None)
+    top = max(v for v in values if v is not None)
+    real_open_app(real_guarded_page, "")
+    summary_viewers: str = real_guarded_page.inner_text("#summary-count")
+    real_open_app(real_guarded_page, "?y=excitement")
+    real_guarded_page.evaluate(
+        "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
+    )
+    got: dict[str, Any] = real_guarded_page.evaluate(_REAL_Y_TRACES_JS)
+    summary_excitement: str = real_guarded_page.inner_text("#summary-count")
+    band_count: int = got["band"]
+    ringed: int = got["ringed"]
+    is_linear = got["type"] == "linear"
+    covers_max = got["lo"] <= 0 and got["hi"] >= top
+    same_summary = summary_viewers == summary_excitement
+    for y in ("viewers", "excitement", "viewers", "excitement"):
+        real_guarded_page.evaluate("(y) => window.__testHooks.setState({y, axis: 'spread'})", y)
+        real_guarded_page.wait_for_timeout(100)
+    errors = len(page_errors)
+    assert band_count == null_count
+    assert ringed == 0
+    assert is_linear
+    assert covers_max
+    assert same_summary
+    assert errors == 0

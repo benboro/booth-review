@@ -452,6 +452,9 @@ _COUNT_QUERIES = [
     "?axis=excitement",
     "?axis=date",
     "?axis=date&seasons=2025-2026",
+    "?y=excitement",
+    "?y=excitement&people=pat-rowan",
+    "?axis=date&y=excitement",
 ]
 
 

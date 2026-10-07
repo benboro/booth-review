@@ -15,7 +15,8 @@
  * (comma-separated names, ordered/filtered by `data.fbsConferences`),
  * `school` (comma-separated team slugs, ordered by team index), `postseason`
  * (`exclude`/`only`; omitted at the default `all`), `seasons`, `networks`,
- * `slot`, `axis` (`excitement`/`date`; Spread is the default and is omitted), `view` (`bars`/`butterfly`), `by` (`network`/`team`/`conference`);
+ * `slot`, `axis` (`excitement`/`date`; Spread is the default and is omitted), `y`
+ * (`excitement`; Viewers is the default and is omitted; y wins over `axis=excitement`, 04.15 D-12), `view` (`bars`/`butterfly`), `by` (`network`/`team`/`conference`);
  * each of the last two is omitted at its default (D-13). `h2h` (`1`, only with
  * exactly two schools; omitted at Either team) and `dots` (`hide`; omitted at
  * the Fade default; 04.7 D-10, D-14). `game` (one named-game slug: a bowl franchise,
@@ -101,6 +102,7 @@ export function encodeState(state, data) {
   }
 
   if (state.axis === 'excitement' || state.axis === 'date') params.push(['axis', state.axis]);
+  if (state.y === 'excitement') params.push(['y', 'excitement']);
   if (state.view === 'bars' || state.view === 'butterfly') params.push(['view', state.view]);
   if (state.by) params.push(['by', state.by]);
   if (state.dots === 'hide') params.push(['dots', 'hide']);
@@ -301,6 +303,9 @@ export function decodeState(search, data) {
   state.slots = decodeSlots(scalarParam(params, 'slot'));
   const rawAxis = scalarParam(params, 'axis');
   state.axis = ['excitement', 'date'].includes(rawAxis) ? rawAxis : 'spread';
+  state.y = scalarParam(params, 'y') === 'excitement' ? 'excitement' : 'viewers';
+  // D-12: a non-default y in a link was picked on purpose, so it wins and x falls back to Spread.
+  if (state.y === 'excitement' && state.axis === 'excitement') state.axis = 'spread';
   // view/by are enum-allowlisted but never checked for applicability
   // (D-12): a stale `?view=bars` must survive a setState round trip.
   const rawView = scalarParam(params, 'view');

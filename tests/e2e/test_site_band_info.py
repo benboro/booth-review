@@ -115,3 +115,54 @@ def test_escape_closes_the_dialog_before_the_band_note(
     guarded_page.keyboard.press("Escape")
     assert guarded_page.is_hidden("#band-note")
     assert guarded_page.evaluate("document.activeElement.id") == "band-info"
+
+
+def test_band_info_mode_swaps_copy_and_closes_the_note(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-16: setBandInfoMode swaps label, aria-label and note block from constants,
+    closes an open note on a mode change, and treats unknown modes as viewers."""
+    open_app(guarded_page, "")
+    _settle(guarded_page)
+    viewers_label = guarded_page.inner_text("#band-info .band-info-text")
+    viewers_aria = guarded_page.get_attribute("#band-info", "aria-label")
+    set_mode = """
+        async (mode) => {
+          const B = await import('./modules/band-info.js');
+          B.setBandInfoMode({
+            button: document.getElementById('band-info'),
+            note: document.getElementById('band-note'),
+          }, mode);
+        }
+    """
+    guarded_page.evaluate(set_mode, "viewers")
+    guarded_page.click("#band-info")
+    assert guarded_page.get_attribute("#band-info", "aria-expanded") == "true"
+
+    guarded_page.evaluate(set_mode, "excitement")
+    assert guarded_page.is_hidden("#band-note")
+    assert guarded_page.get_attribute("#band-info", "aria-expanded") == "false"
+    assert guarded_page.inner_text("#band-info .band-info-text") == "No excitement value"
+    assert (
+        guarded_page.get_attribute("#band-info", "aria-label")
+        == "Why do some games have no excitement value?"
+    )
+    guarded_page.click("#band-info")
+    assert guarded_page.is_visible("#band-note-excitement")
+    assert guarded_page.is_hidden("#band-note-viewers")
+    href = guarded_page.get_attribute("#band-note-excitement a", "href")
+    assert href is not None
+    assert href.endswith("methodology.html#the-y-axis-viewers-or-excitement")
+
+    guarded_page.evaluate(set_mode, "viewers")
+    assert guarded_page.is_hidden("#band-note")
+    assert guarded_page.inner_text("#band-info .band-info-text") == viewers_label
+    assert guarded_page.get_attribute("#band-info", "aria-label") == viewers_aria
+    guarded_page.click("#band-info")
+    assert guarded_page.is_visible("#band-note-viewers")
+    assert guarded_page.is_hidden("#band-note-excitement")
+
+    guarded_page.evaluate(set_mode, "bogus")
+    assert guarded_page.inner_text("#band-info .band-info-text") == viewers_label
+    assert guarded_page.get_attribute("#band-info", "aria-label") == viewers_aria
+    assert guarded_page.is_hidden("#band-note-excitement")

@@ -33,6 +33,8 @@ _STATES = [
     "?axis=excitement",
     "?axis=date",
     "?axis=date&seasons=2025-2026",
+    "?y=excitement",
+    "?axis=date&y=excitement",
 ]
 
 _THEMES = ["light", "dark"]

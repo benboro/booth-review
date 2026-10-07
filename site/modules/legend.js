@@ -18,19 +18,38 @@
  * games; other filters fade unless Hide is on. It is concealed off Scatter.
  */
 
-import { familyToggledOff } from './select.js';
+import { familyToggledOff, familyIsSole } from './select.js';
 import { FAMILY_COLORS, FAMILY_LABELS, PILL_TEXT_COLOR } from './palette.js';
 import { currentTheme } from './pill.js';
 
+/** D-07: two single clicks (or taps) on one pill within this many ms, by input time,
+ * count as a double-click. */
+export const DOUBLE_TAP_MS = 300;
+/** Upper bound on a `detail === 2` click's gap from the first, so a stale first
+ * click (and its `networks` snapshot) never pairs with it (WR-02). */
+export const DOUBLE_CLICK_MAX_MS = 1000;
+
 /**
+ * D-05..D-08: a second click on the same pill (event.detail === 2 within
+ * DOUBLE_CLICK_MAX_MS, or a second click within DOUBLE_TAP_MS, which also
+ * covers double-tap) shows only that family, like Networks > Only. Detection
+ * runs on `click` plus `detail` because a native `dblclick` never fires on
+ * pills rebuilt every render; gaps are measured with `event.timeStamp`. The
+ * first click snapshots `networks` before toggling, so the result comes from
+ * the pre-click state. Keyboard clicks (detail 0) never count; detail >= 3 is
+ * ignored; a click between pills drops the pending first click.
+ *
  * Binds one delegated click listener on `listEl` for every legend chip,
  * present now or rebuilt later by `renderLegend`. Native `<button>`
  * elements already give Enter/Space activation for free, so no separate
  * `keydown` handler is needed.
  * @param {{listEl: HTMLElement, onToggle: (family: string) => void,
+ *   onOnly: (family: string, before: string[]|null) => void,
+ *   getNetworks: () => string[]|null,
  *   switchEl?: HTMLElement|null, onDots?: (value: string) => void}} args
  */
-export function initLegend({ listEl, onToggle, switchEl, onDots }) {
+export function initLegend({ listEl, onToggle, onOnly, getNetworks, switchEl, onDots }) {
+  let last = null;
   if (switchEl) {
     switchEl.addEventListener('click', (ev) => {
       const button = ev.target.closest('button[data-dots]');
@@ -41,8 +60,32 @@ export function initLegend({ listEl, onToggle, switchEl, onDots }) {
   }
   listEl.addEventListener('click', (ev) => {
     const button = ev.target.closest('button[data-family]');
-    if (!button) return;
-    onToggle(button.dataset.family);
+    if (!button) {
+      // A click in the gaps between pills ends any pending first click (WR-02).
+      last = null;
+      return;
+    }
+    const family = button.dataset.family;
+    if (ev.detail >= 3) return;
+    // The event's own input time, not the handler's wall clock: the first
+    // click's synchronous render can block the main thread for 100-300ms on a
+    // slow phone, and the queued second tap must not be charged for it (WR-01).
+    const t = ev.timeStamp;
+    const gap = last === null ? Infinity : t - last.time;
+    const second = last !== null && last.family === family && ev.detail !== 0
+      && (ev.detail === 2 ? gap <= DOUBLE_CLICK_MAX_MS : gap <= DOUBLE_TAP_MS);
+    if (second) {
+      const before = last.networksBefore;
+      last = null;
+      onOnly(family, before);
+      return;
+    }
+    if (ev.detail === 0) {
+      last = null;
+    } else {
+      last = { family, time: t, networksBefore: getNetworks() };
+    }
+    onToggle(family);
   });
 }
 
@@ -70,6 +113,11 @@ export function renderLegend({ data, state, view }) {
     button.textContent = FAMILY_LABELS[family];
     const pressed = !familyToggledOff(data, state, family);
     button.setAttribute('aria-pressed', String(pressed));
+    const hint = familyIsSole(data, view, family, state.networks)
+      ? 'Double-click to show all networks'
+      : `Double-click to show only ${FAMILY_LABELS[family]}`;
+    button.title = hint;
+    button.setAttribute('aria-description', hint);
     const counts = view?.facets?.networks;
     const offered = !counts
       || (data.networksByFamily.get(family) ?? []).reduce((sum, idx) => sum + (counts[idx] ?? 0), 0) > 0;

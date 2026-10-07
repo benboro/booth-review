@@ -293,9 +293,10 @@ def test_trigger_counts_selected_announcers(
 def test_summary_is_one_line_under_the_chip_row(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-21: the summary line sits on one line under the chip row and never
-    wraps into a narrow column."""
-    guarded_page.set_viewport_size({"width": 1280, "height": 800})
+    """D-21: below the beside-the-box breakpoint (04.15 D-02; see
+    test_site_selection_band.BESIDE_MIN_WIDTH) the summary line sits on one line
+    under the chip row and never wraps into a narrow column."""
+    guarded_page.set_viewport_size({"width": 800, "height": 800})
     open_app(guarded_page, "")
     for query in ["Dale Harlow", "Kris Venn", "Sam Delgado"]:
         _add_person_by_query(guarded_page, query)

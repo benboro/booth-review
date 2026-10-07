@@ -405,6 +405,8 @@ def test_legend_chip_click_toggles_family_and_hides_its_dots(
     assert _dot_count(_family_traces(traces)) == 9
     assert sum(len(t["x"]) for t in _inert_traces(traces)) == 0
 
+    # Two clicks on one pill inside 300ms are a double-click (04.15 D-05); space them.
+    guarded_page.wait_for_timeout(350)
     fox_chip.click()
     guarded_page.wait_for_function("location.search === ''")
     assert fox_chip.get_attribute("aria-pressed") == "true"
@@ -1292,6 +1294,57 @@ def test_html_tooltip_falls_back_to_text_when_an_icon_cannot_be_built(
         """
     )
     assert result == {"text": "Summit Bowl \u00b7 CFP semifinal", "svgs": 0, "role": None}
+
+
+def test_tooltip_model_adds_excitement_line_for_excitement_y(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-17: with y = Excitement on Spread x the axis line shows both plotted
+    measures (the Date-line form); the viewers line and every other mode are
+    unchanged."""
+    open_app(guarded_page, "")
+    result = guarded_page.evaluate(
+        """async () => {
+          const T = await import('./modules/tooltip.js');
+          const F = await import('./modules/format.js');
+          const d = window.__testHooks.data;
+          const n = d.n;
+          const find = (pred) => { for (let i = 0; i < n; i++) if (pred(i)) return i; return -1; };
+          const both = find((i) => d.rated[i] && d.t.excitement[i] != null);
+          const unrated = find((i) => !d.rated[i]);
+          const nullExc = find((i) => d.t.excitement[i] == null);
+          const m = (i, o) => T.tooltipModel(d, i, o);
+          return {
+            idx: [both, unrated, nullExc],
+            spreadExc: m(both, { axis: 'spread', y: 'excitement' }).axisLine,
+            dateForm: F.axisValueText(d, both, 'date'),
+            nullLine: m(nullExc, { axis: 'spread', y: 'excitement' }).axisLine,
+            nullTail: F.formatAxisValue('excitement', d.t.excitement[nullExc]),
+            dateExc: m(both, { axis: 'date', y: 'excitement' }).axisLine,
+            dateOnly: m(both, { axis: 'date' }).axisLine,
+            spreadOnly: m(both, { axis: 'spread' }).axisLine,
+            spreadViewers: m(both, { axis: 'spread', y: 'viewers' }).axisLine,
+            vRated: [
+              m(both, { axis: 'spread' }).viewersLine,
+              m(both, { axis: 'spread', y: 'excitement' }).viewersLine,
+            ],
+            vUnrated: [
+              m(unrated, { axis: 'spread' }).viewersLine,
+              m(unrated, { axis: 'spread', y: 'excitement' }).viewersLine,
+            ],
+          };
+        }"""
+    )
+    assert min(result["idx"]) >= 0
+    assert result["spreadExc"] == result["dateForm"]
+    assert result["nullLine"].endswith(result["nullTail"])
+    assert result["dateExc"] == result["dateOnly"]
+    assert result["spreadOnly"] == result["spreadViewers"]
+    assert result["spreadOnly"] != result["spreadExc"]
+    assert result["vRated"][0] == result["vRated"][1]
+    assert result["vRated"][0].startswith("Viewers: ")
+    assert result["vUnrated"][0] == result["vUnrated"][1]
+    assert result["vUnrated"][0].startswith("No public rating")
 
 
 def test_plotly_fallback_tooltip_shows_game_type_text_without_slot_label(

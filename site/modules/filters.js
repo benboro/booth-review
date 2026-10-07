@@ -31,7 +31,7 @@
 import { gameKeyMatches, gameSearchKey, normalizeName } from './data.js';
 import { makeCaretIcon, makeGameTypeIcon } from './icons.js';
 import { FAMILY_LABELS } from './palette.js';
-import { offeredFamilyIds } from './select.js';
+import { familyIsSole, familyOnlyPatch, offeredFamilyIds, sameSet } from './select.js';
 import { NEW_YEARS_SIX, SLOT_SHORT_LABELS, ROLE_LABELS, gameRowTitle } from './format.js';
 
 const ROLE_HELPER_TEXT = 'Limits matches to main-broadcast play-by-play or analyst roles.';
@@ -307,18 +307,15 @@ function buildOnlyButtons() {
   }
 }
 
-const SAME_SET = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
-
 /** True when the button's option is already the sole selection, so it reads "All" (D-25). */
 function onlyIsSole(btn, data, state, view) {
   const d = btn.dataset;
-  if (d.onlyNetwork) return state.networks != null && SAME_SET(state.networks, [d.onlyNetwork]);
+  if (d.onlyNetwork) return state.networks != null && sameSet(state.networks, [d.onlyNetwork]);
   if (d.onlyFamily) {
-    const offered = offeredFamilyIds(data, d.onlyFamily, view);
-    return state.networks != null && offered.length > 0 && SAME_SET(state.networks, offered);
+    return familyIsSole(data, view, d.onlyFamily, state.networks);
   }
-  if (d.onlySlot) return state.slots != null && SAME_SET(state.slots, [d.onlySlot]);
-  if (d.onlyConference) return SAME_SET(state.conferences, [d.onlyConference]);
+  if (d.onlySlot) return state.slots != null && sameSet(state.slots, [d.onlySlot]);
+  if (d.onlyConference) return sameSet(state.conferences, [d.onlyConference]);
   return false;
 }
 
@@ -330,12 +327,15 @@ function handleOnlyClick(data, getState, setState, ev) {
   ev.stopPropagation();
   const d = btn.dataset;
   const resetKey = d.onlyGroup;
+  if (d.onlyFamily) {
+    // Only and All share one rule with the legend pill double-click (04.15 D-06).
+    setState(familyOnlyPatch(data, lastView, d.onlyFamily, getState().networks));
+    return;
+  }
   if (onlyIsSole(btn, data, getState(), lastView)) {
     setState(structuredClone(GROUP_RESETS[resetKey]));
   } else if (d.onlyNetwork) {
     setState({ networks: [d.onlyNetwork] });
-  } else if (d.onlyFamily) {
-    setState({ networks: offeredFamilyIds(data, d.onlyFamily, lastView) });
   } else if (d.onlySlot) {
     setState({ slots: [d.onlySlot] });
   } else if (d.onlyConference) {
