@@ -115,6 +115,9 @@ def test_render_methodology_explains_how_filters_display() -> None:
         "or a named game",
     ):
         assert phrase in result
+    assert "stand out against them" in result
+    assert "1 to 3 network families" in result
+    assert "With a filter active, the games that pass it are drawn like rated dots" not in result
 
 
 def test_render_methodology_explains_the_spread_axis() -> None:

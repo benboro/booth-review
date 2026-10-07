@@ -92,6 +92,8 @@ and lists the games that pass every filter. Double-clicking (or double-tapping) 
 
 **Named games.** The Game filter picks one named game and shows every rated telecast of it. Bowls are grouped by franchise and shown under their latest name, so a renamed bowl is one entry and searching an old name finds it. The CFP entries are the four playoff rounds, and a semifinal or quarterfinal played at a bowl appears under both its round and that bowl. Rivalries come from a curated list of well-known named FBS rivalries and count only the first regular-season meeting of the two teams each season, never a conference championship game. CFBD marks conference title games from 2022 on, so from then a title game is left out even when it comes before the rivalry game or replaces it. For earlier seasons the first-meeting rule alone applies, so a later conference-championship rematch is left out. Postseason meetings never count. The matched-games table lists the games that pass every filter, and the filter combines with the others like any other.
 
+**Dot size.** Games that pass the filters are drawn larger, with a thin black outline, only when faded games are also on the chart, so they stand out against them. In Hide mode, or when a filter leaves nothing faded (for example every kickoff slot checked), every dot keeps its normal size. Zooming or panning never changes sizes. Networks alone is the one exception: picking 1 to 3 network families draws the shown games larger, and 4 or more keep them at normal size. On the Date axis a season range alone does not enlarge dots.
+
 None of this changes the axes or uses viewership as an input.
 
 ## Games with no public rating
@@ -115,7 +117,7 @@ On the site each game reads "No public rating · {cause}".
 
 **The rarely-rated list.** It is set by hand, one value per network, in `data/reference/network_rarity.csv`, and never computed from a threshold. Every network in `networks.csv` has a row, so a newly mapped network forces a review. The build reports only how many networks have an actual rated share that contradicts their flag, so the list stays auditable.
 
-**Where they appear.** With the y-axis on Viewers, these games sit in the "No public rating" strip under the plot as hollow rings when no filter is active, and for games that fail the filters. With the y-axis on Excitement, they are filled dots at their excitement value like every other game. With a filter active, the games that pass it are drawn like rated dots, and a selected announcer's games use the same shapes as their rated games. A Date season range alone does not count as a filter here. In Bars, each bar's outlined part counts them.
+**Where they appear.** With the y-axis on Viewers, these games sit in the "No public rating" strip under the plot as hollow rings when no filter is active, and for games that fail the filters. With the y-axis on Excitement, they are filled dots at their excitement value like every other game. When passing games are drawn larger (see Dot size above), the unrated games that pass are drawn like rated dots, and a selected announcer's games use the same shapes as their rated games; otherwise they stay hollow rings on Viewers. In Bars, each bar's outlined part counts them.
 
 ## Measurement eras
 
