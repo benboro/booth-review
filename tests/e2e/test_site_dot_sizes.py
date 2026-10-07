@@ -417,6 +417,9 @@ def test_person_tiers_follow_the_switch(
     assert colors[0] == colors[1]
 
 
+_WAIT_TWO_FRAMES = "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
+
+
 def _relayout(page: Page, js: str) -> None:
     page.evaluate(
         "async (js) => { const gd = document.getElementById('chart');"
@@ -455,7 +458,9 @@ def test_zoom_and_pan_never_change_sizes(
     reset = "return {'xaxis.autorange': true, 'yaxis.autorange': true};"
     for step in (narrow, pan, reset):
         _relayout(guarded_page, step)
-        guarded_page.wait_for_timeout(150)
+        # plotly_relayout handlers run before the relayout promise resolves; two frames
+        # then flush any re-render they queue, so a regression cannot slip past a sleep.
+        guarded_page.evaluate(_WAIT_TWO_FRAMES)
         assert snapshot() == first, query
 
 

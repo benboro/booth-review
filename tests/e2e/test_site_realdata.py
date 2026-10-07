@@ -1018,6 +1018,29 @@ def test_real_ny6_band_holds_the_six_bowls(
 
 _WAIT_TWO_FRAMES = "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
 
+# Resolves once the chart's season-label geometry is identical across 5 consecutive frames
+# (a condition wait, not a fixed sleep); rejects after ~5s so a never-settling chart fails.
+_WAIT_LABELS_SETTLED = """
+() => new Promise((resolve, reject) => {
+  const sig = () => Array.from(document.querySelectorAll('#chart .annotation, #chart .xtick'))
+    .map((n) => { const b = n.getBoundingClientRect(); return [b.left, b.top, b.width].join(','); })
+    .join('|');
+  let prev = null;
+  let stable = 0;
+  let frames = 0;
+  const tick = () => {
+    const cur = sig();
+    stable = cur !== '' && cur === prev ? stable + 1 : 0;
+    prev = cur;
+    frames += 1;
+    if (stable >= 5) resolve(true);
+    else if (frames > 300) reject(new Error('season labels never settled'));
+    else requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+})
+"""
+
 # Counts and booleans only: nothing returned here names a team, person, or game.
 _DATE_FACTS_JS = """
 () => {
@@ -1137,7 +1160,7 @@ def test_real_phone_shows_all_season_labels(
     real_guarded_page.set_viewport_size({"width": 360, "height": 800})
     real_open_app(real_guarded_page, "?axis=date")
     real_guarded_page.evaluate(_WAIT_TWO_FRAMES)
-    real_guarded_page.wait_for_timeout(200)
+    real_guarded_page.evaluate(_WAIT_LABELS_SETTLED)
     facts: dict[str, Any] = real_guarded_page.evaluate(_PHONE_LABELS_JS)
     seasons = len(set(real_raw["telecasts"]["season"]))
     count = int(facts["count"])
@@ -1165,7 +1188,7 @@ def test_real_desktop_season_labels_never_overlap(
     real_guarded_page.set_viewport_size({"width": width, "height": 900})
     real_open_app(real_guarded_page, "?axis=date")
     real_guarded_page.evaluate(_WAIT_TWO_FRAMES)
-    real_guarded_page.wait_for_timeout(400)
+    real_guarded_page.evaluate(_WAIT_LABELS_SETTLED)
     facts: dict[str, Any] = real_guarded_page.evaluate(SEASON_LABEL_BOXES_JS)
     seasons = len(set(real_raw["telecasts"]["season"]))
     count = int(facts["count"])
@@ -1187,7 +1210,7 @@ def test_real_single_season_shows_dates_on_desktop(
     real_open_app(real_guarded_page, "?axis=date")
     real_guarded_page.evaluate("() => window.__testHooks.setState({seasons: [2025, 2025]})")
     real_guarded_page.evaluate(_WAIT_TWO_FRAMES)
-    real_guarded_page.wait_for_timeout(200)
+    real_guarded_page.evaluate(_WAIT_LABELS_SETTLED)
     facts: dict[str, Any] = real_guarded_page.evaluate(
         """() => {
           const texts = document.getElementById('chart').layout.xaxis.ticktext
@@ -1366,7 +1389,8 @@ def test_real_excitement_y_band_and_axis_counts(
     same_summary = summary_viewers == summary_excitement
     for y in ("viewers", "excitement", "viewers", "excitement"):
         real_guarded_page.evaluate("(y) => window.__testHooks.setState({y, axis: 'spread'})", y)
-        real_guarded_page.wait_for_timeout(100)
+        real_guarded_page.wait_for_function("(y) => window.__testHooks.getState().y === y", arg=y)
+        real_guarded_page.evaluate(_WAIT_TWO_FRAMES)
     errors = len(page_errors)
     assert band_count == null_count
     assert ringed == 0
