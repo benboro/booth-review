@@ -297,3 +297,91 @@ def test_narrow_phone_hint_wraps_under_the_name_without_scrolling(
     finally:
         context.close()
     _assert_guard_clean(off_origin, csp_errors)
+
+
+_GEOMETRY_JS = """(root) => {
+  const rect = (el) => {
+    const r = el.getBoundingClientRect();
+    return {x: r.left, y: r.top, mid: r.top + r.height / 2};
+  };
+  const text = (el) => {
+    const g = document.createRange();
+    g.selectNodeContents(el);
+    return rect(g);
+  };
+  const item = document.querySelector(
+    root + " .family-item:has(input[data-family-checkbox='disney'])");
+  const ch = document.querySelector(root + " #family-rows-disney input[data-network-id]");
+  return {
+    nameX: text(item.querySelector(".option-name")).x,
+    channelX: rect(ch).x,
+    rowTop: item.getBoundingClientRect().top,
+    tops: {
+      caret: rect(item.querySelector(".family-caret svg")).mid,
+      checkbox: rect(item.querySelector("input")).mid,
+      name: text(item.querySelector(".option-name")).mid,
+      only: text(item.querySelector(".only-btn")).mid,
+    },
+  };
+}"""
+
+
+def _assert_channels_under_name(page: Page, root: str) -> None:
+    geo = page.evaluate(_GEOMETRY_JS, root)
+    offset = geo["channelX"] - geo["nameX"]
+    assert -1 <= offset <= 3, f"channel checkbox is {offset}px from the family name start"
+
+
+def test_channel_rows_indent_under_family_name_on_desktop(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    open_app(guarded_page, "")
+    _open_networks(guarded_page)
+    expand_family(guarded_page, "disney")
+    _assert_channels_under_name(guarded_page, "#pop-networks")
+
+
+def test_channel_rows_indent_under_family_name_on_phone(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(mobile_page, "")
+    _open_sheet(mobile_page)
+    expand_family(mobile_page, "disney")
+    _assert_channels_under_name(mobile_page, "#filters-sheet")
+
+
+def test_narrow_phone_wrapped_row_is_top_aligned_and_channels_indent(
+    browser: Browser, site_url: str, open_app: Callable[[Page, str], None]
+) -> None:
+    """At 360px with the widest font, a wrapped family row keeps the caret, checkbox, name
+    and Only text on the first line, and its channel rows still start under the name."""
+    context = browser.new_context(
+        viewport={"width": 360, "height": 800}, has_touch=True, is_mobile=True
+    )
+    page = context.new_page()
+    off_origin, csp_errors = _install_guard(page, site_url)
+
+    def _route(route: Route) -> None:
+        response = route.fetch()
+        route.fulfill(response=response, body=response.text() + "\n" + FONT_CSS["wide"])
+
+    page.route("**/style.css*", _route)
+    try:
+        open_app(page, "")
+        _open_sheet(page)
+        page.locator(f"#filters-sheet {CARET}").tap()
+        _assert_channels_under_name(page, "#filters-sheet")
+        page.locator("#filters-sheet #family-rows-disney input[data-network-id]").first.uncheck()
+        page.locator(f"#filters-sheet {CARET}").tap()
+        expect(page.locator(f"#filters-sheet {DISNEY_HINT}")).to_be_visible()
+        geo = page.evaluate(_GEOMETRY_JS, "#filters-sheet")
+        mids = geo["tops"]
+        spread = max(mids.values()) - min(mids.values())
+        # Glyph boxes differ in height (12px caret, 16px text), so compare their centers: they
+        # share the first line's center, which sits in the top 44px, not the wrapped row's middle.
+        assert spread <= 2, f"first-line centers differ by {spread}px: {mids}"
+        assert max(mids.values()) - geo["rowTop"] <= 24, mids
+    finally:
+        context.close()
+    _assert_guard_clean(off_origin, csp_errors)

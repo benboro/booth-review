@@ -1073,6 +1073,40 @@ input[type="checkbox"] {
   }
 }
 
+/* Top alignment (04.16 sign-off): a family or channel row is one first-line box --row-h
+   tall (a 44px target on touch). The caret, checkbox, name, count and Only button all sit
+   in that box, so when the hint wraps below, nothing drifts to the middle of the row. */
+.family-group {
+  --row-h: 19.6px;
+  --caret-w: 28px;
+}
+
+.family-group .check-item {
+  align-items: flex-start;
+}
+
+.family-group .check-row {
+  align-content: flex-start;
+}
+
+.family-group .family-caret,
+.family-group .family-caret-spacer,
+.family-group .only-btn {
+  align-self: flex-start;
+  height: var(--row-h);
+}
+
+.family-group .option-name,
+.family-group .option-count {
+  line-height: var(--row-h);
+}
+
+/* Channel rows start under the family name: past the caret slot, the family checkbox (13px)
+   and the two 4px gaps. */
+.family-group .network-list {
+  padding-left: calc(var(--caret-w) + 13px + 2 * var(--space-xs));
+}
+
 .family-item .option-name {
   min-width: 0;
   overflow: hidden;
@@ -1280,6 +1314,11 @@ input[type="checkbox"] {
     color: var(--muted-weak);
     min-width: 44px;
     min-height: 44px;
+  }
+
+  .family-group {
+    --row-h: 44px;
+    --caret-w: 44px;
   }
 
   .family-caret,
