@@ -206,6 +206,9 @@ function personMatches(data, state, personIndexes, i, role) {
   return state.together ? personIndexes.every(test) : personIndexes.some(test);
 }
 
+/** Networks-only enlarge applies while 1 to this many families are on (04.16 D-05); methodology.md names the same limit. */
+const NETWORKS_ENLARGE_MAX_FAMILIES = 3;
+
 const BIT_SEASON = 1;
 const BIT_NET = 2;
 const BIT_SLOT = 4;
@@ -520,7 +523,7 @@ export function computeView(data, state) {
   const familiesOn = networksOnly
     ? data.families.filter((f) => !familyToggledOff(data, state, f)).length
     : 0;
-  const enlargeDots = drawnFaded > 0 || (networksOnly && familiesOn >= 1 && familiesOn <= 3);
+  const enlargeDots = drawnFaded > 0 || (networksOnly && familiesOn >= 1 && familiesOn <= NETWORKS_ENLARGE_MAX_FAMILIES);
   let summarySet = matched;
   if (!hasSelection) {
     summarySet = [];
