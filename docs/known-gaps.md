@@ -40,6 +40,20 @@ reflects how much Ratings Reference itself compiled for those four seasons
 across this boundary, since a thinner season here has fewer candidate
 telecasts to plot at all, not necessarily less television coverage. Treat
 any 2021–2024 vs. neighboring-season count comparison with that caveat.
+
+Why the dip happened: from 2014 to 2020, most of Ratings Reference's
+per-game college football figures came from one upstream publisher,
+Sports Media Watch, which published far fewer per-game figures in 2021–2024. In
+2025 a different publisher became Ratings Reference's main source. In
+October 2026 this project looked for a second free, public source of
+per-game Nielsen figures for these four seasons. It checked each
+candidate's reuse terms and robots rules, whether each figure has a free
+page to cite, how many of the missing games it covers, and whether its
+figures match the kind Ratings Reference reports. None has been adopted, so
+these games keep no figure for now. Two publishers' figures closely match
+Ratings Reference's, and this project plans to ask whether it may reuse them
+with credit. Nothing is collected from them unless they agree.
+
 These games now appear in the 'No public rating' strip, and the counts read 'N rated of M games'.
 
 ## 506 Sports: hand-saved pages and a small number of empty weeks
