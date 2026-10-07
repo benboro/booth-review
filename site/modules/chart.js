@@ -369,17 +369,15 @@ export function buildFigure(data, view, state, env) {
       hoverlabel: { bordercolor: FAMILY_COLORS[theme][family] },
       marker: {
         color: FAMILY_COLORS[theme][family],
-        // D-13/D-14 (04.10): with a filter active, passing dots take the announcer-selected
-        // size; filtered-out (inert) dots stay 6; under a person this trace holds the
-        // passing-not-theirs dots, which stay inert at activeUnderPerson opacity.
-        // Enlarged dots also get a 1px black outline (theme-independent) to separate
-        // overlapping 10px dots; unfiltered 6px dots stay borderless.
-        // 04.12 D-05: sizing reads view.sizeFilterActive, which ignores a seasons-only filter
-        // on the Date axis (seasons there only choose what the axis shows); filterActive
-        // still drives the summary.
-        size: view.sizeFilterActive ? 10 : 6,
+        // 04.16 D-01/D-05: passing dots take the announcer-selected size (10px, 1px black
+        // outline, theme-independent) only when view.enlargeDots, i.e. a faded dot is
+        // drawn or Networks alone holds 1-3 families; otherwise 6px and borderless.
+        // Inert dots always stay 6. Under a person this trace holds the passing-not-theirs
+        // dots, at activeUnderPerson opacity and the same size switch (D-09).
+        // 04.12 D-05 / 04.16 D-03: a seasons-only filter on Date never counts.
+        size: view.enlargeDots ? 10 : 6,
         opacity: view.hasPersonSelection ? DOT_OPACITY.activeUnderPerson : DOT_OPACITY.active,
-        line: { width: view.sizeFilterActive ? 1 : 0, color: DOT_OUTLINE },
+        line: { width: view.enlargeDots ? 1 : 0, color: DOT_OUTLINE },
       },
     });
     // D-03 (amended by notes-2 #1/#5): a ring is a filled SURFACE circle with a family-colored
@@ -425,11 +423,11 @@ export function buildFigure(data, view, state, env) {
       hoverinfo: activeHoverInfo,
       hovertemplate: activeHoverTemplate,
       hoverlabel: { bordercolor: color },
-      // notes-2 #5 (amends D-03): with a size filter active a passing unrated game draws exactly
+      // notes-2 #5 (amends D-03; 04.16: switch is view.enlargeDots): when dots are enlarged a passing unrated game draws exactly
       // like its rated twin (filled 10px family dot, 1px outline); otherwise it stays a ring.
       marker: yMode === 'excitement'
         ? { ...activeTraces[activeTraces.length - 1].marker }
-        : view.sizeFilterActive
+        : view.enlargeDots
         ? {
             color,
             size: 10,
