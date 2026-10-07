@@ -49,6 +49,7 @@ wheels/
 .mypy_cache/
 .ruff_cache/
 .coverage
+test-results/
 htmlcov/
 .ipynb_checkpoints/
 
