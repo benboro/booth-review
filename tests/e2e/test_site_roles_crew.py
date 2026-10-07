@@ -224,7 +224,8 @@ def test_selection_row_box(
     assert style["w"] == "1px"
     assert style["col"] == _token(guarded_page, "--special")
     assert style["r"] == "8px"
-    assert style["p"] == "8px"
+    # 04.15 D-01: the compact band tightens the box padding to --space-xs.
+    assert style["p"] == "4px"
     assert row.locator("#summary").count() == 0
     assert row.locator("#compare-note").count() == 0
 
