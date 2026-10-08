@@ -2075,6 +2075,14 @@ input[type="checkbox"] {
 
 #matched-games {
   padding: var(--space-lg) var(--space-lg) var(--space-xl);
+  /* SITE-20: `.games-table` has no `table-layout: fixed`, so its natural width
+     (the Source cell's two links, long crew names, wider fonts) can pass the
+     container's width. That happened on phones and, with wider fonts, just
+     above the 640px breakpoint too. The table scrolls inside this box at every
+     width so the page itself never scrolls sideways; whole-row clicks (D-06)
+     still work inside a scrolled container. */
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 .empty-state {
@@ -2408,20 +2416,6 @@ html:has(#detail-panel[open]) {
   #matched-games {
     padding-left: var(--space-md);
     padding-right: var(--space-md);
-  }
-
-  /* Phone table overflow (deferred-items.md, folded into this plan's Task 2
-     step 5): `.games-table` has no `table-layout: fixed`, so a row with the
-     fixed-width Source cell's two links can force the table's natural
-     content width past `#matched-games`'s own container width, growing
-     `document.documentElement.scrollWidth` past the viewport and scrolling
-     the whole page sideways (SITE-20's "nothing overlaps/scrolls the page
-     at any width"). Scoping the horizontal scroll to `#matched-games`
-     itself keeps rows tappable (D-06's whole-row click still works inside
-     a scrolled container) while the page itself never scrolls. */
-  #matched-games {
-    overflow-x: auto;
-    max-width: 100%;
   }
 
   /* D-04: on phones the legend chip row renders below the chart, not above
