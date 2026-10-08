@@ -1709,6 +1709,10 @@ input[type="checkbox"] {
 .tab-hint {
   min-height: 24px;
   margin: 0;
+  /* One line always: a wrapped Map prompt would push the chart panel down (04.18 D-09). */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font: var(--font-label);
   color: var(--muted);
 }
