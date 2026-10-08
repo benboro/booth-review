@@ -165,8 +165,9 @@ export function prepareData(raw) {
     spread[i] = spreadX(homeSpread[i], merged.home_points[i], merged.away_points[i]);
   }
   // Derived column lives on a copy so raw.telecasts is never mutated. D-06:
-  // season blocks come from every shipped game.
-  const { dateX, axis: dateAxis } = buildDateAxis(merged.season, merged.date, merged.kickoff);
+  // season blocks come from every shipped game; so do the postseason days that
+  // place the bands (04.17 D-06), whatever the view filters are.
+  const { dateX, axis: dateAxis } = buildDateAxis(merged.season, merged.date, merged.kickoff, merged.game_type);
   const t = { ...merged, spread, dateX };
 
   const familyOf = new Array(n);

@@ -389,7 +389,7 @@ _FIG_JS = """
     minallowed: l.xaxis.minallowed,
     maxallowed: l.xaxis.maxallowed,
     // season dividers only: the band's own rect and top line are paper-referenced (plan 07)
-    shapes: (l.shapes ?? []).filter((s) => s.xref === 'x').map((s) => (
+    shapes: (l.shapes ?? []).filter((s) => s.type === 'line' && s.xref === 'x').map((s) => (
       { x: s.x0, layer: s.layer, width: s.line.width, color: s.line.color })),
     anns: (l.annotations ?? []).map((a) => ({
       name: a.name ?? null, text: a.text, yref: a.yref, y: a.y, yanchor: a.yanchor,
@@ -469,7 +469,7 @@ def test_gap_dividers_rendered(date_page: Page) -> None:
 
 def test_season_annotations_rendered(date_page: Page) -> None:
     f = _fig(date_page)
-    anns = [a for a in f["anns"] if a["name"]]
+    anns = [a for a in f["anns"] if (a["name"] or "").startswith("season-")]
     assert [a["name"] for a in anns] == ["season-2019", "season-2021", "season-2025", "season-2026"]
     assert all(a["yref"] == "paper" and a["y"] == 0 and a["yanchor"] == "top" for a in anns)
     assert all(a["capture"] is False for a in anns)
@@ -488,7 +488,10 @@ def test_season_filter_limits_x_axis_fade_and_hide(date_page: Page, dots: str) -
     assert f["minallowed"] == pytest.approx(home[0], abs=1e-6)
     assert f["maxallowed"] == pytest.approx(home[1], abs=1e-6)
     assert f["xs"] and min(f["xs"]) >= 191
-    assert [a["name"] for a in f["anns"] if a["name"]] == ["season-2025", "season-2026"]
+    assert [a["name"] for a in f["anns"] if (a["name"] or "").startswith("season-")] == [
+        "season-2025",
+        "season-2026",
+    ]
     assert [s["x"] for s in f["shapes"]] == [295.5]
     assert f["y"] == base["y"]
 

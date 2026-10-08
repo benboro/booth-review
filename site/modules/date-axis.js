@@ -157,7 +157,7 @@ export function postseasonBands(blocks, rightEdge) {
     out.push({
       season: b.season,
       x0: round4(b.start + DATE_PAD + (b.postDay - b.minDay)),
-      x1: round4(next ? (b.end + next.start) / 2 : rightEdge),
+      x1: next ? round4((b.end + next.start) / 2) : rightEdge,
     });
   });
   return out;

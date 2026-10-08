@@ -214,3 +214,315 @@ def test_dots_keep_contrast_on_blended_band(
         ratio = _contrast(app_page, pal["fam"][theme][family], blended)
         # The locked 0.07 tint puts Other at 2.998 (RESEARCH rounds to 3.00); allow 0.01.
         assert ratio >= floor - 0.01, (theme, surface, family, ratio)
+
+
+# --- rendered bands ----------------------------------------------------------
+
+_SHAPES_JS = """
+() => {
+  const gd = document.getElementById('chart');
+  const l = gd.layout;
+  const shapes = l.shapes ?? [];
+  const surface = shapes.findIndex((s) => s.type === 'rect' && s.xref === 'paper');
+  return {
+    surface,
+    bands: shapes.map((s, i) => ({ s, i }))
+      .filter((o) => String(o.s.name ?? '').startsWith('postseason-'))
+      .map((o) => ({ ...o.s, index: o.i })),
+    traces: gd.data.length,
+    range: gd._fullLayout.xaxis.range.slice(),
+    layoutRange: l.xaxis.range.slice(),
+  };
+}
+"""
+
+_EXPECT_JS = """
+async () => {
+  const A = await import('./modules/date-axis.js');
+  const D = await import('./modules/data.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const data = D.prepareData(raw);
+  const gd = document.getElementById('chart');
+  const seasons = window.__testHooks.getState?.().seasons ?? null;
+  const blocks = A.shownBlocks(data.dateAxis, seasons);
+  return A.postseasonBands(blocks, gd.layout.xaxis.range[1]);
+}
+"""
+
+_ANN_JS = """
+() => {
+  const gd = document.getElementById('chart');
+  const xa = gd._fullLayout.xaxis;
+  const anns = gd.layout.annotations;
+  const a = anns.find((q) => q.name === 'postseason-label');
+  return {
+    count: anns.filter((q) => q.name === 'postseason-label').length,
+    ann: a ? { text: a.text, x: a.x, visible: a.visible, capture: a.captureevents,
+      color: a.font.color, size: a.font.size, y: a.y, yref: a.yref, yanchor: a.yanchor,
+      yshift: a.yshift } : null,
+    range: xa.range.slice(), length: xa._length,
+    bands: gd.boothDateAxis.bands,
+    mobile: gd.boothDateAxis.mobile,
+  };
+}
+"""
+
+_FIT_JS = """
+async ([a, b, c, d]) => {
+  const A = await import('./modules/date-axis.js');
+  return A.postseasonLabel(a, b, c, d);
+}
+"""
+
+_RELAYOUT_JS = "(r) => window.Plotly.relayout(document.getElementById('chart'), r)"
+_TWO_FRAMES = "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
+_COUNT_JS = """
+() => {
+  window.__relayouts = 0;
+  document.getElementById('chart').on('plotly_relayout', () => { window.__relayouts += 1; });
+}
+"""
+
+
+def _settle(page: Page) -> None:
+    page.evaluate(_TWO_FRAMES)
+    page.wait_for_timeout(400)
+
+
+@pytest.fixture
+def date_page(guarded_page: Page, open_app: Callable[[Page, str], None]) -> Page:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    open_app(guarded_page, "?axis=date")
+    _settle(guarded_page)
+    return guarded_page
+
+
+def _open(page: Page, open_app: Callable[[Page, str], None], query: str) -> None:
+    page.set_viewport_size({"width": 1280, "height": 900})
+    open_app(page, query)
+    _settle(page)
+
+
+def test_two_bands_after_surface_with_d04_d05_shape(date_page: Page) -> None:
+    got = date_page.evaluate(_SHAPES_JS)
+    assert [b["name"] for b in got["bands"]] == ["postseason-2021", "postseason-2025"]
+    assert got["surface"] >= 0
+    for band in got["bands"]:
+        assert band["type"] == "rect"
+        assert band["xref"] == "x"
+        assert band["yref"] == "paper"
+        assert band["y0"] == 0
+        assert band["y1"] == 1
+        assert band["layer"] == "below"
+        assert band["line"]["width"] == 0
+        assert band["fillcolor"] == "rgba(166, 120, 40, 0.07)"
+        assert band["index"] > got["surface"] + 1  # after the SURFACE rect and its edge line
+
+
+def test_band_edges_match_pure_geometry(date_page: Page) -> None:
+    got = date_page.evaluate(_SHAPES_JS)
+    want = date_page.evaluate(_EXPECT_JS)
+    assert [(b["season"], b["x0"], b["x1"]) for b in want] == [
+        (int(b["name"].split("-")[1]), b["x0"], b["x1"]) for b in got["bands"]
+    ]
+
+
+def test_last_season_band_ends_at_home_range_when_it_is_last_shown(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    _open(guarded_page, open_app, "?axis=date&seasons=2021-2025")
+    got = guarded_page.evaluate(_SHAPES_JS)
+    assert [b["name"] for b in got["bands"]] == ["postseason-2021", "postseason-2025"]
+    assert got["bands"][-1]["x1"] == pytest.approx(got["layoutRange"][1], abs=1e-6)
+
+
+def test_no_band_for_a_season_without_postseason_games(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    _open(guarded_page, open_app, "?axis=date&seasons=2026-2026")
+    assert guarded_page.evaluate(_SHAPES_JS)["bands"] == []
+    _open(guarded_page, open_app, "?axis=date&seasons=2019-2019")
+    assert guarded_page.evaluate(_SHAPES_JS)["bands"] == []
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        "&postseason=only",
+        "&postseason=exclude",
+        "&dots=hide",
+        "&school=northfield",
+        "&networks=net-b",
+    ],
+)
+def test_bands_ignore_every_filter_but_the_season_range(
+    guarded_page: Page, open_app: Callable[[Page, str], None], date_page: Page, extra: str
+) -> None:
+    base = [(b["name"], b["x0"], b["x1"]) for b in date_page.evaluate(_SHAPES_JS)["bands"]]
+    assert len(base) == 2
+    _open(guarded_page, open_app, "?axis=date" + extra)
+    again = [(b["name"], b["x0"], b["x1"]) for b in guarded_page.evaluate(_SHAPES_JS)["bands"]]
+    assert again == base
+
+
+def test_dark_theme_uses_dark_tint(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    guarded_page.emulate_media(color_scheme="dark")
+    _open(guarded_page, open_app, "?axis=date")
+    bands = guarded_page.evaluate(_SHAPES_JS)["bands"]
+    assert bands
+    assert all(b["fillcolor"] == "rgba(212, 160, 60, 0.12)" for b in bands)
+
+
+def test_trace_count_matches_other_axes(date_page: Page) -> None:
+    n = date_page.evaluate(_SHAPES_JS)["traces"]
+    date_page.evaluate("() => window.__testHooks.setState({ axis: 'spread' })")
+    _settle(date_page)
+    assert date_page.evaluate(_SHAPES_JS)["traces"] == n
+
+
+# --- the label ---------------------------------------------------------------
+
+
+def _label_matches_pure_rule(page: Page) -> dict:  # type: ignore[type-arg]
+    got = page.evaluate(_ANN_JS)
+    fit = page.evaluate(
+        _FIT_JS,
+        [got["bands"], got["range"], got["length"], {"fontSize": 10 if got["mobile"] else 12}],
+    )
+    ann = got["ann"]
+    assert ann is not None
+    assert ann["visible"] is (fit is not None)
+    if fit is not None:
+        assert ann["x"] == pytest.approx(fit["x"], abs=0.01)
+    return got  # type: ignore[no-any-return]
+
+
+def test_label_annotation_is_always_present_with_fixed_style(date_page: Page) -> None:
+    got = date_page.evaluate(_ANN_JS)
+    ann = got["ann"]
+    assert got["count"] == 1
+    assert ann["text"] == "Bowls & CFP"
+    assert ann["capture"] is False
+    assert ann["color"] == "#4B5563"
+    assert ann["size"] == 12
+    assert (ann["y"], ann["yref"], ann["yanchor"], ann["yshift"]) == (1, "paper", "top", -4)
+    _label_matches_pure_rule(date_page)
+
+
+def test_label_follows_zoom_and_hides_when_no_band_fits(date_page: Page) -> None:
+    bands = date_page.evaluate(_SHAPES_JS)["bands"]
+    b21, b25 = bands[0], bands[1]
+    # Zoom around only the 2021 band: the label moves to it.
+    date_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [b21["x0"] - 3, b21["x1"]]})
+    _settle(date_page)
+    got = _label_matches_pure_rule(date_page)
+    assert got["ann"]["visible"] is True
+    assert b21["x0"] <= got["ann"]["x"] <= b21["x1"]
+    # Zoom around the 2025 band: it moves again.
+    date_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [b25["x0"] - 3, b25["x1"]]})
+    _settle(date_page)
+    got = _label_matches_pure_rule(date_page)
+    assert got["ann"]["visible"] is True
+    assert b25["x0"] <= got["ann"]["x"] <= b25["x1"]
+    # A window holding no postseason day hides it.
+    date_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [b21["x0"] - 60, b21["x0"] - 40]})
+    _settle(date_page)
+    got = _label_matches_pure_rule(date_page)
+    assert got["ann"]["visible"] is False
+
+
+def test_label_hidden_at_home_when_every_band_is_narrow(date_page: Page) -> None:
+    got = _label_matches_pure_rule(date_page)
+    # Fixture bands are a few dozen px wide at home on a 1280 viewport.
+    assert got["ann"]["visible"] is False
+
+
+@pytest.mark.parametrize("font", ["default", "dejavu"])
+def test_label_text_fits_inside_its_band_and_clears_season_labels(
+    guarded_page: Page, open_app: Callable[[Page, str], None], font: str
+) -> None:
+    from test_site_date_axis import force_chart_font
+
+    force_chart_font(guarded_page, font)
+    _open(guarded_page, open_app, "?axis=date")
+    bands = guarded_page.evaluate(_SHAPES_JS)["bands"]
+    b25 = bands[-1]
+    guarded_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [b25["x0"] - 3, b25["x1"]]})
+    _settle(guarded_page)
+    out = guarded_page.evaluate(
+        """
+        (band) => {
+          const gd = document.getElementById('chart');
+          const xa = gd._fullLayout.xaxis;
+          const svg = document.querySelector('#chart svg.main-svg').getBoundingClientRect();
+          const px = (x) => svg.left + xa._offset + xa.l2p(x);
+          const label = [...document.querySelectorAll('#chart .annotation')]
+            .find((el) => el.textContent.trim() === 'Bowls & CFP');
+          if (!label) return { found: false };
+          const r = label.querySelector('text').getBoundingClientRect();
+          const seasons = [...document.querySelectorAll('#chart .annotation')]
+            .filter((el) => /^'?\\d{2,4}$/.test(el.textContent.trim()))
+            .map((el) => el.querySelector('text').getBoundingClientRect());
+          const overlaps = seasons.some((s) =>
+            r.left < s.right && r.right > s.left && r.top < s.bottom && r.bottom > s.top);
+          return {
+            found: true, left: r.left, right: r.right, width: r.width,
+            bandLeft: px(band.x0), bandRight: px(band.x1),
+            plotLeft: svg.left + xa._offset, plotRight: svg.left + xa._offset + xa._length,
+            overlaps,
+          };
+        }
+        """,
+        b25,
+    )
+    assert out["found"]
+    assert out["width"] > 0
+    lo = max(out["bandLeft"], out["plotLeft"])
+    hi = min(out["bandRight"], out["plotRight"])
+    assert out["left"] >= lo - 0.5, out
+    assert out["right"] <= hi + 0.5, out
+    assert out["overlaps"] is False
+
+
+def test_fit_hook_settles_with_label(date_page: Page) -> None:
+    b25 = date_page.evaluate(_SHAPES_JS)["bands"][-1]
+    date_page.evaluate(_COUNT_JS)
+    date_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [b25["x0"] - 3, b25["x1"]]})
+    _settle(date_page)
+    first = date_page.evaluate("window.__relayouts")
+    date_page.evaluate(_TWO_FRAMES)
+    date_page.wait_for_timeout(300)
+    assert date_page.evaluate("window.__relayouts") == first
+    assert first <= 4
+
+
+# --- hover -------------------------------------------------------------------
+
+
+def test_empty_band_space_shows_no_tooltip(date_page: Page) -> None:
+    b25 = date_page.evaluate(_SHAPES_JS)["bands"][-1]
+    date_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [b25["x0"] - 3, b25["x1"]]})
+    _settle(date_page)
+    pt = date_page.evaluate(
+        """
+        (band) => {
+          const gd = document.getElementById('chart');
+          const svg = document.querySelector('#chart svg.main-svg').getBoundingClientRect();
+          const xa = gd._fullLayout.xaxis;
+          const ya = gd._fullLayout.yaxis;
+          // the 28px gap row between the log axis and the bottom band holds no dots
+          return {
+            x: svg.left + xa._offset + xa.l2p((band.x0 + band.x1) / 2),
+            y: svg.top + ya._offset + ya._length + 14,
+          };
+        }
+        """,
+        b25,
+    )
+    date_page.mouse.move(pt["x"] - 20, pt["y"])
+    date_page.mouse.move(pt["x"], pt["y"], steps=4)
+    date_page.wait_for_timeout(300)
+    tip = date_page.locator("#chart-tooltip")
+    assert tip.count() == 0 or tip.is_hidden()

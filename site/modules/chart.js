@@ -41,17 +41,21 @@
  * dividers sit between blocks and two label rows (lower ticks, one season
  * annotation per block) are kept right by `fitDateAxis` after every draw.
  * A season filter limits the x range to the shown blocks and drops
- * out-of-range dots from every trace (trace count unchanged).
+ * out-of-range dots from every trace (trace count unchanged). One faint band
+ * per season (04.17, SITE-66) tints its bowl and playoff span, full height behind
+ * the dots and the bottom band; it ignores every filter but the season range. A
+ * single "Bowls & CFP" annotation sits on the rightmost band wide enough to hold
+ * it and `fitDateAxis` moves or hides it with the season labels.
  *
  * `window.Plotly` is referenced only inside `renderChart`/`bindChartEvents`
  * (never at module scope), so `buildFigure`/`naBand`/`hoverText` stay
  * importable from node for quick checks.
  */
 
-import { ACCENT, DIVIDER, DOT_OUTLINE, FAMILY_COLORS, MUTED, PAGE_BG, SURFACE, ZERO_LINE, contrastRatio, familyKey } from './palette.js';
+import { ACCENT, DIVIDER, DOT_OUTLINE, FAMILY_COLORS, MUTED, PAGE_BG, POSTSEASON_BAND, SURFACE, ZERO_LINE, contrastRatio, familyKey } from './palette.js';
 import { MINUS, escapeHover, logTicks, niceLinearTicks } from './format.js';
 import { tooltipModel } from './tooltip.js';
-import { dateAxisLabels, gapDividers, seasonRange, shownBlocks } from './date-axis.js';
+import { POSTSEASON_LABEL, dateAxisLabels, gapDividers, postseasonBands, postseasonLabel, seasonRange, shownBlocks } from './date-axis.js';
 import { gutterPads } from './gutter.js';
 
 /**
@@ -618,7 +622,10 @@ export function buildFigure(data, view, state, env) {
       marginLeft: MARGIN.l,
       marginRight: MARGIN.r,
     });
-    dateAxis = { blocks, range, mobile: env.mobile, labels };
+    // 04.17 D-06: bands come from the shown blocks only, never from the filtered view.
+    const bands = postseasonBands(blocks, range[1]);
+    const label = postseasonLabel(bands, range, plotPx, { fontSize: env.mobile ? 10 : 12 });
+    dateAxis = { blocks, range, mobile: env.mobile, labels, bands, label };
   }
 
   const layout = {
@@ -744,7 +751,24 @@ export function buildFigure(data, view, state, env) {
           showarrow: false,
           captureevents: false,
           font: { size: env.mobile ? 10 : 14, color: ACCENT[theme] },
-        }))
+        })).concat([
+          {
+            // 04.17 D-08: always present so fitDateAxis only toggles x and visible.
+            name: 'postseason-label',
+            text: POSTSEASON_LABEL,
+            x: dateAxis.label ? dateAxis.label.x : (dateAxis.range[0] + dateAxis.range[1]) / 2,
+            xref: 'x',
+            xanchor: 'center',
+            y: 1,
+            yref: 'paper',
+            yanchor: 'top',
+            yshift: -4,
+            visible: dateAxis.label != null,
+            showarrow: false,
+            captureevents: false,
+            font: { size: env.mobile ? 10 : 12, color: MUTED[theme] },
+          },
+        ])
       : [
           {
             text: 'N/A',
@@ -814,6 +838,27 @@ export function buildFigure(data, view, state, env) {
     },
   );
 
+  // 04.17 D-04: the postseason bands go last so the opaque SURFACE rect above cannot paint
+  // over the tint in the bottom band; one piece across the plot, gap row and band. Never
+  // `between`, and existing shape indices stay put.
+  if (isDate) {
+    for (const b of dateAxis.bands) {
+      layout.shapes.push({
+        type: 'rect',
+        name: `postseason-${b.season}`,
+        xref: 'x',
+        x0: b.x0,
+        x1: b.x1,
+        yref: 'paper',
+        y0: 0,
+        y1: 1,
+        layer: 'below',
+        fillcolor: POSTSEASON_BAND[theme],
+        line: { width: 0 },
+      });
+    }
+  }
+
   const config = {
     responsive: true,
     displaylogo: false,
@@ -826,7 +871,7 @@ export function buildFigure(data, view, state, env) {
   };
 
   const bandInfo = { bandTop: bandGeo.bandTop, logBottom: bandGeo.logBottom, bandPx: bandGeo.bandPx, gapPx: bandGeo.gapPx };
-  return { traces, layout, config, band: bandInfo, dateAxis: isDate ? { blocks: dateAxis.blocks, range: dateAxis.range, mobile: env.mobile } : null };
+  return { traces, layout, config, band: bandInfo, dateAxis: isDate ? { blocks: dateAxis.blocks, range: dateAxis.range, mobile: env.mobile, bands: dateAxis.bands } : null };
 }
 
 /**
@@ -1020,7 +1065,8 @@ export function seasonLabelMeasurer(gd) {
  * leave them because `buildFigure` sets `xaxis.minallowed`/`maxallowed`,
  * which Plotly applies before drawing, so there is nothing to clamp here.
  * Otherwise relayouts only the tick and season-label values that differ from
- * the pure `dateAxisLabels` rule. Compare-before-relayout means the
+ * the pure `dateAxisLabels` rule, plus the "Bowls & CFP" label's x and visibility
+ * from `postseasonLabel` (04.17 D-08). Compare-before-relayout means the
  * `plotly_afterplot` this triggers finds nothing to change: it never loops.
  * @param {HTMLElement} gd
  */
@@ -1058,6 +1104,14 @@ export function fitDateAxis(gd) {
     if (a.text !== `<b>${s.label}</b>`) update[`annotations[${idx}].text`] = `<b>${s.label}</b>`;
     if ((a.visible ?? true) !== s.visible) update[`annotations[${idx}].visible`] = s.visible;
   });
+  // 04.17 D-08: the "Bowls & CFP" label rides the same single relayout.
+  const lIdx = anns.findIndex((a) => a.name === 'postseason-label');
+  if (lIdx >= 0) {
+    const fit = postseasonLabel(meta.bands ?? [], xa.range, xa._length, { fontSize: meta.mobile ? 10 : 12 });
+    const la = anns[lIdx];
+    if (fit && Math.abs((la.x ?? 0) - fit.x) > 0.01) update[`annotations[${lIdx}].x`] = fit.x;
+    if ((la.visible ?? true) !== (fit != null)) update[`annotations[${lIdx}].visible`] = fit != null;
+  }
   if (Object.keys(update).length > 0) window.Plotly.relayout(gd, update);
 }
 
