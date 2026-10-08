@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import polars as pl
@@ -53,8 +53,9 @@ from booth_review.build.shipped import (
     rarity_verdict,
     shipped_expr,
 )
-from booth_review.build.sources import load_all_sources
+from booth_review.build.sources import load_all_sources, load_cfbd_venues
 from booth_review.build.telecasts import build_telecasts
+from booth_review.build.venues import empty_venues_frame, venues_frame
 from booth_review.build.viewership import (
     TELECAST_FLAGS_SCHEMA as TELECAST_FLAGS_SCHEMA,
 )
@@ -126,6 +127,8 @@ class BuildTables:
     review_rows: dict[str, tuple[tuple[str, ...], list[dict[str, object]]]]
     # crew_overrides.csv lines whose crew differs from 506's without `correction`.
     crew_override_differs_lines: tuple[int, ...] = ()
+    # CFBD /venues, for the Map's lookups.venues; empty until collected.
+    venues: pl.DataFrame = field(default_factory=empty_venues_frame)
 
 
 def _combined_review_row(
@@ -420,6 +423,7 @@ def assemble_tables(
         diagnostics=diagnostics,
         review_rows=review_rows,
         crew_override_differs_lines=override_result.differs_lines,
+        venues=venues_frame(load_cfbd_venues(paths)),
     )
 
 

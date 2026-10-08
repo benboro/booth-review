@@ -24,9 +24,11 @@ from booth_review.sources.cfbd.parser import (
     CfbdMedia,
     CfbdPollWeek,
     CfbdPregameWp,
+    CfbdVenue,
     parse_lines,
     parse_media,
     parse_rankings,
+    parse_venues,
     parse_wp_pregame,
 )
 from booth_review.sources.ratingsref.parser import RRRecord
@@ -55,6 +57,14 @@ def _load_cfbd_endpoint[T](
     if not path.is_file():
         return []
     return parser(path.read_bytes())
+
+
+def load_cfbd_venues(paths: DataPaths) -> list[CfbdVenue]:
+    """The cached CFBD /venues list (season-less); [] when not yet collected."""
+    path = paths.raw / "cfbd" / "venues" / "all.json"
+    if not path.is_file():
+        return []
+    return parse_venues(path.read_bytes())
 
 
 def load_season_sources(paths: DataPaths, season: int) -> SeasonSources:

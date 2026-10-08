@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import polars as pl
 import pytest
 
 from booth_review.build.games import (
@@ -437,3 +438,10 @@ def test_rank_alignment_counts_agreement_only_where_506_printed_a_rank() -> None
 
 def test_rank_week_offset_is_zero_per_the_real_vault_analysis() -> None:
     assert RANK_WEEK_OFFSET == 0
+
+
+def test_venue_id_column_carries_id_and_null() -> None:
+    sources = [_sources(games=[_game(id=1, venue_id=101), _game(id=2, venue_id=None)])]
+    frame = build_games_frame(sources).sort("game_id")
+    assert frame.schema["venue_id"] == pl.Int64()
+    assert frame["venue_id"].to_list() == [101, None]
