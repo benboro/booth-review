@@ -57,6 +57,7 @@ import { MINUS, escapeHover, logTicks, niceLinearTicks } from './format.js';
 import { tooltipModel } from './tooltip.js';
 import { POSTSEASON_LABEL, dateAxisLabels, gapDividers, postseasonBands, postseasonLabel, seasonRange, shownBlocks } from './date-axis.js';
 import { gutterPads } from './gutter.js';
+import { EXCITEMENT_CAP, Y_MEASURES, pin, cappedTicks } from './caps.js';
 
 /**
  * One-line fallback switch (D-22): set to 'plotly' to restore Plotly's own
@@ -131,17 +132,39 @@ const YAXIS_TITLES = {
 };
 
 /**
- * The linear Excitement y axis (04.15 D-13): the whole-dataset `xRange.excitement` (no cap,
- * never filter-dependent, 04.7 D-08) padded by the 04.12 10px gutter, with nice ticks.
+ * A linear measure y axis (04.17 D-09/D-12/D-14/D-15): the whole-dataset range (never
+ * filter-dependent, 04.7 D-08) padded by the 04.12 10px gutter, with fixed-step ticks whose
+ * last one reads "<cap>+" when a game is above the cap. Excitement reads
+ * `data.xRange.excitement`, the same capped range X Excitement uses (D-10); Points and Margin
+ * run from 0 to the smaller of the data max and the cap.
+ * @param {object} data - a `prepareData` result.
+ * @param {"excitement"|"points"|"margin"} mode
+ * @param {number} logPx - height in px of the main (non-band) y area.
+ * @returns {{range: [number, number], tickvals: number[], ticktext: string[]}}
+ */
+export function measureYAxis(data, mode, logPx) {
+  const { cap, step } = Y_MEASURES[mode];
+  let lo;
+  let hi;
+  if (mode === 'excitement') {
+    [lo, hi] = data.xRange.excitement;
+  } else {
+    lo = 0;
+    hi = Math.min(data.maxOf[mode] ?? cap, cap);
+  }
+  const [padLo, padHi] = gutterPads(hi - lo, logPx);
+  const { tickvals, ticktext } = cappedTicks(lo, hi, step, cap, data.pinned[mode]);
+  return { range: [lo - padLo, hi + padHi], tickvals, ticktext };
+}
+
+/**
+ * The linear Excitement y axis (04.15 D-13), capped at 12 (04.17 D-09).
  * @param {object} data - a `prepareData` result.
  * @param {number} logPx - height in px of the main (non-band) y area.
  * @returns {{range: [number, number], tickvals: number[], ticktext: string[]}}
  */
 export function excitementYAxis(data, logPx) {
-  const [lo, hi] = data.xRange.excitement;
-  const [padLo, padHi] = gutterPads(hi - lo, logPx);
-  const tickvals = niceLinearTicks(lo, hi, 6);
-  return { range: [lo - padLo, hi + padHi], tickvals, ticktext: tickvals.map(String) };
+  return measureYAxis(data, 'excitement', logPx);
 }
 
 /**
@@ -170,6 +193,11 @@ export function naBand(data, axis, plotPx) {
   if (plotPx !== undefined) {
     const [padLo, padHi] = gutterPads(hi - sentinel, plotPx, { minLo: 0.75 * w, minHi: 0.03 * span });
     range = [sentinel - padLo, hi + padHi];
+  }
+  // 04.17 D-12: Excitement ticks are fixed steps so the cap tick (12 or "12+") always exists.
+  if (axis === 'excitement') {
+    const { tickvals, ticktext } = cappedTicks(lo, hi, Y_MEASURES.excitement.step, EXCITEMENT_CAP, data.pinned.excitement);
+    return { sentinel, divider, range, tickvals, ticktext };
   }
   const tickvals = niceLinearTicks(lo, hi, 6);
   const ticktext = tickvals.map((v) => {
@@ -266,7 +294,9 @@ export function buildFigure(data, view, state, env) {
     isDate && state.seasons != null && (data.t.season[i] < state.seasons[0] || data.t.season[i] > state.seasons[1]);
   const xOf = (i) => {
     const rawX = isDate ? data.t.dateX[i] : data.t[axis][i];
-    return rawX == null ? band.sentinel : rawX;
+    if (rawX == null) return band.sentinel;
+    // 04.17 D-11: plot-only pin; data.t keeps the true value for tooltip and panel.
+    return axis === 'excitement' ? pin(rawX, EXCITEMENT_CAP) : rawX;
   };
   const theme = env.theme;
   const plotHeight = (env.chartHeight ?? 0) - MARGIN.t - MARGIN.b;
@@ -275,7 +305,7 @@ export function buildFigure(data, view, state, env) {
   // in both modes: in Excitement mode the band holds the games with no excitement value (D-16),
   // everything else is a regular dot at its excitement (D-14).
   const yMode = state.y === 'excitement' ? 'excitement' : 'viewers';
-  const yOf = (i) => (yMode === 'excitement' ? data.t.excitement[i] : data.t.viewers[i]);
+  const yOf = (i) => (yMode === 'excitement' ? pin(data.t.excitement[i], EXCITEMENT_CAP) : data.t.viewers[i]);
   const inBand = (i) => (yMode === 'excitement' ? data.t.excitement[i] == null : !data.rated[i]);
   const bandY = (i) => (yMode === 'excitement' ? data.bandJitter[i] : data.jitter[i]);
   const hoverOpts = { axis, y: yMode, theme };
@@ -605,7 +635,7 @@ export function buildFigure(data, view, state, env) {
   });
 
   const yTicks = logTicks(data.viewersMin, data.viewersMax);
-  const excY = yMode === 'excitement' ? excitementYAxis(data, bandGeo.plotPx * (1 - bandGeo.logBottom)) : null;
+  const excY = yMode === 'excitement' ? measureYAxis(data, 'excitement', bandGeo.plotPx * (1 - bandGeo.logBottom)) : null;
 
   let dateAxis = null;
   if (isDate) {
