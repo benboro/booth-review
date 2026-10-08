@@ -152,7 +152,7 @@ def test_band_info_mode_swaps_copy_and_closes_the_note(
     assert guarded_page.is_hidden("#band-note-viewers")
     href = guarded_page.get_attribute("#band-note-excitement a", "href")
     assert href is not None
-    assert href.endswith("methodology.html#the-y-axis-viewers-or-excitement")
+    assert href.endswith("methodology.html#the-y-axis-viewers-excitement-points-or-margin")
 
     guarded_page.evaluate(set_mode, "viewers")
     assert guarded_page.is_hidden("#band-note")

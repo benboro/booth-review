@@ -9,7 +9,7 @@ figures on the chart come from.
 ## What this chart shows
 
 Each dot is one rated national telecast of an FBS college football game, from
-the 2014 season onward. The y-axis is viewers, on a log scale, and can show excitement instead (see [the y-axis section](#the-y-axis-viewers-or-excitement)). The x-axis
+the 2014 season onward. The y-axis is viewers, on a log scale, and can show excitement, total points or winning margin instead (see [the y-axis section](#the-y-axis-viewers-excitement-points-or-margin)). The x-axis
 defaults to the winner's closing point spread (see below) and can be toggled
 to CFBD's post-game excitement measure or to the game's date instead. Dots are colored by network family —
 for example, the Disney family groups ABC and the ESPN networks under one
@@ -117,7 +117,7 @@ On the site each game reads "No public rating · {cause}".
 
 **The rarely-rated list.** It is set by hand, one value per network, in `data/reference/network_rarity.csv`, and never computed from a threshold. Every network in `networks.csv` has a row, so a newly mapped network forces a review. The build reports only how many networks have an actual rated share that contradicts their flag, so the list stays auditable.
 
-**Where they appear.** With the y-axis on Viewers, these games sit in the "No public rating" strip under the plot as hollow rings when no filter is active, and for games that fail the filters. With the y-axis on Excitement, they are filled dots at their excitement value like every other game. When passing games are drawn larger (see Dot size above), the unrated games that pass are drawn like rated dots, and a selected announcer's games use the same shapes as their rated games; otherwise they stay hollow rings on Viewers. In Bars, each bar's outlined part counts them.
+**Where they appear.** With the y-axis on Viewers, these games sit in the "No public rating" strip under the plot as hollow rings when no filter is active, and for games that fail the filters. With the y-axis on Excitement, they are filled dots at their excitement value like every other game. On Points and Margin every game is a filled dot at its value, and the strip holds only games with no final score. When passing games are drawn larger (see Dot size above), the unrated games that pass are drawn like rated dots, and a selected announcer's games use the same shapes as their rated games; otherwise they stay hollow rings on Viewers. In Bars, each bar's outlined part counts them.
 
 ## Measurement eras
 
@@ -197,7 +197,8 @@ actually happened during the game, after the fact. It can help explain
 whether an audience stayed tuned in as the game unfolded, but it cannot
 explain the initial decision to watch, since it is not available until the
 outcome is already known. Only the Spread's distance is known at kickoff,
-which is why Spread is the chart's default measure.
+which is why Spread is the chart's default measure. The axis stops at 12. A game
+above that sits at the right edge, marked "12+", and its tooltip shows the real value.
 
 **Date (the third option):** each dot sits at the day its game aired in
 Eastern time, nudged within the day by its kickoff time (a game with no listed
@@ -207,7 +208,7 @@ season's block widens as games are added. A faint line marks the gap between
 seasons; that gap is compressed space, not real days. Under the axis, one row
 names each season (two-digit years on narrow screens, such as '24, or 24 on
 the narrowest phones) and a second row shows month ticks, month names, or
-dates, depending on how much room there is. Bowl and playoff games sit at the end of their own season's block. On this
+dates, depending on how much room there is. On the Date axis, a faint gold band covers each season's bowl games and playoff games, from the first one to the end of that season. Conference championship games are not included. The band is only a calendar marker: it does not change with your filters. On this
 option only, picking a season range shows just those seasons on the axis,
 while every other filter fades or hides dots as usual. The Date axis has no
 N/A strip because every telecast has a date, and its tooltip and detail panel
@@ -221,13 +222,17 @@ zero and never dropped from the chart; it behaves identically to any other dot
 under every filter, highlight, and hover. A game whose score has not arrived
 yet moves into place on the next data update.
 
-## The y-axis: viewers or excitement
+## The y-axis: viewers, excitement, points, or margin
 
-The y-axis has two choices. **Viewers** is the default, on a log scale. **Excitement** is CFBD's excitement index, on a straight scale from 0 to the highest value in the whole dataset (about 23; only a handful of games sit above 15). The axis does not change when you filter, so a dot never moves because of a filter.
+The y-axis has four choices. **Viewers** is the default, on a log scale. **Excitement** is CFBD's excitement index, on a straight scale. **Points** is the two teams' final scores added together. The axis starts at 0. **Margin** is how many points the winner won by. The axis starts at 0. Games have no ties in our data. The axis does not change when you filter, so a dot never moves because of a filter.
+
+The Excitement axis stops at 12, and the Points and Margin axes stop at 120 and 70. A game above a cap is drawn at the top edge, marked "12+", "120+" or "70+". Hover or tap the dot to see its real number.
 
 In Excitement mode every game is a filled dot at its excitement value, rated or not. The strip under the plot then holds the games CFBD publishes no excitement index for, and is labeled "No excitement value". The tooltip still shows viewers (or "No public rating" and its reason), and the summary still counts rated games. Read the vertical position the way [the 2025 excitement break](#the-2025-excitement-break) allows.
 
-Excitement cannot be on both axes. Picking it on one axis moves the other back: the x-axis to Spread, or the y-axis to Viewers.
+A game with no final score is drawn in the bottom strip, labeled "No final score", instead of being left out.
+
+Excitement cannot be on both axes. Picking it on one axis moves the other back: the x-axis to Spread, or the y-axis to Viewers. Points and Margin work with any x-axis.
 
 ## Booth announcers only
 
