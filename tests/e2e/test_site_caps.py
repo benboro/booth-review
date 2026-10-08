@@ -87,7 +87,10 @@ def test_caps_module_constants_and_helpers(guarded_page: Page, site_url: str) ->
         "margin": {"cap": 70, "step": 10, "title": "Margin of victory (points)"},
     }
     assert r["pin"] == [12, 11.9, None, 12, None]
-    assert r["ex"] == {"tickvals": [2, 4, 6, 8, 10, 12], "ticktext": ["2", "4", "6", "8", "10", "12+"]}
+    assert r["ex"] == {
+        "tickvals": [2, 4, 6, 8, 10, 12],
+        "ticktext": ["2", "4", "6", "8", "10", "12+"],
+    }
     assert r["pts"]["tickvals"] == [0, 20, 40, 60, 80, 100, 120]
     assert r["pts"]["ticktext"][-1] == "120+"
     assert r["mar"]["tickvals"] == [0, 10, 20, 30, 40, 50, 60, 70]
@@ -163,7 +166,8 @@ _AXES_JS = """
   const pts = [];
   gd.data.forEach((t) => {
     (t.customdata ?? []).forEach((cd, k) => {
-      if (cd === %d) pts.push({ meta: String(t.meta), x: t.x[k], y: t.y[k], yaxis: t.yaxis ?? 'y',
+      if (cd === __I__) pts.push({ meta: String(t.meta), x: t.x[k], y: t.y[k],
+        yaxis: t.yaxis ?? 'y',
         size: Array.isArray(t.marker.size) ? t.marker.size[k] : t.marker.size,
         symbol: Array.isArray(t.marker.symbol) ? t.marker.symbol[k] : t.marker.symbol });
     });
@@ -175,10 +179,10 @@ _AXES_JS = """
     yRange: gd.layout.yaxis.range.slice(), yLen: fl.yaxis._length,
     yTickvals: gd.layout.yaxis.tickvals, yTicktext: gd.layout.yaxis.ticktext,
     pts, sentinel: ann,
-    t6: window.__testHooks.data.t.excitement[%d],
+    t6: window.__testHooks.data.t.excitement[__I__],
   };
 }
-""" % (_PINNED, _PINNED)
+""".replace("__I__", str(_PINNED))
 
 _SIZES = [(1280, 900), (360, 800)]
 
