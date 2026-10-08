@@ -297,3 +297,64 @@ def test_summary_and_sizes_match_across_y_modes(
             )
         )
     assert all(s == seen[0] for s in seen[1:])
+
+
+_TIP_JS = """
+async ([i, y]) => {
+  const C = await import('./modules/chart.js');
+  const T = await import('./modules/tooltip.js');
+  const d = window.__testHooks.data;
+  return {
+    line: T.tooltipModel(d, i, { axis: 'spread', y }).scoreLine,
+    hover: C.hoverText(d, i, { axis: 'spread', y, theme: 'light' }),
+    viewers: T.tooltipModel(d, i, { axis: 'spread', y }).viewersLine,
+    axis: T.tooltipModel(d, i, { axis: 'spread', y }).axisLine,
+  };
+}
+"""
+
+
+def test_score_line_in_model_and_plotly_text(
+    guarded_page: Page, open_app: Callable[[Page, str], None], fixture_raw: dict[str, Any]
+) -> None:
+    raw = _mutated(fixture_raw)
+    guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+    open_app(guarded_page, "?y=points")
+    nr = len(raw["telecasts"]["season"])
+    big_total = guarded_page.evaluate(_TIP_JS, [_BIG_TOTAL, "points"])
+    assert big_total["line"] == "Total points: 150"
+    assert "Total points: 150" in big_total["hover"]
+    assert big_total["viewers"].startswith("Viewers: ")
+    big_margin = guarded_page.evaluate(_TIP_JS, [_BIG_MARGIN, "margin"])
+    assert big_margin["line"] == "Margin: 80"
+    assert "Margin: 80" in big_margin["hover"]
+    for i, y, text in [
+        (_NO_SCORE_RATED, "points", "Total points: not available"),
+        (nr, "margin", "Margin: not available"),
+    ]:
+        got = guarded_page.evaluate(_TIP_JS, [i, y])
+        assert got["line"] == text
+        assert text in got["hover"]
+    unrated = guarded_page.evaluate(_TIP_JS, [nr, "points"])
+    assert unrated["viewers"].startswith("No public rating · ")
+    for y in ("viewers", "excitement"):
+        assert guarded_page.evaluate(_TIP_JS, [_BIG_TOTAL, y])["line"] is None
+        assert "Total points" not in guarded_page.evaluate(_TIP_JS, [_BIG_TOTAL, y])["hover"]
+
+
+def test_rendered_tooltip_shows_true_value_in_both_modes(
+    guarded_page: Page, open_app: Callable[[Page, str], None], fixture_raw: dict[str, Any]
+) -> None:
+    from test_site_chart import _hover_dot, _use_plotly_tooltip
+
+    raw = _mutated(fixture_raw)
+    guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+    open_app(guarded_page, "?y=points")
+    guarded_page.evaluate(_WAIT_TWO_FRAMES)
+    _hover_dot(guarded_page, _BIG_TOTAL)
+    text = guarded_page.inner_text("#chart-tooltip")
+    assert "Total points: 150" in text
+    assert "Viewers: " in text
+    _use_plotly_tooltip(guarded_page)
+    hover = guarded_page.evaluate(_TIP_JS, [_BIG_TOTAL, "points"])["hover"]
+    assert "Total points: 150" in hover

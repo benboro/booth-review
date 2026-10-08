@@ -237,7 +237,7 @@ export function naBand(data, axis, plotPx) {
  * of visible `&lt;br&gt;` markup rather than as actual line breaks.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
- * @param {{axis: "spread"|"excitement"|"date", theme: "light"|"dark"}} opts
+ * @param {{axis: "spread"|"excitement"|"date", y?: "viewers"|"excitement"|"points"|"margin", theme: "light"|"dark"}} opts
  * @returns {string}
  */
 export function hoverText(data, i, { axis, y, theme }) {
@@ -262,6 +262,7 @@ export function hoverText(data, i, { axis, y, theme }) {
 
   lines.push(escapeHover(model.viewersLine));
   lines.push(escapeHover(model.axisLine));
+  if (model.scoreLine != null) lines.push(escapeHover(model.scoreLine));
   lines.push(escapeHover(model.hint));
 
   return lines.join('<br>');
