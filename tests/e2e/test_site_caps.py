@@ -154,3 +154,158 @@ def test_derived_and_pinned_on_mutated_payload(
     nr = len(raw["telecasts"]["season"])
     assert r["total"][nr] is None
     assert r["margin"][nr] is None
+
+
+_AXES_JS = """
+() => {
+  const gd = document.getElementById('chart');
+  const fl = gd._fullLayout;
+  const pts = [];
+  gd.data.forEach((t) => {
+    (t.customdata ?? []).forEach((cd, k) => {
+      if (cd === %d) pts.push({ meta: String(t.meta), x: t.x[k], y: t.y[k], yaxis: t.yaxis ?? 'y',
+        size: Array.isArray(t.marker.size) ? t.marker.size[k] : t.marker.size,
+        symbol: Array.isArray(t.marker.symbol) ? t.marker.symbol[k] : t.marker.symbol });
+    });
+  });
+  const ann = gd.layout.annotations?.[0]?.x;
+  return {
+    xRange: gd.layout.xaxis.range.slice(), xLen: fl.xaxis._length,
+    xTickvals: gd.layout.xaxis.tickvals, xTicktext: gd.layout.xaxis.ticktext,
+    yRange: gd.layout.yaxis.range.slice(), yLen: fl.yaxis._length,
+    yTickvals: gd.layout.yaxis.tickvals, yTicktext: gd.layout.yaxis.ticktext,
+    pts, sentinel: ann,
+    t6: window.__testHooks.data.t.excitement[%d],
+  };
+}
+""" % (_PINNED, _PINNED)
+
+_SIZES = [(1280, 900), (360, 800)]
+
+
+@pytest.mark.parametrize("size", _SIZES, ids=lambda s: f"{s[0]}x{s[1]}")
+def test_pinned_game_on_x_excitement(
+    request: pytest.FixtureRequest,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+    size: tuple[int, int],
+) -> None:
+    page = _open_mutated(request, open_app, fixture_raw, size, "?axis=excitement")
+    r = page.evaluate(_AXES_JS)
+    assert r["xTicktext"][-1] == "12+"
+    assert r["xTickvals"][-1] == 12
+    assert r["t6"] == _PINNED_VALUE
+    main = [p for p in r["pts"] if p["yaxis"] != "y2"]
+    assert main
+    assert all(p["x"] == 12 for p in main)
+    lo, hi = r["xRange"]
+    assert hi > 12
+    clearance = (hi - 12) * r["xLen"] / (hi - lo)
+    assert clearance >= 10 - 1e-6, clearance
+    # the N/A strip stays left of the data minimum
+    assert r["sentinel"] < 3.0
+    assert lo < r["sentinel"]
+
+
+@pytest.mark.parametrize("size", _SIZES, ids=lambda s: f"{s[0]}x{s[1]}")
+def test_pinned_game_on_y_excitement(
+    request: pytest.FixtureRequest,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+    size: tuple[int, int],
+) -> None:
+    page = _open_mutated(request, open_app, fixture_raw, size, "?y=excitement")
+    r = page.evaluate(_AXES_JS)
+    assert r["yTicktext"] == ["4", "6", "8", "10", "12+"]
+    assert r["yTickvals"] == [4, 6, 8, 10, 12]
+    main = [p for p in r["pts"] if p["yaxis"] != "y2"]
+    assert main
+    assert all(p["y"] == 12 for p in main)
+    lo, hi = r["yRange"]
+    assert hi > 12
+    clearance = (hi - 12) * r["yLen"] / (hi - lo)
+    assert clearance >= 10 - 1e-6, clearance
+
+
+@pytest.mark.parametrize("size", _SIZES, ids=lambda s: f"{s[0]}x{s[1]}")
+def test_pinned_compare_highlight_sits_at_cap(
+    request: pytest.FixtureRequest,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+    size: tuple[int, int],
+) -> None:
+    query = "?y=excitement&people=kris-venn,sam-delgado&mode=compare"
+    page = _open_mutated(request, open_app, fixture_raw, size, query)
+    r = page.evaluate(_AXES_JS)
+    hl = [p for p in r["pts"] if p["meta"].startswith("highlight")]
+    assert hl, r["pts"]
+    assert all(p["y"] == 12 for p in hl)
+    assert all(p["size"] > 0 for p in hl)
+    lo, hi = r["yRange"]
+    assert (hi - 12) * r["yLen"] / (hi - lo) >= 10 - 1e-6
+
+
+def test_axes_agree_on_the_capped_range(
+    guarded_page: Page, open_app: Callable[[Page, str], None], fixture_raw: dict[str, Any]
+) -> None:
+    raw = _mutated(fixture_raw)
+    guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+    open_app(guarded_page, "")
+    got = guarded_page.evaluate(
+        """async () => {
+          const C = await import('./modules/chart.js');
+          const d = window.__testHooks.data;
+          const x = C.naBand(d, 'excitement', 1000);
+          const y = C.measureYAxis(d, 'excitement', 600);
+          return { xr: d.xRange.excitement, xt: x.tickvals, xx: x.ticktext,
+                   yt: y.tickvals, yx: y.ticktext };
+        }"""
+    )
+    assert got["xr"] == [3.0, 12]
+    assert got["xt"] == got["yt"] == [4, 6, 8, 10, 12]
+    assert got["xx"] == got["yx"] == ["4", "6", "8", "10", "12+"]
+
+
+def test_true_value_survives_in_tooltip_hover_and_panel(
+    guarded_page: Page, open_app: Callable[[Page, str], None], fixture_raw: dict[str, Any]
+) -> None:
+    raw = _mutated(fixture_raw)
+    guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+    open_app(guarded_page, "?axis=excitement")
+    got = guarded_page.evaluate(
+        """async (i) => {
+          const C = await import('./modules/chart.js');
+          const T = await import('./modules/tooltip.js');
+          const d = window.__testHooks.data;
+          return {
+            x: C.hoverText(d, i, { axis: 'excitement', y: 'viewers', theme: 'light' }),
+            y: C.hoverText(d, i, { axis: 'spread', y: 'excitement', theme: 'light' }),
+            lineX: T.tooltipModel(d, i, { axis: 'excitement', y: 'viewers' }).axisLine,
+            lineY: T.tooltipModel(d, i, { axis: 'spread', y: 'excitement' }).axisLine,
+          };
+        }""",
+        _PINNED,
+    )
+    assert "Excitement: 23.2" in got["x"]
+    assert "Excitement: 23.2" in got["y"]
+    assert got["lineX"] == "Excitement: 23.2"
+    assert got["lineY"].endswith("Excitement: 23.2")
+    guarded_page.evaluate(f"window.__testHooks.openPanel({_PINNED})")
+    guarded_page.wait_for_timeout(150)
+    assert "Excitement: 23.2" in guarded_page.inner_text("#panel-body")
+
+
+def test_unmutated_fixture_has_plain_ticks_and_wrapper_matches(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    got = guarded_page.evaluate(
+        """async () => {
+          const C = await import('./modules/chart.js');
+          const d = window.__testHooks.data;
+          return { a: C.measureYAxis(d, 'excitement', 600), b: C.excitementYAxis(d, 600) };
+        }"""
+    )
+    assert got["a"] == got["b"]
+    assert got["a"]["tickvals"] == [4, 6, 8]
+    assert not any("+" in s for s in got["a"]["ticktext"])

@@ -1,5 +1,8 @@
 """SITE-58 (04.15 D-13..D-16, D-19): the scatter drawn against CFBD excitement on y.
 
+Since 04.17 D-09 the Excitement axis is capped at 12 (a game above it is pinned there and
+reads "12+"); the fixture's largest value is 9.9, so these tests see the whole data range.
+
 Synthetic fixture only. In the contract fixture, merged indices 2 (rated), 12 and 19
 (unrated) have no excitement value, and 12 and 19 also have no spread.
 """
