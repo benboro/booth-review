@@ -129,6 +129,13 @@ export function prepareData(raw) {
   if (!raw.telecasts_unrated || !Array.isArray(raw.telecasts_unrated.cause)) {
     throw new Error('site-data.json: telecasts_unrated is missing (contract v2.2.0)');
   }
+  if (
+    !Array.isArray(lookups.venues) ||
+    !Array.isArray(raw.telecasts.place) ||
+    !Array.isArray(raw.telecasts_unrated.place)
+  ) {
+    throw new Error('site-data.json: venue fields are missing (contract v2.3.0)');
+  }
   const nRated = raw.telecasts.season.length;
   const nUnrated = raw.telecasts_unrated.season.length;
   const n = nRated + nUnrated;

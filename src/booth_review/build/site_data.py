@@ -226,6 +226,7 @@ def build_site_data(
         "away_conference",
         "home_classification",
         "away_classification",
+        "venue_id",
     )
     rated_rows = list(plotted.join(games_slim, on="game_id", how="left").iter_rows(named=True))
     unrated_rows = list(
@@ -328,6 +329,28 @@ def build_site_data(
         (r for r in rivalries if r.rivalry_id in tagged_ids), key=lambda r: r.rivalry_id
     )
     rivalry_index = {r.rivalry_id: i for i, r in enumerate(used_rivalries)}
+    # Venues: only those a shipped game used and that have coordinates. Place comes
+    # only from the game's own venue id, never the home team's stadium (D-16).
+    venue_rows = {
+        int(vrow["venue_id"]): vrow
+        for vrow in tables.venues.iter_rows(named=True)
+        if vrow["lat"] is not None and vrow["lon"] is not None
+    }
+    used_venue_ids = sorted(
+        {int(r["venue_id"]) for r in shipped_rows if r["venue_id"] in venue_rows}
+    )
+    venue_index = {venue_id: i for i, venue_id in enumerate(used_venue_ids)}
+    venues_lookup = [
+        {
+            "name": venue_rows[venue_id]["name"],
+            "city": venue_rows[venue_id]["city"] or None,
+            "state": venue_rows[venue_id]["state"] or None,
+            "country": venue_rows[venue_id]["country"] or None,
+            "lat": round(venue_rows[venue_id]["lat"], 4),
+            "lon": round(venue_rows[venue_id]["lon"], 4),
+        }
+        for venue_id in used_venue_ids
+    ]
     shipped_ids = {row["telecast_id"] for row in shipped_rows}
     rated_ids = {row["telecast_id"] for row in rated_rows}
 
@@ -495,6 +518,7 @@ def build_site_data(
         "away_conference",
         "bowl",
         "rivalry",
+        "place",
     )
     rated_only_names = (
         "viewers",
@@ -565,6 +589,8 @@ def build_site_data(
             target["bowl"].append(None)
         tagged = rivalry_resolution.by_game.get(int(row["game_id"]))
         target["rivalry"].append(rivalry_index[tagged] if tagged is not None else None)
+        venue_id = row["venue_id"]
+        target["place"].append(venue_index.get(int(venue_id)) if venue_id is not None else None)
 
     for row in rated_rows:
         _append_game_fields(columns, row)
@@ -664,6 +690,7 @@ def build_site_data(
                 for slug in franchise_slugs
             ],
             "rivalries": rivalries_lookup,
+            "venues": venues_lookup,
         },
         "telecasts": columns,
         "telecasts_unrated": unrated_columns,
@@ -686,6 +713,20 @@ def build_site_data(
         counts["not_rarely_rated_but_mostly_unrated"] = unflagged_unrated
         counts["rivalry_title_games_excluded"] = rivalry_resolution.title_games_excluded
         counts["rivalry_rematches_demoted"] = rivalry_resolution.rematches_demoted
+        place_values = [*columns["place"], *unrated_columns["place"]]
+        counts["venue_games_no_id"] = sum(1 for r in shipped_rows if r["venue_id"] is None)
+        counts["venue_games_unlocated"] = sum(
+            1
+            for r, v in zip(shipped_rows, place_values, strict=True)
+            if r["venue_id"] is not None and v is None
+        )
+        counts["venues_shipped"] = len(venues_lookup)
+        counts["venues_abroad"] = sum(
+            1 for v in venues_lookup if v["country"] is not None and v["country"] != "US"
+        )
+        placed_states = [venues_lookup[int(v)]["state"] for v in place_values if isinstance(v, int)]
+        counts["venue_games_alaska"] = placed_states.count("AK")
+        counts["venue_games_hawaii"] = placed_states.count("HI")
     try:
         return validate_site_data(payload)
     except ValidationError as exc:

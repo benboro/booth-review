@@ -23,6 +23,7 @@ from booth_review.build.people_links import PEOPLE_SCHEMA, TELECAST_PEOPLE_SCHEM
 from booth_review.build.site_data import build_site_data, time_slot, write_site_data
 from booth_review.build.tables import BuildDiagnostics, BuildTables
 from booth_review.build.telecasts import LISTING_LINKS_SCHEMA, TELECASTS_SCHEMA
+from booth_review.build.venues import VENUES_SCHEMA
 from booth_review.build.viewership import TELECAST_FLAGS_SCHEMA, VIEWERSHIP_SCHEMA
 from booth_review.config import DataPaths
 from booth_review.contract.models import SITE_DATA_FIELDS, validate_site_data
@@ -1660,6 +1661,12 @@ def test_title_game_before_rivalry_game_is_untagged_and_counted(
         "plotted_duplicates_dropped": 0,
         "rarely_rated_but_mostly_rated": 0,
         "not_rarely_rated_but_mostly_unrated": 0,
+        "venue_games_no_id": 2,
+        "venue_games_unlocated": 0,
+        "venues_shipped": 0,
+        "venues_abroad": 0,
+        "venue_games_alaska": 0,
+        "venue_games_hawaii": 0,
     }
     assert "SENTINEL" not in json.dumps(payload)
 
@@ -1898,3 +1905,117 @@ def test_unrated_games_feed_the_lookups(tmp_path: Path, build_reference: Path) -
     payload = _site(tables, build_reference)
     assert [t["name"] for t in payload["lookups"]["teams"]] == ["Fixture Away", "Fixture Home"]
     assert "net-c" in [n["id"] for n in payload["lookups"]["networks"]]
+
+
+def _with_venues(
+    tables: BuildTables, venue_by_game: dict[int, int | None], venues: list[dict[str, object]]
+) -> BuildTables:
+    ids = [venue_by_game.get(int(g)) for g in tables.games["game_id"].to_list()]
+    games = tables.games.with_columns(pl.Series("venue_id", ids, dtype=pl.Int64))
+    venue_frame = pl.DataFrame(venues, schema=VENUES_SCHEMA)
+    return dataclasses.replace(tables, games=games, venues=venue_frame)
+
+
+_TEST_VENUES: list[dict[str, object]] = [
+    {
+        "venue_id": 10,
+        "name": "Test Isle Stadium",
+        "city": "Testolulu",
+        "state": "HI",
+        "country": "US",
+        "lat": 21.37291234,
+        "lon": -157.93011234,
+    },
+    {
+        "venue_id": 20,
+        "name": "Test Harbour Park",
+        "city": "Testlin",
+        "state": "",
+        "country": "IE",
+        "lat": 53.3352,
+        "lon": -6.2285,
+    },
+    {
+        "venue_id": 30,
+        "name": "Test No Coordinates",
+        "city": "Nowhere",
+        "state": "TS",
+        "country": "US",
+        "lat": None,
+        "lon": None,
+    },
+    {
+        "venue_id": 40,
+        "name": "Test Unused Field",
+        "city": "Unused",
+        "state": "TS",
+        "country": "US",
+        "lat": 40.0,
+        "lon": -100.0,
+    },
+]
+_TEST_VENUE_BY_GAME: dict[int, int | None] = {
+    1: 10,
+    2: 20,  # neutral site: the venue's own location, not the home team's
+    3: 30,  # venue without coordinates
+    4: 10,
+    5: 99,  # venue id missing from the venue list
+    6: None,  # no venue id
+    500007: 10,
+}
+
+
+def test_place_uses_the_games_own_venue_including_neutral_sites(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    tables = _with_venues(small_tables, _TEST_VENUE_BY_GAME, _TEST_VENUES)
+    payload = _site(tables, build_reference)
+    venues = payload["lookups"]["venues"]
+    assert [v["name"] for v in venues] == ["Test Isle Stadium", "Test Harbour Park"]
+    assert venues[0]["lat"] == 21.3729
+    assert venues[0]["lon"] == -157.9301
+    assert venues[1]["state"] is None
+    rated = payload["telecasts"]
+    neutral_index = rated["neutral"].index(True)
+    assert venues[rated["place"][neutral_index]]["country"] == "IE"
+    assert rated["place"].count(None) == 1  # game 3: venue without coordinates
+
+
+def test_venue_counts_are_numbers_and_follow_d16(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    tables = _with_venues(small_tables, _TEST_VENUE_BY_GAME, _TEST_VENUES)
+    counts: dict[str, int] = {}
+    build_site_data(tables, build_coverage(tables), build_reference, _GENERATED_AT, counts=counts)
+    assert counts["venue_games_no_id"] == 1
+    assert counts["venue_games_unlocated"] == 2
+    assert counts["venues_shipped"] == 2
+    assert counts["venues_abroad"] == 1
+    assert counts["venue_games_hawaii"] == 3
+    assert counts["venue_games_alaska"] == 0
+
+
+def test_unused_venue_is_not_shipped(small_tables: BuildTables, build_reference: Path) -> None:
+    tables = _with_venues(small_tables, _TEST_VENUE_BY_GAME, _TEST_VENUES)
+    names = [v["name"] for v in _site(tables, build_reference)["lookups"]["venues"]]
+    assert "Test Unused Field" not in names
+
+
+def test_empty_venue_list_places_nothing_and_counts_unlocated(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    tables = _with_venues(small_tables, _TEST_VENUE_BY_GAME, [])
+    counts: dict[str, int] = {}
+    payload = build_site_data(
+        tables, build_coverage(tables), build_reference, _GENERATED_AT, counts=counts
+    ).model_dump(mode="json")
+    assert payload["lookups"]["venues"] == []
+    assert set(payload["telecasts"]["place"]) == {None}
+    assert set(payload["telecasts_unrated"]["place"]) == {None}
+    assert counts["venue_games_unlocated"] == 6
+    assert counts["venue_games_no_id"] == 1
+
+
+def test_venue_build_is_deterministic(small_tables: BuildTables, build_reference: Path) -> None:
+    tables = _with_venues(small_tables, _TEST_VENUE_BY_GAME, _TEST_VENUES)
+    assert _site(tables, build_reference) == _site(tables, build_reference)

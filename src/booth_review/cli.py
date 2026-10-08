@@ -1005,6 +1005,16 @@ def _build(args: argparse.Namespace) -> int:
             f"title games excluded {outcome.counts['rivalry_title_games_excluded']}, "
             f"rematches demoted {outcome.counts['rivalry_rematches_demoted']}"
         )
+    if "venues_shipped" in outcome.counts:
+        # 04.18 D-14/D-16: where games are placed; counts only.
+        print(
+            f"venues: {outcome.counts['venues_shipped']} shipped "
+            f"({outcome.counts['venues_abroad']} abroad), "
+            f"games in Alaska {outcome.counts['venue_games_alaska']}, "
+            f"in Hawaii {outcome.counts['venue_games_hawaii']}, "
+            f"no venue id {outcome.counts['venue_games_no_id']}, "
+            f"unlocated {outcome.counts['venue_games_unlocated']}"
+        )
     bowl_names_unknown = outcome.counts.get("bowl_names_unknown", 0)
     if bowl_names_unknown > 0:
         print(f"bowl names unknown {bowl_names_unknown}")
