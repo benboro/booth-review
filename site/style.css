@@ -2519,9 +2519,11 @@ html:has(#detail-panel[open]) {
     width: 100%;
   }
 
+  /* 04.17 D-17: four Y buttons on one row. 271.8px is available at 360px and the full
+     labels need 246.0 (default) to 269.6 (wide font) px; 4 x 1fr would need 365px. */
   #y-toggle {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(4, auto);
     width: 100%;
   }
 
@@ -2679,4 +2681,15 @@ html:has(#detail-panel[open]) {
 
 td.no-rating {
   text-align: left;
+}
+
+/* 04.17 D-17: below 360px the four Y labels no longer fit; only Excitement shortens. */
+@media (max-width: 359px) {
+  #y-toggle .axis-long {
+    display: none;
+  }
+
+  #y-toggle .axis-short {
+    display: inline;
+  }
 }
