@@ -618,7 +618,7 @@ def test_compare_toggle_pressed_state_is_unmistakable(
         guarded_page.evaluate("() => getComputedStyle(document.body).backgroundColor")
     )
 
-    for toggle_id in ("#compare-toggle", "#together-toggle"):
+    for toggle_id, mode in (("#compare-toggle", "compare"), ("#together-toggle", "together")):
         before_visibility = guarded_page.eval_on_selector(
             toggle_id, "el => getComputedStyle(el, '::before').visibility"
         )
@@ -627,11 +627,7 @@ def test_compare_toggle_pressed_state_is_unmistakable(
             toggle_id, "el => getComputedStyle(el).backgroundColor"
         )
 
-        guarded_page.click(toggle_id)
-        guarded_page.wait_for_function(
-            "(sel) => document.querySelector(sel).getAttribute('aria-pressed') === 'true'",
-            arg=toggle_id,
-        )
+        click_mode_toggle(guarded_page, toggle_id, mode)
 
         after_bg, after_color = guarded_page.eval_on_selector(
             toggle_id,
