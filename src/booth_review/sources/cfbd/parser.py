@@ -42,6 +42,20 @@ def _load_list(content: bytes, *, kind: str) -> list[dict[str, Any]]:
     return data
 
 
+def _is_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _optional_int(row: dict[str, Any], field: str, *, kind: str) -> int | None:
+    """An int field that may be absent; the message names the field, never the value."""
+    value = row.get(field)
+    if value is None:
+        return None
+    if not _is_int(value):
+        raise ParseError(f"cfbd {kind}: {field} is not an integer")
+    return int(value)
+
+
 @dataclass(frozen=True)
 class CfbdGame:
     id: int
@@ -68,6 +82,7 @@ class CfbdGame:
     notes: str | None
     is_cfp: bool = False
     playoff_round: str | None = None
+    venue_id: int | None = None
 
 
 def parse_games(content: bytes) -> list[CfbdGame]:
@@ -113,6 +128,7 @@ def parse_games(content: bytes) -> list[CfbdGame]:
                 notes=row.get("notes"),
                 is_cfp=is_cfp,
                 playoff_round=playoff_round,
+                venue_id=_optional_int(row, "venueId", kind="game"),
             )
         )
     return games
@@ -320,3 +336,74 @@ def parse_teams(content: bytes) -> list[CfbdTeam]:
             )
         )
     return result
+
+
+@dataclass(frozen=True)
+class CfbdVenue:
+    id: int
+    name: str
+    city: str | None
+    state: str | None
+    country_code: str | None
+    latitude: float | None
+    longitude: float | None
+
+
+def _venue_text(row: dict[str, Any], field: str) -> str | None:
+    value = row.get(field)
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str):
+        raise ParseError(f"cfbd venue: {field} is not a string")
+    return value
+
+
+def _venue_coordinate(value: object, field: str, limit: float) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ParseError(f"cfbd venue: {field} is not a number")
+    if not -limit <= value <= limit:
+        raise ParseError(f"cfbd venue: {field} is out of range")
+    return float(value)
+
+
+def parse_venues(content: bytes) -> list[CfbdVenue]:
+    """Parse the /venues list. Coordinates come from top-level latitude/longitude
+    or a nested location {x: longitude, y: latitude}; a venue with neither parses
+    with None coordinates (handled downstream). Errors name fields, never values.
+    """
+    rows = _load_list(content, kind="venues")
+    venues: list[CfbdVenue] = []
+    seen: set[int] = set()
+    duplicates = 0
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ParseError("cfbd venues: expected an object per row")
+        venue_id = _require(row, "id", kind="venue")
+        if not _is_int(venue_id):
+            raise ParseError("cfbd venue: id is not an integer")
+        name = _require(row, "name", kind="venue")
+        if not isinstance(name, str):
+            raise ParseError("cfbd venue: name is not a string")
+        location = row.get("location")
+        nested = location if isinstance(location, dict) else {}
+        raw_lat = row["latitude"] if "latitude" in row else nested.get("y")
+        raw_lon = row["longitude"] if "longitude" in row else nested.get("x")
+        if venue_id in seen:
+            duplicates += 1
+        seen.add(venue_id)
+        venues.append(
+            CfbdVenue(
+                id=venue_id,
+                name=name,
+                city=_venue_text(row, "city"),
+                state=_venue_text(row, "state"),
+                country_code=_venue_text(row, "countryCode"),
+                latitude=_venue_coordinate(raw_lat, "latitude", 90.0),
+                longitude=_venue_coordinate(raw_lon, "longitude", 180.0),
+            )
+        )
+    if duplicates:
+        raise ParseError(f"cfbd venues: {duplicates} duplicate venue id(s)")
+    return venues
