@@ -18,16 +18,29 @@ OpenApp = Callable[[Page, str], None]
 def test_y_toggle_markup_and_default(guarded_page: Page, open_app: OpenApp) -> None:
     open_app(guarded_page, "")
     buttons = guarded_page.locator("#y-toggle button")
-    assert buttons.count() == 2
-    assert [buttons.nth(i).inner_text() for i in range(2)] == ["Viewers", "Excitement"]
-    assert [buttons.nth(i).get_attribute("data-y") for i in range(2)] == [
+    assert buttons.count() == 4
+    assert [buttons.nth(i).inner_text() for i in range(4)] == [
+        "Viewers",
+        "Excitement",
+        "Points",
+        "Margin",
+    ]
+    assert [buttons.nth(i).get_attribute("data-y") for i in range(4)] == [
         "viewers",
         "excitement",
+        "points",
+        "margin",
     ]
-    assert [buttons.nth(i).get_attribute("aria-pressed") for i in range(2)] == [
+    assert [buttons.nth(i).get_attribute("aria-pressed") for i in range(4)] == [
         "true",
         "false",
+        "false",
+        "false",
     ]
+    assert buttons.nth(1).get_attribute("aria-label") == "Excitement"
+    assert buttons.nth(1).get_attribute("title") == "Excitement"
+    assert buttons.nth(2).get_attribute("title") == "Total points"
+    assert buttons.nth(3).get_attribute("title") == "Winning margin"
     group = guarded_page.locator("#y-toggle")
     assert group.get_attribute("role") == "group"
     assert group.get_attribute("aria-label") == "Y-axis measure"
@@ -36,6 +49,17 @@ def test_y_toggle_markup_and_default(guarded_page: Page, open_app: OpenApp) -> N
         "X axis",
         "Y axis",
     ]
+
+
+_Y_FIT_JS = """() => {
+  const group = document.getElementById('y-toggle');
+  const box = group.closest('.axis-group').getBoundingClientRect();
+  const buttons = [...group.querySelectorAll('button')];
+  return (
+    buttons.every((b) => b.scrollWidth <= b.clientWidth) &&
+    group.getBoundingClientRect().right <= box.right + 0.5
+  );
+}"""
 
 
 @pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
@@ -55,6 +79,8 @@ def test_controls_row_height_is_equal_on_every_tab(
         })"""
     )
     assert overflow
+    assert page.evaluate(_Y_FIT_JS)
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     page.locator("#tab-bars").click()
     page.wait_for_selector("#bars-title")
     assert abs(page.evaluate(height) - scatter) <= 1
@@ -223,3 +249,87 @@ def test_y_switch_has_no_page_errors(guarded_page: Page, open_app: OpenApp) -> N
             page.locator(f'#y-toggle button[data-y="{y}"]').click()
             page.wait_for_function("(y) => window.__testHooks.getState().y === y", arg=y)
     assert errors == []
+
+
+@pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
+def test_y_row_short_excitement_label_below_360(mobile_page: Page, open_app: OpenApp) -> None:
+    page = mobile_page
+    page.set_viewport_size({"width": 340, "height": 900})
+    open_app(page, "")
+    button = page.locator('#y-toggle button[data-y="excitement"]')
+    assert button.inner_text() == "Excite."
+    assert button.get_attribute("aria-label") == "Excitement"
+    assert button.get_attribute("title") == "Excitement"
+    assert page.evaluate(_Y_FIT_JS)
+    boxes = [page.locator("#y-toggle button").nth(i).bounding_box() for i in range(4)]
+    assert all(box is not None for box in boxes)
+    tops = [box["y"] for box in boxes if box]
+    assert max(tops) - min(tops) <= 1
+    assert all(box["height"] >= 44 for box in boxes if box)
+
+
+@pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
+def test_y_row_full_excitement_label_at_360(mobile_page: Page, open_app: OpenApp) -> None:
+    page = mobile_page
+    page.set_viewport_size({"width": 360, "height": 900})
+    open_app(page, "")
+    button = page.locator('#y-toggle button[data-y="excitement"]')
+    assert button.inner_text() == "Excitement"
+
+
+@pytest.mark.parametrize("value", ["points", "margin"])
+def test_y_url_accepts_points_and_margin(guarded_page: Page, open_app: OpenApp, value: str) -> None:
+    page = guarded_page
+    open_app(page, f"?y={value}")
+    assert _state(page)["y"] == value
+    assert f"y={value}" in _search(page)
+    pressed = page.locator(f'#y-toggle button[data-y="{value}"]').get_attribute("aria-pressed")
+    assert pressed == "true"
+    # With X on Excitement both values are kept (no swap).
+    open_app(page, f"?axis=excitement&y={value}")
+    state = _state(page)
+    assert state["axis"] == "excitement"
+    assert state["y"] == value
+
+
+@pytest.mark.parametrize("query", ["?y=bogus", "?y=POINTS", "?y="])
+def test_y_unknown_value_is_viewers_and_omitted(
+    guarded_page: Page, open_app: OpenApp, query: str
+) -> None:
+    page = guarded_page
+    open_app(page, query)
+    assert _state(page)["y"] == "viewers"
+    page.evaluate("window.__testHooks.setState({ y: 'bogus' })")
+    assert _state(page)["y"] == "viewers"
+    page.wait_for_function("!location.search.includes('y=')")
+
+
+def test_excitement_pair_still_swaps_from_url(guarded_page: Page, open_app: OpenApp) -> None:
+    page = guarded_page
+    open_app(page, "?axis=excitement&y=excitement")
+    state = _state(page)
+    assert state["y"] == "excitement"
+    assert state["axis"] == "spread"
+
+
+def test_points_click_keeps_excitement_x_and_persists(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    page = guarded_page
+    open_app(page, "?axis=excitement&school=northfield,lakeview")
+    page.locator('#y-toggle button[data-y="points"]').click()
+    page.wait_for_function("location.search.includes('y=points')")
+    state = _state(page)
+    assert state["y"] == "points"
+    assert state["axis"] == "excitement"
+    page.locator('#y-toggle button[data-y="margin"]').click()
+    page.wait_for_function("location.search.includes('y=margin')")
+    pressed = page.locator('#y-toggle button[aria-pressed="true"]')
+    assert pressed.count() == 1
+    assert pressed.get_attribute("data-y") == "margin"
+    page.locator("#tab-bars").click()
+    page.wait_for_selector("#bars-title")
+    assert "y=margin" in _search(page)
+    page.locator("#tab-scatter").click()
+    assert "y=margin" in _search(page)
+    assert page.locator('#y-toggle button[data-y="margin"]').get_attribute("aria-pressed") == "true"
