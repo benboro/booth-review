@@ -32,6 +32,7 @@ import subprocess
 import sys
 import threading
 import time
+import zlib
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -424,3 +425,35 @@ def open_app(site_url: str) -> Callable[[Page, str], None]:
         page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
 
     return _open
+
+
+def _shard_spec() -> tuple[int, int] | None:
+    """Reads `E2E_SHARD` ("<index>/<total>", 1-based), set only by CI's e2e matrix."""
+    spec = os.environ.get("E2E_SHARD", "").strip()
+    if not spec:
+        return None
+    index_text, _, total_text = spec.partition("/")
+    index, total = int(index_text), int(total_text)
+    if not 1 <= index <= total:
+        raise pytest.UsageError(f"E2E_SHARD must be <index>/<total>, 1 <= index <= total: {spec!r}")
+    return index, total
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Splits the e2e suite across CI shards by a stable hash of each test id.
+
+    Every xdist worker computes the same split, so each shard runs a fixed,
+    disjoint slice and together the shards run every test exactly once.
+    """
+    spec = _shard_spec()
+    if spec is None:
+        return
+    index, total = spec
+    keep: list[pytest.Item] = []
+    drop: list[pytest.Item] = []
+    for item in items:
+        bucket = zlib.crc32(item.nodeid.encode("utf-8")) % total
+        (keep if bucket == index - 1 else drop).append(item)
+    if drop:
+        config.hook.pytest_deselected(items=drop)
+        items[:] = keep

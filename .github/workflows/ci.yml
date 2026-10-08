@@ -1,7 +1,10 @@
 name: ci
 
 on:
+  # One run per PR push (pull_request) plus main after a merge; a plain
+  # branch push without a PR doesn't run CI.
   push:
+    branches: [main]
   pull_request:
 
 permissions:
@@ -30,13 +33,29 @@ jobs:
           out="$(uv run booth-review site --fixture --out dist/site)"
           printf '%s\n' "$out"
           printf '%s\n' "$out" | grep -qx 'cfbd key check: passed'
+
+  e2e:
+    # The browser suite split four ways (tests/e2e/conftest.py hashes each
+    # test id into one shard), so the shards run in parallel instead of one
+    # ~28-minute job. Together they run every e2e test exactly once.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: uv sync --locked
       - run: uv run playwright install --with-deps chromium
       - run: uv run pytest -m e2e -n 4 --tracing retain-on-failure --output test-results
+        env:
+          E2E_SHARD: ${{ matrix.shard }}/4
       - name: Upload Playwright traces
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: playwright-traces
+          name: playwright-traces-shard-${{ matrix.shard }}
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore
