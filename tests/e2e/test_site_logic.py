@@ -1,6 +1,6 @@
 """In-browser proof of D-08, SITE-10, SITE-12, and the D-10..D-19 filter/
 fade/matched-games semantics (SITE-41 / 04.7 D-06, D-07: filters fade a
-dot by default and hide it in Hide mode, Networks always hides; D-14: a
+dot by default and hide it in Hide mode, Networks included (04.16 D-15); D-14: a
 person-matched dot that fails a filter is filtered out, the filter wins;
 D-09/D-10: era-correct conference membership; D-11: School is a fade filter,
 not a highlight; D-12: the matched-games table fills on person-or-school;
@@ -232,11 +232,11 @@ def test_school_and_person_combine_highlight_within_school(
     assert view["matched"] == view["highlighted"]
 
 
-def test_seasons_fade_by_default_hide_removes_and_networks_always_hides(
+def test_seasons_and_networks_fade_by_default_and_hide_in_hide_mode(
     guarded_page: Page, site_url: str
 ) -> None:
     """SITE-41 / 04.7 D-06, D-07: the season range fades by default (reversing
-    04.1 D-13) and removes dots only in Hide mode; Networks hides in both."""
+    04.1 D-13) and removes dots only in Hide mode; Networks does the same (04.16 D-15)."""
     _load(guarded_page, site_url)
     fade = _view(guarded_page, {"seasons": [2025, 2025]})
     assert fade["visibleCount"] == FIXTURE_GAMES
@@ -246,10 +246,12 @@ def test_seasons_fade_by_default_hide_removes_and_networks_always_hides(
     assert hide["visibleCount"] == 6
     assert hide["passesFilters"] == [4, 5, 6, 7, 17, 18]
 
-    for extra in ({}, {"dots": "hide"}):
-        net_view = _view(guarded_page, {"networks": ["net-a"], **extra})
-        assert net_view["visibleCount"] == 6
-        assert net_view["passesFilters"] == [0, 4, 8, 13, 14, 19]
+    net_fade = _view(guarded_page, {"networks": ["net-a"]})
+    assert net_fade["visibleCount"] == FIXTURE_GAMES
+    assert net_fade["passesFilters"] == [0, 4, 8, 13, 14, 19]
+    net_hide = _view(guarded_page, {"networks": ["net-a"], "dots": "hide"})
+    assert net_hide["visibleCount"] == 6
+    assert net_hide["passesFilters"] == [0, 4, 8, 13, 14, 19]
 
 
 @pytest.mark.parametrize(

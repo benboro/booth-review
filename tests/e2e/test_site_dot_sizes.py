@@ -1,6 +1,6 @@
 """SITE-60/SITE-61 (04.16 D-01..D-09, amending 04.10 D-13..D-15): passing dots draw at
-10px with the black outline only when a faded dot is actually drawn (or Networks alone
-holds 1-3 families); otherwise every dot is 6px. Fade tiers, trace count and the hover
+10px with the black outline only when a faded dot is actually drawn, with Networks alone
+capped at 1-3 families and only in Fade (04.16 D-15..D-17); otherwise every dot is 6px. Fade tiers, trace count and the hover
 ring follow the drawn size."""
 
 from __future__ import annotations
@@ -169,7 +169,7 @@ def test_highlight_keeps_accent_border(
 
 # SITE-50 (04.12 D-05..D-07): on the Date axis a seasons-only filter must not enlarge
 # dots (out-of-range seasons are already off the axis); 04.16 D-03 keeps that carve-out
-# and sizing reads enlargeDots (a drawn faded dot, or Networks alone with 1-3 families).
+# and sizing reads enlargeDots (a drawn faded dot; Networks alone enlarges only in Fade with 1-3 families).
 # Fixture facts: northfield has games in 2025; 2025-2026 keeps one dale-harlow game.
 DATE_SEASONS = "?axis=date&seasons=2025-2026"
 DATE_SCHOOL = "?axis=date&seasons=2025-2026&school=northfield"
@@ -195,7 +195,12 @@ MATRIX = [
     ("?networks=net-b,net-c,net-d", True, True),
     ("?networks=net-a,net-e,net-b,net-c", True, True),
     ("?networks=net-a,net-b,net-c,net-d", True, False),
-    ("?networks=net-b&slot=afternoon,prime", True, False),
+    ("?networks=net-b&slot=afternoon,prime", True, True),
+    ("?networks=net-b&dots=hide", True, False),
+    ("?networks=net-b,net-c,net-d&dots=hide", True, False),
+    ("?networks=net-a,net-b,net-c,net-d&dots=hide", True, False),
+    (DATE_SEASONS + "&networks=net-b&dots=hide", True, False),
+    ("?networks=net-b&slot=afternoon,prime&dots=hide", True, False),
     ("?networks=net-b&slot=prime", True, True),
     (DATE_SEASONS + "&networks=net-b", True, True),
     (DATE_SEASONS + "&networks=net-a,net-b,net-c,net-d", True, False),
@@ -247,6 +252,10 @@ def test_drawn_faded_counts_faded_dots(
     assert guarded_page.evaluate("() => window.__testHooks.getView().drawnFaded") > 0
     open_app(guarded_page, "?school=northfield&dots=hide")
     assert guarded_page.evaluate("() => window.__testHooks.getView().drawnFaded") == 0
+    open_app(guarded_page, "?networks=net-b")
+    assert guarded_page.evaluate("() => window.__testHooks.getView().drawnFaded") == 15
+    open_app(guarded_page, "?networks=net-b&dots=hide")
+    assert guarded_page.evaluate("() => window.__testHooks.getView().drawnFaded") == 0
     open_app(guarded_page, "")
     assert guarded_page.evaluate("() => window.__testHooks.getView().drawnFaded") == 0
 
@@ -278,6 +287,8 @@ def test_every_slot_checked_with_no_null_slot_fades_nothing(
         # Other off, four of five families on: the "Networks · 31" screenshot case.
         ("?networks=net-a,net-e,net-b,net-c,net-f", False),
         ("?networks=net-a,net-b,net-f", True),
+        ("?networks=net-a,net-e,net-b,net-c,net-f&dots=hide", False),
+        ("?networks=net-a,net-b,net-f&dots=hide", False),
     ],
 )
 def test_five_family_networks_only(
