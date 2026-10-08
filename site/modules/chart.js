@@ -157,6 +157,10 @@ export function measureYAxis(data, mode, logPx) {
     lo = 0;
     hi = Math.min(data.maxOf[mode] ?? cap, cap);
   }
+  // No values at all fall back to the full capped span; an empty span (every margin 0)
+  // keeps one tick step so the range never collapses or turns NaN.
+  if (lo == null || hi == null) [lo, hi] = [0, cap];
+  if (!(hi > lo)) hi = lo + step;
   const [padLo, padHi] = gutterPads(hi - lo, logPx);
   const { tickvals, ticktext } = cappedTicks(lo, hi, step, cap, data.pinned[mode]);
   return { range: [lo - padLo, hi + padHi], tickvals, ticktext };

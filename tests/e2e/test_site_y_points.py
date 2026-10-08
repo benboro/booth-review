@@ -358,3 +358,60 @@ def test_rendered_tooltip_shows_true_value_in_both_modes(
     _use_plotly_tooltip(guarded_page)
     hover = guarded_page.evaluate(_TIP_JS, [_BIG_TOTAL, "points"])["hover"]
     assert "Total points: 150" in hover
+
+
+_UNKNOWN_Y_JS = """
+async () => {
+  const T = await import('./modules/tooltip.js');
+  const d = window.__testHooks.data;
+  return ['constructor', 'toString', '__proto__', 'hasOwnProperty'].map(
+    (y) => T.tooltipModel(d, 0, { axis: 'spread', y }).scoreLine,
+  );
+}
+"""
+
+
+def test_score_line_ignores_inherited_object_keys(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """04.17 review WR-01: a `y` naming an Object.prototype key yields no score line."""
+    open_app(guarded_page, "")
+    lines = guarded_page.evaluate(_UNKNOWN_Y_JS)
+    assert lines == [None, None, None, None]
+
+
+_DEGENERATE_JS = """
+async () => {
+  const { measureYAxis } = await import('./modules/chart.js');
+  const base = window.__testHooks.data;
+  const none = { ...base, maxOf: { ...base.maxOf, points: null, margin: null },
+    xRange: { ...base.xRange, excitement: [null, null] },
+    pinned: { excitement: false, points: false, margin: false } };
+  const flat = { ...base, maxOf: { ...base.maxOf, margin: 0 },
+    xRange: { ...base.xRange, excitement: [4, 4] },
+    pinned: { excitement: false, points: false, margin: false } };
+  return {
+    noneExc: measureYAxis(none, 'excitement', 400),
+    nonePts: measureYAxis(none, 'points', 400),
+    flatMargin: measureYAxis(flat, 'margin', 400),
+    flatExc: measureYAxis(flat, 'excitement', 400),
+  };
+}
+"""
+
+
+def test_measure_axis_never_collapses(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """04.17 review WR-02: missing or single-valued measures still give a finite, open range."""
+    open_app(guarded_page, "")
+    axes = guarded_page.evaluate(_DEGENERATE_JS)
+    for name in ("noneExc", "nonePts", "flatMargin", "flatExc"):
+        lo, hi = axes[name]["range"]
+        assert lo < hi, name
+        assert all(isinstance(v, (int, float)) for v in (lo, hi)), name
+        assert len(axes[name]["tickvals"]) >= 2, name
+    none_exc_hi = axes["noneExc"]["range"][1]
+    assert none_exc_hi > 12
+    flat_margin_ticks = axes["flatMargin"]["tickvals"]
+    assert flat_margin_ticks == [0, 10]
