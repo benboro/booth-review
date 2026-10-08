@@ -330,6 +330,22 @@ def _partial_counts(before: dict[str, int], after: dict[str, int]) -> dict[str, 
     }
 
 
+_ROBOTS_AND_REQUEST_LEDGER = ("raw/_robots", "ledger/requests.jsonl")
+
+# The vault paths each collect source writes. A collect commit stages only these,
+# so an unrelated untracked file elsewhere in the vault is never swept in (T-02-02).
+_COLLECT_PATHS: dict[str, tuple[str, ...]] = {
+    "sports506": ("raw/sports506", *_ROBOTS_AND_REQUEST_LEDGER),
+    "cfbd": ("raw/cfbd", "ledger/cfbd_ledger.jsonl", *_ROBOTS_AND_REQUEST_LEDGER),
+    "ratingsref": (
+        "raw/ratingsref",
+        "ledger/rr_lastmod.json",
+        "ledger/rr_lastmod.jsonl",
+        *_ROBOTS_AND_REQUEST_LEDGER,
+    ),
+}
+
+
 def _run_and_commit(
     runtime: Runtime,
     run: Callable[[], BatchSummary],
@@ -354,7 +370,10 @@ def _run_and_commit(
                 if summary is not None
                 else _partial_counts(before, runtime.cache.counters)
             )
-            runtime.vault.commit_batch(batch_message(action, source, season_label, counts))
+            runtime.vault.commit_batch(
+                batch_message(action, source, season_label, counts),
+                paths=list(_COLLECT_PATHS[source]),
+            )
     assert summary is not None
     return summary
 
@@ -493,7 +512,10 @@ def _collect_ratingsref_sitemap_only(
     xml = collector.sitemap(dry_run=False)
     counts = _partial_counts(before, runtime.cache.counters)
     if not args.no_commit:
-        runtime.vault.commit_batch(batch_message("collect", "ratingsref", season_label, counts))
+        runtime.vault.commit_batch(
+            batch_message("collect", "ratingsref", season_label, counts),
+            paths=list(_COLLECT_PATHS["ratingsref"]),
+        )
 
     assert xml is not None
     entries, _skipped = parse_sitemap(xml)
@@ -938,7 +960,8 @@ def _budget(args: argparse.Namespace) -> int:
 
         if not args.no_commit:
             runtime.vault.commit_batch(
-                batch_message("budget", "cfbd", "info", {"calls": calls_made})
+                batch_message("budget", "cfbd", "info", {"calls": calls_made}),
+                paths=list(_COLLECT_PATHS["cfbd"]),
             )
         return 0
     finally:

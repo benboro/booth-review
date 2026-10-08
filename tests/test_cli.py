@@ -115,6 +115,27 @@ def test_collect_506_real_run_commits_and_rerun_is_a_noop(
     assert _remote_log_count(remote) == log_count
 
 
+def test_collect_commit_leaves_unrelated_untracked_vault_files_alone(
+    git_vault, mock_transport_factory, patched_client
+) -> None:
+    paths = git_vault
+    draft = paths.vault / "interim" / "draft_untracked.csv"
+    draft.parent.mkdir(parents=True, exist_ok=True)
+    draft.write_text("not part of this collect\n", encoding="utf-8")
+    patched_client(mock_transport_factory(_sports506_responses()))
+
+    assert main(["collect", "506", "--season", "2025"]) == 0
+
+    def run_git(*args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(paths.vault), *args], capture_output=True, text=True, check=True
+        ).stdout
+
+    assert "interim/draft_untracked.csv" in run_git("status", "--porcelain", "-uall")
+    assert "interim/draft_untracked.csv" not in run_git("ls-files")
+    assert "raw/sports506/2025" in run_git("show", "--name-only", "--format=", "HEAD")
+
+
 def test_collect_506_one_404_fetches_others_commits_and_returns_4(
     git_vault, mock_transport_factory, patched_client, capsys
 ) -> None:
