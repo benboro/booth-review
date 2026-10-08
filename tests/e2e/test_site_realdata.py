@@ -1681,3 +1681,299 @@ def test_real_points_and_margin_axes(
     assert points_band == no_total
     assert margin_band == no_margin
     assert last_x == "12+"
+
+
+# ---------------------------------------------------------------- 04.18 Map (SITE-70..75)
+
+_MAP_TRACE_COUNT = 26
+
+_MAP_PICK_JS = """
+async () => {
+  const mm = await import('./modules/map-model.js');
+  const sel = await import('./modules/select.js');
+  const hooks = window.__testHooks;
+  const data = hooks.data;
+  const base = { ...hooks.getState(), school: [], seasons: null, networks: null };
+  const familyCount = (m) => new Set(m.legs.map((l) => l.family)).size;
+  for (const p of data.lookups.people) {
+    const state = { ...base, people: [p.id] };
+    const model = mm.buildMapModel(data, sel.computeView(data, state), state);
+    if (familyCount(model) >= 2) return p.id;
+  }
+  return null;
+}
+"""
+
+_MAP_LEGS_OK_JS = """
+() => {
+  const hooks = window.__testHooks;
+  const data = hooks.data;
+  const model = hooks.getMapModel();
+  const legsOk = model.legs.every((l) => l.family === data.familyOf[l.to]);
+  const families = new Set(model.legs.map((l) => l.family)).size;
+  return { legsOk, families, legCount: model.legs.length };
+}
+"""
+
+_MAP_USC_JS = """
+() => {
+  const hooks = window.__testHooks;
+  const data = hooks.data;
+  const t = data.t;
+  const model = hooks.getMapModel();
+  const teamIdx = data.lookups.teams.findIndex((x) => x.name === 'USC');
+  const games = [];
+  for (let i = 0; i < data.n; i += 1) {
+    if (t.season[i] !== 2024 || t.place[i] == null) continue;
+    if (t.home_team[i] === teamIdx || t.away_team[i] === teamIdx) games.push(i);
+  }
+  games.sort((a, b) => {
+    if (t.date[a] !== t.date[b]) return t.date[a] < t.date[b] ? -1 : 1;
+    const ka = t.kickoff[a];
+    const kb = t.kickoff[b];
+    if (ka !== kb) {
+      if (ka == null) return 1;
+      if (kb == null) return -1;
+      return ka < kb ? -1 : 1;
+    }
+    return a - b;
+  });
+  let pairs = 0;
+  for (let k = 1; k < games.length; k += 1) {
+    if (t.place[games[k]] !== t.place[games[k - 1]]) pairs += 1;
+  }
+  const legsOk = model.legs.every((l) => l.family === data.familyOf[l.to]);
+  const seasonsOk = model.legs.every((l) => l.season === 2024);
+  const countOk = model.legs.length === pairs;
+  const venues = data.lookups.venues;
+  const intoSouthBendNbc = model.legs.some(
+    (l) => l.family === 'nbc' && venues[t.place[l.to]].city === 'South Bend',
+  );
+  const cbsToNbc = model.legs.some((l) => data.familyOf[l.from] === 'cbs' && l.family === 'nbc');
+  return { legsOk, seasonsOk, countOk, intoSouthBendNbc, cbsToNbc, legs: model.legs.length };
+}
+"""
+
+
+def _map_open(page: Page, open_app: Callable[[Page, str], None], query: str = "?view=map") -> None:
+    page.set_viewport_size({"width": 1280, "height": 900})
+    open_app(page, query)
+    page.wait_for_function("() => window.__testHooks.mapRenders >= 1")
+
+
+def _map_set(page: Page, patch: dict[str, Any]) -> None:
+    before = page.evaluate("() => window.__testHooks.mapRenders")
+    page.evaluate("(patch) => window.__testHooks.setState(patch)", patch)
+    page.wait_for_function("(n) => window.__testHooks.mapRenders > n", arg=before)
+    page.evaluate("() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")
+
+
+def test_real_map_usc_2024_destination_colors(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+) -> None:
+    """04.18 D-04: USC 2024 legs take the destination game's family; the CBS-to-NBC and
+    into-South-Bend-on-NBC booleans are recorded (not asserted) for sign-off."""
+    _map_open(real_guarded_page, real_open_app)
+    slug = real_guarded_page.evaluate(
+        "() => { const d = window.__testHooks.data;"
+        " const i = d.lookups.teams.findIndex((x) => x.name === 'USC');"
+        " return i < 0 ? null : d.teamSlugs[i]; }"
+    )
+    has_slug = slug is not None
+    assert has_slug
+    _map_set(real_guarded_page, {"school": [slug], "seasons": [2024, 2024]})
+    facts: dict[str, Any] = real_guarded_page.evaluate(_MAP_USC_JS)
+    legs_ok = bool(facts["legsOk"])
+    seasons_ok = bool(facts["seasonsOk"])
+    count_ok = bool(facts["countOk"])
+    has_legs = int(facts["legs"]) >= 1
+    print(
+        f"usc2024 legs={facts['legs']} cbs_to_nbc={facts['cbsToNbc']} "
+        f"into_south_bend_nbc={facts['intoSouthBendNbc']}"
+    )
+    assert legs_ok
+    assert seasons_ok
+    assert count_ok
+    assert has_legs
+
+
+def test_real_map_announcer_changed_networks(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+) -> None:
+    """04.18 D-04: an announcer whose games span two or more families has legs in each,
+    every leg colored by its destination game."""
+    real_open_app(real_guarded_page, "")
+    person_id = real_guarded_page.evaluate(_MAP_PICK_JS)
+    found = person_id is not None
+    assert found
+    _map_open(real_guarded_page, real_open_app)
+    _map_set(real_guarded_page, {"people": [person_id], "school": []})
+    facts: dict[str, Any] = real_guarded_page.evaluate(_MAP_LEGS_OK_JS)
+    legs_ok = bool(facts["legsOk"])
+    families_ge_2 = int(facts["families"]) >= 2
+    assert legs_ok
+    assert families_ge_2
+
+
+def test_real_map_dublin_marker(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+) -> None:
+    """04.18 D-15: Dublin marker at (955, 30), and a school path draws to it."""
+    _map_open(real_guarded_page, real_open_app)
+    markers = real_guarded_page.evaluate("() => window.__testHooks.getMapModel().markers")
+    dublin = [m for m in markers if m["label"] == "Dublin"]
+    has_dublin = len(dublin) >= 1
+    at_anchor = has_dublin and dublin[0]["x"] == 955 and dublin[0]["y"] == 30
+    assert has_dublin
+    assert at_anchor
+    pick = real_guarded_page.evaluate(
+        """async () => {
+          const mm = await import('./modules/map-model.js');
+          const sel = await import('./modules/select.js');
+          const hooks = window.__testHooks;
+          const data = hooks.data;
+          const t = data.t;
+          const reset = { ...hooks.getState(), people: [], school: [], seasons: null };
+          const ie = new Set();
+          data.lookups.venues.forEach((v, k) => { if (v.country === 'IE') ie.add(k); });
+          for (let i = 0; i < data.n; i += 1) {
+            if (t.place[i] == null || !ie.has(t.place[i])) continue;
+            for (const team of [t.home_team[i], t.away_team[i]]) {
+              const slug = data.teamSlugs[team];
+              const patch = { ...reset, school: [slug], seasons: [t.season[i], t.season[i]] };
+              const state = { ...reset, ...patch };
+              const model = mm.buildMapModel(data, sel.computeView(data, state), state);
+              const hit = model.legs.some((l) =>
+                [l.points[0], l.points[l.points.length - 1]].some(
+                  (p) => p.x === 955 && p.y === 30));
+              if (hit) return patch;
+            }
+          }
+          return null;
+        }"""
+    )
+    found = pick is not None
+    assert found
+    _map_set(real_guarded_page, pick)
+    path_to_anchor = real_guarded_page.evaluate(
+        """() => window.__testHooks.getMapModel().legs.some((l) =>
+          [l.first, l.last].some((p) => p.x === 955 && p.y === 30))"""
+    )
+    assert path_to_anchor
+
+
+def test_real_map_hawaii_inset_and_alaska(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+) -> None:
+    """04.18 D-14: every Hawaii venue sits inside the inset; no shipped game is in Alaska."""
+    _map_open(real_guarded_page, real_open_app)
+    facts: dict[str, Any] = real_guarded_page.evaluate(
+        """async () => {
+          const mm = await import('./modules/map-model.js');
+          const data = window.__testHooks.data;
+          const venues = data.lookups.venues;
+          const placed = mm.placeVenues(venues);
+          const box = mm.HAWAII_INSET;
+          let hi = 0;
+          let hiInside = 0;
+          venues.forEach((v, k) => {
+            if (v.state !== 'HI') return;
+            hi += 1;
+            const p = placed[k];
+            if (p.x >= box.x0 && p.x <= box.x1 && p.y >= box.y0 && p.y <= box.y1) hiInside += 1;
+          });
+          let ak = 0;
+          for (let i = 0; i < data.n; i += 1) {
+            const place = data.t.place[i];
+            if (place != null && venues[place].state === 'AK') ak += 1;
+          }
+          return { hi, hiInside, ak };
+        }"""
+    )
+    hi_ok = facts["hi"] == facts["hiInside"]
+    hi_count_ge_1 = int(facts["hi"]) >= 1
+    ak_zero = int(facts["ak"]) == 0
+    assert hi_ok
+    assert hi_count_ge_1
+    assert ak_zero
+
+
+def test_real_map_nassau(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+) -> None:
+    """04.18 D-15: a Bahamas venue places at its projected point, labeled Nassau."""
+    _map_open(real_guarded_page, real_open_app)
+    facts: dict[str, Any] = real_guarded_page.evaluate(
+        """async () => {
+          const mm = await import('./modules/map-model.js');
+          const venues = window.__testHooks.data.lookups.venues;
+          const placed = mm.placeVenues(venues);
+          let found = 0;
+          let projected = 0;
+          let labeled = 0;
+          venues.forEach((v, k) => {
+            if (v.country !== 'BS') return;
+            found += 1;
+            if (placed[k].edge === false) projected += 1;
+            if (placed[k].label === 'Nassau') labeled += 1;
+          });
+          return { found, projected, labeled };
+        }"""
+    )
+    found = int(facts["found"]) >= 1
+    projected = facts["projected"] == facts["found"]
+    labeled = facts["labeled"] == facts["found"]
+    assert found
+    assert projected
+    assert labeled
+
+
+def test_real_map_constant_traces_and_note(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+) -> None:
+    """04.18 D-06/D-16: 26 traces whatever the subject or Hide, and #map-note matches the
+    count of visible games without a venue location."""
+    real_open_app(real_guarded_page, "")
+    person_id = real_guarded_page.evaluate(_MAP_PICK_JS)
+    _map_open(real_guarded_page, real_open_app)
+    slug = real_guarded_page.evaluate("() => window.__testHooks.data.teamSlugs[0]")
+    counts: list[int] = []
+    note_ok: list[bool] = []
+    patches: list[dict[str, Any]] = [
+        {"people": [], "school": [], "dots": "fade", "seasons": [2019, 2019]},
+        {"people": [person_id], "school": [], "seasons": None},
+        {"people": [], "school": [slug], "seasons": [2024, 2024]},
+        {"dots": "hide"},
+    ]
+    for patch in patches:
+        _map_set(real_guarded_page, patch)
+        n_traces = real_guarded_page.evaluate(
+            "() => document.getElementById('map-chart').data.length"
+        )
+        counts.append(int(n_traces))
+        ok = real_guarded_page.evaluate(
+            """async () => {
+              const mm = await import('./modules/map-model.js');
+              const hooks = window.__testHooks;
+              const data = hooks.data;
+              const view = hooks.getView();
+              let n = 0;
+              for (let i = 0; i < data.n; i += 1) {
+                if (data.t.place[i] == null && view.visible[i] === 1) n += 1;
+              }
+              const el = document.getElementById('map-note');
+              if (n === 0) return el.hidden || el.offsetParent === null;
+              return !el.hidden && el.textContent === mm.noLocationNote(n);
+            }"""
+        )
+        note_ok.append(bool(ok))
+    all_constant = all(c == _MAP_TRACE_COUNT for c in counts)
+    all_notes = all(note_ok)
+    assert all_constant
+    assert all_notes
