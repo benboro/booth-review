@@ -23,7 +23,7 @@ import { prepareData } from './modules/data.js';
 import { defaultState, computeView, toggleFamilyNetworks, familyOnlyPatch, axisPatch, yPatch } from './modules/select.js';
 import { encodeState, decodeState } from './modules/url-state.js';
 import { buildFigure, renderChart, bindChartEvents, TOOLTIP_MODE } from './modules/chart.js';
-import { initTopbar, renderTopbar } from './modules/topbar.js';
+import { initTopbar, renderTopbar, renderMapShapeLegend } from './modules/topbar.js';
 import { initFilters, renderFilters } from './modules/filters.js';
 import { initLegend, renderLegend } from './modules/legend.js';
 import { renderPanel, openPanel, closePanel, initPanel } from './modules/panel.js';
@@ -31,6 +31,8 @@ import { renderTable } from './modules/table.js';
 import { initChartTabs, renderChartTabs, staleCopy } from './modules/chart-tabs.js';
 import { chartContext } from './modules/bars.js';
 import { initBarsPanel, renderBarsPanel, lastBarsModel, resetBarsTap } from './modules/bars-panel.js';
+import { buildMapModel } from './modules/map-model.js';
+import { initMapPanel, renderMapPanel, resetMapTap, mapRenderCount } from './modules/map-panel.js';
 import { initBandInfo, positionBandInfo, closeBandNote, setBandInfoMode } from './modules/band-info.js';
 import { showTooltip, hideTooltip } from './modules/tooltip.js';
 import { selectedPersonIndexes } from './modules/format.js';
@@ -53,6 +55,7 @@ const panelBodyEl = document.getElementById('panel-body');
 const panelTitleEl = document.getElementById('panel-title');
 const barsPanelEl = document.getElementById('bars-panel');
 const mapPanelEl = document.getElementById('map-panel');
+const mapChartEl = document.getElementById('map-chart');
 const barsNoteEl = document.getElementById('bars-note');
 const eraNoteEl = document.getElementById('era-note');
 const shapeLegendEl = document.getElementById('shape-legend');
@@ -81,6 +84,7 @@ let tooltipMode = TOOLTIP_MODE;
 /** Hides the hover tooltip and the hover ring together. */
 function clearHover() {
   resetBarsTap();
+  resetMapTap();
   hideTooltip();
   hideHoverRing();
 }
@@ -89,6 +93,9 @@ window.addEventListener('scroll', () => clearHover(), { passive: true });
 window.addEventListener('resize', () => clearHover(), { passive: true });
 if (chartEl) {
   chartEl.addEventListener('mouseleave', () => clearHover());
+}
+if (mapChartEl) {
+  mapChartEl.addEventListener('mouseleave', () => clearHover());
 }
 
 /**
@@ -139,6 +146,8 @@ let revision = 0;
 let scatterBound = false;
 /** Which panel the last render showed: 'scatter' | 'bars' | 'map'. */
 let lastPanel = null;
+/** The Map model of the last Map render, or null before one ran. */
+let lastMapModel = null;
 
 /** Telecast index the detail panel currently shows, or null when it's closed. */
 let openPanelIndex = null;
@@ -243,6 +252,9 @@ function render() {
     if (barsPanelEl) barsPanelEl.hidden = true;
     if (mapPanelEl) mapPanelEl.hidden = false;
     hideBandInfo();
+    resetMapTap();
+    lastMapModel = buildMapModel(data, view, state);
+    renderMapPanel({ data, model: lastMapModel, env: currentEnv(), resize: lastPanel !== 'map' });
     lastPanel = 'map';
   } else {
     chartEl.hidden = true;
@@ -291,7 +303,8 @@ function render() {
   for (const renderer of renderers) {
     renderer({ data, state, view, setState });
   }
-  if (state.view !== 'scatter' && shapeLegendEl) shapeLegendEl.hidden = true;
+  if (state.view === 'map') renderMapShapeLegend(shapeLegendEl, lastMapModel);
+  else if (state.view !== 'scatter' && shapeLegendEl) shapeLegendEl.hidden = true;
 }
 
 /**
@@ -427,6 +440,8 @@ async function bootstrap() {
     initChartTabs({ data, getState: () => state, setState });
     renderers.push(renderChartTabs);
 
+    initMapPanel();
+
     initBarsPanel({ data, getState: () => state, setState, rerender: render });
 
     let resizeTimer = null;
@@ -515,6 +530,36 @@ async function bootstrap() {
         summary: lastView.summary,
       }),
       renderers,
+      get mapRenders() {
+        return mapRenderCount();
+      },
+      getMapModel: () => {
+        const m = lastMapModel;
+        if (!m) return null;
+        return {
+          hasSubject: m.hasSubject,
+          subjects: m.subjects.map(({ kind, key, label, symbol }) => ({ kind, key, label, symbol })),
+          shapesCapped: m.shapesCapped,
+          hasShared: m.hasShared,
+          dots: structuredClone(m.dots),
+          faded: structuredClone(m.faded),
+          legs: m.legs.map((leg) => ({
+            subject: leg.subject,
+            season: leg.season,
+            from: leg.from,
+            to: leg.to,
+            family: leg.family,
+            pointCount: leg.points.length,
+            first: leg.points[0],
+            last: leg.points[leg.points.length - 1],
+          })),
+          markers: structuredClone(m.markers),
+          noLocationCount: m.noLocationCount,
+          drawnCount: m.drawnCount,
+          emptyAll: m.emptyAll,
+          venueGames: Object.fromEntries(m.venueGames),
+        };
+      },
       get lastPanel() {
         return lastPanel;
       },

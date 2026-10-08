@@ -39,7 +39,8 @@ import { searchPeople } from './data.js';
 import { MAX_COMPARE } from './select.js';
 import { summaryCopy } from './format.js';
 import { makeRolePill } from './pill.js';
-import { COMPARE_GLYPHS, SHARED_GLYPH } from './palette.js';
+import { COMPARE_GLYPHS, COMPARE_SYMBOLS, SHARED_GLYPH } from './palette.js';
+import { MAP_SHAPES_CAPTION } from './map-model.js';
 
 const BASE_COMPARE_HELP = 'Compare up to 4 people — each gets its own shape.';
 const OVER_LIMIT_SUFFIX = ' Remove people to use compare.';
@@ -349,6 +350,46 @@ function renderToggles(state) {
   els.togetherToggle.title = els.togetherHelp.textContent;
 }
 
+/** One shape-legend item: an aria-hidden glyph, then the name. Shared by the scatter and Map legends. */
+function legendItem(glyphText, name) {
+  const li = document.createElement('li');
+  const glyph = document.createElement('span');
+  glyph.setAttribute('aria-hidden', 'true');
+  glyph.textContent = glyphText;
+  li.appendChild(glyph);
+  li.appendChild(document.createTextNode(` ${name}`));
+  return li;
+}
+
+/**
+ * The Map's shape legend (04.18 D-05): glyph and name per subject for the first four,
+ * a Shared booth item when a shared game is drawn, and the cap caption past four.
+ * Hidden and emptied with fewer than two subjects.
+ * @param {HTMLElement} el
+ * @param {object} model - a buildMapModel result.
+ */
+export function renderMapShapeLegend(el, model) {
+  if (!el) return;
+  if (!model || model.subjects.length < 2) {
+    el.hidden = true;
+    el.replaceChildren();
+    return;
+  }
+  const items = model.subjects.slice(0, MAX_COMPARE).map((subject) => {
+    const at = COMPARE_SYMBOLS.indexOf(subject.symbol);
+    return legendItem(COMPARE_GLYPHS[at] ?? '', subject.label);
+  });
+  if (model.hasShared) items.push(legendItem(SHARED_GLYPH, 'Shared booth'));
+  if (model.shapesCapped) {
+    const caption = document.createElement('li');
+    caption.className = 'shape-legend-caption';
+    caption.textContent = MAP_SHAPES_CAPTION[model.subjects[0].kind];
+    items.push(caption);
+  }
+  el.replaceChildren(...items);
+  el.hidden = false;
+}
+
 /** Renders the compare-mode shape legend (D-07), visible only in compare mode with people selected. */
 function renderShapeLegend(data, state, view) {
   const shouldShow = state.compare && state.people.length > 0;
@@ -361,24 +402,12 @@ function renderShapeLegend(data, state, view) {
   const items = state.people.map((id, position) => {
     const idx = data.personIndexById.get(id);
     const person = data.lookups.people[idx];
-    const li = document.createElement('li');
-    const glyph = document.createElement('span');
-    glyph.setAttribute('aria-hidden', 'true');
-    glyph.textContent = COMPARE_GLYPHS[position] ?? '';
-    li.appendChild(glyph);
-    li.appendChild(document.createTextNode(` ${person.name}`));
-    return li;
+    return legendItem(COMPARE_GLYPHS[position] ?? '', person.name);
   });
 
   const hasStar = Array.from(view.symbols.values()).includes('star');
   if (hasStar) {
-    const li = document.createElement('li');
-    const glyph = document.createElement('span');
-    glyph.setAttribute('aria-hidden', 'true');
-    glyph.textContent = SHARED_GLYPH;
-    li.appendChild(glyph);
-    li.appendChild(document.createTextNode(' Shared booth'));
-    items.push(li);
+    items.push(legendItem(SHARED_GLYPH, 'Shared booth'));
   }
 
   els.shapeLegend.replaceChildren(...items);
