@@ -101,7 +101,9 @@ def test_render_methodology_explains_how_filters_display() -> None:
     result = render_methodology(REPO_ROOT / "docs", _fixture_site())
 
     assert 'id="how-filters-display"' in result
-    assert "always hides" in result
+    assert "always hides" not in result
+    assert "works the same way" in result
+    assert "4 or more keep them at normal size even though" in result
     assert "Head-to-head" in result
     assert "fades the games it excludes" in result
     # The per-season counts are facet counts: every filter but the season range.

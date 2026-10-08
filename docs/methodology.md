@@ -81,7 +81,7 @@ By default a filter fades the games it excludes instead of removing them: the
 faded dots keep their network color, so the rest of the field stays visible as
 context. The Hide switch at the end of the network legend row removes them
 instead. The Networks filter, set from the legend chips or the Networks menu,
-always hides. With an announcer selected, their games are drawn at full
+works the same way: games on networks that are switched off fade, or disappear with Hide on. With an announcer selected, their games are drawn at full
 strength, other games that pass the filters are partly transparent, and games
 that fail a filter are fainter still. The summary line and the Bars and
 Butterfly charts count only the games that pass every filter, whether the
@@ -92,7 +92,7 @@ and lists the games that pass every filter. Double-clicking (or double-tapping) 
 
 **Named games.** The Game filter picks one named game and shows every rated telecast of it. Bowls are grouped by franchise and shown under their latest name, so a renamed bowl is one entry and searching an old name finds it. The CFP entries are the four playoff rounds, and a semifinal or quarterfinal played at a bowl appears under both its round and that bowl. Rivalries come from a curated list of well-known named FBS rivalries and count only the first regular-season meeting of the two teams each season, never a conference championship game. CFBD marks conference title games from 2022 on, so from then a title game is left out even when it comes before the rivalry game or replaces it. For earlier seasons the first-meeting rule alone applies, so a later conference-championship rematch is left out. Postseason meetings never count. The matched-games table lists the games that pass every filter, and the filter combines with the others like any other.
 
-**Dot size.** Games that pass the filters are drawn larger, with a thin black outline, only when faded games are also on the chart, so they stand out against them. In Hide mode, or when a filter leaves nothing faded (for example every kickoff slot checked), every dot keeps its normal size, except with Networks alone (below). Zooming or panning never changes sizes. Networks alone is the one exception: picking 1 to 3 network families draws the shown games larger, and 4 or more keep them at normal size. On the Date axis a season range alone does not enlarge dots.
+**Dot size.** Games that pass the filters are drawn larger, with a thin black outline, only when faded games are also on the chart, so they stand out against them. In Hide mode, or when a filter leaves nothing faded (for example every kickoff slot checked), every dot keeps its normal size. Zooming or panning never changes sizes. With Networks as the only filter, the number of network families also matters: picking 1 to 3 network families draws the shown games larger against the faded rest, and 4 or more keep them at normal size even though the other networks' games are faded. On the Date axis a season range alone does not enlarge dots.
 
 None of this changes the axes or uses viewership as an input.
 
