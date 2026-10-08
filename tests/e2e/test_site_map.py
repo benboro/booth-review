@@ -210,7 +210,9 @@ def test_desktop_hover_shows_venue_tooltip(guarded_page: Page, open_app: OpenApp
     px, py = _venue_pixel(guarded_page, nassau["x"], nassau["y"])
     guarded_page.mouse.move(px - 80, py - 80)
     guarded_page.mouse.move(px, py, steps=5)
-    guarded_page.wait_for_function("() => !document.getElementById('chart-tooltip').hidden")
+    guarded_page.wait_for_function(
+        "() => { const e = document.getElementById('chart-tooltip'); return !!e && !e.hidden; }"
+    )
     lines = _tooltip_lines(guarded_page)
     assert lines[0] == "Island Stadium · Nassau, Bahamas"
     assert "ABC/ESPN" in lines[1]
