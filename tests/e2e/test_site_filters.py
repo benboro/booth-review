@@ -207,22 +207,27 @@ def test_blank_season_select_value_is_ignored(
     assert guarded_page.evaluate("window.__testHooks.getState().seasons") == [2021, 2025]
 
 
-def test_unchecking_fox_family_hides_its_dots(
+def test_unchecking_fox_family_fades_its_dots(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """04.7 D-07: Networks always hides -- unchecking a family box removes its
-    networks' dots, so `visibleCount` and `passingCount` both drop to 15 (the 5 net-b
-    games, 3 rated and 2 unrated, are gone); 9 rated dots stay plotted."""
+    """04.16 D-15: unchecking a family box fades its networks' dots in Fade
+    (`visibleCount` stays 20, `passingCount` drops to 15: the 5 net-b games, 3 rated and
+    2 unrated, fail) and removes them in Hide; 9 rated dots stay active."""
     open_app(guarded_page, "")
     _open_filter(guarded_page, "networks")
     guarded_page.uncheck("input[data-family-checkbox='fox']")
     guarded_page.wait_for_function("location.search.includes('networks=')")
 
-    assert _visible_count(guarded_page) == 15
+    assert _visible_count(guarded_page) == 20
     assert _view(guarded_page)["passingCount"] == 15
     active = _visible_customdata(guarded_page)
     assert len(active) == 9
     assert 1 not in active
+
+    guarded_page.keyboard.press("Escape")
+    guarded_page.click('#dots-toggle [data-dots="hide"]')
+    guarded_page.wait_for_function("window.__testHooks.getView().visibleCount === 15")
+    assert _visible_count(guarded_page) == 15
 
 
 def test_isolating_a_single_network_via_family_checkboxes(
@@ -236,7 +241,9 @@ def test_isolating_a_single_network_via_family_checkboxes(
     guarded_page.uncheck("input[data-family-checkbox='other']")
     guarded_page.wait_for_function("location.search.includes('networks=net-b')")
 
-    assert _visible_count(guarded_page) == 5  # net-b: rated 1, 5, 9 plus unrated 12, 16
+    # net-b: rated 1, 5, 9 plus unrated 12, 16 pass; the rest fade (04.16 D-15)
+    assert _view(guarded_page)["passingCount"] == 5
+    assert _visible_count(guarded_page) == 20
     assert sorted(_visible_customdata(guarded_page)) == [1, 5, 9]
 
 

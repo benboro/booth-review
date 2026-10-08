@@ -385,11 +385,11 @@ def test_legend_chip_labels_are_slash_delimited_network_names(
     assert _chip_pressed_states(guarded_page) == ["true"] * len(_LEGEND_CHIP_LABELS)
 
 
-def test_legend_chip_click_toggles_family_and_hides_its_dots(
+def test_legend_chip_click_toggles_family_and_fades_its_dots(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-16: clicking a legend chip toggles that family in the Networks
-    filter, hides its dots (D-07), round-trips through the URL, and
+    filter, fades its dots (04.16 D-15), round-trips through the URL, and
     clicking it again clears the filter."""
     open_app(guarded_page, "")
     fox_chip = guarded_page.locator('#legend-chips button[data-family="fox"]')
@@ -403,7 +403,7 @@ def test_legend_chip_click_toggles_family_and_hides_its_dots(
 
     traces = _traces(guarded_page)
     assert _dot_count(_family_traces(traces)) == 9
-    assert sum(len(t["x"]) for t in _inert_traces(traces)) == 0
+    assert sum(len(t["x"]) for t in _inert_traces(traces)) == 3  # net-b rated 1, 5, 9
 
     # Two clicks on one pill inside 300ms are a double-click (04.15 D-05); space them.
     guarded_page.wait_for_timeout(350)
@@ -560,17 +560,17 @@ def test_set_state_people_highlights_and_fades_family_traces(
     assert guarded_page.url.endswith("?people=dale-harlow")
 
 
-def test_networks_filter_hides_and_fade_filters_keep_family_color(
+def test_networks_filter_fades_and_fade_filters_keep_family_color(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-07/D-01/D-03: `?networks=net-a` hides the other dots (no inert
-    points); a fade filter such as `?slot=late` draws failing dots in their
+    """04.16 D-15/D-01/D-03: `?networks=net-a` fades the other dots into the
+    inert traces (9 of 12 rated); a fade filter such as `?slot=late` draws failing dots in their
     own family color at the inert tier, with hover fully suppressed on the
     resolved `_fullData` (both `hoverinfo: 'skip'` and `hovertemplate: null`
     are required, the 04-11 finding)."""
     open_app(guarded_page, "?networks=net-a")
     traces = _traces(guarded_page)
-    assert sum(len(t["x"]) for t in _inert_traces(traces)) == 0
+    assert sum(len(t["x"]) for t in _inert_traces(traces)) == 9
     assert _dot_count(_family_traces(traces)) == 3
 
     open_app(guarded_page, "?slot=late")
@@ -2560,14 +2560,16 @@ def test_hide_mode_drops_filter_failures_but_keeps_the_announcer_pass_tier(
         assert t["opacity"] == tiers["activeUnderPerson"]
 
 
-@pytest.mark.parametrize("query", ["?networks=net-a", "?networks=net-a&dots=hide"])
-def test_networks_hide_in_both_modes(
-    guarded_page: Page, open_app: Callable[[Page, str], None], query: str
+@pytest.mark.parametrize(
+    ("query", "inert"), [("?networks=net-a", 9), ("?networks=net-a&dots=hide", 0)]
+)
+def test_networks_fade_in_fade_mode_and_hide_in_hide_mode(
+    guarded_page: Page, open_app: Callable[[Page, str], None], query: str, inert: int
 ) -> None:
-    """D-07: Networks always removes the other dots."""
+    """04.16 D-15: Networks fades the other dots in Fade and removes them in Hide."""
     open_app(guarded_page, query)
     traces = _traces(guarded_page)
-    assert _inert_total(traces) == 0
+    assert _inert_total(traces) == inert
     assert sorted(cd for t in _family_traces(traces) for cd in t["customdata"]) == [0, 4, 8]
 
 

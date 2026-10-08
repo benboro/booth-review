@@ -1,7 +1,7 @@
 """SITE-60/SITE-61 (04.16 D-01..D-09, amending 04.10 D-13..D-15): passing dots draw at
 10px with the black outline only when a faded dot is actually drawn, with Networks alone
-capped at 1-3 families and only in Fade (04.16 D-15..D-17); otherwise every dot is 6px. Fade tiers, trace count and the hover
-ring follow the drawn size."""
+capped at 1-3 families and only in Fade (04.16 D-15..D-17); otherwise every dot is 6px.
+Fade tiers, trace count and the hover ring follow the drawn size."""
 
 from __future__ import annotations
 
@@ -169,7 +169,8 @@ def test_highlight_keeps_accent_border(
 
 # SITE-50 (04.12 D-05..D-07): on the Date axis a seasons-only filter must not enlarge
 # dots (out-of-range seasons are already off the axis); 04.16 D-03 keeps that carve-out
-# and sizing reads enlargeDots (a drawn faded dot; Networks alone enlarges only in Fade with 1-3 families).
+# and sizing reads enlargeDots (a drawn faded dot; Networks alone
+# enlarges only in Fade with 1-3 families).
 # Fixture facts: northfield has games in 2025; 2025-2026 keeps one dale-harlow game.
 DATE_SEASONS = "?axis=date&seasons=2025-2026"
 DATE_SCHOOL = "?axis=date&seasons=2025-2026&school=northfield"
