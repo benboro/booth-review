@@ -9,6 +9,7 @@
 import { FAMILY_ORDER, familyKey } from './palette.js';
 import { CFP_GAME_DEFS, NEW_YEARS_SIX } from './format.js';
 import { buildDateAxis } from './date-axis.js';
+import { EXCITEMENT_CAP, Y_MEASURES } from './caps.js';
 
 /**
  * Normalizes a name for matching: Unicode NFKD decomposition, combining
@@ -106,7 +107,9 @@ function spreadX(spread, hp, ap) {
 /**
  * Prepares a validated site-data.json payload for selection, search, and
  * charting: builds every index and derived value the rest of the app needs
- * so it never has to re-scan the raw columns.
+ * so it never has to re-scan the raw columns. Beside `t`: `total` and `margin` (derived per
+ * game, null without both scores), `maxOf` (raw whole-dataset maxima for excitement, points
+ * and margin) and `pinned` (maxOf above the fixed cap), 04.17 D-09..D-15.
  * @param {object} raw - the parsed site-data.json payload.
  * @returns {object} the prepared data object (see module docs for shape).
  */
@@ -158,6 +161,18 @@ export function prepareData(raw) {
   const bandJitter = new Array(n);
   for (let i = 0; i < n; i += 1) {
     bandJitter[i] = jitter[i] ?? (Math.imul(i + 1, 2246822519) >>> 0) / 4294967296;
+  }
+  // 04.17 D-14/D-15: total points and margin of victory, derived in the browser from the
+  // display fields already shipped (no new shipped field). Null when either score is null.
+  // A future tie would plot at 0 margin; the shipped data has none.
+  const total = new Array(n);
+  const margin = new Array(n);
+  for (let i = 0; i < n; i += 1) {
+    const h = merged.home_points[i];
+    const a = merged.away_points[i];
+    const both = h != null && a != null;
+    total[i] = both ? h + a : null;
+    margin[i] = both ? Math.abs(h - a) : null;
   }
   const homeSpread = merged.home_spread;
   const spread = new Array(n);
@@ -214,10 +229,20 @@ export function prepareData(raw) {
   const [viewersMin, viewersMax] = nonNullRange(t.viewers);
 
   // xRange covers every shipped game: the band sits at the same x.
+  // 04.17 D-09/D-10: the Excitement range stops at the fixed cap, on X and Y alike; a game
+  // above it is pinned at plot time only, data.t.excitement keeps the true value.
+  const [exLo, exHi] = nonNullRange(t.excitement);
   const xRange = {
     spread: nonNullRange(spread),
-    excitement: nonNullRange(t.excitement),
+    excitement: exLo != null && exHi != null ? [exLo, Math.min(exHi, EXCITEMENT_CAP)] : [exLo, exHi],
   };
+  // Whole-dataset maxima and the any-above-cap flags (04.17 D-12, D-14, D-15).
+  const maxOfList = (list) => nonNullRange(list)[1];
+  const maxOf = { excitement: exHi, points: maxOfList(total), margin: maxOfList(margin) };
+  const pinned = {};
+  for (const key of Object.keys(Y_MEASURES)) {
+    pinned[key] = maxOf[key] != null && maxOf[key] > Y_MEASURES[key].cap;
+  }
 
   const peopleKeys = lookups.people.map((p, index) => ({
     index,
@@ -338,6 +363,10 @@ export function prepareData(raw) {
     viewersMin,
     viewersMax,
     xRange,
+    total,
+    margin,
+    maxOf,
+    pinned,
     dateAxis,
     peopleKeys,
     teamKeys,
