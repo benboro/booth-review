@@ -38,7 +38,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import pytest
-from playwright.sync_api import Browser, ConsoleMessage, Error, Page, Playwright, Route
+from playwright.sync_api import Browser, ConsoleMessage, Error, Page, Playwright, Route, expect
 
 from booth_review.cli import main
 
@@ -209,6 +209,26 @@ def expand_family(page: Page, family: str) -> None:
         ".getAttribute('aria-expanded') === 'true'",
         arg=family,
     )
+
+
+def click_mode_toggle(page: Page, toggle: str, mode: str) -> None:
+    """Turns Compare or Called together on deterministically (SITE-59).
+
+    A still-open Announcers popover can swallow the click as a light dismiss,
+    so close it first; then click once and assert the pressed state before
+    waiting for the URL, so a miss fails fast with the observed state.
+    """
+    if page.evaluate("document.getElementById('pop-announcers').matches(':popover-open')"):
+        page.keyboard.press("Escape")
+        page.wait_for_function(
+            "!document.getElementById('pop-announcers').matches(':popover-open')"
+        )
+    button = page.locator(toggle)
+    expect(button).to_be_enabled()
+    expect(button).to_have_attribute("aria-pressed", "false")
+    button.click()
+    expect(button).to_have_attribute("aria-pressed", "true")
+    page.wait_for_function("(m) => location.search.includes(m)", arg=mode, timeout=5000)
 
 
 @pytest.fixture

@@ -12,7 +12,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from conftest import expand_family
+from conftest import click_mode_toggle, expand_family
 from playwright.sync_api import Page, expect
 
 pytestmark = pytest.mark.e2e
@@ -501,8 +501,7 @@ def test_clear_all_filters_also_clears_people(
     open_app(guarded_page, "")
 
     _add_person_by_query(guarded_page, "Dale Harlow")
-    guarded_page.click("#compare-toggle")
-    guarded_page.wait_for_function("location.search.includes('mode=compare')")
+    click_mode_toggle(guarded_page, "#compare-toggle", "compare")
 
     _open_filter(guarded_page, "school")
     guarded_page.check("#school-list input[value='northfield']")
