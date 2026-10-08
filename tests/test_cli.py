@@ -414,6 +414,46 @@ def test_collect_cfbd_below_floor_raises_and_sends_no_data_request(
     assert data_requests == []
 
 
+def test_collect_cfbd_venues_dry_run_prints_the_planned_call_and_sends_nothing(
+    git_vault, mock_transport_factory, patched_client, capsys
+) -> None:
+    handle = mock_transport_factory({})
+    patched_client(handle)
+
+    exit_code = main(["collect", "cfbd", "--venues", "--dry-run"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "/venues" in out
+    assert "?" not in out.split("/venues", 1)[1].splitlines()[0]
+    assert handle.requests == []
+
+
+def test_collect_cfbd_requires_season_or_venues(capsys) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        main(["collect", "cfbd"])
+    assert excinfo.value.code == 2
+
+
+def test_collect_cfbd_venues_with_season_is_a_usage_error(capsys) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        main(["collect", "cfbd", "--venues", "--season", "2024"])
+    assert excinfo.value.code == 2
+
+
+def test_collect_cfbd_venues_with_endpoints_exits_2_with_message(
+    git_vault, mock_transport_factory, patched_client, capsys
+) -> None:
+    handle = mock_transport_factory({})
+    patched_client(handle)
+
+    exit_code = main(["collect", "cfbd", "--venues", "--endpoints", "games", "--dry-run"])
+
+    assert exit_code == 2
+    assert "--endpoints does not apply to --venues" in capsys.readouterr().err
+    assert handle.requests == []
+
+
 # -- budget ----------------------------------------------------------------------------------
 
 

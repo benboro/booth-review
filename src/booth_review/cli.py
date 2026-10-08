@@ -80,7 +80,7 @@ from booth_review.spike.selection import (
     save_selection,
     select_games,
 )
-from booth_review.transport.budget import BudgetSummary, InfoSnapshot
+from booth_review.transport.budget import BudgetSummary, CfbdBudget, InfoSnapshot
 from booth_review.vault import VaultRepo, batch_message
 
 logger = logging.getLogger("booth_review.cli")
@@ -159,8 +159,14 @@ def build_parser() -> argparse.ArgumentParser:
     mode_group.add_argument("--sitemap-only", action="store_true")
     prr.add_argument("--no-commit", action="store_true")
 
-    pcfbd = collect_sub.add_parser("cfbd", help="collect CFBD season data")
-    pcfbd.add_argument("--season", required=True, type=parse_season_spec)
+    pcfbd = collect_sub.add_parser("cfbd", help="collect CFBD season data or the venue list")
+    cfbd_target = pcfbd.add_mutually_exclusive_group(required=True)
+    cfbd_target.add_argument("--season", type=parse_season_spec)
+    cfbd_target.add_argument(
+        "--venues",
+        action="store_true",
+        help="collect the CFBD venue list once (no season; counted against the budget)",
+    )
     pcfbd.add_argument("--endpoints", type=_parse_endpoints, default=None)
     pcfbd.add_argument("--max-calls", type=int, default=None)
     pcfbd.add_argument("--tag", default=None)
@@ -571,7 +577,28 @@ def _refresh_ratingsref(args: argparse.Namespace) -> int:
 # -- collect cfbd ---------------------------------------------------------------------
 
 
+def _print_cfbd_batch(summary: BatchSummary, budget: CfbdBudget, args: argparse.Namespace) -> bool:
+    """Print one CFBD batch's dry-run plan or run summary; True when a URL failed."""
+    if args.dry_run:
+        _print_dry_run(summary, url_display=_cfbd_url_display, cfbd=True)
+        remaining = budget.last_known_remaining()
+        if remaining is not None:
+            print(f"remaining (last known): {remaining}")
+            if remaining - summary.cfbd_calls < args.floor:
+                print(
+                    f"warning: planned {summary.cfbd_calls} calls would drop "
+                    f"remaining below the floor of {args.floor}",
+                    file=sys.stderr,
+                )
+        return False
+    _print_run_summary(summary, url_display=_cfbd_url_display)
+    return bool(summary.failed_urls)
+
+
 def _collect_cfbd(args: argparse.Namespace) -> int:
+    if args.venues and args.endpoints is not None:
+        print("--endpoints does not apply to --venues", file=sys.stderr)
+        return 2
     runtime = build_runtime(
         with_budget=True, floor=args.floor, max_calls=args.max_calls, tag=args.tag
     )
@@ -582,32 +609,31 @@ def _collect_cfbd(args: argparse.Namespace) -> int:
         collector = CfbdCollector(runtime.cache, runtime.budget, token)
 
         any_failed = False
-        for season in args.season:
-            season_label = str(season)
+        batches: list[tuple[str, Callable[[], BatchSummary]]]
+        if args.venues:
+            batches = [
+                ("all", functools.partial(collector.run_static, ["venues"], dry_run=args.dry_run))
+            ]
+        else:
+            batches = [
+                (
+                    str(season),
+                    functools.partial(collector.run, season, names, dry_run=args.dry_run),
+                )
+                for season in args.season
+            ]
+        for season_label, run in batches:
             summary = _run_and_commit(
                 runtime,
-                functools.partial(collector.run, season, names, dry_run=args.dry_run),
+                run,
                 action="collect",
                 source="cfbd",
                 season_label=season_label,
                 dry_run=args.dry_run,
                 no_commit=args.no_commit,
             )
-            if args.dry_run:
-                _print_dry_run(summary, url_display=_cfbd_url_display, cfbd=True)
-                remaining = runtime.budget.last_known_remaining()
-                if remaining is not None:
-                    print(f"remaining (last known): {remaining}")
-                    if remaining - summary.cfbd_calls < args.floor:
-                        print(
-                            f"warning: planned {summary.cfbd_calls} calls would drop "
-                            f"remaining below the floor of {args.floor}",
-                            file=sys.stderr,
-                        )
-            else:
-                _print_run_summary(summary, url_display=_cfbd_url_display)
-                if summary.failed_urls:
-                    any_failed = True
+            if _print_cfbd_batch(summary, runtime.budget, args):
+                any_failed = True
         return 4 if any_failed else 0
     finally:
         runtime.client.close()

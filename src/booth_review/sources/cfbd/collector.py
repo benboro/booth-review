@@ -2,8 +2,8 @@
 
 Every call goes through RawCache with a CfbdBudget guard wired in, so the
 allow-list, floor, and per-run cap are enforced there; this module only
-builds requests for the six known endpoints (plus /info) and never targets
-anything outside ENDPOINTS (FOUND-03, D-12).
+builds requests for the six per-season endpoints plus the season-less /venues
+and /info, and never targets anything outside them (FOUND-03, D-12).
 
 `refresh=True` is used only by the scheduled job (Plan 06), to re-fetch the
 current (unfrozen) season's season-level files each run (D-09). A frozen
@@ -33,6 +33,13 @@ ENDPOINTS: dict[str, tuple[str, bool]] = {
     "rankings": ("/rankings", True),
     "teams_fbs": ("/teams/fbs", False),
 }
+
+# name -> API path, for one-off lists that cover every season. Kept apart from
+# ENDPOINTS because ENDPOINTS is iterated as "the six per-season files" by the
+# completeness audit, the regression check, the default collect and the
+# scheduled job. Venues are one list, collected by hand (`collect cfbd
+# --venues`), never by the job.
+SEASONLESS_ENDPOINTS: dict[str, str] = {"venues": "/venues"}
 
 
 class CfbdCollector:
@@ -80,6 +87,38 @@ class CfbdCollector:
             dry_run=dry_run,
             bearer_token=self._token,
             refresh=refresh,
+        )
+
+    def plan_static(self, names: Sequence[str]) -> list[FetchRequest]:
+        requests: list[FetchRequest] = []
+        for name in names:
+            if name not in SEASONLESS_ENDPOINTS:
+                raise ValueError(f"unknown season-less CFBD endpoint name: {name!r}")
+            path = SEASONLESS_ENDPOINTS[name]
+            requests.append(
+                FetchRequest(
+                    source="cfbd",
+                    season=None,
+                    url=f"{CFBD_BASE_URL}{path}",
+                    cache_path=f"cfbd/{name}/all.json",
+                    endpoint=path,
+                    params=(),
+                )
+            )
+        return requests
+
+    def run_static(self, names: Sequence[str], *, dry_run: bool) -> BatchSummary:
+        requests = self.plan_static(names)
+        if not dry_run and self._token is None:
+            raise MissingApiKeyError("CFBD_API_KEY is not set; cannot run a live CFBD collection")
+        return run_requests(
+            self._cache,
+            requests,
+            source="cfbd",
+            season_label="all",
+            dry_run=dry_run,
+            bearer_token=self._token,
+            refresh=False,
         )
 
     def info(self) -> InfoSnapshot:

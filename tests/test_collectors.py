@@ -18,7 +18,7 @@ from booth_review.errors import (
     FrozenSeasonError,
     MissingApiKeyError,
 )
-from booth_review.sources.cfbd.collector import CfbdCollector
+from booth_review.sources.cfbd.collector import ENDPOINTS, SEASONLESS_ENDPOINTS, CfbdCollector
 from booth_review.sources.ratingsref.collector import SITEMAP_URL, RatingsRefCollector
 from booth_review.sources.ratingsref.lastmod import load_lastmods
 from booth_review.sources.sports506.collector import WEEK_LABELS, Sports506Collector
@@ -531,6 +531,111 @@ def test_cfbd_bearer_token_never_appears_in_any_vault_file(
     collector.info()
     collector.run(2025, ["games"], dry_run=False)
 
+    for path in vault_paths.vault.rglob("*"):
+        if path.is_file():
+            assert b"test-token" not in path.read_bytes()
+
+
+# -- season-less /venues (phase 04.18) -----------------------------------------------------
+
+VENUES_URL = "https://api.collegefootballdata.com/venues"
+_SYNTHETIC_VENUES = json.dumps(
+    [{"id": 1, "name": "Synthetic Field", "latitude": 40.0, "longitude": -96.0}]
+).encode("utf-8")
+
+
+def _venues_collector(vault_paths, mock_transport_factory, fake_clock=None, token="test-token"):
+    responses = {
+        "https://api.collegefootballdata.com/robots.txt": (404, b"nf", {}),
+        "https://api.collegefootballdata.com/info": (200, _cfbd_info_body(600), {}),
+        VENUES_URL: (200, _SYNTHETIC_VENUES, {}),
+    }
+    handle = mock_transport_factory(responses)
+    budget = CfbdBudget(vault_paths.cfbd_ledger)
+    cache = RawCache(vault_paths, _client(handle, fake_clock=fake_clock), guards=[budget])
+    return handle, CfbdCollector(cache, budget, token)
+
+
+def test_venues_is_seasonless_and_not_a_per_season_endpoint() -> None:
+    assert SEASONLESS_ENDPOINTS == {"venues": "/venues"}
+    assert sorted(ENDPOINTS) == ["games", "lines", "media", "rankings", "teams_fbs", "wp_pregame"]
+
+
+def test_cfbd_plan_static_venues_is_one_bare_request(vault_paths, mock_transport_factory) -> None:
+    _, collector = _venues_collector(vault_paths, mock_transport_factory)
+
+    requests = collector.plan_static(["venues"])
+
+    assert len(requests) == 1
+    req = requests[0]
+    assert req.source == "cfbd"
+    assert req.season is None
+    assert req.url == VENUES_URL
+    assert "?" not in req.url
+    assert req.cache_path == "cfbd/venues/all.json"
+    assert req.endpoint == "/venues"
+    assert req.params == ()
+
+
+@pytest.mark.parametrize("name", ["games", "plays"])
+def test_cfbd_plan_static_rejects_per_season_and_unknown_names(
+    vault_paths, mock_transport_factory, name
+) -> None:
+    handle, collector = _venues_collector(vault_paths, mock_transport_factory)
+
+    with pytest.raises(ValueError):
+        collector.plan_static([name])
+    assert handle.requests == []
+
+
+def test_cfbd_run_static_dry_run_counts_one_call_without_token(
+    vault_paths, mock_transport_factory
+) -> None:
+    handle, collector = _venues_collector(vault_paths, mock_transport_factory, token=None)
+
+    summary = collector.run_static(["venues"], dry_run=True)
+
+    assert summary.cfbd_calls == 1
+    assert summary.planned == 1
+    assert handle.requests == []
+
+
+def test_cfbd_run_static_without_token_raises_before_any_request(
+    vault_paths, mock_transport_factory
+) -> None:
+    handle, collector = _venues_collector(vault_paths, mock_transport_factory, token=None)
+
+    with pytest.raises(MissingApiKeyError):
+        collector.run_static(["venues"], dry_run=False)
+    assert handle.requests == []
+
+
+def test_cfbd_run_static_fetches_once_then_cache_hit_and_keeps_token_out_of_vault(
+    vault_paths, mock_transport_factory, fake_clock
+) -> None:
+    handle, collector = _venues_collector(vault_paths, mock_transport_factory, fake_clock)
+    collector.info()  # seeds this month's remaining-calls knowledge
+
+    first = collector.run_static(["venues"], dry_run=False)
+    second = collector.run_static(["venues"], dry_run=False)
+
+    assert first.fetched == 1
+    assert second.fetched == 0
+    assert (vault_paths.raw / "cfbd" / "venues" / "all.json").read_bytes() == _SYNTHETIC_VENUES
+    venue_requests = [r for r in handle.requests if r.url == VENUES_URL]
+    assert len(venue_requests) == 1
+    assert venue_requests[0].headers.get("authorization") == "Bearer test-token"
+
+    ledger_lines = [
+        json.loads(line)
+        for line in vault_paths.cfbd_ledger.read_text(encoding="utf-8").splitlines()
+    ]
+    venue_calls = [
+        line
+        for line in ledger_lines
+        if line.get("event") == "call" and line.get("endpoint") == "/venues"
+    ]
+    assert len(venue_calls) == 1
     for path in vault_paths.vault.rglob("*"):
         if path.is_file():
             assert b"test-token" not in path.read_bytes()
