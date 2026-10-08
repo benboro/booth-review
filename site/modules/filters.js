@@ -245,7 +245,6 @@ function buildNetworkChecklist(data) {
   // A4: keep the `.section-head` (title + Reset) as the preserved first child, not a bare h3.
   const heading =
     els.networksSection.querySelector('.section-head') ?? els.networksSection.querySelector('h3');
-  const helper = els.networksSection.querySelector('.helper');
   networkCheckboxes = new Map();
   familyCheckboxes = new Map();
 
@@ -312,7 +311,6 @@ function buildNetworkChecklist(data) {
 
   els.networksSection.replaceChildren(
     ...(heading ? [heading] : []),
-    ...(helper ? [helper] : []),
     ...groups,
   );
 }

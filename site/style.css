@@ -1362,12 +1362,6 @@ input[type="checkbox"] {
   max-width: min(360px, calc(100vw - 16px));
 }
 
-/* The Networks-hides helper wraps to the rows' width instead of setting it, so
-   D-28's fit-to-rows narrowing still works. */
-#filter-networks .helper {
-  contain: inline-size;
-}
-
 #filter-networks .option-count {
   flex: none;
   width: 7ch;

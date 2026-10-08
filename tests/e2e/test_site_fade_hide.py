@@ -11,7 +11,7 @@ from playwright.sync_api import Page, expect
 
 pytestmark = pytest.mark.e2e
 
-RULE = "Networks always hides. Other filters fade unless Hide is on."
+RULE = "Filters fade the games they exclude unless Hide is on."
 HIDE = '#dots-toggle [data-dots="hide"]'
 FADE = '#dots-toggle [data-dots="fade"]'
 
@@ -136,7 +136,7 @@ def test_clear_all_and_resets_keep_the_switch(
     guarded_page.wait_for_function("location.search === '?dots=hide'")
 
 
-def test_switch_copy_states_the_networks_rule(
+def test_switch_copy_states_the_fade_rule(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(guarded_page, "")
@@ -145,9 +145,9 @@ def test_switch_copy_states_the_networks_rule(
     group = guarded_page.locator('#dots-toggle [role="group"]')
     assert group.get_attribute("aria-label") == "Filtered-out dots"
     assert group.get_attribute("title") == RULE
+    assert group.get_attribute("aria-description") == RULE
     expect(guarded_page.locator("#dots-toggle .dots-caption")).to_have_text("Filtered-out dots")
-    helper = guarded_page.locator("#filter-networks .helper")
-    assert "Networks always hides games rather than fading them." in helper.text_content()
+    expect(guarded_page.locator("#filter-networks .helper")).to_have_count(0)
 
 
 @pytest.mark.parametrize("width", [390, 360])
