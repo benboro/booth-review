@@ -36,6 +36,12 @@ import { FAMILY_COLORS, familyKey } from './palette.js';
 /** The single `#chart-tooltip` element, created lazily on first use. */
 let tooltipEl = null;
 
+/** Tooltip score line per y mode (04.17 D-14/D-15): label and the `prepareData` array. */
+const SCORE_LINES = new Map([
+  ['points', { label: 'Total points', key: 'total' }],
+  ['margin', { label: 'Margin', key: 'margin' }],
+]);
+
 /** Sits this many pixels right of and below the hovered point before any
  * viewport-edge flip (see `showTooltip`). */
 const OFFSET = 12;
@@ -92,8 +98,9 @@ export function tooltipModel(data, i, { axis, y = 'viewers', selected = new Set(
   const axisLine = axisValueText(data, i, lineAxis);
   // 04.17 D-11: Points and Margin plot a pinned value, so the true one is stated here.
   // A constant label plus a number or the literal 'not available' (T-04.17-12).
-  const scoreLabel = { points: ['Total points', data.total], margin: ['Margin', data.margin] }[y];
-  const scoreLine = scoreLabel ? `${scoreLabel[0]}: ${scoreLabel[1][i] ?? 'not available'}` : null;
+  // A Map, not an object literal, so an unexpected `y` such as "constructor" finds nothing.
+  const score = SCORE_LINES.get(y);
+  const scoreLine = score ? `${score.label}: ${data[score.key][i] ?? 'not available'}` : null;
   const hint = 'Click for details →';
 
   return { title, dateText, gameType, networks, crew, crewLines, viewersLine, axisLine, scoreLine, hint };

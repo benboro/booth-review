@@ -80,11 +80,7 @@ def test_controls_row_height_is_equal_on_every_tab(
     )
     assert overflow
     assert page.evaluate(_Y_FIT_JS)
-    # The games table can overflow at 641px in the wide fonts (pre-existing, see
-    # deferred-items.md), so check the controls row rather than the whole page.
-    assert page.evaluate(
-        "document.getElementById('chart-controls').scrollWidth <= window.innerWidth"
-    )
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     page.locator("#tab-bars").click()
     page.wait_for_selector("#bars-title")
     assert abs(page.evaluate(height) - scatter) <= 1

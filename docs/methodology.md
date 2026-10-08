@@ -226,7 +226,7 @@ yet moves into place on the next data update.
 
 The y-axis has four choices. **Viewers** is the default, on a log scale. **Excitement** is CFBD's excitement index, on a straight scale. **Points** is the two teams' final scores added together. The axis starts at 0. **Margin** is how many points the winner won by. The axis starts at 0. Games have no ties in our data. The axis does not change when you filter, so a dot never moves because of a filter.
 
-The Excitement axis stops at 12, and the Points and Margin axes stop at 120 and 70. A game above a cap is drawn at the top edge, marked "12+", "120+" or "70+". Hover or tap the dot to see its real number.
+The Excitement axis stops at 12, and the Points and Margin axes stop at 120 and 70. A game above a cap is drawn at the top edge, marked "12+", "120+" or "70+". Hover or tap the dot to see its real number. Like the rest of the axis, the "+" mark comes from every game we have, not just the ones your filters show, so it can appear even when no game above the cap is in view.
 
 In Excitement mode every game is a filled dot at its excitement value, rated or not. The strip under the plot then holds the games CFBD publishes no excitement index for, and is labeled "No excitement value". The tooltip still shows viewers (or "No public rating" and its reason), and the summary still counts rated games. Read the vertical position the way [the 2025 excitement break](#the-2025-excitement-break) allows.
 
