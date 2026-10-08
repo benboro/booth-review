@@ -18,7 +18,6 @@ import {
   COMPARE_SYMBOLS,
   FAMILY_LABELS,
   FAMILY_ORDER,
-  SHARED_GLYPH,
   SHARED_SYMBOL,
 } from './palette.js';
 import { MAX_COMPARE } from './select.js';
@@ -198,4 +197,319 @@ export function arcPoints(a, b, bow = MAP_ARC_BOW) {
   }
   pts.push({ x: b.x, y: b.y });
   return pts;
+}
+
+// ---------------------------------------------------------------- subjects and paths
+
+/** Date, then kickoff (null last), then merged index; never the array order (D-12). */
+function compareGames(t) {
+  return (a, b) => {
+    if (t.date[a] !== t.date[b]) return t.date[a] < t.date[b] ? -1 : 1;
+    const ka = t.kickoff[a];
+    const kb = t.kickoff[b];
+    if (ka !== kb) {
+      if (ka == null) return 1;
+      if (kb == null) return -1;
+      return ka < kb ? -1 : 1;
+    }
+    return a - b;
+  };
+}
+
+function symbolFor(k, count) {
+  if (count < 2) return 'circle';
+  return k < MAX_COMPARE ? COMPARE_SYMBOLS[k] : 'circle';
+}
+
+/**
+ * D-01/D-02: the picked announcers in pick order, else the School filter's schools,
+ * else none. Symbols follow D-05 (circle for a single subject, compare shapes for the
+ * first MAX_COMPARE, circles after).
+ */
+export function mapSubjects(data, view, state) {
+  const people = (state.people ?? [])
+    .map((id) => data.personIndexById.get(id))
+    .filter((idx) => idx != null);
+  if (people.length > 0) {
+    return people.map((personIndex, k) => ({
+      kind: 'person',
+      key: `person:${personIndex}`,
+      label: data.lookups.people[personIndex].name,
+      personIndex,
+      symbol: symbolFor(k, people.length),
+    }));
+  }
+  const slugs = state.school ?? [];
+  return slugs.map((slug, k) => {
+    const teamIdx = data.teamSlugs.indexOf(slug);
+    return {
+      kind: 'school',
+      key: `school:${slug}`,
+      label: teamIdx >= 0 ? data.lookups.teams[teamIdx].name : slug,
+      slug,
+      symbol: symbolFor(k, slugs.length),
+    };
+  });
+}
+
+/** Merged indexes of the games a subject appears in, among games passing the filters. */
+export function subjectGames(data, view, subject) {
+  const out = [];
+  if (subject.kind === 'person') {
+    for (const i of view.highlighted) {
+      const on = view.peopleOnGame.get(i);
+      if (on && on.includes(subject.personIndex)) out.push(i);
+    }
+    return out;
+  }
+  const teamIdx = data.teamSlugs.indexOf(subject.slug);
+  if (teamIdx < 0) return out;
+  const { home_team: home, away_team: away } = data.t;
+  for (let i = 0; i < data.n; i += 1) {
+    if (view.passesFilters[i] && (home[i] === teamIdx || away[i] === teamIdx)) out.push(i);
+  }
+  return out;
+}
+
+/**
+ * D-03: located games in date order, broken by season. One array per season, ascending
+ * season; games without a venue location are dropped and never cut a path (D-16).
+ */
+export function seasonPaths(data, indexes) {
+  const t = data.t;
+  const games = indexes.filter((i) => t.place[i] != null);
+  games.sort(compareGames(t));
+  const bySeason = new Map();
+  for (const i of games) {
+    const s = t.season[i];
+    if (!bySeason.has(s)) bySeason.set(s, []);
+    bySeason.get(s).push(i);
+  }
+  return [...bySeason.keys()].sort((a, b) => a - b).map((s) => bySeason.get(s));
+}
+
+// ---------------------------------------------------------------- the model
+
+const TIER_RANK = { base: 0, other: 0, subject: 1 };
+
+function pushTo(map, key, value) {
+  const list = map.get(key);
+  if (list) list.push(value);
+  else map.set(key, [value]);
+}
+
+/**
+ * Everything the Map draws. `view` is computeView's output, reused as is: its
+ * passesFilters, visible, highlighted and peopleOnGame decide which games count
+ * (the filter always wins, 04.7 D-14), so nothing here re-derives a filter.
+ */
+export function buildMapModel(data, view, state) {
+  const t = data.t;
+  const placements = placeVenues(data.lookups.venues);
+  const cmp = compareGames(t);
+  const subjects = mapSubjects(data, view, state);
+  const hasSubject = subjects.length > 0;
+  const shapesCapped = subjects.length > MAX_COMPARE;
+
+  // Which subject (pick order) owns each game; the earliest pick wins for symbols.
+  const subjectSets = subjects.map((s) => subjectGames(data, view, s));
+  const gameSubjects = new Map();
+  subjectSets.forEach((list, k) => {
+    for (const i of list) pushTo(gameSubjects, i, k);
+  });
+
+  // Located games, split into passing / visible-but-failing, and the unlocated count.
+  const passing = [];
+  const failing = [];
+  let noLocationCount = 0;
+  for (let i = 0; i < data.n; i += 1) {
+    if (t.place[i] == null) {
+      if (view.visible[i] === 1) noLocationCount += 1;
+    } else if (view.passesFilters[i]) {
+      passing.push(i);
+    } else if (view.visible[i] === 1) {
+      failing.push(i);
+    }
+  }
+  passing.sort(cmp);
+
+  const venueGames = new Map();
+  for (const i of passing) pushTo(venueGames, t.place[i], i);
+  const subjectVenueGames = subjectSets.map((list) => {
+    const m = new Map();
+    for (const i of list.filter((g) => t.place[g] != null).sort(cmp)) pushTo(m, t.place[i], i);
+    return m;
+  });
+
+  // Dots: one per (venue, family, tier, symbol) for passing games (D-10, D-05).
+  let hasShared = false;
+  const dotMap = new Map();
+  for (const i of passing) {
+    const venue = t.place[i];
+    const family = data.familyOf[i];
+    let tier = 'base';
+    let symbol = 'circle';
+    if (hasSubject) {
+      const owners = gameSubjects.get(i);
+      if (owners) {
+        tier = 'subject';
+        const first = owners[0];
+        if (subjects[first].kind === 'person' && (view.peopleOnGame.get(i) ?? []).length >= 2) {
+          symbol = SHARED_SYMBOL;
+          hasShared = true;
+        } else {
+          symbol = subjects[first].symbol;
+        }
+      } else {
+        tier = 'other';
+      }
+    }
+    const key = `${venue}|${family}|${tier}|${symbol}`;
+    if (!dotMap.has(key)) {
+      const p = placements[venue];
+      dotMap.set(key, { venue, family, x: p.x, y: p.y, symbol, tier });
+    }
+  }
+  const symbolRank = (s) => (s === SHARED_SYMBOL ? COMPARE_SYMBOLS.length : COMPARE_SYMBOLS.indexOf(s));
+  const dots = [...dotMap.values()].sort(
+    (a, b) =>
+      FAMILY_ORDER.indexOf(a.family) - FAMILY_ORDER.indexOf(b.family) ||
+      a.venue - b.venue ||
+      TIER_RANK[a.tier] - TIER_RANK[b.tier] ||
+      symbolRank(a.symbol) - symbolRank(b.symbol),
+  );
+
+  // Faded dots: visible failing games where no passing game shares (venue, family) (D-12).
+  const passingKeys = new Set(passing.map((i) => `${t.place[i]}|${data.familyOf[i]}`));
+  const fadedMap = new Map();
+  for (const i of failing) {
+    const venue = t.place[i];
+    const family = data.familyOf[i];
+    const key = `${venue}|${family}`;
+    if (passingKeys.has(key) || fadedMap.has(key)) continue;
+    const p = placements[venue];
+    fadedMap.set(key, { venue, family, x: p.x, y: p.y });
+  }
+  const faded = [...fadedMap.values()].sort(
+    (a, b) => FAMILY_ORDER.indexOf(a.family) - FAMILY_ORDER.indexOf(b.family) || a.venue - b.venue,
+  );
+
+  // Legs: consecutive located games of each subject within a season (D-03, D-04).
+  const legs = [];
+  subjects.forEach((_, k) => {
+    for (const path of seasonPaths(data, subjectSets[k])) {
+      for (let s = 1; s < path.length; s += 1) {
+        const from = path[s - 1];
+        const to = path[s];
+        const points = arcPoints(placements[t.place[from]], placements[t.place[to]]);
+        if (points.length === 0) continue;
+        legs.push({ subject: k, season: t.season[from], from, to, family: data.familyOf[to], points });
+      }
+    }
+  });
+
+  // Markers for venues abroad, one per label (D-15).
+  const groups = new Map();
+  data.lookups.venues.forEach((_, venue) => {
+    const p = placements[venue];
+    if (!p.abroad || p.label == null) return;
+    if (!groups.has(p.label)) groups.set(p.label, { p, venues: [] });
+    groups.get(p.label).venues.push(venue);
+  });
+  const busiest = (counts) => {
+    let best = null;
+    for (const f of FAMILY_ORDER) {
+      if ((counts.get(f) ?? 0) > (best ? counts.get(best) : 0)) best = f;
+    }
+    return best;
+  };
+  const markers = [];
+  for (const [label, { p, venues }] of groups) {
+    const pass = new Map();
+    const vis = new Map();
+    for (const v of venues) {
+      for (const i of venueGames.get(v) ?? []) pass.set(data.familyOf[i], (pass.get(data.familyOf[i]) ?? 0) + 1);
+    }
+    for (const i of failing) {
+      if (venues.includes(t.place[i])) vis.set(data.familyOf[i], (vis.get(data.familyOf[i]) ?? 0) + 1);
+    }
+    const top = busiest(pass);
+    if (top) {
+      markers.push({ x: p.x, y: p.y, label, side: p.side, family: top, faded: false });
+    } else {
+      const alt = busiest(vis);
+      if (alt) markers.push({ x: p.x, y: p.y, label, side: p.side, family: alt, faded: true });
+    }
+  }
+
+  const drawn = new Set([...dots, ...faded].map((d) => d.venue));
+  return {
+    hasSubject,
+    subjects,
+    shapesCapped,
+    hasShared,
+    dots,
+    faded,
+    legs,
+    markers,
+    venueGames,
+    subjectVenueGames,
+    noLocationCount,
+    drawnCount: drawn.size,
+    emptyAll: view.visibleCount === 0,
+  };
+}
+
+// ---------------------------------------------------------------- tooltip
+
+const MAX_TOOLTIP_GAMES = 3;
+
+function countryName(code) {
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
+function venueTitle(venue) {
+  const abroad = venue.country != null && venue.country !== 'US';
+  if (!venue.city) return venue.name;
+  const where = abroad ? countryName(venue.country) : venue.state;
+  return where ? `${venue.name} · ${venue.city}, ${where}` : `${venue.name} · ${venue.city}`;
+}
+
+function gameLine(data, i) {
+  const t = data.t;
+  const teams = data.lookups.teams;
+  const home = teams[t.home_team[i]].name;
+  const away = teams[t.away_team[i]].name;
+  const matchup = t.neutral[i] ? `${away} vs ${home}` : `${away} @ ${home}`;
+  return `${t.date[i]}  ${matchup}  ${data.lookups.networks[t.network[i]].name}`;
+}
+
+/**
+ * D-11: plain {text, kind} lines for one venue (index into lookups.venues): title,
+ * family counts for passing games, then each subject's games there (up to three, then
+ * "+N more"). The caller writes them with textContent only.
+ */
+export function venueTooltipLines(data, model, venue) {
+  const lines = [{ text: venueTitle(data.lookups.venues[venue]), kind: 'title' }];
+  const games = model.venueGames.get(venue) ?? [];
+  const counts = new Map();
+  for (const i of games) counts.set(data.familyOf[i], (counts.get(data.familyOf[i]) ?? 0) + 1);
+  const parts = FAMILY_ORDER.filter((f) => counts.get(f)).map((f) => `${FAMILY_LABELS[f]} ${counts.get(f)}`);
+  if (parts.length > 0) lines.push({ text: parts.join(' · '), kind: 'body' });
+  const several = model.subjects.length >= 2;
+  model.subjects.forEach((subject, k) => {
+    const mine = model.subjectVenueGames[k].get(venue) ?? [];
+    if (mine.length === 0) return;
+    const glyph = several ? `${k < MAX_COMPARE ? COMPARE_GLYPHS[k] : '●'} ` : '';
+    lines.push({ text: `── ${glyph}${subject.label} here ──`, kind: 'body' });
+    for (const i of mine.slice(0, MAX_TOOLTIP_GAMES)) lines.push({ text: gameLine(data, i), kind: 'body' });
+    if (mine.length > MAX_TOOLTIP_GAMES) {
+      lines.push({ text: `+${mine.length - MAX_TOOLTIP_GAMES} more`, kind: 'hint' });
+    }
+  });
+  return lines;
 }
