@@ -817,6 +817,7 @@ def test_map_hint_shows_until_a_subject_is_picked(
 ) -> None:
     open_app(guarded_page, "?view=map")
     assert _hint(guarded_page) == MAP_HINT
+    assert guarded_page.locator("#map-hint").count() == 0
     open_app(guarded_page, "?view=map&people=pat-rowan")
     assert _hint(guarded_page) == ""
 

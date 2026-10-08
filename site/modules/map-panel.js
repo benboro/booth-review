@@ -12,7 +12,6 @@
 
 import { buildMapFigure, renderMap, bindMapEvents } from './map-chart.js';
 import {
-  MAP_HINT,
   MAP_EMPTY,
   MAP_ERROR,
   noLocationNote,
@@ -70,15 +69,9 @@ function positionOverlays() {
   const gd = el('map-chart');
   const full = gd && gd._fullLayout;
   if (!full || !full.xaxis || !full.yaxis) return;
-  const left = full.xaxis._offset;
   const right = full.xaxis._offset + full.xaxis._length;
   const bottom = full.yaxis._offset + full.yaxis._length;
-  const hint = el('map-hint');
   const note = el('map-note');
-  if (hint) {
-    hint.style.left = `${left + OVERLAY_INSET}px`;
-    hint.style.bottom = `${Math.max(0, gd.clientHeight - bottom) + OVERLAY_INSET}px`;
-  }
   if (note) {
     note.style.right = `${Math.max(0, gd.clientWidth - right) + OVERLAY_INSET}px`;
     note.style.bottom = `${Math.max(0, gd.clientHeight - bottom) + OVERLAY_INSET}px`;
@@ -147,11 +140,6 @@ export async function renderMapPanel(args) {
   if (!gd) return;
 
   gd.setAttribute('aria-label', mapAriaLabel(model.drawnCount));
-  const hint = el('map-hint');
-  if (hint) {
-    hint.textContent = MAP_HINT;
-    hint.hidden = model.hasSubject;
-  }
   const note = el('map-note');
   if (note) {
     note.textContent = noLocationNote(model.noLocationCount);

@@ -122,15 +122,15 @@ def test_map_view_shows_panel_hides_others_with_26_traces(
     assert len(_TRACE_NAMES) == 26
 
 
-def test_no_subject_draws_dots_only_with_hint(guarded_page: Page, open_app: OpenApp) -> None:
-    """D-02: with no announcer and no school, every legs trace is empty and the hint shows."""
+def test_no_subject_draws_dots_only_with_tab_hint(guarded_page: Page, open_app: OpenApp) -> None:
+    """D-02: no subject draws no legs; only the tab hint shows, nothing over the map."""
     _open_map(guarded_page, open_app, "?view=map")
     traces = _traces(guarded_page)
     assert all(traces[f"legs:{f}"]["n"] == 0 for f in _FAMILIES)
     assert _model(guarded_page)["legs"] == []
     assert sum(traces[f"dots:{f}"]["n"] for f in _FAMILIES) > 0
-    assert _visible(guarded_page, "#map-hint")
-    assert guarded_page.locator("#map-hint").text_content() == MAP_HINT
+    assert guarded_page.locator("#map-hint").count() == 0
+    assert guarded_page.locator("#tab-hint").text_content() == MAP_HINT
 
 
 def test_person_paths_split_by_season_and_colored_by_destination(
@@ -151,7 +151,7 @@ def test_person_paths_split_by_season_and_colored_by_destination(
         "async () => (await import('./modules/palette.js')).FAMILY_COLORS.light.disney"
     )
     assert _traces(guarded_page)["legs:disney"]["color"] == light_disney
-    assert not _visible(guarded_page, "#map-hint")
+    assert guarded_page.locator("#map-hint").count() == 0
 
 
 def test_school_path_starts_at_the_dublin_anchor(guarded_page: Page, open_app: OpenApp) -> None:

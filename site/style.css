@@ -2712,10 +2712,6 @@ td.no-rating {
   pointer-events: none;
 }
 
-.map-hint {
-  max-width: calc(50% - var(--space-md));
-}
-
 .map-note {
   white-space: nowrap;
 }
