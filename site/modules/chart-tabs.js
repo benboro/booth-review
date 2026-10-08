@@ -1,5 +1,5 @@
 /**
- * Chart tabs: the Scatter | Bars | Butterfly tablist, its hint row, and the
+ * Chart tabs: the Scatter | Bars | Butterfly | Map tablist, its hint row, and the
  * grouping / Both-PBP-Analyst controls (SITE-33, D-10, D-12, D-13, D-14,
  * D-17, D-25, D-30; 04.6 D-21). One grouping control (`state.by`) shows only
  * the options that apply to the current subjects, and the role control is
@@ -18,6 +18,7 @@
  */
 
 import { byPatch, chartContext } from './bars.js';
+import { MAP_HINT } from './map-model.js';
 
 export const TAB_HINTS = {
   bars: 'Pick a school, network, announcer, or game',
@@ -35,7 +36,13 @@ export const STALE_COPY = {
   },
 };
 
-const VIEWS = ['scatter', 'bars', 'butterfly'];
+const VIEWS = ['scatter', 'bars', 'butterfly', 'map'];
+
+/** The hint the tab row rests on: the Map's prompt until an announcer or school is picked (04.18 D-02). */
+function restingHint(state) {
+  if (state.view === 'map' && state.people.length === 0 && state.school.length === 0) return MAP_HINT;
+  return '';
+}
 
 /** Hint on the Butterfly tab while Head-to-head blocks the two-school comparison (04.7 D-15). */
 export const H2H_BUTTERFLY_HINT = 'Switch School to Either team to compare two schools';
@@ -82,6 +89,8 @@ function setHint(text) {
   const hint = document.getElementById('tab-hint');
   if (hint) hint.textContent = text;
 }
+
+let currentState = null;
 
 function showHintFor(tab) {
   if (tab && tab.getAttribute('aria-disabled') === 'true') {
@@ -133,7 +142,7 @@ export function initChartTabs({ data, getState, setState }) {
       ev.preventDefault();
       activate(current);
     } else if (ev.key === 'Escape') {
-      setHint('');
+      setHint(currentState ? restingHint(currentState) : '');
     }
   });
 
@@ -146,11 +155,13 @@ export function initChartTabs({ data, getState, setState }) {
   for (const type of ['mouseout', 'focusout']) {
     tabs.addEventListener(type, (ev) => {
       const tab = ev.target.closest('button[data-view]');
-      if (tab && tab.getAttribute('aria-disabled') === 'true') setHint('');
+      if (tab && tab.getAttribute('aria-disabled') === 'true') {
+        setHint(currentState ? restingHint(currentState) : '');
+      }
     });
   }
   document.addEventListener('pointerdown', (ev) => {
-    if (!ev.target.closest('#chart-tabs')) setHint('');
+    if (!ev.target.closest('#chart-tabs')) setHint(currentState ? restingHint(currentState) : '');
   });
 
   const roleToggle = document.getElementById('bar-role-toggle');
@@ -181,7 +192,7 @@ export function renderChartTabs({ data, state }) {
   const tabs = tabsEl();
   if (!tabs) return;
   const ctx = chartContext(data, state);
-  const enabled = { scatter: true, bars: ctx.barsEnabled, butterfly: ctx.butterflyEnabled };
+  const enabled = { scatter: true, bars: ctx.barsEnabled, butterfly: ctx.butterflyEnabled, map: true };
   const focused = document.activeElement;
   // Roving tabindex (WR-04): one Tab stop. The focused tab keeps it while focus
   // is inside the tablist (a focused disabled tab included); otherwise the
@@ -208,13 +219,14 @@ export function renderChartTabs({ data, state }) {
       if (panel) panel.setAttribute('aria-labelledby', tab.id);
     }
   }
-  setHint('');
+  currentState = state;
+  setHint(restingHint(state));
 
   const scatter = state.view === 'scatter';
   const scatterControls = document.getElementById('scatter-controls');
   const barControls = document.getElementById('bar-controls');
   if (scatterControls) scatterControls.classList.toggle('is-concealed', !scatter);
-  if (barControls) barControls.classList.toggle('is-concealed', scatter);
+  if (barControls) barControls.classList.toggle('is-concealed', scatter || state.view === 'map');
 
   for (const button of document.querySelectorAll('#bar-role-toggle button[data-role]')) {
     button.setAttribute('aria-pressed', String((button.dataset.role || null) === state.role));

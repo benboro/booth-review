@@ -513,7 +513,7 @@ def test_chart_tabs_slot_holds_three_tabs(
     box = guarded_page.locator("#chart-tabs").bounding_box()
     assert box is not None
     assert box["height"] == 40
-    assert guarded_page.locator("#chart-tabs [role=tab]").count() == 3
+    assert guarded_page.locator("#chart-tabs [role=tab]").count() == 4
 
     legend_box = guarded_page.locator("#legend-chips").bounding_box()
     assert legend_box is not None

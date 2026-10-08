@@ -45,12 +45,13 @@ def _is_concealed(page: Page, selector: str) -> bool:
     )
 
 
-def test_default_page_has_three_tabs_with_scatter_selected(
+def test_default_page_has_four_tabs_with_scatter_selected(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(guarded_page, "")
     labels = guarded_page.locator("#chart-tabs [role=tab]").all_inner_texts()
-    assert labels == ["Scatter", "Bars", "Butterfly"]
+    assert labels == ["Scatter", "Bars", "Butterfly", "Map"]
+    assert _attr(guarded_page, "#tab-map", "aria-disabled") is None
     assert _attr(guarded_page, "#tab-scatter", "aria-selected") == "true"
     assert _attr(guarded_page, "#tab-scatter", "tabindex") == "0"
     assert _attr(guarded_page, "#tab-scatter", "aria-disabled") is None
@@ -147,9 +148,11 @@ def test_keyboard_navigation_is_roving_with_manual_activation(
     assert guarded_page.evaluate(active) == "tab-bars"
     assert _state(guarded_page)["view"] == "scatter"
     guarded_page.keyboard.press("End")
-    assert guarded_page.evaluate(active) == "tab-butterfly"
+    assert guarded_page.evaluate(active) == "tab-map"
     guarded_page.keyboard.press("Home")
     assert guarded_page.evaluate(active) == "tab-scatter"
+    guarded_page.keyboard.press("ArrowLeft")
+    assert guarded_page.evaluate(active) == "tab-map"
     guarded_page.keyboard.press("ArrowLeft")
     assert guarded_page.evaluate(active) == "tab-butterfly"
     guarded_page.keyboard.press("ArrowLeft")
@@ -767,3 +770,52 @@ def test_stale_copy_is_state_aware(
     }
     assert out["plain"] == out["stale"]["butterfly"]
     assert out["bars"] == out["stale"]["bars"]
+
+
+MAP_HINT = "Pick an announcer or a school to trace a path"
+
+
+def test_clicking_map_sets_view_and_url(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    guarded_page.locator("#tab-map").click()
+    assert _state(guarded_page)["view"] == "map"
+    assert "view=map" in guarded_page.evaluate("() => location.search")
+
+
+def test_map_url_selects_map_panel(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?view=map")
+    assert _attr(guarded_page, "#tab-map", "aria-selected") == "true"
+    assert guarded_page.locator("#map-panel").is_visible()
+    assert not guarded_page.locator("#chart").is_visible()
+    assert not guarded_page.locator("#bars-panel").is_visible()
+    assert guarded_page.evaluate("() => window.__testHooks.lastPanel") == "map"
+
+
+def test_unknown_view_falls_back_to_scatter(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?view=globe")
+    assert _state(guarded_page)["view"] == "scatter"
+    assert _attr(guarded_page, "#tab-scatter", "aria-selected") == "true"
+
+
+def test_map_conceals_both_control_groups_without_hidden(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?view=map")
+    for selector in ("#scatter-controls", "#bar-controls"):
+        assert _is_concealed(guarded_page, selector)
+        assert _attr(guarded_page, selector, "hidden") is None
+
+
+def test_map_hint_shows_until_a_subject_is_picked(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "?view=map")
+    assert _hint(guarded_page) == MAP_HINT
+    open_app(guarded_page, "?view=map&people=pat-rowan")
+    assert _hint(guarded_page) == ""

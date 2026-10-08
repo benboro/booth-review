@@ -2687,3 +2687,31 @@ td.no-rating {
     display: inline;
   }
 }
+
+/* 04.18 Map panel */
+#map-panel {
+  position: relative;
+  min-height: 520px;
+  background: var(--bg);
+}
+
+#map-chart {
+  height: 520px;
+}
+
+.map-overlay {
+  position: absolute;
+  margin: 0;
+  font: var(--font-label);
+  line-height: 1.4;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.map-hint {
+  max-width: calc(50% - var(--space-md));
+}
+
+.map-note {
+  white-space: nowrap;
+}

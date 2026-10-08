@@ -52,6 +52,7 @@ const excitementCaptionEl = document.getElementById('excitement-caption');
 const panelBodyEl = document.getElementById('panel-body');
 const panelTitleEl = document.getElementById('panel-title');
 const barsPanelEl = document.getElementById('bars-panel');
+const mapPanelEl = document.getElementById('map-panel');
 const barsNoteEl = document.getElementById('bars-note');
 const eraNoteEl = document.getElementById('era-note');
 const shapeLegendEl = document.getElementById('shape-legend');
@@ -136,7 +137,7 @@ let revision = 0;
 
 /** Whether the scatter's Plotly event handlers are bound (needs one rendered scatter first). */
 let scatterBound = false;
-/** Which panel the last render showed: 'scatter' | 'bars'. */
+/** Which panel the last render showed: 'scatter' | 'bars' | 'map'. */
 let lastPanel = null;
 
 /** Telecast index the detail panel currently shows, or null when it's closed. */
@@ -225,21 +226,29 @@ function render() {
   if (state.view === 'scatter') {
     chartEl.hidden = false;
     if (barsPanelEl) barsPanelEl.hidden = true;
+    if (mapPanelEl) mapPanelEl.hidden = true;
     renderChart(chartEl, buildFigure(data, view, state, currentEnv()));
     setBandInfoMode(bandInfoEls(), state.y);
     showBandInfo();
     lastScatterWidth = chartEl.clientWidth;
     // The div had no width while hidden (research A4); re-measure once on return.
-    if (lastPanel === 'bars') window.Plotly.Plots.resize(chartEl);
+    if (lastPanel !== null && lastPanel !== 'scatter') window.Plotly.Plots.resize(chartEl);
     if (!scatterBound) {
       bindScatterEvents();
       scatterBound = true;
     }
     lastPanel = 'scatter';
+  } else if (state.view === 'map') {
+    chartEl.hidden = true;
+    if (barsPanelEl) barsPanelEl.hidden = true;
+    if (mapPanelEl) mapPanelEl.hidden = false;
+    hideBandInfo();
+    lastPanel = 'map';
   } else {
     chartEl.hidden = true;
     hideBandInfo();
     if (barsPanelEl) barsPanelEl.hidden = false;
+    if (mapPanelEl) mapPanelEl.hidden = true;
     const applies = state.view === 'bars' ? ctx.barsEnabled : ctx.butterflyEnabled;
     renderBarsShell(applies);
     if (applies) {

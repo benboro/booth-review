@@ -195,6 +195,7 @@
     <button type="button" role="tab" class="chart-tab" id="tab-scatter" data-view="scatter" aria-controls="chart-panel" aria-selected="true" tabindex="0">Scatter</button>
     <button type="button" role="tab" class="chart-tab" id="tab-bars" data-view="bars" aria-controls="chart-panel" aria-selected="false" tabindex="-1">Bars</button>
     <button type="button" role="tab" class="chart-tab" id="tab-butterfly" data-view="butterfly" aria-controls="chart-panel" aria-selected="false" tabindex="-1">Butterfly</button>
+    <button type="button" role="tab" class="chart-tab" id="tab-map" data-view="map" aria-controls="chart-panel" aria-selected="false" tabindex="-1">Map</button>
   </div>
   <p id="tab-hint" class="tab-hint" role="status"></p>
 
@@ -258,6 +259,12 @@
       <div id="bars-footer" class="bars-footer"><button type="button" id="bars-show-all" class="toggle" aria-expanded="false" aria-controls="bars-chart" hidden></button><p id="bars-rowcount" class="caption"></p></div>
       <div id="bars-captions" class="bars-captions"></div>
       <details id="bars-data"><summary>Counts as a list</summary><ol id="bars-counts" class="counts-list"></ol></details>
+    </section>
+    <section id="map-panel" hidden>
+      <div id="map-chart" role="img" aria-label="Map of game venues"></div>
+      <p id="map-hint" class="map-overlay map-hint" hidden></p>
+      <p id="map-note" class="map-overlay map-note" hidden></p>
+      <div id="map-empty-note" class="season-empty-note" role="status" hidden><p class="season-empty-title"></p><p class="season-empty-hint"></p></div>
     </section>
   </div>
 
