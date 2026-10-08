@@ -130,6 +130,12 @@ export const ZERO_LINE = { light: '#9CA3AF', dark: '#6B7280' };
 /** UI chrome divider/border token per theme. */
 export const DIVIDER = { light: '#E2E4E9', dark: '#2A2E35' };
 
+/**
+ * Faint gold/brown tint behind each season's bowl and playoff span on the Date axis
+ * (04.17 D-07). Light alpha must stay at or below 0.10 for CBS/Other contrast.
+ */
+export const POSTSEASON_BAND = { light: 'rgba(166, 120, 40, 0.07)', dark: 'rgba(212, 160, 60, 0.12)' };
+
 /** UI chrome page background token per theme. */
 export const PAGE_BG = { light: '#FFFFFF', dark: '#14161A' };
 
