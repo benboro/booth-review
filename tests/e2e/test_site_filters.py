@@ -12,6 +12,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+from conftest import click_mode_toggle, expand_family
 from playwright.sync_api import Page, expect
 
 pytestmark = pytest.mark.e2e
@@ -206,22 +207,27 @@ def test_blank_season_select_value_is_ignored(
     assert guarded_page.evaluate("window.__testHooks.getState().seasons") == [2021, 2025]
 
 
-def test_unchecking_fox_family_hides_its_dots(
+def test_unchecking_fox_family_fades_its_dots(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """04.7 D-07: Networks always hides -- unchecking a family box removes its
-    networks' dots, so `visibleCount` and `passingCount` both drop to 15 (the 5 net-b
-    games, 3 rated and 2 unrated, are gone); 9 rated dots stay plotted."""
+    """04.16 D-15: unchecking a family box fades its networks' dots in Fade
+    (`visibleCount` stays 20, `passingCount` drops to 15: the 5 net-b games, 3 rated and
+    2 unrated, fail) and removes them in Hide; 9 rated dots stay active."""
     open_app(guarded_page, "")
     _open_filter(guarded_page, "networks")
     guarded_page.uncheck("input[data-family-checkbox='fox']")
     guarded_page.wait_for_function("location.search.includes('networks=')")
 
-    assert _visible_count(guarded_page) == 15
+    assert _visible_count(guarded_page) == 20
     assert _view(guarded_page)["passingCount"] == 15
     active = _visible_customdata(guarded_page)
     assert len(active) == 9
     assert 1 not in active
+
+    guarded_page.keyboard.press("Escape")
+    guarded_page.click('#dots-toggle [data-dots="hide"]')
+    guarded_page.wait_for_function("window.__testHooks.getView().visibleCount === 15")
+    assert _visible_count(guarded_page) == 15
 
 
 def test_isolating_a_single_network_via_family_checkboxes(
@@ -235,7 +241,9 @@ def test_isolating_a_single_network_via_family_checkboxes(
     guarded_page.uncheck("input[data-family-checkbox='other']")
     guarded_page.wait_for_function("location.search.includes('networks=net-b')")
 
-    assert _visible_count(guarded_page) == 5  # net-b: rated 1, 5, 9 plus unrated 12, 16
+    # net-b: rated 1, 5, 9 plus unrated 12, 16 pass; the rest fade (04.16 D-15)
+    assert _view(guarded_page)["passingCount"] == 5
+    assert _visible_count(guarded_page) == 20
     assert sorted(_visible_customdata(guarded_page)) == [1, 5, 9]
 
 
@@ -265,6 +273,7 @@ def test_unchecking_one_network_leaves_family_indeterminate(
     assert 4 in before
 
     _open_filter(guarded_page, "networks")
+    expand_family(guarded_page, "disney")  # 04.16: families open collapsed
     guarded_page.uncheck("input[data-network-id='net-g']")
     guarded_page.wait_for_function("location.search.includes('networks=')")
 
@@ -492,8 +501,7 @@ def test_clear_all_filters_also_clears_people(
     open_app(guarded_page, "")
 
     _add_person_by_query(guarded_page, "Dale Harlow")
-    guarded_page.click("#compare-toggle")
-    guarded_page.wait_for_function("location.search.includes('mode=compare')")
+    click_mode_toggle(guarded_page, "#compare-toggle", "compare")
 
     _open_filter(guarded_page, "school")
     guarded_page.check("#school-list input[value='northfield']")
@@ -950,6 +958,7 @@ def test_network_checklist_rows_are_compact_on_desktop(
     Stream Plus), so it gives two `<li>` rows inside one `.network-list`."""
     open_app(guarded_page, "")
     _open_filter(guarded_page, "networks")
+    expand_family(guarded_page, "disney")  # 04.16: families open collapsed
 
     rows = guarded_page.locator(
         "fieldset.family-group:has(input[data-family-checkbox='disney']) .network-list li"
@@ -1471,6 +1480,26 @@ def _fam_item(page: Page, family: str) -> Any:
     return page.locator(f".check-item:has(input[data-family-checkbox='{family}'])")
 
 
+def _net_row(page: Page, net_id: str) -> Any:
+    """04.16: the row that carries a network's facet state. Single-channel families
+    never show their channel row (D-13), so net-b/c/d are read through their family
+    row, whose count, greying and hidden state equal the channel's."""
+    family = {"net-b": "fox", "net-c": "conference", "net-d": "other"}.get(net_id)
+    return _fam_item(page, family) if family else _net_item(page, net_id)
+
+
+def _open_networks(page: Page) -> None:
+    """Opens Networks with the disney family expanded so net-a and net-e are real rows."""
+    _open_filter(page, "networks")
+    expand_family(page, "disney")
+
+
+def _assert_channel_row_stays_hidden(page: Page, *net_ids: str) -> None:
+    """D-13: a single-channel family never shows its channel row."""
+    for net_id in net_ids:
+        expect(_net_item(page, net_id)).to_be_hidden()
+
+
 def _count_text(item: Any) -> str:
     return str(item.locator(".option-count").inner_text()).strip()
 
@@ -1482,14 +1511,15 @@ def test_facet_person_narrows_networks_to_their_family_and_channel(
     Networks offers only the channels of his games: net-a (rated 0, 8) and, since
     04.13, net-c (his unrated game 17)."""
     open_app(guarded_page, "?people=dale-harlow")
-    _open_filter(guarded_page, "networks")
-    expect(_net_item(guarded_page, "net-a")).to_be_visible()
+    _open_networks(guarded_page)
+    expect(_net_row(guarded_page, "net-a")).to_be_visible()
     expect(_fam_item(guarded_page, "disney")).to_be_visible()
-    assert _count_text(_net_item(guarded_page, "net-a")) == "(2)"
-    expect(_net_item(guarded_page, "net-c")).to_be_visible()
-    assert _count_text(_net_item(guarded_page, "net-c")) == "(1)"
+    assert _count_text(_net_row(guarded_page, "net-a")) == "(2)"
+    expect(_net_row(guarded_page, "net-c")).to_be_visible()
+    assert _count_text(_net_row(guarded_page, "net-c")) == "(1)"
+    _assert_channel_row_stays_hidden(guarded_page, "net-c")
     for net_id in ("net-b", "net-d", "net-e"):
-        expect(_net_item(guarded_page, net_id)).to_be_hidden()
+        expect(_net_row(guarded_page, net_id)).to_be_hidden()
     for family in ("fox", "other"):
         expect(_fam_item(guarded_page, family)).to_be_hidden()
 
@@ -1500,11 +1530,12 @@ def test_facet_default_counts_show_on_every_option(
     """D-12 / 04.13 D-08: each option shows its count of games (rated and unrated), and the
     accessible name says so."""
     open_app(guarded_page, "")
-    _open_filter(guarded_page, "networks")
+    _open_networks(guarded_page)
     # net-a 3+3, net-b 3+2, net-c 3+1, net-d 3+0, net-e 0+2 (rated + unrated) = 20 games.
     expected = {"net-a": 6, "net-b": 5, "net-c": 4, "net-d": 3, "net-e": 2}
     for net_id, n in expected.items():
-        assert _count_text(_net_item(guarded_page, net_id)) == f"({n})"
+        assert _count_text(_net_row(guarded_page, net_id)) == f"({n})"
+    _assert_channel_row_stays_hidden(guarded_page, "net-b", "net-c", "net-d")
     box = guarded_page.get_by_role("checkbox", name=re.compile("Alpha Sports.*6 games"))
     expect(box).to_have_count(1)
 
@@ -1515,18 +1546,19 @@ def test_facet_explicit_networks_pick_made_impossible_stays_greyed(
     """D-11, D-15: 1 of 5 is narrowed, so an impossible pick stays checked, greyed
     '(0)', in the URL, and returns to normal once the causing person is cleared."""
     open_app(guarded_page, "?people=dale-harlow&networks=net-b")
-    _open_filter(guarded_page, "networks")
-    item = _net_item(guarded_page, "net-b")
+    _open_networks(guarded_page)
+    item = _net_row(guarded_page, "net-b")
     expect(item).to_be_visible()
     expect(item).to_have_class(re.compile("is-zero"))
     assert _count_text(item) == "(0)"
+    _assert_channel_row_stays_hidden(guarded_page, "net-b")
     box = item.locator("input")
     expect(box).to_be_checked()
     expect(box).to_be_enabled()
-    expect(_net_item(guarded_page, "net-a")).to_be_visible()
-    assert _count_text(_net_item(guarded_page, "net-a")) == "(2)"
-    expect(_net_item(guarded_page, "net-c")).to_be_visible()  # Dale's unrated game 17
-    expect(_net_item(guarded_page, "net-d")).to_be_hidden()
+    expect(_net_row(guarded_page, "net-a")).to_be_visible()
+    assert _count_text(_net_row(guarded_page, "net-a")) == "(2)"
+    expect(_net_row(guarded_page, "net-c")).to_be_visible()  # Dale's unrated game 17
+    expect(_net_row(guarded_page, "net-d")).to_be_hidden()
     assert "net-b" in guarded_page.evaluate("location.search")
 
     guarded_page.evaluate("window.__testHooks.setState({ people: [] })")
@@ -1539,11 +1571,12 @@ def test_facet_networks_tie_counts_as_narrowed(
 ) -> None:
     """D-11 amendment: 2 of 4 checked is narrowed (2 * checked <= total)."""
     open_app(guarded_page, "?people=dale-harlow&networks=net-a,net-b")
-    _open_filter(guarded_page, "networks")
-    item = _net_item(guarded_page, "net-b")
+    _open_networks(guarded_page)
+    item = _net_row(guarded_page, "net-b")
     expect(item).to_be_visible()
     expect(item).to_have_class(re.compile("is-zero"))
     assert _count_text(item) == "(0)"
+    _assert_channel_row_stays_hidden(guarded_page, "net-b")
     expect(item.locator("input")).to_be_checked()
 
 
@@ -1552,11 +1585,12 @@ def test_facet_networks_all_but_a_few_hides_impossible_rows(
 ) -> None:
     """D-11 amendment: 3 of 5 is default-like, so impossible rows hide instead of grey."""
     open_app(guarded_page, "?people=dale-harlow&networks=net-a,net-b,net-c")
-    _open_filter(guarded_page, "networks")
-    expect(_net_item(guarded_page, "net-b")).to_be_hidden()
-    expect(_net_item(guarded_page, "net-c")).to_be_visible()  # Dale's unrated game 17
-    expect(_net_item(guarded_page, "net-a")).to_be_visible()
-    expect(_net_item(guarded_page, "net-a").locator("input")).to_be_checked()
+    _open_networks(guarded_page)
+    expect(_net_row(guarded_page, "net-b")).to_be_hidden()
+    expect(_net_row(guarded_page, "net-c")).to_be_visible()  # Dale's unrated game 17
+    _assert_channel_row_stays_hidden(guarded_page, "net-c")
+    expect(_net_row(guarded_page, "net-a")).to_be_visible()
+    expect(_net_row(guarded_page, "net-a").locator("input")).to_be_checked()
 
 
 def test_facet_conference_counts_use_others_only(
@@ -1565,8 +1599,8 @@ def test_facet_conference_counts_use_others_only(
     """D-08: checking a conference leaves the other non-zero conferences visible
     and changes the Networks counts."""
     open_app(guarded_page, "")
-    _open_filter(guarded_page, "networks")
-    before = [_count_text(_net_item(guarded_page, n)) for n in ("net-a", "net-b", "net-c", "net-d")]
+    _open_networks(guarded_page)
+    before = [_count_text(_net_row(guarded_page, n)) for n in ("net-a", "net-b", "net-c", "net-d")]
     guarded_page.keyboard.press("Escape")
     _open_filter(guarded_page, "conference")
     default_visible = guarded_page.locator("#conference-list .check-item:not([hidden])").count()
@@ -1578,8 +1612,8 @@ def test_facet_conference_counts_use_others_only(
         == default_visible
     )
     guarded_page.keyboard.press("Escape")
-    _open_filter(guarded_page, "networks")
-    after = [_count_text(_net_item(guarded_page, n)) for n in ("net-a", "net-b", "net-c", "net-d")]
+    _open_networks(guarded_page)
+    after = [_count_text(_net_row(guarded_page, n)) for n in ("net-a", "net-b", "net-c", "net-d")]
     assert before != after
 
 
@@ -1682,17 +1716,17 @@ def test_facet_clear_all_and_reset_restore_defaults(
 ) -> None:
     """Clear all and the Networks Reset return every list to all-visible default counts."""
     open_app(guarded_page, "?people=dale-harlow&networks=net-b")
-    _open_filter(guarded_page, "networks")
+    _open_networks(guarded_page)
     guarded_page.click("#pop-networks .group-reset")
     for net_id in ("net-b", "net-d", "net-e"):  # Dale's games are on net-a and net-c only
-        expect(_net_item(guarded_page, net_id)).to_be_hidden()
+        expect(_net_row(guarded_page, net_id)).to_be_hidden()
     guarded_page.keyboard.press("Escape")
     guarded_page.click("#clear-filters")
-    _open_filter(guarded_page, "networks")
+    _open_networks(guarded_page)
     expected = {"net-a": 6, "net-b": 5, "net-c": 4, "net-d": 3, "net-e": 2}
     for net_id, n in expected.items():
-        expect(_net_item(guarded_page, net_id)).to_be_visible()
-        assert _count_text(_net_item(guarded_page, net_id)) == f"({n})"
+        expect(_net_row(guarded_page, net_id)).to_be_visible()
+        assert _count_text(_net_row(guarded_page, net_id)) == f"({n})"
 
 
 def test_facet_does_not_change_which_dots_pass(
@@ -1859,7 +1893,7 @@ def test_unrated_only_network_is_counted_and_pickable(
     """04.13 D-08: Stream Plus has no rated game, only unrated games 15 and 18; it
     still lists with a real count and picking it leaves exactly those two games."""
     open_app(guarded_page, "")
-    _open_filter(guarded_page, "networks")
+    _open_networks(guarded_page)
     item = _net_item(guarded_page, "net-e")
     expect(item).to_be_visible()
     assert _count_text(item) == "(2)"
@@ -1908,18 +1942,19 @@ def test_screen_reader_count_suffix_reads_games(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """04.13 D-07: the checkbox accessible name ends ', N games' / ', 1 game' and no
-    facet string says 'telecast'."""
+    facet string says 'telecast'. 04.16: the single-channel Conference Network is read
+    through its family checkbox, named by the family label."""
     open_app(guarded_page, "")
-    _open_filter(guarded_page, "networks")
+    _open_networks(guarded_page)
     expect(
         guarded_page.get_by_role("checkbox", name=re.compile("Alpha Sports.*, 6 games"))
     ).to_have_count(1)
     expect(
-        guarded_page.get_by_role("checkbox", name=re.compile("Conference Network.*, 4 games"))
+        guarded_page.get_by_role("checkbox", name=re.compile("Pac-12 Net.MW Net" + ".*, 4 games"))
     ).to_have_count(1)
     guarded_page.evaluate("window.__testHooks.setState({ people: ['dale-harlow'] })")
     expect(
-        guarded_page.get_by_role("checkbox", name=re.compile("Conference Network.*, 1 game$"))
+        guarded_page.get_by_role("checkbox", name=re.compile("Pac-12 Net.MW Net" + ".*, 1 game$"))
     ).to_have_count(1)
     assert "telecast" not in guarded_page.inner_text("#pop-networks")
 
@@ -1947,22 +1982,24 @@ def _conf_item(page: Page, name: str) -> Any:
 def test_only_channel_selects_it_and_all_restores(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-24/D-25: Only on a channel selects it; the same button then reads All and resets."""
+    """D-24/D-25: Only on a channel selects it; the same button then reads All and resets.
+    04.16: the channel is Stream Plus (net-e) on the expanded disney family, since
+    single-channel families no longer show a channel row."""
     open_app(guarded_page, "")
-    _open_filter(guarded_page, "networks")
-    btn = _only_btn(_net_item(guarded_page, "net-b"))
+    _open_networks(guarded_page)
+    btn = _only_btn(_net_item(guarded_page, "net-e"))
     expect(btn).to_have_text("Only")
-    expect(btn).to_have_attribute("aria-label", "Show only Beta Network")
+    expect(btn).to_have_attribute("aria-label", "Show only Stream Plus")
     btn.click()
-    assert _state(guarded_page)["networks"] == ["net-b"]
-    assert "networks=net-b" in guarded_page.evaluate("location.search")
+    assert _state(guarded_page)["networks"] == ["net-e"]
+    assert "networks=net-e" in guarded_page.evaluate("location.search")
     expect(btn).to_have_text("All")
     expect(btn).to_have_attribute("aria-label", "Show all networks")
     expect(guarded_page.locator("#trigger-networks")).to_have_text("Networks · 1")
-    expect(guarded_page.locator(".legend-chip[data-family='fox']")).to_have_attribute(
+    expect(guarded_page.locator(".legend-chip[data-family='disney']")).to_have_attribute(
         "aria-pressed", "true"
     )
-    expect(guarded_page.locator(".legend-chip[data-family='disney']")).to_have_attribute(
+    expect(guarded_page.locator(".legend-chip[data-family='fox']")).to_have_attribute(
         "aria-pressed", "false"
     )
     btn.click()
@@ -1986,6 +2023,7 @@ def test_only_family_selects_only_offered_channels(
     )
     open_app(guarded_page, "?people=kris-venn")
     _open_filter(guarded_page, "networks")
+    expand_family(guarded_page, fox)  # 04.16: net-d hidden must prove facet hiding, not collapse
     expect(_net_item(guarded_page, "net-d")).to_be_hidden()
     _only_btn(_fam_item(guarded_page, fox)).click()
     assert _state(guarded_page)["networks"] == ["net-b"]
@@ -2032,11 +2070,13 @@ def test_only_undone_by_group_reset_and_clear_all(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(guarded_page, "")
-    _open_filter(guarded_page, "networks")
-    _only_btn(_net_item(guarded_page, "net-b")).click()
+    _open_networks(guarded_page)  # 04.16: Only on the expanded Stream Plus channel
+    _only_btn(_net_item(guarded_page, "net-e")).click()
+    assert _state(guarded_page)["networks"] == ["net-e"]
     guarded_page.click("#filter-networks .group-reset")
     assert _state(guarded_page)["networks"] is None
-    _only_btn(_net_item(guarded_page, "net-b")).click()
+    _only_btn(_net_item(guarded_page, "net-e")).click()
+    assert _state(guarded_page)["networks"] == ["net-e"]
     guarded_page.evaluate("document.getElementById('clear-filters').click()")
     assert _state(guarded_page)["networks"] is None
 
@@ -2077,7 +2117,11 @@ def test_only_family_button_hidden_when_no_channel_offered(
     _open_filter(guarded_page, "networks")
     expect(_fam_item(guarded_page, "fox")).to_be_visible()
     expect(_only_btn(_fam_item(guarded_page, "fox"))).to_be_hidden()
-    expect(_only_btn(_net_item(guarded_page, "net-b"))).to_be_visible()
+    # 04.16 D-13: the greyed single-channel pick has no channel row, so no channel-level
+    # All button; the group Reset still clears it.
+    _assert_channel_row_stays_hidden(guarded_page, "net-b")
+    guarded_page.click("#pop-networks .group-reset")
+    assert _state(guarded_page)["networks"] is None
 
 
 def test_only_button_reveal_on_desktop(

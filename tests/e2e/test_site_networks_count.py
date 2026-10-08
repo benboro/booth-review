@@ -28,8 +28,18 @@ def _net_item(page: Page, net_id: str) -> Any:
     return page.locator(f".check-item:has(input[data-network-id='{net_id}'])")
 
 
+_SINGLE_CHANNEL_FAMILY = {"net-b": "fox", "net-c": "conference", "net-d": "other"}
+
+
+def _fam_item(page: Page, family: str) -> Any:
+    return page.locator(f".check-item:has(input[data-family-checkbox='{family}'])")
+
+
 def _uncheck(page: Page, net_id: str) -> None:
-    page.locator(f"input[data-network-id='{net_id}']").uncheck()
+    """04.16: a single-channel network is unchecked through its family checkbox, since
+    its channel row never shows (D-13); the family box carries the same network ids."""
+    family = _SINGLE_CHANNEL_FAMILY[net_id]
+    page.locator(f"input[data-family-checkbox='{family}']").uncheck()
 
 
 def _trigger(page: Page) -> Any:
@@ -43,6 +53,7 @@ def test_networks_count_counts_only_shown_rows(
     leaves two shown rows checked."""
     open_app(guarded_page, "?people=kris-venn")
     _open_filter(guarded_page, "networks")
+    expect(_fam_item(guarded_page, "other")).to_be_hidden()
     expect(_net_item(guarded_page, "net-d")).to_be_hidden()
     _uncheck(guarded_page, "net-c")
     expect(_trigger(guarded_page)).to_have_text("Networks · 2")
@@ -115,8 +126,9 @@ def test_networks_count_includes_greyed_explicit_pick(
     """D-36: a greyed explicit pick is a shown, checked row and counts."""
     open_app(guarded_page, "?people=dale-harlow&networks=net-b")
     _open_filter(guarded_page, "networks")
-    expect(_net_item(guarded_page, "net-a")).to_be_visible()
-    expect(_net_item(guarded_page, "net-b")).to_be_visible()
+    expect(_fam_item(guarded_page, "disney")).to_be_visible()
+    expect(_fam_item(guarded_page, "fox")).to_be_visible()
+    expect(_net_item(guarded_page, "net-b")).to_be_hidden()  # D-13: no channel row
     expect(_trigger(guarded_page)).to_have_text("Networks · 1")
 
 

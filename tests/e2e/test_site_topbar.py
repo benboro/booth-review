@@ -9,30 +9,20 @@ import re
 from collections.abc import Callable
 
 import pytest
-from conftest import FIXTURE_GAMES, FIXTURE_RATED
+from conftest import FIXTURE_GAMES, FIXTURE_RATED, click_mode_toggle
 from playwright.sync_api import Locator, Page, expect
 
 pytestmark = pytest.mark.e2e
 
 
 def _click_compare(page: Page) -> None:
-    """Turns Compare on deterministically (SITE-59).
+    """Turns Compare on deterministically (SITE-59)."""
+    click_mode_toggle(page, "#compare-toggle", "compare")
 
-    A still-open Announcers popover can swallow the click as a light dismiss,
-    so close it first; then click once and assert the pressed state before
-    waiting for the URL, so a miss fails fast with the observed state.
-    """
-    if page.evaluate("document.getElementById('pop-announcers').matches(':popover-open')"):
-        page.keyboard.press("Escape")
-        page.wait_for_function(
-            "!document.getElementById('pop-announcers').matches(':popover-open')"
-        )
-    toggle = page.locator("#compare-toggle")
-    expect(toggle).to_be_enabled()
-    expect(toggle).to_have_attribute("aria-pressed", "false")
-    toggle.click()
-    expect(toggle).to_have_attribute("aria-pressed", "true")
-    page.wait_for_function("location.search.includes('mode=compare')", timeout=5000)
+
+def _click_together(page: Page) -> None:
+    """Turns Called together on deterministically (same popover race as SITE-59)."""
+    click_mode_toggle(page, "#together-toggle", "together")
 
 
 def _parse_rgb(css_color: str) -> tuple[float, float, float]:
@@ -384,8 +374,7 @@ def test_called_together_intersects_and_updates_url(
     _add_person_by_query(guarded_page, "Kris Venn")
     _add_person_by_query(guarded_page, "Sam Delgado")
 
-    guarded_page.click("#together-toggle")
-    guarded_page.wait_for_function("location.search.includes('mode=together')")
+    _click_together(guarded_page)
 
     assert _highlight_customdata(guarded_page) == [6]
 
@@ -399,8 +388,7 @@ def test_reload_restores_compare_and_together_selection(
     _add_person_by_query(guarded_page, "Kris Venn")
     _add_person_by_query(guarded_page, "Sam Delgado")
     _click_compare(guarded_page)
-    guarded_page.click("#together-toggle")
-    guarded_page.wait_for_function("location.search.includes('together')")
+    _click_together(guarded_page)
 
     before_highlight = _highlight_customdata(guarded_page)
     assert before_highlight == [6]
@@ -427,8 +415,7 @@ def test_removing_a_person_below_two_turns_called_together_off(
     open_app(guarded_page, "")
     _add_person_by_query(guarded_page, "Kris Venn")
     _add_person_by_query(guarded_page, "Sam Delgado")
-    guarded_page.click("#together-toggle")
-    guarded_page.wait_for_function("location.search.includes('mode=together')")
+    _click_together(guarded_page)
 
     guarded_page.click('button[aria-label="Remove Sam Delgado"]')
     guarded_page.wait_for_function("location.search === '?people=kris-venn'")
@@ -503,8 +490,7 @@ def test_summary_never_reads_like_a_ranking(
     _click_compare(guarded_page)
     _assert_clean()
 
-    guarded_page.click("#together-toggle")
-    guarded_page.wait_for_function("location.search.includes('together')")
+    _click_together(guarded_page)
     _assert_clean()
 
     open_app(guarded_page, "?networks=net-a")
@@ -632,7 +618,7 @@ def test_compare_toggle_pressed_state_is_unmistakable(
         guarded_page.evaluate("() => getComputedStyle(document.body).backgroundColor")
     )
 
-    for toggle_id in ("#compare-toggle", "#together-toggle"):
+    for toggle_id, mode in (("#compare-toggle", "compare"), ("#together-toggle", "together")):
         before_visibility = guarded_page.eval_on_selector(
             toggle_id, "el => getComputedStyle(el, '::before').visibility"
         )
@@ -641,11 +627,7 @@ def test_compare_toggle_pressed_state_is_unmistakable(
             toggle_id, "el => getComputedStyle(el).backgroundColor"
         )
 
-        guarded_page.click(toggle_id)
-        guarded_page.wait_for_function(
-            "(sel) => document.querySelector(sel).getAttribute('aria-pressed') === 'true'",
-            arg=toggle_id,
-        )
+        click_mode_toggle(guarded_page, toggle_id, mode)
 
         after_bg, after_color = guarded_page.eval_on_selector(
             toggle_id,

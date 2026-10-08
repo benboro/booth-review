@@ -488,16 +488,18 @@ async () => {
   const ns = { networks: [netId] };
   const nf = computeView(data, fade(ns));
   const nh = computeView(data, hide(ns));
-  const netMismatch = (nf.visibleCount !== nf.passingCount ? 1 : 0)
-    + (nh.visibleCount !== nh.passingCount ? 1 : 0);
+  const netFadeNotAll = nf.visibleCount !== data.n ? 1 : 0;
+  const netHideFailing = nh.visibleCount !== nh.passingCount ? 1 : 0;
+  const netCountDiffers = nf.passingCount !== nh.passingCount ? 1 : 0;
+  const netFacetsDiffer = facetKey(nf.facets) !== facetKey(nh.facets) ? 1 : 0;
   const hs = hide(h2hState);
   computeView(data, hs);
   const runs = 20;
   const start = performance.now();
   for (let i = 0; i < runs; i += 1) computeView(data, hs);
   const meanMs = (performance.now() - start) / runs;
-  return [countDiffers, facetsDiffer, fadeNotAll, hideFailing, outsidePair, tooFew, netMismatch,
-          meanMs];
+  return [countDiffers, facetsDiffer, fadeNotAll, hideFailing, outsidePair, tooFew, netFadeNotAll,
+          netHideFailing, netCountDiffers + netFacetsDiffer, meanMs];
 }
 """
 
@@ -507,8 +509,8 @@ def test_real_fade_hide_and_head_to_head_counts(
 ) -> None:
     """D-05, D-06, D-07, D-14: on the real build Fade and Hide never change the
     passing count or facets, Fade draws every dot, Hide draws only passing dots,
-    Networks hides in both, and Head-to-head keeps only the pair's games -- integers
-    and one timing only."""
+    Networks fades in Fade and hides in Hide (04.16 D-15), and Head-to-head keeps only
+    the pair's games -- integers and one timing only."""
     real_open_app(real_guarded_page, "")
     result: list[float] = real_guarded_page.evaluate(_FADE_HIDE_REAL_JS)
     count_differs = result[0]
@@ -517,15 +519,19 @@ def test_real_fade_hide_and_head_to_head_counts(
     hide_failing = result[3]
     outside_pair = result[4]
     too_few = result[5]
-    net_mismatch = result[6]
-    mean_ms = result[7]
+    net_fade_not_all = result[6]
+    net_hide_failing = result[7]
+    net_differs = result[8]
+    mean_ms = result[9]
     assert count_differs == 0, "Fade and Hide gave different passing counts"
     assert facets_differ == 0, "Fade and Hide gave different facets"
     assert fade_not_all == 0, "a Fade state without Networks drew fewer than every dot"
     assert hide_failing == 0, "Hide drew a dot that fails a filter"
     assert outside_pair == 0, "Head-to-head passed a dot outside the selected pair"
     assert too_few == 0, "Head-to-head passed fewer than two games"
-    assert net_mismatch == 0, "a Networks state drew dots that did not pass"
+    assert net_fade_not_all == 0, "a Networks state in Fade drew fewer than every dot"
+    assert net_hide_failing == 0, "a Networks state in Hide drew a dot that fails a filter"
+    assert net_differs == 0, "Fade and Hide gave different passing counts for Networks"
     assert mean_ms <= 20, "mean computeView time under Hide + Head-to-head exceeded 20 ms"
 
 
@@ -1018,6 +1024,29 @@ def test_real_ny6_band_holds_the_six_bowls(
 
 _WAIT_TWO_FRAMES = "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
 
+# Resolves once the chart's season-label geometry is identical across 5 consecutive frames
+# (a condition wait, not a fixed sleep); rejects after ~5s so a never-settling chart fails.
+_WAIT_LABELS_SETTLED = """
+() => new Promise((resolve, reject) => {
+  const sig = () => Array.from(document.querySelectorAll('#chart .annotation, #chart .xtick'))
+    .map((n) => { const b = n.getBoundingClientRect(); return [b.left, b.top, b.width].join(','); })
+    .join('|');
+  let prev = null;
+  let stable = 0;
+  let frames = 0;
+  const tick = () => {
+    const cur = sig();
+    stable = cur !== '' && cur === prev ? stable + 1 : 0;
+    prev = cur;
+    frames += 1;
+    if (stable >= 5) resolve(true);
+    else if (frames > 300) reject(new Error('season labels never settled'));
+    else requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+})
+"""
+
 # Counts and booleans only: nothing returned here names a team, person, or game.
 _DATE_FACTS_JS = """
 () => {
@@ -1137,7 +1166,7 @@ def test_real_phone_shows_all_season_labels(
     real_guarded_page.set_viewport_size({"width": 360, "height": 800})
     real_open_app(real_guarded_page, "?axis=date")
     real_guarded_page.evaluate(_WAIT_TWO_FRAMES)
-    real_guarded_page.wait_for_timeout(200)
+    real_guarded_page.evaluate(_WAIT_LABELS_SETTLED)
     facts: dict[str, Any] = real_guarded_page.evaluate(_PHONE_LABELS_JS)
     seasons = len(set(real_raw["telecasts"]["season"]))
     count = int(facts["count"])
@@ -1165,7 +1194,7 @@ def test_real_desktop_season_labels_never_overlap(
     real_guarded_page.set_viewport_size({"width": width, "height": 900})
     real_open_app(real_guarded_page, "?axis=date")
     real_guarded_page.evaluate(_WAIT_TWO_FRAMES)
-    real_guarded_page.wait_for_timeout(400)
+    real_guarded_page.evaluate(_WAIT_LABELS_SETTLED)
     facts: dict[str, Any] = real_guarded_page.evaluate(SEASON_LABEL_BOXES_JS)
     seasons = len(set(real_raw["telecasts"]["season"]))
     count = int(facts["count"])
@@ -1187,7 +1216,7 @@ def test_real_single_season_shows_dates_on_desktop(
     real_open_app(real_guarded_page, "?axis=date")
     real_guarded_page.evaluate("() => window.__testHooks.setState({seasons: [2025, 2025]})")
     real_guarded_page.evaluate(_WAIT_TWO_FRAMES)
-    real_guarded_page.wait_for_timeout(200)
+    real_guarded_page.evaluate(_WAIT_LABELS_SETTLED)
     facts: dict[str, Any] = real_guarded_page.evaluate(
         """() => {
           const texts = document.getElementById('chart').layout.xaxis.ticktext
@@ -1366,7 +1395,8 @@ def test_real_excitement_y_band_and_axis_counts(
     same_summary = summary_viewers == summary_excitement
     for y in ("viewers", "excitement", "viewers", "excitement"):
         real_guarded_page.evaluate("(y) => window.__testHooks.setState({y, axis: 'spread'})", y)
-        real_guarded_page.wait_for_timeout(100)
+        real_guarded_page.wait_for_function("(y) => window.__testHooks.getState().y === y", arg=y)
+        real_guarded_page.evaluate(_WAIT_TWO_FRAMES)
     errors = len(page_errors)
     assert band_count == null_count
     assert ringed == 0
@@ -1374,3 +1404,119 @@ def test_real_excitement_y_band_and_axis_counts(
     assert covers_max
     assert same_summary
     assert errors == 0
+
+
+_REAL_ENLARGE_JS = """
+async () => {
+  const data = window.__testHooks.data;
+  const frames = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  const fams = [];
+  for (const idx of data.primaryNetworks) {
+    const f = data.lookups.networks[idx].family;
+    if (!fams.includes(f)) fams.push(f);
+  }
+  const idsOf = (list) => data.primaryNetworks
+    .map((idx) => data.lookups.networks[idx])
+    .filter((n) => list.includes(n.family))
+    .map((n) => n.id);
+  const base = {
+    people: [], conferences: [], school: [], postseason: 'all', role: null, seasons: null,
+    networks: null, slots: null, together: false, compare: false, dots: 'fade',
+  };
+  const probe = async (patch) => {
+    window.__testHooks.setState({ ...base, ...patch });
+    await frames();
+    const sizes = new Set();
+    for (const t of document.getElementById('chart').data) {
+      if (String(t.meta).startsWith('family:')) sizes.add(t.marker.size);
+    }
+    const v = window.__testHooks.getView();
+    return { enlarge: v.enlargeDots, sizes: Array.from(sizes), faded: v.drawnFaded };
+  };
+  const other = fams.includes('other') ? 'other' : fams[fams.length - 1];
+  const out = { families: fams.length };
+  out.a = await probe({});
+  out.b = await probe({ networks: idsOf(fams.filter((f) => f !== other)) });
+  out.c = await probe({ networks: idsOf([fams[0]]) });
+  out.d = await probe({ networks: idsOf([fams[0]]), dots: 'hide' });
+  out.e = await probe({ networks: idsOf(fams.filter((f) => f !== other)), dots: 'hide' });
+  return out;
+}
+"""
+
+
+def test_real_dot_enlargement_follows_faded_and_family_rules(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+) -> None:
+    """04.16 D-15/D-16: the default view and Networks set to every family but one are not
+    enlarged (6px) even with faded dots drawn; one family is enlarged in Fade only, never in
+    Hide; Hide draws no faded dot -- booleans and integers only."""
+    real_open_app(real_guarded_page, "")
+    got: dict[str, Any] = real_guarded_page.evaluate(_REAL_ENLARGE_JS)
+    family_count: int = got["families"]
+    if family_count < 5:
+        pytest.skip("fewer than 5 families")
+    default_enlarged: bool = got["a"]["enlarge"]
+    default_sizes: list[int] = got["a"]["sizes"]
+    most_enlarged: bool = got["b"]["enlarge"]
+    most_sizes: list[int] = got["b"]["sizes"]
+    most_faded: int = got["b"]["faded"]
+    one_enlarged: bool = got["c"]["enlarge"]
+    one_faded: int = got["c"]["faded"]
+    one_hide_enlarged: bool = got["d"]["enlarge"]
+    one_hide_sizes: list[int] = got["d"]["sizes"]
+    most_hide_enlarged: bool = got["e"]["enlarge"]
+    most_hide_sizes: list[int] = got["e"]["sizes"]
+    most_hide_faded: int = got["e"]["faded"]
+    default_off = not default_enlarged
+    most_off = not most_enlarged
+    one_hide_off = not one_hide_enlarged
+    most_hide_off = not most_hide_enlarged
+    six_only = [6]
+    assert default_off
+    assert default_sizes == six_only
+    assert most_off
+    assert most_sizes == six_only
+    assert most_faded > 0
+    assert one_enlarged
+    assert one_faded > 0
+    assert one_hide_off
+    assert one_hide_sizes == six_only
+    assert most_hide_off
+    assert most_hide_sizes == six_only
+    assert most_hide_faded == 0
+
+
+_REAL_POPOVER_JS = """
+() => {
+  const data = window.__testHooks.data;
+  let multi = 0;
+  for (const idxs of data.networksByFamily.values()) if (idxs.length > 1) multi += 1;
+  const pop = document.getElementById('pop-networks');
+  const carets = Array.from(pop.querySelectorAll('.family-caret'));
+  const expanded = carets.filter((c) => c.getAttribute('aria-expanded') === 'true').length;
+  const visible = Array.from(pop.querySelectorAll('input[data-network-id]'))
+    .filter((el) => el.getClientRects().length > 0).length;
+  return { multi, carets: carets.length, expanded, visible };
+}
+"""
+
+
+def test_real_networks_popover_opens_collapsed(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+) -> None:
+    """04.16 D-10, D-13: the Networks popover opens with one caret per multi-channel family, all
+    collapsed, and no channel checkbox visible -- integers only."""
+    real_open_app(real_guarded_page, "")
+    real_guarded_page.click("#trigger-networks")
+    real_guarded_page.wait_for_selector("#pop-networks .family-caret")
+    got: dict[str, int] = real_guarded_page.evaluate(_REAL_POPOVER_JS)
+    multi = got["multi"]
+    carets = got["carets"]
+    expanded = got["expanded"]
+    visible = got["visible"]
+    assert carets == multi
+    assert expanded == 0
+    assert visible == 0

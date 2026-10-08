@@ -310,13 +310,22 @@ def test_markers_never_clip_at_band_edges(
 # ---------------------------------------------------------------------------
 
 
-def test_networks_filter_hides_unrated_games_of_other_networks(
+def test_networks_filter_fades_unrated_games_of_other_networks(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
+    """04.16 D-15: off-network unrated games fade in Fade, vanish in Hide."""
     open_app(guarded_page, "?networks=net-a,net-b")
     seen = {i for t in _traces(guarded_page) for i in t["customdata"]}
     assert 15 not in seen and 18 not in seen
-    # hidden, not faded: the inert traces do not carry them either (no customdata there)
+    expected = guarded_page.evaluate(
+        "() => { const d = window.__testHooks.data; let c = 0;"
+        " for (let i = d.nRated; i < d.n; i += 1) {"
+        " if (!['net-a', 'net-b'].includes(d.lookups.networks[d.t.network[i]].id)) c += 1; }"
+        " return c; }"
+    )
+    inert = [t for t in _traces(guarded_page) if t["meta"].startswith("unrated-inert:")]
+    assert sum(len(t["x"]) for t in inert) == expected == 3
+    open_app(guarded_page, "?networks=net-a,net-b&dots=hide")
     inert = [t for t in _traces(guarded_page) if t["meta"].startswith("unrated-inert:")]
     assert sum(len(t["x"]) for t in inert) == 0
 

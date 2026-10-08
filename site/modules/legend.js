@@ -14,8 +14,8 @@
  * any markup-injecting DOM API (T-04-31/T-04-34).
  *
  * The Fade | Hide switch (`#dots-toggle`) lives beside the list in
- * `#legend-row`, outside the rebuilt `<ul>`. Its rule: Networks always hides
- * games; other filters fade unless Hide is on. It is concealed off Scatter.
+ * `#legend-row`, outside the rebuilt `<ul>`. Its rule: every filter, Networks
+ * included, fades the games it excludes unless Hide is on (04.16 D-15). It is concealed off Scatter.
  */
 
 import { familyToggledOff, familyIsSole } from './select.js';

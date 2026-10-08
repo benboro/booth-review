@@ -238,9 +238,10 @@ _MARKERS_JS = """
         "{school: ['{slug}']}",
         "{school: ['{slug}'], dots: 'hide'}",
         "{networks: ['net-a']}",
+        "{networks: ['net-a'], dots: 'hide'}",
     ],
 )
-def test_tiers_sizes_and_networks_hiding_match_across_y_modes(
+def test_tiers_sizes_and_networks_match_across_y_modes(
     guarded_page: Page, open_app: Callable[[Page, str], None], patch: str
 ) -> None:
     open_app(guarded_page, "")

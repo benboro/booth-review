@@ -1,8 +1,8 @@
 /**
  * Selection semantics (D-10..D-19, 04.7 D-05..D-07, D-14): filters (Seasons,
  * Kickoff, Conference, School, Bowls/Playoffs) fade a dot that fails them by
- * default and hide it in Hide mode (`state.dots === 'hide'`); Networks always
- * hides. Head-to-head narrows School to games between exactly two schools.
+ * default and hide it in Hide mode (`state.dots === 'hide'`), Networks
+ * included (04.16 D-15). Head-to-head narrows School to games between exactly two schools.
  * Role still limits only how a person matches, never which dots pass. Also covers person/compare-mode matching, the
  * matched-games fill rule (person-or-school, D-12), and the match summary.
  * Also computes faceted option counts (D-08..D-12, `computeFacets`): each
@@ -85,17 +85,16 @@ export function personOnGame(data, i, personIndex, role) {
 }
 
 /**
- * The drawn mask (04.7 D-05..D-07): Networks always hides a dot; the other
- * filters hide it only in Hide mode (the exact string 'hide'), else it stays
- * drawn and merely fades.
+ * The drawn mask: every filter, Networks included, hides a failing dot only in
+ * Hide mode (the exact string 'hide'); otherwise the dot stays drawn and fades
+ * (04.7 D-05..D-07, reversed for Networks by 04.16 D-15).
  */
 function computeVisible(data, state) {
   const { n } = data;
   const visible = new Uint8Array(n);
   const hide = state.dots === 'hide';
   for (let i = 0; i < n; i += 1) {
-    if (failsNetworks(data, state, i)) continue;
-    if (hide && failsFadeable(data, state, i)) continue;
+    if (hide && !passesFadeFilters(data, state, i)) continue;
     visible[i] = 1;
   }
   return visible;
@@ -164,7 +163,7 @@ function failsGame(data, state, i) {
   return !data.dotGames[i].includes(gi);
 }
 
-/** True when any filter that fades (Seasons, Kickoff, Conference, School, Bowls/Playoffs, Game; not Networks or Role) excludes dot `i`. */
+/** True when any filter that fades (Seasons, Kickoff, Conference, School, Bowls/Playoffs, Game; every filter except Networks, and never Role) excludes dot `i`. */
 function failsFadeable(data, state, i) {
   return (
     failsSeasons(data, state, i) ||
@@ -205,6 +204,9 @@ function personMatches(data, state, personIndexes, i, role) {
   const test = (pIdx) => personOnGame(data, i, pIdx, role) != null;
   return state.together ? personIndexes.every(test) : personIndexes.some(test);
 }
+
+/** Networks-only enlarge applies while 1 to this many families are on (04.16 D-05), and only in Fade (D-16: Hide draws nothing faded); methodology.md names the same limit. */
+const NETWORKS_ENLARGE_MAX_FAMILIES = 3;
 
 const BIT_SEASON = 1;
 const BIT_NET = 2;
@@ -395,10 +397,13 @@ function buildSummary(data, state, summarySet, altGames, personIndexes, hasSelec
 /**
  * Computes the full view for the current data and selection/filter state
  * (D-10..D-19, 04.7): which dots are drawn (filters fade by default and
- * hide in Hide mode; Networks always hides), which pass every filter, which are person-matched, which rows fill the
+ * hide in Hide mode, Networks included), which pass every filter, which are person-matched, which rows fill the
  * matched-games table, their compare-mode symbols, per-season counts, and
- * the match summary. The result's `filterActive` drives the summary; `sizeFilterActive`
- * is for dot sizing only (seasons ignored on the Date axis).
+ * the match summary. The result's `filterActive` drives the summary. `enlargeDots`
+ * is for dot sizing only (04.16 D-01..D-07): true when at least one faded dot is drawn
+ * (`drawnFaded`, counted over the whole plot, never the zoom range, and ignoring
+ * out-of-range seasons on the Date axis), and, with Networks the only filter, only while
+ * 1-3 families are on (04.16 D-16/D-17).
  * @param {object} data - a `prepareData` result.
  * @param {object} state - shaped like `defaultState(data)`.
  * @returns {object}
@@ -407,6 +412,7 @@ export function computeView(data, state) {
   const { n } = data;
   const visible = computeVisible(data, state);
   let visibleCount = 0;
+  let drawnFaded = 0;
 
   const passesFilters = new Uint8Array(n);
   let passingCount = 0;
@@ -415,6 +421,15 @@ export function computeView(data, state) {
     if (passesFadeFilters(data, state, i)) {
       passesFilters[i] = 1;
       passingCount += 1;
+    }
+    // D-01/D-03: a faded dot is drawn but fails a fade filter; on Date, seasons outside
+    // the range are not drawn, so they never count. No zoom input (D-02).
+    if (
+      visible[i] &&
+      !passesFilters[i] &&
+      !(state.axis === 'date' && failsSeasons(data, state, i))
+    ) {
+      drawnFaded += 1;
     }
   }
 
@@ -488,21 +503,29 @@ export function computeView(data, state) {
     }
   }
 
-  // Every filter except seasons. Role and people are deliberately not filters
-  // (04.1 D-13). A new filter goes here once, so it drives both flags below.
-  const otherFilterActive =
-    state.networks != null ||
+  // Every filter except seasons and Networks. Role and people are deliberately not
+  // filters (04.1 D-13). A new filter goes here once, so it drives every flag below.
+  const nonNetworkFilter =
     state.slots != null ||
     state.conferences.length > 0 ||
     state.school.length > 0 ||
     hasGameSelection ||
     state.postseason !== 'all';
+  const otherFilterActive = state.networks != null || nonNetworkFilter;
   const filterActive = state.seasons != null || otherFilterActive;
-  // SITE-50 (04.12 D-05/D-06): on Date, out-of-range seasons are off the axis (04.11 D-12),
-  // so a seasons-only filter picks nothing out and must not enlarge dots; filterActive
-  // still drives the summary (D-07).
-  const sizeFilterActive =
-    otherFilterActive || (state.seasons != null && state.axis !== 'date');
+  // 04.16 D-04: the old rule-based size flag is gone. SITE-50 (D-03) keeps a
+  // seasons-only filter on Date as "no filter": out-of-range seasons are off the axis.
+  const seasonsSizeFilter = state.seasons != null && state.axis !== 'date';
+  // D-16/D-17: a faded dot must be drawn (D-01 count rule; Hide draws none, so Hide is
+  // normal size), and with Networks the only filter the family count must also be 1-3.
+  // Any other filter makes the family count irrelevant (D-17).
+  const networksOnly = state.networks != null && !nonNetworkFilter && !seasonsSizeFilter;
+  const familiesOn = networksOnly
+    ? data.families.filter((f) => !familyToggledOff(data, state, f)).length
+    : 0;
+  const enlargeDots =
+    drawnFaded > 0 &&
+    (!networksOnly || (familiesOn >= 1 && familiesOn <= NETWORKS_ENLARGE_MAX_FAMILIES));
   let summarySet = matched;
   if (!hasSelection) {
     summarySet = [];
@@ -527,7 +550,8 @@ export function computeView(data, state) {
     hasGameSelection,
     hasSelection,
     filterActive,
-    sizeFilterActive,
+    enlargeDots,
+    drawnFaded,
     totalCount: n,
     highlighted,
     matched,
