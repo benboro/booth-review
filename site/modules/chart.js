@@ -128,8 +128,13 @@ const XAXIS_TITLES = {
 /** Y-axis chart titles by y mode (04.15 D-09, D-13). */
 const YAXIS_TITLES = {
   viewers: 'Viewers (log scale)',
-  excitement: 'Excitement index (CFBD)',
+  excitement: Y_MEASURES.excitement.title,
+  points: Y_MEASURES.points.title,
+  margin: Y_MEASURES.margin.title,
 };
+
+/** The y modes that plot a linear measure instead of Viewers (04.15 D-13, 04.17 D-13). */
+const Y_MODES = ['excitement', 'points', 'margin'];
 
 /**
  * A linear measure y axis (04.17 D-09/D-12/D-14/D-15): the whole-dataset range (never
@@ -304,10 +309,18 @@ export function buildFigure(data, view, state, env) {
   // 04.15: which measure is on y. The closures keep the family and highlight loops identical
   // in both modes: in Excitement mode the band holds the games with no excitement value (D-16),
   // everything else is a regular dot at its excitement (D-14).
-  const yMode = state.y === 'excitement' ? 'excitement' : 'viewers';
-  const yOf = (i) => (yMode === 'excitement' ? pin(data.t.excitement[i], EXCITEMENT_CAP) : data.t.viewers[i]);
-  const inBand = (i) => (yMode === 'excitement' ? data.t.excitement[i] == null : !data.rated[i]);
-  const bandY = (i) => (yMode === 'excitement' ? data.bandJitter[i] : data.jitter[i]);
+  // 04.17 D-13/D-16: Points and Margin work like Excitement; the band holds the games with no
+  // value for the measure (no final score) at their bandJitter. T-04.17-14: re-check the allowlist.
+  const yMode = Y_MODES.includes(state.y) ? state.y : 'viewers';
+  const valueOf = (i) => {
+    if (yMode === 'viewers') return data.t.viewers[i];
+    if (yMode === 'points') return data.total[i];
+    if (yMode === 'margin') return data.margin[i];
+    return data.t.excitement[i];
+  };
+  const yOf = (i) => (yMode === 'viewers' ? data.t.viewers[i] : pin(valueOf(i), Y_MEASURES[yMode].cap));
+  const inBand = (i) => (yMode === 'viewers' ? !data.rated[i] : valueOf(i) == null);
+  const bandY = (i) => (yMode === 'viewers' ? data.jitter[i] : data.bandJitter[i]);
   const hoverOpts = { axis, y: yMode, theme };
   const tooltipMode = env.tooltipMode ?? TOOLTIP_MODE;
 
@@ -440,7 +453,7 @@ export function buildFigure(data, view, state, env) {
       hovertemplate: null,
       // 04.15 D-14/D-16: in Excitement mode the band holds filled dots like the main traces.
       marker:
-        yMode === 'excitement'
+        yMode !== 'viewers'
           ? { ...inertTraces[inertTraces.length - 1].marker }
           : ringMarker(view.hasPersonSelection ? DOT_OPACITY.inertUnderPerson : DOT_OPACITY.inert),
     });
@@ -459,7 +472,7 @@ export function buildFigure(data, view, state, env) {
       hoverlabel: { bordercolor: color },
       // notes-2 #5 (amends D-03; 04.16: switch is view.enlargeDots): when dots are enlarged a passing unrated game draws exactly
       // like its rated twin (filled 10px family dot, 1px outline); otherwise it stays a ring.
-      marker: yMode === 'excitement'
+      marker: yMode !== 'viewers'
         ? { ...activeTraces[activeTraces.length - 1].marker }
         : view.enlargeDots
         ? {
@@ -635,7 +648,7 @@ export function buildFigure(data, view, state, env) {
   });
 
   const yTicks = logTicks(data.viewersMin, data.viewersMax);
-  const excY = yMode === 'excitement' ? measureYAxis(data, 'excitement', bandGeo.plotPx * (1 - bandGeo.logBottom)) : null;
+  const excY = yMode !== 'viewers' ? measureYAxis(data, yMode, bandGeo.plotPx * (1 - bandGeo.logBottom)) : null;
 
   let dateAxis = null;
   if (isDate) {
@@ -664,7 +677,7 @@ export function buildFigure(data, view, state, env) {
     // 04.15 D-12: a y switch resets the zoom; the suffix is Excitement-only so the default keys hold.
     uirevision:
       (isDate ? 'date:' + (state.seasons ? state.seasons.join('-') : 'all') : state.axis) +
-      (yMode === 'excitement' ? ':y-excitement' : ''),
+      (yMode !== 'viewers' ? ':y-' + yMode : ''),
     paper_bgcolor: PAGE_BG[theme],
     plot_bgcolor: PAGE_BG[theme],
     font: {
@@ -715,11 +728,11 @@ export function buildFigure(data, view, state, env) {
       showgrid: false,
       zeroline: false,
     },
-    yaxis: yMode === 'excitement'
+    yaxis: yMode !== 'viewers'
       ? {
           domain: [bandGeo.logBottom, 1],
           type: 'linear',
-          title: { text: YAXIS_TITLES.excitement },
+          title: { text: YAXIS_TITLES[yMode] },
           tickmode: 'array',
           tickvals: excY.tickvals,
           ticktext: excY.ticktext,

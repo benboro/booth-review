@@ -179,11 +179,16 @@ def test_band_holds_exactly_the_games_without_a_score(
             assert t["yaxis"] == "y2"
             for k, i in enumerate(t["customdata"]):
                 band[i] = t["y"][k]
-    assert sorted(band) == [_NO_SCORE_RATED, nr]
+    key = "total" if mode == "points" else "margin"
+    unscored = page.evaluate(
+        f"Array.from(window.__testHooks.data.{key}).flatMap((v, i) => (v == null ? [i] : []))"
+    )
+    assert {_NO_SCORE_RATED, nr} <= set(unscored)
+    assert sorted(band) == unscored
     for i, y in band.items():
         assert y == pytest.approx(jitter[i])
     main = sorted(i for t in traces if t["meta"].startswith("family:") for i in t["customdata"])
-    assert main == sorted(set(range(n)) - {_NO_SCORE_RATED, nr})
+    assert main == sorted(set(range(n)) - set(unscored))
     for t in traces:
         assert t["color"] != surface, f"{t['meta']} draws a ring (D-16)"
         assert t["symbol"] != "circle-open"
