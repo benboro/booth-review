@@ -152,7 +152,7 @@ def test_band_info_mode_swaps_copy_and_closes_the_note(
     assert guarded_page.is_hidden("#band-note-viewers")
     href = guarded_page.get_attribute("#band-note-excitement a", "href")
     assert href is not None
-    assert href.endswith("methodology.html#the-y-axis-viewers-or-excitement")
+    assert href.endswith("methodology.html#the-y-axis-viewers-excitement-points-or-margin")
 
     guarded_page.evaluate(set_mode, "viewers")
     assert guarded_page.is_hidden("#band-note")
@@ -166,3 +166,59 @@ def test_band_info_mode_swaps_copy_and_closes_the_note(
     assert guarded_page.inner_text("#band-info .band-info-text") == viewers_label
     assert guarded_page.get_attribute("#band-info", "aria-label") == viewers_aria
     assert guarded_page.is_hidden("#band-note-excitement")
+
+
+def test_band_info_score_group_for_points_and_margin(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """04.17 D-16: points and margin share the 'No final score' copy and note; the
+    note stays open across Points <-> Margin and closes on Viewers or Excitement."""
+    open_app(guarded_page, "")
+    _settle(guarded_page)
+    set_mode = """
+        async (mode) => {
+          const B = await import('./modules/band-info.js');
+          B.setBandInfoMode({
+            button: document.getElementById('band-info'),
+            note: document.getElementById('band-note'),
+          }, mode);
+        }
+    """
+    guarded_page.evaluate(set_mode, "points")
+    assert guarded_page.inner_text("#band-info .band-info-text") == "No final score"
+    assert (
+        guarded_page.get_attribute("#band-info", "aria-label")
+        == "Why do some games have no final score?"
+    )
+    guarded_page.click("#band-info")
+    assert guarded_page.is_visible("#band-note-score")
+    assert guarded_page.is_hidden("#band-note-viewers")
+    assert guarded_page.is_hidden("#band-note-excitement")
+    assert guarded_page.inner_text("#band-note-score .band-note-title") == "No final score"
+    assert guarded_page.inner_text("#band-note-score p:nth-of-type(2)") == (
+        "These games have no final score yet, so they have no height on this chart. "
+        "They are drawn here instead of being left out. Their viewer figures are unchanged."
+    )
+    href = guarded_page.get_attribute("#band-note-score a", "href")
+    assert href is not None
+    assert href.endswith("methodology.html#the-y-axis-viewers-excitement-points-or-margin")
+
+    guarded_page.evaluate(set_mode, "margin")
+    assert guarded_page.is_visible("#band-note")
+    assert guarded_page.is_visible("#band-note-score")
+    assert guarded_page.inner_text("#band-info .band-info-text") == "No final score"
+
+    guarded_page.evaluate(set_mode, "viewers")
+    assert guarded_page.is_hidden("#band-note")
+    guarded_page.evaluate(set_mode, "excitement")
+    guarded_page.evaluate(set_mode, "points")
+    assert guarded_page.is_hidden("#band-note")
+
+
+@pytest.mark.parametrize("value", ["points", "margin"])
+def test_band_info_label_follows_y_in_url(
+    guarded_page: Page, open_app: Callable[[Page, str], None], value: str
+) -> None:
+    open_app(guarded_page, f"?y={value}")
+    _settle(guarded_page)
+    assert guarded_page.inner_text("#band-info .band-info-text") == "No final score"

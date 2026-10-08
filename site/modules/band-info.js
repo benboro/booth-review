@@ -18,6 +18,10 @@ const BAND_INFO_COPY = Object.freeze({
     label: 'No excitement value',
     ariaLabel: 'Why do some games have no excitement value?',
   }),
+  score: Object.freeze({
+    label: 'No final score',
+    ariaLabel: 'Why do some games have no final score?',
+  }),
 });
 
 /**
@@ -54,14 +58,17 @@ export function closeBandNote({ button, note }) {
 
 /**
  * D-16: swaps the band label, aria-label and the visible note block for the
- * y mode (anything but 'excitement' is 'viewers'). Closes an open note when
- * the mode changes. DOM-only: constants and static HTML, never data strings.
+ * y mode's copy group: 'points' and 'margin' share 'score', 'excitement' has its
+ * own, anything else is 'viewers'. Closes an open note when the group changes
+ * (so Points <-> Margin keeps it open). DOM-only: constants and static HTML, never data strings.
  * @param {{button: HTMLElement|null, note: HTMLElement|null}} els
  * @param {string} yMode
  */
 export function setBandInfoMode({ button, note }, yMode) {
   if (!button || !note) return;
-  const mode = yMode === 'excitement' ? 'excitement' : 'viewers';
+  let mode = 'viewers';
+  if (yMode === 'excitement') mode = 'excitement';
+  else if (yMode === 'points' || yMode === 'margin') mode = 'score';
   const previous = button.dataset.yMode;
   if (previous && previous !== mode) closeBandNote({ button, note });
   button.dataset.yMode = mode;
@@ -73,6 +80,8 @@ export function setBandInfoMode({ button, note }, yMode) {
   const excitementBlock = note.querySelector('#band-note-excitement');
   if (viewersBlock) viewersBlock.hidden = mode !== 'viewers';
   if (excitementBlock) excitementBlock.hidden = mode !== 'excitement';
+  const scoreBlock = note.querySelector('#band-note-score');
+  if (scoreBlock) scoreBlock.hidden = mode !== 'score';
 }
 
 /**

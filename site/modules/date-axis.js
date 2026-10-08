@@ -51,6 +51,7 @@ export function kickoffFraction(iso) {
  * @property {number} maxDay - epoch day of the season's last telecast.
  * @property {number} start - data x of the block's left edge.
  * @property {number} end - data x of the block's right edge.
+ * @property {number|null} postDay - epoch day of the season's first bowl or playoff telecast, null when none (04.17 D-01).
  */
 
 /**
@@ -58,9 +59,11 @@ export function kickoffFraction(iso) {
  * @param {number[]} season - telecast season column.
  * @param {string[]} date - ET "YYYY-MM-DD" column.
  * @param {(string|null)[]} kickoff - ET ISO kickoff column.
+ * @param {string[]} [gameType] - optional game_type column; its 'bowl' and 'playoff' rows
+ *   set each block's postDay (04.17 D-01). Omitted, every postDay is null.
  * @returns {{dateX: number[], axis: {pad: number, gap: number, blocks: Block[]}}}
  */
-export function buildDateAxis(season, date, kickoff) {
+export function buildDateAxis(season, date, kickoff, gameType) {
   const n = season.length;
   const days = new Array(n);
   const span = new Map();
@@ -73,13 +76,18 @@ export function buildDateAxis(season, date, kickoff) {
       if (day < s.minDay) s.minDay = day;
       if (day > s.maxDay) s.maxDay = day;
     }
+    // Conference championships are 'regular' and never start a band (D-01).
+    if (gameType && (gameType[i] === 'bowl' || gameType[i] === 'playoff')) {
+      const t = span.get(season[i]);
+      if (t.postDay === undefined || day < t.postDay) t.postDay = day;
+    }
   }
   const blocks = [];
   let cursor = 0;
   for (const s of Array.from(span.keys()).sort((a, b) => a - b)) {
-    const { minDay, maxDay } = span.get(s);
+    const { minDay, maxDay, postDay } = span.get(s);
     const width = maxDay - minDay + 1 + 2 * DATE_PAD;
-    blocks.push({ season: s, minDay, maxDay, start: cursor, end: cursor + width });
+    blocks.push({ season: s, minDay, maxDay, start: cursor, end: cursor + width, postDay: postDay ?? null });
     cursor += width + DATE_GAP;
   }
   const byseason = new Map(blocks.map((b) => [b.season, b]));
@@ -128,6 +136,62 @@ export function gapDividers(blocks) {
 
 const round4 = (v) => Math.round(v * 10000) / 10000;
 const round2 = (v) => Math.round(v * 100) / 100;
+
+/** Text of the single postseason band label (04.17 D-08). */
+export const POSTSEASON_LABEL = 'Bowls & CFP';
+
+/**
+ * One band per block with a bowl or playoff game (04.17 D-02, D-03). The left edge is
+ * the whole-day boundary of the first such day (no kickoff fraction, so a regular dot
+ * on that day sits inside); the right edge is the gap divider, or `rightEdge` for the
+ * last block.
+ * @param {Block[]} blocks - the shown blocks, ascending.
+ * @param {number} rightEdge - the home x range's right end.
+ * @returns {{season: number, x0: number, x1: number}[]}
+ */
+export function postseasonBands(blocks, rightEdge) {
+  const out = [];
+  blocks.forEach((b, i) => {
+    if (b.postDay == null) return;
+    const next = blocks[i + 1];
+    out.push({
+      season: b.season,
+      x0: round4(b.start + DATE_PAD + (b.postDay - b.minDay)),
+      x1: next ? round4((b.end + next.start) / 2) : rightEdge,
+    });
+  });
+  return out;
+}
+
+/**
+ * Where the single rotated "Bowls & CFP" label sits (04.17 D-08, amended): bottom-to-top
+ * at the bottom right of the rightmost band that fits. `x` is the band's visible right
+ * edge (the chart insets it a few px). A band fits when its visible pixel width holds the
+ * label's thickness (font size plus box pad plus the right inset) and the main plot
+ * height holds its length (text plus box pad plus the bottom and top insets).
+ * @param {{season: number, x0: number, x1: number}[]} bands
+ * @param {[number, number]} range - visible data x range.
+ * @param {number} plotPx - plot width in px.
+ * @param {{fontSize?: number, measure?: (text: string) => (number|undefined), heightPx?: number}} [opts]
+ *   heightPx is the main (log or linear) plot height; unset means unlimited.
+ * @returns {{season: number, x: number}|null} null when no band fits.
+ */
+export function postseasonLabel(bands, range, plotPx, { fontSize = 12, measure, heightPx = Infinity } = {}) {
+  const [lo, hi] = range;
+  const measured = measure?.(POSTSEASON_LABEL);
+  const text = Number.isFinite(measured) ? measured : 0.6 * fontSize * POSTSEASON_LABEL.length;
+  const thickness = fontSize + 2.5 + 2 * 4;
+  const length = text + 2.5 + 2 * 4;
+  if (heightPx < length) return null;
+  for (let i = bands.length - 1; i >= 0; i -= 1) {
+    const a = Math.max(bands[i].x0, lo);
+    const b = Math.min(bands[i].x1, hi);
+    if (b <= a) continue;
+    if (((b - a) * plotPx) / (hi - lo) >= thickness) // Floor, never round up: Plotly hides an axis-referenced annotation that sits past the range end.
+      return { season: bands[i].season, x: Math.floor(b * 10000) / 10000 };
+  }
+  return null;
+}
 
 /**
  * Lower-row tier from pixels per day: 1 weekly dates, 2 biweekly dates,

@@ -474,7 +474,7 @@ def test_axis_toggle_fits_one_row_on_phones(
           return {tops: rects.map((r) => Math.round(r.top)), groups};
         }"""
     )
-    assert len(y_info["tops"]) == 2 and len(set(y_info["tops"])) == 1
+    assert len(y_info["tops"]) == 4 and len(set(y_info["tops"])) == 1
     for g in y_info["groups"]:
         assert not g["wrap"]
         assert all(h >= 44 for h in g["heights"])

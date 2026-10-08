@@ -1071,7 +1071,7 @@ _DATE_FACTS_JS = """
     outside,
     annotations: anns.length,
     // season dividers only: the 04.13 band's own rect and top line are paper-referenced
-    dividers: (gd.layout.shapes || []).filter((s) => s.xref === 'x').length,
+    dividers: (gd.layout.shapes || []).filter((s) => s.type === 'line' && s.xref === 'x').length,
     blockCount: blocks.length,
     rangeLo: range[0],
     rangeHi: range[1],
@@ -1359,7 +1359,9 @@ async () => {
     if (t.marker && t.marker.color === p.SURFACE[theme]) ringed += 1;
   }
   const yr = gd._fullLayout.yaxis.range;
-  return { band, ringed, type: gd.layout.yaxis.type, lo: yr[0], hi: yr[1] };
+  const tt = Array.from(gd.layout.yaxis.ticktext ?? []);
+  const type = gd.layout.yaxis.type;
+  return { band, ringed, type, lo: yr[0], hi: yr[1], lastTick: tt[tt.length - 1] };
 }
 """
 
@@ -1391,7 +1393,9 @@ def test_real_excitement_y_band_and_axis_counts(
     band_count: int = got["band"]
     ringed: int = got["ringed"]
     is_linear = got["type"] == "linear"
-    covers_max = got["lo"] <= 0 and got["hi"] >= top
+    covers_cap = got["lo"] <= 0 and got["hi"] >= min(top, 12)
+    is_capped = got["hi"] < top
+    top_tick_plus = got["lastTick"] == "12+"
     same_summary = summary_viewers == summary_excitement
     for y in ("viewers", "excitement", "viewers", "excitement"):
         real_guarded_page.evaluate("(y) => window.__testHooks.setState({y, axis: 'spread'})", y)
@@ -1401,7 +1405,9 @@ def test_real_excitement_y_band_and_axis_counts(
     assert band_count == null_count
     assert ringed == 0
     assert is_linear
-    assert covers_max
+    assert covers_cap
+    assert is_capped
+    assert top_tick_plus
     assert same_summary
     assert errors == 0
 
@@ -1520,3 +1526,158 @@ def test_real_networks_popover_opens_collapsed(
     assert carets == multi
     assert expanded == 0
     assert visible == 0
+
+
+_POSTSEASON_FACTS_JS = """
+() => {
+  const gd = document.getElementById('chart');
+  const data = window.__testHooks.data;
+  return import('./modules/date-axis.js').then((A) => {
+    const shapes = gd.layout.shapes || [];
+    const bandIdx = [];
+    shapes.forEach((s, i) => {
+      if (String(s.name || '').startsWith('postseason-')) bandIdx.push(i);
+    });
+    const surfaceIdx = shapes.findIndex(
+      (s) => s.type === 'rect' && s.xref === 'paper' && s.y0 === 0 && s.y1 < 1);
+    const rng = gd._fullLayout.xaxis.range;
+    const dividerXs = shapes.filter((s) => s.type === 'line' && s.xref === 'x').map((s) => s.x0);
+    const bands = bandIdx.map((i) => shapes[i]);
+    const edgesOk = bands.every((b) => b.x0 < b.x1 && (Math.abs(b.x1 - rng[1]) < 1e-6
+      || dividerXs.some((d) => Math.abs(d - b.x1) < 1e-6)
+      || Math.abs(b.x1 - gd.layout.xaxis.range[1]) < 1e-6));
+    const seasons = new Set();
+    for (let i = 0; i < data.n; i += 1) {
+      const g = data.t.game_type[i];
+      if (g === 'bowl' || g === 'playoff') seasons.add(data.t.season[i]);
+    }
+    const anns = gd.layout.annotations || [];
+    const la = anns.find((a) => a.name === 'postseason-label');
+    const px = gd._fullLayout.xaxis._length;
+    const fit = A.postseasonLabel(gd.boothDateAxis.bands, rng, px, {
+      fontSize: 12, heightPx: gd._fullLayout.yaxis._length });
+    const visible = la ? (la.visible ?? true) : false;
+    const ruleMatches = fit == null ? !visible : (visible && Math.abs(la.x - fit.x) < 0.01);
+    return {
+      bands: bandIdx.length,
+      postSeasons: seasons.size,
+      edgesOk,
+      afterSurface: surfaceIdx >= 0 && bandIdx.every((i) => i > surfaceIdx),
+      ruleMatches,
+      labelVisible: visible,
+      labelDrawn: Array.from(document.querySelectorAll('#chart .annotation'))
+        .some((e) => e.textContent.trim() === 'Bowls & CFP'),
+      latest: Math.max(...Array.from(seasons)),
+    };
+  });
+}
+"""
+
+
+def test_real_postseason_bands_and_label(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+) -> None:
+    """04.17 SITE-66: one band per season with a bowl or playoff game, the label follows the
+    rightmost-fit rule, one past season shows its label, and the exclude/hide filters keep the
+    bands -- integers and booleans only."""
+    real_guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    real_open_app(real_guarded_page, "?axis=date")
+    real_guarded_page.evaluate(_WAIT_TWO_FRAMES)
+    a: dict[str, Any] = real_guarded_page.evaluate(_POSTSEASON_FACTS_JS)
+    bands_all = int(a["bands"])
+    post_seasons = int(a["postSeasons"])
+    edges_ok = bool(a["edgesOk"])
+    after_surface = bool(a["afterSurface"])
+    rule_all = bool(a["ruleMatches"])
+    label_all = bool(a["labelVisible"])
+    drawn_all = bool(a["labelDrawn"])
+    latest = int(a["latest"])
+    print(f"real postseason bands: {bands_all}, label visible (all seasons): {label_all}")
+    real_open_app(real_guarded_page, f"?axis=date&seasons={latest}-{latest}")
+    real_guarded_page.evaluate(_WAIT_TWO_FRAMES)
+    b: dict[str, Any] = real_guarded_page.evaluate(_POSTSEASON_FACTS_JS)
+    bands_one = int(b["bands"])
+    label_one = bool(b["labelVisible"])
+    drawn_one = bool(b["labelDrawn"])
+    rule_one = bool(b["ruleMatches"])
+    real_open_app(real_guarded_page, "?axis=date&postseason=exclude&dots=hide")
+    real_guarded_page.evaluate(_WAIT_TWO_FRAMES)
+    c: dict[str, Any] = real_guarded_page.evaluate(_POSTSEASON_FACTS_JS)
+    bands_filtered = int(c["bands"])
+    assert bands_all == post_seasons
+    assert edges_ok
+    assert after_surface
+    assert rule_all
+    # amended D-08: the rotated label needs ~22px of band width, so it shows on the all-seasons view
+    assert label_all
+    assert bands_one == 1
+    assert label_one
+    assert drawn_one
+    assert drawn_all == label_all
+    assert rule_one
+    assert bands_filtered == bands_all
+
+
+_REAL_SCORE_AXIS_JS = """
+() => {
+  const gd = document.getElementById('chart');
+  const data = window.__testHooks.data;
+  const tt = Array.from(gd.layout.yaxis.ticktext ?? []);
+  const xt = Array.from(gd.layout.xaxis.ticktext ?? []);
+  const tv = Array.from(gd.layout.yaxis.tickvals ?? []);
+  const yr = gd._fullLayout.yaxis.range;
+  let band = 0;
+  for (const t of gd.data) {
+    const meta = String(t.meta);
+    if (meta.startsWith('unrated-') || meta.startsWith('highlight-unrated')) {
+      for (const v of Array.from(t.x ?? [])) if (v !== null && v !== undefined) band += 1;
+    }
+  }
+  let noTotal = 0;
+  let noMargin = 0;
+  for (let i = 0; i < data.n; i += 1) {
+    if (data.total[i] == null) noTotal += 1;
+    if (data.margin[i] == null) noMargin += 1;
+  }
+  return {
+    lastTick: tt[tt.length - 1], lastXTick: xt[xt.length - 1],
+    lo: yr[0], firstTickval: tv[0], band, noTotal, noMargin,
+  };
+}
+"""
+
+
+def _score_facts(page: Page, open_app: Callable[[Page, str], None], query: str) -> dict[str, Any]:
+    page.set_viewport_size({"width": 1280, "height": 900})
+    open_app(page, query)
+    page.evaluate(_WAIT_TWO_FRAMES)
+    facts: dict[str, Any] = page.evaluate(_REAL_SCORE_AXIS_JS)
+    return facts
+
+
+def test_real_points_and_margin_axes(
+    real_guarded_page: Page,
+    real_open_app: Callable[[Page, str], None],
+) -> None:
+    """04.17 SITE-67/68: Points ends at '120+', Margin at '70+', both start at zero, the bottom
+    band holds exactly the games without a score, and X Excitement stops at '12+'."""
+    pts = _score_facts(real_guarded_page, real_open_app, "?y=points")
+    mar = _score_facts(real_guarded_page, real_open_app, "?y=margin")
+    exc = _score_facts(real_guarded_page, real_open_app, "?axis=excitement&y=points")
+    last_points = pts["lastTick"]
+    last_margin = mar["lastTick"]
+    last_x = exc["lastXTick"]
+    points_zero = pts["lo"] < 0 and pts["firstTickval"] == 0
+    margin_zero = mar["lo"] < 0 and mar["firstTickval"] == 0
+    points_band = int(pts["band"])
+    no_total = int(pts["noTotal"])
+    margin_band = int(mar["band"])
+    no_margin = int(mar["noMargin"])
+    assert last_points == "120+"
+    assert last_margin == "70+"
+    assert points_zero
+    assert margin_zero
+    assert points_band == no_total
+    assert margin_band == no_margin
+    assert last_x == "12+"

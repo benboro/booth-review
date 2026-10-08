@@ -184,8 +184,10 @@ def test_band_geometry(
     gap = got["y2Offset"] - (got["logOffset"] + got["logLength"])
     assert gap == pytest.approx(28, abs=1.5)
     # band rectangle and top edge are appended after the existing shapes
-    rect = got["shapes"][-2]
-    edge = got["shapes"][-1]
+    # (04.17: the Date postseason bands come after both, so drop them first)
+    shapes = [s for s in got["shapes"] if not str(s.get("name", "")).startswith("postseason-")]
+    rect = shapes[-2]
+    edge = shapes[-1]
     assert rect["type"] == "rect" and rect["layer"] == "below" and rect["yref"] == "paper"
     assert rect["y0"] == 0 and rect["y1"] == pytest.approx(got["y2domain"][1])
     assert edge["type"] == "line" and edge["y0"] == edge["y1"] == pytest.approx(got["y2domain"][1])

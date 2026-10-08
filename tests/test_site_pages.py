@@ -85,7 +85,7 @@ def test_render_methodology_includes_known_gaps_demoted_and_no_marker() -> None:
     result = render_methodology(REPO_ROOT / "docs", _fixture_site())
 
     assert 'id="the-2025-excitement-break"' in result
-    assert 'id="the-y-axis-viewers-or-excitement"' in result
+    assert 'id="the-y-axis-viewers-excitement-points-or-margin"' in result
     assert 'id="known-gaps"' in result
     assert "include: known-gaps.md" not in result
     assert 'href="#known-gaps"' in result
@@ -95,6 +95,23 @@ def test_render_methodology_includes_known_gaps_demoted_and_no_marker() -> None:
     assert "<script" not in result
     assert "script-src 'none'" in result
     assert 'href="style.css"' in result
+
+
+def test_render_methodology_explains_caps_points_margin_and_bands() -> None:
+    result = render_methodology(REPO_ROOT / "docs", _fixture_site())
+
+    assert 'id="the-y-axis-viewers-excitement-points-or-margin"' in result
+    for phrase in (
+        "12+",
+        "120+",
+        "70+",
+        "Hover or tap the dot to see its real number",
+        "No final score",
+        "a faint gold band covers each season's bowl games and playoff games",
+    ):
+        assert phrase in result
+    assert "about 23" not in result
+    assert "end of their own season's block" not in result
 
 
 def test_render_methodology_explains_how_filters_display() -> None:

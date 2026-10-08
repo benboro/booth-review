@@ -60,8 +60,8 @@ const EDGE_MARGIN = 8;
  * fallback that can't draw an SVG, puts `text` on its own line too).
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
- * @param {{axis: "spread"|"excitement", y?: "viewers"|"excitement", selected?: Set<number>}} opts
- * @returns {{crew: {name: string, role: string, selected: boolean}[], title: string, dateText: string, gameType: {icons: ("bowl"|"playoff"|"rivalry")[], text: string}|null, networks: {name: string, family: string}[], crewLines: string[], viewersLine: string, axisLine: string, hint: string}}
+ * @param {{axis: "spread"|"excitement", y?: "viewers"|"excitement"|"points"|"margin", selected?: Set<number>}} opts
+ * @returns {{crew: {name: string, role: string, selected: boolean}[], title: string, dateText: string, gameType: {icons: ("bowl"|"playoff"|"rivalry")[], text: string}|null, networks: {name: string, family: string}[], crewLines: string[], viewersLine: string, axisLine: string, scoreLine: string|null, hint: string}}
  */
 export function tooltipModel(data, i, { axis, y = 'viewers', selected = new Set() }) {
   const t = data.t;
@@ -90,9 +90,13 @@ export function tooltipModel(data, i, { axis, y = 'viewers', selected = new Set(
   // (the D-11 swap), and Viewers y is unchanged.
   const lineAxis = y === 'excitement' && axis === 'spread' ? 'date' : axis;
   const axisLine = axisValueText(data, i, lineAxis);
+  // 04.17 D-11: Points and Margin plot a pinned value, so the true one is stated here.
+  // A constant label plus a number or the literal 'not available' (T-04.17-12).
+  const scoreLabel = { points: ['Total points', data.total], margin: ['Margin', data.margin] }[y];
+  const scoreLine = scoreLabel ? `${scoreLabel[0]}: ${scoreLabel[1][i] ?? 'not available'}` : null;
   const hint = 'Click for details →';
 
-  return { title, dateText, gameType, networks, crew, crewLines, viewersLine, axisLine, hint };
+  return { title, dateText, gameType, networks, crew, crewLines, viewersLine, axisLine, scoreLine, hint };
 }
 
 /**
@@ -172,6 +176,11 @@ export function renderTooltipContent(el, model, theme) {
   const axisLine = document.createElement('div');
   axisLine.textContent = model.axisLine;
   children.push(axisLine);
+  if (model.scoreLine != null) {
+    const scoreLine = document.createElement('div');
+    scoreLine.textContent = model.scoreLine;
+    children.push(scoreLine);
+  }
 
   const hint = document.createElement('div');
   hint.className = 'tooltip-hint';

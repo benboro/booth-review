@@ -16,7 +16,7 @@
  * `school` (comma-separated team slugs, ordered by team index), `postseason`
  * (`exclude`/`only`; omitted at the default `all`), `seasons`, `networks`,
  * `slot`, `axis` (`excitement`/`date`; Spread is the default and is omitted), `y`
- * (`excitement`; Viewers is the default and is omitted; y wins over `axis=excitement`, 04.15 D-12), `view` (`bars`/`butterfly`), `by` (`network`/`team`/`conference`);
+ * (`excitement`/`points`/`margin`; Viewers is the default and is omitted; y wins over `axis=excitement`, 04.15 D-12), `view` (`bars`/`butterfly`), `by` (`network`/`team`/`conference`);
  * each of the last two is omitted at its default (D-13). `h2h` (`1`, only with
  * exactly two schools; omitted at Either team) and `dots` (`hide`; omitted at
  * the Fade default; 04.7 D-10, D-14). `game` (one named-game slug: a bowl franchise,
@@ -32,6 +32,8 @@
 import { MAX_COMPARE, defaultState } from './select.js';
 
 /** Canonical time-slot order used both for encoding and decoding the `slot` param. */
+// Y measures a link may name; Viewers is the default and is never encoded (04.17 D-19).
+const Y_VALUES = ['excitement', 'points', 'margin'];
 const SLOT_ORDER = ['noon', 'afternoon', 'prime', 'late'];
 
 /** Whether a network id array equals the full set of primary network ids, order-independent. */
@@ -102,7 +104,7 @@ export function encodeState(state, data) {
   }
 
   if (state.axis === 'excitement' || state.axis === 'date') params.push(['axis', state.axis]);
-  if (state.y === 'excitement') params.push(['y', 'excitement']);
+  if (Y_VALUES.includes(state.y)) params.push(['y', state.y]);
   if (state.view === 'bars' || state.view === 'butterfly') params.push(['view', state.view]);
   if (state.by) params.push(['by', state.by]);
   if (state.dots === 'hide') params.push(['dots', 'hide']);
@@ -303,7 +305,8 @@ export function decodeState(search, data) {
   state.slots = decodeSlots(scalarParam(params, 'slot'));
   const rawAxis = scalarParam(params, 'axis');
   state.axis = ['excitement', 'date'].includes(rawAxis) ? rawAxis : 'spread';
-  state.y = scalarParam(params, 'y') === 'excitement' ? 'excitement' : 'viewers';
+  const rawY = scalarParam(params, 'y');
+  state.y = Y_VALUES.includes(rawY) ? rawY : 'viewers';
   // D-12: a non-default y in a link was picked on purpose, so it wins and x falls back to Spread.
   if (state.y === 'excitement' && state.axis === 'excitement') state.axis = 'spread';
   // view/by are enum-allowlisted but never checked for applicability

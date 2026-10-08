@@ -41,18 +41,23 @@
  * dividers sit between blocks and two label rows (lower ticks, one season
  * annotation per block) are kept right by `fitDateAxis` after every draw.
  * A season filter limits the x range to the shown blocks and drops
- * out-of-range dots from every trace (trace count unchanged).
+ * out-of-range dots from every trace (trace count unchanged). One faint band
+ * per season (04.17, SITE-66) tints its bowl and playoff span, full height behind
+ * the dots and the bottom band; it ignores every filter but the season range. A
+ * single "Bowls & CFP" annotation sits on the rightmost band wide enough to hold
+ * it and `fitDateAxis` moves or hides it with the season labels.
  *
  * `window.Plotly` is referenced only inside `renderChart`/`bindChartEvents`
  * (never at module scope), so `buildFigure`/`naBand`/`hoverText` stay
  * importable from node for quick checks.
  */
 
-import { ACCENT, DIVIDER, DOT_OUTLINE, FAMILY_COLORS, MUTED, PAGE_BG, SURFACE, ZERO_LINE, contrastRatio, familyKey } from './palette.js';
+import { ACCENT, DIVIDER, DOT_OUTLINE, FAMILY_COLORS, MUTED, PAGE_BG, POSTSEASON_BAND, POSTSEASON_LABEL as POSTSEASON_LABEL_COLOR, SURFACE, ZERO_LINE, contrastRatio, familyKey } from './palette.js';
 import { MINUS, escapeHover, logTicks, niceLinearTicks } from './format.js';
 import { tooltipModel } from './tooltip.js';
-import { dateAxisLabels, gapDividers, seasonRange, shownBlocks } from './date-axis.js';
+import { POSTSEASON_LABEL, dateAxisLabels, gapDividers, postseasonBands, postseasonLabel, seasonRange, shownBlocks } from './date-axis.js';
 import { gutterPads } from './gutter.js';
+import { EXCITEMENT_CAP, Y_MEASURES, pin, cappedTicks } from './caps.js';
 
 /**
  * One-line fallback switch (D-22): set to 'plotly' to restore Plotly's own
@@ -123,21 +128,48 @@ const XAXIS_TITLES = {
 /** Y-axis chart titles by y mode (04.15 D-09, D-13). */
 const YAXIS_TITLES = {
   viewers: 'Viewers (log scale)',
-  excitement: 'Excitement index (CFBD)',
+  excitement: Y_MEASURES.excitement.title,
+  points: Y_MEASURES.points.title,
+  margin: Y_MEASURES.margin.title,
 };
 
+/** The y modes that plot a linear measure instead of Viewers (04.15 D-13, 04.17 D-13). */
+const Y_MODES = ['excitement', 'points', 'margin'];
+
 /**
- * The linear Excitement y axis (04.15 D-13): the whole-dataset `xRange.excitement` (no cap,
- * never filter-dependent, 04.7 D-08) padded by the 04.12 10px gutter, with nice ticks.
+ * A linear measure y axis (04.17 D-09/D-12/D-14/D-15): the whole-dataset range (never
+ * filter-dependent, 04.7 D-08) padded by the 04.12 10px gutter, with fixed-step ticks whose
+ * last one reads "<cap>+" when a game is above the cap. Excitement reads
+ * `data.xRange.excitement`, the same capped range X Excitement uses (D-10); Points and Margin
+ * run from 0 to the smaller of the data max and the cap.
+ * @param {object} data - a `prepareData` result.
+ * @param {"excitement"|"points"|"margin"} mode
+ * @param {number} logPx - height in px of the main (non-band) y area.
+ * @returns {{range: [number, number], tickvals: number[], ticktext: string[]}}
+ */
+export function measureYAxis(data, mode, logPx) {
+  const { cap, step } = Y_MEASURES[mode];
+  let lo;
+  let hi;
+  if (mode === 'excitement') {
+    [lo, hi] = data.xRange.excitement;
+  } else {
+    lo = 0;
+    hi = Math.min(data.maxOf[mode] ?? cap, cap);
+  }
+  const [padLo, padHi] = gutterPads(hi - lo, logPx);
+  const { tickvals, ticktext } = cappedTicks(lo, hi, step, cap, data.pinned[mode]);
+  return { range: [lo - padLo, hi + padHi], tickvals, ticktext };
+}
+
+/**
+ * The linear Excitement y axis (04.15 D-13), capped at 12 (04.17 D-09).
  * @param {object} data - a `prepareData` result.
  * @param {number} logPx - height in px of the main (non-band) y area.
  * @returns {{range: [number, number], tickvals: number[], ticktext: string[]}}
  */
 export function excitementYAxis(data, logPx) {
-  const [lo, hi] = data.xRange.excitement;
-  const [padLo, padHi] = gutterPads(hi - lo, logPx);
-  const tickvals = niceLinearTicks(lo, hi, 6);
-  return { range: [lo - padLo, hi + padHi], tickvals, ticktext: tickvals.map(String) };
+  return measureYAxis(data, 'excitement', logPx);
 }
 
 /**
@@ -166,6 +198,11 @@ export function naBand(data, axis, plotPx) {
   if (plotPx !== undefined) {
     const [padLo, padHi] = gutterPads(hi - sentinel, plotPx, { minLo: 0.75 * w, minHi: 0.03 * span });
     range = [sentinel - padLo, hi + padHi];
+  }
+  // 04.17 D-12: Excitement ticks are fixed steps so the cap tick (12 or "12+") always exists.
+  if (axis === 'excitement') {
+    const { tickvals, ticktext } = cappedTicks(lo, hi, Y_MEASURES.excitement.step, EXCITEMENT_CAP, data.pinned.excitement);
+    return { sentinel, divider, range, tickvals, ticktext };
   }
   const tickvals = niceLinearTicks(lo, hi, 6);
   const ticktext = tickvals.map((v) => {
@@ -200,7 +237,7 @@ export function naBand(data, axis, plotPx) {
  * of visible `&lt;br&gt;` markup rather than as actual line breaks.
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
- * @param {{axis: "spread"|"excitement"|"date", theme: "light"|"dark"}} opts
+ * @param {{axis: "spread"|"excitement"|"date", y?: "viewers"|"excitement"|"points"|"margin", theme: "light"|"dark"}} opts
  * @returns {string}
  */
 export function hoverText(data, i, { axis, y, theme }) {
@@ -225,6 +262,7 @@ export function hoverText(data, i, { axis, y, theme }) {
 
   lines.push(escapeHover(model.viewersLine));
   lines.push(escapeHover(model.axisLine));
+  if (model.scoreLine != null) lines.push(escapeHover(model.scoreLine));
   lines.push(escapeHover(model.hint));
 
   return lines.join('<br>');
@@ -262,7 +300,9 @@ export function buildFigure(data, view, state, env) {
     isDate && state.seasons != null && (data.t.season[i] < state.seasons[0] || data.t.season[i] > state.seasons[1]);
   const xOf = (i) => {
     const rawX = isDate ? data.t.dateX[i] : data.t[axis][i];
-    return rawX == null ? band.sentinel : rawX;
+    if (rawX == null) return band.sentinel;
+    // 04.17 D-11: plot-only pin; data.t keeps the true value for tooltip and panel.
+    return axis === 'excitement' ? pin(rawX, EXCITEMENT_CAP) : rawX;
   };
   const theme = env.theme;
   const plotHeight = (env.chartHeight ?? 0) - MARGIN.t - MARGIN.b;
@@ -270,10 +310,18 @@ export function buildFigure(data, view, state, env) {
   // 04.15: which measure is on y. The closures keep the family and highlight loops identical
   // in both modes: in Excitement mode the band holds the games with no excitement value (D-16),
   // everything else is a regular dot at its excitement (D-14).
-  const yMode = state.y === 'excitement' ? 'excitement' : 'viewers';
-  const yOf = (i) => (yMode === 'excitement' ? data.t.excitement[i] : data.t.viewers[i]);
-  const inBand = (i) => (yMode === 'excitement' ? data.t.excitement[i] == null : !data.rated[i]);
-  const bandY = (i) => (yMode === 'excitement' ? data.bandJitter[i] : data.jitter[i]);
+  // 04.17 D-13/D-16: Points and Margin work like Excitement; the band holds the games with no
+  // value for the measure (no final score) at their bandJitter. T-04.17-14: re-check the allowlist.
+  const yMode = Y_MODES.includes(state.y) ? state.y : 'viewers';
+  const valueOf = (i) => {
+    if (yMode === 'viewers') return data.t.viewers[i];
+    if (yMode === 'points') return data.total[i];
+    if (yMode === 'margin') return data.margin[i];
+    return data.t.excitement[i];
+  };
+  const yOf = (i) => (yMode === 'viewers' ? data.t.viewers[i] : pin(valueOf(i), Y_MEASURES[yMode].cap));
+  const inBand = (i) => (yMode === 'viewers' ? !data.rated[i] : valueOf(i) == null);
+  const bandY = (i) => (yMode === 'viewers' ? data.jitter[i] : data.bandJitter[i]);
   const hoverOpts = { axis, y: yMode, theme };
   const tooltipMode = env.tooltipMode ?? TOOLTIP_MODE;
 
@@ -406,7 +454,7 @@ export function buildFigure(data, view, state, env) {
       hovertemplate: null,
       // 04.15 D-14/D-16: in Excitement mode the band holds filled dots like the main traces.
       marker:
-        yMode === 'excitement'
+        yMode !== 'viewers'
           ? { ...inertTraces[inertTraces.length - 1].marker }
           : ringMarker(view.hasPersonSelection ? DOT_OPACITY.inertUnderPerson : DOT_OPACITY.inert),
     });
@@ -425,7 +473,7 @@ export function buildFigure(data, view, state, env) {
       hoverlabel: { bordercolor: color },
       // notes-2 #5 (amends D-03; 04.16: switch is view.enlargeDots): when dots are enlarged a passing unrated game draws exactly
       // like its rated twin (filled 10px family dot, 1px outline); otherwise it stays a ring.
-      marker: yMode === 'excitement'
+      marker: yMode !== 'viewers'
         ? { ...activeTraces[activeTraces.length - 1].marker }
         : view.enlargeDots
         ? {
@@ -601,7 +649,7 @@ export function buildFigure(data, view, state, env) {
   });
 
   const yTicks = logTicks(data.viewersMin, data.viewersMax);
-  const excY = yMode === 'excitement' ? excitementYAxis(data, bandGeo.plotPx * (1 - bandGeo.logBottom)) : null;
+  const excY = yMode !== 'viewers' ? measureYAxis(data, yMode, bandGeo.plotPx * (1 - bandGeo.logBottom)) : null;
 
   let dateAxis = null;
   if (isDate) {
@@ -618,7 +666,13 @@ export function buildFigure(data, view, state, env) {
       marginLeft: MARGIN.l,
       marginRight: MARGIN.r,
     });
-    dateAxis = { blocks, range, mobile: env.mobile, labels };
+    // 04.17 D-06: bands come from the shown blocks only, never from the filtered view.
+    const bands = postseasonBands(blocks, range[1]);
+    const label = postseasonLabel(bands, range, plotPx, {
+      fontSize: env.mobile ? 10 : 12,
+      heightPx: bandGeo.plotPx * (1 - bandGeo.logBottom),
+    });
+    dateAxis = { blocks, range, mobile: env.mobile, labels, bands, label };
   }
 
   const layout = {
@@ -627,7 +681,7 @@ export function buildFigure(data, view, state, env) {
     // 04.15 D-12: a y switch resets the zoom; the suffix is Excitement-only so the default keys hold.
     uirevision:
       (isDate ? 'date:' + (state.seasons ? state.seasons.join('-') : 'all') : state.axis) +
-      (yMode === 'excitement' ? ':y-excitement' : ''),
+      (yMode !== 'viewers' ? ':y-' + yMode : ''),
     paper_bgcolor: PAGE_BG[theme],
     plot_bgcolor: PAGE_BG[theme],
     font: {
@@ -678,11 +732,11 @@ export function buildFigure(data, view, state, env) {
       showgrid: false,
       zeroline: false,
     },
-    yaxis: yMode === 'excitement'
+    yaxis: yMode !== 'viewers'
       ? {
           domain: [bandGeo.logBottom, 1],
           type: 'linear',
-          title: { text: YAXIS_TITLES.excitement },
+          title: { text: YAXIS_TITLES[yMode] },
           tickmode: 'array',
           tickvals: excY.tickvals,
           ticktext: excY.ticktext,
@@ -744,7 +798,26 @@ export function buildFigure(data, view, state, env) {
           showarrow: false,
           captureevents: false,
           font: { size: env.mobile ? 10 : 14, color: ACCENT[theme] },
-        }))
+        })).concat([
+          {
+            // 04.17 D-08: always present so fitDateAxis only toggles x and visible.
+            name: 'postseason-label',
+            text: POSTSEASON_LABEL,
+            x: dateAxis.label ? dateAxis.label.x : dateAxis.range[1],
+            xref: 'x',
+            xanchor: 'right',
+            xshift: -4,
+            textangle: -90,
+            y: bandGeo.logBottom,
+            yref: 'paper',
+            yanchor: 'bottom',
+            yshift: 4,
+            visible: dateAxis.label != null,
+            showarrow: false,
+            captureevents: false,
+            font: { size: env.mobile ? 10 : 12, color: POSTSEASON_LABEL_COLOR[theme] },
+          },
+        ])
       : [
           {
             text: 'N/A',
@@ -814,6 +887,27 @@ export function buildFigure(data, view, state, env) {
     },
   );
 
+  // 04.17 D-04: the postseason bands go last so the opaque SURFACE rect above cannot paint
+  // over the tint in the bottom band; one piece across the plot, gap row and band. Never
+  // `between`, and existing shape indices stay put.
+  if (isDate) {
+    for (const b of dateAxis.bands) {
+      layout.shapes.push({
+        type: 'rect',
+        name: `postseason-${b.season}`,
+        xref: 'x',
+        x0: b.x0,
+        x1: b.x1,
+        yref: 'paper',
+        y0: 0,
+        y1: 1,
+        layer: 'below',
+        fillcolor: POSTSEASON_BAND[theme],
+        line: { width: 0 },
+      });
+    }
+  }
+
   const config = {
     responsive: true,
     displaylogo: false,
@@ -826,7 +920,7 @@ export function buildFigure(data, view, state, env) {
   };
 
   const bandInfo = { bandTop: bandGeo.bandTop, logBottom: bandGeo.logBottom, bandPx: bandGeo.bandPx, gapPx: bandGeo.gapPx };
-  return { traces, layout, config, band: bandInfo, dateAxis: isDate ? { blocks: dateAxis.blocks, range: dateAxis.range, mobile: env.mobile } : null };
+  return { traces, layout, config, band: bandInfo, dateAxis: isDate ? { blocks: dateAxis.blocks, range: dateAxis.range, mobile: env.mobile, bands: dateAxis.bands } : null };
 }
 
 /**
@@ -1020,7 +1114,8 @@ export function seasonLabelMeasurer(gd) {
  * leave them because `buildFigure` sets `xaxis.minallowed`/`maxallowed`,
  * which Plotly applies before drawing, so there is nothing to clamp here.
  * Otherwise relayouts only the tick and season-label values that differ from
- * the pure `dateAxisLabels` rule. Compare-before-relayout means the
+ * the pure `dateAxisLabels` rule, plus the "Bowls & CFP" label's x and visibility
+ * from `postseasonLabel` (04.17 D-08). Compare-before-relayout means the
  * `plotly_afterplot` this triggers finds nothing to change: it never loops.
  * @param {HTMLElement} gd
  */
@@ -1058,6 +1153,18 @@ export function fitDateAxis(gd) {
     if (a.text !== `<b>${s.label}</b>`) update[`annotations[${idx}].text`] = `<b>${s.label}</b>`;
     if ((a.visible ?? true) !== s.visible) update[`annotations[${idx}].visible`] = s.visible;
   });
+  // 04.17 D-08: the "Bowls & CFP" label rides the same single relayout.
+  const lIdx = anns.findIndex((a) => a.name === 'postseason-label');
+  if (lIdx >= 0) {
+    const ya = gd._fullLayout.yaxis;
+    const fit = postseasonLabel(meta.bands ?? [], xa.range, xa._length, {
+      fontSize: meta.mobile ? 10 : 12,
+      heightPx: ya?._length,
+    });
+    const la = anns[lIdx];
+    if (fit && Math.abs((la.x ?? 0) - fit.x) > 0.01) update[`annotations[${lIdx}].x`] = fit.x;
+    if ((la.visible ?? true) !== (fit != null)) update[`annotations[${lIdx}].visible`] = fit != null;
+  }
   if (Object.keys(update).length > 0) window.Plotly.relayout(gd, update);
 }
 
