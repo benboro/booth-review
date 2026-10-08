@@ -2,11 +2,14 @@
 field the Phase 4 static site needs, fixed before any join code exists.
 
 Every model uses `extra="forbid"` so an undeclared field (a CFBD
-classification, venue, win probability, or any other bulk field the site
-never shows) fails validation instead of silently shipping (SITE-19, CFBD
+classification, a per-game raw `venue` string, win probability, or any other
+bulk field the site never shows) fails validation instead of silently shipping (SITE-19, CFBD
 terms). Every model is `strict=True` so a stringified number never silently
 coerces, and `frozen=True` since a validated `SiteData` is a read-only
 snapshot of the build output, never mutated after validation.
+
+Venues ship only as the `lookups.venues` display table that each game's `place`
+index references (CFBD fields shown in the chart, confirmed 2026-09-25).
 """
 
 from __future__ import annotations
@@ -17,7 +20,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = "2.2.0"
+SCHEMA_VERSION = "2.3.0"
 
 _S506_HOST = "506sports.com"
 
@@ -152,6 +155,19 @@ class RivalryRef(BaseModel):
         return self
 
 
+class VenueRef(BaseModel):
+    """A venue some shipped game was played at, with usable coordinates (04.18)."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    name: str
+    city: str | None
+    state: str | None
+    country: str | None
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+
+
 class PersonRef(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
@@ -198,6 +214,7 @@ class Lookups(BaseModel):
     bowls: list[BowlRef]
     bowl_franchises: list[BowlFranchiseRef]
     rivalries: list[RivalryRef]
+    venues: list[VenueRef]
 
 
 class TelecastColumns(BaseModel):
@@ -249,6 +266,10 @@ class TelecastColumns(BaseModel):
     # curated rivalry's two teams in a season, conference title games excluded (04.9 D-13),
     # resolved by the build
     rivalry: list[int | None]
+    # Index into lookups.venues: the game's own CFBD venue, so neutral sites use the venue's
+    # location; null when the game has no venue id or its venue has no usable location
+    # (04.18 D-16)
+    place: list[int | None]
 
 
 class UnratedColumns(BaseModel):
@@ -288,6 +309,10 @@ class UnratedColumns(BaseModel):
     away_conference: list[int | None]
     bowl: list[int | None]
     rivalry: list[int | None]
+    # Index into lookups.venues: the game's own CFBD venue, so neutral sites use the venue's
+    # location; null when the game has no venue id or its venue has no usable location
+    # (04.18 D-16)
+    place: list[int | None]
     # 04.13 D-10: why the game has no figure. An enum only; the wording lives in
     # site/modules/format.js, never in the data.
     cause: list[Literal["rarely_rated", "pending", "rr_dip", "none"]]
@@ -316,7 +341,7 @@ class CoverageRow(BaseModel):
 class SiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["2.2.0"]
+    schema_version: Literal["2.3.0"]
     generated_at: str
     freshness: Freshness
     lookups: Lookups
@@ -385,9 +410,10 @@ class SiteData(BaseModel):
             if any(not 0 <= t < num_teams for t in rivalry_ref.teams):
                 raise ValueError(f"lookups.rivalries[{k}].teams: team index out of range")
         referenced_rivalries: set[int] = set()
+        referenced_venues: set[int] = set()
 
         for i in range(n):
-            self._check_game_row("telecasts", tc, i, referenced_rivalries)
+            self._check_game_row("telecasts", tc, i, referenced_rivalries, referenced_venues)
             for j, flag_index in enumerate(tc.flags[i]):
                 if not 0 <= flag_index < num_flags:
                     raise ValueError(f"telecasts.flags[{i}][{j}]: flag index out of range")
@@ -412,7 +438,9 @@ class SiteData(BaseModel):
                     f"telecasts_unrated.season length {un}"
                 )
         for i in range(un):
-            self._check_game_row("telecasts_unrated", uc, i, referenced_rivalries)
+            self._check_game_row(
+                "telecasts_unrated", uc, i, referenced_rivalries, referenced_venues
+            )
             if self.lookups.networks[uc.network[i]].id == "unmapped":
                 raise ValueError(
                     f"telecasts_unrated.network[{i}]: an unrated game needs a resolved network"
@@ -435,6 +463,10 @@ class SiteData(BaseModel):
             if k not in referenced_rivalries:
                 raise ValueError(f"lookups.rivalries[{k}]: not referenced by any telecast")
 
+        for k in range(len(self.lookups.venues)):
+            if k not in referenced_venues:
+                raise ValueError(f"lookups.venues[{k}]: not referenced by any game")
+
         for i, row in enumerate(self.coverage):
             if row.network is not None and not 0 <= row.network < num_networks:
                 raise ValueError(f"coverage[{i}].network: network index out of range")
@@ -451,6 +483,7 @@ class SiteData(BaseModel):
         cols: TelecastColumns | UnratedColumns,
         i: int,
         referenced_rivalries: set[int],
+        referenced_venues: set[int],
     ) -> None:
         """The per-row checks both blocks share. Messages carry the block name,
         column and position only, never a cell value (T-03-04)."""
@@ -513,6 +546,11 @@ class SiteData(BaseModel):
             if pair != lk.rivalries[rivalry].teams:
                 raise ValueError(f"{block}.rivalry[{i}]: teams do not match the rivalry")
             referenced_rivalries.add(rivalry)
+        place = cols.place[i]
+        if place is not None:
+            if not 0 <= place < len(lk.venues):
+                raise ValueError(f"{block}.place[{i}]: venue index out of range")
+            referenced_venues.add(place)
 
 
 def validate_site_data(obj: object) -> SiteData:

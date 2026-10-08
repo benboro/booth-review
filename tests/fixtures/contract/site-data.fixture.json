@@ -1,5 +1,5 @@
 {
-  "schema_version": "2.2.0",
+  "schema_version": "2.3.0",
   "generated_at": "2026-01-01T00:00:00Z",
   "freshness": {
     "season": 2026,
@@ -263,6 +263,80 @@
           0,
           1
         ]
+      }
+    ],
+    "venues": [
+      {
+        "name": "Northfield Stadium",
+        "city": "Lincoln",
+        "state": "NE",
+        "country": "US",
+        "lat": 40.8206,
+        "lon": -96.7056
+      },
+      {
+        "name": "Lakeview Bowl",
+        "city": "Ann Arbor",
+        "state": "MI",
+        "country": "US",
+        "lat": 42.2658,
+        "lon": -83.7487
+      },
+      {
+        "name": "Ironpeak Field",
+        "city": "Boulder",
+        "state": "CO",
+        "country": "US",
+        "lat": 40.0095,
+        "lon": -105.2669
+      },
+      {
+        "name": "Foxhollow Park",
+        "city": "Atlanta",
+        "state": "GA",
+        "country": "US",
+        "lat": 33.7554,
+        "lon": -84.4008
+      },
+      {
+        "name": "Boulder Pass Field",
+        "city": "Honolulu",
+        "state": "HI",
+        "country": "US",
+        "lat": 21.3729,
+        "lon": -157.9301
+      },
+      {
+        "name": "Stonebridge Stadium",
+        "city": "Pasadena",
+        "state": "CA",
+        "country": "US",
+        "lat": 34.1613,
+        "lon": -118.1676
+      },
+      {
+        "name": "Maplecrest Field",
+        "city": "Orlando",
+        "state": "FL",
+        "country": "US",
+        "lat": 28.5392,
+        "lon": -81.4029
+      },
+      {
+        "name": "Harbour Park",
+        "city": "Dublin",
+        "state": null,
+        "country": "IE",
+        "lat": 53.3352,
+        "lon": -6.2285
+      },
+      {
+        "name": "Island Stadium",
+        "city": "Nassau",
+        "state": null,
+        "country": "BS",
+        "lat": 25.048,
+        "lon": -77.3554
       }
     ]
   },
@@ -918,6 +992,20 @@
       null,
       null,
       0
+    ],
+    "place": [
+      0,
+      2,
+      4,
+      3,
+      1,
+      3,
+      5,
+      6,
+      2,
+      3,
+      4,
+      6
     ]
   },
   "telecasts_unrated": {
@@ -1247,6 +1335,16 @@
       null,
       null,
       null
+    ],
+    "place": [
+      4,
+      2,
+      5,
+      8,
+      3,
+      7,
+      null,
+      5
     ],
     "cause": [
       "none",

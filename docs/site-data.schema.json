@@ -347,6 +347,13 @@
           },
           "title": "Teams",
           "type": "array"
+        },
+        "venues": {
+          "items": {
+            "$ref": "#/$defs/VenueRef"
+          },
+          "title": "Venues",
+          "type": "array"
         }
       },
       "required": [
@@ -358,7 +365,8 @@
         "conferences",
         "bowls",
         "bowl_franchises",
-        "rivalries"
+        "rivalries",
+        "venues"
       ],
       "title": "Lookups",
       "type": "object"
@@ -758,6 +766,20 @@
           "title": "Outlets",
           "type": "array"
         },
+        "place": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Place",
+          "type": "array"
+        },
         "playoff_round": {
           "items": {
             "anyOf": [
@@ -911,7 +933,8 @@
         "home_conference",
         "away_conference",
         "bowl",
-        "rivalry"
+        "rivalry",
+        "place"
       ],
       "title": "TelecastColumns",
       "type": "object"
@@ -1168,6 +1191,20 @@
           "title": "Outlets",
           "type": "array"
         },
+        "place": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Place",
+          "type": "array"
+        },
         "playoff_round": {
           "items": {
             "anyOf": [
@@ -1270,13 +1307,79 @@
         "away_conference",
         "bowl",
         "rivalry",
+        "place",
         "cause"
       ],
       "title": "UnratedColumns",
       "type": "object"
+    },
+    "VenueRef": {
+      "additionalProperties": false,
+      "description": "A venue some shipped game was played at, with usable coordinates (04.18).",
+      "properties": {
+        "city": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "City"
+        },
+        "country": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Country"
+        },
+        "lat": {
+          "maximum": 90,
+          "minimum": -90,
+          "title": "Lat",
+          "type": "number"
+        },
+        "lon": {
+          "maximum": 180,
+          "minimum": -180,
+          "title": "Lon",
+          "type": "number"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "State"
+        }
+      },
+      "required": [
+        "name",
+        "city",
+        "state",
+        "country",
+        "lat",
+        "lon"
+      ],
+      "title": "VenueRef",
+      "type": "object"
     }
   },
-  "$id": "booth-review/site-data/2.2.0",
+  "$id": "booth-review/site-data/2.3.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -1298,7 +1401,7 @@
       "$ref": "#/$defs/Lookups"
     },
     "schema_version": {
-      "const": "2.2.0",
+      "const": "2.3.0",
       "title": "Schema Version",
       "type": "string"
     },
