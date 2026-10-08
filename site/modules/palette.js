@@ -136,6 +136,12 @@ export const DIVIDER = { light: '#E2E4E9', dark: '#2A2E35' };
  */
 export const POSTSEASON_BAND = { light: 'rgba(166, 120, 40, 0.07)', dark: 'rgba(212, 160, 60, 0.12)' };
 
+/**
+ * "Bowls & CFP" label text: a darker tint of the band hue on light, a lighter one on dark
+ * (04.17 D-08, amended). 7.3:1 on the blended light plot, 8.5:1 on the blended dark plot.
+ */
+export const POSTSEASON_LABEL = { light: '#6E4A10', dark: '#E8BE6E' };
+
 /** UI chrome page background token per theme. */
 export const PAGE_BG = { light: '#FFFFFF', dark: '#14161A' };
 

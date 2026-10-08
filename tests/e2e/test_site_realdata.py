@@ -1554,7 +1554,8 @@ _POSTSEASON_FACTS_JS = """
     const anns = gd.layout.annotations || [];
     const la = anns.find((a) => a.name === 'postseason-label');
     const px = gd._fullLayout.xaxis._length;
-    const fit = A.postseasonLabel(gd.boothDateAxis.bands, rng, px, { fontSize: 12 });
+    const fit = A.postseasonLabel(gd.boothDateAxis.bands, rng, px, {
+      fontSize: 12, heightPx: gd._fullLayout.yaxis._length });
     const visible = la ? (la.visible ?? true) : false;
     const ruleMatches = fit == null ? !visible : (visible && Math.abs(la.x - fit.x) < 0.01);
     return {
@@ -1564,6 +1565,8 @@ _POSTSEASON_FACTS_JS = """
       afterSurface: surfaceIdx >= 0 && bandIdx.every((i) => i > surfaceIdx),
       ruleMatches,
       labelVisible: visible,
+      labelDrawn: Array.from(document.querySelectorAll('#chart .annotation'))
+        .some((e) => e.textContent.trim() === 'Bowls & CFP'),
       latest: Math.max(...Array.from(seasons)),
     };
   });
@@ -1588,6 +1591,7 @@ def test_real_postseason_bands_and_label(
     after_surface = bool(a["afterSurface"])
     rule_all = bool(a["ruleMatches"])
     label_all = bool(a["labelVisible"])
+    drawn_all = bool(a["labelDrawn"])
     latest = int(a["latest"])
     print(f"real postseason bands: {bands_all}, label visible (all seasons): {label_all}")
     real_open_app(real_guarded_page, f"?axis=date&seasons={latest}-{latest}")
@@ -1595,6 +1599,7 @@ def test_real_postseason_bands_and_label(
     b: dict[str, Any] = real_guarded_page.evaluate(_POSTSEASON_FACTS_JS)
     bands_one = int(b["bands"])
     label_one = bool(b["labelVisible"])
+    drawn_one = bool(b["labelDrawn"])
     rule_one = bool(b["ruleMatches"])
     real_open_app(real_guarded_page, "?axis=date&postseason=exclude&dots=hide")
     real_guarded_page.evaluate(_WAIT_TWO_FRAMES)
@@ -1604,8 +1609,12 @@ def test_real_postseason_bands_and_label(
     assert edges_ok
     assert after_surface
     assert rule_all
+    # amended D-08: the rotated label needs ~22px of band width, so it shows on the all-seasons view
+    assert label_all
     assert bands_one == 1
     assert label_one
+    assert drawn_one
+    assert drawn_all == label_all
     assert rule_one
     assert bands_filtered == bands_all
 

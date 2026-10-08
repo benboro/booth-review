@@ -52,7 +52,7 @@
  * importable from node for quick checks.
  */
 
-import { ACCENT, DIVIDER, DOT_OUTLINE, FAMILY_COLORS, MUTED, PAGE_BG, POSTSEASON_BAND, SURFACE, ZERO_LINE, contrastRatio, familyKey } from './palette.js';
+import { ACCENT, DIVIDER, DOT_OUTLINE, FAMILY_COLORS, MUTED, PAGE_BG, POSTSEASON_BAND, POSTSEASON_LABEL as POSTSEASON_LABEL_COLOR, SURFACE, ZERO_LINE, contrastRatio, familyKey } from './palette.js';
 import { MINUS, escapeHover, logTicks, niceLinearTicks } from './format.js';
 import { tooltipModel } from './tooltip.js';
 import { POSTSEASON_LABEL, dateAxisLabels, gapDividers, postseasonBands, postseasonLabel, seasonRange, shownBlocks } from './date-axis.js';
@@ -668,7 +668,10 @@ export function buildFigure(data, view, state, env) {
     });
     // 04.17 D-06: bands come from the shown blocks only, never from the filtered view.
     const bands = postseasonBands(blocks, range[1]);
-    const label = postseasonLabel(bands, range, plotPx, { fontSize: env.mobile ? 10 : 12 });
+    const label = postseasonLabel(bands, range, plotPx, {
+      fontSize: env.mobile ? 10 : 12,
+      heightPx: bandGeo.plotPx * (1 - bandGeo.logBottom),
+    });
     dateAxis = { blocks, range, mobile: env.mobile, labels, bands, label };
   }
 
@@ -800,17 +803,19 @@ export function buildFigure(data, view, state, env) {
             // 04.17 D-08: always present so fitDateAxis only toggles x and visible.
             name: 'postseason-label',
             text: POSTSEASON_LABEL,
-            x: dateAxis.label ? dateAxis.label.x : (dateAxis.range[0] + dateAxis.range[1]) / 2,
+            x: dateAxis.label ? dateAxis.label.x : dateAxis.range[1],
             xref: 'x',
-            xanchor: 'center',
-            y: 1,
+            xanchor: 'right',
+            xshift: -4,
+            textangle: -90,
+            y: bandGeo.logBottom,
             yref: 'paper',
-            yanchor: 'top',
-            yshift: -4,
+            yanchor: 'bottom',
+            yshift: 4,
             visible: dateAxis.label != null,
             showarrow: false,
             captureevents: false,
-            font: { size: env.mobile ? 10 : 12, color: MUTED[theme] },
+            font: { size: env.mobile ? 10 : 12, color: POSTSEASON_LABEL_COLOR[theme] },
           },
         ])
       : [
@@ -1151,7 +1156,11 @@ export function fitDateAxis(gd) {
   // 04.17 D-08: the "Bowls & CFP" label rides the same single relayout.
   const lIdx = anns.findIndex((a) => a.name === 'postseason-label');
   if (lIdx >= 0) {
-    const fit = postseasonLabel(meta.bands ?? [], xa.range, xa._length, { fontSize: meta.mobile ? 10 : 12 });
+    const ya = gd._fullLayout.yaxis;
+    const fit = postseasonLabel(meta.bands ?? [], xa.range, xa._length, {
+      fontSize: meta.mobile ? 10 : 12,
+      heightPx: ya?._length,
+    });
     const la = anns[lIdx];
     if (fit && Math.abs((la.x ?? 0) - fit.x) > 0.01) update[`annotations[${lIdx}].x`] = fit.x;
     if ((la.visible ?? true) !== (fit != null)) update[`annotations[${lIdx}].visible`] = fit != null;

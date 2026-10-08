@@ -124,7 +124,15 @@ async () => {
     wide: A.postseasonLabel(bands, [0, 100], 1000, { fontSize: 12 }),
     narrow: A.postseasonLabel(bands, [0, 100], 100, { fontSize: 12 }),
     clippedFits: A.postseasonLabel(bands, [0, 15], 2000, { fontSize: 12 }),
-    clippedTight: A.postseasonLabel(bands, [0, 15], 200, { fontSize: 12 }),
+    clippedTight: A.postseasonLabel(bands, [0, 15], 40, { fontSize: 12 }),
+    phone: A.postseasonLabel(bands, [0, 100], 1000, { fontSize: 10 }),
+    phoneNarrow: A.postseasonLabel(bands, [0, 100], 150, { fontSize: 10 }),
+    tall: A.postseasonLabel(bands, [0, 100], 1000, { fontSize: 12, heightPx: 90 }),
+    short: A.postseasonLabel(bands, [0, 100], 1000, { fontSize: 12, heightPx: 89 }),
+    measuredTall: A.postseasonLabel(
+      bands, [0, 100], 3000, { fontSize: 12, measure: () => 40, heightPx: 51 }),
+    measuredShort: A.postseasonLabel(
+      bands, [0, 100], 3000, { fontSize: 12, measure: () => 40, heightPx: 50 }),
     measured: A.postseasonLabel(bands, [0, 100], 3000, { fontSize: 12, measure: () => 40 }),
     outside: A.postseasonLabel(bands, [60, 100], 3000, { fontSize: 12 }),
     empty: A.postseasonLabel([], [0, 100], 1000, { fontSize: 12 }),
@@ -136,21 +144,34 @@ async () => {
 def test_label_picks_rightmost_band_that_fits(app_page: Page) -> None:
     out = app_page.evaluate(_LABEL_JS)
     assert out["text"] == "Bowls & CFP"
-    assert out["wide"] == {"season": 2020, "x": 15}
+    # the 2021 band is 20px wide, under the 22.5px the rotated label needs; 2020 is 100px
+    assert out["wide"] == {"season": 2020, "x": 20}
     assert out["narrow"] is None
     assert out["empty"] is None
+    # phone: thickness 10 + 2.5 + 8 = 20.5, so the 20px 2021 band is still too narrow
+    assert out["phone"] == {"season": 2020, "x": 20}
+    assert out["phoneNarrow"] is None
+
+
+def test_label_needs_main_plot_height_for_its_length(app_page: Page) -> None:
+    out = app_page.evaluate(_LABEL_JS)
+    # default estimate: 0.6 * 12 * 11 = 79.2 text + 2.5 pad + 8 insets = 89.7
+    assert out["tall"] == {"season": 2020, "x": 20}
+    assert out["short"] is None
+    assert out["measuredTall"] == {"season": 2021, "x": 52}
+    assert out["measuredShort"] is None
 
 
 def test_label_clips_to_visible_range(app_page: Page) -> None:
     out = app_page.evaluate(_LABEL_JS)
-    assert out["clippedFits"] == {"season": 2020, "x": 12.5}
+    assert out["clippedFits"] == {"season": 2020, "x": 15}
     assert out["clippedTight"] is None
     assert out["outside"] is None
 
 
 def test_label_uses_measure_hook(app_page: Page) -> None:
     out = app_page.evaluate(_LABEL_JS)
-    assert out["measured"] == {"season": 2021, "x": 51}
+    assert out["measured"] == {"season": 2021, "x": 52}
 
 
 # --- palette contrast --------------------------------------------------------
@@ -160,6 +181,7 @@ async () => {
   const P = await import('./modules/palette.js');
   return {
     band: P.POSTSEASON_BAND,
+    labelColor: P.POSTSEASON_LABEL,
     fam: P.FAMILY_COLORS,
     surface: P.SURFACE,
     pageBg: P.PAGE_BG,
@@ -216,6 +238,19 @@ def test_dots_keep_contrast_on_blended_band(
         assert ratio >= floor - 0.01, (theme, surface, family, ratio)
 
 
+@pytest.mark.parametrize(("theme", "floor"), [("light", 4.5), ("dark", 4.5)])
+def test_label_text_has_contrast_on_blended_band(app_page: Page, theme: str, floor: float) -> None:
+    pal = app_page.evaluate(_PALETTE_JS)
+    assert pal["labelColor"] == {"light": "#6E4A10", "dark": "#E8BE6E"}
+    blended = _blend(pal["band"][theme], pal["pageBg"][theme])
+    assert _contrast(app_page, pal["labelColor"][theme], blended) >= floor
+    # a darker tint on light, a lighter one on dark, relative to the band's own hue
+    band = _parse_rgba(pal["band"][theme])
+    label = int(pal["labelColor"][theme][1:], 16)
+    brightness = sum((label >> s) & 255 for s in (0, 8, 16))
+    assert (brightness < sum(band[:3])) if theme == "light" else (brightness > sum(band[:3]))
+
+
 # --- rendered bands ----------------------------------------------------------
 
 _SHAPES_JS = """
@@ -259,8 +294,9 @@ _ANN_JS = """
     count: anns.filter((q) => q.name === 'postseason-label').length,
     ann: a ? { text: a.text, x: a.x, visible: a.visible, capture: a.captureevents,
       color: a.font.color, size: a.font.size, y: a.y, yref: a.yref, yanchor: a.yanchor,
-      yshift: a.yshift } : null,
-    range: xa.range.slice(), length: xa._length,
+      yshift: a.yshift, xanchor: a.xanchor, xshift: a.xshift, textangle: a.textangle } : null,
+    range: xa.range.slice(), length: xa._length, height: gd._fullLayout.yaxis._length,
+    domain: gd.layout.yaxis.domain.slice(),
     bands: gd.boothDateAxis.bands,
     mobile: gd.boothDateAxis.mobile,
   };
@@ -375,6 +411,14 @@ def test_dark_theme_uses_dark_tint(
     assert all(b["fillcolor"] == "rgba(212, 160, 60, 0.12)" for b in bands)
 
 
+def test_dark_theme_label_uses_light_tint(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    guarded_page.emulate_media(color_scheme="dark")
+    _open(guarded_page, open_app, "?axis=date")
+    assert guarded_page.evaluate(_ANN_JS)["ann"]["color"] == "#E8BE6E"
+
+
 def test_trace_count_matches_other_axes(date_page: Page) -> None:
     n = date_page.evaluate(_SHAPES_JS)["traces"]
     date_page.evaluate("() => window.__testHooks.setState({ axis: 'spread' })")
@@ -389,7 +433,12 @@ def _label_matches_pure_rule(page: Page) -> dict:  # type: ignore[type-arg]
     got = page.evaluate(_ANN_JS)
     fit = page.evaluate(
         _FIT_JS,
-        [got["bands"], got["range"], got["length"], {"fontSize": 10 if got["mobile"] else 12}],
+        [
+            got["bands"],
+            got["range"],
+            got["length"],
+            {"fontSize": 10 if got["mobile"] else 12, "heightPx": got["height"]},
+        ],
     )
     ann = got["ann"]
     assert ann is not None
@@ -405,9 +454,13 @@ def test_label_annotation_is_always_present_with_fixed_style(date_page: Page) ->
     assert got["count"] == 1
     assert ann["text"] == "Bowls & CFP"
     assert ann["capture"] is False
-    assert ann["color"] == "#4B5563"
+    assert ann["color"] == "#6E4A10"
     assert ann["size"] == 12
-    assert (ann["y"], ann["yref"], ann["yanchor"], ann["yshift"]) == (1, "paper", "top", -4)
+    # rotated bottom-to-top, bottom right of the band, just above the gap row / bottom band
+    assert ann["textangle"] == -90
+    assert (ann["xanchor"], ann["xshift"]) == ("right", -4)
+    assert (ann["yref"], ann["yanchor"], ann["yshift"]) == ("paper", "bottom", 4)
+    assert ann["y"] == pytest.approx(got["domain"][0], abs=1e-6)
     _label_matches_pure_rule(date_page)
 
 
@@ -433,57 +486,82 @@ def test_label_follows_zoom_and_hides_when_no_band_fits(date_page: Page) -> None
     assert got["ann"]["visible"] is False
 
 
-def test_label_hidden_at_home_when_every_band_is_narrow(date_page: Page) -> None:
+def test_label_shows_at_home_in_the_rightmost_band(date_page: Page) -> None:
     got = _label_matches_pure_rule(date_page)
-    # Fixture bands are a few dozen px wide at home on a 1280 viewport.
-    assert got["ann"]["visible"] is False
+    # The rotated label needs ~22px of band width, so it fits at home on a 1280 viewport.
+    assert got["ann"]["visible"] is True
+    assert got["ann"]["x"] == pytest.approx(got["bands"][-1]["x1"], abs=0.01)
+
+
+_BBOX_JS = """
+(band) => {
+  const gd = document.getElementById('chart');
+  const xa = gd._fullLayout.xaxis;
+  const ya = gd._fullLayout.yaxis;
+  const svg = document.querySelector('#chart svg.main-svg').getBoundingClientRect();
+  const px = (x) => svg.left + xa._offset + xa.l2p(x);
+  const label = [...document.querySelectorAll('#chart .annotation')]
+    .find((el) => el.textContent.trim() === 'Bowls & CFP');
+  if (!label) return { found: false };
+  const r = label.querySelector('text').getBoundingClientRect();
+  const seasons = [...document.querySelectorAll('#chart .annotation')]
+    .filter((el) => /^'?\\d{2,4}$/.test(el.textContent.trim()))
+    .map((el) => el.querySelector('text').getBoundingClientRect());
+  const overlaps = seasons.some((s) =>
+    r.left < s.right && r.right > s.left && r.top < s.bottom && r.bottom > s.top);
+  return {
+    found: true, left: r.left, right: r.right, top: r.top, bottom: r.bottom,
+    width: r.width, height: r.height,
+    bandLeft: px(band.x0), bandRight: px(band.x1),
+    plotLeft: svg.left + xa._offset, plotRight: svg.left + xa._offset + xa._length,
+    mainTop: svg.top + ya._offset, mainBottom: svg.top + ya._offset + ya._length,
+    overlaps,
+  };
+}
+"""
 
 
 @pytest.mark.parametrize("font", ["default", "dejavu"])
-def test_label_text_fits_inside_its_band_and_clears_season_labels(
-    guarded_page: Page, open_app: Callable[[Page, str], None], font: str
+@pytest.mark.parametrize("zoomed", [False, True])
+def test_label_is_rotated_and_inside_band_and_main_plot(
+    guarded_page: Page, open_app: Callable[[Page, str], None], font: str, zoomed: bool
 ) -> None:
     from test_site_date_axis import force_chart_font
 
     force_chart_font(guarded_page, font)
     _open(guarded_page, open_app, "?axis=date")
-    bands = guarded_page.evaluate(_SHAPES_JS)["bands"]
-    b25 = bands[-1]
-    guarded_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [b25["x0"] - 3, b25["x1"]]})
-    _settle(guarded_page)
-    out = guarded_page.evaluate(
-        """
-        (band) => {
-          const gd = document.getElementById('chart');
-          const xa = gd._fullLayout.xaxis;
-          const svg = document.querySelector('#chart svg.main-svg').getBoundingClientRect();
-          const px = (x) => svg.left + xa._offset + xa.l2p(x);
-          const label = [...document.querySelectorAll('#chart .annotation')]
-            .find((el) => el.textContent.trim() === 'Bowls & CFP');
-          if (!label) return { found: false };
-          const r = label.querySelector('text').getBoundingClientRect();
-          const seasons = [...document.querySelectorAll('#chart .annotation')]
-            .filter((el) => /^'?\\d{2,4}$/.test(el.textContent.trim()))
-            .map((el) => el.querySelector('text').getBoundingClientRect());
-          const overlaps = seasons.some((s) =>
-            r.left < s.right && r.right > s.left && r.top < s.bottom && r.bottom > s.top);
-          return {
-            found: true, left: r.left, right: r.right, width: r.width,
-            bandLeft: px(band.x0), bandRight: px(band.x1),
-            plotLeft: svg.left + xa._offset, plotRight: svg.left + xa._offset + xa._length,
-            overlaps,
-          };
-        }
-        """,
-        b25,
-    )
-    assert out["found"]
-    assert out["width"] > 0
+    b25 = guarded_page.evaluate(_SHAPES_JS)["bands"][-1]
+    if zoomed:
+        guarded_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [b25["x0"] - 3, b25["x1"]]})
+        _settle(guarded_page)
+    out = guarded_page.evaluate(_BBOX_JS, b25)
+    assert out["found"], out
+    # rotated: taller than wide, reading bottom-to-top
+    assert out["height"] > out["width"] > 0, out
     lo = max(out["bandLeft"], out["plotLeft"])
     hi = min(out["bandRight"], out["plotRight"])
     assert out["left"] >= lo - 0.5, out
     assert out["right"] <= hi + 0.5, out
+    # at the bottom right: right edge a few px in from the band's right edge
+    assert hi - out["right"] <= 12, out
+    # inside the main plot, above the gap row / bottom band, not below its bottom edge
+    assert out["bottom"] <= out["mainBottom"] + 0.5, out
+    assert out["mainBottom"] - out["bottom"] <= 12, out
+    assert out["top"] >= out["mainTop"] - 0.5, out
     assert out["overlaps"] is False
+
+
+@pytest.mark.parametrize("query", ["?axis=date&seasons=2021-2025", "?axis=date&seasons=2025-2025"])
+def test_label_is_drawn_when_the_band_ends_at_the_range_edge(
+    guarded_page: Page, open_app: Callable[[Page, str], None], query: str
+) -> None:
+    # Plotly drops an annotation whose x is past the range end, so a label placed at a
+    # rounded-up band edge is "visible" in the layout yet never drawn.
+    _open(guarded_page, open_app, query)
+    b25 = guarded_page.evaluate(_SHAPES_JS)["bands"][-1]
+    out = guarded_page.evaluate(_BBOX_JS, b25)
+    assert out["found"], out
+    assert out["height"] > out["width"] > 0, out
 
 
 def test_fit_hook_settles_with_label(date_page: Page) -> None:

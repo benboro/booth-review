@@ -164,24 +164,31 @@ export function postseasonBands(blocks, rightEdge) {
 }
 
 /**
- * Where the single "Bowls & CFP" label sits (04.17 D-08): the rightmost band whose
- * visible pixel width holds the text plus its box pad, centered on the visible part.
+ * Where the single rotated "Bowls & CFP" label sits (04.17 D-08, amended): bottom-to-top
+ * at the bottom right of the rightmost band that fits. `x` is the band's visible right
+ * edge (the chart insets it a few px). A band fits when its visible pixel width holds the
+ * label's thickness (font size plus box pad plus the right inset) and the main plot
+ * height holds its length (text plus box pad plus the bottom and top insets).
  * @param {{season: number, x0: number, x1: number}[]} bands
  * @param {[number, number]} range - visible data x range.
  * @param {number} plotPx - plot width in px.
- * @param {{fontSize?: number, measure?: (text: string) => (number|undefined)}} [opts]
+ * @param {{fontSize?: number, measure?: (text: string) => (number|undefined), heightPx?: number}} [opts]
+ *   heightPx is the main (log or linear) plot height; unset means unlimited.
  * @returns {{season: number, x: number}|null} null when no band fits.
  */
-export function postseasonLabel(bands, range, plotPx, { fontSize = 12, measure } = {}) {
+export function postseasonLabel(bands, range, plotPx, { fontSize = 12, measure, heightPx = Infinity } = {}) {
   const [lo, hi] = range;
   const measured = measure?.(POSTSEASON_LABEL);
   const text = Number.isFinite(measured) ? measured : 0.6 * fontSize * POSTSEASON_LABEL.length;
-  const needed = text + 2.5 + 8;
+  const thickness = fontSize + 2.5 + 2 * 4;
+  const length = text + 2.5 + 2 * 4;
+  if (heightPx < length) return null;
   for (let i = bands.length - 1; i >= 0; i -= 1) {
     const a = Math.max(bands[i].x0, lo);
     const b = Math.min(bands[i].x1, hi);
     if (b <= a) continue;
-    if (((b - a) * plotPx) / (hi - lo) >= needed) return { season: bands[i].season, x: round4((a + b) / 2) };
+    if (((b - a) * plotPx) / (hi - lo) >= thickness) // Floor, never round up: Plotly hides an axis-referenced annotation that sits past the range end.
+      return { season: bands[i].season, x: Math.floor(b * 10000) / 10000 };
   }
   return null;
 }
