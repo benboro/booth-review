@@ -270,3 +270,181 @@ def test_land_and_outline_contrast(guarded_page: Page, site_url: str) -> None:
         outline_vs_land, land_vs_page = got[theme]
         assert outline_vs_land >= 1.4
         assert land_vs_page <= 1.2
+
+
+# ---------------------------------------------------------------- Task 2: geometry, render, events
+
+_RICH_MODEL = """{
+  dots: [
+    {venue: 3, family: 'nbc', x: 400, y: 300, symbol: 'circle', tier: 'base'},
+    {venue: 4, family: 'fox', x: 700, y: 450, symbol: 'circle', tier: 'base'},
+  ],
+  faded: [{venue: 7, family: 'nbc', x: 200, y: 150}],
+  legs: [{subject: 0, season: 2020, from: 1, to: 2, family: 'fox',
+          points: [{x: 400, y: 300}, {x: 550, y: 350}, {x: 700, y: 450}]}],
+  markers: [{x: 800, y: 80, label: 'Dublin', side: 'left', family: 'cbs', faded: false}],
+}"""
+
+_MOUNT = """
+async ([model, width, height, mobile]) => {
+  const C = await import('./modules/map-chart.js');
+  const G = await import('./vendor/us-states-albers.js');
+  document.getElementById('map-test')?.remove();
+  const div = document.createElement('div');
+  div.id = 'map-test';
+  div.style.cssText = `position:fixed;top:0;left:0;width:${width}px;height:${height}px;`
+    + 'z-index:9999';
+  document.body.appendChild(div);
+  window.__mapTest = {calls: [], C, G};
+  await C.renderMap(div, C.buildMapFigure(MODEL, G.US_STATES, {theme: 'light', mobile}));
+  C.bindMapEvents(div, {
+    onVenueClick: (v, f) => window.__mapTest.calls.push(['click', v, f]),
+    onVenueHover: (v, f) => window.__mapTest.calls.push(['hover', v, f]),
+  });
+  return true;
+}
+""".replace("MODEL", _RICH_MODEL)
+
+_PX = """
+([x, y]) => {
+  const gd = document.getElementById('map-test');
+  const r = gd.getBoundingClientRect();
+  const fl = gd._fullLayout;
+  return [r.left + fl.xaxis._offset + fl.xaxis.l2p(x), r.top + fl.yaxis._offset + fl.yaxis.l2p(y)];
+}
+"""
+
+_PLOT_BOX = """
+() => {
+  const gd = document.getElementById('map-test');
+  const fl = gd._fullLayout;
+  return {
+    l: fl.xaxis._offset, t: fl.yaxis._offset, w: fl.xaxis._length, h: fl.yaxis._length,
+    pw: gd.getBoundingClientRect().width, ph: gd.getBoundingClientRect().height,
+    n: gd.data.length,
+  };
+}
+"""
+
+
+def _mount(page: Page, site_url: str, width: int, height: int, mobile: bool = False) -> None:
+    _load(page, site_url)
+    page.evaluate(_MOUNT, [None, width, height, mobile])
+
+
+def _px(page: Page, x: float, y: float) -> tuple[float, float]:
+    px, py = page.evaluate(_PX, [x, y])
+    return px, py
+
+
+def test_projection_lands_in_vendored_state_rings(guarded_page: Page, site_url: str) -> None:
+    got = _run(
+        guarded_page,
+        site_url,
+        """
+        const M = await import('./modules/map-model.js');
+        const inside = (ring, x, y) => {
+          let c = false;
+          const n = ring.length / 2;
+          for (let i = 0, j = n - 1; i < n; j = i, i += 1) {
+            const xi = ring[2 * i], yi = ring[2 * i + 1], xj = ring[2 * j], yj = ring[2 * j + 1];
+            if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+          }
+          return c;
+        };
+        const stateOf = (pt) => {
+          if (!pt) return null;
+          for (const s of G.US_STATES) {
+            let n = 0;
+            for (const r of s.rings) if (inside(r, pt.x, pt.y)) n += 1;
+            if (n % 2 === 1) return s.id;
+          }
+          return null;
+        };
+        return {
+          sb: stateOf(M.projectAlbersUsa(-86.234, 41.698, 'IN')),
+          la: stateOf(M.projectAlbersUsa(-118.2, 34.0, 'CA')),
+          hi: stateOf(M.projectAlbersUsa(-157.86, 21.3, 'HI')),
+          lnk: stateOf(M.projectAlbersUsa(-96.7056, 40.8206, 'NE')),
+          atl: stateOf(M.projectAlbersUsa(-84.4008, 33.7554, 'GA')),
+          bou: stateOf(M.projectAlbersUsa(-105.2669, 40.0095, 'CO')),
+          nas: stateOf(M.projectAlbersUsa(-77.3, 25.05, null)),
+          count: G.US_STATES.length,
+        };
+        """,
+    )
+    assert got["sb"] == "18"
+    assert got["la"] == "06"
+    assert got["hi"] == "15"
+    assert got["lnk"] == "31"
+    assert got["atl"] == "13"
+    assert got["bou"] == "08"
+    assert got["nas"] is None
+    assert got["count"] == 50
+
+
+def test_render_centers_at_desktop_and_phone_widths(guarded_page: Page, site_url: str) -> None:
+    page = guarded_page
+    _mount(page, site_url, 1280, 520)
+    box = page.evaluate(_PLOT_BOX)
+    assert box["n"] == 26
+    left = box["l"]
+    right = box["pw"] - box["l"] - box["w"]
+    assert abs(left - right) <= 2
+    assert abs(box["w"] / box["h"] - 975 / 610) / (975 / 610) <= 0.01
+    _mount(page, site_url, 360, 520, mobile=True)
+    box = page.evaluate(_PLOT_BOX)
+    above = box["t"]
+    below = box["ph"] - box["t"] - box["h"]
+    assert abs(above - below) <= 2
+    assert abs(box["w"] / box["h"] - 975 / 610) / (975 / 610) <= 0.01
+
+
+def test_events_only_from_active_dots(guarded_page: Page, site_url: str) -> None:
+    page = guarded_page
+    _mount(page, site_url, 1280, 520)
+    ax, ay = _px(page, 400, 300)
+    page.mouse.move(ax - 60, ay - 60)
+    page.mouse.move(ax, ay, steps=4)
+    page.wait_for_timeout(200)
+    calls = page.evaluate("window.__mapTest.calls")
+    labels = page.locator("#map-test .hoverlayer .hovertext").count()
+    assert ["hover", 3, "nbc"] in calls
+    assert labels == 0
+    page.mouse.click(ax, ay)
+    page.wait_for_timeout(200)
+    assert ["click", 3, "nbc"] in page.evaluate("window.__mapTest.calls")
+    before = len(page.evaluate("window.__mapTest.calls"))
+    ix, iy = _px(page, 200, 150)
+    page.mouse.move(ix, iy, steps=4)
+    mx, my = _px(page, 800, 80)
+    page.mouse.move(mx, my, steps=4)
+    page.mouse.click(mx, my)
+    page.wait_for_timeout(200)
+    assert len(page.evaluate("window.__mapTest.calls")) == before
+
+
+def test_react_keeps_traces_and_double_click_resets(guarded_page: Page, site_url: str) -> None:
+    page = guarded_page
+    _mount(page, site_url, 1280, 520)
+    got = page.evaluate(
+        """async () => {
+          const {C, G} = window.__mapTest;
+          const gd = document.getElementById('map-test');
+          const fig = C.buildMapFigure({dots: [], faded: [], legs: [], markers: []},
+            G.US_STATES, {theme: 'dark', mobile: false});
+          await C.renderMap(gd, fig);
+          return gd.data.length;
+        }"""
+    )
+    assert got == 26
+    ax, ay = _px(page, 487, 305)
+    page.evaluate(
+        "() => window.Plotly.relayout(document.getElementById('map-test'),"
+        " {'xaxis.range': [100, 300]})"
+    )
+    page.mouse.dblclick(ax, ay)
+    page.wait_for_timeout(300)
+    rng = page.evaluate("document.getElementById('map-test')._fullLayout.xaxis.range")
+    assert abs(rng[0]) <= 0.5
+    assert abs(rng[1] - 975) <= 0.5
