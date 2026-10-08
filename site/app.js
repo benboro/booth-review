@@ -95,7 +95,11 @@ if (chartEl) {
   chartEl.addEventListener('mouseleave', () => clearHover());
 }
 if (mapChartEl) {
-  mapChartEl.addEventListener('mouseleave', () => clearHover());
+  // On touch the compatibility mouseleave fires right after a tap and would erase the
+  // tap tooltip; there the outside-tap listener and the second tap close it instead.
+  mapChartEl.addEventListener('mouseleave', () => {
+    if (!window.matchMedia('(hover: none)').matches) clearHover();
+  });
 }
 
 /**

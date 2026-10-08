@@ -34,12 +34,11 @@ let latest = null;
 let bound = false;
 let renderCount = 0;
 let pendingTapKey = null;
-let pendingTapAt = 0;
+let lastTapActionAt = -Infinity;
 
 /** Clears the pending first tap so the next tap on a dot shows its tooltip again. */
 export function resetMapTap() {
   pendingTapKey = null;
-  pendingTapAt = 0;
 }
 
 /** How many times the figure has been drawn (test hook). */
@@ -108,10 +107,12 @@ function onVenueClick(venue, family, ev) {
   const { data, model, env } = latest;
   const tapKey = `${venue}:${family}`;
   const now = performance.now();
-  if (tapKey === pendingTapKey && now - pendingTapAt < TAP_DEBOUNCE_MS) return;
+  // One physical tap reaches Plotly twice (the touch, then the compatibility mouse
+  // click); the second must not undo the first, whether that showed or hid the tooltip.
+  if (now - lastTapActionAt < TAP_DEBOUNCE_MS) return;
+  lastTapActionAt = now;
   if (tapKey !== pendingTapKey) {
     pendingTapKey = tapKey;
-    pendingTapAt = now;
     showTextTooltip(venueTooltipLines(data, model, venue), {
       theme: env.theme,
       borderColor: familyBorder(family, env),
