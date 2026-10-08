@@ -55,7 +55,12 @@ from booth_review.build.shipped import (
 )
 from booth_review.build.sources import load_all_sources, load_cfbd_venues
 from booth_review.build.telecasts import build_telecasts
-from booth_review.build.venues import empty_venues_frame, venues_frame
+from booth_review.build.venues import (
+    empty_venues_frame,
+    fill_venue_locations,
+    load_venue_locations,
+    venues_frame,
+)
 from booth_review.build.viewership import (
     TELECAST_FLAGS_SCHEMA as TELECAST_FLAGS_SCHEMA,
 )
@@ -402,6 +407,10 @@ def assemble_tables(
     merged_totals["crew_gaps_unpatched"] = sum(
         1 for r in crew_gap_review if r["override_status"] == "missing"
     )
+    venues, venues_from_reference = fill_venue_locations(
+        venues_frame(load_cfbd_venues(paths)), load_venue_locations(reference_directory)
+    )
+    merged_totals["venues_from_reference"] = venues_from_reference
     merged_totals["bowls_missing"] = len(bowl_rows)
     merged_totals["bowl_names_unknown"] = sum(
         1
@@ -423,7 +432,7 @@ def assemble_tables(
         diagnostics=diagnostics,
         review_rows=review_rows,
         crew_override_differs_lines=override_result.differs_lines,
-        venues=venues_frame(load_cfbd_venues(paths)),
+        venues=venues,
     )
 
 

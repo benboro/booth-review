@@ -87,6 +87,12 @@ def test_formula_prefix_raises(tmp_path: Path, prefix: str) -> None:
         read_reference_csv(path, COLUMNS)
 
 
+def test_plain_negative_number_is_not_a_formula(tmp_path: Path) -> None:
+    path = tmp_path / "negative.csv"
+    _write_raw_csv(path, list(COLUMNS), [["1", "-96.8281", "x"]])
+    assert read_reference_csv(path, COLUMNS)[0]["name"] == "-96.8281"
+
+
 def test_blank_row_is_skipped(tmp_path: Path) -> None:
     path = tmp_path / "blank.csv"
     _write_raw_csv(path, list(COLUMNS), [["1", "a", "x"], ["", "", ""]])
