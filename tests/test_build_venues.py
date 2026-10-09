@@ -59,7 +59,9 @@ def test_venues_frame_sorts_and_keeps_nulls() -> None:
 
 
 def test_load_cfbd_venues_absent_returns_empty(tmp_path: Path) -> None:
-    assert load_cfbd_venues(DataPaths(vault=tmp_path / "vault")) == []
+    result = load_cfbd_venues(DataPaths(vault=tmp_path / "vault"))
+    assert result.venues == []
+    assert result.malformed == 0
 
 
 def test_load_cfbd_venues_parses_cached_file(tmp_path: Path) -> None:
@@ -79,8 +81,26 @@ def test_load_cfbd_venues_parses_cached_file(tmp_path: Path) -> None:
             ]
         ).encode()
     )
-    venues = load_cfbd_venues(paths)
-    assert [v.id for v in venues] == [7]
+    result = load_cfbd_venues(paths)
+    assert [v.id for v in result.venues] == [7]
+    assert result.malformed == 0
+
+
+def test_load_cfbd_venues_skips_a_malformed_row_instead_of_aborting(tmp_path: Path) -> None:
+    paths = DataPaths(vault=tmp_path / "vault")
+    target = paths.raw / "cfbd" / "venues" / "all.json"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(
+        json.dumps(
+            [
+                {"id": 7, "name": "Test Venue", "latitude": 1.0, "longitude": 2.0},
+                {"id": 8, "name": "Junk Venue", "latitude": 999.0, "longitude": 2.0},
+            ]
+        ).encode()
+    )
+    result = load_cfbd_venues(paths)
+    assert [v.id for v in result.venues] == [7]
+    assert result.malformed == 1
 
 
 def test_build_tables_venues_defaults_empty() -> None:

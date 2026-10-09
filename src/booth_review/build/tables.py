@@ -407,9 +407,11 @@ def assemble_tables(
     merged_totals["crew_gaps_unpatched"] = sum(
         1 for r in crew_gap_review if r["override_status"] == "missing"
     )
+    cfbd_venues = load_cfbd_venues(paths)
     venues, venues_from_reference = fill_venue_locations(
-        venues_frame(load_cfbd_venues(paths)), load_venue_locations(reference_directory)
+        venues_frame(cfbd_venues.venues), load_venue_locations(reference_directory)
     )
+    merged_totals["venues_malformed"] = cfbd_venues.malformed
     merged_totals["venues_from_reference"] = venues_from_reference
     merged_totals["bowls_missing"] = len(bowl_rows)
     merged_totals["bowl_names_unknown"] = sum(

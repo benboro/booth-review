@@ -15,6 +15,7 @@ import pytest
 from booth_review.errors import ParseError
 from booth_review.sources.cfbd.parser import (
     CfbdVenue,
+    VenueParse,
     parse_games,
     parse_lines,
     parse_media,
@@ -227,24 +228,27 @@ def _venues(*rows: dict[str, object]) -> bytes:
 
 
 def test_parse_venues_top_level_coordinates() -> None:
-    assert parse_venues(_venues(_venue_row())) == [
-        CfbdVenue(
-            id=1,
-            name="Synthetic Field",
-            city="Lincoln",
-            state="NE",
-            country_code="US",
-            latitude=40.82,
-            longitude=-96.71,
-        )
-    ]
+    assert parse_venues(_venues(_venue_row())) == VenueParse(
+        venues=[
+            CfbdVenue(
+                id=1,
+                name="Synthetic Field",
+                city="Lincoln",
+                state="NE",
+                country_code="US",
+                latitude=40.82,
+                longitude=-96.71,
+            )
+        ],
+        malformed=0,
+    )
 
 
 def test_parse_venues_nested_location_shape() -> None:
     row = _venue_row()
     del row["latitude"], row["longitude"]
     row["location"] = {"x": -96.71, "y": 40.82}
-    venue = parse_venues(_venues(row))[0]
+    venue = parse_venues(_venues(row)).venues[0]
     assert venue.latitude == 40.82
     assert venue.longitude == -96.71
 
@@ -252,43 +256,45 @@ def test_parse_venues_nested_location_shape() -> None:
 def test_parse_venues_no_coordinates_gives_none() -> None:
     row = _venue_row()
     del row["latitude"], row["longitude"]
-    venue = parse_venues(_venues(row))[0]
+    venue = parse_venues(_venues(row)).venues[0]
     assert venue.latitude is None
     assert venue.longitude is None
 
 
 def test_parse_venues_empty_strings_become_none() -> None:
-    venue = parse_venues(_venues(_venue_row(city="", state="")))[0]
+    venue = parse_venues(_venues(_venue_row(city="", state=""))).venues[0]
     assert venue.city is None
     assert venue.state is None
 
 
 @pytest.mark.parametrize(
-    ("overrides", "field"),
+    "overrides",
     [
-        ({"latitude": "40.8"}, "latitude"),
-        ({"longitude": True}, "longitude"),
-        ({"latitude": 91.0}, "latitude"),
-        ({"longitude": -181.0}, "longitude"),
-        ({"city": 5}, "city"),
-        ({"id": "1"}, "id"),
-        ({"name": 7}, "name"),
+        {"latitude": "40.8"},
+        {"longitude": True},
+        {"latitude": 91.0},
+        {"longitude": -181.0},
+        {"city": 5},
+        {"id": "1"},
+        {"name": 7},
     ],
 )
-def test_parse_venues_malformed_field_names_field_only(
-    overrides: dict[str, object], field: str
+def test_parse_venues_malformed_row_is_skipped_and_counted(
+    overrides: dict[str, object],
 ) -> None:
-    with pytest.raises(ParseError, match=field) as excinfo:
-        parse_venues(_venues(_venue_row(**overrides)))
-    assert "Synthetic Field" not in str(excinfo.value)
+    good = _venue_row(id=2, name="Good Field")
+    result = parse_venues(_venues(_venue_row(**overrides), good))
+    assert [v.id for v in result.venues] == [2]
+    assert result.malformed == 1
 
 
 @pytest.mark.parametrize("missing", ["id", "name"])
-def test_parse_venues_missing_required_field_named(missing: str) -> None:
+def test_parse_venues_row_missing_required_field_is_skipped_and_counted(missing: str) -> None:
     row = _venue_row()
     del row[missing]
-    with pytest.raises(ParseError, match=missing):
-        parse_venues(_venues(row))
+    result = parse_venues(_venues(row))
+    assert result.venues == []
+    assert result.malformed == 1
 
 
 def test_parse_venues_non_list_document_raises() -> None:
@@ -296,12 +302,18 @@ def test_parse_venues_non_list_document_raises() -> None:
         parse_venues(b'{"id": 1}')
 
 
-def test_parse_venues_non_dict_row_raises() -> None:
-    with pytest.raises(ParseError, match="object"):
-        parse_venues(b"[1]")
+def test_parse_venues_non_dict_row_is_counted() -> None:
+    result = parse_venues(b"[1]")
+    assert result == VenueParse(venues=[], malformed=1)
 
 
-def test_parse_venues_duplicate_ids_report_count_only() -> None:
-    with pytest.raises(ParseError, match=r"1 duplicate venue id\(s\)") as excinfo:
-        parse_venues(_venues(_venue_row(), _venue_row(name="Other Field")))
-    assert "Synthetic Field" not in str(excinfo.value)
+def test_parse_venues_duplicate_ids_keep_first_and_count_rest() -> None:
+    result = parse_venues(
+        _venues(
+            _venue_row(),
+            _venue_row(name="Other Field"),
+            _venue_row(name="Third Field"),
+        )
+    )
+    assert [v.name for v in result.venues] == ["Synthetic Field"]
+    assert result.malformed == 2

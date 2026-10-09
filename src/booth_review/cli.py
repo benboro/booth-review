@@ -1038,6 +1038,8 @@ def _build(args: argparse.Namespace) -> int:
             f"no venue id {outcome.counts['venue_games_no_id']}, "
             f"unlocated {outcome.counts['venue_games_unlocated']}"
         )
+    if (n := outcome.counts.get("venues_malformed", 0)) > 0:
+        print(f"venues skipped as malformed (their games ship unlocated): {n}")
     bowl_names_unknown = outcome.counts.get("bowl_names_unknown", 0)
     if bowl_names_unknown > 0:
         print(f"bowl names unknown {bowl_names_unknown}")

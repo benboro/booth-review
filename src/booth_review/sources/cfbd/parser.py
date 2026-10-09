@@ -368,42 +368,61 @@ def _venue_coordinate(value: object, field: str, limit: float) -> float | None:
     return float(value)
 
 
-def parse_venues(content: bytes) -> list[CfbdVenue]:
-    """Parse the /venues list. Coordinates come from top-level latitude/longitude
-    or a nested location {x: longitude, y: latitude}; a venue with neither parses
-    with None coordinates (handled downstream). Errors name fields, never values.
+@dataclass(frozen=True)
+class VenueParse:
+    venues: list[CfbdVenue]
+    malformed: int
+
+
+def _parse_venue_row(row: object) -> CfbdVenue:
+    """One /venues row; raises ParseError when the row is malformed."""
+    if not isinstance(row, dict):
+        raise ParseError("cfbd venues: expected an object per row")
+    venue_id = _require(row, "id", kind="venue")
+    if not _is_int(venue_id):
+        raise ParseError("cfbd venue: id is not an integer")
+    name = _require(row, "name", kind="venue")
+    if not isinstance(name, str):
+        raise ParseError("cfbd venue: name is not a string")
+    location = row.get("location")
+    nested = location if isinstance(location, dict) else {}
+    raw_lat = row["latitude"] if "latitude" in row else nested.get("y")
+    raw_lon = row["longitude"] if "longitude" in row else nested.get("x")
+    latitude = _venue_coordinate(raw_lat, "latitude", 90.0)
+    longitude = _venue_coordinate(raw_lon, "longitude", 180.0)
+    return CfbdVenue(
+        id=venue_id,
+        name=name,
+        city=_venue_text(row, "city"),
+        state=_venue_text(row, "state"),
+        country_code=_venue_text(row, "countryCode"),
+        latitude=latitude,
+        longitude=longitude,
+    )
+
+
+def parse_venues(content: bytes) -> VenueParse:
+    """Parse the /venues list. Coordinates come from top-level latitude/longitude,
+    or a nested location {x: longitude, y: latitude}; a venue with neither
+    parses with None coordinates (handled downstream).
+
+    A malformed row, or a repeat of an earlier id, is skipped and counted: its
+    venue is then unlocated and its games ship place: null. Only a malformed
+    response as a whole (not an array) raises. Errors name fields, never values.
     """
     rows = _load_list(content, kind="venues")
     venues: list[CfbdVenue] = []
     seen: set[int] = set()
-    duplicates = 0
+    malformed = 0
     for row in rows:
-        if not isinstance(row, dict):
-            raise ParseError("cfbd venues: expected an object per row")
-        venue_id = _require(row, "id", kind="venue")
-        if not _is_int(venue_id):
-            raise ParseError("cfbd venue: id is not an integer")
-        name = _require(row, "name", kind="venue")
-        if not isinstance(name, str):
-            raise ParseError("cfbd venue: name is not a string")
-        location = row.get("location")
-        nested = location if isinstance(location, dict) else {}
-        raw_lat = row["latitude"] if "latitude" in row else nested.get("y")
-        raw_lon = row["longitude"] if "longitude" in row else nested.get("x")
-        if venue_id in seen:
-            duplicates += 1
-        seen.add(venue_id)
-        venues.append(
-            CfbdVenue(
-                id=venue_id,
-                name=name,
-                city=_venue_text(row, "city"),
-                state=_venue_text(row, "state"),
-                country_code=_venue_text(row, "countryCode"),
-                latitude=_venue_coordinate(raw_lat, "latitude", 90.0),
-                longitude=_venue_coordinate(raw_lon, "longitude", 180.0),
-            )
-        )
-    if duplicates:
-        raise ParseError(f"cfbd venues: {duplicates} duplicate venue id(s)")
-    return venues
+        try:
+            venue = _parse_venue_row(row)
+        except ParseError:
+            malformed += 1
+            continue
+        if venue.id in seen:
+            malformed += 1
+            continue
+        seen.add(venue.id)
+        venues.append(venue)
+    return VenueParse(venues=venues, malformed=malformed)
