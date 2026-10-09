@@ -386,10 +386,18 @@ def _parse_venue_row(row: object) -> CfbdVenue:
         raise ParseError("cfbd venue: name is not a string")
     location = row.get("location")
     nested = location if isinstance(location, dict) else {}
-    raw_lat = row["latitude"] if "latitude" in row else nested.get("y")
-    raw_lon = row["longitude"] if "longitude" in row else nested.get("x")
+    raw_lat = row.get("latitude")
+    if raw_lat is None:
+        raw_lat = nested.get("y")
+    raw_lon = row.get("longitude")
+    if raw_lon is None:
+        raw_lon = nested.get("x")
     latitude = _venue_coordinate(raw_lat, "latitude", 90.0)
     longitude = _venue_coordinate(raw_lon, "longitude", 180.0)
+    if latitude == 0.0 and longitude == 0.0:
+        # (0, 0) is a placeholder, not a place: leave it unlocated so the
+        # reference CSV can fill it.
+        latitude = longitude = None
     return CfbdVenue(
         id=venue_id,
         name=name,
@@ -403,8 +411,9 @@ def _parse_venue_row(row: object) -> CfbdVenue:
 
 def parse_venues(content: bytes) -> VenueParse:
     """Parse the /venues list. Coordinates come from top-level latitude/longitude,
-    or a nested location {x: longitude, y: latitude}; a venue with neither
-    parses with None coordinates (handled downstream).
+    falling back to a nested location {x: longitude, y: latitude} when the
+    top-level value is null or absent; a venue with neither (or at 0, 0) parses
+    with None coordinates (handled downstream).
 
     A malformed row, or a repeat of an earlier id, is skipped and counted: its
     venue is then unlocated and its games ship place: null. Only a malformed

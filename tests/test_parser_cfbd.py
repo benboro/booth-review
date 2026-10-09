@@ -253,6 +253,29 @@ def test_parse_venues_nested_location_shape() -> None:
     assert venue.longitude == -96.71
 
 
+def test_parse_venues_null_top_level_falls_back_to_nested_location() -> None:
+    row = _venue_row(latitude=None, longitude=None, location={"x": -96.71, "y": 40.82})
+    venue = parse_venues(_venues(row)).venues[0]
+    assert (venue.latitude, venue.longitude) == (40.82, -96.71)
+
+
+def test_parse_venues_top_level_wins_over_nested_location() -> None:
+    row = _venue_row(location={"x": 10.0, "y": 20.0})
+    venue = parse_venues(_venues(row)).venues[0]
+    assert (venue.latitude, venue.longitude) == (40.82, -96.71)
+
+
+def test_parse_venues_zero_zero_is_unlocated() -> None:
+    result = parse_venues(_venues(_venue_row(latitude=0, longitude=0.0)))
+    assert (result.venues[0].latitude, result.venues[0].longitude) == (None, None)
+    assert result.malformed == 0
+
+
+def test_parse_venues_zero_on_one_axis_is_kept() -> None:
+    venue = parse_venues(_venues(_venue_row(latitude=0.0, longitude=-96.71))).venues[0]
+    assert (venue.latitude, venue.longitude) == (0.0, -96.71)
+
+
 def test_parse_venues_no_coordinates_gives_none() -> None:
     row = _venue_row()
     del row["latitude"], row["longitude"]

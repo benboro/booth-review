@@ -171,3 +171,16 @@ def test_load_venue_locations_rejects_duplicate_ids(tmp_path: Path) -> None:
     row = "5,10.0,-20.5,https://example.test/v5,note"
     with pytest.raises(ReferenceTableError, match="duplicate"):
         load_venue_locations(_locations_csv(tmp_path, row, row))
+
+
+def test_fill_venue_locations_fills_a_zero_zero_venue_from_reference() -> None:
+    from booth_review.sources.cfbd.parser import parse_venues
+
+    parsed = parse_venues(
+        json.dumps([{"id": 5, "name": "Test", "latitude": 0, "longitude": 0}]).encode()
+    )
+    frame, filled = fill_venue_locations(
+        venues_frame(parsed.venues), [VenueLocation(5, 33.0, -97.0, "https://example.test/v5")]
+    )
+    assert filled == 1
+    assert frame["lat"].to_list() == [33.0]
