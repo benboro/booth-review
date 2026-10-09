@@ -113,8 +113,10 @@ an opt-in NFL option.
 - **IDs:** `nfl-<team>-<team>-<yyyy-mm-dd>`. The two team words are nicknames
   in alphabetical order, not away then home; the record's title gives the
   away and home teams. A few IDs carry an event word, such as a Christmas
-  marker or a season-kickoff special. Some Tuesday or Wednesday-dated
-  entries repeat a game played a day or two earlier.
+  marker, and a few are non-game specials with no team words at all
+  (`nfl-kickoff-<yyyy-mm-dd>`, a Hall of Fame game); those are included in
+  the depth counts below. Some Tuesday or Wednesday-dated entries repeat a
+  game played a day or two earlier.
 - **Depth:** about 95 to 120 NFL telecasts a season from 2014 onward,
   counting playoffs. That covers national windows, primetime and the
   postseason, not every game. Before 2014 there are 2 to 13 entries a

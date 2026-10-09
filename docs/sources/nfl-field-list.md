@@ -2,7 +2,11 @@
 
 This is the planned data model for the NFL special-games module. It comes from
 the Phase 6 go/no-go spike (October 2026), which checked each source by hand. Nothing NFL is collected
-yet; the build is a later phase. Each row names the field's source and how it
+yet; the build is a later phase. The module answers two questions: Task 1
+compares Fox's America's Game of the Week (AGOTW) crew with Fox's other crews
+on the same doubleheader Sunday, and Task 2 counts special games per team per
+season. The spike found Task 1 workable; Task 2 waits on evidence for
+networks before 2025. Each row names the field's source and how it
 is reached, the earliest season the spike found, its terms status, and how it
 changes during a season.
 
@@ -10,8 +14,9 @@ Terms status uses five values:
 
 - **open-attribution:** CC BY or similar. Credit the source.
 - **share-alike:** CC BY-SA.
-- **analysis-only:** the terms are unclear. The field is used in analysis but
-  never displayed, and only our own derived values reach the site.
+- **analysis-only:** the terms are unclear. Under the spike's rule for unclear
+  terms, the field is used in analysis but not displayed; only our own derived
+  values from it reach the site (see Display rule for an open question).
 - **blocked:** the terms ban reuse or automated access, so that source can't
   supply the field.
 - **derived:** our own computed value.
@@ -21,24 +26,24 @@ Terms status uses five values:
 | field | definition | source | earliest season | terms status | updates in season | derivation |
 |---|---|---|---|---|---|---|
 | `season` | NFL season year; January games belong to the previous season | nflverse schedules (`season`), scripted download in the build | 2006 (the schedules file) | open-attribution (nflverse-data, CC BY 4.0) | fixed once the schedule is out | copied |
-| `week` | Regular-season week 1 to 18 | nflverse schedules (`week` with `game_type`), scripted | 2006 | open-attribution (nflverse-data, CC BY 4.0) | fixed | copied |
+| `week` | Regular-season week (1 to 18 from 2021; 1 to 17 before) | nflverse schedules (`week` with `game_type`), scripted | 2006 | open-attribution (nflverse-data, CC BY 4.0) | fixed | copied |
 | `game_date` | Date of the game in Eastern time | nflverse schedules (`gameday`), scripted | 2006 | open-attribution (nflverse-data, CC BY 4.0) | can change after a flex or a weather move; the schedules file refreshes every few minutes | copied |
 | `kickoff_time_et` | Scheduled kickoff, 24-hour Eastern time for every venue | nflverse schedules (`gametime`), scripted | 2006 | open-attribution (nflverse-data, CC BY 4.0) | changes with flexes; refreshed every few minutes | copied |
 | `home_team` | Home team, or the designated home team at a neutral site | nflverse schedules (`home_team`), scripted; names resolved through `data/reference/` crosswalks | 2006 | open-attribution (nflverse-data, CC BY 4.0) | fixed | copied, then crosswalked |
 | `away_team` | Away team | nflverse schedules (`away_team`), scripted; crosswalked | 2006 | open-attribution (nflverse-data, CC BY 4.0) | fixed | copied, then crosswalked |
 | `game_type` | Regular season or a playoff round | nflverse schedules (`game_type`: REG, WC, DIV, CON, SB), scripted | 2006 | open-attribution (nflverse-data, CC BY 4.0) | playoff games are added as rounds are set | copied |
 | `network` | Main-feed network or streaming service | 506 Sports NFL week pages, hand-save (every game); Ratings Reference records for national games, scripted | 2025 evidenced on 506 (earlier seasons not yet checked); RR 2014 for national games | analysis-only (506 states no terms; RR's national-game networks are open-attribution) | 506 week pages change through the week; RR records follow sitemap lastmod | copied; RR's network on regional records is not trusted alone |
-| `broadcast_team` | Main-feed crew: play-by-play first, then analyst, then sideline | 506 Sports NFL week pages, hand-save; Wikipedia season pairings as a weak backup | 2025 evidenced on 506 | analysis-only (506 states no terms; the Wikipedia backup is share-alike) | assignments change through the week; save pages after games finish | split on commas; people resolved through `data/reference/` |
+| `broadcast_team` | Main-feed crew: play-by-play first, then analyst, then sideline | 506 Sports NFL week pages, hand-save; no usable backup found (Wikipedia lists only the current season's ranked pairings, never a game assignment) | 2025 evidenced on 506 | analysis-only (506 states no terms; the Wikipedia backup is share-alike) | assignments change through the week; save pages after games finish | split on commas; people resolved through `data/reference/` |
 | `alt_cast_broadcasts` | Child broadcast rows for alternate feeds of the same game, each with its own crew | none found: 506 NFL pages list no alt-casts; RR mentions them only in claim wording | none found | open-attribution (RR claim wording, the only trace) | n/a | one child row per alt-cast once a source is found |
 | `is_standalone` | No other NFL game kicks off within 3 hours | derived from `game_date` and `kickoff_time_et` | 2006 | derived | recomputed when kickoffs change | absolute gap of 3:00 or less to any other kickoff fails |
 | `slot_name` | Display label: Christmas, Thanksgiving, Black Friday, International, TNF, SNF, MNF, Saturday, Friday, Sunday early, Sunday late, Other | derived from date, kickoff and venue | 2006 | derived | recomputed when kickoffs change | first matching label in the order listed under Rules |
 | `is_agotw` | Fox's late national game on a Fox doubleheader Sunday | derived from 506 (network and window) plus a text source to break ties (RR's late-window record, 506 page text) | 2025 evidenced | derived | settles once the late-window record exists | see Rules; `ambiguous` when no text source picks one game |
 | `is_cbs_national` | CBS's late national game on a CBS doubleheader Sunday | derived the same way as `is_agotw` | 2025 evidenced | derived | as for `is_agotw` | see Rules |
 | `is_international` | Venue outside the United States | derived from nflverse `location` and `stadium` plus 506's "(in City)" note | 2006 | derived | fixed | stadium mapped to a country |
-| `flexed` | Moved after the schedule release into a standalone slot or the Fox or CBS late national game | derived from `original_slot` | 2014 (seasons checked) | derived | set when a move is announced | see Rules |
+| `flexed` | Moved after the schedule release into a standalone slot or the Fox or CBS late national game | derived from `original_slot` | 2014 for moves into standalone slots (seasons checked); moves into the AGOTW or CBS late game follow `is_agotw` (2025 evidenced) | derived | set when a move is announced | see Rules |
 | `original_slot` | Slot as first released, kept for every move | Wikipedia season articles, scheduling-changes section, scripted read of public pages; league schedule releases as a lead | 2014 (2014, 2018, 2022 and 2025 checked) | share-alike (Wikipedia, CC BY-SA 4.0) | added as moves are announced | copied; sometimes missing for afternoon moves |
 | `original_network` | Network as first released, kept for every move including CBS and Fox cross-flexes | Wikipedia season articles, as for `original_slot` | 2014 (seasons checked) | share-alike (Wikipedia, CC BY-SA 4.0) | added as moves are announced | copied; often omitted when the network did not change |
-| `is_special` | Rollup: standalone, AGOTW or CBS late national | derived | 2006 | derived | recomputed | see Rules |
+| `is_special` | Rollup: standalone, AGOTW or CBS late national | derived | 2006 for the standalone part; the AGOTW and CBS late national parts 2025 evidenced | derived | recomputed | see Rules |
 | `fox_doubleheader_weeks` | Count of Fox doubleheader Sundays per season | derived from 506 network and window (kickoffs from nflverse in the build) | 2025 evidenced | derived | grows weekly | see Rules |
 | `cbs_doubleheader_weeks` | Count of CBS doubleheader Sundays per season | derived as for Fox | 2025 evidenced | derived | grows weekly | see Rules |
 | `viewership` | Average audience in viewers, with Nielsen era tag | Ratings Reference JSON records, scripted through `booth-review collect` | 2014 (sparse from 2001) | open-attribution (RR compilation CC BY 4.0; figures credited to their publishers) | finals replace preliminary figures; sitemap lastmod drives re-checks | RR's current figure; Sunday-afternoon figures are window-level, labeled by the featured game |
@@ -77,8 +82,9 @@ Terms status uses five values:
   one on the same Sunday. A Saturday doubleheader is not a Sunday doubleheader.
 - **AGOTW:** on a Fox doubleheader Sunday, the Fox 4:25 game when it is the only
   one. When several share that kickoff, it is the one a text source names as
-  the national game: RR's late-window record for that date, 506 page text, or
-  Fox's announced list. It is never chosen by crew or by map image. Otherwise
+  the national game: RR's late-window record for that date, or 506 page text.
+  Fox's announced list is a cross-check only (its press site is not a field
+  source). It is never chosen by crew or by map image. Otherwise
   the week is ambiguous.
 - **CBS late national:** the same rule for CBS on a CBS doubleheader Sunday.
 - **Is special:** standalone, AGOTW or CBS late national. International and
@@ -99,8 +105,8 @@ Terms status uses five values:
   Each gap is 3:30, so all three are standalone with slot name Thanksgiving.
 - **Saturday tripleheader:** late-December Saturday games at 1:00, 4:30 and
   8:00 pm ET. The gaps are 3:30, so all three pass. The 2025 season had
-  Saturday doubleheaders only (about 4:30 or 5:00 then 8:00 or 8:20), and those
-  pass too.
+  Saturday doubleheaders only (4:30 then 8:00, or 5:00 then 8:20), and those
+  pass too. A 5:00 and 8:00 pair would be exactly three hours apart and fail.
 - **Christmas on a streamer:** a Thursday Christmas with two streaming-exclusive
   games at 1:00 and 4:30 pm ET and a streaming night game. All are standalone
   with slot name Christmas, and the streaming service is the network value.
@@ -126,9 +132,9 @@ Terms status uses five values:
 - **Streaming exclusives:** Prime Video, Netflix, YouTube, Peacock and ESPN+
   are simply `network` values.
 - **Combined figures:** Ratings Reference figures that combine feeds get the
-  same check as the college-football MegaCast hazard. The 2025 Monday figures
-  checked combine ABC, ESPN and the ESPN2 alternate feed, and
-  `composite_of` doesn't mark it. Whether streaming figures include local
+  same check as the college-football MegaCast hazard. Of the 2025 Monday figures
+  checked, one combines ABC, ESPN and the ESPN2 alternate feed and a
+  doubleheader game's combines ABC and ESPN; `composite_of` marks neither. Whether streaming figures include local
   broadcast simulcasts in the teams' markets is not recorded.
 
 ## Playoffs
@@ -161,14 +167,22 @@ during a season:
 
 ## Display rule
 
-Analysis-only fields are used in analysis and never displayed. Only our own
-derived values reach the site, and each displayed source gets its credit:
+Under the spike's rule for unclear terms, analysis-only fields are used in
+analysis but not displayed, and only our own derived values from them reach
+the site. Open-attribution and share-alike fields may be displayed. Each
+displayed source gets its credit:
 nflverse, Ratings Reference with record links and original publishers, and
 Wikipedia under CC BY-SA.
 
 The analysis-only fields are:
 
-- `network` and `broadcast_team` (506 states no terms; the same status as its
-  college-football pages until the site owners are asked)
+- `network` and `broadcast_team` (506 states no terms)
 - `coverage_share` (only a lead with unread terms)
 - `pregame_spread` (odds provenance unstated)
+
+**Open question for the build (999.5):** the college-football site already
+displays 506 crews (hover details), even though 506 states no terms and its
+publishing row in `data/README.md` still reads "ask the site owners". Task 1
+compares crews, so its views need crew names. Before the NFL views are built,
+decide whether NFL crews follow that college-football precedent or the strict
+rule above. Asking 506's owners would settle both.
