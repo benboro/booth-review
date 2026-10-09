@@ -263,7 +263,7 @@ The per-person table (`telecast_people`) is what makes filtering work across net
 | 3. Coverage audit | Table of season by network by field completeness | Known gaps documented before any modeling |
 | 4. Descriptive view | Scatter plot for Question A | Working filter and hover |
 | 5. Model | Section 7.2 model plus event studies around conference moves | Crew effects with intervals; residuals feeding the y-axis toggle |
-| 6. Toggle prep | Repeat Phase 0 for NFL and MLB | Go or no-go per sport |
+| 6. Toggle prep | Repeat Phase 0 for NFL and MLB | Go or no-go per sport; NFL decided October 9, 2026: go for both questions (Section 12) |
 | 7. In-season updates | Scheduled job that fetches only the current season (506 week pages, new Ratings Reference records, CFBD data for the week), adds it to the earlier seasons, rebuilds the site data, and publishes it. Runs Sunday for crews, scores, and excitement, and Wednesday for viewership. Can start once Phase 4 works; it doesn't need Phase 5 | A weekend's games appear on the site by Sunday night and their viewership by Wednesday, with no re-fetch of earlier seasons and CFBD use well under the monthly limit |
 
 **Phase 7 notes:**
@@ -284,7 +284,21 @@ The per-person table (`telecast_people`) is what makes filtering work across net
 - Excitement: nflverse play-by-play from 1999 with win probability; a game excitement index is straightforward.
 - Viewership: clean per-game figures only for primetime, the national late window, and playoffs. Regional afternoon windows can't be attributed to one crew.
 - Best identification: crew moves (Romo replacing Simms at CBS in 2017; Buck and Aikman moving to ESPN in 2022; Tirico replacing Michaels on Sunday Night Football).
-- To check: whether Ratings Reference covers the NFL at the same depth.
+- Ratings Reference depth (checked October 9, 2026, from its sitemap): about 95 to 120 NFL telecasts per season from 2014 to 2025, which covers primetime, national windows, and playoffs, not the roughly 285 games a season. A Sunday-afternoon record measures the whole window, labeled by its featured game (its source calls it the national window featuring that game, with a `market_coverage` note such as "in most markets"), so per-crew viewership on a Sunday afternoon is window-level, not per game.
+
+**NFL special games (planned, October 9, 2026).** The NFL work centers on two questions. Every field is stored per game.
+
+1. *Special games per team per season.*
+   - Standalone games are set by a rule on kickoff times (no other game in the window), not by a fixed list. The rule should catch TNF, SNF, MNF, Thanksgiving, Christmas, Black Friday, late-season Saturdays, and Friday international games. A `slot_name` label is stored for display.
+   - Featured games share a window but get national treatment: Fox's America's Game of the Week (AGOTW) and CBS's late national game. Counts are normalized by each network's doubleheader weeks.
+   - International and flexed games get their own flags (flexed with the original slot). All flags roll up into `is_special`.
+2. *Fox's AGOTW crew vs. Fox's other crews on the same doubleheader Sunday.*
+   - Results show raw (who gets the best games) and adjusted for game quality (pregame spread, final margin, win-probability volatility).
+   - Viewership is normalized by coverage share where a source exists; otherwise the comparison is labeled unnormalized.
+
+Regular season only by default, with playoffs as a toggle. Both questions cover the 2014 to 2026 seasons. A game is standalone when no other game kicks off within three hours, so a 9:30 ET Sunday international game counts, and international games in the 1 pm and 4 pm windows don't.
+
+**Phase 6 result (October 9, 2026).** Go for both questions. On the hand-saved 2025 506 pages, every Fox regular-season game lists a named play-by-play voice and analyst (100%, against a 95% bar). Its viewership is window-level, and no text source gives a game's coverage share, so it is a game-quality comparison with window figures for the national games. Special games per team is also a go for 2014 to 2026: nflverse supplies every game's schedule and ET kickoff, and the hand-saved 506 pages for every week from 2014 give the network of every 4:25 game and, from 2016, every national game. Ratings Reference covers the 2014 and 2015 national games, to be matched per game in the build. Four fields are analysis-only under the spike's rule for unclear terms, including the 506 network and crew; the CFB site already displays 506 crews, so the NFL views must settle that before display (see the field list's open question). The field list is in `docs/sources/nfl-field-list.md` and the schedule source in `docs/sources/nflverse.md`.
 
 **MLB: weakest.**
 
@@ -294,7 +308,9 @@ The per-person table (`telecast_people`) is what makes filtering work across net
 - Excitement: computable from Retrosheet event files or MLB win-expectancy data.
 - Likely scope if added: national games only, which is a small sample.
 
-**Recommendation:** finish CFB through Phase 5 before starting either toggle.
+- Ratings Reference depth (October 9, 2026): about 50 to 120 MLB telecasts per season since 2017.
+
+**Recommendation:** finish CFB through Phase 5 before building either toggle. The go/no-go research for each sport is docs only and can run alongside it.
 
 ---
 
@@ -313,6 +329,7 @@ The per-person table (`telecast_people`) is what makes filtering work across net
 ## 14. Source Links
 
 - 506 Sports CFB schedule and announcers: https://506sports.com/ncaaf.php
+- 506 Sports NFL schedule and announcers: https://506sports.com/nfl.php
 - 506 Archive (older seasons): https://archive.506sports.com/wiki/College_Football
 - Ratings Reference, CFB: https://ratingsreference.com/league/cfb
 - Ratings Reference methodology and license: https://ratingsreference.com/methodology
@@ -324,3 +341,4 @@ The per-person table (`telecast_people`) is what makes filtering work across net
 - Nielsen co-viewing enters currency Aug 31, 2026 (Front Office Sports): https://frontofficesports.com/article/nielsen-co-viewing-currency/
 - Nielsen co-viewing pilot results: https://www.nielsen.com/insights/2026/nielsen-co-viewing-pilot-delivers-a-4-average-increase-in-total-viewers-for-februarys-live-televised-events/
 - cfbfastR (win probability models): https://cfbfastr.sportsdataverse.org/
+- nflverse data (schedules, play-by-play): https://github.com/nflverse/nflverse-data
