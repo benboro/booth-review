@@ -157,20 +157,29 @@ export async function renderMapPanel(args) {
   }
   if (latest !== args) return;
 
-  await renderMap(gd, buildMapFigure(model, geometry, env));
-  if (!bound) {
-    bindMapEvents(gd, {
-      onVenueClick,
-      onVenueHover,
-      // On touch the tap tooltip must outlive Plotly's synthetic unhover.
-      onVenueUnhover: () => {
-        if (!hoverNone()) hideTooltip();
-      },
-    });
-    gd.on('plotly_afterplot', positionOverlays);
-    bound = true;
+  try {
+    await renderMap(gd, buildMapFigure(model, geometry, env));
+    if (!bound) {
+      bindMapEvents(gd, {
+        onVenueClick,
+        onVenueHover,
+        // On touch the tap tooltip must outlive Plotly's synthetic unhover.
+        onVenueUnhover: () => {
+          if (!hoverNone()) hideTooltip();
+        },
+      });
+      gd.on('plotly_afterplot', positionOverlays);
+      bound = true;
+    }
+    if (resize) await window.Plotly.Plots.resize(gd);
+  } catch {
+    // Plotly can reject (a zero-width container, say): show the same note as a
+    // failed geometry import rather than leave an empty map and an unhandled
+    // rejection. `bound` stays false only if the first draw failed, so the next
+    // render binds the events.
+    if (latest === args) showNote(MAP_ERROR);
+    return;
   }
-  if (resize) window.Plotly.Plots.resize(gd);
   positionOverlays();
   renderCount += 1;
 }

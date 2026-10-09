@@ -349,6 +349,41 @@ def test_geometry_failure_shows_error_and_table_still_renders(
     assert guarded_page.locator("#games-table tbody tr").count() > 0
 
 
+_FAIL_MAP_PLOTLY = """() => {
+  // Wrap Plotly as soon as the page assigns it, so the Map's own calls reject.
+  let real;
+  Object.defineProperty(window, 'Plotly', {
+    configurable: true,
+    get: () => real,
+    set: (value) => {
+      real = value;
+      const react = value.react;
+      value.react = (gd, ...rest) =>
+        gd && gd.id === 'map-chart' ? Promise.reject(new Error('forced')) : react(gd, ...rest);
+    },
+  });
+}"""
+
+
+def test_plotly_rejection_shows_error_note_without_unhandled_rejection(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    """WR-04: a rejected Plotly.react shows the error note and leaves no unhandled promise."""
+    page_errors: list[str] = []
+    guarded_page.on("pageerror", lambda err: page_errors.append(str(err)))
+    guarded_page.add_init_script(f"({_FAIL_MAP_PLOTLY})()")
+    open_app(guarded_page, "?view=map&people=pat-rowan")
+    guarded_page.wait_for_function("() => !document.getElementById('map-empty-note').hidden")
+    note = guarded_page.locator("#map-empty-note")
+    assert "The map could not be drawn." in (note.text_content() or "")
+    assert _renders(guarded_page) == 0
+    assert guarded_page.locator("#games-table tbody tr").count() > 0
+    # A later render must not throw either (the first draw never bound events).
+    guarded_page.evaluate("() => window.__testHooks.setState({})")
+    guarded_page.wait_for_timeout(200)
+    assert page_errors == []
+
+
 def test_desktop_drag_zoom_and_double_click_reset(guarded_page: Page, open_app: OpenApp) -> None:
     """D-07: desktop keeps drag-zoom and a modebar; a double-click restores the full extent."""
     guarded_page.set_viewport_size({"width": 1280, "height": 900})
