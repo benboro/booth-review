@@ -5,8 +5,7 @@ the Phase 6 go/no-go spike (October 2026), which checked each source by hand. No
 yet; the build is a later phase. The module answers two questions: Task 1
 compares Fox's America's Game of the Week (AGOTW) crew with Fox's other crews
 on the same doubleheader Sunday, and Task 2 counts special games per team per
-season. The spike found Task 1 workable; Task 2 waits on evidence for
-networks before 2025. Each row names the field's source and how it
+season. The spike found both workable for 2014 to 2026. Each row names the field's source and how it
 is reached, the earliest season the spike found, its terms status, and how it
 changes during a season.
 
@@ -32,20 +31,20 @@ Terms status uses five values:
 | `home_team` | Home team, or the designated home team at a neutral site | nflverse schedules (`home_team`), scripted; names resolved through `data/reference/` crosswalks | 2006 | open-attribution (nflverse-data, CC BY 4.0) | fixed | copied, then crosswalked |
 | `away_team` | Away team | nflverse schedules (`away_team`), scripted; crosswalked | 2006 | open-attribution (nflverse-data, CC BY 4.0) | fixed | copied, then crosswalked |
 | `game_type` | Regular season or a playoff round | nflverse schedules (`game_type`: REG, WC, DIV, CON, SB), scripted | 2006 | open-attribution (nflverse-data, CC BY 4.0) | playoff games are added as rounds are set | copied |
-| `network` | Main-feed network or streaming service | 506 Sports NFL week pages, hand-save (every game); Ratings Reference records for national games, scripted | 2025 evidenced on 506 (earlier seasons not yet checked); RR 2014 for national games | analysis-only (506 states no terms; RR's national-game networks are open-attribution) | 506 week pages change through the week; RR records follow sitemap lastmod | copied; RR's network on regional records is not trusted alone |
-| `broadcast_team` | Main-feed crew: play-by-play first, then analyst, then sideline | 506 Sports NFL week pages, hand-save; no usable backup found (Wikipedia lists only the current season's ranked pairings, never a game assignment) | 2025 evidenced on 506 | analysis-only (506 states no terms; the Wikipedia backup is share-alike) | assignments change through the week; save pages after games finish | split on commas; people resolved through `data/reference/` |
+| `network` | Main-feed network or streaming service | 506 Sports NFL week pages, hand-save (every game); Ratings Reference records for national games, scripted | 2014 on 506 for regional games and 2016 for national games (2014 and 2015 pages list no national games); RR 2014 for national games | analysis-only (506 states no terms; RR's national-game networks are open-attribution) | 506 week pages change through the week; RR records follow sitemap lastmod | copied; RR's network on regional records is not trusted alone |
+| `broadcast_team` | Main-feed crew: play-by-play first, then analyst, then sideline | 506 Sports NFL week pages, hand-save; no usable backup found (Wikipedia lists only the current season's ranked pairings, never a game assignment) | 2014 on 506 for regional games, 2016 for national games | analysis-only (506 states no terms; the Wikipedia backup is share-alike) | assignments change through the week; save pages after games finish | split on commas; people resolved through `data/reference/` |
 | `alt_cast_broadcasts` | Child broadcast rows for alternate feeds of the same game, each with its own crew | none found: 506 NFL pages list no alt-casts; RR mentions them only in claim wording | none found | open-attribution (RR claim wording, the only trace) | n/a | one child row per alt-cast once a source is found |
 | `is_standalone` | No other NFL game kicks off within 3 hours | derived from `game_date` and `kickoff_time_et` | 2006 | derived | recomputed when kickoffs change | absolute gap of 3:00 or less to any other kickoff fails |
 | `slot_name` | Display label: Christmas, Thanksgiving, Black Friday, International, TNF, SNF, MNF, Saturday, Friday, Sunday early, Sunday late, Other | derived from date, kickoff and venue | 2006 | derived | recomputed when kickoffs change | first matching label in the order listed under Rules |
-| `is_agotw` | Fox's late national game on a Fox doubleheader Sunday | derived from 506 (network and window) plus a text source to break ties (RR's late-window record, 506 page text) | 2025 evidenced | derived | settles once the late-window record exists | see Rules; `ambiguous` when no text source picks one game |
-| `is_cbs_national` | CBS's late national game on a CBS doubleheader Sunday | derived the same way as `is_agotw` | 2025 evidenced | derived | as for `is_agotw` | see Rules |
+| `is_agotw` | Fox's late national game on a Fox doubleheader Sunday | derived from 506 (network and window) plus a text source to break ties (RR's late-window record, 506 page text) | 2014 (pages saved; rule measured on 2025) | derived | settles once the late-window record exists | see Rules; `ambiguous` when no text source picks one game; pages saved from 2014, rule measured on 2025 |
+| `is_cbs_national` | CBS's late national game on a CBS doubleheader Sunday | derived the same way as `is_agotw` | 2014 (pages saved; rule measured on 2025) | derived | as for `is_agotw` | see Rules |
 | `is_international` | Venue outside the United States | derived from nflverse `location` and `stadium` plus 506's "(in City)" note | 2006 | derived | fixed | stadium mapped to a country |
-| `flexed` | Moved after the schedule release into a standalone slot or the Fox or CBS late national game | derived from `original_slot` | 2014 for moves into standalone slots (seasons checked); moves into the AGOTW or CBS late game follow `is_agotw` (2025 evidenced) | derived | set when a move is announced | see Rules |
+| `flexed` | Moved after the schedule release into a standalone slot or the Fox or CBS late national game | derived from `original_slot` | 2014 for moves into standalone slots (seasons checked); moves into the AGOTW or CBS late game follow `is_agotw` (2014) | derived | set when a move is announced | see Rules |
 | `original_slot` | Slot as first released, kept for every move | Wikipedia season articles, scheduling-changes section, scripted read of public pages; league schedule releases as a lead | 2014 (2014, 2018, 2022 and 2025 checked) | share-alike (Wikipedia, CC BY-SA 4.0) | added as moves are announced | copied; sometimes missing for afternoon moves |
 | `original_network` | Network as first released, kept for every move including CBS and Fox cross-flexes | Wikipedia season articles, as for `original_slot` | 2014 (seasons checked) | share-alike (Wikipedia, CC BY-SA 4.0) | added as moves are announced | copied; often omitted when the network did not change |
-| `is_special` | Rollup: standalone, AGOTW or CBS late national | derived | 2006 for the standalone part; the AGOTW and CBS late national parts 2025 evidenced | derived | recomputed | see Rules |
-| `fox_doubleheader_weeks` | Count of Fox doubleheader Sundays per season | derived from 506 network and window (kickoffs from nflverse in the build) | 2025 evidenced | derived | grows weekly | see Rules |
-| `cbs_doubleheader_weeks` | Count of CBS doubleheader Sundays per season | derived as for Fox | 2025 evidenced | derived | grows weekly | see Rules |
+| `is_special` | Rollup: standalone, AGOTW or CBS late national | derived | 2006 for the standalone part; 2014 for the AGOTW and CBS late national parts | derived | recomputed | see Rules |
+| `fox_doubleheader_weeks` | Count of Fox doubleheader Sundays per season | derived from 506 network and window (kickoffs from nflverse in the build) | 2014 | derived | grows weekly | see Rules |
+| `cbs_doubleheader_weeks` | Count of CBS doubleheader Sundays per season | derived as for Fox | 2014 | derived | grows weekly | see Rules |
 | `viewership` | Average audience in viewers, with Nielsen era tag | Ratings Reference JSON records, scripted through `booth-review collect` | 2014 (sparse from 2001) | open-attribution (RR compilation CC BY 4.0; figures credited to their publishers) | finals replace preliminary figures; sitemap lastmod drives re-checks | RR's current figure; Sunday-afternoon figures are window-level, labeled by the featured game |
 | `coverage_share` | Share of US markets or households that received the game | none found for 2025; a third-party schedule site states per-game household shares for 2026 only, with no stated source | none found | analysis-only (third-party lead with unread terms; map images are never used) | the lead site changes weekly | not derived; Task 1 viewership is labeled window-level |
 | `excitement_score` | Game excitement from in-game win probability | derived from nflverse play-by-play win probability | 1999 | derived | nightly after games | computed from `home_wp` per play |
@@ -152,8 +151,10 @@ Both tasks target the 2014 to 2026 seasons. Earliest seasons found per source:
 - Ratings Reference NFL records: about 95 to 120 a season from 2014, sparse
   before.
 - Wikipedia scheduling changes: 2014 at least.
-- 506 NFL week pages: 2025 evidenced. Earlier seasons sit behind 506's archive,
-  which still has to be checked by hand.
+- 506 NFL week pages: every regular-season week from 2014 saved by hand.
+  National games appear from 2016; for 2014 and 2015 their networks come
+  from Ratings Reference, matched per game against the nflverse schedule
+  in the build.
 
 2026 is the current season. It is re-checked, not frozen. Sources that update
 during a season:
