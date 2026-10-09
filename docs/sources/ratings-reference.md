@@ -1,8 +1,8 @@
 # Ratings Reference: record format
 
 Ratings Reference publishes about 3,800 college football telecast records at
-`https://ratingsreference.com/telecast/<id>.json` (there's also an HTML page at
-the same path without `.json`, meant for people, not for booth-review; we only
+`https://ratingsreference.com/api/telecast/<id>.json` (there's also an HTML page
+at `/telecast/<id>`, meant for people, not for booth-review; we only
 read the JSON). Every ID starts with a league prefix (`cfb-` for the ones this
 project reads) and ends with the game's date, for example
 `cfb-example-state-example-tech-2026-10-03`.
@@ -101,3 +101,76 @@ name, link the specific record the figure came from, cite that figure's own
 `source_url` alongside it, and note that the published data has been
 modified (joined against other sources, filtered, and re-shaped for the
 chart) rather than reproduced as-is.
+
+## NFL records
+
+Ratings Reference also covers the NFL. The Phase 6 spike (October 2026) read
+its NFL records by hand to judge whether an NFL module is workable. The
+collector still reads CFB only: the sitemap filter keeps paths starting
+`/telecast/cfb-`, and NFL entries are skipped until a later build phase adds
+an opt-in NFL option.
+
+- **IDs:** `nfl-<team>-<team>-<yyyy-mm-dd>`. The two team words are nicknames
+  in alphabetical order, not away then home; the record's title gives the
+  away and home teams. A few IDs carry an event word, such as a Christmas
+  marker or a season-kickoff special. Some Tuesday or Wednesday-dated
+  entries repeat a game played a day or two earlier.
+- **Depth:** about 95 to 120 NFL telecasts a season from 2014 onward,
+  counting playoffs. That covers national windows, primetime and the
+  postseason, not every game. Before 2014 there are 2 to 13 entries a
+  season, back to 2001. Counted from a locally cached sitemap.
+- **How the spike read them:** 14 JSON records, one at a time, 3 seconds
+  apart. Each figure was kept with its record URL and its `source_url`
+  privately. No figure appears in this repository.
+- **No venue, kickoff time or playoff round:** NFL records carry none of these.
+  Kickoff, venue and round come from nflverse (see `nflverse.md`). Use a
+  record's `networks` with care on regional Sunday games: one record checked
+  listed an implausible network.
+
+### Sunday-afternoon figures are window figures
+
+A Sunday-afternoon figure covers a window, not one game.
+
+- **National windows:** claims carry `figure_scope: split_window`, a
+  qualitative `market_coverage` text such as "in most markets", and source
+  wording along the lines of "<network>'s national window, featuring <game>,
+  averaged ...".
+- **Regional early-window figures:** worded as regional action featuring a
+  game.
+- **Inconsistent labels:** some records for the same kind of window say only
+  "<game> averaged ..." with `single_window`. The source wording, not the
+  scope label alone, is the reliable signal.
+- **Standalone games:** primetime, holidays, international mornings and
+  playoffs are one game per window, so their figures are per game.
+- **No market shares:** no NFL claim read states a percent or count of
+  markets.
+
+### Composite and streaming hazards
+
+These extend the CFB MegaCast hazard above.
+
+- **Monday games with an alternate feed:** the final figure is worded as
+  covering ABC, ESPN and ESPN2, the channel that carries the ManningCast
+  alternate broadcast. Nothing marks it as combined: `composite_of` is
+  null, and the separate per-network claims sum to less than the total.
+- **Monday doubleheaders:** the final figure is "combined across ABC and
+  ESPN", next to a preliminary per-network ESPN claim (`cut: per_network`,
+  `carrier_network`).
+- **Amazon Thursday games:** Nielsen-measured (`self_reported: false`), with
+  `platform_scope` unstated. Nothing says whether local broadcast simulcasts
+  in the teams' markets are included.
+- **Netflix Christmas games:** tagged Nielsen, but the source wording credits
+  the streamer (`press_attributed`). Simulcast inclusion is again unstated.
+
+Other NFL claim fields seen:
+
+- `cut`: `full_telecast`, `window`, `per_network`
+- `era_id`: for example a pre-out-of-home panel era for 2015
+- `supersedes_id`: for example a network-confirmed figure replacing a press
+  figure
+- `corroboration`
+
+Preliminary fast-national time-slot lines often sit next to the final figure.
+Every NFL figure is used under the same license and attribution rules as
+above: credit RatingsReference.com, link the record, cite its `source_url`,
+and note the data was modified.
