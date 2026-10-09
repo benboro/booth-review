@@ -16,7 +16,7 @@
  * `school` (comma-separated team slugs, ordered by team index), `postseason`
  * (`exclude`/`only`; omitted at the default `all`), `seasons`, `networks`,
  * `slot`, `axis` (`excitement`/`date`; Spread is the default and is omitted), `y`
- * (`excitement`/`points`/`margin`; Viewers is the default and is omitted; y wins over `axis=excitement`, 04.15 D-12), `view` (`bars`/`butterfly`), `by` (`network`/`team`/`conference`);
+ * (`excitement`/`points`/`margin`; Viewers is the default and is omitted; y wins over `axis=excitement`, 04.15 D-12), `view` (`bars`/`butterfly`/`map`), `by` (`network`/`team`/`conference`);
  * each of the last two is omitted at its default (D-13). `h2h` (`1`, only with
  * exactly two schools; omitted at Either team) and `dots` (`hide`; omitted at
  * the Fade default; 04.7 D-10, D-14). `game` (one named-game slug: a bowl franchise,
@@ -105,7 +105,7 @@ export function encodeState(state, data) {
 
   if (state.axis === 'excitement' || state.axis === 'date') params.push(['axis', state.axis]);
   if (Y_VALUES.includes(state.y)) params.push(['y', state.y]);
-  if (state.view === 'bars' || state.view === 'butterfly') params.push(['view', state.view]);
+  if (state.view === 'bars' || state.view === 'butterfly' || state.view === 'map') params.push(['view', state.view]);
   if (state.by) params.push(['by', state.by]);
   if (state.dots === 'hide') params.push(['dots', 'hide']);
 
@@ -312,7 +312,7 @@ export function decodeState(search, data) {
   // view/by are enum-allowlisted but never checked for applicability
   // (D-12): a stale `?view=bars` must survive a setState round trip.
   const rawView = scalarParam(params, 'view');
-  state.view = rawView === 'bars' || rawView === 'butterfly' ? rawView : 'scatter';
+  state.view = rawView === 'bars' || rawView === 'butterfly' || rawView === 'map' ? rawView : 'scatter';
   const rawBy = scalarParam(params, 'by');
   state.by = ['network', 'team', 'conference'].includes(rawBy) ? rawBy : null;
   // Fade is the default; only the literal 'hide' selects Hide (04.7 D-10).

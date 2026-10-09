@@ -42,6 +42,20 @@ def _load_list(content: bytes, *, kind: str) -> list[dict[str, Any]]:
     return data
 
 
+def _is_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _optional_int(row: dict[str, Any], field: str, *, kind: str) -> int | None:
+    """An int field that may be absent; the message names the field, never the value."""
+    value = row.get(field)
+    if value is None:
+        return None
+    if not _is_int(value):
+        raise ParseError(f"cfbd {kind}: {field} is not an integer")
+    return int(value)
+
+
 @dataclass(frozen=True)
 class CfbdGame:
     id: int
@@ -68,6 +82,7 @@ class CfbdGame:
     notes: str | None
     is_cfp: bool = False
     playoff_round: str | None = None
+    venue_id: int | None = None
 
 
 def parse_games(content: bytes) -> list[CfbdGame]:
@@ -113,6 +128,7 @@ def parse_games(content: bytes) -> list[CfbdGame]:
                 notes=row.get("notes"),
                 is_cfp=is_cfp,
                 playoff_round=playoff_round,
+                venue_id=_optional_int(row, "venueId", kind="game"),
             )
         )
     return games
@@ -320,3 +336,102 @@ def parse_teams(content: bytes) -> list[CfbdTeam]:
             )
         )
     return result
+
+
+@dataclass(frozen=True)
+class CfbdVenue:
+    id: int
+    name: str
+    city: str | None
+    state: str | None
+    country_code: str | None
+    latitude: float | None
+    longitude: float | None
+
+
+def _venue_text(row: dict[str, Any], field: str) -> str | None:
+    value = row.get(field)
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str):
+        raise ParseError(f"cfbd venue: {field} is not a string")
+    return value
+
+
+def _venue_coordinate(value: object, field: str, limit: float) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ParseError(f"cfbd venue: {field} is not a number")
+    if not -limit <= value <= limit:
+        raise ParseError(f"cfbd venue: {field} is out of range")
+    return float(value)
+
+
+@dataclass(frozen=True)
+class VenueParse:
+    venues: list[CfbdVenue]
+    malformed: int
+
+
+def _parse_venue_row(row: object) -> CfbdVenue:
+    """One /venues row; raises ParseError when the row is malformed."""
+    if not isinstance(row, dict):
+        raise ParseError("cfbd venues: expected an object per row")
+    venue_id = _require(row, "id", kind="venue")
+    if not _is_int(venue_id):
+        raise ParseError("cfbd venue: id is not an integer")
+    name = _require(row, "name", kind="venue")
+    if not isinstance(name, str):
+        raise ParseError("cfbd venue: name is not a string")
+    location = row.get("location")
+    nested = location if isinstance(location, dict) else {}
+    raw_lat = row.get("latitude")
+    if raw_lat is None:
+        raw_lat = nested.get("y")
+    raw_lon = row.get("longitude")
+    if raw_lon is None:
+        raw_lon = nested.get("x")
+    latitude = _venue_coordinate(raw_lat, "latitude", 90.0)
+    longitude = _venue_coordinate(raw_lon, "longitude", 180.0)
+    if latitude == 0.0 and longitude == 0.0:
+        # (0, 0) is a placeholder, not a place: leave it unlocated so the
+        # reference CSV can fill it.
+        latitude = longitude = None
+    return CfbdVenue(
+        id=venue_id,
+        name=name,
+        city=_venue_text(row, "city"),
+        state=_venue_text(row, "state"),
+        country_code=_venue_text(row, "countryCode"),
+        latitude=latitude,
+        longitude=longitude,
+    )
+
+
+def parse_venues(content: bytes) -> VenueParse:
+    """Parse the /venues list. Coordinates come from top-level latitude/longitude,
+    falling back to a nested location {x: longitude, y: latitude} when the
+    top-level value is null or absent; a venue with neither (or at 0, 0) parses
+    with None coordinates (handled downstream).
+
+    A malformed row, or a repeat of an earlier id, is skipped and counted: its
+    venue is then unlocated and its games ship place: null. Only a malformed
+    response as a whole (not an array) raises. Errors name fields, never values.
+    """
+    rows = _load_list(content, kind="venues")
+    venues: list[CfbdVenue] = []
+    seen: set[int] = set()
+    malformed = 0
+    for row in rows:
+        try:
+            venue = _parse_venue_row(row)
+        except ParseError:
+            malformed += 1
+            continue
+        if venue.id in seen:
+            malformed += 1
+            continue
+        seen.add(venue.id)
+        venues.append(venue)
+    return VenueParse(venues=venues, malformed=malformed)

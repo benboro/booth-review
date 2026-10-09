@@ -1709,6 +1709,10 @@ input[type="checkbox"] {
 .tab-hint {
   min-height: 24px;
   margin: 0;
+  /* One line always: a wrapped Map prompt would push the chart panel down (04.18 D-09). */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font: var(--font-label);
   color: var(--muted);
 }
@@ -2686,4 +2690,28 @@ td.no-rating {
   #y-toggle .axis-short {
     display: inline;
   }
+}
+
+/* 04.18 Map panel */
+#map-panel {
+  position: relative;
+  min-height: 520px;
+  background: var(--bg);
+}
+
+#map-chart {
+  height: 520px;
+}
+
+.map-overlay {
+  position: absolute;
+  margin: 0;
+  font: var(--font-label);
+  line-height: 1.4;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.map-note {
+  white-space: nowrap;
 }

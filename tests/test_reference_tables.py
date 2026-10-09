@@ -21,6 +21,7 @@ import pytest
 from booth_review.build.bowls import BOWL_COLUMNS, load_bowls
 from booth_review.build.crew_overrides import CREW_OVERRIDE_COLUMNS, load_crew_overrides
 from booth_review.build.rivalries import RIVALRY_COLUMNS, load_rivalries
+from booth_review.build.venues import VENUE_LOCATION_COLUMNS, load_venue_locations
 from booth_review.contract.models import crew_source_url_problem
 from booth_review.flags.era import ERA_COLUMNS, load_eras
 from booth_review.flags.events import EVENT_COLUMNS, load_event_flags
@@ -76,6 +77,7 @@ KNOWN_TABLES: dict[str, tuple[tuple[str, ...] | None, Loader | None]] = {
     "bowls.csv": (BOWL_COLUMNS, load_bowls),
     "rivalries.csv": (RIVALRY_COLUMNS, load_rivalries),
     "crew_overrides.csv": (CREW_OVERRIDE_COLUMNS, load_crew_overrides),
+    "venue_locations.csv": (VENUE_LOCATION_COLUMNS, load_venue_locations),
 }
 
 # 04.3 D-01: the one documented exception to Phase 3 D-05/D-06. Each row records a

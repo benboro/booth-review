@@ -280,3 +280,68 @@ def test_cell_width_comes_from_resting_labels_only(
     assert guarded_page.evaluate(_CELL_MIN_JS) == plain
     _set(guarded_page, RESET)
     assert _truncated(guarded_page) == []
+
+
+_PANEL_JS = """() => {
+  const r = document.getElementById('chart-panel').getBoundingClientRect();
+  return {
+    toolbar: document.getElementById('toolbar').getBoundingClientRect().height,
+    top: r.top,
+    height: r.height,
+  };
+}"""
+
+
+def _panel_geometry(page: Page) -> dict[str, float]:
+    page.evaluate(_WAIT_TWO_FRAMES)
+    result: dict[str, float] = page.evaluate(_PANEL_JS)
+    return result
+
+
+@pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
+@pytest.mark.parametrize("width", [1280, 360])
+def test_scatter_and_map_share_toolbar_and_chart_panel_geometry(
+    guarded_page: Page, open_app: Callable[[Page, str], None], width: int
+) -> None:
+    """04.18 D-09: switching Scatter <-> Map moves neither the controls row nor the
+    chart panel's top, and the panel stays 520px tall (the Map's fixed height)."""
+    guarded_page.set_viewport_size({"width": width, "height": 900})
+    open_app(guarded_page)
+    scatter = _panel_geometry(guarded_page)
+    before: int = guarded_page.evaluate("() => window.__testHooks.mapRenders")
+    _set(guarded_page, {"view": "map"})
+    guarded_page.wait_for_function("(n) => window.__testHooks.mapRenders > n", arg=before)
+    on_map = _panel_geometry(guarded_page)
+    assert on_map["toolbar"] == scatter["toolbar"]
+    assert on_map["top"] == scatter["top"]
+    assert on_map["height"] == scatter["height"] == 520
+    _set(guarded_page, {"view": "scatter"})
+    assert _panel_geometry(guarded_page) == scatter
+
+
+@pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide", "narrow"], indirect=True)
+def test_four_chart_tabs_fit_at_340px(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """04.18 D-09: Scatter, Bars, Butterfly and Map fit one row in 340px, no page overflow."""
+    guarded_page.set_viewport_size({"width": 340, "height": 800})
+    open_app(guarded_page, "?view=map")
+    fit: dict[str, Any] = guarded_page.evaluate(
+        """() => {
+          const tabs = [...document.querySelectorAll('#chart-tabs .chart-tab')];
+          const slot = document.getElementById('chart-tabs').getBoundingClientRect();
+          return {
+            n: tabs.length,
+            tops: [...new Set(tabs.map((t) => Math.round(t.getBoundingClientRect().top)))],
+            clipped: tabs.filter((t) => t.scrollWidth > t.clientWidth).length,
+            right: Math.max(...tabs.map((t) => t.getBoundingClientRect().right)),
+            slotRight: slot.right,
+            scrollWidth: document.documentElement.scrollWidth,
+          };
+        }"""
+    )
+    assert fit["n"] == 4
+    assert len(fit["tops"]) == 1
+    assert fit["clipped"] == 0
+    assert fit["right"] <= fit["slotRight"] + 0.5
+    assert fit["scrollWidth"] <= 340

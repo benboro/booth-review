@@ -36,6 +36,7 @@ ALLOWED_ENDPOINTS: frozenset[str] = frozenset(
         "/lines",
         "/rankings",
         "/teams/fbs",
+        "/venues",
         "/info",
     }
 )

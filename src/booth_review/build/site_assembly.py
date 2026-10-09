@@ -32,6 +32,8 @@ from booth_review.transport.cache import atomic_write_bytes
 
 PLOTLY_BUNDLE = "vendor/plotly-4.1.1.min.js"
 PLOTLY_SHA256 = "3b6e15d45dbb7fca5bd2094291e961ddc5472cd887009e6009a56dab668d721f"
+MAP_GEOMETRY = "vendor/us-states-albers.js"
+MAP_GEOMETRY_SHA256 = "ff1e0a82d121f389782ef3ff466fc2910a08b7594af9e92598ac4032a9e2d3dc"
 COPY_SUFFIXES = frozenset({".html", ".js", ".css"})
 BUILD_MARKER = ".booth-review-site"
 VERSION_TOKEN = "__SITE_DATA_VERSION__"
@@ -130,8 +132,9 @@ def _swap_into_place(staging: Path, out_dir: Path) -> None:
 
 
 def _verify_bundle(site_src: Path) -> None:
-    """Refuse a vendored Plotly bundle whose digest isn't PLOTLY_SHA256
-    (T-04-16): a tampered or wrong-version bundle never reaches dist/site.
+    """Refuse vendored files whose digest isn't pinned: the Plotly bundle
+    (PLOTLY_SHA256, T-04-16) and the map geometry (MAP_GEOMETRY_SHA256,
+    T-04.18-10). A tampered or wrong-version file never reaches dist/site.
     """
     bundle_path = site_src / PLOTLY_BUNDLE
     if not bundle_path.is_file():
@@ -139,6 +142,11 @@ def _verify_bundle(site_src: Path) -> None:
     digest = hashlib.sha256(bundle_path.read_bytes()).hexdigest()
     if digest != PLOTLY_SHA256:
         raise SiteBuildError("vendored Plotly bundle digest mismatch")
+    geometry_path = site_src / MAP_GEOMETRY
+    if not geometry_path.is_file():
+        raise SiteBuildError("vendored map geometry not found")
+    if hashlib.sha256(geometry_path.read_bytes()).hexdigest() != MAP_GEOMETRY_SHA256:
+        raise SiteBuildError("vendored map geometry digest mismatch")
 
 
 def check_no_key_leak(out_dir: Path) -> bool:

@@ -138,6 +138,7 @@ This splits the project into two questions:
 | Games, media, pregame win probability, rankings, talent, betting lines | `/games`, `/games/media`, `/metrics/wp/pregame`, `/rankings`, `/talent`, `/lines` | About one per season each, so roughly 100 (a regular/postseason split may add some) |
 | Play-by-play | `/plays` (requires year and week) | About 17 per season, so roughly 220 |
 | In-game win probability | `/metrics/wp` (requires a game ID) | One per game: 10,000+, far over budget |
+| Venues | `/venues` (no parameters) | One call, made once by hand; re-collected only if a new venue appears |
 
 - **Excitement index caveat:** CFBD notes that stored in-game win-probability values from 2025 onward use the current model, and earlier values were not backfilled. That's a model break at 2025. Options:
   1. Use CFBD's `excitementIndex` as-is and add a season fixed effect.

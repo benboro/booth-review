@@ -152,6 +152,49 @@ export const SURFACE = { light: '#F4F5F7', dark: '#1E2126' };
 export const MUTED = { light: '#4B5563', dark: '#9CA3AF' };
 
 /**
+ * Map land fill per theme (04.18 D-08, UI-SPEC "Color"): barely off the page background so
+ * the states read as a faint base. DEFAULTED pending the user's close-out sign-off.
+ */
+export const MAP_LAND = { light: '#F1F2F5', dark: '#1B1E23' };
+
+/**
+ * Map state outline per theme (04.18 D-08, UI-SPEC "Color"): muted, one step darker than
+ * the land on light and lighter on dark. DEFAULTED pending the user's close-out sign-off.
+ */
+export const MAP_OUTLINE = { light: '#C4C9D1', dark: '#3D424B' };
+
+/** Edge-marker label text (04.18 D-15): the muted token, aliased so the Map can tune it alone. */
+export const MAP_MARKER_LABEL = MUTED;
+
+/**
+ * Map mark opacity tiers (04.18 D-10/D-12/D-13, UI-SPEC "Mark tiers"). DEFAULTED pending
+ * the user's close-out sign-off.
+ */
+export const MAP_OPACITY = Object.freeze({
+  base: 0.6,
+  other: 0.45,
+  subject: 0.85,
+  faded: 0.15,
+  leg: 0.55,
+  marker: 0.6,
+});
+
+/**
+ * Map mark sizes in px (04.18 D-05/D-10, UI-SPEC "Mark tiers"); `subject` is per compare
+ * shape, sized so each shape reads equally large. DEFAULTED pending close-out sign-off.
+ */
+export const MAP_SIZE = Object.freeze({
+  base: 7,
+  other: 7,
+  faded: 7,
+  marker: 9,
+  subject: Object.freeze({ circle: 8, square: 8, diamond: 10, 'triangle-up': 9, star: 12 }),
+});
+
+/** Map line widths in px (04.18 D-08/D-13/D-15, UI-SPEC "Mark tiers"). */
+export const MAP_LINE_WIDTH = Object.freeze({ outline: 0.6, leg: 1.25, marker: 1.5, subjectOutline: 1 });
+
+/**
  * Mirrors the `--special` CSS token (the Announcers toolbar button's violet, D-34); the
  * fill for announcer, team, and conference bars (04.4 D-24). A rendered test keeps the
  * two equal.

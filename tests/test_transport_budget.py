@@ -104,6 +104,10 @@ def test_allowed_endpoints_pass_allow_list(tmp_path: Path) -> None:
         budget.before_fetch(_req(endpoint))  # must not raise
 
 
+def test_venues_endpoint_is_allow_listed() -> None:
+    assert "/venues" in ALLOWED_ENDPOINTS
+
+
 def test_empty_ledger_unknown_budget_but_info_allowed(tmp_path: Path) -> None:
     budget = CfbdBudget(tmp_path / "cfbd_ledger.jsonl")
     with pytest.raises(BudgetUnknownError):

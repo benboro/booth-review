@@ -249,6 +249,32 @@ rather than matched as literal strings, so that, for example, a parent and
 child who share the same name are kept as two separate, distinct people
 rather than merged into one.
 
+## The map
+
+The map shows where games were played and who traveled to call them. It counts
+assignments. It is not a measure of quality or audience, and it carries no
+viewer figures.
+
+A dot is one venue for one network family, counting only the games that pass
+the filters. A venue with many games reads darker.
+
+Where each dot sits comes from one list of venues from CollegeFootballData.com.
+Each game uses its own venue, so a neutral-site or bowl game sits where it was
+played, not at a team's home stadium.
+
+The lines show travel. With announcers picked, each person's games are joined in
+date order. With schools picked and no announcer, each school's games are joined
+the same way. Each season is its own path, so a line never runs across an
+offseason. Each leg is colored by the network of the game it leads to. Filters
+skip games but never cut a path: a leg runs from the last game still shown to
+the next one.
+
+Hawaii is drawn in an inset at the lower left. Alaska is not drawn, because no
+game in the data was played there. Games abroad appear as labeled markers at the
+edge of the map nearest them (Dublin and London at the top right, Sydney at the
+lower left), or at their real point when that point is on the map (Nassau). A
+game with no known location is left off the map and counted in a note.
+
 ## Sources and credits
 
 **Ratings Reference.** Viewership figures on this chart come from
@@ -273,7 +299,7 @@ listing. If a public source shows that a crew 506 lists is wrong, that sourced
 booth replaces 506's the same way, but the coverage table's hand-confirmed
 count includes only telecasts 506 never gave a crew.
 
-**CollegeFootballData.com.** Game data, rankings, closing spreads, and
+**CollegeFootballData.com.** Game data, venue names and locations, rankings, closing spreads, and
 excitement values come from CollegeFootballData.com. Every place this data
 appears is credited with the phrase "Data provided by CollegeFootballData.com" linked to
 [its homepage](https://collegefootballdata.com).

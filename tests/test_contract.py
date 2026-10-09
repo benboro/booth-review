@@ -382,6 +382,45 @@ def _unreferenced_rivalry(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _place_out_of_range(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["place"][0] = 9
+    return data
+
+
+def _unrated_place_out_of_range(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts_unrated"]["place"][0] = 9
+    return data
+
+
+def _unreferenced_venue(data: dict[str, Any]) -> dict[str, Any]:
+    # Venue 6 is used by rated 7 and rated 11 only.
+    data["telecasts"]["place"] = [None if p == 6 else p for p in data["telecasts"]["place"]]
+    data["telecasts_unrated"]["place"] = [
+        None if p == 6 else p for p in data["telecasts_unrated"]["place"]
+    ]
+    return data
+
+
+def _venue_latitude_out_of_range(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["venues"][0]["lat"] = 91
+    return data
+
+
+def _venue_longitude_out_of_range(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["venues"][0]["lon"] = -181
+    return data
+
+
+def _venue_extra_key(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["venues"][0]["capacity"] = 80000
+    return data
+
+
+def _venue_string_latitude(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["venues"][0]["lat"] = "40.8"
+    return data
+
+
 def _rivalry_article_missing(data: dict[str, Any]) -> dict[str, Any]:
     del data["lookups"]["rivalries"][1]["article"]
     return data
@@ -493,6 +532,13 @@ _BROKEN_VARIANTS = [
     pytest.param(_rivalry_teams_mismatch, id="rivalry-teams-mismatch"),
     pytest.param(_rivalry_index_out_of_range, id="rivalry-index-out-of-range"),
     pytest.param(_unreferenced_rivalry, id="unreferenced-rivalry"),
+    pytest.param(_place_out_of_range, id="place-out-of-range"),
+    pytest.param(_unrated_place_out_of_range, id="unrated-place-out-of-range"),
+    pytest.param(_unreferenced_venue, id="unreferenced-venue"),
+    pytest.param(_venue_latitude_out_of_range, id="venue-latitude-out-of-range"),
+    pytest.param(_venue_longitude_out_of_range, id="venue-longitude-out-of-range"),
+    pytest.param(_venue_extra_key, id="venue-extra-key"),
+    pytest.param(_venue_string_latitude, id="venue-string-latitude"),
     pytest.param(_rivalry_article_missing, id="rivalry-article-missing"),
     pytest.param(_rivalry_article_capitalized, id="rivalry-article-capitalized"),
     pytest.param(_rivalry_article_empty_string, id="rivalry-article-empty-string"),
@@ -688,9 +734,9 @@ def test_unrated_fields_are_display_only() -> None:
 
 
 def test_site_data_fields_unchanged() -> None:
-    assert len(SITE_DATA_FIELDS) == 32
+    assert len(SITE_DATA_FIELDS) == 33
     assert SITE_DATA_FIELDS[:3] == ("season", "date", "kickoff")
-    assert SITE_DATA_FIELDS[-1] == "rivalry"
+    assert SITE_DATA_FIELDS[-1] == "place"
     assert not set(UnratedColumns.model_fields) & {"cause"} & set(SITE_DATA_FIELDS)
 
 
@@ -715,7 +761,9 @@ def test_unrated_block_has_no_cfbd_only_fields() -> None:
 def _with_unrated_row(data: dict[str, Any]) -> dict[str, Any]:
     """The fixture plus a one-row unrated block (a regular 2019 net-b game,
     crewless, cause none); every unrated variant mutates this row."""
-    data["schema_version"] = "2.2.0"
+    data["schema_version"] = "2.3.0"
+    # The replaced unrated block was the only user of the last two venues.
+    del data["lookups"]["venues"][7:]
     row: dict[str, Any] = {
         "season": 2019,
         "date": "2019-10-12",
@@ -742,6 +790,7 @@ def _with_unrated_row(data: dict[str, Any]) -> dict[str, Any]:
         "away_conference": 3,
         "bowl": None,
         "rivalry": None,
+        "place": None,
         "cause": "none",
     }
     data["telecasts_unrated"] = {k: [v] for k, v in row.items()}
@@ -860,3 +909,14 @@ def test_game_repeated_within_the_unrated_block_is_rejected() -> None:
     with pytest.raises(ValidationError, match="appear more than once") as info:
         validate_site_data(data)
     assert data["telecasts_unrated"]["date"][0] not in str(info.value)
+
+
+def test_place_and_venue_errors_name_position_only() -> None:
+    with pytest.raises(ValidationError, match=r"telecasts\.place\[0\]: venue index out of range"):
+        validate_site_data(_place_out_of_range(copy.deepcopy(_load_fixture())))
+    with pytest.raises(
+        ValidationError, match=r"telecasts_unrated\.place\[0\]: venue index out of range"
+    ):
+        validate_site_data(_unrated_place_out_of_range(copy.deepcopy(_load_fixture())))
+    with pytest.raises(ValidationError, match=r"lookups\.venues\[6\]: not referenced by any game"):
+        validate_site_data(_unreferenced_venue(copy.deepcopy(_load_fixture())))

@@ -115,6 +115,27 @@ def test_collect_506_real_run_commits_and_rerun_is_a_noop(
     assert _remote_log_count(remote) == log_count
 
 
+def test_collect_commit_leaves_unrelated_untracked_vault_files_alone(
+    git_vault, mock_transport_factory, patched_client
+) -> None:
+    paths = git_vault
+    draft = paths.vault / "interim" / "draft_untracked.csv"
+    draft.parent.mkdir(parents=True, exist_ok=True)
+    draft.write_text("not part of this collect\n", encoding="utf-8")
+    patched_client(mock_transport_factory(_sports506_responses()))
+
+    assert main(["collect", "506", "--season", "2025"]) == 0
+
+    def run_git(*args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(paths.vault), *args], capture_output=True, text=True, check=True
+        ).stdout
+
+    assert "interim/draft_untracked.csv" in run_git("status", "--porcelain", "-uall")
+    assert "interim/draft_untracked.csv" not in run_git("ls-files")
+    assert "raw/sports506/2025" in run_git("show", "--name-only", "--format=", "HEAD")
+
+
 def test_collect_506_one_404_fetches_others_commits_and_returns_4(
     git_vault, mock_transport_factory, patched_client, capsys
 ) -> None:
@@ -412,6 +433,46 @@ def test_collect_cfbd_below_floor_raises_and_sends_no_data_request(
         r for r in collect_handle.requests if r.url.endswith("/games?seasonType=both&year=2025")
     ]
     assert data_requests == []
+
+
+def test_collect_cfbd_venues_dry_run_prints_the_planned_call_and_sends_nothing(
+    git_vault, mock_transport_factory, patched_client, capsys
+) -> None:
+    handle = mock_transport_factory({})
+    patched_client(handle)
+
+    exit_code = main(["collect", "cfbd", "--venues", "--dry-run"])
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "/venues" in out
+    assert "?" not in out.split("/venues", 1)[1].splitlines()[0]
+    assert handle.requests == []
+
+
+def test_collect_cfbd_requires_season_or_venues(capsys) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        main(["collect", "cfbd"])
+    assert excinfo.value.code == 2
+
+
+def test_collect_cfbd_venues_with_season_is_a_usage_error(capsys) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        main(["collect", "cfbd", "--venues", "--season", "2024"])
+    assert excinfo.value.code == 2
+
+
+def test_collect_cfbd_venues_with_endpoints_exits_2_with_message(
+    git_vault, mock_transport_factory, patched_client, capsys
+) -> None:
+    handle = mock_transport_factory({})
+    patched_client(handle)
+
+    exit_code = main(["collect", "cfbd", "--venues", "--endpoints", "games", "--dry-run"])
+
+    assert exit_code == 2
+    assert "--endpoints does not apply to --venues" in capsys.readouterr().err
+    assert handle.requests == []
 
 
 # -- budget ----------------------------------------------------------------------------------
