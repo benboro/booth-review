@@ -35,12 +35,14 @@ _FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
 
 # A plain signed decimal ("-96.8281") cannot be a spreadsheet formula, and west
-# longitudes and southern latitudes need the minus sign.
-_PLAIN_NUMBER = re.compile(r"^-?\d+(\.\d+)?$")
+# longitudes and southern latitudes need the minus sign. ASCII digits only, and
+# it is matched against the raw cell, so padding (" -5") or a leading tab or CR
+# ("\t-5") is not exempt.
+_PLAIN_NUMBER = re.compile(r"-?[0-9]+(\.[0-9]+)?")
 
 
 def _is_formula_like(value: str) -> bool:
-    if _PLAIN_NUMBER.fullmatch(value.strip()):
+    if _PLAIN_NUMBER.fullmatch(value):
         return False
     return value.startswith(_FORMULA_PREFIXES) or value.strip().startswith(_FORMULA_PREFIXES)
 

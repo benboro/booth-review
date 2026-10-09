@@ -93,6 +93,30 @@ def test_plain_negative_number_is_not_a_formula(tmp_path: Path) -> None:
     assert read_reference_csv(path, COLUMNS)[0]["name"] == "-96.8281"
 
 
+@pytest.mark.parametrize("cell", ["\t-5", "\r-5", " -5", "-5 ", "-\u0665"])
+def test_padded_or_control_led_number_is_still_rejected(tmp_path: Path, cell: str) -> None:
+    # The plain-number exemption needs the raw cell to be exactly a signed ASCII
+    # decimal; whitespace padding is rejected deliberately (write "-5" bare).
+    path = tmp_path / "padded.csv"
+    _write_raw_csv(path, list(COLUMNS), [["1", cell, "x"]])
+    with pytest.raises(ReferenceTableError, match=r"line 2"):
+        read_reference_csv(path, COLUMNS)
+
+
+@pytest.mark.parametrize("cell", ["\t-5", "\r-5", " -5"])
+def test_write_refuses_a_padded_or_control_led_number(tmp_path: Path, cell: str) -> None:
+    path = tmp_path / "t.csv"
+    with pytest.raises(ReferenceTableError, match="disallowed"):
+        write_reference_csv(path, ("a", "b"), [{"a": "x", "b": cell}])
+    assert not path.exists()
+
+
+def test_plain_negative_number_round_trips_through_the_writer(tmp_path: Path) -> None:
+    path = tmp_path / "t.csv"
+    write_reference_csv(path, ("a", "b"), [{"a": "x", "b": "-96.8281"}])
+    assert read_reference_csv(path, ("a", "b")) == [{"a": "x", "b": "-96.8281"}]
+
+
 def test_blank_row_is_skipped(tmp_path: Path) -> None:
     path = tmp_path / "blank.csv"
     _write_raw_csv(path, list(COLUMNS), [["1", "a", "x"], ["", "", ""]])
