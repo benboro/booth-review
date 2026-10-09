@@ -284,7 +284,19 @@ The per-person table (`telecast_people`) is what makes filtering work across net
 - Excitement: nflverse play-by-play from 1999 with win probability; a game excitement index is straightforward.
 - Viewership: clean per-game figures only for primetime, the national late window, and playoffs. Regional afternoon windows can't be attributed to one crew.
 - Best identification: crew moves (Romo replacing Simms at CBS in 2017; Buck and Aikman moving to ESPN in 2022; Tirico replacing Michaels on Sunday Night Football).
-- To check: whether Ratings Reference covers the NFL at the same depth.
+- Ratings Reference depth (checked October 9, 2026, from its sitemap): about 95 to 120 NFL telecasts per season from 2014 to 2025, which covers primetime, national windows, and playoffs, not the roughly 285 games a season. Still to check: whether a Sunday-afternoon record measures the featured game alone or the whole window.
+
+**NFL special games (planned, October 9, 2026).** The NFL work centers on two questions. Every field is stored per game.
+
+1. *Special games per team per season.*
+   - Standalone games are set by a rule on kickoff times (no other game in the window), not by a fixed list. The rule should catch TNF, SNF, MNF, Thanksgiving, Christmas, Black Friday, late-season Saturdays, and Friday international games. A `slot_name` label is stored for display.
+   - Featured games share a window but get national treatment: Fox's America's Game of the Week (AGOTW) and CBS's late national game. Counts are normalized by each network's doubleheader weeks.
+   - International and flexed games get their own flags (flexed with the original slot). All flags roll up into `is_special`.
+2. *Fox's AGOTW crew vs. Fox's other crews on the same doubleheader Sunday.*
+   - Results show raw (who gets the best games) and adjusted for game quality (pregame spread, final margin, win-probability volatility).
+   - Viewership is normalized by coverage share where a source exists; otherwise the comparison is labeled unnormalized.
+
+Regular season only by default, with playoffs as a toggle. Open: the season range, and whether early-morning Sunday international games count as standalone.
 
 **MLB: weakest.**
 
@@ -294,7 +306,9 @@ The per-person table (`telecast_people`) is what makes filtering work across net
 - Excitement: computable from Retrosheet event files or MLB win-expectancy data.
 - Likely scope if added: national games only, which is a small sample.
 
-**Recommendation:** finish CFB through Phase 5 before starting either toggle.
+- Ratings Reference depth (October 9, 2026): about 50 to 120 MLB telecasts per season since 2017.
+
+**Recommendation:** finish CFB through Phase 5 before building either toggle. The go/no-go research for each sport is docs only and can run alongside it.
 
 ---
 
