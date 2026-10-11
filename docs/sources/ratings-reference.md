@@ -176,3 +176,42 @@ Preliminary fast-national time-slot lines often sit next to the final figure.
 Every NFL figure is used under the same license and attribution rules as
 above: credit RatingsReference.com, link the record, cite its `source_url`,
 and note the data was modified.
+
+## MLB records
+
+Ratings Reference also covers Major League Baseball. The Phase 7 spike (October
+2026) read 14 MLB records by hand, one at a time and paced, to judge whether an
+MLB module is workable. The collector still reads CFB only; MLB entries are
+skipped until a later build phase adds a league option.
+
+- **IDs:** `mlb-<team>-<team>-<yyyy-mm-dd>`. The two team words are nicknames in
+  alphabetical order, not away then home; the title gives the matchup. There is
+  no game number, so a doubleheader between the same two teams on one date shares
+  one slug (the build marks it ambiguous). Event entries exist for the all-star
+  game and the home run derby, and team words follow current club names for
+  older seasons.
+- **Depth:** about 970 MLB entries. 2002 to 2016 hold 9 to 14 a season, nearly all
+  postseason. Regular-season national games start in 2017, with roughly 50 to
+  120 entries a season; 2025 holds 78 regular-season entries from March to
+  September and 30 after. The earliest postseason season is 2002 and the
+  earliest regular-season one is 2017.
+- **Fields:** the title gives the matchup or, for the postseason, the round and
+  game number. `phase` is present on some records only. There is no network,
+  venue, start time or series field, so the outlet comes from another source.
+- **Fox Saturday is a window:** the record's claim scope marks a split window and
+  labels it by its featured game, so the figure is window-level, as with NFL
+  Sunday afternoons.
+- **Composite and simulcast hazards (composite figures):** the World Series,
+  TBS (regular season and postseason), ESPN, NBC and Netflix records were all
+  unclear on whether the figure combines feeds or outlets (a sister cable network
+  or streaming service, local simulcasts). One postseason record lists TBS and a
+  streaming service with a final figure about a quarter above the preliminary TBS
+  row, and another holds separate per-network claims with no total. Two records
+  carry conflicting final figures. No league-network record was found; whether
+  RR rates that package is open.
+- **Streaming measurement:** the 2026 Netflix and NBC records are
+  Nielsen-measured but state no platform scope. Era tags follow docs/PLAN.md
+  section 6: the out-of-home expansion for spring 2025 claims and Big Data plus
+  Panel from September 2025.
+- **Licensing:** each MLB figure keeps its record URL and its `source_url` under
+  the license section above.
