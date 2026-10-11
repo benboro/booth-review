@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -137,6 +138,55 @@ def test_build_commits_once_scoped_to_nfl_paths(vault: DataPaths) -> None:
     assert "raw/" not in subject
 
 
+TASK1_REVIEWS = (
+    "review_nfl_lead_booth.csv",
+    "review_nfl_agotw_misses.csv",
+    "review_nfl_lead_absent_weeks.csv",
+    "review_nfl_single_header_weeks.csv",
+    "review_nfl_task1_model.csv",
+)
+
+
+def test_build_writes_task1_table_and_reviews_in_the_same_commit(vault: DataPaths) -> None:
+    _seed(vault, rr=["NFL Network"])
+    before = int(_git(vault, "rev-list", "--count", "HEAD").strip())
+    assert main(["nfl", "build", "--season", "2014"]) == 0
+    assert int(_git(vault, "rev-list", "--count", "HEAD").strip()) == before + 1
+    task1 = pl.read_parquet(vault.processed / "nfl_task1_crews.parquet")
+    assert "coverage_normalized" in task1.columns and "predictors_used" in task1.columns
+    files = _git(vault, "show", "--name-only", "--format=%s", "HEAD").splitlines()
+    subject, paths = files[0], {f for f in files[1:] if f}
+    assert "processed/nfl_task1_crews.parquet" in paths
+    for name in TASK1_REVIEWS:
+        assert (vault.interim / name).is_file()
+        assert f"interim/{name}" in paths
+    for key in (
+        "seasons_close",
+        "seasons_tied",
+        "agotw_miss_weeks",
+        "skipped_single_header_weeks",
+        "ambiguous_fox_weeks",
+    ):
+        assert f"{key} 0" in subject
+    model = (vault.interim / "review_nfl_task1_model.csv").read_text()
+    assert "band" in model and "ols" in model
+
+
+def test_extra_tables_hook_still_replaces_task1(vault: DataPaths) -> None:
+    _seed(vault, rr=["NFL Network"])
+    outcome = nfl_pipeline.run_nfl_build(
+        vault,
+        Path(os.environ["BOOTH_REVIEW_REFERENCE"]),
+        seasons=[2014],
+        include_playoffs=False,
+        commit=False,
+        check_acceptance=False,
+        extra_tables=lambda table, ref: {"nfl_hook_probe": table.frame.head(1)},
+    )
+    assert "processed/nfl_hook_probe.parquet" in outcome.written
+    assert "processed/nfl_task1_crews.parquet" not in outcome.written
+
+
 def test_acceptance_unmatched_exits_4_and_writes_review(
     vault: DataPaths, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -177,12 +227,20 @@ def test_rebuild_is_byte_identical(vault: DataPaths) -> None:
     assert main(["nfl", "build", "--season", "2014", "--no-commit"]) == 0
     first = [
         (vault.processed / n).read_bytes()
-        for n in ("nfl_games.parquet", "nfl_special_games_by_team_season.parquet")
+        for n in (
+            "nfl_games.parquet",
+            "nfl_special_games_by_team_season.parquet",
+            "nfl_task1_crews.parquet",
+        )
     ]
     assert main(["nfl", "build", "--season", "2014", "--no-commit"]) == 0
     second = [
         (vault.processed / n).read_bytes()
-        for n in ("nfl_games.parquet", "nfl_special_games_by_team_season.parquet")
+        for n in (
+            "nfl_games.parquet",
+            "nfl_special_games_by_team_season.parquet",
+            "nfl_task1_crews.parquet",
+        )
     ]
     assert first == second
 
@@ -203,8 +261,6 @@ def test_gitignore_untouched() -> None:
 
 
 def _people_csv() -> Path:
-    import os
-
     return Path(os.environ["BOOTH_REVIEW_REFERENCE"]) / "people.csv"
 
 
