@@ -68,7 +68,31 @@ def _require_labels(labels: list[str]) -> None:
 
 # Job steps that report a failure through the generic `step_failed`
 # (cfbd and rr keep their own constructors below, with the same line shape).
-_STEP_NAMES = frozenset({"sports506", "freeze", "budget", "state", "build", "site", "staleness"})
+_STEP_NAMES = frozenset(
+    {
+        "sports506",
+        "freeze",
+        "budget",
+        "state",
+        "build",
+        "site",
+        "staleness",
+        "nflverse",
+        "nfl_rr",
+        "nfl_wikipedia",
+        "nfl_gaps",
+        "nfl_build",
+        "nfl_freeze",
+    }
+)
+
+_NFL_WEEK_LABELS = tuple(str(n) for n in range(1, 19))
+
+
+def _require_nfl_labels(labels: list[str]) -> None:
+    for label in labels:
+        if label not in _NFL_WEEK_LABELS:
+            raise ValueError(f"label is not a recognized NFL week label: {label!r}")
 
 
 def error_type_name(exc: BaseException) -> str:
@@ -296,6 +320,80 @@ def failed_attempts(n: int) -> AttentionItem:
         kind="failed_attempts",
         line=f"scheduled slots since last success whose run failed: {n}",
         severity="info",
+    )
+
+
+def nfl_506_missing(season: int, labels: list[str]) -> AttentionItem:
+    """`labels` are played NFL weeks with no cached 506 page."""
+    _require_nfl_labels(labels)
+    return AttentionItem(
+        kind="nfl_506_missing",
+        line=f"nfl 506 pages missing for {season}: weeks {', '.join(labels)}",
+        severity="attention",
+    )
+
+
+def nfl_506_stale(season: int, labels: list[str]) -> AttentionItem:
+    """`labels` are NFL 506 week pages saved before their games finished."""
+    _require_nfl_labels(labels)
+    return AttentionItem(
+        kind="nfl_506_stale",
+        line=f"nfl 506 pages saved before their games finished for {season}: weeks "
+        f"{', '.join(labels)}",
+        severity="attention",
+    )
+
+
+def nfl_rr_backlog(n: int, cap: int) -> AttentionItem:
+    """`n` NFL RR records carried over past the `cap`-per-run limit."""
+    _require_non_negative("n", n)
+    _require_non_negative("cap", cap)
+    return AttentionItem(
+        kind="nfl_rr_backlog",
+        line=f"nfl rr refresh backlog {n} (cap {cap} per run)",
+        severity="attention",
+    )
+
+
+def nfl_season_past_freeze(season: int, freeze_date: date) -> AttentionItem:
+    """NFL `season` is past its freeze date and still unfrozen."""
+    return AttentionItem(
+        kind="nfl_season_past_freeze",
+        line=(
+            f"nfl season {season} is past its freeze date {freeze_date.isoformat()} "
+            "and not frozen: run nfl freeze"
+        ),
+        severity="attention",
+    )
+
+
+def nfl_build_blocked(n: int) -> AttentionItem:
+    """The NFL build was blocked by `n` invalid week overrides or acceptance misses."""
+    _require_non_negative("n", n)
+    return AttentionItem(
+        kind="nfl_build_blocked",
+        line=f"nfl build blocked: {n} problem(s), tables held (run booth-review nfl build locally)",
+        severity="attention",
+    )
+
+
+def nfl_review_due(n: int) -> AttentionItem:
+    """`n` NFL crew names await local review."""
+    _require_non_negative("n", n)
+    return AttentionItem(
+        kind="nfl_review_due",
+        line=f"nfl crew names awaiting review: {n} (run booth-review nfl people locally)",
+        severity="attention",
+    )
+
+
+def nfl_schedule_drift(n: int) -> AttentionItem:
+    """`n` frozen NFL seasons have schedule rows that changed since the freeze."""
+    _require_non_negative("n", n)
+    return AttentionItem(
+        kind="nfl_schedule_drift",
+        line=f"nfl frozen seasons with changed schedule rows: {n} (run nfl freeze --check-drift)",
+        severity="attention",
     )
 
 
