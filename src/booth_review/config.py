@@ -87,6 +87,12 @@ class DataPaths:
         return self.ledger / "rr_lastmod.json"
 
     @property
+    def nfl_raw(self) -> Path:
+        """The NFL module's fixed raw namespace (raw/nfl/), which CFB globbers
+        never read."""
+        return self.raw / "nfl"
+
+    @property
     def rr_lastmod_log(self) -> Path:
         """Append-only lastmod log (merge=union); read together with rr_lastmod
         through sources.ratingsref.lastmod.load_lastmods."""

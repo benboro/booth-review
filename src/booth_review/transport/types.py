@@ -10,7 +10,15 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal, Protocol
 
-Source = Literal["sports506", "ratingsref", "cfbd"]
+Source = Literal[
+    "sports506",
+    "ratingsref",
+    "cfbd",
+    "nfl_sports506",
+    "nfl_ratingsref",
+    "nfl_nflverse",
+    "nfl_wikipedia",
+]
 
 
 @dataclass(frozen=True)

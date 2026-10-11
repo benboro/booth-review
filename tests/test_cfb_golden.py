@@ -153,6 +153,24 @@ def test_nfl_only_person_does_not_change_cfb_site_data(
     assert digests[_PEOPLE_KEY] == _GOLDEN[_PEOPLE_KEY]
 
 
+def test_nfl_manifest_lines_keep_cfb_generated_at(git_vault: DataPaths, tmp_path: Path) -> None:
+    ref = _vault_with_sentinel_note(git_vault, tmp_path, _KNOWN_BOWLS)
+    _write_manifest(
+        git_vault,
+        [
+            *_CFB_MANIFEST,
+            _entry("nfl/nflverse/schedules/games.csv", "n1", "2026-10-09T10:00:00Z"),
+            _entry(
+                "nfl/ratingsref/telecast/2025/nfl-a-b-2025-09-07.json", "n2", "2026-10-10T10:00:00Z"
+            ),
+        ],
+    )
+    run_build(git_vault, ref, commit=False, accept_baseline=True)
+    site = git_vault.vault / "processed" / "site-data.json"
+    assert _sha(site.read_bytes()) == _GOLDEN["processed/site-data.json"]
+    assert json.loads(site.read_bytes())["generated_at"] == "2026-10-01T10:00:00+00:00"
+
+
 def test_default_sitemap_parse_ignores_other_leagues() -> None:
     def url(slug: str) -> tuple[str, str]:
         return slug, "2026-01-01T00:00:00+00:00"
