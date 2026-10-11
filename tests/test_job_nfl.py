@@ -1020,9 +1020,7 @@ def _push_conflicting_schedules(paths: DataPaths, other: Path) -> None:
     target.write_bytes(target.read_bytes() + b"remote,edit\n")
     ident = ("-c", "user.name=Other", "-c", "user.email=other@example.com")
     for args in (("add", "-A"), ("commit", "-q", "-m", "other: schedules"), ("push", "-q")):
-        subprocess.run(
-            ["git", *ident, "-C", str(other), *args], check=True, capture_output=True
-        )
+        subprocess.run(["git", *ident, "-C", str(other), *args], check=True, capture_output=True)
 
 
 def test_nfl_push_conflict_leaves_the_cfb_state_pushed_and_exits_4(
