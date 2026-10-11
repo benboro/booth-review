@@ -7,7 +7,8 @@ Reference lastmod refresh, and a report of which 2026 506 week pages need a
 hand-save -- never a 506 fetch (D-07/D-08/AUTO-01, Claude's Discretion).
 
 Each step commits its own paths with a count-only message (batch_message);
-state (`ledger/job_state.json`) is saved and committed last. A VaultCommitError
+the CFB state (`ledger/job_state.json`) is saved and committed after every CFB
+step and before any NFL step. A VaultCommitError
 at any commit stops the run immediately (exit 3); every other step failure
 becomes an attention item and the run continues (exit 4 when any attention
 item exists, exit 0 on a clean run). "Every other" includes exceptions that
@@ -35,7 +36,8 @@ error, `_is_transient_cfbd_error`): the saved state's `retry_pending` makes
 every backup slot retry until a run gets past it. A run that stops with exit 3
 before the state save records no attempt, so the next backup slot retries it.
 
-NFL steps (999.4 D-07/D-08) run after every CFB step and CFB commit, once the
+NFL steps (999.4 D-07/D-08) run after every CFB step and CFB commit, the CFB
+state save and push included, once the
 vault is NFL-bootstrapped (an nflverse schedules file exists) and inside the NFL
 collectable season: nflverse schedules, 2026 play-by-play (Wednesday/Thursday
 ET slots and manual runs only), the Ratings Reference NFL refresh under its own
@@ -46,6 +48,15 @@ or VaultStateError from an NFL commit included, becomes an attention item. NFL
 results never touch the CFB failure flags, retry state, build time, deploy or
 key-leak result: they can add attention items (exit 4), never exit 3, a
 "failed" last_status or a held-back last_success_at.
+
+Running the NFL block only after the CFB state is pushed (CR-02) means an NFL
+commit whose push fails (and so stays on the local branch), a lock wait or a
+slow or killed NFL step can no longer fail or lose the CFB state push. Because
+the NFL items are known only after that save, `ledger/job_state.json` and
+`ledger/run_reports.jsonl` describe the CFB run alone; the NFL block appends its
+own count-only line (attention count and `nfl_*` counts) to
+`ledger/nfl_run_reports.jsonl` in a final `job: nfl_state` commit, and its items
+still reach the run's attention report and exit code (4 at most).
 """
 
 from __future__ import annotations
@@ -179,6 +190,10 @@ EXIT_NOTHING_DUE = 5
 # weekend's games are in, to limit vault growth; the Sunday slot skips it and a
 # manual run always does it. Python weekday numbers: Monday is 0.
 NFL_PBP_REFRESH_WEEKDAYS = frozenset({2, 3})
+
+# The NFL block's own count-only run report (CR-02): written after the CFB state
+# save, so it never shares a commit or a file with ledger/run_reports.jsonl.
+NFL_RUN_REPORTS = "nfl_run_reports.jsonl"
 
 # Vault paths each NFL job step commits (never a CFB path; RESEARCH Pitfall 4).
 _NFL_SCHEDULES_PATHS: tuple[str, ...] = ("raw/nfl/nflverse", "raw/_robots", "ledger/requests.jsonl")
@@ -431,16 +446,6 @@ class ScheduledJob:
                         deploy_ready, key_leak = site_result
                         any_failed = any_failed or key_leak
 
-            # D-08: after every CFB step and commit. Nothing the NFL block does
-            # can reach `except VaultCommitError` below or touch any_failed,
-            # retry_pending, new_last_build_at, deploy_ready or key_leak.
-            self._guarded_ok(
-                items,
-                lambda name: step_failed("nfl", name),
-                lambda: self._run_nfl_block(now, items, counts),
-                passthrough=(),
-            )
-
             if self._update:
                 self._staleness_step(items, new_last_build_at or state.last_build_at, now, season)
 
@@ -499,9 +504,16 @@ class ScheduledJob:
                 raise
             except Exception as exc:
                 items.append(step_failed("state", error_type_name(exc)))
-                status = "attention"
 
-        exit_code = 3 if key_leak else (4 if status == "attention" else 0)
+        # D-08 / CR-02: the NFL block runs only once the CFB state is saved and
+        # pushed, so nothing it does (an unpushed NFL commit, a lock wait, a
+        # slow or killed step) can fail or lose that push. It can only add
+        # items, which make the run exit 4 at most.
+        nfl_counts: dict[str, int] = {}
+        self._run_nfl_phase(now, window_season, items, nfl_counts)
+        counts.update(nfl_counts)
+
+        exit_code = 3 if key_leak else (4 if has_attention(items) else 0)
         return JobRunResult(
             exit_code=exit_code,
             items=items,
@@ -820,17 +832,72 @@ class ScheduledJob:
 
     # -- NFL block (999.4 D-07 to D-10; isolated from CFB, D-08) -----------------
 
+    def _run_nfl_phase(
+        self,
+        now: datetime,
+        window_season: int,
+        items: list[AttentionItem],
+        nfl_counts: dict[str, int],
+    ) -> None:
+        """The NFL block, then its own report line. Any exception becomes an
+        attention item; a skipped block (CFB-only vault, off-season) writes nothing."""
+        first = len(items)
+        label = window_season
+        try:
+            ran = self._run_nfl_block(now, items, nfl_counts)
+        except Exception as exc:
+            items.append(step_failed("nfl", error_type_name(exc)))
+        else:
+            if ran is None:
+                return
+            label = ran
+        if self._dry_run:
+            return
+        nfl_items = items[first:]
+        self._guarded_ok(
+            items,
+            lambda name: step_failed("nfl_state", name),
+            lambda: self._save_nfl_report(now, label, nfl_items, nfl_counts, items),
+            passthrough=(),
+        )
+
+    def _save_nfl_report(
+        self,
+        now: datetime,
+        season: int,
+        nfl_items: Sequence[AttentionItem],
+        nfl_counts: dict[str, int],
+        items: list[AttentionItem],
+    ) -> None:
+        """Append the NFL block's count-only report line and commit it alone.
+        A failed push is an attention item, never re-raised (D-08)."""
+        paths = self._runtime.paths
+        attention = sum(1 for item in nfl_items if item.severity == "attention")
+        report = {
+            "run_at": now.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "trigger": self._trigger,
+            "update": self._update,
+            "attention": attention,
+            "counts": dict(nfl_counts),
+        }
+        with (paths.ledger / NFL_RUN_REPORTS).open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(report, sort_keys=True) + "\n")
+        self._nfl_commit(
+            "nfl_state", str(season), {"attention": attention}, [f"ledger/{NFL_RUN_REPORTS}"], items
+        )
+
     def _run_nfl_block(
         self, now: datetime, items: list[AttentionItem], counts: dict[str, int]
-    ) -> None:
-        """Every NFL step, each guarded with no passthrough. Skipped until the
-        vault is NFL-bootstrapped and outside the NFL collectable season."""
+    ) -> int | None:
+        """Every NFL step, each guarded with no passthrough. Skipped (None)
+        until the vault is NFL-bootstrapped and outside the NFL collectable
+        season; otherwise returns the NFL season it ran for."""
         paths = self._runtime.paths
         if not (paths.raw / NFLVERSE_SCHEDULES_PATH).is_file():
-            return
+            return None
         nfl_season = nfl_collectable_season(now.astimezone(EASTERN).date())
         if nfl_season is None:
-            return
+            return None
 
         def _merge(prefix: str, result: dict[str, int] | None) -> None:
             if result is not None:
@@ -900,6 +967,7 @@ class ScheduledJob:
                     passthrough=(),
                 ),
             )
+        return nfl_season
 
     def _nfl_commit(
         self,

@@ -84,6 +84,7 @@ _STEP_NAMES = frozenset(
         "nfl_gaps",
         "nfl_build",
         "nfl_freeze",
+        "nfl_state",
     }
 )
 

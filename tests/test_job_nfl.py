@@ -362,6 +362,7 @@ def test_wednesday_run_collects_every_nfl_source_in_order_with_scoped_commits(
         "job: nfl_pbp 2026",
         "job: nfl_rr 2014-2026",
         "job: nfl_wikipedia 2026",
+        "job: nfl_state 2026",
     ]
     allowed = {
         "job: nfl_schedules": ("raw/nfl/nflverse/", "raw/_robots/", "ledger/requests.jsonl"),
@@ -380,6 +381,7 @@ def test_wednesday_run_collects_every_nfl_source_in_order_with_scoped_commits(
             "ledger/rr_lastmod.jsonl",
         ),
         "job: nfl_wikipedia": ("raw/nfl/wikipedia/", "raw/_robots/", "ledger/requests.jsonl"),
+        "job: nfl_state": ("ledger/nfl_run_reports.jsonl",),
     }
     for commit in commits:
         prefix = next((p for p in allowed if commit.subject.startswith(p + " ")), None)
@@ -390,8 +392,20 @@ def test_wednesday_run_collects_every_nfl_source_in_order_with_scoped_commits(
         assert commit.files
         for name in commit.files:
             assert name.startswith(allowed[prefix]), (commit.subject, name)
-    # The state commit is still last, after every NFL commit.
-    assert subjects[-1].startswith("job: state ")
+    # CR-02: the CFB state commit comes before every NFL commit; the NFL
+    # block's own report commit is last.
+    state_index = next(i for i, s in enumerate(subjects) if s.startswith("job: state "))
+    assert all(not s.startswith("job: nfl_") for s in subjects[:state_index])
+    assert subjects[-1].startswith("job: nfl_state 2026 (attention 1)")
+    nfl_report = json.loads(
+        (paths.ledger / "nfl_run_reports.jsonl").read_text(encoding="utf-8").splitlines()[-1]
+    )
+    assert nfl_report["attention"] == 1
+    assert nfl_report["counts"] == nfl
+    cfb_report = json.loads(
+        (paths.ledger / "run_reports.jsonl").read_text(encoding="utf-8").splitlines()[-1]
+    )
+    assert _nfl_counts(cfb_report["counts"]) == {}
 
     # Every NFL request line in the shared manifest was committed by an NFL commit.
     for sha in _git(paths, "rev-list", f"{head}..HEAD").split():
@@ -414,8 +428,9 @@ def test_wednesday_run_collects_every_nfl_source_in_order_with_scoped_commits(
     assert _GH_TOKEN not in captured.out + captured.err
     assert "506sports" not in "".join(r.url for r in handle.requests)
 
+    # The saved state describes the CFB run alone (the NFL gap is in the NFL report).
     state = load_state(paths.job_state)
-    assert state.last_status == "attention"
+    assert state.last_status == "ok"
     assert state.last_success_at == WED_NOW
     assert state.retry_pending is False
 
@@ -660,6 +675,7 @@ class _Outcome:
     cfb_commits: list[_Commit]
     state_attention: int
     all_items: list[AttentionItem]
+    nfl_report_attention: int | None
 
 
 def _normalize_state(commit: _Commit) -> tuple[_Commit, int]:
@@ -707,6 +723,12 @@ def _run_update(
         else:
             cfb_commits.append(commit)
     state = load_state(paths.job_state)
+    nfl_reports = paths.ledger / "nfl_run_reports.jsonl"
+    nfl_report_attention = (
+        json.loads(nfl_reports.read_text(encoding="utf-8").splitlines()[-1])["attention"]
+        if nfl_reports.is_file()
+        else None
+    )
     return _Outcome(
         exit_code=result.exit_code,
         cfb_items=[i for i in result.items if not _is_nfl_item(i)],
@@ -723,6 +745,7 @@ def _run_update(
         cfb_commits=cfb_commits,
         state_attention=state_attention,
         all_items=list(result.items),
+        nfl_report_attention=nfl_report_attention,
     )
 
 
@@ -772,7 +795,11 @@ def _assert_cfb_unchanged(baseline: _Outcome, outcome: _Outcome) -> None:
     assert outcome.last_attempt_at == baseline.last_attempt_at
     assert outcome.retry_pending == baseline.retry_pending
     assert outcome.last_build_at == baseline.last_build_at
-    assert outcome.state_attention == baseline.state_attention + len(outcome.nfl_items)
+    # CR-02: the CFB state is saved before the NFL block, so its attention count
+    # is the CFB one; the NFL items are counted in the NFL block's own report.
+    assert outcome.state_attention == baseline.state_attention
+    assert baseline.nfl_report_attention is None
+    assert outcome.nfl_report_attention == len(outcome.nfl_items)
 
 
 def _assert_nfl_failure_only(step: str, kind: str, outcome: _Outcome, calls: list[str]) -> None:
@@ -829,9 +856,10 @@ def test_isolation_clean_cfb_with_failing_nfl_step_is_exit_4_and_cfb_untouched(
     for kind, (outcome, calls) in runs.items():
         _assert_nfl_failure_only(step, kind, outcome, calls)
         _assert_cfb_unchanged(baseline, outcome)
-        # The added attention item makes the run attention / exit 4: never 3, never 0.
+        # The added attention item makes the run exit 4: never 3, never 0. The
+        # saved CFB state stays "ok" (CR-02: it is saved before the NFL block).
         assert outcome.exit_code == 4, kind
-        assert outcome.last_status == "attention", kind
+        assert outcome.last_status == baseline.last_status == "ok", kind
         assert outcome.last_success_at == UPDATE_NOW
         assert outcome.retry_pending is False
         assert outcome.deploy_ready is True
@@ -967,6 +995,120 @@ def test_an_error_escaping_the_nfl_block_is_one_attention_item(
     assert outcome.exit_code == 4
     assert outcome.last_status == "attention"
     assert fakes.calls == []
+    assert outcome.nfl_report_attention == 1
+
+
+# -- CR-02: the CFB state is saved and pushed before any NFL step ---------------------------------
+
+
+def _remote_file(paths: DataPaths, rel: str) -> str:
+    remote = _git(paths, "remote", "get-url", "origin").strip()
+    return subprocess.run(
+        ["git", "--git-dir", remote, "show", f"main:{rel}"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+
+
+def _push_conflicting_schedules(paths: DataPaths, other: Path) -> None:
+    """Push different bytes for the NFL schedules file from a second clone, as a
+    local `collect nflverse` would during the job run."""
+    remote = _git(paths, "remote", "get-url", "origin").strip()
+    subprocess.run(["git", "clone", "-q", remote, str(other)], check=True, capture_output=True)
+    target = other / "raw" / NFLVERSE_SCHEDULES_PATH
+    target.write_bytes(target.read_bytes() + b"remote,edit\n")
+    ident = ("-c", "user.name=Other", "-c", "user.email=other@example.com")
+    for args in (("add", "-A"), ("commit", "-q", "-m", "other: schedules"), ("push", "-q")):
+        subprocess.run(
+            ["git", *ident, "-C", str(other), *args], check=True, capture_output=True
+        )
+
+
+def test_nfl_push_conflict_leaves_the_cfb_state_pushed_and_exits_4(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
+) -> None:
+    fakes = _NflFakes(calls=[])
+    _install_fakes(monkeypatch, fakes)
+    root = tmp_path / "runs" / "conflict"
+    paths = _clone_vault(update_vault, root)
+    _bootstrap_nfl(paths, season=2025, frozen_through=2024)
+    seen: dict[str, str] = {}
+
+    def run_schedules(self: Any, *, refresh: bool, dry_run: bool) -> BatchSummary:
+        fakes.hit("schedules")
+        seen["remote_state"] = _remote_file(paths, "ledger/job_state.json")
+        _push_conflicting_schedules(paths, root / "other")
+        local = paths.raw / NFLVERSE_SCHEDULES_PATH
+        local.write_bytes(local.read_bytes() + b"local,edit\n")
+        return _batch("nfl_nflverse")
+
+    monkeypatch.setattr(NflverseCollector, "run_schedules", run_schedules)
+
+    outcome = _run_update(paths, root, mock_transport_factory, fake_clock)
+
+    # The real pull --rebase conflict fails the NFL push and keeps the NFL
+    # commit locally; the NFL report commit then fails to push the same way.
+    assert outcome.nfl_items == [push_failed("nfl_schedules"), push_failed("nfl_state")]
+    assert outcome.exit_code == 4
+    assert fakes.calls == list(_STEPS)
+    # The CFB state was already on the remote when the first NFL step began,
+    # and it is this run's state.
+    local_state = paths.job_state.read_text(encoding="utf-8")
+    assert seen["remote_state"] == local_state
+    assert json.loads(local_state)["last_attempt_at"].startswith("2025")
+    assert _remote_file(paths, "ledger/run_reports.jsonl") == (
+        paths.ledger / "run_reports.jsonl"
+    ).read_text(encoding="utf-8")
+    assert outcome.deploy_ready is True
+    assert outcome.last_attempt_at == UPDATE_NOW
+
+
+@pytest.mark.parametrize("error", [KeyboardInterrupt, SystemExit, RuntimeError])
+def test_an_nfl_step_that_dies_after_the_cfb_save_cannot_lose_the_cfb_state(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch, error
+) -> None:
+    """A hung NFL step is killed from outside (the Actions timeout); a
+    BaseException stands in for that kill, a RuntimeError for a plain raise."""
+    fakes = _NflFakes(calls=[])
+    _install_fakes(monkeypatch, fakes)
+    root = tmp_path / "runs" / "dies"
+    paths = _clone_vault(update_vault, root)
+    _bootstrap_nfl(paths, season=2025, frozen_through=2024)
+    before = load_state(paths.job_state)
+
+    def run_pbp(self: Any, seasons: Any, *, dry_run: bool) -> NflverseSummary:
+        fakes.hit("pbp")
+        raise error()
+
+    monkeypatch.setattr(NflverseCollector, "run_pbp", run_pbp)
+    handle = mock_transport_factory(_update_cfbd_responses())
+    runtime = _runtime(paths, handle, now=lambda: UPDATE_NOW, fake_clock=fake_clock)
+    job = ScheduledJob(
+        runtime,
+        token="test-token",
+        now=lambda: UPDATE_NOW,
+        trigger="manual",
+        update=True,
+        site_out=root / "site-out",
+    )
+
+    if issubclass(error, Exception):
+        result = job.run()
+        assert result.exit_code == 4
+        assert step_failed("nflverse", "RuntimeError") in result.items
+        assert result.deploy_ready is True
+    else:
+        with pytest.raises(error):
+            job.run()
+
+    assert fakes.calls[:2] == ["schedules", "pbp"]
+    remote_state = json.loads(_remote_file(paths, "ledger/job_state.json"))
+    assert remote_state == json.loads(paths.job_state.read_text(encoding="utf-8"))
+    state = load_state(paths.job_state)
+    assert state != before
+    assert state.last_attempt_at == UPDATE_NOW
+    assert state.last_build_at == UPDATE_NOW
 
 
 # -- NFL step results become NFL attention items ------------------------------------------------
