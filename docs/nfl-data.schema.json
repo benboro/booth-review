@@ -1,0 +1,1431 @@
+{
+  "$defs": {
+    "NflAgotwColumns": {
+      "additionalProperties": false,
+      "description": "AGOTW viewership rows per season and Nielsen era.",
+      "properties": {
+        "analyst_person": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Analyst Person",
+          "type": "array"
+        },
+        "era": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Era",
+          "type": "array"
+        },
+        "fill_in_games": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Fill In Games",
+          "type": "array"
+        },
+        "game_list": {
+          "items": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "title": "Game List",
+          "type": "array"
+        },
+        "games": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Games",
+          "type": "array"
+        },
+        "group": {
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "lead",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Group",
+          "type": "array"
+        },
+        "low_n": {
+          "items": {
+            "type": "boolean"
+          },
+          "title": "Low N",
+          "type": "array"
+        },
+        "mean_viewers": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Mean Viewers",
+          "type": "array"
+        },
+        "pbp_person": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Pbp Person",
+          "type": "array"
+        },
+        "season": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Season",
+          "type": "array"
+        },
+        "viewership_resid": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Viewership Resid",
+          "type": "array"
+        },
+        "viewership_se": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Viewership Se",
+          "type": "array"
+        }
+      },
+      "required": [
+        "season",
+        "era",
+        "group",
+        "pbp_person",
+        "analyst_person",
+        "games",
+        "fill_in_games",
+        "mean_viewers",
+        "viewership_resid",
+        "viewership_se",
+        "low_n",
+        "game_list"
+      ],
+      "title": "NflAgotwColumns",
+      "type": "object"
+    },
+    "NflBoothColumns": {
+      "additionalProperties": false,
+      "description": "Fox booth rows, one per season and booth, never pooled across seasons.",
+      "properties": {
+        "adj_excitement_resid": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Adj Excitement Resid",
+          "type": "array"
+        },
+        "adj_excitement_se": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Adj Excitement Se",
+          "type": "array"
+        },
+        "adj_margin_resid": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Adj Margin Resid",
+          "type": "array"
+        },
+        "adj_margin_se": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Adj Margin Se",
+          "type": "array"
+        },
+        "adj_n_excitement": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Adj N Excitement",
+          "type": "array"
+        },
+        "adj_n_margin": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Adj N Margin",
+          "type": "array"
+        },
+        "adj_n_volatility": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Adj N Volatility",
+          "type": "array"
+        },
+        "adj_volatility_resid": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Adj Volatility Resid",
+          "type": "array"
+        },
+        "adj_volatility_se": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Adj Volatility Se",
+          "type": "array"
+        },
+        "analyst_person": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Analyst Person",
+          "type": "array"
+        },
+        "fill_in_games": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Fill In Games",
+          "type": "array"
+        },
+        "game_list": {
+          "items": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "title": "Game List",
+          "type": "array"
+        },
+        "games": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Games",
+          "type": "array"
+        },
+        "group": {
+          "items": {
+            "enum": [
+              "lead",
+              "other",
+              "others_pooled"
+            ],
+            "type": "string"
+          },
+          "title": "Group",
+          "type": "array"
+        },
+        "low_n": {
+          "items": {
+            "type": "boolean"
+          },
+          "title": "Low N",
+          "type": "array"
+        },
+        "pbp_person": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Pbp Person",
+          "type": "array"
+        },
+        "rank": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Rank",
+          "type": "array"
+        },
+        "raw_mean_abs_margin": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Raw Mean Abs Margin",
+          "type": "array"
+        },
+        "raw_mean_excitement": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Raw Mean Excitement",
+          "type": "array"
+        },
+        "raw_mean_volatility": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Raw Mean Volatility",
+          "type": "array"
+        },
+        "raw_n_excitement": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Raw N Excitement",
+          "type": "array"
+        },
+        "raw_n_margin": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Raw N Margin",
+          "type": "array"
+        },
+        "raw_n_volatility": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Raw N Volatility",
+          "type": "array"
+        },
+        "season": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Season",
+          "type": "array"
+        }
+      },
+      "required": [
+        "season",
+        "group",
+        "rank",
+        "pbp_person",
+        "analyst_person",
+        "games",
+        "fill_in_games",
+        "raw_n_margin",
+        "raw_n_excitement",
+        "raw_n_volatility",
+        "raw_mean_abs_margin",
+        "raw_mean_excitement",
+        "raw_mean_volatility",
+        "adj_n_margin",
+        "adj_n_excitement",
+        "adj_n_volatility",
+        "adj_margin_resid",
+        "adj_margin_se",
+        "adj_excitement_resid",
+        "adj_excitement_se",
+        "adj_volatility_resid",
+        "adj_volatility_se",
+        "low_n",
+        "game_list"
+      ],
+      "title": "NflBoothColumns",
+      "type": "object"
+    },
+    "NflConstants": {
+      "additionalProperties": false,
+      "properties": {
+        "coverage_normalized": {
+          "const": false,
+          "title": "Coverage Normalized",
+          "type": "boolean"
+        },
+        "excitement_method": {
+          "const": "GEI-style",
+          "title": "Excitement Method",
+          "type": "string"
+        },
+        "low_n_threshold": {
+          "title": "Low N Threshold",
+          "type": "integer"
+        },
+        "viewership_scope": {
+          "const": "window",
+          "title": "Viewership Scope",
+          "type": "string"
+        }
+      },
+      "required": [
+        "viewership_scope",
+        "coverage_normalized",
+        "excitement_method",
+        "low_n_threshold"
+      ],
+      "title": "NflConstants",
+      "type": "object"
+    },
+    "NflCrewEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "person": {
+          "title": "Person",
+          "type": "integer"
+        },
+        "role": {
+          "enum": [
+            "pbp",
+            "analyst",
+            "unknown"
+          ],
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "person",
+        "role"
+      ],
+      "title": "NflCrewEntry",
+      "type": "object"
+    },
+    "NflEraRef": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "End"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "source_url": {
+          "title": "Source Url",
+          "type": "string"
+        },
+        "start": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Start"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "start",
+        "end",
+        "source_url"
+      ],
+      "title": "NflEraRef",
+      "type": "object"
+    },
+    "NflFranchiseRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "NflFranchiseRef",
+      "type": "object"
+    },
+    "NflFreshness": {
+      "additionalProperties": false,
+      "properties": {
+        "fox_default_season": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Fox Default Season"
+        },
+        "in_progress": {
+          "title": "In Progress",
+          "type": "boolean"
+        },
+        "season": {
+          "title": "Season",
+          "type": "integer"
+        },
+        "through_week": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Through Week"
+        },
+        "viewership_through_week": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Viewership Through Week"
+        }
+      },
+      "required": [
+        "season",
+        "in_progress",
+        "through_week",
+        "viewership_through_week",
+        "fox_default_season"
+      ],
+      "title": "NflFreshness",
+      "type": "object"
+    },
+    "NflGameColumns": {
+      "additionalProperties": false,
+      "description": "One list per display field; index i across every list is one game.",
+      "properties": {
+        "agotw": {
+          "items": {
+            "type": "boolean"
+          },
+          "title": "Agotw",
+          "type": "array"
+        },
+        "away": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Away",
+          "type": "array"
+        },
+        "away_name": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Away Name",
+          "type": "array"
+        },
+        "away_points": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Away Points",
+          "type": "array"
+        },
+        "cause": {
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pending",
+                  "regional",
+                  "none"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Cause",
+          "type": "array"
+        },
+        "cbs_national": {
+          "items": {
+            "type": "boolean"
+          },
+          "title": "Cbs National",
+          "type": "array"
+        },
+        "change_url": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Change Url",
+          "type": "array"
+        },
+        "crew": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/NflCrewEntry"
+            },
+            "type": "array"
+          },
+          "title": "Crew",
+          "type": "array"
+        },
+        "date": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Date",
+          "type": "array"
+        },
+        "era": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Era",
+          "type": "array"
+        },
+        "excitement": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Excitement",
+          "type": "array"
+        },
+        "final_margin": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Final Margin",
+          "type": "array"
+        },
+        "flexed": {
+          "items": {
+            "type": "boolean"
+          },
+          "title": "Flexed",
+          "type": "array"
+        },
+        "home": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Home",
+          "type": "array"
+        },
+        "home_name": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Home Name",
+          "type": "array"
+        },
+        "home_points": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Home Points",
+          "type": "array"
+        },
+        "international": {
+          "items": {
+            "type": "boolean"
+          },
+          "title": "International",
+          "type": "array"
+        },
+        "kickoff": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Kickoff",
+          "type": "array"
+        },
+        "network": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Network",
+          "type": "array"
+        },
+        "original_network": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Original Network",
+          "type": "array"
+        },
+        "original_slot": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Original Slot",
+          "type": "array"
+        },
+        "rr_url": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Rr Url",
+          "type": "array"
+        },
+        "scope": {
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "window",
+                  "game"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Scope",
+          "type": "array"
+        },
+        "season": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Season",
+          "type": "array"
+        },
+        "slot": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Slot",
+          "type": "array"
+        },
+        "source_url": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Source Url",
+          "type": "array"
+        },
+        "standalone": {
+          "items": {
+            "type": "boolean"
+          },
+          "title": "Standalone",
+          "type": "array"
+        },
+        "viewers": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Viewers",
+          "type": "array"
+        },
+        "week": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Week",
+          "type": "array"
+        }
+      },
+      "required": [
+        "season",
+        "week",
+        "date",
+        "kickoff",
+        "home",
+        "away",
+        "home_name",
+        "away_name",
+        "home_points",
+        "away_points",
+        "final_margin",
+        "slot",
+        "standalone",
+        "agotw",
+        "cbs_national",
+        "international",
+        "flexed",
+        "original_slot",
+        "original_network",
+        "change_url",
+        "network",
+        "crew",
+        "excitement",
+        "viewers",
+        "scope",
+        "era",
+        "rr_url",
+        "source_url",
+        "cause"
+      ],
+      "title": "NflGameColumns",
+      "type": "object"
+    },
+    "NflLookups": {
+      "additionalProperties": false,
+      "properties": {
+        "eras": {
+          "items": {
+            "$ref": "#/$defs/NflEraRef"
+          },
+          "title": "Eras",
+          "type": "array"
+        },
+        "franchises": {
+          "items": {
+            "$ref": "#/$defs/NflFranchiseRef"
+          },
+          "title": "Franchises",
+          "type": "array"
+        },
+        "networks": {
+          "items": {
+            "$ref": "#/$defs/NflNetworkRef"
+          },
+          "title": "Networks",
+          "type": "array"
+        },
+        "people": {
+          "items": {
+            "$ref": "#/$defs/NflPersonRef"
+          },
+          "title": "People",
+          "type": "array"
+        },
+        "slots": {
+          "items": {
+            "enum": [
+              "Christmas",
+              "Thanksgiving",
+              "Black Friday",
+              "International",
+              "TNF",
+              "SNF",
+              "MNF",
+              "Saturday",
+              "Friday",
+              "Sunday early",
+              "Sunday late",
+              "Other"
+            ],
+            "type": "string"
+          },
+          "title": "Slots",
+          "type": "array"
+        },
+        "team_names": {
+          "items": {
+            "$ref": "#/$defs/NflTeamNameRef"
+          },
+          "title": "Team Names",
+          "type": "array"
+        }
+      },
+      "required": [
+        "franchises",
+        "team_names",
+        "networks",
+        "people",
+        "eras",
+        "slots"
+      ],
+      "title": "NflLookups",
+      "type": "object"
+    },
+    "NflNetworkRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "NflNetworkRef",
+      "type": "object"
+    },
+    "NflPersonRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "NflPersonRef",
+      "type": "object"
+    },
+    "NflSeasonWeekColumns": {
+      "additionalProperties": false,
+      "description": "Per-season doubleheader and ambiguous week counts (D-13): the client\ncomputes a rate's denominator and shows n/a at zero.",
+      "properties": {
+        "cbs_ambiguous_weeks": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Cbs Ambiguous Weeks",
+          "type": "array"
+        },
+        "cbs_doubleheader_weeks": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Cbs Doubleheader Weeks",
+          "type": "array"
+        },
+        "fox_ambiguous_weeks": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Fox Ambiguous Weeks",
+          "type": "array"
+        },
+        "fox_doubleheader_weeks": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Fox Doubleheader Weeks",
+          "type": "array"
+        },
+        "season": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Season",
+          "type": "array"
+        }
+      },
+      "required": [
+        "season",
+        "fox_doubleheader_weeks",
+        "fox_ambiguous_weeks",
+        "cbs_doubleheader_weeks",
+        "cbs_ambiguous_weeks"
+      ],
+      "title": "NflSeasonWeekColumns",
+      "type": "object"
+    },
+    "NflSpecialColumns": {
+      "additionalProperties": false,
+      "description": "One row per franchise-season; counts are exclusive per bar (D-24).",
+      "properties": {
+        "agotw": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Agotw",
+          "type": "array"
+        },
+        "agotw_rate": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Agotw Rate",
+          "type": "array"
+        },
+        "cbs_national": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Cbs National",
+          "type": "array"
+        },
+        "cbs_national_rate": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Cbs National Rate",
+          "type": "array"
+        },
+        "flexed": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Flexed",
+          "type": "array"
+        },
+        "franchise": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Franchise",
+          "type": "array"
+        },
+        "games": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Games",
+          "type": "array"
+        },
+        "international": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "International",
+          "type": "array"
+        },
+        "international_other": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "International Other",
+          "type": "array"
+        },
+        "season": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Season",
+          "type": "array"
+        },
+        "special": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Special",
+          "type": "array"
+        },
+        "standalone_black_friday": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Standalone Black Friday",
+          "type": "array"
+        },
+        "standalone_christmas": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Standalone Christmas",
+          "type": "array"
+        },
+        "standalone_friday": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Standalone Friday",
+          "type": "array"
+        },
+        "standalone_international": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Standalone International",
+          "type": "array"
+        },
+        "standalone_mnf": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Standalone Mnf",
+          "type": "array"
+        },
+        "standalone_other": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Standalone Other",
+          "type": "array"
+        },
+        "standalone_saturday": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Standalone Saturday",
+          "type": "array"
+        },
+        "standalone_snf": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Standalone Snf",
+          "type": "array"
+        },
+        "standalone_sunday_early": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Standalone Sunday Early",
+          "type": "array"
+        },
+        "standalone_sunday_late": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Standalone Sunday Late",
+          "type": "array"
+        },
+        "standalone_thanksgiving": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Standalone Thanksgiving",
+          "type": "array"
+        },
+        "standalone_tnf": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Standalone Tnf",
+          "type": "array"
+        },
+        "standalone_total": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Standalone Total",
+          "type": "array"
+        }
+      },
+      "required": [
+        "franchise",
+        "season",
+        "games",
+        "standalone_total",
+        "standalone_christmas",
+        "standalone_thanksgiving",
+        "standalone_black_friday",
+        "standalone_international",
+        "standalone_tnf",
+        "standalone_snf",
+        "standalone_mnf",
+        "standalone_saturday",
+        "standalone_friday",
+        "standalone_sunday_early",
+        "standalone_sunday_late",
+        "standalone_other",
+        "agotw",
+        "cbs_national",
+        "international",
+        "international_other",
+        "flexed",
+        "special",
+        "agotw_rate",
+        "cbs_national_rate"
+      ],
+      "title": "NflSpecialColumns",
+      "type": "object"
+    },
+    "NflTeamNameRef": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "short": {
+          "title": "Short",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "short"
+      ],
+      "title": "NflTeamNameRef",
+      "type": "object"
+    }
+  },
+  "$id": "booth-review/nfl-data/1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "agotw_viewership": {
+      "$ref": "#/$defs/NflAgotwColumns"
+    },
+    "constants": {
+      "$ref": "#/$defs/NflConstants"
+    },
+    "fox_booths": {
+      "$ref": "#/$defs/NflBoothColumns"
+    },
+    "freshness": {
+      "$ref": "#/$defs/NflFreshness"
+    },
+    "games": {
+      "$ref": "#/$defs/NflGameColumns"
+    },
+    "lookups": {
+      "$ref": "#/$defs/NflLookups"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "season_weeks": {
+      "$ref": "#/$defs/NflSeasonWeekColumns"
+    },
+    "special": {
+      "$ref": "#/$defs/NflSpecialColumns"
+    }
+  },
+  "required": [
+    "schema_version",
+    "freshness",
+    "constants",
+    "lookups",
+    "games",
+    "special",
+    "season_weeks",
+    "fox_booths",
+    "agotw_viewership"
+  ],
+  "title": "booth-review NFL data",
+  "type": "object"
+}
