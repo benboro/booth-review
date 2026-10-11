@@ -9,7 +9,7 @@ import httpx2
 import pytest
 import stamina
 
-from booth_review.config import USER_AGENT
+from booth_review.config import HOST_POLICIES, USER_AGENT, HostPolicy
 from booth_review.errors import (
     FetchError,
     RobotsDisallowedError,
@@ -552,3 +552,96 @@ def test_fetch_log_masks_ratingsref_record_ids_and_query_strings(
         assert "beta" not in line
         assert "?" not in line
         assert "year=" not in line
+
+
+# -- NFL transport additions: headers, wildcard robots, redirects ---------------
+
+_GH_POLICIES = {
+    **HOST_POLICIES,
+    "github.com": HostPolicy(min_interval_s=2.0, jitter_s=0.0, retry_mode="standard"),
+    "release-assets.githubusercontent.com": HostPolicy(
+        min_interval_s=2.0, jitter_s=0.0, retry_mode="standard"
+    ),
+}
+
+
+def _gh_client(handler: Handler) -> PoliteClient:
+    return PoliteClient(
+        transport=httpx2.MockTransport(handler),
+        clock=lambda: 0.0,
+        sleep=lambda seconds: None,
+        host_policies=_GH_POLICIES,
+    )
+
+
+def test_fetch_sends_custom_headers() -> None:
+    log: list[httpx2.Request] = []
+    responses = {
+        "https://506sports.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://506sports.com/p": (200, b"x", {}),
+    }
+    _client(_recording_handler(responses, log)).fetch(
+        "https://506sports.com/p", headers={"Accept": "application/octet-stream"}
+    )
+    assert log[-1].headers["accept"] == "application/octet-stream"
+
+
+def test_caller_cannot_override_authorization() -> None:
+    log: list[httpx2.Request] = []
+    responses = {
+        "https://506sports.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://506sports.com/p": (200, b"x", {}),
+    }
+    _client(_recording_handler(responses, log)).fetch(
+        "https://506sports.com/p", headers={"Authorization": "x"}, bearer_token="t"
+    )
+    assert log[-1].headers["authorization"] == "Bearer t"
+    log.clear()
+    _client(_recording_handler(responses, log)).fetch(
+        "https://506sports.com/p", headers={"authorization": "x"}
+    )
+    assert "authorization" not in log[-1].headers
+
+
+def test_no_headers_request_unchanged() -> None:
+    log: list[httpx2.Request] = []
+    responses = {
+        "https://506sports.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://506sports.com/p": (200, b"x", {}),
+    }
+    _client(_recording_handler(responses, log)).fetch("https://506sports.com/p")
+    assert set(log[-1].headers.keys()) <= {
+        "host",
+        "accept",
+        "accept-encoding",
+        "connection",
+        "user-agent",
+    }
+    assert "authorization" not in log[-1].headers
+
+
+def test_wildcard_robots_rule_vetoes_fetch() -> None:
+    log: list[httpx2.Request] = []
+    responses = {
+        "https://github.com/robots.txt": (200, b"User-agent: *\nDisallow: /*/download\n", {}),
+    }
+    client = _gh_client(_recording_handler(responses, log))
+    with pytest.raises(RobotsDisallowedError):
+        client.fetch("https://github.com/o/r/releases/download/t/f.parquet")
+    assert [str(r.url) for r in log] == ["https://github.com/robots.txt"]
+
+
+def test_redirect_to_other_host_drops_authorization_and_scrubs_final_url() -> None:
+    log: list[httpx2.Request] = []
+    signed = "https://release-assets.githubusercontent.com/a/b?sig=SECRET&se=1"
+    responses = {
+        "https://github.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://github.com/o/r/asset": (302, b"", {"Location": signed}),
+        signed: (200, b"data", {}),
+    }
+    client = _gh_client(_recording_handler(responses, log))
+    resp = client.fetch("https://github.com/o/r/asset", bearer_token="tok")
+    assert log[1].headers["authorization"] == "Bearer tok"
+    assert "authorization" not in log[2].headers
+    assert resp.final_url == "https://release-assets.githubusercontent.com/a/b"
+    assert "SECRET" not in resp.final_url

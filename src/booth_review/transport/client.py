@@ -24,6 +24,7 @@ from booth_review.errors import (
     RobotsUnavailableError,
     UnknownHostError,
 )
+from booth_review.transport.robots import RobotsRules
 from booth_review.transport.types import FetchResponse, Validators
 
 logger = logging.getLogger("booth_review.transport")
@@ -48,6 +49,12 @@ def _loggable_path(path: str) -> str:
 RobotsListener = Callable[[str, FetchResponse], None]
 
 _RETRY_ATTEMPTS = 4
+
+# GitHub release-asset redirects carry short-lived signed query strings; the
+# manifest's final_url keeps scheme, host and path only for these hosts.
+_STRIP_FINAL_QUERY_HOSTS = frozenset(
+    {"release-assets.githubusercontent.com", "objects.githubusercontent.com"}
+)
 
 # "budgeted" hosts (CFBD) retry only statuses a gateway returns without
 # forwarding the request, with waits sized for a minutes-long outage.
@@ -85,6 +92,7 @@ class PoliteClient:
         self._host_policies = host_policies
         self._last_request_end: dict[str, float] = {}
         self._robots: dict[str, robotparser.RobotFileParser] = {}
+        self._robots_rules: dict[str, RobotsRules] = {}
         self._robots_listeners: list[RobotsListener] = []
 
     def add_robots_listener(self, fn: RobotsListener) -> None:
@@ -110,6 +118,7 @@ class PoliteClient:
         *,
         validators: Validators | None = None,
         bearer_token: str | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> FetchResponse:
         host = httpx2.URL(url).host
         policy = self._host_policies.get(host)
@@ -120,11 +129,15 @@ class PoliteClient:
         rp = self._robots[host]
         if not rp.can_fetch(USER_AGENT, url):
             raise RobotsDisallowedError(f"robots.txt disallows {url}")
+        if self._robots_rules[host].disallows(url):
+            raise RobotsDisallowedError(f"robots.txt wildcard rule disallows {url}")
 
-        headers: dict[str, str] = {}
+        req_headers: dict[str, str] = {
+            k: v for k, v in (headers or {}).items() if k.lower() != "authorization"
+        }
         if bearer_token:
-            headers["Authorization"] = f"Bearer {bearer_token}"
-        return self._send(host, policy, url, validators=validators, headers=headers)
+            req_headers["Authorization"] = f"Bearer {bearer_token}"
+        return self._send(host, policy, url, validators=validators, headers=req_headers)
 
     def _ensure_robots(self, host: str, policy: HostPolicy) -> None:
         if host in self._robots:
@@ -139,6 +152,7 @@ class PoliteClient:
         rp.set_url(robots_url)
         # allow_all/disallow_all are real, documented RobotFileParser attributes
         # (see CPython's urllib/robotparser.py) that typeshed's stub omits.
+        rules = RobotsRules.allow_all()
         if resp.status_code in (401, 403):
             rp.disallow_all = True  # type: ignore[attr-defined]
         elif resp.status_code >= 500:
@@ -146,13 +160,16 @@ class PoliteClient:
                 f"robots.txt fetch failed with status {resp.status_code} for {host}"
             )
         elif resp.status_code == 200:
-            rp.parse(resp.content.decode("utf-8", errors="replace").splitlines())
+            text_lines = resp.content.decode("utf-8", errors="replace").splitlines()
+            rp.parse(text_lines)
+            rules = RobotsRules.parse(text_lines, agent=USER_AGENT)
         else:
             # 404 and other 4xx (except 401/403) mean allow-all, matching
             # RobotFileParser's own stdlib fetch method's 4xx handling.
             rp.allow_all = True  # type: ignore[attr-defined]
 
         self._robots[host] = rp
+        self._robots_rules[host] = rules
         for listener in self._robots_listeners:
             listener(host, resp)
 
@@ -209,13 +226,17 @@ class PoliteClient:
             except ValueError:
                 call_limit_remaining = None
 
+        final_url = str(response.url)
+        if final_host in _STRIP_FINAL_QUERY_HOSTS:
+            final_url = f"{response.url.scheme}://{final_host}{response.url.path}"
+
         fetch_resp = FetchResponse(
             status_code=response.status_code,
             content=response.content,
             etag=response.headers.get("ETag"),
             last_modified=response.headers.get("Last-Modified"),
             call_limit_remaining=call_limit_remaining,
-            final_url=str(response.url),
+            final_url=final_url,
             fetched_at=datetime.now(UTC),
         )
         logger.info(
