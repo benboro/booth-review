@@ -34,6 +34,18 @@ backup slot. The exception is a transient CFBD failure (a 5xx, 429, or network
 error, `_is_transient_cfbd_error`): the saved state's `retry_pending` makes
 every backup slot retry until a run gets past it. A run that stops with exit 3
 before the state save records no attempt, so the next backup slot retries it.
+
+NFL steps (999.4 D-07/D-08) run after every CFB step and CFB commit, once the
+vault is NFL-bootstrapped (an nflverse schedules file exists) and inside the NFL
+collectable season: nflverse schedules, 2026 play-by-play (Wednesday/Thursday
+ET slots and manual runs only), the Ratings Reference NFL refresh under its own
+cap, the Wikipedia season article, the NFL 506 gap list, the schedule-drift and
+past-freeze checks, and in update mode the NFL build (no deploy). Each is its
+own guarded block with no passthrough, so any NFL exception, a VaultCommitError
+or VaultStateError from an NFL commit included, becomes an attention item. NFL
+results never touch the CFB failure flags, retry state, build time, deploy or
+key-leak result: they can add attention items (exit 4), never exit 3, a
+"failed" last_status or a held-back last_success_at.
 """
 
 from __future__ import annotations
@@ -73,6 +85,13 @@ from booth_review.job.attention import (
     failed_attempts,
     has_attention,
     missed_runs,
+    nfl_506_missing,
+    nfl_506_stale,
+    nfl_build_blocked,
+    nfl_review_due,
+    nfl_rr_backlog,
+    nfl_schedule_drift,
+    nfl_season_past_freeze,
     people_review_due,
     push_failed,
     rr_backlog,
@@ -87,6 +106,7 @@ from booth_review.job.attention import (
     unresolved_teams,
 )
 from booth_review.job.catchup import (
+    EASTERN,
     CatchupWindow,
     JobState,
     Trigger,
@@ -98,19 +118,27 @@ from booth_review.job.catchup import (
 )
 from booth_review.job.gaps506 import find_506_gaps
 from booth_review.job.staleness import newest_listed, newest_plotted, staleness_items
+from booth_review.nfl.freeze import schedule_drift
+from booth_review.nfl.gaps import find_nfl_506_gaps
+from booth_review.nfl.layout import NFL_FIRST_SEASON, NFL_SOURCES, NFLVERSE_SCHEDULES_PATH
+from booth_review.nfl.pipeline import run_nfl_build
+from booth_review.nfl.seasons import nfl_collectable_season, nfl_freeze_date
 from booth_review.reference import reference_dir
 from booth_review.runtime import Runtime
 from booth_review.seasons import freeze_date, is_past_freeze_date, season_of
 from booth_review.sources.base import BatchSummary
 from booth_review.sources.cfbd.collector import CfbdCollector
 from booth_review.sources.cfbd.parser import parse_games
+from booth_review.sources.nflverse.collector import NflverseCollector
 from booth_review.sources.ratingsref.collector import (
     FIRST_SEASON,
+    NFL_REFRESH_CAP_DEFAULT,
     REFRESH_CAP_DEFAULT,
     RatingsRefCollector,
     RefreshSummary,
 )
 from booth_review.sources.ratingsref.lastmod import lastmod_ledger_exists
+from booth_review.sources.wikipedia.collector import WikipediaCollector
 from booth_review.transport.cache import FreezeGuard
 from booth_review.vault import batch_message
 
@@ -145,6 +173,29 @@ _T = TypeVar("_T")
 # is False) exits here -- a cheap no-op for a backup cron slot -- before any
 # CFBD, RR, or 506 step, commit, or ledger/job_state.json save.
 EXIT_NOTHING_DUE = 5
+
+# 999.4 (Claude's Discretion): 2026 play-by-play is re-downloaded only on the
+# Wednesday/Thursday ET slots (Wednesday main, Thursday backups), once the
+# weekend's games are in, to limit vault growth; the Sunday slot skips it and a
+# manual run always does it. Python weekday numbers: Monday is 0.
+NFL_PBP_REFRESH_WEEKDAYS = frozenset({2, 3})
+
+# Vault paths each NFL job step commits (never a CFB path; RESEARCH Pitfall 4).
+_NFL_SCHEDULES_PATHS: tuple[str, ...] = ("raw/nfl/nflverse", "raw/_robots", "ledger/requests.jsonl")
+_NFL_PBP_PATHS: tuple[str, ...] = (*_NFL_SCHEDULES_PATHS, "ledger/nfl_nflverse_assets.jsonl")
+_NFL_RR_PATHS: tuple[str, ...] = (
+    "raw/nfl/ratingsref",
+    "raw/ratingsref/sitemap",
+    "raw/_robots",
+    "ledger/requests.jsonl",
+    "ledger/rr_lastmod.json",
+    "ledger/rr_lastmod.jsonl",
+)
+_NFL_WIKIPEDIA_PATHS: tuple[str, ...] = (
+    "raw/nfl/wikipedia",
+    "raw/_robots",
+    "ledger/requests.jsonl",
+)
 
 
 @dataclass(frozen=True)
@@ -246,7 +297,11 @@ class ScheduledJob:
         reference_directory: Path | None = None,
         site_src: Path | None = None,
         docs: Path | None = None,
+        nfl_rr_cap: int = NFL_REFRESH_CAP_DEFAULT,
+        github_token: str | None = None,
     ) -> None:
+        """`github_token` (optional GITHUB_TOKEN) goes only to the nflverse
+        play-by-play listing on api.github.com; it is never logged or stored."""
         if update and site_out is None:
             raise ValueError("update mode requires site_out")
         self._update = update
@@ -259,6 +314,8 @@ class ScheduledJob:
         self._now = now
         self._trigger = trigger
         self._rr_cap = rr_cap
+        self._nfl_rr_cap = nfl_rr_cap
+        self._github_token = github_token
         self._dry_run = dry_run
         self._commit_enabled = commit
 
@@ -373,6 +430,16 @@ class ScheduledJob:
                     else:
                         deploy_ready, key_leak = site_result
                         any_failed = any_failed or key_leak
+
+            # D-08: after every CFB step and commit. Nothing the NFL block does
+            # can reach `except VaultCommitError` below or touch any_failed,
+            # retry_pending, new_last_build_at, deploy_ready or key_leak.
+            self._guarded_ok(
+                items,
+                lambda name: step_failed("nfl", name),
+                lambda: self._run_nfl_block(now, items, counts),
+                passthrough=(),
+            )
 
             if self._update:
                 self._staleness_step(items, new_last_build_at or state.last_build_at, now, season)
@@ -582,6 +649,8 @@ class ScheduledJob:
         items: list[AttentionItem],
         on_error: Callable[[str], AttentionItem],
         step: Callable[[], None],
+        *,
+        passthrough: tuple[type[Exception], ...] = (VaultCommitError,),
     ) -> bool:
         """`_guarded` for a step with no result: True when it completed."""
 
@@ -589,7 +658,7 @@ class ScheduledJob:
             step()
             return True
 
-        return cls._guarded(items, on_error, _ran) is not None
+        return cls._guarded(items, on_error, _ran, passthrough=passthrough) is not None
 
     # -- CFBD step -----------------------------------------------------------
 
@@ -748,6 +817,283 @@ class ScheduledJob:
                 continue
             if not all(guard.is_frozen(source, past_season) for source in SOURCES):
                 items.append(season_past_freeze(past_season, freeze_date(past_season)))
+
+    # -- NFL block (999.4 D-07 to D-10; isolated from CFB, D-08) -----------------
+
+    def _run_nfl_block(
+        self, now: datetime, items: list[AttentionItem], counts: dict[str, int]
+    ) -> None:
+        """Every NFL step, each guarded with no passthrough. Skipped until the
+        vault is NFL-bootstrapped and outside the NFL collectable season."""
+        paths = self._runtime.paths
+        if not (paths.raw / NFLVERSE_SCHEDULES_PATH).is_file():
+            return
+        nfl_season = nfl_collectable_season(now.astimezone(EASTERN).date())
+        if nfl_season is None:
+            return
+
+        def _merge(prefix: str, result: dict[str, int] | None) -> None:
+            if result is not None:
+                counts.update({f"nfl_{prefix}{key}": value for key, value in result.items()})
+
+        _merge(
+            "schedules_",
+            self._guarded(
+                items,
+                lambda name: step_failed("nflverse", name),
+                lambda: self._nfl_schedules_step(nfl_season, items),
+                passthrough=(),
+            ),
+        )
+        _merge(
+            "pbp_",
+            self._guarded(
+                items,
+                lambda name: step_failed("nflverse", name),
+                lambda: self._nfl_pbp_step(nfl_season, now, items),
+                passthrough=(),
+            ),
+        )
+        _merge(
+            "rr_",
+            self._guarded(
+                items,
+                lambda name: step_failed("nfl_rr", name),
+                lambda: self._nfl_rr_step(nfl_season, items),
+                passthrough=(),
+            ),
+        )
+        _merge(
+            "wikipedia_",
+            self._guarded(
+                items,
+                lambda name: step_failed("nfl_wikipedia", name),
+                lambda: self._nfl_wikipedia_step(nfl_season, items),
+                passthrough=(),
+            ),
+        )
+        _merge(
+            "",
+            self._guarded(
+                items,
+                lambda name: step_failed("nfl_gaps", name),
+                lambda: self._nfl_gaps_step(nfl_season, now, items),
+                passthrough=(),
+            ),
+        )
+        _merge(
+            "",
+            self._guarded(
+                items,
+                lambda name: step_failed("nfl_freeze", name),
+                lambda: self._nfl_checks_step(nfl_season, now, items),
+                passthrough=(),
+            ),
+        )
+        if self._update and not self._dry_run:
+            _merge(
+                "build_",
+                self._guarded(
+                    items,
+                    lambda name: step_failed("nfl_build", name),
+                    lambda: self._nfl_build_step(nfl_season, now, items),
+                    passthrough=(),
+                ),
+            )
+
+    def _nfl_commit(
+        self,
+        step: str,
+        label: str,
+        counts: dict[str, int],
+        commit_paths: Sequence[str],
+        items: list[AttentionItem],
+    ) -> None:
+        """Commit one NFL step's own paths. A failed push is an attention item,
+        never re-raised (D-08)."""
+        if self._dry_run or not self._commit_enabled:
+            return
+        try:
+            self._runtime.vault.commit_batch(
+                batch_message("job", step, label, counts), paths=list(commit_paths)
+            )
+        except VaultCommitError:
+            items.append(push_failed(step))
+
+    def _nfl_collect(
+        self,
+        step: str,
+        label: str,
+        commit_paths: Sequence[str],
+        items: list[AttentionItem],
+        collect: Callable[[], dict[str, int]],
+    ) -> dict[str, int]:
+        """Run `collect` and commit its paths. On an exception, commit what was
+        written so far (partial counts) and re-raise for the step guard, so no
+        NFL line in the shared request ledger is left for a CFB commit."""
+        cache = self._runtime.cache
+        before = dict(cache.counters)
+        try:
+            result = collect()
+        except Exception:
+            self._nfl_commit(
+                step, label, _partial_counts(before, cache.counters), commit_paths, items
+            )
+            raise
+        self._nfl_commit(step, label, result, commit_paths, items)
+        return result
+
+    def _nflverse_collector(self) -> NflverseCollector:
+        return NflverseCollector(
+            self._runtime.cache,
+            self._runtime.paths,
+            lock=self._runtime.vault.lock,
+            now=self._now,
+            token=self._github_token,
+        )
+
+    def _nfl_schedules_step(self, season: int, items: list[AttentionItem]) -> dict[str, int]:
+        def _collect() -> dict[str, int]:
+            summary = self._nflverse_collector().run_schedules(refresh=True, dry_run=self._dry_run)
+            if summary.failed > 0:
+                items.append(step_failed("nflverse", "FetchError"))
+            return summary.counts()
+
+        result = self._nfl_collect(
+            "nfl_schedules", str(season), _NFL_SCHEDULES_PATHS, items, _collect
+        )
+        print(f"nfl schedules: fetched {result['fetched']}, not_modified {result['not_modified']}")
+        return result
+
+    def _nfl_pbp_step(
+        self, season: int, now: datetime, items: list[AttentionItem]
+    ) -> dict[str, int]:
+        weekday = now.astimezone(EASTERN).weekday()
+        if self._trigger != "manual" and weekday not in NFL_PBP_REFRESH_WEEKDAYS:
+            print("nfl pbp: skipped (Wednesday/Thursday slots only)")
+            return {"skipped": 1}
+
+        def _collect() -> dict[str, int]:
+            summary = self._nflverse_collector().run_pbp([season], dry_run=self._dry_run)
+            if summary.failed > 0:
+                items.append(step_failed("nflverse", "FetchError"))
+            full = summary.counts()
+            return {
+                "fetched": full["fetched"],
+                "unchanged": full["unchanged"],
+                "not_modified": full["not_modified"],
+                "failed": full["failed"],
+            }
+
+        result = self._nfl_collect("nfl_pbp", str(season), _NFL_PBP_PATHS, items, _collect)
+        print(f"nfl pbp: fetched {result['fetched']}, unchanged {result['unchanged']}")
+        return result
+
+    def _nfl_rr_step(self, season: int, items: list[AttentionItem]) -> dict[str, int]:
+        collector = RatingsRefCollector(
+            self._runtime.cache,
+            self._runtime.paths,
+            lock=self._runtime.vault.lock,
+            now=self._now,
+            league="nfl",
+        )
+
+        def _collect() -> dict[str, int]:
+            summary = collector.refresh(
+                current_season=season, cap=self._nfl_rr_cap, dry_run=self._dry_run
+            )
+            if summary.backlog > 0:
+                items.append(nfl_rr_backlog(summary.backlog, self._nfl_rr_cap))
+            if summary.failed > 0:
+                items.append(step_failed("nfl_rr", "FetchError"))
+            return summary.counts()
+
+        result = self._nfl_collect(
+            "nfl_rr", f"{NFL_FIRST_SEASON}-{season}", _NFL_RR_PATHS, items, _collect
+        )
+        print(
+            f"nfl ratingsref: fetched {result['fetched']}, not_modified {result['not_modified']}, "
+            f"backlog {result['backlog']}"
+        )
+        return result
+
+    def _nfl_wikipedia_step(self, season: int, items: list[AttentionItem]) -> dict[str, int]:
+        def _collect() -> dict[str, int]:
+            summaries = WikipediaCollector(self._runtime.cache).run(
+                [season], refresh=True, dry_run=self._dry_run
+            )
+            totals = _sum_batch_counts(summaries)
+            if totals["failed"] > 0:
+                items.append(step_failed("nfl_wikipedia", "FetchError"))
+            return totals
+
+        result = self._nfl_collect(
+            "nfl_wikipedia", str(season), _NFL_WIKIPEDIA_PATHS, items, _collect
+        )
+        print(f"nfl wikipedia: fetched {result['fetched']}, not_modified {result['not_modified']}")
+        return result
+
+    def _nfl_gaps_step(
+        self, season: int, now: datetime, items: list[AttentionItem]
+    ) -> dict[str, int]:
+        """Read-only: which played NFL 506 weeks need a hand-save (D-10)."""
+        gaps = find_nfl_506_gaps(self._runtime.paths, season, now)
+        if gaps is None:
+            return {}
+        print(f"nfl 506: missing {len(gaps.missing)}, stale {len(gaps.stale)}")
+        if gaps.missing:
+            items.append(nfl_506_missing(season, gaps.missing))
+        if gaps.stale:
+            items.append(nfl_506_stale(season, gaps.stale))
+        return {"506_missing": len(gaps.missing), "506_stale": len(gaps.stale)}
+
+    def _nfl_checks_step(
+        self, season: int, now: datetime, items: list[AttentionItem]
+    ) -> dict[str, int]:
+        """Read-only: frozen-season schedule drift and unfrozen past-freeze seasons (D-11)."""
+        drifted = schedule_drift(self._runtime.paths)
+        if drifted:
+            items.append(nfl_schedule_drift(len(drifted)))
+        today = now.astimezone(EASTERN).date()
+        guard = FreezeGuard.load(self._runtime.paths.frozen)
+        past = 0
+        for past_season in range(NFL_FIRST_SEASON, season):
+            if today < nfl_freeze_date(past_season):
+                continue
+            if not all(guard.is_frozen(source, past_season) for source in NFL_SOURCES):
+                items.append(nfl_season_past_freeze(past_season, nfl_freeze_date(past_season)))
+                past += 1
+        print(f"nfl checks: drifted {len(drifted)}, past freeze {past}")
+        return {"schedule_drift": len(drifted), "past_freeze": past}
+
+    def _nfl_build_step(
+        self, season: int, now: datetime, items: list[AttentionItem]
+    ) -> dict[str, int]:
+        """Update mode only: rebuild the NFL tables in the vault (no site, no deploy)."""
+        try:
+            outcome = run_nfl_build(
+                self._runtime.paths,
+                self._reference_directory or reference_dir(),
+                seasons=list(range(NFL_FIRST_SEASON, season + 1)),
+                include_playoffs=False,
+                commit=self._commit_enabled,
+                check_acceptance=False,
+                now=now,
+            )
+        except VaultCommitError:
+            items.append(push_failed("nfl_build"))
+            return {}
+        built = {key: int(value) for key, value in outcome.counts.items()}
+        unresolved = built.get("unresolved_crew_names", 0)
+        print(
+            f"nfl build: games {built.get('games', 0)}, standalone {built.get('standalone', 0)}, "
+            f"blocked {'yes' if outcome.blocked else 'no'}, crew names to review {unresolved}"
+        )
+        if outcome.blocked:
+            items.append(nfl_build_blocked(built.get("override_errors", 0)))
+        if unresolved > 0:
+            items.append(nfl_review_due(unresolved))
+        return built
 
     # -- state save ------------------------------------------------------------
 

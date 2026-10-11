@@ -77,6 +77,7 @@ _STEP_NAMES = frozenset(
         "build",
         "site",
         "staleness",
+        "nfl",
         "nflverse",
         "nfl_rr",
         "nfl_wikipedia",
