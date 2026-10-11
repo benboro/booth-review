@@ -606,3 +606,84 @@ def test_import_506_records_incoming_file_mtime_as_saved_at(
     (line,) = [entry for entry in _manifest_lines(paths) if entry.get("origin") == "manual"]
     assert line["saved_at"] == "2025-09-24T15:00:00Z"
     assert line["fetched_at"] != line["saved_at"]
+
+
+# -- D-19: cfb/ default folder with a legacy-root fallback through 2026 ----------------------
+
+
+def _cfb_default_setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
+    monkeypatch.chdir(tmp_path)
+    root = tmp_path / "data" / "incoming" / "506"
+    return root / "cfb", root
+
+
+def test_default_scan_reads_cfb_folder_then_legacy_root(
+    vault_paths, mock_transport_factory, tmp_path, monkeypatch
+) -> None:
+    cfb_dir, root = _cfb_default_setup(tmp_path, monkeypatch)
+    _write_incoming(cfb_dir, 2026, "1", _importable_page(2026, "1"))
+    _write_incoming(root, 2026, "2", _importable_page(2026, "2"))
+    # NFL / cfb subfolders are never seen by the non-recursive root scan
+    _write_incoming(root / "nfl", 2026, "3", _importable_page(2026, "3"))
+
+    result = _importer_for(vault_paths, mock_transport_factory).run(2026)
+
+    assert sorted(result.imported) == ["1", "2"]
+    assert result.root_pages == 1
+
+
+def test_same_page_in_cfb_and_root_counts_once(
+    vault_paths, mock_transport_factory, tmp_path, monkeypatch
+) -> None:
+    cfb_dir, root = _cfb_default_setup(tmp_path, monkeypatch)
+    page = _importable_page(2026, "1")
+    _write_incoming(cfb_dir, 2026, "1", page)
+    _write_incoming(root, 2026, "1", page)
+
+    result = _importer_for(vault_paths, mock_transport_factory).run(2026)
+
+    assert result.imported == ["1"]
+    assert result.root_pages == 0
+    assert result.skipped_invalid == []
+
+
+def test_different_pages_for_one_week_across_folders_conflict(
+    vault_paths, mock_transport_factory, tmp_path, monkeypatch
+) -> None:
+    cfb_dir, root = _cfb_default_setup(tmp_path, monkeypatch)
+    _write_incoming(cfb_dir, 2026, "1", _importable_page(2026, "1"))
+    _write_incoming(root, 2026, "1", _importable_page(2026, "1") + b"<!-- other -->")
+
+    result = _importer_for(vault_paths, mock_transport_factory).run(2026)
+
+    assert result.imported == []
+    assert [(s.label, s.reason) for s in result.skipped_invalid] == [
+        ("1", "two different files claim this week")
+    ]
+
+
+def test_explicit_folder_skips_root_fallback(
+    vault_paths, mock_transport_factory, tmp_path, monkeypatch
+) -> None:
+    _cfb_default_setup(tmp_path, monkeypatch)
+    root = tmp_path / "data" / "incoming" / "506"
+    _write_incoming(root, 2026, "2", _importable_page(2026, "2"))
+    explicit = tmp_path / "explicit"
+    _write_incoming(explicit, 2026, "1", _importable_page(2026, "1"))
+
+    result = _importer_for(vault_paths, mock_transport_factory).run(2026, incoming_dir=explicit)
+
+    assert result.imported == ["1"]
+    assert result.root_pages == 0
+
+
+def test_root_not_scanned_after_fallback_season(
+    vault_paths, mock_transport_factory, tmp_path, monkeypatch
+) -> None:
+    _cfb_dir, root = _cfb_default_setup(tmp_path, monkeypatch)
+    _write_incoming(root, 2027, "1", _importable_page(2027, "1"))
+
+    result = _importer_for(vault_paths, mock_transport_factory).run(2027)
+
+    assert result.imported == []
+    assert result.root_pages == 0
