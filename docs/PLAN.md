@@ -263,7 +263,7 @@ The per-person table (`telecast_people`) is what makes filtering work across net
 | 3. Coverage audit | Table of season by network by field completeness | Known gaps documented before any modeling |
 | 4. Descriptive view | Scatter plot for Question A | Working filter and hover |
 | 5. Model | Section 7.2 model plus event studies around conference moves | Crew effects with intervals; residuals feeding the y-axis toggle |
-| 6. Toggle prep | Repeat Phase 0 for NFL and MLB | Go or no-go per sport; NFL decided October 9, 2026: go for both questions (Section 12) |
+| 6. Toggle prep | Repeat Phase 0 for NFL and MLB | Go or no-go per sport; NFL decided October 9, 2026: go for both questions (Section 12); MLB decided October 10, 2026: go for the top crew vs. other crews (Apple TV+) and postseason booth assignment (Section 12) |
 | 7. In-season updates | Scheduled job that fetches only the current season (506 week pages, new Ratings Reference records, CFBD data for the week), adds it to the earlier seasons, rebuilds the site data, and publishes it. Runs Sunday for crews, scores, and excitement, and Wednesday for viewership. Can start once Phase 4 works; it doesn't need Phase 5 | A weekend's games appear on the site by Sunday night and their viewership by Wednesday, with no re-fetch of earlier seasons and CFBD use well under the monthly limit |
 
 **Phase 7 notes:**
@@ -306,9 +306,11 @@ Regular season only by default, with playoffs as a toggle. Both questions cover 
 - Announcers: 506 for national games; local booths only at team-season level (Wikipedia broadcaster lists), with fill-ins lost.
 - Viewership: only national telecasts are published. Local regional sports network ratings per game are essentially not public, and most games are local.
 - Excitement: computable from Retrosheet event files or MLB win-expectancy data.
-- Likely scope if added: national games only, which is a small sample.
+- Scope (Phase 7): go for the top crew vs. other crews (Apple TV+) and postseason booth assignment.
 
 - Ratings Reference depth (October 9, 2026): about 50 to 120 MLB telecasts per season since 2017.
+
+**Phase 7 result (October 10, 2026).** Overall go, for two tasks. Postseason booth assignment is a go: all 47 games of the 2025 postseason name a play-by-play voice and analyst (100%, against a 95% bar), every round is listed, and 506's round pages go back to 2014. The top crew vs. other crews is a go for Apple TV+ only: on the 2026 regular season (the bar season, with the 2025 postseason, chosen by the user after the evidence because 506's saved 2025 regular-season pages are Fox Saturday maps) it has two booths with 24 and 21 games, an identified lead booth, and 100% crew coverage. That coverage relies on per-game crews from a fan schedule blog that relays network press pages; the user accepted them as a one-time waiver of those pages' terms, and under a strict terms reading national crew coverage would be 84.1% and no network would pass. The national crew scatter is a no-go: strict national crew coverage is 99.7% (307 of 308 telecasts) but the ESPN slate is 29 games against a stated 30, and the user did not waive that. National exposure per team is a no-go: only 2026 is evidenced as a full schedule, and exclusivity is unknown for 242 games. Per-game local crews are a no-go: no source names a local crew for any club, so that sample was not run. Season pairings are not accepted as crews (strict), which changes no verdict. The MLB Stats API is blocked by its copyright notice and site terms, and its reads failed; the user recorded it as analysis-only and said presentation is also acceptable, which the build settles against the field list's display rule. Game quality is computable from Retrosheet for 2017 to 2025 (our own win-expectancy table, and pregame stakes from results), with 2026 pending Retrosheet's next release; no moneyline source was found. Viewership is per-game for 108 of the 308 telecasts in the measured set, with Fox Saturday figures window-level. Seven fields are analysis-only and none are blocked. Fields and sources are in `docs/sources/mlb-field-list.md`, `docs/sources/mlb-statsapi.md` and `docs/sources/retrosheet.md`.
 
 **Recommendation:** finish CFB through Phase 5 before building either toggle. The go/no-go research for each sport is docs only and can run alongside it.
 
@@ -342,3 +344,6 @@ Regular season only by default, with playoffs as a toggle. Both questions cover 
 - Nielsen co-viewing pilot results: https://www.nielsen.com/insights/2026/nielsen-co-viewing-pilot-delivers-a-4-average-increase-in-total-viewers-for-februarys-live-televised-events/
 - cfbfastR (win probability models): https://cfbfastr.sportsdataverse.org/
 - nflverse data (schedules, play-by-play): https://github.com/nflverse/nflverse-data
+- Retrosheet (game info, play-by-play; usage notice): https://www.retrosheet.org/notice.txt
+- MLB Stats API data copyright notice: http://gdx.mlb.com/components/copyright.txt
+- 506 Sports MLB schedule and announcers: https://506sports.com/mlb.php
