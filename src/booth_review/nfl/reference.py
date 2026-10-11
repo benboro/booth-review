@@ -1,4 +1,4 @@
-"""Column contracts and loaders for the six NFL reference tables (D-02, D-14, D-16).
+"""Column contracts and loaders for the seven NFL reference tables (D-02, D-14, D-16).
 
 Every table is read through `reference.read_reference_csv_numbered`, so a wrong
 header, an extra cell or a formula-like cell is rejected, and every error here
@@ -34,6 +34,7 @@ NFL_TEAM_CROSSWALK_COLUMNS = (
     "note",
 )
 NFL_STADIUM_COLUMNS = ("stadium_id", "stadium", "country", "source_url", "note")
+NFL_STADIUM_OVERRIDE_COLUMNS = ("nflverse_game_id", "stadium_id", "source_url", "note")
 NFL_NETWORK_COLUMNS = ("source", "variant", "network_id", "note")
 NFL_LEAD_BOOTH_OVERRIDE_COLUMNS = ("season", "person_id", "reason", "source_url")
 NFL_WEEK_OVERRIDE_COLUMNS = (
@@ -230,6 +231,30 @@ def load_nfl_stadiums(reference_dir: Path) -> Mapping[str, str]:
         _check_https(path, line_no, raw["source_url"])
         _check_note(path, line_no, raw["note"])
         out[sid] = raw["country"]
+    return out
+
+
+def load_nfl_stadium_overrides(reference_dir: Path) -> Mapping[str, str]:
+    """nflverse_game_id -> the venue's stadium_id, for games nflverse files under the home
+    team's own stadium id (2025 international games). A missing table is empty; every
+    stadium_id must be a row in nfl_stadiums.csv."""
+    path = reference_dir / "nfl_stadium_overrides.csv"
+    raw_rows = read_reference_csv_numbered(path, NFL_STADIUM_OVERRIDE_COLUMNS, required=False)
+    if not raw_rows:
+        return {}
+    stadiums = load_nfl_stadiums(reference_dir)
+    out: dict[str, str] = {}
+    for line_no, raw in raw_rows:
+        game_id = raw["nflverse_game_id"]
+        if not game_id:
+            raise _err(path, line_no, "nflverse_game_id is required")
+        if game_id in out:
+            raise _err(path, line_no, "duplicate nflverse_game_id")
+        if raw["stadium_id"] not in stadiums:
+            raise _err(path, line_no, "stadium_id is not in nfl_stadiums.csv")
+        _check_https(path, line_no, raw["source_url"])
+        _check_note(path, line_no, raw["note"])
+        out[game_id] = raw["stadium_id"]
     return out
 
 

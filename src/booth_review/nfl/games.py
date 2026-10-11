@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -36,7 +36,12 @@ from booth_review.nfl.changes import GameChange, match_schedule_changes
 from booth_review.nfl.inputs import NflInputs
 from booth_review.nfl.listings import ListingMatch, match_506_listings
 from booth_review.nfl.people import CrewResolution, resolve_crew
-from booth_review.nfl.reference import NflWeekOverride, load_nfl_stadiums, load_nfl_week_overrides
+from booth_review.nfl.reference import (
+    NflWeekOverride,
+    load_nfl_stadium_overrides,
+    load_nfl_stadiums,
+    load_nfl_week_overrides,
+)
 from booth_review.nfl.rr_match import RRGameMatch, match_rr_records
 from booth_review.nfl.rules import (
     DhInput,
@@ -225,6 +230,8 @@ class NflReference:
     week_overrides: Mapping[tuple[int, int, str], NflWeekOverride]
     people: PeopleRegistry
     eras: Sequence[MeasurementEra]
+    #: nflverse_game_id -> venue stadium_id; applied ahead of nflverse's own stadium_id.
+    stadium_overrides: Mapping[str, str] = field(default_factory=dict)
 
     @classmethod
     def load(cls, reference_dir: Path) -> NflReference:
@@ -235,6 +242,7 @@ class NflReference:
             week_overrides=load_nfl_week_overrides(reference_dir),
             people=load_people(reference_dir),
             eras=load_eras(reference_dir),
+            stadium_overrides=load_nfl_stadium_overrides(reference_dir),
         )
 
 
@@ -426,7 +434,8 @@ def assemble_nfl_games(
                 counts["unresolved_teams"] += 1
                 reviews["teams"].append(_review(game, "unresolved-team"))
         listing = listings.get(game.game_id)
-        country = ref.stadiums.get(game.stadium_id)
+        stadium_id = ref.stadium_overrides.get(game.game_id, game.stadium_id)
+        country = ref.stadiums.get(stadium_id)
         international: bool | None
         if country is not None:
             international = country != "US"
@@ -602,7 +611,7 @@ def assemble_nfl_games(
                 "away_franchise_id": away.franchise_id,
                 "home_display_name": home.display_name,
                 "away_display_name": away.display_name,
-                "stadium_id": game.stadium_id or None,
+                "stadium_id": ref.stadium_overrides.get(game.game_id, game.stadium_id) or None,
                 "is_international": item.international,
                 "network_id": choice.network_id,
                 "network_source": choice.source,

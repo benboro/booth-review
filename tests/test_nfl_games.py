@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -114,6 +115,25 @@ def test_intl_city_without_stadium_row_is_unknown(tmp_path: Path) -> None:
     rows = [game_row("a", 1, 2, "2015-10-25", "13:00", stadium_id="NEW98")]
     table = build(tmp_path, rows, listings=[listing_for(1, 2, week=1, intl_city="Somewhere")])
     assert one(table, "a")["is_international"] is None
+
+
+def test_stadium_override_beats_the_home_teams_own_stadium_id(tmp_path: Path) -> None:
+    # nflverse files some overseas games under the home team's US stadium id (HOME1).
+    rows = [
+        game_row("a", 1, 2, "2015-10-25", "09:30", stadium_id="HOME1", location="Neutral"),
+        game_row("b", 3, 2, "2015-11-01", "13:00", stadium_id="HOME1"),
+    ]
+    ref = replace(
+        make_ref(tmp_path, stadiums={"FAKE01": "GB", "HOME1": "US"}),
+        stadium_overrides={"a": "FAKE01"},
+    )
+    table = assemble_nfl_games(make_inputs(rows), ref, include_playoffs=False, now=NOW)
+    assert one(table, "a")["stadium_id"] == "FAKE01"
+    assert one(table, "a")["is_international"] is True
+    assert one(table, "a")["slot_name"] == "International"
+    assert one(table, "b")["stadium_id"] == "HOME1"
+    assert one(table, "b")["is_international"] is False
+    assert table.counts["unknown_stadiums"] == 0
 
 
 def test_network_from_506_with_crew(tmp_path: Path) -> None:

@@ -12,6 +12,7 @@ from booth_review.nfl.reference import (
     load_nfl_franchises,
     load_nfl_lead_booth_overrides,
     load_nfl_networks,
+    load_nfl_stadium_overrides,
     load_nfl_stadiums,
     load_nfl_team_crosswalk,
     load_nfl_week_overrides,
@@ -151,3 +152,34 @@ def test_error_messages_hide_cell_content(ref: Path) -> None:
         load_nfl_networks(ref)
     assert "SECRETVARIANT" not in str(exc.value)
     assert "badid" not in str(exc.value)
+
+
+_OVERRIDE_HEADER = "nflverse_game_id,stadium_id,source_url,note"
+
+
+def _overrides(ref: Path, *rows: str) -> None:
+    (ref / "nfl_stadium_overrides.csv").write_text(
+        "\n".join((_OVERRIDE_HEADER, *rows)) + "\n", encoding="utf-8"
+    )
+
+
+def test_stadium_overrides_load_and_missing_table_is_empty(ref: Path) -> None:
+    assert load_nfl_stadium_overrides(ref) == {}
+    _overrides(ref, "g1,FAKE01,https://example.com/g1,", "g2,FAKE02,https://example.com/g2,x")
+    assert load_nfl_stadium_overrides(ref) == {"g1": "FAKE01", "g2": "FAKE02"}
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        ("g1,NOPE99,https://example.com/g1,",),  # stadium not in nfl_stadiums.csv
+        ("g1,FAKE01,https://example.com/a,", "g1,FAKE02,https://example.com/b,"),  # duplicate
+        ("g1,FAKE01,http://example.com/g1,",),  # not https
+        (",FAKE01,https://example.com/g1,",),  # no game id
+    ],
+)
+def test_stadium_overrides_reject_bad_rows(ref: Path, rows: tuple[str, ...]) -> None:
+    _overrides(ref, *rows)
+    with pytest.raises(ReferenceTableError) as exc:
+        load_nfl_stadium_overrides(ref)
+    assert "NOPE99" not in str(exc.value) and "g1" not in str(exc.value)
