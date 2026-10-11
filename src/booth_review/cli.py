@@ -50,6 +50,7 @@ from booth_review.errors import (
 )
 from booth_review.job.attention import build_attention_body
 from booth_review.job.runner import EXIT_NOTHING_DUE, JOB_CFBD_MAX_CALLS, JobRunResult, ScheduledJob
+from booth_review.nfl.commands import add_nfl_parser, run_nfl_command
 from booth_review.people import review as people_review
 from booth_review.reference import reference_dir
 from booth_review.resolve import diagnose as resolve_diagnose
@@ -286,6 +287,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     build_cmd.add_argument("--no-commit", action="store_true")
     build_cmd.add_argument("--accept-baseline", action="store_true")
+
+    add_nfl_parser(sub)
 
     site_cmd = sub.add_parser(
         "site", help="D-14: assemble dist/site/ from site/, site-data.json, and rendered pages"
@@ -1465,6 +1468,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _budget(args)
         if args.command == "build":
             return _build(args)
+        if args.command == "nfl":
+            return run_nfl_command(args)
         if args.command == "site":
             return _site(args)
         if args.command == "deploy":
