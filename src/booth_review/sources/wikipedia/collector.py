@@ -9,13 +9,14 @@ slot and network) are stored downstream, each with the article URL.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Final
 
 from booth_review.nfl.layout import wikipedia_path, wikipedia_url
 from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.transport.cache import RawCache
 from booth_review.transport.types import FetchRequest
 
-SOURCE = "nfl_wikipedia"
+SOURCE: Final = "nfl_wikipedia"
 
 
 class WikipediaCollector:
