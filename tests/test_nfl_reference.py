@@ -82,6 +82,13 @@ def test_network_resolver(ref: Path) -> None:
     assert resolver.resolve("ratingsref", "Nowhere") is None
 
 
+def test_yahoo_is_a_known_network_id(ref: Path) -> None:
+    # The 2015 London game streamed only on Yahoo; without the id its RR record had no network.
+    _append(ref, "nfl_networks.csv", "ratingsref,Yahoo,yahoo,")
+    resolver = NflNetworkResolver.from_reference_dir(ref)
+    assert resolver.resolve("ratingsref", "Yahoo") == "yahoo"
+
+
 @pytest.mark.parametrize(
     ("name", "old", "new"),
     [

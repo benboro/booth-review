@@ -62,6 +62,7 @@ NFL_NETWORK_IDS = frozenset(
         "peacock",
         "espn_plus",
         "espn_deportes",
+        "yahoo",  # 2015 London game streamed only on Yahoo; 2017 London game on Yahoo/Go90
     }
 )
 NFL_LEAD_BOOTH_REASONS = ("inference-tie", "inference-wrong", "close-call")
