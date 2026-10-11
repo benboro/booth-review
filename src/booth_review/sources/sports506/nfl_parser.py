@@ -72,6 +72,14 @@ _WINDOW_WORDS: dict[str, Window] = {
 
 _GAME_DIV_IDS = frozenset({"game", "nogame", "matchup", "anncrs", "updates", "map", "akhi"})
 _INTL_RE = re.compile(r"\(\s*in\s+([^)]+?)\s*\)", re.IGNORECASE)
+# National lines italicize the host city in three shapes: "(in London)", a bare
+# "in London" and "(London)". Each is rewritten to "(in London)" so the city is
+# never read as a team suffix or as the network.
+_ITALIC_PLACE_RE = re.compile(
+    r"^(?:\(\s*[Ii]n\s+(?P<a>[^()]+?)\s*\)"
+    r"|[Ii]n\s+(?P<b>[^()]+?)"
+    r"|\(\s*(?P<c>[A-Z][a-z]+(?:[ -][A-Z][a-z]+)*)\s*\))$"
+)
 _TRAILING_PAREN_RE = re.compile(r"\s*\([^)]*\)\s*$")
 _PAREN_GROUP_RE = re.compile(r"\s*\(([^)]*)\)")
 _BRACKET_RE = re.compile(r"\[[^\]]*\]")
@@ -290,6 +298,11 @@ def _national_listings(li: Tag) -> list[_NationalFields]:
     first = clone.find("b")
     if first is not None and _collapse_whitespace(first.get_text()).endswith(":"):
         first.decompose()
+    for italic in clone.find_all("i"):
+        place = _ITALIC_PLACE_RE.match(_collapse_whitespace(italic.get_text()))
+        if place is not None:
+            city = place.group("a") or place.group("b") or place.group("c")
+            italic.replace_with(f" (in {city}) ")
     text = _text_with_breaks(clone, drop_links=True)
     text = text.split("█", 1)[0]
     lines = [_collapse_whitespace(line) for line in text.split("\n")]

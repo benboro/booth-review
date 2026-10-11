@@ -249,3 +249,29 @@ def test_header_nested_in_unclosed_national_item_still_resets_window() -> None:
         ("ESPN", "national", True),
         ("CBS", "early", False),
     ]
+
+
+def test_italic_city_on_national_line_in_every_shape() -> None:
+    # Real pages italicize the host city as "in City", "(City)" or "(in City)".
+    html = (
+        b"<html><body><article>"
+        b"<b><font size='5'>NATIONAL BROADCASTS</font></b><br/>"
+        b"<li><b>Sunday Morning:</b> A Team vs B Team <i>in Testville</i> "
+        b"(NFLN; Pat Example, Sam Sample)</li>"
+        b"<li><b>Sunday Morning:</b> C Team vs D Team <i>(New Testville)</i> "
+        b"(9:30 AM ET, CBS) (Pat Example, Sam Sample)</li>"
+        b"<li><b>Sunday Morning:</b> E Team vs F Team <i>(in Testville)</i> (FOX) "
+        b"(Sam Sample)</li>"
+        b"<li><b>Sunday Night:</b> G Team @ H Team <i>(NFLN)</i></li>"
+        b"</article></body></html>"
+    )
+    listings = parse_nfl_week_page(html, season=2023, week=5)
+    assert [(x.away_raw, x.home_raw, x.intl_city, x.network_raw) for x in listings] == [
+        ("A Team", "B Team", "Testville", "NFLN"),
+        ("C Team", "D Team", "New Testville", "CBS"),
+        ("E Team", "F Team", "Testville", "FOX"),
+        ("G Team", "H Team", None, "NFLN"),
+    ]
+    assert listings[0].crew_names == ("Pat Example", "Sam Sample")
+    assert listings[1].crew_names == ("Pat Example", "Sam Sample")
+    assert listings[1].national_time_et_raw == "9:30 AM ET"
