@@ -1,4 +1,4 @@
-"""RatingsRefCollector: fetches the RR sitemap and in-window CFB telecast records.
+"""RatingsRefCollector: fetches the RR sitemap and in-window telecast records for one league.
 
 The sitemap is fetched at most once per UTC day (its cache_path is dated).
 Every fetched record's sitemap <lastmod> is appended to ledger/rr_lastmod.jsonl
@@ -16,18 +16,26 @@ from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from typing import Literal
 
 from booth_review.config import DataPaths
 from booth_review.errors import VaultStateError
+from booth_review.nfl.layout import nfl_rr_path
 from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.sources.ratingsref.lastmod import (
     append_failure,
     append_lastmod,
+    lastmod_has_prefix,
     lastmod_ledger_exists,
     load_failures,
     load_lastmods,
 )
-from booth_review.sources.ratingsref.sitemap import SitemapEntry, parse_sitemap, select_entries
+from booth_review.sources.ratingsref.sitemap import (
+    _LEAGUE_PATH_PREFIXES,
+    SitemapEntry,
+    parse_sitemap,
+    select_entries,
+)
 from booth_review.transport.cache import CacheResult, RawCache
 from booth_review.transport.types import FetchRequest
 
@@ -39,6 +47,11 @@ SITEMAP_URL = "https://ratingsreference.com/sitemap-telecasts.xml"
 # outside the current season) per refresh run; current-season new records are
 # never capped (see RatingsRefCollector.refresh).
 REFRESH_CAP_DEFAULT = 100
+
+# D-09: NFL has about 100 records a season versus CFB's thousands; 40 covers a
+# week of NFL revisions plus margin. Each league's run has its own cap, so a
+# burst of NFL changes never delays CFB re-checks.
+NFL_REFRESH_CAP_DEFAULT = 40
 
 # D-07: the earliest season the refresh's lastmod diff considers.
 FIRST_SEASON = 2014
@@ -82,7 +95,7 @@ class RefreshSummary:
 
 
 class RatingsRefCollector:
-    """Plans, dry-runs, and fetches an in-window slice of RR CFB telecast records."""
+    """Plans, dry-runs, and fetches RR telecast records for one league (default CFB)."""
 
     def __init__(
         self,
@@ -91,10 +104,17 @@ class RatingsRefCollector:
         *,
         lock: Callable[[], AbstractContextManager[object]] | None = None,
         now: Callable[[], datetime] = _utc_now,
+        league: str = "cfb",
     ) -> None:
         """`lock` (normally `VaultRepo.lock`) is held around each lastmod
         append, so an append never lands mid-commit or mid-rebase. `now`
         stamps lastmod/failure lines and times the failed-record hold."""
+        if league not in _LEAGUE_PATH_PREFIXES:
+            raise ValueError(f"unknown ratingsref league: {league!r}")
+        self._league = league
+        self._source: Literal["ratingsref", "nfl_ratingsref"] = (
+            "ratingsref" if league == "cfb" else "nfl_ratingsref"
+        )
         self._cache = cache
         self._paths = paths
         self._lock: Callable[[], AbstractContextManager[object]] = lock or contextlib.nullcontext
@@ -129,13 +149,18 @@ class RatingsRefCollector:
         result = self._cache.get_or_fetch(req)
         return result.content
 
+    def _record_path(self, entry: SitemapEntry) -> str:
+        if self._league == "cfb":
+            return f"ratingsref/telecast/{entry.season}/{entry.telecast_id}.json"
+        return nfl_rr_path(entry.season, entry.telecast_id)
+
     def plan(self, entries: Sequence[SitemapEntry]) -> list[FetchRequest]:
         return [
             FetchRequest(
-                source="ratingsref",
+                source=self._source,
                 season=entry.season,
                 url=entry.json_url,
-                cache_path=f"ratingsref/telecast/{entry.season}/{entry.telecast_id}.json",
+                cache_path=self._record_path(entry),
             )
             for entry in entries
         ]
@@ -147,7 +172,7 @@ class RatingsRefCollector:
         if xml is None:
             logger.info("ratingsref: sitemap not cached; a run would fetch it first (1 request)")
             return BatchSummary(
-                source="ratingsref",
+                source=self._source,
                 season_label=season_label,
                 planned=0,
                 cached=0,
@@ -161,7 +186,7 @@ class RatingsRefCollector:
                 dry_run=dry_run,
             )
 
-        entries, _skipped = parse_sitemap(xml)
+        entries, _skipped = parse_sitemap(xml, league=self._league)
         selected = select_entries(entries, start, end)
         requests = self.plan(selected)
         entries_by_url = {entry.json_url: entry for entry in selected}
@@ -172,7 +197,7 @@ class RatingsRefCollector:
         return run_requests(
             self._cache,
             requests,
-            source="ratingsref",
+            source=self._source,
             season_label=season_label,
             dry_run=dry_run,
             on_fetched=_on_fetched,
@@ -209,6 +234,11 @@ class RatingsRefCollector:
                 "ledger/rr_lastmod.json(l) missing; refusing a refresh that would "
                 "treat every record as new"
             )
+        if self._league == "nfl" and not lastmod_has_prefix(self._paths, "nfl-"):
+            raise VaultStateError(
+                "no NFL lastmod lines yet; run `booth-review collect ratingsref --league nfl "
+                f"--season 2014-{current_season}` first, or every NFL record would queue as new"
+            )
 
         season_label = f"{first_season}-{current_season}"
         xml = self.sitemap(dry_run=dry_run)
@@ -230,7 +260,7 @@ class RatingsRefCollector:
                 dry_run=dry_run,
             )
 
-        entries, _skipped = parse_sitemap(xml)
+        entries, _skipped = parse_sitemap(xml, league=self._league)
         known = load_lastmods(self._paths)
 
         in_window = [e for e in entries if first_season <= e.season <= current_season]
@@ -307,7 +337,7 @@ class RatingsRefCollector:
             batch = run_requests(
                 self._cache,
                 requests,
-                source="ratingsref",
+                source=self._source,
                 season_label=season_label,
                 dry_run=False,
                 refresh=True,

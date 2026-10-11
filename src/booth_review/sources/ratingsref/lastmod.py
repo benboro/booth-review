@@ -57,6 +57,11 @@ def lastmod_ledger_exists(paths: DataPaths) -> bool:
     return paths.rr_lastmod.is_file() or paths.rr_lastmod_log.is_file()
 
 
+def lastmod_has_prefix(paths: DataPaths, prefix: str) -> bool:
+    """Whether any tracked record's telecast_id starts with `prefix` (e.g. "nfl-")."""
+    return any(telecast_id.startswith(prefix) for telecast_id in load_lastmods(paths))
+
+
 def _parse_lastmod(value: str) -> datetime | None:
     try:
         parsed = datetime.fromisoformat(value)
