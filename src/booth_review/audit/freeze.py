@@ -141,7 +141,12 @@ def freeze_seasons(
             seasons_added.append(season)
 
     if not dry_run:
-        merged = {source: sorted(set(values) | set(seasons)) for source, values in current.items()}
+        # Merge only the CFB sources: frozen.json also carries the nfl_* keys,
+        # which only `nfl freeze` (with its own completeness check and freeze
+        # date) may change.
+        merged = dict(current)
+        for source in SOURCES:
+            merged[source] = sorted(set(current[source]) | set(seasons))
         atomic_write_json(paths.frozen, merged)
 
         completeness_bytes = (paths.audit / "completeness.json").read_bytes()

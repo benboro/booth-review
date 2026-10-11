@@ -17,7 +17,7 @@ import json
 from datetime import date
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 from booth_review.errors import ParseError
 
@@ -56,6 +56,16 @@ class RRClaim(BaseModel):
     confidence: float | None = None
     carrier_network: str | None = None
     composite_of: list[str] | None = None
+
+    @field_validator("composite_of", mode="before")
+    @classmethod
+    def _composite_claim_ids(cls, value: object) -> object:
+        # Newer records give an object ({"claim_ids": [...], "combination_rule":
+        # ..., ...}) instead of a bare list; keep only its claim ids, which may
+        # be empty when RR leaves the components unpublished.
+        if isinstance(value, dict):
+            return value.get("claim_ids")
+        return value
 
 
 class RRRecord(BaseModel):

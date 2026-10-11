@@ -21,7 +21,7 @@ there to fill, then aborts before any processed, audit, or baseline write.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -45,7 +45,7 @@ from booth_review.build.regression import (
 )
 from booth_review.build.site_data import build_site_data, write_site_data
 from booth_review.build.tables import BuildTables, assemble_tables, write_tables
-from booth_review.config import DataPaths
+from booth_review.config import HOST_SOURCE, DataPaths
 from booth_review.errors import BowlCrosswalkError
 from booth_review.transport.cache import Manifest
 from booth_review.vault import VaultRepo, batch_message
@@ -82,22 +82,14 @@ _MANIFEST_TIME_FMT = "%Y-%m-%dT%H:%M:%SZ"
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 
-def input_stamp(paths: DataPaths) -> datetime:
-    """The newest change to a collected input, from the request manifest.
-
-    An entry counts as a change when it wrote a cached file (non-null path and
-    sha256) whose sha256 differs from the previous entry for the same path; the
-    first entry for a path is a change. Identical inputs give an identical
-    stamp, so a rebuild with nothing new is byte-identical (D-02 idempotence),
-    and a refresh that returns the same bytes does not move it.
-    """
+def _stamp(paths: DataPaths, include: Callable[[str], bool]) -> datetime:
     last_sha: dict[str, str] = {}
     newest = _EPOCH
     for entry in Manifest(paths.manifest).entries():
         path = entry.get("path")
         sha = entry.get("sha256")
         fetched_at = entry.get("fetched_at")
-        if path is None or sha is None or fetched_at is None:
+        if path is None or sha is None or fetched_at is None or not include(path):
             continue
         previous = last_sha.get(path)
         last_sha[path] = sha
@@ -106,6 +98,37 @@ def input_stamp(paths: DataPaths) -> datetime:
         stamp = datetime.strptime(fetched_at, _MANIFEST_TIME_FMT).replace(tzinfo=UTC)
         newest = max(newest, stamp)
     return newest
+
+
+# robots.txt copies of the hosts only NFL collection talks to (CR-03). Ratings
+# Reference's robots.txt is shared by both leagues and stays a CFB input.
+_NFL_ROBOTS_PREFIXES: tuple[str, ...] = tuple(
+    sorted(f"_robots/{host}/" for host, source in HOST_SOURCE.items() if source.startswith("nfl_"))
+)
+
+
+def _is_nfl_input(path: str) -> bool:
+    return path.startswith(("nfl/", *_NFL_ROBOTS_PREFIXES))
+
+
+def input_stamp(paths: DataPaths) -> datetime:
+    """The newest change to a collected input, from the request manifest.
+
+    An entry counts as a change when it wrote a cached file (non-null path and
+    sha256) whose sha256 differs from the previous entry for the same path; the
+    first entry for a path is a change. Identical inputs give an identical
+    stamp, so a rebuild with nothing new is byte-identical (D-02 idempotence),
+    and a refresh that returns the same bytes does not move it. NFL inputs
+    (paths under nfl/, and robots.txt copies of NFL-only hosts) never move the
+    CFB stamp.
+    """
+    return _stamp(paths, lambda path: not _is_nfl_input(path))
+
+
+def nfl_input_stamp(paths: DataPaths) -> datetime:
+    """The newest change to a collected NFL input (manifest paths under nfl/,
+    and robots.txt copies of NFL-only hosts)."""
+    return _stamp(paths, _is_nfl_input)
 
 
 def _stale_preliminary_headlines(

@@ -106,9 +106,14 @@ chart) rather than reproduced as-is.
 
 Ratings Reference also covers the NFL. The Phase 6 spike (October 2026) read
 its NFL records by hand to judge whether an NFL module is workable. The
-collector still reads CFB only: the sitemap filter keeps paths starting
-`/telecast/cfb-`, and NFL entries are skipped until a later build phase adds
-an opt-in NFL option.
+collector reads NFL records with the league option: `booth-review collect
+ratingsref --league nfl --season 2014-<year>` backfills them into the vault's
+`raw/nfl/ratingsref/`, and `booth-review refresh ratingsref --league nfl`
+keeps them current. Both leagues share one daily sitemap fetch. Each league has
+its own refresh cap per run: 100 for college football and 40 for the NFL, with
+new current-season records not counted against either. An NFL refresh refuses to
+run until an NFL backfill has recorded sitemap dates, because otherwise every
+NFL record would queue as new.
 
 - **IDs:** `nfl-<team>-<team>-<yyyy-mm-dd>`. The two team words are nicknames
   in alphabetical order, not away then home; the record's title gives the
@@ -181,7 +186,7 @@ and note the data was modified.
 
 Ratings Reference also covers Major League Baseball. The Phase 7 spike (October
 2026) read 14 MLB records by hand, one at a time and paced, to judge whether an
-MLB module is workable. The collector still reads CFB only; MLB entries are
+MLB module is workable. The collector reads CFB and, with `--league nfl`, NFL; MLB entries are
 skipped until a later build phase adds a league option.
 
 - **IDs:** `mlb-<team>-<team>-<yyyy-mm-dd>`. The two team words are nicknames in

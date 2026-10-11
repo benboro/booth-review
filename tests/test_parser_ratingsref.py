@@ -230,3 +230,29 @@ def test_parse_record_accepts_int_tier() -> None:
     data["telecast"]["tier"] = 2
     record = parse_record(json.dumps(data).encode("utf-8"))
     assert record.telecast.tier == 2
+
+
+@pytest.mark.parametrize(
+    ("composite_of", "expected"),
+    [
+        (["claim-a", "claim-b"], ["claim-a", "claim-b"]),
+        (
+            {"claim_ids": ["claim-a", "claim-b"], "combination_rule": "sum", "components": []},
+            ["claim-a", "claim-b"],
+        ),
+        ({"claim_ids": [], "combination_rule": "sum", "components_unpublished": True}, []),
+        (None, None),
+    ],
+)
+def test_parse_record_accepts_list_or_object_composite_of(
+    composite_of: object, expected: list[str] | None
+) -> None:
+    """Newer records give composite_of as an object holding claim_ids; it
+    used to fail validation and drop the whole record.
+    """
+    import json
+
+    data = _record_data()
+    data["claims"][0]["composite_of"] = composite_of
+    record = parse_record(json.dumps(data).encode("utf-8"))
+    assert record.claims[0].composite_of == expected

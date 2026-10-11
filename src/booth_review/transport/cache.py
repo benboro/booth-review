@@ -12,7 +12,7 @@ import hashlib
 import json
 import os
 import tempfile
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
@@ -33,7 +33,7 @@ Outcome = Literal["cached", "fetched", "not_modified"]
 # (lastmod advanced, or newly listed in the sitemap) is decided one layer up,
 # by RatingsRefCollector.refresh (Plan 03) -- this constant only says which
 # source is ever allowed to attempt the request.
-_REFRESH_EXEMPT_SOURCES = frozenset({"ratingsref"})
+_REFRESH_EXEMPT_SOURCES = frozenset({"ratingsref", "nfl_ratingsref"})
 
 _MANIFEST_FIELDS = (
     "url",
@@ -190,8 +190,8 @@ class FreezeGuard:
     def is_frozen(self, source: str, season: int | None, *, refresh: bool = False) -> bool:
         """Whether (source, season) refuses a fetch.
 
-        `refresh=True` lets a source in `_REFRESH_EXEMPT_SOURCES` (currently
-        only ratingsref) through a frozen season (D-07); every other source
+        `refresh=True` lets a source in `_REFRESH_EXEMPT_SOURCES` (ratingsref and
+        nfl_ratingsref) through a frozen season (D-07); every other source
         still refuses regardless of `refresh`. Which individual records
         actually qualify for re-fetch is a collector-level decision
         (RatingsRefCollector.refresh, Plan 03), not this method's concern.
@@ -254,7 +254,18 @@ class RawCache:
         *,
         refresh: bool = False,
         bearer_token: str | None = None,
+        conditional: bool = True,
+        validate: Callable[[bytes], None] | None = None,
     ) -> CacheResult:
+        """Serve `req` from the cache, or fetch it (always when `refresh`).
+
+        A refresh sends the last stored validators unless `conditional` is
+        False. `validate` checks the response bytes (a 200's new bytes, or the
+        cached bytes a 304 confirms) before anything is written: when it
+        raises, the cached file is left as it was and the manifest gets an
+        entry with no path and no validators, so a later conditional request
+        never builds on the rejected response.
+        """
         path = self._resolve_cache_path(req.cache_path)
 
         if path.exists() and not refresh:
@@ -267,18 +278,30 @@ class RawCache:
         for guard in self._guards:
             guard.before_fetch(req)
 
-        validators = self._manifest.latest_validators(req.url) if refresh else None
-        resp = self._client.fetch(req.url, validators=validators, bearer_token=bearer_token)
+        validators = self._manifest.latest_validators(req.url) if refresh and conditional else None
+        resp = self._client.fetch(
+            req.url,
+            validators=validators,
+            bearer_token=bearer_token,
+            headers=dict(req.headers) or None,
+        )
 
         for guard in self._guards:
             guard.after_fetch(req, resp)
 
-        return self._handle_response(req, path, resp)
+        return self._handle_response(req, path, resp, validate)
 
-    def _handle_response(self, req: FetchRequest, path: Path, resp: FetchResponse) -> CacheResult:
+    def _handle_response(
+        self,
+        req: FetchRequest,
+        path: Path,
+        resp: FetchResponse,
+        validate: Callable[[bytes], None] | None = None,
+    ) -> CacheResult:
         fetched_at = resp.fetched_at.strftime("%Y-%m-%dT%H:%M:%SZ")
 
         if resp.status_code == 200:
+            self._validate(req, resp, fetched_at, resp.content, validate)
             atomic_write_bytes(path, resp.content)
             self._manifest.append(
                 self._entry(req, resp, fetched_at, content=resp.content, path=path)
@@ -288,6 +311,7 @@ class RawCache:
 
         if resp.status_code == 304:
             content = path.read_bytes()
+            self._validate(req, resp, fetched_at, content, validate)
             self._manifest.append(self._entry(req, resp, fetched_at, content=content, path=path))
             self.counters["not_modified"] += 1
             return CacheResult(content=content, outcome="not_modified", path=path)
@@ -312,6 +336,37 @@ class RawCache:
             f"fetch failed with status {resp.status_code}: {req.url}",
             status_code=resp.status_code,
         )
+
+    def _validate(
+        self,
+        req: FetchRequest,
+        resp: FetchResponse,
+        fetched_at: str,
+        content: bytes,
+        validate: Callable[[bytes], None] | None,
+    ) -> None:
+        if validate is None:
+            return
+        try:
+            validate(content)
+        except Exception:
+            self._manifest.append(
+                ManifestEntry(
+                    url=req.url,
+                    source=req.source,
+                    season=req.season,
+                    kind=req.kind,
+                    fetched_at=fetched_at,
+                    status=resp.status_code,
+                    etag=None,
+                    last_modified=None,
+                    sha256=None,
+                    path=None,
+                    bytes=None,
+                    final_url=resp.final_url,
+                )
+            )
+            raise
 
     def _entry(
         self,

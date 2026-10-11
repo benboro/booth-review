@@ -9,7 +9,7 @@ import httpx2
 import pytest
 import stamina
 
-from booth_review.config import USER_AGENT
+from booth_review.config import HOST_POLICIES, USER_AGENT, HostPolicy
 from booth_review.errors import (
     FetchError,
     RobotsDisallowedError,
@@ -552,3 +552,173 @@ def test_fetch_log_masks_ratingsref_record_ids_and_query_strings(
         assert "beta" not in line
         assert "?" not in line
         assert "year=" not in line
+
+
+# -- NFL transport additions: headers, wildcard robots, redirects ---------------
+
+_GH_POLICIES = {
+    **HOST_POLICIES,
+    "github.com": HostPolicy(min_interval_s=2.0, jitter_s=0.0, retry_mode="standard"),
+    "release-assets.githubusercontent.com": HostPolicy(
+        min_interval_s=2.0, jitter_s=0.0, retry_mode="standard"
+    ),
+}
+
+
+def _gh_client(handler: Handler) -> PoliteClient:
+    return PoliteClient(
+        transport=httpx2.MockTransport(handler),
+        clock=lambda: 0.0,
+        sleep=lambda seconds: None,
+        host_policies=_GH_POLICIES,
+    )
+
+
+def test_fetch_sends_custom_headers() -> None:
+    log: list[httpx2.Request] = []
+    responses = {
+        "https://506sports.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://506sports.com/p": (200, b"x", {}),
+    }
+    _client(_recording_handler(responses, log)).fetch(
+        "https://506sports.com/p", headers={"Accept": "application/octet-stream"}
+    )
+    assert log[-1].headers["accept"] == "application/octet-stream"
+
+
+def test_caller_cannot_override_authorization() -> None:
+    log: list[httpx2.Request] = []
+    responses = {
+        "https://506sports.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://506sports.com/p": (200, b"x", {}),
+    }
+    _client(_recording_handler(responses, log)).fetch(
+        "https://506sports.com/p", headers={"Authorization": "x"}, bearer_token="t"
+    )
+    assert log[-1].headers["authorization"] == "Bearer t"
+    log.clear()
+    _client(_recording_handler(responses, log)).fetch(
+        "https://506sports.com/p", headers={"authorization": "x"}
+    )
+    assert "authorization" not in log[-1].headers
+
+
+def test_no_headers_request_unchanged() -> None:
+    log: list[httpx2.Request] = []
+    responses = {
+        "https://506sports.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://506sports.com/p": (200, b"x", {}),
+    }
+    _client(_recording_handler(responses, log)).fetch("https://506sports.com/p")
+    assert set(log[-1].headers.keys()) <= {
+        "host",
+        "accept",
+        "accept-encoding",
+        "connection",
+        "user-agent",
+    }
+    assert "authorization" not in log[-1].headers
+
+
+def test_wildcard_robots_rule_vetoes_fetch() -> None:
+    log: list[httpx2.Request] = []
+    responses = {
+        "https://github.com/robots.txt": (200, b"User-agent: *\nDisallow: /*/download\n", {}),
+    }
+    client = _gh_client(_recording_handler(responses, log))
+    with pytest.raises(RobotsDisallowedError):
+        client.fetch("https://github.com/o/r/releases/download/t/f.parquet")
+    assert [str(r.url) for r in log] == ["https://github.com/robots.txt"]
+
+
+def test_redirect_to_other_host_drops_authorization_and_scrubs_final_url() -> None:
+    log: list[httpx2.Request] = []
+    signed = "https://release-assets.githubusercontent.com/a/b?sig=SECRET&se=1"
+    responses = {
+        "https://github.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://github.com/o/r/asset": (302, b"", {"Location": signed}),
+        "https://release-assets.githubusercontent.com/robots.txt": ALLOW_ALL_ROBOTS,
+        signed: (200, b"data", {}),
+    }
+    client = _gh_client(_recording_handler(responses, log))
+    resp = client.fetch("https://github.com/o/r/asset", bearer_token="tok")
+    assert log[1].headers["authorization"] == "Bearer tok"
+    # WR-01: the redirect host's robots.txt is read before the hop is sent.
+    assert str(log[2].url) == "https://release-assets.githubusercontent.com/robots.txt"
+    assert "authorization" not in log[2].headers
+    assert str(log[3].url) == signed
+    assert "authorization" not in log[3].headers
+    assert resp.final_url == "https://release-assets.githubusercontent.com/a/b"
+    assert "SECRET" not in resp.final_url
+
+
+# -- WR-01: redirects are vetted hop by hop before they are sent -------------------
+
+
+def test_redirect_to_unknown_host_is_refused_before_the_hop_is_sent() -> None:
+    log: list[httpx2.Request] = []
+    responses = {
+        "https://github.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://github.com/o/r/asset": (
+            302,
+            b"",
+            {"Location": "https://moved-assets.example.com/big.parquet"},
+        ),
+    }
+    client = _gh_client(_recording_handler(responses, log))
+    with pytest.raises(UnknownHostError):
+        client.fetch("https://github.com/o/r/asset")
+    assert all(r.url.host != "moved-assets.example.com" for r in log)
+
+
+def test_redirect_hop_disallowed_by_its_robots_is_never_sent() -> None:
+    log: list[httpx2.Request] = []
+    signed = "https://release-assets.githubusercontent.com/private/x?sig=1"
+    responses = {
+        "https://github.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://github.com/o/r/asset": (302, b"", {"Location": signed}),
+        "https://release-assets.githubusercontent.com/robots.txt": (
+            200,
+            b"User-agent: *\nDisallow: /private/\n",
+            {},
+        ),
+    }
+    client = _gh_client(_recording_handler(responses, log))
+    with pytest.raises(RobotsDisallowedError):
+        client.fetch("https://github.com/o/r/asset")
+    assert signed not in [str(r.url) for r in log]
+
+
+def test_redirect_hop_is_paced_by_its_own_host_policy(fake_clock) -> None:
+    log: list[httpx2.Request] = []
+    signed = "https://release-assets.githubusercontent.com/a/b?sig=1"
+    responses = {
+        "https://github.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://github.com/o/r/asset": (302, b"", {"Location": signed}),
+        "https://release-assets.githubusercontent.com/robots.txt": ALLOW_ALL_ROBOTS,
+        signed: (200, b"data", {}),
+    }
+    client = PoliteClient(
+        transport=httpx2.MockTransport(_recording_handler(responses, log)),
+        clock=fake_clock.now,
+        sleep=fake_clock.sleep,
+        host_policies=_GH_POLICIES,
+    )
+    client.fetch("https://github.com/o/r/asset")
+    # github.com: robots then the asset (one 2 s wait); the asset host: robots
+    # then the signed download (one 2 s wait of its own).
+    assert fake_clock.sleeps == [2.0, 2.0]
+    assert [str(r.url) for r in log][-1] == signed
+
+
+def test_redirect_loop_is_cut_off() -> None:
+    log: list[httpx2.Request] = []
+    responses = {
+        "https://github.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://github.com/a": (302, b"", {"Location": "https://github.com/b"}),
+        "https://github.com/b": (302, b"", {"Location": "https://github.com/a"}),
+    }
+    client = _gh_client(_recording_handler(responses, log))
+    with pytest.raises(FetchError, match="too many redirects"):
+        client.fetch("https://github.com/a")
+    assert len(log) == 1 + 6

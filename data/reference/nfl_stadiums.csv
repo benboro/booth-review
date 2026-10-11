@@ -1,0 +1,27 @@
+stadium_id,stadium,country,source_url,note
+LON00,Wembley Stadium,GB,https://en.wikipedia.org/wiki/Wembley_Stadium,London
+LON01,Twickenham Stadium,GB,https://en.wikipedia.org/wiki/Twickenham_Stadium,London
+LON02,Tottenham Hotspur Stadium,GB,https://en.wikipedia.org/wiki/Tottenham_Hotspur_Stadium,London
+MEX00,Estadio Azteca,MX,https://en.wikipedia.org/wiki/Estadio_Azteca,Mexico City; also listed as Estadio Banorte
+GER00,Allianz Arena,DE,https://en.wikipedia.org/wiki/Allianz_Arena,Munich
+MUN01,Allianz Arena,DE,https://en.wikipedia.org/wiki/Allianz_Arena,Munich; nflverse lists it as FC Bayern Munich Stadium
+FRA00,Deutsche Bank Park,DE,https://en.wikipedia.org/wiki/Waldstadion_(Frankfurt),Frankfurt
+SAO00,Arena Corinthians,BR,https://en.wikipedia.org/wiki/Arena_Corinthians,Sao Paulo
+RIO00,Maracana Stadium,BR,https://en.wikipedia.org/wiki/Maracan%C3%A3_Stadium,Rio de Janeiro
+MAD01,Santiago Bernabeu Stadium,ES,https://en.wikipedia.org/wiki/Santiago_Bernab%C3%A9u_Stadium,Madrid
+PAR00,Stade de France,FR,https://en.wikipedia.org/wiki/Stade_de_France,Saint-Denis near Paris
+MEL00,Melbourne Cricket Ground,AU,https://en.wikipedia.org/wiki/Melbourne_Cricket_Ground,Melbourne
+DET00,Ford Field,US,https://en.wikipedia.org/wiki/Ford_Field,Detroit; also a neutral site
+PHO00,State Farm Stadium,US,https://en.wikipedia.org/wiki/State_Farm_Stadium,Glendale AZ; also a neutral site
+SFO01,Levi's Stadium,US,https://en.wikipedia.org/wiki/Levi%27s_Stadium,Santa Clara CA; Super Bowl host
+HOU00,NRG Stadium,US,https://en.wikipedia.org/wiki/NRG_Stadium,Houston; Super Bowl host
+MIN01,U.S. Bank Stadium,US,https://en.wikipedia.org/wiki/U.S._Bank_Stadium,Minneapolis; Super Bowl host
+ATL97,Mercedes-Benz Stadium,US,https://en.wikipedia.org/wiki/Mercedes-Benz_Stadium,Atlanta; Super Bowl host
+TAM00,Raymond James Stadium,US,https://en.wikipedia.org/wiki/Raymond_James_Stadium,Tampa; Super Bowl host
+VEG00,Allegiant Stadium,US,https://en.wikipedia.org/wiki/Allegiant_Stadium,Las Vegas; Super Bowl host
+NOR00,Caesars Superdome,US,https://en.wikipedia.org/wiki/Caesars_Superdome,New Orleans; Super Bowl host
+DUB00,Croke Park,IE,https://en.wikipedia.org/wiki/Croke_Park,Dublin; project id (no nflverse id seen for this venue)
+BER00,Olympiastadion,DE,https://en.wikipedia.org/wiki/Olympiastadion_(Berlin),Berlin; project id (no nflverse id seen for this venue)
+JAX00,EverBank Stadium,US,https://en.wikipedia.org/wiki/EverBank_Stadium,Jacksonville; formerly TIAA Bank Field; its overseas games are in nfl_stadium_overrides.csv
+LAX01,SoFi Stadium,US,https://en.wikipedia.org/wiki/SoFi_Stadium,Inglewood CA; its overseas games are in nfl_stadium_overrides.csv
+MIA00,Hard Rock Stadium,US,https://en.wikipedia.org/wiki/Hard_Rock_Stadium,Miami Gardens FL; its overseas games are in nfl_stadium_overrides.csv

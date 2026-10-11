@@ -683,3 +683,62 @@ def test_manifest_entry_without_saved_at_omits_the_key() -> None:
 def test_manifest_entry_with_saved_at_serializes_it() -> None:
     payload = json.loads(_entry(saved_at="2026-10-01T12:00:00Z").to_json())
     assert payload["saved_at"] == "2026-10-01T12:00:00Z"
+
+
+# -- NFL additions: request headers and refresh exemption ------------------------
+
+
+def _wiki_req(**extra) -> FetchRequest:
+    return FetchRequest(
+        source="nfl_wikipedia",
+        season=2024,
+        url="https://en.wikipedia.org/wiki/x",
+        cache_path="nfl/wikipedia/2024/x.html",
+        **extra,
+    )
+
+
+def _wiki_handle(mock_transport_factory):
+    return mock_transport_factory(
+        {
+            "https://en.wikipedia.org/robots.txt": (404, b"nf", {}),
+            "https://en.wikipedia.org/wiki/x": (200, b"<html></html>", {}),
+        }
+    )
+
+
+def test_request_headers_are_threaded_and_not_in_manifest(
+    vault_paths, mock_transport_factory
+) -> None:
+    handle = _wiki_handle(mock_transport_factory)
+    cache = RawCache(vault_paths, _client(handle))
+
+    cache.get_or_fetch(_wiki_req(headers=(("Accept", "application/octet-stream"),)))
+
+    assert handle.requests[-1].headers["accept"] == "application/octet-stream"
+    manifest_text = vault_paths.manifest.read_text(encoding="utf-8")
+    assert "octet-stream" not in manifest_text
+    page = next(line for line in _manifest_lines(vault_paths) if line["kind"] == "page")
+    assert set(page.keys()) == _MANIFEST_KEYS
+
+
+def test_request_without_headers_sends_no_accept_override(
+    vault_paths, mock_transport_factory
+) -> None:
+    handle = _wiki_handle(mock_transport_factory)
+    cache = RawCache(vault_paths, _client(handle))
+
+    cache.get_or_fetch(_wiki_req())
+
+    assert handle.requests[-1].headers.get("accept") != "application/octet-stream"
+    assert "authorization" not in handle.requests[-1].headers
+
+
+def test_nfl_ratingsref_is_refresh_exempt(tmp_path) -> None:
+    frozen = tmp_path / "frozen.json"
+    frozen.write_text(json.dumps({"nfl_ratingsref": [2015], "nfl_wikipedia": [2015]}))
+    guard = FreezeGuard.load(frozen)
+
+    assert guard.is_frozen("nfl_ratingsref", 2015) is True
+    assert guard.is_frozen("nfl_ratingsref", 2015, refresh=True) is False
+    assert guard.is_frozen("nfl_wikipedia", 2015, refresh=True) is True

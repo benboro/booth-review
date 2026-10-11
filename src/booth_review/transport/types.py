@@ -10,7 +10,15 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal, Protocol
 
-Source = Literal["sports506", "ratingsref", "cfbd"]
+Source = Literal[
+    "sports506",
+    "ratingsref",
+    "cfbd",
+    "nfl_sports506",
+    "nfl_ratingsref",
+    "nfl_nflverse",
+    "nfl_wikipedia",
+]
 
 
 @dataclass(frozen=True)
@@ -37,6 +45,8 @@ class FetchRequest:
     params: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     """CFBD query params, for the ledger only."""
     kind: Literal["page", "robots"] = "page"
+    headers: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    """Extra request headers only (e.g. Accept); never written to the manifest."""
 
 
 @dataclass(frozen=True)

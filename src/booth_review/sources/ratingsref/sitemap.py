@@ -1,6 +1,6 @@
 """Ratings Reference sitemap-telecasts.xml parsing.
 
-Filters to CFB telecast pages (path starting /telecast/cfb-) whose slug ends
+Filters to telecast pages for one league (default CFB, path starting /telecast/cfb-) whose slug ends
 in a trailing -YYYY-MM-DD date, and builds the derived per-telecast JSON API
 URL. Disables entity resolution and network access on the XML parser (T-01-25).
 """
@@ -17,7 +17,11 @@ from lxml import etree
 from booth_review.errors import ParseError
 from booth_review.seasons import season_of
 
-_CFB_PATH_PREFIX = "/telecast/cfb-"
+# 999.7 adds "mlb": "/telecast/mlb-" here.
+_LEAGUE_PATH_PREFIXES: dict[str, str] = {
+    "cfb": "/telecast/cfb-",
+    "nfl": "/telecast/nfl-",
+}
 _TRAILING_DATE_RE = re.compile(r"-(\d{4})-(\d{2})-(\d{2})$")
 
 
@@ -34,14 +38,18 @@ class SitemapEntry:
     event_date: date
     season: int
     lastmod: str
+    league: str = "cfb"
 
 
-def parse_sitemap(xml: bytes) -> tuple[list[SitemapEntry], int]:
-    """Parse sitemap XML bytes into (CFB telecast entries, skipped count).
+def parse_sitemap(xml: bytes, league: str = "cfb") -> tuple[list[SitemapEntry], int]:
+    """Parse sitemap XML bytes into (telecast entries for `league`, skipped count).
 
-    Entries whose loc path isn't a CFB telecast page, or whose slug has no
+    Entries whose loc path isn't a telecast page for `league`, or whose slug has no
     trailing -YYYY-MM-DD date, are skipped and counted rather than raising.
     """
+    prefix = _LEAGUE_PATH_PREFIXES.get(league)
+    if prefix is None:
+        raise ValueError(f"unknown ratingsref league: {league!r}")
     parser = etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=False)
     try:
         root = etree.fromstring(xml, parser=parser)
@@ -73,7 +81,7 @@ def parse_sitemap(xml: bytes) -> tuple[list[SitemapEntry], int]:
             continue
 
         path = urlparse(loc_text).path
-        if not path.startswith(_CFB_PATH_PREFIX):
+        if not path.startswith(prefix):
             skipped += 1
             continue
 
@@ -98,6 +106,7 @@ def parse_sitemap(xml: bytes) -> tuple[list[SitemapEntry], int]:
                 event_date=event_date,
                 season=season_of(event_date),
                 lastmod=lastmod_text or "",
+                league=league,
             )
         )
 

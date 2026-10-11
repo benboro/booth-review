@@ -32,12 +32,32 @@ HOST_POLICIES: dict[str, HostPolicy] = {
     "api.collegefootballdata.com": HostPolicy(
         min_interval_s=1.0, jitter_s=0.0, retry_mode="budgeted"
     ),
+    # NFL hosts. The two *.githubusercontent.com asset hosts are redirect targets
+    # only (names assumed per RESEARCH A2; confirmed by the live run in plan 09).
+    "raw.githubusercontent.com": HostPolicy(
+        min_interval_s=2.0, jitter_s=1.0, retry_mode="standard"
+    ),
+    "api.github.com": HostPolicy(min_interval_s=2.0, jitter_s=1.0, retry_mode="standard"),
+    "release-assets.githubusercontent.com": HostPolicy(
+        min_interval_s=2.0, jitter_s=1.0, retry_mode="standard"
+    ),
+    "objects.githubusercontent.com": HostPolicy(
+        min_interval_s=2.0, jitter_s=1.0, retry_mode="standard"
+    ),
+    "en.wikipedia.org": HostPolicy(min_interval_s=2.0, jitter_s=1.0, retry_mode="standard"),
 }
 
 HOST_SOURCE: dict[str, Source] = {
     "506sports.com": "sports506",
     "ratingsreference.com": "ratingsref",
     "api.collegefootballdata.com": "cfbd",
+    # Redirect-only hosts are never planned as request URLs (plan 02 tests enforce
+    # that); they are mapped so the two dicts share keys.
+    "raw.githubusercontent.com": "nfl_nflverse",
+    "api.github.com": "nfl_nflverse",
+    "release-assets.githubusercontent.com": "nfl_nflverse",
+    "objects.githubusercontent.com": "nfl_nflverse",
+    "en.wikipedia.org": "nfl_wikipedia",
 }
 
 CFBD_BASE_URL = "https://api.collegefootballdata.com"
@@ -85,6 +105,12 @@ class DataPaths:
     @property
     def rr_lastmod(self) -> Path:
         return self.ledger / "rr_lastmod.json"
+
+    @property
+    def nfl_raw(self) -> Path:
+        """The NFL module's fixed raw namespace (raw/nfl/), which CFB globbers
+        never read."""
+        return self.raw / "nfl"
 
     @property
     def rr_lastmod_log(self) -> Path:

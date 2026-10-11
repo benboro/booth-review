@@ -1,0 +1,10 @@
+nflverse_game_id,stadium_id,source_url,note
+2021_01_GB_NO,JAX00,https://en.wikipedia.org/wiki/2021_New_Orleans_Saints_season,Moved to Jacksonville after Hurricane Ida
+2025_01_KC_LAC,SAO00,https://en.wikipedia.org/wiki/NFL_International_Series,Sao Paulo; nflverse lists the home team's stadium id
+2025_04_MIN_PIT,DUB00,https://en.wikipedia.org/wiki/NFL_International_Series,Dublin; nflverse lists the home team's stadium id
+2025_05_MIN_CLE,LON02,https://en.wikipedia.org/wiki/NFL_International_Series,London; nflverse lists the home team's stadium id
+2025_06_DEN_NYJ,LON02,https://en.wikipedia.org/wiki/NFL_International_Series,London; nflverse lists the home team's stadium id
+2025_07_LA_JAX,LON00,https://en.wikipedia.org/wiki/NFL_International_Series,London; nflverse lists the home team's stadium id
+2025_10_ATL_IND,BER00,https://en.wikipedia.org/wiki/NFL_International_Series,Berlin; nflverse lists the home team's stadium id
+2025_11_WAS_MIA,MAD01,https://en.wikipedia.org/wiki/NFL_International_Series,Madrid; nflverse lists the home team's stadium id
+2026_05_PHI_JAX,LON02,https://en.wikipedia.org/wiki/NFL_International_Series,London per the nflverse stadium name; nflverse lists the home team's stadium id

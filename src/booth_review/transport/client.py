@@ -24,6 +24,7 @@ from booth_review.errors import (
     RobotsUnavailableError,
     UnknownHostError,
 )
+from booth_review.transport.robots import RobotsRules
 from booth_review.transport.types import FetchResponse, Validators
 
 logger = logging.getLogger("booth_review.transport")
@@ -48,6 +49,16 @@ def _loggable_path(path: str) -> str:
 RobotsListener = Callable[[str, FetchResponse], None]
 
 _RETRY_ATTEMPTS = 4
+
+# Redirects are followed by hand (WR-01) so each hop's host is checked against
+# the allow-list and its robots.txt, and paced, before the hop is sent.
+_MAX_REDIRECTS = 5
+
+# GitHub release-asset redirects carry short-lived signed query strings; the
+# manifest's final_url keeps scheme, host and path only for these hosts.
+_STRIP_FINAL_QUERY_HOSTS = frozenset(
+    {"release-assets.githubusercontent.com", "objects.githubusercontent.com"}
+)
 
 # "budgeted" hosts (CFBD) retry only statuses a gateway returns without
 # forwarding the request, with waits sized for a minutes-long outage.
@@ -75,7 +86,7 @@ class PoliteClient:
     ) -> None:
         self._client = httpx2.Client(
             headers={"User-Agent": USER_AGENT},
-            follow_redirects=True,
+            follow_redirects=False,
             timeout=httpx2.Timeout(30.0, connect=10.0),
             transport=transport,
         )
@@ -85,6 +96,7 @@ class PoliteClient:
         self._host_policies = host_policies
         self._last_request_end: dict[str, float] = {}
         self._robots: dict[str, robotparser.RobotFileParser] = {}
+        self._robots_rules: dict[str, RobotsRules] = {}
         self._robots_listeners: list[RobotsListener] = []
 
     def add_robots_listener(self, fn: RobotsListener) -> None:
@@ -110,28 +122,40 @@ class PoliteClient:
         *,
         validators: Validators | None = None,
         bearer_token: str | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> FetchResponse:
         host = httpx2.URL(url).host
         policy = self._host_policies.get(host)
         if policy is None:
             raise UnknownHostError(f"host not in allow-list: {host}")
 
+        self._check_robots(host, policy, url)
+
+        req_headers: dict[str, str] = {
+            k: v for k, v in (headers or {}).items() if k.lower() != "authorization"
+        }
+        if bearer_token:
+            req_headers["Authorization"] = f"Bearer {bearer_token}"
+        return self._send(host, policy, url, validators=validators, headers=req_headers)
+
+    def _check_robots(self, host: str, policy: HostPolicy, url: str) -> None:
         self._ensure_robots(host, policy)
         rp = self._robots[host]
         if not rp.can_fetch(USER_AGENT, url):
             raise RobotsDisallowedError(f"robots.txt disallows {url}")
-
-        headers: dict[str, str] = {}
-        if bearer_token:
-            headers["Authorization"] = f"Bearer {bearer_token}"
-        return self._send(host, policy, url, validators=validators, headers=headers)
+        if self._robots_rules[host].disallows(url):
+            raise RobotsDisallowedError(f"robots.txt wildcard rule disallows {url}")
 
     def _ensure_robots(self, host: str, policy: HostPolicy) -> None:
         if host in self._robots:
             return
         robots_url = f"https://{host}/robots.txt"
         try:
-            resp = self._send(host, policy, robots_url, validators=None, headers={})
+            # A robots.txt redirect is still allow-listed and paced, but its
+            # target's own robots.txt is not consulted (that could loop).
+            resp = self._send(
+                host, policy, robots_url, validators=None, headers={}, check_robots=False
+            )
         except FetchError as exc:
             raise RobotsUnavailableError(f"could not fetch robots.txt for {host}") from exc
 
@@ -139,6 +163,7 @@ class PoliteClient:
         rp.set_url(robots_url)
         # allow_all/disallow_all are real, documented RobotFileParser attributes
         # (see CPython's urllib/robotparser.py) that typeshed's stub omits.
+        rules = RobotsRules.allow_all()
         if resp.status_code in (401, 403):
             rp.disallow_all = True  # type: ignore[attr-defined]
         elif resp.status_code >= 500:
@@ -146,13 +171,16 @@ class PoliteClient:
                 f"robots.txt fetch failed with status {resp.status_code} for {host}"
             )
         elif resp.status_code == 200:
-            rp.parse(resp.content.decode("utf-8", errors="replace").splitlines())
+            text_lines = resp.content.decode("utf-8", errors="replace").splitlines()
+            rp.parse(text_lines)
+            rules = RobotsRules.parse(text_lines, agent=USER_AGENT)
         else:
             # 404 and other 4xx (except 401/403) mean allow-all, matching
             # RobotFileParser's own stdlib fetch method's 4xx handling.
             rp.allow_all = True  # type: ignore[attr-defined]
 
         self._robots[host] = rp
+        self._robots_rules[host] = rules
         for listener in self._robots_listeners:
             listener(host, resp)
 
@@ -173,6 +201,7 @@ class PoliteClient:
         *,
         validators: Validators | None,
         headers: dict[str, str],
+        check_robots: bool = True,
     ) -> FetchResponse:
         req_headers = dict(headers)
         if validators is not None:
@@ -181,21 +210,23 @@ class PoliteClient:
             if validators.last_modified:
                 req_headers["If-Modified-Since"] = validators.last_modified
 
-        def attempt() -> httpx2.Response:
-            self._pace(host, policy)
-            try:
-                response = self._client.get(url, headers=req_headers)
-            finally:
-                self._last_request_end[host] = self._clock()
-            return response
-
-        try:
-            if policy.retry_mode == "standard":
-                response = self._send_with_standard_retries(attempt)
-            else:
-                response = self._send_with_budgeted_retries(attempt)
-        except httpx2.TransportError as exc:
-            raise FetchError(f"transport failure fetching {url}") from exc
+        request = self._client.build_request("GET", url, headers=req_headers)
+        hop_host, hop_policy = host, policy
+        redirects = 0
+        while True:
+            response = self._send_hop(hop_host, hop_policy, request, url)
+            next_request = response.next_request
+            if next_request is None:
+                break
+            # Never read a redirect's body; the next hop is vetted before it is sent.
+            response.close()
+            redirects += 1
+            if redirects > _MAX_REDIRECTS:
+                raise FetchError(f"too many redirects fetching {url}")
+            hop_host, hop_policy = self._approve_redirect(
+                hop_host, next_request, check_robots=check_robots
+            )
+            request = next_request
 
         final_host = response.url.host
         if final_host not in self._host_policies:
@@ -209,13 +240,17 @@ class PoliteClient:
             except ValueError:
                 call_limit_remaining = None
 
+        final_url = str(response.url)
+        if final_host in _STRIP_FINAL_QUERY_HOSTS:
+            final_url = f"{response.url.scheme}://{final_host}{response.url.path}"
+
         fetch_resp = FetchResponse(
             status_code=response.status_code,
             content=response.content,
             etag=response.headers.get("ETag"),
             last_modified=response.headers.get("Last-Modified"),
             call_limit_remaining=call_limit_remaining,
-            final_url=str(response.url),
+            final_url=final_url,
             fetched_at=datetime.now(UTC),
         )
         logger.info(
@@ -226,6 +261,43 @@ class PoliteClient:
             len(fetch_resp.content),
         )
         return fetch_resp
+
+    def _send_hop(
+        self, host: str, policy: HostPolicy, request: httpx2.Request, url: str
+    ) -> httpx2.Response:
+        """Send one request (no redirect following), paced and retried per
+        `host`'s policy."""
+
+        def attempt() -> httpx2.Response:
+            self._pace(host, policy)
+            try:
+                response = self._client.send(request, follow_redirects=False)
+            finally:
+                self._last_request_end[host] = self._clock()
+            return response
+
+        try:
+            if policy.retry_mode == "standard":
+                return self._send_with_standard_retries(attempt)
+            return self._send_with_budgeted_retries(attempt)
+        except httpx2.TransportError as exc:
+            raise FetchError(f"transport failure fetching {url}") from exc
+
+    def _approve_redirect(
+        self, from_host: str, request: httpx2.Request, *, check_robots: bool
+    ) -> tuple[str, HostPolicy]:
+        """Vet a redirect hop before it is sent: its host must be allow-listed
+        and (unless fetching robots.txt itself) its robots.txt must allow the
+        URL. A hop to another host never carries Authorization."""
+        host = request.url.host
+        policy = self._host_policies.get(host)
+        if policy is None:
+            raise UnknownHostError(f"redirect left the host allow-list: {host}")
+        if host != from_host:
+            request.headers.pop("Authorization", None)
+        if check_robots:
+            self._check_robots(host, policy, str(request.url))
+        return host, policy
 
     def _send_with_standard_retries(
         self, attempt: Callable[[], httpx2.Response]

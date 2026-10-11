@@ -41,9 +41,16 @@ from booth_review.build.site_assembly import (
 )
 from booth_review.config import CFBD_FLOOR_DEFAULT, DataPaths, load_cfbd_key
 from booth_review.deploy.publish import SUBDIR_DEFAULT, publish_site
-from booth_review.errors import BoothReviewError, FreezeRefusedError, SiteBuildError
+from booth_review.errors import (
+    BoothReviewError,
+    FreezeRefusedError,
+    RobotsDisallowedError,
+    SiteBuildError,
+    UnknownHostError,
+)
 from booth_review.job.attention import build_attention_body
 from booth_review.job.runner import EXIT_NOTHING_DUE, JOB_CFBD_MAX_CALLS, JobRunResult, ScheduledJob
+from booth_review.nfl.commands import add_nfl_parser, run_nfl_command
 from booth_review.people import review as people_review
 from booth_review.reference import reference_dir
 from booth_review.resolve import diagnose as resolve_diagnose
@@ -53,8 +60,10 @@ from booth_review.seasons import season_of, season_window
 from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.sources.cfbd.collector import ENDPOINTS, CfbdCollector
 from booth_review.sources.cfbd.parser import parse_games
+from booth_review.sources.nflverse.collector import NflverseCollector
 from booth_review.sources.ratingsref.collector import (
     FIRST_SEASON,
+    NFL_REFRESH_CAP_DEFAULT,
     REFRESH_CAP_DEFAULT,
     RatingsRefCollector,
     RefreshSummary,
@@ -62,10 +71,11 @@ from booth_review.sources.ratingsref.collector import (
 from booth_review.sources.ratingsref.sitemap import parse_sitemap, select_entries
 from booth_review.sources.sports506.collector import Sports506Collector
 from booth_review.sources.sports506.importer import (
-    DEFAULT_INCOMING_DIR,
+    NFL_PROFILE,
     ImportResult,
     Sports506Importer,
 )
+from booth_review.sources.wikipedia.collector import WikipediaCollector
 from booth_review.spike.inventory import run_inventory
 from booth_review.spike.join import (
     build_join_rows,
@@ -81,6 +91,7 @@ from booth_review.spike.selection import (
     select_games,
 )
 from booth_review.transport.budget import BudgetSummary, CfbdBudget, InfoSnapshot
+from booth_review.transport.cache import atomic_write_bytes
 from booth_review.vault import VaultRepo, batch_message
 
 logger = logging.getLogger("booth_review.cli")
@@ -158,6 +169,25 @@ def build_parser() -> argparse.ArgumentParser:
     mode_group.add_argument("--dry-run", action="store_true")
     mode_group.add_argument("--sitemap-only", action="store_true")
     prr.add_argument("--no-commit", action="store_true")
+    prr.add_argument("--league", choices=("cfb", "nfl"), default="cfb")
+
+    pnflverse = collect_sub.add_parser("nflverse", help="collect nflverse schedules and pbp")
+    pnflverse.add_argument(
+        "--season", type=parse_season_spec, default=f"2014-{_current_season_ceiling()}"
+    )
+    nflverse_scope = pnflverse.add_mutually_exclusive_group()
+    nflverse_scope.add_argument("--schedules-only", action="store_true")
+    nflverse_scope.add_argument("--pbp-only", action="store_true")
+    pnflverse.add_argument("--refresh-schedules", action="store_true")
+    pnflverse.add_argument("--dry-run", action="store_true")
+    pnflverse.add_argument("--no-commit", action="store_true")
+
+    pwiki = collect_sub.add_parser("wikipedia", help="collect Wikipedia NFL season articles")
+    pwiki.add_argument("--league", choices=("nfl",), default="nfl")
+    pwiki.add_argument("--season", required=True, type=parse_season_spec)
+    pwiki.add_argument("--refresh", action="store_true")
+    pwiki.add_argument("--dry-run", action="store_true")
+    pwiki.add_argument("--no-commit", action="store_true")
 
     pcfbd = collect_sub.add_parser("cfbd", help="collect CFBD season data or the venue list")
     cfbd_target = pcfbd.add_mutually_exclusive_group(required=True)
@@ -179,7 +209,8 @@ def build_parser() -> argparse.ArgumentParser:
     prefresh = refresh_sub.add_parser(
         "ratingsref", help="refresh Ratings Reference records whose sitemap lastmod advanced"
     )
-    prefresh.add_argument("--cap", type=int, default=REFRESH_CAP_DEFAULT)
+    prefresh.add_argument("--cap", type=int, default=None)
+    prefresh.add_argument("--league", choices=("cfb", "nfl"), default="cfb")
     prefresh.add_argument("--dry-run", action="store_true")
     prefresh.add_argument("--no-commit", action="store_true")
 
@@ -191,6 +222,7 @@ def build_parser() -> argparse.ArgumentParser:
     p506imp.add_argument("--from", dest="from_dir", type=Path, default=None)
     p506imp.add_argument("--force", action="store_true")
     p506imp.add_argument("--no-commit", action="store_true")
+    p506imp.add_argument("--league", choices=("cfb", "nfl"), default="cfb")
 
     spike = sub.add_parser("spike", help="spike-only analysis commands (SPIKE-03/04)")
     spike_sub = spike.add_subparsers(dest="spike_command", required=True)
@@ -231,6 +263,12 @@ def build_parser() -> argparse.ArgumentParser:
     job_run = job_sub.add_parser("run", help="run one scheduled collect-only pass")
     job_run.add_argument("--trigger", choices=["schedule", "manual"], default="manual")
     job_run.add_argument("--rr-cap", type=int, default=REFRESH_CAP_DEFAULT)
+    job_run.add_argument(
+        "--nfl-rr-cap",
+        type=int,
+        default=NFL_REFRESH_CAP_DEFAULT,
+        help="Ratings Reference NFL re-fetch cap per run, separate from --rr-cap (999.4 D-09)",
+    )
     job_run.add_argument("--max-cfbd-calls", type=int, default=JOB_CFBD_MAX_CALLS)
     job_run.add_argument("--attention-out", type=Path, default=None)
     job_run.add_argument("--dry-run", action="store_true")
@@ -256,6 +294,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     build_cmd.add_argument("--no-commit", action="store_true")
     build_cmd.add_argument("--accept-baseline", action="store_true")
+
+    add_nfl_parser(sub)
 
     site_cmd = sub.add_parser(
         "site", help="D-14: assemble dist/site/ from site/, site-data.json, and rendered pages"
@@ -343,6 +383,20 @@ _COLLECT_PATHS: dict[str, tuple[str, ...]] = {
         "ledger/rr_lastmod.jsonl",
         *_ROBOTS_AND_REQUEST_LEDGER,
     ),
+    "nfl_ratingsref": (
+        "raw/nfl/ratingsref",
+        "raw/ratingsref/sitemap",
+        "ledger/rr_lastmod.json",
+        "ledger/rr_lastmod.jsonl",
+        *_ROBOTS_AND_REQUEST_LEDGER,
+    ),
+    "nfl_sports506": ("raw/nfl/sports506", "ledger/requests.jsonl"),
+    "nfl_nflverse": (
+        "raw/nfl/nflverse",
+        "ledger/nfl_nflverse_assets.jsonl",
+        *_ROBOTS_AND_REQUEST_LEDGER,
+    ),
+    "nfl_wikipedia": ("raw/nfl/wikipedia", *_ROBOTS_AND_REQUEST_LEDGER),
 }
 
 
@@ -457,10 +511,24 @@ def _collect_506(args: argparse.Namespace) -> int:
 # -- collect ratingsref ---------------------------------------------------------------
 
 
+def _rr_source_key(league: str) -> str:
+    return "nfl_ratingsref" if league == "nfl" else "ratingsref"
+
+
 def _collect_ratingsref(args: argparse.Namespace) -> int:
     runtime = build_runtime(with_budget=False)
     try:
-        collector = RatingsRefCollector(runtime.cache, runtime.paths, lock=runtime.vault.lock)
+        league = args.league
+        source_key = _rr_source_key(league)
+        if league == "nfl" and args.sitemap_only:
+            print(
+                "error: --sitemap-only is shared by both leagues; run it without --league",
+                file=sys.stderr,
+            )
+            return 3
+        collector = RatingsRefCollector(
+            runtime.cache, runtime.paths, lock=runtime.vault.lock, league=league
+        )
 
         if args.season is not None:
             seasons = args.season
@@ -486,7 +554,7 @@ def _collect_ratingsref(args: argparse.Namespace) -> int:
             runtime,
             functools.partial(collector.run, start, end, dry_run=args.dry_run),
             action="collect",
-            source="ratingsref",
+            source=source_key,
             season_label=season_label,
             dry_run=args.dry_run,
             no_commit=args.no_commit,
@@ -553,7 +621,14 @@ def _print_refresh_summary(summary: RefreshSummary) -> None:
 def _refresh_ratingsref(args: argparse.Namespace) -> int:
     runtime = build_runtime(with_budget=False)
     try:
-        collector = RatingsRefCollector(runtime.cache, runtime.paths, lock=runtime.vault.lock)
+        league = args.league
+        source_key = _rr_source_key(league)
+        collector = RatingsRefCollector(
+            runtime.cache, runtime.paths, lock=runtime.vault.lock, league=league
+        )
+        cap = args.cap
+        if cap is None:
+            cap = NFL_REFRESH_CAP_DEFAULT if league == "nfl" else REFRESH_CAP_DEFAULT
         current_season = _current_season_ceiling()
         season_label = f"{FIRST_SEASON}-{current_season}"
 
@@ -561,7 +636,7 @@ def _refresh_ratingsref(args: argparse.Namespace) -> int:
         summary: RefreshSummary | None = None
         try:
             summary = collector.refresh(
-                current_season=current_season, cap=args.cap, dry_run=args.dry_run
+                current_season=current_season, cap=cap, dry_run=args.dry_run
             )
         finally:
             if not args.dry_run and not args.no_commit:
@@ -571,14 +646,8 @@ def _refresh_ratingsref(args: argparse.Namespace) -> int:
                     else _partial_refresh_counts(before, runtime.cache.counters)
                 )
                 runtime.vault.commit_batch(
-                    batch_message("refresh", "ratingsref", season_label, counts),
-                    paths=[
-                        "raw/ratingsref",
-                        "raw/_robots",
-                        "ledger/requests.jsonl",
-                        "ledger/rr_lastmod.json",
-                        "ledger/rr_lastmod.jsonl",
-                    ],
+                    batch_message("refresh", source_key, season_label, counts),
+                    paths=list(_COLLECT_PATHS[source_key]),
                 )
         assert summary is not None
 
@@ -592,6 +661,138 @@ def _refresh_ratingsref(args: argparse.Namespace) -> int:
                 print(f"backlog {summary.backlog}")
             return 4 if summary.failed > 0 or summary.backlog > 0 else 0
         return 0
+    finally:
+        runtime.client.close()
+
+
+# -- collect nflverse / wikipedia ----------------------------------------------------------
+
+
+def _commit_nfl(
+    runtime: Runtime,
+    source_key: str,
+    season_label: str,
+    counts: dict[str, int],
+    args: argparse.Namespace,
+) -> None:
+    if args.dry_run or args.no_commit:
+        return
+    runtime.vault.commit_batch(
+        batch_message("collect", source_key, season_label, counts),
+        paths=list(_COLLECT_PATHS[source_key]),
+    )
+
+
+def _collect_nflverse(args: argparse.Namespace) -> int:
+    runtime = build_runtime(with_budget=False)
+    try:
+        token = os.environ.get("GITHUB_TOKEN") or None
+        collector = NflverseCollector(
+            runtime.cache, runtime.paths, lock=runtime.vault.lock, token=token
+        )
+        seasons: list[int] = args.season
+        label = f"{seasons[0]}-{seasons[-1]}" if len(seasons) > 1 else str(seasons[0])
+        totals = {"fetched": 0, "cached": 0, "not_modified": 0, "failed": 0}
+        before = dict(runtime.cache.counters)
+        error: BoothReviewError | None = None
+        try:
+            if not args.pbp_only:
+                sched = collector.run_schedules(
+                    refresh=args.refresh_schedules, dry_run=args.dry_run
+                )
+                for key, value in sched.counts().items():
+                    totals[key] += value
+                if args.dry_run:
+                    print(f"schedules: planned {sched.planned}, new {len(sched.new_urls)}")
+            if not args.schedules_only:
+                pbp = collector.run_pbp(seasons, dry_run=args.dry_run)
+                counts = pbp.counts()
+                totals["fetched"] += counts["fetched"]
+                totals["cached"] += counts["unchanged"]
+                totals["not_modified"] += counts["not_modified"]
+                totals["failed"] += counts["failed"]
+                if args.dry_run:
+                    print(
+                        f"pbp: planned {pbp.planned}, unchanged {pbp.unchanged}, "
+                        f"frozen {pbp.frozen}, missing_assets {len(pbp.missing_assets)}"
+                    )
+        except (RobotsDisallowedError, UnknownHostError) as exc:
+            error = exc
+            totals = _partial_counts(before, runtime.cache.counters)
+        except BaseException:
+            _commit_nfl(
+                runtime,
+                "nfl_nflverse",
+                label,
+                _partial_counts(before, runtime.cache.counters),
+                args,
+            )
+            raise
+        _commit_nfl(runtime, "nfl_nflverse", label, totals, args)
+        if error is not None:
+            print(f"error: {type(error).__name__}", file=sys.stderr)
+            return 4
+        if not args.dry_run:
+            print(
+                f"fetched {totals['fetched']}, cached {totals['cached']}, "
+                f"not_modified {totals['not_modified']}, failed {totals['failed']}"
+            )
+        return 4 if totals["failed"] else 0
+    finally:
+        runtime.client.close()
+
+
+def _collect_wikipedia(args: argparse.Namespace) -> int:
+    runtime = build_runtime(with_budget=False)
+    try:
+        collector = WikipediaCollector(runtime.cache)
+        seasons: list[int] = args.season
+        label = f"{seasons[0]}-{seasons[-1]}" if len(seasons) > 1 else str(seasons[0])
+        current = _current_season_ceiling()
+        before = dict(runtime.cache.counters)
+        summaries: list[BatchSummary] = []
+        error: BoothReviewError | None = None
+        try:
+            for season in seasons:
+                # A re-read applies only to the current NFL season; completed
+                # seasons are served from cache.
+                refresh = args.refresh and season >= current
+                summaries.extend(collector.run([season], refresh=refresh, dry_run=args.dry_run))
+        except (RobotsDisallowedError, UnknownHostError) as exc:
+            error = exc
+        except BaseException:
+            _commit_nfl(
+                runtime,
+                "nfl_wikipedia",
+                label,
+                _partial_counts(before, runtime.cache.counters),
+                args,
+            )
+            raise
+        counts = (
+            _partial_counts(before, runtime.cache.counters)
+            if error is not None
+            else {
+                key: sum(s.counts()[key] for s in summaries)
+                for key in ("fetched", "cached", "not_modified", "failed")
+            }
+        )
+        _commit_nfl(runtime, "nfl_wikipedia", label, counts, args)
+        if error is not None:
+            print(f"error: {type(error).__name__}", file=sys.stderr)
+            return 4
+        if args.dry_run:
+            print(
+                f"planned {sum(s.planned for s in summaries)}, "
+                f"cached {sum(s.cached for s in summaries)}, "
+                f"new {sum(len(s.new_urls) for s in summaries)}"
+            )
+        else:
+            print(
+                f"fetched {counts['fetched']}, cached {counts['cached']}, "
+                f"not_modified {counts['not_modified']}, failed {counts['failed']}"
+            )
+        return 4 if counts["failed"] else 0
     finally:
         runtime.client.close()
 
@@ -689,8 +890,15 @@ def _print_import_result(result: ImportResult) -> None:
 def _import_506(args: argparse.Namespace) -> int:
     runtime = build_runtime(with_budget=False)
     try:
-        importer = Sports506Importer(runtime.cache, runtime.paths)
-        incoming_dir = args.from_dir if args.from_dir is not None else DEFAULT_INCOMING_DIR
+        nfl = args.league == "nfl"
+        importer = (
+            Sports506Importer(runtime.cache, runtime.paths, profile=NFL_PROFILE)
+            if nfl
+            else Sports506Importer(runtime.cache, runtime.paths)
+        )
+        source_key = "nfl_sports506" if nfl else "sports506"
+        vault_dir = "raw/nfl/sports506" if nfl else "raw/sports506"
+        incoming_dir = args.from_dir  # None: the importer's own default (D-19)
 
         any_problems = False
         for season in args.season:
@@ -700,12 +908,24 @@ def _import_506(args: argparse.Namespace) -> int:
             with runtime.vault.lock():
                 result = importer.run(season, incoming_dir=incoming_dir, force=args.force)
                 _print_import_result(result)
+                if not nfl and result.root_pages > 0:
+                    print(
+                        f"warning: {result.root_pages} page(s) imported from "
+                        "data/incoming/506/; move hand-saves to data/incoming/506/cfb/ "
+                        "(the old folder is read through the 2026 season)"
+                    )
+                if not nfl and result.root_shadowed:
+                    print(
+                        "warning: data/incoming/506/ also holds a different page for week(s) "
+                        f"{', '.join(result.root_shadowed)}; "
+                        "used the one in data/incoming/506/cfb/ (delete the old copy)"
+                    )
                 if result.has_problems:
                     any_problems = True
                 if not args.no_commit:
-                    message = batch_message("import", "sports506", str(season), result.counts())
+                    message = batch_message("import", source_key, str(season), result.counts())
                     runtime.vault.commit_batch(
-                        message, paths=[f"raw/sports506/{season}", "ledger/requests.jsonl"]
+                        message, paths=[f"{vault_dir}/{season}", "ledger/requests.jsonl"]
                     )
         return 4 if any_problems else 0
     finally:
@@ -875,7 +1095,8 @@ def _freeze(args: argparse.Namespace) -> int:
 def _job_run(args: argparse.Namespace) -> int:
     """Run one scheduled pass (collect-only, or the full update with --update).
     Never prints or logs the CFBD key (loaded via config.load_cfbd_key, same
-    as every other live command)."""
+    as every other live command) or GITHUB_TOKEN (read once from the
+    environment and sent only to api.github.com by the NFL pbp step)."""
     if args.update and args.site_out is None:
         print("error: --update requires --site-out", file=sys.stderr)
         return 2
@@ -884,6 +1105,7 @@ def _job_run(args: argparse.Namespace) -> int:
     )
     try:
         token = None if args.dry_run else load_cfbd_key()
+        github_token = os.environ.get("GITHUB_TOKEN") or None
         job = ScheduledJob(
             runtime,
             token=token,
@@ -894,29 +1116,42 @@ def _job_run(args: argparse.Namespace) -> int:
             commit=not args.no_commit,
             update=args.update,
             site_out=args.site_out,
+            nfl_rr_cap=args.nfl_rr_cap,
+            github_token=github_token,
+            # CR-02: the CFB-only outcome is written before the NFL block, so a
+            # killed run (the workflow's step timeout) still leaves it to deploy.
+            on_cfb_result=lambda cfb: _write_job_outputs(args, cfb),
         )
         result: JobRunResult = job.run()
 
         if result.exit_code == EXIT_NOTHING_DUE:
             print("nothing due since last attempt")
 
-        if args.attention_out is not None:
-            body = build_attention_body(result.items, generated_at=datetime.now(UTC))
-            if body is not None:
-                args.attention_out.parent.mkdir(parents=True, exist_ok=True)
-                args.attention_out.write_text(body, encoding="utf-8")
-
-        if args.result_out is not None:
-            args.result_out.parent.mkdir(parents=True, exist_ok=True)
-            args.result_out.write_text(
-                f"deploy_ready={'true' if result.deploy_ready else 'false'}\n"
-                f"stale_only={'true' if result.stale_only else 'false'}\n",
-                encoding="utf-8",
-            )
-
+        _write_job_outputs(args, result)
         return result.exit_code
     finally:
         runtime.client.close()
+
+
+def _write_job_outputs(args: argparse.Namespace, result: JobRunResult) -> None:
+    """Write --attention-out (only when there is something to report) and
+    --result-out for `result`. Called twice on a run that reaches the NFL
+    block: with the CFB-only outcome, then with the final one. Each file is
+    written atomically (a temp sibling, then a rename), so a run killed at
+    any point leaves either the earlier complete file or the new one."""
+    if args.attention_out is not None:
+        body = build_attention_body(result.items, generated_at=datetime.now(UTC))
+        if body is not None:
+            atomic_write_bytes(args.attention_out, body.encode("utf-8"))
+
+    if args.result_out is not None:
+        atomic_write_bytes(
+            args.result_out,
+            (
+                f"deploy_ready={'true' if result.deploy_ready else 'false'}\n"
+                f"stale_only={'true' if result.stale_only else 'false'}\n"
+            ).encode(),
+        )
 
 
 # -- budget -----------------------------------------------------------------------------
@@ -1228,6 +1463,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return _collect_ratingsref(args)
             if args.source == "cfbd":
                 return _collect_cfbd(args)
+            if args.source == "nflverse":
+                return _collect_nflverse(args)
+            if args.source == "wikipedia":
+                return _collect_wikipedia(args)
             raise AssertionError(f"unknown collect source: {args.source!r}")
         if args.command == "refresh":
             if args.source == "ratingsref":
@@ -1257,6 +1496,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _budget(args)
         if args.command == "build":
             return _build(args)
+        if args.command == "nfl":
+            return run_nfl_command(args)
         if args.command == "site":
             return _site(args)
         if args.command == "deploy":
