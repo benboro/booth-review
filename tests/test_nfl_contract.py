@@ -441,3 +441,83 @@ def test_cfb_contract_unchanged() -> None:
     assert cfb_models.SCHEMA_VERSION == "2.3.0"
     digest = hashlib.sha256((REPO / "docs" / "site-data.schema.json").read_bytes()).hexdigest()
     assert digest == CFB_SCHEMA_SHA256
+
+
+# --- the committed synthetic fixture -----------------------------------------
+
+FIXTURE_PATH = Path(__file__).parent / "fixtures" / "contract" / "nfl-data.fixture.json"
+
+
+def _fixture() -> Payload:
+    data: Payload = json.loads(FIXTURE_PATH.read_text())
+    return data
+
+
+def test_fixture_validates() -> None:
+    data = validate_nfl_site_data(_fixture())
+    n = len(data.games.season)
+    assert n >= 35
+    for name in type(data.games).model_fields:
+        assert len(getattr(data.games, name)) == n, name
+
+
+def test_fixture_is_current() -> None:
+    from nfl_site_fixture import build_fixture, render
+
+    assert FIXTURE_PATH.read_text() == render(build_fixture()), (
+        "tests/fixtures/contract/nfl-data.fixture.json is out of date -- run "
+        "`uv run python tests/nfl_site_fixture.py` and commit the result"
+    )
+
+
+def test_fixture_uses_only_example_hosts() -> None:
+    import re
+
+    hosts = set(re.findall(r"https?://([^/\"]+)", FIXTURE_PATH.read_text()))
+    assert hosts == {"example.com"}
+
+
+def test_fixture_covers_every_view_case() -> None:
+    d = _fixture()
+    g, s = d["games"], d["special"]
+    assert any(x > 0 for x in s["international_other"])
+    assert any(u is not None for u in g["change_url"])
+    assert any(x is not None for x in g["original_slot"])
+    assert any(f for f in g["flexed"])
+    assert None in g["network"]
+    assert None in g["excitement"]
+    assert {"pending", "regional", "none"} <= set(g["cause"])
+    assert {"window", "game"} <= set(g["scope"])
+    assert any(m == 0 for m in g["final_margin"])
+    assert any(m is None for m in g["final_margin"])
+    assert any(e["role"] == "unknown" for crew in g["crew"] for e in crew)
+    b, a = d["fox_booths"], d["agotw_viewership"]
+    assert {"lead", "other", "others_pooled"} == set(b["group"])
+    assert any(b["low_n"])
+    assert any(f > 0 for f in b["fill_in_games"])
+    assert len(set(a["era"])) >= 2
+    assert len(set(zip(a["pbp_person"], a["analyst_person"], strict=True))) >= 2
+    assert any(x for x in a["low_n"])
+    w = d["season_weeks"]
+    zero = [
+        i
+        for i in range(len(w["season"]))
+        if w["fox_doubleheader_weeks"][i] - w["fox_ambiguous_weeks"][i] <= 0
+    ]
+    assert zero
+    assert any(w["fox_ambiguous_weeks"])
+    assert d["freshness"]["in_progress"] is True
+
+
+def test_fixture_errors_never_echo_names_or_urls() -> None:
+    d = _fixture()
+    d["games"]["home"][0] = 99
+    d["games"]["viewers"][0] = 0
+    with pytest.raises(ValidationError) as exc:
+        validate_nfl_site_data(d)
+    text = str(exc.value)
+    names = [f["name"] for f in d["lookups"]["franchises"]] + [
+        p["name"] for p in d["lookups"]["people"]
+    ]
+    for needle in [*names, "example.com"]:
+        assert needle not in text

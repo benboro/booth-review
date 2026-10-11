@@ -1,0 +1,2717 @@
+{
+ "agotw_viewership": {
+  "analyst_person": [
+   1,
+   3,
+   3
+  ],
+  "era": [
+   0,
+   1,
+   1
+  ],
+  "fill_in_games": [
+   0,
+   1,
+   0
+  ],
+  "game_list": [
+   [
+    2,
+    5,
+    8,
+    18
+   ],
+   [
+    21,
+    23,
+    25,
+    28,
+    32
+   ],
+   [
+    38,
+    39,
+    42
+   ]
+  ],
+  "games": [
+   4,
+   5,
+   3
+  ],
+  "group": [
+   "lead",
+   "lead",
+   "lead"
+  ],
+  "low_n": [
+   false,
+   false,
+   true
+  ],
+  "mean_viewers": [
+   10916666.6667,
+   17030000.0,
+   21475000.0
+  ],
+  "pbp_person": [
+   0,
+   2,
+   2
+  ],
+  "season": [
+   2024,
+   2025,
+   2026
+  ],
+  "viewership_resid": [
+   -310000.0,
+   415000.0,
+   null
+  ],
+  "viewership_se": [
+   240000.0,
+   205000.0,
+   null
+  ]
+ },
+ "constants": {
+  "coverage_normalized": false,
+  "excitement_method": "GEI-style",
+  "low_n_threshold": 8,
+  "viewership_scope": "window"
+ },
+ "fox_booths": {
+  "adj_excitement_resid": [
+   -0.3,
+   -0.15,
+   null,
+   0.15,
+   0.3,
+   -0.3,
+   -0.15,
+   0.0
+  ],
+  "adj_excitement_se": [
+   0.25,
+   0.354,
+   null,
+   0.5,
+   0.224,
+   0.5,
+   0.354,
+   0.5
+  ],
+  "adj_margin_resid": [
+   -1.8,
+   -0.9,
+   0.0,
+   0.9,
+   1.8,
+   -1.8,
+   -0.9,
+   0.0
+  ],
+  "adj_margin_se": [
+   1.5,
+   2.121,
+   3.0,
+   3.0,
+   1.342,
+   3.0,
+   2.121,
+   3.0
+  ],
+  "adj_n_excitement": [
+   4,
+   2,
+   0,
+   1,
+   5,
+   1,
+   2,
+   1
+  ],
+  "adj_n_margin": [
+   4,
+   2,
+   1,
+   1,
+   5,
+   1,
+   2,
+   1
+  ],
+  "adj_n_volatility": [
+   4,
+   2,
+   0,
+   0,
+   5,
+   1,
+   2,
+   0
+  ],
+  "adj_volatility_resid": [
+   -0.16,
+   -0.08,
+   null,
+   null,
+   0.16,
+   -0.16,
+   -0.08,
+   null
+  ],
+  "adj_volatility_se": [
+   0.15,
+   0.212,
+   null,
+   null,
+   0.134,
+   0.3,
+   0.212,
+   null
+  ],
+  "analyst_person": [
+   1,
+   5,
+   7,
+   null,
+   3,
+   5,
+   7,
+   null
+  ],
+  "fill_in_games": [
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0
+  ],
+  "game_list": [
+   [
+    2,
+    5,
+    8,
+    18
+   ],
+   [
+    7,
+    17
+   ],
+   [
+    9
+   ],
+   [
+    11
+   ],
+   [
+    21,
+    23,
+    25,
+    28,
+    32
+   ],
+   [
+    22
+   ],
+   [
+    26,
+    34
+   ],
+   [
+    31
+   ]
+  ],
+  "games": [
+   4,
+   2,
+   1,
+   1,
+   5,
+   1,
+   2,
+   1
+  ],
+  "group": [
+   "lead",
+   "other",
+   "other",
+   "others_pooled",
+   "lead",
+   "other",
+   "other",
+   "others_pooled"
+  ],
+  "low_n": [
+   false,
+   false,
+   true,
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "pbp_person": [
+   0,
+   4,
+   6,
+   null,
+   2,
+   4,
+   6,
+   null
+  ],
+  "rank": [
+   1,
+   2,
+   3,
+   null,
+   1,
+   2,
+   3,
+   null
+  ],
+  "raw_mean_abs_margin": [
+   4.5,
+   3.0,
+   10.0,
+   1.0,
+   5.0,
+   2.0,
+   4.5,
+   5.0
+  ],
+  "raw_mean_excitement": [
+   2.775,
+   2.2,
+   null,
+   3.6,
+   2.94,
+   3.5,
+   2.5,
+   2.8
+  ],
+  "raw_mean_volatility": [
+   1.3875,
+   1.1,
+   null,
+   null,
+   1.47,
+   1.75,
+   1.25,
+   null
+  ],
+  "raw_n_excitement": [
+   4,
+   2,
+   0,
+   1,
+   5,
+   1,
+   2,
+   1
+  ],
+  "raw_n_margin": [
+   4,
+   2,
+   1,
+   1,
+   5,
+   1,
+   2,
+   1
+  ],
+  "raw_n_volatility": [
+   4,
+   2,
+   0,
+   0,
+   5,
+   1,
+   2,
+   0
+  ],
+  "season": [
+   2024,
+   2024,
+   2024,
+   2024,
+   2025,
+   2025,
+   2025,
+   2025
+  ]
+ },
+ "freshness": {
+  "fox_default_season": 2025,
+  "in_progress": true,
+  "season": 2026,
+  "through_week": 3,
+  "viewership_through_week": 2
+ },
+ "games": {
+  "agotw": [
+   false,
+   false,
+   true,
+   false,
+   false,
+   true,
+   false,
+   false,
+   true,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   true,
+   false,
+   false,
+   true,
+   false,
+   true,
+   false,
+   true,
+   false,
+   false,
+   true,
+   false,
+   false,
+   false,
+   true,
+   false,
+   false,
+   false,
+   false,
+   false,
+   true,
+   true,
+   false,
+   false,
+   true
+  ],
+  "away": [
+   1,
+   5,
+   3,
+   2,
+   4,
+   5,
+   4,
+   0,
+   5,
+   1,
+   0,
+   1,
+   2,
+   3,
+   2,
+   3,
+   4,
+   1,
+   5,
+   0,
+   5,
+   4,
+   3,
+   1,
+   2,
+   3,
+   4,
+   4,
+   2,
+   0,
+   1,
+   2,
+   3,
+   5,
+   2,
+   4,
+   0,
+   3,
+   1,
+   5,
+   2,
+   1,
+   0
+  ],
+  "away_name": [
+   1,
+   5,
+   3,
+   2,
+   4,
+   5,
+   4,
+   6,
+   5,
+   1,
+   6,
+   1,
+   2,
+   3,
+   2,
+   3,
+   4,
+   1,
+   5,
+   0,
+   5,
+   4,
+   3,
+   1,
+   2,
+   3,
+   4,
+   4,
+   2,
+   0,
+   1,
+   2,
+   3,
+   5,
+   2,
+   4,
+   0,
+   3,
+   1,
+   5,
+   2,
+   1,
+   0
+  ],
+  "away_points": [
+   14,
+   19,
+   24,
+   14,
+   19,
+   25,
+   14,
+   19,
+   24,
+   14,
+   19,
+   25,
+   17,
+   19,
+   24,
+   14,
+   19,
+   25,
+   14,
+   19,
+   24,
+   14,
+   19,
+   25,
+   14,
+   19,
+   24,
+   14,
+   19,
+   25,
+   14,
+   19,
+   24,
+   14,
+   19,
+   25,
+   14,
+   19,
+   24,
+   14,
+   19,
+   null,
+   null
+  ],
+  "cause": [
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   "none",
+   null,
+   "regional",
+   "none",
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   "regional",
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   "pending",
+   "pending",
+   "pending"
+  ],
+  "cbs_national": [
+   false,
+   true,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   true,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   true,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   true,
+   false,
+   false
+  ],
+  "change_url": [
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   "https://example.com/wiki/2024-week-8-flex",
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   "https://example.com/wiki/2025-week-5-flex",
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "crew": [
+   [
+    {
+     "person": 12,
+     "role": "pbp"
+    },
+    {
+     "person": 10,
+     "role": "pbp"
+    }
+   ],
+   [
+    {
+     "person": 8,
+     "role": "pbp"
+    },
+    {
+     "person": 9,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 0,
+     "role": "pbp"
+    },
+    {
+     "person": 1,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 10,
+     "role": "pbp"
+    },
+    {
+     "person": 11,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 12,
+     "role": "pbp"
+    },
+    {
+     "person": 11,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 0,
+     "role": "pbp"
+    },
+    {
+     "person": 1,
+     "role": "analyst"
+    }
+   ],
+   [],
+   [
+    {
+     "person": 4,
+     "role": "pbp"
+    },
+    {
+     "person": 5,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 0,
+     "role": "pbp"
+    },
+    {
+     "person": 1,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 6,
+     "role": "pbp"
+    },
+    {
+     "person": 7,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 10,
+     "role": "pbp"
+    },
+    {
+     "person": 11,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 12,
+     "role": "pbp"
+    },
+    {
+     "person": 1,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 12,
+     "role": "pbp"
+    },
+    {
+     "person": 10,
+     "role": "pbp"
+    }
+   ],
+   [
+    {
+     "person": 8,
+     "role": "pbp"
+    },
+    {
+     "person": 9,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 12,
+     "role": "pbp"
+    },
+    {
+     "person": 10,
+     "role": "pbp"
+    }
+   ],
+   [
+    {
+     "person": 12,
+     "role": "pbp"
+    },
+    {
+     "person": 11,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 10,
+     "role": "pbp"
+    },
+    {
+     "person": 11,
+     "role": "analyst"
+    },
+    {
+     "person": 5,
+     "role": "unknown"
+    }
+   ],
+   [
+    {
+     "person": 4,
+     "role": "pbp"
+    },
+    {
+     "person": 5,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 0,
+     "role": "pbp"
+    },
+    {
+     "person": 1,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 10,
+     "role": "pbp"
+    },
+    {
+     "person": 11,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 8,
+     "role": "pbp"
+    },
+    {
+     "person": 9,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 2,
+     "role": "pbp"
+    },
+    {
+     "person": 3,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 4,
+     "role": "pbp"
+    },
+    {
+     "person": 5,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 12,
+     "role": "pbp"
+    },
+    {
+     "person": 1,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 12,
+     "role": "pbp"
+    },
+    {
+     "person": 11,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 2,
+     "role": "pbp"
+    },
+    {
+     "person": 3,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 6,
+     "role": "pbp"
+    },
+    {
+     "person": 7,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 10,
+     "role": "pbp"
+    },
+    {
+     "person": 11,
+     "role": "analyst"
+    },
+    {
+     "person": 5,
+     "role": "unknown"
+    }
+   ],
+   [
+    {
+     "person": 2,
+     "role": "pbp"
+    },
+    {
+     "person": 3,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 12,
+     "role": "pbp"
+    },
+    {
+     "person": 11,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 8,
+     "role": "pbp"
+    },
+    {
+     "person": 9,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 12,
+     "role": "pbp"
+    },
+    {
+     "person": 1,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 2,
+     "role": "pbp"
+    },
+    {
+     "person": 3,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 8,
+     "role": "pbp"
+    },
+    {
+     "person": 9,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 6,
+     "role": "pbp"
+    },
+    {
+     "person": 7,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 12,
+     "role": "pbp"
+    },
+    {
+     "person": 11,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 12,
+     "role": "pbp"
+    },
+    {
+     "person": 10,
+     "role": "pbp"
+    }
+   ],
+   [
+    {
+     "person": 10,
+     "role": "pbp"
+    },
+    {
+     "person": 11,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 2,
+     "role": "pbp"
+    },
+    {
+     "person": 3,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 2,
+     "role": "pbp"
+    },
+    {
+     "person": 3,
+     "role": "analyst"
+    }
+   ],
+   [
+    {
+     "person": 8,
+     "role": "pbp"
+    },
+    {
+     "person": 9,
+     "role": "analyst"
+    }
+   ],
+   [],
+   [
+    {
+     "person": 2,
+     "role": "pbp"
+    },
+    {
+     "person": 3,
+     "role": "analyst"
+    }
+   ]
+  ],
+  "date": [
+   "2024-09-05",
+   "2024-09-08",
+   "2024-09-08",
+   "2024-09-15",
+   "2024-09-16",
+   "2024-09-22",
+   "2024-09-29",
+   "2024-10-06",
+   "2024-10-06",
+   "2024-10-13",
+   "2024-10-27",
+   "2024-11-17",
+   "2024-11-21",
+   "2024-11-28",
+   "2024-11-29",
+   "2024-12-21",
+   "2024-12-25",
+   "2025-01-05",
+   "2025-01-05",
+   "2025-09-04",
+   "2025-09-07",
+   "2025-09-07",
+   "2025-09-14",
+   "2025-09-21",
+   "2025-09-28",
+   "2025-10-05",
+   "2025-10-12",
+   "2025-10-19",
+   "2025-10-26",
+   "2025-11-03",
+   "2025-11-09",
+   "2025-11-16",
+   "2025-11-23",
+   "2025-11-27",
+   "2025-12-07",
+   "2025-12-20",
+   "2025-12-25",
+   "2026-09-10",
+   "2026-09-13",
+   "2026-09-20",
+   "2026-09-27",
+   "2026-10-04",
+   "2026-10-04"
+  ],
+  "era": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   null,
+   0,
+   null,
+   null,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1,
+   null,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1,
+   null,
+   null,
+   null
+  ],
+  "excitement": [
+   2.0,
+   2.3,
+   2.6,
+   2.9,
+   3.2,
+   3.5,
+   null,
+   2.4,
+   2.7,
+   null,
+   3.3,
+   3.6,
+   2.2,
+   2.5,
+   2.8,
+   3.1,
+   3.4,
+   2.0,
+   2.3,
+   2.6,
+   2.9,
+   3.2,
+   3.5,
+   2.1,
+   2.4,
+   2.7,
+   3.0,
+   3.3,
+   3.6,
+   2.2,
+   2.5,
+   2.8,
+   3.1,
+   3.4,
+   2.0,
+   null,
+   2.6,
+   2.9,
+   3.2,
+   3.5,
+   2.1,
+   null,
+   null
+  ],
+  "final_margin": [
+   3,
+   5,
+   -7,
+   10,
+   -2,
+   -1,
+   3,
+   5,
+   -7,
+   10,
+   -2,
+   -1,
+   0,
+   5,
+   -7,
+   10,
+   -2,
+   -1,
+   3,
+   5,
+   -7,
+   10,
+   -2,
+   -1,
+   3,
+   5,
+   -7,
+   10,
+   -2,
+   -1,
+   3,
+   5,
+   -7,
+   10,
+   -2,
+   -1,
+   3,
+   5,
+   -7,
+   10,
+   -2,
+   null,
+   null
+  ],
+  "flexed": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   true,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   true,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "home": [
+   0,
+   4,
+   2,
+   1,
+   3,
+   0,
+   2,
+   3,
+   1,
+   2,
+   5,
+   3,
+   4,
+   1,
+   0,
+   5,
+   2,
+   0,
+   3,
+   1,
+   3,
+   2,
+   0,
+   5,
+   0,
+   4,
+   1,
+   0,
+   3,
+   5,
+   2,
+   5,
+   1,
+   4,
+   0,
+   5,
+   1,
+   2,
+   0,
+   4,
+   1,
+   5,
+   3
+  ],
+  "home_name": [
+   6,
+   4,
+   2,
+   1,
+   3,
+   6,
+   2,
+   3,
+   1,
+   2,
+   5,
+   3,
+   4,
+   1,
+   6,
+   5,
+   2,
+   6,
+   3,
+   1,
+   3,
+   2,
+   0,
+   5,
+   0,
+   4,
+   1,
+   0,
+   3,
+   5,
+   2,
+   5,
+   1,
+   4,
+   0,
+   5,
+   1,
+   2,
+   0,
+   4,
+   1,
+   5,
+   3
+  ],
+  "home_points": [
+   17,
+   24,
+   17,
+   24,
+   17,
+   24,
+   17,
+   24,
+   17,
+   24,
+   17,
+   24,
+   17,
+   24,
+   17,
+   24,
+   17,
+   24,
+   17,
+   24,
+   17,
+   24,
+   17,
+   24,
+   17,
+   24,
+   17,
+   24,
+   17,
+   24,
+   17,
+   24,
+   17,
+   24,
+   17,
+   24,
+   17,
+   24,
+   17,
+   24,
+   17,
+   null,
+   null
+  ],
+  "international": [
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   true,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   true,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "kickoff": [
+   "2024-09-05T20:20:00-04:00",
+   "2024-09-08T13:00:00-04:00",
+   "2024-09-08T16:25:00-04:00",
+   "2024-09-15T20:20:00-04:00",
+   "2024-09-16T20:15:00-04:00",
+   "2024-09-22T16:25:00-04:00",
+   "2024-09-29T09:30:00-04:00",
+   "2024-10-06T13:00:00-04:00",
+   "2024-10-06T16:25:00-04:00",
+   "2024-10-13T13:00:00-04:00",
+   "2024-10-27T20:20:00-04:00",
+   "2024-11-17T13:00:00-05:00",
+   "2024-11-21T20:15:00-05:00",
+   "2024-11-28T12:30:00-05:00",
+   "2024-11-29T15:00:00-05:00",
+   "2024-12-21T13:00:00-05:00",
+   "2024-12-25T13:00:00-05:00",
+   "2025-01-05T13:00:00-05:00",
+   "2025-01-05T16:25:00-05:00",
+   "2025-09-04T20:20:00-04:00",
+   "2025-09-07T13:00:00-04:00",
+   "2025-09-07T16:25:00-04:00",
+   "2025-09-14T13:00:00-04:00",
+   "2025-09-21T16:25:00-04:00",
+   "2025-09-28T09:30:00-04:00",
+   "2025-10-05T16:25:00-04:00",
+   "2025-10-12T13:00:00-04:00",
+   "2025-10-19T20:20:00-04:00",
+   "2025-10-26T16:25:00-04:00",
+   "2025-11-03T20:15:00-05:00",
+   "2025-11-09T13:00:00-05:00",
+   "2025-11-16T13:00:00-05:00",
+   "2025-11-23T16:25:00-05:00",
+   "2025-11-27T12:30:00-05:00",
+   "2025-12-07T13:00:00-05:00",
+   "2025-12-20T16:30:00-05:00",
+   "2025-12-25T16:30:00-05:00",
+   "2026-09-10T20:20:00-04:00",
+   "2026-09-13T16:25:00-04:00",
+   "2026-09-20T16:25:00-04:00",
+   "2026-09-27T13:00:00-04:00",
+   null,
+   "2026-10-04T16:25:00-04:00"
+  ],
+  "network": [
+   4,
+   1,
+   0,
+   2,
+   3,
+   0,
+   null,
+   0,
+   0,
+   0,
+   2,
+   0,
+   4,
+   1,
+   4,
+   3,
+   2,
+   0,
+   0,
+   2,
+   1,
+   0,
+   0,
+   0,
+   3,
+   0,
+   0,
+   2,
+   0,
+   3,
+   1,
+   0,
+   0,
+   1,
+   0,
+   3,
+   4,
+   2,
+   0,
+   0,
+   1,
+   2,
+   0
+  ],
+  "original_network": [
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   0,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   1,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "original_slot": [
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   10,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   9,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null,
+   null
+  ],
+  "rr_url": [
+   "https://example.com/rr/0",
+   "https://example.com/rr/1",
+   "https://example.com/rr/2",
+   "https://example.com/rr/3",
+   "https://example.com/rr/4",
+   "https://example.com/rr/5",
+   null,
+   "https://example.com/rr/7",
+   null,
+   null,
+   "https://example.com/rr/10",
+   "https://example.com/rr/11",
+   "https://example.com/rr/12",
+   "https://example.com/rr/13",
+   "https://example.com/rr/14",
+   "https://example.com/rr/15",
+   "https://example.com/rr/16",
+   "https://example.com/rr/17",
+   "https://example.com/rr/18",
+   "https://example.com/rr/19",
+   "https://example.com/rr/20",
+   "https://example.com/rr/21",
+   "https://example.com/rr/22",
+   "https://example.com/rr/23",
+   "https://example.com/rr/24",
+   "https://example.com/rr/25",
+   null,
+   "https://example.com/rr/27",
+   "https://example.com/rr/28",
+   "https://example.com/rr/29",
+   "https://example.com/rr/30",
+   "https://example.com/rr/31",
+   "https://example.com/rr/32",
+   "https://example.com/rr/33",
+   "https://example.com/rr/34",
+   "https://example.com/rr/35",
+   "https://example.com/rr/36",
+   "https://example.com/rr/37",
+   "https://example.com/rr/38",
+   "https://example.com/rr/39",
+   null,
+   null,
+   null
+  ],
+  "scope": [
+   "game",
+   "window",
+   "window",
+   "game",
+   "game",
+   "window",
+   null,
+   "window",
+   null,
+   null,
+   "game",
+   "window",
+   "game",
+   "game",
+   "game",
+   "game",
+   "game",
+   "window",
+   "window",
+   "game",
+   "window",
+   "window",
+   "window",
+   "window",
+   "game",
+   "window",
+   null,
+   "game",
+   "window",
+   "game",
+   "window",
+   "window",
+   "window",
+   "game",
+   "window",
+   "game",
+   "game",
+   "game",
+   "window",
+   "window",
+   null,
+   null,
+   null
+  ],
+  "season": [
+   2024,
+   2024,
+   2024,
+   2024,
+   2024,
+   2024,
+   2024,
+   2024,
+   2024,
+   2024,
+   2024,
+   2024,
+   2024,
+   2024,
+   2024,
+   2024,
+   2024,
+   2024,
+   2024,
+   2025,
+   2025,
+   2025,
+   2025,
+   2025,
+   2025,
+   2025,
+   2025,
+   2025,
+   2025,
+   2025,
+   2025,
+   2025,
+   2025,
+   2025,
+   2025,
+   2025,
+   2025,
+   2026,
+   2026,
+   2026,
+   2026,
+   2026,
+   2026
+  ],
+  "slot": [
+   4,
+   9,
+   10,
+   5,
+   6,
+   10,
+   3,
+   9,
+   10,
+   9,
+   5,
+   9,
+   4,
+   1,
+   2,
+   7,
+   0,
+   9,
+   10,
+   4,
+   9,
+   10,
+   9,
+   10,
+   3,
+   10,
+   9,
+   5,
+   10,
+   6,
+   9,
+   9,
+   10,
+   1,
+   9,
+   7,
+   0,
+   4,
+   10,
+   10,
+   9,
+   5,
+   10
+  ],
+  "source_url": [
+   "https://example.com/src/0",
+   "https://example.com/src/1",
+   "https://example.com/src/2",
+   "https://example.com/src/3",
+   "https://example.com/src/4",
+   "https://example.com/src/5",
+   null,
+   "https://example.com/src/7",
+   null,
+   null,
+   "https://example.com/src/10",
+   "https://example.com/src/11",
+   "https://example.com/src/12",
+   "https://example.com/src/13",
+   "https://example.com/src/14",
+   "https://example.com/src/15",
+   "https://example.com/src/16",
+   "https://example.com/src/17",
+   "https://example.com/src/18",
+   "https://example.com/src/19",
+   "https://example.com/src/20",
+   "https://example.com/src/21",
+   "https://example.com/src/22",
+   "https://example.com/src/23",
+   "https://example.com/src/24",
+   "https://example.com/src/25",
+   null,
+   "https://example.com/src/27",
+   "https://example.com/src/28",
+   "https://example.com/src/29",
+   "https://example.com/src/30",
+   "https://example.com/src/31",
+   "https://example.com/src/32",
+   "https://example.com/src/33",
+   "https://example.com/src/34",
+   "https://example.com/src/35",
+   "https://example.com/src/36",
+   "https://example.com/src/37",
+   "https://example.com/src/38",
+   "https://example.com/src/39",
+   null,
+   null,
+   null
+  ],
+  "standalone": [
+   true,
+   false,
+   false,
+   true,
+   true,
+   false,
+   false,
+   false,
+   false,
+   false,
+   true,
+   false,
+   true,
+   true,
+   true,
+   true,
+   true,
+   false,
+   false,
+   true,
+   false,
+   false,
+   false,
+   false,
+   true,
+   false,
+   false,
+   true,
+   false,
+   true,
+   false,
+   false,
+   false,
+   true,
+   false,
+   true,
+   true,
+   true,
+   false,
+   false,
+   false,
+   true,
+   false
+  ],
+  "viewers": [
+   8000000,
+   8350000,
+   8700000,
+   9050000,
+   9400000,
+   9750000,
+   null,
+   10450000,
+   null,
+   null,
+   11500000,
+   11850000,
+   12200000,
+   12550000,
+   12900000,
+   13250000,
+   13600000,
+   13950000,
+   14300000,
+   14650000,
+   15000000,
+   15350000,
+   15700000,
+   16050000,
+   16400000,
+   16750000,
+   null,
+   17450000,
+   17800000,
+   18150000,
+   18500000,
+   18850000,
+   19200000,
+   19550000,
+   19900000,
+   20250000,
+   20600000,
+   20950000,
+   21300000,
+   21650000,
+   null,
+   null,
+   null
+  ],
+  "week": [
+   1,
+   1,
+   1,
+   2,
+   2,
+   3,
+   4,
+   5,
+   5,
+   6,
+   8,
+   11,
+   12,
+   13,
+   13,
+   16,
+   17,
+   18,
+   18,
+   1,
+   1,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11,
+   12,
+   13,
+   14,
+   16,
+   17,
+   1,
+   1,
+   2,
+   3,
+   4,
+   4
+  ]
+ },
+ "lookups": {
+  "eras": [
+   {
+    "end": "2024-12-31",
+    "id": "era-a",
+    "label": "Invented measurement era A",
+    "source_url": "https://example.com/era-a",
+    "start": null
+   },
+   {
+    "end": null,
+    "id": "era-b",
+    "label": "Invented measurement era B",
+    "source_url": "https://example.com/era-b",
+    "start": "2025-01-01"
+   }
+  ],
+  "franchises": [
+   {
+    "id": "f-lanterns",
+    "name": "Northfield Lanterns"
+   },
+   {
+    "id": "f-gulls",
+    "name": "Harbor City Gulls"
+   },
+   {
+    "id": "f-foxes",
+    "name": "Ridgeport Foxes"
+   },
+   {
+    "id": "f-owls",
+    "name": "Granite Bay Owls"
+   },
+   {
+    "id": "f-pilots",
+    "name": "Lakeshore Pilots"
+   },
+   {
+    "id": "f-comets",
+    "name": "Mesa Comets"
+   }
+  ],
+  "networks": [
+   {
+    "id": "fox",
+    "name": "Fox"
+   },
+   {
+    "id": "cbs",
+    "name": "CBS"
+   },
+   {
+    "id": "nbc",
+    "name": "NBC"
+   },
+   {
+    "id": "espn",
+    "name": "ESPN"
+   },
+   {
+    "id": "prime",
+    "name": "Prime"
+   }
+  ],
+  "people": [
+   {
+    "id": "p00",
+    "name": "Ada Quill"
+   },
+   {
+    "id": "p01",
+    "name": "Ben Marlow"
+   },
+   {
+    "id": "p02",
+    "name": "Cy Fable"
+   },
+   {
+    "id": "p03",
+    "name": "Dee Harrow"
+   },
+   {
+    "id": "p04",
+    "name": "Eli Thorne"
+   },
+   {
+    "id": "p05",
+    "name": "Fay Lindqvist"
+   },
+   {
+    "id": "p06",
+    "name": "Gus Pell"
+   },
+   {
+    "id": "p07",
+    "name": "Hana Roark"
+   },
+   {
+    "id": "p08",
+    "name": "Ivo Strand"
+   },
+   {
+    "id": "p09",
+    "name": "Jun Vale"
+   },
+   {
+    "id": "p10",
+    "name": "Kit Bramley"
+   },
+   {
+    "id": "p11",
+    "name": "Lou Danvers"
+   },
+   {
+    "id": "p12",
+    "name": "Max Eller"
+   }
+  ],
+  "slots": [
+   "Christmas",
+   "Thanksgiving",
+   "Black Friday",
+   "International",
+   "TNF",
+   "SNF",
+   "MNF",
+   "Saturday",
+   "Friday",
+   "Sunday early",
+   "Sunday late",
+   "Other"
+  ],
+  "team_names": [
+   {
+    "name": "Northfield Lanterns",
+    "short": "NFL"
+   },
+   {
+    "name": "Harbor City Gulls",
+    "short": "HCG"
+   },
+   {
+    "name": "Ridgeport Foxes",
+    "short": "RPF"
+   },
+   {
+    "name": "Granite Bay Owls",
+    "short": "GBO"
+   },
+   {
+    "name": "Lakeshore Pilots",
+    "short": "LSP"
+   },
+   {
+    "name": "Mesa Comets",
+    "short": "MSC"
+   },
+   {
+    "name": "Northfield Torches",
+    "short": "NFT"
+   }
+  ]
+ },
+ "schema_version": "1.0.0",
+ "season_weeks": {
+  "cbs_ambiguous_weeks": [
+   1,
+   0,
+   0
+  ],
+  "cbs_doubleheader_weeks": [
+   8,
+   9,
+   0
+  ],
+  "fox_ambiguous_weeks": [
+   0,
+   1,
+   0
+  ],
+  "fox_doubleheader_weeks": [
+   8,
+   9,
+   0
+  ],
+  "season": [
+   2024,
+   2025,
+   2026
+  ]
+ },
+ "special": {
+  "agotw": [
+   1,
+   0,
+   2,
+   1,
+   2,
+   1,
+   1,
+   2,
+   0,
+   2,
+   3,
+   1,
+   0,
+   2,
+   1,
+   3,
+   1,
+   1
+  ],
+  "agotw_rate": [
+   0.125,
+   0.0,
+   null,
+   0.125,
+   0.25,
+   null,
+   0.125,
+   0.25,
+   null,
+   0.25,
+   0.375,
+   null,
+   0.0,
+   0.25,
+   null,
+   0.375,
+   0.125,
+   null
+  ],
+  "cbs_national": [
+   0,
+   0,
+   0,
+   0,
+   1,
+   1,
+   0,
+   1,
+   1,
+   0,
+   1,
+   0,
+   1,
+   0,
+   0,
+   1,
+   1,
+   0
+  ],
+  "cbs_national_rate": [
+   0.0,
+   0.0,
+   null,
+   0.0,
+   0.1111,
+   null,
+   0.0,
+   0.1111,
+   null,
+   0.0,
+   0.1111,
+   null,
+   0.1429,
+   0.0,
+   null,
+   0.1429,
+   0.1111,
+   null
+  ],
+  "flexed": [
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   1,
+   0,
+   1,
+   0,
+   0
+  ],
+  "franchise": [
+   0,
+   0,
+   0,
+   1,
+   1,
+   1,
+   2,
+   2,
+   2,
+   3,
+   3,
+   3,
+   4,
+   4,
+   4,
+   5,
+   5,
+   5
+  ],
+  "games": [
+   6,
+   7,
+   2,
+   7,
+   6,
+   3,
+   7,
+   6,
+   2,
+   7,
+   5,
+   2,
+   5,
+   6,
+   1,
+   6,
+   6,
+   2
+  ],
+  "international": [
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   1,
+   1,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "international_other": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "season": [
+   2024,
+   2025,
+   2026,
+   2024,
+   2025,
+   2026,
+   2024,
+   2025,
+   2026,
+   2024,
+   2025,
+   2026,
+   2024,
+   2025,
+   2026,
+   2024,
+   2025,
+   2026
+  ],
+  "special": [
+   4,
+   5,
+   2,
+   4,
+   5,
+   3,
+   5,
+   4,
+   2,
+   5,
+   4,
+   2,
+   4,
+   5,
+   1,
+   6,
+   5,
+   2
+  ],
+  "standalone_black_friday": [
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "standalone_christmas": [
+   0,
+   1,
+   0,
+   0,
+   1,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "standalone_friday": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "standalone_international": [
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "standalone_mnf": [
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   1,
+   0
+  ],
+  "standalone_other": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "standalone_saturday": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   1,
+   0,
+   1,
+   1,
+   0
+  ],
+  "standalone_snf": [
+   1,
+   1,
+   0,
+   1,
+   0,
+   1,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   1,
+   0,
+   1
+  ],
+  "standalone_sunday_early": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "standalone_sunday_late": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "standalone_thanksgiving": [
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   0,
+   1,
+   0,
+   0,
+   1,
+   0
+  ],
+  "standalone_tnf": [
+   1,
+   1,
+   0,
+   1,
+   1,
+   0,
+   1,
+   0,
+   1,
+   0,
+   0,
+   1,
+   1,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "standalone_total": [
+   3,
+   5,
+   0,
+   3,
+   2,
+   1,
+   4,
+   1,
+   1,
+   3,
+   0,
+   1,
+   3,
+   3,
+   0,
+   2,
+   3,
+   1
+  ]
+ }
+}
