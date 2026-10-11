@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import urllib.robotparser as robotparser
-
 from booth_review.transport.robots import RobotsRules
 
 AGENT = "booth-review/0.1 (+https://example.invalid)"
@@ -13,13 +11,12 @@ def _rules(*lines: str) -> RobotsRules:
     return RobotsRules.parse(list(lines), agent=AGENT)
 
 
-def test_wildcard_blocks_where_stdlib_parser_allows() -> None:
+def test_wildcard_blocks_github_release_downloads() -> None:
+    # Older CPython robotparsers ignore wildcards and allow this URL (newer
+    # 3.13 patch releases don't), so the result never depends on the stdlib.
     lines = ["User-agent: *", "Disallow: /*/download"]
     url = "https://github.com/o/r/releases/download/t/f.parquet"
     assert _rules(*lines).disallows(url) is True
-    rp = robotparser.RobotFileParser()
-    rp.parse(lines)
-    assert rp.can_fetch(AGENT, url) is True
 
 
 def test_dollar_anchor() -> None:
