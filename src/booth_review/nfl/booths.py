@@ -7,7 +7,8 @@ different analyst is a fill-in that stays with the booth. The lead booth, the AG
 crew, is the booth with the most AGOTW calls, or the cited override. Ambiguous AGOTW
 weeks (D-16) cast no vote. Nothing here decides AGOTW by crew.
 
-Person ids are analysis-only; these tables stay in the private vault.
+These tables stay in the private vault; the NFL site shows names resolved from
+person ids (999.5 D-01).
 """
 
 from __future__ import annotations

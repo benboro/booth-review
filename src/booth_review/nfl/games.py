@@ -4,10 +4,10 @@ Pure assembly: file reads happen only through `NflInputs` (pbp paths) and the
 reference loaders behind `NflReference`. Missing values stay null and are never
 coerced to 0.
 
-Analysis-only columns (field list "Display rule"): network_id, network_source,
-rr_network_id, rr_network_ids, window, crew_names, pbp_person_id,
-analyst_person_id, sideline_person_ids and pregame_spread. 999.5 may use them in
-analysis but must not display them; only values derived from them reach the site.
+Network and crew columns are displayed on the NFL site under the college-football
+precedent (999.5 D-01, D-03). `pregame_spread` and the raw source columns
+(`network_source`, `rr_network_id(s)`, `window`, `crew_names`) stay analysis-only
+and never reach the site (field list "Display rule").
 
 Network order: 506 first; Ratings Reference (RR) supplies the network for
 national games, 2014-2015 standalone games and any non-Sunday-afternoon slot. An
