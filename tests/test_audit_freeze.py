@@ -133,6 +133,28 @@ def test_freeze_seasons_all_complete_merges_with_existing_sorted_no_duplicates(
     assert freeze_record["completeness_sha256"] == hashlib.sha256(completeness_bytes).hexdigest()
 
 
+def test_freeze_seasons_leaves_nfl_keys_untouched(vault_paths: DataPaths) -> None:
+    # CR-01: frozen.json also holds the nfl_* keys that only `nfl freeze` may set.
+    nfl = {
+        "nfl_sports506": [2014],
+        "nfl_ratingsref": [2014],
+        "nfl_nflverse": [2014],
+        "nfl_wikipedia": [],
+    }
+    vault_paths.frozen.write_text(
+        json.dumps({"sports506": [2019], "ratingsref": [2019], "cfbd": [2019], **nfl}),
+        encoding="utf-8",
+    )
+    _seed_complete_season(vault_paths, 2020)
+
+    freeze_seasons(vault_paths, [2020], today=_TODAY, waivers=())
+
+    frozen = json.loads(vault_paths.frozen.read_text(encoding="utf-8"))
+    assert {key: frozen[key] for key in nfl} == nfl
+    for source in ("sports506", "ratingsref", "cfbd"):
+        assert frozen[source] == [2019, 2020]
+
+
 def test_freeze_seasons_already_frozen_is_idempotent(vault_paths: DataPaths) -> None:
     _seed_complete_season(vault_paths, 2020)
     freeze_seasons(vault_paths, [2020], today=_TODAY, waivers=())

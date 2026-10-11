@@ -118,6 +118,19 @@ def test_freeze_writes_only_nfl_keys(vault_paths: DataPaths) -> None:
     assert len(record["schedule_digest"]["2015"]) == 64
 
 
+def test_freeze_leaves_populated_cfb_keys_untouched(vault_paths: DataPaths) -> None:
+    # Mirror of CR-01: an NFL freeze never adds its seasons to the CFB keys.
+    cfb = {"sports506": [2014, 2019], "ratingsref": [2019], "cfbd": [2018, 2019]}
+    vault_paths.frozen.write_text(json.dumps({**cfb, "custom": [2001]}), encoding="utf-8")
+    _seed(vault_paths)
+    result = freeze_nfl_seasons(vault_paths, [2015], TODAY)
+    assert result.frozen == (2015,)
+    data = json.loads(vault_paths.frozen.read_text())
+    assert {k: data[k] for k in cfb} == cfb
+    assert data["custom"] == [2001]
+    assert all(data[source] == [2015] for source in SOURCES)
+
+
 def test_incomplete_refuses_and_waiver_passes(vault_paths: DataPaths) -> None:
     _seed(vault_paths, skip="nfl_wikipedia")
     refused = freeze_nfl_seasons(vault_paths, [2015], TODAY)
