@@ -36,10 +36,11 @@ def test_columns_order_and_dtypes(tmp_path: Path) -> None:
     table = build(tmp_path, [game_row("a", 1, 2, "2015-09-13")])
     assert table.frame.columns == list(NFL_GAME_COLUMNS)
     assert dict(table.frame.schema) == dict(NFL_GAME_SCHEMA)
-    for key in ("teams", "stadiums", "networks", "listings", "rr", "changes", "people"):
+    for key in ("teams", "stadiums", "networks", "listings", "rr", "changes", "crew_names"):
         assert key in table.reviews
     assert "late_national" in table.reviews
     assert "acceptance" in table.reviews
+    assert "people" not in table.reviews  # review_nfl_people.csv belongs to `nfl people`
     assert table.counts["games"] == 1
 
 
@@ -126,8 +127,8 @@ def test_network_from_506_with_crew(tmp_path: Path) -> None:
     assert got["analyst_person_id"] == "bo-fixture"
     assert got["sideline_person_ids"] == []
     assert table.counts["unresolved_crew_names"] == 1
-    assert table.reviews["people"][0]["reason"] == "unresolved-crew-name"
-    assert "Nobody" not in str(table.reviews["people"])
+    assert table.reviews["crew_names"][0]["reason"] == "unresolved-crew-name"
+    assert "Nobody" not in str(table.reviews["crew_names"])
 
 
 def test_rr_supplies_standalone_network(tmp_path: Path) -> None:

@@ -171,6 +171,8 @@ NFL_GAME_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
     "rr_source_url": pl.String,
 }
 
+#: Each key becomes interim/review_nfl_<key>.csv. Never "people": `nfl people` owns
+#: review_nfl_people.csv (the user's add-variant decisions) and the build must not overwrite it.
 REVIEW_KEYS: tuple[str, ...] = (
     "teams",
     "stadiums",
@@ -178,7 +180,7 @@ REVIEW_KEYS: tuple[str, ...] = (
     "listings",
     "rr",
     "changes",
-    "people",
+    "crew_names",
     "late_national",
     "acceptance",
 )
@@ -453,7 +455,7 @@ def assemble_nfl_games(
         crew = resolve_crew(listing.crew_names if listing else (), ref.people)
         if crew.unresolved_names:
             counts["unresolved_crew_names"] += len(crew.unresolved_names)
-            reviews["people"].append(
+            reviews["crew_names"].append(
                 _review(game, "unresolved-crew-name", count=len(crew.unresolved_names))
             )
         network_of[game.game_id] = choice.network_id

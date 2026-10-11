@@ -223,6 +223,20 @@ def test_people_scan_writes_review_and_leaves_people_untouched(
     assert "Zed" not in out and "ANA" not in out
 
 
+def test_build_never_overwrites_the_people_decisions_file(vault: DataPaths) -> None:
+    # Regression: the build's unresolved-crew review once shared review_nfl_people.csv.
+    _seed(vault, rr=None, crew="ANA FIXTURE, Zed Newperson")
+    assert main(["nfl", "people", "--season", "2014"]) == 0
+    review = vault.interim / "review_nfl_people.csv"
+    review.write_text(review.read_text().replace(",no,", ",no,add-variant"))
+    decided = review.read_bytes()
+    assert main(["nfl", "build", "--season", "2014", "--no-commit"]) == 0
+    assert review.read_bytes() == decided
+    assert (vault.interim / "review_nfl_crew_names.csv").is_file()
+    assert main(["nfl", "people", "--season", "2014"]) == 0
+    assert "add-variant" in review.read_text()
+
+
 def test_people_apply_registers_new_and_only_approved_variants(vault: DataPaths) -> None:
     _seed(vault, rr=None, crew="ANA FIXTURE, Zed Newperson")
     assert main(["nfl", "people", "--season", "2014"]) == 0
