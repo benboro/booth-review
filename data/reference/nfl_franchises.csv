@@ -1,0 +1,38 @@
+franchise_id,season_from,season_to,display_name,nickname,note
+cardinals,,,Arizona Cardinals,Cardinals,
+falcons,,,Atlanta Falcons,Falcons,
+ravens,,,Baltimore Ravens,Ravens,
+bills,,,Buffalo Bills,Bills,
+panthers,,,Carolina Panthers,Panthers,
+bears,,,Chicago Bears,Bears,
+bengals,,,Cincinnati Bengals,Bengals,
+browns,,,Cleveland Browns,Browns,
+cowboys,,,Dallas Cowboys,Cowboys,
+broncos,,,Denver Broncos,Broncos,
+lions,,,Detroit Lions,Lions,
+packers,,,Green Bay Packers,Packers,
+texans,,,Houston Texans,Texans,
+colts,,,Indianapolis Colts,Colts,
+jaguars,,,Jacksonville Jaguars,Jaguars,
+chiefs,,,Kansas City Chiefs,Chiefs,
+dolphins,,,Miami Dolphins,Dolphins,
+vikings,,,Minnesota Vikings,Vikings,
+patriots,,,New England Patriots,Patriots,
+saints,,,New Orleans Saints,Saints,
+giants,,,New York Giants,Giants,
+jets,,,New York Jets,Jets,
+eagles,,,Philadelphia Eagles,Eagles,
+steelers,,,Pittsburgh Steelers,Steelers,
+seahawks,,,Seattle Seahawks,Seahawks,
+49ers,,,San Francisco 49ers,49ers,
+buccaneers,,,Tampa Bay Buccaneers,Buccaneers,
+titans,,,Tennessee Titans,Titans,
+raiders,2014,2019,Oakland Raiders,Raiders,Relocation or rename
+raiders,2020,,Las Vegas Raiders,Raiders,Relocation or rename
+chargers,2014,2016,San Diego Chargers,Chargers,Relocation or rename
+chargers,2017,,Los Angeles Chargers,Chargers,Relocation or rename
+rams,2014,2015,St. Louis Rams,Rams,Relocation or rename
+rams,2016,,Los Angeles Rams,Rams,Relocation or rename
+washington,2014,2019,Washington Redskins,Redskins,Relocation or rename
+washington,2020,2021,Washington Football Team,Football Team,Relocation or rename
+washington,2022,,Washington Commanders,Commanders,Relocation or rename

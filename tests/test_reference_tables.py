@@ -25,6 +25,20 @@ from booth_review.build.venues import VENUE_LOCATION_COLUMNS, load_venue_locatio
 from booth_review.contract.models import crew_source_url_problem
 from booth_review.flags.era import ERA_COLUMNS, load_eras
 from booth_review.flags.events import EVENT_COLUMNS, load_event_flags
+from booth_review.nfl.reference import (
+    NFL_FRANCHISE_COLUMNS,
+    NFL_LEAD_BOOTH_OVERRIDE_COLUMNS,
+    NFL_NETWORK_COLUMNS,
+    NFL_STADIUM_COLUMNS,
+    NFL_TEAM_CROSSWALK_COLUMNS,
+    NFL_WEEK_OVERRIDE_COLUMNS,
+    load_nfl_franchises,
+    load_nfl_lead_booth_overrides,
+    load_nfl_networks,
+    load_nfl_stadiums,
+    load_nfl_team_crosswalk,
+    load_nfl_week_overrides,
+)
 from booth_review.people.registry import (
     PEOPLE_COLUMNS,
     PERSON_OVERRIDE_COLUMNS,
@@ -78,6 +92,15 @@ KNOWN_TABLES: dict[str, tuple[tuple[str, ...] | None, Loader | None]] = {
     "rivalries.csv": (RIVALRY_COLUMNS, load_rivalries),
     "crew_overrides.csv": (CREW_OVERRIDE_COLUMNS, load_crew_overrides),
     "venue_locations.csv": (VENUE_LOCATION_COLUMNS, load_venue_locations),
+    "nfl_franchises.csv": (NFL_FRANCHISE_COLUMNS, load_nfl_franchises),
+    "nfl_team_crosswalk.csv": (NFL_TEAM_CROSSWALK_COLUMNS, load_nfl_team_crosswalk),
+    "nfl_stadiums.csv": (NFL_STADIUM_COLUMNS, load_nfl_stadiums),
+    "nfl_networks.csv": (NFL_NETWORK_COLUMNS, load_nfl_networks),
+    "nfl_lead_booth_overrides.csv": (
+        NFL_LEAD_BOOTH_OVERRIDE_COLUMNS,
+        load_nfl_lead_booth_overrides,
+    ),
+    "nfl_week_overrides.csv": (NFL_WEEK_OVERRIDE_COLUMNS, load_nfl_week_overrides),
 }
 
 # 04.3 D-01: the one documented exception to Phase 3 D-05/D-06. Each row records a
@@ -138,7 +161,9 @@ def test_headers_and_loaders(name: str) -> None:
 # A row keyed to one game or telecast that also names a person, a role, or a
 # crew slot records who called which game, even with no forbidden column name.
 # (person_overrides.csv keys on a 506 row pointer, not a game: D-06 allows it.)
-_GAME_KEY_COLUMNS: frozenset[str] = frozenset({"cfbd_game_id", "rr_telecast_id", "telecast_id"})
+_GAME_KEY_COLUMNS: frozenset[str] = frozenset(
+    {"cfbd_game_id", "rr_telecast_id", "telecast_id", "nflverse_game_id"}
+)
 _CREW_COLUMNS: frozenset[str] = frozenset({"person_id", "role", "crew_position"})
 
 
@@ -156,6 +181,7 @@ def _game_level_columns(header: set[str]) -> set[str]:
         ({"season", "pointer", "position", "person_id"}, set()),
         ({"cfbd_game_id", "person_id"}, {"cfbd_game_id", "person_id"}),
         ({"rr_telecast_id", "role"}, {"rr_telecast_id", "role"}),
+        ({"nflverse_game_id", "person_id"}, {"nflverse_game_id", "person_id"}),
         ({"network_id", "crew_raw"}, {"crew_raw"}),
     ],
 )
@@ -182,6 +208,19 @@ def test_person_override_ids_exist() -> None:
     )
     for row in override_rows:
         assert row["person_id"] in people_ids, f"unknown person_id in person_overrides.csv: {row!r}"
+
+
+def test_nfl_lead_booth_override_ids_exist() -> None:
+    people_ids = {
+        row["person_id"] for row in read_reference_csv(REFERENCE_DIR / "people.csv", PEOPLE_COLUMNS)
+    }
+    rows = read_reference_csv_numbered(
+        REFERENCE_DIR / "nfl_lead_booth_overrides.csv", NFL_LEAD_BOOTH_OVERRIDE_COLUMNS
+    )
+    for line_no, row in rows:
+        assert row["person_id"] in people_ids, (
+            f"nfl_lead_booth_overrides.csv line {line_no}: unknown person_id"
+        )
 
 
 def test_d05_exceptions_are_exactly_the_tables_with_game_level_columns() -> None:
