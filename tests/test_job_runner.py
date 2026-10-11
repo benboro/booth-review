@@ -1759,3 +1759,70 @@ def test_cli_update_run_never_leaks_the_key_into_output(
     for path in (tmp_path / "site").rglob("*"):
         if path.is_file():
             assert _KEY_CANARY.encode() not in path.read_bytes()
+
+
+# -- 999.4-19: --nfl-rr-cap and GITHUB_TOKEN plumbing ---------------------------------------------
+
+
+def _record_job_kwargs(monkeypatch) -> list[dict]:
+    from booth_review.job.runner import JobRunResult
+
+    calls: list[dict] = []
+
+    class _RecordingJob:
+        def __init__(self, runtime, **kwargs) -> None:
+            calls.append(kwargs)
+
+        def run(self) -> JobRunResult:
+            return JobRunResult(exit_code=0, items=[], counts={}, window=None)
+
+    monkeypatch.setattr(cli, "ScheduledJob", _RecordingJob)
+    return calls
+
+
+def test_cli_job_run_passes_nfl_rr_cap_and_the_github_token_without_printing_it(
+    git_vault, mock_transport_factory, patched_client, monkeypatch, capsys, caplog
+) -> None:
+    from booth_review.sources.ratingsref.collector import REFRESH_CAP_DEFAULT
+
+    _seed_required_state(git_vault, cfbd_month="2026-10")
+    calls = _record_job_kwargs(monkeypatch)
+    monkeypatch.setenv("GITHUB_TOKEN", "SENTINEL-GH-CLI-TOKEN")
+    handle = mock_transport_factory({})
+    patched_client(handle)
+
+    with caplog.at_level("DEBUG"):
+        code = main(["job", "run", "--nfl-rr-cap", "25", "--dry-run", "--no-commit"])
+
+    assert code == 0
+    assert calls[0]["nfl_rr_cap"] == 25
+    assert calls[0]["rr_cap"] == REFRESH_CAP_DEFAULT
+    assert calls[0]["github_token"] == "SENTINEL-GH-CLI-TOKEN"
+    assert handle.requests == []
+    captured = capsys.readouterr()
+    assert "SENTINEL-GH-CLI-TOKEN" not in captured.out + captured.err
+    assert all("SENTINEL-GH-CLI-TOKEN" not in r.getMessage() for r in caplog.records)
+
+
+def test_cli_job_run_nfl_rr_cap_defaults_to_40_and_a_missing_token_is_none(
+    git_vault, mock_transport_factory, patched_client, monkeypatch
+) -> None:
+    from booth_review.sources.ratingsref.collector import NFL_REFRESH_CAP_DEFAULT
+
+    _seed_required_state(git_vault, cfbd_month="2026-10")
+    calls = _record_job_kwargs(monkeypatch)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    patched_client(mock_transport_factory({}))
+
+    assert main(["job", "run", "--rr-cap", "60", "--dry-run", "--no-commit"]) == 0
+
+    assert calls[0]["nfl_rr_cap"] == NFL_REFRESH_CAP_DEFAULT == 40
+    assert calls[0]["rr_cap"] == 60
+    assert calls[0]["github_token"] is None
+
+
+def test_job_run_help_lists_the_nfl_rr_cap_flag(capsys) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(["job", "run", "--help"])
+    assert exc.value.code == 0
+    assert "--nfl-rr-cap" in capsys.readouterr().out

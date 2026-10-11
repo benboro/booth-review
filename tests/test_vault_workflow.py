@@ -328,6 +328,29 @@ def test_job_step_passes_update_flags_and_filters_result_lines() -> None:
     assert '>> "$GITHUB_OUTPUT"' in run
 
 
+def test_job_step_env_carries_the_github_token_for_the_nflverse_api_route() -> None:
+    # 999.4 D-21: GITHUB_TOKEN reaches booth-review only through the job step's
+    # env; the collector sends it to api.github.com requests only.
+    job = _step("job")
+    env = job["env"]
+    assert isinstance(env, dict)
+    assert env["GITHUB_TOKEN"] == "${{ github.token }}"
+    assert WORKFLOW_TEXT.count("GITHUB_TOKEN: ${{ github.token }}") == 1
+    for step in _steps():
+        if step.get("id") != "job":
+            assert "GITHUB_TOKEN" not in dict(step.get("env") or {})  # type: ignore[call-overload]
+
+
+def test_no_nfl_step_adds_a_deploy() -> None:
+    # The NFL steps live inside `booth-review job run`; the workflow gains no
+    # step of its own, and the only deploy is still the gated CFB site deploy.
+    runs = [(s.get("id"), str(s.get("run", ""))) for s in _steps()]
+    assert [sid for sid, run in runs if "uv run booth-review" in run] == ["job", "deploy"]
+    assert [sid for sid, run in runs if "uv run booth-review deploy" in run] == ["deploy"]
+    for _sid, run in runs:
+        assert "nfl" not in run.lower()
+
+
 # -- collect.yml: secret handling ---------------------------------------------------------------
 
 
