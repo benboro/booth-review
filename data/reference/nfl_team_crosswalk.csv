@@ -111,3 +111,71 @@ any,Chargers,chargers,,,
 any,Rams,rams,,,
 ratingsref,football-team,washington,2020,2021,RR slug tokens
 ratingsref,49ers,49ers,,,RR slug token
+ratingsref,commanders,washington,,,RR team id for every season
+sports506,Arizona,cardinals,,,506 city spelling
+sports506,Atlanta,falcons,,,506 city spelling
+sports506,Baltimore,ravens,,,506 city spelling
+sports506,Buffalo,bills,,,506 city spelling
+sports506,Carolina,panthers,,,506 city spelling
+sports506,Chicago,bears,,,506 city spelling
+sports506,Cincinnati,bengals,,,506 city spelling
+sports506,Cleveland,browns,,,506 city spelling
+sports506,Dallas,cowboys,,,506 city spelling
+sports506,Denver,broncos,,,506 city spelling
+sports506,Detroit,lions,,,506 city spelling
+sports506,Green Bay,packers,,,506 city spelling
+sports506,Houston,texans,,,506 city spelling
+sports506,Indianapolis,colts,,,506 city spelling
+sports506,Jacksonville,jaguars,,,506 city spelling
+sports506,Kansas City,chiefs,,,506 city spelling
+sports506,Miami,dolphins,,,506 city spelling
+sports506,Minnesota,vikings,,,506 city spelling
+sports506,New England,patriots,,,506 city spelling
+sports506,New Orleans,saints,,,506 city spelling
+sports506,NY Giants,giants,,,506 city spelling
+sports506,NY Jets,jets,,,506 city spelling
+sports506,Philadelphia,eagles,,,506 city spelling
+sports506,Pittsburgh,steelers,,,506 city spelling
+sports506,San Francisco,49ers,,,506 city spelling
+sports506,Seattle,seahawks,,,506 city spelling
+sports506,Tampa Bay,buccaneers,,,506 city spelling
+sports506,Tennessee,titans,,,506 city spelling
+sports506,Washington,washington,,,506 city spelling
+sports506,Oakland,raiders,2014,2019,506 city spelling; Oakland years
+sports506,Las Vegas,raiders,2020,,506 city spelling; Las Vegas years
+sports506,San Diego,chargers,2014,2016,506 city spelling; San Diego years
+sports506,LA Chargers,chargers,2017,,506 spelling; Los Angeles years
+sports506,St. Louis,rams,2014,2015,506 city spelling; St. Louis years
+sports506,Los Angeles,rams,2016,2016,506 spelling; the Rams were the only Los Angeles team in 2016
+sports506,LA Rams,rams,2016,,506 spelling; Los Angeles years
+wikipedia,Arizona,cardinals,,,Wikipedia city spelling
+wikipedia,Atlanta,falcons,,,Wikipedia city spelling
+wikipedia,Baltimore,ravens,,,Wikipedia city spelling
+wikipedia,Buffalo,bills,,,Wikipedia city spelling
+wikipedia,Carolina,panthers,,,Wikipedia city spelling
+wikipedia,Chicago,bears,,,Wikipedia city spelling
+wikipedia,Cincinnati,bengals,,,Wikipedia city spelling
+wikipedia,Cleveland,browns,,,Wikipedia city spelling
+wikipedia,Dallas,cowboys,,,Wikipedia city spelling
+wikipedia,Denver,broncos,,,Wikipedia city spelling
+wikipedia,Detroit,lions,,,Wikipedia city spelling
+wikipedia,Green Bay,packers,,,Wikipedia city spelling
+wikipedia,Houston,texans,,,Wikipedia city spelling
+wikipedia,Indianapolis,colts,,,Wikipedia city spelling
+wikipedia,Jacksonville,jaguars,,,Wikipedia city spelling
+wikipedia,Kansas City,chiefs,,,Wikipedia city spelling
+wikipedia,Miami,dolphins,,,Wikipedia city spelling
+wikipedia,Minnesota,vikings,,,Wikipedia city spelling
+wikipedia,New England,patriots,,,Wikipedia city spelling
+wikipedia,New Orleans,saints,,,Wikipedia city spelling
+wikipedia,Philadelphia,eagles,,,Wikipedia city spelling
+wikipedia,Pittsburgh,steelers,,,Wikipedia city spelling
+wikipedia,San Francisco,49ers,,,Wikipedia city spelling
+wikipedia,Seattle,seahawks,,,Wikipedia city spelling
+wikipedia,Tampa Bay,buccaneers,,,Wikipedia city spelling
+wikipedia,Tennessee,titans,,,Wikipedia city spelling
+wikipedia,Washington,washington,,,Wikipedia city spelling
+wikipedia,Oakland,raiders,2014,2019,Wikipedia city spelling; Oakland years
+wikipedia,Las Vegas,raiders,2020,,Wikipedia city spelling; Las Vegas years
+wikipedia,San Diego,chargers,2014,2016,Wikipedia city spelling; San Diego years
+wikipedia,St. Louis,rams,2014,2015,Wikipedia city spelling; St. Louis years
