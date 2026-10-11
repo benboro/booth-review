@@ -8,12 +8,12 @@ from pathlib import Path
 
 import polars as pl
 import pytest
-from booth_review.nfl.task1 import NFL_TASK1_COLUMNS, build_task1
 from nfl_game_helpers import make_ref
 
 from booth_review.nfl.adjust import LOW_N, VIEWERSHIP_PREDICTORS
 from booth_review.nfl.games import NFL_GAME_SCHEMA, NflGameTable, NflReference
 from booth_review.nfl.reference import NflLeadBoothOverride
+from booth_review.nfl.task1 import NFL_TASK1_COLUMNS, build_task1
 
 FULL = "+".join(VIEWERSHIP_PREDICTORS)
 FIRST_SUNDAY = date(2015, 9, 13)
