@@ -20,3 +20,8 @@ ATL97,Mercedes-Benz Stadium,US,https://en.wikipedia.org/wiki/Mercedes-Benz_Stadi
 TAM00,Raymond James Stadium,US,https://en.wikipedia.org/wiki/Raymond_James_Stadium,Tampa; Super Bowl host
 VEG00,Allegiant Stadium,US,https://en.wikipedia.org/wiki/Allegiant_Stadium,Las Vegas; Super Bowl host
 NOR00,Caesars Superdome,US,https://en.wikipedia.org/wiki/Caesars_Superdome,New Orleans; Super Bowl host
+DUB00,Croke Park,IE,https://en.wikipedia.org/wiki/Croke_Park,Dublin; project id (no nflverse id seen for this venue)
+BER00,Olympiastadion,DE,https://en.wikipedia.org/wiki/Olympiastadion_(Berlin),Berlin; project id (no nflverse id seen for this venue)
+JAX00,EverBank Stadium,US,https://en.wikipedia.org/wiki/EverBank_Stadium,Jacksonville; formerly TIAA Bank Field; its overseas games are in nfl_stadium_overrides.csv
+LAX01,SoFi Stadium,US,https://en.wikipedia.org/wiki/SoFi_Stadium,Inglewood CA; its overseas games are in nfl_stadium_overrides.csv
+MIA00,Hard Rock Stadium,US,https://en.wikipedia.org/wiki/Hard_Rock_Stadium,Miami Gardens FL; its overseas games are in nfl_stadium_overrides.csv
