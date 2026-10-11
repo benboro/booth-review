@@ -7,7 +7,11 @@ from datetime import date
 import pytest
 
 from booth_review.errors import ParseError
-from booth_review.nfl.schedule import SCHEDULE_REQUIRED_COLUMNS, parse_schedules
+from booth_review.nfl.schedule import (
+    SCHEDULE_REQUIRED_COLUMNS,
+    parse_schedules,
+    parse_schedules_counted,
+)
 
 
 def _csv(rows: list[dict[str, str]], drop: str | None = None) -> bytes:
@@ -80,3 +84,36 @@ def test_bad_time_names_season_and_row_not_value() -> None:
         parse_schedules(_csv([_row(gametime="zz:99")]))
     assert "season 2024 row 2" in str(err.value)
     assert "zz:99" not in str(err.value)
+
+
+@pytest.mark.parametrize(
+    "over",
+    [
+        {"gametime": ""},
+        {"gametime": "NA"},
+        {"gametime": "TBD"},
+        {"gameday": ""},
+        {"gameday": "NA"},
+        {"week": ""},
+        {"week": "NA"},
+    ],
+)
+def test_unscheduled_row_is_skipped_and_counted_not_fatal(over: dict[str, str]) -> None:
+    # WR-04: a TBD late-season or flex row never stops the whole parse.
+    rows = [_row(), _row(game_id="2024_18_CCC_DDD", **over), _row(game_id="2024_02_EEE_FFF")]
+    games, skipped = parse_schedules_counted(_csv(rows))
+    assert [g.game_id for g in games] == ["2024_01_AAA_BBB", "2024_02_EEE_FFF"]
+    assert skipped == 1
+    assert [g.game_id for g in parse_schedules(_csv(rows))] == [g.game_id for g in games]
+
+
+def test_unscheduled_row_outside_the_seasons_is_not_counted() -> None:
+    rows = [_row(), _row(game_id="x", season="2023", gameday="2023-09-10", gametime="")]
+    assert parse_schedules_counted(_csv(rows), seasons=[2024])[1] == 0
+
+
+def test_structural_problems_still_raise() -> None:
+    with pytest.raises(ParseError, match="row 2: season is not a number"):
+        parse_schedules(_csv([_row(season="")]))
+    with pytest.raises(ParseError, match="week is not a number"):
+        parse_schedules(_csv([_row(week="x")]))

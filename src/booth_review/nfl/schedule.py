@@ -3,11 +3,17 @@
 Pure: bytes in, rows out. All columns are read as strings and converted
 explicitly; empty strings become None. Errors name the column, or the season
 and row number, never the cell value (T-999.4-11-01).
+
+A row whose date, kickoff time or week is not set yet (empty, NA, TBD or TBA,
+as for an unscheduled late-season or flex game) is skipped and counted, never
+an error (WR-04): one such row must not stop the NFL build, gaps or freeze
+checks. A value that is set but malformed still raises.
 """
 
 from __future__ import annotations
 
 import io
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -17,7 +23,12 @@ import polars as pl
 
 from booth_review.errors import ParseError
 
+logger = logging.getLogger(__name__)
+
 ET = ZoneInfo("America/New_York")
+
+# Placeholder cell values meaning "not scheduled yet" (compared upper-cased).
+_UNSET = frozenset({"", "NA", "TBD", "TBA"})
 
 SCHEDULE_REQUIRED_COLUMNS: tuple[str, ...] = (
     "game_id",
@@ -87,7 +98,15 @@ def _opt_float(value: str | None, column: str, where: str) -> float | None:
 
 
 def parse_schedules(content: bytes, *, seasons: Sequence[int] | None = None) -> list[NflGame]:
-    """Parse schedules CSV bytes into NflGame rows, optionally filtered by season."""
+    """Parse schedules CSV bytes into NflGame rows, optionally filtered by season.
+    Rows with no date, kickoff time or week yet are left out (see the module doc)."""
+    return parse_schedules_counted(content, seasons=seasons)[0]
+
+
+def parse_schedules_counted(
+    content: bytes, *, seasons: Sequence[int] | None = None
+) -> tuple[list[NflGame], int]:
+    """`parse_schedules` plus the number of rows skipped as not scheduled yet."""
     try:
         frame = pl.read_csv(io.BytesIO(content), infer_schema_length=0)
     except Exception as exc:  # polars raises several types for malformed CSV
@@ -97,6 +116,7 @@ def parse_schedules(content: bytes, *, seasons: Sequence[int] | None = None) -> 
             raise ParseError(f"nfl schedules: missing column {column}")
     wanted = None if seasons is None else set(seasons)
     games: list[NflGame] = []
+    unscheduled = 0
     for index, row in enumerate(frame.iter_rows(named=True), start=2):
         raw_season = _text(row["season"])
         where = f"season {raw_season} row {index}"
@@ -105,6 +125,9 @@ def parse_schedules(content: bytes, *, seasons: Sequence[int] | None = None) -> 
         except ValueError as exc:
             raise ParseError(f"nfl schedules row {index}: season is not a number") from exc
         if wanted is not None and season not in wanted:
+            continue
+        if any(_text(row[c]).upper() in _UNSET for c in ("gameday", "gametime", "week")):
+            unscheduled += 1
             continue
         gametime = _text(row["gametime"])
         try:
@@ -143,4 +166,6 @@ def parse_schedules(content: bytes, *, seasons: Sequence[int] | None = None) -> 
                 stadium=_text(row["stadium"]),
             )
         )
-    return games
+    if unscheduled:
+        logger.warning("nfl schedules: %d row(s) not scheduled yet were skipped", unscheduled)
+    return games, unscheduled
