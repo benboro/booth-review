@@ -201,13 +201,14 @@ skipped until a later build phase adds a league option.
 - **Fox Saturday is a window:** the record's claim scope marks a split window and
   labels it by its featured game, so the figure is window-level, as with NFL
   Sunday afternoons.
-- **Composite and simulcast hazards (composite figures):** the World Series, TBS, ESPN, NBC, Netflix
-  and the league network records were all unclear on whether the figure combines
-  feeds or outlets (a sister cable network or streaming service, local
-  simulcasts). One postseason record lists TBS and a streaming service with a
-  final figure about a quarter above the preliminary TBS row, and another holds
-  separate per-network claims with no total. Two records carry conflicting final
-  figures.
+- **Composite and simulcast hazards (composite figures):** the World Series,
+  TBS (regular season and postseason), ESPN, NBC and Netflix records were all
+  unclear on whether the figure combines feeds or outlets (a sister cable network
+  or streaming service, local simulcasts). One postseason record lists TBS and a
+  streaming service with a final figure about a quarter above the preliminary TBS
+  row, and another holds separate per-network claims with no total. Two records
+  carry conflicting final figures. No league-network record was found; whether
+  RR rates that package is open.
 - **Streaming measurement:** the 2026 Netflix and NBC records are
   Nielsen-measured but state no platform scope. Era tags follow docs/PLAN.md
   section 6: the out-of-home expansion for spring 2025 claims and Big Data plus

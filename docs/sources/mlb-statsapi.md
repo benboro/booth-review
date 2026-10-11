@@ -16,8 +16,9 @@ list is in [mlb-field-list.md](mlb-field-list.md).
   display without written permission. They never mention the Stats API by name.
 - **What that makes each field group:** blocked. A project that collects the
   schedule in bulk, derives values from it and displays them falls outside
-  "non-bulk" use, so no Stats API field is used until permission exists in
-  writing.
+  "non-bulk" use, so under the terms no Stats API field could be used until
+  permission exists in writing. The project owner has since waived that for
+  analysis use (see the decision below).
 
 ## Robots
 
@@ -57,10 +58,13 @@ Unknown, for the same reason.
 
 | field group | status | reason |
 |---|---|---|
-| Schedule and results | blocked | notice bars bulk use without written authorization |
-| Broadcasts (outlet, national flag, exclusivity) | blocked | same notice; site terms bar automated collection |
-| Win probability | blocked | same notice; not read |
+| Schedule and results | blocked by terms; analysis-only by owner waiver | notice bars bulk use without written authorization |
+| Broadcasts (outlet, national flag, exclusivity) | blocked by terms; analysis-only by owner waiver | same notice; site terms bar automated collection |
+| Win probability | blocked by terms; analysis-only by owner waiver | same notice; not read |
 
-The spike's answer to the open question: the group stays blocked until MLB
-answers in writing, and an analysis-only use (never displayed) is possible only
-as the project owner's recorded waiver.
+**Project owner's decision (October 10, 2026):** the owner waived the blocked
+terms status for analysis use ("statsapi is included on the ignoring terms").
+Stats API fields may be used in analysis; under the field list's Display rule
+they are not displayed. The owner also said presentation is acceptable, and the
+build phase settles display against that statement. MLB has not granted written
+permission.

@@ -28,7 +28,7 @@ go when any task is go.
   season and postseason), plot the game-quality measure against the crew, so
   that the crew's pull can be read beyond what the matchup predicts.
 - **task_exposure:** count, per team and season, the regular-season national
-  games, by default only those that are exclusive (blacked out locally), with
+  games, by default only those that are exclusive (no local telecast), with
   all national games reported alongside.
 - **task_topcrew:** for one network at a time, compare its lead (A) booth with
   its other booths over the same season. A network passes only when it has two
@@ -59,7 +59,7 @@ station, MLB.TV and other out-of-market packages are not national.
 | `is_national` | A national outlet carries the game | derived from `network` under the national-game rule | 2026 regular season and 2025 postseason measured; 506 offers pages back to 2014 but only those seasons were read | derived | 506 weekly pages change through the week | true when the outlet is on the national list |
 | `network` | Main-feed national outlet or streaming service | 506 MLB pages, hand-save (2026 weekly pages list every national game with outlet; 2025 postseason round pages); Ratings Reference only for rated games | 2026 regular season and 2025 postseason read; 506 offers 2014 on, kinds unverified | analysis-only (506 states no terms) | 506 pages change through the week; save after games finish | normalized: trailing star removed, sister outlets and regional tails dropped |
 | `window` | Fox Saturday regional window marker | 506 map-marker note in the outlet cell | 2026 (2025 pages are coverage maps without an outlet cell) | analysis-only (506 states no terms) | changes through the week | copied from the marker note |
-| `is_exclusive` | The national telecast is exclusive, or blacked out locally | 506 star mark (a starred listing is blacked out locally); package wording from Wikipedia and network releases | 2026 regular season, 2025 postseason (package wording) | analysis-only (506 states no terms; Wikipedia wording is share-alike) | 506 pages change through the week | false when starred or a regional network is named; true only on stated package exclusivity; null otherwise, never guessed |
+| `is_exclusive` | No local telecast of the game exists (the national outlet is exclusive; local carriage is blacked out) | 506 star mark (a starred listing means the national telecast is blacked out in the teams' areas, where the local network airs the game, so it is not exclusive); package wording from Wikipedia and network releases | 2026 regular season, 2025 postseason (package wording) | analysis-only (506 states no terms; Wikipedia wording is share-alike) | 506 pages change through the week | false when starred or a regional network is named; true only on stated package exclusivity; null otherwise, never guessed |
 | `production` | Own, simulcast of a local feed, or unknown | 506 star and crew cell, with Wikipedia and league page wording | 2026 regular season, 2025 postseason | analysis-only (506 states no terms) | as for `network` | starred listings with no crew read as simulcast; a named crew reads as own; no wording reads as unknown |
 | `play_by_play` | Main-feed play-by-play voice | 506 MLB pages, hand-save; for listings with no crew, the fan schedule blog under Secondary crew source; Wikipedia season lists only as pairings, never game assignments | 2026 regular season, 2025 postseason | analysis-only (506 states no terms) | assignments change through the week; save pages after games finish | first name in the crew cell; people resolved through `data/reference/` |
 | `analyst_1` | First analyst | 506 MLB pages, hand-save | 2026 regular season, 2025 postseason | analysis-only (506 states no terms) | as for `play_by_play` | second name in the crew cell |
@@ -195,9 +195,15 @@ blog that keeps per-game national crew lists for each network
 (<https://tamirmoore.blogspot.com/>, for example its "2026 MLB on Apple TV
 schedule" post). It is a secondary source: each list credits the network press
 page it was copied from (Apple Newsroom, ESPN Press Room, Fox Sports Press Pass,
-Warner Bros. Discovery). The blog states no terms, so its crews are analysis-only.
-In the spike it agreed with 506 on every game where both name a crew that was
-checked. Cite the blog together with the press page it credits.
+Warner Bros. Discovery). The blog states no terms of its own, but its lists relay
+press pages that are blocked (Apple's site terms bar copying and public display)
+or failed the policy screen (Fox Sports Press Pass, Warner Bros. Discovery); only
+the ESPN list relays an analysis-only host. The project owner waived those
+upstream terms on October 10, 2026, as a one-time waiver for the spike's
+hand-read pull, for analysis use. A build that reads the blog again needs its own
+robots and terms check, a HOST_POLICIES entry and a fresh owner decision. In the
+spike it agreed with 506 on every game where both name a crew that was checked.
+Cite the blog together with the press page it credits.
 
 ## Display rule
 
@@ -211,11 +217,16 @@ Wikipedia under CC BY-SA.
 
 The analysis-only fields are `network`, `window`, `is_exclusive`, `production`,
 `play_by_play`, `analyst_1` and `analyst_2` (506 states no terms). The blocked
-group is the Stats API (see mlb-statsapi.md); no field row depends on it.
+group is the Stats API: its terms block it, and the project owner waived that
+for analysis use (see mlb-statsapi.md). No field row depends on it yet.
 
 **Open question for the build:** the college-football site already displays 506
 crews (hover details), even though 506 states no terms and its publishing row in
 `data/README.md` still reads "ask the site owners". MLB crew views need crew
-names and these crews come from 506. Before MLB views are built, decide whether
-MLB crews follow that college-football precedent or the strict rule above. Asking
-506's owners would settle both.
+names, and most of these crews come from 506. Before MLB views are built, decide
+whether MLB crews follow that college-football precedent or the strict rule above.
+Asking 506's owners would settle both. Apple TV+, the only network that passes top
+crew, takes 30 of its 50 crews from the relay under Secondary crew source, which
+the 506 precedent does not cover. The project owner said presentation is
+acceptable; the build settles display of the relayed crews and of Stats API
+fields against that statement.
