@@ -19,7 +19,6 @@ from booth_review.sources.nflverse.collector import (
     MAX_ASSET_PAGES,
     NflverseAsset,
     NflverseCollector,
-    NflverseIntegrityError,
     NflverseSchemaError,
 )
 from booth_review.transport.cache import RawCache
@@ -268,16 +267,72 @@ def test_run_pbp_frozen(vault_paths, mock_transport_factory) -> None:
 
 
 def test_run_pbp_integrity_failures_write_no_ledger(vault_paths, mock_transport_factory) -> None:
+    # WR-02: a failed check is a counted failure, not a raise, and writes nothing.
     a = _asset(2014)
-    handle = mock_transport_factory(_full([a], {a.asset_id: _pq(41)}))
-    with pytest.raises(NflverseIntegrityError):
-        _collector(vault_paths, handle).run_pbp([2014], dry_run=False)
-    assert _ledger(vault_paths) == []
+    cached = vault_paths.raw / "nfl/nflverse/pbp/play_by_play_2014.parquet"
+    for body in (_pq(41), b"XXXX" + b"z" * 32 + b"XXXX"):
+        handle = mock_transport_factory(_full([a], {a.asset_id: body}))
+        summary = _collector(vault_paths, handle).run_pbp([2014], dry_run=False)
+        assert (summary.failed, summary.fetched) == (1, 0)
+        assert _ledger(vault_paths) == []
+        assert not cached.exists()
 
-    handle = mock_transport_factory(_full([a], {a.asset_id: b"XXXX" + b"z" * 32 + b"XXXX"}))
-    with pytest.raises(NflverseIntegrityError):
-        _collector(vault_paths, handle).run_pbp([2014], dry_run=False)
-    assert _ledger(vault_paths) == []
+
+def test_run_pbp_integrity_failure_keeps_the_good_file_and_runs_other_seasons(
+    vault_paths, mock_transport_factory
+) -> None:
+    good = _asset(2016)
+    _collector(vault_paths, mock_transport_factory(_full([good], {good.asset_id: _pq()}))).run_pbp(
+        [2016], dry_run=False
+    )
+    cached = vault_paths.raw / "nfl/nflverse/pbp/play_by_play_2016.parquet"
+    manifest_before = vault_paths.manifest.read_text(encoding="utf-8")
+
+    bad = _asset(2016, size=44, updated="2026-02-02T00:00:00Z")
+    other = _asset(2017)
+    handle = mock_transport_factory(
+        _full([bad, other], {bad.asset_id: _pq(43), other.asset_id: _pq()})
+    )
+    summary = _collector(vault_paths, handle).run_pbp([2016, 2017], dry_run=False)
+
+    assert (summary.failed, summary.fetched) == (1, 1)
+    assert cached.read_bytes() == _pq()
+    assert [line["name"] for line in _ledger(vault_paths)] == [good.name, other.name]
+    added = vault_paths.manifest.read_text(encoding="utf-8")[len(manifest_before) :]
+    rejected = [
+        json.loads(x) for x in added.splitlines() if json.loads(x)["url"] == _asset_url(bad)
+    ]
+    assert len(rejected) == 1
+    assert rejected[0]["path"] is None and rejected[0]["etag"] is None
+
+
+def test_run_pbp_without_a_ledger_line_never_sends_validators(
+    vault_paths, mock_transport_factory
+) -> None:
+    # A file cached without a ledger line (e.g. a bad download kept by an older
+    # version) must be re-downloaded in full, never confirmed by a 304.
+    a = _asset(2018)
+    responses = _full([a], {})
+    responses[_asset_url(a)] = (200, _pq(), {"ETag": '"v1"'})
+    _collector(vault_paths, mock_transport_factory(responses)).run_pbp([2018], dry_run=False)
+    (vault_paths.ledger / "nfl_nflverse_assets.jsonl").unlink()
+
+    handle = mock_transport_factory(responses)
+    summary = _collector(vault_paths, handle).run_pbp([2018], dry_run=False)
+
+    assert summary.fetched == 1
+    sent = [r for r in handle.requests if r.url == _asset_url(a)]
+    assert "if-none-match" not in sent[0].headers
+    assert len(_ledger(vault_paths)) == 1
+
+    # With the ledger line back, a changed listing is checked conditionally.
+    b = _asset(2018, size=44, updated="2026-03-03T00:00:00Z")
+    changed = _full([b], {})
+    changed[_asset_url(b)] = (200, _pq(44), {"ETag": '"v2"'})
+    handle = mock_transport_factory(changed)
+    _collector(vault_paths, handle).run_pbp([2018], dry_run=False)
+    sent = [r for r in handle.requests if r.url == _asset_url(b)]
+    assert sent[0].headers.get("if-none-match") == '"v1"'
 
 
 def test_run_pbp_missing_asset_counted(vault_paths, mock_transport_factory) -> None:

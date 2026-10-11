@@ -11,6 +11,7 @@ never used: its robots.txt disallows `/*/download`.
 from __future__ import annotations
 
 import contextlib
+import functools
 import hashlib
 import json
 import logging
@@ -322,25 +323,37 @@ class NflverseCollector:
     def run_pbp(self, seasons: Sequence[int], *, dry_run: bool) -> NflverseSummary:
         """Download changed pbp seasons, verify, and ledger them.
 
-        RawCache writes the bytes before the check, so on NflverseIntegrityError
-        the ledger is not updated and the next run downloads again.
+        The size and parquet-magic check runs inside RawCache before anything is
+        written (WR-02): a download that fails it is counted as failed and never
+        replaces the cached file, the ledger gets no line, and the other seasons
+        still run. A season with no ledger line is fetched unconditionally, so a
+        bad file cached by an earlier version can't be confirmed by a 304.
         """
         assets = self.pbp_assets(dry_run=dry_run)
         plan = self._classify(seasons, assets)
         if dry_run:
             return self._summary(plan, fetched=0, not_modified=0, failed=0, dry_run=True)
 
+        ledger = self._load_ledger()
         fetched = not_modified = failed = 0
         for req, asset, exists in plan.to_fetch:
             try:
-                result = self._cache.get_or_fetch(req, refresh=exists, bearer_token=self._token)
+                result = self._cache.get_or_fetch(
+                    req,
+                    refresh=exists,
+                    bearer_token=self._token,
+                    conditional=asset.name in ledger,
+                    validate=functools.partial(self._verify, asset=asset),
+                )
+            except NflverseIntegrityError:
+                failed += 1
+                continue
             except FetchError as exc:
                 status = exc.status_code
                 if status is not None and 400 <= status < 500 and status != 429:
                     failed += 1
                     continue
                 raise
-            self._verify(result.content, asset)
             self._record(asset, result.content)
             if result.outcome == "not_modified":
                 not_modified += 1
