@@ -11,16 +11,18 @@ never used: its robots.txt disallows `/*/download`.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from booth_review.config import DataPaths
-from booth_review.errors import FetchError, ParseError
+from booth_review.errors import FetchError, ParseError, VaultStateError
 from booth_review.nfl.layout import (
     NFLVERSE_API_BASE,
     NFLVERSE_PBP_RELEASE_PATH,
@@ -28,9 +30,10 @@ from booth_review.nfl.layout import (
     NFLVERSE_SCHEDULES_PATH,
     NFLVERSE_SCHEDULES_URL,
     nflverse_pbp_assets_page_path,
+    nflverse_pbp_path,
 )
 from booth_review.sources.base import BatchSummary, run_requests
-from booth_review.transport.cache import RawCache
+from booth_review.transport.cache import FreezeGuard, RawCache
 from booth_review.transport.types import FetchRequest
 
 logger = logging.getLogger(__name__)
@@ -43,6 +46,8 @@ ASSET_HEADERS: tuple[tuple[str, str], ...] = (("Accept", "application/octet-stre
 ASSETS_PER_PAGE = 100
 MAX_ASSET_PAGES = 10
 ASSET_LEDGER_NAME = "nfl_nflverse_assets.jsonl"
+_TIME_FMT = "%Y-%m-%dT%H:%M:%SZ"
+_PARQUET_MAGIC = b"PAR1"
 
 
 class NflverseSchemaError(ParseError):
@@ -60,6 +65,42 @@ class NflverseAsset:
     name: str
     size: int
     updated_at: str
+
+
+@dataclass(frozen=True)
+class NflverseSummary:
+    """The result of one run_pbp call."""
+
+    fetched: int
+    unchanged: int
+    not_modified: int
+    frozen: int
+    frozen_missing: int
+    missing_assets: tuple[int, ...]
+    failed: int
+    planned: int
+    dry_run: bool = False
+
+    def counts(self) -> dict[str, int]:
+        """Counts for vault.batch_message, in a fixed key order."""
+        return {
+            "fetched": self.fetched,
+            "unchanged": self.unchanged,
+            "not_modified": self.not_modified,
+            "frozen": self.frozen,
+            "frozen_missing": self.frozen_missing,
+            "missing_assets": len(self.missing_assets),
+            "failed": self.failed,
+        }
+
+
+@dataclass(frozen=True)
+class _Plan:
+    to_fetch: list[tuple[FetchRequest, NflverseAsset, bool]]
+    unchanged: int
+    frozen: int
+    frozen_missing: int
+    missing: tuple[int, ...]
 
 
 def _utc_now() -> datetime:
@@ -199,3 +240,149 @@ class NflverseCollector:
                 )
             )
         return out
+
+    # -- pbp download ----------------------------------------------------------------
+
+    @property
+    def _ledger_path(self) -> Path:
+        return self._paths.ledger / ASSET_LEDGER_NAME
+
+    def _load_ledger(self) -> dict[str, dict[str, Any]]:
+        """Latest line per asset name, by recorded_at (a union merge can reorder lines)."""
+        latest: dict[str, dict[str, Any]] = {}
+        if not self._ledger_path.is_file():
+            return latest
+        with self._ledger_path.open(encoding="utf-8") as fh:
+            for number, raw_line in enumerate(fh, start=1):
+                stripped = raw_line.strip()
+                if not stripped:
+                    continue
+                try:
+                    line = json.loads(stripped)
+                except json.JSONDecodeError as exc:
+                    raise VaultStateError(f"{ASSET_LEDGER_NAME} line {number} is not JSON") from exc
+                if (
+                    not isinstance(line, dict)
+                    or not isinstance(line.get("name"), str)
+                    or not isinstance(line.get("recorded_at"), str)
+                ):
+                    raise VaultStateError(f"{ASSET_LEDGER_NAME} line {number}: bad shape")
+                current = latest.get(line["name"])
+                if current is None or line["recorded_at"] >= current["recorded_at"]:
+                    latest[line["name"]] = line
+        return latest
+
+    def _classify(self, seasons: Sequence[int], assets: Sequence[NflverseAsset]) -> _Plan:
+        by_name = {a.name: a for a in assets}
+        ledger = self._load_ledger()
+        freeze = FreezeGuard.load(self._paths.frozen)
+        to_fetch: list[tuple[FetchRequest, NflverseAsset, bool]] = []
+        unchanged = frozen = frozen_missing = 0
+        missing: list[int] = []
+        for season in seasons:
+            rel = nflverse_pbp_path(season)
+            exists = (self._paths.raw / rel).is_file()
+            if freeze.is_frozen("nfl_nflverse", season):
+                if exists:
+                    frozen += 1
+                else:
+                    frozen_missing += 1
+                continue
+            asset = by_name.get(f"play_by_play_{season}.parquet")
+            if asset is None:
+                missing.append(season)
+                continue
+            recorded = ledger.get(asset.name)
+            if (
+                exists
+                and recorded is not None
+                and recorded.get("updated_at") == asset.updated_at
+                and recorded.get("size") == asset.size
+            ):
+                unchanged += 1
+                continue
+            req = FetchRequest(
+                source="nfl_nflverse",
+                season=season,
+                url=f"{NFLVERSE_API_BASE}/releases/assets/{asset.asset_id}",
+                cache_path=rel,
+                headers=ASSET_HEADERS,
+            )
+            to_fetch.append((req, asset, exists))
+        return _Plan(to_fetch, unchanged, frozen, frozen_missing, tuple(missing))
+
+    def plan_pbp(
+        self, seasons: Sequence[int], assets: Sequence[NflverseAsset]
+    ) -> list[tuple[FetchRequest, NflverseAsset, bool]]:
+        """One request per season that needs a download. The bool says a cached
+        file already exists, so the fetch must use refresh=True. Seasons that
+        are unchanged, frozen, or without an asset are left out."""
+        return self._classify(seasons, assets).to_fetch
+
+    def run_pbp(self, seasons: Sequence[int], *, dry_run: bool) -> NflverseSummary:
+        """Download changed pbp seasons, verify, and ledger them.
+
+        RawCache writes the bytes before the check, so on NflverseIntegrityError
+        the ledger is not updated and the next run downloads again.
+        """
+        assets = self.pbp_assets(dry_run=dry_run)
+        plan = self._classify(seasons, assets)
+        if dry_run:
+            return self._summary(plan, fetched=0, not_modified=0, failed=0, dry_run=True)
+
+        fetched = not_modified = failed = 0
+        for req, asset, exists in plan.to_fetch:
+            try:
+                result = self._cache.get_or_fetch(req, refresh=exists, bearer_token=self._token)
+            except FetchError as exc:
+                status = exc.status_code
+                if status is not None and 400 <= status < 500 and status != 429:
+                    failed += 1
+                    continue
+                raise
+            self._verify(result.content, asset)
+            self._record(asset, result.content)
+            if result.outcome == "not_modified":
+                not_modified += 1
+            else:
+                fetched += 1
+        return self._summary(
+            plan, fetched=fetched, not_modified=not_modified, failed=failed, dry_run=False
+        )
+
+    @staticmethod
+    def _summary(
+        plan: _Plan, *, fetched: int, not_modified: int, failed: int, dry_run: bool
+    ) -> NflverseSummary:
+        return NflverseSummary(
+            fetched=fetched,
+            unchanged=plan.unchanged,
+            not_modified=not_modified,
+            frozen=plan.frozen,
+            frozen_missing=plan.frozen_missing,
+            missing_assets=plan.missing,
+            failed=failed,
+            planned=len(plan.to_fetch),
+            dry_run=dry_run,
+        )
+
+    @staticmethod
+    def _verify(content: bytes, asset: NflverseAsset) -> None:
+        if len(content) != asset.size:
+            raise NflverseIntegrityError("pbp download size differs from the listing size")
+        if not (content.startswith(_PARQUET_MAGIC) and content.endswith(_PARQUET_MAGIC)):
+            raise NflverseIntegrityError("pbp download is not a parquet file")
+
+    def _record(self, asset: NflverseAsset, content: bytes) -> None:
+        line = {
+            "name": asset.name,
+            "asset_id": asset.asset_id,
+            "size": asset.size,
+            "updated_at": asset.updated_at,
+            "sha256": hashlib.sha256(content).hexdigest(),
+            "recorded_at": self._now().strftime(_TIME_FMT),
+        }
+        with self._lock():
+            self._ledger_path.parent.mkdir(parents=True, exist_ok=True)
+            with self._ledger_path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(line, sort_keys=True) + "\n")

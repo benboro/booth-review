@@ -111,3 +111,51 @@ The NFL module targets 2014 to 2026, which every group covers.
   are picked up midweek.
 - **2026:** the current season, re-checked and not frozen, like the CFB
   sources.
+
+## Access route (999.4, D-21)
+
+- **Schedules:** `https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv`,
+  one file for all seasons, refreshed with conditional requests.
+- **Play-by-play:** through the GitHub REST API, never a release-download link.
+  `GET /repos/nflverse/nflverse-data/releases/tags/pbp` gives the release id;
+  `GET /releases/{id}/assets?per_page=100&page=N` lists its files (at most 10
+  pages); `GET /releases/assets/{asset_id}` with `Accept: application/octet-stream`
+  returns a redirect to a signed asset host, which the client follows. Both API
+  calls send `Accept: application/vnd.github+json` and
+  `X-GitHub-Api-Version: 2022-11-28`.
+- **Why not github.com:** `github.com/robots.txt` disallows `/*/download`, and the
+  client now enforces wildcard rules, so release-download URLs are refused.
+- **Token:** an optional `GITHUB_TOKEN` is sent to api.github.com only, never to
+  raw.githubusercontent.com, and is dropped on the redirect.
+- **Downloaded bytes** must match the listing size and start and end with the
+  parquet magic bytes `PAR1`; otherwise nothing is ledgered and the next run
+  downloads again.
+
+## Change detection
+
+The listing's `updated_at` and `size` for each `play_by_play_<season>.parquet`
+are compared with the latest line for that file in the vault ledger
+`ledger/nfl_nflverse_assets.jsonl` (name, asset_id, size, updated_at, sha256,
+recorded_at). A season is downloaded only when the cached file is missing or
+either value changed. Asset ids may change on a re-upload, so the name is the
+key. Frozen seasons are never re-downloaded.
+
+## Volume
+
+About 19 MB of parquet per season, about 245 MB for 2014-2026. The 2026 season
+is downloaded again only when its listing changed, and only on the Wednesday and
+Thursday job runs.
+
+## Excitement (GEI-style, D-22)
+
+`excitement_score = (3600 / t) x sum of the absolute per-play changes in home win
+probability`, where `t` is the game's seconds, overtime included. It is labeled
+GEI-style: comparable in kind to CFBD's unpublished `excitementIndex`, not
+identical to it. `wp_volatility` is the sample standard deviation of the same
+per-play changes and is a separate field.
+
+## Credit
+
+nflverse-data is CC BY 4.0; credit nflverse wherever a derived value appears.
+`spread_line` and play-by-play provenance are analysis-only, per the
+[field list](nfl-field-list.md).

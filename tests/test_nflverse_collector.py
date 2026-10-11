@@ -19,6 +19,7 @@ from booth_review.sources.nflverse.collector import (
     MAX_ASSET_PAGES,
     NflverseAsset,
     NflverseCollector,
+    NflverseIntegrityError,
     NflverseSchemaError,
 )
 from booth_review.transport.cache import RawCache
@@ -164,3 +165,152 @@ def test_bearer_only_on_api_host(vault_paths, mock_transport_factory) -> None:
     _collector(vault_paths, api, token="tok").pbp_assets(dry_run=False)
     listed = [r for r in api.requests if r.url == _RELEASE_URL]
     assert listed[0].headers["authorization"] == "Bearer tok"
+
+
+# -- pbp download (Task 2) ------------------------------------------------------------
+
+
+def _pq(n: int = 40, fill: bytes = b"x") -> bytes:
+    return b"PAR1" + fill * (n - 8) + b"PAR1"
+
+
+def _asset(season: int, *, size: int = 40, updated: str = "2026-01-01T00:00:00Z", aid: int = 7):
+    return NflverseAsset(aid + season, f"play_by_play_{season}.parquet", size, updated)
+
+
+def _asset_url(asset: NflverseAsset) -> str:
+    return f"{NFLVERSE_API_BASE}/releases/assets/{asset.asset_id}"
+
+
+def _ledger(vault_paths) -> list[dict]:
+    path = vault_paths.ledger / "nfl_nflverse_assets.jsonl"
+    if not path.is_file():
+        return []
+    return [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x]
+
+
+def _full(assets: list[NflverseAsset], bodies: dict[int, bytes]) -> dict:
+    responses = dict(_listing_responses())
+    responses[_page_url(1)] = (
+        200,
+        json.dumps(
+            [
+                {"id": a.asset_id, "name": a.name, "size": a.size, "updated_at": a.updated_at}
+                for a in assets
+            ]
+        ).encode(),
+        {},
+    )
+    for a in assets:
+        if a.asset_id in bodies:
+            responses[_asset_url(a)] = (200, bodies[a.asset_id], {})
+    return responses
+
+
+def test_plan_pbp_shape(vault_paths, mock_transport_factory) -> None:
+    col = _collector(vault_paths, mock_transport_factory({}))
+    assets = [_asset(2014), _asset(2015)]
+    plan = col.plan_pbp([2014, 2015], assets)
+    assert len(plan) == 2
+    req, asset, exists = plan[0]
+    assert req.url == _asset_url(asset)
+    assert req.headers == (("Accept", "application/octet-stream"),)
+    assert req.cache_path == "nfl/nflverse/pbp/play_by_play_2014.parquet"
+    assert req.source == "nfl_nflverse"
+    assert req.season == 2014
+    assert exists is False
+
+
+def test_run_pbp_downloads_ledgers_then_skips_unchanged(
+    vault_paths, mock_transport_factory
+) -> None:
+    a = _asset(2015)
+    handle = mock_transport_factory(_full([a], {a.asset_id: _pq()}))
+    summary = _collector(vault_paths, handle).run_pbp([2015], dry_run=False)
+    assert summary.fetched == 1
+    assert summary.counts()["fetched"] == 1
+    sent = [r for r in handle.requests if r.url == _asset_url(a)]
+    assert sent[0].headers["accept"] == "application/octet-stream"
+    (line,) = _ledger(vault_paths)
+    assert (line["updated_at"], line["size"], line["name"]) == (a.updated_at, 40, a.name)
+    assert len(line["sha256"]) == 64
+
+    again = mock_transport_factory(_full([a], {}))
+    summary = _collector(vault_paths, again).run_pbp([2015], dry_run=False)
+    assert summary.unchanged == 1 and summary.fetched == 0
+    assert not [r for r in again.requests if r.url == _asset_url(a)]
+
+
+def test_run_pbp_refetches_when_updated_at_changes(vault_paths, mock_transport_factory) -> None:
+    a = _asset(2016)
+    _collector(vault_paths, mock_transport_factory(_full([a], {a.asset_id: _pq()}))).run_pbp(
+        [2016], dry_run=False
+    )
+    b = _asset(2016, size=44, updated="2026-02-02T00:00:00Z")
+    handle = mock_transport_factory(_full([b], {b.asset_id: _pq(44, b"y")}))
+    summary = _collector(vault_paths, handle).run_pbp([2016], dry_run=False)
+    assert summary.fetched == 1
+    assert len(_ledger(vault_paths)) == 2
+    cached = vault_paths.raw / "nfl/nflverse/pbp/play_by_play_2016.parquet"
+    assert cached.read_bytes() == _pq(44, b"y")
+
+
+def test_run_pbp_frozen(vault_paths, mock_transport_factory) -> None:
+    vault_paths.frozen.write_text(json.dumps({"nfl_nflverse": [2014, 2015]}), encoding="utf-8")
+    cached = vault_paths.raw / "nfl/nflverse/pbp/play_by_play_2014.parquet"
+    cached.parent.mkdir(parents=True, exist_ok=True)
+    cached.write_bytes(_pq())
+    assets = [_asset(2014), _asset(2015)]
+    handle = mock_transport_factory(_full(assets, {}))
+    summary = _collector(vault_paths, handle).run_pbp([2014, 2015], dry_run=False)
+    assert (summary.frozen, summary.frozen_missing, summary.fetched) == (1, 1, 0)
+    assert not [r for r in handle.requests if "/releases/assets/" in r.url]
+
+
+def test_run_pbp_integrity_failures_write_no_ledger(vault_paths, mock_transport_factory) -> None:
+    a = _asset(2014)
+    handle = mock_transport_factory(_full([a], {a.asset_id: _pq(41)}))
+    with pytest.raises(NflverseIntegrityError):
+        _collector(vault_paths, handle).run_pbp([2014], dry_run=False)
+    assert _ledger(vault_paths) == []
+
+    handle = mock_transport_factory(_full([a], {a.asset_id: b"XXXX" + b"z" * 32 + b"XXXX"}))
+    with pytest.raises(NflverseIntegrityError):
+        _collector(vault_paths, handle).run_pbp([2014], dry_run=False)
+    assert _ledger(vault_paths) == []
+
+
+def test_run_pbp_missing_asset_counted(vault_paths, mock_transport_factory) -> None:
+    handle = mock_transport_factory(_full([_asset(2014)], {}))
+    summary = _collector(vault_paths, handle).run_pbp([2020], dry_run=False)
+    assert summary.missing_assets == (2020,)
+    assert summary.counts()["missing_assets"] == 1
+
+
+def test_run_pbp_follows_redirect(vault_paths, mock_transport_factory) -> None:
+    a = _asset(2014)
+    signed = "https://release-assets.githubusercontent.com/signed/abc?sig=1"
+    responses = _full([a], {})
+    responses[_asset_url(a)] = (302, b"", {"Location": signed})
+    responses[signed] = (200, _pq(), {})
+    responses["https://release-assets.githubusercontent.com/robots.txt"] = (404, b"nf", {})
+    handle = mock_transport_factory(responses)
+    summary = _collector(vault_paths, handle, token="tok").run_pbp([2014], dry_run=False)
+    assert summary.fetched == 1
+    redirected = [r for r in handle.requests if r.url == signed]
+    assert redirected and "authorization" not in redirected[0].headers
+
+
+def test_run_pbp_dry_run_sends_nothing(vault_paths, mock_transport_factory) -> None:
+    handle = mock_transport_factory({})
+    summary = _collector(vault_paths, handle).run_pbp([2014], dry_run=True)
+    assert summary.dry_run and summary.planned == 0
+    assert handle.requests == []
+
+
+def test_collector_source_has_no_github_com_or_httpx() -> None:
+    text = (Path(__file__).parents[1] / "src/booth_review/sources/nflverse/collector.py").read_text(
+        encoding="utf-8"
+    )
+    assert "httpx" not in text
+    assert "https://github.com" not in text
