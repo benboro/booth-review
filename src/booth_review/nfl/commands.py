@@ -17,7 +17,13 @@ from typing import Any
 from booth_review.build.io import write_review_csv
 from booth_review.config import DataPaths
 from booth_review.errors import BoothReviewError
+from booth_review.nfl.freeze import (
+    freeze_nfl_seasons,
+    parse_nfl_waiver,
+    schedule_drift,
+)
 from booth_review.nfl.games import NflReference
+from booth_review.nfl.gaps import find_nfl_506_gaps
 from booth_review.nfl.inputs import load_nfl_inputs
 from booth_review.nfl.listings import match_506_listings
 from booth_review.nfl.people import (
@@ -26,10 +32,11 @@ from booth_review.nfl.people import (
     register_nfl_people,
 )
 from booth_review.nfl.pipeline import NflBuildOutcome, run_nfl_build
+from booth_review.nfl.seasons import nfl_collectable_season
 from booth_review.reference import read_reference_csv, reference_dir
 from booth_review.resolve.names import csv_unsafe
 from booth_review.seasons import season_of
-from booth_review.vault import VaultRepo
+from booth_review.vault import VaultRepo, batch_message
 
 EXIT_BLOCKED = 4
 
@@ -46,6 +53,16 @@ def add_nfl_parser(sub: Any) -> None:
     build.add_argument("--include-playoffs", action="store_true")
     build.add_argument("--check-acceptance", action="store_true")
     build.add_argument("--no-commit", action="store_true")
+
+    gaps = nfl_sub.add_parser("gaps", help="list played NFL 506 week pages to hand-save")
+    gaps.add_argument("--season", type=int, default=None)
+
+    freeze = nfl_sub.add_parser("freeze", help="freeze completed NFL seasons")
+    freeze.add_argument("--season", type=parse_season_spec, default=None)
+    freeze.add_argument("--waive", type=parse_nfl_waiver, action="append", default=[])
+    freeze.add_argument("--dry-run", action="store_true")
+    freeze.add_argument("--no-commit", action="store_true")
+    freeze.add_argument("--check-drift", action="store_true")
 
     people = nfl_sub.add_parser("people", help="review and register NFL crew names")
     people.add_argument("--season", type=parse_season_spec, default=default_season)
@@ -148,9 +165,79 @@ def _nfl_people(args: argparse.Namespace) -> int:
     return 0
 
 
+def _nfl_gaps(args: argparse.Namespace) -> int:
+    now = datetime.now(UTC)
+    season = args.season if args.season is not None else nfl_collectable_season(now.date())
+    if season is None:
+        print("error: no NFL season is collectable now; pass --season", file=sys.stderr)
+        return 2
+    gaps = find_nfl_506_gaps(DataPaths.from_env(), season, now)
+    if gaps is None:
+        print(
+            "error: nfl schedules missing: run booth-review collect nflverse first", file=sys.stderr
+        )
+        return 2
+    print(
+        f"nfl 506 {season}: judged {gaps.judged}, missing {len(gaps.missing)}, "
+        f"stale {len(gaps.stale)}, saved_at fallbacks {gaps.saved_at_fallbacks}"
+    )
+    if gaps.missing:
+        print(f"missing weeks: {', '.join(gaps.missing)}")
+    if gaps.stale:
+        print(f"stale weeks: {', '.join(gaps.stale)}")
+    return 0
+
+
+def _nfl_freeze(args: argparse.Namespace) -> int:
+    paths = DataPaths.from_env()
+    if args.check_drift:
+        drifted = schedule_drift(paths)
+        print(f"nfl schedule drift: {len(drifted)} season(s)")
+        if drifted:
+            print(f"drifted seasons: {', '.join(str(s) for s in drifted)}")
+            return EXIT_BLOCKED
+        return 0
+    if args.season is None:
+        print("error: --season is required", file=sys.stderr)
+        return 2
+    seasons = _seasons(args.season)
+    today = datetime.now(UTC).date()
+    vault = VaultRepo(paths.vault)
+    vault.check()
+    with vault.lock():
+        result = freeze_nfl_seasons(paths, seasons, today, waivers=args.waive, dry_run=args.dry_run)
+        if result.refused:
+            print("freeze refused:", file=sys.stderr)
+            for season, reason in sorted(result.refused.items()):
+                print(f"  {season}: {reason}", file=sys.stderr)
+            return EXIT_BLOCKED
+        if args.dry_run:
+            for season in seasons:
+                status = "would freeze" if season in result.frozen else "already frozen"
+                print(f"{season}: {status}")
+        elif result.written and not args.no_commit:
+            label = f"{min(seasons)}-{max(seasons)}"
+            vault.commit_batch(
+                batch_message(
+                    "freeze",
+                    "nfl",
+                    label,
+                    {"seasons": len(result.frozen), "waived": len(result.waived)},
+                ),
+                paths=list(result.written),
+            )
+    verb = "would freeze" if args.dry_run else "froze"
+    print(f"nfl {verb} {len(result.frozen)} season(s), {len(result.waived)} waived")
+    return 0
+
+
 def run_nfl_command(args: argparse.Namespace) -> int:
     if args.nfl_command == "build":
         return _nfl_build(args)
     if args.nfl_command == "people":
         return _nfl_people(args)
+    if args.nfl_command == "gaps":
+        return _nfl_gaps(args)
+    if args.nfl_command == "freeze":
+        return _nfl_freeze(args)
     raise AssertionError(f"unknown nfl command: {args.nfl_command!r}")
