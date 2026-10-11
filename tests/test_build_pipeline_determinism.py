@@ -119,6 +119,37 @@ def test_nfl_entries_do_not_move_the_cfb_stamp(tmp_path: Path) -> None:
     assert input_stamp(paths) == datetime(2026, 10, 1, 10, 0, tzinfo=UTC)
 
 
+def test_nfl_host_robots_entries_do_not_move_the_cfb_stamp(tmp_path: Path) -> None:
+    # CR-03: robots.txt copies of NFL-only hosts are NFL inputs; Ratings
+    # Reference's robots.txt is shared and stays a CFB input.
+    paths = DataPaths(vault=tmp_path / "vault")
+    nfl_hosts = (
+        "raw.githubusercontent.com",
+        "api.github.com",
+        "release-assets.githubusercontent.com",
+        "objects.githubusercontent.com",
+        "en.wikipedia.org",
+    )
+    entries = [_entry("cfbd/games/2026.json", "a", "2026-10-01T10:00:00Z")]
+    entries += [
+        _entry(f"_robots/{host}/2026-10-0{day}.txt", "r", f"2026-10-0{day}T10:00:00Z")
+        for day, host in enumerate(nfl_hosts, start=4)
+    ]
+    _write_manifest(paths, entries)
+    assert input_stamp(paths) == datetime(2026, 10, 1, 10, 0, tzinfo=UTC)
+    assert nfl_input_stamp(paths) == datetime(2026, 10, 8, 10, 0, tzinfo=UTC)
+
+    _write_manifest(
+        paths,
+        [
+            *entries,
+            _entry("_robots/ratingsreference.com/2026-10-09.txt", "s", "2026-10-09T10:00:00Z"),
+        ],
+    )
+    assert input_stamp(paths) == datetime(2026, 10, 9, 10, 0, tzinfo=UTC)
+    assert nfl_input_stamp(paths) == datetime(2026, 10, 8, 10, 0, tzinfo=UTC)
+
+
 def test_nfl_input_stamp_reads_only_nfl_entries(tmp_path: Path) -> None:
     paths = DataPaths(vault=tmp_path / "vault")
     assert nfl_input_stamp(paths) == datetime(1970, 1, 1, tzinfo=UTC)
