@@ -147,3 +147,41 @@ def test_international_and_flexed_counts() -> None:
 def test_empty_frame_gives_empty_table() -> None:
     out = special_games_table(table([]))
     assert out.height == 0 and out.columns == list(NFL_SPECIAL_COLUMNS)
+
+
+def test_international_other_is_exclusive() -> None:
+    rows = [
+        game(
+            "a",
+            2015,
+            1,
+            "h",
+            "v",
+            is_international=True,
+            is_standalone=True,
+            slot_name="International",
+            is_special=True,
+        ),
+        game("b", 2015, 2, "h", "v", is_international=True),
+        game("c", 2015, 3, "h", "v", is_agotw=True, is_special=True),
+    ]
+    home = row_for(special_games_table(table(rows)), "h", 2015)
+    assert home["international"] == 2
+    assert home["international_other"] == 1
+    assert home["special"] == 2
+    assert home["standalone_total"] + home["agotw"] + home["cbs_national"] == home["special"]
+
+
+def test_international_other_with_agotw_and_cbs_excluded() -> None:
+    rows = [
+        game("a", 2015, 1, "h", "v", is_international=True, is_agotw=True, is_special=True),
+        game("b", 2015, 2, "h", "w", is_international=True, is_cbs_national=True, is_special=True),
+        game("c", 2015, 3, "x", "v", is_international=True, is_special=False),
+    ]
+    out = special_games_table(table(rows))
+    assert out.columns == list(NFL_SPECIAL_COLUMNS)
+    for r in out.to_dicts():
+        assert r["international_other"] <= r["international"]
+        assert r["standalone_total"] + r["agotw"] + r["cbs_national"] == r["special"]
+    assert row_for(out, "h", 2015)["international_other"] == 0
+    assert row_for(out, "x", 2015)["international_other"] == 1

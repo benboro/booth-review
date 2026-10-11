@@ -47,6 +47,7 @@ NFL_SPECIAL_COLUMNS: tuple[str, ...] = (
     "agotw",
     "cbs_national",
     "international",
+    "international_other",
     "flexed",
     "special",
     "fox_doubleheader_weeks",
@@ -146,6 +147,14 @@ def special_games_table(
         pl.col("is_agotw").sum().alias("agotw"),
         pl.col("is_cbs_national").sum().alias("cbs_national"),
         pl.col("is_international").fill_null(False).sum().alias("international"),
+        (
+            pl.col("is_international").fill_null(False)
+            & ~pl.col("is_standalone").fill_null(False)
+            & ~pl.col("is_agotw").fill_null(False)
+            & ~pl.col("is_cbs_national").fill_null(False)
+        )
+        .sum()
+        .alias("international_other"),
         pl.col("flexed").sum().alias("flexed"),
         pl.col("is_special").sum().alias("special"),
     ]
