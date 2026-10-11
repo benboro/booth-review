@@ -62,7 +62,6 @@ from booth_review.sources.ratingsref.collector import (
 from booth_review.sources.ratingsref.sitemap import parse_sitemap, select_entries
 from booth_review.sources.sports506.collector import Sports506Collector
 from booth_review.sources.sports506.importer import (
-    DEFAULT_INCOMING_DIR,
     ImportResult,
     Sports506Importer,
 )
@@ -690,7 +689,7 @@ def _import_506(args: argparse.Namespace) -> int:
     runtime = build_runtime(with_budget=False)
     try:
         importer = Sports506Importer(runtime.cache, runtime.paths)
-        incoming_dir = args.from_dir if args.from_dir is not None else DEFAULT_INCOMING_DIR
+        incoming_dir = args.from_dir  # None: the importer's own default (D-19)
 
         any_problems = False
         for season in args.season:

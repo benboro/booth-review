@@ -14,13 +14,17 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal, Protocol
 
 from booth_review.config import DataPaths
 from booth_review.errors import FrozenSeasonError
-from booth_review.sources.sports506.collector import WEEK_LABELS, Sports506Collector
+from booth_review.nfl.layout import nfl_506_path, nfl_506_url
+from booth_review.sources.sports506.collector import WEEK_LABELS
+from booth_review.sources.sports506.nfl_parser import nfl_smoke_check
 from booth_review.sources.sports506.weeks import discover_season_weeks, smoke_check
 from booth_review.transport.cache import (
     FreezeGuard,
@@ -29,9 +33,13 @@ from booth_review.transport.cache import (
     RawCache,
     atomic_write_bytes,
 )
-from booth_review.transport.types import FetchRequest
+from booth_review.transport.types import FetchRequest, Source
 
-DEFAULT_INCOMING_DIR = Path("data/incoming/506")
+DEFAULT_INCOMING_DIR = Path("data/incoming/506/cfb")
+LEGACY_INCOMING_DIR = Path("data/incoming/506")
+# D-19: read the old root through the 2026 season, then delete this fallback.
+ROOT_FALLBACK_LAST_SEASON = 2026
+NFL_18_WEEK_FIRST_SEASON = 2021
 
 _MANUAL_ORIGIN = "manual"
 
@@ -44,8 +52,96 @@ _CANONICAL_RE = re.compile(
     r"<link[^>]*rel=[\"']canonical[\"'][^>]*href=[\"'][^\"']*ncaaf\.php\?yr=(\d{4})(?:&amp;|&)wk=(\d{1,2}|B)[\"']",
     re.IGNORECASE,
 )
-_TITLE_RE = re.compile(r"<title>[^<]*Week\s+(\d{1,2}|B),\s*(\d{4})[^<]*</title>", re.IGNORECASE)
+# The lookahead keeps an "NFL Maps" title from reading as a CFB page.
+_TITLE_RE = re.compile(
+    r"<title>(?![^<]*\bNFL\b)[^<]*Week\s+(\d{1,2}|B),\s*(\d{4})[^<]*</title>", re.IGNORECASE
+)
 _FILENAME_RE = re.compile(r"^(\d{4})-wk(\d{1,2}|B)\.html$")
+
+_NFL_CANONICAL_RE = re.compile(
+    r"<link[^>]*rel=[\"']canonical[\"'][^>]*href=[\"'][^\"']*nfl\.php\?yr=(\d{4})(?:&amp;|&)wk=(\d{1,2})[\"']",
+    re.IGNORECASE,
+)
+_NFL_TITLE_RE = re.compile(
+    r"<title>[^<]*NFL Maps:\s*Week\s+(\d{1,2}),\s*(\d{4})[^<]*</title>", re.IGNORECASE
+)
+_NFL_FILENAME_RE = re.compile(r"^(\d{4})-nfl-wk(\d{1,2})\.html$")
+
+
+class _Smoke(Protocol):
+    @property
+    def passed(self) -> bool: ...
+
+    @property
+    def reason(self) -> str | None: ...
+
+
+@dataclass(frozen=True)
+class PageProfile:
+    """Everything that differs between the CFB and NFL 506 hand-save importers."""
+
+    league: Literal["cfb", "nfl"]
+    source: Source
+    canonical_re: re.Pattern[str]
+    title_re: re.Pattern[str]
+    filename_re: re.Pattern[str]
+    labels: Callable[[int], tuple[str, ...]]
+    request: Callable[[int, str], FetchRequest]
+    smoke: Callable[[bytes, int, str], _Smoke]
+    season_marker: Callable[[int], str]
+    default_dir: Path
+
+
+def _cfb_request(season: int, label: str) -> FetchRequest:
+    name = label if label == "B" else label.zfill(2)
+    return FetchRequest(
+        source="sports506",
+        season=season,
+        url=f"https://506sports.com/ncaaf.php?yr={season}&wk={label}",
+        cache_path=f"sports506/{season}/wk-{name}.html",
+    )
+
+
+def _nfl_request(season: int, label: str) -> FetchRequest:
+    week = int(label)
+    return FetchRequest(
+        source="nfl_sports506",
+        season=season,
+        url=nfl_506_url(season, week),
+        cache_path=nfl_506_path(season, week),
+    )
+
+
+def _nfl_labels(season: int) -> tuple[str, ...]:
+    last = 18 if season >= NFL_18_WEEK_FIRST_SEASON else 17
+    return tuple(str(n) for n in range(1, last + 1))
+
+
+CFB_PROFILE = PageProfile(
+    league="cfb",
+    source="sports506",
+    canonical_re=_CANONICAL_RE,
+    title_re=_TITLE_RE,
+    filename_re=_FILENAME_RE,
+    labels=lambda _season: tuple(WEEK_LABELS),
+    request=_cfb_request,
+    smoke=lambda content, season, label: smoke_check(content, season=season, week_label=label),
+    season_marker=str,
+    default_dir=DEFAULT_INCOMING_DIR,
+)
+
+NFL_PROFILE = PageProfile(
+    league="nfl",
+    source="nfl_sports506",
+    canonical_re=_NFL_CANONICAL_RE,
+    title_re=_NFL_TITLE_RE,
+    filename_re=_NFL_FILENAME_RE,
+    labels=_nfl_labels,
+    request=_nfl_request,
+    smoke=lambda content, season, label: nfl_smoke_check(content, season=season, week=int(label)),
+    season_marker=str,
+    default_dir=Path("data/incoming/506/nfl"),
+)
 
 
 @dataclass
@@ -73,6 +169,8 @@ class ImportResult:
     unsupported_labels: list[str] = field(default_factory=list)
     """Nav labels outside WEEK_LABELS (e.g. a future week number), surfaced
     rather than silently dropped."""
+    root_pages: int = 0
+    """D-19: recognized CFB pages taken from the legacy incoming root."""
 
     def counts(self) -> dict[str, int]:
         """Counts for vault.batch_message, count-only (never real page text)."""
@@ -87,34 +185,39 @@ class ImportResult:
         return bool(self.missing or self.skipped_invalid or self.unsupported_labels)
 
 
-def _normalize_label(raw: str) -> str | None:
+def _normalize_label(raw: str, season: int, profile: PageProfile) -> str | None:
     label = raw if raw == "B" else str(int(raw))
-    return label if label in WEEK_LABELS else None
+    return label if label in profile.labels(season) else None
 
 
 def _week_sort_key(label: str) -> tuple[int, int]:
     return (1, 0) if label == "B" else (0, int(label))
 
 
-def identify_page(path: Path, content: bytes) -> tuple[int, str] | None:
+def identify_page(
+    path: Path, content: bytes, profile: PageProfile = CFB_PROFILE
+) -> tuple[int, str] | None:
     """Return (season, week label) for a saved 506 week page, or None if unknown.
 
     Page content wins: the canonical link, then the title. The filename pattern
     `{season}-wk{label}.html` is only a fallback for pages that carry neither.
     """
     text = content.decode("utf-8", errors="replace")
-    canonical = _CANONICAL_RE.search(text)
+    canonical = profile.canonical_re.search(text)
     if canonical:
-        label = _normalize_label(canonical.group(2))
-        return (int(canonical.group(1)), label) if label else None
-    title = _TITLE_RE.search(text)
+        season = int(canonical.group(1))
+        label = _normalize_label(canonical.group(2), season, profile)
+        return (season, label) if label else None
+    title = profile.title_re.search(text)
     if title:
-        label = _normalize_label(title.group(1))
-        return (int(title.group(2)), label) if label else None
-    named = _FILENAME_RE.match(path.name)
+        season = int(title.group(2))
+        label = _normalize_label(title.group(1), season, profile)
+        return (season, label) if label else None
+    named = profile.filename_re.match(path.name)
     if named:
-        label = _normalize_label(named.group(2))
-        return (int(named.group(1)), label) if label else None
+        season = int(named.group(1))
+        label = _normalize_label(named.group(2), season, profile)
+        return (season, label) if label else None
     return None
 
 
@@ -128,7 +231,9 @@ def _looks_like_html(text: str) -> bool:
     return "<html" in lowered or "<!doctype html" in lowered
 
 
-def _validation_failure_reason(content: bytes, season: int) -> str | None:
+def _validation_failure_reason(
+    content: bytes, season: int, profile: PageProfile = CFB_PROFILE
+) -> str | None:
     """Return a rejection reason, or None when `content` is acceptable."""
     if not content:
         return "empty file"
@@ -137,7 +242,7 @@ def _validation_failure_reason(content: bytes, season: int) -> str | None:
         return "looks like a Cloudflare challenge/error page"
     if not _looks_like_html(text):
         return "does not look like HTML"
-    if str(season) not in text:
+    if profile.season_marker(season) not in text:
         return f"does not mention {season}"
     return None
 
@@ -145,7 +250,10 @@ def _validation_failure_reason(content: bytes, season: int) -> str | None:
 class Sports506Importer:
     """Imports hand-saved 506 week pages from an incoming folder into the vault."""
 
-    def __init__(self, cache: RawCache, paths: DataPaths) -> None:
+    def __init__(
+        self, cache: RawCache, paths: DataPaths, *, profile: PageProfile = CFB_PROFILE
+    ) -> None:
+        self._profile = profile
         self._cache = cache
         self._paths = paths
         self._manifest = Manifest(paths.manifest)
@@ -171,7 +279,7 @@ class Sports506Importer:
             if not path.is_file():
                 continue
             content = path.read_bytes()
-            identity = identify_page(path, content)
+            identity = identify_page(path, content, self._profile)
             if identity is None:
                 result.unrecognized += 1
                 continue
@@ -199,6 +307,9 @@ class Sports506Importer:
         see (this run's incoming pages plus whatever is already cached),
         never a fixed 18-week assumption.
         """
+        if self._profile.league == "nfl":
+            # NFL never relies on 506's nav: the week list is fixed by season.
+            return list(self._profile.labels(season)), "default", []
         labels: set[str] = set()
         unsupported: set[str] = set()
         for content in pages.values():
@@ -220,25 +331,33 @@ class Sports506Importer:
             expected_source = "default"
         return expected, expected_source, sorted(unsupported, key=_week_sort_key)
 
-    def run(self, season: int, *, incoming_dir: Path, force: bool = False) -> ImportResult:
+    def run(
+        self, season: int, *, incoming_dir: Path | None = None, force: bool = False
+    ) -> ImportResult:
+        profile = self._profile
         # D-06/D-07: a frozen season refuses every write, checked before any
         # file is scanned or touched.
         freeze = FreezeGuard.load(self._paths.frozen)
-        if freeze.is_frozen("sports506", season):
-            raise FrozenSeasonError(f"cannot import frozen season: sports506 {season}")
+        if freeze.is_frozen(profile.source, season):
+            raise FrozenSeasonError(f"cannot import frozen season: {profile.source} {season}")
 
         result = ImportResult(season=season)
-        collector = Sports506Collector(self._cache)
-        requests_by_label = dict(zip(WEEK_LABELS, collector.plan(season), strict=True))
+        labels = profile.labels(season)
+        requests_by_label = {label: profile.request(season, label) for label in labels}
         saved_mtimes: dict[str, float] = {}
-        pages = self._scan(incoming_dir, season, result, saved_mtimes)
+        if incoming_dir is not None:
+            pages = self._scan(incoming_dir, season, result, saved_mtimes)
+        else:
+            pages = self._scan(profile.default_dir, season, result, saved_mtimes)
+            if profile.league == "cfb" and season <= ROOT_FALLBACK_LAST_SEASON:
+                pages = self._merge_legacy_root(pages, season, result, saved_mtimes)
         conflicted = {item.label for item in result.skipped_invalid}
 
         result.expected, result.expected_source, result.unsupported_labels = self._expected_weeks(
             season, pages
         )
 
-        for label in WEEK_LABELS:
+        for label in labels:
             req = requests_by_label[label]
             if label in conflicted:
                 continue
@@ -251,7 +370,7 @@ class Sports506Importer:
                 result.skipped_existing.append(label)
                 continue
 
-            reason = _validation_failure_reason(content, season)
+            reason = _validation_failure_reason(content, season, profile)
             if reason is not None:
                 result.skipped_invalid.append(SkippedFile(label=label, reason=reason))
                 continue
@@ -259,7 +378,7 @@ class Sports506Importer:
             # D-03: reject a page that validates but parses to implausibly
             # few games/crews (a bad or incomplete hand-save, or an older
             # layout this parser can't read), before it's ever written.
-            smoke = smoke_check(content, season=season, week_label=label)
+            smoke = profile.smoke(content, season, label)
             if not smoke.passed:
                 result.skipped_invalid.append(
                     SkippedFile(label=label, reason=smoke.reason or "smoke check failed")
@@ -276,6 +395,47 @@ class Sports506Importer:
         ]
 
         return result
+
+    def _merge_legacy_root(
+        self,
+        pages: dict[str, bytes],
+        season: int,
+        result: ImportResult,
+        saved_mtimes: dict[str, float],
+    ) -> dict[str, bytes]:
+        """D-19: add CFB pages saved at the old incoming root (non-recursive).
+
+        Identical bytes in both folders collapse to one; differing bytes for
+        one week reject that week as a conflict, as within a single folder.
+        """
+        root_mtimes: dict[str, float] = {}
+        root_result = ImportResult(season=season)
+        root_pages = self._scan(LEGACY_INCOMING_DIR, season, root_result, root_mtimes)
+        result.unrecognized += root_result.unrecognized
+        merged = dict(pages)
+        conflicted = {item.label for item in result.skipped_invalid}
+        for item in root_result.skipped_invalid:
+            if item.label not in conflicted:
+                result.skipped_invalid.append(item)
+                conflicted.add(item.label)
+            merged.pop(item.label, None)
+            saved_mtimes.pop(item.label, None)
+        for label, content in root_pages.items():
+            if label in conflicted:
+                continue
+            if label in merged:
+                if merged[label] != content:
+                    merged.pop(label)
+                    saved_mtimes.pop(label, None)
+                    result.skipped_invalid.append(
+                        SkippedFile(label=label, reason="two different files claim this week")
+                    )
+                    conflicted.add(label)
+                continue
+            merged[label] = content
+            saved_mtimes[label] = root_mtimes[label]
+            result.root_pages += 1
+        return merged
 
     def _import_one(
         self, req: FetchRequest, dest: Path, content: bytes, saved_mtime: float
