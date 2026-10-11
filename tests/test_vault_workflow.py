@@ -210,7 +210,10 @@ def test_deploy_vars_never_appear_inside_a_run_block(name: str) -> None:
 
 
 _BASH = shutil.which("bash")
-_DEPLOY_GATE = "steps.job.outputs.deploy_ready == 'true' && steps.gate.outputs.publish == 'yes'"
+_DEPLOY_GATE = (
+    "steps.result.outputs.deploy_ready == 'true' && steps.gate.outputs.publish == 'yes'"
+    " && steps.job.outputs.code != '3'"
+)
 
 
 def _step(step_id: str) -> dict[str, object]:
@@ -240,14 +243,21 @@ def _run_step(
         text=True,
         check=False,
     )
+    (tmp_path / "step.err").write_text(result.stderr, encoding="utf-8")
     lines = output.read_text(encoding="utf-8").splitlines()
     return result.returncode, dict(line.split("=", 1) for line in lines if "=" in line)
 
 
 def test_deploy_steps_gated_on_the_shell_computed_publish_output() -> None:
-    gated = [s for s in _steps() if s.get("if") == _DEPLOY_GATE]
+    # CR-02: `!cancelled()` replaces the implicit success() so a job step that
+    # hit its timeout still deploys its CFB-only result; the deploy itself also
+    # needs the target checkout to have succeeded.
+    assert _step("target")["if"] == "${{ !cancelled() && " + _DEPLOY_GATE + " }}"
+    assert _step("deploy")["if"] == (
+        "${{ !cancelled() && steps.target.outcome == 'success' && " + _DEPLOY_GATE + " }}"
+    )
+    gated = [s for s in _steps() if _DEPLOY_GATE in str(s.get("if", ""))]
     assert {s.get("id") for s in gated} == {"target", "deploy"}
-    assert len(gated) == 2
     assert not any("vars.PUBLISH_ENABLED" in str(s.get("if", "")) for s in _steps())
     deploy = _step("deploy")
     assert "booth-review deploy --site" in str(deploy["run"])
@@ -324,8 +334,12 @@ def test_job_step_passes_update_flags_and_filters_result_lines() -> None:
     run = str(job["run"])
     for flag in ("--update", "--site-out", "--result-out", "--attention-out"):
         assert flag in run
-    assert "grep -E '^(deploy_ready|stale_only)=(true|false)$'" in run
     assert '>> "$GITHUB_OUTPUT"' in run
+    # CR-02: the result file is read by its own step, which also runs after a
+    # job-step timeout (the job step then sets no outputs).
+    result = str(_step("result")["run"])
+    assert "grep -E '^(deploy_ready|stale_only)=(true|false)$'" in result
+    assert "grep" not in run
 
 
 def test_job_step_env_carries_the_github_token_for_the_nflverse_api_route() -> None:
@@ -402,7 +416,7 @@ def test_workflow_fails_hard_only_outside_0_4_and_5_or_on_deploy_failure() -> No
     env = step["env"]
     assert "0|4|5) ;;" in run
     assert '"$DEPLOY_CODE" != "0"' in run
-    assert set(env) == {"JOB_CODE", "DEPLOY_CODE", "DEPLOY_EXPECTED"}  # type: ignore[arg-type]
+    assert set(env) == {"JOB_CODE", "JOB_OUTCOME", "DEPLOY_CODE", "DEPLOY_EXPECTED"}  # type: ignore[arg-type]
 
 
 # -- WR-03: a due deploy that never ran is a problem, not a clean run ----------------------------
@@ -507,6 +521,328 @@ def test_fail_step_fails_when_a_due_deploy_did_not_run(
         tmp_path,
     )
     assert (code != 0) is fails
+
+
+# -- CR-02: a job step that hits its timeout still deploys its CFB-only result -------------------
+#
+# GitHub Actions fails (does not cancel) a step that hits its own timeout-minutes;
+# the step sets no outputs, and every later step whose `if:` has no status
+# function gets an implicit success() and is skipped. `job run` writes the
+# CFB-only result file before the NFL block, so the steps after the job step
+# must still run, and still deploy only on deploy_ready, never on exit 3.
+
+_STATUS_FUNCTIONS = {"always", "cancelled", "success", "failure"}
+_EXPR_TOKEN_RE = re.compile(r"\s*(&&|\|\||==|!=|!|\(|\)|'[^']*'|[A-Za-z_][\w.-]*)")
+
+
+class _Condition:
+    """Evaluates the `if:` expressions this workflow uses, as Actions does:
+    `&&`, `||`, `!`, parentheses, case-insensitive `==`/`!=`, 'literals',
+    `steps.<id>.outcome`, `steps.<id>.outputs.<name>` (a missing one is
+    empty) and the four status functions. An expression with no status
+    function gets an implicit `success() &&`."""
+
+    def __init__(self, steps: dict[str, dict[str, object]], *, failed: bool) -> None:
+        self._steps = steps
+        self._failed = failed
+        self._tokens: list[str] = []
+
+    def runs(self, expr: object) -> bool:
+        if expr is None:
+            return not self._failed
+        text = str(expr).strip()
+        if text.startswith("${{"):
+            assert text.endswith("}}"), text
+            text = text[3:-2]
+        self._tokens = []
+        pos = 0
+        while text[pos:].strip():
+            match = _EXPR_TOKEN_RE.match(text, pos)
+            assert match is not None, f"unsupported expression: {text[pos:]!r}"
+            self._tokens.append(match.group(1))
+            pos = match.end()
+        implicit = not any(
+            tok in _STATUS_FUNCTIONS and nxt == "("
+            for tok, nxt in zip(self._tokens, [*self._tokens[1:], ""], strict=True)
+        )
+        value = self._truthy(self._or())
+        assert not self._tokens, f"trailing tokens: {self._tokens}"
+        return value and not (implicit and self._failed)
+
+    @staticmethod
+    def _truthy(value: object) -> bool:
+        return bool(value)
+
+    def _take(self, expected: str | None = None) -> str:
+        token = self._tokens.pop(0)
+        assert expected is None or token == expected, (token, expected)
+        return token
+
+    def _or(self) -> object:
+        value = self._and()
+        while self._tokens[:1] == ["||"]:
+            self._take()
+            right = self._and()
+            value = value if self._truthy(value) else right
+        return value
+
+    def _and(self) -> object:
+        value = self._unary()
+        while self._tokens[:1] == ["&&"]:
+            self._take()
+            right = self._unary()
+            value = right if self._truthy(value) else value
+        return value
+
+    def _unary(self) -> object:
+        if self._tokens[:1] == ["!"]:
+            self._take()
+            return not self._truthy(self._unary())
+        return self._compare()
+
+    def _compare(self) -> object:
+        left = self._primary()
+        if self._tokens[:1] in (["=="], ["!="]):
+            op = self._take()
+            right = self._primary()
+            equal = str(left).lower() == str(right).lower()
+            return equal if op == "==" else not equal
+        return left
+
+    def _primary(self) -> object:
+        token = self._take()
+        if token == "(":
+            value = self._or()
+            self._take(")")
+            return value
+        if token.startswith("'"):
+            return token[1:-1]
+        if self._tokens[:1] == ["("]:
+            self._take("(")
+            self._take(")")
+            return {
+                "always": True,
+                "cancelled": False,
+                "success": not self._failed,
+                "failure": self._failed,
+            }[token]
+        parts = token.split(".")
+        assert parts[0] == "steps", token
+        step = self._steps.get(parts[1])
+        if step is None:
+            return ""
+        if parts[2] == "outcome":
+            return step["outcome"]
+        assert parts[2] == "outputs", token
+        outputs = step["outputs"]
+        assert isinstance(outputs, dict)
+        return outputs.get(parts[3], "")
+
+
+def _label(step: dict[str, object]) -> str:
+    """A step's id, else its name, else the action it uses (without the pin)."""
+    return str(step.get("id") or step.get("name") or str(step["uses"]).split("@")[0])
+
+
+def _simulate(
+    tmp_path: Path,
+    *,
+    job_outcome: str = "success",
+    job_code: str | None = "0",
+    result_file: str | None = "deploy_ready=true\nstale_only=false\n",
+    publish: str = "yes",
+    failing_step: str | None = None,
+) -> list[str]:
+    """Walk the steps as the Actions runner decides them and return the ids
+    (or names) of the steps that run. The "result" step's own run block is
+    executed against $RUNNER_TEMP/result.txt; every other step is stubbed."""
+    assert any(s.get("id") == "result" for s in _steps())
+    if result_file is not None:
+        (tmp_path / "result.txt").write_text(result_file, encoding="utf-8")
+    state: dict[str, dict[str, object]] = {}
+    failed = False
+    ran: list[str] = []
+    for step in _steps():
+        sid = _label(step)
+        if not _Condition(state, failed=failed).runs(step.get("if")):
+            state[sid] = {"outcome": "skipped", "outputs": {}}
+            continue
+        ran.append(sid)
+        outcome, outputs = "success", {}
+        if sid == failing_step:
+            outcome = "failure"
+        elif sid == "gate":
+            outputs = {"publish": publish}
+        elif sid == "job":
+            outcome = job_outcome
+            outputs = {} if job_code is None else {"code": job_code}
+        elif sid == "result":
+            code, outputs = _run_step(step, {}, tmp_path)
+            assert code == 0
+        elif sid == "deploy":
+            outputs = {"code": "0"}
+        state[sid] = {"outcome": outcome, "outputs": outputs}
+        failed = failed or outcome == "failure"
+    return ran
+
+
+_SETUP = [
+    "Require a pinned JOB_REF (D-10: never default to main)",
+    "gate",
+    "Checkout vault (self)",
+    "Checkout public repo at pinned tag",
+    "astral-sh/setup-uv",
+    "Install booth-review",
+    "Configure the vault's git identity",
+]
+_TAIL = [
+    "Update the attention issue (count-only, one tracked issue)",
+    "Fail the workflow on a hard failure",
+]
+_DEPLOYS = ["target", "deploy"]
+_READY = "deploy_ready=true\nstale_only=false\n"
+_CFB_REPORT = "Counts only.\n- 506 2026 weeks to save: 1"
+
+
+def test_job_step_has_its_own_timeout_well_under_the_job_timeout() -> None:
+    workflow = yaml.safe_load(WORKFLOW_TEXT)
+    job_timeout = workflow["jobs"]["collect"]["timeout-minutes"]
+    step_timeout = _step("job")["timeout-minutes"]
+    assert job_timeout == 60
+    assert isinstance(step_timeout, int)
+    # Room for setup before the step and the deploy and issue update after it.
+    assert 0 < step_timeout <= job_timeout - 10
+    timed = [_label(s) for s in _steps() if "timeout-minutes" in s]
+    assert timed == ["job"]
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+@pytest.mark.parametrize(
+    ("scenario", "kwargs", "after_job"),
+    [
+        # A hung NFL step: the CFB-only result file is there, so it deploys.
+        ("timeout-cfb-ready", {"job_outcome": "failure", "job_code": None}, ["result", *_DEPLOYS]),
+        # Timed out before the CFB result was written: nothing to deploy.
+        (
+            "timeout-no-result",
+            {"job_outcome": "failure", "job_code": None, "result_file": None},
+            ["result"],
+        ),
+        (
+            "timeout-not-ready",
+            {
+                "job_outcome": "failure",
+                "job_code": None,
+                "result_file": "deploy_ready=false\nstale_only=false\n",
+            },
+            ["result"],
+        ),
+        ("finished-0", {}, ["result", *_DEPLOYS]),
+        ("finished-4", {"job_code": "4"}, ["result", *_DEPLOYS]),
+        # Exit 3 never deploys, even if a result file said deploy_ready=true.
+        ("finished-3", {"job_code": "3"}, ["result"]),
+        ("not-ready", {"result_file": "deploy_ready=false\nstale_only=false\n"}, ["result"]),
+        (
+            "publishing-off",
+            {"publish": "no", "job_outcome": "failure", "job_code": None},
+            ["result"],
+        ),
+    ],
+    ids=[
+        "timeout-cfb-ready",
+        "timeout-no-result",
+        "timeout-not-ready",
+        "finished-0",
+        "finished-4",
+        "finished-3",
+        "not-ready",
+        "publishing-off",
+    ],
+)
+def test_steps_after_the_job_step_run_after_its_timeout_and_deploy_only_when_ready(
+    scenario: str, kwargs: dict[str, object], after_job: list[str], tmp_path: Path
+) -> None:
+    ran = _simulate(tmp_path, **kwargs)  # type: ignore[arg-type]
+    assert ran == [*_SETUP, "job", *after_job, *_TAIL], scenario
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+@pytest.mark.parametrize("failing", ["Install booth-review", "target"])
+def test_a_failed_setup_or_target_checkout_still_never_deploys(
+    failing: str, tmp_path: Path
+) -> None:
+    ran = _simulate(tmp_path, failing_step=failing)
+    if failing == "target":
+        assert ran == [*_SETUP, "job", "result", "target", *_TAIL]
+    else:
+        # Every later step but the two always() ones is skipped, the job step
+        # included, so the result step never reads a file.
+        assert ran == [*_SETUP[: _SETUP.index(failing) + 1], *_TAIL]
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        ("deploy_ready=true\nstale_only=false\n", {"deploy_ready": "true", "stale_only": "false"}),
+        ("deploy_ready=false\nstale_only=true\n", {"deploy_ready": "false", "stale_only": "true"}),
+        (None, {}),
+        ("deploy_ready=True\nnoise\n", {}),
+    ],
+    ids=["ready", "stale-only", "missing", "malformed"],
+)
+def test_result_step_reads_only_the_two_exact_result_lines(
+    content: str | None, expected: dict[str, str], tmp_path: Path
+) -> None:
+    if content is not None:
+        (tmp_path / "result.txt").write_text(content, encoding="utf-8")
+    code, outputs = _run_step(_step("result"), {}, tmp_path)
+    assert code == 0
+    assert outputs == expected
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+@pytest.mark.parametrize("cfb_saved", [True, False], ids=["after-cfb-result", "before-cfb-result"])
+def test_attention_step_reports_a_job_step_timeout_and_keeps_the_issue_open(
+    cfb_saved: bool, tmp_path: Path
+) -> None:
+    env, log = _fake_gh(tmp_path)
+    if cfb_saved:
+        (tmp_path / "result.txt").write_text(_READY, encoding="utf-8")
+        (tmp_path / "attention.md").write_text(_CFB_REPORT, encoding="utf-8")
+    env.update(
+        {
+            "JOB_CODE": "",
+            "JOB_OUTCOME": "failure",
+            "DEPLOY_CODE": "0" if cfb_saved else "",
+            "DEPLOY_EXPECTED": "true" if cfb_saved else "false",
+            "STALE_ONLY": "false" if cfb_saved else "",
+        }
+    )
+    code, _outputs = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    calls = log.read_text(encoding="utf-8").splitlines()
+    assert not any(c.startswith("issue close") for c in calls)
+    assert any(c.startswith("issue edit 7 ") and "--body-file" in c for c in calls)
+    body = (tmp_path / "attention-body.md").read_text(encoding="utf-8")
+    if cfb_saved:
+        assert body.startswith(_CFB_REPORT + "\n")
+        assert "step timeout after the CFB result was saved" in body
+        assert "live site was not updated" not in body
+    else:
+        assert body.startswith("job run hit its step timeout without an attention report\n")
+        assert "step timeout before the CFB result was saved" in body
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_fail_step_names_a_job_step_timeout_even_after_a_good_deploy(tmp_path: Path) -> None:
+    code, _outputs = _run_step(
+        _fail_step(),
+        {"JOB_CODE": "", "JOB_OUTCOME": "failure", "DEPLOY_CODE": "0", "DEPLOY_EXPECTED": "true"},
+        tmp_path,
+    )
+    assert code != 0
+    assert "job run hit its step timeout" in (tmp_path / "step.err").read_text(encoding="utf-8")
 
 
 # -- gitattributes ---------------------------------------------------------------------------
