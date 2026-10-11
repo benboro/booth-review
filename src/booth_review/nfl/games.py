@@ -37,7 +37,9 @@ from booth_review.nfl.inputs import NflInputs
 from booth_review.nfl.listings import ListingMatch, match_506_listings
 from booth_review.nfl.people import CrewResolution, resolve_crew
 from booth_review.nfl.reference import (
+    NflLeadBoothOverride,
     NflWeekOverride,
+    load_nfl_lead_booth_overrides,
     load_nfl_stadium_overrides,
     load_nfl_stadiums,
     load_nfl_week_overrides,
@@ -232,6 +234,8 @@ class NflReference:
     eras: Sequence[MeasurementEra]
     #: nflverse_game_id -> venue stadium_id; applied ahead of nflverse's own stadium_id.
     stadium_overrides: Mapping[str, str] = field(default_factory=dict)
+    #: season -> cited lead-booth override (D-02); used by Task 1 (nfl/task1.py).
+    lead_booth_overrides: Mapping[int, NflLeadBoothOverride] = field(default_factory=dict)
 
     @classmethod
     def load(cls, reference_dir: Path) -> NflReference:
@@ -243,6 +247,7 @@ class NflReference:
             people=load_people(reference_dir),
             eras=load_eras(reference_dir),
             stadium_overrides=load_nfl_stadium_overrides(reference_dir),
+            lead_booth_overrides=load_nfl_lead_booth_overrides(reference_dir),
         )
 
 

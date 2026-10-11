@@ -1,8 +1,10 @@
-"""The NFL build behind `booth-review nfl build` (D-20 step 2 deliverable).
+"""The NFL build behind `booth-review nfl build` (D-20 steps 2 and 3).
 
 Everything runs inside one `VaultRepo.lock()`: load inputs, assemble the game
-frame, build the Task 2 table, check 2014-2015 acceptance, write processed/
-tables and interim/ review CSVs, then make one path-scoped, count-only commit.
+frame, build the Task 2 table and the Task 1 crew table (`nfl_task1_crews`, with
+its lead-booth, AGOTW-miss, single-header and model review CSVs), check 2014-2015
+acceptance, write processed/ tables and interim/ review CSVs, then make one
+path-scoped, count-only commit.
 Tables go to the vault only (D-23); nothing is published. A build with an
 invalid week override is blocked: review files are written, tables are not.
 """
@@ -23,9 +25,21 @@ from booth_review.nfl.games import NflGameTable, NflReference, assemble_nfl_game
 from booth_review.nfl.inputs import load_nfl_inputs
 from booth_review.nfl.reference import load_nfl_franchises
 from booth_review.nfl.tables import special_games_table, write_nfl_tables, write_review_files
+from booth_review.nfl.task1 import TASK1_TABLE, build_task1
 from booth_review.vault import VaultRepo, batch_message
 
 ExtraTables = Callable[[NflGameTable, NflReference], Mapping[str, pl.DataFrame]]
+
+#: Task 1 counts added to the commit message, with short labels: the vault's
+#: count-only message whitelist caps a message at 120 characters.
+_MESSAGE_COUNTS: tuple[tuple[str, str], ...] = (
+    ("ambiguous_fox_weeks", "ambig"),
+    ("seasons_close", "close"),
+    ("seasons_tied", "tied"),
+    ("agotw_miss_weeks", "misses"),
+    ("skipped_single_header_weeks", "single"),
+)
+_MAX_MESSAGE_LEN = 120
 
 
 @dataclass(frozen=True)
@@ -74,22 +88,30 @@ def run_nfl_build(
             written = write_review_files(paths, table.reviews)
         else:
             special = special_games_table(table, load_nfl_franchises(reference_directory))
-            extra = extra_tables(table, ref) if extra_tables is not None else None
+            extra: Mapping[str, pl.DataFrame]
+            task1_reviews: Mapping[str, list[dict[str, object]]] = {}
+            if extra_tables is not None:
+                # Test hook: replaces the Task 1 table.
+                extra = extra_tables(table, ref)
+            else:
+                task1, task1_reviews, task1_counts = build_task1(table, ref)
+                extra = {TASK1_TABLE: task1}
+                counts.update(task1_counts)
             written = write_nfl_tables(paths, table, special, extra)
+            written += write_review_files(paths, task1_reviews)
 
         committed = False
         if commit:
             label = f"{min(seasons)}-{max(seasons)}" if seasons else "none"
-            message = batch_message(
-                "build",
-                "nfl",
-                label,
-                {
-                    "games": counts["games"],
-                    "standalone": counts["standalone"],
-                    "blocked": int(blocked),
-                },
-            )
+            base = {
+                "games": counts["games"],
+                "standalone": counts["standalone"],
+                "blocked": int(blocked),
+            }
+            task1_part = {short: int(counts[k]) for k, short in _MESSAGE_COUNTS if k in counts}
+            message = batch_message("build", "nfl", label, {**base, **task1_part})
+            if len(message) > _MAX_MESSAGE_LEN:
+                message = batch_message("build", "nfl", label, base)
             committed = vault.commit_batch(message, paths=sorted(set(written)))
 
     return NflBuildOutcome(

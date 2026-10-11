@@ -124,13 +124,12 @@ def band_expectations(frame: pl.DataFrame, outcome: str) -> dict[int, tuple[int,
     A band whose pooled group has no games is absent (its residuals are null).
     """
     data = _usable(frame, outcome).with_columns(_band_expr().alias("band"))
-    sums: dict[int, tuple[int, float]] = {i: (0, 0.0) for i in range(len(SPREAD_BAND_EDGES))}
-    for band, n, total in (
-        data.group_by("band")
-        .agg(pl.len().alias("n"), pl.col(outcome).cast(pl.Float64).sum().alias("total"))
-        .iter_rows()
-    ):
-        sums[int(band)] = (int(n), float(total))
+    # Per-band filters rather than a group_by keep the float sums in row order, so a
+    # rebuild is byte-identical.
+    sums: dict[int, tuple[int, float]] = {}
+    for i in range(len(SPREAD_BAND_EDGES)):
+        values = data.filter(pl.col("band") == i)[outcome].cast(pl.Float64)
+        sums[i] = (values.len(), float(values.sum()) if values.len() else 0.0)
 
     groups: list[list[int]] = [[i] for i in sorted(sums)]
 
