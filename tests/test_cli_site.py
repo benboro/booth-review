@@ -30,6 +30,8 @@ SITE_SRC = REPO_ROOT / "site"
 DOCS_DIR = REPO_ROOT / "docs"
 FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "contract" / "site-data.fixture.json"
 
+NFL_FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "contract" / "nfl-data.fixture.json"
+
 _SYNTHETIC_KEY = "synthetic-test-key-0000"
 
 
@@ -43,6 +45,7 @@ def site_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("BOOTH_REVIEW_SITE_SRC", str(SITE_SRC))
     monkeypatch.setenv("BOOTH_REVIEW_DOCS", str(DOCS_DIR))
     monkeypatch.setenv("BOOTH_REVIEW_SITE_FIXTURE", str(FIXTURE_PATH))
+    monkeypatch.setenv("BOOTH_REVIEW_NFL_FIXTURE", str(NFL_FIXTURE_PATH))
     monkeypatch.delenv("CFBD_API_KEY", raising=False)
     monkeypatch.delenv("BOOTH_REVIEW_VAULT", raising=False)
     return tmp_path
@@ -54,12 +57,8 @@ def test_site_help_exits_0() -> None:
     assert exc.value.code == 0
 
 
-def test_fixture_build_copies_every_site_source_file(site_env: Path) -> None:
-    out = site_env / "out"
-
-    exit_code = main(["site", "--fixture", "--out", str(out)])
-
-    assert exit_code == 0
+def _site_source_files(*, include_nfl: bool) -> list[Path]:
+    found: list[Path] = []
     for path in SITE_SRC.rglob("*"):
         if not path.is_file():
             continue
@@ -68,12 +67,76 @@ def test_fixture_build_copies_every_site_source_file(site_env: Path) -> None:
             continue
         if path.suffix not in {".html", ".js", ".css"}:
             continue
+        if not include_nfl and rel.parts[:2] == ("sports", "nfl"):
+            continue
+        found.append(rel)
+    return found
+
+
+def test_fixture_build_copies_every_site_source_file(site_env: Path) -> None:
+    out = site_env / "out"
+
+    exit_code = main(["site", "--fixture", "--out", str(out)])
+
+    assert exit_code == 0
+    for rel in _site_source_files(include_nfl=False):
         assert (out / rel).is_file(), rel
+    assert not (out / "sports" / "nfl").exists()
 
     assert (out / "site-data.json").is_file()
     assert (out / "methodology.html").is_file()
     assert (out / "coverage.html").is_file()
     assert (out / ".booth-review-site").is_file()
+
+
+def test_flag_on_build_copies_every_site_source_file(site_env: Path) -> None:
+    out = site_env / "out"
+
+    assert main(["site", "--fixture", "--nfl", "--out", str(out)]) == 0
+
+    for rel in _site_source_files(include_nfl=True):
+        assert (out / rel).is_file(), rel
+    assert (out / "nfl-data.json").is_file()
+
+
+def test_nfl_flag_env_is_exact(site_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NFL_SITE_ENABLED", "True")
+    assert main(["site", "--fixture", "--out", str(site_env / "off")]) == 0
+    assert not (site_env / "off" / "nfl-data.json").exists()
+
+    monkeypatch.setenv("NFL_SITE_ENABLED", "true")
+    assert main(["site", "--fixture", "--out", str(site_env / "on")]) == 0
+    assert (site_env / "on" / "nfl-data.json").is_file()
+
+
+def test_nfl_without_vault_file_fails_with_a_count_free_message(
+    site_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    vault_root = site_env / "vault"
+    (vault_root / "processed").mkdir(parents=True)
+    shutil.copy(FIXTURE_PATH, vault_root / "processed" / "site-data.json")
+    monkeypatch.setenv("BOOTH_REVIEW_VAULT", str(vault_root))
+
+    code = main(["site", "--nfl", "--out", str(site_env / "out")])
+
+    assert code != 0
+    assert "processed/nfl-data.json not found" in capsys.readouterr().err
+
+
+def test_planted_key_in_nfl_fixture_fails_require_key_check(
+    site_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raw = json.loads(NFL_FIXTURE_PATH.read_text(encoding="utf-8"))
+    raw["lookups"]["people"][0]["name"] += " " + _SYNTHETIC_KEY
+    planted = site_env / "planted-nfl.json"
+    planted.write_text(json.dumps(raw), encoding="utf-8")
+    monkeypatch.setenv("BOOTH_REVIEW_NFL_FIXTURE", str(planted))
+    monkeypatch.setenv("CFBD_API_KEY", _SYNTHETIC_KEY)
+
+    code = main(["site", "--fixture", "--nfl", "--require-key-check", "--out", str(site_env / "o")])
+
+    assert code != 0
+    assert not (site_env / "o").exists()
 
 
 def test_fixture_build_site_data_json_validates(site_env: Path) -> None:
@@ -338,6 +401,7 @@ def test_ci_runs_the_key_leak_guard_with_a_synthetic_canary_not_a_secret() -> No
     assert canary.startswith("ci-canary-")
     assert "${{" not in canary
     assert "booth-review site --fixture" in step["run"]
+    assert "site --fixture --nfl" in step["run"]
     assert "grep -qx 'cfbd key check: passed'" in step["run"]
 
 

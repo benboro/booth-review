@@ -37,6 +37,8 @@ from booth_review.build.site_assembly import (
     assemble_site,
     docs_dir,
     fixture_path,
+    nfl_fixture_path,
+    nfl_site_enabled,
     site_source_dir,
 )
 from booth_review.config import CFBD_FLOOR_DEFAULT, DataPaths, load_cfbd_key
@@ -304,6 +306,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--fixture",
         action="store_true",
         help="use the synthetic contract fixture instead of the vault's processed/site-data.json",
+    )
+    site_cmd.add_argument(
+        "--nfl",
+        action="store_true",
+        help="include the NFL sport switch and nfl-data.json "
+        "(also on when NFL_SITE_ENABLED is exactly true)",
     )
     site_cmd.add_argument("--out", type=Path, default=Path("dist/site"))
     site_cmd.add_argument(
@@ -1325,12 +1333,24 @@ def _site(args: argparse.Namespace) -> int:
             raise SiteBuildError(
                 "processed/site-data.json not found; run `booth-review build` first"
             )
+    nfl = bool(args.nfl) or nfl_site_enabled(os.environ)
+    nfl_source: Path | None = None
+    if nfl and args.fixture:
+        nfl_source = nfl_fixture_path()
+    elif nfl:
+        nfl_source = DataPaths.from_env().processed / "nfl-data.json"
+        if not nfl_source.is_file():
+            raise SiteBuildError(
+                "processed/nfl-data.json not found; run `booth-review nfl site-data` first"
+            )
     try:
         result: SiteBuildResult = assemble_site(
             source=source,
             out_dir=args.out,
             site_src=site_source_dir(),
             docs=docs_dir(),
+            nfl=nfl,
+            nfl_source=nfl_source,
         )
     except BoothReviewError:
         raise
@@ -1362,6 +1382,8 @@ def _site(args: argparse.Namespace) -> int:
         if result.key_checked
         else "cfbd key check: skipped (no key configured)"
     )
+    if result.nfl_games is not None:
+        print(f"nfl: {result.nfl_games} games")
     return 0
 
 
