@@ -22,6 +22,8 @@ from booth_review.sources.ratingsref.parser import RRRecord
 #: Most days a record may trail its game and still count as the same game (Thu-Wed week).
 MAX_DATE_SHIFT_DAYS = 3
 _SLUG_DATE_RE = re.compile(r"-\d{4}-\d{2}-\d{2}$")
+# RR team ids carry the league prefix ("nfl-bears"), as CFB ids carry "cfb-".
+_TEAM_ID_PREFIX = "nfl-"
 
 
 @dataclass(frozen=True)
@@ -53,7 +55,8 @@ def _pair_from_names(
 ) -> frozenset[str] | None:
     found: list[str] = []
     for name in names:
-        fid = teams.resolve("ratingsref", name, season).franchise_id
+        key = name.removeprefix(_TEAM_ID_PREFIX)
+        fid = teams.resolve("ratingsref", key, season).franchise_id
         if fid is not None and fid not in found:
             found.append(fid)
     return frozenset(found) if len(found) == 2 else None
@@ -61,8 +64,7 @@ def _pair_from_names(
 
 def _pair_from_slug(slug: str, teams: NflTeamResolver, season: int) -> frozenset[str] | None:
     body = _SLUG_DATE_RE.sub("", slug)
-    if body.startswith("nfl-"):
-        body = body[4:]
+    body = body.removeprefix(_TEAM_ID_PREFIX)
     tokens = [t for t in body.split("-") if t]
     # Event words (christmas, kickoff, ...) may lead the slug; skip as few leading tokens as needed.
     for start in range(len(tokens)):

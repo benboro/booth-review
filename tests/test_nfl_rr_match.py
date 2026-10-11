@@ -90,6 +90,14 @@ def test_teams_field_beats_slug(ref: Path) -> None:
     assert "g1" in matches
 
 
+def test_teams_field_league_prefixed_ids_resolve(ref: Path) -> None:
+    # Real RR records list teams as league-prefixed ids ("nfl-<team>"), like CFB's "cfb-".
+    rec = record("nfl-weird-slug-2015-10-12", "2015-10-12", teams=["nfl-moles", "nfl-otters"])
+    matches, reviews = run(ref, [rec])
+    assert reviews == []
+    assert "g4" in matches
+
+
 def test_event_word_slug(ref: Path) -> None:
     rec = record("nfl-kickoff-moles-otters-2015-10-12", "2015-10-12")
     matches, _ = run(ref, [rec])
