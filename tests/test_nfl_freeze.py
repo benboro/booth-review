@@ -16,6 +16,7 @@ from booth_review.cli import main
 from booth_review.config import DataPaths
 from booth_review.nfl import freeze as nfl_freeze
 from booth_review.nfl.freeze import (
+    accept_schedule_drift,
     freeze_nfl_seasons,
     nfl_completeness,
     parse_nfl_waiver,
@@ -156,6 +157,43 @@ def test_drift_detected(vault_paths: DataPaths) -> None:
     assert schedule_drift(vault_paths) == [2015]
 
 
+def test_accept_drift_rerecords_the_digest_and_clears_drift(vault_paths: DataPaths) -> None:
+    # WR-03: a drift the user has checked can be accepted, so the job stops flagging it.
+    _seed(vault_paths)
+    freeze_nfl_seasons(vault_paths, [2015], TODAY)
+    record_path = vault_paths.audit / "nfl_freeze.json"
+    before = json.loads(record_path.read_text())
+    _schedule(vault_paths, extra="Changed Field")
+    assert schedule_drift(vault_paths) == [2015]
+
+    dry = accept_schedule_drift(vault_paths, [2015], TODAY, dry_run=True)
+    assert dry.accepted == (2015,) and dry.written == ()
+    assert json.loads(record_path.read_text()) == before
+
+    result = accept_schedule_drift(vault_paths, [2015], TODAY)
+    assert result.accepted == (2015,) and result.written == ("audit/nfl_freeze.json",)
+    assert schedule_drift(vault_paths) == []
+    after = json.loads(record_path.read_text())
+    assert after["drift_accepted"] == {"2015": ["2026-10-10T00:00:00Z"]}
+    assert after["schedule_digest"]["2015"] != before["schedule_digest"]["2015"]
+    assert {k: after[k] for k in before if k != "schedule_digest"} == {
+        k: before[k] for k in before if k != "schedule_digest"
+    }
+    again = accept_schedule_drift(vault_paths, [2015], TODAY)
+    assert again.unchanged == (2015,) and again.written == ()
+
+
+def test_accept_drift_refuses_a_season_that_is_not_frozen(vault_paths: DataPaths) -> None:
+    _seed(vault_paths)
+    freeze_nfl_seasons(vault_paths, [2015], TODAY)
+    _schedule(vault_paths, extra="Changed Field")
+    before = (vault_paths.audit / "nfl_freeze.json").read_bytes()
+    result = accept_schedule_drift(vault_paths, [2015, 2016], TODAY)
+    assert result.not_frozen == (2016,) and result.accepted == ()
+    assert (vault_paths.audit / "nfl_freeze.json").read_bytes() == before
+    assert schedule_drift(vault_paths) == [2015]
+
+
 def test_parse_waiver() -> None:
     assert parse_nfl_waiver("2015:nfl_wikipedia") == (2015, "nfl_wikipedia")
     for bad in ("2015:sports506", "x", "2015:"):
@@ -188,6 +226,18 @@ def test_cli_freeze_dry_run_commit_and_drift(
     _schedule(git_vault, extra="Changed Field")
     assert main(["nfl", "freeze", "--check-drift"]) == 4
     assert "drift: 1 season" in capsys.readouterr().out
+
+    # WR-03: accepting the drift commits only the freeze record and clears it.
+    assert main(["nfl", "freeze", "--accept-drift", "--season", "2016"]) == 4
+    count = int(_git(git_vault, "rev-list", "--count", "HEAD").strip())
+    assert main(["nfl", "freeze", "--accept-drift", "--season", "2015"]) == 0
+    assert int(_git(git_vault, "rev-list", "--count", "HEAD").strip()) == count + 1
+    lines = _git(git_vault, "show", "--name-only", "--format=%s", "HEAD").splitlines()
+    assert lines[0] == "freeze: nfl_drift 2015-2015 (accepted 1)"
+    assert [x for x in lines[1:] if x] == ["audit/nfl_freeze.json"]
+    assert main(["nfl", "freeze", "--check-drift"]) == 0
+    with pytest.raises(SystemExit):
+        main(["nfl", "freeze", "--check-drift", "--accept-drift", "--season", "2015"])
 
 
 def test_cli_freeze_refused_exit_4(git_vault: DataPaths) -> None:

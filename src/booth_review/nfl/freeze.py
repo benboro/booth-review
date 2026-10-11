@@ -239,3 +239,48 @@ def schedule_drift(paths: DataPaths) -> list[int]:
         for season, digest in digests.items()
         if schedule_digest(paths, int(season)) != digest
     )
+
+
+@dataclass(frozen=True)
+class DriftAcceptResult:
+    accepted: tuple[int, ...]
+    unchanged: tuple[int, ...]
+    not_frozen: tuple[int, ...]
+    written: tuple[str, ...]
+
+
+def accept_schedule_drift(
+    paths: DataPaths, seasons: Sequence[int], today: date, *, dry_run: bool = False
+) -> DriftAcceptResult:
+    """Re-record the schedule digest of frozen `seasons` whose rows drifted (WR-03).
+
+    The user runs this after checking the drift (`--check-drift`) and deciding
+    the new rows are right, which clears the job's drift item. Any season with
+    no frozen digest refuses the whole call and writes nothing. Each accepted
+    season gets its date under `drift_accepted` in the freeze record.
+    """
+    record = _read_record(paths)
+    digests = dict(record.get("schedule_digest") or {})  # type: ignore[call-overload]
+    not_frozen = tuple(s for s in seasons if str(s) not in digests)
+    if not_frozen:
+        return DriftAcceptResult((), (), not_frozen, ())
+    accepted: list[int] = []
+    unchanged: list[int] = []
+    for season in seasons:
+        current = schedule_digest(paths, season)
+        if current == digests[str(season)]:
+            unchanged.append(season)
+        else:
+            digests[str(season)] = current
+            accepted.append(season)
+    if dry_run or not accepted:
+        return DriftAcceptResult(tuple(accepted), tuple(unchanged), (), ())
+    stamp = datetime(today.year, today.month, today.day, tzinfo=UTC).strftime(_TIME_FMT)
+    history = dict(record.get("drift_accepted") or {})  # type: ignore[call-overload]
+    for season in accepted:
+        history[str(season)] = [*history.get(str(season), []), stamp]
+    atomic_write_json(
+        paths.audit / FREEZE_RECORD,
+        {**record, "schedule_digest": digests, "drift_accepted": history},
+    )
+    return DriftAcceptResult(tuple(accepted), tuple(unchanged), (), (f"audit/{FREEZE_RECORD}",))

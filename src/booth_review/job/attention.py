@@ -394,7 +394,10 @@ def nfl_schedule_drift(n: int) -> AttentionItem:
     _require_non_negative("n", n)
     return AttentionItem(
         kind="nfl_schedule_drift",
-        line=f"nfl frozen seasons with changed schedule rows: {n} (run nfl freeze --check-drift)",
+        line=(
+            f"nfl frozen seasons with changed schedule rows: {n} (list with nfl freeze "
+            "--check-drift, accept with nfl freeze --accept-drift --season YEAR)"
+        ),
         severity="attention",
     )
 

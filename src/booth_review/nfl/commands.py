@@ -11,13 +11,14 @@ import argparse
 import os
 import sys
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from booth_review.build.io import write_review_csv
 from booth_review.config import DataPaths
 from booth_review.errors import BoothReviewError
 from booth_review.nfl.freeze import (
+    accept_schedule_drift,
     freeze_nfl_seasons,
     parse_nfl_waiver,
     schedule_drift,
@@ -62,7 +63,13 @@ def add_nfl_parser(sub: Any) -> None:
     freeze.add_argument("--waive", type=parse_nfl_waiver, action="append", default=[])
     freeze.add_argument("--dry-run", action="store_true")
     freeze.add_argument("--no-commit", action="store_true")
-    freeze.add_argument("--check-drift", action="store_true")
+    drift = freeze.add_mutually_exclusive_group()
+    drift.add_argument("--check-drift", action="store_true")
+    drift.add_argument(
+        "--accept-drift",
+        action="store_true",
+        help="re-record the schedule digest of the --season frozen seasons after a drift",
+    )
 
     people = nfl_sub.add_parser("people", help="review and register NFL crew names")
     people.add_argument("--season", type=parse_season_spec, default=default_season)
@@ -204,6 +211,8 @@ def _nfl_freeze(args: argparse.Namespace) -> int:
     today = datetime.now(UTC).date()
     vault = VaultRepo(paths.vault)
     vault.check()
+    if args.accept_drift:
+        return _nfl_accept_drift(args, paths, vault, seasons, today)
     with vault.lock():
         result = freeze_nfl_seasons(paths, seasons, today, waivers=args.waive, dry_run=args.dry_run)
         if result.refused:
@@ -228,6 +237,40 @@ def _nfl_freeze(args: argparse.Namespace) -> int:
             )
     verb = "would freeze" if args.dry_run else "froze"
     print(f"nfl {verb} {len(result.frozen)} season(s), {len(result.waived)} waived")
+    return 0
+
+
+def _nfl_accept_drift(
+    args: argparse.Namespace,
+    paths: DataPaths,
+    vault: VaultRepo,
+    seasons: list[int],
+    today: date,
+) -> int:
+    with vault.lock():
+        result = accept_schedule_drift(paths, seasons, today, dry_run=args.dry_run)
+        if result.not_frozen:
+            print(
+                "error: no frozen schedule digest for season(s) "
+                + ", ".join(str(s) for s in result.not_frozen),
+                file=sys.stderr,
+            )
+            return EXIT_BLOCKED
+        if result.written and not args.no_commit:
+            vault.commit_batch(
+                batch_message(
+                    "freeze",
+                    "nfl_drift",
+                    f"{min(seasons)}-{max(seasons)}",
+                    {"accepted": len(result.accepted)},
+                ),
+                paths=list(result.written),
+            )
+    verb = "would accept" if args.dry_run else "accepted"
+    print(
+        f"nfl schedule drift {verb} for {len(result.accepted)} season(s), "
+        f"{len(result.unchanged)} unchanged"
+    )
     return 0
 
 
