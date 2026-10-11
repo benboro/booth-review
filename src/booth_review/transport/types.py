@@ -45,6 +45,8 @@ class FetchRequest:
     params: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     """CFBD query params, for the ledger only."""
     kind: Literal["page", "robots"] = "page"
+    headers: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    """Extra request headers only (e.g. Accept); never written to the manifest."""
 
 
 @dataclass(frozen=True)

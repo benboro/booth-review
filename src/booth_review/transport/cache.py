@@ -33,7 +33,7 @@ Outcome = Literal["cached", "fetched", "not_modified"]
 # (lastmod advanced, or newly listed in the sitemap) is decided one layer up,
 # by RatingsRefCollector.refresh (Plan 03) -- this constant only says which
 # source is ever allowed to attempt the request.
-_REFRESH_EXEMPT_SOURCES = frozenset({"ratingsref"})
+_REFRESH_EXEMPT_SOURCES = frozenset({"ratingsref", "nfl_ratingsref"})
 
 _MANIFEST_FIELDS = (
     "url",
@@ -190,8 +190,8 @@ class FreezeGuard:
     def is_frozen(self, source: str, season: int | None, *, refresh: bool = False) -> bool:
         """Whether (source, season) refuses a fetch.
 
-        `refresh=True` lets a source in `_REFRESH_EXEMPT_SOURCES` (currently
-        only ratingsref) through a frozen season (D-07); every other source
+        `refresh=True` lets a source in `_REFRESH_EXEMPT_SOURCES` (ratingsref and
+        nfl_ratingsref) through a frozen season (D-07); every other source
         still refuses regardless of `refresh`. Which individual records
         actually qualify for re-fetch is a collector-level decision
         (RatingsRefCollector.refresh, Plan 03), not this method's concern.
@@ -268,7 +268,12 @@ class RawCache:
             guard.before_fetch(req)
 
         validators = self._manifest.latest_validators(req.url) if refresh else None
-        resp = self._client.fetch(req.url, validators=validators, bearer_token=bearer_token)
+        resp = self._client.fetch(
+            req.url,
+            validators=validators,
+            bearer_token=bearer_token,
+            headers=dict(req.headers) or None,
+        )
 
         for guard in self._guards:
             guard.after_fetch(req, resp)
