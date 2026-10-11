@@ -199,3 +199,53 @@ def test_cfb_page_raises_print_safe_parse_error() -> None:
 def test_empty_body_raises_parse_error() -> None:
     with pytest.raises(ParseError, match="season 2014 week 1"):
         parse_nfl_week_page(b"", season=2014, week=1)
+
+
+def test_three_cell_row_reads_crew_from_next_cell() -> None:
+    html = (
+        b"<html><body><article>"
+        b'<p><b><font size="5">CBS SINGLE</font></b></p>'
+        b"<table><tr><td></td><td><strong>A Team @ B Team</strong></td>"
+        b"<td>Pat Example, Sam Sample</td></tr></table>"
+        b"</article></body></html>"
+    )
+    (listing,) = parse_nfl_week_page(html, season=2017, week=10)
+    assert listing.crew_names == ("Pat Example", "Sam Sample")
+    assert listing.network_raw == "CBS"
+
+
+def test_bold_network_inside_national_line_is_not_a_window_header() -> None:
+    html = (
+        b"<html><body><article>"
+        b"<b><font size='5'>NATIONAL BROADCASTS</font></b><br/>"
+        b"<li><b>Sunday 1:00 ET:</b> A Team @ B Team (<b>NFLN</b>)<br/>"
+        b"Pat Example, Sam Sample<br/><font size='2'>local stations</font></li>"
+        b"<li><b>Monday Night:</b> C Team @ D Team (<b>ESPN</b>)</li>"
+        b'<p><b><font size="5">FOX EARLY</font></b></p>'
+        b"<table><tr><td></td><td><strong>E Team @ F Team</strong> -- Sam Sample</td></tr></table>"
+        b"</article></body></html>"
+    )
+    listings = parse_nfl_week_page(html, season=2022, week=15)
+    assert [(x.network_raw, x.is_national_line) for x in listings] == [
+        ("NFLN", True),
+        ("ESPN", True),
+        ("FOX", False),
+    ]
+    assert listings[0].crew_names == ("Pat Example", "Sam Sample")
+
+
+def test_header_nested_in_unclosed_national_item_still_resets_window() -> None:
+    html = (
+        b"<html><body><article>"
+        b"<b><font size='5'>NATIONAL BROADCASTS</font></b><br/>"
+        b"<li><b>Monday Night:</b> C Team @ D Team (ESPN)<br/>"
+        b'<p><b><font size="5">CBS EARLY</font></b></p>'
+        b'<div id="game"><div id="matchup">E Team @ F Team</div>'
+        b'<div id="anncrs">Pat Example, Sam Sample</div></div>'
+        b"</article></body></html>"
+    )
+    listings = parse_nfl_week_page(html, season=2022, week=1)
+    assert [(x.network_raw, x.window, x.is_national_line) for x in listings] == [
+        ("ESPN", "national", True),
+        ("CBS", "early", False),
+    ]
