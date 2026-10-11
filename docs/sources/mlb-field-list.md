@@ -198,10 +198,9 @@ page it was copied from (Apple Newsroom, ESPN Press Room, Fox Sports Press Pass,
 Warner Bros. Discovery). The blog states no terms of its own, but its lists relay
 press pages that are blocked (Apple's site terms bar copying and public display)
 or failed the policy screen (Fox Sports Press Pass, Warner Bros. Discovery); only
-the ESPN list relays an analysis-only host. The project owner waived those
-upstream terms on October 10, 2026, as a one-time waiver for the spike's
-hand-read pull, for analysis use. A build that reads the blog again needs its own
-robots and terms check, a HOST_POLICIES entry and a fresh owner decision. In the
+the ESPN list relays an analysis-only host. The spike used these crews once,
+hand-read, for analysis only; they are not displayed. Any reuse needs its own
+robots and terms check, a HOST_POLICIES entry and a new owner decision. In the
 spike it agreed with 506 on every game where both name a crew that was checked.
 Cite the blog together with the press page it credits.
 
@@ -217,8 +216,8 @@ Wikipedia under CC BY-SA.
 
 The analysis-only fields are `network`, `window`, `is_exclusive`, `production`,
 `play_by_play`, `analyst_1` and `analyst_2` (506 states no terms). The blocked
-group is the Stats API: its terms block it, and the project owner waived that
-for analysis use (see mlb-statsapi.md). No field row depends on it yet.
+group is the Stats API (see mlb-statsapi.md): analysis use only, never displayed,
+and MLB has not granted written permission. No field row depends on it yet.
 
 **Open question for the build:** the college-football site already displays 506
 crews (hover details), even though 506 states no terms and its publishing row in
@@ -227,6 +226,6 @@ names, and most of these crews come from 506. Before MLB views are built, decide
 whether MLB crews follow that college-football precedent or the strict rule above.
 Asking 506's owners would settle both. Apple TV+, the only network that passes top
 crew, takes 30 of its 50 crews from the relay under Secondary crew source, which
-the 506 precedent does not cover. The project owner said presentation is
-acceptable; the build settles display of the relayed crews and of Stats API
-fields against that statement.
+the 506 precedent does not cover. Display of the relayed crews and of Stats API
+fields is an open question for the build; until it is settled they stay
+analysis-only.
