@@ -647,12 +647,48 @@ def test_same_page_in_cfb_and_root_counts_once(
     assert result.skipped_invalid == []
 
 
-def test_different_pages_for_one_week_across_folders_conflict(
+def test_different_pages_for_one_week_across_folders_prefer_cfb(
+    vault_paths, mock_transport_factory, tmp_path, monkeypatch
+) -> None:
+    # WR-05: a fresh re-save in cfb/ wins over last week's stale save left at the root.
+    cfb_dir, root = _cfb_default_setup(tmp_path, monkeypatch)
+    fresh = _importable_page(2026, "1")
+    _write_incoming(cfb_dir, 2026, "1", fresh)
+    _write_incoming(root, 2026, "1", _importable_page(2026, "1") + b"<!-- other -->")
+
+    result = _importer_for(vault_paths, mock_transport_factory).run(2026, force=True)
+
+    assert result.imported == ["1"]
+    assert result.skipped_invalid == []
+    assert result.root_shadowed == ["1"]
+    assert result.root_pages == 0
+    assert (vault_paths.raw / "sports506" / "2026" / "wk-01.html").read_bytes() == fresh
+
+
+def test_root_conflict_does_not_reject_the_cfb_page(
     vault_paths, mock_transport_factory, tmp_path, monkeypatch
 ) -> None:
     cfb_dir, root = _cfb_default_setup(tmp_path, monkeypatch)
     _write_incoming(cfb_dir, 2026, "1", _importable_page(2026, "1"))
-    _write_incoming(root, 2026, "1", _importable_page(2026, "1") + b"<!-- other -->")
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "old-a.html").write_bytes(_importable_page(2026, "1") + b"<!-- a -->")
+    (root / "old-b.html").write_bytes(_importable_page(2026, "1") + b"<!-- b -->")
+    _write_incoming(root, 2026, "2", _importable_page(2026, "2"))
+
+    result = _importer_for(vault_paths, mock_transport_factory).run(2026)
+
+    assert sorted(result.imported) == ["1", "2"]
+    assert result.skipped_invalid == []
+    assert result.root_shadowed == ["1"]
+
+
+def test_two_different_pages_in_cfb_still_conflict(
+    vault_paths, mock_transport_factory, tmp_path, monkeypatch
+) -> None:
+    cfb_dir, _root = _cfb_default_setup(tmp_path, monkeypatch)
+    cfb_dir.mkdir(parents=True, exist_ok=True)
+    (cfb_dir / "a.html").write_bytes(_importable_page(2026, "1"))
+    (cfb_dir / "b.html").write_bytes(_importable_page(2026, "1") + b"<!-- b -->")
 
     result = _importer_for(vault_paths, mock_transport_factory).run(2026)
 

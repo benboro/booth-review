@@ -913,6 +913,12 @@ def _import_506(args: argparse.Namespace) -> int:
                         "data/incoming/506/; move hand-saves to data/incoming/506/cfb/ "
                         "(the old folder is read through the 2026 season)"
                     )
+                if not nfl and result.root_shadowed:
+                    print(
+                        "warning: data/incoming/506/ also holds a different page for week(s) "
+                        f"{', '.join(result.root_shadowed)}; "
+                        "used the one in data/incoming/506/cfb/ (delete the old copy)"
+                    )
                 if result.has_problems:
                     any_problems = True
                 if not args.no_commit:

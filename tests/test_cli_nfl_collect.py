@@ -238,6 +238,26 @@ def test_import_506_cfb_warns_about_legacy_root_pages(
     assert handle.requests == []
 
 
+def test_import_506_cfb_warns_when_root_page_is_shadowed_by_cfb(
+    git_vault, mock_transport_factory, patched_client, tmp_path, monkeypatch, capsys
+) -> None:
+    # WR-05: the cfb/ re-save is used; the stale root copy only earns a warning.
+    root = tmp_path / "data" / "incoming" / "506"
+    (root / "cfb").mkdir(parents=True)
+    (root / "cfb" / "w5-new.html").write_bytes(_CFB_PAGE)
+    (root / "w5-old.html").write_bytes(_CFB_PAGE + b"<!-- older save -->")
+    handle = mock_transport_factory({})
+    patched_client(handle)
+
+    main(["import", "506", "--season", "2025", "--no-commit"])
+
+    out = capsys.readouterr().out
+    assert "different page for week(s) 5; used the one in data/incoming/506/cfb/" in out
+    assert "page(s) imported from" not in out
+    assert (git_vault.raw / "sports506" / "2025" / "wk-05.html").read_bytes() == _CFB_PAGE
+    assert handle.requests == []
+
+
 def test_import_506_cfb_without_root_pages_prints_no_warning(
     git_vault, mock_transport_factory, patched_client, tmp_path, capsys
 ) -> None:

@@ -171,6 +171,9 @@ class ImportResult:
     rather than silently dropped."""
     root_pages: int = 0
     """D-19: recognized CFB pages taken from the legacy incoming root."""
+    root_shadowed: list[str] = field(default_factory=list)
+    """WR-05: weeks whose legacy-root page differs from the one in cfb/ (or
+    conflicts within the root); the cfb/ page is used and the root one ignored."""
 
     def counts(self) -> dict[str, int]:
         """Counts for vault.batch_message, count-only (never real page text)."""
@@ -405,8 +408,11 @@ class Sports506Importer:
     ) -> dict[str, bytes]:
         """D-19: add CFB pages saved at the old incoming root (non-recursive).
 
-        Identical bytes in both folders collapse to one; differing bytes for
-        one week reject that week as a conflict, as within a single folder.
+        Identical bytes in both folders collapse to one. When both folders hold
+        different pages for one week, the cfb/ page wins and the week is listed
+        in `root_shadowed` (WR-05): a fresh re-save goes to cfb/ while last
+        week's stale save often stays at the root. Only two different files
+        within one folder reject a week as a conflict.
         """
         root_mtimes: dict[str, float] = {}
         root_result = ImportResult(season=season)
@@ -415,6 +421,10 @@ class Sports506Importer:
         merged = dict(pages)
         conflicted = {item.label for item in result.skipped_invalid}
         for item in root_result.skipped_invalid:
+            if item.label in merged and item.label not in conflicted:
+                if item.label not in result.root_shadowed:
+                    result.root_shadowed.append(item.label)
+                continue
             if item.label not in conflicted:
                 result.skipped_invalid.append(item)
                 conflicted.add(item.label)
@@ -424,17 +434,13 @@ class Sports506Importer:
             if label in conflicted:
                 continue
             if label in merged:
-                if merged[label] != content:
-                    merged.pop(label)
-                    saved_mtimes.pop(label, None)
-                    result.skipped_invalid.append(
-                        SkippedFile(label=label, reason="two different files claim this week")
-                    )
-                    conflicted.add(label)
+                if merged[label] != content and label not in result.root_shadowed:
+                    result.root_shadowed.append(label)
                 continue
             merged[label] = content
             saved_mtimes[label] = root_mtimes[label]
             result.root_pages += 1
+        result.root_shadowed.sort(key=_week_sort_key)
         return merged
 
     def _import_one(
