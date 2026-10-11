@@ -85,6 +85,7 @@ _STEP_NAMES = frozenset(
         "nfl_build",
         "nfl_freeze",
         "nfl_state",
+        "result_out",
     }
 )
 

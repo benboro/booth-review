@@ -236,6 +236,11 @@ def _remaining_text(value: int | None) -> str:
     return "unknown" if value is None else str(value)
 
 
+def _exit_code(key_leak: bool, items: Sequence[AttentionItem]) -> int:
+    """A finished run's exit code: 3 on a key leak, else 4 with attention, else 0."""
+    return 3 if key_leak else (4 if has_attention(items) else 0)
+
+
 def _is_transient_cfbd_error(exc: Exception) -> bool:
     """Whether a CFBD step failure is an outage a later backup slot may clear:
     a network error (FetchError with no status), a 5xx or 429 that survived
@@ -314,9 +319,15 @@ class ScheduledJob:
         docs: Path | None = None,
         nfl_rr_cap: int = NFL_REFRESH_CAP_DEFAULT,
         github_token: str | None = None,
+        on_cfb_result: Callable[[JobRunResult], None] | None = None,
     ) -> None:
         """`github_token` (optional GITHUB_TOKEN) goes only to the nflverse
-        play-by-play listing on api.github.com; it is never logged or stored."""
+        play-by-play listing on api.github.com; it is never logged or stored.
+
+        `on_cfb_result` gets the CFB-only outcome once the CFB state is saved
+        and before the NFL block starts (CR-02), so the caller can write its
+        result files early: an NFL step that hangs until it is killed can then
+        never cost the run's CFB deploy. `run()` still returns the final outcome."""
         if update and site_out is None:
             raise ValueError("update mode requires site_out")
         self._update = update
@@ -333,6 +344,7 @@ class ScheduledJob:
         self._github_token = github_token
         self._dry_run = dry_run
         self._commit_enabled = commit
+        self._on_cfb_result = on_cfb_result
 
     # -- public entry point ------------------------------------------------
 
@@ -505,6 +517,19 @@ class ScheduledJob:
             except Exception as exc:
                 items.append(step_failed("state", error_type_name(exc)))
 
+        # CR-02: the CFB-only outcome goes to the caller before any NFL step,
+        # so its result files exist even if an NFL step hangs and is killed.
+        self._report_cfb_result(
+            JobRunResult(
+                exit_code=_exit_code(key_leak, items),
+                items=list(items),
+                counts=dict(counts),
+                window=window,
+                deploy_ready=deploy_ready,
+            ),
+            items,
+        )
+
         # D-08 / CR-02: the NFL block runs only once the CFB state is saved and
         # pushed, so nothing it does (an unpushed NFL commit, a lock wait, a
         # slow or killed step) can fail or lose that push. It can only add
@@ -513,9 +538,8 @@ class ScheduledJob:
         self._run_nfl_phase(now, window_season, items, nfl_counts)
         counts.update(nfl_counts)
 
-        exit_code = 3 if key_leak else (4 if has_attention(items) else 0)
         return JobRunResult(
-            exit_code=exit_code,
+            exit_code=_exit_code(key_leak, items),
             items=items,
             counts=counts,
             window=window,
@@ -523,6 +547,20 @@ class ScheduledJob:
         )
 
     # -- helpers ---------------------------------------------------------------
+
+    def _report_cfb_result(self, cfb: JobRunResult, items: list[AttentionItem]) -> None:
+        """Hand the CFB-only outcome to `on_cfb_result`. A failure there (say,
+        an unwritable result file) is one attention item; the NFL block still
+        runs, and the caller writes the final outcome afterward."""
+        callback = self._on_cfb_result
+        if callback is None:
+            return
+        self._guarded_ok(
+            items,
+            lambda name: step_failed("result_out", name),
+            lambda: callback(cfb),
+            passthrough=(),
+        )
 
     def _remaining(self, now: datetime) -> int | None:
         """The last known CFBD remaining-call count (a ledger read, no call)."""

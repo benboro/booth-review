@@ -91,6 +91,7 @@ from booth_review.spike.selection import (
     select_games,
 )
 from booth_review.transport.budget import BudgetSummary, CfbdBudget, InfoSnapshot
+from booth_review.transport.cache import atomic_write_bytes
 from booth_review.vault import VaultRepo, batch_message
 
 logger = logging.getLogger("booth_review.cli")
@@ -1117,29 +1118,40 @@ def _job_run(args: argparse.Namespace) -> int:
             site_out=args.site_out,
             nfl_rr_cap=args.nfl_rr_cap,
             github_token=github_token,
+            # CR-02: the CFB-only outcome is written before the NFL block, so a
+            # killed run (the workflow's step timeout) still leaves it to deploy.
+            on_cfb_result=lambda cfb: _write_job_outputs(args, cfb),
         )
         result: JobRunResult = job.run()
 
         if result.exit_code == EXIT_NOTHING_DUE:
             print("nothing due since last attempt")
 
-        if args.attention_out is not None:
-            body = build_attention_body(result.items, generated_at=datetime.now(UTC))
-            if body is not None:
-                args.attention_out.parent.mkdir(parents=True, exist_ok=True)
-                args.attention_out.write_text(body, encoding="utf-8")
-
-        if args.result_out is not None:
-            args.result_out.parent.mkdir(parents=True, exist_ok=True)
-            args.result_out.write_text(
-                f"deploy_ready={'true' if result.deploy_ready else 'false'}\n"
-                f"stale_only={'true' if result.stale_only else 'false'}\n",
-                encoding="utf-8",
-            )
-
+        _write_job_outputs(args, result)
         return result.exit_code
     finally:
         runtime.client.close()
+
+
+def _write_job_outputs(args: argparse.Namespace, result: JobRunResult) -> None:
+    """Write --attention-out (only when there is something to report) and
+    --result-out for `result`. Called twice on a run that reaches the NFL
+    block: with the CFB-only outcome, then with the final one. Each file is
+    written atomically (a temp sibling, then a rename), so a run killed at
+    any point leaves either the earlier complete file or the new one."""
+    if args.attention_out is not None:
+        body = build_attention_body(result.items, generated_at=datetime.now(UTC))
+        if body is not None:
+            atomic_write_bytes(args.attention_out, body.encode("utf-8"))
+
+    if args.result_out is not None:
+        atomic_write_bytes(
+            args.result_out,
+            (
+                f"deploy_ready={'true' if result.deploy_ready else 'false'}\n"
+                f"stale_only={'true' if result.stale_only else 'false'}\n"
+            ).encode(),
+        )
 
 
 # -- budget -----------------------------------------------------------------------------

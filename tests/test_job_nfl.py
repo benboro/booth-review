@@ -37,7 +37,9 @@ from test_job_runner import (
     _update_cfbd_responses,
 )
 
+from booth_review import cli
 from booth_review.build.pipeline import BuildOutcome
+from booth_review.cli import main
 from booth_review.config import DataPaths
 from booth_review.errors import FetchError, VaultCommitError
 from booth_review.job.attention import (
@@ -55,7 +57,7 @@ from booth_review.job.attention import (
 )
 from booth_review.job.catchup import load_state
 from booth_review.job.gaps506 import Gaps506
-from booth_review.job.runner import NFL_PBP_REFRESH_WEEKDAYS, ScheduledJob
+from booth_review.job.runner import NFL_PBP_REFRESH_WEEKDAYS, JobRunResult, ScheduledJob
 from booth_review.nfl.gaps import NflGaps
 from booth_review.nfl.layout import NFL_SOURCES, NFLVERSE_SCHEDULES_PATH
 from booth_review.nfl.pipeline import NflBuildOutcome
@@ -1107,6 +1109,253 @@ def test_an_nfl_step_that_dies_after_the_cfb_save_cannot_lose_the_cfb_state(
     assert state != before
     assert state.last_attempt_at == UPDATE_NOW
     assert state.last_build_at == UPDATE_NOW
+
+
+# -- CR-02 residual: the CLI's result files carry the CFB outcome before any NFL step -----------
+
+
+class _FixedNow(datetime):
+    """cli.datetime stand-in: every `now()` (the job clock and the attention
+    body's timestamp) is UPDATE_NOW, so two runs write byte-equal files."""
+
+    @classmethod
+    def now(cls, tz: Any = None) -> datetime:
+        return UPDATE_NOW
+
+
+def _cli_update_run(
+    paths: DataPaths,
+    root: Path,
+    handle_factory: Any,
+    fake_clock: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[int, Path]:
+    """`booth-review job run --update` through main(), with --result-out and
+    --attention-out under root/out; returns (exit code, out dir). A BaseException
+    raised inside the run propagates to the caller."""
+    handle = handle_factory(_update_cfbd_responses())
+    runtime = _runtime(paths, handle, now=lambda: UPDATE_NOW, fake_clock=fake_clock)
+    monkeypatch.setattr(cli, "build_runtime", lambda **kwargs: runtime)
+    monkeypatch.setattr(cli, "datetime", _FixedNow)
+    out = root / "out"
+    code = main(
+        [
+            "job",
+            "run",
+            "--trigger",
+            "manual",
+            "--update",
+            "--site-out",
+            str(root / "site-out"),
+            "--result-out",
+            str(out / "result.txt"),
+            "--attention-out",
+            str(out / "attention.md"),
+        ]
+    )
+    return code, out
+
+
+def _outputs(out: Path) -> dict[str, bytes]:
+    return {name: (out / name).read_bytes() for name in ("result.txt", "attention.md")}
+
+
+def _cfb_only_outputs(
+    pristine: DataPaths,
+    tmp_path: Path,
+    handle_factory: Any,
+    fake_clock: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> dict[str, bytes]:
+    """The files a run with the same CFB outcome and no NFL block writes."""
+    root = tmp_path / "runs" / "cli-baseline"
+    paths = _clone_vault(pristine, root)
+    code, out = _cli_update_run(paths, root, handle_factory, fake_clock, monkeypatch)
+    assert code == 4  # update_vault's CFB side has attention (506 weeks to save)
+    files = _outputs(out)
+    assert files["result.txt"] == b"deploy_ready=true\nstale_only=false\n"
+    assert b"nfl" not in files["attention.md"]
+    return files
+
+
+def _no_temp_files(out: Path) -> bool:
+    return sorted(p.name for p in out.iterdir()) == ["attention.md", "result.txt"]
+
+
+@pytest.mark.parametrize("error", [KeyboardInterrupt, SystemExit])
+def test_cli_result_files_keep_the_cfb_outcome_when_the_nfl_block_is_killed(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch, error
+) -> None:
+    """A BaseException from an NFL step stands in for the workflow's step
+    timeout killing a hung NFL step: the deploy step must still find the CFB
+    outcome in --result-out and --attention-out."""
+    fakes = _NflFakes(calls=[])
+    _install_fakes(monkeypatch, fakes)
+    baseline = _cfb_only_outputs(
+        update_vault, tmp_path, mock_transport_factory, fake_clock, monkeypatch
+    )
+
+    def run_pbp(self: Any, seasons: Any, *, dry_run: bool) -> NflverseSummary:
+        fakes.hit("pbp")
+        raise error()
+
+    monkeypatch.setattr(NflverseCollector, "run_pbp", run_pbp)
+    root = tmp_path / "runs" / "killed"
+    paths = _clone_vault(update_vault, root)
+    _bootstrap_nfl(paths, season=2025, frozen_through=2024)
+
+    with pytest.raises(error):
+        _cli_update_run(paths, root, mock_transport_factory, fake_clock, monkeypatch)
+
+    assert fakes.calls == ["schedules", "pbp"]
+    out = root / "out"
+    assert _outputs(out) == baseline
+    assert _no_temp_files(out)
+
+
+def test_cli_result_files_are_written_before_the_nfl_block_and_rewritten_after_it(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
+) -> None:
+    fakes = _NflFakes(calls=[])
+    _install_fakes(monkeypatch, fakes)
+    baseline = _cfb_only_outputs(
+        update_vault, tmp_path, mock_transport_factory, fake_clock, monkeypatch
+    )
+    root = tmp_path / "runs" / "normal"
+    out = root / "out"
+    seen: dict[str, dict[str, bytes]] = {}
+
+    def run_schedules(self: Any, *, refresh: bool, dry_run: bool) -> BatchSummary:
+        fakes.hit("schedules")
+        seen["first_nfl_step"] = _outputs(out)
+        return _batch("nfl_nflverse")
+
+    def run_pbp(self: Any, seasons: Any, *, dry_run: bool) -> NflverseSummary:
+        fakes.hit("pbp")
+        raise RuntimeError(_SECRET)
+
+    monkeypatch.setattr(NflverseCollector, "run_schedules", run_schedules)
+    monkeypatch.setattr(NflverseCollector, "run_pbp", run_pbp)
+    paths = _clone_vault(update_vault, root)
+    _bootstrap_nfl(paths, season=2025, frozen_through=2024)
+
+    code, _ = _cli_update_run(paths, root, mock_transport_factory, fake_clock, monkeypatch)
+
+    # The CFB-only files were already in place when the first NFL step ran.
+    assert seen["first_nfl_step"] == baseline
+    # The final rewrite adds the NFL items after the CFB ones; NFL makes it 4 at most.
+    assert code == 4
+    assert fakes.calls == list(_STEPS)
+    final = _outputs(out)
+    assert final["result.txt"] == b"deploy_ready=true\nstale_only=false\n"
+    nfl_line = b"- nflverse step failed: RuntimeError"
+    assert final["attention.md"].split(b"\n") == [*baseline["attention.md"].split(b"\n"), nfl_line]
+    assert _no_temp_files(out)
+
+
+def test_an_interrupted_final_rewrite_leaves_the_complete_cfb_only_files(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
+) -> None:
+    """The final rewrite goes through a temp file and a rename: a kill just
+    before the rename leaves the early CFB-only files whole, with no temp file.
+    The pbp failure gives the final outcome an NFL item, so it differs."""
+    fakes = _NflFakes(calls=[], fail=("pbp", "runtime"))
+    _install_fakes(monkeypatch, fakes)
+    baseline = _cfb_only_outputs(
+        update_vault, tmp_path, mock_transport_factory, fake_clock, monkeypatch
+    )
+    root = tmp_path / "runs" / "rename"
+    out = root / "out"
+    armed: list[bool] = []
+    real_replace = Path.replace
+
+    def replace(self: Path, target: Any) -> Path:
+        if armed and Path(target).parent == out:
+            raise KeyboardInterrupt
+        return real_replace(self, target)
+
+    def run_schedules(self: Any, *, refresh: bool, dry_run: bool) -> BatchSummary:
+        fakes.hit("schedules")
+        armed.append(True)  # the early write is done; kill the next one
+        return _batch("nfl_nflverse")
+
+    monkeypatch.setattr(Path, "replace", replace)
+    monkeypatch.setattr(NflverseCollector, "run_schedules", run_schedules)
+    paths = _clone_vault(update_vault, root)
+    _bootstrap_nfl(paths, season=2025, frozen_through=2024)
+
+    with pytest.raises(KeyboardInterrupt):
+        _cli_update_run(paths, root, mock_transport_factory, fake_clock, monkeypatch)
+
+    assert fakes.calls == list(_STEPS)
+    assert _outputs(out) == baseline
+    assert _no_temp_files(out)
+
+
+def test_on_cfb_result_gets_the_cfb_only_outcome_before_the_first_nfl_step(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
+) -> None:
+    fakes = _NflFakes(calls=[], fail=("pbp", "runtime"))
+    _install_fakes(monkeypatch, fakes)
+    root = tmp_path / "runs" / "callback"
+    paths = _clone_vault(update_vault, root)
+    _bootstrap_nfl(paths, season=2025, frozen_through=2024)
+    got: list[tuple[list[str], JobRunResult]] = []
+
+    handle = mock_transport_factory(_update_cfbd_responses())
+    runtime = _runtime(paths, handle, now=lambda: UPDATE_NOW, fake_clock=fake_clock)
+    result = ScheduledJob(
+        runtime,
+        token="test-token",
+        now=lambda: UPDATE_NOW,
+        trigger="manual",
+        update=True,
+        site_out=root / "site-out",
+        on_cfb_result=lambda cfb: got.append((list(fakes.calls), cfb)),
+    ).run()
+
+    assert len(got) == 1
+    calls_then, cfb = got[0]
+    assert calls_then == []
+    assert cfb.deploy_ready is True
+    assert cfb.exit_code == 4
+    assert not any(_is_nfl_item(i) for i in cfb.items)
+    assert _nfl_counts(cfb.counts) == {}
+    # The final outcome adds the NFL item; the CFB-only result kept its own list.
+    assert result.items == [*cfb.items, step_failed("nflverse", "RuntimeError")]
+    assert result.deploy_ready is True
+    assert result.exit_code == 4
+
+
+def test_a_failing_on_cfb_result_is_one_attention_item_and_the_nfl_block_still_runs(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
+) -> None:
+    fakes = _NflFakes(calls=[])
+    _install_fakes(monkeypatch, fakes)
+    root = tmp_path / "runs" / "callback-fails"
+    paths = _clone_vault(update_vault, root)
+    _bootstrap_nfl(paths, season=2025, frozen_through=2024)
+
+    def _unwritable(cfb: JobRunResult) -> None:
+        raise PermissionError(_SECRET)
+
+    handle = mock_transport_factory(_update_cfbd_responses())
+    runtime = _runtime(paths, handle, now=lambda: UPDATE_NOW, fake_clock=fake_clock)
+    result = ScheduledJob(
+        runtime,
+        token="test-token",
+        now=lambda: UPDATE_NOW,
+        trigger="manual",
+        update=True,
+        site_out=root / "site-out",
+        on_cfb_result=_unwritable,
+    ).run()
+
+    assert step_failed("result_out", "PermissionError") in result.items
+    assert fakes.calls == list(_STEPS)
+    assert result.exit_code == 4
+    assert result.deploy_ready is True
+    build_attention_body(result.items, generated_at=UPDATE_NOW)
 
 
 # -- NFL step results become NFL attention items ------------------------------------------------
