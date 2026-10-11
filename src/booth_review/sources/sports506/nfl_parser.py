@@ -81,6 +81,10 @@ _ITALIC_PLACE_RE = re.compile(
     r"|\(\s*(?P<c>[A-Z][a-z]+(?:[ -][A-Z][a-z]+)*)\s*\))$"
 )
 _TRAILING_PAREN_RE = re.compile(r"\s*\([^)]*\)\s*$")
+# A bare network code (no lowercase letter): "NFLN", "ESPN2", "ESPN+".
+_NETWORK_CODE_RE = re.compile(r"[A-Z0-9+!/&]+")
+_BLOCK_TAGS = ["p", "div", "table", "hr", "h1", "h2", "h3", "h4", "h5", "h6"]
+_STOP_MARK = "\x00"
 _PAREN_GROUP_RE = re.compile(r"\s*\(([^)]*)\)")
 _BRACKET_RE = re.compile(r"\[[^\]]*\]")
 # "(AK)" / "(AK; HI)" region markers: parens holding only two-letter codes.
@@ -289,7 +293,11 @@ def _parse_national_chunk(chunk: str) -> _NationalFields | None:
     crew: tuple[str, ...] = ()
     if tokens:
         network = tokens[0]
-        crew = _split_crew(",".join(tokens[1:]))
+        crew_tokens = tokens[1:]
+        # A simulcast names a second network next to the first ("CBS; NFLN"); it is no crew.
+        while crew_tokens and _NETWORK_CODE_RE.fullmatch(crew_tokens[0]):
+            crew_tokens = crew_tokens[1:]
+        crew = _split_crew(",".join(crew_tokens))
     return _NationalFields(away, home, neutral, network, crew, city, time_raw)
 
 
@@ -303,8 +311,12 @@ def _national_listings(li: Tag) -> list[_NationalFields]:
         if place is not None:
             city = place.group("a") or place.group("b") or place.group("c")
             italic.replace_with(f" (in {city}) ")
+    # An unclosed <li> swallows the page after it; its text ends at the first block element.
+    stop = clone.find(_BLOCK_TAGS)
+    if isinstance(stop, Tag):
+        stop.replace_with(_STOP_MARK)
     text = _text_with_breaks(clone, drop_links=True)
-    text = text.split("█", 1)[0]
+    text = text.split("█", 1)[0].split(_STOP_MARK, 1)[0]
     lines = [_collapse_whitespace(line) for line in text.split("\n")]
     lines = [line for line in lines if line]
     if not lines:

@@ -275,3 +275,37 @@ def test_italic_city_on_national_line_in_every_shape() -> None:
     assert listings[0].crew_names == ("Pat Example", "Sam Sample")
     assert listings[1].crew_names == ("Pat Example", "Sam Sample")
     assert listings[1].national_time_et_raw == "9:30 AM ET"
+
+
+def test_simulcast_second_network_is_not_crew() -> None:
+    html = (
+        b"<html><body><article>"
+        b"<b><font size='5'>NATIONAL BROADCASTS</font></b><br/>"
+        b"<li><b>Thursday Night:</b> A Team @ B Team (CBS; NFLN)</li>"
+        b"<li><b>Thursday Night:</b> C Team @ D Team (NBC; NFLN; Pat Example, Sam Sample)</li>"
+        b"</article></body></html>"
+    )
+    listings = parse_nfl_week_page(html, season=2016, week=2)
+    assert [(x.network_raw, x.crew_names) for x in listings] == [
+        ("CBS", ()),
+        ("NBC", ("Pat Example", "Sam Sample")),
+    ]
+
+
+def test_unclosed_national_item_never_takes_the_next_header_as_crew() -> None:
+    # The closing </li> sits inside a comment, so the item swallows the next window header.
+    html = (
+        b"<html><body><article>"
+        b"<b><font size='5'>NATIONAL BROADCASTS</font></b><br/>"
+        b"<li><b>Monday Night:</b> C Team @ D Team (ESPN/ABC)<!--<font>notes</font></li>-->"
+        b"<hr/><br/><br/>"
+        b'<p><b><font size="5">CBS EARLY</font></b></p><br/>'
+        b'<div id="game"><div id="matchup">E Team @ F Team</div>'
+        b'<div id="anncrs">Pat Example, Sam Sample</div></div>'
+        b"</article></body></html>"
+    )
+    listings = parse_nfl_week_page(html, season=2022, week=1)
+    assert [(x.network_raw, x.crew_names) for x in listings] == [
+        ("ESPN/ABC", ()),
+        ("CBS", ("Pat Example", "Sam Sample")),
+    ]
