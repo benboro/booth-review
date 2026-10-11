@@ -1,0 +1,18 @@
+source,variant,franchise_id,season_from,season_to,note
+nflverse,HCG,gulls,2014,2016,
+nflverse,LAG,gulls,2017,,
+nflverse,OTT,otters,,,
+nflverse,HRN,herons,,,
+nflverse,LNX,lynx,,,
+nflverse,MOL,moles,,,
+nflverse,ELK,elks,,,
+sports506,Gulls,gulls,,,506 spelling
+sports506,Pine Elks,elks,,,
+ratingsref,wading-birds,herons,2020,,RR slug token
+ratingsref,otters,otters,,,
+wikipedia,Canyon Lynx,lynx,,,
+any,Harbor City Gulls,gulls,2014,2016,
+any,Lakeshore Gulls,gulls,2017,,
+any,Otters,otters,,,
+any,Hill Moles,moles,,,
+any,Moles,moles,,,
