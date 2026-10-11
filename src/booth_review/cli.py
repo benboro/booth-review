@@ -262,6 +262,12 @@ def build_parser() -> argparse.ArgumentParser:
     job_run = job_sub.add_parser("run", help="run one scheduled collect-only pass")
     job_run.add_argument("--trigger", choices=["schedule", "manual"], default="manual")
     job_run.add_argument("--rr-cap", type=int, default=REFRESH_CAP_DEFAULT)
+    job_run.add_argument(
+        "--nfl-rr-cap",
+        type=int,
+        default=NFL_REFRESH_CAP_DEFAULT,
+        help="Ratings Reference NFL re-fetch cap per run, separate from --rr-cap (999.4 D-09)",
+    )
     job_run.add_argument("--max-cfbd-calls", type=int, default=JOB_CFBD_MAX_CALLS)
     job_run.add_argument("--attention-out", type=Path, default=None)
     job_run.add_argument("--dry-run", action="store_true")
@@ -1082,7 +1088,8 @@ def _freeze(args: argparse.Namespace) -> int:
 def _job_run(args: argparse.Namespace) -> int:
     """Run one scheduled pass (collect-only, or the full update with --update).
     Never prints or logs the CFBD key (loaded via config.load_cfbd_key, same
-    as every other live command)."""
+    as every other live command) or GITHUB_TOKEN (read once from the
+    environment and sent only to api.github.com by the NFL pbp step)."""
     if args.update and args.site_out is None:
         print("error: --update requires --site-out", file=sys.stderr)
         return 2
@@ -1091,6 +1098,7 @@ def _job_run(args: argparse.Namespace) -> int:
     )
     try:
         token = None if args.dry_run else load_cfbd_key()
+        github_token = os.environ.get("GITHUB_TOKEN") or None
         job = ScheduledJob(
             runtime,
             token=token,
@@ -1101,6 +1109,8 @@ def _job_run(args: argparse.Namespace) -> int:
             commit=not args.no_commit,
             update=args.update,
             site_out=args.site_out,
+            nfl_rr_cap=args.nfl_rr_cap,
+            github_token=github_token,
         )
         result: JobRunResult = job.run()
 

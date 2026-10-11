@@ -123,6 +123,8 @@ jobs:
           CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
           BOOTH_REVIEW_VAULT: ${{ github.workspace }}/vault
           EVENT_NAME: ${{ github.event_name }}
+          # api.github.com only, for nflverse play-by-play listings; 999.4 D-21
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set +e
           trigger=manual
