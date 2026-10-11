@@ -1,6 +1,8 @@
-"""The `booth-review nfl` command group: `build` and `people`.
+"""The `booth-review nfl` command group: `build`, `site-data` and `people`.
 
-Printed output is counts only. `nfl people` writes interim/review_nfl_people.csv
+Printed output is counts only. `nfl build` also writes processed/nfl-data.json when
+site data is on (--site-data or NFL_SITE_ENABLED=true); `nfl site-data` rebuilds just
+that file from the vault tables. `nfl people` writes interim/review_nfl_people.csv
 (never committed, like the CFB people review) and changes the shared people.csv
 only under --apply, and then only through the rows the user marked add-variant.
 """
@@ -15,6 +17,13 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 from booth_review.build.io import write_review_csv
+from booth_review.build.nfl_site_data import (
+    build_nfl_site_data,
+    load_nfl_site_inputs,
+    nfl_site_payload_bytes,
+    write_nfl_site_data,
+)
+from booth_review.build.site_assembly import nfl_site_enabled
 from booth_review.config import DataPaths
 from booth_review.errors import BoothReviewError
 from booth_review.nfl.freeze import (
@@ -54,6 +63,17 @@ def add_nfl_parser(sub: Any) -> None:
     build.add_argument("--include-playoffs", action="store_true")
     build.add_argument("--check-acceptance", action="store_true")
     build.add_argument("--no-commit", action="store_true")
+    build.add_argument(
+        "--site-data",
+        action="store_true",
+        help="also write processed/nfl-data.json (on by NFL_SITE_ENABLED=true)",
+    )
+
+    site_data = nfl_sub.add_parser(
+        "site-data",
+        help="rebuild processed/nfl-data.json from the NFL tables in the vault, no recompute",
+    )
+    site_data.add_argument("--no-commit", action="store_true")
 
     gaps = nfl_sub.add_parser("gaps", help="list played NFL 506 week pages to hand-save")
     gaps.add_argument("--season", type=int, default=None)
@@ -93,6 +113,8 @@ def _print_build(outcome: NflBuildOutcome, *, check: bool) -> None:
     )
     if outcome.blocked:
         print(f"override errors {c.get('override_errors', 0)}")
+    if c.get("site_data_failed"):
+        print("nfl site data: failed (tables committed)")
     if check and outcome.acceptance is not None:
         text = f"acceptance: {outcome.acceptance.unmatched} unmatched"
         if outcome.acceptance.multi_network:
@@ -110,6 +132,7 @@ def _nfl_build(args: argparse.Namespace) -> int:
             include_playoffs=args.include_playoffs,
             commit=not args.no_commit,
             check_acceptance=args.check_acceptance,
+            site_data=args.site_data or nfl_site_enabled(os.environ),
         )
     except BoothReviewError:
         raise
@@ -126,6 +149,37 @@ def _nfl_build(args: argparse.Namespace) -> int:
     unmatched = outcome.acceptance.unmatched if outcome.acceptance else 0
     if outcome.blocked or (args.check_acceptance and unmatched > 0):
         return EXIT_BLOCKED
+    return 0
+
+
+def _nfl_site_data(args: argparse.Namespace) -> int:
+    paths = DataPaths.from_env()
+    vault = VaultRepo(paths.vault)
+    vault.check()
+    try:
+        with vault.lock():
+            site = build_nfl_site_data(load_nfl_site_inputs(paths, reference_dir()))
+            rel = write_nfl_site_data(paths, site)
+            games = len(site.games.season)
+            if not args.no_commit:
+                season = site.freshness.season
+                vault.commit_batch(
+                    batch_message("build", "nfl_site", str(season), {"games": games}),
+                    paths=[rel],
+                )
+    except BoothReviewError:
+        raise
+    except Exception as exc:
+        if os.environ.get("BOOTH_REVIEW_DEBUG"):
+            raise
+        print(
+            f"error: unexpected {type(exc).__name__} during nfl site-data; details withheld "
+            "(set BOOTH_REVIEW_DEBUG=1 to see the traceback)",
+            file=sys.stderr,
+        )
+        return 3
+    size = len(nfl_site_payload_bytes(site))
+    print(f"nfl site data: {games} games, {len(site.lookups.people)} people, {size} bytes")
     return 0
 
 
@@ -277,6 +331,8 @@ def _nfl_accept_drift(
 def run_nfl_command(args: argparse.Namespace) -> int:
     if args.nfl_command == "build":
         return _nfl_build(args)
+    if args.nfl_command == "site-data":
+        return _nfl_site_data(args)
     if args.nfl_command == "people":
         return _nfl_people(args)
     if args.nfl_command == "gaps":

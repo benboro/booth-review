@@ -240,6 +240,125 @@ def test_rebuild_is_byte_identical(vault: DataPaths) -> None:
     assert first == second
 
 
+SITE_JSON = "processed/nfl-data.json"
+
+
+def _run(vault: DataPaths, **kwargs: object) -> nfl_pipeline.NflBuildOutcome:
+    return nfl_pipeline.run_nfl_build(
+        vault,
+        Path(os.environ["BOOTH_REVIEW_REFERENCE"]),
+        seasons=[2014],
+        include_playoffs=False,
+        check_acceptance=False,
+        **kwargs,  # type: ignore[arg-type]
+    )
+
+
+def test_site_data_off_writes_nothing_and_adds_no_count(vault: DataPaths) -> None:
+    _seed(vault, rr=["NFL Network"])
+    outcome = _run(vault, commit=True)
+    assert not (vault.vault / SITE_JSON).exists()
+    assert SITE_JSON not in outcome.written
+    assert "site_data_failed" not in outcome.counts and "site_games" not in outcome.counts
+
+
+def test_site_data_on_commits_the_json_with_the_tables(
+    vault: DataPaths, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from booth_review.contract.nfl_models import validate_nfl_site_data
+
+    _seed(vault, rr=["NFL Network"])
+    before = int(_git(vault, "rev-list", "--count", "HEAD").strip())
+    outcome = _run(vault, commit=True, site_data=True)
+    assert "site_data_failed" not in outcome.counts
+    assert SITE_JSON in outcome.written
+    assert int(_git(vault, "rev-list", "--count", "HEAD").strip()) == before + 1
+    files = _git(vault, "show", "--name-only", "--format=%s", "HEAD").splitlines()
+    subject, paths = files[0], {f for f in files[1:] if f}
+    assert SITE_JSON in paths and "processed/nfl_games.parquet" in paths
+    assert len(subject) <= 120
+    assert "Ana" not in subject
+    validate_nfl_site_data(json.loads((vault.vault / SITE_JSON).read_text(encoding="utf-8")))
+    first = (vault.vault / SITE_JSON).read_bytes()
+    _run(vault, commit=False, site_data=True)
+    assert (vault.vault / SITE_JSON).read_bytes() == first
+
+
+def test_builder_failure_still_commits_tables_and_keeps_previous_json(
+    vault: DataPaths, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from booth_review.errors import SiteBuildError
+
+    _seed(vault, rr=["NFL Network"])
+    previous = vault.vault / SITE_JSON
+    previous.parent.mkdir(parents=True, exist_ok=True)
+    previous.write_bytes(b"{}")
+
+    def _boom(*args: object, **kwargs: object) -> None:
+        raise SiteBuildError("boom")
+
+    monkeypatch.setattr(nfl_pipeline, "build_nfl_site_data", _boom)
+    outcome = _run(vault, commit=True, site_data=True)
+    assert outcome.counts["site_data_failed"] == 1
+    assert SITE_JSON not in outcome.written
+    assert previous.read_bytes() == b"{}"
+    assert outcome.committed
+    files = _git(vault, "show", "--name-only", "--format=%s", "HEAD").splitlines()
+    assert "processed/nfl_games.parquet" in files
+
+
+def test_blocked_build_leaves_previous_json(
+    vault: DataPaths, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed(vault, rr=["NFL Network"])
+    previous = vault.vault / SITE_JSON
+    previous.parent.mkdir(parents=True, exist_ok=True)
+    previous.write_bytes(b"last-good")
+    real = nfl_pipeline.assemble_nfl_games
+
+    def _bad(*args: object, **kwargs: object):  # type: ignore[no-untyped-def]
+        table = real(*args, **kwargs)  # type: ignore[arg-type]
+        counts = dict(table.counts)
+        counts["override_errors"] = 1
+        return type(table)(table.frame, table.reviews, counts, table.through_week)
+
+    monkeypatch.setattr(nfl_pipeline, "assemble_nfl_games", _bad)
+    outcome = _run(vault, commit=False, site_data=True)
+    assert outcome.blocked and SITE_JSON not in outcome.written
+    assert previous.read_bytes() == b"last-good"
+
+
+def test_extra_tables_hook_skips_site_data(vault: DataPaths) -> None:
+    _seed(vault, rr=["NFL Network"])
+    outcome = _run(
+        vault,
+        commit=False,
+        site_data=True,
+        extra_tables=lambda table, ref: {"nfl_hook_probe": table.frame.head(1)},
+    )
+    assert SITE_JSON not in outcome.written
+    assert "site_data_failed" not in outcome.counts
+
+
+def test_cli_site_data_flag_and_env(
+    vault: DataPaths, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _seed(vault, rr=["NFL Network"])
+    assert main(["nfl", "build", "--season", "2014", "--no-commit", "--site-data"]) == 0
+    assert (vault.vault / SITE_JSON).is_file()
+    (vault.vault / SITE_JSON).unlink()
+    assert main(["nfl", "build", "--season", "2014", "--no-commit"]) == 0
+    assert not (vault.vault / SITE_JSON).exists()
+    monkeypatch.setenv("NFL_SITE_ENABLED", "true")
+    assert main(["nfl", "build", "--season", "2014", "--no-commit"]) == 0
+    assert (vault.vault / SITE_JSON).is_file()
+    monkeypatch.setenv("NFL_SITE_ENABLED", "TRUE")
+    (vault.vault / SITE_JSON).unlink()
+    assert main(["nfl", "build", "--season", "2014", "--no-commit"]) == 0
+    assert not (vault.vault / SITE_JSON).exists()
+    capsys.readouterr()
+
+
 def test_include_playoffs_adds_rows(vault: DataPaths) -> None:
     _seed(vault, rr=["NFL Network"], playoff=True)
     assert main(["nfl", "build", "--season", "2014", "--no-commit"]) == 0
