@@ -141,6 +141,22 @@ function annotationText(r) {
   return `${plural(r.games, 'game', 'games')} · ${r.fill_in_games} fill-in`;
 }
 
+let measureCtx = null;
+
+/** Rendered width of a string in the axis font (canvas measureText). */
+function textWidth(text, font) {
+  if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d');
+  measureCtx.font = `${font.size}px ${font.family}`;
+  return measureCtx.measureText(text).width;
+}
+
+function ellipsize(text, font, maxWidth) {
+  if (textWidth(text, font) <= maxWidth) return text;
+  let end = text.length;
+  while (end > 1 && textWidth(text.slice(0, end) + '…', font) > maxWidth) end -= 1;
+  return text.slice(0, end) + '…';
+}
+
 function selectedBoothKey(state) {
   const s = state.selection;
   return s && s.kind === 'booth' ? s.key : null;
@@ -502,10 +518,25 @@ function buildFigure(items, state, env, th, selectedKey) {
       });
     });
   }
+  const font = { family: getComputedStyle(document.body).fontFamily, size: 14, color: ACCENT[th] };
+  // Desktop margins follow the longest row label and annotation; the plot keeps
+  // at least half the width, and an over-long label gets an ellipsis.
+  let marginL = 150;
+  let marginR = 16;
+  let labelMax = Infinity;
+  if (!env.mobile) {
+    const width = (refs.chart && refs.chart.clientWidth) || 1000;
+    const longest = Math.max(...items.map((it) => textWidth(it.label, font)));
+    const longestNote = Math.max(...items.map((it) => textWidth(annotationText(it.row), font)));
+    marginR = Math.min(Math.ceil(longestNote) + 12 + 16, Math.floor(width * 0.25));
+    const maxL = Math.floor(width * 0.5) - marginR;
+    marginL = Math.min(Math.ceil(longest) + 24, maxL);
+    labelMax = marginL - 24;
+  }
   const ticktext = items.map((it) => {
     const role = rowRole(it.row);
     const suffix = it.lowN ? ' (low n)' : '';
-    if (!env.mobile) return escapeHover(it.label);
+    if (!env.mobile) return escapeHover(ellipsize(it.label, font, labelMax));
     const names = boothNames(current.model, it.row);
     const first = role ? `${role}` : 'Others (pooled)';
     const second = role ? escapeHover(names).replace(' / ', '<br>') + suffix : '';
@@ -514,7 +545,6 @@ function buildFigure(items, state, env, th, selectedKey) {
       .join('<br>');
   });
 
-  const font = { family: getComputedStyle(document.body).fontFamily, size: 14, color: ACCENT[th] };
   const pitch = env.mobile ? 88 : 44;
   const layout = {
     paper_bgcolor: bg,
@@ -525,7 +555,7 @@ function buildFigure(items, state, env, th, selectedKey) {
     clickmode: 'event',
     dragmode: false,
     height: items.length * pitch + (adjusted ? 130 : 96) + (env.mobile ? 40 : 0),
-    margin: { l: env.mobile ? 150 : 280, r: env.mobile ? 16 : 120, t: 8, b: (adjusted ? 100 : 56) + (env.mobile ? 40 : 0) },
+    margin: { l: marginL, r: marginR, t: 8, b: (adjusted ? 100 : 56) + (env.mobile ? 40 : 0) },
     annotations,
     shapes: adjusted
       ? [{ type: 'line', xref: 'x', yref: 'paper', x0: 0, x1: 0, y0: 0, y1: 1, line: { color: ZERO_LINE[th], width: 1.5 } }]

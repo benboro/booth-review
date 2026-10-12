@@ -444,3 +444,24 @@ def test_mobile_tap_selects_and_shows_hover_lines(
     )
     assert lines == _hover(nfl_fixture_raw, f, 2024, 2026)[1:-1]
     assert mobile.evaluate("document.getElementById('chart-tooltip')?.hidden ?? true") is True
+
+
+def test_x_ticks_are_round_steps(app: Page) -> None:
+    _vm(app)
+    steps = app.evaluate(
+        """async () => {
+          const m = await import('/sports/nfl/views/team-bars.js');
+          return [136, 10, 3, 60, 200].map((n) => [n, m.niceStep(n)]);
+        }"""
+    )
+    by_max = dict(steps)
+    assert by_max[136] in (20, 25)
+    for _, step in steps:
+        assert step in (1, 2, 5, 10, 20, 25, 50, 100, 250, 200)
+    ticks = app.evaluate(
+        f"[...document.querySelectorAll('{GD} .xtick text')].map((t) => Number(t.textContent.replace(/,/g, '')))"
+    )
+    dtick = app.evaluate(f"document.querySelector('{GD}')._fullLayout.xaxis.dtick")
+    assert ticks
+    assert all(t % dtick == 0 for t in ticks), (ticks, dtick)
+    assert not {17, 34, 51} & set(ticks)

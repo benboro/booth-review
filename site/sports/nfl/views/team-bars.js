@@ -31,6 +31,15 @@ const CONFIG = {
   showEditInChartStudio: false,
 };
 
+/** Round tick step (1, 2, 5, 10, 20, 25, 50, ...) giving 4-8 ticks over max. */
+export function niceStep(max) {
+  const steps = [];
+  for (let m = 1; m <= 1e6; m *= 10) steps.push(m, 2 * m, 5 * m, ...(m >= 10 ? [2.5 * m] : []));
+  steps.sort((a, b) => a - b);
+  for (const st of steps) if (max / st <= 8) return st;
+  return steps[steps.length - 1];
+}
+
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -371,7 +380,7 @@ function buildFigure(rows, state, env, th) {
       range: [0, Math.max(1, max) * 1.05],
       tickmode: 'linear',
       tick0: 0,
-      dtick: Math.max(1, Math.ceil(max / 8)),
+      dtick: niceStep(max),
       tickformat: ',d',
       gridcolor: DIVIDER[th],
       tickfont: { color: MUTED[th] },

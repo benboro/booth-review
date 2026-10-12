@@ -483,3 +483,38 @@ def test_mobile_tap_selects_row_without_hover(
     assert page.evaluate("document.getElementById('chart-tooltip')?.hidden ?? true") is True
     _emit(page, "plotly_click", 0)
     page.wait_for_function("window.__nflTestHooks.getViewModel('fox').rows[0].ring === true")
+
+
+def _long_names(route: Route) -> None:
+    resp = route.fetch()
+    raw = json.loads(resp.text())
+    for k, person in enumerate(raw["lookups"]["people"]):
+        person["name"] = f"Longname-Surname{k:02d}"
+    route.fulfill(response=resp, body=json.dumps(raw))
+
+
+def test_long_labels_and_annotations_not_clipped_on_desktop(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    page.set_viewport_size({"width": 1280, "height": 900})
+    page.route("**/nfl-data.json", _long_names)
+    _open(page, open_nfl_app)
+    _vm(page)
+    boxes = page.evaluate(
+        """() => {
+          const gd = document.querySelector('#nfl-view-fox .nfl-chart > div');
+          const c = gd.getBoundingClientRect();
+          const pick = (sel) => [...gd.querySelectorAll(sel)].map((n) => {
+            const b = n.getBoundingClientRect();
+            return { text: n.textContent, left: b.left - c.left, right: c.right - b.right };
+          });
+          return { ticks: pick('.yaxislayer-above .ytick text'), notes: pick('.annotation-text') };
+        }"""
+    )
+    assert boxes["ticks"] and boxes["notes"]
+    for b in boxes["ticks"] + boxes["notes"]:
+        assert b["left"] >= -0.5, b
+        assert b["right"] >= -0.5, b
+    assert not any("…" in b["text"] for b in boxes["ticks"])
+    assert any("fill-in" in b["text"] for b in boxes["notes"])
