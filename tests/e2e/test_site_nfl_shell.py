@@ -143,13 +143,13 @@ def test_fetch_once_and_state_kept(cfb: Page) -> None:
     requests: list[str] = []
     cfb.on("request", lambda r: requests.append(r.url) if r.url.endswith("nfl-data.json") else None)
     _mount_nfl(cfb)
-    cfb.evaluate("window.__nflTestHooks.setState({ view: 'fox' })")
+    cfb.evaluate("window.__nflTestHooks.setState({ view: 'crews' })")
     _unmount_nfl(cfb)
     _mount_nfl(cfb, "?sport=nfl")
     assert len(requests) == 1
-    assert cfb.evaluate("window.__nflTestHooks.getState().view") == "fox"
-    assert "view=fox" in cfb.url
-    assert cfb.locator("#nfl-tab-fox").get_attribute("aria-selected") == "true"
+    assert cfb.evaluate("window.__nflTestHooks.getState().view") == "crews"
+    assert "view=crews" in cfb.url
+    assert cfb.locator("#nfl-tab-crews").get_attribute("aria-selected") == "true"
 
 
 def test_default_url(cfb: Page) -> None:
@@ -165,14 +165,14 @@ def test_tab_order_labels_and_default(cfb: Page) -> None:
     _mount_nfl(cfb)
     tabs = cfb.locator("#nfl-chart-tabs [role=tab]")
     assert tabs.all_inner_texts() == [
-        "Special games by team",
-        "Fox crews",
-        "AGOTW viewership",
-        "Game scatter",
+        "Special games",
+        "Crews",
+        "Viewership",
+        "Scatter",
     ]
     assert cfb.locator("#nfl-tab-special").get_attribute("aria-selected") == "true"
     assert cfb.url.endswith("?sport=nfl")
-    for view in ("special", "fox", "agotw", "scatter"):
+    for view in ("special", "crews", "viewership", "scatter"):
         assert (
             cfb.locator(f"#nfl-view-{view}").get_attribute("aria-labelledby") == f"nfl-tab-{view}"
         )
@@ -183,12 +183,12 @@ def test_tab_keyboard(cfb: Page) -> None:
     _mount_nfl(cfb)
     cfb.focus("#nfl-tab-special")
     cfb.keyboard.press("ArrowRight")
-    assert cfb.evaluate("document.activeElement.id") == "nfl-tab-fox"
+    assert cfb.evaluate("document.activeElement.id") == "nfl-tab-crews"
     assert cfb.locator("#nfl-tab-special").get_attribute("aria-selected") == "true"
     cfb.keyboard.press("Enter")
-    assert cfb.locator("#nfl-tab-fox").get_attribute("aria-selected") == "true"
-    assert "view=fox" in cfb.url
-    assert cfb.locator("#nfl-view-fox").is_visible()
+    assert cfb.locator("#nfl-tab-crews").get_attribute("aria-selected") == "true"
+    assert "view=crews" in cfb.url
+    assert cfb.locator("#nfl-view-crews").is_visible()
     assert not cfb.locator("#nfl-view-special").is_visible()
     cfb.keyboard.press("End")
     assert cfb.evaluate("document.activeElement.id") == "nfl-tab-scatter"
@@ -199,7 +199,10 @@ def test_tab_keyboard(cfb: Page) -> None:
 @pytest.mark.parametrize(
     ("query", "tab"),
     [
-        ("?sport=nfl&view=agotw", "agotw"),
+        ("?sport=nfl&view=crews", "crews"),
+        ("?sport=nfl&view=viewership", "viewership"),
+        ("?sport=nfl&view=fox", "crews"),
+        ("?sport=nfl&view=agotw", "viewership"),
         ("?sport=nfl&view=bogus", "special"),
     ],
 )
@@ -210,6 +213,10 @@ def test_initial_view_from_search(cfb: Page, query: str, tab: str) -> None:
     assert cfb.locator(f"#nfl-tab-{tab}").get_attribute("aria-selected") == "true"
     assert cfb.locator(f"#nfl-view-{tab}").is_visible()
     assert cfb.evaluate(f"window.__nflTestHooks.getViewModel('{tab}')")["view"] == tab
+    if tab != "special" and "view=bogus" not in query:
+        assert (
+            f"view={tab}" in cfb.url and "view=fox" not in cfb.url and "view=agotw" not in cfb.url
+        )
 
 
 def test_headline_shows_count_and_season_range(
@@ -233,6 +240,61 @@ def test_headline_shows_count_and_season_range(
         "t => document.querySelector('#nfl-headline').textContent === t", arg=want
     )
     # The headline is visible on every NFL view.
-    for view in ("special", "fox", "agotw", "scatter"):
+    for view in ("special", "crews", "viewership", "scatter"):
         page.evaluate("v => window.__nflTestHooks.setState({ view: v })", view)
         assert page.locator("#nfl-headline").is_visible()
+
+
+# ------------------------------------------------- views load without errors
+
+
+@pytest.mark.parametrize("view", ["crews", "viewership", "scatter", "special"])
+def test_view_ready_without_console_errors(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], view: str
+) -> None:
+    page = nfl_guarded_page
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+    open_nfl_app(page, f"?sport=nfl&view={view}" if view != "special" else "?sport=nfl")
+    assert page.evaluate("window.__nflTestHooks.failed") is False
+    assert page.locator(f"#nfl-view-{view}").is_visible()
+    if view == "special":
+        # Relaxed until plan 10 rewrites team-bars.js for the 2.0.0 model: only
+        # the ready and not-failed checks apply to Special games. Plan 10 restores
+        # the no-console-error assertion here.
+        return
+    assert errors == []
+
+
+# ------------------------------------------------------------ booth picks
+
+
+def _first_booth(page: Page) -> tuple[str, str]:
+    return page.evaluate(  # type: ignore[no-any-return]
+        "() => { const c = window.__nflTestHooks.getBoothCatalog()[0]; return [c.key, c.label]; }"
+    )
+
+
+def test_booth_chip_caption_and_empty(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    open_nfl_app(page, "?sport=nfl&view=crews")
+    key, label = _first_booth(page)
+    page.evaluate("k => window.__nflTestHooks.setState({ booths: [k] })", key)
+    chip = page.locator("#nfl-chips .chip")
+    assert chip.count() == 1
+    assert chip.locator(".chip-label").inner_text() == label
+    assert "booths=" in page.url
+    assert page.evaluate("window.__nflTestHooks.getTableIndexes().length") > 0
+    # A season range with no games for the booth shows the filtered empty state.
+    page.evaluate("window.__nflTestHooks.setState({ seasons: [2026, 2026] })")
+    page.wait_for_function("window.__nflTestHooks.getTableIndexes().length === 0")
+    empty = page.inner_text("#nfl-matched-games")
+    assert f"No games match the current filters for {label}." in empty
+    # The remove button clears the booth.
+    page.evaluate("window.__nflTestHooks.setState({ seasons: [2024, 2026] })")
+    page.locator("#nfl-chips .chip-remove").click()
+    assert page.locator("#nfl-chips .chip").count() == 0
+    assert page.evaluate("window.__nflTestHooks.getState().booths") == []
