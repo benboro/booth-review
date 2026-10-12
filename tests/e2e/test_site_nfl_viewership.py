@@ -196,6 +196,32 @@ def test_residual_mode_whiskers_caption_and_gap(
     assert tr["error"] is not None
 
 
+def test_residual_whiskers_use_line_color_thin_and_dodged(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    _vm(page)
+    page.locator(f"{VIEW} .segmented button", has_text="Residual given game quality").click()
+    page.wait_for_function("window.__nflTestHooks.getViewModel('viewership').viewY === 'resid'")
+    got = page.evaluate(
+        """(sel) => document.querySelector(sel).data.map((t) => ({
+          name: t.name, x0: t.x[0], line: t.line.color,
+          err: t.error_y && { color: t.error_y.color, thickness: t.error_y.thickness,
+                              width: t.error_y.width },
+        }))""",
+        GD,
+    )
+    assert len(got) >= 2
+    for t in got:
+        assert t["err"]["color"] == t["line"]
+        assert t["err"]["thickness"] <= 1
+        assert t["err"]["width"] <= 2
+    # Same season, distinct x per line so whiskers do not overlap.
+    assert len({round(t["x0"], 4) for t in got if float(t["x0"]) < 2025}) >= 1
+    assert len({t["x0"] for t in got}) == len(got)
+
+
 def test_low_n_hollow_and_hover_says_low_n(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
 ) -> None:
@@ -249,54 +275,66 @@ def test_hover_lists_crews(
 # ------------------------------------------------------------------ legend and picker
 
 
-def test_chip_click_toggles_and_picker_in_sync(
+def test_chip_click_toggles_and_no_categories_popover(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
 ) -> None:
+    """The legend chips are the category picker (D-08); there is no separate popover."""
     page = nfl_guarded_page
     _open(page, open_nfl_app)
     _vm(page)
     ids = _present_ids(nfl_fixture_raw)
+    assert page.locator(f"{VIEW} .filter-trigger").count() == 0
+    assert page.locator(f"{VIEW} .nfl-viewership-popover").count() == 0
     page.locator(f"{CHIPS}[data-category=snf]").click()
     page.wait_for_function("window.__nflTestHooks.getState().hiddenCategories.includes('snf')")
     assert "snf" not in _shown(page)
     vm = _vm(page)
     assert "snf" not in [c["id"] for c in vm["categories"]]
-    page.locator(f"{VIEW} .filter-trigger").click()
-    box = page.locator(f"{VIEW} .nfl-viewership-picklist input[value=snf]")
-    assert not box.is_checked()
-    # Picker unchecks another, chips follow.
-    page.locator(f"{VIEW} .nfl-viewership-picklist input[value=mnf]").uncheck()
-    page.wait_for_function("window.__nflTestHooks.getState().hiddenCategories.includes('mnf')")
-    assert "mnf" not in _shown(page)
-    box.check()
-    page.wait_for_function("!window.__nflTestHooks.getState().hiddenCategories.includes('snf')")
-    assert sorted(_shown(page)) == sorted(i for i in ids if i != "mnf")
-    page.locator(f"{VIEW} .nfl-viewership-popover .group-reset").click()
+    page.wait_for_timeout(600)  # past the double-click window, so this is a second single click
+    page.locator(f"{CHIPS}[data-category=snf]").click()
     page.wait_for_function("window.__nflTestHooks.getState().hiddenCategories.length === 0")
     assert sorted(_shown(page)) == sorted(ids)
 
 
-def test_picker_search_and_only(
-    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
+def test_controls_are_not_stretched_full_width(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
 ) -> None:
     page = nfl_guarded_page
     _open(page, open_nfl_app)
     _vm(page)
-    page.locator(f"{VIEW} .filter-trigger").click()
-    page.locator(f"{VIEW} .nfl-viewership-popover input[type=search]").fill("zzz")
-    assert page.locator(f"{VIEW} .nfl-viewership-popover .helper").is_visible()
-    page.locator(f"{VIEW} .nfl-viewership-popover input[type=search]").fill("thanks")
-    rows = page.locator(f"{VIEW} .nfl-viewership-picklist .check-item:visible")
-    assert rows.count() == 1
-    rows.first.locator(".only-btn").click()
-    page.wait_for_function(
-        "window.__nflTestHooks.getViewModel('viewership').categories.length === 1"
+    widths = page.eval_on_selector_all(
+        f"{VIEW} .nfl-viewership-controls .segmented, {VIEW} .nfl-viewership-controls .axis-group",
+        "els => els.map(e => e.getBoundingClientRect().width)",
     )
-    assert _shown(page) == ["thanksgiving"]
-    assert rows.first.locator(".only-btn").inner_text() == "All"
-    rows.first.locator(".only-btn").click()
-    page.wait_for_function("window.__nflTestHooks.getState().hiddenCategories.length === 0")
-    assert sorted(_shown(page)) == sorted(_present_ids(nfl_fixture_raw))
+    container = page.eval_on_selector(
+        f"{VIEW} .nfl-viewership-controls", "e => e.getBoundingClientRect().width"
+    )
+    assert widths and all(w < container * 0.6 for w in widths)
+
+
+def test_shared_hue_lines_differ_in_symbol_and_color(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    got = page.evaluate(
+        """async () => {
+          const P = await import('./sports/nfl/palette.js');
+          const out = {};
+          const groups = [['thanksgiving', 'christmas', 'black_friday'],
+                          ['saturday', 'friday', 'other']];
+          for (const group of groups) {
+            const styles = group.map((id) => P.viewCategoryStyle(id, 'light'));
+            out[group[0]] = {
+              colors: new Set(styles.map((s) => s.color)).size,
+              symbols: new Set(styles.map((s) => s.symbol)).size,
+            };
+          }
+          return out;
+        }"""
+    )
+    for group in got.values():
+        assert group == {"colors": 3, "symbols": 3}
 
 
 def test_double_click_shows_only_then_restores(

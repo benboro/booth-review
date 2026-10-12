@@ -441,3 +441,41 @@ def test_no_console_errors(page: Page, nfl_site_url: str) -> None:
     page.get_by_role("button", name="Adjusted").click()
     page.get_by_role("button", name="Previous season").click()
     assert errors == []
+
+
+_PLOT_GAP_JS = """(sel) => {
+  const gd = document.querySelector(sel);
+  const box = gd.parentElement.getBoundingClientRect();
+  const paper = gd.getBoundingClientRect();
+  return { gap: box.bottom - paper.bottom };
+}"""
+
+
+def test_chart_container_hugs_the_plot_for_three_booths(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    """No blank band under the booth chart: the container follows the figure height."""
+    _open(nfl_guarded_page, open_nfl_app)
+    _vm(nfl_guarded_page)
+    assert nfl_guarded_page.locator(f"{VIEW} .nfl-booth-table tbody tr").count() == 3
+    got = nfl_guarded_page.evaluate(_PLOT_GAP_JS, GD)
+    assert got["gap"] <= 4
+
+
+def test_phone_booth_table_shows_games_and_unclipped_low_n(
+    nfl_mobile_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_mobile_page
+    _open(page, open_nfl_app)
+    _vm(page)
+    width = page.evaluate("window.innerWidth")
+    games = page.locator(f"{VIEW} .nfl-booth-table thead th", has_text="Games")
+    box = games.bounding_box()
+    assert box is not None and box["x"] >= 0 and box["x"] + box["width"] <= width
+    # The low-n tag sits under the names and is fully inside the viewport.
+    tag = page.locator(f"{VIEW} .nfl-booth-table .low-n-tag").first
+    tbox = tag.bounding_box()
+    assert tbox is not None and tbox["x"] + tbox["width"] <= width
+    names = page.locator(f"{VIEW} .nfl-booth-table .booth-names").first.bounding_box()
+    assert names is not None
+    assert page.locator(f"{VIEW} .nfl-booth-table .booth-names .name-with-roles").count() >= 2

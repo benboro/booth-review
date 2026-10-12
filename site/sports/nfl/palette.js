@@ -24,7 +24,13 @@ export const NFL_CATEGORY_COLORS = Object.freeze({
 /** Games in no special category (scatter only). */
 export const NFL_OTHER_COLOR = Object.freeze({ light: '#8C8C8C', dark: '#999999' });
 
-/** Viewership view category -> segment color plus marker symbol. */
+/**
+ * Viewership view category -> segment color plus marker symbol. Lines that share a hue
+ * (the three holidays, Saturday/Friday/Other) also differ in marker shape and carry their
+ * own shade of the family hue (`shade`), so they stay apart. Every shade reaches 3:1
+ * against --bg and --surface in both themes (e2e: test_view_category_colors_reach_3_to_1).
+ * Dashes stay reserved for window-level lines.
+ */
 export const VIEW_CATEGORY_STYLE = Object.freeze({
   agotw: { segment: 'agotw', symbol: 'circle' },
   cbs_national: { segment: 'cbs_national', symbol: 'circle' },
@@ -32,12 +38,12 @@ export const VIEW_CATEGORY_STYLE = Object.freeze({
   mnf: { segment: 'solo_monday', symbol: 'circle' },
   tnf: { segment: 'solo_thursday', symbol: 'circle' },
   thanksgiving: { segment: 'solo_holiday', symbol: 'circle' },
-  christmas: { segment: 'solo_holiday', symbol: 'square' },
-  black_friday: { segment: 'solo_holiday', symbol: 'diamond' },
+  christmas: { segment: 'solo_holiday', symbol: 'square', shade: { light: '#6B5F00', dark: '#C9BD1F' } },
+  black_friday: { segment: 'solo_holiday', symbol: 'diamond', shade: { light: '#9A8800', dark: '#FFF59A' } },
   international: { segment: 'international_other', symbol: 'circle' },
-  saturday: { segment: 'solo_other', symbol: 'circle' },
-  friday: { segment: 'solo_other', symbol: 'square' },
-  other: { segment: 'solo_other', symbol: 'diamond' },
+  saturday: { segment: 'solo_other', symbol: 'circle', shade: { light: '#5F5F5F', dark: '#8A8A8A' } },
+  friday: { segment: 'solo_other', symbol: 'square', shade: { light: '#8C8C8C', dark: '#B0B0B0' } },
+  other: { segment: 'solo_other', symbol: 'diamond', shade: { light: '#444444', dark: '#D2D2D2' } },
 });
 
 /**
@@ -50,7 +56,8 @@ export function viewCategoryStyle(id, theme) {
   const st = Object.prototype.hasOwnProperty.call(VIEW_CATEGORY_STYLE, id)
     ? VIEW_CATEGORY_STYLE[id]
     : { segment: 'none', symbol: 'circle' };
-  return { color: categoryColor(st.segment, theme), symbol: st.symbol };
+  const t = theme === 'dark' ? 'dark' : 'light';
+  return { color: st.shade ? st.shade[t] : categoryColor(st.segment, theme), symbol: st.symbol };
 }
 
 /** AGOTW crew styles by order of first appearance; the fifth repeats. */

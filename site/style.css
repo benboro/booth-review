@@ -3211,6 +3211,58 @@ body:not([data-sport="nfl"]) #sport-load-error {
   .booth-row-btn {
     min-height: 44px;
   }
+
+  /* Phone Crews table: the booth cell stacks pbp, analyst and the low-n tag on their own
+     lines so the narrow Booth column leaves Games and the flagship column on screen. The
+     rest scrolls sideways, with an edge shadow as the cue. CFB's table has no twin. */
+  .booth-row-btn {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-xs);
+  }
+
+  .booth-rank {
+    min-width: 0;
+  }
+
+  .booth-names {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .booth-sep {
+    display: none;
+  }
+
+  .low-n-tag {
+    margin-left: 0;
+  }
+
+  .nfl-booth-table th,
+  .nfl-booth-table td {
+    padding-left: var(--space-xs);
+    padding-right: var(--space-xs);
+  }
+
+  .nfl-booth-table-wrap {
+    background:
+      linear-gradient(to right, var(--bg), var(--bg)) left center / 20px 100% no-repeat local,
+      linear-gradient(to left, var(--bg), var(--bg)) right center / 20px 100% no-repeat local,
+      linear-gradient(to right, rgba(0, 0, 0, 0.22), transparent) left center / 10px 100% no-repeat scroll,
+      linear-gradient(to left, rgba(0, 0, 0, 0.22), transparent) right center / 10px 100% no-repeat scroll;
+  }
+}
+
+/* NFL control rows: fixed-width groups side by side, never stretched to the row (the shared
+   `.chart-controls` is a one-cell grid built for CFB's single controls block). */
+.nfl-crews-controls,
+.nfl-crews-chart-controls,
+.nfl-viewership-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
 }
 
 .booth-rank {
@@ -3235,6 +3287,8 @@ body:not([data-sport="nfl"]) #sport-load-error {
 }
 
 .season-stepper .season-value {
+  display: flex;
+  align-items: center;
   padding: 0 var(--space-sm);
   font-variant-numeric: tabular-nums;
 }

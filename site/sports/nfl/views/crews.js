@@ -426,19 +426,22 @@ function renderBoothTable(items, group, state, season, anyPublished) {
       btn.dataset.key = it.key;
       btn.setAttribute('aria-pressed', String(sel === it.key));
       btn.append(el('span', 'booth-rank', it.rankLabel));
-      const pbp = nameWithRoles(el('span', 'booth-name', personName(current.model, r.pbp_person)), makeRolePill('pbp'));
-      btn.append(' ', pbp);
+      // The names sit in one `.booth-names` group: inline on desktop, stacked (pbp, analyst,
+      // then the low-n tag) in the narrow phone column; see the 640px rules in style.css.
+      const names = el('span', 'booth-names');
+      names.append(nameWithRoles(el('span', 'booth-name', personName(current.model, r.pbp_person)), makeRolePill('pbp')));
       if (r.analyst_person != null) {
-        btn.append(
-          document.createTextNode(' / '),
+        names.append(
+          el('span', 'booth-sep', ' / '),
           nameWithRoles(el('span', 'booth-name', personName(current.model, r.analyst_person)), makeRolePill('analyst')),
         );
       }
       if (r.low_n) {
         const tag = el('span', 'low-n-tag', 'low n');
         tag.title = 'Few games, so treat with care.';
-        btn.append(' ', tag);
+        names.append(tag);
       }
+      btn.append(' ', names);
       btn.addEventListener('click', () => toggleBooth(it));
       th.appendChild(btn);
       tr.append(th, numCell(String(r.games)));
@@ -854,6 +857,9 @@ export function render(ctx) {
 
   const fig = buildFigure(items, metric, adjusted, env, th, sel, new Set(state.booths));
   refs.drawn = true;
+  // The container follows the figure height (rows x pitch + margins), not the 520px CSS minimum,
+  // so a short chart leaves no blank band below the plot.
+  refs.chart.style.minHeight = `${fig.layout.height}px`;
   window.Plotly.react(refs.gd, fig.traces, fig.layout, CONFIG);
   bindEvents(refs.gd);
 }

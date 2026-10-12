@@ -252,6 +252,35 @@ def test_segment_colors_reach_3_to_1(
         assert on_surface >= 3.0, (scheme, key, on_surface)
 
 
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_view_category_colors_reach_3_to_1(
+    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None], scheme: str
+) -> None:
+    """Every Viewership line color, including the per-line shades of shared hues."""
+    nfl_guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
+    open_flagon_cfb(nfl_guarded_page)
+    got = nfl_guarded_page.evaluate(
+        "async () => {"
+        + PRELUDE
+        + _luminance_js()
+        + f"""
+        const cs = getComputedStyle(document.documentElement);
+        const bg = cs.getPropertyValue('--bg').trim().toUpperCase();
+        const surface = cs.getPropertyValue('--surface').trim().toUpperCase();
+        const out = [];
+        for (const id of Object.keys(P.VIEW_CATEGORY_STYLE)) {{
+          const hex = P.viewCategoryStyle(id, '{scheme}').color;
+          out.push([id, ratio(hex, bg), ratio(hex, surface)]);
+        }}
+        return {{ out }};
+        }}"""
+    )
+    assert len(got["out"]) == 12
+    for key, on_bg, on_surface in got["out"]:
+        assert on_bg >= 3.0, (scheme, key, on_bg)
+        assert on_surface >= 3.0, (scheme, key, on_surface)
+
+
 def test_flag_labels_and_source_text(run: Callable[[str], Any]) -> None:
     got = run(
         """
@@ -290,7 +319,13 @@ def test_view_category_style_and_palette_keys(
     ]  # fmt: skip
     assert got["holiday"] == {"light": "#8A7A00", "dark": "#F0E442"}
     assert all(s["color"].startswith("#") and s["symbol"] for s in got["styles"])
-    assert len({s["symbol"] for s in got["styles"] if s["color"] == "#8A7A00"}) == 3
+    holiday = [
+        s
+        for id_, s in zip(ids, got["styles"], strict=True)
+        if id_ in ("thanksgiving", "christmas", "black_friday")
+    ]
+    assert len({s["symbol"] for s in holiday}) == 3
+    assert len({s["color"] for s in holiday}) == 3
 
 
 # ----------------------------------------------------------------- state.js

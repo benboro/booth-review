@@ -578,6 +578,9 @@ export function render(ctx) {
     return;
   }
   const fig = buildFigure(rows, state, env, th);
+  // The container follows the figure height (rows x pitch + margins), not the 520px CSS minimum,
+  // so a short chart leaves no blank band below the plot.
+  refs.chart.style.minHeight = `${fig.layout.height}px`;
   window.Plotly.react(refs.gd, fig.traces, fig.layout, CONFIG);
   bindEvents(refs.gd);
 }

@@ -61,15 +61,11 @@ function el(tag, className, text) {
   return node;
 }
 
+const DODGE_STEP = 0.06;
+
 const refs = {
   ctx: null,
   measure: null,
-  trigger: null,
-  popover: null,
-  search: null,
-  pickList: null,
-  pickEmpty: null,
-  pickReset: null,
   legend: null,
   bandButton: null,
   bandNote: null,
@@ -82,8 +78,6 @@ const refs = {
   dataBody: null,
   drawn: false,
   bound: false,
-  pickSig: '',
-  pickRows: new Map(),
 };
 
 let current = null; // what the last render drew
@@ -243,60 +237,9 @@ function bindEvents(gd) {
 
 // ---- controls ----
 
-function placePopover(pop, trigger) {
-  const r = trigger.getBoundingClientRect();
-  const margin = 8;
-  const width = Math.min(pop.offsetWidth || 240, window.innerWidth - 2 * margin);
-  const left = Math.max(margin, Math.min(r.left, window.innerWidth - width - margin));
-  pop.style.left = `${left}px`;
-  pop.style.top = `${r.bottom + 4}px`;
-}
-
 function buildControls() {
   const { ctx } = refs;
   const controls = el('div', 'chart-controls nfl-viewership-controls');
-
-  const catGroup = el('div', 'axis-group');
-  catGroup.appendChild(el('span', 'axis-caption', 'Categories'));
-  refs.trigger = el('button', 'filter-trigger', 'Categories');
-  refs.trigger.type = 'button';
-  refs.trigger.setAttribute('popovertarget', 'nfl-viewership-cat-pop');
-  refs.trigger.setAttribute('aria-haspopup', 'dialog');
-  refs.trigger.setAttribute('aria-expanded', 'false');
-  const pop = el('div', 'filter-popover nfl-viewership-popover');
-  pop.id = 'nfl-viewership-cat-pop';
-  pop.setAttribute('popover', 'auto');
-  pop.setAttribute('role', 'dialog');
-  pop.setAttribute('aria-label', 'Categories');
-  const head = el('div', 'section-head');
-  const reset = el('button', 'group-reset', 'Reset');
-  reset.type = 'button';
-  reset.setAttribute('aria-label', 'Reset Categories');
-  reset.addEventListener('click', () => ctx.setState({ hiddenCategories: [] }));
-  head.append(el('h3', null, 'Categories'), reset);
-  const field = el('div', 'search-field');
-  const input = el('input');
-  input.type = 'search';
-  input.placeholder = 'Search categories';
-  input.autocomplete = 'off';
-  input.setAttribute('aria-label', 'Search categories');
-  input.addEventListener('input', filterPicker);
-  field.appendChild(input);
-  const list = el('div', 'nfl-viewership-picklist');
-  const empty = el('p', 'helper', 'No categories match.');
-  empty.hidden = true;
-  pop.append(head, field, list, empty);
-  pop.addEventListener('beforetoggle', (e) => {
-    if (e.newState === 'open') {
-      placePopover(pop, refs.trigger);
-      requestAnimationFrame(() => placePopover(pop, refs.trigger));
-    }
-  });
-  pop.addEventListener('toggle', (e) => {
-    refs.trigger.setAttribute('aria-expanded', e.newState === 'open' ? 'true' : 'false');
-  });
-  Object.assign(refs, { popover: pop, search: input, pickList: list, pickEmpty: empty, pickReset: reset });
-  catGroup.append(refs.trigger, pop);
 
   const measureGroup = el('div', 'axis-group');
   measureGroup.appendChild(el('span', 'axis-caption', 'Measure'));
@@ -314,60 +257,8 @@ function buildControls() {
     refs.measure.appendChild(b);
   }
   measureGroup.appendChild(refs.measure);
-  controls.append(catGroup, measureGroup);
+  controls.append(measureGroup);
   return controls;
-}
-
-function filterPicker() {
-  const q = refs.search.value.trim().toLowerCase();
-  let shown = 0;
-  for (const { item, lower } of refs.pickRows.values()) {
-    const hit = !q || lower.includes(q);
-    item.hidden = !hit;
-    if (hit) shown += 1;
-  }
-  refs.pickEmpty.hidden = shown > 0 || refs.pickRows.size === 0;
-}
-
-function renderPicker(series, state) {
-  const present = series.filter((s) => s.points.length);
-  const sig = present.map((s) => s.id).join('|');
-  if (sig !== refs.pickSig) {
-    refs.pickSig = sig;
-    refs.pickRows = new Map();
-    refs.pickList.replaceChildren();
-    for (const s of present) {
-      const item = el('div', 'check-item');
-      const label = el('label', 'check-row option-check');
-      const box = el('input');
-      box.type = 'checkbox';
-      box.name = 'nfl-view-category';
-      box.value = s.id;
-      box.addEventListener('change', () => toggleCategory(s.id));
-      label.append(box, document.createTextNode(' '), el('span', 'option-name', s.label));
-      const only = el('button', 'only-btn', 'Only');
-      only.type = 'button';
-      only.dataset.onlyCategory = s.id;
-      only.addEventListener('click', (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        refs.ctx.setState(onlyPatch(s.id, refs.ctx.getState().hiddenCategories));
-      });
-      item.append(label, only);
-      refs.pickList.appendChild(item);
-      refs.pickRows.set(s.id, { item, box, only, label: s.label, lower: s.label.toLowerCase() });
-    }
-    filterPicker();
-  }
-  const shown = shownFrom(present.map((s) => s.id), state.hiddenCategories);
-  for (const [id, row] of refs.pickRows) {
-    row.box.checked = shown.includes(id);
-    const sole = shown.length === 1 && shown[0] === id;
-    row.only.textContent = sole ? 'All' : 'Only';
-    row.only.setAttribute('aria-label', sole ? 'Show all categories' : `Show only ${row.label}`);
-  }
-  refs.pickReset.setAttribute('aria-disabled', state.hiddenCategories.length ? 'false' : 'true');
-  refs.trigger.dataset.active = state.hiddenCategories.length ? 'true' : 'false';
 }
 
 function renderLegend(series, state, th) {
@@ -507,7 +398,7 @@ function buildFigure(model, state, env, th, lines, seasonPoints) {
       type: 'scatter',
       mode: 'lines+markers',
       name: ln.label,
-      x: ln.items.map((it) => it.p.season),
+      x: ln.items.map((it) => it.p.season + (resid ? ln.dodge : 0)),
       y: ln.items.map((it) => it.y),
       customdata: ln.items.map((it) => it.k),
       hoverinfo: 'none',
@@ -532,9 +423,9 @@ function buildFigure(model, state, env, th, lines, seasonPoints) {
         type: 'data',
         array: ln.items.map((it) => (it.err == null ? NaN : it.err)),
         visible: true,
-        color: MUTED[th],
-        thickness: 1.5,
-        width: 4,
+        color: ln.color,
+        thickness: 1,
+        width: 2,
       };
     }
     return trace;
@@ -690,7 +581,6 @@ export function render(ctx) {
   }
 
   const series = viewershipSeries(model, state);
-  renderPicker(series, state);
   renderLegend(series, state, th);
 
   const resid = state.viewY === 'resid';
@@ -701,9 +591,13 @@ export function render(ctx) {
   const ordered = [...shown.filter((s) => s.id !== 'agotw'), ...shown.filter((s) => s.id === 'agotw')];
 
   const items = [];
-  const lines = ordered.map((s) => {
+  // Residual mode: each line's points sit slightly left or right of the season tick, so their
+  // whiskers do not stack on one vertical (DODGE_STEP per line, kept inside the season band).
+  const dodgeStep = Math.min(DODGE_STEP, 0.7 / Math.max(ordered.length, 1));
+  const lines = ordered.map((s, k) => {
     const st = viewCategoryStyle(s.id, th);
-    const ln = { id: s.id, label: s.label, windowLevel: s.windowLevel, color: st.color, symbol: st.symbol, items: [] };
+    const dodge = (k - (ordered.length - 1) / 2) * dodgeStep;
+    const ln = { id: s.id, label: s.label, windowLevel: s.windowLevel, color: st.color, symbol: st.symbol, dodge, items: [] };
     for (const p of s.points) {
       const y = resid ? p.resid : p.mean;
       const it = {
@@ -742,6 +636,9 @@ export function render(ctx) {
   current.bands = fig.bands;
   refs.drawn = true;
   setEraCaption(refs.captions, fig.eraLabels, env.mobile);
+  // The container follows the figure height (rows x pitch + margins), not the 520px CSS minimum,
+  // so a short chart leaves no blank band below the plot.
+  refs.chart.style.minHeight = `${fig.layout.height}px`;
   window.Plotly.react(refs.gd, fig.traces, fig.layout, CONFIG);
   bindEvents(refs.gd);
 }

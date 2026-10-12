@@ -539,3 +539,21 @@ def test_keyboard_picks_a_team_from_the_visible_on_focus_table(app: Page) -> Non
     app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
     assert _vm(app)["selected"] == key
     assert app.evaluate("document.activeElement.dataset.key") == key
+
+
+def test_chart_container_hugs_the_plot_for_six_teams(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    """No blank band under the team bars: the container follows the figure height."""
+    open_nfl_app(nfl_guarded_page, "?sport=nfl&view=special")
+    nfl_guarded_page.wait_for_selector("#nfl-view-special .nfl-chart .js-plotly-plot")
+    got = nfl_guarded_page.evaluate(
+        """() => {
+          const gd = document.querySelector('#nfl-view-special .nfl-chart .js-plotly-plot');
+          const box = gd.parentElement.getBoundingClientRect();
+          return { gap: box.bottom - gd.getBoundingClientRect().bottom,
+                   rows: gd.data[0].y.length };
+        }"""
+    )
+    assert got["rows"] == 6
+    assert got["gap"] <= 4
