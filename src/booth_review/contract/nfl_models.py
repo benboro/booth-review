@@ -271,7 +271,7 @@ class NflBoothColumns(BaseModel):
     season: list[int]
     network_group: list[int]
     rank: list[int]
-    rank_source: list[Literal["published", "override", "inferred"]]
+    rank_source: list[Literal["published", "override", "inferred", "games"]]
     is_lead: list[bool]
     pbp_person: list[int]
     analyst_person: list[int | None]
@@ -584,11 +584,14 @@ class NflSiteData(BaseModel):
             ranks = sorted(b.rank[i] for i in rows)
             if ranks != list(range(1, len(rows) + 1)):
                 raise ValueError(f"booths.rank[{rows[0]}]: ranks must be exactly 1..n")
-            leads = [i for i in rows if b.is_lead[i]]
-            if len(leads) != 1 or b.rank[leads[0]] != 1:
-                raise ValueError(f"booths.is_lead[{rows[0]}]: exactly one lead, at rank 1")
             if len({b.rank_source[i] for i in rows}) != 1:
                 raise ValueError(f"booths.rank_source[{rows[0]}]: mixed sources in one group")
+            leads = [i for i in rows if b.is_lead[i]]
+            if b.rank_source[rows[0]] == "games":
+                if leads:
+                    raise ValueError(f"booths.is_lead[{leads[0]}]: no lead when ranked by games")
+            elif len(leads) != 1 or b.rank[leads[0]] != 1:
+                raise ValueError(f"booths.is_lead[{rows[0]}]: exactly one lead, at rank 1")
 
     def _check_viewership(self, num_games: int) -> None:
         v = self.viewership

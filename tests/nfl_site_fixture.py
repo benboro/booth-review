@@ -688,8 +688,9 @@ _BOOTH_LAYOUT: list[tuple[int, str, int, str, tuple[int, int], str, int]] = [
     # The newest season is in progress: published ranks, one booth with no games yet.
     (2026, "fox", 1, "published", _LEAD[2026], "fox:lead", 0),
     (2026, "fox", 2, "published", _CREW_FOX_O1, "fox:o1", 0),
-    (2024, "cbs", 1, "inferred", _CREW_CBS, "cbs:b1", 0),
-    (2024, "cbs", 2, "inferred", _CREW_CBS2, "cbs:b2", 0),
+    # No lead is known for CBS 2024 (D-23): ranked by games called, none labeled Lead.
+    (2024, "cbs", 1, "games", _CREW_CBS, "cbs:b1", 0),
+    (2024, "cbs", 2, "games", _CREW_CBS2, "cbs:b2", 0),
     (2025, "cbs", 1, "override", _CREW_CBS, "cbs:b1", 0),
     (2025, "cbs", 2, "override", _CREW_CBS2, "cbs:b2", 0),
     (2026, "cbs", 1, "override", _CREW_CBS, "cbs:b1", 0),
@@ -755,7 +756,7 @@ def _booth_rows(specs: list[dict[str, Any]], games: dict[str, list[Any]]) -> dic
             "network_group": group_index[group],
             "rank": rank,
             "rank_source": source,
-            "is_lead": rank == 1,
+            "is_lead": rank == 1 and source != "games",
             "pbp_person": people[0],
             "analyst_person": people[1],
             "games": len(idx),

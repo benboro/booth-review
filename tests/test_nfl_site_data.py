@@ -903,6 +903,37 @@ def test_zero_game_published_booth_ships_an_empty_list() -> None:
     assert site.booths.rank_source == ["published", "published"]
 
 
+def test_games_ranked_group_season_ships_without_a_lead() -> None:
+    site = _single(
+        [_fox("f1", 2024, 1, "p-lead", "a-one"), _fox("f2", 2024, 2, "p-two", "a-two")],
+        [
+            _t1(
+                season=2024,
+                booth_group="other",
+                booth_rank=rank,
+                rank_source="games",
+                booth_pbp_person_id=pbp,
+                games=1,
+            )
+            for rank, pbp in ((1, "p-lead"), (2, "p-two"))
+        ],
+    )
+    b = site.booths
+    assert b.rank == [1, 2]
+    assert b.rank_source == ["games", "games"]
+    assert b.is_lead == [False, False]
+    assert [len(g) for g in b.game_list] == [1, 1]
+
+
+def test_a_null_rank_booth_row_is_a_build_error() -> None:
+    with pytest.raises(SiteBuildError) as err:
+        _single(
+            [_fox("f1", 2024, 1, "p-lead", "a-one")],
+            [_t1(season=2024, booth_group="other", booth_rank=None, booth_pbp_person_id="p-lead")],
+        )
+    assert "booths[0].rank" in str(err.value)
+
+
 def test_booth_row_for_an_unshipped_group_raises_by_position() -> None:
     with pytest.raises(SiteBuildError) as err:
         _single(

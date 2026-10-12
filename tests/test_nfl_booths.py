@@ -283,7 +283,17 @@ def test_no_flagship_votes_has_no_lead_and_review() -> None:
     out = build_booths(frame([g("1", 4, "pb-a"), g("2", 4, "pb-b")]))
     assert out.leads["lead_pbp_person_id"].to_list() == [None]
     assert out.reviews["lead_booth"][0]["reason"] == "no-flagship-votes"
-    assert out.booths["booth_rank"].to_list() == [None, None]
+    # D-23: the booths still ship, ranked by games called, none labeled Lead.
+    assert out.booths["booth_rank"].to_list() == [1, 2]
+    assert out.booths["rank_source"].to_list() == ["games", "games"]
+    assert out.booths["is_lead_booth"].to_list() == [False, False]
+
+
+def test_games_ranking_orders_by_games_then_person_id() -> None:
+    out = build_booths(frame([g("1", 4, "pb-b"), g("2", 5, "pb-b"), g("3", 4, "pb-a")]))
+    assert out.booths["booth_pbp_person_id"].to_list() == ["pb-b", "pb-a"]
+    assert out.booths["booth_rank"].to_list() == [1, 2]
+    assert out.booths["booth_rank"].null_count() == 0
 
 
 def test_ranks_lead_first_then_games_then_person_id() -> None:

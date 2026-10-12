@@ -138,9 +138,10 @@ table and is not shipped.
 
 - `season`, `network_group` (`lookups.network_groups` index).
 - `rank` (1..n within a season and group, no gaps) and `is_lead` (true on rank 1; one
-  lead per season and group). `rank_source` is `published`, `override` or `inferred`
+  lead per season and group, except `games`). `rank_source` is `published`, `override`, `inferred` or `games`
   and is the same for every row of one season and group. Precedence is published >
-  override > inferred: the vault resolves it before the file is built.
+  override > inferred: the vault resolves it before the file is built. games: no lead is
+  known; booths are ordered by games called, and none is labeled Lead (no `is_lead` row).
 - `pbp_person`, `analyst_person`: `lookups.people` indexes (`analyst_person` null where
   unknown).
 - `games` (equal to the length of `game_list`), `flagship_games` (the group's flagship

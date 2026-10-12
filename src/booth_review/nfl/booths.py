@@ -307,7 +307,9 @@ def build_booths(
                 }
             )
         if lead is None:
-            for pbp in sorted(entries, key=lambda p: (-int(entries[p]["games"]), p)):  # type: ignore[call-overload]
+            # D-23: no known lead, so rank by games called and label none of them Lead.
+            by_games = sorted(entries, key=lambda p: (-int(entries[p]["games"]), p))  # type: ignore[call-overload]
+            for i, pbp in enumerate(by_games, start=1):
                 booth_rows.append(
                     {
                         "season": season,
@@ -315,8 +317,8 @@ def build_booths(
                         "booth_pbp_person_id": pbp,
                         **entries[pbp],
                         "is_lead_booth": False,
-                        "booth_rank": None,
-                        "rank_source": None,
+                        "booth_rank": i,
+                        "rank_source": "games",
                     }
                 )
 

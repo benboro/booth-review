@@ -558,16 +558,13 @@ def _booth_block(
         by_booth.setdefault(key, []).append(game_index[r["game_id"]])
     rows = task1.filter(pl.col("view") == "booth")
     cols: dict[str, list[Any]] = {n: [] for n in NflBoothColumns.model_fields}
-    shipped = 0
     for i, r in enumerate(rows.iter_rows(named=True)):
         where = f"booths[{i}]"
         group = r["network_group"]
         if group not in groups_pos:
             raise SiteBuildError(f"{where}.network_group: group has no shipped network")
         if r["booth_rank"] is None or r["rank_source"] is None:
-            # A group-season with no ranking (no flagship votes) has no lead to show.
-            continue
-        shipped += 1
+            raise SiteBuildError(f"{where}.rank: a booth row has no rank")
         season = int(r["season"])
         cols["season"].append(season)
         cols["network_group"].append(groups_pos[group])

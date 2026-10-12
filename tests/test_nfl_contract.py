@@ -254,6 +254,14 @@ def _mixed_rank_source(d: Payload) -> None:
     _add_booth_row(d, rank=2, is_lead=False, rank_source="inferred")
 
 
+def _unknown_rank_source(d: Payload) -> None:
+    d["booths"]["rank_source"][0] = "guessed"
+
+
+def _games_ranked_with_a_lead(d: Payload) -> None:
+    d["booths"]["rank_source"][0] = "games"
+
+
 def _booth_game_list_short(d: Payload) -> None:
     d["booths"]["game_list"][0] = []
 
@@ -423,6 +431,8 @@ MUTATORS: list[tuple[str, Mutator]] = [
     ("rank_gap", _rank_gap),
     ("lead_not_rank_one", _lead_not_rank_one),
     ("mixed_rank_source", _mixed_rank_source),
+    ("unknown_rank_source", _unknown_rank_source),
+    ("games_ranked_with_a_lead", _games_ranked_with_a_lead),
     ("booth_game_list_short", _booth_game_list_short),
     ("flagship_over_games", _flagship_over_games),
     ("flagship_in_flagshipless_group", _flagship_in_flagshipless_group),
@@ -655,7 +665,7 @@ def test_fixture_covers_every_view_case() -> None:
     assert any(b["low_n"])
     assert any(f > 0 for f in b["fill_in_games"])
     assert any(n > 0 for n in b["lineup_games"])
-    assert {"published", "override", "inferred"} == set(b["rank_source"])
+    assert {"published", "override", "inferred", "games"} == set(b["rank_source"])
     assert any(n == 0 for n in b["games"])
     assert "published_lineup" in g["crew_source"]
     assert any(c == [] for c in g["crew"])

@@ -166,7 +166,8 @@
             "enum": [
               "published",
               "override",
-              "inferred"
+              "inferred",
+              "games"
             ],
             "type": "string"
           },
