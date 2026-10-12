@@ -490,9 +490,9 @@ function buildFigure(items, state, env, th, selectedKey) {
   const titleText = AXIS_TITLES[adjusted ? 'adjusted' : 'raw'][state.metric];
   if (adjusted) {
     const [left, right] = END_CAPTIONS[state.metric];
-    const cap = { xref: 'paper', yref: 'paper', y: 0, yshift: -58, yanchor: 'top', showarrow: false, font: { size: 14, color: MUTED[th] } };
+    const cap = { xref: 'paper', yref: 'paper', y: 0, yshift: env.mobile ? -66 : -58, yanchor: 'top', showarrow: false, font: { size: env.mobile ? 12 : 14, color: MUTED[th] } };
     annotations.push({ ...cap, x: 0, xanchor: 'left', text: left });
-    annotations.push({ ...cap, x: 1, xanchor: 'right', text: right });
+    annotations.push({ ...cap, x: 1, xanchor: 'right', yshift: env.mobile ? -84 : -58, text: right });
   }
   if (!env.mobile) {
     items.forEach((it) => {
@@ -508,14 +508,14 @@ function buildFigure(items, state, env, th, selectedKey) {
     if (!env.mobile) return escapeHover(it.label);
     const names = boothNames(current.model, it.row);
     const first = role ? `${role}` : 'Others (pooled)';
-    const second = role ? escapeHover(names) + suffix : '';
+    const second = role ? escapeHover(names).replace(' / ', '<br>') + suffix : '';
     return [escapeHover(first) + (role ? '' : suffix), second, annotationText(it.row)]
       .filter((s) => s !== '')
       .join('<br>');
   });
 
   const font = { family: getComputedStyle(document.body).fontFamily, size: 14, color: ACCENT[th] };
-  const pitch = env.mobile ? 72 : 44;
+  const pitch = env.mobile ? 88 : 44;
   const layout = {
     paper_bgcolor: bg,
     plot_bgcolor: bg,
@@ -524,14 +524,14 @@ function buildFigure(items, state, env, th, selectedKey) {
     hovermode: 'closest',
     clickmode: 'event',
     dragmode: false,
-    height: items.length * pitch + (adjusted ? 130 : 96),
-    margin: { l: env.mobile ? 150 : 280, r: env.mobile ? 16 : 120, t: 8, b: adjusted ? 100 : 56 },
+    height: items.length * pitch + (adjusted ? 130 : 96) + (env.mobile ? 40 : 0),
+    margin: { l: env.mobile ? 150 : 280, r: env.mobile ? 16 : 120, t: 8, b: (adjusted ? 100 : 56) + (env.mobile ? 40 : 0) },
     annotations,
     shapes: adjusted
       ? [{ type: 'line', xref: 'x', yref: 'paper', x0: 0, x1: 0, y0: 0, y1: 1, line: { color: ZERO_LINE[th], width: 1.5 } }]
       : [],
     xaxis: {
-      title: { text: titleText, standoff: 4 },
+      title: { text: env.mobile ? titleText.replace(' vs. ', '<br>vs. ') : titleText, standoff: 4, font: { size: env.mobile ? 12 : 14 } },
       range,
       gridcolor: DIVIDER[th],
       tickfont: { color: MUTED[th] },

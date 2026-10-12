@@ -3249,3 +3249,75 @@ html:has(#nfl-detail-panel[open]) {
     margin: 0 0 var(--space-sm);
   }
 }
+
+/* NFL polish (plan 999.5-17): NFL-scoped selectors only. */
+.nfl-view-controls .segmented,
+.nfl-legend-row .segmented {
+  margin-bottom: 0;
+}
+
+.nfl-control-label {
+  color: var(--muted);
+  font: var(--font-label);
+  align-self: center;
+}
+
+.nfl-breakdown-lines {
+  display: grid;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+
+.nfl-breakdown-lines p {
+  margin: 0;
+}
+
+.nfl-stepper select {
+  font: var(--font-label);
+  min-height: 40px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+@media (max-width: 640px) {
+  .nfl-stepper select {
+    min-height: 44px;
+  }
+
+  .nfl-fox-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    width: 100%;
+  }
+
+  .nfl-fox-metrics button {
+    padding-left: var(--space-xs);
+    padding-right: var(--space-xs);
+  }
+
+  .nfl-view-controls {
+    min-height: 0;
+  }
+
+  .nfl-view-controls .segmented {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .nfl-view-controls .segmented button {
+    flex: 1 1 auto;
+    white-space: normal;
+  }
+
+  .nfl-legend-row .segmented {
+    flex-wrap: wrap;
+  }
+
+  .nfl-view-controls .nfl-control-label {
+    flex: 0 0 100%;
+    margin-bottom: calc(var(--space-xs) * -1);
+  }
+}

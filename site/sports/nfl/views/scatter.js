@@ -308,7 +308,7 @@ function buildControls() {
     [{ key: 'fade', label: 'Fade' }, { key: 'hide', label: 'Hide' }],
     (k) => ctx.setState({ dots: k }),
   );
-  refs.controls.append(el('span', null, 'Y'), refs.yGroup, el('span', null, 'X'), refs.xGroup);
+  refs.controls.append(el('span', 'nfl-control-label', 'Y'), refs.yGroup, el('span', 'nfl-control-label', 'X'), refs.xGroup);
 }
 
 function renderLegend(th, state) {
@@ -514,7 +514,7 @@ function dateXAxis(model, state, env, th, plotPx) {
     }
     annotations.push({
       xref: 'x', yref: 'paper', x: band.x0, y: 1, xanchor: 'left', yanchor: 'top',
-      xshift: 4, yshift: -2, showarrow: false, align: 'left',
+      xshift: 4, yshift: -2 - (env.mobile ? (k % 2) * 13 : 0), showarrow: false, align: 'left',
       text: escapeHover(model.eras[band.era].label),
       font: { size: env.mobile ? 10 : 12, color: MUTED[th] },
     });

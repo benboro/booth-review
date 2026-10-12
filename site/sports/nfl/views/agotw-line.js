@@ -378,8 +378,8 @@ function buildFigure(model, state, env, th, drawnSegments, seasonsAll, items) {
     }
     annotations.push({
       xref: 'x', yref: 'paper', x: b.from, y: 1, xanchor: 'left', yanchor: 'top',
-      xshift: 4, yshift: -2, showarrow: false, align: 'left',
-      text: escapeHover(model.eras[b.era].label), font: { size: 12, color: MUTED[th] },
+      xshift: 4, yshift: -2 - (env.mobile ? (k % 2) * 13 : 0), showarrow: false, align: 'left',
+      text: escapeHover(model.eras[b.era].label), font: { size: env.mobile ? 10 : 12, color: MUTED[th] },
     });
   });
   if (resid) {
