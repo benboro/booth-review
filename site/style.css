@@ -3331,3 +3331,16 @@ body:not([data-sport="nfl"]) #sport-load-error {
   color: var(--muted);
   font: var(--font-label);
 }
+
+/* NFL-only: Avg viewers scope footnote mark and rated-game count in the Crews table. */
+.footnote-mark {
+  margin-left: 2px;
+  cursor: help;
+}
+
+.rated-n {
+  display: block;
+  color: var(--muted);
+  font: var(--font-label);
+  font-weight: normal;
+}

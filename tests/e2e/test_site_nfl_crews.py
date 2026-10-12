@@ -16,7 +16,7 @@ pytestmark = pytest.mark.e2e
 
 VIEW = "#nfl-view-crews"
 GD = f"{VIEW} .nfl-chart > div"
-HEADS = ["Booth", "Games", "Avg viewers", "Avg margin", "Excitement"]
+HEADS = ["Booth", "Games", "Avg viewers*", "Avg margin", "Excitement"]
 
 
 def _open(page: Page, open_nfl_app: Callable[..., None], query: str = "") -> None:
@@ -115,7 +115,7 @@ def test_default_opens_fox_booth_table(
         "Booth",
         "Games",
         "AGOTW",
-        "Avg viewers",
+        "Avg viewers*",
         "Avg margin",
         "Excitement",
     ]
@@ -402,6 +402,37 @@ def test_adjusted_whiskers_caption_and_spread_wording(
     assert any(line.startswith("±1.96 standard errors:") for line in lines)
     assert "spread:" not in joined.lower()
     assert "line:" not in joined.lower()
+
+
+def test_avg_viewers_scope_caption_footnote_and_rated_counts(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
+) -> None:
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    vm = _vm(page)
+    # The table footnote and each row's rated-game count are always visible.
+    foot = page.locator(f"{VIEW} .nfl-viewers-footnote").inner_text()
+    assert "window-level" in foot
+    assert "unrated" in foot
+    assert "\u2014" not in foot
+    rows = _rows(nfl_fixture_raw, "fox", vm["season"])
+    cells = page.locator(f"{VIEW} .nfl-booth-table tbody tr .rated-n").all_inner_texts()
+    want = [
+        f"{r['raw_n_viewers']} rated {'game' if r['raw_n_viewers'] == 1 else 'games'}" for r in rows
+    ]
+    assert cells == want
+    assert [r["ratedGames"] for r in vm["rows"]] == [r["raw_n_viewers"] for r in rows]
+    # The caption and hover appear only for the Avg viewers measure.
+    assert "window-level" not in page.locator(f"{VIEW} .nfl-captions").inner_text()
+    page.get_by_role("button", name="Avg viewers").click()
+    page.wait_for_function("window.__nflTestHooks.getViewModel('crews').chart.metric === 'viewers'")
+    caption = page.locator(f"{VIEW} .nfl-captions").inner_text()
+    assert "window-level" in caption
+    assert "unrated" in caption
+    vm = _vm(page)
+    k = next(i for i, p in enumerate(vm["chart"]["points"]) if p["x"] is not None)
+    _emit(page, "plotly_hover", k)
+    assert any(" rated game" in line for line in _tooltip(page))
 
 
 def test_raw_hover_and_excitement_caption_link(

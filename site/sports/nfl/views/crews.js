@@ -88,6 +88,7 @@ const refs = {
   tableHead: null,
   tableBody: null,
   publishedNote: null,
+  viewersNote: null,
   note: null,
   noteTitle: null,
   noteHint: null,
@@ -138,6 +139,14 @@ function fixed(x, digits) {
 function viewersShort(x) {
   return `${(x / 1e6).toFixed(1)}M`;
 }
+
+function ratedGamesText(n) {
+  return `${n} rated ${n === 1 ? 'game' : 'games'}`;
+}
+
+const VIEWERS_SCOPE_NOTE =
+  'Avg viewers counts rated games only; unrated games are left out. Some figures are window-level: '
+  + 'AGOTW and CBS late national figures cover every game in that Sunday window.';
 
 function selectedBoothKey(state) {
   const s = state.selection;
@@ -406,6 +415,11 @@ function renderBoothTable(items, group, state, season, anyPublished) {
     ...heads.map((h, k) => {
       const th = el('th', k === 0 ? 'booth-col' : null, h);
       th.scope = 'col';
+      if (h === 'Avg viewers') {
+        const mark = el('span', 'footnote-mark', '*');
+        mark.title = VIEWERS_SCOPE_NOTE;
+        th.append(mark);
+      }
       return th;
     }),
   );
@@ -446,8 +460,10 @@ function renderBoothTable(items, group, state, season, anyPublished) {
       th.appendChild(btn);
       tr.append(th, numCell(String(r.games)));
       if (hasFlagship) tr.append(numCell(String(r.flagship_games)));
+      const viewersTd = numCell(r.raw_mean_viewers == null ? DASH : formatViewers(Math.round(r.raw_mean_viewers)));
+      if (r.games > 0) viewersTd.append(el('span', 'rated-n', ratedGamesText(r.raw_n_viewers)));
       tr.append(
-        numCell(r.raw_mean_viewers == null ? DASH : formatViewers(Math.round(r.raw_mean_viewers))),
+        viewersTd,
         numCell(fixed(r.raw_mean_abs_margin, 1)),
         numCell(fixed(r.raw_mean_excitement, 1)),
       );
@@ -495,6 +511,9 @@ function renderCaptions(state, adjusted) {
     );
     kids.push(p);
   }
+  if (state.metric === 'viewers') {
+    kids.push(el('p', 'caption nfl-viewers-note', VIEWERS_SCOPE_NOTE));
+  }
   kids.push(el('p', 'caption', 'Hollow marks are booths with few games.'));
   captions.replaceChildren(...kids);
 }
@@ -517,6 +536,7 @@ function hoverLines(item) {
     else if (metric === 'excitement') text = `Excitement: ${fixed(x, 1)} (GEI-style, not CFBD's index)`;
     else text = `Avg viewers: ${viewersShort(x)}`;
     lines.push({ text, kind: 'body' });
+    if (metric === 'viewers') lines.push({ text: ratedGamesText(r.raw_n_viewers), kind: 'body' });
   } else {
     let text;
     if (x == null) {
@@ -709,7 +729,8 @@ export function mount(container, ctx) {
   thead.appendChild(refs.tableHead);
   refs.tableBody = el('tbody');
   table.append(refs.tableCaption, thead, refs.tableBody);
-  refs.tableWrap.appendChild(table);
+  refs.viewersNote = el('p', 'caption nfl-viewers-footnote', `* ${VIEWERS_SCOPE_NOTE}`);
+  refs.tableWrap.append(table, refs.viewersNote);
   refs.publishedNote = el('p', 'caption nfl-published-note', 'Booth order from a published lineup.');
   refs.publishedNote.hidden = true;
 
@@ -901,6 +922,7 @@ export function testModel() {
       games: it.row.games,
       flagship: current.group.flagship ? it.row.flagship_games : null,
       viewers: it.row.raw_mean_viewers,
+      ratedGames: it.row.raw_n_viewers,
       margin: it.row.raw_mean_abs_margin,
       excitement: it.row.raw_mean_excitement,
       lowN: !!it.row.low_n,
