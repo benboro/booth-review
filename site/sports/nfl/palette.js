@@ -3,16 +3,55 @@
  * The CFB palette (site/modules/palette.js) is not touched.
  */
 
-/** Exclusive-category colors, keyed by the builder's category names. */
+/**
+ * Segment colors for the eight exclusive stack segments, keyed by the builder's
+ * segment names. The hues are positional Okabe-Ito picks and imply no CFB network
+ * family. Sunday night (from #1D96DB) and the greys (from #8F8F8F) are darkened in
+ * the light theme because they measured 2.99 and 2.96 against --surface, under the
+ * 3:1 check (NFL-only style, D-18).
+ */
 export const NFL_CATEGORY_COLORS = Object.freeze({
-  standalone: Object.freeze({ light: '#0072B2', dark: '#0072B2' }),
+  solo_thursday: Object.freeze({ light: '#0072B2', dark: '#0072B2' }),
+  solo_sunday: Object.freeze({ light: '#1C94D8', dark: '#56B4E9' }),
+  solo_monday: Object.freeze({ light: '#009E73', dark: '#009E73' }),
+  solo_holiday: Object.freeze({ light: '#8A7A00', dark: '#F0E442' }),
+  solo_other: Object.freeze({ light: '#8C8C8C', dark: '#999999' }),
   agotw: Object.freeze({ light: '#D55E00', dark: '#D55E00' }),
   cbs_national: Object.freeze({ light: '#BD8300', dark: '#E69F00' }),
   international_other: Object.freeze({ light: '#C972A2', dark: '#CC79A7' }),
 });
 
 /** Games in no special category (scatter only). */
-export const NFL_OTHER_COLOR = Object.freeze({ light: '#8F8F8F', dark: '#999999' });
+export const NFL_OTHER_COLOR = Object.freeze({ light: '#8C8C8C', dark: '#999999' });
+
+/** Viewership view category -> segment color plus marker symbol. */
+export const VIEW_CATEGORY_STYLE = Object.freeze({
+  agotw: { segment: 'agotw', symbol: 'circle' },
+  cbs_national: { segment: 'cbs_national', symbol: 'circle' },
+  snf: { segment: 'solo_sunday', symbol: 'circle' },
+  mnf: { segment: 'solo_monday', symbol: 'circle' },
+  tnf: { segment: 'solo_thursday', symbol: 'circle' },
+  thanksgiving: { segment: 'solo_holiday', symbol: 'circle' },
+  christmas: { segment: 'solo_holiday', symbol: 'square' },
+  black_friday: { segment: 'solo_holiday', symbol: 'diamond' },
+  international: { segment: 'international_other', symbol: 'circle' },
+  saturday: { segment: 'solo_other', symbol: 'circle' },
+  friday: { segment: 'solo_other', symbol: 'square' },
+  other: { segment: 'solo_other', symbol: 'diamond' },
+});
+
+/**
+ * Color and marker for a view category id.
+ * @param {string} id
+ * @param {'light'|'dark'} theme
+ * @returns {{color: string, symbol: string}}
+ */
+export function viewCategoryStyle(id, theme) {
+  const st = Object.prototype.hasOwnProperty.call(VIEW_CATEGORY_STYLE, id)
+    ? VIEW_CATEGORY_STYLE[id]
+    : { segment: 'none', symbol: 'circle' };
+  return { color: categoryColor(st.segment, theme), symbol: st.symbol };
+}
 
 /** AGOTW crew styles by order of first appearance; the fifth repeats. */
 export const NFL_CREW_STYLES = Object.freeze([

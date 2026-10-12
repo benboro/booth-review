@@ -6,23 +6,23 @@
  * encoded in the URL.
  */
 
-export const NFL_VIEWS = Object.freeze(['special', 'fox', 'agotw', 'scatter']);
-export const METRICS = Object.freeze(['margin', 'excitement', 'volatility']);
+export const NFL_VIEWS = Object.freeze(['special', 'crews', 'viewership', 'scatter']);
+export const CREW_METRICS = Object.freeze(['margin', 'excitement', 'viewers']);
 
 /** Category filter options in UI order (labels exact per UI-SPEC). */
 export const CATEGORY_OPTIONS = Object.freeze([
-  { key: 'tnf', label: 'Thursday Night Football (TNF)', group: 'Standalone slots', slot: 'TNF' },
-  { key: 'snf', label: 'Sunday Night Football (SNF)', group: 'Standalone slots', slot: 'SNF' },
-  { key: 'mnf', label: 'Monday Night Football (MNF)', group: 'Standalone slots', slot: 'MNF' },
-  { key: 'thanksgiving', label: 'Thanksgiving', group: 'Standalone slots', slot: 'Thanksgiving' },
-  { key: 'christmas', label: 'Christmas', group: 'Standalone slots', slot: 'Christmas' },
-  { key: 'blackfriday', label: 'Black Friday', group: 'Standalone slots', slot: 'Black Friday' },
-  { key: 'saturday', label: 'Saturday', group: 'Standalone slots', slot: 'Saturday' },
-  { key: 'intl_slot', label: 'International (standalone slot)', group: 'Standalone slots', slot: 'International' },
-  { key: 'other_standalone', label: 'Other standalone slots', group: 'Standalone slots', slot: null },
-  { key: 'agotw', label: 'AGOTW', group: 'Other special games', slot: null },
-  { key: 'cbs', label: 'CBS national', group: 'Other special games', slot: null },
-  { key: 'intl', label: 'International (any slot)', group: 'Other special games', slot: null },
+  { key: 'tnf', label: 'Thursday night', group: 'Solo slots', slot: 'TNF' },
+  { key: 'snf', label: 'Sunday night', group: 'Solo slots', slot: 'SNF' },
+  { key: 'mnf', label: 'Monday night', group: 'Solo slots', slot: 'MNF' },
+  { key: 'thanksgiving', label: 'Thanksgiving', group: 'Solo slots', slot: 'Thanksgiving' },
+  { key: 'christmas', label: 'Christmas', group: 'Solo slots', slot: 'Christmas' },
+  { key: 'blackfriday', label: 'Black Friday', group: 'Solo slots', slot: 'Black Friday' },
+  { key: 'saturday', label: 'Saturday', group: 'Solo slots', slot: 'Saturday' },
+  { key: 'intl_slot', label: 'International (solo slot)', group: 'Solo slots', slot: 'International' },
+  { key: 'other_standalone', label: 'Other solo slot', group: 'Solo slots', slot: null },
+  { key: 'agotw', label: 'Fox AGOTW', group: 'Other special games', slot: null },
+  { key: 'cbs', label: 'CBS late national', group: 'Other special games', slot: null },
+  { key: 'intl', label: 'International (any window)', group: 'Other special games', slot: null },
   { key: 'flexed', label: 'Flexed', group: 'Other special games', slot: null },
 ].map((o) => Object.freeze(o)));
 
@@ -31,16 +31,39 @@ const STANDALONE_SLOT_BY_KEY = new Map(
   CATEGORY_OPTIONS.filter((o) => o.slot).map((o) => [o.key, o.slot]),
 );
 const NAMED_SLOTS = new Set(STANDALONE_SLOT_BY_KEY.values());
-const STANDALONE_KEYS = new Set(['other_standalone', ...STANDALONE_SLOT_BY_KEY.keys()]);
 
 /** Exclusive categories (bars and scatter color), code order matches model.category. */
 export const EXCLUSIVE_CATEGORIES = Object.freeze([
-  { key: 'standalone', code: 0, label: 'Standalone slot' },
-  { key: 'agotw', code: 1, label: 'AGOTW' },
-  { key: 'cbs_national', code: 2, label: 'CBS national' },
-  { key: 'international_other', code: 3, label: 'International (not standalone)' },
-  { key: 'none', code: 4, label: 'Other games' },
+  { key: 'solo_thursday', code: 0, label: 'Thursday night' },
+  { key: 'solo_sunday', code: 1, label: 'Sunday night' },
+  { key: 'solo_monday', code: 2, label: 'Monday night' },
+  { key: 'solo_holiday', code: 3, label: 'Holiday' },
+  { key: 'solo_other', code: 4, label: 'Other solo slot' },
+  { key: 'agotw', code: 5, label: 'Fox AGOTW' },
+  { key: 'cbs_national', code: 6, label: 'CBS late national' },
+  { key: 'international_other', code: 7, label: 'International, shared window' },
+  { key: 'none', code: 8, label: 'Other games' },
 ].map((o) => Object.freeze(o)));
+
+/** The eight stack segments (everything but 'none'). */
+const SEGMENT_KEYS = Object.freeze(EXCLUSIVE_CATEGORIES.filter((c) => c.key !== 'none').map((c) => c.key));
+const SEGMENT_SET = new Set(SEGMENT_KEYS);
+
+/** Category filter key -> segments it keeps in focus (flexed fades nothing). */
+const CAT_SEGMENTS = Object.freeze({
+  tnf: ['solo_thursday'],
+  snf: ['solo_sunday'],
+  mnf: ['solo_monday'],
+  thanksgiving: ['solo_holiday'],
+  christmas: ['solo_holiday'],
+  blackfriday: ['solo_holiday'],
+  saturday: ['solo_other'],
+  intl_slot: ['solo_other'],
+  other_standalone: ['solo_other'],
+  agotw: ['agotw'],
+  cbs: ['cbs_national'],
+  intl: ['solo_other', 'international_other'],
+});
 
 const SPECIAL_SLOT_COLUMNS = Object.freeze([
   ['christmas', 'Christmas'], ['thanksgiving', 'Thanksgiving'],
@@ -50,8 +73,13 @@ const SPECIAL_SLOT_COLUMNS = Object.freeze([
   ['sunday_late', 'Sunday late'], ['other', 'Other'],
 ]);
 
-function foxDefault(model) {
-  return model.freshness.fox_default_season ?? model.foxSeasons[0] ?? null;
+function defaultNetwork(model) {
+  const ids = model.networkGroups.map((g) => g.id);
+  return ids.includes('fox') ? 'fox' : ids[0] ?? null;
+}
+
+function crewsDefaultSeason(model) {
+  return model.freshness.crews_default_season ?? model.crewSeasons[0] ?? null;
 }
 
 /** @returns {object} the default NFL state for this model */
@@ -63,16 +91,18 @@ export function defaultNflState(model) {
     people: [],
     cats: [],
     dots: 'fade',
-    fseason: foxDefault(model),
+    network: defaultNetwork(model),
+    cseason: crewsDefaultSeason(model),
+    booths: [],
     adjusted: false,
     metric: 'margin',
-    agotwY: 'mean',
+    viewY: 'mean',
     scatterX: 'date',
     scatterY: 'viewers',
     selection: null,
     showAllTeams: false,
     hiddenSegments: [],
-    hiddenCrews: [],
+    hiddenCategories: [],
   };
 }
 
@@ -102,7 +132,9 @@ export function canonicalNflState(state, model) {
   lo = Math.min(Math.max(Math.trunc(lo), d.seasons[0]), d.seasons[1]);
   hi = Math.min(Math.max(Math.trunc(hi), d.seasons[0]), d.seasons[1]);
   const catSet = new Set(Array.isArray(s.cats) ? s.cats : []);
-  const fs = Number(s.fseason);
+  const cs = Number(s.cseason);
+  const catIds = new Set(model.viewCategories.map((c) => c.id));
+  const asList = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
   return {
     view: pick(s.view, NFL_VIEWS, d.view),
     seasons: [lo, hi],
@@ -110,16 +142,18 @@ export function canonicalNflState(state, model) {
     people: cleanIds(s.people, new Map(model.people.map((p) => [p.id, 1]))),
     cats: CAT_KEYS.filter((k) => catSet.has(k)),
     dots: s.dots === 'hide' ? 'hide' : 'fade',
-    fseason: model.foxSeasons.includes(fs) ? fs : d.fseason,
+    network: model.networkGroups.some((g) => g.id === s.network) ? s.network : d.network,
+    cseason: model.crewSeasons.includes(cs) ? cs : d.cseason,
+    booths: [...new Set(asList(s.booths).filter((k) => model.boothIndex.has(k)))],
     adjusted: s.adjusted === true,
-    metric: pick(s.metric, METRICS, 'margin'),
-    agotwY: s.agotwY === 'resid' ? 'resid' : 'mean',
+    metric: pick(s.metric, CREW_METRICS, 'margin'),
+    viewY: s.viewY === 'resid' ? 'resid' : 'mean',
     scatterX: s.scatterX === 'margin' ? 'margin' : 'date',
     scatterY: s.scatterY === 'excitement' ? 'excitement' : 'viewers',
     selection: s.selection && typeof s.selection === 'object' ? s.selection : null,
     showAllTeams: s.showAllTeams === true,
-    hiddenSegments: Array.isArray(s.hiddenSegments) ? [...s.hiddenSegments] : [],
-    hiddenCrews: Array.isArray(s.hiddenCrews) ? [...s.hiddenCrews] : [],
+    hiddenSegments: [...new Set(asList(s.hiddenSegments).filter((k) => EXCLUSIVE_CATEGORIES.some((c) => c.key === k)))],
+    hiddenCategories: [...new Set(asList(s.hiddenCategories).filter((k) => catIds.has(k)))],
   };
 }
 
@@ -160,14 +194,13 @@ export function personHighlight(model, state, i) {
 }
 
 function emptyCounts() {
-  return { standalone: 0, agotw: 0, cbs_national: 0, international_other: 0 };
+  const c = {};
+  for (const k of SEGMENT_KEYS) c[k] = 0;
+  return c;
 }
 
 function addRow(acc, r) {
-  acc.counts.standalone += r.standalone_total;
-  acc.counts.agotw += r.agotw;
-  acc.counts.cbs_national += r.cbs_national;
-  acc.counts.international_other += r.international_other;
+  for (const k of SEGMENT_KEYS) acc.counts[k] += r[k] ?? 0;
   acc.international += r.international;
   acc.flexed += r.flexed;
   acc.games += r.games;
@@ -192,16 +225,17 @@ function denominators(model, lo, hi) {
 }
 
 function segmentFading(state) {
-  const relevant = state.cats.filter((k) => STANDALONE_KEYS.has(k) || k === 'agotw' || k === 'cbs');
-  if (!relevant.length) {
-    return { standalone: false, agotw: false, cbs_national: false, international_other: false };
+  const keep = new Set();
+  let any = false;
+  for (const k of state.cats) {
+    const segs = CAT_SEGMENTS[k];
+    if (!segs) continue;
+    any = true;
+    for (const g of segs) keep.add(g);
   }
-  return {
-    standalone: !relevant.some((k) => STANDALONE_KEYS.has(k)),
-    agotw: !relevant.includes('agotw'),
-    cbs_national: !relevant.includes('cbs'),
-    international_other: true,
-  };
+  const out = {};
+  for (const k of SEGMENT_KEYS) out[k] = any && !keep.has(k);
+  return out;
 }
 
 function finish(model, acc, fIdx, denom, faded, segFaded) {
@@ -213,7 +247,7 @@ function finish(model, acc, fIdx, denom, faded, segFaded) {
     franchise: fIdx,
     name: model.franchises[fIdx].name,
     counts: c,
-    total: c.standalone + c.agotw + c.cbs_national + c.international_other,
+    total: SEGMENT_KEYS.reduce((n, k) => n + c[k], 0),
     international: acc.international,
     flexed: acc.flexed,
     games: acc.games,
@@ -266,41 +300,96 @@ export function rateText(count, denom) {
   return `${count} of ${denom} weeks (${Math.round((count / denom) * 100)}%)`;
 }
 
-/** Fox rows for one season, never pooled: lead, others by rank, pooled. */
-export function foxRows(model, state) {
-  return model.foxBooths
-    .filter((r) => r.season === state.fseason)
-    .sort((a, b) =>
-      (GROUP_RANK[a.group] ?? 9) - (GROUP_RANK[b.group] ?? 9) || (a.rank ?? 0) - (b.rank ?? 0));
+function groupIndexOf(model, id) {
+  return model.networkGroups.findIndex((g) => g.id === id);
 }
-const GROUP_RANK = { lead: 0, other: 1, others_pooled: 2 };
 
-/** AGOTW points per season in range, split into segments where the crew changes. */
-export function agotwSeries(model, state) {
+/** Network groups with a game in the season range, in lookup order. */
+export function crewsNetworks(model, state) {
   const [lo, hi] = state.seasons;
-  const points = model.agotw
-    .filter((r) => r.season >= lo && r.season <= hi)
-    .map((r) => ({
-      season: r.season,
-      crewKey: `${r.pbp_person ?? ''}|${r.analyst_person ?? ''}`,
-      pbp: r.pbp_person,
-      analyst: r.analyst_person,
-      era: r.era,
-      values: { mean: r.mean_viewers, resid: r.viewership_resid, se: r.viewership_se },
-      games: r.games,
-      fillIn: r.fill_in_games,
-      lowN: !!r.low_n,
-      gameList: r.gameList,
-    }));
-  const order = new Map();
-  const segments = [];
-  for (const p of points) {
-    if (!order.has(p.crewKey)) order.set(p.crewKey, order.size);
-    const last = segments[segments.length - 1];
-    if (last && last.crewKey === p.crewKey) last.points.push(p);
-    else segments.push({ crewKey: p.crewKey, order: order.get(p.crewKey), points: [p] });
+  const c = model.cols;
+  const has = new Set();
+  for (let i = 0; i < model.n; i++) {
+    if (c.season[i] < lo || c.season[i] > hi || c.network[i] == null) continue;
+    const g = model.groupOfNetwork.get(c.network[i]);
+    if (g !== undefined) has.add(g);
   }
-  return { points, segments };
+  return model.networkGroups
+    .map((g, index) => ({ id: g.id, index, name: g.name, flagship: g.flagship }))
+    .filter((g) => has.has(g.index));
+}
+
+/** Seasons (newest first) with booth rows for a network group index. */
+export function crewsSeasons(model, groupIndex) {
+  return model.crewSeasonsByGroup.get(groupIndex) ?? [];
+}
+
+/** Booth rows for the picked network and season, by rank. */
+export function crewsRows(model, state) {
+  const gi = groupIndexOf(model, state.network);
+  return model.booths
+    .filter((r) => r.network_group === gi && r.season === state.cseason)
+    .sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
+}
+
+/** {total, withCrew, fromLineup} over the picked network's games in the season. */
+export function crewsCoverage(model, state) {
+  const gi = groupIndexOf(model, state.network);
+  const c = model.cols;
+  const out = { total: 0, withCrew: 0, fromLineup: 0 };
+  for (let i = 0; i < model.n; i++) {
+    if (c.season[i] !== state.cseason || c.network[i] == null) continue;
+    if (model.groupOfNetwork.get(c.network[i]) !== gi) continue;
+    out.total++;
+    if ((c.crew[i] || []).length) out.withCrew++;
+    if (c.crew_source[i] === 'published_lineup') out.fromLineup++;
+  }
+  return out;
+}
+
+/** One series per view category with its points in the season range. */
+export function viewershipSeries(model, state) {
+  const [lo, hi] = state.seasons;
+  return model.viewCategories.map((vc, category) => ({
+    category,
+    id: vc.id,
+    label: vc.label,
+    windowLevel: !!vc.window_level,
+    points: model.viewership
+      .filter((r) => r.category === category && r.season >= lo && r.season <= hi)
+      .map((r) => ({
+        season: r.season,
+        era: r.era,
+        mean: r.mean_viewers,
+        resid: r.viewership_resid,
+        se: r.viewership_se,
+        games: r.games,
+        lowN: !!r.low_n,
+        gameList: r.gameList,
+      })),
+  }));
+}
+
+/** Game indexes the picked booths called (pbp person on a network of the booth's group). */
+export function boothGames(model, keys) {
+  const set = new Set();
+  const c = model.cols;
+  for (const key of keys || []) {
+    const e = model.boothIndex.get(key);
+    if (!e) continue;
+    for (const i of model.personGames.get(e.person) || []) {
+      if (c.network[i] == null || model.groupOfNetwork.get(c.network[i]) !== e.group) continue;
+      if ((c.crew[i] || []).some((m) => m.person === e.person && m.role === 'pbp')) set.add(i);
+    }
+  }
+  return [...set].sort((a, b) => a - b);
+}
+
+/** True when any game in the list was called by one of the picked booths. */
+export function pointHasBooth(model, gameList, keys) {
+  if (!keys || !keys.length) return false;
+  const set = new Set(boothGames(model, keys));
+  return (gameList || []).some((g) => set.has(g));
 }
 
 function newestFirst(model, list) {
@@ -315,6 +404,7 @@ function newestFirst(model, list) {
 export function tableGames(model, state) {
   let base = null;
   if (state.selection && Array.isArray(state.selection.games)) base = state.selection.games;
+  else if (state.booths.length) base = boothGames(model, state.booths);
   else if (state.people.length) {
     const set = new Set();
     for (const id of state.people) {
@@ -334,5 +424,6 @@ export function activeFilterCount(model, state) {
   if (state.teams.length) n++;
   if (state.cats.length) n++;
   if (state.people.length) n++;
+  if (state.booths.length) n++;
   return n;
 }
