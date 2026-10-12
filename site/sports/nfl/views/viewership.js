@@ -411,11 +411,9 @@ function buildLegendRow() {
   });
 
   const wrap = el('span', 'nfl-band-info-wrap');
-  wrap.style.position = 'relative';
   const btn = el('button', 'band-info');
   btn.type = 'button';
   btn.id = 'nfl-viewership-info';
-  btn.style.position = 'static';
   btn.setAttribute('aria-label', 'About these lines');
   btn.setAttribute('aria-expanded', 'false');
   btn.setAttribute('aria-controls', 'nfl-viewership-note');
@@ -425,8 +423,6 @@ function buildLegendRow() {
   const note = el('div', 'band-note');
   note.id = 'nfl-viewership-note';
   note.hidden = true;
-  note.style.top = '100%';
-  note.style.right = '0';
   const ul = el('ul');
   for (const line of NOTES) ul.appendChild(el('li', null, line));
   note.append(ul, el('p', null, 'Lines with few games are faded and marked low n.'));

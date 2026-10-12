@@ -288,12 +288,9 @@ function buildInfo(ctx) {
   a.rel = 'noopener noreferrer';
   foot.append(a, document.createTextNode(' for the full rules.'));
   note.appendChild(foot);
-  // CFB positions .band-info absolutely inside the chart. Here both sit in the
-  // legend row's flex flow instead, because the legend row has no plot geometry.
-  button.style.position = 'static';
-  note.style.position = 'static';
-  note.style.flexBasis = '100%';
-  note.style.maxWidth = '420px';
+  // CFB positions .band-info absolutely inside the chart; style.css puts both in the legend row's flow.
+  button.classList.add('nfl-legend-info');
+  note.classList.add('nfl-legend-info-note');
   return { button, note };
 }
 

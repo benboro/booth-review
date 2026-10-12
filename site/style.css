@@ -2183,11 +2183,13 @@ html {
   scrollbar-gutter: stable;
 }
 
-html:has(#detail-panel[open]) {
+html:has(#detail-panel[open]),
+html:has(#nfl-detail-panel[open]) {
   overflow: hidden;
 }
 
-#detail-panel {
+#detail-panel,
+#nfl-detail-panel {
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -2200,12 +2202,14 @@ html:has(#detail-panel[open]) {
 }
 
 /* D-38: one scroller, .panel-inner; the dialog never scrolls. Gated on [open]. */
-#detail-panel[open] {
+#detail-panel[open],
+#nfl-detail-panel[open] {
   display: flex;
   flex-direction: column;
 }
 
-#detail-panel .panel-inner {
+#detail-panel .panel-inner,
+#nfl-detail-panel .panel-inner {
   padding: var(--space-lg);
   flex: 1 1 auto;
   min-height: 0;
@@ -2214,7 +2218,8 @@ html:has(#detail-panel[open]) {
   overflow-y: auto;
 }
 
-#detail-panel::backdrop {
+#detail-panel::backdrop,
+#nfl-detail-panel::backdrop {
   background: rgb(0 0 0 / 0.5);
 }
 
@@ -2243,18 +2248,21 @@ html:has(#detail-panel[open]) {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  #detail-panel[open] {
+  #detail-panel[open],
+  #nfl-detail-panel[open] {
     animation: modal-in 120ms ease-out;
   }
 
-  #detail-panel[open]::backdrop {
+  #detail-panel[open]::backdrop,
+  #nfl-detail-panel[open]::backdrop {
     animation: scrim-in 120ms ease-out;
   }
 }
 
 /* Phones (<=640px): the same dialog as a bottom sheet. */
 @media (max-width: 640px) {
-  #detail-panel {
+  #detail-panel,
+  #nfl-detail-panel {
     position: fixed;
     inset: auto 0 0 0;
     margin: 0;
@@ -2290,7 +2298,8 @@ html:has(#detail-panel[open]) {
 /* Sticky inside the one scroller (D-38), so the only visible close control
    stays in view while the body scrolls (review WR-04). The surface fill keeps
    text scrolling underneath from showing through it. */
-#panel-close {
+#panel-close,
+#nfl-detail-panel .panel-close {
   border: none;
   background: var(--surface);
   cursor: pointer;
@@ -2301,12 +2310,14 @@ html:has(#detail-panel[open]) {
   z-index: 1;
 }
 
-#panel-body h3 {
+#panel-body h3,
+#nfl-detail-panel .panel-body h3 {
   font: var(--font-heading);
   margin: var(--space-md) 0 var(--space-sm) 0;
 }
 
-#panel-body p {
+#panel-body p,
+#nfl-detail-panel .panel-body p {
   margin: 0 0 var(--space-sm) 0;
 }
 
@@ -2462,6 +2473,7 @@ html:has(#detail-panel[open]) {
   .games-table th button,
   .shape-legend li,
   #panel-close,
+  #nfl-detail-panel .panel-close,
   .segmented button,
   .chart-tab,
   .counts-list button,
@@ -3050,23 +3062,6 @@ body:not([data-sport="nfl"]) #sport-load-error {
   display: none;
 }
 
-.nfl-view-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-sm);
-  min-height: 48px;
-  margin-bottom: var(--space-md);
-}
-
-.nfl-legend-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-sm);
-  min-height: 32px;
-}
-
 .nfl-chart {
   position: relative;
   min-height: 520px;
@@ -3092,24 +3087,6 @@ body:not([data-sport="nfl"]) #sport-load-error {
   margin-top: var(--space-md);
 }
 
-.nfl-stepper {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-}
-
-.nfl-stepper button {
-  min-width: 40px;
-  min-height: 40px;
-}
-
-@media (max-width: 640px) {
-  .nfl-stepper button {
-    min-width: 44px;
-    min-height: 44px;
-  }
-}
-
 .nfl-breakdown {
   margin-top: var(--space-md);
 }
@@ -3119,12 +3096,8 @@ body:not([data-sport="nfl"]) #sport-load-error {
   margin-top: var(--space-sm);
 }
 
-.nfl-row-annotation {
-  color: var(--muted);
-  font: var(--font-label);
-}
-
 .nfl-muted {
+  /* NFL-only: CFB has no inline muted tag; used by table cells for window-level and lineup tags. */
   color: var(--muted);
 }
 
@@ -3153,99 +3126,6 @@ body:not([data-sport="nfl"]) #sport-load-error {
 .nfl-games-summary {
   margin: 0 0 var(--space-sm) 0;
   color: var(--muted);
-}
-
-/* NFL detail dialog: the CFB rules are id-keyed, so the NFL dialog repeats them. */
-html:has(#nfl-detail-panel[open]) {
-  overflow: hidden;
-}
-
-#nfl-detail-panel {
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--text);
-  width: min(560px, calc(100vw - 32px));
-  max-width: none;
-  max-height: 85vh;
-  overflow: hidden;
-}
-
-#nfl-detail-panel[open] {
-  display: flex;
-  flex-direction: column;
-}
-
-#nfl-detail-panel .panel-inner {
-  padding: var(--space-lg);
-  flex: 1 1 auto;
-  min-height: 0;
-  max-height: none;
-  box-sizing: border-box;
-  overflow-y: auto;
-}
-
-#nfl-detail-panel::backdrop {
-  background: rgb(0 0 0 / 0.5);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  #nfl-detail-panel[open] {
-    animation: modal-in 120ms ease-out;
-  }
-
-  #nfl-detail-panel[open]::backdrop {
-    animation: scrim-in 120ms ease-out;
-  }
-}
-
-@media (max-width: 640px) {
-  #nfl-detail-panel {
-    position: fixed;
-    inset: auto 0 0 0;
-    margin: 0;
-    width: 100%;
-    max-width: 100%;
-    height: 55vh;
-    max-height: 55vh;
-    border-radius: 12px 12px 0 0;
-    border-width: 1px 0 0 0;
-  }
-
-  #nfl-detail-panel .panel-close {
-    min-height: 44px;
-    min-width: 44px;
-  }
-}
-
-#nfl-detail-panel .panel-close {
-  border: none;
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  font: var(--font-heading);
-  float: right;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-#nfl-detail-panel .panel-body h3 {
-  font: var(--font-heading);
-  margin: var(--space-md) 0 var(--space-sm) 0;
-}
-
-#nfl-detail-panel .panel-body p {
-  margin: 0 0 var(--space-sm) 0;
-}
-
-.panel-field {
-  margin: 0 0 var(--space-md) 0;
-}
-
-.panel-field-value {
-  margin: 0;
 }
 
 /* ---------- Sport switch (CFB | NFL, D-05) ---------- */
@@ -3284,18 +3164,6 @@ html:has(#nfl-detail-panel[open]) {
   }
 }
 
-/* NFL polish (plan 999.5-17): NFL-scoped selectors only. */
-.nfl-view-controls .segmented,
-.nfl-legend-row .segmented {
-  margin-bottom: 0;
-}
-
-.nfl-control-label {
-  color: var(--muted);
-  font: var(--font-label);
-  align-self: center;
-}
-
 .nfl-breakdown-lines {
   display: grid;
   gap: var(--space-xs);
@@ -3306,52 +3174,105 @@ html:has(#nfl-detail-panel[open]) {
   margin: 0;
 }
 
-.nfl-stepper select {
-  font: var(--font-label);
-  min-height: 40px;
-  padding: 0 var(--space-sm);
-  border: 1px solid var(--border);
-  border-radius: 4px;
+/* NFL Crews booth table; no CFB twin. The wrap scrolls sideways on phones with
+   the Booth column pinned. */
+.nfl-booth-table-wrap {
+  overflow-x: auto;
+}
+
+.nfl-booth-table .booth-col {
+  position: sticky;
+  left: 0;
+  z-index: 1;
   background: var(--bg);
-  color: var(--text);
+}
+
+.nfl-booth-table th.booth-col {
+  background: var(--surface);
+}
+
+.booth-row-btn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.booth-row-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 @media (max-width: 640px) {
-  .nfl-stepper select {
+  .booth-row-btn {
     min-height: 44px;
   }
+}
 
-  .nfl-fox-metrics {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    width: 100%;
-  }
+.booth-rank {
+  display: inline-block;
+  min-width: 4ch;
+  font-weight: 600;
+}
 
-  .nfl-fox-metrics button {
-    padding-left: var(--space-xs);
-    padding-right: var(--space-xs);
-  }
+.nfl-booth-table tr[data-low-n="true"] {
+  color: var(--muted-weak);
+}
 
-  .nfl-view-controls {
-    min-height: 0;
-  }
+.low-n-tag {
+  margin-left: var(--space-xs);
+  color: var(--muted);
+  font-size: 14px;
+}
 
-  .nfl-view-controls .segmented {
-    max-width: 100%;
-    flex-wrap: wrap;
-  }
+.nfl-booth-table tr[data-picked="true"] .booth-col,
+.booth-row-btn[aria-pressed="true"] {
+  border-inline-start: 3px solid var(--accent);
+}
 
-  .nfl-view-controls .segmented button {
-    flex: 1 1 auto;
-    white-space: normal;
-  }
+.season-stepper .season-value {
+  padding: 0 var(--space-sm);
+  font-variant-numeric: tabular-nums;
+}
 
-  .nfl-legend-row .segmented {
-    flex-wrap: wrap;
-  }
+.nfl-coverage,
+.nfl-published-note {
+  color: var(--muted);
+  font: var(--font-label);
+}
 
-  .nfl-view-controls .nfl-control-label {
-    flex: 0 0 100%;
-    margin-bottom: calc(var(--space-xs) * -1);
-  }
+/* NFL-only: the legend info button and its note sit in the legend row's flex
+   flow, not absolutely over a chart as in CFB (the legend row has no plot geometry). */
+.nfl-legend-info {
+  position: static;
+}
+
+.nfl-legend-info-note {
+  position: static;
+  flex-basis: 100%;
+  max-width: 420px;
+}
+
+/* NFL-only: Viewership anchors its note under the button instead of over a chart. */
+.nfl-band-info-wrap {
+  position: relative;
+}
+
+.nfl-band-info-wrap .band-info {
+  position: static;
+}
+
+.nfl-band-info-wrap .band-note {
+  top: 100%;
+  right: 0;
+}
+
+/* NFL-only: crew-source line inside the crew box. */
+.crew-source-note {
+  margin: var(--space-xs) 0 0 0;
+  color: var(--muted);
+  font: var(--font-label);
 }
