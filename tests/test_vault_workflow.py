@@ -195,7 +195,9 @@ def _steps() -> list[dict[str, object]]:
     return steps
 
 
-@pytest.mark.parametrize("name", ["vars.DEPLOY_REPO", "vars.PUBLISH_ENABLED"])
+@pytest.mark.parametrize(
+    "name", ["vars.DEPLOY_REPO", "vars.PUBLISH_ENABLED", "vars.NFL_SITE_ENABLED"]
+)
 def test_deploy_vars_never_appear_inside_a_run_block(name: str) -> None:
     for step in _steps():
         assert name not in str(step.get("run", ""))
@@ -205,8 +207,24 @@ def test_deploy_vars_never_appear_inside_a_run_block(name: str) -> None:
         if name in line:
             stripped = line.strip()
             assert stripped.startswith(
-                ("PUBLISH_ENABLED:", "DEPLOY_REPO:", "repository:", "ssh-key:")
+                (
+                    "PUBLISH_ENABLED:",
+                    "NFL_SITE_ENABLED:",
+                    "DEPLOY_REPO:",
+                    "repository:",
+                    "ssh-key:",
+                )
             ), stripped
+
+
+def test_job_and_deploy_steps_carry_the_nfl_site_flag_from_vars() -> None:
+    carriers = []
+    for step in _steps():
+        env = step.get("env")
+        if isinstance(env, dict) and "NFL_SITE_ENABLED" in env:
+            assert env["NFL_SITE_ENABLED"] == "${{ vars.NFL_SITE_ENABLED }}"
+            carriers.append(step.get("id"))
+    assert sorted(str(c) for c in carriers) == ["deploy", "job"]
 
 
 _BASH = shutil.which("bash")

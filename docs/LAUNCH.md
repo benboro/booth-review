@@ -60,6 +60,7 @@ line except the last must say "pending", and no private repo name may appear.
 - [ ] Publishing dry run, Sunday: built-data counts match expectations: pending (Plan 13)
 - [ ] Publishing dry run, Wednesday: viewership counts match, and CFBD monthly use is well under 1,000: pending (Plan 14)
 - [ ] Variables reset to `PUBLISH_ENABLED=false` and `DEPLOY_REPO=benboro/benboro.github.io` after the drills: pending (Plan 14)
+- [ ] NFL scratch-repo deploy drill (999.5 D-21; NFL only, the CFB flip does not wait for it, D-18): one dispatched run with `NFL_SITE_ENABLED=true` deploys `site-data.json` and `nfl-data.json` under `booth-review/`, nothing outside `booth-review/` changes, and the key check passes on `nfl-data.json`: pending (999.5 Plan 18)
 - [ ] Launch: set the `PUBLISH_ENABLED` variable to `true` (after 506 Sports' approval)
 
 ## Observations
@@ -69,6 +70,7 @@ line except the last must say "pending", and no private repo name may appear.
 
 ## Operating notes
 
+- `NFL_SITE_ENABLED`: only the exact lowercase `true` turns on the NFL switch and `nfl-data.json`; any other value keeps the site CFB-only. Set it only after `JOB_REF` points at a release that includes 999.5. With it on, a run that cannot refresh the NFL file keeps the live copy and raises "NFL data not refreshed: carried live copy".
 - Variables: `PUBLISH_ENABLED`, `DEPLOY_REPO`, `JOB_REF`. Publishing turns on only when `PUBLISH_ENABLED` is exactly `true` (lowercase); any other value, `True` included, keeps it off. Secrets: `CFBD_API_KEY`, `DEPLOY_KEY_PROD`, `DEPLOY_KEY_SCRATCH`. Deploy keys are repo-scoped, one per target; the workflow picks the production key only when `DEPLOY_REPO` is `benboro/benboro.github.io`.
 - Rollout order: set `JOB_REF` to the new tag before installing a workflow that passes new flags.
 - Releasing a reference fix: patch-bump `version` in `pyproject.toml`, run `uv lock`, update the version literal in the workflow test, open a PR, merge, then run `ops/release-job.sh vX.Y.Z` from the merged main.

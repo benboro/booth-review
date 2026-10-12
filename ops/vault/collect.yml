@@ -52,6 +52,9 @@
 # the tag must also include the early result write (999.4 CR-02); an older
 # tag still runs with this file, but a timed-out job step then leaves no
 # result file, so that run does not deploy.
+#
+# The NFL flag (vars.NFL_SITE_ENABLED, exactly true) needs a JOB_REF release
+# that includes 999.5 before the variable is set; an older tag ignores it.
 name: collect-2026
 
 on:
@@ -144,6 +147,8 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           # api.github.com only, for nflverse play-by-play listings; 999.4 D-21
           GITHUB_TOKEN: ${{ github.token }}
+          # 999.5 D-18/D-20: NFL is on only when this variable is exactly true
+          NFL_SITE_ENABLED: ${{ vars.NFL_SITE_ENABLED }}
         run: |
           set +e
           rm -f "$RUNNER_TEMP/result.txt" "$RUNNER_TEMP/attention.md"
@@ -192,6 +197,8 @@ jobs:
         working-directory: src
         env:
           PUBLISH_ENABLED: ${{ vars.PUBLISH_ENABLED }}
+          # 999.5 D-18/D-20: NFL is on only when this variable is exactly true
+          NFL_SITE_ENABLED: ${{ vars.NFL_SITE_ENABLED }}
           CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
         run: |
           set +e
