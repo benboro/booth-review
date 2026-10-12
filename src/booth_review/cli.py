@@ -1419,6 +1419,8 @@ def _deploy(args: argparse.Namespace) -> int:
         print(
             f"deploy: published bundle {short} (files {result.files}, attempts {result.attempts})"
         )
+    if result.nfl_carried:
+        print("nfl data: carried live copy")
     print(
         "outside booth-review unchanged: yes "
         f"(before {(result.outside_before or '')[:12]}, after {(result.outside_after or '')[:12]})"
