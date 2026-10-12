@@ -20,14 +20,23 @@ from booth_review.build.nfl_site_data import (
     write_nfl_site_data,
 )
 from booth_review.config import DataPaths
-from booth_review.contract.nfl_models import NFL_SLOTS, validate_nfl_site_data
+from booth_review.contract.nfl_models import (
+    NFL_SLOTS,
+    NFL_VIEW_CATEGORIES,
+    validate_nfl_site_data,
+)
 from booth_review.errors import SiteBuildError
 from booth_review.flags.era import MeasurementEra
 from booth_review.nfl.adjust import LOW_N
 from booth_review.nfl.games import NFL_GAME_COLUMNS, NFL_GAME_SCHEMA
 from booth_review.nfl.reference import FranchiseName, NflFranchises
-from booth_review.nfl.tables import _SPECIAL_SCHEMA, NFL_SPECIAL_COLUMNS, SLOT_COLUMNS
-from booth_review.nfl.task1 import NFL_TASK1_COLUMNS, NFL_TASK1_SCHEMA
+from booth_review.nfl.tables import (
+    _SPECIAL_SCHEMA,
+    NFL_SPECIAL_COLUMNS,
+    SLOT_COLUMNS,
+    SOLO_GROUPS,
+)
+from booth_review.nfl.task1 import NFL_TASK1_COLUMNS, NFL_TASK1_SCHEMA, VIEW_CATEGORY_ORDER
 from booth_review.people.registry import PeopleRegistry, Person
 
 REFERENCE = Path(__file__).parent / "fixtures" / "nfl" / "reference"
@@ -124,6 +133,8 @@ def _game(**overrides: Any) -> dict[str, Any]:
         away_points=21,
     )
     row.update(overrides)
+    if row["pbp_person_id"] is not None and row["crew_source"] is None:
+        row["crew_source"] = "506"
     return row
 
 
@@ -169,6 +180,8 @@ def _special_rows(
         )
         for label, suffix in SLOT_COLUMNS.items():
             row[f"standalone_{suffix}"] = sum(g["slot_name"] == label for g in stand)
+        for suffix, labels in SOLO_GROUPS.items():
+            row[f"solo_{suffix}"] = sum(g["slot_name"] in labels for g in stand)
         row["special"] = row["standalone_total"] + row["agotw"] + row["cbs_national"]
         fox_dh, fox_amb, cbs_dh, cbs_amb = week_counts.get(season, (0, 0, 0, 0))
         row.update(
@@ -192,7 +205,15 @@ def _t1(**overrides: Any) -> dict[str, Any]:
     for name in NFL_TASK1_COLUMNS:
         if name.startswith(("raw_n_", "adj_n_")):
             row[name] = 3
-    row.update(games=3, fill_in_games=0, view="booth")
+    row.update(
+        games=3,
+        flagship_games=0,
+        fill_in_games=0,
+        lineup_games=0,
+        view="booth",
+        network_group="fox",
+        rank_source="inferred",
+    )
     row.update(overrides)
     return row
 
@@ -312,6 +333,7 @@ def _scenario() -> NflSiteInputs:
                 booth_pbp_person_id="p-lead",
                 regular_analyst_person_id="a-one",
                 games=2,
+                flagship_games=2,
             ),
             _t1(
                 season=2023,
@@ -322,7 +344,6 @@ def _scenario() -> NflSiteInputs:
                 games=1,
                 low_n=True,
             ),
-            _t1(season=2023, booth_group="others_pooled", games=1),
             _t1(
                 season=2024,
                 booth_group="lead",
@@ -330,13 +351,12 @@ def _scenario() -> NflSiteInputs:
                 booth_pbp_person_id="p-lead",
                 regular_analyst_person_id="a-one",
                 games=1,
+                flagship_games=1,
             ),
             _t1(
-                view="agotw_viewership",
+                view="category_viewership",
+                view_category="agotw",
                 season=2023,
-                booth_group="lead",
-                booth_pbp_person_id="p-lead",
-                regular_analyst_person_id="a-one",
                 era_id="era-a",
                 n_viewership=2,
                 mean_viewers=8_500_000.0,
@@ -344,11 +364,9 @@ def _scenario() -> NflSiteInputs:
                 viewership_se=2.0,
             ),
             _t1(
-                view="agotw_viewership",
+                view="category_viewership",
+                view_category="agotw",
                 season=2024,
-                booth_group="lead",
-                booth_pbp_person_id="p-lead",
-                regular_analyst_person_id="a-one",
                 era_id="era-b",
                 n_viewership=1,
                 mean_viewers=7_000_000.0,
@@ -363,21 +381,11 @@ def _build() -> Any:
     return build_nfl_site_data(_scenario())
 
 
-def _single(rows: list[dict[str, Any]], **kw: Any) -> Any:
-    """Build from one-game-per-season scenario variants (no booth rows)."""
+def _single(rows: list[dict[str, Any]], task1_rows: list[dict[str, Any]] | None = None) -> Any:
+    """Build from a few games and no booth or viewership rows unless given."""
     games = _frame(rows)
     special = _special_rows(games, {})
-    task1 = _task1(
-        [
-            _t1(
-                season=2024,
-                booth_group="lead",
-                booth_rank=1,
-                booth_pbp_person_id="p-lead",
-                regular_analyst_person_id="a-one",
-            )
-        ]
-    )
+    task1 = _task1(task1_rows or [])
     return build_nfl_site_data(
         NflSiteInputs(games, special, task1, _registry(), _franchises(), ERAS)
     )
@@ -435,13 +443,51 @@ def test_franchise_and_team_name_lookups() -> None:
 
 def test_network_lookup_and_null() -> None:
     site = _build()
-    assert {(n.id, n.name) for n in site.lookups.networks} == {
-        ("fox", "Fox"),
-        ("cbs", "CBS"),
-        ("nbc", "NBC"),
+    assert {(n.id, n.name, n.family) for n in site.lookups.networks} == {
+        ("fox", "Fox", "fox"),
+        ("cbs", "CBS", "cbs"),
+        ("nbc", "NBC", "nbc"),
     }
     site2 = _single([_game(network_id=None)])
     assert site2.games.network == [None]
+
+
+def test_network_families() -> None:
+    site = _single(
+        [
+            _game(game_id="a", network_id="abc"),
+            _game(game_id="b", week=2, network_id="peacock"),
+            _game(game_id="c", week=3, network_id="nfln"),
+        ]
+    )
+    assert {n.id: n.family for n in site.lookups.networks} == {
+        "abc": "disney",
+        "peacock": "nbc",
+        "nfln": "other",
+    }
+
+
+def test_network_groups_list_shipped_groups_in_picker_order() -> None:
+    site = _build()
+    groups = site.lookups.network_groups
+    assert [g.id for g in groups] == ["fox", "cbs", "nbc"]
+    assert [g.flagship for g in groups] == ["AGOTW", "Late national", "SNF"]
+    nets = site.lookups.networks
+    assert [[nets[m].id for m in g.members] for g in groups] == [["fox"], ["cbs"], ["nbc"]]
+
+
+def test_null_network_game_enters_no_group() -> None:
+    site = _single([_game(network_id=None)])
+    assert site.games.network == [None]
+    assert site.lookups.network_groups == []
+
+
+def test_view_categories_ship_in_contract_order() -> None:
+    assert tuple(c[0] for c in NFL_VIEW_CATEGORIES) == VIEW_CATEGORY_ORDER
+    site = _build()
+    assert [(c.id, c.label, c.window_level) for c in site.lookups.view_categories] == list(
+        NFL_VIEW_CATEGORIES
+    )
 
 
 def test_network_names_cover_reference_table() -> None:
@@ -466,6 +512,30 @@ def test_crew_roles_and_referenced_people_only() -> None:
     i = site.games.season.index(2023)
     roles = [(site.lookups.people[c.person].id, c.role) for c in site.games.crew[i]]
     assert roles == [("p-lead", "pbp"), ("a-one", "analyst"), ("side", "unknown")]
+
+
+def test_published_lineup_crew_ships_with_its_citation() -> None:
+    site = _single(
+        [
+            _game(
+                game_id="pl",
+                pbp_person_id="p-lead",
+                analyst_person_id="a-one",
+                crew_source="published_lineup",
+                crew_source_url="https://example.com/lineup",
+            ),
+            _game(
+                game_id="s5",
+                week=2,
+                pbp_person_id="p-two",
+                crew_source="506",
+                crew_source_url="https://example.com/leaked",
+            ),
+        ]
+    )
+    assert site.games.crew_source == ["published_lineup", "506"]
+    assert site.games.crew_source_url == ["https://example.com/lineup", None]
+    assert [c.role for c in site.games.crew[0]] == ["pbp", "analyst"]
 
 
 def test_missing_registry_person_raises_without_value() -> None:
@@ -601,10 +671,10 @@ def test_freshness_in_progress() -> None:
         2,
         1,
     )
-    assert f.fox_default_season == 2023
+    assert f.crews_default_season == 2023
 
 
-def test_freshness_complete_season_uses_latest_fox_season() -> None:
+def test_freshness_complete_season_uses_latest_booth_season() -> None:
     inputs = _scenario()
     games = inputs.games.with_columns(
         pl.when(pl.col("home_points").is_null())
@@ -626,10 +696,10 @@ def test_freshness_complete_season_uses_latest_fox_season() -> None:
         )
     )
     assert not site.freshness.in_progress
-    assert site.freshness.fox_default_season == 2024
+    assert site.freshness.crews_default_season == 2024
 
 
-def test_fox_default_null_without_booth_rows() -> None:
+def test_crews_default_null_without_booth_rows() -> None:
     inputs = _scenario()
     task1 = inputs.task1.filter(pl.col("view") != "booth")
     site = build_nfl_site_data(
@@ -637,7 +707,7 @@ def test_fox_default_null_without_booth_rows() -> None:
             inputs.games, inputs.special, task1, inputs.people, inputs.franchises, inputs.eras
         )
     )
-    assert site.freshness.fox_default_season is None
+    assert site.freshness.crews_default_season is None
 
 
 def test_constants() -> None:
@@ -704,6 +774,37 @@ def test_international_other_counts_once() -> None:
     assert site.special.standalone_total[0] == 1
 
 
+def test_solo_columns_ship_and_sum_to_standalone() -> None:
+    site = _single(
+        [
+            _game(game_id="t", slot_name="TNF", is_standalone=True),
+            _game(game_id="x", week=2, slot_name="Christmas", is_standalone=True),
+            _game(game_id="y", week=3, slot_name="Saturday", is_standalone=True),
+        ]
+    )
+    s = site.special
+    assert (s.solo_thursday[0], s.solo_holiday[0], s.solo_other[0]) == (1, 1, 1)
+    assert s.solo_sunday[0] == s.solo_monday[0] == 0
+    assert s.standalone_total[0] == 3
+
+
+def test_solo_mismatch_raises_position_only() -> None:
+    inputs = _scenario()
+    bad = inputs.special.with_columns(
+        pl.when(pl.int_range(pl.len()) == 1)
+        .then(pl.col("solo_other") + 1)
+        .otherwise(pl.col("solo_other"))
+        .alias("solo_other")
+    )
+    with pytest.raises(SiteBuildError) as err:
+        build_nfl_site_data(
+            NflSiteInputs(
+                inputs.games, bad, inputs.task1, inputs.people, inputs.franchises, inputs.eras
+            )
+        )
+    assert str(err.value) == "special[1]: exclusive category counts do not match games"
+
+
 def test_special_mismatch_raises_position_only() -> None:
     inputs = _scenario()
     bad = inputs.special.with_columns(
@@ -753,30 +854,105 @@ def _ids(site: Any, idx: list[int]) -> list[str]:
     return [site.games.season[i] and f"{site.games.season[i]}-{site.games.week[i]}" for i in idx]
 
 
-def test_fox_booths_rows_and_game_lists() -> None:
+def test_booths_rows_and_game_lists() -> None:
     site = _build()
-    b = site.fox_booths
-    assert b.group == ["lead", "other", "others_pooled", "lead"]
-    assert b.low_n == [False, True, False, False]
-    assert b.rank[2] is None
-    assert b.pbp_person[2] is None
-    assert site.lookups.people[b.pbp_person[0] or 0].id == "p-lead"
+    b = site.booths
+    assert b.season == [2023, 2023, 2024]
+    assert [site.lookups.network_groups[g].id for g in b.network_group] == ["fox"] * 3
+    assert b.is_lead == [True, False, True]
+    assert b.rank == [1, 2, 1]
+    assert b.rank_source == ["inferred"] * 3
+    assert b.low_n == [False, True, False]
+    assert site.lookups.people[b.pbp_person[0]].id == "p-lead"
     assert _ids(site, b.game_list[0]) == ["2023-1", "2023-2"]
     assert _ids(site, b.game_list[1]) == ["2023-3"]
-    assert _ids(site, b.game_list[2]) == ["2023-3"]
-    assert _ids(site, b.game_list[3]) == ["2024-1"]
+    assert _ids(site, b.game_list[2]) == ["2024-1"]
+    assert all(len(g) == n for g, n in zip(b.game_list, b.games, strict=True))
 
 
-def test_agotw_rows_per_season_and_era() -> None:
+def test_zero_game_published_booth_ships_an_empty_list() -> None:
+    site = _single(
+        [_fox("f1", 2024, 1, "p-lead", "a-one")],
+        [
+            _t1(
+                season=2024,
+                booth_group="lead",
+                booth_rank=1,
+                rank_source="published",
+                booth_pbp_person_id="p-lead",
+                regular_analyst_person_id="a-one",
+                games=1,
+            ),
+            _t1(
+                season=2024,
+                booth_group="other",
+                booth_rank=2,
+                rank_source="published",
+                booth_pbp_person_id="p-two",
+                games=0,
+                raw_n_margin=0,
+                raw_n_excitement=0,
+                raw_n_viewers=0,
+                adj_n_margin=0,
+                adj_n_excitement=0,
+            ),
+        ],
+    )
+    assert site.booths.games == [1, 0]
+    assert site.booths.game_list[1] == []
+    assert site.booths.rank_source == ["published", "published"]
+
+
+def test_booth_row_for_an_unshipped_group_raises_by_position() -> None:
+    with pytest.raises(SiteBuildError) as err:
+        _single(
+            [_game(game_id="c1")],
+            [_t1(season=2024, booth_group="lead", booth_rank=1, booth_pbp_person_id="p-lead")],
+        )
+    assert "booths[0].network_group" in str(err.value)
+
+
+def test_viewership_rows_per_category_season_and_era() -> None:
     site = _build()
-    a = site.agotw_viewership
-    assert a.season == [2023, 2024]
-    assert [site.lookups.eras[e].id for e in a.era] == ["era-a", "era-b"]
-    assert a.games == [2, 1]
-    assert a.low_n == [False, True]
-    assert a.mean_viewers[0] == 8_500_000.0
-    assert _ids(site, a.game_list[0]) == ["2023-1", "2023-2"]
-    assert _ids(site, a.game_list[1]) == ["2024-1"]
+    v = site.viewership
+    assert v.season == [2023, 2024]
+    assert [site.lookups.view_categories[c].id for c in v.category] == ["agotw", "agotw"]
+    assert [site.lookups.eras[e].id for e in v.era] == ["era-a", "era-b"]
+    assert v.games == [2, 1]
+    assert v.low_n == [False, True]
+    assert v.mean_viewers[0] == 8_500_000.0
+    assert _ids(site, v.game_list[0]) == ["2023-1", "2023-2"]
+    assert _ids(site, v.game_list[1]) == ["2024-1"]
+
+
+def test_viewership_unknown_era_raises_by_position() -> None:
+    with pytest.raises(SiteBuildError) as err:
+        _single(
+            [_game(game_id="a")],
+            [
+                _t1(
+                    view="category_viewership",
+                    view_category="snf",
+                    era_id="era-zzz",
+                    n_viewership=1,
+                )
+            ],
+        )
+    assert "viewership[0].era" in str(err.value)
+
+
+def test_forbidden_names_never_reach_the_bytes() -> None:
+    body = nfl_site_payload_bytes(_build()).decode()
+    for name in (
+        "fox_booths",
+        "agotw_viewership",
+        "volatility",
+        "pregame_spread",
+        "coverage_share",
+        "raw_mean_abs_spread",
+        "others_pooled",
+    ):
+        assert name not in body
 
 
 def test_only_referenced_eras_ship_in_era_order() -> None:
@@ -828,10 +1004,12 @@ def test_realistic_payload_under_size_ceiling() -> None:
             [
                 _t1(
                     season=2024,
+                    network_group="cbs",
                     booth_group="lead",
                     booth_rank=1,
                     booth_pbp_person_id="p-lead",
                     regular_analyst_person_id="a-one",
+                    games=16 * 17,
                 )
             ]
         ),
@@ -882,7 +1060,7 @@ def test_a_nan_statistic_fails_the_build_by_position_only() -> None:
     # file as a bare NaN token (invalid JSON for the whole NFL side).
     inputs = _scenario()
     task1 = inputs.task1.with_columns(
-        pl.when(pl.col("view") == "agotw_viewership")
+        pl.when(pl.col("view") == "category_viewership")
         .then(float("nan"))
         .otherwise(pl.col("viewership_se"))
         .alias("viewership_se")
@@ -893,7 +1071,7 @@ def test_a_nan_statistic_fails_the_build_by_position_only() -> None:
                 inputs.games, inputs.special, task1, inputs.people, inputs.franchises, ERAS
             )
         )
-    assert "agotw_viewership.viewership_se[0]: must be finite" in str(err.value)
+    assert "viewership.viewership_se[0]: must be finite" in str(err.value)
     assert "nan" not in str(err.value).lower()
 
 

@@ -1,7 +1,8 @@
 """Build `nfl-data.json` content from the vault's NFL tables (999.5 D-07).
 
-Selection, labeling and indexing only: every number already exists in the three
-999.4 tables (`nfl_games`, `nfl_special_games_by_team_season`, `nfl_task1_crews`).
+Selection, labeling and indexing only (schema 2.0.0: per-network booths and
+per-category viewership): every number already exists in the three tables
+(`nfl_games`, `nfl_special_games_by_team_season`, `nfl_task1_crews`).
 Each block is built from an explicit list of display columns, so the analysis-only
 fields (the pregame spread, the coverage share, raw crew strings, the raw
 win-probability series and the raw mean absolute spread) cannot reach the output;
@@ -26,22 +27,23 @@ from pydantic import ValidationError
 from booth_review.build.site_data import _contract_error_summary
 from booth_review.config import DataPaths
 from booth_review.contract.nfl_models import (
+    NFL_SCHEMA_VERSION,
     NFL_SLOTS,
+    NFL_VIEW_CATEGORIES,
     NflBoothColumns,
     NflGameColumns,
     NflSiteData,
-)
-from booth_review.contract.nfl_models import (
-    NflViewershipColumns as NflAgotwColumns,  # plan 08-07 rewrites the builder for 2.0.0
+    NflViewershipColumns,
 )
 from booth_review.errors import SiteBuildError
 from booth_review.flags.era import MeasurementEra, load_eras
 from booth_review.nfl.adjust import LOW_N
 from booth_review.nfl.booths import assign_booths
 from booth_review.nfl.games import NFL_GAME_COLUMNS
+from booth_review.nfl.network_groups import NETWORK_FAMILY, NETWORK_GROUPS
 from booth_review.nfl.reference import NflFranchises, load_nfl_franchises
 from booth_review.nfl.tables import NFL_SPECIAL_COLUMNS
-from booth_review.nfl.task1 import NFL_TASK1_COLUMNS
+from booth_review.nfl.task1 import NFL_TASK1_COLUMNS, view_category_expr
 from booth_review.people.registry import PeopleRegistry, load_people
 from booth_review.transport.cache import atomic_write_bytes
 
@@ -80,10 +82,26 @@ _STANDALONE_SUFFIXES: tuple[str, ...] = (
     "sunday_late",
     "other",
 )
+_SOLO_COLUMNS: tuple[str, ...] = (
+    "solo_thursday",
+    "solo_sunday",
+    "solo_monday",
+    "solo_holiday",
+    "solo_other",
+)
+_SOLO_OF_SLOT: Mapping[str, int] = {
+    "TNF": 0,
+    "SNF": 1,
+    "MNF": 2,
+    "Thanksgiving": 3,
+    "Christmas": 3,
+    "Black Friday": 3,
+}
 _SPECIAL_COUNT_COLUMNS: tuple[str, ...] = (
     "games",
     "standalone_total",
     *(f"standalone_{s}" for s in _STANDALONE_SUFFIXES),
+    *_SOLO_COLUMNS,
     "agotw",
     "cbs_national",
     "international",
@@ -97,7 +115,7 @@ _WEEK_COLUMNS: tuple[str, ...] = (
     "cbs_doubleheader_weeks",
     "cbs_ambiguous_weeks",
 )
-_MEASURES: tuple[str, ...] = ("margin", "excitement", "volatility")
+_MEASURES: tuple[str, ...] = ("margin", "excitement")
 _REGIONAL_SLOTS = frozenset({"Sunday early", "Sunday late"})
 
 
@@ -242,7 +260,21 @@ def _network_index(networks: _Index, network_id: str | None, where: str) -> int 
     name = NFL_NETWORK_NAMES.get(network_id)
     if name is None:
         raise SiteBuildError(f"{where}: network id has no display name")
-    return networks.add(network_id, {"id": network_id, "name": name})
+    family = NETWORK_FAMILY.get(network_id, "other")
+    return networks.add(network_id, {"id": network_id, "name": name, "family": family})
+
+
+def _network_groups_lookup(networks: _Index) -> list[dict[str, Any]]:
+    """Groups with at least one shipped network, in picker order (D-14, D-21)."""
+    shipped = {n["id"]: k for k, n in enumerate(networks.items)}
+    out: list[dict[str, Any]] = []
+    for group in NETWORK_GROUPS:
+        members = [shipped[m] for m in group.members if m in shipped]
+        if members:
+            out.append(
+                {"id": group.id, "name": group.name, "flagship": group.flagship, "members": members}
+            )
+    return out
 
 
 def _person_index(people: _Index, registry: PeopleRegistry, person_id: str, where: str) -> int:
@@ -311,6 +343,11 @@ def _append_game(
             idx = _person_index(lookups["people"], inputs.people, pid, f"games.crew[{i}]")
             crew.append({"person": idx, "role": role})
     cols["crew"].append(crew)
+    crew_source = row["crew_source"]
+    cols["crew_source"].append(crew_source)
+    cols["crew_source_url"].append(
+        row["crew_source_url"] if crew_source == "published_lineup" else None
+    )
     excitement = row["excitement_score"]
     cols["excitement"].append(None if excitement is None else round(float(excitement), 3))
     viewers = row["viewership"]
@@ -330,14 +367,14 @@ def _append_game(
 
 
 def _ship_eras(
-    all_eras: Sequence[MeasurementEra], cols: dict[str, list[Any]], agotw: dict[str, list[Any]]
+    all_eras: Sequence[MeasurementEra], cols: dict[str, list[Any]], viewership: dict[str, list[Any]]
 ) -> list[dict[str, Any]]:
     """Ship only the referenced eras, in era order, remapping the positions the
     blocks hold (positions in `all_eras`) to indexes into the shipped list."""
-    used = sorted({e for e in cols["era"] if e is not None} | set(agotw["era"]))
+    used = sorted({e for e in cols["era"] if e is not None} | set(viewership["era"]))
     remap = {old: new for new, old in enumerate(used)}
     cols["era"] = [None if e is None else remap[e] for e in cols["era"]]
-    agotw["era"] = [remap[e] for e in agotw["era"]]
+    viewership["era"] = [remap[e] for e in viewership["era"]]
     out = []
     for position in used:
         era = all_eras[position]
@@ -373,7 +410,12 @@ def _freshness(games: pl.DataFrame, task1: pl.DataFrame) -> dict[str, Any]:
     through = current.filter(pl.col("home_points").is_not_null())["week"].max()
     rated = current.filter(pl.col("viewership").is_not_null())["week"].max()
     booth_seasons = sorted(
-        {int(s) for s in task1.filter(pl.col("view") == "booth")["season"].to_list()}
+        {
+            int(s)
+            for s in task1.filter((pl.col("view") == "booth") & (pl.col("games") > 0))[
+                "season"
+            ].to_list()
+        }
     )
     if in_progress:
         booth_seasons = [s for s in booth_seasons if s < season]
@@ -382,7 +424,7 @@ def _freshness(games: pl.DataFrame, task1: pl.DataFrame) -> dict[str, Any]:
         "in_progress": in_progress,
         "through_week": _opt_int(through),
         "viewership_through_week": _opt_int(rated),
-        "fox_default_season": booth_seasons[-1] if booth_seasons else None,
+        "crews_default_season": booth_seasons[-1] if booth_seasons else None,
     }
 
 
@@ -416,22 +458,23 @@ def _regular_game_counts(games: pl.DataFrame) -> dict[tuple[str, int], int]:
 
 
 def _exclusive_counts(games: pl.DataFrame) -> dict[tuple[str, int], list[int]]:
-    """(franchise, season) -> [standalone, agotw, cbs_national, international_other]."""
+    """(franchise, season) -> [solo_thursday, solo_sunday, solo_monday, solo_holiday,
+    solo_other, agotw, cbs_national, international_other]."""
     counts: dict[tuple[str, int], list[int]] = {}
     for row in games.iter_rows(named=True):
         if row["is_standalone"]:
-            k = 0
+            k = _SOLO_OF_SLOT.get(row["slot_name"], 4)
         elif row["is_agotw"]:
-            k = 1
+            k = 5
         elif row["is_cbs_national"]:
-            k = 2
+            k = 6
         elif row["is_international"]:
-            k = 3
+            k = 7
         else:
             continue
         for side in ("home", "away"):
             key = (row[f"{side}_franchise_id"], int(row["season"]))
-            counts.setdefault(key, [0, 0, 0, 0])[k] += 1
+            counts.setdefault(key, [0] * 8)[k] += 1
     return counts
 
 
@@ -451,9 +494,9 @@ def _special_block(
     cols["cbs_national_rate"] = []
     for i, row in enumerate(special.iter_rows(named=True)):
         key = (row["franchise_id"], int(row["season"]))
-        got = expected.get(key, [0, 0, 0, 0])
+        got = expected.get(key, [0] * 8)
         want = [
-            row["standalone_total"],
+            *(row[c] for c in _SOLO_COLUMNS),
             row["agotw"],
             row["cbs_national"],
             row["international_other"],
@@ -490,7 +533,7 @@ def _season_weeks_block(special: pl.DataFrame) -> dict[str, list[Any]]:
 
 
 # ----------------------------------------------------------------------------
-# Fox booths and AGOTW viewership
+# Booths and category viewership
 # ----------------------------------------------------------------------------
 
 
@@ -506,103 +549,90 @@ def _booth_block(
     inputs: NflSiteInputs,
     people: _Index,
     game_index: dict[str, int],
+    groups_pos: dict[str, int],
 ) -> dict[str, list[Any]]:
     booths, _ = assign_booths(games)
-    by_booth: dict[tuple[int, str], list[int]] = {}
+    by_booth: dict[tuple[int, str, str], list[int]] = {}
     for r in booths.iter_rows(named=True):
-        by_booth.setdefault((int(r["season"]), r["booth_pbp_person_id"]), []).append(
-            game_index[r["game_id"]]
-        )
+        key = (int(r["season"]), r["network_group"], r["booth_pbp_person_id"])
+        by_booth.setdefault(key, []).append(game_index[r["game_id"]])
     rows = task1.filter(pl.col("view") == "booth")
-    lead_pbp = {
-        int(r["season"]): r["booth_pbp_person_id"]
-        for r in rows.iter_rows(named=True)
-        if r["booth_group"] == "lead"
-    }
     cols: dict[str, list[Any]] = {n: [] for n in NflBoothColumns.model_fields}
+    shipped = 0
     for i, r in enumerate(rows.iter_rows(named=True)):
+        where = f"booths[{i}]"
+        group = r["network_group"]
+        if group not in groups_pos:
+            raise SiteBuildError(f"{where}.network_group: group has no shipped network")
+        if r["booth_rank"] is None or r["rank_source"] is None:
+            # A group-season with no ranking (no flagship votes) has no lead to show.
+            continue
+        shipped += 1
         season = int(r["season"])
-        group = r["booth_group"]
-        where = f"fox_booths[{i}]"
         cols["season"].append(season)
-        cols["group"].append(group)
-        cols["rank"].append(None if r["booth_rank"] is None else int(r["booth_rank"]))
+        cols["network_group"].append(groups_pos[group])
+        cols["rank"].append(int(r["booth_rank"]))
+        cols["rank_source"].append(r["rank_source"])
+        cols["is_lead"].append(r["booth_group"] == "lead")
         cols["pbp_person"].append(
-            _optional_person(people, inputs.people, r["booth_pbp_person_id"], where)
+            _person_index(people, inputs.people, r["booth_pbp_person_id"], where)
         )
         cols["analyst_person"].append(
             _optional_person(people, inputs.people, r["regular_analyst_person_id"], where)
         )
-        for c in ("games", "fill_in_games"):
+        for c in ("games", "flagship_games", "fill_in_games", "lineup_games"):
             cols[c].append(int(r[c] or 0))
         for m in _MEASURES:
             cols[f"raw_n_{m}"].append(int(r[f"raw_n_{m}"] or 0))
             cols[f"adj_n_{m}"].append(int(r[f"adj_n_{m}"] or 0))
             cols[f"adj_{m}_resid"].append(r[f"adj_{m}_resid"])
             cols[f"adj_{m}_se"].append(r[f"adj_{m}_se"])
+        cols["raw_n_viewers"].append(int(r["raw_n_viewers"] or 0))
         cols["raw_mean_abs_margin"].append(r["raw_mean_abs_margin"])
         cols["raw_mean_excitement"].append(r["raw_mean_excitement"])
-        cols["raw_mean_volatility"].append(r["raw_mean_volatility"])
+        cols["raw_mean_viewers"].append(r["raw_mean_viewers"])
         cols["low_n"].append(bool(r["low_n"]))
-        if group == "others_pooled":
-            members = [
-                g
-                for (s, pbp), lst in sorted(by_booth.items())
-                if s == season and pbp != lead_pbp.get(season)
-                for g in lst
-            ]
-        else:
-            members = by_booth.get((season, r["booth_pbp_person_id"]), [])
+        members = by_booth.get((season, group, r["booth_pbp_person_id"]), [])
         cols["game_list"].append(sorted(members))
     return cols
 
 
-def _agotw_block(
+def _viewership_block(
     task1: pl.DataFrame,
     games: pl.DataFrame,
     inputs: NflSiteInputs,
-    people: _Index,
     game_index: dict[str, int],
 ) -> dict[str, list[Any]]:
-    booths, _ = assign_booths(games)
-    pbp_of = dict(
-        zip(booths["game_id"].to_list(), booths["booth_pbp_person_id"].to_list(), strict=True)
-    )
     era_pos = {e.era_id: k for k, e in enumerate(inputs.eras)}
-    agotw_games = games.filter(
-        pl.col("is_agotw").fill_null(False)
-        & (pl.col("late_national_status") != "ambiguous")
-        & pl.col("viewership").is_not_null()
+    category_pos = {c[0]: k for k, c in enumerate(NFL_VIEW_CATEGORIES)}
+    rated = games.with_columns(view_category_expr()).filter(
+        pl.col("viewership").is_not_null() & pl.col("view_category").is_not_null()
     )
-    cols: dict[str, list[Any]] = {n: [] for n in NflAgotwColumns.model_fields}
-    for i, r in enumerate(task1.filter(pl.col("view") == "agotw_viewership").iter_rows(named=True)):
-        season = int(r["season"])
-        where = f"agotw_viewership[{i}]"
+    members_of: dict[tuple[str, int, str], list[int]] = {}
+    for g in rated.iter_rows(named=True):
+        key = (g["view_category"], int(g["season"]), g["era_id"])
+        members_of.setdefault(key, []).append(game_index[g["game_id"]])
+    cols: dict[str, list[Any]] = {n: [] for n in NflViewershipColumns.model_fields}
+    for i, r in enumerate(
+        task1.filter(pl.col("view") == "category_viewership").iter_rows(named=True)
+    ):
+        where = f"viewership[{i}]"
         if r["era_id"] not in era_pos:
             raise SiteBuildError(f"{where}.era: not a known measurement era")
+        if r["view_category"] not in category_pos:
+            raise SiteBuildError(f"{where}.category: not a known view category")
+        season = int(r["season"])
+        cols["category"].append(category_pos[r["view_category"]])
         cols["season"].append(season)
         cols["era"].append(era_pos[r["era_id"]])
-        cols["group"].append(r["booth_group"])
-        cols["pbp_person"].append(
-            _optional_person(people, inputs.people, r["booth_pbp_person_id"], where)
-        )
-        cols["analyst_person"].append(
-            _optional_person(people, inputs.people, r["regular_analyst_person_id"], where)
-        )
         cols["games"].append(int(r["n_viewership"] or 0))
-        cols["fill_in_games"].append(int(r["fill_in_games"] or 0))
         cols["mean_viewers"].append(r["mean_viewers"])
         cols["viewership_resid"].append(r["viewership_resid"])
         cols["viewership_se"].append(r["viewership_se"])
         cols["low_n"].append(bool(r["low_n"]))
-        members = [
-            game_index[g["game_id"]]
-            for g in agotw_games.filter(
-                (pl.col("season") == season) & (pl.col("era_id") == r["era_id"])
-            ).iter_rows(named=True)
-            if pbp_of.get(g["game_id"]) == r["booth_pbp_person_id"]
-        ]
-        cols["game_list"].append(sorted(members))
+        cols["game_list"].append(
+            sorted(members_of.get((r["view_category"], season, r["era_id"]), []))
+        )
     return cols
 
 
@@ -632,17 +662,23 @@ def build_nfl_site_data(inputs: NflSiteInputs) -> NflSiteData:
     game_index = {gid: k for k, gid in enumerate(games["game_id"].to_list())}
     special = _special_block(inputs.special, games, lookups["franchises"])
     season_weeks = _season_weeks_block(inputs.special)
-    booths = _booth_block(inputs.task1, games, inputs, lookups["people"], game_index)
-    agotw = _agotw_block(inputs.task1, games, inputs, lookups["people"], game_index)
-    era_rows = _ship_eras(inputs.eras, game_cols, agotw)
+    network_groups = _network_groups_lookup(lookups["networks"])
+    groups_pos = {g["id"]: k for k, g in enumerate(network_groups)}
+    booths = _booth_block(inputs.task1, games, inputs, lookups["people"], game_index, groups_pos)
+    viewership = _viewership_block(inputs.task1, games, inputs, game_index)
+    era_rows = _ship_eras(inputs.eras, game_cols, viewership)
     payload = {
-        "schema_version": "1.0.0",
+        "schema_version": NFL_SCHEMA_VERSION,
         "freshness": freshness,
         "constants": constants,
         "lookups": {
             "franchises": lookups["franchises"].items,
             "team_names": lookups["team_names"].items,
             "networks": lookups["networks"].items,
+            "network_groups": network_groups,
+            "view_categories": [
+                {"id": c[0], "label": c[1], "window_level": c[2]} for c in NFL_VIEW_CATEGORIES
+            ],
             "people": lookups["people"].items,
             "eras": era_rows,
             "slots": list(NFL_SLOTS),
@@ -650,8 +686,8 @@ def build_nfl_site_data(inputs: NflSiteInputs) -> NflSiteData:
         "games": game_cols,
         "special": special,
         "season_weeks": season_weeks,
-        "fox_booths": booths,
-        "agotw_viewership": agotw,
+        "booths": booths,
+        "viewership": viewership,
     }
     try:
         return NflSiteData.model_validate(payload)
