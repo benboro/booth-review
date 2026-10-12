@@ -1,9 +1,10 @@
 """NFL booth model for every network group (D-01 to D-07, D-20).
 
 Pure functions over the game frame. A booth is (season, network group, play-by-play
-voice) with the modal analyst (from 506-sourced games) stored; a game with a different analyst is a fill-in
-that stays with the booth. Every regular-season game a booth called for its group
-counts; there is no doubleheader gate. Booth identity never spans seasons or groups.
+voice) with the modal analyst (from 506-sourced games) stored; a game with a different
+analyst is a fill-in that stays with the booth. Every regular-season game a booth called
+for its group counts; there is no doubleheader gate. Booth identity never spans seasons or
+groups.
 
 Each group-season's order comes from, in precedence: the cited published rank
 (`nfl_booth_ranks.csv`), a cited lead-booth override, then flagship-window inference
