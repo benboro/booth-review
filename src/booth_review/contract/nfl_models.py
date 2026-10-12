@@ -474,6 +474,8 @@ class NflSiteData(BaseModel):
         source, url, crew = g.crew_source[i], g.crew_source_url[i], g.crew[i]
         if source is None and crew:
             raise ValueError(f"games.crew_source[{i}]: required when the game has a crew")
+        if source is not None and not crew:
+            raise ValueError(f"games.crew_source[{i}]: must be null when the crew is empty")
         if source == "published_lineup":
             if not any(e.role == "pbp" for e in crew):
                 raise ValueError(f"games.crew_source[{i}]: published_lineup needs a pbp entry")

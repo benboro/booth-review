@@ -308,6 +308,10 @@ def _source_none_with_crew(d: Payload) -> None:
     d["games"]["crew_source"][0] = None
 
 
+def _source_506_without_crew(d: Payload) -> None:
+    d["games"]["crew_source"][1] = "506"
+
+
 def _url_without_lineup(d: Payload) -> None:
     d["games"]["crew_source_url"][0] = "https://example.com/lineup"
 
@@ -443,6 +447,7 @@ MUTATORS: list[tuple[str, Mutator]] = [
     ("lineup_without_url", _lineup_without_url),
     ("lineup_http_url", _lineup_http_url),
     ("source_none_with_crew", _source_none_with_crew),
+    ("source_506_without_crew", _source_506_without_crew),
     ("url_without_lineup", _url_without_lineup),
     ("network_in_two_groups", _network_in_two_groups),
     ("network_in_no_group", _network_in_no_group),

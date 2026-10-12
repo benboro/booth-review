@@ -82,7 +82,7 @@ Every `people` and `networks` entry must be referenced by something.
 | `original_slot`, `original_network`, `change_url` | flexed games only: the slot and network before the change, and the article that documents it; otherwise null |
 | `network` | `lookups.networks` index; null when unknown |
 | `crew` | list of `{person, role}` (`pbp`, `analyst`, `unknown`); `person` indexes `lookups.people`; may be empty |
-| `crew_source` | where the crew came from: `"506"`, `"published_lineup"` (a cited rank-1 lineup that fills a crewless flagship game) or null; null exactly when `crew` is empty |
+| `crew_source` | where the crew came from: `"506"` (at least one resolved person id came from the 506 listing), `"published_lineup"` (a cited rank-1 lineup that fills a flagship game with no 506 listing) or null; null exactly when `crew` is empty, and a crew is the resolved play-by-play, analyst and sideline ids the file ships, so a 506 listing whose names did not resolve has a null source |
 | `crew_source_url` | the cited lineup release (an `https://` URL); set only when `crew_source` is `published_lineup`, which also needs a `pbp` entry in `crew` (D-20) |
 | `excitement` | GEI-style score, finite; null stays null |
 | `viewers` | people watching, `> 0`; null when no figure |

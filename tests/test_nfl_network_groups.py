@@ -28,6 +28,7 @@ SCHEMA = {
     "crew_names": pl.List(pl.String),
     "pbp_person_id": pl.String,
     "analyst_person_id": pl.String,
+    "sideline_person_ids": pl.List(pl.String),
     "crew_source": pl.String,
     "crew_source_url": pl.String,
 }
@@ -46,6 +47,7 @@ def row(gid: str, network: str | None, **over: object) -> dict[str, object]:
         "crew_names": [],
         "pbp_person_id": None,
         "analyst_person_id": None,
+        "sideline_person_ids": [],
         "crew_source": None,
         "crew_source_url": None,
     }
@@ -100,13 +102,15 @@ def test_flagship(network: str, over: dict[str, object], expected: bool) -> None
 def test_no_ranks_tags_506_only() -> None:
     f = frame(
         row("a", "nbc", pbp_person_id="p"),
-        row("b", "nbc", crew_names=["Someone"]),
-        row("c", "nbc"),
+        row("b", "nbc", sideline_person_ids=["s"]),
+        row("c", "nbc", crew_names=["Someone"]),
+        row("d", "nbc"),
     )
     out, filled = apply_published_lineups(f, {})
     assert filled == 0
-    assert out["crew_source"].to_list() == ["506", "506", None]
-    assert out["pbp_person_id"].to_list() == ["p", None, None]
+    # A crew is a resolved id; a listing whose names did not resolve has no source.
+    assert out["crew_source"].to_list() == ["506", "506", None, None]
+    assert out["pbp_person_id"].to_list() == ["p", None, None, None]
     assert out.columns == f.columns
 
 
@@ -133,7 +137,7 @@ def test_fill_only_crewless_flagship_reg_games() -> None:
     for gid in ("saturday", "old", "post"):
         assert got[gid]["pbp_person_id"] is None
     assert got["unresolved"]["pbp_person_id"] is None
-    assert got["unresolved"]["crew_source"] == "506"
+    assert got["unresolved"]["crew_source"] is None
     assert out.columns == f.columns
 
 
