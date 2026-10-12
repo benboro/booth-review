@@ -517,11 +517,42 @@ def test_unrated_causes() -> None:
             era_id="era-b",
         ),
         _game(game_id="r5", season=2024, week=2),
-        _game(game_id="r6", season=2024, week=3, viewership=None),
+        _game(
+            game_id="r6",
+            season=2024,
+            week=3,
+            viewership=None,
+            home_points=None,
+            away_points=None,
+            final_margin=None,
+        ),
     ]
     site = _single(rows)
+    assert site.freshness.in_progress
     assert site.freshness.viewership_through_week == 1
     assert site.games.cause == ["regional", "none", "none", None, "pending", "pending"]
+
+
+def test_a_complete_season_never_says_pending() -> None:
+    # WR-07: once every score is in, unrated games in or after the last rated
+    # week are regional or have no figure; "pending" would promise figures
+    # that are not coming.
+    rows = [
+        _game(
+            game_id="c1",
+            season=2024,
+            week=1,
+            viewership=5_000_000.0,
+            viewership_scope="window",
+            era_id="era-b",
+        ),
+        _game(game_id="c2", season=2024, week=1, slot_name="Sunday early"),
+        _game(game_id="c3", season=2024, week=2, slot_name="SNF", is_standalone=True),
+    ]
+    site = _single(rows)
+    assert not site.freshness.in_progress
+    assert site.freshness.viewership_through_week == 1
+    assert site.games.cause == [None, "regional", "none"]
 
 
 def _all_keys(node: Any) -> set[str]:

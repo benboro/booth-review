@@ -210,7 +210,7 @@ def _cause(row: dict[str, Any], current: bool, vt_week: int | None, slot: str) -
 def _games_block(
     games: pl.DataFrame,
     inputs: NflSiteInputs,
-    freshness_season: int,
+    current_season: int | None,
     vt_week: int | None,
 ) -> tuple[dict[str, list[Any]], dict[str, _Index]]:
     franchise_ids = sorted(
@@ -230,7 +230,7 @@ def _games_block(
     era_pos = {e.era_id: k for k, e in enumerate(inputs.eras)}
     cols: dict[str, list[Any]] = {name: [] for name in NflGameColumns.model_fields}
     for i, row in enumerate(games.iter_rows(named=True)):
-        _append_game(cols, row, i, inputs, lookups, era_pos, freshness_season, vt_week)
+        _append_game(cols, row, i, inputs, lookups, era_pos, current_season, vt_week)
     return cols, lookups
 
 
@@ -257,7 +257,7 @@ def _append_game(
     inputs: NflSiteInputs,
     lookups: dict[str, _Index],
     era_pos: dict[str, int],
-    freshness_season: int,
+    current_season: int | None,
     vt_week: int | None,
 ) -> None:
     season = int(row["season"])
@@ -316,7 +316,7 @@ def _append_game(
         cols["viewers"].append(None)
         cols["scope"].append(None)
         cols["era"].append(None)
-        cols["cause"].append(_cause(row, season == freshness_season, vt_week, slot))
+        cols["cause"].append(_cause(row, season == current_season, vt_week, slot))
     else:
         cols["viewers"].append(round(viewers))
         cols["scope"].append(row["viewership_scope"])
@@ -616,8 +616,11 @@ def build_nfl_site_data(inputs: NflSiteInputs) -> NflSiteData:
         raise SiteBuildError("games: no regular-season games to ship")
     freshness = _freshness(games, inputs.task1)
     constants = _constants(inputs.task1)
+    # WR-07: only a season still under way has figures still to come; once it
+    # is complete, an unrated game is regional or has none, never pending.
+    current_season = freshness["season"] if freshness["in_progress"] else None
     game_cols, lookups = _games_block(
-        games, inputs, freshness["season"], freshness["viewership_through_week"]
+        games, inputs, current_season, freshness["viewership_through_week"]
     )
     game_index = {gid: k for k, gid in enumerate(games["game_id"].to_list())}
     special = _special_block(inputs.special, games, lookups["franchises"])
