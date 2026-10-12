@@ -282,3 +282,17 @@ def test_cfb_scatter_stays_quiet_under_nfl_on_a_theme_change(
     _click(page, "cfb")
     page.wait_for_function("location.search === " + repr(cfb_search))
     assert page.locator("#chart").is_visible()
+
+
+def test_cfb_url_params_never_leak_into_nfl(
+    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None], open_nfl_app: Callable[..., None]
+) -> None:
+    """JS-CR-02: a CFB link's shared params (seasons, people, y, dots) stay on the CFB side."""
+    page = nfl_guarded_page
+    open_nfl_app(page)
+    default_state = page.evaluate("window.__nflTestHooks.getState()")
+    open_flagon_cfb(page, "?seasons=2025-2025&people=p00&y=excitement&dots=hide")
+    _click(page, "nfl")
+    _wait_nfl_ready(page)
+    assert page.evaluate("location.search") == "?sport=nfl"
+    assert page.evaluate("window.__nflTestHooks.getState()") == default_state

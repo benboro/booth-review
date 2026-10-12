@@ -609,7 +609,12 @@ async function startCfb(search = location.search) {
 let cfbStarted = false;
 let nflModule = null;
 let activeSport = null;
-let initialSearch = '';
+/**
+ * The query NFL decodes its first state from: the page's own query when it
+ * opened on NFL, else '' so a CFB link's shared params (`seasons`, `people`,
+ * `y`, `dots`) never leak into NFL state (JS-CR-02).
+ */
+let nflInitialSearch = '';
 
 /** The query with only the sport param removed, other params kept in order. */
 function searchWithoutSport(search) {
@@ -639,7 +644,7 @@ async function showSport(id) {
     document.body.dataset.sport = 'nfl';
     document.title = sportMeta('nfl').title;
     nflModule ??= await import('./sports/nfl/index.js');
-    await nflModule.mount({ footerEl: document.getElementById('site-footer'), search: initialSearch });
+    await nflModule.mount({ footerEl: document.getElementById('site-footer'), search: nflInitialSearch });
     return;
   }
   nflModule?.unmount();
@@ -657,9 +662,10 @@ async function showSport(id) {
 }
 
 function main() {
-  initialSearch = location.search;
+  const initialSearch = location.search;
   const enabled = enabledSports(document.querySelector('meta[name="booth-review-sports"]'));
   const sport = resolveSport(initialSearch, enabled);
+  if (sport === 'nfl') nflInitialSearch = initialSearch;
   if (sport === 'cfb' && new URLSearchParams(initialSearch).has('sport')) {
     history.replaceState(null, '', location.pathname + searchWithoutSport(initialSearch));
   }
