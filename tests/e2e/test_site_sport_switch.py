@@ -142,24 +142,60 @@ def test_mobile_switch_size_and_topbar_height(
         ctx.close()
 
 
-def test_switching_keeps_topbar_and_stacks_nfl_regions(
-    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None]
-) -> None:
-    """The top bar does not move on a switch and the NFL regions stack with no gap.
+_RECT = "document.querySelector('%s').getBoundingClientRect().%s"
 
-    The NFL toolbar is empty until plan 12, so an exact chart-top match with the CFB
-    toolbar is asserted there, not here.
-    """
-    page = nfl_guarded_page
-    open_flagon_cfb(page)
-    before = _bar_height(page)
+
+def _assert_layout_stable(page: Page, open_cfb: Callable[..., None]) -> None:
+    """Top bar, toolbar height and chart top do not move when the sport changes (SITE-20)."""
+    open_cfb(page)
+    bar = _bar_height(page)
+    cfb_toolbar = page.evaluate(_RECT % ("#toolbar", "height"))
+    cfb_chart_top = page.evaluate(_RECT % ("#chart-area", "top"))
     _click(page, "nfl")
     page.wait_for_function("window.__nflTestHooks && window.__nflTestHooks.ready === true")
-    assert abs(_bar_height(page) - before) <= 1
-    rect = "document.querySelector('%s').getBoundingClientRect().%s"
-    bar_bottom = page.evaluate(rect % ("#nfl-selection-bar", "bottom"))
-    assert abs(page.evaluate(rect % ("#nfl-chart-area", "top")) - bar_bottom) <= 1
-    assert page.evaluate(rect % ("#chart-area", "height")) == 0
+    assert abs(_bar_height(page) - bar) <= 1
+    assert abs(page.evaluate(_RECT % ("#nfl-toolbar", "height")) - cfb_toolbar) <= 1
+    bar_bottom = page.evaluate(_RECT % ("#nfl-selection-bar", "bottom"))
+    assert abs(page.evaluate(_RECT % ("#nfl-chart-area", "top")) - bar_bottom) <= 1
+    assert abs(page.evaluate(_RECT % ("#nfl-chart-area", "top")) - cfb_chart_top) <= 1
+    assert page.evaluate(_RECT % ("#chart-area", "height")) == 0
+
+
+def test_switching_keeps_topbar_toolbar_and_chart_top(
+    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None]
+) -> None:
+    _assert_layout_stable(nfl_guarded_page, open_flagon_cfb)
+
+
+def test_switching_keeps_layout_on_mobile(
+    nfl_mobile_page: Page, open_flagon_cfb: Callable[..., None]
+) -> None:
+    _assert_layout_stable(nfl_mobile_page, open_flagon_cfb)
+
+
+def test_cfb_starts_cleanly_after_opening_on_nfl_url(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    """Open on an NFL query with NFL-only params, then switch to CFB (startCfb decodes it)."""
+    page = nfl_guarded_page
+    errors: list[str] = []
+    page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    nfl_query = (
+        "sport=nfl&view=fox&team=f-gulls&people=p00&cat=agotw&seasons=2025-2025&m=excitement"
+    )
+    open_nfl_app(page, "?" + nfl_query)
+    _click(page, "cfb")
+    page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+    search = page.evaluate("location.search")
+    params = ("sport=", "team=", "people=", "cat=", "seasons=", "fseason=", "m=", "adj=", "ay=")
+    for param in params:
+        assert param not in search, search
+    state = page.evaluate("window.__testHooks.getState()")
+    assert "f-gulls" not in str(state)
+    assert "p00" not in str(state)
+    assert page.locator("#chart").is_visible()
+    assert errors == []
 
 
 def test_nfl_load_error_then_cfb_still_loads(

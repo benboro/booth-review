@@ -392,7 +392,7 @@ function showLoadError() {
   window.__testHooks = { ready: true, failed: true };
 }
 
-async function startCfb() {
+async function startCfb(search = location.search) {
   cfbStarted = true;
   let response;
   try {
@@ -423,7 +423,7 @@ async function startCfb() {
       throw new Error('Plotly bundle not loaded');
     }
     data = prepareData(raw);
-    state = decodeState(location.search, data);
+    state = decodeState(search, data);
 
     initTopbar({ data, getState: () => state, setState });
     renderers.push(renderTopbar);
@@ -630,7 +630,10 @@ async function showSport(id) {
   document.body.dataset.sport = 'cfb';
   document.title = sportMeta('cfb').title;
   if (!cfbStarted) {
-    await startCfb();
+    // The page opened on an NFL URL: its params belong to the NFL side (the
+    // shared `seasons` would otherwise leak into CFB state), so CFB starts at
+    // its defaults.
+    await startCfb('');
   } else if (data) {
     render();
     history.replaceState(null, '', location.pathname + encodeState(state, data));
