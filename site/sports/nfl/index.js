@@ -15,6 +15,7 @@ import { encodeNflState, decodeNflState } from './url-state.js';
 import { createGamesTable } from './table.js';
 import { createDetailPanel } from './panel.js';
 import { createNflTabs } from './tabs.js';
+import { initNflFilters, renderNflFilters, closeNflFilters } from './filters.js';
 import * as teamBars from './views/team-bars.js';
 import * as foxCrews from './views/fox-crews.js';
 import * as agotwLine from './views/agotw-line.js';
@@ -112,8 +113,11 @@ function buildRegions(footerEl) {
   const matched = el('section', 'nfl-region');
   matched.id = 'nfl-matched-games';
 
-  footerEl.before(toolbar, selection, chartArea, matched);
-  return { toolbar, selection, chips, clearBtn, summary, chartArea, tabHost, hint, viewHost, status, matched };
+  const filterLayer = el('div', 'nfl-filter-layer');
+  filterLayer.id = 'nfl-filter-layer';
+
+  footerEl.before(toolbar, filterLayer, selection, chartArea, matched);
+  return { toolbar, filterLayer, selection, chips, clearBtn, summary, chartArea, tabHost, hint, viewHost, status, matched };
 }
 
 function showStatus(kind) {
@@ -259,6 +263,7 @@ function renderAll({ resize = false } = {}) {
   renderTable();
   renderSelectionBar();
   renderTabHint();
+  renderNflFilters(ctx);
   renderCount += 1;
   hooks.renderCount = renderCount;
 }
@@ -346,6 +351,7 @@ function ensureShell(footerEl) {
     onSelect: (id) => setState({ view: id }),
   });
   regions.clearBtn.addEventListener('click', () => setState({ selection: null }));
+  initNflFilters({ toolbar: regions.toolbar, chipsHost: regions.chips, sheetHost: regions.filterLayer, ctx });
   table.render([], { emptyKind: 'nothing' });
 }
 
@@ -394,11 +400,7 @@ export async function mount({ footerEl, search = '' } = {}) {
 export function unmount() {
   mounted = false;
   if (panel) panel.close();
-  if (regions) {
-    for (const p of regions.toolbar.querySelectorAll('[popover]')) {
-      if (p.matches(':popover-open')) p.hidePopover();
-    }
-  }
+  closeNflFilters();
   detachMedia();
   restoreFooter();
 }
