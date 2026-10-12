@@ -484,3 +484,20 @@ def test_tab_change_drops_the_team_selection(app: Page) -> None:
     sel = {"kind": "test", "key": "t", "label": "Test", "games": [0, 1]}
     _set(app, {"view": "fox", "selection": sel})
     assert app.evaluate("window.__nflTestHooks.getState().selection") == sel
+
+
+def test_keyboard_picks_a_team_from_the_visible_on_focus_table(app: Page) -> None:
+    """JS-WR-04: the data table shows while focused, and Enter keeps focus on the row."""
+    _vm(app)
+    wrap = app.locator("#nfl-view-special div.nfl-data-table")
+    first = wrap.locator("tbody button").first
+    key = first.get_attribute("data-key")
+    box = wrap.bounding_box()
+    assert box is not None and box["width"] <= 1
+    first.focus()
+    box = wrap.bounding_box()
+    assert box is not None and box["width"] > 100 and box["height"] > 20
+    app.keyboard.press("Enter")
+    app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
+    assert _vm(app)["selected"] == key
+    assert app.evaluate("document.activeElement.dataset.key") == key

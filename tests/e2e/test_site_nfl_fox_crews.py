@@ -518,3 +518,23 @@ def test_long_labels_and_annotations_not_clipped_on_desktop(
         assert b["right"] >= -0.5, b
     assert not any("…" in b["text"] for b in boxes["ticks"])
     assert any("fill-in" in b["text"] for b in boxes["notes"])
+
+
+def test_keyboard_picks_a_booth_from_the_visible_on_focus_table(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    """JS-WR-04: the data table shows while focused, and Enter keeps focus on the row."""
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    _vm(page)
+    wrap = page.locator("#nfl-view-fox div.nfl-data-table")
+    first = wrap.locator("tbody button").first
+    key = first.get_attribute("data-key")
+    first.focus()
+    box = wrap.bounding_box()
+    assert box is not None and box["width"] > 100
+    page.keyboard.press("Enter")
+    page.wait_for_function("window.__nflTestHooks.getState().selection !== null")
+    sel = page.evaluate("window.__nflTestHooks.getState().selection")
+    assert sel["kind"] == "booth" and str(sel["key"]) == key
+    assert page.evaluate("document.activeElement.dataset.key") == key

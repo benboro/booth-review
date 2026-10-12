@@ -13,6 +13,7 @@ import { categoryColor } from '../palette.js';
 import { ACCENT, MUTED, PAGE_BG, DIVIDER } from '../../../modules/palette.js';
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import { escapeHover } from '../../../modules/format.js';
+import { DATA_TABLE_CLASS, rebuildKeepingFocus } from '../data-table.js';
 
 const SEGMENTS = EXCLUSIVE_CATEGORIES.filter((c) => c.key !== 'none');
 const TOP_N = 15;
@@ -298,26 +299,29 @@ function renderBreakdown(model, state, env, rows) {
 
 function renderDataTable(rows) {
   const { dataBody } = refs;
-  dataBody.replaceChildren();
-  for (const r of rows) {
-    const tr = el('tr');
-    const th = el('th');
-    th.scope = 'row';
-    const btn = el('button', null, r.label);
-    btn.type = 'button';
-    btn.setAttribute('aria-label', `Select ${r.label}`);
-    btn.addEventListener('click', () => toggleTeam(r));
-    th.appendChild(btn);
-    tr.append(
-      th,
-      cell('td', String(r.bar.counts.standalone)),
-      cell('td', String(r.bar.counts.agotw)),
-      cell('td', String(r.bar.counts.cbs_national)),
-      cell('td', String(r.bar.counts.international_other)),
-      cell('td', String(r.bar.total)),
-    );
-    dataBody.appendChild(tr);
-  }
+  rebuildKeepingFocus(dataBody, () => {
+    dataBody.replaceChildren();
+    for (const r of rows) {
+      const tr = el('tr');
+      const th = el('th');
+      th.scope = 'row';
+      const btn = el('button', null, r.label);
+      btn.type = 'button';
+      btn.dataset.key = r.id;
+      btn.setAttribute('aria-label', `Select ${r.label}`);
+      btn.addEventListener('click', () => toggleTeam(r));
+      th.appendChild(btn);
+      tr.append(
+        th,
+        cell('td', String(r.bar.counts.standalone)),
+        cell('td', String(r.bar.counts.agotw)),
+        cell('td', String(r.bar.counts.cbs_national)),
+        cell('td', String(r.bar.counts.international_other)),
+        cell('td', String(r.bar.total)),
+      );
+      dataBody.appendChild(tr);
+    }
+  });
 }
 
 function renderShowAll(total, state) {
@@ -423,7 +427,7 @@ export function mount(container, ctx) {
   refs.breakdown = el('div', 'nfl-breakdown');
   refs.breakdown.hidden = true;
   refs.captions = el('div', 'nfl-captions');
-  const dataWrap = el('div', 'visually-hidden');
+  const dataWrap = el('div', DATA_TABLE_CLASS);
   const dataTable = el('table');
   dataWrap.appendChild(dataTable);
   dataTable.appendChild(el('caption', null, 'Special games by team'));

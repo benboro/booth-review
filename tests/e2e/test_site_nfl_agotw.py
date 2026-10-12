@@ -358,3 +358,28 @@ def test_missing_se_is_disclosed_never_a_zero_whisker(
     assert want in lines
     cells = page.locator("#nfl-view-agotw .visually-hidden tbody tr").nth(k25).locator("td")
     assert cells.nth(1).inner_text().endswith("(±1.96 standard errors: not available)")
+
+
+def test_keyboard_picks_a_season_from_the_visible_on_focus_table(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
+) -> None:
+    """JS-WR-04: each AGOTW table row has a select button, shown with the table on focus."""
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    vm = _vm(page)
+    wrap = page.locator("#nfl-view-agotw div.nfl-data-table")
+    buttons = wrap.locator("tbody th button")
+    assert buttons.count() == len(vm["points"])
+    k = [p["season"] for p in vm["points"]].index(2025)
+    button = buttons.nth(k)
+    key = button.get_attribute("data-key")
+    button.focus()
+    box = wrap.bounding_box()
+    assert box is not None and box["width"] > 100
+    page.keyboard.press("Enter")
+    page.wait_for_function("window.__nflTestHooks.getTableIndexes().length > 0")
+    sel = page.evaluate("window.__nflTestHooks.getState().selection")
+    assert sel["kind"] == "agotw" and sel["label"] == "2025 AGOTW"
+    got = page.evaluate("window.__nflTestHooks.getTableIndexes()")
+    assert sorted(got) == sorted(_rows(nfl_fixture_raw)[1]["game_list"])
+    assert page.evaluate("document.activeElement.dataset.key") == key

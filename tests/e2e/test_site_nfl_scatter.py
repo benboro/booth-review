@@ -453,3 +453,31 @@ def test_mobile_era_labels_inside_plot_scatter(
     caption = page.locator("#nfl-view-scatter .nfl-era-caption").inner_text()
     for lab in labels:
         assert lab in caption
+
+
+def test_keyboard_opens_a_game_from_the_scatter_table(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    """JS-WR-04: the scatter table's Details buttons are one roving tab stop and open the panel."""
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    vm = _vm(page)
+    passing = [it["i"] for it in vm["items"] if not it["faded"]]
+    wrap = page.locator(f"{VIEW} div.nfl-data-table")
+    buttons = wrap.locator("tbody button[data-key]")
+    assert buttons.count() == len(passing)
+    stops = wrap.locator("tbody button[tabindex='0']")
+    assert stops.count() == 1
+    stops.first.focus()
+    box = wrap.bounding_box()
+    assert box is not None and box["width"] > 100
+    page.keyboard.press("ArrowDown")
+    key = page.evaluate("document.activeElement.dataset.key")
+    assert key == buttons.nth(1).get_attribute("data-key")
+    assert wrap.locator("tbody button[tabindex='0']").count() == 1
+    page.keyboard.press("Enter")
+    page.wait_for_function("document.getElementById('nfl-detail-panel').open")
+    assert int(key) in page.evaluate("window.__nflTestHooks.getTableIndexes()")
+    page.keyboard.press("Escape")
+    page.wait_for_function("!document.getElementById('nfl-detail-panel').open")
+    assert page.evaluate("document.activeElement.dataset.key") == key

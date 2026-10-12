@@ -16,6 +16,7 @@ import { crewStyle } from '../palette.js';
 import { ACCENT, MUTED, PAGE_BG, DIVIDER, ZERO_LINE } from '../../../modules/palette.js';
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import { escapeHover, formatViewers, MINUS } from '../../../modules/format.js';
+import { DATA_TABLE_CLASS, rebuildKeepingFocus } from '../data-table.js';
 
 const CONFIG = {
   responsive: true,
@@ -268,21 +269,30 @@ function renderCaptions() {
 function renderDataTable(items, state) {
   const { dataBody } = refs;
   const { model } = current;
-  dataBody.replaceChildren();
-  for (const it of items) {
-    const tr = el('tr');
-    const th = el('th', null, String(it.p.season));
-    th.scope = 'row';
-    let value = it.y == null ? 'n/a' : valueText(state, it.y);
-    if (state.agotwY === 'resid' && it.y != null) value += ` (${seText(state, it)})`;
-    tr.append(
-      th,
-      el('td', null, crewLabel(model, it.p)),
-      el('td', null, value),
-      el('td', null, model.eras[it.p.era].label),
-    );
-    dataBody.appendChild(tr);
-  }
+  rebuildKeepingFocus(dataBody, () => {
+    dataBody.replaceChildren();
+    for (const it of items) {
+      const tr = el('tr');
+      const th = el('th');
+      th.scope = 'row';
+      // A keyboard path to a season's games, as a click on its point gives (JS-WR-04).
+      const btn = el('button', null, String(it.p.season));
+      btn.type = 'button';
+      btn.dataset.key = it.key;
+      btn.setAttribute('aria-label', `Select ${it.p.season} AGOTW, ${crewLabel(model, it.p)}`);
+      btn.addEventListener('click', () => pick(it));
+      th.appendChild(btn);
+      let value = it.y == null ? 'n/a' : valueText(state, it.y);
+      if (state.agotwY === 'resid' && it.y != null) value += ` (${seText(state, it)})`;
+      tr.append(
+        th,
+        el('td', null, crewLabel(model, it.p)),
+        el('td', null, value),
+        el('td', null, model.eras[it.p.era].label),
+      );
+      dataBody.appendChild(tr);
+    }
+  });
 }
 
 function setNote(show) {
@@ -486,7 +496,7 @@ export function mount(container, ctx) {
   );
   refs.chart.append(refs.gd, refs.note);
   refs.captions = el('div', 'nfl-captions');
-  const dataWrap = el('div', 'visually-hidden');
+  const dataWrap = el('div', DATA_TABLE_CLASS);
   const dataTable = el('table');
   dataTable.appendChild(el('caption', null, 'AGOTW viewership'));
   const thead = el('thead');

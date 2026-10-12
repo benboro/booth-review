@@ -3068,6 +3068,19 @@ body:not([data-sport="nfl"]) :is(#nfl-toolbar, #nfl-selection-bar, #nfl-chart-ar
   margin-top: var(--space-sm);
 }
 
+/* JS-WR-04: each NFL view's data table stays visually hidden until keyboard
+   focus enters it, then shows in place so the focused button can be seen. */
+#nfl-chart-area .nfl-data-table:focus-within {
+  position: static;
+  width: auto;
+  height: auto;
+  max-height: 50vh;
+  overflow: auto;
+  clip: auto;
+  white-space: normal;
+  margin-top: var(--space-md);
+}
+
 .nfl-stepper {
   display: inline-flex;
   align-items: center;

@@ -29,6 +29,7 @@ import { placeEraLabels, setEraCaption } from '../era-labels.js';
 import { bandLayout } from '../../../modules/chart.js';
 import { buildDateAxis, seasonRange, shownBlocks, gapDividers } from '../../../modules/date-axis.js';
 import { MONTHS, escapeHover } from '../../../modules/format.js';
+import { DATA_TABLE_CLASS, findRowButton, rebuildKeepingFocus, rovingRows } from '../data-table.js';
 
 const CONFIG = {
   responsive: true,
@@ -187,7 +188,8 @@ function bandY(i) {
 
 // ---- selection and hover ----
 
-function pickGame(i) {
+/** `fromTable`: the pick came from the data table's Details button, which then gets focus back when the panel closes. */
+function pickGame(i, fromTable = false) {
   const { ctx } = refs;
   // A touch tap reaches Plotly as touchend and again as the emulated mouseup.
   const now = Date.now();
@@ -197,7 +199,8 @@ function pickGame(i) {
   const prev = sel && sel.kind === 'games' && sel.key === 'scatter' && Array.isArray(sel.games) ? sel.games : [];
   const games = prev.includes(i) ? prev : [...prev, i];
   ctx.selectGames({ kind: 'games', key: 'scatter', label: 'Picked games', games });
-  ctx.openGame(i, refs.gd);
+  const opener = fromTable ? findRowButton(refs.dataBody, String(i)) : null;
+  ctx.openGame(i, opener ?? refs.gd);
 }
 
 function hoverLines(model, i) {
@@ -385,23 +388,39 @@ function fillBandNote() {
 }
 
 function renderDataTable(items, model) {
-  const frag = document.createDocumentFragment();
-  for (const it of items) {
-    const row = gameRow(model, it.i);
-    const tr = el('tr');
-    const th = el('th', null, `${row.away} at ${row.home}`);
-    th.scope = 'row';
-    tr.append(
-      th,
-      el('td', null, dateShortText(row)),
-      el('td', null, it.cat.label),
-      el('td', null, viewersText(row) ?? 'not available'),
-      el('td', null, row.excitement != null ? row.excitement.toFixed(1) : 'not available'),
-      el('td', null, row.awayPoints != null && row.homePoints != null ? String(Math.abs(row.awayPoints - row.homePoints)) : 'not available'),
-    );
-    frag.appendChild(tr);
-  }
-  refs.dataBody.replaceChildren(frag);
+  rebuildKeepingFocus(refs.dataBody, () => {
+    const frag = document.createDocumentFragment();
+    for (const it of items) {
+      const row = gameRow(model, it.i);
+      const tr = el('tr');
+      const matchup = `${row.away} at ${row.home}`;
+      const th = el('th', null, matchup);
+      th.scope = 'row';
+      // A keyboard path to the detail panel, as a click on a dot gives (JS-WR-04).
+      // Faded dots are not clickable, so their rows get no button either.
+      const action = el('td');
+      if (it.pass) {
+        const btn = el('button', null, 'Details');
+        btn.type = 'button';
+        btn.dataset.key = String(it.i);
+        btn.setAttribute('aria-label', `Details: ${matchup}, ${dateShortText(row)}`);
+        action.appendChild(btn);
+      }
+      tr.append(
+        th,
+        el('td', null, dateShortText(row)),
+        el('td', null, it.cat.label),
+        el('td', null, viewersText(row) ?? 'not available'),
+        el('td', null, row.excitement != null ? row.excitement.toFixed(1) : 'not available'),
+        el('td', null, row.awayPoints != null && row.homePoints != null ? String(Math.abs(row.awayPoints - row.homePoints)) : 'not available'),
+        action,
+      );
+      frag.appendChild(tr);
+    }
+    refs.dataBody.replaceChildren(frag);
+  });
+  // One row per game: a single tab stop with arrow keys, not one per game.
+  rovingRows(refs.dataBody);
 }
 
 function setEmpty(show) {
@@ -673,18 +692,22 @@ export function mount(container, ctx) {
   initBandInfo({ button: refs.bandButton, note: refs.bandNote });
   refs.chart.append(refs.gd, refs.note, refs.bandButton, refs.bandNote);
   refs.captions = el('div', 'nfl-captions');
-  const dataWrap = el('div', 'visually-hidden');
+  const dataWrap = el('div', DATA_TABLE_CLASS);
   const dataTable = el('table');
   dataTable.appendChild(el('caption', null, 'Game scatter'));
   const thead = el('thead');
   const hr = el('tr');
-  for (const h of ['Matchup', 'Date', 'Category', 'Viewers', 'GEI-style excitement', 'Final margin']) {
+  for (const h of ['Matchup', 'Date', 'Category', 'Viewers', 'GEI-style excitement', 'Final margin', 'Details']) {
     const th = el('th', null, h);
     th.scope = 'col';
     hr.appendChild(th);
   }
   thead.appendChild(hr);
   refs.dataBody = el('tbody');
+  refs.dataBody.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-key]');
+    if (btn) pickGame(Number(btn.dataset.key), true);
+  });
   dataTable.append(thead, refs.dataBody);
   dataWrap.appendChild(dataTable);
   container.append(refs.legend, refs.controls, refs.chart, refs.captions, dataWrap);
