@@ -31,7 +31,6 @@ from booth_review.build.nfl_site_data import (
     write_nfl_site_data,
 )
 from booth_review.config import DataPaths
-from booth_review.errors import SiteBuildError
 from booth_review.nfl.acceptance import AcceptanceResult
 from booth_review.nfl.acceptance import check_acceptance as run_acceptance
 from booth_review.nfl.games import NflGameTable, NflReference, assemble_nfl_games
@@ -121,7 +120,10 @@ def run_nfl_build(
                     site = build_nfl_site_data(load_nfl_site_inputs(paths, reference_directory))
                     written.append(write_nfl_site_data(paths, site))
                     counts["site_games"] = len(site.games.season)
-                except (SiteBuildError, pl.exceptions.PolarsError, ValueError):
+                except Exception:
+                    # WR-06: any builder error (TypeError, KeyError, OverflowError,
+                    # a reference-table error, ...) must never skip the table
+                    # commit below or leave the vault dirty.
                     counts["site_data_failed"] = 1
 
         committed = False

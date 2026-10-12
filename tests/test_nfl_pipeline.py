@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import polars as pl
@@ -305,6 +306,49 @@ def test_builder_failure_still_commits_tables_and_keeps_previous_json(
     assert outcome.committed
     files = _git(vault, "show", "--name-only", "--format=%s", "HEAD").splitlines()
     assert "processed/nfl_games.parquet" in files
+
+
+def _reference_error() -> Exception:
+    from booth_review.errors import ReferenceTableError
+
+    return ReferenceTableError("bad reference row")
+
+
+@pytest.mark.parametrize(
+    "make_error",
+    [
+        lambda: TypeError("x"),
+        lambda: AttributeError("x"),
+        lambda: KeyError("x"),
+        lambda: OverflowError("x"),
+        _reference_error,
+    ],
+)
+def test_any_builder_error_still_commits_tables_and_leaves_the_vault_clean(
+    vault: DataPaths, monkeypatch: pytest.MonkeyPatch, make_error: Callable[[], Exception]
+) -> None:
+    # WR-06: the 999.4 table commit guarantee holds for every builder error, not
+    # only SiteBuildError/PolarsError/ValueError.
+    _seed(vault, rr=["NFL Network"])
+    _git(vault, "add", "-A")
+    _git(vault, "commit", "-q", "-m", "seed")
+    previous = vault.vault / SITE_JSON
+    previous.parent.mkdir(parents=True, exist_ok=True)
+    previous.write_bytes(b"{}")
+    _git(vault, "add", "-f", SITE_JSON)
+    _git(vault, "commit", "-q", "-m", "previous site file")
+
+    def _boom(*args: object, **kwargs: object) -> None:
+        raise make_error()
+
+    monkeypatch.setattr(nfl_pipeline, "build_nfl_site_data", _boom)
+    outcome = _run(vault, commit=True, site_data=True)
+    assert outcome.counts["site_data_failed"] == 1
+    assert outcome.committed
+    assert previous.read_bytes() == b"{}"
+    files = _git(vault, "show", "--name-only", "--format=%s", "HEAD").splitlines()
+    assert "processed/nfl_games.parquet" in files
+    assert _git(vault, "status", "--porcelain", "--", "processed").strip() == ""
 
 
 def test_blocked_build_leaves_previous_json(
