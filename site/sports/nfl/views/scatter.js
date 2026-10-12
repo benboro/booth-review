@@ -2,7 +2,7 @@
  * NFL view 4: Game scatter (D-16, D-17).
  *
  * One svg `scatter` dot per regular-season NFL game. Y is viewers (log) or
- * GEI-style excitement (linear); X is date or absolute final margin, never the
+ * excitement (linear, GEI-style: the qualifier lives in the caption and hover only); X is date or absolute final margin, never the
  * spread. Games with no Y value sit in a strip under the plot (the unrated
  * band) and games with no final score sit in an N/A strip at the left of the
  * margin axis. A missing value is never plotted at 0. Dots are colored by
@@ -26,7 +26,8 @@ import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import { showHoverRing, hideHoverRing, ringSpecFromPoint, hoverRingDiameter } from '../../../modules/hover-ring.js';
 import { initBandInfo, positionBandInfo, closeBandNote } from '../../../modules/band-info.js';
 import { placeEraLabels, setEraCaption } from '../era-labels.js';
-import { bandLayout } from '../../../modules/chart.js';
+import { bandLayout, MARGIN, TICK_FONT_PX, DOT_OPACITY } from '../../../modules/chart.js';
+import { createOnlyDetector } from '../../../modules/legend.js';
 import { buildDateAxis, seasonRange, shownBlocks, gapDividers } from '../../../modules/date-axis.js';
 import { MONTHS, escapeHover } from '../../../modules/format.js';
 import { DATA_TABLE_CLASS, findRowButton, rebuildKeepingFocus, rovingRows } from '../data-table.js';
@@ -41,13 +42,13 @@ const CONFIG = {
   showEditInChartStudio: false,
 };
 
-const Y_TITLES = { viewers: 'Viewers', excitement: 'GEI-style excitement' };
+const Y_TITLES = { viewers: 'Viewers', excitement: 'Excitement' };
 const X_TITLE_MARGIN = 'Final margin (points)';
 const VIEWER_TICKS = [
   [5e5, '500K'], [1e6, '1M'], [2e6, '2M'], [5e6, '5M'], [1e7, '10M'], [2e7, '20M'],
 ];
 const BAND_FILL = { light: 'rgba(75, 85, 99, 0.06)', dark: 'rgba(156, 163, 175, 0.10)' };
-const FADED_OPACITY = 0.15;
+// Marker sizes match the CFB scatter's base (6) and highlighted (10) dots.
 const BASE_SIZE = 6;
 const HIGHLIGHT_SIZE = 10;
 const NA_X = -2.5; // the N/A strip's center on the margin axis
@@ -228,8 +229,8 @@ function hoverLines(model, i) {
   }
   lines.push({
     text: row.excitement != null
-      ? `GEI-style excitement: ${row.excitement.toFixed(1)}`
-      : 'GEI-style excitement: not available',
+      ? `Excitement: ${row.excitement.toFixed(1)} (GEI-style, not CFBD's index)`
+      : 'Excitement: not available',
     kind: 'body',
   });
   lines.push({ text: 'Click for details.', kind: 'hint' });
@@ -275,14 +276,20 @@ function bindEvents(gd) {
 
 // ---- controls, legend, captions, table ----
 
-function segmented(label, options, onPick) {
+function segmented(label, options, onPick, dataAttr) {
   const group = el('div', 'segmented');
   group.setAttribute('role', 'group');
   group.setAttribute('aria-label', label);
   for (const o of options) {
-    const b = el('button', null, o.label);
+    const b = el('button', null, o.long ? null : o.label);
     b.type = 'button';
     b.dataset.value = o.key;
+    if (dataAttr) b.dataset[dataAttr] = o.key;
+    if (o.long) {
+      b.setAttribute('aria-label', o.ariaLabel || o.long);
+      if (o.title) b.title = o.title;
+      b.append(el('span', 'axis-long', o.long), el('span', 'axis-short', o.short));
+    }
     b.addEventListener('click', () => onPick(o.key));
     group.appendChild(b);
   }
@@ -295,62 +302,132 @@ function pressGroup(group, value) {
   }
 }
 
+function axisGroup(caption, group) {
+  const wrap = el('div', 'axis-group');
+  const cap = el('span', 'axis-caption', caption);
+  cap.setAttribute('aria-hidden', 'true');
+  wrap.append(cap, group);
+  return wrap;
+}
+
 function buildControls() {
   const { ctx } = refs;
-  refs.yGroup = segmented(
-    'Y axis',
-    [{ key: 'viewers', label: 'Viewers' }, { key: 'excitement', label: 'GEI-style excitement' }],
-    (k) => ctx.setState({ scatterY: k }),
-  );
+  // CFB markup and wording (D-16, D-18). The X set is NFL-only: Date and Final margin,
+  // because the spread is never shown. Y keeps NFL's narrower set (no points or margin).
   refs.xGroup = segmented(
-    'X axis',
-    [{ key: 'date', label: 'Date' }, { key: 'margin', label: 'Final margin' }],
+    'X-axis measure',
+    [
+      { key: 'date', label: 'Date', long: 'Date', short: 'Date' },
+      { key: 'margin', label: 'Final margin', long: 'Final margin', short: 'Final margin' },
+    ],
     (k) => ctx.setState({ scatterX: k }),
+    'axis',
+  );
+  refs.yGroup = segmented(
+    'Y-axis measure',
+    [
+      { key: 'viewers', label: 'Viewers' },
+      { key: 'excitement', long: 'Excitement', short: 'Excite.', title: 'Excitement' },
+    ],
+    (k) => ctx.setState({ scatterY: k }),
+    'y',
   );
   refs.dotsGroup = segmented(
     'Filtered-out dots',
     [{ key: 'fade', label: 'Fade' }, { key: 'hide', label: 'Hide' }],
     (k) => ctx.setState({ dots: k }),
+    'dots',
   );
-  refs.controls.append(el('span', 'nfl-control-label', 'Y'), refs.yGroup, el('span', 'nfl-control-label', 'X'), refs.xGroup);
+  const dotsHint = 'Filters fade the games they exclude unless Hide is on.';
+  refs.dotsGroup.title = dotsHint;
+  refs.dotsGroup.setAttribute('aria-description', dotsHint);
+  refs.dotsToggle = el('div', 'dots-toggle');
+  const dotsCap = el('span', 'dots-caption', 'Filtered-out dots');
+  dotsCap.setAttribute('aria-hidden', 'true');
+  refs.dotsToggle.append(dotsCap, refs.dotsGroup);
+  const scatterControls = el('div', 'scatter-controls');
+  scatterControls.append(axisGroup('X axis', refs.xGroup), axisGroup('Y axis', refs.yGroup));
+  refs.controls.appendChild(scatterControls);
+}
+
+const ALL_CATS = EXCLUSIVE_CATEGORIES.map((c) => c.key);
+
+/** One delegated chip listener (D-15); chips are rebuilt each render. */
+function bindLegend() {
+  const { ctx, chips } = refs;
+  const detector = createOnlyDetector({
+    onToggle: (key) => {
+      if (hiddenCats.has(key)) hiddenCats.delete(key);
+      else hiddenCats.add(key);
+      ctx.setState({});
+    },
+    onOnly: (key, before) => {
+      const prior = new Set(before || []);
+      const wasOnly = ALL_CATS.every((k) => (k === key ? !prior.has(k) : prior.has(k)));
+      hiddenCats.clear();
+      if (!wasOnly) for (const k of ALL_CATS) if (k !== key) hiddenCats.add(k);
+      ctx.setState({});
+    },
+    snapshot: () => [...hiddenCats],
+  });
+  chips.addEventListener('click', (ev) => {
+    const button = ev.target.closest('button[data-category]');
+    if (!button) {
+      detector.reset();
+      return;
+    }
+    detector.click(ev, button.dataset.category);
+  });
 }
 
 function renderLegend(th, state) {
-  const { ctx, legend } = refs;
-  const chips = EXCLUSIVE_CATEGORIES.map((cat) => {
+  const { chips } = refs;
+  const shown = ALL_CATS.filter((k) => !hiddenCats.has(k));
+  const items = EXCLUSIVE_CATEGORIES.map((cat) => {
     const color = categoryColor(cat.key, th);
     const b = el('button', 'legend-chip pill', cat.label);
     b.type = 'button';
     b.dataset.category = cat.key;
     const on = !hiddenCats.has(cat.key);
     b.setAttribute('aria-pressed', String(on));
-    b.style.borderColor = color;
+    const hint = shown.length === 1 && shown[0] === cat.key
+      ? 'Double-click to show all'
+      : `Double-click to show only ${cat.label}`;
+    b.title = hint;
+    b.setAttribute('aria-description', hint);
     if (on) {
       b.style.backgroundColor = color;
       b.style.color = textOn(color);
+      b.style.borderColor = '';
+    } else {
+      b.style.backgroundColor = '';
+      b.style.color = '';
+      b.style.borderColor = color;
     }
-    b.addEventListener('click', () => {
-      if (hiddenCats.has(cat.key)) hiddenCats.delete(cat.key);
-      else hiddenCats.add(cat.key);
-      ctx.setState({});
-    });
-    return b;
+    const li = document.createElement('li');
+    li.appendChild(b);
+    return li;
   });
   pressGroup(refs.dotsGroup, state.dots);
-  legend.replaceChildren(...chips, refs.dotsGroup);
+  chips.replaceChildren(...items);
 }
 
 function renderCaptions() {
   const { ctx, captions } = refs;
-  const p = el('p');
-  p.append(
-    document.createTextNode('Viewers are '),
-    link('window-level', ctx.methodologyHref('nfl-window-level-viewership')),
-    document.createTextNode(" where marked and unnormalized. GEI-style excitement is not CFBD's excitement index; see "),
+  for (const old of captions.querySelectorAll('p.caption')) old.remove();
+  const viewers = el('p', 'caption');
+  viewers.append(
+    document.createTextNode('Viewers are window-level where marked and unnormalized; see '),
+    link('methodology', ctx.methodologyHref('nfl-window-level-viewership')),
+    document.createTextNode('.'),
+  );
+  const excitement = el('p', 'caption');
+  excitement.append(
+    document.createTextNode('NFL excitement is GEI-style, built from win probability. It is not CFBD’s excitementIndex; see '),
     link('methodology', ctx.methodologyHref('nfl-gei-style-excitement')),
     document.createTextNode('.'),
   );
-  captions.replaceChildren(p);
+  captions.prepend(viewers, excitement);
 }
 
 function fillBandNote() {
@@ -585,7 +662,8 @@ function marginXAxis(model, th, env) {
 function buildFigure(model, state, env, th, items) {
   const bg = PAGE_BG[th];
   const height = env.mobile ? 440 : 520;
-  const margin = { l: env.mobile ? 64 : 84, r: 16, t: 12, b: 64 };
+  const margin = MARGIN;
+  const fontPx = env.mobile ? TICK_FONT_PX.mobile : TICK_FONT_PX.desktop;
   const plotH = height - margin.t - margin.b;
   const bandGeo = bandLayout(plotH);
   const plotW = Math.max((refs.chart.clientWidth || (env.mobile ? 360 : 1100)) - margin.l - margin.r, 100);
@@ -603,13 +681,15 @@ function buildFigure(model, state, env, th, items) {
     hoverinfo: 'none',
     showlegend: false,
     marker: {
-      symbol: 'circle',
+      // Other games share the grey of Other solo slot (#8C8C8C / #999999), so they draw
+      // hollow and never read as that segment (UI-SPEC Color).
+      symbol: subset.map((it) => (it.cat.key === 'none' ? 'circle-open' : 'circle')),
       size: subset.map((it) => (it.highlight ? HIGHLIGHT_SIZE : BASE_SIZE)),
       color: subset.map((it) => categoryColor(it.cat.key, th)),
-      opacity: subset.map((it) => (it.pass ? 1 : FADED_OPACITY)),
+      opacity: subset.map((it) => (it.pass ? 1 : DOT_OPACITY.inertUnderPerson)),
       line: {
-        width: subset.map((it) => (it.highlight ? 1.5 : 0)),
-        color: ACCENT[th],
+        width: subset.map((it) => (it.highlight ? 1.5 : it.cat.key === 'none' ? 1.5 : 0)),
+        color: subset.map((it) => (it.highlight ? ACCENT[th] : categoryColor(it.cat.key, th))),
       },
     },
   });
@@ -620,7 +700,7 @@ function buildFigure(model, state, env, th, items) {
   const layout = {
     paper_bgcolor: bg,
     plot_bgcolor: bg,
-    font: { family: getComputedStyle(document.body).fontFamily, size: 14, color: ACCENT[th] },
+    font: { family: getComputedStyle(document.body).fontFamily, size: fontPx, color: ACCENT[th] },
     showlegend: false,
     hovermode: 'closest',
     clickmode: 'event',
@@ -638,7 +718,7 @@ function buildFigure(model, state, env, th, items) {
       tickmode: 'array',
       tickvals: yAxis.tickvals,
       ticktext: yAxis.ticktext,
-      tickfont: { color: MUTED[th] },
+      tickfont: { color: MUTED[th], size: fontPx },
       gridcolor: DIVIDER[th],
       zeroline: false,
       fixedrange: true,
@@ -660,9 +740,13 @@ function buildFigure(model, state, env, th, items) {
 
 export function mount(container, ctx) {
   refs.ctx = ctx;
-  refs.legend = el('div', 'nfl-legend-row');
-  refs.controls = el('div', 'nfl-view-controls');
+  refs.legend = el('div', 'legend-row');
+  refs.chips = el('ul', 'legend-chips');
+  refs.chips.setAttribute('aria-label', 'Game categories: select to show or hide');
+  refs.controls = el('div', 'chart-controls');
   buildControls();
+  refs.legend.append(refs.chips, refs.dotsToggle);
+  bindLegend();
   refs.chart = el('div', 'nfl-chart');
   refs.gd = el('div');
   refs.note = el('div', 'season-empty-note');
@@ -691,13 +775,13 @@ export function mount(container, ctx) {
   refs.bandNote.id = 'nfl-scatter-band-note';
   initBandInfo({ button: refs.bandButton, note: refs.bandNote });
   refs.chart.append(refs.gd, refs.note, refs.bandButton, refs.bandNote);
-  refs.captions = el('div', 'nfl-captions');
+  refs.captions = el('div');
   const dataWrap = el('div', DATA_TABLE_CLASS);
   const dataTable = el('table');
   dataTable.appendChild(el('caption', null, 'Game scatter'));
   const thead = el('thead');
   const hr = el('tr');
-  for (const h of ['Matchup', 'Date', 'Category', 'Viewers', 'GEI-style excitement', 'Final margin', 'Details']) {
+  for (const h of ['Matchup', 'Date', 'Category', 'Viewers', 'Excitement', 'Final margin', 'Details']) {
     const th = el('th', null, h);
     th.scope = 'col';
     hr.appendChild(th);

@@ -62,7 +62,7 @@ def _hidden(page: Page) -> list[str]:
 
 def _wait_hidden(page: Page, expected: list[str]) -> None:
     page.wait_for_function(
-        "e => JSON.stringify(window.__nflTestHooks.getState().hiddenSegments) === JSON.stringify(e)",
+        "e => JSON.stringify(window.__nflTestHooks.getState().hiddenSegments) === JSON.stringify(e)",  # noqa: E501
         arg=expected,
     )
 
@@ -130,3 +130,27 @@ def test_every_chip_has_the_hint(app: Page) -> None:
     _wait_hidden(app, _others("agotw"))
     sole = app.get_attribute(f"{SPECIAL} button[data-segment=agotw]", "title")
     assert sole == "Double-click to show all"
+
+
+# ------------------------------------------------------------------ scatter
+
+
+def _cats(page: Page) -> list[str]:
+    return page.evaluate(  # type: ignore[no-any-return]
+        "window.__nflTestHooks.getViewModel('scatter').hiddenCategories"
+    )
+
+
+def test_scatter_double_click_shows_only_one_category_and_repeat_restores(app: Page) -> None:
+    app.evaluate("window.__nflTestHooks.setState({view: 'scatter'})")
+    app.wait_for_selector(f"{SCATTER} button[data-category=agotw]")
+    clicks = _CLICKS.replace("data-segment", "data-category")
+    app.evaluate(clicks, [SCATTER, "agotw", [1, 2]])
+    app.wait_for_function(
+        "window.__nflTestHooks.getViewModel('scatter').hiddenCategories.length === 8"
+    )
+    assert "agotw" not in _cats(app)
+    app.evaluate(clicks, [SCATTER, "agotw", [1, 2]])
+    app.wait_for_function(
+        "window.__nflTestHooks.getViewModel('scatter').hiddenCategories.length === 0"
+    )

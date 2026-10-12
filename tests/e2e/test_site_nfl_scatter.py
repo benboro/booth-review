@@ -105,7 +105,7 @@ def test_excitement_mode_moves_only_null_excitement_to_band(
     null_exc = {i for i, v in enumerate(g["excitement"]) if v is None}
     assert vm["y"] == "excitement"
     assert vm["yType"] == "linear"
-    assert vm["axisTitles"]["y"] == "GEI-style excitement"
+    assert vm["axisTitles"]["y"] == "Excitement"
     assert vm["counts"]["band"] == len(null_exc)
     assert {it["i"] for it in vm["items"] if it["band"]} == null_exc
     assert vm["counts"]["plotted"] + vm["counts"]["band"] == len(g["season"])
@@ -178,18 +178,22 @@ def test_legend_chip_hides_a_category(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
 ) -> None:
     _open(nfl_guarded_page, open_nfl_app)
-    chips = nfl_guarded_page.locator(f"{VIEW} .legend-chip")
+    chips = nfl_guarded_page.locator(f"{VIEW} ul.legend-chips > li > button.legend-chip.pill")
     assert chips.all_inner_texts() == [
-        "Standalone slot",
-        "AGOTW",
-        "CBS national",
-        "International (not standalone)",
+        "Thursday night",
+        "Sunday night",
+        "Monday night",
+        "Holiday",
+        "Other solo slot",
+        "Fox AGOTW",
+        "CBS late national",
+        "International, shared window",
         "Other games",
     ]
     before = _vm(nfl_guarded_page)
     in_agotw = sum(1 for it in before["items"] if it["category"] == "agotw")
     assert in_agotw > 0
-    chips.nth(1).click()
+    chips.nth(5).click()
     nfl_guarded_page.wait_for_function(
         "window.__nflTestHooks.getViewModel('scatter').hiddenCategories.length === 1"
     )
@@ -197,8 +201,9 @@ def test_legend_chip_hides_a_category(
     assert after["hiddenCategories"] == ["agotw"]
     assert all(it["category"] != "agotw" for it in after["items"])
     assert len(after["items"]) == len(before["items"]) - in_agotw
-    assert chips.nth(1).get_attribute("aria-pressed") == "false"
-    chips.nth(1).click()  # restore for later tests in this page
+    assert chips.nth(5).get_attribute("aria-pressed") == "false"
+    nfl_guarded_page.wait_for_timeout(400)  # past the 300 ms double-tap window
+    chips.nth(5).click()  # restore for later tests in this page
     nfl_guarded_page.wait_for_function(
         "window.__nflTestHooks.getViewModel('scatter').hiddenCategories.length === 0"
     )
@@ -247,11 +252,50 @@ def test_band_note_text_and_links_exact(
     assert href is not None and href.endswith("#nfl-gei-style-excitement")
 
 
+def test_controls_use_cfb_markup_and_wording(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    _vm(page)
+    groups = page.locator(f"{VIEW} .chart-controls .axis-group")
+    assert groups.locator(".axis-caption").all_inner_texts() == ["X axis", "Y axis"]
+    assert groups.locator(".segmented").evaluate_all(
+        "els => els.map(e => e.getAttribute('aria-label'))"
+    ) == ["X-axis measure", "Y-axis measure"]
+    exc = page.locator(f"{VIEW} button[data-y=excitement]")
+    assert exc.get_attribute("aria-label") == "Excitement"
+    assert exc.get_attribute("title") == "Excitement"
+    assert exc.locator(".axis-long").inner_text() == "Excitement"
+    assert exc.locator(".axis-short").inner_text() == "Excite."
+    assert page.locator(f"{VIEW} .dots-toggle .dots-caption").inner_text() == "Filtered-out dots"
+    dots = page.locator(f"{VIEW} .dots-toggle .segmented")
+    assert dots.get_attribute("aria-label") == "Filtered-out dots"
+    assert dots.locator("button[data-dots]").all_inner_texts() == ["Fade", "Hide"]
+    # D-17: the GEI-style qualifier is in the caption only, never a button, axis title or header.
+    for sel in (f"{VIEW} button", f"{VIEW} th"):
+        assert not any("GEI-style" in t for t in page.locator(sel).all_text_contents())
+    assert "GEI-style" in page.locator(f"{VIEW} p.caption").nth(1).inner_text()
+    _set(page, {"scatterY": "excitement"})
+    assert _vm(page)["axisTitles"]["y"] == "Excitement"
+
+
+def test_other_games_draw_hollow(nfl_guarded_page: Page, open_nfl_app: Callable[..., None]) -> None:
+    _open(nfl_guarded_page, open_nfl_app)
+    _vm(nfl_guarded_page)
+    symbols = nfl_guarded_page.evaluate(
+        f"[...new Set(document.querySelector('{GD}').data.flatMap(t => t.marker.symbol))]"
+    )
+    assert "circle-open" in symbols and "circle" in symbols
+
+
 def test_no_spread_text_anywhere(nfl_guarded_page: Page, open_nfl_app: Callable[..., None]) -> None:
     _open(nfl_guarded_page, open_nfl_app)
     _vm(nfl_guarded_page)
     assert "spread" not in nfl_guarded_page.locator(VIEW).inner_text().lower()
-    nfl_guarded_page.locator(f"{VIEW} [aria-label='X axis']").get_by_text("Final margin").click()
+    nfl_guarded_page.locator(f"{VIEW} [aria-label='X-axis measure']").locator(
+        "button[data-axis=margin]"
+    ).click()
     nfl_guarded_page.wait_for_function(
         "window.__nflTestHooks.getViewModel('scatter').x === 'margin'"
     )
@@ -299,7 +343,7 @@ def test_hover_lines_rated_window_and_unrated_regional(
     assert lines[4] == f"{people[pbp['person']]['name']} / {people[analyst['person']]['name']}"
     assert lines[5] == f"Viewers: {g['viewers'][rated] / 1e6:.1f}M · window-level"
     exc = g["excitement"][rated]
-    assert lines[6] == f"GEI-style excitement: {exc:.1f}"
+    assert lines[6] == f"Excitement: {exc:.1f} (GEI-style, not CFBD's index)"
     assert lines[-1] == "Click for details."
     assert not nfl_guarded_page.locator("#chart-hover-ring").is_hidden()
     _emit(nfl_guarded_page, "plotly_unhover", rated)
@@ -316,9 +360,9 @@ def test_hover_lines_rated_window_and_unrated_regional(
     assert not any("window-level" in ln for ln in lines)
     exc = g["excitement"][regional]
     want = (
-        f"GEI-style excitement: {exc:.1f}"
+        f"Excitement: {exc:.1f} (GEI-style, not CFBD's index)"
         if exc is not None
-        else "GEI-style excitement: not available"
+        else "Excitement: not available"
     )
     assert want in lines
 
@@ -368,11 +412,11 @@ def test_caption_text_and_links_exact(
 ) -> None:
     _open(nfl_guarded_page, open_nfl_app)
     _vm(nfl_guarded_page)
-    cap = nfl_guarded_page.locator(f"{VIEW} .nfl-captions")
-    assert cap.inner_text() == (
-        "Viewers are window-level where marked and unnormalized. "
-        "GEI-style excitement is not CFBD's excitement index; see methodology."
-    )
+    cap = nfl_guarded_page.locator(f"{VIEW} p.caption")
+    assert cap.all_inner_texts() == [
+        "Viewers are window-level where marked and unnormalized; see methodology.",
+        "NFL excitement is GEI-style, built from win probability. It is not CFBD\u2019s excitementIndex; see methodology.",
+    ]
     hrefs = cap.locator("a").evaluate_all("els => els.map(a => a.getAttribute('href'))")
     assert [h.split("#")[1] for h in hrefs] == [
         "nfl-window-level-viewership",

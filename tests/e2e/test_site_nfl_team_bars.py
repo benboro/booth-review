@@ -198,7 +198,9 @@ def test_traces_legend_and_counts(app: Page, nfl_fixture_raw: dict[str, Any]) ->
         f"[document.querySelector('{GD}').layout.barmode, document.querySelector('{GD}').data[0].orientation]"
     )
     assert modes == ["stack", "h"]
-    marker_lines = app.evaluate(f"document.querySelector('{GD}').data.map(t => t.marker.line.width[0])")
+    marker_lines = app.evaluate(
+        f"document.querySelector('{GD}').data.map(t => t.marker.line.width[0])"
+    )
     assert marker_lines == [1] * 8
     chips = app.eval_on_selector_all(
         f"{LEGEND} li > button.legend-chip.pill",
@@ -285,9 +287,10 @@ def test_info_note_lists_definitions_and_closes_on_escape(app: Page) -> None:
 def test_no_standalone_label_anywhere(app: Page) -> None:
     _vm(app)
     assert "standalone" not in app.inner_text("#nfl-view-special").lower()
-    assert "standalone" not in app.evaluate(
-        "document.querySelector('#nfl-view-special').textContent"
-    ).lower()
+    assert (
+        "standalone"
+        not in app.evaluate("document.querySelector('#nfl-view-special').textContent").lower()
+    )
 
 
 def test_team_filter_fades_and_announcers_do_not(
