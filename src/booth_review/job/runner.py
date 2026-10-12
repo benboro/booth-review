@@ -108,9 +108,9 @@ from booth_review.job.attention import (
     nfl_rr_backlog,
     nfl_schedule_drift,
     nfl_season_past_freeze,
-    nfl_site_carried_live,
     nfl_site_failed,
     nfl_site_key_check_failed,
+    nfl_site_switch_off,
     people_review_due,
     push_failed,
     rr_backlog,
@@ -340,7 +340,9 @@ class ScheduledJob:
 
         `nfl_site` (NFL_SITE_ENABLED exactly true, D-18) adds nfl-data.json to
         the site dir: carried over from the vault, then refreshed after the NFL
-        build. NFL site problems are items that join the final outcome only."""
+        build. The NFL switch ships only with a valid file (WR-01): with no
+        valid carry-over the site is built CFB-only and the switch waits for the
+        next run. NFL site problems are items that join the final outcome only."""
         if update and site_out is None:
             raise ValueError("update mode requires site_out")
         self._update = update
@@ -557,7 +559,7 @@ class ScheduledJob:
             self._guarded_ok(
                 items,
                 lambda name: step_failed("nfl_site", name),
-                lambda: self._note_carried_live(items),
+                lambda: self._note_switch_off(items),
                 passthrough=(),
             )
 
@@ -647,6 +649,9 @@ class ScheduledJob:
     def _run_site_step(self, items: list[AttentionItem]) -> tuple[bool, bool]:
         """Returns (deploy_ready, key_leak)."""
         assert self._site_out is not None
+        # WR-01 / D-18: the switch is decided by the data, not the flag alone.
+        # Without a valid carry-over the site is CFB-only, so it never ships a
+        # switch whose nfl-data.json fetch would 404.
         carry = self._nfl_carry_over() if self._nfl_site else None
         try:
             result: SiteBuildResult = assemble_site(
@@ -654,7 +659,7 @@ class ScheduledJob:
                 out_dir=self._site_out,
                 site_src=self._site_src or site_source_dir(),
                 docs=self._docs or docs_dir(),
-                nfl=self._nfl_site,
+                nfl=carry is not None,
                 nfl_source=carry,
             )
         except KeyLeakError:
@@ -692,12 +697,13 @@ class ScheduledJob:
             return None
         return carry
 
-    def _note_carried_live(self, items: list[AttentionItem]) -> None:
+    def _note_switch_off(self, items: list[AttentionItem]) -> None:
+        """A flag-on site without nfl-data.json was built without the switch."""
         site = self._site_out
         if site is None or not (site / BUILD_MARKER).is_file():
             return
         if not (site / "nfl-data.json").is_file():
-            items.append(nfl_site_carried_live())
+            items.append(nfl_site_switch_off())
 
     # -- staleness (D-14) -------------------------------------------------------
 
@@ -1274,13 +1280,19 @@ class ScheduledJob:
 
     def _nfl_site_step(self, items: list[AttentionItem]) -> dict[str, int]:
         """Replace the site dir's nfl-data.json with the freshly built vault
-        file. Every failure keeps whatever file the site dir already holds."""
+        file. Every failure keeps whatever file the site dir already holds.
+
+        A site built without the switch (no valid carry-over, WR-01) is left
+        alone: a data file there would serve no switch. The next run carries the
+        new vault file and turns the switch on."""
         site = self._site_out
         if site is None or not (site / BUILD_MARKER).is_file():
             return {}
         source = self._runtime.paths.processed / "nfl-data.json"
         if not source.is_file():
             items.append(nfl_site_failed("missing"))
+            return {}
+        if not (site / "nfl-data.json").is_file():
             return {}
         try:
             result = refresh_nfl_data(site_out=site, source=source)

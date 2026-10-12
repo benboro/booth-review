@@ -316,15 +316,21 @@ def test_bowls_missing_says_shown_as_bowl() -> None:
 
 def test_nfl_site_constructors() -> None:
     from booth_review.job.attention import (
-        nfl_site_carried_live,
         nfl_site_failed,
         nfl_site_key_check_failed,
+        nfl_site_switch_off,
     )
 
-    assert nfl_site_carried_live().kind == "nfl_site_carried_live"
-    assert nfl_site_carried_live().line == "NFL data not refreshed: carried live copy"
+    assert nfl_site_switch_off().kind == "nfl_site_switch_off"
+    assert nfl_site_switch_off().line == (
+        "nfl site data: no valid file, NFL switch left off this run"
+    )
     assert nfl_site_key_check_failed().kind == "nfl_site_key_check_failed"
     assert nfl_site_failed("missing").kind == "nfl_site_failed"
-    assert "carry over invalid" in nfl_site_failed("carry_over_invalid").line
+    assert "last good file kept" in nfl_site_failed("invalid").line
+    carry = nfl_site_failed("carry_over_invalid").line
+    assert "carry over invalid" in carry
+    assert "vault file not used" in carry
+    assert "last good file kept" not in carry
     with pytest.raises(ValueError):
         nfl_site_failed("other")  # type: ignore[arg-type]

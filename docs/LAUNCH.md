@@ -70,7 +70,7 @@ line except the last must say "pending", and no private repo name may appear.
 
 ## Operating notes
 
-- `NFL_SITE_ENABLED`: only the exact lowercase `true` turns on the NFL switch and `nfl-data.json`; any other value keeps the site CFB-only. Set it only after `JOB_REF` points at a release that includes 999.5. With it on, a run that cannot refresh the NFL file keeps the live copy and raises "NFL data not refreshed: carried live copy".
+- `NFL_SITE_ENABLED`: only the exact lowercase `true` turns on the NFL switch and `nfl-data.json`; any other value keeps the site CFB-only. Set it only after `JOB_REF` points at a release that includes 999.5. With it on, a run whose vault holds no valid `nfl-data.json` builds the site without the NFL switch (it never ships without its data file) and raises "nfl site data: no valid file, NFL switch left off this run"; the next run with a valid file turns the switch back on. A run that cannot refresh the NFL file keeps the vault's last good copy.
 - Variables: `PUBLISH_ENABLED`, `DEPLOY_REPO`, `JOB_REF`. Publishing turns on only when `PUBLISH_ENABLED` is exactly `true` (lowercase); any other value, `True` included, keeps it off. Secrets: `CFBD_API_KEY`, `DEPLOY_KEY_PROD`, `DEPLOY_KEY_SCRATCH`. Deploy keys are repo-scoped, one per target; the workflow picks the production key only when `DEPLOY_REPO` is `benboro/benboro.github.io`.
 - Rollout order: set `JOB_REF` to the new tag before installing a workflow that passes new flags.
 - Releasing a reference fix: patch-bump `version` in `pyproject.toml`, run `uv lock`, update the version literal in the workflow test, open a PR, merge, then run `ops/release-job.sh vX.Y.Z` from the merged main.

@@ -385,12 +385,14 @@ _NFL_SITE_REASONS = ("missing", "invalid", "carry_over_invalid")
 
 
 def nfl_site_failed(reason: Literal["missing", "invalid", "carry_over_invalid"]) -> AttentionItem:
-    """The NFL site file could not be built or used; the last good file stays."""
+    """The NFL site file could not be built or used. A refresh failure keeps the
+    site's file; an unusable vault carry-over is simply not used (WR-01)."""
     if reason not in _NFL_SITE_REASONS:
         raise ValueError(f"unknown nfl site reason: {reason!r}")
+    outcome = "vault file not used" if reason == "carry_over_invalid" else "last good file kept"
     return AttentionItem(
         kind="nfl_site_failed",
-        line=f"nfl site data: {reason.replace('_', ' ')}, last good file kept",
+        line=f"nfl site data: {reason.replace('_', ' ')}, {outcome}",
         severity="attention",
     )
 
@@ -404,11 +406,12 @@ def nfl_site_key_check_failed() -> AttentionItem:
     )
 
 
-def nfl_site_carried_live() -> AttentionItem:
-    """The run's site dir has no nfl-data.json, so the deploy carries the live copy."""
+def nfl_site_switch_off() -> AttentionItem:
+    """NFL is on, but the run had no valid NFL data file, so its site was built
+    without the NFL switch (WR-01, D-18): the switch never ships without data."""
     return AttentionItem(
-        kind="nfl_site_carried_live",
-        line="NFL data not refreshed: carried live copy",
+        kind="nfl_site_switch_off",
+        line="nfl site data: no valid file, NFL switch left off this run",
         severity="attention",
     )
 

@@ -368,6 +368,9 @@ def assemble_site(
     """
     if nfl_source is not None and not nfl:
         raise SiteBuildError("nfl_source given while NFL is off")
+    if nfl and nfl_source is None:
+        # WR-01 / D-18: the switch never ships without its data file.
+        raise SiteBuildError("NFL is on but no NFL data file was given")
     site, body = load_site_payload(source)
     nfl_site: NflSiteData | None = None
     nfl_body: bytes | None = None

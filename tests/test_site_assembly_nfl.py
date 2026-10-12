@@ -99,12 +99,15 @@ def test_flag_on_build(tmp_path: Path) -> None:
     assert "nfl-data.json" in result.files
 
 
-def test_flag_on_without_source(tmp_path: Path) -> None:
+def test_flag_on_without_source_is_refused_and_keeps_out_dir(tmp_path: Path) -> None:
+    # WR-01 / D-18: the NFL switch never ships without its data file.
     out = tmp_path / "out"
-    result = _build(out, nfl=True)
-    assert 'id="sport-switch"' in (out / "index.html").read_text(encoding="utf-8")
-    assert not (out / "nfl-data.json").exists()
-    assert result.nfl_games is None
+    _build(out)
+    before = {p.name: _sha(p) for p in out.iterdir() if p.is_file()}
+    with pytest.raises(SiteBuildError, match="no NFL data file"):
+        _build(out, nfl=True)
+    assert {p.name: _sha(p) for p in out.iterdir() if p.is_file()} == before
+    assert "sport-switch" not in (out / "index.html").read_text(encoding="utf-8")
 
 
 def test_source_while_off_is_refused(tmp_path: Path) -> None:
