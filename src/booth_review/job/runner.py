@@ -73,14 +73,17 @@ from booth_review.build.pipeline import BuildOutcome, run_build
 from booth_review.build.site_assembly import (
     BUILD_MARKER,
     SiteBuildResult,
+    add_nfl_to_site,
     assemble_site,
     check_nfl_file_key,
     docs_dir,
     load_nfl_site_payload,
     refresh_nfl_data,
     site_source_dir,
+    site_sports,
 )
 from booth_review.config import CFBD_FLOOR_DEFAULT
+from booth_review.contract.nfl_models import NflSiteData
 from booth_review.errors import (
     FetchError,
     KeyLeakError,
@@ -108,9 +111,9 @@ from booth_review.job.attention import (
     nfl_rr_backlog,
     nfl_schedule_drift,
     nfl_season_past_freeze,
-    nfl_site_carried_live,
     nfl_site_failed,
     nfl_site_key_check_failed,
+    nfl_site_switch_off,
     people_review_due,
     push_failed,
     rr_backlog,
@@ -340,7 +343,10 @@ class ScheduledJob:
 
         `nfl_site` (NFL_SITE_ENABLED exactly true, D-18) adds nfl-data.json to
         the site dir: carried over from the vault, then refreshed after the NFL
-        build. NFL site problems are items that join the final outcome only."""
+        build. The NFL switch ships only with a valid file (WR-01): with no
+        valid carry-over the site is built CFB-only, and the NFL block turns
+        the switch on in the same run once it has a valid fresh file (iter-2
+        WR-02). NFL site problems are items that join the final outcome only."""
         if update and site_out is None:
             raise ValueError("update mode requires site_out")
         self._update = update
@@ -557,7 +563,7 @@ class ScheduledJob:
             self._guarded_ok(
                 items,
                 lambda name: step_failed("nfl_site", name),
-                lambda: self._note_carried_live(items),
+                lambda: self._note_switch_off(items),
                 passthrough=(),
             )
 
@@ -647,6 +653,10 @@ class ScheduledJob:
     def _run_site_step(self, items: list[AttentionItem]) -> tuple[bool, bool]:
         """Returns (deploy_ready, key_leak)."""
         assert self._site_out is not None
+        # WR-01 / D-18: the switch is decided by the data, not the flag alone.
+        # Without a valid carry-over the site is CFB-only, so it never ships a
+        # switch whose nfl-data.json fetch would 404; the NFL block can still
+        # turn the switch on with a fresh file (`_turn_nfl_on`, iter-2 WR-02).
         carry = self._nfl_carry_over() if self._nfl_site else None
         try:
             result: SiteBuildResult = assemble_site(
@@ -654,8 +664,8 @@ class ScheduledJob:
                 out_dir=self._site_out,
                 site_src=self._site_src or site_source_dir(),
                 docs=self._docs or docs_dir(),
-                nfl=self._nfl_site,
-                nfl_source=carry,
+                nfl=carry is not None,
+                nfl_payload=carry,
             )
         except KeyLeakError:
             items.append(site_key_check_failed())
@@ -667,37 +677,49 @@ class ScheduledJob:
         print("cfbd key check: passed")
         return True, False
 
-    def _nfl_carry_over(self) -> Path | None:
-        """The vault's last good nfl-data.json if it validates and passes the
-        key check, else None. Problems become items held in
-        `_nfl_carry_items` (joined after the CFB result is reported) and never
-        raise, so CFB's site step is unaffected (D-20)."""
+    def _nfl_carry_over(self) -> tuple[NflSiteData, bytes] | None:
+        """The vault's last good nfl-data.json, parsed and validated once, if
+        it passes the contract and the key check, else None. `assemble_site`
+        gets these exact bytes and never re-reads the file (WR-03).
+
+        Never raises (D-20): every exception, not only the expected ones,
+        becomes a count-only item held in `_nfl_carry_items` (joined after the
+        CFB result is reported), so CFB's site step is unaffected."""
+        held = self._nfl_carry_items
+        try:
+            return self._load_nfl_carry_over(held)
+        except Exception as exc:
+            held.append(step_failed("nfl_site", error_type_name(exc)))
+            return None
+
+    def _load_nfl_carry_over(self, held: list[AttentionItem]) -> tuple[NflSiteData, bytes] | None:
         assert self._site_out is not None
         carry = self._runtime.paths.processed / "nfl-data.json"
         if not carry.is_file():
             return None
-        held = self._nfl_carry_items
         try:
-            _, body = load_nfl_site_payload(carry)
+            payload = load_nfl_site_payload(carry)
         except (SiteBuildError, OSError, ValueError):
             held.append(nfl_site_failed("carry_over_invalid"))
             return None
         try:
-            check_nfl_file_key(body, scratch_parent=self._site_out.parent)
+            check_nfl_file_key(payload[1], scratch_parent=self._site_out.parent)
         except KeyLeakError:
             held.append(nfl_site_key_check_failed())
             return None
         except OSError:
             held.append(nfl_site_failed("carry_over_invalid"))
             return None
-        return carry
+        return payload
 
-    def _note_carried_live(self, items: list[AttentionItem]) -> None:
+    def _note_switch_off(self, items: list[AttentionItem]) -> None:
+        """A flag-on site whose sports meta still lists CFB only, after the NFL
+        block had its chance to turn the switch on, is one attention item."""
         site = self._site_out
         if site is None or not (site / BUILD_MARKER).is_file():
             return
-        if not (site / "nfl-data.json").is_file():
-            items.append(nfl_site_carried_live())
+        if "nfl" not in site_sports(site):
+            items.append(nfl_site_switch_off())
 
     # -- staleness (D-14) -------------------------------------------------------
 
@@ -1274,7 +1296,13 @@ class ScheduledJob:
 
     def _nfl_site_step(self, items: list[AttentionItem]) -> dict[str, int]:
         """Replace the site dir's nfl-data.json with the freshly built vault
-        file. Every failure keeps whatever file the site dir already holds."""
+        file. Every failure keeps whatever file the site dir already holds.
+
+        A site built without the switch (the vault carry-over was missing or
+        unusable at CFB's site step, WR-01) gets the switch, the NFL modules
+        and the file now, once the fresh vault file validates and passes the
+        key check (iter-2 WR-02, D-20), so a one-off vault-side failure never
+        hides NFL. A failure leaves the switch-less CFB site exactly as built."""
         site = self._site_out
         if site is None or not (site / BUILD_MARKER).is_file():
             return {}
@@ -1282,6 +1310,8 @@ class ScheduledJob:
         if not source.is_file():
             items.append(nfl_site_failed("missing"))
             return {}
+        if "nfl" not in site_sports(site):
+            return self._turn_nfl_on(site, source, items)
         try:
             result = refresh_nfl_data(site_out=site, source=source)
         except KeyLeakError:
@@ -1295,6 +1325,32 @@ class ScheduledJob:
             return {}
         print(f"nfl site: {result.games} games")
         return {"games": result.games}
+
+    def _turn_nfl_on(self, site: Path, source: Path, items: list[AttentionItem]) -> dict[str, int]:
+        """Add the NFL switch and the fresh vault file to a switch-less site."""
+        try:
+            payload = load_nfl_site_payload(source)
+        except (SiteBuildError, OSError, ValueError):
+            items.append(nfl_site_failed("invalid"))
+            return {}
+        try:
+            result = add_nfl_to_site(
+                site_out=site,
+                site_src=self._site_src or site_source_dir(),
+                docs=self._docs or docs_dir(),
+                nfl_payload=payload,
+            )
+        except KeyLeakError:
+            items.append(nfl_site_key_check_failed())
+            return {}
+        except SiteBuildError:
+            items.append(nfl_site_failed("invalid"))
+            return {}
+        if not result.replaced:
+            items.append(nfl_site_key_check_failed())
+            return {}
+        print(f"nfl site: {result.games} games, switch on")
+        return {"games": result.games, "switch_on": 1}
 
     # -- state save ------------------------------------------------------------
 

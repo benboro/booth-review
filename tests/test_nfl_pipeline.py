@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import polars as pl
@@ -244,11 +245,11 @@ SITE_JSON = "processed/nfl-data.json"
 
 
 def _run(vault: DataPaths, **kwargs: object) -> nfl_pipeline.NflBuildOutcome:
+    kwargs.setdefault("include_playoffs", False)
     return nfl_pipeline.run_nfl_build(
         vault,
         Path(os.environ["BOOTH_REVIEW_REFERENCE"]),
         seasons=[2014],
-        include_playoffs=False,
         check_acceptance=False,
         **kwargs,  # type: ignore[arg-type]
     )
@@ -305,6 +306,49 @@ def test_builder_failure_still_commits_tables_and_keeps_previous_json(
     assert outcome.committed
     files = _git(vault, "show", "--name-only", "--format=%s", "HEAD").splitlines()
     assert "processed/nfl_games.parquet" in files
+
+
+def _reference_error() -> Exception:
+    from booth_review.errors import ReferenceTableError
+
+    return ReferenceTableError("bad reference row")
+
+
+@pytest.mark.parametrize(
+    "make_error",
+    [
+        lambda: TypeError("x"),
+        lambda: AttributeError("x"),
+        lambda: KeyError("x"),
+        lambda: OverflowError("x"),
+        _reference_error,
+    ],
+)
+def test_any_builder_error_still_commits_tables_and_leaves_the_vault_clean(
+    vault: DataPaths, monkeypatch: pytest.MonkeyPatch, make_error: Callable[[], Exception]
+) -> None:
+    # WR-06: the 999.4 table commit guarantee holds for every builder error, not
+    # only SiteBuildError/PolarsError/ValueError.
+    _seed(vault, rr=["NFL Network"])
+    _git(vault, "add", "-A")
+    _git(vault, "commit", "-q", "-m", "seed")
+    previous = vault.vault / SITE_JSON
+    previous.parent.mkdir(parents=True, exist_ok=True)
+    previous.write_bytes(b"{}")
+    _git(vault, "add", "-f", SITE_JSON)
+    _git(vault, "commit", "-q", "-m", "previous site file")
+
+    def _boom(*args: object, **kwargs: object) -> None:
+        raise make_error()
+
+    monkeypatch.setattr(nfl_pipeline, "build_nfl_site_data", _boom)
+    outcome = _run(vault, commit=True, site_data=True)
+    assert outcome.counts["site_data_failed"] == 1
+    assert outcome.committed
+    assert previous.read_bytes() == b"{}"
+    files = _git(vault, "show", "--name-only", "--format=%s", "HEAD").splitlines()
+    assert "processed/nfl_games.parquet" in files
+    assert _git(vault, "status", "--porcelain", "--", "processed").strip() == ""
 
 
 def test_blocked_build_leaves_previous_json(
@@ -365,6 +409,31 @@ def test_include_playoffs_adds_rows(vault: DataPaths) -> None:
     assert _tables(vault).height == 3
     assert main(["nfl", "build", "--season", "2014", "--no-commit", "--include-playoffs"]) == 0
     assert _tables(vault).height == 4
+
+
+def test_include_playoffs_skips_site_data_and_keeps_the_previous_file(
+    vault: DataPaths, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # WR-05 / D-17: a playoffs build never writes the regular-season site file,
+    # and with the flag on it is a skip, not a site_data_failed.
+    _seed(vault, rr=["NFL Network"], playoff=True)
+    previous = vault.vault / SITE_JSON
+    previous.parent.mkdir(parents=True, exist_ok=True)
+    previous.write_bytes(b"last-good")
+    outcome = _run(vault, commit=True, site_data=True, include_playoffs=True)
+    assert outcome.counts["site_data_skipped"] == 1
+    assert "site_data_failed" not in outcome.counts
+    assert SITE_JSON not in outcome.written
+    assert previous.read_bytes() == b"last-good"
+    assert outcome.committed
+    monkeypatch.setenv("NFL_SITE_ENABLED", "true")
+    capsys.readouterr()
+    code = main(["nfl", "build", "--season", "2014", "--no-commit", "--include-playoffs"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "nfl site data: skipped (the site shows the regular season only)" in out
+    assert "failed" not in out
+    assert previous.read_bytes() == b"last-good"
 
 
 def test_gitignore_untouched() -> None:

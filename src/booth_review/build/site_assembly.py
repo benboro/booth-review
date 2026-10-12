@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import tempfile
@@ -47,6 +48,7 @@ SPORT_SWITCH_TOKEN = "<!-- booth-review:sport-switch -->"
 NFL_DATA_FILE = "nfl-data.json"
 # The switch is data-driven (D-19): a later sport is one more tuple.
 SITE_SPORTS: tuple[tuple[str, str], ...] = (("cfb", "CFB"), ("nfl", "NFL"))
+_CFB_ONLY = tuple(sid for sid, _ in SITE_SPORTS[:1])
 
 _DEFAULT_FIXTURE = Path("tests/fixtures/contract/site-data.fixture.json")
 _DEFAULT_NFL_FIXTURE = Path("tests/fixtures/contract/nfl-data.fixture.json")
@@ -129,17 +131,33 @@ def load_nfl_site_payload(source: Path) -> tuple[NflSiteData, bytes]:
     """
     if not source.is_file():
         raise SiteBuildError(f"{source} not found")
+    return nfl_site_payload_from_bytes(source.read_bytes(), name=source.name)
+
+
+def nfl_site_payload_from_bytes(
+    raw: bytes, *, name: str = NFL_DATA_FILE
+) -> tuple[NflSiteData, bytes]:
+    """Validate `raw` nfl-data.json bytes against the NFL contract.
+
+    Returns the model and its canonical compact sorted-key bytes. Raises
+    SiteBuildError naming `name` or a contract location only, never a value.
+    """
     try:
-        raw = json.loads(source.read_text(encoding="utf-8"))
+        parsed = json.loads(raw.decode("utf-8"))
     except ValueError:
-        raise SiteBuildError(f"{source.name}: not valid JSON") from None
+        raise SiteBuildError(f"{name}: not valid JSON") from None
     try:
-        nfl = validate_nfl_site_data(raw)
+        nfl = validate_nfl_site_data(parsed)
     except ValidationError as exc:
         raise SiteBuildError(_contract_error_summary(exc)) from None
     payload = nfl.model_dump(mode="json")
-    body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    return nfl, body
+    try:
+        # NaN or Infinity would be invalid JSON (WR-04); the contract rejects
+        # them first, so this only guards against drift.
+        text = json.dumps(payload, separators=(",", ":"), sort_keys=True, allow_nan=False)
+    except ValueError:
+        raise SiteBuildError(f"{name}: a number is not finite") from None
+    return nfl, text.encode("utf-8")
 
 
 def _nfl_game_count(nfl: NflSiteData) -> int:
@@ -266,6 +284,128 @@ def refresh_nfl_data(*, site_out: Path, source: Path) -> NflRefreshResult:
     return NflRefreshResult(games=_nfl_game_count(nfl), key_checked=True, replaced=True)
 
 
+_SPORTS_META_RE = re.compile(r'<meta name="booth-review-sports" content="([a-z,]*)">')
+
+
+def site_sports(site_out: Path) -> tuple[str, ...]:
+    """The sports a built site's index.html lists in its sports meta, such as
+    ("cfb",) for a switch-less site or ("cfb", "nfl") for one with the switch.
+    Empty when there is no index.html or not exactly one sports meta. This,
+    not the env flag, says whether a built site loads nfl-data.json (IN-04).
+    """
+    index = site_out / "index.html"
+    if not index.is_file():
+        return ()
+    found = _SPORTS_META_RE.findall(index.read_text(encoding="utf-8"))
+    if len(found) != 1:
+        return ()
+    return tuple(sid for sid in found[0].split(",") if sid)
+
+
+def _remove_empty_parents(path: Path, root: Path) -> None:
+    """Remove the now-empty dirs between `path` and `root` (both exclusive)."""
+    for parent in path.parents:
+        if parent == root or root not in parent.parents:
+            return
+        try:
+            parent.rmdir()
+        except OSError:
+            return
+
+
+def _promote_into(stage: Path, site_out: Path) -> None:
+    """Move every file of the assembled `stage` that is new to `site_out` or
+    differs from it into `site_out`, index.html last.
+
+    Each move is one same-filesystem rename, and index.html is what turns the
+    switch on, so until that last rename the site is still the whole,
+    switch-less CFB build: a kill at any point never leaves CFB broken. On an
+    error the moved files are put back (from copies in a hidden sibling) and
+    the added ones removed. Never deletes a file the stage does not replace.
+    """
+    staged = {p.relative_to(stage) for p in stage.rglob("*") if p.is_file()}
+    present = {p.relative_to(site_out) for p in site_out.rglob("*") if p.is_file()}
+    if present - staged:
+        raise SiteBuildError(f"refusing to patch {site_out}: it holds files the NFL build does not")
+    index = Path("index.html")
+    changed = sorted(
+        rel
+        for rel in staged
+        if rel not in present or (site_out / rel).read_bytes() != (stage / rel).read_bytes()
+    )
+    order = [rel for rel in changed if rel != index] + ([index] if index in changed else [])
+    root = site_out.resolve()
+    backup = Path(tempfile.mkdtemp(prefix=f".{root.name}.nfl-backup-", dir=root.parent))
+    moved: list[tuple[Path, bool]] = []
+    try:
+        for rel in order:
+            dest = site_out / rel
+            existed = dest.is_file()
+            if existed:
+                (backup / rel).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(dest, backup / rel)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            (stage / rel).replace(dest)
+            moved.append((rel, existed))
+    except Exception:
+        for rel, existed in reversed(moved):
+            dest = site_out / rel
+            if existed:
+                (backup / rel).replace(dest)
+            else:
+                dest.unlink(missing_ok=True)
+                _remove_empty_parents(dest, site_out)
+        raise
+    finally:
+        shutil.rmtree(backup, ignore_errors=True)
+
+
+def add_nfl_to_site(
+    *,
+    site_out: Path,
+    site_src: Path,
+    docs: Path,
+    nfl_payload: tuple[NflSiteData, bytes],
+) -> NflRefreshResult:
+    """Turn the NFL switch on in a switch-less site build (iter-2 WR-02, D-20).
+
+    `site_out` must be a booth-review build whose sports meta lists CFB only.
+    The site is re-assembled with NFL on, from the site's own site-data.json
+    (so every CFB byte, the cache-bust version included, stays the same) and
+    `nfl_payload` (an already-validated model and its canonical bytes), in a
+    hidden sibling staging dir that is key-checked whole. Only then are the
+    new and changed files (the switch and sports meta in index.html, the
+    `sports/nfl/` modules, the NFL methodology section and nfl-data.json)
+    moved in, index.html last (`_promote_into`).
+
+    With no key configured nothing is changed (replaced=False). On any error,
+    a key hit included, `site_out` is left as it was: the switch-less CFB site.
+    """
+    if not (site_out / BUILD_MARKER).is_file():
+        raise SiteBuildError(f"refusing to add NFL to {site_out}: not a booth-review site build")
+    if site_sports(site_out) != _CFB_ONLY:
+        raise SiteBuildError(f"refusing to add NFL to {site_out}: not a CFB-only site build")
+    current = site_out / "site-data.json"
+    site, body = load_site_payload(current)
+    if body != current.read_bytes():
+        raise SiteBuildError(f"refusing to add NFL to {site_out}: site-data.json is not canonical")
+    nfl, nfl_body = nfl_payload
+    _verify_bundle(site_src)
+    stage = _make_staging_dir(site_out)
+    try:
+        _assemble_into(
+            stage, site=site, body=body, site_src=site_src, docs=docs, nfl=True, nfl_body=nfl_body
+        )
+        if not check_no_key_leak(stage):
+            return NflRefreshResult(games=_nfl_game_count(nfl), key_checked=False, replaced=False)
+        _promote_into(stage, site_out)
+    finally:
+        # On a key hit `check_no_key_leak` already removed `stage`; otherwise
+        # it holds what was not moved (unchanged files) or a failed build.
+        shutil.rmtree(stage, ignore_errors=True)
+    return NflRefreshResult(games=_nfl_game_count(nfl), key_checked=True, replaced=True)
+
+
 def _sport_switch_html(sports: tuple[tuple[str, str], ...]) -> str:
     """The segmented switch, built from constants only (T-999.5-20)."""
     buttons = "".join(
@@ -354,11 +494,15 @@ def assemble_site(
     site_src: Path,
     docs: Path,
     nfl: bool = False,
-    nfl_source: Path | None = None,
+    nfl_payload: tuple[NflSiteData, bytes] | None = None,
 ) -> SiteBuildResult:
     """Assemble `out_dir` from `site_src`, `docs`, and the site-data
     payload at `source` (D-14): validate, copy, cache-bust, render pages,
     then run the key-leak guard last.
+
+    `nfl_payload` is an already-validated NFL model and its canonical bytes
+    (`load_nfl_site_payload`), so the CFB build never parses NFL input itself
+    and cannot fail on a second, different read of it (WR-03, D-20).
 
     Everything is built in a hidden sibling staging dir and swapped over
     `out_dir` only once every step, the key-leak guard included, has
@@ -366,13 +510,13 @@ def assemble_site(
     `out_dir` exactly as it was, so it never leaves behind a half-written,
     unmarked dir that the next run would refuse to overwrite.
     """
-    if nfl_source is not None and not nfl:
-        raise SiteBuildError("nfl_source given while NFL is off")
+    if nfl_payload is not None and not nfl:
+        raise SiteBuildError("nfl_payload given while NFL is off")
+    if nfl and nfl_payload is None:
+        # WR-01 / D-18: the switch never ships without its data file.
+        raise SiteBuildError("NFL is on but no NFL data file was given")
     site, body = load_site_payload(source)
-    nfl_site: NflSiteData | None = None
-    nfl_body: bytes | None = None
-    if nfl_source is not None:
-        nfl_site, nfl_body = load_nfl_site_payload(nfl_source)
+    nfl_site, nfl_body = nfl_payload if nfl_payload is not None else (None, None)
     _verify_bundle(site_src)
     _check_out_dir(out_dir)
 

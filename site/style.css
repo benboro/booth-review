@@ -2733,6 +2733,17 @@ body:not([data-sport="nfl"]) :is(#nfl-toolbar, #nfl-selection-bar, #nfl-chart-ar
 #nfl-chart-area { grid-area: main; }
 #nfl-matched-games { grid-area: table; }
 
+/* The NFL modules failed to load (app.js showSportLoadError): the note and its
+   Reload button take NFL's place. Only ever shown on the NFL side. */
+#sport-load-error {
+  grid-area: main;
+  margin: var(--space-lg);
+}
+
+body:not([data-sport="nfl"]) #sport-load-error {
+  display: none;
+}
+
 #nfl-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -3066,6 +3077,19 @@ body:not([data-sport="nfl"]) :is(#nfl-toolbar, #nfl-selection-bar, #nfl-chart-ar
   color: var(--muted);
   font: var(--font-label);
   margin-top: var(--space-sm);
+}
+
+/* JS-WR-04: each NFL view's data table stays visually hidden until keyboard
+   focus enters it, then shows in place so the focused button can be seen. */
+#nfl-chart-area .nfl-data-table:focus-within {
+  position: static;
+  width: auto;
+  height: auto;
+  max-height: 50vh;
+  overflow: auto;
+  clip: auto;
+  white-space: normal;
+  margin-top: var(--space-md);
 }
 
 .nfl-stepper {

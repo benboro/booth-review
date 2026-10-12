@@ -17,11 +17,13 @@ import pytest
 from booth_review.build import site_assembly as sa
 from booth_review.build.site_assembly import (
     BUILD_MARKER,
+    add_nfl_to_site,
     assemble_site,
     check_nfl_file_key,
     load_nfl_site_payload,
     nfl_site_enabled,
     refresh_nfl_data,
+    site_sports,
 )
 from booth_review.deploy.publish import _site_files
 from booth_review.errors import KeyLeakError, SiteBuildError
@@ -83,7 +85,7 @@ def test_flag_off_build(tmp_path: Path) -> None:
 
 def test_flag_on_build(tmp_path: Path) -> None:
     out = tmp_path / "out"
-    result = _build(out, nfl=True, nfl_source=NFL_FIXTURE)
+    result = _build(out, nfl=True, nfl_payload=load_nfl_site_payload(NFL_FIXTURE))
     index = (out / "index.html").read_text(encoding="utf-8")
     assert '<meta name="booth-review-sports" content="cfb,nfl">' in index
     topbar = index.split('<header id="topbar">')[1].split("</header>")[0]
@@ -99,17 +101,20 @@ def test_flag_on_build(tmp_path: Path) -> None:
     assert "nfl-data.json" in result.files
 
 
-def test_flag_on_without_source(tmp_path: Path) -> None:
+def test_flag_on_without_source_is_refused_and_keeps_out_dir(tmp_path: Path) -> None:
+    # WR-01 / D-18: the NFL switch never ships without its data file.
     out = tmp_path / "out"
-    result = _build(out, nfl=True)
-    assert 'id="sport-switch"' in (out / "index.html").read_text(encoding="utf-8")
-    assert not (out / "nfl-data.json").exists()
-    assert result.nfl_games is None
+    _build(out)
+    before = {p.name: _sha(p) for p in out.iterdir() if p.is_file()}
+    with pytest.raises(SiteBuildError, match="no NFL data file"):
+        _build(out, nfl=True)
+    assert {p.name: _sha(p) for p in out.iterdir() if p.is_file()} == before
+    assert "sport-switch" not in (out / "index.html").read_text(encoding="utf-8")
 
 
 def test_source_while_off_is_refused(tmp_path: Path) -> None:
     with pytest.raises(SiteBuildError, match="NFL is off"):
-        _build(tmp_path / "out", nfl_source=NFL_FIXTURE)
+        _build(tmp_path / "out", nfl_payload=load_nfl_site_payload(NFL_FIXTURE))
 
 
 def test_invalid_nfl_source_leaves_out_dir(tmp_path: Path) -> None:
@@ -119,7 +124,7 @@ def test_invalid_nfl_source_leaves_out_dir(tmp_path: Path) -> None:
     bad = tmp_path / "bad.json"
     bad.write_text('{"schema_version": "9"}', encoding="utf-8")
     with pytest.raises(SiteBuildError):
-        _build(out, nfl=True, nfl_source=bad)
+        _build(out, nfl=True, nfl_payload=load_nfl_site_payload(bad))
     assert {p.name: _sha(p) for p in out.iterdir() if p.is_file()} == before
 
 
@@ -139,7 +144,7 @@ def test_planted_key_fails_build_and_keeps_out_dir(
     before = {p.name: _sha(p) for p in out.iterdir() if p.is_file()}
     monkeypatch.setenv("CFBD_API_KEY", _CANARY)
     with pytest.raises(KeyLeakError):
-        _build(tmp_path / "out2", nfl=True, nfl_source=_planted(tmp_path))
+        _build(tmp_path / "out2", nfl=True, nfl_payload=load_nfl_site_payload(_planted(tmp_path)))
     assert not (tmp_path / "out2").exists()
     assert {p.name: _sha(p) for p in out.iterdir() if p.is_file()} == before
 
@@ -160,7 +165,7 @@ def test_token_must_appear_once(tmp_path: Path, token: str, mode: str) -> None:
 
 def _site_with_nfl(tmp_path: Path) -> Path:
     out = tmp_path / "site"
-    _build(out, nfl=True, nfl_source=NFL_FIXTURE)
+    _build(out, nfl=True, nfl_payload=load_nfl_site_payload(NFL_FIXTURE))
     return out
 
 
@@ -237,3 +242,134 @@ def test_check_nfl_file_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     with pytest.raises(KeyLeakError):
         check_nfl_file_key(_CANARY.encode(), scratch_parent=tmp_path)
     assert not list(tmp_path.glob(".nfl-keycheck-*"))
+
+
+# -- iter-2 WR-02: turning the switch on in a switch-less build ------------------------------
+
+
+def _tree(root: Path) -> dict[str, bytes]:
+    return {p.relative_to(root).as_posix(): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+
+
+def _add(out: Path, source: Path = NFL_FIXTURE) -> sa.NflRefreshResult:
+    return add_nfl_to_site(
+        site_out=out, site_src=SITE_SRC, docs=DOCS, nfl_payload=load_nfl_site_payload(source)
+    )
+
+
+def _no_leftovers(tmp_path: Path) -> None:
+    assert not [p.name for p in tmp_path.iterdir() if p.name.startswith(".")]
+
+
+def test_site_sports_reads_the_built_meta(tmp_path: Path) -> None:
+    off = tmp_path / "off"
+    _build(off)
+    assert site_sports(off) == ("cfb",)
+    assert site_sports(_site_with_nfl(tmp_path)) == ("cfb", "nfl")
+    assert site_sports(tmp_path / "missing") == ()
+    (tmp_path / "plain").mkdir()
+    (tmp_path / "plain" / "index.html").write_text("<html>", encoding="utf-8")
+    assert site_sports(tmp_path / "plain") == ()
+
+
+def test_add_nfl_equals_a_flag_on_build_byte_for_byte(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CFBD_API_KEY", _CANARY)
+    out = tmp_path / "out"
+    _build(out)
+    nfl, _ = load_nfl_site_payload(NFL_FIXTURE)
+    result = _add(out)
+    assert (result.replaced, result.key_checked, result.games) == (
+        True,
+        True,
+        len(nfl.games.season),
+    )
+    direct = tmp_path / "direct"
+    _build(direct, nfl=True, nfl_payload=load_nfl_site_payload(NFL_FIXTURE))
+    assert _tree(out) == _tree(direct)
+    assert _sha(out / "site-data.json") == _SITE_DATA_SHA256
+    assert _sha(out / "coverage.html") == _COVERAGE_SHA256
+    assert site_sports(out) == ("cfb", "nfl")
+    _no_leftovers(tmp_path)
+
+
+def test_add_nfl_refuses_anything_but_a_cfb_only_build(tmp_path: Path) -> None:
+    with pytest.raises(SiteBuildError, match="not a CFB-only"):
+        _add(_site_with_nfl(tmp_path))
+    (tmp_path / "plain").mkdir()
+    with pytest.raises(SiteBuildError, match="not a booth-review site build"):
+        _add(tmp_path / "plain")
+    assert not (tmp_path / "plain" / BUILD_MARKER).exists()
+
+
+def test_add_nfl_failures_leave_the_cfb_site_exactly_as_built(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "out"
+    _build(out)
+    before = _tree(out)
+    # No key configured: nothing is changed.
+    result = _add(out)
+    assert (result.replaced, result.key_checked) == (False, False)
+    assert _tree(out) == before
+    # A key hit anywhere in the NFL build: nothing is changed, nothing printed.
+    monkeypatch.setenv("CFBD_API_KEY", _CANARY)
+    with pytest.raises(KeyLeakError):
+        _add(out, _planted(tmp_path))
+    assert _tree(out) == before
+    _no_leftovers(tmp_path)
+
+
+def test_a_failed_move_puts_every_file_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "out"
+    _build(out)
+    before = _tree(out)
+    monkeypatch.setenv("CFBD_API_KEY", _CANARY)
+    real_replace = Path.replace
+    moved: list[str] = []
+
+    def fail_on_index(self: Path, target: Path) -> Path:  # type: ignore[override]
+        if Path(target).name == "index.html" and Path(target).parent == out:
+            raise OSError("simulated failure")
+        moved.append(Path(target).name)
+        return real_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", fail_on_index)
+    with pytest.raises(OSError, match="simulated"):
+        _add(out)
+    monkeypatch.undo()
+    # The modules, the data file and the methodology page had moved in first.
+    assert {"nfl-data.json", "methodology.html"} <= set(moved)
+    assert _tree(out) == before
+    assert not (out / "sports" / "nfl").exists()
+    _no_leftovers(tmp_path)
+
+
+def test_a_kill_before_the_last_move_still_leaves_a_whole_cfb_site(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A kill skips the rollback; index.html moves last, so the page still
+    # lists CFB only and every CFB data file is as built.
+    out = tmp_path / "out"
+    _build(out)
+    before = _tree(out)
+    monkeypatch.setenv("CFBD_API_KEY", _CANARY)
+    real_replace = Path.replace
+
+    def kill_on_index(self: Path, target: Path) -> Path:  # type: ignore[override]
+        if Path(target).name == "index.html" and Path(target).parent == out:
+            raise KeyboardInterrupt
+        return real_replace(self, target)
+
+    monkeypatch.setattr(Path, "replace", kill_on_index)
+    with pytest.raises(KeyboardInterrupt):
+        _add(out)
+    monkeypatch.undo()
+    after = _tree(out)
+    assert site_sports(out) == ("cfb",)
+    for name in ("index.html", "site-data.json", "coverage.html", "app.js"):
+        assert after[name] == before[name]
+    assert set(before) <= set(after)

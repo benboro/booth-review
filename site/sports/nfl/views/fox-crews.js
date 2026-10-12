@@ -12,6 +12,7 @@ import { foxRows } from '../state.js';
 import { ACCENT, MUTED, PAGE_BG, DIVIDER, ZERO_LINE } from '../../../modules/palette.js';
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import { escapeHover, MINUS } from '../../../modules/format.js';
+import { DATA_TABLE_CLASS, rebuildKeepingFocus } from '../data-table.js';
 
 const CONFIG = {
   responsive: true,
@@ -377,25 +378,28 @@ function valueText(metric, x, adjusted) {
 
 function renderDataTable(items, state) {
   const { dataBody } = refs;
-  dataBody.replaceChildren();
-  for (const it of items) {
-    const tr = el('tr');
-    const th = el('th');
-    th.scope = 'row';
-    const btn = el('button', null, it.label);
-    btn.type = 'button';
-    btn.setAttribute('aria-label', `Select ${it.label}`);
-    btn.addEventListener('click', () => toggleBooth(it));
-    th.appendChild(btn);
-    tr.append(
-      th,
-      el('td', null, String(it.row.games)),
-      el('td', null, String(it.row.fill_in_games)),
-      el('td', null, valueText(state.metric, it.x, state.adjusted)),
-      el('td', null, it.row.low_n ? 'yes' : 'no'),
-    );
-    dataBody.appendChild(tr);
-  }
+  rebuildKeepingFocus(dataBody, () => {
+    dataBody.replaceChildren();
+    for (const it of items) {
+      const tr = el('tr');
+      const th = el('th');
+      th.scope = 'row';
+      const btn = el('button', null, it.label);
+      btn.type = 'button';
+      btn.dataset.key = String(it.key);
+      btn.setAttribute('aria-label', `Select ${it.label}`);
+      btn.addEventListener('click', () => toggleBooth(it));
+      th.appendChild(btn);
+      tr.append(
+        th,
+        el('td', null, String(it.row.games)),
+        el('td', null, String(it.row.fill_in_games)),
+        el('td', null, valueText(state.metric, it.x, state.adjusted)),
+        el('td', null, it.row.low_n ? 'yes' : 'no'),
+      );
+      dataBody.appendChild(tr);
+    }
+  });
 }
 
 function setNote(title) {
@@ -599,7 +603,7 @@ export function mount(container, ctx) {
   refs.note.append(refs.noteTitle, el('p', 'season-empty-hint', 'Pick another season with the stepper.'));
   refs.chart.append(refs.gd, refs.note);
   refs.captions = el('div', 'nfl-captions');
-  const dataWrap = el('div', 'visually-hidden');
+  const dataWrap = el('div', DATA_TABLE_CLASS);
   const dataTable = el('table');
   dataTable.appendChild(el('caption', null, 'Fox crews'));
   const thead = el('thead');

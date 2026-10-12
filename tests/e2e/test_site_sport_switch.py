@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import pytest
-from playwright.sync_api import Page
+from playwright.sync_api import Page, Route
 
 pytestmark = pytest.mark.e2e
 
@@ -211,3 +211,188 @@ def test_nfl_load_error_then_cfb_still_loads(
     assert _pressed(page, "cfb") == "true"
     assert page.evaluate("window.__testHooks.ready") is True
     assert page.locator("#chart").is_visible()
+
+
+def _wait_nfl_ready(page: Page) -> None:
+    page.wait_for_function("window.__nflTestHooks && window.__nflTestHooks.ready === true")
+
+
+def _settle(page: Page) -> None:
+    """Let CFB's 150 ms resize debounce run out, so a stray CFB render would have fired."""
+    page.wait_for_timeout(400)
+
+
+def _open_nfl_from_cfb(
+    page: Page, open_flagon_cfb: Callable[..., None], query: str
+) -> tuple[str, str]:
+    """Open CFB at `query`, switch to NFL and change its state; returns (cfb_search, nfl_search)."""
+    open_flagon_cfb(page, query)
+    cfb_search = page.evaluate("location.search")
+    _click(page, "nfl")
+    _wait_nfl_ready(page)
+    page.evaluate("window.__nflTestHooks.setState({ view: 'fox', metric: 'excitement' })")
+    nfl_search = page.evaluate("location.search")
+    assert nfl_search.startswith("?sport=nfl") and "view=fox" in nfl_search
+    return cfb_search, nfl_search
+
+
+def test_cfb_listeners_never_rewrite_the_nfl_url(
+    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None]
+) -> None:
+    """JS-CR-01: CFB's media and resize listeners stay quiet while NFL is shown.
+
+    CFB is left on Butterfly, whose resize handler re-renders at any width.
+    """
+    page = nfl_guarded_page
+    cfb_search, nfl_search = _open_nfl_from_cfb(page, open_flagon_cfb, "?view=butterfly")
+    nfl_state = page.evaluate("window.__nflTestHooks.getState()")
+    page.emulate_media(color_scheme="dark")
+    _settle(page)
+    assert page.evaluate("location.search") == nfl_search
+    page.set_viewport_size({"width": 600, "height": 800})  # across 640px
+    _settle(page)
+    assert page.evaluate("location.search") == nfl_search
+    page.set_viewport_size({"width": 1100, "height": 800})  # back across, then a plain resize
+    _settle(page)
+    page.set_viewport_size({"width": 1000, "height": 800})
+    _settle(page)
+    assert page.evaluate("location.search") == nfl_search
+    assert page.evaluate("window.__nflTestHooks.getState()") == nfl_state
+    assert page.evaluate("document.body.dataset.sport") == "nfl"
+    _click(page, "cfb")
+    page.wait_for_function("location.search === " + repr(cfb_search))
+    assert page.evaluate("window.__testHooks.getState().view") == "butterfly"
+
+
+def test_cfb_scatter_stays_quiet_under_nfl_on_a_theme_change(
+    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None]
+) -> None:
+    """JS-CR-01 with CFB left on its scatter: an OS light/dark flip under NFL keeps
+    the NFL URL and state, and CFB comes back as it was left."""
+    page = nfl_guarded_page
+    cfb_search, nfl_search = _open_nfl_from_cfb(page, open_flagon_cfb, "")
+    nfl_state = page.evaluate("window.__nflTestHooks.getState()")
+    page.emulate_media(color_scheme="dark")
+    _settle(page)
+    assert page.evaluate("location.search") == nfl_search
+    page.emulate_media(color_scheme="light")
+    _settle(page)
+    assert page.evaluate("location.search") == nfl_search
+    assert page.evaluate("window.__nflTestHooks.getState()") == nfl_state
+    _click(page, "cfb")
+    page.wait_for_function("location.search === " + repr(cfb_search))
+    assert page.locator("#chart").is_visible()
+
+
+def test_cfb_url_params_never_leak_into_nfl(
+    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None], open_nfl_app: Callable[..., None]
+) -> None:
+    """JS-CR-02: a CFB link's shared params (seasons, people, y, dots) stay on the CFB side."""
+    page = nfl_guarded_page
+    open_nfl_app(page)
+    default_state = page.evaluate("window.__nflTestHooks.getState()")
+    open_flagon_cfb(page, "?seasons=2025-2025&people=p00&y=excitement&dots=hide")
+    _click(page, "nfl")
+    _wait_nfl_ready(page)
+    assert page.evaluate("location.search") == "?sport=nfl"
+    assert page.evaluate("window.__nflTestHooks.getState()") == default_state
+
+
+def test_switching_back_during_the_nfl_import_keeps_cfb(
+    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None]
+) -> None:
+    """JS-WR-01: a CFB click while the NFL module loads wins; NFL never mounts behind it."""
+    page = nfl_guarded_page
+    open_flagon_cfb(page)
+    cfb_search = page.evaluate("location.search")
+    credit = page.inner_text("#site-footer .credit-line")
+    held: list[Route] = []
+    page.route("**/sports/nfl/index.js", lambda route: held.append(route))
+    urls = _track(page)
+    with page.expect_request("**/sports/nfl/index.js"):
+        _click(page, "nfl")
+    _click(page, "cfb")
+    page.wait_for_function("document.body.dataset.sport === 'cfb'")
+    assert len(held) == 1
+    page.unroute("**/sports/nfl/index.js")
+    held[0].continue_()
+    page.wait_for_load_state("networkidle")
+    _settle(page)
+    assert page.evaluate("location.search") == cfb_search
+    assert page.inner_text("#site-footer .credit-line") == credit
+    assert _count(urls, "nfl-data.json") == 0
+    assert _pressed(page, "cfb") == "true"
+    # A later NFL click still mounts normally.
+    _click(page, "nfl")
+    _wait_nfl_ready(page)
+    assert page.evaluate("location.search") == "?sport=nfl"
+
+
+def _open_with_failed_nfl(page: Page, nfl_site_url: str, opened_on: str) -> str:
+    """Open the page so the NFL import runs (and fails); returns the expected NFL query."""
+    if opened_on == "nfl":
+        page.goto(f"{nfl_site_url}/index.html?sport=nfl&view=fox")
+        expected = "?sport=nfl&view=fox"
+    else:
+        page.goto(f"{nfl_site_url}/index.html")
+        page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+        _click(page, "nfl")
+        expected = "?sport=nfl"
+    page.wait_for_selector("#sport-load-error", state="visible")
+    return expected
+
+
+@pytest.mark.parametrize("opened_on", ["cfb", "nfl"])
+@pytest.mark.parametrize("module", ["index.js", "state.js", "views/scatter.js"])
+def test_nfl_module_failure_offers_a_reload_that_keeps_nfl(
+    nfl_guarded_page: Page, nfl_site_url: str, opened_on: str, module: str
+) -> None:
+    """JS-WR-02, iter-2 WR-03 and IN-02: any failed NFL module, the entry or one it
+    imports, shows a note with a Reload button in NFL's place, never a blank page.
+    The URL stays NFL (a reload or a shared link opens NFL), and the reload's
+    fresh document mounts NFL once the module loads."""
+    page = nfl_guarded_page
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    pattern = f"**/sports/nfl/{module}"
+    page.route(pattern, lambda route: route.abort())
+    expected = _open_with_failed_nfl(page, nfl_site_url, opened_on)
+    banner = page.locator("#sport-load-error")
+    assert banner.get_attribute("role") == "alert"
+    reload = banner.get_by_role("button", name="Reload page")
+    assert reload.is_visible()
+    assert page.evaluate("document.body.dataset.sport") == "nfl"
+    assert _pressed(page, "nfl") == "true"
+    assert page.evaluate("location.search") == expected
+    _settle(page)
+    assert page.evaluate("location.search") == expected
+    assert errors == []
+    page.unroute(pattern)
+    with page.expect_navigation():
+        reload.click()
+    _wait_nfl_ready(page)
+    search = page.evaluate("location.search")
+    assert search.startswith("?sport=nfl")
+    if opened_on == "nfl":
+        assert page.evaluate("window.__nflTestHooks.getState().view") == "fox"
+    assert page.locator("#sport-load-error").count() == 0
+    assert errors == []
+
+
+def test_the_failure_note_leaves_with_nfl_and_cfb_keeps_its_url(
+    nfl_guarded_page: Page, nfl_site_url: str
+) -> None:
+    """IN-01: the note belongs to NFL's place only. Going back to CFB removes it
+    and restores CFB's URL; it never sits in the CFB chart area."""
+    page = nfl_guarded_page
+    page.route("**/sports/nfl/state.js", lambda route: route.abort())
+    page.goto(f"{nfl_site_url}/index.html?view=butterfly")
+    page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+    cfb_search = page.evaluate("location.search")
+    _click(page, "nfl")
+    page.wait_for_selector("#sport-load-error", state="visible")
+    _click(page, "cfb")
+    page.wait_for_function("location.search === " + repr(cfb_search))
+    assert page.locator("#sport-load-error").count() == 0
+    assert page.locator("#chart-area .error-banner:not([hidden])").count() == 0
+    assert _pressed(page, "cfb") == "true"

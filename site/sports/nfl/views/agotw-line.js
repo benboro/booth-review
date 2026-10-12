@@ -16,6 +16,7 @@ import { crewStyle } from '../palette.js';
 import { ACCENT, MUTED, PAGE_BG, DIVIDER, ZERO_LINE } from '../../../modules/palette.js';
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import { escapeHover, formatViewers, MINUS } from '../../../modules/format.js';
+import { DATA_TABLE_CLASS, rebuildKeepingFocus } from '../data-table.js';
 
 const CONFIG = {
   responsive: true,
@@ -110,6 +111,15 @@ function valueText(state, v) {
   return formatViewers(Math.round(v));
 }
 
+/**
+ * The ±1.96 SE range in Residual mode. A missing SE (or residual) says so in
+ * words; it is never drawn or read as a zero-width whisker (JS-WR-06).
+ */
+function seText(state, item) {
+  if (item.y == null || item.err == null) return '±1.96 standard errors: not available';
+  return `±1.96 standard errors: ${valueText(state, item.y - item.err)} to ${valueText(state, item.y + item.err)}`;
+}
+
 function hasSelectedPerson(model, state, p) {
   if (!state.people.length) return false;
   const ids = new Set(state.people);
@@ -147,6 +157,7 @@ function hoverLines(item) {
       kind: 'body',
     },
   ];
+  if (resid) lines.push({ text: seText(state, item), kind: 'body' });
   lines.push({
     text: `${p.games} games${p.fillIn > 0 ? `; ${p.fillIn} fill-in` : ''}`,
     kind: 'body',
@@ -258,19 +269,30 @@ function renderCaptions() {
 function renderDataTable(items, state) {
   const { dataBody } = refs;
   const { model } = current;
-  dataBody.replaceChildren();
-  for (const it of items) {
-    const tr = el('tr');
-    const th = el('th', null, String(it.p.season));
-    th.scope = 'row';
-    tr.append(
-      th,
-      el('td', null, crewLabel(model, it.p)),
-      el('td', null, it.y == null ? 'n/a' : valueText(state, it.y)),
-      el('td', null, model.eras[it.p.era].label),
-    );
-    dataBody.appendChild(tr);
-  }
+  rebuildKeepingFocus(dataBody, () => {
+    dataBody.replaceChildren();
+    for (const it of items) {
+      const tr = el('tr');
+      const th = el('th');
+      th.scope = 'row';
+      // A keyboard path to a season's games, as a click on its point gives (JS-WR-04).
+      const btn = el('button', null, String(it.p.season));
+      btn.type = 'button';
+      btn.dataset.key = it.key;
+      btn.setAttribute('aria-label', `Select ${it.p.season} AGOTW, ${crewLabel(model, it.p)}`);
+      btn.addEventListener('click', () => pick(it));
+      th.appendChild(btn);
+      let value = it.y == null ? 'n/a' : valueText(state, it.y);
+      if (state.agotwY === 'resid' && it.y != null) value += ` (${seText(state, it)})`;
+      tr.append(
+        th,
+        el('td', null, crewLabel(model, it.p)),
+        el('td', null, value),
+        el('td', null, model.eras[it.p.era].label),
+      );
+      dataBody.appendChild(tr);
+    }
+  });
 }
 
 function setNote(show) {
@@ -347,7 +369,8 @@ function buildFigure(model, state, env, th, drawnSegments, seasonsAll, items) {
     if (resid) {
       trace.error_y = {
         type: 'data',
-        array: segItems.map((it) => (it.err == null ? 0 : it.err)),
+        // NaN, not 0: Plotly draws no whisker (and no cap) for a missing SE.
+        array: segItems.map((it) => (it.err == null ? NaN : it.err)),
         visible: true,
         color: MUTED[th],
         thickness: 1.5,
@@ -473,7 +496,7 @@ export function mount(container, ctx) {
   );
   refs.chart.append(refs.gd, refs.note);
   refs.captions = el('div', 'nfl-captions');
-  const dataWrap = el('div', 'visually-hidden');
+  const dataWrap = el('div', DATA_TABLE_CLASS);
   const dataTable = el('table');
   dataTable.appendChild(el('caption', null, 'AGOTW viewership'));
   const thead = el('thead');
@@ -531,7 +554,7 @@ export function render(ctx) {
         p,
         seg,
         y: y == null ? null : y,
-        err: resid && p.values.se != null ? 1.96 * p.values.se : resid ? 0 : null,
+        err: resid && p.values.se != null ? 1.96 * p.values.se : null,
         key: `${p.season}:${p.crewKey}`,
         ring: hasSelectedPerson(model, state, p),
       });

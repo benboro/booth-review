@@ -210,7 +210,7 @@ def _cause(row: dict[str, Any], current: bool, vt_week: int | None, slot: str) -
 def _games_block(
     games: pl.DataFrame,
     inputs: NflSiteInputs,
-    freshness_season: int,
+    current_season: int | None,
     vt_week: int | None,
 ) -> tuple[dict[str, list[Any]], dict[str, _Index]]:
     franchise_ids = sorted(
@@ -230,7 +230,7 @@ def _games_block(
     era_pos = {e.era_id: k for k, e in enumerate(inputs.eras)}
     cols: dict[str, list[Any]] = {name: [] for name in NflGameColumns.model_fields}
     for i, row in enumerate(games.iter_rows(named=True)):
-        _append_game(cols, row, i, inputs, lookups, era_pos, freshness_season, vt_week)
+        _append_game(cols, row, i, inputs, lookups, era_pos, current_season, vt_week)
     return cols, lookups
 
 
@@ -257,7 +257,7 @@ def _append_game(
     inputs: NflSiteInputs,
     lookups: dict[str, _Index],
     era_pos: dict[str, int],
-    freshness_season: int,
+    current_season: int | None,
     vt_week: int | None,
 ) -> None:
     season = int(row["season"])
@@ -316,7 +316,7 @@ def _append_game(
         cols["viewers"].append(None)
         cols["scope"].append(None)
         cols["era"].append(None)
-        cols["cause"].append(_cause(row, season == freshness_season, vt_week, slot))
+        cols["cause"].append(_cause(row, season == current_season, vt_week, slot))
     else:
         cols["viewers"].append(round(viewers))
         cols["scope"].append(row["viewership_scope"])
@@ -403,6 +403,16 @@ def _constants(task1: pl.DataFrame) -> dict[str, Any]:
 # ----------------------------------------------------------------------------
 
 
+def _regular_game_counts(games: pl.DataFrame) -> dict[tuple[str, int], int]:
+    """(franchise, season) -> regular-season games played in the shipped games."""
+    counts: dict[tuple[str, int], int] = {}
+    for row in games.iter_rows(named=True):
+        for side in ("home", "away"):
+            key = (row[f"{side}_franchise_id"], int(row["season"]))
+            counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
 def _exclusive_counts(games: pl.DataFrame) -> dict[tuple[str, int], list[int]]:
     """(franchise, season) -> [standalone, agotw, cbs_national, international_other]."""
     counts: dict[tuple[str, int], list[int]] = {}
@@ -428,6 +438,10 @@ def _special_block(
 ) -> dict[str, list[Any]]:
     special = special.sort(["franchise_id", "season"])
     expected = _exclusive_counts(games)
+    # D-17 / WR-05: the table's counts must come from regular-season games only.
+    # A table built with --include-playoffs counts playoff games too, so it is
+    # refused here rather than shipping inflated counts.
+    regular = _regular_game_counts(games)
     cols: dict[str, list[Any]] = {
         name: [] for name in ("franchise", "season", *_SPECIAL_COUNT_COLUMNS)
     }
@@ -444,6 +458,11 @@ def _special_block(
         ]
         if got != want:
             raise SiteBuildError(f"special[{i}]: exclusive category counts do not match games")
+        if regular.get(key, 0) != row["games"]:
+            raise SiteBuildError(
+                f"special[{i}].games: does not match the regular-season games "
+                "(was the table built with --include-playoffs?)"
+            )
         cols["franchise"].append(franchises.add(row["franchise_id"]))
         cols["season"].append(int(row["season"]))
         for name in _SPECIAL_COUNT_COLUMNS:
@@ -597,8 +616,16 @@ def build_nfl_site_data(inputs: NflSiteInputs) -> NflSiteData:
         raise SiteBuildError("games: no regular-season games to ship")
     freshness = _freshness(games, inputs.task1)
     constants = _constants(inputs.task1)
+    # The CFB rule (shipped.no_rating_cause): "pending" covers a game in the
+    # current season (the freshness season, the latest in the tables) at or
+    # after `viewership_through_week`, or any current-season game while that
+    # stamp is null. It does not key on whether games are still being played:
+    # Ratings Reference figures keep arriving after the last score is in, and
+    # a never-scored (cancelled) game stops being pending once a later season
+    # becomes current.
+    current_season = freshness["season"]
     game_cols, lookups = _games_block(
-        games, inputs, freshness["season"], freshness["viewership_through_week"]
+        games, inputs, current_season, freshness["viewership_through_week"]
     )
     game_index = {gid: k for k, gid in enumerate(games["game_id"].to_list())}
     special = _special_block(inputs.special, games, lookups["franchises"])
@@ -631,9 +658,14 @@ def build_nfl_site_data(inputs: NflSiteInputs) -> NflSiteData:
 
 
 def nfl_site_payload_bytes(site: NflSiteData) -> bytes:
-    """Compact, key-sorted JSON; identical inputs give identical bytes."""
+    """Compact, key-sorted JSON; identical inputs give identical bytes.
+
+    `allow_nan=False`: NaN or Infinity would be invalid JSON (WR-04). The
+    contract already rejects them, so this only guards against drift."""
     payload = site.model_dump(mode="json")
-    return json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return json.dumps(payload, separators=(",", ":"), sort_keys=True, allow_nan=False).encode(
+        "utf-8"
+    )
 
 
 def write_nfl_site_data(paths: DataPaths, site: NflSiteData) -> str:

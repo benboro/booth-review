@@ -37,6 +37,7 @@ from booth_review.build.site_assembly import (
     assemble_site,
     docs_dir,
     fixture_path,
+    load_nfl_site_payload,
     nfl_fixture_path,
     nfl_site_enabled,
     site_source_dir,
@@ -1351,7 +1352,7 @@ def _site(args: argparse.Namespace) -> int:
             site_src=site_source_dir(),
             docs=docs_dir(),
             nfl=nfl,
-            nfl_source=nfl_source,
+            nfl_payload=load_nfl_site_payload(nfl_source) if nfl_source is not None else None,
         )
     except BoothReviewError:
         raise
@@ -1419,8 +1420,13 @@ def _deploy(args: argparse.Namespace) -> int:
         print(
             f"deploy: published bundle {short} (files {result.files}, attempts {result.attempts})"
         )
-    if result.nfl_carried:
+    if result.nfl_switched_on:
+        print("nfl data: carried live copy and turned the NFL switch on")
+    elif result.nfl_carried:
         print("nfl data: carried live copy")
+    elif result.nfl_not_carried is not None:
+        reason = result.nfl_not_carried.replace("_", " ")
+        print(f"nfl data: live copy not carried ({reason}); CFB deployed without it")
     print(
         "outside booth-review unchanged: yes "
         f"(before {(result.outside_before or '')[:12]}, after {(result.outside_after or '')[:12]})"

@@ -12,6 +12,8 @@ With `site_data=True` an unblocked build also writes processed/nfl-data.json, th
 NFL site file (999.5), in the same lock and the same commit, so it always matches
 the tables. A builder error never blocks the table commit: the previous file stays
 and the outcome counts `site_data_failed`. A blocked build leaves the file alone.
+The site shows the regular season only (D-17), so an `include_playoffs` build
+skips the site file (counted as `site_data_skipped`) and keeps the previous one.
 """
 
 from __future__ import annotations
@@ -29,7 +31,6 @@ from booth_review.build.nfl_site_data import (
     write_nfl_site_data,
 )
 from booth_review.config import DataPaths
-from booth_review.errors import SiteBuildError
 from booth_review.nfl.acceptance import AcceptanceResult
 from booth_review.nfl.acceptance import check_acceptance as run_acceptance
 from booth_review.nfl.games import NflGameTable, NflReference, assemble_nfl_games
@@ -111,12 +112,18 @@ def run_nfl_build(
                 counts.update(task1_counts)
             written = write_nfl_tables(paths, table, special, extra)
             written += write_review_files(paths, task1_reviews)
-            if site_data and extra_tables is None:
+            if site_data and extra_tables is None and include_playoffs:
+                # D-17 / WR-05: playoff games would inflate the special counts.
+                counts["site_data_skipped"] = 1
+            elif site_data and extra_tables is None:
                 try:
                     site = build_nfl_site_data(load_nfl_site_inputs(paths, reference_directory))
                     written.append(write_nfl_site_data(paths, site))
                     counts["site_games"] = len(site.games.season)
-                except (SiteBuildError, pl.exceptions.PolarsError, ValueError):
+                except Exception:
+                    # WR-06: any builder error (TypeError, KeyError, OverflowError,
+                    # a reference-table error, ...) must never skip the table
+                    # commit below or leave the vault dirty.
                     counts["site_data_failed"] = 1
 
         committed = False

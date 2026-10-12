@@ -521,3 +521,76 @@ def test_fixture_errors_never_echo_names_or_urls() -> None:
     ]
     for needle in [*names, "example.com"]:
         assert needle not in text
+
+
+# -- WR-04: every float is finite, and the file is never written with NaN ------------------
+
+_FLOAT_COLUMNS = (
+    ("games", "excitement"),
+    ("special", "agotw_rate"),
+    ("special", "cbs_national_rate"),
+    ("fox_booths", "raw_mean_abs_margin"),
+    ("fox_booths", "raw_mean_excitement"),
+    ("fox_booths", "raw_mean_volatility"),
+    ("fox_booths", "adj_margin_resid"),
+    ("fox_booths", "adj_margin_se"),
+    ("fox_booths", "adj_excitement_resid"),
+    ("fox_booths", "adj_excitement_se"),
+    ("fox_booths", "adj_volatility_resid"),
+    ("fox_booths", "adj_volatility_se"),
+    ("agotw_viewership", "mean_viewers"),
+    ("agotw_viewership", "viewership_resid"),
+    ("agotw_viewership", "viewership_se"),
+)
+
+
+def test_float_column_list_covers_every_float_field() -> None:
+    found = set()
+    for block in ("games", "special", "fox_booths", "agotw_viewership"):
+        model = NflSiteData.model_fields[block].annotation
+        assert isinstance(model, type) and issubclass(model, BaseModel)
+        for name, field in model.model_fields.items():
+            if "float" in str(field.annotation):
+                found.add((block, name))
+    assert found == set(_FLOAT_COLUMNS)
+
+
+@pytest.mark.parametrize(("block", "column"), _FLOAT_COLUMNS)
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_floats_are_rejected_by_position(block: str, column: str, bad: float) -> None:
+    payload = _load()
+    payload[block][column][0] = bad
+    with pytest.raises(ValidationError) as err:
+        validate_nfl_site_data(payload)
+    from booth_review.build.site_data import _contract_error_summary
+
+    message = _contract_error_summary(err.value)
+    assert f"{block}.{column}[0]: must be finite" in message
+    assert "nan" not in message.lower()
+    assert "inf" not in message.lower().replace("finite", "")
+
+
+def test_bare_nan_in_a_file_fails_by_position_only() -> None:
+    from booth_review.build.site_assembly import nfl_site_payload_from_bytes
+    from booth_review.errors import SiteBuildError
+
+    payload = _load()
+    payload["agotw_viewership"]["viewership_se"][0] = float("nan")
+    raw = json.dumps(payload).encode("utf-8")
+    assert b"NaN" in raw
+    with pytest.raises(SiteBuildError) as err:
+        nfl_site_payload_from_bytes(raw)
+    assert "agotw_viewership.viewership_se[0]: must be finite" in str(err.value)
+
+
+def test_serializers_never_emit_nan() -> None:
+    from booth_review.build.nfl_site_data import nfl_site_payload_bytes
+
+    site = validate_nfl_site_data(_load())
+    body = nfl_site_payload_bytes(site)
+    assert b"NaN" not in body and b"Infinity" not in body
+    # A model that skipped validation still cannot be written as invalid JSON.
+    booths = site.fox_booths.model_copy(update={"adj_margin_se": [float("nan")]})
+    broken = site.model_copy(update={"fox_booths": booths})
+    with pytest.raises(ValueError):
+        nfl_site_payload_bytes(broken)

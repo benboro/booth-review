@@ -229,8 +229,19 @@ function hideBandInfo() {
   closeBandNote(els);
 }
 
+/**
+ * True while CFB is the sport on screen. CFB's global media/resize listeners
+ * and `render()` do nothing otherwise, so they never draw into the hidden CFB
+ * regions or write CFB state over the NFL URL (JS-CR-01). `showSport('cfb')`
+ * re-renders on the way back. Always true with the NFL flag off.
+ */
+function cfbActive() {
+  return activeSport === 'cfb';
+}
+
 /** Recomputes the view, re-renders the chart, syncs the axis UI and the URL, and runs every registered renderer. */
 function render() {
+  if (!cfbActive()) return;
   revision += 1;
   clearHover();
   const view = computeView(data, state);
@@ -454,6 +465,7 @@ async function startCfb(search = location.search) {
     window.addEventListener('resize', () => {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
+        if (!cfbActive()) return;
         if (state.view === 'butterfly' && !mobileMedia.matches) render();
         // 04.12 D-01: the gutter is converted from screen px using the plot
         // width, so a width change must rebuild the range. Height-only
@@ -485,8 +497,12 @@ async function startCfb(search = location.search) {
       });
     }
 
-    darkMedia.addEventListener('change', () => render());
-    mobileMedia.addEventListener('change', () => render());
+    darkMedia.addEventListener('change', () => {
+      if (cfbActive()) render();
+    });
+    mobileMedia.addEventListener('change', () => {
+      if (cfbActive()) render();
+    });
 
     // The graph div only gains its `.on()` event-emitter API once Plotly has
     // rendered into it at least once, so the first render must come first.
@@ -593,7 +609,14 @@ async function startCfb(search = location.search) {
 let cfbStarted = false;
 let nflModule = null;
 let activeSport = null;
-let initialSearch = '';
+/**
+ * The query NFL decodes its first state from: the page's own query when it
+ * opened on NFL, else '' so a CFB link's shared params (`seasons`, `people`,
+ * `y`, `dots`) never leak into NFL state (JS-CR-02).
+ */
+let nflInitialSearch = '';
+/** Bumped by every sport change, so an NFL switch whose module import resolves late can tell it was superseded. */
+let switchSeq = 0;
 
 /** The query with only the sport param removed, other params kept in order. */
 function searchWithoutSport(search) {
@@ -607,9 +630,55 @@ function sportMeta(id) {
   return SPORTS.find((s) => s.id === id);
 }
 
+const SPORT_ERROR_ID = 'sport-load-error';
+
+/**
+ * The NFL URL a reload should open: the page's own NFL query when it opened on
+ * NFL (a shared NFL link keeps its state), else NFL at its defaults.
+ */
+function nflReloadUrl() {
+  return location.pathname + (nflInitialSearch || '?sport=nfl');
+}
+
+/**
+ * Shown in NFL's place when the NFL modules failed to load (JS-WR-02, iter-2
+ * WR-03). The browser keeps a failed module fetch for the document's lifetime,
+ * for every module the NFL entry imports, so no in-page retry can recover;
+ * a fresh document can. The page stays on NFL with the NFL URL (never CFB's,
+ * IN-02), so a reload or a shared link opens NFL, and the button reloads it.
+ */
+function showSportLoadError() {
+  const url = nflReloadUrl();
+  if (location.pathname + location.search !== url) history.replaceState(null, '', url);
+  if (document.getElementById(SPORT_ERROR_ID)) return;
+  const banner = document.createElement('section');
+  banner.id = SPORT_ERROR_ID;
+  banner.className = 'error-banner';
+  banner.setAttribute('role', 'alert');
+  const title = document.createElement('p');
+  title.textContent = "Couldn't load the NFL view.";
+  const hint = document.createElement('p');
+  hint.textContent = 'Check your connection, then reload the page. CFB is still one click away on the switch above.';
+  const reload = document.createElement('button');
+  reload.type = 'button';
+  reload.className = 'toggle';
+  reload.textContent = 'Reload page';
+  reload.addEventListener('click', () => {
+    location.assign(nflReloadUrl());
+  });
+  banner.append(title, hint, reload);
+  document.getElementById('chart-area')?.before(banner);
+}
+
+function clearSportLoadError() {
+  document.getElementById(SPORT_ERROR_ID)?.remove();
+}
+
 async function showSport(id) {
   if (id === activeSport) return;
   activeSport = id;
+  switchSeq += 1;
+  const seq = switchSeq;
   for (const btn of document.querySelectorAll('#sport-switch button[data-sport]')) {
     btn.setAttribute('aria-pressed', btn.dataset.sport === id ? 'true' : 'false');
   }
@@ -622,11 +691,28 @@ async function showSport(id) {
   if (id === 'nfl') {
     document.body.dataset.sport = 'nfl';
     document.title = sportMeta('nfl').title;
-    nflModule ??= await import('./sports/nfl/index.js');
-    await nflModule.mount({ footerEl: document.getElementById('site-footer'), search: initialSearch });
+    try {
+      nflModule ??= await import('./sports/nfl/index.js');
+    } catch (err) {
+      // A network blip, a deploy swapping the module files, or a module that
+      // throws on load: say so with a reload button instead of an empty page
+      // (JS-WR-02, iter-2 WR-03). Nothing to say when a later switch took
+      // over or NFL loaded meanwhile (IN-01); the switch stays free for CFB.
+      console.error('booth-review: the NFL view failed to load', err);
+      if (seq !== switchSeq || activeSport !== 'nfl' || nflModule) return;
+      showSportLoadError();
+      return;
+    }
+    clearSportLoadError();
+    // The user switched sport while the module loaded: mounting now would put
+    // NFL's footer, listeners and URL behind the other view (JS-WR-01).
+    if (seq !== switchSeq) return;
+    await nflModule.mount({ footerEl: document.getElementById('site-footer'), search: nflInitialSearch });
+    if (activeSport !== 'nfl') nflModule.unmount();
     return;
   }
   nflModule?.unmount();
+  clearSportLoadError();
   document.body.dataset.sport = 'cfb';
   document.title = sportMeta('cfb').title;
   if (!cfbStarted) {
@@ -641,9 +727,10 @@ async function showSport(id) {
 }
 
 function main() {
-  initialSearch = location.search;
+  const initialSearch = location.search;
   const enabled = enabledSports(document.querySelector('meta[name="booth-review-sports"]'));
   const sport = resolveSport(initialSearch, enabled);
+  if (sport === 'nfl') nflInitialSearch = initialSearch;
   if (sport === 'cfb' && new URLSearchParams(initialSearch).has('sport')) {
     history.replaceState(null, '', location.pathname + searchWithoutSport(initialSearch));
   }
