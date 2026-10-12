@@ -391,6 +391,38 @@ def _single(rows: list[dict[str, Any]], task1_rows: list[dict[str, Any]] | None 
     )
 
 
+def test_override_lead_without_games_does_not_break_the_build() -> None:
+    from booth_review.nfl.booths import build_booths
+    from booth_review.nfl.reference import NflLeadBoothOverride
+
+    rows = [
+        _fox("g1", 2023, 1, "p-lead", "a-one", is_agotw=True),
+        _fox("g2", 2023, 2, "p-two", "a-two"),
+    ]
+    games = _frame(rows)
+    over = {("fox", 2023): NflLeadBoothOverride(2023, "fox", "unused", "reported", "https://e.com")}
+    out = build_booths(games.with_columns(pl.lit("506").alias("crew_source")), {}, over)
+    assert out.reviews["lead_booth"][0]["reason"] == "override-no-games"
+    t1 = [
+        _t1(
+            season=2023,
+            booth_group="other",
+            booth_rank=b["booth_rank"],
+            booth_pbp_person_id=b["booth_pbp_person_id"],
+            regular_analyst_person_id=b["regular_analyst_person_id"],
+            rank_source=b["rank_source"],
+            games=b["games"],
+            flagship_games=b["flagship_games"],
+            raw_n_viewers=0,
+        )
+        for b in out.booths.iter_rows(named=True)
+    ]
+    site = _single(rows, t1)
+    assert {b for b in site.booths.rank_source} == {"games"}
+    assert not any(site.booths.is_lead)
+    validate_nfl_site_data(site.model_dump(mode="json"))
+
+
 # ---------------------------------------------------------------- games block
 
 

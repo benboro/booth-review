@@ -264,6 +264,10 @@ def test_override_without_games_is_counted() -> None:
     assert out.counts["override_no_games"] == 1
     assert out.counts["seasons_overridden"] == 1
     assert out.reviews["lead_booth"][0]["reason"] == "override-no-games"
+    # D-23: the ignored override leaves the group ranked by games with no Lead.
+    assert out.booths["booth_pbp_person_id"].to_list() == ["pb-a"]
+    assert out.booths["rank_source"].to_list() == ["games"]
+    assert out.booths["is_lead_booth"].to_list() == [False]
 
 
 def test_lineup_games_never_vote_but_still_count() -> None:

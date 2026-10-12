@@ -293,7 +293,9 @@ def build_booths(
 
         lead = lrow["lead_pbp_person_id"]
         source = lrow["lead_source"]
-        order = _ordered_booths(lrow, entries, cited) if lead is not None else []
+        # An override naming a booth with no games here is as good as no lead (D-23).
+        lead_known = lead is not None and (source != "override" or lead in entries)
+        order = _ordered_booths(lrow, entries, cited) if lead_known else []
         for i, pbp in enumerate(order, start=1):
             booth_rows.append(
                 {
@@ -306,7 +308,7 @@ def build_booths(
                     "rank_source": source,
                 }
             )
-        if lead is None:
+        if not lead_known:
             # D-23: no known lead, so rank by games called and label none of them Lead.
             by_games = sorted(entries, key=lambda p: (-int(entries[p]["games"]), p))  # type: ignore[call-overload]
             for i, pbp in enumerate(by_games, start=1):
