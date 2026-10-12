@@ -630,6 +630,33 @@ function sportMeta(id) {
   return SPORTS.find((s) => s.id === id);
 }
 
+const SPORT_ERROR_ID = 'sport-load-error';
+/**
+ * Failed NFL module imports so far. The browser keeps a failed module import
+ * for the page's lifetime, so a retry asks for the entry module under a new
+ * URL (`?retry=N`).
+ */
+let nflImportFailures = 0;
+
+/** A visible note above the CFB chart that the NFL view failed to load (JS-WR-02). */
+function showSportLoadError() {
+  if (document.getElementById(SPORT_ERROR_ID)) return;
+  const banner = document.createElement('div');
+  banner.id = SPORT_ERROR_ID;
+  banner.className = 'error-banner';
+  banner.setAttribute('role', 'alert');
+  const title = document.createElement('p');
+  title.textContent = "Couldn't load the NFL view, so CFB is shown instead.";
+  const hint = document.createElement('p');
+  hint.textContent = 'Check your connection, then pick NFL again or reload the page.';
+  banner.append(title, hint);
+  document.getElementById('chart-area')?.prepend(banner);
+}
+
+function clearSportLoadError() {
+  document.getElementById(SPORT_ERROR_ID)?.remove();
+}
+
 async function showSport(id) {
   if (id === activeSport) return;
   activeSport = id;
@@ -647,7 +674,22 @@ async function showSport(id) {
   if (id === 'nfl') {
     document.body.dataset.sport = 'nfl';
     document.title = sportMeta('nfl').title;
-    nflModule ??= await import('./sports/nfl/index.js');
+    try {
+      const retry = nflImportFailures ? `?retry=${nflImportFailures}` : '';
+      nflModule ??= await import(`./sports/nfl/index.js${retry}`);
+    } catch (err) {
+      // A network blip, a deploy swapping the module files, or a module that
+      // throws on load: fall back to CFB with a visible note instead of an
+      // empty page, and leave the switch free for a retry (JS-WR-02).
+      console.error('booth-review: the NFL view failed to load', err);
+      nflImportFailures += 1;
+      if (seq !== switchSeq) return;
+      activeSport = null;
+      await showSport('cfb');
+      showSportLoadError();
+      return;
+    }
+    clearSportLoadError();
     // The user switched sport while the module loaded: mounting now would put
     // NFL's footer, listeners and URL behind the other view (JS-WR-01).
     if (seq !== switchSeq) return;

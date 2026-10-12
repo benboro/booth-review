@@ -326,3 +326,34 @@ def test_switching_back_during_the_nfl_import_keeps_cfb(
     _click(page, "nfl")
     _wait_nfl_ready(page)
     assert page.evaluate("location.search") == "?sport=nfl"
+
+
+@pytest.mark.parametrize("opened_on", ["cfb", "nfl"])
+def test_nfl_module_failure_falls_back_to_cfb_and_can_retry(
+    nfl_guarded_page: Page, nfl_site_url: str, opened_on: str
+) -> None:
+    """JS-WR-02: a failed NFL module import shows CFB with a visible note, never a blank page."""
+    page = nfl_guarded_page
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.route("**/sports/nfl/index.js", lambda route: route.abort())
+    if opened_on == "nfl":
+        page.goto(f"{nfl_site_url}/index.html?sport=nfl&view=fox")
+    else:
+        page.goto(f"{nfl_site_url}/index.html")
+        page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+        _click(page, "nfl")
+    page.wait_for_selector("#sport-load-error", state="visible")
+    page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+    assert page.evaluate("document.body.dataset.sport") == "cfb"
+    assert _pressed(page, "cfb") == "true"
+    assert _pressed(page, "nfl") == "false"
+    assert page.locator("#chart").is_visible()
+    assert "sport=" not in page.evaluate("location.search")
+    assert page.get_attribute("#sport-load-error", "role") == "alert"
+    assert errors == []
+    page.unroute("**/sports/nfl/index.js")
+    _click(page, "nfl")
+    _wait_nfl_ready(page)
+    assert page.evaluate("location.search").startswith("?sport=nfl")
+    assert page.locator("#sport-load-error").count() == 0
