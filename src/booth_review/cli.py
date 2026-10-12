@@ -1126,6 +1126,7 @@ def _job_run(args: argparse.Namespace) -> int:
             site_out=args.site_out,
             nfl_rr_cap=args.nfl_rr_cap,
             github_token=github_token,
+            nfl_site=nfl_site_enabled(os.environ),
             # CR-02: the CFB-only outcome is written before the NFL block, so a
             # killed run (the workflow's step timeout) still leaves it to deploy.
             on_cfb_result=lambda cfb: _write_job_outputs(args, cfb),

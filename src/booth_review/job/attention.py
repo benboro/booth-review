@@ -83,6 +83,7 @@ _STEP_NAMES = frozenset(
         "nfl_wikipedia",
         "nfl_gaps",
         "nfl_build",
+        "nfl_site",
         "nfl_freeze",
         "nfl_state",
         "result_out",
@@ -376,6 +377,38 @@ def nfl_build_blocked(n: int) -> AttentionItem:
     return AttentionItem(
         kind="nfl_build_blocked",
         line=f"nfl build blocked: {n} problem(s), tables held (run booth-review nfl build locally)",
+        severity="attention",
+    )
+
+
+_NFL_SITE_REASONS = ("missing", "invalid", "carry_over_invalid")
+
+
+def nfl_site_failed(reason: Literal["missing", "invalid", "carry_over_invalid"]) -> AttentionItem:
+    """The NFL site file could not be built or used; the last good file stays."""
+    if reason not in _NFL_SITE_REASONS:
+        raise ValueError(f"unknown nfl site reason: {reason!r}")
+    return AttentionItem(
+        kind="nfl_site_failed",
+        line=f"nfl site data: {reason.replace('_', ' ')}, last good file kept",
+        severity="attention",
+    )
+
+
+def nfl_site_key_check_failed() -> AttentionItem:
+    """The NFL site file failed the key check (or none could run)."""
+    return AttentionItem(
+        kind="nfl_site_key_check_failed",
+        line="nfl site data: key check failed, file not deployed",
+        severity="attention",
+    )
+
+
+def nfl_site_carried_live() -> AttentionItem:
+    """The run's site dir has no nfl-data.json, so the deploy carries the live copy."""
+    return AttentionItem(
+        kind="nfl_site_carried_live",
+        line="NFL data not refreshed: carried live copy",
         severity="attention",
     )
 
