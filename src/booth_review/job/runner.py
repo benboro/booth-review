@@ -81,6 +81,7 @@ from booth_review.build.site_assembly import (
     site_source_dir,
 )
 from booth_review.config import CFBD_FLOOR_DEFAULT
+from booth_review.contract.nfl_models import NflSiteData
 from booth_review.errors import (
     FetchError,
     KeyLeakError,
@@ -660,7 +661,7 @@ class ScheduledJob:
                 site_src=self._site_src or site_source_dir(),
                 docs=self._docs or docs_dir(),
                 nfl=carry is not None,
-                nfl_source=carry,
+                nfl_payload=carry,
             )
         except KeyLeakError:
             items.append(site_key_check_failed())
@@ -672,30 +673,40 @@ class ScheduledJob:
         print("cfbd key check: passed")
         return True, False
 
-    def _nfl_carry_over(self) -> Path | None:
-        """The vault's last good nfl-data.json if it validates and passes the
-        key check, else None. Problems become items held in
-        `_nfl_carry_items` (joined after the CFB result is reported) and never
-        raise, so CFB's site step is unaffected (D-20)."""
+    def _nfl_carry_over(self) -> tuple[NflSiteData, bytes] | None:
+        """The vault's last good nfl-data.json, parsed and validated once, if
+        it passes the contract and the key check, else None. `assemble_site`
+        gets these exact bytes and never re-reads the file (WR-03).
+
+        Never raises (D-20): every exception, not only the expected ones,
+        becomes a count-only item held in `_nfl_carry_items` (joined after the
+        CFB result is reported), so CFB's site step is unaffected."""
+        held = self._nfl_carry_items
+        try:
+            return self._load_nfl_carry_over(held)
+        except Exception as exc:
+            held.append(step_failed("nfl_site", error_type_name(exc)))
+            return None
+
+    def _load_nfl_carry_over(self, held: list[AttentionItem]) -> tuple[NflSiteData, bytes] | None:
         assert self._site_out is not None
         carry = self._runtime.paths.processed / "nfl-data.json"
         if not carry.is_file():
             return None
-        held = self._nfl_carry_items
         try:
-            _, body = load_nfl_site_payload(carry)
+            payload = load_nfl_site_payload(carry)
         except (SiteBuildError, OSError, ValueError):
             held.append(nfl_site_failed("carry_over_invalid"))
             return None
         try:
-            check_nfl_file_key(body, scratch_parent=self._site_out.parent)
+            check_nfl_file_key(payload[1], scratch_parent=self._site_out.parent)
         except KeyLeakError:
             held.append(nfl_site_key_check_failed())
             return None
         except OSError:
             held.append(nfl_site_failed("carry_over_invalid"))
             return None
-        return carry
+        return payload
 
     def _note_switch_off(self, items: list[AttentionItem]) -> None:
         """A flag-on site without nfl-data.json was built without the switch."""

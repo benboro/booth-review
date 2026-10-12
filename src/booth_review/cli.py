@@ -37,6 +37,7 @@ from booth_review.build.site_assembly import (
     assemble_site,
     docs_dir,
     fixture_path,
+    load_nfl_site_payload,
     nfl_fixture_path,
     nfl_site_enabled,
     site_source_dir,
@@ -1351,7 +1352,7 @@ def _site(args: argparse.Namespace) -> int:
             site_src=site_source_dir(),
             docs=docs_dir(),
             nfl=nfl,
-            nfl_source=nfl_source,
+            nfl_payload=load_nfl_site_payload(nfl_source) if nfl_source is not None else None,
         )
     except BoothReviewError:
         raise

@@ -365,11 +365,15 @@ def assemble_site(
     site_src: Path,
     docs: Path,
     nfl: bool = False,
-    nfl_source: Path | None = None,
+    nfl_payload: tuple[NflSiteData, bytes] | None = None,
 ) -> SiteBuildResult:
     """Assemble `out_dir` from `site_src`, `docs`, and the site-data
     payload at `source` (D-14): validate, copy, cache-bust, render pages,
     then run the key-leak guard last.
+
+    `nfl_payload` is an already-validated NFL model and its canonical bytes
+    (`load_nfl_site_payload`), so the CFB build never parses NFL input itself
+    and cannot fail on a second, different read of it (WR-03, D-20).
 
     Everything is built in a hidden sibling staging dir and swapped over
     `out_dir` only once every step, the key-leak guard included, has
@@ -377,16 +381,13 @@ def assemble_site(
     `out_dir` exactly as it was, so it never leaves behind a half-written,
     unmarked dir that the next run would refuse to overwrite.
     """
-    if nfl_source is not None and not nfl:
-        raise SiteBuildError("nfl_source given while NFL is off")
-    if nfl and nfl_source is None:
+    if nfl_payload is not None and not nfl:
+        raise SiteBuildError("nfl_payload given while NFL is off")
+    if nfl and nfl_payload is None:
         # WR-01 / D-18: the switch never ships without its data file.
         raise SiteBuildError("NFL is on but no NFL data file was given")
     site, body = load_site_payload(source)
-    nfl_site: NflSiteData | None = None
-    nfl_body: bytes | None = None
-    if nfl_source is not None:
-        nfl_site, nfl_body = load_nfl_site_payload(nfl_source)
+    nfl_site, nfl_body = nfl_payload if nfl_payload is not None else (None, None)
     _verify_bundle(site_src)
     _check_out_dir(out_dir)
 

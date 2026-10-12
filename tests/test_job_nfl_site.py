@@ -266,6 +266,52 @@ def test_no_vault_file_in_the_offseason_ships_no_switch(args) -> None:
     assert not any(i.kind.startswith("nfl") for i in run.cfb[0].items)
 
 
+@pytest.mark.parametrize("error", [RecursionError, TypeError, MemoryError, RuntimeError])
+def test_any_carry_over_exception_is_one_item_and_cfb_site_still_builds(
+    args, monkeypatch: pytest.MonkeyPatch, error: type[Exception]
+) -> None:
+    # WR-03 / D-20: the carry-over never raises into CFB's site step, whatever
+    # the exception type.
+    def boom(path: Path) -> Any:
+        raise error("private detail")
+
+    monkeypatch.setattr(f"{RUNNER}.load_nfl_site_payload", boom)
+    run = args(vault_file=_canonical())
+    assert step_failed("nfl_site", error.__name__) in run.result.items
+    assert "site_step_failed" not in run.kinds
+    assert run.result.deploy_ready
+    assert run.cfb[0].deploy_ready
+    assert not any(i.kind.startswith("nfl") for i in run.cfb[0].items)
+    assert (run.site / "index.html").is_file()
+    assert not run.switch_shipped
+    assert all("private" not in item.line for item in run.result.items)
+
+
+def test_the_cfb_build_uses_the_validated_bytes_and_never_rereads_the_file(
+    args, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # WR-03: a vault file that changes after the carry-over check (a concurrent
+    # local `nfl site-data`) cannot fail CFB's site build.
+    import booth_review.job.runner as runner_module
+
+    real = runner_module.load_nfl_site_payload
+    calls: list[Path] = []
+
+    def load_then_clobber(path: Path) -> Any:
+        calls.append(path)
+        payload = real(path)
+        path.write_bytes(b"not json at all")
+        return payload
+
+    monkeypatch.setattr(f"{RUNNER}.load_nfl_site_payload", load_then_clobber)
+    run = args(vault_file=_canonical())
+    assert len(calls) == 1
+    assert run.site_file.read_bytes() == _canonical()
+    assert run.switch_shipped
+    assert run.result.deploy_ready
+    assert "site_step_failed" not in run.kinds
+
+
 # -- NFL block --------------------------------------------------------------------------------
 
 

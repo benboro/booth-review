@@ -83,7 +83,7 @@ def test_flag_off_build(tmp_path: Path) -> None:
 
 def test_flag_on_build(tmp_path: Path) -> None:
     out = tmp_path / "out"
-    result = _build(out, nfl=True, nfl_source=NFL_FIXTURE)
+    result = _build(out, nfl=True, nfl_payload=load_nfl_site_payload(NFL_FIXTURE))
     index = (out / "index.html").read_text(encoding="utf-8")
     assert '<meta name="booth-review-sports" content="cfb,nfl">' in index
     topbar = index.split('<header id="topbar">')[1].split("</header>")[0]
@@ -112,7 +112,7 @@ def test_flag_on_without_source_is_refused_and_keeps_out_dir(tmp_path: Path) -> 
 
 def test_source_while_off_is_refused(tmp_path: Path) -> None:
     with pytest.raises(SiteBuildError, match="NFL is off"):
-        _build(tmp_path / "out", nfl_source=NFL_FIXTURE)
+        _build(tmp_path / "out", nfl_payload=load_nfl_site_payload(NFL_FIXTURE))
 
 
 def test_invalid_nfl_source_leaves_out_dir(tmp_path: Path) -> None:
@@ -122,7 +122,7 @@ def test_invalid_nfl_source_leaves_out_dir(tmp_path: Path) -> None:
     bad = tmp_path / "bad.json"
     bad.write_text('{"schema_version": "9"}', encoding="utf-8")
     with pytest.raises(SiteBuildError):
-        _build(out, nfl=True, nfl_source=bad)
+        _build(out, nfl=True, nfl_payload=load_nfl_site_payload(bad))
     assert {p.name: _sha(p) for p in out.iterdir() if p.is_file()} == before
 
 
@@ -142,7 +142,7 @@ def test_planted_key_fails_build_and_keeps_out_dir(
     before = {p.name: _sha(p) for p in out.iterdir() if p.is_file()}
     monkeypatch.setenv("CFBD_API_KEY", _CANARY)
     with pytest.raises(KeyLeakError):
-        _build(tmp_path / "out2", nfl=True, nfl_source=_planted(tmp_path))
+        _build(tmp_path / "out2", nfl=True, nfl_payload=load_nfl_site_payload(_planted(tmp_path)))
     assert not (tmp_path / "out2").exists()
     assert {p.name: _sha(p) for p in out.iterdir() if p.is_file()} == before
 
@@ -163,7 +163,7 @@ def test_token_must_appear_once(tmp_path: Path, token: str, mode: str) -> None:
 
 def _site_with_nfl(tmp_path: Path) -> Path:
     out = tmp_path / "site"
-    _build(out, nfl=True, nfl_source=NFL_FIXTURE)
+    _build(out, nfl=True, nfl_payload=load_nfl_site_payload(NFL_FIXTURE))
     return out
 
 
