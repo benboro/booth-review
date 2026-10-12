@@ -83,6 +83,8 @@ export const DOT_OPACITY = Object.freeze({
  * screen size). The plot width that converts the 04.12 pixel gutter into data
  * units is the chart width minus `l` and `r`, so this is the one copy.
  */
+/** Tick/label font sizes in px; NFL views import these (08 D-18). */
+export const TICK_FONT_PX = Object.freeze({ desktop: 14, mobile: 10 });
 export const MARGIN = Object.freeze({ l: 70, r: 24, t: 40, b: 60 });
 
 /**
@@ -720,7 +722,7 @@ export function buildFigure(data, view, state, env) {
             ticklen: 4,
             tickcolor: ZERO_LINE[theme],
             tickangle: 0,
-            tickfont: { size: env.mobile ? 10 : 14, color: MUTED[theme] },
+            tickfont: { size: env.mobile ? TICK_FONT_PX.mobile : TICK_FONT_PX.desktop, color: MUTED[theme] },
             showgrid: false,
           }
         : { gridcolor: DIVIDER[theme] }),
@@ -801,7 +803,7 @@ export function buildFigure(data, view, state, env) {
           yshift: env.mobile ? -24 : -28,
           showarrow: false,
           captureevents: false,
-          font: { size: env.mobile ? 10 : 14, color: ACCENT[theme] },
+          font: { size: env.mobile ? TICK_FONT_PX.mobile : TICK_FONT_PX.desktop, color: ACCENT[theme] },
         })).concat([
           {
             // 04.17 D-08: always present so fitDateAxis only toggles x and visible.
@@ -856,7 +858,7 @@ export function buildFigure(data, view, state, env) {
       layer: 'below',
       line: { width: 1.5, color: ZERO_LINE[theme], dash: 'solid' },
     });
-    const caption = { xref: 'x', x: 0, yref: 'paper', y: 1, yanchor: 'bottom', showarrow: false, captureevents: false, font: { size: env.mobile ? 10 : 14, color: MUTED[theme] } };
+    const caption = { xref: 'x', x: 0, yref: 'paper', y: 1, yanchor: 'bottom', showarrow: false, captureevents: false, font: { size: env.mobile ? TICK_FONT_PX.mobile : TICK_FONT_PX.desktop, color: MUTED[theme] } };
     layout.annotations.push(
       { ...caption, text: '← favorite won', xanchor: 'right', xshift: -6 },
       { ...caption, text: 'underdog won →', xanchor: 'left', xshift: 6 },

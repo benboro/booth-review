@@ -35,21 +35,57 @@ export const DOUBLE_CLICK_MAX_MS = 1000;
  * covers double-tap) shows only that family, like Networks > Only. Detection
  * runs on `click` plus `detail` because a native `dblclick` never fires on
  * pills rebuilt every render; gaps are measured with `event.timeStamp`. The
- * first click snapshots `networks` before toggling, so the result comes from
+ * first click snapshots the filter before toggling, so the result comes from
  * the pre-click state. Keyboard clicks (detail 0) never count; detail >= 3 is
- * ignored; a click between pills drops the pending first click.
- *
+ * ignored; `reset()` drops the pending first click (a click between pills).
+ * Shared with the NFL legends.
+ * @param {{onToggle: (key: string) => void,
+ *   onOnly: (key: string, before: *) => void,
+ *   snapshot: () => *}} args
+ */
+export function createOnlyDetector({ onToggle, onOnly, snapshot }) {
+  let last = null;
+  return {
+    click(ev, key) {
+      if (ev.detail >= 3) return;
+      // The event's own input time, not the handler's wall clock: the first
+      // click's synchronous render can block the main thread for 100-300ms on a
+      // slow phone, and the queued second tap must not be charged for it (WR-01).
+      const t = ev.timeStamp;
+      const gap = last === null ? Infinity : t - last.time;
+      const second = last !== null && last.key === key && ev.detail !== 0
+        && (ev.detail === 2 ? gap <= DOUBLE_CLICK_MAX_MS : gap <= DOUBLE_TAP_MS);
+      if (second) {
+        const before = last.before;
+        last = null;
+        onOnly(key, before);
+        return;
+      }
+      if (ev.detail === 0) {
+        last = null;
+      } else {
+        last = { key, time: t, before: snapshot() };
+      }
+      onToggle(key);
+    },
+    reset() {
+      last = null;
+    },
+  };
+}
+
+/**
  * Binds one delegated click listener on `listEl` for every legend chip,
  * present now or rebuilt later by `renderLegend`. Native `<button>`
  * elements already give Enter/Space activation for free, so no separate
- * `keydown` handler is needed.
+ * `keydown` handler is needed. Click rule: see `createOnlyDetector`.
  * @param {{listEl: HTMLElement, onToggle: (family: string) => void,
  *   onOnly: (family: string, before: string[]|null) => void,
  *   getNetworks: () => string[]|null,
  *   switchEl?: HTMLElement|null, onDots?: (value: string) => void}} args
  */
 export function initLegend({ listEl, onToggle, onOnly, getNetworks, switchEl, onDots }) {
-  let last = null;
+  const detector = createOnlyDetector({ onToggle, onOnly, snapshot: getNetworks });
   if (switchEl) {
     switchEl.addEventListener('click', (ev) => {
       const button = ev.target.closest('button[data-dots]');
@@ -62,30 +98,10 @@ export function initLegend({ listEl, onToggle, onOnly, getNetworks, switchEl, on
     const button = ev.target.closest('button[data-family]');
     if (!button) {
       // A click in the gaps between pills ends any pending first click (WR-02).
-      last = null;
+      detector.reset();
       return;
     }
-    const family = button.dataset.family;
-    if (ev.detail >= 3) return;
-    // The event's own input time, not the handler's wall clock: the first
-    // click's synchronous render can block the main thread for 100-300ms on a
-    // slow phone, and the queued second tap must not be charged for it (WR-01).
-    const t = ev.timeStamp;
-    const gap = last === null ? Infinity : t - last.time;
-    const second = last !== null && last.family === family && ev.detail !== 0
-      && (ev.detail === 2 ? gap <= DOUBLE_CLICK_MAX_MS : gap <= DOUBLE_TAP_MS);
-    if (second) {
-      const before = last.networksBefore;
-      last = null;
-      onOnly(family, before);
-      return;
-    }
-    if (ev.detail === 0) {
-      last = null;
-    } else {
-      last = { family, time: t, networksBefore: getNetworks() };
-    }
-    onToggle(family);
+    detector.click(ev, button.dataset.family);
   });
 }
 
