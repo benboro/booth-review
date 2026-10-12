@@ -185,3 +185,53 @@ def test_international_other_with_agotw_and_cbs_excluded() -> None:
         assert r["standalone_total"] + r["agotw"] + r["cbs_national"] == r["special"]
     assert row_for(out, "h", 2015)["international_other"] == 0
     assert row_for(out, "x", 2015)["international_other"] == 1
+
+
+def test_solo_columns_are_exclusive_and_sum_to_standalone_total() -> None:
+    slots = [
+        ("TNF", True),
+        ("SNF", True),
+        ("MNF", True),
+        ("Thanksgiving", True),
+        ("Christmas", True),
+        ("Saturday", True),
+        ("International", True),
+    ]
+    rows = [
+        game(f"s{i}", 2015, i + 1, "h", "v", is_standalone=True, slot_name=slot, is_special=True)
+        for i, (slot, _) in enumerate(slots)
+    ]
+    home = row_for(special_games_table(table(rows)), "h", 2015)
+    assert home["solo_thursday"] == 1
+    assert home["solo_sunday"] == 1
+    assert home["solo_monday"] == 1
+    assert home["solo_holiday"] == 2
+    assert home["solo_other"] == 2
+    solo = sum(home[f"solo_{k}"] for k in ("thursday", "sunday", "monday", "holiday", "other"))
+    assert solo == home["standalone_total"] == 7
+
+
+def test_monday_doubleheader_game_adds_nothing_to_solo_monday() -> None:
+    rows = [game("a", 2015, 1, "h", "v", is_standalone=False, slot_name="MNF")]
+    home = row_for(special_games_table(table(rows)), "h", 2015)
+    assert home["solo_monday"] == 0 and home["standalone_total"] == 0
+
+
+def test_standalone_international_is_solo_other_not_international_other() -> None:
+    rows = [
+        game(
+            "a",
+            2015,
+            1,
+            "h",
+            "v",
+            is_international=True,
+            is_standalone=True,
+            slot_name="International",
+            is_special=True,
+        )
+    ]
+    home = row_for(special_games_table(table(rows)), "h", 2015)
+    assert home["solo_other"] == 1
+    assert home["international"] == 1
+    assert home["international_other"] == 0

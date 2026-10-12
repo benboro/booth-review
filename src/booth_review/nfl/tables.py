@@ -37,6 +37,16 @@ SLOT_COLUMNS: dict[str, str] = {
     "Other": "other",
 }
 
+#: Exclusive solo-slot groups (D-12): solo_<group> -> frame slot labels. Together they
+#: cover every standalone slot, so the five columns sum to standalone_total.
+SOLO_GROUPS: dict[str, tuple[str, ...]] = {
+    "thursday": ("TNF",),
+    "sunday": ("SNF",),
+    "monday": ("MNF",),
+    "holiday": ("Thanksgiving", "Christmas", "Black Friday"),
+    "other": ("Saturday", "International", "Friday", "Sunday early", "Sunday late", "Other"),
+}
+
 NFL_SPECIAL_COLUMNS: tuple[str, ...] = (
     "franchise_id",
     "season",
@@ -44,6 +54,7 @@ NFL_SPECIAL_COLUMNS: tuple[str, ...] = (
     "games",
     "standalone_total",
     *(f"standalone_{suffix}" for suffix in SLOT_COLUMNS.values()),
+    *(f"solo_{suffix}" for suffix in SOLO_GROUPS),
     "agotw",
     "cbs_national",
     "international",
@@ -142,6 +153,12 @@ def special_games_table(
             (pl.col("is_standalone") & (pl.col("slot_name") == label))
             .sum()
             .alias(f"standalone_{suffix}")
+        )
+    for suffix, labels in SOLO_GROUPS.items():
+        aggs.append(
+            (pl.col("is_standalone") & pl.col("slot_name").is_in(labels))
+            .sum()
+            .alias(f"solo_{suffix}")
         )
     aggs += [
         pl.col("is_agotw").sum().alias("agotw"),
