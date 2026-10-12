@@ -466,7 +466,7 @@ def test_mobile_era_labels_inside_plot_scatter(
         eras = raw["lookups"]["eras"]
         eras[:] = [{**eras[0], "id": f"era-{k}", "label": lab} for k, lab in enumerate(labels)]
         rank = {s: k for k, s in enumerate(sorted(set(raw["games"]["season"])))}
-        for block in (raw["games"], raw["agotw_viewership"]):
+        for block in (raw["games"], raw["viewership"]):
             col = block["era"]
             for i, s in enumerate(block["season"]):
                 if col[i] is not None:
