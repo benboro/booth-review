@@ -20,9 +20,10 @@ from zoneinfo import ZoneInfo
 
 from booth_review.contract.nfl_models import (
     NFL_SLOTS,
-    NflAgotwColumns,
+    NFL_VIEW_CATEGORIES,
     NflBoothColumns,
     NflGameColumns,
+    NflViewershipColumns,
     validate_nfl_site_data,
 )
 
@@ -48,8 +49,30 @@ TEAM_NAMES = [
     ("Mesa Comets", "MSC"),
     ("Northfield Torches", "NFT"),
 ]
-NETWORKS = [("fox", "Fox"), ("cbs", "CBS"), ("nbc", "NBC"), ("espn", "ESPN"), ("prime", "Prime")]
-FOX, CBS, NBC, ESPN, PRIME = range(5)
+NETWORKS = [
+    ("fox", "Fox", "fox"),
+    ("cbs", "CBS", "cbs"),
+    ("nbc", "NBC", "nbc"),
+    ("espn", "ESPN", "disney"),
+    ("prime", "Prime", "other"),
+    ("peacock", "Peacock", "nbc"),
+    ("abc", "ABC", "disney"),
+    ("nfln", "NFL Network", "other"),
+    ("netflix", "Netflix", "other"),
+]
+FOX, CBS, NBC, ESPN, PRIME, PEACOCK, ABC, NFLN, NETFLIX = range(9)
+# Picker order: (id, name, flagship label, member network indexes). The flagship
+# games are told apart per group in `_is_flagship`.
+NETWORK_GROUPS = [
+    ("fox", "Fox", "AGOTW", [FOX]),
+    ("cbs", "CBS", "Late national", [CBS]),
+    ("nbc", "NBC", "SNF", [NBC, PEACOCK]),
+    ("espn_abc", "ESPN/ABC", "MNF", [ESPN, ABC]),
+    ("prime", "Amazon", "TNF", [PRIME]),
+    ("nfln", "NFL Network", None, [NFLN]),
+    ("netflix", "Netflix", None, [NETFLIX]),
+]
+LINEUP_URL = "https://example.com/lineup"
 PEOPLE = [
     "Ada Quill",
     "Ben Marlow",
@@ -64,6 +87,10 @@ PEOPLE = [
     "Kit Bramley",
     "Lou Danvers",
     "Max Eller",
+    "Ned Pryor",
+    "Opal Reyes",
+    "Pia Voss",
+    "Rex Dunmore",
 ]
 ERAS = [
     ("era-a", "Invented measurement era A", None, "2024-12-31", "https://example.com/era-a"),
@@ -80,6 +107,8 @@ _CREW_CBS = (8, 9)
 _CREW_NBC = (10, 11)
 _CREW_ESPN = (12, 11)
 _CREW_PRIME = (12, 10)
+_CREW_CBS2 = (13, 14)
+_CREW_NETFLIX = (15, 16)
 
 LOW_N_THRESHOLD = 8
 
@@ -120,6 +149,7 @@ def _game(
     original: tuple[str, int, str] | None = None,
     sideline: int | None = None,
     no_kickoff: bool = False,
+    lineup: bool = False,
 ) -> dict[str, Any]:
     kickoff = None
     if not no_kickoff:
@@ -146,6 +176,7 @@ def _game(
         "original": original,
         "sideline": sideline,
         "no_kickoff": no_kickoff,
+        "lineup": lineup,
     }
 
 
@@ -262,6 +293,9 @@ def _specs() -> list[dict[str, Any]]:
             flags="S",
             sideline=5,
         ),
+        g(2024, 10, "2024-11-10", "13:00", 1, 4, "Sunday early", CBS, _CREW_CBS2),
+        g(2024, 14, "2024-12-08", "13:00", 4, 0, "Other", PEACOCK, _CREW_NBC, flags="S"),
+        g(2024, 15, "2024-12-14", "16:30", 3, 2, "Saturday", NFLN, None, flags="S"),
         g(2024, 18, "2025-01-05", "13:00", 0, 1, "Sunday early", FOX, _CREW_FOX_O1, booth="o1"),
         g(
             2024,
@@ -349,6 +383,8 @@ def _specs() -> list[dict[str, Any]]:
             flags="A",
             booth="lead",
         ),
+        g(2025, 4, "2025-09-29", "20:15", 1, 3, "MNF", ABC, _CREW_ESPN),
+        g(2025, 9, "2025-11-02", "13:00", 0, 3, "Sunday early", CBS, _CREW_CBS2),
         g(2025, 9, "2025-11-03", "20:15", 5, 0, "MNF", ESPN, _CREW_ESPN, flags="S"),
         g(2025, 10, "2025-11-09", "13:00", 2, 1, "Sunday early", CBS, _CREW_CBS, flags="C"),
         g(2025, 11, "2025-11-16", "13:00", 5, 2, "Sunday early", FOX, _CREW_FILL, booth="pool"),
@@ -380,7 +416,9 @@ def _specs() -> list[dict[str, Any]]:
             flags="S",
             exc=False,
         ),
+        g(2025, 14, "2025-12-05", "20:15", 3, 1, "Friday", NFLN, None, flags="S"),
         g(2025, 17, "2025-12-25", "16:30", 1, 0, "Christmas", PRIME, _CREW_PRIME, flags="S"),
+        g(2025, 17, "2025-12-25", "20:15", 3, 0, "Christmas", NETFLIX, _CREW_NETFLIX, flags="S"),
         # 2026, in progress through week 3
         g(2026, 1, "2026-09-10", "20:20", 2, 3, "TNF", NBC, _CREW_NBC, flags="S"),
         g(
@@ -395,6 +433,35 @@ def _specs() -> list[dict[str, Any]]:
             _LEAD[2026],
             flags="A",
             booth="lead",
+        ),
+        g(2026, 2, "2026-09-20", "13:00", 0, 3, "Other", PEACOCK, _CREW_NBC, flags="S"),
+        g(
+            2026,
+            2,
+            "2026-09-20",
+            "20:20",
+            1,
+            4,
+            "SNF",
+            NBC,
+            _CREW_NBC,
+            flags="S",
+            lineup=True,
+        ),
+        g(
+            2026,
+            3,
+            "2026-09-27",
+            "20:20",
+            0,
+            2,
+            "SNF",
+            NBC,
+            _CREW_NBC,
+            flags="S",
+            lineup=True,
+            viewers=False,
+            cause="pending",
         ),
         g(
             2026,
@@ -513,6 +580,8 @@ def _games_block(specs: list[dict[str, Any]], person_roles: dict[int, str]) -> d
             "change_url": original[2] if original else None,
             "network": s["network"],
             "crew": crew,
+            "crew_source": (("published_lineup" if s["lineup"] else "506") if crew else None),
+            "crew_source_url": LINEUP_URL if crew and s["lineup"] else None,
             "excitement": round(2.0 + (i * 37 % 17) / 10, 2) if s["exc"] else None,
             "viewers": 8_000_000 + 350_000 * i if rated else None,
             "scope": ("window" if s["slot"].startswith("Sunday") else "game") if rated else None,
@@ -571,6 +640,18 @@ def _special_block(
         cbs_den = w["cbs_doubleheader_weeks"] - w["cbs_ambiguous_weeks"]
         row["agotw_rate"] = round(row["agotw"] / fox_den, 4) if fox_den > 0 else None
         row["cbs_national_rate"] = round(row["cbs_national"] / cbs_den, 4) if cbs_den > 0 else None
+    for row in ordered:
+        row["solo_thursday"] = row["standalone_tnf"]
+        row["solo_sunday"] = row["standalone_snf"]
+        row["solo_monday"] = row["standalone_mnf"]
+        row["solo_holiday"] = (
+            row["standalone_christmas"]
+            + row["standalone_thanksgiving"]
+            + row["standalone_black_friday"]
+        )
+        row["solo_other"] = row["standalone_total"] - (
+            row["solo_thursday"] + row["solo_sunday"] + row["solo_monday"] + row["solo_holiday"]
+        )
     names = list(ordered[0])
     return {name: [row[name] for row in ordered] for name in names}
 
@@ -580,6 +661,8 @@ def _empty_special(franchise: int, season: int) -> dict[str, Any]:
     row["standalone_total"] = 0
     for suffix in _SLOT_SUFFIXES:
         row[f"standalone_{suffix}"] = 0
+    for name in ("solo_thursday", "solo_sunday", "solo_monday", "solo_holiday", "solo_other"):
+        row[name] = 0
     for name in (
         "agotw",
         "cbs_national",
@@ -594,89 +677,162 @@ def _empty_special(franchise: int, season: int) -> dict[str, Any]:
     return row
 
 
+# (season, group id, rank, rank_source, people, booth tag, fill_in_games)
+_BOOTH_LAYOUT: list[tuple[int, str, int, str, tuple[int, int], str, int]] = [
+    (2024, "fox", 1, "inferred", _LEAD[2024], "fox:lead", 0),
+    (2024, "fox", 2, "inferred", _CREW_FOX_O1, "fox:o1", 0),
+    (2024, "fox", 3, "inferred", _CREW_FOX_O2, "fox:o2", 0),
+    (2025, "fox", 1, "published", _LEAD[2025], "fox:lead", 1),
+    (2025, "fox", 2, "published", _CREW_FOX_O1, "fox:o1", 0),
+    (2025, "fox", 3, "published", _CREW_FOX_O2, "fox:o2", 0),
+    # The newest season is in progress: published ranks, one booth with no games yet.
+    (2026, "fox", 1, "published", _LEAD[2026], "fox:lead", 0),
+    (2026, "fox", 2, "published", _CREW_FOX_O1, "fox:o1", 0),
+    (2024, "cbs", 1, "inferred", _CREW_CBS, "cbs:b1", 0),
+    (2024, "cbs", 2, "inferred", _CREW_CBS2, "cbs:b2", 0),
+    (2025, "cbs", 1, "override", _CREW_CBS, "cbs:b1", 0),
+    (2025, "cbs", 2, "override", _CREW_CBS2, "cbs:b2", 0),
+    (2026, "cbs", 1, "override", _CREW_CBS, "cbs:b1", 0),
+    (2024, "nbc", 1, "published", _CREW_NBC, "nbc:b1", 0),
+    (2025, "nbc", 1, "published", _CREW_NBC, "nbc:b1", 0),
+    (2026, "nbc", 1, "published", _CREW_NBC, "nbc:b1", 0),
+    (2024, "espn_abc", 1, "published", _CREW_ESPN, "espn_abc:b1", 0),
+    (2025, "espn_abc", 1, "published", _CREW_ESPN, "espn_abc:b1", 0),
+    (2024, "prime", 1, "published", _CREW_PRIME, "prime:b1", 0),
+    (2025, "prime", 1, "published", _CREW_PRIME, "prime:b1", 0),
+    (2025, "netflix", 1, "published", _CREW_NETFLIX, "netflix:b1", 0),
+]
+
+_NON_FOX_BOOTH = {
+    _CREW_CBS: "cbs:b1",
+    _CREW_CBS2: "cbs:b2",
+    _CREW_NBC: "nbc:b1",
+    _CREW_ESPN: "espn_abc:b1",
+    _CREW_PRIME: "prime:b1",
+    _CREW_NETFLIX: "netflix:b1",
+}
+
+
+def _booth_tag(s: dict[str, Any]) -> str | None:
+    """The booth row a game belongs to; fill-in-only Fox games belong to none."""
+    if s["network"] == FOX:
+        return f"fox:{s['booth']}" if s["booth"] in ("lead", "o1", "o2") else None
+    return _NON_FOX_BOOTH.get(s["crew"]) if s["crew"] is not None else None
+
+
+def _is_flagship(group: str, s: dict[str, Any]) -> bool:
+    flags, slot = s["flags"], s["slot"]
+    return {
+        "fox": "A" in flags,
+        "cbs": "C" in flags,
+        "nbc": slot == "SNF",
+        "espn_abc": slot == "MNF",
+        "prime": slot == "TNF",
+    }.get(group, False)
+
+
 def _booth_rows(specs: list[dict[str, Any]], games: dict[str, list[Any]]) -> dict[str, list[Any]]:
-    layout = [
-        ("lead", 1, "lead"),
-        ("other", 2, "o1"),
-        ("other", 3, "o2"),
-        ("others_pooled", None, "pool"),
-    ]
-    people_by_booth = {"o1": _CREW_FOX_O1, "o2": _CREW_FOX_O2}
-    fill_ins = {(2025, "lead"): 1}
+    group_index = {gid: i for i, (gid, *_rest) in enumerate(NETWORK_GROUPS)}
     out: dict[str, list[Any]] = {name: [] for name in NflBoothColumns.model_fields}
-    k = 0
-    for season in (2024, 2025):
-        for group, rank, tag in layout:
-            idx = [i for i, s in enumerate(specs) if s["season"] == season and s["booth"] == tag]
-            pbp, analyst = (
-                _LEAD[season] if tag == "lead" else people_by_booth.get(tag, (None, None))
-            )
-            margins = [
-                abs(games["final_margin"][i]) for i in idx if games["final_margin"][i] is not None
-            ]
-            excs = [games["excitement"][i] for i in idx if games["excitement"][i] is not None]
-            vols = [round(e * 0.5, 4) for e in excs] if tag != "pool" else []
-            n_m, n_e, n_v = len(margins), len(excs), len(vols)
-            adj = k % 5 - 2
+    for k, (season, group, rank, source, people, tag, fill_in) in enumerate(_BOOTH_LAYOUT):
+        idx = [i for i, s in enumerate(specs) if s["season"] == season and _booth_tag(s) == tag]
+        margins = [
+            abs(games["final_margin"][i]) for i in idx if games["final_margin"][i] is not None
+        ]
+        excs = [games["excitement"][i] for i in idx if games["excitement"][i] is not None]
+        viewers = [float(games["viewers"][i]) for i in idx if games["viewers"][i] is not None]
+        n_m, n_e = len(margins), len(excs)
+        adj = k % 5 - 2
 
-            def resid(n: int, scale: float, adj: int = adj) -> float | None:
-                return round(adj * scale, 3) if n else None
+        def resid(n: int, scale: float, adj: int = adj) -> float | None:
+            return round(adj * scale, 3) if n else None
 
-            def se(n: int, base: float) -> float | None:
-                return round(base / max(n, 1) ** 0.5, 3) if n else None
+        def se(n: int, base: float) -> float | None:
+            return round(base / max(n, 1) ** 0.5, 3) if n else None
 
-            row = {
-                "season": season,
-                "group": group,
-                "rank": rank,
-                "pbp_person": pbp,
-                "analyst_person": analyst,
-                "games": len(idx),
-                "fill_in_games": fill_ins.get((season, tag), 0),
-                "raw_n_margin": n_m,
-                "raw_n_excitement": n_e,
-                "raw_n_volatility": n_v,
-                "raw_mean_abs_margin": _mean(margins),
-                "raw_mean_excitement": _mean(excs),
-                "raw_mean_volatility": _mean(vols),
-                "adj_n_margin": n_m,
-                "adj_n_excitement": n_e,
-                "adj_n_volatility": n_v,
-                "adj_margin_resid": resid(n_m, 0.9),
-                "adj_margin_se": se(n_m, 3.0),
-                "adj_excitement_resid": resid(n_e, 0.15),
-                "adj_excitement_se": se(n_e, 0.5),
-                "adj_volatility_resid": resid(n_v, 0.08),
-                "adj_volatility_se": se(n_v, 0.3),
-                "low_n": season == 2024 and tag == "o2",
-                "game_list": idx,
-            }
-            for name, value in row.items():
-                out[name].append(value)
-            k += 1
+        row = {
+            "season": season,
+            "network_group": group_index[group],
+            "rank": rank,
+            "rank_source": source,
+            "is_lead": rank == 1,
+            "pbp_person": people[0],
+            "analyst_person": people[1],
+            "games": len(idx),
+            "flagship_games": sum(1 for i in idx if _is_flagship(group, specs[i])),
+            "fill_in_games": fill_in,
+            "lineup_games": sum(1 for i in idx if specs[i]["lineup"]),
+            "raw_n_margin": n_m,
+            "raw_n_excitement": n_e,
+            "raw_n_viewers": len(viewers),
+            "raw_mean_abs_margin": _mean(margins),
+            "raw_mean_excitement": _mean(excs),
+            "raw_mean_viewers": _mean(viewers),
+            "adj_n_margin": n_m,
+            "adj_n_excitement": n_e,
+            "adj_margin_resid": resid(n_m, 0.9),
+            "adj_margin_se": se(n_m, 3.0),
+            "adj_excitement_resid": resid(n_e, 0.15),
+            "adj_excitement_se": se(n_e, 0.5),
+            "low_n": len(idx) < 2,
+            "game_list": idx,
+        }
+        for name, value in row.items():
+            out[name].append(value)
     return out
 
 
-def _agotw_rows(specs: list[dict[str, Any]], games: dict[str, list[Any]]) -> dict[str, list[Any]]:
-    # season, resid, se, low_n, fill_in_games
-    plan = [
-        (2024, -310000.0, 240000.0, False, 0),
-        (2025, 415000.0, 205000.0, False, 1),
-        (2026, None, None, True, 0),
-    ]
-    out: dict[str, list[Any]] = {name: [] for name in NflAgotwColumns.model_fields}
-    for season, resid, se, low_n, fill_in in plan:
-        idx = [i for i, s in enumerate(specs) if s["season"] == season and s["booth"] == "lead"]
-        viewers = [games["viewers"][i] for i in idx if games["viewers"][i] is not None]
+_CATEGORY_BY_SLOT = {
+    "SNF": "snf",
+    "MNF": "mnf",
+    "TNF": "tnf",
+    "Thanksgiving": "thanksgiving",
+    "Christmas": "christmas",
+    "Black Friday": "black_friday",
+    "International": "international",
+    "Saturday": "saturday",
+    "Friday": "friday",
+    "Other": "other",
+}
+
+
+def _view_category(s: dict[str, Any]) -> str | None:
+    if "A" in s["flags"]:
+        return "agotw"
+    if "C" in s["flags"]:
+        return "cbs_national"
+    return _CATEGORY_BY_SLOT.get(s["slot"])
+
+
+def _viewership_rows(
+    specs: list[dict[str, Any]], games: dict[str, list[Any]]
+) -> dict[str, list[Any]]:
+    cat_index = {cid: i for i, (cid, _label, _w) in enumerate(NFL_VIEW_CATEGORIES)}
+    members: dict[tuple[int, int], list[int]] = {}
+    for i, s in enumerate(specs):
+        cat = _view_category(s)
+        if cat is not None and games["viewers"][i] is not None:
+            members.setdefault((cat_index[cat], s["season"]), []).append(i)
+    out: dict[str, list[Any]] = {name: [] for name in NflViewershipColumns.model_fields}
+    for k, (key, idx) in enumerate(sorted(members.items())):
+        cat_i, season = key
+        cat = NFL_VIEW_CATEGORIES[cat_i][0]
+        n = len(idx)
+        resid: float | None = round((k % 5 - 2) * 110000.0, 1)
+        se: float | None = round(300000.0 / n**0.5, 1)
+        low_n = n < 2
+        if cat == "christmas":
+            resid, se, low_n = None, None, True
+        elif cat == "thanksgiving":
+            low_n = True
+        elif cat == "agotw" and season == 2026:
+            resid, se, low_n = None, None, True
         row = {
+            "category": cat_i,
             "season": season,
             "era": 0 if season == 2024 else 1,
-            "group": "lead",
-            "pbp_person": _LEAD[season][0],
-            "analyst_person": _LEAD[season][1],
-            "games": len(idx),
-            "fill_in_games": fill_in,
-            "mean_viewers": _mean([float(v) for v in viewers]),
+            "games": n,
+            "mean_viewers": _mean([float(games["viewers"][i]) for i in idx]),
             "viewership_resid": resid,
             "viewership_se": se,
             "low_n": low_n,
@@ -691,8 +847,8 @@ def build_fixture() -> dict[str, Any]:
     """The full synthetic payload, validated against the contract."""
     specs = sorted(_specs(), key=lambda s: (s["date"], s["kickoff"] or "", s["home"]))
     # Roles by person: first-named crew slot is play-by-play, second analyst.
-    person_roles = {p: "pbp" for p in (0, 2, 4, 6, 8, 10, 12)}
-    person_roles.update({p: "analyst" for p in (1, 3, 5, 7, 9, 11)})
+    person_roles = {p: "pbp" for p in (0, 2, 4, 6, 8, 10, 12, 13, 15)}
+    person_roles.update({p: "analyst" for p in (1, 3, 5, 7, 9, 11, 14, 16)})
     weeks = {
         2024: {
             "fox_doubleheader_weeks": 8,
@@ -715,13 +871,13 @@ def build_fixture() -> dict[str, Any]:
     }
     games = _games_block(specs, person_roles)
     payload: dict[str, Any] = {
-        "schema_version": "1.0.0",
+        "schema_version": "2.0.0",
         "freshness": {
             "season": 2026,
             "in_progress": True,
             "through_week": 3,
             "viewership_through_week": 2,
-            "fox_default_season": 2025,
+            "crews_default_season": 2025,
         },
         "constants": {
             "viewership_scope": "window",
@@ -732,7 +888,14 @@ def build_fixture() -> dict[str, Any]:
         "lookups": {
             "franchises": [{"id": i, "name": n} for i, n in FRANCHISES],
             "team_names": [{"name": n, "short": sh} for n, sh in TEAM_NAMES],
-            "networks": [{"id": i, "name": n} for i, n in NETWORKS],
+            "networks": [{"id": i, "name": n, "family": fam} for i, n, fam in NETWORKS],
+            "network_groups": [
+                {"id": i, "name": n, "flagship": flag, "members": members}
+                for i, n, flag, members in NETWORK_GROUPS
+            ],
+            "view_categories": [
+                {"id": i, "label": label, "window_level": w} for i, label, w in NFL_VIEW_CATEGORIES
+            ],
             "people": [{"id": f"p{k:02d}", "name": n} for k, n in enumerate(PEOPLE)],
             "eras": [
                 {"id": i, "label": label, "start": start, "end": end, "source_url": url}
@@ -754,8 +917,8 @@ def build_fixture() -> dict[str, Any]:
                 )
             },
         },
-        "fox_booths": _booth_rows(specs, games),
-        "agotw_viewership": _agotw_rows(specs, games),
+        "booths": _booth_rows(specs, games),
+        "viewership": _viewership_rows(specs, games),
     }
     validate_nfl_site_data(payload)
     return payload

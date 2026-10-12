@@ -1,163 +1,8 @@
 {
   "$defs": {
-    "NflAgotwColumns": {
-      "additionalProperties": false,
-      "description": "AGOTW viewership rows per season and Nielsen era.",
-      "properties": {
-        "analyst_person": {
-          "items": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "title": "Analyst Person",
-          "type": "array"
-        },
-        "era": {
-          "items": {
-            "type": "integer"
-          },
-          "title": "Era",
-          "type": "array"
-        },
-        "fill_in_games": {
-          "items": {
-            "type": "integer"
-          },
-          "title": "Fill In Games",
-          "type": "array"
-        },
-        "game_list": {
-          "items": {
-            "items": {
-              "type": "integer"
-            },
-            "type": "array"
-          },
-          "title": "Game List",
-          "type": "array"
-        },
-        "games": {
-          "items": {
-            "type": "integer"
-          },
-          "title": "Games",
-          "type": "array"
-        },
-        "group": {
-          "items": {
-            "anyOf": [
-              {
-                "enum": [
-                  "lead",
-                  "other"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "title": "Group",
-          "type": "array"
-        },
-        "low_n": {
-          "items": {
-            "type": "boolean"
-          },
-          "title": "Low N",
-          "type": "array"
-        },
-        "mean_viewers": {
-          "items": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "title": "Mean Viewers",
-          "type": "array"
-        },
-        "pbp_person": {
-          "items": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "title": "Pbp Person",
-          "type": "array"
-        },
-        "season": {
-          "items": {
-            "type": "integer"
-          },
-          "title": "Season",
-          "type": "array"
-        },
-        "viewership_resid": {
-          "items": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "title": "Viewership Resid",
-          "type": "array"
-        },
-        "viewership_se": {
-          "items": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "title": "Viewership Se",
-          "type": "array"
-        }
-      },
-      "required": [
-        "season",
-        "era",
-        "group",
-        "pbp_person",
-        "analyst_person",
-        "games",
-        "fill_in_games",
-        "mean_viewers",
-        "viewership_resid",
-        "viewership_se",
-        "low_n",
-        "game_list"
-      ],
-      "title": "NflAgotwColumns",
-      "type": "object"
-    },
     "NflBoothColumns": {
       "additionalProperties": false,
-      "description": "Fox booth rows, one per season and booth, never pooled across seasons.",
+      "description": "Booth rows, one per season, network group and booth, never pooled across\nseasons. Win-probability swing stays in the vault table and is not shipped.",
       "properties": {
         "adj_excitement_resid": {
           "items": {
@@ -229,41 +74,6 @@
           "title": "Adj N Margin",
           "type": "array"
         },
-        "adj_n_volatility": {
-          "items": {
-            "type": "integer"
-          },
-          "title": "Adj N Volatility",
-          "type": "array"
-        },
-        "adj_volatility_resid": {
-          "items": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "title": "Adj Volatility Resid",
-          "type": "array"
-        },
-        "adj_volatility_se": {
-          "items": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "title": "Adj Volatility Se",
-          "type": "array"
-        },
         "analyst_person": {
           "items": {
             "anyOf": [
@@ -285,6 +95,13 @@
           "title": "Fill In Games",
           "type": "array"
         },
+        "flagship_games": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Flagship Games",
+          "type": "array"
+        },
         "game_list": {
           "items": {
             "items": {
@@ -302,16 +119,18 @@
           "title": "Games",
           "type": "array"
         },
-        "group": {
+        "is_lead": {
           "items": {
-            "enum": [
-              "lead",
-              "other",
-              "others_pooled"
-            ],
-            "type": "string"
+            "type": "boolean"
           },
-          "title": "Group",
+          "title": "Is Lead",
+          "type": "array"
+        },
+        "lineup_games": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Lineup Games",
           "type": "array"
         },
         "low_n": {
@@ -321,32 +140,37 @@
           "title": "Low N",
           "type": "array"
         },
+        "network_group": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Network Group",
+          "type": "array"
+        },
         "pbp_person": {
           "items": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer"
           },
           "title": "Pbp Person",
           "type": "array"
         },
         "rank": {
           "items": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "integer"
           },
           "title": "Rank",
+          "type": "array"
+        },
+        "rank_source": {
+          "items": {
+            "enum": [
+              "published",
+              "override",
+              "inferred"
+            ],
+            "type": "string"
+          },
+          "title": "Rank Source",
           "type": "array"
         },
         "raw_mean_abs_margin": {
@@ -377,7 +201,7 @@
           "title": "Raw Mean Excitement",
           "type": "array"
         },
-        "raw_mean_volatility": {
+        "raw_mean_viewers": {
           "items": {
             "anyOf": [
               {
@@ -388,7 +212,7 @@
               }
             ]
           },
-          "title": "Raw Mean Volatility",
+          "title": "Raw Mean Viewers",
           "type": "array"
         },
         "raw_n_excitement": {
@@ -405,11 +229,11 @@
           "title": "Raw N Margin",
           "type": "array"
         },
-        "raw_n_volatility": {
+        "raw_n_viewers": {
           "items": {
             "type": "integer"
           },
-          "title": "Raw N Volatility",
+          "title": "Raw N Viewers",
           "type": "array"
         },
         "season": {
@@ -422,27 +246,28 @@
       },
       "required": [
         "season",
-        "group",
+        "network_group",
         "rank",
+        "rank_source",
+        "is_lead",
         "pbp_person",
         "analyst_person",
         "games",
+        "flagship_games",
         "fill_in_games",
+        "lineup_games",
         "raw_n_margin",
         "raw_n_excitement",
-        "raw_n_volatility",
+        "raw_n_viewers",
         "raw_mean_abs_margin",
         "raw_mean_excitement",
-        "raw_mean_volatility",
+        "raw_mean_viewers",
         "adj_n_margin",
         "adj_n_excitement",
-        "adj_n_volatility",
         "adj_margin_resid",
         "adj_margin_se",
         "adj_excitement_resid",
         "adj_excitement_se",
-        "adj_volatility_resid",
-        "adj_volatility_se",
         "low_n",
         "game_list"
       ],
@@ -575,7 +400,7 @@
     "NflFreshness": {
       "additionalProperties": false,
       "properties": {
-        "fox_default_season": {
+        "crews_default_season": {
           "anyOf": [
             {
               "type": "integer"
@@ -584,7 +409,7 @@
               "type": "null"
             }
           ],
-          "title": "Fox Default Season"
+          "title": "Crews Default Season"
         },
         "in_progress": {
           "title": "In Progress",
@@ -622,7 +447,7 @@
         "in_progress",
         "through_week",
         "viewership_through_week",
-        "fox_default_season"
+        "crews_default_season"
       ],
       "title": "NflFreshness",
       "type": "object"
@@ -714,6 +539,38 @@
             "type": "array"
           },
           "title": "Crew",
+          "type": "array"
+        },
+        "crew_source": {
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "506",
+                  "published_lineup"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Crew Source",
+          "type": "array"
+        },
+        "crew_source_url": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Crew Source Url",
           "type": "array"
         },
         "date": {
@@ -975,6 +832,8 @@
         "change_url",
         "network",
         "crew",
+        "crew_source",
+        "crew_source_url",
         "excitement",
         "viewers",
         "scope",
@@ -1001,6 +860,13 @@
             "$ref": "#/$defs/NflFranchiseRef"
           },
           "title": "Franchises",
+          "type": "array"
+        },
+        "network_groups": {
+          "items": {
+            "$ref": "#/$defs/NflNetworkGroupRef"
+          },
+          "title": "Network Groups",
           "type": "array"
         },
         "networks": {
@@ -1044,12 +910,21 @@
           },
           "title": "Team Names",
           "type": "array"
+        },
+        "view_categories": {
+          "items": {
+            "$ref": "#/$defs/NflViewCategoryRef"
+          },
+          "title": "View Categories",
+          "type": "array"
         }
       },
       "required": [
         "franchises",
         "team_names",
         "networks",
+        "network_groups",
+        "view_categories",
         "people",
         "eras",
         "slots"
@@ -1057,9 +932,60 @@
       "title": "NflLookups",
       "type": "object"
     },
+    "NflNetworkGroupRef": {
+      "additionalProperties": false,
+      "description": "A picker entry: networks that share one booth ranking (members index\nlookups.networks) and the label of the group's flagship window.",
+      "properties": {
+        "flagship": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Flagship"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "members": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Members",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "flagship",
+        "members"
+      ],
+      "title": "NflNetworkGroupRef",
+      "type": "object"
+    },
     "NflNetworkRef": {
       "additionalProperties": false,
       "properties": {
+        "family": {
+          "enum": [
+            "disney",
+            "fox",
+            "cbs",
+            "nbc",
+            "other"
+          ],
+          "title": "Family",
+          "type": "string"
+        },
         "id": {
           "title": "Id",
           "type": "string"
@@ -1071,7 +997,8 @@
       },
       "required": [
         "id",
-        "name"
+        "name",
+        "family"
       ],
       "title": "NflNetworkRef",
       "type": "object"
@@ -1233,6 +1160,41 @@
           "title": "Season",
           "type": "array"
         },
+        "solo_holiday": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Solo Holiday",
+          "type": "array"
+        },
+        "solo_monday": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Solo Monday",
+          "type": "array"
+        },
+        "solo_other": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Solo Other",
+          "type": "array"
+        },
+        "solo_sunday": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Solo Sunday",
+          "type": "array"
+        },
+        "solo_thursday": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Solo Thursday",
+          "type": "array"
+        },
         "special": {
           "items": {
             "type": "integer"
@@ -1349,6 +1311,11 @@
         "standalone_sunday_early",
         "standalone_sunday_late",
         "standalone_other",
+        "solo_thursday",
+        "solo_sunday",
+        "solo_monday",
+        "solo_holiday",
+        "solo_other",
         "agotw",
         "cbs_national",
         "international",
@@ -1379,20 +1346,147 @@
       ],
       "title": "NflTeamNameRef",
       "type": "object"
+    },
+    "NflViewCategoryRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "window_level": {
+          "title": "Window Level",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "window_level"
+      ],
+      "title": "NflViewCategoryRef",
+      "type": "object"
+    },
+    "NflViewershipColumns": {
+      "additionalProperties": false,
+      "description": "Viewership rows per special-game category and season.",
+      "properties": {
+        "category": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Category",
+          "type": "array"
+        },
+        "era": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Era",
+          "type": "array"
+        },
+        "game_list": {
+          "items": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "title": "Game List",
+          "type": "array"
+        },
+        "games": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Games",
+          "type": "array"
+        },
+        "low_n": {
+          "items": {
+            "type": "boolean"
+          },
+          "title": "Low N",
+          "type": "array"
+        },
+        "mean_viewers": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Mean Viewers",
+          "type": "array"
+        },
+        "season": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Season",
+          "type": "array"
+        },
+        "viewership_resid": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Viewership Resid",
+          "type": "array"
+        },
+        "viewership_se": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Viewership Se",
+          "type": "array"
+        }
+      },
+      "required": [
+        "category",
+        "season",
+        "era",
+        "games",
+        "mean_viewers",
+        "viewership_resid",
+        "viewership_se",
+        "low_n",
+        "game_list"
+      ],
+      "title": "NflViewershipColumns",
+      "type": "object"
     }
   },
-  "$id": "booth-review/nfl-data/1.0.0",
+  "$id": "booth-review/nfl-data/2.0.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
-    "agotw_viewership": {
-      "$ref": "#/$defs/NflAgotwColumns"
+    "booths": {
+      "$ref": "#/$defs/NflBoothColumns"
     },
     "constants": {
       "$ref": "#/$defs/NflConstants"
-    },
-    "fox_booths": {
-      "$ref": "#/$defs/NflBoothColumns"
     },
     "freshness": {
       "$ref": "#/$defs/NflFreshness"
@@ -1404,7 +1498,7 @@
       "$ref": "#/$defs/NflLookups"
     },
     "schema_version": {
-      "const": "1.0.0",
+      "const": "2.0.0",
       "title": "Schema Version",
       "type": "string"
     },
@@ -1413,6 +1507,9 @@
     },
     "special": {
       "$ref": "#/$defs/NflSpecialColumns"
+    },
+    "viewership": {
+      "$ref": "#/$defs/NflViewershipColumns"
     }
   },
   "required": [
@@ -1423,8 +1520,8 @@
     "games",
     "special",
     "season_weeks",
-    "fox_booths",
-    "agotw_viewership"
+    "booths",
+    "viewership"
   ],
   "title": "booth-review NFL data",
   "type": "object"
