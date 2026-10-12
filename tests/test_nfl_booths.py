@@ -108,6 +108,31 @@ def test_assign_regular_analyst_is_mode_and_fill_in_flagged() -> None:
     assert counts["fill_in_games"] == 1
 
 
+def test_lineup_filled_games_do_not_vote_for_the_modal_analyst() -> None:
+    rows = [g("1", 4, "pb-a", "an-1"), g("2", 5, "pb-a", "an-1")]
+    rows += [g(f"p{i}", 6 + i, "pb-a", "an-pub", crew_source="published_lineup") for i in range(3)]
+    booths, counts = assign_booths(frame(rows))
+    assert set(booths["regular_analyst_person_id"]) == {"an-1"}
+    assert counts["fill_in_games"] == 3
+    # A booth with no 506 games falls back to the published analyst.
+    only = [g(f"p{i}", 4 + i, "pb-b", "an-pub", crew_source="published_lineup") for i in range(2)]
+    fallback, _ = assign_booths(frame(only))
+    assert set(fallback["regular_analyst_person_id"]) == {"an-pub"}
+    assert not any(fallback["is_fill_in"])
+
+
+def test_lineup_majority_still_reports_analyst_disagreement() -> None:
+    rows = [g("1", 4, "pb-a", "an-1", agotw=True)]
+    rows += [
+        g(f"p{i}", 5 + i, "pb-a", "an-pub", agotw=True, crew_source="published_lineup")
+        for i in range(3)
+    ]
+    ranks = {("fox", 2025): (rk("fox", 2025, 1, "pb-a", "an-pub"),)}
+    out = build_booths(frame(rows), ranks)
+    kinds = [r["kind"] for r in out.reviews["booth_rank_disagreements"]]
+    assert kinds == ["analyst"]
+
+
 def test_assign_mode_tie_goes_to_smallest_person_id() -> None:
     booths, _ = assign_booths(frame([g("1", 4, "pb-a", "an-2"), g("2", 5, "pb-a", "an-1")]))
     assert set(booths["regular_analyst_person_id"]) == {"an-1"}

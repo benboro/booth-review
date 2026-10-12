@@ -1,7 +1,7 @@
 """NFL booth model for every network group (D-01 to D-07, D-20).
 
 Pure functions over the game frame. A booth is (season, network group, play-by-play
-voice) with the modal analyst stored; a game with a different analyst is a fill-in
+voice) with the modal analyst (from 506-sourced games) stored; a game with a different analyst is a fill-in
 that stays with the booth. Every regular-season game a booth called for its group
 counts; there is no doubleheader gate. Booth identity never spans seasons or groups.
 
@@ -118,7 +118,12 @@ def assign_booths(frame: pl.DataFrame) -> tuple[pl.DataFrame, dict[str, int]]:
 
     regular: dict[tuple[int, str, str], str | None] = {}
     for (season, grp, pbp), group in kept.group_by(["season", "network_group", "pbp_person_id"]):
-        analysts = [a for a in group["analyst_person_id"].to_list() if a is not None]
+        # Lineup-filled games carry the published analyst by construction, so only
+        # 506-sourced games pick the modal analyst; a booth with none falls back to all.
+        pairs = list(zip(group["analyst_person_id"], group["crew_source"], strict=True))
+        analysts = [a for a, src in pairs if a is not None and src == "506"] or [
+            a for a, _ in pairs if a is not None
+        ]
         regular[(int(season), str(grp), str(pbp))] = _modal(analysts)
 
     rows: list[dict[str, object]] = []
