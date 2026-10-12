@@ -211,3 +211,74 @@ def test_nfl_load_error_then_cfb_still_loads(
     assert _pressed(page, "cfb") == "true"
     assert page.evaluate("window.__testHooks.ready") is True
     assert page.locator("#chart").is_visible()
+
+
+def _wait_nfl_ready(page: Page) -> None:
+    page.wait_for_function("window.__nflTestHooks && window.__nflTestHooks.ready === true")
+
+
+def _settle(page: Page) -> None:
+    """Let CFB's 150 ms resize debounce run out, so a stray CFB render would have fired."""
+    page.wait_for_timeout(400)
+
+
+def _open_nfl_from_cfb(
+    page: Page, open_flagon_cfb: Callable[..., None], query: str
+) -> tuple[str, str]:
+    """Open CFB at `query`, switch to NFL and change its state; returns (cfb_search, nfl_search)."""
+    open_flagon_cfb(page, query)
+    cfb_search = page.evaluate("location.search")
+    _click(page, "nfl")
+    _wait_nfl_ready(page)
+    page.evaluate("window.__nflTestHooks.setState({ view: 'fox', metric: 'excitement' })")
+    nfl_search = page.evaluate("location.search")
+    assert nfl_search.startswith("?sport=nfl") and "view=fox" in nfl_search
+    return cfb_search, nfl_search
+
+
+def test_cfb_listeners_never_rewrite_the_nfl_url(
+    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None]
+) -> None:
+    """JS-CR-01: CFB's media and resize listeners stay quiet while NFL is shown.
+
+    CFB is left on Butterfly, whose resize handler re-renders at any width.
+    """
+    page = nfl_guarded_page
+    cfb_search, nfl_search = _open_nfl_from_cfb(page, open_flagon_cfb, "?view=butterfly")
+    nfl_state = page.evaluate("window.__nflTestHooks.getState()")
+    page.emulate_media(color_scheme="dark")
+    _settle(page)
+    assert page.evaluate("location.search") == nfl_search
+    page.set_viewport_size({"width": 600, "height": 800})  # across 640px
+    _settle(page)
+    assert page.evaluate("location.search") == nfl_search
+    page.set_viewport_size({"width": 1100, "height": 800})  # back across, then a plain resize
+    _settle(page)
+    page.set_viewport_size({"width": 1000, "height": 800})
+    _settle(page)
+    assert page.evaluate("location.search") == nfl_search
+    assert page.evaluate("window.__nflTestHooks.getState()") == nfl_state
+    assert page.evaluate("document.body.dataset.sport") == "nfl"
+    _click(page, "cfb")
+    page.wait_for_function("location.search === " + repr(cfb_search))
+    assert page.evaluate("window.__testHooks.getState().view") == "butterfly"
+
+
+def test_cfb_scatter_stays_quiet_under_nfl_on_a_theme_change(
+    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None]
+) -> None:
+    """JS-CR-01 with CFB left on its scatter: an OS light/dark flip under NFL keeps
+    the NFL URL and state, and CFB comes back as it was left."""
+    page = nfl_guarded_page
+    cfb_search, nfl_search = _open_nfl_from_cfb(page, open_flagon_cfb, "")
+    nfl_state = page.evaluate("window.__nflTestHooks.getState()")
+    page.emulate_media(color_scheme="dark")
+    _settle(page)
+    assert page.evaluate("location.search") == nfl_search
+    page.emulate_media(color_scheme="light")
+    _settle(page)
+    assert page.evaluate("location.search") == nfl_search
+    assert page.evaluate("window.__nflTestHooks.getState()") == nfl_state
+    _click(page, "cfb")
+    page.wait_for_function("location.search === " + repr(cfb_search))
+    assert page.locator("#chart").is_visible()

@@ -229,8 +229,19 @@ function hideBandInfo() {
   closeBandNote(els);
 }
 
+/**
+ * True while CFB is the sport on screen. CFB's global media/resize listeners
+ * and `render()` do nothing otherwise, so they never draw into the hidden CFB
+ * regions or write CFB state over the NFL URL (JS-CR-01). `showSport('cfb')`
+ * re-renders on the way back. Always true with the NFL flag off.
+ */
+function cfbActive() {
+  return activeSport === 'cfb';
+}
+
 /** Recomputes the view, re-renders the chart, syncs the axis UI and the URL, and runs every registered renderer. */
 function render() {
+  if (!cfbActive()) return;
   revision += 1;
   clearHover();
   const view = computeView(data, state);
@@ -454,6 +465,7 @@ async function startCfb(search = location.search) {
     window.addEventListener('resize', () => {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
+        if (!cfbActive()) return;
         if (state.view === 'butterfly' && !mobileMedia.matches) render();
         // 04.12 D-01: the gutter is converted from screen px using the plot
         // width, so a width change must rebuild the range. Height-only
@@ -485,8 +497,12 @@ async function startCfb(search = location.search) {
       });
     }
 
-    darkMedia.addEventListener('change', () => render());
-    mobileMedia.addEventListener('change', () => render());
+    darkMedia.addEventListener('change', () => {
+      if (cfbActive()) render();
+    });
+    mobileMedia.addEventListener('change', () => {
+      if (cfbActive()) render();
+    });
 
     // The graph div only gains its `.on()` event-emitter API once Plotly has
     // rendered into it at least once, so the first render must come first.
