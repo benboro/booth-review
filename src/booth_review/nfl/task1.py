@@ -28,8 +28,9 @@ not CFBD's excitementIndex; every row says so in `excitement_method`.
 Playoff games enter the game frame only with --include-playoffs, and even then
 never reach these rows: playoffs have no doubleheader Sundays and 506 has no
 playoff pages, so no playoff crew exists. Null measures stay null (counted by the
-per-measure n), never 0. Person ids and figures are analysis-only; this table stays
-in the private vault (D-23).
+per-measure n), never 0. This table stays in the private vault; the NFL site ships
+its display fields (names resolved by person id, means, residuals, standard errors,
+low_n) through `nfl-data.json` (999.5), never `raw_mean_abs_spread` or the spread.
 """
 
 from __future__ import annotations

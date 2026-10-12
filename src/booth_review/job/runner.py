@@ -71,9 +71,13 @@ from typing import TypeVar
 from booth_review.audit.completeness import SOURCES
 from booth_review.build.pipeline import BuildOutcome, run_build
 from booth_review.build.site_assembly import (
+    BUILD_MARKER,
     SiteBuildResult,
     assemble_site,
+    check_nfl_file_key,
     docs_dir,
+    load_nfl_site_payload,
+    refresh_nfl_data,
     site_source_dir,
 )
 from booth_review.config import CFBD_FLOOR_DEFAULT
@@ -82,6 +86,7 @@ from booth_review.errors import (
     KeyLeakError,
     ParseError,
     RobotsUnavailableError,
+    SiteBuildError,
     VaultCommitError,
     VaultStateError,
 )
@@ -103,6 +108,9 @@ from booth_review.job.attention import (
     nfl_rr_backlog,
     nfl_schedule_drift,
     nfl_season_past_freeze,
+    nfl_site_carried_live,
+    nfl_site_failed,
+    nfl_site_key_check_failed,
     people_review_due,
     push_failed,
     rr_backlog,
@@ -320,6 +328,7 @@ class ScheduledJob:
         nfl_rr_cap: int = NFL_REFRESH_CAP_DEFAULT,
         github_token: str | None = None,
         on_cfb_result: Callable[[JobRunResult], None] | None = None,
+        nfl_site: bool = False,
     ) -> None:
         """`github_token` (optional GITHUB_TOKEN) goes only to the nflverse
         play-by-play listing on api.github.com; it is never logged or stored.
@@ -327,7 +336,11 @@ class ScheduledJob:
         `on_cfb_result` gets the CFB-only outcome once the CFB state is saved
         and before the NFL block starts (CR-02), so the caller can write its
         result files early: an NFL step that hangs until it is killed can then
-        never cost the run's CFB deploy. `run()` still returns the final outcome."""
+        never cost the run's CFB deploy. `run()` still returns the final outcome.
+
+        `nfl_site` (NFL_SITE_ENABLED exactly true, D-18) adds nfl-data.json to
+        the site dir: carried over from the vault, then refreshed after the NFL
+        build. NFL site problems are items that join the final outcome only."""
         if update and site_out is None:
             raise ValueError("update mode requires site_out")
         self._update = update
@@ -345,6 +358,8 @@ class ScheduledJob:
         self._dry_run = dry_run
         self._commit_enabled = commit
         self._on_cfb_result = on_cfb_result
+        self._nfl_site = nfl_site
+        self._nfl_carry_items: list[AttentionItem] = []
 
     # -- public entry point ------------------------------------------------
 
@@ -535,8 +550,16 @@ class ScheduledJob:
         # slow or killed step) can fail or lose that push. It can only add
         # items, which make the run exit 4 at most.
         nfl_counts: dict[str, int] = {}
+        items.extend(self._nfl_carry_items)
         self._run_nfl_phase(now, window_season, items, nfl_counts)
         counts.update(nfl_counts)
+        if self._update and not self._dry_run and self._nfl_site:
+            self._guarded_ok(
+                items,
+                lambda name: step_failed("nfl_site", name),
+                lambda: self._note_carried_live(items),
+                passthrough=(),
+            )
 
         return JobRunResult(
             exit_code=_exit_code(key_leak, items),
@@ -624,12 +647,15 @@ class ScheduledJob:
     def _run_site_step(self, items: list[AttentionItem]) -> tuple[bool, bool]:
         """Returns (deploy_ready, key_leak)."""
         assert self._site_out is not None
+        carry = self._nfl_carry_over() if self._nfl_site else None
         try:
             result: SiteBuildResult = assemble_site(
                 source=self._runtime.paths.processed / "site-data.json",
                 out_dir=self._site_out,
                 site_src=self._site_src or site_source_dir(),
                 docs=self._docs or docs_dir(),
+                nfl=self._nfl_site,
+                nfl_source=carry,
             )
         except KeyLeakError:
             items.append(site_key_check_failed())
@@ -640,6 +666,38 @@ class ScheduledJob:
         print(f"site: {result.telecasts} telecasts, {len(result.files)} files")
         print("cfbd key check: passed")
         return True, False
+
+    def _nfl_carry_over(self) -> Path | None:
+        """The vault's last good nfl-data.json if it validates and passes the
+        key check, else None. Problems become items held in
+        `_nfl_carry_items` (joined after the CFB result is reported) and never
+        raise, so CFB's site step is unaffected (D-20)."""
+        assert self._site_out is not None
+        carry = self._runtime.paths.processed / "nfl-data.json"
+        if not carry.is_file():
+            return None
+        held = self._nfl_carry_items
+        try:
+            _, body = load_nfl_site_payload(carry)
+        except (SiteBuildError, OSError, ValueError):
+            held.append(nfl_site_failed("carry_over_invalid"))
+            return None
+        try:
+            check_nfl_file_key(body, scratch_parent=self._site_out.parent)
+        except KeyLeakError:
+            held.append(nfl_site_key_check_failed())
+            return None
+        except OSError:
+            held.append(nfl_site_failed("carry_over_invalid"))
+            return None
+        return carry
+
+    def _note_carried_live(self, items: list[AttentionItem]) -> None:
+        site = self._site_out
+        if site is None or not (site / BUILD_MARKER).is_file():
+            return
+        if not (site / "nfl-data.json").is_file():
+            items.append(nfl_site_carried_live())
 
     # -- staleness (D-14) -------------------------------------------------------
 
@@ -1005,6 +1063,16 @@ class ScheduledJob:
                     passthrough=(),
                 ),
             )
+            if self._nfl_site:
+                _merge(
+                    "site_",
+                    self._guarded(
+                        items,
+                        lambda name: step_failed("nfl_site", name),
+                        lambda: self._nfl_site_step(items),
+                        passthrough=(),
+                    ),
+                )
         return nfl_season
 
     def _nfl_commit(
@@ -1185,6 +1253,7 @@ class ScheduledJob:
                 commit=self._commit_enabled,
                 check_acceptance=False,
                 now=now,
+                site_data=self._nfl_site,
             )
         except VaultCommitError:
             items.append(push_failed("nfl_build"))
@@ -1199,7 +1268,33 @@ class ScheduledJob:
             items.append(nfl_build_blocked(built.get("override_errors", 0)))
         if unresolved > 0:
             items.append(nfl_review_due(unresolved))
+        if built.get("site_data_failed"):
+            items.append(nfl_site_failed("invalid"))
         return built
+
+    def _nfl_site_step(self, items: list[AttentionItem]) -> dict[str, int]:
+        """Replace the site dir's nfl-data.json with the freshly built vault
+        file. Every failure keeps whatever file the site dir already holds."""
+        site = self._site_out
+        if site is None or not (site / BUILD_MARKER).is_file():
+            return {}
+        source = self._runtime.paths.processed / "nfl-data.json"
+        if not source.is_file():
+            items.append(nfl_site_failed("missing"))
+            return {}
+        try:
+            result = refresh_nfl_data(site_out=site, source=source)
+        except KeyLeakError:
+            items.append(nfl_site_key_check_failed())
+            return {}
+        except SiteBuildError:
+            items.append(nfl_site_failed("invalid"))
+            return {}
+        if not result.replaced:
+            items.append(nfl_site_key_check_failed())
+            return {}
+        print(f"nfl site: {result.games} games")
+        return {"games": result.games}
 
     # -- state save ------------------------------------------------------------
 

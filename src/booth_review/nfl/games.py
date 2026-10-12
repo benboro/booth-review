@@ -4,10 +4,10 @@ Pure assembly: file reads happen only through `NflInputs` (pbp paths) and the
 reference loaders behind `NflReference`. Missing values stay null and are never
 coerced to 0.
 
-Analysis-only columns (field list "Display rule"): network_id, network_source,
-rr_network_id, rr_network_ids, window, crew_names, pbp_person_id,
-analyst_person_id, sideline_person_ids and pregame_spread. 999.5 may use them in
-analysis but must not display them; only values derived from them reach the site.
+Network and crew columns are displayed on the NFL site under the college-football
+precedent (999.5 D-01, D-03). `pregame_spread` and the raw source columns
+(`network_source`, `rr_network_id(s)`, `window`, `crew_names`) stay analysis-only
+and never reach the site (field list "Display rule").
 
 Network order: 506 first; Ratings Reference (RR) supplies the network for
 national games, 2014-2015 standalone games and any non-Sunday-afternoon slot. An
@@ -106,6 +106,8 @@ NFL_GAME_COLUMNS: tuple[str, ...] = (
     "wp_plays",
     "pregame_spread",
     "final_margin",
+    "home_points",
+    "away_points",
     "viewership",
     "viewership_scope",
     "viewership_status",
@@ -166,6 +168,8 @@ NFL_GAME_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
     "wp_plays": pl.Int64,
     "pregame_spread": pl.Float64,
     "final_margin": pl.Int64,
+    "home_points": pl.Int64,
+    "away_points": pl.Int64,
     "viewership": pl.Float64,
     "viewership_scope": pl.String,
     "viewership_status": pl.String,
@@ -594,11 +598,10 @@ def assemble_nfl_games(
         may_combine = game.kickoff_et.weekday() == _MONDAY and (
             bool(feed_ids & _COMBINED_FEED_NETWORKS) or monday_dates[game.gameday] >= 2
         )
-        margin = (
-            game.home_score - game.away_score
-            if game.home_score is not None and game.away_score is not None
-            else None
-        )
+        home_points = away_points = margin = None
+        if game.home_score is not None and game.away_score is not None:
+            home_points, away_points = game.home_score, game.away_score
+            margin = home_points - away_points
         is_agotw = agotw_src is not None
         is_cbs = cbs_src is not None
         listing = item.listing
@@ -654,6 +657,8 @@ def assemble_nfl_games(
                 "wp_plays": metrics.get("wp_plays"),
                 "pregame_spread": game.spread_line,
                 "final_margin": margin,
+                "home_points": home_points,
+                "away_points": away_points,
                 "viewership": headline.headline_value if headline else None,
                 "viewership_scope": "window" if slot_value in _SUNDAY_AFTERNOON else "game",
                 "viewership_status": headline.headline_status if headline else None,

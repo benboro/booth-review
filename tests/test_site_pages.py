@@ -301,3 +301,115 @@ def test_render_methodology_resolves_md_links_against_docs(
     result = render_methodology(tmp_path, _fixture_site())
 
     assert f'<a href="{expected}">the link</a>' in result
+
+
+# --- NFL methodology blocks (phase 999.5, D-10/D-18/D-25) -------------------
+
+# sha256 of render_methodology(docs, CFB fixture site) recorded before any NFL
+# text existed. The flag-off page must stay byte-identical (D-25).
+_METHODOLOGY_FLAG_OFF_SHA256 = "2d0db68763cb345f71191a08e3641ded150d71f7b860341caf5f7866e9e0ea26"
+
+_NFL_ANCHORS = (
+    "nfl-special-games",
+    "nfl-doubleheader-weeks-and-rates",
+    "nfl-fox-crews-and-the-lead-booth",
+    "nfl-the-spread-adjustment",
+    "nfl-low-n",
+    "nfl-gei-style-excitement",
+    "nfl-window-level-viewership",
+    "nfl-games-with-no-public-rating",
+    "nfl-measurement-eras",
+)
+_CFB_ANCHORS = (
+    "games-with-no-public-rating",
+    "measurement-eras",
+    "the-2025-excitement-break",
+    "the-y-axis-viewers-excitement-points-or-margin",
+)
+_DOCS = REPO_ROOT / "docs"
+
+
+def test_methodology_flag_off_digest_is_pinned() -> None:
+    import hashlib
+
+    rendered = render_methodology(_DOCS, _fixture_site())
+    assert hashlib.sha256(rendered.encode("utf-8")).hexdigest() == _METHODOLOGY_FLAG_OFF_SHA256
+
+
+def _temp_docs(tmp_path: Path, methodology: str) -> Path:
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "methodology.md").write_text(methodology, encoding="utf-8")
+    (docs / "known-gaps.md").write_text("# Known gaps\n\nBody.\n", encoding="utf-8")
+    return docs
+
+
+_BLOCK_DOC = (
+    "# Methodology\n\nCFB text.\n\n<!-- nfl:start -->\n\n## NFL: Only here\n\nNFLSECRET.\n\n"
+    "<!-- nfl:end -->\n\nTail.\n\n<!-- include: known-gaps.md -->\n"
+)
+
+
+def test_nfl_blocks_stripped_when_flag_off_and_kept_when_on(tmp_path: Path) -> None:
+    docs = _temp_docs(tmp_path, _BLOCK_DOC)
+    site = _fixture_site()
+    off = render_methodology(docs, site)
+    on = render_methodology(docs, site, nfl=True)
+    assert "NFLSECRET" not in off
+    assert "nfl:start" not in off
+    assert "nfl:end" not in off
+    assert "NFLSECRET" in on
+    assert "nfl:start" not in on
+    assert "nfl:end" not in on
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "<!-- nfl:start -->\nx\n",
+        "x\n<!-- nfl:end -->\n",
+        "<!-- nfl:start -->\n<!-- nfl:start -->\nx\n<!-- nfl:end -->\n<!-- nfl:end -->\n",
+    ],
+)
+def test_unbalanced_nfl_markers_raise(tmp_path: Path, bad: str) -> None:
+    docs = _temp_docs(tmp_path, "# M\n\n" + bad + "\n<!-- include: known-gaps.md -->\n")
+    with pytest.raises(SiteBuildError, match="unbalanced NFL marker"):
+        render_methodology(docs, _fixture_site())
+
+
+def test_write_pages_nfl_flag(tmp_path: Path) -> None:
+    site = _fixture_site()
+    off_dir = tmp_path / "off"
+    off_dir.mkdir()
+    on_dir = tmp_path / "on"
+    on_dir.mkdir()
+    write_pages(off_dir, site, _DOCS)
+    write_pages(on_dir, site, _DOCS, nfl=True)
+    assert 'id="nfl-special-games"' not in (off_dir / "methodology.html").read_text("utf-8")
+    assert 'id="nfl-special-games"' in (on_dir / "methodology.html").read_text("utf-8")
+
+
+def test_methodology_nfl_anchors_exist_with_flag_on() -> None:
+    rendered = render_methodology(_DOCS, _fixture_site(), nfl=True)
+    for anchor in _NFL_ANCHORS:
+        assert f'id="{anchor}"' in rendered, anchor
+
+
+@pytest.mark.parametrize("nfl", [True, False])
+def test_methodology_cfb_anchors_unchanged(nfl: bool) -> None:
+    rendered = render_methodology(_DOCS, _fixture_site(), nfl=nfl)
+    for anchor in _CFB_ANCHORS:
+        assert f'id="{anchor}"' in rendered, anchor
+
+
+def test_methodology_nfl_text_absent_with_flag_off() -> None:
+    assert "NFL:" not in render_methodology(_DOCS, _fixture_site())
+
+
+def test_methodology_nfl_never_ranks_crews() -> None:
+    text = (_DOCS / "methodology.md").read_text(encoding="utf-8")
+    blocks = re.findall(r"<!-- nfl:start -->(.*?)<!-- nfl:end -->", text, flags=re.S)
+    assert len(blocks) == 2
+    joined = " ".join(blocks).lower()
+    for phrase in ("best booth", "worst", "better crew"):
+        assert phrase not in joined

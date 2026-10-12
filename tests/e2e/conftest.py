@@ -427,6 +427,78 @@ def open_app(site_url: str) -> Callable[[Page, str], None]:
     return _open
 
 
+# -- Flag-on (NFL) build: separate fixtures, the flag-off ones above stay untouched (D-25) ----
+
+
+@pytest.fixture(scope="session")
+def nfl_site_dist(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Build dist/site with the NFL flag on from the synthetic fixtures."""
+    out = tmp_path_factory.mktemp("nflsite") / "site"
+    returncode = main(["site", "--fixture", "--nfl", "--out", str(out)])
+    assert returncode == 0, f"booth-review site --fixture --nfl exited {returncode}"
+    return out
+
+
+@pytest.fixture(scope="session")
+def nfl_site_url(nfl_site_dist: Path) -> Iterator[str]:
+    """Serve `nfl_site_dist`; yields its base URL."""
+    yield from _serve_directory(nfl_site_dist)
+
+
+@pytest.fixture(scope="session")
+def nfl_fixture_raw(nfl_site_dist: Path) -> dict[str, Any]:
+    """The built nfl-data.json, parsed."""
+    return json.loads((nfl_site_dist / "nfl-data.json").read_text(encoding="utf-8"))  # type: ignore[no-any-return]
+
+
+@pytest.fixture
+def open_nfl_app(nfl_site_url: str) -> Callable[..., None]:
+    """Returns `open(page, query="?sport=nfl")`: opens the flag-on site and
+    waits for the NFL bootstrap (`window.__nflTestHooks.ready`)."""
+
+    def _open(page: Page, query: str = "?sport=nfl") -> None:
+        page.goto(f"{nfl_site_url}/index.html{query}")
+        page.wait_for_function("window.__nflTestHooks && window.__nflTestHooks.ready === true")
+
+    return _open
+
+
+@pytest.fixture
+def open_flagon_cfb(nfl_site_url: str) -> Callable[..., None]:
+    """Returns `open(page, query="")`: opens the flag-on site on the CFB view."""
+
+    def _open(page: Page, query: str = "") -> None:
+        page.goto(f"{nfl_site_url}/index.html{query}")
+        page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+
+    return _open
+
+
+@pytest.fixture
+def nfl_guarded_page(page: Page, nfl_site_url: str, font_setting: str) -> Iterator[Page]:
+    """`guarded_page` for the flag-on site."""
+    off_origin, csp_errors = _install_guard(page, nfl_site_url)
+    _apply_font(page, font_setting)
+    yield page
+    _assert_guard_clean(off_origin, csp_errors)
+
+
+@pytest.fixture
+def nfl_mobile_page(browser: Browser, nfl_site_url: str, font_setting: str) -> Iterator[Page]:
+    """`mobile_page` for the flag-on site."""
+    context = browser.new_context(
+        viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True
+    )
+    page = context.new_page()
+    off_origin, csp_errors = _install_guard(page, nfl_site_url)
+    _apply_font(page, font_setting)
+    try:
+        yield page
+    finally:
+        context.close()
+    _assert_guard_clean(off_origin, csp_errors)
+
+
 def _shard_spec() -> tuple[int, int] | None:
     """Reads `E2E_SHARD` ("<index>/<total>", 1-based), set only by CI's e2e matrix."""
     spec = os.environ.get("E2E_SHARD", "").strip()

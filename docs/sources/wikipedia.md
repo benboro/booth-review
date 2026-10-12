@@ -41,4 +41,4 @@ row carrying the article URL.
 Article text is licensed
 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), which is
 share-alike; the field list records how that affects published rows. The
-display credit and link belong to the website phase (999.5).
+NFL site shows `original_slot`, `original_network` and the change article link in the detail panel, with a CC BY-SA 4.0 notice in the footer, the panel and `docs/nfl-data.md` (999.5 D-23).

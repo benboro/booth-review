@@ -30,7 +30,7 @@ jobs:
         env:
           CFBD_API_KEY: ci-canary-not-a-real-cfbd-key
         run: |
-          out="$(uv run booth-review site --fixture --out dist/site)"
+          out="$(uv run booth-review site --fixture --nfl --out dist/site)"
           printf '%s\n' "$out"
           printf '%s\n' "$out" | grep -qx 'cfbd key check: passed'
 

@@ -275,6 +275,62 @@ edge of the map nearest them (Dublin and London at the top right, Sydney at the
 lower left), or at their real point when that point is on the map (Nassau). A
 game with no known location is left off the map and counted in a note.
 
+<!-- nfl:start -->
+
+## NFL: Special games
+
+The NFL view counts how often each franchise plays in a special game. These are assignments, not quality: a special game says where the league scheduled a team, not how good the team is. Only regular-season games are counted.
+
+**Standalone.** A game is standalone when no other NFL game kicks off within three hours of it, judged by kickoff times alone. A gap of exactly three hours fails. Slot names (Thursday night, Sunday night, Monday night, Thanksgiving, Christmas, Black Friday, Saturday, International) are labels only and never decide whether a game is standalone. A Monday doubleheader keeps its Monday night label but neither game is standalone. A standalone international game counts under Standalone.
+
+**AGOTW.** On a Fox doubleheader Sunday, the game Fox shows at the late national kickoff is America's Game of the Week. When several Fox games share that kickoff, a text source (a Ratings Reference late-window record or 506 page text) must name the national game. Otherwise the week is ambiguous and is left out of the AGOTW counts and rates.
+
+**CBS national.** The same rule applied to CBS on a CBS doubleheader Sunday.
+
+**International and flexed.** International games are labeled but are special only when they are also standalone, AGOTW or CBS national. A game is flexed when it moved after the schedule was released into a standalone slot or into the Fox or CBS late national game; the original slot and network come from Wikipedia and are shown with the article link.
+
+**The stacked bars.** Each game counts once per bar. The segments are Standalone, AGOTW, CBS national and International (not standalone). The detail panel lists every flag a game carries, including the full international count.
+
+## NFL: Doubleheader weeks and rates
+
+A network has a doubleheader on a Sunday when it carries a game at the late national kickoff and at least one early game that day. The AGOTW rate is a team's AGOTW games divided by the Fox doubleheader weeks that are not ambiguous; the CBS national rate works the same way for CBS. When the range covers several seasons, the rate is the summed count divided by the summed denominator, never an average of season rates. When the denominator is zero the rate shows as n/a, never 0.
+
+## NFL: Fox crews and the lead booth
+
+A booth is a play-by-play voice within one season together with that booth's most frequent analyst. Fill-in analysts stay with their booth, and each row shows its fill-in game count. The lead booth is the one with the most AGOTW calls that season, or a cited override. The other booths are listed by their Fox order and the remaining small booths are pooled as "others". This view shows one season at a time and is never pooled across seasons, because the standard errors do not combine simply. The rows describe which games each booth was assigned and how those games turned out, not how well anyone called them.
+
+## NFL: The spread adjustment
+
+The Adjusted setting shows each booth's average outcome minus what the league-wide average would predict for games in the same band of absolute pregame spread. Bars are plus or minus 1.96 standard errors around zero. The spread itself is never drawn on a chart, listed in a table or shown in a detail panel; only the adjusted residual and the booth's average band are displayed. This section is the only place the word appears.
+
+## NFL: Low n
+
+A booth with fewer than 8 games for an adjusted outcome is marked low n. Its row is drawn hollow and faded and carries a label. No ranking is implied by the order of rows, and a faded row is not a verdict.
+
+## NFL: GEI-style excitement
+
+The NFL excitement score is computed from nflverse per-play win probability, in the style of the Game Excitement Index. It is not CollegeFootballData.com's excitementIndex and the two are not on the same scale. A game with no play-by-play stays missing and is never shown as 0.
+
+## NFL: Window-level viewership
+
+Ratings Reference reports some Sunday-afternoon figures for the whole regional window rather than for one game, so those figures are labeled window-level. No coverage-share source exists, so the comparison is unnormalized. Only AGOTW games are compared across seasons, and each figure is tagged with the measurement era it was taken under.
+
+## NFL: Games with no public rating
+
+A game can have no public viewer figure for one of three reasons, checked in this order:
+
+1. Ratings Reference compiles national windows, not every regional game.
+2. The figure is not posted yet. This applies to games of the current season at or after the latest week that has any figure.
+3. No figure was published.
+
+On the site each such game reads "No public rating" with its cause.
+
+## NFL: Measurement eras
+
+Eras are read from `data/reference/measurement_eras.csv`. Through the 2019 season viewers were measured by the panel alone. From 2020 the panel was combined with out-of-home viewing. From 2025 Nielsen's Big Data plus Panel applies, and from 2026 enhanced co-viewing is added. The February 2025 out-of-home expansion falls in the offseason, so it owns no NFL season. Bands align to whole seasons. Compare across bands with care.
+
+<!-- nfl:end -->
+
 ## Sources and credits
 
 **Ratings Reference.** Viewership figures on this chart come from
@@ -307,6 +363,12 @@ appears is credited with the phrase "Data provided by CollegeFootballData.com" l
 **Plotly.js.** The chart itself is rendered with
 [Plotly.js](https://plotly.com/javascript/), used under its MIT license and
 self-hosted alongside this site's other files.
+
+<!-- nfl:start -->
+
+**NFL.** The NFL view draws on four sources. Schedules and the win-probability-derived measures come from [nflverse](https://nflverse.com), published under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); this use is modified, because the data is derived and joined with crew and viewership data. NFL viewership comes from [RatingsReference.com](https://ratingsreference.com), also CC BY 4.0 and modified; each detail panel links the Ratings Reference record and the figure's original source. Scheduling changes, meaning the original slot and network of flexed games, come from [Wikipedia](https://www.wikipedia.org), with the article linked, and are licensed [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Crews and networks come from [506 Sports](https://506sports.com), on the same terms as college football. The NFL view also offers no bulk download and loads nothing from any source when you view it.
+
+<!-- nfl:end -->
 
 This site offers no bulk download of any of the data above, and it loads no
 data from Ratings Reference, 506 Sports, CollegeFootballData.com, or any

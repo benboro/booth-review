@@ -413,3 +413,136 @@ def test_cli_deploy_error_exits_3(
     code = main(["deploy", "--site", str(site), "--target", str(target)])
     assert code == 3
     assert "error: DeployError:" in capsys.readouterr().err
+
+
+# -- 999.5 D-20: carry the live nfl-data.json when the staged site lacks it --------------
+
+NFL_ENABLED = {"PUBLISH_ENABLED": "true", "NFL_SITE_ENABLED": "true"}
+LIVE_NFL = '{"live":"nfl"}'
+
+
+def _publish_live_nfl(target: Path, tmp_path: Path) -> None:
+    """Put booth-review/nfl-data.json on the remote via a first (flag-on) deploy."""
+    site = _site(
+        tmp_path,
+        {"index.html": "<html>", "app.js": "x=1", "nfl-data.json": LIVE_NFL},
+    )
+    assert publish_site(site, target, env=NFL_ENABLED, sleep=lambda _s: None).status == "published"
+
+
+def _live_nfl_bytes(remote: Path) -> bytes:
+    return subprocess.run(
+        ["git", "-C", str(remote), "show", "master:booth-review/nfl-data.json"],
+        check=True,
+        capture_output=True,
+    ).stdout
+
+
+def test_flag_on_missing_staged_nfl_file_keeps_the_live_one_byte_identical(
+    remote: Path, target: Path, tmp_path: Path
+) -> None:
+    _publish_live_nfl(target, tmp_path)
+    seed = {p: b for p, b in _remote_tree(remote).items() if not p.startswith("booth-review/")}
+    site = _site(tmp_path, {"index.html": "<html>2", "app.js": "x=2"})
+    result = publish_site(site, target, env=NFL_ENABLED, sleep=lambda _s: None)
+    assert result.status == "published"
+    assert result.nfl_carried is True
+    assert _live_nfl_bytes(remote) == LIVE_NFL.encode()
+    tree = _remote_tree(remote)
+    assert sorted(p for p in tree if p.startswith("booth-review/")) == [
+        "booth-review/app.js",
+        "booth-review/index.html",
+        "booth-review/nfl-data.json",
+    ]
+    assert {p: b for p, b in tree.items() if not p.startswith("booth-review/")} == seed
+    assert result.outside_before == result.outside_after
+
+
+def test_flag_on_no_live_nfl_file_ships_none(remote: Path, target: Path, tmp_path: Path) -> None:
+    result = publish_site(_site(tmp_path), target, env=NFL_ENABLED, sleep=lambda _s: None)
+    assert result.status == "published"
+    assert result.nfl_carried is False
+    assert "booth-review/nfl-data.json" not in _remote_tree(remote)
+
+
+def test_staged_nfl_file_wins_over_the_live_one(remote: Path, target: Path, tmp_path: Path) -> None:
+    _publish_live_nfl(target, tmp_path)
+    site = _site(tmp_path, {"index.html": "<html>", "nfl-data.json": '{"fresh":"nfl"}'})
+    result = publish_site(site, target, env=NFL_ENABLED, sleep=lambda _s: None)
+    assert result.nfl_carried is False
+    assert _live_nfl_bytes(remote) == b'{"fresh":"nfl"}'
+
+
+def test_carried_live_file_with_key_refuses_deploy(
+    remote: Path, target: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _publish_live_nfl(target, tmp_path)
+    count = _remote_count(remote)
+    tree = _remote_tree(remote)
+    monkeypatch.setenv("CFBD_API_KEY", "nfl")  # appears in the live file's value
+    with pytest.raises(KeyLeakError):
+        publish_site(_site(tmp_path), target, env=NFL_ENABLED, sleep=lambda _s: None)
+    assert _remote_count(remote) == count
+    assert _remote_tree(remote) == tree
+
+
+def test_flag_off_publish_is_unchanged_and_removes_a_live_nfl_file(
+    remote: Path, target: Path, tmp_path: Path
+) -> None:
+    _publish_live_nfl(target, tmp_path)
+    result = publish_site(_site(tmp_path), target, env=ENABLED, sleep=lambda _s: None)
+    assert result.status == "published"
+    assert result.nfl_carried is False
+    assert "booth-review/nfl-data.json" not in _remote_tree(remote)
+    # Only the exact string "true" turns the carry on.
+    _publish_live_nfl(target, tmp_path)
+    off = {"PUBLISH_ENABLED": "true", "NFL_SITE_ENABLED": "TRUE"}
+    publish_site(_site(tmp_path), target, env=off, sleep=lambda _s: None)
+    assert "booth-review/nfl-data.json" not in _remote_tree(remote)
+
+
+def test_deploy_publishes_both_data_files_under_booth_review_only(
+    remote: Path, target: Path, tmp_path: Path
+) -> None:
+    seed = _remote_tree(remote)
+    site = _site(
+        tmp_path,
+        {
+            "index.html": "<html>",
+            "site-data.json": '{"cfb":1}',
+            "nfl-data.json": '{"nfl":1}',
+        },
+    )
+    publish_site(site, target, env=NFL_ENABLED, sleep=lambda _s: None)
+    tree = _remote_tree(remote)
+    for path, blob in seed.items():
+        assert tree[path] == blob
+    assert sorted(p for p in tree if p not in seed) == [
+        "booth-review/index.html",
+        "booth-review/nfl-data.json",
+        "booth-review/site-data.json",
+    ]
+
+
+def test_key_in_nfl_data_refuses_deploy(remote: Path, target: Path, tmp_path: Path) -> None:
+    site = _site(tmp_path, {"index.html": "<html>", "nfl-data.json": f'{{"k":"{CANARY}"}}'})
+    count = _remote_count(remote)
+    with pytest.raises(KeyLeakError):
+        publish_site(site, target, env=NFL_ENABLED, sleep=lambda _s: None)
+    assert _remote_count(remote) == count
+
+
+def test_a_live_nfl_symlink_is_never_carried(remote: Path, target: Path, tmp_path: Path) -> None:
+    seed = _clone(remote, tmp_path / "seed2")
+    (seed / "booth-review").mkdir()
+    (seed / "booth-review" / "nfl-data.json").symlink_to("../index.html")
+    _git(seed, "add", "-A")
+    _git(seed, "commit", "-q", "-m", "symlinked nfl file")
+    _git(seed, "push", "-q", "origin", "HEAD:refs/heads/master")
+    count = _remote_count(remote)
+    # Nothing is carried from a symlink; the existing staged-path guard then
+    # refuses the mirror that would delete a symlink from the target.
+    with pytest.raises(DeployError):
+        publish_site(_site(tmp_path), target, env=NFL_ENABLED, sleep=lambda _s: None)
+    assert not (tmp_path / "site" / "nfl-data.json").exists()
+    assert _remote_count(remote) == count

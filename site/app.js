@@ -36,6 +36,7 @@ import { initMapPanel, renderMapPanel, resetMapTap, mapRenderCount } from './mod
 import { initBandInfo, positionBandInfo, closeBandNote, setBandInfoMode } from './modules/band-info.js';
 import { showTooltip, hideTooltip } from './modules/tooltip.js';
 import { selectedPersonIndexes } from './modules/format.js';
+import { SPORTS, enabledSports, resolveSport } from './sports/registry.js';
 import {
   showHoverRing,
   hideHoverRing,
@@ -391,7 +392,8 @@ function showLoadError() {
   window.__testHooks = { ready: true, failed: true };
 }
 
-async function bootstrap() {
+async function startCfb(search = location.search) {
+  cfbStarted = true;
   let response;
   try {
     response = await fetch(`site-data.json?v=${encodeURIComponent(version)}`);
@@ -421,7 +423,7 @@ async function bootstrap() {
       throw new Error('Plotly bundle not loaded');
     }
     data = prepareData(raw);
-    state = decodeState(location.search, data);
+    state = decodeState(search, data);
 
     initTopbar({ data, getState: () => state, setState });
     renderers.push(renderTopbar);
@@ -588,4 +590,83 @@ async function bootstrap() {
   }
 }
 
-bootstrap();
+let cfbStarted = false;
+let nflModule = null;
+let activeSport = null;
+let initialSearch = '';
+
+/** The query with only the sport param removed, other params kept in order. */
+function searchWithoutSport(search) {
+  const params = new URLSearchParams(search);
+  params.delete('sport');
+  const rest = params.toString();
+  return rest ? `?${rest}` : '';
+}
+
+function sportMeta(id) {
+  return SPORTS.find((s) => s.id === id);
+}
+
+async function showSport(id) {
+  if (id === activeSport) return;
+  activeSport = id;
+  for (const btn of document.querySelectorAll('#sport-switch button[data-sport]')) {
+    btn.setAttribute('aria-pressed', btn.dataset.sport === id ? 'true' : 'false');
+  }
+  const status = document.getElementById('sport-status');
+  if (status) status.textContent = `Showing ${sportMeta(id).label} games.`;
+  for (const pop of document.querySelectorAll(':popover-open')) pop.hidePopover();
+  if (openPanelIndex !== null) hideDetailPanel();
+  window.scrollTo(0, 0);
+
+  if (id === 'nfl') {
+    document.body.dataset.sport = 'nfl';
+    document.title = sportMeta('nfl').title;
+    nflModule ??= await import('./sports/nfl/index.js');
+    await nflModule.mount({ footerEl: document.getElementById('site-footer'), search: initialSearch });
+    return;
+  }
+  nflModule?.unmount();
+  document.body.dataset.sport = 'cfb';
+  document.title = sportMeta('cfb').title;
+  if (!cfbStarted) {
+    // The page opened on an NFL URL: its params belong to the NFL side (the
+    // shared `seasons` would otherwise leak into CFB state), so CFB starts at
+    // its defaults.
+    await startCfb('');
+  } else if (data) {
+    render();
+    history.replaceState(null, '', location.pathname + encodeState(state, data));
+  }
+}
+
+function main() {
+  initialSearch = location.search;
+  const enabled = enabledSports(document.querySelector('meta[name="booth-review-sports"]'));
+  const sport = resolveSport(initialSearch, enabled);
+  if (sport === 'cfb' && new URLSearchParams(initialSearch).has('sport')) {
+    history.replaceState(null, '', location.pathname + searchWithoutSport(initialSearch));
+  }
+  const switchEl = document.getElementById('sport-switch');
+  if (switchEl) {
+    for (const btn of switchEl.querySelectorAll('button[data-sport]')) {
+      btn.addEventListener('click', () => {
+        showSport(btn.dataset.sport);
+      });
+    }
+    const topbar = document.getElementById('topbar');
+    const status = document.createElement('p');
+    status.id = 'sport-status';
+    status.className = 'visually-hidden';
+    status.setAttribute('role', 'status');
+    topbar.appendChild(status);
+  }
+  if (sport === 'nfl') {
+    showSport('nfl');
+  } else {
+    activeSport = 'cfb';
+    startCfb();
+  }
+}
+
+main();

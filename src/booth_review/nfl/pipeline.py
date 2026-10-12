@@ -7,6 +7,11 @@ acceptance, write processed/ tables and interim/ review CSVs, then make one
 path-scoped, count-only commit.
 Tables go to the vault only (D-23); nothing is published. A build with an
 invalid week override is blocked: review files are written, tables are not.
+
+With `site_data=True` an unblocked build also writes processed/nfl-data.json, the
+NFL site file (999.5), in the same lock and the same commit, so it always matches
+the tables. A builder error never blocks the table commit: the previous file stays
+and the outcome counts `site_data_failed`. A blocked build leaves the file alone.
 """
 
 from __future__ import annotations
@@ -18,7 +23,13 @@ from pathlib import Path
 
 import polars as pl
 
+from booth_review.build.nfl_site_data import (
+    build_nfl_site_data,
+    load_nfl_site_inputs,
+    write_nfl_site_data,
+)
 from booth_review.config import DataPaths
+from booth_review.errors import SiteBuildError
 from booth_review.nfl.acceptance import AcceptanceResult
 from booth_review.nfl.acceptance import check_acceptance as run_acceptance
 from booth_review.nfl.games import NflGameTable, NflReference, assemble_nfl_games
@@ -61,6 +72,7 @@ def run_nfl_build(
     check_acceptance: bool,
     now: datetime | None = None,
     extra_tables: ExtraTables | None = None,
+    site_data: bool = False,
 ) -> NflBuildOutcome:
     vault = VaultRepo(paths.vault)
     vault.check()
@@ -99,6 +111,13 @@ def run_nfl_build(
                 counts.update(task1_counts)
             written = write_nfl_tables(paths, table, special, extra)
             written += write_review_files(paths, task1_reviews)
+            if site_data and extra_tables is None:
+                try:
+                    site = build_nfl_site_data(load_nfl_site_inputs(paths, reference_directory))
+                    written.append(write_nfl_site_data(paths, site))
+                    counts["site_games"] = len(site.games.season)
+                except (SiteBuildError, pl.exceptions.PolarsError, ValueError):
+                    counts["site_data_failed"] = 1
 
         committed = False
         if commit:

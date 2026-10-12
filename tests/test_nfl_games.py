@@ -68,6 +68,7 @@ def test_schedule_fields_and_margin(tmp_path: Path) -> None:
     assert got["kickoff_time_et"] == "20:20"
     assert got["game_date"].isoformat() == "2015-09-13"
     assert got["final_margin"] == 7
+    assert (got["home_points"], got["away_points"]) == (24, 17)
     assert got["pregame_spread"] == -3.5
     assert got["home_franchise_id"] == "team-02"
     assert got["away_display_name"] == "Display 01"
@@ -78,7 +79,23 @@ def test_schedule_fields_and_margin(tmp_path: Path) -> None:
 def test_unplayed_scores_stay_null(tmp_path: Path) -> None:
     got = one(build(tmp_path, [game_row("a", 1, 2, "2015-09-13")]), "a")
     assert got["final_margin"] is None
+    assert got["home_points"] is None and got["away_points"] is None
     assert got["pregame_spread"] is None
+
+
+def test_points_columns_follow_final_margin() -> None:
+    cols = list(NFL_GAME_COLUMNS)
+    at = cols.index("final_margin")
+    assert cols[at + 1 : at + 3] == ["home_points", "away_points"]
+    assert NFL_GAME_SCHEMA["home_points"] == pl.Int64
+    assert NFL_GAME_SCHEMA["away_points"] == pl.Int64
+
+
+def test_half_missing_score_nulls_points_and_margin(tmp_path: Path) -> None:
+    row = game_row("a", 1, 2, "2015-09-13", home_score="24", away_score="")
+    got = one(build(tmp_path, [row]), "a")
+    assert got["final_margin"] is None
+    assert got["home_points"] is None and got["away_points"] is None
 
 
 def test_unmapped_team_is_null_with_review(tmp_path: Path) -> None:

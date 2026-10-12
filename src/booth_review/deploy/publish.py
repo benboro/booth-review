@@ -49,6 +49,7 @@ class DeployResult:
     outside_before: str | None
     outside_after: str | None
     attempts: int
+    nfl_carried: bool = False
 
 
 def _site_files(site: Path) -> list[Path]:
@@ -173,6 +174,51 @@ def _check_committed_tree(target: Path, subdir: str, site: Path, files: list[Pat
         )
 
 
+NFL_DATA_FILE = "nfl-data.json"
+
+
+def _target_branch(target: Path) -> str:
+    branch = _git_ok(target, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    if branch == "HEAD":
+        raise DeployError("deploy refused: target checkout is on a detached HEAD")
+    return branch
+
+
+def _carry_live_nfl_file(site: Path, target: Path, subdir: str) -> bool:
+    """D-20: stage the target's live `<subdir>/nfl-data.json` into `site`.
+
+    The mirror deletes the whole subdir before copying, so a site without the
+    file would delete the live one. The file is read from the fetched tip, and
+    only when it is a regular blob (never a symlink or any other mode). Returns
+    True when a file was carried; the caller's key re-grep covers it.
+    """
+    branch = _target_branch(target)
+    _git_ok(target, "fetch", "--depth=1", "origin", branch)
+    rel = f"{subdir}/{NFL_DATA_FILE}"
+    listed = _git_ok(target, "ls-tree", "-z", "FETCH_HEAD", "--", rel).stdout
+    records = [r for r in listed.split("\0") if r]
+    if len(records) != 1:
+        return False
+    meta, _, path = records[0].partition("\t")
+    mode, _, kind_and_sha = meta.partition(" ")
+    if path != rel or mode != "100644" or not kind_and_sha.startswith("blob "):
+        return False
+    shown = subprocess.run(
+        ["git", "-C", str(target), "show", f"FETCH_HEAD:{rel}"],
+        check=False,
+        capture_output=True,
+        timeout=_GIT_TIMEOUT_SECONDS,
+        stdin=subprocess.DEVNULL,
+        env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+    )
+    if shown.returncode != 0:
+        raise DeployError(f"deploy git step failed (exit {shown.returncode})")
+    staged = site / f".{NFL_DATA_FILE}.carry"
+    staged.write_bytes(shown.stdout)
+    staged.replace(site / NFL_DATA_FILE)
+    return True
+
+
 def publish_site(
     site: Path,
     target: Path,
@@ -183,13 +229,20 @@ def publish_site(
     before_push: Callable[[int], None] | None = None,
 ) -> DeployResult:
     _validate_subdir(subdir)
-    if (env if env is not None else os.environ).get("PUBLISH_ENABLED") != "true":
+    env_map = env if env is not None else os.environ
+    if env_map.get("PUBLISH_ENABLED") != "true":
         return DeployResult("skipped", 0, None, None, None, 0)
 
     # CR-01: a missing, unmarked, or empty site would mirror as "delete every
     # file under the subdir" and wipe the live site; refuse before any git step.
     if not site.is_dir() or not (site / BUILD_MARKER).is_file():
         raise DeployError("deploy refused: site directory is missing or not an assembled build")
+    nfl_carried = False
+    nfl_target = site / NFL_DATA_FILE
+    if env_map.get("NFL_SITE_ENABLED") == "true" and not (
+        nfl_target.exists() or nfl_target.is_symlink()
+    ):
+        nfl_carried = _carry_live_nfl_file(site, target, subdir)
     # WR-01 / D-10: the key re-grep is mandatory; with no key configured it
     # cannot run, so refuse rather than publish unchecked output.
     if not check_no_key_leak(site):
@@ -201,9 +254,7 @@ def publish_site(
     bundle = bundle_sha256(site)
     short = bundle[:12]
 
-    branch = _git_ok(target, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
-    if branch == "HEAD":
-        raise DeployError("deploy refused: target checkout is on a detached HEAD")
+    branch = _target_branch(target)
 
     for attempt in range(1, MAX_PUSH_ATTEMPTS + 1):
         _git_ok(target, "fetch", "--depth=1", "origin", branch)
@@ -219,7 +270,9 @@ def publish_site(
 
         if _git(target, "diff", "--cached", "--quiet").returncode == 0:
             _check_committed_tree(target, subdir, site, files)
-            return DeployResult("no_change", len(files), bundle, before, before, attempt)
+            return DeployResult(
+                "no_change", len(files), bundle, before, before, attempt, nfl_carried
+            )
 
         message = batch_message("deploy", "booth-review", f"bundle {short}", {"files": len(files)})
         _git_ok(
@@ -242,7 +295,9 @@ def publish_site(
             before_push(attempt)
         pushed = _git(target, "push", "origin", f"HEAD:refs/heads/{branch}")
         if pushed.returncode == 0:
-            return DeployResult("published", len(files), bundle, before, after, attempt)
+            return DeployResult(
+                "published", len(files), bundle, before, after, attempt, nfl_carried
+            )
         if not any(marker in pushed.stderr for marker in _REJECTION_MARKERS):
             raise DeployError(f"deploy push failed (exit {pushed.returncode})")
         if attempt < MAX_PUSH_ATTEMPTS:

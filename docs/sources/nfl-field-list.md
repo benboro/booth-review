@@ -15,7 +15,7 @@ Terms status uses five values:
 - **share-alike:** CC BY-SA.
 - **analysis-only:** the terms are unclear. Under the spike's rule for unclear
   terms, the field is used in analysis but not displayed; only our own derived
-  values from it reach the site (see Display rule for an open question).
+  values from it reach the site (see Display rule).
 - **blocked:** the terms ban reuse or automated access, so that source can't
   supply the field.
 - **derived:** our own computed value.
@@ -51,6 +51,8 @@ Terms status uses five values:
 | `excitement_score` | Game excitement from in-game win probability | derived from nflverse play-by-play win probability | 1999 | derived | nightly after games | computed from `home_wp` per play |
 | `pregame_spread` | Pre-game point spread, positive when home is favored | nflverse schedules (`spread_line`), scripted | 2006 | analysis-only (odds provenance unstated) | can move until kickoff | copied, used only for game-quality controls |
 | `final_margin` | Home score minus away score | derived from nflverse schedules (`result`) | 2006 | derived | after the game | copied as computed |
+| `home_points` / `away_points` | Final score of each side | nflverse schedules (`home_score` / `away_score`), scripted | 2006 | open-attribution (CC BY 4.0) | after the game | copied; both null together when the game is unplayed, so they never disagree with `final_margin` |
+| `international_other` | Games that are international but not standalone, AGOTW or CBS national (Task 2's exclusive fourth stack segment) | derived from `is_international`, `is_standalone`, `is_agotw`, `is_cbs_national` | 2006 | derived | after each game | counted per franchise-season so a stacked bar counts each game once; `international` keeps its full meaning |
 | `wp_volatility` | How much win probability swung during the game | derived from nflverse play-by-play win probability | 1999 | derived | nightly after games | spread of per-play `home_wp` changes |
 
 ## Rules
@@ -176,15 +178,18 @@ displayed source gets its credit:
 nflverse, Ratings Reference with record links and original publishers, and
 Wikipedia under CC BY-SA.
 
-The analysis-only fields are:
+**Decision (2026-10-11, 999.5 D-01, D-03, D-04):** `network` and
+`broadcast_team` follow the college-football precedent and are displayed on the
+NFL site, with person names resolved by `person_id` and 506 Sports credited.
 
-- `network` and `broadcast_team` (506 states no terms)
+The fields that stay analysis-only are:
+
 - `coverage_share` (only a lead with unread terms)
 - `pregame_spread` (odds provenance unstated)
 
-**Open question for the build (999.5):** the college-football site already
-displays 506 crews (hover details), even though 506 states no terms and its
-publishing row in `data/README.md` still reads "ask the site owners". Task 1
-compares crews, so its views need crew names. Before the NFL views are built,
-decide whether NFL crews follow that college-football precedent or the strict
-rule above. Asking 506's owners would settle both.
+Only values derived from them (Task 1 means and residuals) reach the site. The
+spread is never an axis, column or panel field.
+
+The 506 publishing question stays open: the publishing row in `data/README.md`
+still reads "ask the site owners", and a pending todo asks 506's owners about
+reuse. The answer could change the CFB, NFL and MLB crew display.

@@ -2715,3 +2715,619 @@ td.no-rating {
 .map-note {
   white-space: nowrap;
 }
+
+/* ---------- NFL side (999.5-10) ----------
+   The NFL regions share the CFB grid areas. Only one set shows at a time,
+   keyed to body[data-sport]; the CFB regions stay in the DOM. */
+
+body[data-sport="nfl"] :is(#toolbar, #selection-bar, #chart-area, #matched-games) {
+  display: none;
+}
+
+body:not([data-sport="nfl"]) :is(#nfl-toolbar, #nfl-selection-bar, #nfl-chart-area, #nfl-matched-games) {
+  display: none;
+}
+
+#nfl-toolbar { grid-area: toolbar; }
+#nfl-selection-bar { grid-area: selection; }
+#nfl-chart-area { grid-area: main; }
+#nfl-matched-games { grid-area: table; }
+
+#nfl-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 48px;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.nfl-filter-layer {
+  display: contents;
+}
+
+.nfl-toolbar-spacer {
+  display: none;
+}
+
+#nfl-clear-filters {
+  font: var(--font-label);
+  font-weight: var(--weight-semibold);
+  padding: 6px var(--space-sm);
+  border: 1px solid var(--reset);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--reset);
+  cursor: pointer;
+}
+
+#nfl-filters-button {
+  font: var(--font-label);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+#nfl-toolbar button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+#nfl-clear-filters:focus-visible,
+#nfl-filters-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+#nfl-trigger-announcers {
+  border-color: var(--special);
+  color: var(--special);
+}
+
+#nfl-trigger-announcers[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--special) 12%, var(--bg));
+}
+
+#nfl-trigger-announcers[data-active="true"] {
+  background: var(--special);
+  border-color: var(--special);
+  color: var(--on-special);
+}
+
+/* Same grid as #toolbar. The hidden spacer cells bring the NFL row count up to
+   the CFB toolbar's eleven cells, so a switch never moves the chart (SITE-20). */
+@media (min-width: 641px) {
+  #nfl-toolbar {
+    display: grid;
+    grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(100%, max(116px, var(--toolbar-cell-min, 116px))), 1fr)
+    );
+    gap: var(--space-sm);
+    align-items: center;
+  }
+
+  #nfl-toolbar .filter-trigger,
+  #nfl-clear-filters {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-left: var(--space-xs);
+    padding-right: var(--space-xs);
+  }
+
+  .nfl-toolbar-spacer {
+    display: block;
+    visibility: hidden;
+    font: var(--font-label);
+    padding: 6px var(--space-xs);
+    border: 1px solid transparent;
+  }
+
+  .nfl-toolbar-spacer::before {
+    content: "\00a0";
+  }
+}
+
+.nfl-filter-popover section {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.nfl-filter-popover select,
+.nfl-filters-sheet select,
+.nfl-team-search {
+  font: var(--font-body);
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.nfl-team-search {
+  width: 100%;
+}
+
+.nfl-people-list {
+  list-style: none;
+  margin: var(--space-sm) 0 0 0;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.nfl-people-list > li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  cursor: pointer;
+}
+
+.nfl-people-list > li[hidden] {
+  display: none;
+}
+
+.nfl-people-list > li:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.nfl-people-list .option-check {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+.nfl-people-list > li[aria-selected="true"] .option-check {
+  background: var(--special);
+  border-color: var(--special);
+}
+
+.nfl-cat-group,
+.nfl-team-list {
+  border: none;
+  margin: 0 0 var(--space-sm) 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.nfl-cat-group legend {
+  font: var(--font-label);
+  font-weight: var(--weight-semibold);
+  padding: 0;
+  margin-bottom: var(--space-xs);
+}
+
+.nfl-team-list {
+  max-height: 240px;
+  overflow-y: auto;
+  margin-top: var(--space-sm);
+}
+
+@media (max-width: 640px) {
+  .nfl-filters-sheet input,
+  .nfl-filters-sheet select,
+  .nfl-filters-sheet .group-reset,
+  .nfl-filters-sheet .nfl-sheet-clear,
+  .nfl-filters-sheet #nfl-filters-show-results,
+  .nfl-filters-sheet .check-row,
+  .nfl-filters-sheet .nfl-people-list > li {
+    min-height: 44px;
+  }
+
+  .nfl-filters-sheet .check-row,
+  .nfl-filters-sheet .nfl-people-list > li {
+    box-sizing: border-box;
+  }
+
+  .nfl-filters-sheet .nfl-people-list,
+  .nfl-filters-sheet .nfl-team-list {
+    max-height: 40vh;
+  }
+
+  #nfl-filters-button {
+    min-height: 44px;
+  }
+}
+
+.nfl-filters-sheet #nfl-filters-show-results {
+  display: block;
+  width: 100%;
+  font: var(--font-label);
+  padding: var(--space-sm) var(--space-md);
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--bg);
+  cursor: pointer;
+}
+
+.nfl-filters-sheet .nfl-sheet-clear {
+  font: var(--font-label);
+  padding: var(--space-xs) var(--space-md);
+  border: 1px solid var(--reset);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--reset);
+  cursor: pointer;
+}
+
+#nfl-selection-bar {
+  padding: var(--space-sm) var(--space-lg);
+  min-width: 0;
+  min-height: 127px;
+}
+
+@media (min-width: 752px) {
+  #nfl-selection-bar {
+    min-height: 91px;
+  }
+}
+
+@media (min-width: 1104px) {
+  #nfl-selection-bar {
+    min-height: 61px;
+  }
+}
+
+@media (max-width: 640px) {
+  #nfl-selection-bar {
+    min-height: 156px;
+  }
+}
+
+/* 999.5-19: the NFL headline sits in the reserved band like CFB's summary count. */
+#nfl-headline {
+  margin: var(--space-xs) 0 0;
+  font: var(--font-heading);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#nfl-chips {
+  list-style: none;
+  margin: 0 0 var(--space-xs) 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+#nfl-chart-area {
+  padding: var(--space-sm) var(--space-lg) 0;
+  position: static;
+  display: flex;
+  flex-direction: column;
+}
+
+#nfl-chart-area,
+#nfl-matched-games {
+  min-width: 0;
+}
+
+#nfl-matched-games {
+  padding: var(--space-lg) var(--space-lg) var(--space-xl);
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.nfl-status {
+  position: relative;
+  min-height: 520px;
+}
+
+.nfl-status[hidden],
+.nfl-view[hidden] {
+  display: none;
+}
+
+.nfl-view-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 48px;
+  margin-bottom: var(--space-md);
+}
+
+.nfl-legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 32px;
+}
+
+.nfl-chart {
+  position: relative;
+  min-height: 520px;
+  background: var(--bg);
+}
+
+.nfl-captions {
+  color: var(--muted);
+  font: var(--font-label);
+  margin-top: var(--space-sm);
+}
+
+.nfl-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.nfl-stepper button {
+  min-width: 40px;
+  min-height: 40px;
+}
+
+@media (max-width: 640px) {
+  .nfl-stepper button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+.nfl-breakdown {
+  margin-top: var(--space-md);
+}
+
+.nfl-show-all {
+  align-self: flex-start;
+  margin-top: var(--space-sm);
+}
+
+.nfl-row-annotation {
+  color: var(--muted);
+  font: var(--font-label);
+}
+
+.nfl-muted {
+  color: var(--muted);
+}
+
+.nfl-pill {
+  display: inline-block;
+}
+
+.nfl-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-top: var(--space-xs);
+}
+
+.nfl-matchup-btn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.nfl-games-summary {
+  margin: 0 0 var(--space-sm) 0;
+  color: var(--muted);
+}
+
+/* NFL detail dialog: the CFB rules are id-keyed, so the NFL dialog repeats them. */
+html:has(#nfl-detail-panel[open]) {
+  overflow: hidden;
+}
+
+#nfl-detail-panel {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  width: min(560px, calc(100vw - 32px));
+  max-width: none;
+  max-height: 85vh;
+  overflow: hidden;
+}
+
+#nfl-detail-panel[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+#nfl-detail-panel .panel-inner {
+  padding: var(--space-lg);
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+#nfl-detail-panel::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  #nfl-detail-panel[open] {
+    animation: modal-in 120ms ease-out;
+  }
+
+  #nfl-detail-panel[open]::backdrop {
+    animation: scrim-in 120ms ease-out;
+  }
+}
+
+@media (max-width: 640px) {
+  #nfl-detail-panel {
+    position: fixed;
+    inset: auto 0 0 0;
+    margin: 0;
+    width: 100%;
+    max-width: 100%;
+    height: 55vh;
+    max-height: 55vh;
+    border-radius: 12px 12px 0 0;
+    border-width: 1px 0 0 0;
+  }
+
+  #nfl-detail-panel .panel-close {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+#nfl-detail-panel .panel-close {
+  border: none;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font: var(--font-heading);
+  float: right;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+#nfl-detail-panel .panel-body h3 {
+  font: var(--font-heading);
+  margin: var(--space-md) 0 var(--space-sm) 0;
+}
+
+#nfl-detail-panel .panel-body p {
+  margin: 0 0 var(--space-sm) 0;
+}
+
+.panel-field {
+  margin: 0 0 var(--space-md) 0;
+}
+
+.panel-field-value {
+  margin: 0;
+}
+
+/* ---------- Sport switch (CFB | NFL, D-05) ---------- */
+
+#sport-switch {
+  margin: 0 0 0 var(--space-md);
+}
+
+#sport-switch button {
+  min-height: 40px;
+  padding: 0 var(--space-md);
+}
+
+@media (max-width: 640px) {
+  #topbar:has(#sport-switch) {
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  #sport-switch {
+    margin-left: auto;
+  }
+
+  #sport-switch button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 360px) {
+  #sport-switch {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    width: 100%;
+    margin: 0 0 var(--space-sm);
+  }
+}
+
+/* NFL polish (plan 999.5-17): NFL-scoped selectors only. */
+.nfl-view-controls .segmented,
+.nfl-legend-row .segmented {
+  margin-bottom: 0;
+}
+
+.nfl-control-label {
+  color: var(--muted);
+  font: var(--font-label);
+  align-self: center;
+}
+
+.nfl-breakdown-lines {
+  display: grid;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+
+.nfl-breakdown-lines p {
+  margin: 0;
+}
+
+.nfl-stepper select {
+  font: var(--font-label);
+  min-height: 40px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+@media (max-width: 640px) {
+  .nfl-stepper select {
+    min-height: 44px;
+  }
+
+  .nfl-fox-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    width: 100%;
+  }
+
+  .nfl-fox-metrics button {
+    padding-left: var(--space-xs);
+    padding-right: var(--space-xs);
+  }
+
+  .nfl-view-controls {
+    min-height: 0;
+  }
+
+  .nfl-view-controls .segmented {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .nfl-view-controls .segmented button {
+    flex: 1 1 auto;
+    white-space: normal;
+  }
+
+  .nfl-legend-row .segmented {
+    flex-wrap: wrap;
+  }
+
+  .nfl-view-controls .nfl-control-label {
+    flex: 0 0 100%;
+    margin-bottom: calc(var(--space-xs) * -1);
+  }
+}
