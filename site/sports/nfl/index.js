@@ -285,6 +285,10 @@ function setState(patch) {
   if (!model) return;
   const prevView = state.view;
   state = canonicalNflState({ ...state, ...(patch || {}) }, model);
+  // A selection (team bar, booth, AGOTW season, scatter picks) belongs to the
+  // view that made it and only that view keeps it current, so a tab change
+  // drops it unless the same patch sets a new one (JS-WR-03, D-09).
+  if (state.view !== prevView && !(patch && 'selection' in patch)) state.selection = null;
   syncUrl();
   renderAll({ resize: state.view !== prevView });
 }

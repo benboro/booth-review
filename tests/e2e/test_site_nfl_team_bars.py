@@ -465,3 +465,22 @@ def test_x_ticks_are_round_steps(app: Page) -> None:
     assert ticks
     assert all(t % dtick == 0 for t in ticks), (ticks, dtick)
     assert not {17, 34, 51} & set(ticks)
+
+
+def test_tab_change_drops_the_team_selection(app: Page) -> None:
+    """JS-WR-03: a team selection belongs to this view; another tab never shows it stale."""
+    _set(app, {"seasons": [2024, 2024]})
+    _vm(app)
+    _emit(app, "plotly_click", 0)
+    app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
+    assert app.evaluate("window.__nflTestHooks.getTableIndexes().length") > 0
+    _set(app, {"view": "scatter", "seasons": [2024, 2026]})
+    assert app.evaluate("window.__nflTestHooks.getState().selection") is None
+    assert app.evaluate("window.__nflTestHooks.getTableIndexes()") == []
+    assert app.locator("#nfl-clear-selection").is_hidden()
+    _set(app, {"view": "special"})
+    assert app.inner_text("#nfl-tab-hint") == "Pick a team bar to see its seasons and games."
+    # A patch that changes the view and sets a selection keeps that selection.
+    sel = {"kind": "test", "key": "t", "label": "Test", "games": [0, 1]}
+    _set(app, {"view": "fox", "selection": sel})
+    assert app.evaluate("window.__nflTestHooks.getState().selection") == sel
