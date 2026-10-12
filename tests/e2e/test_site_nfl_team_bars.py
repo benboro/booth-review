@@ -16,12 +16,38 @@ from playwright.sync_api import Page, Route
 
 pytestmark = pytest.mark.e2e
 
-SEGMENT_LABELS = [
-    "Standalone slot",
-    "AGOTW",
-    "CBS national",
-    "International (not standalone)",
+SEGMENT_KEYS = [
+    "solo_thursday",
+    "solo_sunday",
+    "solo_monday",
+    "solo_holiday",
+    "solo_other",
+    "agotw",
+    "cbs_national",
+    "international_other",
 ]
+SEGMENT_LABELS = [
+    "Thursday night",
+    "Sunday night",
+    "Monday night",
+    "Holiday",
+    "Other solo slot",
+    "Fox AGOTW",
+    "CBS late national",
+    "International, shared window",
+]
+NOTE_LINES = [
+    "Solo slot = no other NFL game kicks off within 3 hours.",
+    "Thursday night: solo-slot games on Thursday.",
+    "Sunday night: solo-slot Sunday night games.",
+    "Monday night: solo-slot Monday games. Monday doubleheader games share a window, so they are not counted here.",
+    "Holiday: Thanksgiving, Christmas and Black Friday games in a solo slot.",
+    "Other solo slot: any other game with no NFL game within 3 hours, such as Saturday or an international morning game.",
+    "Fox AGOTW: Fox's top game on a Sunday afternoon doubleheader.",
+    "CBS late national: CBS's national game in the late Sunday window.",
+    "International, shared window: a game played abroad that shares its window with other games.",
+]
+LEGEND = "#nfl-view-special .legend-chips"
 SLOT_ORDER = [
     ("tnf", "TNF"),
     ("snf", "SNF"),
@@ -73,20 +99,15 @@ def _agg(raw: dict[str, Any], lo: int, hi: int) -> dict[int, dict[str, Any]]:
         a = out.setdefault(
             r["franchise"],
             {
-                "standalone": 0,
-                "agotw": 0,
-                "cbs_national": 0,
-                "international_other": 0,
+                **dict.fromkeys(SEGMENT_KEYS, 0),
                 "international": 0,
                 "flexed": 0,
                 "special": 0,
                 "slots": {},
             },
         )
-        a["standalone"] += r["standalone_total"]
-        a["agotw"] += r["agotw"]
-        a["cbs_national"] += r["cbs_national"]
-        a["international_other"] += r["international_other"]
+        for k in SEGMENT_KEYS:
+            a[k] += r[k]
         a["international"] += r["international"]
         a["flexed"] += r["flexed"]
         a["special"] += r["special"]
@@ -116,18 +137,22 @@ def _hover(raw: dict[str, Any], f: int, lo: int, hi: int) -> list[str]:
     fox, cbs = _denoms(raw, lo, hi)
     name = raw["lookups"]["franchises"][f]["name"]
     slots = ", ".join(f"{lbl} {a['slots'][col]}" for col, lbl in SLOT_ORDER if a["slots"][col] > 0)
-    standalone = f"Standalone: {a['standalone']}" + (f" ({slots})" if slots else "")
-    return [
+    total = sum(a[k] for k in SEGMENT_KEYS)
+    out = [
         f"{name}, {lo}" if lo == hi else f"{name}, {lo}–{hi}",
-        f"Special games: {a['standalone'] + a['agotw'] + a['cbs_national'] + a['international_other']}",
-        standalone,
-        f"AGOTW: {a['agotw']} · {_rate(a['agotw'], fox)}",
-        f"CBS national: {a['cbs_national']} · {_rate(a['cbs_national'], cbs)}",
-        f"International (not standalone): {a['international_other']}",
-        f"International, any slot: {a['international']}. Standalone international games count under Standalone.",
+        f"{total} special games",
+    ]
+    out += [f"{lbl}: {a[k]}" for k, lbl in zip(SEGMENT_KEYS, SEGMENT_LABELS, strict=True) if a[k]]
+    if slots:
+        out.append(f"Solo slots: {slots}")
+    out += [
+        f"International, all windows: {a['international']}",
+        f"Fox AGOTW weeks: {_rate(a['agotw'], fox)}",
+        f"CBS late national weeks: {_rate(a['cbs_national'], cbs)}",
         f"Flexed: {a['flexed']}",
         "Click to see seasons and games.",
     ]
+    return out
 
 
 def _emit(page: Page, event: str, k: int) -> None:
@@ -157,9 +182,7 @@ def _expected_order(raw: dict[str, Any], lo: int, hi: int) -> list[str]:
     rows = []
     for idx, f in enumerate(fr):
         a = agg.get(idx)
-        total = (
-            a["standalone"] + a["agotw"] + a["cbs_national"] + a["international_other"] if a else 0
-        )
+        total = sum(a[k] for k in SEGMENT_KEYS) if a else 0
         rows.append((-total, f["name"], f["id"]))
     return [r[2] for r in sorted(rows)]
 
@@ -175,8 +198,10 @@ def test_traces_legend_and_counts(app: Page, nfl_fixture_raw: dict[str, Any]) ->
         f"[document.querySelector('{GD}').layout.barmode, document.querySelector('{GD}').data[0].orientation]"
     )
     assert modes == ["stack", "h"]
+    marker_lines = app.evaluate(f"document.querySelector('{GD}').data.map(t => t.marker.line.width[0])")
+    assert marker_lines == [1] * 8
     chips = app.eval_on_selector_all(
-        "#nfl-view-special .nfl-legend-row button",
+        f"{LEGEND} li > button.legend-chip.pill",
         "els => els.map(e => [e.textContent, e.getAttribute('aria-pressed')])",
     )
     assert chips == [[label, "true"] for label in SEGMENT_LABELS]
@@ -189,14 +214,9 @@ def test_traces_legend_and_counts(app: Page, nfl_fixture_raw: dict[str, Any]) ->
     total_sum = 0
     for row in vm["rows"]:
         a = agg[ids.index(row["franchise"])]
-        assert row["counts"] == {
-            "standalone": a["standalone"],
-            "agotw": a["agotw"],
-            "cbs_national": a["cbs_national"],
-            "international_other": a["international_other"],
-        }
-        # D-24: special = standalone + agotw + cbs_national; each game counted once.
-        assert a["special"] == a["standalone"] + a["agotw"] + a["cbs_national"]
+        assert row["counts"] == {k: a[k] for k in SEGMENT_KEYS}
+        # Each game counts once: the eight segments sum to the team total.
+        assert row["total"] == sum(row["counts"].values())
         assert row["total"] == a["special"] + a["international_other"]
         total_sum += row["total"]
     assert total_sum == sp_sum + io_sum
@@ -223,26 +243,51 @@ def test_hover_lines_exact_and_na_for_2026(app: Page, nfl_fixture_raw: dict[str,
     _emit(app, "plotly_hover", 0)
     lines = _tooltip(app)
     assert lines == _hover(nfl_fixture_raw, f, 2026, 2026)
-    assert lines[3].endswith("· n/a") and lines[4].endswith("· n/a")
-    assert "0 of" not in lines[3] and "(0%)" not in "".join(lines)
+    fox_line = next(x for x in lines if x.startswith("Fox AGOTW weeks"))
+    cbs_line = next(x for x in lines if x.startswith("CBS late national weeks"))
+    assert fox_line.endswith("n/a") and cbs_line.endswith("n/a")
+    assert "0 of" not in fox_line and "(0%)" not in "".join(lines)
 
 
 def test_legend_chip_hides_segment(app: Page) -> None:
     _vm(app)
-    app.click("#nfl-view-special .nfl-legend-row button[data-segment=agotw]")
+    chip = f"{LEGEND} button[data-segment=agotw]"
+    app.click(chip)
     app.wait_for_function(
         "window.__nflTestHooks.getViewModel('special').hiddenSegments.includes('agotw')"
     )
-    pressed = app.get_attribute(
-        "#nfl-view-special .nfl-legend-row button[data-segment=agotw]", "aria-pressed"
-    )
-    assert pressed == "false"
+    assert app.get_attribute(chip, "aria-pressed") == "false"
     visible = app.evaluate(f"document.querySelector('{GD}').data.map(t => t.visible)")
-    assert visible == [True, False, True, True]
-    app.click("#nfl-view-special .nfl-legend-row button[data-segment=agotw]")
+    assert visible == [True] * 5 + [False, True, True]
+    app.wait_for_timeout(400)  # past the 300 ms double-tap window
+    app.click(chip)
     app.wait_for_function(
         "window.__nflTestHooks.getViewModel('special').hiddenSegments.length === 0"
     )
+
+
+def test_info_note_lists_definitions_and_closes_on_escape(app: Page) -> None:
+    _vm(app)
+    button = app.locator("#nfl-view-special .legend-row button.band-info")
+    note = app.locator("#nfl-view-special .legend-row .band-note")
+    assert button.get_attribute("aria-label") == "About these categories"
+    assert note.is_hidden()
+    button.click()
+    assert note.is_visible()
+    lines = note.locator("p").all_inner_texts()
+    assert lines[:9] == NOTE_LINES
+    assert lines[9] == "Each game counts once. See methodology for the full rules."
+    assert note.locator("a").get_attribute("href") == "methodology.html#nfl-special-games"
+    app.keyboard.press("Escape")
+    assert note.is_hidden()
+
+
+def test_no_standalone_label_anywhere(app: Page) -> None:
+    _vm(app)
+    assert "standalone" not in app.inner_text("#nfl-view-special").lower()
+    assert "standalone" not in app.evaluate(
+        "document.querySelector('#nfl-view-special').textContent"
+    ).lower()
 
 
 def test_team_filter_fades_and_announcers_do_not(
@@ -265,14 +310,9 @@ def test_category_filter_fades_segments(app: Page) -> None:
     _vm(app)
     _set(app, {"cats": ["agotw"]})
     row = _vm(app)["rows"][0]
-    assert row["segmentFaded"] == {
-        "standalone": True,
-        "agotw": False,
-        "cbs_national": True,
-        "international_other": True,
-    }
+    assert row["segmentFaded"] == {k: k != "agotw" for k in SEGMENT_KEYS}
     ops = app.evaluate(f"document.querySelector('{GD}').data.map(t => t.marker.opacity[0])")
-    assert ops == [0.4, 1, 0.4, 0.4]
+    assert ops == [0.4, 0.4, 0.4, 0.4, 0.4, 1, 0.4, 0.4]
 
 
 def _many_franchises(route: Route) -> None:
@@ -393,9 +433,10 @@ def test_breakdown_rows_match_fixture(app: Page, nfl_fixture_raw: dict[str, Any]
         "#nfl-view-special .nfl-breakdown tbody tr[data-season='2026'] > *",
         "els => els.map(e => e.textContent)",
     )
-    assert cells[:3] == ["2026", "2", "1"]
-    assert cells[3] == f"{row['agotw']} · n/a"
-    assert cells[4] == f"{row['cbs_national']} · n/a"
+    assert cells[:2] == ["2026", str(row["special"] + row["international_other"])]
+    assert cells[2:7] == [str(row[k]) for k in SEGMENT_KEYS[:5]]
+    assert cells[7] == f"{row['agotw']} · n/a"
+    assert cells[8] == f"{row['cbs_national']} · n/a"
     # An earlier season carries a real rate.
     older = next(r for r in sp if r["season"] == 2025 and r["franchise"] == row["franchise"])
     fox, cbs = _denoms(nfl_fixture_raw, 2025, 2025)
@@ -403,8 +444,8 @@ def test_breakdown_rows_match_fixture(app: Page, nfl_fixture_raw: dict[str, Any]
         "#nfl-view-special .nfl-breakdown tbody tr[data-season='2025'] > *",
         "els => els.map(e => e.textContent)",
     )
-    assert cells[3] == _rate(older["agotw"], fox)
-    assert cells[4] == _rate(older["cbs_national"], cbs)
+    assert cells[7] == _rate(older["agotw"], fox)
+    assert cells[8] == _rate(older["cbs_national"], cbs)
     assert cells[1] == str(older["special"] + older["international_other"])
 
 
@@ -414,13 +455,7 @@ def test_hidden_table_one_row_per_bar(app: Page) -> None:
     assert rows.count() == len(vm["rows"])
     first = rows.first.locator("td").all_inner_texts()
     r0 = vm["rows"][0]
-    assert first == [
-        str(r0["counts"]["standalone"]),
-        str(r0["counts"]["agotw"]),
-        str(r0["counts"]["cbs_national"]),
-        str(r0["counts"]["international_other"]),
-        str(r0["total"]),
-    ]
+    assert first == [*(str(r0["counts"][k]) for k in SEGMENT_KEYS), str(r0["total"])]
     rows.first.locator("button").focus()
     app.keyboard.press("Enter")
     app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")

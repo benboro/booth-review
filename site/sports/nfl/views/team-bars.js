@@ -1,14 +1,18 @@
 /**
  * NFL view 1: Special games by team (D-12, D-13, D-24).
  *
- * A stacked horizontal Plotly bar per franchise over the selected seasons, four
- * exclusive segments (Standalone slot, AGOTW, CBS national, International (not
- * standalone)), each game counted once. Hover text, the legend chips, the
+ * A stacked horizontal Plotly bar per franchise over the selected seasons, eight
+ * exclusive segments (Thursday night ... International, shared window), each game
+ * counted once. The legend is CFB's chip row with double-click "only this one"
+ * (D-15) and an info note with one definition per segment (D-13). Hover text, the
  * season breakdown and the hidden data table are all built with
  * createElement/textContent; names enter Plotly strings only through
  * escapeHover, and customdata carries row indexes, never names.
  */
 import { teamBars, teamSeasonRows, rateText, EXCLUSIVE_CATEGORIES } from '../state.js';
+import { createOnlyDetector } from '../../../modules/legend.js';
+import { initBandInfo } from '../../../modules/band-info.js';
+import { MARGIN, TICK_FONT_PX } from '../../../modules/chart.js';
 import { categoryColor } from '../palette.js';
 import { ACCENT, MUTED, PAGE_BG, DIVIDER } from '../../../modules/palette.js';
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
@@ -115,21 +119,22 @@ function slotText(slots) {
 function hoverLines(state, label, bar) {
   const [lo, hi] = state.seasons;
   const title = lo === hi ? `${label}, ${lo}` : `${label}, ${lo}–${hi}`;
-  const slots = bar.slots.length ? ` (${slotText(bar.slots)})` : '';
-  const c = bar.counts;
-  return [
+  const lines = [
     { text: title, kind: 'title' },
-    { text: `Special games: ${bar.total}`, kind: 'body' },
-    { text: `Standalone: ${c.standalone}${c.standalone > 0 ? slots : ''}`, kind: 'body' },
-    { text: `AGOTW: ${c.agotw} · ${rateText(bar.agotwRate.count, bar.agotwRate.denom)}`, kind: 'body' },
-    { text: `CBS national: ${c.cbs_national} · ${rateText(bar.cbsRate.count, bar.cbsRate.denom)}`, kind: 'body' },
-    { text: `International (not standalone): ${c.international_other}`, kind: 'body' },
-    {
-      text: `International, any slot: ${bar.international}. Standalone international games count under Standalone.`,
-      kind: 'body',
-    },
-    { text: `Flexed: ${bar.flexed}`, kind: 'body' },
+    { text: `${bar.total} special games`, kind: 'body' },
   ];
+  for (const seg of SEGMENTS) {
+    const n = bar.counts[seg.key];
+    if (n > 0) lines.push({ text: `${seg.label}: ${n}`, kind: 'body' });
+  }
+  if (bar.slots.length) lines.push({ text: `Solo slots: ${slotText(bar.slots)}`, kind: 'body' });
+  lines.push(
+    { text: `International, all windows: ${bar.international}`, kind: 'body' },
+    { text: `Fox AGOTW weeks: ${rateText(bar.agotwRate.count, bar.agotwRate.denom)}`, kind: 'body' },
+    { text: `CBS late national weeks: ${rateText(bar.cbsRate.count, bar.cbsRate.denom)}`, kind: 'body' },
+    { text: `Flexed: ${bar.flexed}`, kind: 'body' },
+  );
+  return lines;
 }
 
 function selectedKey(state) {
@@ -186,30 +191,110 @@ function bindEvents(gd) {
 
 // ---- pieces ----
 
-function renderLegend(state, th) {
+const SEGMENT_NOTES = Object.freeze([
+  'Solo slot = no other NFL game kicks off within 3 hours.',
+  'Thursday night: solo-slot games on Thursday.',
+  'Sunday night: solo-slot Sunday night games.',
+  'Monday night: solo-slot Monday games. Monday doubleheader games share a window, so they are not counted here.',
+  'Holiday: Thanksgiving, Christmas and Black Friday games in a solo slot.',
+  'Other solo slot: any other game with no NFL game within 3 hours, such as Saturday or an international morning game.',
+  "Fox AGOTW: Fox's top game on a Sunday afternoon doubleheader.",
+  "CBS late national: CBS's national game in the late Sunday window.",
+  'International, shared window: a game played abroad that shares its window with other games.',
+]);
+
+const ALL_KEYS = SEGMENTS.map((s) => s.key);
+
+/** Sets hiddenSegments to the keys in `hide`, in segment order. */
+function setHidden(ctx, hide) {
+  const set = new Set(hide);
+  ctx.setState({ hiddenSegments: ALL_KEYS.filter((k) => set.has(k)) });
+}
+
+/** Binds the one delegated chip listener (D-15); the chips themselves are rebuilt each render. */
+function bindLegend() {
   const { ctx, legend } = refs;
+  const detector = createOnlyDetector({
+    onToggle: (key) => {
+      const cur = new Set(ctx.getState().hiddenSegments);
+      if (cur.has(key)) cur.delete(key);
+      else cur.add(key);
+      setHidden(ctx, cur);
+    },
+    onOnly: (key, before) => {
+      const prior = new Set(before || []);
+      const wasOnly = ALL_KEYS.every((k) => (k === key ? !prior.has(k) : prior.has(k)));
+      setHidden(ctx, wasOnly ? [] : ALL_KEYS.filter((k) => k !== key));
+    },
+    snapshot: () => [...ctx.getState().hiddenSegments],
+  });
+  legend.addEventListener('click', (ev) => {
+    const button = ev.target.closest('button[data-segment]');
+    if (!button) {
+      // A click in the gaps between chips ends any pending first click.
+      detector.reset();
+      return;
+    }
+    detector.click(ev, button.dataset.segment);
+  });
+}
+
+function renderLegend(state, th) {
+  const { legend } = refs;
   const hidden = new Set(state.hiddenSegments);
-  const chips = SEGMENTS.map((seg) => {
+  const shown = ALL_KEYS.filter((k) => !hidden.has(k));
+  const items = SEGMENTS.map((seg) => {
     const color = categoryColor(seg.key, th);
     const b = el('button', 'legend-chip pill', seg.label);
     b.type = 'button';
     b.dataset.segment = seg.key;
     const on = !hidden.has(seg.key);
     b.setAttribute('aria-pressed', String(on));
-    b.style.borderColor = color;
+    const hint = shown.length === 1 && shown[0] === seg.key
+      ? 'Double-click to show all'
+      : `Double-click to show only ${seg.label}`;
+    b.title = hint;
+    b.setAttribute('aria-description', hint);
     if (on) {
       b.style.backgroundColor = color;
       b.style.color = textOn(color);
+      b.style.borderColor = '';
+    } else {
+      b.style.backgroundColor = '';
+      b.style.color = '';
+      b.style.borderColor = color;
     }
-    b.addEventListener('click', () => {
-      const cur = new Set(ctx.getState().hiddenSegments);
-      if (cur.has(seg.key)) cur.delete(seg.key);
-      else cur.add(seg.key);
-      ctx.setState({ hiddenSegments: SEGMENTS.map((s) => s.key).filter((k) => cur.has(k)) });
-    });
-    return b;
+    const li = document.createElement('li');
+    li.appendChild(b);
+    return li;
   });
-  legend.replaceChildren(...chips);
+  legend.replaceChildren(...items);
+}
+
+function buildInfo(ctx) {
+  const button = el('button', 'band-info');
+  button.type = 'button';
+  button.setAttribute('aria-label', 'About these categories');
+  button.setAttribute('aria-expanded', 'false');
+  button.append(el('span', 'band-info-glyph', 'i'));
+  button.firstChild.setAttribute('aria-hidden', 'true');
+  const note = el('div', 'band-note');
+  note.hidden = true;
+  for (const line of SEGMENT_NOTES) note.appendChild(el('p', null, line));
+  const foot = el('p');
+  foot.append(document.createTextNode('Each game counts once. See '));
+  const a = el('a', null, 'methodology');
+  a.href = ctx.methodologyHref('nfl-special-games');
+  a.rel = 'noopener noreferrer';
+  foot.append(a, document.createTextNode(' for the full rules.'));
+  note.appendChild(foot);
+  // CFB positions .band-info absolutely inside the chart. Here both sit in the
+  // legend row's flex flow instead, because the legend row has no plot geometry.
+  button.style.position = 'static';
+  note.style.position = 'static';
+  note.style.flexBasis = '100%';
+  note.style.maxWidth = '420px';
+  return { button, note };
 }
 
 function setNote(title, hint) {
@@ -256,10 +341,7 @@ function renderBreakdown(model, state, env, rows) {
 
   const table = el('table', 'games-table');
   const head = el('tr');
-  for (const h of [
-    'Season', 'Special games', 'Standalone', 'AGOTW', 'CBS national',
-    'International (not standalone)', 'Flexed',
-  ]) {
+  for (const h of ['Season', 'Special games', ...SEGMENTS.map((x) => x.label), 'Flexed']) {
     const th = cell('th', h);
     th.scope = 'col';
     head.appendChild(th);
@@ -275,10 +357,11 @@ function renderBreakdown(model, state, env, rows) {
     tr.append(
       season,
       cell('td', String(r.total), 'num'),
-      cell('td', String(r.counts.standalone), 'num'),
-      cell('td', agotwCell(r.agotwRate.count, r.agotwRate.denom)),
-      cell('td', agotwCell(r.cbsRate.count, r.cbsRate.denom)),
-      cell('td', String(r.counts.international_other), 'num'),
+      ...SEGMENTS.map((seg) => {
+        if (seg.key === 'agotw') return cell('td', agotwCell(r.agotwRate.count, r.agotwRate.denom));
+        if (seg.key === 'cbs_national') return cell('td', agotwCell(r.cbsRate.count, r.cbsRate.denom));
+        return cell('td', String(r.counts[seg.key]), 'num');
+      }),
       cell('td', String(r.flexed), 'num'),
     );
     tbody.appendChild(tr);
@@ -313,10 +396,7 @@ function renderDataTable(rows) {
       th.appendChild(btn);
       tr.append(
         th,
-        cell('td', String(r.bar.counts.standalone)),
-        cell('td', String(r.bar.counts.agotw)),
-        cell('td', String(r.bar.counts.cbs_national)),
-        cell('td', String(r.bar.counts.international_other)),
+        ...SEGMENTS.map((seg) => cell('td', String(r.bar.counts[seg.key]))),
         cell('td', String(r.bar.total)),
       );
       dataBody.appendChild(tr);
@@ -366,7 +446,8 @@ function buildFigure(rows, state, env, th) {
   }
   const pitch = env.mobile ? 44 : 32;
   const thickness = env.mobile ? 28 : 20;
-  const font = { family: getComputedStyle(document.body).fontFamily, size: 14, color: ACCENT[th] };
+  const fontPx = env.mobile ? TICK_FONT_PX.mobile : TICK_FONT_PX.desktop;
+  const font = { family: getComputedStyle(document.body).fontFamily, size: fontPx, color: ACCENT[th] };
   const layout = {
     paper_bgcolor: bg,
     plot_bgcolor: bg,
@@ -378,7 +459,9 @@ function buildFigure(rows, state, env, th) {
     clickmode: 'event',
     dragmode: false,
     height: rows.length * pitch + 70,
-    margin: { l: 8, r: 24, t: 8, b: 56 },
+    // NFL-only: horizontal bars need no top margin and a tiny left one, because
+    // automargin sizes the left edge to the team names.
+    margin: { l: 8, r: MARGIN.r, t: 8, b: MARGIN.b },
     xaxis: {
       title: { text: 'Special games', standoff: 4 },
       range: [0, Math.max(1, max) * 1.05],
@@ -387,7 +470,7 @@ function buildFigure(rows, state, env, th) {
       dtick: niceStep(max),
       tickformat: ',d',
       gridcolor: DIVIDER[th],
-      tickfont: { color: MUTED[th] },
+      tickfont: { color: MUTED[th], size: fontPx },
       zeroline: true,
       zerolinecolor: MUTED[th],
       fixedrange: true,
@@ -399,6 +482,7 @@ function buildFigure(rows, state, env, th) {
       tickmode: 'array',
       tickvals: ids,
       ticktext: rows.map((r) => escapeHover(r.label)),
+      tickfont: { size: fontPx },
       autorange: 'reversed',
       automargin: true,
       showgrid: false,
@@ -411,8 +495,13 @@ function buildFigure(rows, state, env, th) {
 
 export function mount(container, ctx) {
   refs.ctx = ctx;
-  refs.legend = el('div', 'nfl-legend-row');
-  const controls = el('div', 'nfl-view-controls');
+  const legendRow = el('div', 'legend-row');
+  refs.legend = el('ul', 'legend-chips');
+  refs.legend.setAttribute('aria-label', 'Special game categories: select to show or hide');
+  const info = buildInfo(ctx);
+  legendRow.append(refs.legend, info.button, info.note);
+  initBandInfo(info);
+  bindLegend();
   refs.chart = el('div', 'nfl-chart');
   refs.gd = el('div');
   refs.note = el('div', 'season-empty-note');
@@ -441,7 +530,7 @@ export function mount(container, ctx) {
   thead.appendChild(hr);
   refs.dataBody = el('tbody');
   dataTable.append(thead, refs.dataBody);
-  container.append(refs.legend, controls, refs.chart, refs.showAll, refs.breakdown, refs.captions, dataWrap);
+  container.append(legendRow, refs.chart, refs.showAll, refs.breakdown, refs.captions, dataWrap);
 }
 
 export function render(ctx) {

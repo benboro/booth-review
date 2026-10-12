@@ -259,11 +259,6 @@ def test_view_ready_without_console_errors(
     open_nfl_app(page, f"?sport=nfl&view={view}" if view != "special" else "?sport=nfl")
     assert page.evaluate("window.__nflTestHooks.failed") is False
     assert page.locator(f"#nfl-view-{view}").is_visible()
-    if view == "special":
-        # Relaxed until plan 10 rewrites team-bars.js for the 2.0.0 model: only
-        # the ready and not-failed checks apply to Special games. Plan 10 restores
-        # the no-console-error assertion here.
-        return
     assert errors == []
 
 
