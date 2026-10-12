@@ -631,9 +631,14 @@ def build_nfl_site_data(inputs: NflSiteInputs) -> NflSiteData:
 
 
 def nfl_site_payload_bytes(site: NflSiteData) -> bytes:
-    """Compact, key-sorted JSON; identical inputs give identical bytes."""
+    """Compact, key-sorted JSON; identical inputs give identical bytes.
+
+    `allow_nan=False`: NaN or Infinity would be invalid JSON (WR-04). The
+    contract already rejects them, so this only guards against drift."""
     payload = site.model_dump(mode="json")
-    return json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return json.dumps(payload, separators=(",", ":"), sort_keys=True, allow_nan=False).encode(
+        "utf-8"
+    )
 
 
 def write_nfl_site_data(paths: DataPaths, site: NflSiteData) -> str:

@@ -149,8 +149,13 @@ def nfl_site_payload_from_bytes(
     except ValidationError as exc:
         raise SiteBuildError(_contract_error_summary(exc)) from None
     payload = nfl.model_dump(mode="json")
-    body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    return nfl, body
+    try:
+        # NaN or Infinity would be invalid JSON (WR-04); the contract rejects
+        # them first, so this only guards against drift.
+        text = json.dumps(payload, separators=(",", ":"), sort_keys=True, allow_nan=False)
+    except ValueError:
+        raise SiteBuildError(f"{name}: a number is not finite") from None
+    return nfl, text.encode("utf-8")
 
 
 def _nfl_game_count(nfl: NflSiteData) -> int:

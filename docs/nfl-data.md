@@ -24,6 +24,9 @@ and pinned by a drift test (`tests/test_nfl_contract.py`). A synthetic example l
 - **No wall-clock field.** Identical inputs give identical bytes, so the vault commits
   only on change. There is no `generated_at`.
 - **Missing stays null.** A missing value is `null`, never 0.
+- **Finite numbers only.** Every float is finite: `NaN` and `Infinity` are not valid
+  JSON, so the validator rejects them (naming the position only) and the file is
+  written with them disallowed.
 - **Labels.** Viewership is window-level and unnormalized (`constants.viewership_scope`
   is `"window"`, `constants.coverage_normalized` is `false`). Excitement is "GEI-style"
   (`constants.excitement_method`), never CFBD's `excitementIndex`.

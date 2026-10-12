@@ -823,3 +823,23 @@ def test_loader_roundtrip(tmp_path: Path) -> None:
     loaded = load_nfl_site_inputs(paths, REFERENCE)
     assert loaded.games.height == inputs.games.height
     assert loaded.special.height == inputs.special.height
+
+
+def test_a_nan_statistic_fails_the_build_by_position_only() -> None:
+    # WR-04: polars propagates NaN through mean(); one NaN must never reach the
+    # file as a bare NaN token (invalid JSON for the whole NFL side).
+    inputs = _scenario()
+    task1 = inputs.task1.with_columns(
+        pl.when(pl.col("view") == "agotw_viewership")
+        .then(float("nan"))
+        .otherwise(pl.col("viewership_se"))
+        .alias("viewership_se")
+    )
+    with pytest.raises(SiteBuildError) as err:
+        build_nfl_site_data(
+            NflSiteInputs(
+                inputs.games, inputs.special, task1, inputs.people, inputs.franchises, ERAS
+            )
+        )
+    assert "agotw_viewership.viewership_se[0]: must be finite" in str(err.value)
+    assert "nan" not in str(err.value).lower()

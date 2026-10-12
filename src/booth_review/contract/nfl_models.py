@@ -292,6 +292,16 @@ def _check_lengths(block: str, cols: BaseModel, anchor: str) -> int:
     return n
 
 
+def _check_finite(block: str, cols: BaseModel) -> None:
+    """Every float cell is finite (WR-04): NaN and Infinity are not valid JSON,
+    so one such cell would make the browser reject the whole file. Messages
+    name `block.column[position]` only."""
+    for name in type(cols).model_fields:
+        for i, value in enumerate(getattr(cols, name)):
+            if isinstance(value, float) and not math.isfinite(value):
+                raise ValueError(f"{block}.{name}[{i}]: must be finite")
+
+
 def _check_index(block: str, column: str, i: int, value: int | None, size: int) -> None:
     if value is not None and not 0 <= value < size:
         raise ValueError(f"{block}.{column}[{i}]: index out of range")
@@ -325,6 +335,8 @@ class NflSiteData(BaseModel):
         """
         if tuple(self.lookups.slots) != NFL_SLOTS:
             raise ValueError("lookups.slots: must equal the NFL slot names in order")
+        for block in ("games", "special", "fox_booths", "agotw_viewership"):
+            _check_finite(block, getattr(self, block))
         referenced_people: set[int] = set()
         referenced_networks: set[int] = set()
         n_games = self._check_games(referenced_people, referenced_networks)
@@ -363,9 +375,6 @@ class NflSiteData(BaseModel):
                 referenced_people.add(entry.person)
             self._check_points(i)
             self._check_rating(i)
-            excitement = g.excitement[i]
-            if excitement is not None and not math.isfinite(excitement):
-                raise ValueError(f"games.excitement[{i}]: must be finite")
         return n
 
     def _check_points(self, i: int) -> None:
