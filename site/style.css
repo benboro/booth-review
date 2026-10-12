@@ -2989,3 +2989,39 @@ html:has(#nfl-detail-panel[open]) {
 .panel-field-value {
   margin: 0;
 }
+
+/* ---------- Sport switch (CFB | NFL, D-05) ---------- */
+
+#sport-switch {
+  margin: 0 0 0 var(--space-md);
+}
+
+#sport-switch button {
+  min-height: 40px;
+  padding: 0 var(--space-md);
+}
+
+@media (max-width: 640px) {
+  #topbar:has(#sport-switch) {
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  #sport-switch {
+    margin-left: auto;
+  }
+
+  #sport-switch button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 360px) {
+  #sport-switch {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    width: 100%;
+    margin: 0 0 var(--space-sm);
+  }
+}
