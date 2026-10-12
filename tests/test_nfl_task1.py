@@ -13,7 +13,12 @@ from nfl_game_helpers import make_ref
 from booth_review.nfl.adjust import LOW_N, VIEWERSHIP_PREDICTORS
 from booth_review.nfl.games import NFL_GAME_SCHEMA, NflGameTable, NflReference
 from booth_review.nfl.reference import NflLeadBoothOverride
-from booth_review.nfl.task1 import NFL_TASK1_COLUMNS, build_task1
+from booth_review.nfl.task1 import (
+    NFL_TASK1_COLUMNS,
+    VIEW_CATEGORY_ORDER,
+    build_task1,
+    view_category_expr,
+)
 
 FULL = "+".join(VIEWERSHIP_PREDICTORS)
 FIRST_SUNDAY = date(2015, 9, 13)
@@ -25,7 +30,8 @@ _USED = (
     "game_id",
     "game_date",
     "network_id",
-    "fox_dh_sunday",
+    "slot_name",
+    "is_cbs_national",
     "is_agotw",
     "late_national_status",
     "pbp_person_id",
@@ -36,6 +42,7 @@ _USED = (
     "wp_volatility",
     "viewership",
     "era_id",
+    "crew_source",
 )
 SCHEMA = {k: NFL_GAME_SCHEMA[k] for k in _USED}
 
@@ -46,7 +53,9 @@ def game(
     season: int = 2015,
     week: int = 1,
     network: str = "fox",
-    dh: bool = True,
+    slot: str = "Sunday late",
+    cbs_national: bool = False,
+    crew_source: str | None = "506",
     agotw: bool = False,
     status: str | None = None,
     pbp: str | None = None,
@@ -68,7 +77,8 @@ def game(
         "game_date": FIRST_SUNDAY.replace(year=season)
         + timedelta(days=7 * (week - 1) + day_offset),
         "network_id": network,
-        "fox_dh_sunday": dh,
+        "slot_name": slot,
+        "is_cbs_national": cbs_national,
         "is_agotw": agotw,
         "late_national_status": status or ("single" if agotw else "not_agotw"),
         "pbp_person_id": pbp,
@@ -79,6 +89,7 @@ def game(
         "wp_volatility": volatility,
         "viewership": viewers,
         "era_id": era,
+        "crew_source": crew_source,
     }
 
 
@@ -93,7 +104,6 @@ def background(season: int = 2015) -> list[dict[str, object]]:
                     season=season,
                     week=1 + i % 17,
                     network="cbs",
-                    dh=False,
                     spread=spread if i % 2 else -spread,
                     margin=4 + spread,
                     excitement=2.0 + spread / 4,
@@ -177,18 +187,45 @@ def test_lead_gets_bigger_mismatches_but_closer_than_expected(ref: NflReference)
     assert lead["viewership_scope"] is None
 
 
-def test_low_n_booth_and_pooled_others(ref: NflReference) -> None:
+def test_low_n_booth_and_no_pooled_others_row(ref: NflReference) -> None:
     out, _, _ = build_task1(table(lead_case()), ref)
     booths = booth_rows(out)
     three = booths.filter(pl.col("booth_pbp_person_id") == "pb-three").row(0, named=True)
     assert three["booth_rank"] == 3 and three["games"] == 3 < LOW_N
     assert three["low_n"] is True
-    pooled = booths.filter(pl.col("booth_group") == "others_pooled")
-    assert pooled.height == 1
-    row = pooled.row(0, named=True)
-    assert row["games"] == 14 and row["raw_n_spread"] == 14
-    assert row["booth_pbp_person_id"] is None and row["booth_rank"] is None
-    assert row["raw_mean_abs_spread"] == pytest.approx((11 * 1.5 + 3 * 4.5) / 14)
+    assert three["network_group"] == "fox" and three["rank_source"] == "inferred"
+    assert set(booths["booth_group"].to_list()) == {"lead", "other"}
+    assert booths["booth_pbp_person_id"].null_count() == 0
+
+
+def test_booth_rows_carry_flagship_games_and_raw_viewers(ref: NflReference) -> None:
+    rows = lead_case()
+    for r in rows:
+        if r["game_id"] in ("lead-1", "lead-2"):
+            r["viewership"] = 100.0 if r["game_id"] == "lead-1" else 200.0
+    out, _, _ = build_task1(table(rows), ref)
+    lead = booth_rows(out).filter(pl.col("booth_group") == "lead").row(0, named=True)
+    assert lead["flagship_games"] == 10
+    assert lead["raw_n_viewers"] == 2 and lead["raw_mean_viewers"] == pytest.approx(150.0)
+    two = booth_rows(out).filter(pl.col("booth_pbp_person_id") == "pb-two").row(0, named=True)
+    assert two["flagship_games"] == 0
+    assert two["raw_n_viewers"] == 0 and two["raw_mean_viewers"] is None
+
+
+def test_zero_game_published_booth_has_null_measures(ref: NflReference) -> None:
+    from booth_review.nfl.reference import NflBoothRank
+
+    cited = (NflBoothRank("fox", 2015, 1, "pb-lead", "an-lead", "https://example.com/r"),)
+    cited += (NflBoothRank("fox", 2015, 2, "pb-ghost", "an-ghost", "https://example.com/r"),)
+    out, _, counts = build_task1(
+        table(lead_case()), replace(ref, booth_ranks={("fox", 2015): cited})
+    )
+    ghost = booth_rows(out).filter(pl.col("booth_pbp_person_id") == "pb-ghost").row(0, named=True)
+    assert ghost["games"] == 0 and ghost["booth_rank"] == 2
+    assert ghost["rank_source"] == "published"
+    assert ghost["raw_mean_abs_spread"] is None and ghost["adj_margin_resid"] is None
+    assert ghost["low_n"] is True
+    assert counts["seasons_published"] == 1
 
 
 def test_null_measures_are_counted_not_zeroed(ref: NflReference) -> None:
@@ -201,19 +238,59 @@ def test_null_measures_are_counted_not_zeroed(ref: NflReference) -> None:
     assert lead["adj_n_margin"] == 10
 
 
-def test_non_fox_single_header_and_playoff_games_stay_out(ref: NflReference) -> None:
+def test_playoff_games_stay_out_of_booths(ref: NflReference) -> None:
     rows = lead_case()
-    rows.append(game("single", week=12, dh=False, pbp="pb-lead", analyst="an-lead"))
     rows.append(game("po", week=19, game_type="WC", pbp="pb-lead", analyst="an-lead"))
-    out, reviews, counts = build_task1(table(rows), ref)
+    out, reviews, _ = build_task1(table(rows), ref)
     lead = booth_rows(out).filter(pl.col("booth_group") == "lead").row(0, named=True)
     assert lead["games"] == 10
-    assert counts["skipped_single_header_weeks"] == 1
-    assert len(reviews["single_header_weeks"]) == 1
-    assert reviews["single_header_weeks"][0]["season"] == 2015
+    assert "single_header_weeks" not in reviews
 
 
-# -- AGOTW viewership by era ---------------------------------------------------------------------
+def test_non_doubleheader_fox_games_now_count(ref: NflReference) -> None:
+    rows = lead_case()
+    rows.append(game("single", week=12, pbp="pb-lead", analyst="an-lead"))
+    out, _, _ = build_task1(table(rows), ref)
+    lead = booth_rows(out).filter(pl.col("booth_group") == "lead").row(0, named=True)
+    assert lead["games"] == 11
+
+
+def test_other_group_booths_are_built(ref: NflReference) -> None:
+    rows = lead_case()
+    rows += [game(f"c-{i}", week=i + 1, network="cbs", pbp="pb-cbs") for i in range(3)]
+    out, _, _ = build_task1(table(rows), ref)
+    cbs = booth_rows(out).filter(pl.col("network_group") == "cbs")
+    assert cbs["booth_pbp_person_id"].to_list() == ["pb-cbs"]
+
+
+# -- view_category ------------------------------------------------------------------------------
+
+
+def test_view_category_expr_mapping() -> None:
+    cases = [
+        (dict(agotw=True, status="single"), "agotw"),
+        (dict(agotw=True, status="ambiguous", slot="Sunday late"), None),
+        (dict(cbs_national=True), "cbs_national"),
+        (dict(slot="SNF"), "snf"),
+        (dict(slot="MNF"), "mnf"),
+        (dict(slot="TNF"), "tnf"),
+        (dict(slot="Thanksgiving"), "thanksgiving"),
+        (dict(slot="Christmas"), "christmas"),
+        (dict(slot="Black Friday"), "black_friday"),
+        (dict(slot="International"), "international"),
+        (dict(slot="Saturday"), "saturday"),
+        (dict(slot="Friday"), "friday"),
+        (dict(slot="Other"), "other"),
+        (dict(slot="Sunday early"), None),
+        (dict(slot="Sunday late"), None),
+    ]
+    frame = pl.DataFrame([game(f"g{i}", **kw) for i, (kw, _) in enumerate(cases)], schema=SCHEMA)  # type: ignore[arg-type]
+    got = frame.select(view_category_expr())["view_category"].to_list()
+    assert got == [want for _, want in cases]
+    assert set(VIEW_CATEGORY_ORDER) >= {w for _, w in cases if w}
+
+
+# -- category viewership by era ---------------------------------------------------------------
 
 
 def agotw_games(
@@ -254,37 +331,39 @@ def viewership_case() -> list[dict[str, object]]:
     rows += agotw_games("era-a", 2016, 20, booth="pb-b", base=1000, full=True, start=20)
     rows += agotw_games("era-b", 2017, 12, booth="pb-b", base=9000, full=False)
     rows += agotw_games("era-c", 2018, 8, booth="pb-c", base=1000, full=True)
-    # Non-AGOTW games with figures never enter the viewership view.
+    # A Sunday-late game with a figure has no category and never enters the view.
     rows.append(game("other-fig", season=2015, pbp="pb-x", analyst="an-x", viewers=500.0))
     return rows
 
 
 def viewership_rows(out: pl.DataFrame) -> pl.DataFrame:
-    return out.filter(pl.col("view") == "agotw_viewership")
+    return out.filter(pl.col("view") == "category_viewership")
 
 
-def test_viewership_rows_per_season_booth_era(ref: NflReference) -> None:
+def test_viewership_rows_per_category_season_era(ref: NflReference) -> None:
     out, _, counts = build_task1(table(viewership_case()), ref)
     view = viewership_rows(out)
-    keys = [
-        (r["season"], r["booth_pbp_person_id"], r["era_id"]) for r in view.iter_rows(named=True)
-    ]
+    keys = [(r["season"], r["view_category"], r["era_id"]) for r in view.iter_rows(named=True)]
     assert keys == [
-        (2015, "pb-a", "era-a"),
-        (2016, "pb-b", "era-a"),
-        (2017, "pb-b", "era-b"),
-        (2018, "pb-c", "era-c"),
+        (2015, "agotw", "era-a"),
+        (2016, "agotw", "era-a"),
+        (2017, "agotw", "era-b"),
+        (2018, "agotw", "era-c"),
     ]
     assert int(view["n_viewership"].sum()) == 60
     assert set(view["viewership_scope"].to_list()) == {"window"}
     assert view["coverage_normalized"].to_list() == [False] * 4
-    assert counts["agotw_viewership_games"] == 60
+    assert view["booth_pbp_person_id"].null_count() == 4
+    assert counts["category_viewership_games"] == 60
+    assert counts["category_viewership_no_era"] == 0
 
 
 def test_full_model_fallback_and_thin_era(ref: NflReference) -> None:
     out, reviews, counts = build_task1(table(viewership_case()), ref)
-    view = {r["era_id"]: r for r in viewership_rows(out).iter_rows(named=True)}
-    assert view["era-a"]["predictors_used"] == FULL
+    view = {
+        r["era_id"]: r for r in viewership_rows(out).iter_rows(named=True) if r["season"] > 2015
+    }
+    assert viewership_rows(out).filter(pl.col("era_id") == "era-a")["predictors_used"][0] == FULL
     assert view["era-a"]["viewership_resid"] == pytest.approx(0.0, abs=1e-6)
     assert view["era-b"]["predictors_used"] == "abs_spread"
     # Fit within era-b only: era-b's line is exact, so pooling with era-a would show.
@@ -297,10 +376,37 @@ def test_full_model_fallback_and_thin_era(ref: NflReference) -> None:
     model = [r for r in reviews["task1_model"] if r["kind"] == "viewership"]
     by_era = {r["era_id"]: r for r in model}
     assert by_era["era-a"]["predictors_used"] == FULL and by_era["era-a"]["n"] == 40
+    assert by_era["era-a"]["view_category"] == "agotw"
     assert by_era["era-a"]["coef_abs_spread"] == pytest.approx(50, abs=1e-6)
     assert by_era["era-b"]["coef_abs_final_margin"] is None
     assert by_era["era-c"]["reason"] == "thin-era" and by_era["era-c"]["n"] == 8
     assert counts["thin_eras"] == 1
+
+
+def test_models_are_fitted_within_each_category(ref: NflReference) -> None:
+    rows = background()
+    rows += agotw_games("era-a", 2015, 20, booth="pb-a", base=1000, full=True)
+    snf = agotw_games("era-a", 2015, 20, booth="pb-s", base=50000, full=True)
+    for r in snf:
+        r["is_agotw"] = False
+        r["late_national_status"] = "not_agotw"
+        r["slot_name"] = "SNF"
+        r["game_id"] = str(r["game_id"]).replace("ag-", "snf-")
+    out, reviews, _ = build_task1(table(rows + snf), ref)
+    view = viewership_rows(out)
+    assert sorted(view["view_category"].to_list()) == ["agotw", "snf"]
+    assert view["viewership_resid"].abs().max() < 1e-6  # type: ignore[operator]
+    assert set(view["viewership_scope"].to_list()) == {"window", "game"}
+    fits = [r for r in reviews["task1_model"] if r["kind"] == "viewership"]
+    assert {r["view_category"] for r in fits} == {"agotw", "snf"}
+
+
+def test_games_without_an_era_are_counted_and_dropped(ref: NflReference) -> None:
+    rows = viewership_case()
+    rows.append(game("noera", agotw=True, viewers=700.0, era=None))  # type: ignore[arg-type]
+    out, _, counts = build_task1(table(rows), ref)
+    assert counts["category_viewership_no_era"] == 1
+    assert int(viewership_rows(out)["n_viewership"].sum()) == 60
 
 
 def test_model_review_lists_bands_and_ols_per_outcome(ref: NflReference) -> None:
@@ -328,7 +434,8 @@ def test_lead_reviews_and_counts(ref: NflReference) -> None:
         "seasons_close",
         "seasons_tied",
         "agotw_miss_weeks",
-        "skipped_single_header_weeks",
+        "published_lineup_games",
+        "booth_rank_disagreements",
         "ambiguous_fox_weeks",
     } <= set(counts)
     assert counts["agotw_miss_weeks"] == 1
@@ -337,7 +444,7 @@ def test_lead_reviews_and_counts(ref: NflReference) -> None:
         "lead_booth",
         "agotw_misses",
         "lead_absent_weeks",
-        "single_header_weeks",
+        "booth_rank_disagreements",
         "task1_model",
     }
 
