@@ -22,14 +22,20 @@ import random
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Literal
 
-from booth_review.build.site_assembly import BUILD_MARKER, check_no_key_leak
-from booth_review.errors import DeployError
+from booth_review.build.site_assembly import (
+    BUILD_MARKER,
+    check_nfl_file_key,
+    check_no_key_leak,
+    nfl_site_payload_from_bytes,
+)
+from booth_review.errors import DeployError, KeyLeakError
 from booth_review.vault import batch_message
 
 SUBDIR_DEFAULT = "booth-review"
@@ -41,6 +47,12 @@ _BOT_NAME = "booth-review-publish[bot]"
 _BOT_EMAIL = "booth-review-publish@users.noreply.github.com"
 
 
+NflCarryProblem = Literal[
+    "read_failed", "invalid", "key_check_failed", "key_check_skipped", "stage_failed"
+]
+_SHA_RE = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
+
+
 @dataclass(frozen=True)
 class DeployResult:
     status: Literal["skipped", "no_change", "published"]
@@ -50,6 +62,8 @@ class DeployResult:
     outside_after: str | None
     attempts: int
     nfl_carried: bool = False
+    # Count-only reason a live nfl-data.json was found but not carried (D-20).
+    nfl_not_carried: NflCarryProblem | None = None
 
 
 def _site_files(site: Path) -> list[Path]:
@@ -184,13 +198,10 @@ def _target_branch(target: Path) -> str:
     return branch
 
 
-def _carry_live_nfl_file(site: Path, target: Path, subdir: str) -> bool:
-    """D-20: stage the target's live `<subdir>/nfl-data.json` into `site`.
-
-    The mirror deletes the whole subdir before copying, so a site without the
-    file would delete the live one. The file is read from the fetched tip, and
-    only when it is a regular blob (never a symlink or any other mode). Returns
-    True when a file was carried; the caller's key re-grep covers it.
+def _read_live_nfl_blob(target: Path, subdir: str) -> bytes | None:
+    """The fetched tip's `<subdir>/nfl-data.json` bytes, or None when it has no
+    such regular file (never a symlink or any other mode). The blob is read by
+    the SHA `ls-tree` listed, so the read is tied to exactly the checked entry.
     """
     branch = _target_branch(target)
     _git_ok(target, "fetch", "--depth=1", "origin", branch)
@@ -198,13 +209,15 @@ def _carry_live_nfl_file(site: Path, target: Path, subdir: str) -> bool:
     listed = _git_ok(target, "ls-tree", "-z", "FETCH_HEAD", "--", rel).stdout
     records = [r for r in listed.split("\0") if r]
     if len(records) != 1:
-        return False
+        return None
     meta, _, path = records[0].partition("\t")
-    mode, _, kind_and_sha = meta.partition(" ")
-    if path != rel or mode != "100644" or not kind_and_sha.startswith("blob "):
-        return False
+    fields = meta.split(" ")
+    if path != rel or len(fields) != 3 or fields[:2] != ["100644", "blob"]:
+        return None
+    if not _SHA_RE.match(fields[2]):
+        return None
     shown = subprocess.run(
-        ["git", "-C", str(target), "show", f"FETCH_HEAD:{rel}"],
+        ["git", "-C", str(target), "cat-file", "blob", fields[2]],
         check=False,
         capture_output=True,
         timeout=_GIT_TIMEOUT_SECONDS,
@@ -213,10 +226,57 @@ def _carry_live_nfl_file(site: Path, target: Path, subdir: str) -> bool:
     )
     if shown.returncode != 0:
         raise DeployError(f"deploy git step failed (exit {shown.returncode})")
-    staged = site / f".{NFL_DATA_FILE}.carry"
-    staged.write_bytes(shown.stdout)
-    staged.replace(site / NFL_DATA_FILE)
-    return True
+    return shown.stdout
+
+
+def _stage_nfl_file(site: Path, body: bytes) -> None:
+    """Write `body` as `site/nfl-data.json` through a hidden sibling of `site`,
+    so a kill never leaves a temp file inside the deployed dir."""
+    stage = Path(
+        tempfile.mkdtemp(prefix=f".{site.resolve().name}.nfl-carry-", dir=site.resolve().parent)
+    )
+    try:
+        staged = stage / NFL_DATA_FILE
+        staged.write_bytes(body)
+        staged.replace(site / NFL_DATA_FILE)
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+
+
+def _carry_live_nfl_file(
+    site: Path, target: Path, subdir: str
+) -> tuple[bool, NflCarryProblem | None]:
+    """D-20: carry the target's live `<subdir>/nfl-data.json` into `site`.
+
+    The mirror deletes the whole subdir before copying, so a site without the
+    file would delete the live one. The live bytes are validated against the
+    NFL contract and key-checked on their own, outside `site`, before they are
+    staged. Returns (carried, problem). Never raises and never touches any
+    other file in `site`: on any failure nothing is carried and `problem` is a
+    count-only reason, so an NFL problem can never block the CFB deploy.
+    """
+    try:
+        raw = _read_live_nfl_blob(target, subdir)
+    except Exception:
+        return False, "read_failed"
+    if raw is None:
+        return False, None
+    try:
+        _, body = nfl_site_payload_from_bytes(raw)
+    except Exception:
+        return False, "invalid"
+    try:
+        if not check_nfl_file_key(body, scratch_parent=site.resolve().parent):
+            return False, "key_check_skipped"
+    except KeyLeakError:
+        return False, "key_check_failed"
+    except Exception:
+        return False, "stage_failed"
+    try:
+        _stage_nfl_file(site, body)
+    except Exception:
+        return False, "stage_failed"
+    return True, None
 
 
 def publish_site(
@@ -238,11 +298,12 @@ def publish_site(
     if not site.is_dir() or not (site / BUILD_MARKER).is_file():
         raise DeployError("deploy refused: site directory is missing or not an assembled build")
     nfl_carried = False
+    nfl_not_carried: NflCarryProblem | None = None
     nfl_target = site / NFL_DATA_FILE
     if env_map.get("NFL_SITE_ENABLED") == "true" and not (
         nfl_target.exists() or nfl_target.is_symlink()
     ):
-        nfl_carried = _carry_live_nfl_file(site, target, subdir)
+        nfl_carried, nfl_not_carried = _carry_live_nfl_file(site, target, subdir)
     # WR-01 / D-10: the key re-grep is mandatory; with no key configured it
     # cannot run, so refuse rather than publish unchecked output.
     if not check_no_key_leak(site):
@@ -271,7 +332,14 @@ def publish_site(
         if _git(target, "diff", "--cached", "--quiet").returncode == 0:
             _check_committed_tree(target, subdir, site, files)
             return DeployResult(
-                "no_change", len(files), bundle, before, before, attempt, nfl_carried
+                "no_change",
+                len(files),
+                bundle,
+                before,
+                before,
+                attempt,
+                nfl_carried,
+                nfl_not_carried,
             )
 
         message = batch_message("deploy", "booth-review", f"bundle {short}", {"files": len(files)})
@@ -296,7 +364,14 @@ def publish_site(
         pushed = _git(target, "push", "origin", f"HEAD:refs/heads/{branch}")
         if pushed.returncode == 0:
             return DeployResult(
-                "published", len(files), bundle, before, after, attempt, nfl_carried
+                "published",
+                len(files),
+                bundle,
+                before,
+                after,
+                attempt,
+                nfl_carried,
+                nfl_not_carried,
             )
         if not any(marker in pushed.stderr for marker in _REJECTION_MARKERS):
             raise DeployError(f"deploy push failed (exit {pushed.returncode})")

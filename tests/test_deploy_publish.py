@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from booth_review.build.site_assembly import load_nfl_site_payload
 from booth_review.cli import main
 from booth_review.deploy import publish
 from booth_review.deploy.publish import (
@@ -418,14 +419,18 @@ def test_cli_deploy_error_exits_3(
 # -- 999.5 D-20: carry the live nfl-data.json when the staged site lacks it --------------
 
 NFL_ENABLED = {"PUBLISH_ENABLED": "true", "NFL_SITE_ENABLED": "true"}
-LIVE_NFL = '{"live":"nfl"}'
+NFL_FIXTURE = Path(__file__).parent / "fixtures" / "contract" / "nfl-data.fixture.json"
+# The synthetic contract fixture's canonical bytes: a valid live file.
+LIVE_NFL = load_nfl_site_payload(NFL_FIXTURE)[1].decode("utf-8")
+# A token only the NFL fixture holds, so it can stand in for a leaked key.
+NFL_ONLY_TOKEN = "franchises"
 
 
-def _publish_live_nfl(target: Path, tmp_path: Path) -> None:
+def _publish_live_nfl(target: Path, tmp_path: Path, body: str = LIVE_NFL) -> None:
     """Put booth-review/nfl-data.json on the remote via a first (flag-on) deploy."""
     site = _site(
         tmp_path,
-        {"index.html": "<html>", "app.js": "x=1", "nfl-data.json": LIVE_NFL},
+        {"index.html": "<html>", "app.js": "x=1", "nfl-data.json": body},
     )
     assert publish_site(site, target, env=NFL_ENABLED, sleep=lambda _s: None).status == "published"
 
@@ -473,17 +478,115 @@ def test_staged_nfl_file_wins_over_the_live_one(remote: Path, target: Path, tmp_
     assert _live_nfl_bytes(remote) == b'{"fresh":"nfl"}'
 
 
-def test_carried_live_file_with_key_refuses_deploy(
-    remote: Path, target: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def _cfb_only_deployed(remote: Path) -> None:
+    tree = _remote_tree(remote)
+    assert sorted(p for p in tree if p.startswith("booth-review/")) == [
+        "booth-review/app.js",
+        "booth-review/index.html",
+    ]
+
+
+def test_carried_live_file_with_key_is_dropped_and_cfb_still_deploys(
+    remote: Path,
+    target: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # WR-02 / D-20: a key hit in the carried file drops only that file; it never
+    # deletes the CFB site or stops the CFB deploy.
+    _publish_live_nfl(target, tmp_path)
+    assert NFL_ONLY_TOKEN in LIVE_NFL
+    monkeypatch.setenv("CFBD_API_KEY", NFL_ONLY_TOKEN)
+    site = _site(tmp_path, {"index.html": "<html>2", "app.js": "x=2"})
+    result = publish_site(site, target, env=NFL_ENABLED, sleep=lambda _s: None)
+    assert result.status == "published"
+    assert result.nfl_carried is False
+    assert result.nfl_not_carried == "key_check_failed"
+    assert (site / "index.html").is_file()
+    assert not (site / "nfl-data.json").exists()
+    _cfb_only_deployed(remote)
+    for blob in _remote_tree(remote).values():
+        assert NFL_ONLY_TOKEN.encode() not in _git(remote, "cat-file", "blob", blob).encode()
+    assert not list(tmp_path.glob(".*nfl-keycheck-*"))
+    assert NFL_ONLY_TOKEN not in capsys.readouterr().out
+
+
+def test_live_file_failing_the_contract_is_dropped_and_cfb_still_deploys(
+    remote: Path, target: Path, tmp_path: Path
+) -> None:
+    # WR-02: an old-contract live file is never republished next to new JS.
+    _publish_live_nfl(target, tmp_path, body='{"live":"nfl"}')
+    site = _site(tmp_path, {"index.html": "<html>2", "app.js": "x=2"})
+    result = publish_site(site, target, env=NFL_ENABLED, sleep=lambda _s: None)
+    assert result.status == "published"
+    assert (result.nfl_carried, result.nfl_not_carried) == (False, "invalid")
+    _cfb_only_deployed(remote)
+
+
+@pytest.mark.parametrize("error", [DeployError("x"), RuntimeError("x"), OSError("x")])
+def test_a_failed_live_read_is_dropped_and_cfb_still_deploys(
+    remote: Path,
+    target: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
 ) -> None:
     _publish_live_nfl(target, tmp_path)
-    count = _remote_count(remote)
-    tree = _remote_tree(remote)
-    monkeypatch.setenv("CFBD_API_KEY", "nfl")  # appears in the live file's value
-    with pytest.raises(KeyLeakError):
-        publish_site(_site(tmp_path), target, env=NFL_ENABLED, sleep=lambda _s: None)
-    assert _remote_count(remote) == count
-    assert _remote_tree(remote) == tree
+
+    def boom(*args: object, **kwargs: object) -> bytes:
+        raise error
+
+    monkeypatch.setattr(publish, "_read_live_nfl_blob", boom)
+    site = _site(tmp_path, {"index.html": "<html>2", "app.js": "x=2"})
+    result = publish_site(site, target, env=NFL_ENABLED, sleep=lambda _s: None)
+    assert result.status == "published"
+    assert (result.nfl_carried, result.nfl_not_carried) == (False, "read_failed")
+    _cfb_only_deployed(remote)
+
+
+def test_carry_stages_outside_the_site_and_a_failed_stage_leaves_nothing(
+    remote: Path, target: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # WR-02: the temp file never sits inside the deployed dir, even when the
+    # final rename fails.
+    _publish_live_nfl(target, tmp_path)
+    site = _site(tmp_path, {"index.html": "<html>2", "app.js": "x=2"})
+    seen: list[Path] = []
+    real_replace = Path.replace
+
+    def failing_replace(self: Path, dest: Path) -> Path:  # type: ignore[override]
+        if self.name == "nfl-data.json":
+            seen.append(self)
+            raise OSError("simulated kill")
+        return real_replace(self, dest)
+
+    monkeypatch.setattr(Path, "replace", failing_replace)
+    result = publish_site(site, target, env=NFL_ENABLED, sleep=lambda _s: None)
+    monkeypatch.undo()
+    assert result.status == "published"
+    assert (result.nfl_carried, result.nfl_not_carried) == (False, "stage_failed")
+    assert seen and all(site.resolve() not in p.resolve().parents for p in seen)
+    assert sorted(p.name for p in site.iterdir()) == [".booth-review-site", "app.js", "index.html"]
+    assert not list(tmp_path.glob(".site.nfl-carry-*"))
+    _cfb_only_deployed(remote)
+
+
+def test_cli_deploy_prints_a_count_only_line_when_the_live_copy_is_dropped(
+    remote: Path,
+    target: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _publish_live_nfl(target, tmp_path, body='{"live":"nfl"}')
+    monkeypatch.setenv("PUBLISH_ENABLED", "true")
+    monkeypatch.setenv("NFL_SITE_ENABLED", "true")
+    site = _site(tmp_path, {"index.html": "<html>2", "app.js": "x=2"})
+    assert main(["deploy", "--site", str(site), "--target", str(target)]) == 0
+    out = capsys.readouterr().out
+    assert "nfl data: live copy not carried (invalid); CFB deployed without it" in out
+    assert "live" not in out.replace("live copy", "")
 
 
 def test_flag_off_publish_is_unchanged_and_removes_a_live_nfl_file(

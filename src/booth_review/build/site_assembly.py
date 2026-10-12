@@ -129,12 +129,23 @@ def load_nfl_site_payload(source: Path) -> tuple[NflSiteData, bytes]:
     """
     if not source.is_file():
         raise SiteBuildError(f"{source} not found")
+    return nfl_site_payload_from_bytes(source.read_bytes(), name=source.name)
+
+
+def nfl_site_payload_from_bytes(
+    raw: bytes, *, name: str = NFL_DATA_FILE
+) -> tuple[NflSiteData, bytes]:
+    """Validate `raw` nfl-data.json bytes against the NFL contract.
+
+    Returns the model and its canonical compact sorted-key bytes. Raises
+    SiteBuildError naming `name` or a contract location only, never a value.
+    """
     try:
-        raw = json.loads(source.read_text(encoding="utf-8"))
+        parsed = json.loads(raw.decode("utf-8"))
     except ValueError:
-        raise SiteBuildError(f"{source.name}: not valid JSON") from None
+        raise SiteBuildError(f"{name}: not valid JSON") from None
     try:
-        nfl = validate_nfl_site_data(raw)
+        nfl = validate_nfl_site_data(parsed)
     except ValidationError as exc:
         raise SiteBuildError(_contract_error_summary(exc)) from None
     payload = nfl.model_dump(mode="json")

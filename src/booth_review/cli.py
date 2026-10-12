@@ -1421,6 +1421,9 @@ def _deploy(args: argparse.Namespace) -> int:
         )
     if result.nfl_carried:
         print("nfl data: carried live copy")
+    elif result.nfl_not_carried is not None:
+        reason = result.nfl_not_carried.replace("_", " ")
+        print(f"nfl data: live copy not carried ({reason}); CFB deployed without it")
     print(
         "outside booth-review unchanged: yes "
         f"(before {(result.outside_before or '')[:12]}, after {(result.outside_after or '')[:12]})"
