@@ -281,39 +281,70 @@ game with no known location is left off the map and counted in a note.
 
 The NFL view counts how often each franchise plays in a special game. These are assignments, not quality: a special game says where the league scheduled a team, not how good the team is. Only regular-season games are counted.
 
-**Standalone.** A game is standalone when no other NFL game kicks off within three hours of it, judged by kickoff times alone. A gap of exactly three hours fails. Slot names (Thursday night, Sunday night, Monday night, Thanksgiving, Christmas, Black Friday, Saturday, International) are labels only and never decide whether a game is standalone. A Monday doubleheader keeps its Monday night label but neither game is standalone. A standalone international game counts under Standalone.
+**Solo slot.** A game is in a solo slot when no other NFL game kicks off within three hours of it, judged by kickoff times alone. A gap of exactly three hours fails. Slot names (Thursday night, Sunday night, Monday night, Thanksgiving, Christmas, Black Friday, Saturday, International) are labels only and never decide whether a game is in a solo slot. A Monday doubleheader keeps its Monday night label but neither game is in a solo slot.
 
-**AGOTW.** On a Fox doubleheader Sunday, the game Fox shows at the late national kickoff is America's Game of the Week. When several Fox games share that kickoff, a text source (a Ratings Reference late-window record or 506 page text) must name the national game. Otherwise the week is ambiguous and is left out of the AGOTW counts and rates.
+**Fox AGOTW.** On a Fox doubleheader Sunday, the game Fox shows at the late national kickoff is America's Game of the Week. When several Fox games share that kickoff, a text source (a Ratings Reference late-window record or 506 page text) must name the national game. Otherwise the week is ambiguous and is left out of the Fox AGOTW counts and rates.
 
-**CBS national.** The same rule applied to CBS on a CBS doubleheader Sunday.
+**CBS late national.** The same rule applied to CBS on a CBS doubleheader Sunday.
 
-**International and flexed.** International games are labeled but are special only when they are also standalone, AGOTW or CBS national. A game is flexed when it moved after the schedule was released into a standalone slot or into the Fox or CBS late national game; the original slot and network come from Wikipedia and are shown with the article link.
+**International and flexed.** International games are labeled but are special only when they are also in a solo slot, Fox AGOTW or CBS late national. A game is flexed when it moved after the schedule was released into a solo slot or into the Fox or CBS late national game; the original slot and network come from Wikipedia and are shown with the article link.
 
-**The stacked bars.** Each game counts once per bar. The segments are Standalone, AGOTW, CBS national and International (not standalone). The detail panel lists every flag a game carries, including the full international count.
+**The stacked bars.** Each game counts once. The eight segments, in stack order, are:
+
+1. Thursday night
+2. Sunday night
+3. Monday night (solo-slot games only; Monday doubleheader games share a window and are not counted here)
+4. Holiday (Thanksgiving, Christmas and Black Friday games in a solo slot)
+5. Other solo slot (Saturday, international mornings and any other solo-slot game)
+6. Fox AGOTW
+7. CBS late national
+8. International, shared window (a game played abroad that shares its window)
+
+A solo international game counts under its solo segment. The detail panel lists every flag a game carries, including the total international count.
 
 ## NFL: Doubleheader weeks and rates
 
-A network has a doubleheader on a Sunday when it carries a game at the late national kickoff and at least one early game that day. The AGOTW rate is a team's AGOTW games divided by the Fox doubleheader weeks that are not ambiguous; the CBS national rate works the same way for CBS. When the range covers several seasons, the rate is the summed count divided by the summed denominator, never an average of season rates. When the denominator is zero the rate shows as n/a, never 0.
+A network has a doubleheader on a Sunday when it carries a game at the late national kickoff and at least one early game that day. The Fox AGOTW rate is a team's Fox AGOTW games divided by the Fox doubleheader weeks that are not ambiguous; the CBS late national rate works the same way for CBS. When the range covers several seasons, the rate is the summed count divided by the summed denominator, never an average of season rates. When the denominator is zero the rate shows as n/a, never 0.
 
-## NFL: Fox crews and the lead booth
+## NFL: Crews and the lead booth
 
-A booth is a play-by-play voice within one season together with that booth's most frequent analyst. Fill-in analysts stay with their booth, and each row shows its fill-in game count. The lead booth is the one with the most AGOTW calls that season, or a cited override. The other booths are listed by their Fox order and the remaining small booths are pooled as "others". This view shows one season at a time and is never pooled across seasons, because the standard errors do not combine simply. The rows describe which games each booth was assigned and how those games turned out, not how well anyone called them.
+A booth is a play-by-play voice within one season and one network, together with that booth's most frequent analyst. Fill-in analysts stay with their booth, and each row shows its fill-in game count. Networks are grouped by family: ESPN, ABC, ESPN2, ESPN+ and ESPN Deportes count as ESPN/ABC, Peacock counts with NBC, NFL Network stands alone, and Netflix, YouTube and similar one-offs stand on their own. Games with no network are left out. Every regular-season game a booth called for that network counts.
+
+Each network's lead booth is its flagship booth. For Fox it is the booth with the most Fox AGOTW calls. For CBS it is the booth with the most CBS late national calls. For NBC it is the Sunday night booth, for ESPN/ABC the Monday night booth, and for Amazon the Thursday night booth. For other networks it is the booth with the most games. The other booths follow by games called.
+
+Three sources set the order, strongest first. Where a cited published lineup ranks a network's booths for a season, that order sets Lead, #2 and #3. Otherwise a cited lead-booth override applies. Otherwise the inference above applies. The build reports where a published lead differs from the inferred one.
+
+The view shows one season at a time and is never pooled across seasons, because the standard errors do not combine simply. Its season list covers seasons with games and seasons with a published lineup. The rows describe which games each booth was assigned and how those games turned out, not how well anyone called them.
+
+## NFL: Published lineups
+
+506 lists a crew for nearly all Fox and CBS games, but often gives national games (Sunday, Monday and Thursday night, and streaming) a network and no crew. For those games, the first booth on a network's cited lineup release for that season is assigned to that network's flagship-window games that have no 506 crew. These games say "from published lineup" in the table and panel, which link the release. A crew 506 names always wins.
+
+This is the second documented exception to the 506-only crew rule, alongside the college-football crew overrides in `crew_overrides.csv`. The rows are typed by hand from the release and confirmed by the user; no network site is collected by script. The Crews view states how many of a network's games have a listed crew.
 
 ## NFL: The spread adjustment
 
-The Adjusted setting shows each booth's average outcome minus what the league-wide average would predict for games in the same band of absolute pregame spread. Bars are plus or minus 1.96 standard errors around zero. The spread itself is never drawn on a chart, listed in a table or shown in a detail panel; only the adjusted residual and the booth's average band are displayed. This section is the only place the word appears.
+The Adjusted setting compares each booth's average outcome with what the league-wide average predicts for games in the same band of absolute pregame spread. The Crews caption words it plainly, for example "1.4 pts closer than the spread predicted". Whiskers are plus or minus 1.96 standard errors. The spread's value is never drawn, listed or shown in a detail panel; only the adjusted result and the booth's average band are displayed. Win-probability volatility is no longer shown.
 
 ## NFL: Low n
 
-A booth with fewer than 8 games for an adjusted outcome is marked low n. Its row is drawn hollow and faded and carries a label. No ranking is implied by the order of rows, and a faded row is not a verdict.
+A booth, or a category point in the viewership view, with fewer than 8 games for an adjusted outcome or a residual is marked low n. It is drawn faded or hollow and carries a "low n" label. No ranking is implied by the order of rows, and a faded row is not a verdict.
 
 ## NFL: GEI-style excitement
 
-The NFL excitement score is computed from nflverse per-play win probability, in the style of the Game Excitement Index. It is not CollegeFootballData.com's excitementIndex and the two are not on the same scale. A game with no play-by-play stays missing and is never shown as 0.
+The NFL excitement score is computed from nflverse per-play win probability, in the style of the Game Excitement Index. It is not CollegeFootballData.com's excitementIndex and the two are not on the same scale. Buttons, axis titles and table headers say "Excitement". The GEI-style qualifier appears in the excitement caption, the hover, the detail panel and here. A game with no play-by-play stays missing and is never shown as 0.
+
+## NFL: Viewership by category
+
+Each rated regular-season game falls in one category. Fox AGOTW is checked first, then CBS late national, then the slot: Sunday night, Monday night, Thursday night, Thanksgiving, Christmas, Black Friday, International, Saturday, Friday, and Other. Regional Sunday early and late games are not a category.
+
+The chart draws one line per category, with season on the x axis and mean viewers on the y axis. Ratings Reference reports Fox AGOTW and CBS late national figures for the whole Sunday window rather than for one game, so those lines are dashed and labeled window-level. No coverage-share source exists, so the comparison is unnormalized, and each figure is tagged with the measurement era it was taken under.
+
+The residual setting fits viewers on game quality within each category and Nielsen era. A point shows how a season compared with other seasons of the same category and era, not how categories compare with each other. Categories with too few games for a fit show no residual. Points with fewer than 8 games are marked low n. A missing figure stays missing and is never shown as 0.
 
 ## NFL: Window-level viewership
 
-Ratings Reference reports some Sunday-afternoon figures for the whole regional window rather than for one game, so those figures are labeled window-level. No coverage-share source exists, so the comparison is unnormalized. Only AGOTW games are compared across seasons, and each figure is tagged with the measurement era it was taken under.
+Ratings Reference reports some Sunday-afternoon figures for the whole regional window rather than for one game, so those figures are labeled window-level. See [Viewership by category](#nfl-viewership-by-category) for how they are drawn.
 
 ## NFL: Games with no public rating
 

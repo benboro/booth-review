@@ -312,11 +312,13 @@ _METHODOLOGY_FLAG_OFF_SHA256 = "2d0db68763cb345f71191a08e3641ded150d71f7b860341c
 _NFL_ANCHORS = (
     "nfl-special-games",
     "nfl-doubleheader-weeks-and-rates",
-    "nfl-fox-crews-and-the-lead-booth",
+    "nfl-crews-and-the-lead-booth",
+    "nfl-published-lineups",
+    "nfl-viewership-by-category",
+    "nfl-window-level-viewership",
     "nfl-the-spread-adjustment",
     "nfl-low-n",
     "nfl-gei-style-excitement",
-    "nfl-window-level-viewership",
     "nfl-games-with-no-public-rating",
     "nfl-measurement-eras",
 )
@@ -435,6 +437,9 @@ def test_methodology_nfl_never_ranks_crews() -> None:
     text = (_DOCS / "methodology.md").read_text(encoding="utf-8")
     blocks = re.findall(r"<!-- nfl:start -->(.*?)<!-- nfl:end -->", text, flags=re.S)
     assert len(blocks) == 2
-    joined = " ".join(blocks).lower()
+    gaps = (_DOCS / "known-gaps.md").read_text(encoding="utf-8")
+    gap_blocks = re.findall(r"<!-- nfl:start -->(.*?)<!-- nfl:end -->", gaps, flags=re.S)
+    assert len(gap_blocks) == 1
+    joined = " ".join(blocks + gap_blocks).lower()
     for phrase in ("best booth", "worst", "better crew"):
         assert phrase not in joined
