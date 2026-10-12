@@ -60,7 +60,7 @@ line except the last must say "pending", and no private repo name may appear.
 - [ ] Publishing dry run, Sunday: built-data counts match expectations: pending (Plan 13)
 - [ ] Publishing dry run, Wednesday: viewership counts match, and CFBD monthly use is well under 1,000: pending (Plan 14)
 - [ ] Variables reset to `PUBLISH_ENABLED=false` and `DEPLOY_REPO=benboro/benboro.github.io` after the drills: pending (Plan 14)
-- [ ] NFL scratch-repo deploy drill (999.5 D-21; NFL only, the CFB flip does not wait for it, D-18): one dispatched run with `NFL_SITE_ENABLED=true` deploys `site-data.json` and `nfl-data.json` under `booth-review/`, nothing outside `booth-review/` changes, and the key check passes on `nfl-data.json`: pending (999.5 Plan 18)
+- [x] 2026-10-12 NFL scratch-repo deploy drill (999.5 D-21; NFL only, the CFB flip does not wait for it, D-18): one dispatched run on v0.8.0 with `NFL_SITE_ENABLED=true` deployed `site-data.json` and `nfl-data.json` under `booth-review/` (files 54), nothing outside `booth-review/` changed, and the key check passed. evidence: run log lines `cfbd key check: passed`, `nfl site: 3229 games`, `deploy: published bundle 09cacaca2aa7 (files 54)`, `outside booth-review unchanged: yes`; the deployed bundle's NFL views load with no console errors
 - [ ] Launch: set the `PUBLISH_ENABLED` variable to `true` (after 506 Sports' approval)
 
 ## Observations
