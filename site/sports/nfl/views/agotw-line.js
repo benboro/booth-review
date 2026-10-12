@@ -10,6 +10,7 @@
  * through escapeHover; chips, tooltip, captions and the hidden table use
  * createElement/textContent.
  */
+import { placeEraLabel } from '../era-labels.js';
 import { agotwSeries } from '../state.js';
 import { crewStyle } from '../palette.js';
 import { ACCENT, MUTED, PAGE_BG, DIVIDER, ZERO_LINE } from '../../../modules/palette.js';
@@ -366,6 +367,8 @@ function buildFigure(model, state, env, th, drawnSegments, seasonsAll, items) {
       b.to = Math.max(b.to, s.season + 0.5);
     }
   }
+  const eraRange = [Math.min(...seasonsAll.map((s) => s.season)) - 0.5, Math.max(...seasonsAll.map((s) => s.season)) + 0.5];
+  const plotPx = Math.max((refs.chart.clientWidth || (env.mobile ? 360 : 1100)) - (env.mobile ? 64 : 84) - 16, 100);
   const bands = [...bandMap.values()].sort((a, b) => a.from - b.from);
   const shapes = [];
   const annotations = [];
@@ -376,10 +379,11 @@ function buildFigure(model, state, env, th, drawnSegments, seasonsAll, items) {
         fillcolor: BAND_FILL[th], line: { width: 0 }, layer: 'below',
       });
     }
+    const pos = placeEraLabel(model.eras[b.era].label, b.from, eraRange, plotPx, env.mobile ? 10 : 12);
     annotations.push({
-      xref: 'x', yref: 'paper', x: b.from, y: 1, xanchor: 'left', yanchor: 'top',
-      xshift: 4, yshift: -2 - (env.mobile ? (k % 2) * 13 : 0), showarrow: false, align: 'left',
-      text: escapeHover(model.eras[b.era].label), font: { size: env.mobile ? 10 : 12, color: MUTED[th] },
+      xref: 'x', yref: 'paper', x: pos.x, y: 1, xanchor: pos.xanchor, yanchor: 'top',
+      xshift: pos.xshift, yshift: -2 - (env.mobile ? (k % 2) * 13 : 0), showarrow: false, align: pos.xanchor,
+      text: escapeHover(pos.text), font: { size: env.mobile ? 10 : 12, color: MUTED[th] },
     });
   });
   if (resid) {

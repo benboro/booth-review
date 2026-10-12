@@ -10,7 +10,7 @@
  * Everything is built with createElement/textContent; no innerHTML.
  */
 import { prepareNfl, gameRow } from './data.js';
-import { canonicalNflState, tableGames } from './state.js';
+import { canonicalNflState, tableGames, gamePasses } from './state.js';
 import { encodeNflState, decodeNflState } from './url-state.js';
 import { createGamesTable } from './table.js';
 import { createDetailPanel } from './panel.js';
@@ -97,7 +97,9 @@ function buildRegions(footerEl) {
   clearBtn.hidden = true;
   const summary = el('p', 'nfl-summary');
   summary.id = 'nfl-summary';
-  selection.append(chips, clearBtn, summary);
+  const headline = el('h2', 'nfl-headline');
+  headline.id = 'nfl-headline';
+  selection.append(chips, clearBtn, summary, headline);
 
   const chartArea = el('section', 'nfl-region');
   chartArea.id = 'nfl-chart-area';
@@ -117,7 +119,7 @@ function buildRegions(footerEl) {
   filterLayer.id = 'nfl-filter-layer';
 
   footerEl.before(toolbar, filterLayer, selection, chartArea, matched);
-  return { toolbar, filterLayer, selection, chips, clearBtn, summary, chartArea, tabHost, hint, viewHost, status, matched };
+  return { toolbar, filterLayer, selection, chips, clearBtn, summary, chartArea, tabHost, hint, viewHost, status, matched, headline };
 }
 
 function showStatus(kind) {
@@ -237,6 +239,16 @@ function renderSelectionBar() {
   summary.textContent = n ? `${n} ${n === 1 ? 'game matches' : 'games match'}` : '';
 }
 
+/** '{N} games · {first}–{last}' for the active Seasons range and filters. */
+function renderHeadline() {
+  const n = model.cols.season.length;
+  let count = 0;
+  for (let i = 0; i < n; i += 1) if (gamePasses(model, state, i)) count += 1;
+  const [lo, hi] = state.seasons;
+  const span = lo === hi ? String(lo) : `${lo}–${hi}`;
+  regions.headline.textContent = `${count.toLocaleString('en-US')} ${count === 1 ? 'game' : 'games'} · ${span}`;
+}
+
 function renderTable() {
   lastRows = tableGames(model, state).map((i) => gameRow(model, i));
   const filtered = !!state.selection || state.people.length > 0;
@@ -262,6 +274,7 @@ function renderAll({ resize = false } = {}) {
   views[state.view].mod.render(ctx);
   renderTable();
   renderSelectionBar();
+  renderHeadline();
   renderTabHint();
   renderNflFilters(ctx);
   renderCount += 1;

@@ -2992,6 +2992,16 @@ body:not([data-sport="nfl"]) :is(#nfl-toolbar, #nfl-selection-bar, #nfl-chart-ar
   }
 }
 
+/* 999.5-19: the NFL headline sits in the reserved band like CFB's summary count. */
+#nfl-headline {
+  margin: var(--space-xs) 0 0;
+  font: var(--font-heading);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 #nfl-chips {
   list-style: none;
   margin: 0 0 var(--space-xs) 0;

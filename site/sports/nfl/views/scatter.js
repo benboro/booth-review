@@ -25,6 +25,7 @@ import { ACCENT, MUTED, PAGE_BG, DIVIDER, ZERO_LINE } from '../../../modules/pal
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import { showHoverRing, hideHoverRing, ringSpecFromPoint, hoverRingDiameter } from '../../../modules/hover-ring.js';
 import { initBandInfo, positionBandInfo, closeBandNote } from '../../../modules/band-info.js';
+import { placeEraLabel } from '../era-labels.js';
 import { bandLayout } from '../../../modules/chart.js';
 import { buildDateAxis, seasonRange, shownBlocks, gapDividers } from '../../../modules/date-axis.js';
 import { MONTHS, escapeHover } from '../../../modules/format.js';
@@ -512,10 +513,12 @@ function dateXAxis(model, state, env, th, plotPx) {
         fillcolor: BAND_FILL[th], line: { width: 0 }, layer: 'below',
       });
     }
+    const pos = placeEraLabel(model.eras[band.era].label, band.x0, range, plotPx, env.mobile ? 10 : 12);
     annotations.push({
-      xref: 'x', yref: 'paper', x: band.x0, y: 1, xanchor: 'left', yanchor: 'top',
-      xshift: 4, yshift: -2 - (env.mobile ? (k % 2) * 13 : 0), showarrow: false, align: 'left',
-      text: escapeHover(model.eras[band.era].label),
+      xref: 'x', yref: 'paper', x: pos.x, y: 1, xanchor: pos.xanchor, yanchor: 'top',
+      xshift: pos.xshift, yshift: -2 - (env.mobile ? (k % 2) * 13 : 0), showarrow: false,
+      align: pos.xanchor,
+      text: escapeHover(pos.text),
       font: { size: env.mobile ? 10 : 12, color: MUTED[th] },
     });
   });

@@ -1,4 +1,4 @@
-# ruff: noqa: E501  (embedded JS lines and the UI copy's typographic characters)
+# ruff: noqa: E501, RUF001  (embedded JS lines and the UI copy's typographic characters)
 """999.5-10: the NFL mount module, mounted directly (app.js does not call it yet)."""
 
 from __future__ import annotations
@@ -210,3 +210,29 @@ def test_initial_view_from_search(cfb: Page, query: str, tab: str) -> None:
     assert cfb.locator(f"#nfl-tab-{tab}").get_attribute("aria-selected") == "true"
     assert cfb.locator(f"#nfl-view-{tab}").is_visible()
     assert cfb.evaluate(f"window.__nflTestHooks.getViewModel('{tab}')")["view"] == tab
+
+
+def test_headline_shows_count_and_season_range(
+    nfl_guarded_page: Page,
+    open_nfl_app: Callable[..., None],
+    nfl_fixture_raw: dict[str, Any],
+) -> None:
+    page = nfl_guarded_page
+    open_nfl_app(page)
+    seasons = nfl_fixture_raw["games"]["season"]
+    lo, hi = min(seasons), max(seasons)
+    expect = f"{len(seasons):,} games · {lo}–{hi}"
+    page.wait_for_function(
+        "t => document.querySelector('#nfl-headline')?.textContent === t", arg=expect
+    )
+    assert page.locator("#nfl-selection-bar h2#nfl-headline").count() == 1
+    inner = [s for s in seasons if lo <= s <= lo + 1]
+    page.evaluate("p => window.__nflTestHooks.setState(p)", {"seasons": [lo, lo + 1]})
+    want = f"{len(inner):,} {'game' if len(inner) == 1 else 'games'} · {lo}–{lo + 1}"
+    page.wait_for_function(
+        "t => document.querySelector('#nfl-headline').textContent === t", arg=want
+    )
+    # The headline is visible on every NFL view.
+    for view in ("special", "fox", "agotw", "scatter"):
+        page.evaluate("v => window.__nflTestHooks.setState({ view: v })", view)
+        assert page.locator("#nfl-headline").is_visible()

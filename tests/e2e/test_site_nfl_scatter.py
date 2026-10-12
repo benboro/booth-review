@@ -7,11 +7,12 @@ from the fixture's `games` block.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from typing import Any
 
 import pytest
-from playwright.sync_api import Page
+from playwright.sync_api import Page, Route
 
 pytestmark = pytest.mark.e2e
 
@@ -405,3 +406,35 @@ def test_resize_repositions_band_button(
         f"parseFloat(document.querySelector('{VIEW} .band-info').style.top)"
     )
     assert top > 0
+
+
+def test_mobile_era_labels_inside_plot_scatter(
+    nfl_mobile_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_mobile_page
+
+    def _long_eras(route: Route) -> None:
+        resp = route.fetch()
+        raw = json.loads(resp.text())
+        for era in raw["lookups"]["eras"]:
+            era["label"] = "Synthetic Nielsen measurement era with a long label"
+        route.fulfill(response=resp, body=json.dumps(raw))
+
+    page.route("**/nfl-data.json", _long_eras)
+    open_nfl_app(page, "?sport=nfl&view=scatter")
+    page.wait_for_function("window.__nflTestHooks.getViewModel('scatter').drawn === true")
+    boxes = page.evaluate(
+        """() => {
+          const view = document.querySelector('#nfl-view-scatter .nfl-chart > div');
+          const c = view.getBoundingClientRect();
+          return [...view.querySelectorAll('.annotation-text')]
+            .filter((n) => n.textContent.includes('Nielsen'))
+            .map((n) => {
+              const b = n.getBoundingClientRect();
+              return { text: n.textContent, left: b.left - c.left, right: c.right - b.right };
+            });
+        }"""
+    )
+    assert boxes
+    for b in boxes:
+        assert b["left"] >= -0.5 and b["right"] >= -0.5, b
