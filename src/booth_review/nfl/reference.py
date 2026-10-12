@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from booth_review.errors import ReferenceTableError
+from booth_review.nfl.network_groups import NETWORK_GROUP_IDS
 from booth_review.people.registry import load_people
 from booth_review.reference import SLUG_PATTERN, read_reference_csv_numbered
 from booth_review.resolve.names import normalize_team
@@ -36,7 +37,8 @@ NFL_TEAM_CROSSWALK_COLUMNS = (
 NFL_STADIUM_COLUMNS = ("stadium_id", "stadium", "country", "source_url", "note")
 NFL_STADIUM_OVERRIDE_COLUMNS = ("nflverse_game_id", "stadium_id", "source_url", "note")
 NFL_NETWORK_COLUMNS = ("source", "variant", "network_id", "note")
-NFL_LEAD_BOOTH_OVERRIDE_COLUMNS = ("season", "person_id", "reason", "source_url")
+NFL_LEAD_BOOTH_OVERRIDE_COLUMNS = ("season", "network_id", "person_id", "reason", "source_url")
+NFL_BOOTH_RANK_COLUMNS = ("network", "season", "rank", "pbp", "analyst", "source_url")
 NFL_WEEK_OVERRIDE_COLUMNS = (
     "season",
     "week",
@@ -296,30 +298,93 @@ def load_nfl_networks(reference_dir: Path) -> list[NflNetworkRow]:
 @dataclass(frozen=True)
 class NflLeadBoothOverride:
     season: int
+    network_id: str
     person_id: str
     reason: str
     source_url: str
 
 
-def load_nfl_lead_booth_overrides(reference_dir: Path) -> dict[int, NflLeadBoothOverride]:
+def load_nfl_lead_booth_overrides(
+    reference_dir: Path,
+) -> dict[tuple[str, int], NflLeadBoothOverride]:
+    """(network group id, season) -> the override. A missing or header-only file is empty."""
     path = reference_dir / "nfl_lead_booth_overrides.csv"
     raw_rows = read_reference_csv_numbered(path, NFL_LEAD_BOOTH_OVERRIDE_COLUMNS, required=False)
     if not raw_rows:
         return {}
     people = load_people(reference_dir).persons
-    out: dict[int, NflLeadBoothOverride] = {}
+    out: dict[tuple[str, int], NflLeadBoothOverride] = {}
     for line_no, raw in raw_rows:
         season = _req_int(path, line_no, raw["season"], "season")
-        if season in out:
-            raise _err(path, line_no, "duplicate season")
+        network_id = raw["network_id"]
+        if network_id not in NETWORK_GROUP_IDS:
+            raise _err(path, line_no, "network_id must be a network group id")
+        if (network_id, season) in out:
+            raise _err(path, line_no, "duplicate (network_id, season)")
         if raw["person_id"] not in people:
             raise _err(path, line_no, "person_id is not in people.csv")
         if raw["reason"] not in NFL_LEAD_BOOTH_REASONS:
             raise _err(path, line_no, "invalid reason")
         _check_https(path, line_no, raw["source_url"])
-        out[season] = NflLeadBoothOverride(
-            season, raw["person_id"], raw["reason"], raw["source_url"]
+        out[(network_id, season)] = NflLeadBoothOverride(
+            season, network_id, raw["person_id"], raw["reason"], raw["source_url"]
         )
+    return out
+
+
+# -- published booth ranks ----------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class NflBoothRank:
+    network: str
+    season: int
+    rank: int
+    pbp_person_id: str
+    analyst_person_id: str
+    source_url: str
+
+
+def load_nfl_booth_ranks(
+    reference_dir: Path,
+) -> dict[tuple[str, int], tuple[NflBoothRank, ...]]:
+    """(network group id, season) -> cited booths in published order (D-06, D-07).
+
+    Names resolve through people.csv; an unresolved name fails with file and line only.
+    A missing table is empty.
+    """
+    path = reference_dir / "nfl_booth_ranks.csv"
+    raw_rows = read_reference_csv_numbered(path, NFL_BOOTH_RANK_COLUMNS, required=False)
+    if not raw_rows:
+        return {}
+    people = load_people(reference_dir)
+    grouped: dict[tuple[str, int], list[tuple[int, NflBoothRank]]] = {}
+    for line_no, raw in raw_rows:
+        network = raw["network"]
+        if network not in NETWORK_GROUP_IDS:
+            raise _err(path, line_no, "network must be a network group id")
+        season = _req_int(path, line_no, raw["season"], "season")
+        rank = _req_int(path, line_no, raw["rank"], "rank")
+        if rank < 1:
+            raise _err(path, line_no, "rank must be at least 1")
+        pbp = people.lookup(raw["pbp"])
+        analyst = people.lookup(raw["analyst"])
+        if pbp is None or analyst is None:
+            raise _err(path, line_no, "name does not resolve through people.csv")
+        _check_https(path, line_no, raw["source_url"])
+        rows = grouped.setdefault((network, season), [])
+        if any(r.rank == rank for _, r in rows):
+            raise _err(path, line_no, "duplicate (network, season, rank)")
+        if any(r.pbp_person_id == pbp for _, r in rows):
+            raise _err(path, line_no, "play-by-play person appears twice in one network season")
+        rows.append((line_no, NflBoothRank(network, season, rank, pbp, analyst, raw["source_url"])))
+    out: dict[tuple[str, int], tuple[NflBoothRank, ...]] = {}
+    for key, rows in grouped.items():
+        ordered = sorted(rows, key=lambda lr: lr[1].rank)
+        for expected, (line_no, r) in enumerate(ordered, start=1):
+            if r.rank != expected:
+                raise _err(path, line_no, "ranks must run 1..n")
+        out[key] = tuple(r for _, r in ordered)
     return out
 
 

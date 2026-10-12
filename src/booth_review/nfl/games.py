@@ -239,7 +239,9 @@ class NflReference:
     #: nflverse_game_id -> venue stadium_id; applied ahead of nflverse's own stadium_id.
     stadium_overrides: Mapping[str, str] = field(default_factory=dict)
     #: season -> cited lead-booth override (D-02); used by Task 1 (nfl/task1.py).
-    lead_booth_overrides: Mapping[int, NflLeadBoothOverride] = field(default_factory=dict)
+    lead_booth_overrides: Mapping[tuple[str, int], NflLeadBoothOverride] = field(
+        default_factory=dict
+    )
 
     @classmethod
     def load(cls, reference_dir: Path) -> NflReference:

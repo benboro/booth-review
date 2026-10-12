@@ -343,8 +343,10 @@ def test_lead_reviews_and_counts(ref: NflReference) -> None:
 
 
 def test_lead_override_is_honored(ref: NflReference) -> None:
-    ov = NflLeadBoothOverride(2015, "pb-two", "reported", "https://example.com/x")
-    out, _, counts = build_task1(table(lead_case()), replace(ref, lead_booth_overrides={2015: ov}))
+    ov = NflLeadBoothOverride(2015, "fox", "pb-two", "reported", "https://example.com/x")
+    out, _, counts = build_task1(
+        table(lead_case()), replace(ref, lead_booth_overrides={("fox", 2015): ov})
+    )
     lead = booth_rows(out).filter(pl.col("booth_group") == "lead").row(0, named=True)
     assert lead["booth_pbp_person_id"] == "pb-two"
     assert counts["seasons_overridden"] == 1

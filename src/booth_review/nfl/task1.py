@@ -432,7 +432,9 @@ def build_task1(
 
     # Overrides for seasons outside this build would only add "override-no-games" noise.
     built = set(frame["season"].unique().to_list())
-    overrides = {s: o for s, o in ref.lead_booth_overrides.items() if s in built}
+    overrides = {
+        s: o for (net, s), o in ref.lead_booth_overrides.items() if net == "fox" and s in built
+    }
     booth_model = build_booths(frame, overrides)
     booths = booth_model.booths
     lead_flags = booths.select("season", "booth_pbp_person_id", "is_lead_booth")
