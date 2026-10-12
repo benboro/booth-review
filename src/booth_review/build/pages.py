@@ -229,7 +229,7 @@ def render_methodology(docs_dir: Path, site: SiteData, *, nfl: bool = False) -> 
     known_gaps_path = docs_dir / "known-gaps.md"
     if not known_gaps_path.is_file():
         raise SiteBuildError("docs/known-gaps.md not found")
-    known_gaps_text = known_gaps_path.read_text(encoding="utf-8")
+    known_gaps_text = _apply_nfl_blocks(known_gaps_path.read_text(encoding="utf-8"), nfl=nfl)
 
     combined = methodology_text.replace(_INCLUDE_MARKER, _known_gaps_body(known_gaps_text))
     renderer = markdown.Markdown(extensions=["tables", "toc"])
