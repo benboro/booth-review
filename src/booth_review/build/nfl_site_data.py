@@ -616,9 +616,14 @@ def build_nfl_site_data(inputs: NflSiteInputs) -> NflSiteData:
         raise SiteBuildError("games: no regular-season games to ship")
     freshness = _freshness(games, inputs.task1)
     constants = _constants(inputs.task1)
-    # WR-07: only a season still under way has figures still to come; once it
-    # is complete, an unrated game is regional or has none, never pending.
-    current_season = freshness["season"] if freshness["in_progress"] else None
+    # The CFB rule (shipped.no_rating_cause): "pending" covers a game in the
+    # current season (the freshness season, the latest in the tables) at or
+    # after `viewership_through_week`, or any current-season game while that
+    # stamp is null. It does not key on whether games are still being played:
+    # Ratings Reference figures keep arriving after the last score is in, and
+    # a never-scored (cancelled) game stops being pending once a later season
+    # becomes current.
+    current_season = freshness["season"]
     game_cols, lookups = _games_block(
         games, inputs, current_season, freshness["viewership_through_week"]
     )

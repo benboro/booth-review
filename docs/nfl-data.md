@@ -83,6 +83,13 @@ Every `people` and `networks` entry must be referenced by something.
 | `rr_url`, `source_url` | the Ratings Reference record URL and the figure's original source |
 | `cause` | why a game has no figure: `pending`, `regional` or `none`; set exactly when `viewers` is null. The wording lives in the client, never in the data |
 
+`pending` follows the CFB rule: a game in the current season (`freshness.season`) at or
+after `freshness.viewership_through_week`, or any current-season game when that stamp is
+null. It does not depend on `freshness.in_progress`, since figures keep arriving after
+the last score is in. Otherwise a game is `regional` (a regional Sunday-afternoon slot
+that is neither AGOTW nor CBS national) or `none`, so a game in an earlier season, a
+cancelled one included, is never `pending`.
+
 `original_slot`, `original_network` and `change_url` are extracted from Wikipedia
 articles and are CC BY-SA 4.0 (D-23); the detail panel links the article.
 

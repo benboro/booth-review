@@ -533,26 +533,47 @@ def test_unrated_causes() -> None:
     assert site.games.cause == ["regional", "none", "none", None, "pending", "pending"]
 
 
-def test_a_complete_season_never_says_pending() -> None:
-    # WR-07: once every score is in, unrated games in or after the last rated
-    # week are regional or have no figure; "pending" would promise figures
-    # that are not coming.
+def test_pending_outlives_the_last_score_like_cfb() -> None:
+    # Iter-2 WR-01: figures keep arriving after the last score is in, so a
+    # complete current season stays "pending" at and after the stamp week,
+    # the CFB rule. Before the stamp week a game is regional or has none.
+    rated = {"viewership": 5_000_000.0, "viewership_scope": "window", "era_id": "era-b"}
     rows = [
-        _game(
-            game_id="c1",
-            season=2024,
-            week=1,
-            viewership=5_000_000.0,
-            viewership_scope="window",
-            era_id="era-b",
-        ),
-        _game(game_id="c2", season=2024, week=1, slot_name="Sunday early"),
-        _game(game_id="c3", season=2024, week=2, slot_name="SNF", is_standalone=True),
+        _game(game_id="c1", season=2024, week=1, slot_name="Sunday early"),
+        _game(game_id="c2", season=2024, week=2, **rated),
+        _game(game_id="c3", season=2024, week=2, slot_name="Sunday late"),
+        _game(game_id="c4", season=2024, week=3, slot_name="SNF", is_standalone=True),
     ]
     site = _single(rows)
     assert not site.freshness.in_progress
-    assert site.freshness.viewership_through_week == 1
-    assert site.games.cause == [None, "regional", "none"]
+    assert site.freshness.viewership_through_week == 2
+    assert site.games.cause == ["regional", None, "pending", "pending"]
+
+
+def test_a_season_that_is_no_longer_current_is_never_pending() -> None:
+    # Iter-2 WR-01: once a later season is current, an earlier season's
+    # unrated games are regional or have none, a never-scored (cancelled) game
+    # included. A current season with no figure yet is pending throughout.
+    unscored = {"home_points": None, "away_points": None, "final_margin": None}
+    rows = [
+        _game(
+            game_id="p1",
+            season=2023,
+            week=17,
+            viewership=4_000_000.0,
+            viewership_scope="window",
+            era_id="era-a",
+        ),
+        _game(game_id="p2", season=2023, week=17, slot_name="Sunday early", **unscored),
+        _game(game_id="p3", season=2023, week=18, slot_name="Sunday late"),
+        _game(game_id="p4", season=2023, week=18, slot_name="SNF", is_standalone=True),
+        _game(game_id="n1", season=2024, week=1, slot_name="Sunday early"),
+        _game(game_id="n2", season=2024, week=2, slot_name="MNF", is_standalone=True, **unscored),
+    ]
+    site = _single(rows)
+    assert site.freshness.season == 2024
+    assert site.freshness.viewership_through_week is None
+    assert site.games.cause == [None, "regional", "regional", "none", "pending", "pending"]
 
 
 def _all_keys(node: Any) -> set[str]:
