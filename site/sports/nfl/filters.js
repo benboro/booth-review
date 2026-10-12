@@ -16,6 +16,7 @@ import { CATEGORY_OPTIONS, activeFilterCount, defaultNflState } from './state.js
 
 const TRIGGERS = [
   { key: 'announcers', label: 'Announcers' },
+  { key: 'booths', label: 'Booths' },
   { key: 'seasons', label: 'Seasons' },
   { key: 'category', label: 'Category' },
   { key: 'team', label: 'Team' },
@@ -172,6 +173,181 @@ function announcersSection(ctx, sfx) {
   };
 }
 
+/** Views that carry the Booths control (D-10); it is concealed everywhere else. */
+const BOOTH_VIEWS = new Set(['crews', 'viewership']);
+
+function sameKeys(a, b) {
+  return a.length === b.length && a.every((k) => b.includes(k));
+}
+
+/**
+ * Booths: a searchable checklist grouped by network on Crews and by category on
+ * Viewership, with Only/All shortcuts per group (D-10). Picks write `booths`.
+ */
+function boothsSection(ctx, sfx) {
+  const { model } = ctx;
+  const root = el('section', 'nfl-filter-section');
+  root.id = `nfl-filter-booths-${sfx}`;
+  const { head, reset } = sectionHead('Booths', () => ctx.setState({ booths: [] }));
+  const field = el('div', 'search-field');
+  const input = el('input');
+  input.type = 'text';
+  input.id = `nfl-booth-search-${sfx}`;
+  input.setAttribute('role', 'combobox');
+  input.setAttribute('aria-autocomplete', 'list');
+  input.setAttribute('aria-controls', `nfl-booth-results-${sfx}`);
+  input.placeholder = 'Search booths';
+  input.autocomplete = 'off';
+  const list = el('ul', 'nfl-people-list nfl-booth-list');
+  list.id = `nfl-booth-results-${sfx}`;
+  list.setAttribute('role', 'listbox');
+  list.setAttribute('aria-multiselectable', 'true');
+  list.setAttribute('aria-label', 'Booths');
+  const empty = el('p', 'helper', 'No booths match.');
+  empty.hidden = true;
+
+  let builtFor = null; // the view the list is grouped for
+  let groups = []; // [{ id, head, only, keys, options: [{ li, key, lower }] }]
+  let stop = null;
+  const setStop = (li) => {
+    if (stop && stop !== li) stop.tabIndex = -1;
+    stop = li;
+    if (li) li.tabIndex = 0;
+  };
+  const optionRows = () => [...list.querySelectorAll('li[role="option"]')].filter((li) => !li.hidden);
+  const toggle = (key) => {
+    const cur = ctx.getState().booths;
+    ctx.setState({ booths: cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key] });
+  };
+
+  function groupings(view) {
+    if (view === 'viewership') {
+      return model.viewCategories
+        .map((vc, ci) => ({
+          id: vc.id,
+          name: vc.label,
+          entries: model.boothCatalog.filter((e) => e.categories.has(ci)),
+        }))
+        .filter((g) => g.entries.length);
+    }
+    return model.networkGroups
+      .map((g, gi) => ({ id: g.id, name: g.name, entries: model.boothCatalog.filter((e) => e.group === gi) }))
+      .filter((g) => g.entries.length);
+  }
+
+  function rebuild(view) {
+    builtFor = view;
+    groups = [];
+    stop = null;
+    list.replaceChildren();
+    for (const g of groupings(view)) {
+      const headLi = el('li', 'group-head');
+      headLi.setAttribute('role', 'presentation');
+      const only = el('button', 'only-btn', 'Only');
+      only.type = 'button';
+      only.dataset.onlyGroup = g.id;
+      const keys = g.entries.map((e) => e.key);
+      only.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const sole = sameKeys(ctx.getState().booths, keys);
+        ctx.setState({ booths: sole ? [] : keys });
+      });
+      headLi.append(el('span', 'group-name', g.name), only);
+      list.appendChild(headLi);
+      const options = [];
+      for (const e of g.entries) {
+        const li = el('li');
+        li.setAttribute('role', 'option');
+        li.tabIndex = -1;
+        li.dataset.booth = e.key;
+        const box = el('span', 'option-check');
+        box.setAttribute('aria-hidden', 'true');
+        li.append(box, el('span', 'option-name', e.label));
+        li.addEventListener('click', () => toggle(e.key));
+        li.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter' || ev.key === ' ') {
+            ev.preventDefault();
+            toggle(e.key);
+          }
+        });
+        list.appendChild(li);
+        options.push({ li, key: e.key, lower: e.label.toLowerCase() });
+      }
+      groups.push({ id: g.id, name: g.name, head: headLi, only, keys, options });
+    }
+    filterRows();
+  }
+
+  function filterRows() {
+    const q = input.value.trim().toLowerCase();
+    let shown = 0;
+    for (const g of groups) {
+      let any = false;
+      for (const o of g.options) {
+        const hit = !q || o.lower.includes(q);
+        o.li.hidden = !hit;
+        if (hit) {
+          any = true;
+          shown += 1;
+        }
+      }
+      g.head.hidden = !any;
+    }
+    empty.hidden = shown > 0;
+    input.setAttribute('aria-expanded', shown > 0 ? 'true' : 'false');
+    if (!stop || stop.hidden || !list.contains(stop)) setStop(optionRows()[0] ?? null);
+  }
+  input.addEventListener('input', filterRows);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+      const first = optionRows()[0];
+      if (first) {
+        e.preventDefault();
+        setStop(first);
+        first.focus();
+      }
+    }
+  });
+  list.addEventListener('focusin', (e) => {
+    const li = e.target.closest('li[role="option"]');
+    if (li) setStop(li);
+  });
+  list.addEventListener('keydown', (e) => {
+    const li = e.target.closest('li[role="option"]');
+    if (!li) return;
+    const shown = optionRows();
+    const at = shown.indexOf(li);
+    let target = null;
+    if (e.key === 'ArrowDown') target = shown[Math.min(at + 1, shown.length - 1)];
+    else if (e.key === 'ArrowUp') target = at > 0 ? shown[at - 1] : input;
+    else if (e.key === 'Home') target = shown[0];
+    else if (e.key === 'End') target = shown[shown.length - 1];
+    if (!target) return;
+    e.preventDefault();
+    if (target !== input) setStop(target);
+    target.focus();
+  });
+
+  field.append(labelFor(input, 'Search booths'), input, list, empty);
+  root.append(head, field);
+  return {
+    root,
+    update(state) {
+      root.hidden = !BOOTH_VIEWS.has(state.view);
+      if (!root.hidden && builtFor !== state.view) rebuild(state.view);
+      const sel = new Set(state.booths);
+      for (const g of groups) {
+        for (const o of g.options) o.li.setAttribute('aria-selected', sel.has(o.key) ? 'true' : 'false');
+        const sole = sameKeys(state.booths, g.keys);
+        g.only.textContent = sole ? 'All' : 'Only';
+        g.only.setAttribute('aria-label', sole ? 'Show all booths' : `Show only ${g.name}`);
+      }
+      setDisabledLook(reset, state.booths.length === 0);
+    },
+  };
+}
+
 function seasonsSection(ctx, sfx) {
   const { model } = ctx;
   const d = defaultNflState(model);
@@ -310,6 +486,7 @@ function teamSection(ctx, sfx) {
 
 const BUILDERS = {
   announcers: announcersSection,
+  booths: boothsSection,
   seasons: seasonsSection,
   category: categorySection,
   team: teamSection,
@@ -331,7 +508,7 @@ function placePopover(pop, trigger) {
 
 function clearAll(ctx) {
   const d = defaultNflState(ctx.model);
-  ctx.setState({ seasons: [...d.seasons], teams: [], people: [], cats: [] });
+  ctx.setState({ seasons: [...d.seasons], teams: [], people: [], cats: [], booths: [] });
 }
 
 function buildShell(ctx) {
@@ -359,6 +536,7 @@ function buildShell(ctx) {
     btn.setAttribute('popovertarget', `nfl-pop-${t.key}`);
     btn.setAttribute('aria-haspopup', 'dialog');
     btn.setAttribute('aria-expanded', 'false');
+    if (t.key === 'booths') btn.hidden = true; // shown on Crews and Viewership only
     triggers.set(t.key, btn);
     nodes.push(btn);
 
@@ -466,11 +644,22 @@ export function renderNflFilters(ctx) {
   const d = defaultNflState(ctx.model);
   const active = {
     announcers: state.people.length > 0,
+    booths: state.booths.length > 0,
     seasons: state.seasons[0] !== d.seasons[0] || state.seasons[1] !== d.seasons[1],
     category: state.cats.length > 0,
     team: state.teams.length > 0,
   };
   for (const [key, btn] of ui.triggers) btn.dataset.active = active[key] ? 'true' : 'false';
+  // Booths exist only on Crews and Viewership (D-10); close its popover when concealed.
+  const boothsOn = BOOTH_VIEWS.has(state.view);
+  const boothTrigger = ui.triggers.get('booths');
+  if (boothTrigger.hidden === boothsOn) {
+    boothTrigger.hidden = !boothsOn;
+    if (!boothsOn) {
+      const pop = ui.popovers.get('booths');
+      if (pop.matches(':popover-open')) pop.hidePopover();
+    }
+  }
   const n = activeFilterCount(ctx.model, state);
   ui.filtersButton.textContent = n ? `Filters (${n})` : 'Filters';
 }

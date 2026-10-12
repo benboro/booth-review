@@ -199,7 +199,7 @@ def test_mobile_sheet_sections_url_and_close(mobile: Page) -> None:
     mobile.click("#nfl-filters-button")
     mobile.wait_for_selector("#nfl-filters-sheet:popover-open")
     assert mobile.get_attribute("#nfl-filters-button", "aria-expanded") == "true"
-    headings = mobile.locator("#nfl-filters-sheet .sheet-body h3").all_inner_texts()
+    headings = mobile.locator("#nfl-filters-sheet .sheet-body h3:visible").all_inner_texts()
     assert headings == TRIGGERS
     mobile.select_option("#nfl-season-to-sheet", "2025")
     assert _search(mobile) == "?sport=nfl&seasons=2024-2025"
@@ -265,3 +265,179 @@ def test_announcer_list_is_one_tab_stop_with_arrow_keys(app: Page) -> None:
     assert app.get_attribute("#nfl-person-search-pop", "aria-expanded") == "true"
     stop = app.locator(f"{options}[tabindex='0']")
     assert stop.count() == 1 and stop.is_visible()
+
+
+# ------------------------------------------------------------------ Booths (08-09, D-10)
+
+
+def _booths_app(page: Page, open_nfl_app: Callable[..., None], view: str, extra: str = "") -> None:
+    open_nfl_app(page, f"?sport=nfl&view={view}{extra}")
+    page.wait_for_function("window.__nflTestHooks.getViewModel('crews') !== null")
+
+
+def _state(page: Page) -> dict:  # type: ignore[type-arg]
+    return page.evaluate("window.__nflTestHooks.getState()")  # type: ignore[no-any-return]
+
+
+def test_booths_trigger_only_on_crews_and_viewership(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    open_nfl_app(page, "?sport=nfl")
+    for view, visible in (
+        ("special", False),
+        ("scatter", False),
+        ("crews", True),
+        ("viewership", True),
+    ):
+        page.evaluate("v => window.__nflTestHooks.setState({ view: v })", view)
+        page.wait_for_function("v => window.__nflTestHooks.getState().view === v", arg=view)
+        assert page.locator("#nfl-trigger-booths").is_visible() is visible, view
+
+
+def test_booths_grouped_by_network_on_crews_and_category_on_viewership(
+    nfl_guarded_page: Page,
+    open_nfl_app: Callable[..., None],
+    nfl_fixture_raw: dict,  # type: ignore[type-arg]
+) -> None:
+    page = nfl_guarded_page
+    _booths_app(page, open_nfl_app, "crews")
+    _open(page, "booths")
+    names = page.locator("#nfl-pop-booths .group-head .group-name").all_inner_texts()
+    nets = [g["name"] for g in nfl_fixture_raw["lookups"]["network_groups"]]
+    assert names and all(n in nets for n in names)
+    assert page.locator("#nfl-pop-booths [role=listbox][aria-multiselectable=true]").count() == 1
+    page.keyboard.press("Escape")
+    page.evaluate("window.__nflTestHooks.setState({ view: 'viewership' })")
+    page.wait_for_function("window.__nflTestHooks.getState().view === 'viewership'")
+    _open(page, "booths")
+    cats = [c["label"] for c in nfl_fixture_raw["lookups"]["view_categories"]]
+    names = page.locator("#nfl-pop-booths .group-head .group-name").all_inner_texts()
+    assert names and all(n in cats for n in names)
+
+
+def test_booths_search_narrows_and_empty(
+    nfl_guarded_page: Page,
+    open_nfl_app: Callable[..., None],
+    nfl_fixture_raw: dict,  # type: ignore[type-arg]
+) -> None:
+    page = nfl_guarded_page
+    _booths_app(page, open_nfl_app, "crews")
+    _open(page, "booths")
+    total = page.locator("#nfl-booth-results-pop li[role=option]:visible").count()
+    assert total >= 2
+    first = page.locator("#nfl-booth-results-pop li[role=option] .option-name").first.inner_text()
+    analyst = first.split(" / ")[-1]
+    page.fill("#nfl-booth-search-pop", analyst)
+    narrowed = page.locator("#nfl-booth-results-pop li[role=option]:visible").count()
+    assert 1 <= narrowed < total or total == narrowed
+    for text in page.locator("#nfl-booth-results-pop li[role=option]:visible").all_inner_texts():
+        assert analyst.lower() in text.lower()
+    page.fill("#nfl-booth-search-pop", "zzzz")
+    assert page.locator("#nfl-pop-booths .helper", has_text="No booths match.").is_visible()
+    assert page.locator("#nfl-booth-results-pop li[role=option]:visible").count() == 0
+
+
+def test_booths_only_all_url_and_reload(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    _booths_app(page, open_nfl_app, "crews")
+    _open(page, "booths")
+    head = page.locator("#nfl-pop-booths .group-head").first
+    expected = page.evaluate(
+        """() => {
+          const lis = [...document.querySelectorAll('#nfl-booth-results-pop > li')];
+          const keys = [];
+          for (const li of lis.slice(1)) {
+            if (li.classList.contains('group-head')) break;
+            keys.push(li.dataset.booth);
+          }
+          return keys;
+        }"""
+    )
+    head.locator(".only-btn").click()
+    page.wait_for_function("window.__nflTestHooks.getState().booths.length > 0")
+    assert sorted(_state(page)["booths"]) == sorted(expected)
+    assert head.locator(".only-btn").inner_text() == "All"
+    assert "booths=" in _search(page)
+    page.reload()
+    page.wait_for_function("window.__nflTestHooks && window.__nflTestHooks.ready === true")
+    assert sorted(_state(page)["booths"]) == sorted(expected)
+    _open(page, "booths")
+    page.locator("#nfl-pop-booths .group-head .only-btn").first.click()
+    page.wait_for_function("window.__nflTestHooks.getState().booths.length === 0")
+    assert "booths=" not in _search(page)
+
+
+def test_booths_pick_lists_games_on_viewership(
+    nfl_guarded_page: Page,
+    open_nfl_app: Callable[..., None],
+    nfl_fixture_raw: dict,  # type: ignore[type-arg]
+) -> None:
+    page = nfl_guarded_page
+    _booths_app(page, open_nfl_app, "viewership")
+    _open(page, "booths")
+    page.locator("#nfl-booth-results-pop li[role=option]").first.click()
+    page.wait_for_function("window.__nflTestHooks.getState().booths.length === 1")
+    key = _state(page)["booths"][0]
+    group_id, person_id = key.split(":")
+    lk = nfl_fixture_raw["lookups"]
+    gi = next(i for i, g in enumerate(lk["network_groups"]) if g["id"] == group_id)
+    pi = next(i for i, p in enumerate(lk["people"]) if p["id"] == person_id)
+    members = set(lk["network_groups"][gi]["members"])
+    g = nfl_fixture_raw["games"]
+    expected = [
+        i
+        for i in range(len(g["season"]))
+        if g["network"][i] in members
+        and any(m["person"] == pi and m["role"] == "pbp" for m in (g["crew"][i] or []))
+    ]
+    assert expected
+    assert sorted(page.evaluate("window.__nflTestHooks.getTableIndexes()")) == sorted(expected)
+    assert page.locator("#nfl-booth-results-pop li[aria-selected=true]").count() >= 1
+
+
+def test_clear_all_filters_clears_booths(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    _booths_app(page, open_nfl_app, "crews")
+    key = page.evaluate("window.__nflTestHooks.getBoothCatalog()[0].key")
+    page.evaluate("k => window.__nflTestHooks.setState({ booths: [k] })", key)
+    assert page.get_attribute("#nfl-trigger-booths", "data-active") == "true"
+    page.click("#nfl-clear-filters")
+    page.wait_for_function("window.__nflTestHooks.getState().booths.length === 0")
+    assert page.get_attribute("#nfl-trigger-booths", "data-active") == "false"
+    assert "booths=" not in _search(page)
+
+
+def test_booths_arrows_move_between_rows(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    _booths_app(page, open_nfl_app, "crews")
+    _open(page, "booths")
+    page.focus("#nfl-booth-search-pop")
+    page.keyboard.press("ArrowDown")
+    first = page.evaluate("document.activeElement.dataset.booth")
+    assert first
+    page.keyboard.press("ArrowDown")
+    second = page.evaluate("document.activeElement.dataset.booth")
+    assert second and second != first
+    page.keyboard.press("ArrowUp")
+    assert page.evaluate("document.activeElement.dataset.booth") == first
+
+
+def test_mobile_sheet_has_booths_section(
+    nfl_mobile_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_mobile_page
+    _booths_app(page, open_nfl_app, "crews")
+    page.click("#nfl-filters-button")
+    page.wait_for_selector("#nfl-filters-sheet:popover-open")
+    headings = page.locator("#nfl-filters-sheet .sheet-body h3:visible").all_inner_texts()
+    assert "Booths" in headings
+    page.locator("#nfl-booth-results-sheet li[role=option]").first.click()
+    page.wait_for_function("window.__nflTestHooks.getState().booths.length === 1")
+    assert "booths=" in _search(page)
