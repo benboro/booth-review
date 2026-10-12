@@ -22,7 +22,7 @@ from booth_review.nfl.winprob import PBP_COLUMNS
 
 
 def build(tmp_path: Path, rows, *, include_playoffs: bool = False, now=NOW, **kw):
-    ref_kw = {k: kw.pop(k) for k in ("stadiums", "overrides") if k in kw}
+    ref_kw = {k: kw.pop(k) for k in ("stadiums", "overrides", "booth_ranks") if k in kw}
     ref = make_ref(tmp_path, **ref_kw)
     return assemble_nfl_games(
         make_inputs(rows, **kw), ref, include_playoffs=include_playoffs, now=now
@@ -161,6 +161,7 @@ def test_network_from_506_with_crew(tmp_path: Path) -> None:
     assert (got["network_id"], got["network_source"]) == ("cbs", "506")
     assert got["crew_names"] == ["Ana Fixture", "Bo Fixture", "Nobody Known"]
     assert got["pbp_person_id"] == "ana-fixture"
+    assert got["crew_source"] == "506"
     assert got["analyst_person_id"] == "bo-fixture"
     assert got["sideline_person_ids"] == []
     assert table.counts["unresolved_crew_names"] == 1

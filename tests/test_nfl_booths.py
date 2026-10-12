@@ -66,7 +66,7 @@ def frame(rows: list[dict[str, object]]) -> pl.DataFrame:
 
 
 def ov(season: int, person: str) -> NflLeadBoothOverride:
-    return NflLeadBoothOverride(season, person, "reported", "https://example.com/x")
+    return NflLeadBoothOverride(season, "fox", person, "reported", "https://example.com/x")
 
 
 def votes_frame(a: int, b: int) -> pl.DataFrame:
