@@ -25,7 +25,7 @@ import { ACCENT, MUTED, PAGE_BG, DIVIDER, ZERO_LINE } from '../../../modules/pal
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import { showHoverRing, hideHoverRing, ringSpecFromPoint, hoverRingDiameter } from '../../../modules/hover-ring.js';
 import { initBandInfo, positionBandInfo, closeBandNote } from '../../../modules/band-info.js';
-import { placeEraLabel } from '../era-labels.js';
+import { placeEraLabels, setEraCaption } from '../era-labels.js';
 import { bandLayout } from '../../../modules/chart.js';
 import { buildDateAxis, seasonRange, shownBlocks, gapDividers } from '../../../modules/date-axis.js';
 import { MONTHS, escapeHover } from '../../../modules/format.js';
@@ -506,6 +506,10 @@ function dateXAxis(model, state, env, th, plotPx) {
       last.lastIdx = k;
     } else merged.push({ era, x0, x1, lastIdx: k });
   });
+  const places = placeEraLabels(
+    merged.map((band) => ({ text: model.eras[band.era].label, x0: band.x0 })),
+    range, plotPx, env.mobile ? 10 : 12,
+  );
   merged.forEach((band, k) => {
     if (k % 2 === 0) {
       shapes.push({
@@ -513,11 +517,11 @@ function dateXAxis(model, state, env, th, plotPx) {
         fillcolor: BAND_FILL[th], line: { width: 0 }, layer: 'below',
       });
     }
-    const pos = placeEraLabel(model.eras[band.era].label, band.x0, range, plotPx, env.mobile ? 10 : 12);
+    const pos = places[k];
+    if (!pos) return;
     annotations.push({
       xref: 'x', yref: 'paper', x: pos.x, y: 1, xanchor: pos.xanchor, yanchor: 'top',
-      xshift: pos.xshift, yshift: -2 - (env.mobile ? (k % 2) * 13 : 0), showarrow: false,
-      align: pos.xanchor,
+      xshift: pos.xshift, yshift: -2, showarrow: false, align: pos.xanchor,
       text: escapeHover(pos.text),
       font: { size: env.mobile ? 10 : 12, color: MUTED[th] },
     });
@@ -530,6 +534,7 @@ function dateXAxis(model, state, env, th, plotPx) {
     },
     shapes,
     annotations,
+    eraLabels: merged.map((band) => model.eras[band.era].label),
   };
 }
 
@@ -629,7 +634,7 @@ function buildFigure(model, state, env, th, items) {
       zeroline: false,
     },
   };
-  return { traces, layout, yAxis };
+  return { traces, layout, yAxis, eraLabels: xPart.eraLabels || [] };
 }
 
 // ---- contract ----
@@ -733,6 +738,7 @@ export function render(ctx) {
   refs.bandButton.hidden = counts.band === 0;
   if (counts.band === 0) closeBandNote({ button: refs.bandButton, note: refs.bandNote });
   refs.drawn = true;
+  setEraCaption(refs.captions, fig.eraLabels, env.mobile);
   const done = window.Plotly.react(refs.gd, fig.traces, fig.layout, CONFIG);
   bindEvents(refs.gd);
   if (done && typeof done.then === 'function') done.then(placeBandInfo);

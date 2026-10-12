@@ -10,7 +10,7 @@
  * through escapeHover; chips, tooltip, captions and the hidden table use
  * createElement/textContent.
  */
-import { placeEraLabel } from '../era-labels.js';
+import { placeEraLabels, setEraCaption } from '../era-labels.js';
 import { agotwSeries } from '../state.js';
 import { crewStyle } from '../palette.js';
 import { ACCENT, MUTED, PAGE_BG, DIVIDER, ZERO_LINE } from '../../../modules/palette.js';
@@ -372,6 +372,10 @@ function buildFigure(model, state, env, th, drawnSegments, seasonsAll, items) {
   const bands = [...bandMap.values()].sort((a, b) => a.from - b.from);
   const shapes = [];
   const annotations = [];
+  const places = placeEraLabels(
+    bands.map((b) => ({ text: model.eras[b.era].label, x0: b.from })),
+    eraRange, plotPx, env.mobile ? 10 : 12,
+  );
   bands.forEach((b, k) => {
     if (k % 2 === 0) {
       shapes.push({
@@ -379,10 +383,11 @@ function buildFigure(model, state, env, th, drawnSegments, seasonsAll, items) {
         fillcolor: BAND_FILL[th], line: { width: 0 }, layer: 'below',
       });
     }
-    const pos = placeEraLabel(model.eras[b.era].label, b.from, eraRange, plotPx, env.mobile ? 10 : 12);
+    const pos = places[k];
+    if (!pos) return;
     annotations.push({
       xref: 'x', yref: 'paper', x: pos.x, y: 1, xanchor: pos.xanchor, yanchor: 'top',
-      xshift: pos.xshift, yshift: -2 - (env.mobile ? (k % 2) * 13 : 0), showarrow: false, align: pos.xanchor,
+      xshift: pos.xshift, yshift: -2, showarrow: false, align: pos.xanchor,
       text: escapeHover(pos.text), font: { size: env.mobile ? 10 : 12, color: MUTED[th] },
     });
   });
@@ -448,7 +453,7 @@ function buildFigure(model, state, env, th, drawnSegments, seasonsAll, items) {
       fixedrange: true,
     },
   };
-  return { traces, layout, bands };
+  return { traces, layout, bands, eraLabels: bands.map((b) => model.eras[b.era].label) };
 }
 
 // ---- contract ----
@@ -545,6 +550,7 @@ export function render(ctx) {
   const fig = buildFigure(model, state, env, th, drawnSegments, series.points, items);
   current.bands = fig.bands;
   refs.drawn = true;
+  setEraCaption(refs.captions, fig.eraLabels, env.mobile);
   window.Plotly.react(refs.gd, fig.traces, fig.layout, CONFIG);
   bindEvents(refs.gd);
 }

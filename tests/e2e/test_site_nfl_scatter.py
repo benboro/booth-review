@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from itertools import pairwise
 from typing import Any
 
 import pytest
@@ -413,11 +414,19 @@ def test_mobile_era_labels_inside_plot_scatter(
 ) -> None:
     page = nfl_mobile_page
 
+    labels = [f"Synthetic Nielsen measurement era {c} with a long label" for c in "ABC"]
+
     def _long_eras(route: Route) -> None:
         resp = route.fetch()
         raw = json.loads(resp.text())
-        for era in raw["lookups"]["eras"]:
-            era["label"] = "Synthetic Nielsen measurement era with a long label"
+        eras = raw["lookups"]["eras"]
+        eras[:] = [{**eras[0], "id": f"era-{k}", "label": lab} for k, lab in enumerate(labels)]
+        rank = {s: k for k, s in enumerate(sorted(set(raw["games"]["season"])))}
+        for block in (raw["games"], raw["agotw_viewership"]):
+            col = block["era"]
+            for i, s in enumerate(block["season"]):
+                if col[i] is not None:
+                    col[i] = min(rank[s], len(labels) - 1)
         route.fulfill(response=resp, body=json.dumps(raw))
 
     page.route("**/nfl-data.json", _long_eras)
@@ -431,10 +440,16 @@ def test_mobile_era_labels_inside_plot_scatter(
             .filter((n) => n.textContent.includes('Nielsen'))
             .map((n) => {
               const b = n.getBoundingClientRect();
-              return { text: n.textContent, left: b.left - c.left, right: c.right - b.right };
+              return { text: n.textContent, left: b.left - c.left, right: c.right - b.right, w: b.width };
             });
         }"""
     )
     assert boxes
     for b in boxes:
         assert b["left"] >= -0.5 and b["right"] >= -0.5, b
+    ordered = sorted(boxes, key=lambda b: b["left"])
+    for prev, nxt in pairwise(ordered):
+        assert prev["w"] + prev["left"] <= nxt["left"], (prev, nxt)
+    caption = page.locator("#nfl-view-scatter .nfl-era-caption").inner_text()
+    for lab in labels:
+        assert lab in caption
