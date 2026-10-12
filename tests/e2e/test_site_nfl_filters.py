@@ -100,21 +100,21 @@ def test_seasons_range_writes_url(app: Page) -> None:
 def test_category_labels_and_url(app: Page) -> None:
     _open(app, "category")
     legends = app.locator("#nfl-pop-category legend").all_inner_texts()
-    assert legends == ["Standalone slots", "Other special games"]
+    assert legends == ["Solo slots", "Other special games"]
     labels = app.locator("#nfl-pop-category .check-row .option-name").all_inner_texts()
     assert labels == [
-        "Thursday Night Football (TNF)",
-        "Sunday Night Football (SNF)",
-        "Monday Night Football (MNF)",
+        "Thursday night",
+        "Sunday night",
+        "Monday night",
         "Thanksgiving",
         "Christmas",
         "Black Friday",
         "Saturday",
-        "International (standalone slot)",
-        "Other standalone slots",
-        "AGOTW",
-        "CBS national",
-        "International (any slot)",
+        "International (solo slot)",
+        "Other solo slot",
+        "Fox AGOTW",
+        "CBS late national",
+        "International (any window)",
         "Flexed",
     ]
     app.check('#nfl-pop-category input[value="intl"]')
