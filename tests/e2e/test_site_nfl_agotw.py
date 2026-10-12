@@ -321,3 +321,40 @@ def test_mobile_era_labels_inside_plot_agotw(
     caption = page.locator("#nfl-view-agotw .nfl-era-caption").inner_text()
     for lab in labels:
         assert lab in caption
+
+
+def test_missing_se_is_disclosed_never_a_zero_whisker(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
+) -> None:
+    """JS-WR-06: a null SE draws no whisker and says "not available" in the hover and table."""
+    page = nfl_guarded_page
+
+    def _no_se(route: Route) -> None:
+        resp = route.fetch()
+        raw = json.loads(resp.text())
+        raw["agotw_viewership"]["viewership_se"][1] = None  # 2025 keeps its residual
+        route.fulfill(response=resp, body=json.dumps(raw))
+
+    page.route("**/nfl-data.json", _no_se)
+    _open(page, open_nfl_app, "&ay=resid")
+    vm = _vm(page)
+    seasons = [p["season"] for p in vm["points"]]
+    k25, k24 = seasons.index(2025), seasons.index(2024)
+    assert vm["points"][k25]["err"] is None
+    nan = page.evaluate(
+        f"""(() => {{
+          const t = document.querySelector('{GD}').data.find((d) => d.error_y && d.x.includes(2025));
+          return Number.isNaN(t.error_y.array[t.x.indexOf(2025)]);
+        }})()"""
+    )
+    assert nan is True
+    _emit(page, "plotly_hover", k25)
+    assert "±1.96 standard errors: not available" in _tooltip(page)
+    r = _rows(nfl_fixture_raw)[0]
+    half = 1.96 * r["viewership_se"]
+    _emit(page, "plotly_hover", k24)
+    lines = _tooltip(page)
+    want = f"±1.96 standard errors: {_fmt(r['viewership_resid'] - half, True)} to {_fmt(r['viewership_resid'] + half, True)}"
+    assert want in lines
+    cells = page.locator("#nfl-view-agotw .visually-hidden tbody tr").nth(k25).locator("td")
+    assert cells.nth(1).inner_text().endswith("(±1.96 standard errors: not available)")

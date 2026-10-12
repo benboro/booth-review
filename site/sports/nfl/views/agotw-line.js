@@ -110,6 +110,15 @@ function valueText(state, v) {
   return formatViewers(Math.round(v));
 }
 
+/**
+ * The ±1.96 SE range in Residual mode. A missing SE (or residual) says so in
+ * words; it is never drawn or read as a zero-width whisker (JS-WR-06).
+ */
+function seText(state, item) {
+  if (item.y == null || item.err == null) return '±1.96 standard errors: not available';
+  return `±1.96 standard errors: ${valueText(state, item.y - item.err)} to ${valueText(state, item.y + item.err)}`;
+}
+
 function hasSelectedPerson(model, state, p) {
   if (!state.people.length) return false;
   const ids = new Set(state.people);
@@ -147,6 +156,7 @@ function hoverLines(item) {
       kind: 'body',
     },
   ];
+  if (resid) lines.push({ text: seText(state, item), kind: 'body' });
   lines.push({
     text: `${p.games} games${p.fillIn > 0 ? `; ${p.fillIn} fill-in` : ''}`,
     kind: 'body',
@@ -263,10 +273,12 @@ function renderDataTable(items, state) {
     const tr = el('tr');
     const th = el('th', null, String(it.p.season));
     th.scope = 'row';
+    let value = it.y == null ? 'n/a' : valueText(state, it.y);
+    if (state.agotwY === 'resid' && it.y != null) value += ` (${seText(state, it)})`;
     tr.append(
       th,
       el('td', null, crewLabel(model, it.p)),
-      el('td', null, it.y == null ? 'n/a' : valueText(state, it.y)),
+      el('td', null, value),
       el('td', null, model.eras[it.p.era].label),
     );
     dataBody.appendChild(tr);
@@ -347,7 +359,8 @@ function buildFigure(model, state, env, th, drawnSegments, seasonsAll, items) {
     if (resid) {
       trace.error_y = {
         type: 'data',
-        array: segItems.map((it) => (it.err == null ? 0 : it.err)),
+        // NaN, not 0: Plotly draws no whisker (and no cap) for a missing SE.
+        array: segItems.map((it) => (it.err == null ? NaN : it.err)),
         visible: true,
         color: MUTED[th],
         thickness: 1.5,
@@ -531,7 +544,7 @@ export function render(ctx) {
         p,
         seg,
         y: y == null ? null : y,
-        err: resid && p.values.se != null ? 1.96 * p.values.se : resid ? 0 : null,
+        err: resid && p.values.se != null ? 1.96 * p.values.se : null,
         key: `${p.season}:${p.crewKey}`,
         ring: hasSelectedPerson(model, state, p),
       });
