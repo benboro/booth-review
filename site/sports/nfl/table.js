@@ -7,7 +7,7 @@
  * the CFB panel's `safeHref`. Nothing here reads or shows a point spread.
  */
 
-import { nameWithRoles, makeRolePill } from '../../modules/pill.js';
+import { nameWithRoles, makeRolePill, makePill, currentTheme } from '../../modules/pill.js';
 import { safeHref } from '../../modules/panel.js';
 import { crewSourceText, dateShortText, flagLabels, kickoffText, scoreText, viewersText } from './game-format.js';
 
@@ -76,7 +76,13 @@ function sourceCell(row) {
 }
 
 function buildRow(row, onOpen) {
-  const tr = el('tr');
+  const tr = el('tr', 'row-link');
+  // CFB parity: the whole row opens the panel. The matchup button stays as the keyboard
+  // and screen-reader opener (and the focus target on close); links keep their own click.
+  tr.addEventListener('click', (ev) => {
+    if (ev.target instanceof Element && ev.target.closest('a, button')) return;
+    onOpen?.(row.i, tr.querySelector('.nfl-matchup-btn'));
+  });
 
   const dateTd = el('td', 'num', dateShortText(row));
   const ko = kickoffText(row);
@@ -100,7 +106,11 @@ function buildRow(row, onOpen) {
 
   // NFL-only column: the table shows the final score; CFB shows it only in the panel.
   tr.appendChild(el('td', null, scoreText(row)));
-  tr.appendChild(el('td', null, row.network ?? NOT_RECORDED));
+  // CFB parity (D-18): the network is a family-colored pill, as in CFB's table.
+  const networkTd = el('td');
+  if (row.network == null) networkTd.textContent = NOT_RECORDED;
+  else networkTd.appendChild(makePill(row.network, row.networkFamily, currentTheme()));
+  tr.appendChild(networkTd);
 
   const crewTd = el('td');
   crewCell(crewTd, row);

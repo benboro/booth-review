@@ -12,6 +12,7 @@
  * `chipsHost` is accepted for the documented signature; the people chips are
  * rendered by index.js's selection bar, which already owns `#nfl-chips`.
  */
+import { makeRolePill } from '../../modules/pill.js';
 import { CATEGORY_OPTIONS, activeFilterCount, defaultNflState } from './state.js';
 
 const TRIGGERS = [
@@ -72,7 +73,7 @@ function announcersSection(ctx, sfx) {
   input.setAttribute('role', 'combobox');
   input.setAttribute('aria-autocomplete', 'list');
   input.setAttribute('aria-controls', `nfl-person-results-${sfx}`);
-  input.placeholder = 'Search announcers — try "Joe Buck"';
+  input.placeholder = 'Type a name, or pick from the list';
   input.autocomplete = 'off';
   const list = el('ul', 'nfl-people-list');
   list.id = `nfl-person-results-${sfx}`;
@@ -83,6 +84,20 @@ function announcersSection(ctx, sfx) {
   empty.hidden = true;
 
   const people = [...model.people].sort((a, b) => a.name.localeCompare(b.name));
+  // CFB parity (D-18): each row carries the person's usual role pill and game count, as CFB's list does.
+  const roleTally = new Map();
+  for (const crew of model.cols.crew) {
+    for (const m of crew || []) {
+      const t = roleTally.get(m.person) ?? new Map();
+      t.set(m.role, (t.get(m.role) ?? 0) + 1);
+      roleTally.set(m.person, t);
+    }
+  }
+  const usualRole = (idx) => {
+    const t = roleTally.get(idx);
+    if (!t) return 'unknown';
+    return [...t.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  };
   const rows = new Map();
   // Roving tabindex (JS-WR-05): the list is one tab stop, held by `stop`.
   // ArrowUp/ArrowDown, Home and End move between the visible options, and
@@ -105,7 +120,12 @@ function announcersSection(ctx, sfx) {
     li.dataset.person = p.id;
     const box = el('span', 'option-check');
     box.setAttribute('aria-hidden', 'true');
-    li.append(box, el('span', 'option-name', p.name));
+    const idx = model.personIndex.get(p.id);
+    const roleSpan = el('span', 'option-role');
+    roleSpan.appendChild(makeRolePill(usualRole(idx)));
+    const countSpan = el('span', 'option-count', `(${(model.personGames.get(idx) || []).length})`);
+    countSpan.setAttribute('aria-hidden', 'true');
+    li.append(box, el('span', 'option-name', p.name), roleSpan, countSpan);
     li.addEventListener('click', () => toggle(p.id));
     li.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
@@ -575,7 +595,7 @@ function buildShell(ctx) {
   const title = el('h2', null, 'Filters');
   title.id = 'nfl-filters-sheet-title';
   const clearSlot = el('div', 'sheet-clear-slot');
-  const sheetClear = el('button', 'nfl-sheet-clear', 'Clear');
+  const sheetClear = el('button', 'nfl-sheet-clear', 'Clear all filters');
   sheetClear.type = 'button';
   sheetClear.addEventListener('click', () => {
     if (ctx.model) clearAll(ctx);

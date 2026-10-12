@@ -2892,34 +2892,29 @@ body:not([data-sport="nfl"]) #sport-load-error {
   border-radius: 4px;
 }
 
-.nfl-people-list > li {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
-  padding: var(--space-xs) var(--space-sm);
-  cursor: pointer;
-}
-
 .nfl-people-list > li[hidden] {
   display: none;
 }
 
+/* The NFL list is a roving-tabindex list (focus moves between rows), so it needs the
+   CFB `.is-active` ring on :focus-visible. */
 .nfl-people-list > li:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 
-.nfl-people-list .option-check {
-  flex: none;
-  width: 14px;
-  height: 14px;
-  border: 1px solid var(--border);
-  border-radius: 3px;
+/* The row look (flex, padding, focus ring, .option-check box) comes from the shared
+   `[role="listbox"] > li[role="option"]` and `.option-check` rules, as on CFB (D-18).
+   These two mirror CFB's `#person-results` column rules, which key on that id. */
+.nfl-people-list .option-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
-.nfl-people-list > li[aria-selected="true"] .option-check {
-  background: var(--special);
-  border-color: var(--special);
+.nfl-people-list .option-role,
+.nfl-people-list .option-count {
+  flex: none;
 }
 
 .nfl-cat-group,
@@ -3116,11 +3111,17 @@ body:not([data-sport="nfl"]) #sport-load-error {
   border: none;
   background: transparent;
   padding: 0;
-  color: var(--accent);
+  color: inherit;
   font: inherit;
   text-align: left;
-  text-decoration: underline;
   cursor: pointer;
+}
+
+/* A real button (keyboard and screen-reader opener) that reads as plain matchup text like
+   CFB's cell; the underline appears on hover and focus. */
+.nfl-matchup-btn:hover,
+.nfl-matchup-btn:focus-visible {
+  text-decoration: underline;
 }
 
 .nfl-games-summary {

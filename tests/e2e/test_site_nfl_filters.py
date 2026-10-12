@@ -59,11 +59,14 @@ def test_announcers_search_pick_chip_and_remove(app: Page, nfl_site_dist: Path) 
     _open(app, "announcers")
     assert (
         app.get_attribute("#nfl-person-search-pop", "placeholder")
-        == 'Search announcers — try "Joe Buck"'
+        == "Type a name, or pick from the list"
     )
     app.fill("#nfl-person-search-pop", "ada qu")
     visible = app.locator("#nfl-person-results-pop > li:visible")
-    assert visible.all_inner_texts() == ["Ada Quill"]
+    assert visible.locator(".option-name").all_inner_texts() == ["Ada Quill"]
+    # CFB parity: each row shows the usual role pill and a game count.
+    assert visible.locator(".option-role .role-pill").count() == 1
+    assert visible.locator(".option-count").inner_text() == "(4)"
     app.fill("#nfl-person-search-pop", cfb_only)
     assert app.locator("#nfl-person-results-pop > li:visible").count() == 0
     app.fill("#nfl-person-search-pop", "ada")
@@ -238,7 +241,7 @@ def test_announcer_list_is_one_tab_stop_with_arrow_keys(app: Page) -> None:
     def active() -> str | None:
         return app.evaluate(  # type: ignore[no-any-return]
             "document.activeElement.matches('li[role=option]')"
-            " ? document.activeElement.textContent : document.activeElement.id"
+            " ? document.activeElement.querySelector('.option-name').textContent : document.activeElement.id"
         )
 
     app.focus("#nfl-person-search-pop")
@@ -246,7 +249,7 @@ def test_announcer_list_is_one_tab_stop_with_arrow_keys(app: Page) -> None:
     assert active() == names[0]
     app.keyboard.press("ArrowDown")
     assert active() == names[1]
-    assert app.locator(f"{options}[tabindex='0']").inner_text() == names[1]
+    assert app.locator(f"{options}[tabindex='0'] .option-name").inner_text() == names[1]
     app.keyboard.press("End")
     assert active() == names[-1]
     app.keyboard.press("Home")
@@ -441,3 +444,17 @@ def test_mobile_sheet_has_booths_section(
     page.locator("#nfl-booth-results-sheet li[role=option]").first.click()
     page.wait_for_function("window.__nflTestHooks.getState().booths.length === 1")
     assert "booths=" in _search(page)
+
+
+def test_team_alone_fills_the_table_like_cfb_school(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    """Phase 8 parity audit: a Team alone lists its games, as CFB's School does (D-12)."""
+    open_nfl_app(nfl_guarded_page, "?sport=nfl&view=scatter&team=f-lanterns")
+    rows = nfl_guarded_page.locator("#nfl-matched-games tbody tr")
+    assert rows.count() > 0
+    # CFB parity: the network is a family-colored pill and the row is a click target.
+    assert rows.first.locator("td .pill").count() >= 1
+    assert "row-link" in (rows.first.get_attribute("class") or "")
+    rows.first.locator("td").nth(1).click(position={"x": 2, "y": 2})
+    nfl_guarded_page.wait_for_selector("#nfl-detail-panel[open]")

@@ -140,7 +140,9 @@ export function createDetailPanel(host, { methodologyHref: _methodologyHref } = 
           theme: currentTheme(),
         });
     const children = [dateP, network, ...crewSection(row), ...viewersNodes(row), factsParagraph(row)];
-    children.push(el('h3', null, 'Links'), linksList(linkItems(row)));
+    // CFB parity: the Links heading appears only when there is something to link to.
+    const links = linkItems(row).filter((it) => it.href || it.fallback);
+    if (links.length) children.push(el('h3', null, 'Links'), linksList(links));
     body.replaceChildren(...children);
   }
 

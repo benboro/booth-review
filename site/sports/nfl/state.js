@@ -411,6 +411,9 @@ export function tableGames(model, state) {
       for (const g of model.personGames.get(model.personIndex.get(id)) || []) set.add(g);
     }
     base = [...set];
+  } else if (state.teams.length) {
+    // CFB parity (D-18, D-19): a Team alone fills the table with that team's games, as School does on CFB.
+    base = model.cols.date.map((_, i) => i);
   }
   if (!base) return [];
   return newestFirst(model, base.filter((i) => gamePasses(model, state, i)));
