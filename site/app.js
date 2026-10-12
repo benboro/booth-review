@@ -615,6 +615,8 @@ let activeSport = null;
  * `y`, `dots`) never leak into NFL state (JS-CR-02).
  */
 let nflInitialSearch = '';
+/** Bumped by every sport change, so an NFL switch whose module import resolves late can tell it was superseded. */
+let switchSeq = 0;
 
 /** The query with only the sport param removed, other params kept in order. */
 function searchWithoutSport(search) {
@@ -631,6 +633,8 @@ function sportMeta(id) {
 async function showSport(id) {
   if (id === activeSport) return;
   activeSport = id;
+  switchSeq += 1;
+  const seq = switchSeq;
   for (const btn of document.querySelectorAll('#sport-switch button[data-sport]')) {
     btn.setAttribute('aria-pressed', btn.dataset.sport === id ? 'true' : 'false');
   }
@@ -644,7 +648,11 @@ async function showSport(id) {
     document.body.dataset.sport = 'nfl';
     document.title = sportMeta('nfl').title;
     nflModule ??= await import('./sports/nfl/index.js');
+    // The user switched sport while the module loaded: mounting now would put
+    // NFL's footer, listeners and URL behind the other view (JS-WR-01).
+    if (seq !== switchSeq) return;
     await nflModule.mount({ footerEl: document.getElementById('site-footer'), search: nflInitialSearch });
+    if (activeSport !== 'nfl') nflModule.unmount();
     return;
   }
   nflModule?.unmount();

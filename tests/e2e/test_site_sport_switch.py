@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import pytest
-from playwright.sync_api import Page
+from playwright.sync_api import Page, Route
 
 pytestmark = pytest.mark.e2e
 
@@ -296,3 +296,33 @@ def test_cfb_url_params_never_leak_into_nfl(
     _wait_nfl_ready(page)
     assert page.evaluate("location.search") == "?sport=nfl"
     assert page.evaluate("window.__nflTestHooks.getState()") == default_state
+
+
+def test_switching_back_during_the_nfl_import_keeps_cfb(
+    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None]
+) -> None:
+    """JS-WR-01: a CFB click while the NFL module loads wins; NFL never mounts behind it."""
+    page = nfl_guarded_page
+    open_flagon_cfb(page)
+    cfb_search = page.evaluate("location.search")
+    credit = page.inner_text("#site-footer .credit-line")
+    held: list[Route] = []
+    page.route("**/sports/nfl/index.js", lambda route: held.append(route))
+    urls = _track(page)
+    with page.expect_request("**/sports/nfl/index.js"):
+        _click(page, "nfl")
+    _click(page, "cfb")
+    page.wait_for_function("document.body.dataset.sport === 'cfb'")
+    assert len(held) == 1
+    page.unroute("**/sports/nfl/index.js")
+    held[0].continue_()
+    page.wait_for_load_state("networkidle")
+    _settle(page)
+    assert page.evaluate("location.search") == cfb_search
+    assert page.inner_text("#site-footer .credit-line") == credit
+    assert _count(urls, "nfl-data.json") == 0
+    assert _pressed(page, "cfb") == "true"
+    # A later NFL click still mounts normally.
+    _click(page, "nfl")
+    _wait_nfl_ready(page)
+    assert page.evaluate("location.search") == "?sport=nfl"
