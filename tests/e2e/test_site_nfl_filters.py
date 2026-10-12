@@ -154,10 +154,11 @@ def test_keyboard_reaches_each_trigger_and_enter_opens(app: Page) -> None:
         assert app.evaluate("document.activeElement.id") == f"nfl-trigger-{key}"
     app.keyboard.press("Enter")
     app.wait_for_selector("#nfl-pop-team:popover-open")
-    assert app.get_attribute("#nfl-trigger-team", "aria-expanded") == "true"
+    # aria-expanded follows the popover's toggle event, which fires after it opens.
+    app.wait_for_selector('#nfl-trigger-team[aria-expanded="true"]')
     app.keyboard.press("Escape")
     app.wait_for_selector("#nfl-pop-team:not(:popover-open)", state="attached")
-    assert app.get_attribute("#nfl-trigger-team", "aria-expanded") == "false"
+    app.wait_for_selector('#nfl-trigger-team[aria-expanded="false"]')
 
 
 def test_popover_markup_is_text_only(app: Page) -> None:
