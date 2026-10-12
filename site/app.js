@@ -631,26 +631,43 @@ function sportMeta(id) {
 }
 
 const SPORT_ERROR_ID = 'sport-load-error';
-/**
- * Failed NFL module imports so far. The browser keeps a failed module import
- * for the page's lifetime, so a retry asks for the entry module under a new
- * URL (`?retry=N`).
- */
-let nflImportFailures = 0;
 
-/** A visible note above the CFB chart that the NFL view failed to load (JS-WR-02). */
+/**
+ * The NFL URL a reload should open: the page's own NFL query when it opened on
+ * NFL (a shared NFL link keeps its state), else NFL at its defaults.
+ */
+function nflReloadUrl() {
+  return location.pathname + (nflInitialSearch || '?sport=nfl');
+}
+
+/**
+ * Shown in NFL's place when the NFL modules failed to load (JS-WR-02, iter-2
+ * WR-03). The browser keeps a failed module fetch for the document's lifetime,
+ * for every module the NFL entry imports, so no in-page retry can recover;
+ * a fresh document can. The page stays on NFL with the NFL URL (never CFB's,
+ * IN-02), so a reload or a shared link opens NFL, and the button reloads it.
+ */
 function showSportLoadError() {
+  const url = nflReloadUrl();
+  if (location.pathname + location.search !== url) history.replaceState(null, '', url);
   if (document.getElementById(SPORT_ERROR_ID)) return;
-  const banner = document.createElement('div');
+  const banner = document.createElement('section');
   banner.id = SPORT_ERROR_ID;
   banner.className = 'error-banner';
   banner.setAttribute('role', 'alert');
   const title = document.createElement('p');
-  title.textContent = "Couldn't load the NFL view, so CFB is shown instead.";
+  title.textContent = "Couldn't load the NFL view.";
   const hint = document.createElement('p');
-  hint.textContent = 'Check your connection, then pick NFL again or reload the page.';
-  banner.append(title, hint);
-  document.getElementById('chart-area')?.prepend(banner);
+  hint.textContent = 'Check your connection, then reload the page. CFB is still one click away on the switch above.';
+  const reload = document.createElement('button');
+  reload.type = 'button';
+  reload.className = 'toggle';
+  reload.textContent = 'Reload page';
+  reload.addEventListener('click', () => {
+    location.assign(nflReloadUrl());
+  });
+  banner.append(title, hint, reload);
+  document.getElementById('chart-area')?.before(banner);
 }
 
 function clearSportLoadError() {
@@ -675,17 +692,14 @@ async function showSport(id) {
     document.body.dataset.sport = 'nfl';
     document.title = sportMeta('nfl').title;
     try {
-      const retry = nflImportFailures ? `?retry=${nflImportFailures}` : '';
-      nflModule ??= await import(`./sports/nfl/index.js${retry}`);
+      nflModule ??= await import('./sports/nfl/index.js');
     } catch (err) {
       // A network blip, a deploy swapping the module files, or a module that
-      // throws on load: fall back to CFB with a visible note instead of an
-      // empty page, and leave the switch free for a retry (JS-WR-02).
+      // throws on load: say so with a reload button instead of an empty page
+      // (JS-WR-02, iter-2 WR-03). Nothing to say when a later switch took
+      // over or NFL loaded meanwhile (IN-01); the switch stays free for CFB.
       console.error('booth-review: the NFL view failed to load', err);
-      nflImportFailures += 1;
-      if (seq !== switchSeq) return;
-      activeSport = null;
-      await showSport('cfb');
+      if (seq !== switchSeq || activeSport !== 'nfl' || nflModule) return;
       showSportLoadError();
       return;
     }
@@ -698,6 +712,7 @@ async function showSport(id) {
     return;
   }
   nflModule?.unmount();
+  clearSportLoadError();
   document.body.dataset.sport = 'cfb';
   document.title = sportMeta('cfb').title;
   if (!cfbStarted) {

@@ -2733,6 +2733,17 @@ body:not([data-sport="nfl"]) :is(#nfl-toolbar, #nfl-selection-bar, #nfl-chart-ar
 #nfl-chart-area { grid-area: main; }
 #nfl-matched-games { grid-area: table; }
 
+/* The NFL modules failed to load (app.js showSportLoadError): the note and its
+   Reload button take NFL's place. Only ever shown on the NFL side. */
+#sport-load-error {
+  grid-area: main;
+  margin: var(--space-lg);
+}
+
+body:not([data-sport="nfl"]) #sport-load-error {
+  display: none;
+}
+
 #nfl-toolbar {
   display: flex;
   flex-wrap: wrap;

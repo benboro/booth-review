@@ -328,32 +328,71 @@ def test_switching_back_during_the_nfl_import_keeps_cfb(
     assert page.evaluate("location.search") == "?sport=nfl"
 
 
-@pytest.mark.parametrize("opened_on", ["cfb", "nfl"])
-def test_nfl_module_failure_falls_back_to_cfb_and_can_retry(
-    nfl_guarded_page: Page, nfl_site_url: str, opened_on: str
-) -> None:
-    """JS-WR-02: a failed NFL module import shows CFB with a visible note, never a blank page."""
-    page = nfl_guarded_page
-    errors: list[str] = []
-    page.on("pageerror", lambda e: errors.append(str(e)))
-    page.route("**/sports/nfl/index.js", lambda route: route.abort())
+def _open_with_failed_nfl(page: Page, nfl_site_url: str, opened_on: str) -> str:
+    """Open the page so the NFL import runs (and fails); returns the expected NFL query."""
     if opened_on == "nfl":
         page.goto(f"{nfl_site_url}/index.html?sport=nfl&view=fox")
+        expected = "?sport=nfl&view=fox"
     else:
         page.goto(f"{nfl_site_url}/index.html")
         page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
         _click(page, "nfl")
+        expected = "?sport=nfl"
     page.wait_for_selector("#sport-load-error", state="visible")
-    page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
-    assert page.evaluate("document.body.dataset.sport") == "cfb"
-    assert _pressed(page, "cfb") == "true"
-    assert _pressed(page, "nfl") == "false"
-    assert page.locator("#chart").is_visible()
-    assert "sport=" not in page.evaluate("location.search")
-    assert page.get_attribute("#sport-load-error", "role") == "alert"
+    return expected
+
+
+@pytest.mark.parametrize("opened_on", ["cfb", "nfl"])
+@pytest.mark.parametrize("module", ["index.js", "state.js", "views/scatter.js"])
+def test_nfl_module_failure_offers_a_reload_that_keeps_nfl(
+    nfl_guarded_page: Page, nfl_site_url: str, opened_on: str, module: str
+) -> None:
+    """JS-WR-02, iter-2 WR-03 and IN-02: any failed NFL module, the entry or one it
+    imports, shows a note with a Reload button in NFL's place, never a blank page.
+    The URL stays NFL (a reload or a shared link opens NFL), and the reload's
+    fresh document mounts NFL once the module loads."""
+    page = nfl_guarded_page
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    pattern = f"**/sports/nfl/{module}"
+    page.route(pattern, lambda route: route.abort())
+    expected = _open_with_failed_nfl(page, nfl_site_url, opened_on)
+    banner = page.locator("#sport-load-error")
+    assert banner.get_attribute("role") == "alert"
+    reload = banner.get_by_role("button", name="Reload page")
+    assert reload.is_visible()
+    assert page.evaluate("document.body.dataset.sport") == "nfl"
+    assert _pressed(page, "nfl") == "true"
+    assert page.evaluate("location.search") == expected
+    _settle(page)
+    assert page.evaluate("location.search") == expected
     assert errors == []
-    page.unroute("**/sports/nfl/index.js")
-    _click(page, "nfl")
+    page.unroute(pattern)
+    with page.expect_navigation():
+        reload.click()
     _wait_nfl_ready(page)
-    assert page.evaluate("location.search").startswith("?sport=nfl")
+    search = page.evaluate("location.search")
+    assert search.startswith("?sport=nfl")
+    if opened_on == "nfl":
+        assert page.evaluate("window.__nflTestHooks.getState().view") == "fox"
     assert page.locator("#sport-load-error").count() == 0
+    assert errors == []
+
+
+def test_the_failure_note_leaves_with_nfl_and_cfb_keeps_its_url(
+    nfl_guarded_page: Page, nfl_site_url: str
+) -> None:
+    """IN-01: the note belongs to NFL's place only. Going back to CFB removes it
+    and restores CFB's URL; it never sits in the CFB chart area."""
+    page = nfl_guarded_page
+    page.route("**/sports/nfl/state.js", lambda route: route.abort())
+    page.goto(f"{nfl_site_url}/index.html?view=butterfly")
+    page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+    cfb_search = page.evaluate("location.search")
+    _click(page, "nfl")
+    page.wait_for_selector("#sport-load-error", state="visible")
+    _click(page, "cfb")
+    page.wait_for_function("location.search === " + repr(cfb_search))
+    assert page.locator("#sport-load-error").count() == 0
+    assert page.locator("#chart-area .error-banner:not([hidden])").count() == 0
+    assert _pressed(page, "cfb") == "true"
