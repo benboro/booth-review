@@ -31,9 +31,13 @@ from typing import Literal
 
 from booth_review.build.site_assembly import (
     BUILD_MARKER,
+    add_nfl_to_site,
     check_nfl_file_key,
     check_no_key_leak,
+    docs_dir,
     nfl_site_payload_from_bytes,
+    site_source_dir,
+    site_sports,
 )
 from booth_review.errors import DeployError, KeyLeakError
 from booth_review.vault import batch_message
@@ -48,7 +52,12 @@ _BOT_EMAIL = "booth-review-publish@users.noreply.github.com"
 
 
 NflCarryProblem = Literal[
-    "read_failed", "invalid", "key_check_failed", "key_check_skipped", "stage_failed"
+    "read_failed",
+    "invalid",
+    "key_check_failed",
+    "key_check_skipped",
+    "stage_failed",
+    "switch_failed",
 ]
 _SHA_RE = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
 
@@ -64,6 +73,8 @@ class DeployResult:
     nfl_carried: bool = False
     # Count-only reason a live nfl-data.json was found but not carried (D-20).
     nfl_not_carried: NflCarryProblem | None = None
+    # The carry also turned the NFL switch on in a switch-less site (iter-2 WR-02).
+    nfl_switched_on: bool = False
 
 
 def _site_files(site: Path) -> list[Path]:
@@ -244,39 +255,68 @@ def _stage_nfl_file(site: Path, body: bytes) -> None:
 
 
 def _carry_live_nfl_file(
-    site: Path, target: Path, subdir: str
-) -> tuple[bool, NflCarryProblem | None]:
+    site: Path, target: Path, subdir: str, *, nfl_wanted: bool, site_src: Path, docs: Path
+) -> tuple[bool, bool, NflCarryProblem | None]:
     """D-20: carry the target's live `<subdir>/nfl-data.json` into `site`.
 
     The mirror deletes the whole subdir before copying, so a site without the
-    file would delete the live one. The live bytes are validated against the
-    NFL contract and key-checked on their own, outside `site`, before they are
-    staged. Returns (carried, problem). Never raises and never touches any
-    other file in `site`: on any failure nothing is carried and `problem` is a
-    count-only reason, so an NFL problem can never block the CFB deploy.
+    file would delete the live one. Whether to carry is read from the built
+    index.html's sports meta, never from the flag alone (IN-04), so the server
+    never holds a file no page loads:
+    - a site with the NFL switch gets the live file as is;
+    - a switch-less site gets it only when NFL is wanted (`nfl_wanted`, the
+      exact NFL_SITE_ENABLED flag), and then with the switch and the NFL
+      modules too (`add_nfl_to_site`): the run had no valid NFL file of its
+      own, so the last good one keeps NFL reachable (iter-2 WR-02);
+    - anything else carries nothing.
+
+    The live bytes are validated against the NFL contract and key-checked on
+    their own, outside `site`, before anything is staged. Returns (carried,
+    switched_on, problem). Never raises: on any failure `site` is left as it
+    was and `problem` is a count-only reason, so an NFL problem can never
+    block the CFB deploy.
     """
+    try:
+        sports = site_sports(site)
+    except Exception:
+        return False, False, "read_failed"
+    switch_on = "nfl" not in sports
+    if switch_on and not (nfl_wanted and sports == ("cfb",)):
+        return False, False, None
     try:
         raw = _read_live_nfl_blob(target, subdir)
     except Exception:
-        return False, "read_failed"
+        return False, False, "read_failed"
     if raw is None:
-        return False, None
+        return False, False, None
     try:
-        _, body = nfl_site_payload_from_bytes(raw)
+        payload = nfl_site_payload_from_bytes(raw)
     except Exception:
-        return False, "invalid"
+        return False, False, "invalid"
     try:
-        if not check_nfl_file_key(body, scratch_parent=site.resolve().parent):
-            return False, "key_check_skipped"
+        if not check_nfl_file_key(payload[1], scratch_parent=site.resolve().parent):
+            return False, False, "key_check_skipped"
     except KeyLeakError:
-        return False, "key_check_failed"
+        return False, False, "key_check_failed"
     except Exception:
-        return False, "stage_failed"
+        return False, False, "stage_failed"
+    if switch_on:
+        try:
+            added = add_nfl_to_site(
+                site_out=site, site_src=site_src, docs=docs, nfl_payload=payload
+            )
+        except KeyLeakError:
+            return False, False, "key_check_failed"
+        except Exception:
+            return False, False, "switch_failed"
+        if not added.replaced:
+            return False, False, "key_check_skipped"
+        return True, True, None
     try:
-        _stage_nfl_file(site, body)
+        _stage_nfl_file(site, payload[1])
     except Exception:
-        return False, "stage_failed"
-    return True, None
+        return False, False, "stage_failed"
+    return True, False, None
 
 
 def publish_site(
@@ -287,7 +327,12 @@ def publish_site(
     env: Mapping[str, str] | None = None,
     sleep: Callable[[float], None] = time.sleep,
     before_push: Callable[[int], None] | None = None,
+    site_src: Path | None = None,
+    docs: Path | None = None,
 ) -> DeployResult:
+    """`site_src` and `docs` (default: `site_source_dir()` and `docs_dir()`)
+    are read only to turn the NFL switch on in a switch-less site that carries
+    the live nfl-data.json (`_carry_live_nfl_file`)."""
     _validate_subdir(subdir)
     env_map = env if env is not None else os.environ
     if env_map.get("PUBLISH_ENABLED") != "true":
@@ -298,12 +343,18 @@ def publish_site(
     if not site.is_dir() or not (site / BUILD_MARKER).is_file():
         raise DeployError("deploy refused: site directory is missing or not an assembled build")
     nfl_carried = False
+    nfl_switched_on = False
     nfl_not_carried: NflCarryProblem | None = None
     nfl_target = site / NFL_DATA_FILE
-    if env_map.get("NFL_SITE_ENABLED") == "true" and not (
-        nfl_target.exists() or nfl_target.is_symlink()
-    ):
-        nfl_carried, nfl_not_carried = _carry_live_nfl_file(site, target, subdir)
+    if not (nfl_target.exists() or nfl_target.is_symlink()):
+        nfl_carried, nfl_switched_on, nfl_not_carried = _carry_live_nfl_file(
+            site,
+            target,
+            subdir,
+            nfl_wanted=env_map.get("NFL_SITE_ENABLED") == "true",
+            site_src=site_src or site_source_dir(),
+            docs=docs or docs_dir(),
+        )
     # WR-01 / D-10: the key re-grep is mandatory; with no key configured it
     # cannot run, so refuse rather than publish unchecked output.
     if not check_no_key_leak(site):
@@ -340,6 +391,7 @@ def publish_site(
                 attempt,
                 nfl_carried,
                 nfl_not_carried,
+                nfl_switched_on,
             )
 
         message = batch_message("deploy", "booth-review", f"bundle {short}", {"files": len(files)})
@@ -372,6 +424,7 @@ def publish_site(
                 attempt,
                 nfl_carried,
                 nfl_not_carried,
+                nfl_switched_on,
             )
         if not any(marker in pushed.stderr for marker in _REJECTION_MARKERS):
             raise DeployError(f"deploy push failed (exit {pushed.returncode})")

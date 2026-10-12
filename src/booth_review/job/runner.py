@@ -73,12 +73,14 @@ from booth_review.build.pipeline import BuildOutcome, run_build
 from booth_review.build.site_assembly import (
     BUILD_MARKER,
     SiteBuildResult,
+    add_nfl_to_site,
     assemble_site,
     check_nfl_file_key,
     docs_dir,
     load_nfl_site_payload,
     refresh_nfl_data,
     site_source_dir,
+    site_sports,
 )
 from booth_review.config import CFBD_FLOOR_DEFAULT
 from booth_review.contract.nfl_models import NflSiteData
@@ -342,8 +344,9 @@ class ScheduledJob:
         `nfl_site` (NFL_SITE_ENABLED exactly true, D-18) adds nfl-data.json to
         the site dir: carried over from the vault, then refreshed after the NFL
         build. The NFL switch ships only with a valid file (WR-01): with no
-        valid carry-over the site is built CFB-only and the switch waits for the
-        next run. NFL site problems are items that join the final outcome only."""
+        valid carry-over the site is built CFB-only, and the NFL block turns
+        the switch on in the same run once it has a valid fresh file (iter-2
+        WR-02). NFL site problems are items that join the final outcome only."""
         if update and site_out is None:
             raise ValueError("update mode requires site_out")
         self._update = update
@@ -652,7 +655,8 @@ class ScheduledJob:
         assert self._site_out is not None
         # WR-01 / D-18: the switch is decided by the data, not the flag alone.
         # Without a valid carry-over the site is CFB-only, so it never ships a
-        # switch whose nfl-data.json fetch would 404.
+        # switch whose nfl-data.json fetch would 404; the NFL block can still
+        # turn the switch on with a fresh file (`_turn_nfl_on`, iter-2 WR-02).
         carry = self._nfl_carry_over() if self._nfl_site else None
         try:
             result: SiteBuildResult = assemble_site(
@@ -709,11 +713,12 @@ class ScheduledJob:
         return payload
 
     def _note_switch_off(self, items: list[AttentionItem]) -> None:
-        """A flag-on site without nfl-data.json was built without the switch."""
+        """A flag-on site whose sports meta still lists CFB only, after the NFL
+        block had its chance to turn the switch on, is one attention item."""
         site = self._site_out
         if site is None or not (site / BUILD_MARKER).is_file():
             return
-        if not (site / "nfl-data.json").is_file():
+        if "nfl" not in site_sports(site):
             items.append(nfl_site_switch_off())
 
     # -- staleness (D-14) -------------------------------------------------------
@@ -1293,9 +1298,11 @@ class ScheduledJob:
         """Replace the site dir's nfl-data.json with the freshly built vault
         file. Every failure keeps whatever file the site dir already holds.
 
-        A site built without the switch (no valid carry-over, WR-01) is left
-        alone: a data file there would serve no switch. The next run carries the
-        new vault file and turns the switch on."""
+        A site built without the switch (the vault carry-over was missing or
+        unusable at CFB's site step, WR-01) gets the switch, the NFL modules
+        and the file now, once the fresh vault file validates and passes the
+        key check (iter-2 WR-02, D-20), so a one-off vault-side failure never
+        hides NFL. A failure leaves the switch-less CFB site exactly as built."""
         site = self._site_out
         if site is None or not (site / BUILD_MARKER).is_file():
             return {}
@@ -1303,8 +1310,8 @@ class ScheduledJob:
         if not source.is_file():
             items.append(nfl_site_failed("missing"))
             return {}
-        if not (site / "nfl-data.json").is_file():
-            return {}
+        if "nfl" not in site_sports(site):
+            return self._turn_nfl_on(site, source, items)
         try:
             result = refresh_nfl_data(site_out=site, source=source)
         except KeyLeakError:
@@ -1318,6 +1325,32 @@ class ScheduledJob:
             return {}
         print(f"nfl site: {result.games} games")
         return {"games": result.games}
+
+    def _turn_nfl_on(self, site: Path, source: Path, items: list[AttentionItem]) -> dict[str, int]:
+        """Add the NFL switch and the fresh vault file to a switch-less site."""
+        try:
+            payload = load_nfl_site_payload(source)
+        except (SiteBuildError, OSError, ValueError):
+            items.append(nfl_site_failed("invalid"))
+            return {}
+        try:
+            result = add_nfl_to_site(
+                site_out=site,
+                site_src=self._site_src or site_source_dir(),
+                docs=self._docs or docs_dir(),
+                nfl_payload=payload,
+            )
+        except KeyLeakError:
+            items.append(nfl_site_key_check_failed())
+            return {}
+        except SiteBuildError:
+            items.append(nfl_site_failed("invalid"))
+            return {}
+        if not result.replaced:
+            items.append(nfl_site_key_check_failed())
+            return {}
+        print(f"nfl site: {result.games} games, switch on")
+        return {"games": result.games, "switch_on": 1}
 
     # -- state save ------------------------------------------------------------
 

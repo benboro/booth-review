@@ -1420,7 +1420,9 @@ def _deploy(args: argparse.Namespace) -> int:
         print(
             f"deploy: published bundle {short} (files {result.files}, attempts {result.attempts})"
         )
-    if result.nfl_carried:
+    if result.nfl_switched_on:
+        print("nfl data: carried live copy and turned the NFL switch on")
+    elif result.nfl_carried:
         print("nfl data: carried live copy")
     elif result.nfl_not_carried is not None:
         reason = result.nfl_not_carried.replace("_", " ")

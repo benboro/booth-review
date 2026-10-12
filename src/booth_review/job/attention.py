@@ -407,11 +407,16 @@ def nfl_site_key_check_failed() -> AttentionItem:
 
 
 def nfl_site_switch_off() -> AttentionItem:
-    """NFL is on, but the run had no valid NFL data file, so its site was built
-    without the NFL switch (WR-01, D-18): the switch never ships without data."""
+    """NFL is on, but neither the vault carry-over nor the NFL block's fresh
+    file was usable, so the run's site has no NFL switch (WR-01, D-18): the
+    switch never ships without data. The deploy can still turn it on with a
+    valid live nfl-data.json (iter-2 WR-02, D-20)."""
     return AttentionItem(
         kind="nfl_site_switch_off",
-        line="nfl site data: no valid file, NFL switch left off this run",
+        line=(
+            "nfl site data: no valid file this run, "
+            "NFL switch off unless the deploy carries the live copy"
+        ),
         severity="attention",
     )
 

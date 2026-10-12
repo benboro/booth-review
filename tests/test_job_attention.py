@@ -323,7 +323,8 @@ def test_nfl_site_constructors() -> None:
 
     assert nfl_site_switch_off().kind == "nfl_site_switch_off"
     assert nfl_site_switch_off().line == (
-        "nfl site data: no valid file, NFL switch left off this run"
+        "nfl site data: no valid file this run, "
+        "NFL switch off unless the deploy carries the live copy"
     )
     assert nfl_site_key_check_failed().kind == "nfl_site_key_check_failed"
     assert nfl_site_failed("missing").kind == "nfl_site_failed"

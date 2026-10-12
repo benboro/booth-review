@@ -27,7 +27,12 @@ from test_job_nfl import (
 )
 from test_job_runner import UPDATE_NOW, _runtime, _update_cfbd_responses
 
-from booth_review.build.site_assembly import load_nfl_site_payload
+from booth_review.build.site_assembly import (
+    assemble_site,
+    docs_dir,
+    load_nfl_site_payload,
+    site_source_dir,
+)
 from booth_review.config import DataPaths
 from booth_review.job.attention import (
     AttentionItem,
@@ -159,7 +164,8 @@ def test_constructors_are_count_free_and_validated() -> None:
         nfl_site_switch_off(),
     ]
     assert nfl_site_switch_off().line == (
-        "nfl site data: no valid file, NFL switch left off this run"
+        "nfl site data: no valid file this run, "
+        "NFL switch off unless the deploy carries the live copy"
     )
     assert all(item.severity == "attention" for item in items)
     build_attention_body(items, generated_at=UPDATE_NOW)
@@ -351,18 +357,143 @@ def test_build_without_a_vault_file_reports_missing_and_switch_off(args) -> None
     assert not run.switch_shipped
 
 
-def test_a_first_build_does_not_add_data_to_a_switchless_site(args) -> None:
-    # WR-01: the site was built without the switch (no vault file yet), so the
-    # new file waits for the next run instead of landing in a CFB-only site.
+def _tree(root: Path) -> dict[str, bytes]:
+    return {p.relative_to(root).as_posix(): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+
+
+def _cfb_only_build(site: Path, out: Path) -> dict[str, bytes]:
+    """What CFB's site step built: the CFB-only site from the run's own data."""
+    assemble_site(
+        source=site / "site-data.json", out_dir=out, site_src=site_source_dir(), docs=docs_dir()
+    )
+    return _tree(out)
+
+
+def _flag_on_build(site: Path, out: Path, body: bytes) -> dict[str, bytes]:
+    nfl_file = out.parent / f"{out.name}.nfl.json"
+    nfl_file.parent.mkdir(parents=True, exist_ok=True)
+    nfl_file.write_bytes(body)
+    assemble_site(
+        source=site / "site-data.json",
+        out_dir=out,
+        site_src=site_source_dir(),
+        docs=docs_dir(),
+        nfl=True,
+        nfl_payload=load_nfl_site_payload(nfl_file),
+    )
+    return _tree(out)
+
+
+def test_a_first_build_turns_the_switch_on_in_the_same_run(args, tmp_path: Path) -> None:
+    # Iter-2 WR-02: the site was built without the switch (no vault file yet);
+    # the NFL block's fresh, valid file turns it on in this run.
     def build(paths: DataPaths) -> dict[str, int]:
         _write(paths.processed / "nfl-data.json", _canonical())
         return {"games": 3}
 
     run = args(bootstrap=True, build=build)
-    assert not run.site_file.exists()
-    assert not run.switch_shipped
-    assert nfl_site_switch_off() in run.result.items
+    assert run.site_file.read_bytes() == _canonical()
+    assert run.switch_shipped
+    assert (run.site / "sports" / "nfl" / "index.js").is_file()
+    assert _tree(run.site) == _flag_on_build(run.site, tmp_path / "direct", _canonical())
+    assert not any(kind.startswith("nfl_site") for kind in run.kinds)
+    assert run.result.counts["nfl_site_switch_on"] == 1
     assert run.result.deploy_ready
+    assert run.cfb[0].deploy_ready
+    assert not any(i.kind.startswith("nfl") for i in run.cfb[0].items)
+
+
+@pytest.mark.parametrize("carry", ["invalid", "unreadable"])
+def test_an_unusable_vault_file_this_run_still_ships_the_switch_from_the_fresh_build(
+    args, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, carry: str
+) -> None:
+    # Iter-2 WR-02 / D-20: a one-off vault-side failure at CFB's site step no
+    # longer hides NFL when the NFL block builds a valid file.
+    if carry == "unreadable":
+        import booth_review.job.runner as runner_module
+
+        real = runner_module.load_nfl_site_payload
+        calls: list[Path] = []
+
+        def fail_once(path: Path) -> Any:
+            calls.append(path)
+            if len(calls) == 1:
+                raise OSError("private detail")
+            return real(path)
+
+        monkeypatch.setattr(f"{RUNNER}.load_nfl_site_payload", fail_once)
+    new = _variant()
+
+    def build(paths: DataPaths) -> dict[str, int]:
+        _write(paths.processed / "nfl-data.json", new)
+        return {"games": 3}
+
+    vault_file = b'{"not": "the contract"}' if carry == "invalid" else _canonical()
+    run = args(bootstrap=True, vault_file=vault_file, build=build)
+    assert nfl_site_failed("carry_over_invalid") in run.result.items
+    assert run.switch_shipped
+    assert run.site_file.read_bytes() == load_nfl_site_payload_bytes(new)
+    assert "nfl_site_switch_off" not in run.kinds
+    assert _tree(run.site) == _flag_on_build(run.site, tmp_path / "direct", new)
+    assert run.result.deploy_ready
+    assert run.cfb[0].deploy_ready
+    assert all("private" not in item.line for item in run.result.items)
+
+
+def test_an_invalid_fresh_file_leaves_the_switchless_site_as_built(args, tmp_path: Path) -> None:
+    def build(paths: DataPaths) -> dict[str, int]:
+        _write(paths.processed / "nfl-data.json", b"{}")
+        return {"games": 3}
+
+    run = args(bootstrap=True, build=build)
+    assert nfl_site_failed("invalid") in run.result.items
+    assert nfl_site_switch_off() in run.result.items
+    assert not run.switch_shipped
+    assert _tree(run.site) == _cfb_only_build(run.site, tmp_path / "cfb")
+    assert run.result.exit_code == 4
+
+
+def test_a_fresh_file_with_the_key_leaves_the_switchless_site_as_built(
+    args, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    token = _unique_nfl_token()
+
+    def build(paths: DataPaths) -> dict[str, int]:
+        _write(paths.processed / "nfl-data.json", _canonical())
+        monkeypatch.setenv("CFBD_API_KEY", token)
+        return {"games": 3}
+
+    run = args(bootstrap=True, build=build)
+    assert nfl_site_key_check_failed() in run.result.items
+    assert nfl_site_switch_off() in run.result.items
+    assert not run.switch_shipped
+    for path in run.site.rglob("*"):
+        if path.is_file():
+            assert token.encode() not in path.read_bytes()
+    monkeypatch.setenv("CFBD_API_KEY", "SENTINEL-UPDATE-KEY-ABC")
+    assert _tree(run.site) == _cfb_only_build(run.site, tmp_path / "cfb")
+    assert not [p.name for p in run.site.parent.iterdir() if p.name.startswith(".")]
+
+
+def test_a_failed_switch_on_is_one_item_and_cfb_is_unchanged(
+    args, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def boom(**kwargs: Any) -> Any:
+        raise RuntimeError("private detail")
+
+    monkeypatch.setattr(f"{RUNNER}.add_nfl_to_site", boom)
+
+    def build(paths: DataPaths) -> dict[str, int]:
+        _write(paths.processed / "nfl-data.json", _canonical())
+        return {"games": 3}
+
+    run = args(bootstrap=True, build=build)
+    assert step_failed("nfl_site", "RuntimeError") in run.result.items
+    assert nfl_site_switch_off() in run.result.items
+    assert _tree(run.site) == _cfb_only_build(run.site, tmp_path / "cfb")
+    assert run.result.deploy_ready
+    assert run.result.exit_code == 4
+    assert all("private" not in item.line for item in run.result.items)
 
 
 def test_injected_step_error_is_one_item_and_cfb_is_unchanged(
