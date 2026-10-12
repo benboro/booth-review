@@ -27,10 +27,12 @@ from booth_review.build.site_data import _contract_error_summary
 from booth_review.config import DataPaths
 from booth_review.contract.nfl_models import (
     NFL_SLOTS,
-    NflAgotwColumns,
     NflBoothColumns,
     NflGameColumns,
     NflSiteData,
+)
+from booth_review.contract.nfl_models import (
+    NflViewershipColumns as NflAgotwColumns,  # plan 08-07 rewrites the builder for 2.0.0
 )
 from booth_review.errors import SiteBuildError
 from booth_review.flags.era import MeasurementEra, load_eras

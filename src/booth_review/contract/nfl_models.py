@@ -21,7 +21,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-NFL_SCHEMA_VERSION = "1.0.0"
+NFL_SCHEMA_VERSION = "2.0.0"
 
 NflSlotLabel = Literal[
     "Christmas",
@@ -56,6 +56,25 @@ NFL_SLOTS: tuple[str, ...] = (
 
 PersonRole = Literal["pbp", "analyst", "unknown"]
 
+# The CFB FAMILY_COLORS keys the NFL pills use.
+NflNetworkFamily = Literal["disney", "fox", "cbs", "nbc", "other"]
+
+# (id, label, window_level) in line order; lookups.view_categories must equal this.
+NFL_VIEW_CATEGORIES: tuple[tuple[str, str, bool], ...] = (
+    ("agotw", "Fox AGOTW", True),
+    ("cbs_national", "CBS late national", True),
+    ("snf", "SNF", False),
+    ("mnf", "MNF", False),
+    ("tnf", "TNF", False),
+    ("thanksgiving", "Thanksgiving", False),
+    ("christmas", "Christmas", False),
+    ("black_friday", "Black Friday", False),
+    ("international", "International", False),
+    ("saturday", "Saturday", False),
+    ("friday", "Friday", False),
+    ("other", "Other", False),
+)
+
 
 class NflFreshness(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
@@ -64,7 +83,7 @@ class NflFreshness(BaseModel):
     in_progress: bool
     through_week: int | None
     viewership_through_week: int | None
-    fox_default_season: int | None
+    crews_default_season: int | None
 
 
 class NflConstants(BaseModel):
@@ -95,6 +114,27 @@ class NflNetworkRef(BaseModel):
 
     id: str
     name: str
+    family: NflNetworkFamily
+
+
+class NflNetworkGroupRef(BaseModel):
+    """A picker entry: networks that share one booth ranking (members index
+    lookups.networks) and the label of the group's flagship window."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    id: str
+    name: str
+    flagship: str | None
+    members: list[int]
+
+
+class NflViewCategoryRef(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    id: str
+    label: str
+    window_level: bool
 
 
 class NflPersonRef(BaseModel):
@@ -120,6 +160,8 @@ class NflLookups(BaseModel):
     franchises: list[NflFranchiseRef]
     team_names: list[NflTeamNameRef]
     networks: list[NflNetworkRef]
+    network_groups: list[NflNetworkGroupRef]
+    view_categories: list[NflViewCategoryRef]
     people: list[NflPersonRef]
     eras: list[NflEraRef]
     slots: list[NflSlotLabel]
@@ -160,6 +202,8 @@ class NflGameColumns(BaseModel):
     change_url: list[str | None]
     network: list[int | None]
     crew: list[list[NflCrewEntry]]
+    crew_source: list[Literal["506", "published_lineup"] | None]
+    crew_source_url: list[str | None]
     excitement: list[float | None]
     viewers: list[int | None]
     scope: list[Literal["window", "game"] | None]
@@ -190,6 +234,11 @@ class NflSpecialColumns(BaseModel):
     standalone_sunday_early: list[int]
     standalone_sunday_late: list[int]
     standalone_other: list[int]
+    solo_thursday: list[int]
+    solo_sunday: list[int]
+    solo_monday: list[int]
+    solo_holiday: list[int]
+    solo_other: list[int]
     agotw: list[int]
     cbs_national: list[int]
     international: list[int]
@@ -214,48 +263,47 @@ class NflSeasonWeekColumns(BaseModel):
 
 
 class NflBoothColumns(BaseModel):
-    """Fox booth rows, one per season and booth, never pooled across seasons."""
+    """Booth rows, one per season, network group and booth, never pooled across
+    seasons. Win-probability swing stays in the vault table and is not shipped."""
 
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
     season: list[int]
-    group: list[Literal["lead", "other", "others_pooled"]]
-    rank: list[int | None]
-    pbp_person: list[int | None]
+    network_group: list[int]
+    rank: list[int]
+    rank_source: list[Literal["published", "override", "inferred"]]
+    is_lead: list[bool]
+    pbp_person: list[int]
     analyst_person: list[int | None]
     games: list[int]
+    flagship_games: list[int]
     fill_in_games: list[int]
+    lineup_games: list[int]
     raw_n_margin: list[int]
     raw_n_excitement: list[int]
-    raw_n_volatility: list[int]
+    raw_n_viewers: list[int]
     raw_mean_abs_margin: list[float | None]
     raw_mean_excitement: list[float | None]
-    raw_mean_volatility: list[float | None]
+    raw_mean_viewers: list[float | None]
     adj_n_margin: list[int]
     adj_n_excitement: list[int]
-    adj_n_volatility: list[int]
     adj_margin_resid: list[float | None]
     adj_margin_se: list[float | None]
     adj_excitement_resid: list[float | None]
     adj_excitement_se: list[float | None]
-    adj_volatility_resid: list[float | None]
-    adj_volatility_se: list[float | None]
     low_n: list[bool]
     game_list: list[list[int]]
 
 
-class NflAgotwColumns(BaseModel):
-    """AGOTW viewership rows per season and Nielsen era."""
+class NflViewershipColumns(BaseModel):
+    """Viewership rows per special-game category and season."""
 
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
+    category: list[int]
     season: list[int]
     era: list[int]
-    group: list[Literal["lead", "other"] | None]
-    pbp_person: list[int | None]
-    analyst_person: list[int | None]
     games: list[int]
-    fill_in_games: list[int]
     mean_viewers: list[float | None]
     viewership_resid: list[float | None]
     viewership_se: list[float | None]
@@ -273,6 +321,22 @@ _STANDALONE_COLUMNS: tuple[str, ...] = (
     "standalone_snf",
     "standalone_mnf",
     "standalone_saturday",
+    "standalone_friday",
+    "standalone_sunday_early",
+    "standalone_sunday_late",
+    "standalone_other",
+)
+
+_SOLO_COLUMNS: tuple[str, ...] = (
+    "solo_thursday",
+    "solo_sunday",
+    "solo_monday",
+    "solo_holiday",
+    "solo_other",
+)
+_SOLO_OTHER_PARTS: tuple[str, ...] = (
+    "standalone_saturday",
+    "standalone_international",
     "standalone_friday",
     "standalone_sunday_early",
     "standalone_sunday_late",
@@ -316,15 +380,15 @@ def _check_game_list(block: str, i: int, game_list: Sequence[int], num_games: in
 class NflSiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["1.0.0"]
+    schema_version: Literal["2.0.0"]
     freshness: NflFreshness
     constants: NflConstants
     lookups: NflLookups
     games: NflGameColumns
     special: NflSpecialColumns
     season_weeks: NflSeasonWeekColumns
-    fox_booths: NflBoothColumns
-    agotw_viewership: NflAgotwColumns
+    booths: NflBoothColumns
+    viewership: NflViewershipColumns
 
     @model_validator(mode="after")
     def _check_alignment_and_indexes(self) -> NflSiteData:
@@ -335,15 +399,16 @@ class NflSiteData(BaseModel):
         """
         if tuple(self.lookups.slots) != NFL_SLOTS:
             raise ValueError("lookups.slots: must equal the NFL slot names in order")
-        for block in ("games", "special", "fox_booths", "agotw_viewership"):
+        for block in ("games", "special", "booths", "viewership"):
             _check_finite(block, getattr(self, block))
+        self._check_lookups()
         referenced_people: set[int] = set()
         referenced_networks: set[int] = set()
         n_games = self._check_games(referenced_people, referenced_networks)
         self._check_special()
         self._check_season_weeks()
         self._check_booths(n_games, referenced_people)
-        self._check_agotw(n_games, referenced_people)
+        self._check_viewership(n_games)
         for k in range(len(self.lookups.people)):
             if k not in referenced_people:
                 raise ValueError(f"lookups.people[{k}]: not referenced by anything")
@@ -351,6 +416,32 @@ class NflSiteData(BaseModel):
             if k not in referenced_networks:
                 raise ValueError(f"lookups.networks[{k}]: not referenced by any game")
         return self
+
+    def _check_lookups(self) -> None:
+        lk = self.lookups
+        if [(c.id, c.label, c.window_level) for c in lk.view_categories] != list(
+            NFL_VIEW_CATEGORIES
+        ):
+            raise ValueError("lookups.view_categories: must equal the NFL view categories in order")
+        seen_ids: set[str] = set()
+        owner: dict[int, int] = {}
+        for gi, grp in enumerate(lk.network_groups):
+            if grp.id in seen_ids:
+                raise ValueError(f"lookups.network_groups[{gi}].id: duplicate")
+            seen_ids.add(grp.id)
+            if not grp.members:
+                raise ValueError(f"lookups.network_groups[{gi}].members: empty")
+            for j, m in enumerate(grp.members):
+                if not 0 <= m < len(lk.networks):
+                    raise ValueError(f"lookups.network_groups[{gi}].members[{j}]: out of range")
+                if m in owner:
+                    raise ValueError(
+                        f"lookups.network_groups[{gi}].members[{j}]: network is in two groups"
+                    )
+                owner[m] = gi
+        for k in range(len(lk.networks)):
+            if k not in owner:
+                raise ValueError(f"lookups.networks[{k}]: not in any network group")
 
     def _check_games(self, referenced_people: set[int], referenced_networks: set[int]) -> int:
         g = self.games
@@ -373,9 +464,23 @@ class NflSiteData(BaseModel):
                 if not 0 <= entry.person < len(lk.people):
                     raise ValueError(f"games.crew[{i}][{j}].person: index out of range")
                 referenced_people.add(entry.person)
+            self._check_crew_source(i)
             self._check_points(i)
             self._check_rating(i)
         return n
+
+    def _check_crew_source(self, i: int) -> None:
+        g = self.games
+        source, url, crew = g.crew_source[i], g.crew_source_url[i], g.crew[i]
+        if source is None and crew:
+            raise ValueError(f"games.crew_source[{i}]: required when the game has a crew")
+        if source == "published_lineup":
+            if not any(e.role == "pbp" for e in crew):
+                raise ValueError(f"games.crew_source[{i}]: published_lineup needs a pbp entry")
+            if url is None or not url.startswith("https://"):
+                raise ValueError(f"games.crew_source_url[{i}]: must be an https citation")
+        elif url is not None:
+            raise ValueError(f"games.crew_source_url[{i}]: only for published_lineup games")
 
     def _check_points(self, i: int) -> None:
         g = self.games
@@ -414,12 +519,34 @@ class NflSiteData(BaseModel):
                 raise ValueError(
                     f"special.standalone_total[{i}]: does not equal the sum of the standalone slots"
                 )
+            self._check_solo(i)
             if s.special[i] != s.standalone_total[i] + s.agotw[i] + s.cbs_national[i]:
                 raise ValueError(
                     f"special.special[{i}]: does not equal standalone_total + agotw + cbs_national"
                 )
             if s.international_other[i] > s.international[i]:
                 raise ValueError(f"special.international_other[{i}]: exceeds international")
+
+    def _check_solo(self, i: int) -> None:
+        s = self.special
+        expected = {
+            "solo_thursday": s.standalone_tnf[i],
+            "solo_sunday": s.standalone_snf[i],
+            "solo_monday": s.standalone_mnf[i],
+            "solo_holiday": (
+                s.standalone_christmas[i]
+                + s.standalone_thanksgiving[i]
+                + s.standalone_black_friday[i]
+            ),
+            "solo_other": sum(getattr(s, name)[i] for name in _SOLO_OTHER_PARTS),
+        }
+        for name, want in expected.items():
+            if getattr(s, name)[i] != want:
+                raise ValueError(f"special.{name}[{i}]: does not match its standalone slots")
+        if sum(getattr(s, name)[i] for name in _SOLO_COLUMNS) != s.standalone_total[i]:
+            raise ValueError(
+                f"special.solo_other[{i}]: solo columns do not sum to standalone_total"
+            )
 
     def _check_season_weeks(self) -> None:
         w = self.season_weeks
@@ -431,38 +558,57 @@ class NflSiteData(BaseModel):
                 raise ValueError(f"season_weeks.cbs_ambiguous_weeks[{i}]: exceeds doubleheader")
 
     def _check_booths(self, num_games: int, referenced_people: set[int]) -> None:
-        b = self.fox_booths
-        n = _check_lengths("fox_booths", b, "season")
+        b = self.booths
+        n = _check_lengths("booths", b, "season")
         num_people = len(self.lookups.people)
-        leads: set[int] = set()
+        groups = self.lookups.network_groups
+        by_key: dict[tuple[int, int], list[int]] = {}
         for i in range(n):
+            _check_index("booths", "network_group", i, b.network_group[i], len(groups))
             for col in ("pbp_person", "analyst_person"):
                 value = getattr(b, col)[i]
-                _check_index("fox_booths", col, i, value, num_people)
+                _check_index("booths", col, i, value, num_people)
                 if value is not None:
                     referenced_people.add(value)
-            _check_game_list("fox_booths", i, b.game_list[i], num_games)
-            if b.group[i] == "lead":
-                if b.season[i] in leads:
-                    raise ValueError(f"fox_booths.group[{i}]: second lead row in one season")
-                leads.add(b.season[i])
-            if b.group[i] == "others_pooled" and (
-                b.pbp_person[i] is not None or b.analyst_person[i] is not None
-            ):
-                raise ValueError(f"fox_booths.pbp_person[{i}]: a pooled row names no people")
+            _check_game_list("booths", i, b.game_list[i], num_games)
+            if len(b.game_list[i]) != b.games[i]:
+                raise ValueError(f"booths.game_list[{i}]: length does not equal games")
+            for col in ("flagship_games", "fill_in_games", "lineup_games"):
+                if getattr(b, col)[i] > b.games[i]:
+                    raise ValueError(f"booths.{col}[{i}]: exceeds games")
+            in_range = 0 <= b.network_group[i] < len(groups)
+            if in_range and groups[b.network_group[i]].flagship is None and b.flagship_games[i] > 0:
+                raise ValueError(f"booths.flagship_games[{i}]: the group has no flagship")
+            by_key.setdefault((b.season[i], b.network_group[i]), []).append(i)
+        for rows in by_key.values():
+            ranks = sorted(b.rank[i] for i in rows)
+            if ranks != list(range(1, len(rows) + 1)):
+                raise ValueError(f"booths.rank[{rows[0]}]: ranks must be exactly 1..n")
+            leads = [i for i in rows if b.is_lead[i]]
+            if len(leads) != 1 or b.rank[leads[0]] != 1:
+                raise ValueError(f"booths.is_lead[{rows[0]}]: exactly one lead, at rank 1")
+            if len({b.rank_source[i] for i in rows}) != 1:
+                raise ValueError(f"booths.rank_source[{rows[0]}]: mixed sources in one group")
 
-    def _check_agotw(self, num_games: int, referenced_people: set[int]) -> None:
-        a = self.agotw_viewership
-        n = _check_lengths("agotw_viewership", a, "season")
-        num_people = len(self.lookups.people)
+    def _check_viewership(self, num_games: int) -> None:
+        v = self.viewership
+        n = _check_lengths("viewership", v, "season")
+        seen: set[tuple[int, int]] = set()
         for i in range(n):
-            _check_index("agotw_viewership", "era", i, a.era[i], len(self.lookups.eras))
-            for col in ("pbp_person", "analyst_person"):
-                value = getattr(a, col)[i]
-                _check_index("agotw_viewership", col, i, value, num_people)
-                if value is not None:
-                    referenced_people.add(value)
-            _check_game_list("agotw_viewership", i, a.game_list[i], num_games)
+            _check_index(
+                "viewership", "category", i, v.category[i], len(self.lookups.view_categories)
+            )
+            _check_index("viewership", "era", i, v.era[i], len(self.lookups.eras))
+            _check_game_list("viewership", i, v.game_list[i], num_games)
+            if (v.category[i], v.season[i]) in seen:
+                raise ValueError(
+                    f"viewership.category[{i}]: second row for one category and season"
+                )
+            seen.add((v.category[i], v.season[i]))
+            if v.games[i] < 1:
+                raise ValueError(f"viewership.games[{i}]: must be >= 1")
+            if len(v.game_list[i]) != v.games[i]:
+                raise ValueError(f"viewership.game_list[{i}]: length does not equal games")
 
 
 def validate_nfl_site_data(obj: object) -> NflSiteData:
