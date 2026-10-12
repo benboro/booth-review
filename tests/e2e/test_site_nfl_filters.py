@@ -224,3 +224,43 @@ def test_mobile_sheet_controls_are_44px(mobile: Page) -> None:
         }"""
     )
     assert small == []
+
+
+def test_announcer_list_is_one_tab_stop_with_arrow_keys(app: Page) -> None:
+    """JS-WR-05: a roving tabindex, not one tab stop per announcer; arrows move between options."""
+    _open(app, "announcers")
+    options = "#nfl-person-results-pop > li"
+    assert app.locator(f"{options}[tabindex='0']").count() == 1
+    names = app.locator(f"{options}:visible .option-name").all_inner_texts()
+    assert len(names) >= 3
+
+    def active() -> str | None:
+        return app.evaluate(  # type: ignore[no-any-return]
+            "document.activeElement.matches('li[role=option]')"
+            " ? document.activeElement.textContent : document.activeElement.id"
+        )
+
+    app.focus("#nfl-person-search-pop")
+    app.keyboard.press("ArrowDown")
+    assert active() == names[0]
+    app.keyboard.press("ArrowDown")
+    assert active() == names[1]
+    assert app.locator(f"{options}[tabindex='0']").inner_text() == names[1]
+    app.keyboard.press("End")
+    assert active() == names[-1]
+    app.keyboard.press("Home")
+    assert active() == names[0]
+    app.keyboard.press("ArrowUp")
+    assert active() == "nfl-person-search-pop"
+    # Tab from an option leaves the list in one step.
+    app.keyboard.press("ArrowDown")
+    app.keyboard.press("Tab")
+    assert app.evaluate("document.activeElement.closest('#nfl-person-results-pop')") is None
+    # aria-expanded follows whether any option is listed.
+    assert app.get_attribute("#nfl-person-search-pop", "aria-expanded") == "true"
+    app.fill("#nfl-person-search-pop", "zzzz no such announcer")
+    assert app.get_attribute("#nfl-person-search-pop", "aria-expanded") == "false"
+    app.fill("#nfl-person-search-pop", "ada")
+    assert app.get_attribute("#nfl-person-search-pop", "aria-expanded") == "true"
+    stop = app.locator(f"{options}[tabindex='0']")
+    assert stop.count() == 1 and stop.is_visible()

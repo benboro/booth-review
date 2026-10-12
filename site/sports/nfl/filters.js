@@ -69,7 +69,6 @@ function announcersSection(ctx, sfx) {
   input.type = 'text';
   input.id = `nfl-person-search-${sfx}`;
   input.setAttribute('role', 'combobox');
-  input.setAttribute('aria-expanded', 'true');
   input.setAttribute('aria-autocomplete', 'list');
   input.setAttribute('aria-controls', `nfl-person-results-${sfx}`);
   input.placeholder = 'Search announcers — try "Joe Buck"';
@@ -84,6 +83,16 @@ function announcersSection(ctx, sfx) {
 
   const people = [...model.people].sort((a, b) => a.name.localeCompare(b.name));
   const rows = new Map();
+  // Roving tabindex (JS-WR-05): the list is one tab stop, held by `stop`.
+  // ArrowUp/ArrowDown, Home and End move between the visible options, and
+  // ArrowUp on the first option goes back to the search box.
+  let stop = null;
+  const setStop = (li) => {
+    if (stop && stop !== li) stop.tabIndex = -1;
+    stop = li;
+    if (li) li.tabIndex = 0;
+  };
+  const visibleRows = () => [...list.children].filter((li) => !li.hidden);
   const toggle = (id) => {
     const cur = ctx.getState().people;
     ctx.setState({ people: cur.includes(id) ? cur.filter((p) => p !== id) : [...cur, id] });
@@ -91,7 +100,7 @@ function announcersSection(ctx, sfx) {
   for (const p of people) {
     const li = el('li');
     li.setAttribute('role', 'option');
-    li.tabIndex = 0;
+    li.tabIndex = -1;
     li.dataset.person = p.id;
     const box = el('span', 'option-check');
     box.setAttribute('aria-hidden', 'true');
@@ -116,16 +125,38 @@ function announcersSection(ctx, sfx) {
       if (hit) shown += 1;
     }
     empty.hidden = shown > 0;
+    input.setAttribute('aria-expanded', shown > 0 ? 'true' : 'false');
+    if (!stop || stop.hidden) setStop(visibleRows()[0] ?? null);
   }
   input.addEventListener('input', filterRows);
   input.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown') {
-      const first = [...list.children].find((li) => !li.hidden);
+      const first = visibleRows()[0];
       if (first) {
         e.preventDefault();
+        setStop(first);
         first.focus();
       }
     }
+  });
+  list.addEventListener('focusin', (e) => {
+    const li = e.target.closest('li[role="option"]');
+    if (li) setStop(li);
+  });
+  list.addEventListener('keydown', (e) => {
+    const li = e.target.closest('li[role="option"]');
+    if (!li) return;
+    const shown = visibleRows();
+    const at = shown.indexOf(li);
+    let target = null;
+    if (e.key === 'ArrowDown') target = shown[Math.min(at + 1, shown.length - 1)];
+    else if (e.key === 'ArrowUp') target = at > 0 ? shown[at - 1] : input;
+    else if (e.key === 'Home') target = shown[0];
+    else if (e.key === 'End') target = shown[shown.length - 1];
+    if (!target) return;
+    e.preventDefault();
+    if (target !== input) setStop(target);
+    target.focus();
   });
 
   field.append(labelFor(input, 'Search announcers'), input, list, empty);
