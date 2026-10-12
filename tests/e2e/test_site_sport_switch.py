@@ -97,3 +97,81 @@ def test_nfl_state_kept_across_cfb_detour(
     page.wait_for_function("location.search.includes('sport=nfl')")
     assert page.evaluate("window.__nflTestHooks.getState().view") == "fox"
     assert "view=fox" in page.evaluate("location.search")
+
+
+def test_flag_off_ignores_sport_param(guarded_page: Page, site_url: str) -> None:
+    page = guarded_page
+    urls = _track(page)
+    page.goto(f"{site_url}/index.html?sport=nfl")
+    page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+    assert page.evaluate("location.search") == ""
+    assert page.locator("#sport-switch").count() == 0
+    assert _count(urls, "nfl-data.json") == 0
+    page.goto(f"{site_url}/index.html?sport=nfl&view=bars")
+    page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+    assert page.evaluate("location.search") == "?view=bars"
+
+
+def _bar_height(page: Page) -> float:
+    return float(page.evaluate("document.getElementById('topbar').getBoundingClientRect().height"))
+
+
+def test_mobile_switch_size_and_topbar_height(
+    nfl_mobile_page: Page,
+    open_flagon_cfb: Callable[..., None],
+    browser: object,
+    site_url: str,
+) -> None:
+    page = nfl_mobile_page
+    open_flagon_cfb(page)
+    for sport in ("cfb", "nfl"):
+        box = page.locator(f'#sport-switch button[data-sport="{sport}"]').bounding_box()
+        assert box is not None
+        assert box["height"] >= 44
+        assert box["width"] >= 44
+    on_height = _bar_height(page)
+    ctx = browser.new_context(  # type: ignore[attr-defined]
+        viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True
+    )
+    try:
+        off = ctx.new_page()
+        off.goto(f"{site_url}/index.html")
+        off.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+        assert abs(_bar_height(off) - on_height) <= 1
+    finally:
+        ctx.close()
+
+
+def test_switching_keeps_topbar_and_stacks_nfl_regions(
+    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None]
+) -> None:
+    """The top bar does not move on a switch and the NFL regions stack with no gap.
+
+    The NFL toolbar is empty until plan 12, so an exact chart-top match with the CFB
+    toolbar is asserted there, not here.
+    """
+    page = nfl_guarded_page
+    open_flagon_cfb(page)
+    before = _bar_height(page)
+    _click(page, "nfl")
+    page.wait_for_function("window.__nflTestHooks && window.__nflTestHooks.ready === true")
+    assert abs(_bar_height(page) - before) <= 1
+    rect = "document.querySelector('%s').getBoundingClientRect().%s"
+    bar_bottom = page.evaluate(rect % ("#nfl-selection-bar", "bottom"))
+    assert abs(page.evaluate(rect % ("#nfl-chart-area", "top")) - bar_bottom) <= 1
+    assert page.evaluate(rect % ("#chart-area", "height")) == 0
+
+
+def test_nfl_load_error_then_cfb_still_loads(
+    nfl_guarded_page: Page, nfl_site_url: str, open_flagon_cfb: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    page.route("**/nfl-data.json*", lambda route: route.fulfill(status=500, body="no"))
+    open_flagon_cfb(page)
+    _click(page, "nfl")
+    page.wait_for_function("window.__nflTestHooks && window.__nflTestHooks.failed === true")
+    assert _pressed(page, "nfl") == "true"
+    _click(page, "cfb")
+    assert _pressed(page, "cfb") == "true"
+    assert page.evaluate("window.__testHooks.ready") is True
+    assert page.locator("#chart").is_visible()

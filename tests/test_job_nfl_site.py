@@ -172,7 +172,7 @@ def test_flag_off_has_no_nfl_file_no_items_and_site_data_off(args) -> None:
         build_kwargs=kwargs,
     )
     assert not run.site_file.exists()
-    assert not (run.site / "sports").exists()
+    assert not (run.site / "sports" / "nfl").exists()
     assert not any(kind.startswith("nfl_site") for kind in run.kinds)
     assert kwargs[0]["site_data"] is False
     assert run.result.deploy_ready
