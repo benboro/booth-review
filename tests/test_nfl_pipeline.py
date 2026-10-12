@@ -244,11 +244,11 @@ SITE_JSON = "processed/nfl-data.json"
 
 
 def _run(vault: DataPaths, **kwargs: object) -> nfl_pipeline.NflBuildOutcome:
+    kwargs.setdefault("include_playoffs", False)
     return nfl_pipeline.run_nfl_build(
         vault,
         Path(os.environ["BOOTH_REVIEW_REFERENCE"]),
         seasons=[2014],
-        include_playoffs=False,
         check_acceptance=False,
         **kwargs,  # type: ignore[arg-type]
     )
@@ -365,6 +365,31 @@ def test_include_playoffs_adds_rows(vault: DataPaths) -> None:
     assert _tables(vault).height == 3
     assert main(["nfl", "build", "--season", "2014", "--no-commit", "--include-playoffs"]) == 0
     assert _tables(vault).height == 4
+
+
+def test_include_playoffs_skips_site_data_and_keeps_the_previous_file(
+    vault: DataPaths, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # WR-05 / D-17: a playoffs build never writes the regular-season site file,
+    # and with the flag on it is a skip, not a site_data_failed.
+    _seed(vault, rr=["NFL Network"], playoff=True)
+    previous = vault.vault / SITE_JSON
+    previous.parent.mkdir(parents=True, exist_ok=True)
+    previous.write_bytes(b"last-good")
+    outcome = _run(vault, commit=True, site_data=True, include_playoffs=True)
+    assert outcome.counts["site_data_skipped"] == 1
+    assert "site_data_failed" not in outcome.counts
+    assert SITE_JSON not in outcome.written
+    assert previous.read_bytes() == b"last-good"
+    assert outcome.committed
+    monkeypatch.setenv("NFL_SITE_ENABLED", "true")
+    capsys.readouterr()
+    code = main(["nfl", "build", "--season", "2014", "--no-commit", "--include-playoffs"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "nfl site data: skipped (the site shows the regular season only)" in out
+    assert "failed" not in out
+    assert previous.read_bytes() == b"last-good"
 
 
 def test_gitignore_untouched() -> None:

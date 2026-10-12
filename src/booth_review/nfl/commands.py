@@ -115,6 +115,8 @@ def _print_build(outcome: NflBuildOutcome, *, check: bool) -> None:
         print(f"override errors {c.get('override_errors', 0)}")
     if c.get("site_data_failed"):
         print("nfl site data: failed (tables committed)")
+    if c.get("site_data_skipped"):
+        print("nfl site data: skipped (the site shows the regular season only)")
     if check and outcome.acceptance is not None:
         text = f"acceptance: {outcome.acceptance.unmatched} unmatched"
         if outcome.acceptance.multi_network:

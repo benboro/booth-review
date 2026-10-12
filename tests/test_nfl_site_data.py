@@ -843,3 +843,24 @@ def test_a_nan_statistic_fails_the_build_by_position_only() -> None:
         )
     assert "agotw_viewership.viewership_se[0]: must be finite" in str(err.value)
     assert "nan" not in str(err.value).lower()
+
+
+def test_a_playoff_inclusive_special_table_is_refused_by_position() -> None:
+    # WR-05 / D-17: a special table built with --include-playoffs counts playoff
+    # games; even when the categories happen to match, it must not ship.
+    inputs = _scenario()
+    games = inputs.games.with_columns(pl.lit("REG").alias("game_type"))
+    playoff_special = _special_rows(games, {2023: (3, 1, 1, 1), 2024: (2, 0, 0, 0)})
+    with pytest.raises(SiteBuildError) as err:
+        build_nfl_site_data(
+            NflSiteInputs(
+                inputs.games,
+                playoff_special,
+                inputs.task1,
+                inputs.people,
+                inputs.franchises,
+                inputs.eras,
+            )
+        )
+    assert str(err.value).startswith("special[")
+    assert "].games: does not match the regular-season games" in str(err.value)

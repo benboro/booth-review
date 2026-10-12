@@ -403,6 +403,16 @@ def _constants(task1: pl.DataFrame) -> dict[str, Any]:
 # ----------------------------------------------------------------------------
 
 
+def _regular_game_counts(games: pl.DataFrame) -> dict[tuple[str, int], int]:
+    """(franchise, season) -> regular-season games played in the shipped games."""
+    counts: dict[tuple[str, int], int] = {}
+    for row in games.iter_rows(named=True):
+        for side in ("home", "away"):
+            key = (row[f"{side}_franchise_id"], int(row["season"]))
+            counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
 def _exclusive_counts(games: pl.DataFrame) -> dict[tuple[str, int], list[int]]:
     """(franchise, season) -> [standalone, agotw, cbs_national, international_other]."""
     counts: dict[tuple[str, int], list[int]] = {}
@@ -428,6 +438,10 @@ def _special_block(
 ) -> dict[str, list[Any]]:
     special = special.sort(["franchise_id", "season"])
     expected = _exclusive_counts(games)
+    # D-17 / WR-05: the table's counts must come from regular-season games only.
+    # A table built with --include-playoffs counts playoff games too, so it is
+    # refused here rather than shipping inflated counts.
+    regular = _regular_game_counts(games)
     cols: dict[str, list[Any]] = {
         name: [] for name in ("franchise", "season", *_SPECIAL_COUNT_COLUMNS)
     }
@@ -444,6 +458,11 @@ def _special_block(
         ]
         if got != want:
             raise SiteBuildError(f"special[{i}]: exclusive category counts do not match games")
+        if regular.get(key, 0) != row["games"]:
+            raise SiteBuildError(
+                f"special[{i}].games: does not match the regular-season games "
+                "(was the table built with --include-playoffs?)"
+            )
         cols["franchise"].append(franchises.add(row["franchise_id"]))
         cols["season"].append(int(row["season"]))
         for name in _SPECIAL_COUNT_COLUMNS:
