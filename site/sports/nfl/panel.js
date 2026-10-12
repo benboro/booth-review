@@ -1,14 +1,15 @@
 /**
- * NFL detail panel (999.5-08, D-09, D-22, D-23). A native <dialog> the
- * component creates inside `host`. Fields follow the UI-SPEC order. It never
- * shows a point spread or any spread-named field.
+ * NFL detail panel (999.5-08, D-09, D-14, D-17, D-20, D-22, D-23). A native
+ * <dialog> the component creates inside `host`. Its sections follow the CFB
+ * panel's order and are built from the shared panel-parts. It never shows a
+ * point spread or any spread-named field.
  *
  * DOM is built only with createElement/textContent; every href passes through
- * `safeHref` and gets target=_blank with rel="noopener noreferrer".
+ * `externalLink` -> `safeHref` and gets target=_blank, rel="noopener noreferrer".
  */
 
-import { safeHref } from '../../modules/panel.js';
-import { makeRolePill, nameWithRoles } from '../../modules/pill.js';
+import { externalLink, crewBox, linksList, networksParagraph } from '../../modules/panel-parts.js';
+import { currentTheme } from '../../modules/pill.js';
 import {
   causeCopy,
   dateLongText,
@@ -19,8 +20,7 @@ import {
   viewersText,
 } from './game-format.js';
 
-const WINDOW_TITLE = 'This figure covers the whole Sunday-afternoon window, not just this game.';
-const NOT_RECORDED = 'Not recorded';
+const WINDOW_NOTE = ' · Window-level figure (all Sunday afternoon games).';
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -29,87 +29,67 @@ function el(tag, className, text) {
   return node;
 }
 
-function link(url, text) {
-  const href = safeHref(url);
-  if (!href) return null;
-  const a = el('a', null, text);
-  a.href = href;
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
-  return a;
+function titleText(row) {
+  const away = row.awayPoints != null ? `${row.away} ${row.awayPoints}` : row.away;
+  const home = row.homePoints != null ? `${row.home} ${row.homePoints}` : row.home;
+  return `${away} at ${home}`;
 }
 
-/** A label/value field row: `<div class="panel-field"><h3>label</h3><div>...</div></div>`. */
-function field(label, ...valueNodes) {
-  const wrap = el('div', 'panel-field');
-  wrap.appendChild(el('h3', null, label));
-  const value = el('div', 'panel-field-value');
-  value.append(...valueNodes);
-  wrap.appendChild(value);
-  return wrap;
-}
-
-function text(s) {
-  return document.createTextNode(s);
-}
-
-function flexedNodes(row) {
-  const parts = [];
-  if (row.originalSlot != null) parts.push(row.originalSlot);
-  const origin = parts.length ? parts[0] : null;
-  let line = 'Flexed from';
-  if (origin) line += ` ${origin}`;
-  if (row.originalNetwork) line += origin ? ` (${row.originalNetwork})` : ` ${row.originalNetwork}`;
-  const nodes = [el('p', null, line)];
-  const a = link(row.changeUrl, 'Scheduling change on Wikipedia ↗');
-  if (a) {
-    const p = el('p');
-    p.appendChild(a);
-    nodes.push(p);
+function crewSection(row) {
+  const heading = el('h3', null, 'Crew');
+  if (row.crew.length === 0) return [heading, el('p', 'panel-crew-empty crew-missing', 'Crew not listed.')];
+  const box = crewBox(row.crew.map((c) => ({ name: c.name, role: c.role })));
+  if (row.crewSource === 'published_lineup') {
+    box.appendChild(el('p', 'crew-source-note', 'From published lineup.'));
   }
-  nodes.push(el('p', 'nfl-muted', 'Scheduling facts: Wikipedia, CC BY-SA 4.0.'));
-  return nodes;
-}
-
-function crewNodes(row) {
-  if (row.crew.length === 0) return [text(NOT_RECORDED)];
-  const box = el('div', 'crew-box');
-  const ul = el('ul', 'panel-crew');
-  for (const c of row.crew) {
-    const li = el('li');
-    li.appendChild(nameWithRoles(el('span', 'crew-name', c.name), makeRolePill(c.role)));
-    ul.appendChild(li);
-  }
-  box.appendChild(ul);
-  return [box];
+  return [heading, box];
 }
 
 function viewersNodes(row) {
   const v = viewersText(row);
-  if (v == null) return [text(`Not available (${causeCopy(row).panel})`)];
-  const nodes = [text(v)];
-  if (row.scope === 'window') {
-    const tag = el('span', 'nfl-muted', 'window-level');
-    tag.title = WINDOW_TITLE;
-    nodes.push(text(' '), tag);
-  }
+  if (v == null) return [el('p', null, `Viewers: not available (${causeCopy(row).panel})`)];
+  const nodes = [el('p', null, `Viewers: ${v}${row.scope === 'window' ? WINDOW_NOTE : ''}`)];
+  if (row.era != null) nodes.push(el('p', null, `Measured under ${row.era}.`));
   return nodes;
 }
 
-function linksNodes(row) {
-  const ul = el('ul', 'panel-links');
-  const rr = link(row.rrUrl, 'View record on Ratings Reference ↗');
-  if (rr) {
-    const li = el('li');
-    li.appendChild(rr);
-    ul.appendChild(li);
+function factsParagraph(row) {
+  const p = el('p', 'panel-facts');
+  const bits = [`Slot: ${slotLabel(row.slot)}.`, row.standalone ? 'Solo slot.' : 'Shares its window.'];
+  for (const f of flagLabels(row)) if (f !== 'Solo slot' && f !== 'Flexed') bits.push(`${f}.`);
+  p.appendChild(document.createTextNode(bits.join(' ')));
+  if (row.flexed) {
+    let line = ' Flexed from';
+    if (row.originalSlot != null) line += ` ${row.originalSlot}`;
+    if (row.originalNetwork) line += row.originalSlot != null ? ` on ${row.originalNetwork}` : ` ${row.originalNetwork}`;
+    p.appendChild(document.createTextNode(`${line}. `));
+    const a = externalLink(row.changeUrl, 'Wikipedia (CC BY-SA 4.0)');
+    if (a) p.appendChild(a);
+    else p.appendChild(document.createTextNode('Source: Wikipedia (CC BY-SA 4.0).'));
   }
-  const li = el('li');
-  const src = link(row.sourceUrl, 'View original source ↗');
-  if (src) li.appendChild(src);
-  else li.textContent = 'Original source not recorded';
-  ul.appendChild(li);
-  return [ul];
+  p.appendChild(document.createTextNode(` Final score: ${scoreText(row)}.`));
+  const ex = row.excitement == null
+    ? 'Excitement: not available.'
+    : `Excitement: ${row.excitement.toFixed(1)} (GEI-style, not CFBD's index).`;
+  p.appendChild(document.createTextNode(` ${ex}`));
+  return p;
+}
+
+function linkItems(row) {
+  const items = [{ href: row.rrUrl, text: 'View record on Ratings Reference ↗' }];
+  items.push({
+    href: row.sourceUrl,
+    text: 'View original source ↗',
+    fallback: row.viewers != null ? 'Original source not recorded' : undefined,
+  });
+  if (row.crewSource === 'published_lineup') {
+    items.push({
+      href: row.crewSourceUrl,
+      text: 'Crew source: published lineup ↗',
+      fallback: 'Crew source: published lineup',
+    });
+  }
+  return items;
 }
 
 /**
@@ -150,47 +130,18 @@ export function createDetailPanel(host, { methodologyHref: _methodologyHref } = 
   });
 
   function renderRow(row) {
-    title.textContent = `${row.away} at ${row.home}`;
-    const fields = [
-      field('Final score', text(scoreText(row))),
-      field('Date', text(dateLongText(row))),
-      field('Kickoff', text(kickoffText(row) ?? NOT_RECORDED)),
-      field('Week', text(`Week ${row.week}, ${row.season} regular season`)),
-      field('Slot', text(slotLabel(row.slot))),
-    ];
-    const flags = flagLabels(row);
-    fields.push(
-      field(
-        'Flags',
-        ...(flags.length
-          ? flags.map((f) => el('span', 'pill nfl-pill', f))
-          : [text('None')]),
-      ),
-    );
-    if (row.flexed) fields.push(field('Flexed from', ...flexedNodes(row)));
-    fields.push(field('Network', text(row.network ?? NOT_RECORDED)));
-    fields.push(field('Crew', ...crewNodes(row)));
-    fields.push(field('Viewers', ...viewersNodes(row)));
-    if (row.viewers != null && row.era != null) fields.push(field('Measured under', text(row.era)));
-    if (row.viewers != null && row.scope === 'window') {
-      fields.push(
-        field(
-          'Viewership scope',
-          el('span', 'nfl-muted', 'Unnormalized. No coverage-share data was available.'),
-        ),
-      );
-    }
-    const exVal = row.excitement == null ? 'Not available' : row.excitement.toFixed(1);
-    fields.push(
-      field(
-        'GEI-style excitement',
-        text(exVal),
-        text(' '),
-        el('span', 'nfl-muted', "Not CFBD's excitement index."),
-      ),
-    );
-    fields.push(field('Links', ...linksNodes(row)));
-    body.replaceChildren(...fields);
+    title.textContent = titleText(row);
+    const dateP = el('p', null, `${dateLongText(row)} · ${kickoffText(row) ?? 'Kickoff time not recorded'}`);
+    const network = row.network == null
+      ? el('p', null, 'Network not recorded.')
+      : networksParagraph({
+          primary: { name: row.network, family: row.networkFamily },
+          others: [],
+          theme: currentTheme(),
+        });
+    const children = [dateP, network, ...crewSection(row), ...viewersNodes(row), factsParagraph(row)];
+    children.push(el('h3', null, 'Links'), linksList(linkItems(row)));
+    body.replaceChildren(...children);
   }
 
   return {

@@ -9,7 +9,7 @@
 
 import { nameWithRoles, makeRolePill } from '../../modules/pill.js';
 import { safeHref } from '../../modules/panel.js';
-import { dateShortText, flagLabels, kickoffText, scoreText, viewersText } from './game-format.js';
+import { crewSourceText, dateShortText, flagLabels, kickoffText, scoreText, viewersText } from './game-format.js';
 
 const ROLE_ORDER = { pbp: 0, analyst: 1 };
 const NOT_RECORDED = 'Not recorded';
@@ -54,6 +54,8 @@ function crewCell(td, row) {
     if (nodes.length > 0) nodes.push(document.createTextNode(' · '));
     nodes.push(nameWithRoles(el('span', 'crew-name', c.name), makeRolePill(c.role)));
   }
+  const source = crewSourceText(row);
+  if (source) nodes.push(document.createTextNode(' '), el('span', 'nfl-muted', source));
   td.replaceChildren(...nodes);
 }
 
@@ -96,6 +98,7 @@ function buildRow(row, onOpen) {
   matchupTd.appendChild(pills);
   tr.appendChild(matchupTd);
 
+  // NFL-only column: the table shows the final score; CFB shows it only in the panel.
   tr.appendChild(el('td', null, scoreText(row)));
   tr.appendChild(el('td', null, row.network ?? NOT_RECORDED));
 
