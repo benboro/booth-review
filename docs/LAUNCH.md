@@ -3,7 +3,9 @@
 The site goes live by setting the vault workflow's `PUBLISH_ENABLED` variable to `true`
 with `DEPLOY_REPO=benboro/benboro.github.io`. Nothing else changes at launch. 506 Sports
 was asked about reuse and has not replied, so launch does not wait on it; if 506 objects,
-its crews and networks come off the site. Until launch the scheduled job collects and
+its crews and networks come off the site. Sports Media Watch's 2021–2024 figures are
+used on the same terms: credited with a link, and taken down if it objects (see the
+takedown note under Operating notes). Until launch the scheduled job collects and
 builds but deploys nothing.
 
 The data repo is private and is only called "the private data repo" here. The dry-run
@@ -41,9 +43,11 @@ line except the last must say "pending", and no private repo name may appear.
 
 ### Attribution
 
-- [x] 2026-10-05 Each plotted row keeps its Ratings Reference record URLs and the headline's original source URL in the site data. `tests/test_launch_checks.py::test_plotted_rows_keep_rr_record_urls_and_headline_source_url`
+- [x] 2026-10-05 Each plotted row with a Ratings Reference headline keeps its record URLs, and every plotted row keeps the headline's original source URL in the site data. `tests/test_launch_checks.py::test_plotted_rows_keep_rr_record_urls_and_headline_source_url`
 - [x] 2026-10-05 The detail panel links both Ratings Reference records. `tests/e2e/test_site_panel_table.py::test_click_dot_opens_panel_with_both_rr_record_links`
 - [x] 2026-10-05 A missing source URL shows as text, not a dead link. `tests/e2e/test_site_panel_table.py::test_open_panel_hook_shows_source_and_506_link_variants`
+- [x] 2026-10-13 A Sports Media Watch figure ships without Ratings Reference record links. `tests/test_build_site_data.py::test_second_source_headline_drops_rr_record_links`
+- [x] 2026-10-13 A Sports Media Watch figure is credited to Sports Media Watch with a link to its season page, and the panel says it is not listed on Ratings Reference. `tests/e2e/test_site_second_source.py::test_smw_panel_credit_lines`
 - [x] 2026-10-05 Footer carries the CFBD credit and the CC BY 4.0 link. `tests/test_site_pages.py::test_footer_html_has_credit_line_once_and_nav_and_credit_links`
 - [x] 2026-10-05 Footer carries the "modified" notice and freshness date. `tests/e2e/test_site_static.py::test_footer_credits_freshness_and_nav`
 
@@ -80,4 +84,5 @@ line except the last must say "pending", and no private repo name may appear.
 - The staleness check runs only when a run happens. The manual fallback is `gh workflow run`.
 - If a drill run is missing, dispatch it again; concurrency keeps one pending run.
 - Deploy commits record the bundle hash in their message.
+- Taking down Sports Media Watch: remove `raw/smw/<season>/` from the vault for each season, commit and push the vault, and rebuild. The rated counts drop, so if the regression guard blocks the build, accept the new baseline with `booth-review build --accept-baseline`. Its games go back to the "No public rating" strip (`docs/sources/smw.md`).
 - There is no `.nojekyll` file: the user site's Pages workflow does not run Jekyll.
