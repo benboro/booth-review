@@ -378,3 +378,76 @@ def test_load_team_crosswalk_allows_same_variant_over_disjoint_seasons(tmp_path:
         encoding="utf-8",
     )
     assert len(load_team_crosswalk(tmp_path)) == 3
+
+
+# -- second sources and candidate sets (04.19 D-05, D-21) ---------------------------------
+
+
+def _two_team_games() -> dict[int, list[CfbdGame]]:
+    return {
+        2021: [
+            _game(
+                1, season=2021, home_id=1, home_team="Foxhollow", away_id=2, away_team="Ironpeak"
+            ),
+            _game(
+                2, season=2021, home_id=3, home_team="Silverlake", away_id=2, away_team="Ironpeak"
+            ),
+        ]
+    }
+
+
+def _row(source: str, variant: str, team_id: int) -> TeamCrosswalkRow:
+    return TeamCrosswalkRow(
+        source=source,  # type: ignore[arg-type]
+        variant=variant,
+        canonical=f"Team {team_id}",
+        cfbd_team_id=team_id,
+        season_from=None,
+        season_to=None,
+        note="",
+    )
+
+
+def test_second_source_crosswalk_rows_load_and_may_share_a_variant(tmp_path: Path) -> None:
+    (tmp_path / "team_crosswalk.csv").write_text(
+        _CROSSWALK_HEADER + "smw,MSU,Team 1,1,,,\n" + "smw,MSU,Team 2,2,,,\n",
+        encoding="utf-8",
+    )
+    assert len(load_team_crosswalk(tmp_path)) == 2
+
+
+def test_second_source_overlap_still_rejected_for_other_sources(tmp_path: Path) -> None:
+    (tmp_path / "team_crosswalk.csv").write_text(
+        _CROSSWALK_HEADER + "sports506,MSU,Team 1,1,,,\n" + "sports506,MSU,Team 2,2,,,\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ReferenceTableError, match="line 3"):
+        load_team_crosswalk(tmp_path)
+
+
+def test_bogus_crosswalk_source_still_invalid(tmp_path: Path) -> None:
+    (tmp_path / "team_crosswalk.csv").write_text(
+        _CROSSWALK_HEADER + "bogus,MSU,Team 1,1,,,\n", encoding="utf-8"
+    )
+    with pytest.raises(ReferenceTableError, match="invalid source"):
+        load_team_crosswalk(tmp_path)
+
+
+def test_resolve_candidates_and_ambiguous_resolve() -> None:
+    resolver = TeamResolver(_two_team_games(), [_row("smw", "MSU", 1), _row("smw", "MSU", 2)])
+    assert resolver.resolve_candidates("smw", "MSU", 2021) == (1, 2)
+    assert resolver.resolve("smw", "MSU", 2021).method == "unresolved"
+    assert resolver.resolve_candidates("smw", "Silverlake", 2021) == (3,)
+    assert resolver.resolve_candidates("smw", "Nowhere", 2021) == ()
+
+
+def test_second_source_any_row_applies_and_smw_row_beats_it() -> None:
+    resolver = TeamResolver(_two_team_games(), [_row("any", "Fox", 1), _row("smw", "Fox", 3)])
+    assert resolver.resolve("tvrg", "Fox", 2021).team_id == 1
+    assert resolver.resolve("smw", "Fox", 2021).team_id == 3
+
+
+def test_clean_team_text_second_sources_strip_rank_and_footnote() -> None:
+    assert clean_team_text("No. 5 Foxhollow*", "smw") == "Foxhollow"
+    assert clean_team_text("#12 Foxhollow", "aa") == "Foxhollow"
+    assert clean_team_text("Foxhollow", "espnpr") == "Foxhollow"

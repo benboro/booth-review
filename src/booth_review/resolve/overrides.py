@@ -30,15 +30,19 @@ REASON_CODES: frozenset[str] = frozenset(
 )
 
 OverrideAction = Literal["match", "exclude"]
-OverrideSource = Literal["sports506", "ratingsref"]
+OverrideSource = Literal["sports506", "ratingsref", "smw", "tvrg", "aa", "espnpr"]
 
-_SOURCES: frozenset[str] = frozenset({"sports506", "ratingsref"})
+_SECOND_SOURCES: frozenset[str] = frozenset({"smw", "tvrg", "aa", "espnpr"})
+_SOURCES: frozenset[str] = frozenset({"sports506", "ratingsref"} | _SECOND_SOURCES)
 _ACTIONS: frozenset[str] = frozenset({"match", "exclude"})
 
 # sports506: "<week_label>:<source_row_index>" (week_label is 0-16 or "B").
 _SPORTS506_POINTER_RE = re.compile(r"^([0-9]{1,2}|B):[0-9]+$")
 # ratingsref: the RR telecast id/slug.
 _RATINGSREF_POINTER_RE = re.compile(r"^cfb-[a-z0-9-]+$")
+# second sources (04.19): "<chart_file>:<row>" for SMW, defined by each source's
+# plan otherwise; kept to a safe charset with no whitespace.
+_SECOND_POINTER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
 
 
 @dataclass(frozen=True)
@@ -62,7 +66,12 @@ def pointer_for_record(record: RRRecord) -> str:
 
 
 def _validate_pointer(source: str, pointer: str, *, path_name: str, line_no: int) -> None:
-    pattern = _SPORTS506_POINTER_RE if source == "sports506" else _RATINGSREF_POINTER_RE
+    if source in _SECOND_SOURCES:
+        pattern = _SECOND_POINTER_RE
+    elif source == "sports506":
+        pattern = _SPORTS506_POINTER_RE
+    else:
+        pattern = _RATINGSREF_POINTER_RE
     if not pattern.match(pointer):
         raise ReferenceTableError(
             f"{path_name}: line {line_no}: malformed pointer {pointer!r} for source {source!r}"

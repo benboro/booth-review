@@ -8,7 +8,13 @@ from __future__ import annotations
 
 import pytest
 
-from booth_review.resolve.headline import HEADLINE_RULE, compare_with_rr_current, select_headline
+from booth_review.resolve.headline import (
+    HEADLINE_RULE,
+    HEADLINE_SOURCE_ORDER_RULE,
+    compare_with_rr_current,
+    select_headline,
+    select_headline_across_sources,
+)
 from booth_review.sources.ratingsref.parser import RRClaim, RRRecord, RRTelecast
 
 
@@ -163,3 +169,84 @@ def test_select_headline_none_when_only_claims_have_no_value() -> None:
 
 def test_headline_rule_documents_the_value_filter() -> None:
     assert "value" in HEADLINE_RULE
+
+
+# -- select_headline_across_sources (04.19 D-09) ------------------------------------------
+
+
+def _second(source: str, value: float | None, claim_id: str | None = None) -> RRClaim:
+    return RRClaim.model_validate(
+        {
+            "metric_type": "avg_audience",
+            "status": "final",
+            "value": value,
+            "unit": "viewers",
+            "id": claim_id or f"{source}:2021:x:1",
+            "source": source,
+        }
+    )
+
+
+def test_across_sources_rr_wins_over_higher_second_source() -> None:
+    rr = _claim(claim_id="rr-1", value=1000000)
+    got = select_headline_across_sources([rr], [_second("smw", 9000000)])
+    assert got is not None
+    assert got[0] is rr
+    assert got[1] == "rr"
+
+
+def test_across_sources_unusable_rr_falls_to_smw() -> None:
+    rr = _claim(claim_id="rr-1", value=None)
+    smw = _second("smw", 3000000)
+    got = select_headline_across_sources([rr], [_second("tvrg", 4000000), smw])
+    assert got == (smw, "smw")
+
+
+def test_across_sources_order_tvrg_aa_espnpr_and_none() -> None:
+    aa = _second("aa", 1000000)
+    tvrg = _second("tvrg", 2000000)
+    got = select_headline_across_sources([], [aa, tvrg])
+    assert got == (tvrg, "tvrg")
+    espn = _second("espnpr", 5000000)
+    assert select_headline_across_sources([], [espn]) == (espn, "espnpr")
+    assert select_headline_across_sources([], [_second("smw", None)]) is None
+    assert select_headline_across_sources([], []) is None
+
+
+def test_across_sources_two_usable_same_source_takes_first() -> None:
+    first = _second("smw", 1000000, "smw:2021:a:1")
+    second = _second("smw", 9000000, "smw:2021:a:2")
+    got = select_headline_across_sources([], [first, second])
+    assert got is not None
+    assert got[0] is first
+
+
+def test_across_sources_unknown_source_raises() -> None:
+    with pytest.raises(ValueError, match="unknown source"):
+        select_headline_across_sources([], [_second("bogus", 1000000)])
+
+
+def test_headline_rule_text_is_pinned() -> None:
+    assert HEADLINE_RULE == (
+        "Headline figure: among claims with metric_type == 'avg_audience', "
+        "unit == 'viewers', and a value of at least 1 (a claim with no value, "
+        "or a value below 1, is never the headline), drop any claim that "
+        "appears as another claim's supersedes_id, then rank the rest by status "
+        "(revised > final > preliminary > any other status), then by "
+        "figure_type (currency over any other figure_type), then by higher "
+        "confidence, then by the latest first_published. The top-ranked claim "
+        "after those tie-breaks is the headline claim; ties on every field keep "
+        "the first one encountered."
+    )
+
+
+def test_source_order_rule_names_sources_in_order() -> None:
+    names = [
+        "Ratings Reference",
+        "Sports Media Watch",
+        "The TV Ratings Guide",
+        "Awful Announcing",
+        "ESPN Press Room",
+    ]
+    positions = [HEADLINE_SOURCE_ORDER_RULE.index(name) for name in names]
+    assert positions == sorted(positions)

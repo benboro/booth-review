@@ -23,6 +23,7 @@ from booth_review.build.crew_overrides import CREW_OVERRIDE_COLUMNS, load_crew_o
 from booth_review.build.rivalries import RIVALRY_COLUMNS, load_rivalries
 from booth_review.build.venues import VENUE_LOCATION_COLUMNS, load_venue_locations
 from booth_review.contract.models import crew_source_url_problem
+from booth_review.errors import ReferenceTableError
 from booth_review.flags.era import ERA_COLUMNS, load_eras
 from booth_review.flags.events import EVENT_COLUMNS, load_event_flags
 from booth_review.nfl.reference import (
@@ -300,3 +301,25 @@ def test_reference_not_ignored(tmp_path: Path) -> None:
         check=False,
     )
     assert result.returncode == 1, "expected data/reference/people.csv to not be ignored"
+
+
+# -- game_overrides.csv second sources (04.19 D-05) ---------------------------------------
+
+
+def test_game_overrides_accept_second_source_pointer(tmp_path: Path) -> None:
+    (tmp_path / "game_overrides.csv").write_text(
+        "source,season,pointer,action,cfbd_game_id,reason\n"
+        "smw,2021,week5cfb.png:12,match,4001,other\n",
+        encoding="utf-8",
+    )
+    overrides = load_game_overrides(tmp_path)
+    assert ("smw", 2021, "week5cfb.png:12") in overrides
+
+
+def test_game_overrides_reject_unknown_source(tmp_path: Path) -> None:
+    (tmp_path / "game_overrides.csv").write_text(
+        "source,season,pointer,action,cfbd_game_id,reason\nbogus,2021,a:1,exclude,,other\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ReferenceTableError, match="invalid source"):
+        load_game_overrides(tmp_path)
