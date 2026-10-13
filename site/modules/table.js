@@ -20,6 +20,7 @@ import {
   formatViewers,
   measurementLabel,
   NO_RATING_LABEL,
+  figureSourceOf,
 } from './format.js';
 import { safeHref } from './panel.js';
 import { currentTheme, makePill, makeRolePill, nameWithRoles } from './pill.js';
@@ -93,9 +94,12 @@ function buildSourceCell(data, i) {
     td.appendChild(document.createTextNode('Original source not recorded'));
   }
 
+  // A second-source figure (or any row without RR records) gets no separator or RR text.
+  const rrUrls = t.rr_urls[i];
+  if (figureSourceOf(data, i) !== 'rr' || rrUrls.length === 0) return td;
+
   td.appendChild(document.createTextNode(' · '));
 
-  const rrUrls = t.rr_urls[i];
   rrUrls.forEach((url, idx) => {
     if (idx > 0) td.appendChild(document.createTextNode(' '));
     const label = rrUrls.length > 1 ? `Ratings Reference ${idx + 1}` : 'Ratings Reference';

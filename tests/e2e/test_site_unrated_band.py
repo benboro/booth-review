@@ -824,7 +824,7 @@ def test_band_note_toggle_escape_outside_and_no_shift(
         "No public rating",
         "We found no published viewer count for these games.",
         "The network is rarely rated, such as ESPN+, CBS Sports Network, or SEC Network.",
-        "Few figures were compiled for 2021\u201324.",
+        "No figure found in our sources for some 2021\u201324 games.",
         "No figure was published.",
     ):
         assert phrase in text
@@ -901,7 +901,7 @@ def test_tap_band_marker_at_360_shows_cause_line(
     mobile_page.touchscreen.tap(point["x"], point["y"])
     mobile_page.wait_for_function("document.getElementById('detail-panel').open")
     shown = mobile_page.inner_text("#panel-body")
-    assert "No public rating · few figures were compiled for 2021\u201324" in shown
+    assert "No public rating · no figure found in our 2021\u201324 sources" in shown
 
 
 def test_compare_faded_unrated_marker_is_inert(

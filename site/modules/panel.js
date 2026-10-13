@@ -20,6 +20,7 @@ import {
   SLOT_LABELS,
   conferenceLine,
   crewEntries,
+  figureNotViaRrText,
   axisValueText,
   formatDate,
   formatKickoff,
@@ -358,6 +359,13 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
     const publishedP = document.createElement('p');
     publishedP.textContent = `Figure first published by ${data.lookups.publishers[t.publisher[i]]}`;
     children.push(publishedP);
+  }
+
+  const notViaRr = data.rated[i] ? figureNotViaRrText(data, i) : null;
+  if (notViaRr) {
+    const notViaRrP = document.createElement('p');
+    notViaRrP.textContent = notViaRr;
+    children.push(notViaRrP);
   }
 
   const spreadText = axisValueText(data, i, 'spread');

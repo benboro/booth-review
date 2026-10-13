@@ -108,7 +108,7 @@ Besides the rated games the chart plots, the site lists the games that have no p
 
 1. "{Network} games are rarely rated": the network is on a hand-kept list (below).
 2. "viewership not posted yet": the game is in the current season, in the newest week that has any posted figure or later (the postseason counts as after every regular week). When the season has no posted figure yet, every current-season game qualifies. A week's figures arrive over several days, so a strictly-later rule would flag nothing.
-3. "few figures were compiled for 2021–24": the game is from a season in that range, when Ratings Reference itself compiled far fewer figures (see Known gaps).
+3. "no figure found in our 2021–24 sources": the game is from a season in that range, Ratings Reference compiled few figures for those seasons, and the second sources listed under Sources and credits did not cover the game (see Known gaps).
 4. "no figure was published": anything else. This also covers the rare game whose only figure is for an alternate feed.
 
 On the site each game reads "No public rating · {cause}".

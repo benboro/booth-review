@@ -307,7 +307,8 @@ def test_render_methodology_resolves_md_links_against_docs(
 
 # sha256 of render_methodology(docs, CFB fixture site) recorded before any NFL
 # text existed. The flag-off page must stay byte-identical (D-25).
-_METHODOLOGY_FLAG_OFF_SHA256 = "2d0db68763cb345f71191a08e3641ded150d71f7b860341caf5f7866e9e0ea26"
+# Re-pinned at 04.19 Plan 09: cause list item 3 reworded (D-21), the only change.
+_METHODOLOGY_FLAG_OFF_SHA256 = "e884ec990fca5ad6cc4939c6831d14728f17d11d7de2caef9bc968634e4bb0a0"
 
 _NFL_ANCHORS = (
     "nfl-special-games",

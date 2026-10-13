@@ -1431,7 +1431,7 @@ def test_cause_wording_and_format_viewers_null(guarded_page: Page, site_url: str
     assert r["c"] == [
         None,
         "no figure was published",
-        "few figures were compiled for 2021\u201324",
+        "no figure found in our 2021\u201324 sources",
         "Stream Plus games are rarely rated",
         "Conference Network games are rarely rated",
         "viewership not posted yet",
