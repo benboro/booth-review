@@ -880,10 +880,12 @@ def _collect_wikipedia(args: argparse.Namespace) -> int:
 
 def _earliest_gap_month(paths: DataPaths) -> tuple[int, int] | None:
     """The month of the earliest 2021-2024 date SMW left unrated (D-11), offline."""
-    from booth_review.build.gaps import GAP_SEASONS, earliest_gap_month, remaining_gap_dates
+    from booth_review.build.gaps import earliest_gap_month, remaining_gap_dates
     from booth_review.build.tables import assemble_tables
 
-    tables = assemble_tables(paths, reference_dir(), list(GAP_SEASONS))
+    # Every season, as `booth-review build` assembles them: a season subset trips
+    # the crew-override check for overrides that name other seasons.
+    tables = assemble_tables(paths, reference_dir())
     return earliest_gap_month(remaining_gap_dates(tables))
 
 
