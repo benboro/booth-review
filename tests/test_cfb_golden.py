@@ -41,6 +41,10 @@ equal the sha256 of their header line); no figure changed.
 04.19 review WR-02: the header-only review_second_source_gate.csv gains superseded and
 excluded_override columns (digest equals the sha256 of its header line); no figure
 changed.
+
+04.19 review WR-05: the header-only review_second_source_gate.csv gains accepts_ignored
+and accepts_unused columns (digest equals the sha256 of its header line); no figure
+changed.
 """
 
 from __future__ import annotations
@@ -108,7 +112,7 @@ _GOLDEN: dict[str, str] = {
         "4b773b5cd105f8ba481447cb016926840fc57b4d5dbc6e1b4dfc540f94d91e74"
     ),
     "interim/review_second_source_gate.csv": (
-        "3bc584992573ecd14ca4af89a6d2a5a052d80f42d38a71aefb1c24ec8983c2cc"
+        "a4f3ef8e5bfdea92d5acd147d0fbf424ee590b0d452d83c2d0d3d2e19f92f986"
     ),
     "interim/review_second_source_rejected.csv": (
         "81e689caaed346e7dd312f67d95a93039f98228e4c1a06d34038c8343557dd3f"

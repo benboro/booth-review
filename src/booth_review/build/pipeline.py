@@ -74,6 +74,8 @@ class BuildOutcome:
     crew_override_differs_lines: tuple[int, ...] = ()
     # Per (source, season) second-source gate rows (04.19 D-02), for count-only printing.
     second_source_gates: tuple[GateStatus, ...] = ()
+    # second_source_network_accepts.csv (line, ignored | unused) pairs (WR-05).
+    second_source_accept_warnings: tuple[tuple[int, str], ...] = ()
 
 
 # A preliminary headline figure older than this many days is listed in
@@ -209,6 +211,7 @@ def _build_counts(tables: BuildTables, result: RegressionResult) -> dict[str, in
         "second_source_rejected_pages": totals.get("second_source_rejected_pages", 0),
         "second_source_superseded": totals.get("second_source_superseded", 0),
         "second_source_excluded_override": totals.get("second_source_excluded_override", 0),
+        "second_source_accepts_ignored": totals.get("second_source_accepts_ignored", 0),
         **{f"{name}_rows": review_count(name) for name in SECOND_SOURCE_REVIEW_NAMES},
         "review_rows_total": review_rows_total,
         "current_season": current_season,
@@ -329,4 +332,5 @@ def run_build(
         committed=committed,
         crew_override_differs_lines=tables.crew_override_differs_lines,
         second_source_gates=tables.second_source_gates,
+        second_source_accept_warnings=tables.second_source_accept_warnings,
     )

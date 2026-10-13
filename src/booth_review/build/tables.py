@@ -60,9 +60,10 @@ from booth_review.build.people_links import (
 from booth_review.build.second_sources import (
     REVIEW_REJECTED,
     GateStatus,
+    SecondSourceResult,
     apply_second_sources,
     load_gate_overrides,
-    load_network_accepts,
+    load_network_accept_lines,
     load_second_source_inputs,
     rejected_page_rows,
 )
@@ -154,6 +155,9 @@ class BuildTables:
     venues: pl.DataFrame = field(default_factory=empty_venues_frame)
     # Per (source, season) second-source gate rows (04.19 D-02); counts only when printed.
     second_source_gates: tuple[GateStatus, ...] = ()
+    # second_source_network_accepts.csv (line, status) pairs the build could not use:
+    # "ignored" (the game has more than one main telecast) or "unused" (WR-05).
+    second_source_accept_warnings: tuple[tuple[int, str], ...] = ()
 
 
 def _combined_review_row(
@@ -287,6 +291,21 @@ def network_rarity_review_rows(
     return rows
 
 
+def _accept_warnings(
+    accept_lines: Mapping[tuple[str, int, str], int],
+    second: SecondSourceResult,
+    seasons: Sequence[int] | None,
+) -> tuple[tuple[int, str], ...]:
+    """(line, "ignored" | "unused") for each network accept that placed no
+    figure; an accept for a season this run did not load is not judged."""
+    warnings: list[tuple[int, str]] = []
+    for key, line in accept_lines.items():
+        if key in second.accepts_used or (seasons is not None and key[1] not in seasons):
+            continue
+        warnings.append((line, "ignored" if key in second.accepts_ignored else "unused"))
+    return tuple(sorted(warnings))
+
+
 def assemble_tables(
     paths: DataPaths, reference_directory: Path, seasons: Sequence[int] | None = None
 ) -> BuildTables:
@@ -318,6 +337,7 @@ def assemble_tables(
     )
 
     # 04.19: second-source figures fill existing telecasts (never create one).
+    accept_lines = load_network_accept_lines(reference_directory)
     second = apply_second_sources(
         telecast_build.telecasts,
         telecast_build.records_by_telecast,
@@ -326,7 +346,7 @@ def assemble_tables(
         index=index,
         networks=networks,
         overrides=overrides,
-        accepts=load_network_accepts(reference_directory),
+        accepts=frozenset(accept_lines),
         gate_overrides=load_gate_overrides(reference_directory),
         fbs_game_ids=set(games["game_id"].to_list()),
         season_counts=telecast_build.counts,
@@ -531,6 +551,7 @@ def assemble_tables(
         crew_override_differs_lines=override_result.differs_lines,
         venues=venues,
         second_source_gates=second.gates,
+        second_source_accept_warnings=_accept_warnings(accept_lines, second, seasons),
     )
 
 

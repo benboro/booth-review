@@ -291,3 +291,22 @@ def test_unreadable_cached_pages_are_skipped_listed_and_counted(
         ("espnpr", "espnpr/2025/releases/broken.html", "no_canonical_url"),
         ("tvrg", "tvrg/2022/posts/2022-10-broken.html", "no_canonical_url"),
     ]
+
+
+def test_build_warns_about_a_network_accept_that_places_no_figure(
+    git_vault: DataPaths,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # WR-05: a stale accept is named by its public line number, never ignored silently.
+    _seed_build_raw(git_vault)
+    reference = _reference(tmp_path, monkeypatch)
+    (reference / "second_source_network_accepts.csv").write_text(
+        "source,season,pointer,reason\nsmw,2022,week5cfb.png:12,chart prints ESPN2\n",
+        encoding="utf-8",
+    )
+    capsys.readouterr()
+    assert main(["build", "--no-commit"]) == 0
+    err = capsys.readouterr().err
+    assert "warning: second_source_network_accepts.csv line 2: no held row needs it" in err

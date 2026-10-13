@@ -24,6 +24,7 @@ from booth_review.build.second_sources import (
     SecondSourceResult,
     apply_second_sources,
     load_gate_overrides,
+    load_network_accept_lines,
     load_network_accepts,
     load_second_source_inputs,
 )
@@ -401,6 +402,8 @@ def test_network_clash_is_held_until_accepted() -> None:
     result, _ = h.run([row])
     assert list(result.claims_by_telecast) == ["100-espnu"]
     assert _review(result, REVIEW_NETWORK) == []
+    assert result.accepts_used == {("smw", SEASON, "w:1")}
+    assert (_gate(result).accepts_ignored, _gate(result).accepts_unused) == (0, 0)
 
 
 def test_accept_does_not_release_a_game_with_two_main_telecasts() -> None:
@@ -412,6 +415,43 @@ def test_accept_does_not_release_a_game_with_two_main_telecasts() -> None:
     assert result.claims_by_telecast == {}
     (held,) = _review(result, REVIEW_NETWORK)
     assert held["our_network_ids"] == "abc|espnu"
+    # WR-05: the skipped accept is counted, not silently dropped.
+    assert result.accepts_ignored == {("smw", SEASON, "w:1")}
+    assert result.accepts_used == frozenset()
+    assert _gate(result).accepts_ignored == 1
+    assert _gate(result).as_row()["accepts_ignored"] == 1
+    assert result.counts["accepts_ignored"] == 1
+
+
+def test_an_accept_no_held_row_needs_is_counted_unused() -> None:
+    h = Harness()
+    # w:1's network matches ours; w:9 names no row at all.
+    h.accepts = frozenset({("smw", SEASON, "w:1"), ("smw", SEASON, "w:9")})
+    result, _ = h.run([_row("w:1", "Silverlake", "Northfield")])
+    assert list(result.claims_by_telecast) == ["100-abc"]
+    assert result.accepts_used == frozenset()
+    assert (_gate(result).accepts_ignored, _gate(result).accepts_unused) == (0, 2)
+
+
+def test_accept_warnings_name_lines_and_skip_seasons_not_loaded() -> None:
+    from dataclasses import replace
+
+    from booth_review.build.tables import _accept_warnings
+
+    result, _ = Harness().run([])
+    result = replace(
+        result,
+        accepts_used=frozenset({("smw", 2022, "a:1")}),
+        accepts_ignored=frozenset({("smw", 2022, "b:1")}),
+    )
+    lines = {
+        ("smw", 2022, "a:1"): 2,
+        ("smw", 2022, "b:1"): 3,
+        ("smw", 2022, "c:1"): 4,
+        ("tvrg", 2021, "d:1"): 5,
+    }
+    assert _accept_warnings(lines, result, None) == ((3, "ignored"), (4, "unused"), (5, "unused"))
+    assert _accept_warnings(lines, result, [2022]) == ((3, "ignored"), (4, "unused"))
 
 
 def test_unmapped_network_text_is_unmatched() -> None:
@@ -632,6 +672,7 @@ def test_load_network_accepts(tmp_path: Path) -> None:
         "source,season,pointer,reason\nsmw,2022,week5cfb.png:12,chart prints ESPN2\n",
     )
     assert load_network_accepts(tmp_path) == {("smw", 2022, "week5cfb.png:12")}
+    assert load_network_accept_lines(tmp_path) == {("smw", 2022, "week5cfb.png:12"): 2}
 
 
 @pytest.mark.parametrize(

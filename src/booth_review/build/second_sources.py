@@ -110,6 +110,8 @@ REVIEW_GATE_COLUMNS = (
     "rejected_pages",
     "superseded",
     "excluded_override",
+    "accepts_ignored",
+    "accepts_unused",
     "status",
 )
 REVIEW_REJECTED_COLUMNS = ("source", "season", "path", "reason")
@@ -183,11 +185,15 @@ def _check_source_season(path: Path, line_no: int, raw: Mapping[str, str]) -> tu
     return source, season
 
 
-def load_network_accepts(reference_dir: Path) -> frozenset[tuple[str, int, str]]:
+AcceptKey = tuple[str, int, str]
+
+
+def load_network_accept_lines(reference_dir: Path) -> dict[AcceptKey, int]:
     """Read second_source_network_accepts.csv (not required): (source, season,
-    pointer) rows whose chart network we accept against our own (D-06)."""
+    pointer) rows whose chart network we accept against our own (D-06), each
+    with its file line number (for the build's stale-accept warnings)."""
     path = reference_dir / "second_source_network_accepts.csv"
-    accepts: set[tuple[str, int, str]] = set()
+    accepts: dict[AcceptKey, int] = {}
     for line_no, raw in read_reference_csv_numbered(path, NETWORK_ACCEPT_COLUMNS, required=False):
         source, season = _check_source_season(path, line_no, raw)
         pointer = raw["pointer"]
@@ -196,8 +202,13 @@ def load_network_accepts(reference_dir: Path) -> frozenset[tuple[str, int, str]]
         key = (source, season, pointer)
         if key in accepts:
             raise ReferenceTableError(f"{path.name}: line {line_no}: duplicate row")
-        accepts.add(key)
-    return frozenset(accepts)
+        accepts[key] = line_no
+    return accepts
+
+
+def load_network_accepts(reference_dir: Path) -> frozenset[AcceptKey]:
+    """The accepted (source, season, pointer) keys of second_source_network_accepts.csv."""
+    return frozenset(load_network_accept_lines(reference_dir))
 
 
 def load_gate_overrides(reference_dir: Path) -> dict[tuple[str, int], int]:
@@ -385,6 +396,11 @@ class GateStatus:
     # (WR-02), so the gate row's buckets add up to `rows`.
     superseded: int = 0
     excluded_override: int = 0
+    # Network accepts of this (source, season) that could not apply because the
+    # game has more than one main telecast, and accepts no held row needs
+    # (the pointer is gone, or its network now matches) (WR-05).
+    accepts_ignored: int = 0
+    accepts_unused: int = 0
 
     def as_row(self) -> dict[str, object]:
         return {column: getattr(self, column) for column in REVIEW_GATE_COLUMNS}
@@ -400,6 +416,10 @@ class SecondSourceResult:
     gates: tuple[GateStatus, ...]
     counts: dict[str, int]
     rejected_pages: tuple[RejectedPage, ...] = ()
+    # Network accepts that placed a figure, and those that could not (more than
+    # one main telecast on the game); every other accept is unused (WR-05).
+    accepts_used: frozenset[AcceptKey] = frozenset()
+    accepts_ignored: frozenset[AcceptKey] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -620,6 +640,8 @@ def apply_second_sources(
     unresolved: dict[tuple[str, str], list[int]] = {}
     candidates: dict[tuple[str, str], list[_Winner]] = {}
     superseded_rows: list[SecondSourceRow] = []
+    accepts_used: set[AcceptKey] = set()
+    accepts_ignored: set[AcceptKey] = set()
 
     def unresolved_name(row: SecondSourceRow, raw: str) -> None:
         unresolved.setdefault((row.source, raw), []).append(row.season)
@@ -706,12 +728,16 @@ def apply_second_sources(
             count["unmatched"] += 1
             continue
         target: str | None = next((tid for tid, nid in game_mains if nid == chart.network_id), None)
-        if (
-            target is None
-            and (row.source, row.season, row.pointer) in accepts
-            and len(game_mains) == 1
-        ):
-            target = game_mains[0][0]
+        accept_key = (row.source, row.season, row.pointer)
+        if target is None and accept_key in accepts:
+            if len(game_mains) == 1:
+                target = game_mains[0][0]
+                accepts_used.add(accept_key)
+            else:
+                # The accept can't pick one of several main telecasts; the row
+                # stays held and the build says so (WR-05).
+                accepts_ignored.add(accept_key)
+                count["accepts_ignored"] += 1
         if target is None:
             network_rows.append(
                 {
@@ -741,6 +767,11 @@ def apply_second_sources(
     for winner in winners:
         by_key.setdefault((winner.row.source, winner.row.season), []).append(winner)
 
+    unused_by_key = Counter(
+        (source, season)
+        for source, season, pointer in accepts
+        if (source, season, pointer) not in accepts_used | accepts_ignored
+    )
     gates: list[GateStatus] = []
     loaded_winners: list[_Winner] = []
     for gate_key in sorted(tally):
@@ -820,6 +851,8 @@ def apply_second_sources(
                 ignored=count["ignored"],
                 superseded=count["superseded"],
                 excluded_override=count["excluded_override"],
+                accepts_ignored=count["accepts_ignored"],
+                accepts_unused=unused_by_key[gate_key],
             )
         )
 
@@ -927,6 +960,8 @@ def apply_second_sources(
         "rejected_pages": len(inputs.rejected),
         "superseded": totals["superseded"],
         "excluded_override": totals["excluded_override"],
+        "accepts_used": len(accepts_used),
+        "accepts_ignored": len(accepts_ignored),
     }
     return SecondSourceResult(
         telecasts=telecasts_out,
@@ -937,4 +972,6 @@ def apply_second_sources(
         gates=tuple(gates),
         counts=counts,
         rejected_pages=inputs.rejected,
+        accepts_used=frozenset(accepts_used),
+        accepts_ignored=frozenset(accepts_ignored),
     )

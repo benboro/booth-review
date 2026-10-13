@@ -1862,6 +1862,8 @@ def _build(args: argparse.Namespace) -> int:
             ("superseded", gate.superseded),
             ("excluded by override", gate.excluded_override),
             ("rejected pages", gate.rejected_pages),
+            ("accepts ignored", gate.accepts_ignored),
+            ("accepts unused", gate.accepts_unused),
         )
         print(
             f"second source {gate.source} {gate.season}: shared {gate.shared}, "
@@ -1876,6 +1878,17 @@ def _build(args: argparse.Namespace) -> int:
             f"{outcome.counts.get('second_source_unmatched', 0)} for review, "
             f"{outcome.counts.get('second_source_withheld_seasons', 0)} season(s) withheld"
         )
+    # WR-05: an accept that placed no figure would otherwise look like a resolved
+    # item forever. Only public second_source_network_accepts.csv line numbers print.
+    for line, status in outcome.second_source_accept_warnings:
+        why = (
+            "the game has more than one main telecast, so the accept can't choose one; "
+            "correct the network through the override tables instead"
+            if status == "ignored"
+            else "no held row needs it (the pointer is gone or its network now matches); "
+            "remove the row"
+        )
+        print(f"warning: second_source_network_accepts.csv line {line}: {why}", file=sys.stderr)
     rejected = outcome.counts.get("second_source_rejected_pages", 0) + outcome.counts.get(
         "crew_backup_rejected_pages", 0
     )
