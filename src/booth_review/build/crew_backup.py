@@ -22,9 +22,10 @@ The 04.5 backup-crew rules, with the collector swapped for hand-save import
 - Backup rows reach telecast_people with the 506 row shape (source
   `crew_backup`, feed main, crew_position, no 506 pointer). The page prints
   names without roles: the first is play-by-play, the rest take their
-  people.csv role (default analyst). On a line of three or more names, a last
-  name with no play-by-play or analyst role in people.csv is the sideline
-  reporter by ESPN's order and is dropped (counted). An unknown name becomes
+  people.csv role (default analyst). On a line of three or more names, the
+  trailing names with no play-by-play or analyst role in people.csv are the
+  sideline reporters by ESPN's order and are dropped (counted once per booth),
+  down to two names. An unknown name becomes
   a provisional person, the same flow as 506 names (review_people_new).
 - Credit uses the 04.3 D-11 fields: crew_source_label "ESPN Press Room" and
   crew_source_url the saved page's canonical URL, checked by
@@ -271,11 +272,14 @@ def _booth_role(name: str, registry: PeopleRegistry) -> Role | None:
 
 def _booth_names(names: Sequence[str], registry: PeopleRegistry) -> tuple[tuple[str, ...], bool]:
     """(booth names, sideline dropped): placeholders removed, then on a line of
-    three or more names a last name with no booth role in people.csv dropped."""
+    three or more names every trailing name with no booth role in people.csv
+    dropped (primetime lines can print two sideline names), keeping at least
+    two names."""
     kept = tuple(name for name in names if not is_placeholder(name))
-    if len(kept) >= _SIDELINE_MIN_NAMES and _booth_role(kept[-1], registry) is None:
-        return kept[:-1], True
-    return kept, False
+    dropped = False
+    while len(kept) >= _SIDELINE_MIN_NAMES and _booth_role(kept[-1], registry) is None:
+        kept, dropped = kept[:-1], True
+    return kept, dropped
 
 
 def _roles(names: Sequence[str], registry: PeopleRegistry) -> list[Role]:

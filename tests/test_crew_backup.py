@@ -458,6 +458,26 @@ def test_three_name_line_drops_an_unknown_third_without_registering_it() -> None
     assert result.new_name_rows == []
 
 
+def test_four_name_line_drops_every_trailing_name_with_no_booth_role() -> None:
+    # Primetime lines can print two sideline names after the booth; both go.
+    result = _run(
+        [_tel(100)],
+        [_booth(("Avery Lane", "Morgan Pike", "Sable Wren", "Tamsin Vale"))],
+    )
+    assert result.telecast_people["person_id"].to_list() == ["avery-lane", "morgan-pike"]
+    assert result.counts["sideline_dropped"] == 1
+    assert result.new_name_rows == []
+
+
+def test_two_trailing_sideline_names_still_agree_with_the_506_booth() -> None:
+    tels = [_tel(100, crew_matched=True)]
+    people = [_tp("100-espn", "avery-lane"), _tp("100-espn", "morgan-pike", 1)]
+    booth = _booth(("Avery Lane", "Morgan Pike", "Sable Wren", "Tamsin Vale"))
+    result = _run(tels, [booth], people)
+    assert result.statuses == {"100-espn": "agrees"}
+    assert result.counts["disagreements"] == 0
+
+
 def test_later_names_take_their_people_csv_role() -> None:
     # Blair Tolley is a registered pbp voice; listed second she keeps that role.
     result = _run([_tel(100)], [_booth(("Avery Lane", "Blair Tolley", "Morgan Pike"))])
