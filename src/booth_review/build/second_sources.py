@@ -1,7 +1,7 @@
 """Second viewership sources (04.19 D-05..D-09, D-21).
 
-A second-source row (Sports Media Watch, The TV Ratings Guide and Awful
-Announcing; ESPN Press Room later) is matched to an EXISTING main-feed
+A second-source row (Sports Media Watch, The TV Ratings Guide, Awful
+Announcing and ESPN Press Room, in that headline order) is matched to an EXISTING main-feed
 telecast through the team crosswalk's candidate sets, held when its network
 disagrees with ours, settled against duplicates and season-top rows, and gated
 per (source, season) against Ratings Reference's headline figures. Nothing here
@@ -139,10 +139,11 @@ _EXCLUDED_KINDS = {
 }
 _WEEKLY_CLASS_EXCLUDED = "season_top"
 # Sources whose needs_review rows are counted on the gate instead of listed for
-# review: AA prose mentions the parser can't tie to one game (season or window
-# averages, other-season comparisons, multi-game sentences, non-game shows).
-# They never carry a figure, so listing them asks the user nothing (user, 04.19-35).
-COUNTED_REVIEW_SOURCES: frozenset[str] = frozenset({"aa"})
+# review: AA and ESPN Press Room prose mentions the parser can't tie to one game
+# (season or window averages, other-season comparisons, multi-game sentences,
+# non-game shows, whole-million figures). They never carry a figure, so listing
+# them asks the user nothing (user, 04.19-35).
+COUNTED_REVIEW_SOURCES: frozenset[str] = frozenset({"aa", "espnpr"})
 
 SourceSeason = tuple[str, int]
 
@@ -260,8 +261,9 @@ def _load_smw(paths: DataPaths, seasons: Sequence[int] | None) -> _LoaderResult:
 def _load_posts(
     source: PostSource, paths: DataPaths, seasons: Sequence[int] | None
 ) -> _LoaderResult:
-    """Every cached post of `source` for 2021-2024 (raw/<source>/<season>/posts/*.html),
-    parsed into rows, plus that season's known_disagreements.csv (D-02, D-10)."""
+    """Every cached post of `source` for 2021-2024 (raw/<source>/<season>/posts/*.html;
+    ESPN Press Room: ratings/*.html), parsed into rows, plus that season's
+    known_disagreements.csv (D-02, D-10, D-12)."""
     rows: list[SecondSourceRow] = []
     known: dict[SourceSeason, frozenset[str]] = {}
     root = paths.raw / source
@@ -288,11 +290,19 @@ def _load_aa(paths: DataPaths, seasons: Sequence[int] | None) -> _LoaderResult:
     return _load_posts("aa", paths, seasons)
 
 
-# Wave C appends the espnpr loader here.
+def _load_espnpr(paths: DataPaths, seasons: Sequence[int] | None) -> _LoaderResult:
+    """Hand-imported ESPN Press Room ratings releases (raw/espnpr/<season>/ratings/);
+    the commentators pages and weekly releases beside them are crews, never read
+    here (D-12, D-13)."""
+    return _load_posts("espnpr", paths, seasons)
+
+
+# Headline order (D-09) lives in resolve/headline.py SOURCE_ORDER; ESPN Press Room is last.
 SECOND_SOURCE_LOADERS: tuple[Callable[[DataPaths, Sequence[int] | None], _LoaderResult], ...] = (
     _load_smw,
     _load_tvrg,
     _load_aa,
+    _load_espnpr,
 )
 
 

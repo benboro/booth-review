@@ -785,3 +785,134 @@ def test_gate_runs_per_source_with_its_own_known_file() -> None:
     h.known[("tvrg", SEASON)] = frozenset({"post:3"})
     result, _ = h.run(rows + tvrg_rows)
     assert {g.source: g.status for g in result.gates} == {"smw": "passed", "tvrg": "passed"}
+
+
+# -- Wave C: ESPN Press Room viewership (04.19 D-09, D-12) --------------------------------------
+
+_ESPNPR_SLUG = "synthetic-saturday-viewership-grows-on-espn-networks"
+
+
+def _espnpr_page(vault: Path, season: int, folder: str, name: str, fixture: str) -> None:
+    target = vault / "raw" / "espnpr" / str(season) / folder
+    target.mkdir(parents=True, exist_ok=True)
+    (target / f"{name}.html").write_text(
+        (_FIXTURES / "espnpr" / fixture).read_text(encoding="utf-8"), encoding="utf-8"
+    )
+
+
+def test_loader_reads_espnpr_ratings_releases_only(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _espnpr_page(vault, 2022, "ratings", _ESPNPR_SLUG, "ratings_synthetic.html")
+    # Crew pages sit beside the ratings releases; the viewership loader never reads
+    # them (parse_viewership would refuse them, so reading one would raise).
+    _espnpr_page(vault, 2022, "commentators", "wk-7", "commentators_synthetic.html")
+    _espnpr_page(vault, 2022, "releases", "synthetic-week-6", "release_synthetic.html")
+    _espnpr_page(vault, 2025, "ratings", _ESPNPR_SLUG, "ratings_synthetic.html")  # outside
+    _write(
+        vault / "raw" / "espnpr" / "2022" / "known_disagreements.csv",
+        f"chart_file,row,explanation\n{_ESPNPR_SLUG},4,ESPN rounds to 0.1M\n",
+    )
+
+    inputs = load_second_source_inputs(DataPaths(vault=vault))
+    assert {row.source for row in inputs.rows} == {"espnpr"}
+    assert {row.season for row in inputs.rows} == {2022}
+    assert len(inputs.rows) == 6
+    assert {row.source_url for row in inputs.rows} == {
+        f"https://espnpressroom.com/press-release/{_ESPNPR_SLUG}/"
+    }
+    assert inputs.known == {("espnpr", 2022): frozenset({f"{_ESPNPR_SLUG}:4"})}
+    assert load_second_source_inputs(DataPaths(vault=vault), seasons=[2021]).rows == ()
+
+
+def test_loader_rejects_a_non_ratings_page_in_the_ratings_folder(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _espnpr_page(vault, 2023, "ratings", "misfiled", "release_synthetic.html")
+    with pytest.raises(ReferenceTableError) as exc:
+        load_second_source_inputs(DataPaths(vault=vault))
+    assert "espnpr 2023: 1 cached post(s)" in str(exc.value)
+    assert "Silverlake" not in str(exc.value)
+
+
+def test_espnpr_rows_from_the_vault_match_settle_and_gate(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _espnpr_page(vault, 2022, "ratings", _ESPNPR_SLUG, "ratings_synthetic.html")
+    inputs = load_second_source_inputs(DataPaths(vault=vault))
+    h = Harness()
+    h.games = [_game(100, home=2, away=1, day=29)]  # Silverlake at Northfield, 10/29
+    result, _ = h.run(list(inputs.rows))
+
+    (claim,) = result.claims_by_telecast["100-abc"]
+    # The prose sentence and the table row name the same telecast; the table wins.
+    assert claim.id == f"espnpr:2022:{_ESPNPR_SLUG}:4"
+    assert claim.publisher == "ESPN Press Room"
+    assert claim.value == 5_200_000
+    assert claim_source(claim) == "espnpr"
+    assert _review(result, REVIEW_CONFLICTS) == []
+    gate = _gate(result)
+    assert (gate.source, gate.season, gate.status) == ("espnpr", 2022, "no_shared")
+    assert gate.excluded_multi_feed == 1
+    assert gate.unlinked_prose == 1  # the window average, counted, never listed
+    reasons = sorted(str(r["reason"]) for r in _review(result, REVIEW_UNMATCHED))
+    assert reasons == ["unresolved_team", "unresolved_team"]  # teams not in this harness
+
+    h.records["100-abc"] = [_rr(5_200_000)]
+    result, _ = h.run(list(inputs.rows))
+    assert (_gate(result).shared, _gate(result).status) == (1, "passed")
+
+
+def test_smw_keeps_the_headline_and_espnpr_fills_a_telecast_smw_lacks() -> None:
+    h = Harness()
+    h.games = [_game(100, home=2, away=1), _game(101, home=4, away=3)]
+    h.telecasts = [_telecast(100), _telecast(101)]
+    espnpr = {"source": "espnpr", "chart_kind": "post", "rank": 7_380_002}
+    rows = [
+        _row("week5cfb.png:1", "Silverlake", "Northfield", 1_000_000),
+        _row("synthetic-release:1", "Silverlake", "Northfield", 1_000_000, **espnpr),
+        _row("synthetic-release:2", "Riverbend", "Lakeshore", 900_000, **espnpr),
+    ]
+    result, _ = h.run(rows)
+    both = result.claims_by_telecast["100-abc"]
+    assert sorted(claim_source(c) for c in both) == ["espnpr", "smw"]
+    picked = select_headline_across_sources([], both)
+    assert picked is not None and picked[1] == "smw"
+    only = select_headline_across_sources([], result.claims_by_telecast["101-abc"])
+    assert only is not None and only[1] == "espnpr"
+    assert {(g.source, g.season) for g in result.gates} == {("smw", 2022), ("espnpr", 2022)}
+
+
+def test_espnpr_ranks_last_behind_every_other_second_source() -> None:
+    h = Harness()
+    post = {"chart_kind": "post"}
+    rows = [
+        _row("synthetic-release:1", "Silverlake", "Northfield", 1_010_000, source="espnpr", **post),
+        _row("post-a:1", "Silverlake", "Northfield", 1_020_000, source="aa", **post),
+    ]
+    result, _ = h.run(rows)
+    picked = select_headline_across_sources([], result.claims_by_telecast["100-abc"])
+    assert picked is not None and picked[1] == "aa"
+
+
+def test_espnpr_gate_withholds_on_an_unexplained_miss_and_loads_when_known() -> None:
+    h, rows = _shared_harness([1_020_000, 1_000_000, 1_050_000])
+    espnpr_rows = [
+        _row(f"rel:{i + 1}", r.away_raw, r.home_raw, r.viewers, source="espnpr", chart_kind="post")
+        for i, r in enumerate(rows)
+    ]
+    result, _ = h.run(espnpr_rows)
+    gate = _gate(result)
+    assert (gate.source, gate.unexplained, gate.status) == ("espnpr", 1, "withheld")
+    assert result.claims_by_telecast == {}
+    h.known = {("espnpr", SEASON): frozenset({"rel:3"})}
+    result, _ = h.run(espnpr_rows)
+    assert (_gate(result).logged, _gate(result).status) == (1, "passed")
+
+
+def test_espnpr_needs_review_rows_are_counted_and_unknown_suffix_is_listed() -> None:
+    espnpr = {"source": "espnpr", "chart_kind": "post"}
+    rows = [
+        _row("rel:1", "", "", None, kind="needs_review", **espnpr),
+        _row("rel:2", "Silverlake", "Northfield", None, kind="unknown_suffix", **espnpr),
+    ]
+    result, _ = Harness().run(rows)
+    assert [r["reason"] for r in _review(result, REVIEW_UNMATCHED)] == ["unknown_suffix"]
+    assert _gate(result).unlinked_prose == 1

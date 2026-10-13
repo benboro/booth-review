@@ -332,7 +332,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     pknownimp = import_sub.add_parser(
         "known",
-        help="import a hand-written TVRG or AA known-disagreements file (04.19 D-02)",
+        help="import a hand-written TVRG, AA or ESPN PR known-disagreements file (04.19 D-02)",
     )
     pknownimp.add_argument("--source", dest="known_source", required=True, choices=POST_SOURCES)
     pknownimp.add_argument("--season", required=True, type=int)

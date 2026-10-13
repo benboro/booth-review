@@ -1,7 +1,7 @@
 """Offline tests for `booth-review import known` (04.19 D-02, D-10), synthetic data only.
 
-The cached posts are the invented fixtures under tests/fixtures/tvrg and
-tests/fixtures/aa; nothing is fetched.
+The cached posts are the invented fixtures under tests/fixtures/tvrg,
+tests/fixtures/aa and tests/fixtures/espnpr; nothing is fetched.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from booth_review.config import DataPaths
 _FIXTURES = Path(__file__).parent / "fixtures"
 TVRG_SLUG = "2022-10-saturday-cable-ratings-10122-invented"
 AA_SLUG = "silverlake-northfield-week-5-fox-cfb-ratings"
+ESPNPR_SLUG = "synthetic-saturday-viewership-grows-on-espn-networks"
 HEADER = "chart_file,row,explanation\n"
 
 
@@ -138,7 +139,22 @@ def test_season_outside_wave_b_is_refused(git_vault, tmp_path) -> None:
     assert main([*argv, "--no-commit"]) == 4
 
 
-@pytest.mark.parametrize("source", ["smw", "espnpr", "other"])
+def test_espnpr_file_validates_against_the_imported_ratings_releases(git_vault, tmp_path) -> None:
+    ratings = git_vault.raw / "espnpr" / "2022" / "ratings"
+    ratings.mkdir(parents=True)
+    (ratings / f"{ESPNPR_SLUG}.html").write_bytes(
+        (_FIXTURES / "espnpr" / "ratings_synthetic.html").read_bytes()
+    )
+    base = ["import", "known", "--source", "espnpr", "--season", "2022", "--no-commit"]
+    bad = _csv(tmp_path, f"{ESPNPR_SLUG},99,no such row\n", name="bad.csv")
+    assert main([*base, "--from", str(bad)]) == 4
+    src = _csv(tmp_path, f"{ESPNPR_SLUG},4,ESPN rounds to 0.1M\n")
+    assert main([*base, "--from", str(src)]) == 0
+    dest = git_vault.raw / "espnpr" / "2022" / "known_disagreements.csv"
+    assert dest.read_bytes() == src.read_bytes()
+
+
+@pytest.mark.parametrize("source", ["smw", "other"])
 def test_other_sources_are_rejected(git_vault, tmp_path, source: str) -> None:
     src = _csv(tmp_path, "week5cfb.png,1,why\n")
     with pytest.raises(SystemExit) as exc:
