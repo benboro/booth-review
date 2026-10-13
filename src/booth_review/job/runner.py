@@ -4,7 +4,9 @@ Composes the Plan 04 job modules (catchup, gaps506, attention) with the
 existing collectors into one tested, catch-up-aware, count-only collect-only
 run for the current season: a CFBD season-level refresh, the Ratings
 Reference lastmod refresh, and a report of which 2026 506 week pages need a
-hand-save -- never a 506 fetch (D-07/D-08/AUTO-01, Claude's Discretion).
+hand-save -- never a 506 fetch (D-07/D-08/AUTO-01, Claude's Discretion) --
+plus the week's ESPN Press Room commentators page when it is not saved yet,
+never fetched either (04.19 D-14).
 
 Each step commits its own paths with a count-only message (batch_message);
 the CFB state (`ledger/job_state.json`) is saved and committed after every CFB
@@ -101,6 +103,7 @@ from booth_review.job.attention import (
     cfbd_remaining,
     cfbd_step_failed,
     error_type_name,
+    espnpr_week_unsaved,
     failed_attempts,
     has_attention,
     missed_runs,
@@ -139,6 +142,7 @@ from booth_review.job.catchup import (
     save_state,
 )
 from booth_review.job.gaps506 import find_506_gaps
+from booth_review.job.gaps_espnpr import espnpr_page_week, find_espnpr_gap
 from booth_review.job.staleness import newest_listed, newest_plotted, staleness_items
 from booth_review.nfl.freeze import schedule_drift
 from booth_review.nfl.gaps import find_nfl_506_gaps
@@ -445,6 +449,13 @@ class ScheduledJob:
                     lambda: self._run_506_gap_step(gap_season, now, items),
                 )
                 any_failed = any_failed or not gap_ok
+                # 04.19 D-14: the week's ESPN Press Room commentators page, read-only.
+                espnpr_ok = self._guarded_ok(
+                    items,
+                    lambda name: step_failed("espnpr_gaps", name),
+                    lambda: self._run_espnpr_gap_step(gap_season, now, items),
+                )
+                any_failed = any_failed or not espnpr_ok
 
             freeze_ok = self._guarded_ok(
                 items,
@@ -937,6 +948,27 @@ class ScheduledJob:
             items.append(sports506_missing(season, gaps.missing))
         if gaps.stale:
             items.append(sports506_stale(season, gaps.stale))
+
+    # -- ESPN Press Room reminder (04.19 D-14; read-only, never fetches the site) --
+
+    def _run_espnpr_gap_step(self, season: int, now: datetime, items: list[AttentionItem]) -> None:
+        games_path = self._runtime.paths.raw / "cfbd" / "games" / f"{season}.json"
+        if not games_path.is_file():
+            return
+        try:
+            games = parse_games(games_path.read_bytes())
+        except ParseError:
+            return
+
+        if espnpr_page_week(games, season, now) is None:
+            print("espnpr: no current week")
+            return
+        label = find_espnpr_gap(self._runtime.paths, season, games, now)
+        if label is None:
+            print("espnpr: current week saved")
+            return
+        print(f"espnpr: week {label} not saved")
+        items.append(espnpr_week_unsaved(season, label))
 
     # -- past-freeze check (IN-02: every run, not only off-season) ---------------
 
