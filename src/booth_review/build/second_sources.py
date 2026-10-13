@@ -448,8 +448,8 @@ def apply_second_sources(
         if row.kind in _EXCLUDED_KINDS:
             count[_EXCLUDED_KINDS[row.kind]] += 1
             continue
-        if row.kind == "unknown_suffix":
-            unmatched_rows.append(_unmatched(row, "", "unknown_suffix"))
+        if row.kind in ("unknown_suffix", "needs_review"):
+            unmatched_rows.append(_unmatched(row, "", row.kind))
             count["unmatched"] += 1
             continue
         if row.viewers is None or not is_usable_value(float(row.viewers)):

@@ -8,7 +8,7 @@ cite the file name, line numbers and counts only, never a cell value.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date
 from pathlib import Path
 
@@ -90,9 +90,12 @@ def _is_non_game(row: Mapping[str, str]) -> bool:
     return home == "" and away != "" and _GAME_SHAPE_RE.search(away) is None
 
 
-def classify_row(row: Mapping[str, str]) -> RowKind:
+def classify_row(
+    row: Mapping[str, str], *, parse: Callable[[str], int | None] = parse_viewers
+) -> RowKind:
     """Label a row; precedence: simulcast, multi_feed, regional, non_game, non_nielsen,
-    no_figure, unknown_suffix, figure."""
+    no_figure, unknown_suffix, figure. `parse` is the source's own unit rule (SMW's
+    M/K suffixes by default; TVRG and AA pass theirs)."""
     network = row.get("network", "")
     # A simulcast prints two networks joined by "&", by a comma ("NET1, NET2") or by a
     # spaced "+" ("NET1 + NET2"); an unspaced "+" is part of a name (ESPN+, Bally+ Ariz).
@@ -111,7 +114,7 @@ def classify_row(row: Mapping[str, str]) -> RowKind:
     # chart has no figure; only a number with an unknown suffix goes to review.
     if not any(ch.isdigit() for ch in viewers):
         return "no_figure"
-    if parse_viewers(viewers) is None:
+    if parse(viewers) is None:
         return "unknown_suffix"
     return "figure"
 

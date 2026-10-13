@@ -22,6 +22,9 @@ RowKind = Literal[
     "non_nielsen",
     "non_game",
     "unknown_suffix",
+    # A post's figure the parser can't tie to one game unambiguously (AA prose,
+    # an unsplittable TVRG game cell): review only, never loaded.
+    "needs_review",
 ]
 ChartKind = Literal["weekly", "postseason", "season_top", "post"]
 
