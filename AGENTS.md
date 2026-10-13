@@ -76,8 +76,16 @@ model, and build phases; read the relevant section before starting a phase.
   `booth-review collect wikipedia --league nfl`, never the `/w/` or `/api/` paths its
   robots.txt disallows. Its text is CC BY-SA 4.0; store only extracted facts with the
   article URL.
-- Sports Media Watch: never collect with scripts; its robots.txt blocks them. Use it
-  only for manual spot checks.
+- Sports Media Watch: never collect with scripts; its robots.txt blocks them. Save
+  its season ratings pages by hand in a browser ("Webpage, Complete", after scrolling
+  so every chart loads) into `data/incoming/smw/<season>/`. Transcribe the chart
+  images in Claude Code sessions, two independent passes per chart, with no OCR or
+  image-parsing script; reconcile them with `booth-review review smw-diff` and
+  `smw-merge`, then bring them into the vault with
+  `booth-review import smw --season <year>`. Transcriptions are private vault files:
+  never put them in the public repo, test fixtures, commit messages, or logs. Credit
+  every figure to Sports Media Watch with its season-page link, and take its figures
+  down if it objects.
 - CFBD: the free tier allows 1,000 requests per calendar month. Count every call, and
   never call per-game endpoints such as `/metrics/wp` in bulk.
 
@@ -91,6 +99,10 @@ model, and build phases; read the relevant section before starting a phase.
   (Sep 25, 2026) that its fields, including `excitementIndex`, may appear in the chart;
   any downloadable file may hold only our own analysis, never CFBD's fields in bulk,
   even reformatted. Credit "Data provided by CollegeFootballData.com" with a link.
+- Second-source viewership figures (Sports Media Watch now; The TV Ratings Guide,
+  Awful Announcing and ESPN Press Room later) are credited with the publisher's name
+  linked to the page the figure came from, and the detail panel says the figure is
+  not listed on Ratings Reference.
 
 # Tooling
 
