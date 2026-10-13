@@ -75,6 +75,8 @@ def test_parse_chart_date() -> None:
         ({"note": "Not Nielsen"}, "non_nielsen"),
         ({"viewers": "n/a"}, "no_figure"),
         ({"viewers": ""}, "no_figure"),
+        ({"viewers": "not disclosed"}, "no_figure"),
+        ({"viewers": "-"}, "no_figure"),
         ({"viewers": "5.2f"}, "unknown_suffix"),
         ({}, "figure"),
         ({"network": "ABC & ESPN2", "viewers": "n/a"}, "simulcast"),

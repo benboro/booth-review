@@ -107,7 +107,9 @@ def classify_row(row: Mapping[str, str]) -> RowKind:
     if "not nielsen" in row.get("note", "").lower():
         return "non_nielsen"
     viewers = row.get("viewers", "").strip()
-    if viewers == "" or viewers.lower() == "n/a":
+    # A cell with no digit at all ("n/a", "not disclosed", blank) states that the
+    # chart has no figure; only a number with an unknown suffix goes to review.
+    if not any(ch.isdigit() for ch in viewers):
         return "no_figure"
     if parse_viewers(viewers) is None:
         return "unknown_suffix"
