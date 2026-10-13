@@ -16,6 +16,7 @@ from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from typing import cast
 
 import polars as pl
 
@@ -33,7 +34,7 @@ from booth_review.resolve.headline import is_usable_value, select_headline
 from booth_review.resolve.names import to_et_date
 from booth_review.resolve.networks import NetworkTable, primary_network
 from booth_review.resolve.overrides import GameOverride
-from booth_review.resolve.teams import TeamResolver
+from booth_review.resolve.teams import TeamResolver, TeamSource
 from booth_review.sources.cfbd.parser import CfbdGame
 from booth_review.sources.known_disagreements import (
     POST_SEASONS,
@@ -371,33 +372,76 @@ class _Winner:
 # -- Matching ------------------------------------------------------------------------------
 
 
-def _find_games(
-    row: SecondSourceRow,
+def find_games(
+    season: int,
+    date_et: date | None,
     away_ids: tuple[int, ...],
     home_ids: tuple[int, ...],
     index: GameIndex,
 ) -> tuple[list[CfbdGame], str]:
-    """(games, confidence): confidence is exact, date-shift, ambiguous or none."""
+    """(games, confidence) for one team-candidate pair: confidence is exact,
+    date-shift (a day either way), ambiguous or none. With no date, the pair
+    must have exactly one game that season (season-top rows)."""
     seen: dict[int, CfbdGame] = {}
     for away in away_ids:
         for home in home_ids:
             if away == home:
                 continue
-            for game in index.games_by_pair(row.season, frozenset({away, home})):
+            for game in index.games_by_pair(season, frozenset({away, home})):
                 seen.setdefault(game.id, game)
     games = [seen[key] for key in sorted(seen)]
-    if row.date_et is None:
-        # Season-top rows only: the pair must have exactly one game that season.
+    if date_et is None:
         if len(games) == 1:
             return games, "exact"
         return [], "ambiguous" if games else "none"
-    exact = [g for g in games if to_et_date(g.start_date) == row.date_et]
+    exact = [g for g in games if to_et_date(g.start_date) == date_et]
     if exact:
         return (exact, "exact") if len(exact) == 1 else ([], "ambiguous")
-    shifted = [g for g in games if abs((to_et_date(g.start_date) - row.date_et).days) == 1]
+    shifted = [g for g in games if abs((to_et_date(g.start_date) - date_et).days) == 1]
     if shifted:
         return (shifted, "date-shift") if len(shifted) == 1 else ([], "ambiguous")
     return [], "none"
+
+
+def match_row_to_game(
+    source: str,
+    season: int,
+    date_et: date | None,
+    away_raw: str,
+    home_raw: str,
+    *,
+    resolver: TeamResolver,
+    index: GameIndex,
+    overrides: Mapping[tuple[str, int, str], GameOverride],
+    pointer: str,
+) -> tuple[CfbdGame | None, str]:
+    """The CFBD game one second-source listing names, through game_overrides.csv
+    (keyed by source, season and pointer) and then the team crosswalk's
+    candidate sets plus the ET date (a day either way).
+
+    Returns (game, reason). Matched: reason is override, exact or date-shift.
+    Unmatched (game None): excluded_override, unresolved_team, ambiguous or
+    none. An override naming an unknown game raises (count-only).
+    """
+    override = overrides.get((source, season, pointer))
+    if override is not None:
+        if override.action == "exclude":
+            return None, "excluded_override"
+        game = index.by_id(override.cfbd_game_id) if override.cfbd_game_id is not None else None
+        if game is None:
+            raise ReferenceTableError(
+                "game_overrides.csv: 1 second-source row names an unknown game"
+            )
+        return game, "override"
+    team_source = cast("TeamSource", source)
+    away_ids = resolver.resolve_candidates(team_source, away_raw, season)
+    home_ids = resolver.resolve_candidates(team_source, home_raw, season)
+    if not away_ids or not home_ids:
+        return None, "unresolved_team"
+    found, confidence = find_games(season, date_et, away_ids, home_ids, index)
+    if not found:
+        return None, "ambiguous" if confidence == "ambiguous" else "none"
+    return found[0], confidence
 
 
 def _iso(day: date | None) -> str:
@@ -517,41 +561,41 @@ def apply_second_sources(
             continue
         count["figures"] += 1
 
-        override = overrides.get((row.source, row.season, row.pointer))
-        game: CfbdGame | None = None
-        if override is not None:
-            if override.action == "exclude":
+        if (
+            (row.source, row.season, row.pointer) not in overrides
+            and row.date_et is None
+            and row.chart_kind != _WEEKLY_CLASS_EXCLUDED
+        ):
+            unmatched_rows.append(_unmatched(row, "", "no_date"))
+            count["unmatched"] += 1
+            continue
+        game, reason = match_row_to_game(
+            row.source,
+            row.season,
+            row.date_et,
+            row.away_raw,
+            row.home_raw,
+            resolver=resolver,
+            index=index,
+            overrides=overrides,
+            pointer=row.pointer,
+        )
+        if game is None:
+            if reason == "excluded_override":
                 count["excluded_override"] += 1
                 continue
-            game = index.by_id(override.cfbd_game_id) if override.cfbd_game_id is not None else None
-            if game is None:
-                raise ReferenceTableError(
-                    "game_overrides.csv: 1 second-source row names an unknown game"
-                )
-        else:
-            if row.date_et is None and row.chart_kind != _WEEKLY_CLASS_EXCLUDED:
-                unmatched_rows.append(_unmatched(row, "", "no_date"))
-                count["unmatched"] += 1
-                continue
-            away_ids = resolver.resolve_candidates(row.source, row.away_raw, row.season)
-            home_ids = resolver.resolve_candidates(row.source, row.home_raw, row.season)
-            if not away_ids or not home_ids:
-                if not away_ids:
-                    unresolved_name(row, row.away_raw)
-                if not home_ids:
-                    unresolved_name(row, row.home_raw)
+            if reason == "unresolved_team":
+                for raw in (row.away_raw, row.home_raw):
+                    if not resolver.resolve_candidates(row.source, raw, row.season):
+                        unresolved_name(row, raw)
                 unmatched_rows.append(_unmatched(row, "", "unresolved_team"))
                 count["unmatched"] += 1
                 continue
-            found, confidence = _find_games(row, away_ids, home_ids, index)
-            if not found:
-                reason = "ambiguous" if confidence == "ambiguous" else "none"
-                unmatched_rows.append(_unmatched(row, confidence, reason))
-                count["unmatched"] += 1
-                if reason == "ambiguous":
-                    count["ambiguous"] += 1
-                continue
-            game = found[0]
+            unmatched_rows.append(_unmatched(row, reason, reason))
+            count["unmatched"] += 1
+            if reason == "ambiguous":
+                count["ambiguous"] += 1
+            continue
         count["matched"] += 1
 
         if game.id not in fbs_game_ids:

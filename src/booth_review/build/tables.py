@@ -29,6 +29,15 @@ from booth_review.build.combined import (
     load_combined_figures,
     orphan_decision_count,
 )
+from booth_review.build.crew_backup import (
+    ESPNPR_BACKFILL_GAP_COLUMNS,
+    ESPNPR_BACKFILL_GAPS,
+    REVIEW_CREW_BACKUP_DISAGREEMENT_COLUMNS,
+    REVIEW_CREW_BACKUP_DISAGREEMENTS,
+    apply_crew_backup,
+    backfill_gap_rows,
+    load_espnpr_booths,
+)
 from booth_review.build.crew_overrides import (
     REVIEW_CREW_GAPS_COLUMNS,
     apply_crew_overrides,
@@ -373,20 +382,46 @@ def assemble_tables(
     )
     telecasts = override_result.telecasts
     telecast_people = override_result.telecast_people
+
+    # 04.19 D-13: ESPN Press Room booths fill the ESPN-family telecasts that
+    # 506 and the overrides left crew-less (override > 506 > backup).
+    backup = apply_crew_backup(
+        telecasts,
+        telecast_people,
+        people,
+        load_espnpr_booths(paths, seasons),
+        resolver=resolver,
+        index=index,
+        overrides=overrides,
+        networks=networks,
+        registry=registry,
+        season_counts=override_result.season_counts,
+    )
+    telecasts = backup.telecasts
+    telecast_people = backup.telecast_people
+    people = backup.people
     crew_gap_review = crew_gap_rows(
         telecasts_pre,
         games,
         telecast_people_pre,
         override_result.statuses,
         unmatched_506_keys(telecast_build.unmatched_rows, networks),
+        backup_ids=backup.filled_ids,
+    )
+    # D-15: the ESPN-family gaps still left, by week, for the user to look up
+    # (interim/espnpr_backfill_gaps.csv).
+    backfill_gaps = backfill_gap_rows(
+        crew_gap_review, [game for s in sources for game in s.games], networks
     )
 
     unmatched_review_rows: list[dict[str, object]] = [
-        dict(unmatched_row(row)) for row in telecast_build.unmatched_rows
+        dict(unmatched_row(row)) for row in [*telecast_build.unmatched_rows, *backup.unmatched_rows]
     ]
     unresolved_review_rows: list[dict[str, object]] = [
         dict(row)
-        for row in unresolved_rows([*telecast_build.unresolved_rows, *second.unresolved_rows])
+        for row in unresolved_rows(
+            [*telecast_build.unresolved_rows, *second.unresolved_rows, *backup.unresolved_rows]
+        )
     ]
 
     bowl_entries = load_bowls(reference_directory)
@@ -404,7 +439,18 @@ def assemble_tables(
         "review_unresolved_teams": (UNRESOLVED_COLUMNS, unresolved_review_rows),
         "review_headline_disagreements": (HEADLINE_DISAGREEMENT_COLUMNS, disagreement_rows),
         "review_era_disagreements": (ERA_DISAGREEMENT_COLUMNS, era_disagreement_rows),
-        "review_people_new": (NEW_NAME_COLUMNS, people_links.new_name_rows),
+        "review_people_new": (
+            NEW_NAME_COLUMNS,
+            sorted(
+                [*people_links.new_name_rows, *backup.new_name_rows],
+                key=lambda row: str(row["name"]),
+            ),
+        ),
+        REVIEW_CREW_BACKUP_DISAGREEMENTS: (
+            REVIEW_CREW_BACKUP_DISAGREEMENT_COLUMNS,
+            backup.review_rows,
+        ),
+        ESPNPR_BACKFILL_GAPS: (ESPNPR_BACKFILL_GAP_COLUMNS, backfill_gaps),
         "review_combined": (
             REVIEW_COMBINED_COLUMNS,
             [
@@ -415,7 +461,7 @@ def assemble_tables(
     }
     review_rows.update(second.review_rows)
 
-    diagnostics = _build_diagnostics(override_result.season_counts)
+    diagnostics = _build_diagnostics(backup.season_counts)
     merged_totals = dict(diagnostics.totals)
     merged_totals.update({f"second_source_{key}": value for key, value in second.counts.items()})
     merged_totals.update({f"people_{key}": value for key, value in people_links.counts.items()})
@@ -439,6 +485,8 @@ def assemble_tables(
     merged_totals.update(
         {f"crew_overrides_{key}": value for key, value in override_result.counts.items()}
     )
+    merged_totals.update({f"crew_backup_{key}": value for key, value in backup.counts.items()})
+    merged_totals["crew_backup_gap_weeks"] = len(backfill_gaps)
     merged_totals["crew_gaps_unpatched"] = sum(
         1 for r in crew_gap_review if r["override_status"] == "missing"
     )

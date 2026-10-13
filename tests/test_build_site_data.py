@@ -1412,7 +1412,11 @@ def test_notes_sentinel_never_ships(tmp_path: Path, build_reference: Path) -> No
 
 
 def _patched_freshness_tables(
-    *, second_season_type: str, second_week: int, second_patched: bool
+    *,
+    second_season_type: str,
+    second_week: int,
+    second_patched: bool,
+    second_backup: bool = False,
 ) -> BuildTables:
     games = [
         _game_row(game_id=1, week=2),
@@ -1434,6 +1438,7 @@ def _patched_freshness_tables(
             rr_telecast_ids=["cfb-example-2"],
             rr_record_urls=["https://example.com/r2"],
             crew_patched=second_patched,
+            crew_backup=second_backup,
         ),
     ]
     return _build_tables(
@@ -1463,6 +1468,17 @@ def test_freshness_patched_postseason_crew_is_not_postseason(build_reference: Pa
     )
     payload = _site(tables, build_reference)
     assert payload["freshness"]["crews_through_week"] == "2"
+
+
+def test_freshness_crews_stamp_ignores_backup_crews(build_reference: Path) -> None:
+    # D-14: an ESPN Press Room backup crew (crew_matched, not patched) never
+    # moves the 506 stamp, though its week is plotted.
+    tables = _patched_freshness_tables(
+        second_season_type="regular", second_week=3, second_patched=False, second_backup=True
+    )
+    payload = _site(tables, build_reference)
+    assert payload["freshness"]["crews_through_week"] == "2"
+    assert payload["freshness"]["viewership_through_week"] == "3"
 
 
 def test_freshness_unpatched_crew_advances_stamp(build_reference: Path) -> None:

@@ -42,7 +42,7 @@ def _monday_start(day: date) -> datetime:
     return datetime.combine(monday, time(0, 0), tzinfo=EASTERN)
 
 
-def _game_label(game: CfbdGame, windows: dict[str, tuple[datetime, datetime]]) -> str:
+def espn_week_label(game: CfbdGame, windows: dict[str, tuple[datetime, datetime]]) -> str:
     """The 506/ESPN label of one regular-season game, by `week_windows`' week-1 split."""
     if game.week != 1:
         return str(game.week)
@@ -66,7 +66,7 @@ def week_spans(games: Sequence[CfbdGame], season: int) -> dict[str, datetime]:
     for game in games:
         if game.season != season or game.season_type != "regular":
             continue
-        label = _game_label(game, windows)
+        label = espn_week_label(game, windows)
         if label not in windows or not label.isdigit():
             continue
         day = game.start_date.astimezone(EASTERN).date()

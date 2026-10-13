@@ -81,6 +81,9 @@ TELECASTS_SCHEMA: dict[str, pl.DataType] = {
     "crew_network_mismatch": pl.Boolean(),
     # Filled by build.crew_overrides.apply_crew_overrides (04.3 D-11/D-13).
     "crew_patched": pl.Boolean(),
+    # Filled by build.crew_backup.apply_crew_backup (04.19 D-13): an ESPN Press
+    # Room booth on a telecast 506 and the overrides left crew-less.
+    "crew_backup": pl.Boolean(),
     "crew_source_url": pl.Utf8(),
     "crew_source_label": pl.Utf8(),
     "combined_feeds": pl.Int32(),
@@ -316,6 +319,7 @@ def _finalize_telecast(
         "crew_matched": crew_matched,
         "crew_network_mismatch": draft.crew_network_mismatch,
         "crew_patched": False,
+        "crew_backup": False,
         "crew_source_url": None,
         "crew_source_label": None,
         "combined_feeds": _combined_feeds([record for record, _ in draft.records]),

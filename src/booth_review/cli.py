@@ -1839,6 +1839,15 @@ def _build(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
     print(f"crew gaps unpatched {outcome.counts.get('crew_gaps_unpatched', 0)}")
+    # 04.19 D-13/D-15: ESPN Press Room backup crews; counts only (the review
+    # rows and the gap list stay in the vault's interim/).
+    print(
+        f"crew backup: filled {outcome.counts.get('crew_backup_filled', 0)}, "
+        f"disagreements {outcome.counts.get('crew_backup_disagreements', 0)}, "
+        f"network mismatches {outcome.counts.get('crew_backup_network_mismatch', 0)}, "
+        f"sideline dropped {outcome.counts.get('crew_backup_sideline_dropped', 0)}, "
+        f"gap weeks listed {outcome.counts.get('crew_backup_gap_weeks', 0)}"
+    )
     for gate in outcome.second_source_gates:
         prose = f", unlinked prose {gate.unlinked_prose}" if gate.unlinked_prose else ""
         print(
