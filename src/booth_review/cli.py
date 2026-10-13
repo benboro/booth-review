@@ -61,17 +61,22 @@ from booth_review.resolve import diagnose as resolve_diagnose
 from booth_review.resolve import network_diagnose
 from booth_review.runtime import Runtime, build_runtime
 from booth_review.seasons import season_of, season_window
+from booth_review.sources.aa.collector import AaCollector
 from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.sources.cfbd.collector import ENDPOINTS, CfbdCollector
 from booth_review.sources.cfbd.parser import parse_games
+from booth_review.sources.gapcollect import MAX_REQUESTS_DEFAULT, RequestBudget
 from booth_review.sources.nflverse.collector import NflverseCollector
 from booth_review.sources.policy import (
     POLICY_LEDGER,
+    TARGETS,
     PolicyCheck,
     PolicyChecker,
     PolicyRobotsError,
     PolicySource,
     append_policy_check,
+    evaluate_robots,
+    policy_fresh,
     robots_fresh,
 )
 from booth_review.sources.ratingsref.collector import (
@@ -107,6 +112,7 @@ from booth_review.sources.sports506.importer import (
     ImportResult,
     Sports506Importer,
 )
+from booth_review.sources.tvrg.collector import TvrgCollector
 from booth_review.sources.wikipedia.collector import WikipediaCollector
 from booth_review.spike.inventory import run_inventory
 from booth_review.spike.join import (
@@ -124,6 +130,7 @@ from booth_review.spike.selection import (
 )
 from booth_review.transport.budget import BudgetSummary, CfbdBudget, InfoSnapshot
 from booth_review.transport.cache import atomic_write_bytes
+from booth_review.transport.types import FetchResponse
 from booth_review.vault import VaultRepo, batch_message
 
 logger = logging.getLogger("booth_review.cli")
@@ -169,6 +176,16 @@ def _parse_date(text: str) -> date:
         return date.fromisoformat(text)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(f"invalid date (expected YYYY-MM-DD): {text!r}") from exc
+
+
+def _positive_int(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"expected a whole number: {text!r}") from exc
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"expected 1 or more: {text!r}")
+    return value
 
 
 def _parse_endpoints(text: str) -> list[str]:
@@ -223,7 +240,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     for key, label in (("tvrg", "The TV Ratings Guide"), ("aa", "Awful Announcing")):
         psecond = collect_sub.add_parser(
-            key, help=f"04.19 D-10: {label} robots.txt and terms re-check"
+            key,
+            help=f"04.19 D-10/D-11: {label} policy re-check, or the gap-only data pass (--season)",
+        )
+        psecond.add_argument(
+            "--season",
+            type=parse_season_spec,
+            help="data pass for 2021-2024 seasons: only pages that can fill a remaining gap",
+        )
+        psecond.add_argument("--dry-run", action="store_true")
+        psecond.add_argument(
+            "--max-requests",
+            type=_positive_int,
+            default=MAX_REQUESTS_DEFAULT,
+            help=f"cap on new requests across the run (default {MAX_REQUESTS_DEFAULT})",
         )
         psecond.add_argument(
             "--policy-check",
@@ -921,14 +951,129 @@ def _confirm_terms_only(source: PolicySource, args: argparse.Namespace) -> int:
     return 0
 
 
-def _collect_policy(args: argparse.Namespace, source: PolicySource) -> int:
-    if not args.policy_check and not args.confirm_terms:
+def _collect_second(args: argparse.Namespace, source: PolicySource) -> int:
+    policy_mode = args.policy_check or args.confirm_terms
+    if policy_mode and args.season:
+        print("error: --season runs the data pass; run --policy-check on its own", file=sys.stderr)
+        return 2
+    if policy_mode:
+        return _collect_policy(args, source)
+    if not args.season:
         print(
-            f"error: data collection for {source} is not yet available; "
-            "this command supports --policy-check and --confirm-terms only",
+            f"error: {source} needs --season for the data pass, "
+            "or --policy-check / --confirm-terms",
             file=sys.stderr,
         )
         return 2
+    return _collect_gap_pass(args, source)
+
+
+def _second_source_gaps(
+    paths: DataPaths, seasons: Sequence[int]
+) -> tuple[dict[int, set[date]], dict[date, set[int]]]:
+    """(gap dates per season, regular-season week per date), offline (D-11)."""
+    from booth_review.build.gaps import regular_weeks_by_date, remaining_gap_dates
+    from booth_review.build.tables import assemble_tables
+
+    # Every season, as `booth-review build` assembles them (see _earliest_gap_month).
+    tables = assemble_tables(paths, reference_dir())
+    return remaining_gap_dates(tables, seasons), regular_weeks_by_date(tables.games, seasons)
+
+
+def _robots_guard(source: PolicySource) -> Callable[[str, FetchResponse], None]:
+    """Stop a data pass when the robots.txt the client reads now disallows
+    everything or asks for a longer Crawl-delay than our pacing (D-10)."""
+    host = TARGETS[source].host
+
+    def _check(seen_host: str, resp: FetchResponse) -> None:
+        if seen_host != host:
+            return
+        verdict = evaluate_robots(
+            resp.status_code, resp.content, host=host, planned_urls=TARGETS[source].planned_samples
+        )
+        if not verdict.ok:
+            raise PolicyRobotsError(verdict)
+
+    return _check
+
+
+def _collect_gap_pass(args: argparse.Namespace, source: PolicySource) -> int:
+    seasons: list[int] = args.season
+    outside = [season for season in seasons if season not in range(2021, 2025)]
+    if outside:
+        print(f"error: {source} covers the 2021-2024 seasons only", file=sys.stderr)
+        return 2
+    paths = DataPaths.from_env()
+    if not policy_fresh(paths, source, datetime.now(UTC)):
+        print(
+            "error: policy check older than 30 days or not approved; run --policy-check",
+            file=sys.stderr,
+        )
+        return 4
+    gaps, week_of = _second_source_gaps(paths, seasons)
+    runtime = build_runtime(with_budget=False)
+    try:
+        runtime.client.add_robots_listener(_robots_guard(source))
+        collector: TvrgCollector | AaCollector = (
+            TvrgCollector(runtime.cache)
+            if source == "tvrg"
+            else AaCollector(runtime.cache, week_of)
+        )
+        budget = RequestBudget(args.max_requests)
+        any_failed = False
+        for season in seasons:
+            season_gaps = gaps.get(season, set())
+            plan = collector.plan(season, season_gaps)
+            cached = sum(1 for req in plan if runtime.cache.status(req) == "cached")
+            print(
+                f"{source} {season}: gap dates {len(season_gaps)}, planned {len(plan)} "
+                f"(cached {cached}, new {len(plan) - cached}; "
+                "posts are planned from cached index pages only)"
+            )
+            try:
+                summary = _run_and_commit(
+                    runtime,
+                    functools.partial(
+                        collector.run_season,
+                        season,
+                        season_gaps,
+                        dry_run=args.dry_run,
+                        budget=budget,
+                    ),
+                    action="collect",
+                    source=source,
+                    season_label=str(season),
+                    dry_run=args.dry_run,
+                    no_commit=args.no_commit,
+                )
+            except (
+                PolicyRobotsError,
+                RobotsDisallowedError,
+                RobotsUnavailableError,
+                UnknownHostError,
+            ) as exc:
+                print(f"error: {type(exc).__name__}", file=sys.stderr)
+                return 4
+            if args.dry_run:
+                print(
+                    f"planned {summary.planned}, cached {summary.cached}, "
+                    f"new {len(summary.new_urls)}"
+                )
+            else:
+                print(
+                    f"fetched {summary.fetched}, cached {summary.cached}, "
+                    f"not_modified {summary.not_modified}, failed {summary.failed}"
+                )
+                any_failed = any_failed or bool(summary.failed)
+            if budget.exhausted:
+                print(f"stopped: --max-requests {args.max_requests} reached")
+                break
+        return 4 if any_failed else 0
+    finally:
+        runtime.client.close()
+
+
+def _collect_policy(args: argparse.Namespace, source: PolicySource) -> int:
     if not args.policy_check:
         return _confirm_terms_only(source, args)
 
@@ -1820,7 +1965,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.source == "wikipedia":
                 return _collect_wikipedia(args)
             if args.source in ("tvrg", "aa"):
-                return _collect_policy(args, cast(PolicySource, args.source))
+                return _collect_second(args, cast(PolicySource, args.source))
             raise AssertionError(f"unknown collect source: {args.source!r}")
         if args.command == "refresh":
             if args.source == "ratingsref":

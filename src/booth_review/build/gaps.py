@@ -49,3 +49,27 @@ def earliest_gap_month(gaps: dict[int, set[date]]) -> tuple[int, int] | None:
         return None
     first = min(days)
     return first.year, first.month
+
+
+def regular_weeks_by_date(
+    games: pl.DataFrame, seasons: Collection[int] = GAP_SEASONS
+) -> dict[date, set[int]]:
+    """ET date -> CFBD regular-season week(s) of the games played that day.
+
+    Awful Announcing's weekly roundups are planned per week (04.19 D-11), so a
+    gap date maps to its week here; postseason dates map to nothing.
+    """
+    rows = (
+        games.filter(
+            (pl.col("season_type").fill_null("regular") == "regular")
+            & pl.col("season").is_in(sorted(set(seasons)))
+            & pl.col("date_et").is_not_null()
+            & pl.col("week").is_not_null()
+        )
+        .select("date_et", "week")
+        .unique()
+    )
+    result: dict[date, set[int]] = {}
+    for day, week in rows.iter_rows():
+        result.setdefault(day, set()).add(int(week))
+    return result

@@ -253,7 +253,7 @@ def test_policy_fresh_needs_robots_and_terms_within_30_days(tmp_path: Path) -> N
 
 def test_no_mode_is_a_clear_error(git_vault, capsys) -> None:
     assert main(["collect", "tvrg"]) == 2
-    assert "not yet available" in capsys.readouterr().err
+    assert "needs --season" in capsys.readouterr().err
 
 
 def test_collect_paths_cover_the_policy_ledger() -> None:
