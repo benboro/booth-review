@@ -97,6 +97,20 @@ model, and build phases; read the relevant section before starting a phase.
   `--max-requests` (default 150); check the count with `--dry-run` first. Credit
   every figure with a link to the exact post it came from, and take a site's figures
   down if it objects.
+- ESPN Press Room: never collect with scripts; Disney's Terms of Use ban automated
+  access. Save its pages by hand in a browser (any filename) into
+  `data/incoming/espnpr/`, or copy them there with `cp -p` to keep each file's save
+  time, and bring them into the vault with `booth-review import espnpr` (`--force`
+  replaces a page whose re-save changed). The importer identifies each page by its
+  canonical link and body class and skips the category listing. The commentators
+  schedule page shows only the current week, so the scheduled job lists that week
+  when it is not saved yet; it never fetches the page. ESPN Press Room crews are a
+  backup: a hand-confirmed override wins, then 506, then ESPN Press Room, and a backup
+  crew never moves the "crews through week N" stamp. Its viewership figures rank last,
+  behind Ratings Reference, Sports Media Watch, The TV Ratings Guide and Awful
+  Announcing, and pass the same 3% Ratings Reference agreement gate. Credit every crew
+  and figure with a link to the exact page it came from, and take ESPN Press Room's
+  data down if ESPN objects.
 - CFBD: the free tier allows 1,000 requests per calendar month. Count every call, and
   never call per-game endpoints such as `/metrics/wp` in bulk.
 
@@ -110,10 +124,10 @@ model, and build phases; read the relevant section before starting a phase.
   (Sep 25, 2026) that its fields, including `excitementIndex`, may appear in the chart;
   any downloadable file may hold only our own analysis, never CFBD's fields in bulk,
   even reformatted. Credit "Data provided by CollegeFootballData.com" with a link.
-- Second-source viewership figures (Sports Media Watch, The TV Ratings Guide and
-  Awful Announcing now; ESPN Press Room later) are credited with the publisher's
-  name linked to the page the figure came from, and the detail panel says the figure
-  is not listed on Ratings Reference.
+- Second-source viewership figures (Sports Media Watch, The TV Ratings Guide, Awful
+  Announcing and ESPN Press Room) are credited with the publisher's name linked to the
+  page the figure came from, and the detail panel says the figure is not listed on
+  Ratings Reference.
 
 # Tooling
 
