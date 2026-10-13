@@ -21,6 +21,12 @@ import pytest
 from booth_review.build.bowls import BOWL_COLUMNS, load_bowls
 from booth_review.build.crew_overrides import CREW_OVERRIDE_COLUMNS, load_crew_overrides
 from booth_review.build.rivalries import RIVALRY_COLUMNS, load_rivalries
+from booth_review.build.second_sources import (
+    GATE_OVERRIDE_COLUMNS,
+    NETWORK_ACCEPT_COLUMNS,
+    load_gate_overrides,
+    load_network_accepts,
+)
 from booth_review.build.venues import VENUE_LOCATION_COLUMNS, load_venue_locations
 from booth_review.contract.models import crew_source_url_problem
 from booth_review.errors import ReferenceTableError
@@ -97,6 +103,8 @@ KNOWN_TABLES: dict[str, tuple[tuple[str, ...] | None, Loader | None]] = {
     "rivalries.csv": (RIVALRY_COLUMNS, load_rivalries),
     "crew_overrides.csv": (CREW_OVERRIDE_COLUMNS, load_crew_overrides),
     "venue_locations.csv": (VENUE_LOCATION_COLUMNS, load_venue_locations),
+    "second_source_network_accepts.csv": (NETWORK_ACCEPT_COLUMNS, load_network_accepts),
+    "second_source_gate_overrides.csv": (GATE_OVERRIDE_COLUMNS, load_gate_overrides),
     "nfl_franchises.csv": (NFL_FRANCHISE_COLUMNS, load_nfl_franchises),
     "nfl_team_crosswalk.csv": (NFL_TEAM_CROSSWALK_COLUMNS, load_nfl_team_crosswalk),
     "nfl_stadiums.csv": (NFL_STADIUM_COLUMNS, load_nfl_stadiums),
