@@ -64,6 +64,10 @@ def _is_regional(row: Mapping[str, str]) -> bool:
     away, home, note = row.get("away", ""), row.get("home", ""), row.get("note", "")
     if any("regional action" in cell.lower() for cell in (away, home, note)):
         return True
+    # The transcription brief marks a cell that stacks several games (a BTN window
+    # printed without "or") with the note "multi-game cell".
+    if "multi-game cell" in note.lower():
+        return True
     return any(" or " in cell.lower() or cell.count("/") > 1 for cell in (away, home))
 
 

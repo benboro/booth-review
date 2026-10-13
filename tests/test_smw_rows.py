@@ -59,6 +59,8 @@ def test_parse_chart_date() -> None:
         ({"network": "ESPN MEGA"}, "multi_feed"),
         ({"home": "Regional action"}, "regional"),
         ({"away": "Silverlake or Riverbend"}, "regional"),
+        ({"away": "Silverlake Northfield", "note": "multi-game cell"}, "regional"),
+        ({"away": "Silverlake Northfield", "note": "Multi-game cell"}, "regional"),
         ({"note": "Not Nielsen"}, "non_nielsen"),
         ({"viewers": "n/a"}, "no_figure"),
         ({"viewers": ""}, "no_figure"),
