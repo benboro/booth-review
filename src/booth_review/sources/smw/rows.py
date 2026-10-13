@@ -35,6 +35,7 @@ ROWS_COLUMNS = (*PASS_COLUMNS, "superseded_by")
 _VIEWERS_RE = re.compile(r"^(\d+(?:\.\d+)?)([MK])$")
 _DATE_RE = re.compile(r"^(\d{1,2})/(\d{1,2})$")
 _CHART_FILE_RE = re.compile(r"^[A-Za-z0-9._-]+\.png$")
+_SPACED_PLUS_RE = re.compile(r"\s\+\s")
 
 
 def parse_viewers(printed: str) -> int | None:
@@ -75,8 +76,9 @@ def classify_row(row: Mapping[str, str]) -> RowKind:
     """Label a row; precedence: simulcast, multi_feed, regional, non_nielsen,
     no_figure, unknown_suffix, figure."""
     network = row.get("network", "")
-    # A simulcast prints two networks joined by "&" or by a comma ("NET1, NET2").
-    if "&" in network or "," in network:
+    # A simulcast prints two networks joined by "&", by a comma ("NET1, NET2") or by a
+    # spaced "+" ("NET1 + NET2"); an unspaced "+" is part of a name (ESPN+, Bally+ Ariz).
+    if "&" in network or "," in network or _SPACED_PLUS_RE.search(network):
         return "simulcast"
     if "MEGA" in network.upper().split():
         return "multi_feed"
