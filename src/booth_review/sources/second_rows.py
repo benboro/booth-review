@@ -60,6 +60,27 @@ class SecondSourceRow:
     rank: int
     source_url: str
     superseded: bool
+    # SMW: the "<chart_file>:<row>" pointer of the later row that replaces this
+    # one (rows.csv superseded_by); empty for every other row.
+    superseded_by: str = ""
+    # TVRG and AA: the post's published time, UTC "%Y-%m-%dT%H:%M:%SZ", which
+    # breaks a tie between two posts of the same rank (a later post wins, D-08);
+    # empty when unknown or for a chart row.
+    published: str = ""
+
+
+RejectReason = Literal["no_canonical_url", "off_host_url", "parse_error"]
+
+
+@dataclass(frozen=True)
+class RejectedPage:
+    """A cached page the build skipped: its path under the vault's raw/ folder
+    and why. Listed in the vault's interim/ folder, never printed."""
+
+    source: SecondSource
+    season: int
+    path: str
+    reason: RejectReason
 
 
 @dataclass(frozen=True)

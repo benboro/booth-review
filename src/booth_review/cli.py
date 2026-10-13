@@ -65,6 +65,11 @@ from booth_review.sources.aa.collector import AaCollector
 from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.sources.cfbd.collector import ENDPOINTS, CfbdCollector
 from booth_review.sources.cfbd.parser import parse_games
+from booth_review.sources.espnpr.importer import (
+    LISTING_MESSAGE,
+    EspnPrImporter,
+    EspnPrImportResult,
+)
 from booth_review.sources.gapcollect import MAX_REQUESTS_DEFAULT, RequestBudget
 from booth_review.sources.known_disagreements import (
     KNOWN_FILE,
@@ -269,8 +274,8 @@ def build_parser() -> argparse.ArgumentParser:
         psecond.add_argument(
             "--confirm-terms",
             action="store_true",
-            help="record that the user read the current terms and allows collection "
-            "(needs a robots-ok check from the last 30 days, or --policy-check)",
+            help="record that the user read the terms the latest --policy-check fetched and "
+            "they allow collection (run alone, after a robots-ok check from the last 30 days)",
         )
         psecond.add_argument("--no-commit", action="store_true")
 
@@ -317,9 +322,17 @@ def build_parser() -> argparse.ArgumentParser:
     psmwimp.add_argument("--force", action="store_true")
     psmwimp.add_argument("--no-commit", action="store_true")
 
+    pespnprimp = import_sub.add_parser(
+        "espnpr",
+        help="import hand-saved ESPN Press Room pages (04.19 D-12; the site is never fetched)",
+    )
+    pespnprimp.add_argument("--from", dest="from_dir", type=Path, default=None)
+    pespnprimp.add_argument("--force", action="store_true")
+    pespnprimp.add_argument("--no-commit", action="store_true")
+
     pknownimp = import_sub.add_parser(
         "known",
-        help="import a hand-written TVRG or AA known-disagreements file (04.19 D-02)",
+        help="import a hand-written TVRG, AA or ESPN PR known-disagreements file (04.19 D-02)",
     )
     pknownimp.add_argument("--source", dest="known_source", required=True, choices=POST_SOURCES)
     pknownimp.add_argument("--season", required=True, type=int)
@@ -968,6 +981,14 @@ def _confirm_terms_only(source: PolicySource, args: argparse.Namespace) -> int:
 
 
 def _collect_second(args: argparse.Namespace, source: PolicySource) -> int:
+    if args.policy_check and args.confirm_terms:
+        # WR-04 (D-10): the confirmation stands for terms the user has read, so it
+        # can't be recorded in the run that fetches them.
+        print(
+            "error: run --policy-check first and read its summary, then --confirm-terms on its own",
+            file=sys.stderr,
+        )
+        return 2
     policy_mode = args.policy_check or args.confirm_terms
     if policy_mode and args.season:
         print("error: --season runs the data pass; run --policy-check on its own", file=sys.stderr)
@@ -1144,15 +1165,14 @@ def _collect_policy(args: argparse.Namespace, source: PolicySource) -> int:
             counts = _partial_counts(before, runtime.cache.counters)
         else:
             summary = outcome.summary
-            robots_ok = outcome.robots_ok
-            # Terms are confirmed only on a clean run: every policy page read.
-            confirm = args.confirm_terms and robots_ok and summary.failed == 0
+            # terms_ok stays null: only a later `--confirm-terms` run, after the
+            # user has read this summary, records it (WR-04).
             check = PolicyCheck(
                 source,
                 outcome.robots_checked_at or now,
-                robots_ok=robots_ok,
+                robots_ok=outcome.robots_ok,
                 crawl_delay=outcome.verdict.crawl_delay if outcome.verdict else None,
-                terms_ok=True if confirm else None,
+                terms_ok=None,
             )
             counts = summary.counts()
         with runtime.vault.lock():
@@ -1178,9 +1198,6 @@ def _collect_policy(args: argparse.Namespace, source: PolicySource) -> int:
             f"terms_ok {'true' if check.terms_ok else 'null'}"
         )
         if not outcome.robots_ok:
-            return 4
-        if args.confirm_terms and not check.terms_ok:
-            print("error: terms not confirmed (a policy page failed)", file=sys.stderr)
             return 4
         return 4 if counts["failed"] else 0
     finally:
@@ -1360,6 +1377,64 @@ def _import_smw(args: argparse.Namespace) -> int:
         return 4 if any_problems else 0
     finally:
         runtime.client.close()
+
+
+# -- import espnpr --------------------------------------------------------------------------
+
+
+def _print_espnpr_import_result(result: EspnPrImportResult) -> None:
+    """Counts and reasons only, never page text or file names."""
+    for season in result.seasons():
+        imported = [ref for ref in result.imported if ref.season == season]
+        by_kind = ", ".join(
+            f"{kind} {sum(ref.kind == kind for ref in imported)}"
+            for kind in ("commentators", "release", "ratings")
+        )
+        print(
+            f"espnpr {season}: imported {len(imported)} ({by_kind}), "
+            f"skipped_existing {sum(r.season == season for r in result.skipped_existing)}, "
+            f"changed_without_force {sum(r.season == season for r in result.changed_without_force)}"
+        )
+    reasons: dict[str, int] = {}
+    for item in result.skipped_invalid:
+        reasons[item.reason] = reasons.get(item.reason, 0) + 1
+    print(
+        f"imported {len(result.imported)}, skipped_existing {len(result.skipped_existing)}, "
+        f"skipped_invalid {len(result.skipped_invalid)}, "
+        f"changed_without_force {len(result.changed_without_force)}"
+    )
+    for reason, count in sorted(reasons.items()):
+        print(f"skipped {count}: {reason}")
+    if result.changed_without_force:
+        print("some pages differ from the vault copy; use --force to overwrite")
+    if result.superseded:
+        print(f"--force kept the newest save; {result.superseded} older save(s) ignored")
+    if result.listings:
+        print(f"skipped {result.listings} {LISTING_MESSAGE}")
+    if result.unrecognized:
+        print(f"ignored {result.unrecognized} HTML file(s) that aren't ESPN Press Room data pages")
+    for problem in result.problems:
+        print(f"problem: {problem}")
+
+
+def _import_espnpr(args: argparse.Namespace) -> int:
+    """04.19 D-12: ESPN Press Room is hand-save only (Disney Terms of Use ban
+    automated access), so no client is built here at all. Holds the vault lock
+    and commits once per season, touching only raw/espnpr/<season> and the
+    ledger, with a count-only message."""
+    paths = DataPaths.from_env()
+    vault = VaultRepo(paths.vault)
+    vault.check()
+    with vault.lock():
+        result = EspnPrImporter(paths).run(incoming_dir=args.from_dir, force=args.force)
+        _print_espnpr_import_result(result)
+        if not args.no_commit:
+            for season in result.seasons():
+                vault.commit_batch(
+                    batch_message("import", "espnpr", str(season), result.counts(season)),
+                    paths=[f"raw/espnpr/{season}", "ledger/requests.jsonl"],
+                )
+    return 4 if result.has_problems else 0
 
 
 # -- import known ---------------------------------------------------------------------------
@@ -1768,13 +1843,33 @@ def _build(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
     print(f"crew gaps unpatched {outcome.counts.get('crew_gaps_unpatched', 0)}")
+    # 04.19 D-13/D-15: ESPN Press Room backup crews; counts only (the review
+    # rows and the gap list stay in the vault's interim/).
+    print(
+        f"crew backup: filled {outcome.counts.get('crew_backup_filled', 0)}, "
+        f"disagreements {outcome.counts.get('crew_backup_disagreements', 0)}, "
+        f"network mismatches {outcome.counts.get('crew_backup_network_mismatch', 0)}, "
+        f"sideline dropped {outcome.counts.get('crew_backup_sideline_dropped', 0)}, "
+        f"gap weeks listed {outcome.counts.get('crew_backup_gap_weeks', 0)}, "
+        f"rows skipped {outcome.counts.get('crew_backup_rows_skipped', 0)}, "
+        f"radio dropped {outcome.counts.get('crew_backup_radio_dropped', 0)}, "
+        f"pages without booths {outcome.counts.get('crew_backup_pages_without_booths', 0)}"
+        + _nonzero(("rejected pages", outcome.counts.get("crew_backup_rejected_pages", 0)))
+    )
     for gate in outcome.second_source_gates:
-        prose = f", unlinked prose {gate.unlinked_prose}" if gate.unlinked_prose else ""
+        extras = _nonzero(
+            ("unlinked prose", gate.unlinked_prose),
+            ("superseded", gate.superseded),
+            ("excluded by override", gate.excluded_override),
+            ("rejected pages", gate.rejected_pages),
+            ("accepts ignored", gate.accepts_ignored),
+            ("accepts unused", gate.accepts_unused),
+        )
         print(
             f"second source {gate.source} {gate.season}: shared {gate.shared}, "
             f"within 3% {gate.within_3pct}, logged {gate.logged}, "
             f"unexplained {gate.unexplained}, loaded {gate.loaded}, "
-            f"held {gate.held_network}{prose}, {gate.status}"
+            f"held {gate.held_network}{extras}, {gate.status}"
         )
     if outcome.second_source_gates:
         print(
@@ -1783,11 +1878,37 @@ def _build(args: argparse.Namespace) -> int:
             f"{outcome.counts.get('second_source_unmatched', 0)} for review, "
             f"{outcome.counts.get('second_source_withheld_seasons', 0)} season(s) withheld"
         )
+    # WR-05: an accept that placed no figure would otherwise look like a resolved
+    # item forever. Only public second_source_network_accepts.csv line numbers print.
+    for line, status in outcome.second_source_accept_warnings:
+        why = (
+            "the game has more than one main telecast, so the accept can't choose one; "
+            "correct the network through the override tables instead"
+            if status == "ignored"
+            else "no held row needs it (the pointer is gone or its network now matches); "
+            "remove the row"
+        )
+        print(f"warning: second_source_network_accepts.csv line {line}: {why}", file=sys.stderr)
+    rejected = outcome.counts.get("second_source_rejected_pages", 0) + outcome.counts.get(
+        "crew_backup_rejected_pages", 0
+    )
+    if rejected:
+        # CR-01: an unreadable cached page is skipped, never a reason to stop the build.
+        print(
+            f"warning: {rejected} cached page(s) skipped as unreadable "
+            "(see interim/review_second_source_rejected.csv)",
+            file=sys.stderr,
+        )
     if outcome.accepted:
         print("accepted new baseline")
     for reason in outcome.reasons:
         print(reason)
     return 4 if exit_blocked else 0
+
+
+def _nonzero(*fields: tuple[str, int]) -> str:
+    """Build output extras: ", <label> <n>" for each field whose count is not zero."""
+    return "".join(f", {label} {n}" for label, n in fields if n)
 
 
 # -- site (D-14) --------------------------------------------------------------------------
@@ -2034,6 +2155,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return _import_506(args)
             if args.source == "smw":
                 return _import_smw(args)
+            if args.source == "espnpr":
+                return _import_espnpr(args)
             if args.source == "known":
                 return _import_known(args)
             raise AssertionError(f"unknown import source: {args.source!r}")

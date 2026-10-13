@@ -62,6 +62,18 @@ def test_parse_chart_date() -> None:
         ({"network": "ESPN+"}, "figure"),
         ({"network": "Bally+ Ariz"}, "figure"),
         ({"network": "ESPN MEGA"}, "multi_feed"),
+        # WR-03: a "/"-joined simulcast total, and stacked ESPN MegaCast feeds.
+        ({"network": "ABC/ESPN2"}, "simulcast"),
+        ({"network": "ABC/ESPN2", "viewers": "2.10M"}, "simulcast"),
+        ({"network": "ABC / ESPN2"}, "simulcast"),
+        ({"network": "ESPN ESPN2/U", "viewers": "2.10M"}, "multi_feed"),
+        ({"network": "ESPN ESPNU", "viewers": "2.10M"}, "multi_feed"),
+        ({"network": "ESPN2/U", "viewers": "2.10M"}, "simulcast"),
+        ({"network": "ESPN"}, "figure"),
+        ({"network": "ESPNU (taped)"}, "figure"),
+        ({"network": "ESPN Classic"}, "figure"),
+        ({"network": "CBS Sports Network"}, "figure"),
+        ({"network": "The CW"}, "figure"),
         ({"home": "Regional action"}, "regional"),
         ({"away": "Silverlake or Riverbend"}, "regional"),
         ({"away": "Silverlake Northfield", "note": "multi-game cell"}, "regional"),
@@ -150,6 +162,7 @@ def test_smw_second_rows() -> None:
     assert out[1].viewers is None
     assert out[1].kind == "simulcast"
     assert out[1].superseded is True
+    assert (out[0].superseded_by, out[1].superseded_by) == ("", "w.png:1")
 
 
 @pytest.mark.parametrize(

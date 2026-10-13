@@ -15,6 +15,7 @@ from typing import Any
 
 import polars as pl
 
+from booth_review.build.crew_backup import CREW_BACKUP_SOURCE
 from booth_review.build.crew_overrides import CREW_OVERRIDE_SOURCE
 from booth_review.build.io import write_review_csv
 from booth_review.config import DataPaths
@@ -152,17 +153,21 @@ def stratified_sample(
 
     JOIN-08 measures the 506 join, so a telecast whose main crew came from
     data/reference/crew_overrides.csv (04.3: `crew_patched`, or main rows
-    with source `crew_override`) is never drawn; it has no 506 crew to check.
+    with source `crew_override`) or from an ESPN Press Room backup page
+    (04.19: `crew_backup`, or main rows with source `crew_backup`) is never
+    drawn; it has no 506 crew to check.
     """
     override_ids = set(
         telecast_people.filter(
-            (pl.col("feed_type") == "main") & (pl.col("source") == CREW_OVERRIDE_SOURCE)
+            (pl.col("feed_type") == "main")
+            & pl.col("source").is_in([CREW_OVERRIDE_SOURCE, CREW_BACKUP_SOURCE])
         )["telecast_id"].to_list()
     )
-    if "crew_patched" in telecasts.columns:  # a pre-04.3 telecasts.parquet has no column
-        override_ids.update(
-            telecasts.filter(pl.col("crew_patched").fill_null(False))["telecast_id"].to_list()
-        )
+    for column in ("crew_patched", "crew_backup"):  # older telecasts.parquet lack these
+        if column in telecasts.columns:
+            override_ids.update(
+                telecasts.filter(pl.col(column).fill_null(False))["telecast_id"].to_list()
+            )
     plotted = telecasts.filter(
         pl.col("plotted") & ~pl.col("telecast_id").is_in(sorted(override_ids))
     )

@@ -158,7 +158,11 @@ def _build_freshness(tables: BuildTables) -> dict[str, object]:
     # status `patched` (506 listed no main crew) and marks exactly those
     # crew_patched, so this is that match; redundant, correction, and differs
     # overrides sit on crews 506 did list and still advance the stamp.
-    crew_filter = pl.col("crew_matched") & ~pl.col("crew_patched")
+    # D-14 (04.19): backup crews never move the 506 stamp either; an ESPN
+    # Press Room booth covers one network family, so it can't claim a week.
+    crew_filter = (
+        pl.col("crew_matched") & ~pl.col("crew_patched") & ~pl.col("crew_backup").fill_null(False)
+    )
     crew_ids: set[str] = set(season_telecasts.filter(crew_filter)["telecast_id"].to_list())
     viewership_ids: set[str] = set(
         season_telecasts.filter(pl.col("plotted"))["telecast_id"].to_list()
@@ -665,6 +669,7 @@ def build_site_data(
                 "matched_game": rated_telecasts,
                 "matched_crew": _as_int(crow["matched_crew"]),
                 "matched_crew_patched": _as_int(crow["crew_patched"]),
+                "matched_crew_backup": _as_int(crow["crew_backup"]),
                 "match_rate": crow["match_rate"],
                 "headline_present": _as_int(crow["headline_present"]),
                 "excitement_present": _as_int(crow["excitement_present"]),

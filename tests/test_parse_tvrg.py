@@ -55,6 +55,19 @@ def test_college_game_row_is_a_figure_in_millions() -> None:
     assert row.superseded is False
 
 
+def test_published_time_is_read_as_utc_for_the_settle_tie_break() -> None:
+    # WR-07: two posts of one air date tie on rank; the later published one wins.
+    assert {row.published for row in _parsed().values()} == {""}  # the fixture has none
+    stamped = _HTML.replace(
+        "</head>",
+        "</head><abbr class='published updated' title='2022-10-03T09:15:00-07:00'>Oct 3</abbr>",
+        1,
+    )
+    assert "<abbr" in stamped
+    rows = parse_post(stamped, url=_URL, season=2022).rows
+    assert {row.published for row in rows} == {"2022-10-03T16:15:00Z"}
+
+
 def test_every_row_kind_and_the_ignored_count() -> None:
     parsed = parse_post(_HTML, url=_URL, season=2022)
     kinds = {row.pointer.split(":")[1]: row.kind for row in parsed.rows}

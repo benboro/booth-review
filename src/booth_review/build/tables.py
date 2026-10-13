@@ -29,6 +29,15 @@ from booth_review.build.combined import (
     load_combined_figures,
     orphan_decision_count,
 )
+from booth_review.build.crew_backup import (
+    ESPNPR_BACKFILL_GAP_COLUMNS,
+    ESPNPR_BACKFILL_GAPS,
+    REVIEW_CREW_BACKUP_DISAGREEMENT_COLUMNS,
+    REVIEW_CREW_BACKUP_DISAGREEMENTS,
+    apply_crew_backup,
+    backfill_gap_rows,
+    load_espnpr_booths,
+)
 from booth_review.build.crew_overrides import (
     REVIEW_CREW_GAPS_COLUMNS,
     apply_crew_overrides,
@@ -49,11 +58,14 @@ from booth_review.build.people_links import (
     TELECAST_PEOPLE_SCHEMA as TELECAST_PEOPLE_SCHEMA,
 )
 from booth_review.build.second_sources import (
+    REVIEW_REJECTED,
     GateStatus,
+    SecondSourceResult,
     apply_second_sources,
     load_gate_overrides,
-    load_network_accepts,
+    load_network_accept_lines,
     load_second_source_inputs,
+    rejected_page_rows,
 )
 from booth_review.build.shipped import (
     network_rated_counts,
@@ -143,6 +155,9 @@ class BuildTables:
     venues: pl.DataFrame = field(default_factory=empty_venues_frame)
     # Per (source, season) second-source gate rows (04.19 D-02); counts only when printed.
     second_source_gates: tuple[GateStatus, ...] = ()
+    # second_source_network_accepts.csv (line, status) pairs the build could not use:
+    # "ignored" (the game has more than one main telecast) or "unused" (WR-05).
+    second_source_accept_warnings: tuple[tuple[int, str], ...] = ()
 
 
 def _combined_review_row(
@@ -276,6 +291,21 @@ def network_rarity_review_rows(
     return rows
 
 
+def _accept_warnings(
+    accept_lines: Mapping[tuple[str, int, str], int],
+    second: SecondSourceResult,
+    seasons: Sequence[int] | None,
+) -> tuple[tuple[int, str], ...]:
+    """(line, "ignored" | "unused") for each network accept that placed no
+    figure; an accept for a season this run did not load is not judged."""
+    warnings: list[tuple[int, str]] = []
+    for key, line in accept_lines.items():
+        if key in second.accepts_used or (seasons is not None and key[1] not in seasons):
+            continue
+        warnings.append((line, "ignored" if key in second.accepts_ignored else "unused"))
+    return tuple(sorted(warnings))
+
+
 def assemble_tables(
     paths: DataPaths, reference_directory: Path, seasons: Sequence[int] | None = None
 ) -> BuildTables:
@@ -307,6 +337,7 @@ def assemble_tables(
     )
 
     # 04.19: second-source figures fill existing telecasts (never create one).
+    accept_lines = load_network_accept_lines(reference_directory)
     second = apply_second_sources(
         telecast_build.telecasts,
         telecast_build.records_by_telecast,
@@ -315,7 +346,7 @@ def assemble_tables(
         index=index,
         networks=networks,
         overrides=overrides,
-        accepts=load_network_accepts(reference_directory),
+        accepts=frozenset(accept_lines),
         gate_overrides=load_gate_overrides(reference_directory),
         fbs_game_ids=set(games["game_id"].to_list()),
         season_counts=telecast_build.counts,
@@ -373,20 +404,47 @@ def assemble_tables(
     )
     telecasts = override_result.telecasts
     telecast_people = override_result.telecast_people
+
+    # 04.19 D-13: ESPN Press Room booths fill the ESPN-family telecasts that
+    # 506 and the overrides left crew-less (override > 506 > backup).
+    booth_pages = load_espnpr_booths(paths, seasons)
+    backup = apply_crew_backup(
+        telecasts,
+        telecast_people,
+        people,
+        booth_pages.booths,
+        resolver=resolver,
+        index=index,
+        overrides=overrides,
+        networks=networks,
+        registry=registry,
+        season_counts=override_result.season_counts,
+    )
+    telecasts = backup.telecasts
+    telecast_people = backup.telecast_people
+    people = backup.people
     crew_gap_review = crew_gap_rows(
         telecasts_pre,
         games,
         telecast_people_pre,
         override_result.statuses,
         unmatched_506_keys(telecast_build.unmatched_rows, networks),
+        backup_ids=backup.filled_ids,
+    )
+    # D-15: the ESPN-family gaps still left, by week, for the user to look up
+    # (interim/espnpr_backfill_gaps.csv).
+    backfill_gaps = backfill_gap_rows(
+        crew_gap_review, [game for s in sources for game in s.games], networks
     )
 
     unmatched_review_rows: list[dict[str, object]] = [
-        dict(unmatched_row(row)) for row in telecast_build.unmatched_rows
+        dict(unmatched_row(row)) for row in [*telecast_build.unmatched_rows, *backup.unmatched_rows]
     ]
     unresolved_review_rows: list[dict[str, object]] = [
         dict(row)
-        for row in unresolved_rows([*telecast_build.unresolved_rows, *second.unresolved_rows])
+        for row in unresolved_rows(
+            [*telecast_build.unresolved_rows, *second.unresolved_rows, *backup.unresolved_rows]
+        )
     ]
 
     bowl_entries = load_bowls(reference_directory)
@@ -404,7 +462,18 @@ def assemble_tables(
         "review_unresolved_teams": (UNRESOLVED_COLUMNS, unresolved_review_rows),
         "review_headline_disagreements": (HEADLINE_DISAGREEMENT_COLUMNS, disagreement_rows),
         "review_era_disagreements": (ERA_DISAGREEMENT_COLUMNS, era_disagreement_rows),
-        "review_people_new": (NEW_NAME_COLUMNS, people_links.new_name_rows),
+        "review_people_new": (
+            NEW_NAME_COLUMNS,
+            sorted(
+                [*people_links.new_name_rows, *backup.new_name_rows],
+                key=lambda row: str(row["name"]),
+            ),
+        ),
+        REVIEW_CREW_BACKUP_DISAGREEMENTS: (
+            REVIEW_CREW_BACKUP_DISAGREEMENT_COLUMNS,
+            backup.review_rows,
+        ),
+        ESPNPR_BACKFILL_GAPS: (ESPNPR_BACKFILL_GAP_COLUMNS, backfill_gaps),
         "review_combined": (
             REVIEW_COMBINED_COLUMNS,
             [
@@ -414,8 +483,14 @@ def assemble_tables(
         ),
     }
     review_rows.update(second.review_rows)
+    # Unreadable booth pages join the second sources' rejected-page list (CR-01).
+    rejected_columns, _ = review_rows[REVIEW_REJECTED]
+    review_rows[REVIEW_REJECTED] = (
+        rejected_columns,
+        rejected_page_rows([*second.rejected_pages, *booth_pages.rejected]),
+    )
 
-    diagnostics = _build_diagnostics(override_result.season_counts)
+    diagnostics = _build_diagnostics(backup.season_counts)
     merged_totals = dict(diagnostics.totals)
     merged_totals.update({f"second_source_{key}": value for key, value in second.counts.items()})
     merged_totals.update({f"people_{key}": value for key, value in people_links.counts.items()})
@@ -439,6 +514,11 @@ def assemble_tables(
     merged_totals.update(
         {f"crew_overrides_{key}": value for key, value in override_result.counts.items()}
     )
+    merged_totals.update({f"crew_backup_{key}": value for key, value in backup.counts.items()})
+    merged_totals.update(
+        {f"crew_backup_{key}": value for key, value in booth_pages.counts().items()}
+    )
+    merged_totals["crew_backup_gap_weeks"] = len(backfill_gaps)
     merged_totals["crew_gaps_unpatched"] = sum(
         1 for r in crew_gap_review if r["override_status"] == "missing"
     )
@@ -471,6 +551,7 @@ def assemble_tables(
         crew_override_differs_lines=override_result.differs_lines,
         venues=venues,
         second_source_gates=second.gates,
+        second_source_accept_warnings=_accept_warnings(accept_lines, second, seasons),
     )
 
 

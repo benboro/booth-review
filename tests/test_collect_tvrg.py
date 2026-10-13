@@ -43,7 +43,15 @@ _PAGE2 = (
     b"Friday Cable Ratings 9/30/22: Example Late Show</a></h3></body></html>"
 )
 _EMPTY_ARCHIVE = b"<html><body><p>No posts.</p></body></html>"
-_POST = b"<html><body><p>Invented post body.</p></body></html>"
+
+
+def _post(url: str) -> bytes:
+    """An invented post the build can read: an on-host canonical link, no data table."""
+    return (
+        f"<html><head><link rel='canonical' href='{url}'></head>"
+        "<body><p>Invented post body.</p></body></html>"
+    ).encode()
+
 
 _SAT_CABLE = f"{_HOST}/2022/10/saturday-cable-ratings-10122-silverlake.html"
 _SAT_TV = f"{_HOST}/2022/10/saturday-tv-ratings-10122-northfield.html"
@@ -222,11 +230,11 @@ def _responses() -> dict[str, tuple[int, bytes, dict[str, str]]]:
         f"{_HOST}/2022/10/": (200, _ARCHIVE, {}),
         _OLDER: (200, _PAGE2, {}),
         f"{_HOST}/2022/11/": (200, _EMPTY_ARCHIVE, {}),
-        _SAT_CABLE: (200, _POST, {}),
-        _SAT_TV: (200, _POST, {}),
-        _FRI_TV: (200, _POST, {}),
-        _SUN_CABLE: (200, _POST, {}),
-        _FRI_CABLE: (200, _POST, {}),
+        _SAT_CABLE: (200, _post(_SAT_CABLE), {}),
+        _SAT_TV: (200, _post(_SAT_TV), {}),
+        _FRI_TV: (200, _post(_FRI_TV), {}),
+        _SUN_CABLE: (200, _post(_SUN_CABLE), {}),
+        _FRI_CABLE: (200, _post(_FRI_CABLE), {}),
     }
 
 
@@ -308,6 +316,31 @@ def test_live_pass_fetches_archives_then_gap_posts_and_commits(
     patched_client(handle2)
     assert main(["collect", "tvrg", "--season", "2022"]) == 0
     assert [r.url for r in handle2.requests] == []
+
+
+def test_live_pass_never_caches_a_post_the_build_could_not_read(
+    git_vault, mock_transport_factory, patched_client, one_gap, capsys
+) -> None:
+    _fresh(git_vault)
+    responses = _responses()
+    # No canonical link, and a canonical link off the source's host.
+    responses[_SAT_CABLE] = (200, b"<html><body><p>Invented.</p></body></html>", {})
+    off_host = _SAT_TV.replace(_HOST, "https://elsewhere.example.com")
+    responses[_SAT_TV] = (200, _post(off_host), {})
+    patched_client(mock_transport_factory(responses))
+    assert main(["collect", "tvrg", "--season", "2022"]) == 4
+    out = capsys.readouterr().out
+    assert "fetched 6, cached 0, not_modified 0, failed 2" in out
+    posts = git_vault.raw / "tvrg" / "2022" / "posts"
+    assert len(list(posts.iterdir())) == 3
+    assert not any("saturday" in path.name for path in posts.iterdir())
+
+    # The next run asks for the two rejected posts again; nothing else is re-fetched.
+    handle = mock_transport_factory(_responses())
+    patched_client(handle)
+    assert main(["collect", "tvrg", "--season", "2022"]) == 0
+    pages = [r.url for r in handle.requests if not r.url.endswith("/robots.txt")]
+    assert pages == [_SAT_CABLE, _SAT_TV]
 
 
 def test_max_requests_stops_after_the_cap_and_commits_partial_work(

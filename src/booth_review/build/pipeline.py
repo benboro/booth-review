@@ -74,6 +74,8 @@ class BuildOutcome:
     crew_override_differs_lines: tuple[int, ...] = ()
     # Per (source, season) second-source gate rows (04.19 D-02), for count-only printing.
     second_source_gates: tuple[GateStatus, ...] = ()
+    # second_source_network_accepts.csv (line, ignored | unused) pairs (WR-05).
+    second_source_accept_warnings: tuple[tuple[int, str], ...] = ()
 
 
 # A preliminary headline figure older than this many days is listed in
@@ -190,12 +192,26 @@ def _build_counts(tables: BuildTables, result: RegressionResult) -> dict[str, in
         "crew_overrides_differs": totals.get("crew_overrides_differs", 0),
         "crew_overrides_corrections": totals.get("crew_overrides_corrections", 0),
         "crew_gaps_unpatched": totals.get("crew_gaps_unpatched", 0),
+        # 04.19 D-13/D-15: the ESPN Press Room backup pass; counts only.
+        "crew_backup_filled": totals.get("crew_backup_filled", 0),
+        "crew_backup_disagreements": totals.get("crew_backup_disagreements", 0),
+        "crew_backup_network_mismatch": totals.get("crew_backup_network_mismatch", 0),
+        "crew_backup_sideline_dropped": totals.get("crew_backup_sideline_dropped", 0),
+        "crew_backup_gap_weeks": totals.get("crew_backup_gap_weeks", 0),
+        "crew_backup_rejected_pages": totals.get("crew_backup_rejected_pages", 0),
+        "crew_backup_rows_skipped": totals.get("crew_backup_rows_skipped", 0),
+        "crew_backup_radio_dropped": totals.get("crew_backup_radio_dropped", 0),
+        "crew_backup_pages_without_booths": totals.get("crew_backup_pages_without_booths", 0),
         "rated_second_source": totals.get("rated_second_source", 0),
         "second_source_loaded": totals.get("second_source_loaded", 0),
         "second_source_held_network": totals.get("second_source_held_network", 0),
         "second_source_unmatched": totals.get("second_source_unmatched", 0),
         "second_source_withheld_seasons": totals.get("second_source_withheld_seasons", 0),
         "second_source_conflicts": totals.get("second_source_conflicts", 0),
+        "second_source_rejected_pages": totals.get("second_source_rejected_pages", 0),
+        "second_source_superseded": totals.get("second_source_superseded", 0),
+        "second_source_excluded_override": totals.get("second_source_excluded_override", 0),
+        "second_source_accepts_ignored": totals.get("second_source_accepts_ignored", 0),
         **{f"{name}_rows": review_count(name) for name in SECOND_SOURCE_REVIEW_NAMES},
         "review_rows_total": review_rows_total,
         "current_season": current_season,
@@ -316,4 +332,5 @@ def run_build(
         committed=committed,
         crew_override_differs_lines=tables.crew_override_differs_lines,
         second_source_gates=tables.second_source_gates,
+        second_source_accept_warnings=tables.second_source_accept_warnings,
     )

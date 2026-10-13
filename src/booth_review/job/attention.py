@@ -1,15 +1,16 @@
 """D-12: the count-only "needs attention" issue body builder.
 
 Failures and needs-attention states (budget floor, source errors, vault push
-failure, RR backlog over cap, missing/stale 2026 506 weeks, a season past its
-freeze date) go into one tracked issue in the private vault repo (Plan 06
-wires this into `gh issue`). D-12 requires the text be count-only: never
-joined data, never a URL with parameters beyond the path, never key
-material. Every line built here passes a fixed character whitelist before
-`build_attention_body` will include it, so a stray exception message, a
-query-string URL, or a planted secret fails loudly (ValueError) instead of
-silently reaching a GitHub issue. The body never includes a run URL; the
-workflow appends the Actions run link itself (Plan 06).
+failure, RR backlog over cap, missing/stale 2026 506 weeks, an unsaved ESPN
+Press Room commentators week, a season past its freeze date) go into one
+tracked issue in the private vault repo (Plan 06 wires this into `gh issue`).
+D-12 requires the text be count-only: never joined data, never a URL with
+parameters beyond the path, never key material. Every line built here passes
+a fixed character whitelist before `build_attention_body` will include it, so
+a stray exception message, a query-string URL, or a planted secret fails
+loudly (ValueError) instead of silently reaching a GitHub issue. The body
+never includes a run URL; the workflow appends the Actions run link itself
+(Plan 06).
 """
 
 from __future__ import annotations
@@ -71,6 +72,7 @@ def _require_labels(labels: list[str]) -> None:
 _STEP_NAMES = frozenset(
     {
         "sports506",
+        "espnpr_gaps",
         "freeze",
         "budget",
         "state",
@@ -183,6 +185,34 @@ def sports506_stale(season: int, labels: list[str]) -> AttentionItem:
     return AttentionItem(
         kind="sports506_stale",
         line=f"506 {season} weeks saved before their games finished: {', '.join(labels)}",
+        severity="attention",
+    )
+
+
+_ESPNPR_LABEL_RE = re.compile(r"^\d{1,2}$")
+
+
+def espnpr_commentators_url(season: int) -> str:
+    """ESPN Press Room's season commentators page (path only, no query string)."""
+    return (
+        f"https://espnpressroom.com/{season}-{(season + 1) % 100:02d}"
+        "-espn-college-football-commentators-schedule/"
+    )
+
+
+def espnpr_week_unsaved(season: int, label: str) -> AttentionItem:
+    """04.19 D-14: the ESPN Press Room commentators page for ESPN week `label`
+    (the week it carries now) is not in the vault. The page is replaced each
+    Monday, so the line names the page and the import command."""
+    if not _ESPNPR_LABEL_RE.match(label):
+        raise ValueError(f"label is not an ESPN week number: {label!r}")
+    return AttentionItem(
+        kind="espnpr_week_unsaved",
+        line=(
+            f"espn pr {season} commentators page not saved for week {label} "
+            f"(save {espnpr_commentators_url(season)} by Monday, "
+            "then booth-review import espnpr)"
+        ),
         severity="attention",
     )
 

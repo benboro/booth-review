@@ -4,8 +4,9 @@ The site goes live by setting the vault workflow's `PUBLISH_ENABLED` variable to
 with `DEPLOY_REPO=benboro/benboro.github.io`. Nothing else changes at launch. 506 Sports
 was asked about reuse and has not replied, so launch does not wait on it; if 506 objects,
 its crews and networks come off the site. The 2021–2024 figures from Sports Media
-Watch, The TV Ratings Guide and Awful Announcing are used on the same terms: credited
-with a link, and taken down if a site objects (see the takedown notes under Operating
+Watch, The TV Ratings Guide, Awful Announcing and ESPN Press Room, and ESPN Press
+Room's backup crews, are used on the same terms: credited with a link, and taken down
+if a site objects (see the takedown notes under Operating
 notes). Until launch the scheduled job collects and
 builds but deploys nothing.
 
@@ -87,4 +88,5 @@ line except the last must say "pending", and no private repo name may appear.
 - Deploy commits record the bundle hash in their message.
 - Taking down Sports Media Watch: remove `raw/smw/<season>/` from the vault for each season, commit and push the vault, and rebuild. The rated counts drop, so if the regression guard blocks the build, accept the new baseline with `booth-review build --accept-baseline`. Its games go back to the "No public rating" strip (`docs/sources/smw.md`).
 - Taking down The TV Ratings Guide or Awful Announcing: remove `raw/tvrg/` or `raw/aa/` from the vault, commit and push the vault, and rebuild. If the regression guard blocks the build, accept the new baseline with `booth-review build --accept-baseline` (`docs/sources/tvrg.md`, `docs/sources/aa.md`).
+- Taking down ESPN Press Room: remove `raw/espnpr/<season>/` from the vault for each season, commit and push the vault, and rebuild. Backup crews go back to "Crew not listed" and its figures come off the site. Crew overrides in `crew_overrides.csv` that cite an ESPN Press Room release need another public source or removal (`docs/sources/espnpr.md`).
 - There is no `.nojekyll` file: the user site's Pages workflow does not run Jekyll.

@@ -335,3 +335,43 @@ def test_nfl_site_constructors() -> None:
     assert "last good file kept" not in carry
     with pytest.raises(ValueError):
         nfl_site_failed("other")  # type: ignore[arg-type]
+
+
+# -- 04.19 D-14: the ESPN Press Room commentators reminder ------------------------------------
+
+
+def test_espnpr_week_unsaved_line_names_the_page_and_the_import_command() -> None:
+    from booth_review.job.attention import _LINE_RE, espnpr_week_unsaved
+
+    item = espnpr_week_unsaved(2026, "7")
+    assert item.kind == "espnpr_week_unsaved"
+    assert item.severity == "attention"
+    assert item.line.startswith("espn pr 2026 commentators page not saved for week 7 ")
+    assert item.line == (
+        "espn pr 2026 commentators page not saved for week 7 (save "
+        "https://espnpressroom.com/2026-27-espn-college-football-commentators-schedule/ "
+        "by Monday, then booth-review import espnpr)"
+    )
+    assert _LINE_RE.match(item.line)
+    body = build_attention_body([item, espnpr_week_unsaved(2026, "12")], generated_at=_NOW)
+    assert body is not None
+
+
+def test_espnpr_commentators_url_wraps_the_season_pair() -> None:
+    from booth_review.job.attention import espnpr_commentators_url
+
+    assert espnpr_commentators_url(2099) == (
+        "https://espnpressroom.com/2099-00-espn-college-football-commentators-schedule/"
+    )
+
+
+@pytest.mark.parametrize("label", ["B", "", "007", "7a", "7?x=1", "-1"])
+def test_espnpr_week_unsaved_rejects_a_label_that_is_not_a_week_number(label: str) -> None:
+    from booth_review.job.attention import espnpr_week_unsaved
+
+    with pytest.raises(ValueError):
+        espnpr_week_unsaved(2026, label)
+
+
+def test_step_failed_accepts_espnpr_gaps() -> None:
+    assert step_failed("espnpr_gaps", "ValueError").line == "espnpr_gaps step failed: ValueError"

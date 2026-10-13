@@ -43,6 +43,7 @@ COVERAGE_COLUMNS: tuple[str, ...] = (
     "rated_telecasts",
     "matched_crew",
     "crew_patched",
+    "crew_backup",
     "records_with_crew",
     "crew_rate",
     "match_rate",
@@ -75,6 +76,7 @@ _BUCKET_KEYS: tuple[str, ...] = (
     "rated_telecasts",
     "matched_crew",
     "crew_patched",
+    "crew_backup",
     "headline_present",
     "headline_second_source",
     "excitement_present",
@@ -193,6 +195,8 @@ def build_coverage(tables: BuildTables) -> CoverageReport:
             bucket["matched_crew"] += 1
             if row["crew_patched"]:
                 bucket["crew_patched"] += 1
+            if row["crew_backup"]:
+                bucket["crew_backup"] += 1
 
         has_headline = row["headline_claim_id"] is not None
         if has_headline:
@@ -242,6 +246,7 @@ def build_coverage(tables: BuildTables) -> CoverageReport:
                 "rated_telecasts": bucket["rated_telecasts"],
                 "matched_crew": bucket["matched_crew"],
                 "crew_patched": bucket["crew_patched"],
+                "crew_backup": bucket["crew_backup"],
                 "records_with_crew": None,
                 "crew_rate": _rate(bucket["matched_crew"], bucket["rated_telecasts"]),
                 "match_rate": None,
@@ -278,6 +283,7 @@ def build_coverage(tables: BuildTables) -> CoverageReport:
                 "rated_telecasts": summed["rated_telecasts"],
                 "matched_crew": summed["matched_crew"],
                 "crew_patched": summed["crew_patched"],
+                "crew_backup": summed["crew_backup"],
                 "records_with_crew": diag.get("records_with_crew"),
                 "crew_rate": _rate(summed["matched_crew"], summed["rated_telecasts"]),
                 "match_rate": diagnostics.join08_by_season.get(season),

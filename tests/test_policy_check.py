@@ -16,6 +16,7 @@ import pytest
 from booth_review import cli
 from booth_review.cli import main
 from booth_review.config import HOST_POLICIES, DataPaths
+from booth_review.errors import VaultStateError
 from booth_review.sources.policy import (
     POLICY_LEDGER,
     PolicyCheck,
@@ -180,11 +181,13 @@ def test_same_day_rerun_judges_the_cached_robots_and_sends_nothing(
 
     handle = mock_transport_factory({})
     patched_client(handle)
-    assert main(["collect", "tvrg", "--policy-check", "--confirm-terms"]) == 0
+    assert main(["collect", "tvrg", "--policy-check"]) == 0
     assert handle.requests == []
+    assert main(["collect", "tvrg", "--confirm-terms"]) == 0
     lines = _ledger(git_vault)
-    assert [line["terms_ok"] for line in lines] == [None, True]
-    assert lines[1]["checked_at"] == lines[0]["checked_at"]  # the robots read it stands on
+    assert [line["terms_ok"] for line in lines] == [None, None, True]
+    # The rerun and the confirmation stand on the first robots read.
+    assert lines[2]["checked_at"] == lines[1]["checked_at"] == lines[0]["checked_at"]
 
 
 # -- confirm-terms and freshness -----------------------------------------------------------
@@ -251,6 +254,24 @@ def test_policy_fresh_needs_robots_and_terms_within_30_days(tmp_path: Path) -> N
     assert latest.crawl_delay == 30.0
 
 
+@pytest.mark.parametrize(
+    "bad",
+    ["{not json", "[1, 2]", '{"source": "tvrg"}', '{"source": "aa", "checked_at": "yesterday"}'],
+)
+def test_an_unreadable_ledger_line_is_a_clean_count_only_error(git_vault, capsys, bad: str) -> None:
+    # IN-03: no traceback, and never skipped (an older approval must not become newest).
+    now = datetime.now(UTC)
+    append_policy_check(git_vault, PolicyCheck("tvrg", now, True, None, True))
+    with (git_vault.vault / POLICY_LEDGER).open("a", encoding="utf-8") as fh:
+        fh.write(bad + "\n")
+    with pytest.raises(VaultStateError, match="1 unreadable line"):
+        policy_fresh(git_vault, "tvrg", now)
+    assert main(["collect", "tvrg", "--season", "2022"]) == 3
+    err = capsys.readouterr().err
+    assert "policy_checks.jsonl: 1 unreadable line(s), first at line 2" in err
+    assert "Traceback" not in err
+
+
 def test_no_mode_is_a_clear_error(git_vault, capsys) -> None:
     assert main(["collect", "tvrg"]) == 2
     assert "needs --season" in capsys.readouterr().err
@@ -311,15 +332,15 @@ def test_aa_policy_check_fetches_an_on_host_legal_page(
     )
     patched_client(handle)
 
-    assert main(["collect", "aa", "--policy-check", "--confirm-terms"]) == 0
+    assert main(["collect", "aa", "--policy-check"]) == 0
 
     assert (git_vault.raw / "aa" / "_policy" / _today() / "legal.html").is_file()
     (line,) = _ledger(git_vault)
-    assert line["terms_ok"] is True
+    assert line["terms_ok"] is None
 
 
-def test_aa_confirm_terms_is_withheld_when_a_policy_page_failed(
-    git_vault, mock_transport_factory, patched_client, capsys
+def test_aa_policy_check_with_a_failed_policy_page_exits_4_unconfirmed(
+    git_vault, mock_transport_factory, patched_client
 ) -> None:
     handle = mock_transport_factory(
         {
@@ -329,8 +350,20 @@ def test_aa_confirm_terms_is_withheld_when_a_policy_page_failed(
     )
     patched_client(handle)
 
-    assert main(["collect", "aa", "--policy-check", "--confirm-terms"]) == 4
+    assert main(["collect", "aa", "--policy-check"]) == 4
     (line,) = _ledger(git_vault)
     assert line["robots_ok"] is True
     assert line["terms_ok"] is None
-    assert "terms not confirmed" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("source", ["tvrg", "aa"])
+def test_confirm_terms_is_refused_in_the_run_that_fetches_the_terms(
+    git_vault, mock_transport_factory, patched_client, capsys, source: str
+) -> None:
+    # WR-04: the user confirms terms they have read, never ones fetched in the same run.
+    handle = mock_transport_factory({})
+    patched_client(handle)
+    assert main(["collect", source, "--policy-check", "--confirm-terms"]) == 2
+    assert handle.requests == []
+    assert _ledger(git_vault) == []
+    assert "then --confirm-terms on its own" in capsys.readouterr().err

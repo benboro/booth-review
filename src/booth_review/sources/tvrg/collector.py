@@ -25,6 +25,7 @@ from booth_review.sources.gapcollect import (
     MAX_REQUESTS_DEFAULT,
     GapRun,
     RequestBudget,
+    post_validator,
     safe_slug,
 )
 from booth_review.sources.tvrg.index import (
@@ -34,6 +35,7 @@ from booth_review.sources.tvrg.index import (
     parse_archive,
     title_date,
 )
+from booth_review.sources.tvrg.parser import TvrgParseError, parse_post, post_url_from_html
 from booth_review.transport.cache import RawCache
 from booth_review.transport.types import FetchRequest
 
@@ -178,6 +180,14 @@ class TvrgCollector:
                 dry_run=True,
             )
         run = GapRun(self._cache, SOURCE, label, budget)
+        # A post the build couldn't read is never cached (CR-01).
+        check_post = post_validator(
+            SOURCE,
+            season,
+            url_from_html=post_url_from_html,
+            parse=parse_post,
+            error=TvrgParseError,
+        )
         done: set[str] = set()
         for year, month in index_months(gap_dates):
             pages: list[FetchRequest] = []
@@ -201,7 +211,7 @@ class TvrgCollector:
                 if post.url in done:
                     continue
                 done.add(post.url)
-                if not run.fetch(post_request(season, post.url)):
+                if not run.fetch(post_request(season, post.url), validate=check_post):
                     return run.summary
         return run.summary
 

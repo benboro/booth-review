@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -245,6 +246,24 @@ def _crew_source_with_alt_crew_only(data: dict[str, Any]) -> dict[str, Any]:
 def _matched_crew_patched_exceeds(data: dict[str, Any]) -> dict[str, Any]:
     row = data["coverage"][0]
     row["matched_crew_patched"] = row["matched_crew"] + 1
+    return data
+
+
+def _matched_crew_backup_negative(data: dict[str, Any]) -> dict[str, Any]:
+    data["coverage"][0]["matched_crew_backup"] = -1
+    return data
+
+
+def _matched_crew_backup_with_patched_exceeds(data: dict[str, Any]) -> dict[str, Any]:
+    # Each alone fits; together the hand-confirmed and backup crews exceed matched_crew.
+    row = data["coverage"][0]
+    row["matched_crew_patched"] = row["matched_crew"]
+    row["matched_crew_backup"] = 1
+    return data
+
+
+def _missing_matched_crew_backup(data: dict[str, Any]) -> dict[str, Any]:
+    del data["coverage"][0]["matched_crew_backup"]
     return data
 
 
@@ -509,6 +528,11 @@ _BROKEN_VARIANTS = [
     pytest.param(_matched_crew_patched_exceeds, id="matched-crew-patched-exceeds"),
     pytest.param(_missing_crew_source_url_column, id="missing-crew-source-url-column"),
     pytest.param(_missing_matched_crew_patched, id="missing-matched-crew-patched"),
+    pytest.param(_matched_crew_backup_negative, id="matched-crew-backup-negative"),
+    pytest.param(
+        _matched_crew_backup_with_patched_exceeds, id="matched-crew-backup-with-patched-exceeds"
+    ),
+    pytest.param(_missing_matched_crew_backup, id="missing-matched-crew-backup"),
     pytest.param(_bowl_index_out_of_range, id="bowl-index-out-of-range"),
     pytest.param(_bowl_core_not_in_name, id="bowl-core-not-in-name"),
     pytest.param(_bowl_on_regular_game, id="bowl-on-regular-game"),
@@ -556,6 +580,31 @@ def test_broken_variant_raises(mutate: Any) -> None:
     broken = mutate(data)
     with pytest.raises(ValidationError):
         validate_site_data(broken)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (_matched_crew_backup_negative, "coverage[0].matched_crew_backup: must not be negative"),
+        (
+            _matched_crew_backup_with_patched_exceeds,
+            "coverage[0].matched_crew_backup: with matched_crew_patched exceeds matched_crew",
+        ),
+    ],
+)
+def test_matched_crew_backup_errors_name_the_row(mutate: Any, message: str) -> None:
+    broken = mutate(copy.deepcopy(_load_fixture()))
+    with pytest.raises(ValidationError, match=re.escape(message)):
+        validate_site_data(broken)
+
+
+def test_matched_crew_backup_within_matched_crew_validates() -> None:
+    # 04.19 D-13: backup crews count toward matched_crew beside the patched ones.
+    data = copy.deepcopy(_load_fixture())
+    row = next(r for r in data["coverage"] if r["matched_crew"] >= 2 and r["matched_crew_patched"])
+    row["matched_crew_backup"] = row["matched_crew"] - row["matched_crew_patched"]
+    site_data = validate_site_data(data)
+    assert any(r.matched_crew_backup for r in site_data.coverage)
 
 
 _NAMED_GAME_VARIANTS = [
@@ -702,18 +751,29 @@ def test_crew_source_label_rule_is_shared_with_the_loader() -> None:
 def test_fixture_patched_crews_are_counted_in_their_season_coverage() -> None:
     """Every fixture telecast with a crew source has a season-total coverage
     row that counts at least one hand-confirmed crew (the v1.5.0 fixture once
-    had a patched telecast in a season with no coverage row at all)."""
+    had a patched telecast in a season with no coverage row at all). Since
+    04.19 Plan 49 an ESPN Press Room crew counts as a backup crew instead."""
     data = _load_fixture()
     telecasts = data["telecasts"]
-    patched_seasons = {
-        season
-        for season, url in zip(telecasts["season"], telecasts["crew_source_url"], strict=True)
+    sourced = [
+        (season, label)
+        for season, url, label in zip(
+            telecasts["season"],
+            telecasts["crew_source_url"],
+            telecasts["crew_source_label"],
+            strict=True,
+        )
         if url is not None
-    }
+    ]
+    patched_seasons = {season for season, label in sourced if label != "ESPN Press Room"}
+    backup_seasons = {season for season, label in sourced if label == "ESPN Press Room"}
     assert patched_seasons
+    assert backup_seasons
     totals = {row["season"]: row for row in data["coverage"] if row["network"] is None}
     for season in patched_seasons:
         assert totals[season]["matched_crew_patched"] >= 1
+    for season in backup_seasons:
+        assert totals[season]["matched_crew_backup"] >= 1
 
 
 # --- 04.13 D-16: the slim unrated block ---
@@ -762,7 +822,7 @@ def test_unrated_block_has_no_cfbd_only_fields() -> None:
 def _with_unrated_row(data: dict[str, Any]) -> dict[str, Any]:
     """The fixture plus a one-row unrated block (a regular 2019 net-b game,
     crewless, cause none); every unrated variant mutates this row."""
-    data["schema_version"] = "2.4.0"
+    data["schema_version"] = "2.5.0"
     # The replaced unrated block was the only user of the last two venues.
     del data["lookups"]["venues"][7:]
     row: dict[str, Any] = {

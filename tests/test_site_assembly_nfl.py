@@ -36,10 +36,18 @@ NFL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "contract" / "nfl-data.fixture.
 
 # Recorded from a fixture build at the commit before this plan; site-data and index digests
 # re-pinned at 04.19 Plan 08 (contract 2.4.0: figure_source column and one SMW fixture row);
-# index digest re-pinned at Plan 09 (band-note bullet reworded, D-21).
-_SITE_DATA_SHA256 = "9f7353b25fbd8afc7593da9c0ede9c205524cf059c41a9324e39a7c3a6c56e8a"
-_COVERAGE_SHA256 = "77f5c7b375e0280082f601e3838fb4dc0f1ff8c309b73e390674ea1ffbe009db"
-_INDEX_PRE_PHASE_SHA256 = "c4ebc886a9c8e90cf51250f4fd30af737cd92b87839f1d033a4049d4e5efc789"
+# index digest re-pinned at Plan 09 (band-note bullet reworded, D-21); site-data and index
+# digests re-pinned at Plan 41 (contract 2.5.0: coverage matched_crew_backup 0 on every
+# fixture row; the index moves only through its site-data cache-bust hash). All three
+# re-pinned at Plan 49: fixture telecast 8 became an ESPN Press Room backup crew with
+# matched_crew_backup 1 on its 2026 coverage rows (reverting those gives the Plan 41 site-data
+# digest), coverage.html gained the "Of which ESPN Press Room backup" column (dropping it from
+# the reverted build gives the Plan 41 digest), and the index moves only through its
+# site-data cache-bust hash. Coverage re-pinned at Plan 43 (user decision): the column header
+# shortened to "Of which ESPN backup" (restoring the old header text gives the Plan 49 digest).
+_SITE_DATA_SHA256 = "b93ca1c096fef2da4c75c30864da9f06084b8ddea671253ef0dae3d14ce4ce78"
+_COVERAGE_SHA256 = "f3cf1022cdd2bacc514a00971310411288b395acd621ea3f880d12731ed0a4e9"
+_INDEX_PRE_PHASE_SHA256 = "781de92244af2d9f6b4ce99efc522f41f10357127208ff7a9451aecbba145b1a"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'

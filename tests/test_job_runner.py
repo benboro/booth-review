@@ -150,6 +150,11 @@ def test_runner_defines_scheduled_job_and_never_references_506sports() -> None:
     assert "506sports" not in RUNNER_SRC
 
 
+def test_runner_never_names_the_espn_press_room_host() -> None:
+    # 04.19 D-14: the reminder is read-only; the URL lives only in the attention line.
+    assert "espnpressroom" not in RUNNER_SRC
+
+
 def test_job_cfbd_max_calls_constant_is_8() -> None:
     assert JOB_CFBD_MAX_CALLS == 8
 
@@ -1035,7 +1040,13 @@ _BUILD_DIR = Path(__file__).parent / "fixtures" / "build"
 _REFERENCE_DIR = Path(__file__).parent / "fixtures" / "reference"
 UPDATE_NOW = datetime(2025, 10, 8, 12, 0, tzinfo=UTC)
 _KEY_CANARY = "SENTINEL-UPDATE-KEY-ABC"
-_COUNT_KINDS = {"people_review_due", "unresolved_teams", "sports506_missing", "sports506_stale"}
+_COUNT_KINDS = {
+    "people_review_due",
+    "unresolved_teams",
+    "sports506_missing",
+    "sports506_stale",
+    "espnpr_week_unsaved",
+}
 
 
 def _git(paths, *args: str) -> str:
@@ -1826,3 +1837,141 @@ def test_job_run_help_lists_the_nfl_rr_cap_flag(capsys) -> None:
         main(["job", "run", "--help"])
     assert exc.value.code == 0
     assert "--nfl-rr-cap" in capsys.readouterr().out
+
+
+# -- 04.19 D-14: the ESPN Press Room hand-save reminder (read-only) ------------------------------
+
+# Wednesday 2026-10-14 10:00 ET: ESPN Week 7's page is up (week 7 games Thu Oct 15 and
+# Sat Oct 17); weeks 2 and 6 are already played, so 506 has pages to list too.
+_ESPNPR_NOW = datetime(2026, 10, 14, 14, 0, tzinfo=UTC)
+
+
+def _espnpr_games_json() -> bytes:
+    rows = [
+        (1, 2, "2026-09-12T16:00:00Z"),
+        (2, 6, "2026-10-10T16:00:00Z"),
+        (3, 7, "2026-10-15T23:30:00Z"),
+        (4, 7, "2026-10-17T16:00:00Z"),
+    ]
+    return json.dumps(
+        [
+            {
+                "id": game_id,
+                "season": 2026,
+                "week": week,
+                "seasonType": "regular",
+                "startDate": start,
+                "homeTeam": "Home",
+                "awayTeam": "Away",
+            }
+            for game_id, week, start in rows
+        ]
+    ).encode()
+
+
+def _espnpr_responses() -> dict:
+    responses = _cfbd_ok_responses(2026)
+    responses["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
+    responses[SITEMAP_URL] = (200, _empty_sitemap_xml(), {})
+    games_url = "https://api.collegefootballdata.com/games?seasonType=both&year=2026"
+    responses[games_url] = (200, _espnpr_games_json(), {})
+    return responses
+
+
+def _espnpr_run(paths, mock_transport_factory, fake_clock):
+    handle = mock_transport_factory(_espnpr_responses())
+    result = _wr12_job(paths, handle, fake_clock, _ESPNPR_NOW).run()
+    return result, handle
+
+
+def _save_espnpr_week(paths, label: str) -> None:
+    page = paths.raw / "espnpr" / "2026" / "commentators" / f"wk-{label}.html"
+    page.parent.mkdir(parents=True, exist_ok=True)
+    page.write_bytes(b"<html>synthetic</html>")
+    _git(paths, "add", "-A")
+    _git(paths, "commit", "-q", "-m", "test: seed espnpr page")
+    _git(paths, "push", "-q", "origin", "main")
+
+
+def test_espnpr_unsaved_week_is_one_item_and_no_request_reaches_the_site(
+    git_vault, mock_transport_factory, fake_clock, capsys
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+
+    result, handle = _espnpr_run(paths, mock_transport_factory, fake_clock)
+
+    espnpr = [item for item in result.items if item.kind == "espnpr_week_unsaved"]
+    assert [item.line for item in espnpr] == [
+        "espn pr 2026 commentators page not saved for week 7 (save "
+        "https://espnpressroom.com/2026-27-espn-college-football-commentators-schedule/ "
+        "by Monday, then booth-review import espnpr)"
+    ]
+    assert espnpr[0].severity == "attention"
+    assert result.exit_code == 4
+    assert not any(item.kind == "espnpr_gaps_step_failed" for item in result.items)
+    assert all("espnpressroom" not in request.url for request in handle.requests)
+    out = capsys.readouterr().out
+    assert "espnpr: week 7 not saved" in out
+    assert not (paths.raw / "espnpr").exists()  # read-only: nothing written
+    assert load_state(paths.job_state).last_status == "attention"  # not a failed run
+
+
+def test_espnpr_saved_week_adds_nothing(
+    git_vault, mock_transport_factory, fake_clock, capsys
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    _save_espnpr_week(paths, "7")
+
+    result, handle = _espnpr_run(paths, mock_transport_factory, fake_clock)
+
+    assert not any(item.kind.startswith("espnpr") for item in result.items)
+    assert all("espnpressroom" not in request.url for request in handle.requests)
+    assert "espnpr: current week saved" in capsys.readouterr().out
+
+
+def test_espnpr_step_leaves_the_506_items_unchanged(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    # 04.5 D-10: every missing or stale 506 week is still listed, whatever ESPN PR holds.
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    _save_espnpr_week(paths, "6")  # ESPN PR covers week 6; 506 must still list it
+
+    with_step, _ = _espnpr_run(paths, mock_transport_factory, fake_clock)
+    monkeypatch.setattr(ScheduledJob, "_run_espnpr_gap_step", lambda *args, **kwargs: None)
+    without_step, _ = _espnpr_run(paths, mock_transport_factory, fake_clock)
+
+    def _506(result) -> list:
+        return [item for item in result.items if item.kind.startswith("sports506")]
+
+    assert _506(with_step) == _506(without_step)
+    assert [item.line for item in _506(with_step)] == ["506 2026 weeks to save: 2, 6"]
+    assert [item.kind for item in with_step.items if item.kind.startswith("espnpr")] == [
+        "espnpr_week_unsaved"
+    ]
+    assert not any(item.kind.startswith("espnpr") for item in without_step.items)
+
+
+def test_espnpr_step_error_is_one_count_only_item_and_the_run_continues(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+
+    def _boom(*args, **kwargs):
+        raise ValueError(_SECRET_MESSAGE)
+
+    monkeypatch.setattr("booth_review.job.runner.find_espnpr_gap", _boom)
+    result, _ = _espnpr_run(paths, mock_transport_factory, fake_clock)
+
+    step_items = [item for item in result.items if item.kind == "espnpr_gaps_step_failed"]
+    assert [item.line for item in step_items] == ["espnpr_gaps step failed: ValueError"]
+    assert not any(item.kind == "espnpr_week_unsaved" for item in result.items)
+    assert "sports506_missing" in {item.kind for item in result.items}
+    assert all("key=" not in item.line and "Team" not in item.line for item in result.items)
+    assert result.exit_code == 4
+    saved_state = load_state(paths.job_state)
+    assert saved_state.last_attempt_at == _ESPNPR_NOW
+    assert saved_state.last_status == "failed"

@@ -814,11 +814,13 @@ def _assert_nfl_failure_only(step: str, kind: str, outcome: _Outcome, calls: lis
 
 
 def _clean_cfb(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Make the CFB side of an update run attention-free: no 506 gaps, no review counts."""
+    """Make the CFB side of an update run attention-free: no 506 gaps, no unsaved
+    ESPN PR week, no review counts."""
     monkeypatch.setattr(
         f"{RUNNER}.find_506_gaps",
         lambda paths, season, games, now: Gaps506(season, [], [], 0),
     )
+    monkeypatch.setattr(f"{RUNNER}.find_espnpr_gap", lambda paths, season, games, now: None)
     real = __import__(RUNNER, fromlist=["run_build"]).run_build
 
     def run_build(*args: Any, **kwargs: Any) -> BuildOutcome:

@@ -340,6 +340,7 @@ def crew_gap_rows(
     telecast_people: pl.DataFrame,
     statuses: Mapping[str, str],
     unmatched_506: Collection[tuple[str, str]],
+    backup_ids: Collection[str] = frozenset(),
 ) -> list[dict[str, object]]:
     """One row per plotted main telecast with no 506 main crew, classified, plus
     one has-506-crew row per redundant/differs/correction override (D-05, D-09).
@@ -348,6 +349,8 @@ def crew_gap_rows(
     `join-miss-suspect` needs an unmatched 506 listing on the telecast's date
     AND network (see unmatched_506_keys); a same-day listing on another
     network is no evidence that this telecast's join missed.
+    A gap the ESPN Press Room backup pass filled (`backup_ids`, 04.19 D-13)
+    is `backup`, not missing; an override status still comes first.
     Vault-only (interim/review_crew_overrides.csv); never logged or published.
     Callers and tests never hard-code a gap count.
     """
@@ -385,7 +388,11 @@ def crew_gap_rows(
                 "s506_pointer": tel["s506_pointer"],
                 "other_feed_crew": telecast_id in non_main,
                 "crew_network_mismatch": tel["crew_network_mismatch"],
-                "override_status": status if status is not None else "missing",
+                "override_status": (
+                    status
+                    if status is not None
+                    else ("backup" if telecast_id in backup_ids else "missing")
+                ),
             }
         )
     rows.sort(key=lambda r: (r["season"], r["date_et"], r["cfbd_game_id"], r["network_id"]))

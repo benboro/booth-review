@@ -395,8 +395,10 @@ viewers (see `docs/sources/tvrg.md`). It also reads
 posts, which are prose, and takes a figure only from a sentence that ties it
 to exactly one named game (see `docs/sources/aa.md`). Both are fetched only
 for dates that still have unrated games, after a fresh check of each site's
-robots.txt and terms. ESPN
-Press Room is planned for the gaps that remain.
+robots.txt and terms. ESPN's ratings releases on
+[ESPN Press Room](https://espnpressroom.com) are the last source. Disney's
+terms ban automated access, so its pages are saved by hand and imported, never
+fetched (see `docs/sources/espnpr.md`).
 
 Each telecast's headline figure comes from one source, so a dot never mixes
 two sources' numbers: the highest-ranked source with a usable figure, in the
@@ -412,7 +414,8 @@ season with more than two such disagreements loads only by a recorded decision.
 All four Sports Media Watch seasons passed; 2024 had three logged disagreements
 and loads by that decision. The TV Ratings Guide passed in all four seasons
 and Awful Announcing in 2023, with no disagreements; Awful Announcing's 2024
-posts share no game with Ratings Reference.
+posts share no game with Ratings Reference. ESPN Press Room's 2024 ratings
+release passed with one logged disagreement.
 
 Only per-game figures are used. A simulcast total (one figure for two
 networks), a regional-window total (such as a Big Ten Network window that
@@ -425,8 +428,9 @@ counts, the coverage audit, and any future model built on this data.
 
 Each second-source figure is credited to its publisher by name, linked to the
 page it came from. For Sports Media Watch that is the season's ratings page,
-because its charts have no page of their own; for The TV Ratings Guide and
-Awful Announcing it is the exact post. The detail panel also says the
+because its charts have no page of their own; for The TV Ratings Guide,
+Awful Announcing and ESPN Press Room it is the exact post or release. The
+detail panel also says the
 figure is not listed on Ratings Reference. These sources are used without
 asking first, and a source's figures come off the site if it objects.
 
@@ -440,6 +444,16 @@ release, and each such dot's detail view links that source in place of the 506
 listing. If a public source shows that a crew 506 lists is wrong, that sourced
 booth replaces 506's the same way, but the coverage table's hand-confirmed
 count includes only telecasts 506 never gave a crew.
+
+ESPN Press Room is a backup crew source for ESPN-family games. Its announcer
+schedules and weekly releases are saved by hand and imported, never fetched.
+Crews follow a fixed order: a hand-confirmed booth, then 506 Sports, then ESPN
+Press Room, and the whole booth comes from one source, never merged person by
+person. A backup booth fills a telecast only when it is on the same network and
+neither of the others names a crew, and a later 506 crew replaces it. Its
+detail view reads "Crew source: ESPN Press Room ↗", linked to the page the
+booth came from. The coverage table counts backup crews in their own column,
+and the "crews through week N" stamp counts 506 crews only.
 
 **CollegeFootballData.com.** Game data, venue names and locations, rankings, closing spreads, and
 excitement values come from CollegeFootballData.com. Every place this data

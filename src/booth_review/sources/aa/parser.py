@@ -42,7 +42,7 @@ import html as html_lib
 import json
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urlsplit
@@ -254,8 +254,9 @@ def _walk(node: Any) -> list[dict[str, Any]]:
     return []
 
 
-def _ld_fields(blobs: list[str]) -> tuple[str, date | None]:
-    """(headline, post date in ET) from the ld+json blocks; an Article wins."""
+def _ld_fields(blobs: list[str]) -> tuple[str, date | None, str]:
+    """(headline, post date in ET, published time as UTC "%Y-%m-%dT%H:%M:%SZ" or "")
+    from the ld+json blocks; an Article wins."""
     objects: list[dict[str, Any]] = []
     for blob in blobs:
         try:
@@ -267,6 +268,7 @@ def _ld_fields(blobs: list[str]) -> tuple[str, date | None]:
         (obj["headline"] for obj in objects if isinstance(obj.get("headline"), str)), ""
     )
     posted: date | None = None
+    published = ""
     for obj in objects:
         stamp = obj.get("datePublished")
         if not isinstance(stamp, str):
@@ -278,8 +280,9 @@ def _ld_fields(blobs: list[str]) -> tuple[str, date | None]:
         if moment.tzinfo is None:
             continue
         posted = moment.astimezone(_ET).date()
+        published = moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         break
-    return " ".join(html_lib.unescape(headline).split()), posted
+    return " ".join(html_lib.unescape(headline).split()), posted, published
 
 
 def _sentences(text: str) -> list[str]:
@@ -424,7 +427,8 @@ def parse_post(html: str, *, url: str, season: int) -> ParsedPost:
     parser = _PostParser()
     parser.feed(html)
     parser.close()
-    headline, posted = _ld_fields(parser.ld_blobs)
+    # Two posts of the same day tie on rank; the later published post wins (WR-07).
+    headline, posted, published = _ld_fields(parser.ld_blobs)
     headline_game = _headline_game(headline)
     rank = posted.toordinal() if posted is not None else 0
 
@@ -481,6 +485,7 @@ def parse_post(html: str, *, url: str, season: int) -> ParsedPost:
                         rank=rank,
                         source_url=url,
                         superseded=False,
+                        published=published,
                     )
                 )
     return ParsedPost(rows=rows, ignored=ignored)
