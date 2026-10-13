@@ -1855,6 +1855,8 @@ def _build(args: argparse.Namespace) -> int:
     for gate in outcome.second_source_gates:
         extras = _nonzero(
             ("unlinked prose", gate.unlinked_prose),
+            ("superseded", gate.superseded),
+            ("excluded by override", gate.excluded_override),
             ("rejected pages", gate.rejected_pages),
         )
         print(

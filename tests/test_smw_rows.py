@@ -150,6 +150,7 @@ def test_smw_second_rows() -> None:
     assert out[1].viewers is None
     assert out[1].kind == "simulcast"
     assert out[1].superseded is True
+    assert (out[0].superseded_by, out[1].superseded_by) == ("", "w.png:1")
 
 
 @pytest.mark.parametrize(

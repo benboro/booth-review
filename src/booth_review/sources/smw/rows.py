@@ -195,6 +195,7 @@ def smw_second_rows(
                 rank=entry.rank,
                 source_url=source_url,
                 superseded=bool(row.get("superseded_by", "")),
+                superseded_by=row.get("superseded_by", ""),
             )
         )
     return result

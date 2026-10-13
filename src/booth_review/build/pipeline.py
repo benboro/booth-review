@@ -207,6 +207,8 @@ def _build_counts(tables: BuildTables, result: RegressionResult) -> dict[str, in
         "second_source_withheld_seasons": totals.get("second_source_withheld_seasons", 0),
         "second_source_conflicts": totals.get("second_source_conflicts", 0),
         "second_source_rejected_pages": totals.get("second_source_rejected_pages", 0),
+        "second_source_superseded": totals.get("second_source_superseded", 0),
+        "second_source_excluded_override": totals.get("second_source_excluded_override", 0),
         **{f"{name}_rows": review_count(name) for name in SECOND_SOURCE_REVIEW_NAMES},
         "review_rows_total": review_rows_total,
         "current_season": current_season,

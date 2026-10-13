@@ -239,6 +239,54 @@ def test_unknown_suffix_goes_to_unmatched_and_superseded_is_ignored() -> None:
     assert result.claims_by_telecast == {}
 
 
+def test_superseded_and_override_excluded_rows_are_counted_on_the_gate() -> None:
+    h = Harness()
+    h.overrides[("smw", SEASON, "w:3")] = GameOverride(
+        source="smw",
+        season=SEASON,
+        pointer="w:3",
+        action="exclude",
+        cfbd_game_id=None,
+        reason="other",
+    )
+    rows = [
+        _row("w:1", "Silverlake", "Northfield", superseded=True, superseded_by="u:1"),
+        _row("u:1", "Silverlake", "Northfield", rank=4),
+        _row("w:3", "Riverbend", "Lakeshore"),
+    ]
+    result, _ = h.run(rows)
+    gate = _gate(result)
+    assert (gate.rows, gate.superseded, gate.excluded_override) == (3, 1, 1)
+    assert gate.as_row()["superseded"] == 1
+    assert gate.as_row()["excluded_override"] == 1
+    assert (result.counts["superseded"], result.counts["excluded_override"]) == (1, 1)
+    # Same figure on both charts: nothing to report.
+    assert _review(result, REVIEW_CONFLICTS) == []
+
+
+def test_a_superseded_row_with_another_figure_is_reported_as_a_conflict() -> None:
+    rows = [
+        _row("w:1", "Silverlake", "Northfield", 900_000, superseded=True, superseded_by="u:1"),
+        _row("u:1", "Silverlake", "Northfield", 1_000_000, rank=4),
+    ]
+    result, _ = Harness().run(rows)
+    (conflict,) = _review(result, REVIEW_CONFLICTS)
+    assert conflict == {
+        "source": "smw",
+        "season": SEASON,
+        "telecast_id": "100-abc",
+        "kept_pointer": "u:1",
+        "other_pointer": "w:1",
+        "kept_value": 1_000_000,
+        "other_value": 900_000,
+        "kind": "superseded",
+    }
+    # The later chart's figure still loads.
+    (claim,) = result.claims_by_telecast["100-abc"]
+    assert claim.value == 1_000_000
+    assert result.counts["conflicts"] == 1
+
+
 # -- Matching --------------------------------------------------------------------------------
 
 

@@ -60,6 +60,9 @@ class SecondSourceRow:
     rank: int
     source_url: str
     superseded: bool
+    # SMW: the "<chart_file>:<row>" pointer of the later row that replaces this
+    # one (rows.csv superseded_by); empty for every other row.
+    superseded_by: str = ""
 
 
 RejectReason = Literal["no_canonical_url", "off_host_url", "parse_error"]

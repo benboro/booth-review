@@ -108,6 +108,8 @@ REVIEW_GATE_COLUMNS = (
     "unexplained",
     "stale_known",
     "rejected_pages",
+    "superseded",
+    "excluded_override",
     "status",
 )
 REVIEW_REJECTED_COLUMNS = ("source", "season", "path", "reason")
@@ -379,6 +381,10 @@ class GateStatus:
     rejected_pages: int = 0
     # Post lines or figure mentions the parsers ignored (WR-01).
     ignored: int = 0
+    # Rows replaced by a later chart (D-08) and rows game_overrides.csv excludes
+    # (WR-02), so the gate row's buckets add up to `rows`.
+    superseded: int = 0
+    excluded_override: int = 0
 
     def as_row(self) -> dict[str, object]:
         return {column: getattr(self, column) for column in REVIEW_GATE_COLUMNS}
@@ -541,6 +547,42 @@ def _settle(
     return kept
 
 
+def _superseded_conflicts(
+    rows: Sequence[SecondSourceRow],
+    superseded: Sequence[SecondSourceRow],
+    candidates: Mapping[tuple[str, str], Sequence[_Winner]],
+) -> list[dict[str, object]]:
+    """A conflict row (kind "superseded") for each superseded row whose figure
+    differs from the row that replaces it (D-08, D-21: every conflict is
+    reported). `telecast_id` is the replacing row's telecast when it matched
+    one, else empty; a missing figure is an empty cell."""
+    by_pointer = {(r.source, r.season, r.pointer): r for r in rows}
+    placed = {
+        (w.row.source, w.row.season, w.row.pointer): w.telecast_id
+        for group in candidates.values()
+        for w in group
+    }
+    out: list[dict[str, object]] = []
+    for row in superseded:
+        key = (row.source, row.season, row.superseded_by)
+        target = by_pointer.get(key)
+        if target is None or target.viewers == row.viewers:
+            continue
+        out.append(
+            {
+                "source": row.source,
+                "season": row.season,
+                "telecast_id": placed.get(key, ""),
+                "kept_pointer": target.pointer,
+                "other_pointer": row.pointer,
+                "kept_value": target.viewers if target.viewers is not None else "",
+                "other_value": row.viewers if row.viewers is not None else "",
+                "kind": "superseded",
+            }
+        )
+    return out
+
+
 def apply_second_sources(
     telecasts: pl.DataFrame,
     records_by_telecast: Mapping[str, Sequence[RRRecord]],
@@ -577,6 +619,7 @@ def apply_second_sources(
     agreement_rows: list[dict[str, object]] = []
     unresolved: dict[tuple[str, str], list[int]] = {}
     candidates: dict[tuple[str, str], list[_Winner]] = {}
+    superseded_rows: list[SecondSourceRow] = []
 
     def unresolved_name(row: SecondSourceRow, raw: str) -> None:
         unresolved.setdefault((row.source, raw), []).append(row.season)
@@ -595,6 +638,7 @@ def apply_second_sources(
         count["rows"] += 1
         if row.superseded:
             count["superseded"] += 1
+            superseded_rows.append(row)
             continue
         if row.kind in _EXCLUDED_KINDS:
             count[_EXCLUDED_KINDS[row.kind]] += 1
@@ -690,6 +734,7 @@ def apply_second_sources(
     winners: list[_Winner] = [
         _settle(group, conflict_rows) for _, group in sorted(candidates.items())
     ]
+    conflict_rows.extend(_superseded_conflicts(inputs.rows, superseded_rows, candidates))
 
     # -- Gate (D-02) --
     by_key: dict[SourceSeason, list[_Winner]] = {}
@@ -773,6 +818,8 @@ def apply_second_sources(
                 status=gate_status,
                 rejected_pages=count["rejected_pages"],
                 ignored=count["ignored"],
+                superseded=count["superseded"],
+                excluded_override=count["excluded_override"],
             )
         )
 
@@ -866,6 +913,8 @@ def apply_second_sources(
         totals["ambiguous"] += count["ambiguous"]
         totals["out_of_scope"] += count["out_of_scope"]
         totals["no_telecast"] += count["no_telecast"]
+        totals["superseded"] += count["superseded"]
+        totals["excluded_override"] += count["excluded_override"]
     counts = {
         "loaded": sum(gate.loaded for gate in gates),
         "held_network": totals["held_network"],
@@ -876,6 +925,8 @@ def apply_second_sources(
         "withheld_seasons": sum(1 for gate in gates if gate.status == "withheld"),
         "conflicts": len(conflict_rows),
         "rejected_pages": len(inputs.rejected),
+        "superseded": totals["superseded"],
+        "excluded_override": totals["excluded_override"],
     }
     return SecondSourceResult(
         telecasts=telecasts_out,
