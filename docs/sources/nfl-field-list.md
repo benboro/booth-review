@@ -190,6 +190,6 @@ The fields that stay analysis-only are:
 Only values derived from them (Task 1 means and residuals) reach the site. The
 spread is never an axis, column or panel field.
 
-The 506 publishing question stays open: the publishing row in `data/README.md`
-still reads "ask the site owners", and a pending todo asks 506's owners about
-reuse. The answer could change the CFB, NFL and MLB crew display.
+506's owners were asked about reuse and have not replied. The CFB, NFL and later
+MLB views show 506 crews and networks with credit, and they come off the site if
+506 objects (see the 506 rows in `data/README.md`).

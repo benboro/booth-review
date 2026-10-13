@@ -1,9 +1,10 @@
 # Launch Checklist
 
 The site goes live by setting the vault workflow's `PUBLISH_ENABLED` variable to `true`
-with `DEPLOY_REPO=benboro/benboro.github.io`. Nothing else changes at launch. Launch
-also waits on 506 Sports' approval. Until then the scheduled job collects and builds
-but deploys nothing.
+with `DEPLOY_REPO=benboro/benboro.github.io`. Nothing else changes at launch. 506 Sports
+was asked about reuse and has not replied, so launch does not wait on it; if 506 objects,
+its crews and networks come off the site. Until launch the scheduled job collects and
+builds but deploys nothing.
 
 The data repo is private and is only called "the private data repo" here. The dry-run
 target is "a private scratch copy of the user site". A checked line carries a pass date
@@ -61,7 +62,7 @@ line except the last must say "pending", and no private repo name may appear.
 - [ ] Publishing dry run, Wednesday: viewership counts match, and CFBD monthly use is well under 1,000: pending (Plan 14)
 - [ ] Variables reset to `PUBLISH_ENABLED=false` and `DEPLOY_REPO=benboro/benboro.github.io` after the drills: pending (Plan 14)
 - [x] 2026-10-12 NFL scratch-repo deploy drill (999.5 D-21; NFL only, the CFB flip does not wait for it, D-18): one dispatched run on v0.8.0 with `NFL_SITE_ENABLED=true` deployed `site-data.json` and `nfl-data.json` under `booth-review/` (files 54), nothing outside `booth-review/` changed, and the key check passed. evidence: run log lines `cfbd key check: passed`, `nfl site: 3229 games`, `deploy: published bundle 09cacaca2aa7 (files 54)`, `outside booth-review unchanged: yes`; the deployed bundle's NFL views load with no console errors
-- [ ] Launch: set the `PUBLISH_ENABLED` variable to `true` (after 506 Sports' approval)
+- [ ] Launch: set the `PUBLISH_ENABLED` variable to `true` (506 Sports was asked and has not replied; launch does not wait on it)
 
 ## Observations
 
