@@ -17,17 +17,19 @@ from booth_review.build.tables import BuildTables
 
 
 def _tables() -> BuildTables:
-    games = pl.DataFrame({"game_id": [1, 2, 3, 4, 5, 6, 7]}, schema={"game_id": pl.Int64})
+    games = pl.DataFrame({"game_id": [1, 2, 3, 4, 5, 6, 7, 8]}, schema={"game_id": pl.Int64})
     rows = [
-        # (game_id, season, date_et, network_id, feed_type, rated)
+        # (game_id, season, date_et, network_id, feed_type, plotted)
         (1, 2021, date(2021, 9, 4), "espn", "main", False),  # a gap
         (2, 2021, date(2021, 9, 4), "abc", "main", False),  # same date, counted once
-        (3, 2022, date(2022, 10, 1), "espn", "main", True),  # rated (RR or SMW)
+        (3, 2022, date(2022, 10, 1), "espn", "main", True),  # has a figure (RR or SMW)
         (4, 2022, date(2022, 10, 8), "fs1", "alt", False),  # alternate feed
         (5, 2023, date(2023, 11, 4), None, "main", False),  # no network
         (6, 2020, date(2020, 9, 12), "espn", "main", False),  # outside 2021-2024
         (99, 2024, date(2024, 9, 7), "espn", "main", False),  # out of scope (no game)
-        (7, 2024, date(2024, 11, 30), "cbs", "main", None),  # unknown rated -> a gap
+        (7, 2024, date(2024, 11, 30), "cbs", "main", None),  # unknown -> a gap
+        # WR-06: an RR record with no usable figure (a peak only) leaves it unplotted.
+        (8, 2023, date(2023, 9, 16), "fox", "main", False),
     ]
     telecasts = pl.DataFrame(
         rows,
@@ -37,19 +39,23 @@ def _tables() -> BuildTables:
             "date_et": pl.Date,
             "network_id": pl.Utf8,
             "feed_type": pl.Utf8,
-            "rated": pl.Boolean,
+            "plotted": pl.Boolean,
         },
         orient="row",
+    )
+    # rated is true for every RR record, figure or not; the gap filter ignores it.
+    telecasts = telecasts.with_columns(
+        rated=pl.col("game_id").is_in([3, 8]),
     )
     return cast(BuildTables, SimpleNamespace(games=games, telecasts=telecasts))
 
 
-def test_remaining_gap_dates_keeps_only_main_unrated_in_scope_dates() -> None:
+def test_remaining_gap_dates_keeps_only_main_unplotted_in_scope_dates() -> None:
     gaps = remaining_gap_dates(_tables())
     assert gaps == {
         2021: {date(2021, 9, 4)},
         2022: set(),
-        2023: set(),
+        2023: {date(2023, 9, 16)},
         2024: {date(2024, 11, 30)},
     }
 
@@ -62,9 +68,9 @@ def test_remaining_gap_dates_network_filter_keeps_listed_networks_only() -> None
     tables = _tables()
     extra = pl.DataFrame(
         [
-            (1, 2022, date(2022, 9, 10), "espn-plus", "main", False),  # streaming: dropped
-            (2, 2022, date(2022, 9, 17), "sec-network", "main", False),  # conference: dropped
-            (3, 2022, date(2022, 9, 24), "fs1", "main", False),  # listed: kept
+            (1, 2022, date(2022, 9, 10), "espn-plus", "main", False, False),  # streaming
+            (2, 2022, date(2022, 9, 17), "sec-network", "main", False, False),  # conference
+            (3, 2022, date(2022, 9, 24), "fs1", "main", False, False),  # listed: kept
         ],
         schema=tables.telecasts.schema,
         orient="row",
@@ -74,7 +80,7 @@ def test_remaining_gap_dates_network_filter_keeps_listed_networks_only() -> None
     assert remaining_gap_dates(filtered, networks=LISTED_GAP_NETWORKS) == {
         2021: {date(2021, 9, 4)},
         2022: {date(2022, 9, 24)},
-        2023: set(),
+        2023: {date(2023, 9, 16)},
         2024: {date(2024, 11, 30)},
     }
     # Without the filter every unrated network counts.

@@ -30,19 +30,22 @@ def remaining_gap_dates(
     *,
     networks: Collection[str] | None = None,
 ) -> dict[int, set[date]]:
-    """Per season, the ET dates of in-scope main-feed telecasts still unrated.
+    """Per season, the ET dates of in-scope main-feed telecasts still without a figure.
 
-    A telecast counts when its feed is "main", it is not rated, it has a
-    network (one of `networks` when given), and its game is in the games
-    frame (the build's scope). Every requested season gets a key, empty when
-    it has no gap left.
+    A telecast counts when its feed is "main", it is not plotted (no usable
+    headline: unrated, or rated by an RR record with no usable average such as
+    a peak only), it has a network (one of `networks` when given), and its game
+    is in the games frame (the build's scope). Every requested season gets a
+    key, empty when it has no gap left.
     """
     wanted = sorted(set(seasons))
     result: dict[int, set[date]] = {season: set() for season in wanted}
     scoped_ids = tables.games.get_column("game_id").unique()
     gaps = tables.telecasts.filter(
         (pl.col("feed_type") == "main")
-        & ~pl.col("rated").fill_null(value=False)
+        # WR-06: `rated` is true for any RR record, even one with no usable
+        # figure; `plotted` is true only with a usable headline.
+        & ~pl.col("plotted").fill_null(value=False)
         & pl.col("network_id").is_not_null()
         & pl.col("season").is_in(wanted)
         & pl.col("game_id").is_in(scoped_ids.implode())
