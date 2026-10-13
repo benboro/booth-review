@@ -71,7 +71,8 @@ def classify_row(row: Mapping[str, str]) -> RowKind:
     """Label a row; precedence: simulcast, multi_feed, regional, non_nielsen,
     no_figure, unknown_suffix, figure."""
     network = row.get("network", "")
-    if "&" in network:
+    # A simulcast prints two networks joined by "&" or by a comma ("NET1, NET2").
+    if "&" in network or "," in network:
         return "simulcast"
     if "MEGA" in network.upper().split():
         return "multi_feed"

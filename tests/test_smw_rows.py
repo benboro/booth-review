@@ -54,6 +54,8 @@ def test_parse_chart_date() -> None:
     ("kw", "kind"),
     [
         ({"network": "ABC & ESPN2"}, "simulcast"),
+        ({"network": "ABC, ESPN2"}, "simulcast"),
+        ({"network": "ABC, ESPN2", "viewers": "2.10M"}, "simulcast"),
         ({"network": "ESPN MEGA"}, "multi_feed"),
         ({"home": "Regional action"}, "regional"),
         ({"away": "Silverlake or Riverbend"}, "regional"),
