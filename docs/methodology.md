@@ -163,6 +163,11 @@ Because this figure type mixes two different measurement approaches, it is not s
 comparable to a Nielsen-only figure, even within the same era, and should be
 read with that caveat in mind.
 
+Figures from the second sources (see [Sources and credits](#sources-and-credits))
+carry no measurement label, because those sources don't say how a figure was
+measured. Their detail panel shows "Measurement not recorded"; the era still
+comes from the air date.
+
 ## The 2025 excitement break
 
 CFBD, the source of this chart's excitement measure, changed its underlying
@@ -364,7 +369,7 @@ Eras are read from `data/reference/measurement_eras.csv`. Through the 2019 seaso
 
 ## Sources and credits
 
-**Ratings Reference.** Viewership figures on this chart come from
+**Ratings Reference.** Most viewership figures on this chart come from
 [RatingsReference.com](https://ratingsreference.com), published under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). This project's use
 of that data is modified: it has been filtered, joined against game and crew
@@ -374,6 +379,44 @@ record (or records, when more than one record was merged for the same
 telecast) that its figure came from, along with that figure's own original
 source — the article, wire report, or post the number was first published
 in.
+
+**Sports Media Watch and the other viewership sources.** Ratings Reference
+compiled few figures for the 2021–2024 seasons, so for those seasons this
+project also uses the per-game figures that
+[Sports Media Watch](https://www.sportsmediawatch.com/college-football-tv-ratings/)
+printed in its season ratings charts. The charts are images. Their pages are
+saved by hand and each chart is transcribed twice, independently, with no
+automated reading (see `docs/sources/smw.md`). The TV Ratings Guide, Awful
+Announcing and ESPN Press Room are planned for the gaps that remain.
+
+Each telecast's headline figure comes from one source, so a dot never mixes
+two sources' numbers: the highest-ranked source with a usable figure, in the
+order Ratings Reference, Sports Media Watch, The TV Ratings Guide, Awful
+Announcing, ESPN Press Room. Lower-ranked figures for the same telecast are kept
+in this project's data but are not shown.
+
+A second source's season loads only after its figures agree with Ratings
+Reference's within 3% on every game both cover. A miss is read again from the
+source. If the source really prints a different figure, the game is logged as
+a known disagreement and Ratings Reference's figure stays the headline. A
+season with more than two such disagreements loads only by a recorded decision.
+All four Sports Media Watch seasons passed; 2024 had three logged disagreements
+and loads by that decision.
+
+Only per-game figures are used. A simulcast total (one figure for two
+networks), a regional-window total (such as a Big Ten Network window that
+covers several games), a multi-feed MegaCast total, and an "n/a" entry are all
+left out.
+
+As a result, 2021–2024 figures come from a mix of sources. A second-source
+figure counts the same as a Ratings Reference figure everywhere: in the rated
+counts, the coverage audit, and any future model built on this data.
+
+Each second-source figure is credited to its publisher by name, linked to the
+page it came from. For Sports Media Watch that is the season's ratings page,
+because its charts have no page of their own. The detail panel also says the
+figure is not listed on Ratings Reference. These sources are used without
+asking first, and a source's figures come off the site if it objects.
 
 **506 Sports.** Crew listings — who called each telecast — come from
 [506sports.com](https://506sports.com).

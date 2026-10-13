@@ -5,8 +5,8 @@ project's coverage of 2014–2025 college football telecasts is thin or
 uneven. It exists so a reader of the chart understands what "every rated
 telecast" actually means before comparing two seasons, two networks, or two
 announcers. No specific game, crew, or figure is named here — see
-`docs/sources/506.md`, `docs/sources/ratings-reference.md`, and
-`docs/sources/cfbd.md` for source-level detail, and `docs/site-data.md` for
+`docs/sources/506.md`, `docs/sources/ratings-reference.md`,
+`docs/sources/smw.md`, and `docs/sources/cfbd.md` for source-level detail, and `docs/site-data.md` for
 how these tables reach the chart.
 
 ## Scope
@@ -14,8 +14,8 @@ how these tables reach the chart.
 The chart covers games from the 2014 season onward where at least one team
 was FBS that season (JOIN-07) — a rated FBS-vs-FCS opener counts, two
 non-FBS teams playing each other does not. Only **rated** telecasts (a
-figure this project could attach a Ratings Reference viewership claim to)
-appear as dots; unrated games are not shown in v1, though the data behind
+telecast with a Ratings Reference viewership figure or, for 2021–2024, a
+Sports Media Watch one) appear as dots; unrated games are not shown in v1, though the data behind
 that gap is being kept for a possible future assignment view. 2013 is out of
 scope: it needs its own excitement computation this project doesn't attempt
 in v1 (CFBD's win-probability data used for excitement starts in 2014).
@@ -23,36 +23,58 @@ in v1 (CFBD's win-probability data used for excitement starts in 2014).
 ## Ratings Reference coverage: a real dip in 2021–2024
 
 Ratings Reference's own record count per season is not flat. 2021–2024 sit
-noticeably lower than the seasons around them:
+noticeably lower than the seasons around them: 154, 113, 148 and 173 records,
+while every other season from 2014 to 2025 has between 280 and 412. This
+project did not cause the dip. It reflects how much Ratings Reference itself
+compiled for those four seasons.
 
-| Season | RR records |
-|---|---|
-| 2021 | 154 |
-| 2022 | 113 |
-| 2023 | 148 |
-| 2024 | 171 |
+Why the dip happened: from 2014 to 2020, most of Ratings Reference's per-game
+college football figures came from one upstream publisher, Sports Media Watch.
+For 2021–2024 Ratings Reference compiled far fewer of them, even though Sports
+Media Watch kept publishing per-game figures, as chart images on one ratings
+page per season. In 2025 a different publisher became Ratings Reference's main
+source.
 
-By comparison, every other season in this project's range falls between
-roughly 322 and 412 records. This project did not cause the dip — it
-reflects how much Ratings Reference itself compiled for those four seasons
-— but it matters for reading the chart: a season-over-season comparison of
-"how many telecasts got a national audience figure" is not apples-to-apples
-across this boundary, since a thinner season here has fewer candidate
-telecasts to plot at all, not necessarily less television coverage. Treat
-any 2021–2024 vs. neighboring-season count comparison with that caveat.
+Sports Media Watch's charts now fill most of the gap. Their pages were saved by
+hand and every chart was transcribed twice, independently (see
+`docs/sources/smw.md`). Each season loaded only after its figures matched
+Ratings Reference's within 3% on the games both cover (see
+[Sources and credits](methodology.md#sources-and-credits)). Where both have a
+figure, Ratings Reference's stays the headline.
 
-Why the dip happened: from 2014 to 2020, most of Ratings Reference's
-per-game college football figures came from one upstream publisher,
-Sports Media Watch, which published far fewer per-game figures in 2021–2024. In
-2025 a different publisher became Ratings Reference's main source. In
-October 2026 this project looked for a second free, public source of
-per-game Nielsen figures for these four seasons. It checked each
-candidate's reuse terms and robots rules, whether each figure has a free
-page to cite, how many of the missing games it covers, and whether its
-figures match the kind Ratings Reference reports. None has been adopted, so
-these games keep no figure for now. Two publishers' figures closely match
-Ratings Reference's, and this project plans to ask whether it may reuse them
-with credit. Nothing is collected from them unless they agree.
+| Season | Ratings Reference records | Rated now | Headline from Sports Media Watch | Main telecasts | Still unrated |
+|---|---|---|---|---|---|
+| 2021 | 154 | 363 | 209 | 882 | 519 |
+| 2022 | 113 | 381 | 268 | 893 | 512 |
+| 2023 | 148 | 435 | 287 | 907 | 472 |
+| 2024 | 173 | 470 | 298 | 920 | 450 |
+
+One 2024 telecast's Ratings Reference record has only a peak figure, which is
+never a headline, so its Sports Media Watch figure is the headline instead.
+
+So 2021–2024 figures come from a mix of sources, and they count the same as
+Ratings Reference figures everywhere. Count comparisons across this boundary
+still need care: the 2021–2024 rated counts include second-source figures that
+the seasons around them don't have.
+
+What stays unrated, and why:
+
+- Most of these games aired on networks whose games are rarely rated at all,
+  such as conference networks and streaming services (468, 471, 450 and 424
+  games in 2021–2024). In 2024 the charts also note that several of those
+  networks are not Nielsen-rated.
+- The rest (51, 41, 22 and 25 games) aired on networks that are usually rated,
+  but neither Ratings Reference nor a Sports Media Watch chart has a usable
+  figure. Either the game is not on any chart, or its chart row prints "n/a" or
+  only a total this project leaves out (a simulcast, regional-window or
+  multi-feed MegaCast total).
+- One 2024 telecast has no resolved network, so it is counted only in the
+  build summary.
+- No chart row is held for a network disagreement or waiting on review.
+
+The TV Ratings Guide, Awful Announcing and ESPN Press Room are planned for the
+games that remain. If Ratings Reference later adds figures for these seasons,
+its refresh picks them up and they become the headline.
 
 These games now appear in the 'No public rating' strip, and the counts read 'N rated of M games'.
 
