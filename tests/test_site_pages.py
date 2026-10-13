@@ -214,6 +214,46 @@ def test_render_coverage_has_hand_confirmed_column() -> None:
     assert "<tr><td>2026</td><td>4</td><td>4</td><td>4</td><td>3</td>" in result
 
 
+def test_render_coverage_has_espn_press_room_backup_column() -> None:
+    """04.19 D-13: the backup-crew count sits right after the hand-confirmed
+    count, read from matched_crew_backup and never folded into it."""
+    payload = copy.deepcopy(_load_fixture())
+    coverage = payload["coverage"]
+    assert isinstance(coverage, list)
+    all_row = next(r for r in coverage if r["season"] == 2026 and r["network"] is None)
+    all_row.update(
+        rated_telecasts=5,
+        matched_game=5,
+        matched_crew=5,
+        matched_crew_patched=2,
+        matched_crew_backup=1,
+    )
+    result = render_coverage(validate_site_data(payload))
+
+    assert (
+        '<th scope="col">Of which hand-confirmed</th>'
+        '<th scope="col">Of which ESPN Press Room backup</th>'
+        '<th scope="col">Match rate</th>' in result
+    )
+    # Season, rated, matched to a game, matched with crew, hand-confirmed, backup.
+    assert "<tr><td>2026</td><td>5</td><td>5</td><td>5</td><td>2</td><td>1</td>" in result
+
+
+def test_render_coverage_backup_column_reads_zero_when_no_backup() -> None:
+    """A season with no ESPN Press Room crews still shows the column, as 0."""
+    site = _fixture_site()
+    result = render_coverage(site)
+    row = next(r for r in site.coverage if r.network is None and r.matched_crew_backup == 0)
+    assert (
+        f"<td>{row.matched_crew}</td><td>{row.matched_crew_patched}</td><td>0</td>"
+        f"<td>{_pct_text(row.match_rate)}</td>"
+    ) in result
+
+
+def _pct_text(value: float | None) -> str:
+    return f"{value * 100:.1f}%" if value is not None else chr(0x2013)  # en dash
+
+
 def test_render_coverage_escapes_network_name() -> None:
     mutated_payload = copy.deepcopy(_load_fixture())
     mutated_payload["lookups"]["networks"][0]["name"] = "<script>x</script>"  # type: ignore[index]

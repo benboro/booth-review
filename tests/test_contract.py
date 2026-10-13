@@ -751,18 +751,29 @@ def test_crew_source_label_rule_is_shared_with_the_loader() -> None:
 def test_fixture_patched_crews_are_counted_in_their_season_coverage() -> None:
     """Every fixture telecast with a crew source has a season-total coverage
     row that counts at least one hand-confirmed crew (the v1.5.0 fixture once
-    had a patched telecast in a season with no coverage row at all)."""
+    had a patched telecast in a season with no coverage row at all). Since
+    04.19 Plan 49 an ESPN Press Room crew counts as a backup crew instead."""
     data = _load_fixture()
     telecasts = data["telecasts"]
-    patched_seasons = {
-        season
-        for season, url in zip(telecasts["season"], telecasts["crew_source_url"], strict=True)
+    sourced = [
+        (season, label)
+        for season, url, label in zip(
+            telecasts["season"],
+            telecasts["crew_source_url"],
+            telecasts["crew_source_label"],
+            strict=True,
+        )
         if url is not None
-    }
+    ]
+    patched_seasons = {season for season, label in sourced if label != "ESPN Press Room"}
+    backup_seasons = {season for season, label in sourced if label == "ESPN Press Room"}
     assert patched_seasons
+    assert backup_seasons
     totals = {row["season"]: row for row in data["coverage"] if row["network"] is None}
     for season in patched_seasons:
         assert totals[season]["matched_crew_patched"] >= 1
+    for season in backup_seasons:
+        assert totals[season]["matched_crew_backup"] >= 1
 
 
 # --- 04.13 D-16: the slim unrated block ---

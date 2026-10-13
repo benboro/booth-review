@@ -38,10 +38,15 @@ NFL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "contract" / "nfl-data.fixture.
 # re-pinned at 04.19 Plan 08 (contract 2.4.0: figure_source column and one SMW fixture row);
 # index digest re-pinned at Plan 09 (band-note bullet reworded, D-21); site-data and index
 # digests re-pinned at Plan 41 (contract 2.5.0: coverage matched_crew_backup 0 on every
-# fixture row; the index moves only through its site-data cache-bust hash).
-_SITE_DATA_SHA256 = "b41d5c096637e0be275ad24e81242ffd1262ba4ce5ce55a94131f3f671cf1055"
-_COVERAGE_SHA256 = "77f5c7b375e0280082f601e3838fb4dc0f1ff8c309b73e390674ea1ffbe009db"
-_INDEX_PRE_PHASE_SHA256 = "af2b19a43de3f1b274a15694e91da7b363ebd859a409df49d075452dac51ba6b"
+# fixture row; the index moves only through its site-data cache-bust hash). All three
+# re-pinned at Plan 49: fixture telecast 8 became an ESPN Press Room backup crew with
+# matched_crew_backup 1 on its 2026 coverage rows (reverting those gives the Plan 41 site-data
+# digest), coverage.html gained the "Of which ESPN Press Room backup" column (dropping it from
+# the reverted build gives the Plan 41 digest), and the index moves only through its
+# site-data cache-bust hash.
+_SITE_DATA_SHA256 = "b93ca1c096fef2da4c75c30864da9f06084b8ddea671253ef0dae3d14ce4ce78"
+_COVERAGE_SHA256 = "6f8931204d2b4497bf31bf85b817cfe5a75d719dfa705bcc65c09af1ce46d9e1"
+_INDEX_PRE_PHASE_SHA256 = "781de92244af2d9f6b4ce99efc522f41f10357127208ff7a9451aecbba145b1a"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'

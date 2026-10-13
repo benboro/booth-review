@@ -1579,6 +1579,69 @@ def test_crew_source_fields_emit_at_their_index_and_null_otherwise(build_referen
     assert all_row["matched_crew_patched"] == 1
 
 
+def test_backup_crew_ships_espn_press_room_credit_and_main_crew(build_reference: Path) -> None:
+    """04.19 D-13 (04.3 D-11): a telecast filled from an ESPN Press Room page
+    ships its label, its espnpressroom.com page and its main-feed booth, and
+    the payload validates under the 2.5.0 contract."""
+    release = "https://espnpressroom.com/press-release/synthetic-week-release/"
+    games = [_game_row(game_id=1), _game_row(game_id=2, week=3, date_et=date(2024, 9, 21))]
+    telecasts = [
+        _telecast_row(telecast_id="1-net-a", game_id=1),
+        _telecast_row(
+            telecast_id="2-net-a",
+            game_id=2,
+            date_et=date(2024, 9, 21),
+            headline_claim_id="claim-2",
+            headline_value=100.0,
+            rr_telecast_ids=["cfb-example-2"],
+            rr_record_urls=["https://example.com/r2"],
+            s506_pointer=None,
+            crew_patched=False,
+            crew_backup=True,
+            crew_source_url=release,
+            crew_source_label="ESPN Press Room",
+        ),
+    ]
+    tables = _build_tables(
+        games_rows=games,
+        telecast_rows=telecasts,
+        flag_rows=[
+            {"telecast_id": "1-net-a", "flag_id": "rr-fixture-era-2", "kind": "era"},
+            {"telecast_id": "2-net-a", "flag_id": "rr-fixture-era-2", "kind": "era"},
+        ],
+        people_rows=_people_rows(),
+        # apply_crew_backup's row shape: main feed, a position, no 506 pointer.
+        telecast_people_rows=[
+            {
+                "telecast_id": "2-net-a",
+                "person_id": person_id,
+                "role": role,
+                "feed_type": "main",
+                "crew_position": position,
+                "s506_pointer": None,
+                "source": "crew_backup",
+            }
+            for position, (person_id, role) in enumerate(
+                (("mike-golic-jr", "pbp"), ("mike-golic", "analyst"))
+            )
+        ],
+    )
+    payload = _site(tables, build_reference)
+
+    assert payload["schema_version"] == "2.5.0"
+    columns = payload["telecasts"]
+    assert columns["crew_source_label"] == [None, "ESPN Press Room"]
+    assert columns["crew_source_url"] == [None, release]
+    people = payload["lookups"]["people"]
+    crew = columns["crew"][1]
+    assert [people[entry["person"]]["name"] for entry in crew] == ["Mike Golic Jr.", "Mike Golic"]
+    assert {entry["feed"] for entry in crew} == {"main"}
+    all_row = next(r for r in payload["coverage"] if r["network"] is None)
+    assert (all_row["matched_crew"], all_row["matched_crew_patched"]) == (2, 0)
+    assert all_row["matched_crew_backup"] == 1
+    validate_site_data(payload)
+
+
 def test_home_spread_emits_closing_spread_and_no_pregame_column(
     build_reference: Path,
 ) -> None:
