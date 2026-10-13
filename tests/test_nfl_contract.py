@@ -34,7 +34,8 @@ Mutator = Callable[[Payload], None]
 REPO = Path(__file__).resolve().parent.parent
 
 # sha256 of docs/site-data.schema.json recorded at the start of phase 999.5 plan 02.
-CFB_SCHEMA_SHA256 = "b5c7ab15bd07f21b9d021ddd570ec3c0af349b741a01cd9cd491eb243de0bbe7"
+# Re-pinned at 04.19 Plan 08: contract 2.4.0 adds telecasts.figure_source.
+CFB_SCHEMA_SHA256 = "d3481254224d25b3eb0a365c847924506679cfeb8732f302f63651ed2662763c"
 
 INVENTED_STRINGS = ("Northfield Lanterns", "Harbor City", "Ada Quill", "example.com")
 
@@ -613,7 +614,7 @@ def test_schema_version_pinned() -> None:
 
 
 def test_cfb_contract_unchanged() -> None:
-    assert cfb_models.SCHEMA_VERSION == "2.3.0"
+    assert cfb_models.SCHEMA_VERSION == "2.4.0"
     digest = hashlib.sha256((REPO / "docs" / "site-data.schema.json").read_bytes()).hexdigest()
     assert digest == CFB_SCHEMA_SHA256
 

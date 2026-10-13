@@ -18,7 +18,7 @@ immediately, in parallel with Phase 3's real joins.
 `site-data.json` is **one versioned columnar JSON file** (D-13), not an array
 of per-telecast objects:
 
-- `schema_version` — the contract version (currently `"2.3.0"`). See
+- `schema_version` — the contract version (currently `"2.4.0"`). See
   Versioning below.
 - `generated_at` — ISO UTC time of the newest change to a collected input (the
   newest manifest entry whose content differs from the previous one for the same
@@ -113,7 +113,8 @@ describes when the value is `null` instead of coerced to a placeholder like
 | `measurement_type` | `"nielsen"` \| `"nielsen_adobe"` \| `"unknown"` | never null | FLAG-02, SITE-04 |
 | `publisher` | int \| null, index into `lookups.publishers` | null when the figure's first publisher isn't known | SITE-17 |
 | `source_url` | str \| null | null when the figure's original source URL isn't known | SITE-05, SITE-17 |
-| `rr_urls` | list[str], never empty | every merged Ratings Reference record URL for this telecast (JOIN-05); a duplicate-record merge keeps both | SITE-05 |
+| `rr_urls` | list[str]; non-empty for Ratings Reference figures, empty for second-source figures | every merged Ratings Reference record URL for this telecast (JOIN-05); a duplicate-record merge keeps both | SITE-05 |
+| `figure_source` | `"rr"` \| `"smw"` \| `"tvrg"` \| `"aa"` \| `"espnpr"`; rated block only | never null; which source the headline figure came from (04.19 D-16). `rr_urls` is non-empty exactly when this is `rr`. For any other value `source_url` must be an https URL on that source's own host and `publisher` must be set (the name comes from `lookups.publishers`). Our own provenance label, not a CFBD field | SITE-05, SRC-06 |
 | `s506_url` | str \| null | null when no 506 page is linked | SITE-05 |
 | `crew_source_url` | str \| null, http(s) URL with a host, never 506 Sports | null for a 506 crew, including one a `crew_overrides.csv` row only confirms; set only with `crew_source_label` when the shown crew comes from `crew_overrides.csv` instead of 506 (a patch, correction, or differing crew; the crew's own cited source), and then `crew` lists at least one main-feed entry | SITE-32 |
 | `crew_source_label` | str \| null, non-empty, at most 60 characters, no `<` or `>` | null for a 506 crew; a short public label for the cited source, set only with `crew_source_url` (the same rule the `crew_overrides.csv` loader applies to `source_name`) | SITE-32 |
@@ -247,7 +248,8 @@ Unrated rows carry the same display-only CFBD fields as rated rows (`excitement`
   (SITE-43, 04.8 D-01/D-02); a major bump because a field was removed;
   `2.0.0 -> 2.1.0` added `lookups.bowl_franchises`, `lookups.bowls[].franchise`, `lookups.rivalries` (with each rivalry's title `article`), and `telecasts.rivalry` (SITE-44, SITE-45, 04.9 D-16); minor bump, additive;
   `2.1.0 -> 2.2.0` added the `telecasts_unrated` block with its `cause` enum (SITE-51, 04.13 D-16); minor bump, additive;
-  `2.2.0 -> 2.3.0` added `lookups.venues` and the per-game `place` index in both blocks (SITE-71, 04.18); minor bump, additive.
+  `2.2.0 -> 2.3.0` added `lookups.venues` and the per-game `place` index in both blocks (SITE-71, 04.18); minor bump, additive;
+  `2.3.0 -> 2.4.0` added `telecasts.figure_source` and allowed empty `rr_urls` for second-source figures (SRC-06, 04.19); minor bump.
 - **Removing a field, renaming a field, or changing a field's type**
   (including narrowing an enum) bumps the **major** version (`1.0.0` →
   `2.0.0`).
@@ -286,6 +288,8 @@ As of v1.4.0 telecast 3 (2021) carries a crew-source pair (a patched crew with n
 As of v2.0.0 there is no `pregame` column; the fixture's `home_spread` column is unchanged: `[-3.5, 7.0, -2.0, null, -1.0, -14.0, 5.5, -3.0, 6.5, -0.5, -2.5, 1.5]`. By telecast index: 0 home favorite won; 1 away favorite, home won (upset); 2 line but no final score; 3 no line; 4 home favorite won; 5 home favorite won; 6 away favorite, home won; 7 home favorite, away won; 8 away favorite won; 9 home favorite, away won; 10 tie (20-20); 11 away favorite won.
 
 As of v2.1.0 the two bowls belong to franchises `harbor-bowl` (latest name Harbor Bowl, former name Bayside Bowl: a renamed bowl) and `summit-bowl` (hosting the telecast 5 CFP semifinal); `Lakeshore Rivalry` (Northfield-Lakeview, article `"the"`) tags telecasts 0 and 4; `The Bridge Game` (Stonebridge-Maplecrest, article null) tags telecast 11, while telecast 3 between the same teams (2021-12-04, neutral) is null: it stands for a conference-championship rematch whose regular-season meeting was not rated. The two-season rename itself is exercised with synthetic games in tests/test_named_games.py and tests/test_build_site_data.py.
+
+As of v2.4.0 the fixture carries one Sports Media Watch figure: telecast 3 (2021-12-04) has `figure_source` `"smw"`, publisher "Sports Media Watch", an empty `rr_urls`, and a `sportsmediawatch.com` season-page `source_url`; every other row is `"rr"`.
 
 As of v2.3.0 the fixture also carries nine fictional venues in `lookups.venues` (including a Honolulu venue, a Dublin venue, a Nassau venue and a neutral site) with a `place` index on every game; unrated 6 is the one game with `place` null.
 

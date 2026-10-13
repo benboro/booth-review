@@ -1,5 +1,5 @@
 {
-  "schema_version": "2.3.0",
+  "schema_version": "2.4.0",
   "generated_at": "2026-01-01T00:00:00Z",
   "freshness": {
     "season": 2026,
@@ -154,7 +154,8 @@
     "publishers": [
       "Wire Service Example",
       "Ratings Blog Example",
-      "Wiki Editor Example"
+      "Wiki Editor Example",
+      "Sports Media Watch"
     ],
     "flags": [
       {
@@ -582,7 +583,7 @@
       0,
       1,
       2,
-      null,
+      3,
       0,
       1,
       2,
@@ -596,7 +597,7 @@
       "https://example.com/source/1",
       "https://example.com/source/2",
       null,
-      "https://example.com/source/4",
+      "https://www.sportsmediawatch.com/college-football-tv-ratings/2021-season/",
       "https://example.com/source/5",
       "https://example.com/source/6",
       "https://example.com/source/7",
@@ -616,9 +617,7 @@
       [
         "https://ratingsreference.com/telecast/cfb-invented-cedar-hollow-boulder-pass-2021-10-02"
       ],
-      [
-        "https://ratingsreference.com/telecast/cfb-invented-stonebridge-maplecrest-2021-12-04"
-      ],
+      [],
       [
         "https://ratingsreference.com/telecast/cfb-invented-northfield-lakeview-2025-09-13-a",
         "https://ratingsreference.com/telecast/cfb-invented-northfield-lakeview-2025-09-13-b"
@@ -644,6 +643,20 @@
       [
         "https://ratingsreference.com/telecast/cfb-invented-stonebridge-maplecrest-2026-10-03"
       ]
+    ],
+    "figure_source": [
+      "rr",
+      "rr",
+      "rr",
+      "smw",
+      "rr",
+      "rr",
+      "rr",
+      "rr",
+      "rr",
+      "rr",
+      "rr",
+      "rr"
     ],
     "s506_url": [
       "https://example.com/506/2019/wk1/1",

@@ -11,6 +11,9 @@ reason, since a changed digest means a changed CFB output.
 Regenerated in 04.19 Plan 07: viewership gains a source column, telecasts a
 headline_source column, coverage a headline_second_source column, and five
 empty review_second_source_* CSVs; no CFB figure changed.
+
+04.19 Plan 08: site-data.json schema 2.4.0 adds telecasts.figure_source (all rr in the
+synthetic vault); no figure changed.
 """
 
 from __future__ import annotations
@@ -94,7 +97,7 @@ _GOLDEN: dict[str, str] = {
         "07ff159d34d5e0cfdd3b77f84c3ecaec0cd14c437fa015fe89333709317831c3"
     ),
     "processed/site-data.json": (
-        "644d840e7edc04cb5e8cd671b5e65febce1ea31c0660905aeb97bf0cae9d3979"
+        "df91e0a4b45d179d478d2db040beb6a89645dc1452d766aa7b4ab11ed6d656f3"
     ),
     "processed/telecast_flags.parquet": (
         "2e2f334909dc09ab5ff590cadd3d4cb2158678a2d980948cd454219ab82927e2"

@@ -145,6 +145,7 @@ def _telecast_row(**overrides: object) -> dict[str, object]:
         "headline_claim_id": "claim-1",
         "headline_value": 1_234_567.4,
         "headline_publisher": "Wire Service Example",
+        "headline_source": "rr",
         "headline_source_url": "https://example.com/story1",
         "measurement_type": "nielsen",
         "era_id": "rr-fixture-era-2",
@@ -576,6 +577,53 @@ def test_time_slot_column_matches_kickoff(small_tables: BuildTables, build_refer
 def test_viewers_is_rounded_int(small_tables: BuildTables, build_reference: Path) -> None:
     payload = _site(small_tables, build_reference)
     assert payload["telecasts"]["viewers"][0] == 1_234_567
+
+
+def test_figure_source_follows_headline_source(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    rr_payload = _site(small_tables, build_reference)
+    assert rr_payload["telecasts"]["figure_source"] == ["rr", "rr", "rr"]
+
+    smw_url = "https://www.sportsmediawatch.com/college-football-tv-ratings/2024-season/"
+    is_target = pl.col("telecast_id") == "3-net-c"
+    frame = small_tables.telecasts.with_columns(
+        pl.when(is_target)
+        .then(pl.lit("smw"))
+        .otherwise(pl.col("headline_source"))
+        .alias("headline_source"),
+        pl.when(is_target)
+        .then(pl.lit("Sports Media Watch"))
+        .otherwise(pl.col("headline_publisher"))
+        .alias("headline_publisher"),
+        pl.when(is_target)
+        .then(pl.lit(smw_url))
+        .otherwise(pl.col("headline_source_url"))
+        .alias("headline_source_url"),
+        pl.when(is_target)
+        .then(pl.lit([], dtype=pl.List(pl.String)))
+        .otherwise(pl.col("rr_record_urls"))
+        .alias("rr_record_urls"),
+    )
+    payload = _site(dataclasses.replace(small_tables, telecasts=frame), build_reference)
+    columns = payload["telecasts"]
+    assert columns["figure_source"] == ["rr", "rr", "smw"]
+    assert columns["rr_urls"][2] == []
+    assert columns["source_url"][2] == smw_url
+    assert payload["lookups"]["publishers"][columns["publisher"][2]] == "Sports Media Watch"
+
+
+def test_plotted_telecast_without_headline_source_is_a_build_error(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    frame = small_tables.telecasts.with_columns(
+        pl.when(pl.col("telecast_id") == "1-net-a")
+        .then(None)
+        .otherwise(pl.col("headline_source"))
+        .alias("headline_source")
+    )
+    with pytest.raises(ValueError, match="no headline_source"):
+        _site(dataclasses.replace(small_tables, telecasts=frame), build_reference)
 
 
 def test_publisher_null_when_not_known(small_tables: BuildTables, build_reference: Path) -> None:

@@ -7,6 +7,8 @@ changes nothing. Teams and figures are invented.
 from __future__ import annotations
 
 import csv
+import json
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -105,8 +107,7 @@ def test_no_smw_files_writes_empty_review_csvs_and_flips_nothing(
 def test_smw_figures_flip_an_unrated_telecast_and_reach_every_consumer(
     git_vault: DataPaths, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Site data is not built here: the contract only learns non-RR figures in Plan 08, so
-    # run_build would stop at validation. Tables, coverage and metrics are the consumers.
+    # Tables, coverage and metrics are checked directly; run_build at the end covers site data.
     reference = _vault(git_vault, tmp_path, monkeypatch)
     before = _build(git_vault, reference)
     rated_before = _telecasts(git_vault).filter(pl.col("rated") & (pl.col("feed_type") == "main"))
@@ -176,3 +177,14 @@ def test_smw_figures_flip_an_unrated_telecast_and_reach_every_consumer(
     assert [r["status"] for r in gate_rows] == ["passed"]
     for name in (REVIEW_UNMATCHED, REVIEW_NETWORK, REVIEW_CONFLICTS):
         assert _csv_rows(git_vault.vault / "interim" / f"{name}.csv")[1] == []
+
+    # Contract 2.4.0: the full build validates and ships the SMW figure with its source label.
+    _build(git_vault, reference)
+    site = json.loads((git_vault.vault / "processed" / "site-data.json").read_text())
+    assert site["schema_version"] == "2.4.0"
+    columns = site["telecasts"]
+    assert Counter(columns["figure_source"]) == {"rr": rated_before.height, "smw": 1}
+    i = columns["figure_source"].index("smw")
+    assert columns["rr_urls"][i] == []
+    assert columns["source_url"][i].startswith("https://www.sportsmediawatch.com/")
+    assert site["lookups"]["publishers"][columns["publisher"][i]] == "Sports Media Watch"
