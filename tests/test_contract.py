@@ -724,6 +724,7 @@ _RATED_ONLY = {
     "publisher",
     "source_url",
     "rr_urls",
+    "figure_source",
     "flags",
     "combined_feeds",
 }
@@ -734,7 +735,7 @@ def test_unrated_fields_are_display_only() -> None:
 
 
 def test_site_data_fields_unchanged() -> None:
-    assert len(SITE_DATA_FIELDS) == 33
+    assert len(SITE_DATA_FIELDS) == 34
     assert SITE_DATA_FIELDS[:3] == ("season", "date", "kickoff")
     assert SITE_DATA_FIELDS[-1] == "place"
     assert not set(UnratedColumns.model_fields) & {"cause"} & set(SITE_DATA_FIELDS)
@@ -761,7 +762,7 @@ def test_unrated_block_has_no_cfbd_only_fields() -> None:
 def _with_unrated_row(data: dict[str, Any]) -> dict[str, Any]:
     """The fixture plus a one-row unrated block (a regular 2019 net-b game,
     crewless, cause none); every unrated variant mutates this row."""
-    data["schema_version"] = "2.3.0"
+    data["schema_version"] = "2.4.0"
     # The replaced unrated block was the only user of the last two venues.
     del data["lookups"]["venues"][7:]
     row: dict[str, Any] = {
@@ -920,3 +921,85 @@ def test_place_and_venue_errors_name_position_only() -> None:
         validate_site_data(_unrated_place_out_of_range(copy.deepcopy(_load_fixture())))
     with pytest.raises(ValidationError, match=r"lookups\.venues\[6\]: not referenced by any game"):
         validate_site_data(_unreferenced_venue(copy.deepcopy(_load_fixture())))
+
+
+# 04.19 Plan 08: figure_source and the relaxed rr_urls rule (fixture row 3 is the SMW row).
+_SMW_ROW = 3
+
+
+def _smw_error(mutate: Any) -> str:
+    data = _load_fixture()
+    mutate(data["telecasts"])
+    with pytest.raises(ValidationError) as info:
+        validate_site_data(data)
+    return str(info.value)
+
+
+def test_fixture_has_one_smw_row() -> None:
+    site = validate_site_data(_load_fixture())
+    fs = site.telecasts.figure_source
+    assert fs.count("smw") == 1
+    assert fs[_SMW_ROW] == "smw"
+    assert site.telecasts.rr_urls[_SMW_ROW] == []
+
+
+def test_rr_figure_with_empty_rr_urls_fails() -> None:
+    def mutate(t: dict[str, Any]) -> None:
+        t["rr_urls"][0] = []
+
+    assert "telecasts.rr_urls[0]: must not be empty for a Ratings Reference figure" in _smw_error(
+        mutate
+    )
+
+
+def test_smw_figure_with_rr_urls_fails() -> None:
+    def mutate(t: dict[str, Any]) -> None:
+        t["rr_urls"][_SMW_ROW] = ["https://ratingsreference.com/telecast/x"]
+
+    assert "must be empty for a non-Ratings Reference figure" in _smw_error(mutate)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        None,
+        "http://www.sportsmediawatch.com/secret-path-1/",
+        "https://evil.example.com/secret-path-2/",
+        "https://sportsmediawatch.com.evil.example/secret-path-3/",
+    ],
+)
+def test_smw_figure_bad_source_url_fails_without_echoing_url(bad: str | None) -> None:
+    def mutate(t: dict[str, Any]) -> None:
+        t["source_url"][_SMW_ROW] = bad
+
+    message = _smw_error(mutate)
+    assert f"telecasts.source_url[{_SMW_ROW}]" in message
+    assert "secret-path" not in message
+
+
+def test_smw_figure_without_publisher_fails() -> None:
+    def mutate(t: dict[str, Any]) -> None:
+        t["publisher"][_SMW_ROW] = None
+
+    assert f"telecasts.publisher[{_SMW_ROW}]: required" in _smw_error(mutate)
+
+
+def test_unknown_figure_source_fails() -> None:
+    def mutate(t: dict[str, Any]) -> None:
+        t["figure_source"][0] = "bogus"
+
+    assert "figure_source" in _smw_error(mutate)
+
+
+def test_unrated_block_rejects_figure_source() -> None:
+    data = _with_unrated_row(_load_fixture())
+    data["telecasts_unrated"]["figure_source"] = ["rr"]
+    with pytest.raises(ValidationError):
+        validate_site_data(data)
+
+
+def test_schema_version_2_3_0_fails() -> None:
+    data = _load_fixture()
+    data["schema_version"] = "2.3.0"
+    with pytest.raises(ValidationError):
+        validate_site_data(data)

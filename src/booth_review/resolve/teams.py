@@ -32,9 +32,16 @@ TEAM_CROSSWALK_COLUMNS = (
     "note",
 )
 
-TeamSource = Literal["sports506", "ratingsref", "cfbd", "any"]
+TeamSource = Literal["sports506", "ratingsref", "cfbd", "any", "smw", "tvrg", "aa", "espnpr"]
 
-_SOURCES: frozenset[str] = frozenset({"sports506", "ratingsref", "cfbd", "any"})
+# The 04.19 second sources (Sports Media Watch, The TV Ratings Guide, Awful
+# Announcing, ESPN Press Room). Their chart abbreviations can be ambiguous, so a
+# variant may name a candidate set of teams (D-21); the other sources may not.
+SECOND_TEAM_SOURCES: frozenset[str] = frozenset({"smw", "tvrg", "aa", "espnpr"})
+
+_SOURCES: frozenset[str] = frozenset(
+    {"sports506", "ratingsref", "cfbd", "any"} | SECOND_TEAM_SOURCES
+)
 _MAX_NOTE_LEN = 80
 
 # A trailing 506 "(in <city>)"/"(at <city>)" location note, kept verbatim by
@@ -42,6 +49,10 @@ _MAX_NOTE_LEN = 80
 # (every such note has this shape), not a per-team fix.
 _LOCATION_NOTE_RE = re.compile(r"\s*\((?:in|at)\s+[^)]*\)\s*$", re.IGNORECASE)
 _RR_SLUG_PREFIX = "cfb-"
+# Structural wrappers on second-source names: a leading rank ("No. 5 ", "#5 ")
+# and trailing footnote markers ("*", "+"). Every such wrapper has this shape.
+_RANK_PREFIX_RE = re.compile(r"^(?:no\.?\s*|#)\d{1,2}\s+", re.IGNORECASE)
+_FOOTNOTE_SUFFIX_RE = re.compile(r"[\s*+]+$")
 
 
 @dataclass(frozen=True)
@@ -86,7 +97,10 @@ def load_team_crosswalk(reference_dir: Path) -> list[TeamCrosswalkRow]:
     source, a non-integer cfbd_team_id/season, a note over 80 characters, or
     the same (source, normalized variant) mapped to two different
     cfbd_team_ids over overlapping season ranges (the resolver would
-    otherwise silently use whichever row came first).
+    otherwise silently use whichever row came first). The overlap check does
+    not apply to the second sources (smw, tvrg, aa, espnpr): there two rows
+    may name a candidate set for an ambiguous abbreviation (D-21), which
+    `TeamResolver.resolve` treats as unresolved.
     """
     path = reference_dir / "team_crosswalk.csv"
     raw_rows = read_reference_csv_numbered(path, TEAM_CROSSWALK_COLUMNS, required=False)
@@ -117,8 +131,10 @@ def load_team_crosswalk(reference_dir: Path) -> list[TeamCrosswalkRow]:
         normalized_variant = normalize_team(clean_team_text(raw["variant"], source))  # type: ignore[arg-type]
         variant_key = (source, normalized_variant)
         for other_from, other_to, other_id in seen.get(variant_key, ()):
-            if other_id != cfbd_team_id and _ranges_overlap(
-                season_from, season_to, other_from, other_to
+            if (
+                source not in SECOND_TEAM_SOURCES
+                and other_id != cfbd_team_id
+                and _ranges_overlap(season_from, season_to, other_from, other_to)
             ):
                 raise ReferenceTableError(
                     f"{path.name}: line {line_no}: variant {raw['variant']!r} maps to "
@@ -143,10 +159,14 @@ def load_team_crosswalk(reference_dir: Path) -> list[TeamCrosswalkRow]:
 def clean_team_text(raw: str, source: TeamSource) -> str:
     """Strip a source-specific structural wrapper before normalization: a
     trailing 506 "(in <city>)"/"(at <city>)" location note for sports506, or
-    the "cfb-" slug prefix for ratingsref. Generic and structural only, never
+    the "cfb-" slug prefix for ratingsref, or a leading rank / trailing
+    footnote marker for the second sources. Generic and structural only, never
     a per-team fix; a name carrying no such wrapper is returned unchanged.
     """
     text = raw.strip()
+    if source in SECOND_TEAM_SOURCES:
+        text = _RANK_PREFIX_RE.sub("", text)
+        return _FOOTNOTE_SUFFIX_RE.sub("", text).strip()
     if source == "sports506":
         return _LOCATION_NOTE_RE.sub("", text).strip()
     if source == "ratingsref":
@@ -223,6 +243,35 @@ class TeamResolver:
                     "appears in none of its in-range seasons' CFBD games"
                 )
 
+    def _in_range_rows(self, source: str, normalized: str, season: int) -> list[TeamCrosswalkRow]:
+        return [
+            row
+            for row in self._crosswalk.get((source, normalized), ())
+            if (row.season_from is None or season >= row.season_from)
+            and (row.season_to is None or season <= row.season_to)
+        ]
+
+    def _crosswalk_rows(self, source: str, normalized: str, season: int) -> list[TeamCrosswalkRow]:
+        """In-range rows for the source, else for "any" (source-specific wins)."""
+        lookup_sources = (source,) if source == "any" else (source, "any")
+        for lookup_source in lookup_sources:
+            rows = self._in_range_rows(lookup_source, normalized, season)
+            if rows:
+                return rows
+        return []
+
+    def resolve_candidates(self, source: TeamSource, raw: str, season: int) -> tuple[int, ...]:
+        """Every CFBD team id the name could be: the sorted distinct ids of
+        the in-range crosswalk rows, else the one direct-match id, else ().
+        """
+        normalized = normalize_team(clean_team_text(raw, source))
+        rows = self._crosswalk_rows(source, normalized, season)
+        if rows:
+            return tuple(sorted({row.cfbd_team_id for row in rows}))
+        direct = self._direct.get(season, {}).get(normalized, set())
+        ids = {team_id for team_id, _ in direct}
+        return (next(iter(ids)),) if len(ids) == 1 and len(direct) == 1 else ()
+
     def resolve(self, source: TeamSource, raw: str, season: int) -> ResolvedTeam:
         cache_key = (source, raw, season)
         cached = self._cache.get(cache_key)
@@ -232,18 +281,16 @@ class TeamResolver:
         cleaned = clean_team_text(raw, source)
         normalized = normalize_team(cleaned)
 
-        lookup_sources = (source,) if source == "any" else (source, "any")
-        for lookup_source in lookup_sources:
-            for row in self._crosswalk.get((lookup_source, normalized), ()):
-                in_range = (row.season_from is None or season >= row.season_from) and (
-                    row.season_to is None or season <= row.season_to
+        rows = self._crosswalk_rows(source, normalized, season)
+        if rows:
+            if source in SECOND_TEAM_SOURCES and len({row.cfbd_team_id for row in rows}) > 1:
+                result = ResolvedTeam(team_id=None, canonical=None, method="unresolved")
+            else:
+                result = ResolvedTeam(
+                    team_id=rows[0].cfbd_team_id, canonical=rows[0].canonical, method="crosswalk"
                 )
-                if in_range:
-                    result = ResolvedTeam(
-                        team_id=row.cfbd_team_id, canonical=row.canonical, method="crosswalk"
-                    )
-                    self._cache[cache_key] = result
-                    return result
+            self._cache[cache_key] = result
+            return result
 
         candidates = self._direct.get(season, {}).get(normalized, set())
         if len(candidates) == 1:

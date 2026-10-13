@@ -110,6 +110,7 @@ def _telecast_row(**overrides: object) -> dict[str, object]:
         "headline_value": None,
         "headline_publisher": None,
         "headline_source_url": None,
+        "headline_source": None,
         "measurement_type": None,
         "era_id": None,
         "rr_current_check": None,
@@ -617,3 +618,82 @@ def test_null_top_ranked_claim_loses_to_lower_ranked_claim_with_a_value() -> Non
     assert row["plotted"] is True
     assert row["headline_claim_id"] == "c-final"
     assert row["headline_value"] == 4_000_000.0
+
+
+# -- second sources (04.19 D-09) ---------------------------------------------------------------
+
+
+def _second_claim(value: float = 1_500_000.0, source: str = "smw") -> RRClaim:
+    return RRClaim.model_validate(
+        {
+            "metric_type": "avg_audience",
+            "status": "final",
+            "value": value,
+            "unit": "viewers",
+            "publisher": "Sports Media Watch",
+            "source_url": "https://www.sportsmediawatch.com/college-football-tv-ratings/2025-season/",
+            "measured_by": None,
+            "id": f"{source}:2025:chart.png:1",
+            "source": source,
+        }
+    )
+
+
+def test_second_claim_rows_carry_source_and_null_rr_identifiers() -> None:
+    record = _record(record_id="cfb-example-sample-2025-09-13", claims=[_claim(claim_id="c-final")])
+    build = _build_telecast_build([_telecast_row()], {"1-alpha": [record]})
+
+    viewership = build_viewership(build, _ERAS, {"1-alpha": [_second_claim()]})
+
+    rr = viewership.filter(pl.col("source") == "rr").row(0, named=True)
+    smw = viewership.filter(pl.col("source") == "smw").row(0, named=True)
+    assert rr["is_headline"] is True
+    assert smw["is_headline"] is False
+    assert smw["rr_telecast_id"] is None
+    assert smw["record_url"] is None
+    assert smw["is_rr_current"] is None
+    assert smw["measurement_type"] == "unknown"
+    assert smw["era_check"] == "not_comparable"
+    assert viewership["source"].null_count() == 0
+
+
+def test_second_claim_fills_an_unrated_telecast_headline() -> None:
+    build = _build_telecast_build([_telecast_row(rated=True)], {})
+    claims = {"1-alpha": [_second_claim()]}
+    viewership = build_viewership(build, _ERAS, claims)
+
+    telecasts, disagreements, _, flags = apply_headlines(
+        build.telecasts, viewership, {}, _ERAS, _EVENT_FLAGS, claims
+    )
+
+    row = telecasts.row(0, named=True)
+    assert viewership.row(0, named=True)["is_headline"] is True
+    assert row["headline_source"] == "smw"
+    assert row["headline_value"] == 1_500_000.0
+    assert row["headline_publisher"] == "Sports Media Watch"
+    assert row["measurement_type"] == "unknown"
+    assert row["rr_current_check"] is None
+    assert row["plotted"] is True
+    assert disagreements == []
+    assert "nielsen_adobe" not in flags["flag_id"].to_list()
+
+
+def test_rr_telecast_keeps_rr_headline_source_and_bookkeeping() -> None:
+    record = _record(
+        record_id="cfb-example-sample-2025-09-13",
+        claims=[_claim(claim_id="c-final")],
+        rr_current_claim_id="c-final",
+        rr_current_status="found",
+    )
+    build = _build_telecast_build([_telecast_row()], {"1-alpha": [record]})
+    claims = {"1-alpha": [_second_claim()]}
+    viewership = build_viewership(build, _ERAS, claims)
+
+    telecasts, _, _, _ = apply_headlines(
+        build.telecasts, viewership, {"1-alpha": [record]}, _ERAS, _EVENT_FLAGS, claims
+    )
+
+    row = telecasts.row(0, named=True)
+    assert row["headline_source"] == "rr"
+    assert row["headline_claim_id"] == "c-final"
+    assert row["rr_current_check"] == "agree"

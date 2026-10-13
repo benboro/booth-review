@@ -141,6 +141,7 @@ export function prepareData(raw) {
   const n = nRated + nUnrated;
   // One indexed model (04.13): rated games first (indices 0..nRated-1, the log
   // axis), then games with no public rating. Built on copies; raw is never mutated.
+  // figure_source (2.4.0) gets the null tail for unrated games; a file without it reads as 'rr'.
   const merged = {};
   for (const key of Object.keys(raw.telecasts)) {
     let tail;

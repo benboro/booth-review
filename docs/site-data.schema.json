@@ -631,6 +631,20 @@
           "title": "Excitement",
           "type": "array"
         },
+        "figure_source": {
+          "items": {
+            "enum": [
+              "rr",
+              "smw",
+              "tvrg",
+              "aa",
+              "espnpr"
+            ],
+            "type": "string"
+          },
+          "title": "Figure Source",
+          "type": "array"
+        },
         "flags": {
           "items": {
             "items": {
@@ -920,6 +934,7 @@
         "publisher",
         "source_url",
         "rr_urls",
+        "figure_source",
         "s506_url",
         "crew_source_url",
         "crew_source_label",
@@ -1379,7 +1394,7 @@
       "type": "object"
     }
   },
-  "$id": "booth-review/site-data/2.3.0",
+  "$id": "booth-review/site-data/2.4.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -1401,7 +1416,7 @@
       "$ref": "#/$defs/Lookups"
     },
     "schema_version": {
-      "const": "2.3.0",
+      "const": "2.4.0",
       "title": "Schema Version",
       "type": "string"
     },

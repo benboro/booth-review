@@ -18,6 +18,10 @@ Source = Literal[
     "nfl_ratingsref",
     "nfl_nflverse",
     "nfl_wikipedia",
+    "smw",
+    "tvrg",
+    "aa",
+    "espnpr",
 ]
 
 

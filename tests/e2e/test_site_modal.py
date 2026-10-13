@@ -275,7 +275,7 @@ def test_unrated_modal_shows_cause_and_why_link_without_source_rows(
     link; no figure, publisher, Ratings Reference, or flag rows; the 506 listing stays."""
     text = _open(guarded_page, open_app, 16)
     body = guarded_page.locator("#panel-body")
-    assert "No public rating · few figures were compiled for 2021\u201324" in text
+    assert "No public rating · no figure found in our 2021\u201324 sources" in text
     why = body.locator("a", has_text="Why no rating?")
     expect(why).to_have_count(1)
     assert (why.get_attribute("href") or "").endswith(

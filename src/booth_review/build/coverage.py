@@ -47,6 +47,7 @@ COVERAGE_COLUMNS: tuple[str, ...] = (
     "crew_rate",
     "match_rate",
     "headline_present",
+    "headline_second_source",
     "excitement_present",
     "spread_present",
     "points_present",
@@ -75,6 +76,7 @@ _BUCKET_KEYS: tuple[str, ...] = (
     "matched_crew",
     "crew_patched",
     "headline_present",
+    "headline_second_source",
     "excitement_present",
     "spread_present",
     "points_present",
@@ -195,6 +197,8 @@ def build_coverage(tables: BuildTables) -> CoverageReport:
         has_headline = row["headline_claim_id"] is not None
         if has_headline:
             bucket["headline_present"] += 1
+        if row["headline_source"] not in (None, "rr"):
+            bucket["headline_second_source"] += 1
         if row["excitement"] is not None:
             bucket["excitement_present"] += 1
         if row["closing_spread"] is not None:
@@ -242,6 +246,7 @@ def build_coverage(tables: BuildTables) -> CoverageReport:
                 "crew_rate": _rate(bucket["matched_crew"], bucket["rated_telecasts"]),
                 "match_rate": None,
                 "headline_present": bucket["headline_present"],
+                "headline_second_source": bucket["headline_second_source"],
                 "excitement_present": bucket["excitement_present"],
                 "spread_present": bucket["spread_present"],
                 "points_present": bucket["points_present"],
@@ -277,6 +282,7 @@ def build_coverage(tables: BuildTables) -> CoverageReport:
                 "crew_rate": _rate(summed["matched_crew"], summed["rated_telecasts"]),
                 "match_rate": diagnostics.join08_by_season.get(season),
                 "headline_present": summed["headline_present"],
+                "headline_second_source": summed["headline_second_source"],
                 "excitement_present": summed["excitement_present"],
                 "spread_present": summed["spread_present"],
                 "points_present": summed["points_present"],

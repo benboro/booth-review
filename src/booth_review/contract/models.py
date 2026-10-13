@@ -20,7 +20,9 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = "2.3.0"
+from booth_review.sources.second_rows import SECOND_SOURCE_HOSTS, host_matches
+
+SCHEMA_VERSION = "2.4.0"
 
 _S506_HOST = "506sports.com"
 
@@ -244,6 +246,9 @@ class TelecastColumns(BaseModel):
     publisher: list[int | None]
     source_url: list[str | None]
     rr_urls: list[list[str]]
+    # 04.19 D-16: which source the headline figure came from; rr_urls is empty exactly when
+    # this is not rr
+    figure_source: list[Literal["rr", "smw", "tvrg", "aa", "espnpr"]]
     s506_url: list[str | None]
     # 04.3 D-11: a hand-confirmed crew's own cited source; null for 506 crews; both set or both null
     crew_source_url: list[str | None]
@@ -341,7 +346,7 @@ class CoverageRow(BaseModel):
 class SiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["2.3.0"]
+    schema_version: Literal["2.4.0"]
     generated_at: str
     freshness: Freshness
     lookups: Lookups
@@ -422,8 +427,31 @@ class SiteData(BaseModel):
                 raise ValueError(f"telecasts.publisher[{i}]: publisher index out of range")
             if tc.viewers[i] <= 0:
                 raise ValueError(f"telecasts.viewers[{i}]: must be > 0")
-            if not tc.rr_urls[i]:
-                raise ValueError(f"telecasts.rr_urls[{i}]: must not be empty")
+            source = tc.figure_source[i]
+            if source == "rr":
+                if not tc.rr_urls[i]:
+                    raise ValueError(
+                        f"telecasts.rr_urls[{i}]: must not be empty for a Ratings Reference figure"
+                    )
+            else:
+                if tc.rr_urls[i]:
+                    raise ValueError(
+                        f"telecasts.rr_urls[{i}]: must be empty for a non-Ratings Reference figure"
+                    )
+                if publisher is None:
+                    raise ValueError(
+                        f"telecasts.publisher[{i}]: required for a non-Ratings Reference figure"
+                    )
+                url = tc.source_url[i]
+                if (
+                    url is None
+                    or source not in SECOND_SOURCE_HOSTS
+                    or not host_matches(source, url)
+                ):
+                    raise ValueError(
+                        f"telecasts.source_url[{i}]: must be an https URL on the "
+                        "figure source's own host"
+                    )
             combined = tc.combined_feeds[i]
             if combined is not None and combined < 2:
                 raise ValueError(f"telecasts.combined_feeds[{i}]: must be null or >= 2")

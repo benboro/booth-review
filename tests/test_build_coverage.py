@@ -506,3 +506,15 @@ def test_spread_present_counts_the_closing_spread_not_pregame_x(
     tables = dataclasses.replace(small_tables, games=games)
     net_a = _row(build_coverage(tables), 2024, "net-a")
     assert net_a["spread_present"] == 1
+
+
+def test_headline_second_source_counts_only_direct_second_source_headlines() -> None:
+    games = [_game_row(game_id=i + 1) for i in range(3)]
+    telecasts = [
+        _telecast_row(telecast_id=f"{i + 1}-net-a", game_id=i + 1, headline_source=source)
+        for i, source in enumerate(["rr", "smw", None])
+    ]
+    tables = _build_tables(games, telecasts, diagnostics=_diagnostics({2024: {}}, {2024: None}))
+    report = build_coverage(tables)
+    for network in ("net-a", "ALL"):
+        assert _row(report, 2024, network)["headline_second_source"] == 1

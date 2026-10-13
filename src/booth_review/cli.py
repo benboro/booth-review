@@ -72,6 +72,25 @@ from booth_review.sources.ratingsref.collector import (
     RefreshSummary,
 )
 from booth_review.sources.ratingsref.sitemap import parse_sitemap, select_entries
+from booth_review.sources.smw.chart_order import parse_chart_order
+from booth_review.sources.smw.diff import (
+    SmwMergeError,
+    diff_passes,
+    load_pass_dir,
+    load_resolutions,
+    merge_rows,
+    write_diff_csv,
+    write_rows_csv,
+)
+from booth_review.sources.smw.importer import (
+    DEFAULT_INCOMING_DIR as SMW_DEFAULT_ROOT,
+)
+from booth_review.sources.smw.importer import (
+    SmwImporter,
+    SmwImportResult,
+    list_chart_pngs,
+    season_dir,
+)
 from booth_review.sources.sports506.collector import Sports506Collector
 from booth_review.sources.sports506.importer import (
     NFL_PROFILE,
@@ -227,6 +246,14 @@ def build_parser() -> argparse.ArgumentParser:
     p506imp.add_argument("--no-commit", action="store_true")
     p506imp.add_argument("--league", choices=("cfb", "nfl"), default="cfb")
 
+    psmwimp = import_sub.add_parser(
+        "smw", help="import hand-saved Sports Media Watch charts and their transcriptions"
+    )
+    psmwimp.add_argument("--season", required=True, type=parse_season_spec)
+    psmwimp.add_argument("--from", dest="from_dir", type=Path, default=None)
+    psmwimp.add_argument("--force", action="store_true")
+    psmwimp.add_argument("--no-commit", action="store_true")
+
     spike = sub.add_parser("spike", help="spike-only analysis commands (SPIKE-03/04)")
     spike_sub = spike.add_subparsers(dest="spike_command", required=True)
     spike_inventory = spike_sub.add_parser(
@@ -363,6 +390,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     review_sample.add_argument("--size", type=int, default=build_sample.DEFAULT_SIZE)
     review_sample.add_argument("--seed", type=int, default=build_sample.DEFAULT_SEED)
+
+    review_smw_diff = review_sub.add_parser(
+        "smw-diff", help="diff two SMW transcription passes, or self-check one (04.19 D-01)"
+    )
+    review_smw_diff.add_argument("--season", required=True, type=int)
+    review_smw_diff.add_argument("--root", type=Path, default=SMW_DEFAULT_ROOT)
+    review_smw_diff.add_argument("--check-pass", choices=("a", "b"), default=None)
+
+    review_smw_merge = review_sub.add_parser(
+        "smw-merge", help="merge SMW transcription passes and resolutions into rows.csv"
+    )
+    review_smw_merge.add_argument("--season", required=True, type=int)
+    review_smw_merge.add_argument("--root", type=Path, default=SMW_DEFAULT_ROOT)
 
     return parser
 
@@ -941,6 +981,46 @@ def _import_506(args: argparse.Namespace) -> int:
         runtime.client.close()
 
 
+# -- import smw -----------------------------------------------------------------------------
+
+
+def _print_smw_import_result(result: SmwImportResult) -> None:
+    print(
+        f"smw {result.season}: imported {len(result.imported)}, "
+        f"skipped_existing {len(result.skipped_existing)}, "
+        f"skipped_invalid {len(result.skipped_invalid)}, "
+        f"changed_without_force {len(result.changed_without_force)}, "
+        f"missing_charts {len(result.missing_charts)}, problems {len(result.problems)}"
+    )
+    for problem in result.problems:
+        print(f"problem: {problem}")
+    if result.changed_without_force:
+        print("some files differ from the vault copy; use --force to overwrite")
+
+
+def _import_smw(args: argparse.Namespace) -> int:
+    runtime = build_runtime(with_budget=False)
+    try:
+        importer = SmwImporter(runtime.cache, runtime.paths)
+        any_problems = False
+        for season in args.season:
+            folder = args.from_dir if args.from_dir is not None else None
+            # D-04: hold the vault lock and commit only this season's own files.
+            with runtime.vault.lock():
+                result = importer.run(season, incoming_dir=folder, force=args.force)
+                _print_smw_import_result(result)
+                if result.has_problems:
+                    any_problems = True
+                if not args.no_commit:
+                    message = batch_message("import", "smw", str(season), result.counts())
+                    runtime.vault.commit_batch(
+                        message, paths=[f"raw/smw/{season}", "ledger/requests.jsonl"]
+                    )
+        return 4 if any_problems else 0
+    finally:
+        runtime.client.close()
+
+
 # -- spike inventory ----------------------------------------------------------------------
 
 
@@ -1313,6 +1393,20 @@ def _build(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
     print(f"crew gaps unpatched {outcome.counts.get('crew_gaps_unpatched', 0)}")
+    for gate in outcome.second_source_gates:
+        print(
+            f"second source {gate.source} {gate.season}: shared {gate.shared}, "
+            f"within 3% {gate.within_3pct}, logged {gate.logged}, "
+            f"unexplained {gate.unexplained}, loaded {gate.loaded}, "
+            f"held {gate.held_network}, {gate.status}"
+        )
+    if outcome.second_source_gates:
+        print(
+            f"second sources: {outcome.counts.get('second_source_loaded', 0)} loaded, "
+            f"{outcome.counts.get('second_source_held_network', 0)} held for network, "
+            f"{outcome.counts.get('second_source_unmatched', 0)} for review, "
+            f"{outcome.counts.get('second_source_withheld_seasons', 0)} season(s) withheld"
+        )
     if outcome.accepted:
         print("accepted new baseline")
     for reason in outcome.reasons:
@@ -1446,6 +1540,60 @@ def _with_vault_lock(run: Callable[[], int]) -> int:
         return run()
 
 
+def _review_smw_diff(args: argparse.Namespace) -> int:
+    """Offline: reads and writes only under --root, so no vault lock."""
+    folder = season_dir(args.root, args.season)
+    charts = list_chart_pngs(folder)
+    tdir = folder / "transcription"
+    if args.check_pass is not None:
+        # Self-check one pass: never opens the other pass's folder.
+        covered = load_pass_dir(tdir / f"pass-{args.check_pass}")
+        rows = sum(len(v) for v in covered.values())
+        print(
+            f"pass {args.check_pass}: charts covered "
+            f"{len(set(covered) & set(charts))} of {len(charts)}, rows {rows}"
+        )
+        return 0
+    entries = diff_passes(tdir / "pass-a", tdir / "pass-b", charts)
+    write_diff_csv(tdir / "diff.csv", entries)
+    kinds = [e.kind for e in entries]
+    print(
+        f"smw {args.season}: charts {len(charts)}, cell diffs {kinds.count('cell')}, "
+        f"row-count diffs {kinds.count('row_count')}, missing charts {kinds.count('missing_chart')}"
+    )
+    return 0
+
+
+def _review_smw_merge(args: argparse.Namespace) -> int:
+    folder = season_dir(args.root, args.season)
+    tdir = folder / "transcription"
+    page = folder / "season-page.html"
+    if not page.is_file():
+        print(f"smw {args.season}: season-page.html is missing")
+        return 4
+    charts = list_chart_pngs(folder)
+    order = parse_chart_order(page.read_text(encoding="utf-8", errors="replace"), set(charts))
+    if order.unreferenced:
+        print(f"smw {args.season}: {len(order.unreferenced)} chart(s) not listed on the page")
+        return 4
+    diff = diff_passes(tdir / "pass-a", tdir / "pass-b", charts)
+    pass_c = tdir / "pass-c"
+    try:
+        merged = merge_rows(
+            tdir / "pass-a",
+            pass_c if pass_c.is_dir() else None,
+            diff,
+            load_resolutions(tdir / "resolutions.csv"),
+            order.entries,
+        )
+    except SmwMergeError as exc:
+        print(f"smw {args.season}: cannot merge: {exc}")
+        return 4
+    write_rows_csv(tdir / "rows.csv", merged)
+    print(f"smw {args.season}: rows {len(merged)} from {len(charts)} chart(s)")
+    return 0
+
+
 def _review_teams(args: argparse.Namespace) -> int:
     if args.no_write:
         return resolve_diagnose.main(["--no-write"])
@@ -1506,6 +1654,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "import":
             if args.source == "506":
                 return _import_506(args)
+            if args.source == "smw":
+                return _import_smw(args)
             raise AssertionError(f"unknown import source: {args.source!r}")
         if args.command == "spike":
             if args.spike_command == "inventory":
@@ -1544,6 +1694,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return _review_combined(args)
             if args.review_command == "sample":
                 return _review_sample(args)
+            if args.review_command == "smw-diff":
+                return _review_smw_diff(args)
+            if args.review_command == "smw-merge":
+                return _review_smw_merge(args)
             raise AssertionError(f"unknown review command: {args.review_command!r}")
         raise AssertionError(f"unknown command: {args.command!r}")
     except BoothReviewError as exc:

@@ -1,7 +1,7 @@
 # NFL site data contract
 
 `nfl-data.json` is the NFL site file (schema `2.0.0`). It is separate from
-`site-data.json` (see `docs/site-data.md`, schema `2.3.0`, which this contract never
+`site-data.json` (see `docs/site-data.md`, schema `2.4.0`, which this contract never
 touches) and the page loads it only when NFL is chosen, directly or through
 `?sport=nfl`, so a college-football page load is unchanged.
 

@@ -43,6 +43,7 @@ from booth_review.build.regression import (
 from booth_review.build.regression import (
     accept_baseline as accept_baseline_metrics,
 )
+from booth_review.build.second_sources import SECOND_SOURCE_REVIEW_NAMES, GateStatus
 from booth_review.build.site_data import build_site_data, write_site_data
 from booth_review.build.tables import BuildTables, assemble_tables, write_tables
 from booth_review.config import HOST_SOURCE, DataPaths
@@ -71,6 +72,8 @@ class BuildOutcome:
     # crew_overrides.csv lines whose crew differs from 506's without
     # `correction`: flagged for the user, never a reason to block.
     crew_override_differs_lines: tuple[int, ...] = ()
+    # Per (source, season) second-source gate rows (04.19 D-02), for count-only printing.
+    second_source_gates: tuple[GateStatus, ...] = ()
 
 
 # A preliminary headline figure older than this many days is listed in
@@ -187,6 +190,13 @@ def _build_counts(tables: BuildTables, result: RegressionResult) -> dict[str, in
         "crew_overrides_differs": totals.get("crew_overrides_differs", 0),
         "crew_overrides_corrections": totals.get("crew_overrides_corrections", 0),
         "crew_gaps_unpatched": totals.get("crew_gaps_unpatched", 0),
+        "rated_second_source": totals.get("rated_second_source", 0),
+        "second_source_loaded": totals.get("second_source_loaded", 0),
+        "second_source_held_network": totals.get("second_source_held_network", 0),
+        "second_source_unmatched": totals.get("second_source_unmatched", 0),
+        "second_source_withheld_seasons": totals.get("second_source_withheld_seasons", 0),
+        "second_source_conflicts": totals.get("second_source_conflicts", 0),
+        **{f"{name}_rows": review_count(name) for name in SECOND_SOURCE_REVIEW_NAMES},
         "review_rows_total": review_rows_total,
         "current_season": current_season,
         "games_current_season": int(games_now.height),
@@ -305,4 +315,5 @@ def run_build(
         written=tuple(sorted(set(written))),
         committed=committed,
         crew_override_differs_lines=tables.crew_override_differs_lines,
+        second_source_gates=tables.second_source_gates,
     )

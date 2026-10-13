@@ -326,8 +326,27 @@ export function causeText(data, i) {
     return `${data.lookups.networks[data.t.network[i]].name} games are rarely rated`;
   }
   if (cause === 'pending') return 'viewership not posted yet';
-  if (cause === 'rr_dip') return 'few figures were compiled for 2021–24';
+  if (cause === 'rr_dip') return 'no figure found in our 2021–24 sources';
   return 'no figure was published';
+}
+
+/** Headline source of telecast `i`; a file without figure_source (pre-2.4.0) reads as Ratings Reference. */
+export function figureSourceOf(data, i) {
+  return data.t.figure_source?.[i] ?? 'rr';
+}
+
+/** Panel line for a figure that did not come from Ratings Reference; null for rr. */
+export function figureNotViaRrText(data, i) {
+  const source = figureSourceOf(data, i);
+  if (source === 'rr') return null;
+  const tail = 'not listed on Ratings Reference.';
+  if (source === 'smw') {
+    return `Figure read from Sports Media Watch's ${data.t.season[i]} ratings chart; ${tail}`;
+  }
+  if (source === 'tvrg') return `Figure read from The TV Ratings Guide's ratings post; ${tail}`;
+  if (source === 'aa') return `Figure read from Awful Announcing's ratings post; ${tail}`;
+  if (source === 'espnpr') return `Figure read from an ESPN Press Room release; ${tail}`;
+  return null;
 }
 
 /** Full line: "No public rating · {cause}" (plain text; callers use textContent). */

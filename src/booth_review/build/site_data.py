@@ -526,6 +526,7 @@ def build_site_data(
         "publisher",
         "source_url",
         "rr_urls",
+        "figure_source",
         "flags",
         "combined_feeds",
     )
@@ -600,7 +601,14 @@ def build_site_data(
             publisher_index[row["headline_publisher"]] if row["headline_publisher"] else None
         )
         columns["source_url"].append(row["headline_source_url"])
-        columns["rr_urls"].append(list(row["rr_record_urls"]))
+        if row["headline_source"] is None:
+            # A plotted telecast always has a headline source; a null here is a build bug.
+            raise ValueError("site data: a plotted telecast has no headline_source")
+        # RR record links go with an RR figure only: a second-source headline on a
+        # telecast whose RR record has no usable average (a peak only) ships none.
+        is_rr = row["headline_source"] == "rr"
+        columns["rr_urls"].append(list(row["rr_record_urls"]) if is_rr else [])
+        columns["figure_source"].append(row["headline_source"])
         columns["flags"].append(
             [flag_index[f] for f in flags_by_telecast.get(row["telecast_id"], [])]
         )

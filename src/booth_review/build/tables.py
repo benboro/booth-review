@@ -48,6 +48,13 @@ from booth_review.build.people_links import (
 from booth_review.build.people_links import (
     TELECAST_PEOPLE_SCHEMA as TELECAST_PEOPLE_SCHEMA,
 )
+from booth_review.build.second_sources import (
+    GateStatus,
+    apply_second_sources,
+    load_gate_overrides,
+    load_network_accepts,
+    load_second_source_inputs,
+)
 from booth_review.build.shipped import (
     network_rated_counts,
     rarity_verdict,
@@ -134,6 +141,8 @@ class BuildTables:
     crew_override_differs_lines: tuple[int, ...] = ()
     # CFBD /venues, for the Map's lookups.venues; empty until collected.
     venues: pl.DataFrame = field(default_factory=empty_venues_frame)
+    # Per (source, season) second-source gate rows (04.19 D-02); counts only when printed.
+    second_source_gates: tuple[GateStatus, ...] = ()
 
 
 def _combined_review_row(
@@ -297,12 +306,35 @@ def assemble_tables(
         sources, games, resolver, index, overrides, networks, primary_overrides, media_by_game
     )
 
+    # 04.19: second-source figures fill existing telecasts (never create one).
+    second = apply_second_sources(
+        telecast_build.telecasts,
+        telecast_build.records_by_telecast,
+        load_second_source_inputs(paths, seasons),
+        resolver=resolver,
+        index=index,
+        networks=networks,
+        overrides=overrides,
+        accepts=load_network_accepts(reference_directory),
+        gate_overrides=load_gate_overrides(reference_directory),
+        fbs_game_ids=set(games["game_id"].to_list()),
+        season_counts=telecast_build.counts,
+    )
+    telecast_build = replace(
+        telecast_build, telecasts=second.telecasts, counts=second.season_counts
+    )
+
     eras = load_eras(reference_directory)
     event_flags = load_event_flags(reference_directory)
 
-    viewership = build_viewership(telecast_build, eras)
+    viewership = build_viewership(telecast_build, eras, second.claims_by_telecast)
     telecasts, disagreement_rows, era_disagreement_rows, telecast_flags = apply_headlines(
-        telecast_build.telecasts, viewership, telecast_build.records_by_telecast, eras, event_flags
+        telecast_build.telecasts,
+        viewership,
+        telecast_build.records_by_telecast,
+        eras,
+        event_flags,
+        second.claims_by_telecast,
     )
 
     combined_decisions = load_combined_figures(reference_directory)
@@ -353,7 +385,8 @@ def assemble_tables(
         dict(unmatched_row(row)) for row in telecast_build.unmatched_rows
     ]
     unresolved_review_rows: list[dict[str, object]] = [
-        dict(row) for row in unresolved_rows(telecast_build.unresolved_rows)
+        dict(row)
+        for row in unresolved_rows([*telecast_build.unresolved_rows, *second.unresolved_rows])
     ]
 
     bowl_entries = load_bowls(reference_directory)
@@ -380,9 +413,11 @@ def assemble_tables(
             ],
         ),
     }
+    review_rows.update(second.review_rows)
 
     diagnostics = _build_diagnostics(override_result.season_counts)
     merged_totals = dict(diagnostics.totals)
+    merged_totals.update({f"second_source_{key}": value for key, value in second.counts.items()})
     merged_totals.update({f"people_{key}": value for key, value in people_links.counts.items()})
     merged_totals["combined_candidates_alt_listed"] = sum(
         1 for c in combined_candidates if "alt_listed" in c.reasons
@@ -435,6 +470,7 @@ def assemble_tables(
         review_rows=review_rows,
         crew_override_differs_lines=override_result.differs_lines,
         venues=venues,
+        second_source_gates=second.gates,
     )
 
 

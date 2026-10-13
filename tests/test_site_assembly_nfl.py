@@ -34,10 +34,12 @@ DOCS = REPO_ROOT / "docs"
 CFB_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "contract" / "site-data.fixture.json"
 NFL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "contract" / "nfl-data.fixture.json"
 
-# Recorded from a fixture build at the commit before this plan.
-_SITE_DATA_SHA256 = "09db84ed5ec02ec95e1a7b2a9601afab26bb7bf0622bc8ae25a42527b90467ea"
+# Recorded from a fixture build at the commit before this plan; site-data and index digests
+# re-pinned at 04.19 Plan 08 (contract 2.4.0: figure_source column and one SMW fixture row);
+# index digest re-pinned at Plan 09 (band-note bullet reworded, D-21).
+_SITE_DATA_SHA256 = "9f7353b25fbd8afc7593da9c0ede9c205524cf059c41a9324e39a7c3a6c56e8a"
 _COVERAGE_SHA256 = "77f5c7b375e0280082f601e3838fb4dc0f1ff8c309b73e390674ea1ffbe009db"
-_INDEX_PRE_PHASE_SHA256 = "2d63d59bca8e587cdad13488386eefcf3bb470c96d5f49280fabea70e8862ae2"
+_INDEX_PRE_PHASE_SHA256 = "c4ebc886a9c8e90cf51250f4fd30af737cd92b87839f1d033a4049d4e5efc789"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'

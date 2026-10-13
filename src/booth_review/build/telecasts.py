@@ -91,6 +91,7 @@ TELECASTS_SCHEMA: dict[str, pl.DataType] = {
     "headline_value": pl.Float64(),
     "headline_publisher": pl.Utf8(),
     "headline_source_url": pl.Utf8(),
+    "headline_source": pl.Utf8(),
     "measurement_type": pl.Utf8(),
     "era_id": pl.Utf8(),
     "rr_current_check": pl.Utf8(),
@@ -120,6 +121,8 @@ _COUNT_KEYS: tuple[str, ...] = (
     "rr_matched",
     "rated_telecasts",
     "rated_with_crew",
+    # telecasts rated only by a second source (04.19 D-20)
+    "rated_second_source",
     "records_with_crew",
     # records_with_crew as the 506 join alone left it: apply_crew_overrides
     # (04.3) raises records_with_crew for a patched crew but never this, so
@@ -321,6 +324,7 @@ def _finalize_telecast(
         "headline_value": None,
         "headline_publisher": None,
         "headline_source_url": None,
+        "headline_source": None,
         "measurement_type": None,
         "era_id": None,
         "rr_current_check": None,

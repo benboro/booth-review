@@ -1158,7 +1158,7 @@ def test_tooltip_model_and_hover_text_for_unrated_games(
     assert lines["u12"] == "No public rating · no figure was published"
     assert lines["c12"] == ["Crew not recorded"]
     assert lines["u19"] == "No public rating · viewership not posted yet"
-    assert lines["u13"] == "No public rating · few figures were compiled for 2021\u201324"
+    assert lines["u13"] == "No public rating · no figure found in our 2021\u201324 sources"
     assert lines["rated"].startswith("Viewers: ")
     if lines["hover"] is not None:
         assert "No public rating · Stream Plus games are rarely rated" in lines["hover"]

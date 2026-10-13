@@ -5,10 +5,14 @@ One documented, unit-tested rule instead of "most recent" or "follow
 supersedes_id alone" (Pitfall 1: a later preliminary figure is not the right
 pick over an earlier final one). Reads the claim id from `model_extra["id"]`,
 the key name found in the real Ratings Reference inventory (01-11).
+
+04.19 adds `select_headline_across_sources`: Ratings Reference first, then the
+second sources in a fixed order, one source per telecast (D-09).
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Literal
 
 from booth_review.sources.ratingsref.parser import RRClaim, RRRecord
@@ -23,6 +27,18 @@ HEADLINE_RULE = (
     "confidence, then by the latest first_published. The top-ranked claim "
     "after those tie-breaks is the headline claim; ties on every field keep "
     "the first one encountered."
+)
+
+SOURCE_ORDER: tuple[str, ...] = ("rr", "smw", "tvrg", "aa", "espnpr")
+
+HEADLINE_SOURCE_ORDER_RULE = (
+    "Each telecast's headline comes from exactly one source. If Ratings "
+    "Reference has any usable claim, HEADLINE_RULE picks among its claims "
+    "only; otherwise the headline is the first usable figure from Sports "
+    "Media Watch, then The TV Ratings Guide, then Awful Announcing, then "
+    "ESPN Press Room. Figures from different sources are never ranked "
+    "against each other; lower-ranked figures are kept but are never the "
+    "headline (04.19 D-09)."
 )
 
 _STATUS_RANK: dict[str, int] = {"revised": 0, "final": 1, "preliminary": 2}
@@ -87,6 +103,41 @@ def select_headline(claims: list[RRClaim]) -> RRClaim | None:
     tied = [claim for claim in eligible if _rank_key(claim) == best_key]
     tied.sort(key=lambda claim: claim.first_published or "", reverse=True)
     return tied[0]
+
+
+def claim_source(claim: RRClaim) -> str:
+    """The claim's source key from model_extra["source"]; missing means "rr"."""
+    value = (claim.model_extra or {}).get("source")
+    return value if isinstance(value, str) else "rr"
+
+
+def select_headline_across_sources(
+    rr_claims: list[RRClaim], second_claims: Sequence[RRClaim]
+) -> tuple[RRClaim, str] | None:
+    """Return (claim, source) per HEADLINE_SOURCE_ORDER_RULE, or None.
+
+    RR claims go through HEADLINE_RULE unchanged. Otherwise the first usable
+    claim of the first source in smw, tvrg, aa, espnpr order wins; within one
+    source the first in input order (a defensive tie rule: the loader hands
+    over one winning claim per source).
+    """
+    known = SOURCE_ORDER[1:]
+    for claim in second_claims:
+        if claim_source(claim) not in known:
+            raise ValueError(f"{len(second_claims)} second-source claims include an unknown source")
+    picked = select_headline(rr_claims)
+    if picked is not None:
+        return picked, "rr"
+    for source in known:
+        for claim in second_claims:
+            if (
+                claim_source(claim) == source
+                and claim.metric_type == "avg_audience"
+                and claim.unit == "viewers"
+                and is_usable_value(claim.value)
+            ):
+                return claim, source
+    return None
 
 
 def compare_with_rr_current(

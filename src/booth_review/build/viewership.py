@@ -8,12 +8,18 @@ Every figure is kept (`build_viewership`); `apply_headlines` then fills each
 telecast's headline/era/measurement/flag columns from the same pooled claims
 and returns the disagreement rows and per-telecast flag rows for the caller
 to write.
+
+Second-source figures (04.19 D-09) are rows too, tagged by `source`; the
+headline comes from `select_headline_across_sources`, and the RR-only
+bookkeeping (rr_current_check, disagreement log, nielsen_adobe flag) applies
+only when the headline is an RR claim.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import date
+from types import MappingProxyType
 
 import polars as pl
 
@@ -23,15 +29,17 @@ from booth_review.flags.events import EventFlag, event_flags_for
 from booth_review.flags.measurement_type import measurement_type
 from booth_review.resolve.headline import (
     claim_id,
+    claim_source,
     compare_with_rr_current,
     is_usable_value,
     rank_key,
-    select_headline,
+    select_headline_across_sources,
 )
 from booth_review.sources.ratingsref.parser import RRClaim, RRRecord
 
 VIEWERSHIP_SCHEMA: dict[str, pl.DataType] = {
     "telecast_id": pl.Utf8(),
+    "source": pl.Utf8(),
     "rr_telecast_id": pl.Utf8(),
     "record_url": pl.Utf8(),
     "claim_id": pl.Utf8(),
@@ -81,12 +89,19 @@ def _pooled_claims(records: Sequence[RRRecord]) -> list[RRClaim]:
     return [claim for record in records for claim in record.claims]
 
 
-def build_viewership(telecast_build: TelecastBuild, eras: Sequence[MeasurementEra]) -> pl.DataFrame:
-    """One row per claim of every RR record merged into a telecast (all
-    figures kept), with `is_headline` True on the one claim HEADLINE_RULE
-    picks per telecast (JOIN-04) and `is_rr_current` reporting whether that
-    claim is RR's own current pick, null when RR's pick isn't "found"
-    (research Assumption A3).
+_NO_SECOND_CLAIMS: Mapping[str, Sequence[RRClaim]] = MappingProxyType({})
+
+
+def build_viewership(
+    telecast_build: TelecastBuild,
+    eras: Sequence[MeasurementEra],
+    second_claims_by_telecast: Mapping[str, Sequence[RRClaim]] = _NO_SECOND_CLAIMS,
+) -> pl.DataFrame:
+    """One row per claim of every RR record merged into a telecast plus one
+    per loaded second-source claim (all figures kept), with `is_headline` True
+    on the one claim the headline rules pick per telecast (JOIN-04) and
+    `is_rr_current` reporting whether that claim is RR's own current pick,
+    null when RR's pick isn't "found" (research Assumption A3).
     """
     telecast_dates: dict[str, date] = {
         row["telecast_id"]: row["date_et"]
@@ -94,52 +109,84 @@ def build_viewership(telecast_build: TelecastBuild, eras: Sequence[MeasurementEr
     }
 
     rows: list[dict[str, object]] = []
-    for telecast_id, records in telecast_build.records_by_telecast.items():
+    telecast_ids = sorted(set(telecast_build.records_by_telecast) | set(second_claims_by_telecast))
+    for telecast_id in telecast_ids:
+        records = telecast_build.records_by_telecast.get(telecast_id, [])
+        second_claims = second_claims_by_telecast.get(telecast_id, ())
         telecast_date = telecast_dates.get(telecast_id)
         era = era_for(telecast_date, eras) if telecast_date is not None else None
 
         pooled = _pooled_claims(records)
-        headline = select_headline(pooled) if pooled else None
-        headline_id = claim_id(headline) if headline is not None else None
+        picked = select_headline_across_sources(pooled, second_claims)
+        headline_id = claim_id(picked[0]) if picked is not None else None
+
+        def row_for(
+            claim: RRClaim,
+            *,
+            source: str,
+            rr_telecast_id: str | None,
+            record_url: str | None,
+            is_current: bool | None,
+            telecast_id: str = telecast_id,
+            era: MeasurementEra | None = era,
+            headline_id: str | None = headline_id,
+        ) -> dict[str, object]:
+            this_claim_id = claim_id(claim)
+            return {
+                "telecast_id": telecast_id,
+                "source": source,
+                "rr_telecast_id": rr_telecast_id,
+                "record_url": record_url,
+                "claim_id": this_claim_id,
+                "metric_type": claim.metric_type,
+                "status": claim.status,
+                "value": claim.value,
+                "unit": claim.unit,
+                "cut": claim.cut,
+                "figure_type": _figure_type(claim),
+                "publisher": claim.publisher,
+                "source_url": claim.source_url,
+                "first_published": claim.first_published,
+                "confidence": claim.confidence,
+                "rr_era_id": claim.era_id,
+                "measured_by": claim.measured_by,
+                "measurement_type": measurement_type(claim.measured_by),
+                "era_id": era.era_id if era is not None else None,
+                "era_check": (
+                    era_check(era, claim.era_id) if era is not None else "not_comparable"
+                ),
+                "is_headline": headline_id is not None and this_claim_id == headline_id,
+                "is_rr_current": is_current,
+                "carrier_network": claim.carrier_network,
+                "composite_of": claim.composite_of,
+            }
 
         for record in records:
             for claim in record.claims:
-                this_claim_id = claim_id(claim)
                 is_current: bool | None
                 if record.rr_current_status != "found":
                     is_current = None
                 else:
-                    is_current = this_claim_id == record.rr_current_claim_id
-
+                    is_current = claim_id(claim) == record.rr_current_claim_id
                 rows.append(
-                    {
-                        "telecast_id": telecast_id,
-                        "rr_telecast_id": record.telecast.id,
-                        "record_url": record.record_url,
-                        "claim_id": this_claim_id,
-                        "metric_type": claim.metric_type,
-                        "status": claim.status,
-                        "value": claim.value,
-                        "unit": claim.unit,
-                        "cut": claim.cut,
-                        "figure_type": _figure_type(claim),
-                        "publisher": claim.publisher,
-                        "source_url": claim.source_url,
-                        "first_published": claim.first_published,
-                        "confidence": claim.confidence,
-                        "rr_era_id": claim.era_id,
-                        "measured_by": claim.measured_by,
-                        "measurement_type": measurement_type(claim.measured_by),
-                        "era_id": era.era_id if era is not None else None,
-                        "era_check": (
-                            era_check(era, claim.era_id) if era is not None else "not_comparable"
-                        ),
-                        "is_headline": headline_id is not None and this_claim_id == headline_id,
-                        "is_rr_current": is_current,
-                        "carrier_network": claim.carrier_network,
-                        "composite_of": claim.composite_of,
-                    }
+                    row_for(
+                        claim,
+                        source="rr",
+                        rr_telecast_id=record.telecast.id,
+                        record_url=record.record_url,
+                        is_current=is_current,
+                    )
                 )
+        for claim in second_claims:
+            rows.append(
+                row_for(
+                    claim,
+                    source=claim_source(claim),
+                    rr_telecast_id=None,
+                    record_url=None,
+                    is_current=None,
+                )
+            )
 
     frame = pl.DataFrame(rows, schema=VIEWERSHIP_SCHEMA)
     if frame.height:
@@ -153,6 +200,7 @@ def apply_headlines(
     records_by_telecast: Mapping[str, Sequence[RRRecord]],
     eras: Sequence[MeasurementEra],
     event_flags: Sequence[EventFlag],
+    second_claims_by_telecast: Mapping[str, Sequence[RRClaim]] = _NO_SECOND_CLAIMS,
 ) -> tuple[pl.DataFrame, list[dict[str, object]], list[dict[str, object]], pl.DataFrame]:
     """Fill every telecast's headline/era/measurement/flag columns from its
     pooled claims (JOIN-04, FLAG-01..04, D-10) and return
@@ -190,17 +238,21 @@ def apply_headlines(
 
         records = records_by_telecast.get(telecast_id, [])
         pooled = _pooled_claims(records)
-        headline = select_headline(pooled) if pooled else None
+        picked = select_headline_across_sources(
+            pooled, second_claims_by_telecast.get(telecast_id, ())
+        )
+        headline = picked[0] if picked is not None else None
 
-        if headline is None:
+        if headline is None or picked is None:
             updated["rr_current_check"] = None
         else:
+            updated["headline_source"] = picked[1]
             updated["headline_claim_id"] = claim_id(headline)
             updated["headline_value"] = headline.value
             updated["headline_publisher"] = headline.publisher
             updated["headline_source_url"] = headline.source_url
             updated["measurement_type"] = measurement_type(headline.measured_by)
-            if updated["measurement_type"] == "nielsen_adobe":
+            if picked[1] == "rr" and updated["measurement_type"] == "nielsen_adobe":
                 telecast_flag_rows.append(
                     {
                         "telecast_id": telecast_id,
@@ -209,7 +261,11 @@ def apply_headlines(
                     }
                 )
 
-            owning_record = next((r for r in records if headline in r.claims), None)
+            owning_record = (
+                next((r for r in records if headline in r.claims), None)
+                if picked[1] == "rr"
+                else None
+            )
             if owning_record is not None:
                 check = compare_with_rr_current(headline, owning_record)
                 updated["rr_current_check"] = check
