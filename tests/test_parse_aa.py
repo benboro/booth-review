@@ -71,6 +71,11 @@ def test_game_average_sentence_is_one_figure_row() -> None:
     assert row.superseded is False
 
 
+def test_published_time_is_read_as_utc_for_the_settle_tie_break() -> None:
+    # WR-07: the ld+json datePublished, as UTC, breaks a same-rank tie.
+    assert {row.published for row in _by_line().values()} == {"2022-10-03T14:00:00Z"}
+
+
 def test_every_mention_kind_and_the_ignored_count() -> None:
     parsed = parse_post(_HTML, url=_URL, season=2022)
     kinds = {int(row.pointer.rsplit(":", 1)[1]): row.kind for row in parsed.rows}

@@ -288,6 +288,54 @@ def test_a_superseded_row_with_another_figure_is_reported_as_a_conflict() -> Non
     assert result.counts["conflicts"] == 1
 
 
+def test_same_chart_duplicates_settle_on_the_numeric_line() -> None:
+    # WR-07: ":10" is later than ":9" on one chart (string order had it the other way).
+    rows = [
+        _row("week5.png:9", "Silverlake", "Northfield", 900_000),
+        _row("week5.png:10", "Silverlake", "Northfield", 1_000_000),
+    ]
+    result, _ = Harness().run(rows)
+    (claim,) = result.claims_by_telecast["100-abc"]
+    assert claim.id == f"smw:{SEASON}:week5.png:10"
+    (conflict,) = _review(result, REVIEW_CONFLICTS)
+    assert (conflict["kept_pointer"], conflict["other_pointer"]) == ("week5.png:10", "week5.png:9")
+
+
+def test_two_posts_of_one_air_date_settle_on_the_later_published_time() -> None:
+    tvrg = {"source": "tvrg", "chart_kind": "post", "rank": 738_000}
+    rows = [
+        # The slug of the later post sorts first; its published time decides.
+        _row(
+            "2022-10-a-final:1",
+            "Silverlake",
+            "Northfield",
+            1_000_000,
+            published="2022-10-04T16:00:00Z",
+            **tvrg,
+        ),
+        _row(
+            "2022-10-b-early:1",
+            "Silverlake",
+            "Northfield",
+            900_000,
+            published="2022-10-03T16:00:00Z",
+            **tvrg,
+        ),
+    ]
+    result, _ = Harness().run(rows)
+    (claim,) = result.claims_by_telecast["100-abc"]
+    assert claim.value == 1_000_000
+    assert claim.id == f"tvrg:{SEASON}:2022-10-a-final:1"
+
+
+def test_pointer_key_orders_lines_numerically() -> None:
+    from booth_review.build.second_sources import pointer_key
+
+    assert pointer_key("w.png:10") > pointer_key("w.png:9")
+    assert pointer_key("2022-10-post:2") == ("2022-10-post", 2)
+    assert pointer_key("no-line") == ("no-line", -1)
+
+
 # -- Matching --------------------------------------------------------------------------------
 
 

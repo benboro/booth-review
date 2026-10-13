@@ -28,7 +28,7 @@ a duplicate. Errors are count-only; nothing here fetches or executes anything.
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import UTC, date, datetime
 from html.parser import HTMLParser
 from urllib.parse import urlsplit
 
@@ -88,6 +88,7 @@ class _PostParser(HTMLParser):
         self.title_parts: list[str] = []
         self.canonical: str | None = None
         self.og_url: str | None = None
+        self.published: str | None = None
         self.tables: list[list[list[str]]] = []
         self._in_title = False
         self._body_depth = 0
@@ -103,6 +104,8 @@ class _PostParser(HTMLParser):
             self.canonical = self.canonical or attr.get("href")
         elif tag == "meta" and attr.get("property") == "og:url":
             self.og_url = self.og_url or attr.get("content")
+        elif tag == "abbr" and "published" in _classes(attr) and self.published is None:
+            self.published = attr.get("title")
         if tag == "div":
             if self._body_depth:
                 self._body_depth += 1
@@ -145,6 +148,20 @@ class _PostParser(HTMLParser):
             self.title_parts.append(data)
         if self._cell is not None:
             self._cell.append(data)
+
+
+def published_utc(stamp: str | None) -> str:
+    """An ISO timestamp with an offset as UTC "%Y-%m-%dT%H:%M:%SZ"; "" when absent,
+    unreadable or naive."""
+    if not stamp:
+        return ""
+    try:
+        moment = datetime.fromisoformat(stamp.strip())
+    except ValueError:
+        return ""
+    if moment.tzinfo is None:
+        return ""
+    return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def post_url_from_html(html: str) -> str | None:
@@ -191,6 +208,9 @@ def parse_post(html: str, *, url: str, season: int) -> ParsedPost:
     title = " ".join("".join(parser.title_parts).split())
     air_date: date | None = title_date(title)
     rank = air_date.toordinal() if air_date is not None else 0
+    # Two posts for one air date (a preliminary and an updated one) tie on rank;
+    # the later published post wins (D-08, WR-07).
+    published = published_utc(parser.published)
 
     table = _data_table(parser.tables)
     if table is None:
@@ -248,6 +268,7 @@ def parse_post(html: str, *, url: str, season: int) -> ParsedPost:
                 rank=rank,
                 source_url=url,
                 superseded=False,
+                published=published,
             )
         )
     return ParsedPost(rows=rows, ignored=ignored)

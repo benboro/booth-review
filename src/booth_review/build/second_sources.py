@@ -538,13 +538,26 @@ def _round_value(value: int | float) -> object:
     return int(value) if float(value).is_integer() else value
 
 
+def pointer_key(pointer: str) -> tuple[str, int]:
+    """("<chart_file or slug>", line) with the line as a number, so ":10" sorts after
+    ":9"; a pointer with no numeric line sorts first on its chart or post."""
+    head, _, line = pointer.rpartition(":")
+    return (head, int(line)) if line.isascii() and line.isdecimal() else (pointer, -1)
+
+
+def _settle_key(winner: _Winner) -> tuple[int, str, tuple[str, int]]:
+    """Latest wins (D-08): chart order or air date, then the post's published
+    time (two posts of one air date), then the numeric line (WR-07)."""
+    return winner.row.rank, winner.row.published, pointer_key(winner.row.pointer)
+
+
 def _settle(
     candidates: list[_Winner], conflicts: list[dict[str, object]]
 ) -> _Winner:  # candidates for one (source, telecast), non-empty
     weekly = [w for w in candidates if w.row.chart_kind != _WEEKLY_CLASS_EXCLUDED]
     pool = weekly or candidates
-    kept = max(pool, key=lambda w: (w.row.rank, w.row.pointer))
-    for other in sorted(candidates, key=lambda w: w.row.pointer):
+    kept = max(pool, key=_settle_key)
+    for other in sorted(candidates, key=lambda w: pointer_key(w.row.pointer)):
         if other is kept or other.viewers == kept.viewers:
             continue
         kind = (
