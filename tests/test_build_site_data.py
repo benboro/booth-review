@@ -613,6 +613,35 @@ def test_figure_source_follows_headline_source(
     assert payload["lookups"]["publishers"][columns["publisher"][2]] == "Sports Media Watch"
 
 
+def test_second_source_headline_drops_rr_record_links(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    # An RR record holding only a peak figure leaves the SMW average as the
+    # headline; the record link must not ship next to a non-RR figure.
+    smw_url = "https://www.sportsmediawatch.com/college-football-tv-ratings/2024-season/"
+    is_target = pl.col("telecast_id") == "3-net-c"
+    frame = small_tables.telecasts.with_columns(
+        pl.when(is_target)
+        .then(pl.lit("smw"))
+        .otherwise(pl.col("headline_source"))
+        .alias("headline_source"),
+        pl.when(is_target)
+        .then(pl.lit("Sports Media Watch"))
+        .otherwise(pl.col("headline_publisher"))
+        .alias("headline_publisher"),
+        pl.when(is_target)
+        .then(pl.lit(smw_url))
+        .otherwise(pl.col("headline_source_url"))
+        .alias("headline_source_url"),
+    )
+    assert frame.filter(is_target)["rr_record_urls"].list.len().item() > 0
+    payload = _site(dataclasses.replace(small_tables, telecasts=frame), build_reference)
+    columns = payload["telecasts"]
+    assert columns["figure_source"] == ["rr", "rr", "smw"]
+    assert columns["rr_urls"][2] == []
+    assert all(columns["rr_urls"][i] for i in (0, 1))
+
+
 def test_plotted_telecast_without_headline_source_is_a_build_error(
     small_tables: BuildTables, build_reference: Path
 ) -> None:
