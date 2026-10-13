@@ -65,6 +65,11 @@ from booth_review.sources.aa.collector import AaCollector
 from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.sources.cfbd.collector import ENDPOINTS, CfbdCollector
 from booth_review.sources.cfbd.parser import parse_games
+from booth_review.sources.espnpr.importer import (
+    LISTING_MESSAGE,
+    EspnPrImporter,
+    EspnPrImportResult,
+)
 from booth_review.sources.gapcollect import MAX_REQUESTS_DEFAULT, RequestBudget
 from booth_review.sources.known_disagreements import (
     KNOWN_FILE,
@@ -316,6 +321,14 @@ def build_parser() -> argparse.ArgumentParser:
     psmwimp.add_argument("--from", dest="from_dir", type=Path, default=None)
     psmwimp.add_argument("--force", action="store_true")
     psmwimp.add_argument("--no-commit", action="store_true")
+
+    pespnprimp = import_sub.add_parser(
+        "espnpr",
+        help="import hand-saved ESPN Press Room pages (04.19 D-12; the site is never fetched)",
+    )
+    pespnprimp.add_argument("--from", dest="from_dir", type=Path, default=None)
+    pespnprimp.add_argument("--force", action="store_true")
+    pespnprimp.add_argument("--no-commit", action="store_true")
 
     pknownimp = import_sub.add_parser(
         "known",
@@ -1362,6 +1375,64 @@ def _import_smw(args: argparse.Namespace) -> int:
         runtime.client.close()
 
 
+# -- import espnpr --------------------------------------------------------------------------
+
+
+def _print_espnpr_import_result(result: EspnPrImportResult) -> None:
+    """Counts and reasons only, never page text or file names."""
+    for season in result.seasons():
+        imported = [ref for ref in result.imported if ref.season == season]
+        by_kind = ", ".join(
+            f"{kind} {sum(ref.kind == kind for ref in imported)}"
+            for kind in ("commentators", "release", "ratings")
+        )
+        print(
+            f"espnpr {season}: imported {len(imported)} ({by_kind}), "
+            f"skipped_existing {sum(r.season == season for r in result.skipped_existing)}, "
+            f"changed_without_force {sum(r.season == season for r in result.changed_without_force)}"
+        )
+    reasons: dict[str, int] = {}
+    for item in result.skipped_invalid:
+        reasons[item.reason] = reasons.get(item.reason, 0) + 1
+    print(
+        f"imported {len(result.imported)}, skipped_existing {len(result.skipped_existing)}, "
+        f"skipped_invalid {len(result.skipped_invalid)}, "
+        f"changed_without_force {len(result.changed_without_force)}"
+    )
+    for reason, count in sorted(reasons.items()):
+        print(f"skipped {count}: {reason}")
+    if result.changed_without_force:
+        print("some pages differ from the vault copy; use --force to overwrite")
+    if result.superseded:
+        print(f"--force kept the newest save; {result.superseded} older save(s) ignored")
+    if result.listings:
+        print(f"skipped {result.listings} {LISTING_MESSAGE}")
+    if result.unrecognized:
+        print(f"ignored {result.unrecognized} HTML file(s) that aren't ESPN Press Room data pages")
+    for problem in result.problems:
+        print(f"problem: {problem}")
+
+
+def _import_espnpr(args: argparse.Namespace) -> int:
+    """04.19 D-12: ESPN Press Room is hand-save only (Disney Terms of Use ban
+    automated access), so no client is built here at all. Holds the vault lock
+    and commits once per season, touching only raw/espnpr/<season> and the
+    ledger, with a count-only message."""
+    paths = DataPaths.from_env()
+    vault = VaultRepo(paths.vault)
+    vault.check()
+    with vault.lock():
+        result = EspnPrImporter(paths).run(incoming_dir=args.from_dir, force=args.force)
+        _print_espnpr_import_result(result)
+        if not args.no_commit:
+            for season in result.seasons():
+                vault.commit_batch(
+                    batch_message("import", "espnpr", str(season), result.counts(season)),
+                    paths=[f"raw/espnpr/{season}", "ledger/requests.jsonl"],
+                )
+    return 4 if result.has_problems else 0
+
+
 # -- import known ---------------------------------------------------------------------------
 
 
@@ -2034,6 +2105,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return _import_506(args)
             if args.source == "smw":
                 return _import_smw(args)
+            if args.source == "espnpr":
+                return _import_espnpr(args)
             if args.source == "known":
                 return _import_known(args)
             raise AssertionError(f"unknown import source: {args.source!r}")

@@ -49,6 +49,8 @@ def _run_git(args: list[str], cwd: Path, env: dict[str, str]) -> subprocess.Comp
         "data/incoming/smw/2022/x.png",
         "data/incoming/smw/2022/transcription/pass-a/x.csv",
         "data/vault/raw/smw/2022/transcription/rows.csv",
+        "data/incoming/espnpr/x.html",
+        "data/vault/raw/espnpr/2026/commentators/wk-7.html",
         ".env",
     ],
 )
