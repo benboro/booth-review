@@ -21,7 +21,7 @@ from booth_review.sources.second_rows import ChartKind
 CHART_ORDER_COLUMNS = ("chart_file", "alt", "upload_month", "page_index", "chart_kind", "rank")
 
 _CANONICAL_RE = re.compile(
-    r"""<link[^>]*rel=["']canonical["'][^>]*href=["']https?://(?:www\.)?sportsmediawatch\.com"""
+    r"""<link[^>]*rel=["']canonical["'][^>]*href=["']https://(?:www\.)?sportsmediawatch\.com"""
     r"""/college-football-tv-ratings/(\d{4})-season/?["']""",
     re.IGNORECASE,
 )

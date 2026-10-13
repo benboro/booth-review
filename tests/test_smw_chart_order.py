@@ -29,6 +29,10 @@ def test_identify_season_page() -> None:
 def test_identify_rejects_missing_canonical_and_year_mismatch() -> None:
     assert identify_season_page("<title>2022 college football TV ratings</title>") is None
     assert identify_season_page(PAGE.replace("<title>2022", "<title>2021")) is None
+    # IN-02: a plain-http canonical link does not identify the page.
+    assert "https://www.sportsmediawatch.com" in PAGE
+    plain = PAGE.replace("https://www.sportsmediawatch.com", "http://www.sportsmediawatch.com")
+    assert identify_season_page(plain) is None
 
 
 def test_ranks_oldest_first_with_suffixes_mapped() -> None:
