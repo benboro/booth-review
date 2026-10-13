@@ -1393,6 +1393,20 @@ def _build(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
     print(f"crew gaps unpatched {outcome.counts.get('crew_gaps_unpatched', 0)}")
+    for gate in outcome.second_source_gates:
+        print(
+            f"second source {gate.source} {gate.season}: shared {gate.shared}, "
+            f"within 3% {gate.within_3pct}, logged {gate.logged}, "
+            f"unexplained {gate.unexplained}, loaded {gate.loaded}, "
+            f"held {gate.held_network}, {gate.status}"
+        )
+    if outcome.second_source_gates:
+        print(
+            f"second sources: {outcome.counts.get('second_source_loaded', 0)} loaded, "
+            f"{outcome.counts.get('second_source_held_network', 0)} held for network, "
+            f"{outcome.counts.get('second_source_unmatched', 0)} for review, "
+            f"{outcome.counts.get('second_source_withheld_seasons', 0)} season(s) withheld"
+        )
     if outcome.accepted:
         print("accepted new baseline")
     for reason in outcome.reasons:

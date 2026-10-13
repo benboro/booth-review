@@ -7,6 +7,10 @@ nothing here reads the real vault.
 
 Regenerating `_GOLDEN` (via `_compute_digests`) is allowed only with a recorded
 reason, since a changed digest means a changed CFB output.
+
+Regenerated in 04.19 Plan 07: viewership gains a source column, telecasts a
+headline_source column, coverage a headline_second_source column, and five
+empty review_second_source_* CSVs; no CFB figure changed.
 """
 
 from __future__ import annotations
@@ -61,6 +65,21 @@ _GOLDEN: dict[str, str] = {
     "interim/review_preliminary_headlines.csv": (
         "d064b0645618b7b48173f6257d6c01ed70c4ce06d3e7505d91d4d4c0e282d1ad"
     ),
+    "interim/review_second_source_agreement.csv": (
+        "d86c1c145f09f77478ff4bc47e840f2fa26d6e2284123c6fb3ead324b40e23a0"
+    ),
+    "interim/review_second_source_conflicts.csv": (
+        "4b773b5cd105f8ba481447cb016926840fc57b4d5dbc6e1b4dfc540f94d91e74"
+    ),
+    "interim/review_second_source_gate.csv": (
+        "7efdfa04f379e9f7d355e67953026314c9fe4a9bfb3abe26236069d1640c8296"
+    ),
+    "interim/review_second_source_network.csv": (
+        "ae7620474f2c88d2b9a3f6a97e2600d4c365b37364c6d99a6ae5990a6fc4bc3d"
+    ),
+    "interim/review_second_source_unmatched.csv": (
+        "c122bee9e37fe49de9dc5765aa52d0a3dee9dcf99fc395910912af11ef690a9b"
+    ),
     "interim/review_unmatched.csv": (
         "2c57f941658b36aaae41ac9bf514b262abcdf35940404938d1ae4139b9fb58b5"
     ),
@@ -84,10 +103,10 @@ _GOLDEN: dict[str, str] = {
         "b1a1dfe384aedae6bbe88a851792065fd4f60d94ef338faad6054abc5710b0d2"
     ),
     "processed/telecasts.parquet": (
-        "0d7da1fdc10a5f29cff75080ac7a8d1d41e3623de2e8b0dc2bfb7ef80a8ae305"
+        "b3323b5c516a72df6dd2cf34a37a2583df9df2aa32fa1bff282fc1cabd06483c"
     ),
     "processed/viewership.parquet": (
-        "42630ae4e1f6b1155edfa752bae5d5c2477ae3020e044bf6780d5f84330342b1"
+        "9f4c6a8905644a1dbb02beb9b49e8d71cbcba17955f7957d024097b1af1d1f0e"
     ),
 }
 
