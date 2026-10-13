@@ -20,6 +20,7 @@ RowKind = Literal[
     "multi_feed",
     "regional",
     "non_nielsen",
+    "non_game",
     "unknown_suffix",
 ]
 ChartKind = Literal["weekly", "postseason", "season_top", "post"]

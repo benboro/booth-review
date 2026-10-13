@@ -209,6 +209,7 @@ def _gate(result: SecondSourceResult) -> Any:
         ("multi_feed", "excluded_multi_feed"),
         ("regional", "excluded_regional"),
         ("non_nielsen", "excluded_non_nielsen"),
+        ("non_game", "excluded_non_game"),
         ("no_figure", "no_figure"),
     ],
 )

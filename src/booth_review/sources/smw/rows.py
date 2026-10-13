@@ -36,6 +36,8 @@ _VIEWERS_RE = re.compile(r"^(\d+(?:\.\d+)?)([MK])$")
 _DATE_RE = re.compile(r"^(\d{1,2})/(\d{1,2})$")
 _CHART_FILE_RE = re.compile(r"^[A-Za-z0-9._-]+\.png$")
 _SPACED_PLUS_RE = re.compile(r"\s\+\s")
+# A one-cell game shape: "A / B", "A @ B", "A at B", "A vs B".
+_GAME_SHAPE_RE = re.compile(r"/|\s(?:@|at|vs\.?)\s", re.IGNORECASE)
 
 
 def parse_viewers(printed: str) -> int | None:
@@ -72,8 +74,15 @@ def _is_regional(row: Mapping[str, str]) -> bool:
     return any(" or " in cell.lower() or cell.count("/") > 1 for cell in (away, home))
 
 
+def _is_non_game(row: Mapping[str, str]) -> bool:
+    """A broadcast label spanning the row (a studio show, an awards telecast): text in
+    away, an empty home cell, and no game shape in the text."""
+    away, home = row.get("away", "").strip(), row.get("home", "").strip()
+    return home == "" and away != "" and _GAME_SHAPE_RE.search(away) is None
+
+
 def classify_row(row: Mapping[str, str]) -> RowKind:
-    """Label a row; precedence: simulcast, multi_feed, regional, non_nielsen,
+    """Label a row; precedence: simulcast, multi_feed, regional, non_game, non_nielsen,
     no_figure, unknown_suffix, figure."""
     network = row.get("network", "")
     # A simulcast prints two networks joined by "&", by a comma ("NET1, NET2") or by a
@@ -84,6 +93,8 @@ def classify_row(row: Mapping[str, str]) -> RowKind:
         return "multi_feed"
     if _is_regional(row):
         return "regional"
+    if _is_non_game(row):
+        return "non_game"
     if "not nielsen" in row.get("note", "").lower():
         return "non_nielsen"
     viewers = row.get("viewers", "").strip()

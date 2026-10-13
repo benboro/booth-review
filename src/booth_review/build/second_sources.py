@@ -89,6 +89,7 @@ REVIEW_GATE_COLUMNS = (
     "excluded_multi_feed",
     "excluded_regional",
     "excluded_non_nielsen",
+    "excluded_non_game",
     "no_figure",
     "shared",
     "within_3pct",
@@ -125,6 +126,7 @@ _EXCLUDED_KINDS = {
     "multi_feed": "excluded_multi_feed",
     "regional": "excluded_regional",
     "non_nielsen": "excluded_non_nielsen",
+    "non_game": "excluded_non_game",
     "no_figure": "no_figure",
 }
 _WEEKLY_CLASS_EXCLUDED = "season_top"
@@ -278,6 +280,7 @@ class GateStatus:
     excluded_multi_feed: int
     excluded_regional: int
     excluded_non_nielsen: int
+    excluded_non_game: int
     no_figure: int
     shared: int
     within_3pct: int
@@ -605,6 +608,7 @@ def apply_second_sources(
                 excluded_multi_feed=count["excluded_multi_feed"],
                 excluded_regional=count["excluded_regional"],
                 excluded_non_nielsen=count["excluded_non_nielsen"],
+                excluded_non_game=count["excluded_non_game"],
                 no_figure=count["no_figure"],
                 shared=shared,
                 within_3pct=within,
