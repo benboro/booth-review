@@ -307,7 +307,7 @@ def render_coverage(site: SiteData) -> str:
         '<th scope="col">Matched to a game</th>'
         '<th scope="col">Matched with crew</th>'
         '<th scope="col">Of which hand-confirmed</th>'
-        '<th scope="col">Of which ESPN Press Room backup</th>'
+        '<th scope="col">Of which ESPN backup</th>'
         '<th scope="col">Match rate</th>'
         '<th scope="col">Excitement present</th>'
         '<th scope="col">Spread</th>'

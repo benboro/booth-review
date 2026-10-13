@@ -43,9 +43,10 @@ NFL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "contract" / "nfl-data.fixture.
 # matched_crew_backup 1 on its 2026 coverage rows (reverting those gives the Plan 41 site-data
 # digest), coverage.html gained the "Of which ESPN Press Room backup" column (dropping it from
 # the reverted build gives the Plan 41 digest), and the index moves only through its
-# site-data cache-bust hash.
+# site-data cache-bust hash. Coverage re-pinned at Plan 43 (user decision): the column header
+# shortened to "Of which ESPN backup" (restoring the old header text gives the Plan 49 digest).
 _SITE_DATA_SHA256 = "b93ca1c096fef2da4c75c30864da9f06084b8ddea671253ef0dae3d14ce4ce78"
-_COVERAGE_SHA256 = "6f8931204d2b4497bf31bf85b817cfe5a75d719dfa705bcc65c09af1ce46d9e1"
+_COVERAGE_SHA256 = "f3cf1022cdd2bacc514a00971310411288b395acd621ea3f880d12731ed0a4e9"
 _INDEX_PRE_PHASE_SHA256 = "781de92244af2d9f6b4ce99efc522f41f10357127208ff7a9451aecbba145b1a"
 
 _CANARY = "invented-nfl-canary-key-0001"

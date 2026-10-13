@@ -232,7 +232,7 @@ def test_render_coverage_has_espn_press_room_backup_column() -> None:
 
     assert (
         '<th scope="col">Of which hand-confirmed</th>'
-        '<th scope="col">Of which ESPN Press Room backup</th>'
+        '<th scope="col">Of which ESPN backup</th>'
         '<th scope="col">Match rate</th>' in result
     )
     # Season, rated, matched to a game, matched with crew, hand-confirmed, backup.
