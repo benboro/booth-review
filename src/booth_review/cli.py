@@ -987,13 +987,20 @@ def _collect_second(args: argparse.Namespace, source: PolicySource) -> int:
 def _second_source_gaps(
     paths: DataPaths, seasons: Sequence[int]
 ) -> tuple[dict[int, set[date]], dict[date, set[int]]]:
-    """(gap dates per season, regular-season week per date), offline (D-11)."""
-    from booth_review.build.gaps import regular_weeks_by_date, remaining_gap_dates
+    """(gap dates per season, regular-season week per date), offline (D-11).
+
+    Only dates with an unrated telecast on a network TVRG and AA list count."""
+    from booth_review.build.gaps import (
+        LISTED_GAP_NETWORKS,
+        regular_weeks_by_date,
+        remaining_gap_dates,
+    )
     from booth_review.build.tables import assemble_tables
 
     # Every season, as `booth-review build` assembles them (see _earliest_gap_month).
     tables = assemble_tables(paths, reference_dir())
-    return remaining_gap_dates(tables, seasons), regular_weeks_by_date(tables.games, seasons)
+    gaps = remaining_gap_dates(tables, seasons, networks=LISTED_GAP_NETWORKS)
+    return gaps, regular_weeks_by_date(tables.games, seasons)
 
 
 def _robots_guard(source: PolicySource) -> Callable[[str, FetchResponse], None]:

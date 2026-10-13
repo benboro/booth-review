@@ -16,15 +16,26 @@ from booth_review.build.tables import BuildTables
 
 GAP_SEASONS: range = range(2021, 2025)
 
+# The networks whose games TVRG's nightly lists and AA's ratings posts carry.
+# TVRG's full 2021 pass filled no gap on any other network (ESPN+, CBSSN, the
+# conference networks, ESPNU), so the data pass targets only these (user, 04.19-35).
+LISTED_GAP_NETWORKS: frozenset[str] = frozenset(
+    {"abc", "cbs", "nbc", "fox", "espn", "espn2", "fs1"}
+)
+
 
 def remaining_gap_dates(
-    tables: BuildTables, seasons: Collection[int] = GAP_SEASONS
+    tables: BuildTables,
+    seasons: Collection[int] = GAP_SEASONS,
+    *,
+    networks: Collection[str] | None = None,
 ) -> dict[int, set[date]]:
     """Per season, the ET dates of in-scope main-feed telecasts still unrated.
 
     A telecast counts when its feed is "main", it is not rated, it has a
-    network, and its game is in the games frame (the build's scope). Every
-    requested season gets a key, empty when it has no gap left.
+    network (one of `networks` when given), and its game is in the games
+    frame (the build's scope). Every requested season gets a key, empty when
+    it has no gap left.
     """
     wanted = sorted(set(seasons))
     result: dict[int, set[date]] = {season: set() for season in wanted}
@@ -36,8 +47,10 @@ def remaining_gap_dates(
         & pl.col("season").is_in(wanted)
         & pl.col("game_id").is_in(scoped_ids.implode())
         & pl.col("date_et").is_not_null()
-    ).select("season", "date_et")
-    for season, day in gaps.iter_rows():
+    )
+    if networks is not None:
+        gaps = gaps.filter(pl.col("network_id").is_in(sorted(set(networks))))
+    for season, day in gaps.select("season", "date_et").iter_rows():
         result[int(season)].add(day)
     return result
 

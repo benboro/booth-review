@@ -8,7 +8,11 @@ from typing import cast
 
 import polars as pl
 
-from booth_review.build.gaps import earliest_gap_month, remaining_gap_dates
+from booth_review.build.gaps import (
+    LISTED_GAP_NETWORKS,
+    earliest_gap_month,
+    remaining_gap_dates,
+)
 from booth_review.build.tables import BuildTables
 
 
@@ -52,6 +56,33 @@ def test_remaining_gap_dates_keeps_only_main_unrated_in_scope_dates() -> None:
 
 def test_remaining_gap_dates_honors_a_season_subset() -> None:
     assert remaining_gap_dates(_tables(), seasons=[2024]) == {2024: {date(2024, 11, 30)}}
+
+
+def test_remaining_gap_dates_network_filter_keeps_listed_networks_only() -> None:
+    tables = _tables()
+    extra = pl.DataFrame(
+        [
+            (1, 2022, date(2022, 9, 10), "espn-plus", "main", False),  # streaming: dropped
+            (2, 2022, date(2022, 9, 17), "sec-network", "main", False),  # conference: dropped
+            (3, 2022, date(2022, 9, 24), "fs1", "main", False),  # listed: kept
+        ],
+        schema=tables.telecasts.schema,
+        orient="row",
+    )
+    telecasts = pl.concat([tables.telecasts, extra])
+    filtered = cast(BuildTables, SimpleNamespace(games=tables.games, telecasts=telecasts))
+    assert remaining_gap_dates(filtered, networks=LISTED_GAP_NETWORKS) == {
+        2021: {date(2021, 9, 4)},
+        2022: {date(2022, 9, 24)},
+        2023: set(),
+        2024: {date(2024, 11, 30)},
+    }
+    # Without the filter every unrated network counts.
+    assert remaining_gap_dates(filtered)[2022] == {
+        date(2022, 9, 10),
+        date(2022, 9, 17),
+        date(2022, 9, 24),
+    }
 
 
 def test_earliest_gap_month() -> None:
