@@ -310,7 +310,10 @@ def test_render_methodology_resolves_md_links_against_docs(
 # Re-pinned at 04.19 Plan 09: cause list item 3 reworded (D-21), the only change.
 # Re-pinned at 04.19 Plan 30: Sports Media Watch source order, gate and credit text
 # (methodology) and the 2021-24 counts (known gaps); no NFL text changed.
-_METHODOLOGY_FLAG_OFF_SHA256 = "42a7628b11d9ef760fc80b028dd6e9e4600426a6342e2e16c7daf6ce692b5d98"
+# Re-pinned at 04.19 Plan 36: The TV Ratings Guide and Awful Announcing route, gate
+# and credit text (methodology) and the Wave B 2021-24 counts (known gaps); no NFL
+# text changed.
+_METHODOLOGY_FLAG_OFF_SHA256 = "84b158f1e57a861917ae764cf3b9e05cbb76e472f4260e4ed3609c912af47fbd"
 
 _NFL_ANCHORS = (
     "nfl-special-games",
