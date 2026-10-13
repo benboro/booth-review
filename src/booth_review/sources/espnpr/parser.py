@@ -3,7 +3,9 @@
 Pages come only from `booth-review import espnpr` (hand-saved; nothing here
 fetches, renders or executes anything). The structure was recorded from saved
 pages in 04.19-37. Text is read from the post body (``div.brxe-post-content``)
-with the stdlib HTML parser; entities are unescaped, U+00A0 is a space and
+and, after it, any ``div.release__table-container`` section (the 2026 release
+template moved the schedule table there; the 2024 pages leave it empty) with
+the stdlib HTML parser; entities are unescaped, U+00A0 is a space and
 whitespace is collapsed.
 
 **Booths** (commentators page and weekly release): only the schedule table is
@@ -106,12 +108,17 @@ _LIST_TAGS = frozenset({"ul", "ol"})
 _SKIP_TAGS = frozenset({"script", "style", "noscript", "template"})
 _BOLD_TAGS = frozenset({"strong", "b"})
 _CONTENT_CLASS = "brxe-post-content"
+# The 2026 release template's own section for the schedule table, after the post body.
+_TABLE_CONTAINER_CLASS = "release__table-container"
 
 # -- matchups and crews --
 _ROW_DATE_RE = re.compile(
     r"^(?:[A-Za-z]{3,9}\.?,?\s+)?(?P<mon>[A-Za-z]{3,9})\.?\s+(?P<day>\d{1,2})\b"
 )
 _RANK_PREFIX_RE = re.compile(r"^(?:(?:T-)?No\.\s*\d{1,2}|#\d{1,2})\s+", re.IGNORECASE)
+# A neutral-site location printed after the matchup, "(City, Region)". A school's
+# own parenthetical ("Miami (Ohio)", "(Pa.)") has no comma, so it never matches.
+_LOCATION_RE = re.compile(r"\s*\([^()]*,[^()]*\)$")
 _EVENT_PREFIX_RE = re.compile(r"^[^:]{1,80}?(?::|\s[\u2013\u2014-])\s+(?=\S)")
 _AT_RE = re.compile(r"\s+at\s+")
 _VS_RE = re.compile(r"\s+vs\.?\s+", re.IGNORECASE)
@@ -202,7 +209,8 @@ def _clean(text: str) -> str:
 
 
 class _ContentParser(HTMLParser):
-    """The first post body's text blocks and tables, in document order."""
+    """The first post body's text blocks and tables, then any release table
+    container's, in document order."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -237,9 +245,11 @@ class _ContentParser(HTMLParser):
         if tag == "div":
             if self._depth:
                 self._depth += 1
-            elif not self._done:
+            else:
                 classes = (dict(attrs).get("class") or "").split()
-                if _CONTENT_CLASS in classes:
+                if (_CONTENT_CLASS in classes and not self._done) or (
+                    _TABLE_CONTAINER_CLASS in classes
+                ):
                     self._depth = 1
             return
         if not self._depth:
@@ -347,9 +357,11 @@ def _team(text: str) -> str:
 
 
 def _split_game(text: str) -> tuple[str, str] | None:
-    """(away, home) from ``<away> at <home>`` (or ``vs.``), event prefix and rank
-    marks stripped; None when the text doesn't split into exactly two teams."""
+    """(away, home) from ``<away> at <home>`` (or ``vs.``), event prefix, a
+    trailing ``(City, Region)`` location and rank marks stripped; None when the
+    text doesn't split into exactly two teams."""
     game = text.strip().rstrip("*\u2020 ").strip()
+    game = _LOCATION_RE.sub("", game).rstrip("*\u2020 ").strip()
     for candidate in (_EVENT_PREFIX_RE.sub("", game, count=1), game):
         for separator in (_AT_RE, _VS_RE):
             parts = separator.split(candidate)
@@ -408,6 +420,21 @@ def _join_networks(lines: list[str]) -> str:
         else:
             joined += "/" + line
     return joined.strip(" /")
+
+
+def _matchup(lines: list[str]) -> tuple[tuple[str, str] | None, list[str]]:
+    """((away, home), the crew lines after it). The matchup is the first line;
+    a neutral-site event row wraps it over two (an event heading, or a break
+    mid-game), so when the first line alone isn't a game the first two joined
+    are tried."""
+    if not lines:
+        return None, []
+    teams = _split_game(lines[0])
+    if teams is None and len(lines) > 1:
+        joined = _split_game(f"{lines[0]} {lines[1]}")
+        if joined is not None:
+            return joined, lines[2:]
+    return teams, lines[1:]
 
 
 def _tv_crew(lines: list[str]) -> tuple[str | None, int]:
@@ -481,9 +508,9 @@ def parse_booths(html: str, *, url: str, season: int) -> ParsedBooths:
             skipped += 1
             radio_dropped += 1 if len(game_lines) > 1 else 0
             continue
-        crew_line, radio = _tv_crew(game_lines[1:])
+        teams, crew_lines = _matchup(game_lines)
+        crew_line, radio = _tv_crew(crew_lines)
         radio_dropped += radio
-        teams = _split_game(game_lines[0]) if game_lines else None
         names = _names(crew_line) if crew_line is not None else None
         if current is None or teams is None or names is None:
             skipped += 1

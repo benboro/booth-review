@@ -170,6 +170,33 @@ def test_rows_without_a_clean_booth_are_skipped_and_counted() -> None:
     assert parsed.radio_dropped == 1
 
 
+def test_an_event_matchup_wrapped_over_two_lines_with_a_location() -> None:
+    # Neutral-site event rows wrap the bold matchup over two lines, either as
+    # an event heading then the game, or mid-game, and end with "(City, Region)".
+    rows = """
+<tr><td><strong>Sat, Aug 29</strong></td><td>Noon</td>
+<td><strong>Harbor Classic:<br>Hilltop vs. Lakeshore (Rivertown, Isle)</strong>
+<br>Morgan Pike, Avery Lane, Jules Marten</td>
+<td>ESPN</td></tr>
+<tr><td>&nbsp;</td><td>3 p.m.</td>
+<td><strong>Bay Kickoff: Eastbrook vs.<br>Miami (Ohio) (Portside, Fla.)</strong>
+<br>Kit Barrow, Sam Ellery</td>
+<td>ESPN2</td></tr>"""
+    parsed = parse_booths(
+        _release_page("synthetic-schedule", _schedule(rows)),
+        url="https://espnpressroom.com/press-release/synthetic-schedule/",
+        season=2026,
+    )
+    first, second = parsed.booths
+    assert (first.away_raw, first.home_raw) == ("Hilltop", "Lakeshore")
+    assert first.tv_names == ("Morgan Pike", "Avery Lane", "Jules Marten")
+    # A school's own parenthetical has no comma and stays.
+    assert (second.away_raw, second.home_raw) == ("Eastbrook", "Miami (Ohio)")
+    assert second.tv_names == ("Kit Barrow", "Sam Ellery")
+    assert second.pointer == "synthetic-schedule:2"
+    assert parsed.skipped == 0
+
+
 def test_a_missing_first_date_skips_until_a_date_is_printed() -> None:
     rows = """
 <tr><td>&nbsp;</td><td>Noon</td>
@@ -198,6 +225,45 @@ def test_2026_style_header_and_where_to_watch_also_parse() -> None:
     )
     assert booth.network_raw == "ESPN2"
     assert booth.kickoff == "8 p.m."
+
+
+def _release_page_2026(slug: str, prose: str, container: str) -> str:
+    """The 2026 release template: the schedule table sits in its own
+    `release__table-container` section after the post body, not inside it."""
+    return f"""<!DOCTYPE html><html><head><title>Synthetic - ESPN Press Room</title>
+<link rel="canonical" href="https://espnpressroom.com/press-release/{slug}/" />
+<meta property="article:published_time" content="2026-10-05T13:00:00-04:00" />
+</head><body class="press-release-template-default single single-press-release">
+<main><section class="brxe-section"><div class="brxe-container">
+<article class="brxe-block"><div class="brxe-post-content">{prose}</div></article>
+</div></section>
+<section class="brxe-section all-posts-section">
+<div class="brxe-container release__table-container"><div class="brxe-div">
+<div class="brxe-text">{container}</div></div></div></section></main></body></html>"""
+
+
+def test_2026_release_reads_the_table_container_after_the_post_body() -> None:
+    rows = """
+<tr><td><strong>Sat, Oct 10</strong></td><td>Noon</td>
+<td><strong>No. 9 Hilltop at Lakeshore</strong><br>Morgan Pike, Avery Lane, Jules Marten</td>
+<td>ESPN</td></tr>"""
+    prose = "<p>Synthetic prose: <strong>Morgan Pike</strong> calls the opener.</p>"
+    html = _release_page_2026("synthetic-2026-week-6", prose, _schedule(rows, fourth="Network"))
+    (booth,) = _booths(html, slug="synthetic-2026-week-6", season=2026)
+    assert (booth.away_raw, booth.home_raw) == ("Hilltop", "Lakeshore")
+    assert booth.date_et == date(2026, 10, 10)
+    assert booth.network_raw == "ESPN"
+    assert booth.tv_names == ("Morgan Pike", "Avery Lane", "Jules Marten")
+    assert booth.pointer == "synthetic-2026-week-6:1"
+
+
+def test_an_empty_table_container_leaves_a_2024_release_unchanged() -> None:
+    empty = '<div class="brxe-container release__table-container"></div>'
+    with_container = _RELEASE.replace("</main>", f"{empty}</main>")
+    assert with_container != _RELEASE
+    before = parse_booths(_RELEASE, url=_RELEASE_URL, season=2022)
+    after = parse_booths(with_container, url=_RELEASE_URL, season=2022)
+    assert after == before
 
 
 def test_booth_parser_refuses_off_host_and_non_schedule_pages() -> None:
