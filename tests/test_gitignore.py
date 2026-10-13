@@ -46,6 +46,9 @@ def _run_git(args: list[str], cwd: Path, env: dict[str, str]) -> subprocess.Comp
         "data/raw/x.json",
         "data/interim/x.csv",
         "data/processed/unlisted.csv",
+        "data/incoming/smw/2022/x.png",
+        "data/incoming/smw/2022/transcription/pass-a/x.csv",
+        "data/vault/raw/smw/2022/transcription/rows.csv",
         ".env",
     ],
 )
