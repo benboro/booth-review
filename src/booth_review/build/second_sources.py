@@ -1,7 +1,7 @@
 """Second viewership sources (04.19 D-05..D-09, D-21).
 
-A second-source row (Sports Media Watch first; TV Ratings Guide, Awful
-Announcing and ESPN Press Room later) is matched to an EXISTING main-feed
+A second-source row (Sports Media Watch, The TV Ratings Guide and Awful
+Announcing; ESPN Press Room later) is matched to an EXISTING main-feed
 telecast through the team crosswalk's candidate sets, held when its network
 disagrees with ours, settled against duplicates and season-top rows, and gated
 per (source, season) against Ratings Reference's headline figures. Nothing here
@@ -35,6 +35,13 @@ from booth_review.resolve.networks import NetworkTable, primary_network
 from booth_review.resolve.overrides import GameOverride
 from booth_review.resolve.teams import TeamResolver
 from booth_review.sources.cfbd.parser import CfbdGame
+from booth_review.sources.known_disagreements import (
+    POST_SEASONS,
+    PostSource,
+    known_path,
+    load_known,
+    read_cached_posts,
+)
 from booth_review.sources.ratingsref.parser import RRClaim, RRRecord
 from booth_review.sources.second_rows import (
     SECOND_SOURCE_PUBLISHERS,
@@ -91,6 +98,7 @@ REVIEW_GATE_COLUMNS = (
     "excluded_non_nielsen",
     "excluded_non_game",
     "no_figure",
+    "unlinked_prose",
     "shared",
     "within_3pct",
     "logged",
@@ -130,6 +138,11 @@ _EXCLUDED_KINDS = {
     "no_figure": "no_figure",
 }
 _WEEKLY_CLASS_EXCLUDED = "season_top"
+# Sources whose needs_review rows are counted on the gate instead of listed for
+# review: AA prose mentions the parser can't tie to one game (season or window
+# averages, other-season comparisons, multi-game sentences, non-game shows).
+# They never carry a figure, so listing them asks the user nothing (user, 04.19-35).
+COUNTED_REVIEW_SOURCES: frozenset[str] = frozenset({"aa"})
 
 SourceSeason = tuple[str, int]
 
@@ -244,9 +257,42 @@ def _load_smw(paths: DataPaths, seasons: Sequence[int] | None) -> _LoaderResult:
     return rows, known
 
 
-# Waves B and C append the tvrg, aa and espnpr loaders here.
+def _load_posts(
+    source: PostSource, paths: DataPaths, seasons: Sequence[int] | None
+) -> _LoaderResult:
+    """Every cached post of `source` for 2021-2024 (raw/<source>/<season>/posts/*.html),
+    parsed into rows, plus that season's known_disagreements.csv (D-02, D-10)."""
+    rows: list[SecondSourceRow] = []
+    known: dict[SourceSeason, frozenset[str]] = {}
+    root = paths.raw / source
+    if not root.is_dir():
+        return rows, known
+    for folder in sorted(root.iterdir()):
+        season = _parse_ascii_int(folder.name)
+        if season is None or season not in POST_SEASONS:
+            continue
+        if seasons is not None and season not in seasons:
+            continue
+        rows.extend(read_cached_posts(paths, source, season).rows)
+        known_file = known_path(paths, source, season)
+        if known_file.is_file():
+            known[(source, season)] = load_known(known_file)
+    return rows, known
+
+
+def _load_tvrg(paths: DataPaths, seasons: Sequence[int] | None) -> _LoaderResult:
+    return _load_posts("tvrg", paths, seasons)
+
+
+def _load_aa(paths: DataPaths, seasons: Sequence[int] | None) -> _LoaderResult:
+    return _load_posts("aa", paths, seasons)
+
+
+# Wave C appends the espnpr loader here.
 SECOND_SOURCE_LOADERS: tuple[Callable[[DataPaths, Sequence[int] | None], _LoaderResult], ...] = (
     _load_smw,
+    _load_tvrg,
+    _load_aa,
 )
 
 
@@ -282,6 +328,7 @@ class GateStatus:
     excluded_non_nielsen: int
     excluded_non_game: int
     no_figure: int
+    unlinked_prose: int
     shared: int
     within_3pct: int
     logged: int
@@ -448,8 +495,11 @@ def apply_second_sources(
         if row.kind in _EXCLUDED_KINDS:
             count[_EXCLUDED_KINDS[row.kind]] += 1
             continue
-        if row.kind == "unknown_suffix":
-            unmatched_rows.append(_unmatched(row, "", "unknown_suffix"))
+        if row.kind == "needs_review" and row.source in COUNTED_REVIEW_SOURCES:
+            count["unlinked_prose"] += 1
+            continue
+        if row.kind in ("unknown_suffix", "needs_review"):
+            unmatched_rows.append(_unmatched(row, "", row.kind))
             count["unmatched"] += 1
             continue
         if row.viewers is None or not is_usable_value(float(row.viewers)):
@@ -610,6 +660,7 @@ def apply_second_sources(
                 excluded_non_nielsen=count["excluded_non_nielsen"],
                 excluded_non_game=count["excluded_non_game"],
                 no_figure=count["no_figure"],
+                unlinked_prose=count["unlinked_prose"],
                 shared=shared,
                 within_3pct=within,
                 logged=logged,

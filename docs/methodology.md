@@ -386,8 +386,17 @@ project also uses the per-game figures that
 [Sports Media Watch](https://www.sportsmediawatch.com/college-football-tv-ratings/)
 printed in its season ratings charts. The charts are images. Their pages are
 saved by hand and each chart is transcribed twice, independently, with no
-automated reading (see `docs/sources/smw.md`). The TV Ratings Guide, Awful
-Announcing and ESPN Press Room are planned for the gaps that remain.
+automated reading (see `docs/sources/smw.md`). For the games still unrated
+on ABC, CBS, NBC, FOX, ESPN, ESPN2 or FS1, a collector reads
+[The TV Ratings Guide](https://www.thetvratingsguide.com)'s daily ratings
+posts, whose tables list college games by name, and takes each game row's
+viewers (see `docs/sources/tvrg.md`). It also reads
+[Awful Announcing](https://awfulannouncing.com)'s college football ratings
+posts, which are prose, and takes a figure only from a sentence that ties it
+to exactly one named game (see `docs/sources/aa.md`). Both are fetched only
+for dates that still have unrated games, after a fresh check of each site's
+robots.txt and terms. ESPN
+Press Room is planned for the gaps that remain.
 
 Each telecast's headline figure comes from one source, so a dot never mixes
 two sources' numbers: the highest-ranked source with a usable figure, in the
@@ -401,7 +410,9 @@ source. If the source really prints a different figure, the game is logged as
 a known disagreement and Ratings Reference's figure stays the headline. A
 season with more than two such disagreements loads only by a recorded decision.
 All four Sports Media Watch seasons passed; 2024 had three logged disagreements
-and loads by that decision.
+and loads by that decision. The TV Ratings Guide passed in all four seasons
+and Awful Announcing in 2023, with no disagreements; Awful Announcing's 2024
+posts share no game with Ratings Reference.
 
 Only per-game figures are used. A simulcast total (one figure for two
 networks), a regional-window total (such as a Big Ten Network window that
@@ -414,7 +425,8 @@ counts, the coverage audit, and any future model built on this data.
 
 Each second-source figure is credited to its publisher by name, linked to the
 page it came from. For Sports Media Watch that is the season's ratings page,
-because its charts have no page of their own. The detail panel also says the
+because its charts have no page of their own; for The TV Ratings Guide and
+Awful Announcing it is the exact post. The detail panel also says the
 figure is not listed on Ratings Reference. These sources are used without
 asking first, and a source's figures come off the site if it objects.
 

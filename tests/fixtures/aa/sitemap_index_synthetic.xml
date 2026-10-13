@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Invented sitemap index; the shape follows a Yoast index. -->
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+	<sitemap>
+		<loc>https://awfulannouncing.com/post-sitemap.xml</loc>
+		<lastmod>2026-10-01T12:00:00+00:00</lastmod>
+	</sitemap>
+	<sitemap>
+		<loc>https://awfulannouncing.com/post-sitemap2.xml</loc>
+		<lastmod>-0001-11-30T00:00:00+00:00</lastmod>
+	</sitemap>
+	<sitemap>
+		<loc>https://awfulannouncing.com/post-sitemap3.xml</loc>
+		<lastmod>2022-05-10T12:00:00+00:00</lastmod>
+	</sitemap>
+	<sitemap>
+		<loc>https://awfulannouncing.com/post-sitemap4.xml</loc>
+		<lastmod>2022-09-20T12:00:00+00:00</lastmod>
+	</sitemap>
+	<sitemap>
+		<loc>https://awfulannouncing.com/post-sitemap5.xml</loc>
+		<lastmod>2022-12-20T12:00:00+00:00</lastmod>
+	</sitemap>
+	<sitemap>
+		<loc>https://awfulannouncing.com/post-sitemap6.xml</loc>
+		<lastmod>2023-03-01T12:00:00+00:00</lastmod>
+	</sitemap>
+	<sitemap>
+		<loc>https://awfulannouncing.com/attachment-sitemap.xml</loc>
+		<lastmod>2022-11-01T12:00:00+00:00</lastmod>
+	</sitemap>
+	<sitemap>
+		<loc>https://example.com/post-sitemap7.xml</loc>
+		<lastmod>2022-11-01T12:00:00+00:00</lastmod>
+	</sitemap>
+</sitemapindex>

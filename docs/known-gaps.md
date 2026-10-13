@@ -6,7 +6,7 @@ uneven. It exists so a reader of the chart understands what "every rated
 telecast" actually means before comparing two seasons, two networks, or two
 announcers. No specific game, crew, or figure is named here — see
 `docs/sources/506.md`, `docs/sources/ratings-reference.md`,
-`docs/sources/smw.md`, and `docs/sources/cfbd.md` for source-level detail, and `docs/site-data.md` for
+`docs/sources/smw.md`, `docs/sources/tvrg.md`, `docs/sources/aa.md`, and `docs/sources/cfbd.md` for source-level detail, and `docs/site-data.md` for
 how these tables reach the chart.
 
 ## Scope
@@ -14,8 +14,8 @@ how these tables reach the chart.
 The chart covers games from the 2014 season onward where at least one team
 was FBS that season (JOIN-07) — a rated FBS-vs-FCS opener counts, two
 non-FBS teams playing each other does not. Only **rated** telecasts (a
-telecast with a Ratings Reference viewership figure or, for 2021–2024, a
-Sports Media Watch one) appear as dots; unrated games are not shown in v1, though the data behind
+telecast with a Ratings Reference viewership figure or, for 2021–2024, one
+from a second source such as Sports Media Watch) appear as dots; unrated games are not shown in v1, though the data behind
 that gap is being kept for a possible future assignment view. 2013 is out of
 scope: it needs its own excitement computation this project doesn't attempt
 in v1 (CFBD's win-probability data used for excitement starts in 2014).
@@ -42,12 +42,21 @@ Ratings Reference's within 3% on the games both cover (see
 [Sources and credits](methodology.md#sources-and-credits)). Where both have a
 figure, Ratings Reference's stays the headline.
 
-| Season | Ratings Reference records | Rated now | Headline from Sports Media Watch | Main telecasts | Still unrated |
-|---|---|---|---|---|---|
-| 2021 | 154 | 363 | 209 | 882 | 519 |
-| 2022 | 113 | 381 | 268 | 893 | 512 |
-| 2023 | 148 | 435 | 287 | 907 | 472 |
-| 2024 | 173 | 470 | 298 | 920 | 450 |
+The TV Ratings Guide's daily ratings posts and Awful Announcing's ratings
+posts were then collected for the dates that still had an unrated game on ABC,
+CBS, NBC, FOX, ESPN, ESPN2 or FS1 (see `docs/sources/tvrg.md` and
+`docs/sources/aa.md`). Every season that shares games with Ratings Reference
+passed the same 3% check with no disagreement (Awful Announcing's 2024 posts
+share none). Most of their game figures repeat a game Ratings Reference or
+Sports Media Watch already rated: The TV Ratings Guide adds 16 headlines, and
+Awful Announcing none.
+
+| Season | Ratings Reference records | Rated now | Headline from Sports Media Watch | Headline from The TV Ratings Guide | Main telecasts | Still unrated |
+|---|---|---|---|---|---|---|
+| 2021 | 154 | 363 | 209 | 0 | 882 | 519 |
+| 2022 | 113 | 384 | 268 | 3 | 893 | 509 |
+| 2023 | 148 | 448 | 287 | 13 | 907 | 459 |
+| 2024 | 173 | 470 | 298 | 0 | 920 | 450 |
 
 One 2024 telecast's Ratings Reference record has only a peak figure, which is
 never a headline, so its Sports Media Watch figure is the headline instead.
@@ -63,18 +72,19 @@ What stays unrated, and why:
   such as conference networks and streaming services (468, 471, 450 and 424
   games in 2021–2024). In 2024 the charts also note that several of those
   networks are not Nielsen-rated.
-- The rest (51, 41, 22 and 25 games) aired on networks that are usually rated,
-  but neither Ratings Reference nor a Sports Media Watch chart has a usable
-  figure. Either the game is not on any chart, or its chart row prints "n/a" or
-  only a total this project leaves out (a simulcast, regional-window or
-  multi-feed MegaCast total).
+- The rest (51, 38, 9 and 25 games) aired on networks that are usually rated,
+  but no source has a usable figure. Either the game is on no Sports Media
+  Watch chart and in no The TV Ratings Guide or Awful Announcing post, or the
+  source prints "n/a" or only a total this project leaves out (a simulcast,
+  regional-window or multi-feed MegaCast total).
 - One 2024 telecast has no resolved network, so it is counted only in the
   build summary.
-- No chart row is held for a network disagreement or waiting on review.
+- No second-source row is held for a network disagreement or waiting on
+  review.
 
-The TV Ratings Guide, Awful Announcing and ESPN Press Room are planned for the
-games that remain. If Ratings Reference later adds figures for these seasons,
-its refresh picks them up and they become the headline.
+ESPN Press Room is planned for the games that remain. If Ratings Reference
+later adds figures for these seasons, its refresh picks them up and they become
+the headline.
 
 These games now appear in the 'No public rating' strip, and the counts read 'N rated of M games'.
 

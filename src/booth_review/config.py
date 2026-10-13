@@ -45,6 +45,13 @@ HOST_POLICIES: dict[str, HostPolicy] = {
         min_interval_s=2.0, jitter_s=1.0, retry_mode="standard"
     ),
     "en.wikipedia.org": HostPolicy(min_interval_s=2.0, jitter_s=1.0, retry_mode="standard"),
+    # 04.19 D-10: scripted only for the 2021-2024 dates SMW left unrated (D-11), and
+    # only after a fresh `collect tvrg|aa --policy-check`, which also compares any
+    # robots.txt Crawl-delay with min_interval_s (the client does not read it).
+    "www.thetvratingsguide.com": HostPolicy(
+        min_interval_s=3.0, jitter_s=1.0, retry_mode="standard"
+    ),
+    "awfulannouncing.com": HostPolicy(min_interval_s=3.0, jitter_s=1.0, retry_mode="standard"),
 }
 
 HOST_SOURCE: dict[str, Source] = {
@@ -58,6 +65,8 @@ HOST_SOURCE: dict[str, Source] = {
     "release-assets.githubusercontent.com": "nfl_nflverse",
     "objects.githubusercontent.com": "nfl_nflverse",
     "en.wikipedia.org": "nfl_wikipedia",
+    "www.thetvratingsguide.com": "tvrg",
+    "awfulannouncing.com": "aa",
 }
 
 CFBD_BASE_URL = "https://api.collegefootballdata.com"

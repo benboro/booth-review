@@ -22,6 +22,9 @@ RowKind = Literal[
     "non_nielsen",
     "non_game",
     "unknown_suffix",
+    # A post's figure the parser can't tie to one game unambiguously (AA prose,
+    # an unsplittable TVRG game cell): review only, never loaded.
+    "needs_review",
 ]
 ChartKind = Literal["weekly", "postseason", "season_top", "post"]
 
@@ -57,6 +60,15 @@ class SecondSourceRow:
     rank: int
     source_url: str
     superseded: bool
+
+
+@dataclass(frozen=True)
+class ParsedPost:
+    """One parsed post (TVRG, AA): its rows and how many lines or figure
+    mentions it ignored (non-football rows, peaks, streaming numbers)."""
+
+    rows: list[SecondSourceRow]
+    ignored: int
 
 
 def host_matches(source: SecondSource, url: str) -> bool:

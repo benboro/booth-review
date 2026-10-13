@@ -48,6 +48,7 @@ from booth_review.errors import (
     BoothReviewError,
     FreezeRefusedError,
     RobotsDisallowedError,
+    RobotsUnavailableError,
     SiteBuildError,
     UnknownHostError,
 )
@@ -60,10 +61,30 @@ from booth_review.resolve import diagnose as resolve_diagnose
 from booth_review.resolve import network_diagnose
 from booth_review.runtime import Runtime, build_runtime
 from booth_review.seasons import season_of, season_window
+from booth_review.sources.aa.collector import AaCollector
 from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.sources.cfbd.collector import ENDPOINTS, CfbdCollector
 from booth_review.sources.cfbd.parser import parse_games
+from booth_review.sources.gapcollect import MAX_REQUESTS_DEFAULT, RequestBudget
+from booth_review.sources.known_disagreements import (
+    KNOWN_FILE,
+    POST_SOURCES,
+    PostSource,
+    import_known,
+)
 from booth_review.sources.nflverse.collector import NflverseCollector
+from booth_review.sources.policy import (
+    POLICY_LEDGER,
+    TARGETS,
+    PolicyCheck,
+    PolicyChecker,
+    PolicyRobotsError,
+    PolicySource,
+    append_policy_check,
+    evaluate_robots,
+    policy_fresh,
+    robots_fresh,
+)
 from booth_review.sources.ratingsref.collector import (
     FIRST_SEASON,
     NFL_REFRESH_CAP_DEFAULT,
@@ -97,6 +118,7 @@ from booth_review.sources.sports506.importer import (
     ImportResult,
     Sports506Importer,
 )
+from booth_review.sources.tvrg.collector import TvrgCollector
 from booth_review.sources.wikipedia.collector import WikipediaCollector
 from booth_review.spike.inventory import run_inventory
 from booth_review.spike.join import (
@@ -114,6 +136,7 @@ from booth_review.spike.selection import (
 )
 from booth_review.transport.budget import BudgetSummary, CfbdBudget, InfoSnapshot
 from booth_review.transport.cache import atomic_write_bytes
+from booth_review.transport.types import FetchResponse
 from booth_review.vault import VaultRepo, batch_message
 
 logger = logging.getLogger("booth_review.cli")
@@ -159,6 +182,16 @@ def _parse_date(text: str) -> date:
         return date.fromisoformat(text)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(f"invalid date (expected YYYY-MM-DD): {text!r}") from exc
+
+
+def _positive_int(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"expected a whole number: {text!r}") from exc
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"expected 1 or more: {text!r}")
+    return value
 
 
 def _parse_endpoints(text: str) -> list[str]:
@@ -211,6 +244,36 @@ def build_parser() -> argparse.ArgumentParser:
     pwiki.add_argument("--dry-run", action="store_true")
     pwiki.add_argument("--no-commit", action="store_true")
 
+    for key, label in (("tvrg", "The TV Ratings Guide"), ("aa", "Awful Announcing")):
+        psecond = collect_sub.add_parser(
+            key,
+            help=f"04.19 D-10/D-11: {label} policy re-check, or the gap-only data pass (--season)",
+        )
+        psecond.add_argument(
+            "--season",
+            type=parse_season_spec,
+            help="data pass for 2021-2024 seasons: only pages that can fill a remaining gap",
+        )
+        psecond.add_argument("--dry-run", action="store_true")
+        psecond.add_argument(
+            "--max-requests",
+            type=_positive_int,
+            default=MAX_REQUESTS_DEFAULT,
+            help=f"cap on new requests across the run (default {MAX_REQUESTS_DEFAULT})",
+        )
+        psecond.add_argument(
+            "--policy-check",
+            action="store_true",
+            help="fetch robots.txt, the policy page(s) and one index sample; ledger the result",
+        )
+        psecond.add_argument(
+            "--confirm-terms",
+            action="store_true",
+            help="record that the user read the current terms and allows collection "
+            "(needs a robots-ok check from the last 30 days, or --policy-check)",
+        )
+        psecond.add_argument("--no-commit", action="store_true")
+
     pcfbd = collect_sub.add_parser("cfbd", help="collect CFBD season data or the venue list")
     cfbd_target = pcfbd.add_mutually_exclusive_group(required=True)
     cfbd_target.add_argument("--season", type=parse_season_spec)
@@ -253,6 +316,16 @@ def build_parser() -> argparse.ArgumentParser:
     psmwimp.add_argument("--from", dest="from_dir", type=Path, default=None)
     psmwimp.add_argument("--force", action="store_true")
     psmwimp.add_argument("--no-commit", action="store_true")
+
+    pknownimp = import_sub.add_parser(
+        "known",
+        help="import a hand-written TVRG or AA known-disagreements file (04.19 D-02)",
+    )
+    pknownimp.add_argument("--source", dest="known_source", required=True, choices=POST_SOURCES)
+    pknownimp.add_argument("--season", required=True, type=int)
+    pknownimp.add_argument("--from", dest="from_file", required=True, type=Path)
+    pknownimp.add_argument("--force", action="store_true")
+    pknownimp.add_argument("--no-commit", action="store_true")
 
     spike = sub.add_parser("spike", help="spike-only analysis commands (SPIKE-03/04)")
     spike_sub = spike.add_subparsers(dest="spike_command", required=True)
@@ -446,6 +519,8 @@ _COLLECT_PATHS: dict[str, tuple[str, ...]] = {
         *_ROBOTS_AND_REQUEST_LEDGER,
     ),
     "nfl_wikipedia": ("raw/nfl/wikipedia", *_ROBOTS_AND_REQUEST_LEDGER),
+    "tvrg": ("raw/tvrg", POLICY_LEDGER, *_ROBOTS_AND_REQUEST_LEDGER),
+    "aa": ("raw/aa", POLICY_LEDGER, *_ROBOTS_AND_REQUEST_LEDGER),
 }
 
 
@@ -846,6 +921,272 @@ def _collect_wikipedia(args: argparse.Namespace) -> int:
         runtime.client.close()
 
 
+# -- collect tvrg / aa (04.19 D-10 policy re-check) -----------------------------------
+
+
+def _earliest_gap_month(paths: DataPaths) -> tuple[int, int] | None:
+    """The month of the earliest 2021-2024 date SMW left unrated (D-11), offline."""
+    from booth_review.build.gaps import earliest_gap_month, remaining_gap_dates
+    from booth_review.build.tables import assemble_tables
+
+    # Every season, as `booth-review build` assembles them: a season subset trips
+    # the crew-override check for overrides that name other seasons.
+    tables = assemble_tables(paths, reference_dir())
+    return earliest_gap_month(remaining_gap_dates(tables))
+
+
+def _confirm_terms_only(source: PolicySource, args: argparse.Namespace) -> int:
+    paths = DataPaths.from_env()
+    vault = VaultRepo(paths.vault)
+    vault.check()
+    fresh = robots_fresh(paths, source, datetime.now(UTC))
+    if fresh is None:
+        print(
+            f"error: no robots-ok policy check for {source} in the last 30 days; "
+            "run --policy-check first",
+            file=sys.stderr,
+        )
+        return 4
+    with vault.lock():
+        append_policy_check(
+            paths,
+            PolicyCheck(
+                source=source,
+                checked_at=fresh.checked_at,
+                robots_ok=True,
+                crawl_delay=fresh.crawl_delay,
+                terms_ok=True,
+            ),
+        )
+    if not args.no_commit:
+        vault.commit_batch(
+            batch_message("collect", source, "policy", {"confirmed": 1}),
+            paths=[POLICY_LEDGER],
+        )
+    print(f"{source} policy: terms confirmed 1")
+    return 0
+
+
+def _collect_second(args: argparse.Namespace, source: PolicySource) -> int:
+    policy_mode = args.policy_check or args.confirm_terms
+    if policy_mode and args.season:
+        print("error: --season runs the data pass; run --policy-check on its own", file=sys.stderr)
+        return 2
+    if policy_mode:
+        return _collect_policy(args, source)
+    if not args.season:
+        print(
+            f"error: {source} needs --season for the data pass, "
+            "or --policy-check / --confirm-terms",
+            file=sys.stderr,
+        )
+        return 2
+    return _collect_gap_pass(args, source)
+
+
+def _second_source_gaps(
+    paths: DataPaths, seasons: Sequence[int]
+) -> tuple[dict[int, set[date]], dict[date, set[int]]]:
+    """(gap dates per season, regular-season week per date), offline (D-11).
+
+    Only dates with an unrated telecast on a network TVRG and AA list count."""
+    from booth_review.build.gaps import (
+        LISTED_GAP_NETWORKS,
+        regular_weeks_by_date,
+        remaining_gap_dates,
+    )
+    from booth_review.build.tables import assemble_tables
+
+    # Every season, as `booth-review build` assembles them (see _earliest_gap_month).
+    tables = assemble_tables(paths, reference_dir())
+    gaps = remaining_gap_dates(tables, seasons, networks=LISTED_GAP_NETWORKS)
+    return gaps, regular_weeks_by_date(tables.games, seasons)
+
+
+def _robots_guard(source: PolicySource) -> Callable[[str, FetchResponse], None]:
+    """Stop a data pass when the robots.txt the client reads now disallows
+    everything or asks for a longer Crawl-delay than our pacing (D-10)."""
+    host = TARGETS[source].host
+
+    def _check(seen_host: str, resp: FetchResponse) -> None:
+        if seen_host != host:
+            return
+        verdict = evaluate_robots(
+            resp.status_code, resp.content, host=host, planned_urls=TARGETS[source].planned_samples
+        )
+        if not verdict.ok:
+            raise PolicyRobotsError(verdict)
+
+    return _check
+
+
+def _collect_gap_pass(args: argparse.Namespace, source: PolicySource) -> int:
+    seasons: list[int] = args.season
+    outside = [season for season in seasons if season not in range(2021, 2025)]
+    if outside:
+        print(f"error: {source} covers the 2021-2024 seasons only", file=sys.stderr)
+        return 2
+    paths = DataPaths.from_env()
+    if not policy_fresh(paths, source, datetime.now(UTC)):
+        print(
+            "error: policy check older than 30 days or not approved; run --policy-check",
+            file=sys.stderr,
+        )
+        return 4
+    gaps, week_of = _second_source_gaps(paths, seasons)
+    runtime = build_runtime(with_budget=False)
+    try:
+        runtime.client.add_robots_listener(_robots_guard(source))
+        collector: TvrgCollector | AaCollector = (
+            TvrgCollector(runtime.cache)
+            if source == "tvrg"
+            else AaCollector(runtime.cache, week_of)
+        )
+        budget = RequestBudget(args.max_requests)
+        any_failed = False
+        for season in seasons:
+            season_gaps = gaps.get(season, set())
+            plan = collector.plan(season, season_gaps)
+            cached = sum(1 for req in plan if runtime.cache.status(req) == "cached")
+            print(
+                f"{source} {season}: gap dates {len(season_gaps)}, planned {len(plan)} "
+                f"(cached {cached}, new {len(plan) - cached}; "
+                "posts are planned from cached index pages only)"
+            )
+            try:
+                summary = _run_and_commit(
+                    runtime,
+                    functools.partial(
+                        collector.run_season,
+                        season,
+                        season_gaps,
+                        dry_run=args.dry_run,
+                        budget=budget,
+                    ),
+                    action="collect",
+                    source=source,
+                    season_label=str(season),
+                    dry_run=args.dry_run,
+                    no_commit=args.no_commit,
+                )
+            except (
+                PolicyRobotsError,
+                RobotsDisallowedError,
+                RobotsUnavailableError,
+                UnknownHostError,
+            ) as exc:
+                print(f"error: {type(exc).__name__}", file=sys.stderr)
+                return 4
+            if args.dry_run:
+                print(
+                    f"planned {summary.planned}, cached {summary.cached}, "
+                    f"new {len(summary.new_urls)}"
+                )
+            else:
+                print(
+                    f"fetched {summary.fetched}, cached {summary.cached}, "
+                    f"not_modified {summary.not_modified}, failed {summary.failed}"
+                )
+                any_failed = any_failed or bool(summary.failed)
+            if budget.exhausted:
+                print(f"stopped: --max-requests {args.max_requests} reached")
+                break
+        return 4 if any_failed else 0
+    finally:
+        runtime.client.close()
+
+
+def _collect_policy(args: argparse.Namespace, source: PolicySource) -> int:
+    if not args.policy_check:
+        return _confirm_terms_only(source, args)
+
+    paths = DataPaths.from_env()
+    index_month = _earliest_gap_month(paths) if source == "tvrg" else None
+    runtime = build_runtime(with_budget=False)
+    try:
+        checker = PolicyChecker(
+            runtime.cache,
+            runtime.client,
+            runtime.paths,
+            source,
+            today=datetime.now(UTC).date(),
+            index_month=index_month,
+        )
+        before = dict(runtime.cache.counters)
+        error: BoothReviewError | None = None
+        outcome = None
+        try:
+            outcome = checker.run()
+        except (
+            PolicyRobotsError,
+            RobotsDisallowedError,
+            RobotsUnavailableError,
+            UnknownHostError,
+        ) as exc:
+            error = exc
+        except BaseException:
+            if not args.no_commit:
+                runtime.vault.commit_batch(
+                    batch_message(
+                        "collect",
+                        source,
+                        "policy",
+                        _partial_counts(before, runtime.cache.counters),
+                    ),
+                    paths=list(_COLLECT_PATHS[source]),
+                )
+            raise
+
+        now = datetime.now(UTC)
+        if outcome is None:
+            delay = error.verdict.crawl_delay if isinstance(error, PolicyRobotsError) else None
+            check = PolicyCheck(source, now, robots_ok=False, crawl_delay=delay, terms_ok=None)
+            counts = _partial_counts(before, runtime.cache.counters)
+        else:
+            summary = outcome.summary
+            robots_ok = outcome.robots_ok
+            # Terms are confirmed only on a clean run: every policy page read.
+            confirm = args.confirm_terms and robots_ok and summary.failed == 0
+            check = PolicyCheck(
+                source,
+                outcome.robots_checked_at or now,
+                robots_ok=robots_ok,
+                crawl_delay=outcome.verdict.crawl_delay if outcome.verdict else None,
+                terms_ok=True if confirm else None,
+            )
+            counts = summary.counts()
+        with runtime.vault.lock():
+            append_policy_check(runtime.paths, check)
+        if not args.no_commit:
+            runtime.vault.commit_batch(
+                batch_message("collect", source, "policy", counts),
+                paths=list(_COLLECT_PATHS[source]),
+            )
+
+        if error is not None:
+            print(f"error: {type(error).__name__}", file=sys.stderr)
+            print(f"{source} policy: robots blocked, crawl-delay {check.crawl_delay or 'none'}")
+            return 4
+        assert outcome is not None
+        verdict = outcome.verdict
+        print(
+            f"{source} policy: fetched {counts['fetched']}, cached {counts['cached']}, "
+            f"failed {counts['failed']}; robots {'ok' if outcome.robots_ok else 'unknown'}, "
+            f"crawl-delay {check.crawl_delay if check.crawl_delay is not None else 'none'}, "
+            f"sitemaps {len(verdict.sitemaps) if verdict else 0}; "
+            f"legal page: {outcome.legal_page}; index sample: {outcome.index_sample}; "
+            f"terms_ok {'true' if check.terms_ok else 'null'}"
+        )
+        if not outcome.robots_ok:
+            return 4
+        if args.confirm_terms and not check.terms_ok:
+            print("error: terms not confirmed (a policy page failed)", file=sys.stderr)
+            return 4
+        return 4 if counts["failed"] else 0
+    finally:
+        runtime.client.close()
+
+
 # -- collect cfbd ---------------------------------------------------------------------
 
 
@@ -1019,6 +1360,40 @@ def _import_smw(args: argparse.Namespace) -> int:
         return 4 if any_problems else 0
     finally:
         runtime.client.close()
+
+
+# -- import known ---------------------------------------------------------------------------
+
+
+def _import_known(args: argparse.Namespace) -> int:
+    """Validate a known-disagreements file against the cached posts and copy it
+    into the vault under the lock; the commit touches only that file and the
+    ledger, with a count-only message. SMW's file travels with `import smw`."""
+    paths = DataPaths.from_env()
+    vault = VaultRepo(paths.vault)
+    vault.check()
+    source = cast(PostSource, args.known_source)
+    with vault.lock():
+        result = import_known(paths, source, args.season, args.from_file, force=args.force)
+        print(
+            f"known {source} {args.season}: imported {result.imported}, "
+            f"skipped {result.skipped}, problems {len(result.problems)}"
+        )
+        for problem in result.problems:
+            print(f"problem: {problem}")
+        if result.changed_without_force:
+            print("the vault copy differs; use --force to overwrite")
+        if result.has_problems:
+            return 4
+        if not args.no_commit:
+            vault.commit_batch(
+                batch_message("import", source, str(args.season), result.counts()),
+                paths=[
+                    f"raw/{source}/{args.season}/{KNOWN_FILE}",
+                    "ledger/requests.jsonl",
+                ],
+            )
+    return 0
 
 
 # -- spike inventory ----------------------------------------------------------------------
@@ -1394,11 +1769,12 @@ def _build(args: argparse.Namespace) -> int:
         )
     print(f"crew gaps unpatched {outcome.counts.get('crew_gaps_unpatched', 0)}")
     for gate in outcome.second_source_gates:
+        prose = f", unlinked prose {gate.unlinked_prose}" if gate.unlinked_prose else ""
         print(
             f"second source {gate.source} {gate.season}: shared {gate.shared}, "
             f"within 3% {gate.within_3pct}, logged {gate.logged}, "
             f"unexplained {gate.unexplained}, loaded {gate.loaded}, "
-            f"held {gate.held_network}, {gate.status}"
+            f"held {gate.held_network}{prose}, {gate.status}"
         )
     if outcome.second_source_gates:
         print(
@@ -1646,6 +2022,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return _collect_nflverse(args)
             if args.source == "wikipedia":
                 return _collect_wikipedia(args)
+            if args.source in ("tvrg", "aa"):
+                return _collect_second(args, cast(PolicySource, args.source))
             raise AssertionError(f"unknown collect source: {args.source!r}")
         if args.command == "refresh":
             if args.source == "ratingsref":
@@ -1656,6 +2034,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return _import_506(args)
             if args.source == "smw":
                 return _import_smw(args)
+            if args.source == "known":
+                return _import_known(args)
             raise AssertionError(f"unknown import source: {args.source!r}")
         if args.command == "spike":
             if args.spike_command == "inventory":
