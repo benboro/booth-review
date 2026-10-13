@@ -15,6 +15,10 @@ empty review_second_source_* CSVs; no CFB figure changed.
 04.19 Plan 08: site-data.json schema 2.4.0 adds telecasts.figure_source (all rr in the
 synthetic vault); no figure changed.
 
+04.19 Plan 41: contract 2.5.0 adds coverage matched_crew_backup (0 in the synthetic
+vault); site-data.json with that field dropped and the version set back to 2.4.0 hashes to
+the Plan 08 digest, so no figure or crew changed.
+
 04.19 Plan 27 (3de6998): the header-only review_second_source_gate.csv gains an
 excluded_non_game column; no figure changed.
 
@@ -114,7 +118,7 @@ _GOLDEN: dict[str, str] = {
         "07ff159d34d5e0cfdd3b77f84c3ecaec0cd14c437fa015fe89333709317831c3"
     ),
     "processed/site-data.json": (
-        "df91e0a4b45d179d478d2db040beb6a89645dc1452d766aa7b4ab11ed6d656f3"
+        "ea373e9f8b1f422a38692e331d4845b9702f21c2f17779b2d9f85d47368c47b1"
     ),
     "processed/telecast_flags.parquet": (
         "2e2f334909dc09ab5ff590cadd3d4cb2158678a2d980948cd454219ab82927e2"

@@ -18,7 +18,7 @@ immediately, in parallel with Phase 3's real joins.
 `site-data.json` is **one versioned columnar JSON file** (D-13), not an array
 of per-telecast objects:
 
-- `schema_version` — the contract version (currently `"2.4.0"`). See
+- `schema_version` — the contract version (currently `"2.5.0"`). See
   Versioning below.
 - `generated_at` — ISO UTC time of the newest change to a collected input (the
   newest manifest entry whose content differs from the previous one for the same
@@ -197,7 +197,11 @@ One `CoverageRow` per `(season, network)`, plus one season-total row per
 season with `network` null: `season`, `network`, `rated_telecasts`,
 `matched_game`, `matched_crew`, `matched_crew_patched` (how many of
 `matched_crew` are hand-confirmed crews from `crew_overrides.csv`; never more
-than `matched_crew`), `match_rate` (null when there's nothing to
+than `matched_crew`), `matched_crew_backup` (how many of `matched_crew` took
+their crew from a hand-saved ESPN Press Room page because neither 506 nor
+`crew_overrides.csv` listed one, 04.19 D-13; never negative, and
+`matched_crew_patched + matched_crew_backup` is never more than `matched_crew`),
+`match_rate` (null when there's nothing to
 divide), `headline_present`, `excitement_present`, `spread_present` (telecasts whose game has a closing spread),
 `duplicate_merges`, `combined_figures`, and `publisher_counts` (a
 publisher-name-to-count map). This is AUDIT-01's table, exposed to the site
@@ -249,7 +253,8 @@ Unrated rows carry the same display-only CFBD fields as rated rows (`excitement`
   `2.0.0 -> 2.1.0` added `lookups.bowl_franchises`, `lookups.bowls[].franchise`, `lookups.rivalries` (with each rivalry's title `article`), and `telecasts.rivalry` (SITE-44, SITE-45, 04.9 D-16); minor bump, additive;
   `2.1.0 -> 2.2.0` added the `telecasts_unrated` block with its `cause` enum (SITE-51, 04.13 D-16); minor bump, additive;
   `2.2.0 -> 2.3.0` added `lookups.venues` and the per-game `place` index in both blocks (SITE-71, 04.18); minor bump, additive;
-  `2.3.0 -> 2.4.0` added `telecasts.figure_source` and allowed empty `rr_urls` for second-source figures (SRC-06, 04.19); minor bump.
+  `2.3.0 -> 2.4.0` added `telecasts.figure_source` and allowed empty `rr_urls` for second-source figures (SRC-06, 04.19); minor bump;
+  `2.4.0 -> 2.5.0` added coverage `matched_crew_backup` (SRC-09, 04.19); minor bump.
 - **Removing a field, renaming a field, or changing a field's type**
   (including narrowing an enum) bumps the **major** version (`1.0.0` →
   `2.0.0`).
@@ -288,6 +293,8 @@ As of v1.4.0 telecast 3 (2021) carries a crew-source pair (a patched crew with n
 As of v2.0.0 there is no `pregame` column; the fixture's `home_spread` column is unchanged: `[-3.5, 7.0, -2.0, null, -1.0, -14.0, 5.5, -3.0, 6.5, -0.5, -2.5, 1.5]`. By telecast index: 0 home favorite won; 1 away favorite, home won (upset); 2 line but no final score; 3 no line; 4 home favorite won; 5 home favorite won; 6 away favorite, home won; 7 home favorite, away won; 8 away favorite won; 9 home favorite, away won; 10 tie (20-20); 11 away favorite won.
 
 As of v2.1.0 the two bowls belong to franchises `harbor-bowl` (latest name Harbor Bowl, former name Bayside Bowl: a renamed bowl) and `summit-bowl` (hosting the telecast 5 CFP semifinal); `Lakeshore Rivalry` (Northfield-Lakeview, article `"the"`) tags telecasts 0 and 4; `The Bridge Game` (Stonebridge-Maplecrest, article null) tags telecast 11, while telecast 3 between the same teams (2021-12-04, neutral) is null: it stands for a conference-championship rematch whose regular-season meeting was not rated. The two-season rename itself is exercised with synthetic games in tests/test_named_games.py and tests/test_build_site_data.py.
+
+As of v2.5.0 every fixture coverage row has `matched_crew_backup` 0.
 
 As of v2.4.0 the fixture carries one Sports Media Watch figure: telecast 3 (2021-12-04) has `figure_source` `"smw"`, publisher "Sports Media Watch", an empty `rr_urls`, and a `sportsmediawatch.com` season-page `source_url`; every other row is `"rr"`.
 

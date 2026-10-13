@@ -1481,6 +1481,23 @@ def test_freshness_crews_stamp_ignores_backup_crews(build_reference: Path) -> No
     assert payload["freshness"]["viewership_through_week"] == "3"
 
 
+def test_coverage_emits_matched_crew_backup_per_network_and_season(
+    build_reference: Path,
+) -> None:
+    # 04.19 D-13: the backup crew counts in matched_crew and matched_crew_backup only.
+    tables = _patched_freshness_tables(
+        second_season_type="regular", second_week=3, second_patched=False, second_backup=True
+    )
+    payload = _site(tables, build_reference)
+    rows = payload["coverage"]
+    assert isinstance(rows, list)
+    assert {row["network"] is None for row in rows} == {True, False}
+    for row in rows:
+        assert row["matched_crew"] == 2
+        assert row["matched_crew_backup"] == 1
+        assert row["matched_crew_patched"] == 0
+
+
 def test_freshness_unpatched_crew_advances_stamp(build_reference: Path) -> None:
     tables = _patched_freshness_tables(
         second_season_type="regular", second_week=3, second_patched=False

@@ -111,6 +111,10 @@
           "title": "Matched Crew",
           "type": "integer"
         },
+        "matched_crew_backup": {
+          "title": "Matched Crew Backup",
+          "type": "integer"
+        },
         "matched_crew_patched": {
           "title": "Matched Crew Patched",
           "type": "integer"
@@ -157,6 +161,7 @@
         "matched_game",
         "matched_crew",
         "matched_crew_patched",
+        "matched_crew_backup",
         "headline_present",
         "excitement_present",
         "spread_present",
@@ -1394,7 +1399,7 @@
       "type": "object"
     }
   },
-  "$id": "booth-review/site-data/2.4.0",
+  "$id": "booth-review/site-data/2.5.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -1416,7 +1421,7 @@
       "$ref": "#/$defs/Lookups"
     },
     "schema_version": {
-      "const": "2.4.0",
+      "const": "2.5.0",
       "title": "Schema Version",
       "type": "string"
     },
