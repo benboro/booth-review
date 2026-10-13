@@ -47,6 +47,10 @@ _WEEK5 = (
     f"{_HOST}/college-football/2022-college-football-week-5-viewership-silverlake-northfield.html"
 )
 _WEEK4 = f"{_HOST}/college-football/college-football-week-4-viewership-2022-lakeside.html"
+_GAME = f"{_HOST}/college-football/silverlake-northfield-week-5-espn-cfb-ratings.html"
+_NETWORK = f"{_HOST}/ratings/silverlake-fox-week-4-viewership-down.html"
+_NO_WEEK = f"{_HOST}/ratings/example-northfield-college-football-most-watched.html"
+_KEPT = [_WEEK5, _WEEK4, _GAME, _NETWORK, _NO_WEEK]
 _GAP = date(2022, 10, 1)
 _WEEK_OF = {_GAP: {5}, date(2022, 9, 24): {4}}
 
@@ -77,10 +81,12 @@ def test_parse_index_lists_on_host_children_with_lastmod() -> None:
 def test_parse_urlset_keeps_only_https_on_host_urls() -> None:
     sitemap = parse_sitemap(_CHILD)
     assert sitemap.kind == "urlset"
-    assert len(sitemap.urls) == 5
+    assert len(sitemap.urls) == 14
     assert sitemap.skipped == 2
     assert all(entry.url.startswith(f"{_HOST}/") for entry in sitemap.urls)
     assert sitemap.urls[0].slug == "2022-college-football-week-5-viewership-silverlake-northfield"
+    assert sitemap.urls[0].category == "college-football"
+    assert UrlEntry(f"{_HOST}/bare-slug.html", None).category == ""
 
 
 @pytest.mark.parametrize(
@@ -126,7 +132,9 @@ def test_select_post_sitemaps_spans_the_window() -> None:
 def test_slug_week_and_year() -> None:
     assert week_of_slug("2022-college-football-week-5-viewership-x") == 5
     assert week_of_slug("college-football-week-12-viewership") == 12
-    assert week_of_slug("nfl-week-5-viewership") is None
+    assert week_of_slug("silverlake-week-0-nbc-cfb-ratings") == 0
+    assert week_of_slug("weekly-viewership") is None
+    assert week_of_slug("midweek-5-ratings") is None
     assert year_of_slug("2022-college-football-week-5-viewership") == 2022
     assert year_of_slug("college-football-week-4-viewership-2022-x") == 2022
     assert year_of_slug("college-football-week-4-viewership") is None
@@ -135,13 +143,18 @@ def test_slug_week_and_year() -> None:
 # -- gap-week selection ----------------------------------------------------------------
 
 
-def test_wanted_entry_matches_week_n_or_n_minus_1_and_the_season_year() -> None:
+def test_wanted_entry_keeps_only_gap_week_or_gap_date_college_ratings_posts() -> None:
     entries = parse_sitemap(_CHILD).urls
     weeks = gap_weeks({_GAP}, _WEEK_OF)
     assert weeks == {5}
-    kept = [entry.url for entry in entries if wanted_entry(entry, 2022, weeks)]
-    assert kept == [_WEEK5, _WEEK4]
-    assert not wanted_entry(UrlEntry(_WEEK5, None), 2023, weeks)
+    kept = [entry.url for entry in entries if wanted_entry(entry, 2022, weeks, [_GAP])]
+    # Dropped: week 6, a 2021 slug, a preview with no ratings word, an NFL slug,
+    # a non-college ratings post, a no-week post outside 0-7 days, a stale
+    # yearless week slug, the schedules and nfl categories.
+    assert kept == _KEPT
+    assert not wanted_entry(UrlEntry(_WEEK5, None), 2023, weeks, [_GAP])
+    assert not wanted_entry(UrlEntry(_NO_WEEK, None), 2022, weeks, [_GAP])
+    assert not wanted_entry(UrlEntry(_GAME, None), 2022, weeks, [])
 
 
 def test_postseason_gap_dates_plan_nothing() -> None:
@@ -194,7 +207,7 @@ def test_plan_grows_as_the_index_is_cached(cache: RawCache, vault_paths: DataPat
 
     (index / "post-sitemap5.xml").write_bytes(_CHILD)
     plan = collector.plan(2022, {_GAP})
-    assert [req.url for req in plan[2:]] == [_WEEK5, _WEEK4]
+    assert [req.url for req in plan[2:]] == _KEPT
 
 
 def test_no_week_gap_plans_nothing(cache: RawCache) -> None:
@@ -228,8 +241,7 @@ def _responses() -> dict[str, tuple[int, bytes, dict[str, str]]]:
         f"{_HOST}/robots.txt": (200, _ALLOW, {}),
         f"{_HOST}/sitemap_index.xml": (200, _INDEX, {}),
         f"{_HOST}/post-sitemap5.xml": (200, _CHILD, {}),
-        _WEEK5: (200, _POST, {}),
-        _WEEK4: (200, _POST, {}),
+        **{url: (200, _POST, {}) for url in _KEPT},
     }
 
 
@@ -264,13 +276,12 @@ def test_aa_live_pass_walks_index_child_then_week_posts(
         f"{_HOST}/robots.txt",
         f"{_HOST}/sitemap_index.xml",
         f"{_HOST}/post-sitemap5.xml",
-        _WEEK5,
-        _WEEK4,
+        *_KEPT,
     ]
     posts = git_vault.raw / "aa" / "2022" / "posts"
-    assert len(list(posts.iterdir())) == 2
+    assert len(list(posts.iterdir())) == 5
     subject = _git(git_vault.vault, "log", "-1", "--format=%s")
-    assert subject == "collect: aa 2022 (fetched 4, cached 0, not_modified 0, failed 0)"
+    assert subject == "collect: aa 2022 (fetched 7, cached 0, not_modified 0, failed 0)"
 
 
 def test_aa_max_requests_caps_new_fetches(

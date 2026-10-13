@@ -29,7 +29,7 @@ SITEMAP_INDEX_URL: Final = f"https://{AA_HOST}/sitemap_index.xml"
 
 _FORBIDDEN_DECL = re.compile(rb"<!\s*(DOCTYPE|ENTITY)", re.IGNORECASE)
 _POST_SITEMAP = re.compile(r"^/post-sitemap(\d*)\.xml$")
-_WEEK_SLUG = re.compile(r"college-football-week-(\d{1,2})-viewership")
+_WEEK_SLUG = re.compile(r"(?:^|-)week-(\d{1,2})(?=-|$)")
 _SLUG_YEAR = re.compile(r"(?:^|-)(20\d{2})(?=-|$)")
 
 
@@ -60,6 +60,12 @@ class UrlEntry:
     @property
     def slug(self) -> str:
         return urlsplit(self.url).path.rstrip("/").rsplit("/", 1)[-1].removesuffix(".html")
+
+    @property
+    def category(self) -> str:
+        """The first path segment (``/<category>/<slug>.html``), or "" for a bare slug."""
+        parts = urlsplit(self.url).path.strip("/").split("/")
+        return parts[0] if len(parts) > 1 else ""
 
 
 @dataclass(frozen=True)
@@ -174,6 +180,7 @@ def select_post_sitemaps(refs: Sequence[SitemapRef], start: date, end: date) -> 
 
 
 def week_of_slug(slug: str) -> int | None:
+    """The n of a ``week-<n>`` token (``...-week-5-viewership``, ``...-week-0-nbc-...``)."""
     match = _WEEK_SLUG.search(slug)
     return int(match.group(1)) if match else None
 

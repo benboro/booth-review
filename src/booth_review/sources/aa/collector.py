@@ -1,11 +1,22 @@
 """AaCollector: gap-week collection from Awful Announcing (04.19 D-11).
 
-AA publishes one college-football viewership roundup per week, its slug
-saying ``college-football-week-<n>-viewership`` with the season's year. A gap
-date maps to the CFBD regular-season week whose games include it; ESPN-style
-"Week 0" naming can put AA's number one below CFBD's, so a slug week w is
-kept when w or w + 1 is a gap week, and only when the slug's year equals the
-season. Postseason gap dates have no week roundup and plan nothing here.
+AA's college-football ratings coverage is per game or per network, not one
+weekly roundup: slugs such as ``<teams>-week-<n>-<network>-cfb-ratings`` or
+``<teams>-<network>-week-<n>-viewership-...`` under the ``ratings/``,
+``college-football/`` and ``ncaa/`` categories, usually with no year. A post
+is kept only when it can fill a gap:
+
+- its category is one of those three; a ``college-football/`` or ``ncaa/``
+  slug must carry a ratings word, and a ``ratings/`` slug must not name another
+  league (``nfl``, ``nba`` ...);
+- a slug year, when present, equals the season;
+- a ``week-<n>`` slug matches a gap week: the CFBD regular-season week of a gap
+  date is n or n + 1 (AA counts "Week 0" where CFBD says week 1), and, with no
+  slug year, its sitemap lastmod is on or after the season's first gap date;
+- a slug with no week also needs a college word (``cfb``/``college``/``ncaa``
+  or a college category) and a sitemap lastmod 0-7 days after a gap date.
+
+Postseason gap dates map to no week and plan nothing here.
 
 The index is the sitemap: the sitemap index (cached once, at
 ``aa/index/sitemap-1.xml`` where the 04.19-32 policy check stored it), then
@@ -60,12 +71,47 @@ def week_gap_dates(
     return sorted(day for day in gap_dates if week_of.get(day))
 
 
-def wanted_entry(entry: UrlEntry, season: int, weeks: Collection[int]) -> bool:
-    slug = entry.slug
-    week = week_of_slug(slug)
-    if week is None or year_of_slug(slug) != season:
+RATINGS_CATEGORIES: Final = frozenset({"ratings", "college-football", "ncaa"})
+COLLEGE_CATEGORIES: Final = frozenset({"college-football", "ncaa"})
+NO_WEEK_WINDOW: Final = timedelta(days=7)
+_RATINGS_WORDS: Final = frozenset(
+    {"rating", "ratings", "viewership", "viewers", "audience", "watched"}
+)
+_COLLEGE_WORDS: Final = frozenset({"cfb", "college", "ncaa"})
+_OTHER_LEAGUES: Final = frozenset(
+    {"nfl", "nba", "wnba", "mlb", "nhl", "mls", "nascar", "pga", "ufc", "wwe", "aew", "f1"}
+)
+
+
+def wanted_entry(
+    entry: UrlEntry, season: int, weeks: Collection[int], gap_dates: Collection[date]
+) -> bool:
+    """True when the sitemap entry can fill a gap week or date (see module doc)."""
+    category = entry.category
+    if category not in RATINGS_CATEGORIES:
         return False
-    return week in weeks or week + 1 in weeks
+    slug = entry.slug
+    tokens = set(slug.split("-"))
+    if category in COLLEGE_CATEGORIES and not tokens & _RATINGS_WORDS:
+        return False
+    if tokens & _OTHER_LEAGUES:
+        return False
+    year = year_of_slug(slug)
+    if year is not None and year != season:
+        return False
+    if not gap_dates:
+        return False
+    posted = entry.lastmod.date() if entry.lastmod is not None else None
+    week = week_of_slug(slug)
+    if week is not None:
+        if week not in weeks and week + 1 not in weeks:
+            return False
+        return year == season or (posted is not None and posted >= min(gap_dates))
+    if category not in COLLEGE_CATEGORIES and not tokens & _COLLEGE_WORDS:
+        return False
+    if posted is None:
+        return False
+    return any(timedelta(0) <= posted - day <= NO_WEEK_WINDOW for day in gap_dates)
 
 
 def sitemap_request(ref: SitemapRef) -> FetchRequest:
@@ -114,24 +160,27 @@ class AaCollector:
         return [INDEX_REQUEST, *self._child_requests(gap_dates)]
 
     def _posts_in(
-        self, children: Sequence[FetchRequest], season: int, weeks: Collection[int]
+        self, children: Sequence[FetchRequest], season: int, gap_dates: Collection[date]
     ) -> list[UrlEntry]:
+        weeks = gap_weeks(gap_dates, self._week_of)
+        days = week_gap_dates(gap_dates, self._week_of)
         entries: list[UrlEntry] = []
         for req in children:
             body = self._cache.read_cached(req)
             if body is None:
                 continue
             entries.extend(
-                entry for entry in parse_sitemap(body).urls if wanted_entry(entry, season, weeks)
+                entry
+                for entry in parse_sitemap(body).urls
+                if wanted_entry(entry, season, weeks, days)
             )
         return entries
 
     def plan_posts(self, season: int, gap_dates: Collection[date]) -> list[FetchRequest]:
         """Post requests from the cached sitemaps only."""
-        weeks = gap_weeks(gap_dates, self._week_of)
         seen: set[str] = set()
         requests: list[FetchRequest] = []
-        for entry in self._posts_in(self._child_requests(gap_dates), season, weeks):
+        for entry in self._posts_in(self._child_requests(gap_dates), season, gap_dates):
             if entry.url not in seen:
                 seen.add(entry.url)
                 requests.append(post_request(season, entry))
@@ -166,12 +215,11 @@ class AaCollector:
             return run.summary
         if not run.fetch(INDEX_REQUEST):
             return run.summary
-        weeks = gap_weeks(gap_dates, self._week_of)
         done: set[str] = set()
         for child in self._child_requests(gap_dates):
             if not run.fetch(child):
                 return run.summary
-            for entry in self._posts_in([child], season, weeks):
+            for entry in self._posts_in([child], season, gap_dates):
                 if entry.url in done:
                     continue
                 done.add(entry.url)
