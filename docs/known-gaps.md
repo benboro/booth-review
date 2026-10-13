@@ -207,3 +207,11 @@ These games now appear in the 'No public rating' strip, and the counts read 'N r
 ## Games with no public rating
 
 Games with no public viewer figure are shown, not dropped: they sit in a "No public rating" strip, each with its cause. See [Games with no public rating](methodology.md#games-with-no-public-rating) for the causes and how the counts work.
+
+<!-- nfl:start -->
+
+## NFL crews outside Fox and CBS
+
+506 Sports lists crews for regional Fox and CBS games but rarely for national NBC, ESPN/ABC, Amazon and NFL Network games. The Crews view says "Crew listed for N of M games" for each network. Cited published lineups fill only the flagship-window games of seasons with a cited release, so other national games stay without a crew. See [NFL: Published lineups](methodology.md#nfl-published-lineups).
+
+<!-- nfl:end -->

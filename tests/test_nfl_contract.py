@@ -22,6 +22,7 @@ from booth_review.contract.nfl_models import (
     NFL_GAME_FIELDS,
     NFL_SCHEMA_VERSION,
     NFL_SLOTS,
+    NFL_VIEW_CATEGORIES,
     NflSiteData,
     validate_nfl_site_data,
 )
@@ -41,13 +42,13 @@ INVENTED_STRINGS = ("Northfield Lanterns", "Harbor City", "Ada Quill", "example.
 def _minimal_payload() -> Payload:
     """A tiny valid payload: two games (one rated, one unrated), one row per block."""
     return {
-        "schema_version": "1.0.0",
+        "schema_version": "2.0.0",
         "freshness": {
             "season": 2026,
             "in_progress": True,
             "through_week": 3,
             "viewership_through_week": 2,
-            "fox_default_season": 2025,
+            "crews_default_season": 2025,
         },
         "constants": {
             "viewership_scope": "window",
@@ -64,7 +65,16 @@ def _minimal_payload() -> Payload:
                 {"name": "Northfield Lanterns", "short": "NFL"},
                 {"name": "Harbor City Gulls", "short": "HCG"},
             ],
-            "networks": [{"id": "fox", "name": "Fox"}, {"id": "cbs", "name": "CBS"}],
+            "networks": [
+                {"id": "fox", "name": "Fox", "family": "fox"},
+                {"id": "cbs", "name": "CBS", "family": "cbs"},
+            ],
+            "network_groups": [
+                {"id": "fox", "name": "Fox", "flagship": "AGOTW", "members": [0, 1]},
+            ],
+            "view_categories": [
+                {"id": i, "label": label, "window_level": w} for i, label, w in NFL_VIEW_CATEGORIES
+            ],
             "people": [{"id": "p1", "name": "Ada Quill"}],
             "eras": [
                 {
@@ -100,6 +110,8 @@ def _minimal_payload() -> Payload:
             "change_url": ["https://example.com/wiki/change", None],
             "network": [0, None],
             "crew": [[{"person": 0, "role": "pbp"}], []],
+            "crew_source": ["506", None],
+            "crew_source_url": [None, None],
             "excitement": [1.5, None],
             "viewers": [9000000, None],
             "scope": ["window", None],
@@ -125,6 +137,11 @@ def _minimal_payload() -> Payload:
             "standalone_sunday_early": [0],
             "standalone_sunday_late": [0],
             "standalone_other": [0],
+            "solo_thursday": [1],
+            "solo_sunday": [0],
+            "solo_monday": [0],
+            "solo_holiday": [0],
+            "solo_other": [0],
             "agotw": [1],
             "cbs_national": [0],
             "international": [2],
@@ -141,40 +158,38 @@ def _minimal_payload() -> Payload:
             "cbs_doubleheader_weeks": [0],
             "cbs_ambiguous_weeks": [0],
         },
-        "fox_booths": {
+        "booths": {
             "season": [2025],
-            "group": ["lead"],
+            "network_group": [0],
             "rank": [1],
+            "rank_source": ["published"],
+            "is_lead": [True],
             "pbp_person": [0],
             "analyst_person": [None],
             "games": [1],
+            "flagship_games": [1],
             "fill_in_games": [0],
+            "lineup_games": [0],
             "raw_n_margin": [1],
             "raw_n_excitement": [1],
-            "raw_n_volatility": [0],
+            "raw_n_viewers": [1],
             "raw_mean_abs_margin": [3.0],
             "raw_mean_excitement": [1.5],
-            "raw_mean_volatility": [None],
+            "raw_mean_viewers": [9000000.0],
             "adj_n_margin": [1],
             "adj_n_excitement": [1],
-            "adj_n_volatility": [0],
             "adj_margin_resid": [0.1],
             "adj_margin_se": [1.0],
             "adj_excitement_resid": [0.2],
             "adj_excitement_se": [1.0],
-            "adj_volatility_resid": [None],
-            "adj_volatility_se": [None],
             "low_n": [True],
             "game_list": [[0]],
         },
-        "agotw_viewership": {
+        "viewership": {
+            "category": [0],
             "season": [2025],
             "era": [0],
-            "group": ["lead"],
-            "pbp_person": [0],
-            "analyst_person": [None],
             "games": [1],
-            "fill_in_games": [0],
             "mean_viewers": [9000000.0],
             "viewership_resid": [None],
             "viewership_se": [None],
@@ -214,11 +229,143 @@ def _misaligned(d: Payload) -> None:
     d["games"]["week"] = [1]
 
 
-def _two_leads(d: Payload) -> None:
-    b = d["fox_booths"]
+def _add_booth_row(d: Payload, **changes: object) -> None:
+    b = d["booths"]
     for name, col in list(b.items()):
         b[name] = [*col, copy.deepcopy(col[0])]
-    b["rank"][1] = 2
+    for name, value in changes.items():
+        b[name][1] = value
+
+
+def _two_leads(d: Payload) -> None:
+    _add_booth_row(d, rank=2)
+
+
+def _rank_gap(d: Payload) -> None:
+    _add_booth_row(d, rank=3, is_lead=False)
+
+
+def _lead_not_rank_one(d: Payload) -> None:
+    d["booths"]["rank"][0] = 2
+    _add_booth_row(d, rank=1, is_lead=False)
+
+
+def _mixed_rank_source(d: Payload) -> None:
+    _add_booth_row(d, rank=2, is_lead=False, rank_source="inferred")
+
+
+def _unknown_rank_source(d: Payload) -> None:
+    d["booths"]["rank_source"][0] = "guessed"
+
+
+def _games_ranked_with_a_lead(d: Payload) -> None:
+    d["booths"]["rank_source"][0] = "games"
+
+
+def _booth_game_list_short(d: Payload) -> None:
+    d["booths"]["game_list"][0] = []
+
+
+def _flagship_over_games(d: Payload) -> None:
+    d["booths"]["flagship_games"][0] = 2
+
+
+def _flagship_in_flagshipless_group(d: Payload) -> None:
+    d["lookups"]["network_groups"][0]["flagship"] = None
+
+
+def _viewership_duplicate(d: Payload) -> None:
+    v = d["viewership"]
+    for name, col in list(v.items()):
+        v[name] = [*col, copy.deepcopy(col[0])]
+
+
+def _viewership_game_list_short(d: Payload) -> None:
+    d["viewership"]["game_list"][0] = []
+
+
+def _viewership_zero_games(d: Payload) -> None:
+    d["viewership"]["games"][0] = 0
+    d["viewership"]["game_list"][0] = []
+
+
+def _lineup_without_pbp(d: Payload) -> None:
+    d["games"]["crew_source"][0] = "published_lineup"
+    d["games"]["crew_source_url"][0] = "https://example.com/lineup"
+    d["games"]["crew"][0] = [{"person": 0, "role": "analyst"}]
+
+
+def _lineup_without_url(d: Payload) -> None:
+    d["games"]["crew_source"][0] = "published_lineup"
+
+
+def _lineup_http_url(d: Payload) -> None:
+    d["games"]["crew_source"][0] = "published_lineup"
+    d["games"]["crew_source_url"][0] = "http://example.com/lineup"
+
+
+def _source_none_with_crew(d: Payload) -> None:
+    d["games"]["crew_source"][0] = None
+
+
+def _source_506_without_crew(d: Payload) -> None:
+    d["games"]["crew_source"][1] = "506"
+
+
+def _url_without_lineup(d: Payload) -> None:
+    d["games"]["crew_source_url"][0] = "https://example.com/lineup"
+
+
+def _network_in_two_groups(d: Payload) -> None:
+    d["lookups"]["network_groups"].append(
+        {"id": "cbs", "name": "CBS", "flagship": None, "members": [1]}
+    )
+
+
+def _network_in_no_group(d: Payload) -> None:
+    d["lookups"]["network_groups"][0]["members"] = [0]
+
+
+def _categories_reordered(d: Payload) -> None:
+    d["lookups"]["view_categories"].reverse()
+
+
+def _bad_family(d: Payload) -> None:
+    d["lookups"]["networks"][0]["family"] = "abc"
+
+
+def _solo_sum(d: Payload) -> None:
+    d["special"]["solo_other"][0] = 1
+
+
+def _solo_thursday(d: Payload) -> None:
+    d["special"]["solo_thursday"][0] = 0
+    d["special"]["solo_other"][0] = 1
+
+
+def _solo_holiday(d: Payload) -> None:
+    d["special"]["solo_thursday"][0] = 0
+    d["special"]["solo_holiday"][0] = 1
+
+
+def _old_block(d: Payload) -> None:
+    d["fox_booths"] = d["booths"]
+
+
+def _old_agotw_block(d: Payload) -> None:
+    d["agotw_viewership"] = d["viewership"]
+
+
+def _booth_volatility_column(d: Payload) -> None:
+    d["booths"]["raw_mean_volatility"] = [None]
+
+
+def _booth_spread_column(d: Payload) -> None:
+    d["booths"]["raw_mean_abs_spread"] = [None]
+
+
+def _booth_pregame_spread(d: Payload) -> None:
+    d["booths"]["pregame_spread"] = [None]
 
 
 def _slots_reordered(d: Payload) -> None:
@@ -261,15 +408,11 @@ def _margin_without_points(d: Payload) -> None:
     d["games"]["final_margin"][1] = 0
 
 
-def _pooled_with_person(d: Payload) -> None:
-    d["fox_booths"]["group"][0] = "others_pooled"
-
-
 MUTATORS: list[tuple[str, Mutator]] = [
     ("top_extra", _top_extra),
     ("block_extra", _block_extra),
     ("misaligned", _misaligned),
-    ("bad_version", lambda d: d.update(schema_version="1.0.1")),
+    ("bad_version", lambda d: d.update(schema_version="1.0.0")),
     ("home_idx", _set("games", "home", 0, 2)),
     ("away_idx", _set("games", "away", 0, -1)),
     ("home_name_idx", _set("games", "home_name", 0, 2)),
@@ -281,13 +424,43 @@ MUTATORS: list[tuple[str, Mutator]] = [
     ("crew_person_idx", _set("games", "crew", 0, [{"person": 3, "role": "pbp"}])),
     ("era_idx", _set("games", "era", 0, 4)),
     ("special_franchise_idx", _set("special", "franchise", 0, 7)),
-    ("fox_pbp_idx", _set("fox_booths", "pbp_person", 0, 7)),
-    ("fox_analyst_idx", _set("fox_booths", "analyst_person", 0, 7)),
-    ("agotw_era_idx", _set("agotw_viewership", "era", 0, 7)),
-    ("agotw_pbp_idx", _set("agotw_viewership", "pbp_person", 0, 7)),
-    ("agotw_analyst_idx", _set("agotw_viewership", "analyst_person", 0, 7)),
-    ("fox_game_list", _set("fox_booths", "game_list", 0, [5])),
-    ("agotw_game_list", _set("agotw_viewership", "game_list", 0, [-1])),
+    ("booth_pbp_idx", _set("booths", "pbp_person", 0, 7)),
+    ("booth_analyst_idx", _set("booths", "analyst_person", 0, 7)),
+    ("booth_group_idx", _set("booths", "network_group", 0, 7)),
+    ("viewership_era_idx", _set("viewership", "era", 0, 7)),
+    ("viewership_category_idx", _set("viewership", "category", 0, 12)),
+    ("booth_game_list", _set("booths", "game_list", 0, [5])),
+    ("viewership_game_list", _set("viewership", "game_list", 0, [-1])),
+    ("two_leads", _two_leads),
+    ("rank_gap", _rank_gap),
+    ("lead_not_rank_one", _lead_not_rank_one),
+    ("mixed_rank_source", _mixed_rank_source),
+    ("unknown_rank_source", _unknown_rank_source),
+    ("games_ranked_with_a_lead", _games_ranked_with_a_lead),
+    ("booth_game_list_short", _booth_game_list_short),
+    ("flagship_over_games", _flagship_over_games),
+    ("flagship_in_flagshipless_group", _flagship_in_flagshipless_group),
+    ("viewership_duplicate", _viewership_duplicate),
+    ("viewership_game_list_short", _viewership_game_list_short),
+    ("viewership_zero_games", _viewership_zero_games),
+    ("lineup_without_pbp", _lineup_without_pbp),
+    ("lineup_without_url", _lineup_without_url),
+    ("lineup_http_url", _lineup_http_url),
+    ("source_none_with_crew", _source_none_with_crew),
+    ("source_506_without_crew", _source_506_without_crew),
+    ("url_without_lineup", _url_without_lineup),
+    ("network_in_two_groups", _network_in_two_groups),
+    ("network_in_no_group", _network_in_no_group),
+    ("categories_reordered", _categories_reordered),
+    ("bad_family", _bad_family),
+    ("solo_sum", _solo_sum),
+    ("solo_thursday", _solo_thursday),
+    ("solo_holiday", _solo_holiday),
+    ("old_fox_booths_block", _old_block),
+    ("old_agotw_block", _old_agotw_block),
+    ("booth_volatility_column", _booth_volatility_column),
+    ("booth_spread_column", _booth_spread_column),
+    ("booth_pregame_spread", _booth_pregame_spread),
     ("viewers_zero", _set("games", "viewers", 0, 0)),
     ("viewers_with_cause", _viewers_with_cause),
     ("unrated_without_cause", _unrated_without_cause),
@@ -301,8 +474,6 @@ MUTATORS: list[tuple[str, Mutator]] = [
     ("standalone_total", _set("special", "standalone_total", 0, 2)),
     ("special_identity", _set("special", "special", 0, 3)),
     ("international_other", _set("special", "international_other", 0, 3)),
-    ("two_leads", _two_leads),
-    ("pooled_with_person", _pooled_with_person),
     ("slots_reordered", _slots_reordered),
     ("unreferenced_person", _unreferenced_person),
     ("unreferenced_network", _unreferenced_network),
@@ -362,6 +533,8 @@ BANNED_NAMES = {
     "pbp",
     "raw_mean_abs_spread",
     "raw_n_spread",
+    "raw_mean_volatility",
+    "raw_n_volatility",
     "generated_at",
     "game_type",
     "status",
@@ -407,6 +580,8 @@ def test_nfl_game_fields_pinned() -> None:
         "change_url",
         "network",
         "crew",
+        "crew_source",
+        "crew_source_url",
         "excitement",
         "viewers",
         "scope",
@@ -433,8 +608,8 @@ def test_schema_file_matches_models() -> None:
 
 
 def test_schema_version_pinned() -> None:
-    assert NFL_SCHEMA_VERSION == "1.0.0"
-    assert render_schema()["$id"] == "booth-review/nfl-data/1.0.0"
+    assert NFL_SCHEMA_VERSION == "2.0.0"
+    assert render_schema()["$id"] == "booth-review/nfl-data/2.0.0"
 
 
 def test_cfb_contract_unchanged() -> None:
@@ -491,13 +666,26 @@ def test_fixture_covers_every_view_case() -> None:
     assert any(m == 0 for m in g["final_margin"])
     assert any(m is None for m in g["final_margin"])
     assert any(e["role"] == "unknown" for crew in g["crew"] for e in crew)
-    b, a = d["fox_booths"], d["agotw_viewership"]
-    assert {"lead", "other", "others_pooled"} == set(b["group"])
+    b, v, lk = d["booths"], d["viewership"], d["lookups"]
     assert any(b["low_n"])
     assert any(f > 0 for f in b["fill_in_games"])
-    assert len(set(a["era"])) >= 2
-    assert len(set(zip(a["pbp_person"], a["analyst_person"], strict=True))) >= 2
-    assert any(x for x in a["low_n"])
+    assert any(n > 0 for n in b["lineup_games"])
+    assert {"published", "override", "inferred", "games"} == set(b["rank_source"])
+    assert any(n == 0 for n in b["games"])
+    assert "published_lineup" in g["crew_source"]
+    assert any(c == [] for c in g["crew"])
+    cats = [c["id"] for c in lk["view_categories"]]
+    seen = {cats[c] for c in v["category"]}
+    assert {"agotw", "cbs_national", "snf", "mnf", "tnf", "thanksgiving", "christmas"} <= seen
+    assert len(set(v["era"])) >= 2
+    assert any(x for x in v["low_n"])
+    assert any(r is None for r in v["viewership_resid"])
+    for col in ("solo_thursday", "solo_sunday", "solo_monday", "solo_holiday", "solo_other"):
+        assert any(x > 0 for x in s[col]), col
+    assert any(
+        sum(1 for gg, _ in zip(b["network_group"], b["season"], strict=True) if gg == gi) == 1
+        for gi in range(len(lk["network_groups"]))
+    )
     w = d["season_weeks"]
     zero = [
         i
@@ -529,24 +717,22 @@ _FLOAT_COLUMNS = (
     ("games", "excitement"),
     ("special", "agotw_rate"),
     ("special", "cbs_national_rate"),
-    ("fox_booths", "raw_mean_abs_margin"),
-    ("fox_booths", "raw_mean_excitement"),
-    ("fox_booths", "raw_mean_volatility"),
-    ("fox_booths", "adj_margin_resid"),
-    ("fox_booths", "adj_margin_se"),
-    ("fox_booths", "adj_excitement_resid"),
-    ("fox_booths", "adj_excitement_se"),
-    ("fox_booths", "adj_volatility_resid"),
-    ("fox_booths", "adj_volatility_se"),
-    ("agotw_viewership", "mean_viewers"),
-    ("agotw_viewership", "viewership_resid"),
-    ("agotw_viewership", "viewership_se"),
+    ("booths", "raw_mean_abs_margin"),
+    ("booths", "raw_mean_excitement"),
+    ("booths", "raw_mean_viewers"),
+    ("booths", "adj_margin_resid"),
+    ("booths", "adj_margin_se"),
+    ("booths", "adj_excitement_resid"),
+    ("booths", "adj_excitement_se"),
+    ("viewership", "mean_viewers"),
+    ("viewership", "viewership_resid"),
+    ("viewership", "viewership_se"),
 )
 
 
 def test_float_column_list_covers_every_float_field() -> None:
     found = set()
-    for block in ("games", "special", "fox_booths", "agotw_viewership"):
+    for block in ("games", "special", "booths", "viewership"):
         model = NflSiteData.model_fields[block].annotation
         assert isinstance(model, type) and issubclass(model, BaseModel)
         for name, field in model.model_fields.items():
@@ -575,12 +761,12 @@ def test_bare_nan_in_a_file_fails_by_position_only() -> None:
     from booth_review.errors import SiteBuildError
 
     payload = _load()
-    payload["agotw_viewership"]["viewership_se"][0] = float("nan")
+    payload["viewership"]["viewership_se"][0] = float("nan")
     raw = json.dumps(payload).encode("utf-8")
     assert b"NaN" in raw
     with pytest.raises(SiteBuildError) as err:
         nfl_site_payload_from_bytes(raw)
-    assert "agotw_viewership.viewership_se[0]: must be finite" in str(err.value)
+    assert "viewership.viewership_se[0]: must be finite" in str(err.value)
 
 
 def test_serializers_never_emit_nan() -> None:
@@ -590,7 +776,7 @@ def test_serializers_never_emit_nan() -> None:
     body = nfl_site_payload_bytes(site)
     assert b"NaN" not in body and b"Infinity" not in body
     # A model that skipped validation still cannot be written as invalid JSON.
-    booths = site.fox_booths.model_copy(update={"adj_margin_se": [float("nan")]})
-    broken = site.model_copy(update={"fox_booths": booths})
+    booths = site.booths.model_copy(update={"adj_margin_se": [float("nan")]})
+    broken = site.model_copy(update={"booths": booths})
     with pytest.raises(ValueError):
         nfl_site_payload_bytes(broken)

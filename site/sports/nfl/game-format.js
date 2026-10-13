@@ -40,12 +40,17 @@ export function slotLabel(code) {
 /** Ordered subset of the flag labels set on the row. */
 export function flagLabels(row) {
   const out = [];
-  if (row.standalone) out.push('Standalone');
-  if (row.agotw) out.push('AGOTW');
-  if (row.cbsNational) out.push('CBS national');
+  if (row.standalone) out.push('Solo slot');
+  if (row.agotw) out.push('Fox AGOTW');
+  if (row.cbsNational) out.push('CBS late national');
   if (row.international) out.push('International');
   if (row.flexed) out.push('Flexed');
   return out;
+}
+
+/** Crew provenance note, or null when the crew came from 506. */
+export function crewSourceText(row) {
+  return row.crewSource === 'published_lineup' ? 'from published lineup' : null;
 }
 
 /** '12.3M' or null when unrated. */

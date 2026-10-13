@@ -9,6 +9,7 @@ import pytest
 
 from booth_review.errors import ReferenceTableError
 from booth_review.nfl.reference import (
+    load_nfl_booth_ranks,
     load_nfl_franchises,
     load_nfl_lead_booth_overrides,
     load_nfl_networks,
@@ -46,7 +47,7 @@ def test_fixture_loads(ref: Path) -> None:
     assert load_nfl_team_crosswalk(ref)
     assert load_nfl_stadiums(ref) == {"FAKE01": "GB", "FAKE02": "DE"}
     assert load_nfl_networks(ref)
-    assert 2018 in load_nfl_lead_booth_overrides(ref)
+    assert ("fox", 2018) in load_nfl_lead_booth_overrides(ref)
     assert (2018, 5, "fox") in load_nfl_week_overrides(ref)
 
 
@@ -141,7 +142,9 @@ def test_duplicate_keys(ref: Path) -> None:
     )
     with pytest.raises(ReferenceTableError):
         load_nfl_week_overrides(ref)
-    _append(ref, "nfl_lead_booth_overrides.csv", "2018,bo-fixture,close-call,https://example.com/b")
+    _append(
+        ref, "nfl_lead_booth_overrides.csv", "2018,fox,bo-fixture,close-call,https://example.com/b"
+    )
     with pytest.raises(ReferenceTableError):
         load_nfl_lead_booth_overrides(ref)
 
@@ -183,3 +186,66 @@ def test_stadium_overrides_reject_bad_rows(ref: Path, rows: tuple[str, ...]) -> 
     with pytest.raises(ReferenceTableError) as exc:
         load_nfl_stadium_overrides(ref)
     assert "NOPE99" not in str(exc.value) and "g1" not in str(exc.value)
+
+
+def _ranks(ref: Path, *rows: str) -> None:
+    header = "network,season,rank,pbp,analyst,source_url"
+    (ref / "nfl_booth_ranks.csv").write_text("\n".join([header, *rows]) + "\n", encoding="utf-8")
+
+
+_URL = "https://example.com/lineup"
+
+
+def test_booth_ranks_load(ref: Path) -> None:
+    _ranks(
+        ref,
+        f"fox,2026,2,Bo Fixture,Ana Fixture,{_URL}",
+        f"fox,2026,1,Ana Fixture,Bo Fixture,{_URL}",
+    )
+    ranks = load_nfl_booth_ranks(ref)[("fox", 2026)]
+    assert [(r.rank, r.pbp_person_id, r.analyst_person_id) for r in ranks] == [
+        (1, "ana-fixture", "bo-fixture"),
+        (2, "bo-fixture", "ana-fixture"),
+    ]
+
+
+def test_booth_ranks_missing_file_is_empty(ref: Path) -> None:
+    (ref / "nfl_booth_ranks.csv").unlink()
+    assert load_nfl_booth_ranks(ref) == {}
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        [f"espn,2026,1,Ana Fixture,Bo Fixture,{_URL}"],
+        ["fox,2026,1,Ana Fixture,Bo Fixture,http://example.com/x"],
+        [f"fox,2026,1,Ana Fixture,Bo Fixture,{_URL}", f"fox,2026,1,Bo Fixture,Ana Fixture,{_URL}"],
+        [f"fox,2026,1,Ana Fixture,Bo Fixture,{_URL}", f"fox,2026,3,Bo Fixture,Ana Fixture,{_URL}"],
+        [f"fox,2026,1,Ana Fixture,Bo Fixture,{_URL}", f"fox,2026,2,Ana Fixture,Bo Fixture,{_URL}"],
+    ],
+)
+def test_booth_ranks_rejections(ref: Path, rows: list[str]) -> None:
+    _ranks(ref, *rows)
+    with pytest.raises(ReferenceTableError):
+        load_nfl_booth_ranks(ref)
+
+
+def test_booth_ranks_unresolved_name_hides_name(ref: Path) -> None:
+    _ranks(ref, f"fox,2026,1,Zed Nobody,Bo Fixture,{_URL}")
+    with pytest.raises(ReferenceTableError) as exc:
+        load_nfl_booth_ranks(ref)
+    assert "line 2" in str(exc.value)
+    assert "Nobody" not in str(exc.value)
+
+
+def test_override_network_must_be_group_id(ref: Path) -> None:
+    _rewrite(ref, "nfl_lead_booth_overrides.csv", "2018,fox,", "2018,espn,")
+    with pytest.raises(ReferenceTableError):
+        load_nfl_lead_booth_overrides(ref)
+
+
+def test_override_header_only_is_empty(ref: Path) -> None:
+    (ref / "nfl_lead_booth_overrides.csv").write_text(
+        "season,network_id,person_id,reason,source_url\n", encoding="utf-8"
+    )
+    assert load_nfl_lead_booth_overrides(ref) == {}

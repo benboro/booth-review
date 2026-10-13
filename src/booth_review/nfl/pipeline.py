@@ -49,7 +49,8 @@ _MESSAGE_COUNTS: tuple[tuple[str, str], ...] = (
     ("seasons_close", "close"),
     ("seasons_tied", "tied"),
     ("agotw_miss_weeks", "misses"),
-    ("skipped_single_header_weeks", "single"),
+    ("published_lineup_games", "lineup"),
+    ("booth_rank_disagreements", "rankdiff"),
 )
 _MAX_MESSAGE_LEN = 120
 

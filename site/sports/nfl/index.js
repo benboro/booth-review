@@ -17,17 +17,17 @@ import { createDetailPanel } from './panel.js';
 import { createNflTabs } from './tabs.js';
 import { initNflFilters, renderNflFilters, closeNflFilters } from './filters.js';
 import * as teamBars from './views/team-bars.js';
-import * as foxCrews from './views/fox-crews.js';
-import * as agotwLine from './views/agotw-line.js';
+import * as crews from './views/crews.js';
+import * as viewership from './views/viewership.js';
 import * as scatter from './views/scatter.js';
 
-const VIEW_MODULES = { special: teamBars, fox: foxCrews, agotw: agotwLine, scatter };
+const VIEW_MODULES = { special: teamBars, crews, viewership, scatter };
 const VIEW_IDS = Object.keys(VIEW_MODULES);
 
 const HINTS = {
   special: 'Pick a team bar to see its seasons and games.',
-  fox: 'Pick a booth to list its games.',
-  agotw: 'Pick a season point to list its games.',
+  crews: 'Pick a booth to list its games.',
+  viewership: 'Pick a season point to list its games.',
   scatter: '',
 };
 
@@ -76,6 +76,7 @@ const hooks = {
   getTableIndexes: () => lastRows.map((r) => r.i),
   openGame: (i) => openGame(i, undefined),
   closePanel: () => panel && panel.close(),
+  getBoothCatalog: () => (model ? model.boothCatalog.map((e) => ({ key: e.key, label: e.label })) : []),
   getViewModel: (id) => (views && views[id] ? views[id].mod.testModel() : null),
 };
 
@@ -219,20 +220,28 @@ function personName(id) {
   return idx == null ? id : model.people[idx].name;
 }
 
+function boothLabel(key) {
+  const e = model.boothIndex.get(key);
+  return e ? e.label : key;
+}
+
 function renderSelectionBar() {
   const { chips, clearBtn, summary } = regions;
+  const chip = (name, onRemove) => {
+    const li = el('li', 'chip');
+    const label = el('span', 'chip-label', name);
+    const rm = el('button', 'chip-remove', '×');
+    rm.type = 'button';
+    rm.setAttribute('aria-label', `Remove ${name}`);
+    rm.addEventListener('click', onRemove);
+    li.append(label, rm);
+    return li;
+  };
   chips.replaceChildren(
-    ...state.people.map((id) => {
-      const name = personName(id);
-      const li = el('li', 'chip');
-      const label = el('span', 'chip-label', name);
-      const rm = el('button', 'chip-remove', '×');
-      rm.type = 'button';
-      rm.setAttribute('aria-label', `Remove ${name}`);
-      rm.addEventListener('click', () => setState({ people: state.people.filter((p) => p !== id) }));
-      li.append(label, rm);
-      return li;
-    }),
+    ...state.people.map((id) =>
+      chip(personName(id), () => setState({ people: state.people.filter((p) => p !== id) }))),
+    ...state.booths.map((key) =>
+      chip(boothLabel(key), () => setState({ booths: state.booths.filter((k) => k !== key) }))),
   );
   clearBtn.hidden = !state.selection;
   const n = lastRows.length;
@@ -251,10 +260,13 @@ function renderHeadline() {
 
 function renderTable() {
   lastRows = tableGames(model, state).map((i) => gameRow(model, i));
-  const filtered = !!state.selection || state.people.length > 0;
+  const filtered = !!state.selection || state.booths.length > 0 || state.people.length > 0;
   let selectionLabel = '';
   if (state.selection && state.selection.label) selectionLabel = String(state.selection.label);
-  else if (state.people.length) selectionLabel = state.people.map(personName).join(', ');
+  else {
+    const names = [...state.booths.map(boothLabel), ...state.people.map(personName)];
+    if (names.length) selectionLabel = names.join(', ');
+  }
   table.render(lastRows, { emptyKind: filtered ? 'filtered' : 'nothing', selectionLabel });
 }
 

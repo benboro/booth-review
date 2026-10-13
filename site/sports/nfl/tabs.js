@@ -5,10 +5,10 @@
 import { NFL_VIEWS } from './state.js';
 
 const LABELS = Object.freeze({
-  special: 'Special games by team',
-  fox: 'Fox crews',
-  agotw: 'AGOTW viewership',
-  scatter: 'Game scatter',
+  special: 'Special games',
+  crews: 'Crews',
+  viewership: 'Viewership',
+  scatter: 'Scatter',
 });
 
 /**

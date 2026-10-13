@@ -33,7 +33,8 @@ import {
   showsTimeSlot,
 } from './format.js';
 import { makeGameTypeIcon } from './icons.js';
-import { currentTheme, makePill, makeRolePill, nameWithRoles } from './pill.js';
+import { currentTheme } from './pill.js';
+import { crewBox, externalLink, linksList, networksParagraph } from './panel-parts.js';
 
 /** The element focus returns to when the dialog closes, or null. */
 let opener = null;
@@ -46,37 +47,7 @@ let handledSession = 0;
 let pointerDownOnBackdrop = false;
 
 
-/**
- * Returns `url` unchanged when it parses as an `http:`/`https:` URL, else
- * `null` (T-04-35). A malformed or non-http(s) scheme (e.g. `javascript:`)
- * never becomes a link href.
- * @param {string|null} url
- * @returns {string|null}
- */
-export function safeHref(url) {
-  if (url == null) return null;
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? url : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Builds an external `<a>` with the D-16/T-04-36 target/rel pair, or
- * returns `null` when `href` fails `safeHref`.
- */
-function externalLink(href, text) {
-  const safe = safeHref(href);
-  if (safe == null) return null;
-  const a = document.createElement('a');
-  a.href = safe;
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
-  a.textContent = text;
-  return a;
-}
+export { safeHref } from './panel-parts.js';
 
 /** date · kickoff ET · time-slot line. The time-slot label ("Prime time",
  * "Afternoon", "Noon") is gated on `showsTimeSlot` (D-19): only a
@@ -89,52 +60,28 @@ function dateLine(data, i) {
   return parts.join(' · ');
 }
 
-/** Networks paragraph: "Network: " + a pill per network, primary first, then
- * "Also on: " + a pill per other outlet (SITE-26). Full names and any
- * parenthetical notes are kept -- the panel is where they belong. */
+/** Networks paragraph for a CFB telecast: primary network first, then the other
+ * outlets. Full names and any parenthetical notes are kept (SITE-26). */
 function buildNetworksParagraph(data, i, theme) {
   const t = data.t;
-  const p = document.createElement('p');
-  p.className = 'panel-networks';
-  p.appendChild(document.createTextNode('Network: '));
-  const primaryNet = data.lookups.networks[t.network[i]];
-  p.appendChild(makePill(primaryNet.name, primaryNet.family, theme));
   const others = t.outlets[i].filter((idx) => idx !== t.network[i]);
-  if (others.length > 0) {
-    p.appendChild(document.createTextNode(' · Also on: '));
-    others.forEach((idx, pos) => {
-      if (pos > 0) p.appendChild(document.createTextNode(' '));
-      const net = data.lookups.networks[idx];
-      p.appendChild(makePill(net.name, net.family, theme));
-    });
-  }
-  return p;
+  return networksParagraph({
+    primary: data.lookups.networks[t.network[i]],
+    others: others.map((idx) => data.lookups.networks[idx]),
+    theme,
+  });
 }
 
-/** Crew list in one violet `.crew-box`: one `<li>` per crew entry, "Name [pill]",
- * with " (alt-cast)" etc. after the pill for a non-main feed (D-10). Selected
- * announcers are bold (D-11). */
+/** Crew list for a CFB telecast: " (alt-cast)" etc. after a non-main feed (D-10). */
 function buildCrewList(data, i, selected) {
-  const box = document.createElement('div');
-  box.className = 'crew-box';
-  const ul = document.createElement('ul');
-  ul.className = 'panel-crew';
-  for (const entry of crewEntries(data, i, { selected })) {
-    const li = document.createElement('li');
-    const name = document.createElement('span');
-    name.className = entry.selected ? 'crew-name is-selected' : 'crew-name';
-    name.textContent = entry.name;
-    li.append(nameWithRoles(name, makeRolePill(entry.role)));
-    if (entry.feed !== 'main') {
-      const feed = document.createElement('span');
-      feed.className = 'crew-feed';
-      feed.textContent = ` (${FEED_LABELS[entry.feed]})`;
-      li.appendChild(feed);
-    }
-    ul.appendChild(li);
-  }
-  box.appendChild(ul);
-  return box;
+  return crewBox(
+    crewEntries(data, i, { selected }).map((entry) => ({
+      name: entry.name,
+      role: entry.role,
+      selected: entry.selected,
+      feedLabel: entry.feed !== 'main' ? FEED_LABELS[entry.feed] : null,
+    })),
+  );
 }
 
 /** "Selected on this game: ..." line (D-07), or null when nobody selected is on this dot. */
@@ -215,8 +162,7 @@ function buildFlagsList(data, i) {
 /** Links section: every RR record, the original source (or its absence), then the crew's own source for a hand-confirmed crew (04.3 D-11) or else the 506 listing. */
 function buildLinksList(data, i) {
   const t = data.t;
-  const ul = document.createElement('ul');
-  ul.className = 'panel-links';
+  const items = [];
 
   const rated = Boolean(data.rated[i]);
   const rrUrls = rated ? t.rr_urls[i] : [];
@@ -225,38 +171,31 @@ function buildLinksList(data, i) {
       rrUrls.length > 1
         ? `View record ${idx + 1} on Ratings Reference ↗`
         : 'View record on Ratings Reference ↗';
-    const li = document.createElement('li');
-    li.appendChild(externalLink(url, label) ?? document.createTextNode(label));
-    ul.appendChild(li);
+    items.push({ href: url, text: label, fallback: label });
   });
 
   if (rated) {
-    const sourceLi = document.createElement('li');
     const publisherName = t.publisher[i] != null ? data.lookups.publishers[t.publisher[i]] : null;
-    const sourceLink = externalLink(t.source_url[i], `View original source (${publisherName ?? 'publisher unknown'}) ↗`);
-    sourceLi.appendChild(sourceLink ?? document.createTextNode('Original source not recorded'));
-    ul.appendChild(sourceLi);
+    items.push({
+      href: t.source_url[i],
+      text: `View original source (${publisherName ?? 'publisher unknown'}) ↗`,
+      fallback: 'Original source not recorded',
+    });
   }
 
   const crewSourceLabel = t.crew_source_label?.[i] ?? null;
   const crewSourceUrl = t.crew_source_url?.[i] ?? null;
   if (crewSourceLabel != null) {
-    const li = document.createElement('li');
-    li.appendChild(
-      externalLink(crewSourceUrl, `Crew source: ${crewSourceLabel} ↗`) ??
-        document.createTextNode(`Crew source: ${crewSourceLabel}`),
-    );
-    ul.appendChild(li);
+    items.push({
+      href: crewSourceUrl,
+      text: `Crew source: ${crewSourceLabel} ↗`,
+      fallback: `Crew source: ${crewSourceLabel}`,
+    });
   } else {
-    const s506Link = externalLink(t.s506_url[i], 'View 506 Sports listing ↗');
-    if (s506Link) {
-      const li = document.createElement('li');
-      li.appendChild(s506Link);
-      ul.appendChild(li);
-    }
+    items.push({ href: t.s506_url[i], text: 'View 506 Sports listing ↗' });
   }
 
-  return ul;
+  return linksList(items);
 }
 
 /**

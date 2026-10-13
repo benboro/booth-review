@@ -7,18 +7,35 @@
 
 /** Category codes in model.category (D-24 precedence). */
 export const CATEGORY_CODES = Object.freeze({
-  standalone: 0,
-  agotw: 1,
-  cbs_national: 2,
-  international_other: 3,
-  none: 4,
+  solo_thursday: 0,
+  solo_sunday: 1,
+  solo_monday: 2,
+  solo_holiday: 3,
+  solo_other: 4,
+  agotw: 5,
+  cbs_national: 6,
+  international_other: 7,
+  none: 8,
 });
 
+const HOLIDAY_SLOTS = new Set(['Thanksgiving', 'Christmas', 'Black Friday']);
+
+function soloCode(slot) {
+  if (slot === 'TNF') return CATEGORY_CODES.solo_thursday;
+  if (slot === 'SNF') return CATEGORY_CODES.solo_sunday;
+  if (slot === 'MNF') return CATEGORY_CODES.solo_monday;
+  if (HOLIDAY_SLOTS.has(slot)) return CATEGORY_CODES.solo_holiday;
+  return CATEGORY_CODES.solo_other;
+}
+
 const REQUIRED_BLOCKS = [
-  'games', 'lookups', 'special', 'season_weeks', 'fox_booths',
-  'agotw_viewership', 'freshness', 'constants',
+  'games', 'lookups', 'special', 'season_weeks', 'booths',
+  'viewership', 'freshness', 'constants',
 ];
-const REQUIRED_LOOKUPS = ['franchises', 'team_names', 'networks', 'people', 'eras', 'slots'];
+const REQUIRED_LOOKUPS = [
+  'franchises', 'team_names', 'networks', 'people', 'eras', 'slots',
+  'network_groups', 'view_categories',
+];
 
 /** Columnar block -> array of row objects keyed by column name. */
 function rowsOf(block) {
@@ -47,7 +64,10 @@ export function prepareNfl(raw) {
   }
   const cols = raw.games;
   const n = Array.isArray(cols.season) ? cols.season.length : 0;
-  const { franchises, team_names: teamNames, networks, people, eras, slots } = raw.lookups;
+  const {
+    franchises, team_names: teamNames, networks, people, eras, slots,
+    network_groups: networkGroups, view_categories: viewCategories,
+  } = raw.lookups;
 
   let minSeason = Infinity;
   let maxSeason = -Infinity;
@@ -58,7 +78,7 @@ export function prepareNfl(raw) {
     const s = cols.season[i];
     if (s < minSeason) minSeason = s;
     if (s > maxSeason) maxSeason = s;
-    if (cols.standalone[i]) category[i] = CATEGORY_CODES.standalone;
+    if (cols.standalone[i]) category[i] = soloCode(slots[cols.slot[i]]);
     else if (cols.agotw[i]) category[i] = CATEGORY_CODES.agotw;
     else if (cols.cbs_national[i]) category[i] = CATEGORY_CODES.cbs_national;
     else if (cols.international[i]) category[i] = CATEGORY_CODES.international_other;
@@ -79,11 +99,60 @@ export function prepareNfl(raw) {
   const seasonWeeks = new Map();
   for (const r of rowsOf(raw.season_weeks)) seasonWeeks.set(r.season, r);
 
-  const foxBooths = rowsOf(raw.fox_booths).map((r) => ({ ...r, gameList: r.game_list }));
-  const foxSeasons = [...new Set(foxBooths.map((r) => r.season))].sort((a, b) => b - a);
-  const agotw = rowsOf(raw.agotw_viewership)
+  const booths = rowsOf(raw.booths)
     .map((r) => ({ ...r, gameList: r.game_list }))
-    .sort((a, b) => a.season - b.season);
+    .sort((a, b) => a.season - b.season || a.network_group - b.network_group || a.rank - b.rank);
+  const viewership = rowsOf(raw.viewership)
+    .map((r) => ({ ...r, gameList: r.game_list }))
+    .sort((a, b) => a.category - b.category || a.season - b.season);
+
+  const groupOfNetwork = new Map();
+  networkGroups.forEach((g, gi) => {
+    for (const m of g.members || []) groupOfNetwork.set(m, gi);
+  });
+  const crewSeasons = [...new Set(booths.map((r) => r.season))].sort((a, b) => b - a);
+  const crewSeasonsByGroup = new Map();
+  for (const r of booths) {
+    if (!crewSeasonsByGroup.has(r.network_group)) crewSeasonsByGroup.set(r.network_group, new Set());
+    crewSeasonsByGroup.get(r.network_group).add(r.season);
+  }
+  for (const [g, set] of crewSeasonsByGroup) {
+    crewSeasonsByGroup.set(g, [...set].sort((a, b) => b - a));
+  }
+
+  // Booth catalog: one entry per (group, pbp person) with games, analyst from the latest season.
+  const boothIndex = new Map();
+  const latest = new Map();
+  for (const r of booths) {
+    if (!(r.games > 0) || r.pbp_person == null) continue;
+    const key = `${networkGroups[r.network_group].id}:${people[r.pbp_person].id}`;
+    let e = boothIndex.get(key);
+    if (!e) {
+      e = { key, group: r.network_group, person: r.pbp_person, analyst: null, label: '', categories: new Set() };
+      boothIndex.set(key, e);
+    }
+    if (!latest.has(key) || r.season >= latest.get(key)) {
+      latest.set(key, r.season);
+      e.analyst = r.analyst_person ?? null;
+    }
+  }
+  for (const e of boothIndex.values()) {
+    const pbp = people[e.person].name;
+    e.label = e.analyst == null ? pbp : `${pbp} / ${people[e.analyst].name}`;
+  }
+  for (const v of viewership) {
+    for (const g of v.gameList || []) {
+      const grp = groupOfNetwork.get(cols.network[g]);
+      if (grp === undefined) continue;
+      for (const c of cols.crew[g] || []) {
+        if (c.role !== 'pbp') continue;
+        const e = boothIndex.get(`${networkGroups[grp].id}:${people[c.person].id}`);
+        if (e) e.categories.add(v.category);
+      }
+    }
+  }
+  const boothCatalog = [...boothIndex.values()].sort((a, b) =>
+    a.group - b.group || (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
 
   const franchiseIndex = new Map(franchises.map((f, k) => [f.id, k]));
   const personIndex = new Map(people.map((p, k) => [p.id, k]));
@@ -102,9 +171,15 @@ export function prepareNfl(raw) {
     seasons: n ? [minSeason, maxSeason] : [0, 0],
     special: rowsOf(raw.special),
     seasonWeeks,
-    foxBooths,
-    foxSeasons,
-    agotw,
+    networkGroups,
+    groupOfNetwork,
+    viewCategories,
+    booths,
+    crewSeasons,
+    crewSeasonsByGroup,
+    viewership,
+    boothCatalog,
+    boothIndex,
     personGames,
     franchiseGames,
     franchiseIndex,
@@ -122,6 +197,7 @@ export function gameRow(model, i) {
   const c = model.cols;
   const name = (idx) => (idx == null ? null : model.networks[idx].name);
   const hasViewers = c.viewers[i] != null;
+  const grp = c.network[i] == null ? null : model.groupOfNetwork.get(c.network[i]) ?? null;
   return {
     i,
     season: c.season[i],
@@ -144,6 +220,10 @@ export function gameRow(model, i) {
     originalNetwork: name(c.original_network[i]),
     changeUrl: c.change_url[i] ?? null,
     network: name(c.network[i]),
+    networkFamily: c.network[i] == null ? null : model.networks[c.network[i]].family ?? null,
+    networkGroup: grp == null ? null : model.networkGroups[grp].name,
+    crewSource: c.crew_source[i] ?? null,
+    crewSourceUrl: c.crew_source_url[i] ?? null,
     crew: (c.crew[i] || []).map((m) => ({ name: model.people[m.person].name, role: m.role })),
     viewers: c.viewers[i] ?? null,
     scope: hasViewers ? c.scope[i] ?? null : null,

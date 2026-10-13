@@ -1,6 +1,6 @@
 # NFL site data contract
 
-`nfl-data.json` is the NFL site file (schema `1.0.0`). It is separate from
+`nfl-data.json` is the NFL site file (schema `2.0.0`). It is separate from
 `site-data.json` (see `docs/site-data.md`, schema `2.3.0`, which this contract never
 touches) and the page loads it only when NFL is chosen, directly or through
 `?sport=nfl`, so a college-football page load is unchanged.
@@ -17,7 +17,8 @@ and pinned by a drift test (`tests/test_nfl_contract.py`). A synthetic example l
 - **Display fields only.** The file is small pre-aggregated data for the charts.
   There is no downloadable bulk file of nflverse or Ratings Reference data.
 - **Analysis-only fields never ship:** `pregame_spread`, `coverage_share`, raw crew
-  strings, raw win-probability series and `raw_mean_abs_spread` (or any spread count).
+  strings, raw win-probability series, win-probability volatility and
+  `raw_mean_abs_spread` (or any spread count).
   Only values derived from them (the adjusted residuals and standard errors) appear.
 - **Strict models.** Every model forbids extra keys and does not coerce types. The
   validator reports `block.column[position]` only, never a cell value.
@@ -27,9 +28,12 @@ and pinned by a drift test (`tests/test_nfl_contract.py`). A synthetic example l
 - **Finite numbers only.** Every float is finite: `NaN` and `Infinity` are not valid
   JSON, so the validator rejects them (naming the position only) and the file is
   written with them disallowed.
-- **Labels.** Viewership is window-level and unnormalized (`constants.viewership_scope`
-  is `"window"`, `constants.coverage_normalized` is `false`). Excitement is "GEI-style"
-  (`constants.excitement_method`), never CFBD's `excitementIndex`.
+- **Labels.** Viewership is unnormalized (`constants.coverage_normalized` is `false`).
+  Whether a figure is a window-level one applies per category
+  (`lookups.view_categories[].window_level`: Fox AGOTW and CBS late national are,
+  the rest are not); `constants.viewership_scope` stays `"window"` as the file default.
+  The site says "Excitement" with the GEI-style qualifier in captions, hover, panel and
+  methodology (`constants.excitement_method`, D-17), never CFBD's `excitementIndex`.
 
 ## Layout
 
@@ -39,8 +43,8 @@ Columnar like the CFB file: each block is an object of equal-length lists, and i
 ### freshness
 
 `season`, `in_progress` (true while the season is under way), `through_week`
-(last week with results), `viewership_through_week`, `fox_default_season` (the latest
-season before the in-progress one; the Fox crews view opens there). The two weeks and
+(last week with results), `viewership_through_week`, `crews_default_season` (the latest
+season before the in-progress one; the Crews view opens there). The two weeks and
 the default season are `null` when unknown.
 
 ### constants
@@ -54,7 +58,9 @@ the default season are `null` when unknown.
 |---|---|
 | `franchises` | `{id, name}`: one per franchise across relocations; `name` is the latest |
 | `team_names` | `{name, short}`: the name shown in a season, so a renamed team keeps its old name on old games |
-| `networks` | `{id, name}` |
+| `networks` | `{id, name, family}`: `family` is `disney`, `fox`, `cbs`, `nbc` or `other` and picks the pill color |
+| `network_groups` | `{id, name, flagship, members}` in picker order: networks that share one booth ranking (`members` index `networks`; every network is in exactly one group) and the label of the group's flagship window (AGOTW, Late national, SNF, MNF, TNF), `null` when it has none |
+| `view_categories` | `{id, label, window_level}`: the 12 special-game categories in line order (agotw, cbs_national, snf, mnf, tnf, thanksgiving, christmas, black_friday, international, saturday, friday, other); `window_level` is true for agotw and cbs_national |
 | `people` | `{id, name}`: NFL-only; a `person_id` is shared with CFB but the lists are not linked (D-02) |
 | `eras` | `{id, label, start, end, source_url}`: Nielsen measurement eras; `start`/`end` null when open |
 | `slots` | the 12 slot names in a fixed order: Christmas, Thanksgiving, Black Friday, International, TNF, SNF, MNF, Saturday, Friday, Sunday early, Sunday late, Other |
@@ -76,6 +82,8 @@ Every `people` and `networks` entry must be referenced by something.
 | `original_slot`, `original_network`, `change_url` | flexed games only: the slot and network before the change, and the article that documents it; otherwise null |
 | `network` | `lookups.networks` index; null when unknown |
 | `crew` | list of `{person, role}` (`pbp`, `analyst`, `unknown`); `person` indexes `lookups.people`; may be empty |
+| `crew_source` | where the crew came from: `"506"` (at least one resolved person id came from the 506 listing), `"published_lineup"` (a cited rank-1 lineup that fills a flagship game with no 506 listing) or null; null exactly when `crew` is empty, and a crew is the resolved play-by-play, analyst and sideline ids the file ships, so a 506 listing whose names did not resolve has a null source |
+| `crew_source_url` | the cited lineup release (an `https://` URL); set only when `crew_source` is `published_lineup`, which also needs a `pbp` entry in `crew` (D-20) |
 | `excitement` | GEI-style score, finite; null stays null |
 | `viewers` | people watching, `> 0`; null when no figure |
 | `scope` | `"window"` or `"game"`; set only when `viewers` is set |
@@ -102,6 +110,11 @@ slots, `agotw`, `cbs_national` and `international_other` are exclusive segments.
 - `standalone_total` and the 12 `standalone_<slot>` columns (`christmas`,
   `thanksgiving`, `black_friday`, `international`, `tnf`, `snf`, `mnf`, `saturday`,
   `friday`, `sunday_early`, `sunday_late`, `other`). `standalone_total` equals their sum.
+- `solo_thursday`, `solo_sunday`, `solo_monday`, `solo_holiday`, `solo_other`: the five
+  exclusive solo stack segments (D-12). Thursday = TNF, Sunday = SNF, Monday = MNF,
+  Holiday = Thanksgiving + Christmas + Black Friday, Other solo slot = Saturday,
+  International, Friday, Sunday early, Sunday late and Other. They sum to
+  `standalone_total`, so each game counts once per bar.
 - `agotw`, `cbs_national`.
 - `international`: every international game, in any slot. `international_other`: the
   international games that are not standalone, AGOTW or CBS national (the fourth
@@ -117,28 +130,42 @@ One row per season: `fox_doubleheader_weeks`, `fox_ambiguous_weeks`,
 `cbs_doubleheader_weeks`, `cbs_ambiguous_weeks`. The client's rate denominator is
 doubleheader weeks minus ambiguous weeks and shows "n/a" at zero, never 0.
 
-### fox_booths
+### booths
 
-Fox booth rows, one per season and booth, never pooled across seasons because the
-standard errors do not pool.
+Booth rows, one per season, network group and booth, never pooled across seasons
+because the standard errors do not pool. Win-probability volatility stays in the vault
+table and is not shipped.
 
-- `season`, `group` (`lead`, `other`, `others_pooled`), `rank` (null for the pooled row).
-  A season has at most one `lead` row; an `others_pooled` row names no people.
-- `pbp_person`, `analyst_person`: `lookups.people` indexes (null where unknown).
-- `games`, `fill_in_games`.
-- `raw_n_*` and `raw_mean_abs_margin`, `raw_mean_excitement`, `raw_mean_volatility`:
-  the raw mean, null when its sample count is zero.
-- `adj_n_*` and `adj_<metric>_resid`, `adj_<metric>_se`: the residual against what the
-  spread predicts and its standard error (shown as +/-1.96 SE).
+- `season`, `network_group` (`lookups.network_groups` index).
+- `rank` (1..n within a season and group, no gaps) and `is_lead` (true on rank 1; one
+  lead per season and group, except `games`). `rank_source` is `published`, `override`, `inferred` or `games`
+  and is the same for every row of one season and group. Precedence is published >
+  override > inferred: the vault resolves it before the file is built. games: no lead is
+  known; booths are ordered by games called, and none is labeled Lead (no `is_lead` row).
+- `pbp_person`, `analyst_person`: `lookups.people` indexes (`analyst_person` null where
+  unknown).
+- `games` (equal to the length of `game_list`), `flagship_games` (the group's flagship
+  window; 0 when the group's `flagship` is null, never above `games`), `fill_in_games`,
+  `lineup_games` (games whose crew came from a published lineup). A published booth
+  with no games yet in an in-progress season ships with `games` 0 and an empty
+  `game_list`.
+- `raw_n_margin`, `raw_n_excitement`, `raw_n_viewers` and `raw_mean_abs_margin`,
+  `raw_mean_excitement`, `raw_mean_viewers`: the raw mean, null when its sample count is
+  zero.
+- `adj_n_margin`, `adj_n_excitement` and `adj_<metric>_resid`, `adj_<metric>_se`: the
+  residual against what the spread predicts and its standard error; the chart draws the
+  whisker as +/-1.96 SE.
 - `low_n`: the booth is under `constants.low_n_threshold`; the client fades it.
 - `game_list`: indexes into `games`.
 
-### agotw_viewership
+### viewership
 
-One row per season: `season`, `era` (Nielsen era index), `group` (`lead`, `other` or
-null), `pbp_person`, `analyst_person`, `games`, `fill_in_games`, `mean_viewers`,
-`viewership_resid`, `viewership_se`, `low_n`, `game_list`. Sunday-afternoon figures are
-window-level and unnormalized, so the client labels them so.
+One row per special-game category and season: `category` (`lookups.view_categories`
+index), `season`, `era` (Nielsen era index), `games` (at least 1, equal to the length of
+`game_list`), `mean_viewers`, `viewership_resid`, `viewership_se`, `low_n`, `game_list`.
+The residual is computed within category and era. A category with too few games ships
+`viewership_resid` and `viewership_se` as `null` and the client shows them as missing,
+never 0. Figures for the window-level categories are labeled as such by the client.
 
 ## Credits
 
@@ -150,6 +177,9 @@ window-level and unnormalized, so the client labels them so.
 
 ## Versioning
 
-NFL data has its own `1.0.0` line, with the same rules as the CFB contract: a patch
+NFL data is on its own `2.0.0` line, with the same rules as the CFB contract: a patch
 for wording or documentation, a minor for an added optional field, a major for a
 removed or retyped field. Changing the CFB contract's version is out of scope here.
+
+- 2.0.0 (Phase 8): fox_booths and agotw_viewership replaced by booths and viewership;
+  families, network groups, view categories, solo segments and crew source added.

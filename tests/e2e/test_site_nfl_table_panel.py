@@ -23,7 +23,8 @@ const base = {
   away: 'Harbor Gulls', home: 'Northfield Lanterns', awayShort: 'Gulls', homeShort: 'Lanterns',
   awayPoints: 24, homePoints: 27, slot: 'Sunday early', standalone: false, agotw: false,
   cbsNational: false, international: false, flexed: false, originalSlot: null,
-  originalNetwork: null, changeUrl: null, network: 'Fox',
+  originalNetwork: null, changeUrl: null, network: 'Fox', networkFamily: 'fox',
+  crewSource: null, crewSourceUrl: null,
   crew: [
     { name: 'Sam Sideline', role: 'unknown' },
     { name: 'Ann Analyst', role: 'analyst' },
@@ -71,7 +72,7 @@ def test_format_helpers(run: Callable[[str], Any]) -> None:
     assert got["none"] == "Not available"
     assert got["snf"] == "Sunday Night Football (SNF)"
     assert got["other"] == "Thanksgiving"
-    assert got["flags"] == ["Standalone", "AGOTW", "Flexed"]
+    assert got["flags"] == ["Solo slot", "Fox AGOTW", "Flexed"]
     assert got["v"] == "12.3M"
     assert got["nv"] is None
     assert got["ko"] == "1:00 PM ET"
@@ -100,6 +101,7 @@ def test_table_cells(run: Callable[[str], Any]) -> None:
         crewOrder: [...rows[1].querySelectorAll('.crew-name')].map((n) => n.textContent),
         link: rows[1].querySelector('td:last-child a')?.getAttribute('rel'),
         badLink: rows[0].querySelector('td:last-child a') !== null,
+        tagged: rows[1].children[4].textContent.includes('from published lineup'),
         pillTexts: [...rows[0].querySelectorAll('.nfl-pill')].map((p) => p.textContent),
         text: host.textContent.toLowerCase(),
       };
@@ -122,7 +124,7 @@ def test_table_cells(run: Callable[[str], Any]) -> None:
     assert second[5] == "No rating"
     assert second[6] == "No record"
     assert got["badLink"] is False
-    assert got["pillTexts"] == ["SNF", "AGOTW"]
+    assert got["pillTexts"] == ["SNF", "Fox AGOTW"]
     assert "spread" not in got["text"]
 
 
@@ -198,29 +200,45 @@ def test_table_open_callback_and_xss(run: Callable[[str], Any]) -> None:
 # ------------------------------------------------------------------ panel
 
 
-def test_panel_fields_in_order(run: Callable[[str], Any]) -> None:
+def test_table_published_lineup_tag(run: Callable[[str], Any]) -> None:
+    got = run("""
+      const t = T.createGamesTable(host, { onOpen: () => {} });
+      t.render([
+        mk({ i: 0, date: '2025-09-07', crewSource: 'published_lineup', crewSourceUrl: 'https://example.com/lineup' }),
+        mk({ i: 1, date: '2025-09-14' }),
+      ]);
+      const rows = [...host.querySelectorAll('tbody tr')];
+      return rows.map((tr) => tr.children[4].textContent.includes('from published lineup'));
+    """)
+    assert got == [False, True]  # newest first: the Sep 14 row is untagged
+
+
+def test_panel_cfb_layout(run: Callable[[str], Any]) -> None:
     got = run("""
       const p = PN.createDetailPanel(host, { methodologyHref: 'methodology.html' });
       const opener = document.createElement('button');
       host.appendChild(opener);
       opener.focus();
       p.open(mk({
-        flexed: true, originalSlot: 'SNF', originalNetwork: 'NBC', slot: 'MNF',
-        changeUrl: 'https://example.com/wiki/change',
+        flexed: true, originalSlot: 'SNF', originalNetwork: 'NBC', slot: 'MNF', network: 'ESPN',
+        networkFamily: 'disney', changeUrl: 'https://example.com/wiki/change',
+        crewSource: 'published_lineup', crewSourceUrl: 'https://example.com/lineup',
       }), opener);
       const d = document.getElementById('nfl-detail-panel');
-      const fields = [...d.querySelectorAll('.panel-field')].map((f) => [
-        f.querySelector('h3').textContent, f.querySelector('.panel-field-value').textContent,
-      ]);
       const out = {
         open: p.isOpen(), labelled: d.getAttribute('aria-labelledby'),
         title: document.getElementById('nfl-panel-title').textContent,
         closeLabel: d.querySelector('.panel-close').getAttribute('aria-label'),
-        closeText: d.querySelector('.panel-close').textContent,
-        fields,
-        windowTitle: d.querySelector('.panel-field-value span[title]')?.title,
-        anchors: [...d.querySelectorAll('a')].map((a) => [a.target, a.rel, a.href]),
+        headings: [...d.querySelectorAll('h3')].map((h) => h.textContent),
+        paras: [...d.querySelectorAll('.panel-body > p')].map((x) => x.textContent),
+        pillFamily: d.querySelector('.panel-networks .pill')?.dataset.family,
+        crewBox: d.querySelectorAll('.crew-box .panel-crew li').length,
+        rolePills: d.querySelectorAll('.crew-box .role-pill').length,
+        boxText: d.querySelector('.crew-box').textContent,
+        links: [...d.querySelectorAll('.panel-links li')].map((li) => li.textContent),
+        anchors: [...d.querySelectorAll('a')].map((a) => [a.target, a.rel, a.textContent]),
         text: d.textContent.toLowerCase(),
+        oldFields: d.querySelectorAll('.panel-field, .nfl-pill').length,
       };
       p.close();
       out.closed = p.isOpen();
@@ -229,47 +247,31 @@ def test_panel_fields_in_order(run: Callable[[str], Any]) -> None:
     """)
     assert got["open"] is True
     assert got["labelled"] == "nfl-panel-title"
-    assert got["title"] == "Harbor Gulls at Northfield Lanterns"
-    assert got["closeLabel"] == "Close details" and got["closeText"] == "×"
-    labels = [f[0] for f in got["fields"]]
-    assert labels == [
-        "Final score",
-        "Date",
-        "Kickoff",
-        "Week",
-        "Slot",
-        "Flags",
-        "Flexed from",
-        "Network",
-        "Crew",
-        "Viewers",
-        "Measured under",
-        "Viewership scope",
-        "GEI-style excitement",
-        "Links",
+    assert got["title"] == "Harbor Gulls 24 at Northfield Lanterns 27"
+    assert got["closeLabel"] == "Close details"
+    assert got["headings"] == ["Crew", "Links"]
+    paras = got["paras"]
+    assert paras[0] == "Sunday, Sep 7, 2025 · 1:00 PM ET"
+    assert paras[1].startswith("Network: ESPN")
+    assert got["pillFamily"] == "disney"
+    assert got["crewBox"] == 3 and got["rolePills"] >= 2
+    assert "From published lineup." in got["boxText"]
+    assert "Viewers: 12.3M · Window-level figure (all Sunday afternoon games)." in paras
+    assert "Measured under Nielsen panel plus out-of-home." in paras
+    facts = next(x for x in paras if x.startswith("Slot:"))
+    assert "Slot: Monday Night Football (MNF). Shares its window." in facts
+    assert "Flexed from SNF on NBC." in facts and "Wikipedia (CC BY-SA 4.0)" in facts
+    assert "Final score: Lanterns 27, Gulls 24." in facts
+    assert "Excitement: 7.3 (GEI-style, not CFBD's index)." in facts
+    assert got["links"] == [
+        "View record on Ratings Reference ↗",
+        "View original source ↗",
+        "Crew source: published lineup ↗",
     ]
-    values = dict(got["fields"])
-    assert values["Final score"] == "Lanterns 27, Gulls 24"
-    assert values["Date"] == "Sunday, Sep 7, 2025"
-    assert values["Kickoff"] == "1:00 PM ET"
-    assert values["Week"] == "Week 1, 2025 regular season"
-    assert values["Slot"] == "Monday Night Football (MNF)"
-    assert values["Flags"] == "Flexed"
-    assert "Flexed from SNF (NBC)" in values["Flexed from"]
-    assert "Scheduling change on Wikipedia ↗" in values["Flexed from"]
-    assert "Scheduling facts: Wikipedia, CC BY-SA 4.0." in values["Flexed from"]
-    assert values["Network"] == "Fox"
-    assert values["Viewers"].startswith("12.3M") and "window-level" in values["Viewers"]
-    assert values["Measured under"] == "Nielsen panel plus out-of-home"
-    assert values["Viewership scope"] == "Unnormalized. No coverage-share data was available."
-    assert values["GEI-style excitement"].startswith("7.3")
-    assert "Not CFBD's excitement index." in values["GEI-style excitement"]
-    assert "View record on Ratings Reference ↗" in values["Links"]
-    assert "View original source ↗" in values["Links"]
-    assert got["windowTitle"].startswith("This figure covers the whole Sunday-afternoon window")
-    assert len(got["anchors"]) == 3
-    for target, rel, _href in got["anchors"]:
+    assert len(got["anchors"]) == 4
+    for target, rel, _text in got["anchors"]:
         assert target == "_blank" and rel == "noopener noreferrer"
+    assert got["oldFields"] == 0
     assert "spread" not in got["text"] and "excitementindex" not in got["text"]
     assert got["closed"] is False
     assert got["focusBack"] is True
@@ -282,21 +284,23 @@ def test_panel_unrated_and_unsafe_links(run: Callable[[str], Any]) -> None:
         viewers: null, scope: null, cause: 'regional', era: null, excitement: null,
         kickoff: null, network: null, crew: [], rrUrl: 'javascript:alert(1)', sourceUrl: null,
         flexed: true, originalSlot: null, originalNetwork: null, changeUrl: 'javascript:1',
+        standalone: true,
       }), null);
       const d = document.getElementById('nfl-detail-panel');
-      const values = Object.fromEntries([...d.querySelectorAll('.panel-field')].map((f) => [
-        f.querySelector('h3').textContent, f.querySelector('.panel-field-value').textContent,
-      ]));
-      return { values, anchors: d.querySelectorAll('a').length };
+      return {
+        paras: [...d.querySelectorAll('.panel-body > p')].map((x) => x.textContent),
+        links: [...d.querySelectorAll('.panel-links li')].map((li) => li.textContent),
+        anchors: d.querySelectorAll('a').length,
+      };
     """)
-    values = got["values"]
-    assert values["Viewers"] == "Not available (Ratings Reference does not compile regional games)"
-    assert "Measured under" not in values and "Viewership scope" not in values
-    assert values["Kickoff"] == "Not recorded"
-    assert values["Network"] == "Not recorded" and values["Crew"] == "Not recorded"
-    assert values["GEI-style excitement"].startswith("Not available")
-    assert values["Flexed from"].startswith("Flexed from")
-    assert "Original source not recorded" in values["Links"]
+    paras = got["paras"]
+    assert paras[0] == "Sunday, Sep 7, 2025 · Kickoff time not recorded"
+    assert "Network not recorded." in paras and "Crew not listed." in paras
+    assert "Viewers: not available (Ratings Reference does not compile regional games)" in paras
+    assert not any(x.startswith("Measured under") for x in paras)
+    facts = next(x for x in paras if x.startswith("Slot:"))
+    assert "Solo slot." in facts and "Excitement: not available." in facts
+    assert got["links"] == []
     assert got["anchors"] == 0
 
 
@@ -314,7 +318,10 @@ def test_panel_replaces_content_and_esc_closes(
     }"""
     )
     assert nfl_guarded_page.locator("dialog#nfl-detail-panel").count() == 1
-    assert nfl_guarded_page.locator("#nfl-panel-title").inner_text() == "Second Away at Second Home"
+    assert (
+        nfl_guarded_page.locator("#nfl-panel-title").inner_text()
+        == "Second Away 24 at Second Home 27"
+    )
     nfl_guarded_page.keyboard.press("Escape")
     assert nfl_guarded_page.evaluate("window.__p.isOpen()") is False
 

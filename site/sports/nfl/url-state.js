@@ -2,9 +2,10 @@
  * NFL URL state (D-05, D-06). DOM-free. Encodes `sport=nfl` first plus only
  * non-default params; decoding allowlists every value and never throws.
  */
-import { canonicalNflState, defaultNflState, CATEGORY_OPTIONS, METRICS } from './state.js';
+import { canonicalNflState, defaultNflState, CATEGORY_OPTIONS, CREW_METRICS } from './state.js';
 
-const VIEW_PARAM = ['fox', 'agotw', 'scatter'];
+const VIEW_PARAM = ['crews', 'viewership', 'scatter'];
+const VIEW_ALIASES = Object.freeze({ fox: 'crews', agotw: 'viewership' });
 
 /**
  * @returns {string} '?sport=nfl' plus non-default params, in documented order
@@ -20,10 +21,12 @@ export function encodeNflState(state, model) {
   if (s.teams.length) parts.push('team=' + s.teams.map(encodeURIComponent).join(','));
   if (s.people.length) parts.push('people=' + s.people.map(encodeURIComponent).join(','));
   if (s.cats.length) parts.push('cat=' + s.cats.map(encodeURIComponent).join(','));
-  if (s.fseason !== d.fseason && s.fseason != null) parts.push('fseason=' + s.fseason);
+  if (s.network !== d.network && s.network != null) parts.push('net=' + encodeURIComponent(s.network));
+  if (s.cseason !== d.cseason && s.cseason != null) parts.push('cseason=' + s.cseason);
+  if (s.booths.length) parts.push('booths=' + s.booths.map(encodeURIComponent).join(','));
   if (s.adjusted) parts.push('adj=1');
   if (s.metric !== 'margin') parts.push('m=' + s.metric);
-  if (s.agotwY === 'resid') parts.push('ay=resid');
+  if (s.viewY === 'resid') parts.push('ay=resid');
   if (s.scatterX === 'margin') parts.push('x=margin');
   if (s.scatterY === 'excitement') parts.push('y=excitement');
   if (s.dots === 'hide') parts.push('dots=hide');
@@ -66,6 +69,7 @@ export function decodeNflState(search, model) {
       case 'view': {
         const v = safeDecode(raw);
         if (VIEW_PARAM.includes(v)) state.view = v;
+        else if (Object.prototype.hasOwnProperty.call(VIEW_ALIASES, v)) state.view = VIEW_ALIASES[v];
         break;
       }
       case 'seasons': {
@@ -76,12 +80,23 @@ export function decodeNflState(search, model) {
       case 'team': state.teams = list(raw); break;
       case 'people': state.people = list(raw); break;
       case 'cat': state.cats = list(raw).filter((k) => CATEGORY_OPTIONS.some((o) => o.key === k)); break;
+      case 'net': {
+        const v = safeDecode(raw);
+        if (v !== null) state.network = v;
+        break;
+      }
+      case 'booths': state.booths = list(raw); break;
+      case 'cseason':
       case 'fseason':
-        if (/^\d{4}$/.test(raw)) state.fseason = Number(raw);
+        // The first of cseason and fseason seen wins (fseason is the old name).
+        if (!seen.has('cseason*') && /^\d{4}$/.test(raw)) {
+          state.cseason = Number(raw);
+          seen.add('cseason*');
+        }
         break;
       case 'adj': state.adjusted = raw === '1'; break;
-      case 'm': if (METRICS.includes(raw)) state.metric = raw; break;
-      case 'ay': if (raw === 'resid') state.agotwY = 'resid'; break;
+      case 'm': if (CREW_METRICS.includes(raw)) state.metric = raw; break;
+      case 'ay': if (raw === 'resid') state.viewY = 'resid'; break;
       case 'x': if (raw === 'margin') state.scatterX = 'margin'; break;
       case 'y': if (raw === 'excitement') state.scatterY = 'excitement'; break;
       case 'dots': if (raw === 'hide') state.dots = 'hide'; break;

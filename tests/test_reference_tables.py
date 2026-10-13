@@ -26,6 +26,7 @@ from booth_review.contract.models import crew_source_url_problem
 from booth_review.flags.era import ERA_COLUMNS, load_eras
 from booth_review.flags.events import EVENT_COLUMNS, load_event_flags
 from booth_review.nfl.reference import (
+    NFL_BOOTH_RANK_COLUMNS,
     NFL_FRANCHISE_COLUMNS,
     NFL_LEAD_BOOTH_OVERRIDE_COLUMNS,
     NFL_NETWORK_COLUMNS,
@@ -33,6 +34,7 @@ from booth_review.nfl.reference import (
     NFL_STADIUM_OVERRIDE_COLUMNS,
     NFL_TEAM_CROSSWALK_COLUMNS,
     NFL_WEEK_OVERRIDE_COLUMNS,
+    load_nfl_booth_ranks,
     load_nfl_franchises,
     load_nfl_lead_booth_overrides,
     load_nfl_networks,
@@ -103,6 +105,7 @@ KNOWN_TABLES: dict[str, tuple[tuple[str, ...] | None, Loader | None]] = {
         NFL_LEAD_BOOTH_OVERRIDE_COLUMNS,
         load_nfl_lead_booth_overrides,
     ),
+    "nfl_booth_ranks.csv": (NFL_BOOTH_RANK_COLUMNS, load_nfl_booth_ranks),
     "nfl_week_overrides.csv": (NFL_WEEK_OVERRIDE_COLUMNS, load_nfl_week_overrides),
 }
 
@@ -224,6 +227,18 @@ def test_nfl_lead_booth_override_ids_exist() -> None:
         assert row["person_id"] in people_ids, (
             f"nfl_lead_booth_overrides.csv line {line_no}: unknown person_id"
         )
+
+
+def test_nfl_booth_rank_names_resolve() -> None:
+    people = load_people(REFERENCE_DIR)
+    rows = read_reference_csv_numbered(
+        REFERENCE_DIR / "nfl_booth_ranks.csv", NFL_BOOTH_RANK_COLUMNS
+    )
+    for line_no, row in rows:
+        for field in ("pbp", "analyst"):
+            assert people.lookup(row[field]) is not None, (
+                f"nfl_booth_ranks.csv line {line_no}: {field} does not resolve"
+            )
 
 
 def test_d05_exceptions_are_exactly_the_tables_with_game_level_columns() -> None:

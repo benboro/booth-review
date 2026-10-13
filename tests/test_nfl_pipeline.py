@@ -143,7 +143,7 @@ TASK1_REVIEWS = (
     "review_nfl_lead_booth.csv",
     "review_nfl_agotw_misses.csv",
     "review_nfl_lead_absent_weeks.csv",
-    "review_nfl_single_header_weeks.csv",
+    "review_nfl_booth_rank_disagreements.csv",
     "review_nfl_task1_model.csv",
 )
 
@@ -161,9 +161,10 @@ def test_build_writes_task1_table_and_reviews_in_the_same_commit(vault: DataPath
     for name in TASK1_REVIEWS:
         assert (vault.interim / name).is_file()
         assert f"interim/{name}" in paths
-    # ambiguous_fox_weeks, seasons_close, seasons_tied, agotw_miss_weeks and
-    # skipped_single_header_weeks, under short labels (120-character message cap).
-    assert subject.endswith("blocked 0, ambig 0, close 0, tied 0, misses 0, single 0)")
+    # ambiguous_fox_weeks, seasons_close, seasons_tied, agotw_miss_weeks,
+    # published_lineup_games and booth_rank_disagreements, under short labels
+    # (120-character message cap).
+    assert subject.endswith("blocked 0, ambig 0, close 0, tied 0, misses 0, lineup 0, rankdiff 0)")
     model = (vault.interim / "review_nfl_task1_model.csv").read_text()
     assert "band" in model and "ols" in model
 

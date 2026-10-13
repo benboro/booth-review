@@ -89,14 +89,14 @@ def test_nfl_state_kept_across_cfb_detour(
 ) -> None:
     page = nfl_guarded_page
     open_nfl_app(page)
-    page.evaluate("window.__nflTestHooks.setState({ view: 'fox' })")
+    page.evaluate("window.__nflTestHooks.setState({ view: 'crews' })")
     _click(page, "cfb")
     page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
     assert "sport=nfl" not in page.evaluate("location.search")
     _click(page, "nfl")
     page.wait_for_function("location.search.includes('sport=nfl')")
-    assert page.evaluate("window.__nflTestHooks.getState().view") == "fox"
-    assert "view=fox" in page.evaluate("location.search")
+    assert page.evaluate("window.__nflTestHooks.getState().view") == "crews"
+    assert "view=crews" in page.evaluate("location.search")
 
 
 def test_flag_off_ignores_sport_param(guarded_page: Page, site_url: str) -> None:
@@ -230,9 +230,9 @@ def _open_nfl_from_cfb(
     cfb_search = page.evaluate("location.search")
     _click(page, "nfl")
     _wait_nfl_ready(page)
-    page.evaluate("window.__nflTestHooks.setState({ view: 'fox', metric: 'excitement' })")
+    page.evaluate("window.__nflTestHooks.setState({ view: 'crews', metric: 'excitement' })")
     nfl_search = page.evaluate("location.search")
-    assert nfl_search.startswith("?sport=nfl") and "view=fox" in nfl_search
+    assert nfl_search.startswith("?sport=nfl") and "view=crews" in nfl_search
     return cfb_search, nfl_search
 
 
@@ -331,8 +331,8 @@ def test_switching_back_during_the_nfl_import_keeps_cfb(
 def _open_with_failed_nfl(page: Page, nfl_site_url: str, opened_on: str) -> str:
     """Open the page so the NFL import runs (and fails); returns the expected NFL query."""
     if opened_on == "nfl":
-        page.goto(f"{nfl_site_url}/index.html?sport=nfl&view=fox")
-        expected = "?sport=nfl&view=fox"
+        page.goto(f"{nfl_site_url}/index.html?sport=nfl&view=crews")
+        expected = "?sport=nfl&view=crews"
     else:
         page.goto(f"{nfl_site_url}/index.html")
         page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
@@ -374,7 +374,7 @@ def test_nfl_module_failure_offers_a_reload_that_keeps_nfl(
     search = page.evaluate("location.search")
     assert search.startswith("?sport=nfl")
     if opened_on == "nfl":
-        assert page.evaluate("window.__nflTestHooks.getState().view") == "fox"
+        assert page.evaluate("window.__nflTestHooks.getState().view") == "crews"
     assert page.locator("#sport-load-error").count() == 0
     assert errors == []
 

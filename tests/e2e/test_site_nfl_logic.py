@@ -78,19 +78,21 @@ def test_person_games_and_category_precedence(
     run: Callable[[str], Any], nfl_fixture_raw: dict
 ) -> None:
     g = nfl_fixture_raw["games"]
+    slots = nfl_fixture_raw["lookups"]["slots"]
     n = len(g["season"])
+    solo = {"TNF": 0, "SNF": 1, "MNF": 2, "Thanksgiving": 3, "Christmas": 3, "Black Friday": 3}
     expected_cat = []
     for i in range(n):
         if g["standalone"][i]:
-            expected_cat.append(0)
+            expected_cat.append(solo.get(slots[g["slot"][i]], 4))
         elif g["agotw"][i]:
-            expected_cat.append(1)
+            expected_cat.append(5)
         elif g["cbs_national"][i]:
-            expected_cat.append(2)
+            expected_cat.append(6)
         elif g["international"][i]:
-            expected_cat.append(3)
+            expected_cat.append(7)
         else:
-            expected_cat.append(4)
+            expected_cat.append(8)
     got = run("return { cat: Array.from(m.category), pg: [...m.personGames.entries()] }")
     assert got["cat"] == expected_cat
     pg = {k: v for k, v in got["pg"]}
@@ -101,15 +103,15 @@ def test_person_games_and_category_precedence(
 def test_category_agrees_with_special_rows(run: Callable[[str], Any]) -> None:
     bad = run(
         """
+        const keys = ['solo_thursday', 'solo_sunday', 'solo_monday', 'solo_holiday',
+          'solo_other', 'agotw', 'cbs_national', 'international_other'];
         const out = [];
         for (const r of m.special) {
-          const c = [0, 0, 0, 0, 0];
+          const c = new Array(9).fill(0);
           for (const i of m.franchiseGames.get(r.franchise) || []) {
             if (m.cols.season[i] === r.season) c[m.category[i]]++;
           }
-          if (c[0] !== r.standalone_total || c[1] !== r.agotw || c[2] !== r.cbs_national
-              || c[3] !== r.international_other
-              || r.special !== r.standalone_total + r.agotw + r.cbs_national) out.push(r);
+          if (keys.some((k, code) => c[code] !== r[k])) out.push(r);
         }
         return out;
         """
@@ -117,36 +119,213 @@ def test_category_agrees_with_special_rows(run: Callable[[str], Any]) -> None:
     assert bad == []
 
 
-def test_model_blocks_typed(run: Callable[[str], Any], nfl_fixture_raw: dict) -> None:
+def test_game_row_new_fields(run: Callable[[str], Any], nfl_fixture_raw: dict) -> None:
+    g = nfl_fixture_raw["games"]
+    lk = nfl_fixture_raw["lookups"]
+    i = g["crew_source"].index("published_lineup")
+    row = run(f"return D.gameRow(m, {i})")
+    assert row["crewSource"] == "published_lineup"
+    assert row["crewSourceUrl"] == g["crew_source_url"][i]
+    net = g["network"][i]
+    if net is None:
+        assert row["networkFamily"] is None and row["networkGroup"] is None
+    else:
+        assert row["networkFamily"] == lk["networks"][net]["family"]
+        grp = next((x["name"] for x in lk["network_groups"] if net in x["members"]), None)
+        assert row["networkGroup"] == grp
+    assert run("return D.gameRow(m, 0).crewSource") == g["crew_source"][0]
+
+
+def test_prepare_requires_new_blocks(run: Callable[[str], Any]) -> None:
     got = run(
-        """return { special: m.special.length, sw: [...m.seasonWeeks.keys()],
-          fox: m.foxBooths.length, fs: m.foxSeasons, ag: m.agotw.length,
-          gl: m.foxBooths[0].gameList, rate: m.special.map(r => r.agotw_rate) }"""
-    )
-    assert got["special"] == len(nfl_fixture_raw["special"]["season"])
-    assert got["sw"] == nfl_fixture_raw["season_weeks"]["season"]
-    assert got["fox"] == len(nfl_fixture_raw["fox_booths"]["season"])
-    assert got["fs"] == sorted(set(nfl_fixture_raw["fox_booths"]["season"]), reverse=True)
-    assert got["ag"] == len(nfl_fixture_raw["agotw_viewership"]["season"])
-    assert got["gl"] == nfl_fixture_raw["fox_booths"]["game_list"][0]
-    assert got["rate"] == nfl_fixture_raw["special"]["agotw_rate"]
-
-
-def test_colors_reach_three_to_one(run: Callable[[str], Any]) -> None:
-    ratios = run(
         """
-        const bg = { light: '#FFFFFF', dark: '#14161A' };
         const out = [];
-        const all = [...Object.values(P.NFL_CATEGORY_COLORS), P.NFL_OTHER_COLOR,
-          ...P.NFL_CREW_STYLES];
-        for (const e of all) for (const t of ['light', 'dark']) {
-          out.push(CP.contrastRatio(e[t], bg[t]));
+        for (const k of ['booths', 'viewership']) {
+          const bad = { ...raw }; delete bad[k];
+          try { D.prepareNfl(bad); out.push('ok'); } catch (e) { out.push(e.message); }
         }
         return out;
         """
     )
-    assert len(ratios) == 20
-    assert min(ratios) >= 3.0
+    assert got == ["NFL data is incomplete"] * 2
+
+
+def test_model_blocks_typed(run: Callable[[str], Any], nfl_fixture_raw: dict) -> None:
+    lk = nfl_fixture_raw["lookups"]
+    b = nfl_fixture_raw["booths"]
+    v = nfl_fixture_raw["viewership"]
+    got = run(
+        """return { special: m.special.length, sw: [...m.seasonWeeks.keys()],
+          groups: m.networkGroups.map(g => g.id),
+          gon: [...m.groupOfNetwork.entries()],
+          booths: m.booths.map(r => [r.season, r.network_group, r.rank]),
+          gl: m.booths[0].gameList,
+          cs: m.crewSeasons, csg: [...m.crewSeasonsByGroup.entries()],
+          vw: m.viewership.map(r => [r.category, r.season]),
+          vc: m.viewCategories.map(c => c.id),
+          catalog: m.boothCatalog.map(e => [e.key, e.label, [...e.categories].sort()]),
+          rate: m.special.map(r => r.agotw_rate) }"""
+    )
+    assert got["special"] == len(nfl_fixture_raw["special"]["season"])
+    assert got["sw"] == nfl_fixture_raw["season_weeks"]["season"]
+    assert got["groups"] == [x["id"] for x in lk["network_groups"]]
+    gon = {}
+    for gi, grp in enumerate(lk["network_groups"]):
+        for net in grp["members"]:
+            gon[net] = gi
+    assert dict(map(tuple, got["gon"])) == gon
+    rows = sorted(
+        zip(b["season"], b["network_group"], b["rank"], b["game_list"], strict=True),
+        key=lambda r: r[:3],
+    )
+    assert got["booths"] == [list(r[:3]) for r in rows]
+    assert got["gl"] == rows[0][3]
+    assert got["cs"] == sorted(set(b["season"]), reverse=True)
+    for g, seasons in got["csg"]:
+        assert seasons == sorted(
+            {s for s, grp in zip(b["season"], b["network_group"], strict=True) if grp == g},
+            reverse=True,
+        )
+    assert got["vw"] == sorted(map(list, zip(v["category"], v["season"], strict=True)))
+    assert got["vc"] == [c["id"] for c in lk["view_categories"]]
+    people = lk["people"]
+    keys = {}
+    for k in range(len(b["season"])):
+        if b["games"][k] > 0:
+            grp_id = lk["network_groups"][b["network_group"][k]]["id"]
+            key = f"{grp_id}:{people[b['pbp_person'][k]]['id']}"
+            keys[key] = None
+    assert sorted(e[0] for e in got["catalog"]) == sorted(keys)
+    for key, label, _cats in got["catalog"]:
+        assert (
+            " / " in label
+            or label
+            == people[next(i for i, p in enumerate(people) if p["id"] == key.split(":")[1])]["name"]
+        )
+    assert got["rate"] == nfl_fixture_raw["special"]["agotw_rate"]
+
+
+def _luminance_js() -> str:
+    return """
+    const lin = (c) => {
+      c /= 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    const lum = (hex) => {
+      const n = parseInt(hex.slice(1), 16);
+      return 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+    };
+    const ratio = (a, b) => {
+      const la = lum(a), lb = lum(b);
+      return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+    };
+    """
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_segment_colors_reach_3_to_1(
+    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None], scheme: str
+) -> None:
+    nfl_guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
+    open_flagon_cfb(nfl_guarded_page)
+    got = nfl_guarded_page.evaluate(
+        "async () => {"
+        + PRELUDE
+        + _luminance_js()
+        + f"""
+        const cs = getComputedStyle(document.documentElement);
+        const bg = cs.getPropertyValue('--bg').trim().toUpperCase();
+        const surface = cs.getPropertyValue('--surface').trim().toUpperCase();
+        const out = [];
+        const entries = [...Object.entries(P.NFL_CATEGORY_COLORS), ['other', P.NFL_OTHER_COLOR]];
+        for (const [k, e] of entries) {{
+          const hex = e['{scheme}'];
+          out.push([k, ratio(hex, bg), ratio(hex, surface)]);
+        }}
+        return {{ bg, surface, out }};
+        }}"""
+    )
+    assert got["bg"].startswith("#") and got["surface"].startswith("#")
+    assert len(got["out"]) == 9
+    for key, on_bg, on_surface in got["out"]:
+        assert on_bg >= 3.0, (scheme, key, on_bg)
+        assert on_surface >= 3.0, (scheme, key, on_surface)
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_view_category_colors_reach_3_to_1(
+    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None], scheme: str
+) -> None:
+    """Every Viewership line color, including the per-line shades of shared hues."""
+    nfl_guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
+    open_flagon_cfb(nfl_guarded_page)
+    got = nfl_guarded_page.evaluate(
+        "async () => {"
+        + PRELUDE
+        + _luminance_js()
+        + f"""
+        const cs = getComputedStyle(document.documentElement);
+        const bg = cs.getPropertyValue('--bg').trim().toUpperCase();
+        const surface = cs.getPropertyValue('--surface').trim().toUpperCase();
+        const out = [];
+        for (const id of Object.keys(P.VIEW_CATEGORY_STYLE)) {{
+          const hex = P.viewCategoryStyle(id, '{scheme}').color;
+          out.push([id, ratio(hex, bg), ratio(hex, surface)]);
+        }}
+        return {{ out }};
+        }}"""
+    )
+    assert len(got["out"]) == 12
+    for key, on_bg, on_surface in got["out"]:
+        assert on_bg >= 3.0, (scheme, key, on_bg)
+        assert on_surface >= 3.0, (scheme, key, on_surface)
+
+
+def test_flag_labels_and_source_text(run: Callable[[str], Any]) -> None:
+    got = run(
+        """
+        const F = await import('./sports/nfl/game-format.js');
+        const all = { standalone: true, agotw: true, cbsNational: true, international: true,
+          flexed: true };
+        return { labels: F.flagLabels(all), a: F.crewSourceText({ crewSource: 'published_lineup' }),
+          b: F.crewSourceText({ crewSource: '506' }), c: F.crewSourceText({ crewSource: null }) };
+        """
+    )
+    assert got["labels"] == [
+        "Solo slot",
+        "Fox AGOTW",
+        "CBS late national",
+        "International",
+        "Flexed",
+    ]
+    assert got["a"] == "from published lineup" and got["b"] is None and got["c"] is None
+
+
+def test_view_category_style_and_palette_keys(
+    run: Callable[[str], Any], nfl_fixture_raw: dict
+) -> None:
+    ids = [c["id"] for c in nfl_fixture_raw["lookups"]["view_categories"]]
+    got = run(
+        f"""
+        const ids = {ids!r};
+        return {{ keys: Object.keys(P.NFL_CATEGORY_COLORS),
+          styles: ids.map(id => P.viewCategoryStyle(id, 'light')),
+          holiday: P.NFL_CATEGORY_COLORS.solo_holiday }};
+        """
+    )
+    assert got["keys"] == [
+        "solo_thursday", "solo_sunday", "solo_monday", "solo_holiday",
+        "solo_other", "agotw", "cbs_national", "international_other",
+    ]  # fmt: skip
+    assert got["holiday"] == {"light": "#8A7A00", "dark": "#F0E442"}
+    assert all(s["color"].startswith("#") and s["symbol"] for s in got["styles"])
+    holiday = [
+        s
+        for id_, s in zip(ids, got["styles"], strict=True)
+        if id_ in ("thanksgiving", "christmas", "black_friday")
+    ]
+    assert len({s["symbol"] for s in holiday}) == 3
+    assert len({s["color"] for s in holiday}) == 3
 
 
 # ----------------------------------------------------------------- state.js
@@ -156,7 +335,10 @@ def test_default_state(run: Callable[[str], Any], nfl_fixture_raw: dict) -> None
     s = run("return S.defaultNflState(m)")
     seasons = nfl_fixture_raw["games"]["season"]
     assert s["seasons"] == [min(seasons), max(seasons)]
-    assert s["fseason"] == nfl_fixture_raw["freshness"]["fox_default_season"]
+    assert s["cseason"] == nfl_fixture_raw["freshness"]["crews_default_season"]
+    assert s["network"] == "fox" and s["booths"] == []
+    assert (s["metric"], s["adjusted"], s["viewY"]) == ("margin", False, "mean")
+    assert s["hiddenSegments"] == [] and s["hiddenCategories"] == []
     assert s["view"] == "special" and s["teams"] == [] and s["selection"] is None
 
 
@@ -210,14 +392,20 @@ def test_team_bars_range_rates_and_fading(run: Callable[[str], Any], nfl_fixture
     for k in range(len(sp["season"])):
         if rng[0] <= sp["season"][k] <= rng[1]:
             f = sp["franchise"][k]
-            totals[f] = totals.get(f, 0) + sp["special"][k] + sp["international_other"][k]
+            totals[f] = totals.get(f, 0) + sum(
+                sp[c][k]
+                for c in (
+                    "solo_thursday", "solo_sunday", "solo_monday", "solo_holiday", "solo_other",
+                    "agotw", "cbs_national", "international_other",
+                )
+            )  # fmt: skip
             agotw[f] = agotw.get(f, 0) + sp["agotw"][k]
     got = run(
         """
         const d = { ...S.defaultNflState(m), seasons: [2024, 2025] };
         const t = S.teamBars(m, { ...d, teams: [m.franchises[0].id], cats: ['agotw'] });
         return { bars: S.teamBars(m, d), faded: t.map(b => [b.franchise, b.teamFaded,
-          b.segmentFaded.standalone, b.segmentFaded.agotw]) };
+          b.segmentFaded.solo_thursday, b.segmentFaded.agotw]) };
         """
     )
     bars = got["bars"]
@@ -243,27 +431,130 @@ def test_rate_text_and_season_rows(run: Callable[[str], Any]) -> None:
     assert got["rows"] == sorted(got["rows"], reverse=True) and len(got["rows"]) >= 1
 
 
-def test_fox_rows_and_agotw_series(run: Callable[[str], Any], nfl_fixture_raw: dict) -> None:
-    fb = nfl_fixture_raw["fox_booths"]
-    n25 = sum(1 for s in fb["season"] if s == 2025)
+def test_segment_counts_and_fading_map(run: Callable[[str], Any]) -> None:
     got = run(
         """
         const d = S.defaultNflState(m);
-        const rows = S.foxRows(m, { ...d, fseason: 2025 });
-        return { groups: rows.map(r => [r.season, r.group, r.rank]),
-          none: S.foxRows(m, { ...d, fseason: 1999 }),
-          ag: S.agotwSeries(m, d),
-          narrow: S.agotwSeries(m, { ...d, seasons: [2025, 2025] }).points.length };
+        const bars = S.teamBars(m, d);
+        const fade = (cats) => S.teamBars(m, { ...d, cats })[0].segmentFaded;
+        const unfaded = (cats) => Object.entries(fade(cats)).filter(([, v]) => !v).map(([k]) => k);
+        return { keys: Object.keys(bars[0].counts),
+          sums: bars.every(b => b.total === Object.values(b.counts).reduce((x, y) => x + y, 0)),
+          tnf: unfaded(['tnf']), holiday: unfaded(['christmas', 'blackfriday']),
+          other: unfaded(['saturday']), intl: unfaded(['intl']), cbs: unfaded(['cbs']),
+          flexed: unfaded(['flexed']), none: unfaded([]), ex: S.EXCLUSIVE_CATEGORIES.length };
         """
     )
-    assert len(got["groups"]) == n25 and {r[0] for r in got["groups"]} == {2025}
-    rank = {"lead": 0, "other": 1, "others_pooled": 2}
-    assert [rank[r[1]] for r in got["groups"]] == sorted(rank[r[1]] for r in got["groups"])
+    assert got["keys"] == [
+        "solo_thursday", "solo_sunday", "solo_monday", "solo_holiday",
+        "solo_other", "agotw", "cbs_national", "international_other",
+    ]  # fmt: skip
+    assert got["sums"] is True and got["ex"] == 9
+    assert got["tnf"] == ["solo_thursday"]
+    assert got["holiday"] == ["solo_holiday"]
+    assert got["other"] == ["solo_other"]
+    assert got["intl"] == ["solo_other", "international_other"]
+    assert got["cbs"] == ["cbs_national"]
+    assert len(got["flexed"]) == 8 and len(got["none"]) == 8
+
+
+def test_crews_state_functions(run: Callable[[str], Any], nfl_fixture_raw: dict) -> None:
+    b = nfl_fixture_raw["booths"]
+    g = nfl_fixture_raw["games"]
+    n25 = sorted(
+        (b["rank"][k], b["pbp_person"][k])
+        for k in range(len(b["season"]))
+        if b["season"][k] == 2025 and b["network_group"][k] == 0
+    )
+    fox_games = [
+        i for i in range(len(g["season"])) if g["season"][i] == 2025 and g["network"][i] == 0
+    ]
+    got = run(
+        """
+        const d = S.defaultNflState(m);
+        const cov = S.crewsCoverage(m, d);
+        return { rows: S.crewsRows(m, d).map(r => [r.rank, r.pbp_person]),
+          none: S.crewsRows(m, { ...d, cseason: 1999 }),
+          nets: S.crewsNetworks(m, d).map(x => x.id),
+          narrow: S.crewsNetworks(m, { ...d, seasons: [2026, 2026] }).map(x => x.id),
+          seasons: S.crewsSeasons(m, 0), cov };
+        """
+    )
+    assert [tuple(r) for r in got["rows"]] == n25
     assert got["none"] == []
-    assert [p["season"] for p in got["ag"]["points"]] == [2024, 2025, 2026]
-    assert [len(s["points"]) for s in got["ag"]["segments"]] == [1, 2]
-    assert [s["order"] for s in got["ag"]["segments"]] == [0, 1]
+    assert got["nets"] == [
+        x["id"]
+        for gi, x in enumerate(nfl_fixture_raw["lookups"]["network_groups"])
+        if any(
+            g["network"][i] in x["members"]
+            for i in range(len(g["season"]))
+            if g["network"][i] is not None
+        )
+    ]
+    assert set(got["narrow"]) <= set(got["nets"])
+    assert got["seasons"] == [2025, 2024] or got["seasons"][0] >= got["seasons"][-1]
+    assert got["cov"]["total"] == len(fox_games)
+    assert got["cov"]["withCrew"] == sum(1 for i in fox_games if g["crew"][i])
+    assert got["cov"]["fromLineup"] == sum(
+        1 for i in fox_games if g["crew_source"][i] == "published_lineup"
+    )
+
+
+def test_viewership_series(run: Callable[[str], Any], nfl_fixture_raw: dict) -> None:
+    v = nfl_fixture_raw["viewership"]
+    got = run(
+        """
+        const d = S.defaultNflState(m);
+        const all = S.viewershipSeries(m, d);
+        return { all: all.map(s => [s.id, s.label, s.windowLevel, s.points.length]),
+          p0: all[0].points[0],
+          narrow: S.viewershipSeries(m, { ...d, seasons: [2025, 2025] })[0].points.length };
+        """
+    )
+    lk = nfl_fixture_raw["lookups"]["view_categories"]
+    assert [a[0] for a in got["all"]] == [c["id"] for c in lk]
+    for ci, (_id, label, window, count) in enumerate(got["all"]):
+        assert label == lk[ci]["label"] and window == lk[ci]["window_level"]
+        assert count == sum(1 for c in v["category"] if c == ci)
+    first = min(k for k in range(len(v["season"])) if v["category"][k] == 0)
+    p0 = got["p0"]
+    assert p0["season"] == v["season"][first] and p0["mean"] == v["mean_viewers"][first]
+    assert p0["resid"] == v["viewership_resid"][first] and p0["lowN"] == v["low_n"][first]
+    assert p0["gameList"] == v["game_list"][first] and p0["games"] == v["games"][first]
     assert got["narrow"] == 1
+
+
+def test_booth_games_and_state_clean(run: Callable[[str], Any], nfl_fixture_raw: dict) -> None:
+    got = run(
+        """
+        const d = S.defaultNflState(m);
+        const key = m.boothCatalog[0].key;
+        const e = m.boothIndex.get(key);
+        const games = S.boothGames(m, [key]);
+        const ok = games.every(i => m.groupOfNetwork.get(m.cols.network[i]) === e.group
+          && m.cols.crew[i].some(c => c.person === e.person && c.role === 'pbp'));
+        const table = S.tableGames(m, { ...d, booths: [key], people: [m.people[0].id] });
+        const empty = S.tableGames(m, { ...d, booths: [key], seasons: [2030, 2030] });
+        const dirty = S.canonicalNflState({ ...d, network: 'nope', cseason: 1999,
+          booths: [key, 'zz:zz', 5], hiddenSegments: ['agotw', 'bogus'],
+          hiddenCategories: ['snf', 'bogus'], metric: 'volatility' }, m);
+        return { key, games, ok, table, empty, dirty,
+          count: S.activeFilterCount(m, { ...d, booths: [key] }),
+          has: S.pointHasBooth(m, games.slice(0, 1), [key]), no: S.pointHasBooth(m, games, []),
+          garbage: S.canonicalNflState(null, m).view };
+        """
+    )
+    assert got["games"] and got["ok"] is True
+    assert set(got["table"]) == set(got["games"])
+    assert got["empty"] == []
+    dirty = got["dirty"]
+    assert dirty["network"] == "fox"
+    assert dirty["cseason"] == nfl_fixture_raw["freshness"]["crews_default_season"]
+    assert dirty["booths"] == [got["key"]]
+    assert dirty["hiddenSegments"] == ["agotw"] and dirty["hiddenCategories"] == ["snf"]
+    assert dirty["metric"] == "margin"
+    assert got["count"] == 1 and got["has"] is True and got["no"] is False
+    assert got["garbage"] == "special"
 
 
 def test_table_games_and_filter_count(run: Callable[[str], Any]) -> None:
@@ -300,16 +591,22 @@ def test_encode_default_and_order(run: Callable[[str], Any]) -> None:
     got = run(
         """
         const d = S.defaultNflState(m);
+        const key = m.boothCatalog[0].key;
         return { def: U.encodeNflState(d, m),
-          full: U.encodeNflState({ ...d, view: 'fox', seasons: [2024, 2025],
-            teams: [m.franchises[0].id], adjusted: true, metric: 'excitement' }, m),
-          id: m.franchises[0].id };
+          full: U.encodeNflState({ ...d, view: 'crews', seasons: [2024, 2025],
+            teams: [m.franchises[0].id], network: 'cbs', cseason: 2024, booths: [key],
+            adjusted: true, metric: 'viewers' }, m),
+          vw: U.encodeNflState({ ...d, view: 'viewership', viewY: 'resid' }, m),
+          id: m.franchises[0].id, key };
         """
     )
     assert got["def"] == "?sport=nfl"
+    key = got["key"].replace(":", "%3A")
     assert got["full"] == (
-        f"?sport=nfl&view=fox&seasons=2024-2025&team={got['id']}&adj=1&m=excitement"
+        f"?sport=nfl&view=crews&seasons=2024-2025&team={got['id']}&net=cbs&cseason=2024"
+        f"&booths={key}&adj=1&m=viewers"
     )
+    assert got["vw"] == "?sport=nfl&view=viewership&ay=resid"
 
 
 def test_round_trip(run: Callable[[str], Any]) -> None:
@@ -318,8 +615,9 @@ def test_round_trip(run: Callable[[str], Any]) -> None:
         const d = S.defaultNflState(m);
         const s = S.canonicalNflState({ ...d, view: 'scatter', seasons: [2025, 2024],
           teams: [m.franchises[1].id, m.franchises[0].id], people: [m.people[2].id],
-          cats: ['flexed', 'tnf'], fseason: 2024, adjusted: true, metric: 'volatility',
-          agotwY: 'resid', scatterX: 'margin', scatterY: 'excitement', dots: 'hide' }, m);
+          cats: ['flexed', 'tnf'], network: 'cbs', cseason: 2024, booths: [m.boothCatalog[0].key],
+          adjusted: true, metric: 'excitement', viewY: 'resid', scatterX: 'margin',
+          scatterY: 'excitement', dots: 'hide' }, m);
         const back = U.decodeNflState(U.encodeNflState(s, m), m);
         return JSON.stringify(back) === JSON.stringify(S.canonicalNflState(s, m));
         """
@@ -327,12 +625,29 @@ def test_round_trip(run: Callable[[str], Any]) -> None:
     assert ok is True
 
 
+def test_decode_aliases(run: Callable[[str], Any]) -> None:
+    got = run(
+        """
+        const q = ['?view=fox', '?view=agotw', '?view=crews&fseason=2024',
+          '?cseason=2024&fseason=2025',
+          '?fseason=2024&cseason=2025', '?m=volatility', '?m=viewers&ay=resid'];
+        return q.map(x => U.decodeNflState(x, m));
+        """
+    )
+    assert got[0]["view"] == "crews" and got[1]["view"] == "viewership"
+    assert got[2]["cseason"] == 2024
+    assert got[3]["cseason"] == 2024 and got[4]["cseason"] == 2024
+    assert got[5]["metric"] == "margin"
+    assert got[6]["metric"] == "viewers" and got[6]["viewY"] == "resid"
+
+
 def test_decode_never_throws(run: Callable[[str], Any]) -> None:
     got = run(
         """
         const d = S.defaultNflState(m);
         const q = ['%', '?sport=nfl&seasons=abc', '?team=nope,%E0%A4%A', '?cat=bogus,tnf',
-          '?fseason=1850', '?view=bogus', '?seasons=2030-2001', '?sport=cfb&team=%', '&&==', ''];
+          '?cseason=1850', '?view=bogus', '?seasons=2030-2001', '?sport=cfb&team=%', '&&==', '',
+          '?net=%E0%A4%A', '?net=nope', '?booths=zz%3Azz,%', '?fseason=1850'];
         const out = q.map(x => U.decodeNflState(x, m));
         return { out, d, ids: m.franchises.map(f => f.id) };
         """
@@ -340,5 +655,7 @@ def test_decode_never_throws(run: Callable[[str], Any]) -> None:
     out, d = got["out"], got["d"]
     assert out[0] == d and out[1]["seasons"] == d["seasons"]
     assert out[2]["teams"] == [] and out[3]["cats"] == ["tnf"]
-    assert out[4]["fseason"] == d["fseason"] and out[5]["view"] == "special"
+    assert out[4]["cseason"] == d["cseason"] and out[5]["view"] == "special"
     assert out[6]["seasons"] == d["seasons"] and out[7] == d
+    for k in (10, 11, 12, 13):
+        assert out[k] == d

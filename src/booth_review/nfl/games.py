@@ -34,11 +34,14 @@ import polars as pl
 from booth_review.flags.era import MeasurementEra, era_for, load_eras
 from booth_review.nfl.changes import GameChange, match_schedule_changes
 from booth_review.nfl.inputs import NflInputs
+from booth_review.nfl.lineups import apply_published_lineups
 from booth_review.nfl.listings import ListingMatch, match_506_listings
 from booth_review.nfl.people import CrewResolution, resolve_crew
 from booth_review.nfl.reference import (
+    NflBoothRank,
     NflLeadBoothOverride,
     NflWeekOverride,
+    load_nfl_booth_ranks,
     load_nfl_lead_booth_overrides,
     load_nfl_stadium_overrides,
     load_nfl_stadiums,
@@ -85,6 +88,8 @@ NFL_GAME_COLUMNS: tuple[str, ...] = (
     "pbp_person_id",
     "analyst_person_id",
     "sideline_person_ids",
+    "crew_source",
+    "crew_source_url",
     "alt_cast_broadcasts",
     "is_standalone",
     "slot_name",
@@ -147,6 +152,8 @@ NFL_GAME_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
     "pbp_person_id": pl.String,
     "analyst_person_id": pl.String,
     "sideline_person_ids": pl.List(pl.String),
+    "crew_source": pl.String,
+    "crew_source_url": pl.String,
     "alt_cast_broadcasts": pl.List(ALT_CAST_DTYPE),
     "is_standalone": pl.Boolean,
     "slot_name": pl.String,
@@ -217,6 +224,7 @@ COUNT_KEYS: tuple[str, ...] = (
     "unmatched_listings",
     "unmatched_rr",
     "unmatched_changes",
+    "published_lineup_games",
 )
 
 #: A game counts as played this long after its scheduled kickoff (D-12).
@@ -239,7 +247,11 @@ class NflReference:
     #: nflverse_game_id -> venue stadium_id; applied ahead of nflverse's own stadium_id.
     stadium_overrides: Mapping[str, str] = field(default_factory=dict)
     #: season -> cited lead-booth override (D-02); used by Task 1 (nfl/task1.py).
-    lead_booth_overrides: Mapping[int, NflLeadBoothOverride] = field(default_factory=dict)
+    lead_booth_overrides: Mapping[tuple[str, int], NflLeadBoothOverride] = field(
+        default_factory=dict
+    )
+    #: (network group, season) -> cited booths in published order (D-06, D-20).
+    booth_ranks: Mapping[tuple[str, int], tuple[NflBoothRank, ...]] = field(default_factory=dict)
 
     @classmethod
     def load(cls, reference_dir: Path) -> NflReference:
@@ -252,6 +264,7 @@ class NflReference:
             eras=load_eras(reference_dir),
             stadium_overrides=load_nfl_stadium_overrides(reference_dir),
             lead_booth_overrides=load_nfl_lead_booth_overrides(reference_dir),
+            booth_ranks=load_nfl_booth_ranks(reference_dir),
         )
 
 
@@ -630,6 +643,8 @@ def assemble_nfl_games(
                 "pbp_person_id": crew.pbp_person_id,
                 "analyst_person_id": crew.analyst_person_id,
                 "sideline_person_ids": list(crew.sideline_person_ids),
+                "crew_source": None,
+                "crew_source_url": None,
                 "alt_cast_broadcasts": [],
                 "is_standalone": item.standalone,
                 "slot_name": slot_value,
@@ -678,6 +693,8 @@ def assemble_nfl_games(
         else pl.DataFrame(schema=NFL_GAME_SCHEMA)
     )
     frame = frame.select(NFL_GAME_COLUMNS)
+    frame, filled = apply_published_lineups(frame, ref.booth_ranks)
+    counts["published_lineup_games"] = filled
     counts["games"] = frame.height
     counts["standalone"] = int(frame["is_standalone"].sum()) if frame.height else 0
     counts["agotw"] = int(frame["is_agotw"].sum()) if frame.height else 0

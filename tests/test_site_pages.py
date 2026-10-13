@@ -312,11 +312,13 @@ _METHODOLOGY_FLAG_OFF_SHA256 = "2d0db68763cb345f71191a08e3641ded150d71f7b860341c
 _NFL_ANCHORS = (
     "nfl-special-games",
     "nfl-doubleheader-weeks-and-rates",
-    "nfl-fox-crews-and-the-lead-booth",
+    "nfl-crews-and-the-lead-booth",
+    "nfl-published-lineups",
+    "nfl-viewership-by-category",
+    "nfl-window-level-viewership",
     "nfl-the-spread-adjustment",
     "nfl-low-n",
     "nfl-gei-style-excitement",
-    "nfl-window-level-viewership",
     "nfl-games-with-no-public-rating",
     "nfl-measurement-eras",
 )
@@ -336,11 +338,13 @@ def test_methodology_flag_off_digest_is_pinned() -> None:
     assert hashlib.sha256(rendered.encode("utf-8")).hexdigest() == _METHODOLOGY_FLAG_OFF_SHA256
 
 
-def _temp_docs(tmp_path: Path, methodology: str) -> Path:
+def _temp_docs(
+    tmp_path: Path, methodology: str, known_gaps: str = "# Known gaps\n\nBody.\n"
+) -> Path:
     docs = tmp_path / "docs"
     docs.mkdir()
     (docs / "methodology.md").write_text(methodology, encoding="utf-8")
-    (docs / "known-gaps.md").write_text("# Known gaps\n\nBody.\n", encoding="utf-8")
+    (docs / "known-gaps.md").write_text(known_gaps, encoding="utf-8")
     return docs
 
 
@@ -361,6 +365,29 @@ def test_nfl_blocks_stripped_when_flag_off_and_kept_when_on(tmp_path: Path) -> N
     assert "NFLSECRET" in on
     assert "nfl:start" not in on
     assert "nfl:end" not in on
+
+
+_GAPS_WITH_NFL = (
+    "# Known gaps\n\nBody.\n\n<!-- nfl:start -->\n\n## NFL gap\n\nGAPSECRET.\n\n<!-- nfl:end -->\n"
+)
+_PLAIN_DOC = "# M\n\n<!-- include: known-gaps.md -->\n"
+
+
+def test_known_gaps_nfl_block_follows_flag(tmp_path: Path) -> None:
+    docs = _temp_docs(tmp_path, _PLAIN_DOC, _GAPS_WITH_NFL)
+    site = _fixture_site()
+    off = render_methodology(docs, site)
+    on = render_methodology(docs, site, nfl=True)
+    assert "GAPSECRET" not in off
+    assert "nfl:" not in off
+    assert "GAPSECRET" in on
+    assert "nfl:" not in on
+
+
+def test_known_gaps_unbalanced_nfl_marker_raises(tmp_path: Path) -> None:
+    docs = _temp_docs(tmp_path, _PLAIN_DOC, "# Known gaps\n\n<!-- nfl:start -->\nx\n")
+    with pytest.raises(SiteBuildError, match="unbalanced NFL marker"):
+        render_methodology(docs, _fixture_site())
 
 
 @pytest.mark.parametrize(
@@ -410,6 +437,9 @@ def test_methodology_nfl_never_ranks_crews() -> None:
     text = (_DOCS / "methodology.md").read_text(encoding="utf-8")
     blocks = re.findall(r"<!-- nfl:start -->(.*?)<!-- nfl:end -->", text, flags=re.S)
     assert len(blocks) == 2
-    joined = " ".join(blocks).lower()
+    gaps = (_DOCS / "known-gaps.md").read_text(encoding="utf-8")
+    gap_blocks = re.findall(r"<!-- nfl:start -->(.*?)<!-- nfl:end -->", gaps, flags=re.S)
+    assert len(gap_blocks) == 1
+    joined = " ".join(blocks + gap_blocks).lower()
     for phrase in ("best booth", "worst", "better crew"):
         assert phrase not in joined

@@ -15,6 +15,7 @@ from booth_review.nfl.games import NflReference
 from booth_review.nfl.inputs import NflInputs
 from booth_review.nfl.reference import (
     FranchiseName,
+    NflBoothRank,
     NflFranchises,
     NflNetworkRow,
     NflTeamCrosswalkRow,
@@ -74,6 +75,7 @@ def make_ref(
     *,
     stadiums: Mapping[str, str] | None = None,
     overrides: Sequence[NflWeekOverride] = (),
+    booth_ranks: Mapping[tuple[str, int], tuple[NflBoothRank, ...]] | None = None,
 ) -> NflReference:
     dest = tmp_path / "ref"
     if not dest.exists():
@@ -85,6 +87,7 @@ def make_ref(
         week_overrides={(o.season, o.week, o.network): o for o in overrides},
         people=load_people(dest),
         eras=load_eras(dest),
+        booth_ranks=dict(booth_ranks or {}),
     )
 
 
