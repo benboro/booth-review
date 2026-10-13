@@ -26,7 +26,12 @@ from urllib import robotparser
 from urllib.parse import urljoin, urlsplit
 
 from booth_review.config import HOST_POLICIES, USER_AGENT, DataPaths
-from booth_review.errors import BoothReviewError, RobotsDisallowedError, UnknownHostError
+from booth_review.errors import (
+    BoothReviewError,
+    RobotsDisallowedError,
+    UnknownHostError,
+    VaultStateError,
+)
 from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.transport.cache import Manifest, RawCache
 from booth_review.transport.client import PoliteClient
@@ -109,19 +114,37 @@ def append_policy_check(paths: DataPaths, check: PolicyCheck) -> None:
 
 
 def latest_policy_check(paths: DataPaths, source: str) -> PolicyCheck | None:
-    """The last line written for `source` (file order), or None."""
+    """The last line written for `source` (file order), or None.
+
+    An unreadable line (not JSON, or missing or malformed fields) stops with a
+    count-only VaultStateError rather than a traceback. It is never skipped:
+    skipping could make an older approval the newest line (fail closed).
+    """
     path = _ledger_path(paths)
     if not path.is_file():
         return None
     latest: PolicyCheck | None = None
+    unreadable: list[int] = []
     with path.open(encoding="utf-8") as fh:
-        for line in fh:
+        for line_no, line in enumerate(fh, start=1):
             stripped = line.strip()
             if not stripped:
                 continue
-            row = json.loads(stripped)
-            if row.get("source") == source:
-                latest = PolicyCheck.from_dict(row)
+            try:
+                row = json.loads(stripped)
+                if not isinstance(row, dict):
+                    raise TypeError("not an object")
+                check = PolicyCheck.from_dict(row)
+            except (ValueError, KeyError, TypeError):
+                unreadable.append(line_no)
+                continue
+            if check.source == source:
+                latest = check
+    if unreadable:
+        raise VaultStateError(
+            f"{POLICY_LEDGER}: {len(unreadable)} unreadable line(s), first at line "
+            f"{unreadable[0]}; fix or remove it, then run --policy-check"
+        )
     return latest
 
 

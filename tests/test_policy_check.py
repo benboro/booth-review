@@ -16,6 +16,7 @@ import pytest
 from booth_review import cli
 from booth_review.cli import main
 from booth_review.config import HOST_POLICIES, DataPaths
+from booth_review.errors import VaultStateError
 from booth_review.sources.policy import (
     POLICY_LEDGER,
     PolicyCheck,
@@ -251,6 +252,24 @@ def test_policy_fresh_needs_robots_and_terms_within_30_days(tmp_path: Path) -> N
     latest = latest_policy_check(paths, "tvrg")
     assert latest is not None
     assert latest.crawl_delay == 30.0
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["{not json", "[1, 2]", '{"source": "tvrg"}', '{"source": "aa", "checked_at": "yesterday"}'],
+)
+def test_an_unreadable_ledger_line_is_a_clean_count_only_error(git_vault, capsys, bad: str) -> None:
+    # IN-03: no traceback, and never skipped (an older approval must not become newest).
+    now = datetime.now(UTC)
+    append_policy_check(git_vault, PolicyCheck("tvrg", now, True, None, True))
+    with (git_vault.vault / POLICY_LEDGER).open("a", encoding="utf-8") as fh:
+        fh.write(bad + "\n")
+    with pytest.raises(VaultStateError, match="1 unreadable line"):
+        policy_fresh(git_vault, "tvrg", now)
+    assert main(["collect", "tvrg", "--season", "2022"]) == 3
+    err = capsys.readouterr().err
+    assert "policy_checks.jsonl: 1 unreadable line(s), first at line 2" in err
+    assert "Traceback" not in err
 
 
 def test_no_mode_is_a_clear_error(git_vault, capsys) -> None:
