@@ -274,8 +274,8 @@ def build_parser() -> argparse.ArgumentParser:
         psecond.add_argument(
             "--confirm-terms",
             action="store_true",
-            help="record that the user read the current terms and allows collection "
-            "(needs a robots-ok check from the last 30 days, or --policy-check)",
+            help="record that the user read the terms the latest --policy-check fetched and "
+            "they allow collection (run alone, after a robots-ok check from the last 30 days)",
         )
         psecond.add_argument("--no-commit", action="store_true")
 
@@ -981,6 +981,14 @@ def _confirm_terms_only(source: PolicySource, args: argparse.Namespace) -> int:
 
 
 def _collect_second(args: argparse.Namespace, source: PolicySource) -> int:
+    if args.policy_check and args.confirm_terms:
+        # WR-04 (D-10): the confirmation stands for terms the user has read, so it
+        # can't be recorded in the run that fetches them.
+        print(
+            "error: run --policy-check first and read its summary, then --confirm-terms on its own",
+            file=sys.stderr,
+        )
+        return 2
     policy_mode = args.policy_check or args.confirm_terms
     if policy_mode and args.season:
         print("error: --season runs the data pass; run --policy-check on its own", file=sys.stderr)
@@ -1157,15 +1165,14 @@ def _collect_policy(args: argparse.Namespace, source: PolicySource) -> int:
             counts = _partial_counts(before, runtime.cache.counters)
         else:
             summary = outcome.summary
-            robots_ok = outcome.robots_ok
-            # Terms are confirmed only on a clean run: every policy page read.
-            confirm = args.confirm_terms and robots_ok and summary.failed == 0
+            # terms_ok stays null: only a later `--confirm-terms` run, after the
+            # user has read this summary, records it (WR-04).
             check = PolicyCheck(
                 source,
                 outcome.robots_checked_at or now,
-                robots_ok=robots_ok,
+                robots_ok=outcome.robots_ok,
                 crawl_delay=outcome.verdict.crawl_delay if outcome.verdict else None,
-                terms_ok=True if confirm else None,
+                terms_ok=None,
             )
             counts = summary.counts()
         with runtime.vault.lock():
@@ -1191,9 +1198,6 @@ def _collect_policy(args: argparse.Namespace, source: PolicySource) -> int:
             f"terms_ok {'true' if check.terms_ok else 'null'}"
         )
         if not outcome.robots_ok:
-            return 4
-        if args.confirm_terms and not check.terms_ok:
-            print("error: terms not confirmed (a policy page failed)", file=sys.stderr)
             return 4
         return 4 if counts["failed"] else 0
     finally:

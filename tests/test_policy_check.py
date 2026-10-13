@@ -180,11 +180,13 @@ def test_same_day_rerun_judges_the_cached_robots_and_sends_nothing(
 
     handle = mock_transport_factory({})
     patched_client(handle)
-    assert main(["collect", "tvrg", "--policy-check", "--confirm-terms"]) == 0
+    assert main(["collect", "tvrg", "--policy-check"]) == 0
     assert handle.requests == []
+    assert main(["collect", "tvrg", "--confirm-terms"]) == 0
     lines = _ledger(git_vault)
-    assert [line["terms_ok"] for line in lines] == [None, True]
-    assert lines[1]["checked_at"] == lines[0]["checked_at"]  # the robots read it stands on
+    assert [line["terms_ok"] for line in lines] == [None, None, True]
+    # The rerun and the confirmation stand on the first robots read.
+    assert lines[2]["checked_at"] == lines[1]["checked_at"] == lines[0]["checked_at"]
 
 
 # -- confirm-terms and freshness -----------------------------------------------------------
@@ -311,15 +313,15 @@ def test_aa_policy_check_fetches_an_on_host_legal_page(
     )
     patched_client(handle)
 
-    assert main(["collect", "aa", "--policy-check", "--confirm-terms"]) == 0
+    assert main(["collect", "aa", "--policy-check"]) == 0
 
     assert (git_vault.raw / "aa" / "_policy" / _today() / "legal.html").is_file()
     (line,) = _ledger(git_vault)
-    assert line["terms_ok"] is True
+    assert line["terms_ok"] is None
 
 
-def test_aa_confirm_terms_is_withheld_when_a_policy_page_failed(
-    git_vault, mock_transport_factory, patched_client, capsys
+def test_aa_policy_check_with_a_failed_policy_page_exits_4_unconfirmed(
+    git_vault, mock_transport_factory, patched_client
 ) -> None:
     handle = mock_transport_factory(
         {
@@ -329,8 +331,20 @@ def test_aa_confirm_terms_is_withheld_when_a_policy_page_failed(
     )
     patched_client(handle)
 
-    assert main(["collect", "aa", "--policy-check", "--confirm-terms"]) == 4
+    assert main(["collect", "aa", "--policy-check"]) == 4
     (line,) = _ledger(git_vault)
     assert line["robots_ok"] is True
     assert line["terms_ok"] is None
-    assert "terms not confirmed" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("source", ["tvrg", "aa"])
+def test_confirm_terms_is_refused_in_the_run_that_fetches_the_terms(
+    git_vault, mock_transport_factory, patched_client, capsys, source: str
+) -> None:
+    # WR-04: the user confirms terms they have read, never ones fetched in the same run.
+    handle = mock_transport_factory({})
+    patched_client(handle)
+    assert main(["collect", source, "--policy-check", "--confirm-terms"]) == 2
+    assert handle.requests == []
+    assert _ledger(git_vault) == []
+    assert "then --confirm-terms on its own" in capsys.readouterr().err
