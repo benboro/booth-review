@@ -34,6 +34,9 @@ header-only; site-data.json is unchanged).
 never raised. The header-only review_second_source_gate.csv gains a rejected_pages
 column, and a new header-only review_second_source_rejected.csv appears (both digests
 equal the sha256 of their header line); no figure changed.
+
+04.19 review WR-01: the header-only review_second_source_gate.csv gains an ignored column
+(digest equals the sha256 of its header line); no figure changed.
 """
 
 from __future__ import annotations
@@ -101,7 +104,7 @@ _GOLDEN: dict[str, str] = {
         "4b773b5cd105f8ba481447cb016926840fc57b4d5dbc6e1b4dfc540f94d91e74"
     ),
     "interim/review_second_source_gate.csv": (
-        "88e87905b4ae5d7e8f006b6d45efaabef16523cded1be2bcdc3deae5cae294a8"
+        "bb25a623bfb61c2b23fefd7b9bdd29b43524ff7da3824c5926d46015536901e7"
     ),
     "interim/review_second_source_rejected.csv": (
         "81e689caaed346e7dd312f67d95a93039f98228e4c1a06d34038c8343557dd3f"

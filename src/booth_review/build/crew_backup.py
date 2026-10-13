@@ -154,6 +154,20 @@ class LoadedBooths:
 
     booths: list[SavedBooth]
     rejected: tuple[RejectedPage, ...] = ()
+    # Schedule rows that gave no TV booth (radio crews included), the radio
+    # crews among them, and readable pages that gave no booth at all (a
+    # template change shows up here instead of as a silent "filled 0").
+    rows_skipped: int = 0
+    radio_dropped: int = 0
+    pages_without_booths: int = 0
+
+    def counts(self) -> dict[str, int]:
+        return {
+            "rejected_pages": len(self.rejected),
+            "rows_skipped": self.rows_skipped,
+            "radio_dropped": self.radio_dropped,
+            "pages_without_booths": self.pages_without_booths,
+        }
 
 
 @dataclass(frozen=True)
@@ -217,6 +231,7 @@ def load_espnpr_booths(paths: DataPaths, seasons: Sequence[int] | None = None) -
 
     saved: list[SavedBooth] = []
     rejected: list[RejectedPage] = []
+    rows_skipped = radio_dropped = pages_without_booths = 0
     for season, rel in pages:
         html = (paths.raw / rel).read_text(encoding="utf-8", errors="replace")
         entry = latest.get(rel, {})
@@ -232,12 +247,21 @@ def load_espnpr_booths(paths: DataPaths, seasons: Sequence[int] | None = None) -
         except EspnPrParseError:
             rejected.append(RejectedPage(_SOURCE, season, rel, "parse_error"))
             continue
+        rows_skipped += parsed.skipped
+        radio_dropped += parsed.radio_dropped
+        pages_without_booths += int(not parsed.booths)
         stamp = entry.get("saved_at")
         if not isinstance(stamp, str):
             published = page.published if page is not None else None
             stamp = published.astimezone(UTC).strftime(_TIME_FORMAT) if published else ""
         saved.extend(SavedBooth(booth=booth, saved_at=stamp) for booth in parsed.booths)
-    return LoadedBooths(booths=saved, rejected=tuple(rejected))
+    return LoadedBooths(
+        booths=saved,
+        rejected=tuple(rejected),
+        rows_skipped=rows_skipped,
+        radio_dropped=radio_dropped,
+        pages_without_booths=pages_without_booths,
+    )
 
 
 # -- People ----------------------------------------------------------------------------------

@@ -495,7 +495,9 @@ def assemble_tables(
         {f"crew_overrides_{key}": value for key, value in override_result.counts.items()}
     )
     merged_totals.update({f"crew_backup_{key}": value for key, value in backup.counts.items()})
-    merged_totals["crew_backup_rejected_pages"] = len(booth_pages.rejected)
+    merged_totals.update(
+        {f"crew_backup_{key}": value for key, value in booth_pages.counts().items()}
+    )
     merged_totals["crew_backup_gap_weeks"] = len(backfill_gaps)
     merged_totals["crew_gaps_unpatched"] = sum(
         1 for r in crew_gap_review if r["override_status"] == "missing"

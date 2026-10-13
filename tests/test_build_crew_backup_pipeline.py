@@ -239,7 +239,7 @@ def test_saved_release_fills_a_crewless_telecast_end_to_end(
     out = capsys.readouterr().out
     assert (
         "crew backup: filled 1, disagreements 1, network mismatches 0, sideline dropped 1, "
-        "gap weeks listed 0" in out
+        "gap weeks listed 0, rows skipped 0, radio dropped 0, pages without booths 0" in out
     )
     for name in ("Avery Lane", "Morgan Pike", "Sable Wren", "Tamsin Vale", "Ironpeak"):
         assert name not in out

@@ -156,6 +156,7 @@ class Harness:
         self.known: dict[tuple[str, int], frozenset[str]] = {}
         self.fbs: set[int] | None = None
         self.rejected: tuple[RejectedPage, ...] = ()
+        self.ignored: dict[tuple[str, int], int] = {}
         self.season_counts: dict[int, dict[str, int]] = {SEASON: {"rated_telecasts": 5}}
 
     def alias(self, variant: str, *team_ids: int) -> None:
@@ -180,7 +181,9 @@ class Harness:
         result = apply_second_sources(
             frame,
             self.records,
-            SecondSourceInputs(rows=tuple(rows), known=self.known, rejected=self.rejected),
+            SecondSourceInputs(
+                rows=tuple(rows), known=self.known, rejected=self.rejected, ignored=self.ignored
+            ),
             resolver=TeamResolver({SEASON: self.games}, self.crosswalk),
             index=GameIndex(self.games),
             networks=_networks(),
@@ -726,6 +729,21 @@ def test_loader_skips_and_lists_an_off_host_or_unparsable_post(tmp_path: Path) -
     rejected = _review(result, REVIEW_REJECTED)
     assert [r["reason"] for r in rejected] == ["no_canonical_url", "off_host_url"]
     assert result.counts["rejected_pages"] == 2
+
+
+def test_ignored_post_lines_reach_the_gate_row(tmp_path: Path) -> None:
+    # WR-01: lines a parser ignores are counted per (source, season) on the gate.
+    vault = tmp_path / "vault"
+    _cache_post(vault, "tvrg", 2022, _TVRG_SLUG, _fixture("tvrg"))
+    inputs = load_second_source_inputs(DataPaths(vault=vault))
+    ignored = inputs.ignored[("tvrg", 2022)]
+    assert ignored > 0
+    h = Harness()
+    h.ignored = inputs.ignored
+    result, _ = h.run(list(inputs.rows))
+    (gate,) = [g for g in result.gates if g.source == "tvrg"]
+    assert gate.ignored == ignored
+    assert gate.as_row()["ignored"] == ignored
 
 
 def test_loader_rejects_a_bad_known_file(tmp_path: Path) -> None:

@@ -101,6 +101,7 @@ REVIEW_GATE_COLUMNS = (
     "excluded_non_game",
     "no_figure",
     "unlinked_prose",
+    "ignored",
     "shared",
     "within_3pct",
     "logged",
@@ -226,6 +227,10 @@ class SecondSourceInputs:
     known: dict[SourceSeason, frozenset[str]]
     # Cached pages skipped because they lack an on-host canonical URL or don't parse.
     rejected: tuple[RejectedPage, ...] = ()
+    # (source, season) -> post lines or figure mentions the parsers ignored
+    # (non-football rows, peaks, streaming numbers): a template change that
+    # makes every line ignored shows on the gate row instead of vanishing.
+    ignored: dict[SourceSeason, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -233,6 +238,7 @@ class _LoaderResult:
     rows: list[SecondSourceRow] = field(default_factory=list)
     known: dict[SourceSeason, frozenset[str]] = field(default_factory=dict)
     rejected: list[RejectedPage] = field(default_factory=list)
+    ignored: dict[SourceSeason, int] = field(default_factory=dict)
 
 
 def _load_smw(paths: DataPaths, seasons: Sequence[int] | None) -> _LoaderResult:
@@ -293,6 +299,7 @@ def _load_posts(
         cached = read_cached_posts(paths, source, season)
         result.rows.extend(cached.rows)
         result.rejected.extend(cached.rejected)
+        result.ignored[(source, season)] = cached.ignored
         known_file = known_path(paths, source, season)
         if known_file.is_file():
             result.known[(source, season)] = load_known(known_file)
@@ -329,12 +336,16 @@ def load_second_source_inputs(
     rows: list[SecondSourceRow] = []
     known: dict[SourceSeason, frozenset[str]] = {}
     rejected: list[RejectedPage] = []
+    ignored: dict[SourceSeason, int] = {}
     for loader in SECOND_SOURCE_LOADERS:
         loaded = loader(paths, seasons)
         rows.extend(loaded.rows)
         known.update(loaded.known)
         rejected.extend(loaded.rejected)
-    return SecondSourceInputs(rows=tuple(rows), known=known, rejected=tuple(rejected))
+        ignored.update(loaded.ignored)
+    return SecondSourceInputs(
+        rows=tuple(rows), known=known, rejected=tuple(rejected), ignored=ignored
+    )
 
 
 # -- Result types --------------------------------------------------------------------------
@@ -366,6 +377,8 @@ class GateStatus:
     status: str  # passed | withheld | no_shared
     # Cached pages of this (source, season) skipped as unreadable (CR-01).
     rejected_pages: int = 0
+    # Post lines or figure mentions the parsers ignored (WR-01).
+    ignored: int = 0
 
     def as_row(self) -> dict[str, object]:
         return {column: getattr(self, column) for column in REVIEW_GATE_COLUMNS}
@@ -572,6 +585,9 @@ def apply_second_sources(
     # rejection shows in the build output.
     for page in inputs.rejected:
         tally.setdefault((page.source, page.season), Counter())["rejected_pages"] += 1
+    for ignored_key, ignored in inputs.ignored.items():
+        if ignored:
+            tally.setdefault(ignored_key, Counter())["ignored"] += ignored
 
     for row in inputs.rows:
         tally_key = (row.source, row.season)
@@ -756,6 +772,7 @@ def apply_second_sources(
                 stale_known=len(known - missed),
                 status=gate_status,
                 rejected_pages=count["rejected_pages"],
+                ignored=count["ignored"],
             )
         )
 

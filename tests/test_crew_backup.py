@@ -792,3 +792,41 @@ def test_loader_skips_and_lists_an_unidentifiable_page(tmp_path: Any) -> None:
         "espnpr/2022/releases/broken.html",
         "no_canonical_url",
     )
+
+
+def test_loader_counts_rows_without_a_booth_and_pages_without_any(tmp_path: Any) -> None:
+    # WR-01: a template change that skips every row shows in the counts, not as "filled 0".
+    paths = _vault(tmp_path)
+    radio = (
+        "<tr><td><strong>Sat, Oct 8</strong></td><td>Noon</td>"
+        "<td><strong>Silverlake at Northfield</strong><br>Avery Lane, Morgan Pike</td>"
+        "<td>ESPN Radio</td></tr>"
+    )
+    undated = (
+        "<tr><td></td><td>Noon</td><td><strong>Riverbend at Lakeshore</strong></td>"
+        "<td>ESPN</td></tr>"
+    )
+    release = _page(
+        URL,
+        "single single-press-release",
+        _ROW.format(names="Blair Tolley, Casey Lorn") + radio + undated,
+        published="2022-10-03T14:00:00-04:00",
+        heading="College Football on ESPN &#8211; WEEK 6",
+    )
+    empty = _page(
+        URL_B,
+        "single single-post post-template-default",
+        "",
+        published="2022-10-03T15:30:00-04:00",
+        heading="WEEK 6",
+    ).replace("<strong>Date</strong>", "<strong>Day</strong>")
+    _write(paths, "espnpr/2022/releases/synthetic-week-6-college-football-coverage.html", release)
+    _write(paths, "espnpr/2022/commentators/wk-6.html", empty)
+    loaded = load_espnpr_booths(paths)
+    assert len(loaded.booths) == 1
+    assert loaded.counts() == {
+        "rejected_pages": 0,
+        "rows_skipped": 2,  # the radio row and the undated, crew-less row
+        "radio_dropped": 1,
+        "pages_without_booths": 1,
+    }

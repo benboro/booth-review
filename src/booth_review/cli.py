@@ -1846,7 +1846,10 @@ def _build(args: argparse.Namespace) -> int:
         f"disagreements {outcome.counts.get('crew_backup_disagreements', 0)}, "
         f"network mismatches {outcome.counts.get('crew_backup_network_mismatch', 0)}, "
         f"sideline dropped {outcome.counts.get('crew_backup_sideline_dropped', 0)}, "
-        f"gap weeks listed {outcome.counts.get('crew_backup_gap_weeks', 0)}"
+        f"gap weeks listed {outcome.counts.get('crew_backup_gap_weeks', 0)}, "
+        f"rows skipped {outcome.counts.get('crew_backup_rows_skipped', 0)}, "
+        f"radio dropped {outcome.counts.get('crew_backup_radio_dropped', 0)}, "
+        f"pages without booths {outcome.counts.get('crew_backup_pages_without_booths', 0)}"
         + _nonzero(("rejected pages", outcome.counts.get("crew_backup_rejected_pages", 0)))
     )
     for gate in outcome.second_source_gates:
