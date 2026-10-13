@@ -86,6 +86,17 @@ model, and build phases; read the relevant section before starting a phase.
   never put them in the public repo, test fixtures, commit messages, or logs. Credit
   every figure to Sports Media Watch with its season-page link, and take its figures
   down if it objects.
+- The TV Ratings Guide and Awful Announcing: collect only with
+  `booth-review collect tvrg|aa --season <year>`, and only for 2021-2024 dates that
+  still have an unrated game on ABC, CBS, NBC, FOX, ESPN, ESPN2 or FS1. A data pass
+  needs a policy check from the last 30 days: `--policy-check` re-reads robots.txt
+  and the site's terms into the vault's policy ledger, and `--confirm-terms` records
+  that the user read the terms and they allow collection. If robots.txt or the terms
+  now ban automated access, stop collecting from that site. Requests go at least 3 s
+  apart (a longer robots Crawl-delay stops the run) and are capped per run with
+  `--max-requests` (default 150); check the count with `--dry-run` first. Credit
+  every figure with a link to the exact post it came from, and take a site's figures
+  down if it objects.
 - CFBD: the free tier allows 1,000 requests per calendar month. Count every call, and
   never call per-game endpoints such as `/metrics/wp` in bulk.
 
@@ -99,10 +110,10 @@ model, and build phases; read the relevant section before starting a phase.
   (Sep 25, 2026) that its fields, including `excitementIndex`, may appear in the chart;
   any downloadable file may hold only our own analysis, never CFBD's fields in bulk,
   even reformatted. Credit "Data provided by CollegeFootballData.com" with a link.
-- Second-source viewership figures (Sports Media Watch now; The TV Ratings Guide,
-  Awful Announcing and ESPN Press Room later) are credited with the publisher's name
-  linked to the page the figure came from, and the detail panel says the figure is
-  not listed on Ratings Reference.
+- Second-source viewership figures (Sports Media Watch, The TV Ratings Guide and
+  Awful Announcing now; ESPN Press Room later) are credited with the publisher's
+  name linked to the page the figure came from, and the detail panel says the figure
+  is not listed on Ratings Reference.
 
 # Tooling
 
