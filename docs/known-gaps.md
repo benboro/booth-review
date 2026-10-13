@@ -6,7 +6,7 @@ uneven. It exists so a reader of the chart understands what "every rated
 telecast" actually means before comparing two seasons, two networks, or two
 announcers. No specific game, crew, or figure is named here — see
 `docs/sources/506.md`, `docs/sources/ratings-reference.md`,
-`docs/sources/smw.md`, `docs/sources/tvrg.md`, `docs/sources/aa.md`, and `docs/sources/cfbd.md` for source-level detail, and `docs/site-data.md` for
+`docs/sources/smw.md`, `docs/sources/tvrg.md`, `docs/sources/aa.md`, `docs/sources/espnpr.md`, and `docs/sources/cfbd.md` for source-level detail, and `docs/site-data.md` for
 how these tables reach the chart.
 
 ## Scope
@@ -82,9 +82,11 @@ What stays unrated, and why:
 - No second-source row is held for a network disagreement or waiting on
   review.
 
-ESPN Press Room is planned for the games that remain. If Ratings Reference
-later adds figures for these seasons, its refresh picks them up and they become
-the headline.
+ESPN Press Room's ratings releases rank last. Its pages are saved by hand,
+and only one 2024 ratings release has been saved so far: 7 of its figures
+loaded, all on games another source already rates, so none is a headline
+(see `docs/sources/espnpr.md`). If Ratings Reference later adds figures for
+these seasons, its refresh picks them up and they become the headline.
 
 These games now appear in the 'No public rating' strip, and the counts read 'N rated of M games'.
 
@@ -102,10 +104,16 @@ Separately, a small share of 506 listings carry no announcing crew at all
 (mostly smaller-audience and streaming-only games); those telecasts, when
 otherwise rated, are counted as coverage gaps rather than silently dropped
 — see the crew-match rate below. During the season, crews for the newest
-week appear once its 506 pages are saved by hand and imported; a second,
-automated crew source was evaluated and none was adopted. Until then those
+week appear once its 506 pages are saved by hand and imported. Until then those
 dots read "Crew not listed", and the "crews through week N" stamp shows how
 far crews reach.
+
+ESPN Press Room is a backup crew source for ESPN-family games that have no 506
+crew and no hand-confirmed one. Its pages are saved by hand, never fetched
+(see `docs/sources/espnpr.md`). As of the last build it fills 0 telecasts in
+every season: every rated ESPN-family game its saved pages cover already has a
+506 crew. The remaining ESPN-family crew gaps from past seasons, 9 telecasts in
+8 weeks, stay gaps until a weekly release covering them is found and saved.
 
 ## Matching: game and game-plus-crew rates
 

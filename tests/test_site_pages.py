@@ -353,7 +353,10 @@ def test_render_methodology_resolves_md_links_against_docs(
 # Re-pinned at 04.19 Plan 36: The TV Ratings Guide and Awful Announcing route, gate
 # and credit text (methodology) and the Wave B 2021-24 counts (known gaps); no NFL
 # text changed.
-_METHODOLOGY_FLAG_OFF_SHA256 = "84b158f1e57a861917ae764cf3b9e05cbb76e472f4260e4ed3609c912af47fbd"
+# Re-pinned at 04.19 Plan 44: ESPN Press Room hand-save route, gate line, crew backup
+# order and credit text (methodology) and its crew and figure counts (known gaps); no
+# NFL text changed.
+_METHODOLOGY_FLAG_OFF_SHA256 = "9604643822b0d1d6b7aa013310845697dabfc5c4c532873e83b3bc90355f30b9"
 
 _NFL_ANCHORS = (
     "nfl-special-games",
