@@ -113,6 +113,11 @@ def parse_sitemap(xml: bytes) -> Sitemap:
         root = etree.fromstring(xml, parser=parser)
     except etree.XMLSyntaxError as exc:
         raise ParseError(f"aa sitemap: invalid XML: {exc}") from exc
+    # The byte check above misses a declaration in another encoding (UTF-16);
+    # lxml already refuses entities, DTDs and the network, so this is defense
+    # in depth (IN-06).
+    if root.getroottree().docinfo.doctype:
+        raise ParseError("aa sitemap: DOCTYPE/ENTITY declarations are forbidden")
     kind = _local(root.tag)
     if kind == "sitemapindex":
         item_name = "sitemap"

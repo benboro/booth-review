@@ -111,6 +111,14 @@ def test_doctype_and_entities_are_refused(xml: bytes) -> None:
         parse_sitemap(xml)
 
 
+def test_a_utf16_doctype_the_byte_check_misses_is_still_refused() -> None:
+    # IN-06: the byte regex can't see a UTF-16 declaration; the parsed tree can.
+    xml = '<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE urlset><urlset/>'.encode("utf-16")
+    assert b"DOCTYPE" not in xml
+    with pytest.raises(ParseError, match="DOCTYPE/ENTITY"):
+        parse_sitemap(xml)
+
+
 def test_invalid_xml_and_unknown_root_raise_parse_error() -> None:
     with pytest.raises(ParseError):
         parse_sitemap(b"<urlset><url>")
