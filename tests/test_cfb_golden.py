@@ -14,6 +14,9 @@ empty review_second_source_* CSVs; no CFB figure changed.
 
 04.19 Plan 08: site-data.json schema 2.4.0 adds telecasts.figure_source (all rr in the
 synthetic vault); no figure changed.
+
+04.19 Plan 27 (3de6998): the header-only review_second_source_gate.csv gains an
+excluded_non_game column; no figure changed.
 """
 
 from __future__ import annotations
@@ -75,7 +78,7 @@ _GOLDEN: dict[str, str] = {
         "4b773b5cd105f8ba481447cb016926840fc57b4d5dbc6e1b4dfc540f94d91e74"
     ),
     "interim/review_second_source_gate.csv": (
-        "7efdfa04f379e9f7d355e67953026314c9fe4a9bfb3abe26236069d1640c8296"
+        "6c7787a45a7d676bf6865f4cdc7aad9180a4a4e3a2715afaead44c027660bd99"
     ),
     "interim/review_second_source_network.csv": (
         "ae7620474f2c88d2b9a3f6a97e2600d4c365b37364c6d99a6ae5990a6fc4bc3d"
