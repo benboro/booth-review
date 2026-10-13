@@ -57,11 +57,13 @@ smw,ALBANY,UAlbany,399,,,SMW chart short name
 smw,APPALACHIAN ST,App State,2026,,,SMW chart abbreviation
 smw,ARK. PINE-BLUFF,Arkansas-Pine Bluff,2029,,,SMW chart abbreviation
 smw,BETH-COOKMAN,Bethune-Cookman,2065,,,SMW chart abbreviation
+smw,C MICHIGAN,Central Michigan,2117,,,SMW chart abbreviation
 smw,CAL,California,25,,,SMW chart short name
 smw,CENTRAL MICH.,Central Michigan,2117,,,SMW chart abbreviation
 smw,CENTRAL STATE U,Central State,2119,,,SMW chart abbreviation
 smw,COL. SCH. OF MINES,Colorado School of Mines,2146,,,SMW chart abbreviation
 smw,CORTLAND,SUNY Cortland,2782,,,SMW chart short name
+smw,E MICHIGAN,Eastern Michigan,2199,,,SMW chart abbreviation
 smw,EASTERN MICH.,Eastern Michigan,2199,,,SMW chart abbreviation
 smw,ECU,East Carolina,151,,,SMW chart initialism
 smw,FAMU,Florida A&M,50,,,SMW chart initialism
@@ -73,18 +75,23 @@ smw,JACKSONVILLE ST.,Jacksonville State,55,,,SMW chart abbreviation
 smw,JAX STATE,Jacksonville State,55,,,SMW chart abbreviation
 smw,MIAMI (OHIO),Miami (OH),193,,,SMW chart spells out the state qualifier
 smw,MIDDLE TENN.,Middle Tennessee,2393,,,SMW chart abbreviation
+smw,MISS STATE,Mississippi State,344,,,SMW chart abbreviation
 smw,MISS VALLEY STATE,Mississippi Valley State,2400,,,SMW chart abbreviation
 smw,MISSISSIPPI,Ole Miss,145,,,SMW chart uses the formal name
 smw,MISSISSIPPI ST.,Mississippi State,344,,,SMW chart abbreviation
+smw,MTSU,Middle Tennessee,2393,,,SMW chart initialism
 smw,N DAKOTA STATE,North Dakota State,2449,,,SMW chart abbreviation
 smw,NC CENTRAL,North Carolina Central,2428,,,SMW chart abbreviation
 smw,NEW MEXICO ST,New Mexico State,166,,,SMW chart abbreviation
 smw,NIU,Northern Illinois,2459,,,SMW chart initialism
+smw,NM STATE,New Mexico State,166,,,SMW chart abbreviation
 smw,NORTH CENTRAL,North Central College,3071,,,SMW chart short name
 smw,NORTH DAKOTA ST,North Dakota State,2449,,,SMW chart abbreviation
+smw,OKLAHOMA ST.,Oklahoma State,197,,,SMW chart abbreviation
 smw,PENN,Pennsylvania,219,,,SMW chart short name
 smw,PITT,Pittsburgh,221,,,SMW chart short name
 smw,PRAIRIE VW. A&M,Prairie View A&M,2504,,,SMW chart abbreviation
+smw,PV A&M,Prairie View A&M,2504,,,SMW chart abbreviation
 smw,SACRAMENTO ST.,Sacramento State,16,,,SMW chart abbreviation
 smw,SAN DIEGO ST,San Diego State,21,,,SMW chart abbreviation
 smw,SC STATE,South Carolina State,2569,,,SMW chart abbreviation
@@ -92,9 +99,15 @@ smw,SDSU,San Diego State,21,,,Ambiguous SMW initialism; candidate set narrowed b
 smw,SDSU,South Dakota State,2571,,,Ambiguous SMW initialism; candidate set narrowed by date and opponent
 smw,SEMO,Southeast Missouri State,2546,,,SMW chart initialism
 smw,SOUTH DAKOTA ST,South Dakota State,2571,,,SMW chart abbreviation
+smw,TENNESSEE ST.,Tennessee State,2634,,,SMW chart abbreviation
+smw,TEXAS A&M-CC,East Texas A&M,2837,2024,2024,SMW 2024 chart misnames East Texas A&M (formerly Texas A&M-Commerce)
+smw,TUSKEEGE,Tuskegee,2657,2024,2024,SMW 2024 chart misspelling
 smw,TUSKEEGEE,Tuskegee,2657,2023,2023,SMW 2023 chart misspelling
 smw,UMASS,Massachusetts,113,,,SMW chart short name
 smw,USF,South Florida,58,,,SMW chart initialism
+smw,W MICHIGAN,Western Michigan,2711,,,SMW chart abbreviation
+smw,W. KENTUCKY,Western Kentucky,98,,,SMW chart abbreviation
+smw,W. MICHIGAN,Western Michigan,2711,,,SMW chart abbreviation
 smw,WASHINGTON ST,Washington State,265,,,SMW chart abbreviation
 smw,WESTERN MICH.,Western Michigan,2711,,,SMW chart abbreviation
 smw,WKU,Western Kentucky,98,,,SMW chart initialism
@@ -127,7 +140,7 @@ smw,COASTAL C,Coastal Carolina,324,2021,2021,SMW 2021 chart abbreviation
 smw,COL,Colorado,38,2021,2021,SMW 2021 chart abbreviation
 smw,COLO,Colorado,38,2021,2021,SMW 2021 chart abbreviation
 smw,COLO ST,Colorado State,36,2021,2021,SMW 2021 chart abbreviation
-smw,EMU,Eastern Michigan,2199,2021,2021,SMW 2021 chart abbreviation
+smw,EMU,Eastern Michigan,2199,2021,,SMW chart abbreviation
 smw,EWU,Eastern Washington,331,2021,2021,SMW 2021 chart abbreviation
 smw,FRES ST,Fresno State,278,2021,2021,SMW 2021 chart abbreviation
 smw,GA ST,Georgia State,2247,2021,2021,SMW 2021 chart abbreviation
@@ -147,7 +160,7 @@ smw,JAX ST,Jacksonville State,55,2021,2021,Ambiguous SMW abbreviation; candidate
 smw,JAX ST,Jackson State,2296,2021,2021,Ambiguous SMW abbreviation; candidate set narrowed by date and opponent
 smw,JAX ST (TAPE),Jackson State,2296,2021,2021,SMW 2021 chart abbreviation with a tape-delay marker
 smw,K ST,Kansas State,2306,2021,2021,SMW 2021 chart abbreviation
-smw,K-STATE,Kansas State,2306,2021,2021,SMW 2021 chart abbreviation
+smw,K-STATE,Kansas State,2306,2021,,SMW chart abbreviation
 smw,KENT,Kent State,2309,2021,2021,SMW 2021 chart abbreviation
 smw,KU,Kansas,2305,2021,2021,SMW 2021 chart abbreviation
 smw,LA TECH,Louisiana Tech,2348,2021,2021,SMW 2021 chart abbreviation
@@ -168,7 +181,7 @@ smw,MONT ST,Montana State,147,2021,2021,SMW 2021 chart abbreviation
 smw,MSU,Michigan State,127,2021,2021,SMW 2021 chart abbreviation
 smw,NC ST,NC State,152,2021,2021,SMW 2021 chart abbreviation
 smw,ND,Notre Dame,87,2021,2021,SMW 2021 chart abbreviation
-smw,NDSU,North Dakota State,2449,2021,2021,SMW 2021 chart abbreviation
+smw,NDSU,North Dakota State,2449,2021,,SMW chart abbreviation
 smw,NEB,Nebraska,158,2021,2021,SMW 2021 chart abbreviation
 smw,NEV,Nevada,2440,2021,2021,SMW 2021 chart abbreviation
 smw,NM,New Mexico,167,2021,2021,SMW 2021 chart abbreviation
