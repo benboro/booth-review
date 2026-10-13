@@ -36,6 +36,9 @@ _VIEWERS_RE = re.compile(r"^(\d+(?:\.\d+)?)([MK])$")
 _DATE_RE = re.compile(r"^(\d{1,2})/(\d{1,2})$")
 _CHART_FILE_RE = re.compile(r"^[A-Za-z0-9._-]+\.png$")
 _SPACED_PLUS_RE = re.compile(r"\s\+\s")
+# 2021 postseason charts print the game or bowl name before the away team in one
+# GAME cell ("<name>: <team>"); the transcription keeps it as printed.
+_GAME_NAME_PREFIX_RE = re.compile(r"^[^:/]+:\s+(?=\S)")
 # A one-cell game shape: "A / B", "A @ B", "A at B", "A vs B".
 _GAME_SHAPE_RE = re.compile(r"/|\s(?:@|at|vs\.?)\s", re.IGNORECASE)
 
@@ -61,6 +64,12 @@ def parse_chart_date(printed: str, season: int) -> date | None:
         return date(year, month, day)
     except ValueError:
         return None
+
+
+def away_team_text(printed: str) -> str:
+    """The away cell without a leading "<game or bowl name>: " segment, for team
+    resolution; a cell with no such segment comes back unchanged."""
+    return _GAME_NAME_PREFIX_RE.sub("", printed, count=1)
 
 
 def _is_regional(row: Mapping[str, str]) -> bool:
@@ -172,7 +181,7 @@ def smw_second_rows(
                 season=season,
                 pointer=f"{row['chart_file']}:{row['row']}",
                 date_et=parse_chart_date(row["date"], season),
-                away_raw=row["away"],
+                away_raw=away_team_text(row["away"]),
                 home_raw=row["home"],
                 network_raw=row["network"],
                 viewers=parse_viewers(row["viewers"]) if kind == "figure" else None,

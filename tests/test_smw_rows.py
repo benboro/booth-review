@@ -11,6 +11,7 @@ from booth_review.sources.smw.chart_order import ChartOrderEntry
 from booth_review.sources.smw.rows import (
     PASS_COLUMNS,
     ROWS_COLUMNS,
+    away_team_text,
     classify_row,
     load_pass_csv,
     load_rows_csv,
@@ -147,6 +148,30 @@ def test_smw_second_rows() -> None:
     assert out[1].viewers is None
     assert out[1].kind == "simulcast"
     assert out[1].superseded is True
+
+
+@pytest.mark.parametrize(
+    ("printed", "expected"),
+    [
+        ("Lakeshore Bowl: Silverlake", "Silverlake"),
+        ("CONF Champ: NORTH ST", "NORTH ST"),
+        ("Silverlake", "Silverlake"),
+        ("Regional action:", "Regional action:"),
+        ("Silverlake / Northfield", "Silverlake / Northfield"),
+    ],
+)
+def test_away_team_text(printed: str, expected: str) -> None:
+    assert away_team_text(printed) == expected
+
+
+def test_smw_second_rows_strips_game_name_prefix_from_away() -> None:
+    order = {"b.png": ChartOrderEntry("b.png", "", "2022-12", 0, "postseason", 2)}
+    rows = [
+        {**row(row="1", chart_file="b.png", away="Lakeshore Bowl: Silverlake"), "superseded_by": ""}
+    ]
+    out = smw_second_rows(rows, order, season=2022, source_url="u")
+    assert out[0].away_raw == "Silverlake"
+    assert out[0].home_raw == "Northfield"
 
 
 def test_smw_second_rows_missing_chart() -> None:
