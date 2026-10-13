@@ -14,6 +14,7 @@ from pathlib import Path
 
 from booth_review.errors import ReferenceTableError
 from booth_review.reference import read_reference_csv_numbered
+from booth_review.resolve.networks import split_outlets
 from booth_review.sources.second_rows import RowKind, SecondSourceRow
 from booth_review.sources.smw.chart_order import ChartOrderEntry
 
@@ -41,6 +42,9 @@ _SPACED_PLUS_RE = re.compile(r"\s\+\s")
 _GAME_NAME_PREFIX_RE = re.compile(r"^[^:/]+:\s+(?=\S)")
 # A one-cell game shape: "A / B", "A @ B", "A at B", "A vs B".
 _GAME_SHAPE_RE = re.compile(r"/|\s(?:@|at|vs\.?)\s", re.IGNORECASE)
+# One ESPN outlet name, alone or with "/"-joined sub-feeds: ESPN, ESPN2, ESPNU,
+# ESPNEWS, "ESPN2/U" (ESPN2 and ESPNU).
+_ESPN_OUTLET_RE = re.compile(r"^ESPN[0-9A-Z]*(?:/[0-9A-Z]+)*$")
 
 
 def parse_viewers(printed: str) -> int | None:
@@ -90,6 +94,12 @@ def _is_non_game(row: Mapping[str, str]) -> bool:
     return home == "" and away != "" and _GAME_SHAPE_RE.search(away) is None
 
 
+def _is_stacked_feeds(tokens: Sequence[str]) -> bool:
+    """Two or more ESPN outlet names side by side with no joiner ("ESPN ESPNU",
+    "ESPN ESPN2/U"): a MegaCast's main and alternate feeds stacked in one cell."""
+    return len(tokens) >= 2 and all(_ESPN_OUTLET_RE.match(token) for token in tokens)
+
+
 def classify_row(
     row: Mapping[str, str], *, parse: Callable[[str], int | None] = parse_viewers
 ) -> RowKind:
@@ -101,8 +111,13 @@ def classify_row(
     # spaced "+" ("NET1 + NET2"); an unspaced "+" is part of a name (ESPN+, Bally+ Ariz).
     if "&" in network or "," in network or _SPACED_PLUS_RE.search(network):
         return "simulcast"
-    if "MEGA" in network.upper().split():
+    # A MegaCast total: "ESPN MEGA", or the ESPN feeds stacked with no joiner.
+    tokens = network.upper().split()
+    if "MEGA" in tokens or _is_stacked_feeds(tokens):
         return "multi_feed"
+    # Outlets joined by "/" (or ";", "|"), e.g. "ABC/ESPN2", are a simulcast total too.
+    if len(split_outlets(network)) >= 2:
+        return "simulcast"
     if _is_regional(row):
         return "regional"
     if _is_non_game(row):
