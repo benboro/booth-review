@@ -26,6 +26,7 @@ booth-review = "booth_review.cli:main"
 [dependency-groups]
 dev = [
     "mypy>=2.3.1",
+    "pillow>=12.3.0",
     "pytest>=9.1.1",
     "pytest-playwright>=0.9.0",
     "pytest-socket>=0.8.1",
