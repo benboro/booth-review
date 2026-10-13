@@ -62,6 +62,15 @@ class SecondSourceRow:
     superseded: bool
 
 
+@dataclass(frozen=True)
+class ParsedPost:
+    """One parsed post (TVRG, AA): its rows and how many lines or figure
+    mentions it ignored (non-football rows, peaks, streaming numbers)."""
+
+    rows: list[SecondSourceRow]
+    ignored: int
+
+
 def host_matches(source: SecondSource, url: str) -> bool:
     """True when `url` is https and its host is the source's host or a subdomain."""
     parts = urlsplit(url)

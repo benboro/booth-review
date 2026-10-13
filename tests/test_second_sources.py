@@ -29,6 +29,7 @@ from booth_review.build.second_sources import (
 from booth_review.config import DataPaths
 from booth_review.errors import ReferenceTableError
 from booth_review.resolve.games import GameIndex
+from booth_review.resolve.headline import claim_source, select_headline_across_sources
 from booth_review.resolve.networks import NetworkRow, NetworkTable
 from booth_review.resolve.overrides import GameOverride
 from booth_review.resolve.teams import TeamCrosswalkRow, TeamResolver
@@ -646,3 +647,124 @@ def test_loader_rejects_a_season_page_for_another_year(tmp_path: Path) -> None:
     write_chart_order_csv(folder / "chart_order.csv", parse_chart_order(PAGE, set(charts)))
     with pytest.raises(ReferenceTableError, match="does not name the season"):
         load_second_source_inputs(DataPaths(vault=tmp_path / "vault"))
+
+
+# -- Wave B: TVRG and AA posts (04.19 D-09, D-10) ---------------------------------------------
+
+_FIXTURES = Path(__file__).parent / "fixtures"
+_TVRG_SLUG = "2022-10-saturday-cable-ratings-10122-invented"
+_AA_SLUG = "silverlake-northfield-week-5-fox-cfb-ratings"
+
+
+def _cache_post(vault: Path, source: str, season: int, slug: str, html: str) -> None:
+    folder = vault / "raw" / source / str(season) / "posts"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{slug}.html").write_text(html, encoding="utf-8")
+
+
+def _fixture(source: str) -> str:
+    return (_FIXTURES / source / "post_synthetic.html").read_text(encoding="utf-8")
+
+
+def test_loader_reads_tvrg_and_aa_posts_beside_smw(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    folder = build_season(vault / "raw" / "smw" / "2022")
+    charts = sorted(p.name for p in folder.glob("*.png"))
+    write_chart_order_csv(folder / "chart_order.csv", parse_chart_order(PAGE, set(charts)))
+    _cache_post(vault, "tvrg", 2022, _TVRG_SLUG, _fixture("tvrg"))
+    _cache_post(vault, "aa", 2022, _AA_SLUG, _fixture("aa"))
+    _cache_post(vault, "tvrg", 2025, _TVRG_SLUG, _fixture("tvrg"))  # outside 2021-2024
+    _write(
+        vault / "raw" / "tvrg" / "2022" / "known_disagreements.csv",
+        f"chart_file,row,explanation\n{_TVRG_SLUG},1,reviewed\n",
+    )
+    _write(
+        vault / "raw" / "aa" / "2022" / "known_disagreements.csv",
+        f"chart_file,row,explanation\n{_AA_SLUG},9,reviewed\n",
+    )
+
+    inputs = load_second_source_inputs(DataPaths(vault=vault))
+    by_source: dict[str, list[SecondSourceRow]] = {}
+    for row in inputs.rows:
+        by_source.setdefault(row.source, []).append(row)
+    assert set(by_source) == {"smw", "tvrg", "aa"}
+    assert len(by_source["tvrg"]) == 7
+    assert len(by_source["aa"]) == 8
+    assert {row.season for row in inputs.rows} == {2022}
+    assert {row.chart_kind for row in by_source["tvrg"] + by_source["aa"]} == {"post"}
+    assert inputs.known[("tvrg", 2022)] == frozenset({f"{_TVRG_SLUG}:1"})
+    assert inputs.known[("aa", 2022)] == frozenset({f"{_AA_SLUG}:9"})
+    only_2021 = load_second_source_inputs(DataPaths(vault=vault), seasons=[2021])
+    assert only_2021.rows == ()
+
+
+def test_loader_rejects_an_off_host_post_count_only(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    html = _fixture("tvrg").replace(
+        "https://www.thetvratingsguide.com/2022/10/", "https://elsewhere.example.com/2022/10/"
+    )
+    _cache_post(vault, "tvrg", 2022, _TVRG_SLUG, html)
+    with pytest.raises(ReferenceTableError) as exc:
+        load_second_source_inputs(DataPaths(vault=vault))
+    assert "tvrg 2022: 1 cached post(s)" in str(exc.value)
+    assert "elsewhere" not in str(exc.value)
+
+
+def test_loader_rejects_a_bad_known_file(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _cache_post(vault, "aa", 2023, _AA_SLUG, _fixture("aa"))
+    _write(
+        vault / "raw" / "aa" / "2023" / "known_disagreements.csv",
+        f"chart_file,row,explanation\n{_AA_SLUG},x,reviewed\n",
+    )
+    with pytest.raises(ReferenceTableError, match="line 2"):
+        load_second_source_inputs(DataPaths(vault=vault))
+
+
+def test_needs_review_rows_go_to_unmatched_and_never_load() -> None:
+    result, _ = Harness().run(
+        [_row("p:3", "", "", None, kind="needs_review", source="aa", chart_kind="post")]
+    )
+    assert [r["reason"] for r in _review(result, REVIEW_UNMATCHED)] == ["needs_review"]
+    assert result.claims_by_telecast == {}
+
+
+def test_smw_keeps_the_headline_and_tvrg_fills_a_telecast_smw_lacks() -> None:
+    h = Harness()
+    h.games = [_game(100, home=2, away=1), _game(101, home=4, away=3)]
+    h.telecasts = [_telecast(100), _telecast(101)]
+    tvrg = {"source": "tvrg", "chart_kind": "post", "rank": 738_000}
+    rows = [
+        _row("week5cfb.png:1", "Silverlake", "Northfield", 1_000_000),
+        _row("2022-10-post:1", "Silverlake", "Northfield", 1_010_000, **tvrg),
+        _row("2022-10-post:2", "Riverbend", "Lakeshore", 900_000, **tvrg),
+    ]
+    result, _ = h.run(rows)
+    assert {(g.source, g.status) for g in result.gates} == {
+        ("smw", "no_shared"),
+        ("tvrg", "no_shared"),
+    }
+    both = result.claims_by_telecast["100-abc"]
+    assert sorted(claim_source(c) for c in both) == ["smw", "tvrg"]
+    picked = select_headline_across_sources([], both)
+    assert picked is not None and picked[1] == "smw"
+    assert picked[0].value == 1_000_000
+    only = select_headline_across_sources([], result.claims_by_telecast["101-abc"])
+    assert only is not None and only[1] == "tvrg"
+    assert result.season_counts[SEASON]["rated_second_source"] == 2
+
+
+def test_gate_runs_per_source_with_its_own_known_file() -> None:
+    h, rows = _shared_harness([1_020_000, 1_000_000, 1_050_000])
+    tvrg_rows = [
+        _row(f"post:{i + 1}", r.away_raw, r.home_raw, r.viewers, source="tvrg", chart_kind="post")
+        for i, r in enumerate(rows)
+    ]
+    # SMW's known file lists the miss; TVRG's doesn't, so only TVRG is withheld.
+    h.known = {("smw", SEASON): frozenset({"c.png:3"}), ("tvrg", SEASON): frozenset()}
+    result, _ = h.run(rows + tvrg_rows)
+    status = {g.source: (g.logged, g.unexplained, g.status) for g in result.gates}
+    assert status == {"smw": (1, 0, "passed"), "tvrg": (0, 1, "withheld")}
+    h.known[("tvrg", SEASON)] = frozenset({"post:3"})
+    result, _ = h.run(rows + tvrg_rows)
+    assert {g.source: g.status for g in result.gates} == {"smw": "passed", "tvrg": "passed"}

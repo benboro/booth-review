@@ -66,6 +66,12 @@ from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.sources.cfbd.collector import ENDPOINTS, CfbdCollector
 from booth_review.sources.cfbd.parser import parse_games
 from booth_review.sources.gapcollect import MAX_REQUESTS_DEFAULT, RequestBudget
+from booth_review.sources.known_disagreements import (
+    KNOWN_FILE,
+    POST_SOURCES,
+    PostSource,
+    import_known,
+)
 from booth_review.sources.nflverse.collector import NflverseCollector
 from booth_review.sources.policy import (
     POLICY_LEDGER,
@@ -310,6 +316,16 @@ def build_parser() -> argparse.ArgumentParser:
     psmwimp.add_argument("--from", dest="from_dir", type=Path, default=None)
     psmwimp.add_argument("--force", action="store_true")
     psmwimp.add_argument("--no-commit", action="store_true")
+
+    pknownimp = import_sub.add_parser(
+        "known",
+        help="import a hand-written TVRG or AA known-disagreements file (04.19 D-02)",
+    )
+    pknownimp.add_argument("--source", dest="known_source", required=True, choices=POST_SOURCES)
+    pknownimp.add_argument("--season", required=True, type=int)
+    pknownimp.add_argument("--from", dest="from_file", required=True, type=Path)
+    pknownimp.add_argument("--force", action="store_true")
+    pknownimp.add_argument("--no-commit", action="store_true")
 
     spike = sub.add_parser("spike", help="spike-only analysis commands (SPIKE-03/04)")
     spike_sub = spike.add_subparsers(dest="spike_command", required=True)
@@ -1339,6 +1355,40 @@ def _import_smw(args: argparse.Namespace) -> int:
         runtime.client.close()
 
 
+# -- import known ---------------------------------------------------------------------------
+
+
+def _import_known(args: argparse.Namespace) -> int:
+    """Validate a known-disagreements file against the cached posts and copy it
+    into the vault under the lock; the commit touches only that file and the
+    ledger, with a count-only message. SMW's file travels with `import smw`."""
+    paths = DataPaths.from_env()
+    vault = VaultRepo(paths.vault)
+    vault.check()
+    source = cast(PostSource, args.known_source)
+    with vault.lock():
+        result = import_known(paths, source, args.season, args.from_file, force=args.force)
+        print(
+            f"known {source} {args.season}: imported {result.imported}, "
+            f"skipped {result.skipped}, problems {len(result.problems)}"
+        )
+        for problem in result.problems:
+            print(f"problem: {problem}")
+        if result.changed_without_force:
+            print("the vault copy differs; use --force to overwrite")
+        if result.has_problems:
+            return 4
+        if not args.no_commit:
+            vault.commit_batch(
+                batch_message("import", source, str(args.season), result.counts()),
+                paths=[
+                    f"raw/{source}/{args.season}/{KNOWN_FILE}",
+                    "ledger/requests.jsonl",
+                ],
+            )
+    return 0
+
+
 # -- spike inventory ----------------------------------------------------------------------
 
 
@@ -1976,6 +2026,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return _import_506(args)
             if args.source == "smw":
                 return _import_smw(args)
+            if args.source == "known":
+                return _import_known(args)
             raise AssertionError(f"unknown import source: {args.source!r}")
         if args.command == "spike":
             if args.spike_command == "inventory":

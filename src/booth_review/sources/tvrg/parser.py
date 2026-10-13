@@ -28,13 +28,17 @@ a duplicate. Errors are count-only; nothing here fetches or executes anything.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from datetime import date
 from html.parser import HTMLParser
 from urllib.parse import urlsplit
 
 from booth_review.sources.gapcollect import safe_slug
-from booth_review.sources.second_rows import RowKind, SecondSourceRow, host_matches
+from booth_review.sources.second_rows import (
+    ParsedPost,
+    RowKind,
+    SecondSourceRow,
+    host_matches,
+)
 from booth_review.sources.smw.rows import classify_row
 from booth_review.sources.tvrg.index import title_date
 
@@ -54,12 +58,6 @@ _SIMULCAST_SLASH_RE = re.compile(r"/")
 
 class TvrgParseError(ValueError):
     """A post that can't be parsed safely; the message is count-only."""
-
-
-@dataclass(frozen=True)
-class ParsedPost:
-    rows: list[SecondSourceRow]
-    ignored: int
 
 
 def parse_tvrg_viewers(printed: str) -> int | None:
@@ -199,7 +197,8 @@ def parse_post(html: str, *, url: str, season: int) -> ParsedPost:
         return ParsedPost(rows=[], ignored=0)
     columns = _columns(table[0])
     if columns is None:
-        raise TvrgParseError("tvrg data table header lacks a Show, Network or Viewers column")
+        # Another table layout (no Show, Network and Viewers columns): nothing to read.
+        return ParsedPost(rows=[], ignored=len(table) - 1)
     show_col, network_col, viewers_col = columns
 
     rows: list[SecondSourceRow] = []

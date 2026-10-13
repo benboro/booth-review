@@ -49,7 +49,12 @@ from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from booth_review.sources.gapcollect import safe_slug
-from booth_review.sources.second_rows import RowKind, SecondSourceRow, host_matches
+from booth_review.sources.second_rows import (
+    ParsedPost,
+    RowKind,
+    SecondSourceRow,
+    host_matches,
+)
 from booth_review.sources.smw.rows import classify_row
 
 _ET = ZoneInfo("America/New_York")
@@ -127,12 +132,6 @@ _SKIP_TAGS = frozenset({"script", "style", "noscript"})
 
 class AaParseError(ValueError):
     """A post that can't be parsed safely; the message is count-only."""
-
-
-@dataclass(frozen=True)
-class ParsedPost:
-    rows: list[SecondSourceRow]
-    ignored: int
 
 
 def parse_aa_viewers(printed: str) -> int | None:
