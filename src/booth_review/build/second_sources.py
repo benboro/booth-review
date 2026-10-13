@@ -761,7 +761,10 @@ def apply_second_sources(
                     "date_et": _iso(to_et_date(game.start_date)),
                     "chart_network_raw": row.network_raw,
                     "chart_network_id": chart.network_id,
-                    "our_network_ids": "|".join(sorted(str(nid) for _, nid in game_mains)),
+                    # A telecast with no network is an empty part, never "None" (IN-04).
+                    "our_network_ids": "|".join(
+                        sorted(str(nid) if nid is not None else "" for _, nid in game_mains)
+                    ),
                 }
             )
             count["held_network"] += 1

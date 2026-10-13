@@ -502,6 +502,14 @@ def test_accept_warnings_name_lines_and_skip_seasons_not_loaded() -> None:
     assert _accept_warnings(lines, result, [2022]) == ((3, "ignored"), (4, "unused"))
 
 
+def test_a_telecast_with_no_network_is_an_empty_part_never_none() -> None:
+    h = Harness()
+    h.telecasts = [_telecast(100, "espnu"), {**_telecast(100, "x"), "network_id": None}]
+    result, _ = h.run([_row("w:1", "Silverlake", "Northfield", network_raw="ESPN2")])
+    (held,) = _review(result, REVIEW_NETWORK)
+    assert held["our_network_ids"] == "|espnu"
+
+
 def test_unmapped_network_text_is_unmatched() -> None:
     h = Harness()
     result, _ = h.run([_row("w:1", "Silverlake", "Northfield", network_raw="Mystery Net")])
