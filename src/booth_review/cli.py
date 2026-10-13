@@ -48,6 +48,7 @@ from booth_review.errors import (
     BoothReviewError,
     FreezeRefusedError,
     RobotsDisallowedError,
+    RobotsUnavailableError,
     SiteBuildError,
     UnknownHostError,
 )
@@ -64,6 +65,15 @@ from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.sources.cfbd.collector import ENDPOINTS, CfbdCollector
 from booth_review.sources.cfbd.parser import parse_games
 from booth_review.sources.nflverse.collector import NflverseCollector
+from booth_review.sources.policy import (
+    POLICY_LEDGER,
+    PolicyCheck,
+    PolicyChecker,
+    PolicyRobotsError,
+    PolicySource,
+    append_policy_check,
+    robots_fresh,
+)
 from booth_review.sources.ratingsref.collector import (
     FIRST_SEASON,
     NFL_REFRESH_CAP_DEFAULT,
@@ -210,6 +220,23 @@ def build_parser() -> argparse.ArgumentParser:
     pwiki.add_argument("--refresh", action="store_true")
     pwiki.add_argument("--dry-run", action="store_true")
     pwiki.add_argument("--no-commit", action="store_true")
+
+    for key, label in (("tvrg", "The TV Ratings Guide"), ("aa", "Awful Announcing")):
+        psecond = collect_sub.add_parser(
+            key, help=f"04.19 D-10: {label} robots.txt and terms re-check"
+        )
+        psecond.add_argument(
+            "--policy-check",
+            action="store_true",
+            help="fetch robots.txt, the policy page(s) and one index sample; ledger the result",
+        )
+        psecond.add_argument(
+            "--confirm-terms",
+            action="store_true",
+            help="record that the user read the current terms and allows collection "
+            "(needs a robots-ok check from the last 30 days, or --policy-check)",
+        )
+        psecond.add_argument("--no-commit", action="store_true")
 
     pcfbd = collect_sub.add_parser("cfbd", help="collect CFBD season data or the venue list")
     cfbd_target = pcfbd.add_mutually_exclusive_group(required=True)
@@ -446,6 +473,8 @@ _COLLECT_PATHS: dict[str, tuple[str, ...]] = {
         *_ROBOTS_AND_REQUEST_LEDGER,
     ),
     "nfl_wikipedia": ("raw/nfl/wikipedia", *_ROBOTS_AND_REQUEST_LEDGER),
+    "tvrg": ("raw/tvrg", POLICY_LEDGER, *_ROBOTS_AND_REQUEST_LEDGER),
+    "aa": ("raw/aa", POLICY_LEDGER, *_ROBOTS_AND_REQUEST_LEDGER),
 }
 
 
@@ -841,6 +870,148 @@ def _collect_wikipedia(args: argparse.Namespace) -> int:
                 f"fetched {counts['fetched']}, cached {counts['cached']}, "
                 f"not_modified {counts['not_modified']}, failed {counts['failed']}"
             )
+        return 4 if counts["failed"] else 0
+    finally:
+        runtime.client.close()
+
+
+# -- collect tvrg / aa (04.19 D-10 policy re-check) -----------------------------------
+
+
+def _earliest_gap_month(paths: DataPaths) -> tuple[int, int] | None:
+    """The month of the earliest 2021-2024 date SMW left unrated (D-11), offline."""
+    from booth_review.build.gaps import GAP_SEASONS, earliest_gap_month, remaining_gap_dates
+    from booth_review.build.tables import assemble_tables
+
+    tables = assemble_tables(paths, reference_dir(), list(GAP_SEASONS))
+    return earliest_gap_month(remaining_gap_dates(tables))
+
+
+def _confirm_terms_only(source: PolicySource, args: argparse.Namespace) -> int:
+    paths = DataPaths.from_env()
+    vault = VaultRepo(paths.vault)
+    vault.check()
+    fresh = robots_fresh(paths, source, datetime.now(UTC))
+    if fresh is None:
+        print(
+            f"error: no robots-ok policy check for {source} in the last 30 days; "
+            "run --policy-check first",
+            file=sys.stderr,
+        )
+        return 4
+    with vault.lock():
+        append_policy_check(
+            paths,
+            PolicyCheck(
+                source=source,
+                checked_at=fresh.checked_at,
+                robots_ok=True,
+                crawl_delay=fresh.crawl_delay,
+                terms_ok=True,
+            ),
+        )
+    if not args.no_commit:
+        vault.commit_batch(
+            batch_message("collect", source, "policy", {"confirmed": 1}),
+            paths=[POLICY_LEDGER],
+        )
+    print(f"{source} policy: terms confirmed 1")
+    return 0
+
+
+def _collect_policy(args: argparse.Namespace, source: PolicySource) -> int:
+    if not args.policy_check and not args.confirm_terms:
+        print(
+            f"error: data collection for {source} is not yet available; "
+            "this command supports --policy-check and --confirm-terms only",
+            file=sys.stderr,
+        )
+        return 2
+    if not args.policy_check:
+        return _confirm_terms_only(source, args)
+
+    paths = DataPaths.from_env()
+    index_month = _earliest_gap_month(paths) if source == "tvrg" else None
+    runtime = build_runtime(with_budget=False)
+    try:
+        checker = PolicyChecker(
+            runtime.cache,
+            runtime.client,
+            runtime.paths,
+            source,
+            today=datetime.now(UTC).date(),
+            index_month=index_month,
+        )
+        before = dict(runtime.cache.counters)
+        error: BoothReviewError | None = None
+        outcome = None
+        try:
+            outcome = checker.run()
+        except (
+            PolicyRobotsError,
+            RobotsDisallowedError,
+            RobotsUnavailableError,
+            UnknownHostError,
+        ) as exc:
+            error = exc
+        except BaseException:
+            if not args.no_commit:
+                runtime.vault.commit_batch(
+                    batch_message(
+                        "collect",
+                        source,
+                        "policy",
+                        _partial_counts(before, runtime.cache.counters),
+                    ),
+                    paths=list(_COLLECT_PATHS[source]),
+                )
+            raise
+
+        now = datetime.now(UTC)
+        if outcome is None:
+            delay = error.verdict.crawl_delay if isinstance(error, PolicyRobotsError) else None
+            check = PolicyCheck(source, now, robots_ok=False, crawl_delay=delay, terms_ok=None)
+            counts = _partial_counts(before, runtime.cache.counters)
+        else:
+            summary = outcome.summary
+            robots_ok = outcome.robots_ok
+            # Terms are confirmed only on a clean run: every policy page read.
+            confirm = args.confirm_terms and robots_ok and summary.failed == 0
+            check = PolicyCheck(
+                source,
+                outcome.robots_checked_at or now,
+                robots_ok=robots_ok,
+                crawl_delay=outcome.verdict.crawl_delay if outcome.verdict else None,
+                terms_ok=True if confirm else None,
+            )
+            counts = summary.counts()
+        with runtime.vault.lock():
+            append_policy_check(runtime.paths, check)
+        if not args.no_commit:
+            runtime.vault.commit_batch(
+                batch_message("collect", source, "policy", counts),
+                paths=list(_COLLECT_PATHS[source]),
+            )
+
+        if error is not None:
+            print(f"error: {type(error).__name__}", file=sys.stderr)
+            print(f"{source} policy: robots blocked, crawl-delay {check.crawl_delay or 'none'}")
+            return 4
+        assert outcome is not None
+        verdict = outcome.verdict
+        print(
+            f"{source} policy: fetched {counts['fetched']}, cached {counts['cached']}, "
+            f"failed {counts['failed']}; robots {'ok' if outcome.robots_ok else 'unknown'}, "
+            f"crawl-delay {check.crawl_delay if check.crawl_delay is not None else 'none'}, "
+            f"sitemaps {len(verdict.sitemaps) if verdict else 0}; "
+            f"legal page: {outcome.legal_page}; index sample: {outcome.index_sample}; "
+            f"terms_ok {'true' if check.terms_ok else 'null'}"
+        )
+        if not outcome.robots_ok:
+            return 4
+        if args.confirm_terms and not check.terms_ok:
+            print("error: terms not confirmed (a policy page failed)", file=sys.stderr)
+            return 4
         return 4 if counts["failed"] else 0
     finally:
         runtime.client.close()
@@ -1646,6 +1817,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return _collect_nflverse(args)
             if args.source == "wikipedia":
                 return _collect_wikipedia(args)
+            if args.source in ("tvrg", "aa"):
+                return _collect_policy(args, cast(PolicySource, args.source))
             raise AssertionError(f"unknown collect source: {args.source!r}")
         if args.command == "refresh":
             if args.source == "ratingsref":
