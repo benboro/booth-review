@@ -723,10 +723,27 @@ def test_loader_rejects_a_bad_known_file(tmp_path: Path) -> None:
 
 def test_needs_review_rows_go_to_unmatched_and_never_load() -> None:
     result, _ = Harness().run(
-        [_row("p:3", "", "", None, kind="needs_review", source="aa", chart_kind="post")]
+        [_row("p:3", "", "", None, kind="needs_review", source="tvrg", chart_kind="post")]
     )
     assert [r["reason"] for r in _review(result, REVIEW_UNMATCHED)] == ["needs_review"]
     assert result.claims_by_telecast == {}
+    assert _gate(result).unlinked_prose == 0
+
+
+def test_aa_needs_review_rows_are_counted_on_the_gate_not_listed() -> None:
+    aa = {"source": "aa", "chart_kind": "post"}
+    rows = [
+        _row("p:3", "", "", None, kind="needs_review", **aa),
+        _row("p:4", "", "", None, kind="needs_review", **aa),
+    ]
+    result, _ = Harness().run(rows)
+    assert _review(result, REVIEW_UNMATCHED) == []
+    assert result.claims_by_telecast == {}
+    gate = _gate(result)
+    assert gate.unlinked_prose == 2
+    assert gate.rows == 2
+    assert gate.as_row()["unlinked_prose"] == 2
+    assert result.counts["unmatched"] == 0
 
 
 def test_smw_keeps_the_headline_and_tvrg_fills_a_telecast_smw_lacks() -> None:

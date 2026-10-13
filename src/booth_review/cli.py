@@ -1769,11 +1769,12 @@ def _build(args: argparse.Namespace) -> int:
         )
     print(f"crew gaps unpatched {outcome.counts.get('crew_gaps_unpatched', 0)}")
     for gate in outcome.second_source_gates:
+        prose = f", unlinked prose {gate.unlinked_prose}" if gate.unlinked_prose else ""
         print(
             f"second source {gate.source} {gate.season}: shared {gate.shared}, "
             f"within 3% {gate.within_3pct}, logged {gate.logged}, "
             f"unexplained {gate.unexplained}, loaded {gate.loaded}, "
-            f"held {gate.held_network}, {gate.status}"
+            f"held {gate.held_network}{prose}, {gate.status}"
         )
     if outcome.second_source_gates:
         print(

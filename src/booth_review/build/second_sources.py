@@ -98,6 +98,7 @@ REVIEW_GATE_COLUMNS = (
     "excluded_non_nielsen",
     "excluded_non_game",
     "no_figure",
+    "unlinked_prose",
     "shared",
     "within_3pct",
     "logged",
@@ -137,6 +138,11 @@ _EXCLUDED_KINDS = {
     "no_figure": "no_figure",
 }
 _WEEKLY_CLASS_EXCLUDED = "season_top"
+# Sources whose needs_review rows are counted on the gate instead of listed for
+# review: AA prose mentions the parser can't tie to one game (season or window
+# averages, other-season comparisons, multi-game sentences, non-game shows).
+# They never carry a figure, so listing them asks the user nothing (user, 04.19-35).
+COUNTED_REVIEW_SOURCES: frozenset[str] = frozenset({"aa"})
 
 SourceSeason = tuple[str, int]
 
@@ -322,6 +328,7 @@ class GateStatus:
     excluded_non_nielsen: int
     excluded_non_game: int
     no_figure: int
+    unlinked_prose: int
     shared: int
     within_3pct: int
     logged: int
@@ -488,6 +495,9 @@ def apply_second_sources(
         if row.kind in _EXCLUDED_KINDS:
             count[_EXCLUDED_KINDS[row.kind]] += 1
             continue
+        if row.kind == "needs_review" and row.source in COUNTED_REVIEW_SOURCES:
+            count["unlinked_prose"] += 1
+            continue
         if row.kind in ("unknown_suffix", "needs_review"):
             unmatched_rows.append(_unmatched(row, "", row.kind))
             count["unmatched"] += 1
@@ -650,6 +660,7 @@ def apply_second_sources(
                 excluded_non_nielsen=count["excluded_non_nielsen"],
                 excluded_non_game=count["excluded_non_game"],
                 no_figure=count["no_figure"],
+                unlinked_prose=count["unlinked_prose"],
                 shared=shared,
                 within_3pct=within,
                 logged=logged,
