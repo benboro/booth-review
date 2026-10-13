@@ -27,7 +27,13 @@ from booth_review.errors import BoothReviewError, FrozenSeasonError, ReferenceTa
 from booth_review.reference import read_reference_csv_numbered
 from booth_review.sources.aa import parser as aa_parser
 from booth_review.sources.espnpr import parser as espnpr_parser
-from booth_review.sources.second_rows import ParsedPost, SecondSourceRow, host_matches
+from booth_review.sources.second_rows import (
+    ParsedPost,
+    RejectedPage,
+    RejectReason,
+    SecondSourceRow,
+    host_matches,
+)
 from booth_review.sources.smw.diff import KNOWN_DISAGREEMENT_COLUMNS
 from booth_review.sources.tvrg import parser as tvrg_parser
 from booth_review.transport.cache import FreezeGuard, Manifest, ManifestEntry
@@ -100,36 +106,56 @@ def load_known(path: Path) -> frozenset[str]:
 class CachedPosts:
     rows: list[SecondSourceRow]
     ignored: int
+    # Posts skipped because they lack an on-host canonical URL or their parser
+    # refuses them; the build lists them in interim/ and counts them on the gate.
+    rejected: tuple[RejectedPage, ...] = ()
+
+
+def examine_post(
+    source: PostSource, html: str, season: int
+) -> tuple[ParsedPost | None, RejectReason | None]:
+    """(parsed post, None), or (None, why) when the post has no canonical URL,
+    one off the source's host, or its parser refuses it."""
+    parser = _PARSERS[source]
+    url = parser.url_from_html(html)
+    if url is None:
+        return None, "no_canonical_url"
+    if not host_matches(source, url):
+        return None, "off_host_url"
+    try:
+        return parser.parse(html, url=url, season=season), None
+    except parser.error:
+        return None, "parse_error"
 
 
 def read_cached_posts(paths: DataPaths, source: PostSource, season: int) -> CachedPosts:
     """Parse every cached post of one (source, season). A post with no canonical
-    URL on the source's host, or one its parser refuses, raises (count-only)."""
+    URL on the source's host, or one its parser refuses, is skipped and returned
+    in `rejected` (vault path and reason), so one bad page never stops the build."""
     parser = _PARSERS[source]
     folder = paths.raw / source / str(season) / parser.folder
     if not folder.is_dir():
         return CachedPosts(rows=[], ignored=0)
     rows: list[SecondSourceRow] = []
-    ignored = rejected = 0
+    rejected: list[RejectedPage] = []
+    ignored = 0
     for post in sorted(folder.glob("*.html")):
         html = post.read_text(encoding="utf-8", errors="replace")
-        url = parser.url_from_html(html)
-        if url is None or not host_matches(source, url):
-            rejected += 1
-            continue
-        try:
-            parsed = parser.parse(html, url=url, season=season)
-        except parser.error:
-            rejected += 1
+        parsed, reason = examine_post(source, html, season)
+        if parsed is None:
+            assert reason is not None
+            rejected.append(
+                RejectedPage(
+                    source=source,
+                    season=season,
+                    path=post.relative_to(paths.raw).as_posix(),
+                    reason=reason,
+                )
+            )
             continue
         rows.extend(parsed.rows)
         ignored += parsed.ignored
-    if rejected:
-        raise ReferenceTableError(
-            f"{source} {season}: {rejected} cached post(s) lack an on-host canonical URL "
-            "or don't parse"
-        )
-    return CachedPosts(rows=rows, ignored=ignored)
+    return CachedPosts(rows=rows, ignored=ignored, rejected=tuple(rejected))
 
 
 # -- import known ------------------------------------------------------------------------
@@ -181,10 +207,17 @@ def import_known(
         return result
     try:
         pointers = load_known(from_file)
-        cached = {row.pointer for row in read_cached_posts(paths, source, season).rows}
+        posts = read_cached_posts(paths, source, season)
     except BoothReviewError as exc:
         result.problems.append(f"{type(exc).__name__}: {exc}")
         return result
+    # The import stays strict: a known file is checked against every cached post.
+    if posts.rejected:
+        result.problems.append(
+            f"{len(posts.rejected)} cached post(s) lack an on-host canonical URL or don't parse"
+        )
+        return result
+    cached = {row.pointer for row in posts.rows}
     unknown = pointers - cached
     if unknown:
         result.problems.append(f"{len(unknown)} pointer(s) name no row of a cached post")

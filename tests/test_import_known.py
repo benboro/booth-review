@@ -119,6 +119,20 @@ def test_invalid_file_exits_4_and_writes_nothing(git_vault, tmp_path, capsys, bo
     assert _manifest(git_vault) == []
 
 
+def test_an_unreadable_cached_post_still_refuses_the_import(git_vault, tmp_path, capsys) -> None:
+    # The build skips such a post (CR-01); the import stays strict.
+    _cache_posts(git_vault)
+    bad = git_vault.raw / "tvrg" / "2022" / "posts" / "2022-10-unreadable.html"
+    bad.write_text("<html><body>SENTINEL</body></html>", encoding="utf-8")
+    src = _csv(tmp_path, f"{TVRG_SLUG},1,TVRG prints an earlier fast-national figure\n")
+    argv = ["import", "known", "--source", "tvrg", "--season", "2022", "--from", str(src)]
+    assert main([*argv, "--no-commit"]) == 4
+    captured = capsys.readouterr()
+    assert "problems 1" in captured.out
+    assert "SENTINEL" not in captured.out + captured.err
+    assert not (git_vault.raw / "tvrg" / "2022" / "known_disagreements.csv").exists()
+
+
 def test_changed_file_needs_force(git_vault, tmp_path) -> None:
     _cache_posts(git_vault)
     first = _csv(tmp_path, f"{TVRG_SLUG},1,first explanation\n")

@@ -258,3 +258,36 @@ def test_no_saved_pages_writes_empty_review_files(
     assert rows == []
     telecasts = pl.read_parquet(git_vault.vault / "processed" / "telecasts.parquet")
     assert not telecasts["crew_backup"].any()
+
+
+def test_unreadable_cached_pages_are_skipped_listed_and_counted(
+    git_vault: DataPaths,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # CR-01: one bad page never stops the build; the good release still fills its booth.
+    _seed_build_raw(git_vault)
+    _reference(tmp_path, monkeypatch)
+    _save_release(git_vault)
+    broken = git_vault.raw / "espnpr" / "2025" / "releases" / "broken.html"
+    broken.write_text("<html><body>SENTINEL TEXT</body></html>", encoding="utf-8")
+    post = git_vault.raw / "tvrg" / "2022" / "posts" / "2022-10-broken.html"
+    post.parent.mkdir(parents=True)
+    post.write_text("<html><body>SENTINEL TEXT</body></html>", encoding="utf-8")
+
+    capsys.readouterr()
+    assert main(["build", "--no-commit"]) == 0
+    captured = capsys.readouterr()
+    assert "crew backup: filled 1," in captured.out
+    assert ", rejected pages 1" in captured.out
+    assert "second source tvrg 2022: shared 0" in captured.out
+    assert "2 cached page(s) skipped as unreadable" in captured.err
+    assert "SENTINEL" not in captured.out + captured.err
+    assert "broken" not in captured.out + captured.err
+    columns, rows = _csv(git_vault, "review_second_source_rejected")
+    assert columns == ["source", "season", "path", "reason"]
+    assert [(r["source"], r["path"], r["reason"]) for r in rows] == [
+        ("espnpr", "espnpr/2025/releases/broken.html", "no_canonical_url"),
+        ("tvrg", "tvrg/2022/posts/2022-10-broken.html", "no_canonical_url"),
+    ]

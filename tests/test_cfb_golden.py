@@ -29,6 +29,11 @@ unlinked_prose column; no figure changed.
 crew changed (telecasts.parquet without the all-false crew_backup column still has the
 earlier digest; espnpr_backfill_gaps.csv and review_crew_backup_disagreements.csv are
 header-only; site-data.json is unchanged).
+
+04.19 review CR-01: an unreadable cached second-source page is skipped and listed,
+never raised. The header-only review_second_source_gate.csv gains a rejected_pages
+column, and a new header-only review_second_source_rejected.csv appears (both digests
+equal the sha256 of their header line); no figure changed.
 """
 
 from __future__ import annotations
@@ -96,7 +101,10 @@ _GOLDEN: dict[str, str] = {
         "4b773b5cd105f8ba481447cb016926840fc57b4d5dbc6e1b4dfc540f94d91e74"
     ),
     "interim/review_second_source_gate.csv": (
-        "745fd178c5e0c72b017ae69ae09053004fcf2145e0bbc0e9fa9993d060c591e8"
+        "88e87905b4ae5d7e8f006b6d45efaabef16523cded1be2bcdc3deae5cae294a8"
+    ),
+    "interim/review_second_source_rejected.csv": (
+        "81e689caaed346e7dd312f67d95a93039f98228e4c1a06d34038c8343557dd3f"
     ),
     "interim/review_second_source_network.csv": (
         "ae7620474f2c88d2b9a3f6a97e2600d4c365b37364c6d99a6ae5990a6fc4bc3d"

@@ -141,6 +141,7 @@ def test_write_tables_writes_parquet_and_review_csvs_and_returns_sorted_paths(
         "interim/review_second_source_agreement.csv",
         "interim/review_second_source_conflicts.csv",
         "interim/review_second_source_gate.csv",
+        "interim/review_second_source_rejected.csv",
         "interim/review_crew_backup_disagreements.csv",
         "interim/espnpr_backfill_gaps.csv",
     }

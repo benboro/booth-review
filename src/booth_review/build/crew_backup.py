@@ -54,7 +54,6 @@ from booth_review.build.crew_overrides import CREW_OVERRIDE_SOURCE
 from booth_review.build.second_sources import match_row_to_game
 from booth_review.config import DataPaths
 from booth_review.contract.models import crew_source_url_problem
-from booth_review.errors import ReferenceTableError
 from booth_review.job.gaps506 import week_windows
 from booth_review.job.gaps_espnpr import espn_week_label
 from booth_review.people.normalize import fold_person, is_placeholder
@@ -68,7 +67,7 @@ from booth_review.resolve.teams import TeamResolver
 from booth_review.sources.cfbd.parser import CfbdGame
 from booth_review.sources.espnpr.importer import identify_page
 from booth_review.sources.espnpr.parser import EspnPrBooth, EspnPrParseError, parse_booths
-from booth_review.sources.second_rows import host_matches
+from booth_review.sources.second_rows import RejectedPage, host_matches
 from booth_review.transport.cache import Manifest
 
 CREW_BACKUP_LABEL = "ESPN Press Room"
@@ -149,6 +148,15 @@ class SavedBooth:
 
 
 @dataclass(frozen=True)
+class LoadedBooths:
+    """Every booth the saved pages give, plus the pages skipped as unreadable
+    (no canonical URL, or the parser refuses them)."""
+
+    booths: list[SavedBooth]
+    rejected: tuple[RejectedPage, ...] = ()
+
+
+@dataclass(frozen=True)
 class CrewBackupResult:
     telecasts: pl.DataFrame
     telecast_people: pl.DataFrame
@@ -173,17 +181,18 @@ def _season_folder(name: str) -> int | None:
     return int(name) if name.isascii() and name.isdecimal() else None
 
 
-def load_espnpr_booths(paths: DataPaths, seasons: Sequence[int] | None = None) -> list[SavedBooth]:
+def load_espnpr_booths(paths: DataPaths, seasons: Sequence[int] | None = None) -> LoadedBooths:
     """Every booth in the vault's saved commentators pages and weekly releases
     (raw/espnpr/<season>/{commentators,releases}/*.html), any season.
 
     The source URL is the manifest's `url` (the canonical link the importer
     recorded), else the page's own canonical link. A page with neither, or one
-    the parser refuses, raises (count-only), like the viewership loader.
+    the parser refuses, is skipped and returned in `rejected` (vault path and
+    reason), like the viewership loader, so one bad page never stops the build.
     """
     root = paths.raw / _SOURCE
     if not root.is_dir():
-        return []
+        return LoadedBooths(booths=[])
     pages: list[tuple[int, str]] = []  # (season, vault path under raw/)
     for folder in sorted(root.iterdir()):
         season = _season_folder(folder.name)
@@ -197,7 +206,7 @@ def load_espnpr_booths(paths: DataPaths, seasons: Sequence[int] | None = None) -
                     for page in sorted(directory.glob("*.html"))
                 )
     if not pages:
-        return []
+        return LoadedBooths(booths=[])
 
     # The newest manifest line per path (a --force re-save appends a new one).
     latest: dict[str, dict[str, Any]] = {}
@@ -207,7 +216,7 @@ def load_espnpr_booths(paths: DataPaths, seasons: Sequence[int] | None = None) -
             latest[path] = entry
 
     saved: list[SavedBooth] = []
-    rejected = 0
+    rejected: list[RejectedPage] = []
     for season, rel in pages:
         html = (paths.raw / rel).read_text(encoding="utf-8", errors="replace")
         entry = latest.get(rel, {})
@@ -216,23 +225,19 @@ def load_espnpr_booths(paths: DataPaths, seasons: Sequence[int] | None = None) -
         if not isinstance(url, str):
             url = page.canonical_url if page is not None else None
         if url is None:
-            rejected += 1
+            rejected.append(RejectedPage(_SOURCE, season, rel, "no_canonical_url"))
             continue
         try:
             parsed = parse_booths(html, url=url, season=season)
         except EspnPrParseError:
-            rejected += 1
+            rejected.append(RejectedPage(_SOURCE, season, rel, "parse_error"))
             continue
         stamp = entry.get("saved_at")
         if not isinstance(stamp, str):
             published = page.published if page is not None else None
             stamp = published.astimezone(UTC).strftime(_TIME_FORMAT) if published else ""
         saved.extend(SavedBooth(booth=booth, saved_at=stamp) for booth in parsed.booths)
-    if rejected:
-        raise ReferenceTableError(
-            f"espnpr: {rejected} saved booth page(s) lack an on-host canonical URL or don't parse"
-        )
-    return saved
+    return LoadedBooths(booths=saved, rejected=tuple(rejected))
 
 
 # -- People ----------------------------------------------------------------------------------

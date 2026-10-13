@@ -42,7 +42,16 @@ _HOST = "https://awfulannouncing.com"
 _ALLOW = b"User-agent: *\nAllow: /\n"
 _INDEX = (_FIXTURES / "sitemap_index_synthetic.xml").read_bytes()
 _CHILD = (_FIXTURES / "sitemap_synthetic.xml").read_bytes()
-_POST = b"<html><body><p>Invented roundup.</p></body></html>"
+
+
+def _post(url: str) -> bytes:
+    """An invented roundup the build can read: an on-host canonical link, no figure."""
+    return (
+        f'<html><head><link rel="canonical" href="{url}"></head>'
+        "<body><p>Invented roundup.</p></body></html>"
+    ).encode()
+
+
 _WEEK5 = (
     f"{_HOST}/college-football/2022-college-football-week-5-viewership-silverlake-northfield.html"
 )
@@ -241,7 +250,7 @@ def _responses() -> dict[str, tuple[int, bytes, dict[str, str]]]:
         f"{_HOST}/robots.txt": (200, _ALLOW, {}),
         f"{_HOST}/sitemap_index.xml": (200, _INDEX, {}),
         f"{_HOST}/post-sitemap5.xml": (200, _CHILD, {}),
-        **{url: (200, _POST, {}) for url in _KEPT},
+        **{url: (200, _post(url), {}) for url in _KEPT},
     }
 
 
@@ -282,6 +291,19 @@ def test_aa_live_pass_walks_index_child_then_week_posts(
     assert len(list(posts.iterdir())) == 5
     subject = _git(git_vault.vault, "log", "-1", "--format=%s")
     assert subject == "collect: aa 2022 (fetched 7, cached 0, not_modified 0, failed 0)"
+
+
+def test_aa_live_pass_never_caches_a_post_the_build_could_not_read(
+    git_vault, mock_transport_factory, patched_client, one_gap, capsys
+) -> None:
+    _fresh(git_vault)
+    responses = _responses()
+    responses[_KEPT[0]] = (200, b"<html><body><p>No canonical link.</p></body></html>", {})
+    patched_client(mock_transport_factory(responses))
+    assert main(["collect", "aa", "--season", "2022"]) == 4
+    assert "fetched 6, cached 0, not_modified 0, failed 1" in capsys.readouterr().out
+    posts = git_vault.raw / "aa" / "2022" / "posts"
+    assert len(list(posts.iterdir())) == 4
 
 
 def test_aa_max_requests_caps_new_fetches(

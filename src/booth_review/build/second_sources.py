@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Callable, Collection, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import cast
@@ -46,6 +46,7 @@ from booth_review.sources.known_disagreements import (
 from booth_review.sources.ratingsref.parser import RRClaim, RRRecord
 from booth_review.sources.second_rows import (
     SECOND_SOURCE_PUBLISHERS,
+    RejectedPage,
     SecondSourceRow,
     host_matches,
 )
@@ -105,20 +106,26 @@ REVIEW_GATE_COLUMNS = (
     "logged",
     "unexplained",
     "stale_known",
+    "rejected_pages",
     "status",
 )
+REVIEW_REJECTED_COLUMNS = ("source", "season", "path", "reason")
 
 REVIEW_UNMATCHED = "review_second_source_unmatched"
 REVIEW_NETWORK = "review_second_source_network"
 REVIEW_AGREEMENT = "review_second_source_agreement"
 REVIEW_CONFLICTS = "review_second_source_conflicts"
 REVIEW_GATE = "review_second_source_gate"
+# Cached pages the build skipped (no on-host canonical URL, or the parser
+# refuses them): vault paths and reasons, never printed.
+REVIEW_REJECTED = "review_second_source_rejected"
 SECOND_SOURCE_REVIEW_NAMES = (
     REVIEW_UNMATCHED,
     REVIEW_NETWORK,
     REVIEW_AGREEMENT,
     REVIEW_CONFLICTS,
     REVIEW_GATE,
+    REVIEW_REJECTED,
 )
 NETWORK_ACCEPT_COLUMNS = ("source", "season", "pointer", "reason")
 GATE_OVERRIDE_COLUMNS = ("source", "season", "max_logged", "reason")
@@ -217,19 +224,24 @@ class SecondSourceInputs:
     rows: tuple[SecondSourceRow, ...]
     # (source, season) -> pointers whose RR disagreement the user explained.
     known: dict[SourceSeason, frozenset[str]]
+    # Cached pages skipped because they lack an on-host canonical URL or don't parse.
+    rejected: tuple[RejectedPage, ...] = ()
 
 
-_LoaderResult = tuple[list[SecondSourceRow], dict[SourceSeason, frozenset[str]]]
+@dataclass
+class _LoaderResult:
+    rows: list[SecondSourceRow] = field(default_factory=list)
+    known: dict[SourceSeason, frozenset[str]] = field(default_factory=dict)
+    rejected: list[RejectedPage] = field(default_factory=list)
 
 
 def _load_smw(paths: DataPaths, seasons: Sequence[int] | None) -> _LoaderResult:
     from booth_review.sources.smw.diff import KNOWN_DISAGREEMENT_COLUMNS
 
-    rows: list[SecondSourceRow] = []
-    known: dict[SourceSeason, frozenset[str]] = {}
+    result = _LoaderResult()
     root = paths.raw / "smw"
     if not root.is_dir():
-        return rows, known
+        return result
     for folder in sorted(root.iterdir()):
         season = _parse_ascii_int(folder.name)
         if season is None or (seasons is not None and season not in seasons):
@@ -247,16 +259,18 @@ def _load_smw(paths: DataPaths, seasons: Sequence[int] | None) -> _LoaderResult:
         if not host_matches("smw", url):
             raise ReferenceTableError(f"smw {season}: season page URL has an unexpected host")
         order = load_chart_order_csv(folder / "chart_order.csv")
-        rows.extend(smw_second_rows(load_rows_csv(rows_path), order, season=season, source_url=url))
+        result.rows.extend(
+            smw_second_rows(load_rows_csv(rows_path), order, season=season, source_url=url)
+        )
         known_path = folder / "transcription" / "known_disagreements.csv"
         if known_path.is_file():
-            known[("smw", season)] = frozenset(
+            result.known[("smw", season)] = frozenset(
                 f"{raw['chart_file']}:{raw['row']}"
                 for _, raw in read_reference_csv_numbered(
                     known_path, KNOWN_DISAGREEMENT_COLUMNS, required=True
                 )
             )
-    return rows, known
+    return result
 
 
 def _load_posts(
@@ -264,23 +278,25 @@ def _load_posts(
 ) -> _LoaderResult:
     """Every cached post of `source` for 2021-2024 (raw/<source>/<season>/posts/*.html;
     ESPN Press Room: ratings/*.html), parsed into rows, plus that season's
-    known_disagreements.csv (D-02, D-10, D-12)."""
-    rows: list[SecondSourceRow] = []
-    known: dict[SourceSeason, frozenset[str]] = {}
+    known_disagreements.csv (D-02, D-10, D-12). A post that can't be read is
+    skipped and returned in `rejected`."""
+    result = _LoaderResult()
     root = paths.raw / source
     if not root.is_dir():
-        return rows, known
+        return result
     for folder in sorted(root.iterdir()):
         season = _parse_ascii_int(folder.name)
         if season is None or season not in POST_SEASONS:
             continue
         if seasons is not None and season not in seasons:
             continue
-        rows.extend(read_cached_posts(paths, source, season).rows)
+        cached = read_cached_posts(paths, source, season)
+        result.rows.extend(cached.rows)
+        result.rejected.extend(cached.rejected)
         known_file = known_path(paths, source, season)
         if known_file.is_file():
-            known[(source, season)] = load_known(known_file)
-    return rows, known
+            result.known[(source, season)] = load_known(known_file)
+    return result
 
 
 def _load_tvrg(paths: DataPaths, seasons: Sequence[int] | None) -> _LoaderResult:
@@ -312,11 +328,13 @@ def load_second_source_inputs(
 ) -> SecondSourceInputs:
     rows: list[SecondSourceRow] = []
     known: dict[SourceSeason, frozenset[str]] = {}
+    rejected: list[RejectedPage] = []
     for loader in SECOND_SOURCE_LOADERS:
-        loaded_rows, loaded_known = loader(paths, seasons)
-        rows.extend(loaded_rows)
-        known.update(loaded_known)
-    return SecondSourceInputs(rows=tuple(rows), known=known)
+        loaded = loader(paths, seasons)
+        rows.extend(loaded.rows)
+        known.update(loaded.known)
+        rejected.extend(loaded.rejected)
+    return SecondSourceInputs(rows=tuple(rows), known=known, rejected=tuple(rejected))
 
 
 # -- Result types --------------------------------------------------------------------------
@@ -346,6 +364,8 @@ class GateStatus:
     unexplained: int
     stale_known: int
     status: str  # passed | withheld | no_shared
+    # Cached pages of this (source, season) skipped as unreadable (CR-01).
+    rejected_pages: int = 0
 
     def as_row(self) -> dict[str, object]:
         return {column: getattr(self, column) for column in REVIEW_GATE_COLUMNS}
@@ -360,6 +380,7 @@ class SecondSourceResult:
     unresolved_rows: list[UnresolvedTeamRow]
     gates: tuple[GateStatus, ...]
     counts: dict[str, int]
+    rejected_pages: tuple[RejectedPage, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -367,6 +388,14 @@ class _Winner:
     row: SecondSourceRow
     telecast_id: str
     viewers: int
+
+
+def rejected_page_rows(pages: Sequence[RejectedPage]) -> list[dict[str, object]]:
+    """interim/review_second_source_rejected.csv rows, in path order."""
+    return [
+        {"source": p.source, "season": p.season, "path": p.path, "reason": p.reason}
+        for p in sorted(pages, key=lambda p: p.path)
+    ]
 
 
 # -- Matching ------------------------------------------------------------------------------
@@ -538,6 +567,11 @@ def apply_second_sources(
 
     def unresolved_name(row: SecondSourceRow, raw: str) -> None:
         unresolved.setdefault((row.source, raw), []).append(row.season)
+
+    # A season whose every page was rejected still gets a gate row, so the
+    # rejection shows in the build output.
+    for page in inputs.rejected:
+        tally.setdefault((page.source, page.season), Counter())["rejected_pages"] += 1
 
     for row in inputs.rows:
         tally_key = (row.source, row.season)
@@ -721,6 +755,7 @@ def apply_second_sources(
                 unexplained=unexplained,
                 stale_known=len(known - missed),
                 status=gate_status,
+                rejected_pages=count["rejected_pages"],
             )
         )
 
@@ -790,6 +825,10 @@ def apply_second_sources(
             ordered(conflict_rows, "source", "season", "telecast_id", "other_pointer"),
         ),
         REVIEW_GATE: (REVIEW_GATE_COLUMNS, [gate.as_row() for gate in gates]),
+        REVIEW_REJECTED: (
+            REVIEW_REJECTED_COLUMNS,
+            rejected_page_rows(inputs.rejected),
+        ),
     }
     unresolved_out = [
         UnresolvedTeamRow(
@@ -819,6 +858,7 @@ def apply_second_sources(
         "no_telecast": totals["no_telecast"],
         "withheld_seasons": sum(1 for gate in gates if gate.status == "withheld"),
         "conflicts": len(conflict_rows),
+        "rejected_pages": len(inputs.rejected),
     }
     return SecondSourceResult(
         telecasts=telecasts_out,
@@ -828,4 +868,5 @@ def apply_second_sources(
         unresolved_rows=unresolved_out,
         gates=tuple(gates),
         counts=counts,
+        rejected_pages=inputs.rejected,
     )

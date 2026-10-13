@@ -9,10 +9,13 @@ for cache file names.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Final
+from typing import Any, Final
 
+from booth_review.errors import PageRejectedError
 from booth_review.sources.base import BatchSummary, run_requests
+from booth_review.sources.second_rows import SecondSource, host_matches
 from booth_review.transport.cache import RawCache
 from booth_review.transport.types import FetchRequest
 
@@ -26,6 +29,32 @@ def safe_slug(text: str) -> str:
     """Lower-case `text` and keep only [a-z0-9-] (runs of anything else become one dash)."""
     slug = _SLUG_DASHES.sub("-", _SLUG_BAD.sub("-", text.lower())).strip("-")
     return slug or "post"
+
+
+def post_validator(
+    source: SecondSource,
+    season: int,
+    *,
+    url_from_html: Callable[[str], str | None],
+    parse: Callable[..., Any],
+    error: type[Exception],
+) -> Callable[[bytes], None]:
+    """A RawCache `validate` check for one fetched post: it must carry a
+    canonical URL on the source's host and parse, as the build reads it
+    (known_disagreements.read_cached_posts), or it is never cached (CR-01).
+    Raises PageRejectedError with a count-only message."""
+
+    def check(content: bytes) -> None:
+        html = content.decode("utf-8", errors="replace")
+        url = url_from_html(html)
+        if url is None or not host_matches(source, url):
+            raise PageRejectedError(f"{source} post lacks an on-host canonical URL")
+        try:
+            parse(html, url=url, season=season)
+        except error as exc:
+            raise PageRejectedError(f"{source} post does not parse") from exc
+
+    return check
 
 
 @dataclass
@@ -83,11 +112,12 @@ class GapRun:
     def __post_init__(self) -> None:
         self.summary = empty_summary(self.source, self.season_label)
 
-    def fetch(self, req: FetchRequest) -> bool:
+    def fetch(self, req: FetchRequest, *, validate: Callable[[bytes], None] | None = None) -> bool:
         """Serve or fetch `req`; False when the budget refused it (stop the run).
 
-        A 4xx is counted as failed and returns True (the run goes on); any
-        other error propagates (robots disallow, unknown host, 5xx after retries).
+        A 4xx, or a response `validate` rejects (never cached), is counted as
+        failed and returns True (the run goes on); any other error propagates
+        (robots disallow, unknown host, 5xx after retries).
         """
         if not self.budget.allows(self.cache, req):
             return False
@@ -97,6 +127,7 @@ class GapRun:
             source=self.source,
             season_label=self.season_label,
             dry_run=False,
+            validate=validate,
         )
         self.summary = merge(self.summary, one)
         return True

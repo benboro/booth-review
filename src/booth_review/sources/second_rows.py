@@ -62,6 +62,20 @@ class SecondSourceRow:
     superseded: bool
 
 
+RejectReason = Literal["no_canonical_url", "off_host_url", "parse_error"]
+
+
+@dataclass(frozen=True)
+class RejectedPage:
+    """A cached page the build skipped: its path under the vault's raw/ folder
+    and why. Listed in the vault's interim/ folder, never printed."""
+
+    source: SecondSource
+    season: int
+    path: str
+    reason: RejectReason
+
+
 @dataclass(frozen=True)
 class ParsedPost:
     """One parsed post (TVRG, AA): its rows and how many lines or figure

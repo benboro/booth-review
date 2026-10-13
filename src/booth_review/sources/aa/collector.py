@@ -41,11 +41,13 @@ from booth_review.sources.aa.index import (
     week_of_slug,
     year_of_slug,
 )
+from booth_review.sources.aa.parser import AaParseError, parse_post, post_url_from_html
 from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.sources.gapcollect import (
     MAX_REQUESTS_DEFAULT,
     GapRun,
     RequestBudget,
+    post_validator,
     safe_slug,
 )
 from booth_review.transport.cache import RawCache
@@ -211,6 +213,10 @@ class AaCollector:
                 dry_run=True,
             )
         run = GapRun(self._cache, SOURCE, label, budget)
+        # A post the build couldn't read is never cached (CR-01).
+        check_post = post_validator(
+            SOURCE, season, url_from_html=post_url_from_html, parse=parse_post, error=AaParseError
+        )
         if not week_gap_dates(gap_dates, self._week_of):
             return run.summary
         if not run.fetch(INDEX_REQUEST):
@@ -223,7 +229,7 @@ class AaCollector:
                 if entry.url in done:
                     continue
                 done.add(entry.url)
-                if not run.fetch(post_request(season, entry)):
+                if not run.fetch(post_request(season, entry), validate=check_post):
                     return run.summary
         return run.summary
 

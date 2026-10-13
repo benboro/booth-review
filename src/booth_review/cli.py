@@ -1847,14 +1847,18 @@ def _build(args: argparse.Namespace) -> int:
         f"network mismatches {outcome.counts.get('crew_backup_network_mismatch', 0)}, "
         f"sideline dropped {outcome.counts.get('crew_backup_sideline_dropped', 0)}, "
         f"gap weeks listed {outcome.counts.get('crew_backup_gap_weeks', 0)}"
+        + _nonzero(("rejected pages", outcome.counts.get("crew_backup_rejected_pages", 0)))
     )
     for gate in outcome.second_source_gates:
-        prose = f", unlinked prose {gate.unlinked_prose}" if gate.unlinked_prose else ""
+        extras = _nonzero(
+            ("unlinked prose", gate.unlinked_prose),
+            ("rejected pages", gate.rejected_pages),
+        )
         print(
             f"second source {gate.source} {gate.season}: shared {gate.shared}, "
             f"within 3% {gate.within_3pct}, logged {gate.logged}, "
             f"unexplained {gate.unexplained}, loaded {gate.loaded}, "
-            f"held {gate.held_network}{prose}, {gate.status}"
+            f"held {gate.held_network}{extras}, {gate.status}"
         )
     if outcome.second_source_gates:
         print(
@@ -1863,11 +1867,26 @@ def _build(args: argparse.Namespace) -> int:
             f"{outcome.counts.get('second_source_unmatched', 0)} for review, "
             f"{outcome.counts.get('second_source_withheld_seasons', 0)} season(s) withheld"
         )
+    rejected = outcome.counts.get("second_source_rejected_pages", 0) + outcome.counts.get(
+        "crew_backup_rejected_pages", 0
+    )
+    if rejected:
+        # CR-01: an unreadable cached page is skipped, never a reason to stop the build.
+        print(
+            f"warning: {rejected} cached page(s) skipped as unreadable "
+            "(see interim/review_second_source_rejected.csv)",
+            file=sys.stderr,
+        )
     if outcome.accepted:
         print("accepted new baseline")
     for reason in outcome.reasons:
         print(reason)
     return 4 if exit_blocked else 0
+
+
+def _nonzero(*fields: tuple[str, int]) -> str:
+    """Build output extras: ", <label> <n>" for each field whose count is not zero."""
+    return "".join(f", {label} {n}" for label, n in fields if n)
 
 
 # -- site (D-14) --------------------------------------------------------------------------

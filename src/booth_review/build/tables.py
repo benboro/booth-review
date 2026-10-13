@@ -58,11 +58,13 @@ from booth_review.build.people_links import (
     TELECAST_PEOPLE_SCHEMA as TELECAST_PEOPLE_SCHEMA,
 )
 from booth_review.build.second_sources import (
+    REVIEW_REJECTED,
     GateStatus,
     apply_second_sources,
     load_gate_overrides,
     load_network_accepts,
     load_second_source_inputs,
+    rejected_page_rows,
 )
 from booth_review.build.shipped import (
     network_rated_counts,
@@ -385,11 +387,12 @@ def assemble_tables(
 
     # 04.19 D-13: ESPN Press Room booths fill the ESPN-family telecasts that
     # 506 and the overrides left crew-less (override > 506 > backup).
+    booth_pages = load_espnpr_booths(paths, seasons)
     backup = apply_crew_backup(
         telecasts,
         telecast_people,
         people,
-        load_espnpr_booths(paths, seasons),
+        booth_pages.booths,
         resolver=resolver,
         index=index,
         overrides=overrides,
@@ -460,6 +463,12 @@ def assemble_tables(
         ),
     }
     review_rows.update(second.review_rows)
+    # Unreadable booth pages join the second sources' rejected-page list (CR-01).
+    rejected_columns, _ = review_rows[REVIEW_REJECTED]
+    review_rows[REVIEW_REJECTED] = (
+        rejected_columns,
+        rejected_page_rows([*second.rejected_pages, *booth_pages.rejected]),
+    )
 
     diagnostics = _build_diagnostics(backup.season_counts)
     merged_totals = dict(diagnostics.totals)
@@ -486,6 +495,7 @@ def assemble_tables(
         {f"crew_overrides_{key}": value for key, value in override_result.counts.items()}
     )
     merged_totals.update({f"crew_backup_{key}": value for key, value in backup.counts.items()})
+    merged_totals["crew_backup_rejected_pages"] = len(booth_pages.rejected)
     merged_totals["crew_backup_gap_weeks"] = len(backfill_gaps)
     merged_totals["crew_gaps_unpatched"] = sum(
         1 for r in crew_gap_review if r["override_status"] == "missing"

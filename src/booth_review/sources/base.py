@@ -12,7 +12,7 @@ import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
-from booth_review.errors import FetchError
+from booth_review.errors import FetchError, PageRejectedError
 from booth_review.transport.cache import CacheResult, RawCache
 from booth_review.transport.types import FetchRequest
 
@@ -59,6 +59,7 @@ def run_requests(
     refresh: bool = False,
     on_fetched: Callable[[FetchRequest, CacheResult], None] | None = None,
     on_failed: Callable[[FetchRequest, int], None] | None = None,
+    validate: Callable[[bytes], None] | None = None,
 ) -> BatchSummary:
     """Plan or run one batch of requests through `cache`.
 
@@ -78,6 +79,10 @@ def run_requests(
     (304, a refresh confirming the cache is current) -- a caller that only
     tracks lastmod/validators needs both signals. `on_failed` fires with the
     status code for each 4xx recorded as failed.
+
+    `validate` checks each fetched response's bytes before it is cached
+    (RawCache.get_or_fetch); a response it rejects with PageRejectedError is
+    never written, is recorded as failed, and the batch continues.
     """
     if dry_run:
         return _plan_summary(cache, requests, source=source, season_label=season_label)
@@ -88,7 +93,13 @@ def run_requests(
 
     for i, req in enumerate(requests, start=1):
         try:
-            result = cache.get_or_fetch(req, refresh=refresh, bearer_token=bearer_token)
+            result = cache.get_or_fetch(
+                req, refresh=refresh, bearer_token=bearer_token, validate=validate
+            )
+        except PageRejectedError:
+            failed += 1
+            failed_urls.append(req.url)
+            continue
         except FetchError as exc:
             status = exc.status_code
             if status is not None and 400 <= status < 500 and status != 429:

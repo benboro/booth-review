@@ -17,6 +17,7 @@ from booth_review.build.second_sources import (
     REVIEW_CONFLICTS,
     REVIEW_GATE,
     REVIEW_NETWORK,
+    REVIEW_REJECTED,
     REVIEW_UNMATCHED,
     SECOND_SOURCE_REVIEW_NAMES,
     SecondSourceInputs,
@@ -35,7 +36,7 @@ from booth_review.resolve.overrides import GameOverride
 from booth_review.resolve.teams import TeamCrosswalkRow, TeamResolver
 from booth_review.sources.cfbd.parser import CfbdGame
 from booth_review.sources.ratingsref.parser import RRClaim, RRRecord, RRTelecast
-from booth_review.sources.second_rows import SecondSourceRow
+from booth_review.sources.second_rows import RejectedPage, SecondSourceRow
 from booth_review.sources.smw.chart_order import parse_chart_order, write_chart_order_csv
 
 SEASON = 2022
@@ -154,6 +155,7 @@ class Harness:
         self.gate_overrides: dict[tuple[str, int], int] = {}
         self.known: dict[tuple[str, int], frozenset[str]] = {}
         self.fbs: set[int] | None = None
+        self.rejected: tuple[RejectedPage, ...] = ()
         self.season_counts: dict[int, dict[str, int]] = {SEASON: {"rated_telecasts": 5}}
 
     def alias(self, variant: str, *team_ids: int) -> None:
@@ -178,7 +180,7 @@ class Harness:
         result = apply_second_sources(
             frame,
             self.records,
-            SecondSourceInputs(rows=tuple(rows), known=self.known),
+            SecondSourceInputs(rows=tuple(rows), known=self.known, rejected=self.rejected),
             resolver=TeamResolver({SEASON: self.games}, self.crosswalk),
             index=GameIndex(self.games),
             networks=_networks(),
@@ -698,16 +700,32 @@ def test_loader_reads_tvrg_and_aa_posts_beside_smw(tmp_path: Path) -> None:
     assert only_2021.rows == ()
 
 
-def test_loader_rejects_an_off_host_post_count_only(tmp_path: Path) -> None:
+def test_loader_skips_and_lists_an_off_host_or_unparsable_post(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     html = _fixture("tvrg").replace(
         "https://www.thetvratingsguide.com/2022/10/", "https://elsewhere.example.com/2022/10/"
     )
-    _cache_post(vault, "tvrg", 2022, _TVRG_SLUG, html)
-    with pytest.raises(ReferenceTableError) as exc:
-        load_second_source_inputs(DataPaths(vault=vault))
-    assert "tvrg 2022: 1 cached post(s)" in str(exc.value)
-    assert "elsewhere" not in str(exc.value)
+    _cache_post(vault, "tvrg", 2022, "off-host", html)
+    _cache_post(vault, "tvrg", 2022, "no-link", "<html><body>SENTINEL</body></html>")
+    _cache_post(vault, "tvrg", 2022, _TVRG_SLUG, _fixture("tvrg"))
+    inputs = load_second_source_inputs(DataPaths(vault=vault))
+    # The good post still loads; the two bad ones are skipped, never raised.
+    assert len(inputs.rows) == 7
+    assert [(p.source, p.season, p.path, p.reason) for p in inputs.rejected] == [
+        ("tvrg", 2022, "tvrg/2022/posts/no-link.html", "no_canonical_url"),
+        ("tvrg", 2022, "tvrg/2022/posts/off-host.html", "off_host_url"),
+    ]
+
+    h = Harness()
+    h.rejected = inputs.rejected
+    result, _ = h.run([])
+    # A season whose only pages were rejected still gets a gate row.
+    gate = _gate(result)
+    assert (gate.source, gate.season, gate.rows, gate.rejected_pages) == ("tvrg", 2022, 0, 2)
+    assert gate.status == "no_shared"
+    rejected = _review(result, REVIEW_REJECTED)
+    assert [r["reason"] for r in rejected] == ["no_canonical_url", "off_host_url"]
+    assert result.counts["rejected_pages"] == 2
 
 
 def test_loader_rejects_a_bad_known_file(tmp_path: Path) -> None:
@@ -824,13 +842,18 @@ def test_loader_reads_espnpr_ratings_releases_only(tmp_path: Path) -> None:
     assert load_second_source_inputs(DataPaths(vault=vault), seasons=[2021]).rows == ()
 
 
-def test_loader_rejects_a_non_ratings_page_in_the_ratings_folder(tmp_path: Path) -> None:
+def test_loader_skips_a_non_ratings_page_in_the_ratings_folder(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     _espnpr_page(vault, 2023, "ratings", "misfiled", "release_synthetic.html")
-    with pytest.raises(ReferenceTableError) as exc:
-        load_second_source_inputs(DataPaths(vault=vault))
-    assert "espnpr 2023: 1 cached post(s)" in str(exc.value)
-    assert "Silverlake" not in str(exc.value)
+    inputs = load_second_source_inputs(DataPaths(vault=vault))
+    assert inputs.rows == ()
+    (page,) = inputs.rejected
+    assert (page.source, page.season, page.path, page.reason) == (
+        "espnpr",
+        2023,
+        "espnpr/2023/ratings/misfiled.html",
+        "no_canonical_url",  # a release page has no ratings-release canonical link
+    )
 
 
 def test_espnpr_rows_from_the_vault_match_settle_and_gate(tmp_path: Path) -> None:

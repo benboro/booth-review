@@ -9,7 +9,6 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 import polars as pl
-import pytest
 
 from booth_review.build.crew_backup import (
     CREW_BACKUP_LABEL,
@@ -25,7 +24,6 @@ from booth_review.build.people_links import PEOPLE_SCHEMA, TELECAST_PEOPLE_SCHEM
 from booth_review.build.telecasts import TELECASTS_SCHEMA
 from booth_review.config import DataPaths
 from booth_review.contract.models import crew_source_label_problem
-from booth_review.errors import ReferenceTableError
 from booth_review.people.registry import PeopleRegistry, Person
 from booth_review.resolve.games import GameIndex
 from booth_review.resolve.networks import NetworkRow, NetworkTable
@@ -763,8 +761,9 @@ def test_loader_reads_commentators_pages_and_releases_with_save_times(tmp_path: 
             {"source": "sports506", "path": "sports506/2022/wk-06.html"},
         ],
     )
-    booths = load_espnpr_booths(paths)
-    by_pointer = {b.booth.pointer: b for b in booths}
+    loaded = load_espnpr_booths(paths)
+    assert loaded.rejected == ()
+    by_pointer = {b.booth.pointer: b for b in loaded.booths}
     assert set(by_pointer) == {"wk-6:1", "synthetic-week-6-college-football-coverage:1"}
     assert by_pointer["wk-6:1"].saved_at == "2022-10-05T01:00:00Z"  # the newest manifest line
     assert by_pointer["wk-6:1"].booth.source_url == URL_B
@@ -773,17 +772,23 @@ def test_loader_reads_commentators_pages_and_releases_with_save_times(tmp_path: 
     assert release_booth.saved_at == "2022-10-03T18:00:00Z"
     assert release_booth.booth.source_url == URL
     assert release_booth.booth.tv_names == ("Blair Tolley", "Casey Lorn")
-    assert load_espnpr_booths(paths, seasons=[2021]) == []
+    assert load_espnpr_booths(paths, seasons=[2021]).booths == []
 
 
 def test_loader_without_pages_is_empty(tmp_path: Any) -> None:
-    assert load_espnpr_booths(_vault(tmp_path)) == []
+    loaded = load_espnpr_booths(_vault(tmp_path))
+    assert (loaded.booths, loaded.rejected) == ([], ())
 
 
-def test_loader_refuses_an_unidentifiable_page_count_only(tmp_path: Any) -> None:
+def test_loader_skips_and_lists_an_unidentifiable_page(tmp_path: Any) -> None:
     paths = _vault(tmp_path)
     _write(paths, "espnpr/2022/releases/broken.html", "<html><body>SENTINEL TEXT</body></html>")
-    with pytest.raises(ReferenceTableError) as excinfo:
-        load_espnpr_booths(paths)
-    assert "SENTINEL" not in str(excinfo.value)
-    assert "1 saved booth page" in str(excinfo.value)
+    loaded = load_espnpr_booths(paths)
+    assert loaded.booths == []
+    (page,) = loaded.rejected
+    assert (page.source, page.season, page.path, page.reason) == (
+        "espnpr",
+        2022,
+        "espnpr/2022/releases/broken.html",
+        "no_canonical_url",
+    )
