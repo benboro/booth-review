@@ -14,12 +14,14 @@ import contextlib
 import logging
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 
 from booth_review.config import DataPaths
 from booth_review.errors import VaultStateError
+from booth_review.mlb.constants import MLB_REFRESH_CAP_DEFAULT
+from booth_review.mlb.layout import mlb_rr_path
 from booth_review.nfl.layout import nfl_rr_path
 from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.sources.ratingsref.lastmod import (
@@ -31,7 +33,6 @@ from booth_review.sources.ratingsref.lastmod import (
     load_lastmods,
 )
 from booth_review.sources.ratingsref.sitemap import (
-    LEAGUE_PATH_PREFIXES,
     SitemapEntry,
     parse_sitemap,
     select_entries,
@@ -52,6 +53,62 @@ REFRESH_CAP_DEFAULT = 100
 # week of NFL revisions plus margin. Each league's run has its own cap, so a
 # burst of NFL changes never delays CFB re-checks.
 NFL_REFRESH_CAP_DEFAULT = 40
+
+__all__ = ["MLB_REFRESH_CAP_DEFAULT"]
+
+# Event pages are not regular telecasts; MLB's are never planned or refreshed.
+MLB_EVENT_SLUG_PREFIXES = ("mlb-all-star-", "mlb-home-run-derby-")
+
+Windows = Sequence[tuple[date, date]]
+
+
+def _cfb_rr_path(season: int, telecast_id: str) -> str:
+    return f"ratingsref/telecast/{season}/{telecast_id}.json"
+
+
+@dataclass(frozen=True)
+class LeagueSpec:
+    """Per-league collector settings: source key, cache path, lastmod prefix, refresh cap."""
+
+    source: Literal["ratingsref", "nfl_ratingsref", "mlb_ratingsref"]
+    record_path: Callable[[int, str], str]
+    lastmod_prefix: str | None
+    refresh_cap: int
+    event_prefixes: tuple[str, ...] = ()
+
+
+LEAGUES: dict[str, LeagueSpec] = {
+    "cfb": LeagueSpec("ratingsref", _cfb_rr_path, None, REFRESH_CAP_DEFAULT),
+    "nfl": LeagueSpec("nfl_ratingsref", nfl_rr_path, "nfl-", NFL_REFRESH_CAP_DEFAULT),
+    "mlb": LeagueSpec(
+        "mlb_ratingsref",
+        mlb_rr_path,
+        "mlb-",
+        MLB_REFRESH_CAP_DEFAULT,
+        MLB_EVENT_SLUG_PREFIXES,
+    ),
+}
+
+
+def _in_any_window(day: date, windows: Windows) -> bool:
+    return any(start <= day <= end for start, end in windows)
+
+
+@dataclass
+class RunSummary(BatchSummary):
+    """A BatchSummary that also carries the MLB scope skips (absent for cfb/nfl)."""
+
+    skipped_event: int | None = None
+    out_of_window: int | None = None
+
+    def counts(self) -> dict[str, int]:
+        counts = super().counts()
+        if self.skipped_event is not None:
+            counts["skipped_event"] = self.skipped_event
+        if self.out_of_window is not None:
+            counts["out_of_window"] = self.out_of_window
+        return counts
+
 
 # D-07: the earliest season the refresh's lastmod diff considers.
 FIRST_SEASON = 2014
@@ -83,6 +140,10 @@ class RefreshSummary:
     dry_run: bool
     deferred_failed: int = 0
     """Qualifying records held back because they failed recently (WR-04)."""
+    out_of_window: int = 0
+    """MLB only: sitemap entries outside every D-14 window (never candidates)."""
+    skipped_event: int = 0
+    """MLB only: all-star / home-run-derby entries (never candidates)."""
 
     def counts(self) -> dict[str, int]:
         """Counts for vault.batch_message, in a fixed key order."""
@@ -109,12 +170,11 @@ class RatingsRefCollector:
         """`lock` (normally `VaultRepo.lock`) is held around each lastmod
         append, so an append never lands mid-commit or mid-rebase. `now`
         stamps lastmod/failure lines and times the failed-record hold."""
-        if league not in LEAGUE_PATH_PREFIXES:
+        if league not in LEAGUES:
             raise ValueError(f"unknown ratingsref league: {league!r}")
         self._league = league
-        self._source: Literal["ratingsref", "nfl_ratingsref"] = (
-            "ratingsref" if league == "cfb" else "nfl_ratingsref"
-        )
+        self._spec = LEAGUES[league]
+        self._source = self._spec.source
         self._cache = cache
         self._paths = paths
         self._lock: Callable[[], AbstractContextManager[object]] = lock or contextlib.nullcontext
@@ -150,11 +210,28 @@ class RatingsRefCollector:
         return result.content
 
     def _record_path(self, entry: SitemapEntry) -> str:
-        if self._league == "cfb":
-            return f"ratingsref/telecast/{entry.season}/{entry.telecast_id}.json"
-        return nfl_rr_path(entry.season, entry.telecast_id)
+        return self._spec.record_path(entry.season, entry.telecast_id)
 
-    def plan(self, entries: Sequence[SitemapEntry]) -> list[FetchRequest]:
+    def _scope(
+        self, entries: Sequence[SitemapEntry], windows: Windows | None
+    ) -> tuple[list[SitemapEntry], int, int]:
+        """Drop event slugs and out-of-window entries: (kept, skipped_event, out_of_window)."""
+        kept: list[SitemapEntry] = []
+        skipped_event = 0
+        out_of_window = 0
+        for entry in entries:
+            if entry.telecast_id.startswith(self._spec.event_prefixes):
+                skipped_event += 1
+            elif windows is not None and not _in_any_window(entry.event_date, windows):
+                out_of_window += 1
+            else:
+                kept.append(entry)
+        return kept, skipped_event, out_of_window
+
+    def plan(
+        self, entries: Sequence[SitemapEntry], *, windows: Windows | None = None
+    ) -> list[FetchRequest]:
+        kept, _event, _out = self._scope(entries, windows)
         return [
             FetchRequest(
                 source=self._source,
@@ -162,10 +239,12 @@ class RatingsRefCollector:
                 url=entry.json_url,
                 cache_path=self._record_path(entry),
             )
-            for entry in entries
+            for entry in kept
         ]
 
-    def run(self, start: date, end: date, *, dry_run: bool) -> BatchSummary:
+    def run(
+        self, start: date, end: date, *, dry_run: bool, windows: Windows | None = None
+    ) -> BatchSummary:
         season_label = f"{start}..{end}"
         xml = self.sitemap(dry_run=dry_run)
 
@@ -187,14 +266,16 @@ class RatingsRefCollector:
             )
 
         entries, _skipped = parse_sitemap(xml, league=self._league)
-        selected = select_entries(entries, start, end)
+        selected, skipped_event, out_of_window = self._scope(
+            select_entries(entries, start, end), windows
+        )
         requests = self.plan(selected)
         entries_by_url = {entry.json_url: entry for entry in selected}
 
         def _on_fetched(req: FetchRequest, result: CacheResult) -> None:
             self._record_lastmod(entries_by_url[req.url])
 
-        return run_requests(
+        batch = run_requests(
             self._cache,
             requests,
             source=self._source,
@@ -202,14 +283,22 @@ class RatingsRefCollector:
             dry_run=dry_run,
             on_fetched=_on_fetched,
         )
+        if self._league != "mlb" and windows is None:
+            return batch
+        return RunSummary(
+            **asdict(batch),
+            skipped_event=skipped_event if self._league == "mlb" else None,
+            out_of_window=out_of_window if windows is not None else None,
+        )
 
     def refresh(
         self,
         *,
         current_season: int,
-        cap: int = REFRESH_CAP_DEFAULT,
+        cap: int | None = None,
         first_season: int = FIRST_SEASON,
         dry_run: bool,
+        windows: Windows | None = None,
     ) -> RefreshSummary:
         """Re-fetch RR records whose sitemap <lastmod> advanced or that are
         newly listed, in any season 2014..current_season, frozen ones
@@ -228,16 +317,30 @@ class RatingsRefCollector:
         nor backlog), and after that sorts behind every other capped
         candidate, so a record that keeps failing can never take the cap
         from the rest of the queue (WR-04).
+
+        `windows` (D-14) keeps only entries whose event_date falls inside one;
+        league mlb requires it. Event slugs and out-of-window entries are dropped
+        before new/advanced selection, so they are never candidates or backlog.
+        `cap` defaults to the league's own cap.
         """
+        if cap is None:
+            cap = self._spec.refresh_cap
+        if self._league == "mlb" and windows is None:
+            raise ValueError(
+                "MLB refresh needs the D-14 windows (2014-2026 postseason + 2026 regular season)"
+            )
         if not lastmod_ledger_exists(self._paths):
             raise VaultStateError(
                 "ledger/rr_lastmod.json(l) missing; refusing a refresh that would "
                 "treat every record as new"
             )
-        if self._league == "nfl" and not lastmod_has_prefix(self._paths, "nfl-"):
+        prefix = self._spec.lastmod_prefix
+        if prefix is not None and not lastmod_has_prefix(self._paths, prefix):
+            label = self._league.upper()
             raise VaultStateError(
-                "no NFL lastmod lines yet; run `booth-review collect ratingsref --league nfl "
-                f"--season 2014-{current_season}` first, or every NFL record would queue as new"
+                f"no {label} lastmod lines yet; run `booth-review collect ratingsref "
+                f"--league {self._league} --season 2014-{current_season}` first, or every "
+                f"{label} record would queue as new"
             )
 
         season_label = f"{first_season}-{current_season}"
@@ -261,6 +364,7 @@ class RatingsRefCollector:
             )
 
         entries, _skipped = parse_sitemap(xml, league=self._league)
+        entries, skipped_event, out_of_window = self._scope(entries, windows)
         known = load_lastmods(self._paths)
 
         in_window = [e for e in entries if first_season <= e.season <= current_season]
@@ -317,6 +421,9 @@ class RatingsRefCollector:
             "backlog": len(backlog_entries),
             "deferred_failed": len(deferred_ids),
         }
+        if self._league == "mlb":
+            counts["out_of_window"] = out_of_window
+            counts["skipped_event"] = skipped_event
 
         if dry_run:
             summary = RefreshSummary(
