@@ -22,6 +22,12 @@ Source = Literal[
     "tvrg",
     "aa",
     "espnpr",
+    "mlb_sports506",
+    "mlb_ratingsref",
+    "mlb_retrosheet",
+    "mlb_wikipedia",
+    "mlb_relay",
+    "mlb_statsapi",
 ]
 
 

@@ -33,7 +33,7 @@ Outcome = Literal["cached", "fetched", "not_modified"]
 # (lastmod advanced, or newly listed in the sitemap) is decided one layer up,
 # by RatingsRefCollector.refresh (Plan 03) -- this constant only says which
 # source is ever allowed to attempt the request.
-_REFRESH_EXEMPT_SOURCES = frozenset({"ratingsref", "nfl_ratingsref"})
+_REFRESH_EXEMPT_SOURCES = frozenset({"ratingsref", "nfl_ratingsref", "mlb_ratingsref"})
 
 _MANIFEST_FIELDS = (
     "url",

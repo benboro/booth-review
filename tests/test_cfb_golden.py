@@ -237,6 +237,21 @@ def test_nfl_manifest_lines_keep_cfb_generated_at(git_vault: DataPaths, tmp_path
     assert json.loads(site.read_bytes())["generated_at"] == "2026-10-01T10:00:00+00:00"
 
 
+def test_mlb_manifest_lines_do_not_move_input_stamp(git_vault: DataPaths, tmp_path: Path) -> None:
+    ref = _vault_with_sentinel_note(git_vault, tmp_path, _KNOWN_BOWLS)
+    _write_manifest(
+        git_vault,
+        [
+            *_CFB_MANIFEST,
+            _entry("mlb/retrosheet/gameinfo.zip", "m1", "2026-10-12T10:00:00Z"),
+            _entry("_robots/www.retrosheet.org/robots.txt", "m2", "2026-10-13T10:00:00Z"),
+        ],
+    )
+    run_build(git_vault, ref, commit=False, accept_baseline=True)
+    site = git_vault.vault / "processed" / "site-data.json"
+    assert json.loads(site.read_bytes())["generated_at"] == "2026-10-01T10:00:00+00:00"
+
+
 def test_default_sitemap_parse_ignores_other_leagues() -> None:
     def url(slug: str) -> tuple[str, str]:
         return slug, "2026-01-01T00:00:00+00:00"

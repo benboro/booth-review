@@ -73,3 +73,23 @@ def test_smw_and_espnpr_are_never_fetched(host: str) -> None:
     with pytest.raises(UnknownHostError):
         client.fetch(f"https://{host}/")
     assert sent == []
+
+
+def test_retrosheet_is_allow_listed_at_five_seconds() -> None:
+    assert HOST_SOURCE["www.retrosheet.org"] == "mlb_retrosheet"
+    policy = HOST_POLICIES["www.retrosheet.org"]
+    assert policy.min_interval_s == 5.0
+    assert policy.jitter_s == 1.0
+    assert policy.retry_mode == "standard"
+
+
+@pytest.mark.parametrize("host", ["statsapi.mlb.com", "tamirmoore.blogspot.com"])
+def test_gated_mlb_hosts_have_no_policy(host: str) -> None:
+    assert host not in HOST_POLICIES
+    assert host not in HOST_SOURCE
+
+
+def test_mlb_ratingsref_is_refresh_exempt() -> None:
+    from booth_review.transport.cache import _REFRESH_EXEMPT_SOURCES
+
+    assert "mlb_ratingsref" in _REFRESH_EXEMPT_SOURCES
