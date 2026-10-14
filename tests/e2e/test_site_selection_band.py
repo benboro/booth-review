@@ -172,14 +172,13 @@ def test_selection_band_reserve_has_small_headroom(
     assert 2 <= reserve - natural <= 8
 
 
-@pytest.mark.parametrize("font_setting", FONTS, indirect=True)
-def test_phone_selection_band_reserve_has_small_headroom(
-    mobile_page: Page, open_app: Callable[[Page, str], None], font_setting: str
+def test_phone_selection_band_has_no_reserve(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    open_app(mobile_page, LONGEST_NAME_QUERY)
-    natural, reserve = mobile_page.evaluate(_NATURAL_JS)
-    print(f"MEASURED {font_setting} phone natural={natural:.1f} reserve={reserve:.1f}")
-    assert 2 <= reserve - natural <= 8
+    """Phones drop the one-person reserve (user, 2026-10-13): the band hugs its content."""
+    open_app(mobile_page, "")
+    _, reserve = mobile_page.evaluate(_NATURAL_JS)
+    assert reserve == 0
 
 
 def _gap_under_summary(page: Page) -> float:
@@ -207,9 +206,9 @@ def test_phone_summary_gap_is_reclaimed(
     mobile_page: Page, open_app: Callable[[Page, str], None], font_setting: str
 ) -> None:
     open_app(mobile_page, "")
-    band = _height(mobile_page, "#selection-bar")
-    print(f"MEASURED {font_setting} phone empty band={band:.1f}")
-    assert band <= 162
+    gap = _gap_under_summary(mobile_page)
+    print(f"MEASURED {font_setting} phone empty gap={gap:.1f}")
+    assert gap <= 24
 
 
 @pytest.mark.parametrize("font_setting", FONTS, indirect=True)
@@ -282,12 +281,14 @@ def test_desktop_selection_buttons_show_long_labels(
 def test_phone_compare_row_may_grow_without_horizontal_overflow(
     mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-04: the reserve covers 0 or 1 person; four Compare people may grow the band."""
+    """Four Compare people grow the band without widening the page."""
+    open_app(mobile_page, "?people=dale-harlow")
+    one = _height(mobile_page, "#selection-bar")
     open_app(
         mobile_page,
         "?people=dale-harlow,kris-venn,sam-delgado,pat-rowan&mode=compare",
     )
-    assert _height(mobile_page, "#selection-bar") >= 156
+    assert _height(mobile_page, "#selection-bar") > one
     overflow = mobile_page.evaluate(
         "document.documentElement.scrollWidth - document.documentElement.clientWidth"
     )
@@ -338,15 +339,17 @@ def test_a_broad_filter_alone_does_not_grow_the_selection_band(
 
 
 @pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
-def test_selection_band_height_is_fixed_on_phone(
+def test_phone_summary_stays_one_line(
     mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     # CI renders in DejaVu Sans, where dale-harlow's detail line (two networks since his
     # unrated game) is wider than a 390px phone; it must stay one line, not grow the band.
     open_app(mobile_page, "")
-    y0 = _y(mobile_page, "#chart")
+    h0 = _height(mobile_page, "#summary")
     open_app(mobile_page, "?people=dale-harlow")
-    assert abs(_y(mobile_page, "#chart") - y0) <= 0.5
+    # The 20px count and 16px detail share a baseline, so one line may gain ~2px; a
+    # second line would add a whole 24px line.
+    assert _height(mobile_page, "#summary") - h0 <= 4
     detail = mobile_page.locator("#summary-detail")
     assert detail.get_attribute("title") == detail.inner_text()
 

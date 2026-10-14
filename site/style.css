@@ -2387,11 +2387,13 @@ html:has(#nfl-detail-panel[open]) {
 /* ---------- Phones (≤640px) ---------- */
 
 @media (max-width: 640px) {
-  /* D-01/D-03/D-20: one-person band height on a 390px phone (chip row, one
-     row of three 44px buttons, one-line summary): natural 149 / 150 / 150px
-     in the default / DejaVu / wide fonts; reserve 156px (~6px headroom). */
+  /* Phones keep no reserve (user, 2026-10-13): the one-person reserve left a
+     ~128px blank band under the summary with nobody selected. The trade-off:
+     the chart moves down when the first person is added and back up on
+     Clear. Picks from the full-screen Filters sheet hide the move; a tap on a
+     person bar in Bars does not. */
   #selection-bar {
-    min-height: 156px;
+    min-height: 0;
   }
 
   .selection-row {
@@ -3006,7 +3008,15 @@ body:not([data-sport="nfl"]) #sport-load-error {
 
 @media (max-width: 640px) {
   #nfl-selection-bar {
-    min-height: 156px;
+    min-height: 0;
+  }
+
+  /* With no reserve, the empty chip list and summary's margins would make the
+     empty NFL band 12px taller than CFB's and move the chart on a sport
+     switch (SITE-20). */
+  .nfl-chips:empty,
+  .nfl-summary:empty {
+    display: none;
   }
 }
 
