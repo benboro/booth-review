@@ -1,0 +1,6 @@
+club_id,league,division,season_from,season_to,display_name,nickname,note
+alpha,AL,East,,2024,Alpha City Aces,Aces,synthetic
+alpha,AL,East,2025,,Alpha Bay Aces,Aces,synthetic relocation
+bravo,AL,West,,,Bravo Bravos,Bravos,synthetic
+charlie,NL,East,,,Charlie Chargers,Chargers,synthetic
+delta,NL,West,,,Delta Dragons,Dragons,synthetic

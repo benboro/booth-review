@@ -1,0 +1,4 @@
+network,season,rank,pbp,analyst,source_url
+apple,2026,1,Ana Fixture,Bo Fixture,https://example.invalid/apple-2026
+apple,2026,2,Cy Fixture,Newcomer Analyst,https://example.invalid/apple-2026
+net_one,2026,1,Cy Fixture,Bo Fixture,https://example.invalid/net-one-2026
