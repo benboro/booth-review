@@ -385,6 +385,35 @@ def test_booths_search_narrows_and_empty(
     assert page.locator("#nfl-booth-results-pop li[role=option]:visible").count() == 0
 
 
+def test_booth_group_head_inset_and_only_on_hover(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    """Group heads line up with the rows, and Only shows on head hover at the counts' edge."""
+    page = nfl_guarded_page
+    _booths_app(page, open_nfl_app, "crews")
+    _open(page, "booths")
+    head = page.locator("#nfl-pop-booths .group-head").first
+    row = page.locator("#nfl-booth-results-pop li[role=option]").first
+    name_box = head.locator(".group-name").bounding_box()
+    check_box = row.locator(".option-check").bounding_box()
+    assert name_box and check_box
+    assert abs(name_box["x"] - check_box["x"]) <= 1
+    assert head.locator(".group-name").evaluate("e => getComputedStyle(e).fontWeight") == "600"
+    only = head.locator(".only-btn")
+    page.mouse.move(0, 0)
+    assert only.evaluate("e => getComputedStyle(e).opacity") == "0"
+    head.hover()
+    page.wait_for_function(
+        "() => getComputedStyle(document.querySelector('#nfl-pop-booths .group-head .only-btn')).opacity === '1'"
+    )
+    edge = only.evaluate(
+        "e => { const r = document.createRange(); r.selectNodeContents(e); return r.getBoundingClientRect().right; }"
+    )
+    count_box = row.locator(".option-count").bounding_box()
+    assert count_box
+    assert abs(edge - (count_box["x"] + count_box["width"])) <= 1
+
+
 def test_booths_only_all_url_and_reload(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
 ) -> None:
