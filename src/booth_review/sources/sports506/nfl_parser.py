@@ -32,9 +32,9 @@ from bs4 import BeautifulSoup, Tag
 
 from booth_review.errors import ParseError
 from booth_review.sources.sports506.parser import (
-    _collapse_whitespace,
-    _decode,
-    _split_matchup,
+    collapse_whitespace,
+    decode_html,
+    split_matchup,
 )
 
 SMOKE_MIN_GAMES = 8
@@ -142,18 +142,18 @@ def _text_with_breaks(tag: Tag, *, drop_links: bool = False) -> str:
 
 def _clean_matchup(text: str) -> tuple[str, str, bool, str | None] | None:
     """(away, home, neutral, intl_city) from matchup text, dropping notes."""
-    text = _collapse_whitespace(text)
+    text = collapse_whitespace(text)
     city: str | None = None
     intl = _INTL_RE.search(text)
     if intl is not None:
         city = intl.group(1)
-        text = _collapse_whitespace(text[: intl.start()] + " " + text[intl.end() :])
+        text = collapse_whitespace(text[: intl.start()] + " " + text[intl.end() :])
     while True:
         trimmed = _TRAILING_PAREN_RE.sub("", text)
         if trimmed == text:
             break
         text = trimmed
-    split = _split_matchup(text)
+    split = split_matchup(text)
     if split is None:
         return None
     away, home, neutral = split
@@ -165,8 +165,8 @@ def _clean_matchup(text: str) -> tuple[str, str, bool, str | None] | None:
 def _split_crew(text: str) -> tuple[str, ...]:
     text = _BRACKET_RE.sub(" ", text)
     text = _REGION_PAREN_RE.sub(" ", text)
-    text = _LEAD_PUNCT_RE.sub("", _collapse_whitespace(text))
-    names = (_collapse_whitespace(part) for part in text.split(","))
+    text = _LEAD_PUNCT_RE.sub("", collapse_whitespace(text))
+    names = (collapse_whitespace(part) for part in text.split(","))
     return tuple(name for name in names if name)
 
 
@@ -197,7 +197,7 @@ def _header_text(bold: Tag) -> str | None:
         return None  # a label or network inside a national line
     if bold.find_parent("div", id=lambda value: value in _GAME_DIV_IDS) is not None:
         return None
-    text = _collapse_whitespace(bold.get_text())
+    text = collapse_whitespace(bold.get_text())
     if len(text) < 3 or text.endswith(":") or text != text.upper():
         return None
     if text in _NOT_HEADERS or not any(ch.isalpha() for ch in text):
@@ -230,7 +230,7 @@ def _national_chunks(main: str) -> list[str]:
     chunks: list[str] = []
     for part in parts:
         head = part.split("(", 1)[0]
-        if _split_matchup(_collapse_whitespace(head)) is not None or not chunks:
+        if split_matchup(collapse_whitespace(head)) is not None or not chunks:
             chunks.append(part)
         else:
             chunks[-1] += ";" + part
@@ -249,18 +249,18 @@ class _NationalFields:
 
 
 def _parse_national_chunk(chunk: str) -> _NationalFields | None:
-    chunk = _collapse_whitespace(chunk)
+    chunk = collapse_whitespace(chunk)
     city: str | None = None
     intl = _INTL_RE.search(chunk)
     if intl is not None:
         city = intl.group(1)
-        chunk = _collapse_whitespace(chunk[: intl.start()] + " " + chunk[intl.end() :])
+        chunk = collapse_whitespace(chunk[: intl.start()] + " " + chunk[intl.end() :])
     cut = len(chunk)
     for marker in ("(", ";"):
         pos = chunk.find(marker)
         if pos != -1:
             cut = min(cut, pos)
-    split = _split_matchup(chunk[:cut])
+    split = split_matchup(chunk[:cut])
     if split is None:
         return None
     away, home, neutral = split
@@ -282,7 +282,7 @@ def _parse_national_chunk(chunk: str) -> _NationalFields | None:
     for content in contents:
         for segment in content.split(";"):
             for raw in segment.split(","):
-                token = _collapse_whitespace(raw)
+                token = collapse_whitespace(raw)
                 if not token:
                     continue
                 if _is_time(token) and time_raw is None:
@@ -304,10 +304,10 @@ def _parse_national_chunk(chunk: str) -> _NationalFields | None:
 def _national_listings(li: Tag) -> list[_NationalFields]:
     clone = copy.copy(li)
     first = clone.find("b")
-    if first is not None and _collapse_whitespace(first.get_text()).endswith(":"):
+    if first is not None and collapse_whitespace(first.get_text()).endswith(":"):
         first.decompose()
     for italic in clone.find_all("i"):
-        place = _ITALIC_PLACE_RE.match(_collapse_whitespace(italic.get_text()))
+        place = _ITALIC_PLACE_RE.match(collapse_whitespace(italic.get_text()))
         if place is not None:
             city = place.group("a") or place.group("b") or place.group("c")
             italic.replace_with(f" (in {city}) ")
@@ -317,7 +317,7 @@ def _national_listings(li: Tag) -> list[_NationalFields]:
         stop.replace_with(_STOP_MARK)
     text = _text_with_breaks(clone, drop_links=True)
     text = text.split("█", 1)[0].split(_STOP_MARK, 1)[0]
-    lines = [_collapse_whitespace(line) for line in text.split("\n")]
+    lines = [collapse_whitespace(line) for line in text.split("\n")]
     lines = [line for line in lines if line]
     if not lines:
         return []
@@ -344,12 +344,12 @@ def _regional_from_row(row: Tag) -> tuple[str, tuple[str, ...]] | None:
     if not isinstance(strong, Tag):
         return None
     cell = strong.parent if isinstance(strong.parent, Tag) else row
-    matchup = _collapse_whitespace(strong.get_text())
-    full = _collapse_whitespace(_text_with_breaks(cell).replace("\n", " "))
+    matchup = collapse_whitespace(strong.get_text())
+    full = collapse_whitespace(_text_with_breaks(cell).replace("\n", " "))
     rest = full[len(matchup) :] if full.startswith(matchup) else ""
     if not _split_crew(rest):
         for sibling in cell.find_next_siblings("td"):
-            rest += " " + _collapse_whitespace(_text_with_breaks(sibling).replace("\n", " "))
+            rest += " " + collapse_whitespace(_text_with_breaks(sibling).replace("\n", " "))
     return matchup, _split_crew(rest)
 
 
@@ -362,7 +362,7 @@ def parse_nfl_week_page(html: bytes, *, season: int, week: int) -> list[NflListi
     if not html:
         raise _error(season, week, "empty response body")
 
-    soup = BeautifulSoup(_decode(html), features="lxml")
+    soup = BeautifulSoup(decode_html(html), features="lxml")
     if soup.find("div", id="cgame") is not None or soup.select_one("table.listingtable"):
         raise _error(season, week, "page is not an nfl week page")
 

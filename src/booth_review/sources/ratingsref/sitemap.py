@@ -18,7 +18,7 @@ from booth_review.errors import ParseError
 from booth_review.seasons import season_of
 
 # 999.7 adds "mlb": "/telecast/mlb-" here.
-_LEAGUE_PATH_PREFIXES: dict[str, str] = {
+LEAGUE_PATH_PREFIXES: dict[str, str] = {
     "cfb": "/telecast/cfb-",
     "nfl": "/telecast/nfl-",
 }
@@ -47,7 +47,7 @@ def parse_sitemap(xml: bytes, league: str = "cfb") -> tuple[list[SitemapEntry], 
     Entries whose loc path isn't a telecast page for `league`, or whose slug has no
     trailing -YYYY-MM-DD date, are skipped and counted rather than raising.
     """
-    prefix = _LEAGUE_PATH_PREFIXES.get(league)
+    prefix = LEAGUE_PATH_PREFIXES.get(league)
     if prefix is None:
         raise ValueError(f"unknown ratingsref league: {league!r}")
     parser = etree.XMLParser(resolve_entities=False, no_network=True, huge_tree=False)

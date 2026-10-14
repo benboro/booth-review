@@ -19,7 +19,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
-from booth_review.audit.freeze import _load_frozen
+from booth_review.audit.freeze import load_frozen
 from booth_review.config import DataPaths
 from booth_review.nfl.layout import (
     NFL_SOURCES,
@@ -177,7 +177,7 @@ def freeze_nfl_seasons(
         if season not in seasons:
             refused[season] = f"waiver {season}:{source} is not among the seasons being frozen"
 
-    current = _load_frozen(paths.frozen)
+    current = load_frozen(paths.frozen)
     pending: list[NflCompleteness] = []
     used: list[str] = []
     for season in seasons:

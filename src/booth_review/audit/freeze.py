@@ -62,7 +62,7 @@ def parse_waiver(text: str) -> Waiver:
     return Waiver(season=season, source=source)
 
 
-def _load_frozen(path: Path) -> dict[str, list[int]]:
+def load_frozen(path: Path) -> dict[str, list[int]]:
     """Load ledger/frozen.json, validated the same way FreezeGuard.load does."""
     try:
         raw = path.read_text(encoding="utf-8")
@@ -128,7 +128,7 @@ def freeze_seasons(
     incomplete_keys = {(cell.season, cell.source) for cell in report.incomplete_cells()}
     used_waivers = [w for w in waivers if (w.season, w.source) in incomplete_keys]
 
-    current = _load_frozen(paths.frozen)
+    current = load_frozen(paths.frozen)
     for source in SOURCES:
         current.setdefault(source, [])
 
