@@ -1220,7 +1220,7 @@ def _cfb_only_outputs(
     root = tmp_path / "runs" / "cli-baseline"
     paths = _clone_vault(pristine, root)
     code, out = _cli_update_run(paths, root, handle_factory, fake_clock, monkeypatch)
-    assert code == 4  # update_vault's CFB side has attention (506 weeks to save)
+    assert code == 4  # update_vault's CFB side has attention (506 pages to save)
     files = _outputs(out)
     assert files["result.txt"] == b"deploy_ready=true\nstale_only=false\n"
     assert b"nfl" not in files["attention.md"]

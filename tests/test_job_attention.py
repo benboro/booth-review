@@ -21,6 +21,8 @@ from booth_review.job.attention import (
     error_type_name,
     has_attention,
     missed_runs,
+    nfl_506_missing,
+    nfl_506_stale,
     push_failed,
     rr_backlog,
     rr_failed,
@@ -129,8 +131,30 @@ def test_cfbd_remaining_is_info_line() -> None:
 
 def test_sports506_missing_line_format() -> None:
     item = sports506_missing(2026, ["3", "4", "B"])
-    assert item.line == "506 2026 weeks to save: 3, 4, B"
+    assert item.line == "506 2026 pages to save: weeks 3, 4, bowls"
     assert item.severity == "attention"
+
+
+def test_sports506_missing_names_single_week_and_bowls() -> None:
+    assert sports506_missing(2026, ["6"]).line == "506 2026 pages to save: week 6"
+    assert sports506_missing(2026, ["B"]).line == "506 2026 pages to save: bowls"
+
+
+def test_nfl_506_lines_name_singular_and_plural_weeks() -> None:
+    assert nfl_506_missing(2026, ["2"]).line == "nfl 506 pages missing for 2026: week 2"
+    assert nfl_506_missing(2026, ["2", "3"]).line == "nfl 506 pages missing for 2026: weeks 2, 3"
+    assert nfl_506_stale(2026, ["2"]).line == (
+        "nfl 506 pages saved before their games finished for 2026: week 2"
+    )
+    assert nfl_506_stale(2026, ["2", "3"]).line == (
+        "nfl 506 pages saved before their games finished for 2026: weeks 2, 3"
+    )
+
+
+def test_every_cfb_week_label_fits_the_attention_body() -> None:
+    labels = [*(str(n) for n in range(17)), "B"]
+    items = [sports506_missing(2026, labels), sports506_stale(2026, labels)]
+    assert build_attention_body(items, generated_at=_NOW) is not None
 
 
 def test_sports506_missing_rejects_unrecognized_label() -> None:
@@ -140,7 +164,7 @@ def test_sports506_missing_rejects_unrecognized_label() -> None:
 
 def test_sports506_stale_line_format() -> None:
     item = sports506_stale(2026, ["2"])
-    assert item.line == "506 2026 weeks saved before their games finished: 2"
+    assert item.line == "506 2026 pages saved before their games finished: week 2"
     assert item.severity == "attention"
 
 

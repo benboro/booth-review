@@ -1947,7 +1947,7 @@ def test_espnpr_step_leaves_the_506_items_unchanged(
         return [item for item in result.items if item.kind.startswith("sports506")]
 
     assert _506(with_step) == _506(without_step)
-    assert [item.line for item in _506(with_step)] == ["506 2026 weeks to save: 2, 6"]
+    assert [item.line for item in _506(with_step)] == ["506 2026 pages to save: weeks 2, 6"]
     assert [item.kind for item in with_step.items if item.kind.startswith("espnpr")] == [
         "espnpr_week_unsaved"
     ]

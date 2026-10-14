@@ -169,12 +169,29 @@ def cfbd_remaining(n: int, floor: int) -> AttentionItem:
     )
 
 
+def _week_list(labels: list[str]) -> str:
+    """Name 506 week labels explicitly: `week 6`, `weeks 3, 4, bowls`.
+
+    A bare label list read as a count (a lone "6" was week 6, not six
+    weeks). "B" is 506's postseason page and renders as `bowls`, after the
+    numbered weeks.
+    """
+    weeks = [label for label in labels if label != "B"]
+    parts: list[str] = []
+    if weeks:
+        parts.append(f"{'week' if len(weeks) == 1 else 'weeks'} {', '.join(weeks)}")
+    if "B" in labels:
+        parts.append("bowls")
+    return ", ".join(parts)
+
+
 def sports506_missing(season: int, labels: list[str]) -> AttentionItem:
-    """`labels` are played 2026 506 week pages with no cached page at all."""
+    """`labels` are played 2026 506 week pages with no cached page at all; the
+    line names those weeks, it is not a count."""
     _require_labels(labels)
     return AttentionItem(
         kind="sports506_missing",
-        line=f"506 {season} weeks to save: {', '.join(labels)}",
+        line=f"506 {season} pages to save: {_week_list(labels)}",
         severity="attention",
     )
 
@@ -184,7 +201,7 @@ def sports506_stale(season: int, labels: list[str]) -> AttentionItem:
     _require_labels(labels)
     return AttentionItem(
         kind="sports506_stale",
-        line=f"506 {season} weeks saved before their games finished: {', '.join(labels)}",
+        line=f"506 {season} pages saved before their games finished: {_week_list(labels)}",
         severity="attention",
     )
 
@@ -362,7 +379,7 @@ def nfl_506_missing(season: int, labels: list[str]) -> AttentionItem:
     _require_nfl_labels(labels)
     return AttentionItem(
         kind="nfl_506_missing",
-        line=f"nfl 506 pages missing for {season}: weeks {', '.join(labels)}",
+        line=f"nfl 506 pages missing for {season}: {_week_list(labels)}",
         severity="attention",
     )
 
@@ -372,8 +389,7 @@ def nfl_506_stale(season: int, labels: list[str]) -> AttentionItem:
     _require_nfl_labels(labels)
     return AttentionItem(
         kind="nfl_506_stale",
-        line=f"nfl 506 pages saved before their games finished for {season}: weeks "
-        f"{', '.join(labels)}",
+        line=f"nfl 506 pages saved before their games finished for {season}: {_week_list(labels)}",
         severity="attention",
     )
 
