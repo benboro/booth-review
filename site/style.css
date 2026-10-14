@@ -2935,6 +2935,38 @@ body:not([data-sport="nfl"]) #sport-load-error {
   gap: var(--space-sm);
 }
 
+/* Group heads (a network on Crews, a category on Viewership): inset like the rows, labelled
+   like the Category popover's group legends, with Only/All at the right edge. The head is
+   not a `.check-item`, so it reveals its button on its own hover. */
+.nfl-booth-list > li.group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md) 0;
+}
+
+.nfl-booth-list > li.group-head[hidden] {
+  display: none;
+}
+
+.nfl-booth-list .group-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: var(--font-label);
+  font-weight: var(--weight-semibold);
+}
+
+/* Right-aligned in its fixed box (D-31) so Only/All lines up with the counts below. */
+.nfl-booth-list .group-head .only-btn {
+  text-align: right;
+  padding-right: 0;
+}
+
+.nfl-booth-list .group-head:hover .only-btn,
+.nfl-booth-list .group-head:has(:focus-visible) .only-btn {
+  opacity: 1;
+}
+
 .nfl-cat-group,
 .nfl-team-list {
   border: none;
