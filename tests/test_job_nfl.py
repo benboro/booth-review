@@ -1050,16 +1050,14 @@ def test_nfl_push_conflict_leaves_the_cfb_state_pushed_and_exits_4(
     outcome = _run_update(paths, root, mock_transport_factory, fake_clock)
 
     # The real pull --rebase conflict fails the NFL push, and the unpushed NFL
-    # commit is rolled back (CR-02) with the edited schedules file left on disk.
-    # The pbp step's commit paths include the schedules directory, so it
-    # re-commits that same dirty file, conflicts the same way and is rolled back
-    # too; the later steps' paths exclude it, so their commits (nfl_state
-    # included) push cleanly. Observed: only nfl_schedules and nfl_pbp fail.
-    assert outcome.nfl_items == [push_failed("nfl_schedules"), push_failed("nfl_pbp")]
+    # commit is rolled back (CR-02) onto the remote: the conflicting schedules
+    # file takes the remote's side, so no later step's pull --autostash can pop
+    # conflict markers into it, and every later NFL commit pushes cleanly.
+    assert outcome.nfl_items == [push_failed("nfl_schedules")]
     assert _git(paths, "rev-list", "--count", "@{u}..HEAD").strip() == "0"
-    # The autostash pop of the conflicting edit leaves conflict markers holding
-    # both sides, so the local edit is still on disk.
-    assert b"local,edit\n" in (paths.raw / NFLVERSE_SCHEDULES_PATH).read_bytes()
+    schedules = (paths.raw / NFLVERSE_SCHEDULES_PATH).read_bytes()
+    assert schedules == _remote_file(paths, f"raw/{NFLVERSE_SCHEDULES_PATH}").encode()
+    assert b"<<<<<<<" not in schedules
     assert outcome.exit_code == 4
     assert fakes.calls == list(_STEPS)
     # The CFB state was already on the remote when the first NFL step began,

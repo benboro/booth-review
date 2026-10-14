@@ -585,3 +585,54 @@ def test_drop_unpushed_since_without_upstream_is_a_noop(
 
     assert repo.drop_unpushed_since(before) is False
     assert repo.head() == head
+
+
+def _push_from_other_clone(remote: Path, tmp_path: Path, files: dict[str, str]) -> None:
+    other = tmp_path / "other"
+    _run_ok(["git", "clone", "-q", str(remote), str(other)])
+    for rel, text in files.items():
+        (other / rel).write_text(text, encoding="utf-8")
+    ident = ("-c", "user.name=Other", "-c", "user.email=other@example.com")
+    for args in (("add", "-A"), ("commit", "-q", "-m", "other: edit"), ("push", "-q")):
+        _run_ok(["git", *ident, "-C", str(other), *args])
+
+
+def test_drop_unpushed_since_after_a_conflict_leaves_no_markers_and_keeps_union_lines(
+    vault_repo_env: tuple[Path, Path], tmp_path: Path
+) -> None:
+    remote, vault = vault_repo_env
+    repo = VaultRepo(vault, sleep=lambda _s: None)
+    (vault / ".gitattributes").write_text("*.jsonl merge=union\n", encoding="utf-8")
+    (vault / "nfl.csv").write_text("a\n", encoding="utf-8")
+    (vault / "requests.jsonl").write_text("seed\n", encoding="utf-8")
+    assert repo.commit_batch(
+        "job: seed (fetched 1)", paths=[".gitattributes", "nfl.csv", "requests.jsonl"]
+    )
+    before = repo.head()
+    assert before is not None
+    _push_from_other_clone(
+        remote,
+        tmp_path,
+        {"nfl.csv": "remote\n", "requests.jsonl": "seed\nremote\n", "other.txt": "o\n"},
+    )
+    (vault / "nfl.csv").write_text("local\n", encoding="utf-8")
+    (vault / "requests.jsonl").write_text("seed\nlocal\n", encoding="utf-8")
+    (vault / "new.csv").write_text("n\n", encoding="utf-8")
+    with pytest.raises(VaultCommitError):
+        repo.commit_batch("job: nfl (fetched 1)", paths=["nfl.csv", "requests.jsonl", "new.csv"])
+
+    assert repo.drop_unpushed_since(before) is True
+
+    assert repo.head() == _git_out(vault, "rev-parse", "@{u}")
+    # The conflicting file takes the remote's side, with no markers on disk.
+    assert (vault / "nfl.csv").read_text(encoding="utf-8") == "remote\n"
+    # The union ledger keeps both lines, and the remote-only file is on disk.
+    ledger = (vault / "requests.jsonl").read_text(encoding="utf-8").splitlines()
+    assert sorted(ledger) == ["local", "remote", "seed"]
+    assert (vault / "other.txt").read_text(encoding="utf-8") == "o\n"
+    assert (vault / "new.csv").read_text(encoding="utf-8") == "n\n"
+    status = {line.strip() for line in _git_out(vault, "status", "--porcelain").splitlines()}
+    assert status == {"M requests.jsonl", "?? new.csv"}
+    # Re-committing the leftovers now pushes cleanly.
+    assert repo.commit_batch("job: nfl (fetched 1)", paths=["requests.jsonl", "new.csv"])
+    assert _git_out(vault, "rev-list", "--count", "@{u}..HEAD") == "0"

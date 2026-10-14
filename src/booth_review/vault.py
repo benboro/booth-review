@@ -257,11 +257,14 @@ class VaultRepo:
         """Drop the unpushed commits made after `before`; True when HEAD moved.
 
         For a step whose push failed and whose commit must not linger on the
-        local branch, where the next push would replay it. Resets `--mixed` to
-        the merge-base of HEAD and @{u}, never `--hard`: the step's files stay
-        on disk as uncommitted changes (the next scoped commit re-commits them)
-        and unrelated edits survive. The merge-base, not @{u}, because after an
-        aborted `pull --rebase` @{u} is ahead of the working tree.
+        local branch, where the next push would replay it. Moves the branch to
+        @{u} with `reset --mixed`, never `--hard`, and lays the dropped commits'
+        changes back on disk merged onto @{u} (`merge-tree`, so `merge=union`
+        ledgers keep both sides' lines): the next scoped commit re-commits
+        them. A path that truly conflicts with the remote takes the remote's
+        version, so no later `pull --rebase --autostash` can pop conflict
+        markers into a data file. Files the remote changed are brought up to
+        @{u} on disk too, unless they hold an unrelated local edit.
 
         Acts only when `before` is an ancestor of @{u}, i.e. everything up to
         the step is already on the remote, so an unpushed earlier commit is
@@ -269,21 +272,77 @@ class VaultRepo:
         nothing and returns False.
         """
         with self.lock():
-            if self.head() == before:
+            tip = self.head()
+            if tip is None or tip == before:
                 return False
             if self._run("rev-parse", "--verify", "@{u}").returncode != 0:
                 return False
             if self._run("merge-base", "--is-ancestor", before, "@{u}").returncode != 0:
                 return False
-            base_result = self._run("merge-base", "HEAD", "@{u}")
+            upstream = self._run("rev-parse", "--verify", "@{u}").stdout.strip()
+            base_result = self._run("merge-base", tip, upstream)
             base = base_result.stdout.strip()
             if base_result.returncode != 0 or not base:
                 return False
-            reset_result = self._run("reset", "--mixed", "--quiet", base)
+
+            merge_result = self._run(
+                "merge-tree", "--write-tree", "--name-only", "--no-messages", "-z", upstream, tip
+            )
+            if merge_result.returncode not in (0, 1):
+                raise VaultCommitError(
+                    f"git subcommand merge-tree exited {merge_result.returncode}"
+                )
+            merged_tree, *conflicted_list = merge_result.stdout.split("\0")
+            conflicted = {path for path in conflicted_list if path}
+            dropped = self._changed_paths(base, tip)
+            remote_changed = self._changed_paths(base, upstream)
+
+            reset_result = self._run("reset", "--mixed", "--quiet", upstream)
             if reset_result.returncode != 0:
                 raise VaultCommitError(f"git subcommand reset exited {reset_result.returncode}")
-            logger.info("vault: dropped unpushed commit(s)")
+
+            for rel in sorted(dropped | remote_changed):
+                target = self._path / rel
+                if rel not in dropped and self._read_disk(target) != self._blob(base, rel):
+                    continue  # an unrelated local edit to a file the remote changed
+                source = upstream if rel in conflicted else merged_tree
+                self._write_disk(target, self._blob(source, rel))
+            logger.info("vault: dropped unpushed commit(s), %d conflicted", len(conflicted))
             return True
+
+    def _changed_paths(self, old: str, new: str) -> set[str]:
+        result = self._run("diff", "--name-only", "--no-renames", "-z", old, new)
+        if result.returncode != 0:
+            raise VaultCommitError(f"git subcommand diff exited {result.returncode}")
+        return {path for path in result.stdout.split("\0") if path}
+
+    def _blob(self, rev: str, rel: str) -> bytes | None:
+        """The bytes of `rel` at `rev`, or None when `rev` has no such file."""
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(self._path), "cat-file", "blob", f"{rev}:{rel}"],
+                check=False,
+                capture_output=True,
+                timeout=_GIT_TIMEOUT_SECONDS,
+                stdin=subprocess.DEVNULL,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise VaultCommitError(
+                f"git subcommand cat-file timed out after {_GIT_TIMEOUT_SECONDS}s"
+            ) from exc
+        return result.stdout if result.returncode == 0 else None
+
+    @staticmethod
+    def _read_disk(target: Path) -> bytes | None:
+        return target.read_bytes() if target.is_file() else None
+
+    @staticmethod
+    def _write_disk(target: Path, content: bytes | None) -> None:
+        if content is None:
+            target.unlink(missing_ok=True)
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
 
     def _push_with_retry(self) -> None:
         """Up to 3 rounds of push; a rejected push is followed by pull --rebase.

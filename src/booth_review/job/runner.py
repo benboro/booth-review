@@ -52,14 +52,14 @@ key-leak result: they can add attention items (exit 4), never exit 3, a
 "failed" last_status or a held-back last_success_at.
 
 Running the NFL block only after the CFB state is pushed (CR-02) means an NFL
-commit whose push fails (it is rolled back off the local branch, its files kept
-on disk), a lock wait or a
-slow or killed NFL step can no longer fail or lose the CFB state push. Because
-the NFL items are known only after that save, `ledger/job_state.json` and
-`ledger/run_reports.jsonl` describe the CFB run alone; the NFL block appends its
-own count-only line (attention count and `nfl_*` counts) to
-`ledger/nfl_run_reports.jsonl` in a final `job: nfl_state` commit, and its items
-still reach the run's attention report and exit code (4 at most).
+commit whose push fails (it is rolled back onto the remote, its files merged
+onto the remote's on disk), a lock wait or a slow or killed NFL step can no
+longer fail or lose the CFB state push. Because the NFL items are known only
+after that save, `ledger/job_state.json` and `ledger/run_reports.jsonl`
+describe the CFB run alone; the NFL block appends its own count-only line
+(attention count and `nfl_*` counts) to `ledger/nfl_run_reports.jsonl` in a
+final `job: nfl_state` commit, and its items still reach the run's attention
+report and exit code (4 at most).
 """
 
 from __future__ import annotations
