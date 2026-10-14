@@ -282,6 +282,22 @@ def _state(page: Page) -> dict:  # type: ignore[type-arg]
     return page.evaluate("window.__nflTestHooks.getState()")  # type: ignore[no-any-return]
 
 
+def _booth_games(raw: dict, key: str) -> list[int]:  # type: ignore[type-arg]
+    """Games a booth key selects: its pbp person calling on a network in its group."""
+    group_id, person_id = key.split(":")
+    lk = raw["lookups"]
+    gi = next(i for i, g in enumerate(lk["network_groups"]) if g["id"] == group_id)
+    pi = next(i for i, p in enumerate(lk["people"]) if p["id"] == person_id)
+    members = set(lk["network_groups"][gi]["members"])
+    g = raw["games"]
+    return [
+        i
+        for i in range(len(g["season"]))
+        if g["network"][i] in members
+        and any(m["person"] == pi and m["role"] == "pbp" for m in (g["crew"][i] or []))
+    ]
+
+
 def test_booths_trigger_only_on_crews_and_viewership(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
 ) -> None:
@@ -319,6 +335,34 @@ def test_booths_grouped_by_network_on_crews_and_category_on_viewership(
     assert names and all(n in cats for n in names)
 
 
+def test_booth_rows_show_role_pills_and_counts(
+    nfl_guarded_page: Page,
+    open_nfl_app: Callable[..., None],
+    nfl_fixture_raw: dict,  # type: ignore[type-arg]
+) -> None:
+    """Announcers parity: one line per person with its role pill, then the game count."""
+    page = nfl_guarded_page
+    _booths_app(page, open_nfl_app, "crews")
+    _open(page, "booths")
+    people = {p["id"]: p["name"] for p in nfl_fixture_raw["lookups"]["people"]}
+    rows = page.locator("#nfl-booth-results-pop li[role=option]")
+    assert rows.count() >= 2
+    for k in range(rows.count()):
+        row = rows.nth(k)
+        key = row.get_attribute("data-booth")
+        assert key
+        lines = row.locator(".option-line")
+        assert 1 <= lines.count() <= 2
+        assert lines.first.locator(".option-name").inner_text() == people[key.split(":")[1]]
+        roles = row.locator(".option-role .role-pill").evaluate_all(
+            "ps => ps.map(p => p.dataset.role)"
+        )
+        assert roles == ["pbp", "analyst"][: lines.count()]
+        count = row.locator(".option-count")
+        assert count.get_attribute("aria-hidden") == "true"
+        assert count.inner_text() == f"({len(_booth_games(nfl_fixture_raw, key))})"
+
+
 def test_booths_search_narrows_and_empty(
     nfl_guarded_page: Page,
     open_nfl_app: Callable[..., None],
@@ -329,8 +373,8 @@ def test_booths_search_narrows_and_empty(
     _open(page, "booths")
     total = page.locator("#nfl-booth-results-pop li[role=option]:visible").count()
     assert total >= 2
-    first = page.locator("#nfl-booth-results-pop li[role=option] .option-name").first.inner_text()
-    analyst = first.split(" / ")[-1]
+    first_row = page.locator("#nfl-booth-results-pop li[role=option]").first
+    analyst = first_row.locator(".option-name").last.inner_text()
     page.fill("#nfl-booth-search-pop", analyst)
     narrowed = page.locator("#nfl-booth-results-pop li[role=option]:visible").count()
     assert 1 <= narrowed < total or total == narrowed
@@ -384,18 +428,7 @@ def test_booths_pick_lists_games_on_viewership(
     page.locator("#nfl-booth-results-pop li[role=option]").first.click()
     page.wait_for_function("window.__nflTestHooks.getState().booths.length === 1")
     key = _state(page)["booths"][0]
-    group_id, person_id = key.split(":")
-    lk = nfl_fixture_raw["lookups"]
-    gi = next(i for i, g in enumerate(lk["network_groups"]) if g["id"] == group_id)
-    pi = next(i for i, p in enumerate(lk["people"]) if p["id"] == person_id)
-    members = set(lk["network_groups"][gi]["members"])
-    g = nfl_fixture_raw["games"]
-    expected = [
-        i
-        for i in range(len(g["season"]))
-        if g["network"][i] in members
-        and any(m["person"] == pi and m["role"] == "pbp" for m in (g["crew"][i] or []))
-    ]
+    expected = _booth_games(nfl_fixture_raw, key)
     assert expected
     assert sorted(page.evaluate("window.__nflTestHooks.getTableIndexes()")) == sorted(expected)
     assert page.locator("#nfl-booth-results-pop li[aria-selected=true]").count() >= 1

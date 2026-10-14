@@ -13,7 +13,7 @@
  * rendered by index.js's selection bar, which already owns `#nfl-chips`.
  */
 import { makeRolePill } from '../../modules/pill.js';
-import { CATEGORY_OPTIONS, activeFilterCount, defaultNflState } from './state.js';
+import { CATEGORY_OPTIONS, activeFilterCount, boothGames, defaultNflState } from './state.js';
 
 const TRIGGERS = [
   { key: 'announcers', label: 'Announcers' },
@@ -226,6 +226,7 @@ function boothsSection(ctx, sfx) {
   const empty = el('p', 'helper', 'No booths match.');
   empty.hidden = true;
 
+  const counts = new Map(model.boothCatalog.map((e) => [e.key, boothGames(model, [e.key]).length]));
   let builtFor = null; // the view the list is grouped for
   let groups = []; // [{ id, head, only, keys, options: [{ li, key, lower }] }]
   let stop = null;
@@ -283,7 +284,21 @@ function boothsSection(ctx, sfx) {
         li.dataset.booth = e.key;
         const box = el('span', 'option-check');
         box.setAttribute('aria-hidden', 'true');
-        li.append(box, el('span', 'option-name', e.label));
+        // Announcers parity: one line per person with its role pill, then the game
+        // count (the games picking this booth selects).
+        const people = el('span', 'option-people');
+        const line = (idx, role) => {
+          const roleSpan = el('span', 'option-role');
+          roleSpan.appendChild(makeRolePill(role));
+          const row = el('span', 'option-line');
+          row.append(el('span', 'option-name', model.people[idx].name), roleSpan);
+          people.appendChild(row);
+        };
+        line(e.person, 'pbp');
+        if (e.analyst != null) line(e.analyst, 'analyst');
+        const countSpan = el('span', 'option-count', `(${counts.get(e.key)})`);
+        countSpan.setAttribute('aria-hidden', 'true');
+        li.append(box, people, countSpan);
         li.addEventListener('click', () => toggle(e.key));
         li.addEventListener('keydown', (ev) => {
           if (ev.key === 'Enter' || ev.key === ' ') {
