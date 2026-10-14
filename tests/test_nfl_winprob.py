@@ -27,7 +27,6 @@ def _plays(
             "play_id": list(range(1, n + 1)),
             "qtr": [1] * (n - 1) + [last_qtr],
             "quarter_seconds_remaining": [900.0] * (n - 1) + [last_qsr],
-            "game_seconds_remaining": [3000.0] * n,
             "home_wp": wps,
             "home_wp_post": [None] * (n - 1) + [post],
         },
@@ -36,7 +35,6 @@ def _plays(
             "play_id": pl.Int64,
             "qtr": pl.Int64,
             "quarter_seconds_remaining": pl.Float64,
-            "game_seconds_remaining": pl.Float64,
             "home_wp": pl.Float64,
             "home_wp_post": pl.Float64,
         },
@@ -105,3 +103,12 @@ def test_read_pbp_wp_projects_columns(tmp_path: Path) -> None:
     path = tmp_path / "pbp.parquet"
     df.write_parquet(path)
     assert tuple(read_pbp_wp(path).columns) == PBP_COLUMNS
+
+
+def test_read_pbp_wp_does_not_require_game_seconds_remaining(tmp_path: Path) -> None:
+    # IN-05: nothing reads game_seconds_remaining, so a file without it is valid.
+    df = _plays("g", [0.5, 0.6], 0.7)
+    assert "game_seconds_remaining" not in df.columns
+    path = tmp_path / "pbp.parquet"
+    df.write_parquet(path)
+    assert read_pbp_wp(path).columns == list(PBP_COLUMNS)

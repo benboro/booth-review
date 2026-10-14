@@ -21,7 +21,6 @@ PBP_COLUMNS: tuple[str, ...] = (
     "play_id",
     "qtr",
     "quarter_seconds_remaining",
-    "game_seconds_remaining",
     "home_wp",
     "home_wp_post",
 )

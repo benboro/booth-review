@@ -130,12 +130,6 @@ def input_stamp(paths: DataPaths) -> datetime:
     return _stamp(paths, lambda path: not _is_nfl_input(path))
 
 
-def nfl_input_stamp(paths: DataPaths) -> datetime:
-    """The newest change to a collected NFL input (manifest paths under nfl/,
-    and robots.txt copies of NFL-only hosts)."""
-    return _stamp(paths, _is_nfl_input)
-
-
 def _stale_preliminary_headlines(
     tables: BuildTables, generated_at: datetime
 ) -> list[dict[str, object]]:

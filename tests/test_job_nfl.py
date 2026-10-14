@@ -1049,9 +1049,15 @@ def test_nfl_push_conflict_leaves_the_cfb_state_pushed_and_exits_4(
 
     outcome = _run_update(paths, root, mock_transport_factory, fake_clock)
 
-    # The real pull --rebase conflict fails the NFL push and keeps the NFL
-    # commit locally; the NFL report commit then fails to push the same way.
-    assert outcome.nfl_items == [push_failed("nfl_schedules"), push_failed("nfl_state")]
+    # The real pull --rebase conflict fails the NFL push, and the unpushed NFL
+    # commit is rolled back (CR-02) onto the remote: the conflicting schedules
+    # file takes the remote's side, so no later step's pull --autostash can pop
+    # conflict markers into it, and every later NFL commit pushes cleanly.
+    assert outcome.nfl_items == [push_failed("nfl_schedules")]
+    assert _git(paths, "rev-list", "--count", "@{u}..HEAD").strip() == "0"
+    schedules = (paths.raw / NFLVERSE_SCHEDULES_PATH).read_bytes()
+    assert schedules == _remote_file(paths, f"raw/{NFLVERSE_SCHEDULES_PATH}").encode()
+    assert b"<<<<<<<" not in schedules
     assert outcome.exit_code == 4
     assert fakes.calls == list(_STEPS)
     # The CFB state was already on the remote when the first NFL step began,
@@ -1064,6 +1070,45 @@ def test_nfl_push_conflict_leaves_the_cfb_state_pushed_and_exits_4(
     ).read_text(encoding="utf-8")
     assert outcome.deploy_ready is True
     assert outcome.last_attempt_at == UPDATE_NOW
+
+
+def test_nfl_push_failure_drops_the_unpushed_nfl_commit_and_exits_4(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
+) -> None:
+    fakes = _NflFakes(calls=[])
+    _install_fakes(monkeypatch, fakes)
+    root = tmp_path / "runs" / "rejected"
+    paths = _clone_vault(update_vault, root)
+    _bootstrap_nfl(paths, season=2025, frozen_through=2024)
+    remote = Path(_git(paths, "remote", "get-url", "origin").strip())
+
+    def run_schedules(self: Any, *, refresh: bool, dry_run: bool) -> BatchSummary:
+        fakes.hit("schedules")
+        # The CFB state is pushed by now; from here the remote rejects pushes.
+        hook = remote / "hooks" / "pre-receive"
+        hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        hook.chmod(0o755)
+        local = paths.raw / NFLVERSE_SCHEDULES_PATH
+        local.write_bytes(local.read_bytes() + b"local,edit\n")
+        return _batch("nfl_nflverse")
+
+    monkeypatch.setattr(NflverseCollector, "run_schedules", run_schedules)
+
+    outcome = _run_update(paths, root, mock_transport_factory, fake_clock)
+
+    assert outcome.exit_code == 4
+    assert push_failed("nfl_schedules") in outcome.nfl_items
+    remote_head = subprocess.run(
+        ["git", "--git-dir", str(remote), "rev-parse", "main"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert _head(paths) == remote_head
+    assert (paths.raw / NFLVERSE_SCHEDULES_PATH).read_bytes().endswith(b"local,edit\n")
+    assert _remote_file(paths, "ledger/job_state.json") == paths.job_state.read_text(
+        encoding="utf-8"
+    )
 
 
 @pytest.mark.parametrize("error", [KeyboardInterrupt, SystemExit, RuntimeError])
@@ -1173,7 +1218,7 @@ def _cfb_only_outputs(
     root = tmp_path / "runs" / "cli-baseline"
     paths = _clone_vault(pristine, root)
     code, out = _cli_update_run(paths, root, handle_factory, fake_clock, monkeypatch)
-    assert code == 4  # update_vault's CFB side has attention (506 weeks to save)
+    assert code == 4  # update_vault's CFB side has attention (506 pages to save)
     files = _outputs(out)
     assert files["result.txt"] == b"deploy_ready=true\nstale_only=false\n"
     assert b"nfl" not in files["attention.md"]

@@ -86,7 +86,7 @@ class Listing506:
     game_label: str | None
 
 
-def _decode(html: bytes) -> str:
+def decode_html(html: bytes) -> str:
     """Decode `html` with the charset it declares, else fall back to utf-8."""
     match = _CHARSET_RE.search(html[:2048])
     encoding = match.group(1).decode("ascii") if match else "utf-8"
@@ -96,12 +96,13 @@ def _decode(html: bytes) -> str:
         return html.decode("utf-8", errors="replace")
 
 
-def _collapse_whitespace(text: str) -> str:
+def collapse_whitespace(text: str) -> str:
+    """Collapse runs of whitespace to single spaces."""
     return " ".join(text.split())
 
 
 def _split_rank(part: str) -> tuple[int | None, str]:
-    part = _collapse_whitespace(part)
+    part = collapse_whitespace(part)
     match = _RANK_RE.match(part)
     if match is None:
         return None, part
@@ -113,7 +114,7 @@ def _parse_date_header(text: str, year: int) -> date | None:
     header isn't a date header at all (a sidebar or section heading such as
     "Other Links"), so the caller can skip it instead of crashing (WR-10)."""
     _, _, month_day = text.partition(",")
-    month_day = _collapse_whitespace(month_day)
+    month_day = collapse_whitespace(month_day)
     try:
         return datetime.strptime(f"{month_day} {year}", "%B %d %Y").date()  # noqa: DTZ007
     except ValueError:
@@ -121,7 +122,7 @@ def _parse_date_header(text: str, year: int) -> date | None:
 
 
 def _parse_kickoff(date_et: date, time_text: str) -> datetime | None:
-    time_text = _collapse_whitespace(time_text)
+    time_text = collapse_whitespace(time_text)
     if not time_text or time_text.upper() in {"TBA", "TBD"}:
         return None
     try:
@@ -154,7 +155,7 @@ def _extract_cell_text(tag: Tag | None) -> str:
         return ""
     for br in tag.find_all("br"):
         br.replace_with(" ")
-    return _collapse_whitespace(tag.get_text())
+    return collapse_whitespace(tag.get_text())
 
 
 def _extract_matchup(matchup_tag: Tag) -> tuple[str | None, str]:
@@ -167,7 +168,7 @@ def _extract_matchup(matchup_tag: Tag) -> tuple[str | None, str]:
     `<br>(in <city>)` location note, itself sometimes present on an
     ordinary (non-bowl) neutral-site game with no label at all. `<br>` is
     turned into a line break first; the *last* line that itself parses as
-    a matchup (`_split_matchup` succeeds) and isn't a parenthesized note is
+    a matchup (`split_matchup` succeeds) and isn't a parenthesized note is
     the matchup line, any line(s) before it are the label, and any line(s)
     after it are appended back onto the matchup text with a space. Taking
     the last such line, not the first, keeps a label that happens to
@@ -180,7 +181,7 @@ def _extract_matchup(matchup_tag: Tag) -> tuple[str | None, str]:
     for br in matchup_tag.find_all("br"):
         br.replace_with("\n")
     full_text = matchup_tag.get_text()
-    lines = [_collapse_whitespace(line) for line in full_text.split("\n")]
+    lines = [collapse_whitespace(line) for line in full_text.split("\n")]
     lines = [line for line in lines if line]
     if not lines:
         return None, ""
@@ -189,12 +190,12 @@ def _extract_matchup(matchup_tag: Tag) -> tuple[str | None, str]:
         (
             i
             for i in range(len(lines) - 1, -1, -1)
-            if not _PAREN_NOTE_RE.match(lines[i]) and _split_matchup(lines[i]) is not None
+            if not _PAREN_NOTE_RE.match(lines[i]) and split_matchup(lines[i]) is not None
         ),
         None,
     )
     if matchup_index is None:
-        return None, _collapse_whitespace(full_text)
+        return None, collapse_whitespace(full_text)
 
     game_label = lines[0] if matchup_index > 0 else None
     return game_label, " ".join(lines[matchup_index:])
@@ -211,8 +212,9 @@ _PAREN_NOTE_RE = re.compile(r"^\(.*\)$")
 _NEUTRAL_RE = re.compile(r"^(.+?)\svs\.?\s(.+)$")
 
 
-def _split_matchup(text: str) -> tuple[str, str, bool] | None:
-    text = _collapse_whitespace(text)
+def split_matchup(text: str) -> tuple[str, str, bool] | None:
+    """Split "A @ B" or "A vs B" into (first, second, neutral), or None."""
+    text = collapse_whitespace(text)
     match = _HOME_AWAY_RE.match(text)
     if match:
         return match.group(1).strip(), match.group(2).strip(), False
@@ -235,7 +237,7 @@ def _build_listing(
 ) -> Listing506 | None:
     """Shared field extraction for one row, whichever layout it came from."""
     game_label, matchup_text = _extract_matchup(matchup_tag)
-    split = _split_matchup(matchup_text)
+    split = split_matchup(matchup_text)
     if split is None:
         return None
     away_part, home_part, neutral = split
@@ -387,7 +389,7 @@ def parse_week_page(html: bytes, *, season: int, week_label: str) -> list[Listin
     if not html:
         raise ParseError(f"sports506 {season} wk{week_label}: empty response body")
 
-    soup = BeautifulSoup(_decode(html), features="lxml")
+    soup = BeautifulSoup(decode_html(html), features="lxml")
 
     if soup.find_all("div", id="cgame"):
         return _walk_page(

@@ -52,17 +52,19 @@ key-leak result: they can add attention items (exit 4), never exit 3, a
 "failed" last_status or a held-back last_success_at.
 
 Running the NFL block only after the CFB state is pushed (CR-02) means an NFL
-commit whose push fails (and so stays on the local branch), a lock wait or a
-slow or killed NFL step can no longer fail or lose the CFB state push. Because
-the NFL items are known only after that save, `ledger/job_state.json` and
-`ledger/run_reports.jsonl` describe the CFB run alone; the NFL block appends its
-own count-only line (attention count and `nfl_*` counts) to
-`ledger/nfl_run_reports.jsonl` in a final `job: nfl_state` commit, and its items
-still reach the run's attention report and exit code (4 at most).
+commit whose push fails (it is rolled back onto the remote, its files merged
+onto the remote's on disk), a lock wait or a slow or killed NFL step can no
+longer fail or lose the CFB state push. Because the NFL items are known only
+after that save, `ledger/job_state.json` and `ledger/run_reports.jsonl`
+describe the CFB run alone; the NFL block appends its own count-only line
+(attention count and `nfl_*` counts) to `ledger/nfl_run_reports.jsonl` in a
+final `job: nfl_state` commit, and its items still reach the run's attention
+report and exit code (4 at most).
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -1141,12 +1143,24 @@ class ScheduledJob:
         never re-raised (D-08)."""
         if self._dry_run or not self._commit_enabled:
             return
+        before = self._runtime.vault.head()
         try:
             self._runtime.vault.commit_batch(
                 batch_message("job", step, label, counts), paths=list(commit_paths)
             )
         except VaultCommitError:
             items.append(push_failed(step))
+            self._drop_unpushed_nfl(before)
+
+    def _drop_unpushed_nfl(self, before: str | None) -> None:
+        """Roll back the NFL commit whose push just failed (CR-02). The files
+        stay on disk for the next run's commit. Never raises: the push_failed
+        item already reports the failure (D-08), and a CFB commit that was never
+        pushed is never touched (drop_unpushed_since checks that)."""
+        if before is None:
+            return
+        with contextlib.suppress(VaultCommitError):
+            self._runtime.vault.drop_unpushed_since(before)
 
     def _nfl_collect(
         self,
@@ -1298,6 +1312,7 @@ class ScheduledJob:
         self, season: int, now: datetime, items: list[AttentionItem]
     ) -> dict[str, int]:
         """Update mode only: rebuild the NFL tables in the vault (no site, no deploy)."""
+        before = self._runtime.vault.head() if self._commit_enabled else None
         try:
             outcome = run_nfl_build(
                 self._runtime.paths,
@@ -1311,6 +1326,7 @@ class ScheduledJob:
             )
         except VaultCommitError:
             items.append(push_failed("nfl_build"))
+            self._drop_unpushed_nfl(before)
             return {}
         built = {key: int(value) for key, value in outcome.counts.items()}
         unresolved = built.get("unresolved_crew_names", 0)

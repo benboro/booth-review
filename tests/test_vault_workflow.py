@@ -719,7 +719,7 @@ _TAIL = [
 ]
 _DEPLOYS = ["target", "deploy"]
 _READY = "deploy_ready=true\nstale_only=false\n"
-_CFB_REPORT = "Counts only.\n- 506 2026 weeks to save: 1"
+_CFB_REPORT = "Counts only.\n- 506 2026 pages to save: week 1"
 
 
 def test_job_step_has_its_own_timeout_well_under_the_job_timeout() -> None:
@@ -996,7 +996,7 @@ _STALE_REPORT = (
         (
             "7",
             "Counts only. Updated 2026-10-08 00:05 UTC\n"
-            "- 506 2026 weeks to save: 6\n"
+            "- 506 2026 pages to save: week 6\n"
             "- last successful build is 5 days old (limit 4)\n"
             "- newest plotted 2026 telecast trails the newest listed one: 3 listed after it\n"
             "\nrun: https://example.invalid/r/1",

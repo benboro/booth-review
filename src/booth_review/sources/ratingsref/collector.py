@@ -31,7 +31,7 @@ from booth_review.sources.ratingsref.lastmod import (
     load_lastmods,
 )
 from booth_review.sources.ratingsref.sitemap import (
-    _LEAGUE_PATH_PREFIXES,
+    LEAGUE_PATH_PREFIXES,
     SitemapEntry,
     parse_sitemap,
     select_entries,
@@ -109,7 +109,7 @@ class RatingsRefCollector:
         """`lock` (normally `VaultRepo.lock`) is held around each lastmod
         append, so an append never lands mid-commit or mid-rebase. `now`
         stamps lastmod/failure lines and times the failed-record hold."""
-        if league not in _LEAGUE_PATH_PREFIXES:
+        if league not in LEAGUE_PATH_PREFIXES:
             raise ValueError(f"unknown ratingsref league: {league!r}")
         self._league = league
         self._source: Literal["ratingsref", "nfl_ratingsref"] = (

@@ -662,7 +662,7 @@ def _collect_ratingsref(args: argparse.Namespace) -> int:
                 "error: --sitemap-only is shared by both leagues; run it without --league",
                 file=sys.stderr,
             )
-            return 3
+            return 2
         collector = RatingsRefCollector(
             runtime.cache, runtime.paths, lock=runtime.vault.lock, league=league
         )
