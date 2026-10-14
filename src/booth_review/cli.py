@@ -37,7 +37,10 @@ from booth_review.build.site_assembly import (
     assemble_site,
     docs_dir,
     fixture_path,
+    load_mlb_site_payload,
     load_nfl_site_payload,
+    mlb_fixture_path,
+    mlb_site_enabled,
     nfl_fixture_path,
     nfl_site_enabled,
     site_source_dir,
@@ -426,6 +429,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="include the NFL sport switch and nfl-data.json "
         "(also on when NFL_SITE_ENABLED is exactly true)",
+    )
+    site_cmd.add_argument(
+        "--mlb",
+        action="store_true",
+        help="include the MLB sport switch entry and mlb-data.json "
+        "(also on when MLB_SITE_ENABLED is exactly true)",
     )
     site_cmd.add_argument("--out", type=Path, default=Path("dist/site"))
     site_cmd.add_argument(
@@ -1936,6 +1945,16 @@ def _site(args: argparse.Namespace) -> int:
             raise SiteBuildError(
                 "processed/nfl-data.json not found; run `booth-review nfl site-data` first"
             )
+    mlb = bool(args.mlb) or mlb_site_enabled(os.environ)
+    mlb_source: Path | None = None
+    if mlb and args.fixture:
+        mlb_source = mlb_fixture_path()
+    elif mlb:
+        mlb_source = DataPaths.from_env().processed / "mlb-data.json"
+        if not mlb_source.is_file():
+            raise SiteBuildError(
+                "processed/mlb-data.json not found; run `booth-review mlb site-data` first"
+            )
     try:
         result: SiteBuildResult = assemble_site(
             source=source,
@@ -1944,6 +1963,8 @@ def _site(args: argparse.Namespace) -> int:
             docs=docs_dir(),
             nfl=nfl,
             nfl_payload=load_nfl_site_payload(nfl_source) if nfl_source is not None else None,
+            mlb=mlb,
+            mlb_payload=load_mlb_site_payload(mlb_source) if mlb_source is not None else None,
         )
     except BoothReviewError:
         raise
@@ -1977,6 +1998,8 @@ def _site(args: argparse.Namespace) -> int:
     )
     if result.nfl_games is not None:
         print(f"nfl: {result.nfl_games} games")
+    if result.mlb_games is not None:
+        print(f"mlb: {result.mlb_games} games")
     return 0
 
 
@@ -2018,6 +2041,13 @@ def _deploy(args: argparse.Namespace) -> int:
     elif result.nfl_not_carried is not None:
         reason = result.nfl_not_carried.replace("_", " ")
         print(f"nfl data: live copy not carried ({reason}); CFB deployed without it")
+    if result.mlb_switched_on:
+        print("mlb data: carried live copy and turned the MLB switch on")
+    elif result.mlb_carried:
+        print("mlb data: carried live copy")
+    elif result.mlb_not_carried is not None:
+        reason = result.mlb_not_carried.replace("_", " ")
+        print(f"mlb data: live copy not carried ({reason}); deployed without it")
     print(
         "outside booth-review unchanged: yes "
         f"(before {(result.outside_before or '')[:12]}, after {(result.outside_after or '')[:12]})"

@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import re
+import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from booth_review.build.site_assembly import assemble_site, load_nfl_site_payload
+from booth_review.build.site_assembly import (
+    assemble_site,
+    load_mlb_site_payload,
+    load_nfl_site_payload,
+    site_sports,
+)
 from booth_review.cli import main
 from booth_review.deploy import publish
 from booth_review.deploy.publish import (
@@ -800,3 +807,213 @@ def test_cli_deploy_says_when_it_turned_the_switch_on(
     site = _assembled(tmp_path / "cfb-only")
     assert main(["deploy", "--site", str(site), "--target", str(target)]) == 0
     assert "nfl data: carried live copy and turned the NFL switch on" in capsys.readouterr().out
+
+
+# -- 09-12 D-16 / Pitfall 9: carry the live mlb-data.json ---------------------------------
+
+MLB_ENABLED = {"PUBLISH_ENABLED": "true", "MLB_SITE_ENABLED": "true"}
+BOTH_ENABLED = {**NFL_ENABLED, **MLB_ENABLED}
+MLB_FIXTURE = Path(__file__).parent / "fixtures" / "contract" / "mlb-data.fixture.json"
+LIVE_MLB = load_mlb_site_payload(MLB_FIXTURE)[1].decode("utf-8")
+SWITCH_META_MLB = '<meta name="booth-review-sports" content="cfb,mlb">'
+
+
+@pytest.fixture
+def mlb_src(tmp_path: Path) -> Path:
+    """site/ plus a placeholder sports/mlb module (the real one lands in a later plan)."""
+    dest = tmp_path / "_mlb_src"
+    shutil.copytree(REPO_ROOT / "site", dest, ignore=shutil.ignore_patterns("node_modules"))
+    (dest / "sports" / "mlb").mkdir(exist_ok=True)
+    (dest / "sports" / "mlb" / "index.js").write_text("// synthetic placeholder\n", "utf-8")
+    return dest
+
+
+def _publish_live_sport_files(target: Path, tmp_path: Path, files: dict[str, str]) -> None:
+    site = _site(tmp_path, {"index.html": "<html>", "app.js": "x=1", **files})
+    assert publish_site(site, target, env=ENABLED, sleep=lambda _s: None).status == "published"
+
+
+def _live_mlb_bytes(remote: Path) -> bytes:
+    return subprocess.run(
+        ["git", "-C", str(remote), "show", "master:booth-review/mlb-data.json"],
+        check=True,
+        capture_output=True,
+    ).stdout
+
+
+def _publish_with(site: Path, target: Path, env: dict[str, str], src: Path) -> DeployResult:
+    return publish_site(
+        site, target, env=env, sleep=lambda _s: None, site_src=src, docs=REPO_ROOT / "docs"
+    )
+
+
+def test_mlb_carry_base_cfb(remote: Path, target: Path, tmp_path: Path, mlb_src: Path) -> None:
+    _publish_live_sport_files(target, tmp_path, {"mlb-data.json": LIVE_MLB})
+    seed = {p: b for p, b in _remote_tree(remote).items() if not p.startswith("booth-review/")}
+    site = _assembled(tmp_path / "cfb-only")
+    result = _publish_with(site, target, MLB_ENABLED, mlb_src)
+    assert result.status == "published"
+    assert (result.mlb_carried, result.mlb_switched_on, result.mlb_not_carried) == (
+        True,
+        True,
+        None,
+    )
+    assert (result.nfl_carried, result.nfl_not_carried) == (False, None)
+    assert _live_mlb_bytes(remote) == LIVE_MLB.encode()
+    tree = _remote_tree(remote)
+    assert "booth-review/sports/mlb/index.js" in tree
+    assert not [p for p in tree if p.startswith("booth-review/sports/nfl/")]
+    assert "booth-review/nfl-data.json" not in tree
+    assert SWITCH_META_MLB in _git(remote, "show", "master:booth-review/index.html")
+    assert {p: b for p, b in tree.items() if not p.startswith("booth-review/")} == seed
+
+
+def test_mlb_carry_base_cfb_nfl(remote: Path, target: Path, tmp_path: Path, mlb_src: Path) -> None:
+    _publish_live_sport_files(target, tmp_path, {"mlb-data.json": LIVE_MLB})
+    site = _assembled(
+        tmp_path / "cfb-nfl", nfl=True, nfl_payload=load_nfl_site_payload(NFL_FIXTURE)
+    )
+    before = _tree(site)
+    result = _publish_with(site, target, MLB_ENABLED, mlb_src)
+    assert (result.mlb_carried, result.mlb_switched_on) == (True, True)
+    after = _tree(site)
+    kept = [k for k in before if k == "nfl-data.json" or k.startswith("sports/nfl/")]
+    assert "nfl-data.json" in kept
+    assert all(after[k] == before[k] for k in kept)
+    index = after["index.html"].decode("utf-8")
+    assert '<meta name="booth-review-sports" content="cfb,nfl,mlb">' in index
+    buttons = re.findall(r'data-sport="(\w+)"', index.split('<header id="topbar">')[1])
+    assert buttons[:3] == ["cfb", "nfl", "mlb"]
+    assert _live_mlb_bytes(remote) == LIVE_MLB.encode()
+
+
+def test_mlb_carry_nfl_then_mlb(remote: Path, target: Path, tmp_path: Path, mlb_src: Path) -> None:
+    _publish_live_sport_files(
+        target, tmp_path, {"nfl-data.json": LIVE_NFL, "mlb-data.json": LIVE_MLB}
+    )
+    site = _assembled(tmp_path / "cfb-only")
+    result = _publish_with(site, target, BOTH_ENABLED, mlb_src)
+    assert (result.nfl_carried, result.nfl_switched_on) == (True, True)
+    assert (result.mlb_carried, result.mlb_switched_on) == (True, True)
+    assert _live_nfl_bytes(remote) == LIVE_NFL.encode()
+    assert _live_mlb_bytes(remote) == LIVE_MLB.encode()
+    assert '<meta name="booth-review-sports" content="cfb,nfl,mlb">' in _git(
+        remote, "show", "master:booth-review/index.html"
+    )
+    assert "booth-review/sports/nfl/index.js" in _remote_tree(remote)
+    assert "booth-review/sports/mlb/index.js" in _remote_tree(remote)
+    assert site_sports(site) == ("cfb", "nfl", "mlb")
+
+
+def test_mlb_flag_off_carries_nothing(
+    remote: Path, target: Path, tmp_path: Path, mlb_src: Path
+) -> None:
+    _publish_live_sport_files(target, tmp_path, {"mlb-data.json": LIVE_MLB})
+    for env in (ENABLED, {**ENABLED, "MLB_SITE_ENABLED": "TRUE"}):
+        site = _assembled(tmp_path / "cfb-only")
+        before = _tree(site)
+        result = _publish_with(site, target, env, mlb_src)
+        assert (result.mlb_carried, result.mlb_not_carried) == (False, None)
+        assert _tree(site) == before
+        assert "booth-review/mlb-data.json" not in _remote_tree(remote)
+        _publish_live_sport_files(target, tmp_path, {"mlb-data.json": LIVE_MLB})
+
+
+def test_mlb_staged_file_wins_over_the_live_one(
+    remote: Path, target: Path, tmp_path: Path, mlb_src: Path
+) -> None:
+    _publish_live_sport_files(target, tmp_path, {"mlb-data.json": LIVE_MLB})
+    site = _site(tmp_path, {"index.html": "<html>", "mlb-data.json": '{"fresh":"mlb"}'})
+    result = _publish_with(site, target, MLB_ENABLED, mlb_src)
+    assert result.mlb_carried is False
+    assert _live_mlb_bytes(remote) == b'{"fresh":"mlb"}'
+
+
+def test_mlb_invalid_live_file_is_not_carried(
+    remote: Path, target: Path, tmp_path: Path, mlb_src: Path
+) -> None:
+    _publish_live_sport_files(target, tmp_path, {"mlb-data.json": '{"live":"mlb"}'})
+    site = _assembled(tmp_path / "cfb-only")
+    before = _tree(site)
+    result = _publish_with(site, target, MLB_ENABLED, mlb_src)
+    assert result.status == "published"
+    assert (result.mlb_carried, result.mlb_not_carried) == (False, "invalid")
+    assert _tree(site) == before
+    assert "booth-review/mlb-data.json" not in _remote_tree(remote)
+
+
+def test_mlb_live_file_with_the_key_is_not_carried(
+    remote: Path,
+    target: Path,
+    tmp_path: Path,
+    mlb_src: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _publish_live_sport_files(target, tmp_path, {"mlb-data.json": LIVE_MLB})
+    token = "apple_booths"
+    assert token in LIVE_MLB
+    monkeypatch.setenv("CFBD_API_KEY", token)
+    site = _assembled(tmp_path / "cfb-only")
+    result = _publish_with(site, target, MLB_ENABLED, mlb_src)
+    assert (result.mlb_carried, result.mlb_not_carried) == (False, "key_check_failed")
+    assert "booth-review/mlb-data.json" not in _remote_tree(remote)
+    assert token not in capsys.readouterr().out
+    assert not list(tmp_path.glob(".*mlb-keycheck-*"))
+
+
+@pytest.mark.parametrize("error", [DeployError("x"), OSError("x")])
+def test_mlb_failed_live_read_is_count_only(
+    remote: Path,
+    target: Path,
+    tmp_path: Path,
+    mlb_src: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
+) -> None:
+    def boom(*args: object, **kwargs: object) -> bytes:
+        raise error
+
+    monkeypatch.setattr(publish, "_read_live_sport_blob", boom)
+    site = _assembled(tmp_path / "cfb-only")
+    result = _publish_with(site, target, MLB_ENABLED, mlb_src)
+    assert result.status == "published"
+    assert (result.mlb_carried, result.mlb_not_carried) == (False, "read_failed")
+
+
+def test_mlb_switch_failure_leaves_the_site_whole(
+    remote: Path,
+    target: Path,
+    tmp_path: Path,
+    mlb_src: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _publish_live_sport_files(target, tmp_path, {"mlb-data.json": LIVE_MLB})
+
+    def boom(*args: object, **kwargs: object) -> object:
+        raise RuntimeError("private detail")
+
+    monkeypatch.setattr(publish, "add_sport_to_site", boom)
+    site = _assembled(tmp_path / "cfb-only")
+    before = _tree(site)
+    result = _publish_with(site, target, MLB_ENABLED, mlb_src)
+    assert (result.mlb_carried, result.mlb_not_carried) == (False, "switch_failed")
+    assert _tree(site) == before
+
+
+def test_cli_deploy_reports_the_mlb_carry(
+    remote: Path,
+    target: Path,
+    tmp_path: Path,
+    mlb_src: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _publish_live_sport_files(target, tmp_path, {"mlb-data.json": LIVE_MLB})
+    monkeypatch.setenv("PUBLISH_ENABLED", "true")
+    monkeypatch.setenv("MLB_SITE_ENABLED", "true")
+    monkeypatch.setenv("BOOTH_REVIEW_SITE_SRC", str(mlb_src))
+    monkeypatch.setenv("BOOTH_REVIEW_DOCS", str(REPO_ROOT / "docs"))
+    site = _assembled(tmp_path / "cfb-only")
+    assert main(["deploy", "--site", str(site), "--target", str(target)]) == 0
+    assert "mlb data: carried live copy and turned the MLB switch on" in capsys.readouterr().out
