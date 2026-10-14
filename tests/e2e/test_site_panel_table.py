@@ -673,7 +673,7 @@ def test_table_alt_cast_row_and_school_only_rows(
     guarded_page.click("#clear-selection")
     guarded_page.evaluate("window.__testHooks.setState({school: ['northfield']})")
     expect(guarded_page.locator("#games-table")).to_be_visible()
-    assert guarded_page.locator("#games-table tbody tr").count() == 5
+    expect(guarded_page.locator("#games-table tbody tr")).to_have_count(5)
 
 
 def test_sideline_role_crew_shows_in_table_and_hover(
