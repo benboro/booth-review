@@ -77,7 +77,7 @@ def test_crosswalk_unknown_club_rejected(ref: Path) -> None:
 
 
 def test_formula_cell_rejected(ref: Path) -> None:
-    _append(ref, "mlb_networks.csv", "506,=SUM(A1),net_one,broadcast,")
+    _append(ref, "mlb_networks.csv", "506,=SUM(A1),net_one,fox,")
     with pytest.raises(ReferenceTableError):
         load_mlb_reference(ref)
 

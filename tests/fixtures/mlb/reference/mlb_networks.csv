@@ -1,5 +1,5 @@
 source,variant,network_id,family,note
 506,Apple TV+,apple,apple,synthetic
-506,Net One,net_one,broadcast,synthetic
-ratingsref,NET1,net_one,broadcast,synthetic
-506,Cable Two,cable_two,cable,synthetic
+506,Net One,net_one,fox,synthetic
+ratingsref,NET1,net_one,fox,synthetic
+506,Cable Two,cable_two,tbs,synthetic

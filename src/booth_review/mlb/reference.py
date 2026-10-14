@@ -11,7 +11,9 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import get_args
 
+from booth_review.contract.mlb_models import MlbNetworkFamily
 from booth_review.errors import ReferenceTableError
 from booth_review.nfl.reference import (
     _check_https,
@@ -57,7 +59,9 @@ MLB_TEAM_SOURCES = frozenset({"506", "ratingsref", "retrosheet", "relay", "wikip
 MLB_NETWORK_SOURCES = frozenset({"506", "ratingsref", "retrosheet", "relay", "wikipedia"})
 MLB_ROUND_IDS = ("wild_card", "division", "lcs", "world_series", "tiebreak")
 MLB_LEAGUES = ("AL", "NL")
-MLB_NETWORK_FAMILIES = frozenset({"broadcast", "cable", "streaming", "apple", "regional", "other"})
+# A family is the corporate group (FS1 is fox, truTV is tbs), so a Wikipedia crew listed
+# for a network family matches its sister channels; the site contract owns the set.
+MLB_NETWORK_FAMILIES = frozenset(get_args(MlbNetworkFamily))
 
 _NETWORK_ID_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _CLUB_ID_RE = re.compile(r"^[a-z][a-z0-9-]*$")
