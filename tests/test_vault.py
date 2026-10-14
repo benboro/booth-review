@@ -500,3 +500,88 @@ def test_push_retry_aborts_rebase_on_conflict_and_raises(
     assert "rebase in progress" not in status.stdout
     assert not (vault / ".git" / "rebase-merge").exists()
     assert not (vault / ".git" / "rebase-apply").exists()
+
+
+# -- drop_unpushed_since (CR-02 rollback) ---------------------------------------
+
+
+def _git_out(vault: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(vault), *args], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def _reject_pushes(remote: Path) -> None:
+    hook = remote / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    hook.chmod(0o755)
+
+
+def test_head_returns_the_current_commit(vault_repo_env: tuple[Path, Path]) -> None:
+    _, vault = vault_repo_env
+    assert VaultRepo(vault).head() == _git_out(vault, "rev-parse", "HEAD")
+
+
+def test_drop_unpushed_since_is_a_noop_when_head_is_before(
+    vault_repo_env: tuple[Path, Path],
+) -> None:
+    _, vault = vault_repo_env
+    repo = VaultRepo(vault)
+    before = repo.head()
+    assert before is not None
+    assert repo.drop_unpushed_since(before) is False
+    assert repo.head() == before
+
+
+def test_drop_unpushed_since_drops_a_commit_whose_push_failed(
+    vault_repo_env: tuple[Path, Path],
+) -> None:
+    remote, vault = vault_repo_env
+    repo = VaultRepo(vault, sleep=lambda _s: None)
+    before = repo.head()
+    assert before is not None
+    _reject_pushes(remote)
+    (vault / "nfl.csv").write_text("a,b\n", encoding="utf-8")
+    with pytest.raises(VaultCommitError):
+        repo.commit_batch("job: nfl (fetched 1)", paths=["nfl.csv"])
+    assert repo.head() != before
+
+    assert repo.drop_unpushed_since(before) is True
+
+    assert repo.head() == before
+    assert (vault / "nfl.csv").read_text(encoding="utf-8") == "a,b\n"
+    assert _git_out(vault, "status", "--porcelain") == "?? nfl.csv"
+    assert _git_out(vault, "rev-list", "--count", "@{u}..HEAD") == "0"
+
+
+def test_drop_unpushed_since_keeps_an_unpushed_earlier_commit(
+    vault_repo_env: tuple[Path, Path],
+) -> None:
+    _, vault = vault_repo_env
+    repo = VaultRepo(vault)
+    (vault / "cfb.csv").write_text("1\n", encoding="utf-8")
+    assert repo.commit_batch("job: cfb (fetched 1)", paths=["cfb.csv"], push=False)
+    before = repo.head()
+    assert before is not None
+    (vault / "nfl.csv").write_text("2\n", encoding="utf-8")
+    assert repo.commit_batch("job: nfl (fetched 1)", paths=["nfl.csv"], push=False)
+    head = repo.head()
+
+    assert repo.drop_unpushed_since(before) is False
+    assert repo.head() == head
+
+
+def test_drop_unpushed_since_without_upstream_is_a_noop(
+    vault_repo_env: tuple[Path, Path],
+) -> None:
+    _, vault = vault_repo_env
+    repo = VaultRepo(vault)
+    before = repo.head()
+    assert before is not None
+    (vault / "nfl.csv").write_text("2\n", encoding="utf-8")
+    repo.commit_batch("job: nfl (fetched 1)", paths=["nfl.csv"], push=False)
+    head = repo.head()
+    _run_ok(["git", "-C", str(vault), "branch", "--unset-upstream"])
+
+    assert repo.drop_unpushed_since(before) is False
+    assert repo.head() == head

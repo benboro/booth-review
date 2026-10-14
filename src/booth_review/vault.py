@@ -248,6 +248,43 @@ class VaultRepo:
 
         return True
 
+    def head(self) -> str | None:
+        """The commit HEAD points at, or None when the vault has no commits."""
+        result = self._run("rev-parse", "--verify", "HEAD")
+        return result.stdout.strip() if result.returncode == 0 else None
+
+    def drop_unpushed_since(self, before: str) -> bool:
+        """Drop the unpushed commits made after `before`; True when HEAD moved.
+
+        For a step whose push failed and whose commit must not linger on the
+        local branch, where the next push would replay it. Resets `--mixed` to
+        the merge-base of HEAD and @{u}, never `--hard`: the step's files stay
+        on disk as uncommitted changes (the next scoped commit re-commits them)
+        and unrelated edits survive. The merge-base, not @{u}, because after an
+        aborted `pull --rebase` @{u} is ahead of the working tree.
+
+        Acts only when `before` is an ancestor of @{u}, i.e. everything up to
+        the step is already on the remote, so an unpushed earlier commit is
+        never reset away. With no upstream, or HEAD == `before`, it does
+        nothing and returns False.
+        """
+        with self.lock():
+            if self.head() == before:
+                return False
+            if self._run("rev-parse", "--verify", "@{u}").returncode != 0:
+                return False
+            if self._run("merge-base", "--is-ancestor", before, "@{u}").returncode != 0:
+                return False
+            base_result = self._run("merge-base", "HEAD", "@{u}")
+            base = base_result.stdout.strip()
+            if base_result.returncode != 0 or not base:
+                return False
+            reset_result = self._run("reset", "--mixed", "--quiet", base)
+            if reset_result.returncode != 0:
+                raise VaultCommitError(f"git subcommand reset exited {reset_result.returncode}")
+            logger.info("vault: dropped unpushed commit(s)")
+            return True
+
     def _push_with_retry(self) -> None:
         """Up to 3 rounds of push; a rejected push is followed by pull --rebase.
 
