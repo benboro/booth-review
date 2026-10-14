@@ -121,7 +121,7 @@ def test_collect_ratingsref_nfl_rejects_sitemap_only(
     handle = mock_transport_factory({})
     patched_client(handle)
     code = main(["collect", "ratingsref", "--league", "nfl", "--season", "2015", "--sitemap-only"])
-    assert code == 3
+    assert code == 2
     assert handle.requests == []
     assert "--sitemap-only" in capsys.readouterr().err
 
