@@ -12,7 +12,7 @@ from typing import get_args
 
 from test_build_bowls_pipeline import _vault_with_sentinel_note
 
-from booth_review.build.pipeline import input_stamp, nfl_input_stamp, run_build
+from booth_review.build.pipeline import input_stamp, run_build
 from booth_review.config import DataPaths
 from booth_review.nfl.layout import (
     NFL_SOURCES,
@@ -137,7 +137,6 @@ def test_nfl_host_robots_entries_do_not_move_the_cfb_stamp(tmp_path: Path) -> No
     ]
     _write_manifest(paths, entries)
     assert input_stamp(paths) == datetime(2026, 10, 1, 10, 0, tzinfo=UTC)
-    assert nfl_input_stamp(paths) == datetime(2026, 10, 8, 10, 0, tzinfo=UTC)
 
     _write_manifest(
         paths,
@@ -147,12 +146,11 @@ def test_nfl_host_robots_entries_do_not_move_the_cfb_stamp(tmp_path: Path) -> No
         ],
     )
     assert input_stamp(paths) == datetime(2026, 10, 9, 10, 0, tzinfo=UTC)
-    assert nfl_input_stamp(paths) == datetime(2026, 10, 8, 10, 0, tzinfo=UTC)
 
 
-def test_nfl_input_stamp_reads_only_nfl_entries(tmp_path: Path) -> None:
+def test_input_stamp_ignores_nfl_manifest_paths(tmp_path: Path) -> None:
     paths = DataPaths(vault=tmp_path / "vault")
-    assert nfl_input_stamp(paths) == datetime(1970, 1, 1, tzinfo=UTC)
+    assert input_stamp(paths) == datetime(1970, 1, 1, tzinfo=UTC)
     _write_manifest(
         paths,
         [
@@ -160,7 +158,11 @@ def test_nfl_input_stamp_reads_only_nfl_entries(tmp_path: Path) -> None:
             _entry("nfl/nflverse/schedules/games.csv", "n", "2026-10-09T10:00:00Z"),
         ],
     )
-    assert nfl_input_stamp(paths) == datetime(2026, 10, 9, 10, 0, tzinfo=UTC)
+    assert input_stamp(paths) == datetime(2026, 10, 10, 10, 0, tzinfo=UTC)
+    _write_manifest(
+        paths, [_entry("nfl/nflverse/schedules/games.csv", "n", "2026-10-09T10:00:00Z")]
+    )
+    assert input_stamp(paths) == datetime(1970, 1, 1, tzinfo=UTC)
 
 
 def test_nfl_layout_paths_and_sources() -> None:
