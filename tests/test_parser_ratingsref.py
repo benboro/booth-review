@@ -241,6 +241,8 @@ def test_parse_record_accepts_int_tier() -> None:
             ["claim-a", "claim-b"],
         ),
         ({"claim_ids": [], "combination_rule": "sum", "components_unpublished": True}, []),
+        ({"claim_ids": [101, "claim-b"], "combination_rule": "sum"}, ["101", "claim-b"]),
+        ([7, 8], ["7", "8"]),
         (None, None),
     ],
 )

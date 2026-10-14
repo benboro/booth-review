@@ -62,9 +62,15 @@ class RRClaim(BaseModel):
     def _composite_claim_ids(cls, value: object) -> object:
         # Newer records give an object ({"claim_ids": [...], "combination_rule":
         # ..., ...}) instead of a bare list; keep only its claim ids, which may
-        # be empty when RR leaves the components unpublished.
+        # be empty when RR leaves the components unpublished. Numeric ids are
+        # read as strings so they don't fail validation and drop the record.
         if isinstance(value, dict):
-            return value.get("claim_ids")
+            value = value.get("claim_ids")
+        if isinstance(value, list):
+            return [
+                str(item) if isinstance(item, int) and not isinstance(item, bool) else item
+                for item in value
+            ]
         return value
 
 
