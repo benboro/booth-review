@@ -298,7 +298,6 @@ def test_pbp_metrics_joined_by_game_id(tmp_path: Path) -> None:
                 "play_id": float(i + 1),
                 "qtr": 4 if i == 29 else 1,
                 "quarter_seconds_remaining": 0.0 if i == 29 else 600.0,
-                "game_seconds_remaining": float(3600 - i * 100),
                 "home_wp": 0.5 + (0.01 * i if i % 2 else -0.01 * i),
                 "home_wp_post": 0.9,
             }
