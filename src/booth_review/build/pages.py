@@ -181,39 +181,51 @@ def _rewrite_relative_md_links(rendered_html: str) -> str:
     return _MD_HREF_RE.sub(_replace, rendered_html)
 
 
-_NFL_START = "<!-- nfl:start -->"
-_NFL_END = "<!-- nfl:end -->"
+def _apply_sport_blocks(text: str, *, sport: str, enabled: bool) -> str:
+    """Resolve `<!-- <sport>:start -->` / `<!-- <sport>:end -->` marker blocks.
 
-
-def _apply_nfl_blocks(text: str, *, nfl: bool) -> str:
-    """Resolve `<!-- nfl:start -->` / `<!-- nfl:end -->` marker blocks.
-
-    With `nfl` False each block is dropped whole; with it True only the two
+    With `enabled` False each block is dropped whole; with it True only the two
     marker lines are dropped. Unbalanced or nested markers fail closed.
     """
+    start = f"<!-- {sport}:start -->"
+    end = f"<!-- {sport}:end -->"
+    problem = f"docs/methodology.md: unbalanced {sport.upper()} marker"
     kept: list[str] = []
     inside = False
     for line in text.splitlines(keepends=True):
         marker = line.rstrip()
-        if marker == _NFL_START:
+        if marker == start:
             if inside:
-                raise SiteBuildError("docs/methodology.md: unbalanced NFL marker")
+                raise SiteBuildError(problem)
             inside = True
             continue
-        if marker == _NFL_END:
+        if marker == end:
             if not inside:
-                raise SiteBuildError("docs/methodology.md: unbalanced NFL marker")
+                raise SiteBuildError(problem)
             inside = False
             continue
-        if inside and not nfl:
+        if inside and not enabled:
             continue
         kept.append(line)
     if inside:
-        raise SiteBuildError("docs/methodology.md: unbalanced NFL marker")
+        raise SiteBuildError(problem)
     return "".join(kept)
 
 
-def render_methodology(docs_dir: Path, site: SiteData, *, nfl: bool = False) -> str:
+def _apply_nfl_blocks(text: str, *, nfl: bool) -> str:
+    """The NFL blocks only; kept for callers that predate the sport registry."""
+    return _apply_sport_blocks(text, sport="nfl", enabled=nfl)
+
+
+def _apply_all_sport_blocks(text: str, *, nfl: bool, mlb: bool) -> str:
+    return _apply_sport_blocks(
+        _apply_sport_blocks(text, sport="nfl", enabled=nfl), sport="mlb", enabled=mlb
+    )
+
+
+def render_methodology(
+    docs_dir: Path, site: SiteData, *, nfl: bool = False, mlb: bool = False
+) -> str:
     """Render `docs/methodology.md` to HTML, with `docs/known-gaps.md`
     spliced in at its include marker (D-13). Raises SiteBuildError --
     naming the missing file or marker only, never file content -- when
@@ -222,14 +234,18 @@ def render_methodology(docs_dir: Path, site: SiteData, *, nfl: bool = False) -> 
     methodology_path = docs_dir / "methodology.md"
     if not methodology_path.is_file():
         raise SiteBuildError("docs/methodology.md not found")
-    methodology_text = _apply_nfl_blocks(methodology_path.read_text(encoding="utf-8"), nfl=nfl)
+    methodology_text = _apply_all_sport_blocks(
+        methodology_path.read_text(encoding="utf-8"), nfl=nfl, mlb=mlb
+    )
     if _INCLUDE_MARKER not in methodology_text:
         raise SiteBuildError("docs/methodology.md: known-gaps include marker missing")
 
     known_gaps_path = docs_dir / "known-gaps.md"
     if not known_gaps_path.is_file():
         raise SiteBuildError("docs/known-gaps.md not found")
-    known_gaps_text = _apply_nfl_blocks(known_gaps_path.read_text(encoding="utf-8"), nfl=nfl)
+    known_gaps_text = _apply_all_sport_blocks(
+        known_gaps_path.read_text(encoding="utf-8"), nfl=nfl, mlb=mlb
+    )
 
     combined = methodology_text.replace(_INCLUDE_MARKER, _known_gaps_body(known_gaps_text))
     renderer = markdown.Markdown(extensions=["tables", "toc"])
@@ -338,12 +354,15 @@ def render_coverage(site: SiteData) -> str:
     return page_html("Coverage · booth-review", body, site.freshness)
 
 
-def write_pages(out_dir: Path, site: SiteData, docs_dir: Path, *, nfl: bool = False) -> list[str]:
+def write_pages(
+    out_dir: Path, site: SiteData, docs_dir: Path, *, nfl: bool = False, mlb: bool = False
+) -> list[str]:
     """Render and atomically write `methodology.html` and `coverage.html`
     under `out_dir`. Returns their out_dir-relative paths.
     """
     atomic_write_bytes(
-        out_dir / "methodology.html", render_methodology(docs_dir, site, nfl=nfl).encode("utf-8")
+        out_dir / "methodology.html",
+        render_methodology(docs_dir, site, nfl=nfl, mlb=mlb).encode("utf-8"),
     )
     atomic_write_bytes(out_dir / "coverage.html", render_coverage(site).encode("utf-8"))
     return ["methodology.html", "coverage.html"]
