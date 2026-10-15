@@ -69,6 +69,9 @@ def _site_source_files(*, include_nfl: bool) -> list[Path]:
             continue
         if not include_nfl and rel.parts[:2] == ("sports", "nfl"):
             continue
+        # MLB ships only behind --mlb / MLB_SITE_ENABLED; neither build here sets it.
+        if rel.parts[:2] == ("sports", "mlb"):
+            continue
         found.append(rel)
     return found
 
@@ -82,6 +85,7 @@ def test_fixture_build_copies_every_site_source_file(site_env: Path) -> None:
     for rel in _site_source_files(include_nfl=False):
         assert (out / rel).is_file(), rel
     assert not (out / "sports" / "nfl").exists()
+    assert not (out / "sports" / "mlb").exists()
 
     assert (out / "site-data.json").is_file()
     assert (out / "methodology.html").is_file()
@@ -97,6 +101,7 @@ def test_flag_on_build_copies_every_site_source_file(site_env: Path) -> None:
     for rel in _site_source_files(include_nfl=True):
         assert (out / rel).is_file(), rel
     assert (out / "nfl-data.json").is_file()
+    assert not (out / "sports" / "mlb").exists()
 
 
 def test_nfl_flag_env_is_exact(site_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
