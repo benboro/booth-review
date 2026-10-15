@@ -101,7 +101,8 @@ pending), the lead and others counts, `rr_rated` and `apple_games`.
 denominator, mean excitement with its n, mean viewers with its n, and `game_list`. A
 cell below `constants.coverage_bar` is flagged; a game with no crew reads "crew not
 listed". `postseason_seasons` carries each season's coverage numerator and denominator,
-which must equal the sum over its cells.
+which must equal the sum over its cells; the builder ships exactly that sum, so
+a postseason game with no own-production telecast does not count in the denominator.
 
 ## Credits
 
