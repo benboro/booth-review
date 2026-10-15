@@ -26,6 +26,7 @@ _HEADER_ALIASES: dict[str, str] = {
     "play by play": "pbp",
     "color commentator(s)": "analysts",
     "color commentator": "analysts",
+    "color commentator(s)/secondary play-by-play": "analysts",
     "color commentators": "analysts",
     "analyst(s)": "analysts",
     "analysts": "analysts",
@@ -92,7 +93,20 @@ class ListParse:
 
 
 def _norm(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip().lower()
+    folded = re.sub(r"\s+", " ", text).strip().lower()
+    return folded.replace(" (s)", "(s)")  # live pages write "Color commentator (s)"
+
+
+_NATIONAL_TV_EXCLUDED = ("radio", "local")
+
+
+def _is_television_table(table: Tag) -> bool:
+    """False for tables under a Radio or Local section: only national TV crews count."""
+    heading = table.find_previous("h2")
+    if heading is None:
+        return True
+    text = heading.get_text(" ").lower()
+    return not any(word in text for word in _NATIONAL_TV_EXCLUDED)
 
 
 def _split_names(text: str) -> list[str]:
@@ -144,6 +158,8 @@ def parse_broadcaster_list(html: str, url: str, round_kind: str) -> ListParse:
     result = ListParse()
     for t_idx, table in enumerate(soup.find_all("table")):
         if not isinstance(table, Tag) or table.find_parent("table") is not None:
+            continue
+        if not _is_television_table(table):
             continue
         grid = expand_wikitable(table)
         if not grid or not grid[0]:

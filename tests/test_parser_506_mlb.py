@@ -141,6 +141,16 @@ def test_outlet_cell_edge_cases() -> None:
     assert parse_outlet_cell("") == ()
 
 
+def test_live_page_outlet_spellings() -> None:
+    assert parse_outlet_cell("FOX (\U0001f534 on map)") == (
+        MlbOutletCell("FOX", False, "red", None),
+    )
+    assert parse_outlet_cell("MLBN*ESPN Unltd") == (
+        MlbOutletCell("MLBN", True, None, None),
+        MlbOutletCell("ESPN Unltd", False, None, None),
+    )
+
+
 def test_non_game_rows_collected(week: bytes) -> None:
     page = parse_mlb_page(week, season=2099, label="3")
     kinds = sorted(r.kind for r in page.non_game)

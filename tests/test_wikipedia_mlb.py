@@ -136,3 +136,16 @@ def test_national_list_order() -> None:
     assert crews[1].analysts_raw == ("Ray Epsilon", "Jo Zeta")
     assert crews[2].pbp_raw == "Lee Gamma"
     assert crews[2].analysts_raw == ("Max Eta",)
+
+
+def test_radio_tables_skipped_and_spaced_headers_read() -> None:
+    html = (
+        "<h2>National television</h2><table class='wikitable'>"
+        "<tr><th>Year</th><th>Network</th><th>Play-by-play</th><th>Color commentator (s)</th></tr>"
+        "<tr><td>2016</td><td>TV</td><td>Pat Alpha</td><td>Sam Beta</td></tr></table>"
+        "<h2>National radio</h2><table class='wikitable'>"
+        "<tr><th>Year</th><th>Network</th><th>Play-by-play</th><th>Color commentator</th></tr>"
+        "<tr><td>2016</td><td>Radio</td><td>Ray Delta</td><td>Lee Gamma</td></tr></table>"
+    )
+    result = parse_broadcaster_list(html, URL, "lcs_al")
+    assert [c.network_raw for c in result.crews] == ["TV"]

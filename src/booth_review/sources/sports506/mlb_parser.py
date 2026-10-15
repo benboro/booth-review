@@ -50,7 +50,18 @@ _TRAILING_PAREN_RE = re.compile(r"\s*\(([^()]*)\)\s*$")
 _GAME_NUMBER_RE = re.compile(r"^Game\s+([12])$", re.IGNORECASE)
 _IN_RE = re.compile(r"^in\s+(.+)$", re.IGNORECASE)
 _WINDOW_RE = re.compile(r"\(\s*(\w+)\s+circle[^)]*on map\s*\)", re.IGNORECASE)
-_STAR_SPLIT_RE = re.compile(r"(?<=\*)\s+")
+# Live pages mark the map window with a colored emoji circle instead of the words.
+_EMOJI_WINDOWS = {
+    "\U0001f534": "red",
+    "\U0001f535": "blue",
+    "\U0001f7e2": "green",
+    "\U0001f7e1": "yellow",
+    "\U0001f7e0": "orange",
+    "\U0001f7e3": "purple",
+}
+_EMOJI_WINDOW_RE = re.compile(r"\(\s*([" + "".join(_EMOJI_WINDOWS) + r"])\s*on map\s*\)")
+# A star ends an outlet token even when the next outlet follows with no space ("MLBN*ESPN Unltd").
+_STAR_SPLIT_RE = re.compile(r"(?<=\*)\s*(?=\S)")
 _TIME_RE = re.compile(r"^(\d{1,2}):(\d{2})\s*([AP]M)", re.IGNORECASE)
 _NOT_PLAYED = ("rained out", "postponed")
 
@@ -144,7 +155,11 @@ def parse_outlet_cell(raw: str) -> tuple[MlbOutletCell, ...]:
     text = collapse_whitespace(raw)
     window: str | None = None
     match = _WINDOW_RE.search(text)
-    if match is not None:
+    emoji = _EMOJI_WINDOW_RE.search(text) if match is None else None
+    if match is None and emoji is not None:
+        window = _EMOJI_WINDOWS[emoji.group(1)]
+        text = collapse_whitespace(text[: emoji.start()] + " " + text[emoji.end() :])
+    elif match is not None:
         window = match.group(1).lower()
         text = collapse_whitespace(text[: match.start()] + " " + text[match.end() :])
     if not text:
