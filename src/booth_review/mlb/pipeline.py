@@ -26,6 +26,7 @@ from typing import Final
 
 import polars as pl
 
+from booth_review.build.mlb_site_data import build_and_write_mlb_site_data
 from booth_review.config import DataPaths
 from booth_review.errors import BoothReviewError, ParseError
 from booth_review.flags.era import load_eras
@@ -121,8 +122,8 @@ _LINEUP_SCHEMA: Final[dict[str, pl.DataType | type[pl.DataType]]] = {
 }
 
 
-#: Plan 09-26 sets this to the real site-data writer: (paths, reference dir) -> vault path.
-SITE_DATA_BUILDER: Callable[[DataPaths, Path], str] | None = None
+#: The site-data writer `--site-data` calls: (paths, reference dir) -> vault path.
+SITE_DATA_BUILDER: Callable[[DataPaths, Path], str] | None = build_and_write_mlb_site_data
 
 
 @dataclass(frozen=True)
@@ -543,8 +544,8 @@ def run_mlb_build(
     """Build every MLB table and review file under one vault lock, then one scoped commit.
 
     `we_min_train_games` exists for tests with tiny synthetic Retrosheet bundles.
-    `site_builder` is the hook plan 09-26 fills; asking for site data before it exists
-    stops the build before anything is written.
+    `site_builder` replaces the site-data writer (tests); with none available, asking for
+    site data stops the build before anything is written.
     """
     site_builder = site_builder or SITE_DATA_BUILDER
     if site_data and site_builder is None:

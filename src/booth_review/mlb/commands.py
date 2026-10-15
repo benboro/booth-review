@@ -1,4 +1,4 @@
-"""The `booth-review mlb` command group: build, gaps, rr-backfill, freeze and people.
+"""The `booth-review mlb` command group: build, site-data, gaps, rr-backfill, freeze and people.
 
 Printed output is counts only. The names `booth-review mlb build` and
 `booth-review mlb rr-backfill` are fixed because AGENTS.md and the docs name them.
@@ -19,6 +19,13 @@ import sys
 from datetime import UTC, date, datetime
 from typing import Any
 
+from booth_review.build.mlb_site_data import (
+    build_mlb_site_data,
+    load_mlb_site_inputs,
+    mlb_site_counts,
+    mlb_site_payload_bytes,
+    write_mlb_site_data,
+)
 from booth_review.build.site_assembly import mlb_site_enabled
 from booth_review.config import DataPaths
 from booth_review.errors import BoothReviewError
@@ -78,6 +85,11 @@ def add_mlb_parser(sub: Any) -> None:
         action="store_true",
         help="also write processed/mlb-data.json (on by MLB_SITE_ENABLED=true)",
     )
+
+    site_data = mlb_sub.add_parser(
+        "site-data", help="write processed/mlb-data.json from the built MLB tables"
+    )
+    site_data.add_argument("--no-commit", action="store_true")
 
     gaps = mlb_sub.add_parser("gaps", help="list games that still need work by hand")
     gaps.add_argument(
@@ -161,6 +173,30 @@ def _mlb_build(args: argparse.Namespace) -> int:
         site_data=wanted,
     )
     _print_build(outcome)
+    return 0
+
+
+# -- site-data --------------------------------------------------------------------------
+
+
+def _mlb_site_data(args: argparse.Namespace) -> int:
+    paths = DataPaths.from_env()
+    vault = VaultRepo(paths.vault)
+    vault.check()
+    with vault.lock():
+        site = build_mlb_site_data(load_mlb_site_inputs(paths, reference_dir()))
+        rel = write_mlb_site_data(paths, site)
+        counts = mlb_site_counts(site)
+        if not args.no_commit:
+            vault.commit_batch(
+                batch_message("build", "mlb_site", str(site.freshness.season), counts),
+                paths=[rel],
+            )
+    size = len(mlb_site_payload_bytes(site))
+    print(
+        f"mlb site data: {counts['games']} games, {counts['lineups']} lineups, "
+        f"{len(site.lookups.people)} people, {size} bytes"
+    )
     return 0
 
 
@@ -372,6 +408,7 @@ def _mlb_accept_drift(
 
 _HANDLERS = {
     "build": _mlb_build,
+    "site-data": _mlb_site_data,
     "gaps": _mlb_gaps,
     "rr-backfill": _mlb_rr_backfill,
     "freeze": _mlb_freeze,

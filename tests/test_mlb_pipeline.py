@@ -16,6 +16,7 @@ from mlb_pipeline_support import make_reference, make_vault
 from booth_review.cli import main
 from booth_review.config import DataPaths
 from booth_review.mlb import commands as mlb_commands
+from booth_review.mlb import pipeline
 from booth_review.mlb.collect_cli import load_mlb_rr_windows
 from booth_review.mlb.pipeline import run_mlb_build
 from booth_review.mlb.tables import MLB_TABLES, REVIEW_KEYS
@@ -150,11 +151,12 @@ def test_build_touches_only_mlb_outputs(git_vault: DataPaths, tmp_path: Path) ->
 
 
 def test_site_data_before_its_builder_exists_stops_early(
-    git_vault: DataPaths, tmp_path: Path
+    git_vault: DataPaths, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     paths = git_vault
     make_vault(paths)
     ref = make_reference(tmp_path / "ref")
+    monkeypatch.setattr(pipeline, "SITE_DATA_BUILDER", None)
 
     with pytest.raises(Exception, match="site data builder not available"):
         _build(paths, ref, site_data=True)
@@ -278,11 +280,12 @@ def test_mlb_build_site_data_flag_stops_before_the_builder_exists(
     cli_vault: DataPaths, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setenv("MLB_SITE_ENABLED", "true")
+    monkeypatch.setattr(pipeline, "SITE_DATA_BUILDER", None)
     monkeypatch.setattr(
         mlb_commands, "run_mlb_build", functools.partial(run_mlb_build, we_min_train_games=_TRAIN)
     )
 
-    # The env switch alone only skips (the builder is plan 09-26's); the flag is explicit.
+    # With no builder the env switch alone only skips; the flag is explicit and stops.
     assert main(["mlb", "build", "--no-commit"]) == 0
     assert "builder not available yet; skipped" in capsys.readouterr().out
     assert main(["mlb", "build", "--no-commit", "--site-data"]) != 0
