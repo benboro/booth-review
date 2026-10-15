@@ -74,3 +74,11 @@ only (capped by `--max-requests`, default 1), never in bulk. Any refusal (HTTP 4
 or another 4xx) ends the route: no retries, no user-agent or header changes, no
 other endpoints. The default is to wait for Retrosheet's late-2026 release.
 
+
+## Phase 9 D-04/D-22 outcome
+
+October 14, 2026: the owner chose to wait for Retrosheet 2026. No request was
+sent to statsapi.mlb.com, the collector stays disabled, and `config.py` carries
+no host policy for it. The dry run planned 36 dates; the single test request
+(2026-03-27, lineups) was never made. Revisit only if Retrosheet's release slips
+and the owner approves a test request.
