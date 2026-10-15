@@ -114,3 +114,23 @@ def test_rerun_dry_run_keeps_prior_decisions(ref: Path, paths: DataPaths) -> Non
     register_mlb_people(paths, ref, ["Marked Caller"])
     rows = read_reference_csv(path, REVIEW_MLB_PEOPLE_COLUMNS)
     assert rows[0]["decision"] == "add"
+
+
+def test_real_reference_keeps_chris_and_chip_caray_apart_and_folds_variants() -> None:
+    registry = load_people(Path(__file__).parent.parent / "data" / "reference")
+    chris = registry.lookup("Chris Caray")
+    chip = registry.lookup("Chip Caray")
+    assert chris is not None
+    assert chip is not None
+    assert chris != chip
+    for a, b in (
+        ("A.J. Pierzynski", "AJ Pierzynski"),
+        ("C.J. Nitkowski", "CJ Nitkowski"),
+        ("C.C. Sabathia", "CC Sabathia"),
+        ("Eduardo Perez", "Eduardo Pérez"),
+        ("Matt Gubicza", "Mark Gubicza"),
+        ("Ryan Rolland-Smith", "Ryan Rowland-Smith"),
+        ("Ryan Spilborgs", "Ryan Spilborghs"),
+    ):
+        assert registry.lookup(a) is not None
+        assert registry.lookup(a) == registry.lookup(b)
