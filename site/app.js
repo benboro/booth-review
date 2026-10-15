@@ -607,14 +607,15 @@ async function startCfb(search = location.search) {
 }
 
 let cfbStarted = false;
-let nflModule = null;
+/** Loaded non-CFB sport modules by registry id. */
+const sportModules = new Map();
 let activeSport = null;
 /**
- * The query NFL decodes its first state from: the page's own query when it
- * opened on NFL, else '' so a CFB link's shared params (`seasons`, `people`,
- * `y`, `dots`) never leak into NFL state (JS-CR-02).
+ * Per sport, the query it decodes its first state from: the page's own query
+ * when it opened on that sport, else '' so a CFB link's shared params
+ * (`seasons`, `people`, `y`, `dots`) never leak into its state (JS-CR-02).
  */
-let nflInitialSearch = '';
+const sportInitialSearch = new Map();
 /** Bumped by every sport change, so an NFL switch whose module import resolves late can tell it was superseded. */
 let switchSeq = 0;
 
@@ -633,11 +634,11 @@ function sportMeta(id) {
 const SPORT_ERROR_ID = 'sport-load-error';
 
 /**
- * The NFL URL a reload should open: the page's own NFL query when it opened on
- * NFL (a shared NFL link keeps its state), else NFL at its defaults.
+ * The URL a reload should open: the page's own query when it opened on that
+ * sport (a shared link keeps its state), else the sport at its defaults.
  */
-function nflReloadUrl() {
-  return location.pathname + (nflInitialSearch || '?sport=nfl');
+function sportReloadUrl(id) {
+  return location.pathname + (sportInitialSearch.get(id) || `?sport=${id}`);
 }
 
 /**
@@ -647,8 +648,8 @@ function nflReloadUrl() {
  * a fresh document can. The page stays on NFL with the NFL URL (never CFB's,
  * IN-02), so a reload or a shared link opens NFL, and the button reloads it.
  */
-function showSportLoadError() {
-  const url = nflReloadUrl();
+function showSportLoadError(id) {
+  const url = sportReloadUrl(id);
   if (location.pathname + location.search !== url) history.replaceState(null, '', url);
   if (document.getElementById(SPORT_ERROR_ID)) return;
   const banner = document.createElement('section');
@@ -656,7 +657,7 @@ function showSportLoadError() {
   banner.className = 'error-banner';
   banner.setAttribute('role', 'alert');
   const title = document.createElement('p');
-  title.textContent = "Couldn't load the NFL view.";
+  title.textContent = `Couldn't load the ${sportMeta(id).label} view.`;
   const hint = document.createElement('p');
   hint.textContent = 'Check your connection, then reload the page. CFB is still one click away on the switch above.';
   const reload = document.createElement('button');
@@ -664,7 +665,7 @@ function showSportLoadError() {
   reload.className = 'toggle';
   reload.textContent = 'Reload page';
   reload.addEventListener('click', () => {
-    location.assign(nflReloadUrl());
+    location.assign(sportReloadUrl(id));
   });
   banner.append(title, hint, reload);
   document.getElementById('chart-area')?.before(banner);
@@ -688,30 +689,34 @@ async function showSport(id) {
   if (openPanelIndex !== null) hideDetailPanel();
   window.scrollTo(0, 0);
 
-  if (id === 'nfl') {
-    document.body.dataset.sport = 'nfl';
-    document.title = sportMeta('nfl').title;
+  if (id !== 'cfb') {
+    const entry = sportMeta(id);
+    // Only one non-CFB view is mounted at a time.
+    for (const [otherId, mod] of sportModules) if (otherId !== id) mod.unmount();
+    document.body.dataset.sport = id;
+    document.title = entry.title;
     try {
-      nflModule ??= await import('./sports/nfl/index.js');
+      if (!sportModules.has(id)) sportModules.set(id, await import(`./sports/${entry.module.replace(/^\.\//, '')}`));
     } catch (err) {
       // A network blip, a deploy swapping the module files, or a module that
       // throws on load: say so with a reload button instead of an empty page
       // (JS-WR-02, iter-2 WR-03). Nothing to say when a later switch took
-      // over or NFL loaded meanwhile (IN-01); the switch stays free for CFB.
-      console.error('booth-review: the NFL view failed to load', err);
-      if (seq !== switchSeq || activeSport !== 'nfl' || nflModule) return;
-      showSportLoadError();
+      // over or the view loaded meanwhile (IN-01); the switch stays free for CFB.
+      console.error(`booth-review: the ${entry.label} view failed to load`, err);
+      if (seq !== switchSeq || activeSport !== id || sportModules.has(id)) return;
+      showSportLoadError(id);
       return;
     }
     clearSportLoadError();
     // The user switched sport while the module loaded: mounting now would put
-    // NFL's footer, listeners and URL behind the other view (JS-WR-01).
+    // its footer, listeners and URL behind the other view (JS-WR-01).
     if (seq !== switchSeq) return;
-    await nflModule.mount({ footerEl: document.getElementById('site-footer'), search: nflInitialSearch });
-    if (activeSport !== 'nfl') nflModule.unmount();
+    const mod = sportModules.get(id);
+    await mod.mount({ footerEl: document.getElementById('site-footer'), search: sportInitialSearch.get(id) ?? '' });
+    if (activeSport !== id) mod.unmount();
     return;
   }
-  nflModule?.unmount();
+  for (const mod of sportModules.values()) mod.unmount();
   clearSportLoadError();
   document.body.dataset.sport = 'cfb';
   document.title = sportMeta('cfb').title;
@@ -730,7 +735,7 @@ function main() {
   const initialSearch = location.search;
   const enabled = enabledSports(document.querySelector('meta[name="booth-review-sports"]'));
   const sport = resolveSport(initialSearch, enabled);
-  if (sport === 'nfl') nflInitialSearch = initialSearch;
+  if (sport !== 'cfb') sportInitialSearch.set(sport, initialSearch);
   if (sport === 'cfb' && new URLSearchParams(initialSearch).has('sport')) {
     history.replaceState(null, '', location.pathname + searchWithoutSport(initialSearch));
   }
@@ -748,8 +753,8 @@ function main() {
     status.setAttribute('role', 'status');
     topbar.appendChild(status);
   }
-  if (sport === 'nfl') {
-    showSport('nfl');
+  if (sport !== 'cfb') {
+    showSport(sport);
   } else {
     activeSport = 'cfb';
     startCfb();

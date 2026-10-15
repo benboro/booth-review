@@ -2734,9 +2734,18 @@ td.no-rating {
    The NFL regions share the CFB grid areas. Only one set shows at a time,
    keyed to body[data-sport]; the CFB regions stay in the DOM. */
 
-body[data-sport="nfl"] :is(#toolbar, #selection-bar, #chart-area, #matched-games) {
+body:is([data-sport="nfl"], [data-sport="mlb"]) :is(#toolbar, #selection-bar, #chart-area, #matched-games) {
   display: none;
 }
+
+body:not([data-sport="mlb"]) :is(#mlb-toolbar, #mlb-selection-bar, #mlb-chart-area, #mlb-matched-games, #mlb-detail-panel) {
+  display: none;
+}
+
+#mlb-toolbar { grid-area: toolbar; }
+#mlb-selection-bar { grid-area: selection; }
+#mlb-chart-area { grid-area: main; }
+#mlb-matched-games { grid-area: table; }
 
 body:not([data-sport="nfl"]) :is(#nfl-toolbar, #nfl-selection-bar, #nfl-chart-area, #nfl-matched-games) {
   display: none;
@@ -2754,7 +2763,7 @@ body:not([data-sport="nfl"]) :is(#nfl-toolbar, #nfl-selection-bar, #nfl-chart-ar
   margin: var(--space-lg);
 }
 
-body:not([data-sport="nfl"]) #sport-load-error {
+body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   display: none;
 }
 
