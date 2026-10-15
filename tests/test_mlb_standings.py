@@ -6,6 +6,7 @@ from pathlib import Path
 
 import polars as pl
 import pytest
+from mlb_games_support import build_reference
 
 from booth_review.mlb import standings
 from booth_review.mlb.constants import STAKES_MIN_GAMES
@@ -17,7 +18,6 @@ from booth_review.mlb.standings import (
     team_divisions,
     team_leverage,
 )
-from tests.mlb_games_support import build_reference
 
 TEAMS = {
     "E1": ("AL", "East"),
@@ -236,14 +236,12 @@ def test_strength_prior_is_the_2025_win_percentage_and_2026_games_average_it() -
     prior = strength_prior(gameinfo(2025), 2025)
     pct = dict(prior.select("team", "win_pct").iter_rows())
     assert pct["E1"] == pytest.approx(1.0)
-    assert pct["E2"] == pytest.approx(0.5)
+    assert pct["E2"] == pytest.approx(2 / 3)
     assert pct["W3"] == pytest.approx(0.0)
     assert "N1" not in pct  # no 2025 games
-    games = pl.DataFrame(
-        {"gid": ["a", "b"], "visteam": ["E1", "E1"], "hometeam": ["E2", "N1"]}
-    )
+    games = pl.DataFrame({"gid": ["a", "b"], "visteam": ["E1", "E1"], "hometeam": ["E2", "N1"]})
     out = game_strength_prior(games, prior)
-    assert out["strength_prior"][0] == pytest.approx(0.75)
+    assert out["strength_prior"][0] == pytest.approx((1.0 + 2 / 3) / 2)
     assert out["strength_prior"][1] is None
 
 
