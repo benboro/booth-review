@@ -499,6 +499,72 @@ def nfl_mobile_page(browser: Browser, nfl_site_url: str, font_setting: str) -> I
     _assert_guard_clean(off_origin, csp_errors)
 
 
+# -- Flag-on (MLB) build: the synthetic MLB fixture only (09-17) ----
+
+
+@pytest.fixture(scope="session")
+def mlb_site_dist(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Build dist/site with the MLB flag on from the synthetic fixtures."""
+    out = tmp_path_factory.mktemp("mlbsite") / "site"
+    returncode = main(["site", "--fixture", "--mlb", "--out", str(out)])
+    assert returncode == 0, f"booth-review site --fixture --mlb exited {returncode}"
+    return out
+
+
+@pytest.fixture(scope="session")
+def mlb_site_url(mlb_site_dist: Path) -> Iterator[str]:
+    """Serve `mlb_site_dist`; yields its base URL."""
+    yield from _serve_directory(mlb_site_dist)
+
+
+@pytest.fixture
+def mlb_guarded_page(page: Page, mlb_site_url: str, font_setting: str) -> Iterator[Page]:
+    """`guarded_page` for the MLB flag-on site."""
+    off_origin, csp_errors = _install_guard(page, mlb_site_url)
+    _apply_font(page, font_setting)
+    yield page
+    _assert_guard_clean(off_origin, csp_errors)
+
+
+@pytest.fixture
+def mlb_mobile_page(browser: Browser, mlb_site_url: str, font_setting: str) -> Iterator[Page]:
+    """`mobile_page` for the MLB flag-on site."""
+    context = browser.new_context(
+        viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True
+    )
+    page = context.new_page()
+    off_origin, csp_errors = _install_guard(page, mlb_site_url)
+    _apply_font(page, font_setting)
+    try:
+        yield page
+    finally:
+        context.close()
+    _assert_guard_clean(off_origin, csp_errors)
+
+
+@pytest.fixture
+def open_mlb_app(mlb_site_url: str) -> Callable[..., None]:
+    """Returns `open(page, query="?sport=mlb")`: opens the MLB flag-on site and
+    waits for the MLB bootstrap (`window.__mlbTestHooks.ready`)."""
+
+    def _open(page: Page, query: str = "?sport=mlb") -> None:
+        page.goto(f"{mlb_site_url}/index.html{query}")
+        page.wait_for_function("window.__mlbTestHooks && window.__mlbTestHooks.ready === true")
+
+    return _open
+
+
+@pytest.fixture
+def open_mlb_cfb(mlb_site_url: str) -> Callable[..., None]:
+    """Returns `open(page, query="")`: opens the MLB flag-on site on the CFB view."""
+
+    def _open(page: Page, query: str = "") -> None:
+        page.goto(f"{mlb_site_url}/index.html{query}")
+        page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+
+    return _open
+
+
 def _shard_spec() -> tuple[int, int] | None:
     """Reads `E2E_SHARD` ("<index>/<total>", 1-based), set only by CI's e2e matrix."""
     spec = os.environ.get("E2E_SHARD", "").strip()
