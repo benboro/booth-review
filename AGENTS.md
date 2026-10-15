@@ -87,13 +87,15 @@ model, and build phases; read the relevant section before starting a phase.
   (`booth-review collect nflverse`), never through github.com release-download links:
   github.com's robots.txt disallows `/*/download`. The client honors robots.txt
   wildcards (`*` and `$`).
-- Retrosheet: collect only with `booth-review collect retrosheet`, and only the game
-  info file, the per-season plays files and the `allplayers` file under `/downloads/`;
-  never request `/gamelogs/` or `/boxesetc/`. Completed seasons freeze once collected
-  and checked; 2026 is collected only after Retrosheet's late-2026 release. Every page
-  that shows Retrosheet-derived data carries: "The information used here was obtained
-  free of charge from and is copyrighted by Retrosheet. Interested parties may contact
-  Retrosheet at www.retrosheet.org".
+- Retrosheet: collect only with `booth-review collect retrosheet`, and only the
+  downloads index page and the per-season CSV bundles (`/downloads/<year>/<year>csvs.zip`,
+  one request per season from 2014) under `/downloads/` on www.retrosheet.org; never
+  request `/gamelogs/` or `/boxesetc/`, the `plays.html` page, or any other path.
+  Each bundle's CSV files are read locally from the zip. Completed seasons freeze once
+  collected and checked; 2026 is collected only after Retrosheet's late-2026 release.
+  Every page that shows Retrosheet-derived data carries: "The information used here was
+  obtained free of charge from and is copyrighted by Retrosheet. Interested parties may
+  contact Retrosheet at www.retrosheet.org".
 - MLB relay crews (the user's exception to the collect-only rule, for the 2026 season
   only): a Claude Code session may read the fan schedule blog
   `tamirmoore.blogspot.com` with WebFetch to fill 2026 MLB crews that 506 does not
