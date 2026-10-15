@@ -19,7 +19,7 @@ import sys
 from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 from booth_review.audit.completeness import (
@@ -57,6 +57,18 @@ from booth_review.errors import (
 )
 from booth_review.job.attention import build_attention_body
 from booth_review.job.runner import EXIT_NOTHING_DUE, JOB_CFBD_MAX_CALLS, JobRunResult, ScheduledJob
+from booth_review.mlb.collect_cli import (
+    MLB_RR_WINDOWS_MISSING,
+    add_mlb_collect_parsers,
+    clip_windows,
+    load_mlb_rr_windows,
+    mlb_season_ceiling,
+    run_collect_retrosheet,
+    run_collect_statsapi,
+    run_import_relay,
+)
+from booth_review.mlb.constants import MLB_REFRESH_CAP_DEFAULT
+from booth_review.mlb.seasons import mlb_season_window
 from booth_review.nfl.commands import add_nfl_parser, run_nfl_command
 from booth_review.people import review as people_review
 from booth_review.reference import reference_dir
@@ -122,12 +134,16 @@ from booth_review.sources.smw.importer import (
 )
 from booth_review.sources.sports506.collector import Sports506Collector
 from booth_review.sources.sports506.importer import (
+    MLB_PROFILE,
     NFL_PROFILE,
     ImportResult,
+    PageProfile,
     Sports506Importer,
+    inspect_folder,
 )
 from booth_review.sources.tvrg.collector import TvrgCollector
 from booth_review.sources.wikipedia.collector import WikipediaCollector
+from booth_review.sources.wikipedia.mlb_collector import MlbWikipediaCollector
 from booth_review.spike.inventory import run_inventory
 from booth_review.spike.join import (
     build_join_rows,
@@ -185,6 +201,43 @@ def parse_season_spec(text: str) -> list[int]:
     return list(range(start, end + 1))
 
 
+def parse_season_spec_any_league(text: str) -> list[int]:
+    """A season spec checked only against the loosest ceiling (the calendar year);
+    `_check_league_ceiling` then applies the league's own ceiling after parsing.
+    """
+    if not _SEASON_SPEC_RE.match(text):
+        raise argparse.ArgumentTypeError(f"invalid season spec: {text!r}")
+    start_text, _, end_text = text.partition("-")
+    start = int(start_text)
+    end = int(end_text) if end_text else start
+    if start > end:
+        raise argparse.ArgumentTypeError(f"season range must be ascending: {text!r}")
+    ceiling = max(_current_season_ceiling(), mlb_season_ceiling())
+    if start < _MIN_SEASON or end > ceiling:
+        raise argparse.ArgumentTypeError(
+            f"season out of range [{_MIN_SEASON}, {ceiling}]: {text!r}"
+        )
+    return list(range(start, end + 1))
+
+
+def _check_league_ceiling(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Re-apply the football (July-June) ceiling to cfb/nfl; MLB uses calendar years."""
+    seasons = getattr(args, "season", None)
+    league = getattr(args, "league", None)
+    if not isinstance(seasons, list) or league is None or league == "mlb":
+        return
+    ceiling = _current_season_ceiling()
+    if max(seasons) > ceiling:
+        parser.error(
+            f"argument --season: season out of range [{_MIN_SEASON}, {ceiling}]: "
+            f"{_season_text(seasons)!r}"
+        )
+
+
+def _season_text(seasons: list[int]) -> str:
+    return f"{seasons[0]}-{seasons[-1]}" if len(seasons) > 1 else str(seasons[0])
+
+
 def _parse_date(text: str) -> date:
     try:
         return date.fromisoformat(text)
@@ -225,14 +278,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     prr = collect_sub.add_parser("ratingsref", help="collect Ratings Reference records")
     window_group = prr.add_mutually_exclusive_group(required=True)
-    window_group.add_argument("--season", type=parse_season_spec)
+    window_group.add_argument("--season", type=parse_season_spec_any_league)
     window_group.add_argument("--from-date", type=_parse_date)
     prr.add_argument("--to-date", type=_parse_date)
     mode_group = prr.add_mutually_exclusive_group()
     mode_group.add_argument("--dry-run", action="store_true")
     mode_group.add_argument("--sitemap-only", action="store_true")
     prr.add_argument("--no-commit", action="store_true")
-    prr.add_argument("--league", choices=("cfb", "nfl"), default="cfb")
+    prr.add_argument("--league", choices=("cfb", "nfl", "mlb"), default="cfb")
 
     pnflverse = collect_sub.add_parser("nflverse", help="collect nflverse schedules and pbp")
     pnflverse.add_argument(
@@ -245,9 +298,12 @@ def build_parser() -> argparse.ArgumentParser:
     pnflverse.add_argument("--dry-run", action="store_true")
     pnflverse.add_argument("--no-commit", action="store_true")
 
-    pwiki = collect_sub.add_parser("wikipedia", help="collect Wikipedia NFL season articles")
-    pwiki.add_argument("--league", choices=("nfl",), default="nfl")
-    pwiki.add_argument("--season", required=True, type=parse_season_spec)
+    pwiki = collect_sub.add_parser(
+        "wikipedia", help="collect Wikipedia NFL season articles or MLB postseason articles"
+    )
+    pwiki.add_argument("--league", choices=("nfl", "mlb"), default="nfl")
+    pwiki.add_argument("--season", required=True, type=parse_season_spec_any_league)
+    pwiki.add_argument("--lists", action="store_true", help="MLB only: also the list pages")
     pwiki.add_argument("--refresh", action="store_true")
     pwiki.add_argument("--dry-run", action="store_true")
     pwiki.add_argument("--no-commit", action="store_true")
@@ -302,8 +358,8 @@ def build_parser() -> argparse.ArgumentParser:
     prefresh = refresh_sub.add_parser(
         "ratingsref", help="refresh Ratings Reference records whose sitemap lastmod advanced"
     )
-    prefresh.add_argument("--cap", type=int, default=None)
-    prefresh.add_argument("--league", choices=("cfb", "nfl"), default="cfb")
+    prefresh.add_argument("--cap", "--max-refetch", dest="cap", type=int, default=None)
+    prefresh.add_argument("--league", choices=("cfb", "nfl", "mlb"), default="cfb")
     prefresh.add_argument("--dry-run", action="store_true")
     prefresh.add_argument("--no-commit", action="store_true")
 
@@ -311,11 +367,18 @@ def build_parser() -> argparse.ArgumentParser:
     import_sub = import_cmd.add_subparsers(dest="source", required=True)
 
     p506imp = import_sub.add_parser("506", help="import hand-saved 506 Sports week pages")
-    p506imp.add_argument("--season", required=True, type=parse_season_spec)
+    p506imp.add_argument("--season", required=True, type=parse_season_spec_any_league)
     p506imp.add_argument("--from", dest="from_dir", type=Path, default=None)
     p506imp.add_argument("--force", action="store_true")
     p506imp.add_argument("--no-commit", action="store_true")
-    p506imp.add_argument("--league", choices=("cfb", "nfl"), default="cfb")
+    p506imp.add_argument("--league", choices=("cfb", "nfl", "mlb"), default="cfb")
+    p506imp.add_argument(
+        "--inspect",
+        action="store_true",
+        help="MLB only: report each saved page's layout and counts; imports nothing",
+    )
+
+    add_mlb_collect_parsers(collect_sub, import_sub)
 
     psmwimp = import_sub.add_parser(
         "smw", help="import hand-saved Sports Media Watch charts and their transcriptions"
@@ -514,6 +577,7 @@ def _partial_counts(before: dict[str, int], after: dict[str, int]) -> dict[str, 
     }
 
 
+_MESSAGE_COUNT_KEYS = ("fetched", "cached", "not_modified", "failed")
 _ROBOTS_AND_REQUEST_LEDGER = ("raw/_robots", "ledger/requests.jsonl")
 
 # The vault paths each collect source writes. A collect commit stages only these,
@@ -534,6 +598,19 @@ _COLLECT_PATHS: dict[str, tuple[str, ...]] = {
         "ledger/rr_lastmod.jsonl",
         *_ROBOTS_AND_REQUEST_LEDGER,
     ),
+    "mlb_ratingsref": (
+        "raw/mlb/ratingsref",
+        "raw/ratingsref/sitemap",
+        "ledger/rr_lastmod.json",
+        "ledger/rr_lastmod.jsonl",
+        "ledger/mlb_rr_windows.json",
+        *_ROBOTS_AND_REQUEST_LEDGER,
+    ),
+    "mlb_sports506": ("raw/mlb/sports506", "ledger/requests.jsonl"),
+    "mlb_wikipedia": ("raw/mlb/wikipedia", *_ROBOTS_AND_REQUEST_LEDGER),
+    "mlb_retrosheet": ("raw/mlb/retrosheet", *_ROBOTS_AND_REQUEST_LEDGER),
+    "mlb_relay": ("raw/mlb/relay", "ledger/requests.jsonl"),
+    "mlb_statsapi": ("raw/mlb/statsapi", *_ROBOTS_AND_REQUEST_LEDGER),
     "nfl_sports506": ("raw/nfl/sports506", "ledger/requests.jsonl"),
     "nfl_nflverse": (
         "raw/nfl/nflverse",
@@ -570,6 +647,9 @@ def _run_and_commit(
                 if summary is not None
                 else _partial_counts(before, runtime.cache.counters)
             )
+            # MLB summaries add scope-skip counts; the message keeps to the four
+            # standard ones so it stays within the 120-character cap.
+            counts = {key: counts[key] for key in _MESSAGE_COUNT_KEYS if key in counts}
             runtime.vault.commit_batch(
                 batch_message(action, source, season_label, counts),
                 paths=list(_COLLECT_PATHS[source]),
@@ -657,16 +737,37 @@ def _collect_506(args: argparse.Namespace) -> int:
 # -- collect ratingsref ---------------------------------------------------------------
 
 
+_RR_SOURCE_KEYS = {"cfb": "ratingsref", "nfl": "nfl_ratingsref", "mlb": "mlb_ratingsref"}
+
+
 def _rr_source_key(league: str) -> str:
-    return "nfl_ratingsref" if league == "nfl" else "ratingsref"
+    return _RR_SOURCE_KEYS[league]
+
+
+def _mlb_windows_or_exit(args: argparse.Namespace) -> int | None:
+    """D-14: exit 2 before any runtime or request when the windows file is absent."""
+    if load_mlb_rr_windows(DataPaths.from_env()) is None:
+        print(f"error: {MLB_RR_WINDOWS_MISSING}", file=sys.stderr)
+        return 2
+    return None
 
 
 def _collect_ratingsref(args: argparse.Namespace) -> int:
+    if args.league == "mlb":
+        if args.sitemap_only:
+            print(
+                "error: --sitemap-only is shared by both leagues; run it without --league",
+                file=sys.stderr,
+            )
+            return 2
+        early = _mlb_windows_or_exit(args)
+        if early is not None:
+            return early
     runtime = build_runtime(with_budget=False)
     try:
         league = args.league
         source_key = _rr_source_key(league)
-        if league == "nfl" and args.sitemap_only:
+        if league in ("nfl", "mlb") and args.sitemap_only:
             print(
                 "error: --sitemap-only is shared by both leagues; run it without --league",
                 file=sys.stderr,
@@ -678,8 +779,9 @@ def _collect_ratingsref(args: argparse.Namespace) -> int:
 
         if args.season is not None:
             seasons = args.season
-            start = season_window(min(seasons))[0]
-            end = season_window(max(seasons))[1]
+            window_of = mlb_season_window if league == "mlb" else season_window
+            start = window_of(min(seasons))[0]
+            end = window_of(max(seasons))[1]
         else:
             if args.to_date is None:
                 print(
@@ -696,9 +798,14 @@ def _collect_ratingsref(args: argparse.Namespace) -> int:
                 runtime, collector, start, end, season_label, args
             )
 
+        run_kwargs: dict[str, Any] = {}
+        if league == "mlb":
+            stored = load_mlb_rr_windows(runtime.paths)
+            assert stored is not None
+            run_kwargs["windows"] = clip_windows(stored, start, end)
         summary = _run_and_commit(
             runtime,
-            functools.partial(collector.run, start, end, dry_run=args.dry_run),
+            functools.partial(collector.run, start, end, dry_run=args.dry_run, **run_kwargs),
             action="collect",
             source=source_key,
             season_label=season_label,
@@ -765,6 +872,10 @@ def _print_refresh_summary(summary: RefreshSummary) -> None:
 
 
 def _refresh_ratingsref(args: argparse.Namespace) -> int:
+    if args.league == "mlb":
+        early = _mlb_windows_or_exit(args)
+        if early is not None:
+            return early
     runtime = build_runtime(with_budget=False)
     try:
         league = args.league
@@ -774,15 +885,22 @@ def _refresh_ratingsref(args: argparse.Namespace) -> int:
         )
         cap = args.cap
         if cap is None:
-            cap = NFL_REFRESH_CAP_DEFAULT if league == "nfl" else REFRESH_CAP_DEFAULT
-        current_season = _current_season_ceiling()
+            cap = {
+                "cfb": REFRESH_CAP_DEFAULT,
+                "nfl": NFL_REFRESH_CAP_DEFAULT,
+                "mlb": MLB_REFRESH_CAP_DEFAULT,
+            }[league]
+        current_season = mlb_season_ceiling() if league == "mlb" else _current_season_ceiling()
         season_label = f"{FIRST_SEASON}-{current_season}"
+        refresh_kwargs: dict[str, Any] = {}
+        if league == "mlb":
+            refresh_kwargs["windows"] = load_mlb_rr_windows(runtime.paths)
 
         before = dict(runtime.cache.counters)
         summary: RefreshSummary | None = None
         try:
             summary = collector.refresh(
-                current_season=current_season, cap=cap, dry_run=args.dry_run
+                current_season=current_season, cap=cap, dry_run=args.dry_run, **refresh_kwargs
             )
         finally:
             if not args.dry_run and not args.no_commit:
@@ -889,12 +1007,19 @@ def _collect_nflverse(args: argparse.Namespace) -> int:
 
 
 def _collect_wikipedia(args: argparse.Namespace) -> int:
+    mlb = args.league == "mlb"
+    if args.lists and not mlb:
+        print("error: --lists is MLB only", file=sys.stderr)
+        return 2
     runtime = build_runtime(with_budget=False)
     try:
-        collector = WikipediaCollector(runtime.cache)
+        collector = (
+            MlbWikipediaCollector(runtime.cache) if mlb else WikipediaCollector(runtime.cache)
+        )
+        source_key = "mlb_wikipedia" if mlb else "nfl_wikipedia"
         seasons: list[int] = args.season
         label = f"{seasons[0]}-{seasons[-1]}" if len(seasons) > 1 else str(seasons[0])
-        current = _current_season_ceiling()
+        current = mlb_season_ceiling() if mlb else _current_season_ceiling()
         before = dict(runtime.cache.counters)
         summaries: list[BatchSummary] = []
         error: BoothReviewError | None = None
@@ -903,13 +1028,23 @@ def _collect_wikipedia(args: argparse.Namespace) -> int:
                 # A re-read applies only to the current NFL season; completed
                 # seasons are served from cache.
                 refresh = args.refresh and season >= current
-                summaries.extend(collector.run([season], refresh=refresh, dry_run=args.dry_run))
+                if isinstance(collector, MlbWikipediaCollector):
+                    summaries.extend(
+                        collector.run(
+                            [season],
+                            lists=args.lists and season == seasons[-1],
+                            refresh=refresh,
+                            dry_run=args.dry_run,
+                        )
+                    )
+                else:
+                    summaries.extend(collector.run([season], refresh=refresh, dry_run=args.dry_run))
         except (RobotsDisallowedError, UnknownHostError) as exc:
             error = exc
         except BaseException:
             _commit_nfl(
                 runtime,
-                "nfl_wikipedia",
+                source_key,
                 label,
                 _partial_counts(before, runtime.cache.counters),
                 args,
@@ -923,7 +1058,7 @@ def _collect_wikipedia(args: argparse.Namespace) -> int:
                 for key in ("fetched", "cached", "not_modified", "failed")
             }
         )
-        _commit_nfl(runtime, "nfl_wikipedia", label, counts, args)
+        _commit_nfl(runtime, source_key, label, counts, args)
         if error is not None:
             print(f"error: {type(error).__name__}", file=sys.stderr)
             return 4
@@ -1303,17 +1438,51 @@ def _print_import_result(result: ImportResult) -> None:
         print(f"ignored {result.unrecognized} HTML file(s) that aren't 506 week pages")
 
 
+_IMPORT_506_PROFILES: dict[str, PageProfile | None] = {
+    "cfb": None,
+    "nfl": NFL_PROFILE,
+    "mlb": MLB_PROFILE,
+}
+_IMPORT_506_SOURCES = {"cfb": "sports506", "nfl": "nfl_sports506", "mlb": "mlb_sports506"}
+_IMPORT_506_DIRS = {
+    "cfb": "raw/sports506",
+    "nfl": "raw/nfl/sports506",
+    "mlb": "raw/mlb/sports506",
+}
+
+
+def _inspect_506(args: argparse.Namespace) -> int:
+    """Counts-only look at a folder of saved MLB pages; writes nothing, sends nothing."""
+    profile = MLB_PROFILE
+    folder = args.from_dir if args.from_dir is not None else profile.default_dir
+    rows, summary = inspect_folder(profile, folder)
+    for row in rows:
+        print(
+            f"file {row.file_index}: season {row.season}, label {row.label}, "
+            f"layout {row.layout}, listings {row.listings}, non_game {row.non_game}, "
+            f"crew_listed {row.crew_listed}, {row.verdict}"
+        )
+    print("summary: " + ", ".join(f"{k} {v}" for k, v in sorted(summary.items())))
+    return 0
+
+
 def _import_506(args: argparse.Namespace) -> int:
+    if args.inspect:
+        if args.league != "mlb":
+            print("error: --inspect is MLB only (use --league mlb)", file=sys.stderr)
+            return 2
+        return _inspect_506(args)
     runtime = build_runtime(with_budget=False)
     try:
-        nfl = args.league == "nfl"
+        league = args.league
+        profile = _IMPORT_506_PROFILES[league]
         importer = (
-            Sports506Importer(runtime.cache, runtime.paths, profile=NFL_PROFILE)
-            if nfl
+            Sports506Importer(runtime.cache, runtime.paths, profile=profile)
+            if profile is not None
             else Sports506Importer(runtime.cache, runtime.paths)
         )
-        source_key = "nfl_sports506" if nfl else "sports506"
-        vault_dir = "raw/nfl/sports506" if nfl else "raw/sports506"
+        source_key = _IMPORT_506_SOURCES[league]
+        vault_dir = _IMPORT_506_DIRS[league]
         incoming_dir = args.from_dir  # None: the importer's own default (D-19)
 
         any_problems = False
@@ -1324,13 +1493,13 @@ def _import_506(args: argparse.Namespace) -> int:
             with runtime.vault.lock():
                 result = importer.run(season, incoming_dir=incoming_dir, force=args.force)
                 _print_import_result(result)
-                if not nfl and result.root_pages > 0:
+                if league == "cfb" and result.root_pages > 0:
                     print(
                         f"warning: {result.root_pages} page(s) imported from "
                         "data/incoming/506/; move hand-saves to data/incoming/506/cfb/ "
                         "(the old folder is read through the 2026 season)"
                     )
-                if not nfl and result.root_shadowed:
+                if league == "cfb" and result.root_shadowed:
                     print(
                         "warning: data/incoming/506/ also holds a different page for week(s) "
                         f"{', '.join(result.root_shadowed)}; "
@@ -2160,6 +2329,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser = build_parser()
     args = parser.parse_args(argv)
+    _check_league_ceiling(parser, args)
 
     try:
         if args.command == "collect":
@@ -2175,6 +2345,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return _collect_wikipedia(args)
             if args.source in ("tvrg", "aa"):
                 return _collect_second(args, cast(PolicySource, args.source))
+            if args.source == "retrosheet":
+                return run_collect_retrosheet(args, _COLLECT_PATHS)
+            if args.source == "statsapi":
+                return run_collect_statsapi(args, _COLLECT_PATHS)
             raise AssertionError(f"unknown collect source: {args.source!r}")
         if args.command == "refresh":
             if args.source == "ratingsref":
@@ -2183,6 +2357,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "import":
             if args.source == "506":
                 return _import_506(args)
+            if args.source == "relay":
+                return run_import_relay(args, _COLLECT_PATHS)
             if args.source == "smw":
                 return _import_smw(args)
             if args.source == "espnpr":
