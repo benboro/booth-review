@@ -73,4 +73,20 @@ Credit line for every page that shows Retrosheet-derived data: "The information 
 
 ## Columns (recorded from the cached files)
 
-To be filled by plan 09-16 after the first live collection.
+Recorded 2026-10-14 from the twelve cached season bundles (2014-2025, one `<year>csvs.zip` per season). The index offers no separate gameinfo, allplayers or plays assets, so each bundle is the only unit collected. Header lines were read locally; the header is identical across all twelve seasons for every file.
+
+Members of each bundle (`<year>` prefix): `allplayers.csv`, `batting.csv`, `fielding.csv`, `gameinfo.csv`, `pitching.csv`, `plays.csv`, `teamstats.csv`.
+
+- `gameinfo.csv`: gid, visteam, hometeam, site, date, number, starttime, daynight, innings, tiebreaker, usedh, htbf, timeofgame, attendance, fieldcond, precip, sky, temp, winddir, windspeed, oscorer, forfeit, suspend, umphome, ump1b, ump2b, ump3b, umplf, umprf, wp, lp, save, gametype, vruns, hruns, wteam, lteam, line, batteries, lineups, box, pbp, season.
+- `allplayers.csv`: id, last, first, bat, throw, team, g, g_p, g_sp, g_rp, g_c, g_1b, g_2b, g_3b, g_ss, g_lf, g_cf, g_rf, g_of, g_dh, g_ph, g_pr, first_g, last_g.
+- `batting.csv`: gid, id, team, b_lp, b_seq, stattype, b_pa, b_ab, b_r, b_h, b_d, b_t, b_hr, b_rbi, b_sh, b_sf, b_hbp, b_w, b_iw, b_k, b_sb, b_cs, b_gdp, b_xi, b_roe, dh, ph, pr, date, number, site, vishome, opp, win, loss, tie, gametype, box, pbp.
+- `fielding.csv`: gid, id, team, d_seq, d_pos, stattype, d_ifouts, d_po, d_a, d_e, d_dp, d_tp, d_pb, d_wp, d_sb, d_cs, d_gs, date, number, site, vishome, opp, win, loss, tie, gametype, box, pbp.
+- `pitching.csv`: gid, id, team, p_seq, stattype, p_ipouts, p_noout, p_bfp, p_h, p_d, p_t, p_hr, p_r, p_er, p_w, p_iw, p_k, p_hbp, p_wp, p_bk, p_sh, p_sf, p_sb, p_cs, p_pb, wp, lp, save, p_gs, p_gf, p_cg, date, number, site, vishome, opp, win, loss, tie, gametype, box, pbp.
+- `teamstats.csv`: gid, team, inn1 to inn28, lob, mgr, stattype, the b_, p_ and d_ team totals, start_l1 to start_l9 (starting batting order), start_f1 to start_f10 (starting fielders), date, number, site, vishome, opp, win, loss, tie, gametype, box, pbp.
+- `plays.csv` (one row per play): gid, event, inning, top_bot, vis_home, site, batteam, pitteam, score_v, score_h, batter, pitcher, lp, bat_f, bathand, pithand, balls, strikes, count, pitches, nump, pa, ab, the outcome flags (single, double, triple, hr, sh, sf, hbp, walk, k, and so on), outs_pre, outs_post, br1_pre to br3_post (base runners before and after), run and rbi columns, l1 to l9 (batting order ids), lf1 to lf9 (batting order fielding positions), f2 to f9 (fielders by position), po0 to po9, a1 to a9, fseq, loc, hittype, pn, umphome to umprf, date, gametype, pbp.
+
+`gametype` values across 2014-2025 `gameinfo.csv`: `regular`, `allstar`, `wildcard`, `divisionseries`, `lcs`, `worldseries`, `playoff` (`playoff` is rare, two games across all twelve seasons; not a modeled round unless a later plan decides otherwise). Values are words, not numeric codes.
+
+Score columns are pre-play: in a count-only check of the first play of 3,001 sampled games (mostly 2014 plus the first game of later sampled seasons), none had a nonzero `score_v` or `score_h`. Running scores after a play are the next row's scores or `score + runs`.
+
+Lineup slot, fielding position and pinch flags exist: `batting.csv` has `b_lp` (lineup position) and `b_seq` (sequence within the slot), plus `ph` and `pr` flags and `dh`; `fielding.csv` has `d_pos` (position) and `d_seq`; `plays.csv` has `lp` and `bat_f` for the batter and `l1`-`l9`/`lf1`-`lf9` for the lineup state.
