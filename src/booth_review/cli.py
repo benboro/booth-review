@@ -67,6 +67,7 @@ from booth_review.mlb.collect_cli import (
     run_collect_statsapi,
     run_import_relay,
 )
+from booth_review.mlb.commands import add_mlb_parser, run_mlb_command
 from booth_review.mlb.constants import MLB_REFRESH_CAP_DEFAULT
 from booth_review.mlb.seasons import mlb_season_window
 from booth_review.nfl.commands import add_nfl_parser, run_nfl_command
@@ -478,6 +479,7 @@ def build_parser() -> argparse.ArgumentParser:
     build_cmd.add_argument("--accept-baseline", action="store_true")
 
     add_nfl_parser(sub)
+    add_mlb_parser(sub)
 
     site_cmd = sub.add_parser(
         "site", help="D-14: assemble dist/site/ from site/, site-data.json, and rendered pages"
@@ -2388,6 +2390,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _build(args)
         if args.command == "nfl":
             return run_nfl_command(args)
+        if args.command == "mlb":
+            return run_mlb_command(args)
         if args.command == "site":
             return _site(args)
         if args.command == "deploy":
