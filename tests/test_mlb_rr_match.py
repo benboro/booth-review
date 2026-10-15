@@ -228,15 +228,22 @@ def test_window_figure_is_labelled(tmp_path: Path) -> None:
     assert (m.cause, m.viewership_label, m.viewers) == ("window_level", "window-level", 5_000_000)
 
 
-def test_composite_and_unnormalized_labels(tmp_path: Path) -> None:
+def test_composite_and_stray_flag_labels(tmp_path: Path) -> None:
     comp = record(
         "mlb-aces-bravos-2026-05-02", "2026-05-02", claims=[{**CLAIM, "composite_of": ["x", "y"]}]
     )
     assert only(run(tmp_path, ONE, [comp])[0]).viewership_label == "composite"
+    # The real records have no normalized flag: such a key must not relabel a claim.
     raw = record(
         "mlb-aces-bravos-2026-05-02", "2026-05-02", claims=[{**CLAIM, "unnormalized": True}]
     )
-    assert only(run(tmp_path, ONE, [raw])[0]).viewership_label == "unnormalized"
+    assert only(run(tmp_path, ONE, [raw])[0]).viewership_label == "per-game"
+    win = record(
+        "mlb-aces-bravos-2026-05-02",
+        "2026-05-02",
+        claims=[{**CLAIM, "measurement_basis": "stated_window"}],
+    )
+    assert only(run(tmp_path, ONE, [win])[0]).viewership_label == "window-level"
 
 
 def test_game_without_record_is_none(tmp_path: Path) -> None:

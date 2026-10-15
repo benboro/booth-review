@@ -121,20 +121,24 @@ def _extra(claim: RRClaim) -> Mapping[str, object]:
 
 
 def _is_window(claim: RRClaim) -> bool:
-    return claim.cut == "window" or _extra(claim).get("figure_scope") == "split_window"
+    extra = _extra(claim)
+    return (
+        claim.cut == "window"
+        or extra.get("figure_scope") == "split_window"
+        or extra.get("measurement_basis") == "stated_window"
+    )
 
 
 def _viewership_label(claim: RRClaim | None) -> str:
     """Per-game, window-level, composite, unnormalized or none, from the claim's own fields."""
     if claim is None:
         return "none"
-    extra = _extra(claim)
     if claim.composite_of:
         return "composite"
     if _is_window(claim):
         return "window-level"
-    if extra.get("unnormalized") is True or extra.get("normalized") is False:
-        return "unnormalized"
+    # Real MLB records carry no normalized/unnormalized field (09-25 check), so no
+    # claim is labelled "unnormalized" until RR publishes one.
     return "per-game"
 
 
