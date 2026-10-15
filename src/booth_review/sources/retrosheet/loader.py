@@ -29,6 +29,7 @@ GAMEINFO_COLUMNS: tuple[str, ...] = (
     "starttime",
     "daynight",
     "innings",
+    "forfeit",
     "gametype",
     "vruns",
     "hruns",
@@ -38,6 +39,7 @@ GAMEINFO_COLUMNS: tuple[str, ...] = (
 PLAYS_COLUMNS: tuple[str, ...] = (
     "gid",
     "inning",
+    "top_bot",
     "vis_home",
     "batteam",
     "pitteam",
@@ -48,6 +50,10 @@ PLAYS_COLUMNS: tuple[str, ...] = (
     "lp",
     "bat_f",
     "pa",
+    "outs_pre",
+    "br1_pre",
+    "br2_pre",
+    "br3_pre",
 )
 
 ALLPLAYERS_COLUMNS: tuple[str, ...] = ("id", "last", "first")
@@ -73,6 +79,8 @@ _INT_COLUMNS = {
     "lp": pl.Int8,
     "bat_f": pl.Int8,
     "pa": pl.Int8,
+    "top_bot": pl.Int8,
+    "outs_pre": pl.Int8,
     "vruns": pl.Int32,
     "hruns": pl.Int32,
     "number": pl.Int8,
@@ -161,7 +169,9 @@ def cached_slim_plays(paths: DataPaths, season: int, zip_bytes: bytes) -> pl.Dat
         and sidecar.is_file()
         and sidecar.read_text(encoding="utf-8").strip() == digest
     ):
-        return pl.read_parquet(target)
+        cached = pl.read_parquet(target)
+        if set(PLAYS_COLUMNS) <= set(cached.columns):
+            return cached
     frame = read_plays(zip_bytes, season)
     write_parquet_atomic(frame, target)
     sidecar.write_text(digest + "\n", encoding="utf-8")
