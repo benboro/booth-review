@@ -45,20 +45,16 @@ def _seed_index(vault_paths) -> None:
 def _asset_responses() -> dict:
     return {
         **_ROBOTS,
-        _BASE + "gameinfo.zip": (200, _ZIP, {}),
-        _BASE + "allplayers.zip": (200, _ZIP, {}),
-        _BASE + "2099plays.zip": (200, _ZIP, {}),
-        _BASE + "2100plays.zip": (200, _ZIP, {}),
+        _BASE + "2099/2099csvs.zip": (200, _ZIP, {}),
+        _BASE + "2100/2100csvs.zip": (200, _ZIP, {}),
     }
 
 
 def test_discover_allow_list() -> None:
     assets = discover_assets(_INDEX)
     assert {(a.kind, a.season) for a in assets} == {
-        ("gameinfo", None),
-        ("plays", 2099),
-        ("plays", 2100),
-        ("allplayers", None),
+        ("season_bundle", 2099),
+        ("season_bundle", 2100),
     }
     for asset in assets:
         assert "gamelogs" not in asset.url
@@ -88,7 +84,7 @@ def test_guard_rejects(url: str) -> None:
 
 
 def test_url_guard_passes_downloads_zip() -> None:
-    check_retrosheet_url(_BASE + "2099plays.zip")
+    check_retrosheet_url(_BASE + "2099/2099csvs.zip")
 
 
 def test_asset_name_unsafe_rejected() -> None:
@@ -123,10 +119,10 @@ def test_asset_plan_and_fetch(vault_paths, mock_transport_factory) -> None:
     _seed_index(vault_paths)
     handle = mock_transport_factory(_asset_responses())
     summary = _collector(vault_paths, handle).run([2099, 2100])
-    assert summary.counts() == {"planned": 4, "fetched": 4, "cached": 0, "frozen": 0, "failed": 0}
-    assert (vault_paths.raw / retrosheet_asset_path("2099plays.zip")).read_bytes() == _ZIP
+    assert summary.counts() == {"planned": 2, "fetched": 2, "cached": 0, "frozen": 0, "failed": 0}
+    assert (vault_paths.raw / retrosheet_asset_path("2099csvs.zip")).read_bytes() == _ZIP
     again = _collector(vault_paths, mock_transport_factory({})).run([2099, 2100])
-    assert (again.fetched, again.cached) == (0, 4)
+    assert (again.fetched, again.cached) == (0, 2)
 
 
 def test_frozen_season_skipped(vault_paths, mock_transport_factory) -> None:
@@ -134,8 +130,8 @@ def test_frozen_season_skipped(vault_paths, mock_transport_factory) -> None:
     vault_paths.frozen.write_text(json.dumps({"mlb_retrosheet": [2099]}), encoding="utf-8")
     handle = mock_transport_factory(_asset_responses())
     summary = _collector(vault_paths, handle).run([2099, 2100])
-    assert (summary.planned, summary.frozen, summary.fetched) == (3, 1, 3)
-    assert not any("2099plays" in r.url for r in handle.requests)
+    assert (summary.planned, summary.frozen, summary.fetched) == (1, 1, 1)
+    assert not any("2099csvs" in r.url for r in handle.requests)
 
 
 def test_missing_asset_raises_before_requests(vault_paths, mock_transport_factory) -> None:
@@ -150,10 +146,10 @@ def test_missing_asset_raises_before_requests(vault_paths, mock_transport_factor
 def test_zip_magic_rejected(vault_paths, mock_transport_factory) -> None:
     _seed_index(vault_paths)
     responses = _asset_responses()
-    responses[_BASE + "2099plays.zip"] = (200, b"<html>not a zip</html>", {})
+    responses[_BASE + "2099/2099csvs.zip"] = (200, b"<html>not a zip</html>", {})
     summary = _collector(vault_paths, mock_transport_factory(responses)).run([2099])
-    assert (summary.fetched, summary.failed) == (2, 1)
-    assert not (vault_paths.raw / retrosheet_asset_path("2099plays.zip")).exists()
+    assert (summary.fetched, summary.failed) == (0, 1)
+    assert not (vault_paths.raw / retrosheet_asset_path("2099csvs.zip")).exists()
 
 
 def test_size_cap_rejected(vault_paths, mock_transport_factory, monkeypatch) -> None:
@@ -161,16 +157,16 @@ def test_size_cap_rejected(vault_paths, mock_transport_factory, monkeypatch) -> 
     monkeypatch.setattr("booth_review.sources.retrosheet.collector.RETROSHEET_MAX_ZIP_BYTES", 10)
     assert RETROSHEET_MAX_ZIP_BYTES > 10
     summary = _collector(vault_paths, mock_transport_factory(_asset_responses())).run([2099])
-    assert summary.failed == 3
+    assert summary.failed == 1
     assert summary.fetched == 0
 
 
 def test_4xx_counts_failed_and_continues(vault_paths, mock_transport_factory) -> None:
     _seed_index(vault_paths)
     responses = _asset_responses()
-    responses[_BASE + "gameinfo.zip"] = (404, b"", {})
+    responses[_BASE + "2099/2099csvs.zip"] = (404, b"", {})
     summary = _collector(vault_paths, mock_transport_factory(responses)).run([2099])
-    assert (summary.failed, summary.fetched) == (1, 2)
+    assert (summary.failed, summary.fetched) == (1, 0)
 
 
 def test_dry_run_sends_nothing(vault_paths, mock_transport_factory) -> None:
@@ -178,6 +174,6 @@ def test_dry_run_sends_nothing(vault_paths, mock_transport_factory) -> None:
     handle = mock_transport_factory({})
     summary = _collector(vault_paths, handle).run([2099, 2100], dry_run=True)
     assert summary.dry_run is True
-    assert summary.planned == 4
+    assert summary.planned == 2
     assert handle.requests == []
     assert set(summary.counts()) == {"planned", "fetched", "cached", "frozen", "failed"}

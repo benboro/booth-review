@@ -401,8 +401,8 @@ def test_collect_retrosheet_list_assets_counts_by_kind_without_requests(
     assert main(["collect", "retrosheet", "--list-assets"]) == 0
 
     out = capsys.readouterr().out
-    assert "assets 4" in out
-    assert "plays 2" in out
+    assert "assets 2" in out
+    assert "season_bundle 2" in out
     assert handle.requests == []
 
 
@@ -415,12 +415,12 @@ def test_collect_retrosheet_season_dry_run_and_missing_asset(
     _seed_retro_index(git_vault)
 
     assert main(["collect", "retrosheet", "--season", "2099-2100", "--dry-run"]) == 0
-    assert "planned 4" in capsys.readouterr().out
+    assert "planned 2" in capsys.readouterr().out
     assert handle.requests == []
 
     before = _commit_count(git_vault.vault)
     assert main(["collect", "retrosheet", "--season", "2098", "--dry-run"]) == 4
-    assert "plays 2098" in capsys.readouterr().err
+    assert "season_bundle 2098" in capsys.readouterr().err
     assert _commit_count(git_vault.vault) == before
 
 
@@ -432,9 +432,7 @@ def test_collect_retrosheet_season_fetches_assets_and_commits(
     handle = mock_transport_factory(
         {
             **_RETRO_ROBOTS,
-            _RETRO_BASE + "gameinfo.zip": (200, _ZIP, {}),
-            _RETRO_BASE + "allplayers.zip": (200, _ZIP, {}),
-            _RETRO_BASE + "2099plays.zip": (200, _ZIP, {}),
+            _RETRO_BASE + "2099/2099csvs.zip": (200, _ZIP, {}),
         }
     )
     patched_client(handle)

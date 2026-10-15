@@ -1,7 +1,8 @@
 """Discover Retrosheet download assets from the cached downloads index.
 
-RETROSHEET_ASSET_PATTERNS are best guesses from RESEARCH Pattern 4. Plan 09-16
-corrects them once the real index has been fetched and cached.
+The real index (plan 09-16 recon) links one per-season bundle,
+/downloads/<year>/<year>csvs.zip, each holding allplayers, gameinfo, teamstats,
+batting, pitching, fielding and plays CSVs. That is the only asset kind.
 """
 
 from __future__ import annotations
@@ -16,9 +17,7 @@ RETROSHEET_DOWNLOADS_BASE = f"https://{RETROSHEET_HOST}/downloads/"
 
 # Matched against the last path segment of each link on the index page.
 RETROSHEET_ASSET_PATTERNS: dict[str, re.Pattern[str]] = {
-    "gameinfo": re.compile(r"^gameinfo\.zip$", re.IGNORECASE),
-    "plays": re.compile(r"^(?P<season>\d{4})plays\.zip$", re.IGNORECASE),
-    "allplayers": re.compile(r"^allplayers\.zip$", re.IGNORECASE),
+    "season_bundle": re.compile(r"^(?P<season>\d{4})csvs\.zip$", re.IGNORECASE),
 }
 
 
@@ -68,6 +67,8 @@ def discover_assets(
             if match is None:
                 continue
             season = int(match.group("season")) if "season" in pattern.groupindex else None
+            if season is not None and parts.path.rsplit("/", 2)[-2] != str(season):
+                break
             found.setdefault(url, RetrosheetAsset(name=name, url=url, kind=kind, season=season))
             break
     return sorted(found.values(), key=lambda a: (a.kind, a.season or 0, a.name))

@@ -1,4 +1,4 @@
-"""RetrosheetCollector: downloads index recon, then allow-listed zip assets.
+"""RetrosheetCollector: downloads index recon, then per-season csvs bundles.
 
 Only /downloads/ on www.retrosheet.org is ever planned; gamelogs and boxesetc
 are refused before any request. Archives are validated (zip magic, size cap)
@@ -121,14 +121,14 @@ class RetrosheetCollector:
         """(requests to consider, frozen-season skips). Raises before any request
         if an expected asset is missing."""
         freeze = FreezeGuard.load(self._paths.frozen)
-        wanted = [self._find(assets, "gameinfo", None), self._find(assets, "allplayers", None)]
+        wanted: list[RetrosheetAsset] = []
         frozen = 0
         for season in sorted(set(seasons)):
-            plays = self._find(assets, "plays", season)
+            bundle = self._find(assets, "season_bundle", season)
             if freeze.is_frozen(SOURCE, season):
                 frozen += 1
                 continue
-            wanted.append(plays)
+            wanted.append(bundle)
         out: list[tuple[FetchRequest, RetrosheetAsset]] = []
         for asset in wanted:
             check_retrosheet_url(asset.url)
