@@ -16,9 +16,10 @@ import { createGamesTable } from './table.js';
 import { createDetailPanel, RETROSHEET_NOTICE, RETROSHEET_CONTACT } from './panel.js';
 import { createMlbTabs } from './tabs.js';
 import * as appleView from './views/apple.js';
+import * as postseasonView from './views/postseason.js';
 
 // View id -> module (mount, render, resize, testModel); the tab bar renders from this map.
-const VIEW_MODULES = { apple: appleView };
+const VIEW_MODULES = { apple: appleView, postseason: postseasonView };
 const VIEW_IDS = Object.keys(VIEW_MODULES);
 
 const HINTS = {

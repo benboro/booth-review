@@ -255,6 +255,8 @@ export function render(ctx) {
   const { model } = ctx;
   const state = ctx.getState();
   setPressed(refs.values, adjusted ? 'adjusted' : 'raw');
+  // With every booth pending there is no value to switch between.
+  refs.values.parentNode.hidden = allPending(model);
   refs.coverage.textContent = coverageText(model);
   renderTable(model, state);
 
@@ -263,6 +265,7 @@ export function render(ctx) {
   for (const l of lines) {
     const p = el('p', 'mlb-lead-line');
     p.dataset.measure = l.key;
+    if (l.text === PENDING_TEXT) p.dataset.pending = 'true';
     p.append(el('span', 'mlb-lead-measure', l.label), ' ', el('span', null, l.text));
     nodes.push(p);
   }

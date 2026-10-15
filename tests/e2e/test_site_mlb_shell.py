@@ -1,4 +1,3 @@
-# ruff: noqa: E501
 """09-17: the MLB mount module on the synthetic MLB fixture (flag-on build)."""
 
 from __future__ import annotations
@@ -120,3 +119,32 @@ def test_only_mlb_data_is_fetched(
     }
     assert "nfl-data.json" not in json_files
     assert "mlb-data.json" in json_files
+
+
+def test_tab_bar_lists_exactly_the_registered_views(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    open_mlb_app(mlb_guarded_page)
+    tabs = mlb_guarded_page.eval_on_selector_all(
+        "#mlb-chart-tabs [role=tab]", "els => els.map(e => e.textContent)"
+    )
+    assert tabs == ["Apple crews", "Postseason booths"]
+    assert mlb_guarded_page.locator("#mlb-chart-tabs").is_visible()
+    assert mlb_guarded_page.locator("#mlb-tab-apple[aria-selected='true']").count() == 1
+    mlb_guarded_page.click("#mlb-tab-postseason")
+    assert mlb_guarded_page.locator("#mlb-tab-postseason[aria-selected='true']").count() == 1
+    assert mlb_guarded_page.locator("#mlb-view-postseason").is_visible()
+    assert mlb_guarded_page.locator("#mlb-view-apple").is_hidden()
+    assert "view=postseason" in mlb_guarded_page.url
+
+
+def test_view_deep_links(mlb_guarded_page: Page, open_mlb_app: Callable[..., None]) -> None:
+    page = mlb_guarded_page
+    open_mlb_app(page, "?sport=mlb&view=postseason")
+    assert page.locator("#mlb-tab-postseason[aria-selected='true']").count() == 1
+    assert page.locator("#mlb-view-postseason table.mlb-grid").is_visible()
+    assert page.locator("#mlb-view-apple").is_hidden()
+    open_mlb_app(page, "?sport=mlb&view=apple")
+    assert page.locator("#mlb-tab-apple[aria-selected='true']").count() == 1
+    assert page.locator("#mlb-view-apple table.mlb-apple-table").is_visible()
+    assert page.locator("#mlb-view-postseason").is_hidden()
