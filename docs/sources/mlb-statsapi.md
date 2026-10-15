@@ -65,3 +65,12 @@ Unknown, for the same reason.
 analysis use only and are never displayed, under the field list's Display rule.
 MLB has not granted written permission. Display is an open question for the
 build.
+
+## Phase 9 route (D-04, D-22)
+
+The collector (`booth-review collect statsapi`) is built and disabled. It stays
+disabled until the user approves a single test request, then serves 2026 lineups
+only (capped by `--max-requests`, default 1), never in bulk. Any refusal (HTTP 406
+or another 4xx) ends the route: no retries, no user-agent or header changes, no
+other endpoints. The default is to wait for Retrosheet's late-2026 release.
+

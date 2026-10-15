@@ -57,3 +57,20 @@ Pre-game stakes (records and games behind) are derived from game info results.
 | Plays (complete play-by-play) | 1908 |
 | Measured for game quality | 2017 to 2025 |
 | 2026 | pending the late-2026 release |
+
+## Collector route (Phase 9)
+
+`booth-review collect retrosheet` first reads the downloads index (recon,
+`--index-only` / `--list-assets`), then fetches only an allow-list: the game info
+file, the per-season plays files and the `allplayers` file (added by D-17) under
+`/downloads/`. Guards refuse `/gamelogs/` and `/boxesetc/`. A completed season
+freezes once collected and checked; later drift in a frozen season is reported,
+not silently overwritten (`--refresh` is explicit). 2026 is collected only after
+the late-2026 release; an MLB season freezes on March 1 of the next year, so that
+release can still be collected for 2026.
+
+Credit line for every page that shows Retrosheet-derived data: "The information used here was obtained free of charge from and is copyrighted by Retrosheet. Interested parties may contact Retrosheet at www.retrosheet.org".
+
+## Columns (recorded from the cached files)
+
+To be filled by plan 09-16 after the first live collection.

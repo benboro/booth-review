@@ -42,3 +42,13 @@ Article text is licensed
 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), which is
 share-alike; the field list records how that affects published rows. The
 NFL site shows `original_slot`, `original_network` and the change article link in the detail panel, with a CC BY-SA 4.0 notice in the footer, the panel and `docs/nfl-data.md` (999.5 D-23).
+
+## MLB pages (Phase 9)
+
+`booth-review collect wikipedia --league mlb` reads plain `/wiki/<title>` pages
+only: the "<year> Major League Baseball postseason" articles from 2014 (13 season
+articles) and the named broadcaster list pages. It extracts rounds, series
+leagues, outlets and lead-booth markers; nothing else is kept. Text is CC BY-SA
+4.0, so published rows carry the article URL and the share-alike notice, and the
+cached HTML stays in the private vault.
+

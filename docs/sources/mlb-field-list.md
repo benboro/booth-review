@@ -2,7 +2,7 @@
 
 This is the planned data model for a Major League Baseball module. It comes from
 the Phase 7 go/no-go spike (October 2026), which checked each source by hand.
-Nothing MLB is collected yet; the build is a later phase. Each row names the
+Phase 9: built. The module collects only through `booth-review` commands. Each row names the
 field's source and how it is reached, the earliest season the spike found, its
 terms status, and how it changes during a season. No real rows, clubs, games or
 people appear here; examples use placeholders.
@@ -199,8 +199,10 @@ Warner Bros. Discovery). The blog states no terms of its own, but its lists rela
 press pages that are blocked (Apple's site terms bar copying and public display)
 or failed the policy screen (Fox Sports Press Pass, Warner Bros. Discovery); only
 the ESPN list relays an analysis-only host. The spike used these crews once,
-hand-read, for analysis only; they are not displayed. Any reuse needs its own
-robots and terms check, a HOST_POLICIES entry and a new owner decision. In the
+hand-read, for analysis only. In Phase 9 the user decided (D-03) that relayed
+crews may be displayed with the post and press-page credit; the read is the
+recorded exception in AGENTS.md, and the facts reach the vault through
+`booth-review import relay`. In the
 spike it agreed with 506 on every game where both name a crew that was checked.
 Cite the blog together with the press page it credits.
 
@@ -214,18 +216,17 @@ information used here was obtained free of charge from and is copyrighted by
 Retrosheet."), Ratings Reference with record links and original publishers, and
 Wikipedia under CC BY-SA.
 
-The analysis-only fields are `network`, `window`, `is_exclusive`, `production`,
-`play_by_play`, `analyst_1` and `analyst_2` (506 states no terms). The blocked
-group is the Stats API (see mlb-statsapi.md): analysis use only, never displayed,
-and MLB has not granted written permission. No field row depends on it yet.
+`network`, `window`, `play_by_play`, `analyst_1` and `analyst_2` may be
+displayed with credit to 506 Sports and a link, following the college-football
+display precedent; 506 states no terms and its owners cannot be reached, so the
+stated path is takedown if 506 objects. Crews relayed from the fan schedule blog
+(see Secondary crew source) may be displayed credited to the blog post and the
+press page it cites. `is_exclusive` and `production` stay analysis-only: only
+derived values from them reach the site. The Stats API (see mlb-statsapi.md) is
+analysis use only, never displayed, and MLB has not granted written permission.
+No field row depends on it yet.
 
-**Open question for the build:** the college-football site already displays 506
-crews (hover details), even though 506 states no terms and its publishing row in
-`data/README.md` still reads "ask the site owners". MLB crew views need crew
-names, and most of these crews come from 506. Before MLB views are built, decide
-whether MLB crews follow that college-football precedent or the strict rule above.
-Asking 506's owners would settle both. Apple TV+, the only network that passes top
-crew, takes 30 of its 50 crews from the relay under Secondary crew source, which
-the 506 precedent does not cover. Display of the relayed crews and of Stats API
-fields is an open question for the build; until it is settled they stay
-analysis-only.
+**Decision for the build (Phase 9, D-03):** MLB crews follow the college-football
+precedent, not the strict rule above. The earlier open question is settled: the
+relayed crews are displayable with the post and press-page credit, and Stats API
+fields stay analysis-only.
