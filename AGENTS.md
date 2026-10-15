@@ -29,11 +29,16 @@ model, and build phases; read the relevant section before starting a phase.
   fan-run site; keep its rate especially low.
 - Cache every page and API response under `data/vault/raw/`, a local clone of the
   private data repo. Never re-fetch a cached response from a completed season. The one
-  exception is Ratings Reference: `booth-review refresh ratingsref [--league nfl]`
-  (also run by the scheduled job) re-fetches a record in any season, frozen ones
-  included, when its sitemap `<lastmod>` advanced or the sitemap newly lists it. Each
-  league has its own cap per run: at most 100 such fetches for college football and 40
-  for the NFL, with current-season new records not counted and the rest carried over.
+  exception is Ratings Reference: `booth-review refresh ratingsref [--league nfl|mlb]`
+  (run by the scheduled job for college football and the NFL; MLB is hand-run only)
+  re-fetches a record in any season, frozen ones included, when its sitemap `<lastmod>`
+  advanced or the sitemap newly lists it. Each league has its own cap per run: at most
+  100 such fetches for college football, 40 for the NFL and 40 for MLB, with
+  current-season new records not counted and the rest carried over. For MLB, a record
+  qualifies only if its game date falls inside the windows `booth-review mlb
+  rr-backfill` stored (the 2014-2026 postseason and the 2026 regular season); nothing
+  outside them is ever fetched, and without stored windows the MLB commands refuse to
+  run.
   A re-fetch overwrites the cached file; the vault's git history keeps earlier
   versions. When re-checking current-season data, send conditional requests (ETag /
   Last-Modified) where the source supports them.
@@ -44,10 +49,14 @@ model, and build phases; read the relevant section before starting a phase.
   correctly-identified requests, confirmed 2026-09-25). Never work around this
   (no User-Agent changes, retries, or alternate request shapes). Instead, save
   its week pages by hand in a browser (any filename) and bring them into the vault
-  with `booth-review import 506 --season <year> [--league nfl] [--from <folder>]`
-  (default folder `data/incoming/506/cfb/` for college football and
-  `data/incoming/506/nfl/` for the NFL; through the 2026 season the college-football
-  import also reads pages left directly in `data/incoming/506/` and warns about them).
+  with `booth-review import 506 --season <year> [--league nfl|mlb] [--from <folder>]`
+  (default folder `data/incoming/506/cfb/` for college football,
+  `data/incoming/506/nfl/` for the NFL and `data/incoming/506/mlb/` for MLB; through
+  the 2026 season the college-football import also reads pages left directly in
+  `data/incoming/506/` and warns about them). For MLB, save the 2026 week pages and
+  the 2025-2026 postseason round pages (WC, DS, CS, WS); 506 has no MLB round pages
+  before 2025. `--inspect` reports each saved MLB file's layout and counts without
+  importing.
   The importer uses each saved file's modified time as its save time, so save pages
   from the browser straight into the league's folder (or copy with `cp -p`), since a
   plain copy resets that time. It identifies each page by its canonical link and
@@ -57,7 +66,9 @@ model, and build phases; read the relevant section before starting a phase.
   pages that are missing or were saved before their games finished (NFL weeks are
   checked against the nflverse schedule, never against 506); the user hand-saves those
   pages and imports them with
-  `booth-review import 506 --season 2026 [--league nfl] [--force]`.
+  `booth-review import 506 --season 2026 [--league nfl] [--force]`. The job does
+  nothing for MLB: after each 2026 MLB round ends, the user hand-saves its 506 page
+  and imports it with `booth-review import 506 --season 2026 --league mlb [--force]`.
 - Once the scheduled job is live, run `git -C data/vault pull --rebase` before a local
   collection command. Every `booth-review` command that writes to the vault holds a
   vault lock and commits only the paths it touched, so a local run and the job never
@@ -66,16 +77,48 @@ model, and build phases; read the relevant section before starting a phase.
   commit messages, or logs; tests use synthetic 506 and CFBD fixtures.
 - Ratings Reference: read the per-telecast JSON records (`/api/telecast/<id>.json`)
   instead of scraping HTML. Keep each row's record URL and the figure's original
-  `source_url`; Ratings Reference's reuse terms ask for both.
+  `source_url`; Ratings Reference's reuse terms ask for both. For MLB,
+  `booth-review mlb rr-backfill` is a one-time backfill of only the 2014-2026
+  postseason and the 2026 regular season; MLB records use calendar-year seasons, and
+  an MLB season freezes on March 1 of the next year, so the late-2026 Retrosheet
+  release can still be collected for 2026.
 - nflverse: fetch schedules from `raw.githubusercontent.com` and play-by-play through
   the GitHub REST API's release-asset endpoint on `api.github.com`
   (`booth-review collect nflverse`), never through github.com release-download links:
   github.com's robots.txt disallows `/*/download`. The client honors robots.txt
   wildcards (`*` and `$`).
-- Wikipedia: read plain season articles (`/wiki/<title>`) with
-  `booth-review collect wikipedia --league nfl`, never the `/w/` or `/api/` paths its
-  robots.txt disallows. Its text is CC BY-SA 4.0; store only extracted facts with the
-  article URL.
+- Retrosheet: collect only with `booth-review collect retrosheet`, and only the game
+  info file, the per-season plays files and the `allplayers` file under `/downloads/`;
+  never request `/gamelogs/` or `/boxesetc/`. Completed seasons freeze once collected
+  and checked; 2026 is collected only after Retrosheet's late-2026 release. Every page
+  that shows Retrosheet-derived data carries: "The information used here was obtained
+  free of charge from and is copyrighted by Retrosheet. Interested parties may contact
+  Retrosheet at www.retrosheet.org".
+- MLB relay crews (the user's exception to the collect-only rule, for the 2026 season
+  only): a Claude Code session may read the fan schedule blog
+  `tamirmoore.blogspot.com` with WebFetch to fill 2026 MLB crews that 506 does not
+  list. Before the first request, the session identifies itself as the Phase 7 spike
+  did: WebFetch sends its own identification and cannot send the project user agent,
+  so the session writes the project name and repo URL, as the user agent string
+  `booth-review/<version> (+https://github.com/benboro/booth-review)`, at the top of
+  its session log and states there that the requests themselves did not carry it.
+  Check its robots.txt first and stop if it disallows the posts; send one request at a
+  time, at least 5 s apart, within the request count the user approves for that
+  session. Transcribe only extracted facts (game, crew, post link, and the press page
+  the post credits) into `data/incoming/mlb-relay/` and bring them into the vault with
+  `booth-review import relay`; never save page copies, and never put the file in the
+  public repo. The blog is never a `booth-review collect` source and never runs on a
+  schedule. Credit every relayed crew with its blog post and the press page it cites.
+- MLB Stats API (`statsapi.mlb.com`): never request it except through
+  `booth-review collect statsapi`, which stays disabled until the user approves a
+  single test request; it may serve 2026 lineups only, never in bulk and never for
+  anything else. Any refusal (HTTP 406 or another 4xx) ends the route: no retries,
+  user-agent or header changes, or other endpoints.
+- Wikipedia: read plain articles (`/wiki/<title>`) with
+  `booth-review collect wikipedia --league nfl|mlb`, never the `/w/` or `/api/` paths
+  its robots.txt disallows. For MLB that means the '<year> Major League Baseball
+  postseason' articles from 2014 and the named broadcaster list pages only. Its text
+  is CC BY-SA 4.0; store only extracted facts with the article URL.
 - Sports Media Watch: never collect with scripts; its robots.txt blocks them. Save
   its season ratings pages by hand in a browser ("Webpage, Complete", after scrolling
   so every chart loads) into `data/incoming/smw/<season>/`. Transcribe the chart
@@ -128,6 +171,11 @@ model, and build phases; read the relevant section before starting a phase.
   Announcing and ESPN Press Room) are credited with the publisher's name linked to the
   page the figure came from, and the detail panel says the figure is not listed on
   Ratings Reference.
+- MLB views (behind `MLB_SITE_ENABLED`, off in production until the user signs off)
+  credit 506 crews and networks to 506 Sports, each relayed crew to its blog post and
+  the press page it cites, Wikipedia-derived crews and outlets under CC BY-SA 4.0 with
+  the article link, and Retrosheet-derived lineups and excitement with Retrosheet's
+  credit line. Take a source's data down if it objects; never contact 506's owners.
 
 # Tooling
 
