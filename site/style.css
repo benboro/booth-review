@@ -3503,3 +3503,39 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* MLB Apple crews: pending quality cells and the lead-minus-others lines. The booth table
+   itself reuses the NFL booth-table rules above. */
+.mlb-apple-table td.mlb-pending {
+  color: var(--muted);
+  font: var(--font-label);
+  white-space: nowrap;
+}
+
+.mlb-apple-table .rated-n {
+  display: block;
+  color: var(--muted);
+  font: var(--font-label);
+}
+
+.mlb-lead-lines {
+  margin: var(--space-md) 0 var(--space-xs) 0;
+}
+
+.mlb-lead-lines p {
+  margin: 0 0 var(--space-xs) 0;
+}
+
+.mlb-lead-title {
+  font-weight: var(--weight-semibold);
+}
+
+.mlb-lead-measure {
+  display: inline-block;
+  min-width: 6.5em;
+  font-weight: var(--weight-semibold);
+}
+
+.mlb-rr-note {
+  margin: 0 0 var(--space-xs) 0;
+}

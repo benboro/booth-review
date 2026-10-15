@@ -15,10 +15,10 @@ import { encodeMlbState, decodeMlbState } from './url-state.js';
 import { createGamesTable } from './table.js';
 import { createDetailPanel, RETROSHEET_NOTICE, RETROSHEET_CONTACT } from './panel.js';
 import { createMlbTabs } from './tabs.js';
+import * as appleView from './views/apple.js';
 
-// View id -> module (mount, render, resize, testModel). Plan 09-19 registers the
-// Apple crews and Postseason booths views here; the tab bar renders from this map.
-const VIEW_MODULES = {};
+// View id -> module (mount, render, resize, testModel); the tab bar renders from this map.
+const VIEW_MODULES = { apple: appleView };
 const VIEW_IDS = Object.keys(VIEW_MODULES);
 
 const HINTS = {
