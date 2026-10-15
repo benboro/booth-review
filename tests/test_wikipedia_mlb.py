@@ -149,3 +149,15 @@ def test_radio_tables_skipped_and_spaced_headers_read() -> None:
     )
     result = parse_broadcaster_list(html, URL, "lcs_al")
     assert [c.network_raw for c in result.crews] == ["TV"]
+
+
+def test_wrapped_headings_and_nested_sections_feed_the_map() -> None:
+    html = (
+        "<div class='mw-heading mw-heading2'><h2>Broadcasting</h2></div>"
+        "<section><div class='mw-heading'><h3>Television coverage</h3></div>"
+        "<p>Fox aired the World Series.</p></section>"
+        "<section><div class='mw-heading'><h3>Radio</h3></div>"
+        "<p>ESPN aired the World Series.</p></section>"
+    )
+    proposals = extract_postseason_map(html, 2099, URL, ["Fox", "ESPN"])
+    assert [(p.round, p.network_raw) for p in proposals] == [("WS", "Fox")]

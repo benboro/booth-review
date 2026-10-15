@@ -207,14 +207,33 @@ def _sentences(text: str) -> list[str]:
     return [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
 
 
+_SKIP_SECTION_WORDS = ("radio", "streaming", "most watched", "notes", "references", "external")
+
+
+def _is_heading(node: Tag) -> bool:
+    if node.name in ("h2", "h3"):
+        return True
+    return node.name == "div" and "mw-heading" in (node.get("class") or [])
+
+
 def _broadcast_sections(soup: BeautifulSoup) -> list[str]:
+    """Prose under a Broadcasting/Television heading, headings wrapped or bare.
+
+    Live pages wrap each heading in `div.mw-heading` and nest subsections in
+    `<section>` siblings; radio, streaming and viewership sections are skipped.
+    """
     texts: list[str] = []
     for head in soup.find_all(["h2", "h3"]):
         if _norm(head.get_text(" ")).strip() not in _SECTION_WORDS:
             continue
-        for sib in head.find_next_siblings():
-            if sib.name in ("h2", "h3"):
+        holder = head.parent if head.parent is not None and _is_heading(head.parent) else head
+        for sib in holder.find_next_siblings():
+            if _is_heading(sib):
                 break
+            inner = sib.find(["h2", "h3", "h4"])
+            title = _norm(inner.get_text(" ")) if inner is not None else ""
+            if any(word in title for word in _SKIP_SECTION_WORDS):
+                continue
             texts.append(sib.get_text(" "))
     return texts
 
