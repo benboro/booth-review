@@ -99,7 +99,8 @@ function viewershipSection(row) {
   if (v == null) {
     nodes.push(el('p', null, `Viewers: not available (${CAUSE_COPY[row.cause] ?? CAUSE_COPY.none})`));
   } else {
-    nodes.push(el('p', null, `${row.viewersLabel || 'Viewers'}: ${v}`));
+    const windowNote = row.scope === 'window' ? ' (whole broadcast window, not this game alone)' : '';
+    nodes.push(el('p', null, `${row.viewersLabel || 'Viewers'}: ${v}${windowNote}`));
     if (row.era != null) nodes.push(el('p', null, `Measured under ${row.era}.`));
   }
   const links = [{ href: row.rrUrl, text: 'View record on Ratings Reference ↗' }];

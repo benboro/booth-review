@@ -144,6 +144,37 @@ def test_rated_game_shows_record_and_publisher_links(mlb: Page) -> None:
     assert mlb.locator('#mlb-detail-panel a[href="https://example.org/506/mlb-week"]').count() == 1
 
 
+def test_window_level_figure_is_labelled_not_a_game_audience(mlb: Page) -> None:
+    _open(mlb, 10)
+    text = _panel(mlb)
+    assert "Viewers: 5.5M (whole broadcast window, not this game alone)" in text
+    # A per-game figure carries no such note.
+    _open(mlb, 7)
+    assert "whole broadcast window" not in _panel(mlb)
+    mlb.evaluate(f"{HOOKS}.closePanel()")
+    mlb.evaluate(f"{HOOKS}.setState({{ view: 'postseason', cell: '2019-lcs-NL' }})")
+    tag = mlb.locator("#mlb-matched-games tbody .mlb-source-tag[data-scope='window']")
+    assert tag.count() == 1
+    assert "Avg" not in mlb.inner_text("#mlb-view-postseason button[data-cell='2019-lcs-NL']")
+
+
+def test_window_figures_sort_after_game_figures(mlb: Page) -> None:
+    mlb.evaluate(f"{HOOKS}.setState({{ view: 'postseason', selection: null }})")
+    mlb.evaluate(f"{HOOKS}.setState({{ cell: null }})")
+    # 2014 World Series (12.0M game figure) and 2019 LCS (5.5M window) need one table.
+    mlb.evaluate(f"{HOOKS}.setState({{ selection: {{ games: [7, 10], label: 'test pair' }} }})")
+    mlb.click("#mlb-matched-games th button[data-sort='viewers']")
+    rows = mlb.eval_on_selector_all(
+        "#mlb-matched-games tbody .nfl-matchup-btn", "els => els.map(e => e.dataset.game)"
+    )
+    assert rows == ["7", "10"]
+    mlb.click("#mlb-matched-games th button[data-sort='viewers']")
+    rows = mlb.eval_on_selector_all(
+        "#mlb-matched-games tbody .nfl-matchup-btn", "els => els.map(e => e.dataset.game)"
+    )
+    assert rows == ["7", "10"]  # the window figure stays last in either direction
+
+
 def test_per_network_game_shows_cause(mlb: Page) -> None:
     _open(mlb, 8)
     text = _panel(mlb)

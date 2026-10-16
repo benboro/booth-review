@@ -125,11 +125,11 @@ def _outlet_wiki(year: int) -> dict[str, Any]:
     }
 
 
-def _rated(viewers: int, n: int) -> dict[str, Any]:
+def _rated(viewers: int, n: int, scope: str = "game") -> dict[str, Any]:
     return {
         "viewers": viewers,
         "viewership_label": "Viewers",
-        "scope": "game",
+        "scope": scope,
         "era": 0,
         "rr_url": f"https://example.org/rr/telecast-{n}",
         "source_url": f"https://example.org/source/figure-{n}",
@@ -259,7 +259,7 @@ def _games() -> list[dict[str, Any]]:
             wp_excitement=1.1,
             lineup_status="missing",
             **_wiki(6, 7, 2019),
-            **_rated(5_500_000, 3),
+            **_rated(5_500_000, 3, scope="window"),
         ),
         # 11: 2025 wild card, 506 crew, conflicting figures
         _game(
@@ -341,7 +341,8 @@ def _postseason(games: list[dict[str, Any]]) -> dict[str, list[Any]]:
     for season, rnd, league, networks, idx, booths in cells:
         rows = [games[i] for i in idx]
         listed = sum(1 for r in rows if r["crew"])
-        viewers = [r["viewers"] for r in rows if r["viewers"] is not None]
+        # A window-level audience is not one game's figure, so it stays out of the cell mean.
+        viewers = [r["viewers"] for r in rows if r["viewers"] is not None and r["scope"] == "game"]
         wps = [r["wp_excitement"] for r in rows if r["wp_excitement"] is not None]
         out["season"].append(season)
         out["round"].append(rnd)

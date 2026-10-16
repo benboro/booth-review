@@ -2,7 +2,7 @@
 
 Fixture seasons: 2014 (50% crews listed), 2019 (100%), 2025 (100%), 2026 (50%, excitement pending).
 Cells: 2014 wild card AL (no crew), 2014 World Series (Wikipedia crew, 12.0M), 2019 division
-AL (two games), 2019 LCS NL (5.5M), 2025 wild card NL, 2025 World Series, 2026 LCS AL,
+AL (two games), 2019 LCS NL (5.5M, window-level), 2025 wild card NL, 2025 World Series, 2026 LCS AL,
 2026 division NL.
 """
 

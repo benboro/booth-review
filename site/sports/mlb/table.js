@@ -20,11 +20,14 @@ function el(tag, className, text) {
   return node;
 }
 
-/** Row order: active key and direction, unrated always last, ties by date then index. */
+/** Row order: active key and direction, unrated (then window-level) always last, ties by date then index. */
 function compareRows(sort, a, b) {
   let cmp = 0;
   if (sort.key === 'viewers') {
-    if ((a.viewers == null) !== (b.viewers == null)) return a.viewers == null ? 1 : -1;
+    // Unrated rows last, then window-level figures (a whole broadcast window's audience),
+    // so they are never ranked against true per-game figures.
+    const tier = (r) => (r.viewers == null ? 2 : r.scope === 'window' ? 1 : 0);
+    if (tier(a) !== tier(b)) return tier(a) - tier(b);
     cmp = (a.viewers ?? 0) - (b.viewers ?? 0);
   } else {
     cmp = a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
@@ -111,6 +114,12 @@ function buildRow(row, onOpen) {
   if (vText) {
     vTd.className = 'num';
     vTd.textContent = vText;
+    if (row.scope === 'window') {
+      const tag = el('span', 'nfl-muted mlb-source-tag', 'window');
+      tag.dataset.scope = 'window';
+      tag.title = 'Audience of the whole broadcast window, not this game alone';
+      vTd.append(document.createTextNode(' '), tag);
+    }
   } else {
     vTd.className = 'no-rating';
     vTd.textContent = CAUSE_COPY[row.cause] ?? CAUSE_COPY.none;
