@@ -249,12 +249,31 @@ def _retrosheet_postseason(
     return games
 
 
-def _games_from_telecasts(telecasts: pl.DataFrame) -> dict[str, dict[str, Any]]:
+def _via_retrosheet(row: Mapping[str, Any], retro_seasons: frozenset[int]) -> bool:
+    """True when a telecast row is matched to a Retrosheet game (exact key, then +/-1 day).
+
+    Every pre-2026 row is. A current-season round row is too once Retrosheet holds that
+    season's postseason, so the two sources never list one game twice. Without those
+    Retrosheet rows, current-season rows build their own games from the 506 table.
+    """
+    season = int(row["season"])
+    if season != _CURRENT_SEASON_FROM_506:
+        return True
+    return season in retro_seasons and row["round"] is not None
+
+
+def _games_from_telecasts(
+    telecasts: pl.DataFrame, retro_seasons: frozenset[int] = frozenset()
+) -> dict[str, dict[str, Any]]:
     games: dict[str, dict[str, Any]] = {}
     if telecasts.is_empty():
         return games
-    current = telecasts.filter(pl.col("season") == _CURRENT_SEASON_FROM_506)
-    for row in current.iter_rows(named=True):
+    current = [
+        r
+        for r in telecasts.iter_rows(named=True)
+        if r["season"] == _CURRENT_SEASON_FROM_506 and not _via_retrosheet(r, retro_seasons)
+    ]
+    for row in current:
         existing = games.get(row["game_key"])
         if existing is None:
             games[row["game_key"]] = {
@@ -310,9 +329,14 @@ def _attach_round_telecasts(
     telecasts: pl.DataFrame,
     games: dict[str, dict[str, Any]],
     reviews: list[Review],
+    retro_seasons: frozenset[int] = frozenset(),
 ) -> list[dict[str, Any]]:
-    """Attach pre-2026 round-page telecasts to Retrosheet games: exact key, then +/-1 day."""
-    rows = [r for r in telecasts.iter_rows(named=True) if r["season"] != _CURRENT_SEASON_FROM_506]
+    """Attach round-page telecasts to Retrosheet games: exact key, then +/-1 day.
+
+    That is every pre-2026 row and, once Retrosheet holds the 2026 postseason, the 2026
+    round rows too (see `_via_retrosheet`).
+    """
+    rows = [r for r in telecasts.iter_rows(named=True) if _via_retrosheet(r, retro_seasons)]
     by_pair: dict[tuple[object, object, object], dict[date, str]] = {}
     for key, game in games.items():
         if game["retrosheet_gid"] is None:
@@ -356,6 +380,11 @@ def _attach_round_telecasts(
         row["game_number"] = game["game_number"]
         row["round"] = game["round"]
         row["series_game"] = game["series_game"]
+        # 506 knows about neutral-site games and venue notes that Retrosheet rows lack.
+        game["neutral"] = bool(game["neutral"] or row["neutral"])
+        game["venue_note"] = game["venue_note"] or row["venue_note"]
+        row["neutral"] = game["neutral"]
+        row["venue_note"] = game["venue_note"]
     return attached
 
 
@@ -365,18 +394,21 @@ def build_mlb_games(
     """Game table, final telecast table and review rows."""
     reviews: list[Review] = []
     games = _retrosheet_postseason(inputs, ref, reviews)
-    for key, game in _games_from_telecasts(telecasts).items():
+    retro_seasons = frozenset(int(str(g["season"])) for g in games.values())
+    for key, game in _games_from_telecasts(telecasts, retro_seasons).items():
         games.setdefault(key, game)
     _number_series(games, ref, reviews)
 
     current_rows = [
-        r for r in telecasts.iter_rows(named=True) if r["season"] == _CURRENT_SEASON_FROM_506
+        r
+        for r in telecasts.iter_rows(named=True)
+        if r["season"] == _CURRENT_SEASON_FROM_506 and not _via_retrosheet(r, retro_seasons)
     ]
     for row in current_rows:
         game = games[row["game_key"]]
         row["round"] = game["round"] if game["round"] != "regular" else row["round"]
         row["series_game"] = game["series_game"]
-    attached = _attach_round_telecasts(telecasts, games, reviews)
+    attached = _attach_round_telecasts(telecasts, games, reviews, retro_seasons)
 
     map_rows, map_reviews = build_postseason_map(inputs, ref)
     reviews.extend(map_reviews)

@@ -320,3 +320,58 @@ def test_map_review_file_is_written(built: Built) -> None:
     assert lines[0] == "season,round,league,network_id,source,source_url"
     assert any(line.startswith("2024,lcs,NL,netb,override,") for line in lines)
     assert any(line.startswith("2016,division,AL,neta,wikipedia,") for line in lines)
+
+
+def test_2026_round_listing_attaches_to_a_retrosheet_game_once_it_exists(tmp_path: Path) -> None:
+    paths = DataPaths(vault=tmp_path / "vault")
+    ref = build_reference(tmp_path / "ref")
+    zip_path = paths.raw / retrosheet_asset_path("2026csvs.zip")
+    zip_path.parent.mkdir(parents=True)
+    zip_path.write_bytes(
+        bundle_zip(
+            [
+                _row("Z1", "XAA", "XBB", "20261014", "lcs", 2026),
+                _row("Z2", "XAA", "XBB", "20261015", "lcs", 2026),
+            ],
+            2026,
+        )
+    )
+    page = paths.raw / mlb_506_path(2026, "CS")
+    page.parent.mkdir(parents=True)
+    page.write_bytes(
+        page_html(
+            [
+                (
+                    "Tuesday, October 13",
+                    "Game 1: Alpha City @ Bravo Town",
+                    "8:00 PM ET",
+                    "FOX",
+                    "A B, C D",
+                ),
+                (
+                    "Thursday, October 15",
+                    "Game 2: Alpha City @ Bravo Town",
+                    "8:00 PM ET",
+                    "FOX",
+                    "A B, C D",
+                ),
+            ]
+        )
+    )
+    inputs = load_mlb_inputs(paths, [2026])
+    telecasts, _ = listings_to_telecasts(
+        [item for p in inputs.pages.values() for item in p.listings], ref
+    )
+    games, final, reviews = build_mlb_games(inputs, ref, telecasts)
+
+    # One game per Retrosheet game: the 506 listings join it instead of adding a copy.
+    assert sorted(games["game_key"].to_list()) == [
+        "2026-10-14|alpha|bravo|0",
+        "2026-10-15|alpha|bravo|0",
+    ]
+    assert games["retrosheet_gid"].null_count() == 0
+    listed = final.filter(pl.col("source") == "506").sort("game_date")
+    assert listed["game_key"].to_list() == games.sort("game_date")["game_key"].to_list()
+    assert listed["date_shift"].to_list() == [True, False]
+    assert final.height == 2
+    assert _kinds(reviews)["date_shift"] == 1
