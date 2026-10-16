@@ -1,6 +1,10 @@
 /**
  * MLB URL state (D-01). DOM-free. Encodes `sport=mlb` first plus only
  * non-default params; decoding allowlists every value and never throws.
+ *
+ * `booth` is the booth's play-by-play person id and `game` a date~away~home~number id,
+ * both stable across rebuilds. An old positional link (`booth=1`, `game=3`) matches no
+ * id and falls back to the default view.
  */
 import { canonicalMlbState, defaultMlbState, MLB_VIEWS } from './state.js';
 
@@ -9,9 +13,15 @@ export function encodeMlbState(state, model) {
   const d = defaultMlbState();
   const parts = ['sport=mlb'];
   if (s.view !== d.view) parts.push('view=' + s.view);
-  if (s.booth != null) parts.push('booth=' + s.booth);
+  const boothId = s.booth == null ? null : model.boothIds[Number(s.booth)];
+  if (boothId != null && model.boothIndexById.get(boothId) === Number(s.booth)) {
+    parts.push('booth=' + encodeURIComponent(boothId));
+  }
   if (s.cell != null) parts.push('cell=' + encodeURIComponent(s.cell));
-  if (s.game != null) parts.push('game=' + s.game);
+  const gameId = s.game == null ? null : model.gameIds[s.game];
+  if (gameId != null && model.gameIndexById.get(gameId) === s.game) {
+    parts.push('game=' + encodeURIComponent(gameId));
+  }
   return '?' + parts.join('&');
 }
 
@@ -40,9 +50,17 @@ export function decodeMlbState(search, model) {
     seen.add(key);
     switch (key) {
       case 'view': if (MLB_VIEWS.includes(raw)) state.view = raw; break;
-      case 'booth': state.booth = raw; break;
+      case 'booth': {
+        const at = model.boothIndexById.get(safeDecode(raw));
+        state.booth = at == null ? null : String(at);
+        break;
+      }
       case 'cell': state.cell = safeDecode(raw); break;
-      case 'game': state.game = raw === '' ? null : Number(raw); break;
+      case 'game': {
+        const at = model.gameIndexById.get(safeDecode(raw));
+        state.game = at == null ? null : at;
+        break;
+      }
       default: break;
     }
   }

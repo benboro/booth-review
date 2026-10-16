@@ -166,7 +166,7 @@ def test_row_click_lists_booth_games_and_toggles(mlb: Page) -> None:
     mlb.click("#mlb-view-apple .booth-row-btn >> nth=1")
     assert mlb.evaluate(f"{HOOKS}.getTableIndexes()") == [3, 2]
     assert mlb.locator("#mlb-view-apple .booth-row-btn[aria-pressed='true']").count() == 1
-    assert "booth=1" in mlb.url
+    assert "booth=p2" in mlb.url
     mlb.click("#mlb-view-apple .booth-row-btn >> nth=1")
     assert mlb.evaluate(f"{HOOKS}.getTableIndexes()") == []
     assert "booth=" not in mlb.url

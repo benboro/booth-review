@@ -2,7 +2,8 @@
  * MLB module state (D-01, D-03, D-22). DOM-free.
  *
  * `booth` is an Apple booth index (string), `cell` a postseason cell key
- * (season-round-league), `game` a game index whose panel is open. A selection
+ * (season-round-league), `game` a game index whose panel is open. Indexes are
+ * in-memory only; the URL carries stable ids (see url-state.js). A selection
  * made by a view ({games, label}) is UI-only and never reaches the URL.
  */
 import { boothLabelOf, cellLabel } from './data.js';

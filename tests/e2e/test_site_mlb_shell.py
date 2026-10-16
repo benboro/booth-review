@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 
 import pytest
-from playwright.sync_api import Page
+from playwright.sync_api import Page, Route
 
 pytestmark = pytest.mark.e2e
 
@@ -86,12 +87,43 @@ def test_url_state_round_trip(mlb_guarded_page: Page, open_mlb_app: Callable[...
     open_mlb_app(page)
     page.evaluate("window.__mlbTestHooks.setState({ booth: '1', game: 3 })")
     search = page.evaluate("location.search")
-    assert search == "?sport=mlb&booth=1&game=3"
+    # Stable ids, not positions: the booth's play-by-play person and the game's date and clubs.
+    assert search == "?sport=mlb&booth=p2&game=2026-04-24~owls~gulls~0"
     open_mlb_app(page, search)
     state = page.evaluate("window.__mlbTestHooks.getState()")
     assert state["booth"] == "1"
     assert state["game"] == 3
     assert page.evaluate("document.getElementById('mlb-detail-panel').open") is True
+
+
+def test_booth_link_follows_the_booth_when_the_data_is_reordered(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    def rotate(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        for name, col in data["apple_booths"].items():
+            data["apple_booths"][name] = [*col[1:], col[0]]
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    page = mlb_guarded_page
+    page.route("**/mlb-data.json", rotate)
+    open_mlb_app(page, "?sport=mlb&booth=p2")
+    # Booth p2 moved from position 1 to 0, and the link still opens it.
+    assert page.evaluate("window.__mlbTestHooks.getState().booth") == "0"
+    assert page.evaluate("window.__mlbTestHooks.getTableIndexes()") == [3, 2]
+    assert page.evaluate("location.search") == "?sport=mlb&booth=p2"
+
+
+def test_old_positional_links_fall_back_to_the_default_view(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    page = mlb_guarded_page
+    open_mlb_app(page, "?sport=mlb&booth=1&game=3")
+    state = page.evaluate("window.__mlbTestHooks.getState()")
+    assert state["booth"] is None and state["game"] is None
+    assert page.evaluate("document.getElementById('mlb-detail-panel').open") is False
+    assert page.evaluate("location.search") == "?sport=mlb"
 
 
 def test_cell_key_and_junk_params(

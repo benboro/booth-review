@@ -97,10 +97,37 @@ export function prepareMlb(raw) {
     for (const g of r.game_list) if (!c.games.includes(g)) c.games.push(g);
   }
 
+  // Stable ids for deep links: a booth is its play-by-play person's id, a game is its
+  // date, clubs and game number. Positions shift when the data is rebuilt; these do not.
+  // A duplicate id (never expected) is kept out of the maps so it cannot misdirect a link.
+  const boothIndexById = new Map();
+  const duplicateBooths = new Set();
+  const boothIds = appleBooths.map((b, k) => {
+    const id = raw.lookups.people[b.pbp].id;
+    if (boothIndexById.has(id)) duplicateBooths.add(id);
+    else boothIndexById.set(id, k);
+    return id;
+  });
+  for (const id of duplicateBooths) boothIndexById.delete(id);
+  const gameIndexById = new Map();
+  const duplicateGames = new Set();
+  const gameIds = new Array(n);
+  for (let i = 0; i < n; i += 1) {
+    const id = `${cols.date[i]}~${lookups.clubs[cols.away[i]].id}~${lookups.clubs[cols.home[i]].id}~${cols.game_number[i]}`;
+    gameIds[i] = id;
+    if (gameIndexById.has(id)) duplicateGames.add(id);
+    else gameIndexById.set(id, i);
+  }
+  for (const id of duplicateGames) gameIndexById.delete(id);
+
   return {
     n,
     cols,
     lookups,
+    boothIds,
+    boothIndexById,
+    gameIds,
+    gameIndexById,
     clubs: lookups.clubs,
     networks: lookups.networks,
     people: lookups.people,
