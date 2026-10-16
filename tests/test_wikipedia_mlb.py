@@ -12,7 +12,6 @@ from booth_review.sources.wikipedia.mlb_collector import SOURCE, MlbWikipediaCol
 from booth_review.sources.wikipedia.mlb_parser import (
     extract_postseason_map,
     parse_broadcaster_list,
-    parse_national_list,
 )
 from booth_review.sources.wikipedia.tables import expand_wikitable
 from booth_review.transport.cache import RawCache
@@ -150,16 +149,6 @@ def test_postseason_map_proposals_hash_evidence() -> None:
     assert ds.evidence_hash == hashlib.sha256(sentence.encode()).hexdigest()
     assert all(p.source_url == URL and p.season == 2016 for p in props)
     assert not any(hasattr(p, "sentence") for p in props)
-
-
-def test_national_list_order() -> None:
-    crews = parse_national_list(_read("national_list_synthetic.html"), URL)
-    assert [(c.network_raw, c.rank) for c in crews] == [("NetA", 1), ("NetA", 2), ("NetB", 1)]
-    assert crews[0].pbp_raw == "Pat Alpha"
-    assert crews[0].analysts_raw == ("Sam Beta",)
-    assert crews[1].analysts_raw == ("Ray Epsilon", "Jo Zeta")
-    assert crews[2].pbp_raw == "Lee Gamma"
-    assert crews[2].analysts_raw == ("Max Eta",)
 
 
 def test_radio_tables_skipped_and_spaced_headers_read() -> None:

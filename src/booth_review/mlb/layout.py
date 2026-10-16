@@ -48,12 +48,6 @@ MLB_WIKIPEDIA_LIST_PAGES: tuple[tuple[str, str, str], ...] = (
         "lcs_nl",
     ),
     ("world_series", "List_of_World_Series_broadcasters", "world_series"),
-    # Title assumed (RESEARCH A10); plan 09-16 confirms it from the cached page.
-    (
-        "national_current",
-        "List_of_current_Major_League_Baseball_broadcasters",
-        "national_current",
-    ),
 )
 
 

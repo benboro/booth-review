@@ -36,7 +36,7 @@ def test_wikipedia_urls_use_plain_article_paths() -> None:
     for slug, title, _kind in layout.MLB_WIKIPEDIA_LIST_PAGES:
         urls.append(layout.mlb_wikipedia_list_url(title))
         assert layout.mlb_wikipedia_list_path(slug) == f"mlb/wikipedia/lists/{slug}.html"
-    assert len(layout.MLB_WIKIPEDIA_LIST_PAGES) == 5
+    assert len(layout.MLB_WIKIPEDIA_LIST_PAGES) == 4
     for url in urls:
         assert url.startswith("https://en.wikipedia.org/wiki/")
         assert "/w/" not in url

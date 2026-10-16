@@ -73,15 +73,6 @@ class MapProposal:
 
 
 @dataclass(frozen=True)
-class NationalCrew:
-    network_raw: str
-    rank: int
-    pbp_raw: str
-    analysts_raw: tuple[str, ...]
-    source_url: str
-
-
-@dataclass(frozen=True)
 class UnparsedTable:
     table_index: int
     headers: tuple[str, ...]
@@ -375,49 +366,4 @@ def extract_postseason_map(
                             continue
                         seen.add(key)
                         out.append(MapProposal(season, rnd, lg, net, url, digest))
-    return out
-
-
-_CREW = re.compile(r"^\s*crew\s+(\d+)\s*[:\-]?\s*(.*)$", re.I)
-
-
-def _crew_row(network: str, rank: int, names: list[str], url: str) -> NationalCrew | None:
-    if not names:
-        return None
-    return NationalCrew(network, rank, names[0], tuple(names[1:]), url)
-
-
-def parse_national_list(html: str, url: str) -> list[NationalCrew]:
-    soup = BeautifulSoup(html, "html.parser")
-    out: list[NationalCrew] = []
-    for head in soup.find_all(["h2", "h3"]):
-        network = re.sub(r"\[.*?\]", "", head.get_text(" ")).strip()
-        for sib in head.find_next_siblings():
-            if sib.name in ("h2", "h3"):
-                break
-            if sib.name == "table" and isinstance(sib, Tag):
-                grid = expand_wikitable(sib)
-                if len(grid) < 2:
-                    continue
-                roles = [_HEADER_ALIASES.get(_norm(h), _norm(h)) for h in grid[0]]
-                if "pbp" not in roles or "analysts" not in roles:
-                    continue
-                for row in grid[1:]:
-                    m = _CREW.match(row[0])
-                    if m is None:
-                        continue
-                    names = _split_names(row[roles.index("pbp")]) + _split_names(
-                        row[roles.index("analysts")]
-                    )
-                    crew = _crew_row(network, int(m.group(1)), names, url)
-                    if crew:
-                        out.append(crew)
-            else:
-                for li in sib.find_all("li") if sib.name in ("ul", "ol") else [sib]:
-                    m = _CREW.match(li.get_text(" "))
-                    if m is None:
-                        continue
-                    crew = _crew_row(network, int(m.group(1)), _split_names(m.group(2)), url)
-                    if crew:
-                        out.append(crew)
     return out

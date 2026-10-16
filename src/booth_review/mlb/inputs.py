@@ -30,7 +30,7 @@ from booth_review.mlb.layout import (
 from booth_review.sources.retrosheet.loader import read_allplayers, read_gameinfo
 from booth_review.sources.sports506.mlb_parser import MlbPage, parse_mlb_page
 
-_WIKIPEDIA_LIST_SLUGS = ("wild_card", "lcs_al", "lcs_nl", "world_series", "national_current")
+_WIKIPEDIA_LIST_SLUGS = ("wild_card", "lcs_al", "lcs_nl", "world_series")
 
 
 @dataclass(frozen=True)
