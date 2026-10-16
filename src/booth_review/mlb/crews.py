@@ -393,7 +393,7 @@ def assign_crews(
             if (key, network) in override_map:
                 candidates.append(override_map[(key, network)])
             names = [str(n) for n in (row["crew_names"] or [])]
-            if names:
+            if names and _real(names[0]):
                 candidates.append(_Candidate("506", names[0], tuple(names[1:])))
             if (key, network) in relay_map:
                 candidates.append(relay_map[(key, network)])
@@ -416,7 +416,9 @@ def assign_crews(
             resolved = [_resolve(c, ref.people, unresolved) for c in candidates]
             disagreements.extend(_disagreements(key, network, resolved))
             if resolved:
-                win = resolved[0]
+                # A source that names no complete crew must not block a lower one that does.
+                complete = [r for r in resolved if r.pbp_id is not None and r.analyst_ids]
+                win = complete[0] if complete else resolved[0]
                 pbp_id = win.pbp_id
                 analyst_ids = list(win.analyst_ids)
                 source = win.candidate.source

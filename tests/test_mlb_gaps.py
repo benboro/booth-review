@@ -16,6 +16,7 @@ from booth_review.mlb.gaps import (
     rr_windows,
     write_relay_gaps,
 )
+from booth_review.mlb.listings import telecast_frame
 from booth_review.mlb.pipeline import assemble_mlb_tables
 
 
@@ -59,6 +60,19 @@ def test_relay_gaps_skips_a_game_the_relay_filled(git_vault: DataPaths, tmp_path
     asm, _ = assemble_mlb_tables(paths, ref, [2026])
 
     assert relay_gaps(asm.telecasts, asm.crews) == []
+
+
+def test_relay_gaps_counts_a_506_cell_with_no_usable_crew(tmp_path: Path) -> None:
+    from test_mlb_crews import run, tele
+
+    rows = [
+        tele(["TBA"], network="a1", day=date(2026, 5, 2)),
+        tele(["Pat Quill"], network="a2", day=date(2026, 5, 2)),
+        tele(["Pat Quill", "Sam Rook"], network="a3", day=date(2026, 5, 2)),
+    ]
+    frame, _, _, _ = run(tmp_path, rows)
+    gaps = relay_gaps(telecast_frame(rows), frame)
+    assert sorted(str(r["network_id"]) for r in gaps) == ["a1", "a2"]
 
 
 def test_relay_gaps_empty_frames() -> None:

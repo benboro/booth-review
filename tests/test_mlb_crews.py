@@ -371,3 +371,27 @@ def test_per_game_fill_in_pbp_reaches_the_game_crew(tmp_path: Path) -> None:
     ]
     frame, _, _, _ = run(tmp_path, rows, lists=crews)
     assert frame["pbp_person_id"].to_list() == ["kim", "jo", "kim"]
+
+
+def test_506_placeholder_cell_does_not_block_the_relay(tmp_path: Path) -> None:
+    frame, _, _, _ = run(tmp_path, [tele(["TBA"])], relay=[RELAY_ROW])
+    row = frame.row(0, named=True)
+    assert row["crew_source"] == "relay"
+    assert row["pbp_person_id"] == "pat"
+    assert row["crew_named"] is True
+
+
+def test_506_pbp_only_crew_does_not_block_a_complete_relay_crew(tmp_path: Path) -> None:
+    frame, dis, _, _ = run(tmp_path, [tele(["Lee Marsh"])], relay=[RELAY_ROW])
+    row = frame.row(0, named=True)
+    assert row["crew_source"] == "relay"
+    assert row["crew_named"] is True
+    assert dis == [CrewDisagreement(KEY, "apple", "506", "relay", "pbp", "lee", "pat")]
+
+
+def test_506_pbp_only_crew_still_wins_when_nothing_complete_exists(tmp_path: Path) -> None:
+    frame, _, _, _ = run(tmp_path, [tele(["Lee Marsh"])])
+    row = frame.row(0, named=True)
+    assert row["crew_source"] == "506"
+    assert row["pbp_person_id"] == "lee"
+    assert row["crew_named"] is False

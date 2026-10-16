@@ -42,11 +42,14 @@ _NOT_POSTSEASON: Final = ("regular", "allstar")
 
 
 def relay_gaps(telecasts: pl.DataFrame, crews: pl.DataFrame) -> list[dict[str, object]]:
-    """2026 own-production telecasts with no 506 crew and no named crew after assignment.
+    """2026 own-production telecasts with no named crew after assignment.
 
-    `telecasts` is the telecast frame before crew assignment (it carries the 506 crew
-    names); `crews` is the same frame after `assign_crews`. A game the relay (or an
-    override or Wikipedia) has already filled is not a gap.
+    A 506 cell that names no usable crew (blank, "TBA", a play-by-play name alone) is a
+    gap like any other; only `crew_named` decides.
+
+    `telecasts` is the telecast frame before crew assignment; `crews` is the same frame
+    after `assign_crews`. A game the relay (or an override or Wikipedia) has already
+    filled is not a gap.
     """
     if telecasts.is_empty() or crews.is_empty():
         return []
@@ -63,7 +66,7 @@ def relay_gaps(telecasts: pl.DataFrame, crews: pl.DataFrame) -> list[dict[str, o
     current = telecasts.filter((pl.col("season") == RELAY_SEASON) & (pl.col("production") == "own"))
     for row in current.iter_rows(named=True):
         slot = (str(row["game_key"]), str(row["network_id"]))
-        if slot in seen or row["crew_names"] or not in_scope.get(slot, False):
+        if slot in seen or not in_scope.get(slot, False):
             continue
         if named.get(slot, False):
             continue
