@@ -178,7 +178,9 @@ def add_mlb_collect_parsers(
     stats.add_argument("--no-commit", action="store_true")
 
     relay = import_sub.add_parser("relay", help="import the staged MLB relay crew CSV")
-    relay.add_argument("--season", type=int, default=RELAY_SEASON_DEFAULT)
+    relay.add_argument(
+        "--season", type=int, choices=[RELAY_SEASON_DEFAULT], default=RELAY_SEASON_DEFAULT
+    )
     relay.add_argument("--from", dest="from_dir", type=Path, default=None)
     relay.add_argument("--force", action="store_true")
     relay.add_argument("--no-commit", action="store_true")

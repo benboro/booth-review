@@ -206,6 +206,9 @@ class RelayImporter:
         content = files[0].read_bytes()
         try:
             rows = validate_relay_csv(content)
+            for row in rows:
+                if row.season != season:
+                    raise RelayValidationError(f"line {row.line}: column season: not {season}")
         except RelayValidationError:
             result.problems = 1
             raise

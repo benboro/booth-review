@@ -157,3 +157,12 @@ def test_frozen_season_refuses(git_vault, mock_transport_factory, tmp_path):
     git_vault.frozen.write_text(json.dumps({"mlb_relay": [2026]}), encoding="utf-8")
     with pytest.raises(FrozenSeasonError):
         _importer(git_vault, mock_transport_factory).run(2026, src=_stage(tmp_path))
+
+
+def test_rows_from_another_season_are_rejected(git_vault, mock_transport_factory, tmp_path):
+    text = _valid().replace("2026-", "2025-").replace("2026,", "2025,")
+    src = _stage(tmp_path, text)
+    with pytest.raises(RelayValidationError) as info:
+        _importer(git_vault, mock_transport_factory).run(2026, src=src)
+    assert "not 2026" in str(info.value)
+    assert not (git_vault.raw / MLB_RELAY_PATH).exists()
