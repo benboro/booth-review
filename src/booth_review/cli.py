@@ -1421,7 +1421,12 @@ def _collect_cfbd(args: argparse.Namespace) -> int:
 def _print_import_result(result: ImportResult) -> None:
     total = len(result.expected)
     present = total - len(result.missing)
-    source_note = "(weeks from nav)" if result.expected_source == "nav" else "(default 18 weeks)"
+    if result.expected_source == "nav":
+        source_note = "(weeks from nav)"
+    elif result.league == "mlb":
+        source_note = f"(default {total} rounds)"
+    else:
+        source_note = "(default 18 weeks)"
     print(
         f"season {result.season}: present {present}/{total}, "
         f"missing {len(result.missing)}/{total} {source_note}"
@@ -1436,6 +1441,19 @@ def _print_import_result(result: ImportResult) -> None:
     )
     for item in result.skipped_invalid:
         print(f"skipped wk-{item.label}: {item.reason}")
+    if result.replaced:
+        print(f"replaced {len(result.replaced)}: {', '.join(result.replaced)}")
+    if result.changed_without_force:
+        print(
+            f"changed_without_force {len(result.changed_without_force)}: "
+            f"{', '.join(result.changed_without_force)} "
+            "(the saved page differs from the vault copy; use --force to replace it)"
+        )
+    if result.unsupported_pages:
+        pages = ", ".join(result.unsupported_pages)
+        print(f"unsupported pages (not a week or a known round): {pages}")
+    if result.out_of_scope:
+        print(f"out_of_scope {result.out_of_scope} (page layout this profile does not read)")
     if result.unrecognized:
         print(f"ignored {result.unrecognized} HTML file(s) that aren't 506 week pages")
 

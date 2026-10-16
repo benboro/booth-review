@@ -17,6 +17,7 @@ import pytest
 from booth_review.sources.sports506.importer import (
     CFB_PROFILE,
     MLB_PROFILE,
+    ImportResult,
     Sports506Importer,
     identify_page,
     inspect_folder,
@@ -238,3 +239,27 @@ def test_inspect_reports_counts_and_writes_nothing(
 def test_inspect_other_profiles_not_implemented(tmp_path) -> None:
     with pytest.raises(NotImplementedError):
         inspect_folder(CFB_PROFILE, tmp_path)
+
+
+def test_changed_without_force_is_counted_and_printed(capsys) -> None:
+    from booth_review.cli import _print_import_result
+
+    result = ImportResult(season=2026, league="mlb")
+    result.expected = ["1", "WC"]
+    result.changed_without_force = ["3"]
+    result.unsupported_pages = ["TB"]
+    result.out_of_scope = 1
+    result.replaced = ["4"]
+
+    assert result.has_problems
+    assert result.counts()["skipped"] == 1
+    _print_import_result(result)
+    out = capsys.readouterr().out
+    assert "changed_without_force 1: 3" in out
+    assert "--force" in out
+    assert "unsupported pages" in out
+    assert "TB" in out
+    assert "out_of_scope 1" in out
+    assert "replaced 1: 4" in out
+    assert "(default 2 rounds)" in out
+    assert "18 weeks" not in out

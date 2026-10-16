@@ -224,6 +224,7 @@ class ImportResult:
     """The outcome of importing one season's worth of incoming 506 files."""
 
     season: int
+    league: str = "cfb"
     imported: list[str] = field(default_factory=list)
     skipped_existing: list[str] = field(default_factory=list)
     skipped_invalid: list[SkippedFile] = field(default_factory=list)
@@ -257,7 +258,11 @@ class ImportResult:
         """Counts for vault.batch_message, count-only (never real page text)."""
         counts = {
             "imported": len(self.imported),
-            "skipped": len(self.skipped_existing) + len(self.skipped_invalid),
+            "skipped": (
+                len(self.skipped_existing)
+                + len(self.skipped_invalid)
+                + len(self.changed_without_force)
+            ),
         }
         if self.unsupported_pages:
             counts["unsupported"] = len(self.unsupported_pages)
@@ -486,7 +491,7 @@ class Sports506Importer:
         if freeze.is_frozen(profile.source, season):
             raise FrozenSeasonError(f"cannot import frozen season: {profile.source} {season}")
 
-        result = ImportResult(season=season)
+        result = ImportResult(season=season, league=self._profile.league)
         labels = profile.labels(season)
         requests_by_label = {label: profile.request(season, label) for label in labels}
         saved_mtimes: dict[str, float] = {}
@@ -563,7 +568,7 @@ class Sports506Importer:
         within one folder reject a week as a conflict.
         """
         root_mtimes: dict[str, float] = {}
-        root_result = ImportResult(season=season)
+        root_result = ImportResult(season=season, league=self._profile.league)
         root_pages = self._scan(LEGACY_INCOMING_DIR, season, root_result, root_mtimes)
         result.unrecognized += root_result.unrecognized
         merged = dict(pages)
