@@ -78,6 +78,11 @@ function allPending(model) {
   return model.appleBooths.length > 0 && model.appleBooths.every((b) => b.quality_status === 'pending');
 }
 
+/** The builder withholds every lead-minus-others figure while any booth is pending. */
+function anyPending(model) {
+  return model.freshness.quality_pending || model.appleBooths.some((b) => b.quality_status === 'pending');
+}
+
 function qualityCell(model, r, m) {
   if (r.quality_status === 'pending') {
     const td = el('td', 'num mlb-pending', PENDING_TEXT);
@@ -152,7 +157,7 @@ function leadLines(model) {
     const diff = s[m.lead];
     const se = s[`${m.lead}_se`];
     let text;
-    if (allPending(model)) {
+    if (anyPending(model)) {
       text = PENDING_TEXT;
     } else if (diff == null || se == null || Math.abs(diff) <= 1.96 * se) {
       text = TOO_FEW_TEXT;

@@ -170,3 +170,26 @@ def test_row_click_lists_booth_games_and_toggles(mlb: Page) -> None:
     mlb.click("#mlb-view-apple .booth-row-btn >> nth=1")
     assert mlb.evaluate(f"{HOOKS}.getTableIndexes()") == []
     assert "booth=" not in mlb.url
+
+
+def test_some_booths_pending_withholds_the_lead_lines_as_pending(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        b = data["apple_booths"]
+        # Booth 0 is ready, the others stay pending: the builder nulls the differences.
+        b["quality_status"][0] = "ready"
+        b["raw_stakes"][0] = 1.1
+        b["adj_stakes"][0] = 0.2
+        b["adj_stakes_se"][0] = 0.05
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    mlb_guarded_page.route("**/mlb-data.json", handler)
+    open_mlb_app(mlb_guarded_page)
+    lead = mlb_guarded_page.eval_on_selector_all(
+        "#mlb-view-apple .mlb-lead-line", "els => els.map(e => e.textContent)"
+    )
+    assert lead and all("pending Retrosheet 2026" in t for t in lead)
+    assert not any("too few games" in t for t in lead)
