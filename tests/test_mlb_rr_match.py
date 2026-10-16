@@ -147,6 +147,20 @@ def test_one_day_shift_is_flagged_and_two_days_is_unmatched(tmp_path: Path) -> N
     assert reviews2 == [RRReview(2026, "mlb-aces-bravos-2026-05-05", "unmatched")]
 
 
+def test_exact_record_beats_a_shifted_record_of_an_unlisted_neighbour(tmp_path: Path) -> None:
+    exact = record(
+        "mlb-aces-bravos-2026-05-02", "2026-05-02", claims=[CLAIM], networks=["Apple TV+"]
+    )
+    other = {**CLAIM, "id": "c2", "value": 3_000_000}
+    foreign = record("mlb-aces-bravos-2026-05-03", "2026-05-03", claims=[other], networks=["Fox"])
+    for order in ([exact, foreign], [foreign, exact]):
+        m, reviews = run(tmp_path, ONE, order)
+        got = only(m)
+        assert (got.tier, got.cause, got.viewers) == ("date", None, 5_000_000)
+        assert got.record_url == exact.record_url
+        assert reviews == [RRReview(2026, "mlb-aces-bravos-2026-05-03", "shift_superseded")]
+
+
 def test_unresolved_team_is_reviewed(tmp_path: Path) -> None:
     _, reviews = run(
         tmp_path, ONE, [record("mlb-zzz-yyy-2026-05-02", "2026-05-02", claims=[CLAIM])]

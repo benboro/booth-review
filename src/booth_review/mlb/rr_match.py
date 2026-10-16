@@ -305,6 +305,7 @@ def match_mlb_rr(
     reviews: list[RRReview] = []
     attached: dict[str, list[tuple[RRRecord, Literal["date", "date-shift"]]]] = {}
     ambiguous: dict[str, str] = {}
+    shifted: list[tuple[_Game, RRRecord]] = []
     for record in records:
         tid = record.telecast.id
         event_date = record.telecast.event_date
@@ -330,7 +331,21 @@ def match_mlb_rr(
                     ambiguous[g.key] = reason
             continue
         game = candidates[0]
+        if tier == "date-shift":
+            # Decided after every exact match is known (an exact record always wins).
+            shifted.append((game, record))
+            continue
         attached.setdefault(game.key, []).append((record, tier))
+
+    for game, record in shifted:
+        if game.key in attached or game.key in ambiguous:
+            # The game has its own exact-date record (or is an ambiguous doubleheader), so
+            # this record belongs to a neighbouring game of the series that is not listed.
+            reviews.append(
+                RRReview(record.telecast.event_date.year, record.telecast.id, "shift_superseded")
+            )
+            continue
+        attached.setdefault(game.key, []).append((record, "date-shift"))
 
     matches: list[RRGameMatch] = []
     for game in ordered:
