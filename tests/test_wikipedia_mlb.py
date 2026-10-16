@@ -161,3 +161,17 @@ def test_wrapped_headings_and_nested_sections_feed_the_map() -> None:
     )
     proposals = extract_postseason_map(html, 2099, URL, ["Fox", "ESPN"])
     assert [(p.round, p.network_raw) for p in proposals] == [("WS", "Fox")]
+
+
+def test_stacked_play_by_play_keeps_the_series_voice() -> None:
+    html = (
+        "<table><tr><th>Year</th><th>Network</th><th>Play-by-play</th>"
+        "<th>Color commentator(s)</th></tr>"
+        "<tr><td>2019</td><td>NetA</td>"
+        "<td>Pat Alpha (Games 1-3)<br />Quinn Delta (Game 4)</td>"
+        "<td>Sam Beta</td></tr></table>"
+    )
+    crew = parse_broadcaster_list(html, URL, "lcs_al").crews[0]
+    assert crew.pbp_raw == "Pat Alpha"
+    assert crew.network_raw == "NetA"
+    assert crew.analysts_raw == ("Sam Beta",)

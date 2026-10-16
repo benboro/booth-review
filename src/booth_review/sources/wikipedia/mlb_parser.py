@@ -39,6 +39,7 @@ _REQUIRED = {"year", "network", "pbp", "analysts"}
 _YEAR = re.compile(r"\b(19|20)\d{2}\b")
 _NOTE = re.compile(r"\(([^)]*)\)")
 _SPLIT = re.compile(r"\s*(?:,|&|;|\band\b)\s*")
+_BR = "\u00a6"  # marks a <br> inside a cell; names never contain it
 _ROUND_FOR_KIND = {
     "wild_card": "WC",
     "lcs_al": "CS",
@@ -109,6 +110,19 @@ def _is_television_table(table: Tag) -> bool:
     return not any(word in text for word in _NATIONAL_TV_EXCLUDED)
 
 
+def _flat(text: str) -> str:
+    return re.sub(r"\s+", " ", text.replace(_BR, " ")).strip()
+
+
+def _first_stacked(text: str) -> str:
+    """The first of several play-by-play names stacked in one cell with ``<br>``.
+
+    A cell like "A (Games 1-3)<br>B (Game 4)" names the series voice first and a
+    one-game fill-in after; the series crew keeps the first name.
+    """
+    return _NOTE.sub("", text.split(_BR)[0]).strip()
+
+
 def _split_names(text: str) -> list[str]:
     cleaned = _NOTE.sub("", text)
     return [n.strip() for n in _SPLIT.split(cleaned) if n.strip()]
@@ -161,7 +175,7 @@ def parse_broadcaster_list(html: str, url: str, round_kind: str) -> ListParse:
             continue
         if not _is_television_table(table):
             continue
-        grid = expand_wikitable(table)
+        grid = expand_wikitable(table, _BR)
         if not grid or not grid[0]:
             continue
         found = _header_rows(grid)
@@ -174,8 +188,8 @@ def parse_broadcaster_list(html: str, url: str, round_kind: str) -> ListParse:
             ym = _YEAR.search(row[col["year"]])
             if ym is None:
                 continue
-            analysts, per_game, note = _raw_analyst_cells(row[col["analysts"]])
-            series = row[col["series"]] if "series" in col else ""
+            analysts, per_game, note = _raw_analyst_cells(row[col["analysts"]].replace(_BR, ";"))
+            series = _flat(row[col["series"]]) if "series" in col else ""
             league = _LEAGUE_FOR_KIND.get(round_kind) or (_league(series) if series else None)
             label = series or note if per_game else (series or None)
             result.crews.append(
@@ -183,8 +197,8 @@ def parse_broadcaster_list(html: str, url: str, round_kind: str) -> ListParse:
                     season=int(ym.group(0)),
                     round=_ROUND_FOR_KIND.get(round_kind, round_kind),
                     league=league,
-                    network_raw=row[col["network"]],
-                    pbp_raw=_NOTE.sub("", row[col["pbp"]]).strip(),
+                    network_raw=_flat(row[col["network"]]),
+                    pbp_raw=_first_stacked(row[col["pbp"]]),
                     analysts_raw=analysts,
                     series_label=label or None,
                     scope="per_game" if per_game else "per_series",

@@ -9,7 +9,10 @@ from bs4 import Tag
 _FOOTNOTE = re.compile(r"\[\s*[\w ]{1,12}\s*\]")
 
 
-def _cell_text(cell: Tag) -> str:
+def _cell_text(cell: Tag, br_sep: str | None = None) -> str:
+    if br_sep is not None:
+        for br in cell.find_all("br"):
+            br.replace_with(f" {br_sep} ")
     for nested in cell.find_all("table"):
         nested.decompose()
     for sup in cell.find_all("sup", class_="reference"):
@@ -32,11 +35,12 @@ def _drain_pending(row: list[str], pending: dict[int, tuple[str, int]]) -> None:
             pending[col] = (text, left - 1)
 
 
-def expand_wikitable(table: Tag) -> list[list[str]]:
+def expand_wikitable(table: Tag, br_sep: str | None = None) -> list[list[str]]:
     """Expand a table into rows of equal length, repeating spanned cells.
 
     Nested tables are ignored; spans are capped at the table's row and
     (cells-per-row) column counts so hostile markup cannot blow up memory.
+    ``br_sep`` turns each ``<br>`` into that separator so callers can split stacked values.
     """
     rows = [tr for tr in table.find_all("tr") if tr.find_parent("table") is table]
     cell_rows = [list(tr.find_all(["td", "th"], recursive=False)) for tr in rows]
@@ -48,7 +52,7 @@ def expand_wikitable(table: Tag) -> list[list[str]]:
         row: list[str] = []
         for cell in cells:
             _drain_pending(row, pending)
-            text = _cell_text(cell)
+            text = _cell_text(cell, br_sep)
             colspan = _span(cell, "colspan", max_cols)
             rowspan = _span(cell, "rowspan", max_rows)
             for _ in range(colspan):
