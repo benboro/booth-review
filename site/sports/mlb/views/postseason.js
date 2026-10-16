@@ -85,10 +85,10 @@ function excitementLine(model, b) {
   if (b.exciteN > 0) {
     return `Excitement ${(b.exciteSum / b.exciteN).toFixed(2)} (${b.exciteN} ${b.exciteN === 1 ? 'game' : 'games'})`;
   }
-  const f = model.freshness;
-  if (f.quality_pending || (f.retrosheet_through_season != null && b.season > f.retrosheet_through_season)) {
-    return PENDING_TEXT;
-  }
+  // Pending only for seasons Retrosheet has not reached; an older cell without a figure
+  // simply lacks play-by-play, whatever the Apple booths' quality status says.
+  const through = model.freshness.retrosheet_through_season;
+  if (through == null || b.season > through) return PENDING_TEXT;
   return 'no excitement figure';
 }
 

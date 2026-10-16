@@ -8,10 +8,11 @@ AL (two games), 2019 LCS NL (5.5M), 2025 wild card NL, 2025 World Series, 2026 L
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 
 import pytest
-from playwright.sync_api import Page
+from playwright.sync_api import Page, Route
 
 pytestmark = pytest.mark.e2e
 
@@ -111,6 +112,27 @@ def test_2026_excitement_pending_and_no_stakes(post: Page) -> None:
     cell = post.locator(f"{VIEW} button[data-cell='2026-lcs-AL']").inner_text()
     assert "pending Retrosheet 2026" in cell
     assert "stakes" not in post.inner_text(VIEW).lower()
+
+
+def test_a_historic_cell_without_excitement_is_not_called_pending(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        p = data["postseason"]
+        k = next(i for i, s in enumerate(p["season"]) if s == 2019 and p["round"][i] == "division")
+        p["mean_excitement"][k] = None
+        p["excitement_n"][k] = 0
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    mlb_guarded_page.route("**/mlb-data.json", handler)
+    open_mlb_app(mlb_guarded_page, "?sport=mlb&view=postseason")
+    old = mlb_guarded_page.locator(f"{VIEW} button[data-cell='2019-division-AL']").inner_text()
+    assert "no excitement figure" in old and "pending" not in old
+    # Quality is still pending (Apple booths), and 2026 is past Retrosheet's coverage.
+    new = mlb_guarded_page.locator(f"{VIEW} button[data-cell='2026-lcs-AL']").inner_text()
+    assert "pending Retrosheet 2026" in new
 
 
 def test_cell_click_lists_games_and_deep_link(
