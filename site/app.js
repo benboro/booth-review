@@ -651,9 +651,13 @@ function sportReloadUrl(id) {
 function showSportLoadError(id) {
   const url = sportReloadUrl(id);
   if (location.pathname + location.search !== url) history.replaceState(null, '', url);
-  if (document.getElementById(SPORT_ERROR_ID)) return;
+  // A banner for another sport (its text and reload target) must not outlive a new failure.
+  const existing = document.getElementById(SPORT_ERROR_ID);
+  if (existing?.dataset.sport === id) return;
+  existing?.remove();
   const banner = document.createElement('section');
   banner.id = SPORT_ERROR_ID;
+  banner.dataset.sport = id;
   banner.className = 'error-banner';
   banner.setAttribute('role', 'alert');
   const title = document.createElement('p');

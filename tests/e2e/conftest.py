@@ -565,6 +565,33 @@ def open_mlb_cfb(mlb_site_url: str) -> Callable[..., None]:
     return _open
 
 
+# -- Flag-on (NFL and MLB) build: both synthetic fixtures ----
+
+
+@pytest.fixture(scope="session")
+def both_site_dist(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Build dist/site with the NFL and MLB flags on from the synthetic fixtures."""
+    out = tmp_path_factory.mktemp("bothsite") / "site"
+    returncode = main(["site", "--fixture", "--nfl", "--mlb", "--out", str(out)])
+    assert returncode == 0, f"booth-review site --fixture --nfl --mlb exited {returncode}"
+    return out
+
+
+@pytest.fixture(scope="session")
+def both_site_url(both_site_dist: Path) -> Iterator[str]:
+    """Serve `both_site_dist`; yields its base URL."""
+    yield from _serve_directory(both_site_dist)
+
+
+@pytest.fixture
+def both_guarded_page(page: Page, both_site_url: str, font_setting: str) -> Iterator[Page]:
+    """`guarded_page` for the NFL and MLB flag-on site."""
+    off_origin, csp_errors = _install_guard(page, both_site_url)
+    _apply_font(page, font_setting)
+    yield page
+    _assert_guard_clean(off_origin, csp_errors)
+
+
 def _shard_spec() -> tuple[int, int] | None:
     """Reads `E2E_SHARD` ("<index>/<total>", 1-based), set only by CI's e2e matrix."""
     spec = os.environ.get("E2E_SHARD", "").strip()
