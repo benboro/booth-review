@@ -37,6 +37,10 @@ class FetchError(BoothReviewError):
         self.status_code = status_code
 
 
+class ResponseTooLargeError(FetchError):
+    """A response passed its request's size cap; the body was dropped unread."""
+
+
 class FrozenSeasonError(BoothReviewError):
     """Raised when a cache miss occurs for a (source, season) marked frozen."""
 

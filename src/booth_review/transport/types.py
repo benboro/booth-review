@@ -57,6 +57,8 @@ class FetchRequest:
     kind: Literal["page", "robots"] = "page"
     headers: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     """Extra request headers only (e.g. Accept); never written to the manifest."""
+    max_bytes: int | None = None
+    """Abort the download (ResponseTooLargeError) once the body passes this size."""
 
 
 @dataclass(frozen=True)

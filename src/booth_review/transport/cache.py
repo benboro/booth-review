@@ -284,6 +284,7 @@ class RawCache:
             validators=validators,
             bearer_token=bearer_token,
             headers=dict(req.headers) or None,
+            max_bytes=req.max_bytes,
         )
 
         for guard in self._guards:

@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 from booth_review.config import DataPaths
-from booth_review.errors import FetchError
+from booth_review.errors import FetchError, ResponseTooLargeError
 from booth_review.mlb.constants import RETROSHEET_MAX_ZIP_BYTES
 from booth_review.mlb.layout import (
     RETROSHEET_INDEX_PATH,
@@ -142,6 +142,7 @@ class RetrosheetCollector:
                 season=asset.season,
                 url=asset.url,
                 cache_path=retrosheet_asset_path(asset.name),
+                max_bytes=RETROSHEET_MAX_ZIP_BYTES,
             )
             out.append((req, asset))
         return out, frozen
@@ -182,7 +183,7 @@ class RetrosheetCollector:
                 continue
             try:
                 self._cache.get_or_fetch(req, refresh=exists, validate=_verify)
-            except RetrosheetIntegrityError:
+            except (RetrosheetIntegrityError, ResponseTooLargeError):
                 failed += 1
                 continue
             except FetchError as exc:
