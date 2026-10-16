@@ -433,3 +433,39 @@ def test_rr_backfill_cap_stops_before_the_window_that_would_exceed_it(
     out = capsys.readouterr().out
     assert "fetched 1" in out and "stopped: --max-requests 1 reached" in out
     assert all(_IN_2026 not in r.url for r in handle.requests)
+
+
+def test_rr_backfill_cap_fetches_part_of_a_window_and_the_next_run_continues(
+    cli_vault: DataPaths,
+    mock_transport_factory,
+    patched_client,
+    capsys,  # type: ignore[no-untyped-def]
+) -> None:
+    second_2026 = "mlb-aces-bravos-2026-06-12"
+    slugs = (_IN_2025, _IN_2026, second_2026)
+    urls = "".join(
+        f"<url><loc>https://ratingsreference.com/telecast/{slug}</loc><lastmod>{_LM}</lastmod></url>\n"
+        for slug in slugs
+    )
+    sitemap = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + urls + "</urlset>\n"
+    ).encode()
+    routes = {_RR_ROBOTS: (404, b"nf", {}), SITEMAP_URL: (200, sitemap, {})}
+    for slug in slugs:
+        routes[_rr_url(slug)] = (200, b'{"telecast": {"id": "x"}}', {})
+    handle = mock_transport_factory(routes)
+    patched_client(handle)
+
+    # The 2026 window holds two new records but the cap leaves room for one of them.
+    assert main(["mlb", "rr-backfill", "--max-requests", "2", "--no-commit"]) == 0
+    out = capsys.readouterr().out
+    assert "fetched 2" in out and "run again to continue" in out
+    fetched = [r.url for r in handle.requests if "/api/telecast/" in str(r.url)]
+    assert len(fetched) == 2
+
+    assert main(["mlb", "rr-backfill", "--max-requests", "2", "--no-commit"]) == 0
+    out = capsys.readouterr().out
+    assert "fetched 1" in out and "stopped" not in out
+    fetched = [r.url for r in handle.requests if "/api/telecast/" in str(r.url)]
+    assert len(fetched) == 3 and len(set(map(str, fetched))) == 3

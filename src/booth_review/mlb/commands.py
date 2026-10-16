@@ -277,14 +277,25 @@ def _backfill_run(
             collector.sitemap(dry_run=False)
             for window in windows:
                 plan = collector.run(window[0], window[1], dry_run=True, windows=[window])
-                if len(plan.new_urls) > remaining:
-                    stopped = True
-                    break
-                summary = collector.run(window[0], window[1], dry_run=False, windows=[window])
-                remaining -= summary.fetched
+                pending = len(plan.new_urls)
+                # Fetch as much of the window as the cap allows; the cache keeps what was
+                # fetched, so the next run plans only the rest.
+                summary = collector.run(
+                    window[0],
+                    window[1],
+                    dry_run=False,
+                    windows=[window],
+                    max_requests=remaining,
+                )
+                # Every network request counts against the cap, failed ones included.
+                used = summary.fetched + summary.failed + summary.not_modified
+                remaining -= used
                 for key in counts:
                     counts[key] += int(getattr(summary, key))
                 failed_urls += len(summary.failed_urls)
+                if pending > used:
+                    stopped = True
+                    break
         finally:
             if not args.no_commit:
                 runtime.vault.commit_batch(
@@ -296,7 +307,8 @@ def _backfill_run(
         f"failed {counts['failed']}"
     )
     if stopped:
-        print(f"stopped: --max-requests {args.max_requests} reached; run again to continue")
+        hint = "run again to continue" if counts["fetched"] else "no record was fetched"
+        print(f"stopped: --max-requests {args.max_requests} reached; {hint}")
     return 4 if failed_urls else 0
 
 

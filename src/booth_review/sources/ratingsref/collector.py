@@ -242,9 +242,32 @@ class RatingsRefCollector:
             for entry in kept
         ]
 
+    def _cap_new(self, requests: list[FetchRequest], max_requests: int) -> list[FetchRequest]:
+        """Keep every cached request and only the first `max_requests` that need the network."""
+        kept: list[FetchRequest] = []
+        new = 0
+        for req in requests:
+            if self._cache.status(req) == "cached":
+                kept.append(req)
+            elif new < max_requests:
+                new += 1
+                kept.append(req)
+        return kept
+
     def run(
-        self, start: date, end: date, *, dry_run: bool, windows: Windows | None = None
+        self,
+        start: date,
+        end: date,
+        *,
+        dry_run: bool,
+        windows: Windows | None = None,
+        max_requests: int | None = None,
     ) -> BatchSummary:
+        """Plan or fetch the records in [start, end].
+
+        `max_requests` limits a real run to that many records that are not cached yet, in
+        sitemap order; the rest stay un-fetched and a later run continues with them.
+        """
         if self._league == "mlb" and windows is None:
             raise ValueError(
                 "MLB collect needs the D-14 windows (2014-2026 postseason + 2026 regular season)"
@@ -274,6 +297,8 @@ class RatingsRefCollector:
             select_entries(entries, start, end), windows
         )
         requests = self.plan(selected)
+        if max_requests is not None and not dry_run:
+            requests = self._cap_new(requests, max(max_requests, 0))
         entries_by_url = {entry.json_url: entry for entry in selected}
 
         def _on_fetched(req: FetchRequest, result: CacheResult) -> None:
