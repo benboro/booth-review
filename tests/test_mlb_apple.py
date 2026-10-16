@@ -213,3 +213,26 @@ def test_rr_rated_counts_clean_figures_only(tmp_path: Path) -> None:
     _, summary, _, counts = run(tmp_path, filled=False, rr=rr)
     assert summary["rr_rated"][0] == 1
     assert counts["rr_rated"] == 1
+
+
+def test_booth_analyst_label_is_most_frequent_and_crew_listed_counts_named(
+    tmp_path: Path,
+) -> None:
+    frame = crews_frame()
+    analysts = frame["analyst_person_ids"].to_list()
+    # p2's four games (indexes 6-9): first game a one-off, the rest the regular analyst
+    analysts[6] = ["one_off"]
+    for i in (7, 8, 9):
+        analysts[i] = ["regular"]
+    frame = frame.with_columns(pl.Series("analyst_person_ids", analysts, dtype=pl.List(pl.String)))
+    sources = frame["crew_source"].to_list()
+    sources[6] = "wikipedia"  # a named crew from a non-506/relay source still counts as listed
+    frame = frame.with_columns(pl.Series("crew_source", sources, dtype=pl.String))
+    ref = make_ref(tmp_path, [(1, "p1"), (2, "p2"), (3, "p3")])
+    stakes, exc, strength, baseline = inputs(False)
+    booths, _, _, _ = build_apple_booths(
+        pl.DataFrame(), frame, stakes, exc, strength, [], ref, baseline=baseline
+    )
+    row = booths.filter(pl.col("pbp_person_id") == "p2").row(0, named=True)
+    assert row["analyst_person_ids"] == ["regular"]
+    assert row["crew_listed"] == row["games"] == 4

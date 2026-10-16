@@ -123,6 +123,69 @@ def _first_stacked(text: str) -> str:
     return _NOTE.sub("", text.split(_BR)[0]).strip()
 
 
+_GAME_NUMS = re.compile(r"(\d+)(?:\s*[-\N{EN DASH}\N{EM DASH}]\s*(\d+))?")
+
+
+def _note_games(note: str) -> frozenset[int]:
+    """Series games a "Games 1-3, 5-6" / "Game 4" note names (empty when it names none)."""
+    m = re.search(r"\bgames?\b", note, re.I)
+    if m is None:
+        return frozenset()
+    games: set[int] = set()
+    for lo, hi in _GAME_NUMS.findall(note[m.end() :]):
+        a = int(lo)
+        b = int(hi) if hi else a
+        if a <= b <= 9:
+            games.update(range(a, b + 1))
+    return frozenset(games)
+
+
+def _stack_options(cell: str) -> list[tuple[str, frozenset[int]]]:
+    """Each ``<br>``-stacked entry of a cell as (text without notes, games its note names)."""
+    out: list[tuple[str, frozenset[int]]] = []
+    for seg in cell.split(_BR):
+        if not seg.strip():
+            continue
+        games: frozenset[int] = frozenset()
+        for note in _NOTE.findall(seg):
+            games = games | _note_games(note)
+        out.append((seg, games))
+    return out
+
+
+def _per_game_assignments(
+    pbp_cell: str, analyst_cell: str
+) -> list[tuple[str, tuple[str, ...], frozenset[int]]] | None:
+    """(pbp, analysts, games) groups when stacked cells carry per-game notes, else None."""
+    pbp_opts = _stack_options(pbp_cell)
+    an_opts = _stack_options(analyst_cell)
+    stacked = len(pbp_opts) > 1 or len(an_opts) > 1
+    all_games = frozenset().union(*(g for _, g in pbp_opts + an_opts)) if stacked else frozenset()
+    if not all_games or not pbp_opts or not an_opts:
+        return None
+
+    def pick(opts: list[tuple[str, frozenset[int]]], g: int) -> str | None:
+        for text, games in opts:
+            if g in games:
+                return text
+        for text, games in opts:
+            if not games:
+                return text
+        return None
+
+    groups: dict[tuple[str, tuple[str, ...]], set[int]] = {}
+    for g in sorted(all_games):
+        pbp_text = pick(pbp_opts, g)
+        if pbp_text is None:
+            continue
+        an_text = pick(an_opts, g) or an_opts[0][0]
+        pbp = _first_stacked(pbp_text)
+        analysts = tuple(_split_names(an_text.replace(_BR, ";")))
+        if pbp and analysts:
+            groups.setdefault((pbp, analysts), set()).add(g)
+    return [(p, a, frozenset(g)) for (p, a), g in groups.items()]
+
+
 def _split_names(text: str) -> list[str]:
     cleaned = _NOTE.sub("", text)
     return [n.strip() for n in _SPLIT.split(cleaned) if n.strip()]
@@ -192,17 +255,45 @@ def parse_broadcaster_list(html: str, url: str, round_kind: str) -> ListParse:
             series = _flat(row[col["series"]]) if "series" in col else ""
             league = _LEAGUE_FOR_KIND.get(round_kind) or (_league(series) if series else None)
             label = series or note if per_game else (series or None)
+            groups = _per_game_assignments(row[col["pbp"]], row[col["analysts"]])
+            base = {
+                "season": int(ym.group(0)),
+                "round": _ROUND_FOR_KIND.get(round_kind, round_kind),
+                "league": league,
+                "network_raw": _flat(row[col["network"]]),
+                "source_url": url,
+            }
+            if groups is not None:
+                # Stacked cells with per-game notes: one per-game row per distinct crew, plus
+                # the first-listed crew as the series fallback for games no note covers.
+                first_an = tuple(_split_names(row[col["analysts"]].split(_BR)[0]))
+                result.crews.append(
+                    ListCrew(
+                        **base,  # type: ignore[arg-type]
+                        pbp_raw=_first_stacked(row[col["pbp"]]),
+                        analysts_raw=first_an or analysts,
+                        series_label=series or None,
+                        scope="per_series",
+                    )
+                )
+                for g_pbp, g_an, g_games in groups:
+                    result.crews.append(
+                        ListCrew(
+                            **base,  # type: ignore[arg-type]
+                            pbp_raw=g_pbp,
+                            analysts_raw=g_an,
+                            series_label="Games " + ", ".join(str(g) for g in sorted(g_games)),
+                            scope="per_game",
+                        )
+                    )
+                continue
             result.crews.append(
                 ListCrew(
-                    season=int(ym.group(0)),
-                    round=_ROUND_FOR_KIND.get(round_kind, round_kind),
-                    league=league,
-                    network_raw=_flat(row[col["network"]]),
+                    **base,  # type: ignore[arg-type]
                     pbp_raw=_first_stacked(row[col["pbp"]]),
                     analysts_raw=analysts,
                     series_label=label or None,
                     scope="per_game" if per_game else "per_series",
-                    source_url=url,
                 )
             )
     return result

@@ -30,6 +30,7 @@ from booth_review.mlb.adjust import (
     welch_diff,
 )
 from booth_review.mlb.constants import LOW_N
+from booth_review.mlb.crews import modal_analysts
 from booth_review.mlb.inputs import Review
 from booth_review.mlb.reference import MlbReference
 from booth_review.mlb.rr_match import RRGameMatch
@@ -200,6 +201,7 @@ def build_apple_booths(
                 "pbp": row["pbp_person_id"],
                 "analysts": row["analyst_person_ids"],
                 "crew_source": row["crew_source"],
+                "crew_named": bool(row["crew_named"]),
                 "stakes_raw": s,
                 "stakes_adj": s_adj,
                 "excitement_raw": e,
@@ -213,6 +215,7 @@ def build_apple_booths(
         "pbp": pl.String,
         "analysts": pl.List(pl.String),
         "crew_source": pl.String,
+        "crew_named": pl.Boolean,
         "stakes_raw": pl.Float64,
         "stakes_adj": pl.Float64,
         "excitement_raw": pl.Float64,
@@ -238,18 +241,19 @@ def build_apple_booths(
         _, e_adj, e_se = mean_se(sub["excitement_adj"])
         _, strength_mean, _ = mean_se(sub["strength"])
         _, season_text, pbp = k.split("|")
-        sources = sub["crew_source"].to_list()
         rows.append(
             {
                 "booth_key": k,
                 "network_id": APPLE_NETWORK,
                 "season": int(season_text),
                 "pbp_person_id": pbp,
-                "analyst_person_ids": sub["analysts"][0],
+                "analyst_person_ids": modal_analysts(sub["analysts"].to_list()),
                 "rank_label": labels.get(k),
                 "games": sub.height,
-                "crew_listed": sources.count("506") + sources.count("relay"),
-                "relay_crews": sources.count("relay"),
+                "crew_listed": sub.filter(pl.col("crew_named")).height,
+                "relay_crews": sub.filter(
+                    pl.col("crew_named") & (pl.col("crew_source") == "relay")
+                ).height,
                 "stakes_n": s_n,
                 "stakes_raw": s_raw,
                 "stakes_adj": s_adj,

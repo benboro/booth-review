@@ -161,7 +161,7 @@ def test_one_row_per_season_round_league() -> None:
 def test_booths_games_and_crew_listed() -> None:
     cells, _, _, _ = run()
     al = cells.filter((pl.col("season") == 2019) & (pl.col("league") == "AL")).row(0, named=True)
-    assert al["games"] == 2 and al["crew_listed"] == 1
+    assert al["games"] == 2 and al["crew_listed"] == 2
     assert [b["pbp_person_id"] for b in al["booths"]] == ["p1"]
     assert al["booths"][0]["games"] == 2
     assert al["network_id"] == "neta"
@@ -214,3 +214,32 @@ def test_tiebreak_row_only_when_a_tiebreak_game_exists() -> None:
     games, crews = build(spec)
     cells, _, _, _ = build_postseason_booths(games, crews, exc_frame([]), [])
     assert cells.filter(pl.col("round") == "tiebreak").height == 1
+
+
+def test_wikipedia_crewed_booth_counts_as_listed() -> None:
+    cells, _, _, _ = run()
+    ws = cells.filter(pl.col("round") == "world_series").row(0, named=True)
+    assert ws["crew_listed"] == ws["games"] == 2
+    wc = cells.filter(pl.col("season") == 2014).row(0, named=True)
+    assert wc["crew_listed"] == wc["games"] == 1
+
+
+def test_booth_analyst_is_the_most_frequent_not_the_first_game() -> None:
+    games, crews = build()
+    ws = crews["round"].to_list()
+    idx = [i for i, r in enumerate(ws) if r == "world_series"][:2]
+    analysts = crews["analyst_person_ids"].to_list()
+    analysts[idx[0]] = ["one_off"]
+    analysts[idx[1]] = ["regular"]
+    # 2019 AL division booth: three games, first one-off, then the regular twice
+    crews = crews.with_columns(pl.Series("analyst_person_ids", analysts, dtype=pl.List(pl.String)))
+    cells, _, _, _ = build_postseason_booths(games, crews, exc_frame([]), [])
+    ws_row = cells.filter(pl.col("round") == "world_series").row(0, named=True)
+    # tie (1 each): the earliest game's analyst wins
+    assert ws_row["booths"][0]["analyst_person_ids"] == ["one_off"]
+    analysts[idx[0]] = ["regular"]
+    analysts[idx[1]] = ["regular"]
+    crews2 = crews.with_columns(pl.Series("analyst_person_ids", analysts, dtype=pl.List(pl.String)))
+    cells2, _, _, _ = build_postseason_booths(games, crews2, exc_frame([]), [])
+    ws2 = cells2.filter(pl.col("round") == "world_series").row(0, named=True)
+    assert ws2["booths"][0]["analyst_person_ids"] == ["regular"]

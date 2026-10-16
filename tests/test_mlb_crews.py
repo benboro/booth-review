@@ -14,6 +14,7 @@ from booth_review.mlb.crews import (
     CrewDisagreement,
     assign_crews,
     booth_key,
+    modal_analysts,
     people_review_names,
     write_crew_disagreements,
 )
@@ -325,3 +326,48 @@ def test_disagreement_csv_has_ids_only(tmp_path: Path) -> None:
     text = path.read_text(encoding="utf-8").splitlines()
     assert text[0].startswith("game_key,network_id,source_a")
     assert text[1].endswith("pbp,lee,pat")
+
+
+def test_wikipedia_per_game_note_accepts_comma_lists_and_ranges(tmp_path: Path) -> None:
+    rows = [
+        tele(
+            network="netb",
+            family="disney",
+            day=date(2020, 10, 5 + n),
+            round_id="division",
+            series_game=n,
+        )
+        for n in (1, 2, 3, 4, 5, 6)
+    ]
+    crew = _list("per_game", "Games 1\u20132, 5, 6", "Kim Vale", ("Ray Epsilon",))
+    frame, _, _, _ = run(tmp_path, rows, lists=[crew])
+    assert [s is not None for s in frame["crew_source"]] == [True, True, False, False, True, True]
+
+
+def test_modal_analysts_most_frequent_then_earliest_then_id() -> None:
+    assert modal_analysts([["b"], ["a"], ["a"], ["a", "x"]]) == ["a"]
+    assert modal_analysts([["b"], ["a"]]) == ["b"]  # tie: earliest game wins
+    assert modal_analysts([None, [], ["z"]]) == ["z"]
+    assert modal_analysts([]) == []
+
+
+def test_per_game_fill_in_pbp_reaches_the_game_crew(tmp_path: Path) -> None:
+    from test_mlb_crews import _list, run, tele
+
+    rows = [
+        tele(
+            network="netb",
+            family="disney",
+            day=date(2020, 10, 5 + n),
+            round_id="division",
+            series_game=n,
+        )
+        for n in (1, 2, 3)
+    ]
+    crews = [
+        _list("per_series", None, "Kim Vale", ("Ray Epsilon",)),
+        _list("per_game", "Games 1, 3", "Kim Vale", ("Ray Epsilon",)),
+        _list("per_game", "Games 2", "Jo Zeta", ("Ray Epsilon",)),
+    ]
+    frame, _, _, _ = run(tmp_path, rows, lists=crews)
+    assert frame["pbp_person_id"].to_list() == ["kim", "jo", "kim"]

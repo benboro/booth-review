@@ -175,3 +175,35 @@ def test_stacked_play_by_play_keeps_the_series_voice() -> None:
     assert crew.pbp_raw == "Pat Alpha"
     assert crew.network_raw == "NetA"
     assert crew.analysts_raw == ("Sam Beta",)
+
+
+_LIST_HEAD = (
+    "<table><tr><th>Year</th><th>Network</th><th>Play-by-play</th>"
+    "<th>Color commentator(s)</th></tr>"
+)
+
+
+def test_stacked_play_by_play_notes_become_per_game_crews() -> None:
+    html = (
+        _LIST_HEAD + "<tr><td>2019</td><td>NetA</td>"
+        "<td>Pat Alpha (Games 1\u20133, 5\u20136)<br />Quinn Delta (Game 4)</td>"
+        "<td>Sam Beta</td></tr></table>"
+    )
+    crews = parse_broadcaster_list(html, URL, "lcs_al").crews
+    per_game = {c.pbp_raw: c for c in crews if c.scope == "per_game"}
+    assert per_game["Pat Alpha"].series_label == "Games 1, 2, 3, 5, 6"
+    assert per_game["Quinn Delta"].series_label == "Games 4"
+    assert per_game["Quinn Delta"].analysts_raw == ("Sam Beta",)
+    assert [c.pbp_raw for c in crews if c.scope == "per_series"] == ["Pat Alpha"]
+
+
+def test_stacked_analysts_with_notes_pair_with_the_game() -> None:
+    html = (
+        _LIST_HEAD + "<tr><td>2019</td><td>NetA</td><td>Pat Alpha</td>"
+        "<td>Sam Beta (Games 1-3)<br />Lou Gamma (Game 4)</td></tr></table>"
+    )
+    crews = parse_broadcaster_list(html, URL, "lcs_al").crews
+    by_label = {c.series_label: c for c in crews if c.scope == "per_game"}
+    assert by_label["Games 1, 2, 3"].analysts_raw == ("Sam Beta",)
+    assert by_label["Games 4"].analysts_raw == ("Lou Gamma",)
+    assert by_label["Games 4"].pbp_raw == "Pat Alpha"

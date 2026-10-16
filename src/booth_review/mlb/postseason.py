@@ -13,11 +13,12 @@ only (D-18). Excitement is null for 2026 until Retrosheet 2026 is collected.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Final
+from typing import Final, cast
 
 import polars as pl
 
 from booth_review.mlb.constants import CREW_COVERAGE_BAR
+from booth_review.mlb.crews import modal_analysts
 from booth_review.mlb.inputs import Review
 from booth_review.mlb.rr_match import RRGameMatch
 
@@ -131,11 +132,17 @@ def build_postseason_booths(
                 {
                     "booth_key": str(bk),
                     "pbp_person_id": r["pbp_person_id"],
-                    "analyst_person_ids": r["analyst_person_ids"] or [],
+                    "analyst_person_ids": [],
                     "games": 0,
+                    "_analysts": [],
                 },
             )
+            cast("list[object]", entry["_analysts"]).append(r["analyst_person_ids"])
             entry["games"] = int(str(entry["games"])) + 1
+        for entry in booth_games.values():
+            entry["analyst_person_ids"] = modal_analysts(
+                cast("list[list[str] | None]", entry.pop("_analysts"))
+            )
         booths = sorted(
             booth_games.values(), key=lambda b: (-int(str(b["games"])), str(b["booth_key"]))
         )
@@ -150,7 +157,7 @@ def build_postseason_booths(
                 "network_ids": networks,
                 "booths": booths,
                 "games": len(keys),
-                "crew_listed": sum(1 for r in by_game.values() if r["crew_source"] == "506"),
+                "crew_listed": sum(1 for r in by_game.values() if r["crew_named"]),
                 "coverage_num": sum(1 for r in by_game.values() if r["crew_named"]),
                 "coverage_den": len(keys),
                 "mean_excitement": sum(exc_vals) / len(exc_vals) if exc_vals else None,

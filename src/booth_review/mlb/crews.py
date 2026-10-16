@@ -48,6 +48,7 @@ __all__ = [
     "PeopleReview",
     "assign_crews",
     "booth_key",
+    "modal_analysts",
     "people_review_names",
     "write_crew_disagreements",
 ]
@@ -81,7 +82,8 @@ CREW_DISAGREEMENT_COLUMNS: Final = (
     "person_id_b",
 )
 
-_GAMES_RANGE = re.compile(r"\bgames?\s+(\d+)(?:\s*[-\N{EN DASH}\N{EM DASH}]\s*(\d+))?", re.I)
+_GAMES_LIST = re.compile(r"\bgames?\b", re.I)
+_GAME_SPAN = re.compile(r"(\d+)(?:\s*[-\N{EN DASH}\N{EM DASH}]\s*(\d+))?")
 
 
 @dataclass(frozen=True)
@@ -108,6 +110,29 @@ class PeopleReview:
 def people_review_names(reviews: Iterable[PeopleReview]) -> list[str]:
     """One entry per occurrence, the shape `register_mlb_people` takes as crew_names."""
     return [r.raw_name for r in reviews for _ in range(r.count)]
+
+
+def modal_analysts(per_game: Sequence[Sequence[str] | None]) -> list[str]:
+    """A booth's analyst label: the most frequent first analyst across its games.
+
+    Ties go to the analyst of the earliest game, then the smaller id. The returned list is
+    the most frequent full analyst list among games led by that analyst (same tie-breaks).
+    """
+    games = [tuple(a) for a in per_game if a]
+    if not games:
+        return []
+    firsts = Counter(g[0] for g in games)
+    first_seen: dict[str, int] = {}
+    for i, g in enumerate(games):
+        first_seen.setdefault(g[0], i)
+    lead = min(firsts, key=lambda a: (-firsts[a], first_seen[a], a))
+    led = [g for g in games if g[0] == lead]
+    tuples = Counter(led)
+    order: dict[tuple[str, ...], int] = {}
+    for i, g in enumerate(led):
+        order.setdefault(g, i)
+    best = min(tuples, key=lambda t: (-tuples[t], order[t], t))
+    return list(best)
 
 
 def booth_key(network_id: str, season: int, pbp_person_id: str | None) -> str | None:
@@ -268,11 +293,12 @@ def _in_games(label: str | None, series_game: int | None) -> bool:
     """True when a per-game list row's "games N-M" note covers `series_game`."""
     if label is None or series_game is None:
         return False
-    for m in _GAMES_RANGE.finditer(label):
-        lo = int(m.group(1))
-        hi = int(m.group(2)) if m.group(2) else lo
-        if lo <= series_game <= hi:
-            return True
+    for m in _GAMES_LIST.finditer(label):
+        for lo_text, hi_text in _GAME_SPAN.findall(label[m.end() :]):
+            lo = int(lo_text)
+            hi = int(hi_text) if hi_text else lo
+            if lo <= series_game <= hi:
+                return True
     return False
 
 
