@@ -209,3 +209,39 @@ def test_cli_freeze_incomplete_exits_4(git_vault: DataPaths) -> None:
 
 def test_module_text_has_no_source_urls() -> None:
     assert "506sports" not in Path(mlb_freeze.__file__).read_text()
+
+
+def test_failed_ledger_write_leaves_neither_file_changed(
+    vault_paths: DataPaths, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _seed(vault_paths)
+    ledger_before = vault_paths.frozen.read_text()
+    real_write = mlb_freeze.atomic_write_json
+
+    def failing(path: Path, data: object) -> None:
+        if path == vault_paths.frozen:
+            raise OSError("disk full")
+        real_write(path, data)
+
+    monkeypatch.setattr(mlb_freeze, "atomic_write_json", failing)
+
+    with pytest.raises(OSError, match="disk full"):
+        freeze_mlb_seasons(vault_paths, [SEASON], TODAY)
+
+    assert vault_paths.frozen.read_text() == ledger_before
+    assert not (vault_paths.audit / "mlb_freeze.json").exists()
+    monkeypatch.setattr(mlb_freeze, "atomic_write_json", real_write)
+    assert freeze_mlb_seasons(vault_paths, [SEASON], TODAY).frozen == (SEASON,)
+
+
+def test_malformed_prior_record_stops_the_freeze_before_any_write(vault_paths: DataPaths) -> None:
+    _seed(vault_paths)
+    record = vault_paths.audit / "mlb_freeze.json"
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(json.dumps({"retrosheet_digest": 5}), encoding="utf-8")
+    ledger_before = vault_paths.frozen.read_text()
+
+    with pytest.raises(TypeError):
+        freeze_mlb_seasons(vault_paths, [SEASON], TODAY)
+
+    assert vault_paths.frozen.read_text() == ledger_before

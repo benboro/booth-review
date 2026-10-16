@@ -203,10 +203,10 @@ def freeze_mlb_seasons(
     if dry_run or not pending:
         return MlbFreezeResult(frozen, {}, (), tuple(used))
 
+    # Build both payloads before writing anything, so a bad prior record or an unreadable
+    # bundle stops the freeze before it changes a file.
     for source in MLB_SOURCES:
         current[source] = sorted(set(current.get(source, [])) | set(frozen))
-    atomic_write_json(paths.frozen, current)
-
     record = _read_record(paths)
     digests = dict(record.get("retrosheet_digest") or {})  # type: ignore[call-overload]
     evidence = dict(record.get("evidence") or {})  # type: ignore[call-overload]
@@ -215,18 +215,27 @@ def freeze_mlb_seasons(
         evidence[str(r.season)] = dict(r.evidence)
     prior_seasons = record.get("seasons") or []
     prior_waivers = record.get("waivers") or []
-    atomic_write_json(
-        paths.audit / FREEZE_RECORD,
-        {
-            "frozen_at": datetime(today.year, today.month, today.day, tzinfo=UTC).strftime(
-                _TIME_FMT
-            ),
-            "seasons": sorted(set(prior_seasons) | set(frozen)),  # type: ignore[call-overload]
-            "waivers": sorted(set(prior_waivers) | set(used)),  # type: ignore[call-overload]
-            "evidence": evidence,
-            "retrosheet_digest": digests,
-        },
-    )
+    payload = {
+        "frozen_at": datetime(today.year, today.month, today.day, tzinfo=UTC).strftime(_TIME_FMT),
+        "seasons": sorted(set(prior_seasons) | set(frozen)),  # type: ignore[call-overload]
+        "waivers": sorted(set(prior_waivers) | set(used)),  # type: ignore[call-overload]
+        "evidence": evidence,
+        "retrosheet_digest": digests,
+    }
+    # The record goes first: without the ledger change it only adds drift checks. If the
+    # ledger write then fails, put the old record back so no season is left frozen
+    # without its digest, or digested without being frozen.
+    record_path = paths.audit / FREEZE_RECORD
+    had_record = record_path.is_file()
+    atomic_write_json(record_path, payload)
+    try:
+        atomic_write_json(paths.frozen, current)
+    except BaseException:
+        if had_record:
+            atomic_write_json(record_path, record)
+        else:
+            record_path.unlink(missing_ok=True)
+        raise
     return MlbFreezeResult(
         frozen, {}, ("ledger/frozen.json", f"audit/{FREEZE_RECORD}"), tuple(used)
     )
