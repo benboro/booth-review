@@ -56,10 +56,17 @@ def expand_wikitable(table: Tag, br_sep: str | None = None) -> list[list[str]]:
             colspan = _span(cell, "colspan", max_cols)
             rowspan = _span(cell, "rowspan", max_rows)
             for _ in range(colspan):
+                # A cell written over a column that still holds a pending rowspan
+                # replaces it; leaving the entry would insert it into a later row.
+                pending.pop(len(row), None)
                 if rowspan > 1:
                     pending[len(row)] = (text, rowspan - 1)
                 row.append(text)
-        _drain_pending(row, pending)
+        # A row that ends before a pending column is padded up to it, so the spanned
+        # cell lands in its own column now and not in a later row.
+        while later := [col for col in pending if col >= len(row)]:
+            row.extend([""] * (min(later) - len(row)))
+            _drain_pending(row, pending)
         grid.append(row)
     width = max((len(r) for r in grid), default=0)
     return [r + [""] * (width - len(r)) for r in grid]

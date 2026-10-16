@@ -80,6 +80,30 @@ def test_expand_wikitable_caps_runaway_spans() -> None:
     assert len(grid[0]) <= 3
 
 
+def _grid(html: str) -> list[list[str]]:
+    table = BeautifulSoup(html, "html.parser").find("table")
+    assert isinstance(table, Tag)
+    return expand_wikitable(table)
+
+
+def test_expand_wikitable_short_row_under_a_rowspan_keeps_columns() -> None:
+    grid = _grid(
+        "<table><tr><td>A</td><td>B</td><td rowspan='2'>C</td></tr>"
+        "<tr><td>D</td></tr>"
+        "<tr><td>E</td><td>F</td><td>G</td></tr></table>"
+    )
+    assert grid == [["A", "B", "C"], ["D", "", "C"], ["E", "F", "G"]]
+
+
+def test_expand_wikitable_colspan_over_a_pending_rowspan_drops_it() -> None:
+    grid = _grid(
+        "<table><tr><td>A</td><td rowspan='3'>B</td></tr>"
+        "<tr><td colspan='2'>X</td></tr>"
+        "<tr><td>P</td><td>Q</td></tr></table>"
+    )
+    assert grid == [["A", "B"], ["X", "X"], ["P", "Q"]]
+
+
 def test_list_crews_split_analysts_and_scope() -> None:
     result = parse_broadcaster_list(_read("broadcaster_list_synthetic.html"), URL, "lcs_al")
     assert result.unparsed == []
