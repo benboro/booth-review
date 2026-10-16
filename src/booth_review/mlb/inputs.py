@@ -107,8 +107,12 @@ def load_mlb_inputs(paths: DataPaths, seasons: Sequence[int]) -> MlbInputs:
         if bundle.is_file():
             try:
                 data = bundle.read_bytes()
-                gameinfo_frames.append(read_gameinfo(data))
-                player_frames.append(read_allplayers(data))
+                # Both members must parse before either counts: a half-read bundle would
+                # feed game info with no plays or lineups behind it.
+                season_info = read_gameinfo(data)
+                season_players = read_allplayers(data)
+                gameinfo_frames.append(season_info)
+                player_frames.append(season_players)
                 zips[season] = bundle
             except ParseError:
                 retro_failures += 1

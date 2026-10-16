@@ -412,3 +412,27 @@ def test_series_game_numbers_by_index_only_when_that_is_safe(tmp_path: Path) -> 
     assert [(r.source, r.kind) for r in reviews] == [("games", "series_game_unknown")]
     # Everything prefixed keeps 506's numbers even with a game missing.
     assert numbered(1, 2, 4) == ([1, 2, 4], [])
+
+
+def test_half_parsed_retrosheet_bundle_is_dropped_whole(tmp_path: Path) -> None:
+    import io
+    import zipfile
+
+    paths = DataPaths(vault=tmp_path / "vault")
+    good = paths.raw / retrosheet_asset_path("2024csvs.zip")
+    good.parent.mkdir(parents=True)
+    good.write_bytes(bundle_zip([_row("L1", "XCC", "XDD", "20241014", "lcs", 2024)], 2024))
+    # 2025 holds game info but no allplayers member, so the second read fails.
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as archive:
+        source = zipfile.ZipFile(
+            io.BytesIO(bundle_zip([_row("W1", "XCC", "XDD", "20251001", "wildcard", 2025)], 2025))
+        )
+        archive.writestr("2025gameinfo.csv", source.read("2025gameinfo.csv"))
+    (paths.raw / retrosheet_asset_path("2025csvs.zip")).write_bytes(out.getvalue())
+
+    inputs = load_mlb_inputs(paths, [2024, 2025])
+
+    assert inputs.retrosheet_failures == 1
+    assert sorted(inputs.retrosheet_zips) == [2024]
+    assert set(inputs.gameinfo["season"].to_list()) == {2024}
