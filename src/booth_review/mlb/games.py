@@ -319,10 +319,21 @@ def _number_series(
                 reviews.append(Review("games", "series_league_unknown", 1, f"{season}/{round_id}"))
         pair = frozenset((game["away_club"], game["home_club"]))
         groups.setdefault((season, round_id, game["series_league"], pair), []).append(game)
-    for members in groups.values():
+    for key, members in groups.items():
         members.sort(key=lambda g: (g["game_date"], g["game_number"]))
-        for index, game in enumerate(members, start=1):
-            game["series_game"] = game["series_game"] or index
+        if not any(g["series_game"] for g in members):
+            for index, game in enumerate(members, start=1):
+                game["series_game"] = index
+            continue
+        # Some games carry 506's own "Game N". The rest take their place in date order
+        # only when that makes the series numbers unique and gap-free; otherwise a missing
+        # or unlisted game would shift every later number, so they stay unnumbered.
+        proposed = [g["series_game"] or index for index, g in enumerate(members, start=1)]
+        if sorted(proposed) == list(range(1, len(members) + 1)):
+            for game, number in zip(members, proposed, strict=True):
+                game["series_game"] = number
+        elif any(not g["series_game"] for g in members):
+            reviews.append(Review("games", "series_game_unknown", 1, f"{key[0]}/{key[1]}"))
 
 
 def _attach_round_telecasts(

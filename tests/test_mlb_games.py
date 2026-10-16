@@ -375,3 +375,40 @@ def test_2026_round_listing_attaches_to_a_retrosheet_game_once_it_exists(tmp_pat
     assert listed["date_shift"].to_list() == [True, False]
     assert final.height == 2
     assert _kinds(reviews)["date_shift"] == 1
+
+
+def _series_game(day: int, number: int | None) -> dict:
+    return {
+        "game_key": f"k{day}",
+        "season": 2026,
+        "game_date": date(2026, 10, day),
+        "away_club": "alpha",
+        "home_club": "charlie",
+        "game_number": 0,
+        "round": "world_series",
+        "series_league": None,
+        "series_game": number,
+    }
+
+
+def test_series_game_numbers_by_index_only_when_that_is_safe(tmp_path: Path) -> None:
+    from booth_review.mlb.games import _number_series
+
+    ref = build_reference(tmp_path / "ref")
+
+    def numbered(*explicit: int | None) -> tuple[list[int | None], list[Review]]:
+        games = {f"k{d}": _series_game(d, n) for d, n in enumerate(explicit, start=24)}
+        reviews: list[Review] = []
+        _number_series(games, ref, reviews)
+        return [g["series_game"] for g in games.values()], reviews
+
+    # No explicit numbers: date order.
+    assert numbered(None, None, None) == ([1, 2, 3], [])
+    # An unprefixed game between prefixed ones fits the gap-free sequence.
+    assert numbered(1, None, 3) == ([1, 2, 3], [])
+    # "Game 3" is listed first: filling the rest by position would repeat or skip numbers.
+    values, reviews = numbered(3, None)
+    assert values == [3, None]
+    assert [(r.source, r.kind) for r in reviews] == [("games", "series_game_unknown")]
+    # Everything prefixed keeps 506's numbers even with a game missing.
+    assert numbered(1, 2, 4) == ([1, 2, 4], [])
