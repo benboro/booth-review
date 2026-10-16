@@ -294,14 +294,16 @@ def team_leverage(
 ) -> float | None:
     """STAKES_GAME_SHIFT * phi(z) / sigma, sigma = GB_SD_PER_ROOT_GAME*sqrt(games_left).
 
-    The gap is the smaller of games behind the division and the last wild-card spot
-    (negative while leading); z = |gap| / sigma. Null with no gap or under one game left.
+    The gap is the race closest to its cutoff: the smaller of |games behind the division|
+    and |games behind the last wild-card spot| (a lead counts as distance, as a deficit
+    does); z = that gap / sigma. A club 0.5 games out of its division but comfortably in
+    the wild-card field is still in a live race. Null with no gap or under one game left.
     """
     gaps = [g for g in (gb_div, gb_wc) if g is not None]
     if not gaps or games_left < 1:
         return None
     sigma = GB_SD_PER_ROOT_GAME * math.sqrt(games_left)
-    z = abs(min(gaps)) / sigma
+    z = min(abs(g) for g in gaps) / sigma
     phi = math.exp(-0.5 * z * z) / _SQRT_2PI
     return STAKES_GAME_SHIFT * phi / sigma
 

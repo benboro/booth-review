@@ -184,6 +184,13 @@ def test_team_leverage_matches_hand_numbers() -> None:
     assert team_leverage(1.5, 4.0, 36) == pytest.approx(0.07323188157795373, abs=1e-12)
 
 
+def test_team_leverage_uses_the_race_closest_to_its_cutoff() -> None:
+    # 0.5 out of the division but 8 clear in the wild-card field: the division race is live.
+    assert team_leverage(0.5, -8.0, 100) == team_leverage(0.5, None, 100)
+    assert team_leverage(0.5, -8.0, 100) > team_leverage(8.0, None, 100)
+    assert team_leverage(-8.0, 0.5, 100) == team_leverage(0.5, None, 100)
+
+
 def test_team_leverage_is_null_without_games_or_gap() -> None:
     assert team_leverage(1.0, 1.0, 0) is None
     assert team_leverage(None, None, 50) is None
