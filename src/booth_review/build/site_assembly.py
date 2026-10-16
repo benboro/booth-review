@@ -100,7 +100,6 @@ SPORT_SPECS: tuple[SportSpec, ...] = (
     ),
 )
 SITE_SPORTS: tuple[tuple[str, str], ...] = tuple((s.id, s.label) for s in SPORT_SPECS)
-_CFB_ONLY = tuple(sid for sid, _ in SITE_SPORTS[:1])
 
 
 def sport_spec(sport_id: str) -> SportSpec:
@@ -578,12 +577,11 @@ def add_nfl_to_site(
     docs: Path,
     nfl_payload: tuple[NflSiteData, bytes],
 ) -> SportRefreshResult:
-    """Turn the NFL switch on in a switch-less (CFB-only) site build (iter-2
-    WR-02, D-20); `add_sport_to_site` with the CFB-only precondition."""
+    """Turn the NFL switch on in a built site that lacks it (iter-2 WR-02, D-20):
+    `add_sport_to_site` for NFL. The base may already list MLB (cfb,mlb), and the
+    switch order still follows the registry."""
     if not (site_out / BUILD_MARKER).is_file():
         raise SiteBuildError(f"refusing to add NFL to {site_out}: not a booth-review site build")
-    if site_sports(site_out) != _CFB_ONLY:
-        raise SiteBuildError(f"refusing to add NFL to {site_out}: not a CFB-only site build")
     return add_sport_to_site(
         "nfl", site_out=site_out, site_src=site_src, docs=docs, payload=nfl_payload
     )

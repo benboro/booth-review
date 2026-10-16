@@ -776,7 +776,7 @@ def test_a_failed_switch_on_leaves_the_cfb_site_whole_and_deploys_it(
         def boom(**kwargs: object) -> object:
             raise RuntimeError("private detail")
 
-        monkeypatch.setattr(publish, "add_nfl_to_site", boom)
+        monkeypatch.setattr(publish, "add_sport_to_site", boom)
     site = _assembled(tmp_path / "cfb-only")
     before = _tree(site)
     result = _publish(site, target, NFL_ENABLED)
@@ -903,6 +903,32 @@ def test_mlb_carry_nfl_then_mlb(remote: Path, target: Path, tmp_path: Path, mlb_
     assert "booth-review/sports/nfl/index.js" in _remote_tree(remote)
     assert "booth-review/sports/mlb/index.js" in _remote_tree(remote)
     assert site_sports(site) == ("cfb", "nfl", "mlb")
+
+
+def test_a_failed_nfl_build_keeps_the_live_nfl_view_when_the_build_lists_mlb(
+    remote: Path, target: Path, tmp_path: Path
+) -> None:
+    # MLB on: the built site is cfb,mlb and has no nfl-data.json of its own.
+    _publish_live_sport_files(target, tmp_path, {"nfl-data.json": LIVE_NFL})
+    site = _assembled(
+        tmp_path / "cfb-mlb", mlb=True, mlb_payload=load_mlb_site_payload(MLB_FIXTURE)
+    )
+    assert site_sports(site) == ("cfb", "mlb")
+    result = _publish(site, target, BOTH_ENABLED)
+    assert result.status == "published"
+    assert (result.nfl_carried, result.nfl_switched_on, result.nfl_not_carried) == (
+        True,
+        True,
+        None,
+    )
+    assert site_sports(site) == ("cfb", "nfl", "mlb")
+    assert _live_nfl_bytes(remote) == LIVE_NFL.encode()
+    tree = _remote_tree(remote)
+    assert "booth-review/sports/nfl/index.js" in tree
+    assert "booth-review/mlb-data.json" in tree
+    assert '<meta name="booth-review-sports" content="cfb,nfl,mlb">' in _git(
+        remote, "show", "master:booth-review/index.html"
+    )
 
 
 def test_mlb_flag_off_carries_nothing(

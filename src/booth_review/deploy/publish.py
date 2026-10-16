@@ -32,7 +32,6 @@ from typing import Literal
 from booth_review.build.site_assembly import (
     BUILD_MARKER,
     SportSpec,
-    add_nfl_to_site,
     add_sport_to_site,
     check_no_key_leak,
     check_sport_file_key,
@@ -311,9 +310,10 @@ def _carry_live_sport_file(
         return False, False, "read_failed"
     switch_on = spec.id not in sports
     if switch_on:
-        # NFL has only ever been switched on in a CFB-only build; later sports
-        # also join a build that already lists earlier ones.
-        base_ok = sports == ("cfb",) if spec.id == "nfl" else sports[:1] == ("cfb",)
+        # Any sport joins a build that lists CFB first, whatever else it lists: with
+        # MLB on the built site is cfb,mlb, and a failed NFL build must still keep the
+        # live NFL view.
+        base_ok = sports[:1] == ("cfb",)
         if not (wanted and base_ok):
             return False, False, None
     try:
@@ -335,17 +335,9 @@ def _carry_live_sport_file(
         return False, False, "stage_failed"
     if switch_on:
         try:
-            if spec.id == "nfl":
-                added = add_nfl_to_site(
-                    site_out=site,
-                    site_src=site_src,
-                    docs=docs,
-                    nfl_payload=payload,  # type: ignore[arg-type]
-                )
-            else:
-                added = add_sport_to_site(
-                    spec.id, site_out=site, site_src=site_src, docs=docs, payload=payload
-                )
+            added = add_sport_to_site(
+                spec.id, site_out=site, site_src=site_src, docs=docs, payload=payload
+            )
         except KeyLeakError:
             return False, False, "key_check_failed"
         except Exception:
