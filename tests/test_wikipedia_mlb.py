@@ -220,3 +220,23 @@ def test_stacked_analysts_with_notes_pair_with_the_game() -> None:
     assert by_label["Games 1, 2, 3"].analysts_raw == ("Sam Beta",)
     assert by_label["Games 4"].analysts_raw == ("Lou Gamma",)
     assert by_label["Games 4"].pbp_raw == "Pat Alpha"
+
+
+def test_mlb_robots_fetch_is_recorded_under_mlb_not_nfl(
+    vault_paths, mock_transport_factory
+) -> None:
+    from booth_review.build.pipeline import _is_nfl_input
+    from booth_review.transport.cache import Manifest
+
+    robots = "https://en.wikipedia.org/robots.txt"
+    page = mlb_wikipedia_url(2014)
+    handle = mock_transport_factory({robots: (404, b"nf", {}), page: (200, b"<html></html>", {})})
+    cache = RawCache(vault_paths, PoliteClient(transport=handle.transport, clock=lambda: 0.0))
+    MlbWikipediaCollector(cache).run([2014])
+
+    rows = [e for e in Manifest(vault_paths.manifest).entries() if e["kind"] == "robots"]
+    assert len(rows) == 1
+    assert rows[0]["source"] == "mlb_wikipedia"
+    assert rows[0]["path"].startswith("mlb/wikipedia/_robots/en.wikipedia.org/")
+    assert not _is_nfl_input(rows[0]["path"])
+    assert (vault_paths.raw / rows[0]["path"]).is_file()
