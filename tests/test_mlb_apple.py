@@ -136,7 +136,7 @@ def test_pending_run_has_counts_labels_and_null_measures(tmp_path: Path) -> None
     booths, summary, reviews, counts = run(tmp_path, filled=False)
     assert booths["rank_label"].to_list() == ["Lead", "#2", "#3"]
     assert booths["games"].to_list() == [6, 4, 2]
-    assert booths["crew_listed"].to_list() == [3, 4, 0]
+    assert booths["crew_listed"].to_list() == [6, 4, 2]
     assert booths["relay_crews"].to_list() == [3, 0, 2]
     assert booths["low_n"].to_list() == [True, True, True]
     assert set(booths["quality_status"]) == {"pending"}

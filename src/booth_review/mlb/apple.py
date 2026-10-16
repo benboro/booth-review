@@ -248,7 +248,7 @@ def build_apple_booths(
                 "analyst_person_ids": sub["analysts"][0],
                 "rank_label": labels.get(k),
                 "games": sub.height,
-                "crew_listed": sources.count("506"),
+                "crew_listed": sources.count("506") + sources.count("relay"),
                 "relay_crews": sources.count("relay"),
                 "stakes_n": s_n,
                 "stakes_raw": s_raw,
