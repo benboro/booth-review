@@ -90,7 +90,10 @@ def postseason_map(
     overrides: Iterable[MlbMapOverride],
     network_resolver: MlbNetworkResolver,
 ) -> tuple[list[MapRow], list[Review]]:
-    """Map rows for one season. Overrides win; two proposed networks give a null outlet."""
+    """Map rows for one season. Overrides win; two proposed networks give a null outlet.
+
+    An override with a blank league covers the whole round, whatever leagues Wikipedia proposed.
+    """
     reviews: list[Review] = []
     proposed: dict[tuple[str, str | None], list[MapProposal]] = {}
     for proposal in proposals:
@@ -105,7 +108,9 @@ def postseason_map(
     }
     rows: list[MapRow] = []
     for round_id, league in sorted(set(proposed) | set(chosen), key=lambda k: (k[0], k[1] or "")):
-        override = chosen.get((round_id, league))
+        # A league-specific override wins; a round-wide one (blank league) replaces the
+        # proposals of every league in that round.
+        override = chosen.get((round_id, league)) or chosen.get((round_id, None))
         if override is not None:
             rows.append(
                 MapRow(

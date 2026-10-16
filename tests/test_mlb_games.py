@@ -436,3 +436,29 @@ def test_half_parsed_retrosheet_bundle_is_dropped_whole(tmp_path: Path) -> None:
     assert inputs.retrosheet_failures == 1
     assert sorted(inputs.retrosheet_zips) == [2024]
     assert set(inputs.gameinfo["season"].to_list()) == {2024}
+
+
+def test_round_wide_override_replaces_league_proposals(tmp_path: Path) -> None:
+    ref = build_reference(
+        tmp_path / "ref",
+        "2030,lcs,,netc,https://example.invalid/round\n"
+        "2030,division,AL,netb,https://example.invalid/al\n",
+    )
+    resolver = MlbNetworkResolver.from_reference(ref)
+    proposals = [
+        _proposal("CS", "AL", "NetA"),
+        _proposal("CS", "NL", "NetA"),
+        _proposal("CS", "NL", "NetB"),
+        _proposal("DS", "AL", "NetA"),
+        _proposal("DS", "NL", "NetA"),
+    ]
+    rows, reviews = postseason_map(2030, proposals, ref.map_overrides, resolver)
+    by_key = {(r.round, r.league): r for r in rows}
+
+    # The blank-league override reaches both leagues, including the ambiguous NL proposal.
+    assert by_key[("lcs", "AL")].network_id == by_key[("lcs", "NL")].network_id == "netc"
+    assert by_key[("lcs", "NL")].source == "override"
+    # A league-specific override still wins for its own league; the other keeps Wikipedia's.
+    assert by_key[("division", "AL")].network_id == "netb"
+    assert by_key[("division", "NL")].network_id == "neta"
+    assert reviews == []
