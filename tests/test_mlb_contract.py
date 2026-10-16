@@ -84,6 +84,8 @@ def _minimal_payload() -> Payload:
             "series_league": [None, None],
             "series_game": [None, None],
             "network": [0, 0],
+            "network_source": ["506", "506"],
+            "network_source_url": [None, None],
             "crew": [[{"person": 0, "role": "pbp"}, {"person": 1, "role": "analyst"}], []],
             "crew_source": ["relay", None],
             "crew_source_url": ["https://example.org/relay/1", None],
@@ -111,7 +113,7 @@ def _minimal_payload() -> Payload:
             "starter_uncertain": [],
         },
         "apple_booths": {
-            "rank_label": ["Lead booth"],
+            "rank_label": ["Lead"],
             "pbp": [0],
             "analyst": [1],
             "games": [1],
@@ -143,7 +145,8 @@ def _minimal_payload() -> Payload:
             "season": [],
             "round": [],
             "league": [],
-            "network": [],
+            "networks": [],
+            "outlet_source_url": [],
             "booths": [],
             "games": [],
             "crew_listed": [],
@@ -203,7 +206,8 @@ def _booth_shape(d: Payload) -> None:
 
 
 def _season_sum(d: Payload) -> None:
-    d["postseason_seasons"]["coverage_den"][0] += 1
+    # A season may count more games than its cells hold, never fewer.
+    d["postseason_seasons"]["coverage_den"][0] -= 1
 
 
 def _summary_nan(d: Payload) -> None:
@@ -266,7 +270,17 @@ MUTATORS: list[tuple[str, Mutator]] = [
     ("booth_game_list", _set("apple_booths", "game_list", 0, [99])),
     ("booth_game_list_short", _set("apple_booths", "game_list", 0, [0])),
     ("post_league_idx", _set("postseason", "league", 0, 5)),
-    ("post_network_idx", _set("postseason", "network", 0, 9)),
+    ("post_network_idx", _set("postseason", "networks", 0, [9])),
+    ("post_no_network", _set("postseason", "networks", 0, [])),
+    ("post_repeated_network", _set("postseason", "networks", 0, [0, 0])),
+    ("post_wikipedia_without_article", _set("postseason", "outlet_source_url", 0, None)),
+    ("post_article_http", _set("postseason", "outlet_source_url", 0, "http://example.org/w")),
+    ("wiki_outlet_without_url", _set("games", "network_source_url", 6, None)),
+    ("outlet_url_http", _set("games", "network_source_url", 6, "http://example.org/w")),
+    ("outlet_source_without_outlet", _set("games", "network_source", 0, None)),
+    ("outlet_source_bad", _set("games", "network_source", 0, "guess")),
+    ("outlet_506_with_url", _set("games", "network_source_url", 0, "https://example.org/x")),
+    ("bad_rank_label", _set("apple_booths", "rank_label", 0, "Lead booth")),
     ("post_game_list", _set("postseason", "game_list", 0, [99])),
     ("post_game_list_short", _set("postseason", "game_list", 0, [6, 7])),
     ("lineup_game_idx", _set("lineups", "game", 0, 99)),
@@ -455,6 +469,18 @@ def test_fixture_validates() -> None:
     assert n >= 15
     for name in type(data.games).model_fields:
         assert len(getattr(data.games, name)) == n, name
+
+
+def test_fixture_wikipedia_outlets_carry_their_article() -> None:
+    d = _fixture()
+    g, p = d["games"], d["postseason"]
+    wiki = [i for i, s in enumerate(g["network_source"]) if s == "wikipedia"]
+    assert wiki and all(g["network_source_url"][i] for i in wiki)
+    assert any(u for u in p["outlet_source_url"])
+    assert any(len(n) > 1 for n in p["networks"])
+    # A season counts games that no cell holds.
+    cells = sum(c for s, c in zip(p["season"], p["coverage_den"], strict=True) if s == 2019)
+    assert d["postseason_seasons"]["coverage_den"][1] > cells
 
 
 def test_fixture_is_current() -> None:

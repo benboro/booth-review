@@ -104,6 +104,8 @@ _TELECAST_COLUMNS: Final = (
     "home_club",
     "game_number",
     "network_id",
+    "network_source",
+    "network_source_url",
     "production",
     "round",
     "series_game",
@@ -115,6 +117,7 @@ _TELECAST_COLUMNS: Final = (
     "press_name",
     "crew_named",
     "booth_key",
+    "rr_figure_row",
     "rr_cause",
     "rr_viewers",
     "rr_label",
@@ -164,7 +167,7 @@ _POST_COLUMNS: Final = (
     "season",
     "round",
     "league",
-    "network_id",
+    "network_ids",
     "booths",
     "games",
     "crew_listed",
@@ -290,11 +293,20 @@ def _shipped_telecasts(telecasts: pl.DataFrame) -> pl.DataFrame:
         & (pl.col("season") == APPLE_SEASON)
         & (pl.col("round").is_null() | (pl.col("round") == "regular"))
     )
-    return (
+    shipped = (
         own.filter(is_post | is_apple)
         .sort("game_date", "game_key", maintain_order=True)
         .unique("game_key", keep="first", maintain_order=True)
         .sort("season", "game_date", "game_key", maintain_order=True)
+    )
+    # A game's Ratings Reference figure sits on one telecast row (`rr_figure_row`), which
+    # need not be the shipped row, so it is joined back by game.
+    figure_cols = [c for c in telecasts.columns if c.startswith("rr_") and c != "rr_figure_row"]
+    figures = telecasts.filter(pl.col("rr_figure_row").fill_null(False)).unique(
+        "game_key", keep="first", maintain_order=True
+    )
+    return shipped.drop(figure_cols).join(
+        figures.select("game_key", *figure_cols), on="game_key", how="left", maintain_order="left"
     )
 
 
@@ -417,12 +429,22 @@ def _games_and_lineups(
             series_game = row["series_game"]
         cols["series_game"].append(None if regular or series_game is None else int(series_game))
         cols["network"].append(lk.network(row["network_id"], f"games.network[{i}]"))
+        _append_network_source(cols, row, i)
         _append_crew(cols, row, lk, i)
         cols["wp_excitement"].append(_finite(info.get("wp_excitement"), 3))
         cols["stakes"].append(_finite(info.get("pregame_stakes"), 3) if regular else None)
         _append_rating(cols, row, lk, i, season, current)
         _append_lineup(cols, lin, lineup_rows.get(key), lk, i, season, current)
     return cols, lin, {key: i for i, key in enumerate(keys)}
+
+
+def _append_network_source(cols: dict[str, list[Any]], row: dict[str, Any], i: int) -> None:
+    """Where the outlet came from; a Wikipedia or hand-confirmed outlet keeps its link."""
+    source = row["network_source"] or "506"
+    if source not in ("506", "wikipedia", "override"):
+        raise SiteBuildError(f"games.network_source[{i}]: not a known outlet source")
+    cols["network_source"].append(source)
+    cols["network_source_url"].append(row["network_source_url"] if source != "506" else None)
 
 
 def _append_crew(cols: dict[str, list[Any]], row: dict[str, Any], lk: _Lookups, i: int) -> None:
@@ -570,10 +592,24 @@ def _summary_block(summary: pl.DataFrame, pending: bool) -> dict[str, Any]:
     }
 
 
+def _wikipedia_outlet_urls(telecasts: pl.DataFrame) -> dict[str, str]:
+    """game_key -> the Wikipedia article an own-production outlet of that game came from."""
+    rows = telecasts.filter(
+        (pl.col("production") == "own")
+        & (pl.col("network_source") == "wikipedia")
+        & pl.col("network_source_url").is_not_null()
+    ).select("game_key", "network_source_url")
+    out: dict[str, str] = {}
+    for key, url in rows.sort("game_key", "network_source_url").iter_rows():
+        out.setdefault(str(key), str(url))
+    return out
+
+
 def _postseason_block(
     inputs: MlbSiteInputs, lk: _Lookups, game_index: Mapping[str, int]
 ) -> tuple[dict[str, list[Any]], dict[str, list[Any]]]:
     cols: dict[str, list[Any]] = {name: [] for name in MlbPostseasonColumns.model_fields}
+    wiki_urls = _wikipedia_outlet_urls(inputs.telecasts)
     for i, r in enumerate(inputs.postseason.iter_rows(named=True)):
         where = f"postseason[{i}]"
         league = r["league"]
@@ -582,7 +618,9 @@ def _postseason_block(
         cols["season"].append(int(r["season"]))
         cols["round"].append(r["round"])
         cols["league"].append(None if league is None else _LEAGUES.index(league))
-        cols["network"].append(lk.network(r["network_id"], f"{where}.network"))
+        cols["networks"].append(
+            [lk.network(str(n), f"{where}.networks") for n in r["network_ids"] or []]
+        )
         booths: list[list[int | None]] = []
         for booth in r["booths"] or []:
             analysts = booth["analyst_person_ids"] or []
@@ -600,24 +638,30 @@ def _postseason_block(
         cols["viewers_mean"].append(_finite(r["viewers_mean"]))
         cols["viewers_n"].append(int(r["viewers_n"]))
         indexes: list[int] = []
+        urls: set[str] = set()
         for key in r["game_list"] or []:
             index = game_index.get(str(key))
             if index is None:
                 raise SiteBuildError(f"{where}.game_list: a cell game was not shipped")
             indexes.append(index)
+            if str(key) in wiki_urls:
+                urls.add(wiki_urls[str(key)])
         cols["game_list"].append(sorted(indexes))
-    return cols, _season_coverage(cols)
+        cols["outlet_source_url"].append(min(urls) if urls else None)
+    return cols, _season_coverage(inputs.postseason_seasons)
 
 
-def _season_coverage(post: Mapping[str, list[Any]]) -> dict[str, list[Any]]:
-    """Per-season coverage as the sum over the shipped cells (the contract requires it)."""
-    seasons = sorted(set(post["season"]))
-    out: dict[str, list[Any]] = {"season": seasons, "coverage_num": [], "coverage_den": []}
-    for season in seasons:
-        rows = [k for k, s in enumerate(post["season"]) if s == season]
-        out["coverage_num"].append(sum(post["coverage_num"][k] for k in rows))
-        out["coverage_den"].append(sum(post["coverage_den"][k] for k in rows))
-    return out
+def _season_coverage(seasons: pl.DataFrame) -> dict[str, list[Any]]:
+    """Per-season coverage straight from the builder's season table.
+
+    The denominator is every postseason game of the season, including games with no
+    own-production outlet, which belong to no cell; the cells add up to at most this."""
+    ordered = seasons.sort("season")
+    return {
+        "season": [int(v) for v in ordered["season"].to_list()],
+        "coverage_num": [int(v) for v in ordered["coverage_num"].to_list()],
+        "coverage_den": [int(v) for v in ordered["coverage_den"].to_list()],
+    }
 
 
 def _team_names(lk: _Lookups, seasons: Sequence[int]) -> list[dict[str, Any]]:

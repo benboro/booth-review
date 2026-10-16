@@ -12,6 +12,7 @@
  * Everything is built with createElement and textContent only.
  */
 import { boothLabelOf, cellKey, personName } from '../data.js';
+import { externalLink } from '../../../modules/panel-parts.js';
 import { makePill, makeRolePill, nameWithRoles, currentTheme } from '../../../modules/pill.js';
 
 export const PENDING_TEXT = 'pending Retrosheet 2026';
@@ -49,13 +50,16 @@ function buildGrid(model) {
     if (!b) {
       b = {
         key, season: r.season, round: r.round, league: leagueId,
-        outlets: [], booths: [], games: 0, crewListed: 0,
+        outlets: [], outletSourceUrl: null, booths: [], games: 0, crewListed: 0,
         exciteSum: 0, exciteN: 0, viewerSum: 0, viewerN: 0,
       };
       blocks.set(key, b);
     }
-    const net = r.network == null ? null : model.networks[r.network];
-    if (net && !b.outlets.some((o) => o.name === net.name)) b.outlets.push({ name: net.name, family: net.family });
+    for (const idx of r.networks) {
+      const net = model.networks[idx];
+      if (net && !b.outlets.some((o) => o.name === net.name)) b.outlets.push({ name: net.name, family: net.family });
+    }
+    if (r.outlet_source_url && !b.outletSourceUrl) b.outletSourceUrl = r.outlet_source_url;
     for (const pair of r.booths) {
       if (!b.booths.some((p) => p[0] === pair[0] && p[1] === pair[1])) b.booths.push(pair);
     }
@@ -178,10 +182,21 @@ export function render(ctx) {
     th.scope = 'row';
     th.append(el('span', 'mlb-season', String(s.season)));
     const pct = coveragePct(s.coverage_num, s.coverage_den);
-    const cov = el('span', 'mlb-season-coverage', pct == null ? '' : `Crews listed for ${pct}% of games`);
+    // Counts come from the builder's season table: every postseason game of the season.
+    const cov = el(
+      'span',
+      'mlb-season-coverage',
+      pct == null ? '' : `Crews listed for ${s.coverage_num} of ${s.coverage_den} postseason games (${pct}%)`,
+    );
     const low = s.coverage_den > 0 && s.coverage_num / s.coverage_den < bar;
     if (low) cov.dataset.low = 'true';
     th.append(cov);
+    const wikiUrl = [...blocks.values()].find((b) => b.season === s.season && b.outletSourceUrl)?.outletSourceUrl;
+    const credit = wikiUrl ? externalLink(wikiUrl, `Outlets: Wikipedia ${s.season} postseason (CC BY-SA 4.0) ↗`) : null;
+    if (credit) {
+      credit.className = 'mlb-season-credit';
+      th.append(credit);
+    }
     tr.appendChild(th);
     for (const r of rounds) {
       const td = el('td', 'mlb-cell');
@@ -198,7 +213,7 @@ export function render(ctx) {
           td.append(blockButton(model, b, split ? b.league : null, state.cell === b.key));
           summary.push({
             key: b.key, season: b.season, round: b.round, league: b.league, games: b.games,
-            outlets: b.outlets.map((o) => o.name),
+            outlets: b.outlets.map((o) => o.name), outletSourceUrl: b.outletSourceUrl,
             booths: b.booths.map(([p, a]) => boothLabelOf(model, p, a)),
             crewListed: b.crewListed, excitementN: b.exciteN,
             excitement: b.exciteN ? b.exciteSum / b.exciteN : null,
@@ -214,7 +229,7 @@ export function render(ctx) {
 
   refs.captions.replaceChildren(
     el('p', 'caption', 'Excitement is the mean per game from win probability, a tendency, not proof.'),
-    el('p', 'caption', `Seasons with crews listed for fewer than ${Math.round(bar * 100)}% of games are marked; their booths are partial.`),
+    el('p', 'caption', `Season percentages count every postseason game of the season, including games with no outlet listed; a cell counts only the games it shows. Seasons with crews listed for fewer than ${Math.round(bar * 100)}% of those games are marked; their booths are partial.`),
   );
   current = { model, state, summary, seasons: seasons.map((s) => s.season), rounds };
 }

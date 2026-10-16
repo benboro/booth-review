@@ -56,6 +56,8 @@ GAME_DEFAULTS: dict[str, Any] = {
     "series_league": None,
     "series_game": None,
     "network": None,
+    "network_source": None,
+    "network_source_url": None,
     "crew": [],
     "crew_source": None,
     "crew_source_url": None,
@@ -112,6 +114,17 @@ def _wiki(pbp: int, analyst: int, year: int) -> dict[str, Any]:
     }
 
 
+def _outlet_506() -> dict[str, Any]:
+    return {"network_source": "506", "network_source_url": None}
+
+
+def _outlet_wiki(year: int) -> dict[str, Any]:
+    return {
+        "network_source": "wikipedia",
+        "network_source_url": f"https://example.org/wiki/{year}_Invented_Series",
+    }
+
+
 def _rated(viewers: int, n: int) -> dict[str, Any]:
     return {
         "viewers": viewers,
@@ -150,7 +163,7 @@ def _lineup_row(
 
 
 def _games() -> list[dict[str, Any]]:
-    apple = {"network": APPLE}
+    apple = {"network": APPLE, **_outlet_506()}
     games = [
         # 0-5: Apple 2026 regular season
         _game(game_number=0, date="2026-04-03", **apple, **_relay(0, 1, 1), stakes=None),
@@ -183,6 +196,7 @@ def _games() -> list[dict[str, Any]]:
             series_league=AL,
             series_game=1,
             network=TBS,
+            **_outlet_wiki(2014),
             wp_excitement=1.2,
             cause="none",
             lineup_status="present",
@@ -198,6 +212,7 @@ def _games() -> list[dict[str, Any]]:
             round="world_series",
             series_game=1,
             network=FOX,
+            **_outlet_wiki(2014),
             wp_excitement=2.4,
             lineup_status="missing",
             **_wiki(6, 7, 2014),
@@ -211,6 +226,7 @@ def _games() -> list[dict[str, Any]]:
             series_league=AL,
             series_game=1,
             network=TBS,
+            **_outlet_wiki(2019),
             wp_excitement=0.9,
             cause="per_network",
             lineup_status="missing",
@@ -223,6 +239,7 @@ def _games() -> list[dict[str, Any]]:
             series_league=AL,
             series_game=2,
             network=TBS,
+            **_outlet_wiki(2019),
             wp_excitement=1.6,
             cause="ambiguous_doubleheader",
             lineup_status="missing",
@@ -238,6 +255,7 @@ def _games() -> list[dict[str, Any]]:
             series_league=NL,
             series_game=1,
             network=FOX,
+            **_outlet_wiki(2019),
             wp_excitement=1.1,
             lineup_status="missing",
             **_wiki(6, 7, 2019),
@@ -253,6 +271,7 @@ def _games() -> list[dict[str, Any]]:
             series_league=NL,
             series_game=1,
             network=ESPN,
+            **_outlet_506(),
             wp_excitement=1.4,
             cause="conflict",
             lineup_status="missing",
@@ -267,6 +286,7 @@ def _games() -> list[dict[str, Any]]:
             round="world_series",
             series_game=1,
             network=FOX,
+            **_outlet_506(),
             wp_excitement=2.0,
             cause="regional",
             lineup_status="missing",
@@ -279,6 +299,7 @@ def _games() -> list[dict[str, Any]]:
             series_league=AL,
             series_game=1,
             network=FOX,
+            **_outlet_506(),
             **_relay(0, 1, 3),
         ),
         # 14: 2026 NLDS, crew not listed
@@ -290,6 +311,7 @@ def _games() -> list[dict[str, Any]]:
             series_league=NL,
             series_game=1,
             network=TBS,
+            **_outlet_506(),
         ),
     ]
     return games
@@ -304,18 +326,19 @@ def _mean(values: list[float]) -> float | None:
 
 
 def _postseason(games: list[dict[str, Any]]) -> dict[str, list[Any]]:
-    cells: list[tuple[int, str, int | None, int | None, list[int], list[list[int]]]] = [
-        (2014, "wild_card", AL, TBS, [6], []),
-        (2014, "world_series", None, FOX, [7], [[6, 7]]),
-        (2019, "division", AL, TBS, [8, 9], [[8, 7]]),
-        (2019, "lcs", NL, FOX, [10], [[6, 7]]),
-        (2025, "wild_card", NL, ESPN, [11], [[2, 3]]),
-        (2025, "world_series", None, FOX, [12], [[6, 7]]),
-        (2026, "lcs", AL, FOX, [13], [[0, 1]]),
-        (2026, "division", NL, TBS, [14], []),
+    cells: list[tuple[int, str, int | None, list[int], list[int], list[list[int]]]] = [
+        (2014, "wild_card", AL, [TBS], [6], []),
+        (2014, "world_series", None, [FOX], [7], [[6, 7]]),
+        (2019, "division", AL, [TBS], [8, 9], [[8, 7]]),
+        (2019, "lcs", NL, [FOX], [10], [[6, 7]]),
+        # A split cell: the round aired on two outlets.
+        (2025, "wild_card", NL, [ESPN, TBS], [11], [[2, 3]]),
+        (2025, "world_series", None, [FOX], [12], [[6, 7]]),
+        (2026, "lcs", AL, [FOX], [13], [[0, 1]]),
+        (2026, "division", NL, [TBS], [14], []),
     ]
     out: dict[str, list[Any]] = {name: [] for name in MlbPostseasonColumns.model_fields}
-    for season, rnd, league, network, idx, booths in cells:
+    for season, rnd, league, networks, idx, booths in cells:
         rows = [games[i] for i in idx]
         listed = sum(1 for r in rows if r["crew"])
         viewers = [r["viewers"] for r in rows if r["viewers"] is not None]
@@ -323,7 +346,9 @@ def _postseason(games: list[dict[str, Any]]) -> dict[str, list[Any]]:
         out["season"].append(season)
         out["round"].append(rnd)
         out["league"].append(league)
-        out["network"].append(network)
+        out["networks"].append(networks)
+        wiki = {r["network_source_url"] for r in rows if r["network_source"] == "wikipedia"}
+        out["outlet_source_url"].append(min(wiki) if wiki else None)
         out["booths"].append(booths)
         out["games"].append(len(rows))
         out["crew_listed"].append(listed)
@@ -337,6 +362,10 @@ def _postseason(games: list[dict[str, Any]]) -> dict[str, list[Any]]:
     return out
 
 
+# Postseason games that had no own-production outlet: counted in the season, in no cell.
+NO_OUTLET_GAMES = {2019: 1}
+
+
 def _seasons(post: dict[str, list[Any]]) -> dict[str, list[Any]]:
     seasons = sorted(set(post["season"]))
     num = [
@@ -345,6 +374,7 @@ def _seasons(post: dict[str, list[Any]]) -> dict[str, list[Any]]:
     ]
     den = [
         sum(n for s, n in zip(post["season"], post["coverage_den"], strict=True) if s == y)
+        + NO_OUTLET_GAMES.get(y, 0)
         for y in seasons
     ]
     return {"season": seasons, "coverage_num": num, "coverage_den": den}
@@ -352,9 +382,9 @@ def _seasons(post: dict[str, list[Any]]) -> dict[str, list[Any]]:
 
 def _apple_booths() -> dict[str, list[Any]]:
     rows = [
-        ("Lead booth", 0, 1, [0, 1], 1, False),
-        ("Booth 2", 2, 3, [2, 3], 1, False),
-        ("Booth 3", 4, 5, [4], 0, True),
+        ("Lead", 0, 1, [0, 1], 1, False),
+        ("#2", 2, 3, [2, 3], 1, False),
+        ("#3", 4, 5, [4], 0, True),
     ]
     out: dict[str, list[Any]] = {name: [] for name in MlbAppleBoothColumns.model_fields}
     for label, pbp, analyst, games, relay, low_n in rows:

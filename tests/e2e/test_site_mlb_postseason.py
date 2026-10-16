@@ -39,16 +39,42 @@ def test_coverage_per_season_and_low_tone(post: Page) -> None:
     cov = post.eval_on_selector_all(
         f"{VIEW} .mlb-season-coverage", "els => els.map(e => e.textContent)"
     )
+    # Counts come from the builder's season table; 2019 has one postseason game that
+    # sits in no cell, so its denominator is larger than its cells'.
     assert cov == [
-        "Crews listed for 50% of games",
-        "Crews listed for 100% of games",
-        "Crews listed for 100% of games",
-        "Crews listed for 50% of games",
+        "Crews listed for 1 of 2 postseason games (50%)",
+        "Crews listed for 3 of 4 postseason games (75%)",
+        "Crews listed for 2 of 2 postseason games (100%)",
+        "Crews listed for 1 of 2 postseason games (50%)",
     ]
     low = post.eval_on_selector_all(
         f"{VIEW} .mlb-season-coverage[data-low='true']", "els => els.length"
     )
-    assert low == 2
+    assert low == 3
+
+
+def test_wikipedia_outlets_are_credited_per_season(post: Page) -> None:
+    links = post.eval_on_selector_all(
+        f"{VIEW} .mlb-season-credit",
+        "els => els.map(e => [e.textContent, e.getAttribute('href'), e.getAttribute('rel')])",
+    )
+    assert [t for t, _, _ in links] == [
+        "Outlets: Wikipedia 2014 postseason (CC BY-SA 4.0) ↗",
+        "Outlets: Wikipedia 2019 postseason (CC BY-SA 4.0) ↗",
+    ]
+    assert [h for _, h, _ in links] == [
+        "https://example.org/wiki/2014_Invented_Series",
+        "https://example.org/wiki/2019_Invented_Series",
+    ]
+    assert all("noopener" in (r or "") for _, _, r in links)
+
+
+def test_a_split_cell_shows_every_outlet(post: Page) -> None:
+    pills = post.eval_on_selector_all(
+        f"{VIEW} button[data-cell='2025-wild_card-NL'] .mlb-cell-head .pill",
+        "els => els.map(e => e.textContent)",
+    )
+    assert pills == ["ESPN", "TBS"]
 
 
 def test_crew_not_listed_and_al_nl_split(post: Page) -> None:

@@ -208,6 +208,8 @@ export function gameRow(model, i) {
     seriesGame: c.series_game[i] ?? null,
     network: net ? net.name : null,
     networkFamily: net ? net.family ?? null : null,
+    networkSource: net ? c.network_source[i] ?? null : null,
+    networkSourceUrl: net ? c.network_source_url[i] ?? null : null,
     crew: (c.crew[i] || []).map((m) => ({ name: model.people[m.person].name, role: m.role })),
     crewSource: c.crew_source[i] ?? null,
     crewSourceUrl: c.crew_source_url[i] ?? null,

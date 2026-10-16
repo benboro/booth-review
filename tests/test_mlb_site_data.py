@@ -73,6 +73,8 @@ TELECAST_SCHEMA: dict[str, Any] = {
     "home_club": pl.String,
     "game_number": pl.Int8,
     "network_id": pl.String,
+    "network_source": pl.String,
+    "network_source_url": pl.String,
     "production": pl.String,
     "round": pl.String,
     "series_game": pl.Int8,
@@ -84,6 +86,7 @@ TELECAST_SCHEMA: dict[str, Any] = {
     "press_name": pl.String,
     "crew_named": pl.Boolean,
     "booth_key": pl.String,
+    "rr_figure_row": pl.Boolean,
     "rr_cause": pl.String,
     "rr_viewers": pl.Float64,
     "rr_label": pl.String,
@@ -141,7 +144,7 @@ POST_SCHEMA: dict[str, Any] = {
     "season": pl.Int32,
     "round": pl.String,
     "league": pl.String,
-    "network_id": pl.String,
+    "network_ids": pl.List(pl.String),
     "booths": pl.List(BOOTH_STRUCT),
     "games": pl.Int64,
     "crew_listed": pl.Int64,
@@ -177,6 +180,7 @@ D1 = key("2019-10-04", "alpha", "bravo")
 S1 = key("2014-10-21", "charlie", "alpha")
 O1 = key("2013-10-21", "charlie", "alpha")  # before 2014: never ships
 LINEUP_GAMES = (A1, W1)
+WIKI_POST = "https://en.wikipedia.org/wiki/2025_Major_League_Baseball_postseason"
 
 
 def _telecast(
@@ -194,6 +198,9 @@ def _telecast(
     cause: str | None = None,
     viewers: float | None = None,
     series_game: int | None = None,
+    net_source: str = "506",
+    net_url: str | None = None,
+    figure_row: bool = True,
 ) -> dict[str, Any]:
     day, away, home, number = game.split("|")
     return {
@@ -204,6 +211,8 @@ def _telecast(
         "home_club": home,
         "game_number": int(number),
         "network_id": network,
+        "network_source": net_source,
+        "network_source_url": net_url,
         "production": production,
         "round": rnd,
         "series_game": series_game,
@@ -215,6 +224,7 @@ def _telecast(
         "press_name": press[1] if press else None,
         "crew_named": pbp is not None and bool(analysts),
         "booth_key": booth,
+        "rr_figure_row": figure_row,
         "rr_cause": cause,
         "rr_viewers": viewers,
         "rr_label": "per-game" if viewers else None,
@@ -309,7 +319,7 @@ def _cells() -> list[dict[str, Any]]:
             "season": 2014,
             "round": "world_series",
             "league": None,
-            "network_id": "fox_net",
+            "network_ids": ["fox_net"],
             "booths": [],
             "games": 1,
             "crew_listed": 0,
@@ -325,7 +335,7 @@ def _cells() -> list[dict[str, Any]]:
             "season": 2019,
             "round": "division",
             "league": "AL",
-            "network_id": "tbs",
+            "network_ids": ["tbs"],
             "booths": [],
             "games": 1,
             "crew_listed": 0,
@@ -341,7 +351,7 @@ def _cells() -> list[dict[str, Any]]:
             "season": 2025,
             "round": "wild_card",
             "league": "NL",
-            "network_id": "tbs",
+            "network_ids": ["tbs", "fox_net"],
             "booths": [
                 booth("tbs|2025|p5", "p5", ["p6"], 1),
                 booth("tbs|2025|p1", "p1", ["p2"], 1),
@@ -386,11 +396,16 @@ def make_tables(paths: DataPaths, *, ready: bool = True) -> None:
         _telecast(A3, "apple"),
         _telecast(B1, "fox_net", pbp="p1", analysts=("p2",), source="506", url="https://s/x"),
         _telecast(B2, "apple", production="partner", pbp="p5", source="506", url="https://s/y"),
-        _telecast(A1, "mlbn"),
+        _telecast(A1, "mlbn", figure_row=False),
         _telecast(
             W1, "tbs", rnd="wild_card", pbp="p5", analysts=("p6",), source="wikipedia",
-            url="https://en.wikipedia.org/wiki/Invented", viewers=5_000_000.0,
-            cause="window_level", series_game=1,
+            url="https://en.wikipedia.org/wiki/Invented", series_game=1,
+            net_source="wikipedia", net_url=WIKI_POST, figure_row=False,
+        ),
+        # The game's figure sits on this second own row, not on the shipped one.
+        _telecast(
+            W1, "fox_net", rnd="wild_card", viewers=5_000_000.0, cause="window_level",
+            series_game=1,
         ),
         _telecast(
             W2, "tbs", rnd="wild_card", pbp="p1", analysts=("p2",), source="506",
@@ -415,9 +430,29 @@ def make_tables(paths: DataPaths, *, ready: bool = True) -> None:
         "excitement_adj_diff": -0.4,
         "excitement_adj_diff_se": 0.2,
     }
+    # 2014 also has a postseason game with no own-production outlet, so it sits in no cell.
     seasons = [
-        {"season": s, "coverage_num": 0, "coverage_den": 1, "coverage_pct": 0.0, "below_bar": True}
-        for s in (2014, 2019, 2025)
+        {
+            "season": 2014,
+            "coverage_num": 0,
+            "coverage_den": 2,
+            "coverage_pct": 0.0,
+            "below_bar": True,
+        },
+        {
+            "season": 2019,
+            "coverage_num": 0,
+            "coverage_den": 1,
+            "coverage_pct": 0.0,
+            "below_bar": True,
+        },
+        {
+            "season": 2025,
+            "coverage_num": 2,
+            "coverage_den": 3,
+            "coverage_pct": 2 / 3,
+            "below_bar": True,
+        },
     ]
     tables = {
         "mlb_games": pl.DataFrame(games, schema=GAME_SCHEMA),
@@ -615,11 +650,24 @@ def test_postseason_cells_and_season_coverage(tables: DataPaths, reference: Path
     assert post["league"] == [None, 0, 1]
     assert [len(x) for x in post["game_list"]] == [1, 1, 2]
     assert len(post["booths"][2]) == 2 and post["booths"][0] == []
+    # Season coverage is the builder's own table (every postseason game of the season),
+    # not the sum of the shipped cells.
     assert seasons == {
         "season": [2014, 2019, 2025],
         "coverage_num": [0, 0, 2],
-        "coverage_den": [1, 1, 2],
+        "coverage_den": [2, 1, 3],
     }
+    assert [
+        sum(post["coverage_den"][k] for k in range(3) if post["season"][k] == y)
+        for y in (2014, 2019, 2025)
+    ] == [1, 1, 2]
+    # A split-network cell ships every outlet, most common first.
+    names = [n["id"] for n in data["lookups"]["networks"]]
+    assert [[names[i] for i in nets] for nets in post["networks"]] == [
+        ["fox_net"],
+        ["tbs"],
+        ["tbs", "fox_net"],
+    ]
     assert data["constants"]["coverage_bar"] == pytest.approx(0.95)
     assert data["constants"]["low_n_threshold"] == 10
 
@@ -920,3 +968,43 @@ def test_assembly_consumes_the_written_file(
 
 def test_inputs_type_is_exported() -> None:
     assert MlbSiteInputs.__name__ == "MlbSiteInputs"
+
+
+def test_wikipedia_outlets_ship_their_article_link(tables: DataPaths, reference: Path) -> None:
+    shipped = _games_by_key(tables, reference)
+    data = _site(tables, reference)
+
+    assert shipped[W1]["network_source"] == "wikipedia"
+    assert shipped[W1]["network_source_url"] == WIKI_POST
+    assert shipped[W2]["network_source"] == "506" and shipped[W2]["network_source_url"] is None
+    assert shipped[A1]["network_source"] == "506" and shipped[A1]["network_source_url"] is None
+    cells = data["postseason"]
+    urls = dict(zip(cells["season"], cells["outlet_source_url"], strict=True))
+    assert urls == {2014: None, 2019: None, 2025: WIKI_POST}
+
+
+def test_a_wikipedia_outlet_without_its_article_fails_closed(
+    tables: DataPaths, reference: Path
+) -> None:
+    replace_table(
+        tables,
+        "mlb_telecasts",
+        lambda f: f.with_columns(
+            pl.when(pl.col("game_key") == W1)
+            .then(None)
+            .otherwise(pl.col("network_source_url"))
+            .alias("network_source_url")
+        ),
+    )
+
+    with pytest.raises(SiteBuildError, match=r"games\.network_source_url\["):
+        build_mlb_site_data(load_mlb_site_inputs(tables, reference))
+
+
+def test_a_game_figure_is_read_from_its_figure_row(tables: DataPaths, reference: Path) -> None:
+    shipped = _games_by_key(tables, reference)
+
+    # The shipped W1 row (tbs) carries no figure; the figure row is the second own row.
+    assert shipped[W1]["network"] is not None
+    assert shipped[W1]["viewers"] == 5_000_000
+    assert shipped[W1]["scope"] == "window"

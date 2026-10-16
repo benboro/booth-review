@@ -66,6 +66,24 @@ function creditLine(row) {
   return p;
 }
 
+/** The outlet's source: Wikipedia (CC BY-SA 4.0) with its article, or a hand-confirmed outlet. */
+function outletCredit(row) {
+  if (row.network == null) return [];
+  const p = el('p', 'crew-source-note mlb-credit');
+  p.dataset.outletSource = row.networkSource ?? '';
+  const t = (s) => document.createTextNode(s);
+  if (row.networkSource === 'wikipedia') {
+    p.append(t('Outlet from Wikipedia (CC BY-SA 4.0) '), externalLink(row.networkSourceUrl, 'View outlet article ↗') ?? t('(link not recorded)'));
+  } else if (row.networkSource === 'override') {
+    p.append(t('Hand-confirmed outlet.'));
+    const link = externalLink(row.networkSourceUrl, 'Source ↗');
+    if (link) p.append(t(' '), link);
+  } else {
+    return [];
+  }
+  return [p];
+}
+
 function crewSection(row) {
   const heading = el('h3', null, 'Crew');
   if (row.crew.length === 0) return [heading, el('p', 'panel-crew-empty crew-missing', 'Crew not listed.')];
@@ -199,6 +217,7 @@ export function createDetailPanel(host, { onClose, getConstants } = {}) {
     body.replaceChildren(
       dateP,
       network,
+      ...outletCredit(row),
       ...crewSection(row),
       ...viewershipSection(row),
       el('h3', null, 'Excitement'),

@@ -266,6 +266,18 @@ def test_map_telecasts_from_wikipedia_and_overrides(built: Built) -> None:
     assert mapped["crew_names"].list.len().max() == 0
     assert set(mapped["production"]) == {"own"}
     assert _kinds(built.reviews)["no_outlet"] >= 2
+    # Each mapped outlet keeps the map row's source and link for the site credit.
+    credit = {
+        by_gid[k]: (src, url)
+        for k, src, url in zip(
+            mapped["game_key"],
+            mapped["network_source"],
+            mapped["network_source_url"],
+            strict=True,
+        )
+    }
+    assert credit["Y1"][0] == "wikipedia" and str(credit["Y1"][1]).startswith("https://")
+    assert credit["L1"][0] == "override" and credit["L1"][1]
 
 
 def test_every_postseason_game_has_outlet_or_review(built: Built) -> None:

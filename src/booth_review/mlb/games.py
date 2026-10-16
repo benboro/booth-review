@@ -177,18 +177,17 @@ def write_postseason_map_review(paths: DataPaths, rows: Sequence[MapRow]) -> Pat
     return target
 
 
-def _lookup_network(
+def _lookup_map_row(
     index: Mapping[tuple[int, str, str | None], MapRow],
     season: int,
     round_id: str,
     league: str | None,
-) -> str | None:
+) -> MapRow | None:
     """The exact (round, league) row wins, even when null; else the league-less row."""
     exact = index.get((season, round_id, league))
     if exact is not None:
-        return exact.network_id
-    fallback = index.get((season, round_id, None))
-    return fallback.network_id if fallback is not None else None
+        return exact
+    return index.get((season, round_id, None))
 
 
 # -- game universe ------------------------------------------------------------------------------
@@ -439,10 +438,11 @@ def build_mlb_games(
         season = int(str(game["season"]))
         round_id = str(game["round"])
         league = game["series_league"]
-        network = _lookup_network(
+        network_row = _lookup_map_row(
             index, season, round_id, league if isinstance(league, str) else None
         )
-        if network is None:
+        network = None if network_row is None else network_row.network_id
+        if network_row is None or network is None:
             pointer = f"{season}/{round_id}/{league or '-'}"
             missing[pointer] = missing.get(pointer, 0) + 1
             continue
@@ -470,6 +470,8 @@ def build_mlb_games(
                 "neutral": game["neutral"],
                 "venue_note": game["venue_note"],
                 "date_shift": False,
+                "network_source": network_row.source,
+                "network_source_url": network_row.source_url,
             }
         )
     reviews.extend(Review("map", "no_outlet", n, p) for p, n in sorted(missing.items()))

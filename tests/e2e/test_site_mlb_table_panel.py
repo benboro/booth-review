@@ -105,6 +105,18 @@ def test_missing_lineup_reads_not_in_retrosheet(mlb: Page) -> None:
     assert href == "https://example.org/wiki/2014_Invented_Series"
 
 
+def test_wikipedia_outlet_is_credited_with_its_article(mlb: Page) -> None:
+    _open(mlb, 7)
+    text = _panel(mlb)
+    assert "Outlet from Wikipedia (CC BY-SA 4.0)" in text
+    link = mlb.locator('#mlb-detail-panel a:has-text("View outlet article")')
+    assert link.get_attribute("href") == "https://example.org/wiki/2014_Invented_Series"
+    assert "noopener" in (link.get_attribute("rel") or "")
+    # A 506 outlet carries no Wikipedia credit.
+    _open(mlb, 11)
+    assert "Outlet from Wikipedia" not in _panel(mlb)
+
+
 def test_relay_crew_links_post_and_press_page(mlb: Page) -> None:
     _open(mlb, 0)
     post = mlb.locator('#mlb-detail-panel a[href="https://example.org/relay/post-1"]')

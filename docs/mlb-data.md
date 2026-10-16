@@ -58,12 +58,16 @@ season span the name applies to), `networks` (id, name, family), `people`, `play
 ### games
 
 `season`, `date`, `game_number`, `away`, `home` (club indexes), `round`,
-`series_league`, `series_game`, `network`, `crew` (entries of person index and role
+`series_league`, `series_game`, `network`, the outlet credit (`network_source`,
+`network_source_url`), `crew` (entries of person index and role
 `pbp` or `analyst`), the crew credit (`crew_source`, `crew_source_url`, `press_url`,
 `press_name`), `wp_excitement`, `stakes`, the viewership figure (`viewers`,
 `viewership_label`, `scope`, `era`, `rr_url`, `source_url`), `cause`, and the lineup
 pointer (`lineup_status`, `lineup_start`, `lineup_end`).
 
+- `network_source` is `506`, `wikipedia` or `override`, set exactly when `network` is. A
+  `wikipedia` outlet needs the https article URL as `network_source_url`; an `override`
+  may carry an https citation; a `506` outlet carries none.
 - `round` is one of the `rounds` names; a regular-season game has no `series_*` values
   and a World Series game has no `series_league`.
 - `crew_source` is `override`, `506`, `relay`, `wikipedia` or null. It is set exactly
@@ -86,7 +90,7 @@ contiguous range its `lineup_start`/`lineup_end` name.
 
 ### apple_booths and apple_summary
 
-One row per Apple booth: `rank_label`, `pbp`, `analyst`, `games`, `crew_listed` (games with a named crew from any source),
+One row per Apple booth: `rank_label` (`Lead`, `#2`, `#3`, ... or `Other`), `pbp`, `analyst`, `games`, `crew_listed` (games with a named crew from any source),
 `relay_crews`, raw and adjusted stakes (stakes lead, excitement second), `raw_stakes_n`,
 standard errors, `strength_prior`, `low_n`, `quality_status` and `game_list`.
 `quality_status` is `pending` until Retrosheet 2026 is loaded, and while pending every
@@ -96,13 +100,17 @@ pending), the lead and others counts, `rr_rated` and `apple_games`.
 
 ### postseason and postseason_seasons
 
-`postseason` has one row per season, round, league and network: the booths (each a
+`postseason` has one row per season, round and league: `networks` (every outlet the
+cell's games aired on, most common first), `outlet_source_url` (the Wikipedia article the
+outlets came from; required when one of the cell's shipped games has a Wikipedia outlet),
+the booths (each a
 `[pbp, analyst]` person-index pair), games, crew-listed count (games with a named crew from any source), coverage numerator and
 denominator, mean excitement with its n, mean viewers with its n, and `game_list`. A
 cell below `constants.coverage_bar` is flagged; a game with no crew reads "crew not
 listed". `postseason_seasons` carries each season's coverage numerator and denominator,
-which must equal the sum over its cells; the builder ships exactly that sum, so
-a postseason game with no own-production telecast does not count in the denominator.
+copied from the builder's `mlb_postseason_seasons` table. Its denominator is every
+postseason game of the season, including games with no own-production telecast, which
+sit in no cell; the cells therefore add up to at most the season's numbers.
 
 ## Credits
 
@@ -115,7 +123,8 @@ Every displayed crew and figure carries its credit.
 - **Ratings Reference.** Each viewership figure keeps its Ratings Reference record URL
   (`rr_url`) and the figure's original `source_url`, with a note that we changed the data.
 - **Wikipedia.** Round, league, outlet and list-derived crews are from Wikipedia text
-  under CC BY-SA 4.0, credited with the article URL (`crew_source_url`).
+  under CC BY-SA 4.0, credited with the article URL (`crew_source_url` for a crew,
+  `network_source_url` and the cell's `outlet_source_url` for an outlet).
 - **506 Sports.** 506-sourced crews, networks and windows link to the saved league page
   (`crew_source_url`). 506 Sports' data comes down if its owners object.
 - **Relay.** A relay crew links the blog post (`crew_source_url`) and the press page it

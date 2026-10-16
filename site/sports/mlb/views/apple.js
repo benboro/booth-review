@@ -43,11 +43,9 @@ const refs = {
 let adjusted = false;
 let current = null;
 
-/** 'Lead booth' -> 'Lead', 'Booth 2' -> '#2'; anything else is shown as given. */
+/** The builder's rank labels ('Lead', '#2', ..., 'Other') are already short. */
 export function shortRank(label) {
-  if (label === 'Lead booth') return 'Lead';
-  const m = /^Booth (\d+)$/.exec(String(label));
-  return m ? `#${m[1]}` : String(label);
+  return String(label);
 }
 
 function fixed(x, digits, signed) {

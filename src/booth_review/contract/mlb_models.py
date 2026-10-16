@@ -18,9 +18,9 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 
 MLB_SCHEMA_VERSION = "1.0.0"
 
@@ -58,11 +58,15 @@ MlbCause = Literal[
     "window_level",
 ]
 MlbCrewSource = Literal["override", "506", "relay", "wikipedia"]
+# Where a game's outlet came from; a Wikipedia outlet must carry its article link.
+MlbNetworkSource = Literal["override", "506", "wikipedia"]
 MlbCrewRole = Literal["pbp", "analyst"]
 MlbNetworkFamily = Literal["disney", "fox", "cbs", "nbc", "tbs", "apple", "other"]
 MlbLineupStatus = Literal["present", "pending", "missing"]
 MlbQualityStatus = Literal["pending", "ready"]
 MlbLeague = Literal["AL", "NL"]
+# The labels the Apple ranking emits: "Lead", "#2", "#3", ..., or "Other".
+MlbRankLabel = Literal["Lead", "Other"] | Annotated[str, StringConstraints(pattern=r"^#\d+$")]
 
 
 class _Strict(BaseModel):
@@ -159,6 +163,8 @@ class MlbGameColumns(_Strict):
     series_league: list[int | None]
     series_game: list[int | None]
     network: list[int | None]
+    network_source: list[MlbNetworkSource | None]
+    network_source_url: list[str | None]
     crew: list[list[MlbCrewEntry]]
     crew_source: list[MlbCrewSource | None]
     crew_source_url: list[str | None]
@@ -193,7 +199,7 @@ class MlbAppleBoothColumns(_Strict):
     """Apple booth rows, ordered stakes-first (D-07). While quality is pending
     every stakes and excitement figure is null (D-06)."""
 
-    rank_label: list[str]
+    rank_label: list[MlbRankLabel]
     pbp: list[int]
     analyst: list[int | None]
     games: list[int]
@@ -224,12 +230,16 @@ class MlbAppleSummary(_Strict):
 
 
 class MlbPostseasonColumns(_Strict):
-    """One row per season, round, league and network cell."""
+    """One row per season, round and league cell. `networks` lists every outlet the
+    cell's games aired on (most common first); `outlet_source_url` is the Wikipedia
+    article the cell's outlets came from, required whenever one of its shipped games
+    has a Wikipedia outlet."""
 
     season: list[int]
     round: list[MlbRound]
     league: list[int | None]
-    network: list[int | None]
+    networks: list[list[int]]
+    outlet_source_url: list[str | None]
     booths: list[list[list[int | None]]]
     games: list[int]
     crew_listed: list[int]
@@ -370,6 +380,7 @@ class MlbSiteData(_Strict):
                     raise ValueError(f"games.crew[{i}][{j}].person: index out of range")
                 people.add(entry.person)
             self._check_round(i)
+            self._check_network_source(i)
             self._check_crew_source(i)
             self._check_rating(i)
         return n
@@ -383,6 +394,20 @@ class MlbSiteData(_Strict):
             raise ValueError(f"games.series_league[{i}]: set on a World Series game")
         if g.series_game[i] is not None and g.series_game[i] < 1:  # type: ignore[operator]
             raise ValueError(f"games.series_game[{i}]: must be >= 1")
+
+    def _check_network_source(self, i: int) -> None:
+        g = self.games
+        source, url = g.network_source[i], g.network_source_url[i]
+        if g.network[i] is None:
+            if source is not None or url is not None:
+                raise ValueError(f"games.network_source[{i}]: set without an outlet")
+            return
+        if source is None:
+            raise ValueError(f"games.network_source[{i}]: required when the game has an outlet")
+        if source == "wikipedia" and not _is_https(url):
+            raise ValueError(f"games.network_source_url[{i}]: a Wikipedia outlet needs its article")
+        if url is not None and (source == "506" or not _is_https(url)):
+            raise ValueError(f"games.network_source_url[{i}]: not a valid outlet citation")
 
     def _check_crew_source(self, i: int) -> None:
         g = self.games
@@ -487,18 +512,33 @@ class MlbSiteData(_Strict):
         p = self.postseason
         lk = self.lookups
         n = _check_lengths("postseason", p, "season")
-        seen: set[tuple[int, str, int | None, int | None]] = set()
+        seen: set[tuple[int, str, int | None]] = set()
         for i in range(n):
             _check_index("postseason", "league", i, p.league[i], len(lk.leagues))
-            _check_index("postseason", "network", i, p.network[i], len(lk.networks))
-            if p.network[i] is not None:
-                networks.add(p.network[i])  # type: ignore[arg-type]
+            if not p.networks[i]:
+                raise ValueError(f"postseason.networks[{i}]: needs at least one outlet")
+            for net in p.networks[i]:
+                _check_index("postseason", "networks", i, net, len(lk.networks))
+                networks.add(net)
+            if len(set(p.networks[i])) != len(p.networks[i]):
+                raise ValueError(f"postseason.networks[{i}]: repeated outlet")
             if p.round[i] in ("regular",):
                 raise ValueError(f"postseason.round[{i}]: regular season is not a postseason round")
-            key = (p.season[i], p.round[i], p.league[i], p.network[i])
+            key = (p.season[i], p.round[i], p.league[i])
             if key in seen:
                 raise ValueError(f"postseason.season[{i}]: second row for one cell")
             seen.add(key)
+            url = p.outlet_source_url[i]
+            if url is not None and not _is_https(url):
+                raise ValueError(f"postseason.outlet_source_url[{i}]: must be an https link")
+            if url is None and any(
+                self.games.network_source[g] == "wikipedia"
+                for g in p.game_list[i]
+                if 0 <= g < num_games
+            ):
+                raise ValueError(
+                    f"postseason.outlet_source_url[{i}]: Wikipedia outlet needs its article"
+                )
             for j, booth in enumerate(p.booths[i]):
                 if len(booth) != 2 or booth[0] is None:
                     raise ValueError(f"postseason.booths[{i}][{j}]: must be [pbp, analyst]")
@@ -525,12 +565,14 @@ class MlbSiteData(_Strict):
         for i in range(n):
             if ps.coverage_num[i] > ps.coverage_den[i]:
                 raise ValueError(f"postseason_seasons.coverage_num[{i}]: exceeds coverage_den")
+            # The season counts every postseason game; a cell holds only games with an
+            # own-production outlet, so the cells can add up to less, never more.
             rows = [k for k in range(len(p.season)) if p.season[k] == ps.season[i]]
             if (
-                sum(p.coverage_num[k] for k in rows) != ps.coverage_num[i]
-                or sum(p.coverage_den[k] for k in rows) != ps.coverage_den[i]
+                sum(p.coverage_num[k] for k in rows) > ps.coverage_num[i]
+                or sum(p.coverage_den[k] for k in rows) > ps.coverage_den[i]
             ):
-                raise ValueError(f"postseason_seasons.coverage_num[{i}]: does not match its cells")
+                raise ValueError(f"postseason_seasons.coverage_num[{i}]: smaller than its cells")
         for k in range(len(p.season)):
             if p.season[k] not in ps.season:
                 raise ValueError(f"postseason.season[{k}]: season missing from postseason_seasons")

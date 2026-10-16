@@ -66,6 +66,10 @@ TELECAST_SCHEMA: Final[Mapping[str, pl.DataType | type[pl.DataType]]] = {
     "neutral": pl.Boolean,
     "venue_note": pl.String,
     "date_shift": pl.Boolean,
+    # Where the outlet came from: "506" (the listing itself), or "wikipedia"/"override"
+    # (the round/league outlet map) with the map row's article or citation URL.
+    "network_source": pl.String,
+    "network_source_url": pl.String,
 }
 
 
@@ -162,6 +166,8 @@ def listings_to_telecasts(
                 "neutral": item.neutral,
                 "venue_note": item.venue_note,
                 "date_shift": False,
+                "network_source": "506",
+                "network_source_url": None,
             }
             slot = (key, resolved.network_id)
             prior = merged.get(slot)

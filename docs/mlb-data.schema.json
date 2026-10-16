@@ -125,7 +125,19 @@
         },
         "rank_label": {
           "items": {
-            "type": "string"
+            "anyOf": [
+              {
+                "enum": [
+                  "Lead",
+                  "Other"
+                ],
+                "type": "string"
+              },
+              {
+                "pattern": "^#\\d+$",
+                "type": "string"
+              }
+            ]
           },
           "title": "Rank Label",
           "type": "array"
@@ -636,6 +648,39 @@
           "title": "Network",
           "type": "array"
         },
+        "network_source": {
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "override",
+                  "506",
+                  "wikipedia"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Network Source",
+          "type": "array"
+        },
+        "network_source_url": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Network Source Url",
+          "type": "array"
+        },
         "press_name": {
           "items": {
             "anyOf": [
@@ -827,6 +872,8 @@
         "series_league",
         "series_game",
         "network",
+        "network_source",
+        "network_source_url",
         "crew",
         "crew_source",
         "crew_source_url",
@@ -1088,7 +1135,7 @@
     },
     "MlbPostseasonColumns": {
       "additionalProperties": false,
-      "description": "One row per season, round, league and network cell.",
+      "description": "One row per season, round and league cell. `networks` lists every outlet the\ncell's games aired on (most common first); `outlet_source_url` is the Wikipedia\narticle the cell's outlets came from, required whenever one of its shipped games\nhas a Wikipedia outlet.",
       "properties": {
         "booths": {
           "items": {
@@ -1183,18 +1230,28 @@
           "title": "Mean Excitement",
           "type": "array"
         },
-        "network": {
+        "networks": {
+          "items": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "title": "Networks",
+          "type": "array"
+        },
+        "outlet_source_url": {
           "items": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ]
           },
-          "title": "Network",
+          "title": "Outlet Source Url",
           "type": "array"
         },
         "round": {
@@ -1245,7 +1302,8 @@
         "season",
         "round",
         "league",
-        "network",
+        "networks",
+        "outlet_source_url",
         "booths",
         "games",
         "crew_listed",

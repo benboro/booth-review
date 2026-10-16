@@ -1,7 +1,7 @@
 """09-19: the MLB Apple crews view on the synthetic MLB fixture.
 
-Fixture booths: 0 Ada Quill / Ben Marlow (Lead booth, 2 games, 1 from the relay), 1 Cy Fable /
-Dee Hart (Booth 2, 2 games, 1 relay), 2 Eli Stroud / Fay Lorn (Booth 3, 1 game, low n). Every
+Fixture booths: 0 Ada Quill / Ben Marlow (Lead, 2 games, 1 from the relay), 1 Cy Fable /
+Dee Hart (#2, 2 games, 1 relay), 2 Eli Stroud / Fay Lorn (#3, 1 game, low n). Every
 booth is quality-pending in the fixture; tests that need ready data rewrite the response.
 """
 

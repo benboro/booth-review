@@ -3574,6 +3574,13 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   font-weight: 400;
 }
 
+.mlb-season-credit {
+  display: block;
+  color: var(--muted);
+  font: var(--font-label);
+  font-weight: 400;
+}
+
 .mlb-season-coverage[data-low="true"] {
   color: var(--game-playoff-text);
   font-weight: var(--weight-semibold);
