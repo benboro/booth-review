@@ -59,6 +59,8 @@ def discover_assets(
         parts = urlsplit(url)
         if parts.scheme != "https" or parts.netloc != RETROSHEET_HOST:
             continue
+        if "%" in parts.path or any(seg in (".", "..") for seg in parts.path.split("/")):
+            continue
         name = parts.path.rsplit("/", 1)[-1]
         if not name or "/" in name or ".." in name:
             continue

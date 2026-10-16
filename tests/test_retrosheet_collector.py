@@ -75,6 +75,11 @@ def test_discover_ignores_off_host() -> None:
         "https://www.retrosheet.org/other/x.zip",
         "http://www.retrosheet.org/downloads/x.zip",
         "https://example.invalid/downloads/x.zip",
+        "https://www.retrosheet.org/downloads/../2014/2014csvs.zip",
+        "https://www.retrosheet.org/downloads/%2e%2e/2014/2014csvs.zip",
+        "https://www.retrosheet.org/downloads/2014/2015csvs.zip",
+        "https://www.retrosheet.org/downloads/plays.html",
+        "https://www.retrosheet.org/downloads/2014/2014csvs.zip?x=1",
     ],
 )
 def test_guard_rejects(url: str) -> None:
@@ -85,6 +90,19 @@ def test_guard_rejects(url: str) -> None:
 
 def test_url_guard_passes_downloads_zip() -> None:
     check_retrosheet_url(_BASE + "2099/2099csvs.zip")
+
+
+def test_url_guard_passes_index_page() -> None:
+    check_retrosheet_url("https://www.retrosheet.org/downloads/csvdownloads.html")
+
+
+def test_discover_skips_dot_and_encoded_segments() -> None:
+    index = (
+        '<a href="https://www.retrosheet.org/downloads/../2014/2014csvs.zip">a</a>'
+        '<a href="/downloads/%2e%2e/2015/2015csvs.zip">b</a>'
+        '<a href="/downloads/2016/2016csvs.zip">c</a>'
+    )
+    assert [a.season for a in discover_assets(index)] == [2016]
 
 
 def test_asset_name_unsafe_rejected() -> None:

@@ -8,6 +8,7 @@ before caching and are never extracted here.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from urllib.parse import urlsplit
@@ -34,6 +35,8 @@ logger = logging.getLogger(__name__)
 SOURCE: Source = "mlb_retrosheet"
 _ZIP_MAGIC = b"PK\x03\x04"
 _FORBIDDEN = ("gamelogs", "boxesetc")
+# Only the downloads index page and one csvs bundle per season (AGENTS.md).
+_ALLOWED_PATH = re.compile(r"^/downloads/(?:csvdownloads\.html|(\d{4})/\1csvs\.zip)$")
 
 
 class RetrosheetPathError(FetchError):
@@ -49,15 +52,17 @@ class RetrosheetMissingAsset(FetchError):
 
 
 def check_retrosheet_url(url: str) -> None:
-    """Raise RetrosheetPathError unless `url` is an https /downloads/ URL on the host."""
+    """Raise RetrosheetPathError unless `url` is the index page or one season bundle."""
     lowered = url.lower()
     if any(word in lowered for word in _FORBIDDEN):
         raise RetrosheetPathError("Retrosheet URL points at a disallowed path")
     parts = urlsplit(url)
-    if parts.scheme != "https" or parts.netloc != RETROSHEET_HOST:
-        raise RetrosheetPathError("Retrosheet URL is not https on the Retrosheet host")
-    if not parts.path.startswith("/downloads/"):
-        raise RetrosheetPathError("Retrosheet URL is outside /downloads/")
+    if parts.scheme != "https" or parts.netloc != RETROSHEET_HOST or parts.query or parts.fragment:
+        raise RetrosheetPathError("Retrosheet URL is not a plain https URL on the Retrosheet host")
+    if "%" in parts.path or any(seg in (".", "..") for seg in parts.path.split("/")):
+        raise RetrosheetPathError("Retrosheet URL has dot or encoded path segments")
+    if not _ALLOWED_PATH.match(parts.path):
+        raise RetrosheetPathError("Retrosheet URL is outside the allowed downloads")
 
 
 @dataclass(frozen=True)
