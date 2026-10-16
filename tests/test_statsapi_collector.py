@@ -19,6 +19,7 @@ from booth_review.sources.statsapi.collector import (
     StatsApiInvalidError,
     StatsApiRefused,
     plan_dates,
+    statsapi_route_closed,
 )
 from booth_review.transport.cache import RawCache
 from booth_review.transport.client import PoliteClient
@@ -116,3 +117,23 @@ def test_non_json_200_not_cached(vault_paths, mock_transport_factory, monkeypatc
     with pytest.raises(StatsApiInvalidError):
         _collector(vault_paths, handle, monkeypatch).run(plan_dates([_D1], max_requests=5))
     assert not (vault_paths.raw / statsapi_schedule_path(_D1)).exists()
+
+
+def test_refusal_is_persisted_so_a_second_run_sends_nothing(
+    vault_paths, mock_transport_factory, monkeypatch
+) -> None:
+    handle = mock_transport_factory({_ROBOTS: (404, b"nf", {}), _url(_D1): (406, b"no", {})})
+    with pytest.raises(StatsApiRefused):
+        _collector(vault_paths, handle, monkeypatch).run(plan_dates([_D1], max_requests=5))
+    assert statsapi_route_closed(vault_paths)
+    sent = len(handle.requests)
+
+    again = mock_transport_factory({_ROBOTS: (404, b"nf", {}), _url(_D2): (200, b"{}", {})})
+    with pytest.raises(StatsApiRefused):
+        _collector(vault_paths, again, monkeypatch).run(plan_dates([_D2], max_requests=5))
+    assert again.requests == []
+    assert sent >= 1
+
+
+def test_route_open_without_refusal(vault_paths) -> None:
+    assert not statsapi_route_closed(vault_paths)

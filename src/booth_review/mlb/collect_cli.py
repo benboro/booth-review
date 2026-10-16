@@ -42,6 +42,7 @@ from booth_review.sources.statsapi.collector import (
     StatsApiCollector,
     StatsApiRefused,
     plan_dates,
+    statsapi_route_closed,
 )
 from booth_review.transport.cache import atomic_write_bytes
 from booth_review.vault import batch_message
@@ -380,6 +381,13 @@ def run_collect_statsapi(args: argparse.Namespace, commit_paths: CommitPaths) ->
         return 3
     runtime = build_runtime(with_budget=False)
     try:
+        if statsapi_route_closed(runtime.paths):
+            print(
+                "error: statsapi refused an earlier request; the route is closed "
+                "(nothing was sent)",
+                file=sys.stderr,
+            )
+            return 3
         collector = StatsApiCollector(runtime.cache, runtime.paths)
         result: dict[str, Any] = {}
 

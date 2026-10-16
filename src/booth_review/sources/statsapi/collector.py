@@ -18,7 +18,7 @@ from booth_review.config import DataPaths
 from booth_review.errors import BoothReviewError, FetchError, ParseError, RunCapError
 from booth_review.mlb.constants import STATSAPI_MAX_REQUESTS
 from booth_review.mlb.layout import statsapi_schedule_path
-from booth_review.transport.cache import RawCache
+from booth_review.transport.cache import Manifest, RawCache
 from booth_review.transport.types import FetchRequest
 
 logger = logging.getLogger(__name__)
@@ -43,6 +43,23 @@ class StatsApiRefused(BoothReviewError):
     def __init__(self, status_class: str) -> None:
         super().__init__(f"statsapi refused the request ({status_class}); run stopped")
         self.status_class = status_class
+
+
+def statsapi_route_closed(paths: DataPaths) -> bool:
+    """True once the manifest holds any 4xx for the Stats API.
+
+    A refusal ends the route for good (D-04): the ledger outlives the process, so a
+    later run sends nothing instead of retrying or trying another date.
+    """
+    for entry in Manifest(paths.manifest).entries():
+        status = entry.get("status")
+        if (
+            entry.get("source") == "mlb_statsapi"
+            and isinstance(status, int)
+            and 400 <= status < 500
+        ):
+            return True
+    return False
 
 
 class StatsApiInvalidError(ParseError):
@@ -101,6 +118,8 @@ class StatsApiCollector:
     def run(self, requests: Sequence[FetchRequest], *, dry_run: bool = False) -> StatsApiSummary:
         if dry_run:
             return StatsApiSummary(len(requests), 0, 0, False, False, (), dry_run=True)
+        if statsapi_route_closed(self._paths):
+            raise StatsApiRefused("earlier 4xx on record")
         fetched = cached = 0
         has_dates = has_lineups = False
         keys: set[str] = set()
