@@ -122,6 +122,10 @@ Every displayed crew and figure carries its credit.
   cites (`press_url`, `press_name`).
 - **Overrides.** A hand-confirmed override wins over every other crew source.
 
+## Production flip
+
+Turning MLB on in production means setting MLB_SITE_ENABLED=true in the scheduled job's environment as well as for manual deploys; otherwise a job deploy rebuilds without MLB and, with the flag off there, does not carry the live mlb-data.json.
+
 ## Versioning
 
 `schema_version` is `1.0.0`. A change to the shape bumps the version and regenerates

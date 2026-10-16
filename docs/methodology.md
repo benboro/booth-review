@@ -367,6 +367,40 @@ Eras are read from `data/reference/measurement_eras.csv`. Through the 2019 seaso
 
 <!-- nfl:end -->
 
+<!-- mlb:start -->
+
+## MLB: Sources, games and crews
+
+The MLB view covers the Apple TV Friday game and the postseason booths on national networks. Game results, lineups and the play-by-play behind the excitement and stakes scores come from [Retrosheet](https://www.retrosheet.org), schedules and outlets from [506 Sports](https://506sports.com) hand-saved pages, round and crew lists from [Wikipedia](https://www.wikipedia.org) (CC BY-SA 4.0), and viewership from [RatingsReference.com](https://ratingsreference.com) (CC BY 4.0, modified). A game is identified by its date, the two clubs and the game number of a doubleheader, so each source lands on the same game.
+
+**Crew precedence.** A hand-confirmed override wins, then a crew listed by 506 Sports, then a crew relayed from a fan-run schedule blog (credited game by game with its post and the press release the post cites), then Wikipedia's per-series broadcaster lists. When two sources name different crews for one game the build keeps the higher one and records the disagreement. Names are resolved through one crosswalk so a variant spelling is one person; Chris Caray and Chip Caray are kept as two people.
+
+**Apple lead booth.** The lead is the play-by-play voice that Wikipedia's current national broadcaster list ranks first for Apple. Apple booths are the play-by-play voice plus the analysts listed with them in a season.
+
+## MLB: Stakes
+
+Stakes is a leverage proxy, not a simulation. For each game it takes each club's record through the previous day and its games behind the division leader and the last wild-card spot, and asks how much one game can move those races: the games-behind change is treated as having a standard deviation of the square root of one eighth per square-root game left, and ties on a cutoff are shifted by half a game. Wild-card spots are two per league through 2021 and three from 2022. Stakes are not scored in the first 20 games of a season, and 2020 is left out of the baseline because the short season distorts it.
+
+## MLB: Excitement
+
+Excitement uses a win-expectancy table our own method builds from Retrosheet play-by-play for 2015-2025. It is in-sample: the same seasons the table is trained on are scored with it. A state is the inning (extra innings pooled at the tenth), the half, the outs, the base runners and the score difference (clipped at 10), with a separate extra-inning regime for the automatic runner (2020 on). Each state is smoothed toward a coarser table and forced to rise with the home lead. Excitement is the sum of the changes in the home team's win probability over a game's plays, ending with the result, so extra innings simply add terms. A game with fewer than 30 plays, a forfeit or an undecided game gets no score, never zero. This is our own analysis; it is not a Retrosheet figure and not another source's rating.
+
+## MLB: The adjustment, low n and what is pending
+
+Booths are compared after adjusting for the matchup. Stakes are compared with the average for games in the same calendar month; excitement with the average for games in the same stakes band (band edges at the 50th, 80th and 95th percentiles of a 2017-2025 baseline with 2020 excluded). A band with fewer than 200 games is pooled with its neighbor. The difference between the lead booth and the others is a Welch difference with its standard error. A booth with fewer than 10 games is marked low n and no difference is claimed from it.
+
+**Pending Retrosheet 2026.** Retrosheet publishes the 2026 season late in 2026. Until then 2026 games have no play-by-play, so 2026 stakes, excitement and lineups read "pending Retrosheet 2026". Rebuilding after the release fills them in. We did not use the league's own statistics service as a stopgap.
+
+## MLB: Viewership
+
+Viewership is matched to games from Ratings Reference records, which are kept with their record URL and the figure's original source. A figure can be marked as covering a window rather than one game, as a doubleheader that cannot be told apart, or as one network of several carrying the game; those are shown with their cause and not counted as a single-game figure. Apple's viewership is not reported to Ratings Reference, so the Apple view shows no figures and says so.
+
+## MLB: Postseason crews 2014-2026
+
+Crews for the 2025 and 2026 postseason come from 506 Sports round pages first. 506 has no MLB round pages before 2025, so 2014-2024 crews come from Wikipedia's lists of broadcasters for the Wild Card, League Championship Series and World Series, which do not cover the Division Series. The round-to-network map for those seasons is read from each season's Wikipedia postseason article and settled by hand. Each season row says what share of its games has a crew listed.
+
+<!-- mlb:end -->
+
 ## Sources and credits
 
 **Ratings Reference.** Most viewership figures on this chart come from
@@ -469,6 +503,12 @@ self-hosted alongside this site's other files.
 **NFL.** The NFL view draws on four sources. Schedules and the win-probability-derived measures come from [nflverse](https://nflverse.com), published under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); this use is modified, because the data is derived and joined with crew and viewership data. NFL viewership comes from [RatingsReference.com](https://ratingsreference.com), also CC BY 4.0 and modified; each detail panel links the Ratings Reference record and the figure's original source. Scheduling changes, meaning the original slot and network of flexed games, come from [Wikipedia](https://www.wikipedia.org), with the article linked, and are licensed [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Crews and networks come from [506 Sports](https://506sports.com), on the same terms as college football. The NFL view also offers no bulk download and loads nothing from any source when you view it.
 
 <!-- nfl:end -->
+
+<!-- mlb:start -->
+
+**MLB.** Play-by-play, results and lineups: "The information used here was obtained free of charge from and is copyrighted by Retrosheet. Interested parties may contact Retrosheet at www.retrosheet.org." Viewership comes from [RatingsReference.com](https://ratingsreference.com) (CC BY 4.0; modified), each detail panel linking the record and the figure's original source. Lists of broadcasters and postseason articles come from [Wikipedia](https://www.wikipedia.org), linked per crew and licensed [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Schedules and 2025-2026 crews come from [506 Sports](https://506sports.com); 2026 crews relayed from a fan-run schedule blog are credited per game with the post and the press release it cites. Excitement and stakes are our own analysis. The MLB view offers no bulk download and loads nothing from any source when you view it.
+
+<!-- mlb:end -->
 
 This site offers no bulk download of any of the data above, and it loads no
 data from Ratings Reference, 506 Sports, CollegeFootballData.com, or any
