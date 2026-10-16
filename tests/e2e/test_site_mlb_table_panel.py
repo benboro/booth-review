@@ -8,10 +8,11 @@ crew, lineup missing), 8 (2019 division, per_network, lineup missing).
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 
 import pytest
-from playwright.sync_api import Page
+from playwright.sync_api import Page, Route
 
 pytestmark = pytest.mark.e2e
 
@@ -105,6 +106,27 @@ def test_missing_lineup_reads_not_in_retrosheet(mlb: Page) -> None:
     assert href == "https://example.org/wiki/2014_Invented_Series"
 
 
+def test_missing_outlet_reads_not_recorded(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        g = data["games"]
+        g["network"][7] = None
+        g["network_source"][7] = None
+        g["network_source_url"][7] = None
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    mlb_guarded_page.route("**/mlb-data.json", handler)
+    open_mlb_app(mlb_guarded_page)
+    _open(mlb_guarded_page, 7)
+    text = _panel(mlb_guarded_page)
+    assert "Outlet not recorded." in text
+    assert "Outlet: \n" not in text and not text.rstrip().endswith("Outlet:")
+    assert "Outlet from Wikipedia" not in text
+
+
 def test_wikipedia_outlet_is_credited_with_its_article(mlb: Page) -> None:
     _open(mlb, 7)
     text = _panel(mlb)
@@ -193,7 +215,8 @@ def test_escape_closes_and_returns_focus(mlb: Page) -> None:
     assert "game=" in mlb.evaluate("location.search")
     mlb.keyboard.press("Escape")
     mlb.wait_for_selector("#mlb-detail-panel:not([open])", state="attached")
-    assert mlb.evaluate("document.activeElement.className") == "nfl-matchup-btn"
+    # The dialog's close event (which restores focus) is queued after `open` clears.
+    mlb.wait_for_function("document.activeElement.className === 'nfl-matchup-btn'")
     assert mlb.evaluate(f"{HOOKS}.getState().game") is None
     assert "game=" not in mlb.evaluate("location.search")
 

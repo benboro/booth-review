@@ -214,7 +214,7 @@ export function createDetailPanel(host, { onClose, getConstants } = {}) {
     const network = row.network == null
       ? el('p', null, 'Outlet not recorded.')
       : networksParagraph({ primary: { name: row.network, family: row.networkFamily }, others: [], theme: currentTheme() });
-    network.firstChild.textContent = 'Outlet: ';
+    if (row.network != null) network.firstChild.textContent = 'Outlet: ';
     body.replaceChildren(
       dateP,
       network,
