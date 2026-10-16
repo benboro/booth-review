@@ -210,3 +210,10 @@ def test_mlb_refresh_cap_default_is_forty(vault_paths, mock_transport_factory) -
     )
     assert summary.selected == 40
     assert summary.backlog == 5
+
+
+def test_mlb_run_requires_windows_and_sends_nothing(vault_paths, mock_transport_factory) -> None:
+    handle = mock_transport_factory({})
+    with pytest.raises(ValueError, match="D-14"):
+        _collector(vault_paths, handle).run(date(2026, 4, 1), date(2026, 4, 30), dry_run=False)
+    assert handle.requests == []

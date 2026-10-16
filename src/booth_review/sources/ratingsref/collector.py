@@ -245,6 +245,10 @@ class RatingsRefCollector:
     def run(
         self, start: date, end: date, *, dry_run: bool, windows: Windows | None = None
     ) -> BatchSummary:
+        if self._league == "mlb" and windows is None:
+            raise ValueError(
+                "MLB collect needs the D-14 windows (2014-2026 postseason + 2026 regular season)"
+            )
         season_label = f"{start}..{end}"
         xml = self.sitemap(dry_run=dry_run)
 
