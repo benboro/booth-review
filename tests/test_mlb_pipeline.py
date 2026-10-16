@@ -512,3 +512,48 @@ def test_rr_figure_sits_on_one_telecast_row_per_game() -> None:
         "https://example.org/r",
     ]
     assert out.filter(pl.col("game_key") == "g2")["rr_viewers"].sum() == 7.0
+
+
+def test_shown_game_without_exact_gid_joins_by_date_and_clubs_or_is_reviewed(
+    tmp_path: Path,
+) -> None:
+    from mlb_games_support import build_reference
+
+    ref = build_reference(tmp_path / "ref")
+
+    def info(gid: str, day: str, vis: str, home: str, number: int) -> dict[str, object]:
+        return {
+            "gid": gid, "season": 2026, "date": day, "visteam": vis, "hometeam": home,
+            "number": number,
+        }  # fmt: skip
+
+    gameinfo = pl.DataFrame(
+        [
+            info("G1", "20260605", "XAA", "XBB", 2),  # 506 lists it as game 0
+            info("G2", "20260606", "XCC", "XDD", 1),  # exact key shown
+            info("G3", "20260607", "XAA", "XBB", 1),  # a doubleheader: ambiguous
+            info("G4", "20260607", "XAA", "XBB", 2),
+        ]
+    )
+    shown = [
+        ("2026-06-05|alpha|bravo|0", date(2026, 6, 5), "alpha", "bravo", 0),
+        ("2026-06-06|charlie|delta|1", date(2026, 6, 6), "charlie", "delta", 1),
+        ("2026-06-07|alpha|bravo|0", date(2026, 6, 7), "alpha", "bravo", 0),
+        ("2026-06-08|alpha|bravo|0", date(2026, 6, 8), "alpha", "bravo", 0),
+    ]
+    games = pl.DataFrame(
+        {
+            "game_key": [s[0] for s in shown],
+            "season": [2026] * 4,
+            "game_date": [s[1] for s in shown],
+            "away_club": [s[2] for s in shown],
+            "home_club": [s[3] for s in shown],
+        }
+    )
+    gid_keys = pipeline._gid_keys(gameinfo, ref)
+    extra, reviews = pipeline._join_unnumbered(games, gameinfo, ref, gid_keys)
+
+    assert extra == {"G1": "2026-06-05|alpha|bravo|0"}
+    assert [(r.source, r.kind, r.pointer) for r in reviews] == [
+        ("retrosheet", "shown_game_no_gid", "2026")
+    ] * 2

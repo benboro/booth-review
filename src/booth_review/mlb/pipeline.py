@@ -262,8 +262,8 @@ def _parse_day(text: object) -> date | None:
         return None
 
 
-def _gid_keys(gameinfo: pl.DataFrame, ref: MlbReference) -> dict[str, str]:
-    """Retrosheet game id -> game key, for every game whose clubs and date resolve."""
+def _gid_slots(gameinfo: pl.DataFrame, ref: MlbReference) -> dict[str, tuple[date, str, str, int]]:
+    """Retrosheet game id -> (date, away club, home club, game number), where all resolve."""
     if gameinfo.is_empty():
         return {}
     teams = MlbTeamResolver.from_reference(ref)
@@ -275,7 +275,7 @@ def _gid_keys(gameinfo: pl.DataFrame, ref: MlbReference) -> dict[str, str]:
             clubs[slot] = teams.resolve("retrosheet", code, season).club_id
         return clubs[slot]
 
-    out: dict[str, str] = {}
+    out: dict[str, tuple[date, str, str, int]] = {}
     for gid, season, day, vis, home, number in gameinfo.select(
         "gid", "season", "date", "visteam", "hometeam", "number"
     ).iter_rows():
@@ -283,8 +283,57 @@ def _gid_keys(gameinfo: pl.DataFrame, ref: MlbReference) -> dict[str, str]:
         away_club, home_club = club(str(vis), int(season)), club(str(home), int(season))
         if parsed is None or away_club is None or home_club is None:
             continue
-        out.setdefault(str(gid), game_key(parsed, away_club, home_club, int(number or 0)))
+        out.setdefault(str(gid), (parsed, away_club, home_club, int(number or 0)))
     return out
+
+
+def _gid_keys(gameinfo: pl.DataFrame, ref: MlbReference) -> dict[str, str]:
+    """Retrosheet game id -> game key, for every game whose clubs and date resolve."""
+    return {
+        gid: game_key(day, away, home, number)
+        for gid, (day, away, home, number) in _gid_slots(gameinfo, ref).items()
+    }
+
+
+def _join_unnumbered(
+    games: pl.DataFrame,
+    gameinfo: pl.DataFrame,
+    ref: MlbReference,
+    gid_keys: dict[str, str],
+) -> tuple[dict[str, str], list[Review]]:
+    """Give shown games with no exact Retrosheet key a gid by (date, clubs) when unambiguous.
+
+    A listing 506 numbers 0 (one game of a doubleheader named without "Game N") never
+    meets Retrosheet's 1 or 2 on the exact key. Returns the gid -> shown key additions
+    and a `shown_game_no_gid` review for every shown game still without a gid, in each
+    season a Retrosheet bundle covers.
+    """
+    if gameinfo.is_empty() or games.is_empty():
+        return {}, []
+    covered = {int(s) for s in gameinfo["season"].unique().to_list()}
+    have = set(gid_keys.values())
+    slots = _gid_slots(gameinfo, ref)
+    by_slot: dict[tuple[date, str, str], list[str]] = {}
+    for gid, (day, away, home, _number) in slots.items():
+        by_slot.setdefault((day, away, home), []).append(gid)
+    shown = set(games["game_key"].to_list())
+    taken = {gid for gid, key in gid_keys.items() if key in shown}
+    extra: dict[str, str] = {}
+    reviews: list[Review] = []
+    for row in games.filter(pl.col("season").is_in(sorted(covered))).iter_rows(named=True):
+        key = str(row["game_key"])
+        if key in have:
+            continue
+        found = [
+            g
+            for g in by_slot.get((row["game_date"], row["away_club"], row["home_club"]), [])
+            if g not in taken and g not in extra
+        ]
+        if len(found) == 1:
+            extra[found[0]] = key
+        else:
+            reviews.append(Review("retrosheet", "shown_game_no_gid", 1, str(row["season"])))
+    return extra, reviews
 
 
 def _coverage(crews: pl.DataFrame) -> dict[int, tuple[int, int]]:
@@ -604,6 +653,8 @@ def run_mlb_build(
 
         gid_keys = _gid_keys(all_inputs.gameinfo, ref)
         shown_keys = set(games["game_key"].to_list())
+        extra_gids, no_gid_reviews = _join_unnumbered(games, all_inputs.gameinfo, ref, gid_keys)
+        gid_keys = {**gid_keys, **extra_gids}
         wanted = {g: k for g, k in gid_keys.items() if k in shown_keys}
         model = _model(
             paths,
@@ -672,6 +723,7 @@ def run_mlb_build(
             *apple_reviews,
             *post_reviews,
             *model.reviews,
+            *no_gid_reviews,
         ]
         nongame = [r for r in all_reviews if r.kind.startswith("non_game_")]
         other = [r for r in all_reviews if not r.kind.startswith("non_game_")]
