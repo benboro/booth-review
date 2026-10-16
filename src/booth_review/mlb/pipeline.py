@@ -301,7 +301,13 @@ def _coverage(crews: pl.DataFrame) -> dict[int, tuple[int, int]]:
 
 
 def _rr_columns(crews: pl.DataFrame, matches: Sequence[RRGameMatch]) -> pl.DataFrame:
-    """The telecast table: crew columns plus the game's Ratings Reference figure and cause."""
+    """The telecast table: crew columns plus the game's Ratings Reference figure and cause.
+
+    A figure belongs to the game, not to a telecast, so it sits on one row per game only:
+    the first own-production telecast in table order (the row the site ships), else the
+    first row. `rr_figure_row` marks that row; the game's other rows carry nulls, so
+    aggregating `rr_viewers` over telecasts never counts one audience twice.
+    """
     schema: dict[str, pl.DataType | type[pl.DataType]] = {
         "game_key": pl.String,
         "rr_cause": pl.String,
@@ -326,7 +332,24 @@ def _rr_columns(crews: pl.DataFrame, matches: Sequence[RRGameMatch]) -> pl.DataF
         for m in matches
     ]
     frame = pl.DataFrame(rows, schema=schema).unique("game_key", keep="first", maintain_order=True)
-    return crews.join(frame, on="game_key", how="left", maintain_order="left")
+    joined = crews.join(frame, on="game_key", how="left", maintain_order="left")
+    if joined.is_empty():
+        return joined.with_columns(pl.lit(None, dtype=pl.Boolean).alias("rr_figure_row"))
+    own = (joined["production"] == "own").to_list()
+    keys = joined["game_key"].to_list()
+    has_own = {k for k, o in zip(keys, own, strict=True) if o}
+    claimed: set[str] = set()
+    primary: list[bool] = []
+    for key, is_own in zip(keys, own, strict=True):
+        take = key not in claimed and (is_own or key not in has_own)
+        if take:
+            claimed.add(key)
+        primary.append(take)
+    flag = pl.Series("rr_figure_row", primary, dtype=pl.Boolean)
+    figure_cols = [name for name in schema if name != "game_key"]
+    return joined.with_columns(
+        [pl.when(flag).then(pl.col(name)).otherwise(None).alias(name) for name in figure_cols]
+    ).with_columns(flag)
 
 
 @dataclass

@@ -483,3 +483,32 @@ def test_season_2026_is_one_constant_and_the_default_range_stops_at_it(
     # A clock past the supported season never widens the default range.
     monkeypatch.setattr(mlb_commands, "mlb_current_season", lambda _today: 2027)
     assert mlb_commands._current_season() == constants.MLB_CURRENT_SEASON
+
+
+def test_rr_figure_sits_on_one_telecast_row_per_game() -> None:
+    from booth_review.mlb.rr_match import RRGameMatch
+
+    def match(key: str, viewers: float) -> RRGameMatch:
+        return RRGameMatch(
+            key, None, "date", (), "https://example.org/r", (), (), viewers, "per-game",
+            None, None, None, None, None, "https://example.org/s", None, None,
+        )  # fmt: skip
+
+    crews = pl.DataFrame(
+        {
+            "game_key": ["g1", "g1", "g2", "g2", "g3"],
+            "production": ["local", "own", "own", "own", "local"],
+        }
+    )
+    out = pipeline._rr_columns(crews, [match("g1", 5.0), match("g2", 7.0), match("g3", 9.0)])
+
+    assert out["rr_viewers"].to_list() == [None, 5.0, 7.0, None, 9.0]
+    assert out["rr_figure_row"].to_list() == [False, True, True, False, True]
+    assert out["rr_url"].to_list() == [
+        None,
+        "https://example.org/r",
+        "https://example.org/r",
+        None,
+        "https://example.org/r",
+    ]
+    assert out.filter(pl.col("game_key") == "g2")["rr_viewers"].sum() == 7.0
