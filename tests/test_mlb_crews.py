@@ -395,3 +395,15 @@ def test_506_pbp_only_crew_still_wins_when_nothing_complete_exists(tmp_path: Pat
     assert row["crew_source"] == "506"
     assert row["pbp_person_id"] == "lee"
     assert row["crew_named"] is False
+
+
+def test_malformed_relay_rows_are_reviewed_not_fatal(tmp_path: Path) -> None:
+    bad_date = {**RELAY_ROW, "game_date": "not-a-date"}
+    bad_number = {**RELAY_ROW, "game_number": "x"}
+    missing_url = {k: v for k, v in RELAY_ROW.items() if k != "post_url"}
+    bad_season = {**RELAY_ROW, "season": ""}
+    frame, _, _, reviews = run(
+        tmp_path, [tele()], relay=[bad_date, bad_number, missing_url, bad_season, RELAY_ROW]
+    )
+    assert [r.kind for r in reviews if r.source == "relay"] == ["malformed_row"] * 4
+    assert frame.row(0, named=True)["crew_source"] == "relay"

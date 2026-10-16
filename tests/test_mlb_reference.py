@@ -161,3 +161,45 @@ def test_network_resolver(ref: Path) -> None:
     assert (r.network_id, r.family) == ("apple", "apple")
     assert resolver.resolve("506", "  apple   tv+ ").network_id == "apple"
     assert resolver.resolve("506", "Unknown Net").network_id is None
+
+
+_OVERRIDE_HEAD = (
+    "season,game_date,away_club,home_club,game_number,network_id,pbp,analyst_1,analyst_2,"
+    "source_url,note\n"
+)
+
+
+def _write_overrides(ref: Path, *lines: str) -> None:
+    (ref / "mlb_crew_overrides.csv").write_text(
+        _OVERRIDE_HEAD + "".join(f"{line}\n" for line in lines), encoding="utf-8"
+    )
+
+
+@pytest.mark.parametrize(
+    ("line", "message"),
+    [
+        (f"2026,2026-13-01,alpha,bravo,0,net_one,Ana Fixture,Bo Fixture,,{URL},", "ISO date"),
+        (f"2026,05/01/2026,alpha,bravo,0,net_one,Ana Fixture,Bo Fixture,,{URL},", "ISO date"),
+        (f"2025,2026-05-01,alpha,bravo,0,net_one,Ana Fixture,Bo Fixture,,{URL},", "season"),
+        (f"2026,2026-05-01,alphq,bravo,0,net_one,Ana Fixture,Bo Fixture,,{URL},", "away_club"),
+        (f"2026,2026-05-01,alpha,bravq,0,net_one,Ana Fixture,Bo Fixture,,{URL},", "home_club"),
+        (f"2026,2026-05-01,alpha,bravo,0,net_xyz,Ana Fixture,Bo Fixture,,{URL},", "mlb_networks"),
+        (f"2026,2026-05-01,alpha,bravo,0,net_one,,Bo Fixture,,{URL},", "pbp is required"),
+    ],
+)
+def test_bad_crew_override_row_names_file_and_line(ref: Path, line: str, message: str) -> None:
+    _write_overrides(ref, line)
+    with pytest.raises(ReferenceTableError, match=rf"mlb_crew_overrides\.csv: line 2.*{message}"):
+        load_mlb_reference(ref)
+
+
+def test_duplicate_crew_override_rejected(ref: Path) -> None:
+    row = f"2026,2026-05-01,alpha,bravo,0,net_one,Ana Fixture,Bo Fixture,,{URL},"
+    _write_overrides(ref, row, row)
+    with pytest.raises(ReferenceTableError, match="duplicate"):
+        load_mlb_reference(ref)
+
+
+def test_good_crew_override_loads_through_the_bundle(ref: Path) -> None:
+    _write_overrides(ref, f"2026,2026-05-01,alpha,bravo,0,net_one,Ana Fixture,Bo Fixture,,{URL},")
+    assert load_mlb_reference(ref).crew_overrides[0].game_date == "2026-05-01"

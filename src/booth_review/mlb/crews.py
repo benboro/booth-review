@@ -236,10 +236,47 @@ def _disagreements(
 def _override_candidates(overrides: Iterable[MlbCrewOverride]) -> dict[tuple[str, str], _Candidate]:
     out: dict[tuple[str, str], _Candidate] = {}
     for o in overrides:
+        # The loader has already checked the date; hand-built rows may not have been.
         key = game_key(date.fromisoformat(o.game_date), o.away_club, o.home_club, o.game_number)
         names = tuple(n for n in (o.analyst_1, o.analyst_2) if n.strip())
         out[(key, o.network_id)] = _Candidate("override", o.pbp, names, url=o.source_url)
     return out
+
+
+def _relay_row(
+    row: Mapping[str, str],
+    teams: MlbTeamResolver,
+    networks: MlbNetworkResolver,
+    known: set[str],
+    reviews: list[Review],
+) -> tuple[tuple[str, str], _Candidate] | None:
+    """One relay row as ((game key, network), candidate); None (with a review) when dropped.
+
+    A missing column or a cell that does not parse raises KeyError or ValueError.
+    """
+    season = int(row["season"])
+    away = teams.resolve("relay", row["away_club"], season).club_id
+    home = teams.resolve("relay", row["home_club"], season).club_id
+    if away is None or home is None:
+        reviews.append(Review("relay", "unresolved_club", 1, str(season)))
+        return None
+    network = networks.resolve("relay", row["network_id"]).network_id
+    if network is None and row["network_id"] in known:
+        network = row["network_id"]
+    if network is None:
+        reviews.append(Review("relay", "unresolved_network", 1, str(season)))
+        return None
+    key = game_key(date.fromisoformat(row["game_date"]), away, home, int(row["game_number"]))
+    names = tuple(n for n in (row["analyst_1"], row["analyst_2"]) if n.strip())
+    candidate = _Candidate(
+        "relay",
+        row["pbp"],
+        names,
+        url=row["post_url"],
+        press_url=row["press_url"] or None,
+        press_name=row["press_name"] or None,
+    )
+    return (key, network), candidate
 
 
 def _relay_candidates(
@@ -250,28 +287,13 @@ def _relay_candidates(
     known = {n.network_id for n in ref.networks}
     out: dict[tuple[str, str], _Candidate] = {}
     for row in rows:
-        season = int(row["season"])
-        away = teams.resolve("relay", row["away_club"], season).club_id
-        home = teams.resolve("relay", row["home_club"], season).club_id
-        if away is None or home is None:
-            reviews.append(Review("relay", "unresolved_club", 1, str(season)))
+        try:
+            parsed = _relay_row(row, teams, networks, known, reviews)
+        except (KeyError, ValueError, TypeError, AttributeError):
+            reviews.append(Review("relay", "malformed_row", 1, "-"))
             continue
-        network = networks.resolve("relay", row["network_id"]).network_id
-        if network is None and row["network_id"] in known:
-            network = row["network_id"]
-        if network is None:
-            reviews.append(Review("relay", "unresolved_network", 1, str(season)))
-            continue
-        key = game_key(date.fromisoformat(row["game_date"]), away, home, int(row["game_number"]))
-        names = tuple(n for n in (row["analyst_1"], row["analyst_2"]) if n.strip())
-        out[(key, network)] = _Candidate(
-            "relay",
-            row["pbp"],
-            names,
-            url=row["post_url"],
-            press_url=row["press_url"] or None,
-            press_name=row["press_name"] or None,
-        )
+        if parsed is not None:
+            out[parsed[0]] = parsed[1]
     return out
 
 

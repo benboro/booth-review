@@ -8,8 +8,9 @@ never cell content. Loaders never write; people.csv is read-only here.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import get_args
 
@@ -364,17 +365,53 @@ class MlbCrewOverride:
     note: str
 
 
-def load_mlb_crew_overrides(path: Path) -> list[MlbCrewOverride]:
-    """Game-level crew corrections (D-10 first tier). A missing file is empty."""
+def load_mlb_crew_overrides(
+    path: Path,
+    *,
+    clubs: MlbClubs | None = None,
+    network_ids: Collection[str] | None = None,
+) -> list[MlbCrewOverride]:
+    """Game-level crew corrections (D-10 first tier). A missing file is empty.
+
+    Every row must name a real date, a play-by-play person, and (when `clubs` and
+    `network_ids` are given) known clubs and a known network; a (game, network) pair may
+    appear once. A bad row raises `ReferenceTableError` naming the file and line, since a
+    typo would otherwise be an override that silently never matches.
+    """
     raw_rows = read_reference_csv_numbered(path, MLB_CREW_OVERRIDE_COLUMNS, required=False)
     out: list[MlbCrewOverride] = []
+    seen: set[tuple[str, str, str, int, str]] = set()
     for line_no, raw in raw_rows:
         season = _req_int(path, line_no, raw["season"], "season")
         game_number = _req_int(path, line_no, raw["game_number"], "game_number")
         if not raw["game_date"] or not raw["away_club"] or not raw["home_club"]:
             raise _err(path, line_no, "game_date, away_club and home_club are required")
+        try:
+            day = date.fromisoformat(raw["game_date"])
+        except ValueError:
+            raise _err(path, line_no, "game_date must be an ISO date (YYYY-MM-DD)") from None
+        if day.year != season:
+            raise _err(path, line_no, "season must be the year of game_date")
+        if clubs is not None:
+            for column in ("away_club", "home_club"):
+                if raw[column] not in clubs:
+                    raise _err(path, line_no, f"{column} is not in mlb_clubs.csv")
         if not _NETWORK_ID_RE.fullmatch(raw["network_id"]):
             raise _err(path, line_no, "network_id must be a lowercase slug")
+        if network_ids is not None and raw["network_id"] not in network_ids:
+            raise _err(path, line_no, "network_id is not in mlb_networks.csv")
+        if not raw["pbp"].strip():
+            raise _err(path, line_no, "pbp is required")
+        slot = (
+            raw["game_date"],
+            raw["away_club"],
+            raw["home_club"],
+            game_number,
+            raw["network_id"],
+        )
+        if slot in seen:
+            raise _err(path, line_no, "duplicate (game, network) override")
+        seen.add(slot)
         _check_https(path, line_no, raw["source_url"])
         _check_note(path, line_no, raw["note"])
         out.append(
@@ -414,12 +451,20 @@ def load_mlb_reference(reference_dir: Path) -> MlbReference:
     ranks_path = reference_dir / "mlb_booth_ranks.csv"
     if not ranks_path.is_file():
         raise ReferenceTableError(f"{ranks_path.name}: missing required reference table")
+    clubs = load_mlb_clubs(reference_dir)
+    networks = tuple(load_mlb_networks(reference_dir))
     return MlbReference(
-        clubs=load_mlb_clubs(reference_dir),
+        clubs=clubs,
         crosswalk=tuple(load_mlb_team_crosswalk(reference_dir)),
-        networks=tuple(load_mlb_networks(reference_dir)),
+        networks=networks,
         booth_ranks=load_mlb_booth_ranks(ranks_path, people),
         map_overrides=tuple(load_mlb_postseason_map_overrides(reference_dir)),
-        crew_overrides=tuple(load_mlb_crew_overrides(reference_dir / "mlb_crew_overrides.csv")),
+        crew_overrides=tuple(
+            load_mlb_crew_overrides(
+                reference_dir / "mlb_crew_overrides.csv",
+                clubs=clubs,
+                network_ids={n.network_id for n in networks},
+            )
+        ),
         people=people,
     )
