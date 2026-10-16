@@ -17,7 +17,7 @@ from typing import Final, cast
 
 import polars as pl
 
-from booth_review.mlb.constants import CREW_COVERAGE_BAR
+from booth_review.mlb.constants import CREW_COVERAGE_BAR, MLB_CURRENT_SEASON
 from booth_review.mlb.crews import modal_analysts
 from booth_review.mlb.inputs import Review
 from booth_review.mlb.rr_match import RRGameMatch
@@ -28,7 +28,7 @@ POSTSEASON_TABLE: Final = "mlb_postseason_booths"
 POSTSEASON_SEASONS_TABLE: Final = "mlb_postseason_seasons"
 
 FIRST_SEASON: Final = 2014
-LAST_SEASON: Final = 2026
+LAST_SEASON: Final = MLB_CURRENT_SEASON
 _ROUND_ORDER: Final = ("tiebreak", "wild_card", "division", "lcs", "world_series")
 _NON_POSTSEASON: Final = frozenset({"regular", "allstar"})
 

@@ -23,6 +23,7 @@ from booth_review.audit.freeze import load_frozen
 from booth_review.config import DataPaths
 from booth_review.errors import ParseError
 from booth_review.mlb.collect_cli import load_mlb_rr_windows
+from booth_review.mlb.constants import MLB_CURRENT_SEASON
 from booth_review.mlb.layout import (
     MLB_ROUNDS,
     MLB_SOURCES,
@@ -54,7 +55,7 @@ _WAIVER_RE = re.compile(r"^(\d{4}):([a-z0-9_]+)$")
 _TIME_FMT = "%Y-%m-%dT%H:%M:%SZ"
 FREEZE_RECORD = "mlb_freeze.json"
 #: This phase never freezes the current season (D-22 as amended).
-FIRST_UNFROZEN_SEASON = 2026
+FIRST_UNFROZEN_SEASON = MLB_CURRENT_SEASON
 
 
 @dataclass(frozen=True)

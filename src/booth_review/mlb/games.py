@@ -23,7 +23,7 @@ from typing import Any, Final
 import polars as pl
 
 from booth_review.config import DataPaths
-from booth_review.mlb.constants import MAX_DATE_SHIFT_DAYS
+from booth_review.mlb.constants import MAX_DATE_SHIFT_DAYS, MLB_CURRENT_SEASON
 from booth_review.mlb.inputs import MlbInputs, Review
 from booth_review.mlb.layout import mlb_wikipedia_url
 from booth_review.mlb.listings import (
@@ -67,7 +67,7 @@ MAP_REVIEW_COLUMNS: Final = ("season", "round", "league", "network_id", "source"
 
 _LEAGUE_ROUNDS: Final = frozenset({"wild_card", "division", "lcs"})
 _NON_POSTSEASON: Final = frozenset({"regular", "allstar"})
-_CURRENT_SEASON_FROM_506: Final = 2026
+_CURRENT_SEASON_FROM_506: Final = MLB_CURRENT_SEASON
 _MAP_ROUNDS: Final = {"WC": "wild_card", "DS": "division", "CS": "lcs", "WS": "world_series"}
 
 

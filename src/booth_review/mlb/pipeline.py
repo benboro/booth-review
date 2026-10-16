@@ -32,6 +32,7 @@ from booth_review.errors import BoothReviewError, ParseError
 from booth_review.flags.era import load_eras
 from booth_review.mlb.apple import build_apple_booths
 from booth_review.mlb.constants import (
+    MLB_CURRENT_SEASON,
     STAKES_BASELINE_SEASONS,
     WE_MIN_TRAIN_GAMES,
     WE_TRAIN_SEASONS,
@@ -91,7 +92,7 @@ __all__ = [
     "run_mlb_build",
 ]
 
-CURRENT_SEASON: Final = 2026
+CURRENT_SEASON: Final = MLB_CURRENT_SEASON
 _MAX_MESSAGE_LEN: Final = 120
 _LIST_ROUND_SLUGS: Final = ("wild_card", "lcs_al", "lcs_nl", "world_series")
 _MAP_ISSUE_KINDS: Final = frozenset(

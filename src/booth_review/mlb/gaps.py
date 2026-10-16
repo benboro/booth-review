@@ -20,6 +20,7 @@ import polars as pl
 from booth_review.build.io import write_review_csv
 from booth_review.config import DataPaths
 from booth_review.mlb.collect_cli import Windows
+from booth_review.mlb.constants import MLB_CURRENT_SEASON
 
 __all__ = [
     "RELAY_GAPS_COLUMNS",
@@ -34,9 +35,9 @@ __all__ = [
 
 RELAY_GAPS_PATH: Final = "interim/review_mlb_relay_gaps.csv"
 RELAY_GAPS_COLUMNS: Final = ("game_key", "network_id", "game_date")
-RELAY_SEASON: Final = 2026
+RELAY_SEASON: Final = MLB_CURRENT_SEASON
 RR_WINDOW_MARGIN_DAYS: Final = 1
-RR_WINDOWS_END_2026: Final = date(2026, 12, 31)
+RR_WINDOWS_END_2026: Final = date(MLB_CURRENT_SEASON, 12, 31)
 _FIRST_RETROSHEET_POSTSEASON: Final = 2014
 _NOT_POSTSEASON: Final = ("regular", "allstar")
 

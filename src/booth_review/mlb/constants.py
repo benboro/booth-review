@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import math
 
+#: The one season whose games come from the 506 telecast table (no regular-season
+#: Retrosheet join before its late-year release). Raise it only with the AGENTS.md rules.
+MLB_CURRENT_SEASON = 2026
+
 # Win-expectancy (WE) table
 WE_TRAIN_SEASONS = tuple(range(2015, 2026))  # Retrosheet seasons the table trains on
 WE_TRAIN_INNINGS = 9  # regulation innings kept as table states
 WE_MAX_DIFF = 10  # score differential is clipped to +/- this
 WE_EXTRA_INNING_CAP = 10  # extra innings are pooled at this inning
-WE_GHOST_RUNNER_SEASONS = (*range(2020, 2026), 2026)  # automatic runner in extras (regular season)
+WE_GHOST_RUNNER_SEASONS = (
+    *range(2020, 2026),
+    MLB_CURRENT_SEASON,
+)  # automatic runner in extras (regular season)
 WE_PRIOR_K = 30  # pseudo-observations of smoothing toward the neighbor prior
 WE_ENFORCE_MONOTONE = True  # force WE nondecreasing in the lead
 WE_MIN_TRAIN_GAMES = 5000  # fewer training games than this fails the build

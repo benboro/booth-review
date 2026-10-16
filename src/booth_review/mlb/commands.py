@@ -34,6 +34,7 @@ from booth_review.mlb.collect_cli import (
     parse_mlb_season_spec,
     write_mlb_rr_windows,
 )
+from booth_review.mlb.constants import MLB_CURRENT_SEASON
 from booth_review.mlb.freeze import (
     accept_retrosheet_drift,
     freeze_mlb_seasons,
@@ -54,7 +55,7 @@ from booth_review.reference import reference_dir
 from booth_review.vault import VaultRepo, batch_message
 
 EXIT_BLOCKED = 4
-RELAY_SEASON = 2026
+RELAY_SEASON = MLB_CURRENT_SEASON
 RR_BACKFILL_MAX_REQUESTS = 150
 
 
@@ -69,7 +70,9 @@ def _positive_int(text: str) -> int:
 
 
 def _current_season() -> int:
-    return mlb_current_season(datetime.now(UTC).date())
+    """The newest season a default range reaches: the clock's year, never past the
+    season this module's sources cover (AGENTS.md rules)."""
+    return min(mlb_current_season(datetime.now(UTC).date()), MLB_CURRENT_SEASON)
 
 
 def add_mlb_parser(sub: Any) -> None:

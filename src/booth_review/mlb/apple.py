@@ -29,7 +29,7 @@ from booth_review.mlb.adjust import (
     stakes_band_edges,
     welch_diff,
 )
-from booth_review.mlb.constants import LOW_N
+from booth_review.mlb.constants import LOW_N, MLB_CURRENT_SEASON
 from booth_review.mlb.crews import modal_analysts
 from booth_review.mlb.inputs import Review
 from booth_review.mlb.reference import MlbReference
@@ -41,7 +41,7 @@ APPLE_BOOTHS_TABLE: Final = "mlb_apple_booths"
 APPLE_SUMMARY_TABLE: Final = "mlb_apple_summary"
 
 APPLE_NETWORK: Final = "apple"
-APPLE_SEASON: Final = 2026
+APPLE_SEASON: Final = MLB_CURRENT_SEASON
 _MEASURES: Final = ("stakes_raw", "stakes_adj", "excitement_raw", "excitement_adj")
 
 _BOOTH_SCHEMA: Final[dict[str, pl.DataType | type[pl.DataType]]] = {

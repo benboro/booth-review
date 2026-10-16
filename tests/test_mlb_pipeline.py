@@ -469,3 +469,17 @@ def test_rr_backfill_cap_fetches_part_of_a_window_and_the_next_run_continues(
     assert "fetched 1" in out and "stopped" not in out
     fetched = [r.url for r in handle.requests if "/api/telecast/" in str(r.url)]
     assert len(fetched) == 3 and len(set(map(str, fetched))) == 3
+
+
+def test_season_2026_is_one_constant_and_the_default_range_stops_at_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from booth_review.mlb import apple, constants, games, gaps, postseason
+
+    assert constants.MLB_CURRENT_SEASON == 2026
+    assert pipeline.CURRENT_SEASON == constants.MLB_CURRENT_SEASON
+    assert apple.APPLE_SEASON == postseason.LAST_SEASON == gaps.RELAY_SEASON
+    assert games._CURRENT_SEASON_FROM_506 == mlb_commands.RELAY_SEASON == 2026
+    # A clock past the supported season never widens the default range.
+    monkeypatch.setattr(mlb_commands, "mlb_current_season", lambda _today: 2027)
+    assert mlb_commands._current_season() == constants.MLB_CURRENT_SEASON
