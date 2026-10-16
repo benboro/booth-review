@@ -283,7 +283,15 @@ def run_collect_retrosheet(args: argparse.Namespace, commit_paths: CommitPaths) 
             )
             return 0
 
-        seasons: list[int] = args.season or list(range(MLB_FIRST_SEASON, mlb_season_ceiling() + 1))
+        ceiling = mlb_season_ceiling()
+        seasons: list[int] = args.season or list(range(MLB_FIRST_SEASON, ceiling + 1))
+        if args.refresh and args.season and min(args.season) < ceiling:
+            print(
+                "error: --refresh covers only the current season; a completed season is "
+                "never re-fetched",
+                file=sys.stderr,
+            )
+            return 2
         label = "index" if args.index_only else _season_label(seasons)
         result: dict[str, Any] = {}
 
@@ -293,6 +301,8 @@ def run_collect_retrosheet(args: argparse.Namespace, commit_paths: CommitPaths) 
                 index_only=args.index_only,
                 dry_run=args.dry_run,
                 refresh=args.refresh,
+                current_season=ceiling,
+                optional_from=None if args.season else ceiling,
             )
             result["summary"] = summary
             return summary.counts()
@@ -319,6 +329,10 @@ def run_collect_retrosheet(args: argparse.Namespace, commit_paths: CommitPaths) 
             print(
                 f"planned {summary.planned}, fetched {summary.fetched}, cached {summary.cached}, "
                 f"frozen {summary.frozen}, failed {summary.failed}"
+            )
+        if summary.unreleased:
+            print(
+                f"unreleased {summary.unreleased} (current-season bundle is not on the index yet)"
             )
         return 4 if summary.failed else 0
     finally:

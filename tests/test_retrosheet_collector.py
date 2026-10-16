@@ -195,3 +195,32 @@ def test_dry_run_sends_nothing(vault_paths, mock_transport_factory) -> None:
     assert summary.planned == 2
     assert handle.requests == []
     assert set(summary.counts()) == {"planned", "fetched", "cached", "frozen", "failed"}
+
+
+def test_unreleased_current_season_is_skipped_not_an_error(
+    vault_paths, mock_transport_factory
+) -> None:
+    _seed_index(vault_paths)
+    handle = mock_transport_factory(_asset_responses())
+    summary = _collector(vault_paths, handle).run([2099, 2101], optional_from=2101)
+    assert (summary.planned, summary.fetched, summary.unreleased) == (1, 1, 1)
+
+
+def test_older_missing_season_still_raises_with_optional_from(
+    vault_paths, mock_transport_factory
+) -> None:
+    _seed_index(vault_paths)
+    with pytest.raises(RetrosheetMissingAsset):
+        _collector(vault_paths, mock_transport_factory({})).run([2098], optional_from=2101)
+
+
+def test_refresh_never_refetches_a_completed_season(vault_paths, mock_transport_factory) -> None:
+    _seed_index(vault_paths)
+    for name in ("2099csvs.zip", "2100csvs.zip"):
+        path = vault_paths.raw / retrosheet_asset_path(name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(_ZIP)
+    handle = mock_transport_factory(_asset_responses())
+    summary = _collector(vault_paths, handle).run([2099, 2100], refresh=True, current_season=2100)
+    assert (summary.fetched, summary.cached) == (1, 1)
+    assert not any("2099csvs" in r.url for r in handle.requests)

@@ -547,3 +547,31 @@ def test_collect_statsapi_default_max_requests_is_one(
         == 2
     )
     assert "cap" in capsys.readouterr().err
+
+
+def test_collect_retrosheet_default_range_skips_the_unreleased_season(
+    monkeypatch: pytest.MonkeyPatch, git_vault, mock_transport_factory, patched_client, capsys
+) -> None:
+    monkeypatch.setattr(collect_cli, "mlb_season_ceiling", lambda: 2101)
+    monkeypatch.setattr(collect_cli, "MLB_FIRST_SEASON", 2099)
+    handle = mock_transport_factory({})
+    patched_client(handle)
+    _seed_retro_index(git_vault)
+
+    assert main(["collect", "retrosheet", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "planned 2" in out
+    assert "unreleased 1" in out
+    assert handle.requests == []
+
+
+def test_collect_retrosheet_refresh_rejects_a_completed_season(
+    monkeypatch: pytest.MonkeyPatch, git_vault, mock_transport_factory, patched_client, capsys
+) -> None:
+    monkeypatch.setattr(collect_cli, "mlb_season_ceiling", lambda: 2100)
+    handle = mock_transport_factory({})
+    patched_client(handle)
+
+    assert main(["collect", "retrosheet", "--season", "2099", "--refresh"]) == 2
+    assert "current season" in capsys.readouterr().err
+    assert handle.requests == []

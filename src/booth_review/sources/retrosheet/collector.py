@@ -11,6 +11,7 @@ import logging
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
 from booth_review.config import DataPaths
@@ -21,6 +22,7 @@ from booth_review.mlb.layout import (
     RETROSHEET_INDEX_URL,
     retrosheet_asset_path,
 )
+from booth_review.mlb.seasons import mlb_current_season
 from booth_review.sources.retrosheet.assets import (
     RETROSHEET_DOWNLOADS_BASE,
     RETROSHEET_HOST,
@@ -73,6 +75,8 @@ class RetrosheetSummary:
     frozen: int
     failed: int
     dry_run: bool = False
+    unreleased: int = 0
+    """Default-range seasons whose bundle is not on the index yet (not an error)."""
 
     def counts(self) -> dict[str, int]:
         return {
@@ -121,15 +125,27 @@ class RetrosheetCollector:
         raise RetrosheetMissingAsset(f"expected Retrosheet asset not on the index: {label}")
 
     def plan(
-        self, seasons: Sequence[int], assets: Sequence[RetrosheetAsset]
-    ) -> tuple[list[tuple[FetchRequest, RetrosheetAsset]], int]:
-        """(requests to consider, frozen-season skips). Raises before any request
-        if an expected asset is missing."""
+        self,
+        seasons: Sequence[int],
+        assets: Sequence[RetrosheetAsset],
+        *,
+        optional_from: int | None = None,
+    ) -> tuple[list[tuple[FetchRequest, RetrosheetAsset]], int, int]:
+        """(requests to consider, frozen-season skips, unreleased skips). Raises
+        before any request if an expected asset is missing, except that seasons at
+        or after `optional_from` may be absent from the index: Retrosheet releases
+        the current season's bundle late, so that is the expected state."""
         freeze = FreezeGuard.load(self._paths.frozen)
         wanted: list[RetrosheetAsset] = []
-        frozen = 0
+        frozen = unreleased = 0
         for season in sorted(set(seasons)):
-            bundle = self._find(assets, "season_bundle", season)
+            try:
+                bundle = self._find(assets, "season_bundle", season)
+            except RetrosheetMissingAsset:
+                if optional_from is not None and season >= optional_from:
+                    unreleased += 1
+                    continue
+                raise
             if freeze.is_frozen(SOURCE, season):
                 frozen += 1
                 continue
@@ -145,7 +161,7 @@ class RetrosheetCollector:
                 max_bytes=RETROSHEET_MAX_ZIP_BYTES,
             )
             out.append((req, asset))
-        return out, frozen
+        return out, frozen, unreleased
 
     def run(
         self,
@@ -154,7 +170,14 @@ class RetrosheetCollector:
         index_only: bool = False,
         dry_run: bool = False,
         refresh: bool = False,
+        current_season: int | None = None,
+        optional_from: int | None = None,
     ) -> RetrosheetSummary:
+        """`refresh` re-downloads only bundles for `current_season` or later: a
+        completed season is never re-fetched. `optional_from` is for the default
+        range (see `plan`)."""
+        if current_season is None:
+            current_season = mlb_current_season(datetime.now(UTC).date())
         index_req = self.plan_index()
         if index_only:
             if dry_run:
@@ -171,14 +194,17 @@ class RetrosheetCollector:
             body = self._cache.get_or_fetch(index_req, refresh=False).content
             assets = discover_assets(body, RETROSHEET_DOWNLOADS_BASE)
 
-        plan, frozen = self.plan(seasons, assets)
+        plan, frozen, unreleased = self.plan(seasons, assets, optional_from=optional_from)
         if dry_run:
-            return RetrosheetSummary(len(plan), 0, 0, frozen, 0, dry_run=True)
+            return RetrosheetSummary(
+                len(plan), 0, 0, frozen, 0, dry_run=True, unreleased=unreleased
+            )
 
         fetched = cached = failed = 0
-        for req, _asset in plan:
+        for req, asset in plan:
             exists = self._cache.read_cached(req) is not None
-            if exists and not refresh:
+            refresh_this = refresh and asset.season is not None and asset.season >= current_season
+            if exists and not refresh_this:
                 cached += 1
                 continue
             try:
@@ -193,4 +219,4 @@ class RetrosheetCollector:
                     continue
                 raise
             fetched += 1
-        return RetrosheetSummary(len(plan), fetched, cached, frozen, failed)
+        return RetrosheetSummary(len(plan), fetched, cached, frozen, failed, unreleased=unreleased)
