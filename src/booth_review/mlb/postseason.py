@@ -114,31 +114,40 @@ def build_postseason_booths(
     for (season, round_id, league), rows in sorted(
         cells.items(), key=lambda kv: (kv[0][0], _round_rank(kv[0][1]), kv[0][2] or "")
     ):
-        by_game: dict[str, dict[str, object]] = {}
+        # Every own-production row of a game counts: the game is covered when any of its
+        # rows names a crew (the season table's rule), each booth and each network is
+        # counted once per game, and a booth's analysts come from every row it appears on.
+        by_game: dict[str, list[dict[str, object]]] = {}
         for r in rows:
-            by_game.setdefault(str(r["game_key"]), r)
+            by_game.setdefault(str(r["game_key"]), []).append(r)
         keys = list(by_game)
         net_counts: dict[str, int] = {}
-        for r in by_game.values():
-            net_counts[str(r["network_id"])] = net_counts.get(str(r["network_id"]), 0) + 1
-        networks = sorted(net_counts, key=lambda n: (-net_counts[n], n))
         booth_games: dict[str, dict[str, object]] = {}
-        for r in by_game.values():
-            bk = r["booth_key"]
-            if bk is None:
-                continue
-            entry = booth_games.setdefault(
-                str(bk),
-                {
-                    "booth_key": str(bk),
-                    "pbp_person_id": r["pbp_person_id"],
-                    "analyst_person_ids": [],
-                    "games": 0,
-                    "_analysts": [],
-                },
-            )
-            cast("list[object]", entry["_analysts"]).append(r["analyst_person_ids"])
-            entry["games"] = int(str(entry["games"])) + 1
+        for game_rows in by_game.values():
+            for nid in {str(r["network_id"]) for r in game_rows}:
+                net_counts[nid] = net_counts.get(nid, 0) + 1
+            seen_booths: set[str] = set()
+            for r in game_rows:
+                bk = r["booth_key"]
+                if bk is None or str(bk) in seen_booths:
+                    continue
+                seen_booths.add(str(bk))
+                entry = booth_games.setdefault(
+                    str(bk),
+                    {
+                        "booth_key": str(bk),
+                        "pbp_person_id": r["pbp_person_id"],
+                        "analyst_person_ids": [],
+                        "games": 0,
+                        "_analysts": [],
+                    },
+                )
+                cast("list[object]", entry["_analysts"]).append(r["analyst_person_ids"])
+                entry["games"] = int(str(entry["games"])) + 1
+        networks = sorted(net_counts, key=lambda n: (-net_counts[n], n))
+        covered = sum(
+            1 for game_rows in by_game.values() if any(r["crew_named"] for r in game_rows)
+        )
         for entry in booth_games.values():
             entry["analyst_person_ids"] = modal_analysts(
                 cast("list[list[str] | None]", entry.pop("_analysts"))
@@ -157,8 +166,8 @@ def build_postseason_booths(
                 "network_ids": networks,
                 "booths": booths,
                 "games": len(keys),
-                "crew_listed": sum(1 for r in by_game.values() if r["crew_named"]),
-                "coverage_num": sum(1 for r in by_game.values() if r["crew_named"]),
+                "crew_listed": covered,
+                "coverage_num": covered,
                 "coverage_den": len(keys),
                 "mean_excitement": sum(exc_vals) / len(exc_vals) if exc_vals else None,
                 "excitement_n": len(exc_vals),

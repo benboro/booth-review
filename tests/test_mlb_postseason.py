@@ -243,3 +243,23 @@ def test_booth_analyst_is_the_most_frequent_not_the_first_game() -> None:
     cells2, _, _, _ = build_postseason_booths(games, crews2, exc_frame([]), [])
     ws2 = cells2.filter(pl.col("round") == "world_series").row(0, named=True)
     assert ws2["booths"][0]["analyst_person_ids"] == ["regular"]
+
+
+def test_cell_counts_every_own_row_of_a_game_like_the_season_table() -> None:
+    spec = [
+        (2021, "lcs", "AL", date(2021, 10, 16), None, "neta", "own", None),
+        (2021, "lcs", "AL", date(2021, 10, 16), "p6", "netb", "own", "506"),
+        (2021, "lcs", "AL", date(2021, 10, 17), "p7", "netb", "own", "506"),
+    ]
+    games, crews = build(spec)
+    cells, seasons, _, _ = build_postseason_booths(games, crews, exc_frame([]), [])
+    cell = cells.row(0, named=True)
+
+    assert cell["games"] == 2
+    # The uncrewed first row no longer hides the crewed second row of the same game.
+    assert cell["coverage_num"] == cell["crew_listed"] == 2 and cell["coverage_den"] == 2
+    assert {b["pbp_person_id"]: b["games"] for b in cell["booths"]} == {"p6": 1, "p7": 1}
+    assert sorted(cell["network_ids"]) == ["neta", "netb"]
+    assert seasons.row(0, named=True)["coverage_num"] == cell["coverage_num"]
+    # The season table also counts the game that has no own-production telecast at all.
+    assert seasons.row(0, named=True)["coverage_den"] == cell["coverage_den"] + 1
