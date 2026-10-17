@@ -216,6 +216,24 @@ def test_tiebreak_row_only_when_a_tiebreak_game_exists() -> None:
     assert cells.filter(pl.col("round") == "tiebreak").height == 1
 
 
+def test_tiebreak_games_stay_out_of_the_season_coverage() -> None:
+    spec = [*SPEC, (2018, "tiebreak", None, date(2018, 10, 1), None, "neta", "own", None)]
+    games, crews = build(spec)
+    extra = {**games.row(0, named=True), "game_key": "2018-10-02|alpha|zulu|0", "season": 2018}
+    extra["round"] = "tiebreak"
+    games = pl.concat([games, pl.DataFrame([extra], schema=dict(GAME_SCHEMA))])
+    games = games.with_columns(
+        pl.when(pl.col("game_key").str.starts_with("2018"))
+        .then(2018)
+        .otherwise(pl.col("season"))
+        .cast(games.schema["season"])
+        .alias("season")
+    )
+    _, seasons, _, counts = build_postseason_booths(games, crews, exc_frame([]), [])
+    assert 2018 not in seasons["season"].to_list()
+    assert counts["games"] == sum(r["coverage_den"] for r in seasons.iter_rows(named=True))
+
+
 def test_wikipedia_crewed_booth_counts_as_listed() -> None:
     cells, _, _, _ = run()
     ws = cells.filter(pl.col("round") == "world_series").row(0, named=True)

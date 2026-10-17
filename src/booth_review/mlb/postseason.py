@@ -31,6 +31,9 @@ FIRST_SEASON: Final = 2014
 LAST_SEASON: Final = MLB_CURRENT_SEASON
 _ROUND_ORDER: Final = ("tiebreak", "wild_card", "division", "lcs", "world_series")
 _NON_POSTSEASON: Final = frozenset({"regular", "allstar"})
+#: By MLB rule a game-163 tiebreaker is a regular-season game, so the season coverage
+#: table leaves it out of both counts (a telecast of one still gets its grid cell).
+_NOT_IN_SEASON_COVERAGE: Final = frozenset({"tiebreak"})
 
 _BOOTH_STRUCT: Final = pl.Struct(
     {
@@ -178,16 +181,18 @@ def build_postseason_booths(
         )
     cells_frame = pl.DataFrame(out, schema=_CELL_SCHEMA)
 
-    # Season coverage: every postseason game counts in the denominator, crew or not.
+    # Season coverage: every postseason game counts in the denominator, crew or not;
+    # tiebreakers are regular-season games and are left out.
+    counted = post.filter(~pl.col("round").is_in(list(_NOT_IN_SEASON_COVERAGE)))
     den: dict[int, set[str]] = {}
     num: dict[int, set[str]] = {}
     for r in games.filter(
         pl.col("round").is_not_null()
-        & ~pl.col("round").is_in(list(_NON_POSTSEASON))
+        & ~pl.col("round").is_in(list(_NON_POSTSEASON | _NOT_IN_SEASON_COVERAGE))
         & pl.col("season").is_between(FIRST_SEASON, LAST_SEASON)
     ).iter_rows(named=True):
         den.setdefault(int(str(r["season"])), set()).add(str(r["game_key"]))
-    for r in post.iter_rows(named=True):
+    for r in counted.iter_rows(named=True):
         s = int(str(r["season"]))
         den.setdefault(s, set()).add(str(r["game_key"]))
         if r["crew_named"]:
