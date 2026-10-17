@@ -6,6 +6,8 @@ from itertools import pairwise
 
 import polars as pl
 import pytest
+
+from booth_review.mlb.constants import MIN_WE_PLAYS, WE_MAX_DIFF, WE_PRIOR_K
 from booth_review.mlb.winexp import (
     WeTable,
     build_we_table,
@@ -13,8 +15,6 @@ from booth_review.mlb.winexp import (
     game_excitement,
     state_keys,
 )
-
-from booth_review.mlb.constants import MIN_WE_PLAYS, WE_MAX_DIFF, WE_PRIOR_K
 
 # (inning, top_bot, score_v, score_h, outs, br1, br2, br3)
 Play = tuple[int, int, int, int, int, str | None, str | None, str | None]
