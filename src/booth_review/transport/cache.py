@@ -20,7 +20,13 @@ from typing import Any, Literal
 from booth_review.config import HOST_SOURCE, DataPaths
 from booth_review.errors import FetchError, FrozenSeasonError, VaultStateError
 from booth_review.transport.client import PoliteClient
-from booth_review.transport.types import FetchGuard, FetchRequest, FetchResponse, Validators
+from booth_review.transport.types import (
+    FetchGuard,
+    FetchRequest,
+    FetchResponse,
+    Source,
+    Validators,
+)
 
 CacheStatus = Literal["cached", "new", "frozen-miss"]
 Outcome = Literal["cached", "fetched", "not_modified"]
@@ -33,7 +39,7 @@ Outcome = Literal["cached", "fetched", "not_modified"]
 # (lastmod advanced, or newly listed in the sitemap) is decided one layer up,
 # by RatingsRefCollector.refresh (Plan 03) -- this constant only says which
 # source is ever allowed to attempt the request.
-_REFRESH_EXEMPT_SOURCES = frozenset({"ratingsref", "nfl_ratingsref"})
+_REFRESH_EXEMPT_SOURCES = frozenset({"ratingsref", "nfl_ratingsref", "mlb_ratingsref"})
 
 _MANIFEST_FIELDS = (
     "url",
@@ -222,6 +228,7 @@ class RawCache:
         self._freeze = freeze if freeze is not None else FreezeGuard.load(paths.frozen)
         self._manifest = Manifest(paths.manifest)
         self.counters: dict[str, int] = {"cached": 0, "fetched": 0, "not_modified": 0}
+        self._requesting_source: Source | None = None
         client.add_robots_listener(self._on_robots)
 
     def _resolve_cache_path(self, cache_path: str) -> Path:
@@ -279,12 +286,17 @@ class RawCache:
             guard.before_fetch(req)
 
         validators = self._manifest.latest_validators(req.url) if refresh and conditional else None
-        resp = self._client.fetch(
-            req.url,
-            validators=validators,
-            bearer_token=bearer_token,
-            headers=dict(req.headers) or None,
-        )
+        self._requesting_source = req.source
+        try:
+            resp = self._client.fetch(
+                req.url,
+                validators=validators,
+                bearer_token=bearer_token,
+                headers=dict(req.headers) or None,
+                max_bytes=req.max_bytes,
+            )
+        finally:
+            self._requesting_source = None
 
         for guard in self._guards:
             guard.after_fetch(req, resp)
@@ -394,11 +406,20 @@ class RawCache:
 
     def _on_robots(self, host: str, resp: FetchResponse) -> None:
         date_str = resp.fetched_at.strftime("%Y-%m-%d")
-        path = self._paths.raw / "_robots" / host / f"{date_str}.txt"
+        source = HOST_SOURCE[host]
+        folder = Path("_robots") / host
+        requester = self._requesting_source
+        if requester is not None and requester.startswith("mlb_") and source.startswith("nfl_"):
+            # A host that NFL collection owns (Wikipedia) is also read for MLB. Keep
+            # the MLB copy and its manifest row under MLB, so an MLB run neither
+            # moves the NFL data stamp nor shows up as an NFL source.
+            source = requester
+            folder = Path("mlb") / requester.removeprefix("mlb_") / "_robots" / host
+        path = self._paths.raw / folder / f"{date_str}.txt"
         atomic_write_bytes(path, resp.content)
         entry = ManifestEntry(
             url=f"https://{host}/robots.txt",
-            source=HOST_SOURCE[host],
+            source=source,
             season=None,
             kind="robots",
             fetched_at=resp.fetched_at.strftime("%Y-%m-%dT%H:%M:%SZ"),

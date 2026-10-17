@@ -12,6 +12,7 @@ import stamina
 from booth_review.config import HOST_POLICIES, USER_AGENT, HostPolicy
 from booth_review.errors import (
     FetchError,
+    ResponseTooLargeError,
     RobotsDisallowedError,
     RobotsUnavailableError,
     UnknownHostError,
@@ -722,3 +723,47 @@ def test_redirect_loop_is_cut_off() -> None:
     with pytest.raises(FetchError, match="too many redirects"):
         client.fetch("https://github.com/a")
     assert len(log) == 1 + 6
+
+
+# -- Response size cap --------------------------------------------------------
+
+_CAP_URL = "https://506sports.com/ncaaf.php?yr=2025&wk=1"
+
+
+def test_max_bytes_passes_a_body_within_the_cap() -> None:
+    responses = {
+        "https://506sports.com/robots.txt": ALLOW_ALL_ROBOTS,
+        _CAP_URL: (200, b"x" * 100, {"ETag": "abc"}),
+    }
+    client = _client(_recording_handler(responses, []))
+    resp = client.fetch(_CAP_URL, max_bytes=100)
+    assert resp.content == b"x" * 100
+    assert resp.etag == "abc"
+
+
+def test_max_bytes_aborts_an_oversize_body() -> None:
+    responses = {
+        "https://506sports.com/robots.txt": ALLOW_ALL_ROBOTS,
+        _CAP_URL: (200, b"x" * 101, {}),
+    }
+    client = _client(_recording_handler(responses, []))
+    with pytest.raises(ResponseTooLargeError):
+        client.fetch(_CAP_URL, max_bytes=100)
+
+
+def test_max_bytes_rejects_declared_length_before_reading() -> None:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if request.url.path == "/robots.txt":
+            return httpx2.Response(404, content=b"nf", request=request)
+
+        def chunks():  # type: ignore[no-untyped-def]
+            raise AssertionError("body must not be read")
+            yield b""
+
+        return httpx2.Response(
+            200, headers={"Content-Length": "5000"}, content=chunks(), request=request
+        )
+
+    client = _client(handler)
+    with pytest.raises(ResponseTooLargeError):
+        client.fetch(_CAP_URL, max_bytes=100)

@@ -220,3 +220,17 @@ skipped until a later build phase adds a league option.
   Panel from September 2025.
 - **Licensing:** each MLB figure keeps its record URL and its `source_url` under
   the license section above.
+
+### Collection and refresh scope (Phase 9)
+
+- `--league mlb` on `collect ratingsref` and `refresh ratingsref`; seasons are
+  calendar years. Event slugs that are not games are skipped.
+- Scope (D-14): `booth-review mlb rr-backfill` is a one-time backfill that stores
+  windows for the 2014-2026 postseason and the 2026 regular season. A record
+  qualifies only when its game date is inside a stored window; without stored
+  windows the MLB commands refuse to run.
+- The MLB refresh is hand-run only (not in the scheduled job), capped at 40
+  re-fetches per run.
+- Reported hazards: doubleheaders (slugs carry no game number), conflicting final
+  figures, and per-network claims with no total.
+

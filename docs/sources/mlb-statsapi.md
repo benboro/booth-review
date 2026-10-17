@@ -65,3 +65,20 @@ Unknown, for the same reason.
 analysis use only and are never displayed, under the field list's Display rule.
 MLB has not granted written permission. Display is an open question for the
 build.
+
+## Phase 9 route (D-04, D-22)
+
+The collector (`booth-review collect statsapi`) is built and disabled. It stays
+disabled until the user approves a single test request, then serves 2026 lineups
+only (capped by `--max-requests`, default 1), never in bulk. Any refusal (HTTP 406
+or another 4xx) ends the route: no retries, no user-agent or header changes, no
+other endpoints. The default is to wait for Retrosheet's late-2026 release.
+
+
+## Phase 9 D-04/D-22 outcome
+
+October 14, 2026: the owner chose to wait for Retrosheet 2026. No request was
+sent to statsapi.mlb.com, the collector stays disabled, and `config.py` carries
+no host policy for it. The dry run planned 36 dates; the single test request
+(2026-03-27, lineups) was never made. Revisit only if Retrosheet's release slips
+and the owner approves a test request.

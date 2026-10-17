@@ -31,13 +31,15 @@ from typing import Literal
 
 from booth_review.build.site_assembly import (
     BUILD_MARKER,
-    add_nfl_to_site,
-    check_nfl_file_key,
+    SportSpec,
+    add_sport_to_site,
     check_no_key_leak,
+    check_sport_file_key,
     docs_dir,
-    nfl_site_payload_from_bytes,
     site_source_dir,
     site_sports,
+    sport_payload_from_bytes,
+    sport_spec,
 )
 from booth_review.errors import DeployError, KeyLeakError
 from booth_review.vault import batch_message
@@ -51,7 +53,7 @@ _BOT_NAME = "booth-review-publish[bot]"
 _BOT_EMAIL = "booth-review-publish@users.noreply.github.com"
 
 
-NflCarryProblem = Literal[
+SportCarryProblem = Literal[
     "read_failed",
     "invalid",
     "key_check_failed",
@@ -59,6 +61,7 @@ NflCarryProblem = Literal[
     "stage_failed",
     "switch_failed",
 ]
+NflCarryProblem = SportCarryProblem
 _SHA_RE = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
 
 
@@ -75,6 +78,10 @@ class DeployResult:
     nfl_not_carried: NflCarryProblem | None = None
     # The carry also turned the NFL switch on in a switch-less site (iter-2 WR-02).
     nfl_switched_on: bool = False
+    # The same three facts for the live mlb-data.json (D-16).
+    mlb_carried: bool = False
+    mlb_not_carried: SportCarryProblem | None = None
+    mlb_switched_on: bool = False
 
 
 def _site_files(site: Path) -> list[Path]:
@@ -200,6 +207,7 @@ def _check_committed_tree(target: Path, subdir: str, site: Path, files: list[Pat
 
 
 NFL_DATA_FILE = "nfl-data.json"
+MLB_DATA_FILE = "mlb-data.json"
 
 
 def _target_branch(target: Path) -> str:
@@ -209,14 +217,14 @@ def _target_branch(target: Path) -> str:
     return branch
 
 
-def _read_live_nfl_blob(target: Path, subdir: str) -> bytes | None:
-    """The fetched tip's `<subdir>/nfl-data.json` bytes, or None when it has no
+def _read_live_sport_blob(target: Path, subdir: str, data_file: str) -> bytes | None:
+    """The fetched tip's `<subdir>/<data_file>` bytes, or None when it has no
     such regular file (never a symlink or any other mode). The blob is read by
     the SHA `ls-tree` listed, so the read is tied to exactly the checked entry.
     """
     branch = _target_branch(target)
     _git_ok(target, "fetch", "--depth=1", "origin", branch)
-    rel = f"{subdir}/{NFL_DATA_FILE}"
+    rel = f"{subdir}/{data_file}"
     listed = _git_ok(target, "ls-tree", "-z", "FETCH_HEAD", "--", rel).stdout
     records = [r for r in listed.split("\0") if r]
     if len(records) != 1:
@@ -240,61 +248,86 @@ def _read_live_nfl_blob(target: Path, subdir: str) -> bytes | None:
     return shown.stdout
 
 
-def _stage_nfl_file(site: Path, body: bytes) -> None:
-    """Write `body` as `site/nfl-data.json` through a hidden sibling of `site`,
+def _read_live_nfl_blob(target: Path, subdir: str) -> bytes | None:
+    """`_read_live_sport_blob` for nfl-data.json."""
+    return _read_live_sport_blob(target, subdir, NFL_DATA_FILE)
+
+
+def _stage_sport_file(site: Path, spec: SportSpec, body: bytes) -> None:
+    """Write `body` as `site/<data file>` through a hidden sibling of `site`,
     so a kill never leaves a temp file inside the deployed dir."""
+    assert spec.data_file is not None
     stage = Path(
-        tempfile.mkdtemp(prefix=f".{site.resolve().name}.nfl-carry-", dir=site.resolve().parent)
+        tempfile.mkdtemp(
+            prefix=f".{site.resolve().name}.{spec.id}-carry-", dir=site.resolve().parent
+        )
     )
     try:
-        staged = stage / NFL_DATA_FILE
+        staged = stage / spec.data_file
         staged.write_bytes(body)
-        staged.replace(site / NFL_DATA_FILE)
+        staged.replace(site / spec.data_file)
     finally:
         shutil.rmtree(stage, ignore_errors=True)
 
 
-def _carry_live_nfl_file(
-    site: Path, target: Path, subdir: str, *, nfl_wanted: bool, site_src: Path, docs: Path
-) -> tuple[bool, bool, NflCarryProblem | None]:
-    """D-20: carry the target's live `<subdir>/nfl-data.json` into `site`.
+def _carry_live_sport_file(
+    site: Path,
+    target: Path,
+    subdir: str,
+    spec: SportSpec,
+    *,
+    wanted: bool,
+    site_src: Path,
+    docs: Path,
+    read: Callable[[Path, str], bytes | None] | None = None,
+) -> tuple[bool, bool, SportCarryProblem | None]:
+    """D-20: carry the target's live `<subdir>/<data file>` into `site`.
 
     The mirror deletes the whole subdir before copying, so a site without the
     file would delete the live one. Whether to carry is read from the built
     index.html's sports meta, never from the flag alone (IN-04), so the server
     never holds a file no page loads:
-    - a site with the NFL switch gets the live file as is;
-    - a switch-less site gets it only when NFL is wanted (`nfl_wanted`, the
-      exact NFL_SITE_ENABLED flag), and then with the switch and the NFL
-      modules too (`add_nfl_to_site`): the run had no valid NFL file of its
-      own, so the last good one keeps NFL reachable (iter-2 WR-02);
+    - a site that lists the sport gets the live file as is;
+    - a site that lacks it gets the file only when the sport is wanted (`wanted`,
+      the sport's exact env flag), and then with its switch entry and modules
+      too (`add_sport_to_site`): the run had no valid file of its own, so the
+      last good one keeps the sport reachable (iter-2 WR-02). The sport is added
+      to the site as it stands now, so an earlier carry that switched another
+      sport on is kept, and the switch order follows the registry;
     - anything else carries nothing.
 
-    The live bytes are validated against the NFL contract and key-checked on
-    their own, outside `site`, before anything is staged. Returns (carried,
+    The live bytes are validated against the sport's contract and key-checked
+    on their own, outside `site`, before anything is staged. Returns (carried,
     switched_on, problem). Never raises: on any failure `site` is left as it
-    was and `problem` is a count-only reason, so an NFL problem can never
+    was and `problem` is a count-only reason, so a sport's problem can never
     block the CFB deploy.
     """
+    assert spec.data_file is not None
+    reader = read or (lambda t, s: _read_live_sport_blob(t, s, spec.data_file or ""))
     try:
         sports = site_sports(site)
     except Exception:
         return False, False, "read_failed"
-    switch_on = "nfl" not in sports
-    if switch_on and not (nfl_wanted and sports == ("cfb",)):
-        return False, False, None
+    switch_on = spec.id not in sports
+    if switch_on:
+        # Any sport joins a build that lists CFB first, whatever else it lists: with
+        # MLB on the built site is cfb,mlb, and a failed NFL build must still keep the
+        # live NFL view.
+        base_ok = sports[:1] == ("cfb",)
+        if not (wanted and base_ok):
+            return False, False, None
     try:
-        raw = _read_live_nfl_blob(target, subdir)
+        raw = reader(target, subdir)
     except Exception:
         return False, False, "read_failed"
     if raw is None:
         return False, False, None
     try:
-        payload = nfl_site_payload_from_bytes(raw)
+        payload = sport_payload_from_bytes(spec.id, raw)
     except Exception:
         return False, False, "invalid"
     try:
-        if not check_nfl_file_key(payload[1], scratch_parent=site.resolve().parent):
+        if not check_sport_file_key(spec.id, payload[1], scratch_parent=site.resolve().parent):
             return False, False, "key_check_skipped"
     except KeyLeakError:
         return False, False, "key_check_failed"
@@ -302,8 +335,8 @@ def _carry_live_nfl_file(
         return False, False, "stage_failed"
     if switch_on:
         try:
-            added = add_nfl_to_site(
-                site_out=site, site_src=site_src, docs=docs, nfl_payload=payload
+            added = add_sport_to_site(
+                spec.id, site_out=site, site_src=site_src, docs=docs, payload=payload
             )
         except KeyLeakError:
             return False, False, "key_check_failed"
@@ -313,10 +346,46 @@ def _carry_live_nfl_file(
             return False, False, "key_check_skipped"
         return True, True, None
     try:
-        _stage_nfl_file(site, payload[1])
+        _stage_sport_file(site, spec, payload[1])
     except Exception:
         return False, False, "stage_failed"
     return True, False, None
+
+
+def _carry_live_nfl_file(
+    site: Path, target: Path, subdir: str, *, nfl_wanted: bool, site_src: Path, docs: Path
+) -> tuple[bool, bool, SportCarryProblem | None]:
+    """`_carry_live_sport_file` for nfl-data.json."""
+    return _carry_live_sport_file(
+        site,
+        target,
+        subdir,
+        sport_spec("nfl"),
+        wanted=nfl_wanted,
+        site_src=site_src,
+        docs=docs,
+        read=_read_live_nfl_blob,
+    )
+
+
+def _carry_live_mlb_file(
+    site: Path, target: Path, subdir: str, *, mlb_wanted: bool, site_src: Path, docs: Path
+) -> tuple[bool, bool, SportCarryProblem | None]:
+    """`_carry_live_sport_file` for mlb-data.json (D-16, RESEARCH Pitfall 9).
+
+    Runs only when MLB_SITE_ENABLED is exactly true in this process's
+    environment; a scheduled-job deploy therefore needs the flag in the job's
+    environment.
+    """
+    return _carry_live_sport_file(
+        site,
+        target,
+        subdir,
+        sport_spec("mlb"),
+        wanted=mlb_wanted,
+        site_src=site_src,
+        docs=docs,
+    )
 
 
 def publish_site(
@@ -331,8 +400,8 @@ def publish_site(
     docs: Path | None = None,
 ) -> DeployResult:
     """`site_src` and `docs` (default: `site_source_dir()` and `docs_dir()`)
-    are read only to turn the NFL switch on in a switch-less site that carries
-    the live nfl-data.json (`_carry_live_nfl_file`)."""
+    are read only to turn a sport's switch entry on in a site that carries that
+    sport's live data file (`_carry_live_nfl_file`, `_carry_live_mlb_file`)."""
     _validate_subdir(subdir)
     env_map = env if env is not None else os.environ
     if env_map.get("PUBLISH_ENABLED") != "true":
@@ -352,6 +421,20 @@ def publish_site(
             target,
             subdir,
             nfl_wanted=env_map.get("NFL_SITE_ENABLED") == "true",
+            site_src=site_src or site_source_dir(),
+            docs=docs or docs_dir(),
+        )
+    # The MLB carry reads the site as the NFL carry left it, never the original build.
+    mlb_carried = False
+    mlb_switched_on = False
+    mlb_not_carried: SportCarryProblem | None = None
+    mlb_target = site / MLB_DATA_FILE
+    if not (mlb_target.exists() or mlb_target.is_symlink()):
+        mlb_carried, mlb_switched_on, mlb_not_carried = _carry_live_mlb_file(
+            site,
+            target,
+            subdir,
+            mlb_wanted=env_map.get("MLB_SITE_ENABLED") == "true",
             site_src=site_src or site_source_dir(),
             docs=docs or docs_dir(),
         )
@@ -392,6 +475,9 @@ def publish_site(
                 nfl_carried,
                 nfl_not_carried,
                 nfl_switched_on,
+                mlb_carried,
+                mlb_not_carried,
+                mlb_switched_on,
             )
 
         message = batch_message("deploy", "booth-review", f"bundle {short}", {"files": len(files)})
@@ -425,6 +511,9 @@ def publish_site(
                 nfl_carried,
                 nfl_not_carried,
                 nfl_switched_on,
+                mlb_carried,
+                mlb_not_carried,
+                mlb_switched_on,
             )
         if not any(marker in pushed.stderr for marker in _REJECTION_MARKERS):
             raise DeployError(f"deploy push failed (exit {pushed.returncode})")

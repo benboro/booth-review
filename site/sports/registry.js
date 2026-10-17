@@ -16,6 +16,13 @@ export const SPORTS = [
     module: './nfl/index.js',
     data: 'nfl-data.json',
   },
+  {
+    id: 'mlb',
+    label: 'MLB',
+    title: 'booth-review · MLB national telecasts',
+    module: './mlb/index.js',
+    data: 'mlb-data.json',
+  },
 ];
 
 /**

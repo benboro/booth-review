@@ -304,8 +304,8 @@ def test_add_nfl_equals_a_flag_on_build_byte_for_byte(
     _no_leftovers(tmp_path)
 
 
-def test_add_nfl_refuses_anything_but_a_cfb_only_build(tmp_path: Path) -> None:
-    with pytest.raises(SiteBuildError, match="not a CFB-only"):
+def test_add_nfl_refuses_a_build_that_already_has_it_or_is_not_a_build(tmp_path: Path) -> None:
+    with pytest.raises(SiteBuildError, match="not a build that can take it"):
         _add(_site_with_nfl(tmp_path))
     (tmp_path / "plain").mkdir()
     with pytest.raises(SiteBuildError, match="not a booth-review site build"):

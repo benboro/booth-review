@@ -32,6 +32,18 @@ from booth_review.contract.models import crew_source_url_problem
 from booth_review.errors import ReferenceTableError
 from booth_review.flags.era import ERA_COLUMNS, load_eras
 from booth_review.flags.events import EVENT_COLUMNS, load_event_flags
+from booth_review.mlb.reference import (
+    MLB_BOOTH_RANK_COLUMNS,
+    MLB_CLUB_COLUMNS,
+    MLB_MAP_OVERRIDE_COLUMNS,
+    MLB_NETWORK_COLUMNS,
+    MLB_TEAM_CROSSWALK_COLUMNS,
+    load_mlb_booth_ranks,
+    load_mlb_clubs,
+    load_mlb_networks,
+    load_mlb_postseason_map_overrides,
+    load_mlb_team_crosswalk,
+)
 from booth_review.nfl.reference import (
     NFL_BOOTH_RANK_COLUMNS,
     NFL_FRANCHISE_COLUMNS,
@@ -116,6 +128,17 @@ KNOWN_TABLES: dict[str, tuple[tuple[str, ...] | None, Loader | None]] = {
     ),
     "nfl_booth_ranks.csv": (NFL_BOOTH_RANK_COLUMNS, load_nfl_booth_ranks),
     "nfl_week_overrides.csv": (NFL_WEEK_OVERRIDE_COLUMNS, load_nfl_week_overrides),
+    "mlb_clubs.csv": (MLB_CLUB_COLUMNS, load_mlb_clubs),
+    "mlb_team_crosswalk.csv": (MLB_TEAM_CROSSWALK_COLUMNS, load_mlb_team_crosswalk),
+    "mlb_networks.csv": (MLB_NETWORK_COLUMNS, load_mlb_networks),
+    "mlb_booth_ranks.csv": (
+        MLB_BOOTH_RANK_COLUMNS,
+        lambda d: load_mlb_booth_ranks(d / "mlb_booth_ranks.csv", load_people(d)),
+    ),
+    "mlb_postseason_map_overrides.csv": (
+        MLB_MAP_OVERRIDE_COLUMNS,
+        load_mlb_postseason_map_overrides,
+    ),
 }
 
 # 04.3 D-01: the one documented exception to Phase 3 D-05/D-06. Each row records a

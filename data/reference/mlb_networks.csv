@@ -1,0 +1,73 @@
+source,variant,network_id,family,note
+506,MLBN,mlbn,other,
+506,MLBN alt,mlbn_alt,other,
+506,ESPN Unltd,espn_unltd,disney,
+506,ESPN,espn,disney,
+506,Peacock,peacock,nbc,
+506,Peacock local,peacock_local,nbc,
+506,Apple TV+,apple,apple,
+506,FS1,fs1,fox,
+506,NBC,nbc,nbc,
+506,FOX,fox,fox,
+506,TBS,tbs,tbs,
+506,truTV,trutv,tbs,
+506,Netflix,netflix,other,
+506,ABC,abc,disney,
+wikipedia,ABC,abc,disney,
+wikipedia,ESPN,espn,disney,
+wikipedia,ESPN2,espn,disney,prose map name
+wikipedia,TBS,tbs,tbs,
+wikipedia,Fox,fox,fox,
+wikipedia,FS1,fs1,fox,
+wikipedia,NBC,nbc,nbc,
+wikipedia,Apple TV+,apple,apple,
+wikipedia,Netflix,netflix,other,
+wikipedia,MLB Network,mlbn,other,
+wikipedia,ABC (Game 1) ESPN2 (Game 2),abc,disney,list spelling
+wikipedia,ABC (Game 3),abc,disney,list spelling
+wikipedia,ABC (Games 1–2),abc,disney,list spelling
+wikipedia,ESPN (Game 1) ESPN2 (Game 2),espn,disney,list spelling
+wikipedia,ESPN (Game 3),espn,disney,list spelling
+wikipedia,ESPN (Games 1–2),espn,disney,list spelling
+wikipedia,ESPN (U.S.),espn,disney,list spelling
+wikipedia,ESPN2 (Game 1) ESPN (Game 2),espn,disney,list spelling
+wikipedia,"FS1 (Games 1, 3–7)",fs1,fox,list spelling
+wikipedia,"FS1 (Games 1–3, 5)",fs1,fox,list spelling
+wikipedia,FS1 (Games 2–5),fs1,fox,list spelling
+wikipedia,FS1 (Games 2–6),fs1,fox,list spelling
+wikipedia,FS1 (Games 2–6) (U.S.),fs1,fox,list spelling
+wikipedia,FS1 (Games 2–7),fs1,fox,list spelling
+wikipedia,FS1 (Games 2–7) (US),fs1,fox,list spelling
+wikipedia,FS1/Fox One (Games 2–4),fs1,fox,list spelling
+wikipedia,Fox (Game 1),fox,fox,list spelling
+wikipedia,Fox (Game 1) (U.S.),fox,fox,list spelling
+wikipedia,Fox (Game 1–2),fox,fox,list spelling
+wikipedia,"Fox (Game 1–2, 7)",fox,fox,list spelling
+wikipedia,Fox (Game 2),fox,fox,list spelling
+wikipedia,"Fox (Games 1, 4, 7)",fox,fox,list spelling
+wikipedia,Fox (Games 1–2),fox,fox,list spelling
+wikipedia,"Fox (Games 1–2, 7) (US)",fox,fox,list spelling
+wikipedia,"Fox (Games 2, 4)",fox,fox,list spelling
+wikipedia,Fox / Fox One,fox,fox,list spelling
+wikipedia,Fox / Fox One (US),fox,fox,list spelling
+wikipedia,Fox/Fox One (Games 1 and 2),fox,fox,list spelling
+wikipedia,NBC/Peacock,nbc,nbc,list spelling
+wikipedia,Peacock/NBCSN,peacock,nbc,list spelling
+wikipedia,TBS (U.S.),tbs,tbs,list spelling
+wikipedia,TBS / Max,tbs,tbs,list spelling
+wikipedia,TBS / TruTV / HBO Max,tbs,tbs,list spelling
+ratingsref,MLB Network,mlbn,other,
+ratingsref,MLBN,mlbn,other,
+ratingsref,ESPN,espn,disney,
+ratingsref,ESPN2,espn,disney,
+ratingsref,ABC,abc,disney,
+ratingsref,FOX,fox,fox,
+ratingsref,FS1,fs1,fox,
+ratingsref,TBS,tbs,tbs,
+ratingsref,truTV,trutv,tbs,
+ratingsref,NBC,nbc,nbc,
+ratingsref,NBCSN,nbc,nbc,
+ratingsref,Peacock,peacock,nbc,
+ratingsref,Apple TV+,apple,apple,
+ratingsref,Apple TV,apple,apple,
+ratingsref,Netflix,netflix,other,

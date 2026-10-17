@@ -20,6 +20,7 @@ import stamina
 from booth_review.config import HOST_POLICIES, USER_AGENT, HostPolicy
 from booth_review.errors import (
     FetchError,
+    ResponseTooLargeError,
     RobotsDisallowedError,
     RobotsUnavailableError,
     UnknownHostError,
@@ -70,6 +71,38 @@ _BUDGETED_WAIT_MAX_S = 90.0
 
 class _RetryableStatus(Exception):
     """Internal signal that a response's status code should be retried."""
+
+
+def _read_capped(response: httpx2.Response, request: httpx2.Request, cap: int) -> httpx2.Response:
+    """Read a streamed body, aborting once it passes `cap` bytes.
+
+    A redirect is returned unread (its body is never needed). Otherwise the
+    body is decoded in chunks and a new in-memory response replaces the stream, so
+    nothing larger than `cap` plus one chunk is ever held.
+    """
+    if response.next_request is not None:
+        return response
+    try:
+        declared = response.headers.get("Content-Length")
+        if declared is not None and declared.isdigit() and int(declared) > cap:
+            raise ResponseTooLargeError("response is larger than the size cap")
+        chunks: list[bytes] = []
+        total = 0
+        for chunk in response.iter_bytes():
+            total += len(chunk)
+            if total > cap:
+                raise ResponseTooLargeError("response is larger than the size cap")
+            chunks.append(chunk)
+    finally:
+        response.close()
+    headers = [
+        (k, v)
+        for k, v in response.headers.multi_items()
+        if k.lower() not in ("content-encoding", "content-length", "transfer-encoding")
+    ]
+    return httpx2.Response(
+        response.status_code, headers=headers, content=b"".join(chunks), request=request
+    )
 
 
 class PoliteClient:
@@ -123,6 +156,7 @@ class PoliteClient:
         validators: Validators | None = None,
         bearer_token: str | None = None,
         headers: Mapping[str, str] | None = None,
+        max_bytes: int | None = None,
     ) -> FetchResponse:
         host = httpx2.URL(url).host
         policy = self._host_policies.get(host)
@@ -136,7 +170,9 @@ class PoliteClient:
         }
         if bearer_token:
             req_headers["Authorization"] = f"Bearer {bearer_token}"
-        return self._send(host, policy, url, validators=validators, headers=req_headers)
+        return self._send(
+            host, policy, url, validators=validators, headers=req_headers, max_bytes=max_bytes
+        )
 
     def _check_robots(self, host: str, policy: HostPolicy, url: str) -> None:
         self._ensure_robots(host, policy)
@@ -202,6 +238,7 @@ class PoliteClient:
         validators: Validators | None,
         headers: dict[str, str],
         check_robots: bool = True,
+        max_bytes: int | None = None,
     ) -> FetchResponse:
         req_headers = dict(headers)
         if validators is not None:
@@ -214,7 +251,7 @@ class PoliteClient:
         hop_host, hop_policy = host, policy
         redirects = 0
         while True:
-            response = self._send_hop(hop_host, hop_policy, request, url)
+            response = self._send_hop(hop_host, hop_policy, request, url, max_bytes=max_bytes)
             next_request = response.next_request
             if next_request is None:
                 break
@@ -263,7 +300,13 @@ class PoliteClient:
         return fetch_resp
 
     def _send_hop(
-        self, host: str, policy: HostPolicy, request: httpx2.Request, url: str
+        self,
+        host: str,
+        policy: HostPolicy,
+        request: httpx2.Request,
+        url: str,
+        *,
+        max_bytes: int | None = None,
     ) -> httpx2.Response:
         """Send one request (no redirect following), paced and retried per
         `host`'s policy."""
@@ -271,7 +314,14 @@ class PoliteClient:
         def attempt() -> httpx2.Response:
             self._pace(host, policy)
             try:
-                response = self._client.send(request, follow_redirects=False)
+                if max_bytes is None:
+                    response = self._client.send(request, follow_redirects=False)
+                else:
+                    response = _read_capped(
+                        self._client.send(request, stream=True, follow_redirects=False),
+                        request,
+                        max_bytes,
+                    )
             finally:
                 self._last_request_end[host] = self._clock()
             return response

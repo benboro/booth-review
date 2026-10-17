@@ -22,8 +22,16 @@ from typing import Literal, Protocol
 
 from booth_review.config import DataPaths
 from booth_review.errors import FrozenSeasonError
+from booth_review.mlb.layout import MLB_ROUNDS, mlb_506_path, mlb_506_url
 from booth_review.nfl.layout import nfl_506_path, nfl_506_url
 from booth_review.sources.sports506.collector import WEEK_LABELS
+from booth_review.sources.sports506.mlb_parser import (
+    Layout,
+    detect_layout,
+    discover_mlb_season_labels,
+    mlb_smoke_check,
+    parse_mlb_page,
+)
 from booth_review.sources.sports506.nfl_parser import nfl_smoke_check
 from booth_review.sources.sports506.weeks import discover_season_weeks, smoke_check
 from booth_review.transport.cache import (
@@ -67,6 +75,21 @@ _NFL_TITLE_RE = re.compile(
 )
 _NFL_FILENAME_RE = re.compile(r"^(\d{4})-nfl-wk(\d{1,2})\.html$")
 
+# The MLB token is matched loosely (any short word) so an unexpected round label
+# (a tiebreak page, say) is reported as unsupported instead of looking like junk.
+_MLB_CANONICAL_RE = re.compile(
+    r"<link[^>]*rel=[\"']canonical[\"'][^>]*href=[\"'][^\"']*mlb\.php\?yr=(\d{4})(?:&amp;|&)wk=(\d{1,2}|[A-Za-z]{1,4})[\"']",
+    re.IGNORECASE,
+)
+_MLB_TITLE_RE = re.compile(
+    r"<title>[^<]*MLB:\s*Week\s+(\d{1,2}|[A-Za-z]{1,4}),\s*(\d{4})[^<]*</title>", re.IGNORECASE
+)
+_MLB_FILENAME_RE = re.compile(r"^(\d{4})-mlb-wk(\d{1,2}|WC|DS|CS|WS)\.html$")
+# D-21: 506 has no MLB round pages before 2025; 2026 weekly pages are cgame.
+MLB_FIRST_PAGE_SEASON = 2025
+MLB_WEEKLY_FIRST_SEASON = 2026
+_MLB_MAX_WEEK = 30
+
 
 class _Smoke(Protocol):
     @property
@@ -80,7 +103,7 @@ class _Smoke(Protocol):
 class PageProfile:
     """Everything that differs between the CFB and NFL 506 hand-save importers."""
 
-    league: Literal["cfb", "nfl"]
+    league: Literal["cfb", "nfl", "mlb"]
     source: Source
     canonical_re: re.Pattern[str]
     title_re: re.Pattern[str]
@@ -117,6 +140,39 @@ def _nfl_labels(season: int) -> tuple[str, ...]:
     return tuple(str(n) for n in range(1, last + 1))
 
 
+def _mlb_labels(season: int) -> tuple[str, ...]:
+    if season < MLB_FIRST_PAGE_SEASON:
+        return ()
+    weeks = (
+        tuple(str(n) for n in range(1, _MLB_MAX_WEEK + 1))
+        if season >= MLB_WEEKLY_FIRST_SEASON
+        else ()
+    )
+    return (*weeks, *MLB_ROUNDS)
+
+
+def _mlb_request(season: int, label: str) -> FetchRequest:
+    return FetchRequest(
+        source="mlb_sports506",
+        season=season,
+        url=mlb_506_url(season, label),
+        cache_path=mlb_506_path(season, label),
+    )
+
+
+@dataclass(frozen=True)
+class _MlbSmoke:
+    reason: str | None
+
+    @property
+    def passed(self) -> bool:
+        return self.reason is None
+
+
+def _mlb_smoke(content: bytes, season: int, label: str) -> _MlbSmoke:
+    return _MlbSmoke(mlb_smoke_check(content, season=season, label=label))
+
+
 CFB_PROFILE = PageProfile(
     league="cfb",
     source="sports506",
@@ -143,6 +199,19 @@ NFL_PROFILE = PageProfile(
     default_dir=Path("data/incoming/506/nfl"),
 )
 
+MLB_PROFILE = PageProfile(
+    league="mlb",
+    source="mlb_sports506",
+    canonical_re=_MLB_CANONICAL_RE,
+    title_re=_MLB_TITLE_RE,
+    filename_re=_MLB_FILENAME_RE,
+    labels=_mlb_labels,
+    request=_mlb_request,
+    smoke=_mlb_smoke,
+    season_marker=str,
+    default_dir=Path("data/incoming/506/mlb"),
+)
+
 
 @dataclass
 class SkippedFile:
@@ -155,6 +224,7 @@ class ImportResult:
     """The outcome of importing one season's worth of incoming 506 files."""
 
     season: int
+    league: str = "cfb"
     imported: list[str] = field(default_factory=list)
     skipped_existing: list[str] = field(default_factory=list)
     skipped_invalid: list[SkippedFile] = field(default_factory=list)
@@ -175,25 +245,54 @@ class ImportResult:
     """WR-05: weeks whose legacy-root page differs from the one in cfb/ (or
     conflicts within the root); the cfb/ page is used and the root one ignored."""
 
+    out_of_scope: int = 0
+    """MLB: pages in a layout the profile does not read (Fox coverage maps)."""
+    unsupported_pages: list[str] = field(default_factory=list)
+    """MLB: page labels that are neither a week nor a known round; never written."""
+    changed_without_force: list[str] = field(default_factory=list)
+    """MLB: labels whose saved page differs from the cached one and were kept."""
+    replaced: list[str] = field(default_factory=list)
+    """Labels whose cached page was overwritten by a forced re-import."""
+
     def counts(self) -> dict[str, int]:
         """Counts for vault.batch_message, count-only (never real page text)."""
-        return {
+        counts = {
             "imported": len(self.imported),
-            "skipped": len(self.skipped_existing) + len(self.skipped_invalid),
+            "skipped": (
+                len(self.skipped_existing)
+                + len(self.skipped_invalid)
+                + len(self.changed_without_force)
+            ),
         }
+        if self.unsupported_pages:
+            counts["unsupported"] = len(self.unsupported_pages)
+        if self.out_of_scope:
+            counts["out_of_scope"] = self.out_of_scope
+        return counts
 
     @property
     def has_problems(self) -> bool:
         """True when something needs a human's attention."""
-        return bool(self.missing or self.skipped_invalid or self.unsupported_labels)
+        return bool(
+            self.missing
+            or self.skipped_invalid
+            or self.unsupported_labels
+            or self.unsupported_pages
+            or self.changed_without_force
+        )
 
 
 def _normalize_label(raw: str, season: int, profile: PageProfile) -> str | None:
+    if profile.league == "mlb":
+        # Membership is decided later so an odd round token is reported, not dropped.
+        return str(int(raw)) if raw.isdigit() else raw.upper()
     label = raw if raw == "B" else str(int(raw))
     return label if label in profile.labels(season) else None
 
 
 def _week_sort_key(label: str) -> tuple[int, int]:
+    if label in MLB_ROUNDS:
+        return (2, MLB_ROUNDS.index(label))
     return (1, 0) if label == "B" else (0, int(label))
 
 
@@ -207,6 +306,15 @@ def identify_page(
     """
     text = content.decode("utf-8", errors="replace")
     canonical = profile.canonical_re.search(text)
+    if profile.league == "mlb":
+        # T-09-11-01: when both are present, canonical link and title must agree.
+        title_hit = profile.title_re.search(text)
+        if canonical and title_hit:
+            same = int(canonical.group(1)) == int(title_hit.group(2)) and _normalize_label(
+                canonical.group(2), 0, profile
+            ) == _normalize_label(title_hit.group(1), 0, profile)
+            if not same:
+                return None
     if canonical:
         season = int(canonical.group(1))
         label = _normalize_label(canonical.group(2), season, profile)
@@ -289,6 +397,8 @@ class Sports506Importer:
             page_season, label = identity
             if page_season != season:
                 continue
+            if self._profile.league == "mlb" and self._mlb_excluded(season, label, content, result):
+                continue
             if label in found and found[label] != content:
                 conflicts.add(label)
             found[label] = content
@@ -303,6 +413,41 @@ class Sports506Importer:
             )
         return found
 
+    def _mlb_excluded(self, season: int, label: str, content: bytes, result: ImportResult) -> bool:
+        """True when an MLB page is counted out of the import (count-only reasons)."""
+        if season < MLB_FIRST_PAGE_SEASON:
+            result.skipped_invalid.append(
+                SkippedFile(label=label, reason="no MLB round pages before 2025")
+            )
+            return True
+        if label.isdigit() and detect_layout(content.decode("utf-8", errors="replace")) == "map":
+            result.out_of_scope += 1
+            return True
+        if label not in self._profile.labels(season):
+            if label not in result.unsupported_pages:
+                result.unsupported_pages.append(label)
+            return True
+        return False
+
+    def _mlb_expected_weeks(
+        self, season: int, pages: dict[str, bytes]
+    ) -> tuple[list[str], str, list[str]]:
+        """2026 weeks come from the page nav; 2025 expects the four rounds."""
+        known = set(self._profile.labels(season))
+        nav: set[str] = set()
+        if season >= MLB_WEEKLY_FIRST_SEASON:
+            sources = list(pages.values())
+            season_dir = self._paths.raw / "mlb" / "sports506" / str(season)
+            if season_dir.is_dir():
+                sources += [p.read_bytes() for p in sorted(season_dir.glob("wk-*.html"))]
+            for content in sources:
+                nav.update(discover_mlb_season_labels(content))
+        unsupported = sorted(nav - known, key=_week_sort_key)
+        if nav & known:
+            return sorted(nav & known, key=_week_sort_key), "nav", unsupported
+        default = list(MLB_ROUNDS) if known else []
+        return default, "default", unsupported
+
     def _expected_weeks(
         self, season: int, pages: dict[str, bytes]
     ) -> tuple[list[str], str, list[str]]:
@@ -310,6 +455,8 @@ class Sports506Importer:
         see (this run's incoming pages plus whatever is already cached),
         never a fixed 18-week assumption.
         """
+        if self._profile.league == "mlb":
+            return self._mlb_expected_weeks(season, pages)
         if self._profile.league == "nfl":
             # NFL never relies on 506's nav: the week list is fixed by season.
             return list(self._profile.labels(season)), "default", []
@@ -344,7 +491,7 @@ class Sports506Importer:
         if freeze.is_frozen(profile.source, season):
             raise FrozenSeasonError(f"cannot import frozen season: {profile.source} {season}")
 
-        result = ImportResult(season=season)
+        result = ImportResult(season=season, league=self._profile.league)
         labels = profile.labels(season)
         requests_by_label = {label: profile.request(season, label) for label in labels}
         saved_mtimes: dict[str, float] = {}
@@ -370,7 +517,10 @@ class Sports506Importer:
 
             dest = self._paths.raw / req.cache_path
             if dest.exists() and not force:
-                result.skipped_existing.append(label)
+                if profile.league == "mlb" and dest.read_bytes() != content:
+                    result.changed_without_force.append(label)
+                else:
+                    result.skipped_existing.append(label)
                 continue
 
             reason = _validation_failure_reason(content, season, profile)
@@ -388,8 +538,11 @@ class Sports506Importer:
                 )
                 continue
 
+            replacing = dest.exists()
             self._import_one(req, dest, content, saved_mtimes[label])
             result.imported.append(label)
+            if replacing:
+                result.replaced.append(label)
 
         result.missing = [
             label
@@ -415,7 +568,7 @@ class Sports506Importer:
         within one folder reject a week as a conflict.
         """
         root_mtimes: dict[str, float] = {}
-        root_result = ImportResult(season=season)
+        root_result = ImportResult(season=season, league=self._profile.league)
         root_pages = self._scan(LEGACY_INCOMING_DIR, season, root_result, root_mtimes)
         result.unrecognized += root_result.unrecognized
         merged = dict(pages)
@@ -467,3 +620,65 @@ class Sports506Importer:
             saved_at=saved_at,
         )
         self._manifest.append(entry)
+
+
+@dataclass(frozen=True)
+class InspectRow:
+    """One inspected file; carries no file name or page text (counts only)."""
+
+    file_index: int
+    season: int | None
+    label: str | None
+    layout: Layout
+    listings: int
+    non_game: int
+    crew_listed: int
+    verdict: Literal["importable", "out_of_scope", "unrecognized", "rejected"]
+
+
+def inspect_folder(profile: PageProfile, folder: Path) -> tuple[list[InspectRow], dict[str, int]]:
+    """Report each saved file's layout, label and counts without importing."""
+    if profile.league != "mlb":
+        raise NotImplementedError("inspect is only implemented for the MLB profile")
+    rows: list[InspectRow] = []
+    summary: dict[str, int] = {}
+
+    def bump(key: str) -> None:
+        summary[key] = summary.get(key, 0) + 1
+
+    files = [p for p in sorted(folder.glob("*.htm*")) if p.is_file()]
+    for index, path in enumerate(files):
+        content = path.read_bytes()
+        text = content.decode("utf-8", errors="replace")
+        layout = detect_layout(text)
+        identity = identify_page(path, content, profile)
+        if identity is None:
+            rows.append(InspectRow(index, None, None, layout, 0, 0, 0, "unrecognized"))
+            bump("unrecognized")
+            continue
+        season, label = identity
+        listings = non_game = crew = 0
+        try:
+            page = parse_mlb_page(content, season=season, label=label)
+        except Exception:
+            page = None
+        if page is not None:
+            listings, non_game = len(page.listings), len(page.non_game)
+            crew = sum(1 for item in page.listings if item.crew_names)
+        verdict: Literal["importable", "out_of_scope", "unrecognized", "rejected"]
+        if season < MLB_FIRST_PAGE_SEASON:
+            verdict = "rejected"
+        elif label.isdigit() and layout == "map":
+            verdict = "out_of_scope"
+        elif (
+            label not in profile.labels(season)
+            or _validation_failure_reason(content, season, profile) is not None
+            or not profile.smoke(content, season, label).passed
+        ):
+            verdict = "rejected"
+        else:
+            verdict = "importable"
+        rows.append(InspectRow(index, season, label, layout, listings, non_game, crew, verdict))
+        bump(verdict)
+        bump(f"season_{season}")
+    return rows, summary

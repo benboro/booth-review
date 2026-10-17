@@ -45,6 +45,10 @@ changed.
 04.19 review WR-05: the header-only review_second_source_gate.csv gains accepts_ignored
 and accepts_unused columns (digest equals the sha256 of its header line); no figure
 changed.
+
+Phase 09 (MLB module): the MLB isolation characterizations below pass on HEAD and must keep
+passing. The input_stamp assertion for raw/mlb/ manifest lines is owned by plan 09-02
+(TDD red then green), because on HEAD input_stamp only skips nfl/ paths.
 """
 
 from __future__ import annotations
@@ -233,6 +237,21 @@ def test_nfl_manifest_lines_keep_cfb_generated_at(git_vault: DataPaths, tmp_path
     assert json.loads(site.read_bytes())["generated_at"] == "2026-10-01T10:00:00+00:00"
 
 
+def test_mlb_manifest_lines_do_not_move_input_stamp(git_vault: DataPaths, tmp_path: Path) -> None:
+    ref = _vault_with_sentinel_note(git_vault, tmp_path, _KNOWN_BOWLS)
+    _write_manifest(
+        git_vault,
+        [
+            *_CFB_MANIFEST,
+            _entry("mlb/retrosheet/gameinfo.zip", "m1", "2026-10-12T10:00:00Z"),
+            _entry("_robots/www.retrosheet.org/robots.txt", "m2", "2026-10-13T10:00:00Z"),
+        ],
+    )
+    run_build(git_vault, ref, commit=False, accept_baseline=True)
+    site = git_vault.vault / "processed" / "site-data.json"
+    assert json.loads(site.read_bytes())["generated_at"] == "2026-10-01T10:00:00+00:00"
+
+
 def test_default_sitemap_parse_ignores_other_leagues() -> None:
     def url(slug: str) -> tuple[str, str]:
         return slug, "2026-01-01T00:00:00+00:00"
@@ -327,3 +346,116 @@ def test_nfl_raw_tree_invisible_to_cfb_loaders(git_vault: DataPaths, tmp_path: P
 
     assert load_all_sources(git_vault) == before_sources
     assert build_completeness(git_vault, [2025], now=now) == before_report
+
+
+def test_mlb_raw_tree_invisible_to_cfb_loaders(git_vault: DataPaths, tmp_path: Path) -> None:
+    ref = _vault_with_sentinel_note(git_vault, tmp_path, _KNOWN_BOWLS)
+    _write_manifest(git_vault, _CFB_MANIFEST)
+    now = datetime(2026, 10, 11, tzinfo=UTC)
+    before_sources = load_all_sources(git_vault)
+    before_report = build_completeness(git_vault, [2025], now=now)
+
+    mlb = git_vault.raw / "mlb"
+    files = {
+        "ratingsref/telecast/2026/mlb-aaa-bbb-2026-04-03.json": b'{"invented": true}',
+        "sports506/2026/wk-01.html": b"<html>invented</html>",
+        "retrosheet/gameinfo.zip": b"PK\x03\x04invented",
+        "relay/crew_relays.csv": b"invented\n",
+    }
+    for rel, data in files.items():
+        target = mlb / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+
+    assert load_all_sources(git_vault) == before_sources
+    assert build_completeness(git_vault, [2025], now=now) == before_report
+    run_build(git_vault, ref, commit=False, accept_baseline=True)
+    digests = _compute_digests(git_vault)
+    assert digests["processed/site-data.json"] == _GOLDEN["processed/site-data.json"]
+
+
+def test_cfb_refresh_plan_ignores_mlb_entries(
+    vault_paths: DataPaths, mock_transport_factory, fake_clock
+) -> None:
+    cfb_new = "cfb-alpha-beta-2025-09-06"
+    cfb_advanced = "cfb-gamma-delta-2025-09-13"
+    mlb_slugs = ["mlb-alpha-beta-2026-04-03", "mlb-all-star-2026-07-14"]
+    cfb_sitemap = [
+        (cfb_new, "2026-03-01T00:00:00+00:00"),
+        (cfb_advanced, "2026-02-01T00:00:00+00:00"),
+    ]
+    mlb_sitemap = [(slug, "2026-04-01T00:00:00+00:00") for slug in mlb_slugs]
+
+    sitemap_dir = vault_paths.raw / "ratingsref" / "sitemap"
+    sitemap_dir.mkdir(parents=True, exist_ok=True)
+    sitemap_file = sitemap_dir / "2026-10-01.xml"
+
+    log = vault_paths.rr_lastmod_log
+    log.parent.mkdir(parents=True, exist_ok=True)
+    cfb_line = {
+        "event": "fetched",
+        "telecast_id": cfb_advanced,
+        "lastmod": "2025-12-01T00:00:00+00:00",
+        "fetched_at": "2025-12-01T00:00:00Z",
+        "record_url": f"https://ratingsreference.com/telecast/{cfb_advanced}",
+    }
+    mlb_lines = [
+        {
+            "event": "fetched",
+            "telecast_id": slug,
+            "lastmod": "2026-01-01T00:00:00+00:00",
+            "fetched_at": "2026-01-02T00:00:00Z",
+            "record_url": f"https://ratingsreference.com/telecast/{slug}",
+        }
+        for slug in mlb_slugs
+    ]
+
+    def dry_summary(sitemap: list[tuple[str, str]], lines: list[dict[str, str]]):
+        sitemap_file.write_bytes(_sitemap_xml(sitemap))
+        log.write_text("".join(json.dumps(x) + "\n" for x in lines), encoding="utf-8")
+        handle = mock_transport_factory({})
+        cache = RawCache(vault_paths, _client(handle, fake_clock=fake_clock))
+        summary = RatingsRefCollector(cache, vault_paths).refresh(current_season=2025, dry_run=True)
+        assert handle.requests == []
+        return summary
+
+    with_mlb = dry_summary(cfb_sitemap + mlb_sitemap, [cfb_line, *mlb_lines])
+    without_mlb = dry_summary(cfb_sitemap, [cfb_line])
+    assert with_mlb == without_mlb
+    assert (with_mlb.qualifying, with_mlb.new, with_mlb.advanced) == (2, 1, 1)
+
+
+def test_default_sitemap_parse_ignores_mlb_entries() -> None:
+    def url(slug: str) -> tuple[str, str]:
+        return slug, "2026-01-01T00:00:00+00:00"
+
+    xml = _sitemap_xml(
+        [
+            url("cfb-alpha-beta-2025-09-06"),
+            url("mlb-alpha-beta-2026-04-03"),
+            url("cfb-gamma-delta-2025-09-13"),
+            url("nfl-alpha-beta-2025-09-07"),
+            url("mlb-gamma-delta-2026-04-04"),
+            url("mlb-all-star-2026-07-14"),
+        ]
+    )
+    entries, skipped = parse_sitemap(xml)
+    assert skipped == 4
+    assert [e.telecast_id for e in entries] == [
+        "cfb-alpha-beta-2025-09-06",
+        "cfb-gamma-delta-2025-09-13",
+    ]
+    second = entries[1]
+    assert second == SitemapEntry(
+        telecast_id="cfb-gamma-delta-2025-09-13",
+        record_url="https://ratingsreference.com/telecast/cfb-gamma-delta-2025-09-13",
+        json_url="https://ratingsreference.com/api/telecast/cfb-gamma-delta-2025-09-13.json",
+        event_date=second.event_date,
+        season=2025,
+        lastmod="2026-01-01T00:00:00+00:00",
+    )
+    assert (second.event_date.year, second.event_date.month, second.event_date.day) == (
+        2025,
+        9,
+        13,
+    )

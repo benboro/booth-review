@@ -1,0 +1,4 @@
+gid,visteam,hometeam,site,date,number,starttime,daynight,innings,tiebreaker,usedh,htbf,timeofgame,attendance,fieldcond,precip,sky,temp,winddir,windspeed,oscorer,forfeit,suspend,umphome,ump1b,ump2b,ump3b,umplf,umprf,wp,lp,save,gametype,vruns,hruns,wteam,lteam,line,batteries,lineups,box,pbp,season
+XBB202004010,XAA,XBB,XST01,20200401,0,7:05PM,night,9,,true,,,,,,,,,,,,,,,,,,,,,,regular,3,4,,,,,,,,2020
+XBB202004020,XAA,XBB,XST01,20200402,0,7:05PM,night,9,,true,,,,,,,,,,,,,,,,,,,,,,wildcard,3,4,,,,,,,,2020
+XBB202004021,XAA,XBB,XST01,20200402,2,7:05PM,night,9,,true,,,,,,,,,,,,,,,,,,,,,,regular,3,4,,,,,,,,2020

@@ -42,3 +42,43 @@ Article text is licensed
 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), which is
 share-alike; the field list records how that affects published rows. The
 NFL site shows `original_slot`, `original_network` and the change article link in the detail panel, with a CC BY-SA 4.0 notice in the footer, the panel and `docs/nfl-data.md` (999.5 D-23).
+
+## MLB pages (Phase 9)
+
+`booth-review collect wikipedia --league mlb` reads plain `/wiki/<title>` pages
+only: the "<year> Major League Baseball postseason" articles from 2014 (13 season
+articles) and the named broadcaster list pages. It extracts rounds, series
+leagues, outlets and lead-booth markers; nothing else is kept. Text is CC BY-SA
+4.0, so published rows carry the article URL and the share-alike notice, and the
+cached HTML stays in the private vault.
+
+
+### Confirmed MLB structure (first live collection, 2026-10-14)
+
+All 18 requests returned 200 (13 season articles 2014-2026, 5 list pages). The
+five list-page titles in `MLB_WIKIPEDIA_LIST_PAGES` are confirmed as written, with
+no 404s and no title changes:
+
+- `List_of_Major_League_Baseball_wild_card_round_broadcasters`
+- `List_of_American_League_Championship_Series_broadcasters`
+- `List_of_National_League_Championship_Series_broadcasters`
+- `List_of_World_Series_broadcasters`
+- `List_of_current_Major_League_Baseball_broadcasters` (the current national list
+  page, RESEARCH A10: confirmed)
+
+Structure (headers only):
+
+- Season articles: `wikitable` series tables with columns Game, Date, Score,
+  Location, Time, Attendance; sections run Teams, Playoff bracket, then one
+  section per series (Wild Card Series, Division Series, then the later rounds),
+  with a sub-heading per matchup in the form "(seed) team vs. (seed) team".
+- Wild card list: sections Television and Radio, split by decade; tables with
+  Year, League, Series, Network, Play-by-play, Color commentator(s),
+  Field reporter(s); a Year/Game variant and a League/Series variant also occur.
+- ALCS, NLCS and World Series lists: a National television section split by
+  decade; tables with Year, Network, Play-by-play, Color commentator(s),
+  Field reporter(s), Pregame host(s), Pregame analysts, Trophy presentation
+  (singular "Pregame host" occurs in places).
+- Current list: regional television, regional radio and a National broadcasters
+  section; the regional tables are keyed by Team and are not the national crew
+  source.

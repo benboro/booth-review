@@ -1,0 +1,10 @@
+source,variant,club_id,season_from,season_to,note
+506,Alpha City,alpha,,2024,synthetic
+506,Alpha Bay,alpha,2025,,synthetic
+506,Bravo,bravo,,,synthetic
+ratingsref,Aces,alpha,,,synthetic
+retrosheet,ALC,alpha,,,synthetic
+relay,Chargers,charlie,,,synthetic
+wikipedia,Dragons,delta,,,synthetic
+any,Delta,delta,,,synthetic
+any,Bravo,bravo,,,synthetic

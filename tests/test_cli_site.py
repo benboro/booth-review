@@ -69,6 +69,9 @@ def _site_source_files(*, include_nfl: bool) -> list[Path]:
             continue
         if not include_nfl and rel.parts[:2] == ("sports", "nfl"):
             continue
+        # MLB ships only behind --mlb / MLB_SITE_ENABLED; neither build here sets it.
+        if rel.parts[:2] == ("sports", "mlb"):
+            continue
         found.append(rel)
     return found
 
@@ -82,6 +85,7 @@ def test_fixture_build_copies_every_site_source_file(site_env: Path) -> None:
     for rel in _site_source_files(include_nfl=False):
         assert (out / rel).is_file(), rel
     assert not (out / "sports" / "nfl").exists()
+    assert not (out / "sports" / "mlb").exists()
 
     assert (out / "site-data.json").is_file()
     assert (out / "methodology.html").is_file()
@@ -97,6 +101,7 @@ def test_flag_on_build_copies_every_site_source_file(site_env: Path) -> None:
     for rel in _site_source_files(include_nfl=True):
         assert (out / rel).is_file(), rel
     assert (out / "nfl-data.json").is_file()
+    assert not (out / "sports" / "mlb").exists()
 
 
 def test_nfl_flag_env_is_exact(site_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -448,3 +453,51 @@ def test_require_key_check_passes_with_key(
     captured = capsys.readouterr()
     assert "cfbd key check: passed" in captured.out
     assert _SYNTHETIC_KEY not in captured.out + captured.err
+
+
+# -- MLB behind its own flag (D-01) --------------------------------------------------------
+
+MLB_FIXTURE_PATH = REPO_ROOT / "tests" / "fixtures" / "contract" / "mlb-data.fixture.json"
+
+
+def test_mlb_flag_adds_the_entry_and_data_file(
+    site_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("BOOTH_REVIEW_MLB_FIXTURE", str(MLB_FIXTURE_PATH))
+    out = site_env / "out"
+
+    assert main(["site", "--fixture", "--mlb", "--out", str(out)]) == 0
+
+    assert (out / "mlb-data.json").is_file()
+    assert not (out / "nfl-data.json").exists()
+    index = (out / "index.html").read_text(encoding="utf-8")
+    assert '<meta name="booth-review-sports" content="cfb,mlb">' in index
+    assert "mlb: " in capsys.readouterr().out
+
+
+def test_mlb_flag_env_is_exact(site_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BOOTH_REVIEW_MLB_FIXTURE", str(MLB_FIXTURE_PATH))
+    monkeypatch.setenv("MLB_SITE_ENABLED", "True")
+    assert main(["site", "--fixture", "--out", str(site_env / "off")]) == 0
+    assert not (site_env / "off" / "mlb-data.json").exists()
+    assert not (site_env / "off" / "sports" / "mlb").exists()
+
+    monkeypatch.setenv("MLB_SITE_ENABLED", "true")
+    assert main(["site", "--fixture", "--out", str(site_env / "on")]) == 0
+    assert (site_env / "on" / "mlb-data.json").is_file()
+
+
+def test_mlb_without_vault_file_names_the_command_to_run(
+    site_env: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    vault_root = site_env / "vault"
+    (vault_root / "processed").mkdir(parents=True)
+    shutil.copy(FIXTURE_PATH, vault_root / "processed" / "site-data.json")
+    monkeypatch.setenv("BOOTH_REVIEW_VAULT", str(vault_root))
+
+    code = main(["site", "--mlb", "--out", str(site_env / "out")])
+
+    err = capsys.readouterr().err
+    assert code != 0
+    assert "processed/mlb-data.json not found" in err
+    assert "booth-review mlb site-data" in err

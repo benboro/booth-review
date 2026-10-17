@@ -116,6 +116,26 @@ def _is_nfl_input(path: str) -> bool:
     return path.startswith(("nfl/", *_NFL_ROBOTS_PREFIXES))
 
 
+# Every non-CFB sport's raw tree and host-only robots copies stay out of the CFB stamp.
+_OTHER_SPORT_PREFIXES: tuple[str, ...] = ("nfl/", "mlb/")
+_OTHER_SPORT_ROBOTS_PREFIXES: tuple[str, ...] = tuple(
+    sorted(
+        f"_robots/{host}/"
+        for host, source in HOST_SOURCE.items()
+        if source.startswith(("nfl_", "mlb_"))
+    )
+)
+
+
+def _is_other_sport_input(path: str) -> bool:
+    return path.startswith((*_OTHER_SPORT_PREFIXES, *_OTHER_SPORT_ROBOTS_PREFIXES))
+
+
+def mlb_input_stamp(paths: DataPaths) -> datetime:
+    """Like `input_stamp`, but over MLB inputs only (paths under mlb/)."""
+    return _stamp(paths, lambda path: path.startswith("mlb/"))
+
+
 def input_stamp(paths: DataPaths) -> datetime:
     """The newest change to a collected input, from the request manifest.
 
@@ -123,11 +143,11 @@ def input_stamp(paths: DataPaths) -> datetime:
     sha256) whose sha256 differs from the previous entry for the same path; the
     first entry for a path is a change. Identical inputs give an identical
     stamp, so a rebuild with nothing new is byte-identical (D-02 idempotence),
-    and a refresh that returns the same bytes does not move it. NFL inputs
-    (paths under nfl/, and robots.txt copies of NFL-only hosts) never move the
+    and a refresh that returns the same bytes does not move it. NFL and MLB inputs
+    (paths under nfl/ or mlb/, and robots.txt copies of NFL- or MLB-only hosts) never move the
     CFB stamp.
     """
-    return _stamp(paths, lambda path: not _is_nfl_input(path))
+    return _stamp(paths, lambda path: not _is_other_sport_input(path))
 
 
 def _stale_preliminary_headlines(

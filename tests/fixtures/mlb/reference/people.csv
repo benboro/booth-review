@@ -1,0 +1,4 @@
+person_id,canonical_name,variants,usual_role,role_override
+ana-fixture,Ana Fixture,Ana Fixture,pbp,
+bo-fixture,Bo Fixture,Bo Fixture,analyst,
+cy-fixture,Cy Fixture,Cy Fixture,pbp,

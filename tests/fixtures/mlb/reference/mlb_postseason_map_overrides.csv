@@ -1,0 +1,4 @@
+season,round,league,network_id,source_url
+2026,lcs,AL,net_one,https://example.invalid/map-2026
+2026,lcs,NL,cable_two,https://example.invalid/map-2026
+2026,world_series,,net_one,https://example.invalid/map-2026

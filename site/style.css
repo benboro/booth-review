@@ -2184,12 +2184,14 @@ html {
 }
 
 html:has(#detail-panel[open]),
-html:has(#nfl-detail-panel[open]) {
+html:has(#nfl-detail-panel[open]),
+html:has(#mlb-detail-panel[open]) {
   overflow: hidden;
 }
 
 #detail-panel,
-#nfl-detail-panel {
+#nfl-detail-panel,
+#mlb-detail-panel {
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -2203,13 +2205,15 @@ html:has(#nfl-detail-panel[open]) {
 
 /* D-38: one scroller, .panel-inner; the dialog never scrolls. Gated on [open]. */
 #detail-panel[open],
-#nfl-detail-panel[open] {
+#nfl-detail-panel[open],
+#mlb-detail-panel[open] {
   display: flex;
   flex-direction: column;
 }
 
 #detail-panel .panel-inner,
-#nfl-detail-panel .panel-inner {
+#nfl-detail-panel .panel-inner,
+#mlb-detail-panel .panel-inner {
   padding: var(--space-lg);
   flex: 1 1 auto;
   min-height: 0;
@@ -2219,7 +2223,8 @@ html:has(#nfl-detail-panel[open]) {
 }
 
 #detail-panel::backdrop,
-#nfl-detail-panel::backdrop {
+#nfl-detail-panel::backdrop,
+#mlb-detail-panel::backdrop {
   background: rgb(0 0 0 / 0.5);
 }
 
@@ -2249,12 +2254,14 @@ html:has(#nfl-detail-panel[open]) {
 
 @media (prefers-reduced-motion: no-preference) {
   #detail-panel[open],
-  #nfl-detail-panel[open] {
+  #nfl-detail-panel[open],
+  #mlb-detail-panel[open] {
     animation: modal-in 120ms ease-out;
   }
 
   #detail-panel[open]::backdrop,
-  #nfl-detail-panel[open]::backdrop {
+  #nfl-detail-panel[open]::backdrop,
+  #mlb-detail-panel[open]::backdrop {
     animation: scrim-in 120ms ease-out;
   }
 }
@@ -2262,7 +2269,8 @@ html:has(#nfl-detail-panel[open]) {
 /* Phones (<=640px): the same dialog as a bottom sheet. */
 @media (max-width: 640px) {
   #detail-panel,
-  #nfl-detail-panel {
+  #nfl-detail-panel,
+  #mlb-detail-panel {
     position: fixed;
     inset: auto 0 0 0;
     margin: 0;
@@ -2299,7 +2307,8 @@ html:has(#nfl-detail-panel[open]) {
    stays in view while the body scrolls (review WR-04). The surface fill keeps
    text scrolling underneath from showing through it. */
 #panel-close,
-#nfl-detail-panel .panel-close {
+#nfl-detail-panel .panel-close,
+#mlb-detail-panel .panel-close {
   border: none;
   background: var(--surface);
   cursor: pointer;
@@ -2311,13 +2320,15 @@ html:has(#nfl-detail-panel[open]) {
 }
 
 #panel-body h3,
-#nfl-detail-panel .panel-body h3 {
+#nfl-detail-panel .panel-body h3,
+#mlb-detail-panel .panel-body h3 {
   font: var(--font-heading);
   margin: var(--space-md) 0 var(--space-sm) 0;
 }
 
 #panel-body p,
-#nfl-detail-panel .panel-body p {
+#nfl-detail-panel .panel-body p,
+#mlb-detail-panel .panel-body p {
   margin: 0 0 var(--space-sm) 0;
 }
 
@@ -2476,6 +2487,7 @@ html:has(#nfl-detail-panel[open]) {
   .shape-legend li,
   #panel-close,
   #nfl-detail-panel .panel-close,
+  #mlb-detail-panel .panel-close,
   .segmented button,
   .chart-tab,
   .counts-list button,
@@ -2734,9 +2746,18 @@ td.no-rating {
    The NFL regions share the CFB grid areas. Only one set shows at a time,
    keyed to body[data-sport]; the CFB regions stay in the DOM. */
 
-body[data-sport="nfl"] :is(#toolbar, #selection-bar, #chart-area, #matched-games) {
+body:is([data-sport="nfl"], [data-sport="mlb"]) :is(#toolbar, #selection-bar, #chart-area, #matched-games) {
   display: none;
 }
+
+body:not([data-sport="mlb"]) :is(#mlb-toolbar, #mlb-selection-bar, #mlb-chart-area, #mlb-matched-games, #mlb-detail-panel) {
+  display: none;
+}
+
+#mlb-toolbar { grid-area: toolbar; }
+#mlb-selection-bar { grid-area: selection; }
+#mlb-chart-area { grid-area: main; }
+#mlb-matched-games { grid-area: table; }
 
 body:not([data-sport="nfl"]) :is(#nfl-toolbar, #nfl-selection-bar, #nfl-chart-area, #nfl-matched-games) {
   display: none;
@@ -2754,7 +2775,7 @@ body:not([data-sport="nfl"]) :is(#nfl-toolbar, #nfl-selection-bar, #nfl-chart-ar
   margin: var(--space-lg);
 }
 
-body:not([data-sport="nfl"]) #sport-load-error {
+body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   display: none;
 }
 
@@ -3036,26 +3057,30 @@ body:not([data-sport="nfl"]) #sport-load-error {
   cursor: pointer;
 }
 
-#nfl-selection-bar {
+#nfl-selection-bar,
+#mlb-selection-bar {
   padding: var(--space-sm) var(--space-lg);
   min-width: 0;
   min-height: 127px;
 }
 
 @media (min-width: 752px) {
-  #nfl-selection-bar {
+  #nfl-selection-bar,
+  #mlb-selection-bar {
     min-height: 91px;
   }
 }
 
 @media (min-width: 1104px) {
-  #nfl-selection-bar {
+  #nfl-selection-bar,
+  #mlb-selection-bar {
     min-height: 61px;
   }
 }
 
 @media (max-width: 640px) {
-  #nfl-selection-bar {
+  #nfl-selection-bar,
+  #mlb-selection-bar {
     min-height: 0;
   }
 
@@ -3069,7 +3094,8 @@ body:not([data-sport="nfl"]) #sport-load-error {
 }
 
 /* 999.5-19: the NFL headline sits in the reserved band like CFB's summary count. */
-#nfl-headline {
+#nfl-headline,
+#mlb-headline {
   margin: var(--space-xs) 0 0;
   font: var(--font-heading);
   font-weight: var(--weight-semibold);
@@ -3078,7 +3104,8 @@ body:not([data-sport="nfl"]) #sport-load-error {
   text-overflow: ellipsis;
 }
 
-#nfl-chips {
+#nfl-chips,
+#mlb-chips {
   list-style: none;
   margin: 0 0 var(--space-xs) 0;
   padding: 0;
@@ -3087,7 +3114,8 @@ body:not([data-sport="nfl"]) #sport-load-error {
   gap: var(--space-xs);
 }
 
-#nfl-chart-area {
+#nfl-chart-area,
+#mlb-chart-area {
   padding: var(--space-sm) var(--space-lg) 0;
   position: static;
   display: flex;
@@ -3095,11 +3123,14 @@ body:not([data-sport="nfl"]) #sport-load-error {
 }
 
 #nfl-chart-area,
-#nfl-matched-games {
+#mlb-chart-area,
+#nfl-matched-games,
+#mlb-matched-games {
   min-width: 0;
 }
 
-#nfl-matched-games {
+#nfl-matched-games,
+#mlb-matched-games {
   padding: var(--space-lg) var(--space-lg) var(--space-xl);
   overflow-x: auto;
   max-width: 100%;
@@ -3129,7 +3160,8 @@ body:not([data-sport="nfl"]) #sport-load-error {
 
 /* JS-WR-04: each NFL view's data table stays visually hidden until keyboard
    focus enters it, then shows in place so the focused button can be seen. */
-#nfl-chart-area .nfl-data-table:focus-within {
+#nfl-chart-area .nfl-data-table:focus-within,
+#mlb-chart-area .nfl-data-table:focus-within {
   position: static;
   width: auto;
   height: auto;
@@ -3401,4 +3433,300 @@ body:not([data-sport="nfl"]) #sport-load-error {
   color: var(--muted);
   font: var(--font-label);
   font-weight: normal;
+}
+
+/* ---------- MLB detail panel and games table (09-17) ----------
+   The MLB panel and table reuse the NFL rules above; these cover what is MLB's own. */
+
+.mlb-source-tag {
+  font-size: 12px;
+}
+
+.mlb-credit {
+  color: var(--muted);
+  font: var(--font-label);
+}
+
+#mlb-detail-panel .mlb-lineup-note {
+  color: var(--muted);
+}
+
+.mlb-lineups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md) var(--space-lg);
+  margin: 0 0 var(--space-md) 0;
+}
+
+.mlb-lineup h4 {
+  margin: 0 0 var(--space-xs) 0;
+  padding-bottom: var(--space-xs);
+  border-bottom: 1px solid var(--border);
+  font: var(--font-label);
+  font-weight: var(--weight-semibold);
+}
+
+.mlb-lineup-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mlb-lineup-list li {
+  display: grid;
+  grid-template-columns: 2em minmax(0, 1fr) 2.5em;
+  column-gap: var(--space-xs);
+  align-items: baseline;
+  padding: 2px 0;
+  font: var(--font-label);
+}
+
+.mlb-lineup-list .mlb-slot {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.mlb-lineup-list .mlb-pos {
+  color: var(--muted);
+  text-align: right;
+}
+
+/* The starting pitcher sits below the nine with a hairline, so the batting order reads as one run. */
+.mlb-lineup-list .mlb-sp {
+  margin-top: var(--space-xs);
+  padding-top: var(--space-xs);
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 420px) {
+  .mlb-lineups {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* MLB Apple crews: pending quality cells and the lead-minus-others lines. The booth table
+   itself reuses the NFL booth-table rules above. */
+.mlb-apple-table td.mlb-pending {
+  color: var(--muted);
+  font: var(--font-label);
+  white-space: nowrap;
+}
+
+.mlb-apple-table .rated-n {
+  display: block;
+  color: var(--muted);
+  font: var(--font-label);
+}
+
+.mlb-lead-lines {
+  margin: var(--space-md) 0 var(--space-xs) 0;
+}
+
+.mlb-lead-lines p {
+  margin: 0 0 var(--space-xs) 0;
+}
+
+.mlb-lead-title {
+  font-weight: var(--weight-semibold);
+}
+
+.mlb-lead-line[data-pending="true"] {
+  color: var(--muted);
+}
+
+.mlb-lead-measure {
+  display: inline-block;
+  min-width: 6.5em;
+  font-weight: var(--weight-semibold);
+}
+
+.mlb-rr-note {
+  margin: 0 0 var(--space-xs) 0;
+}
+
+/* MLB postseason grid: seasons down, rounds across. Whitespace and hairlines group the cells;
+   on phones every season becomes a stacked block with the round named above each cell. */
+.mlb-grid-wrap {
+  overflow-x: auto;
+}
+
+.mlb-grid {
+  table-layout: fixed;
+}
+
+.mlb-grid th.mlb-season-col {
+  width: 11em;
+  min-width: 11em;
+  vertical-align: top;
+  text-align: left;
+}
+
+.mlb-season {
+  display: block;
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.mlb-season-coverage {
+  display: block;
+  color: var(--muted);
+  font: var(--font-label);
+  font-weight: 400;
+}
+
+.mlb-season-credit {
+  display: block;
+  color: var(--muted);
+  font: var(--font-label);
+  font-weight: 400;
+}
+
+.mlb-season-coverage[data-low="true"] {
+  color: var(--game-playoff-text);
+  font-weight: var(--weight-semibold);
+}
+
+.mlb-grid td.mlb-cell {
+  vertical-align: top;
+  text-align: left;
+  min-width: 11em;
+}
+
+.mlb-cell-label {
+  display: none;
+}
+
+.mlb-empty-mark,
+.mlb-cell-empty {
+  color: var(--muted-weak);
+}
+
+.mlb-cell-btn {
+  display: block;
+  width: 100%;
+  margin: 0 0 var(--space-sm) 0;
+  padding: var(--space-xs) var(--space-sm);
+  border: none;
+  border-inline-start: 3px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mlb-cell-btn:last-child {
+  margin-bottom: 0;
+}
+
+.mlb-cell-btn:hover {
+  background: var(--surface);
+}
+
+.mlb-cell-btn[aria-pressed="true"] {
+  border-inline-start-color: var(--accent);
+  background: var(--surface);
+}
+
+.mlb-cell-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.mlb-cell-btn > span,
+.mlb-cell-stats > span,
+.mlb-cell-booth {
+  display: block;
+}
+
+.mlb-cell-btn > span.mlb-cell-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-xs);
+}
+
+.mlb-cell-league {
+  font-weight: var(--weight-semibold);
+}
+
+.mlb-cell-booth {
+  margin-bottom: 2px;
+}
+
+.mlb-no-crew {
+  color: var(--muted);
+  font: var(--font-label);
+}
+
+.mlb-cell-stats {
+  margin-top: var(--space-xs);
+  color: var(--muted);
+  font: var(--font-label);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .mlb-grid thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .mlb-grid,
+  .mlb-grid tbody,
+  .mlb-grid tr,
+  .mlb-grid th,
+  .mlb-grid td {
+    display: block;
+  }
+
+  .mlb-grid tr {
+    padding: var(--space-sm) 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .mlb-grid {
+    table-layout: auto;
+  }
+
+  .mlb-grid th.mlb-season-col {
+    width: auto;
+    min-width: 0;
+    padding-bottom: var(--space-xs);
+  }
+
+  .mlb-grid td.mlb-cell {
+    min-width: 0;
+    padding-top: 0;
+    padding-bottom: var(--space-xs);
+    border: none;
+  }
+
+  .mlb-grid td.mlb-cell-empty {
+    display: none;
+  }
+
+  .mlb-cell-label {
+    display: block;
+    color: var(--muted);
+    font: var(--font-label);
+    font-weight: var(--weight-semibold);
+  }
+
+  .mlb-cell-btn {
+    min-height: 44px;
+  }
+}
+
+/* The phone booth-table rule hides the pbp/analyst separator; the postseason cells keep it. */
+.mlb-cell-booth .booth-sep {
+  display: inline;
+}
+
+.mlb-apple-table .rated-n {
+  white-space: nowrap;
 }

@@ -8,6 +8,7 @@ URL. Disables entity resolution and network access on the XML parser (T-01-25).
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from urllib.parse import urlparse
@@ -15,12 +16,19 @@ from urllib.parse import urlparse
 from lxml import etree
 
 from booth_review.errors import ParseError
+from booth_review.mlb.seasons import mlb_season_of
 from booth_review.seasons import season_of
 
-# 999.7 adds "mlb": "/telecast/mlb-" here.
 LEAGUE_PATH_PREFIXES: dict[str, str] = {
     "cfb": "/telecast/cfb-",
     "nfl": "/telecast/nfl-",
+    "mlb": "/telecast/mlb-",
+}
+# MLB seasons are calendar years; CFB and NFL use the July-June football season.
+LEAGUE_SEASON_OF: dict[str, Callable[[date], int]] = {
+    "cfb": season_of,
+    "nfl": season_of,
+    "mlb": mlb_season_of,
 }
 _TRAILING_DATE_RE = re.compile(r"-(\d{4})-(\d{2})-(\d{2})$")
 
@@ -104,7 +112,7 @@ def parse_sitemap(xml: bytes, league: str = "cfb") -> tuple[list[SitemapEntry], 
                 record_url=loc_text,
                 json_url=f"https://ratingsreference.com/api/telecast/{slug}.json",
                 event_date=event_date,
-                season=season_of(event_date),
+                season=LEAGUE_SEASON_OF[league](event_date),
                 lastmod=lastmod_text or "",
                 league=league,
             )

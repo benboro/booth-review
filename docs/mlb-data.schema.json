@@ -1,0 +1,1448 @@
+{
+  "$defs": {
+    "MlbAppleBoothColumns": {
+      "additionalProperties": false,
+      "description": "Apple booth rows, ordered stakes-first (D-07). While quality is pending\nevery stakes and excitement figure is null (D-06).",
+      "properties": {
+        "adj_excitement": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Adj Excitement",
+          "type": "array"
+        },
+        "adj_excitement_se": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Adj Excitement Se",
+          "type": "array"
+        },
+        "adj_stakes": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Adj Stakes",
+          "type": "array"
+        },
+        "adj_stakes_se": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Adj Stakes Se",
+          "type": "array"
+        },
+        "analyst": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Analyst",
+          "type": "array"
+        },
+        "crew_listed": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Crew Listed",
+          "type": "array"
+        },
+        "game_list": {
+          "items": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "title": "Game List",
+          "type": "array"
+        },
+        "games": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Games",
+          "type": "array"
+        },
+        "low_n": {
+          "items": {
+            "type": "boolean"
+          },
+          "title": "Low N",
+          "type": "array"
+        },
+        "pbp": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Pbp",
+          "type": "array"
+        },
+        "quality_status": {
+          "items": {
+            "enum": [
+              "pending",
+              "ready"
+            ],
+            "type": "string"
+          },
+          "title": "Quality Status",
+          "type": "array"
+        },
+        "rank_label": {
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "Lead",
+                  "Other"
+                ],
+                "type": "string"
+              },
+              {
+                "pattern": "^#\\d+$",
+                "type": "string"
+              }
+            ]
+          },
+          "title": "Rank Label",
+          "type": "array"
+        },
+        "raw_excitement": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Raw Excitement",
+          "type": "array"
+        },
+        "raw_stakes": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Raw Stakes",
+          "type": "array"
+        },
+        "raw_stakes_n": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Raw Stakes N",
+          "type": "array"
+        },
+        "relay_crews": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Relay Crews",
+          "type": "array"
+        },
+        "strength_prior": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Strength Prior",
+          "type": "array"
+        }
+      },
+      "required": [
+        "rank_label",
+        "pbp",
+        "analyst",
+        "games",
+        "crew_listed",
+        "relay_crews",
+        "raw_stakes",
+        "raw_stakes_n",
+        "adj_stakes",
+        "adj_stakes_se",
+        "raw_excitement",
+        "adj_excitement",
+        "adj_excitement_se",
+        "strength_prior",
+        "low_n",
+        "quality_status",
+        "game_list"
+      ],
+      "title": "MlbAppleBoothColumns",
+      "type": "object"
+    },
+    "MlbAppleSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "apple_games": {
+          "title": "Apple Games",
+          "type": "integer"
+        },
+        "lead_minus_others_excitement": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Lead Minus Others Excitement"
+        },
+        "lead_minus_others_excitement_se": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Lead Minus Others Excitement Se"
+        },
+        "lead_minus_others_stakes": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Lead Minus Others Stakes"
+        },
+        "lead_minus_others_stakes_se": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Lead Minus Others Stakes Se"
+        },
+        "n_lead": {
+          "title": "N Lead",
+          "type": "integer"
+        },
+        "n_others": {
+          "title": "N Others",
+          "type": "integer"
+        },
+        "rr_rated": {
+          "title": "Rr Rated",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "lead_minus_others_stakes",
+        "lead_minus_others_stakes_se",
+        "lead_minus_others_excitement",
+        "lead_minus_others_excitement_se",
+        "n_lead",
+        "n_others",
+        "rr_rated",
+        "apple_games"
+      ],
+      "title": "MlbAppleSummary",
+      "type": "object"
+    },
+    "MlbClubRef": {
+      "additionalProperties": false,
+      "properties": {
+        "division": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Division"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "league": {
+          "anyOf": [
+            {
+              "enum": [
+                "AL",
+                "NL"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "League"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "league",
+        "division"
+      ],
+      "title": "MlbClubRef",
+      "type": "object"
+    },
+    "MlbConstants": {
+      "additionalProperties": false,
+      "properties": {
+        "coverage_bar": {
+          "title": "Coverage Bar",
+          "type": "number"
+        },
+        "excitement_method": {
+          "title": "Excitement Method",
+          "type": "string"
+        },
+        "low_n_threshold": {
+          "title": "Low N Threshold",
+          "type": "integer"
+        },
+        "stakes_method": {
+          "title": "Stakes Method",
+          "type": "string"
+        }
+      },
+      "required": [
+        "excitement_method",
+        "stakes_method",
+        "low_n_threshold",
+        "coverage_bar"
+      ],
+      "title": "MlbConstants",
+      "type": "object"
+    },
+    "MlbCrewEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "person": {
+          "title": "Person",
+          "type": "integer"
+        },
+        "role": {
+          "enum": [
+            "pbp",
+            "analyst"
+          ],
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "person",
+        "role"
+      ],
+      "title": "MlbCrewEntry",
+      "type": "object"
+    },
+    "MlbEraRef": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "End"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "source_url": {
+          "title": "Source Url",
+          "type": "string"
+        },
+        "start": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Start"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "start",
+        "end",
+        "source_url"
+      ],
+      "title": "MlbEraRef",
+      "type": "object"
+    },
+    "MlbFreshness": {
+      "additionalProperties": false,
+      "properties": {
+        "in_progress": {
+          "title": "In Progress",
+          "type": "boolean"
+        },
+        "quality_pending": {
+          "title": "Quality Pending",
+          "type": "boolean"
+        },
+        "retrosheet_through_season": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Retrosheet Through Season"
+        },
+        "season": {
+          "title": "Season",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "season",
+        "in_progress",
+        "retrosheet_through_season",
+        "quality_pending"
+      ],
+      "title": "MlbFreshness",
+      "type": "object"
+    },
+    "MlbGameColumns": {
+      "additionalProperties": false,
+      "description": "One list per display field; index i across every list is one game.",
+      "properties": {
+        "away": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Away",
+          "type": "array"
+        },
+        "cause": {
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pending",
+                  "none",
+                  "regional",
+                  "per_network",
+                  "ambiguous_doubleheader",
+                  "conflict",
+                  "window_level"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Cause",
+          "type": "array"
+        },
+        "crew": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/MlbCrewEntry"
+            },
+            "type": "array"
+          },
+          "title": "Crew",
+          "type": "array"
+        },
+        "crew_source": {
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "override",
+                  "506",
+                  "relay",
+                  "wikipedia"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Crew Source",
+          "type": "array"
+        },
+        "crew_source_url": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Crew Source Url",
+          "type": "array"
+        },
+        "date": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Date",
+          "type": "array"
+        },
+        "era": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Era",
+          "type": "array"
+        },
+        "game_number": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Game Number",
+          "type": "array"
+        },
+        "home": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Home",
+          "type": "array"
+        },
+        "lineup_end": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Lineup End",
+          "type": "array"
+        },
+        "lineup_start": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Lineup Start",
+          "type": "array"
+        },
+        "lineup_status": {
+          "items": {
+            "enum": [
+              "present",
+              "pending",
+              "missing"
+            ],
+            "type": "string"
+          },
+          "title": "Lineup Status",
+          "type": "array"
+        },
+        "network": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Network",
+          "type": "array"
+        },
+        "network_source": {
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "override",
+                  "506",
+                  "wikipedia"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Network Source",
+          "type": "array"
+        },
+        "network_source_url": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Network Source Url",
+          "type": "array"
+        },
+        "press_name": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Press Name",
+          "type": "array"
+        },
+        "press_url": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Press Url",
+          "type": "array"
+        },
+        "round": {
+          "items": {
+            "enum": [
+              "regular",
+              "wild_card",
+              "division",
+              "lcs",
+              "world_series",
+              "tiebreak"
+            ],
+            "type": "string"
+          },
+          "title": "Round",
+          "type": "array"
+        },
+        "rr_url": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Rr Url",
+          "type": "array"
+        },
+        "scope": {
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "window",
+                  "game"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Scope",
+          "type": "array"
+        },
+        "season": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Season",
+          "type": "array"
+        },
+        "series_game": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Series Game",
+          "type": "array"
+        },
+        "series_league": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Series League",
+          "type": "array"
+        },
+        "source_url": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Source Url",
+          "type": "array"
+        },
+        "stakes": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Stakes",
+          "type": "array"
+        },
+        "viewers": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Viewers",
+          "type": "array"
+        },
+        "viewership_label": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Viewership Label",
+          "type": "array"
+        },
+        "wp_excitement": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Wp Excitement",
+          "type": "array"
+        }
+      },
+      "required": [
+        "season",
+        "date",
+        "game_number",
+        "away",
+        "home",
+        "round",
+        "series_league",
+        "series_game",
+        "network",
+        "network_source",
+        "network_source_url",
+        "crew",
+        "crew_source",
+        "crew_source_url",
+        "press_url",
+        "press_name",
+        "wp_excitement",
+        "stakes",
+        "viewers",
+        "viewership_label",
+        "scope",
+        "era",
+        "rr_url",
+        "source_url",
+        "cause",
+        "lineup_status",
+        "lineup_start",
+        "lineup_end"
+      ],
+      "title": "MlbGameColumns",
+      "type": "object"
+    },
+    "MlbLeagueRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "enum": [
+            "AL",
+            "NL"
+          ],
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "MlbLeagueRef",
+      "type": "object"
+    },
+    "MlbLineupColumns": {
+      "additionalProperties": false,
+      "description": "Flat rows: slot 0 is the starting pitcher, slots 1-9 the batting order.",
+      "properties": {
+        "game": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Game",
+          "type": "array"
+        },
+        "player": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Player",
+          "type": "array"
+        },
+        "position": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Position",
+          "type": "array"
+        },
+        "side": {
+          "items": {
+            "enum": [
+              "away",
+              "home"
+            ],
+            "type": "string"
+          },
+          "title": "Side",
+          "type": "array"
+        },
+        "slot": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Slot",
+          "type": "array"
+        },
+        "starter_uncertain": {
+          "items": {
+            "type": "boolean"
+          },
+          "title": "Starter Uncertain",
+          "type": "array"
+        }
+      },
+      "required": [
+        "game",
+        "side",
+        "slot",
+        "player",
+        "position",
+        "starter_uncertain"
+      ],
+      "title": "MlbLineupColumns",
+      "type": "object"
+    },
+    "MlbLookups": {
+      "additionalProperties": false,
+      "properties": {
+        "clubs": {
+          "items": {
+            "$ref": "#/$defs/MlbClubRef"
+          },
+          "title": "Clubs",
+          "type": "array"
+        },
+        "eras": {
+          "items": {
+            "$ref": "#/$defs/MlbEraRef"
+          },
+          "title": "Eras",
+          "type": "array"
+        },
+        "leagues": {
+          "items": {
+            "$ref": "#/$defs/MlbLeagueRef"
+          },
+          "title": "Leagues",
+          "type": "array"
+        },
+        "networks": {
+          "items": {
+            "$ref": "#/$defs/MlbNetworkRef"
+          },
+          "title": "Networks",
+          "type": "array"
+        },
+        "people": {
+          "items": {
+            "$ref": "#/$defs/MlbPersonRef"
+          },
+          "title": "People",
+          "type": "array"
+        },
+        "players": {
+          "items": {
+            "$ref": "#/$defs/MlbPlayerRef"
+          },
+          "title": "Players",
+          "type": "array"
+        },
+        "rounds": {
+          "items": {
+            "enum": [
+              "regular",
+              "wild_card",
+              "division",
+              "lcs",
+              "world_series",
+              "tiebreak"
+            ],
+            "type": "string"
+          },
+          "title": "Rounds",
+          "type": "array"
+        },
+        "team_names": {
+          "items": {
+            "$ref": "#/$defs/MlbTeamNameRef"
+          },
+          "title": "Team Names",
+          "type": "array"
+        }
+      },
+      "required": [
+        "clubs",
+        "team_names",
+        "networks",
+        "people",
+        "players",
+        "rounds",
+        "leagues",
+        "eras"
+      ],
+      "title": "MlbLookups",
+      "type": "object"
+    },
+    "MlbNetworkRef": {
+      "additionalProperties": false,
+      "properties": {
+        "family": {
+          "enum": [
+            "disney",
+            "fox",
+            "cbs",
+            "nbc",
+            "tbs",
+            "apple",
+            "other"
+          ],
+          "title": "Family",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "family"
+      ],
+      "title": "MlbNetworkRef",
+      "type": "object"
+    },
+    "MlbPersonRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "MlbPersonRef",
+      "type": "object"
+    },
+    "MlbPlayerRef": {
+      "additionalProperties": false,
+      "description": "A Retrosheet player id and name, only for players in shipped lineups.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "MlbPlayerRef",
+      "type": "object"
+    },
+    "MlbPostseasonColumns": {
+      "additionalProperties": false,
+      "description": "One row per season, round and league cell. `networks` lists every outlet the\ncell's games aired on (most common first); `outlet_source_url` is the Wikipedia\narticle the cell's outlets came from, required whenever one of its shipped games\nhas a Wikipedia outlet.",
+      "properties": {
+        "booths": {
+          "items": {
+            "items": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "title": "Booths",
+          "type": "array"
+        },
+        "coverage_den": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Coverage Den",
+          "type": "array"
+        },
+        "coverage_num": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Coverage Num",
+          "type": "array"
+        },
+        "crew_listed": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Crew Listed",
+          "type": "array"
+        },
+        "excitement_n": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Excitement N",
+          "type": "array"
+        },
+        "game_list": {
+          "items": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "title": "Game List",
+          "type": "array"
+        },
+        "games": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Games",
+          "type": "array"
+        },
+        "league": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "League",
+          "type": "array"
+        },
+        "mean_excitement": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Mean Excitement",
+          "type": "array"
+        },
+        "networks": {
+          "items": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "title": "Networks",
+          "type": "array"
+        },
+        "outlet_source_url": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Outlet Source Url",
+          "type": "array"
+        },
+        "round": {
+          "items": {
+            "enum": [
+              "regular",
+              "wild_card",
+              "division",
+              "lcs",
+              "world_series",
+              "tiebreak"
+            ],
+            "type": "string"
+          },
+          "title": "Round",
+          "type": "array"
+        },
+        "season": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Season",
+          "type": "array"
+        },
+        "viewers_mean": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Viewers Mean",
+          "type": "array"
+        },
+        "viewers_n": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Viewers N",
+          "type": "array"
+        }
+      },
+      "required": [
+        "season",
+        "round",
+        "league",
+        "networks",
+        "outlet_source_url",
+        "booths",
+        "games",
+        "crew_listed",
+        "coverage_num",
+        "coverage_den",
+        "mean_excitement",
+        "excitement_n",
+        "viewers_mean",
+        "viewers_n",
+        "game_list"
+      ],
+      "title": "MlbPostseasonColumns",
+      "type": "object"
+    },
+    "MlbPostseasonSeasonColumns": {
+      "additionalProperties": false,
+      "properties": {
+        "coverage_den": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Coverage Den",
+          "type": "array"
+        },
+        "coverage_num": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Coverage Num",
+          "type": "array"
+        },
+        "season": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Season",
+          "type": "array"
+        }
+      },
+      "required": [
+        "season",
+        "coverage_num",
+        "coverage_den"
+      ],
+      "title": "MlbPostseasonSeasonColumns",
+      "type": "object"
+    },
+    "MlbTeamNameRef": {
+      "additionalProperties": false,
+      "description": "A club's name for a span of seasons (clubs rename and relocate).",
+      "properties": {
+        "club": {
+          "title": "Club",
+          "type": "integer"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "season_end": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Season End"
+        },
+        "season_start": {
+          "title": "Season Start",
+          "type": "integer"
+        },
+        "short": {
+          "title": "Short",
+          "type": "string"
+        }
+      },
+      "required": [
+        "club",
+        "name",
+        "short",
+        "season_start",
+        "season_end"
+      ],
+      "title": "MlbTeamNameRef",
+      "type": "object"
+    }
+  },
+  "$id": "booth-review/mlb-data/1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "apple_booths": {
+      "$ref": "#/$defs/MlbAppleBoothColumns"
+    },
+    "apple_summary": {
+      "$ref": "#/$defs/MlbAppleSummary"
+    },
+    "constants": {
+      "$ref": "#/$defs/MlbConstants"
+    },
+    "freshness": {
+      "$ref": "#/$defs/MlbFreshness"
+    },
+    "games": {
+      "$ref": "#/$defs/MlbGameColumns"
+    },
+    "lineups": {
+      "$ref": "#/$defs/MlbLineupColumns"
+    },
+    "lookups": {
+      "$ref": "#/$defs/MlbLookups"
+    },
+    "postseason": {
+      "$ref": "#/$defs/MlbPostseasonColumns"
+    },
+    "postseason_seasons": {
+      "$ref": "#/$defs/MlbPostseasonSeasonColumns"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "freshness",
+    "constants",
+    "lookups",
+    "games",
+    "lineups",
+    "apple_booths",
+    "apple_summary",
+    "postseason",
+    "postseason_seasons"
+  ],
+  "title": "booth-review MLB data",
+  "type": "object"
+}

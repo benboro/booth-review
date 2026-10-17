@@ -52,6 +52,9 @@ HOST_POLICIES: dict[str, HostPolicy] = {
         min_interval_s=3.0, jitter_s=1.0, retry_mode="standard"
     ),
     "awfulannouncing.com": HostPolicy(min_interval_s=3.0, jitter_s=1.0, retry_mode="standard"),
+    # MLB: Retrosheet's CSV downloads. statsapi.mlb.com and the relay blog stay
+    # unlisted (gated, D-04/D-22/D-09), so the client refuses them.
+    "www.retrosheet.org": HostPolicy(min_interval_s=5.0, jitter_s=1.0, retry_mode="standard"),
 }
 
 HOST_SOURCE: dict[str, Source] = {
@@ -67,6 +70,7 @@ HOST_SOURCE: dict[str, Source] = {
     "en.wikipedia.org": "nfl_wikipedia",
     "www.thetvratingsguide.com": "tvrg",
     "awfulannouncing.com": "aa",
+    "www.retrosheet.org": "mlb_retrosheet",
 }
 
 CFBD_BASE_URL = "https://api.collegefootballdata.com"

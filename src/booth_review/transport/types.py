@@ -22,6 +22,12 @@ Source = Literal[
     "tvrg",
     "aa",
     "espnpr",
+    "mlb_sports506",
+    "mlb_ratingsref",
+    "mlb_retrosheet",
+    "mlb_wikipedia",
+    "mlb_relay",
+    "mlb_statsapi",
 ]
 
 
@@ -51,6 +57,8 @@ class FetchRequest:
     kind: Literal["page", "robots"] = "page"
     headers: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     """Extra request headers only (e.g. Accept); never written to the manifest."""
+    max_bytes: int | None = None
+    """Abort the download (ResponseTooLargeError) once the body passes this size."""
 
 
 @dataclass(frozen=True)
