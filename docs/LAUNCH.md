@@ -1,20 +1,21 @@
 # Launch Checklist
 
-The site goes live by setting the vault workflow's `PUBLISH_ENABLED` variable to `true`
-with `DEPLOY_REPO=benboro/benboro.github.io`. Nothing else changes at launch. 506 Sports
+The site went live on 2026-10-17 by setting the vault workflow's `PUBLISH_ENABLED`
+variable to `true` with `DEPLOY_REPO=benboro/benboro.github.io`; setting it back to
+`false` stops further deploys. 506 Sports
 was asked about reuse and has not replied, so launch does not wait on it; if 506 objects,
 its crews and networks come off the site. The 2021–2024 figures from Sports Media
 Watch, The TV Ratings Guide, Awful Announcing and ESPN Press Room, and ESPN Press
 Room's backup crews, are used on the same terms: credited with a link, and taken down
 if a site objects (see the takedown notes under Operating
-notes). Until launch the scheduled job collects and
-builds but deploys nothing.
+notes). Before launch the scheduled job collected and
+built but deployed nothing.
 
 The data repo is private and is only called "the private data repo" here. The dry-run
 target is "a private scratch copy of the user site". A checked line carries a pass date
 and either a test pointer (`tests/<file>.py::<test>`) or an `evidence:` note.
-`tests/test_launch_doc.py` keeps this file honest: pointers must exist, every unchecked
-line except the last must say "pending", and no private repo name may appear.
+`tests/test_launch_doc.py` keeps this file honest: pointers must exist, every line is checked now
+that the site is live, and no private repo name may appear.
 
 ## Checklist
 
@@ -69,7 +70,7 @@ line except the last must say "pending", and no private repo name may appear.
 - [x] 2026-10-17 Variables reset to `PUBLISH_ENABLED=false` and `DEPLOY_REPO=benboro/benboro.github.io` after the drills. evidence: both read back after the reset, and the dry-run target's outside-`booth-review/` tree hash equal to its seed after 5 deploy commits
 - [x] 2026-10-12 NFL scratch-repo deploy drill (999.5 D-21; NFL only, the CFB flip does not wait for it, D-18): one dispatched run on v0.8.0 with `NFL_SITE_ENABLED=true` deployed `site-data.json` and `nfl-data.json` under `booth-review/` (files 54), nothing outside `booth-review/` changed, and the key check passed. evidence: run log lines `cfbd key check: passed`, `nfl site: 3229 games`, `deploy: published bundle 09cacaca2aa7 (files 54)`, `outside booth-review unchanged: yes`; the deployed bundle's NFL views load with no console errors
 - [x] 2026-10-17 Map release: `JOB_REF` bumped to a release with the map, one dispatched scratch deploy with outside `booth-review/` unchanged, variables reset. evidence: `JOB_REF` v0.12.1; the dispatched run logged `cfbd key check: passed`, `deploy: published bundle 2383cc9d3388 (files 56)` with the map modules, and `outside booth-review unchanged: yes`; the target's outside tree hash equals its seed; both variables read back as `PUBLISH_ENABLED=false` and `DEPLOY_REPO=benboro/benboro.github.io`
-- [ ] Launch: set the `PUBLISH_ENABLED` variable to `true` (506 Sports was asked and has not replied; launch does not wait on it)
+- [x] 2026-10-17 Launch: set the `PUBLISH_ENABLED` variable to `true` (506 Sports was asked and has not replied; launch does not wait on it). evidence: `NFL_SITE_ENABLED=false` set first (college football only), `DEPLOY_REPO=benboro/benboro.github.io`, `JOB_REF` v0.12.1; one dispatched run logged `cfbd key check: passed`, `deploy: published bundle 8f5ea09653e8 (files 39)` and `outside booth-review unchanged: yes`; the target's deploy commit touched only `booth-review/` paths, its Pages workflow succeeded, and the page and `site-data.json` load (200)
 
 ## Observations
 

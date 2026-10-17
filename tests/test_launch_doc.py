@@ -52,10 +52,15 @@ def test_unchecked_lines_are_pending_except_the_last() -> None:
             assert "pending" in line, line
 
 
-def test_last_checkbox_is_the_publish_flip_and_unchecked() -> None:
+def test_last_checkbox_is_the_publish_flip() -> None:
     last = _checkbox_lines()[-1]
-    assert last.startswith("- [ ]")
     assert "PUBLISH_ENABLED" in last
+
+
+def test_every_line_is_checked_after_launch() -> None:
+    # The flip was the last open line; launch went live on 2026-10-17.
+    unchecked = [line for line in _checkbox_lines() if line.startswith("- [ ]")]
+    assert not unchecked, unchecked
 
 
 def test_no_private_names_or_run_links() -> None:
