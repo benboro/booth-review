@@ -61,13 +61,14 @@ line except the last must say "pending", and no private repo name may appear.
 - [x] 2026-10-05 CFBD budget: the remaining call count is logged at the start and end of each update run. `tests/test_job_runner.py::test_update_run_logs_cfbd_remaining_at_start_and_end`
 - [x] 2026-10-05 Tests run network-blocked. `tests/test_network_blocked.py::test_unmocked_client_is_blocked_by_pytest_socket`
 - [x] 2026-10-05 Catch-up logic after a skipped slot (unit level; the live drill stays below). evidence: `tests/test_job_catchup.py`
-- [ ] Live publishing-off run of the scheduled workflow: pending (Plan 10)
-- [ ] Deploy drill against a private scratch copy of the user site, with before and after proof that nothing outside `booth-review/` changed: pending (Plan 11)
-- [ ] Catch-up drill after a skipped main slot, closing AUTO-01: pending (Plan 12)
-- [ ] Publishing dry run, Sunday: built-data counts match expectations: pending (Plan 13)
-- [ ] Publishing dry run, Wednesday: viewership counts match, and CFBD monthly use is well under 1,000: pending (Plan 14)
-- [ ] Variables reset to `PUBLISH_ENABLED=false` and `DEPLOY_REPO=benboro/benboro.github.io` after the drills: pending (Plan 14)
+- [x] 2026-10-05 Live publishing-off run of the scheduled workflow. evidence: dispatched run built 1 site (3491 telecasts, 29 files), both deploy steps skipped, target unchanged, 5 CFBD calls
+- [x] 2026-10-05 Deploy drill against a private scratch copy of the user site, with before and after proof that nothing outside `booth-review/` changed. evidence: 1 deploy commit, 29 changed paths, 0 outside `booth-review/`, outside-tree hash equal before and after, the target's Pages workflow triggered by the push
+- [x] 2026-10-08 Catch-up drill after a skipped main slot, closing AUTO-01. evidence: missed 1, last_success advanced, 5 CFBD season files refreshed, RR new 0, rebuilt and deployed (files 32), outside tree unchanged
+- [x] 2026-10-12 Publishing dry run, Sunday: built-data counts match expectations. evidence: first Sunday run finished 14:44 ET (main slot dropped by cron), finals +55 for 55 scored weekend games, 1 deploy commit with 0 paths outside `booth-review/`; RR listed 0 weekend telecasts that day, so none to plot
+- [x] 2026-10-15 Publishing dry run, Wednesday: viewership counts match, and CFBD monthly use is well under 1,000. evidence: Wednesday run started 22:22 ET (before the Thursday 16:00 ET last backup), 34 of 34 weekend RR-listed telecasts plotted, 41 job-tagged CFBD calls this month (959 remaining), 0 manual dispatches in the window
+- [x] 2026-10-17 Variables reset to `PUBLISH_ENABLED=false` and `DEPLOY_REPO=benboro/benboro.github.io` after the drills. evidence: both read back after the reset, and the dry-run target's outside-`booth-review/` tree hash equal to its seed after 5 deploy commits
 - [x] 2026-10-12 NFL scratch-repo deploy drill (999.5 D-21; NFL only, the CFB flip does not wait for it, D-18): one dispatched run on v0.8.0 with `NFL_SITE_ENABLED=true` deployed `site-data.json` and `nfl-data.json` under `booth-review/` (files 54), nothing outside `booth-review/` changed, and the key check passed. evidence: run log lines `cfbd key check: passed`, `nfl site: 3229 games`, `deploy: published bundle 09cacaca2aa7 (files 54)`, `outside booth-review unchanged: yes`; the deployed bundle's NFL views load with no console errors
+- [ ] Map release: `JOB_REF` bumped to a release with the map, one dispatched scratch deploy with outside `booth-review/` unchanged, variables reset: pending (after Phase 04.18)
 - [ ] Launch: set the `PUBLISH_ENABLED` variable to `true` (506 Sports was asked and has not replied; launch does not wait on it)
 
 ## Observations
