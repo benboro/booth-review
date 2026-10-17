@@ -592,6 +592,39 @@ def _model(
     return model
 
 
+def _club_strength(
+    info: pl.DataFrame, ref: MlbReference, games: pl.DataFrame, existing: pl.DataFrame
+) -> pl.DataFrame:
+    """Strength prior for current-season games from their clubs, without Retrosheet 2026.
+
+    The 2025 win percentage per Retrosheet team code is mapped to club ids through the
+    crosswalk, then each shown current-season game takes the mean of its away and home
+    club values. Rows already in `existing` (the Retrosheet-gid path) win; both paths use
+    the same club values, so they agree.
+    """
+    if info.is_empty() or games.is_empty():
+        return existing
+    prior = strength_prior(info, STRENGTH_PRIOR_SEASON)
+    if prior.is_empty():
+        return existing
+    teams = MlbTeamResolver.from_reference(ref)
+    by_club: dict[str, float] = {}
+    for team, pct in prior.select("team", "win_pct").iter_rows():
+        club_id = teams.resolve("retrosheet", str(team), STRENGTH_PRIOR_SEASON).club_id
+        if club_id is not None:
+            by_club[club_id] = float(pct)
+    have = set(existing["game_key"].to_list())
+    rows = []
+    current = games.filter(pl.col("season") == CURRENT_SEASON)
+    for key, away, home in current.select("game_key", "away_club", "home_club").iter_rows():
+        a, h = by_club.get(str(away)), by_club.get(str(home))
+        if key in have or a is None or h is None:
+            continue
+        rows.append({"game_key": key, "strength_prior": (a + h) / 2})
+    extra = pl.DataFrame(rows, schema={"game_key": pl.String, "strength_prior": pl.Float64})
+    return pl.concat([existing, extra]).sort("game_key")
+
+
 def _message_counts(counts: Mapping[str, int]) -> dict[str, int]:
     return {
         "games": counts["games"],
@@ -665,6 +698,8 @@ def run_mlb_build(
             gid_keys,
             we_min_train_games=we_min_train_games,
         )
+
+        model.strength = _club_strength(all_inputs.gameinfo, ref, games, model.strength)
 
         apple, apple_summary, apple_reviews, apple_counts = build_apple_booths(
             games,

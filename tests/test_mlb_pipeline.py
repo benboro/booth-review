@@ -104,6 +104,49 @@ def test_build_with_2026_results_is_ready(git_vault: DataPaths, tmp_path: Path) 
     assert we.height > 0 and we["p"].is_between(0, 1).all()
 
 
+def _strength_by_key(paths: DataPaths) -> dict[str, float | None]:
+    games = pl.read_parquet(paths.processed / "mlb_games.parquet").filter(pl.col("season") == 2026)
+    return dict(games.select("game_key", "strength_prior").iter_rows())
+
+
+def test_strength_prior_comes_from_the_shown_games_clubs_without_2026_results(
+    git_vault: DataPaths, tmp_path: Path
+) -> None:
+    paths = git_vault
+    make_vault(paths)
+    ref = make_reference(tmp_path / "ref")
+
+    _build(paths, ref)
+
+    games = pl.read_parquet(paths.processed / "mlb_games.parquet").filter(pl.col("season") == 2026)
+    played = games.filter(pl.col("away_club").is_in(["alpha", "bravo"]))
+    assert played.height == 2
+    assert played["strength_prior"].is_not_null().all()
+    assert played["strength_prior"].is_between(0, 1).all()
+    # A club with no 2025 regular-season games has no prior, so its game stays null.
+    unknown = games.filter(pl.col("away_club") == "charlie")
+    assert unknown["strength_prior"].is_null().all()
+    apple = pl.read_parquet(paths.processed / "mlb_apple_booths.parquet")
+    assert apple["strength_prior"].is_not_null().all()
+
+
+def test_strength_prior_agrees_with_and_without_2026_results(
+    git_vault: DataPaths, tmp_path: Path
+) -> None:
+    paths = git_vault
+    make_vault(paths)
+    ref = make_reference(tmp_path / "ref")
+    _build(paths, ref)
+    without_info = _strength_by_key(paths)
+
+    make_vault(paths, with_2026=True)
+    _build(paths, ref)
+    with_info = _strength_by_key(paths)
+
+    assert without_info == with_info
+    assert any(v is not None for v in with_info.values())
+
+
 def test_rr_figure_attaches_to_the_listed_postseason_telecast(
     git_vault: DataPaths, tmp_path: Path
 ) -> None:

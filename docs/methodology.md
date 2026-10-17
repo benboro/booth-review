@@ -391,6 +391,8 @@ Booths are compared after adjusting for the matchup. Stakes are compared with th
 
 **Pending Retrosheet 2026.** Retrosheet publishes the 2026 season late in 2026. Until then 2026 games have no play-by-play, so 2026 stakes, excitement and lineups read "pending Retrosheet 2026". Rebuilding after the release fills them in. We did not use the league's own statistics service as a stopgap.
 
+**2025 win % of both clubs.** The Apple view's one raw measure that needs no 2026 results is the mean of the two clubs' 2025 regular-season win percentages, computed from 2025 results that come from [Retrosheet](https://www.retrosheet.org) (credit line below). It is our own arithmetic from those results, a pregame strength reference rather than a rating, and it reads as a dash for a game when either club has no 2025 regular-season games.
+
 ## MLB: Viewership
 
 Viewership is matched to games from Ratings Reference records, which are kept with their record URL and the figure's original source. A figure can be marked as covering a window rather than one game, as a doubleheader that cannot be told apart, or as one network of several carrying the game; those are shown with their cause and not counted as a single-game figure. Apple's viewership is not reported to Ratings Reference, so the Apple view shows no figures and says so.
