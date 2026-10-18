@@ -3,6 +3,7 @@ A.J. Hawk,AJ Hawk,similar_first,same
 A.J. Kanell,AJ Kanell,similar_first,same
 Adam Breneman,Adam Brenneman,near_spelling,same
 Adam Brenemen,Adam Brenneman,near_spelling,same
+Alex Del Bario,Alex Del Barrio,near_spelling,same
 Anthony Simeone,Tony Simeone,nickname,same
 Barrett Brooke,Barrett Brooks,near_spelling,same
 Ben Hartsock,Brian Hartsock,similar_first,same
@@ -36,6 +37,7 @@ Jessie Palmer,Jordan Palmer,similar_first,different
 Jim Mora,Jim Mora Jr.,suffix_only,same
 John Cognemi,John Congemi,near_spelling,same
 Jon Vilma,Jonathan Vilma,nickname,same
+Kelsie Kaspar,Kelsie Kasper,near_spelling,same
 Mark Helfich,Mark Helfrich,near_spelling,same
 Mark Helfich,Mark Herzlich,near_spelling,different
 Matt Schumacker,Matt Schumaker,near_spelling,same
@@ -45,6 +47,7 @@ Mike Golic,Mike Golic Jr.,suffix_only,different
 Mike Logan,Mike Morgan,near_spelling,different
 Pete Sousa,Peter Sousa,similar_first,same
 Randy Cross,Richard Cross,similar_first,different
+Reggie Walker,Reginald Walker Jr.,similar_first,same
 Rocky Boiman,Rocky Boiman,possible_two_people,one
 Scott Jackson,Stanley Jackson,similar_first,different
 Sean Kenney,Shawn Kenney,similar_first,same
