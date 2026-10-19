@@ -32,6 +32,7 @@ WORST_CASE_PATCHES: list[tuple[str, dict[str, Any]]] = [
     ("postseason", {"postseason": "exclude"}),
     ("game-round", {"game": "cfp-national-championship"}),
     ("game-rivalry", {"game": "bridge-game"}),
+    ("booth", {"booth": ["a", "b"]}),
     ("people", {"people": ["dale-harlow", "dale-harlow-jr", "casey-lund"]}),
 ]
 RESET: dict[str, Any] = {
@@ -44,6 +45,7 @@ RESET: dict[str, Any] = {
     "h2h": False,
     "postseason": "all",
     "game": None,
+    "booth": [],
     "people": [],
 }
 
@@ -205,21 +207,22 @@ _CELL_MIN_JS = (
 
 
 @pytest.mark.parametrize("font_setting", ["narrow"], indirect=True)
-def test_grid_has_room_for_ten_cells(
+def test_grid_has_room_for_eleven_cells(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """With a font narrow enough for the 116px floor, all ten cells (nine filters
-    plus Clear all) fit one row at 1280px, and picking a long game keeps it there."""
-    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    """With a font narrow enough for the 116px floor, all eleven cells (ten filters
+    plus Clear all) fit one row at 1440px (eleven 116px cells need 1356px), and
+    picking a long game keeps it there."""
+    guarded_page.set_viewport_size({"width": 1440, "height": 900})
     open_app(guarded_page)
     assert int(guarded_page.evaluate(_CELL_MIN_JS).removesuffix("px")) <= 116
     columns = guarded_page.evaluate(
         "() => getComputedStyle(document.getElementById('toolbar'))"
         ".gridTemplateColumns.split(' ').length"
     )
-    assert columns >= 10
+    assert columns >= 11
     tops: list[int] = guarded_page.evaluate(_VISIBLE_TOPS_JS)
-    assert len(tops) == 10
+    assert len(tops) == 11
     assert len(set(tops)) == 1
     _set(guarded_page, {"game": "cfp-national-championship"})
     assert len(set(guarded_page.evaluate(_VISIBLE_TOPS_JS))) == 1
@@ -234,24 +237,17 @@ def test_toolbar_rows_with_game_button(
     width: int,
     font_setting: str,
 ) -> None:
-    """Ten visible cells, two rows at 800, 900, and 1024px on every font. At 1280px
-    the row count follows the font: one row for a narrow font, two for DejaVu Sans
-    (whose resting "Clear all filters" needs a wider cell than ten fit), and either
-    for the machine's own default. Whatever it is, toggling filters never changes it,
-    and no resting label truncates."""
+    """Eleven visible cells, two rows at 800, 900, 1024 and 1280px on every font except
+    the wide ones at 800px, which need three (eleven 116px cells need 1356px, more
+    than the 1248px a 1280px toolbar has, so the Booth trigger moved 1280px from one
+    row to two). Toggling filters never changes the row count, and no resting label
+    truncates."""
     guarded_page.set_viewport_size({"width": width, "height": 900})
     open_app(guarded_page)
     tops: list[int] = guarded_page.evaluate(_VISIBLE_TOPS_JS)
-    assert len(tops) == 10
+    assert len(tops) == 11
     rows = len(set(tops))
-    if width < 1280:
-        assert rows == 2
-    elif font_setting == "narrow":
-        assert rows == 1
-    elif font_setting in ("dejavu", "wide"):
-        assert rows == 2
-    else:
-        assert rows in (1, 2)
+    assert rows == (3 if width == 800 and font_setting in ("dejavu", "wide") else 2)
     assert _truncated(guarded_page) == []
 
     cell_min = guarded_page.evaluate(_CELL_MIN_JS)

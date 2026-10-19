@@ -531,7 +531,7 @@ def test_toolbar_order_and_clear_all_contrast(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-02/SITE-27: "Clear all filters" is the first visible toolbar item,
-    followed by the Announcers trigger and the seven filter triggers in
+    followed by the Announcers trigger and the other filter triggers in
     order (D-21). D-25: its computed color against the *toolbar's own*
     background (its own background is transparent) clears WCAG AA's 4.5:1
     minimum, and its color/border-top-color differ from a plain filter
@@ -554,6 +554,7 @@ def test_toolbar_order_and_clear_all_contrast(
         "trigger-school",
         "trigger-postseason",
         "trigger-game",
+        "trigger-booth",
     ]
 
     styles = guarded_page.evaluate(
@@ -987,6 +988,7 @@ def test_mobile_filters_sheet(mobile_page: Page, open_app: Callable[[Page, str],
         "school",
         "postseason",
         "game",
+        "booth",
     ):
         expect(mobile_page.locator(f"#trigger-{name}")).to_be_hidden()
 
@@ -1012,6 +1014,7 @@ def test_mobile_filters_sheet(mobile_page: Page, open_app: Callable[[Page, str],
         "filter-school",
         "filter-postseason",
         "filter-game",
+        "filter-booth",
     ]
 
     mobile_page.check("input[name='slot'][value='prime']")
@@ -1289,6 +1292,7 @@ _RESET_ARIA_LABELS = {
     "school": "Reset school filter",
     "postseason": "Reset bowls and playoffs filter",
     "game": "Reset game filter",
+    "booth": "Reset booth filter",
 }
 
 
@@ -1336,7 +1340,7 @@ def test_group_reset_and_clear_all_stay_consistent(
         "() => Array.from(document.querySelectorAll('.group-reset'))"
         ".map((el) => el.getAttribute('aria-disabled'))"
     )
-    assert states == ["true"] * 9
+    assert states == ["true"] * 10
 
 
 @pytest.mark.parametrize("scheme", ["light", "dark"])
@@ -1460,7 +1464,7 @@ def test_group_reset_in_phone_sheet_sections(
         "() => Array.from(document.querySelectorAll('.sheet-body section'))"
         ".map((s) => s.querySelectorAll('.section-head .group-reset').length)"
     )
-    assert counts == [1] * 9
+    assert counts == [1] * 10
 
     reset = mobile_page.locator("#filter-role .group-reset")
     assert reset.get_attribute("aria-disabled") == "false"
