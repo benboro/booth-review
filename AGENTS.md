@@ -156,6 +156,15 @@ model, and build phases; read the relevant section before starting a phase.
   Announcing, and pass the same 3% Ratings Reference agreement gate. Credit every crew
   and figure with a link to the exact page it came from, and take ESPN Press Room's
   data down if ESPN objects.
+- Network lineup pages (Phase 10 booth tiers): never collect with scripts; the FOX,
+  CBS and NBC press sites ban scripts or block clients, and ESPN Press Room's terms ban
+  automated access. Save each season's lineup announcement by hand in a browser into
+  `data/incoming/lineups/<family>/` (disney, fox, cbs, nbc). A Claude session reads the
+  saved pages and proposes rows for `data/reference/cfb_booth_ranks.csv`; the user
+  confirms every row before it is added. Only the facts (family, season, rank,
+  play-by-play, analyst, conference-network scope) and the page's public URL as
+  `source_url` go into the repo; the saved pages are never committed or copied into the
+  vault.
 - CFBD: the free tier allows 1,000 requests per calendar month. Count every call, and
   never call per-game endpoints such as `/metrics/wp` in bulk.
 
