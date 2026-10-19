@@ -552,7 +552,8 @@ export function buildFigure(data, view, state, env) {
     });
     leadTraces.push({
       ...leadBase(`unrated-lead:${family}`, uLead, 'y2'),
-      marker: { symbol: 'star', color: SURFACE[theme], size: LEAD_STAR_SIZE, opacity: activeOpacity, line: { width: 0 } },
+      // Hollow only in Viewers mode; elsewhere the band is filled (D-14), so no surface fill.
+      marker: { symbol: 'star', color: yMode === 'viewers' ? SURFACE[theme] : color, size: LEAD_STAR_SIZE, opacity: activeOpacity, line: { width: 0 } },
     });
   }
 
