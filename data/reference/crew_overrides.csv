@@ -73,3 +73,5 @@ cfbd_game_id,network_id,crew_position,person_id,role,reason,source_kind,source_n
 400548149,espnu,1,rene-ingoglia,analyst,no-506-listing,school,Buffalo Football game notes,https://ubbulls.com/documents/download/2019/6/17/gamenotes_ohio_2014.pdf
 401531911,espnu,0,courtney-lyle,pbp,no-506-crew,outlet,Crescent City Sports,https://crescentcitysports.com/?p=255364
 401531911,espnu,1,hutson-mason,analyst,no-506-crew,outlet,Crescent City Sports,https://crescentcitysports.com/?p=255364
+400868988,sec-network,0,mark-neely,pbp,correction,school,Mizzou Athletics game preview,https://mutigers.com/news/2016/9/5/mizzoufootball-opens-home-schedule-with-emu
+400868988,sec-network,1,ray-bentley,analyst,correction,school,Mizzou Athletics game preview,https://mutigers.com/news/2016/9/5/mizzoufootball-opens-home-schedule-with-emu
