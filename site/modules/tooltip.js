@@ -21,6 +21,7 @@
 import {
   crewEntries,
   axisValueText,
+  boothLabel,
   formatDate,
   formatKickoff,
   formatMatchup,
@@ -102,8 +103,9 @@ export function tooltipModel(data, i, { axis, y = 'viewers', selected = new Set(
   const score = SCORE_LINES.get(y);
   const scoreLine = score ? `${score.label}: ${data[score.key][i] ?? 'not available'}` : null;
   const hint = 'Click for details →';
+  const boothLine = boothLabel(data, i);
 
-  return { title, dateText, gameType, networks, crew, crewLines, viewersLine, axisLine, scoreLine, hint };
+  return { boothLine, title, dateText, gameType, networks, crew, crewLines, viewersLine, axisLine, scoreLine, hint };
 }
 
 /**
@@ -174,6 +176,13 @@ export function renderTooltipContent(el, model, theme) {
       box.appendChild(line);
     }
     children.push(box);
+  }
+
+  if (model.boothLine != null) {
+    const booth = document.createElement('div');
+    booth.className = 'tooltip-booth';
+    booth.textContent = model.boothLine;
+    children.push(booth);
   }
 
   const viewersLine = document.createElement('div');

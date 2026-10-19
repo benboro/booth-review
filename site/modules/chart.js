@@ -53,7 +53,7 @@
  */
 
 import { ACCENT, DIVIDER, DOT_OUTLINE, FAMILY_COLORS, MUTED, PAGE_BG, POSTSEASON_BAND, POSTSEASON_LABEL as POSTSEASON_LABEL_COLOR, SURFACE, ZERO_LINE, contrastRatio, familyKey } from './palette.js';
-import { MINUS, escapeHover, logTicks, niceLinearTicks } from './format.js';
+import { MINUS, boothLabel, escapeHover, logTicks, niceLinearTicks } from './format.js';
 import { tooltipModel } from './tooltip.js';
 import { POSTSEASON_LABEL, dateAxisLabels, gapDividers, postseasonBands, postseasonLabel, seasonRange, shownBlocks } from './date-axis.js';
 import { gutterPads } from './gutter.js';
@@ -265,6 +265,8 @@ export function hoverText(data, i, { axis, y, theme }) {
   lines.push(networkSpans.join('/'));
 
   for (const line of model.crewLines) lines.push(escapeHover(line));
+  const boothLine = boothLabel(data, i);
+  if (boothLine != null) lines.push(escapeHover(boothLine));
 
   lines.push(escapeHover(model.viewersLine));
   lines.push(escapeHover(model.axisLine));

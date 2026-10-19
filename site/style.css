@@ -1572,6 +1572,21 @@ input[type="checkbox"] {
   margin-right: var(--space-xs);
 }
 
+/* D-11 booth tier line: muted, label-size text in the tooltip and the detail panel. */
+.tooltip-booth,
+.panel-booth {
+  color: var(--muted);
+  font: var(--font-label);
+}
+
+.tooltip-booth {
+  margin: var(--space-xs) 0;
+}
+
+.panel-booth {
+  margin: var(--space-sm) 0 0;
+}
+
 /* ---------- Chart area ---------- */
 
 /* `#chart-area`'s own children stack top-to-bottom in flex-column flow (not

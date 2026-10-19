@@ -22,6 +22,7 @@ import {
   crewEntries,
   figureNotViaRrText,
   axisValueText,
+  boothLabel,
   formatDate,
   formatKickoff,
   formatMatchup,
@@ -344,6 +345,13 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
     children.push(crewHeading, emptyP);
   } else {
     children.push(crewHeading, buildCrewList(data, i, selectedPersonIndexes(data, state)));
+  }
+  const boothText = boothLabel(data, i);
+  if (boothText != null) {
+    const boothP = document.createElement('p');
+    boothP.className = 'panel-booth';
+    boothP.textContent = boothText;
+    children.push(boothP);
   }
 
   const selectedText = selectedOnGameText(data, view, i);
