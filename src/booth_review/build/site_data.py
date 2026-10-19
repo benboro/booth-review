@@ -390,6 +390,24 @@ def build_site_data(
             f"telecast_people: {len(missing_people)} person_id(s) missing from the people table"
         )
 
+    # Phase 10: the booth tier of each shipped telecast, keyed by its booth.
+    booth_by_telecast: dict[str, dict[str, Any]] = {
+        str(brow["telecast_id"]): brow for brow in tables.booth_tiers.iter_rows(named=True)
+    }
+    missing_booth_people = {
+        str(pid)
+        for brow in booth_by_telecast.values()
+        for pid in (brow["pbp_person_id"], brow["analyst_person_id"])
+        if pid is not None and pid not in people_by_id
+    }
+    if missing_booth_people:
+        raise VaultStateError(
+            f"booth_tiers: {len(missing_booth_people)} person_id(s) missing from the people table"
+        )
+    booth_values: dict[tuple[str, int, str], tuple[Any, ...]] = {}
+    booth_key_by_telecast: dict[str, tuple[str, int, str]] = {}
+    conflicting_booths = 0
+
     # -- Pass 1: discover every referenced lookup value -------------------------------------
     team_names: set[str] = set()
     network_ids: set[str] = set()
@@ -412,6 +430,27 @@ def build_site_data(
             flag_ids.update(flags_by_telecast.get(row["telecast_id"], []))
         for crow in crew_by_telecast.get(row["telecast_id"], []):
             person_ids.add(str(crow["person_id"]))
+        booth_row = booth_by_telecast.get(str(row["telecast_id"]))
+        if booth_row is not None:
+            booth_key = (
+                str(booth_row["family"]),
+                int(booth_row["season"]),
+                booth_row["pbp_person_id"],
+            )
+            booth_value = (
+                booth_row["analyst_person_id"],
+                booth_row["rank"],
+                booth_row["tier"],
+                booth_row["lead_network_id"],
+            )
+            if booth_values.setdefault(booth_key, booth_value) != booth_value:
+                conflicting_booths += 1
+            booth_key_by_telecast[str(row["telecast_id"])] = booth_key
+            person_ids.add(str(booth_row["pbp_person_id"]))
+            if booth_row["analyst_person_id"] is not None:
+                person_ids.add(str(booth_row["analyst_person_id"]))
+            if booth_row["lead_network_id"] is not None:
+                network_ids.add(str(booth_row["lead_network_id"]))
         for side in ("home", "away"):
             conf = row[f"{side}_conference"]
             if conf is None:
@@ -429,9 +468,31 @@ def build_site_data(
         elif network_id != "ALL":
             network_ids.add(str(network_id))
 
+    if conflicting_booths:
+        raise VaultStateError(
+            f"booth_tiers: {conflicting_booths} telecast(s) disagree with their booth's values"
+        )
     team_index = {name: i for i, name in enumerate(sorted(team_names))}
     network_index = {network_id: i for i, network_id in enumerate(sorted(network_ids))}
     person_index = {person_id: i for i, person_id in enumerate(sorted(person_ids))}
+    used_booths = sorted(booth_values)
+    booth_index = {key: i for i, key in enumerate(used_booths)}
+    booths_lookup = [
+        {
+            "family": family,
+            "season": season,
+            "pbp": person_index[pbp],
+            "analyst": person_index[str(booth_values[(family, season, pbp)][0])]
+            if booth_values[(family, season, pbp)][0] is not None
+            else None,
+            "rank": booth_values[(family, season, pbp)][1],
+            "tier": booth_values[(family, season, pbp)][2],
+            "lead_network": network_index[str(booth_values[(family, season, pbp)][3])]
+            if booth_values[(family, season, pbp)][3] is not None
+            else None,
+        }
+        for family, season, pbp in used_booths
+    ]
     publisher_index = {name: i for i, name in enumerate(sorted(publishers))}
     flag_index = {flag_id: i for i, flag_id in enumerate(sorted(flag_ids))}
     unmatched_rivalry_teams = sum(
@@ -523,6 +584,7 @@ def build_site_data(
         "bowl",
         "rivalry",
         "place",
+        "booth",
     )
     rated_only_names = (
         "viewers",
@@ -596,6 +658,8 @@ def build_site_data(
         target["rivalry"].append(rivalry_index[tagged] if tagged is not None else None)
         venue_id = row["venue_id"]
         target["place"].append(venue_index.get(int(venue_id)) if venue_id is not None else None)
+        booth_key = booth_key_by_telecast.get(str(row["telecast_id"]))
+        target["booth"].append(booth_index[booth_key] if booth_key is not None else None)
 
     for row in rated_rows:
         _append_game_fields(columns, row)
@@ -704,6 +768,7 @@ def build_site_data(
             ],
             "rivalries": rivalries_lookup,
             "venues": venues_lookup,
+            "booths": booths_lookup,
         },
         "telecasts": columns,
         "telecasts_unrated": unrated_columns,

@@ -18,6 +18,7 @@ from pathlib import Path
 
 import polars as pl
 
+from booth_review.build.booths import empty_booth_tiers_frame
 from booth_review.build.bowls import BowlEntry, load_bowls
 from booth_review.build.combined import (
     REVIEW_COMBINED_COLUMNS,
@@ -158,6 +159,8 @@ class BuildTables:
     # second_source_network_accepts.csv (line, status) pairs the build could not use:
     # "ignored" (the game has more than one main telecast) or "unused" (WR-05).
     second_source_accept_warnings: tuple[tuple[int, str], ...] = ()
+    # Phase 10 booth tier per tiered CFB telecast; private, never written to processed/.
+    booth_tiers: pl.DataFrame = field(default_factory=empty_booth_tiers_frame)
 
 
 def _combined_review_row(
