@@ -48,9 +48,11 @@ NFL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "contract" / "nfl-data.fixture.
 # Site-data and index re-pinned at Phase 10 Plan 03 (contract 2.6.0: lookups.booths [] and a null
 # booth column in both blocks; dropping them and setting the version back to 2.5.0 gives the
 # old site-data digest, and the index moves only through its cache-bust hash).
+# Index re-pinned at Phase 10 Plan 11: plans 10-06..10-09 added only markup (Booth trigger and
+# popover, Crews tab and panel, Lead booth key; 21 added lines, none removed).
 _SITE_DATA_SHA256 = "8ceec31a10326e809f9a9397da7734be8b1092156ef094093742c7d4e117ac02"
 _COVERAGE_SHA256 = "f3cf1022cdd2bacc514a00971310411288b395acd621ea3f880d12731ed0a4e9"
-_INDEX_PRE_PHASE_SHA256 = "8719e49f44938377d8a2424b942f0f10a3976735d9b3cb67454005f870620be1"
+_INDEX_PRE_PHASE_SHA256 = "6af9ae936af0347012c8e9e627289b31a09e633f521050c9f471ea99835fe4e9"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'
