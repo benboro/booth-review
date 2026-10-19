@@ -19,6 +19,11 @@ synthetic vault); no figure changed.
 vault); site-data.json with that field dropped and the version set back to 2.4.0 hashes to
 the Plan 08 digest, so no figure or crew changed.
 
+Phase 10 Plan 03: site-data.json schema 2.6.0 adds lookups.booths ([] in the synthetic
+vault) and telecasts[_unrated].booth (all null); site-data.json with those fields dropped
+and the version set back to 2.5.0 hashes to the 04.19 Plan 41 digest
+(ea373e9f8b1f...), so no figure or crew changed.
+
 04.19 Plan 27 (3de6998): the header-only review_second_source_gate.csv gains an
 excluded_non_game column; no figure changed.
 
@@ -141,7 +146,7 @@ _GOLDEN: dict[str, str] = {
         "07ff159d34d5e0cfdd3b77f84c3ecaec0cd14c437fa015fe89333709317831c3"
     ),
     "processed/site-data.json": (
-        "ea373e9f8b1f422a38692e331d4845b9702f21c2f17779b2d9f85d47368c47b1"
+        "c5b137899b09e6c8f85aba54ece5811e0ca6b6bda5a0f587abe4fab675c8def1"
     ),
     "processed/telecast_flags.parquet": (
         "2e2f334909dc09ab5ff590cadd3d4cb2158678a2d980948cd454219ab82927e2"

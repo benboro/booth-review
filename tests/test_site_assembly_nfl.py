@@ -45,9 +45,12 @@ NFL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "contract" / "nfl-data.fixture.
 # the reverted build gives the Plan 41 digest), and the index moves only through its
 # site-data cache-bust hash. Coverage re-pinned at Plan 43 (user decision): the column header
 # shortened to "Of which ESPN backup" (restoring the old header text gives the Plan 49 digest).
-_SITE_DATA_SHA256 = "b93ca1c096fef2da4c75c30864da9f06084b8ddea671253ef0dae3d14ce4ce78"
+# Site-data and index re-pinned at Phase 10 Plan 03 (contract 2.6.0: lookups.booths [] and a null
+# booth column in both blocks; dropping them and setting the version back to 2.5.0 gives the
+# old site-data digest, and the index moves only through its cache-bust hash).
+_SITE_DATA_SHA256 = "8ceec31a10326e809f9a9397da7734be8b1092156ef094093742c7d4e117ac02"
 _COVERAGE_SHA256 = "f3cf1022cdd2bacc514a00971310411288b395acd621ea3f880d12731ed0a4e9"
-_INDEX_PRE_PHASE_SHA256 = "781de92244af2d9f6b4ce99efc522f41f10357127208ff7a9451aecbba145b1a"
+_INDEX_PRE_PHASE_SHA256 = "8719e49f44938377d8a2424b942f0f10a3976735d9b3cb67454005f870620be1"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'
