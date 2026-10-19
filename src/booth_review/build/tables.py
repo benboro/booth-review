@@ -18,7 +18,13 @@ from pathlib import Path
 
 import polars as pl
 
-from booth_review.build.booths import empty_booth_tiers_frame
+from booth_review.build.booth_ranks import load_cfb_booth_ranks
+from booth_review.build.booths import (
+    REVIEW_CFB_BOOTHS_UNTIERED,
+    UNTIERED_COLUMNS,
+    assign_cfb_booths,
+    empty_booth_tiers_frame,
+)
 from booth_review.build.bowls import BowlEntry, load_bowls
 from booth_review.build.combined import (
     REVIEW_COMBINED_COLUMNS,
@@ -426,6 +432,10 @@ def assemble_tables(
     telecasts = backup.telecasts
     telecast_people = backup.telecast_people
     people = backup.people
+    # Phase 10: tier every big-four telecast from the cited order, after every crew source.
+    booth_assignment = assign_cfb_booths(
+        telecasts, telecast_people, people, networks, load_cfb_booth_ranks(reference_directory)
+    )
     crew_gap_review = crew_gap_rows(
         telecasts_pre,
         games,
@@ -456,6 +466,7 @@ def assemble_tables(
 
     review_rows: dict[str, tuple[tuple[str, ...], list[dict[str, object]]]] = {
         "review_bowls": (REVIEW_BOWLS_COLUMNS, bowl_rows),
+        REVIEW_CFB_BOOTHS_UNTIERED: (UNTIERED_COLUMNS, booth_assignment.untiered_rows),
         "review_network_rarity": (
             REVIEW_NETWORK_RARITY_COLUMNS,
             network_rarity_review_rows(telecasts, rarity),
@@ -496,6 +507,7 @@ def assemble_tables(
     diagnostics = _build_diagnostics(backup.season_counts)
     merged_totals = dict(diagnostics.totals)
     merged_totals.update({f"second_source_{key}": value for key, value in second.counts.items()})
+    merged_totals.update({f"cfb_booths_{k}": v for k, v in booth_assignment.counts.items()})
     merged_totals.update({f"people_{key}": value for key, value in people_links.counts.items()})
     merged_totals["combined_candidates_alt_listed"] = sum(
         1 for c in combined_candidates if "alt_listed" in c.reasons
@@ -553,6 +565,7 @@ def assemble_tables(
         review_rows=review_rows,
         crew_override_differs_lines=override_result.differs_lines,
         venues=venues,
+        booth_tiers=booth_assignment.booth_tiers,
         second_source_gates=second.gates,
         second_source_accept_warnings=_accept_warnings(accept_lines, second, seasons),
     )

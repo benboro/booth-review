@@ -128,6 +128,7 @@ def test_write_tables_writes_parquet_and_review_csvs_and_returns_sorted_paths(
         "processed/people.parquet",
         "processed/telecast_people.parquet",
         "interim/review_bowls.csv",
+        "interim/review_cfb_booths_untiered.csv",
         "interim/review_network_rarity.csv",
         "interim/review_crew_overrides.csv",
         "interim/review_unmatched.csv",
