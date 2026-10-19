@@ -18,7 +18,7 @@ immediately, in parallel with Phase 3's real joins.
 `site-data.json` is **one versioned columnar JSON file** (D-13), not an array
 of per-telecast objects:
 
-- `schema_version` — the contract version (currently `"2.5.0"`). See
+- `schema_version` — the contract version (currently `"2.6.0"`). See
   Versioning below.
 - `generated_at` — ISO UTC time of the newest change to a collected input (the
   newest manifest entry whose content differs from the previous one for the same
@@ -72,7 +72,7 @@ meaning as the `telecasts` field of the same name: `season`, `date`, `kickoff`,
 `time_slot`, `away_team`, `home_team`, `neutral`, `away_points`, `home_points`,
 `away_rank`, `home_rank`, `network`, `outlets`, `s506_url`, `crew_source_url`,
 `crew_source_label`, `excitement`, `home_spread`, `crew`, `game_type`, `playoff_round`,
-`home_conference`, `away_conference`, `bowl`, `rivalry`, `place`. The rated-only fields
+`home_conference`, `away_conference`, `bowl`, `rivalry`, `place`, `booth`. The rated-only fields
 `viewers`, `measurement_type`, `publisher`, `source_url`, `rr_urls`, `flags`, and
 `combined_feeds` are absent, and so is any game or telecast id (SITE-19, CFBD terms).
 The block rejects any column it does not declare.
@@ -130,6 +130,7 @@ describes when the value is `null` instead of coerced to a placeholder like
 | `bowl` | int \| null, index into `lookups.bowls` | non-null only for a game played at a named bowl; never set on a regular-season game; display name only, the raw CFBD note never ships | SITE-30 |
 | `rivalry` | int \| null, index into `lookups.rivalries` | non-null only on a regular-season game that is the first meeting of a curated rivalry's two teams in that season, not counting conference championship games; a conference championship game (marked by CFBD from 2022 on, so null even when it comes before the rivalry game or is the only meeting) or a postseason meeting is null, and for earlier seasons a later rematch is null; resolved at build time from `data/reference/rivalries.csv`. The build reads CFBD's private game notes only as a yes/no test for a title game; no notes text ships | SITE-45 |
 | `place` | int \| null, index into `lookups.venues` | the game's own CFBD venue, so a neutral-site game sits at the venue's location, never the home team's city; null when the game has no venue id, its venue is missing from CFBD's venue list, or the venue has no coordinates (never guessed, never the home stadium; 04.18 D-16) | SITE-71 |
+| `booth` | int \| null, index into `lookups.booths` | the game's CFB booth tier for its network family and season (Phase 10); null when the game has no booth tier. Present in both blocks, so an unrated lead game keeps its tier | BOOTH-04 |
 
 ### `time_slot` boundaries
 
@@ -173,6 +174,7 @@ Each `crew` entry is `{ person: int, role, feed }`:
 - **`bowl_franchises`**: `{ slug, name, former }` — a bowl franchise from the hand-checked `franchise` column of `data/reference/bowls.csv`; `name` is the latest core name and must be the `core` of one of the franchise's `lookups.bowls` entries, `former` the older core names oldest first, for search only; `slug` is a permanent URL value (SITE-44, 04.9 D-07). Franchise and rivalry `name`s are distinct across both lists, compared case-insensitively, so no two Game rows share a label. `name` and `former` are derived from every shipped postseason game, rated or not (04.13 D-14), so a bowl's latest core name and its older core names reflect unrated games too.
 - **`rivalries`**: `{ slug, name, article, teams }` — a curated rivalry from `data/reference/rivalries.csv` with at least one shipped game, rated or unrated; `article` is `"the"` when titles read "of the {name}" (the Iron Bowl) and null when the name stands alone (Bedlam, Paul Bunyan's Axe) or already starts with "The " (The Game), which must be null; `teams` are two ascending indexes into `lookups.teams` (SITE-45). Franchise and rivalry slugs share one namespace with the four reserved CFP slugs (`cfp-national-championship`, `cfp-semifinal`, `cfp-quarterfinal`, `cfp-first-round`).
 - **`venues`**: `{ name, city, state, country, lat, lon }` — a venue that at least one shipped game (rated or unrated) was played at and that has coordinates, in ascending CFBD venue id order; every row is referenced by some game's `place` (the contract rejects an unreferenced row), so no standalone venue table ships. `city`, `state` and `country` are null when CFBD has no value (`state` is null abroad); `country` is CFBD's country code; `lat` and `lon` are rounded to 4 decimals (SITE-71, 04.18).
+- **`booths`**: `{ family, season, pbp, analyst, rank, tier, lead_network }` — a CFB booth some shipped game belongs to, sorted by family, season and play-by-play person. `family` is `disney`, `fox`, `cbs` or `nbc`; `pbp` and `analyst` index `lookups.people` (the booth is keyed by its play-by-play voice and stores the regular analyst; `analyst` is null only when none is on record); `rank` is the published rank (null for an unlisted booth or an unranked conference lead); `tier` is `a` (rank 1), `b` (rank 2) or `other`; `lead_network` indexes `lookups.networks` and is set only for a conference-network lead, which is always tier `other`. The contract rejects a game whose booth family differs from its network's family or whose booth season differs from its season, a tier that does not match its rank, a second `a` or `b` booth for one family and season, a duplicate (family, season, pbp), and a booth no game references. No game or telecast ids or counts ship (Phase 10).
 - **`conferences`**: `{ name, is_fbs }` — one entry per distinct conference
   name that appears as a plotted telecast's `home_conference` or
   `away_conference` (D-09). `name` is CFBD's own per-game conference string
@@ -254,7 +256,8 @@ Unrated rows carry the same display-only CFBD fields as rated rows (`excitement`
   `2.1.0 -> 2.2.0` added the `telecasts_unrated` block with its `cause` enum (SITE-51, 04.13 D-16); minor bump, additive;
   `2.2.0 -> 2.3.0` added `lookups.venues` and the per-game `place` index in both blocks (SITE-71, 04.18); minor bump, additive;
   `2.3.0 -> 2.4.0` added `telecasts.figure_source` and allowed empty `rr_urls` for second-source figures (SRC-06, 04.19); minor bump;
-  `2.4.0 -> 2.5.0` added coverage `matched_crew_backup` (SRC-09, 04.19); minor bump.
+  `2.4.0 -> 2.5.0` added coverage `matched_crew_backup` (SRC-09, 04.19); minor bump;
+  `2.5.0 -> 2.6.0`: `lookups.booths` and `telecasts[_unrated].booth` (Phase 10 CFB booth tiers; additive).
 - **Removing a field, renaming a field, or changing a field's type**
   (including narrowing an enum) bumps the **major** version (`1.0.0` →
   `2.0.0`).

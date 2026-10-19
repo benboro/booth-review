@@ -1,5 +1,82 @@
 {
   "$defs": {
+    "BoothRef": {
+      "additionalProperties": false,
+      "description": "A CFB booth tier for one network family and season (Phase 10).\n\nKeyed by its play-by-play voice with the regular analyst stored. `tier` is\n\"a\" for published rank 1, \"b\" for rank 2, otherwise \"other\". A conference\nnetwork lead (`lead_network`) is always tier \"other\".",
+      "properties": {
+        "analyst": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Analyst"
+        },
+        "family": {
+          "enum": [
+            "disney",
+            "fox",
+            "cbs",
+            "nbc"
+          ],
+          "title": "Family",
+          "type": "string"
+        },
+        "lead_network": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Lead Network"
+        },
+        "pbp": {
+          "title": "Pbp",
+          "type": "integer"
+        },
+        "rank": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Rank"
+        },
+        "season": {
+          "title": "Season",
+          "type": "integer"
+        },
+        "tier": {
+          "enum": [
+            "a",
+            "b",
+            "other"
+          ],
+          "title": "Tier",
+          "type": "string"
+        }
+      },
+      "required": [
+        "family",
+        "season",
+        "pbp",
+        "analyst",
+        "rank",
+        "tier",
+        "lead_network"
+      ],
+      "title": "BoothRef",
+      "type": "object"
+    },
     "BowlFranchiseRef": {
       "additionalProperties": false,
       "description": "A bowl franchise: the latest core name, older core names for search\nonly, and a permanent URL slug (04.9 D-07).",
@@ -290,6 +367,13 @@
     "Lookups": {
       "additionalProperties": false,
       "properties": {
+        "booths": {
+          "items": {
+            "$ref": "#/$defs/BoothRef"
+          },
+          "title": "Booths",
+          "type": "array"
+        },
         "bowl_franchises": {
           "items": {
             "$ref": "#/$defs/BowlFranchiseRef"
@@ -371,7 +455,8 @@
         "bowls",
         "bowl_franchises",
         "rivalries",
-        "venues"
+        "venues",
+        "booths"
       ],
       "title": "Lookups",
       "type": "object"
@@ -547,6 +632,20 @@
             "type": "integer"
           },
           "title": "Away Team",
+          "type": "array"
+        },
+        "booth": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Booth",
           "type": "array"
         },
         "bowl": {
@@ -954,7 +1053,8 @@
         "away_conference",
         "bowl",
         "rivalry",
-        "place"
+        "place",
+        "booth"
       ],
       "title": "TelecastColumns",
       "type": "object"
@@ -1010,6 +1110,20 @@
             "type": "integer"
           },
           "title": "Away Team",
+          "type": "array"
+        },
+        "booth": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Booth",
           "type": "array"
         },
         "bowl": {
@@ -1328,6 +1442,7 @@
         "bowl",
         "rivalry",
         "place",
+        "booth",
         "cause"
       ],
       "title": "UnratedColumns",
@@ -1399,7 +1514,7 @@
       "type": "object"
     }
   },
-  "$id": "booth-review/site-data/2.5.0",
+  "$id": "booth-review/site-data/2.6.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -1421,7 +1536,7 @@
       "$ref": "#/$defs/Lookups"
     },
     "schema_version": {
-      "const": "2.5.0",
+      "const": "2.6.0",
       "title": "Schema Version",
       "type": "string"
     },
