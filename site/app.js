@@ -319,6 +319,8 @@ function render() {
   for (const renderer of renderers) {
     renderer({ data, state, view, setState });
   }
+  const leadKeyEl = document.getElementById('lead-key');
+  if (leadKeyEl) leadKeyEl.hidden = state.view !== 'scatter';
   if (state.view === 'map') renderMapShapeLegend(shapeLegendEl, lastMapModel);
   else if (state.view !== 'scatter' && shapeLegendEl) shapeLegendEl.hidden = true;
 }

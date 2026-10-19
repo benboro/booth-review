@@ -508,7 +508,8 @@ export function computeView(data, state) {
   const symbols = new Map();
   for (const i of highlighted) {
     if (!state.compare) {
-      symbols.set(i, 'circle');
+      // Phase 10 D-09: one person selected shows their lead-booth (A) games as stars.
+      symbols.set(i, data.boothTier[i] === 1 ? 'star' : 'circle');
       continue;
     }
     const onGame = peopleOnGame.get(i);

@@ -2082,6 +2082,17 @@ input[type="checkbox"] {
   font: var(--font-label);
 }
 
+.lead-key {
+  margin: var(--space-sm) 0;
+  font: var(--font-label);
+  color: var(--text);
+}
+
+/* Space stays reserved when the key is off so nothing shifts. */
+.lead-key.is-off {
+  visibility: hidden;
+}
+
 .error-banner {
   border: 1px solid var(--error);
   color: var(--error);
