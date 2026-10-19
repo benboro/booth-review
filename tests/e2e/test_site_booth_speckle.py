@@ -116,8 +116,9 @@ def test_lead_star_has_no_pixels_outside_the_glyph(
     serve_booths(guarded_page)
     open_app(guarded_page, "")
     guarded_page.wait_for_timeout(150)
+    # The filled state is the cased star as drawn: surface casing star beneath the lead star.
     metas = (
-        ["lead:disney"]
+        ["lead-halo:disney", "lead:disney"]
         if state == "filled"
         else ["unrated-lead-halo:disney", "unrated-lead:disney"]
     )
@@ -127,10 +128,11 @@ def test_lead_star_has_no_pixels_outside_the_glyph(
         assert marker["symbol"] == "star"
         assert marker["line"]["width"] == 0
     largest = max(float(m["size"]) for m in layers)
+    # A star's top tip reaches about 0.65 of its size from the centre (11px at 17px), past the
+    # size / 2 of a square marker, so the glyph box is 0.65 * size plus a 1px antialias margin.
+    half = largest * 0.65 + 1
     guarded_page.evaluate(_DRAW_JS, [layers, info["bg"], _CELL, _COLS, _ROWS])
     url = _data_url(guarded_page, _CELL * _COLS, _CELL * _ROWS)
-    result = guarded_page.evaluate(
-        _ANALYZE_JS, [url, _CELL, _COLS, _ROWS, largest / 2 + 2, info["bg"]]
-    )
+    result = guarded_page.evaluate(_ANALYZE_JS, [url, _CELL, _COLS, _ROWS, half, info["bg"]])
     assert result["inside"] > 0, "the star was not drawn at all"
     assert result["stray"] == 0, f"{result['stray']} stray pixels outside the {state} star"

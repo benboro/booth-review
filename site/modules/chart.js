@@ -96,7 +96,9 @@ export const BAND = Object.freeze({ frac: 0.12, minPx: 56, gapPx: 28, padPx: 12 
 
 /** Plot height assumed before the chart div is measured: #chart min-height 520 minus MARGIN.t + MARGIN.b. */
 /** Phase 10 D-09: lead-booth star size in px, independent of the enlarge-dots switch. */
-const LEAD_STAR_SIZE = 12;
+const LEAD_STAR_SIZE = 14;
+/** Phase 10 (10-11 review): the surface-colored casing star drawn directly beneath each rated lead star. */
+const LEAD_CASING_SIZE = 18;
 const FALLBACK_PLOT_HEIGHT = 420;
 
 /**
@@ -362,6 +364,7 @@ export function buildFigure(data, view, state, env) {
   const unratedInertTraces = [];
   const unratedActiveTraces = [];
   const leadTraces = [];
+  const leadCasingTraces = [];
   for (const family of data.families) {
     const active = { x: [], y: [], customdata: [], text: [] };
     const inert = { x: [], y: [] };
@@ -530,6 +533,19 @@ export function buildFigure(data, view, state, env) {
       hovertemplate: activeHoverTemplate,
       hoverlabel: { bordercolor: color },
     });
+    // A page-background casing star under each rated lead star keeps it readable among the
+    // same-colored dots it overlaps. Plain filled surface star: no marker.line, no open symbol.
+    leadCasingTraces.push({
+      type: 'scattergl',
+      mode: 'markers',
+      meta: `lead-halo:${family}`,
+      showlegend: false,
+      x: lead.x,
+      y: lead.y,
+      hoverinfo: 'skip',
+      hovertemplate: null,
+      marker: { symbol: 'star', color: SURFACE[theme], size: LEAD_CASING_SIZE, opacity: 1, line: { width: 0 } },
+    });
     leadTraces.push({
       ...leadBase(`lead:${family}`, lead, null),
       marker: { symbol: 'star', color, size: LEAD_STAR_SIZE, opacity: activeOpacity, line: { width: 0 } },
@@ -557,7 +573,7 @@ export function buildFigure(data, view, state, env) {
     });
   }
 
-  const traces = [...inertTraces, ...unratedInertTraces, ...activeTraces, ...unratedActiveTraces, ...leadTraces];
+  const traces = [...inertTraces, ...unratedInertTraces, ...activeTraces, ...unratedActiveTraces, ...leadCasingTraces, ...leadTraces];
 
   const hx = [];
   const hy = [];
@@ -587,6 +603,11 @@ export function buildFigure(data, view, state, env) {
   const uhaloY = [];
   const uhaloSymbol = [];
   const uhaloSize = [];
+  // 10-11 review: a highlighted unrated lead (A) game in Viewers mode keeps its hollow star -- the
+  // family-colored star above gets a smaller SURFACE star on top, as the unrated-lead traces do.
+  const uholeX = [];
+  const uholeY = [];
+  const uholeSize = [];
   // D-31/D-33: a scattergl non-circle symbol (square/diamond/triangle-up/
   // star) is drawn from an SDF glyph atlas (regl-scatter2d), and a
   // `marker.line` border on one of those glyphs antialiases into a
@@ -616,6 +637,11 @@ export function buildFigure(data, view, state, env) {
       usymbol.push(symbol);
       usize.push(size);
       ulineWidth.push(symbol === 'circle' ? 1.5 : 0);
+      if (symbol === 'star' && yMode === 'viewers' && !view.personShapes && data.boothTier[i] === 1) {
+        uholeX.push(x);
+        uholeY.push(bandY(i));
+        uholeSize.push(size - 3);
+      }
       if (symbol !== 'circle') {
         uhaloX.push(x);
         uhaloY.push(bandY(i));
@@ -678,6 +704,18 @@ export function buildFigure(data, view, state, env) {
       opacity: 1,
       line: { width: ulineWidth, color: ACCENT[theme] },
     },
+  });
+  traces.push({
+    type: 'scattergl',
+    mode: 'markers',
+    meta: 'highlight-unrated-hole',
+    showlegend: false,
+    yaxis: 'y2',
+    x: uholeX,
+    y: uholeY,
+    hoverinfo: 'skip',
+    hovertemplate: null,
+    marker: { symbol: 'star', size: uholeSize, color: SURFACE[theme], opacity: 1, line: { width: 0 } },
   });
   if (haloX.length > 0) {
     traces.push({

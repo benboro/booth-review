@@ -1562,7 +1562,14 @@ def test_tooltip_mode_trace_config(
     html_full = guarded_page.evaluate(full_js)
     for t in html_full:
         if str(t["meta"]).startswith(
-            ("inert:", "unrated-inert:", "highlight-halo", "unrated-lead-halo:")
+            (
+                "inert:",
+                "unrated-inert:",
+                "highlight-halo",
+                "unrated-lead-halo:",
+                "lead-halo:",
+                "highlight-unrated-hole",
+            )
         ):
             assert t["hoverinfo"] == "skip"
             assert not t["hovertemplate"]
@@ -1581,7 +1588,16 @@ def test_tooltip_mode_trace_config(
     plotly_full = guarded_page.evaluate(full_js)
     for t in plotly_full:
         meta = str(t["meta"])
-        if meta.startswith(("inert:", "unrated-inert:", "highlight-halo", "unrated-lead-halo:")):
+        if meta.startswith(
+            (
+                "inert:",
+                "unrated-inert:",
+                "highlight-halo",
+                "unrated-lead-halo:",
+                "lead-halo:",
+                "highlight-unrated-hole",
+            )
+        ):
             assert t["hoverinfo"] == "skip"
             assert not t["hovertemplate"]
         elif meta.startswith(("family:", "unrated-active:", "lead:", "unrated-lead")):
@@ -1597,11 +1613,19 @@ def test_tooltip_mode_trace_config(
     for t in plotly_full_selected:
         meta = str(t["meta"])
         if meta.startswith(
-            ("inert:", "family:", "unrated-inert:", "unrated-active:", "lead:", "unrated-lead")
+            (
+                "inert:",
+                "family:",
+                "unrated-inert:",
+                "unrated-active:",
+                "lead:",
+                "lead-halo:",
+                "unrated-lead",
+            )
         ):
             assert t["hoverinfo"] == "skip"
             assert not t["hovertemplate"]
-        elif meta.startswith("highlight-halo"):
+        elif meta.startswith(("highlight-halo", "highlight-unrated-hole")):
             assert t["hoverinfo"] == "skip"  # halos are never hoverable
         else:
             assert meta in ("highlight", "highlight-unrated")

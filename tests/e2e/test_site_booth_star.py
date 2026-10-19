@@ -278,3 +278,49 @@ def test_map_tab_draws_no_star(
         }"""
     )
     assert "star" not in symbols
+
+
+def test_rated_lead_star_has_a_surface_casing_drawn_beneath_it(
+    guarded_page: Page, serve_booths: Callable, open_app: Callable
+) -> None:
+    traces = _open(guarded_page, serve_booths, open_app)
+    by_meta = {t["meta"]: t for t in traces}
+    order = [t["meta"] for t in traces]
+    surface = by_meta["unrated-lead:disney"]["color"]
+    for family, game in (("disney", 8), ("fox", 5)):
+        casing, star = by_meta[f"lead-halo:{family}"], by_meta[f"lead:{family}"]
+        assert star["customdata"] == [game]
+        assert casing["n"] == star["n"] == 1
+        assert casing["customdata"] == []  # the casing never takes hover or click
+        assert casing["symbol"] == star["symbol"] == "star"
+        assert casing["lineWidth"] == star["lineWidth"] == 0
+        assert casing["color"] == surface != star["color"]
+        assert (casing["size"], star["size"]) == (18, 14)
+        assert order.index(f"lead-halo:{family}") < order.index(f"lead:{family}")
+    # The stars and their casings are drawn above every plain dot trace.
+    last_dot = max(i for i, m in enumerate(order) if m.startswith(("family:", "unrated-active:")))
+    assert min(order.index(f"lead-halo:{f}") for f in ("disney", "fox")) > last_dot
+
+
+def test_one_announcer_highlight_keeps_the_unrated_lead_star_hollow(
+    guarded_page: Page, serve_booths: Callable, open_app: Callable
+) -> None:
+    default = {t["meta"]: t for t in _open(guarded_page, serve_booths, open_app)}
+    surface = default["unrated-lead:disney"]["color"]
+    traces = _open(guarded_page, serve_booths, open_app, "?people=casey-lund")
+    order = [t["meta"] for t in traces]
+    unrated = next(t for t in traces if t["meta"] == "highlight-unrated")
+    hole = next(t for t in traces if t["meta"] == "highlight-unrated-hole")
+    halo = next(t for t in traces if t["meta"] == "highlight-halo-unrated")
+    at = unrated["customdata"].index(14)
+    assert unrated["symbol"][at] == "star"
+    # Fill, not just symbol: the star is family colored, with a smaller surface star on top.
+    assert unrated["color"][at] == default["lead:disney"]["color"] != surface
+    assert hole["n"] == 1
+    assert hole["color"] == surface
+    assert hole["symbol"] == "star"
+    assert hole["lineWidth"] == 0
+    assert hole["size"][0] < unrated["size"][at]
+    assert hole["customdata"] == []
+    assert halo["n"] >= 1  # the accent highlight halo is still drawn
+    assert order.index("highlight-unrated-hole") == order.index("highlight-unrated") + 1
