@@ -1,0 +1,239 @@
+"""CFB booth tiering on synthetic frames (invented ids, no kickoff or slot columns)."""
+
+from __future__ import annotations
+
+import polars as pl
+
+from booth_review.build.booth_ranks import CfbBoothRank
+from booth_review.build.booths import (
+    BOOTH_TIERS_SCHEMA,
+    UNTIERED_COLUMNS,
+    assign_cfb_booths,
+)
+from booth_review.resolve.networks import NetworkRow, NetworkTable
+
+URL = "https://example.com/lineup"
+
+
+def _net(nid: str, family: str) -> NetworkRow:
+    return NetworkRow(nid, nid, nid, family, "cable", "main", None, None, None)
+
+
+NETWORKS = NetworkTable(
+    [
+        _net("d-one", "disney"),
+        _net("d-two", "disney"),
+        _net("d-conf", "disney"),
+        _net("f-one", "fox"),
+        _net("c-one", "conference"),
+    ]
+)
+
+
+def rank(
+    r: int | None, pbp: str, analyst: str, *, scope: str | None = None, family: str = "disney"
+) -> CfbBoothRank:
+    return CfbBoothRank(family, 2024, r, pbp, analyst, scope, URL)
+
+
+RANKS = {
+    ("disney", 2024): (
+        rank(1, "p1", "a1"),
+        rank(2, "p2", "a2"),
+        rank(3, "p3", "a3"),
+        rank(None, "p4", "a4", scope="d-conf"),
+    )
+}
+
+
+def tel(tid: str, net: str = "d-one", season: int = 2024, feed: str = "main") -> dict[str, object]:
+    return {
+        "telecast_id": tid,
+        "game_id": 1,
+        "season": season,
+        "network_id": net,
+        "feed_type": feed,
+    }
+
+
+def crew(
+    tid: str,
+    pbp: str | None,
+    analyst: str | None = None,
+    *,
+    feed: str = "main",
+    pos: int = 1,
+    role: str = "pbp",
+) -> list[dict[str, object]]:
+    rows = []
+    if pbp:
+        rows.append(
+            {
+                "telecast_id": tid,
+                "person_id": pbp,
+                "role": role,
+                "feed_type": feed,
+                "crew_position": pos,
+            }
+        )
+    if analyst:
+        rows.append(
+            {
+                "telecast_id": tid,
+                "person_id": analyst,
+                "role": "analyst",
+                "feed_type": feed,
+                "crew_position": pos + 1,
+            }
+        )
+    return rows
+
+
+def frames(
+    items: list[tuple[dict[str, object], list[dict[str, object]]]],
+) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
+    tels = pl.DataFrame([t for t, _ in items])
+    tp_schema = {
+        "telecast_id": pl.Utf8,
+        "person_id": pl.Utf8,
+        "role": pl.Utf8,
+        "feed_type": pl.Utf8,
+        "crew_position": pl.Int64,
+    }
+    tp = pl.DataFrame([r for _, rows in items for r in rows], schema=tp_schema)
+    ids = sorted({str(r["person_id"]) for _, rows in items for r in rows})
+    people = pl.DataFrame({"person_id": ids, "canonical_name": [f"Name {i}" for i in ids]})
+    return tels, tp, people
+
+
+def run(items, ranks=RANKS):
+    tels, tp, people = frames(items)
+    return assign_cfb_booths(tels, tp, people, NETWORKS, ranks)
+
+
+def by_id(result) -> dict[str, dict]:
+    return {r["telecast_id"]: r for r in result.booth_tiers.iter_rows(named=True)}
+
+
+def test_tiers_by_rank_and_scope() -> None:
+    items = [
+        (tel("t1"), crew("t1", "p1", "a1")),
+        (tel("t2", "d-two"), crew("t2", "p2", "a2")),
+        (tel("t3"), crew("t3", "p3", "a3")),
+        (tel("t4", "d-one"), crew("t4", "p4", "a4")),
+        (tel("t5"), crew("t5", "p5", "a5")),
+    ]
+    got = by_id(run(items))
+    assert (got["t1"]["tier"], got["t1"]["rank"]) == ("a", 1)
+    assert (got["t2"]["tier"], got["t2"]["rank"]) == ("b", 2)
+    assert (got["t3"]["tier"], got["t3"]["rank"]) == ("other", 3)
+    assert got["t4"]["tier"] == "other"
+    assert got["t4"]["rank"] is None
+    assert got["t4"]["lead_network_id"] == "d-conf"
+    assert got["t5"]["tier"] == "other"
+    assert got["t5"]["rank"] is None
+    assert got["t5"]["analyst_person_id"] == "a5"
+    assert got["t5"]["lead_network_id"] is None
+
+
+def test_schema_and_counts() -> None:
+    result = run([(tel("t1"), crew("t1", "p1", "a1")), (tel("t4"), crew("t4", "p4", "a4"))])
+    assert dict(result.booth_tiers.schema) == BOOTH_TIERS_SCHEMA
+    assert result.counts["tiered_telecasts"] == 2
+    assert result.counts["a"] == 1
+    assert result.counts["conference_lead"] == 1
+    assert all(isinstance(v, int) for v in result.counts.values())
+
+
+def test_fill_in_keeps_tier() -> None:
+    got = by_id(run([(tel("t1"), crew("t1", "p1", "x"))]))
+    assert got["t1"]["tier"] == "a"
+    assert got["t1"]["is_fill_in"] is True
+    assert got["t1"]["analyst_person_id"] == "a1"
+    assert got["t1"]["game_analyst_person_id"] == "x"
+
+
+def test_regular_analyst_is_not_fill_in() -> None:
+    got = by_id(run([(tel("t1"), crew("t1", "p1", "a1"))]))
+    assert got["t1"]["is_fill_in"] is False
+
+
+def test_regular_analyst_with_other_pbp_is_other_booth() -> None:
+    got = by_id(run([(tel("t1"), crew("t1", "z", "a1"))]))
+    assert got["t1"]["tier"] == "other"
+    assert got["t1"]["pbp_person_id"] == "z"
+
+
+def test_uncited_family_season_is_untiered() -> None:
+    result = run([(tel("t1", "f-one"), crew("t1", "p1", "a1"))])
+    assert result.booth_tiers.is_empty()
+    assert result.counts["untiered_family_seasons"] == 1
+
+
+def test_other_family_never_tiered_or_reviewed() -> None:
+    result = run([(tel("t1", "c-one"), crew("t1", "p1", "a1"))])
+    assert result.booth_tiers.is_empty()
+    assert result.untiered_rows == []
+
+
+def test_unmapped_network_untiered() -> None:
+    result = run([(tel("t1", "nope"), crew("t1", "p1", "a1"))])
+    assert result.booth_tiers.is_empty()
+
+
+def test_no_pbp_role_untiered_and_counted() -> None:
+    result = run([(tel("t1"), crew("t1", "p1", None, role="sideline"))])
+    assert result.booth_tiers.is_empty()
+    assert result.counts["no_pbp"] == 1
+
+
+def test_multi_pbp_lowest_position_wins() -> None:
+    rows = crew("t1", "p2", None, pos=2) + crew("t1", "p1", None, pos=1)
+    result = run([(tel("t1"), rows)])
+    assert by_id(result)["t1"]["pbp_person_id"] == "p1"
+    assert result.counts["multi_pbp"] == 1
+
+
+def test_alt_feed_crew_never_chooses_pbp() -> None:
+    rows = crew("t1", "p1", None, feed="alt") + crew("t1", "p2", None)
+    assert by_id(run([(tel("t1"), rows)]))["t1"]["pbp_person_id"] == "p2"
+
+
+def test_alt_feed_telecast_not_tiered() -> None:
+    result = run([(tel("t1", feed="alt"), crew("t1", "p1", "a1", feed="alt"))])
+    assert result.booth_tiers.is_empty()
+
+
+def test_january_bowl_uses_telecast_season() -> None:
+    got = by_id(run([(tel("t1", season=2024), crew("t1", "p1", "a1"))]))
+    assert got["t1"]["season"] == 2024
+
+
+def test_untiered_review_rows_sorted() -> None:
+    items = [
+        (tel("t1"), crew("t1", "q1", "b1")),
+        (tel("t2"), crew("t2", "q2", "b2")),
+        (tel("t3"), crew("t3", "q2", "b2")),
+        (tel("t4", "f-one"), crew("t4", "r1", "c1")),
+    ]
+    result = run(items, ranks={})
+    rows = result.untiered_rows
+    assert [(r["family"], r["pbp_person_id"], r["games"]) for r in rows] == [
+        ("disney", "q2", 2),
+        ("disney", "q1", 1),
+        ("fox", "r1", 1),
+    ]
+    assert set(rows[0]) == set(UNTIERED_COLUMNS)
+    assert rows[0]["pbp_name"] == "Name q2"
+    assert result.counts["untiered_family_seasons"] == 2
+    assert result.counts["untiered_review_rows"] == 3
+
+
+def test_tiered_family_season_has_no_review_rows() -> None:
+    result = run([(tel("t1"), crew("t1", "p1", "a1"))])
+    assert result.untiered_rows == []
+
+
+def test_empty_inputs_keep_schema() -> None:
+    result = run([(tel("t1", "c-one"), crew("t1", "p1", "a1"))])
+    assert dict(result.booth_tiers.schema) == BOOTH_TIERS_SCHEMA
