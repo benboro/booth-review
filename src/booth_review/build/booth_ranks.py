@@ -13,11 +13,11 @@ from booth_review.errors import ReferenceTableError
 from booth_review.people.registry import load_people
 from booth_review.reference import read_reference_csv_numbered
 from booth_review.resolve.networks import load_networks
+from booth_review.seasons import current_season
 
 CFB_BOOTH_RANK_COLUMNS = ("family", "season", "rank", "pbp", "analyst", "scope", "source_url")
 CFB_BOOTH_FAMILIES = ("disney", "fox", "cbs", "nbc")
 CFB_BOOTH_FIRST_SEASON = 2014
-CFB_BOOTH_LAST_SEASON = 2026
 
 
 @dataclass(frozen=True)
@@ -75,8 +75,9 @@ def load_cfb_booth_ranks(
         if family not in CFB_BOOTH_FAMILIES:
             raise _err(path, line_no, "family must be disney, fox, cbs or nbc")
         season = _req_int(path, line_no, raw["season"], "season")
-        if not CFB_BOOTH_FIRST_SEASON <= season <= CFB_BOOTH_LAST_SEASON:
-            raise _err(path, line_no, "season must be 2014-2026")
+        last_season = current_season()
+        if not CFB_BOOTH_FIRST_SEASON <= season <= last_season:
+            raise _err(path, line_no, f"season must be {CFB_BOOTH_FIRST_SEASON}-{last_season}")
         scope = raw["scope"].strip() or None
         if scope is not None:
             info = networks.get(scope)
@@ -87,8 +88,8 @@ def load_cfb_booth_ranks(
             raise _err(path, line_no, "rank is required unless scope is set")
         if rank is not None and rank < 1:
             raise _err(path, line_no, "rank must be at least 1")
-        if scope is not None and rank == 1:
-            raise _err(path, line_no, "a conference-network lead cannot be rank 1")
+        if scope is not None and rank is not None and rank < 3:
+            raise _err(path, line_no, "a conference-network lead cannot be rank 1 or 2")
         pbp = people.lookup(raw["pbp"])
         analyst = people.lookup(raw["analyst"])
         if pbp is None or analyst is None:

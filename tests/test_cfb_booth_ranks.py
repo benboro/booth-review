@@ -11,6 +11,7 @@ from booth_review.build.booth_ranks import (
     load_cfb_booth_ranks,
 )
 from booth_review.errors import ReferenceTableError
+from booth_review.seasons import current_season
 
 _URL = "https://example.com/lineup"
 _HEADER = ",".join(CFB_BOOTH_RANK_COLUMNS)
@@ -82,7 +83,7 @@ def test_header_only_is_empty(ref: Path) -> None:
 _REJECTIONS: list[list[str]] = [
     [_row(family="cw")],
     [_row(season="2013")],
-    [_row(season="2027")],
+    [_row(season=str(current_season() + 1))],
     [_row(season="x")],
     [_row("0")],
     [_row("")],
@@ -95,6 +96,7 @@ _REJECTIONS: list[list[str]] = [
     [_row("1"), _row("", "Cy Fixture", "Di Fixture", scope="fixture-main")],
     [_row("1"), _row("", "Cy Fixture", "Di Fixture", scope="fixture-fox-conf")],
     [_row("1", scope="fixture-conf")],
+    [_row("1"), _row("2", "Cy Fixture", "Di Fixture", scope="fixture-conf")],
     [
         _row("1"),
         _row("", "Cy Fixture", "Di Fixture", scope="fixture-conf"),
