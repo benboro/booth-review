@@ -132,17 +132,36 @@ def test_low_n_default_and_off(
     guarded_page: Page, serve_booths: Callable[[Page], None], open_app: Callable[[Page, str], None]
 ) -> None:
     _open(guarded_page, serve_booths, open_app)
+    # The user set CREWS_LOW_N = 0 (2026-10-18): mid-season most booths sit under 8 games.
     default = _model(guarded_page)
-    assert default["lowN"] == 8
-    assert all(r["lowN"] for g in default["groups"] for r in g["rows"])
-    off = _model(guarded_page, opts={"lowN": 0})
-    assert not any(r["lowN"] for g in off["groups"] for r in g["rows"])
+    assert default["lowN"] == 0
+    assert not any(r["lowN"] for g in default["groups"] for r in g["rows"])
+    on = _model(guarded_page, opts={"lowN": 8})
+    assert all(r["lowN"] for g in on["groups"] for r in g["rows"])
 
-    assert guarded_page.locator("#crews-panel .low-n-tag").count() == 7
-    assert guarded_page.locator("#crews-panel tr[data-low-n='true']").count() == 7
-    legend = guarded_page.locator("#crews-panel .crews-legend")
+    assert guarded_page.locator("#crews-panel .low-n-tag").count() == 0
+    assert guarded_page.locator("#crews-panel tr[data-low-n]").count() == 0
+    assert guarded_page.locator("#crews-panel .crews-legend").count() == 0
+    # A nonzero cutoff still fades, tags and explains every row under it
+    guarded_page.evaluate(
+        """async () => {
+          const D = await import('./modules/data.js');
+          const S = await import('./modules/select.js');
+          const C = await import('./modules/crews.js');
+          const raw = await (await fetch('site-data.json')).json();
+          const data = D.prepareData(raw);
+          const view = S.computeView(data, S.defaultState(data));
+          const host = document.createElement('div');
+          host.id = 'crews-on';
+          document.body.append(host);
+          C.renderCrewsPanel(host, C.buildCrewsModel(data, view, { lowN: 8 }));
+        }"""
+    )
+    assert guarded_page.locator("#crews-on .low-n-tag").count() == 7
+    assert guarded_page.locator("#crews-on tr[data-low-n='true']").count() == 7
+    legend = guarded_page.locator("#crews-on .crews-legend")
     assert legend.text_content() == "low n: fewer than 8 games, so medians move easily."
-    # CREWS_LOW_N = 0 removes the tags and the legend in the DOM too
+    # Off (0) removes the tags and the legend in the DOM too
     guarded_page.evaluate(
         """async () => {
           const D = await import('./modules/data.js');

@@ -12,10 +12,10 @@ import { BOOTH_FAMILY_NAMES, stripNetworkNote } from './format.js';
 import { makeRolePill, nameWithRoles } from './pill.js';
 
 /**
- * Rows with fewer games than this are faded and tagged "low n" (D-15). Mirrors the NFL
- * Crews LOW_N precedent. Set to 0 to show every row equally (no fade, no tag, no legend).
+ * Rows with fewer games than this are faded and tagged "low n" (D-15). Off (0) by user choice
+ * (2026-10-18): mid-season most booths have under 8 games. 8 mirrors the NFL LOW_N.
  */
-export const CREWS_LOW_N = 8;
+export const CREWS_LOW_N = 0;
 
 const TIER_KEYS = ['a', 'b', 'conf', 'other'];
 
