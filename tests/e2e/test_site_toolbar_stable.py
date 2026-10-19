@@ -240,14 +240,18 @@ def test_toolbar_rows_with_game_button(
     """Eleven visible cells, two rows at 800, 900, 1024 and 1280px on every font except
     the wide ones at 800px, which need three (eleven 116px cells need 1356px, more
     than the 1248px a 1280px toolbar has, so the Booth trigger moved 1280px from one
-    row to two). Toggling filters never changes the row count, and no resting label
-    truncates."""
+    row to two). At 800px the machine's own default font may be either (CI's default
+    is DejaVu-like). Toggling filters never changes the row count, and no resting
+    label truncates."""
     guarded_page.set_viewport_size({"width": width, "height": 900})
     open_app(guarded_page)
     tops: list[int] = guarded_page.evaluate(_VISIBLE_TOPS_JS)
     assert len(tops) == 11
     rows = len(set(tops))
-    assert rows == (3 if width == 800 and font_setting in ("dejavu", "wide") else 2)
+    if width == 800 and font_setting == "default":
+        assert rows in (2, 3)
+    else:
+        assert rows == (3 if width == 800 and font_setting in ("dejavu", "wide") else 2)
     assert _truncated(guarded_page) == []
 
     cell_min = guarded_page.evaluate(_CELL_MIN_JS)
