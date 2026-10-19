@@ -21,7 +21,8 @@
  * exactly two schools; omitted at Either team) and `dots` (`hide`; omitted at
  * the Fade default; 04.7 D-10, D-14). `game` (one named-game slug: a bowl franchise,
  * a rivalry, or a CFP round; allowlisted against `data.gameIndexBySlug`; omitted when
- * no game is picked; 04.9 D-20). The old `bars` and
+ * no game is picked; 04.9 D-20). `booth` (`a`,`b`,`other`, canonical order; omitted when no
+ * tier is picked; Phase 10 D-12). The old `bars` and
  * `group` params are ignored (04.6 D-27). There is no `team` param on encode -- `school` replaces
  * it (D-11, Pitfall 4). The legacy `team` param is still *decoded*: a valid
  * slug is unioned into `school` (legacy first) through the exact same path
@@ -34,6 +35,8 @@ import { MAX_COMPARE, defaultState } from './select.js';
 /** Canonical time-slot order used both for encoding and decoding the `slot` param. */
 // Y measures a link may name; Viewers is the default and is never encoded (04.17 D-19).
 const Y_VALUES = ['excitement', 'points', 'margin'];
+// Booth tiers in canonical order (Phase 10 D-12).
+const BOOTH_ORDER = ['a', 'b', 'other'];
 const SLOT_ORDER = ['noon', 'afternoon', 'prime', 'late'];
 
 /** Whether a network id array equals the full set of primary network ids, order-independent. */
@@ -78,6 +81,10 @@ export function encodeState(state, data) {
   if (state.h2h === true && state.school.length === 2) params.push(['h2h', '1']);
 
   if (state.postseason !== 'all') params.push(['postseason', state.postseason]);
+  if (state.booth.length > 0) {
+    const ordered = BOOTH_ORDER.filter((tier) => state.booth.includes(tier));
+    if (ordered.length > 0) params.push(['booth', ordered.join(',')]);
+  }
   if (state.game != null) params.push(['game', encodeURIComponent(state.game)]);
 
   if (
@@ -229,6 +236,13 @@ function decodeSlots(raw) {
   return ordered.length > 0 ? ordered : null;
 }
 
+/** Decodes the `booth` param (D-12): exact tokens a, b, other only, deduped, canonical order. */
+function decodeBooth(raw) {
+  if (!raw) return [];
+  const pieces = raw.split(',');
+  return BOOTH_ORDER.filter((tier) => pieces.includes(tier));
+}
+
 /** Decodes the `conferences` param (D-10): unknown/FCS names dropped, deduped, canonicalized to `data.fbsConferences` order. */
 function decodeConferences(raw, data) {
   if (!raw) return [];
@@ -297,6 +311,7 @@ export function decodeState(search, data) {
 
   const rawPostseason = scalarParam(params, 'postseason');
   state.postseason = rawPostseason === 'exclude' || rawPostseason === 'only' ? rawPostseason : 'all';
+  state.booth = decodeBooth(scalarParam(params, 'booth'));
   const rawGame = scalarParam(params, 'game');
   state.game = rawGame != null && data.gameIndexBySlug.has(rawGame) ? rawGame : null;
 

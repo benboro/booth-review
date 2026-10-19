@@ -77,6 +77,9 @@ export function gameKeyMatches(key, query) {
   return key.replaceAll(' ', '').includes(query.replaceAll(' ', ''));
 }
 
+/** Tier code per booth tier name; 0 means untiered (Phase 10). */
+export const BOOTH_TIER_CODE = { a: 1, b: 2, other: 3 };
+
 /** Computes [min, max] over the non-null values of an array, or [null, null] if none. */
 function nonNullRange(values) {
   let min = Infinity;
@@ -136,6 +139,13 @@ export function prepareData(raw) {
   ) {
     throw new Error('site-data.json: venue fields are missing (contract v2.3.0)');
   }
+  if (
+    !Array.isArray(lookups.booths) ||
+    !Array.isArray(raw.telecasts.booth) ||
+    !Array.isArray(raw.telecasts_unrated.booth)
+  ) {
+    throw new Error('site-data.json: booth fields are missing (booth tiers need contract 2.6.0)');
+  }
   const nRated = raw.telecasts.season.length;
   const nUnrated = raw.telecasts_unrated.season.length;
   const n = nRated + nUnrated;
@@ -193,6 +203,19 @@ export function prepareData(raw) {
   // place the bands (04.17 D-06), whatever the view filters are.
   const { dateX, axis: dateAxis } = buildDateAxis(merged.season, merged.date, merged.kickoff, merged.game_type);
   const t = { ...merged, spread, dateX };
+
+  // Phase 10: per-game booth index and tier from the merged booth column (rated rows first,
+  // then unrated), so unrated lead games keep their tier. 0 none, 1 a, 2 b, 3 other.
+  const boothOf = new Int32Array(n).fill(-1);
+  const boothTier = new Uint8Array(n);
+  const boothIsConfLead = new Uint8Array(n);
+  for (let i = 0; i < n; i += 1) {
+    const b = merged.booth[i];
+    if (b == null || lookups.booths[b] == null) continue;
+    boothOf[i] = b;
+    boothTier[i] = BOOTH_TIER_CODE[lookups.booths[b].tier] ?? 0;
+    boothIsConfLead[i] = lookups.booths[b].lead_network != null ? 1 : 0;
+  }
 
   const familyOf = new Array(n);
   for (let i = 0; i < n; i += 1) {
@@ -358,6 +381,10 @@ export function prepareData(raw) {
     t,
     lookups,
     familyOf,
+    booths: lookups.booths,
+    boothOf,
+    boothTier,
+    boothIsConfLead,
     families,
     personIndexById,
     networkIndexById,
