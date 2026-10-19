@@ -67,3 +67,9 @@ cfbd_game_id,network_id,crew_position,person_id,role,reason,source_kind,source_n
 401677192,espn,1,kirk-herbstreit,analyst,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/theres-never-been-a-playoff-like-this-expanded-12-team-college-football-playoff-on-espn-reaches-blockbuster-conclusion-on-championship-monday-jan-20/
 401769076,espn,0,chris-fowler,pbp,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/espn-showcases-signature-megacast-presentation-as-hurricanes-and-hoosiers-headline-at-hard-rock-stadium-for-2026-college-football-playoff-national-championship-presented-by-att/
 401769076,espn,1,kirk-herbstreit,analyst,no-506-listing,press-release,ESPN Press Room,https://espnpressroom.com/press-release/espn-showcases-signature-megacast-presentation-as-hurricanes-and-hoosiers-headline-at-hard-rock-stadium-for-2026-college-football-playoff-national-championship-presented-by-att/
+400548431,espn2,0,mike-couzens,pbp,no-506-listing,school,Arkansas State game notes,https://static.astateredwolves.com/custompages/pdf9/2921106.pdf
+400548431,espn2,1,ray-bentley,analyst,no-506-listing,school,Arkansas State game notes,https://static.astateredwolves.com/custompages/pdf9/2921106.pdf
+400548149,espnu,0,jason-benetti,pbp,no-506-listing,school,Buffalo Football game notes,https://ubbulls.com/documents/download/2019/6/17/gamenotes_ohio_2014.pdf
+400548149,espnu,1,rene-ingoglia,analyst,no-506-listing,school,Buffalo Football game notes,https://ubbulls.com/documents/download/2019/6/17/gamenotes_ohio_2014.pdf
+401531911,espnu,0,courtney-lyle,pbp,no-506-crew,outlet,Crescent City Sports,https://crescentcitysports.com/?p=255364
+401531911,espnu,1,hutson-mason,analyst,no-506-crew,outlet,Crescent City Sports,https://crescentcitysports.com/?p=255364
