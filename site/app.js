@@ -53,6 +53,9 @@ const loadErrorEl = document.getElementById('load-error');
 const axisToggleEl = document.getElementById('axis-toggle');
 const yToggleEl = document.getElementById('y-toggle');
 const excitementCaptionEl = document.getElementById('excitement-caption');
+const legendRowEl = document.getElementById('legend-row');
+const chartControlsEl = document.getElementById('chart-controls');
+let crewsHasNewModelSeason = false;
 const panelBodyEl = document.getElementById('panel-body');
 const panelTitleEl = document.getElementById('panel-title');
 const barsPanelEl = document.getElementById('bars-panel');
@@ -273,7 +276,9 @@ function render() {
     hideBandInfo();
     if (crewsPanelEl) {
       crewsPanelEl.hidden = false;
-      renderCrewsPanel(crewsPanelEl, buildCrewsModel(data, view));
+      const crewsModel = buildCrewsModel(data, view);
+      renderCrewsPanel(crewsPanelEl, crewsModel);
+      crewsHasNewModelSeason = crewsModel.groups.some((g) => g.season >= 2025);
     }
     lastPanel = 'crews';
   } else if (state.view === 'map') {
@@ -316,9 +321,16 @@ function render() {
     }
   }
   if (excitementCaptionEl) {
+    // Crews shows excitement medians, so the 2025+ model note applies when any shown group is 2025+.
     excitementCaptionEl.hidden =
-      (state.axis !== 'excitement' && state.y !== 'excitement') || state.view !== 'scatter';
+      state.view === 'crews'
+        ? !crewsHasNewModelSeason
+        : (state.axis !== 'excitement' && state.y !== 'excitement') || state.view !== 'scatter';
   }
+  // The network-color chips mean nothing on the Crews table; the Networks filter still applies.
+  if (legendRowEl) legendRowEl.hidden = state.view === 'crews';
+  // Its axis and bar toggles are concealed on Crews; drop the reserved row so the hint sits close.
+  if (chartControlsEl) chartControlsEl.hidden = state.view === 'crews';
   if (eraNoteEl) eraNoteEl.hidden = state.view !== 'scatter';
 
   history.replaceState(null, '', location.pathname + encodeState(state, data));

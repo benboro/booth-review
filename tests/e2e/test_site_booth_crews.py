@@ -315,3 +315,36 @@ def test_phone_scrolls_inside_wrapper(
     assert out["wrapScroll"] > out["wrapClient"]
     assert out["page"] <= 390
     assert out["numWrap"] == 0
+
+
+def test_new_model_caption_shows_only_when_a_group_is_2025_or_later(
+    guarded_page: Page, serve_booths: Callable[[Page], None], open_app: Callable[[Page, str], None]
+) -> None:
+    _open(guarded_page, serve_booths, open_app)
+    caption = guarded_page.locator("#excitement-caption")
+    assert caption.is_visible()
+    assert "2025+ excitement uses CFBD's new win-probability model" in (
+        caption.text_content() or ""
+    )
+    # Only the 2021 group left: no 2025+ excitement on the table, so no note.
+    guarded_page.evaluate("() => window.__testHooks.setState({ seasons: [2021, 2021] })")
+    assert [g.text_content() for g in guarded_page.locator("#crews-panel h3").all()] == [
+        "ESPN/ABC, 2021"
+    ]
+    assert not caption.is_visible()
+    guarded_page.evaluate("() => window.__testHooks.setState({ seasons: [2021, 2026] })")
+    assert caption.is_visible()
+
+
+def test_legend_chips_are_hidden_on_crews_and_networks_filter_still_applies(
+    guarded_page: Page, serve_booths: Callable[[Page], None], open_app: Callable[[Page, str], None]
+) -> None:
+    _open(guarded_page, serve_booths, open_app, "")
+    assert guarded_page.locator("#legend-row").is_visible()
+    guarded_page.locator("#tab-crews").click()
+    assert not guarded_page.locator("#legend-row").is_visible()
+    assert guarded_page.locator("#legend-chips").is_hidden()
+    no_fox = _model(guarded_page, {"networks": ["net-a", "net-c", "net-d", "net-e"]})
+    assert len(no_fox["groups"]) == 3
+    guarded_page.locator("#tab-scatter").click()
+    assert guarded_page.locator("#legend-row").is_visible()
