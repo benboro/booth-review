@@ -160,7 +160,9 @@ def assign_cfb_booths(
             if tier != "other":
                 lead = None
             regular = match.analyst_person_id
-        fill_in = game_analyst is not None and game_analyst != regular
+        # Fill-in only when the booth's regular analyst is on none of this game's analyst seats.
+        game_analysts = {str(r["person_id"]) for r in analyst_rows.get(tid, [])}
+        fill_in = game_analyst is not None and regular not in game_analysts
         counts["tiered_telecasts"] += 1
         counts[tier] += 1
         if lead is not None:
