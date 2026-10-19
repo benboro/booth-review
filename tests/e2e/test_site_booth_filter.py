@@ -16,7 +16,9 @@ from playwright.sync_api import Page, expect
 pytestmark = pytest.mark.e2e
 
 A = [5, 8, 14]
-HELPER = "Network families with a published booth order only. Games without one are faded."
+HELPER = (
+    "Network families with a published booth order only. Games without one are faded or hidden."
+)
 
 _PASSES_JS = "() => window.__testHooks.getView().passesFilters"
 
