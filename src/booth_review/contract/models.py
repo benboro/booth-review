@@ -184,7 +184,8 @@ class BoothRef(BaseModel):
     season: int
     # Index into lookups.people.
     pbp: int
-    # Regular analyst, index into lookups.people; null only when none is on record.
+    # Regular analyst, index into lookups.people; null when none is on record or the
+    # regular analyst is on no shipped crew row.
     analyst: int | None
     # Published rank; null for an unlisted booth or an unranked conference lead.
     rank: int | None

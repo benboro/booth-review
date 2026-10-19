@@ -2281,7 +2281,9 @@ def test_booth_tiers_ship_sorted_and_indexed_in_both_blocks(
     booths = lookups["booths"]
     assert [(b["family"], b["season"]) for b in booths] == [("disney", 2024), ("fox", 2024)]
     assert people[booths[1]["pbp"]] == "dale-harlow"
-    assert people[booths[1]["analyst"]] == "regular-analyst"
+    # The regular analyst is on no shipped crew row, so they neither ship nor get an index.
+    assert booths[1]["analyst"] is None
+    assert "regular-analyst" not in people
     assert booths[0]["analyst"] is None
     assert (booths[1]["rank"], booths[1]["tier"]) == (2, "b")
     assert networks[booths[0]["lead_network"]] == "net-e"
@@ -2291,6 +2293,16 @@ def test_booth_tiers_ship_sorted_and_indexed_in_both_blocks(
     assert rated["booth"][:2] == [0, 1]
     assert unrated["booth"].count(1) == 1
     assert sum(b is not None for b in unrated["booth"]) == 1
+
+
+def test_booth_regular_analyst_on_a_shipped_crew_row_ships(
+    small_tables: BuildTables, build_reference: Path, tmp_path: Path
+) -> None:
+    rows = [_booth_row("2-net-b", analyst_person_id="mike-golic")]
+    payload = _site(_booth_tables(small_tables, rows), _booth_reference(tmp_path, build_reference))
+    people = [p["id"] for p in payload["lookups"]["people"]]
+    booth = payload["lookups"]["booths"][0]
+    assert people[booth["analyst"]] == "mike-golic"
 
 
 def test_booth_tier_for_unshipped_telecast_is_ignored(

@@ -447,8 +447,6 @@ def build_site_data(
                 conflicting_booths += 1
             booth_key_by_telecast[str(row["telecast_id"])] = booth_key
             person_ids.add(str(booth_row["pbp_person_id"]))
-            if booth_row["analyst_person_id"] is not None:
-                person_ids.add(str(booth_row["analyst_person_id"]))
             if booth_row["lead_network_id"] is not None:
                 network_ids.add(str(booth_row["lead_network_id"]))
         for side in ("home", "away"):
@@ -482,9 +480,8 @@ def build_site_data(
             "family": family,
             "season": season,
             "pbp": person_index[pbp],
-            "analyst": person_index[str(booth_values[(family, season, pbp)][0])]
-            if booth_values[(family, season, pbp)][0] is not None
-            else None,
+            # The regular analyst ships only when a shipped crew row already names them.
+            "analyst": person_index.get(str(booth_values[(family, season, pbp)][0])),
             "rank": booth_values[(family, season, pbp)][1],
             "tier": booth_values[(family, season, pbp)][2],
             "lead_network": network_index[str(booth_values[(family, season, pbp)][3])]
