@@ -3756,3 +3756,91 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .mlb-apple-table .rated-n {
   white-space: nowrap;
 }
+
+/* ---------- Crews tab (Phase 10, D-13..D-15) ---------- */
+
+#crews-panel {
+  padding: var(--space-md) 0 var(--space-lg);
+}
+
+.crews-hint {
+  margin: 0 0 var(--space-md);
+}
+
+.crews-group {
+  margin-bottom: var(--space-lg);
+}
+
+.crews-heading {
+  font-size: 20px;
+  line-height: 1.2;
+  margin: 0 0 var(--space-sm);
+}
+
+.crews-table th.num,
+.crews-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.crews-table th.num {
+  white-space: normal;
+}
+
+.crews-table .crews-pbp {
+  font-weight: 600;
+}
+
+.crews-chip {
+  margin-left: var(--space-xs);
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.crews-legend,
+.crews-rated-note {
+  margin: var(--space-xs) 0;
+}
+
+.crews-credits {
+  margin-top: var(--space-md);
+}
+
+.crews-credits .caption {
+  margin: var(--space-xs) 0;
+}
+
+.crews-empty {
+  position: static;
+  align-items: flex-start;
+  text-align: left;
+  padding: 0;
+  margin: var(--space-md) 0;
+}
+
+.crews-empty p {
+  margin: 0 0 var(--space-xs);
+}
+
+.crews-empty .season-empty-title {
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .crews-table .booth-col {
+    min-width: 150px;
+  }
+
+  .crews-chip {
+    margin-left: 0;
+  }
+
+  .crews-table th.num {
+    min-width: 64px;
+  }
+}

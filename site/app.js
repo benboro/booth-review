@@ -32,6 +32,7 @@ import { initChartTabs, renderChartTabs, staleCopy } from './modules/chart-tabs.
 import { chartContext } from './modules/bars.js';
 import { initBarsPanel, renderBarsPanel, lastBarsModel, resetBarsTap } from './modules/bars-panel.js';
 import { buildMapModel } from './modules/map-model.js';
+import { buildCrewsModel, renderCrewsPanel } from './modules/crews.js';
 import { initMapPanel, renderMapPanel, resetMapTap, mapRenderCount } from './modules/map-panel.js';
 import { initBandInfo, positionBandInfo, closeBandNote, setBandInfoMode } from './modules/band-info.js';
 import { showTooltip, hideTooltip } from './modules/tooltip.js';
@@ -56,6 +57,7 @@ const panelBodyEl = document.getElementById('panel-body');
 const panelTitleEl = document.getElementById('panel-title');
 const barsPanelEl = document.getElementById('bars-panel');
 const mapPanelEl = document.getElementById('map-panel');
+const crewsPanelEl = document.getElementById('crews-panel');
 const mapChartEl = document.getElementById('map-chart');
 const barsNoteEl = document.getElementById('bars-note');
 const eraNoteEl = document.getElementById('era-note');
@@ -149,7 +151,7 @@ let revision = 0;
 
 /** Whether the scatter's Plotly event handlers are bound (needs one rendered scatter first). */
 let scatterBound = false;
-/** Which panel the last render showed: 'scatter' | 'bars' | 'map'. */
+/** Which panel the last render showed: 'scatter' | 'bars' | 'map' | 'crews'. */
 let lastPanel = null;
 /** The Map model of the last Map render, or null before one ran. */
 let lastMapModel = null;
@@ -252,6 +254,7 @@ function render() {
     chartEl.hidden = false;
     if (barsPanelEl) barsPanelEl.hidden = true;
     if (mapPanelEl) mapPanelEl.hidden = true;
+    if (crewsPanelEl) crewsPanelEl.hidden = true;
     renderChart(chartEl, buildFigure(data, view, state, currentEnv()));
     setBandInfoMode(bandInfoEls(), state.y);
     showBandInfo();
@@ -263,9 +266,20 @@ function render() {
       scatterBound = true;
     }
     lastPanel = 'scatter';
+  } else if (state.view === 'crews') {
+    chartEl.hidden = true;
+    if (barsPanelEl) barsPanelEl.hidden = true;
+    if (mapPanelEl) mapPanelEl.hidden = true;
+    hideBandInfo();
+    if (crewsPanelEl) {
+      crewsPanelEl.hidden = false;
+      renderCrewsPanel(crewsPanelEl, buildCrewsModel(data, view));
+    }
+    lastPanel = 'crews';
   } else if (state.view === 'map') {
     chartEl.hidden = true;
     if (barsPanelEl) barsPanelEl.hidden = true;
+    if (crewsPanelEl) crewsPanelEl.hidden = true;
     if (mapPanelEl) mapPanelEl.hidden = false;
     hideBandInfo();
     resetMapTap();
@@ -277,6 +291,7 @@ function render() {
     hideBandInfo();
     if (barsPanelEl) barsPanelEl.hidden = false;
     if (mapPanelEl) mapPanelEl.hidden = true;
+    if (crewsPanelEl) crewsPanelEl.hidden = true;
     const applies = state.view === 'bars' ? ctx.barsEnabled : ctx.butterflyEnabled;
     renderBarsShell(applies);
     if (applies) {
