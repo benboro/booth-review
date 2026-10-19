@@ -45,12 +45,12 @@ def _is_concealed(page: Page, selector: str) -> bool:
     )
 
 
-def test_default_page_has_four_tabs_with_scatter_selected(
+def test_default_page_has_five_tabs_with_scatter_selected(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(guarded_page, "")
     labels = guarded_page.locator("#chart-tabs [role=tab]").all_inner_texts()
-    assert labels == ["Scatter", "Bars", "Butterfly", "Map"]
+    assert labels == ["Scatter", "Bars", "Butterfly", "Map", "Crews"]
     assert _attr(guarded_page, "#tab-map", "aria-disabled") is None
     assert _attr(guarded_page, "#tab-scatter", "aria-selected") == "true"
     assert _attr(guarded_page, "#tab-scatter", "tabindex") == "0"
@@ -148,9 +148,11 @@ def test_keyboard_navigation_is_roving_with_manual_activation(
     assert guarded_page.evaluate(active) == "tab-bars"
     assert _state(guarded_page)["view"] == "scatter"
     guarded_page.keyboard.press("End")
-    assert guarded_page.evaluate(active) == "tab-map"
+    assert guarded_page.evaluate(active) == "tab-crews"
     guarded_page.keyboard.press("Home")
     assert guarded_page.evaluate(active) == "tab-scatter"
+    guarded_page.keyboard.press("ArrowLeft")
+    assert guarded_page.evaluate(active) == "tab-crews"
     guarded_page.keyboard.press("ArrowLeft")
     assert guarded_page.evaluate(active) == "tab-map"
     guarded_page.keyboard.press("ArrowLeft")

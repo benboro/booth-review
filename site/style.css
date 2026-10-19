@@ -2538,6 +2538,13 @@ html:has(#mlb-detail-panel[open]) {
 
   .chart-tabs {
     min-height: 44px;
+    gap: 0;
+  }
+
+  /* Five tabs (Crews added in Phase 10) must share one row at 340px. */
+  .chart-tab {
+    padding-left: var(--space-sm);
+    padding-right: var(--space-sm);
   }
 
   /* 04.6 D-24: exactly two fixed rows: grouping control full width, then the role
@@ -3775,6 +3782,24 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   font-size: 20px;
   line-height: 1.2;
   margin: 0 0 var(--space-sm);
+}
+
+.crews-table {
+  table-layout: fixed;
+  min-width: 620px;
+}
+
+.crews-table th.booth-col {
+  width: 38%;
+}
+
+/* Row headers take the row's own background, so a row reads as one band. */
+.crews-table tbody th.booth-col {
+  background: var(--bg);
+}
+
+.crews-table tbody tr:nth-child(even) th.booth-col {
+  background: var(--surface);
 }
 
 .crews-table th.num,

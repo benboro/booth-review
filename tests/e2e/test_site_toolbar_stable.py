@@ -316,10 +316,10 @@ def test_scatter_and_map_share_toolbar_and_chart_panel_geometry(
 
 
 @pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide", "narrow"], indirect=True)
-def test_four_chart_tabs_fit_at_340px(
+def test_five_chart_tabs_fit_at_340px(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """04.18 D-09: Scatter, Bars, Butterfly and Map fit one row in 340px, no page overflow."""
+    """04.18 D-09: Scatter, Bars, Butterfly, Map and Crews fit one row in 340px, no page overflow."""
     guarded_page.set_viewport_size({"width": 340, "height": 800})
     open_app(guarded_page, "?view=map")
     fit: dict[str, Any] = guarded_page.evaluate(
@@ -336,7 +336,7 @@ def test_four_chart_tabs_fit_at_340px(
           };
         }"""
     )
-    assert fit["n"] == 4
+    assert fit["n"] == 5
     assert len(fit["tops"]) == 1
     assert fit["clipped"] == 0
     assert fit["right"] <= fit["slotRight"] + 0.5
