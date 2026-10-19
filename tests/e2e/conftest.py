@@ -179,6 +179,30 @@ def serve_round(fixture_raw: dict[str, Any]) -> Callable[[Page, str | None], Non
     return _serve
 
 
+@pytest.fixture
+def serve_booths(fixture_raw: dict[str, Any]) -> Callable[[Page], None]:
+    """Returns `serve(page)`: makes `page` load the synthetic contract fixture with the
+    booth overlay applied (lookups.booths, telecasts.booth, telecasts_unrated.booth from
+    tests/fixtures/contract/booth-overlay.json; scenarios are listed with the overlay,
+    plan 10-03). Synthetic data only. Call it before opening the app; a later route wins
+    over the origin guard's catch-all, as for `serve_round`.
+    """
+    overlay = json.loads(
+        (
+            Path(__file__).resolve().parents[1] / "fixtures" / "contract" / "booth-overlay.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    def _serve(page: Page) -> None:
+        raw = copy.deepcopy(fixture_raw)
+        raw["lookups"]["booths"] = overlay["booths"]
+        raw["telecasts"]["booth"] = overlay["telecasts_booth"]
+        raw["telecasts_unrated"]["booth"] = overlay["unrated_booth"]
+        page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+
+    return _serve
+
+
 def multichannel_raw(
     fixture_raw: dict[str, Any], *, also_move_zero: bool = False
 ) -> dict[str, Any]:
