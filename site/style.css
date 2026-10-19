@@ -2846,7 +2846,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 /* Same grid as #toolbar. The hidden spacer cells bring the NFL row count up to
-   the CFB toolbar's eleven cells, so a switch never moves the chart (SITE-20). */
+   the CFB toolbar's twelve cells, so a switch never moves the chart (SITE-20). */
 @media (min-width: 641px) {
   #nfl-toolbar {
     display: grid;
