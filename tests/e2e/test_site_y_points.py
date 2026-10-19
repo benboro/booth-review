@@ -190,7 +190,12 @@ def test_band_holds_exactly_the_games_without_a_score(
     main = sorted(i for t in traces if t["meta"].startswith("family:") for i in t["customdata"])
     assert main == sorted(set(range(n)) - set(unscored))
     for t in traces:
-        assert t["color"] != surface, f"{t['meta']} draws a ring (D-16)"
+        # A lead-halo: casing is a filled surface star under a filled lead star, not a ring.
+        # highlight-unrated-hole hollows a lead star in Viewers mode only, so it is empty here.
+        if t["meta"] == "highlight-unrated-hole":
+            assert t["x"] == []
+        elif not t["meta"].startswith("lead-halo:"):
+            assert t["color"] != surface, f"{t['meta']} draws a ring (D-16)"
         assert t["symbol"] != "circle-open"
 
 

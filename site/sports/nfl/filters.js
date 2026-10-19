@@ -594,7 +594,7 @@ function buildShell(ctx) {
   }
   // Spacer cells keep the grid's row count equal to the CFB toolbar's, so
   // switching sport never moves the chart (SITE-20). Hidden from every user.
-  for (let k = 0; k < 6; k++) {
+  for (let k = 0; k < 7; k++) {
     const spacer = el('span', 'nfl-toolbar-spacer');
     spacer.setAttribute('aria-hidden', 'true');
     nodes.push(spacer);

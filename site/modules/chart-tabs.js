@@ -36,7 +36,7 @@ export const STALE_COPY = {
   },
 };
 
-const VIEWS = ['scatter', 'bars', 'butterfly', 'map'];
+const VIEWS = ['scatter', 'bars', 'butterfly', 'map', 'crews'];
 
 /** The hint the tab row rests on: the Map's prompt until an announcer or school is picked (04.18 D-02). */
 function restingHint(state) {
@@ -192,7 +192,7 @@ export function renderChartTabs({ data, state }) {
   const tabs = tabsEl();
   if (!tabs) return;
   const ctx = chartContext(data, state);
-  const enabled = { scatter: true, bars: ctx.barsEnabled, butterfly: ctx.butterflyEnabled, map: true };
+  const enabled = { scatter: true, bars: ctx.barsEnabled, butterfly: ctx.butterflyEnabled, map: true, crews: true };
   const focused = document.activeElement;
   // Roving tabindex (WR-04): one Tab stop. The focused tab keeps it while focus
   // is inside the tablist (a focused disabled tab included); otherwise the
@@ -226,7 +226,7 @@ export function renderChartTabs({ data, state }) {
   const scatterControls = document.getElementById('scatter-controls');
   const barControls = document.getElementById('bar-controls');
   if (scatterControls) scatterControls.classList.toggle('is-concealed', !scatter);
-  if (barControls) barControls.classList.toggle('is-concealed', scatter || state.view === 'map');
+  if (barControls) barControls.classList.toggle('is-concealed', scatter || state.view === 'map' || state.view === 'crews');
 
   for (const button of document.querySelectorAll('#bar-role-toggle button[data-role]')) {
     button.setAttribute('aria-pressed', String((button.dataset.role || null) === state.role));

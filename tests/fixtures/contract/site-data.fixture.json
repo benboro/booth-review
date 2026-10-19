@@ -1,5 +1,5 @@
 {
-  "schema_version": "2.5.0",
+  "schema_version": "2.6.0",
   "generated_at": "2026-01-01T00:00:00Z",
   "freshness": {
     "season": 2026,
@@ -339,7 +339,8 @@
         "lat": 25.048,
         "lon": -77.3554
       }
-    ]
+    ],
+    "booths": []
   },
   "telecasts": {
     "season": [
@@ -1019,6 +1020,20 @@
       3,
       4,
       6
+    ],
+    "booth": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
     ]
   },
   "telecasts_unrated": {
@@ -1368,6 +1383,16 @@
       "rarely_rated",
       "rarely_rated",
       "pending"
+    ],
+    "booth": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
     ]
   },
   "coverage": [

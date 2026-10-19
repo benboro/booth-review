@@ -513,7 +513,7 @@ def test_chart_tabs_slot_holds_three_tabs(
     box = guarded_page.locator("#chart-tabs").bounding_box()
     assert box is not None
     assert box["height"] == 40
-    assert guarded_page.locator("#chart-tabs [role=tab]").count() == 4
+    assert guarded_page.locator("#chart-tabs [role=tab]").count() == 5
 
     legend_box = guarded_page.locator("#legend-chips").bounding_box()
     assert legend_box is not None
@@ -1561,7 +1561,16 @@ def test_tooltip_mode_trace_config(
 
     html_full = guarded_page.evaluate(full_js)
     for t in html_full:
-        if str(t["meta"]).startswith(("inert:", "unrated-inert:", "highlight-halo")):
+        if str(t["meta"]).startswith(
+            (
+                "inert:",
+                "unrated-inert:",
+                "highlight-halo",
+                "unrated-lead-halo:",
+                "lead-halo:",
+                "highlight-unrated-hole",
+            )
+        ):
             assert t["hoverinfo"] == "skip"
             assert not t["hovertemplate"]
         else:
@@ -1579,10 +1588,19 @@ def test_tooltip_mode_trace_config(
     plotly_full = guarded_page.evaluate(full_js)
     for t in plotly_full:
         meta = str(t["meta"])
-        if meta.startswith(("inert:", "unrated-inert:", "highlight-halo")):
+        if meta.startswith(
+            (
+                "inert:",
+                "unrated-inert:",
+                "highlight-halo",
+                "unrated-lead-halo:",
+                "lead-halo:",
+                "highlight-unrated-hole",
+            )
+        ):
             assert t["hoverinfo"] == "skip"
             assert not t["hovertemplate"]
-        elif meta.startswith(("family:", "unrated-active:")):
+        elif meta.startswith(("family:", "unrated-active:", "lead:", "unrated-lead")):
             # an empty trace (unrated-active:other) has its template reset by Plotly
             if t["customdata"]:
                 assert t["hovertemplate"] == "%{text}<extra></extra>"
@@ -1594,10 +1612,20 @@ def test_tooltip_mode_trace_config(
     plotly_full_selected = guarded_page.evaluate(full_js)
     for t in plotly_full_selected:
         meta = str(t["meta"])
-        if meta.startswith(("inert:", "family:", "unrated-inert:", "unrated-active:")):
+        if meta.startswith(
+            (
+                "inert:",
+                "family:",
+                "unrated-inert:",
+                "unrated-active:",
+                "lead:",
+                "lead-halo:",
+                "unrated-lead",
+            )
+        ):
             assert t["hoverinfo"] == "skip"
             assert not t["hovertemplate"]
-        elif meta.startswith("highlight-halo"):
+        elif meta.startswith(("highlight-halo", "highlight-unrated-hole")):
             assert t["hoverinfo"] == "skip"  # halos are never hoverable
         else:
             assert meta in ("highlight", "highlight-unrated")

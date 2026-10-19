@@ -1572,6 +1572,21 @@ input[type="checkbox"] {
   margin-right: var(--space-xs);
 }
 
+/* D-11 booth tier line: muted, label-size text in the tooltip and the detail panel. */
+.tooltip-booth,
+.panel-booth {
+  color: var(--muted);
+  font: var(--font-label);
+}
+
+.tooltip-booth {
+  margin: var(--space-xs) 0;
+}
+
+.panel-booth {
+  margin: var(--space-sm) 0 0;
+}
+
 /* ---------- Chart area ---------- */
 
 /* `#chart-area`'s own children stack top-to-bottom in flex-column flow (not
@@ -2067,6 +2082,17 @@ input[type="checkbox"] {
   font: var(--font-label);
 }
 
+.lead-key {
+  margin: var(--space-sm) 0;
+  font: var(--font-label);
+  color: var(--text);
+}
+
+/* Space stays reserved when the key is off so nothing shifts. */
+.lead-key.is-off {
+  visibility: hidden;
+}
+
 .error-banner {
   border: 1px solid var(--error);
   color: var(--error);
@@ -2512,6 +2538,13 @@ html:has(#mlb-detail-panel[open]) {
 
   .chart-tabs {
     min-height: 44px;
+    gap: 0;
+  }
+
+  /* Five tabs (Crews added in Phase 10) must share one row at 340px. */
+  .chart-tab {
+    padding-left: var(--space-sm);
+    padding-right: var(--space-sm);
   }
 
   /* 04.6 D-24: exactly two fixed rows: grouping control full width, then the role
@@ -2846,7 +2879,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 /* Same grid as #toolbar. The hidden spacer cells bring the NFL row count up to
-   the CFB toolbar's eleven cells, so a switch never moves the chart (SITE-20). */
+   the CFB toolbar's twelve cells, so a switch never moves the chart (SITE-20). */
 @media (min-width: 641px) {
   #nfl-toolbar {
     display: grid;
@@ -3729,4 +3762,110 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 .mlb-apple-table .rated-n {
   white-space: nowrap;
+}
+
+/* ---------- Crews tab (Phase 10, D-13..D-15) ---------- */
+
+#crews-panel {
+  padding: var(--space-md) 0 var(--space-lg);
+}
+
+.crews-hint {
+  margin: 0 0 var(--space-md);
+}
+
+.crews-group {
+  margin-bottom: var(--space-lg);
+}
+
+.crews-heading {
+  font-size: 20px;
+  line-height: 1.2;
+  margin: 0 0 var(--space-sm);
+}
+
+.crews-table {
+  table-layout: fixed;
+  min-width: 620px;
+}
+
+.crews-table th.booth-col {
+  width: 38%;
+}
+
+/* Row headers take the row's own background, so a row reads as one band. */
+.crews-table tbody th.booth-col {
+  background: var(--bg);
+}
+
+.crews-table tbody tr:nth-child(even) th.booth-col {
+  background: var(--surface);
+}
+
+.crews-table th.num,
+.crews-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.crews-table th.num {
+  white-space: normal;
+}
+
+.crews-table .crews-pbp {
+  font-weight: 600;
+}
+
+.crews-chip {
+  margin-left: var(--space-xs);
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--muted);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.crews-legend,
+.crews-rated-note {
+  margin: var(--space-xs) 0;
+}
+
+.crews-credits {
+  margin-top: var(--space-md);
+}
+
+.crews-credits .caption {
+  margin: var(--space-xs) 0;
+}
+
+.crews-empty {
+  position: static;
+  align-items: flex-start;
+  text-align: left;
+  padding: 0;
+  margin: var(--space-md) 0;
+}
+
+.crews-empty p {
+  margin: 0 0 var(--space-xs);
+}
+
+.crews-empty .season-empty-title {
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .crews-table .booth-col {
+    min-width: 150px;
+  }
+
+  .crews-chip {
+    margin-left: 0;
+  }
+
+  .crews-table th.num {
+    min-width: 64px;
+  }
 }

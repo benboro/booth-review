@@ -13,6 +13,7 @@ republishing (see [Sources](#sources)).
 | `incoming/mlb-relay/` | Staging CSV of 2026 MLB crews transcribed in a Claude Code session from the fan schedule blog, waiting for `booth-review import relay` | Never |
 | `incoming/smw/<season>/` | Hand-saved Sports Media Watch season pages and chart images, with their session transcriptions, waiting for `booth-review import smw` | Never |
 | `incoming/espnpr/` | Hand-saved ESPN Press Room pages (any filename), waiting for `booth-review import espnpr` | Never |
+| `incoming/lineups/<family>/` (disney, fox, cbs, nbc) | Hand-saved network lineup pages for Phase 10 booth tiers; no booth-review command reads them. A Claude session reads the pages and proposes rows for `data/reference/cfb_booth_ranks.csv`, which the user confirms row by row; only the facts and the `source_url` reach `data/reference/` | Never |
 | `processed/` | Joined tables that feed the plot and the models, published from this public repo | Only tables whose sources all allow it. Publish one by adding a `!data/processed/<file>` line to `.gitignore`, after `!data/processed/` and `data/processed/*` |
 | `reference/` | Hand-maintained tables (`nfl_booth_ranks.csv` holds facts and the URL from network lineup releases, never the page): team-name crosswalk, announcer name variants, event flags, per-network `network_rarity.csv` (hand-set rarely-rated flag) | Yes |
 

@@ -31,6 +31,7 @@
   <button type="button" class="filter-trigger desktop-only" id="trigger-school" popovertarget="pop-school" aria-haspopup="dialog" aria-expanded="false">School</button>
   <button type="button" class="filter-trigger desktop-only" id="trigger-postseason" popovertarget="pop-postseason" aria-haspopup="dialog" aria-expanded="false">Bowls/Playoffs</button>
   <button type="button" class="filter-trigger desktop-only" id="trigger-game" popovertarget="pop-game" aria-haspopup="dialog" aria-expanded="false">Game</button>
+  <button type="button" class="filter-trigger desktop-only" id="trigger-booth" popovertarget="pop-booth" aria-haspopup="dialog" aria-expanded="false">Booth</button>
 </nav>
 <script src="toolbar-fit.js"></script>
 
@@ -180,6 +181,22 @@
   </section>
 </div>
 
+<div id="pop-booth" class="filter-popover" popover="auto" role="dialog" aria-label="Booth">
+  <section id="filter-booth">
+    <div class="section-head">
+      <h3>Booth</h3>
+      <button type="button" class="group-reset" data-reset="booth" aria-label="Reset booth filter" aria-disabled="true">Reset</button>
+    </div>
+    <p class="helper">Network families with a published booth order only. Games without one are faded or hidden.</p>
+    <fieldset id="booth-list">
+      <legend class="visually-hidden">Booth, multi-select</legend>
+      <div class="check-item"><label class="check-row"><input type="checkbox" name="booth" value="a"> <span class="option-name">Lead (A)</span><span class="option-count" aria-hidden="true"></span><span class="visually-hidden option-count-sr"></span></label></div>
+      <div class="check-item"><label class="check-row"><input type="checkbox" name="booth" value="b"> <span class="option-name">No. 2 (B)</span><span class="option-count" aria-hidden="true"></span><span class="visually-hidden option-count-sr"></span></label></div>
+      <div class="check-item"><label class="check-row"><input type="checkbox" name="booth" value="other"> <span class="option-name">Other</span><span class="option-count" aria-hidden="true"></span><span class="visually-hidden option-count-sr"></span></label></div>
+    </fieldset>
+  </section>
+</div>
+
 <div id="filters-sheet" class="filters-sheet" popover="auto" role="dialog" aria-labelledby="filters-sheet-title">
   <div class="sheet-header">
     <h2 id="filters-sheet-title">Filters</h2>
@@ -197,6 +214,7 @@
     <button type="button" role="tab" class="chart-tab" id="tab-bars" data-view="bars" aria-controls="chart-panel" aria-selected="false" tabindex="-1">Bars</button>
     <button type="button" role="tab" class="chart-tab" id="tab-butterfly" data-view="butterfly" aria-controls="chart-panel" aria-selected="false" tabindex="-1">Butterfly</button>
     <button type="button" role="tab" class="chart-tab" id="tab-map" data-view="map" aria-controls="chart-panel" aria-selected="false" tabindex="-1">Map</button>
+    <button type="button" role="tab" class="chart-tab" id="tab-crews" data-view="crews" aria-controls="chart-panel" aria-selected="false" tabindex="-1">Crews</button>
   </div>
   <p id="tab-hint" class="tab-hint" role="status"></p>
 
@@ -261,12 +279,15 @@
       <div id="bars-captions" class="bars-captions"></div>
       <details id="bars-data"><summary>Counts as a list</summary><ol id="bars-counts" class="counts-list"></ol></details>
     </section>
+    <section id="crews-panel" hidden></section>
     <section id="map-panel" hidden>
       <div id="map-chart" role="img" aria-label="Map of game venues"></div>
       <p id="map-note" class="map-overlay map-note" hidden></p>
       <div id="map-empty-note" class="season-empty-note" role="status" hidden><p class="season-empty-title"></p><p class="season-empty-hint"></p></div>
     </section>
   </div>
+
+  <p id="lead-key" class="lead-key is-off" role="note" aria-label="Called by the lead booth for its network family" title="Called by the lead booth for its network family"><span aria-hidden="true">&#9733; Lead booth</span></p>
 
   <ul id="shape-legend" hidden></ul>
 

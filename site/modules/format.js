@@ -564,6 +564,34 @@ export function stripNetworkNote(name) {
 }
 
 /**
+ * D-11 wording for the network families that publish a booth order. It differs
+ * from palette.js FAMILY_LABELS on purpose (the disney family reads ESPN/ABC here).
+ */
+export const BOOTH_FAMILY_NAMES = Object.freeze({ disney: 'ESPN/ABC', fox: 'FOX', cbs: 'CBS', nbc: 'NBC' });
+
+/**
+ * The one-line booth tier text (D-11): "Lead ESPN/ABC crew, 2024", "No. 2 FOX crew,
+ * 2024", or "Lead SEC Network crew, 2026" for a conference-network lead. Plain Other
+ * and untiered games return null (no line, no placeholder).
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @returns {string|null}
+ */
+export function boothLabel(data, i) {
+  const b = data.boothOf[i];
+  if (b < 0) return null;
+  const booth = data.booths[b];
+  const family = BOOTH_FAMILY_NAMES[booth.family];
+  if (booth.tier === 'a' && family) return `Lead ${family} crew, ${booth.season}`;
+  if (booth.tier === 'b' && family) return `No. 2 ${family} crew, ${booth.season}`;
+  if (booth.tier === 'other' && booth.lead_network != null) {
+    const net = data.lookups.networks[booth.lead_network];
+    if (net) return `Lead ${stripNetworkNote(net.name)} crew, ${booth.season}`;
+  }
+  return null;
+}
+
+/**
  * Escapes `&`, `<`, and `>` for safe use in Plotly's pseudo-HTML hover text
  * (T-04-06). `&` is escaped first so the entities produced for `<`/`>`
  * are never double-escaped.

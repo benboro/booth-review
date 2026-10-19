@@ -6,12 +6,17 @@ season that started in July 2025, i.e. "season 2025".
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 
 
 def season_of(d: date) -> int:
     """Return the season a calendar date belongs to (July-June window)."""
     return d.year if d.month >= 7 else d.year - 1
+
+
+def current_season() -> int:
+    """Return the season today's date belongs to."""
+    return season_of(datetime.now(UTC).date())
 
 
 def season_window(season: int) -> tuple[date, date]:

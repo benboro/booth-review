@@ -8,6 +8,7 @@ from __future__ import annotations
 import ast
 import dataclasses
 import json
+import shutil
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ import polars as pl
 import pytest
 
 from booth_review.build import site_data as site_data_module
+from booth_review.build.booths import BOOTH_TIERS_SCHEMA
 from booth_review.build.bowls import BowlEntry
 from booth_review.build.coverage import build_coverage
 from booth_review.build.games import GAMES_SCHEMA
@@ -1582,7 +1584,7 @@ def test_crew_source_fields_emit_at_their_index_and_null_otherwise(build_referen
 def test_backup_crew_ships_espn_press_room_credit_and_main_crew(build_reference: Path) -> None:
     """04.19 D-13 (04.3 D-11): a telecast filled from an ESPN Press Room page
     ships its label, its espnpressroom.com page and its main-feed booth, and
-    the payload validates under the 2.5.0 contract."""
+    the payload validates under the 2.6.0 contract."""
     release = "https://espnpressroom.com/press-release/synthetic-week-release/"
     games = [_game_row(game_id=1), _game_row(game_id=2, week=3, date_et=date(2024, 9, 21))]
     telecasts = [
@@ -1628,7 +1630,7 @@ def test_backup_crew_ships_espn_press_room_credit_and_main_crew(build_reference:
     )
     payload = _site(tables, build_reference)
 
-    assert payload["schema_version"] == "2.5.0"
+    assert payload["schema_version"] == "2.6.0"
     columns = payload["telecasts"]
     assert columns["crew_source_label"] == [None, "ESPN Press Room"]
     assert columns["crew_source_url"] == [None, release]
@@ -2192,3 +2194,132 @@ def test_empty_venue_list_places_nothing_and_counts_unlocated(
 def test_venue_build_is_deterministic(small_tables: BuildTables, build_reference: Path) -> None:
     tables = _with_venues(small_tables, _TEST_VENUE_BY_GAME, _TEST_VENUES)
     assert _site(tables, build_reference) == _site(tables, build_reference)
+
+
+# -- Phase 10: booth tiers ---------------------------------------------------------------------
+
+
+def _booth_row(telecast_id: str, **overrides: object) -> dict[str, object]:
+    row: dict[str, object] = {
+        "telecast_id": telecast_id,
+        "family": "fox",
+        "season": 2024,
+        "pbp_person_id": "dale-harlow",
+        "analyst_person_id": "regular-analyst",
+        "game_analyst_person_id": "regular-analyst",
+        "is_fill_in": False,
+        "rank": 2,
+        "tier": "b",
+        "lead_network_id": None,
+    }
+    row.update(overrides)
+    return row
+
+
+def _booth_reference(tmp_path: Path, build_reference: Path) -> Path:
+    """The synthetic reference with real network families, so booths can name them."""
+    target = tmp_path / "booth-reference"
+    shutil.copytree(build_reference, target)
+    networks = target / "networks.csv"
+    networks.write_text(
+        networks.read_text().replace("family-a", "disney").replace("family-b", "fox")
+    )
+    return target
+
+
+def _booth_tables(small_tables: BuildTables, rows: list[dict[str, object]]) -> BuildTables:
+    extra = pl.DataFrame(
+        [
+            {
+                "person_id": "regular-analyst",
+                "canonical_name": "Regular Analyst",
+                "variants": ["Regular Analyst"],
+                "usual_role": "analyst",
+                "registered": True,
+            }
+        ],
+        schema=PEOPLE_SCHEMA,
+    )
+    return dataclasses.replace(
+        small_tables,
+        people=pl.concat([small_tables.people, extra]),
+        booth_tiers=pl.DataFrame(rows, schema=BOOTH_TIERS_SCHEMA),
+    )
+
+
+def test_default_booth_tiers_ship_no_booths(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    payload = _site(small_tables, build_reference)
+    assert payload["lookups"]["booths"] == []
+    assert payload["telecasts"]["booth"] == [None] * len(payload["telecasts"]["season"])
+    assert payload["telecasts_unrated"]["booth"] == [None] * len(
+        payload["telecasts_unrated"]["season"]
+    )
+
+
+def test_booth_tiers_ship_sorted_and_indexed_in_both_blocks(
+    small_tables: BuildTables, build_reference: Path, tmp_path: Path
+) -> None:
+    rows = [
+        _booth_row("2-net-b"),
+        _booth_row("6-net-b"),  # the unrated telecast of the same booth
+        _booth_row(
+            "1-net-a",
+            family="disney",
+            pbp_person_id="mike-golic-jr",
+            analyst_person_id=None,
+            rank=3,
+            tier="other",
+            lead_network_id="net-e",
+        ),
+    ]
+    payload = _site(_booth_tables(small_tables, rows), _booth_reference(tmp_path, build_reference))
+    lookups = payload["lookups"]
+    people = [p["id"] for p in lookups["people"]]
+    networks = [n["id"] for n in lookups["networks"]]
+    booths = lookups["booths"]
+    assert [(b["family"], b["season"]) for b in booths] == [("disney", 2024), ("fox", 2024)]
+    assert people[booths[1]["pbp"]] == "dale-harlow"
+    # The regular analyst is on no shipped crew row, so they neither ship nor get an index.
+    assert booths[1]["analyst"] is None
+    assert "regular-analyst" not in people
+    assert booths[0]["analyst"] is None
+    assert (booths[1]["rank"], booths[1]["tier"]) == (2, "b")
+    assert networks[booths[0]["lead_network"]] == "net-e"
+    assert booths[1]["lead_network"] is None
+    rated, unrated = payload["telecasts"], payload["telecasts_unrated"]
+    # Rated rows are ordered by date: 1-net-a (0), 2-net-b (1).
+    assert rated["booth"][:2] == [0, 1]
+    assert unrated["booth"].count(1) == 1
+    assert sum(b is not None for b in unrated["booth"]) == 1
+
+
+def test_booth_regular_analyst_on_a_shipped_crew_row_ships(
+    small_tables: BuildTables, build_reference: Path, tmp_path: Path
+) -> None:
+    rows = [_booth_row("2-net-b", analyst_person_id="mike-golic")]
+    payload = _site(_booth_tables(small_tables, rows), _booth_reference(tmp_path, build_reference))
+    people = [p["id"] for p in payload["lookups"]["people"]]
+    booth = payload["lookups"]["booths"][0]
+    assert people[booth["analyst"]] == "mike-golic"
+
+
+def test_booth_tier_for_unshipped_telecast_is_ignored(
+    small_tables: BuildTables, build_reference: Path, tmp_path: Path
+) -> None:
+    rows = [_booth_row("2-net-b"), _booth_row("8-none", pbp_person_id="kris-venn")]
+    payload = _site(_booth_tables(small_tables, rows), _booth_reference(tmp_path, build_reference))
+    booths = payload["lookups"]["booths"]
+    assert len(booths) == 1
+    assert payload["lookups"]["people"][booths[0]["pbp"]]["id"] == "dale-harlow"
+
+
+def test_disagreeing_booth_rows_raise_a_count_only_error(
+    small_tables: BuildTables, build_reference: Path, tmp_path: Path
+) -> None:
+    from booth_review.errors import VaultStateError
+
+    rows = [_booth_row("2-net-b"), _booth_row("6-net-b", rank=1, tier="a")]
+    with pytest.raises(VaultStateError, match=r"booth_tiers: 1 telecast"):
+        _site(_booth_tables(small_tables, rows), _booth_reference(tmp_path, build_reference))

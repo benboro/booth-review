@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from booth_review.sources.second_rows import SECOND_SOURCE_HOSTS, host_matches
 
-SCHEMA_VERSION = "2.5.0"
+SCHEMA_VERSION = "2.6.0"
 
 _S506_HOST = "506sports.com"
 
@@ -170,6 +170,30 @@ class VenueRef(BaseModel):
     lon: float = Field(ge=-180, le=180)
 
 
+class BoothRef(BaseModel):
+    """A CFB booth tier for one network family and season (Phase 10).
+
+    Keyed by its play-by-play voice with the regular analyst stored. `tier` is
+    "a" for published rank 1, "b" for rank 2, otherwise "other". A conference
+    network lead (`lead_network`) is always tier "other".
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    family: Literal["disney", "fox", "cbs", "nbc"]
+    season: int
+    # Index into lookups.people.
+    pbp: int
+    # Regular analyst, index into lookups.people; null when none is on record or the
+    # regular analyst is on no shipped crew row.
+    analyst: int | None
+    # Published rank; null for an unlisted booth or an unranked conference lead.
+    rank: int | None
+    tier: Literal["a", "b", "other"]
+    # Index into lookups.networks; set only for a conference-network lead.
+    lead_network: int | None
+
+
 class PersonRef(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
@@ -217,6 +241,7 @@ class Lookups(BaseModel):
     bowl_franchises: list[BowlFranchiseRef]
     rivalries: list[RivalryRef]
     venues: list[VenueRef]
+    booths: list[BoothRef]
 
 
 class TelecastColumns(BaseModel):
@@ -275,6 +300,8 @@ class TelecastColumns(BaseModel):
     # location; null when the game has no venue id or its venue has no usable location
     # (04.18 D-16)
     place: list[int | None]
+    # Index into lookups.booths; null when the game has no booth tier (Phase 10)
+    booth: list[int | None]
 
 
 class UnratedColumns(BaseModel):
@@ -318,6 +345,8 @@ class UnratedColumns(BaseModel):
     # location; null when the game has no venue id or its venue has no usable location
     # (04.18 D-16)
     place: list[int | None]
+    # Index into lookups.booths; null when the game has no booth tier (Phase 10)
+    booth: list[int | None]
     # 04.13 D-10: why the game has no figure. An enum only; the wording lives in
     # site/modules/format.js, never in the data.
     cause: list[Literal["rarely_rated", "pending", "rr_dip", "none"]]
@@ -348,7 +377,7 @@ class CoverageRow(BaseModel):
 class SiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["2.5.0"]
+    schema_version: Literal["2.6.0"]
     generated_at: str
     freshness: Freshness
     lookups: Lookups
@@ -418,9 +447,12 @@ class SiteData(BaseModel):
                 raise ValueError(f"lookups.rivalries[{k}].teams: team index out of range")
         referenced_rivalries: set[int] = set()
         referenced_venues: set[int] = set()
+        referenced_booths: set[int] = set()
 
         for i in range(n):
-            self._check_game_row("telecasts", tc, i, referenced_rivalries, referenced_venues)
+            self._check_game_row(
+                "telecasts", tc, i, referenced_rivalries, referenced_venues, referenced_booths
+            )
             for j, flag_index in enumerate(tc.flags[i]):
                 if not 0 <= flag_index < num_flags:
                     raise ValueError(f"telecasts.flags[{i}][{j}]: flag index out of range")
@@ -469,7 +501,12 @@ class SiteData(BaseModel):
                 )
         for i in range(un):
             self._check_game_row(
-                "telecasts_unrated", uc, i, referenced_rivalries, referenced_venues
+                "telecasts_unrated",
+                uc,
+                i,
+                referenced_rivalries,
+                referenced_venues,
+                referenced_booths,
             )
             if self.lookups.networks[uc.network[i]].id == "unmapped":
                 raise ValueError(
@@ -497,6 +534,8 @@ class SiteData(BaseModel):
             if k not in referenced_venues:
                 raise ValueError(f"lookups.venues[{k}]: not referenced by any game")
 
+        self._check_booths(referenced_booths)
+
         for i, row in enumerate(self.coverage):
             if row.network is not None and not 0 <= row.network < num_networks:
                 raise ValueError(f"coverage[{i}].network: network index out of range")
@@ -521,6 +560,7 @@ class SiteData(BaseModel):
         i: int,
         referenced_rivalries: set[int],
         referenced_venues: set[int],
+        referenced_booths: set[int],
     ) -> None:
         """The per-row checks both blocks share. Messages carry the block name,
         column and position only, never a cell value (T-03-04)."""
@@ -588,6 +628,52 @@ class SiteData(BaseModel):
             if not 0 <= place < len(lk.venues):
                 raise ValueError(f"{block}.place[{i}]: venue index out of range")
             referenced_venues.add(place)
+        booth = cols.booth[i]
+        if booth is not None:
+            if not 0 <= booth < len(lk.booths):
+                raise ValueError(f"{block}.booth[{i}]: booth index out of range")
+            booth_ref = lk.booths[booth]
+            if booth_ref.family != lk.networks[cols.network[i]].family:
+                raise ValueError(
+                    f"{block}.booth[{i}]: booth family does not match the network family"
+                )
+            if booth_ref.season != cols.season[i]:
+                raise ValueError(f"{block}.booth[{i}]: booth season does not match")
+            referenced_booths.add(booth)
+
+    def _check_booths(self, referenced_booths: set[int]) -> None:
+        """lookups.booths rules: tier/rank, lead network, people, uniqueness,
+        and every booth referenced by a game. Messages carry positions only."""
+        lk = self.lookups
+        seen: set[tuple[str, int, int]] = set()
+        tier_seen: set[tuple[str, int, str]] = set()
+        for k, b in enumerate(lk.booths):
+            if (
+                (b.tier == "a") != (b.rank == 1)
+                or (b.tier == "b") != (b.rank == 2)
+                or (b.tier == "other" and b.rank is not None and b.rank < 3)
+            ):
+                raise ValueError(f"lookups.booths[{k}]: tier does not match rank")
+            if b.lead_network is not None and (
+                b.tier != "other" or not 0 <= b.lead_network < len(lk.networks)
+            ):
+                raise ValueError(f"lookups.booths[{k}]: lead_network invalid")
+            people = [b.pbp] if b.analyst is None else [b.pbp, b.analyst]
+            if any(not 0 <= p < len(lk.people) for p in people):
+                raise ValueError(f"lookups.booths[{k}]: person index out of range")
+            key = (b.family, b.season, b.pbp)
+            if key in seen:
+                raise ValueError(f"lookups.booths[{k}]: duplicate booth")
+            seen.add(key)
+            if b.tier != "other":
+                tkey = (b.family, b.season, b.tier)
+                if tkey in tier_seen:
+                    raise ValueError(
+                        f"lookups.booths[{k}]: second {b.tier} booth in one family season"
+                    )
+                tier_seen.add(tkey)
+            if k not in referenced_booths:
+                raise ValueError(f"lookups.booths[{k}]: not referenced by any game")
 
 
 def validate_site_data(obj: object) -> SiteData:

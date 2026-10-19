@@ -1,0 +1,91 @@
+{
+  "booths": [
+    {
+      "family": "disney",
+      "season": 2021,
+      "pbp": 2,
+      "analyst": 3,
+      "rank": 2,
+      "tier": "b",
+      "lead_network": null
+    },
+    {
+      "family": "disney",
+      "season": 2021,
+      "pbp": 4,
+      "analyst": 5,
+      "rank": null,
+      "tier": "other",
+      "lead_network": 2
+    },
+    {
+      "family": "disney",
+      "season": 2021,
+      "pbp": 7,
+      "analyst": 8,
+      "rank": 1,
+      "tier": "a",
+      "lead_network": null
+    },
+    {
+      "family": "disney",
+      "season": 2025,
+      "pbp": 7,
+      "analyst": 8,
+      "rank": 3,
+      "tier": "other",
+      "lead_network": null
+    },
+    {
+      "family": "disney",
+      "season": 2026,
+      "pbp": 0,
+      "analyst": 1,
+      "rank": 1,
+      "tier": "a",
+      "lead_network": null
+    },
+    {
+      "family": "fox",
+      "season": 2025,
+      "pbp": 4,
+      "analyst": 5,
+      "rank": 1,
+      "tier": "a",
+      "lead_network": null
+    },
+    {
+      "family": "fox",
+      "season": 2026,
+      "pbp": 2,
+      "analyst": 3,
+      "rank": 2,
+      "tier": "b",
+      "lead_network": null
+    }
+  ],
+  "telecasts_booth": [
+    null,
+    null,
+    null,
+    null,
+    3,
+    5,
+    null,
+    null,
+    4,
+    6,
+    null,
+    null
+  ],
+  "unrated_booth": [
+    null,
+    0,
+    2,
+    1,
+    null,
+    null,
+    null,
+    null
+  ]
+}

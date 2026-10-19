@@ -18,6 +18,7 @@ from pathlib import Path
 
 import pytest
 
+from booth_review.build.booth_ranks import CFB_BOOTH_RANK_COLUMNS, load_cfb_booth_ranks
 from booth_review.build.bowls import BOWL_COLUMNS, load_bowls
 from booth_review.build.crew_overrides import CREW_OVERRIDE_COLUMNS, load_crew_overrides
 from booth_review.build.rivalries import RIVALRY_COLUMNS, load_rivalries
@@ -127,6 +128,7 @@ KNOWN_TABLES: dict[str, tuple[tuple[str, ...] | None, Loader | None]] = {
         load_nfl_lead_booth_overrides,
     ),
     "nfl_booth_ranks.csv": (NFL_BOOTH_RANK_COLUMNS, load_nfl_booth_ranks),
+    "cfb_booth_ranks.csv": (CFB_BOOTH_RANK_COLUMNS, load_cfb_booth_ranks),
     "nfl_week_overrides.csv": (NFL_WEEK_OVERRIDE_COLUMNS, load_nfl_week_overrides),
     "mlb_clubs.csv": (MLB_CLUB_COLUMNS, load_mlb_clubs),
     "mlb_team_crosswalk.csv": (MLB_TEAM_CROSSWALK_COLUMNS, load_mlb_team_crosswalk),
@@ -270,6 +272,18 @@ def test_nfl_booth_rank_names_resolve() -> None:
         for field in ("pbp", "analyst"):
             assert people.lookup(row[field]) is not None, (
                 f"nfl_booth_ranks.csv line {line_no}: {field} does not resolve"
+            )
+
+
+def test_cfb_booth_rank_names_resolve() -> None:
+    people = load_people(REFERENCE_DIR)
+    rows = read_reference_csv_numbered(
+        REFERENCE_DIR / "cfb_booth_ranks.csv", CFB_BOOTH_RANK_COLUMNS
+    )
+    for line_no, row in rows:
+        for field in ("pbp", "analyst"):
+            assert people.lookup(row[field]) is not None, (
+                f"cfb_booth_ranks.csv line {line_no}: {field} does not resolve"
             )
 
 

@@ -795,9 +795,9 @@ def test_unrated_fields_are_display_only() -> None:
 
 
 def test_site_data_fields_unchanged() -> None:
-    assert len(SITE_DATA_FIELDS) == 34
+    assert len(SITE_DATA_FIELDS) == 35
     assert SITE_DATA_FIELDS[:3] == ("season", "date", "kickoff")
-    assert SITE_DATA_FIELDS[-1] == "place"
+    assert SITE_DATA_FIELDS[-1] == "booth"
     assert not set(UnratedColumns.model_fields) & {"cause"} & set(SITE_DATA_FIELDS)
 
 
@@ -822,7 +822,7 @@ def test_unrated_block_has_no_cfbd_only_fields() -> None:
 def _with_unrated_row(data: dict[str, Any]) -> dict[str, Any]:
     """The fixture plus a one-row unrated block (a regular 2019 net-b game,
     crewless, cause none); every unrated variant mutates this row."""
-    data["schema_version"] = "2.5.0"
+    data["schema_version"] = "2.6.0"
     # The replaced unrated block was the only user of the last two venues.
     del data["lookups"]["venues"][7:]
     row: dict[str, Any] = {
@@ -852,6 +852,7 @@ def _with_unrated_row(data: dict[str, Any]) -> dict[str, Any]:
         "bowl": None,
         "rivalry": None,
         "place": None,
+        "booth": None,
         "cause": "none",
     }
     data["telecasts_unrated"] = {k: [v] for k, v in row.items()}
@@ -1063,3 +1064,122 @@ def test_schema_version_2_3_0_fails() -> None:
     data["schema_version"] = "2.3.0"
     with pytest.raises(ValidationError):
         validate_site_data(data)
+
+
+# --- Phase 10 booth tiers (contract 2.6.0) ---------------------------------
+# Overlay scenario (tests/fixtures/contract/booth-overlay.json): rated A on disney
+# 2026 (telecast 8); rated A on fox 2025 with a fill-in analyst (telecast 5, the CFP
+# game; game analyst 9, regular 5); unrated A on disney 2021 (unrated 2); rated B fox
+# 2026 (telecast 9); unrated B disney 2021 with a fill-in analyst (unrated 1; game
+# analyst 10, regular 3); conference lead "Conference Network" on a disney channel
+# (unrated 3, net-e); rated Other disney 2025 rank 3 (telecast 4); every other game
+# untiered. Totals: A 3, B 2, Other 2, untiered 13.
+
+BOOTH_OVERLAY_PATH = FIXTURE_PATH.parent / "booth-overlay.json"
+
+
+def _with_booths(raw: dict[str, Any]) -> dict[str, Any]:
+    data = copy.deepcopy(raw)
+    overlay = json.loads(BOOTH_OVERLAY_PATH.read_text())
+    data["lookups"]["booths"] = overlay["booths"]
+    data["telecasts"]["booth"] = overlay["telecasts_booth"]
+    data["telecasts_unrated"]["booth"] = overlay["unrated_booth"]
+    return data
+
+
+def test_booth_overlay_validates() -> None:
+    site_data = validate_site_data(_with_booths(_load_fixture()))
+    assert len(site_data.lookups.booths) == 7
+
+
+def _booth_edit(index: int, **changes: Any) -> Any:
+    def mutate(data: dict[str, Any]) -> dict[str, Any]:
+        data["lookups"]["booths"][index].update(changes)
+        return data
+
+    return mutate
+
+
+def _rated_booth(row: int, value: int | None) -> Any:
+    def mutate(data: dict[str, Any]) -> dict[str, Any]:
+        data["telecasts"]["booth"][row] = value
+        return data
+
+    return mutate
+
+
+def _drop_unrated_booth(data: dict[str, Any]) -> dict[str, Any]:
+    del data["telecasts_unrated"]["booth"]
+    return data
+
+
+def _unreferenced_booth(data: dict[str, Any]) -> dict[str, Any]:
+    data["telecasts"]["booth"][8] = None  # booth 4 is used only by rated 8 (disney 2026)
+    return data
+
+
+def _duplicate_booth(data: dict[str, Any]) -> dict[str, Any]:
+    data["lookups"]["booths"].append(dict(data["lookups"]["booths"][3]))
+    data["telecasts"]["booth"][0] = None
+    return data
+
+
+_BOOTH_BROKEN = [
+    pytest.param(_rated_booth(4, 99), "telecasts.booth[4]: booth index out of range", id="range"),
+    pytest.param(
+        _rated_booth(5, 3), "telecasts.booth[5]: booth family does not match", id="family"
+    ),
+    pytest.param(
+        _rated_booth(4, 5), "telecasts.booth[4]: booth family does not match", id="family2"
+    ),
+    pytest.param(
+        _rated_booth(4, 0), "telecasts.booth[4]: booth season does not match", id="season"
+    ),
+    pytest.param(
+        _booth_edit(0, tier="a"), "lookups.booths[0]: tier does not match rank", id="a-r2"
+    ),
+    pytest.param(
+        _booth_edit(2, tier="b"), "lookups.booths[2]: tier does not match rank", id="b-r1"
+    ),
+    pytest.param(
+        _booth_edit(3, rank=1), "lookups.booths[3]: tier does not match rank", id="other-r1"
+    ),
+    pytest.param(
+        _booth_edit(1, tier="a", rank=1),
+        "lookups.booths[1]: lead_network invalid",
+        id="a-with-lead",
+    ),
+    pytest.param(
+        _booth_edit(1, lead_network=99), "lookups.booths[1]: lead_network invalid", id="lead-range"
+    ),
+    pytest.param(
+        _booth_edit(0, pbp=99), "lookups.booths[0]: person index out of range", id="pbp-range"
+    ),
+    pytest.param(
+        _booth_edit(0, analyst=99),
+        "lookups.booths[0]: person index out of range",
+        id="analyst-range",
+    ),
+    pytest.param(_duplicate_booth, "lookups.booths[7]: duplicate booth", id="duplicate"),
+    pytest.param(
+        _unreferenced_booth, "lookups.booths[4]: not referenced by any game", id="unreferenced"
+    ),
+    pytest.param(_booth_edit(0, family="cw"), "lookups.booths.0.family", id="family-cw"),
+    pytest.param(_drop_unrated_booth, "telecasts_unrated.booth", id="missing-unrated-column"),
+]
+
+
+@pytest.mark.parametrize(("mutate", "needle"), _BOOTH_BROKEN)
+def test_booth_rejected(mutate: Any, needle: str) -> None:
+    with pytest.raises(ValidationError) as excinfo:
+        validate_site_data(mutate(_with_booths(_load_fixture())))
+    assert needle in str(excinfo.value)
+
+
+def test_second_a_booth_in_one_family_season_rejected() -> None:
+    data = _with_booths(_load_fixture())
+    # Two disney 2021 booths already: b (pbp 2) and a (pbp 7). Make the b booth a second a.
+    data["lookups"]["booths"][0].update(rank=1, tier="a")
+    with pytest.raises(ValidationError) as excinfo:
+        validate_site_data(data)
+    assert "second a booth in one family season" in str(excinfo.value)

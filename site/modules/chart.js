@@ -53,7 +53,7 @@
  */
 
 import { ACCENT, DIVIDER, DOT_OUTLINE, FAMILY_COLORS, MUTED, PAGE_BG, POSTSEASON_BAND, POSTSEASON_LABEL as POSTSEASON_LABEL_COLOR, SURFACE, ZERO_LINE, contrastRatio, familyKey } from './palette.js';
-import { MINUS, escapeHover, logTicks, niceLinearTicks } from './format.js';
+import { MINUS, boothLabel, escapeHover, logTicks, niceLinearTicks } from './format.js';
 import { tooltipModel } from './tooltip.js';
 import { POSTSEASON_LABEL, dateAxisLabels, gapDividers, postseasonBands, postseasonLabel, seasonRange, shownBlocks } from './date-axis.js';
 import { gutterPads } from './gutter.js';
@@ -95,6 +95,10 @@ export const MARGIN = Object.freeze({ l: 70, r: 24, t: 40, b: 60 });
 export const BAND = Object.freeze({ frac: 0.12, minPx: 56, gapPx: 28, padPx: 12 });
 
 /** Plot height assumed before the chart div is measured: #chart min-height 520 minus MARGIN.t + MARGIN.b. */
+/** Phase 10 D-09: lead-booth star size in px, independent of the enlarge-dots switch. */
+const LEAD_STAR_SIZE = 14;
+/** Phase 10 (10-11 review): the surface-colored casing star drawn directly beneath each rated lead star. */
+const LEAD_CASING_SIZE = 18;
 const FALLBACK_PLOT_HEIGHT = 420;
 
 /**
@@ -265,6 +269,8 @@ export function hoverText(data, i, { axis, y, theme }) {
   lines.push(networkSpans.join('/'));
 
   for (const line of model.crewLines) lines.push(escapeHover(line));
+  const boothLine = boothLabel(data, i);
+  if (boothLine != null) lines.push(escapeHover(boothLine));
 
   lines.push(escapeHover(model.viewersLine));
   lines.push(escapeHover(model.axisLine));
@@ -357,19 +363,34 @@ export function buildFigure(data, view, state, env) {
   const activeTraces = [];
   const unratedInertTraces = [];
   const unratedActiveTraces = [];
+  const leadTraces = [];
+  const leadCasingTraces = [];
   for (const family of data.families) {
     const active = { x: [], y: [], customdata: [], text: [] };
     const inert = { x: [], y: [] };
     const uActive = { x: [], y: [], customdata: [], text: [] };
     const uInert = { x: [], y: [] };
+    // Phase 10 D-09: a passing lead-booth (A) game is drawn as a star unless per-person
+    // shapes are in use (compare mode). `lead` sits on the main axis, `uLeadFilled` is a
+    // band game in a non-Viewers mode (filled), `uLead` is a band game in Viewers mode (hollow).
+    const lead = { x: [], y: [], customdata: [], text: [] };
+    const uLeadFilled = { x: [], y: [], customdata: [], text: [] };
+    const uLead = { x: [], y: [], customdata: [], text: [] };
     for (let i = 0; i < data.n; i += 1) {
       if (!view.visible[i] || data.familyOf[i] !== family) continue;
       if (highlightSet.has(i)) continue;
       if (outOfSeasons(i)) continue;
       const x = xOf(i);
       // 04.13 D-01/D-05: an unrated game sits in the band at its x, with its fixed jitter as y.
+      const isLead = view.passesFilters[i] && data.boothTier[i] === 1 && !view.personShapes;
       if (inBand(i)) {
-        if (view.passesFilters[i]) {
+        if (isLead) {
+          const bucket = yMode === 'viewers' ? uLead : uLeadFilled;
+          bucket.x.push(x);
+          bucket.y.push(bandY(i));
+          bucket.customdata.push(i);
+          if (usePlotlyText) bucket.text.push(hoverText(data, i, hoverOpts));
+        } else if (view.passesFilters[i]) {
           uActive.x.push(x);
           uActive.y.push(bandY(i));
           uActive.customdata.push(i);
@@ -381,7 +402,12 @@ export function buildFigure(data, view, state, env) {
         continue;
       }
       const y = yOf(i);
-      if (view.passesFilters[i]) {
+      if (isLead) {
+        lead.x.push(x);
+        lead.y.push(y);
+        lead.customdata.push(i);
+        if (usePlotlyText) lead.text.push(hoverText(data, i, hoverOpts));
+      } else if (view.passesFilters[i]) {
         active.x.push(x);
         active.y.push(y);
         active.customdata.push(i);
@@ -490,9 +516,64 @@ export function buildFigure(data, view, state, env) {
           }
         : ringMarker(activeOpacity),
     });
+    // Phase 10 D-09/D-10: lead-booth stars. No marker.line on an SDF glyph (it speckles, notes-2
+    // #1); a hollow star is a family-colored star under a slightly smaller SURFACE star. Always
+    // pushed, possibly empty, so the trace count never changes.
+    const leadBase = (meta, bucket, yaxis) => ({
+      type: 'scattergl',
+      mode: 'markers',
+      meta,
+      showlegend: false,
+      ...(yaxis ? { yaxis } : {}),
+      x: bucket.x,
+      y: bucket.y,
+      customdata: bucket.customdata,
+      ...(usePlotlyText ? { text: bucket.text } : {}),
+      hoverinfo: activeHoverInfo,
+      hovertemplate: activeHoverTemplate,
+      hoverlabel: { bordercolor: color },
+    });
+    // A page-background casing star under each rated lead star keeps it readable among the
+    // same-colored dots it overlaps. Plain filled surface star: no marker.line, no open symbol.
+    leadCasingTraces.push({
+      type: 'scattergl',
+      mode: 'markers',
+      meta: `lead-halo:${family}`,
+      showlegend: false,
+      x: lead.x,
+      y: lead.y,
+      hoverinfo: 'skip',
+      hovertemplate: null,
+      marker: { symbol: 'star', color: SURFACE[theme], size: LEAD_CASING_SIZE, opacity: 1, line: { width: 0 } },
+    });
+    leadTraces.push({
+      ...leadBase(`lead:${family}`, lead, null),
+      marker: { symbol: 'star', color, size: LEAD_STAR_SIZE, opacity: activeOpacity, line: { width: 0 } },
+    });
+    leadTraces.push({
+      ...leadBase(`unrated-lead-filled:${family}`, uLeadFilled, 'y2'),
+      marker: { symbol: 'star', color, size: LEAD_STAR_SIZE, opacity: activeOpacity, line: { width: 0 } },
+    });
+    leadTraces.push({
+      type: 'scattergl',
+      mode: 'markers',
+      meta: `unrated-lead-halo:${family}`,
+      showlegend: false,
+      yaxis: 'y2',
+      x: uLead.x,
+      y: uLead.y,
+      hoverinfo: 'skip',
+      hovertemplate: null,
+      marker: { symbol: 'star', color, size: LEAD_STAR_SIZE + (thin === 2 ? 4 : 3), opacity: activeOpacity, line: { width: 0 } },
+    });
+    leadTraces.push({
+      ...leadBase(`unrated-lead:${family}`, uLead, 'y2'),
+      // Hollow only in Viewers mode; elsewhere the band is filled (D-14), so no surface fill.
+      marker: { symbol: 'star', color: yMode === 'viewers' ? SURFACE[theme] : color, size: LEAD_STAR_SIZE, opacity: activeOpacity, line: { width: 0 } },
+    });
   }
 
-  const traces = [...inertTraces, ...unratedInertTraces, ...activeTraces, ...unratedActiveTraces];
+  const traces = [...inertTraces, ...unratedInertTraces, ...activeTraces, ...unratedActiveTraces, ...leadCasingTraces, ...leadTraces];
 
   const hx = [];
   const hy = [];
@@ -522,6 +603,11 @@ export function buildFigure(data, view, state, env) {
   const uhaloY = [];
   const uhaloSymbol = [];
   const uhaloSize = [];
+  // 10-11 review: a highlighted unrated lead (A) game in Viewers mode keeps its hollow star -- the
+  // family-colored star above gets a smaller SURFACE star on top, as the unrated-lead traces do.
+  const uholeX = [];
+  const uholeY = [];
+  const uholeSize = [];
   // D-31/D-33: a scattergl non-circle symbol (square/diamond/triangle-up/
   // star) is drawn from an SDF glyph atlas (regl-scatter2d), and a
   // `marker.line` border on one of those glyphs antialiases into a
@@ -551,6 +637,11 @@ export function buildFigure(data, view, state, env) {
       usymbol.push(symbol);
       usize.push(size);
       ulineWidth.push(symbol === 'circle' ? 1.5 : 0);
+      if (symbol === 'star' && yMode === 'viewers' && !view.personShapes && data.boothTier[i] === 1) {
+        uholeX.push(x);
+        uholeY.push(bandY(i));
+        uholeSize.push(size - 3);
+      }
       if (symbol !== 'circle') {
         uhaloX.push(x);
         uhaloY.push(bandY(i));
@@ -613,6 +704,18 @@ export function buildFigure(data, view, state, env) {
       opacity: 1,
       line: { width: ulineWidth, color: ACCENT[theme] },
     },
+  });
+  traces.push({
+    type: 'scattergl',
+    mode: 'markers',
+    meta: 'highlight-unrated-hole',
+    showlegend: false,
+    yaxis: 'y2',
+    x: uholeX,
+    y: uholeY,
+    hoverinfo: 'skip',
+    hovertemplate: null,
+    marker: { symbol: 'star', size: uholeSize, color: SURFACE[theme], opacity: 1, line: { width: 0 } },
   });
   if (haloX.length > 0) {
     traces.push({

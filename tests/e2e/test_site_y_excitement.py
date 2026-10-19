@@ -153,6 +153,8 @@ def test_band_holds_exactly_the_null_excitement_games(
             continue
         assert all(isinstance(y, (int, float)) for y in t["y"]), t["meta"]
     for t in traces:
+        if t["meta"].startswith(("lead-halo:", "highlight-unrated-hole")):
+            continue  # surface-colored casing and hollow-star centre stars, not rings
         assert t["color"] != surface, f"{t['meta']} draws a ring (D-14)"
         assert t["symbol"] != "circle-open"
     # every game with a value is in a main trace, rated or not

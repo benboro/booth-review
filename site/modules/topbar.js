@@ -414,6 +414,25 @@ function renderShapeLegend(data, state, view) {
   els.shapeLegend.hidden = false;
 }
 
+/**
+ * Phase 10 D-09: the one-line "Lead booth" key. Shown (space always reserved) only when a lead
+ * star can be drawn: some passing visible game is a lead-booth game and per-person shapes are off.
+ */
+function renderLeadKey(data, view) {
+  const el = document.getElementById('lead-key');
+  if (!el) return;
+  let show = false;
+  if (!view.personShapes) {
+    for (let i = 0; i < data.n; i += 1) {
+      if (data.boothTier[i] === 1 && view.visible[i] && view.passesFilters[i]) {
+        show = true;
+        break;
+      }
+    }
+  }
+  el.classList.toggle('is-off', !show);
+}
+
 /** Renders the counts-only match summary line (A1). */
 function renderSummary(view) {
   const { count, detail } = summaryCopy(view.summary);
@@ -466,6 +485,7 @@ export function renderTopbar({ data, state, view }) {
   renderToggles(state);
   els.clearSelection.hidden = state.people.length === 0;
   renderShapeLegend(data, state, view);
+  renderLeadKey(data, view);
   renderSummary(view);
   renderPersonList(state);
   renderPersonFacets(state, view);
