@@ -11,18 +11,29 @@ Each runs on a desktop profile (cell 3, no throttle) and a phone profile (cell 4
 throttle through CDP). Prints `PERF step=<name> profile=<desktop|phone> p95=<ms>
 budget=<ms>`; only soft limits at 2x the UI-SPEC budget are asserted, so CI noise does not
 flake. The 1x comparison lives in the plan SUMMARY.
+
+Timings from a parallel run measure CPU contention between workers, not the page, so the
+probe skips under pytest-xdist; run it alone with
+`uv run pytest -m e2e -p no:xdist tests/e2e/test_site_map_perf.py`.
 """
 
 from __future__ import annotations
 
 import copy
+import os
 import random
 from typing import Any
 
 import pytest
 from playwright.sync_api import Page
 
-pytestmark = pytest.mark.e2e
+pytestmark = [
+    pytest.mark.e2e,
+    pytest.mark.skipif(
+        "PYTEST_XDIST_WORKER" in os.environ,
+        reason="timing probe needs an otherwise idle machine; run with -p no:xdist",
+    ),
+]
 
 RUNS = 20
 WARMUPS = 2
