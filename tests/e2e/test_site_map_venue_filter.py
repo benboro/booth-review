@@ -162,7 +162,9 @@ def _click_dot(page: Page, x: float, y: float) -> None:
     _, py = _pixel(page, x, y)
     page.evaluate("(dy) => window.scrollBy(0, dy)", py - 300)
     px, py = _pixel(page, x, y)
-    page.mouse.move(px - 40, py - 40)
+    # Approach from the left along the marker's row, so the start is inside the plot even for
+    # Dublin (near the top edge) and Nassau (near the bottom edge).
+    page.mouse.move(px - 40, py)
     page.mouse.move(px, py, steps=4)
     page.mouse.click(px, py)
 
@@ -198,17 +200,18 @@ def test_desktop_click_filters_table_scrolls_focuses_and_announces(
     assert guarded_page.evaluate(_IMAGES) == images_before
 
 
+@pytest.mark.parametrize("label", ["Dublin", "Nassau"])
 def test_clicking_an_edge_marker_filters_to_its_group(
-    guarded_page: Page, open_app: OpenApp
+    guarded_page: Page, open_app: OpenApp, label: str
 ) -> None:
     guarded_page.emulate_media(reduced_motion="reduce")
     guarded_page.set_viewport_size({"width": 1280, "height": 900})
     _open_map(guarded_page, open_app)
-    marker = next(m for m in _model(guarded_page)["markers"] if m["label"] == "Nassau")
+    marker = next(m for m in _model(guarded_page)["markers"] if m["label"] == label)
     _click_dot(guarded_page, marker["x"], marker["y"])
-    guarded_page.wait_for_function("() => location.search.includes('venue=nassau')")
+    guarded_page.wait_for_function(f"() => location.search.includes('venue={label.lower()}')")
     guarded_page.wait_for_function("() => document.querySelector('#venue-chips .chip')")
-    assert guarded_page.evaluate(CHIP_TEXT) == "Venue: Nassau"
+    assert guarded_page.evaluate(CHIP_TEXT) == f"Venue: {label}"
     assert guarded_page.evaluate(ROWS) > 0
 
 

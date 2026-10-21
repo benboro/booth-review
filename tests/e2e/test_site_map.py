@@ -200,6 +200,52 @@ def test_no_location_note_follows_the_filters(guarded_page: Page, open_app: Open
     assert not _visible(guarded_page, "#map-note")
 
 
+@pytest.mark.parametrize("label", ["Dublin", "Nassau"])
+def test_desktop_real_mouse_hover_on_each_edge_marker_fires_plotly_hover(
+    guarded_page: Page, open_app: OpenApp, label: str
+) -> None:
+    """Regression: the modebar sat over Dublin (top right) and swallowed its hover."""
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    _open_map(guarded_page, open_app, "?view=map")
+    guarded_page.evaluate(
+        """() => { window.__hovered = [];
+          document.getElementById('map-chart').on('plotly_hover',
+            (e) => window.__hovered.push(String(e.points[0].customdata))); }"""
+    )
+    marker = next(m for m in _model(guarded_page)["markers"] if m["label"] == label)
+    px, py = _venue_pixel(guarded_page, marker["x"], marker["y"])
+    guarded_page.mouse.move(px - 60, py)
+    guarded_page.mouse.move(px, py)  # one jump: only the marker's own pixel is hit-tested
+    guarded_page.wait_for_function(f"() => window.__hovered.includes('{label.lower()}')")
+
+
+def test_desktop_modebar_does_not_overlap_the_edge_markers(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    _open_map(guarded_page, open_app, "?view=map")
+    dublin = next(m for m in _model(guarded_page)["markers"] if m["label"] == "Dublin")
+    _, py = _venue_pixel(guarded_page, dublin["x"], dublin["y"])
+    bar = guarded_page.locator("#map-chart .modebar").bounding_box()
+    assert bar is not None
+    assert py - 12 > bar["y"] + bar["height"]
+
+
+@pytest.mark.parametrize("label", ["Dublin", "Nassau"])
+def test_phone_tap_on_each_edge_marker_shows_the_card(
+    mobile_page: Page, open_app: OpenApp, label: str
+) -> None:
+    _phone(mobile_page, open_app, "?view=map")
+    mobile_page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
+    marker = next(m for m in _model(mobile_page)["markers"] if m["label"] == label)
+    px, py = _venue_pixel(mobile_page, marker["x"], marker["y"])
+    mobile_page.touchscreen.tap(px, py)
+    mobile_page.wait_for_function(
+        "() => { const e = document.getElementById('chart-tooltip'); return e && !e.hidden; }"
+    )
+    assert (_tooltip_lines(mobile_page) or [""])[0] == label
+
+
 def test_desktop_hover_shows_venue_tooltip(guarded_page: Page, open_app: OpenApp) -> None:
     """D-02: hovering the Nassau marker shows the venue card and the subject's games."""
     guarded_page.set_viewport_size({"width": 1280, "height": 900})

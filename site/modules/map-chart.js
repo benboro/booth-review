@@ -242,6 +242,13 @@ export function splatImageSpec(url) {
 }
 
 /**
+ * Desktop top margin in px that holds the Plotly modebar above the plot, so the modebar never
+ * covers the top-right edge markers (Dublin, London) and swallows their hover and click.
+ * Phones show no modebar, so they keep no margin.
+ */
+export const MODEBAR_BAND = 26;
+
+/**
  * Builds the whole Map figure.
  * @param {object} model - buildMapModel output (venueDots, venueFaded, legs, markers used).
  * @param {ReadonlyArray<{id: string, rings: number[][]}>} geometry - US_STATES.
@@ -273,7 +280,7 @@ export function buildMapFigure(model, geometry, env) {
       constrain: 'domain',
       fixedrange: mobile,
     },
-    margin: { l: 0, r: 0, t: 0, b: 0 },
+    margin: { l: 0, r: 0, t: mobile ? 0 : MODEBAR_BAND, b: 0 },
     paper_bgcolor: PAGE_BG[theme],
     plot_bgcolor: PAGE_BG[theme],
     showlegend: false,
