@@ -638,6 +638,113 @@ def test_colors_off_during_a_relayout_leaves_land_fill_and_no_image(
     assert guarded_page.evaluate(_IMAGES) == []
 
 
+# -- Review fix WR-01: a superseded render must not cancel the current render's raster ---------
+
+# Plotly.react on the map: the first call resolves only on `__releaseFirst()`, the rest at once.
+_HOLD_FIRST_REACT = """() => {
+  const P = window.Plotly;
+  const real = P.react.bind(P);
+  const s = (window.__react = { calls: 0, release: null, second: null });
+  P.react = (gd, ...rest) => {
+    if (!gd || gd.id !== 'map-chart') return real(gd, ...rest);
+    s.calls += 1;
+    const p = real(gd, ...rest);
+    if (s.calls === 1) return new Promise((resolve) => { s.release = () => p.then(resolve); });
+    if (s.calls === 2) s.second = p;
+    return p;
+  };
+}"""
+
+
+def test_render_finishing_out_of_order_does_not_cancel_the_newer_raster(
+    guarded_page: Page, open_app: Any
+) -> None:
+    """Render A's Plotly.react resolves after render B's: A must not schedule a paint that
+    bumps the token past B's, or B's raster is dropped and the land stays unpainted."""
+    _open_splat(guarded_page, open_app)
+    n = _splats(guarded_page)
+    guarded_page.evaluate(_HOLD_FIRST_REACT)
+    _set_state(guarded_page, {"seasons": [2021, 2021]})
+    guarded_page.wait_for_function("() => window.__react.calls === 1")
+    _set_state(guarded_page, {"seasons": [2022, 2022]})
+    guarded_page.evaluate(
+        """async () => {
+          while (!window.__react.second) await new Promise((r) => setTimeout(r, 0));
+          await window.__react.second;
+          window.__react.release();
+        }"""
+    )
+    _settle(guarded_page)
+    _wait_splat(guarded_page, n)
+    assert len(guarded_page.evaluate(_IMAGES)) == 1
+    assert guarded_page.evaluate(_OUTLINE_FILL) == "none"
+
+
+def test_superseded_first_open_hands_its_resize_to_the_next_render(
+    guarded_page: Page, open_app: Any
+) -> None:
+    """The render that opens the Map tab asks for a resize; a second render lands before
+    it gets past the geometry import. The map must still be resized once."""
+    open_app(guarded_page, "")
+    guarded_page.evaluate(
+        """() => {
+          const P = window.Plotly;
+          const real = P.Plots.resize.bind(P.Plots);
+          window.__mapResizes = 0;
+          P.Plots.resize = (gd, ...rest) => {
+            if (gd && gd.id === 'map-chart') window.__mapResizes += 1;
+            return real(gd, ...rest);
+          };
+          window.__testHooks.setState({ view: 'map' });
+          window.__testHooks.setState({ seasons: [2021, 2021] });
+        }"""
+    )
+    _settle(guarded_page)
+    assert guarded_page.evaluate("() => window.__mapResizes") >= 1
+
+
+def test_raster_failure_cleanup_does_not_strip_a_newer_image(
+    guarded_page: Page, open_app: Any
+) -> None:
+    """WR-04: paint A's relayout rejects and its cleanup is still restyling the land fill when
+    paint B is requested. The cleanup runs in the layout queue, so B's image goes in after it
+    instead of being stripped by its late relayout."""
+    _open_splat(guarded_page, open_app)
+    n = _splats(guarded_page)
+    guarded_page.evaluate(
+        """() => {
+          const P = window.Plotly;
+          const real = P.relayout.bind(P);
+          const s = (window.__fail = { armed: true, reject: null, held: [] });
+          const realRestyle = P.restyle.bind(P);
+          // The failure cleanup's land-fill restyle is held so it would land after B's image.
+          P.restyle = (gd, upd, ...rest) =>
+            gd && gd.id === 'map-chart' && upd && upd.fill === 'toself'
+              ? new Promise((resolve) => s.held.push(() => realRestyle(gd, upd, ...rest).then(resolve)))
+              : realRestyle(gd, upd, ...rest);
+          P.relayout = (gd, upd, ...rest) => {
+            if (gd && gd.id === 'map-chart' && upd && upd.images && upd.images.length && s.armed) {
+              s.armed = false;
+              return new Promise((_, rej) => { s.reject = () => rej(new Error('boom')); });
+            }
+            return real(gd, upd, ...rest);
+          };
+        }"""
+    )
+    _set_state(guarded_page, {"seasons": [2021, 2021]})
+    guarded_page.wait_for_function("() => window.__fail.reject !== null")
+    guarded_page.evaluate("() => window.__fail.reject()")
+    guarded_page.wait_for_function("() => window.__fail.held.length === 1")
+    _set_state(guarded_page, {"seasons": [2022, 2022]})
+    _settle(guarded_page)
+    guarded_page.evaluate("() => window.__fail.held.splice(0).forEach((f) => f())")
+    _settle(guarded_page)
+    _wait_splat(guarded_page, n)
+    images = guarded_page.evaluate(_IMAGES)
+    assert len(images) == 1
+    assert guarded_page.evaluate(_FETCH_OK, images[0]) is True
+
+
 # -- Phase 11 plan 09: the key overlay ---------------------------------------------------
 
 _KEY_BOXES = """async () => {

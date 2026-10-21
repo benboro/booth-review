@@ -65,6 +65,8 @@ let splatCount = 0;
 /** Tail of the queued raster layout changes (see serialLayout). */
 let layoutChain = Promise.resolve();
 let splatBroken = false;
+// A render that asked for a resize but was superseded hands the request to the next render.
+let pendingResize = false;
 let splatWarned = false;
 /** The state geometry once loaded, for the key's land test. */
 let loadedGeometry = null;
@@ -123,7 +125,7 @@ function drawKey({ model, env }) {
 }
 
 /** Falls back to the plain land fill after a failed raster; logs once, shows nothing. */
-function splatFailed(gd, err, theme) {
+function splatFailed(gd, err, theme, mine) {
   splatBroken = true;
   if (!splatWarned) {
     splatWarned = true;
@@ -136,14 +138,25 @@ function splatFailed(gd, err, theme) {
   currentImageSpec = null;
   const url = currentImageUrl;
   currentImageUrl = null;
-  const restyle = window.Plotly.restyle(gd, { fill: 'toself', fillcolor: MAP_LAND[theme] }, [0]);
-  Promise.resolve(restyle)
-    .catch(() => {})
-    .then(() => window.Plotly.relayout(gd, { images: [] }))
-    .catch(() => {})
-    .then(() => {
-      if (url) URL.revokeObjectURL(url);
-    });
+  // Queued behind every other layout change; a newer render (token) owns the image and the
+  // fill by the time this runs, so it only revokes the blob it was holding.
+  serialLayout(async () => {
+    if (mine === splatToken) {
+      try {
+        await window.Plotly.restyle(gd, { fill: 'toself', fillcolor: MAP_LAND[theme] }, [0]);
+      } catch {
+        // The relayout below still clears the image.
+      }
+      if (mine === splatToken) {
+        try {
+          await window.Plotly.relayout(gd, { images: [] });
+        } catch {
+          // Nothing more to fall back on.
+        }
+      }
+    }
+    if (url) URL.revokeObjectURL(url);
+  });
 }
 
 /**
@@ -172,7 +185,7 @@ async function applySplat(gd, mine, blob, theme) {
       currentImageSpec = prevSpec;
     }
     URL.revokeObjectURL(url);
-    if (mine === splatToken) splatFailed(gd, err, theme);
+    if (mine === splatToken) splatFailed(gd, err, theme, mine);
     return;
   }
   if (prev) URL.revokeObjectURL(prev);
@@ -182,7 +195,7 @@ async function applySplat(gd, mine, blob, theme) {
   try {
     await window.Plotly.restyle(gd, { fill: 'none' }, [0]);
   } catch (err) {
-    if (mine === splatToken) splatFailed(gd, err, theme);
+    if (mine === splatToken) splatFailed(gd, err, theme, mine);
     return;
   }
   if (mine === splatToken) splatCount += 1;
@@ -471,6 +484,7 @@ export function initMapPanel({ setState, getState, getMatchedCount } = {}) {
 export async function renderMapPanel(args) {
   latest = args;
   const { model, env, resize } = args;
+  if (resize) pendingResize = true;
   const gd = el('map-chart');
   if (!gd) return;
 
@@ -526,7 +540,16 @@ export async function renderMapPanel(args) {
       gd.on('plotly_afterplot', positionOverlays);
       bound = true;
     }
-    if (resize) await window.Plotly.Plots.resize(gd);
+    // A newer render owns the raster, the overlays and any pending resize.
+    if (latest !== args) return;
+    if (pendingResize) {
+      pendingResize = false;
+      await window.Plotly.Plots.resize(gd);
+      if (latest !== args) {
+        pendingResize = true;
+        return;
+      }
+    }
     if (wantSplat) scheduleSplat(args, geometry);
     else await clearSplat(gd);
   } catch {
