@@ -369,7 +369,7 @@ export function venuePieSvg(slices, theme) {
 /**
  * Shows the venue hover card (Phase 11 D-02, D-01a) from a plain card object.
  * @param {{title: string, leader: string, slices: object[], rows: object[],
- *   hasMissingViewers: boolean, hasViewers: boolean,
+ *   hasMissingViewers: boolean, hasPartialViewers?: boolean, hasViewers: boolean,
  *   subjectLines: {text: string, kind: string}[]}} card
  * @param {{theme: "light"|"dark", clientX: number, clientY: number, hint: string}} opts
  */
@@ -400,7 +400,8 @@ export function showVenueTooltip(card, { theme, clientX, clientY, hint }) {
     swatch.style.backgroundColor =
       row.family == null ? MAP_DOT_NEUTRAL[theme] : MAP_FAMILY_COLORS[theme][row.family];
     label.append(swatch, document.createTextNode(row.label));
-    const viewers = row.viewers == null ? '-' : formatAudienceShort(row.viewers);
+    const viewers =
+      row.viewers == null ? '-' : formatAudienceShort(row.viewers) + (row.partial ? '*' : '');
     tr.append(label, text('td', 'num', String(row.games)), text('td', 'num', viewers));
     tbody.appendChild(tr);
   }
@@ -413,6 +414,9 @@ export function showVenueTooltip(card, { theme, clientX, clientY, hint }) {
   const children = [title, body];
   if (card.hasMissingViewers) {
     children.push(text('p', 'tooltip-footnote', '- no viewer figure listed'));
+  }
+  if (card.hasPartialViewers) {
+    children.push(text('p', 'tooltip-footnote', '* Viewers cover rated games only'));
   }
   if (card.hasViewers) {
     children.push(text('p', 'tooltip-footnote tooltip-credit', VENUE_CREDIT_NOTE));

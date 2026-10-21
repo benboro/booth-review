@@ -500,7 +500,7 @@ const CARD_MAX_ROWS = 6;
 /**
  * Hover-card data for one venue key or abroad group key (Phase 11 D-02, D-01a): the
  * title, pie slices, at most six family rows plus Other, real viewers (the unrated
- * floor never enters), and the subject lines. Unknown keys give null.
+ * floor never enters; a row with unrated games is `partial`), and the subject lines. Unknown keys give null.
  */
 export function venueCard(data, model, key) {
   const entry = model.venueModel?.byKey.get(key) ?? model.fullVenueModel?.byKey.get(key);
@@ -511,6 +511,7 @@ export function venueCard(data, model, key) {
   const slices = FAMILY_ORDER.map((family, f) => ({
     family,
     games: entry.counts[f],
+    rated: entry.ratedCounts[f],
     viewers: entry.ratedCounts[f] > 0 ? entry.viewers[f] : null,
   }))
     .filter((s) => s.games > 0)
@@ -520,15 +521,18 @@ export function venueCard(data, model, key) {
     label: FAMILY_LABELS[s.family],
     games: s.games,
     viewers: s.viewers,
+    partial: s.viewers != null && s.rated < s.games,
   }));
   const rest = slices.slice(CARD_MAX_ROWS);
   if (rest.length > 0) {
     const rated = rest.filter((s) => s.viewers != null);
+    const games = rest.reduce((n, s) => n + s.games, 0);
     rows.push({
       family: null,
       label: 'Other',
-      games: rest.reduce((n, s) => n + s.games, 0),
+      games,
       viewers: rated.length > 0 ? rated.reduce((n, s) => n + s.viewers, 0) : null,
+      partial: rated.length > 0 && rest.reduce((n, s) => n + s.rated, 0) < games,
     });
   }
   return {
@@ -537,6 +541,8 @@ export function venueCard(data, model, key) {
     slices,
     rows,
     hasMissingViewers: rows.some((r) => r.viewers == null),
+    // A row's Viewers figure adds up its rated games only when some of its games are unrated.
+    hasPartialViewers: rows.some((r) => r.partial),
     hasViewers: rows.some((r) => r.viewers != null),
     subjectLines: subjectLinesFor(data, model, indexes),
   };

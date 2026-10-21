@@ -184,6 +184,53 @@ def test_credit_note_follows_has_viewers(
     assert without["rows"] == [["FOX", "3", "-"]]
 
 
+_PARTIAL_JS = """
+async () => {
+  const M = await import('./modules/map-model.js');
+  const P = await import('./modules/palette.js');
+  const NF = P.FAMILY_ORDER.length;
+  const counts = Array(NF).fill(0), rated = Array(NF).fill(0), viewers = Array(NF).fill(0);
+  // fox: 4 games, 1 rated; cbs: 2 games, all rated; nbc: 1 game, none rated
+  counts[P.FAMILY_ORDER.indexOf('fox')] = 4; rated[P.FAMILY_ORDER.indexOf('fox')] = 1;
+  viewers[P.FAMILY_ORDER.indexOf('fox')] = 3100000;
+  counts[P.FAMILY_ORDER.indexOf('cbs')] = 2; rated[P.FAMILY_ORDER.indexOf('cbs')] = 2;
+  viewers[P.FAMILY_ORDER.indexOf('cbs')] = 5000000;
+  counts[P.FAMILY_ORDER.indexOf('nbc')] = 1;
+  const fake = {venueModel: {byKey: new Map([['x', {
+    index: 0, leader: 'fox', counts, viewers, ratedCounts: rated,
+  }]])}, subjects: [], subjectVenueGames: []};
+  const data = {lookups: {venues: [{name: 'Riverbend Field', city: 'Fairview', state: 'KS'}]}};
+  const card = M.venueCard(data, fake, 'x');
+  return {rows: card.rows.map((r) => [r.label, r.partial]), partial: card.hasPartialViewers};
+}
+"""
+
+
+def test_card_flags_rows_whose_viewers_cover_only_some_games(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    got = guarded_page.evaluate(_PARTIAL_JS)
+    assert got["rows"] == [["FOX/FS1/BTN", True], ["CBS/CBSSN", False], ["NBC/Peacock", False]]
+    assert got["partial"] is True
+
+
+def test_card_marks_partial_rows_and_explains_the_mark(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    rows = [
+        {"family": "fox", "label": "FOX", "games": 12, "viewers": 3100000, "partial": True},
+        {"family": "cbs", "label": "CBS", "games": 1, "viewers": 900000, "partial": False},
+    ]
+    r = _show(guarded_page, _card(rows=rows, hasMissingViewers=False, hasPartialViewers=True))
+    assert r["rows"] == [["FOX", "12", "3.1MM*"], ["CBS", "1", "900K"]]
+    assert r["footnotes"] == ["* Viewers cover rated games only"]
+    assert r["width"] <= 296
+    clean = _show(guarded_page, _card(rows=rows, hasMissingViewers=False))
+    assert clean["footnotes"] == []
+
+
 def test_card_stays_on_phone_screen(
     mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
