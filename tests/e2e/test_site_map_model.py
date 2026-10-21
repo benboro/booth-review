@@ -441,11 +441,21 @@ def test_counts_and_empty(guarded_page: Page, site_url: str) -> None:
         const none = new Uint8Array(G.length);
         const m = M.buildMapModel(data, mkView({passes: none, visible: none}), mkState());
         const full = M.buildMapModel(data, mkView(), mkState());
+        // Fade: nothing passes but every game stays visible (faded).
+        const fade = M.buildMapModel(data, mkView({passes: none}), mkState());
         return {emptyAll: m.emptyAll, drawn: m.drawnCount, dots: m.venueDots.length,
-                full: full.emptyAll, fullDrawn: full.drawnCount};
+                full: full.emptyAll, fullDrawn: full.drawnCount,
+                fade: [fade.emptyAll, fade.drawnCount, fade.venueFaded.length, fade.markers.length]};
         """,
     )
-    assert got == {"emptyAll": True, "drawn": 0, "dots": 0, "full": False, "fullDrawn": 6}
+    assert got == {
+        "emptyAll": True,
+        "drawn": 0,
+        "dots": 0,
+        "full": False,
+        "fullDrawn": 6,
+        "fade": [True, 0, 0, 0],
+    }
 
 
 # ------------------------------------------------ Phase 11 plan 07: venue dots and card

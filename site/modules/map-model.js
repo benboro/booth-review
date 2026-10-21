@@ -319,7 +319,12 @@ export function buildMapModel(data, view, state) {
     if (p.abroad || passingVenues.has(venue) || venueFadedMap.has(venue)) continue;
     venueFadedMap.set(venue, { venue, key: data.venueKeys[venue], x: p.x, y: p.y });
   }
-  const venueFaded = [...venueFadedMap.values()].sort((a, b) => a.venue - b.venue);
+  // UI-SPEC Empty map behavior: with no game passing the filters the map is plain land,
+  // so Fade's faded dots and edge markers go too (Hide has none to begin with).
+  let passingAny = 0;
+  for (let i = 0; i < data.n; i += 1) if (view.passesFilters[i]) passingAny += 1;
+  const emptyAll = passingAny === 0;
+  const venueFaded = emptyAll ? [] : [...venueFadedMap.values()].sort((a, b) => a.venue - b.venue);
 
   // Markers for venues abroad, one per label (D-15, D-10).
   const groups = new Map();
@@ -363,6 +368,10 @@ export function buildMapModel(data, view, state) {
     }
   }
 
+  if (emptyAll) {
+    markers.length = 0;
+    markerVenues.clear();
+  }
   const drawn = new Set([
     ...venueDots.map((d) => d.venue),
     ...venueFaded.map((d) => d.venue),
@@ -383,7 +392,7 @@ export function buildMapModel(data, view, state) {
     subjectVenueGames,
     noLocationCount,
     drawnCount: drawn.size,
-    emptyAll: view.visibleCount === 0,
+    emptyAll,
   };
 }
 

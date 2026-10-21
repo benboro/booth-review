@@ -383,6 +383,30 @@ def test_every_game_hidden_shows_the_empty_note(guarded_page: Page, open_app: Op
     assert "No games match these filters." in (note.text_content() or "")
 
 
+@pytest.mark.parametrize("dots", ["fade", "hide"])
+def test_no_passing_game_is_a_plain_empty_map_in_fade_and_hide(
+    guarded_page: Page, open_app: OpenApp, dots: str
+) -> None:
+    """UI-SPEC Empty map behavior: when no game passes the filters the map is plain land
+    with the note, with no dots, faded dots, edge markers, key or raster, even under Fade."""
+    _open_map(guarded_page, open_app, f"?view=map&networks=none&dots={dots}")
+    assert _model(guarded_page)["emptyAll"] is True
+    assert "No games match these filters." in (
+        guarded_page.locator("#map-empty-note").text_content() or ""
+    )
+    assert _visible(guarded_page, "#map-empty-note")
+    assert not _visible(guarded_page, "#map-key")
+    traces = _traces(guarded_page)
+    for name in ("venue-faded", "venue-dots", "venue-selected", "markers"):
+        assert traces[name]["n"] == 0, name
+    model = _model(guarded_page)
+    assert (model["venueFaded"], model["markers"], model["drawnCount"]) == ([], [], 0)
+    assert guarded_page.evaluate("() => document.getElementById('map-chart').layout.images") in (
+        None,
+        [],
+    )
+
+
 def test_geometry_failure_shows_error_and_table_still_renders(
     guarded_page: Page, open_app: OpenApp
 ) -> None:
