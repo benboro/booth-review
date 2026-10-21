@@ -14,6 +14,7 @@ const DESCRIPTION = 'Dot size blends the number of games with their audience.';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const LABEL_RESERVE = 96;
 const LEADER_GAP = 8;
+const LABEL_LINE = 20;
 const STRENGTH_OPACITY = Object.freeze([0.15, 0.5, 0.88]);
 
 /** Nearest key step in log distance; a tie goes to the smaller step. */
@@ -96,14 +97,23 @@ export function renderMapKey(root, key, env) {
   if (key.sizes.length) {
     const block = el('div', 'map-key-block');
     block.appendChild(el('p', 'map-key-heading', 'Dot size'));
-    const height = Math.ceil(key.sizes[0].diameter);
-    const circleW = height;
+    // Labels stack at one line each: a label sits level with its circle's top when it can,
+    // and is pushed down when the circles are too close together for the text.
+    const circleW = Math.ceil(key.sizes[0].diameter);
+    const centers = [];
+    let prev = -Infinity;
+    for (const s of key.sizes) {
+      const want = circleW - s.diameter;
+      prev = Math.max(want, prev + LABEL_LINE, LABEL_LINE / 2);
+      centers.push(prev);
+    }
+    const height = Math.max(circleW, LABEL_LINE, Math.ceil(prev + LABEL_LINE / 2));
     const box = el('div', 'map-key-sizes');
     box.style.position = 'relative';
     box.style.width = `${circleW + LEADER_GAP + LABEL_RESERVE}px`;
     box.style.height = `${height}px`;
     const svg = svgEl('svg', {
-      width: circleW + LEADER_GAP + 24,
+      width: circleW + LEADER_GAP + 4,
       height,
       'aria-hidden': 'true',
       focusable: 'false',
@@ -112,29 +122,31 @@ export function renderMapKey(root, key, env) {
     svg.style.left = '0px';
     svg.style.top = '0px';
     const cx = circleW / 2;
-    for (const s of key.sizes) {
+    const single = key.sizes.length === 1;
+    key.sizes.forEach((s, i) => {
       const d = s.diameter;
       const top = height - d;
       svg.appendChild(
-        svgEl('circle', { cx, cy: height - d / 2, r: d / 2 - 0.5, fill: 'none', stroke: muted, 'stroke-width': 1 }),
+        svgEl('circle', { cx, cy: single ? height / 2 : height - d / 2, r: d / 2 - 0.5, fill: 'none', stroke: muted, 'stroke-width': 1 }),
       );
-      svg.appendChild(
-        svgEl('line', {
-          x1: cx,
-          y1: top,
-          x2: circleW + LEADER_GAP,
-          y2: top,
-          stroke: muted,
-          'stroke-width': 1,
-          'stroke-dasharray': '1 2',
-        }),
-      );
+      // One circle needs no leader: its label is level with it.
+      if (!single) {
+        svg.appendChild(
+          svgEl('polyline', {
+            points: `${cx},${top} ${circleW / 2 + d / 2},${top} ${circleW + LEADER_GAP},${centers[i]}`,
+            fill: 'none',
+            stroke: muted,
+            'stroke-width': 1,
+            'stroke-dasharray': '1 2',
+          }),
+        );
+      }
       const label = el('span', 'map-key-label', s.label);
       label.style.position = 'absolute';
       label.style.left = `${circleW + LEADER_GAP + 4}px`;
-      label.style.top = `${Math.max(0, top - 6)}px`;
+      label.style.top = `${(single ? height / 2 : centers[i]) - LABEL_LINE / 2}px`;
       box.appendChild(label);
-    }
+    });
     box.insertBefore(svg, box.firstChild);
     block.appendChild(box);
     root.appendChild(block);

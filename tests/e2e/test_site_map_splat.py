@@ -619,3 +619,33 @@ def test_key_desktop_screenshot(guarded_page: Page, open_app: Any) -> None:
     _open_splat(guarded_page, open_app)
     guarded_page.evaluate(_WAIT_FRAMES)
     guarded_page.locator("#map-panel").screenshot(path=str(_SHOTS / "map-key-1280.png"))
+
+
+_NOTE_VS_LABELS = """() => {
+  const note = document.getElementById('map-note');
+  const r = note.getBoundingClientRect();
+  const labels = Array.from(document.querySelectorAll('#map-chart .scatterlayer .textpoint'))
+    .map((n) => n.getBoundingClientRect()).filter((b) => b.width > 0);
+  return { shown: !note.hidden, note: { left: r.left, right: r.right, top: r.top, bottom: r.bottom },
+           labels: labels.map((b) => ({ left: b.left, right: b.right, top: b.top, bottom: b.bottom })) };
+}"""
+
+
+def _assert_note_clear_of_labels(page: Page) -> None:
+    got = page.evaluate(_NOTE_VS_LABELS)
+    assert got["shown"] and got["labels"]
+    for label in got["labels"]:
+        assert not _hits(got["note"], label), (got["note"], label)
+
+
+def test_note_clears_edge_marker_labels_desktop(guarded_page: Page, open_app: Any) -> None:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    _open_splat(guarded_page, open_app)
+    guarded_page.evaluate(_WAIT_FRAMES)
+    _assert_note_clear_of_labels(guarded_page)
+
+
+def test_note_clears_edge_marker_labels_phone(mobile_page: Page, open_app: Any) -> None:
+    _open_splat(mobile_page, open_app)
+    mobile_page.evaluate(_WAIT_FRAMES)
+    _assert_note_clear_of_labels(mobile_page)

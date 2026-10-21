@@ -227,6 +227,22 @@ function placeKey(gd, full, panel) {
   if (!keyClearOfLand(full, boxOf())) corner();
 }
 
+/** Raises the note above any edge-marker label it would cover (Nassau sits at the bottom right). */
+function liftNoteClearOfLabels(gd, panel, note) {
+  const panelRect = panel.getBoundingClientRect();
+  const labels = Array.from(gd.querySelectorAll('.scatterlayer .textpoint'))
+    .map((n) => n.getBoundingClientRect())
+    .filter((r) => r.width > 0 && r.height > 0);
+  for (let pass = 0; pass < labels.length; pass++) {
+    const n = note.getBoundingClientRect();
+    const hit = labels.find(
+      (r) => r.left < n.right && r.right > n.left && r.top < n.bottom && r.bottom > n.top,
+    );
+    if (!hit) return;
+    note.style.bottom = `${panelRect.bottom - hit.top + OVERLAY_INSET / 2}px`;
+  }
+}
+
 function positionOverlays() {
   const gd = el('map-chart');
   const full = gd && gd._fullLayout;
@@ -242,6 +258,7 @@ function positionOverlays() {
   const key = el('map-key');
   if (!panel || !key) return;
   placeKey(gd, full, panel);
+  if (note && !note.hidden) liftNoteClearOfLabels(gd, panel, note);
   if (note && !note.hidden && !key.hidden) {
     const panelRect = panel.getBoundingClientRect();
     const k = key.getBoundingClientRect();

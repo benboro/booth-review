@@ -2855,6 +2855,7 @@ td.no-rating {
 .map-key-label {
   position: absolute;
   white-space: nowrap;
+  line-height: 20px;
 }
 
 .map-key-strength {
