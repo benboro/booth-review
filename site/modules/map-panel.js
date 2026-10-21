@@ -32,6 +32,10 @@ import { MAP_LAND, MAP_SPLAT, MAP_VENUE_DOT, PAGE_BG } from './palette.js';
 import { showVenueTooltip, hideTooltip } from './tooltip.js';
 
 const TAP_DEBOUNCE_MS = 350;
+/** A touch that moves farther than this is a drag, not a tap. */
+const TAP_SLOP_PX = 10;
+/** How long after the pointer lifts to wait for Plotly's click on a dot before calling it background. */
+const BACKGROUND_TAP_DELAY_MS = 120;
 const DOTS_TRACE = MAP_TRACE_NAMES.indexOf('venue-dots');
 const HOVER_HINT = 'Click to list these games';
 const TAP_HINT = 'Tap again to list these games';
@@ -49,6 +53,8 @@ let pendingTapKey = null;
 /** The venue-dots ring arrays from the last draw, restored on unhover. */
 let baseRing = null;
 let lastTapActionAt = -Infinity;
+/** Venue dot / marker clicks seen so far; a tap that leaves it unchanged hit the background. */
+let venueClickCount = 0;
 /** app.js handles (Phase 11 D-05): the click filters the table through the same setState. */
 let handles = { setState: null, getState: null, getMatchedCount: null };
 /** Splat raster state (Phase 11 D-06): a render token coalesces paints, one image is live. */
@@ -405,6 +411,7 @@ function applyVenue(key) {
 }
 
 function onVenueClick(key, ev) {
+  venueClickCount += 1;
   if (!latest) return;
   if (!hoverNone()) {
     applyVenue(key);
@@ -423,14 +430,36 @@ function onVenueClick(key, ev) {
   applyVenue(key);
 }
 
-/** Wires the outside-tap listener once. */
+/** Wires the outside-tap and map-background-tap listeners once. */
 export function initMapPanel({ setState, getState, getMatchedCount } = {}) {
   handles = { setState, getState, getMatchedCount };
+  /** The touch in progress inside the map: where it began and how many venue clicks preceded it. */
+  let down = null;
   document.addEventListener('pointerdown', (ev) => {
-    if (pendingTapKey != null && !ev.target.closest('#map-chart')) {
+    if (!ev.target.closest('#map-chart')) {
+      down = null;
+      if (pendingTapKey != null) {
+        resetMapTap();
+        hideTooltip();
+      }
+      return;
+    }
+    down = hoverNone() ? { x: ev.clientX, y: ev.clientY, clicks: venueClickCount } : null;
+  });
+  document.addEventListener('pointercancel', () => {
+    down = null;
+  });
+  document.addEventListener('pointerup', (ev) => {
+    const start = down;
+    down = null;
+    if (!start || Math.hypot(ev.clientX - start.x, ev.clientY - start.y) > TAP_SLOP_PX) return;
+    // UI-SPEC: a tap on the map that lands on no dot or marker clears only the card. Plotly
+    // reports a hit through plotly_click a moment after the pointer lifts, so look afterwards.
+    setTimeout(() => {
+      if (venueClickCount !== start.clicks) return;
       resetMapTap();
       hideTooltip();
-    }
+    }, BACKGROUND_TAP_DELAY_MS);
   });
 }
 

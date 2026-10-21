@@ -333,3 +333,41 @@ def test_phone_first_tap_shows_card_second_tap_filters(
     mobile_page.touchscreen.tap(px, py)
     mobile_page.wait_for_function("() => document.getElementById('chart-tooltip').hidden")
     mobile_page.wait_for_function("() => location.search.includes('venue=')")
+
+
+def test_phone_background_tap_clears_the_card_and_rearms_the_first_tap(
+    mobile_page: Page, open_app: OpenApp
+) -> None:
+    """UI-SPEC: a tap elsewhere on the map clears only the card. dot, background, same dot
+    shows the card again (first tap) and does not filter."""
+    mobile_page.set_viewport_size({"width": 360, "height": 800})
+    _open_map(mobile_page, open_app)
+    mobile_page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
+    model = _model(mobile_page)
+    dot = model["venueDots"][0]
+    px, py = _pixel(mobile_page, dot["x"], dot["y"])
+    # The plot point farthest from every dot and edge marker is a safe background tap.
+    spots = [(d["x"], d["y"]) for d in model["venueDots"] + model["venueFaded"] + model["markers"]]
+    best = max(
+        ((x, y) for x in range(40, 940, 30) for y in range(60, 560, 30)),
+        key=lambda c: min((c[0] - sx) ** 2 + (c[1] - sy) ** 2 for sx, sy in spots),
+    )
+    bx, by = _pixel(mobile_page, *best)
+    card_open = (
+        "() => { const e = document.getElementById('chart-tooltip'); return e && !e.hidden; }"
+    )
+
+    mobile_page.touchscreen.tap(px, py)
+    mobile_page.wait_for_function(card_open)
+    mobile_page.wait_for_timeout(450)
+    mobile_page.touchscreen.tap(bx, by)
+    mobile_page.wait_for_function("() => document.getElementById('chart-tooltip').hidden")
+    assert "venue=" not in mobile_page.evaluate("() => location.search")
+    mobile_page.wait_for_timeout(450)
+    mobile_page.touchscreen.tap(px, py)
+    mobile_page.wait_for_function(card_open)
+    tip = _tooltip(mobile_page)
+    assert tip is not None
+    assert tip["hint"] == "Tap again to list these games"
+    mobile_page.wait_for_timeout(450)
+    assert "venue=" not in mobile_page.evaluate("() => location.search")
