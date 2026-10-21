@@ -23,6 +23,7 @@ import {
   axisValueText,
   boothLabel,
   formatDate,
+  formatAudienceShort,
   formatKickoff,
   formatMatchup,
   formatViewers,
@@ -32,7 +33,13 @@ import {
 } from './format.js';
 import { makeGameTypeIcon } from './icons.js';
 import { makePill, makeRolePill, nameWithRoles, roleKey, ROLE_PILL_TEXT } from './pill.js';
-import { FAMILY_COLORS, familyKey } from './palette.js';
+import {
+  FAMILY_COLORS,
+  MAP_DOT_NEUTRAL,
+  MAP_FAMILY_COLORS,
+  PAGE_BG,
+  familyKey,
+} from './palette.js';
 
 /** The single `#chart-tooltip` element, created lazily on first use. */
 let tooltipEl = null;
@@ -276,6 +283,7 @@ export function showTextTooltip(lines, { borderColor, clientX, clientY }) {
   el.replaceChildren(...children);
   el.style.borderColor = borderColor;
   delete el.dataset.family;
+  delete el.dataset.kind;
   el.hidden = false;
   placeTooltip(el, clientX, clientY);
 }
@@ -295,6 +303,7 @@ export function showTextTooltip(lines, { borderColor, clientX, clientY }) {
 export function showTooltip(data, i, { axis, y, theme, clientX, clientY, selected }) {
   const el = ensureTooltipEl();
   renderTooltipContent(el, tooltipModel(data, i, { axis, y, selected }), theme);
+  delete el.dataset.kind;
   el.hidden = false;
 
   placeTooltip(el, clientX, clientY);
@@ -303,4 +312,120 @@ export function showTooltip(data, i, { axis, y, theme, clientX, clientY, selecte
 /** Hides the tooltip (a no-op before the first `showTooltip` call). */
 export function hideTooltip() {
   if (tooltipEl) tooltipEl.hidden = true;
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** Credit note for aggregate viewer sums (CLAUDE.md Website rule): the games table credits each source. */
+export const VENUE_CREDIT_NOTE =
+  "Viewers add up published figures from Ratings Reference and other outlets; the games table (click the dot) credits each game's source.";
+
+/**
+ * The 48px venue pie (Phase 11 D-02): slices clockwise from 12 o'clock in the given order,
+ * 1px page-background separators, a plain circle for a single family. Built with
+ * createElementNS only.
+ * @param {{family: string, games: number}[]} slices
+ * @param {"light"|"dark"} theme
+ * @returns {SVGSVGElement}
+ */
+export function venuePieSvg(slices, theme) {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('width', '48');
+  svg.setAttribute('height', '48');
+  svg.setAttribute('viewBox', '0 0 48 48');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('class', 'tooltip-pie');
+  const total = slices.reduce((sum, s) => sum + s.games, 0);
+  const r3 = (v) => String(Math.round(v * 1000) / 1000);
+  if (slices.length === 1) {
+    const circle = document.createElementNS(SVG_NS, 'circle');
+    circle.setAttribute('cx', '24');
+    circle.setAttribute('cy', '24');
+    circle.setAttribute('r', '22');
+    circle.setAttribute('fill', MAP_FAMILY_COLORS[theme][slices[0].family]);
+    svg.appendChild(circle);
+    return svg;
+  }
+  let a0 = -Math.PI / 2;
+  for (const slice of slices) {
+    const share = slice.games / total;
+    const a1 = a0 + 2 * Math.PI * share;
+    const large = share > 0.5 ? 1 : 0;
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute(
+      'd',
+      `M24 24 L${r3(24 + 22 * Math.cos(a0))} ${r3(24 + 22 * Math.sin(a0))} ` +
+        `A22 22 0 ${large} 1 ${r3(24 + 22 * Math.cos(a1))} ${r3(24 + 22 * Math.sin(a1))} Z`,
+    );
+    path.setAttribute('fill', MAP_FAMILY_COLORS[theme][slice.family]);
+    path.setAttribute('stroke', PAGE_BG[theme]);
+    path.setAttribute('stroke-width', '1');
+    svg.appendChild(path);
+    a0 = a1;
+  }
+  return svg;
+}
+
+/**
+ * Shows the venue hover card (Phase 11 D-02, D-01a) from a plain card object.
+ * @param {{title: string, leader: string, slices: object[], rows: object[],
+ *   hasMissingViewers: boolean, hasViewers: boolean,
+ *   subjectLines: {text: string, kind: string}[]}} card
+ * @param {{theme: "light"|"dark", clientX: number, clientY: number, hint: string}} opts
+ */
+export function showVenueTooltip(card, { theme, clientX, clientY, hint }) {
+  const el = ensureTooltipEl();
+  const text = (tag, className, content) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    node.textContent = content;
+    return node;
+  };
+
+  const title = text('strong', 'tooltip-title', card.title);
+
+  const table = document.createElement('table');
+  table.className = 'tooltip-venue-table';
+  const headRow = document.createElement('tr');
+  headRow.append(text('th', '', ''), text('th', '', 'Games'), text('th', '', 'Viewers'));
+  const thead = document.createElement('thead');
+  thead.appendChild(headRow);
+  const tbody = document.createElement('tbody');
+  for (const row of card.rows) {
+    const tr = document.createElement('tr');
+    const label = document.createElement('td');
+    const swatch = document.createElement('span');
+    swatch.className = 'tooltip-swatch';
+    swatch.setAttribute('aria-hidden', 'true');
+    swatch.style.backgroundColor =
+      row.family == null ? MAP_DOT_NEUTRAL[theme] : MAP_FAMILY_COLORS[theme][row.family];
+    label.append(swatch, document.createTextNode(row.label));
+    const viewers = row.viewers == null ? '-' : formatAudienceShort(row.viewers);
+    tr.append(label, text('td', 'num', String(row.games)), text('td', 'num', viewers));
+    tbody.appendChild(tr);
+  }
+  table.append(thead, tbody);
+
+  const body = document.createElement('div');
+  body.className = 'tooltip-venue-body';
+  body.append(venuePieSvg(card.slices, theme), table);
+
+  const children = [title, body];
+  if (card.hasMissingViewers) {
+    children.push(text('p', 'tooltip-footnote', '- no viewer figure listed'));
+  }
+  if (card.hasViewers) {
+    children.push(text('p', 'tooltip-footnote tooltip-credit', VENUE_CREDIT_NOTE));
+  }
+  for (const line of card.subjectLines) {
+    children.push(text('div', line.kind === 'hint' ? 'tooltip-hint' : '', line.text));
+  }
+  children.push(text('p', 'tooltip-hint', hint));
+
+  el.replaceChildren(...children);
+  el.style.borderColor = MAP_FAMILY_COLORS[theme][card.leader];
+  delete el.dataset.family;
+  el.dataset.kind = 'venue';
+  el.hidden = false;
+  placeTooltip(el, clientX, clientY);
 }

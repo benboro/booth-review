@@ -1539,6 +1539,54 @@ input[type="checkbox"] {
   margin-top: var(--space-xs);
 }
 
+/* Phase 11 D-02: venue hover card (pie left, Games/Viewers table right). */
+.chart-tooltip[data-kind='venue'] {
+  max-width: min(280px, calc(100vw - 32px));
+}
+
+.chart-tooltip .tooltip-venue-body {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: flex-start;
+  margin-top: var(--space-xs);
+}
+
+.chart-tooltip .tooltip-pie {
+  flex: none;
+}
+
+.chart-tooltip .tooltip-venue-table {
+  font-size: 14px;
+  line-height: 1.4;
+  border-collapse: collapse;
+}
+
+.chart-tooltip .tooltip-venue-table th {
+  color: var(--muted);
+  font-weight: 400;
+  text-align: right;
+  padding-left: var(--space-xs);
+}
+
+.chart-tooltip .tooltip-venue-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  padding-left: var(--space-xs);
+}
+
+.chart-tooltip .tooltip-venue-table .tooltip-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  outline: none;
+}
+
+.chart-tooltip .tooltip-footnote {
+  font-size: 14px;
+  color: var(--muted);
+  margin: var(--space-xs) 0 0;
+}
+
 /* Bowl / playoff icon (notes-4 A1/A2a): inline SVG in `currentColor` from
    icons.js, shared by the tooltip and the detail panel. Each kind takes its
    own color from the tokens above. */
