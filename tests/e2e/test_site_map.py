@@ -16,14 +16,15 @@ pytestmark = pytest.mark.e2e
 
 OpenApp = Callable[[Page, str], None]
 
-MAP_HINT = "Pick an announcer or a school to trace a path"
+MAP_HINT = (
+    "Pick an announcer or a school to trace a path. "
+    "Color shows which network airs the most games nearby."
+)
 _FAMILIES = ["disney", "fox", "cbs", "nbc", "cw", "wbd", "conference", "other"]
 _TRACE_NAMES = (
     ["outline"]
     + [f"legs:{f}" for f in _FAMILIES]
-    + [f"inert:{f}" for f in _FAMILIES]
-    + [f"dots:{f}" for f in _FAMILIES]
-    + ["markers"]
+    + ["venue-faded", "venue-dots", "venue-selected", "markers"]
 )
 # Fixture network ids by family (lookups.networks): net-a disney, net-b fox, net-c
 # conference, net-d other, net-e disney (Stream Plus, the Nassau game's network).
@@ -31,6 +32,7 @@ _ALL_BUT_NET_E = ["net-a", "net-b", "net-c", "net-d"]
 
 _TRACE_INFO = """() => document.getElementById('map-chart').data.map(
   (t) => ({name: t.name, n: (t.x || []).length, color: t.line && t.line.color,
+           cd: t.customdata || null, mcolor: t.marker ? t.marker.color : null,
            fill: t.fillcolor, text: t.text || null, mx: t.x, my: t.y,
            symbols: t.marker ? t.marker.symbol : null}))"""
 
@@ -99,27 +101,22 @@ def _venue_pixel(page: Page, x: float, y: float) -> tuple[float, float]:
     return px, py
 
 
-def _dot_point(page: Page, family: str, i_text: str) -> tuple[float, float]:
-    """Plot coordinates of the first active dot in `dots:<family>` (any index if unknown)."""
-    pts: list[list[float]] = page.evaluate(
-        """(name) => { const t = document.getElementById('map-chart').data
-            .find((d) => d.name === name); return t.x.map((x, i) => [x, t.y[i]]); }""",
-        f"dots:{family}",
-    )
-    assert pts, i_text
-    return pts[0][0], pts[0][1]
+def _dot_point(page: Page) -> tuple[float, float]:
+    """Plot coordinates of the largest venue dot (the model orders dots by score)."""
+    dot = _model(page)["venueDots"][0]
+    return dot["x"], dot["y"]
 
 
-def test_map_view_shows_panel_hides_others_with_26_traces(
+def test_map_view_shows_panel_hides_others_with_13_traces(
     guarded_page: Page, open_app: OpenApp
 ) -> None:
-    """D-06: `?view=map` shows #map-panel, hides #chart and #bars-panel; 26 traces."""
+    """D-06: `?view=map` shows #map-panel, hides #chart and #bars-panel; 13 traces."""
     _open_map(guarded_page, open_app, "?view=map")
     assert _visible(guarded_page, "#map-panel")
     assert not _visible(guarded_page, "#chart")
     assert not _visible(guarded_page, "#bars-panel")
     assert list(_traces(guarded_page)) == _TRACE_NAMES
-    assert len(_TRACE_NAMES) == 26
+    assert len(_TRACE_NAMES) == 13
 
 
 def test_no_subject_draws_dots_only_with_tab_hint(guarded_page: Page, open_app: OpenApp) -> None:
@@ -128,7 +125,8 @@ def test_no_subject_draws_dots_only_with_tab_hint(guarded_page: Page, open_app: 
     traces = _traces(guarded_page)
     assert all(traces[f"legs:{f}"]["n"] == 0 for f in _FAMILIES)
     assert _model(guarded_page)["legs"] == []
-    assert sum(traces[f"dots:{f}"]["n"] for f in _FAMILIES) > 0
+    assert traces["venue-dots"]["n"] > 0
+    assert traces["venue-dots"]["cd"] == [d["key"] for d in _model(guarded_page)["venueDots"]]
     assert guarded_page.locator("#map-hint").count() == 0
     assert guarded_page.locator("#tab-hint").text_content() == MAP_HINT
 
@@ -148,7 +146,7 @@ def test_person_paths_split_by_season_and_colored_by_destination(
     assert inset["x0"] <= first["x"] <= inset["x1"]
     assert inset["y0"] <= first["y"] <= inset["y1"]
     light_disney: str = guarded_page.evaluate(
-        "async () => (await import('./modules/palette.js')).FAMILY_COLORS.light.disney"
+        "async () => (await import('./modules/palette.js')).MAP_FAMILY_COLORS.light.disney"
     )
     assert _traces(guarded_page)["legs:disney"]["color"] == light_disney
     assert guarded_page.locator("#map-hint").count() == 0
@@ -185,11 +183,11 @@ def test_fade_keeps_excluded_venues_hide_removes_them_legs_unchanged(
     _open_map(guarded_page, open_app, "?view=map&people=pat-rowan&seasons=2021-2021")
     fade_legs = _legs(guarded_page)
     traces = _traces(guarded_page)
-    assert sum(traces[f"inert:{f}"]["n"] for f in _FAMILIES) > 0
+    assert traces["venue-faded"]["n"] > 0
     assert {season for season, _ in fade_legs} == {2021}
     _set(guarded_page, {"dots": "hide"})
     hidden = _traces(guarded_page)
-    assert all(hidden[f"inert:{f}"]["n"] == 0 for f in _FAMILIES)
+    assert hidden["venue-faded"]["n"] == 0
     assert _legs(guarded_page) == fade_legs
 
 
@@ -202,8 +200,54 @@ def test_no_location_note_follows_the_filters(guarded_page: Page, open_app: Open
     assert not _visible(guarded_page, "#map-note")
 
 
+@pytest.mark.parametrize("label", ["Dublin", "Nassau"])
+def test_desktop_real_mouse_hover_on_each_edge_marker_fires_plotly_hover(
+    guarded_page: Page, open_app: OpenApp, label: str
+) -> None:
+    """Regression: the modebar sat over Dublin (top right) and swallowed its hover."""
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    _open_map(guarded_page, open_app, "?view=map")
+    guarded_page.evaluate(
+        """() => { window.__hovered = [];
+          document.getElementById('map-chart').on('plotly_hover',
+            (e) => window.__hovered.push(String(e.points[0].customdata))); }"""
+    )
+    marker = next(m for m in _model(guarded_page)["markers"] if m["label"] == label)
+    px, py = _venue_pixel(guarded_page, marker["x"], marker["y"])
+    guarded_page.mouse.move(px - 60, py)
+    guarded_page.mouse.move(px, py)  # one jump: only the marker's own pixel is hit-tested
+    guarded_page.wait_for_function(f"() => window.__hovered.includes('{label.lower()}')")
+
+
+def test_desktop_modebar_does_not_overlap_the_edge_markers(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    _open_map(guarded_page, open_app, "?view=map")
+    dublin = next(m for m in _model(guarded_page)["markers"] if m["label"] == "Dublin")
+    _, py = _venue_pixel(guarded_page, dublin["x"], dublin["y"])
+    bar = guarded_page.locator("#map-chart .modebar").bounding_box()
+    assert bar is not None
+    assert py - 12 > bar["y"] + bar["height"]
+
+
+@pytest.mark.parametrize("label", ["Dublin", "Nassau"])
+def test_phone_tap_on_each_edge_marker_shows_the_card(
+    mobile_page: Page, open_app: OpenApp, label: str
+) -> None:
+    _phone(mobile_page, open_app, "?view=map")
+    mobile_page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
+    marker = next(m for m in _model(mobile_page)["markers"] if m["label"] == label)
+    px, py = _venue_pixel(mobile_page, marker["x"], marker["y"])
+    mobile_page.touchscreen.tap(px, py)
+    mobile_page.wait_for_function(
+        "() => { const e = document.getElementById('chart-tooltip'); return e && !e.hidden; }"
+    )
+    assert (_tooltip_lines(mobile_page) or [""])[0] == label
+
+
 def test_desktop_hover_shows_venue_tooltip(guarded_page: Page, open_app: OpenApp) -> None:
-    """D-11: hovering the Nassau dot shows title, family counts and the subject's games."""
+    """D-02: hovering the Nassau marker shows the venue card and the subject's games."""
     guarded_page.set_viewport_size({"width": 1280, "height": 900})
     _open_map(guarded_page, open_app, "?view=map&people=pat-rowan")
     nassau = next(m for m in _model(guarded_page)["markers"] if m["label"] == "Nassau")
@@ -214,20 +258,20 @@ def test_desktop_hover_shows_venue_tooltip(guarded_page: Page, open_app: OpenApp
         "() => { const e = document.getElementById('chart-tooltip'); return !!e && !e.hidden; }"
     )
     lines = _tooltip_lines(guarded_page)
-    assert lines[0] == "Island Stadium · Nassau, Bahamas"
-    assert "ABC/ESPN" in lines[1]
+    assert lines[0] == "Nassau"
+    text = _tooltip_text(guarded_page) or ""
     assert "── Pat Rowan here ──" in lines
     assert any(line.startswith("2021-12-18  Ironpeak vs Foxhollow") for line in lines)
-    assert "viewers" not in (_tooltip_text(guarded_page) or "").lower()
+    assert "Games" in text
 
 
 def test_faded_dot_shows_no_tooltip(guarded_page: Page, open_app: OpenApp) -> None:
-    """D-11: a faded (inert) dot shows nothing on hover."""
+    """D-10: a faded dot shows nothing on hover."""
     guarded_page.set_viewport_size({"width": 1280, "height": 900})
     _open_map(guarded_page, open_app, "?view=map&school=boulder-pass")
-    inert: dict[str, Any] = _traces(guarded_page)["inert:disney"]
-    assert inert["n"] > 0
-    px, py = _venue_pixel(guarded_page, inert["mx"][0], inert["my"][0])
+    faded: dict[str, Any] = _traces(guarded_page)["venue-faded"]
+    assert faded["n"] > 0
+    px, py = _venue_pixel(guarded_page, faded["mx"][0], faded["my"][0])
     guarded_page.mouse.move(px - 60, py - 60)
     guarded_page.mouse.move(px, py, steps=5)
     guarded_page.wait_for_timeout(300)
@@ -251,7 +295,9 @@ def test_two_people_compare_shapes_and_legend(guarded_page: Page, open_app: Open
     symbols = [s["symbol"] for s in _model(guarded_page)["subjects"]]
     assert symbols == ["circle", "square"]
     assert _visible(guarded_page, "#shape-legend")
-    assert guarded_page.locator("#shape-legend li").count() == 2
+    # Venues are shared by venue now: the legend adds "Shared booth" when two picks meet at one.
+    shared = 1 if _model(guarded_page)["hasShared"] else 0
+    assert guarded_page.locator("#shape-legend li").count() == 2 + shared
 
 
 def test_shared_booth_star_and_legend_item(guarded_page: Page, open_app: OpenApp) -> None:
@@ -260,9 +306,7 @@ def test_shared_booth_star_and_legend_item(guarded_page: Page, open_app: OpenApp
     model = _model(guarded_page)
     assert model["hasShared"] is True
     traces = _traces(guarded_page)
-    stars = sum(
-        1 for f in _FAMILIES for sym in (traces[f"dots:{f}"]["symbols"] or []) if sym == "star"
-    )
+    stars = sum(1 for sym in (traces["venue-dots"]["symbols"] or []) if sym == "star")
     assert stars > 0
     labels = guarded_page.locator("#shape-legend li").all_text_contents()
     assert any("Shared booth" in label for label in labels)
@@ -281,7 +325,7 @@ def test_more_than_four_schools_shows_the_shapes_caption(
 
 
 def test_trace_names_are_constant_across_states(guarded_page: Page, open_app: OpenApp) -> None:
-    """D-06: the 26 trace names never change with subject, filters or Hide."""
+    """D-06: the 13 trace names never change with subject, filters or Hide."""
     _open_map(guarded_page, open_app, "?view=map")
     seen = [list(_traces(guarded_page))]
     for patch in (
@@ -311,20 +355,24 @@ def test_map_url_survives_setstate_and_reload(guarded_page: Page, open_app: Open
     assert state["people"] == ["pat-rowan"]
 
 
-def test_dark_theme_uses_dark_land_and_family_colors(guarded_page: Page, open_app: OpenApp) -> None:
-    """D-08: dark scheme draws the outline in MAP_LAND dark and legs in FAMILY_COLORS dark."""
+def test_dark_theme_uses_dark_land_and_map_family_colors(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    """D-08: dark scheme draws the outline in MAP_LAND dark, legs in MAP_FAMILY_COLORS dark."""
     guarded_page.emulate_media(color_scheme="dark")
     _open_map(guarded_page, open_app, "?view=map&people=pat-rowan")
     palette: dict[str, Any] = guarded_page.evaluate(
         """async () => { const P = await import('./modules/palette.js');
-          return {land: P.MAP_LAND.dark, disney: P.FAMILY_COLORS.dark.disney,
-                  fox: P.FAMILY_COLORS.dark.fox}; }"""
+          return {land: P.MAP_LAND.dark, disney: P.MAP_FAMILY_COLORS.dark.disney,
+                  fox: P.MAP_FAMILY_COLORS.dark.fox}; }"""
     )
     traces = _traces(guarded_page)
     assert palette["land"] == "#1B1E23"
     assert traces["outline"]["fill"] == palette["land"]
     assert traces["legs:disney"]["color"] == palette["disney"]
     assert traces["legs:fox"]["color"] == palette["fox"]
+    dark_colors = [d["dotColor"]["dark"] for d in _model(guarded_page)["venueDots"]]
+    assert traces["venue-dots"]["mcolor"] == dark_colors
 
 
 def test_every_game_hidden_shows_the_empty_note(guarded_page: Page, open_app: OpenApp) -> None:
@@ -333,6 +381,30 @@ def test_every_game_hidden_shows_the_empty_note(guarded_page: Page, open_app: Op
     note = guarded_page.locator("#map-empty-note")
     assert note.is_visible()
     assert "No games match these filters." in (note.text_content() or "")
+
+
+@pytest.mark.parametrize("dots", ["fade", "hide"])
+def test_no_passing_game_is_a_plain_empty_map_in_fade_and_hide(
+    guarded_page: Page, open_app: OpenApp, dots: str
+) -> None:
+    """UI-SPEC Empty map behavior: when no game passes the filters the map is plain land
+    with the note, with no dots, faded dots, edge markers, key or raster, even under Fade."""
+    _open_map(guarded_page, open_app, f"?view=map&networks=none&dots={dots}")
+    assert _model(guarded_page)["emptyAll"] is True
+    assert "No games match these filters." in (
+        guarded_page.locator("#map-empty-note").text_content() or ""
+    )
+    assert _visible(guarded_page, "#map-empty-note")
+    assert not _visible(guarded_page, "#map-key")
+    traces = _traces(guarded_page)
+    for name in ("venue-faded", "venue-dots", "venue-selected", "markers"):
+        assert traces[name]["n"] == 0, name
+    model = _model(guarded_page)
+    assert (model["venueFaded"], model["markers"], model["drawnCount"]) == ([], [], 0)
+    assert guarded_page.evaluate("() => document.getElementById('map-chart').layout.images") in (
+        None,
+        [],
+    )
 
 
 def test_geometry_failure_shows_error_and_table_still_renders(
@@ -445,27 +517,35 @@ def test_phone_wheel_over_map_scrolls_the_page(mobile_page: Page, open_app: Open
     assert after > before
 
 
-def test_phone_tap_shows_then_hides_tooltip(mobile_page: Page, open_app: OpenApp) -> None:
-    """D-07/D-11: a first tap shows the tooltip, a second hides it, a tap elsewhere hides it."""
+def test_phone_second_tap_filters_the_table(mobile_page: Page, open_app: OpenApp) -> None:
+    """D-05: a first tap shows the card, a second tap filters the table; a tap elsewhere hides."""
     _phone(mobile_page, open_app, "?view=map&people=pat-rowan")
     mobile_page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
-    x, y = _dot_point(mobile_page, "disney", "disney dot")
-    px, py = _venue_pixel(mobile_page, x, y)
+    dot = _model(mobile_page)["venueDots"][0]
+    px, py = _venue_pixel(mobile_page, dot["x"], dot["y"])
     mobile_page.touchscreen.tap(px, py)
     mobile_page.wait_for_function(
         "() => { const e = document.getElementById('chart-tooltip'); return e && !e.hidden; }"
     )
-    assert _tooltip_text(mobile_page)
+    assert "Tap again to list these games" in (_tooltip_text(mobile_page) or "")
+    assert "venue=" not in mobile_page.evaluate("() => location.search")
     mobile_page.wait_for_timeout(450)
     mobile_page.touchscreen.tap(px, py)
-    mobile_page.wait_for_function("() => document.getElementById('chart-tooltip').hidden")
+    mobile_page.wait_for_function(f"() => location.search.includes('venue={dot['key']}')")
+    mobile_page.wait_for_function("() => document.querySelector('#venue-chips .chip')")
+    assert mobile_page.locator("#chart-tooltip").is_hidden()
+    # A tap outside the map after only the first tap hides the card and sets nothing.
+    mobile_page.evaluate("() => window.__testHooks.setState({ venue: null })")
+    mobile_page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
     mobile_page.wait_for_timeout(450)
+    px, py = _venue_pixel(mobile_page, dot["x"], dot["y"])
     mobile_page.touchscreen.tap(px, py)
     mobile_page.wait_for_function("() => !document.getElementById('chart-tooltip').hidden")
     mobile_page.wait_for_timeout(450)
     mobile_page.evaluate("() => window.scrollTo(0, 0)")
     mobile_page.touchscreen.tap(5, 5)
     mobile_page.wait_for_function("() => document.getElementById('chart-tooltip').hidden")
+    assert "venue=" not in mobile_page.evaluate("() => location.search")
 
 
 def test_phone_plot_is_centered_in_a_520px_panel(mobile_page: Page, open_app: OpenApp) -> None:

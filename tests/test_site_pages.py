@@ -356,7 +356,11 @@ def test_render_methodology_resolves_md_links_against_docs(
 # Re-pinned at 04.19 Plan 44: ESPN Press Room hand-save route, gate line, crew backup
 # order and credit text (methodology) and its crew and figure counts (known gaps); no
 # NFL text changed.
-_METHODOLOGY_FLAG_OFF_SHA256 = "9604643822b0d1d6b7aa013310845697dabfc5c4c532873e83b3bc90355f30b9"
+# Re-pinned at 11 Plan 06: the map section rewrite (venue dots, hover card, network
+# colors); no NFL text changed.
+# Re-pinned at 11 review fixes: one sentence on announcer picks rescaling the map's dots
+# and coloring; no NFL text changed.
+_METHODOLOGY_FLAG_OFF_SHA256 = "75358f81127ec87b18730c999158e110bef03b5216b7c8b6818b24231574be56"
 
 _NFL_ANCHORS = (
     "nfl-special-games",

@@ -256,12 +256,19 @@ rather than merged into one.
 
 ## The map
 
-The map shows where games were played and who traveled to call them. It counts
-assignments. It is not a measure of quality or audience, and it carries no
-viewer figures.
+The map shows where games were played and who traveled to call them. Each
+venue has one dot, colored by the network with the most games there. Hover a
+dot to see its games and published viewers by network; click it to list those
+games in the table below.
 
-A dot is one venue for one network family, counting only the games that pass
-the filters. A venue with many games reads darker.
+The viewer totals on the hover card add up published figures from Ratings Reference and from second sources (Sports Media Watch, The TV Ratings Guide, Awful Announcing and ESPN Press Room); click the dot to list its games in the table, where each game's figure is credited to the page it came from.
+
+There is one dot per venue, counting only the games that pass the filters. Its
+color fades toward a neutral when the venue's games split between networks, and
+its size blends how many games it hosted with how many people watched. With
+announcers picked, the dots, their sizes and colors, and the map's coloring count
+only the games those announcers called (together, when called together is on);
+venues where they called no game stay on the map as paler dots.
 
 Where each dot sits comes from one list of venues from CollegeFootballData.com.
 Each game uses its own venue, so a neutral-site or bowl game sits where it was
@@ -277,8 +284,15 @@ the next one.
 Hawaii is drawn in an inset at the lower left. Alaska is not drawn, because no
 game in the data was played there. Games abroad appear as labeled markers at the
 edge of the map nearest them (Dublin and London at the top right, Sydney at the
-lower left), or at their real point when that point is on the map (Nassau). A
-game with no known location is left off the map and counted in a note.
+lower left), or at their real point when that point is on the map (Nassau). Games
+abroad add no color to the map. A game with no known location is left off the map
+and counted in a note.
+
+### How the map is colored
+
+Each venue pulls color from the networks that aired its games, and the network with the most games leads. How far and how strongly a venue pulls blends how many games it hosted with how many people watched, with games counting a little more than viewers. Areas with few games, or where networks split the games, look faint. Games with no published viewer figure count as a low-rated game here; the figure is not shown anywhere.
+
+The Network colors switch above the map turns the coloring off.
 
 <!-- nfl:start -->
 

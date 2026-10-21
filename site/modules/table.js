@@ -25,9 +25,12 @@ import {
 import { safeHref } from './panel.js';
 import { currentTheme, makePill, makeRolePill, nameWithRoles } from './pill.js';
 import { personOnGame } from './select.js';
+import { venueFilterInfo } from './map-model.js';
 
 const tableEl = document.getElementById('games-table');
 const emptyEl = document.getElementById('table-empty');
+const venueChipsEl = document.getElementById('venue-chips');
+const venueNoMatchEl = document.getElementById('venue-nomatch');
 const tbody = tableEl.querySelector('tbody');
 const dateSortButton = tableEl.querySelector('th button[data-sort="date"]');
 const viewersSortButton = tableEl.querySelector('th button[data-sort="viewers"]');
@@ -218,6 +221,31 @@ function renderSortHeaders(sort) {
 }
 
 /**
+ * Draws the removable "Venue: {name}" chip in the heading row (Phase 11 D-05), or empties
+ * the list. Text only; the remove handler lives in filters.js.
+ */
+function renderVenueChip({ data, view, state }) {
+  const info = view.venueSelected ? venueFilterInfo(data, state.venue) : null;
+  if (!info) {
+    venueChipsEl.replaceChildren();
+    return;
+  }
+  const li = document.createElement('li');
+  li.className = 'chip';
+  li.title = info.title;
+  const nameSpan = document.createElement('span');
+  nameSpan.textContent = `Venue: ${info.name}`;
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'chip-remove';
+  removeBtn.textContent = '×';
+  removeBtn.setAttribute('aria-label', `Remove venue filter: ${info.name}`);
+  removeBtn.dataset.venue = state.venue;
+  li.append(nameSpan, removeBtn);
+  venueChipsEl.replaceChildren(li);
+}
+
+/**
  * Renders the matched-games table (or its empty state) from the current
  * data/state/view (D-12, SITE-13, SITE-22).
  * @param {{data: object, view: object, state: object, sort: {key: "date"|"viewers", dir: "asc"|"desc"}, onSort: (key: string) => void, onDetails: (i: number) => void}} args
@@ -227,15 +255,24 @@ export function renderTable({ data, view, state, sort, onSort, onDetails }) {
   bindHeaderListeners();
   renderSortHeaders(sort);
 
-  if (!view.hasSelection) {
+  renderVenueChip({ data, view, state });
+
+  if (!view.hasSelection && !view.venueSelected) {
     emptyEl.hidden = false;
+    venueNoMatchEl.hidden = true;
     tableEl.hidden = true;
     tbody.replaceChildren();
     return;
   }
 
   emptyEl.hidden = true;
-  tableEl.hidden = false;
+  const noMatch = view.venueSelected && view.matched.length === 0;
+  venueNoMatchEl.hidden = !noMatch;
+  tableEl.hidden = noMatch;
+  if (noMatch) {
+    tbody.replaceChildren();
+    return;
+  }
 
   const rows = [...view.matched].sort((a, b) => compareRows(data, sort, a, b));
   tbody.replaceChildren(...rows.map((i) => buildRow(data, state, onDetails, i)));

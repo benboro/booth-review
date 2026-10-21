@@ -21,7 +21,9 @@
  * exactly two schools; omitted at Either team) and `dots` (`hide`; omitted at
  * the Fade default; 04.7 D-10, D-14). `game` (one named-game slug: a bowl franchise,
  * a rivalry, or a CFP round; allowlisted against `data.gameIndexBySlug`; omitted when
- * no game is picked; 04.9 D-20). `booth` (`a`,`b`,`other`, canonical order; omitted when no
+ * no game is picked; 04.9 D-20). `venue` (one venue or abroad-group slug, allowlisted against
+ * `data.venueIndexesByKey`; omitted when none; Phase 11 D-05) and `colors` (`off`; omitted at the
+ * On default; Phase 11 D-09). `booth` (`a`,`b`,`other`, canonical order; omitted when no
  * tier is picked; Phase 10 D-12). The old `bars` and
  * `group` params are ignored (04.6 D-27). There is no `team` param on encode -- `school` replaces
  * it (D-11, Pitfall 4). The legacy `team` param is still *decoded*: a valid
@@ -86,6 +88,7 @@ export function encodeState(state, data) {
     if (ordered.length > 0) params.push(['booth', ordered.join(',')]);
   }
   if (state.game != null) params.push(['game', encodeURIComponent(state.game)]);
+  if (state.venue != null) params.push(['venue', encodeURIComponent(state.venue)]);
 
   if (
     state.seasons != null &&
@@ -115,6 +118,7 @@ export function encodeState(state, data) {
   if (state.view === 'bars' || state.view === 'butterfly' || state.view === 'map' || state.view === 'crews') params.push(['view', state.view]);
   if (state.by) params.push(['by', state.by]);
   if (state.dots === 'hide') params.push(['dots', 'hide']);
+  if (state.colors === 'off') params.push(['colors', 'off']);
 
   if (params.length === 0) return '';
   return `?${params.map(([key, value]) => `${key}=${value}`).join('&')}`;
@@ -314,6 +318,8 @@ export function decodeState(search, data) {
   state.booth = decodeBooth(scalarParam(params, 'booth'));
   const rawGame = scalarParam(params, 'game');
   state.game = rawGame != null && data.gameIndexBySlug.has(rawGame) ? rawGame : null;
+  const rawVenue = scalarParam(params, 'venue');
+  state.venue = rawVenue != null && data.venueIndexesByKey?.has(rawVenue) ? rawVenue : null;
 
   state.seasons = decodeSeasons(scalarParam(params, 'seasons'), data);
   state.networks = decodeNetworks(params.get('networks') ?? null, data);
@@ -332,6 +338,7 @@ export function decodeState(search, data) {
   state.by = ['network', 'team', 'conference'].includes(rawBy) ? rawBy : null;
   // Fade is the default; only the literal 'hide' selects Hide (04.7 D-10).
   state.dots = scalarParam(params, 'dots') === 'hide' ? 'hide' : 'fade';
+  state.colors = scalarParam(params, 'colors') === 'off' ? 'off' : 'on';
 
   return state;
 }

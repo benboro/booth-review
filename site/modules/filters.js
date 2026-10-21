@@ -69,6 +69,7 @@ const GROUP_RESETS = {
   postseason: { postseason: 'all' },
   game: { game: null },
   booth: { booth: [] },
+  venue: { venue: null },
 };
 
 /** Booth tier values in canonical order, and their trigger labels (D-12). */
@@ -1058,6 +1059,13 @@ export function initFilters({ data, getState, setState }) {
     const btn = ev.target.closest('.chip-remove');
     if (!btn || !btn.dataset.slug) return;
     setState({ school: getState().school.filter((slug) => slug !== btn.dataset.slug) });
+  });
+
+  // Phase 11 D-05: the chip lives in the table heading row; removal clears only the venue.
+  document.getElementById('venue-chips')?.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.chip-remove');
+    if (!btn || !btn.dataset.venue) return;
+    setState({ venue: null });
   });
 
   els.postseasonOptions.addEventListener('click', (ev) => {

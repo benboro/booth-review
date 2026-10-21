@@ -27,15 +27,20 @@ def _run(page: Page, site_url: str, body: str) -> Any:
           const C = await import('./modules/map-chart.js');
           const P = await import('./modules/palette.js');
           const G = await import('./vendor/us-states-albers.js');
-          const empty = {dots: [], faded: [], legs: [], markers: []};
+          const empty = {venueDots: [], venueFaded: [], legs: [], markers: []};
+          const dot = (venue, x, y, symbol, tier, desktop, phone, selected = false) => ({
+            venue, key: `v${venue}`, x, y, symbol, tier, selected,
+            size: {desktop, phone},
+            dotColor: {light: `#10${venue}000`, dark: `#20${venue}000`},
+          });
           const rich = {
-            dots: [
-              {venue: 3, family: 'fox', x: 400, y: 300, symbol: 'circle', tier: 'base'},
-              {venue: 4, family: 'fox', x: 410, y: 310, symbol: 'circle', tier: 'other'},
-              {venue: 5, family: 'fox', x: 420, y: 320, symbol: 'diamond', tier: 'subject'},
-              {venue: 6, family: 'cbs', x: 430, y: 330, symbol: 'star', tier: 'subject'},
+            venueDots: [
+              dot(3, 400, 300, 'circle', 'base', 14, 10),
+              dot(4, 410, 310, 'circle', 'other', 8, 6),
+              dot(5, 420, 320, 'diamond', 'subject', 4, 4, true),
+              dot(6, 430, 330, 'star', 'subject', 16, 12),
             ],
-            faded: [{venue: 7, family: 'nbc', x: 500, y: 300}],
+            venueFaded: [{venue: 7, key: 'v7', x: 500, y: 300}],
             legs: [
               {subject: 0, season: 2020, from: 1, to: 2, family: 'nbc',
                points: [1, 2, 3, 4, 5, 6, 7].map((i) => ({x: i * 10, y: i * 5}))},
@@ -45,12 +50,14 @@ def _run(page: Page, site_url: str, body: str) -> Any:
                points: [1, 2, 3].map((i) => ({x: i * 13, y: i * 3}))},
             ],
             markers: [
-              {x: 955, y: 30, label: '<b>x</b>', side: 'left', family: 'fox', faded: false},
-              {x: 120, y: 575, label: 'Sydney', side: 'right', family: 'cbs', faded: true},
+              {x: 955, y: 30, label: '<b>x</b>', side: 'left', family: 'fox', faded: false,
+               key: 'g:x', selected: false},
+              {x: 120, y: 575, label: 'Sydney', side: 'right', family: 'cbs', faded: true,
+               key: 'g:sydney', selected: false},
             ],
           };
-          const build = (m, theme = 'light', mobile = false) =>
-            C.buildMapFigure(m, G.US_STATES, {theme, mobile});
+          const build = (m, theme = 'light', mobile = false, splat = false) =>
+            C.buildMapFigure(m, G.US_STATES, {theme, mobile, splat});
           const byName = (fig, n) => fig.traces.find((t) => t.name === n);
           """
         + body
@@ -66,10 +73,12 @@ def test_trace_names_constant_across_models_themes_and_envs(
         site_url,
         """
         const out = [];
-        for (const m of [empty, {...empty, dots: rich.dots}, rich]) {
+        for (const m of [empty, {...empty, venueDots: rich.venueDots}, rich]) {
           for (const theme of ['light', 'dark']) {
             for (const mobile of [false, true]) {
-              out.push(build(m, theme, mobile).traces.map((t) => t.name));
+              for (const splat of [false, true]) {
+                out.push(build(m, theme, mobile, splat).traces.map((t) => t.name));
+              }
             }
           }
         }
@@ -79,12 +88,10 @@ def test_trace_names_constant_across_models_themes_and_envs(
     expected = (
         ["outline"]
         + [f"legs:{f}" for f in _FAMILIES]
-        + [f"inert:{f}" for f in _FAMILIES]
-        + [f"dots:{f}" for f in _FAMILIES]
-        + ["markers"]
+        + ["venue-faded", "venue-dots", "venue-selected", "markers"]
     )
     assert got["names"] == expected
-    assert len(expected) == 26
+    assert len(expected) == 13
     for run in got["runs"]:
         assert run == expected
 
@@ -114,6 +121,15 @@ def test_outline_trace(guarded_page: Page, site_url: str) -> None:
     assert got["mode"] == "lines"
 
 
+def test_outline_fill_off_when_splat_is_on(guarded_page: Page, site_url: str) -> None:
+    got = _run(
+        guarded_page,
+        site_url,
+        "return byName(build(empty, 'light', false, true), 'outline').fill;",
+    )
+    assert got == "none"
+
+
 def test_legs_traces(guarded_page: Page, site_url: str) -> None:
     got = _run(
         guarded_page,
@@ -124,7 +140,7 @@ def test_legs_traces(guarded_page: Page, site_url: str) -> None:
         const cbs = byName(fig, 'legs:cbs');
         return {
           nbcX: nbc.x.length, nbcNulls: nbc.x.filter((v) => v === null).length,
-          cbsX: cbs.x.length, color: nbc.line.color, want: P.FAMILY_COLORS.light.nbc,
+          cbsX: cbs.x.length, color: nbc.line.color, want: P.MAP_FAMILY_COLORS.light.nbc,
           width: nbc.line.width, opacity: nbc.opacity, hover: nbc.hoverinfo,
           foxX: byName(fig, 'legs:fox').x.length,
         };
@@ -141,67 +157,121 @@ def test_legs_traces(guarded_page: Page, site_url: str) -> None:
     assert got["foxX"] == 0
 
 
-def test_dots_inert_and_markers(guarded_page: Page, site_url: str) -> None:
+def test_conference_leg_uses_the_map_violet(guarded_page: Page, site_url: str) -> None:
+    got = _run(
+        guarded_page,
+        site_url,
+        """
+        const m = {...empty, legs: [{subject: 0, season: 2020, from: 1, to: 2,
+          family: 'conference', points: [{x: 1, y: 1}, {x: 2, y: 2}]}]};
+        return byName(build(m), 'legs:conference').line.color;
+        """,
+    )
+    assert got == "#6A5BA0"
+
+
+def test_venue_dots_faded_selected_and_markers(guarded_page: Page, site_url: str) -> None:
     got = _run(
         guarded_page,
         site_url,
         """
         const fig = build(rich);
-        const fox = byName(fig, 'dots:fox');
-        const inert = byName(fig, 'inert:nbc');
+        const dots = byName(fig, 'venue-dots');
+        const phone = byName(build(rich, 'dark', true), 'venue-dots');
+        const faded = byName(fig, 'venue-faded');
+        const sel = byName(fig, 'venue-selected');
+        const unsel = {...rich, venueDots: rich.venueDots.slice(0, 2)};
+        const none = byName(build(unsel), 'venue-selected');
         const mk = byName(fig, 'markers');
         const mobileMk = byName(build(rich, 'light', true), 'markers');
+        const selMk = byName(build({...rich, markers: [{...rich.markers[0], selected: true}]}),
+          'markers');
         return {
-          fox: {
-            custom: fox.customdata, symbol: fox.marker.symbol, size: fox.marker.size,
-            opacity: fox.marker.opacity, lw: fox.marker.line.width,
-            lc: fox.marker.line.color, outline: P.DOT_OUTLINE,
-            hoverinfo: fox.hoverinfo, ht: fox.hovertemplate,
+          dots: {
+            x: dots.x, y: dots.y, custom: dots.customdata, symbol: dots.marker.symbol,
+            size: dots.marker.size, color: dots.marker.color, opacity: dots.marker.opacity,
+            lw: dots.marker.line.width, lc: dots.marker.line.color, hover: dots.hoverinfo,
+            ht: dots.hovertemplate, bg: P.PAGE_BG.light, outline: P.DOT_OUTLINE,
           },
-          cbs: {size: byName(fig, 'dots:cbs').marker.size},
-          inert: {
-            size: inert.marker.size, opacity: inert.marker.opacity, hoverinfo: inert.hoverinfo,
-            ht: inert.hovertemplate, custom: inert.customdata ?? null, n: inert.x.length,
+          phoneSize: phone.marker.size, phoneColor: phone.marker.color,
+          faded: {
+            size: faded.marker.size, opacity: faded.marker.opacity, hover: faded.hoverinfo,
+            custom: faded.customdata ?? null, n: faded.x.length, color: faded.marker.color,
+            muted: P.MUTED.light,
           },
+          sel: {x: sel.x, y: sel.y, size: sel.marker.size, symbol: sel.marker.symbol,
+            lw: sel.marker.line.width, lc: sel.marker.line.color, accent: P.ACCENT.light,
+            hover: sel.hoverinfo},
+          noneSel: none.x.length,
           mk: {
             symbol: mk.marker.symbol, size: mk.marker.size, lw: mk.marker.line.width,
             colors: mk.marker.line.color, opacity: mk.marker.opacity, pos: mk.textposition,
             font: mk.textfont.size, fontColor: mk.textfont.color, muted: P.MUTED.light,
-            text: mk.text, fox: P.FAMILY_COLORS.light.fox, cbs: P.FAMILY_COLORS.light.cbs,
+            text: mk.text, fox: P.MAP_FAMILY_COLORS.light.fox, cbs: P.MAP_FAMILY_COLORS.light.cbs,
+            custom: mk.customdata, hover: mk.hoverinfo,
           },
           mobileFont: mobileMk.textfont.size,
+          selMk: {lw: selMk.marker.line.width, lc: selMk.marker.line.color},
         };
         """,
     )
-    fox = got["fox"]
-    assert fox["custom"] == [3, 4, 5]
-    assert fox["symbol"] == ["circle", "circle", "diamond"]
-    assert fox["size"] == [7, 7, 10]
-    assert fox["opacity"] == [0.6, 0.45, 0.85]
-    assert fox["lw"] == [0, 0, 1]
-    assert fox["lc"][2] == fox["outline"]
-    assert fox["hoverinfo"] == "none"
-    assert fox["ht"] is None
-    assert got["cbs"]["size"] == [12]
-    inert = got["inert"]
-    assert inert["size"] == 7
-    assert inert["opacity"] == 0.15
-    assert inert["hoverinfo"] == "skip"
-    assert inert["ht"] is None
-    assert inert["custom"] is None
-    assert inert["n"] == 1
+    d = got["dots"]
+    assert d["custom"] == ["v3", "v4", "v5", "v6"]
+    assert d["x"] == [400, 410, 420, 430]
+    assert d["symbol"] == ["circle", "circle", "diamond", "star"]
+    # Subject dots are raised to their shape size (diamond 10, star 12); others keep the model size.
+    assert d["size"] == [14, 8, 10, 16]
+    assert got["phoneSize"] == [10, 6, 10, 12]
+    assert d["color"] == ["#103000", "#104000", "#105000", "#106000"]
+    assert got["phoneColor"] == ["#203000", "#204000", "#205000", "#206000"]
+    assert d["opacity"] == [1, 0.45, 0.85, 0.85]
+    assert d["lw"] == [1, 1, 1, 1]
+    assert d["lc"] == [d["bg"], d["bg"], d["outline"], d["outline"]]
+    assert d["hover"] == "none"
+    assert d["ht"] is None
+    f = got["faded"]
+    assert (f["size"], f["opacity"], f["hover"], f["n"]) == (6, 0.15, "skip", 1)
+    assert f["custom"] is None
+    assert f["color"] == f["muted"]
+    s = got["sel"]
+    assert (s["x"], s["y"]) == ([420], [320])
+    assert s["symbol"] == "circle-open"
+    assert s["size"] == [10 + 2 * (2 + 2)]
+    assert (s["lw"], s["lc"], s["hover"]) == (2, s["accent"], "skip")
+    assert got["noneSel"] == 0
     mk = got["mk"]
     assert mk["symbol"] == "circle-open"
     assert mk["size"] == 9
-    assert mk["lw"] == 1.5
+    assert mk["lw"] == [1.5, 1.5]
     assert mk["colors"] == [mk["fox"], mk["cbs"]]
     assert mk["opacity"] == [0.6, 0.15]
     assert mk["pos"] == ["middle left", "middle right"]
     assert mk["font"] == 12
     assert mk["fontColor"] == mk["muted"]
+    assert mk["custom"] == ["g:x", None]
+    assert mk["hover"] == "none"
     assert got["mobileFont"] == 10
     assert mk["text"][0] == "&lt;b&gt;x&lt;/b&gt;"
     assert "<b>" not in "".join(mk["text"])
+    assert got["selMk"]["lw"] == [2]
+
+
+def test_splat_image_spec(guarded_page: Page, site_url: str) -> None:
+    got = _run(guarded_page, site_url, "return C.splatImageSpec('data:image/png;base64,AA');")
+    assert got == {
+        "source": "data:image/png;base64,AA",
+        "xref": "x",
+        "yref": "y",
+        "x": 0,
+        "y": 0,
+        "sizex": 975,
+        "sizey": 610,
+        "xanchor": "left",
+        "yanchor": "top",
+        "sizing": "stretch",
+        "layer": "below",
+        "opacity": 1,
+    }
 
 
 def test_layout_and_config(guarded_page: Page, site_url: str) -> None:
@@ -261,13 +331,15 @@ def test_land_and_outline_contrast(guarded_page: Page, site_url: str) -> None:
         const r = {};
         for (const t of ['light', 'dark']) {
           r[t] = [P.contrastRatio(P.MAP_OUTLINE[t], P.MAP_LAND[t]),
-                  P.contrastRatio(P.MAP_LAND[t], P.PAGE_BG[t])];
+                  P.contrastRatio(P.MAP_LAND[t], P.PAGE_BG[t]),
+                  P.contrastRatio(P.MAP_FAMILY_COLORS[t].conference, P.MAP_LAND[t])];
         }
         return r;
         """,
     )
     for theme in ("light", "dark"):
-        outline_vs_land, land_vs_page = got[theme]
+        outline_vs_land, land_vs_page, conference_vs_land = got[theme]
+        assert conference_vs_land >= 3
         assert outline_vs_land >= 1.4
         assert land_vs_page <= 1.2
 
@@ -275,14 +347,21 @@ def test_land_and_outline_contrast(guarded_page: Page, site_url: str) -> None:
 # ---------------------------------------------------------------- Task 2: geometry, render, events
 
 _RICH_MODEL = """{
-  dots: [
-    {venue: 3, family: 'nbc', x: 400, y: 300, symbol: 'circle', tier: 'base'},
-    {venue: 4, family: 'fox', x: 700, y: 450, symbol: 'circle', tier: 'base'},
+  venueDots: [
+    {venue: 3, key: 'v3', x: 400, y: 300, symbol: 'circle', tier: 'base', selected: false,
+     size: {desktop: 10, phone: 8}, dotColor: {light: '#336699', dark: '#99CCFF'}},
+    {venue: 4, key: 'v4', x: 700, y: 450, symbol: 'circle', tier: 'base', selected: false,
+     size: {desktop: 10, phone: 8}, dotColor: {light: '#336699', dark: '#99CCFF'}},
   ],
-  faded: [{venue: 7, family: 'nbc', x: 200, y: 150}],
+  venueFaded: [{venue: 7, key: 'v7', x: 200, y: 150}],
   legs: [{subject: 0, season: 2020, from: 1, to: 2, family: 'fox',
           points: [{x: 400, y: 300}, {x: 550, y: 350}, {x: 700, y: 450}]}],
-  markers: [{x: 800, y: 80, label: 'Dublin', side: 'left', family: 'cbs', faded: false}],
+  markers: [
+    {x: 800, y: 80, label: 'Dublin', side: 'left', family: 'cbs', faded: false, key: 'g:dublin',
+     selected: false},
+    {x: 100, y: 500, label: 'Sydney', side: 'right', family: 'cbs', faded: true, key: 'g:sydney',
+     selected: false},
+  ],
 }"""
 
 _MOUNT = """
@@ -298,8 +377,8 @@ async ([model, width, height, mobile]) => {
   window.__mapTest = {calls: [], C, G};
   await C.renderMap(div, C.buildMapFigure(MODEL, G.US_STATES, {theme: 'light', mobile}));
   C.bindMapEvents(div, {
-    onVenueClick: (v, f) => window.__mapTest.calls.push(['click', v, f]),
-    onVenueHover: (v, f) => window.__mapTest.calls.push(['hover', v, f]),
+    onVenueClick: (k) => window.__mapTest.calls.push(['click', k]),
+    onVenueHover: (k) => window.__mapTest.calls.push(['hover', k]),
   });
   return true;
 }
@@ -387,7 +466,7 @@ def test_render_centers_at_desktop_and_phone_widths(guarded_page: Page, site_url
     page = guarded_page
     _mount(page, site_url, 1280, 520)
     box = page.evaluate(_PLOT_BOX)
-    assert box["n"] == 26
+    assert box["n"] == 13
     left = box["l"]
     right = box["pw"] - box["l"] - box["w"]
     assert abs(left - right) <= 2
@@ -400,7 +479,7 @@ def test_render_centers_at_desktop_and_phone_widths(guarded_page: Page, site_url
     assert abs(box["w"] / box["h"] - 975 / 610) / (975 / 610) <= 0.01
 
 
-def test_events_only_from_active_dots(guarded_page: Page, site_url: str) -> None:
+def test_events_only_from_venue_dots_and_keyed_markers(guarded_page: Page, site_url: str) -> None:
     page = guarded_page
     _mount(page, site_url, 1280, 520)
     ax, ay = _px(page, 400, 300)
@@ -409,17 +488,22 @@ def test_events_only_from_active_dots(guarded_page: Page, site_url: str) -> None
     page.wait_for_timeout(200)
     calls = page.evaluate("window.__mapTest.calls")
     labels = page.locator("#map-test .hoverlayer .hovertext").count()
-    assert ["hover", 3, "nbc"] in calls
+    assert ["hover", "v3"] in calls
     assert labels == 0
     page.mouse.click(ax, ay)
     page.wait_for_timeout(200)
-    assert ["click", 3, "nbc"] in page.evaluate("window.__mapTest.calls")
-    before = len(page.evaluate("window.__mapTest.calls"))
-    ix, iy = _px(page, 200, 150)
-    page.mouse.move(ix, iy, steps=4)
+    assert ["click", "v3"] in page.evaluate("window.__mapTest.calls")
     mx, my = _px(page, 800, 80)
+    page.mouse.move(mx - 40, my - 40)
     page.mouse.move(mx, my, steps=4)
-    page.mouse.click(mx, my)
+    page.wait_for_timeout(200)
+    assert ["hover", "g:dublin"] in page.evaluate("window.__mapTest.calls")
+    before = len(page.evaluate("window.__mapTest.calls"))
+    # A faded dot, a faded marker and a leg midpoint stay inert.
+    for x, y in ((200, 150), (100, 500), (550, 350)):
+        ix, iy = _px(page, x, y)
+        page.mouse.move(ix, iy, steps=4)
+        page.mouse.click(ix, iy)
     page.wait_for_timeout(200)
     assert len(page.evaluate("window.__mapTest.calls")) == before
 
@@ -431,13 +515,13 @@ def test_react_keeps_traces_and_double_click_resets(guarded_page: Page, site_url
         """async () => {
           const {C, G} = window.__mapTest;
           const gd = document.getElementById('map-test');
-          const fig = C.buildMapFigure({dots: [], faded: [], legs: [], markers: []},
+          const fig = C.buildMapFigure({venueDots: [], venueFaded: [], legs: [], markers: []},
             G.US_STATES, {theme: 'dark', mobile: false});
           await C.renderMap(gd, fig);
           return gd.data.length;
         }"""
     )
-    assert got == 26
+    assert got == 13
     ax, ay = _px(page, 487, 305)
     page.evaluate(
         "() => window.Plotly.relayout(document.getElementById('map-test'),"

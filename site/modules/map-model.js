@@ -21,38 +21,42 @@ import {
   SHARED_SYMBOL,
 } from './palette.js';
 import { MAX_COMPARE } from './select.js';
+import { buildVenueModel, venueDotSize } from './map-venues.js';
+import {
+  ALBERS_SCALE,
+  ALBERS_TRANSLATE,
+  EDGE_ANCHORS,
+  FALLBACK_ANCHORS,
+  HAWAII_INSET,
+  MAP_HEIGHT,
+  MAP_WIDTH,
+  placeVenue,
+  placeVenues,
+  projectAlbersUsa,
+} from './map-geo.js';
+export {
+  ALBERS_SCALE,
+  ALBERS_TRANSLATE,
+  EDGE_ANCHORS,
+  FALLBACK_ANCHORS,
+  HAWAII_INSET,
+  MAP_HEIGHT,
+  MAP_WIDTH,
+  placeVenue,
+  placeVenues,
+  projectAlbersUsa,
+} from './map-geo.js';
 
 // ---------------------------------------------------------------- constants
 
-export const MAP_WIDTH = 975;
-export const MAP_HEIGHT = 610;
-export const ALBERS_SCALE = 1300;
-export const ALBERS_TRANSLATE = Object.freeze([487.5, 305]);
 /** Quadratic-arc bow, as a fraction of the leg length, to the left of travel (D-13). */
 export const MAP_ARC_BOW = 0.15;
 const ARC_STEP = 20;
 const ARC_MIN_SEGMENTS = 6;
 const ARC_MAX_SEGMENTS = 24;
 
-/** The us-atlas Hawaii inset bounding box in map pixels. */
-export const HAWAII_INSET = Object.freeze({ x0: 216, x1: 332, y0: 528, y1: 603 });
-
-/** D-15: labeled anchors for venues abroad that fall outside every sub-projection. */
-export const EDGE_ANCHORS = Object.freeze({
-  IE: Object.freeze({ x: 955, y: 30, label: 'Dublin', side: 'left' }),
-  GB: Object.freeze({ x: 955, y: 52, label: 'London', side: 'left' }),
-  AU: Object.freeze({ x: 120, y: 575, label: 'Sydney', side: 'right' }),
-});
-
-/** D-15: corner anchors for any other country, chosen by bearing from the map center. */
-export const FALLBACK_ANCHORS = Object.freeze({
-  ne: Object.freeze({ x: 955, y: 74, side: 'left' }),
-  se: Object.freeze({ x: 955, y: 588, side: 'left' }),
-  sw: Object.freeze({ x: 40, y: 588, side: 'right' }),
-  nw: Object.freeze({ x: 20, y: 30, side: 'right' }),
-});
-
-export const MAP_HINT = 'Pick an announcer or a school to trace a path';
+export const MAP_HINT =
+  'Pick an announcer or a school to trace a path. Color shows which network airs the most games nearby.';
 export const MAP_SHAPES_CAPTION = Object.freeze({
   school: 'Shapes shown for the first 4 schools',
   person: 'Shapes shown for the first 4 announcers',
@@ -76,101 +80,6 @@ export function mapAriaLabel(n) {
   return `Map of ${n} game venues`;
 }
 
-// ---------------------------------------------------------------- projection
-
-const RAD = Math.PI / 180;
-
-/**
- * d3-geo's conic equal-area sub-projection with rotate/center/scale/translate,
- * returned as a function (lon, lat in degrees) -> [x, y] in screen space.
- */
-function conicEqualArea(parallels, rotate, center, k, translate) {
-  const s0 = Math.sin(parallels[0] * RAD);
-  const s1 = Math.sin(parallels[1] * RAD);
-  const n = (s0 + s1) / 2;
-  const c = 1 + s0 * (2 * n - s0);
-  const r0 = Math.sqrt(c) / n;
-  const raw = (lambda, phi) => {
-    const r = Math.sqrt(c - 2 * n * Math.sin(phi)) / n;
-    return [r * Math.sin(n * lambda), r0 - r * Math.cos(n * lambda)];
-  };
-  // The center is given in rotated coordinates (not rotated again).
-  const [cx, cy] = raw(center[0] * RAD, center[1] * RAD);
-  return (lon, lat) => {
-    const [rx, ry] = raw((lon + rotate) * RAD, lat * RAD);
-    return [translate[0] + k * (rx - cx), translate[1] - k * (ry - cy)];
-  };
-}
-
-const [TX, TY] = ALBERS_TRANSLATE;
-const K = ALBERS_SCALE;
-const LOWER48 = conicEqualArea([29.5, 45.5], 96, [-0.6, 38.7], K, [TX, TY]);
-const HAWAII = conicEqualArea([8, 18], 157, [-3, 19.9], K, [TX - 0.205 * K, TY + 0.212 * K]);
-// Alaska is left off the drawn map (D-14) but kept so a future Alaska venue still places.
-const ALASKA = conicEqualArea([55, 65], 154, [-2, 58.5], 0.35 * K, [TX - 0.307 * K, TY + 0.201 * K]);
-const CLIP = Object.freeze({
-  x0: TX - 0.455 * K,
-  x1: TX + 0.455 * K,
-  y0: TY - 0.238 * K,
-  y1: TY + 0.238 * K,
-});
-
-/** Project lon/lat to map pixels, or null when outside the (state-selected) projection. */
-export function projectAlbersUsa(lon, lat, state) {
-  if (state === 'HI') {
-    const [x, y] = HAWAII(lon, lat);
-    return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
-  }
-  if (state === 'AK') {
-    const [x, y] = ALASKA(lon, lat);
-    return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
-  }
-  const [x, y] = LOWER48(lon, lat);
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-  if (x < CLIP.x0 || x > CLIP.x1 || y < CLIP.y0 || y > CLIP.y1) return null;
-  return { x, y };
-}
-
-function fallbackAnchor(venue) {
-  const dLon = ((((venue.lon + 98 + 540) % 360) + 360) % 360) - 180;
-  const dLat = venue.lat - 39;
-  const corner = (dLat >= 0 ? 'n' : 's') + (dLon >= 0 ? 'e' : 'w');
-  const a = FALLBACK_ANCHORS[corner];
-  return { x: a.x, y: a.y, edge: true, label: venue.city ?? venue.name, side: a.side };
-}
-
-/** Where a venue sits on the map (D-14, D-15): projected, or a labeled edge anchor. */
-export function placeVenue(venue) {
-  const abroad = venue.country != null && venue.country !== 'US';
-  const pt = projectAlbersUsa(venue.lon, venue.lat, venue.state);
-  if (pt) {
-    return {
-      x: pt.x,
-      y: pt.y,
-      abroad,
-      edge: false,
-      label: abroad ? (venue.city ?? venue.name) : null,
-      side: abroad ? 'left' : null,
-    };
-  }
-  const known = abroad ? EDGE_ANCHORS[venue.country] : undefined;
-  if (known) {
-    return { x: known.x, y: known.y, abroad, edge: true, label: known.label, side: known.side };
-  }
-  return { ...fallbackAnchor(venue), abroad };
-}
-
-const placementCache = new WeakMap();
-
-/** placeVenue for every venue, cached per venues array. */
-export function placeVenues(venues) {
-  let hit = placementCache.get(venues);
-  if (!hit) {
-    hit = venues.map(placeVenue);
-    placementCache.set(venues, hit);
-  }
-  return hit;
-}
 
 // ---------------------------------------------------------------- arcs
 
@@ -290,8 +199,6 @@ export function seasonPaths(data, indexes) {
 
 // ---------------------------------------------------------------- the model
 
-const TIER_RANK = { base: 0, other: 0, subject: 1 };
-
 function pushTo(map, key, value) {
   const list = map.get(key);
   if (list) list.push(value);
@@ -341,59 +248,6 @@ export function buildMapModel(data, view, state) {
     return m;
   });
 
-  // Dots: one per (venue, family, tier, symbol) for passing games (D-10, D-05).
-  let hasShared = false;
-  const dotMap = new Map();
-  for (const i of passing) {
-    const venue = t.place[i];
-    const family = data.familyOf[i];
-    let tier = 'base';
-    let symbol = 'circle';
-    if (hasSubject) {
-      const owners = gameSubjects.get(i);
-      if (owners) {
-        tier = 'subject';
-        const first = owners[0];
-        if (subjects[first].kind === 'person' && (view.peopleOnGame.get(i) ?? []).length >= 2) {
-          symbol = SHARED_SYMBOL;
-          hasShared = true;
-        } else {
-          symbol = subjects[first].symbol;
-        }
-      } else {
-        tier = 'other';
-      }
-    }
-    const key = `${venue}|${family}|${tier}|${symbol}`;
-    if (!dotMap.has(key)) {
-      const p = placements[venue];
-      dotMap.set(key, { venue, family, x: p.x, y: p.y, symbol, tier });
-    }
-  }
-  const symbolRank = (s) => (s === SHARED_SYMBOL ? COMPARE_SYMBOLS.length : COMPARE_SYMBOLS.indexOf(s));
-  const dots = [...dotMap.values()].sort(
-    (a, b) =>
-      FAMILY_ORDER.indexOf(a.family) - FAMILY_ORDER.indexOf(b.family) ||
-      a.venue - b.venue ||
-      TIER_RANK[a.tier] - TIER_RANK[b.tier] ||
-      symbolRank(a.symbol) - symbolRank(b.symbol),
-  );
-
-  // Faded dots: visible failing games where no passing game shares (venue, family) (D-12).
-  const passingKeys = new Set(passing.map((i) => `${t.place[i]}|${data.familyOf[i]}`));
-  const fadedMap = new Map();
-  for (const i of failing) {
-    const venue = t.place[i];
-    const family = data.familyOf[i];
-    const key = `${venue}|${family}`;
-    if (passingKeys.has(key) || fadedMap.has(key)) continue;
-    const p = placements[venue];
-    fadedMap.set(key, { venue, family, x: p.x, y: p.y });
-  }
-  const faded = [...fadedMap.values()].sort(
-    (a, b) => FAMILY_ORDER.indexOf(a.family) - FAMILY_ORDER.indexOf(b.family) || a.venue - b.venue,
-  );
-
   // Legs: consecutive located games of each subject within a season (D-03, D-04).
   const legs = [];
   subjects.forEach((_, k) => {
@@ -408,7 +262,104 @@ export function buildMapModel(data, view, state) {
     }
   });
 
-  // Markers for venues abroad, one per label (D-15).
+  // Phase 11 venue model: one dot per venue (D-01), subject shapes (D-04), the selected
+  // venue flag (D-05; the venue filter never reaches `passing`, so no dot collapses).
+  // D-03: with announcers picked, the venue model (dots, splat, key, card) is built from
+  // the picked people's games among those passing, exactly computeView's `highlighted`
+  // (role and called-together included), so it rescales with the pick. Venues that
+  // host only other games stay on the map as background dots from the full cohort.
+  const personPick = hasSubject && subjects[0].kind === 'person';
+  const fullVenueModel = buildVenueModel(data, passing, placements);
+  const venueModel = personPick
+    ? buildVenueModel(
+        data,
+        view.highlighted.filter((i) => t.place[i] != null),
+        placements,
+      )
+    : fullVenueModel;
+  const selectedSet = new Set(
+    state.venue != null ? (data.venueIndexesByKey?.get(state.venue) ?? []) : [],
+  );
+  let venueShared = false;
+  const venueDots = venueModel.venues.map((v) => {
+    let tier = 'base';
+    let symbol = 'circle';
+    if (hasSubject) {
+      const games = venueGames.get(v.index) ?? [];
+      const owners = new Set();
+      let together = false;
+      for (const i of games) {
+        const mine = gameSubjects.get(i);
+        if (!mine) continue;
+        for (const k of mine) owners.add(k);
+        if (mine.some((k) => subjects[k].kind === 'person') && (view.peopleOnGame.get(i) ?? []).length >= 2) {
+          together = true;
+        }
+      }
+      if (owners.size === 0) {
+        tier = 'other';
+      } else {
+        tier = 'subject';
+        if (owners.size >= 2 || together) {
+          symbol = SHARED_SYMBOL;
+          venueShared = true;
+        } else {
+          symbol = subjects[Math.min(...owners)].symbol;
+        }
+      }
+    }
+    return {
+      venue: v.index,
+      key: v.key,
+      x: v.x,
+      y: v.y,
+      tier,
+      symbol,
+      leader: v.leader,
+      score: v.score,
+      size: v.size,
+      dotColor: v.dotColor,
+      selected: selectedSet.has(v.index),
+    };
+  });
+  if (personPick) {
+    // Background venues first, so the picked people's dots draw on top. Their size uses the
+    // picked cohort's scale (capped like any dot), so the two kinds stay comparable.
+    const inCohort = new Set(venueModel.venues.map((v) => v.index));
+    const background = fullVenueModel.venues
+      .filter((v) => !inCohort.has(v.index))
+      .map((v) => ({
+        venue: v.index,
+        key: v.key,
+        x: v.x,
+        y: v.y,
+        tier: 'other',
+        symbol: 'circle',
+        leader: v.leader,
+        score: v.score,
+        size: venueDotSize(v.score, venueModel.maxScore),
+        dotColor: v.dotColor,
+        selected: selectedSet.has(v.index),
+      }));
+    venueDots.unshift(...background);
+  }
+
+  const passingVenues = new Set(passing.map((i) => t.place[i]));
+  const venueFadedMap = new Map();
+  for (const i of failing) {
+    const venue = t.place[i];
+    const p = placements[venue];
+    if (p.abroad || passingVenues.has(venue) || venueFadedMap.has(venue)) continue;
+    venueFadedMap.set(venue, { venue, key: data.venueKeys[venue], x: p.x, y: p.y });
+  }
+  // UI-SPEC Empty map behavior: with no game passing the filters the map is plain land,
+  // so Fade's faded dots and edge markers go too (Hide has none to begin with).
+  let passingAny = 0;
+  for (let i = 0; i < data.n; i += 1) if (view.passesFilters[i]) passingAny += 1;
+  const emptyAll = passingAny === 0;
+  const venueFaded = emptyAll ? [] : [...venueFadedMap.values()].sort((a, b) => a.venue - b.venue);
+
+  // Markers for venues abroad, one per label (D-15, D-10).
   const groups = new Map();
   data.lookups.venues.forEach((_, venue) => {
     const p = placements[venue];
@@ -424,6 +375,7 @@ export function buildMapModel(data, view, state) {
     return best;
   };
   const markers = [];
+  const markerVenues = new Set();
   for (const [label, { p, venues }] of groups) {
     const pass = new Map();
     const vis = new Map();
@@ -433,30 +385,48 @@ export function buildMapModel(data, view, state) {
     for (const i of failing) {
       if (venues.includes(t.place[i])) vis.set(data.familyOf[i], (vis.get(data.familyOf[i]) ?? 0) + 1);
     }
+    const key = data.venueGroupKeys?.[venues[0]] ?? null;
+    const selected = (key != null && state.venue === key) || venues.some((v) => selectedSet.has(v));
+    const grp = key != null ? venueModel.byKey.get(key) : null;
     const top = busiest(pass);
     if (top) {
-      markers.push({ x: p.x, y: p.y, label, side: p.side, family: top, faded: false });
+      markers.push({ x: p.x, y: p.y, label, side: p.side, family: grp?.leader ?? top, faded: false, key, selected });
+      for (const v of venues) if (venueGames.has(v)) markerVenues.add(v);
     } else {
       const alt = busiest(vis);
-      if (alt) markers.push({ x: p.x, y: p.y, label, side: p.side, family: alt, faded: true });
+      if (alt) {
+        markers.push({ x: p.x, y: p.y, label, side: p.side, family: alt, faded: true, key, selected });
+        for (const v of venues) if (failing.some((i) => t.place[i] === v)) markerVenues.add(v);
+      }
     }
   }
 
-  const drawn = new Set([...dots, ...faded].map((d) => d.venue));
+  if (emptyAll) {
+    markers.length = 0;
+    markerVenues.clear();
+  }
+  const drawn = new Set([
+    ...venueDots.map((d) => d.venue),
+    ...venueFaded.map((d) => d.venue),
+    ...markerVenues,
+  ]);
   return {
     hasSubject,
     subjects,
     shapesCapped,
-    hasShared,
-    dots,
-    faded,
+    hasShared: venueShared,
+    hasVenueShared: venueShared,
+    venueModel,
+    fullVenueModel,
+    venueDots,
+    venueFaded,
     legs,
     markers,
     venueGames,
     subjectVenueGames,
     noLocationCount,
     drawnCount: drawn.size,
-    emptyAll: view.visibleCount === 0,
+    emptyAll,
   };
 }
 
@@ -479,6 +449,26 @@ function venueTitle(venue) {
   return where ? `${venue.name} · ${venue.city}, ${where}` : `${venue.name} · ${venue.city}`;
 }
 
+/**
+ * Name and tooltip for the venue filter chip and status (Phase 11 D-05): a single venue
+ * gives its name and "name, city, ST"; an abroad marker group gives its label. Unknown
+ * keys give null.
+ */
+export function venueFilterInfo(data, key) {
+  const indexes = key != null ? data.venueIndexesByKey?.get(key) : undefined;
+  if (!indexes || indexes.length === 0) return null;
+  const single = data.venueKeys?.indexOf(key) ?? -1;
+  if (single >= 0) {
+    const v = data.lookups.venues[single];
+    const abroad = v.country != null && v.country !== 'US';
+    const where = abroad ? countryName(v.country) : v.state;
+    const title = [v.name, v.city, where].filter(Boolean).join(', ');
+    return { name: v.name, title };
+  }
+  const label = placeVenues(data.lookups.venues)[indexes[0]]?.label ?? key;
+  return { name: label, title: label };
+}
+
 function gameLine(data, i) {
   const t = data.t;
   const teams = data.lookups.teams;
@@ -488,21 +478,12 @@ function gameLine(data, i) {
   return `${t.date[i]}  ${matchup}  ${data.lookups.networks[t.network[i]].name}`;
 }
 
-/**
- * D-11: plain {text, kind} lines for one venue (index into lookups.venues): title,
- * family counts for passing games, then each subject's games there (up to three, then
- * "+N more"). The caller writes them with textContent only.
- */
-export function venueTooltipLines(data, model, venue) {
-  const lines = [{ text: venueTitle(data.lookups.venues[venue]), kind: 'title' }];
-  const games = model.venueGames.get(venue) ?? [];
-  const counts = new Map();
-  for (const i of games) counts.set(data.familyOf[i], (counts.get(data.familyOf[i]) ?? 0) + 1);
-  const parts = FAMILY_ORDER.filter((f) => counts.get(f)).map((f) => `${FAMILY_LABELS[f]} ${counts.get(f)}`);
-  if (parts.length > 0) lines.push({ text: parts.join(' · '), kind: 'body' });
+/** Subject blocks ("── Pat here ──", up to three games, "+N more") for venue indexes. */
+function subjectLinesFor(data, model, indexes) {
+  const lines = [];
   const several = model.subjects.length >= 2;
   model.subjects.forEach((subject, k) => {
-    const mine = model.subjectVenueGames[k].get(venue) ?? [];
+    const mine = indexes.flatMap((v) => model.subjectVenueGames[k].get(v) ?? []);
     if (mine.length === 0) return;
     const glyph = several ? `${k < MAX_COMPARE ? COMPARE_GLYPHS[k] : '●'} ` : '';
     lines.push({ text: `── ${glyph}${subject.label} here ──`, kind: 'body' });
@@ -512,4 +493,51 @@ export function venueTooltipLines(data, model, venue) {
     }
   });
   return lines;
+}
+
+const CARD_MAX_ROWS = 6;
+
+/**
+ * Hover-card data for one venue key or abroad group key (Phase 11 D-02, D-01a): the
+ * title, pie slices, at most six family rows plus Other, real viewers (the unrated
+ * floor never enters), and the subject lines. Unknown keys give null.
+ */
+export function venueCard(data, model, key) {
+  const entry = model.venueModel?.byKey.get(key) ?? model.fullVenueModel?.byKey.get(key);
+  if (!entry) return null;
+  const isGroup = Array.isArray(entry.indexes);
+  const indexes = isGroup ? entry.indexes : [entry.index];
+  const title = isGroup ? entry.label : venueTitle(data.lookups.venues[entry.index]);
+  const slices = FAMILY_ORDER.map((family, f) => ({
+    family,
+    games: entry.counts[f],
+    viewers: entry.ratedCounts[f] > 0 ? entry.viewers[f] : null,
+  }))
+    .filter((s) => s.games > 0)
+    .sort((a, b) => b.games - a.games || FAMILY_ORDER.indexOf(a.family) - FAMILY_ORDER.indexOf(b.family));
+  const rows = slices.slice(0, CARD_MAX_ROWS).map((s) => ({
+    family: s.family,
+    label: FAMILY_LABELS[s.family],
+    games: s.games,
+    viewers: s.viewers,
+  }));
+  const rest = slices.slice(CARD_MAX_ROWS);
+  if (rest.length > 0) {
+    const rated = rest.filter((s) => s.viewers != null);
+    rows.push({
+      family: null,
+      label: 'Other',
+      games: rest.reduce((n, s) => n + s.games, 0),
+      viewers: rated.length > 0 ? rated.reduce((n, s) => n + s.viewers, 0) : null,
+    });
+  }
+  return {
+    title,
+    leader: entry.leader,
+    slices,
+    rows,
+    hasMissingViewers: rows.some((r) => r.viewers == null),
+    hasViewers: rows.some((r) => r.viewers != null),
+    subjectLines: subjectLinesFor(data, model, indexes),
+  };
 }

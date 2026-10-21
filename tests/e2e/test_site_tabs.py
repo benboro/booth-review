@@ -774,7 +774,10 @@ def test_stale_copy_is_state_aware(
     assert out["bars"] == out["stale"]["bars"]
 
 
-MAP_HINT = "Pick an announcer or a school to trace a path"
+MAP_HINT = (
+    "Pick an announcer or a school to trace a path. "
+    "Color shows which network airs the most games nearby."
+)
 
 
 def test_clicking_map_sets_view_and_url(
@@ -828,4 +831,4 @@ def test_map_renders_figure(guarded_page: Page, open_app: Callable[[Page, str], 
     open_app(guarded_page, "?view=map&people=pat-rowan")
     guarded_page.wait_for_function("() => window.__testHooks.mapRenders >= 1")
     traces = guarded_page.evaluate("() => document.getElementById('map-chart').data.length")
-    assert traces == 26
+    assert traces == 13

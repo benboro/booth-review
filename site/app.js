@@ -33,7 +33,7 @@ import { chartContext } from './modules/bars.js';
 import { initBarsPanel, renderBarsPanel, lastBarsModel, resetBarsTap } from './modules/bars-panel.js';
 import { buildMapModel } from './modules/map-model.js';
 import { buildCrewsModel, renderCrewsPanel } from './modules/crews.js';
-import { initMapPanel, renderMapPanel, resetMapTap, mapRenderCount } from './modules/map-panel.js';
+import { initMapPanel, renderMapPanel, resetMapTap, mapRenderCount, mapSplatCount } from './modules/map-panel.js';
 import { initBandInfo, positionBandInfo, closeBandNote, setBandInfoMode } from './modules/band-info.js';
 import { showTooltip, hideTooltip } from './modules/tooltip.js';
 import { selectedPersonIndexes } from './modules/format.js';
@@ -289,7 +289,12 @@ function render() {
     hideBandInfo();
     resetMapTap();
     lastMapModel = buildMapModel(data, view, state);
-    renderMapPanel({ data, model: lastMapModel, env: currentEnv(), resize: lastPanel !== 'map' });
+        renderMapPanel({
+      data,
+      model: lastMapModel,
+      env: { ...currentEnv(), splat: state.colors !== 'off' },
+      resize: lastPanel !== 'map',
+    });
     lastPanel = 'map';
   } else {
     chartEl.hidden = true;
@@ -478,6 +483,8 @@ async function startCfb(search = location.search) {
       getNetworks: () => structuredClone(state.networks),
       switchEl: document.getElementById('dots-toggle'),
       onDots: (dots) => setState({ dots }),
+      colorsEl: document.getElementById('colors-toggle'),
+      onColors: (colors) => setState({ colors }),
     });
     renderers.push(renderLegend);
 
@@ -486,7 +493,7 @@ async function startCfb(search = location.search) {
     initChartTabs({ data, getState: () => state, setState });
     renderers.push(renderChartTabs);
 
-    initMapPanel();
+    initMapPanel({ setState, getState: () => state, getMatchedCount: () => lastView.matched.length });
 
     initBarsPanel({ data, getState: () => state, setState, rerender: render });
 
@@ -584,6 +591,9 @@ async function startCfb(search = location.search) {
       get mapRenders() {
         return mapRenderCount();
       },
+      get mapSplatRenders() {
+        return mapSplatCount();
+      },
       getMapModel: () => {
         const m = lastMapModel;
         if (!m) return null;
@@ -592,8 +602,8 @@ async function startCfb(search = location.search) {
           subjects: m.subjects.map(({ kind, key, label, symbol }) => ({ kind, key, label, symbol })),
           shapesCapped: m.shapesCapped,
           hasShared: m.hasShared,
-          dots: structuredClone(m.dots),
-          faded: structuredClone(m.faded),
+          venueDots: structuredClone(m.venueDots),
+          venueFaded: structuredClone(m.venueFaded),
           legs: m.legs.map((leg) => ({
             subject: leg.subject,
             season: leg.season,

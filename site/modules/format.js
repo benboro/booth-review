@@ -310,6 +310,20 @@ export function formatViewers(n) {
   return n.toLocaleString('en-US');
 }
 
+/**
+ * Short audience total for the map hover card (Phase 11 UI-SPEC Typography): K under a
+ * million, MM from there, at most one decimal with no trailing zero.
+ * @param {number} n
+ * @returns {string} e.g. "900K", "12.5K", "1MM", "50.6MM".
+ */
+export function formatAudienceShort(n) {
+  const trim = (v) => String(Math.round(v * 10) / 10);
+  if (n < 1000) return String(Math.round(n));
+  const k = Math.round((n / 1e3) * 10) / 10;
+  if (k < 1000) return `${trim(k)}K`;
+  return `${trim(n / 1e6)}MM`;
+}
+
 /** Label for a game with no public rating (04.13). */
 export const NO_RATING_LABEL = 'No public rating';
 

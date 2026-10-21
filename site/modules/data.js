@@ -10,6 +10,7 @@ import { FAMILY_ORDER, familyKey } from './palette.js';
 import { CFP_GAME_DEFS, NEW_YEARS_SIX } from './format.js';
 import { buildDateAxis } from './date-axis.js';
 import { EXCITEMENT_CAP, Y_MEASURES } from './caps.js';
+import { placeVenues } from './map-geo.js';
 
 /**
  * Normalizes a name for matching: Unicode NFKD decomposition, combining
@@ -36,6 +37,54 @@ export function slugify(s) {
   return normalizeName(s)
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Stable venue keys (Phase 11 D-05): the slug of name + city, with -2/-3 suffixes on
+ * repeats in lookup order, plus a group key for each abroad marker label (Dublin) that
+ * resolves to every venue in the group. Indexes are never put in a URL.
+ * @param {Array<object>} venues lookups.venues
+ */
+function buildVenueKeys(venues) {
+  const bases = venues.map((v) => slugify(`${v.name} ${v.city ?? ''}`) || 'venue');
+  // Every natural base is reserved first, so a suffix (foo-2) never lands on another
+  // venue's own key ("Foo 2"); keys without a collision stay exactly the base.
+  const reserved = new Set(bases);
+  const taken = new Set();
+  const venueKeys = bases.map((base) => {
+    let key = base;
+    if (taken.has(base)) {
+      let n = 2;
+      while (reserved.has(`${base}-${n}`) || taken.has(`${base}-${n}`)) n += 1;
+      key = `${base}-${n}`;
+    }
+    taken.add(key);
+    return key;
+  });
+  const placements = placeVenues(venues);
+  // One key per abroad label; it can match neither a venue key nor another label's key.
+  const groupByLabel = new Map();
+  const groupKeyOf = (label) => {
+    if (groupByLabel.has(label)) return groupByLabel.get(label);
+    const slug = slugify(label) || 'venue';
+    let key = taken.has(slug) ? `abroad-${slug}` : slug;
+    for (let n = 2; taken.has(key); n += 1) key = `${taken.has(slug) ? 'abroad-' : ''}${slug}-${n}`;
+    taken.add(key);
+    groupByLabel.set(label, key);
+    return key;
+  };
+  const venueGroupKeys = placements.map((pl) =>
+    !pl.abroad || pl.label == null ? null : groupKeyOf(pl.label),
+  );
+  const venueIndexesByKey = new Map();
+  venueKeys.forEach((key, i) => venueIndexesByKey.set(key, [i]));
+  venueGroupKeys.forEach((key, i) => {
+    if (key == null) return;
+    const hit = venueIndexesByKey.get(key);
+    if (hit) hit.push(i);
+    else venueIndexesByKey.set(key, [i]);
+  });
+  return { venueKeys, venueGroupKeys, venueIndexesByKey };
 }
 
 /**
@@ -348,6 +397,7 @@ export function prepareData(raw) {
     g.index = index;
   });
   const gameIndexBySlug = new Map(games.map((g) => [g.slug, g.index]));
+  const { venueKeys, venueGroupKeys, venueIndexesByKey } = buildVenueKeys(lookups.venues);
   const gameByRound = new Map();
   const gameByFranchise = new Map();
   const gameByRivalry = new Map();
@@ -409,6 +459,9 @@ export function prepareData(raw) {
     fbsConferences,
     games,
     gameIndexBySlug,
+    venueKeys,
+    venueGroupKeys,
+    venueIndexesByKey,
     dotGames,
   };
 }

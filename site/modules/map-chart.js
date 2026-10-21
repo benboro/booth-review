@@ -1,7 +1,7 @@
 // Map figure (04.18 D-04/D-05/D-07..D-10/D-13/D-15): paints the map model with Plotly.
 //
-// Constant-trace figure: outline, legs x 8 families, inert x 8, dots x 8, markers, always
-// in that order and drawn bottom to top, so Plotly.react diffs cleanly whatever the
+// Constant-trace figure: outline, legs x 8 families, venue-faded, venue-dots, venue-selected,
+// markers, always in that order and drawn bottom to top, so Plotly.react diffs cleanly whatever the
 // selection; unused slots carry empty arrays. buildMapFigure is pure (model + geometry +
 // env in, {traces, layout, config} out). window.Plotly is touched only inside renderMap
 // and bindMapEvents. Data strings reach Plotly text only through escapeHover; hover labels
@@ -11,31 +11,35 @@
 import { escapeHover } from './format.js';
 import { MAP_HEIGHT, MAP_WIDTH } from './map-model.js';
 import {
+  ACCENT,
   DOT_OUTLINE,
-  FAMILY_COLORS,
   FAMILY_ORDER,
+  MAP_FAMILY_COLORS,
   MAP_LAND,
   MAP_LINE_WIDTH,
   MAP_MARKER_LABEL,
   MAP_OPACITY,
   MAP_OUTLINE,
   MAP_SIZE,
+  MAP_VENUE_DOT,
+  MUTED,
   PAGE_BG,
 } from './palette.js';
 
 const MARKER_FONT = { desktop: 12, mobile: 10 };
 const MOBILE_HOVER_DISTANCE = 22;
 
-/** The 26 trace names in draw order. */
+/** The 13 trace names in draw order (Phase 11). */
 export const MAP_TRACE_NAMES = Object.freeze([
   'outline',
   ...FAMILY_ORDER.map((f) => `legs:${f}`),
-  ...FAMILY_ORDER.map((f) => `inert:${f}`),
-  ...FAMILY_ORDER.map((f) => `dots:${f}`),
+  'venue-faded',
+  'venue-dots',
+  'venue-selected',
   'markers',
 ]);
 
-function outlineTrace(geometry, theme) {
+function outlineTrace(geometry, theme, splat) {
   const x = [];
   const y = [];
   for (const state of geometry) {
@@ -56,7 +60,7 @@ function outlineTrace(geometry, theme) {
     name: 'outline',
     x,
     y,
-    fill: 'toself',
+    fill: splat ? 'none' : 'toself',
     fillcolor: MAP_LAND[theme],
     connectgaps: false,
     line: { color: MAP_OUTLINE[theme], width: MAP_LINE_WIDTH.outline },
@@ -87,7 +91,7 @@ function legsTrace(family, legs, theme) {
     x,
     y,
     connectgaps: false,
-    line: { color: FAMILY_COLORS[theme][family], width: MAP_LINE_WIDTH.leg },
+    line: { color: MAP_FAMILY_COLORS[theme][family], width: MAP_LINE_WIDTH.leg },
     opacity: MAP_OPACITY.leg,
     hoverinfo: 'skip',
     hovertemplate: null,
@@ -95,18 +99,17 @@ function legsTrace(family, legs, theme) {
   };
 }
 
-function inertTrace(family, faded, theme) {
-  const mine = faded.filter((d) => d.family === family);
+function venueFadedTrace(faded, theme) {
   return {
     type: 'scatter',
     mode: 'markers',
-    name: `inert:${family}`,
-    x: mine.map((d) => d.x),
-    y: mine.map((d) => d.y),
+    name: 'venue-faded',
+    x: faded.map((d) => d.x),
+    y: faded.map((d) => d.y),
     marker: {
       symbol: 'circle',
-      size: MAP_SIZE.faded,
-      color: FAMILY_COLORS[theme][family],
+      size: MAP_VENUE_DOT.fadedSize,
+      color: MUTED[theme],
       opacity: MAP_OPACITY.faded,
       line: { width: 0 },
     },
@@ -116,28 +119,37 @@ function inertTrace(family, faded, theme) {
   };
 }
 
-function dotSize(dot) {
-  if (dot.tier !== 'subject') return MAP_SIZE[dot.tier];
-  return MAP_SIZE.subject[dot.symbol] ?? MAP_SIZE.subject.circle;
+/** Drawn diameter of one venue dot: the model size, raised to the subject shape size. */
+function venueDotSize(dot, mobile) {
+  const base = mobile ? dot.size.phone : dot.size.desktop;
+  if (dot.tier !== 'subject') return base;
+  return Math.max(base, MAP_SIZE.subject[dot.symbol] ?? MAP_SIZE.subject.circle);
 }
 
-function dotsTrace(family, dots, theme) {
-  const mine = dots.filter((d) => d.family === family);
+function venueDotsTrace(dots, theme, mobile) {
   return {
     type: 'scatter',
     mode: 'markers',
-    name: `dots:${family}`,
-    x: mine.map((d) => d.x),
-    y: mine.map((d) => d.y),
-    customdata: mine.map((d) => d.venue),
+    name: 'venue-dots',
+    x: dots.map((d) => d.x),
+    y: dots.map((d) => d.y),
+    customdata: dots.map((d) => d.key),
     marker: {
-      symbol: mine.map((d) => d.symbol),
-      size: mine.map(dotSize),
-      color: FAMILY_COLORS[theme][family],
-      opacity: mine.map((d) => MAP_OPACITY[d.tier]),
+      symbol: dots.map((d) => d.symbol),
+      size: dots.map((d) => venueDotSize(d, mobile)),
+      color: dots.map((d) => d.dotColor[theme]),
+      opacity: dots.map((d) =>
+        d.tier === 'subject'
+          ? MAP_OPACITY.subject
+          : d.tier === 'other'
+            ? MAP_OPACITY.other
+            : MAP_VENUE_DOT.opacity,
+      ),
       line: {
-        width: mine.map((d) => (d.tier === 'subject' ? MAP_LINE_WIDTH.subjectOutline : 0)),
-        color: mine.map(() => DOT_OUTLINE),
+        width: dots.map((d) =>
+          d.tier === 'subject' ? MAP_LINE_WIDTH.subjectOutline : MAP_VENUE_DOT.ringWidth,
+        ),
+        color: dots.map((d) => (d.tier === 'subject' ? DOT_OUTLINE : PAGE_BG[theme])),
       },
     },
     hoverinfo: 'none',
@@ -146,14 +158,38 @@ function dotsTrace(family, dots, theme) {
   };
 }
 
+function venueSelectedTrace(model, theme, mobile) {
+  const sel = model.venueDots.find((d) => d.selected);
+  const ring = MAP_VENUE_DOT.selectedRingGap + MAP_VENUE_DOT.selectedRingWidth;
+  return {
+    type: 'scatter',
+    mode: 'markers',
+    name: 'venue-selected',
+    x: sel ? [sel.x] : [],
+    y: sel ? [sel.y] : [],
+    marker: {
+      symbol: 'circle-open',
+      size: sel ? [venueDotSize(sel, mobile) + 2 * ring] : [],
+      color: ACCENT[theme],
+      line: { width: MAP_VENUE_DOT.selectedRingWidth, color: ACCENT[theme] },
+    },
+    hoverinfo: 'skip',
+    hovertemplate: null,
+    showlegend: false,
+  };
+}
+
 function markersTrace(markers, theme, mobile) {
-  const colors = markers.map((m) => FAMILY_COLORS[theme][m.family]);
+  const colors = markers.map((m) =>
+    m.selected ? ACCENT[theme] : MAP_FAMILY_COLORS[theme][m.family],
+  );
   return {
     type: 'scatter',
     mode: 'markers+text',
     name: 'markers',
     x: markers.map((m) => m.x),
     y: markers.map((m) => m.y),
+    customdata: markers.map((m) => (m.faded ? null : (m.key ?? null))),
     text: markers.map((m) => escapeHover(m.label)),
     textposition: markers.map((m) => (m.side === 'left' ? 'middle left' : 'middle right')),
     textfont: {
@@ -165,28 +201,68 @@ function markersTrace(markers, theme, mobile) {
       size: MAP_SIZE.marker,
       color: colors,
       opacity: markers.map((m) => (m.faded ? MAP_OPACITY.faded : MAP_OPACITY.marker)),
-      line: { width: MAP_LINE_WIDTH.marker, color: colors },
+      line: {
+        width: markers.map((m) =>
+          m.selected ? MAP_VENUE_DOT.selectedRingWidth : MAP_LINE_WIDTH.marker,
+        ),
+        color: colors,
+      },
     },
-    hoverinfo: 'skip',
+    hoverinfo: 'none',
     hovertemplate: null,
     showlegend: false,
   };
 }
 
 /**
+ * The y anchor of the splat image on the reversed y-axis, measured by the Phase 11
+ * layout.images probe (11-01-SUMMARY.md: 'top' lands on the matching coordinates, 'bottom' fails).
+ */
+export const IMAGE_YANCHOR = 'top';
+
+/**
+ * The layout.images entry that places a splat raster under the traces (Phase 11 D-06).
+ * @param {string} url - the raster's data URL.
+ */
+export function splatImageSpec(url) {
+  return {
+    source: url,
+    xref: 'x',
+    yref: 'y',
+    x: 0,
+    y: 0,
+    sizex: MAP_WIDTH,
+    sizey: MAP_HEIGHT,
+    xanchor: 'left',
+    yanchor: IMAGE_YANCHOR,
+    sizing: 'stretch',
+    layer: 'below',
+    opacity: 1,
+  };
+}
+
+/**
+ * Desktop top margin in px that holds the Plotly modebar above the plot, so the modebar never
+ * covers the top-right edge markers (Dublin, London) and swallows their hover and click.
+ * Phones show no modebar, so they keep no margin.
+ */
+export const MODEBAR_BAND = 26;
+
+/**
  * Builds the whole Map figure.
- * @param {object} model - buildMapModel output (dots, faded, legs, markers used).
+ * @param {object} model - buildMapModel output (venueDots, venueFaded, legs, markers used).
  * @param {ReadonlyArray<{id: string, rings: number[][]}>} geometry - US_STATES.
- * @param {{theme: 'light'|'dark', mobile: boolean}} env
+ * @param {{theme: 'light'|'dark', mobile: boolean, splat?: boolean, images?: object[]}} env
  * @returns {{traces: object[], layout: object, config: object}}
  */
 export function buildMapFigure(model, geometry, env) {
   const { theme, mobile } = env;
   const traces = [
-    outlineTrace(geometry, theme),
+    outlineTrace(geometry, theme, env.splat),
     ...FAMILY_ORDER.map((f) => legsTrace(f, model.legs, theme)),
-    ...FAMILY_ORDER.map((f) => inertTrace(f, model.faded, theme)),
-    ...FAMILY_ORDER.map((f) => dotsTrace(f, model.dots, theme)),
+    venueFadedTrace(model.venueFaded, theme),
+    venueDotsTrace(model.venueDots, theme, mobile),
+    venueSelectedTrace(model, theme, mobile),
     markersTrace(model.markers, theme, mobile),
   ];
   const layout = {
@@ -204,13 +280,14 @@ export function buildMapFigure(model, geometry, env) {
       constrain: 'domain',
       fixedrange: mobile,
     },
-    margin: { l: 0, r: 0, t: 0, b: 0 },
+    margin: { l: 0, r: 0, t: mobile ? 0 : MODEBAR_BAND, b: 0 },
     paper_bgcolor: PAGE_BG[theme],
     plot_bgcolor: PAGE_BG[theme],
     showlegend: false,
     hovermode: 'closest',
     dragmode: mobile ? false : 'zoom',
     uirevision: 'map',
+    images: env.images ?? [],
   };
   if (mobile) layout.hoverdistance = MOBILE_HOVER_DISTANCE;
   const config = {
@@ -237,13 +314,13 @@ function venueOf(ev) {
   const p = ev.points && ev.points[0];
   if (!p || p.customdata == null) return null;
   const name = p.data && p.data.name;
-  if (typeof name !== 'string' || !name.startsWith('dots:')) return null;
-  return { venue: p.customdata, family: name.slice('dots:'.length) };
+  if (name !== 'venue-dots' && name !== 'markers') return null;
+  return { key: p.customdata };
 }
 
 /**
- * Binds Plotly events once, after the first `renderMap`. Only active dots count;
- * callbacks receive (venueIndex, family, ev).
+ * Binds Plotly events once, after the first `renderMap`. Only venue dots and keyed
+ * (non-faded) markers count; callbacks receive (key, ev).
  * @param {HTMLElement} gd
  * @param {{onVenueClick?: Function, onVenueHover?: Function, onVenueUnhover?: Function}} handlers
  */
@@ -251,11 +328,11 @@ export function bindMapEvents(gd, handlers = {}) {
   const { onVenueClick, onVenueHover, onVenueUnhover } = handlers;
   gd.on('plotly_click', (ev) => {
     const hit = venueOf(ev);
-    if (hit) onVenueClick?.(hit.venue, hit.family, ev);
+    if (hit) onVenueClick?.(hit.key, ev);
   });
   gd.on('plotly_hover', (ev) => {
     const hit = venueOf(ev);
-    if (hit) onVenueHover?.(hit.venue, hit.family, ev);
+    if (hit) onVenueHover?.(hit.key, ev);
   });
   gd.on('plotly_unhover', () => onVenueUnhover?.());
 }
