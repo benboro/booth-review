@@ -445,7 +445,8 @@ def test_counts_and_empty(guarded_page: Page, site_url: str) -> None:
         const fade = M.buildMapModel(data, mkView({passes: none}), mkState());
         return {emptyAll: m.emptyAll, drawn: m.drawnCount, dots: m.venueDots.length,
                 full: full.emptyAll, fullDrawn: full.drawnCount,
-                fade: [fade.emptyAll, fade.drawnCount, fade.venueFaded.length, fade.markers.length]};
+                fade: [fade.emptyAll, fade.drawnCount, fade.venueFaded.length,
+                       fade.markers.length]};
         """,
     )
     assert got == {
