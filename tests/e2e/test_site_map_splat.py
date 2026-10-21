@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -10,6 +12,14 @@ from playwright.sync_api import Page
 # ruff: noqa: E501  (inline JS fixtures)
 
 pytestmark = pytest.mark.e2e
+
+# Review screenshots go to a scratch folder (never committed); tmp_path-free on purpose.
+_SHOTS = Path(
+    os.environ.get(
+        "BOOTH_REVIEW_SHOTS",
+        "/tmp/claude-1000/-home-ben-projects-booth-review/8f1ddb8d-4483-4a07-97ba-c49bc76eb3a6/scratchpad",
+    )
+)
 
 PRELUDE = """
 const S = await import('./modules/map-splat.js');
@@ -517,3 +527,95 @@ def test_raster_failure_falls_back_to_land_fill(guarded_page: Page, open_app: An
     _set_state(guarded_page, {"seasons": [2021, 2021]})
     guarded_page.evaluate(_WAIT_FRAMES)
     assert len([m for m in messages if "map colors" in m]) == 1
+
+
+# -- Phase 11 plan 09: the key overlay ---------------------------------------------------
+
+_KEY_BOXES = """async () => {
+  const gd = document.getElementById('map-chart');
+  const full = gd._fullLayout;
+  const panel = document.getElementById('map-panel').getBoundingClientRect();
+  const rel = (r) => ({ left: r.left - panel.left, right: r.right - panel.left,
+                        top: r.top - panel.top, bottom: r.bottom - panel.top });
+  const key = document.getElementById('map-key');
+  const note = document.getElementById('map-note');
+  const G = await import('./modules/map-geo.js');
+  const xa = full.xaxis, ya = full.yaxis;
+  const px = (x, y) => ({ x: xa._offset + xa.l2p(x), y: ya._offset + ya.l2p(y) });
+  const a = px(G.HAWAII_INSET.x0, G.HAWAII_INSET.y0), b = px(G.HAWAII_INSET.x1, G.HAWAII_INSET.y1);
+  const { US_STATES } = await import('./vendor/us-states-albers.js');
+  const S = await import('./modules/map-splat.js');
+  const cell = 3, lm = S.buildLandMask(US_STATES, cell);
+  const k = rel(key.getBoundingClientRect());
+  const m = (p, o) => o.p2l(p);
+  const x0 = xa.p2l(k.left - xa._offset), x1 = xa.p2l(k.right - xa._offset);
+  const y0 = ya.p2l(k.top - ya._offset), y1 = ya.p2l(k.bottom - ya._offset);
+  let land = 0;
+  for (let r = Math.max(0, Math.floor(Math.min(y0, y1) / cell)); r <= Math.min(lm.gh - 1, Math.floor(Math.max(y0, y1) / cell)); r++)
+    for (let c = Math.max(0, Math.floor(Math.min(x0, x1) / cell)); c <= Math.min(lm.gw - 1, Math.floor(Math.max(x0, x1) / cell)); c++)
+      if (lm.mask[r * lm.gw + c] !== 0) land++;
+  return { key: k, note: note.hidden ? null : rel(note.getBoundingClientRect()),
+           hawaii: { left: Math.min(a.x, b.x), right: Math.max(a.x, b.x), top: Math.min(a.y, b.y), bottom: Math.max(a.y, b.y) },
+           land, panelW: panel.width, panelH: panel.height,
+           visible: !key.hidden, text: key.innerText };
+}"""
+
+
+def _hits(a: dict[str, float], b: dict[str, float]) -> bool:
+    return bool(
+        a["left"] < b["right"]
+        and a["right"] > b["left"]
+        and a["top"] < b["bottom"]
+        and a["bottom"] > b["top"]
+    )
+
+
+def test_key_desktop_over_water_clear_of_inset(guarded_page: Page, open_app: Any) -> None:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    _open_splat(guarded_page, open_app)
+    guarded_page.evaluate(_WAIT_FRAMES)
+    got = guarded_page.evaluate(_KEY_BOXES)
+    assert got["visible"]
+    assert "Dot size" in got["text"]
+    assert "Color strength" in got["text"]
+    labels = guarded_page.locator("#map-key .map-key-label").all_inner_texts()
+    assert 1 <= len(labels) <= 3
+    assert all(t.endswith(("game", "games")) for t in labels)
+    assert got["land"] == 0
+    assert not _hits(got["key"], got["hawaii"])
+    if got["note"]:
+        assert not _hits(got["key"], got["note"])
+
+
+def test_key_omits_strength_when_colors_off(guarded_page: Page, open_app: Any) -> None:
+    _open_map(guarded_page, open_app, "?view=map&colors=off")
+    text = guarded_page.locator("#map-key").inner_text()
+    assert "Dot size" in text
+    assert "Color strength" not in text
+
+
+def test_key_phone_sits_in_panel_corner(mobile_page: Page, open_app: Any) -> None:
+    _open_splat(mobile_page, open_app)
+    mobile_page.evaluate(_WAIT_FRAMES)
+    got = mobile_page.evaluate(_KEY_BOXES)
+    key = got["key"]
+    assert key["left"] >= 0 and key["right"] <= got["panelW"]
+    assert key["bottom"] <= got["panelH"] and key["top"] >= 0
+    assert abs(key["left"] - 8) <= 1
+    assert abs(got["panelH"] - key["bottom"] - 8) <= 1
+    if got["note"]:
+        assert not _hits(key, got["note"])
+    mobile_page.screenshot(path=str(_SHOTS / "map-key-390.png"))
+
+
+def test_key_hidden_when_every_game_filtered(guarded_page: Page, open_app: Any) -> None:
+    _open_splat(guarded_page, open_app)
+    _set_state(guarded_page, {"networks": [], "dots": "hide"})
+    guarded_page.wait_for_function("() => document.getElementById('map-key').hidden")
+
+
+def test_key_desktop_screenshot(guarded_page: Page, open_app: Any) -> None:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    _open_splat(guarded_page, open_app)
+    guarded_page.evaluate(_WAIT_FRAMES)
+    guarded_page.locator("#map-panel").screenshot(path=str(_SHOTS / "map-key-1280.png"))

@@ -2830,6 +2830,56 @@ td.no-rating {
   white-space: nowrap;
 }
 
+/* Phase 11 D-09: the key sits on the plot, so its text takes a halo, not a box. */
+.map-key {
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--muted);
+  text-shadow: 0 0 3px var(--bg), 0 0 3px var(--bg);
+}
+
+.map-key-heading {
+  margin: 0 0 var(--space-xs);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.map-key-block + .map-key-block {
+  margin-top: var(--space-sm);
+}
+
+.map-key-sizes {
+  position: relative;
+}
+
+.map-key-label {
+  position: absolute;
+  white-space: nowrap;
+}
+
+.map-key-strength {
+  display: grid;
+  grid-template-columns: repeat(3, 16px) auto;
+  align-items: center;
+  column-gap: var(--space-xs);
+}
+
+.map-key-strength .map-key-heading,
+.map-key-strength .map-key-end:first-of-type {
+  grid-column: 1 / -1;
+}
+
+.map-key-strength .map-key-end:last-child {
+  grid-column: 4;
+  margin-inline-start: var(--space-xs);
+}
+
+.map-key-swatch {
+  display: inline-block;
+  width: 16px;
+  height: 8px;
+}
+
 /* ---------- NFL side (999.5-10) ----------
    The NFL regions share the CFB grid areas. Only one set shows at a time,
    keyed to body[data-sport]; the CFB regions stay in the DOM. */

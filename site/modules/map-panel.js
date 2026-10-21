@@ -17,7 +17,9 @@ import {
   splatImageSpec,
   MAP_TRACE_NAMES,
 } from './map-chart.js';
-import { paintSplat } from './map-splat.js';
+import { buildLandMask, paintSplat } from './map-splat.js';
+import { buildMapKey, renderMapKey } from './map-key.js';
+import { HAWAII_INSET } from './map-geo.js';
 import { MAP_EMPTY, MAP_ERROR, noLocationNote, mapAriaLabel, venueCard } from './map-model.js';
 import { MAP_LAND, MAP_SPLAT, MAP_VENUE_DOT, PAGE_BG } from './palette.js';
 import { showVenueTooltip, hideTooltip } from './tooltip.js';
@@ -47,6 +49,8 @@ let currentImageSpec = null;
 let splatCount = 0;
 let splatBroken = false;
 let splatWarned = false;
+/** The state geometry once loaded, for the key's land test. */
+let loadedGeometry = null;
 
 /** Clears the pending first tap so the next tap on a dot shows its tooltip again. */
 export function resetMapTap() {
@@ -155,6 +159,74 @@ function hideNote() {
   if (note) note.hidden = true;
 }
 
+/** Key anchor on desktop: bottom-left corner at these map units (open Pacific water). */
+const KEY_ANCHOR = Object.freeze({ x: 20, y: 515 });
+const KEY_PHONE_INSET = 8;
+
+const boxesIntersect = (a, b) =>
+  a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+
+/** True when the key's box (panel pixels) lies on water and clear of the Hawaii inset. */
+function keyClearOfLand(full, box) {
+  if (!loadedGeometry) return false;
+  const xa = full.xaxis;
+  const ya = full.yaxis;
+  const mapBox = {
+    x0: xa.p2l(box.left - xa._offset),
+    x1: xa.p2l(box.right - xa._offset),
+    y0: ya.p2l(box.top - ya._offset),
+    y1: ya.p2l(box.bottom - ya._offset),
+  };
+  const lo = { x: Math.min(mapBox.x0, mapBox.x1), y: Math.min(mapBox.y0, mapBox.y1) };
+  const hi = { x: Math.max(mapBox.x0, mapBox.x1), y: Math.max(mapBox.y0, mapBox.y1) };
+  if (
+    lo.x < HAWAII_INSET.x1 &&
+    hi.x > HAWAII_INSET.x0 &&
+    lo.y < HAWAII_INSET.y1 &&
+    hi.y > HAWAII_INSET.y0
+  ) {
+    return false;
+  }
+  const cell = MAP_SPLAT.cell.desktop;
+  const { gw, gh, mask } = buildLandMask(loadedGeometry, cell);
+  const c0 = Math.max(0, Math.floor(lo.x / cell));
+  const c1 = Math.min(gw - 1, Math.floor(hi.x / cell));
+  const r0 = Math.max(0, Math.floor(lo.y / cell));
+  const r1 = Math.min(gh - 1, Math.floor(hi.y / cell));
+  for (let r = r0; r <= r1; r++) {
+    for (let c = c0; c <= c1; c++) if (mask[r * gw + c] !== 0) return false;
+  }
+  return true;
+}
+
+function placeKey(gd, full, panel) {
+  const key = el('map-key');
+  if (!key || key.hidden) return;
+  const panelRect = panel.getBoundingClientRect();
+  const boxOf = () => {
+    const r = key.getBoundingClientRect();
+    return {
+      left: r.left - panelRect.left,
+      right: r.right - panelRect.left,
+      top: r.top - panelRect.top,
+      bottom: r.bottom - panelRect.top,
+    };
+  };
+  const corner = () => {
+    key.style.left = `${KEY_PHONE_INSET}px`;
+    key.style.bottom = `${KEY_PHONE_INSET}px`;
+  };
+  if (latest && latest.env.mobile) {
+    corner();
+    return;
+  }
+  const xa = full.xaxis;
+  const ya = full.yaxis;
+  key.style.left = `${Math.round(xa._offset + xa.l2p(KEY_ANCHOR.x))}px`;
+  key.style.bottom = `${Math.round(panel.clientHeight - (ya._offset + ya.l2p(KEY_ANCHOR.y)))}px`;
+  if (!keyClearOfLand(full, boxOf())) corner();
+}
+
 function positionOverlays() {
   const gd = el('map-chart');
   const full = gd && gd._fullLayout;
@@ -165,6 +237,24 @@ function positionOverlays() {
   if (note) {
     note.style.right = `${Math.max(0, gd.clientWidth - right) + OVERLAY_INSET}px`;
     note.style.bottom = `${Math.max(0, gd.clientHeight - bottom) + OVERLAY_INSET}px`;
+  }
+  const panel = el('map-panel');
+  const key = el('map-key');
+  if (!panel || !key) return;
+  placeKey(gd, full, panel);
+  if (note && !note.hidden && !key.hidden) {
+    const panelRect = panel.getBoundingClientRect();
+    const k = key.getBoundingClientRect();
+    const n = note.getBoundingClientRect();
+    const box = (r) => ({
+      left: r.left - panelRect.left,
+      right: r.right - panelRect.left,
+      top: r.top - panelRect.top,
+      bottom: r.bottom - panelRect.top,
+    });
+    if (boxesIntersect(box(k), box(n))) {
+      note.style.bottom = `${panelRect.bottom - k.top + OVERLAY_INSET}px`;
+    }
   }
 }
 
@@ -250,6 +340,13 @@ export async function renderMapPanel(args) {
     note.textContent = noLocationNote(model.noLocationCount);
     note.hidden = model.noLocationCount === 0;
   }
+  const keyEl = el('map-key');
+  if (keyEl) {
+    renderMapKey(keyEl, buildMapKey(model.venueModel, { phone: env.mobile, colorsOn: env.splat }), {
+      theme: env.theme,
+    });
+    if (model.emptyAll) keyEl.hidden = true;
+  }
   if (model.emptyAll) showNote(MAP_EMPTY);
   else hideNote();
 
@@ -261,6 +358,7 @@ export async function renderMapPanel(args) {
     return;
   }
   if (latest !== args) return;
+  loadedGeometry = geometry;
 
   try {
     const wantSplat =
