@@ -21,7 +21,7 @@ import {
   SHARED_SYMBOL,
 } from './palette.js';
 import { MAX_COMPARE } from './select.js';
-import { buildVenueModel } from './map-venues.js';
+import { buildVenueModel, venueDotSize } from './map-venues.js';
 import {
   ALBERS_SCALE,
   ALBERS_TRANSLATE,
@@ -264,7 +264,19 @@ export function buildMapModel(data, view, state) {
 
   // Phase 11 venue model: one dot per venue (D-01), subject shapes (D-04), the selected
   // venue flag (D-05; the venue filter never reaches `passing`, so no dot collapses).
-  const venueModel = buildVenueModel(data, passing, placements);
+  // D-03: with announcers picked, the venue model (dots, splat, key, card) is built from
+  // the picked people's games among those passing, exactly computeView's `highlighted`
+  // (role and called-together included), so it rescales with the pick. Venues that
+  // host only other games stay on the map as background dots from the full cohort.
+  const personPick = hasSubject && subjects[0].kind === 'person';
+  const fullVenueModel = buildVenueModel(data, passing, placements);
+  const venueModel = personPick
+    ? buildVenueModel(
+        data,
+        view.highlighted.filter((i) => t.place[i] != null),
+        placements,
+      )
+    : fullVenueModel;
   const selectedSet = new Set(
     state.venue != null ? (data.venueIndexesByKey?.get(state.venue) ?? []) : [],
   );
@@ -310,6 +322,27 @@ export function buildMapModel(data, view, state) {
       selected: selectedSet.has(v.index),
     };
   });
+  if (personPick) {
+    // Background venues first, so the picked people's dots draw on top. Their size uses the
+    // picked cohort's scale (capped like any dot), so the two kinds stay comparable.
+    const inCohort = new Set(venueModel.venues.map((v) => v.index));
+    const background = fullVenueModel.venues
+      .filter((v) => !inCohort.has(v.index))
+      .map((v) => ({
+        venue: v.index,
+        key: v.key,
+        x: v.x,
+        y: v.y,
+        tier: 'other',
+        symbol: 'circle',
+        leader: v.leader,
+        score: v.score,
+        size: venueDotSize(v.score, venueModel.maxScore),
+        dotColor: v.dotColor,
+        selected: selectedSet.has(v.index),
+      }));
+    venueDots.unshift(...background);
+  }
 
   const passingVenues = new Set(passing.map((i) => t.place[i]));
   const venueFadedMap = new Map();
@@ -384,6 +417,7 @@ export function buildMapModel(data, view, state) {
     hasShared: venueShared,
     hasVenueShared: venueShared,
     venueModel,
+    fullVenueModel,
     venueDots,
     venueFaded,
     legs,
@@ -469,7 +503,7 @@ const CARD_MAX_ROWS = 6;
  * floor never enters), and the subject lines. Unknown keys give null.
  */
 export function venueCard(data, model, key) {
-  const entry = model.venueModel?.byKey.get(key);
+  const entry = model.venueModel?.byKey.get(key) ?? model.fullVenueModel?.byKey.get(key);
   if (!entry) return null;
   const isGroup = Array.isArray(entry.indexes);
   const indexes = isGroup ? entry.indexes : [entry.index];

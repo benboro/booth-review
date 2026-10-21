@@ -358,7 +358,9 @@ def test_render_methodology_resolves_md_links_against_docs(
 # NFL text changed.
 # Re-pinned at 11 Plan 06: the map section rewrite (venue dots, hover card, network
 # colors); no NFL text changed.
-_METHODOLOGY_FLAG_OFF_SHA256 = "a707fc2501862e2aad76cc2b8c0fe42ea6648b379c4b6c16bb1725511e882fc7"
+# Re-pinned at 11 review fixes: one sentence on announcer picks rescaling the map's dots
+# and coloring; no NFL text changed.
+_METHODOLOGY_FLAG_OFF_SHA256 = "75358f81127ec87b18730c999158e110bef03b5216b7c8b6818b24231574be56"
 
 _NFL_ANCHORS = (
     "nfl-special-games",

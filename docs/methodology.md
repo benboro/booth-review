@@ -265,7 +265,10 @@ The viewer totals on the hover card add up published figures from Ratings Refere
 
 There is one dot per venue, counting only the games that pass the filters. Its
 color fades toward a neutral when the venue's games split between networks, and
-its size blends how many games it hosted with how many people watched.
+its size blends how many games it hosted with how many people watched. With
+announcers picked, the dots, their sizes and colors, and the map's coloring count
+only the games those announcers called (together, when called together is on);
+venues where they called no game stay on the map as paler dots.
 
 Where each dot sits comes from one list of venues from CollegeFootballData.com.
 Each game uses its own venue, so a neutral-site or bowl game sits where it was

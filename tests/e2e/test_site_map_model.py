@@ -668,3 +668,48 @@ def test_hook_exposes_venue_fields(guarded_page: Page, site_url: str) -> None:
     )
     if got is not None:
         assert got == {"dots": True, "faded": True, "keyed": True}
+
+
+def test_announcer_pick_rescales_the_venue_model(guarded_page: Page, site_url: str) -> None:
+    """D-03: picking an announcer builds dots, splat, key and card from the picked people's
+    games; venues with only other games stay as background dots; the venue filter never
+    reaches this cohort."""
+    got = _model(
+        guarded_page,
+        site_url,
+        """
+        const none = M.buildMapModel(data, mkView(), mkState());
+        // Only games 1, 0 and 6 are Pat's here: two of Alpha Field's four, one of Beta Bowl's two.
+        const hl = [1, 0, 6];
+        const m = M.buildMapModel(data, hlView(hl), mkState({people: ['pat']}));
+        const alpha = 'alpha-field-south-bend';
+        const sel = M.buildMapModel(data, hlView(hl), mkState({people: ['pat'], venue: alpha}));
+        const byVenue = (model) =>
+          Object.fromEntries(model.venueModel.venues.map((v) => [v.index, v.games]));
+        const cardGames = (model, key) =>
+          M.venueCard(data, model, key).rows.reduce((n, r) => n + r.games, 0);
+        const dot = (model, i) => model.venueDots.find((d) => d.venue === i);
+        return {
+          allGames: byVenue(none), patGames: byVenue(m), selGames: byVenue(sel),
+          allDots: none.venueDots.map((d) => d.venue).sort(),
+          patDots: m.venueDots.map((d) => [d.venue, d.tier]).sort((a, b) => a[0] - b[0]),
+          bgSize: dot(m, 5).size, bgScore: dot(m, 5).score, patMax: m.venueModel.maxScore,
+          alphaCard: cardGames(m, alpha),
+          alphaCardAll: cardGames(none, alpha),
+          bgCard: M.venueCard(data, m, 'delta-dome-columbus') !== null,
+        };
+        """,
+    )
+    # Alpha Field hosts games 0, 2, 6, 10; Beta Bowl 1 and 7; Delta Dome 3 and 11.
+    assert got["allGames"]["0"] == 4
+    assert got["patGames"] == {"0": 2, "1": 1}
+    assert "5" in got["allGames"]
+    assert got["selGames"] == got["patGames"]
+    tiers = dict(map(tuple, got["patDots"]))
+    assert [d[0] for d in got["patDots"]] == [int(v) for v in got["allDots"]]
+    assert tiers[5] == "other"
+    assert tiers[0] == "subject"
+    assert got["bgSize"]["desktop"] <= 16
+    assert got["alphaCard"] == 2
+    assert got["alphaCardAll"] == 4
+    assert got["bgCard"] is True
