@@ -8,12 +8,15 @@ from the fixture's `games` block.
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Callable
 from itertools import pairwise
 from typing import Any
 
 import pytest
 from playwright.sync_api import Page, Route
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+from test_site_chart import _RING_VISIBLE, _assert_ring_on
 
 pytestmark = pytest.mark.e2e
 
@@ -58,6 +61,103 @@ def _tooltip(page: Page) -> list[str]:
 
 def _panel_open(page: Page) -> bool:
     return page.evaluate("document.getElementById('nfl-detail-panel').open")  # type: ignore[no-any-return]
+
+
+# The NFL twin of test_site_chart's `_DOT_PIXEL_JS`, reading the NFL graph div.
+_NFL_DOT_PIXEL_JS = """
+([selector, customdata]) => {
+  const gd = document.querySelector(selector);
+  const layout = gd._fullLayout;
+  const rect = gd.getBoundingClientRect();
+  for (const trace of gd.data) {
+    if (!trace.customdata) continue;
+    const idx = trace.customdata.indexOf(customdata);
+    if (idx === -1) continue;
+    // band (unrated) traces ride y2: use the trace's own y axis offset
+    const ya = layout[trace.yaxis === 'y2' ? 'yaxis2' : 'yaxis'];
+    return {
+      x: rect.left + layout._size.l + layout.xaxis.d2p(trace.x[idx]),
+      y: rect.top + ya._offset + ya.l2p(ya.d2l(trace.y[idx])),
+    };
+  }
+  return null;
+}
+"""
+
+# Client-pixel centre of the rated (y) or band (y2) subplot.
+_NFL_SUBPLOT_CENTER_JS = """
+([selector, band]) => {
+  const gd = document.querySelector(selector);
+  const layout = gd._fullLayout;
+  const rect = gd.getBoundingClientRect();
+  const ya = band ? layout.yaxis2 : layout.yaxis;
+  return {
+    x: rect.left + layout.xaxis._offset + layout.xaxis._length / 2,
+    y: rect.top + ya._offset + ya._length / 2,
+  };
+}
+"""
+
+# True when the point lies on Plotly's drag/hover layer inside the graph div.
+_NFL_HOVER_LAYER_JS = """
+([selector, x, y]) => {
+  const gd = document.querySelector(selector);
+  const hit = document.elementFromPoint(x, y);
+  return hit !== null && gd.contains(hit) && hit.closest('.draglayer') !== null;
+}
+"""
+
+_TWO_FRAMES_JS = (
+    "() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))"
+)
+
+
+def _nfl_dot_point(page: Page, customdata: int) -> dict[str, float]:
+    """Client pixel of game `customdata`'s dot, computed from the trace data and the
+    axes (not from any hover event), so it is an independent reference for the ring."""
+    page.locator(GD).first.scroll_into_view_if_needed()
+    point: dict[str, float] | None = page.evaluate(_NFL_DOT_PIXEL_JS, [GD, customdata])
+    assert point is not None, f"no NFL dot with customdata {customdata}"
+    return point
+
+
+def _offset_hover_target(page: Page, band: bool) -> tuple[int, dict[str, float], dict[str, float]]:
+    """A game, its dot pixel, and a pointer pixel a few px off that dot.
+
+    Picks the most isolated dot of the case (rated log axis, or the unrated band) so
+    it stays the unique nearest dot within Plotly's 20 px hover distance, then offsets
+    the pointer 6 px in x and 5 px in y toward the subplot centre, onto the hover layer.
+    """
+    case = "unrated-band" if band else "rated-log-axis"
+    items = _vm(page)["items"]
+    candidates = [it["i"] for it in items if it["band"] is band and not it["faded"]]
+    pixels = {i: _nfl_dot_point(page, i) for i in candidates}
+
+    def clearance(i: int) -> float:
+        others = [
+            math.hypot(pixels[i]["x"] - pixels[j]["x"], pixels[i]["y"] - pixels[j]["y"])
+            for j in candidates
+            if j != i
+        ]
+        return min(others, default=math.inf)
+
+    centre = page.evaluate(_NFL_SUBPLOT_CENTER_JS, [GD, band])
+    best = 0.0
+    for i in sorted(candidates, key=clearance, reverse=True):
+        room = clearance(i)
+        best = max(best, room)
+        if room < 24:
+            break
+        dot = pixels[i]
+        pointer = {
+            "x": dot["x"] + (6.0 if centre["x"] >= dot["x"] else -6.0),
+            "y": dot["y"] + (5.0 if centre["y"] >= dot["y"] else -5.0),
+        }
+        if page.evaluate(_NFL_HOVER_LAYER_JS, [GD, pointer["x"], pointer["y"]]):
+            return i, dot, pointer
+    raise AssertionError(
+        f"{case}: no isolated dot with a hoverable offset (best clearance {best:.1f} px)"
+    )
 
 
 # --------------------------------------------------------------- task 1
@@ -383,6 +483,36 @@ def test_faded_dot_has_no_hover_or_click(
     assert nfl_guarded_page.locator("#chart-tooltip").is_hidden()
     _emit(nfl_guarded_page, "plotly_click", faded)
     assert not _panel_open(nfl_guarded_page)
+
+
+@pytest.mark.parametrize("band", [False, True], ids=["rated-log-axis", "unrated-band"])
+def test_hover_ring_centres_on_the_dot_not_the_pointer(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], band: bool
+) -> None:
+    """notes-14: the ring centres on the hovered dot even when the pointer is off it, on the log axis and in the band."""
+    page = nfl_guarded_page
+    page.set_viewport_size({"width": 1280, "height": 900})
+    _open(page, open_nfl_app)
+    vm = _vm(page)
+    assert vm["yType"] == "log"
+    assert any(it["band"] is band and not it["faded"] for it in vm["items"])
+    # Same scripted-hover quirks as test_site_chart._hover_dot: leave the chart first,
+    # and let a coalesced scroll event settle before hovering.
+    page.mouse.move(5, 5)
+    page.locator(GD).first.scroll_into_view_if_needed()
+    page.evaluate(_TWO_FRAMES_JS)
+    i, dot, pointer = _offset_hover_target(page, band)
+    assert math.hypot(pointer["x"] - dot["x"], pointer["y"] - dot["y"]) >= 6
+    for attempt in range(2):
+        page.mouse.move(pointer["x"], pointer["y"])
+        try:
+            page.wait_for_selector(_RING_VISIBLE, timeout=3000)
+            break
+        except PlaywrightTimeoutError:
+            if attempt == 1:
+                raise
+            page.mouse.move(5, 5)
+    _assert_ring_on(page, i, dot)
 
 
 def test_click_opens_panel_and_accumulates_picks(
