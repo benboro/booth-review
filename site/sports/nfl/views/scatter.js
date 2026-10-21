@@ -244,6 +244,41 @@ function itemFor(ev) {
   return current.byGame.get(k) || null;
 }
 
+/**
+ * The hovered dot's client-pixel position, for the hover ring (the CFB scatter
+ * derives its ring the same way). The tooltip keeps the pointer position; only
+ * the ring uses this, so it sits on the dot even when the pointer is a few px
+ * off it. The point-based math reaches into undocumented Plotly internals
+ * (`_fullLayout`, `_offset`, `.l2p`). If a vendored Plotly version reshapes or
+ * drops any of them, fall through to the hover event's own client coordinates
+ * rather than letting the exception silently swallow the hover (Plotly's event
+ * dispatch does not surface a throwing listener to the user).
+ */
+function pointClientPosition(gd, ev) {
+  const point = ev.points && ev.points[0];
+  let clientX;
+  let clientY;
+  try {
+    if (point && point.x != null && point.y != null && gd._fullLayout) {
+      const layout = gd._fullLayout;
+      const rect = gd.getBoundingClientRect();
+      // Each event point carries its own axes, so band (y2) points anchor on y2.
+      const xa = point.xaxis ?? layout.xaxis;
+      const ya = point.yaxis ?? layout.yaxis;
+      clientX = rect.left + xa._offset + xa.l2p(xa.d2l(point.x));
+      clientY = rect.top + ya._offset + ya.l2p(ya.d2l(point.y));
+    }
+  } catch {
+    clientX = undefined;
+    clientY = undefined;
+  }
+  if (clientX == null || clientY == null) {
+    clientX = ev.event?.clientX;
+    clientY = ev.event?.clientY;
+  }
+  return { clientX, clientY };
+}
+
 function bindEvents(gd) {
   if (refs.bound) return;
   refs.bound = true;
@@ -256,16 +291,24 @@ function bindEvents(gd) {
     if (!it || !it.pass) return;
     if (current.env.mobile || current.env.hoverNone) return;
     const e = ev.event || {};
-    const clientX = e.clientX ?? 0;
-    const clientY = e.clientY ?? 0;
+    const pointerX = e.clientX ?? 0;
+    const pointerY = e.clientY ?? 0;
     showTextTooltip(hoverLines(current.model, it.i), {
       theme: theme(current.env),
       borderColor: ACCENT[theme(current.env)],
-      clientX,
-      clientY,
+      clientX: pointerX,
+      clientY: pointerY,
     });
-    const spec = ringSpecFromPoint(ev.points[0]);
-    showHoverRing({ i: it.i, clientX, clientY, diameter: hoverRingDiameter(spec.size, spec.symbol) });
+    const at = pointClientPosition(gd, ev);
+    if (Number.isFinite(at.clientX) && Number.isFinite(at.clientY)) {
+      const spec = ringSpecFromPoint(ev.points[0]);
+      showHoverRing({
+        i: it.i,
+        clientX: at.clientX,
+        clientY: at.clientY,
+        diameter: hoverRingDiameter(spec.size, spec.symbol),
+      });
+    }
   });
   gd.on('plotly_unhover', () => {
     hideTooltip();
