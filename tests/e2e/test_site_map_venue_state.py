@@ -110,6 +110,47 @@ def test_group_slug_colliding_with_a_venue_key_is_prefixed(
     assert got["plain"] == [1]
 
 
+def test_suffixed_key_never_lands_on_another_venues_own_key(
+    guarded_page: Page, site_url: str
+) -> None:
+    mutation = (
+        "const v = raw.lookups.venues;"
+        " [['Foo', ''], ['Foo', ''], ['Foo 2', '']].forEach(([n, c], i) => { v[i].name = n; v[i].city = c; });"
+    )
+    got = _eval(
+        guarded_page,
+        site_url,
+        "return { keys: data.venueKeys, byKey: [...data.venueIndexesByKey.keys()].length, n: data.lookups.venues.length };",
+        mutation,
+    )
+    assert got["keys"][:3] == ["foo", "foo-3", "foo-2"]
+    assert len(set(got["keys"])) == got["n"]
+
+
+def test_abroad_group_key_never_collides_with_a_venue_or_another_group(
+    guarded_page: Page, site_url: str
+) -> None:
+    mutation = (
+        "const v = raw.lookups.venues;"
+        " v[1].name = 'Dublin'; v[1].city = '';"
+        " v[2].name = 'Abroad Dublin'; v[2].city = '';"
+    )
+    got = _eval(
+        guarded_page,
+        site_url,
+        "return { keys: data.venueKeys, groups: data.venueGroupKeys, d: data.venueIndexesByKey.get('abroad-dublin-2'), a: data.venueIndexesByKey.get('abroad-dublin'), plain: data.venueIndexesByKey.get('dublin') };",
+        mutation,
+    )
+    assert got["keys"][1] == "dublin"
+    assert got["keys"][2] == "abroad-dublin"
+    assert got["groups"][7] == "abroad-dublin-2"
+    assert got["d"] == [7]
+    assert got["a"] == [2]
+    assert got["plain"] == [1]
+    groups = {k for k in got["groups"] if k is not None}
+    assert not groups & set(got["keys"])
+
+
 # ---------------------------------------------------------------- state and view
 
 _VENUE = "ironpeak-field-boulder"  # fixture venue 2: rated telecasts 1 (2019) and 8 (2026)
