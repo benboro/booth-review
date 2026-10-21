@@ -10,6 +10,7 @@ import { FAMILY_ORDER, familyKey } from './palette.js';
 import { CFP_GAME_DEFS, NEW_YEARS_SIX } from './format.js';
 import { buildDateAxis } from './date-axis.js';
 import { EXCITEMENT_CAP, Y_MEASURES } from './caps.js';
+import { placeVenues } from './map-geo.js';
 
 /**
  * Normalizes a name for matching: Unicode NFKD decomposition, combining
@@ -36,6 +37,38 @@ export function slugify(s) {
   return normalizeName(s)
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Stable venue keys (Phase 11 D-05): the slug of name + city, with -2/-3 suffixes on
+ * repeats in lookup order, plus a group key for each abroad marker label (Dublin) that
+ * resolves to every venue in the group. Indexes are never put in a URL.
+ * @param {Array<object>} venues lookups.venues
+ */
+function buildVenueKeys(venues) {
+  const seen = new Map();
+  const venueKeys = venues.map((v) => {
+    const base = slugify(`${v.name} ${v.city ?? ''}`) || 'venue';
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    return n === 1 ? base : `${base}-${n}`;
+  });
+  const taken = new Set(venueKeys);
+  const placements = placeVenues(venues);
+  const venueGroupKeys = placements.map((pl) => {
+    if (!pl.abroad || pl.label == null) return null;
+    const slug = slugify(pl.label) || 'venue';
+    return taken.has(slug) ? `abroad-${slug}` : slug;
+  });
+  const venueIndexesByKey = new Map();
+  venueKeys.forEach((key, i) => venueIndexesByKey.set(key, [i]));
+  venueGroupKeys.forEach((key, i) => {
+    if (key == null) return;
+    const hit = venueIndexesByKey.get(key);
+    if (hit && !taken.has(key)) hit.push(i);
+    else if (!hit) venueIndexesByKey.set(key, [i]);
+  });
+  return { venueKeys, venueGroupKeys, venueIndexesByKey };
 }
 
 /**
@@ -348,6 +381,7 @@ export function prepareData(raw) {
     g.index = index;
   });
   const gameIndexBySlug = new Map(games.map((g) => [g.slug, g.index]));
+  const { venueKeys, venueGroupKeys, venueIndexesByKey } = buildVenueKeys(lookups.venues);
   const gameByRound = new Map();
   const gameByFranchise = new Map();
   const gameByRivalry = new Map();
@@ -409,6 +443,9 @@ export function prepareData(raw) {
     fbsConferences,
     games,
     gameIndexBySlug,
+    venueKeys,
+    venueGroupKeys,
+    venueIndexesByKey,
     dotGames,
   };
 }
