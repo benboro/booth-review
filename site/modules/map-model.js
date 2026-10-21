@@ -406,6 +406,26 @@ function venueTitle(venue) {
   return where ? `${venue.name} · ${venue.city}, ${where}` : `${venue.name} · ${venue.city}`;
 }
 
+/**
+ * Name and tooltip for the venue filter chip and status (Phase 11 D-05): a single venue
+ * gives its name and "name, city, ST"; an abroad marker group gives its label. Unknown
+ * keys give null.
+ */
+export function venueFilterInfo(data, key) {
+  const indexes = key != null ? data.venueIndexesByKey?.get(key) : undefined;
+  if (!indexes || indexes.length === 0) return null;
+  const single = data.venueKeys?.indexOf(key) ?? -1;
+  if (single >= 0) {
+    const v = data.lookups.venues[single];
+    const abroad = v.country != null && v.country !== 'US';
+    const where = abroad ? countryName(v.country) : v.state;
+    const title = [v.name, v.city, where].filter(Boolean).join(', ');
+    return { name: v.name, title };
+  }
+  const label = placeVenues(data.lookups.venues)[indexes[0]]?.label ?? key;
+  return { name: label, title: label };
+}
+
 function gameLine(data, i) {
   const t = data.t;
   const teams = data.lookups.teams;

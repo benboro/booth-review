@@ -310,13 +310,16 @@
 </main>
 
 <section id="matched-games">
-  <h2>Matched games</h2>
+  <div class="matched-heading-row"><h2 id="matched-games-title" tabindex="-1">Matched games</h2><ul id="venue-chips" class="chips venue-chips" aria-label="Venue filter"></ul></div>
+  <p id="venue-status" class="visually-hidden" role="status" aria-live="polite"></p>
 
   <div id="table-empty" class="empty-state">
     <h3>Nothing selected</h3>
     <p>Select an announcer, a school, or a game to list matching games.</p>
     <p>Pick an announcer, a school, or a game from the filters above.</p>
   </div>
+
+  <p id="venue-nomatch" hidden>No games match these filters.</p>
 
   <table id="games-table" class="games-table" hidden>
     <thead>

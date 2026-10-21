@@ -2155,6 +2155,30 @@ input[type="checkbox"] {
 
 /* ---------- Matched games table ---------- */
 
+.matched-heading-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  min-height: var(--space-xl);
+  margin: 0 0 var(--space-md) 0;
+}
+
+.matched-heading-row h2 {
+  margin: 0;
+}
+
+.venue-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  min-width: 0;
+  max-width: 100%;
+}
+
 #matched-games {
   padding: var(--space-lg) var(--space-lg) var(--space-xl);
   /* SITE-20: `.games-table` has no `table-layout: fixed`, so its natural width
