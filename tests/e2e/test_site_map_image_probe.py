@@ -21,7 +21,7 @@ _SETUP = """
 async () => {
   const C = await import('./modules/map-chart.js');
   const G = await import('./vendor/us-states-albers.js');
-  const fig = C.buildMapFigure({dots: [], faded: [], legs: [], markers: []},
+  const fig = C.buildMapFigure({venueDots: [], venueFaded: [], legs: [], markers: []},
                                G.US_STATES, {theme: 'light', mobile: false});
   const div = document.createElement('div');
   div.id = 'probe-gd';
