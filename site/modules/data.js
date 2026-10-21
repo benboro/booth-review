@@ -39,10 +39,29 @@ export function slugify(s) {
     .replace(/^-+|-+$/g, '');
 }
 
+/** Orders venues that share a name and city by their own data, never by array position. */
+function compareVenueIdentity(venues, i, j) {
+  const a = venues[i];
+  const b = venues[j];
+  // Code-unit order, so the result never depends on the browser's locale.
+  const text = (x, y) => ((x ?? '') < (y ?? '') ? -1 : (x ?? '') > (y ?? '') ? 1 : 0);
+  return (
+    text(a.state, b.state) ||
+    text(a.country, b.country) ||
+    (a.lat ?? 0) - (b.lat ?? 0) ||
+    (a.lon ?? 0) - (b.lon ?? 0) ||
+    i - j
+  );
+}
+
 /**
- * Stable venue keys (Phase 11 D-05): the slug of name + city, with -2/-3 suffixes on
- * repeats in lookup order, plus a group key for each abroad marker label (Dublin) that
- * resolves to every venue in the group. Indexes are never put in a URL.
+ * Stable venue keys (Phase 11 D-05): the slug of name + city. Venues that repeat a name
+ * and city get -2/-3 suffixes in the order of their own state, country, latitude and
+ * longitude, so a saved link keeps its venue when other venues are added or removed or
+ * the lookup is reordered (only an exact duplicate of all of those falls back to lookup
+ * position). A venue with a unique name and city keeps the bare slug. Also a group key
+ * for each abroad marker label (Dublin) that resolves to every venue in the group.
+ * Indexes are never put in a URL.
  * @param {Array<object>} venues lookups.venues
  */
 function buildVenueKeys(venues) {
@@ -51,16 +70,22 @@ function buildVenueKeys(venues) {
   // venue's own key ("Foo 2"); keys without a collision stay exactly the base.
   const reserved = new Set(bases);
   const taken = new Set();
-  const venueKeys = bases.map((base) => {
-    let key = base;
-    if (taken.has(base)) {
-      let n = 2;
-      while (reserved.has(`${base}-${n}`) || taken.has(`${base}-${n}`)) n += 1;
-      key = `${base}-${n}`;
-    }
-    taken.add(key);
-    return key;
-  });
+  const members = new Map();
+  bases.forEach((base, i) => members.set(base, [...(members.get(base) ?? []), i]));
+  const venueKeys = new Array(venues.length);
+  for (const [base, indexes] of members) {
+    indexes.sort((i, j) => compareVenueIdentity(venues, i, j));
+    indexes.forEach((i, rank) => {
+      let key = base;
+      if (rank > 0) {
+        let n = 2;
+        while (reserved.has(`${base}-${n}`) || taken.has(`${base}-${n}`)) n += 1;
+        key = `${base}-${n}`;
+      }
+      taken.add(key);
+      venueKeys[i] = key;
+    });
+  }
   const placements = placeVenues(venues);
   // One key per abroad label; it can match neither a venue key nor another label's key.
   const groupByLabel = new Map();
