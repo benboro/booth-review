@@ -289,7 +289,13 @@ function render() {
     hideBandInfo();
     resetMapTap();
     lastMapModel = buildMapModel(data, view, state);
-    renderMapPanel({ data, model: lastMapModel, env: currentEnv(), resize: lastPanel !== 'map' });
+    // Task 2 of 11-09 switches splat to `state.colors !== 'off'` once the raster lands.
+    renderMapPanel({
+      data,
+      model: lastMapModel,
+      env: { ...currentEnv(), splat: false },
+      resize: lastPanel !== 'map',
+    });
     lastPanel = 'map';
   } else {
     chartEl.hidden = true;
@@ -478,6 +484,8 @@ async function startCfb(search = location.search) {
       getNetworks: () => structuredClone(state.networks),
       switchEl: document.getElementById('dots-toggle'),
       onDots: (dots) => setState({ dots }),
+      colorsEl: document.getElementById('colors-toggle'),
+      onColors: (colors) => setState({ colors }),
     });
     renderers.push(renderLegend);
 

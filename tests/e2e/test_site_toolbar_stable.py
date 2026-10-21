@@ -345,3 +345,33 @@ def test_five_chart_tabs_fit_at_340px(
     assert fit["clipped"] == 0
     assert fit["right"] <= fit["slotRight"] + 0.5
     assert fit["scrollWidth"] <= 340
+
+
+_COLORS_RECT_JS = """() => {
+  const el = document.getElementById('colors-toggle');
+  const r = el.getBoundingClientRect();
+  const lr = document.getElementById('legend-row').getBoundingClientRect();
+  return {x: r.x, y: r.y - lr.y, w: r.width, h: r.height, vis: getComputedStyle(el).visibility,
+          legendH: document.getElementById('legend-row').getBoundingClientRect().height};
+}"""
+
+
+@pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
+@pytest.mark.parametrize("width", [1280, 360])
+def test_colors_toggle_conceals_without_layout_shift(
+    guarded_page: Page, open_app: Callable[[Page, str], None], width: int
+) -> None:
+    """Phase 11 D-09: the Network colors switch is concealed (not hidden) off the Map, so
+    the legend row and the switch's own box never move between tabs."""
+    guarded_page.set_viewport_size({"width": width, "height": 900})
+    open_app(guarded_page)
+    off_map = guarded_page.evaluate(_COLORS_RECT_JS)
+    assert off_map["vis"] == "hidden"
+    before: int = guarded_page.evaluate("() => window.__testHooks.mapRenders")
+    _set(guarded_page, {"view": "map"})
+    guarded_page.wait_for_function("(n) => window.__testHooks.mapRenders > n", arg=before)
+    guarded_page.evaluate(_WAIT_TWO_FRAMES)
+    on_map = guarded_page.evaluate(_COLORS_RECT_JS)
+    assert on_map["vis"] == "visible"
+    for key in ("x", "y", "w", "h", "legendH"):
+        assert on_map[key] == off_map[key], key

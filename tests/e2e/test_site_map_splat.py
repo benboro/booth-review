@@ -230,3 +230,66 @@ def test_synthetic_timings_printed(guarded_page: Page, site_url: str) -> None:
     )
     print(f"synthetic 200-venue timings (ms): {got}")
     assert all(v >= 0 for v in got.values())
+
+
+# -- Phase 11 plan 09: the live Map (switch, URL, chips) ---------------------------------
+
+_WAIT_FRAMES = "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
+
+
+def _open_map(page: Page, open_app: Any, query: str = "?view=map") -> None:
+    open_app(page, query)
+    page.wait_for_function("() => window.__testHooks.mapRenders >= 1")
+
+
+def _pressed(page: Page) -> list[str]:
+    result: list[str] = page.evaluate(
+        "() => [...document.querySelectorAll('#colors-toggle button')]"
+        ".filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset.colors)"
+    )
+    return result
+
+
+def test_colors_switch_visible_only_on_map_and_round_trips_url(
+    guarded_page: Page, open_app: Any
+) -> None:
+    open_app(guarded_page)
+    assert (
+        guarded_page.evaluate(
+            "() => getComputedStyle(document.getElementById('colors-toggle')).visibility"
+        )
+        == "hidden"
+    )
+    _open_map(guarded_page, open_app)
+    assert guarded_page.locator("#colors-toggle").is_visible()
+    assert _pressed(guarded_page) == ["on"]
+    guarded_page.click("#colors-toggle button[data-colors=off]")
+    guarded_page.wait_for_function("() => location.search.includes('colors=off')")
+    assert _pressed(guarded_page) == ["off"]
+    guarded_page.click("#colors-toggle button[data-colors=on]")
+    guarded_page.wait_for_function("() => !location.search.includes('colors')")
+    assert _pressed(guarded_page) == ["on"]
+
+
+def test_colors_off_and_bogus_urls(guarded_page: Page, open_app: Any) -> None:
+    _open_map(guarded_page, open_app, "?view=map&colors=off")
+    assert _pressed(guarded_page) == ["off"]
+    _open_map(guarded_page, open_app, "?view=map&colors=bogus")
+    assert _pressed(guarded_page) == ["on"]
+
+
+def test_map_conference_chip_uses_map_violet(guarded_page: Page, open_app: Any) -> None:
+    _open_map(guarded_page, open_app)
+    got = guarded_page.evaluate(
+        """async () => {
+          const P = await import('./modules/palette.js');
+          const chip = document.querySelector('#legend-chips button[data-family=conference]');
+          const probe = document.createElement('span');
+          probe.style.color = P.MAP_FAMILY_COLORS.light.conference;
+          document.body.appendChild(probe);
+          const want = getComputedStyle(probe).color;
+          probe.remove();
+          return {bg: getComputedStyle(chip).backgroundColor, want};
+        }"""
+    )
+    assert got["bg"] == got["want"]

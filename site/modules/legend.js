@@ -19,7 +19,13 @@
  */
 
 import { familyToggledOff, familyIsSole } from './select.js';
-import { FAMILY_COLORS, FAMILY_LABELS, PILL_TEXT_COLOR } from './palette.js';
+import {
+  FAMILY_COLORS,
+  FAMILY_LABELS,
+  MAP_FAMILY_COLORS,
+  PILL_TEXT_COLOR,
+  readableTextOn,
+} from './palette.js';
 import { currentTheme } from './pill.js';
 
 /** D-07: two single clicks (or taps) on one pill within this many ms, by input time,
@@ -82,9 +88,19 @@ export function createOnlyDetector({ onToggle, onOnly, snapshot }) {
  * @param {{listEl: HTMLElement, onToggle: (family: string) => void,
  *   onOnly: (family: string, before: string[]|null) => void,
  *   getNetworks: () => string[]|null,
- *   switchEl?: HTMLElement|null, onDots?: (value: string) => void}} args
+ *   switchEl?: HTMLElement|null, onDots?: (value: string) => void,
+ *   colorsEl?: HTMLElement|null, onColors?: (value: string) => void}} args
  */
-export function initLegend({ listEl, onToggle, onOnly, getNetworks, switchEl, onDots }) {
+export function initLegend({
+  listEl,
+  onToggle,
+  onOnly,
+  getNetworks,
+  switchEl,
+  onDots,
+  colorsEl,
+  onColors,
+}) {
   const detector = createOnlyDetector({ onToggle, onOnly, snapshot: getNetworks });
   if (switchEl) {
     switchEl.addEventListener('click', (ev) => {
@@ -92,6 +108,14 @@ export function initLegend({ listEl, onToggle, onOnly, getNetworks, switchEl, on
       if (!button) return;
       const value = button.dataset.dots;
       if (value === 'fade' || value === 'hide') onDots(value);
+    });
+  }
+  if (colorsEl) {
+    colorsEl.addEventListener('click', (ev) => {
+      const button = ev.target.closest('button[data-colors]');
+      if (!button) return;
+      const value = button.dataset.colors;
+      if (value === 'on' || value === 'off') onColors(value);
     });
   }
   listEl.addEventListener('click', (ev) => {
@@ -120,6 +144,7 @@ export function renderLegend({ data, state, view }) {
   const listEl = document.getElementById('legend-chips');
   if (!listEl) return;
   const theme = currentTheme();
+  const palette = state.view === 'map' ? MAP_FAMILY_COLORS : FAMILY_COLORS;
   const items = data.families.map((family) => {
     const li = document.createElement('li');
     const button = document.createElement('button');
@@ -143,10 +168,13 @@ export function renderLegend({ data, state, view }) {
       // so the stylesheet applies; the border keeps the family color.
       button.style.backgroundColor = '';
       button.style.color = '';
-      button.style.borderColor = FAMILY_COLORS[theme][family];
+      button.style.borderColor = palette[theme][family];
     } else if (pressed) {
-      button.style.backgroundColor = FAMILY_COLORS[theme][family];
-      button.style.color = PILL_TEXT_COLOR[family];
+      button.style.backgroundColor = palette[theme][family];
+      button.style.color =
+        state.view === 'map' && family === 'conference'
+          ? (readableTextOn(palette[theme][family]) ?? PILL_TEXT_COLOR[family])
+          : PILL_TEXT_COLOR[family];
       button.style.borderColor = '';
     } else {
       // Toggled off: clear the inline fill so CSS's own
@@ -154,7 +182,7 @@ export function renderLegend({ data, state, view }) {
       // `--text` color) applies; only the border keeps the family color.
       button.style.backgroundColor = '';
       button.style.color = '';
-      button.style.borderColor = FAMILY_COLORS[theme][family];
+      button.style.borderColor = palette[theme][family];
     }
     li.appendChild(button);
     return li;
@@ -167,5 +195,13 @@ export function renderLegend({ data, state, view }) {
       button.setAttribute('aria-pressed', String(button.dataset.dots === mode));
     }
     toggleEl.classList.toggle('is-concealed', state.view !== 'scatter');
+  }
+  const colorsEl = document.getElementById('colors-toggle');
+  if (colorsEl) {
+    const mode = state.colors === 'off' ? 'off' : 'on';
+    for (const button of colorsEl.querySelectorAll('button[data-colors]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.colors === mode));
+    }
+    colorsEl.classList.toggle('is-concealed', state.view !== 'map');
   }
 }

@@ -1686,6 +1686,10 @@ input[type="checkbox"] {
   margin-inline-start: auto;
 }
 
+.colors-toggle {
+  margin-inline-start: var(--space-md);
+}
+
 .dots-caption {
   font: var(--font-label);
   color: var(--muted);
@@ -2526,13 +2530,16 @@ html:has(#mlb-detail-panel[open]) {
     order: 1;
   }
 
-  .dots-toggle {
+  .dots-toggle,
+  .colors-toggle {
     margin-inline-start: 0;
     flex-basis: 100%;
   }
 
   .dots-toggle .segmented,
-  .dots-toggle .segmented button {
+  .dots-toggle .segmented button,
+  .colors-toggle .segmented,
+  .colors-toggle .segmented button {
     flex: 1;
   }
 
