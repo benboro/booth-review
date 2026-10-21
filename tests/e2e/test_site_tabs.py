@@ -774,7 +774,10 @@ def test_stale_copy_is_state_aware(
     assert out["bars"] == out["stale"]["bars"]
 
 
-MAP_HINT = "Pick an announcer or a school to trace a path"
+MAP_HINT = (
+    "Pick an announcer or a school to trace a path. "
+    "Color shows which network airs the most games nearby."
+)
 
 
 def test_clicking_map_sets_view_and_url(

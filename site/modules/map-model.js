@@ -21,6 +21,7 @@ import {
   SHARED_SYMBOL,
 } from './palette.js';
 import { MAX_COMPARE } from './select.js';
+import { buildVenueModel } from './map-venues.js';
 import {
   ALBERS_SCALE,
   ALBERS_TRANSLATE,
@@ -54,7 +55,8 @@ const ARC_STEP = 20;
 const ARC_MIN_SEGMENTS = 6;
 const ARC_MAX_SEGMENTS = 24;
 
-export const MAP_HINT = 'Pick an announcer or a school to trace a path';
+export const MAP_HINT =
+  'Pick an announcer or a school to trace a path. Color shows which network airs the most games nearby.';
 export const MAP_SHAPES_CAPTION = Object.freeze({
   school: 'Shapes shown for the first 4 schools',
   person: 'Shapes shown for the first 4 announcers',
@@ -315,7 +317,66 @@ export function buildMapModel(data, view, state) {
     }
   });
 
-  // Markers for venues abroad, one per label (D-15).
+  // Phase 11 venue model: one dot per venue (D-01), subject shapes (D-04), the selected
+  // venue flag (D-05; the venue filter never reaches `passing`, so no dot collapses).
+  const venueModel = buildVenueModel(data, passing, placements);
+  const selectedSet = new Set(
+    state.venue != null ? (data.venueIndexesByKey?.get(state.venue) ?? []) : [],
+  );
+  let venueShared = false;
+  const venueDots = venueModel.venues.map((v) => {
+    let tier = 'base';
+    let symbol = 'circle';
+    if (hasSubject) {
+      const games = venueGames.get(v.index) ?? [];
+      const owners = new Set();
+      let together = false;
+      for (const i of games) {
+        const mine = gameSubjects.get(i);
+        if (!mine) continue;
+        for (const k of mine) owners.add(k);
+        if (mine.some((k) => subjects[k].kind === 'person') && (view.peopleOnGame.get(i) ?? []).length >= 2) {
+          together = true;
+        }
+      }
+      if (owners.size === 0) {
+        tier = 'other';
+      } else {
+        tier = 'subject';
+        if (owners.size >= 2 || together) {
+          symbol = SHARED_SYMBOL;
+          venueShared = true;
+        } else {
+          symbol = subjects[Math.min(...owners)].symbol;
+        }
+      }
+    }
+    return {
+      venue: v.index,
+      key: v.key,
+      x: v.x,
+      y: v.y,
+      tier,
+      symbol,
+      leader: v.leader,
+      score: v.score,
+      size: v.size,
+      dotColor: v.dotColor,
+      selected: selectedSet.has(v.index),
+    };
+  });
+
+  const passingVenues = new Set(passing.map((i) => t.place[i]));
+  const venueFadedMap = new Map();
+  for (const i of failing) {
+    const venue = t.place[i];
+    const p = placements[venue];
+    if (p.abroad || passingVenues.has(venue) || venueFadedMap.has(venue)) continue;
+    venueFadedMap.set(venue, { venue, key: data.venueKeys[venue], x: p.x, y: p.y });
+  }
+  const venueFaded = [...venueFadedMap.values()].sort((a, b) => a.venue - b.venue);
+
+  // Markers for venues abroad, one per label (D-15, D-10).
   const groups = new Map();
   data.lookups.venues.forEach((_, venue) => {
     const p = placements[venue];
@@ -331,6 +392,7 @@ export function buildMapModel(data, view, state) {
     return best;
   };
   const markers = [];
+  const markerVenues = new Set();
   for (const [label, { p, venues }] of groups) {
     const pass = new Map();
     const vis = new Map();
@@ -340,23 +402,38 @@ export function buildMapModel(data, view, state) {
     for (const i of failing) {
       if (venues.includes(t.place[i])) vis.set(data.familyOf[i], (vis.get(data.familyOf[i]) ?? 0) + 1);
     }
+    const key = data.venueGroupKeys?.[venues[0]] ?? null;
+    const selected = (key != null && state.venue === key) || venues.some((v) => selectedSet.has(v));
+    const grp = key != null ? venueModel.byKey.get(key) : null;
     const top = busiest(pass);
     if (top) {
-      markers.push({ x: p.x, y: p.y, label, side: p.side, family: top, faded: false });
+      markers.push({ x: p.x, y: p.y, label, side: p.side, family: grp?.leader ?? top, faded: false, key, selected });
+      for (const v of venues) if (venueGames.has(v)) markerVenues.add(v);
     } else {
       const alt = busiest(vis);
-      if (alt) markers.push({ x: p.x, y: p.y, label, side: p.side, family: alt, faded: true });
+      if (alt) {
+        markers.push({ x: p.x, y: p.y, label, side: p.side, family: alt, faded: true, key, selected });
+        for (const v of venues) if (failing.some((i) => t.place[i] === v)) markerVenues.add(v);
+      }
     }
   }
 
-  const drawn = new Set([...dots, ...faded].map((d) => d.venue));
+  const drawn = new Set([
+    ...venueDots.map((d) => d.venue),
+    ...venueFaded.map((d) => d.venue),
+    ...markerVenues,
+  ]);
   return {
     hasSubject,
     subjects,
     shapesCapped,
     hasShared,
+    hasVenueShared: venueShared,
     dots,
     faded,
+    venueModel,
+    venueDots,
+    venueFaded,
     legs,
     markers,
     venueGames,
@@ -395,6 +472,23 @@ function gameLine(data, i) {
   return `${t.date[i]}  ${matchup}  ${data.lookups.networks[t.network[i]].name}`;
 }
 
+/** Subject blocks ("── Pat here ──", up to three games, "+N more") for venue indexes. */
+function subjectLinesFor(data, model, indexes) {
+  const lines = [];
+  const several = model.subjects.length >= 2;
+  model.subjects.forEach((subject, k) => {
+    const mine = indexes.flatMap((v) => model.subjectVenueGames[k].get(v) ?? []);
+    if (mine.length === 0) return;
+    const glyph = several ? `${k < MAX_COMPARE ? COMPARE_GLYPHS[k] : '●'} ` : '';
+    lines.push({ text: `── ${glyph}${subject.label} here ──`, kind: 'body' });
+    for (const i of mine.slice(0, MAX_TOOLTIP_GAMES)) lines.push({ text: gameLine(data, i), kind: 'body' });
+    if (mine.length > MAX_TOOLTIP_GAMES) {
+      lines.push({ text: `+${mine.length - MAX_TOOLTIP_GAMES} more`, kind: 'hint' });
+    }
+  });
+  return lines;
+}
+
 /**
  * D-11: plain {text, kind} lines for one venue (index into lookups.venues): title,
  * family counts for passing games, then each subject's games there (up to three, then
@@ -407,16 +501,53 @@ export function venueTooltipLines(data, model, venue) {
   for (const i of games) counts.set(data.familyOf[i], (counts.get(data.familyOf[i]) ?? 0) + 1);
   const parts = FAMILY_ORDER.filter((f) => counts.get(f)).map((f) => `${FAMILY_LABELS[f]} ${counts.get(f)}`);
   if (parts.length > 0) lines.push({ text: parts.join(' · '), kind: 'body' });
-  const several = model.subjects.length >= 2;
-  model.subjects.forEach((subject, k) => {
-    const mine = model.subjectVenueGames[k].get(venue) ?? [];
-    if (mine.length === 0) return;
-    const glyph = several ? `${k < MAX_COMPARE ? COMPARE_GLYPHS[k] : '●'} ` : '';
-    lines.push({ text: `── ${glyph}${subject.label} here ──`, kind: 'body' });
-    for (const i of mine.slice(0, MAX_TOOLTIP_GAMES)) lines.push({ text: gameLine(data, i), kind: 'body' });
-    if (mine.length > MAX_TOOLTIP_GAMES) {
-      lines.push({ text: `+${mine.length - MAX_TOOLTIP_GAMES} more`, kind: 'hint' });
-    }
-  });
+  lines.push(...subjectLinesFor(data, model, [venue]));
   return lines;
+}
+
+const CARD_MAX_ROWS = 6;
+
+/**
+ * Hover-card data for one venue key or abroad group key (Phase 11 D-02, D-01a): the
+ * title, pie slices, at most six family rows plus Other, real viewers (the unrated
+ * floor never enters), and the subject lines. Unknown keys give null.
+ */
+export function venueCard(data, model, key) {
+  const entry = model.venueModel?.byKey.get(key);
+  if (!entry) return null;
+  const isGroup = Array.isArray(entry.indexes);
+  const indexes = isGroup ? entry.indexes : [entry.index];
+  const title = isGroup ? entry.label : venueTitle(data.lookups.venues[entry.index]);
+  const slices = FAMILY_ORDER.map((family, f) => ({
+    family,
+    games: entry.counts[f],
+    viewers: entry.ratedCounts[f] > 0 ? entry.viewers[f] : null,
+  }))
+    .filter((s) => s.games > 0)
+    .sort((a, b) => b.games - a.games || FAMILY_ORDER.indexOf(a.family) - FAMILY_ORDER.indexOf(b.family));
+  const rows = slices.slice(0, CARD_MAX_ROWS).map((s) => ({
+    family: s.family,
+    label: FAMILY_LABELS[s.family],
+    games: s.games,
+    viewers: s.viewers,
+  }));
+  const rest = slices.slice(CARD_MAX_ROWS);
+  if (rest.length > 0) {
+    const rated = rest.filter((s) => s.viewers != null);
+    rows.push({
+      family: null,
+      label: 'Other',
+      games: rest.reduce((n, s) => n + s.games, 0),
+      viewers: rated.length > 0 ? rated.reduce((n, s) => n + s.viewers, 0) : null,
+    });
+  }
+  return {
+    title,
+    leader: entry.leader,
+    slices,
+    rows,
+    hasMissingViewers: rows.some((r) => r.viewers == null),
+    hasViewers: rows.some((r) => r.viewers != null),
+    subjectLines: subjectLinesFor(data, model, indexes),
+  };
 }

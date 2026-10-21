@@ -148,7 +148,10 @@ def test_copy_constants(guarded_page: Page, site_url: str) -> None:
     assert got["one"] == "1 game has no venue location"
     assert got["three"] == "3 games have no venue location"
     assert got["aria"] == "Map of 9 game venues"
-    assert got["hint"] == "Pick an announcer or a school to trace a path"
+    assert got["hint"] == (
+        "Pick an announcer or a school to trace a path. "
+        "Color shows which network airs the most games nearby."
+    )
     assert all(got["frozen"])
 
 
@@ -188,7 +191,16 @@ const col = (k) => G.map((g) => g[k]);
 const data = {
   n: G.length,
   t: {season: col(0), date: col(1), kickoff: col(2), home_team: col(3), away_team: col(4),
-      network: col(5), neutral: col(6), place: col(7)},
+      network: col(5), neutral: col(6), place: col(7),
+      viewers: G.map((_, i) => (i % 3 === 2 ? null : 1000000 + i * 100000))},
+  venueKeys: ['alpha-field-south-bend', 'beta-bowl-los-angeles', 'gamma-park-honolulu',
+              'dublin-arena-dublin', 'nassau-stadium-nassau', 'delta-dome-columbus'],
+  venueGroupKeys: [null, null, null, 'dublin', 'nassau', null],
+  venueIndexesByKey: new Map([
+    ['alpha-field-south-bend', [0]], ['beta-bowl-los-angeles', [1]],
+    ['gamma-park-honolulu', [2]], ['dublin-arena-dublin', [3]],
+    ['nassau-stadium-nassau', [4]], ['delta-dome-columbus', [5]],
+    ['dublin', [3]], ['nassau', [4]]]),
   familyOf: G.map((g) => ['disney', 'nbc', 'cbs'][g[5]]),
   lookups: {venues, teams, networks, people},
   teamSlugs: ['a', 'b', 'c', 'd', 'e', 'f'],
@@ -493,3 +505,199 @@ def test_counts_and_empty(guarded_page: Page, site_url: str) -> None:
         """,
     )
     assert got == {"emptyAll": True, "drawn": 0, "dots": 0, "full": False, "fullDrawn": 6}
+
+
+# ------------------------------------------------ Phase 11 plan 07: venue dots and card
+
+
+def test_venue_dots_one_per_venue_no_abroad(guarded_page: Page, site_url: str) -> None:
+    got = _model(
+        guarded_page,
+        site_url,
+        """
+        const m = M.buildMapModel(data, mkView(), mkState());
+        const byIdx = new Map(m.venueModel.venues.map((v) => [v.index, v]));
+        return {
+          venues: m.venueDots.map((d) => d.venue),
+          order: m.venueModel.venues.map((v) => v.index),
+          tiers: [...new Set(m.venueDots.map((d) => d.tier))],
+          match: m.venueDots.every((d) => {
+            const v = byIdx.get(d.venue);
+            return d.leader === v.leader && d.size === v.size && d.dotColor === v.dotColor
+              && d.key === v.key;
+          }),
+          selected: m.venueDots.filter((d) => d.selected).length,
+        };
+        """,
+    )
+    assert sorted(got["venues"]) == [0, 1, 2, 5]
+    assert got["venues"] == got["order"]
+    assert got["tiers"] == ["base"]
+    assert got["match"] is True
+    assert got["selected"] == 0
+
+
+def test_venue_dot_subject_and_shared_shapes(guarded_page: Page, site_url: str) -> None:
+    got = _model(
+        guarded_page,
+        site_url,
+        """
+        const one = M.buildMapModel(data, hlView([1, 0]), mkState({people: ['pat']}));
+        const sym = (m) =>
+          Object.fromEntries(m.venueDots.map((d) => [d.venue, [d.tier, d.symbol]]));
+        // Pat on game 0 (venue 0), Quinn on game 2 (venue 0): different games, one venue.
+        const on = new Map([[0, [0]], [2, [1]]]);
+        const two = M.buildMapModel(data, mkView({highlighted: [0, 2], peopleOnGame: on}),
+                                    mkState({people: ['pat', 'quinn']}));
+        // Both called game 1 together at venue 1.
+        const on2 = new Map([[1, [0, 1]]]);
+        const tog = M.buildMapModel(data, mkView({highlighted: [1], peopleOnGame: on2}),
+                                    mkState({people: ['pat', 'quinn']}));
+        return {one: sym(one), two: sym(two), twoShared: two.hasVenueShared, tog: sym(tog)};
+        """,
+    )
+    assert got["one"]["0"] == ["subject", "circle"]
+    assert got["one"]["1"] == ["subject", "circle"]
+    assert got["one"]["5"] == ["other", "circle"]
+    assert got["two"]["0"] == ["subject", "star"]
+    assert got["twoShared"] is True
+    assert got["tog"]["1"] == ["subject", "star"]
+
+
+def test_venue_dots_rescale_and_faded_per_venue(guarded_page: Page, site_url: str) -> None:
+    got = _model(
+        guarded_page,
+        site_url,
+        """
+        const passes = ones();
+        for (const i of [1, 7]) passes[i] = 0;        // both Beta Bowl games fail
+        const fade = M.buildMapModel(data, mkView({passes}), mkState());
+        const vis = ones(); vis[1] = 0; vis[7] = 0;
+        const hide = M.buildMapModel(data, mkView({passes, visible: vis}), mkState());
+        const nbc = ones();
+        data.familyOf.forEach((f, i) => { if (f !== 'nbc') nbc[i] = 0; });
+        const one = M.buildMapModel(data, mkView({passes: nbc}), mkState());
+        return {
+          fadeDots: fade.venueDots.map((d) => d.venue),
+          faded: fade.venueFaded.map((d) => [d.venue, d.key]),
+          hideFaded: hide.venueFaded.length,
+          nbcVenues: one.venueDots.map((d) => d.venue).sort(),
+          top: one.venueDots[0].size.desktop,
+        };
+        """,
+    )
+    assert 1 not in got["fadeDots"]
+    assert got["faded"] == [[1, "beta-bowl-los-angeles"]]
+    assert got["hideFaded"] == 0
+    assert got["nbcVenues"] == [0, 1, 5]
+    assert got["top"] == 16
+
+
+def test_marker_keys_and_selected_flags(guarded_page: Page, site_url: str) -> None:
+    got = _model(
+        guarded_page,
+        site_url,
+        """
+        const m = M.buildMapModel(data, mkView(), mkState());
+        const sel = M.buildMapModel(data, mkView(), mkState({venue: 'beta-bowl-los-angeles'}));
+        const dub = M.buildMapModel(data, mkView(), mkState({venue: 'dublin'}));
+        return {
+          markers: m.markers.map((x) => [x.label, x.key, x.family, x.selected]),
+          selDots: sel.venueDots.filter((d) => d.selected).map((d) => d.venue),
+          selCount: sel.venueDots.length,
+          dubMarkers: dub.markers.filter((x) => x.selected).map((x) => x.label),
+          dubDots: dub.venueDots.filter((d) => d.selected).length,
+          dubCount: dub.venueDots.length,
+          drawn: m.drawnCount,
+        };
+        """,
+    )
+    assert got["markers"] == [
+        ["Dublin", "dublin", "disney", False],
+        ["Nassau", "nassau", "cbs", False],
+    ]
+    assert got["selDots"] == [1]
+    assert got["selCount"] == 4
+    assert got["dubMarkers"] == ["Dublin"]
+    assert got["dubDots"] == 0
+    assert got["dubCount"] == 4
+    assert got["drawn"] == 6
+
+
+def test_venue_card_rows_and_viewers(guarded_page: Page, site_url: str) -> None:
+    got = _model(
+        guarded_page,
+        site_url,
+        """
+        const m = M.buildMapModel(data, mkView(), mkState());
+        const card = M.venueCard(data, m, 'alpha-field-south-bend');
+        const dub = M.venueCard(data, m, 'dublin');
+        const none = M.venueCard(data, m, 'nope');
+        // Make every game at venue 0 unrated: the floor must not leak into the card.
+        const saved = data.t.viewers.slice();
+        data.t.viewers.fill(null);
+        const m2 = M.buildMapModel(data, mkView(), mkState());
+        const unrated = M.venueCard(data, m2, 'alpha-field-south-bend');
+        data.t.viewers.splice(0, data.n, ...saved);
+        // Synthetic venue with 8 families to fold into Other.
+        const P = await import('./modules/palette.js');
+        const NF = P.FAMILY_ORDER.length;
+        const fake = {venueModel: {byKey: new Map([['x', {
+          index: 0, leader: 'disney',
+          counts: [8, 7, 6, 5, 4, 3, 2, 1].concat(Array(20).fill(0)).slice(0, NF),
+          viewers: Array(NF).fill(10), ratedCounts: Array(NF).fill(1),
+        }]])}, subjects: [], subjectVenueGames: []};
+        const folded = M.venueCard(data, fake, 'x');
+        return {card, dub, none, unrated, folded};
+        """,
+    )
+    card = got["card"]
+    assert card["title"] == "Alpha Field · South Bend, IN"
+    assert card["leader"] == "disney"
+    games = [s["games"] for s in card["slices"]]
+    assert games == sorted(games, reverse=True)
+    assert [s["family"] for s in card["slices"]] == ["disney", "nbc"]
+    assert card["subjectLines"] == []
+    assert got["dub"]["title"] == "Dublin"
+    assert got["none"] is None
+    unrated = got["unrated"]
+    assert all(r["viewers"] is None for r in unrated["rows"])
+    assert unrated["hasViewers"] is False
+    assert unrated["hasMissingViewers"] is True
+    folded = got["folded"]
+    assert len(folded["rows"]) <= 7
+    other = folded["rows"][-1]
+    assert other["label"] == "Other" and other["family"] is None
+    assert other["games"] == sum(s["games"] for s in folded["slices"][6:])
+    assert folded["hasMissingViewers"] is False
+
+
+def test_venue_card_subject_lines(guarded_page: Page, site_url: str) -> None:
+    got = _model(
+        guarded_page,
+        site_url,
+        """
+        const hl = [1, 0, 2, 6, 7, 10];
+        const on = new Map(hl.map((i) => [i, [0]]));
+        const m = M.buildMapModel(data, mkView({highlighted: hl, peopleOnGame: on}),
+                                  mkState({people: ['pat']}));
+        return M.venueCard(data, m, 'alpha-field-south-bend').subjectLines
+          .map((l) => l.text);
+        """,
+    )
+    assert got[0] == "── Pat here ──"
+    assert got[-1] == "+1 more"
+    assert len(got) == 5
+
+
+def test_hook_exposes_venue_fields(guarded_page: Page, site_url: str) -> None:
+    _load(guarded_page, site_url)
+    got = guarded_page.evaluate(
+        """() => {
+          const m = window.__testHooks.getMapModel();
+          return m ? {dots: Array.isArray(m.venueDots), faded: Array.isArray(m.venueFaded),
+                      keyed: m.markers.every((x) => 'key' in x && 'selected' in x)} : null;
+        }"""
+    )
+    if got is not None:
+        assert got == {"dots": True, "faded": True, "keyed": True}

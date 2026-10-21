@@ -16,7 +16,10 @@ pytestmark = pytest.mark.e2e
 
 OpenApp = Callable[[Page, str], None]
 
-MAP_HINT = "Pick an announcer or a school to trace a path"
+MAP_HINT = (
+    "Pick an announcer or a school to trace a path. "
+    "Color shows which network airs the most games nearby."
+)
 _FAMILIES = ["disney", "fox", "cbs", "nbc", "cw", "wbd", "conference", "other"]
 _TRACE_NAMES = (
     ["outline"]
