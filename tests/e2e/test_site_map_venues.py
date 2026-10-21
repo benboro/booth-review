@@ -134,6 +134,27 @@ def test_tie_goes_to_viewers_then_family_order(guarded_page: Page, site_url: str
     assert got["b"] == ["fox", 0]
 
 
+def test_tie_prefers_real_viewers_over_the_unrated_floor(guarded_page: Page, site_url: str) -> None:
+    got = _model(
+        guarded_page,
+        site_url,
+        """
+        // One unrated FOX game against one CBS game at 120K: the floor (p10 of the rated
+        // games) is above 120K here, so floor-weighted viewers would pick FOX while the
+        // card shows FOX with no figure.
+        const games = [[0, 'fox', null], [0, 'cbs', 120000], ...Array.from({ length: 11 }, (_, k) => [1, 'nbc', 300000 + k * 1000])];
+        const m = build(games, [{ name: 'Lakeside Field' }, { name: 'Other Park' }]);
+        const v = m.byKey.get('Lakeside Field');
+        // Neither side rated: weighted (floor) then FAMILY_ORDER still decide.
+        const none = build([[0, 'cbs', null], [0, 'fox', null]], [{ name: 'Lakeside Field' }]).venues[0];
+        return { leader: v.leader, floor: m.floorViewers, none: none.leader };
+        """,
+    )
+    assert got["floor"] > 120000
+    assert got["leader"] == "cbs"
+    assert got["none"] == "fox"
+
+
 def test_score_orders_venues(guarded_page: Page, site_url: str) -> None:
     got = _model(
         guarded_page,

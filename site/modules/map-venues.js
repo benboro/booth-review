@@ -45,19 +45,25 @@ export function venueScore(games, weightedViewers) {
 }
 
 /**
- * Leader by games; an equal nonzero game count goes to the larger weighted viewers, then
- * to the earlier FAMILY_ORDER family.
+ * Leader by games; an equal nonzero game count goes to the larger real (rated) viewers,
+ * then the larger floor-weighted viewers, then the earlier FAMILY_ORDER family (D-06a:
+ * viewers only break exact ties, and an unrated game's floor never beats a real figure).
  * @param {number[]} counts
- * @param {number[]} weighted
+ * @param {number[]} weighted - viewers with unrated games at the floor.
+ * @param {number[]} [viewers] - real viewers only.
  * @returns {{leaderIndex: number, leaderGames: number, runnerUpGames: number}}
  */
-export function venueLeader(counts, weighted) {
+export function venueLeader(counts, weighted, viewers = counts.map(() => 0)) {
   let a = 0;
   let b = 0;
   let ai = 0;
   for (let f = 0; f < counts.length; f += 1) {
     const w = counts[f];
-    if (w > a || (w === a && w && weighted[f] > weighted[ai])) {
+    const tieWin =
+      w === a &&
+      w > 0 &&
+      (viewers[f] > viewers[ai] || (viewers[f] === viewers[ai] && weighted[f] > weighted[ai]));
+    if (w > a || tieWin) {
       b = a;
       a = w;
       ai = f;
@@ -165,7 +171,7 @@ export function buildVenueModel(data, passing, placements) {
       continue;
     }
     const weightedSum = a.weighted.reduce((s, c) => s + c, 0);
-    const { leaderIndex, leaderGames, runnerUpGames } = venueLeader(a.counts, a.weighted);
+    const { leaderIndex, leaderGames, runnerUpGames } = venueLeader(a.counts, a.weighted, a.viewers);
     const margin = (leaderGames - runnerUpGames) / games;
     const fade = margin ** MAP_SPLAT.dotMarginExp;
     const leader = FAMILY_ORDER[leaderIndex];
@@ -202,7 +208,7 @@ export function buildVenueModel(data, passing, placements) {
 
   const groups = [];
   for (const grp of groupMap.values()) {
-    grp.leader = FAMILY_ORDER[venueLeader(grp.counts, grp.weighted).leaderIndex];
+    grp.leader = FAMILY_ORDER[venueLeader(grp.counts, grp.weighted, grp.viewers).leaderIndex];
     grp.counts = Array.from(grp.counts);
     grp.viewers = Array.from(grp.viewers);
     grp.ratedCounts = Array.from(grp.ratedCounts);
