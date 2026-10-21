@@ -293,3 +293,227 @@ def test_map_conference_chip_uses_map_violet(guarded_page: Page, open_app: Any) 
         }"""
     )
     assert got["bg"] == got["want"]
+
+
+# -- Phase 11 plan 09: raster scheduling and image lifecycle ----------------------------
+
+_IMAGES = "() => (document.getElementById('map-chart').layout.images || []).map((i) => i.source)"
+_OUTLINE_FILL = "() => document.getElementById('map-chart').data[0].fill"
+_TRACE_COUNT = "() => document.getElementById('map-chart').data.length"
+
+
+def _splats(page: Page) -> int:
+    n: int = page.evaluate("() => window.__testHooks.mapSplatRenders")
+    return n
+
+
+def _wait_splat(page: Page, after: int) -> None:
+    page.wait_for_function("(n) => window.__testHooks.mapSplatRenders > n", arg=after)
+
+
+def _set_state(page: Page, patch: dict[str, Any]) -> None:
+    page.evaluate("(patch) => window.__testHooks.setState(patch)", patch)
+
+
+def _open_splat(page: Page, open_app: Any, query: str = "?view=map") -> None:
+    _open_map(page, open_app, query)
+    _wait_splat(page, 0)
+
+
+def test_default_map_has_one_blob_image_and_no_outline_fill(
+    guarded_page: Page, open_app: Any
+) -> None:
+    _open_splat(guarded_page, open_app)
+    images = guarded_page.evaluate(_IMAGES)
+    assert len(images) == 1
+    assert images[0].startswith("blob:")
+    assert guarded_page.evaluate(_OUTLINE_FILL) == "none"
+
+
+def test_colors_off_has_no_image_and_on_restores_it(guarded_page: Page, open_app: Any) -> None:
+    _open_map(guarded_page, open_app, "?view=map&colors=off")
+    assert guarded_page.evaluate(_IMAGES) == []
+    assert guarded_page.evaluate(_OUTLINE_FILL) == "toself"
+    guarded_page.click("#colors-toggle button[data-colors=on]")
+    _wait_splat(guarded_page, 0)
+    assert len(guarded_page.evaluate(_IMAGES)) == 1
+    assert guarded_page.evaluate(_OUTLINE_FILL) == "none"
+    revoked_source = guarded_page.evaluate(_IMAGES)[0]
+    guarded_page.click("#colors-toggle button[data-colors=off]")
+    guarded_page.wait_for_function(
+        "() => (document.getElementById('map-chart').layout.images || []).length === 0"
+    )
+    assert guarded_page.evaluate(_OUTLINE_FILL) == "toself"
+    assert guarded_page.evaluate(_FETCH_OK, revoked_source) is False
+
+
+# connect-src is 'self', so a blob is probed through an image element (img-src allows blob:).
+_FETCH_OK = """(u) => new Promise((resolve) => {
+  const img = new Image();
+  img.onload = () => resolve(true);
+  img.onerror = () => resolve(false);
+  img.src = u;
+})"""
+
+
+def test_seasons_change_swaps_image_and_revokes_previous(guarded_page: Page, open_app: Any) -> None:
+    _open_splat(guarded_page, open_app)
+    first = guarded_page.evaluate(_IMAGES)[0]
+    assert guarded_page.evaluate(_FETCH_OK, first) is True
+    n = _splats(guarded_page)
+    _set_state(guarded_page, {"seasons": [2021, 2021]})
+    _wait_splat(guarded_page, n)
+    second = guarded_page.evaluate(_IMAGES)
+    assert len(second) == 1
+    assert second[0] != first
+    assert guarded_page.evaluate(_FETCH_OK, first) is False
+    assert guarded_page.evaluate(_TRACE_COUNT) == 13
+
+
+def test_rapid_changes_coalesce_and_never_blank(guarded_page: Page, open_app: Any) -> None:
+    _open_splat(guarded_page, open_app)
+    guarded_page.evaluate(
+        """() => {
+          const gd = document.getElementById('map-chart');
+          window.__imageCounts = [];
+          gd.on('plotly_relayout', () => window.__imageCounts.push((gd.layout.images || []).length));
+        }"""
+    )
+    n = _splats(guarded_page)
+    guarded_page.evaluate(
+        "() => { window.__testHooks.setState({seasons: [2021, 2021]});"
+        " window.__testHooks.setState({seasons: [2022, 2022]}); }"
+    )
+    _wait_splat(guarded_page, n)
+    guarded_page.evaluate(_WAIT_FRAMES)
+    guarded_page.evaluate(_WAIT_FRAMES)
+    assert _splats(guarded_page) == n + 1
+    counts = guarded_page.evaluate("() => window.__imageCounts")
+    assert counts
+    assert 0 not in counts
+
+
+def test_zoom_survives_a_filter_change(guarded_page: Page, open_app: Any) -> None:
+    _open_splat(guarded_page, open_app)
+    box = guarded_page.evaluate(
+        """() => { const f = document.getElementById('map-chart')._fullLayout;
+          const r = document.getElementById('map-chart').getBoundingClientRect();
+          return {x: r.x + f.xaxis._offset, y: r.y + f.yaxis._offset,
+                  w: f.xaxis._length, h: f.yaxis._length}; }"""
+    )
+    x0, y0 = box["x"] + box["w"] * 0.3, box["y"] + box["h"] * 0.3
+    guarded_page.mouse.move(x0, y0)
+    guarded_page.mouse.down()
+    guarded_page.mouse.move(x0 + box["w"] * 0.3, y0 + box["h"] * 0.3, steps=5)
+    guarded_page.mouse.up()
+    zoomed = guarded_page.evaluate("() => document.getElementById('map-chart').layout.xaxis.range")
+    assert zoomed[1] - zoomed[0] < 900
+    n = _splats(guarded_page)
+    _set_state(guarded_page, {"seasons": [2021, 2021]})
+    _wait_splat(guarded_page, n)
+    after = guarded_page.evaluate("() => document.getElementById('map-chart').layout.xaxis.range")
+    assert [round(v) for v in after] == [round(v) for v in zoomed]
+
+
+def test_all_filtered_clears_image(guarded_page: Page, open_app: Any) -> None:
+    _open_splat(guarded_page, open_app)
+    _set_state(guarded_page, {"networks": [], "dots": "hide"})
+    guarded_page.wait_for_function(
+        "() => (document.getElementById('map-chart').layout.images || []).length === 0"
+    )
+    assert guarded_page.evaluate(_OUTLINE_FILL) == "toself"
+    assert guarded_page.locator("#map-empty-note").is_visible()
+
+
+_DECODE = """async ([name, which]) => {
+  const gd = document.getElementById('map-chart');
+  const bmp = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = gd.layout.images[0].source; });
+  const c = document.createElement('canvas'); c.width = bmp.naturalWidth; c.height = bmp.naturalHeight;
+  const ctx = c.getContext('2d'); ctx.drawImage(bmp, 0, 0);
+  const sx = c.width / 975, sy = c.height / 610;
+  const dots = gd.data.find((t) => t.name === 'venue-dots');
+  const px = (x, y) => [...ctx.getImageData(Math.floor(x * sx), Math.floor(y * sy), 1, 1).data];
+  // Far land pixel: Kansas-ish interior, then the nearest dot's pixel.
+  return { dot: px(dots.x[0], dots.y[0]), land: px(480, 300), nx: dots.x[0], ny: dots.y[0] };
+}"""
+
+
+def _near(a: list[int], hex_color: str, tol: int) -> bool:
+    want = [int(hex_color[i : i + 2], 16) for i in (1, 3, 5)]
+    return all(abs(a[i] - want[i]) <= tol for i in range(3))
+
+
+def test_dark_theme_redraws_with_dark_land(guarded_page: Page, open_app: Any) -> None:
+    _open_splat(guarded_page, open_app)
+    n = _splats(guarded_page)
+    guarded_page.emulate_media(color_scheme="dark")
+    _wait_splat(guarded_page, n)
+    land_dark = guarded_page.evaluate(
+        "async () => (await import('./modules/palette.js')).MAP_LAND.dark"
+    )
+    # Find a land pixel far from every venue: scan the mask for one.
+    px = guarded_page.evaluate(
+        """async (land) => {
+          const gd = document.getElementById('map-chart');
+          const bmp = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = gd.layout.images[0].source; });
+          const c = document.createElement('canvas'); c.width = bmp.naturalWidth; c.height = bmp.naturalHeight;
+          const ctx = c.getContext('2d'); ctx.drawImage(bmp, 0, 0);
+          const want = [1, 3, 5].map((i) => parseInt(land.slice(i, i + 2), 16));
+          const d = ctx.getImageData(0, 0, c.width, c.height).data;
+          let best = null;
+          for (let i = 0; i < d.length; i += 4) {
+            if (d[i + 3] === 255 && [0, 1, 2].every((k) => Math.abs(d[i + k] - want[k]) <= 3)) {
+              return true;
+            }
+          }
+          return false;
+        }""",
+        land_dark,
+    )
+    assert px is True
+
+
+def test_raster_pixel_at_venue_leans_to_family_hue(guarded_page: Page, open_app: Any) -> None:
+    _open_splat(guarded_page, open_app)
+    got = guarded_page.evaluate(_DECODE, ["x", 0])
+    land = guarded_page.evaluate(
+        "async () => (await import('./modules/palette.js')).MAP_LAND.light"
+    )
+    fams = guarded_page.evaluate(
+        "async () => Object.values((await import('./modules/palette.js')).MAP_FAMILY_COLORS.light)"
+    )
+
+    def dist(a: list[int], h: str) -> int:
+        w = [int(h[i : i + 2], 16) for i in (1, 3, 5)]
+        return sum(abs(a[i] - w[i]) for i in range(3))
+
+    assert min(dist(got["dot"], f) for f in fams) < dist(got["dot"], land)
+
+
+def test_raster_failure_falls_back_to_land_fill(guarded_page: Page, open_app: Any) -> None:
+    messages: list[str] = []
+    guarded_page.on("console", lambda m: messages.append(m.text) if m.type == "warning" else None)
+    guarded_page.add_init_script(
+        """
+        if (typeof OffscreenCanvas !== 'undefined') {
+          OffscreenCanvas.prototype.convertToBlob = () => Promise.reject(new Error('boom'));
+        }
+        HTMLCanvasElement.prototype.toBlob = function (cb) { cb(null); };
+        """
+    )
+    _open_map(guarded_page, open_app)
+    guarded_page.wait_for_function(
+        "() => document.getElementById('map-chart').data[0].fill === 'toself'"
+    )
+    guarded_page.evaluate(_WAIT_FRAMES)
+    assert guarded_page.evaluate(_TRACE_COUNT) == 13
+    assert (
+        guarded_page.evaluate(
+            "() => document.getElementById('map-chart').data.find((t) => t.name === 'venue-dots').x.length"
+        )
+        > 0
+    )
+    assert guarded_page.locator("#map-empty-note").is_hidden()
+    _set_state(guarded_page, {"seasons": [2021, 2021]})
+    guarded_page.evaluate(_WAIT_FRAMES)
+    assert len([m for m in messages if "map colors" in m]) == 1

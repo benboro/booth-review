@@ -245,7 +245,7 @@ export function splatImageSpec(url) {
  * Builds the whole Map figure.
  * @param {object} model - buildMapModel output (venueDots, venueFaded, legs, markers used).
  * @param {ReadonlyArray<{id: string, rings: number[][]}>} geometry - US_STATES.
- * @param {{theme: 'light'|'dark', mobile: boolean, splat?: boolean}} env
+ * @param {{theme: 'light'|'dark', mobile: boolean, splat?: boolean, images?: object[]}} env
  * @returns {{traces: object[], layout: object, config: object}}
  */
 export function buildMapFigure(model, geometry, env) {
@@ -280,6 +280,7 @@ export function buildMapFigure(model, geometry, env) {
     hovermode: 'closest',
     dragmode: mobile ? false : 'zoom',
     uirevision: 'map',
+    images: env.images ?? [],
   };
   if (mobile) layout.hoverdistance = MOBILE_HOVER_DISTANCE;
   const config = {

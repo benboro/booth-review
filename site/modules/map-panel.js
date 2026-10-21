@@ -10,9 +10,16 @@
  * markup-injecting APIs (T-04.18-21).
  */
 
-import { buildMapFigure, renderMap, bindMapEvents, MAP_TRACE_NAMES } from './map-chart.js';
+import {
+  buildMapFigure,
+  renderMap,
+  bindMapEvents,
+  splatImageSpec,
+  MAP_TRACE_NAMES,
+} from './map-chart.js';
+import { paintSplat } from './map-splat.js';
 import { MAP_EMPTY, MAP_ERROR, noLocationNote, mapAriaLabel, venueCard } from './map-model.js';
-import { MAP_VENUE_DOT, PAGE_BG } from './palette.js';
+import { MAP_LAND, MAP_SPLAT, MAP_VENUE_DOT, PAGE_BG } from './palette.js';
 import { showVenueTooltip, hideTooltip } from './tooltip.js';
 
 const TAP_DEBOUNCE_MS = 350;
@@ -33,6 +40,13 @@ let pendingTapKey = null;
 /** The venue-dots ring arrays from the last draw, restored on unhover. */
 let baseRing = null;
 let lastTapActionAt = -Infinity;
+/** Splat raster state (Phase 11 D-06): a render token coalesces paints, one image is live. */
+let splatToken = 0;
+let currentImageUrl = null;
+let currentImageSpec = null;
+let splatCount = 0;
+let splatBroken = false;
+let splatWarned = false;
 
 /** Clears the pending first tap so the next tap on a dot shows its tooltip again. */
 export function resetMapTap() {
@@ -42,6 +56,83 @@ export function resetMapTap() {
 /** How many times the figure has been drawn (test hook). */
 export function mapRenderCount() {
   return renderCount;
+}
+
+/** How many splat rasters have been applied to the layout (test hook). */
+export function mapSplatCount() {
+  return splatCount;
+}
+
+/** Drops the live raster (if any) from the layout and revokes its blob URL. */
+async function clearSplat(gd) {
+  splatToken += 1;
+  if (!currentImageUrl) return;
+  const url = currentImageUrl;
+  currentImageUrl = null;
+  currentImageSpec = null;
+  try {
+    await window.Plotly.relayout(gd, { images: [] });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/** Falls back to the plain land fill after a failed raster; logs once, shows nothing. */
+function splatFailed(gd, err, theme) {
+  splatBroken = true;
+  if (!splatWarned) {
+    splatWarned = true;
+    console.warn('booth-review: map colors could not be drawn', err);
+  }
+  currentImageSpec = null;
+  const url = currentImageUrl;
+  currentImageUrl = null;
+  const restyle = window.Plotly.restyle(gd, { fill: 'toself', fillcolor: MAP_LAND[theme] }, [0]);
+  Promise.resolve(restyle)
+    .catch(() => {})
+    .then(() => window.Plotly.relayout(gd, { images: [] }))
+    .catch(() => {})
+    .then(() => {
+      if (url) URL.revokeObjectURL(url);
+    });
+}
+
+/**
+ * Paints the splat behind one requestAnimationFrame; the render token discards a paint a
+ * newer render has overtaken, and the previous image stays in place until the new one is in.
+ */
+function scheduleSplat(args, geometry) {
+  const gd = el('map-chart');
+  const { model, env } = args;
+  const mine = ++splatToken;
+  requestAnimationFrame(async () => {
+    if (mine !== splatToken || latest !== args) return;
+    try {
+      const { blob } = await paintSplat({
+        venueModel: model.venueModel,
+        states: geometry,
+        theme: env.theme,
+        cell: env.mobile ? MAP_SPLAT.cell.phone : MAP_SPLAT.cell.desktop,
+      });
+      if (mine !== splatToken) return;
+      const url = URL.createObjectURL(blob);
+      const spec = splatImageSpec(url);
+      try {
+        await window.Plotly.relayout(gd, { images: [spec] });
+        await window.Plotly.restyle(gd, { fill: 'none' }, [0]);
+      } catch (err) {
+        URL.revokeObjectURL(url);
+        throw err;
+      }
+      const prev = currentImageUrl;
+      currentImageUrl = url;
+      currentImageSpec = spec;
+      if (prev) URL.revokeObjectURL(prev);
+      splatCount += 1;
+    } catch (err) {
+      if (mine === splatToken) splatFailed(gd, err, env.theme);
+    }
+  });
 }
 
 function loadGeometry() {
@@ -172,7 +263,17 @@ export async function renderMapPanel(args) {
   if (latest !== args) return;
 
   try {
-    const figure = buildMapFigure(model, geometry, env);
+    const wantSplat =
+      Boolean(env.splat) &&
+      !splatBroken &&
+      !model.emptyAll &&
+      model.venueModel.venues.length > 0;
+    const figure = buildMapFigure(model, geometry, {
+      ...env,
+      // The land stays filled until the raster that replaces it is in the layout.
+      splat: wantSplat && currentImageSpec !== null,
+      images: wantSplat && currentImageSpec ? [currentImageSpec] : [],
+    });
     const dots = figure.traces[DOTS_TRACE];
     baseRing = { width: dots.marker.line.width, color: dots.marker.line.color };
     await renderMap(gd, figure);
@@ -192,6 +293,8 @@ export async function renderMapPanel(args) {
       bound = true;
     }
     if (resize) await window.Plotly.Plots.resize(gd);
+    if (wantSplat) scheduleSplat(args, geometry);
+    else await clearSplat(gd);
   } catch {
     // Plotly can reject (a zero-width container, say): show the same note as a
     // failed geometry import rather than leave an empty map and an unhandled

@@ -33,7 +33,7 @@ import { chartContext } from './modules/bars.js';
 import { initBarsPanel, renderBarsPanel, lastBarsModel, resetBarsTap } from './modules/bars-panel.js';
 import { buildMapModel } from './modules/map-model.js';
 import { buildCrewsModel, renderCrewsPanel } from './modules/crews.js';
-import { initMapPanel, renderMapPanel, resetMapTap, mapRenderCount } from './modules/map-panel.js';
+import { initMapPanel, renderMapPanel, resetMapTap, mapRenderCount, mapSplatCount } from './modules/map-panel.js';
 import { initBandInfo, positionBandInfo, closeBandNote, setBandInfoMode } from './modules/band-info.js';
 import { showTooltip, hideTooltip } from './modules/tooltip.js';
 import { selectedPersonIndexes } from './modules/format.js';
@@ -289,11 +289,10 @@ function render() {
     hideBandInfo();
     resetMapTap();
     lastMapModel = buildMapModel(data, view, state);
-    // Task 2 of 11-09 switches splat to `state.colors !== 'off'` once the raster lands.
-    renderMapPanel({
+        renderMapPanel({
       data,
       model: lastMapModel,
-      env: { ...currentEnv(), splat: false },
+      env: { ...currentEnv(), splat: state.colors !== 'off' },
       resize: lastPanel !== 'map',
     });
     lastPanel = 'map';
@@ -591,6 +590,9 @@ async function startCfb(search = location.search) {
       renderers,
       get mapRenders() {
         return mapRenderCount();
+      },
+      get mapSplatRenders() {
+        return mapSplatCount();
       },
       getMapModel: () => {
         const m = lastMapModel;
