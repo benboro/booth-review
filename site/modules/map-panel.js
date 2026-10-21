@@ -56,6 +56,8 @@ let splatToken = 0;
 let currentImageUrl = null;
 let currentImageSpec = null;
 let splatCount = 0;
+/** Tail of the queued raster layout changes (see serialLayout). */
+let layoutChain = Promise.resolve();
 let splatBroken = false;
 let splatWarned = false;
 /** The state geometry once loaded, for the key's land test. */
@@ -76,18 +78,31 @@ export function mapSplatCount() {
   return splatCount;
 }
 
+/**
+ * Runs one raster layout change after every earlier one has settled, so a slow older
+ * relayout can never land on top of a newer render's layout. Failures do not break the chain.
+ */
+function serialLayout(task) {
+  const run = layoutChain.then(task, task);
+  layoutChain = run.catch(() => {});
+  return run;
+}
+
 /** Drops the live raster (if any) from the layout and revokes its blob URL. */
 async function clearSplat(gd) {
   splatToken += 1;
-  if (!currentImageUrl) return;
-  const url = currentImageUrl;
-  currentImageUrl = null;
-  currentImageSpec = null;
-  try {
-    await window.Plotly.relayout(gd, { images: [] });
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  // Decided when the turn comes: an in-flight paint has registered its image by then.
+  await serialLayout(async () => {
+    if (!currentImageUrl) return;
+    const url = currentImageUrl;
+    currentImageUrl = null;
+    currentImageSpec = null;
+    try {
+      await window.Plotly.relayout(gd, { images: [] });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  });
 }
 
 /** Falls back to the plain land fill after a failed raster; logs once, shows nothing. */
@@ -111,6 +126,48 @@ function splatFailed(gd, err, theme) {
 }
 
 /**
+ * Puts one painted raster into the layout. Runs in the serialized queue, so it starts only
+ * after every earlier layout change has settled; a render that has overtaken it by then
+ * (token) costs only its own blob. The image is registered as live before the relayout so
+ * a clear or a newer paint that follows always sees and removes it; the previous image is
+ * revoked once this one is in the layout.
+ */
+async function applySplat(gd, mine, blob, theme) {
+  const url = URL.createObjectURL(blob);
+  if (mine !== splatToken) {
+    URL.revokeObjectURL(url);
+    return;
+  }
+  const spec = splatImageSpec(url);
+  const prev = currentImageUrl;
+  const prevSpec = currentImageSpec;
+  currentImageUrl = url;
+  currentImageSpec = spec;
+  try {
+    await window.Plotly.relayout(gd, { images: [spec] });
+  } catch (err) {
+    if (currentImageUrl === url) {
+      currentImageUrl = prev;
+      currentImageSpec = prevSpec;
+    }
+    URL.revokeObjectURL(url);
+    if (mine === splatToken) splatFailed(gd, err, theme);
+    return;
+  }
+  if (prev) URL.revokeObjectURL(prev);
+  // A newer render took over while the image went in: it re-applies or removes the image
+  // and sets the fill itself, so this one leaves the fill and the shared state alone.
+  if (mine !== splatToken) return;
+  try {
+    await window.Plotly.restyle(gd, { fill: 'none' }, [0]);
+  } catch (err) {
+    if (mine === splatToken) splatFailed(gd, err, theme);
+    return;
+  }
+  if (mine === splatToken) splatCount += 1;
+}
+
+/**
  * Paints the splat behind one requestAnimationFrame; the render token discards a paint a
  * newer render has overtaken, and the previous image stays in place until the new one is in.
  */
@@ -128,20 +185,7 @@ function scheduleSplat(args, geometry) {
         cell: env.mobile ? MAP_SPLAT.cell.phone : MAP_SPLAT.cell.desktop,
       });
       if (mine !== splatToken) return;
-      const url = URL.createObjectURL(blob);
-      const spec = splatImageSpec(url);
-      try {
-        await window.Plotly.relayout(gd, { images: [spec] });
-        await window.Plotly.restyle(gd, { fill: 'none' }, [0]);
-      } catch (err) {
-        URL.revokeObjectURL(url);
-        throw err;
-      }
-      const prev = currentImageUrl;
-      currentImageUrl = url;
-      currentImageSpec = spec;
-      if (prev) URL.revokeObjectURL(prev);
-      splatCount += 1;
+      await serialLayout(() => applySplat(gd, mine, blob, env.theme));
     } catch (err) {
       if (mine === splatToken) splatFailed(gd, err, env.theme);
     }

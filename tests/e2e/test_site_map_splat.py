@@ -529,6 +529,94 @@ def test_raster_failure_falls_back_to_land_fill(guarded_page: Page, open_app: An
     assert len([m for m in messages if "map colors" in m]) == 1
 
 
+# -- Review fix: the raster race (a slow older relayout must not undo a newer render) ----------
+
+# Holds the next `n` raster layout calls (relayout with images, restyle with fill) on the
+# map. "resolve" calls Plotly at once and resolves its promise on release; "apply" calls
+# Plotly only on release, so the held change lands after anything newer.
+_GATE = """(mode) => {
+  const P = window.Plotly;
+  const gate = (window.__gate = { n: 0, mode, held: 0, release: null, waiting: [] });
+  const wrap = (name, key) => {
+    const real = P[name].bind(P);
+    P[name] = (gd, ...rest) => {
+      const raster = gd && gd.id === 'map-chart' && rest[0] && key in rest[0];
+      if (!raster || gate.n <= 0) return real(gd, ...rest);
+      gate.n -= 1;
+      gate.held += 1;
+      return new Promise((resolve, reject) => {
+        if (gate.mode === 'apply') gate.waiting.push(() => real(gd, ...rest).then(resolve, reject));
+        else {
+          const p = real(gd, ...rest);
+          gate.waiting.push(() => p.then(resolve, reject));
+        }
+      });
+    };
+  };
+  wrap('relayout', 'images');
+  wrap('restyle', 'fill');
+  gate.release = () => gate.waiting.splice(0).forEach((f) => f());
+}"""
+
+
+def _hold_next(page: Page, mode: str) -> None:
+    page.evaluate(f"({_GATE})('{mode}')")
+    page.evaluate("() => { window.__gate.n = 1; }")
+
+
+def _settle(page: Page, frames: int = 12) -> None:
+    for _ in range(frames):
+        page.evaluate(_WAIT_FRAMES)
+    page.wait_for_timeout(150)
+
+
+def _release_and_settle(page: Page) -> None:
+    page.evaluate("() => window.__gate.release()")
+    _settle(page)
+
+
+@pytest.mark.parametrize("mode", ["resolve", "apply"])
+def test_stale_paint_suspended_in_relayout_does_not_revoke_the_newer_image(
+    guarded_page: Page, open_app: Any, mode: str
+) -> None:
+    """Paint A is held in its relayout while paint B is requested; once A resumes the live
+    image is B's, still loadable, and A has not recorded itself or revoked B."""
+    _open_splat(guarded_page, open_app)
+    n = _splats(guarded_page)
+    _hold_next(guarded_page, mode)
+    _set_state(guarded_page, {"seasons": [2021, 2021]})
+    guarded_page.wait_for_function("() => window.__gate.held === 1")
+    _set_state(guarded_page, {"seasons": [2022, 2022]})
+    _settle(guarded_page)
+    _release_and_settle(guarded_page)
+    _wait_splat(guarded_page, n)
+    images = guarded_page.evaluate(_IMAGES)
+    assert len(images) == 1
+    assert guarded_page.evaluate(_FETCH_OK, images[0]) is True
+    assert guarded_page.evaluate(_OUTLINE_FILL) == "none"
+    assert _splats(guarded_page) == n + 1
+
+
+@pytest.mark.parametrize("mode", ["resolve", "apply"])
+def test_colors_off_during_a_relayout_leaves_land_fill_and_no_image(
+    guarded_page: Page, open_app: Any, mode: str
+) -> None:
+    """Colors go Off while paint A is suspended in its relayout: the map ends with the land
+    fill and no image, never fill 'none' over an empty image list (a white map)."""
+    _open_splat(guarded_page, open_app)
+    _hold_next(guarded_page, mode)
+    _set_state(guarded_page, {"seasons": [2021, 2021]})
+    guarded_page.wait_for_function("() => window.__gate.held === 1")
+    guarded_page.click("#colors-toggle button[data-colors=off]")
+    _settle(guarded_page)
+    _release_and_settle(guarded_page)
+    guarded_page.wait_for_function(
+        "() => (document.getElementById('map-chart').layout.images || []).length === 0"
+    )
+    assert guarded_page.evaluate(_OUTLINE_FILL) == "toself"
+    assert guarded_page.evaluate(_IMAGES) == []
+
+
 # -- Phase 11 plan 09: the key overlay ---------------------------------------------------
 
 _KEY_BOXES = """async () => {
