@@ -221,6 +221,44 @@ def multichannel_raw(
     return raw
 
 
+def map_venues_raw(fixture_raw: dict[str, Any]) -> dict[str, Any]:
+    """Synthetic venue cases for the Map tests (Phase 11); fictional fixture data only,
+    no vault data.
+
+    (a) Duplicate key: appends venue 9, the same name and city as venue 0 (Northfield
+    Stadium, Lincoln) at a slightly different lat/lon, and moves rated telecast 11
+    (was at venue 6) onto it. Keys are then venue 0 'northfield-stadium-lincoln' and
+    venue 9 'northfield-stadium-lincoln-2'.
+    (b) Splits, stated here so tests depend on them deliberately: rated venue 2 holds
+    telecast 1 (net-b, fox) and telecast 8 (net-a, disney), an exact two-family even
+    split, so the networks of telecasts 1 and 8 are pinned below; venue 8 (Nassau)
+    holds only unrated games.
+    """
+    raw = copy.deepcopy(fixture_raw)
+    venues = raw["lookups"]["venues"]
+    twin = dict(venues[0])
+    twin["lat"] = round(twin["lat"] + 0.01, 4)
+    twin["lon"] = round(twin["lon"] + 0.01, 4)
+    venues.append(twin)
+    raw["telecasts"]["place"][11] = len(venues) - 1
+    raw["telecasts"]["network"][1] = 1  # fox
+    raw["telecasts"]["network"][8] = 0  # disney
+    return raw
+
+
+@pytest.fixture
+def serve_map_venues(fixture_raw: dict[str, Any]) -> Callable[[Page], None]:
+    """Returns `serve(page)`: loads the `map_venues_raw` synthetic fixture. Call it
+    before opening the app.
+    """
+
+    def _serve(page: Page) -> None:
+        raw = map_venues_raw(fixture_raw)
+        page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+
+    return _serve
+
+
 def expand_family(page: Page, family: str) -> None:
     """Expands a Networks family so its channel rows show. Since 04.16 D-10 the
     families open collapsed, so channel-level tests expand first.

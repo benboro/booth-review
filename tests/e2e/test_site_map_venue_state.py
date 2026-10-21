@@ -108,3 +108,165 @@ def test_group_slug_colliding_with_a_venue_key_is_prefixed(
     assert got["groups"][7] == "abroad-dublin"
     assert got["d"] == [7]
     assert got["plain"] == [1]
+
+
+# ---------------------------------------------------------------- state and view
+
+_VENUE = "ironpeak-field-boulder"  # fixture venue 2: rated telecasts 1 (2019) and 8 (2026)
+
+
+def test_default_state_has_venue_and_colors(guarded_page: Page, site_url: str) -> None:
+    got = _eval(
+        guarded_page,
+        site_url,
+        "const s = S.defaultState(data); return { venue: s.venue, colors: s.colors };",
+    )
+    assert got == {"venue": None, "colors": "on"}
+
+
+def test_venue_alone_fills_table_with_its_filtered_games(guarded_page: Page, site_url: str) -> None:
+    got = _eval(
+        guarded_page,
+        site_url,
+        f"""
+        const s = S.defaultState(data);
+        const base = S.computeView(data, s);
+        s.venue = '{_VENUE}';
+        const v = S.computeView(data, s);
+        const expect = [];
+        for (let i = 0; i < data.n; i += 1) if (v.passesFilters[i] && data.t.place[i] === 2) expect.push(i);
+        return {{ sel: v.venueSelected, has: v.hasSelection, matched: v.matched, expect,
+                  baseSel: base.venueSelected, hi: v.highlighted, summary: v.summary,
+                  baseSummary: base.summary, filterActive: v.filterActive }};
+        """,
+    )
+    assert got["sel"] is True and got["baseSel"] is False
+    assert got["has"] is False
+    assert got["matched"] == got["expect"] == [1, 8, 13]  # 13: unrated game at venue 2
+    assert got["hi"] == []
+    assert got["summary"] == got["baseSummary"]
+
+
+def test_venue_intersects_with_school_and_leaves_summary(guarded_page: Page, site_url: str) -> None:
+    got = _eval(
+        guarded_page,
+        site_url,
+        f"""
+        const search = '?school=ironpeak';
+        const s0 = U.decodeState(search, data);
+        const a = S.computeView(data, s0);
+        const s1 = {{ ...s0, venue: '{_VENUE}' }};
+        const b = S.computeView(data, s1);
+        const expect = a.matched.filter((i) => data.t.place[i] === 2);
+        return {{ school: s0.school, a: a.matched, b: b.matched, expect,
+                  hiSame: JSON.stringify(a.highlighted) === JSON.stringify(b.highlighted),
+                  sumSame: JSON.stringify(a.summary) === JSON.stringify(b.summary),
+                  hasSame: a.hasSelection === b.hasSelection }};
+        """,
+    )
+    assert got["school"], "school slug must resolve"
+    assert got["b"] == got["expect"]
+    assert got["b"], "ironpeak plays at its own venue in the fixture"
+    assert got["hiSame"] and got["sumSame"] and got["hasSame"]
+
+
+def test_venue_with_filter_excluding_all_games_is_empty_but_selected(
+    guarded_page: Page, site_url: str
+) -> None:
+    got = _eval(
+        guarded_page,
+        site_url,
+        f"""
+        const s = S.defaultState(data);
+        s.venue = '{_VENUE}';
+        s.seasons = [2022, 2024];
+        const v = S.computeView(data, s);
+        return {{ sel: v.venueSelected, matched: v.matched }};
+        """,
+    )
+    assert got == {"sel": True, "matched": []}
+
+
+def test_unknown_venue_is_ignored(guarded_page: Page, site_url: str) -> None:
+    got = _eval(
+        guarded_page,
+        site_url,
+        """
+        const s = S.defaultState(data);
+        s.venue = 'nope';
+        const v = S.computeView(data, s);
+        return { sel: v.venueSelected, matched: v.matched };
+        """,
+    )
+    assert got == {"sel": False, "matched": []}
+
+
+def test_group_key_filters_to_every_group_venue(guarded_page: Page, site_url: str) -> None:
+    # Move rated telecast 0 to a second Dublin-labelled venue so the group has two members.
+    mutation = (
+        "raw.lookups.venues.push({city: 'Dublin', country: 'IE', lat: 53.4, lon: -6.3,"
+        " name: 'Liffey Ground', state: null});"
+        " raw.telecasts.place[0] = raw.lookups.venues.length - 1;"
+        " raw.telecasts.place[1] = 7;"
+    )
+    got = _eval(
+        guarded_page,
+        site_url,
+        """
+        const s = S.defaultState(data);
+        s.venue = 'dublin';
+        const v = S.computeView(data, s);
+        return { idx: data.venueIndexesByKey.get('dublin'), matched: v.matched };
+        """,
+        mutation,
+    )
+    assert got["idx"] == [7, 9]
+    assert got["matched"] == [0, 1, 17]  # 17: unrated game at venue 7
+
+
+# ---------------------------------------------------------------- URL
+
+
+def test_venue_url_round_trip_and_drops(guarded_page: Page, site_url: str) -> None:
+    got = _eval(
+        guarded_page,
+        site_url,
+        f"""
+        const out = {{}};
+        const s = {{ ...S.defaultState(data), venue: '{_VENUE}' }};
+        out.encoded = U.encodeState(s, data);
+        out.round = U.decodeState(out.encoded, data).venue;
+        out.plain = U.encodeState(S.defaultState(data), data);
+        out.drops = ['?venue=nope', '?venue=%', '?venue=', '?venue=%E0%A4%A']
+          .map((q) => U.decodeState(q, data).venue);
+        out.group = U.decodeState('?venue=dublin', data).venue;
+        return out;
+        """,
+    )
+    assert f"venue={_VENUE}" in got["encoded"]
+    assert got["round"] == _VENUE
+    assert "venue" not in got["plain"]
+    assert got["drops"] == [None, None, None, None]
+    assert got["group"] == "dublin"
+
+
+def test_colors_url_round_trip(guarded_page: Page, site_url: str) -> None:
+    got = _eval(
+        guarded_page,
+        site_url,
+        """
+        const on = S.defaultState(data);
+        const off = { ...on, colors: 'off' };
+        return {
+          off: U.encodeState(off, data),
+          on: U.encodeState(on, data),
+          offBack: U.decodeState('?colors=off', data).colors,
+          maybe: U.decodeState('?colors=maybe', data).colors,
+          none: U.decodeState('', data).colors,
+        };
+        """,
+    )
+    assert "colors=off" in got["off"]
+    assert "colors" not in got["on"]
+    assert got["offBack"] == "off"
+    assert got["maybe"] == "on" and got["none"] == "on"

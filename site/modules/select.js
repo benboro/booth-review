@@ -48,11 +48,15 @@ export function defaultState(_data) {
     postseason: 'all',
     booth: [],
     game: null,
+    // Phase 11 D-05: one venue (or abroad group) key filtering the Matched games table only.
+    venue: null,
     axis: 'spread',
     y: 'viewers',
     view: 'scatter',
     by: null,
     dots: 'fade',
+    // Phase 11 D-09: the Network colors switch on the Map ('on' | 'off').
+    colors: 'on',
     h2h: false,
   };
 }
@@ -504,6 +508,25 @@ export function computeView(data, state) {
   } else {
     matched = [];
   }
+  // Phase 11 D-05: a clicked venue narrows the table only. Everything above (hasSelection,
+  // highlighted, the summary) is computed without it, so summarySet keeps the base rows.
+  const matchedBase = matched;
+  const venueIndexes =
+    state.venue != null ? data.venueIndexesByKey?.get(state.venue) : undefined;
+  const venueSelected = venueIndexes != null;
+  if (venueSelected) {
+    const venueSet = new Set(venueIndexes);
+    const place = data.t.place;
+    const pool = hasSelection ? matched : null;
+    matched = [];
+    if (pool) {
+      for (const i of pool) if (venueSet.has(place[i])) matched.push(i);
+    } else {
+      for (let i = 0; i < n; i += 1) {
+        if (passesFilters[i] && venueSet.has(place[i])) matched.push(i);
+      }
+    }
+  }
 
   const symbols = new Map();
   for (const i of highlighted) {
@@ -549,7 +572,7 @@ export function computeView(data, state) {
   const enlargeDots =
     drawnFaded > 0 &&
     (!networksOnly || (familiesOn >= 1 && familiesOn <= NETWORKS_ENLARGE_MAX_FAMILIES));
-  let summarySet = matched;
+  let summarySet = matchedBase;
   if (!hasSelection) {
     summarySet = [];
     for (let i = 0; i < n; i += 1) if (passesFilters[i]) summarySet.push(i);
@@ -583,6 +606,7 @@ export function computeView(data, state) {
     totalCount: n,
     highlighted,
     matched,
+    venueSelected,
     peopleOnGame,
     altGames,
     symbols,
