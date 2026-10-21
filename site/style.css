@@ -1541,7 +1541,7 @@ input[type="checkbox"] {
 
 /* Phase 11 D-02: venue hover card (pie left, Games/Viewers table right). */
 .chart-tooltip[data-kind='venue'] {
-  max-width: min(280px, calc(100vw - 32px));
+  max-width: min(296px, calc(100vw - 32px));
   /* a long network name plus the Viewers column needs the width the default 16px side
      padding would take */
   padding-left: 10px;

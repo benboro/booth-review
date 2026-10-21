@@ -190,7 +190,7 @@ def test_card_stays_on_phone_screen(
     open_app(mobile_page, "")
     r = _show(mobile_page, _card(), clientX=380, clientY=300)
     assert r["right"] <= 390
-    assert r["width"] <= 280
+    assert r["width"] <= 296
 
 
 # ---------------------------------------------------------------- live Map hover
