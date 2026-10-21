@@ -10,18 +10,15 @@
  * markup-injecting APIs (T-04.18-21).
  */
 
-import { buildMapFigure, renderMap, bindMapEvents } from './map-chart.js';
-import {
-  MAP_EMPTY,
-  MAP_ERROR,
-  noLocationNote,
-  mapAriaLabel,
-  venueTooltipLines,
-} from './map-model.js';
-import { FAMILY_COLORS } from './palette.js';
-import { showTextTooltip, hideTooltip } from './tooltip.js';
+import { buildMapFigure, renderMap, bindMapEvents, MAP_TRACE_NAMES } from './map-chart.js';
+import { MAP_EMPTY, MAP_ERROR, noLocationNote, mapAriaLabel, venueCard } from './map-model.js';
+import { MAP_VENUE_DOT, PAGE_BG } from './palette.js';
+import { showVenueTooltip, hideTooltip } from './tooltip.js';
 
 const TAP_DEBOUNCE_MS = 350;
+const DOTS_TRACE = MAP_TRACE_NAMES.indexOf('venue-dots');
+const HOVER_HINT = 'Click to list these games';
+const TAP_HINT = 'Tap again to list these games';
 /** Gap between the map space's edge and the hint / note (UI-SPEC section 5). */
 const OVERLAY_INSET = 8;
 
@@ -33,6 +30,8 @@ let latest = null;
 let bound = false;
 let renderCount = 0;
 let pendingTapKey = null;
+/** The venue-dots ring arrays from the last draw, restored on unhover. */
+let baseRing = null;
 let lastTapActionAt = -Infinity;
 
 /** Clears the pending first tap so the next tap on a dot shows its tooltip again. */
@@ -78,40 +77,55 @@ function positionOverlays() {
   }
 }
 
-function familyBorder(family, env) {
-  const palette = FAMILY_COLORS[env.theme] || FAMILY_COLORS.light;
-  return palette[family];
-}
-
-function onVenueHover(venue, family, ev) {
-  if (hoverNone() || !latest) return;
+function cardAt(key, ev, hint) {
+  if (!latest) return;
   const { data, model, env } = latest;
-  showTextTooltip(venueTooltipLines(data, model, venue), {
+  const card = venueCard(data, model, key);
+  if (!card) return;
+  showVenueTooltip(card, {
     theme: env.theme,
-    borderColor: familyBorder(family, env),
     clientX: ev.event?.clientX ?? 0,
     clientY: ev.event?.clientY ?? 0,
+    hint,
   });
 }
 
-function onVenueClick(venue, family, ev) {
-  // A tap does nothing but show or hide the tooltip: no filter, table or panel change.
+/** Sets (key) or clears (null) the 2px hover ring on one venue dot; one restyle, no re-render. */
+function setHoverRing(key) {
+  const gd = el('map-chart');
+  if (!gd || !baseRing || !window.Plotly) return;
+  let width = baseRing.width;
+  let color = baseRing.color;
+  if (key != null && latest) {
+    const at = latest.model.venueDots.findIndex((d) => d.key === key);
+    if (at < 0 || latest.model.venueDots[at].tier === 'subject') return;
+    width = baseRing.width.slice();
+    color = baseRing.color.slice();
+    width[at] = MAP_VENUE_DOT.hoverRingWidth;
+    color[at] = PAGE_BG[latest.env.theme];
+  }
+  window.Plotly.restyle(gd, { 'marker.line.width': [width], 'marker.line.color': [color] }, [
+    DOTS_TRACE,
+  ]);
+}
+
+function onVenueHover(key, ev) {
+  if (hoverNone() || !latest) return;
+  cardAt(key, ev, HOVER_HINT);
+  setHoverRing(key);
+}
+
+function onVenueClick(key, ev) {
+  // Desktop: the click does nothing in this plan. Phone: first tap shows the card.
   if (!hoverNone() || !latest) return;
-  const { data, model, env } = latest;
-  const tapKey = `${venue}:${family}`;
   const now = performance.now();
   // One physical tap reaches Plotly twice (the touch, then the compatibility mouse
-  // click); the second must not undo the first, whether that showed or hid the tooltip.
+  // click); the second must not undo the first, whether that showed or hid the card.
   if (now - lastTapActionAt < TAP_DEBOUNCE_MS) return;
   lastTapActionAt = now;
-  if (tapKey !== pendingTapKey) {
-    pendingTapKey = tapKey;
-    showTextTooltip(venueTooltipLines(data, model, venue), {
-      theme: env.theme,
-      borderColor: familyBorder(family, env),
-      clientX: ev.event?.clientX ?? 0,
-      clientY: ev.event?.clientY ?? 0,
-    });
+  if (key !== pendingTapKey) {
+    pendingTapKey = key;
+    cardAt(key, ev, TAP_HINT);
     return;
   }
   resetMapTap();
@@ -158,14 +172,20 @@ export async function renderMapPanel(args) {
   if (latest !== args) return;
 
   try {
-    await renderMap(gd, buildMapFigure(model, geometry, env));
+    const figure = buildMapFigure(model, geometry, env);
+    const dots = figure.traces[DOTS_TRACE];
+    baseRing = { width: dots.marker.line.width, color: dots.marker.line.color };
+    await renderMap(gd, figure);
     if (!bound) {
       bindMapEvents(gd, {
         onVenueClick,
         onVenueHover,
         // On touch the tap tooltip must outlive Plotly's synthetic unhover.
         onVenueUnhover: () => {
-          if (!hoverNone()) hideTooltip();
+          if (!hoverNone()) {
+            hideTooltip();
+            setHoverRing(null);
+          }
         },
       });
       gd.on('plotly_afterplot', positionOverlays);

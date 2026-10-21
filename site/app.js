@@ -592,8 +592,6 @@ async function startCfb(search = location.search) {
           subjects: m.subjects.map(({ kind, key, label, symbol }) => ({ kind, key, label, symbol })),
           shapesCapped: m.shapesCapped,
           hasShared: m.hasShared,
-          dots: structuredClone(m.dots),
-          faded: structuredClone(m.faded),
           venueDots: structuredClone(m.venueDots),
           venueFaded: structuredClone(m.venueFaded),
           legs: m.legs.map((leg) => ({

@@ -199,8 +199,6 @@ export function seasonPaths(data, indexes) {
 
 // ---------------------------------------------------------------- the model
 
-const TIER_RANK = { base: 0, other: 0, subject: 1 };
-
 function pushTo(map, key, value) {
   const list = map.get(key);
   if (list) list.push(value);
@@ -249,59 +247,6 @@ export function buildMapModel(data, view, state) {
     for (const i of list.filter((g) => t.place[g] != null).sort(cmp)) pushTo(m, t.place[i], i);
     return m;
   });
-
-  // Dots: one per (venue, family, tier, symbol) for passing games (D-10, D-05).
-  let hasShared = false;
-  const dotMap = new Map();
-  for (const i of passing) {
-    const venue = t.place[i];
-    const family = data.familyOf[i];
-    let tier = 'base';
-    let symbol = 'circle';
-    if (hasSubject) {
-      const owners = gameSubjects.get(i);
-      if (owners) {
-        tier = 'subject';
-        const first = owners[0];
-        if (subjects[first].kind === 'person' && (view.peopleOnGame.get(i) ?? []).length >= 2) {
-          symbol = SHARED_SYMBOL;
-          hasShared = true;
-        } else {
-          symbol = subjects[first].symbol;
-        }
-      } else {
-        tier = 'other';
-      }
-    }
-    const key = `${venue}|${family}|${tier}|${symbol}`;
-    if (!dotMap.has(key)) {
-      const p = placements[venue];
-      dotMap.set(key, { venue, family, x: p.x, y: p.y, symbol, tier });
-    }
-  }
-  const symbolRank = (s) => (s === SHARED_SYMBOL ? COMPARE_SYMBOLS.length : COMPARE_SYMBOLS.indexOf(s));
-  const dots = [...dotMap.values()].sort(
-    (a, b) =>
-      FAMILY_ORDER.indexOf(a.family) - FAMILY_ORDER.indexOf(b.family) ||
-      a.venue - b.venue ||
-      TIER_RANK[a.tier] - TIER_RANK[b.tier] ||
-      symbolRank(a.symbol) - symbolRank(b.symbol),
-  );
-
-  // Faded dots: visible failing games where no passing game shares (venue, family) (D-12).
-  const passingKeys = new Set(passing.map((i) => `${t.place[i]}|${data.familyOf[i]}`));
-  const fadedMap = new Map();
-  for (const i of failing) {
-    const venue = t.place[i];
-    const family = data.familyOf[i];
-    const key = `${venue}|${family}`;
-    if (passingKeys.has(key) || fadedMap.has(key)) continue;
-    const p = placements[venue];
-    fadedMap.set(key, { venue, family, x: p.x, y: p.y });
-  }
-  const faded = [...fadedMap.values()].sort(
-    (a, b) => FAMILY_ORDER.indexOf(a.family) - FAMILY_ORDER.indexOf(b.family) || a.venue - b.venue,
-  );
 
   // Legs: consecutive located games of each subject within a season (D-03, D-04).
   const legs = [];
@@ -427,10 +372,8 @@ export function buildMapModel(data, view, state) {
     hasSubject,
     subjects,
     shapesCapped,
-    hasShared,
+    hasShared: venueShared,
     hasVenueShared: venueShared,
-    dots,
-    faded,
     venueModel,
     venueDots,
     venueFaded,
@@ -486,22 +429,6 @@ function subjectLinesFor(data, model, indexes) {
       lines.push({ text: `+${mine.length - MAX_TOOLTIP_GAMES} more`, kind: 'hint' });
     }
   });
-  return lines;
-}
-
-/**
- * D-11: plain {text, kind} lines for one venue (index into lookups.venues): title,
- * family counts for passing games, then each subject's games there (up to three, then
- * "+N more"). The caller writes them with textContent only.
- */
-export function venueTooltipLines(data, model, venue) {
-  const lines = [{ text: venueTitle(data.lookups.venues[venue]), kind: 'title' }];
-  const games = model.venueGames.get(venue) ?? [];
-  const counts = new Map();
-  for (const i of games) counts.set(data.familyOf[i], (counts.get(data.familyOf[i]) ?? 0) + 1);
-  const parts = FAMILY_ORDER.filter((f) => counts.get(f)).map((f) => `${FAMILY_LABELS[f]} ${counts.get(f)}`);
-  if (parts.length > 0) lines.push({ text: parts.join(' · '), kind: 'body' });
-  lines.push(...subjectLinesFor(data, model, [venue]));
   return lines;
 }
 

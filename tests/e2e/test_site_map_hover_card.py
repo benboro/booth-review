@@ -191,3 +191,148 @@ def test_card_stays_on_phone_screen(
     r = _show(mobile_page, _card(), clientX=380, clientY=300)
     assert r["right"] <= 390
     assert r["width"] <= 280
+
+
+# ---------------------------------------------------------------- live Map hover
+
+OpenApp = Callable[[Page, str], None]
+
+_RING_JS = """() => {
+  const gd = document.getElementById('map-chart');
+  const t = gd.data.find((d) => d.name === 'venue-dots');
+  return {width: t.marker.line.width, color: t.marker.line.color};
+}"""
+
+
+def _open_map(page: Page, open_app: OpenApp, query: str = "?view=map") -> None:
+    open_app(page, query)
+    page.wait_for_function("() => window.__testHooks.mapRenders >= 1")
+    page.evaluate("() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")
+
+
+def _pixel(page: Page, x: float, y: float) -> tuple[float, float]:
+    px, py = page.evaluate(
+        """([x, y]) => {
+          const gd = document.getElementById('map-chart');
+          const r = gd.getBoundingClientRect();
+          const fl = gd._fullLayout;
+          return [r.left + fl.xaxis._offset + fl.xaxis.l2p(x),
+                  r.top + fl.yaxis._offset + fl.yaxis.l2p(y)];
+        }""",
+        [x, y],
+    )
+    return px, py
+
+
+def _hover(page: Page, x: float, y: float) -> None:
+    px, py = _pixel(page, x, y)
+    page.mouse.move(px - 60, py - 60)
+    page.mouse.move(px, py, steps=5)
+    page.wait_for_timeout(250)
+
+
+def _tooltip(page: Page) -> dict[str, Any] | None:
+    result: dict[str, Any] | None = page.evaluate(
+        """() => { const el = document.getElementById('chart-tooltip');
+          if (!el || el.hidden) return null;
+          return {kind: el.dataset.kind, text: el.textContent,
+                  title: el.querySelector('strong.tooltip-title')?.textContent,
+                  pie: el.querySelector('.tooltip-venue-body svg') !== null,
+                  hint: el.lastElementChild.textContent,
+                  rows: [...el.querySelectorAll('tbody tr')].map((r) =>
+                    [...r.children].map((c) => c.textContent))}; }"""
+    )
+    return result
+
+
+def _model(page: Page) -> dict[str, Any]:
+    model: dict[str, Any] = page.evaluate("() => window.__testHooks.getMapModel()")
+    return model
+
+
+def _base_dots(page: Page) -> list[dict[str, Any]]:
+    return [d for d in _model(page)["venueDots"] if d["tier"] == "base"]
+
+
+def test_desktop_hover_shows_card_and_hover_ring(guarded_page: Page, open_app: OpenApp) -> None:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    _open_map(guarded_page, open_app)
+    dots = _model(guarded_page)["venueDots"]
+    # Hover the largest dot; the model orders dots by score so index 0 is the top one.
+    _hover(guarded_page, dots[0]["x"], dots[0]["y"])
+    tip = _tooltip(guarded_page)
+    assert tip is not None
+    assert tip["kind"] == "venue"
+    assert tip["title"]
+    assert tip["pie"] is True
+    assert tip["hint"] == "Click to list these games"
+    ring = guarded_page.evaluate(_RING_JS)
+    bg = guarded_page.evaluate("async () => (await import('./modules/palette.js')).PAGE_BG.light")
+    assert ring["width"][0] == 2
+    assert ring["color"][0] == bg
+    assert all(w == 1 for w in ring["width"][1:])
+    guarded_page.mouse.move(5, 5, steps=4)
+    guarded_page.wait_for_timeout(250)
+    assert _tooltip(guarded_page) is None
+    assert all(w == 1 for w in guarded_page.evaluate(_RING_JS)["width"])
+
+
+def test_hovering_a_faded_dot_shows_no_card(guarded_page: Page, open_app: OpenApp) -> None:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    _open_map(guarded_page, open_app, "?view=map&school=boulder-pass")
+    faded = _model(guarded_page)["venueFaded"]
+    assert faded
+    _hover(guarded_page, faded[0]["x"], faded[0]["y"])
+    assert _tooltip(guarded_page) is None
+
+
+def test_hovering_an_edge_marker_shows_its_card(guarded_page: Page, open_app: OpenApp) -> None:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    _open_map(guarded_page, open_app)
+    nassau = next(m for m in _model(guarded_page)["markers"] if m["label"] == "Nassau")
+    _hover(guarded_page, nassau["x"], nassau["y"])
+    tip = _tooltip(guarded_page)
+    assert tip is not None
+    assert tip["title"] == "Nassau"
+    assert tip["pie"] is True
+
+
+def test_unrated_and_rated_venues_show_dash_and_credit_note(
+    guarded_page: Page, open_app: OpenApp, serve_map_venues: Callable[[Page], None]
+) -> None:
+    serve_map_venues(guarded_page)
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    _open_map(guarded_page, open_app)
+    texts: list[str] = []
+    for dot in _model(guarded_page)["venueDots"]:
+        _hover(guarded_page, dot["x"], dot["y"])
+        tip = _tooltip(guarded_page)
+        if tip:
+            texts.append(tip["text"])
+    assert any("- no viewer figure listed" in t for t in texts)
+    assert any(CREDIT in t for t in texts)
+
+
+def test_phone_first_tap_shows_card_second_tap_hides(mobile_page: Page, open_app: OpenApp) -> None:
+    mobile_page.set_viewport_size({"width": 360, "height": 800})
+    _open_map(mobile_page, open_app)
+    mobile_page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
+    dot = _model(mobile_page)["venueDots"][0]
+    px, py = _pixel(mobile_page, dot["x"], dot["y"])
+    mobile_page.touchscreen.tap(px, py)
+    mobile_page.wait_for_function(
+        "() => { const e = document.getElementById('chart-tooltip'); return e && !e.hidden; }"
+    )
+    tip = _tooltip(mobile_page)
+    assert tip is not None
+    assert tip["kind"] == "venue"
+    assert tip["hint"] == "Tap again to list these games"
+    mobile_page.wait_for_timeout(450)
+    mobile_page.touchscreen.tap(px, py)
+    mobile_page.wait_for_function("() => document.getElementById('chart-tooltip').hidden")
+    mobile_page.wait_for_timeout(450)
+    mobile_page.touchscreen.tap(px, py)
+    mobile_page.wait_for_function("() => !document.getElementById('chart-tooltip').hidden")
+    mobile_page.evaluate("() => window.scrollTo(0, 0)")
+    mobile_page.touchscreen.tap(5, 5)
+    mobile_page.wait_for_function("() => document.getElementById('chart-tooltip').hidden")
