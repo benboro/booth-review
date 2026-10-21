@@ -505,10 +505,18 @@ def test_raster_failure_falls_back_to_land_fill(guarded_page: Page, open_app: An
     guarded_page.on("console", lambda m: messages.append(m.text) if m.type == "warning" else None)
     guarded_page.add_init_script(
         """
+        window.__failRaster = true;
         if (typeof OffscreenCanvas !== 'undefined') {
-          OffscreenCanvas.prototype.convertToBlob = () => Promise.reject(new Error('boom'));
+          const real = OffscreenCanvas.prototype.convertToBlob;
+          OffscreenCanvas.prototype.convertToBlob = function (...a) {
+            return window.__failRaster ? Promise.reject(new Error('boom')) : real.apply(this, a);
+          };
         }
-        HTMLCanvasElement.prototype.toBlob = function (cb) { cb(null); };
+        const realToBlob = HTMLCanvasElement.prototype.toBlob;
+        HTMLCanvasElement.prototype.toBlob = function (cb, ...a) {
+          if (window.__failRaster) cb(null);
+          else realToBlob.call(this, cb, ...a);
+        };
         """
     )
     _open_map(guarded_page, open_app)
@@ -524,8 +532,21 @@ def test_raster_failure_falls_back_to_land_fill(guarded_page: Page, open_app: An
         > 0
     )
     assert guarded_page.locator("#map-empty-note").is_hidden()
+    # While broken the key drops its Color strength block although the switch stays On.
+    assert "Color strength" not in guarded_page.locator("#map-key").inner_text()
+    assert _pressed(guarded_page) == ["on"]
     _set_state(guarded_page, {"seasons": [2021, 2021]})
     guarded_page.evaluate(_WAIT_FRAMES)
+    _settle(guarded_page)
+    assert len([m for m in messages if "map colors" in m]) == 1
+    assert guarded_page.evaluate(_OUTLINE_FILL) == "toself"
+    # The next paint retries: once the raster works again the colors come back.
+    guarded_page.evaluate("() => { window.__failRaster = false; }")
+    _set_state(guarded_page, {"seasons": [2022, 2022]})
+    _wait_splat(guarded_page, 0)
+    assert len(guarded_page.evaluate(_IMAGES)) == 1
+    assert guarded_page.evaluate(_OUTLINE_FILL) == "none"
+    assert "Color strength" in guarded_page.locator("#map-key").inner_text()
     assert len([m for m in messages if "map colors" in m]) == 1
 
 

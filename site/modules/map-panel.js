@@ -105,12 +105,27 @@ async function clearSplat(gd) {
   });
 }
 
+/** Draws the key; the Color strength block hides while the raster is broken. */
+function drawKey({ model, env }) {
+  const keyEl = el('map-key');
+  if (!keyEl) return;
+  const colorsOn = Boolean(env.splat) && !splatBroken;
+  renderMapKey(keyEl, buildMapKey(model.venueModel, { phone: env.mobile, colorsOn }), {
+    theme: env.theme,
+  });
+  if (model.emptyAll) keyEl.hidden = true;
+}
+
 /** Falls back to the plain land fill after a failed raster; logs once, shows nothing. */
 function splatFailed(gd, err, theme) {
   splatBroken = true;
   if (!splatWarned) {
     splatWarned = true;
     console.warn('booth-review: map colors could not be drawn', err);
+  }
+  if (latest) {
+    drawKey(latest);
+    positionOverlays();
   }
   currentImageSpec = null;
   const url = currentImageUrl;
@@ -436,13 +451,9 @@ export async function renderMapPanel(args) {
     note.textContent = noLocationNote(model.noLocationCount);
     note.hidden = model.noLocationCount === 0;
   }
-  const keyEl = el('map-key');
-  if (keyEl) {
-    renderMapKey(keyEl, buildMapKey(model.venueModel, { phone: env.mobile, colorsOn: env.splat }), {
-      theme: env.theme,
-    });
-    if (model.emptyAll) keyEl.hidden = true;
-  }
+  // A new render is a new chance for the colors: a failed raster no longer sticks.
+  splatBroken = false;
+  drawKey(args);
   if (model.emptyAll) showNote(MAP_EMPTY);
   else hideNote();
 
