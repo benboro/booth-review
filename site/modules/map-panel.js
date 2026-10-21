@@ -20,7 +20,14 @@ import {
 import { buildLandMask, paintSplat } from './map-splat.js';
 import { buildMapKey, renderMapKey } from './map-key.js';
 import { HAWAII_INSET } from './map-geo.js';
-import { MAP_EMPTY, MAP_ERROR, noLocationNote, mapAriaLabel, venueCard } from './map-model.js';
+import {
+  MAP_EMPTY,
+  MAP_ERROR,
+  noLocationNote,
+  mapAriaLabel,
+  venueCard,
+  venueFilterInfo,
+} from './map-model.js';
 import { MAP_LAND, MAP_SPLAT, MAP_VENUE_DOT, PAGE_BG } from './palette.js';
 import { showVenueTooltip, hideTooltip } from './tooltip.js';
 
@@ -42,6 +49,8 @@ let pendingTapKey = null;
 /** The venue-dots ring arrays from the last draw, restored on unhover. */
 let baseRing = null;
 let lastTapActionAt = -Infinity;
+/** app.js handles (Phase 11 D-05): the click filters the table through the same setState. */
+let handles = { setState: null, getState: null, getMatchedCount: null };
 /** Splat raster state (Phase 11 D-06): a render token coalesces paints, one image is live. */
 let splatToken = 0;
 let currentImageUrl = null;
@@ -313,12 +322,38 @@ function onVenueHover(key, ev) {
   setHoverRing(key);
 }
 
+/**
+ * Filters the Matched games table to one venue or abroad group (Phase 11 D-05), then
+ * scrolls to the table, moves focus to its heading and announces the count. A key that is
+ * already selected only scrolls and focuses.
+ */
+function applyVenue(key) {
+  const { setState, getState, getMatchedCount } = handles;
+  if (!setState || !latest) return;
+  const info = venueFilterInfo(latest.data, key);
+  if (!info) return;
+  if (getState().venue !== key) setState({ venue: key });
+  hideTooltip();
+  resetMapTap();
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  el('matched-games')?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+  el('matched-games-title')?.focus({ preventScroll: true });
+  const n = getMatchedCount();
+  const status = el('venue-status');
+  if (status) {
+    status.textContent = `Showing ${n} ${n === 1 ? 'game' : 'games'} at ${info.name}`;
+  }
+}
+
 function onVenueClick(key, ev) {
-  // Desktop: the click does nothing in this plan. Phone: first tap shows the card.
-  if (!hoverNone() || !latest) return;
+  if (!latest) return;
+  if (!hoverNone()) {
+    applyVenue(key);
+    return;
+  }
   const now = performance.now();
   // One physical tap reaches Plotly twice (the touch, then the compatibility mouse
-  // click); the second must not undo the first, whether that showed or hid the card.
+  // click); the second must not undo the first, whether that showed the card or filtered.
   if (now - lastTapActionAt < TAP_DEBOUNCE_MS) return;
   lastTapActionAt = now;
   if (key !== pendingTapKey) {
@@ -326,12 +361,12 @@ function onVenueClick(key, ev) {
     cardAt(key, ev, TAP_HINT);
     return;
   }
-  resetMapTap();
-  hideTooltip();
+  applyVenue(key);
 }
 
 /** Wires the outside-tap listener once. */
-export function initMapPanel() {
+export function initMapPanel({ setState, getState, getMatchedCount } = {}) {
+  handles = { setState, getState, getMatchedCount };
   document.addEventListener('pointerdown', (ev) => {
     if (pendingTapKey != null && !ev.target.closest('#map-chart')) {
       resetMapTap();

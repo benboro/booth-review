@@ -146,3 +146,90 @@ def test_markup_in_a_venue_name_renders_as_text(guarded_page: Page, site_url: st
     assert guarded_page.locator("#venue-chips img").count() == 0
     assert "<img" in guarded_page.evaluate(CHIP_TEXT)
     assert guarded_page.evaluate("() => window.__pwned") is None
+
+
+# ---------------------------------------------------------------- click and tap
+
+_TRACE = """(name) => {
+  const t = document.getElementById('map-chart').data.find((d) => d.name === name);
+  return t ? t.x.length : null;
+}"""
+_IMAGES = "() => document.getElementById('map-chart').layout.images?.length ?? 0"
+
+
+def _click_dot(page: Page, x: float, y: float) -> None:
+    """Scrolls the dot to mid-viewport, then hovers and clicks it."""
+    _, py = _pixel(page, x, y)
+    page.evaluate("(dy) => window.scrollBy(0, dy)", py - 300)
+    px, py = _pixel(page, x, y)
+    page.mouse.move(px - 40, py - 40)
+    page.mouse.move(px, py, steps=4)
+    page.mouse.click(px, py)
+
+
+def test_desktop_click_filters_table_scrolls_focuses_and_announces(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    guarded_page.emulate_media(reduced_motion="reduce")
+    guarded_page.set_viewport_size({"width": 1280, "height": 700})
+    _open_map(guarded_page, open_app)
+    dot = _model(guarded_page)["venueDots"][0]
+    dots_before = guarded_page.evaluate(_TRACE, "venue-dots")
+    images_before = guarded_page.evaluate(_IMAGES)
+    _click_dot(guarded_page, dot["x"], dot["y"])
+    guarded_page.wait_for_function(f"() => location.search.includes('venue={dot['key']}')")
+    guarded_page.wait_for_function("() => document.querySelector('#venue-chips .chip')")
+    assert guarded_page.evaluate("() => document.activeElement.id") == "matched-games-title"
+    rows = guarded_page.evaluate(ROWS)
+    assert rows > 0
+    name = guarded_page.evaluate(CHIP_TEXT).removeprefix("Venue: ")
+    noun = "game" if rows == 1 else "games"
+    assert guarded_page.locator("#venue-status").inner_text() == f"Showing {rows} {noun} at {name}"
+    guarded_page.wait_for_function(
+        """() => {
+          const top = document.getElementById('matched-games').getBoundingClientRect().top;
+          const root = document.documentElement;
+          const atEnd = window.scrollY + window.innerHeight >= root.scrollHeight - 2;
+          return Math.abs(top) <= 2 || (atEnd && top >= -2);
+        }"""
+    )
+    assert guarded_page.evaluate(_TRACE, "venue-selected") == 1
+    assert guarded_page.evaluate(_TRACE, "venue-dots") == dots_before
+    assert guarded_page.evaluate(_IMAGES) == images_before
+
+
+def test_clicking_an_edge_marker_filters_to_its_group(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    guarded_page.emulate_media(reduced_motion="reduce")
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    _open_map(guarded_page, open_app)
+    marker = next(m for m in _model(guarded_page)["markers"] if m["label"] == "Nassau")
+    _click_dot(guarded_page, marker["x"], marker["y"])
+    guarded_page.wait_for_function("() => location.search.includes('venue=nassau')")
+    guarded_page.wait_for_function("() => document.querySelector('#venue-chips .chip')")
+    assert guarded_page.evaluate(CHIP_TEXT) == "Venue: Nassau"
+    assert guarded_page.evaluate(ROWS) > 0
+
+
+def test_group_key_chip_reads_the_marker_label(guarded_page: Page, open_app: OpenApp) -> None:
+    """The Dublin group key lists every Dublin-group game under 'Venue: Dublin' (D-10)."""
+    open_app(guarded_page, "?view=map&venue=dublin")
+    guarded_page.wait_for_function("() => document.querySelector('#venue-chips .chip')")
+    assert guarded_page.evaluate(CHIP_TEXT) == "Venue: Dublin"
+    assert guarded_page.evaluate(ROWS) > 0
+
+
+def test_chip_survives_tab_switch_and_reload(guarded_page: Page, open_app: OpenApp) -> None:
+    key = _first_key(guarded_page, open_app)
+    open_app(guarded_page, f"?view=map&venue={key}")
+    guarded_page.wait_for_function("() => document.querySelector('#venue-chips .chip')")
+    guarded_page.evaluate("() => window.__testHooks.setState({ view: 'bars' })")
+    guarded_page.wait_for_function("() => location.search.includes('view=bars')")
+    assert guarded_page.locator("#venue-chips .chip").count() == 1
+    guarded_page.evaluate("() => window.__testHooks.setState({ view: 'map' })")
+    assert guarded_page.locator("#venue-chips .chip").count() == 1
+    guarded_page.reload()
+    guarded_page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+    assert guarded_page.locator("#venue-chips .chip").count() == 1
+    assert f"venue={key}" in guarded_page.evaluate("() => location.search")

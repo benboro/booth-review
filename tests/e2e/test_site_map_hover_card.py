@@ -313,7 +313,9 @@ def test_unrated_and_rated_venues_show_dash_and_credit_note(
     assert any(CREDIT in t for t in texts)
 
 
-def test_phone_first_tap_shows_card_second_tap_hides(mobile_page: Page, open_app: OpenApp) -> None:
+def test_phone_first_tap_shows_card_second_tap_filters(
+    mobile_page: Page, open_app: OpenApp
+) -> None:
     mobile_page.set_viewport_size({"width": 360, "height": 800})
     _open_map(mobile_page, open_app)
     mobile_page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
@@ -330,9 +332,4 @@ def test_phone_first_tap_shows_card_second_tap_hides(mobile_page: Page, open_app
     mobile_page.wait_for_timeout(450)
     mobile_page.touchscreen.tap(px, py)
     mobile_page.wait_for_function("() => document.getElementById('chart-tooltip').hidden")
-    mobile_page.wait_for_timeout(450)
-    mobile_page.touchscreen.tap(px, py)
-    mobile_page.wait_for_function("() => !document.getElementById('chart-tooltip').hidden")
-    mobile_page.evaluate("() => window.scrollTo(0, 0)")
-    mobile_page.touchscreen.tap(5, 5)
-    mobile_page.wait_for_function("() => document.getElementById('chart-tooltip').hidden")
+    mobile_page.wait_for_function("() => location.search.includes('venue=')")

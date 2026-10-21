@@ -493,7 +493,7 @@ async function startCfb(search = location.search) {
     initChartTabs({ data, getState: () => state, setState });
     renderers.push(renderChartTabs);
 
-    initMapPanel();
+    initMapPanel({ setState, getState: () => state, getMatchedCount: () => lastView.matched.length });
 
     initBarsPanel({ data, getState: () => state, setState, rerender: render });
 

@@ -447,27 +447,35 @@ def test_phone_wheel_over_map_scrolls_the_page(mobile_page: Page, open_app: Open
     assert after > before
 
 
-def test_phone_tap_shows_then_hides_tooltip(mobile_page: Page, open_app: OpenApp) -> None:
-    """D-07/D-11: a first tap shows the tooltip, a second hides it, a tap elsewhere hides it."""
+def test_phone_second_tap_filters_the_table(mobile_page: Page, open_app: OpenApp) -> None:
+    """D-05: a first tap shows the card, a second tap filters the table; a tap elsewhere hides."""
     _phone(mobile_page, open_app, "?view=map&people=pat-rowan")
     mobile_page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
-    x, y = _dot_point(mobile_page)
-    px, py = _venue_pixel(mobile_page, x, y)
+    dot = _model(mobile_page)["venueDots"][0]
+    px, py = _venue_pixel(mobile_page, dot["x"], dot["y"])
     mobile_page.touchscreen.tap(px, py)
     mobile_page.wait_for_function(
         "() => { const e = document.getElementById('chart-tooltip'); return e && !e.hidden; }"
     )
-    assert _tooltip_text(mobile_page)
+    assert "Tap again to list these games" in (_tooltip_text(mobile_page) or "")
+    assert "venue=" not in mobile_page.evaluate("() => location.search")
     mobile_page.wait_for_timeout(450)
     mobile_page.touchscreen.tap(px, py)
-    mobile_page.wait_for_function("() => document.getElementById('chart-tooltip').hidden")
+    mobile_page.wait_for_function(f"() => location.search.includes('venue={dot['key']}')")
+    mobile_page.wait_for_function("() => document.querySelector('#venue-chips .chip')")
+    assert mobile_page.locator("#chart-tooltip").is_hidden()
+    # A tap outside the map after only the first tap hides the card and sets nothing.
+    mobile_page.evaluate("() => window.__testHooks.setState({ venue: null })")
+    mobile_page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
     mobile_page.wait_for_timeout(450)
+    px, py = _venue_pixel(mobile_page, dot["x"], dot["y"])
     mobile_page.touchscreen.tap(px, py)
     mobile_page.wait_for_function("() => !document.getElementById('chart-tooltip').hidden")
     mobile_page.wait_for_timeout(450)
     mobile_page.evaluate("() => window.scrollTo(0, 0)")
     mobile_page.touchscreen.tap(5, 5)
     mobile_page.wait_for_function("() => document.getElementById('chart-tooltip').hidden")
+    assert "venue=" not in mobile_page.evaluate("() => location.search")
 
 
 def test_phone_plot_is_centered_in_a_520px_panel(mobile_page: Page, open_app: OpenApp) -> None:
