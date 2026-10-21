@@ -51,9 +51,11 @@ NFL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "contract" / "nfl-data.fixture.
 # Index re-pinned at Phase 10 Plan 11: plans 10-06..10-09 added only markup (Booth trigger and
 # popover, Crews tab and panel, Lead booth key; 21 added lines, none removed), then re-pinned
 # once more for the 10-11 review: the Booth helper now ends "faded or hidden." (one reworded line).
+# Index re-pinned at Phase 11 Plan 09: only added markup (Network colors toggle and the
+# map key overlay; 8 added lines, none removed).
 _SITE_DATA_SHA256 = "8ceec31a10326e809f9a9397da7734be8b1092156ef094093742c7d4e117ac02"
 _COVERAGE_SHA256 = "f3cf1022cdd2bacc514a00971310411288b395acd621ea3f880d12731ed0a4e9"
-_INDEX_PRE_PHASE_SHA256 = "012237c8dbd5a874c10d6fc70631787a478614cbc6c8236d72a0a3e35a32ef86"
+_INDEX_PRE_PHASE_SHA256 = "72a689830400724f98164ee7651d20077942251afbb49f17d8c1d7030cfd9471"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'
