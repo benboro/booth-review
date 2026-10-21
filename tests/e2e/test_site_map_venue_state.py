@@ -94,6 +94,37 @@ def test_duplicate_name_city_gets_suffix(
     assert got[9] == "northfield-stadium-lincoln-2"
 
 
+def test_shuffling_duplicate_venues_keeps_each_ones_key(
+    guarded_page: Page, site_url: str, serve_map_venues: Callable[[Page], None]
+) -> None:
+    """Same-name, same-city venues are keyed by their own data, not lookup order."""
+    serve_map_venues(guarded_page)
+    body = """
+      const v = data.lookups.venues;
+      const dupes = v.map((x, i) => i).filter((i) => data.venueKeys[i].startsWith('northfield-stadium-lincoln'));
+      return {
+        dupes: dupes.map((i) => ({ lat: v[i].lat, lon: v[i].lon, state: v[i].state, key: data.venueKeys[i] })),
+        others: v.map((x, i) => [x.name, data.venueKeys[i]]).filter(([, k]) => !k.startsWith('northfield-stadium-lincoln')),
+      };
+    """
+    base = _eval(guarded_page, site_url, body)
+    assert len(base["dupes"]) == 2
+    # Swap the lookup positions of the two duplicates (venue 0 and venue 9).
+    mutation = """
+      const v = raw.lookups.venues;
+      const a = 0, b = 9;
+      const t = v[a]; v[a] = v[b]; v[b] = t;
+    """
+    shuffled = _eval(guarded_page, site_url, body, mutation)
+    by_place = {(d["lat"], d["lon"], d["state"]): d["key"] for d in base["dupes"]}
+    assert {(d["lat"], d["lon"], d["state"]): d["key"] for d in shuffled["dupes"]} == by_place
+    assert sorted(by_place.values()) == [
+        "northfield-stadium-lincoln",
+        "northfield-stadium-lincoln-2",
+    ]
+    assert sorted(shuffled["others"]) == sorted(base["others"])
+
+
 def test_group_slug_colliding_with_a_venue_key_is_prefixed(
     guarded_page: Page, site_url: str
 ) -> None:
@@ -116,6 +147,9 @@ def test_suffixed_key_never_lands_on_another_venues_own_key(
     mutation = (
         "const v = raw.lookups.venues;"
         " [['Foo', ''], ['Foo', ''], ['Foo 2', '']].forEach(([n, c], i) => { v[i].name = n; v[i].city = c; });"
+        # Duplicates are ordered by their own data: pin venue 0 ahead of venue 1.
+        " v[0].state = v[1].state = 'NE'; v[0].country = v[1].country = 'US';"
+        " v[0].lat = 40; v[1].lat = 41; v[0].lon = v[1].lon = -96;"
     )
     got = _eval(
         guarded_page,
