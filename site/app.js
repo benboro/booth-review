@@ -46,6 +46,7 @@ import {
   hoverRingDiameter,
 } from './modules/hover-ring.js';
 import { PHONE_QUERY } from './modules/breakpoints.js';
+import { waitForFonts, onLateFont } from './modules/chart-frame.js';
 
 const versionMeta = document.querySelector('meta[name="site-data-version"]');
 const version = versionMeta ? versionMeta.content : '';
@@ -542,7 +543,14 @@ async function startCfb(search = location.search) {
     });
 
     // The graph div only gains its `.on()` event-emitter API once Plotly has
-    // rendered into it at least once, so the first render must come first.
+    // rendered into it at least once, so the first render must come first. The first draw
+    // waits (at most 1500ms) for the faces so tick labels and margins do not shift after font
+    // swap; a face that arrives later re-lays the chart out once (13-12, SHELL-06).
+    if (!(await waitForFonts())) {
+      onLateFont(() => {
+        if (cfbActive()) render();
+      });
+    }
     render();
 
     window.__testHooks = {
