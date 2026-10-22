@@ -258,6 +258,18 @@ Games with no public viewer figure are shown, not dropped: they sit in a "No pub
 
 <!-- mlb:start -->
 
+## NFL: small crew rows can reveal a game's spread band
+
+The NFL Crews view's Adjusted mode shows each booth-season's residual: how far
+its games' margin and excitement ran from what their pregame spreads predict.
+The spread itself never ships, and residuals ship only per booth-season, not
+per game. But a booth-season can be a single game (a one-off fill-in
+play-by-play voice) or a few games, and each row lists its games. For such a
+row, the residual and the shipped final margin together reveal which of the
+four spread bands the game fell in. This is accepted: the band is a coarse
+range, not the spread. Such rows carry the low-n mark. See
+[NFL field list](sources/nfl-field-list.md).
+
 ## MLB gaps
 
 - **Apple has no viewership.** Ratings Reference carries no Apple TV figures, so the Apple view shows none. Apple crews are named for every 2026 telecast, 20 from 506 Sports and 30 relayed.

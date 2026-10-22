@@ -190,6 +190,50 @@ The fields that stay analysis-only are:
 Only values derived from them (Task 1 means and residuals) reach the site. The
 spread is never an axis, column or panel field.
 
+**Decision (2026-10-21, 12-CONTEXT D-19; corrected 2026-10-22):** no
+per-game spread-derived NFL field ships. Per-game raw outcomes (`final_margin`,
+`excitement`, `viewers`) are already shipped; spread-adjusted residuals and
+their standard errors ship only per row, over a booth-season or a
+category-season. A row can cover a single game or a few games, and each row
+names its games in `game_list`, so a small row's residual can reveal those
+games' spread band. That is accepted and listed in
+[Known gaps](../known-gaps.md#nfl-small-crew-rows-can-reveal-a-games-spread-band);
+nothing here claims the aggregation hides it.
+
+Modes: NFL Crews shows Raw or Adjusted (the booth residual
+`adj_<metric>_resid` with its standard error); NFL Viewership shows Viewers or
+Residual (`viewership_resid` with its standard error). Special games has no
+modes.
+
+Crews Adjusted stays available under row filters (Seasons, a Booths pick, an
+Announcers pick that matches a booth row's play-by-play voice), which pool the
+shipped booth rows exactly from their `n`, mean and standard error; a row with
+a null residual leaves the pool together with its `n`, and the pooled value is
+blank when no row in range has one. Viewership Residual is never pooled: it
+shows one point per category-season, because the model behind it is fitted per
+category and era, so its residuals average to zero over a whole era. Any other
+pick (Team, Category on Crews or Viewership, Booths or Announcers on
+Viewership, an Announcers pick that matches an analyst, fill-in or any other
+listed crew member inside a Crews row) switches the view to Raw, recomputed in
+the browser from `games[]` fields, with a short on-screen reason. When one pick
+matches whole rows in some places and games inside a row in others, the view
+switches to Raw. Under Raw, the low-n mark uses the number of picked games with
+a value for the shown metric. No NFL contract, golden or fixture changes.
+
+| Affected cell (view x pick) | Serving field or Raw switch |
+|---|---|
+| Crews x Seasons | row filter: `booths[].raw_n_*`, `raw_mean_*`, `adj_n_*`, `adj_<metric>_resid`, `adj_<metric>_se`, pooled exactly; raw viewers blank when the rows span more than one measurement era (`games[].era` via `booths[].game_list`) |
+| Crews x Booths | row filter: `booths[]` whole rows |
+| Crews x Announcers (booth's play-by-play voice) | row filter: `booths[].pbp_person` |
+| Crews x Announcers (analyst, fill-in or other crew member) | Raw, from the absolute value of `games[].final_margin`, `excitement`, `viewers` via `booths[].game_list` |
+| Crews x Team, Crews x Category | Raw, as above |
+| Viewership x Seasons | row filter: `viewership[].games`, `mean_viewers`, `era`, raw pooled only within one measurement era; Residual shows `viewership_resid`, `viewership_se` per category-season, not pooled |
+| Viewership x Category, Team, Announcers or Booths | Raw, from `games[].viewers` via `viewership[].game_list` |
+| Special games x Seasons | row filter: `special[]` whole rows |
+| Special games x Category | fades segments within `special[]` rows; no row is dropped |
+| Special games x Team, Announcers | `games[].home`, `away`, `crew`, `slot`, `standalone`, `agotw`, `cbs_national`, `international`, `flexed` (no spread value used) |
+| Scatter, Matched games table x any pick | `games[]` fields, by pass |
+
 506's owners were asked about reuse and have not replied. The CFB, NFL and later
 MLB views show 506 crews and networks with credit, and they come off the site if
 506 objects (see the 506 rows in `data/README.md`).
