@@ -11,17 +11,19 @@
  *
  * `chipsHost` is accepted for the documented signature; the people chips are
  * rendered by index.js's selection bar, which already owns `#nfl-chips`.
+ * `clearHost` is the always-rendered selection row, where Clear all filters sits
+ * at the right end (C1). The bar itself is fixed: Booths is always visible (D-11).
  */
 import { makeRolePill } from '../../modules/pill.js';
-import { CATEGORY_OPTIONS, activeFilterCount, boothGames, defaultNflState } from './state.js';
+import { CATEGORY_OPTIONS, boothGames, defaultNflState } from './state.js';
 import { PHONE_QUERY } from '../../modules/breakpoints.js';
 
 const TRIGGERS = [
   { key: 'announcers', label: 'Announcers' },
-  { key: 'booths', label: 'Booths' },
   { key: 'seasons', label: 'Seasons' },
   { key: 'category', label: 'Category' },
   { key: 'team', label: 'Team' },
+  { key: 'booths', label: 'Booths' },
 ];
 
 function el(tag, className, text) {
@@ -32,6 +34,7 @@ function el(tag, className, text) {
 }
 
 let toolbarEl = null;
+let clearHost = null;
 let layer = null;
 let ui = null; // { clear, filtersButton, triggers: Map, sheet, popovers: Map }
 let built = false; // sections need the loaded model
@@ -194,8 +197,8 @@ function announcersSection(ctx, sfx) {
   };
 }
 
-/** Views that carry the Booths control (D-10); it is concealed everywhere else. */
-const BOOTH_VIEWS = new Set(['crews', 'viewership']);
+/** The Booths list is grouped by category on Viewership and by network family everywhere else (D-10). */
+const boothGrouping = (view) => (view === 'viewership' ? 'viewership' : 'network');
 
 function sameKeys(a, b) {
   return a.length === b.length && a.every((k) => b.includes(k));
@@ -228,7 +231,7 @@ function boothsSection(ctx, sfx) {
   empty.hidden = true;
 
   const counts = new Map(model.boothCatalog.map((e) => [e.key, boothGames(model, [e.key]).length]));
-  let builtFor = null; // the view the list is grouped for
+  let builtFor = null; // the grouping the list was built for
   let groups = []; // [{ id, head, only, keys, options: [{ li, key, lower }] }]
   let stop = null;
   const setStop = (li) => {
@@ -242,8 +245,8 @@ function boothsSection(ctx, sfx) {
     ctx.setState({ booths: cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key] });
   };
 
-  function groupings(view) {
-    if (view === 'viewership') {
+  function groupings(grouping) {
+    if (grouping === 'viewership') {
       return model.viewCategories
         .map((vc, ci) => ({
           id: vc.id,
@@ -257,12 +260,12 @@ function boothsSection(ctx, sfx) {
       .filter((g) => g.entries.length);
   }
 
-  function rebuild(view) {
-    builtFor = view;
+  function rebuild(grouping) {
+    builtFor = grouping;
     groups = [];
     stop = null;
     list.replaceChildren();
-    for (const g of groupings(view)) {
+    for (const g of groupings(grouping)) {
       const headLi = el('li', 'group-head');
       headLi.setAttribute('role', 'presentation');
       const only = el('button', 'only-btn', 'Only');
@@ -370,8 +373,8 @@ function boothsSection(ctx, sfx) {
   return {
     root,
     update(state) {
-      root.hidden = !BOOTH_VIEWS.has(state.view);
-      if (!root.hidden && builtFor !== state.view) rebuild(state.view);
+      const grouping = boothGrouping(state.view);
+      if (builtFor !== grouping) rebuild(grouping);
       const sel = new Set(state.booths);
       for (const g of groups) {
         for (const o of g.options) o.li.setAttribute('aria-selected', sel.has(o.key) ? 'true' : 'false');
@@ -540,6 +543,38 @@ function placePopover(pop, trigger) {
   pop.style.top = `${r.bottom + 4}px`;
 }
 
+// ---- control text and the changed predicate ----
+
+/** One trigger's text: the resting label, then the value (empty at default), in two inline spans. */
+function triggerText(label, value) {
+  const text = el('span', 'filter-text');
+  text.append(el('span', 'filter-label', label), el('span', 'filter-value', value));
+  return text;
+}
+
+/**
+ * Per control: whether it differs from a clean load (defaultNflState) and its value text.
+ * One predicate for the desktop accent, the phone "Filters · N changed" label and the chips.
+ */
+function controlInfo(model, state) {
+  const d = defaultNflState(model);
+  const n = (list) => (list.length ? ` · ${list.length}` : '');
+  const seasonsChanged = state.seasons[0] !== d.seasons[0] || state.seasons[1] !== d.seasons[1];
+  return {
+    announcers: { active: state.people.length > 0, value: n(state.people) },
+    seasons: { active: seasonsChanged, value: seasonsChanged ? ` ${state.seasons[0]}–${state.seasons[1]}` : '' },
+    category: { active: state.cats.length > 0, value: n(state.cats) },
+    team: { active: state.teams.length > 0, value: n(state.teams) },
+    booths: { active: state.booths.length > 0, value: n(state.booths) },
+  };
+}
+
+/** The control keys that differ from a clean load, in bar order. */
+export function changedControls(model, state) {
+  const info = controlInfo(model, state);
+  return TRIGGERS.map((t) => t.key).filter((key) => info[key].active);
+}
+
 // ---- init / render ----
 
 function clearAll(ctx) {
@@ -548,7 +583,7 @@ function clearAll(ctx) {
 }
 
 function buildShell(ctx) {
-  const clear = el('button', null, 'Clear all filters');
+  const clear = el('button', 'clear-all', 'Clear all filters');
   clear.type = 'button';
   clear.id = 'nfl-clear-filters';
   clear.addEventListener('click', () => {
@@ -564,15 +599,19 @@ function buildShell(ctx) {
 
   const triggers = new Map();
   const popovers = new Map();
-  const nodes = [clear, filtersButton];
+  const filterChips = el('ul', 'filter-chips mobile-only');
+  filterChips.id = 'nfl-filter-chips';
+  filterChips.setAttribute('aria-label', 'Changed filters');
+  filterChips.hidden = true;
+  const nodes = [filtersButton, filterChips];
   for (const t of TRIGGERS) {
-    const btn = el('button', 'filter-trigger desktop-only', t.label);
+    const btn = el('button', 'filter-trigger desktop-only');
+    btn.append(triggerText(t.label, ''));
     btn.type = 'button';
     btn.id = `nfl-trigger-${t.key}`;
     btn.setAttribute('popovertarget', `nfl-pop-${t.key}`);
     btn.setAttribute('aria-haspopup', 'dialog');
     btn.setAttribute('aria-expanded', 'false');
-    if (t.key === 'booths') btn.hidden = true; // shown on Crews and Viewership only
     triggers.set(t.key, btn);
     nodes.push(btn);
 
@@ -593,14 +632,8 @@ function buildShell(ctx) {
     popovers.set(t.key, pop);
     layer.appendChild(pop);
   }
-  // Spacer cells keep the grid's row count equal to the CFB toolbar's, so
-  // switching sport never moves the chart (SITE-20). Hidden from every user.
-  for (let k = 0; k < 7; k++) {
-    const spacer = el('span', 'nfl-toolbar-spacer');
-    spacer.setAttribute('aria-hidden', 'true');
-    nodes.push(spacer);
-  }
   toolbarEl.append(...nodes);
+  if (clearHost) clearHost.append(clear);
 
   const sheet = el('div', 'filters-sheet nfl-filters-sheet');
   sheet.id = 'nfl-filters-sheet';
@@ -620,7 +653,7 @@ function buildShell(ctx) {
   header.append(title, clearSlot);
   const body = el('div', 'sheet-body');
   const footer = el('div', 'sheet-footer');
-  const show = el('button', null, 'Show results');
+  const show = el('button', null, 'Show games');
   show.type = 'button';
   show.id = 'nfl-filters-show-results';
   show.addEventListener('click', () => {
@@ -633,7 +666,7 @@ function buildShell(ctx) {
   });
   layer.appendChild(sheet);
 
-  ui = { clear, filtersButton, triggers, popovers, sheet, sheetBody: body };
+  ui = { clear, filtersButton, filterChips, triggers, popovers, sheet, sheetBody: body };
   for (const btn of [filtersButton, ...triggers.values()]) {
     btn.disabled = true;
   }
@@ -655,14 +688,16 @@ function buildSections(ctx) {
  * Build the toolbar controls once. The sections wait for the loaded model;
  * until then the triggers are disabled (also the load-error state).
  */
-export function initNflFilters({ toolbar, sheetHost, ctx }) {
+export function initNflFilters({ toolbar, sheetHost, clearHost: clearRow, ctx }) {
   if (ui) return;
   toolbarEl = toolbar;
+  clearHost = clearRow ?? null;
   layer = sheetHost;
   buildShell(ctx);
   mobileMql = window.matchMedia(PHONE_QUERY);
   mobileMql.addEventListener('change', () => closeNflFilters());
-  watchCellMin();
+  // The bar measures its own cells with the same equal-cell rule as the CFB bar (toolbar-fit.js).
+  if (window.boothToolbarFit) window.boothToolbarFit.register(toolbar);
 }
 
 export function closeNflFilters() {
@@ -677,70 +712,33 @@ export function renderNflFilters(ctx) {
   if (!built) buildSections(ctx);
   const state = ctx.getState();
   for (const update of updaters) update(state);
-  const d = defaultNflState(ctx.model);
-  const active = {
-    announcers: state.people.length > 0,
-    booths: state.booths.length > 0,
-    seasons: state.seasons[0] !== d.seasons[0] || state.seasons[1] !== d.seasons[1],
-    category: state.cats.length > 0,
-    team: state.teams.length > 0,
-  };
-  for (const [key, btn] of ui.triggers) btn.dataset.active = active[key] ? 'true' : 'false';
-  // Booths exist only on Crews and Viewership (D-10); close its popover when concealed.
-  const boothsOn = BOOTH_VIEWS.has(state.view);
-  const boothTrigger = ui.triggers.get('booths');
-  if (boothTrigger.hidden === boothsOn) {
-    boothTrigger.hidden = !boothsOn;
-    if (!boothsOn) {
-      const pop = ui.popovers.get('booths');
-      if (pop.matches(':popover-open')) pop.hidePopover();
-    }
+  const info = controlInfo(ctx.model, state);
+  for (const [key, btn] of ui.triggers) {
+    const { active, value } = info[key];
+    const label = TRIGGERS.find((t) => t.key === key).label;
+    btn.replaceChildren(triggerText(label, value));
+    btn.dataset.active = active ? 'true' : 'false';
+    btn.classList.toggle('is-changed', active);
+    // The full summary is always available; long values truncate in their cell (C3).
+    btn.setAttribute('title', `${label}${value}`);
+    btn.setAttribute('aria-label', `${label}${value}`);
   }
-  const n = activeFilterCount(ctx.model, state);
-  ui.filtersButton.textContent = n ? `Filters (${n})` : 'Filters';
-}
-
-// ---- toolbar cell width ----
-
-/**
- * Sets --toolbar-cell-min on #nfl-toolbar: the wider of this toolbar's own
- * widest resting label and the CFB toolbar's value, so both grids wrap to the
- * same number of rows. The CFB value is written by toolbar-fit.js; this
- * follows it.
- */
-function measureOwn() {
-  const labels = [ui.clear, ...ui.triggers.values()];
-  const box = el('div', 'toolbar-measure');
-  box.setAttribute('aria-hidden', 'true');
-  const probes = labels.map((btn) => {
-    const cs = getComputedStyle(btn);
-    const probe = el('span', null, btn.textContent + (btn === ui.clear ? '' : ' ▾'));
-    for (const prop of ['fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing', 'paddingLeft', 'paddingRight']) {
-      probe.style[prop] = cs[prop];
-    }
-    box.appendChild(probe);
-    return probe;
-  });
-  document.body.appendChild(box);
-  let widest = 0;
-  for (const p of probes) widest = Math.max(widest, p.getBoundingClientRect().width);
-  box.remove();
-  return Math.ceil(widest);
-}
-
-function applyCellMin() {
-  if (!toolbarEl) return;
-  const cfb = document.getElementById('toolbar');
-  const raw = cfb ? parseFloat(cfb.style.getPropertyValue('--toolbar-cell-min')) : NaN;
-  const own = measureOwn();
-  const px = Math.max(own, Number.isFinite(raw) ? raw : 0);
-  if (px > 0) toolbarEl.style.setProperty('--toolbar-cell-min', `${px}px`);
-}
-
-function watchCellMin() {
-  applyCellMin();
-  const cfb = document.getElementById('toolbar');
-  if (cfb) new MutationObserver(applyCellMin).observe(cfb, { attributes: true, attributeFilter: ['style'] });
-  if (document.fonts) document.fonts.ready.then(applyCellMin);
-  window.addEventListener('resize', applyCellMin, { passive: true });
+  const changed = changedControls(ctx.model, state);
+  ui.filtersButton.textContent = changed.length ? `Filters · ${changed.length} changed` : 'Filters';
+  ui.filtersButton.classList.toggle('is-changed', changed.length > 0);
+  ui.filterChips.replaceChildren(
+    ...changed.map((key) => {
+      const label = TRIGGERS.find((t) => t.key === key).label;
+      const li = el('li');
+      const chip = el('button', 'filter-chip');
+      chip.type = 'button';
+      chip.setAttribute('popovertarget', 'nfl-filters-sheet');
+      chip.setAttribute('aria-haspopup', 'dialog');
+      chip.setAttribute('aria-label', `${label}${info[key].value}`);
+      chip.append(el('b', null, label), document.createTextNode(info[key].value));
+      li.append(chip);
+      return li;
+    }),
+  );
+  ui.filterChips.hidden = changed.length === 0;
 }

@@ -103,7 +103,12 @@ function buildRegions(footerEl) {
   summary.id = 'nfl-summary';
   const headline = el('h2', 'nfl-headline');
   headline.id = 'nfl-headline';
-  selection.append(chips, clearBtn, summary, headline);
+  // Always-rendered 32px row: chips, Clear selection, then Clear all filters at
+  // the right end (filters.js places it; C1).
+  const selectionRow = el('div', 'selection-row nfl-selection-row');
+  selectionRow.id = 'nfl-selection-row';
+  selectionRow.append(chips, clearBtn);
+  selection.append(selectionRow, summary, headline);
 
   const chartArea = el('section', 'nfl-region');
   chartArea.id = 'nfl-chart-area';
@@ -123,7 +128,7 @@ function buildRegions(footerEl) {
   filterLayer.id = 'nfl-filter-layer';
 
   footerEl.before(toolbar, filterLayer, selection, chartArea, matched);
-  return { toolbar, filterLayer, selection, chips, clearBtn, summary, chartArea, tabHost, hint, viewHost, status, matched, headline };
+  return { toolbar, filterLayer, selection, selectionRow, chips, clearBtn, summary, chartArea, tabHost, hint, viewHost, status, matched, headline };
 }
 
 function showStatus(kind) {
@@ -383,7 +388,13 @@ function ensureShell(footerEl) {
     onSelect: (id) => setState({ view: id }),
   });
   regions.clearBtn.addEventListener('click', () => setState({ selection: null }));
-  initNflFilters({ toolbar: regions.toolbar, chipsHost: regions.chips, sheetHost: regions.filterLayer, ctx });
+  initNflFilters({
+    toolbar: regions.toolbar,
+    chipsHost: regions.chips,
+    sheetHost: regions.filterLayer,
+    clearHost: regions.selectionRow,
+    ctx,
+  });
   table.render([], { emptyKind: 'nothing' });
 }
 
