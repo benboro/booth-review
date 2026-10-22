@@ -56,12 +56,15 @@ import {
   MUTED,
   PAGE_BG,
   INK,
+  SPECIAL,
   channelShades,
   familyKey,
   mixHex,
+  readableTextOn,
   readableTextOnAll,
 } from './palette.js';
 import { escapeHover, niceLinearTicks } from './format.js';
+import { FRAME_FONT, frameConfig, frameLayout, haloText } from './chart-frame.js';
 import { segmentText } from './bar-copy.js';
 
 const FONT_FAMILY =
@@ -95,24 +98,17 @@ const SEGMENT_GAP = { desktop: 3, phone: 2 };
 const LABEL_LINE = 18;
 const LABEL_GAP = 2;
 
-const CONFIG = {
-  responsive: true,
-  displayModeBar: false,
-  displaylogo: false,
-  scrollZoom: false,
-  showLink: false,
-  showSendToCloud: false,
-  showEditInChartStudio: false,
-};
+// Ranked-bar end markers (UI-SPEC "Shared chart frame"): a filled ellipse in the bar's
+// colour with the count inside (600), a --bg ring, and the raw value in a right column.
+const MARKER_H = 22;
+const MARKER_PAD = 10;
+const MARKER_RING = 2;
+const VALUE_COL_GAP = 12;
+const HERO_INK_WEIGHT = 0.8;
+const LABEL_MEASURE = { size: 14, family: FRAME_FONT };
 
 function truncate(text, max) {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
-}
-
-/** The page's own font family (the chart text must match what is measured). */
-function chartFontFamily() {
-  if (typeof document === 'undefined' || !document.body) return FONT_FAMILY;
-  return getComputedStyle(document.body).fontFamily || FONT_FAMILY;
 }
 
 let measureCtx = null;
@@ -124,10 +120,10 @@ const measureCache = new Map();
  * under any system font. Falls back to `CHAR_PX` per character (scaled by size)
  * when there is no DOM or canvas.
  * @param {string} text
- * @param {{size?: number, weight?: number}} [opts]
+ * @param {{size?: number, weight?: number, family?: string|null}} [opts]
  * @returns {number}
  */
-export function textWidth(text, { size = CHART_FONT_SIZE, weight = 400 } = {}) {
+export function textWidth(text, { size = CHART_FONT_SIZE, weight = 400, family = null } = {}) {
   const str = String(text);
   const fallback = CHAR_PX * (size / CHART_FONT_SIZE) * str.length;
   if (typeof document === 'undefined' || !document.body) return fallback;
@@ -135,7 +131,7 @@ export function textWidth(text, { size = CHART_FONT_SIZE, weight = 400 } = {}) {
   if (measureCtx == null) return fallback;
   const cs = getComputedStyle(document.body);
   const spacing = Number.parseFloat(cs.letterSpacing) || 0;
-  const font = `${weight} ${size}px ${cs.fontFamily || FONT_FAMILY}`;
+  const font = `${weight} ${size}px ${family ?? (cs.fontFamily || FONT_FAMILY)}`;
   const key = `${font}|${spacing}|${str}`;
   let width = measureCache.get(key);
   if (width === undefined) {
@@ -173,11 +169,14 @@ function widest(labels, opts) {
  * neutral ink pair (D-04).
  * @param {{family: string|null, mainFamily?: string|null}} row
  * @param {'light'|'dark'} theme
+ * @param {boolean} [matched] - a pick is active.
  * @returns {{a: string, b: string}}
  */
-export function barTones(row, theme) {
+export function barTones(row, theme, matched = false) {
   const family = row.family ?? row.mainFamily ?? null;
-  const base = family != null ? FAMILY_COLORS[theme][familyKey(family)] : INK[theme];
+  // Hero bars (no family): --ink at 80% with no pick, --accent once a pick matches (accent use 4).
+  const hero = matched ? SPECIAL[theme] : mixHex(INK[theme], PAGE_BG[theme], HERO_INK_WEIGHT);
+  const base = family != null ? FAMILY_COLORS[theme][familyKey(family)] : hero;
   return { a: base, b: mixHex(base, PAGE_BG[theme], 0.55) };
 }
 
@@ -232,6 +231,113 @@ export function totalAnnotations(rows, totalOf, side, theme, axis) {
   return out;
 }
 
+const VALUE_FONT = { size: 14, family: FRAME_FONT };
+const MARKER_FONT = { size: 12, weight: 600, family: FRAME_FONT };
+
+/** Width in px of the end marker for a count (a 22px circle that widens for long numbers). */
+export function markerWidth(text) {
+  return Math.max(MARKER_H, Math.ceil(textWidth(text, MARKER_FONT)) + MARKER_PAD);
+}
+
+/**
+ * End-marker ellipses: one per row whose total is above zero, centred on the bar's outer end,
+ * filled in the bar colour with a page-background ring. Pixel-sized so the marker is the same on
+ * every row; shapes capture no events.
+ * @param {object[]} rows
+ * @param {(row: object) => number} totalOf
+ * @param {string[]} fills - the bar colour per row.
+ * @param {'light'|'dark'} theme
+ * @param {string} axis - x axis id the marker is anchored on.
+ * @returns {object[]}
+ */
+export function endMarkerShapes(rows, totalOf, fills, theme, axis) {
+  const out = [];
+  rows.forEach((row, i) => {
+    const total = totalOf(row);
+    if (!(total > 0)) return;
+    const w = markerWidth(String(total));
+    out.push({
+      type: 'circle',
+      name: 'end-marker',
+      xref: axis,
+      yref: 'y',
+      xsizemode: 'pixel',
+      ysizemode: 'pixel',
+      xanchor: total,
+      yanchor: i,
+      x0: -w / 2,
+      x1: w / 2,
+      y0: -MARKER_H / 2,
+      y1: MARKER_H / 2,
+      fillcolor: fills[i],
+      line: { color: PAGE_BG[theme], width: MARKER_RING },
+      layer: 'above',
+    });
+  });
+  return out;
+}
+
+/**
+ * The count inside each end marker (600 weight, readable on the bar colour). Text is `String()`
+ * of an integer count, never a name (T-04.4-45, T-13-28); `captureevents: false` keeps them out
+ * of row-label clicks.
+ * @param {object[]} rows
+ * @param {(row: object) => number} totalOf
+ * @param {string[]} fills
+ * @param {'light'|'dark'} theme
+ * @param {string} axis
+ * @returns {object[]}
+ */
+export function endMarkerAnnotations(rows, totalOf, fills, theme, axis) {
+  const out = [];
+  rows.forEach((row, i) => {
+    const total = totalOf(row);
+    if (!(total > 0)) return;
+    out.push({
+      name: 'total',
+      xref: axis,
+      yref: 'y',
+      x: total,
+      y: i,
+      xanchor: 'center',
+      yanchor: 'middle',
+      text: String(total),
+      showarrow: false,
+      captureevents: false,
+      borderpad: 0,
+      font: { size: 12, weight: 600, color: readableTextOn(fills[i]) ?? PAGE_BG[theme] },
+    });
+  });
+  return out;
+}
+
+/**
+ * The raw-value column: each row's count right-aligned at the plot's right edge (inside the
+ * right margin), so values line up whatever the bar length.
+ * @param {object[]} rows
+ * @param {(row: object) => number} totalOf
+ * @param {number} marginR - right margin in px.
+ * @param {'light'|'dark'} theme
+ * @returns {object[]}
+ */
+export function valueColumn(rows, totalOf, marginR, theme) {
+  return rows.map((row, i) => ({
+    name: 'value',
+    xref: 'paper',
+    yref: 'y',
+    x: 1,
+    y: i,
+    xanchor: 'right',
+    xshift: marginR - 8,
+    yanchor: 'middle',
+    text: String(totalOf(row)),
+    showarrow: false,
+    captureevents: false,
+    borderpad: 0,
+    font: { size: 14, color: INK[theme] },
+  }));
+}
+
 /** Integer ticks only: these are counts. */
 function countTicks(max) {
   const ticks = niceLinearTicks(0, max, 6).filter((v) => Number.isInteger(v));
@@ -258,11 +364,11 @@ const unratedOf = (total, rated) => Math.max(0, (total ?? 0) - (rated ?? 0));
 const borderWidths = (widths) => widths.map((w) => (w > 0 ? 1.5 : 0));
 
 /** Rated and unrated traces of single-color bars for one side (or the only side). */
-function simpleTraces(rows, totalOf, ratedOf, side, theme, xaxis) {
+function simpleTraces(rows, totalOf, ratedOf, side, theme, xaxis, matched = false) {
   const totals = rows.map(totalOf);
   const rated = rows.map((r, i) => Math.min(totals[i], ratedOf(r) ?? 0));
   const unrated = totals.map((t, i) => t - rated[i]);
-  const tones = rows.map((r) => barTones(r, theme).a);
+  const tones = rows.map((r) => barTones(r, theme, matched).a);
   const base = {
     type: 'bar',
     orientation: 'h',
@@ -306,9 +412,10 @@ const TRANSPARENT = 'rgba(0,0,0,0)';
  * @param {'light'|'dark'} theme
  * @param {{piece: string, overlay: string, text: string}} axes
  * @param {number} gap - separator stroke width in px (D-28).
+ * @param {boolean} [matched] - a pick is active (hero bars take the accent).
  * @returns {object[]}
  */
-function stackedTraces(rows, segmentsOf, partsOf, side, theme, axes, gap) {
+function stackedTraces(rows, segmentsOf, partsOf, side, theme, axes, gap, matched = false) {
   const bg = PAGE_BG[theme];
   const y = rows.map((r) => r.key);
   const segs = rows.map(segmentsOf);
@@ -325,7 +432,7 @@ function stackedTraces(rows, segmentsOf, partsOf, side, theme, axes, gap) {
   const pieceDepth = pieceLists.reduce((m, list) => Math.max(m, list.length), 0);
   const traces = [];
   for (let j = 0; j < pieceDepth; j += 1) {
-    const cells = pieceLists.map((list, i) => list[j] ?? { w: 0, tone: barTones(rows[i], theme).a, unrated: false });
+    const cells = pieceLists.map((list, i) => list[j] ?? { w: 0, tone: barTones(rows[i], theme, matched).a, unrated: false });
     traces.push({
       type: 'bar',
       orientation: 'h',
@@ -403,9 +510,9 @@ function stackedTraces(rows, segmentsOf, partsOf, side, theme, axes, gap) {
 }
 
 /** Pieces of a plain stacked segment: one, in the segment's Tone A/B (D-16). */
-function plainParts(theme) {
+function plainParts(theme, matched = false) {
   return (row, _i, seg, k) => {
-    const t = barTones(row, theme);
+    const t = barTones(row, theme, matched);
     return [{ count: seg.count, rated: seg.rated ?? 0, tone: k % 2 === 0 ? t.a : t.b }];
   };
 }
@@ -452,10 +559,6 @@ function labelAnnotation(row, i, text, extra) {
 function baseLayout(theme, env, rows, pitch, margin, bargap) {
   return {
     datarevision: env.revision,
-    paper_bgcolor: PAGE_BG[theme],
-    plot_bgcolor: PAGE_BG[theme],
-    font: { family: chartFontFamily(), size: CHART_FONT_SIZE, color: ACCENT[theme] },
-    showlegend: false,
     hovermode: 'closest',
     clickmode: 'event',
     dragmode: false,
@@ -488,9 +591,8 @@ function xAxis(theme, range, extra) {
     tickvals: countTicks(Math.max(range[0], range[1])),
     gridcolor: DIVIDER[theme],
     tickfont: { color: MUTED[theme] },
-    zeroline: true,
-    zerolinecolor: MUTED[theme],
-    zerolinewidth: 2,
+    showgrid: false,
+    zeroline: false,
     fixedrange: true,
     ...extra,
   };
@@ -514,27 +616,35 @@ export function buildBarFigure(model, rows, env) {
   const gap = mobile ? SEGMENT_GAP.phone : SEGMENT_GAP.desktop;
   const labels = rows.map((r) => (mobile
     ? truncate(r.label, LABEL_MAX)
-    : truncateFit(r.label, LABEL_MAX, LABEL_MAX_PX)));
+    : truncateFit(r.label, LABEL_MAX, LABEL_MAX_PX, LABEL_MEASURE)));
   const pitch = mobile ? PHONE_BARS_PITCH : DESKTOP_PITCH;
   const bargap = mobile ? gapFor(PHONE_BARS_PITCH, PHONE_BARS_THICKNESS) : DESKTOP_BARGAP;
+  const matched = env.matched === true;
+  const maxTotal = rows.reduce((m, r) => Math.max(m, r.total), 0);
+  // The right-aligned value column sits in the right margin, wide enough for the largest count.
+  const columnPx = Math.ceil(textWidth(String(Math.max(maxTotal, 1)), VALUE_FONT)) + VALUE_COL_GAP;
   const margin = mobile
-    ? { l: 8, r: 8, t: MARGIN_T, b: MARGIN_B }
-    : { l: Math.min(240, 16 + Math.ceil(widest(labels))), r: 48, t: MARGIN_T, b: MARGIN_B };
+    ? { l: 8, r: 8 + columnPx, t: MARGIN_T, b: MARGIN_B }
+    : { l: Math.min(240, 16 + Math.ceil(widest(labels, LABEL_MEASURE))), r: 16 + columnPx, t: MARGIN_T, b: MARGIN_B };
 
   const family = stacked && model.rowKind === 'family';
   let traces;
   const barAxes = { piece: 'x', overlay: 'x3', text: 'x5' };
   if (stacked) {
-    const parts = family ? familyParts(theme) : plainParts(theme);
-    traces = stackedTraces(rows, (r) => r.segments, parts, null, theme, barAxes, gap);
-  } else traces = simpleTraces(rows, (r) => r.total, (r) => r.rated, null, theme, 'x');
-  const maxTotal = rows.reduce((m, r) => Math.max(m, r.total), 0);
+    const parts = family ? familyParts(theme) : plainParts(theme, matched);
+    traces = stackedTraces(rows, (r) => r.segments, parts, null, theme, barAxes, gap, matched);
+  } else traces = simpleTraces(rows, (r) => r.total, (r) => r.rated, null, theme, 'x', matched);
 
   const layout = baseLayout(theme, env, rows, pitch, margin, bargap);
   layout.barmode = 'stack';
+  const plotPx = env.width - margin.l - margin.r;
+  // The end marker is centred on the bar end, so its half-width must fit inside the range too.
+  const markerHalf = Math.ceil(markerWidth(String(Math.max(maxTotal, 1))) / 2) + MARKER_RING;
+  const peak = Math.max(maxTotal, 1);
+  const markerTop = peak * (plotPx / Math.max(1, plotPx - markerHalf));
   layout.xaxis = xAxis(
     theme,
-    [0, rangeTop(maxTotal, env.width - margin.l - margin.r, 1.12)],
+    [0, Math.max(rangeTop(maxTotal, plotPx, 1.12), markerTop)],
     {},
   );
   if (stacked) {
@@ -543,7 +653,7 @@ export function buildBarFigure(model, rows, env) {
   }
   layout.annotations = rows.map((row, i) => {
     const text = escapeHover(labels[i]);
-    const font = { size: 14, color: ACCENT[theme] };
+    const font = { size: 14, color: INK[theme] };
     if (mobile) {
       return labelAnnotation(row, i, text, {
         x: 0,
@@ -561,10 +671,13 @@ export function buildBarFigure(model, rows, env) {
       font,
     });
   });
+  const tones = rows.map((r) => barTones(r, theme, matched).a);
   layout.annotations = layout.annotations.concat(
-    totalAnnotations(rows, (r) => r.total, 'right', theme, 'x'),
+    endMarkerAnnotations(rows, (r) => r.total, tones, theme, 'x'),
+    valueColumn(rows, (r) => r.total, margin.r, theme),
   );
-  return { traces, layout, config: { ...CONFIG } };
+  layout.shapes = endMarkerShapes(rows, (r) => r.total, tones, theme, 'x');
+  return { traces, layout: frameLayout(layout, env), config: frameConfig() };
 }
 
 /**
@@ -595,7 +708,7 @@ export function buildButterflyFigure(model, rows, env) {
   const labelMax = mobile ? LABEL_MAX : SPINE_LABEL_MAX;
   const labels = rows.map((r) => (mobile
     ? truncate(r.label, labelMax)
-    : truncateFit(r.label, labelMax, SPINE_LABEL_MAX_PX)));
+    : truncateFit(r.label, labelMax, SPINE_LABEL_MAX_PX, LABEL_MEASURE)));
   const pitch = mobile ? PHONE_FLY_PITCH : DESKTOP_PITCH;
   const bargap = mobile ? gapFor(PHONE_FLY_PITCH, PHONE_FLY_THICKNESS) : DESKTOP_BARGAP;
   const margin = { l: 8, r: 8, t: MARGIN_T, b: MARGIN_B };
@@ -625,7 +738,7 @@ export function buildButterflyFigure(model, rows, env) {
     0,
   );
 
-  const gapPx = mobile ? 0 : spineGapPx(widest(labels));
+  const gapPx = mobile ? 0 : spineGapPx(widest(labels, LABEL_MEASURE));
   const g = mobile ? 0 : Math.min(0.4, gapPx / Math.max(1, env.width - 16));
   const top = rangeTop(maxSide, (env.width - 16) * (0.5 - g / 2), 1.1);
 
@@ -640,7 +753,7 @@ export function buildButterflyFigure(model, rows, env) {
     layout.xaxis6 = overlayAxis('x2', layout.xaxis2.range);
   }
 
-  const font = { size: 14, color: ACCENT[theme] };
+  const font = { size: 14, color: INK[theme], ...haloText(theme) };
   const rowLabels = rows.map((row, i) => {
     const text = escapeHover(labels[i]);
     if (mobile) {
@@ -656,7 +769,6 @@ export function buildButterflyFigure(model, rows, env) {
       x: 0.5,
       xanchor: 'center',
       yanchor: 'middle',
-      bgcolor: PAGE_BG[theme],
       borderpad: 2,
       font,
     });
@@ -664,7 +776,7 @@ export function buildButterflyFigure(model, rows, env) {
   // A phone half is ~170px wide and a title grows away from the spine, so cap
   // its rendered width (bold 14px) by the half's width.
   const headerPx = mobile ? Math.max(0, (env.width - 16) / 2 - 12) : Infinity;
-  const headerFont = { weight: 600 };
+  const headerFont = { family: FRAME_FONT };
   // D-26: each side title sits against the spine edge of its own half.
   const headers = [0, 1].map((side) => ({
     xref: 'paper',
@@ -675,17 +787,17 @@ export function buildButterflyFigure(model, rows, env) {
     borderpad: 0,
     y: 1,
     yanchor: 'bottom',
-    text: escapeHover(truncateFit(model.sides[side].name, SPINE_LABEL_MAX, headerPx, headerFont)),
+    text: escapeHover(truncateFit(model.sides[side].name, SPINE_LABEL_MAX, headerPx, { ...LABEL_MEASURE, ...headerFont })),
     showarrow: false,
     captureevents: false,
-    font: { size: 14, color: ACCENT[theme], weight: 600 },
+    font: { size: 14, color: INK[theme] },
   }));
   layout.annotations = rowLabels.concat(headers);
   layout.annotations = layout.annotations.concat(
     totalAnnotations(rows, (r) => r.sides[0].total, 'left', theme, 'x'),
     totalAnnotations(rows, (r) => r.sides[1].total, 'right', theme, 'x2'),
   );
-  return { traces, layout, config: { ...CONFIG } };
+  return { traces, layout: frameLayout(layout, env), config: frameConfig() };
 }
 
 /**
