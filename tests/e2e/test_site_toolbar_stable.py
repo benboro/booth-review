@@ -1,6 +1,6 @@
 """The desktop toolbar is a grid of equal cells, so no filter label re-wraps it.
 
-SITE-20 (toggling a filter moves nothing) and 04.9 D-21: above 640px the toolbar's
+SITE-20 (toggling a filter moves nothing) and 04.9 D-21: above 480px the toolbar's
 row count depends only on the viewport width and the visitor's font. toolbar-fit.js
 sizes the cells from the widest resting label in that font, so resting labels never
 truncate; long active summaries truncate with an ellipsis inside their cell, and

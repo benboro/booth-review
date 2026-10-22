@@ -130,7 +130,7 @@ BESIDE_MIN_WIDTH = 1104
 # The 91px tier starts here (the box stops wrapping its buttons); below it the box wraps
 # and the reserve is 127px.
 ONE_ROW_MIN_WIDTH = 752
-TIER_WIDTHS = [1280, BESIDE_MIN_WIDTH, BESIDE_MIN_WIDTH - 8, 800, ONE_ROW_MIN_WIDTH, 641]
+TIER_WIDTHS = [1280, BESIDE_MIN_WIDTH, BESIDE_MIN_WIDTH - 8, 800, ONE_ROW_MIN_WIDTH, 481]
 FONTS = ["default", "dejavu", "wide"]
 
 # The fixture person with the longest name (the widest one-person box).

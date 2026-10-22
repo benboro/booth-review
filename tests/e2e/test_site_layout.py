@@ -515,12 +515,12 @@ def test_no_empty_band_between_toolbar_and_chart(
 
 
 @pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
-@pytest.mark.parametrize("width", [360, 641, 700, 800, 1024])
+@pytest.mark.parametrize("width", [360, 481, 700, 800, 1024])
 def test_games_table_never_scrolls_the_page(
     guarded_page: Page, open_app: Callable[[Page, str], None], width: int
 ) -> None:
     """SITE-20: a table too wide for its text scrolls inside `#matched-games` at every
-    width, never the page. Wider fonts pushed it past 641px (deferred in 04.17-02)."""
+    width, never the page. Wider fonts pushed it past 481px (deferred in 04.17-02)."""
     page = guarded_page
     page.set_viewport_size({"width": width, "height": 900})
     open_app(page, "?school=northfield,lakeview")

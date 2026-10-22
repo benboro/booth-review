@@ -1010,7 +1010,7 @@ def _thirteen_season_raw(raw: dict) -> dict:  # type: ignore[type-arg]
 
 
 @pytest.mark.parametrize("chart_font", ["default", "dejavu"])
-@pytest.mark.parametrize("width", [641, 700, 800, 900, 1024])
+@pytest.mark.parametrize("width", [481, 700, 800, 900, 1024])
 def test_desktop_13_season_labels_never_overlap_in_dom(
     guarded_page: Page,
     open_app: Callable[[Page, str], None],

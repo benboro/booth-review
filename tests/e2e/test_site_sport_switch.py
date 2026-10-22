@@ -249,7 +249,7 @@ def test_cfb_listeners_never_rewrite_the_nfl_url(
     page.emulate_media(color_scheme="dark")
     _settle(page)
     assert page.evaluate("location.search") == nfl_search
-    page.set_viewport_size({"width": 600, "height": 800})  # across 640px
+    page.set_viewport_size({"width": 400, "height": 800})  # across 480px
     _settle(page)
     assert page.evaluate("location.search") == nfl_search
     page.set_viewport_size({"width": 1100, "height": 800})  # back across, then a plain resize

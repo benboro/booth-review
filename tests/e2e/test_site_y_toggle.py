@@ -63,7 +63,7 @@ _Y_FIT_JS = """() => {
 
 
 @pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
-@pytest.mark.parametrize("width", [360, 390, 641, 700, 800, 1280])
+@pytest.mark.parametrize("width", [360, 390, 481, 700, 800, 1280])
 def test_controls_row_height_is_equal_on_every_tab(
     guarded_page: Page, open_app: OpenApp, width: int
 ) -> None:

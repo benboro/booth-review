@@ -1180,7 +1180,7 @@ def test_real_phone_shows_all_season_labels(
 
 
 @pytest.mark.parametrize("chart_font", ["default", "dejavu"])
-@pytest.mark.parametrize("width", [641, 700, 800, 900, 1024])
+@pytest.mark.parametrize("width", [481, 700, 800, 900, 1024])
 def test_real_desktop_season_labels_never_overlap(
     real_guarded_page: Page,
     real_open_app: Callable[[Page, str], None],
