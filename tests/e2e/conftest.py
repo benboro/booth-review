@@ -410,17 +410,16 @@ def _assert_guard_clean(off_origin: list[str], csp_errors: list[str]) -> None:
 # to catch any font-dependent sizing that happens to fit DejaVu. `narrow` tightens
 # DejaVu below the toolbar's 116px cell floor, a stand-in for a narrow system font
 # that is present on every runner.
+_DEJAVU_ROOT = (
+    ':root { --sans: "DejaVu Sans", sans-serif !important;'
+    ' --serif: "DejaVu Sans", sans-serif !important;'
+    ' --plot: "DejaVu Sans", sans-serif !important; }'
+)
 FONT_CSS: dict[str, str] = {
     "default": "",
-    "dejavu": ':root { --font-family: "DejaVu Sans", sans-serif !important; }',
-    "wide": (
-        ':root { --font-family: "DejaVu Sans", sans-serif !important; }'
-        " body, button, input { letter-spacing: 0.4px; }"
-    ),
-    "narrow": (
-        ':root { --font-family: "DejaVu Sans", sans-serif !important; }'
-        " body, button, input { letter-spacing: -1px; }"
-    ),
+    "dejavu": _DEJAVU_ROOT,
+    "wide": (_DEJAVU_ROOT + " body, button, input { letter-spacing: 0.4px; }"),
+    "narrow": (_DEJAVU_ROOT + " body, button, input { letter-spacing: -1px; }"),
 }
 
 
