@@ -14,6 +14,7 @@
  */
 import { makeRolePill } from '../../modules/pill.js';
 import { CATEGORY_OPTIONS, activeFilterCount, boothGames, defaultNflState } from './state.js';
+import { PHONE_QUERY } from '../../modules/breakpoints.js';
 
 const TRIGGERS = [
   { key: 'announcers', label: 'Announcers' },
@@ -659,7 +660,7 @@ export function initNflFilters({ toolbar, sheetHost, ctx }) {
   toolbarEl = toolbar;
   layer = sheetHost;
   buildShell(ctx);
-  mobileMql = window.matchMedia('(max-width: 640px)');
+  mobileMql = window.matchMedia(PHONE_QUERY);
   mobileMql.addEventListener('change', () => closeNflFilters());
   watchCellMin();
 }

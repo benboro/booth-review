@@ -1,7 +1,7 @@
 /**
  * Sizes the desktop toolbar's grid cells to fit the visitor's own font (04.9 D-21).
  *
- * Above 640px the toolbar is a grid of equal cells, so its row count never
+ * Above 480px the toolbar is a grid of equal cells, so its row count never
  * changes when a filter label does. The cell's minimum width was a fixed
  * 116px, tuned on one machine's font; a wider default font (DejaVu Sans on
  * many Linux desktops) truncated resting labels such as "Bowls/Playoffs ▾"
@@ -26,7 +26,8 @@
   const toolbar = document.getElementById('toolbar');
   if (!toolbar) return;
 
-  const mobileMedia = window.matchMedia('(max-width: 640px)');
+  // Mirrors PHONE_QUERY in modules/breakpoints.js; a classic script cannot import it.
+  const mobileMedia = window.matchMedia('(max-width: 480px)');
   const buttons = [...toolbar.querySelectorAll(':scope > .filter-trigger, :scope > #clear-filters')];
   // The resting labels, read before app.js replaces any of them with a summary.
   const restingLabels = new Map(buttons.map((btn) => [btn, btn.textContent.trim()]));

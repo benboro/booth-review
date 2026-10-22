@@ -21,6 +21,7 @@ import * as teamBars from './views/team-bars.js';
 import * as crews from './views/crews.js';
 import * as viewership from './views/viewership.js';
 import * as scatter from './views/scatter.js';
+import { PHONE_QUERY } from '../../modules/breakpoints.js';
 
 const VIEW_MODULES = { special: teamBars, crews, viewership, scatter };
 const VIEW_IDS = Object.keys(VIEW_MODULES);
@@ -207,7 +208,7 @@ function restoreFooter() {
 function env() {
   return {
     dark: currentTheme() === 'dark',
-    mobile: window.matchMedia('(max-width: 640px)').matches,
+    mobile: window.matchMedia(PHONE_QUERY).matches,
     hoverNone: window.matchMedia('(hover: none)').matches,
   };
 }
@@ -391,7 +392,7 @@ function attachMedia() {
   mqHandler = () => {
     if (mounted && model && views) views[state.view].mod.render(ctx);
   };
-  for (const q of ['(max-width: 640px)', '(hover: none)']) {
+  for (const q of [PHONE_QUERY, '(hover: none)']) {
     const mql = window.matchMedia(q);
     mql.addEventListener('change', mqHandler);
     mqls.push(mql);

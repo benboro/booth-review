@@ -18,6 +18,7 @@ import { createDetailPanel, RETROSHEET_NOTICE, RETROSHEET_CONTACT } from './pane
 import { createMlbTabs } from './tabs.js';
 import * as appleView from './views/apple.js';
 import * as postseasonView from './views/postseason.js';
+import { PHONE_QUERY } from '../../modules/breakpoints.js';
 
 // View id -> module (mount, render, resize, testModel); the tab bar renders from this map.
 const VIEW_MODULES = { apple: appleView, postseason: postseasonView };
@@ -196,7 +197,7 @@ function restoreFooter() {
 function env() {
   return {
     dark: currentTheme() === 'dark',
-    mobile: window.matchMedia('(max-width: 640px)').matches,
+    mobile: window.matchMedia(PHONE_QUERY).matches,
     hoverNone: window.matchMedia('(hover: none)').matches,
   };
 }
@@ -390,7 +391,7 @@ function attachMedia() {
   mqHandler = () => {
     if (mounted && model && views && views[state.view]) views[state.view].mod.render(ctx);
   };
-  for (const q of ['(max-width: 640px)', '(hover: none)']) {
+  for (const q of [PHONE_QUERY, '(hover: none)']) {
     const mql = window.matchMedia(q);
     mql.addEventListener('change', mqHandler);
     mqls.push(mql);

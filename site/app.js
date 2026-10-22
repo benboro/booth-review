@@ -45,6 +45,7 @@ import {
   ringSpecFromPoint,
   hoverRingDiameter,
 } from './modules/hover-ring.js';
+import { PHONE_QUERY } from './modules/breakpoints.js';
 
 const versionMeta = document.querySelector('meta[name="site-data-version"]');
 const version = versionMeta ? versionMeta.content : '';
@@ -71,7 +72,7 @@ const barsOnlyEls = ['bars-title', 'bars-footer', 'bars-captions', 'bars-data'].
   document.getElementById(id),
 );
 
-const mobileMedia = window.matchMedia('(max-width: 640px)');
+const mobileMedia = window.matchMedia(PHONE_QUERY);
 /** True on a touch device with no real hover capability (D-22): these
  * devices keep tap-to-open-panel and never show the hover tooltip. */
 const hoverNoneMedia = window.matchMedia('(hover: none)');

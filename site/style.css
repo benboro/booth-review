@@ -29,6 +29,7 @@
   src: url("fonts/roboto-condensed-latin-400-normal.woff2") format("woff2");
 }
 
+/* Phone breakpoint: 480px and under; desktop 481px and up (mirrors site/modules/breakpoints.js). */
 :root {
   color-scheme: light;
   --space-xs: 4px;
@@ -304,7 +305,7 @@ li[role="option"][aria-selected="true"] .option-check::after {
      natural one-person band height (min-height 0, fixture person with the
      longest name, default / DejaVu / wide fonts) rounded up with ~5-6px of
      headroom for font metrics that differ across machines.
-     641-751px: the box wraps its buttons under the chip, so the band is
+     481-751px: the box wraps its buttons under the chip, so the band is
      natural 120.2 / 121.2 / 121.2px; reserve 127px. */
   min-height: 127px;
 }
@@ -564,7 +565,7 @@ li[role="option"][aria-selected="true"] .option-check::after {
   display: none;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 480px) {
   .desktop-only {
     display: none;
   }
@@ -695,14 +696,14 @@ body.app {
   cursor: pointer;
 }
 
-/* D-21: above 640px the toolbar is a grid of equal cells, so its row count
+/* D-21: above 480px the toolbar is a grid of equal cells, so its row count
    depends only on the viewport width and the visitor's font, never on a
    filter label. toolbar-fit.js sets `--toolbar-cell-min` to the widest
    resting label ("Bowls/Playoffs ▾", "Clear all filters", ...) measured in
    the font the page renders in, so no resting label truncates on a wide
    font. 116px stays the floor (one row of ten at 1280px on narrow fonts);
    `min(100%, ...)` keeps a pathological font from overflowing the toolbar. */
-@media (min-width: 641px) {
+@media (min-width: 481px) {
   #toolbar {
     display: grid;
     grid-template-columns: repeat(
@@ -1403,7 +1404,7 @@ input[type="checkbox"] {
   min-width: 0;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 480px) {
   .filter-trigger {
     max-width: 100%;
   }
@@ -1688,7 +1689,7 @@ input[type="checkbox"] {
 /* ---------- Chart area ---------- */
 
 /* `#chart-area`'s own children stack top-to-bottom in flex-column flow (not
-   grid) so the ≤640px media query below can reorder the legend row below
+   grid) so the ≤480px media query below can reorder the legend row below
    the chart via `order`, without touching the rest of the page's grid. */
 #chart-area {
   display: flex;
@@ -2246,7 +2247,7 @@ input[type="checkbox"] {
   /* SITE-20: `.games-table` has no `table-layout: fixed`, so its natural width
      (the Source cell's two links, long crew names, wider fonts) can pass the
      container's width. That happened on phones and, with wider fonts, just
-     above the 640px breakpoint too. The table scrolls inside this box at every
+     above the 480px breakpoint too. The table scrolls inside this box at every
      width so the page itself never scrolls sideways; whole-row clicks (D-06)
      still work inside a scrolled container. */
   overflow-x: auto;
@@ -2434,8 +2435,8 @@ html:has(#mlb-detail-panel[open]) {
   }
 }
 
-/* Phones (<=640px): the same dialog as a bottom sheet. */
-@media (max-width: 640px) {
+/* Phones (<=480px): the same dialog as a bottom sheet. */
+@media (max-width: 480px) {
   #detail-panel,
   #nfl-detail-panel,
   #mlb-detail-panel {
@@ -2580,9 +2581,9 @@ html:has(#mlb-detail-panel[open]) {
   overflow-x: auto;
 }
 
-/* ---------- Phones (≤640px) ---------- */
+/* ---------- Phones (≤480px) ---------- */
 
-@media (max-width: 640px) {
+@media (max-width: 480px) {
   /* Phones keep no reserve (user, 2026-10-13): the one-person reserve left a
      ~128px blank band under the summary with nobody selected. The trade-off:
      the chart moves down when the first person is added and back up on
@@ -2657,7 +2658,7 @@ html:has(#mlb-detail-panel[open]) {
   }
 
   /* The phone bottom-sheet `#detail-panel` rules live in the "Detail modal"
-     section's own `(max-width: 640px)` block above. */
+     section's own `(max-width: 480px)` block above. */
 
   button,
   .toggle,
@@ -2688,7 +2689,7 @@ html:has(#mlb-detail-panel[open]) {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 480px) {
   #game-search {
     height: 44px;
   }
@@ -3085,7 +3086,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 /* Same grid as #toolbar. The hidden spacer cells bring the NFL row count up to
    the CFB toolbar's twelve cells, so a switch never moves the chart (SITE-20). */
-@media (min-width: 641px) {
+@media (min-width: 481px) {
   #nfl-toolbar {
     display: grid;
     grid-template-columns: repeat(
@@ -3247,7 +3248,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   margin-top: var(--space-sm);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 480px) {
   .nfl-filters-sheet input,
   .nfl-filters-sheet select,
   .nfl-filters-sheet .group-reset,
@@ -3316,7 +3317,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 480px) {
   #nfl-selection-bar,
   #mlb-selection-bar {
     min-height: 0;
@@ -3483,7 +3484,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   border-bottom-color: var(--ink);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 480px) {
   #topbar:has(#sport-switch) {
     flex-wrap: wrap;
     justify-content: space-between;
@@ -3550,7 +3551,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   outline-offset: 2px;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 480px) {
   .booth-row-btn {
     min-height: 44px;
   }
@@ -3920,7 +3921,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 480px) {
   .mlb-grid thead {
     position: absolute;
     width: 1px;
@@ -4076,7 +4077,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   font-weight: 600;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 480px) {
   .crews-table .booth-col {
     min-width: 150px;
   }

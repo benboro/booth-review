@@ -441,7 +441,7 @@ function renderBoothTable(items, group, state, season, anyPublished) {
       btn.setAttribute('aria-pressed', String(sel === it.key));
       btn.append(el('span', 'booth-rank', it.rankLabel));
       // The names sit in one `.booth-names` group: inline on desktop, stacked (pbp, analyst,
-      // then the low-n tag) in the narrow phone column; see the 640px rules in style.css.
+      // then the low-n tag) in the narrow phone column; see the 480px rules in style.css.
       const names = el('span', 'booth-names');
       names.append(nameWithRoles(el('span', 'booth-name', personName(current.model, r.pbp_person)), makeRolePill('pbp')));
       if (r.analyst_person != null) {

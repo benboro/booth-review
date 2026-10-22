@@ -33,6 +33,7 @@ import { makeCaretIcon, makeGameTypeIcon } from './icons.js';
 import { FAMILY_LABELS } from './palette.js';
 import { familyIsSole, familyOnlyPatch, offeredFamilyIds, sameSet } from './select.js';
 import { NEW_YEARS_SIX, SLOT_SHORT_LABELS, ROLE_LABELS, gameRowTitle } from './format.js';
+import { PHONE_QUERY } from './breakpoints.js';
 
 const ROLE_HELPER_TEXT = 'Limits matches to main-broadcast play-by-play or analyst roles.';
 
@@ -1148,7 +1149,7 @@ export function initFilters({ data, getState, setState }) {
     syncGameTooltips();
   });
 
-  const mobileMedia = window.matchMedia('(max-width: 640px)');
+  const mobileMedia = window.matchMedia(PHONE_QUERY);
   placeSections(mobileMedia.matches);
   mobileMedia.addEventListener('change', (ev) => placeSections(ev.matches));
 }
