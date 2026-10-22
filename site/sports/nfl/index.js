@@ -22,6 +22,7 @@ import * as crews from './views/crews.js';
 import * as viewership from './views/viewership.js';
 import * as scatter from './views/scatter.js';
 import { PHONE_QUERY } from '../../modules/breakpoints.js';
+import { showToolsFor } from './tools.js';
 
 const VIEW_MODULES = { special: teamBars, crews, viewership, scatter };
 const VIEW_IDS = Object.keys(VIEW_MODULES);
@@ -294,6 +295,7 @@ function renderTabHint() {
 
 function showActiveView({ resize }) {
   for (const id of VIEW_IDS) views[id].section.hidden = id !== state.view;
+  showToolsFor(regions.tools, state.view);
   tabs.setActive(state.view);
   if (resize) views[state.view].mod.resize();
 }

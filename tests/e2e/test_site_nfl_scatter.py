@@ -21,6 +21,7 @@ from test_site_chart import _RING_VISIBLE, _assert_ring_on
 pytestmark = pytest.mark.e2e
 
 VIEW = "#nfl-view-scatter"
+TOOLS = "#nfl-chart-tools [data-tools-for='scatter']"  # view tools sit in the module header (13-13)
 GD = f"{VIEW} .nfl-chart > div"
 CAUSES = ("pending", "regional", "none")
 
@@ -358,12 +359,12 @@ def test_controls_use_cfb_markup_and_wording(
     page = nfl_guarded_page
     _open(page, open_nfl_app)
     _vm(page)
-    groups = page.locator(f"{VIEW} .chart-controls .axis-group")
+    groups = page.locator(f"{TOOLS} .chart-controls .axis-group")
     assert groups.locator(".axis-caption").all_inner_texts() == ["X axis", "Y axis"]
     assert groups.locator(".segmented").evaluate_all(
         "els => els.map(e => e.getAttribute('aria-label'))"
     ) == ["X-axis measure", "Y-axis measure"]
-    exc = page.locator(f"{VIEW} button[data-y=excitement]")
+    exc = page.locator(f"{TOOLS} button[data-y=excitement]")
     assert exc.get_attribute("aria-label") == "Excitement"
     assert exc.get_attribute("title") == "Excitement"
     assert exc.locator(".axis-long").inner_text() == "Excitement"
@@ -373,7 +374,7 @@ def test_controls_use_cfb_markup_and_wording(
     assert dots.get_attribute("aria-label") == "Filtered-out dots"
     assert dots.locator("button[data-dots]").all_inner_texts() == ["Fade", "Hide"]
     # D-17: the GEI-style qualifier is in the caption only, never a button, axis title or header.
-    for sel in (f"{VIEW} button", f"{VIEW} th"):
+    for sel in (f"{VIEW} button", f"{TOOLS} button", f"{VIEW} th"):
         assert not any("GEI-style" in t for t in page.locator(sel).all_text_contents())
     assert "GEI-style" in page.locator(f"{VIEW} p.caption").nth(1).inner_text()
     _set(page, {"scatterY": "excitement"})
@@ -393,7 +394,7 @@ def test_no_spread_text_anywhere(nfl_guarded_page: Page, open_nfl_app: Callable[
     _open(nfl_guarded_page, open_nfl_app)
     _vm(nfl_guarded_page)
     assert "spread" not in nfl_guarded_page.locator(VIEW).inner_text().lower()
-    nfl_guarded_page.locator(f"{VIEW} [aria-label='X-axis measure']").locator(
+    nfl_guarded_page.locator(f"{TOOLS} [aria-label='X-axis measure']").locator(
         "button[data-axis=margin]"
     ).click()
     nfl_guarded_page.wait_for_function(

@@ -15,6 +15,7 @@ from playwright.sync_api import Page
 pytestmark = pytest.mark.e2e
 
 VIEW = "#nfl-view-crews"
+TOOLS = "#nfl-chart-tools [data-tools-for='crews']"  # view tools sit in the module header (13-13)
 GD = f"{VIEW} .nfl-chart > div"
 HEADS = ["Booth", "Games", "Avg viewers*", "Avg margin", "Excitement"]
 
@@ -350,7 +351,7 @@ def test_measure_switch_and_axis_titles(
     page.get_by_role("button", name="Avg viewers").click()
     page.wait_for_function("window.__nflTestHooks.getViewModel('crews').chart.metric === 'viewers'")
     assert title() == "Avg viewers"
-    assert "is-concealed" in page.locator(f"{VIEW} [aria-label='Raw or adjusted']").get_attribute(
+    assert "is-concealed" in page.locator(f"{TOOLS} [aria-label='Raw or adjusted']").get_attribute(
         "class"
     )
 

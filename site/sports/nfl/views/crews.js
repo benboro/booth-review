@@ -16,21 +16,15 @@
 import { crewsNetworks, crewsSeasons, crewsRows, crewsCoverage, CREW_METRICS } from '../state.js';
 import { crewStyle } from '../palette.js';
 import { ACCENT, MUTED, PAGE_BG, DIVIDER, ZERO_LINE } from '../../../modules/palette.js';
+import { frameConfig, frameLayout, referenceLine } from '../../../modules/chart-frame.js';
 import { MARGIN, TICK_FONT_PX, DOT_OPACITY } from '../../../modules/chart.js';
 import { makeRolePill, nameWithRoles, currentTheme } from '../../../modules/pill.js';
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import { escapeHover, MINUS, formatViewers } from '../../../modules/format.js';
+import { mountViewTools } from '../tools.js';
 import { DATA_TABLE_CLASS, rebuildKeepingFocus } from '../data-table.js';
 
-const CONFIG = {
-  responsive: true,
-  displayModeBar: false,
-  displaylogo: false,
-  scrollZoom: false,
-  showLink: false,
-  showSendToCloud: false,
-  showEditInChartStudio: false,
-};
+const CONFIG = frameConfig({ zoomable: false });
 
 const DASH = '—';
 const SEGMENT_MAX = 6; // more networks than this use the popover picker
@@ -651,20 +645,17 @@ function buildFigure(items, metric, adjusted, env, th, sel, picked) {
 
   const tick = env.mobile ? TICK_FONT_PX.mobile : TICK_FONT_PX.desktop;
   const titleText = adjusted ? f.adjTitle : f.rawTitle;
-  const font = { family: getComputedStyle(document.body).fontFamily, size: tick, color: ACCENT[th] };
+  const font = { size: tick, color: ACCENT[th] };
   const pitch = env.mobile ? 48 : 40;
   const layout = {
-    paper_bgcolor: bg,
-    plot_bgcolor: bg,
     font,
-    showlegend: false,
     hovermode: 'closest',
     clickmode: 'event',
     dragmode: false,
     height: items.length * pitch + MARGIN.t + MARGIN.b + 20,
     margin: { ...MARGIN, l: env.mobile ? 56 : MARGIN.l },
     shapes: adjusted
-      ? [{ type: 'line', xref: 'x', yref: 'paper', x0: 0, x1: 0, y0: 0, y1: 1, line: { color: ZERO_LINE[th], width: 1.5 } }]
+      ? [referenceLine({ xref: 'x', yref: 'paper', x0: 0, x1: 0, y0: 0, y1: 1 }, th)]
       : [],
     xaxis: {
       title: { text: escapeHover(titleText), standoff: 4, font: { size: tick } },
@@ -688,7 +679,7 @@ function buildFigure(items, metric, adjusted, env, th, sel, picked) {
       fixedrange: true,
     },
   };
-  return { traces: [underlay, main], layout };
+  return { traces: [underlay, main], layout: frameLayout(layout, { theme: th }) };
 }
 
 function renderDataTable(items, metric, adjusted) {
@@ -766,11 +757,12 @@ export function mount(container, ctx) {
     refs.tableWrap,
     refs.publishedNote,
     refs.note,
-    chartControls,
     refs.chart,
     refs.captions,
     dataWrap,
   );
+  // The mode control (measure, raw or adjusted) lives in the module header tools.
+  mountViewTools(ctx, 'crews', [chartControls], container);
 }
 
 function nearest(list, season) {
