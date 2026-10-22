@@ -65,7 +65,9 @@ _COVERAGE_SHA256 = "1c2076a54c682ad0355657a0e1a3d938d35c7451c3c7d52bf5342a8753f7
 # Re-pinned at Phase 13 Plan 06: font preloads and load-error copy.
 # Re-pinned at Phase 13 Plan 10: Clear all filters moved into the always-rendered
 # selection row; Show games label.
-_INDEX_PRE_PHASE_SHA256 = "f1ba13a89098455e9a0258a07ea80070811b63e77eeecf4e7cdb278e7d7170d8"
+# Re-pinned at Phase 13 Plan 11: module headers, tab hint moved into the module subtitle,
+# compare note in the summary, Reset zoom slot.
+_INDEX_PRE_PHASE_SHA256 = "1e9300ae41a1d2ed36c1ba68790823a79fd13748d045f9cabc5398bb273d80ff"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'
