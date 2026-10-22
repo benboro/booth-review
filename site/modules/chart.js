@@ -52,12 +52,13 @@
  * importable from node for quick checks.
  */
 
-import { ACCENT, DIVIDER, DOT_OUTLINE, FAMILY_COLORS, MUTED, PAGE_BG, POSTSEASON_BAND, POSTSEASON_LABEL as POSTSEASON_LABEL_COLOR, SURFACE, ZERO_LINE, contrastRatio, familyKey } from './palette.js';
+import { ACCENT, DIVIDER, DOT_OUTLINE, FAMILY_COLORS, MUTED, POSTSEASON_BAND, POSTSEASON_LABEL as POSTSEASON_LABEL_COLOR, SURFACE, ZERO_LINE, contrastRatio, familyKey } from './palette.js';
 import { MINUS, boothLabel, escapeHover, logTicks, niceLinearTicks } from './format.js';
 import { tooltipModel } from './tooltip.js';
 import { POSTSEASON_LABEL, dateAxisLabels, gapDividers, postseasonBands, postseasonLabel, seasonRange, shownBlocks } from './date-axis.js';
 import { gutterPads } from './gutter.js';
 import { EXCITEMENT_CAP, Y_MEASURES, pin, cappedTicks } from './caps.js';
+import { frameLayout, frameConfig, haloText, referenceLine } from './chart-frame.js';
 
 /**
  * One-line fallback switch (D-22): set to 'plotly' to restore Plotly's own
@@ -83,8 +84,8 @@ export const DOT_OPACITY = Object.freeze({
  * screen size). The plot width that converts the 04.12 pixel gutter into data
  * units is the chart width minus `l` and `r`, so this is the one copy.
  */
-/** Tick/label font sizes in px; NFL views import these (08 D-18). */
-export const TICK_FONT_PX = Object.freeze({ desktop: 14, mobile: 10 });
+/** Tick/label font sizes in px; NFL views import these (08 D-18). 12px on every viewport (chart frame floor). */
+export const TICK_FONT_PX = Object.freeze({ desktop: 12, mobile: 12 });
 export const MARGIN = Object.freeze({ l: 70, r: 24, t: 40, b: 60 });
 
 /**
@@ -96,6 +97,8 @@ export const BAND = Object.freeze({ frac: 0.12, minPx: 56, gapPx: 28, padPx: 12 
 
 /** Plot height assumed before the chart div is measured: #chart min-height 520 minus MARGIN.t + MARGIN.b. */
 /** Phase 10 D-09: lead-booth star size in px, independent of the enlarge-dots switch. */
+/** Marker diameter in px of an enlarged dot (a marker size, not a font size). */
+const ENLARGED_DOT_PX = 10;
 const LEAD_STAR_SIZE = 14;
 /** Phase 10 (10-11 review): the surface-colored casing star drawn directly beneath each rated lead star. */
 const LEAD_CASING_SIZE = 18;
@@ -454,7 +457,7 @@ export function buildFigure(data, view, state, env) {
         // Inert dots always stay 6. Under a person this trace holds the passing-not-theirs
         // dots, at activeUnderPerson opacity and the same size switch (D-09).
         // 04.12 D-05 / 04.16 D-03: a seasons-only filter on Date never counts.
-        size: view.enlargeDots ? 10 : 6,
+        size: view.enlargeDots ? ENLARGED_DOT_PX : 6,
         opacity: view.hasPersonSelection ? DOT_OPACITY.activeUnderPerson : DOT_OPACITY.active,
         line: { width: view.enlargeDots ? 1 : 0, color: DOT_OUTLINE },
       },
@@ -509,7 +512,7 @@ export function buildFigure(data, view, state, env) {
         : view.enlargeDots
         ? {
             color,
-            size: 10,
+            size: ENLARGED_DOT_PX,
             opacity: activeOpacity,
             line: { width: 1, color: DOT_OUTLINE },
           }
@@ -777,35 +780,24 @@ export function buildFigure(data, view, state, env) {
     // 04.17 D-06: bands come from the shown blocks only, never from the filtered view.
     const bands = postseasonBands(blocks, range[1]);
     const label = postseasonLabel(bands, range, plotPx, {
-      fontSize: env.mobile ? 10 : 12,
+      fontSize: 12,
       heightPx: bandGeo.plotPx * (1 - bandGeo.logBottom),
     });
     dateAxis = { blocks, range, mobile: env.mobile, labels, bands, label };
   }
 
-  const layout = {
+  const layout = frameLayout({
     datarevision: env.revision,
     // D-13: on Date a season change resets the zoom, other filters keep it.
     // 04.15 D-12: a y switch resets the zoom; the suffix is Excitement-only so the default keys hold.
     uirevision:
       (isDate ? 'date:' + (state.seasons ? state.seasons.join('-') : 'all') : state.axis) +
       (yMode !== 'viewers' ? ':y-' + yMode : ''),
-    paper_bgcolor: PAGE_BG[theme],
-    plot_bgcolor: PAGE_BG[theme],
-    font: {
-      family:
-        'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji"',
-      size: 14,
-      color: ACCENT[theme],
-    },
-    showlegend: false,
     hovermode: 'closest',
     // Wider once a selection exists, so it's easier to snap to a highlighted
     // dot's tooltip even when the cursor lands a few pixels off it (T3/D-02).
     hoverdistance: view.hasSelection ? 40 : 20,
     hoverlabel: {
-      bgcolor: SURFACE[theme],
-      bordercolor: DIVIDER[theme],
       font: { color: ACCENT[theme] },
     },
     xaxis: {
@@ -824,7 +816,7 @@ export function buildFigure(data, view, state, env) {
             ticklen: 4,
             tickcolor: ZERO_LINE[theme],
             tickangle: 0,
-            tickfont: { size: env.mobile ? TICK_FONT_PX.mobile : TICK_FONT_PX.desktop, color: MUTED[theme] },
+            tickfont: { color: MUTED[theme] },
             showgrid: false,
           }
         : { gridcolor: DIVIDER[theme] }),
@@ -905,7 +897,7 @@ export function buildFigure(data, view, state, env) {
           yshift: env.mobile ? -24 : -28,
           showarrow: false,
           captureevents: false,
-          font: { size: env.mobile ? TICK_FONT_PX.mobile : TICK_FONT_PX.desktop, color: ACCENT[theme] },
+          font: { size: TICK_FONT_PX.desktop, color: ACCENT[theme] },
         })).concat([
           {
             // 04.17 D-08: always present so fitDateAxis only toggles x and visible.
@@ -923,7 +915,7 @@ export function buildFigure(data, view, state, env) {
             visible: dateAxis.label != null,
             showarrow: false,
             captureevents: false,
-            font: { size: env.mobile ? 10 : 12, color: POSTSEASON_LABEL_COLOR[theme] },
+            font: { size: 12, color: POSTSEASON_LABEL_COLOR[theme], ...haloText(theme) },
           },
         ])
       : [
@@ -936,7 +928,7 @@ export function buildFigure(data, view, state, env) {
             yanchor: 'top',
             yshift: -6,
             showarrow: false,
-            font: { size: 14 },
+            font: { size: 12, ...haloText(theme) },
           },
         ],
     dragmode: env.mobile ? false : 'zoom',
@@ -944,23 +936,13 @@ export function buildFigure(data, view, state, env) {
     // legend; the HTML chip row above the chart replaced it, so the margin
     // is the same narrow width at every screen size now.
     margin: { ...MARGIN },
-  };
+  }, env);
 
   // D-02: Spread axis only -- appended so shapes[0]/annotations[0] stay the
   // N/A divider and label.
   if (axis === 'spread') {
-    layout.shapes.push({
-      type: 'line',
-      xref: 'x',
-      x0: 0,
-      x1: 0,
-      yref: 'paper',
-      y0: 0,
-      y1: 1,
-      layer: 'below',
-      line: { width: 1.5, color: ZERO_LINE[theme], dash: 'solid' },
-    });
-    const caption = { xref: 'x', x: 0, yref: 'paper', y: 1, yanchor: 'bottom', showarrow: false, captureevents: false, font: { size: env.mobile ? TICK_FONT_PX.mobile : TICK_FONT_PX.desktop, color: MUTED[theme] } };
+    layout.shapes.push(referenceLine({ xref: 'x', x0: 0, x1: 0, yref: 'paper', y0: 0, y1: 1 }, theme));
+    const caption = { xref: 'x', x: 0, yref: 'paper', y: 1, yanchor: 'bottom', showarrow: false, captureevents: false, font: { size: TICK_FONT_PX.desktop, color: MUTED[theme], ...haloText(theme) } };
     layout.annotations.push(
       { ...caption, text: '← favorite won', xanchor: 'right', xshift: -6 },
       { ...caption, text: 'underdog won →', xanchor: 'left', xshift: 6 },
@@ -1016,16 +998,7 @@ export function buildFigure(data, view, state, env) {
     }
   }
 
-  const config = {
-    responsive: true,
-    displaylogo: false,
-    scrollZoom: false,
-    showSendToCloud: false,
-    showEditInChartStudio: false,
-    showLink: false,
-    displayModeBar: !env.mobile,
-    modeBarButtonsToRemove: ['lasso2d', 'select2d'],
-  };
+  const config = frameConfig({ zoomable: true });
 
   const bandInfo = { bandTop: bandGeo.bandTop, logBottom: bandGeo.logBottom, bandPx: bandGeo.bandPx, gapPx: bandGeo.gapPx };
   return { traces, layout, config, band: bandInfo, dateAxis: isDate ? { blocks: dateAxis.blocks, range: dateAxis.range, mobile: env.mobile, bands: dateAxis.bands } : null };
@@ -1037,8 +1010,8 @@ export function buildFigure(data, view, state, env) {
  * `layout` must already hold fresh array identities for any changed
  * attribute.
  *
- * The home range is re-saved as the target of double-click and the modebar's
- * "Reset axes" (CR-01) on a `uirevision` change (axis switch, Date season
+ * The home range is re-saved as the target of double-click and the page-level
+ * Reset zoom (CR-01) on a `uirevision` change (axis switch, Date season
  * change) and when the home x range moves under the same `uirevision` (a width
  * change moves the pixel gutter, 04.12 D-03). A range the user zoomed or
  * panned away from home is kept through such a re-render, and through every
@@ -1071,6 +1044,34 @@ export function renderChart(gd, figure) {
     }
   }
   gd.boothHomeX = Array.isArray(home) ? home.slice() : undefined;
+  const homeY = figure.layout.yaxis?.range;
+  gd.boothHomeY = Array.isArray(homeY) ? homeY.slice() : undefined;
+}
+
+/**
+ * True when the scatter shows its home range (the range the last render asked for), so the
+ * page-level Reset zoom has nothing to undo.
+ * @param {HTMLElement} gd
+ * @returns {boolean}
+ */
+export function scatterAtHome(gd) {
+  const fl = gd?._fullLayout;
+  if (!fl || !Array.isArray(gd.boothHomeX)) return true;
+  if (!sameRange(fl.xaxis?.range, gd.boothHomeX)) return false;
+  return !Array.isArray(gd.boothHomeY) || sameRange(fl.yaxis?.range, gd.boothHomeY);
+}
+
+/**
+ * Puts the scatter back on its home range (the page-level Reset zoom, same target as a
+ * double-click on the plot).
+ * @param {HTMLElement} gd
+ * @returns {*} the Plotly promise, or undefined when there is no home yet.
+ */
+export function resetScatterZoom(gd) {
+  if (!gd || !Array.isArray(gd.boothHomeX)) return undefined;
+  const update = { 'xaxis.range': gd.boothHomeX.slice() };
+  if (Array.isArray(gd.boothHomeY)) update['yaxis.range'] = gd.boothHomeY.slice();
+  return window.Plotly.relayout(gd, update);
 }
 
 /**
@@ -1266,7 +1267,7 @@ export function fitDateAxis(gd) {
   if (lIdx >= 0) {
     const ya = gd._fullLayout.yaxis;
     const fit = postseasonLabel(meta.bands ?? [], xa.range, xa._length, {
-      fontSize: meta.mobile ? 10 : 12,
+      fontSize: 12,
       heightPx: ya?._length,
     });
     const la = anns[lIdx];

@@ -3,7 +3,7 @@
  * base Plotly layout and config for every chart, so no chart sets its own title, font,
  * modebar, gridlines or outline colour.
  *
- * - Roboto Condensed 12px `--muted` for tick, axis and hover text (12px is the floor on
+ * - Roboto Condensed 12px `--muted` for tick, axis and hover text (axis titles inherit `layout.font`) (12px is the floor on
  *   every viewport); no `layout.title`, no legend box, no modebar.
  * - Horizontal `--rule` hairline gridlines only; no vertical gridlines, no zero line.
  * - Reference lines are dashed and drawn behind the data (`referenceLine`).
@@ -85,7 +85,6 @@ export function frameLayout(overrides, env) {
   const theme = env.theme;
   const muted = MUTED[theme];
   const tickfont = { family: FRAME_FONT, size: FRAME_MIN_FONT_PX, color: muted };
-  const axisTitle = { font: { family: FRAME_FONT, size: FRAME_MIN_FONT_PX, color: muted } };
   const base = {
     font: { family: FRAME_FONT, size: FRAME_MIN_FONT_PX, color: muted },
     paper_bgcolor: PAGE_BG[theme],
@@ -102,7 +101,6 @@ export function frameLayout(overrides, env) {
       showgrid: false,
       zeroline: false,
       tickfont,
-      title: axisTitle,
     },
     yaxis: {
       showline: false,
@@ -111,7 +109,6 @@ export function frameLayout(overrides, env) {
       gridcolor: DIVIDER[theme],
       zeroline: false,
       tickfont,
-      title: axisTitle,
     },
   };
   const layout = merge(base, overrides);

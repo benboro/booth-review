@@ -1541,7 +1541,6 @@ input[type="checkbox"] {
 .legend-chip[data-offered="false"] {
   background: transparent;
   border-style: dashed;
-  border-width: 2px;
 }
 
 #person-results .option-count,
@@ -1881,22 +1880,31 @@ input[type="checkbox"] {
 }
 
 .legend-chip {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
   min-height: 28px;
+  padding: 0 var(--space-md);
+  background: var(--bg);
+  color: var(--ink);
   border: 1px solid var(--rule-strong);
   border-radius: 14px;
   cursor: pointer;
-  font: inherit;
+  font: var(--font-body);
+  white-space: nowrap;
   /* D-07: double-tap zoom off; pan and pinch kept. */
   touch-action: manipulation;
   user-select: none;
 }
 
-/* Toggled off (D-16): legend.js clears the inline fill so this rule's
-   transparent background/--ink color shows through; only the chip's own
-   inline `border-color` (the family color) is kept. */
+/* Outlined chips (13-12): shown = --ink text and a full-strength family dot; hidden (the
+   family is toggled off) = --muted text and a dot at 32%, the faded-dot opacity. */
 .legend-chip[aria-pressed="false"] {
-  background: transparent;
-  color: var(--ink);
+  color: var(--muted);
+}
+
+.legend-chip[aria-pressed="false"] .legend-dot {
+  opacity: 0.32;
 }
 
 /* D-37: a dashed (not offered) chip reads lighter when on, grey when off. */
@@ -2935,7 +2943,12 @@ html:has(#mlb-detail-panel[open]) {
   white-space: nowrap;
   color: var(--muted);
   font: var(--font-body);
+  /* Chart text: 12px Roboto Condensed with a halo in the page background (13-12). */
+  font-family: var(--plot);
+  font-size: 12px;
   font-weight: var(--weight-regular);
+  paint-order: stroke;
+  text-shadow: -1px -1px 0 var(--bg), 1px -1px 0 var(--bg), -1px 1px 0 var(--bg), 1px 1px 0 var(--bg);
   cursor: pointer;
 }
 
@@ -4215,6 +4228,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 /* Legend chip family dot. */
 .legend-chip .legend-dot {
+  flex: none;
   display: inline-block;
   width: 8px;
   height: 8px;

@@ -71,6 +71,46 @@ let splatWarned = false;
 /** The state geometry once loaded, for the key's land test. */
 let loadedGeometry = null;
 
+/** Map zoom state for the page-level Reset zoom (13-12): the unzoomed ranges and a change listener. */
+let mapHome = null;
+let mapZoomed = false;
+let viewListener = null;
+/** Set by our own draws and resizes so the next afterplot may take the live ranges as home. */
+let captureHome = false;
+
+const sameMapRange = (a, b) =>
+  Array.isArray(a) && Array.isArray(b) && Math.abs(a[0] - b[0]) < 1e-6 && Math.abs(a[1] - b[1]) < 1e-6;
+
+/** Registers the one callback run whenever the map's zoom state may have changed. */
+export function onMapViewChange(fn) {
+  viewListener = fn;
+}
+
+/** True while the map shows its home range (nothing for Reset zoom to undo). */
+export function mapAtHome() {
+  return !mapZoomed;
+}
+
+/** Puts the map back on the range it was first drawn at. */
+export function resetMapZoom() {
+  const gd = el('map-chart');
+  if (!gd || !mapHome) return undefined;
+  return window.Plotly.relayout(gd, { 'xaxis.range': mapHome.x.slice(), 'yaxis.range': mapHome.y.slice() });
+}
+
+/** Tracks the live axis ranges: they are the home range until a relayout moves them. */
+function syncMapZoom(gd, fromRelayout) {
+  const x = gd._fullLayout?.xaxis?.range;
+  const y = gd._fullLayout?.yaxis?.range;
+  if (!Array.isArray(x) || !Array.isArray(y)) return;
+  if (!mapHome || (captureHome && !mapZoomed && !fromRelayout)) {
+    mapHome = { x: x.slice(), y: y.slice() };
+  }
+  if (!fromRelayout) captureHome = false;
+  mapZoomed = !(sameMapRange(x, mapHome.x) && sameMapRange(y, mapHome.y));
+  viewListener?.();
+}
+
 /** Clears the pending first tap so the next tap on a dot shows its tooltip again. */
 export function resetMapTap() {
   pendingTapKey = null;
@@ -524,6 +564,7 @@ export async function renderMapPanel(args) {
     });
     const dots = figure.traces[DOTS_TRACE];
     baseRing = { width: dots.marker.line.width, color: dots.marker.line.color };
+    captureHome = true;
     await renderMap(gd, figure);
     if (!bound) {
       bindMapEvents(gd, {
@@ -537,13 +578,22 @@ export async function renderMapPanel(args) {
           }
         },
       });
-      gd.on('plotly_afterplot', positionOverlays);
+      gd.on('plotly_afterplot', () => {
+        positionOverlays();
+        syncMapZoom(gd, false);
+      });
+      gd.on('plotly_relayout', (ev) => {
+        if (ev && Object.keys(ev).some((k) => k.startsWith('xaxis.') || k.startsWith('yaxis.'))) {
+          syncMapZoom(gd, true);
+        }
+      });
       bound = true;
     }
     // A newer render owns the raster, the overlays and any pending resize.
     if (latest !== args) return;
     if (pendingResize) {
       pendingResize = false;
+      captureHome = true;
       await window.Plotly.Plots.resize(gd);
       if (latest !== args) {
         pendingResize = true;

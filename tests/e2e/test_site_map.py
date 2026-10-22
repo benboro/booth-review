@@ -347,7 +347,7 @@ def test_map_url_survives_setstate_and_reload(guarded_page: Page, open_app: Open
     assert "view=map" in search
     assert "people=pat-rowan" in search
     guarded_page.reload()
-    guarded_page.wait_for_function("() => window.__testHooks.ready === true")
+    guarded_page.wait_for_function("() => window.__testHooks && window.__testHooks.ready === true")
     guarded_page.wait_for_function("() => window.__testHooks.mapRenders >= 1")
     assert _visible(guarded_page, "#map-panel")
     state: dict[str, Any] = guarded_page.evaluate("() => window.__testHooks.getState()")
