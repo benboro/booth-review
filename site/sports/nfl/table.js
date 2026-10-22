@@ -7,7 +7,8 @@
  * the CFB panel's `safeHref`. Nothing here reads or shows a point spread.
  */
 
-import { nameWithRoles, makeRolePill, makePill, currentTheme } from '../../modules/pill.js';
+import { nameWithRoles, makeRolePill } from '../../modules/pill.js';
+import { networkMark } from '../../modules/network.js';
 import { safeHref } from '../../modules/panel.js';
 import { crewSourceText, dateShortText, flagLabels, kickoffText, scoreText, viewersText } from './game-format.js';
 
@@ -109,7 +110,7 @@ function buildRow(row, onOpen) {
   // CFB parity (D-18): the network is a family-colored pill, as in CFB's table.
   const networkTd = el('td');
   if (row.network == null) networkTd.textContent = NOT_RECORDED;
-  else networkTd.appendChild(makePill(row.network, row.networkFamily, currentTheme()));
+  else networkTd.appendChild(networkMark({ id: row.networkId, name: row.network, family: row.networkFamily }));
   tr.appendChild(networkTd);
 
   const crewTd = el('td');

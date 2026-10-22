@@ -7,7 +7,8 @@
  * links in the table (the panel carries the credits).
  */
 
-import { nameWithRoles, makeRolePill, makePill, currentTheme } from '../../modules/pill.js';
+import { nameWithRoles, makeRolePill } from '../../modules/pill.js';
+import { networkMark } from '../../modules/network.js';
 import { dateShortText } from './format.js';
 import { CAUSE_COPY, crewSourceTag, viewersText } from './data.js';
 
@@ -101,7 +102,7 @@ function buildRow(row, onOpen) {
     outletTd.className = 'no-rating';
     outletTd.textContent = 'Not recorded';
   } else {
-    outletTd.appendChild(makePill(row.network, row.networkFamily, currentTheme()));
+    outletTd.appendChild(networkMark({ id: row.networkId, name: row.network, family: row.networkFamily }));
   }
   tr.appendChild(outletTd);
 

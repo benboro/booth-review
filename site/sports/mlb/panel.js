@@ -213,7 +213,7 @@ export function createDetailPanel(host, { onClose, getConstants } = {}) {
     const dateP = el('p', null, when.join(' · '));
     const network = row.network == null
       ? el('p', null, 'Outlet not recorded.')
-      : networksParagraph({ primary: { name: row.network, family: row.networkFamily }, others: [], theme: currentTheme() });
+      : networksParagraph({ primary: { id: row.networkId, name: row.network, family: row.networkFamily }, others: [], theme: currentTheme() });
     if (row.network != null) network.firstChild.textContent = 'Outlet: ';
     body.replaceChildren(
       dateP,

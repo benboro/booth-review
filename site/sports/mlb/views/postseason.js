@@ -12,8 +12,9 @@
  * Everything is built with createElement and textContent only.
  */
 import { boothLabelOf, cellKey, personName } from '../data.js';
+import { networkMark } from '../../../modules/network.js';
 import { externalLink } from '../../../modules/panel-parts.js';
-import { makePill, makeRolePill, nameWithRoles, currentTheme } from '../../../modules/pill.js';
+import { makeRolePill, nameWithRoles } from '../../../modules/pill.js';
 
 export const PENDING_TEXT = 'pending Retrosheet 2026';
 export const NO_CREW_TEXT = 'crew not listed';
@@ -57,7 +58,7 @@ function buildGrid(model) {
     }
     for (const idx of r.networks) {
       const net = model.networks[idx];
-      if (net && !b.outlets.some((o) => o.name === net.name)) b.outlets.push({ name: net.name, family: net.family });
+      if (net && !b.outlets.some((o) => o.name === net.name)) b.outlets.push({ id: net.id ?? null, name: net.name, family: net.family });
     }
     if (r.outlet_source_url && !b.outletSourceUrl) b.outletSourceUrl = r.outlet_source_url;
     for (const pair of r.booths) {
@@ -101,7 +102,7 @@ function blockButton(model, b, label, picked) {
   btn.setAttribute('aria-label', `${where}, ${b.games} ${b.games === 1 ? 'game' : 'games'}`);
   const head = el('span', 'mlb-cell-head');
   if (label) head.append(el('span', 'mlb-cell-league', label));
-  for (const o of b.outlets) head.append(makePill(o.name, o.family, currentTheme()));
+  for (const o of b.outlets) head.append(networkMark(o));
   btn.append(head);
 
   const booths = el('span', 'mlb-cell-booths');
