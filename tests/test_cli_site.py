@@ -65,7 +65,7 @@ def _site_source_files(*, include_nfl: bool) -> list[Path]:
         rel = path.relative_to(SITE_SRC)
         if any(part.startswith(".") for part in rel.parts):
             continue
-        if path.suffix not in {".html", ".js", ".css"}:
+        if path.suffix not in {".html", ".js", ".css", ".svg", ".woff2", ".txt"}:
             continue
         if not include_nfl and rel.parts[:2] == ("sports", "nfl"):
             continue
@@ -174,16 +174,29 @@ def test_fixture_build_file_suffixes_and_one_json_file(site_env: Path) -> None:
     out = site_env / "out"
     assert main(["site", "--fixture", "--out", str(out)]) == 0
 
-    json_files = []
+    by_suffix: dict[str, set[str]] = {}
     for path in out.rglob("*"):
         if not path.is_file():
             continue
         if path.name == ".booth-review-site":
             continue
-        assert path.suffix in {".html", ".js", ".css", ".json"}, path
-        if path.suffix == ".json":
-            json_files.append(path)
-    assert len(json_files) == 1
+        by_suffix.setdefault(path.suffix, set()).add(path.relative_to(out).as_posix())
+
+    assert set(by_suffix) <= {".html", ".js", ".css", ".json", ".svg", ".woff2", ".txt"}
+    assert by_suffix[".woff2"] == {
+        "fonts/crimson-text-latin-600-normal.woff2",
+        "fonts/roboto-latin-400-normal.woff2",
+        "fonts/roboto-latin-600-normal.woff2",
+        "fonts/roboto-condensed-latin-400-normal.woff2",
+    }
+    assert by_suffix[".txt"] == {
+        "fonts/OFL-crimson-text.txt",
+        "fonts/OFL-roboto.txt",
+        "fonts/OFL-roboto-condensed.txt",
+    }
+    source_svgs = {path.relative_to(SITE_SRC).as_posix() for path in SITE_SRC.rglob("*.svg")}
+    assert by_suffix.get(".svg", set()) == source_svgs
+    assert len(by_suffix[".json"]) == 1
 
 
 def test_key_check_passed_when_key_set(

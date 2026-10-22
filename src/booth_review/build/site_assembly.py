@@ -40,7 +40,9 @@ PLOTLY_BUNDLE = "vendor/plotly-4.1.1.min.js"
 PLOTLY_SHA256 = "3b6e15d45dbb7fca5bd2094291e961ddc5472cd887009e6009a56dab668d721f"
 MAP_GEOMETRY = "vendor/us-states-albers.js"
 MAP_GEOMETRY_SHA256 = "ff1e0a82d121f389782ef3ff466fc2910a08b7594af9e92598ac4032a9e2d3dc"
-COPY_SUFFIXES = frozenset({".html", ".js", ".css"})
+# Pages, scripts and styles, plus the vendored fonts (.woff2), their OFL texts (.txt)
+# and network logos (.svg). .csv and .md stay out, so logos/manifest.csv and READMEs never ship.
+COPY_SUFFIXES = frozenset({".html", ".js", ".css", ".svg", ".woff2", ".txt"})
 BUILD_MARKER = ".booth-review-site"
 VERSION_TOKEN = "__SITE_DATA_VERSION__"
 FOOTER_TOKEN = "<!-- booth-review:footer -->"

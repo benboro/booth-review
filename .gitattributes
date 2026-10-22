@@ -5,3 +5,7 @@
 # SHA-256 is pinned (site/vendor/plotly-4.1.1.min.js.sha256) and tested
 # in tests/test_site_vendor.py.
 site/vendor/*.js -text linguist-vendored
+
+# Vendored fonts are binary (digests pinned in tests/test_site_assets.py); logos are LF text.
+*.woff2 binary
+*.svg text eol=lf
