@@ -32,7 +32,8 @@ import {
   stripNetworkNote,
 } from './format.js';
 import { makeGameTypeIcon } from './icons.js';
-import { networkMarks } from './network.js';
+import { networkMark, networkMarks } from './network.js';
+import { crewBox } from './panel-parts.js';
 import { makeRolePill, nameWithRoles, roleKey, ROLE_PILL_TEXT } from './pill.js';
 import {
   FAMILY_COLORS,
@@ -247,12 +248,20 @@ function placeTooltip(el, clientX, clientY) {
 
 /**
  * Shows plain text lines in the shared tooltip (Bars/Butterfly, D-16).
- * @param {{text: string, kind: 'title'|'body'|'hint', swatch?: string, roles?: string[]}[]} lines
+ * @param {({text: string, kind: 'title'|'body'|'hint', swatch?: string, roles?: string[]}|{kind: 'network', network: {id?: string, name: string, family: string}}|{kind: 'crew', entries: {name: string, role: string, selected?: boolean}[]})[]} lines
  * @param {{theme: string, borderColor: string, clientX: number, clientY: number}} opts
  */
 export function showTextTooltip(lines, { borderColor, clientX, clientY }) {
   const el = ensureTooltipEl();
-  const children = lines.map(({ text, kind, swatch, roles }) => {
+  const children = lines.map(({ text, kind, swatch, roles, network, entries }) => {
+    // Rich kinds (NFL scatter hover): a network logo mark and a D-01 crew box.
+    if (kind === 'network') {
+      const row = document.createElement('div');
+      row.className = 'tooltip-networks';
+      row.appendChild(networkMark(network, { dot: false }));
+      return row;
+    }
+    if (kind === 'crew') return crewBox(entries);
     const node = document.createElement(kind === 'title' ? 'strong' : 'div');
     if (kind === 'title') node.className = 'tooltip-title';
     if (kind === 'hint') node.className = 'tooltip-hint';

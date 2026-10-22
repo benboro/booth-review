@@ -204,7 +204,7 @@ function pickGame(i, fromTable = false) {
   ctx.openGame(i, opener ?? refs.gd);
 }
 
-function hoverLines(model, i) {
+function hoverLines(model, i, state) {
   const row = gameRow(model, i);
   const lines = [{ text: `${row.away} at ${row.home}`, kind: 'title' }];
   const kick = kickoffText(row);
@@ -213,11 +213,18 @@ function hoverLines(model, i) {
     kind: 'body',
   });
   lines.push({ text: [slotLabel(row.slot), ...flagLabels(row)].join(' · '), kind: 'body' });
-  if (row.network) lines.push({ text: row.network, kind: 'body' });
+  if (row.network) {
+    lines.push({ kind: 'network', network: { id: row.networkId, name: row.network, family: row.networkFamily } });
+  }
   const pbp = row.crew.find((m) => m.role === 'pbp');
   const analyst = row.crew.find((m) => m.role === 'analyst');
-  const crew = [pbp, analyst].filter(Boolean).map((m) => m.name).join(' / ');
-  if (crew) lines.push({ text: crew, kind: 'body' });
+  const picked = new Set((state?.people ?? []).map((id) => model.personIndex.get(id)));
+  const entries = [pbp, analyst].filter(Boolean).map((m) => ({
+    name: m.name,
+    role: m.role,
+    selected: picked.has(m.person),
+  }));
+  if (entries.length > 0) lines.push({ kind: 'crew', entries });
   if (row.viewers != null) {
     lines.push({
       text: `Viewers: ${viewersText(row)}${row.scope === 'window' ? ' · window-level' : ''}`,
@@ -233,7 +240,6 @@ function hoverLines(model, i) {
       : 'Excitement: not available',
     kind: 'body',
   });
-  lines.push({ text: 'Click for details.', kind: 'hint' });
   return lines;
 }
 
@@ -293,7 +299,7 @@ function bindEvents(gd) {
     const e = ev.event || {};
     const pointerX = e.clientX ?? 0;
     const pointerY = e.clientY ?? 0;
-    showTextTooltip(hoverLines(current.model, it.i), {
+    showTextTooltip(hoverLines(current.model, it.i, current.state), {
       theme: theme(current.env),
       borderColor: ACCENT[theme(current.env)],
       clientX: pointerX,
