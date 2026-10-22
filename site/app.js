@@ -20,6 +20,7 @@
  */
 
 import { prepareData } from './modules/data.js';
+import { currentTheme, onThemeChange } from './modules/theme.js';
 import { defaultState, computeView, toggleFamilyNetworks, familyOnlyPatch, axisPatch, yPatch } from './modules/select.js';
 import { encodeState, decodeState } from './modules/url-state.js';
 import { buildFigure, renderChart, bindChartEvents, TOOLTIP_MODE } from './modules/chart.js';
@@ -70,7 +71,6 @@ const barsOnlyEls = ['bars-title', 'bars-footer', 'bars-captions', 'bars-data'].
   document.getElementById(id),
 );
 
-const darkMedia = window.matchMedia('(prefers-color-scheme: dark)');
 const mobileMedia = window.matchMedia('(max-width: 640px)');
 /** True on a touch device with no real hover capability (D-22): these
  * devices keep tap-to-open-panel and never show the hover tooltip. */
@@ -207,7 +207,7 @@ function tableRenderer({ data, state, view }) {
 /** The env object `buildFigure` needs, refreshed on every render. */
 function currentEnv() {
   return {
-    theme: darkMedia.matches ? 'dark' : 'light',
+    theme: currentTheme(),
     mobile: mobileMedia.matches,
     revision,
     tooltipMode,
@@ -533,7 +533,7 @@ async function startCfb(search = location.search) {
       });
     }
 
-    darkMedia.addEventListener('change', () => {
+    onThemeChange(() => {
       if (cfbActive()) render();
     });
     mobileMedia.addEventListener('change', () => {

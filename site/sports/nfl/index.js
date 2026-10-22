@@ -10,6 +10,7 @@
  * Everything is built with createElement/textContent; no innerHTML.
  */
 import { prepareNfl, gameRow } from './data.js';
+import { currentTheme, onThemeChange } from '../../modules/theme.js';
 import { canonicalNflState, tableGames, gamePasses } from './state.js';
 import { encodeNflState, decodeNflState } from './url-state.js';
 import { createGamesTable } from './table.js';
@@ -66,6 +67,7 @@ let footerOriginals = null; // { freshness: Node[], credit: Node[] }
 let footerRefs = null; // { freshness, credit }
 const mqls = [];
 let mqHandler = null;
+let stopThemeWatch = null;
 
 const hooks = {
   ready: false,
@@ -204,7 +206,7 @@ function restoreFooter() {
 
 function env() {
   return {
-    dark: window.matchMedia('(prefers-color-scheme: dark)').matches,
+    dark: currentTheme() === 'dark',
     mobile: window.matchMedia('(max-width: 640px)').matches,
     hoverNone: window.matchMedia('(hover: none)').matches,
   };
@@ -389,16 +391,19 @@ function attachMedia() {
   mqHandler = () => {
     if (mounted && model && views) views[state.view].mod.render(ctx);
   };
-  for (const q of ['(prefers-color-scheme: dark)', '(max-width: 640px)', '(hover: none)']) {
+  for (const q of ['(max-width: 640px)', '(hover: none)']) {
     const mql = window.matchMedia(q);
     mql.addEventListener('change', mqHandler);
     mqls.push(mql);
   }
+  stopThemeWatch = onThemeChange(mqHandler);
 }
 
 function detachMedia() {
   for (const mql of mqls) mql.removeEventListener('change', mqHandler);
   mqls.length = 0;
+  if (stopThemeWatch) stopThemeWatch();
+  stopThemeWatch = null;
 }
 
 /**
