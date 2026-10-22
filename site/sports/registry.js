@@ -7,19 +7,19 @@ export const SPORTS = [
   {
     id: 'cfb',
     label: 'CFB',
-    title: 'booth-review · college football broadcast crews and viewership',
+    title: 'The Broadcast Ledger · college football broadcast crews and viewership',
   },
   {
     id: 'nfl',
     label: 'NFL',
-    title: 'booth-review · NFL broadcast crews and special games',
+    title: 'The Broadcast Ledger · NFL broadcast crews and special games',
     module: './nfl/index.js',
     data: 'nfl-data.json',
   },
   {
     id: 'mlb',
     label: 'MLB',
-    title: 'booth-review · MLB national telecasts',
+    title: 'The Broadcast Ledger · MLB national telecasts',
     module: './mlb/index.js',
     data: 'mlb-data.json',
   },

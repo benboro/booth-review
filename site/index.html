@@ -1,13 +1,14 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
-<meta name="description" content="An interactive scatter of college football games and their public viewer counts by network, announcer, and matchup quality.">
+<meta name="description" content="The Broadcast Ledger: An interactive scatter of college football games and their public viewer counts by network, announcer, and matchup quality.">
 <meta name="site-data-version" content="__SITE_DATA_VERSION__">
 <!-- booth-review:sports-meta -->
-<title>booth-review · college football broadcast crews and viewership</title>
+<title>The Broadcast Ledger · college football broadcast crews and viewership</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body class="app">
@@ -15,8 +16,10 @@
   <p>The chart needs JavaScript. The methodology and coverage pages work without it: <a href="methodology.html">Methodology</a>, <a href="coverage.html">Coverage</a>.</p>
 </noscript>
 
-<header id="topbar">
-  <a href="index.html" class="site-title">booth-review</a><!-- booth-review:sport-switch -->
+<header id="topbar" class="site-header">
+  <a href="index.html" class="site-title">The Broadcast Ledger</a><!-- booth-review:sport-switch -->
+  <nav class="header-links" aria-label="Pages"><a href="methodology.html">Methodology</a><a href="coverage.html">Coverage</a></nav>
+  <span id="theme-slot" aria-hidden="true"></span>
 </header>
 
 <nav id="toolbar" aria-label="Filters">

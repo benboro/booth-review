@@ -56,8 +56,10 @@ NFL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "contract" / "nfl-data.fixture.
 # Index re-pinned at Phase 11 Plan 10: only the Matched games heading row, venue status and
 # no-match line (4 added lines, 1 removed).
 _SITE_DATA_SHA256 = "8ceec31a10326e809f9a9397da7734be8b1092156ef094093742c7d4e117ac02"
-_COVERAGE_SHA256 = "f3cf1022cdd2bacc514a00971310411288b395acd621ea3f880d12731ed0a4e9"
-_INDEX_PRE_PHASE_SHA256 = "3960852df9d8999c9d6a998cd5c1d3fabe8930da3e853375eaf620d9773a36e4"
+# Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme, new header with theme slot, site name.
+_COVERAGE_SHA256 = "1c2076a54c682ad0355657a0e1a3d938d35c7451c3c7d52bf5342a8753f7c39c"
+# Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme, new header with theme slot, site name.
+_INDEX_PRE_PHASE_SHA256 = "cf4fa302166313a0941193f2d6ba80fa14c5efae7beff8a8b6a7301086fa8519"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'
@@ -108,7 +110,7 @@ def test_flag_on_build(tmp_path: Path) -> None:
     result = _build(out, nfl=True, nfl_payload=load_nfl_site_payload(NFL_FIXTURE))
     index = (out / "index.html").read_text(encoding="utf-8")
     assert '<meta name="booth-review-sports" content="cfb,nfl">' in index
-    topbar = index.split('<header id="topbar">')[1].split("</header>")[0]
+    topbar = index.split('<header id="topbar" class="site-header">')[1].split("</header>")[0]
     assert 'id="sport-switch"' in topbar
     cfb = topbar.index('data-sport="cfb" aria-pressed="true"')
     assert cfb < topbar.index('data-sport="nfl" aria-pressed="false"')

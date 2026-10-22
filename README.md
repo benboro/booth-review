@@ -54,4 +54,4 @@ CFBD, Ratings Reference, or 506 Sports.
 ## License
 
 The code is MIT-licensed. The data isn't covered by that license: it belongs to
-the sources above and is subject to their terms.
+the sources above and is subject to their terms. Network logos under site/logos/ are trademarks of their owners and are not covered by the MIT license; site/logos/manifest.csv records each file's source and licence. The fonts under site/fonts/ are used under the SIL Open Font License 1.1 (the OFL-*.txt files beside them).

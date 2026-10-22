@@ -68,6 +68,12 @@ def freshness_stamps(freshness: Freshness) -> tuple[str, str]:
     return crews, viewership
 
 
+TRADEMARK_LINE = (
+    "Network logos are trademarks of their owners, shown only to identify each network. "
+    "Their use does not imply endorsement, and they are not covered by this site's MIT license."
+)
+
+
 def footer_html(freshness: Freshness) -> str:
     """The `<footer>` body every page shares: Chart/Methodology/Coverage
     nav, both freshness stamps, and the verbatim D-16 credit line.
@@ -85,11 +91,21 @@ def footer_html(freshness: Freshness) -> str:
         '<a href="https://collegefootballdata.com" '
         'rel="noopener noreferrer">CollegeFootballData.com</a>'
     )
+    type_html = (
+        'Type: <a href="fonts/OFL-crimson-text.txt">Crimson Text</a> '
+        "(copyright 2010 The Crimson Text Project Authors), "
+        '<a href="fonts/OFL-roboto.txt">Roboto</a> '
+        "(copyright 2011 The Roboto Project Authors) and "
+        '<a href="fonts/OFL-roboto-condensed.txt">Roboto Condensed</a> '
+        "(copyright 2011 Google Inc.), used under the SIL Open Font License 1.1."
+    )
     freshness_line = f"{html.escape(crews_stamp)} · {html.escape(viewership_stamp)}"
     return (
         f'<nav aria-label="Site">{nav_html}</nav>'
         f'<p class="freshness">{freshness_line}</p>'
         f'<p class="credit-line">{credit_html}</p>'
+        f'<p class="trademark-line">{html.escape(TRADEMARK_LINE, quote=False)}</p>'
+        f'<p class="type-line">{type_html}</p>'
     )
 
 
@@ -101,16 +117,20 @@ def page_html(title: str, body_html: str, freshness: Freshness) -> str:
     footer = footer_html(freshness)
     return (
         "<!DOCTYPE html>\n"
-        '<html lang="en">\n'
+        '<html lang="en" data-theme="light">\n'
         "<head>\n"
         '<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
+        '<meta name="color-scheme" content="light">\n'
         f'<meta http-equiv="Content-Security-Policy" content="{_CSP}">\n'
         f"<title>{html.escape(title)}</title>\n"
         '<link rel="stylesheet" href="style.css">\n'
         "</head>\n"
         "<body>\n"
-        '<header><a href="index.html">booth-review</a></header>\n'
+        '<header class="site-header"><a href="index.html" class="site-title">'
+        'The Broadcast Ledger</a><nav class="header-links" aria-label="Pages">'
+        '<a href="methodology.html">Methodology</a><a href="coverage.html">Coverage</a>'
+        "</nav></header>\n"
         f'<main class="page">{body_html}</main>\n'
         f'<footer class="site-footer">{footer}</footer>\n'
         "</body>\n"
@@ -250,7 +270,7 @@ def render_methodology(
     combined = methodology_text.replace(_INCLUDE_MARKER, _known_gaps_body(known_gaps_text))
     renderer = markdown.Markdown(extensions=["tables", "toc"])
     body_html = _rewrite_relative_md_links(renderer.convert(combined))
-    return page_html("Methodology · booth-review", body_html, site.freshness)
+    return page_html("Methodology · The Broadcast Ledger", body_html, site.freshness)
 
 
 def _pct(value: float | None) -> str:
@@ -351,7 +371,7 @@ def render_coverage(site: SiteData) -> str:
         "<h2>Match and data quality by season</h2>"
         f"{quality_table}"
     )
-    return page_html("Coverage · booth-review", body, site.freshness)
+    return page_html("Coverage · The Broadcast Ledger", body, site.freshness)
 
 
 def write_pages(
