@@ -19,7 +19,8 @@ export const CREWS_LOW_N = 0;
 
 const TIER_KEYS = ['a', 'b', 'conf', 'other'];
 
-const HINT =
+/** Shown in the Crews module's subtitle (13-11); Phase 14 replaces the behaviour it describes. */
+export const CREWS_HINT =
   'Booths by network family and season, for the games your filters show. Selected announcers do not change this table.';
 const RATED_NOTE = 'Rated shows how many games have a viewership figure. It is context, not a ranking.';
 const NO_MATCH = {
@@ -213,7 +214,6 @@ function creditLine(text, href) {
  */
 export function renderCrewsPanel(container, model) {
   container.replaceChildren();
-  container.append(el('p', 'caption crews-hint', HINT));
   if (model.state !== 'rows') {
     const copy = model.state === 'no-order' ? NO_ORDER : NO_MATCH;
     const note = el('div', 'season-empty-note crews-empty');

@@ -307,6 +307,9 @@ function renderChips(data, state) {
 
     const li = document.createElement('li');
     li.className = 'chip';
+    // The chip truncates (64-160px); the title and label carry the full name.
+    li.title = person.name;
+    li.setAttribute('aria-label', person.name);
 
     // D-30: this slot is always present (never conditional on
     // `state.compare`) so toggling Compare only changes its text, never

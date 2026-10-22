@@ -36,6 +36,10 @@
   --space-sm: 8px;
   --space-md: 16px;
   --space-lg: 24px;
+  /* The two vertical-rhythm gaps (SHELL-04). No other rule may set either: filter bar
+     bottom to selection row top, and tab row bottom to the first module top. */
+  --gap-filters-band: 8px;
+  --gap-bar-content: 16px;
   --space-xl: 32px;
   --space-2xl: 48px;
   --space-3xl: 64px;
@@ -292,64 +296,14 @@ li[role="option"][aria-selected="true"] .option-check::after {
 
 /* ---------- Selection bar (D-21) ---------- */
 
-/* The chips, Compare/Called together/Clear selection row, and the summary
-   line all live here now, below the toolbar -- filling the empty band the
-   user flagged between the filters and the plot (D-25). `min-width: 0` lets
-   its flex children shrink instead of forcing the whole page wider. */
+/* The selection band: a 32px row (chips, toggles, Clear all filters), 8px, then
+   a 24px summary box -- exactly 64px at 481px and up with zero to four picks.
+   The old viewport-tiered min-height reserve is gone (C2); the band is fixed by
+   its parts. `min-width: 0` lets its flex children shrink instead of forcing
+   the page wider. */
 #selection-bar {
-  padding: var(--space-sm) var(--space-lg);
+  padding: 0 var(--space-lg);
   min-width: 0;
-  /* D-01/D-04: the reserve covers zero or one person and depends on viewport
-     width only (never on content), so the legend row and chart do not move
-     when a person is added or cleared. Three width tiers, each the measured
-     natural one-person band height (min-height 0, fixture person with the
-     longest name, default / DejaVu / wide fonts) rounded up with ~5-6px of
-     headroom for font metrics that differ across machines.
-     481-751px: the box wraps its buttons under the chip, so the band is
-     natural 120.2 / 121.2 / 121.2px; reserve 127px. */
-  min-height: 127px;
-}
-
-/* 752-1103px: the box fits on one row (39.6px) and the summary line sits
-   under it: natural 84.6 / 85.6 / 85.6px; reserve 91px (empty gap about
-   63px). The row stops wrapping at 745px in the wide font, so 752 is the
-   next multiple of 8. */
-@media (min-width: 752px) {
-  #selection-bar {
-    min-height: 91px;
-  }
-}
-
-/* D-02 (revised): from 1104px up the summary sits beside the box, to its
-   right with an 8px gap, on one row: natural 55.6px in all three fonts;
-   reserve 61px (empty gap about 26px). 1104px is the breakpoint B: the
-   smallest multiple of 8 at which the widest one-person box (680px in the
-   wide font), the 8px gap, the full count (220px) and 120px of detail fit
-   inside the bar's content box (1088px gave only 108px of detail). */
-@media (min-width: 1104px) {
-  #selection-bar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    column-gap: var(--space-sm);
-    min-height: 61px;
-  }
-
-  /* Full width, so Clear all filters sits at the row's right end (C1). */
-  .selection-row {
-    flex: 1 1 100%;
-    max-width: 100%;
-  }
-
-  #summary {
-    flex: 1 1 16rem;
-    min-width: 0;
-    margin-top: 0;
-  }
-
-  #compare-note {
-    flex-basis: 100%;
-  }
 }
 
 .selection-row {
@@ -412,6 +366,80 @@ li[role="option"][aria-selected="true"] .option-check::after {
 
 .lbl-short {
   display: none;
+}
+
+/* 481px and up: the selection row never wraps (C2). Chips truncate (64-160px,
+   full name in title and aria-label); below 1104px the toggles use their short
+   labels; Clear all filters stays at the right end. */
+@media (min-width: 481px) {
+  .selection-row {
+    flex-wrap: nowrap;
+    height: 32px;
+    min-height: 0;
+    box-sizing: border-box;
+  }
+
+  #chips,
+  #nfl-chips,
+  #mlb-chips {
+    flex-wrap: nowrap;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  #chips > .chip,
+  #nfl-chips > .chip,
+  #mlb-chips > .chip {
+    box-sizing: border-box;
+    height: 28px;
+    min-width: 64px;
+    max-width: 160px;
+    flex: 0 1 auto;
+    padding: 0 var(--space-sm);
+    border-radius: 14px;
+    background: var(--bg);
+  }
+
+  .selection-row .toggle-group {
+    flex-wrap: nowrap;
+    flex: none;
+  }
+
+  .selection-row .toggle,
+  .selection-row #clear-selection,
+  .mlb-selection-area .toggle {
+    box-sizing: border-box;
+    height: 28px;
+    padding: 0 12px;
+    white-space: nowrap;
+  }
+
+  .selection-row .clear-all {
+    margin-left: auto;
+    flex: none;
+    white-space: nowrap;
+  }
+}
+
+@media (min-width: 481px) {
+  .lbl-long {
+    display: none;
+  }
+
+  .lbl-short {
+    display: inline;
+  }
+}
+
+@media (min-width: 1104px) {
+  .lbl-long {
+    display: inline;
+  }
+
+  .lbl-short {
+    display: none;
+  }
 }
 
 .toggle {
@@ -495,10 +523,12 @@ li[role="option"][aria-selected="true"] .option-check::after {
   color: var(--muted);
 }
 
+/* Inside the summary box (D-03): transient text, never an extra row. */
 #compare-note {
+  flex: none;
   font: var(--font-body);
   color: var(--muted);
-  margin: var(--space-xs) 0 0 0;
+  white-space: nowrap;
 }
 
 .helper,
@@ -522,19 +552,15 @@ li[role="option"][aria-selected="true"] .option-check::after {
 #summary {
   display: flex;
   flex-wrap: nowrap;
-  align-items: baseline;
+  align-items: center;
   column-gap: var(--space-sm);
   text-align: left;
-  margin-top: var(--space-xs);
-  /* A flex container forms its own formatting context (no CSS2.1 "strut"),
-     so with no selection both #summary-count and #summary-detail are empty
-     text and the whole box collapses to 0 height -- appearing "hidden" to
-     a real visitor and to Playwright's own visibility check alike (Rule 1,
-     found while writing test_site_layout.py's
-     test_selection_row_hidden_with_no_people). A block #summary (its
-     pre-flex shape) never had this problem, since an empty inline "strut"
-     still reserves one line of height. */
-  min-height: 1.5em;
+  /* The 24px fixed box, 8px below the selection row. A flex container with
+     only empty text collapses, so the height is explicit. */
+  box-sizing: border-box;
+  height: 24px;
+  margin-top: var(--space-sm);
+  overflow: hidden;
 }
 
 /* The detail stays one line and ends in an ellipsis when it does not fit
@@ -667,7 +693,7 @@ body.app {
   /* D-25: side gutters (>=16px) plus a small top pad -- the selection bar
      above already supplies its own vertical space, so this no longer needs
      the old `--space-xl` top pad to avoid crowding the toolbar. */
-  padding: var(--space-sm) var(--space-lg) 0;
+  padding: var(--space-md) var(--space-lg) 0;
   /* Regression (2026-09-27): `#chart-area` must stay in normal flow, never
      a floating/pinned position -- making it sticky alongside the old left
      filter column (11ac9b5) pinned it over the "Matched games" table once
@@ -692,6 +718,7 @@ body.app {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm);
+  margin-bottom: var(--gap-filters-band);
   min-height: 48px;
   padding: var(--space-sm) var(--space-md);
   background: var(--surface);
@@ -1891,6 +1918,9 @@ input[type="checkbox"] {
   gap: 4px;
   border-bottom: 1px solid var(--rule-strong);
   min-height: 40px;
+  box-sizing: border-box;
+  /* The only rule that sets the tab-row-to-module gap (SHELL-04). */
+  margin-bottom: var(--gap-bar-content);
 }
 
 .chart-tab {
@@ -1920,23 +1950,12 @@ input[type="checkbox"] {
   outline-offset: 2px;
 }
 
-.tab-hint {
-  min-height: 24px;
-  margin: 0;
-  /* One line always: a wrapped Map prompt would push the chart panel down (04.18 D-09). */
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font: var(--font-body);
-  color: var(--muted);
-}
-
 /* D-14/D-17: both control sets share one grid cell so the slot never shifts. */
 .chart-controls {
   display: grid;
-  /* D-22: the row's bottom spacing lives here, not on each control, so no
-     control's margin box shifts its text off the shared baseline. */
-  margin-bottom: var(--space-md);
+  /* The controls live in the module header tools now; their spacing is the
+     header's own (D-22: no control's margin box shifts the shared baseline). */
+  margin-bottom: 0;
 }
 
 .chart-controls .segmented {
@@ -2676,15 +2695,6 @@ html:has(#mlb-detail-panel[open]) {
 /* ---------- Phones (≤480px) ---------- */
 
 @media (max-width: 480px) {
-  /* Phones keep no reserve (user, 2026-10-13): the one-person reserve left a
-     ~128px blank band under the summary with nobody selected. The trade-off:
-     the chart moves down when the first person is added and back up on
-     Clear. Picks from the full-screen Filters sheet hide the move; a tap on a
-     person bar in Bars does not. */
-  #selection-bar {
-    min-height: 0;
-  }
-
   .selection-row {
     flex-direction: column;
     align-items: stretch;
@@ -3123,6 +3133,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm);
+  margin-bottom: var(--gap-filters-band);
   min-height: 48px;
   padding: var(--space-sm) var(--space-md);
   background: var(--surface);
@@ -3346,55 +3357,58 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 #nfl-selection-bar,
 #mlb-selection-bar {
-  padding: var(--space-sm) var(--space-lg);
+  padding: 0 var(--space-lg);
   min-width: 0;
-  min-height: 127px;
 }
 
-@media (min-width: 752px) {
-  #nfl-selection-bar,
-  #mlb-selection-bar {
-    min-height: 91px;
-  }
-}
-
-@media (min-width: 1104px) {
-  #nfl-selection-bar,
-  #mlb-selection-bar {
-    min-height: 61px;
-  }
-}
-
-@media (max-width: 480px) {
-  #nfl-selection-bar,
-  #mlb-selection-bar {
-    min-height: 0;
-  }
-
-  /* With no reserve, the empty chip list and summary's margins would make the
-     empty NFL band 12px taller than CFB's and move the chart on a sport
-     switch (SITE-20). */
-  .nfl-chips:empty,
-  .nfl-summary:empty {
-    display: none;
-  }
-}
-
-/* 999.5-19: the NFL headline sits in the reserved band like CFB's summary count. */
-#nfl-headline,
-#mlb-headline {
-  margin: var(--space-xs) 0 0;
-  font: var(--font-heading);
-  font-weight: var(--weight-semibold);
+/* The NFL and MLB summary is the same 24px fixed box as CFB's, 8px below the row. */
+.nfl-summary {
+  box-sizing: border-box;
+  height: 24px;
+  margin: var(--space-sm) 0 0;
+  font: var(--font-body);
+  color: var(--muted);
+  line-height: 24px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* The NFL and MLB headline is the module title now (module-head). */
+#nfl-headline,
+#mlb-chart-title {
+  margin: 0;
+}
+
+/* MLB has no filter bar: its labelled selection area takes the bar's place,
+   32px high, in the same position (SHELL-03). */
+#mlb-toolbar {
+  display: none;
+}
+
+.mlb-selection-area {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  height: 32px;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.mlb-selection-note {
+  margin: 0;
+  font: var(--font-body);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
 #nfl-chips,
 #mlb-chips {
   list-style: none;
-  margin: 0 0 var(--space-xs) 0;
+  margin: 0;
   padding: 0;
   display: flex;
   flex-wrap: wrap;
@@ -3403,7 +3417,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 #nfl-chart-area,
 #mlb-chart-area {
-  padding: var(--space-sm) var(--space-lg) 0;
+  padding: var(--space-md) var(--space-lg) 0;
   position: static;
   display: flex;
   flex-direction: column;
@@ -4151,7 +4165,8 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .module-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
+  min-height: 32px;
   gap: var(--space-sm) var(--space-md);
   margin-bottom: var(--space-md);
 }
@@ -4162,8 +4177,16 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 .module-subtitle {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
   font: var(--font-body);
   color: var(--muted);
+  /* One line always: a wrapped hint would push the chart down (04.18 D-09). The
+     full text is the element's title. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .module-tools {
@@ -4249,3 +4272,30 @@ tr.is-matched > :first-child {
   box-shadow: inset 2px 0 0 var(--ink);
 }
 
+
+/* CFB chart module: a flex column so the phone `order` rules (legend row and
+   captions below the chart) keep working now that they sit inside the module. */
+#chart-module {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+#chart-module > .module-head .module-title:empty {
+  display: none;
+}
+
+@media (max-width: 480px) {
+  .module-tools {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .module-subtitle {
+    flex-basis: 100%;
+  }
+
+  #chart-tools > #chart-controls {
+    width: 100%;
+  }
+}

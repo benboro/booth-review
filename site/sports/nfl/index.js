@@ -101,25 +101,33 @@ function buildRegions(footerEl) {
   clearBtn.hidden = true;
   const summary = el('p', 'nfl-summary');
   summary.id = 'nfl-summary';
-  const headline = el('h2', 'nfl-headline');
+  // The headline is the chart module's title (13-11); it keeps its id.
+  const headline = el('h2', 'nfl-headline module-title');
   headline.id = 'nfl-headline';
   // Always-rendered 32px row: chips, Clear selection, then Clear all filters at
   // the right end (filters.js places it; C1).
   const selectionRow = el('div', 'selection-row nfl-selection-row');
   selectionRow.id = 'nfl-selection-row';
   selectionRow.append(chips, clearBtn);
-  selection.append(selectionRow, summary, headline);
+  selection.append(selectionRow, summary);
 
   const chartArea = el('section', 'nfl-region');
   chartArea.id = 'nfl-chart-area';
   chartArea.setAttribute('aria-label', 'Chart');
   const tabHost = el('div', 'nfl-tabs-host');
-  const hint = el('p', 'tab-hint');
-  hint.id = 'nfl-tab-hint';
+  // Module frame (SHELL-06): title (the headline), subtitle (the tab hint, C6) and tools.
+  const chartModule = el('div', 'module nfl-chart-module');
+  const moduleHead = el('div', 'module-head');
+  const hint = el('p', 'module-subtitle');
+  hint.id = 'nfl-chart-subtitle';
   hint.setAttribute('role', 'status');
+  const tools = el('div', 'module-tools');
+  tools.id = 'nfl-chart-tools';
+  moduleHead.append(headline, hint, tools);
   const viewHost = el('div', 'nfl-views');
   const status = el('div', 'nfl-status');
-  chartArea.append(tabHost, hint, viewHost, status);
+  chartModule.append(moduleHead, viewHost, status);
+  chartArea.append(tabHost, chartModule);
 
   const matched = el('section', 'nfl-region');
   matched.id = 'nfl-matched-games';
@@ -128,7 +136,7 @@ function buildRegions(footerEl) {
   filterLayer.id = 'nfl-filter-layer';
 
   footerEl.before(toolbar, filterLayer, selection, chartArea, matched);
-  return { toolbar, filterLayer, selection, selectionRow, chips, clearBtn, summary, chartArea, tabHost, hint, viewHost, status, matched, headline };
+  return { toolbar, filterLayer, selection, selectionRow, chips, clearBtn, summary, chartArea, tabHost, hint, tools, viewHost, status, matched, headline };
 }
 
 function showStatus(kind) {
@@ -237,6 +245,8 @@ function renderSelectionBar() {
   const { chips, clearBtn, summary } = regions;
   const chip = (name, onRemove) => {
     const li = el('li', 'chip');
+    li.title = name;
+    li.setAttribute('aria-label', name);
     const label = el('span', 'chip-label', name);
     const rm = el('button', 'chip-remove', '×');
     rm.type = 'button';
@@ -331,6 +341,10 @@ const ctx = {
   methodologyHref: (anchor) => (anchor ? `${METHODOLOGY}#${anchor}` : METHODOLOGY),
   setTabHint: (text) => {
     if (regions) regions.hint.textContent = text || '';
+  },
+  /** The chart module header's tools slot (view tools move in here in 13-13). */
+  get chartTools() {
+    return regions ? regions.tools : null;
   },
 };
 

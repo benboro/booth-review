@@ -90,34 +90,46 @@ function buildRegions(footerEl) {
   const selection = el('section', 'nfl-region');
   selection.id = 'mlb-selection-bar';
   selection.setAttribute('aria-label', 'Selection');
+  // MLB has no filter bar: this labelled 32px area takes its place (SHELL-03).
+  const area = el('div', 'mlb-selection-area');
+  area.id = 'mlb-selection-area';
+  const note = el('p', 'mlb-selection-note', 'Filters: none. MLB is selection-driven; pick a row below.');
   const chips = el('ul', 'nfl-chips');
   chips.id = 'mlb-chips';
   const clearBtn = el('button', 'toggle', 'Clear selection');
   clearBtn.type = 'button';
   clearBtn.id = 'mlb-clear-selection';
   clearBtn.hidden = true;
+  area.append(note, chips, clearBtn);
   const summary = el('p', 'nfl-summary');
   summary.id = 'mlb-summary';
-  const headline = el('h2', 'nfl-headline');
-  headline.id = 'mlb-headline';
-  selection.append(chips, clearBtn, summary, headline);
+  selection.append(area, summary);
 
   const chartArea = el('section', 'nfl-region');
   chartArea.id = 'mlb-chart-area';
   chartArea.setAttribute('aria-label', 'Chart');
   const tabHost = el('div', 'nfl-tabs-host');
-  const hint = el('p', 'tab-hint');
-  hint.id = 'mlb-tab-hint';
+  // Module frame (SHELL-06): title (the headline), subtitle (the tab hint, C6) and tools.
+  const chartModule = el('div', 'module nfl-chart-module');
+  const moduleHead = el('div', 'module-head');
+  const headline = el('h2', 'nfl-headline module-title');
+  headline.id = 'mlb-chart-title';
+  const hint = el('p', 'module-subtitle');
+  hint.id = 'mlb-chart-subtitle';
   hint.setAttribute('role', 'status');
+  const tools = el('div', 'module-tools');
+  tools.id = 'mlb-chart-tools';
+  moduleHead.append(headline, hint, tools);
   const viewHost = el('div', 'nfl-views');
   const status = el('div', 'nfl-status');
-  chartArea.append(tabHost, hint, viewHost, status);
+  chartModule.append(moduleHead, viewHost, status);
+  chartArea.append(tabHost, chartModule);
 
   const matched = el('section', 'nfl-region');
   matched.id = 'mlb-matched-games';
 
   footerEl.before(toolbar, selection, chartArea, matched);
-  return { toolbar, selection, chips, clearBtn, summary, chartArea, tabHost, hint, viewHost, status, matched, headline };
+  return { toolbar, selection, chips, clearBtn, summary, chartArea, tabHost, hint, tools, viewHost, status, matched, headline };
 }
 
 function showStatus(kind) {
@@ -212,6 +224,8 @@ function renderSelectionBar() {
   const label = selectionLabel(model, state);
   if (label) {
     const li = el('li', 'chip');
+    li.title = label;
+    li.setAttribute('aria-label', label);
     const rm = el('button', 'chip-remove', '×');
     rm.type = 'button';
     rm.setAttribute('aria-label', `Remove ${label}`);
