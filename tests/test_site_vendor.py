@@ -1,6 +1,6 @@
-"""Digest and normalization checks for the vendored Plotly.js full bundle (D-14).
+"""Digest and normalization checks for the vendored Plotly.js partial bundle (D-14).
 
-The bundle at site/vendor/plotly-4.1.1.min.js is downloaded once and pinned by
+The bundle at site/vendor/plotly-partial-4.1.1.min.js is downloaded once and pinned by
 its SHA-256 digest. These tests prove the committed bytes still match that pinned
 digest, the recorded .sha256 file agrees, and git never text-normalizes the bundle
 (which would silently change its bytes and invalidate the pinned digest).
@@ -20,10 +20,10 @@ from booth_review.build import site_assembly
 from booth_review.errors import SiteBuildError
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-BUNDLE_PATH = REPO_ROOT / "site" / "vendor" / "plotly-4.1.1.min.js"
-DIGEST_PATH = REPO_ROOT / "site" / "vendor" / "plotly-4.1.1.min.js.sha256"
+BUNDLE_PATH = REPO_ROOT / "site" / "vendor" / "plotly-partial-4.1.1.min.js"
+DIGEST_PATH = REPO_ROOT / "site" / "vendor" / "plotly-partial-4.1.1.min.js.sha256"
 
-EXPECTED_SHA256 = "3b6e15d45dbb7fca5bd2094291e961ddc5472cd887009e6009a56dab668d721f"
+EXPECTED_SHA256 = "bdf808c7a31ad3510f4f0306cb2720f999b8386de2e97cd6400720f7401bd04d"
 
 
 def test_bundle_matches_pinned_digest() -> None:
@@ -34,18 +34,38 @@ def test_bundle_matches_pinned_digest() -> None:
 def test_recorded_digest_file_matches() -> None:
     tokens = DIGEST_PATH.read_text(encoding="utf-8").split()
     assert tokens[0] == EXPECTED_SHA256
-    assert tokens[1] == "plotly-4.1.1.min.js"
+    assert tokens[1] == "plotly-partial-4.1.1.min.js"
 
 
 def test_bundle_is_not_text_normalized() -> None:
     result = subprocess.run(
-        ["git", "check-attr", "text", "--", "site/vendor/plotly-4.1.1.min.js"],
+        ["git", "check-attr", "text", "--", "site/vendor/plotly-partial-4.1.1.min.js"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
         check=True,
     )
     assert "text: unset" in result.stdout
+
+
+def test_build_constant_matches() -> None:
+    assert site_assembly.PLOTLY_SHA256 == EXPECTED_SHA256
+
+
+def test_index_sri_matches() -> None:
+    html = (REPO_ROOT / "site" / "index.html").read_text(encoding="utf-8")
+    assert (
+        '<script src="vendor/plotly-partial-4.1.1.min.js" '
+        'integrity="sha256-vfgIx6Ma01EPTwMGyycg+Zm4OG3i6XzWQAcg90Ab0E0="'
+    ) in html
+
+
+def test_unsafe_eval_is_recorded() -> None:
+    html = (REPO_ROOT / "site" / "index.html").read_text(encoding="utf-8")
+    readme = (REPO_ROOT / "site" / "vendor" / "README.md").read_text(encoding="utf-8")
+    assert "'unsafe-eval'" in html
+    assert "unsafe-eval" in readme
+    assert "spike 005" in readme
 
 
 GEOMETRY_PATH = REPO_ROOT / "site" / "vendor" / "us-states-albers.js"

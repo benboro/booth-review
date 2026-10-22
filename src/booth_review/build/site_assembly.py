@@ -36,8 +36,9 @@ from booth_review.contract.nfl_models import NflSiteData, validate_nfl_site_data
 from booth_review.errors import KeyLeakError, MissingApiKeyError, SiteBuildError
 from booth_review.transport.cache import atomic_write_bytes
 
-PLOTLY_BUNDLE = "vendor/plotly-4.1.1.min.js"
-PLOTLY_SHA256 = "3b6e15d45dbb7fca5bd2094291e961ddc5472cd887009e6009a56dab668d721f"
+# Partial Plotly 4.1.1 bundle (traces scatter, scattergl, bar), built from the v4.1.1 tag.
+PLOTLY_BUNDLE = "vendor/plotly-partial-4.1.1.min.js"
+PLOTLY_SHA256 = "bdf808c7a31ad3510f4f0306cb2720f999b8386de2e97cd6400720f7401bd04d"
 MAP_GEOMETRY = "vendor/us-states-albers.js"
 MAP_GEOMETRY_SHA256 = "ff1e0a82d121f389782ef3ff466fc2910a08b7594af9e92598ac4032a9e2d3dc"
 # Pages, scripts and styles, plus the vendored fonts (.woff2), their OFL texts (.txt)
