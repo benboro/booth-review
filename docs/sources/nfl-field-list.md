@@ -196,12 +196,13 @@ are already shipped; spread-adjusted residuals and their standard errors ship
 only as aggregates over a booth-season or category-season row, because a
 per-game residual would let a reader infer a game's spread band. Adjusted and
 Residual modes stay available under row filters (Seasons, a Booths pick on
-Crews, an Announcers pick that matches a booth row's play-by-play voice),
-which pool the shipped rows exactly from their `n`, mean and standard error.
-Under game-subset filters (Team, Category, Viewership by category, an
-Announcers pick that matches an analyst or fill-in inside a row) the view
-switches to Raw, recomputed in the browser from `games[]` fields, with a short
-on-screen reason. No NFL contract, golden or fixture changes.
+Crews, a Category pick on Viewership or Special games, an Announcers pick that
+matches a booth row's play-by-play voice), which pool the shipped rows exactly
+from their `n`, mean and standard error. Under game-subset filters (Team, a
+Category pick on Crews, a Booths or Announcers pick on Viewership, a Category
+pick on Viewership combined with another pick, an Announcers pick that matches
+an analyst or fill-in inside a Crews row) the view switches to Raw, recomputed
+in the browser from `games[]` fields, with a short on-screen reason. No NFL contract, golden or fixture changes.
 
 | Affected cell (view x pick) | Serving field or Raw switch |
 |---|---|
