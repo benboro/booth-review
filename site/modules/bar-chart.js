@@ -55,7 +55,7 @@ import {
   FAMILY_COLORS,
   MUTED,
   PAGE_BG,
-  SPECIAL,
+  INK,
   channelShades,
   familyKey,
   mixHex,
@@ -170,14 +170,14 @@ function widest(labels, opts) {
 /**
  * Tone A / Tone B fills for a row (D-16): a network row uses its family
  * color, an announcer row its main family color (D-31), every other row the
- * violet special-filter pair (D-24, superseding D-16's neutral ink tone).
+ * neutral ink pair (D-04).
  * @param {{family: string|null, mainFamily?: string|null}} row
  * @param {'light'|'dark'} theme
  * @returns {{a: string, b: string}}
  */
 export function barTones(row, theme) {
   const family = row.family ?? row.mainFamily ?? null;
-  const base = family != null ? FAMILY_COLORS[theme][familyKey(family)] : SPECIAL[theme];
+  const base = family != null ? FAMILY_COLORS[theme][familyKey(family)] : INK[theme];
   return { a: base, b: mixHex(base, PAGE_BG[theme], 0.55) };
 }
 

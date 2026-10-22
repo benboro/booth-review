@@ -217,7 +217,7 @@ function buildLabelLine(kind, label) {
 
 /**
  * Bowl line (D-20, D-21): bowl icon, then the official name with the core
- * name bold in --text and the sponsor text around it in --muted. textContent
+ * name bold in --ink and the sponsor text around it in --muted. textContent
  * only, so a hostile name renders as literal text.
  * @param {{name: string, core: string}} bowl
  * @returns {HTMLParagraphElement}
@@ -238,7 +238,7 @@ function buildBowlLine(bowl) {
   if (at < 0) {
     const plain = document.createElement('span');
     plain.style.fontWeight = '400';
-    plain.style.color = 'var(--text)';
+    plain.style.color = 'var(--ink)';
     plain.textContent = bowl.name;
     parts.push(plain);
   } else {
@@ -253,7 +253,7 @@ function buildBowlLine(bowl) {
 
 /**
  * Rivalry line (04.10 D-11): crossed-swords icon, then the rivalry name bold
- * in --text. textContent only, so a hostile name renders as literal text.
+ * in --ink. textContent only, so a hostile name renders as literal text.
  * @param {string} name
  * @returns {HTMLParagraphElement}
  */

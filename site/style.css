@@ -1,4 +1,33 @@
-/* booth-review — hand-written CSS. No remote imports, embedded fonts, or external resource references. */
+/* booth-review — hand-written CSS. No remote imports; fonts are self-hosted same-origin woff2 files under fonts/. */
+
+@font-face {
+  font-family: "Crimson Text";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("fonts/crimson-text-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Roboto";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/roboto-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Roboto";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("fonts/roboto-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Roboto Condensed";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/roboto-condensed-latin-400-normal.woff2") format("woff2");
+}
 
 :root {
   color-scheme: light;
@@ -10,39 +39,34 @@
   --space-2xl: 48px;
   --space-3xl: 64px;
 
-  --font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-  --font-body: 16px/1.5 var(--font-family);
-  --font-label: 14px/1.4 var(--font-family);
-  --font-heading: 20px/1.2 var(--font-family);
-  --font-display: 28px/1.2 var(--font-family);
+  --serif: "Crimson Text", Georgia, serif;
+  --sans: "Roboto", Arial, sans-serif;
+  --plot: "Roboto Condensed", Arial, sans-serif;
+  --font-caption: 12px/1.4 var(--sans);
+  --font-body: 14px/1.5 var(--sans);
+  --font-heading: 600 20px/1.2 var(--serif);
+  --font-display: 600 24px/1.1 var(--serif);
   --weight-regular: 400;
   --weight-semibold: 600;
 
-  --bg: #FFFFFF;
-  --surface: #F4F5F7;
-  --border: #E2E4E9;
-  --accent: #111827;
-  --text: #111827;
-  --muted: #4B5563;
-  /* Greyed (count 0) options and legend chips. Only for --bg surfaces, never --surface. */
-  --muted-weak: #6B7280;
+  --bg: #FBF9F5;
+  --surface: #F4F0E8;
+  --ink: #23201B;
+  --muted: #6A6358;
+  --rule: #E4DDD1;
+  --rule-strong: #CFC6B6;
+  --accent: #1B4F5C;
+  --accent-soft: #E3EDEF;
+  --accent-soft-hover: #D3E3E7;
+  --disabled: #9C9486;
   --error: #B3261E;
-  /* D-25: "Clear all filters" own accent color -- the same verified pair as
-     --error today, kept as its own token so the two can diverge later
-     without also changing the error banner's color. */
-  --reset: #B3261E;
   /* Game-type icon colors (notes-4 A1/A2a follow-up): trophy = gold, bowl =
-     bronze/copper. Each reaches 3:1 non-text contrast (WCAG 1.4.11) against
-     --surface, the tooltip and detail-panel background: light 3.67 / 5.03,
-     dark 9.90 / 5.13. */
+     bronze/copper, rivalry = rose crimson. Each reaches 3:1 non-text
+     contrast (WCAG 1.4.11) against --bg and --surface. */
   --game-playoff: #A37800;
   --game-bowl: #A8501C;
-  --game-rivalry: #B42318;
+  --game-rivalry: #8F2D3A;
   --game-playoff-text: #7A5A00;
-  /* D-34: violet special-filter hue for the Announcers button (not an
-     Okabe-Ito family color). 5.70/5.22 on --bg/--surface; filled 5.70. */
-  --special: #7C3AED;
-  --on-special: #FFFFFF;
 }
 
 /* Placeholder dark values; untested until Phase 17. The data-theme attribute is the only theme hook. */
@@ -50,19 +74,19 @@
   color-scheme: dark;
   --bg: #14161A;
   --surface: #1E2126;
-  --border: #2A2E35;
-  --accent: #E5E7EB;
-  --text: #E5E7EB;
+  --ink: #E5E7EB;
   --muted: #9CA3AF;
-  --muted-weak: #7B8492;
+  --rule: #2A2E35;
+  --rule-strong: #3A3F47;
+  --accent: #E5E7EB;
+  --accent-soft: #1E2126;
+  --accent-soft-hover: #2A2E35;
+  --disabled: #7B8492;
   --error: #F2B8B5;
-  --reset: #F2B8B5;
   --game-playoff: #F5C518;
   --game-bowl: #CD7F32;
   --game-rivalry: #F97066;
   --game-playoff-text: #F5C518;
-  --special: #A78BFA;
-  --on-special: #111827;
 }
 
 * {
@@ -73,13 +97,13 @@ html, body {
   margin: 0;
   padding: 0;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   font: var(--font-body);
   font-weight: var(--weight-regular);
 }
 
 a {
-  color: var(--accent);
+  color: var(--ink);
   text-decoration: underline;
 }
 
@@ -118,19 +142,46 @@ h1, h2, h3 {
 /* D-21: the top bar now holds only the site title -- the person search
    moved into the toolbar's Announcers popover, and the chips/toggles/
    summary moved into #selection-bar below the toolbar (see that section). */
+.site-header,
 #topbar {
   display: flex;
-  align-items: center;
-  min-height: 56px;
-  padding: 0 var(--space-lg);
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  align-items: baseline;
+  min-height: 64px;
+  padding: var(--space-md) var(--space-lg);
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
 }
 
 .site-title {
-  font: var(--font-heading);
-  font-weight: var(--weight-semibold);
+  font: var(--font-display);
+  color: var(--ink);
   text-decoration: none;
+}
+
+.header-links {
+  display: flex;
+  gap: var(--space-md);
+  margin-left: auto;
+}
+
+.header-links a {
+  font: var(--font-body);
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.header-links a:hover,
+.header-links a:focus-visible {
+  text-decoration: underline;
+}
+
+/* Phase 17 mounts the theme toggle here; empty until then. */
+#theme-slot {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  margin-left: var(--space-md);
 }
 
 /* D-28: a flex column so #person-results (flex: 1 1 auto) can grow to fill
@@ -146,10 +197,10 @@ h1, h2, h3 {
 .search-field input {
   font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 4px;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   width: 100%;
 }
 
@@ -170,7 +221,7 @@ h1, h2, h3 {
   min-height: 0;
   overflow-y: auto;
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 4px;
 }
 
@@ -178,10 +229,10 @@ h1, h2, h3 {
 #school-search {
   font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 4px;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   width: 100%;
 }
 
@@ -200,7 +251,7 @@ h1, h2, h3 {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  font: var(--font-label);
+  font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
   cursor: pointer;
 }
@@ -304,12 +355,7 @@ li[role="option"][aria-selected="true"] .option-check::after {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm);
-  /* D-13: the selection controls sit in a violet box (8% tint keeps violet
-     text >= 4.5:1). */
-  border: 1px solid var(--special);
-  border-radius: 8px;
-  padding: var(--space-xs);
-  background: color-mix(in srgb, var(--special) 8%, var(--bg));
+  /* D-03: no box; chips and toggles sit on the page. */
 }
 
 #chips {
@@ -324,13 +370,13 @@ li[role="option"][aria-selected="true"] .option-check::after {
 }
 
 .chip {
-  font: var(--font-label);
+  font: var(--font-body);
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
   padding: 2px var(--space-sm);
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 999px;
   max-width: 100%;
 }
@@ -349,8 +395,8 @@ li[role="option"][aria-selected="true"] .option-check::after {
   border: none;
   background: none;
   cursor: pointer;
-  color: var(--text);
-  font: var(--font-label);
+  color: var(--ink);
+  font: var(--font-body);
 }
 
 .toggle-group {
@@ -365,12 +411,12 @@ li[role="option"][aria-selected="true"] .option-check::after {
 }
 
 .toggle {
-  font: var(--font-label);
+  font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 4px;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   cursor: pointer;
 }
 
@@ -413,15 +459,15 @@ li[role="option"][aria-selected="true"] .option-check::after {
 
 /* D-30: Clear selection is its own kind of control -- a dashed secondary
    treatment, never the toggle's filled/outlined look and never Clear all
-   filters' `--reset` red, so the two "clear" actions read as distinct.
+   filters' `--ink` red, so the two "clear" actions read as distinct.
    Dashed `--muted` on `--bg` clears 3:1 in both themes (about 7.5:1 light,
    7.3:1 dark). The explicit `background`/`color` (D-25a) keeps dark mode
    from ever falling back to the UA's own white button face. */
 #clear-selection {
-  font: var(--font-label);
+  font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   border: 1px dashed var(--muted);
   border-radius: 4px;
   cursor: pointer;
@@ -446,14 +492,14 @@ li[role="option"][aria-selected="true"] .option-check::after {
 }
 
 #compare-note {
-  font: var(--font-label);
+  font: var(--font-body);
   color: var(--muted);
   margin: var(--space-xs) 0 0 0;
 }
 
 .helper,
 .caption {
-  font: var(--font-label);
+  font: var(--font-body);
   color: var(--muted);
   margin: var(--space-xs) 0 0 0;
 }
@@ -502,12 +548,12 @@ li[role="option"][aria-selected="true"] .option-check::after {
 /* `#filters-button`'s visibility comes from `.mobile-only` below; this rule
    is only its shape. */
 #filters-button {
-  font: var(--font-label);
+  font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 4px;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   cursor: pointer;
 }
 
@@ -594,23 +640,23 @@ body.app {
   min-height: 48px;
   padding: var(--space-sm) var(--space-md);
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--rule);
   /* Never sticky or fixed -- scrolls with the page like any other block
      (D-02). */
 }
 
 .filter-trigger {
-  font: var(--font-label);
+  font: var(--font-body);
   padding: 6px var(--space-sm);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 6px;
   background: var(--bg);
   /* Regression: form controls don't inherit `color` from an ancestor like
      `body` -- the UA stylesheet sets an explicit color for `<button>`
      itself, which wins over inheritance. Without this, the button rendered
      in the browser's default button-text color instead of the theme's
-     `--text` token, failing WCAG AA 4.5:1 in dark mode against `--bg`. */
-  color: var(--text);
+     `--ink` token, failing WCAG AA 4.5:1 in dark mode against `--bg`. */
+  color: var(--ink);
   cursor: pointer;
   /* Labels truncate in their grid cell; the full label is the button's title
      and aria-label (04.9 D-21). */
@@ -633,19 +679,19 @@ body.app {
 /* D-25b: "Clear all filters" gets a style distinct from the plain filter
    triggers above -- an outlined accent, never the same look as the filter
    buttons -- while it also clears the selected announcers (D-27). An
-   outlined `--reset` treatment rather than a filled one, so it doesn't read
+   outlined `--ink` treatment rather than a filled one, so it doesn't read
    as more prominent than the primary filter controls. Contrast against the
    toolbar's `--surface` background (#F4F5F7 light / #1E2126 dark):
-   `--reset` on light is ~6.0:1, on dark ~9.5:1 -- both clear WCAG AA's
+   `--ink` on light is ~6.0:1, on dark ~9.5:1 -- both clear WCAG AA's
    4.5:1 minimum. */
 #clear-filters {
-  font: var(--font-label);
+  font: var(--font-body);
   font-weight: var(--weight-semibold);
   padding: 6px var(--space-sm);
-  border: 1px solid var(--reset);
+  border: 1px solid var(--ink);
   border-radius: 6px;
   background: transparent;
-  color: var(--reset);
+  color: var(--ink);
   cursor: pointer;
 }
 
@@ -703,22 +749,13 @@ body.app {
   outline-offset: 2px;
 }
 
-/* D-34: the Announcers button is the special filter -- violet outline and
-   text at rest, filled when people are selected. Distinct from the red
-   --reset "Clear all filters". */
-#trigger-announcers {
-  border-color: var(--special);
-  color: var(--special);
-}
-
-#trigger-announcers[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--special) 12%, var(--bg));
-}
-
+/* D-04: the Announcers button is an ordinary filter trigger; it takes the
+   changed-control accent while people are selected. */
 #trigger-announcers[data-active="true"] {
-  background: var(--special);
-  border-color: var(--special);
-  color: var(--on-special);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: var(--weight-semibold);
 }
 
 /* ---------- Filter popovers ---------- */
@@ -740,10 +777,9 @@ body.app {
   overflow-y: auto;
   padding: var(--space-md);
   background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border);
+  color: var(--ink);
+  border: 1px solid var(--rule-strong);
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
 /* A4: every filter section's header row -- the title with a per-group Reset at
@@ -767,13 +803,13 @@ body.app {
    aria-disabled (not disabled) keeps it focusable. The 2px outline + 2px
    offset fit inside the popover's 16px padding, so no ancestor clips it. */
 .group-reset {
-  font: var(--font-label);
+  font: var(--font-body);
   background: transparent;
   border: none;
   padding: 2px var(--space-xs);
   margin: 0;
   cursor: pointer;
-  color: var(--reset);
+  color: var(--ink);
 }
 
 .group-reset[aria-disabled="true"] {
@@ -842,7 +878,7 @@ body.app {
 
 .filter-popover label,
 .sheet-body label {
-  font: var(--font-label);
+  font: var(--font-body);
   display: flex;
   align-items: center;
   gap: var(--space-xs);
@@ -878,7 +914,7 @@ body.app {
   display: flex;
   flex-direction: column;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   padding: 0;
   border: none;
 }
@@ -894,7 +930,7 @@ body.app {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--rule);
 }
 
 .sheet-body {
@@ -906,7 +942,7 @@ body.app {
 .sheet-body section {
   padding-bottom: var(--space-lg);
   margin-bottom: var(--space-lg);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--rule);
 }
 
 /* D-28: inside the phone Filters sheet, cap the announcer list's own height
@@ -916,13 +952,13 @@ body.app {
 }
 
 .sheet-footer {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--rule);
 }
 
 .sheet-footer #filters-show-results {
   display: block;
   width: 100%;
-  font: var(--font-label);
+  font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
   border: none;
   border-radius: 6px;
@@ -961,7 +997,7 @@ input[type="checkbox"] {
   background: var(--bg);
   margin: calc(-1 * var(--space-md)) calc(-1 * var(--space-md)) 0;
   padding: var(--space-md) var(--space-md) var(--space-sm);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--rule);
 }
 
 .sheet-body .game-sticky {
@@ -991,7 +1027,7 @@ input[type="checkbox"] {
   margin: 0;
   background: none;
   border: none;
-  font: var(--font-label);
+  font: var(--font-body);
   font-weight: var(--weight-semibold);
   color: var(--muted);
   text-align: left;
@@ -1030,7 +1066,7 @@ input[type="checkbox"] {
 
 @media (hover: hover) {
   .family-caret:hover {
-    color: var(--text);
+    color: var(--ink);
   }
 }
 
@@ -1156,7 +1192,7 @@ input[type="checkbox"] {
 }
 
 .game-ny6-label {
-  font: var(--font-label);
+  font: var(--font-body);
   font-weight: 400;
   font-style: italic;
   line-height: 1.4;
@@ -1218,7 +1254,7 @@ input[type="checkbox"] {
 /* Greyed (count 0): color only, so the checkbox keeps its accent and stays clickable. */
 .is-zero,
 .is-zero .option-count {
-  color: var(--muted-weak);
+  color: var(--disabled);
 }
 
 /* ---------- Bowls/Playoffs radio list (D-35) ---------- */
@@ -1237,8 +1273,8 @@ input[type="checkbox"] {
   padding: 4px 0;
   border: none;
   background: none;
-  font: var(--font-label);
-  color: var(--text);
+  font: var(--font-body);
+  color: var(--ink);
   text-align: left;
   cursor: pointer;
 }
@@ -1292,7 +1328,7 @@ input[type="checkbox"] {
 }
 
 .only-btn:hover {
-  color: var(--text);
+  color: var(--ink);
 }
 
 .only-btn:focus-visible {
@@ -1306,11 +1342,11 @@ input[type="checkbox"] {
 }
 
 /* Touch: always shown, quiet, 44px target at the row's right edge. Popovers and the phone
-   sheet sit on --bg, so --muted-weak (at least 3:1 there) is the right grey. */
+   sheet sit on --bg, so --disabled (at least 3:1 there) is the right grey. */
 @media (hover: none) {
   .only-btn {
     opacity: 1;
-    color: var(--muted-weak);
+    color: var(--disabled);
     min-width: 44px;
     min-height: 44px;
   }
@@ -1381,7 +1417,7 @@ input[type="checkbox"] {
 }
 
 /* Legend chip for a family with no matching games (plan 04.2-09). #chart-area
-   sits on --bg, so --muted-weak is the right grey. */
+   sits on --bg, so --disabled is the right grey. */
 .legend-chip[data-offered="false"] {
   background: transparent;
   border-style: dashed;
@@ -1391,7 +1427,7 @@ input[type="checkbox"] {
 #person-results .option-count,
 #person-results li.is-zero,
 #person-results li.is-zero .option-name {
-  color: var(--muted-weak);
+  color: var(--disabled);
 }
 
 #filter-seasons,
@@ -1426,7 +1462,7 @@ input[type="checkbox"] {
   box-sizing: border-box;
   padding: 0;
   margin: 0;
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 .network-list {
@@ -1455,7 +1491,7 @@ input[type="checkbox"] {
 }
 
 #season-counts-details summary {
-  font: var(--font-label);
+  font: var(--font-body);
   color: var(--muted);
   cursor: pointer;
   margin-top: var(--space-sm);
@@ -1465,7 +1501,7 @@ input[type="checkbox"] {
   list-style: none;
   margin: var(--space-sm) 0 0 0;
   padding: 0;
-  font: var(--font-label);
+  font: var(--font-body);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1489,11 +1525,10 @@ input[type="checkbox"] {
   max-width: 320px;
   padding: var(--space-sm) var(--space-md);
   background: var(--surface);
-  color: var(--text);
-  border: 2px solid var(--border);
+  color: var(--ink);
+  border: 2px solid var(--rule-strong);
   border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 /* notes-6: the hovered-dot ring is a DOM overlay, not a Plotly trace or
@@ -1639,7 +1674,7 @@ input[type="checkbox"] {
 .tooltip-booth,
 .panel-booth {
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 .tooltip-booth {
@@ -1706,7 +1741,7 @@ input[type="checkbox"] {
 }
 
 .dots-caption {
-  font: var(--font-label);
+  font: var(--font-body);
   color: var(--muted);
 }
 
@@ -1718,7 +1753,7 @@ input[type="checkbox"] {
    network pills -- pill.js's `makePill`). */
 .pill {
   display: inline-block;
-  font: var(--font-label);
+  font: var(--font-body);
   padding: 2px var(--space-sm);
   border-radius: 999px;
   white-space: nowrap;
@@ -1726,6 +1761,9 @@ input[type="checkbox"] {
 }
 
 .legend-chip {
+  min-height: 28px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 14px;
   cursor: pointer;
   font: inherit;
   /* D-07: double-tap zoom off; pan and pinch kept. */
@@ -1734,20 +1772,20 @@ input[type="checkbox"] {
 }
 
 /* Toggled off (D-16): legend.js clears the inline fill so this rule's
-   transparent background/--text color shows through; only the chip's own
+   transparent background/--ink color shows through; only the chip's own
    inline `border-color` (the family color) is kept. */
 .legend-chip[aria-pressed="false"] {
   background: transparent;
-  color: var(--text);
+  color: var(--ink);
 }
 
 /* D-37: a dashed (not offered) chip reads lighter when on, grey when off. */
 .legend-chip[data-offered="false"][aria-pressed="true"] {
-  color: var(--text);
+  color: var(--ink);
 }
 
 .legend-chip[data-offered="false"][aria-pressed="false"] {
-  color: var(--muted-weak);
+  color: var(--disabled);
 }
 
 .legend-chip:focus-visible {
@@ -1758,12 +1796,12 @@ input[type="checkbox"] {
 .chart-tabs {
   display: flex;
   gap: 4px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--rule-strong);
   min-height: 40px;
 }
 
 .chart-tab {
-  font: var(--font-label);
+  font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
   background: transparent;
   border: none;
@@ -1773,12 +1811,13 @@ input[type="checkbox"] {
 }
 
 .chart-tab[aria-selected="true"] {
-  color: var(--text);
-  border-bottom-color: var(--accent);
+  color: var(--ink);
+  font-weight: var(--weight-semibold);
+  border-bottom-color: var(--ink);
 }
 
 .chart-tab[aria-disabled="true"] {
-  color: var(--muted-weak);
+  color: var(--disabled);
   cursor: not-allowed;
   border-bottom-color: transparent;
 }
@@ -1795,7 +1834,7 @@ input[type="checkbox"] {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font: var(--font-label);
+  font: var(--font-body);
   color: var(--muted);
 }
 
@@ -1831,7 +1870,7 @@ input[type="checkbox"] {
 }
 
 .axis-caption {
-  font: var(--font-label);
+  font: var(--font-body);
   color: var(--muted);
   white-space: nowrap;
 }
@@ -1872,7 +1911,7 @@ input[type="checkbox"] {
 }
 
 .by-sizer > span {
-  font: var(--font-label);
+  font: var(--font-body);
   padding: 0 12px;
   white-space: nowrap;
 }
@@ -1936,7 +1975,7 @@ input[type="checkbox"] {
 }
 
 .bars-captions p {
-  font: var(--font-label);
+  font: var(--font-body);
   color: var(--muted);
   margin: 0 0 4px;
 }
@@ -1944,7 +1983,7 @@ input[type="checkbox"] {
 .counts-list {
   list-style: none;
   padding: 0;
-  font: var(--font-label);
+  font: var(--font-body);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1957,7 +1996,7 @@ input[type="checkbox"] {
   border: none;
   padding: 0;
   font: inherit;
-  color: var(--text);
+  color: var(--ink);
   cursor: pointer;
   text-align: left;
 }
@@ -1980,20 +2019,21 @@ input[type="checkbox"] {
   border-radius: 2px;
   margin-right: var(--space-xs);
   vertical-align: middle;
-  outline: 1px solid var(--border);
+  outline: 1px solid var(--rule-strong);
 }
 
 .counts-list ol.counts-channels {
   padding-left: var(--space-md);
 }
 
-/* Role pills (D-14..D-16); colors come from tokens so they follow the theme. */
+/* Role tags (D-02): PBP filled ink, Analyst ink outline, Sideline dashed muted. */
 .role-pill {
   display: inline-block;
-  font: 600 12px/1 var(--font-family);
-  padding: 2px 6px;
-  border-radius: 999px;
-  border: 1px solid var(--special);
+  font: 400 12px/18px var(--sans);
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 10px;
+  border: 1px solid var(--ink);
   white-space: nowrap;
   vertical-align: baseline;
   margin-left: 4px;
@@ -2008,19 +2048,26 @@ input[type="checkbox"] {
 }
 
 .role-pill[data-role="pbp"] {
-  background: var(--special);
-  color: var(--on-special);
+  background: var(--ink);
+  color: var(--bg);
 }
 
 .role-pill[data-role="analyst"] {
   background: transparent;
-  color: var(--special);
+  color: var(--ink);
 }
 
+.role-pill[data-role="sideline"],
 .role-pill[data-role="unknown"] {
   background: transparent;
-  border-color: var(--muted);
+  border: 1px dashed var(--muted);
   color: var(--muted);
+}
+
+.crew-box.is-matched {
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--accent-soft);
 }
 
 .segmented .role-pill,
@@ -2036,11 +2083,12 @@ input[type="checkbox"] {
 }
 
 /* Crew box (D-09, D-11, D-12). */
+/* D-01: neutral box; accent use (3) is extended to the matched crew box. */
 .crew-box {
-  border: 1px solid var(--special);
-  border-radius: 8px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
   padding: var(--space-sm);
-  background: color-mix(in srgb, var(--special) 8%, var(--surface));
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
@@ -2068,26 +2116,25 @@ input[type="checkbox"] {
 
 .segmented {
   display: inline-flex;
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 4px;
   overflow: hidden;
   margin-bottom: var(--space-md);
 }
 
 .segmented button {
-  font: var(--font-label);
-  padding: var(--space-sm) var(--space-md);
+  font: var(--font-body);
+  min-height: 28px;
+  padding: 0 var(--space-md);
   border: none;
-  /* D-22: pressed and unpressed buttons are the same height. */
-  border-bottom: 2px solid transparent;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   cursor: pointer;
 }
 
 .segmented button[aria-pressed="true"] {
-  border-bottom-color: var(--accent);
-  color: var(--accent);
+  background: var(--ink);
+  color: var(--bg);
 }
 
 #chart {
@@ -2108,7 +2155,7 @@ input[type="checkbox"] {
   padding: var(--space-md);
   pointer-events: none;
   z-index: 2;
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 /* 04.7 D-06: a boxed note stays legible over faded dots. */
@@ -2120,7 +2167,7 @@ input[type="checkbox"] {
   width: max-content;
   max-width: calc(100% - var(--space-xl));
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 4px;
   padding: var(--space-sm) var(--space-md);
 }
@@ -2130,7 +2177,7 @@ input[type="checkbox"] {
 }
 
 .season-empty-title {
-  color: var(--text);
+  color: var(--ink);
   margin: 0;
 }
 
@@ -2146,13 +2193,13 @@ input[type="checkbox"] {
   gap: var(--space-md);
   padding: 0;
   margin: var(--space-sm) 0;
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 .lead-key {
   margin: var(--space-sm) 0;
-  font: var(--font-label);
-  color: var(--text);
+  font: var(--font-body);
+  color: var(--ink);
 }
 
 /* Space stays reserved when the key is off so nothing shifts. */
@@ -2223,22 +2270,26 @@ input[type="checkbox"] {
 .games-table {
   width: 100%;
   border-collapse: collapse;
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 .games-table th,
 .games-table td {
-  padding: var(--space-xs) var(--space-sm);
-  border-bottom: 1px solid var(--border);
+  padding: var(--space-sm) var(--space-md);
+  line-height: 1.4;
+  border-bottom: 1px solid var(--rule);
   text-align: left;
 }
 
 .games-table th {
-  background: var(--surface);
+  background: transparent;
+  font-weight: var(--weight-semibold);
+  border-bottom-color: var(--rule-strong);
 }
 
-.games-table tbody tr:nth-child(even) {
-  background: var(--surface);
+.games-table td.num,
+.games-table th.num {
+  text-align: right;
 }
 
 .games-table td.num,
@@ -2263,7 +2314,7 @@ input[type="checkbox"] {
 }
 
 .sort-glyph {
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 /* D-06: the whole row is the click/Enter target that opens the detail
@@ -2283,9 +2334,9 @@ input[type="checkbox"] {
 
 .badge {
   display: inline-block;
-  font: var(--font-label);
+  font: var(--font-body);
   padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 999px;
 }
 
@@ -2310,10 +2361,10 @@ html:has(#mlb-detail-panel[open]) {
 #nfl-detail-panel,
 #mlb-detail-panel {
   padding: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 8px;
   background: var(--surface);
-  color: var(--text);
+  color: var(--ink);
   width: min(560px, calc(100vw - 32px));
   max-width: none;
   max-height: 85vh;
@@ -2411,12 +2462,12 @@ html:has(#mlb-detail-panel[open]) {
 }
 
 .panel-bowl .bowl-core {
-  color: var(--text);
+  color: var(--ink);
   font-weight: 600;
 }
 
 .panel-rivalry .rivalry-name {
-  color: var(--text);
+  color: var(--ink);
   font-weight: 600;
 }
 
@@ -2469,14 +2520,22 @@ html:has(#mlb-detail-panel[open]) {
 /* ---------- Footer ---------- */
 
 .site-footer {
-  background: var(--surface);
-  border-top: 1px solid var(--border);
+  background: var(--bg);
+  border-top: 1px solid var(--rule);
+  margin-top: var(--space-2xl);
   padding: var(--space-lg);
-  font: var(--font-label);
+  font: var(--font-caption);
+  color: var(--muted);
 }
 
 .site-footer a {
-  color: var(--accent);
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.trademark-line,
+.type-line {
+  margin: var(--space-xs) 0;
 }
 
 /* ---------- Methodology / coverage pages ---------- */
@@ -2504,8 +2563,17 @@ html:has(#mlb-detail-panel[open]) {
 
 .page table th,
 .page table td {
-  border: 1px solid var(--border);
-  padding: var(--space-xs) var(--space-sm);
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  padding: var(--space-sm) var(--space-md);
+  font: var(--font-body);
+  line-height: 1.4;
+  text-align: left;
+}
+
+.page table th {
+  font-weight: var(--weight-semibold);
+  border-bottom-color: var(--rule-strong);
 }
 
 .table-scroll {
@@ -2763,7 +2831,7 @@ html:has(#mlb-detail-panel[open]) {
   border: 0;
   white-space: nowrap;
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
   font-weight: var(--weight-regular);
   cursor: pointer;
 }
@@ -2786,7 +2854,7 @@ html:has(#mlb-detail-panel[open]) {
   height: 20px;
   border: 1px solid var(--muted);
   border-radius: 50%;
-  font: var(--font-label);
+  font: var(--font-body);
   font-weight: var(--weight-semibold);
   line-height: 1;
 }
@@ -2798,9 +2866,9 @@ html:has(#mlb-detail-panel[open]) {
   max-width: 280px;
   padding: var(--space-md);
   background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text);
-  font: var(--font-label);
+  border: 1px solid var(--rule-strong);
+  color: var(--ink);
+  font: var(--font-body);
   line-height: 1.5;
 }
 
@@ -2822,7 +2890,7 @@ html:has(#mlb-detail-panel[open]) {
 }
 
 .band-note a {
-  color: var(--text);
+  color: var(--ink);
   text-decoration: underline;
 }
 
@@ -2859,7 +2927,7 @@ td.no-rating {
 .map-overlay {
   position: absolute;
   margin: 0;
-  font: var(--font-label);
+  font: var(--font-body);
   line-height: 1.4;
   color: var(--muted);
   pointer-events: none;
@@ -2880,7 +2948,7 @@ td.no-rating {
 .map-key-heading {
   margin: 0 0 var(--space-xs);
   font-weight: 600;
-  color: var(--text);
+  color: var(--ink);
 }
 
 .map-key-block + .map-key-block {
@@ -2965,7 +3033,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   min-height: 48px;
   padding: var(--space-sm) var(--space-md);
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--rule);
 }
 
 .nfl-filter-layer {
@@ -2977,23 +3045,23 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 #nfl-clear-filters {
-  font: var(--font-label);
+  font: var(--font-body);
   font-weight: var(--weight-semibold);
   padding: 6px var(--space-sm);
-  border: 1px solid var(--reset);
+  border: 1px solid var(--ink);
   border-radius: 6px;
   background: transparent;
-  color: var(--reset);
+  color: var(--ink);
   cursor: pointer;
 }
 
 #nfl-filters-button {
-  font: var(--font-label);
+  font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 4px;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   cursor: pointer;
 }
 
@@ -3008,19 +3076,11 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   outline-offset: 2px;
 }
 
-#nfl-trigger-announcers {
-  border-color: var(--special);
-  color: var(--special);
-}
-
-#nfl-trigger-announcers[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--special) 12%, var(--bg));
-}
-
 #nfl-trigger-announcers[data-active="true"] {
-  background: var(--special);
-  border-color: var(--special);
-  color: var(--on-special);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: var(--weight-semibold);
 }
 
 /* Same grid as #toolbar. The hidden spacer cells bring the NFL row count up to
@@ -3051,7 +3111,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   .nfl-toolbar-spacer {
     display: block;
     visibility: hidden;
-    font: var(--font-label);
+    font: var(--font-body);
     padding: 6px var(--space-xs);
     border: 1px solid transparent;
   }
@@ -3072,10 +3132,10 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .nfl-team-search {
   font: var(--font-body);
   padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 4px;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
 }
 
 .nfl-team-search {
@@ -3089,7 +3149,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   max-height: 240px;
   overflow-y: auto;
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 4px;
 }
 
@@ -3151,7 +3211,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .nfl-booth-list .group-name {
   flex: 1 1 auto;
   min-width: 0;
-  font: var(--font-label);
+  font: var(--font-body);
   font-weight: var(--weight-semibold);
 }
 
@@ -3175,7 +3235,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 .nfl-cat-group legend {
-  font: var(--font-label);
+  font: var(--font-body);
   font-weight: var(--weight-semibold);
   padding: 0;
   margin-bottom: var(--space-xs);
@@ -3216,7 +3276,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .nfl-filters-sheet #nfl-filters-show-results {
   display: block;
   width: 100%;
-  font: var(--font-label);
+  font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
   border: none;
   border-radius: 6px;
@@ -3226,12 +3286,12 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 .nfl-filters-sheet .nfl-sheet-clear {
-  font: var(--font-label);
+  font: var(--font-body);
   padding: var(--space-xs) var(--space-md);
-  border: 1px solid var(--reset);
+  border: 1px solid var(--ink);
   border-radius: 6px;
   background: transparent;
-  color: var(--reset);
+  color: var(--ink);
   cursor: pointer;
 }
 
@@ -3332,7 +3392,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 .nfl-captions {
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
   margin-top: var(--space-sm);
 }
 
@@ -3400,12 +3460,27 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 /* ---------- Sport switch (CFB | NFL, D-05) ---------- */
 
 #sport-switch {
+  display: inline-flex;
+  gap: var(--space-xs);
   margin: 0 0 0 var(--space-md);
+  border: none;
+  border-radius: 0;
+  overflow: visible;
 }
 
 #sport-switch button {
-  min-height: 40px;
-  padding: 0 var(--space-md);
+  min-height: 0;
+  padding: var(--space-sm) var(--space-md);
+  background: transparent;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+}
+
+#sport-switch button[aria-pressed="true"] {
+  background: transparent;
+  color: var(--ink);
+  font-weight: var(--weight-semibold);
+  border-bottom-color: var(--ink);
 }
 
 @media (max-width: 640px) {
@@ -3540,7 +3615,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 .nfl-booth-table tr[data-low-n="true"] {
-  color: var(--muted-weak);
+  color: var(--disabled);
 }
 
 .low-n-tag {
@@ -3564,7 +3639,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .nfl-coverage,
 .nfl-published-note {
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 /* NFL-only: the legend info button and its note sit in the legend row's flex
@@ -3597,7 +3672,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .crew-source-note {
   margin: var(--space-xs) 0 0 0;
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 /* NFL-only: Avg viewers scope footnote mark and rated-game count in the Crews table. */
@@ -3609,7 +3684,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .rated-n {
   display: block;
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
   font-weight: normal;
 }
 
@@ -3622,7 +3697,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 .mlb-credit {
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 #mlb-detail-panel .mlb-lineup-note {
@@ -3639,8 +3714,8 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .mlb-lineup h4 {
   margin: 0 0 var(--space-xs) 0;
   padding-bottom: var(--space-xs);
-  border-bottom: 1px solid var(--border);
-  font: var(--font-label);
+  border-bottom: 1px solid var(--rule);
+  font: var(--font-body);
   font-weight: var(--weight-semibold);
 }
 
@@ -3656,7 +3731,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   column-gap: var(--space-xs);
   align-items: baseline;
   padding: 2px 0;
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 .mlb-lineup-list .mlb-slot {
@@ -3673,7 +3748,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .mlb-lineup-list .mlb-sp {
   margin-top: var(--space-xs);
   padding-top: var(--space-xs);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--rule);
 }
 
 @media (max-width: 420px) {
@@ -3686,14 +3761,14 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
    itself reuses the NFL booth-table rules above. */
 .mlb-apple-table td.mlb-pending {
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
   white-space: nowrap;
 }
 
 .mlb-apple-table .rated-n {
   display: block;
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 .mlb-lead-lines {
@@ -3748,14 +3823,14 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .mlb-season-coverage {
   display: block;
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
   font-weight: 400;
 }
 
 .mlb-season-credit {
   display: block;
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
   font-weight: 400;
 }
 
@@ -3776,7 +3851,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 .mlb-empty-mark,
 .mlb-cell-empty {
-  color: var(--muted-weak);
+  color: var(--disabled);
 }
 
 .mlb-cell-btn {
@@ -3835,13 +3910,13 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 .mlb-no-crew {
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 .mlb-cell-stats {
   margin-top: var(--space-xs);
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
   font-variant-numeric: tabular-nums;
 }
 
@@ -3864,7 +3939,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
   .mlb-grid tr {
     padding: var(--space-sm) 0;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--rule);
   }
 
   .mlb-grid {
@@ -3891,7 +3966,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   .mlb-cell-label {
     display: block;
     color: var(--muted);
-    font: var(--font-label);
+    font: var(--font-body);
     font-weight: var(--weight-semibold);
   }
 
@@ -3943,7 +4018,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   background: var(--bg);
 }
 
-.crews-table tbody tr:nth-child(even) th.booth-col {
+.crews-table tbody tr:hover th.booth-col {
   background: var(--surface);
 }
 
@@ -3965,7 +4040,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .crews-chip {
   margin-left: var(--space-xs);
   padding: 0 var(--space-xs);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 3px;
   color: var(--muted);
   font-size: 14px;
@@ -4014,3 +4089,114 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
     min-width: 64px;
   }
 }
+
+/* ---------- Phase 13 shared components (modules, marks, chips) ---------- */
+
+.module {
+  border: 1px solid var(--rule-strong);
+  background: var(--bg);
+  padding: var(--space-md);
+  margin: 0 0 var(--space-lg);
+}
+
+.module-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.module-title {
+  font: var(--font-heading);
+  margin: 0;
+}
+
+.module-subtitle {
+  font: var(--font-body);
+  color: var(--muted);
+}
+
+.module-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-left: auto;
+}
+
+.reset-zoom {
+  min-height: 28px;
+  padding: 0 var(--space-md);
+  font: var(--font-body);
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.reset-zoom[aria-disabled="true"] {
+  color: var(--disabled);
+  cursor: default;
+}
+
+/* Legend chip family dot. */
+.legend-chip .legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: var(--space-sm);
+}
+
+/* Network marks: a logo (or the dot-and-name fallback) beside the name. */
+.net-marks {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.net-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.net-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.net-logo {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* A 20px badge inside a 19.6px table line box must not grow the row. */
+.net-logo--badge {
+  height: 20px;
+  margin-block: -2px;
+}
+
+.net-name {
+  font: var(--font-body);
+}
+
+table tbody tr:hover {
+  background: var(--surface);
+}
+
+/* Matched table row (accent use 3): soft fill and a 2px ink marker. */
+tr.is-matched {
+  background: var(--accent-soft);
+}
+
+tr.is-matched > :first-child {
+  box-shadow: inset 2px 0 0 var(--ink);
+}
+

@@ -179,7 +179,7 @@ export function renderLegend({ data, state, view }) {
     } else {
       // Toggled off: clear the inline fill so CSS's own
       // `.legend-chip[aria-pressed="false"]` rule (transparent background,
-      // `--text` color) applies; only the border keeps the family color.
+      // `--ink` color) applies; only the border keeps the family color.
       button.style.backgroundColor = '';
       button.style.color = '';
       button.style.borderColor = palette[theme][family];
