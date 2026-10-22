@@ -63,7 +63,9 @@ _COVERAGE_SHA256 = "1c2076a54c682ad0355657a0e1a3d938d35c7451c3c7d52bf5342a8753f7
 # new header with theme slot, site name.
 # Re-pinned at Phase 13 Plan 05: Plotly partial bundle src and SRI.
 # Re-pinned at Phase 13 Plan 06: font preloads and load-error copy.
-_INDEX_PRE_PHASE_SHA256 = "71b82880680569cf42021a9494d873db0fa66e6f0f0f9a4bb1535a3417866d80"
+# Re-pinned at Phase 13 Plan 10: Clear all filters moved into the always-rendered
+# selection row; Show games label.
+_INDEX_PRE_PHASE_SHA256 = "f1ba13a89098455e9a0258a07ea80070811b63e77eeecf4e7cdb278e7d7170d8"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'
