@@ -5,7 +5,8 @@
  * href through `safeHref` with the target/rel pair (T-04-35, T-04-36).
  */
 
-import { makePill, makeRolePill, nameWithRoles } from './pill.js';
+import { networkMark } from './network.js';
+import { makeRolePill, nameWithRoles } from './pill.js';
 
 /**
  * Returns `url` unchanged when it parses as an `http:`/`https:` URL, else
@@ -39,33 +40,35 @@ export function externalLink(href, text) {
   return a;
 }
 
-/** Networks paragraph: "Network: " + a pill for `primary`, then "Also on: " + a
- * pill per entry of `others` (SITE-26). `primary` and `others` items are
- * `{ name, family }`.
- * @param {{primary: {name: string, family: string},
- *   others?: {name: string, family: string}[], theme: string}} args */
-export function networksParagraph({ primary, others = [], theme }) {
+/** Networks paragraph: "Network: " + a network mark for `primary`, then
+ * "Also on: " + a mark per entry of `others` (SITE-05). `primary` and `others`
+ * items are `{ id?, name, family }`; an item without an id (or without a
+ * vendored logo) shows the family dot plus the name.
+ * @param {{primary: {id?: string, name: string, family: string},
+ *   others?: {id?: string, name: string, family: string}[], theme?: string}} args */
+export function networksParagraph({ primary, others = [] }) {
   const p = document.createElement('p');
   p.className = 'panel-networks';
   p.appendChild(document.createTextNode('Network: '));
-  p.appendChild(makePill(primary.name, primary.family, theme));
+  p.appendChild(networkMark(primary));
   if (others.length > 0) {
     p.appendChild(document.createTextNode(' · Also on: '));
     others.forEach((net, pos) => {
       if (pos > 0) p.appendChild(document.createTextNode(' '));
-      p.appendChild(makePill(net.name, net.family, theme));
+      p.appendChild(networkMark(net));
     });
   }
   return p;
 }
 
-/** Crew list in one violet `.crew-box`: one `<li>` per entry, "Name [pill]",
+/** Crew list in one `.crew-box` (teal `.is-matched` when any entry is a picked
+ * announcer, neutral otherwise, D-01): one `<li>` per entry, "Name [pill]",
  * with " (feedLabel)" after the pill when `feedLabel` is non-null (D-10).
  * Selected entries are bold (D-11).
  * @param {{name: string, role: string, selected?: boolean, feedLabel?: string|null}[]} entries */
 export function crewBox(entries) {
   const box = document.createElement('div');
-  box.className = 'crew-box';
+  box.className = entries.some((e) => e.selected) ? 'crew-box is-matched' : 'crew-box';
   const ul = document.createElement('ul');
   ul.className = 'panel-crew';
   for (const entry of entries) {

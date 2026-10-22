@@ -275,7 +275,6 @@ export function hoverText(data, i, { axis, y, theme }) {
   lines.push(escapeHover(model.viewersLine));
   lines.push(escapeHover(model.axisLine));
   if (model.scoreLine != null) lines.push(escapeHover(model.scoreLine));
-  lines.push(escapeHover(model.hint));
 
   return lines.join('<br>');
 }

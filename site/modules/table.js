@@ -23,7 +23,8 @@ import {
   figureSourceOf,
 } from './format.js';
 import { safeHref } from './panel.js';
-import { currentTheme, makePill, makeRolePill, nameWithRoles } from './pill.js';
+import { networkMark } from './network.js';
+import { makeRolePill, nameWithRoles } from './pill.js';
 import { personOnGame } from './select.js';
 import { venueFilterInfo } from './map-model.js';
 
@@ -163,7 +164,7 @@ function buildRow(data, state, onDetails, i) {
 
   const networkTd = document.createElement('td');
   const net = data.lookups.networks[t.network[i]];
-  networkTd.appendChild(makePill(net.name, net.family, currentTheme()));
+  networkTd.appendChild(networkMark({ id: net.id, name: net.name, family: net.family }));
   tr.appendChild(networkTd);
 
   const crewTd = document.createElement('td');
