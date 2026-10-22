@@ -56,9 +56,11 @@ NFL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "contract" / "nfl-data.fixture.
 # Index re-pinned at Phase 11 Plan 10: only the Matched games heading row, venue status and
 # no-match line (4 added lines, 1 removed).
 _SITE_DATA_SHA256 = "8ceec31a10326e809f9a9397da7734be8b1092156ef094093742c7d4e117ac02"
-# Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme, new header with theme slot, site name.
+# Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
+# new header with theme slot, site name.
 _COVERAGE_SHA256 = "1c2076a54c682ad0355657a0e1a3d938d35c7451c3c7d52bf5342a8753f7c39c"
-# Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme, new header with theme slot, site name.
+# Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
+# new header with theme slot, site name.
 _INDEX_PRE_PHASE_SHA256 = "cf4fa302166313a0941193f2d6ba80fa14c5efae7beff8a8b6a7301086fa8519"
 
 _CANARY = "invented-nfl-canary-key-0001"

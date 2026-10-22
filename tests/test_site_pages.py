@@ -372,7 +372,8 @@ def test_render_methodology_resolves_md_links_against_docs(
 # colors); no NFL text changed.
 # Re-pinned at 11 review fixes: one sentence on announcer picks rescaling the map's dots
 # and coloring; no NFL text changed.
-# Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme, new header with theme slot, site name.
+# Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
+# new header with theme slot, site name.
 _METHODOLOGY_FLAG_OFF_SHA256 = "2d0e07bd422e517c8a4e6bdf9d002a9b097ee31e90beb6f529bd1490ef40abb1"
 
 _NFL_ANCHORS = (
