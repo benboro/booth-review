@@ -190,6 +190,33 @@ The fields that stay analysis-only are:
 Only values derived from them (Task 1 means and residuals) reach the site. The
 spread is never an axis, column or panel field.
 
+**Decision (2026-10-21, 12-CONTEXT D-19):** no per-game spread-derived NFL
+value ships. Per-game raw outcomes (`final_margin`, `excitement`, `viewers`)
+are already shipped; spread-adjusted residuals and their standard errors ship
+only as aggregates over a booth-season or category-season row, because a
+per-game residual would let a reader infer a game's spread band. Adjusted and
+Residual modes stay available under row filters (Seasons, a Booths pick on
+Crews, an Announcers pick that matches a booth row's play-by-play voice),
+which pool the shipped rows exactly from their `n`, mean and standard error.
+Under game-subset filters (Team, Category, Viewership by category, an
+Announcers pick that matches an analyst or fill-in inside a row) the view
+switches to Raw, recomputed in the browser from `games[]` fields, with a short
+on-screen reason. No NFL contract, golden or fixture changes.
+
+| Affected cell (view x pick) | Serving field or Raw switch |
+|---|---|
+| Crews x Seasons | row filter: `booths[].raw_n_*`, `raw_mean_*`, `adj_n_*`, `adj_<metric>_resid`, `adj_<metric>_se`, pooled exactly |
+| Crews x Booths | row filter: `booths[]` whole rows |
+| Crews x Announcers (booth's play-by-play voice) | row filter: `booths[].pbp_person` |
+| Crews x Announcers (analyst or fill-in) | Raw, from `games[].final_margin`, `excitement`, `viewers` via `booths[].game_list` |
+| Crews x Team, Crews x Category | Raw, as above |
+| Viewership x Seasons | row filter: `viewership[].games`, `mean_viewers`, `viewership_resid`, `viewership_se`, `era`; raw pooled only within one measurement era |
+| Viewership x Category | row filter on category rows; Raw from `games[].viewers` via `viewership[].game_list` if combined with another pick |
+| Viewership x Team, Announcers or Booths | Raw, from `games[].viewers` via `viewership[].game_list` |
+| Special games x Seasons, Category | row filter: `special[]` |
+| Special games x Team, Announcers | `games[].home`, `away`, `crew`, `slot`, `standalone`, `agotw` (no spread value used) |
+| Scatter, Matched games table x any pick | `games[]` fields, by pass |
+
 506's owners were asked about reuse and have not replied. The CFB, NFL and later
 MLB views show 506 crews and networks with credit, and they come off the site if
 506 objects (see the 506 rows in `data/README.md`).
