@@ -2698,6 +2698,31 @@ html:has(#mlb-detail-panel[open]) {
 
 .table-scroll {
   overflow-x: auto;
+  position: relative;
+}
+
+/* Scroll-cue plumbing (13-14): 1px sentinels the IntersectionObserver watches, and the
+   header label. Neither shows on desktop. */
+.scroll-sentinel {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.scroll-sentinel-start {
+  left: 0;
+}
+
+.swipe-cue {
+  display: none;
+}
+
+/* The phone twin of the MLB Postseason grid never shows above 480px. */
+.mlb-phone-grid {
+  display: none;
 }
 
 /* ---------- Phones (≤480px) ---------- */
@@ -3664,13 +3689,6 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
     padding-right: var(--space-xs);
   }
 
-  .nfl-booth-table-wrap {
-    background:
-      linear-gradient(to right, var(--bg), var(--bg)) left center / 20px 100% no-repeat local,
-      linear-gradient(to left, var(--bg), var(--bg)) right center / 20px 100% no-repeat local,
-      linear-gradient(to right, rgba(0, 0, 0, 0.22), transparent) left center / 10px 100% no-repeat scroll,
-      linear-gradient(to left, rgba(0, 0, 0, 0.22), transparent) right center / 10px 100% no-repeat scroll;
-  }
 }
 
 /* NFL control rows: fixed-width groups side by side, never stretched to the row (the shared
@@ -4311,5 +4329,193 @@ tr.is-matched > :first-child {
 
   #chart-tools > #chart-controls {
     width: 100%;
+  }
+}
+
+/* ---------- Phone tables (13-14; 13-UI-SPEC "Phone" items 1-3) ---------- */
+
+@media (max-width: 480px) {
+  /* Header: Methodology and Coverage are in the footer nav, so the title, sport switch
+     and theme slot share the row. */
+  .header-links {
+    display: none;
+  }
+
+  .site-header,
+  #topbar {
+    padding-inline: var(--space-md);
+  }
+
+  /* 13-14: at 390px "The Broadcast Ledger" at the 24px display size (214px) plus the
+     sport switch (141px at 8px button padding) and the theme slot cannot share one
+     row in 358px, and dropping "The" alone still left it 11px over. The title drops to
+     20px on phone (177px, "The" kept) and the switch buttons lose half their side
+     padding; the 360px-and-under grid switch below keeps its own row. */
+  .site-title {
+    font-size: 20px;
+    white-space: nowrap;
+  }
+
+  #sport-switch button {
+    padding-inline: var(--space-sm);
+  }
+
+  #theme-slot {
+    margin-left: var(--space-sm);
+  }
+
+  /* Scroll cue label: a fixed-height slot in the module header, so showing or hiding it
+     never moves the table below. */
+  .swipe-cue {
+    display: none;
+    flex: 0 0 100%;
+    box-sizing: border-box;
+    height: 16px;
+    margin: 0;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--muted);
+    text-align: right;
+  }
+
+  .swipe-cue.is-slot {
+    display: block;
+  }
+
+  .swipe-cue.is-idle {
+    visibility: hidden;
+  }
+
+  .module-head:has(> .swipe-cue.is-slot) {
+    row-gap: 0;
+  }
+
+  .nfl-games > .module-head {
+    min-height: 0;
+    margin-bottom: 0;
+  }
+
+  /* 24px fades at the scroller edges, only while content remains in that direction
+     (a mask over the module's own --bg, so the fade needs no overlay element). */
+  .table-scroll.has-more-right {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  }
+
+  .table-scroll.has-more-left {
+    -webkit-mask-image: linear-gradient(to right, #000 var(--pin-w, 0px), transparent var(--pin-w, 0px), #000 calc(var(--pin-w, 0px) + 24px));
+    mask-image: linear-gradient(to right, #000 var(--pin-w, 0px), transparent var(--pin-w, 0px), #000 calc(var(--pin-w, 0px) + 24px));
+  }
+
+  .table-scroll.has-more-left.has-more-right {
+    -webkit-mask-image:
+      linear-gradient(to right, #000 var(--pin-w, 0px), transparent var(--pin-w, 0px), #000 calc(var(--pin-w, 0px) + 24px)),
+      linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    mask-image:
+      linear-gradient(to right, #000 var(--pin-w, 0px), transparent var(--pin-w, 0px), #000 calc(var(--pin-w, 0px) + 24px)),
+      linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
+  }
+
+  /* Identity column pinned: sticky left, a 1px strong divider, its own opaque fill. */
+  .table-scroll .games-table th,
+  .table-scroll .games-table td {
+    padding: 8px 12px;
+  }
+
+  /* The 8px cell padding alone would leave a whole-row click target under 44px. */
+  .table-scroll .games-table tr.row-link > td {
+    height: 44px;
+  }
+
+  .table-scroll .games-table tr > :first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background-color: var(--bg);
+    border-right: 1px solid var(--rule-strong);
+  }
+
+  .table-scroll .games-table thead tr > :first-child {
+    background-color: var(--surface);
+  }
+
+  .table-scroll .games-table tbody tr:hover > :first-child {
+    background-color: var(--surface);
+  }
+
+  .table-scroll .games-table tr.is-matched > :first-child {
+    background-image: linear-gradient(var(--accent-soft), var(--accent-soft));
+  }
+
+  /* The CFB and NFL/MLB matched tables outgrow 360px; they scroll inside the module. */
+  .table-scroll .games-table {
+    width: max-content;
+    min-width: 100%;
+  }
+
+  /* MLB Postseason booths: the stacked-by-season grid gives way to the phone twin, one
+     row per season, round and league with a merged 96px pinned column. */
+  .mlb-grid {
+    display: none;
+  }
+
+  .mlb-phone-grid {
+    display: table;
+    table-layout: auto;
+  }
+
+  .mlb-phone-grid th.mlb-merged-col,
+  .mlb-phone-grid td.mlb-booths-col {
+    vertical-align: top;
+    text-align: left;
+  }
+
+  .mlb-phone-grid th.mlb-merged-col {
+    box-sizing: border-box;
+    width: 96px;
+    min-width: 96px;
+    max-width: 96px;
+    padding-inline: 8px;
+  }
+
+  .mlb-merged-line {
+    display: block;
+    min-height: 1.4em;
+    font-weight: var(--weight-semibold);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+
+  .mlb-merged-league {
+    color: var(--muted);
+    font-weight: 400;
+  }
+
+  .mlb-phone-grid td.mlb-booths-col {
+    min-width: 200px;
+    white-space: normal;
+  }
+
+  .mlb-phone-grid .mlb-cell-btn {
+    min-width: 200px;
+  }
+
+  .mlb-booth-more {
+    display: block;
+    color: var(--muted);
+    font: var(--font-body);
+  }
+}
+
+.mlb-booth-more {
+  display: block;
+}
+
+@media (min-width: 361px) and (max-width: 480px) {
+  #topbar:has(#sport-switch) {
+    flex-wrap: nowrap;
+    align-items: center;
   }
 }

@@ -22,6 +22,7 @@ import { makeRolePill, nameWithRoles, currentTheme } from '../../../modules/pill
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import { escapeHover, MINUS, formatViewers } from '../../../modules/format.js';
 import { mountViewTools } from '../tools.js';
+import { attachScrollCue } from '../../../modules/scroll-cue.js';
 import { DATA_TABLE_CLASS, rebuildKeepingFocus } from '../data-table.js';
 
 const CONFIG = frameConfig({ zoomable: false });
@@ -712,7 +713,7 @@ export function mount(container, ctx) {
   refs.coverage = el('p', 'caption nfl-coverage');
   refs.coverage.setAttribute('role', 'status');
 
-  refs.tableWrap = el('div', 'nfl-booth-table-wrap');
+  refs.tableWrap = el('div', 'nfl-booth-table-wrap table-scroll');
   const table = el('table', 'games-table nfl-booth-table');
   refs.tableCaption = el('caption', 'visually-hidden');
   refs.tableHead = el('tr');
@@ -722,6 +723,7 @@ export function mount(container, ctx) {
   table.append(refs.tableCaption, thead, refs.tableBody);
   refs.viewersNote = el('p', 'caption nfl-viewers-footnote', `* ${VIEWERS_SCOPE_NOTE}`);
   refs.tableWrap.append(table, refs.viewersNote);
+  attachScrollCue(refs.tableWrap, null);
   refs.publishedNote = el('p', 'caption nfl-published-note', 'Booth order from a published lineup.');
   refs.publishedNote.hidden = true;
 

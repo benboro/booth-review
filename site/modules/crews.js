@@ -10,6 +10,7 @@
 import { FAMILY_ORDER } from './palette.js';
 import { BOOTH_FAMILY_NAMES, stripNetworkNote } from './format.js';
 import { makeRolePill, nameWithRoles } from './pill.js';
+import { attachScrollCue } from './scroll-cue.js';
 
 /**
  * Rows with fewer games than this are faded and tagged "low n" (D-15). Off (0) by user choice
@@ -147,7 +148,7 @@ function numCell(text) {
 }
 
 function buildTable(group) {
-  const wrap = el('div', 'nfl-booth-table-wrap crews-table-wrap');
+  const wrap = el('div', 'nfl-booth-table-wrap crews-table-wrap table-scroll');
   const table = el('table', 'games-table nfl-booth-table crews-table');
   table.append(el('caption', 'visually-hidden', `Booths for ${group.heading}`));
   const tr = el('tr');
@@ -191,6 +192,7 @@ function buildTable(group) {
   }
   table.append(thead, tbody);
   wrap.append(table);
+  attachScrollCue(wrap, null);
   return wrap;
 }
 

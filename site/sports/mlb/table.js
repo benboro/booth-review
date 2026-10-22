@@ -9,6 +9,7 @@
 
 import { nameWithRoles, makeRolePill } from '../../modules/pill.js';
 import { networkMark } from '../../modules/network.js';
+import { attachScrollCue } from '../../modules/scroll-cue.js';
 import { dateShortText } from './format.js';
 import { CAUSE_COPY, crewSourceTag, viewersText } from './data.js';
 
@@ -179,7 +180,12 @@ export function createGamesTable(host, { onOpen } = {}) {
   thead.appendChild(headRow);
   const tbody = el('tbody');
   table.append(thead, tbody);
-  section.append(heading, summary, empty, table);
+  const head = el('div', 'module-head');
+  head.append(heading);
+  const scroll = el('div', 'table-scroll');
+  scroll.append(table);
+  section.append(head, summary, empty, scroll);
+  attachScrollCue(scroll, head);
   host.appendChild(section);
 
   let sort = { key: 'date', dir: 'desc' };

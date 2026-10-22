@@ -24,6 +24,7 @@ import {
 } from './format.js';
 import { safeHref } from './panel.js';
 import { networkMark } from './network.js';
+import { attachScrollCue } from './scroll-cue.js';
 import { makeRolePill, nameWithRoles } from './pill.js';
 import { personOnGame } from './select.js';
 import { venueFilterInfo } from './map-model.js';
@@ -32,6 +33,12 @@ const tableEl = document.getElementById('games-table');
 const emptyEl = document.getElementById('table-empty');
 const venueChipsEl = document.getElementById('venue-chips');
 const venueNoMatchEl = document.getElementById('venue-nomatch');
+// The static table gets a sideways scroller of its own (phone scroll cue, 13-14).
+const scrollEl = document.createElement('div');
+scrollEl.className = 'table-scroll';
+tableEl.before(scrollEl);
+scrollEl.append(tableEl);
+attachScrollCue(scrollEl, () => scrollEl.closest('.module')?.querySelector(':scope > .module-head') ?? null);
 const tbody = tableEl.querySelector('tbody');
 const dateSortButton = tableEl.querySelector('th button[data-sort="date"]');
 const viewersSortButton = tableEl.querySelector('th button[data-sort="viewers"]');
