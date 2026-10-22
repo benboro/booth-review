@@ -1,6 +1,7 @@
 /* booth-review — hand-written CSS. No remote imports, embedded fonts, or external resource references. */
 
 :root {
+  color-scheme: light;
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 16px;
@@ -44,24 +45,24 @@
   --on-special: #FFFFFF;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14161A;
-    --surface: #1E2126;
-    --border: #2A2E35;
-    --accent: #E5E7EB;
-    --text: #E5E7EB;
-    --muted: #9CA3AF;
-    --muted-weak: #7B8492;
-    --error: #F2B8B5;
-    --reset: #F2B8B5;
-    --game-playoff: #F5C518;
-    --game-bowl: #CD7F32;
-    --game-rivalry: #F97066;
-    --game-playoff-text: #F5C518;
-    --special: #A78BFA;
-    --on-special: #111827;
-  }
+/* Placeholder dark values; untested until Phase 17. The data-theme attribute is the only theme hook. */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #14161A;
+  --surface: #1E2126;
+  --border: #2A2E35;
+  --accent: #E5E7EB;
+  --text: #E5E7EB;
+  --muted: #9CA3AF;
+  --muted-weak: #7B8492;
+  --error: #F2B8B5;
+  --reset: #F2B8B5;
+  --game-playoff: #F5C518;
+  --game-bowl: #CD7F32;
+  --game-rivalry: #F97066;
+  --game-playoff-text: #F5C518;
+  --special: #A78BFA;
+  --on-special: #111827;
 }
 
 * {
@@ -1149,11 +1150,9 @@ input[type="checkbox"] {
   margin-bottom: var(--space-xs);
 }
 
-@media (prefers-color-scheme: dark) {
-  .game-ny6 {
-    background: #26241A;
-    background: color-mix(in srgb, var(--game-playoff) 8%, transparent);
-  }
+[data-theme="dark"] .game-ny6 {
+  background: #26241A;
+  background: color-mix(in srgb, var(--game-playoff) 8%, transparent);
 }
 
 .game-ny6-label {
