@@ -15,6 +15,7 @@ import { boothLabelOf, cellKey, personName } from '../data.js';
 import { networkMark } from '../../../modules/network.js';
 import { externalLink } from '../../../modules/panel-parts.js';
 import { makeRolePill, nameWithRoles } from '../../../modules/pill.js';
+import { attachScrollCue } from '../../../modules/scroll-cue.js';
 
 export const PENDING_TEXT = 'pending Retrosheet 2026';
 export const NO_CREW_TEXT = 'crew not listed';
@@ -34,7 +35,10 @@ function el(tag, className, text) {
   return node;
 }
 
-const refs = { ctx: null, head: null, body: null, captions: null, table: null };
+/** Booth lines the phone Booths cell shows before a "+N more" last line (13-14 line budget). */
+export const PHONE_BOOTH_LINES = 3;
+
+const refs = { ctx: null, head: null, body: null, captions: null, table: null, phoneBody: null };
 let current = null;
 
 function coveragePct(num, den) {
@@ -93,7 +97,7 @@ function excitementLine(model, b) {
   return 'no excitement figure';
 }
 
-function blockButton(model, b, label, picked) {
+function blockButton(model, b, label, picked, maxLines = Infinity) {
   const btn = el('button', 'mlb-cell-btn');
   btn.type = 'button';
   btn.dataset.cell = b.key;
@@ -107,13 +111,17 @@ function blockButton(model, b, label, picked) {
 
   const booths = el('span', 'mlb-cell-booths');
   if (b.booths.length) {
-    for (const [pbp, analyst] of b.booths) {
+    const shown = b.booths.slice(0, maxLines);
+    for (const [pbp, analyst] of shown) {
       const line = el('span', 'mlb-cell-booth');
       line.append(nameWithRoles(el('span', 'booth-name', personName(model, pbp)), makeRolePill('pbp')));
       if (analyst != null) {
         line.append(el('span', 'booth-sep', ' / '), nameWithRoles(el('span', 'booth-name', personName(model, analyst)), makeRolePill('analyst')));
       }
       booths.append(line);
+    }
+    if (b.booths.length > shown.length) {
+      booths.append(el('span', 'mlb-booth-more', `+${b.booths.length - shown.length} more`));
     }
   } else {
     booths.append(el('span', 'mlb-no-crew', NO_CREW_TEXT));
@@ -146,6 +154,33 @@ function roundsPresent(model) {
   return ROUND_ORDER.filter((r) => r !== 'tiebreak' || have.has('tiebreak'));
 }
 
+function phoneRows(model, state, seasons, rounds, blocks) {
+  const out = [];
+  for (const s of seasons) {
+    for (const r of rounds) {
+      const here = [...blocks.values()].filter((b) => b.season === s.season && b.round === r);
+      here.sort((x, y) => String(x.league).localeCompare(String(y.league)));
+      for (const b of here) {
+        const tr = el('tr');
+        tr.dataset.season = String(s.season);
+        const th = el('th', 'mlb-merged-col');
+        th.scope = 'row';
+        th.append(el('span', 'mlb-merged-line', `${s.season} ${SHORT_ROUNDS[r]}`));
+        th.append(el('span', 'mlb-merged-line mlb-merged-league', b.league ?? ''));
+        const td = el('td', 'mlb-booths-col');
+        const btn = blockButton(model, b, null, state.cell === b.key, PHONE_BOOTH_LINES);
+        // The desktop grid owns data-cell; the phone twin must not double-match it.
+        btn.dataset.phoneCell = b.key;
+        delete btn.dataset.cell;
+        td.append(btn);
+        tr.append(th, td);
+        out.push(tr);
+      }
+    }
+  }
+  return out;
+}
+
 export function mount(container, ctx) {
   refs.ctx = ctx;
   const wrap = el('div', 'mlb-grid-wrap');
@@ -157,6 +192,23 @@ export function mount(container, ctx) {
   refs.body = el('tbody');
   table.append(thead, refs.body);
   wrap.appendChild(table);
+  // Phone twin (480px and under, CSS swaps the two): one row per season, round and league
+  // block with a merged pinned first column and a Booths column.
+  const phone = el('table', 'games-table mlb-phone-grid');
+  phone.appendChild(el('caption', 'visually-hidden', 'Postseason booths by season, round and league'));
+  const phoneHead = el('tr');
+  for (const [text, cls] of [['Season and round', 'mlb-merged-col'], ['Booths', 'mlb-booths-col']]) {
+    const th = el('th', cls, text);
+    th.scope = 'col';
+    phoneHead.appendChild(th);
+  }
+  const phoneThead = el('thead');
+  phoneThead.appendChild(phoneHead);
+  refs.phoneBody = el('tbody');
+  phone.append(phoneThead, refs.phoneBody);
+  wrap.appendChild(phone);
+  wrap.classList.add('table-scroll');
+  attachScrollCue(wrap, null);
   refs.table = table;
   refs.captions = el('div', 'nfl-captions');
   container.append(wrap, refs.captions);
@@ -227,6 +279,7 @@ export function render(ctx) {
     rows.push(tr);
   }
   refs.body.replaceChildren(...rows);
+  refs.phoneBody.replaceChildren(...phoneRows(model, state, seasons, rounds, blocks));
 
   refs.captions.replaceChildren(
     el('p', 'caption', 'Excitement is the mean per game from win probability, a tendency, not proof.'),

@@ -31,9 +31,11 @@ def test_grid_rows_and_columns(post: Page) -> None:
         f"{VIEW} tbody th .mlb-season", "els => els.map(e => e.textContent)"
     )
     assert seasons == ["2014", "2019", "2025", "2026"]
-    heads = post.eval_on_selector_all(f"{VIEW} thead th", "els => els.map(e => e.textContent)")
+    heads = post.eval_on_selector_all(
+        f"{VIEW} .mlb-grid thead th", "els => els.map(e => e.textContent)"
+    )
     assert heads == ["Season", "Wild Card", "Division", "LCS", "World Series"]
-    assert post.locator(f"{VIEW} table th[scope='row']").count() == 4
+    assert post.locator(f"{VIEW} .mlb-grid th[scope='row']").count() == 4
 
 
 def test_coverage_per_season_and_low_tone(post: Page) -> None:
@@ -141,7 +143,7 @@ def test_cell_click_lists_games_and_deep_link(
     post.click(f"{VIEW} button[data-cell='2019-division-AL']")
     assert post.evaluate(f"{HOOKS}.getTableIndexes()") == [9, 8]
     assert "cell=2019-division-AL" in post.url
-    assert post.locator(f"{VIEW} button[aria-pressed='true']").count() == 1
+    assert post.locator(f"{VIEW} .mlb-grid button[aria-pressed='true']").count() == 1
     post.click(f"{VIEW} button[data-cell='2019-division-AL']")
     assert post.evaluate(f"{HOOKS}.getTableIndexes()") == []
     open_mlb_app(post, "?sport=mlb&view=postseason&cell=2014-world_series-all")
@@ -160,17 +162,21 @@ def test_unknown_cell_param_is_ignored(post: Page, open_mlb_app: Callable[..., N
     assert post.evaluate(f"{HOOKS}.getState().cell") is None
 
 
-def test_phone_stacks_each_season(mlb_mobile_page: Page, open_mlb_app: Callable[..., None]) -> None:
+def test_phone_twin_has_a_merged_pinned_column_and_booths(
+    mlb_mobile_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """13-14: 480px and under swaps the grid for one row per season, round and league."""
     page = mlb_mobile_page
     open_mlb_app(page, "?sport=mlb&view=postseason")
-    first = page.locator(f"{VIEW} tbody tr").first
-    assert first.evaluate("e => getComputedStyle(e).display") == "block"
-    assert page.locator(f"{VIEW} thead").evaluate("e => e.getBoundingClientRect().width") <= 1
-    labels = page.locator(
-        f"{VIEW} tr[data-season='2014'] .mlb-cell-label:visible"
-    ).all_inner_texts()
-    assert labels == ["Wild Card", "World Series"]
-    assert page.locator(f"{VIEW} tr[data-season='2014'] td[data-round='division']").is_hidden()
+    assert page.locator(f"{VIEW} .mlb-grid").is_hidden()
+    twin = page.locator(f"{VIEW} .mlb-phone-grid")
+    assert twin.is_visible()
+    assert twin.locator("thead th").all_inner_texts() == ["Season and round", "Booths"]
+    first = twin.locator("tbody th.mlb-merged-col").first
+    assert first.evaluate("e => e.getBoundingClientRect().width") == 96
+    assert first.evaluate("e => getComputedStyle(e).position") == "sticky"
+    assert first.locator(".mlb-merged-line").all_inner_texts() == ["2014 Wild Card", "AL"]
+    assert twin.locator("td.mlb-booths-col").first.evaluate("e => e.offsetWidth") >= 200
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-    page.locator(f"{VIEW} button[data-cell='2014-world_series-all']").tap()
+    page.locator(f"{VIEW} button[data-phone-cell='2014-world_series-all']").tap()
     assert page.evaluate(f"{HOOKS}.getTableIndexes()") == [7]
