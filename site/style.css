@@ -335,8 +335,9 @@ li[role="option"][aria-selected="true"] .option-check::after {
     min-height: 61px;
   }
 
+  /* Full width, so Clear all filters sits at the row's right end (C1). */
   .selection-row {
-    flex: none;
+    flex: 1 1 100%;
     max-width: 100%;
   }
 
@@ -356,7 +357,9 @@ li[role="option"][aria-selected="true"] .option-check::after {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm);
-  /* D-03: no box; chips and toggles sit on the page. */
+  /* D-03: no box; chips and toggles sit on the page. Always rendered, 32px:
+     with no pick it holds only Clear all filters at the right end (C1). */
+  min-height: 32px;
 }
 
 #chips {
@@ -547,15 +550,66 @@ li[role="option"][aria-selected="true"] .option-check::after {
 }
 
 /* `#filters-button`'s visibility comes from `.mobile-only` below; this rule
-   is only its shape. */
+   is only its shape. Accent once anything differs from a clean load. */
 #filters-button {
   font: var(--font-body);
-  padding: var(--space-sm) var(--space-md);
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 0 12px;
   border: 1px solid var(--rule-strong);
-  border-radius: 4px;
+  border-radius: 3px;
   background: var(--bg);
   color: var(--ink);
   cursor: pointer;
+}
+
+#filters-button.is-changed,
+#nfl-filters-button.is-changed {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: var(--weight-semibold);
+}
+
+/* One accent chip per changed control (phone only; the list is hidden at
+   desktop widths by `.mobile-only` and while nothing differs). */
+.filter-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+@media (max-width: 480px) {
+  .filter-chips:not([hidden]) {
+    display: flex;
+  }
+
+  /* The NFL sheet carries its own Clear all filters, as the CFB one does. */
+  #nfl-clear-filters {
+    display: none;
+  }
+}
+
+.filter-chip {
+  font: var(--font-body);
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--accent);
+  border-radius: 20px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
+.filter-chip b {
+  font-weight: var(--weight-semibold);
 }
 
 .desktop-only {
@@ -646,84 +700,131 @@ body.app {
      (D-02). */
 }
 
+/* SHELL-03 control anatomy: 32px, 12px side padding, 1px rule, 3px radius. The
+   label (14px 400) and the value (muted, hidden at default) sit on one line
+   and truncate with an ellipsis; the 6px caret is a pair of borders. */
 .filter-trigger {
   font: var(--font-body);
-  padding: 6px var(--space-sm);
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 12px;
   border: 1px solid var(--rule-strong);
-  border-radius: 6px;
+  border-radius: 3px;
   background: var(--bg);
   /* Regression: form controls don't inherit `color` from an ancestor like
      `body` -- the UA stylesheet sets an explicit color for `<button>`
-     itself, which wins over inheritance. Without this, the button rendered
-     in the browser's default button-text color instead of the theme's
-     `--ink` token, failing WCAG AA 4.5:1 in dark mode against `--bg`. */
+     itself, which wins over inheritance. */
   color: var(--ink);
   cursor: pointer;
-  /* Labels truncate in their grid cell; the full label is the button's title
-     and aria-label (04.9 D-21). */
   max-width: 320px;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.filter-trigger::after {
-  content: " ▾";
+/* Label and value are inline spans in one block, so the whole summary reads as
+   one line of text and ellipsises at the cell's edge. `pre` keeps the
+   separator a value starts with (": ", " · ", " "). */
+.filter-trigger .filter-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+  text-align: left;
 }
 
-.filter-trigger[data-active="true"],
+.filter-trigger .filter-value {
+  color: var(--muted);
+}
+
+.filter-trigger::after {
+  content: "";
+  flex: none;
+  box-sizing: border-box;
+  width: 6px;
+  height: 6px;
+  margin: -2px 2px 0 8px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.filter-trigger:hover {
+  background: var(--surface);
+}
+
+/* A control that differs from a clean load (changedControls in filters.js):
+   border, label and caret in the accent, soft fill, label 600, value 400. */
+@media (max-width: 480px) {
+  /* `.filter-trigger` sets a display above, so the phone rule must outrank it. */
+  .filter-trigger.desktop-only {
+    display: none;
+  }
+}
+
+.filter-trigger.is-changed {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.filter-trigger.is-changed:hover {
+  background: var(--accent-soft-hover);
+}
+
+.filter-trigger.is-changed .filter-label {
+  font-weight: var(--weight-semibold);
+}
+
+.filter-trigger.is-changed .filter-value {
+  font-weight: 400;
+  color: var(--accent);
+}
+
 .filter-trigger[aria-expanded="true"] {
   border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
 }
 
-/* D-25b: "Clear all filters" gets a style distinct from the plain filter
-   triggers above -- an outlined accent, never the same look as the filter
-   buttons -- while it also clears the selected announcers (D-27). An
-   outlined `--ink` treatment rather than a filled one, so it doesn't read
-   as more prominent than the primary filter controls. Contrast against the
-   toolbar's `--surface` background (#F4F5F7 light / #1E2126 dark):
-   `--ink` on light is ~6.0:1, on dark ~9.5:1 -- both clear WCAG AA's
-   4.5:1 minimum. */
-#clear-filters {
+/* Clear all filters: the right end of the always-rendered 32px selection row
+   (C1), never in the filter bar. Not accent, not red: `--ink` outline. */
+.clear-all {
   font: var(--font-body);
   font-weight: var(--weight-semibold);
-  padding: 6px var(--space-sm);
+  box-sizing: border-box;
+  height: 32px;
+  margin-left: auto;
+  padding: 0 12px;
   border: 1px solid var(--ink);
-  border-radius: 6px;
+  border-radius: 3px;
   background: transparent;
   color: var(--ink);
   cursor: pointer;
+  white-space: nowrap;
 }
 
-/* D-21: above 480px the toolbar is a grid of equal cells, so its row count
+/* D-21: above 480px the filter bar is a grid of equal cells, so its row count
    depends only on the viewport width and the visitor's font, never on a
-   filter label. toolbar-fit.js sets `--toolbar-cell-min` to the widest
-   resting label ("Bowls/Playoffs ▾", "Clear all filters", ...) measured in
-   the font the page renders in, so no resting label truncates on a wide
-   font. 116px stays the floor (one row of ten at 1280px on narrow fonts);
-   `min(100%, ...)` keeps a pathological font from overflowing the toolbar. */
+   control's value. toolbar-fit.js writes `--toolbar-cell-min` (the widest
+   resting label in the rendered font, caret included) and `--toolbar-cols`
+   (balanced rows). Before it runs, auto-fill with a 116px floor stands in.
+   `min(100%, ...)` keeps a pathological font from overflowing the bar. */
 @media (min-width: 481px) {
   #toolbar {
     display: grid;
     grid-template-columns: repeat(
-      auto-fill,
+      var(--toolbar-cols, auto-fill),
       minmax(min(100%, max(116px, var(--toolbar-cell-min, 116px))), 1fr)
     );
     gap: var(--space-sm);
     align-items: center;
   }
 
-  .filter-trigger,
-  #clear-filters {
+  .filter-trigger {
     width: 100%;
     min-width: 0;
     max-width: none;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    padding-left: var(--space-xs);
-    padding-right: var(--space-xs);
   }
 }
 
@@ -744,19 +845,10 @@ body.app {
   white-space: nowrap;
 }
 
-#clear-filters:focus-visible,
+.clear-all:focus-visible,
 .filter-trigger:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-
-/* D-04: the Announcers button is an ordinary filter trigger; it takes the
-   changed-control accent while people are selected. */
-#trigger-announcers[data-active="true"] {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent);
-  font-weight: var(--weight-semibold);
 }
 
 /* ---------- Filter popovers ---------- */
@@ -3041,26 +3133,27 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   display: contents;
 }
 
-.nfl-toolbar-spacer {
-  display: none;
-}
-
-#nfl-clear-filters {
-  font: var(--font-body);
-  font-weight: var(--weight-semibold);
-  padding: 6px var(--space-sm);
-  border: 1px solid var(--ink);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink);
-  cursor: pointer;
+/* Same equal-cell grid as #toolbar (set after the flex base above, which it
+   must outrank); `.filter-trigger` sizing is shared. */
+@media (min-width: 481px) {
+  #nfl-toolbar {
+    display: grid;
+    grid-template-columns: repeat(
+      var(--toolbar-cols, auto-fill),
+      minmax(min(100%, max(116px, var(--toolbar-cell-min, 116px))), 1fr)
+    );
+    gap: var(--space-sm);
+    align-items: center;
+  }
 }
 
 #nfl-filters-button {
   font: var(--font-body);
-  padding: var(--space-sm) var(--space-md);
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 0 12px;
   border: 1px solid var(--rule-strong);
-  border-radius: 4px;
+  border-radius: 3px;
   background: var(--bg);
   color: var(--ink);
   cursor: pointer;
@@ -3071,56 +3164,11 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   cursor: default;
 }
 
-#nfl-clear-filters:focus-visible,
 #nfl-filters-button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-#nfl-trigger-announcers[data-active="true"] {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent);
-  font-weight: var(--weight-semibold);
-}
-
-/* Same grid as #toolbar. The hidden spacer cells bring the NFL row count up to
-   the CFB toolbar's twelve cells, so a switch never moves the chart (SITE-20). */
-@media (min-width: 481px) {
-  #nfl-toolbar {
-    display: grid;
-    grid-template-columns: repeat(
-      auto-fill,
-      minmax(min(100%, max(116px, var(--toolbar-cell-min, 116px))), 1fr)
-    );
-    gap: var(--space-sm);
-    align-items: center;
-  }
-
-  #nfl-toolbar .filter-trigger,
-  #nfl-clear-filters {
-    width: 100%;
-    min-width: 0;
-    max-width: none;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    padding-left: var(--space-xs);
-    padding-right: var(--space-xs);
-  }
-
-  .nfl-toolbar-spacer {
-    display: block;
-    visibility: hidden;
-    font: var(--font-body);
-    padding: 6px var(--space-xs);
-    border: 1px solid transparent;
-  }
-
-  .nfl-toolbar-spacer::before {
-    content: "\00a0";
-  }
-}
 
 .nfl-filter-popover section {
   display: flex;

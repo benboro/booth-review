@@ -26,8 +26,8 @@
 </header>
 
 <nav id="toolbar" aria-label="Filters">
-  <button type="button" id="clear-filters">Clear all filters</button>
   <button type="button" id="filters-button" class="mobile-only" popovertarget="filters-sheet" aria-haspopup="dialog" aria-expanded="false">Filters</button>
+  <ul id="filter-chips" class="filter-chips mobile-only" aria-label="Changed filters" hidden></ul>
   <button type="button" class="filter-trigger desktop-only" id="trigger-announcers" popovertarget="pop-announcers" aria-haspopup="dialog" aria-expanded="false">Announcers</button>
   <button type="button" class="filter-trigger desktop-only" id="trigger-seasons" popovertarget="pop-seasons" aria-haspopup="dialog" aria-expanded="false">Seasons</button>
   <button type="button" class="filter-trigger desktop-only" id="trigger-networks" popovertarget="pop-networks" aria-haspopup="dialog" aria-expanded="false">Networks</button>
@@ -42,7 +42,7 @@
 <script src="toolbar-fit.js"></script>
 
 <section id="selection-bar" aria-label="Selected announcers and match summary">
-  <div id="selection-row" class="selection-row" hidden>
+  <div id="selection-row" class="selection-row">
     <ul id="chips" aria-label="Selected people"></ul>
 
     <div class="toggle-group">
@@ -52,6 +52,8 @@
       <span id="together-help" class="visually-hidden">Show only games where everyone selected shared the booth.</span>
       <button type="button" id="clear-selection" aria-label="Clear selection" title="Clear selection"><span class="lbl-long">Clear selection</span><span class="lbl-short">Clear</span></button>
     </div>
+
+    <button type="button" id="clear-filters" class="clear-all">Clear all filters</button>
   </div>
 
   <p id="compare-note" hidden>Compare mode holds up to 4 people.</p>
@@ -210,7 +212,7 @@
   </div>
   <div class="sheet-body"></div>
   <div class="sheet-footer">
-    <button type="button" id="filters-show-results">Show results</button>
+    <button type="button" id="filters-show-results">Show games</button>
   </div>
 </div>
 
