@@ -109,7 +109,7 @@ function ariaSort(state, key) {
 }
 
 function networkCell(data, row) {
-  const td = el('td', 'crews-network');
+  const td = el('td', row.network.count > 1 ? 'crews-network has-more' : 'crews-network');
   const net = data.lookups.networks.find((n) => n.id === row.network.primaryId);
   if (net) td.append(networkMark(net));
   if (row.network.count > 1) td.append(el('span', 'crews-more-nets caption', `+${row.network.count - 1}`));
@@ -281,6 +281,7 @@ function buildTable(rows, ctx, cols) {
   const table = el('table', 'games-table crews-table');
   table.setAttribute('role', 'grid');
   table.classList.add(`crews-table--${model.mode}`);
+  if (model.perSeason) table.classList.add('has-season');
   const headRow = el('tr');
   const chevronTh = el('th', 'crews-chevron-cell');
   chevronTh.scope = 'col';
@@ -293,7 +294,7 @@ function buildTable(rows, ctx, cols) {
     const b = el('button');
     b.type = 'button';
     b.dataset.sortKey = key;
-    b.append(el('span', 'sort-glyph', sortGlyph(state, key)), el('span', 'crews-sort-label', label));
+    b.append(el('span', 'crews-sort-label', label), el('span', 'sort-glyph', sortGlyph(state, key)));
     b.addEventListener('click', () => setState({ csort: nextSort(state, key) }));
     th.append(b);
     headRow.append(th);

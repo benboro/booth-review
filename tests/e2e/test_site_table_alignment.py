@@ -165,11 +165,11 @@ def test_sort_glyph_does_not_move_a_right_aligned_head(
 
 def test_cfb_crews_heads_align_right_over_numbers(
     guarded_page: Page,
-    serve_booths: Callable[[Page], None],
+    serve_crews: Callable[[Page], None],
     open_app: Callable[[Page, str], None],
 ) -> None:
     guarded_page.set_viewport_size(DESKTOP)
-    serve_booths(guarded_page)
+    serve_crews(guarded_page)
     open_app(guarded_page, "?view=crews")
     guarded_page.wait_for_selector("#crews-panel table.games-table tbody tr")
     _assert_aligned(_columns(guarded_page, "#crews-panel"))

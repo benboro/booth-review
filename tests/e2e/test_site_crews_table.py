@@ -543,3 +543,112 @@ def test_excitement_caption_follows_the_seasons_range(app: Page) -> None:
     expect(caption).to_be_hidden()
     _set(app, {"seasons": [2024, 2025]})
     expect(caption).to_be_visible()
+
+
+# -- Styles (UI-SPEC Spacing, Typography, Color, Phone) -----------------------------------------
+
+_PROBE_JS = """
+(prop) => {
+  const probe = document.createElement('span');
+  probe.style[prop.css] = prop.value;
+  document.body.append(probe);
+  const out = getComputedStyle(probe)[prop.css];
+  probe.remove();
+  return out;
+}
+"""
+
+
+def _resolved(page: Page, css: str, value: str) -> str:
+    out: str = page.evaluate(_PROBE_JS, {"css": css, "value": value})
+    return out
+
+
+def _style(page: Page, selector: str, prop: str) -> str:
+    out: str = page.evaluate(
+        "([s, p]) => getComputedStyle(document.querySelector(s))[p]", [selector, prop]
+    )
+    return out
+
+
+@pytest.mark.parametrize("width,height", [(1440, 1000), (390, 900)])
+def test_crews_table_computed_styles(app: Page, width: int, height: int) -> None:
+    app.set_viewport_size({"width": width, "height": height})
+    phone = width <= 480
+    muted = _resolved(app, "color", "var(--muted)")
+    soft = _resolved(app, "backgroundColor", "var(--accent-soft)")
+    assert _style(app, "#crews-panel table", "tableLayout") == "fixed"
+    assert _style(app, "#crews-panel tbody td.num", "textAlign") in ("right", "end")
+    assert "tabular-nums" in _style(app, "#crews-panel tbody td.num", "fontVariantNumeric")
+    assert _style(app, "#crews-panel th.num", "textAlign") in ("right", "end")
+    # Low-n cells are muted.
+    assert _style(app, "#crews-panel td.is-low-n", "color") == muted
+    # The pick and a person highlight share the accent-soft fill.
+    key = _key(app, [CASE_TRIO["pbp"], *CASE_TRIO["analysts"]])
+    _set(app, {"crew": key})
+    assert _style(app, "#crews-panel tr.is-picked", "backgroundColor") == soft
+    _set(app, {"crew": None, "people": [CASE_TRIO["pbp"]]})
+    assert _style(app, "#crews-panel tr.is-highlighted", "backgroundColor") == soft
+    # "View more": 32px on a desktop, 44px on a phone.
+    more_h = app.locator("#crews-panel .crews-more").bounding_box()
+    assert more_h is not None
+    assert round(more_h["height"]) == (44 if phone else 32)
+    # Sticky identity columns on a phone only.
+    chevron_pos = _style(app, "#crews-panel tbody td.crews-chevron-cell", "position")
+    name_pos = _style(app, "#crews-panel tbody td.crews-name", "position")
+    assert (chevron_pos, name_pos) == (("sticky", "sticky") if phone else ("static", "static"))
+    # Tag type: 12px with a 3px radius.
+    tag = "#crews-panel td.is-low-n .crews-tag"
+    assert _style(app, tag, "fontSize") == "12px"
+    assert _style(app, tag, "borderTopLeftRadius") == "3px"
+
+
+@pytest.mark.parametrize("mode", ["pbp", "analyst"])
+def test_partner_list_is_muted_by_colour_only(app: Page, mode: str) -> None:
+    app.locator(f"#crews-panel button[data-cmode={mode}]").click()
+    muted = _resolved(app, "color", "var(--muted)")
+    sel = "#crews-panel tbody tr:has(.crews-partners)"
+    partner = f"{sel} .crews-partners"
+    name = f"{sel} .crews-person-name"
+    assert _style(app, partner, "color") == muted
+    assert _style(app, partner, "color") != _style(app, name, "color")
+    assert _style(app, partner, "fontSize") == _style(app, name, "fontSize")
+    assert _style(app, partner, "fontWeight") == _style(app, name, "fontWeight")
+
+
+def test_phone_table_scrolls_inside_its_wrapper(app: Page) -> None:
+    app.set_viewport_size({"width": 390, "height": 844})
+    out = app.evaluate(
+        """() => {
+          const wrap = document.querySelector('#crews-panel .crews-table-wrap');
+          return {
+            wrapScroll: wrap.scrollWidth, wrapClient: wrap.clientWidth,
+            page: document.documentElement.scrollWidth,
+            // One line of content is about 20px tall; a wrapped figure is 36px or more.
+            numWrap: [...document.querySelectorAll(
+              '#crews-panel td.num:not(.is-low-n):not(.is-blank)')]
+              .filter((td) => {
+                const r = document.createRange();
+                r.selectNodeContents(td);
+                return r.getBoundingClientRect().height > 28;
+              }).length,
+          };
+        }"""
+    )
+    assert out["wrapScroll"] > out["wrapClient"]
+    assert out["page"] <= 390
+    assert out["numWrap"] == 0
+
+
+def test_pinned_columns_have_an_opaque_fill_on_phones_only(app: Page) -> None:
+    js = """() => {
+      const td = document.querySelector('#crews-panel tbody td.crews-name');
+      const cs = getComputedStyle(td);
+      return { position: cs.position, bg: cs.backgroundColor }; }"""
+    desktop = app.evaluate(js)
+    assert desktop["position"] != "sticky"
+    assert desktop["bg"] == "rgba(0, 0, 0, 0)"
+    app.set_viewport_size({"width": 390, "height": 844})
+    phone = app.evaluate(js)
+    assert phone["position"] == "sticky"
+    assert phone["bg"] != "rgba(0, 0, 0, 0)"

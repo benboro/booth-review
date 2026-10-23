@@ -3766,20 +3766,14 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 @media (max-width: 480px) {
   /* Identity column pinned (UI-SPEC phone contract): sticky left with its own opaque fill.
      Desktop has no column fill. */
-  .nfl-booth-table .booth-col,
-  .crews-table tbody th.booth-col {
+  .nfl-booth-table .booth-col {
     position: sticky;
     left: 0;
     z-index: 1;
     background: var(--bg);
   }
 
-  .nfl-booth-table th.booth-col,
-  .crews-table thead th.booth-col {
-    background: var(--surface);
-  }
-
-  .crews-table tbody tr:hover th.booth-col {
+  .nfl-booth-table th.booth-col {
     background: var(--surface);
   }
 
@@ -4219,68 +4213,285 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   white-space: nowrap;
 }
 
-/* ---------- Crews tab (Phase 10, D-13..D-15) ---------- */
+/* ---------- Crews tab (Phase 14, CFB-02..CFB-05) ---------- */
 
 #crews-panel {
   padding: var(--space-md) 0 var(--space-lg);
 }
 
-.crews-hint {
-  margin: 0 0 var(--space-md);
+/* Mode switch and Per season sit left, 8px apart; the row keeps its height in every mode. */
+.crews-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 28px;
+  margin-bottom: var(--space-md);
 }
 
-.crews-group {
-  margin-bottom: var(--space-lg);
+.crews-mode {
+  margin-bottom: 0;
 }
 
-.crews-heading {
-  font-size: 20px;
-  line-height: 1.2;
-  margin: 0 0 var(--space-sm);
+/* A fixed width per button, so a label never shifts the group. */
+.crews-mode button {
+  width: 80px;
+  padding: 0;
 }
 
+.crews-perseason-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font: var(--font-body);
+  cursor: pointer;
+}
+
+.crews-perseason {
+  accent-color: var(--ink);
+}
+
+.crews-perseason:disabled,
+.crews-perseason-label:has(:disabled) {
+  color: var(--muted);
+  cursor: default;
+}
+
+/* Fixed layout with the UI-SPEC column widths; the Crew column takes the rest. */
 .crews-table {
   table-layout: fixed;
-  min-width: 620px;
+  min-width: 1088px;
 }
 
-/* Fixed layout keeps the columns of every season-and-family table in line, so the numeric
-   columns get set widths sized to their content (heads may wrap to two lines) and the Booth
-   column takes the rest (brief §5). */
+.crews-table th.crews-chevron-cell {
+  width: 40px;
+}
+
+.crews-table th.crews-col-season {
+  width: 72px;
+}
+
+.crews-table th.crews-col-rank {
+  width: 200px;
+}
+
+.crews-table th.crews-col-network {
+  width: 128px;
+}
+
+.crews-table th.crews-col-games {
+  width: 104px;
+}
+
+.crews-table th.crews-col-exc {
+  width: 120px;
+}
+
+.crews-table th.crews-col-viewers {
+  width: 176px;
+}
+
 .crews-table th.num {
-  width: 8.5rem;
   white-space: normal;
 }
 
-.crews-table th.num.crews-narrow {
-  width: 5rem;
+.crews-table td {
+  vertical-align: top;
 }
 
-.crews-table .crews-pbp {
-  font-weight: 600;
+/* A head wraps inside its column (two lines at most) instead of spilling over the next one. */
+.crews-table th button {
+  max-width: 100%;
+  text-align: inherit;
 }
 
-.crews-chip {
-  margin-left: var(--space-xs);
-  padding: 0 var(--space-xs);
-  border: 1px solid var(--rule-strong);
-  border-radius: 3px;
+.crews-sort-label {
+  min-width: 0;
+  white-space: normal;
+}
+
+.crews-table td.crews-name,
+.crews-table td.crews-rank {
+  white-space: normal;
+  word-break: normal;
+}
+
+.crews-table .sort-glyph {
+  display: inline-block;
+  width: 14px;
+  text-align: center;
+}
+
+.crews-table .caption {
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+/* A person row: the partner list is lighter by colour only (same size and weight). */
+.crews-partners {
+  margin-left: var(--space-sm);
   color: var(--muted);
-  font-size: 14px;
+}
+
+.crews-more-nets {
+  margin-left: var(--space-xs);
+}
+
+/* A network name stays on one line and is cut with an ellipsis (the cell title lists them all). */
+.crews-network {
   white-space: nowrap;
 }
 
-.crews-legend,
-.crews-rated-note {
-  margin: var(--space-xs) 0;
+.crews-network .net-mark {
+  max-width: 100%;
+  min-width: 0;
+  vertical-align: top;
 }
 
-.crews-credits {
+.crews-network.has-more .net-mark {
+  max-width: calc(100% - 28px);
+}
+
+.crews-network .net-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crews-season {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tags are text notes, not pills: 12px, 4px side padding, 3px radius. */
+.crews-tag {
+  display: inline-block;
+  padding: 0 var(--space-xs);
+  margin-left: var(--space-xs);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 400;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.crews-tag.is-dashed {
+  border: 1px dashed var(--muted);
+}
+
+/* Under 8 figures: muted text, a faint diagonal hatch and the tag; the row stays listed. */
+.crews-table td.is-low-n {
+  color: var(--muted);
+  background-image: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.025) 0 1px, transparent 1px 6px);
+}
+
+/* Chevron: a CSS-border caret in a 28px square (44px on a phone). Expansion arrives in 14-08. */
+.crews-table td.crews-chevron-cell,
+.crews-table th.crews-chevron-cell {
+  padding: 0;
+  text-align: left;
+}
+
+.crews-chevron {
+  margin-left: 6px;
+}
+
+.crews-chevron {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.crews-chevron::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg);
+}
+
+.crews-row {
+  cursor: pointer;
+}
+
+.crews-table tbody tr.crews-row:hover {
+  background: var(--surface);
+}
+
+.crews-table tbody tr.is-highlighted,
+.crews-table tbody tr.is-highlighted:hover {
+  background: var(--accent-soft);
+}
+
+.crews-table tbody tr.is-picked,
+.crews-table tbody tr.is-picked:hover {
+  background: var(--accent-soft);
+}
+
+.crews-table tbody tr.is-picked > .crews-chevron-cell {
+  box-shadow: inset 2px 0 0 var(--ink);
+}
+
+.crews-table tbody tr.is-picked .crews-person-name {
+  font-weight: 600;
+}
+
+.crews-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.crews-more {
+  display: block;
+  margin-top: var(--space-md);
+  min-height: 32px;
+  padding: 0 var(--space-md);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--ink);
+  font: var(--font-body);
+  cursor: pointer;
+}
+
+.crews-more:hover {
+  background: var(--surface);
+}
+
+.crews-more:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Notes sit 16px below the table, 8px apart. */
+#crews-panel > .caption {
+  margin: var(--space-sm) 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+#crews-panel > .crews-count {
   margin-top: var(--space-md);
 }
 
+.crews-credits {
+  margin-top: var(--space-sm);
+}
+
 .crews-credits .caption {
-  margin: var(--space-xs) 0;
+  margin: var(--space-sm) 0 0;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .crews-empty {
@@ -4288,7 +4499,9 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   align-items: flex-start;
   text-align: left;
   padding: 0;
-  margin: var(--space-md) 0;
+  margin: 0 0 var(--space-md);
+  min-height: 320px;
+  justify-content: flex-start;
 }
 
 .crews-empty p {
@@ -4300,20 +4513,116 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 @media (max-width: 480px) {
-  .crews-table .booth-col {
-    min-width: 150px;
+  /* Two reserved rows (mode switch, Per season) so nothing shifts between modes. */
+  .crews-tools {
+    flex-direction: column;
+    align-items: flex-start;
+    min-height: 80px;
   }
 
-  .crews-chip {
+  .crews-mode button {
+    min-width: 0;
+  }
+
+  .crews-chevron {
+    width: 44px;
+    height: 44px;
     margin-left: 0;
   }
 
-  .crews-table th.num {
-    width: 5.5rem;
+  /* Phone widths: chevron 44, Crew 148, Rank 96 (Crew mode), Network 96, Games 80,
+     Excitement 88, Viewers 120, and 72 more for Season. */
+  .table-scroll .games-table.crews-table {
+    table-layout: fixed;
+    width: 576px;
+    min-width: 576px;
   }
 
-  .crews-table th.num.crews-narrow {
-    width: 4rem;
+  .table-scroll .games-table.crews-table.crews-table--crew {
+    width: 672px;
+    min-width: 672px;
+  }
+
+  .table-scroll .games-table.crews-table.has-season {
+    width: 648px;
+    min-width: 648px;
+  }
+
+  .table-scroll .games-table.crews-table.crews-table--crew.has-season {
+    width: 744px;
+    min-width: 744px;
+  }
+
+  .crews-table th.crews-chevron-cell {
+    width: 44px;
+  }
+
+  .crews-table th.crews-col-crew {
+    width: 148px;
+  }
+
+  .crews-table th.crews-col-season {
+    width: 72px;
+  }
+
+  .crews-table th.crews-col-rank,
+  .crews-table th.crews-col-network {
+    width: 96px;
+  }
+
+  .crews-table th.crews-col-games {
+    width: 80px;
+  }
+
+  .crews-table th.crews-col-exc {
+    width: 88px;
+  }
+
+  .crews-table th.crews-col-viewers {
+    width: 120px;
+  }
+
+  .table-scroll .games-table td.crews-chevron-cell,
+  .table-scroll .games-table th.crews-chevron-cell {
+    padding: 0;
+  }
+
+  /* The Crew or Person column is pinned beside the chevron; the chevron keeps no divider. */
+  .table-scroll .crews-table tr > :first-child {
+    border-right: none;
+  }
+
+  .table-scroll .crews-table tr > :nth-child(2) {
+    position: sticky;
+    left: 44px;
+    z-index: 1;
+    background-color: var(--bg);
+    border-right: 1px solid var(--rule-strong);
+  }
+
+  .table-scroll .crews-table thead tr > :nth-child(2) {
+    background-color: var(--surface);
+  }
+
+  .table-scroll .crews-table tbody tr:hover > :nth-child(2) {
+    background-color: var(--surface);
+  }
+
+  .table-scroll .crews-table tbody tr.is-picked > :nth-child(-n + 2),
+  .table-scroll .crews-table tbody tr.is-highlighted > :nth-child(-n + 2) {
+    background-image: linear-gradient(var(--accent-soft), var(--accent-soft));
+  }
+
+  /* The narrow figure columns put an n < 8 tag under its figure, right-aligned. */
+  .crews-table td.num .crews-tag {
+    display: block;
+    width: fit-content;
+    margin: 2px 0 0 auto;
+  }
+
+  .crews-more {
+    width: 100%;
+    min-height: 44px;
   }
 }
 
