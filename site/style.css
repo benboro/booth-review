@@ -4321,6 +4321,25 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   white-space: normal;
 }
 
+/* Over a right-aligned number column the sort glyph follows the label's last word, so it never
+   floats left of a wrapped label. Its box takes no inline width (the negative margin cancels
+   it), so the label keeps the numbers' right edge and the glyph hangs in the cell padding. */
+.crews-table th.num button {
+  display: block;
+  overflow: visible;
+  text-align: right;
+}
+
+.crews-table th.num .crews-sort-label {
+  display: inline;
+}
+
+.crews-table th.num .sort-glyph {
+  width: 12px;
+  margin-left: var(--space-xs);
+  margin-right: calc(-12px - var(--space-xs));
+}
+
 .crews-table td.crews-name,
 .crews-table td.crews-rank {
   white-space: normal;
@@ -4803,8 +4822,9 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
     width: 80px;
   }
 
+  /* "excitement" plus its sort glyph needs 100px; at 88px the glyph wrapped under the label. */
   .crews-table th.crews-col-exc {
-    width: 88px;
+    width: 100px;
   }
 
   .crews-table th.crews-col-viewers {

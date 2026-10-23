@@ -222,3 +222,31 @@ def test_plus_n_count_never_overlaps_a_wide_logo(
     assert m["imgRight"] <= m["moreLeft"] + 0.5, f"{name}: the logo covers the +N count"
     assert m["moreRight"] <= m["contentRight"] + 0.5, f"{name}: the +N count is clipped"
     assert m["markRight"] <= m["moreLeft"] + 0.5
+
+
+# -- 14-10: the sort glyph sits beside the label on right-aligned number heads ----------------
+
+_GLYPH_JS = """
+() => [...document.querySelectorAll('#crews-panel th.num')].map((th) => {
+  const label = th.querySelector('.crews-sort-label');
+  const glyph = th.querySelector('.sort-glyph').getBoundingClientRect();
+  const lines = [...label.getClientRects()];
+  const last = lines[lines.length - 1];
+  const cs = getComputedStyle(th);
+  const numRight = th.getBoundingClientRect().right - parseFloat(cs.paddingRight);
+  return { text: label.textContent, lines: lines.length, gap: glyph.left - last.right,
+           labelRight: last.right, numRight,
+           dy: Math.abs((glyph.top + glyph.bottom) / 2 - (last.top + last.bottom) / 2) };
+})
+"""
+
+
+@pytest.mark.parametrize("width", WIDTHS)
+def test_sort_glyph_follows_the_label_on_number_heads(app: Page, width: int) -> None:
+    _at(app, width)
+    heads: list[dict[str, Any]] = app.evaluate(_GLYPH_JS)
+    assert len(heads) >= 3
+    for h in heads:
+        assert 0 <= h["gap"] <= 8, f"{h['text']}: the sort glyph is {h['gap']}px from its label"
+        assert h["dy"] <= 8, f"{h['text']}: the sort glyph is off the label's last line"
+        assert abs(h["labelRight"] - h["numRight"]) <= 1, f"{h['text']}: label lost the numbers' edge"
