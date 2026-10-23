@@ -1163,11 +1163,6 @@ _PHONE_LABELS_JS = """
 """
 
 
-@pytest.mark.xfail(
-    reason="360px plot is 193px wide after the 13-14 module frame, so the label fitter hides 5 "
-    "of 13 season labels; layout fix pending (13-E2E-LEDGER, 13-24)",
-    strict=False,
-)
 def test_real_phone_shows_all_season_labels(
     real_guarded_page: Page,
     real_open_app: Callable[[Page, str], None],

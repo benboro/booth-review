@@ -841,6 +841,33 @@ def test_mobile_layout_disables_drag_zoom_and_moves_legend_below(
     assert legend_box["y"] >= chart_box["y"] + chart_box["height"]
 
 
+def test_phone_left_margin_is_narrow_and_the_y_axis_text_still_fits(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """SITE-48: at <=480px the shared left margin is 44px (70 on desktop) and the y ticks
+    and title stay inside the chart div, clear of the plot edge."""
+    open_app(mobile_page, "")
+    assert _layout(mobile_page)["margin"]["l"] == 44
+    boxes = mobile_page.evaluate(
+        "() => { const c = document.getElementById('chart').getBoundingClientRect();"
+        " const p = document.querySelector('#chart .nsewdrag').getBoundingClientRect();"
+        " const t = [...document.querySelectorAll('.yaxislayer-above .ytick text, .g-ytitle text')]"
+        "  .map(e => e.getBoundingClientRect());"
+        " return {chartLeft: c.left, plotLeft: p.left, texts: t.map(r => [r.left, r.right])}; }"
+    )
+    assert boxes["texts"]
+    for left, right in boxes["texts"]:
+        assert left >= boxes["chartLeft"] - 0.5
+        assert right <= boxes["plotLeft"] + 0.5
+
+
+def test_desktop_left_margin_is_unchanged(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    assert _layout(guarded_page)["margin"]["l"] == 70
+
+
 def test_mobile_page_has_no_horizontal_scroll(
     mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:

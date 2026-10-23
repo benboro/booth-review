@@ -27,7 +27,7 @@ import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import { showHoverRing, hideHoverRing, ringSpecFromPoint, hoverRingDiameter } from '../../../modules/hover-ring.js';
 import { initBandInfo, positionBandInfo, closeBandNote } from '../../../modules/band-info.js';
 import { placeEraLabels, setEraCaption } from '../era-labels.js';
-import { bandLayout, MARGIN, TICK_FONT_PX, DOT_OPACITY } from '../../../modules/chart.js';
+import { bandLayout, marginFor, TICK_FONT_PX, DOT_OPACITY } from '../../../modules/chart.js';
 import { createOnlyDetector } from '../../../modules/legend.js';
 import { buildDateAxis, seasonRange, shownBlocks, gapDividers } from '../../../modules/date-axis.js';
 import { MONTHS, escapeHover } from '../../../modules/format.js';
@@ -736,7 +736,7 @@ function marginXAxis(model, th, env) {
 function buildFigure(model, state, env, th, items) {
   const bg = PAGE_BG[th];
   const height = env.mobile ? 440 : 520;
-  const margin = MARGIN;
+  const margin = marginFor(env.mobile);
   const fontPx = env.mobile ? TICK_FONT_PX.mobile : TICK_FONT_PX.desktop;
   const plotH = height - margin.t - margin.b;
   const bandGeo = bandLayout(plotH);

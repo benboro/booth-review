@@ -87,6 +87,10 @@ export const DOT_OPACITY = Object.freeze({
 /** Tick/label font sizes in px; NFL views import these (08 D-18). 12px on every viewport (chart frame floor). */
 export const TICK_FONT_PX = Object.freeze({ desktop: 12, mobile: 12 });
 export const MARGIN = Object.freeze({ l: 70, r: 24, t: 40, b: 60 });
+/** Phone width (<= 480px, PHONE_QUERY): a narrower left margin gives the plot the width back (SITE-48). */
+export const MARGIN_PHONE = Object.freeze({ ...MARGIN, l: 44 });
+/** The plot margins for the current width: the shared MARGIN, or MARGIN_PHONE on a phone. */
+export const marginFor = (mobile) => (mobile ? MARGIN_PHONE : MARGIN);
 
 /**
  * 04.13 D-01 chart-geometry constants for the "No public rating" band, in screen px
@@ -301,9 +305,10 @@ export function hoverText(data, i, { axis, y, theme }) {
 export function buildFigure(data, view, state, env) {
   const axis = state.axis;
   const isDate = axis === 'date';
-  const measuredPx = (env.chartWidth ?? 0) - MARGIN.l - MARGIN.r;
+  const margin = marginFor(env.mobile);
+  const measuredPx = (env.chartWidth ?? 0) - margin.l - margin.r;
   const plotPx =
-    measuredPx > 0 ? measuredPx : (env.mobile ? FALLBACK_CHART_WIDTH.mobile : FALLBACK_CHART_WIDTH.desktop) - MARGIN.l - MARGIN.r;
+    measuredPx > 0 ? measuredPx : (env.mobile ? FALLBACK_CHART_WIDTH.mobile : FALLBACK_CHART_WIDTH.desktop) - margin.l - margin.r;
   // Pitfall 9: naBand never sees 'date'; a harmless band keeps every path off a sentinel.
   const band = isDate
     ? { sentinel: 0, divider: 0, range: [0, 1], tickvals: [], ticktext: [] }
@@ -774,8 +779,8 @@ export function buildFigure(data, view, state, env) {
     const range = [base[0] - padLo, base[1] + padHi];
     const labels = dateAxisLabels(blocks, range, plotPx, {
       mobile: env.mobile,
-      marginLeft: MARGIN.l,
-      marginRight: MARGIN.r,
+      marginLeft: margin.l,
+      marginRight: margin.r,
     });
     // 04.17 D-06: bands come from the shown blocks only, never from the filtered view.
     const bands = postseasonBands(blocks, range[1]);
@@ -935,7 +940,7 @@ export function buildFigure(data, view, state, env) {
     // D-04: the 170px right margin only ever made room for Plotly's own
     // legend; the HTML chip row above the chart replaced it, so the margin
     // is the same narrow width at every screen size now.
-    margin: { ...MARGIN },
+    margin: { ...margin },
   }, env);
 
   // D-02: Spread axis only -- appended so shapes[0]/annotations[0] stay the
@@ -1238,8 +1243,8 @@ export function fitDateAxis(gd) {
   }
   const want = dateAxisLabels(meta.blocks, xa.range, xa._length, {
     mobile: meta.mobile,
-    marginLeft: MARGIN.l,
-    marginRight: MARGIN.r,
+    marginLeft: marginFor(meta.mobile).l,
+    marginRight: marginFor(meta.mobile).r,
     measure: seasonLabelMeasurer(gd),
   });
   const update = {};
