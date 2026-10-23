@@ -6,10 +6,11 @@ host after page load.
 
 ## plotly-partial-4.1.1.min.js
 
-- **Source:** built locally from the plotly.js tag v4.1.1 (commit `0aabc3c`) with
-  `npm run custom-bundle -- --traces scatter,scattergl,bar` (Phase 12 spike; build
-  notes kept in the local planning spikes). Traces: scatter, scattergl, bar, which
-  is everything the site draws. Must stay **>=4.1.1**: the first release with the
+- **Source:** built locally (2026-10-21, Phase 12 spike) from the plotly.js tag v4.1.1
+  (commit `0aabc3c`) as a custom bundle with only the traces scatter, scattergl and bar,
+  which is everything the site draws; the build steps are under "Re-vendoring procedure"
+  below. No published package carries this trace set, so the digest can only be
+  checked by rebuilding. Must stay **>=4.1.1**: the first release with the
   `scattergl` per-point marker color fix the chart depends on.
 - **License:** MIT (plotly.js, github.com/plotly/plotly.js)
 - **Size:** 1,457,503 bytes (replaced the 4,815,814-byte full bundle)
@@ -65,11 +66,25 @@ directive and this record.
 
 Any new vendored file stops at a user-approval checkpoint first.
 
-1. Download to a scratch directory outside the repo:
-   `curl -fsSL --proto '=https' -o <scratch>/plotly-partial-<version>.min.js https://cdn.plot.ly/plotly-<version>.min.js`
-2. Verify the digest against an independent second host (jsDelivr
-   `plotly.js-dist-min@<version>`, compare with `cmp`) before copying into
-   `site/vendor/`.
+1. Build the partial bundle in a new empty scratch directory outside the repo, with no
+   install scripts run:
+   ```
+   git clone --depth 1 --branch v<version> https://github.com/plotly/plotly.js.git <scratch>/plotly.js
+   git -C <scratch>/plotly.js rev-parse --short HEAD   # record the commit (v4.1.1: 0aabc3c)
+   cd <scratch>/plotly.js
+   npm ci --ignore-scripts
+   npm run custom-bundle -- --traces scatter,scattergl,bar --out phase12
+   ```
+   (`--out phase12` is the name the pinned v4.1.1 build used; keep it when rebuilding
+   that version.) Take the minified file the command reports writing under `dist/` and
+   copy it out as `plotly-partial-<version>.min.js`. Use the Node.js LTS current at build
+   time and record its version (`node --version`) in this README; the v4.1.1 build did
+   not record one. Keep the trace list in step with every trace type the site draws.
+2. Check the result before copying it into `site/vendor/`: a rebuild of the pinned
+   version must reproduce the SHA-256 above byte for byte (`sha256sum`; if it does not,
+   stop and find the difference, usually the Node or npm version). For a new version,
+   record the new size, SHA-256 and SRI, and run the e2e tests in step 5 to confirm every
+   trace draws.
 3. Update all of these together in one commit:
    - This README (source URL, version, size, digest, SRI)
    - `site/vendor/plotly-partial-<version>.min.js.sha256` (sha256sum format)
