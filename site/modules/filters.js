@@ -1460,6 +1460,15 @@ export function changedControls(data, state, view) {
   return TRIGGER_NAMES.filter((name) => triggerInfo(name, data, state, view).active);
 }
 
+/**
+ * Whether Clear all filters has anything to reset: a changed toolbar control, or a venue
+ * picked on the map (GROUP_RESETS.venue has no toolbar trigger, so `changedControls` never
+ * lists it).
+ */
+export function clearAllActive(changed, state) {
+  return changed.length > 0 || state.venue != null;
+}
+
 /** Renders every toolbar trigger's label, value and `data-active` / `.is-changed` state (D-02). */
 function renderTriggers(data, state, view) {
   const changed = new Set(changedControls(data, state, view));
@@ -1491,8 +1500,10 @@ function renderFiltersButton(data, state, view) {
   const n = changed.length;
   els.filtersButton.textContent = n > 0 ? `Filters · ${n} changed` : 'Filters';
   els.filtersButton.classList.toggle('is-changed', n > 0);
-  // Clear all filters looks and reads as disabled while nothing is changed (the shared predicate).
-  els.clearFilters.setAttribute('aria-disabled', n > 0 ? 'false' : 'true');
+  // Clear all filters looks and reads as disabled while nothing it would reset is changed: a
+  // changed toolbar control, or the map's venue filter, which Clear all also resets but which
+  // has no toolbar trigger (its chip sits in the table heading row).
+  els.clearFilters.setAttribute('aria-disabled', clearAllActive(changed, state) ? 'false' : 'true');
   const chips = changed.map((name) => {
     const { label } = triggerInfo(name, data, state, view);
     const li = document.createElement('li');
