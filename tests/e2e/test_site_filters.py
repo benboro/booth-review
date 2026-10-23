@@ -2313,6 +2313,18 @@ def test_clear_all_filters_is_disabled_until_a_filter_changes(
     )
 
 
+def test_disabled_clear_all_filters_is_a_no_op(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """While aria-disabled, Clear all filters changes nothing: typed Game-search text stays."""
+    open_app(guarded_page, "")
+    assert _clear_state(guarded_page, "#clear-filters")["aria"] == "true"
+    guarded_page.evaluate("document.getElementById('game-search').value = 'bridge'")
+    # Playwright refuses to click an aria-disabled button; a script click still fires.
+    guarded_page.evaluate("document.getElementById('clear-filters').click()")
+    assert guarded_page.evaluate("document.getElementById('game-search').value") == "bridge"
+
+
 def test_phone_clear_all_filters_is_disabled_until_a_filter_changes(
     mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:

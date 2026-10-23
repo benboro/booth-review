@@ -629,6 +629,16 @@ def test_clear_all_filters_is_disabled_until_a_filter_changes(app: Page) -> None
     )
 
 
+def test_disabled_clear_all_filters_is_a_no_op(app: Page) -> None:
+    """While aria-disabled, Clear all filters does not touch the state or re-render."""
+    assert _clear_state(app, "#nfl-clear-filters")["aria"] == "true"
+    before = app.evaluate("window.__nflTestHooks.renderCount")
+    # Playwright refuses to click an aria-disabled button; a script click still fires.
+    app.evaluate("document.getElementById('nfl-clear-filters').click()")
+    app.wait_for_timeout(100)
+    assert app.evaluate("window.__nflTestHooks.renderCount") == before
+
+
 def test_phone_clear_all_filters_is_disabled_until_a_filter_changes(mobile: Page) -> None:
     sheet_clear = ".nfl-filters-sheet .nfl-sheet-clear"
     idle = _clear_state(mobile, sheet_clear)

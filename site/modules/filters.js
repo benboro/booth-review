@@ -1098,6 +1098,9 @@ export function initFilters({ data, getState, setState }) {
   bindGameKeyboard(setState);
 
   els.clearFilters.addEventListener('click', () => {
+    // Announced as disabled while nothing is changed (renderFiltersButton): a no-op then,
+    // like the per-group Reset below.
+    if (els.clearFilters.getAttribute('aria-disabled') === 'true') return;
     // D-27 (overrides the earlier "people are not cleared" proposal): Clear all
     // filters also removes every selected announcer, compare mode, and
     // called-together (the `announcers` reset). "Clear selection" in the chip

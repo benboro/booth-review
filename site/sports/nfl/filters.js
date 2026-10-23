@@ -587,6 +587,8 @@ function buildShell(ctx) {
   clear.type = 'button';
   clear.id = 'nfl-clear-filters';
   clear.addEventListener('click', () => {
+    // aria-disabled while nothing is changed (renderNflFilters): a no-op then.
+    if (clear.getAttribute('aria-disabled') === 'true') return;
     if (ctx.model) clearAll(ctx);
   });
 
@@ -647,6 +649,8 @@ function buildShell(ctx) {
   const sheetClear = el('button', 'nfl-sheet-clear', 'Clear all filters');
   sheetClear.type = 'button';
   sheetClear.addEventListener('click', () => {
+    // aria-disabled while nothing is changed (renderNflFilters): a no-op then.
+    if (sheetClear.getAttribute('aria-disabled') === 'true') return;
     if (ctx.model) clearAll(ctx);
   });
   clearSlot.appendChild(sheetClear);
