@@ -1462,11 +1462,11 @@ input[type="checkbox"] {
 }
 
 /* Touch: always shown, quiet, 44px target at the row's right edge. Popovers and the phone
-   sheet sit on --bg, so --disabled (at least 3:1 there) is the right grey. */
+   sheet sit on --bg, where --disabled is only 2.86:1, so the quiet grey is --muted. */
 @media (hover: none) {
   .only-btn {
     opacity: 1;
-    color: var(--disabled);
+    color: var(--muted);
     min-width: 44px;
     min-height: 44px;
   }
