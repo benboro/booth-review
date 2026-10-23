@@ -181,7 +181,11 @@ def real_open_app(real_site_url: str) -> Callable[[Page, str], None]:
 
     def _open(page: Page, query: str = "") -> None:
         page.goto(f"{real_site_url}/index.html{query}")
-        page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+        # 90 s: the test right after the all-people highlight sweep (a minute of CPU on the
+        # real vault) otherwise misses the default 30 s ready wait on a busy machine.
+        page.wait_for_function(
+            "window.__testHooks && window.__testHooks.ready === true", timeout=90_000
+        )
 
     return _open
 
