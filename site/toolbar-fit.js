@@ -122,6 +122,8 @@
     const entry = { labels: new Map(controlsOf(bar).map((btn) => [btn, restingLabelOf(btn)])), applied: null };
     bars.set(bar, entry);
     fitBar(bar, entry);
+    // style.css keeps the controls invisible until now (a slow load can paint before this runs).
+    bar.dataset.fitted = '';
     // A bar hidden by the sport switch has no width; it fits when it is shown again.
     // This fires on a size change only, never on a filter change.
     if (window.ResizeObserver) new ResizeObserver(() => fitBar(bar, entry)).observe(bar);

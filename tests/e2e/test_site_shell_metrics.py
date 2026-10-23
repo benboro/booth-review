@@ -611,6 +611,9 @@ def test_font_swap_causes_no_layout_shift_in_header_filter_bar_or_tab_row(
     page.add_init_script(_CLS_INIT)
     cdp = page.context.new_cdp_session(page)
     cdp.send("Network.enable")
+    # A slow CPU, like the CI runner's, lets the half-parsed page paint while a script below
+    # the toolbar still downloads; without it a fast machine never shows that first paint.
+    cdp.send("Emulation.setCPUThrottlingRate", {"rate": 6})
     cdp.send(
         "Network.emulateNetworkConditions",
         {
@@ -630,6 +633,7 @@ def test_font_swap_causes_no_layout_shift_in_header_filter_bar_or_tab_row(
         "Network.emulateNetworkConditions",
         {"offline": False, "latency": 0, "downloadThroughput": -1, "uploadThroughput": -1},
     )
+    cdp.send("Emulation.setCPUThrottlingRate", {"rate": 1})
     chrome = page.evaluate("window.__chromeShift")
     total = page.evaluate("window.__totalShift")
     shifts = page.evaluate("window.__shifts")

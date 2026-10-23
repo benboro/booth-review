@@ -853,6 +853,13 @@ body.app {
     min-width: 0;
     max-width: none;
   }
+
+  /* On a slow load the page can paint while toolbar-fit.js still downloads; the controls
+     stay invisible until its first fit, so they appear in their final cells instead of
+     jumping from the stand-in grid. */
+  #toolbar:not([data-fitted]) > .filter-trigger {
+    visibility: hidden;
+  }
 }
 
 /* toolbar-fit.js's offscreen probes: laid out for measuring, never seen. */

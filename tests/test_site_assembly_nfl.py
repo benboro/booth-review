@@ -70,7 +70,8 @@ _COVERAGE_SHA256 = "1c2076a54c682ad0355657a0e1a3d938d35c7451c3c7d52bf5342a8753f7
 # Re-pinned after the Phase 13 checkpoint: the Viewers head carries class="num" so it aligns
 # right like its cells (1 changed line).
 # Re-pinned after the Phase 13 panel review: #theme-slot drops aria-hidden (1 changed line).
-_INDEX_PRE_PHASE_SHA256 = "40331ac5745f1cae745c108de6259f3defcc8beba17d2d737c4808d4b1f69b1f"
+# Re-pinned for the toolbar-fit.js preload in <head> (1 added line).
+_INDEX_PRE_PHASE_SHA256 = "f824b5be88745c211d1994e100b722cedaf2d3e7ae19b4d67fe2260aacef172a"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'
