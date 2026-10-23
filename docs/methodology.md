@@ -280,7 +280,9 @@ They leave out telecasts with no person in that role, and say how many.
 An average from fewer than 8 games is flagged n < 8. A pooled row whose games
 fall on both sides of [the 2025 excitement break](#the-2025-excitement-break),
 or across more than one [measurement era](#measurement-eras), shows "see Per
-season" instead of an average. Average viewers mostly reflects which games a
+season" instead of an average. The Crews table treats a whole season as one
+measurement band, so a Per season row never blanks for a mid-season switch; bands
+change at the 2020, 2025 and 2026 seasons. Average viewers mostly reflects which games a
 crew was assigned, not how well it called them; see
 [assignments, not quality](#assignments-not-quality).
 

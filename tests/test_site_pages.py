@@ -376,7 +376,8 @@ def test_render_methodology_resolves_md_links_against_docs(
 # new header with theme slot, site name.
 # Re-pinned at Phase 14 Plan 09: new Crews section.
 # Re-pinned at Phase 14 Plan 10: Crews opens on Per season (one methodology sentence).
-_METHODOLOGY_FLAG_OFF_SHA256 = "80a747d28e17cc1d18258aa2456b632ad04f59b8cc64c9466612bd52d4b1c1a4"
+# Re-pinned at Phase 14 Plan 10 (checkpoint): one Crews sentence on whole-season Nielsen bands.
+_METHODOLOGY_FLAG_OFF_SHA256 = "94de97040500b2af01644ee78be47153e12d907e311b4d1cbbff31097ce5a4f3"
 
 _NFL_ANCHORS = (
     "nfl-special-games",
