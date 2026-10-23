@@ -23,6 +23,10 @@ const TIER_KEYS = ['a', 'b', 'conf', 'other'];
 /** Shown in the Crews module's subtitle (13-11); Phase 14 replaces the behaviour it describes. */
 export const CREWS_HINT =
   'Booths by network family and season, for the games your filters show. Selected announcers do not change this table.';
+
+/** Disposers for the scroll cues on the tables the last render built. */
+const detachCues = [];
+
 const RATED_NOTE = 'Rated shows how many games have a viewership figure. It is context, not a ranking.';
 const NO_MATCH = {
   title: 'No booths match these filters',
@@ -194,7 +198,7 @@ function buildTable(group) {
   }
   table.append(thead, tbody);
   wrap.append(table);
-  attachScrollCue(wrap, null);
+  detachCues.push(attachScrollCue(wrap, null));
   return wrap;
 }
 
@@ -217,6 +221,8 @@ function creditLine(text, href) {
  * @param {ReturnType<typeof buildCrewsModel>} model
  */
 export function renderCrewsPanel(container, model) {
+  // Every render rebuilds the tables, so release the old ones' scroll-cue observers first.
+  detachCues.splice(0).forEach((detach) => detach());
   container.replaceChildren();
   if (model.state !== 'rows') {
     const copy = model.state === 'no-order' ? NO_ORDER : NO_MATCH;

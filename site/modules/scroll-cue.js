@@ -62,9 +62,11 @@ function cueFor(head) {
 /**
  * @param {HTMLElement} scroller the `.table-scroll` wrapper
  * @param {HTMLElement|(() => HTMLElement|null)|null} headEl the module header to carry the label
+ * @returns {() => void} detaches the observers and listeners; call it before discarding a
+ *   scroller that is rebuilt on every render
  */
 export function attachScrollCue(scroller, headEl) {
-  if (attached.has(scroller)) return;
+  if (attached.has(scroller)) return () => {};
   attached.add(scroller);
   scroller.classList.add('table-scroll');
 
@@ -79,8 +81,13 @@ export function attachScrollCue(scroller, headEl) {
     const phone = mq.matches;
     const shown = phone && scroller.offsetWidth > 0;
     const overflow = shown && scroller.scrollWidth > scroller.clientWidth + 1;
+    // The end sentinel sits inside the scroller, so its old position props up scrollWidth:
+    // park it at 0 before measuring, or a table that narrows never lets the extent shrink.
+    endS.style.left = '0px';
     if (phone) {
-      const pin = scroller.querySelector('th, td');
+      // Pin width from the table on screen: a scroller can hold a hidden twin (MLB Postseason).
+      const visible = [...scroller.querySelectorAll('table')].find((t) => t.offsetParent !== null);
+      const pin = visible?.querySelector('th, td');
       scroller.style.setProperty('--pin-w', `${pin ? pin.offsetWidth : 0}px`);
       endS.style.left = `${Math.max(0, scroller.scrollWidth - 1)}px`;
     } else {
@@ -112,8 +119,7 @@ export function attachScrollCue(scroller, headEl) {
 
   const ro = new ResizeObserver(refresh);
   ro.observe(scroller);
-  const table = scroller.querySelector('table');
-  if (table) ro.observe(table);
+  scroller.querySelectorAll('table').forEach((t) => ro.observe(t));
   mq.addEventListener('change', refresh);
 
   let scrolled = false;
@@ -126,4 +132,12 @@ export function attachScrollCue(scroller, headEl) {
     },
     { passive: true },
   );
+
+  return () => {
+    io.disconnect();
+    ro.disconnect();
+    mq.removeEventListener('change', refresh);
+    if (head) heads.get(head)?.scrollers.delete(scroller);
+    attached.delete(scroller);
+  };
 }
