@@ -2415,6 +2415,11 @@ input[type="checkbox"] {
   border-bottom-color: var(--rule-strong);
 }
 
+/* A row header closes its row with the same hairline as the cells beside it. */
+.games-table tbody th {
+  border-bottom-color: var(--rule);
+}
+
 .games-table td.num,
 .games-table th.num {
   text-align: right;
@@ -3638,17 +3643,6 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   overflow-x: auto;
 }
 
-.nfl-booth-table .booth-col {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  background: var(--bg);
-}
-
-.nfl-booth-table th.booth-col {
-  background: var(--surface);
-}
-
 .booth-row-btn {
   border: none;
   background: transparent;
@@ -3665,6 +3659,25 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 @media (max-width: 480px) {
+  /* Identity column pinned (UI-SPEC phone contract): sticky left with its own opaque fill.
+     Desktop has no column fill. */
+  .nfl-booth-table .booth-col,
+  .crews-table tbody th.booth-col {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--bg);
+  }
+
+  .nfl-booth-table th.booth-col,
+  .crews-table thead th.booth-col {
+    background: var(--surface);
+  }
+
+  .crews-table tbody tr:hover th.booth-col {
+    background: var(--surface);
+  }
+
   .booth-row-btn {
     min-height: 44px;
   }
@@ -4118,15 +4131,6 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 .crews-table th.booth-col {
   width: 38%;
-}
-
-/* Row headers take the row's own background, so a row reads as one band. */
-.crews-table tbody th.booth-col {
-  background: var(--bg);
-}
-
-.crews-table tbody tr:hover th.booth-col {
-  background: var(--surface);
 }
 
 .crews-table th.num,

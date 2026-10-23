@@ -378,3 +378,19 @@ def test_legend_chips_are_hidden_on_crews_and_networks_filter_still_applies(
     assert len(no_fox["groups"]) == 3
     guarded_page.locator("#tab-scatter").click()
     assert guarded_page.locator("#legend-row").is_visible()
+
+
+def test_booth_column_is_pinned_and_filled_on_phones_only(
+    guarded_page: Page, serve_booths: Callable[[Page], None], open_app: Callable[[Page, str], None]
+) -> None:
+    """UI-SPEC phone contract: the sticky identity column and its fill belong at <=480px."""
+    js = """() => { const cs = getComputedStyle(document.querySelector('#crews-panel tbody th.booth-col'));
+      return { position: cs.position, bg: cs.backgroundColor }; }"""
+    _open(guarded_page, serve_booths, open_app)
+    desktop = guarded_page.evaluate(js)
+    assert desktop["position"] != "sticky"
+    assert desktop["bg"] == "rgba(0, 0, 0, 0)"
+    guarded_page.set_viewport_size({"width": 390, "height": 844})
+    phone = guarded_page.evaluate(js)
+    assert phone["position"] == "sticky"
+    assert phone["bg"] != "rgba(0, 0, 0, 0)"
