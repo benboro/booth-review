@@ -349,6 +349,28 @@ li[role="option"][aria-selected="true"] .option-check::after {
   white-space: nowrap;
 }
 
+/* Phase 14 D-07: the Crews pick chip. Accent border, soft fill and accent text mark it as the
+   one pick that is not a person; the label keeps its width and the names truncate. */
+.chip-crew {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.chip-crew > .chip-crew-label {
+  flex: none;
+  font-weight: 400;
+}
+
+.chip-crew > .chip-crew-names {
+  min-width: 0;
+  font-weight: 600;
+}
+
+.chip-crew .chip-remove {
+  color: var(--accent);
+}
+
 .chip-remove {
   border: none;
   background: none;
@@ -399,6 +421,11 @@ li[role="option"][aria-selected="true"] .option-check::after {
     padding: 0 var(--space-sm);
     border-radius: 14px;
     background: var(--bg);
+  }
+
+  #chips > .chip.chip-crew {
+    min-width: 96px;
+    max-width: 280px;
   }
 
   .selection-row .toggle-group {

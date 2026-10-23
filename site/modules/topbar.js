@@ -37,7 +37,7 @@
 
 import { searchPeople } from './data.js';
 import { MAX_COMPARE } from './select.js';
-import { summaryCopy } from './format.js';
+import { crewPickNames, summaryCopy } from './format.js';
 import { makeRolePill } from './pill.js';
 import { COMPARE_GLYPHS, COMPARE_SYMBOLS, SHARED_GLYPH } from './palette.js';
 import { MAP_SHAPES_CAPTION } from './map-model.js';
@@ -74,7 +74,7 @@ let facetSignature = null;
 
 /** A key identifying the current people/compare selection, for the compare-note sticky logic. */
 function personSelectionKey(state) {
-  return `${state.people.join(',')}|${state.compare}`;
+  return `${state.people.join(',')}|${state.compare}|${state.crew ?? ''}`;
 }
 
 /** Builds every option `<li>` once, in alphabetical order (D-28). */
@@ -279,6 +279,10 @@ export function initTopbar({ data, getState, setState }) {
   els.chips.addEventListener('click', (ev) => {
     const btn = ev.target.closest('.chip-remove');
     if (!btn) return;
+    if (btn.closest('.chip-crew')) {
+      setState({ crew: null });
+      return;
+    }
     const id = btn.dataset.personId;
     const state = getState();
     setState({ people: state.people.filter((personId) => personId !== id) });
@@ -295,7 +299,7 @@ export function initTopbar({ data, getState, setState }) {
   });
 
   els.clearSelection.addEventListener('click', () => {
-    setState({ people: [], compare: false, together: false });
+    setState({ people: [], compare: false, together: false, crew: null });
   });
 }
 
@@ -335,7 +339,43 @@ function renderChips(data, state) {
 
     return li;
   });
+  const names = crewPickNames(data, state);
+  if (state.crew != null && names.length > 0) items.push(buildCrewChip(names));
   els.chips.replaceChildren(...items);
+}
+
+/**
+ * The Crews pick chip (D-07): "Crew: A / B" in the accent, after the person chips. Same shape as a
+ * person chip (empty fixed-width glyph slot, so nothing shifts); names via textContent, the
+ * full text via title/aria-label properties.
+ */
+function buildCrewChip(names) {
+  const li = document.createElement('li');
+  li.className = 'chip chip-crew';
+  li.dataset.crew = '1';
+  li.title = `Crew pick: ${names.join(' and ')}. Remove`;
+  li.setAttribute('aria-label', li.title);
+
+  const glyph = document.createElement('span');
+  glyph.className = 'chip-glyph';
+  glyph.setAttribute('aria-hidden', 'true');
+  li.appendChild(glyph);
+
+  const label = document.createElement('span');
+  label.className = 'chip-crew-label';
+  label.textContent = 'Crew:';
+  const list = document.createElement('span');
+  list.className = 'chip-crew-names';
+  list.textContent = names.join(' / ');
+  li.append(label, list);
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'chip-remove';
+  removeBtn.textContent = '×';
+  removeBtn.setAttribute('aria-label', 'Remove crew pick');
+  li.appendChild(removeBtn);
+  return li;
 }
 
 /** Renders the compare/together toggle states and helper text. */
@@ -486,11 +526,16 @@ function renderPersonFacets(state, view) {
 export function renderTopbar({ data, state, view }) {
   // The row always renders (it holds Clear all filters); only its person parts hide.
   const noPeople = state.people.length === 0;
-  els.chips.hidden = noPeople;
-  els.toggleGroup.hidden = noPeople;
+  const noPick = noPeople && state.crew == null;
+  els.chips.hidden = noPick;
+  // A crew-only pick keeps the group for Clear selection, but Compare / Called together are
+  // person tools and stay out of the row.
+  els.toggleGroup.hidden = noPick;
+  els.compareToggle.hidden = noPeople;
+  els.togetherToggle.hidden = noPeople;
   renderChips(data, state);
   renderToggles(state);
-  els.clearSelection.hidden = state.people.length === 0;
+  els.clearSelection.hidden = noPick;
   renderShapeLegend(data, state, view);
   renderLeadKey(data, view);
   renderSummary(view);
