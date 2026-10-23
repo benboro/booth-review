@@ -6,6 +6,7 @@ crews dataset (tests/e2e/crews_fixture.py). Expected values come from the CASE_*
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from typing import Any
 
@@ -22,6 +23,7 @@ from crews_fixture import (
     CASE_SIDELINE,
     CASE_TRIO,
     CASE_TWO_FAMILIES,
+    build_crews_raw,
 )
 from playwright.sync_api import Page
 
@@ -34,7 +36,19 @@ async ({partial, opts, sort}) => {
   const G = await import('./modules/crew-groups.js');
   const raw = await (await fetch('site-data.json')).json();
   const data = D.prepareData(raw);
-  const state = Object.assign(S.defaultState(data), partial);
+  // '@team:N' and '@game:N' stand for the Nth team slug / game slug of the data.
+  const slot = (v) => {
+    if (typeof v !== 'string') return v;
+    const m = /^@(team|game):(\\d+)$/.exec(v);
+    if (!m) return v;
+    return m[1] === 'team'
+      ? data.teamSlugs[Number(m[2])]
+      : Array.from(data.gameIndexBySlug.keys())[Number(m[2])];
+  };
+  const resolved = Object.fromEntries(
+    Object.entries(partial).map(([k, v]) => [k, Array.isArray(v) ? v.map(slot) : slot(v)]),
+  );
+  const state = Object.assign(S.defaultState(data), resolved);
   const view = S.computeView(data, state);
   const out = G.buildCrewRows(data, view, opts);
   const rows = (sort === undefined ? out.rows : G.sortCrewRows(out.rows, sort)).map((r) => ({
@@ -330,3 +344,86 @@ def test_metric_sort_full_n_then_flagged_then_blank(
     asc = guarded_page.evaluate(_SYNTH_SORT_JS, {"key": key, "dir": "asc"})
     assert desc == ["full-hi", "full-lo", "flag-hi", "flag-lo", "blank-a", "blank-b"]
     assert asc == ["full-lo", "full-hi", "flag-lo", "flag-hi", "blank-a", "blank-b"]
+
+
+# -- CFB-05: every master filter acts on the table as the matrix says ---------------------------
+
+_PARTIALS: dict[str, dict[str, Any]] = {
+    "seasons": {"seasons": [2024, 2024]},
+    "seasons-wide": {"seasons": [2023, 2024]},
+    "networks": {"networks": ["net-a"]},
+    "slots": {"slots": ["afternoon"]},
+    "slots-none": {"slots": ["night"]},
+    "conference": {"conferences": ["@conf"]},
+    "school": {"school": ["@team:0"]},
+    "postseason-exclude": {"postseason": "exclude"},
+    "postseason-only": {"postseason": "only"},
+    "game": {"game": "@game:0"},
+    "booth-a": {"booth": ["a"]},
+    "booth-ab": {"booth": ["a", "b"]},
+    "announcers": {"people": ["trio-pbp"]},
+    "announcers-booth": {"people": ["fill-pbp"], "booth": ["a"]},
+}
+
+
+def _merged(raw: dict[str, Any], key: str) -> list[Any]:
+    """A telecast column in the page's index order: rated games, then unrated."""
+    unrated = raw["telecasts_unrated"]
+    tail = unrated.get(key) or [None] * len(unrated["season"])
+    return [*raw["telecasts"][key], *tail]
+
+
+@pytest.mark.parametrize("name", sorted(_PARTIALS))
+def test_filters_recount_rows(
+    rows_page: Callable[..., dict[str, Any]], fixture_raw: dict[str, Any], name: str
+) -> None:
+    raw = build_crews_raw(fixture_raw)
+    # every synthetic game copies the shared fixture's first rated game, so that conference matches
+    conference = raw["lookups"]["conferences"][raw["telecasts"]["home_conference"][0]]["name"]
+    partial = {
+        k: [conference if x == "@conf" else x for x in v] if isinstance(v, list) else v
+        for k, v in _PARTIALS[name].items()
+    }
+    out = rows_page(partial)
+    season = _merged(raw, "season")
+    exc = _merged(raw, "excitement")
+    n_rated = len(raw["telecasts"]["season"])
+    viewers = [*raw["telecasts"]["viewers"], *[None] * len(raw["telecasts_unrated"]["season"])]
+    if "seasons" in partial:
+        lo, hi = partial["seasons"]
+        assert all(lo <= season[i] <= hi for i in out["passes"])
+
+    expected: dict[str, list[int]] = {}
+    for i in out["passes"]:
+        if out["keys"][i] is not None:
+            expected.setdefault(out["keys"][i], []).append(i)
+    rows = {r["crewKey"]: r for r in out["rows"]}
+    assert set(rows) == set(expected)
+    assert out["totalRows"] == len(expected)
+    for key, games in expected.items():
+        row = rows[key]
+        assert row["gamesCount"] > 0 and sorted(row["games"]) == games
+        excs = [exc[i] for i in games if exc[i] is not None]
+        vs = [viewers[i] for i in games if i < n_rated and viewers[i] is not None]
+        assert row["exc"]["n"] == len(excs) and row["viewers"]["n"] == len(vs)
+        for metric, vals in (("exc", excs), ("viewers", vs)):
+            if row[metric]["blank"] is None:
+                assert math.isclose(row[metric]["mean"], sum(vals) / len(vals))
+            else:
+                assert row[metric]["mean"] is None
+
+
+def test_announcers_highlight_not_filter(rows_page: Callable[..., dict[str, Any]]) -> None:
+    """U-06: picking an announcer highlights, so no row leaves the table."""
+    cleared = rows_page()
+    picked = rows_page({"people": ["trio-pbp"]})
+    assert {r["crewKey"] for r in picked["rows"]} == {r["crewKey"] for r in cleared["rows"]}
+    assert picked["leftOut"] == cleared["leftOut"]
+
+
+def test_zero_game_rows_absent_under_seasons(rows_page: Callable[..., dict[str, Any]]) -> None:
+    out = rows_page({"seasons": [2022, 2022]})
+    assert out["rows"] and all(r["gamesCount"] > 0 for r in out["rows"])
+    assert all(len(r["games"]) == r["gamesCount"] for r in out["rows"])
+    empty = rows_page({"slots": ["night"]})
+    assert empty["rows"] == [] and empty["totalRows"] == 0
