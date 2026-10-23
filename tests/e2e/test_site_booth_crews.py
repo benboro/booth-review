@@ -384,7 +384,9 @@ def test_booth_column_is_pinned_and_filled_on_phones_only(
     guarded_page: Page, serve_booths: Callable[[Page], None], open_app: Callable[[Page, str], None]
 ) -> None:
     """UI-SPEC phone contract: the sticky identity column and its fill belong at <=480px."""
-    js = """() => { const cs = getComputedStyle(document.querySelector('#crews-panel tbody th.booth-col'));
+    js = """() => {
+      const th = document.querySelector('#crews-panel tbody th.booth-col');
+      const cs = getComputedStyle(th);
       return { position: cs.position, bg: cs.backgroundColor }; }"""
     _open(guarded_page, serve_booths, open_app)
     desktop = guarded_page.evaluate(js)

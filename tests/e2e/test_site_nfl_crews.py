@@ -547,10 +547,13 @@ def test_low_n_is_a_styled_tag(nfl_guarded_page: Page, open_nfl_app: Callable[..
     _open(page, open_nfl_app)
     _vm(page)
     got = page.evaluate(
-        """() => { const cs = getComputedStyle(document.querySelector('#nfl-view-crews .low-n-tag, .nfl-booth-table .low-n-tag'));
+        """() => {
+          const cs = getComputedStyle(document.querySelector('.nfl-booth-table .low-n-tag'));
           const rp = getComputedStyle(document.querySelector('.nfl-booth-table .role-pill'));
-          return { style: cs.borderTopStyle, width: cs.borderTopWidth, radius: cs.borderTopLeftRadius,
-                   height: cs.height, pillHeight: rp.height, pillRadius: rp.borderTopLeftRadius }; }"""
+          return {
+            style: cs.borderTopStyle, width: cs.borderTopWidth, radius: cs.borderTopLeftRadius,
+            height: cs.height, pillHeight: rp.height, pillRadius: rp.borderTopLeftRadius };
+        }"""
     )
     assert got["style"] == "dashed"
     assert got["width"] == "1px"
