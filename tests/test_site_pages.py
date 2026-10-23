@@ -375,7 +375,8 @@ def test_render_methodology_resolves_md_links_against_docs(
 # Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
 # new header with theme slot, site name.
 # Re-pinned at Phase 14 Plan 09: new Crews section.
-_METHODOLOGY_FLAG_OFF_SHA256 = "f081132ccecb4da3b702284eeef91dc126f42651b986ff8c679abe18c8ec2d80"
+# Re-pinned at Phase 14 Plan 10: Crews opens on Per season (one methodology sentence).
+_METHODOLOGY_FLAG_OFF_SHA256 = "80a747d28e17cc1d18258aa2456b632ad04f59b8cc64c9466612bd52d4b1c1a4"
 
 _NFL_ANCHORS = (
     "nfl-special-games",

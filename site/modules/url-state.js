@@ -26,8 +26,8 @@
  * On default; Phase 11 D-09). The Crews params (Phase 14 D-06..D-10), view-agnostic like `by` so a
  * stale `?view=scatter&crew=...` survives a setState round trip: `crew` (a pooled crew key, allowlisted
  * by `CREW_KEY_RE` and by existence in `crewIndex(data).crews`; dropped when `people` is present, A7),
- * `cmode` (`pbp`/`analyst`; Crew is the omitted default), `perseason` (`1`; ignored on a one-season
- * range) and `csort` (`<key>` or `<key>.asc|desc`; omitted at the Games-descending default; `rank`
+ * `cmode` (`pbp`/`analyst`; Crew is the omitted default), `perseason` (`0` = pooled; Per season is the omitted default since Phase 14 Plan 10, and a
+ * one-season range applies it as pooled without storing that) and `csort` (`<key>` or `<key>.asc|desc`; omitted at the Games-descending default; `rank`
  * only in Crew mode, `season` only with Per season on, A8). `booth` (`a`,`b`,`other`, canonical order; omitted when no
  * tier is picked; Phase 10 D-12). The old `bars` and
  * `group` params are ignored (04.6 D-27). There is no `team` param on encode -- `school` replaces
@@ -130,7 +130,7 @@ export function encodeState(state, data) {
   if (state.colors === 'off') params.push(['colors', 'off']);
   if (state.crew != null) params.push(['crew', state.crew]);
   if (state.cmode === 'pbp' || state.cmode === 'analyst') params.push(['cmode', state.cmode]);
-  if (state.perseason === true) params.push(['perseason', '1']);
+  if (state.perseason === false) params.push(['perseason', '0']);
   if (state.csort != null && CSORT_RE.test(state.csort.key)) {
     const { key, dir } = state.csort;
     const natural = NATURAL_DIR[key];
@@ -370,18 +370,21 @@ export function decodeState(search, data) {
       : null;
   const rawCmode = scalarParam(params, 'cmode');
   state.cmode = rawCmode === 'pbp' || rawCmode === 'analyst' ? rawCmode : 'crew';
-  // Per season needs two or more seasons in the range; a narrowed one-season range ignores it (D-10).
+  // Per season needs two or more seasons in the range to change anything (D-10).
   const lo = state.seasons ? state.seasons[0] : data.seasonMin;
   const hi = state.seasons ? state.seasons[1] : data.seasonMax;
   const seasonsInRange = data.seasons.filter((season) => season >= lo && season <= hi).length;
-  state.perseason = scalarParam(params, 'perseason') === '1' && seasonsInRange >= 2;
+  // Per season is the default (14-10 checkpoint, 2026-10-23); only an explicit `0` pools. The state keeps
+  // the preference even on a one-season range, where pooled and per-season rows are the same; the
+  // consumers apply the two-season rule (`perSeasonApplies`).
+  state.perseason = scalarParam(params, 'perseason') !== '0';
   const csortMatch = CSORT_RE.exec(scalarParam(params, 'csort') ?? '');
   state.csort = null;
   if (csortMatch) {
     const key = csortMatch[1];
     const dir = csortMatch[3] ?? NATURAL_DIR[key];
     const modeOk = key !== 'rank' || state.cmode === 'crew';
-    const seasonOk = key !== 'season' || state.perseason;
+    const seasonOk = key !== 'season' || (state.perseason && seasonsInRange >= 2);
     const isDefault = key === CSORT_DEFAULT && dir === NATURAL_DIR[CSORT_DEFAULT];
     if (modeOk && seasonOk && !isDefault && NATURAL_DIR[key] !== undefined) state.csort = { key, dir };
   }

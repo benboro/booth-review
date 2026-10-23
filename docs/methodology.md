@@ -265,11 +265,12 @@ analyst who worked the most games with that voice. A game where the regular
 analyst was absent stays in the crew and is marked fill-in. A usual
 three-person booth names all three people.
 
-Rows pool across the Seasons range, and a Per season switch splits them by
-year. On a telecast with a resolved play-by-play voice, only the play-by-play
-and analyst seats name the crew, so a person of unknown role on that telecast
-(often a sideline reporter) is not shown in its row. Telecasts where no one
-has a resolved play-by-play role are grouped by their exact people, and every
+Rows split by season by default when the Seasons range covers two or more
+seasons, and a Per season switch pools them across the range instead. On a
+telecast with a resolved play-by-play voice, only the play-by-play and analyst
+seats name the crew, so a person of unknown role on that telecast (often a
+sideline reporter) is not shown in its row. Telecasts where no one has a
+resolved play-by-play role are grouped by their exact people, and every
 name is marked unknown role. When a person's role is known in some of their
 games, the mark reads "unknown role in k of n games".
 

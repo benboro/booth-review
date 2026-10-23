@@ -33,7 +33,7 @@ import { initChartTabs, renderChartTabs, staleCopy } from './modules/chart-tabs.
 import { chartContext } from './modules/bars.js';
 import { initBarsPanel, renderBarsPanel, lastBarsModel, resetBarsTap } from './modules/bars-panel.js';
 import { buildMapModel } from './modules/map-model.js';
-import { renderCrewsPanel } from './modules/crews.js';
+import { renderCrewsPanel, perSeasonApplies } from './modules/crews.js';
 import { buildCrewRows, modelBreakSeason } from './modules/crew-groups.js';
 import { initMapPanel, renderMapPanel, resetMapTap, mapRenderCount, mapSplatCount, onMapViewChange, mapAtHome, resetMapZoom } from './modules/map-panel.js';
 import { initBandInfo, positionBandInfo, closeBandNote, setBandInfoMode } from './modules/band-info.js';
@@ -279,7 +279,7 @@ function render() {
     hideBandInfo();
     if (crewsPanelEl) {
       crewsPanelEl.hidden = false;
-      const crewsModel = buildCrewRows(data, view, { mode: state.cmode, perSeason: state.perseason });
+      const crewsModel = buildCrewRows(data, view, { mode: state.cmode, perSeason: perSeasonApplies(data, state) });
       renderCrewsPanel(crewsPanelEl, crewsModel, {
         data,
         state,

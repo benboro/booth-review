@@ -502,6 +502,11 @@ function seasonsInRange(data, state) {
   return data.seasons.filter((s) => s >= lo && s <= hi).length;
 }
 
+/** Per season is on by default but changes nothing on a one-season range, so it applies only with two or more (D-10). */
+export function perSeasonApplies(data, state) {
+  return state.perseason && seasonsInRange(data, state) >= 2;
+}
+
 function buildTools(ctx) {
   const { data, state, setState } = ctx;
   const tools = el('div', 'crews-tools');
@@ -521,7 +526,7 @@ function buildTools(ctx) {
   const label = el('label', 'crews-perseason-label');
   const box = el('input', 'crews-perseason');
   box.type = 'checkbox';
-  box.checked = state.perseason;
+  box.checked = perSeasonApplies(data, state);
   const single = seasonsInRange(data, state) < 2;
   box.disabled = single;
   label.title = single ? 'Needs two or more seasons in range' : 'One row per crew and season';

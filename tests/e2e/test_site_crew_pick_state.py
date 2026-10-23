@@ -79,7 +79,7 @@ def test_default_state_encodes_empty(app: Page) -> None:
     assert out["defaultEncoded"] == ""
     assert out["defaultDecodedEq"] is True
     s = out["decoded"]
-    assert (s["crew"], s["cmode"], s["perseason"], s["csort"]) == (None, "crew", False, None)
+    assert (s["crew"], s["cmode"], s["perseason"], s["csort"]) == (None, "crew", True, None)
 
 
 def test_crew_round_trip_after_colors(app: Page) -> None:
@@ -110,13 +110,20 @@ def test_cmode(app: Page) -> None:
     assert _url(app, "?cmode=x")["encoded"] == ""
 
 
-def test_perseason_needs_two_seasons(app: Page) -> None:
-    assert _url(app, "?perseason=1")["decoded"]["perseason"] is True
-    assert _url(app, "?perseason=1")["encoded"] == "?perseason=1"
-    assert _url(app, "?perseason=yes")["decoded"]["perseason"] is False
+def test_perseason_is_the_default_and_zero_pools(app: Page) -> None:
+    assert _url(app, "")["decoded"]["perseason"] is True
+    assert _url(app, "?perseason=0")["decoded"]["perseason"] is False
+    assert _url(app, "?perseason=0")["encoded"] == "?perseason=0"
+    assert _url(app, "?perseason=1")["encoded"] == ""
+    assert _url(app, "?perseason=yes")["decoded"]["perseason"] is True
+
+
+def test_perseason_default_encodes_empty_on_a_single_season(app: Page) -> None:
     season = app.evaluate("window.__testHooks.data.seasons[0]")
-    one = _url(app, f"?perseason=1&seasons={season}-{season}")["decoded"]
-    assert one["perseason"] is False
+    one = _url(app, f"?seasons={season}-{season}")
+    assert one["decoded"]["perseason"] is True
+    assert one["encoded"] == f"?seasons={season}-{season}"
+    assert "perseason" not in one["encoded"]
 
 
 def test_csort(app: Page) -> None:
@@ -129,11 +136,10 @@ def test_csort(app: Page) -> None:
     assert _url(app, "?csort=games.asc")["encoded"] == "?csort=games.asc"
     assert _url(app, "?csort=rank&cmode=pbp")["decoded"]["csort"] is None
     assert _url(app, "?csort=rank")["decoded"]["csort"] == {"key": "rank", "dir": "asc"}
-    assert _url(app, "?csort=season")["decoded"]["csort"] is None
-    assert _url(app, "?csort=season&perseason=1")["decoded"]["csort"] == {
-        "key": "season",
-        "dir": "asc",
-    }
+    assert _url(app, "?csort=season")["decoded"]["csort"] == {"key": "season", "dir": "asc"}
+    assert _url(app, "?csort=season&perseason=0")["decoded"]["csort"] is None
+    season = app.evaluate("window.__testHooks.data.seasons[0]")
+    assert _url(app, f"?csort=season&seasons={season}-{season}")["decoded"]["csort"] is None
     assert _url(app, "?csort=bogus")["decoded"]["csort"] is None
 
 

@@ -29,7 +29,7 @@ def app(
     open_app: Callable[[Page, str], None],
 ) -> Page:
     serve_crews(guarded_page)
-    open_app(guarded_page, "?view=crews")
+    open_app(guarded_page, "?view=crews&perseason=0")
     return guarded_page
 
 
@@ -379,7 +379,7 @@ def test_second_source_figure_keeps_the_publisher_link(
     t["source_url"][target] = "https://example.com/smw/season"
     raw["lookups"]["publishers"] = ["Sports Media Watch", *raw["lookups"]["publishers"][1:]]
     guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=copy.deepcopy(raw)))
-    open_app(guarded_page, "?view=crews")
+    open_app(guarded_page, "?view=crews&perseason=0")
     _row(guarded_page, BIG_CREW).locator("button.crews-chevron").click()
     sub = _sub(guarded_page, BIG_CREW)
     sub.locator("button.crews-games-more").click()

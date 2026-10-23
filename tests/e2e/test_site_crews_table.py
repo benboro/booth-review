@@ -47,7 +47,7 @@ def app(
     open_app: Callable[[Page, str], None],
 ) -> Page:
     serve_crews(guarded_page)
-    open_app(guarded_page, "?view=crews")
+    open_app(guarded_page, "?view=crews&perseason=0")
     return guarded_page
 
 
@@ -652,3 +652,45 @@ def test_pinned_columns_have_an_opaque_fill_on_phones_only(app: Page) -> None:
     phone = app.evaluate(js)
     assert phone["position"] == "sticky"
     assert phone["bg"] != "rgba(0, 0, 0, 0)"
+
+
+# -- 14-10 checkpoint (2026-10-23): Crews opens on Per season -------------------------------
+
+
+def _season_head(page: Page) -> Locator:
+    return page.locator("#crews-panel thead th").filter(has_text=re.compile(r"^\s*Season"))
+
+
+def test_crews_opens_on_per_season_and_pooled_is_one_click_away(
+    guarded_page: Page,
+    serve_crews: Callable[[Page], None],
+    open_app: Callable[[Page, str], None],
+) -> None:
+    serve_crews(guarded_page)
+    open_app(guarded_page, "?view=crews")
+    box = guarded_page.locator("#crews-panel input.crews-perseason")
+    expect(box).to_be_checked()
+    expect(_season_head(guarded_page)).to_have_count(1)
+    assert "perseason" not in guarded_page.url
+    box.uncheck()
+    expect(_season_head(guarded_page)).to_have_count(0)
+    assert "perseason=0" in guarded_page.url
+    box.check()
+    expect(_season_head(guarded_page)).to_have_count(1)
+    assert "perseason" not in guarded_page.url
+
+
+def test_a_single_season_range_shows_the_toggle_off_and_disabled(
+    guarded_page: Page,
+    serve_crews: Callable[[Page], None],
+    open_app: Callable[[Page, str], None],
+) -> None:
+    serve_crews(guarded_page)
+    open_app(guarded_page, "?view=crews")
+    season = guarded_page.evaluate("() => window.__testHooks.data.seasons[0]")
+    open_app(guarded_page, f"?view=crews&seasons={season}-{season}")
+    box = guarded_page.locator("#crews-panel input.crews-perseason")
+    expect(box).to_be_disabled()
+    expect(box).not_to_be_checked()
+    expect(_season_head(guarded_page)).to_have_count(0)
+    assert "perseason" not in guarded_page.url

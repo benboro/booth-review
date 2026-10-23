@@ -40,7 +40,7 @@ def crews(
     open_app: Callable[[Page, str], None],
 ) -> Page:
     serve_crews(guarded_page)
-    open_app(guarded_page, "?view=crews")
+    open_app(guarded_page, "?view=crews&perseason=0")
     return guarded_page
 
 
