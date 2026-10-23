@@ -38,3 +38,15 @@ def test_a_second_failure_shows_its_own_sport_and_reload_target(
         page.get_by_role("button", name="Reload page").click()
     page.wait_for_function("window.__mlbTestHooks && window.__mlbTestHooks.ready === true")
     assert page.evaluate("location.search").startswith("?sport=mlb")
+
+
+def test_cfb_data_failure_shows_the_load_error_copy(guarded_page: Page, site_url: str) -> None:
+    page = guarded_page
+    page.route("**/site-data.json*", lambda route: route.fulfill(status=500, body="no"))
+    page.goto(f"{site_url}/index.html")
+    banner = page.locator("#load-error")
+    banner.wait_for(state="visible")
+    assert banner.get_attribute("role") == "alert"
+    assert " ".join(banner.inner_text().split()) == (
+        "The data did not load. Reload the page; if it still fails, try again later."
+    )

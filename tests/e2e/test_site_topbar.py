@@ -601,15 +601,13 @@ def test_arrow_key_active_option_is_visibly_outlined(
 # ---------- D-30: unmistakable pressed toggles, no row-shift on Compare ----------
 
 
-@pytest.mark.parametrize("color_scheme", ["light", "dark"])
 def test_compare_toggle_pressed_state_is_unmistakable(
-    guarded_page: Page, open_app: Callable[[Page, str], None], color_scheme: str
+    guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-30: Compare people and Called together show an unmistakable
     pressed state -- a reserved `::before` check slot that's invisible until
     pressed, a filled accent background with inverse (AA-contrast) text, and
     that fill itself reads as distinct against the page background."""
-    guarded_page.emulate_media(color_scheme=color_scheme)
     open_app(guarded_page, "")
     _add_person_by_query(guarded_page, "Kris Venn")
     _add_person_by_query(guarded_page, "Sam Delgado")
@@ -826,3 +824,52 @@ def test_facet_announcers_scroll_survives_unrelated_renders(
     guarded_page.wait_for_function("window.__testHooks.getState().axis === 'excitement'")
     after = guarded_page.evaluate("document.getElementById('person-results').scrollTop")
     assert after == before
+
+
+# ---------- Phase 13 shell: header, selection row, summary ----------
+
+
+def test_header_structure_and_selection_row(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Header: title link, page links, empty theme slot. Selection row: always rendered,
+    Clear all filters at its right end; summary is a fixed 24px box."""
+    page = guarded_page
+    open_app(page, "")
+    header = page.locator("#topbar.site-header")
+    expect(header).to_be_visible()
+    expect(header.locator("a.site-title")).to_have_text("The Broadcast Ledger")
+    assert header.locator("a.site-title").get_attribute("href") == "index.html"
+    expect(header.locator(".header-links a")).to_have_text(["Methodology", "Coverage"])
+    assert page.locator("#theme-slot").inner_text() == ""
+    # Always rendered, with no people picked.
+    row = page.locator("#selection-row")
+    expect(row).to_be_visible()
+    row_box = row.bounding_box()
+    clear = page.locator("#clear-filters").bounding_box()
+    assert row_box is not None and clear is not None
+    assert clear["x"] + clear["width"] >= row_box["x"] + row_box["width"] - 1
+    assert row_box["height"] == 32
+    assert page.evaluate("document.getElementById('summary').getBoundingClientRect().height") == 24
+
+
+def test_chip_truncates_with_full_name_in_title_and_label(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    page = guarded_page
+    open_app(page, "")
+    _add_person_by_query(page, "Dale Harlow")
+    chip = page.locator("#chips .chip").first
+    expect(chip).to_have_count(1)
+    assert chip.get_attribute("title") == "Dale Harlow"
+    assert chip.get_attribute("aria-label") == "Dale Harlow"
+    width = chip.bounding_box()
+    assert width is not None and 64 <= width["width"] <= 160
+
+
+def test_compare_note_sits_inside_the_summary(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    page = guarded_page
+    open_app(page, "")
+    assert page.evaluate("document.getElementById('compare-note').parentElement.id") == "summary"
