@@ -154,6 +154,25 @@ function roundsPresent(model) {
   return ROUND_ORDER.filter((r) => r !== 'tiebreak' || have.has('tiebreak'));
 }
 
+/**
+ * A season's coverage line (`data-low` under the coverage bar) and its per-season Wikipedia
+ * outlets credit (RT-13), built fresh for each grid so the phone twin carries both too.
+ */
+function seasonNotes(s, blocks, bar) {
+  const pct = coveragePct(s.coverage_num, s.coverage_den);
+  // Counts come from the builder's season table: every postseason game of the season.
+  const cov = el(
+    'span',
+    'mlb-season-coverage',
+    pct == null ? '' : `Crews listed for ${s.coverage_num} of ${s.coverage_den} postseason games (${pct}%)`,
+  );
+  if (s.coverage_den > 0 && s.coverage_num / s.coverage_den < bar) cov.dataset.low = 'true';
+  const wikiUrl = [...blocks.values()].find((b) => b.season === s.season && b.outletSourceUrl)?.outletSourceUrl;
+  const credit = wikiUrl ? externalLink(wikiUrl, `Outlets: Wikipedia ${s.season} postseason (CC BY-SA 4.0) ↗`) : null;
+  if (credit) credit.className = 'mlb-season-credit';
+  return credit ? [cov, credit] : [cov];
+}
+
 function phoneRows(model, state, seasons, rounds, blocks) {
   const out = [];
   for (const s of seasons) {
@@ -210,8 +229,12 @@ export function mount(container, ctx) {
   wrap.classList.add('table-scroll');
   attachScrollCue(wrap, null);
   refs.table = table;
+  // The phone twin's 96px pinned column has no room for each season's coverage line and
+  // Wikipedia credit, and a row inside the scroller would sit under its fades: they follow
+  // the table as a per-season list (CSS shows it at 480px and under only).
+  refs.phoneNotes = el('ul', 'mlb-phone-season-notes');
   refs.captions = el('div', 'nfl-captions');
-  container.append(wrap, refs.captions);
+  container.append(wrap, refs.phoneNotes, refs.captions);
 }
 
 export function render(ctx) {
@@ -234,22 +257,7 @@ export function render(ctx) {
     const th = el('th', 'mlb-season-col');
     th.scope = 'row';
     th.append(el('span', 'mlb-season', String(s.season)));
-    const pct = coveragePct(s.coverage_num, s.coverage_den);
-    // Counts come from the builder's season table: every postseason game of the season.
-    const cov = el(
-      'span',
-      'mlb-season-coverage',
-      pct == null ? '' : `Crews listed for ${s.coverage_num} of ${s.coverage_den} postseason games (${pct}%)`,
-    );
-    const low = s.coverage_den > 0 && s.coverage_num / s.coverage_den < bar;
-    if (low) cov.dataset.low = 'true';
-    th.append(cov);
-    const wikiUrl = [...blocks.values()].find((b) => b.season === s.season && b.outletSourceUrl)?.outletSourceUrl;
-    const credit = wikiUrl ? externalLink(wikiUrl, `Outlets: Wikipedia ${s.season} postseason (CC BY-SA 4.0) ↗`) : null;
-    if (credit) {
-      credit.className = 'mlb-season-credit';
-      th.append(credit);
-    }
+    th.append(...seasonNotes(s, blocks, bar));
     tr.appendChild(th);
     for (const r of rounds) {
       const td = el('td', 'mlb-cell');
@@ -280,6 +288,14 @@ export function render(ctx) {
   }
   refs.body.replaceChildren(...rows);
   refs.phoneBody.replaceChildren(...phoneRows(model, state, seasons, rounds, blocks));
+  refs.phoneNotes.replaceChildren(
+    ...seasons.map((s) => {
+      const li = el('li');
+      li.dataset.season = String(s.season);
+      li.append(el('span', 'mlb-season', String(s.season)), ...seasonNotes(s, blocks, bar));
+      return li;
+    }),
+  );
 
   refs.captions.replaceChildren(
     el('p', 'caption', 'Excitement is the mean per game from win probability, a tendency, not proof.'),

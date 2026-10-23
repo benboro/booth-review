@@ -2801,8 +2801,9 @@ html:has(#mlb-detail-panel[open]) {
   display: none;
 }
 
-/* The phone twin of the MLB Postseason grid never shows above 480px. */
-.mlb-phone-grid {
+/* The phone twin of the MLB Postseason grid, and its season notes, never show above 480px. */
+.mlb-phone-grid,
+.mlb-phone-season-notes {
   display: none;
 }
 
@@ -4597,6 +4598,18 @@ tr.is-matched > :first-child {
   .mlb-merged-league {
     color: var(--muted);
     font-weight: 400;
+  }
+
+  /* Each season's coverage line and Wikipedia credit (RT-13), listed under the twin. */
+  .mlb-phone-season-notes {
+    display: block;
+    margin: 12px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .mlb-phone-season-notes li + li {
+    margin-top: 8px;
   }
 
   .mlb-phone-grid td.mlb-booths-col {

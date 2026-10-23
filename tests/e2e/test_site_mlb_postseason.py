@@ -40,7 +40,7 @@ def test_grid_rows_and_columns(post: Page) -> None:
 
 def test_coverage_per_season_and_low_tone(post: Page) -> None:
     cov = post.eval_on_selector_all(
-        f"{VIEW} .mlb-season-coverage", "els => els.map(e => e.textContent)"
+        f"{VIEW} .mlb-grid .mlb-season-coverage", "els => els.map(e => e.textContent)"
     )
     # Counts come from the builder's season table; 2019 has one postseason game that
     # sits in no cell, so its denominator is larger than its cells'.
@@ -51,14 +51,14 @@ def test_coverage_per_season_and_low_tone(post: Page) -> None:
         "Crews listed for 1 of 2 postseason games (50%)",
     ]
     low = post.eval_on_selector_all(
-        f"{VIEW} .mlb-season-coverage[data-low='true']", "els => els.length"
+        f"{VIEW} .mlb-grid .mlb-season-coverage[data-low='true']", "els => els.length"
     )
     assert low == 3
 
 
 def test_wikipedia_outlets_are_credited_per_season(post: Page) -> None:
     links = post.eval_on_selector_all(
-        f"{VIEW} .mlb-season-credit",
+        f"{VIEW} .mlb-grid .mlb-season-credit",
         "els => els.map(e => [e.textContent, e.getAttribute('href'), e.getAttribute('rel')])",
     )
     assert [t for t, _, _ in links] == [
@@ -218,6 +218,28 @@ def test_phone_twin_has_a_merged_pinned_column_and_booths(
     assert page.evaluate(f"{HOOKS}.getTableIndexes()") == [7]
 
 
+def test_phone_lists_each_season_credit_and_coverage(
+    mlb_mobile_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """RT-13 per season at 480px and under: the season list under the phone twin carries the
+    visible Wikipedia credit, the coverage line and its low marker the hidden grid holds."""
+    page = mlb_mobile_page
+    open_mlb_app(page, "?sport=mlb&view=postseason")
+    twin = page.locator(f"{VIEW} .mlb-phone-season-notes")
+    assert twin.locator("li .mlb-season").all_inner_texts() == ["2014", "2019", "2025", "2026"]
+    credits = twin.locator(".mlb-season-credit")
+    assert credits.count() == 2
+    assert all(credits.nth(i).is_visible() for i in range(2))
+    assert [credits.nth(i).get_attribute("href") for i in range(2)] == [
+        "https://example.org/wiki/2014_Invented_Series",
+        "https://example.org/wiki/2019_Invented_Series",
+    ]
+    cov = twin.locator(".mlb-season-coverage")
+    assert cov.count() == 4
+    assert all(cov.nth(i).is_visible() for i in range(4))
+    assert twin.locator(".mlb-season-coverage[data-low='true']").count() == 3
+
+
 def test_phone_booths_cell_caps_lines_with_plus_n_more(
     mlb_mobile_page: Page, open_mlb_app: Callable[..., None]
 ) -> None:
@@ -267,6 +289,7 @@ def test_phone_swipe_cue_shows_on_overflow_and_hides_after_a_scroll(
 def test_desktop_has_separate_columns_and_no_phone_twin(post: Page) -> None:
     assert post.locator(f"{VIEW} .mlb-grid").is_visible()
     assert post.locator(f"{VIEW} .mlb-phone-grid").is_hidden()
+    assert post.locator(f"{VIEW} .mlb-phone-season-notes").is_hidden()
     heads = post.eval_on_selector_all(
         f"{VIEW} .mlb-grid thead th", "els => els.map(e => e.textContent)"
     )
