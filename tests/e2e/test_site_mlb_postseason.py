@@ -72,12 +72,41 @@ def test_wikipedia_outlets_are_credited_per_season(post: Page) -> None:
     assert all("noopener" in (r or "") for _, _, r in links)
 
 
-def test_a_split_cell_shows_every_outlet(post: Page) -> None:
-    pills = post.eval_on_selector_all(
-        f"{VIEW} button[data-cell='2025-wild_card-NL'] .mlb-cell-head .pill",
-        "els => els.map(e => e.textContent)",
+def _cell_marks(page: Page, cell: str) -> list[dict[str, str | None]]:
+    return page.eval_on_selector_all(  # type: ignore[no-any-return]
+        f"{VIEW} button[data-cell='{cell}'] .mlb-cell-head .net-mark",
+        """els => els.map(m => ({
+          alt: m.querySelector('img')?.getAttribute('alt') ?? null,
+          title: m.querySelector('img')?.getAttribute('title') ?? null,
+          name: m.querySelector('.net-name')?.textContent ?? null,
+        }))""",
     )
-    assert pills == ["ESPN", "TBS"]
+
+
+def test_a_split_cell_shows_every_outlet(post: Page) -> None:
+    """SHELL-05: each outlet is a logo by id with alt/title = name, in the lookup order."""
+    marks = _cell_marks(post, "2025-wild_card-NL")
+    assert marks == [
+        {"alt": "ESPN", "title": "ESPN", "name": None},
+        {"alt": "TBS", "title": "TBS", "name": None},
+    ]
+    assert post.locator(f"{VIEW} .mlb-cell-head .pill").count() == 0
+
+
+def test_outlet_without_a_logo_falls_back_to_dot_and_name(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        data["lookups"]["networks"][1].update({"id": "mlbn", "name": "MLB Network"})
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    mlb_guarded_page.route("**/mlb-data.json", handler)
+    open_mlb_app(mlb_guarded_page, "?sport=mlb&view=postseason")
+    assert _cell_marks(mlb_guarded_page, "2014-world_series-all") == [
+        {"alt": None, "title": None, "name": "MLB Network"}
+    ]
 
 
 def test_crew_not_listed_and_al_nl_split(post: Page) -> None:
@@ -101,7 +130,9 @@ def test_wikipedia_crew_excitement_and_viewers(post: Page) -> None:
     ws = post.locator(f"{VIEW} button[data-cell='2014-world_series-all']").inner_text()
     assert "Gus Penn" in ws
     assert "Hana Voss" in ws
-    assert "Fox" in ws
+    assert _cell_marks(post, "2014-world_series-all") == [
+        {"alt": "Fox", "title": "Fox", "name": None}
+    ]
     assert "Excitement 2.40 (1 game)" in ws
     assert "Avg 12.0M viewers, 1 of 1 games rated" in ws
     two = post.locator(f"{VIEW} button[data-cell='2019-division-AL']").inner_text()
@@ -180,3 +211,58 @@ def test_phone_twin_has_a_merged_pinned_column_and_booths(
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     page.locator(f"{VIEW} button[data-phone-cell='2014-world_series-all']").tap()
     assert page.evaluate(f"{HOOKS}.getTableIndexes()") == [7]
+
+
+def test_phone_booths_cell_caps_lines_with_plus_n_more(
+    mlb_mobile_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """13-14: a cell with more booths than the line budget ends in '+N more'."""
+
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        p = data["postseason"]
+        k = next(i for i, s in enumerate(p["season"]) if s == 2019 and p["round"][i] == "division")
+        p["booths"][k] = [[8, 7], [6, 7], [2, 3], [0, 1], [4, 5]]
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    mlb_mobile_page.route("**/mlb-data.json", handler)
+    open_mlb_app(mlb_mobile_page, "?sport=mlb&view=postseason")
+    cell = mlb_mobile_page.locator(f"{VIEW} button[data-phone-cell='2019-division-AL']")
+    assert cell.locator(".mlb-cell-booth").count() == 3
+    assert cell.locator(".mlb-booth-more").inner_text() == "+2 more"
+
+
+def test_phone_swipe_cue_shows_on_overflow_and_hides_after_a_scroll(
+    mlb_mobile_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    page = mlb_mobile_page
+    open_mlb_app(page, "?sport=mlb&view=postseason")
+    wrap = page.locator(f"{VIEW} .mlb-grid-wrap")
+    # Make the table wider than the scroller so the cue has something to say.
+    page.evaluate(
+        "() => { document.querySelector('#mlb-view-postseason .mlb-phone-grid')"
+        ".style.minWidth = '700px'; }"
+    )
+    cue = page.locator(".module-head .swipe-cue")
+    page.wait_for_function(
+        """() => [...document.querySelectorAll('.swipe-cue')].some(
+          (c) => c.textContent === 'Swipe for more \\u203a' && c.classList.contains('is-slot')
+            && !c.classList.contains('is-idle'))"""
+    )
+    assert cue.first.inner_text() == "Swipe for more \u203a"
+    wrap.evaluate("e => { e.scrollLeft = 120; }")
+    page.wait_for_function(
+        "() => [...document.querySelectorAll('.swipe-cue')]"
+        ".every((c) => c.classList.contains('is-idle'))"
+    )
+    assert cue.first.evaluate("e => getComputedStyle(e).visibility") == "hidden"
+
+
+def test_desktop_has_separate_columns_and_no_phone_twin(post: Page) -> None:
+    assert post.locator(f"{VIEW} .mlb-grid").is_visible()
+    assert post.locator(f"{VIEW} .mlb-phone-grid").is_hidden()
+    heads = post.eval_on_selector_all(
+        f"{VIEW} .mlb-grid thead th", "els => els.map(e => e.textContent)"
+    )
+    assert heads == ["Season", "Wild Card", "Division", "LCS", "World Series"]

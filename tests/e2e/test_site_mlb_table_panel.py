@@ -239,3 +239,55 @@ def test_phone_panel_fits_without_sideways_scroll(
     )
     assert fits
     assert page.locator("#mlb-detail-panel .mlb-lineup").count() == 2
+
+
+def test_506_crew_credit_link_text_and_href(mlb: Page) -> None:
+    """RT-14: a 506-sourced crew reads 'Crew from 506 Sports ↗' and links to the week page."""
+    _open(mlb, 1)
+    link = mlb.locator('#mlb-detail-panel a:has-text("506 Sports ↗")')
+    assert link.count() == 1
+    assert link.inner_text() == "506 Sports ↗"
+    assert link.get_attribute("href") == "https://example.org/506/mlb-week"
+    assert "Crew from 506 Sports ↗" in _panel(mlb)
+
+
+def _outlet_mark(page: Page) -> dict[str, str | None]:
+    return page.evaluate(  # type: ignore[no-any-return]
+        """() => {
+          const m = document.querySelector('#mlb-detail-panel .panel-networks .net-mark');
+          const img = m.querySelector('img');
+          return {
+            alt: img?.getAttribute('alt') ?? null,
+            title: img?.getAttribute('title') ?? null,
+            name: m.querySelector('.net-name')?.textContent ?? null,
+            pills: String(document.querySelectorAll('#mlb-detail-panel .panel-networks .pill').length),
+          };
+        }"""
+    )
+
+
+def test_panel_outlet_is_a_logo_by_id(mlb: Page) -> None:
+    """SHELL-05: Apple TV shows its logo (alt/title = name), not a pill or text."""
+    _open(mlb, 0)
+    assert _outlet_mark(mlb) == {"alt": "Apple TV", "title": "Apple TV", "name": None, "pills": "0"}
+
+
+def test_panel_outlet_without_a_logo_falls_back_to_dot_and_name(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        data["lookups"]["networks"][0].update({"id": "mlbn", "name": "MLB Network"})
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    mlb_guarded_page.route("**/mlb-data.json", handler)
+    open_mlb_app(mlb_guarded_page)
+    _open(mlb_guarded_page, 0)
+    assert _outlet_mark(mlb_guarded_page) == {
+        "alt": None,
+        "title": None,
+        "name": "MLB Network",
+        "pills": "0",
+    }
+    assert mlb_guarded_page.locator("#mlb-detail-panel .panel-networks .net-dot").count() == 1
