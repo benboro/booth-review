@@ -37,8 +37,6 @@ _STATES = [
     "?axis=date&y=excitement",
 ]
 
-_THEMES = ["light", "dark"]
-
 # One open-symbol scan over every scattergl trace: string symbols, array symbols, and numeric
 # codes (Plotly's open variants are code % 200 > 100).
 OPEN_SYMBOLS_JS = """
@@ -79,7 +77,7 @@ _BAND_MARKERS_JS = """
 _THEME_JS = """
 async () => {
   const p = await import('./modules/palette.js');
-  const theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  const theme = (document.documentElement.dataset.theme === 'dark') ? 'dark' : 'light';
   return p.SURFACE[theme];
 }
 """
@@ -179,26 +177,22 @@ def _open(
     page: Page,
     open_app: Callable[[Page, str], None],
     query: str,
-    theme: str,
     width: int,
 ) -> None:
-    page.emulate_media(color_scheme=theme)  # type: ignore[arg-type]
     page.set_viewport_size({"width": width, "height": 900})
     open_app(page, query)
     page.evaluate(_WAIT_TWO_FRAMES)
     page.wait_for_timeout(150)
 
 
-@pytest.mark.parametrize("theme", _THEMES)
 @pytest.mark.parametrize("query", _STATES)
 def test_no_scattergl_trace_uses_an_open_symbol(
     guarded_page: Page,
     open_app: Callable[[Page, str], None],
     query: str,
-    theme: str,
 ) -> None:
     """notes-2 #1: an open scattergl symbol speckles at small sizes; the figure never uses one."""
-    _open(guarded_page, open_app, query, theme, 1280)
+    _open(guarded_page, open_app, query, 1280)
     open_traces: int = guarded_page.evaluate(OPEN_SYMBOLS_JS)
     assert open_traces == 0, f"{open_traces} scattergl trace(s) carry an open symbol at {query!r}"
 
@@ -218,7 +212,6 @@ _BAND_CASES = [
 
 
 @pytest.mark.parametrize("width", [1280, 360])
-@pytest.mark.parametrize("theme", _THEMES)
 @pytest.mark.parametrize(("query", "meta"), _BAND_CASES)
 @pytest.mark.parametrize("synthetic", ["dense", "grid"])
 def test_band_markers_match_the_svg_reference_at_real_density(
@@ -226,12 +219,11 @@ def test_band_markers_match_the_svg_reference_at_real_density(
     open_app: Callable[[Page, str], None],
     query: str,
     meta: str,
-    theme: str,
     width: int,
     synthetic: str,
 ) -> None:
     """The band's own marker config, drawn through GL, matches the analytic SVG rendering."""
-    _open(guarded_page, open_app, query, theme, width)
+    _open(guarded_page, open_app, query, width)
     info = guarded_page.evaluate(_BAND_MARKERS_JS, [meta])
     marker = info["markers"][meta]
     bg: str = guarded_page.evaluate(_THEME_JS)

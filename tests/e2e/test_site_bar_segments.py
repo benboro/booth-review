@@ -18,7 +18,6 @@ from playwright.sync_api import Page
 pytestmark = pytest.mark.e2e
 
 _ENV = {"theme": "light", "mobile": False, "revision": 1, "width": 1280}
-_THEMES = ["light", "dark"]
 _TRANSPARENT = "rgba(0,0,0,0)"
 
 _BUILD_JS = """
@@ -185,7 +184,8 @@ def test_plain_stack_pieces_group_by_segment(guarded_page: Page, site_url: str) 
     fig = _bars_figure(guarded_page, site_url, "plain")
     walk = _piece_walk(fig, "x")
     assert [w[0] for w in walk] == [1, 2, 2, 0, 0, 1]  # A r/u, B r/u, C r/u
-    tones = {"A": "#7C3AED", "B": "#B793F5", "C": "#7C3AED"}
+    hero = guarded_page.evaluate(_PALETTE_JS, ["light", None, 0, []])["tone"]
+    tones = {"A": hero["a"], "B": hero["b"], "C": hero["a"]}
     for (width, fill, border, line), (seg, rated) in zip(
         walk, [(s, r) for s in "ABC" for r in (True, False)], strict=True
     ):
@@ -246,7 +246,7 @@ def test_segment_overlays_carry_separators_and_customdata(
     assert [t["x"][0] for t in overlays] == counts
     for k, t in enumerate(overlays):
         assert t["marker"]["color"] == _TRANSPARENT
-        assert t["marker"]["line"] == {"width": 3, "color": "#FFFFFF"}  # D-28
+        assert t["marker"]["line"] == {"width": 3, "color": "#FBF9F5"}  # D-28: the --bg gap
         assert t["customdata"][0] == {"r": 0, "s": k, "side": None}
         assert t["hoverinfo"] == "none"
         assert not any(t.get("text", []))
@@ -286,12 +286,9 @@ def _expected_text(
     return out
 
 
-@pytest.mark.parametrize("theme", _THEMES)
 @pytest.mark.parametrize("kind", ["plain", "family"])
-def test_part_text_sits_on_the_wider_part(
-    guarded_page: Page, site_url: str, kind: str, theme: str
-) -> None:
-    fig = _bars_figure(guarded_page, site_url, kind, {**_ENV, "theme": theme})
+def test_part_text_sits_on_the_wider_part(guarded_page: Page, site_url: str, kind: str) -> None:
+    fig = _bars_figure(guarded_page, site_url, kind)
     text = _on(fig, "x5")
     if kind == "plain":
         parts = [("A", 1, 2, [0]), ("B", 2, 0, [0]), ("C", 0, 1, [0])]
@@ -300,7 +297,7 @@ def test_part_text_sits_on_the_wider_part(
         parts = [("A", 3, 2, [0, 1]), ("B", 0, 1, [0])]
         wider = ["rated", "unrated"]
     assert len(text) == 2 * len(parts)
-    expected = _expected_text(guarded_page, kind, theme, parts)
+    expected = _expected_text(guarded_page, kind, "light", parts)
     for k, (side, (want, color)) in enumerate(zip(wider, expected, strict=True)):
         rated_t, unrated_t = text[2 * k], text[2 * k + 1]
         assert rated_t["x"][0] == parts[k][1] and unrated_t["x"][0] == parts[k][2]
@@ -406,14 +403,12 @@ def _render(
     raw: dict | None,
     partial: dict,
     fn: str,
-    theme: str,
     width: int,
 ) -> dict[str, Any]:
     if raw is not None:
         page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
-    page.emulate_media(color_scheme=theme)  # type: ignore[arg-type]
     open_app(page, "")
-    env = {"theme": theme, "mobile": width < 600, "revision": 1, "width": width}
+    env = {"theme": "light", "mobile": width < 600, "revision": 1, "width": width}
     return page.evaluate(_RENDER_JS, [partial, fn, env])  # type: ignore[no-any-return]
 
 
@@ -422,7 +417,6 @@ def _piece_count(seg: dict[str, Any]) -> int:
     return sum((p["rated"] > 0) + (p["count"] - p["rated"] > 0) for p in parts if p["count"] > 0)
 
 
-@pytest.mark.parametrize("theme", _THEMES)
 @pytest.mark.parametrize("width", [1280, 360])
 @pytest.mark.parametrize(
     ("partial", "fn", "multi"),
@@ -437,14 +431,13 @@ def test_rendered_segment_pieces_are_contiguous(
     guarded_page: Page,
     open_app: Callable[[Page, str], None],
     request: pytest.FixtureRequest,
-    theme: str,
     width: int,
     partial: dict,
     fn: str,
     multi: bool,
 ) -> None:
     raw = request.getfixturevalue("multichannel") if multi else None
-    out = _render(guarded_page, open_app, raw, partial, fn, theme, width)
+    out = _render(guarded_page, open_app, raw, partial, fn, width)
     groups: dict[tuple[int, int], dict[str, list[dict]]] = {}
     for p in out["paths"]:
         yc = (p["t"] + p["b"]) / 2
@@ -477,7 +470,6 @@ def test_rendered_segment_pieces_are_contiguous(
 
 
 @pytest.mark.parametrize("width", [1280, 360])
-@pytest.mark.parametrize("theme", _THEMES)
 @pytest.mark.parametrize(
     ("partial", "fn"),
     [
@@ -488,12 +480,11 @@ def test_rendered_segment_pieces_are_contiguous(
 def test_rendered_rated_and_unrated_parts_are_equally_thick(
     guarded_page: Page,
     open_app: Callable[[Page, str], None],
-    theme: str,
     width: int,
     partial: dict,
     fn: str,
 ) -> None:
-    out = _render(guarded_page, open_app, None, partial, fn, theme, width)
+    out = _render(guarded_page, open_app, None, partial, fn, width)
     solid = [p for p in out["paths"] if p["fo"] > 0.9]
     hollow = [p for p in out["paths"] if 0 < p["fo"] < 0.5]
     assert solid and hollow
