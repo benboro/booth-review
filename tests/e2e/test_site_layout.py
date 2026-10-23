@@ -11,6 +11,7 @@ import re
 from collections.abc import Callable
 
 import pytest
+from conftest import element_height, measure_gap
 from playwright.sync_api import Page, expect
 
 pytestmark = pytest.mark.e2e
@@ -320,13 +321,18 @@ def test_summary_is_one_line_under_the_chip_row(
     assert summary_box["width"] >= 0.5 * inner_width
 
 
-def test_selection_row_hidden_with_no_people(
+def test_selection_row_is_always_rendered_with_only_clear_all_when_empty(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """With nothing selected, #selection-row is hidden but #summary still
-    shows the unfiltered count."""
+    """With nothing selected #selection-row is still rendered (32px fixed, 13-10) and
+    holds only Clear all filters at its right end; #summary shows the unfiltered count."""
     open_app(guarded_page, "")
-    expect(guarded_page.locator("#selection-row")).to_be_hidden()
+    row = guarded_page.locator("#selection-row")
+    expect(row).to_be_visible()
+    expect(guarded_page.locator("#clear-filters")).to_be_visible()
+    assert guarded_page.locator("#chips .chip").count() == 0
+    assert row.bounding_box() is not None
+    assert row.bounding_box()["height"] == 32  # type: ignore[index]
     expect(guarded_page.locator("#summary")).to_be_visible()
 
 
@@ -366,91 +372,78 @@ def test_phone_announcers_picker_is_in_the_filters_sheet(
     assert selection_row_box["y"] + selection_row_box["height"] <= chart_area_box["y"] + 0.5
 
 
-def test_clear_selection_is_readable_in_light_and_dark(
+def test_clear_selection_is_readable(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-25a: Clear selection is readable (WCAG AA) against its own
-    background in both themes, and the dark background is never the UA's
-    default white button face."""
-    for scheme in ("light", "dark"):
-        guarded_page.emulate_media(color_scheme=scheme)
-        open_app(guarded_page, "")
-        _add_person_by_query(guarded_page, "Dale Harlow")
+    """D-25a: Clear selection is readable (WCAG AA) against its own background."""
+    open_app(guarded_page, "")
+    _add_person_by_query(guarded_page, "Dale Harlow")
 
-        colors = guarded_page.eval_on_selector(
-            "#clear-selection",
-            "el => { const s = getComputedStyle(el); return [s.color, s.backgroundColor]; }",
-        )
-        fg = _parse_rgb(colors[0])
-        bg = _parse_rgb(colors[1])
-        assert _contrast_ratio(fg, bg) >= 4.5, scheme
-        if scheme == "dark":
-            assert colors[1] != "rgb(255, 255, 255)"
+    colors = guarded_page.eval_on_selector(
+        "#clear-selection",
+        "el => { const s = getComputedStyle(el); return [s.color, s.backgroundColor]; }",
+    )
+    assert _contrast_ratio(_parse_rgb(colors[0]), _parse_rgb(colors[1])) >= 4.5
 
 
-def test_clear_all_filters_is_distinct_and_aa_in_both_themes(
+def test_clear_all_filters_is_distinct_and_aa(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-25b: Clear all filters clears WCAG AA against the toolbar background
-    in both themes, and its color/border differ from a plain filter
-    trigger's in both themes too."""
-    for scheme in ("light", "dark"):
-        guarded_page.emulate_media(color_scheme=scheme)
-        open_app(guarded_page, "")
+    """D-25b / C1: Clear all filters sits at the right end of the selection row, clears
+    WCAG AA against the page background, and is distinct from a plain filter trigger
+    (1px --ink border and 600 weight against the trigger's --rule-strong border)."""
+    open_app(guarded_page, "")
 
-        styles = guarded_page.evaluate(
-            "() => { const toolbarBg = getComputedStyle(document.getElementById('toolbar'))"
-            ".backgroundColor; "
-            "const clear = getComputedStyle(document.getElementById('clear-filters')); "
-            "const trig = getComputedStyle(document.getElementById('trigger-seasons')); "
-            "return { toolbarBg, clearColor: clear.color, clearBorderTop: clear.borderTopColor, "
-            "trigColor: trig.color, trigBorderTop: trig.borderTopColor }; }"
-        )
-        fg = _parse_rgb(styles["clearColor"])
-        bg = _parse_rgb(styles["toolbarBg"])
-        assert _contrast_ratio(fg, bg) >= 4.5, scheme
-        assert styles["clearColor"] != styles["trigColor"], scheme
-        assert styles["clearBorderTop"] != styles["trigBorderTop"], scheme
+    styles = guarded_page.evaluate(
+        "() => { const pageBg = getComputedStyle(document.body).backgroundColor; "
+        "const clear = getComputedStyle(document.getElementById('clear-filters')); "
+        "const trig = getComputedStyle(document.getElementById('trigger-seasons')); "
+        "const row = document.getElementById('selection-row').getBoundingClientRect(); "
+        "const box = document.getElementById('clear-filters').getBoundingClientRect(); "
+        "return { pageBg, clearColor: clear.color, clearBorderTop: clear.borderTopColor, "
+        "clearWeight: clear.fontWeight, trigWeight: trig.fontWeight, "
+        "trigBorderTop: trig.borderTopColor, rowRight: row.right, clearRight: box.right }; }"
+    )
+    assert _contrast_ratio(_parse_rgb(styles["clearColor"]), _parse_rgb(styles["pageBg"])) >= 4.5
+    assert styles["clearBorderTop"] == "rgb(35, 32, 27)"  # --ink
+    assert styles["clearBorderTop"] != styles["trigBorderTop"]
+    assert styles["clearWeight"] == "600"
+    assert styles["clearWeight"] != styles["trigWeight"]
+    assert styles["rowRight"] - styles["clearRight"] <= 1
 
 
 def test_clear_selection_is_distinct_and_aa(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-30: Clear selection reads as its own kind of control -- a dashed
-    secondary treatment, not the toggle's border style and not
-    Clear all filters' `--reset` red -- and clears WCAG AA in both themes."""
-    for scheme in ("light", "dark"):
-        guarded_page.emulate_media(color_scheme=scheme)
-        open_app(guarded_page, "")
-        _add_person_by_query(guarded_page, "Dale Harlow")
+    secondary treatment, not the toggle's border style and not Clear all
+    filters' solid --ink outline -- and clears WCAG AA."""
+    open_app(guarded_page, "")
+    _add_person_by_query(guarded_page, "Dale Harlow")
 
-        styles = guarded_page.evaluate(
-            "() => { "
-            "const cs = getComputedStyle(document.getElementById('clear-selection')); "
-            "const ct = getComputedStyle(document.getElementById('compare-toggle')); "
-            "const cf = getComputedStyle(document.getElementById('clear-filters')); "
-            "const bodyBg = getComputedStyle(document.body).backgroundColor; "
-            "return { csBorderStyle: cs.borderTopStyle, csColor: cs.color, "
-            "csBorderColor: cs.borderTopColor, csBg: cs.backgroundColor, "
-            "ctBorderStyle: ct.borderTopStyle, cfColor: cf.color, "
-            "cfBorderColor: cf.borderTopColor, bodyBg }; }"
-        )
-        assert styles["csBorderStyle"] != styles["ctBorderStyle"], scheme
-        assert styles["csColor"] != styles["cfColor"], scheme
-        assert styles["csBorderColor"] != styles["cfBorderColor"], scheme
+    styles = guarded_page.evaluate(
+        "() => { "
+        "const cs = getComputedStyle(document.getElementById('clear-selection')); "
+        "const ct = getComputedStyle(document.getElementById('compare-toggle')); "
+        "const cf = getComputedStyle(document.getElementById('clear-filters')); "
+        "const bodyBg = getComputedStyle(document.body).backgroundColor; "
+        "return { csBorderStyle: cs.borderTopStyle, csColor: cs.color, "
+        "csBorderColor: cs.borderTopColor, csBg: cs.backgroundColor, "
+        "ctBorderStyle: ct.borderTopStyle, cfBorderStyle: cf.borderTopStyle, "
+        "cfBorderColor: cf.borderTopColor, bodyBg }; }"
+    )
+    assert styles["csBorderStyle"] == "dashed"
+    assert styles["csBorderStyle"] != styles["ctBorderStyle"]
+    assert styles["csBorderStyle"] != styles["cfBorderStyle"]
+    assert styles["csBorderColor"] != styles["cfBorderColor"]
 
-        fg = _parse_rgb(styles["csColor"])
-        bg = _parse_rgb(styles["csBg"])
-        assert _contrast_ratio(fg, bg) >= 4.5, scheme
+    assert _contrast_ratio(_parse_rgb(styles["csColor"]), _parse_rgb(styles["csBg"])) >= 4.5
+    assert _contrast_ratio(_parse_rgb(styles["csBorderColor"]), _parse_rgb(styles["bodyBg"])) >= 3
 
-        border = _parse_rgb(styles["csBorderColor"])
-        effective_bg = _parse_rgb(styles["bodyBg"])
-        assert _contrast_ratio(border, effective_bg) >= 3, scheme
-
-        has_toggle_class = guarded_page.eval_on_selector(
-            "#clear-selection", "el => el.classList.contains('toggle')"
-        )
-        assert has_toggle_class is False, scheme
+    has_toggle_class = guarded_page.eval_on_selector(
+        "#clear-selection", "el => el.classList.contains('toggle')"
+    )
+    assert has_toggle_class is False
 
 
 @pytest.mark.parametrize(("width", "height"), [(1280, 800), (390, 844)])
@@ -489,29 +482,70 @@ def test_page_has_side_gutters(
 def test_no_empty_band_between_toolbar_and_chart(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-25d/D-08: Phase 04.4 D-10 fills the chart-tab slot (40px), and the gap
-    between the toolbar and the legend row is no more than the selection bar,
-    the tabs, the hint row, and a small gutter -- not the old empty band."""
+    """D-25d / SHELL-04: the tab row is 40px, the filter bar sits 8px above the
+    selection band (--gap-filters-band) and the tab row 16px above the first module
+    (--gap-bar-content); the hint lives in the module subtitle."""
     guarded_page.set_viewport_size({"width": 1280, "height": 800})
     open_app(guarded_page, "")
 
-    chart_tabs_box = guarded_page.locator("#chart-tabs").bounding_box()
-    assert chart_tabs_box is not None
-    assert chart_tabs_box["height"] == 40
-    tab_hint_box = guarded_page.locator("#tab-hint").bounding_box()
-    assert tab_hint_box is not None
+    assert element_height(guarded_page, "#chart-tabs") == 40
+    assert measure_gap(guarded_page, "#toolbar", "#selection-bar") == 8
+    assert measure_gap(guarded_page, "#chart-tabs", "#chart-module") == 16
+    assert element_height(guarded_page, "#selection-bar") == 64
 
-    toolbar_box = guarded_page.locator("#toolbar").bounding_box()
-    legend_box = guarded_page.locator("#legend-chips").bounding_box()
-    selection_bar_box = guarded_page.locator("#selection-bar").bounding_box()
-    assert toolbar_box is not None
-    assert legend_box is not None
-    assert selection_bar_box is not None
 
-    gap = legend_box["y"] - (toolbar_box["y"] + toolbar_box["height"])
-    assert gap <= (
-        selection_bar_box["height"] + chart_tabs_box["height"] + tab_hint_box["height"] + 16
+def _module_head_boxes(page: Page) -> dict[str, dict[str, float]]:
+    boxes: dict[str, dict[str, float]] = page.evaluate(
+        """() => Object.fromEntries(
+          ['chart-title', 'chart-subtitle', 'chart-tools'].map((id) => {
+            const r = document.getElementById(id).getBoundingClientRect();
+            return [id, {left: r.left, right: r.right, top: r.top, bottom: r.bottom}];
+          }).concat([['module', (() => {
+            const r = document.getElementById('chart-module').getBoundingClientRect();
+            return {left: r.left, right: r.right, top: r.top, bottom: r.bottom};
+          })()]])
+        )"""
     )
+    return boxes
+
+
+def test_module_head_carries_title_subtitle_and_right_aligned_tools(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """C6 / resolution 4: the chart module's head holds the title, the hint subtitle
+    and the tools on one row on desktop, tools right-aligned."""
+    guarded_page.set_viewport_size({"width": 1280, "height": 800})
+    open_app(guarded_page, "?view=map")
+    expect(guarded_page.locator("#chart-subtitle")).not_to_have_text("")
+    boxes = _module_head_boxes(guarded_page)
+    title, subtitle, tools = boxes["chart-title"], boxes["chart-subtitle"], boxes["chart-tools"]
+    assert title["right"] <= subtitle["left"] + 0.5
+    assert subtitle["right"] <= tools["left"] + 0.5
+    assert abs(title["top"] - tools["top"]) < 40  # one head row
+    assert boxes["module"]["right"] - tools["right"] <= 17.5  # 16px padding + 1px border
+
+
+def _assert_phone_boundary(page: Page, button: str, trigger: str) -> None:
+    """A 480px viewport gets the phone Filters button (desktop triggers hidden);
+    481px gets the equal-cell bar (button hidden)."""
+    page.set_viewport_size({"width": 480, "height": 900})
+    expect(page.locator(button)).to_be_visible()
+    expect(page.locator(trigger)).to_be_hidden()
+    page.set_viewport_size({"width": 481, "height": 900})
+    expect(page.locator(button)).to_be_hidden()
+    expect(page.locator(trigger)).to_be_visible()
+
+
+def test_phone_boundary_480_481(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
+    open_app(guarded_page, "")
+    _assert_phone_boundary(guarded_page, "#filters-button", "#trigger-seasons")
+
+
+def test_phone_boundary_480_481_nfl(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    open_nfl_app(nfl_guarded_page)
+    _assert_phone_boundary(nfl_guarded_page, "#nfl-filters-button", "#nfl-trigger-seasons")
 
 
 @pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)

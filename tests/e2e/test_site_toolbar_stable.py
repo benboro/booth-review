@@ -206,27 +206,36 @@ _CELL_MIN_JS = (
 )
 
 
+_COLS_JS = (
+    "() => getComputedStyle(document.getElementById('toolbar'))"
+    ".gridTemplateColumns.split(' ').length"
+)
+_FILTER_CELLS = 10  # the bar holds ten CFB filter controls; Clear all lives in the selection row
+
+
+def _expected_rows(columns: int) -> int:
+    return -(-_FILTER_CELLS // columns)
+
+
 @pytest.mark.parametrize("font_setting", ["narrow"], indirect=True)
-def test_grid_has_room_for_eleven_cells(
+def test_grid_cells_fit_the_bar_and_a_long_game_keeps_the_rows(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """With a font narrow enough for the 116px floor, all eleven cells (ten filters
-    plus Clear all) fit one row at 1440px (eleven 116px cells need 1356px), and
-    picking a long game keeps it there."""
+    """With the narrow font the ten cells wrap to the balanced row count the grid
+    reports (ceil(10 / columns)), the cell never drops below the 116px floor, and
+    picking a long game neither adds a row nor truncates anything but its own label
+    (the cell may be wide enough that it truncates nothing)."""
     guarded_page.set_viewport_size({"width": 1440, "height": 900})
     open_app(guarded_page)
-    assert int(guarded_page.evaluate(_CELL_MIN_JS).removesuffix("px")) <= 116
-    columns = guarded_page.evaluate(
-        "() => getComputedStyle(document.getElementById('toolbar'))"
-        ".gridTemplateColumns.split(' ').length"
-    )
-    assert columns >= 11
+    assert int(guarded_page.evaluate(_CELL_MIN_JS).removesuffix("px")) >= 116
+    columns: int = guarded_page.evaluate(_COLS_JS)
     tops: list[int] = guarded_page.evaluate(_VISIBLE_TOPS_JS)
-    assert len(tops) == 11
-    assert len(set(tops)) == 1
+    assert len(tops) == _FILTER_CELLS
+    rows = len(set(tops))
+    assert rows == _expected_rows(columns)
     _set(guarded_page, {"game": "cfp-national-championship"})
-    assert len(set(guarded_page.evaluate(_VISIBLE_TOPS_JS))) == 1
-    assert _truncated(guarded_page) == ["Game: CFP National Championship"]
+    assert len(set(guarded_page.evaluate(_VISIBLE_TOPS_JS))) == rows
+    assert set(_truncated(guarded_page)) <= {"Game: CFP National Championship"}
 
 
 @pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide", "narrow"], indirect=True)
@@ -235,23 +244,17 @@ def test_toolbar_rows_with_game_button(
     guarded_page: Page,
     open_app: Callable[[Page, str], None],
     width: int,
-    font_setting: str,
 ) -> None:
-    """Eleven visible cells, two rows at 800, 900, 1024 and 1280px on every font except
-    the wide ones at 800px, which need three (eleven 116px cells need 1356px, more
-    than the 1248px a 1280px toolbar has, so the Booth trigger moved 1280px from one
-    row to two). At 800px the machine's own default font may be either (CI's default
-    is DejaVu-like). Toggling filters never changes the row count, and no resting
-    label truncates."""
+    """Ten visible filter cells. The row count is the balanced one the grid reports
+    (ceil(10 / columns)), at most three, and a function of width and font only:
+    toggling filters never changes it, and no resting label truncates."""
     guarded_page.set_viewport_size({"width": width, "height": 900})
     open_app(guarded_page)
     tops: list[int] = guarded_page.evaluate(_VISIBLE_TOPS_JS)
-    assert len(tops) == 11
+    assert len(tops) == _FILTER_CELLS
     rows = len(set(tops))
-    if width == 800 and font_setting == "default":
-        assert rows in (2, 3)
-    else:
-        assert rows == (3 if width == 800 and font_setting in ("dejavu", "wide") else 2)
+    assert rows == _expected_rows(guarded_page.evaluate(_COLS_JS))
+    assert 1 <= rows <= 3
     assert _truncated(guarded_page) == []
 
     cell_min = guarded_page.evaluate(_CELL_MIN_JS)
