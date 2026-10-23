@@ -152,3 +152,11 @@ def test_phone_filter_chip_never_widens_the_page(app: Page) -> None:
     )
     scroll_w, client_w = widths
     assert scroll_w <= client_w
+
+
+def test_phone_filter_chip_names_the_crew_once(app: Page) -> None:
+    app.set_viewport_size({"width": 390, "height": 800})
+    _, names = _pick(app)
+    chip = app.locator("#filter-chips .filter-chip")
+    expect(chip).to_have_count(1)
+    assert chip.inner_text().strip() == f"Crew: {' / '.join(names)}"

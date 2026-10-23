@@ -1533,10 +1533,12 @@ function renderFiltersButton(data, state, view) {
     chip.className = 'filter-chip';
     chip.setAttribute('popovertarget', 'filters-sheet');
     chip.setAttribute('aria-haspopup', 'dialog');
-    const resting = restingLabels.get(name) ?? label;
+    // The crew pick has no toolbar trigger, so no resting label: bold its "Crew:" prefix.
+    const resting = name === 'crew' ? 'Crew:' : (restingLabels.get(name) ?? label);
     const strong = document.createElement('b');
     strong.textContent = resting;
-    chip.append(strong, document.createTextNode(triggerValue(name, label, true)));
+    const value = name === 'crew' ? label.slice(resting.length) : triggerValue(name, label, true);
+    chip.append(strong, document.createTextNode(value));
     chip.setAttribute('aria-label', label);
     li.append(chip);
     return li;
