@@ -22,6 +22,7 @@ import * as crews from './views/crews.js';
 import * as viewership from './views/viewership.js';
 import * as scatter from './views/scatter.js';
 import { PHONE_QUERY } from '../../modules/breakpoints.js';
+import { waitForFonts, onLateFont } from '../../modules/chart-frame.js';
 import { showToolsFor } from './tools.js';
 
 const VIEW_MODULES = { special: teamBars, crews, viewership, scatter };
@@ -463,7 +464,9 @@ export async function mount({ footerEl, search = '' } = {}) {
   ensureShell(footerEl);
   swapFooter(footerEl);
   attachMedia();
-  await ensureLoaded(search);
+  // The first draw waits (at most 1500ms, alongside the data) for the faces, as CFB's does, so
+  // tick labels and margins do not shift after font swap (13-UI-SPEC "Wait for fonts").
+  const [, fontsLoaded] = await Promise.all([ensureLoaded(search), waitForFonts()]);
   if (loadFailed || !model) {
     hooks.failed = true;
     hooks.ready = true;
@@ -474,6 +477,12 @@ export async function mount({ footerEl, search = '' } = {}) {
     swapFooter(footerEl);
     syncUrl();
     renderAll({ resize: true });
+    // A face that arrives later re-lays the charts out once.
+    if (!fontsLoaded) {
+      onLateFont(() => {
+        if (mounted) renderAll({ resize: true });
+      });
+    }
   }
   hooks.ready = true;
 }
