@@ -655,3 +655,22 @@ def test_summary_line_is_filled_at_rest_in_every_sport(
         "document.querySelector(s).textContent.trim())",
         arg=sport.summary,
     )
+
+
+@pytest.mark.parametrize("sport_key", ("nfl", "mlb"))
+def test_summary_line_reads_zero_matches_for_an_empty_selection(
+    both_guarded_page: Page, both_site_url: str, sport_key: str
+) -> None:
+    """A selection that matches no game reads "0 games match", never the at-rest
+    "N rated of M games" line (which would contradict the table's filtered empty state)."""
+    page = both_guarded_page
+    sport = SPORT_BY_KEY[sport_key]
+    page.set_viewport_size({"width": 1440, "height": 900})
+    _open(page, both_site_url, sport)
+    page.evaluate(
+        f"window.{sport.hooks}.setState({{ selection: {{ label: 'Nothing', games: [] }} }})"
+    )
+    page.wait_for_function(
+        "(s) => document.querySelector(s).textContent.trim() === '0 games match'",
+        arg=sport.summary,
+    )

@@ -264,7 +264,11 @@ function renderSelectionBar() {
   );
   clearBtn.hidden = !state.selection;
   const n = lastRows.length;
-  if (n) {
+  // Same sources tableGames fills the table from; a source that matches nothing still reads
+  // "0 games match" rather than falling back to the at-rest line.
+  const tableActive = !!state.selection || state.booths.length > 0 || state.people.length > 0
+    || state.teams.length > 0;
+  if (tableActive) {
     summary.textContent = `${n} ${n === 1 ? 'game matches' : 'games match'}`;
   } else {
     // No selection: the same "N rated of M games" line CFB shows, over the games the filters pass.

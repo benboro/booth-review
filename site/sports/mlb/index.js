@@ -237,7 +237,7 @@ function renderSelectionBar() {
   }
   clearBtn.hidden = !label;
   const n = lastRows.length;
-  if (n) {
+  if (label) {
     summary.textContent = `${n} ${n === 1 ? 'game matches' : 'games match'}`;
   } else {
     // No selection: the CFB-style "N rated of M games" line over every MLB game.
