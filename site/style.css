@@ -2868,9 +2868,11 @@ html:has(#mlb-detail-panel[open]) {
     column-gap: 0;
   }
 
+  /* Content-sized columns (13-24): equal 1fr columns left "Excitement" 5px short in the wide
+     font at 360px; auto columns size to the labels and still fill the row. */
   #axis-toggle {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, auto);
     width: 100%;
   }
 

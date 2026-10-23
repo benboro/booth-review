@@ -12,17 +12,17 @@
  */
 export const NFL_CATEGORY_COLORS = Object.freeze({
   solo_thursday: Object.freeze({ light: '#0072B2', dark: '#0072B2' }),
-  solo_sunday: Object.freeze({ light: '#1C94D8', dark: '#56B4E9' }),
+  solo_sunday: Object.freeze({ light: '#1B90D2', dark: '#56B4E9' }),
   solo_monday: Object.freeze({ light: '#009E73', dark: '#009E73' }),
   solo_holiday: Object.freeze({ light: '#8A7A00', dark: '#F0E442' }),
-  solo_other: Object.freeze({ light: '#8C8C8C', dark: '#999999' }),
+  solo_other: Object.freeze({ light: '#888888', dark: '#999999' }),
   agotw: Object.freeze({ light: '#D55E00', dark: '#D55E00' }),
-  cbs_national: Object.freeze({ light: '#BD8300', dark: '#E69F00' }),
-  international_other: Object.freeze({ light: '#C972A2', dark: '#CC79A7' }),
+  cbs_national: Object.freeze({ light: '#B77F00', dark: '#E69F00' }),
+  international_other: Object.freeze({ light: '#C26D9C', dark: '#CC79A7' }),
 });
 
 /** Games in no special category (scatter only). */
-export const NFL_OTHER_COLOR = Object.freeze({ light: '#8C8C8C', dark: '#999999' });
+export const NFL_OTHER_COLOR = Object.freeze({ light: '#888888', dark: '#999999' });
 
 /**
  * Viewership view category -> segment color plus marker symbol. Lines that share a hue
@@ -42,7 +42,7 @@ export const VIEW_CATEGORY_STYLE = Object.freeze({
   black_friday: { segment: 'solo_holiday', symbol: 'diamond', shade: { light: '#9A8800', dark: '#FFF59A' } },
   international: { segment: 'international_other', symbol: 'circle' },
   saturday: { segment: 'solo_other', symbol: 'circle', shade: { light: '#5F5F5F', dark: '#8A8A8A' } },
-  friday: { segment: 'solo_other', symbol: 'square', shade: { light: '#8C8C8C', dark: '#B0B0B0' } },
+  friday: { segment: 'solo_other', symbol: 'square', shade: { light: '#888888', dark: '#B0B0B0' } },
   other: { segment: 'solo_other', symbol: 'diamond', shade: { light: '#444444', dark: '#D2D2D2' } },
 });
 
