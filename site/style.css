@@ -4249,6 +4249,8 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 .crews-perseason {
   accent-color: var(--ink);
+  /* The UA gives a checkbox 13.33px; the type scale allows only 12/14/20/24. */
+  font: inherit;
 }
 
 .crews-perseason:disabled,
