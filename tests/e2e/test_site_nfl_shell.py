@@ -55,19 +55,89 @@ def _display(page: Page, selector: str) -> str:
 # ---------------------------------------------------------------- footer
 
 
+_TRADEMARK_LINE = (
+    "Network logos are trademarks of their owners, shown only to identify each network. "
+    "Their use does not imply endorsement, and they are not covered by this site's MIT license."
+)
+
+_TYPE_LINE = (
+    "Type: Crimson Text (copyright 2010 The Crimson Text Project Authors), "
+    "Roboto (copyright 2011 The Roboto Project Authors) and "
+    "Roboto Condensed (copyright 2011 Google Inc.), "
+    "used under the SIL Open Font License 1.1."
+)
+
+_RT02_TEXT = (
+    "Viewership: RatingsReference.com (CC BY 4.0), modified: filtered and joined with crew and "
+    "game data · Schedules and win-probability measures: nflverse (CC BY 4.0), modified: "
+    "derived and joined with crew and viewership data · Scheduling changes: Wikipedia "
+    "(CC BY-SA 4.0) · Crews and networks: 506 Sports"
+)
+
+_BY = "https://creativecommons.org/licenses/by/4.0/"
+_RT02_LINKS = [
+    ("RatingsReference.com", "https://ratingsreference.com"),
+    ("CC BY 4.0", _BY),
+    ("nflverse", "https://nflverse.com"),
+    ("CC BY 4.0", _BY),
+    ("Wikipedia", "https://www.wikipedia.org"),
+    ("CC BY-SA 4.0", "https://creativecommons.org/licenses/by-sa/4.0/"),
+    ("506 Sports", "https://506sports.com"),
+]
+
+
+def _norm(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _static_lines(page: Page) -> tuple[str, str, list[str]]:
+    """RT-23 and RT-24 text and the RT-24 link targets, as the footer shows them now."""
+    trademark = _norm(page.locator("#site-footer p.trademark-line").inner_text())
+    type_line = _norm(page.locator("#site-footer p.type-line").inner_text())
+    hrefs = page.locator("#site-footer p.type-line a").evaluate_all(
+        "els => els.map(e => e.getAttribute('href'))"
+    )
+    return trademark, type_line, hrefs
+
+
 def test_footer_swap_and_restore(cfb: Page) -> None:
     before = cfb.evaluate("document.getElementById('site-footer').outerHTML")
+    lines_before = _static_lines(cfb)
+    assert lines_before[0] == _TRADEMARK_LINE
+    assert lines_before[1] == _TYPE_LINE
     _mount_nfl(cfb)
+    # RT-02 in full: exact text, link text and targets, rel on every link.
+    credit = cfb.locator("#site-footer .credit-line")
+    assert _norm(credit.inner_text()) == _RT02_TEXT
+    anchors = credit.locator("a")
+    assert anchors.evaluate_all("els => els.map(e => [e.textContent, e.getAttribute('href')])") == [
+        list(pair) for pair in _RT02_LINKS
+    ]
+    assert anchors.evaluate_all("els => els.map(e => e.rel)") == ["noopener noreferrer"] * 7
     text = cfb.inner_text("#site-footer")
-    assert "nflverse" in text
-    assert "Wikipedia (CC BY-SA 4.0)" in text
-    assert "506 Sports" in text
     assert "Schedules and scores" in text
+    # RT-03: no CFBD credit on NFL.
     assert "CollegeFootballData" not in text
-    links = cfb.eval_on_selector_all("#site-footer .credit-line a", "els => els.map(e => e.rel)")
-    assert links and all(rel == "noopener noreferrer" for rel in links)
+    # RT-23 and RT-24 are untouched while NFL is mounted.
+    assert _static_lines(cfb) == lines_before
     _unmount_nfl(cfb)
     assert cfb.evaluate("document.getElementById('site-footer').outerHTML") == before
+    assert _static_lines(cfb) == lines_before
+
+
+def test_footer_round_trip_through_the_sport_switch(cfb: Page) -> None:
+    """RT-04: CFB -> NFL -> CFB restores the CFB footer, RT-23/24 present at every step."""
+    before = cfb.evaluate("document.getElementById('site-footer').outerHTML")
+    lines_before = _static_lines(cfb)
+    cfb.click('#sport-switch button[data-sport="nfl"]')
+    cfb.wait_for_function("window.__nflTestHooks && window.__nflTestHooks.ready === true")
+    assert _norm(cfb.locator("#site-footer .credit-line").inner_text()) == _RT02_TEXT
+    assert "CollegeFootballData" not in cfb.inner_text("#site-footer")
+    assert _static_lines(cfb) == lines_before
+    cfb.click('#sport-switch button[data-sport="cfb"]')
+    cfb.wait_for_function("document.body.dataset.sport === 'cfb'")
+    assert cfb.evaluate("document.getElementById('site-footer').outerHTML") == before
+    assert _static_lines(cfb) == lines_before
 
 
 # ------------------------------------------------------------ load states
@@ -232,7 +302,7 @@ def test_headline_shows_count_and_season_range(
     page.wait_for_function(
         "t => document.querySelector('#nfl-headline')?.textContent === t", arg=expect
     )
-    assert page.locator("#nfl-selection-bar h2#nfl-headline").count() == 1
+    assert page.locator("#nfl-chart-area .module-head h2#nfl-headline").count() == 1
     inner = [s for s in seasons if lo <= s <= lo + 1]
     page.evaluate("p => window.__nflTestHooks.setState(p)", {"seasons": [lo, lo + 1]})
     want = f"{len(inner):,} {'game' if len(inner) == 1 else 'games'} · {lo}–{lo + 1}"
@@ -293,3 +363,26 @@ def test_booth_chip_caption_and_empty(
     page.locator("#nfl-chips .chip-remove").click()
     assert page.locator("#nfl-chips .chip").count() == 0
     assert page.evaluate("window.__nflTestHooks.getState().booths") == []
+
+
+# ------------------------------------------------- selection row and filter bar
+
+
+@pytest.mark.parametrize("view", ["special", "crews", "viewership", "scatter"])
+def test_selection_row_and_booths_on_every_tab(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], view: str
+) -> None:
+    page = nfl_guarded_page
+    open_nfl_app(page, f"?sport=nfl&view={view}")
+    # The selection row is always rendered, with Clear all filters at its right end.
+    row = page.locator("#nfl-selection-row")
+    assert row.is_visible()
+    clear = page.locator("#nfl-clear-filters")
+    assert clear.is_visible()
+    row_box, clear_box = row.bounding_box(), clear.bounding_box()
+    assert row_box is not None and clear_box is not None
+    assert clear_box["x"] + clear_box["width"] >= row_box["x"] + row_box["width"] - 1
+    # Booths is visible on every NFL tab (D-11).
+    assert page.locator("#nfl-trigger-booths").is_visible()
+    # The module subtitle replaces the old tab hint.
+    assert page.locator("#nfl-chart-subtitle").count() == 1
