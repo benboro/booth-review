@@ -114,6 +114,27 @@ def test_network_without_a_logo_shows_dot_and_name(
     assert dot_color not in ("", "rgba(0, 0, 0, 0)")
 
 
+def test_a_logo_stands_alone_with_no_family_dot(
+    guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
+) -> None:
+    """Brief §5: a network with a logo shows the logo alone in the table and the panel; the
+    family dot appears only in the dot-and-name fallback."""
+    _serve(guarded_page, _with_logo_ids(fixture_raw))
+    open_app(guarded_page, _QUERY)
+    marks = guarded_page.eval_on_selector_all(
+        "#games-table tbody .net-mark",
+        "els => els.map(m => ({ logo: !!m.querySelector('img'),"
+        " dots: m.querySelectorAll('.net-dot').length }))",
+    )
+    assert {m["logo"] for m in marks} == {True, False}
+    for mark in marks:
+        assert mark["dots"] == (0 if mark["logo"] else 1), marks
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")  # telecast 0 is on espn
+    panel = guarded_page.locator("#panel-body .panel-networks .net-mark").first
+    assert panel.locator("img").count() == 1
+    assert panel.locator(".net-dot").count() == 0
+
+
 def test_table_family_dots_follow_a_theme_change(
     guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
 ) -> None:

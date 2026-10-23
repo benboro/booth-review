@@ -31,13 +31,16 @@ function watchTheme() {
 /**
  * Builds one network mark (`span.net-mark`).
  * @param {{id: string, name: string, family: string}} network
- * @param {{dot?: boolean}} [opts] - dot: draw the family dot first (default true).
+ * @param {{dot?: boolean}} [opts] - dot: draw the family dot before a fallback name
+ *   (default true). A logo always stands alone: the dot is only the fallback's
+ *   colour key, never drawn beside a logo (brief §5).
  * @returns {HTMLSpanElement}
  */
 export function networkMark({ id, name, family }, { dot = true } = {}) {
   const mark = document.createElement('span');
   mark.className = 'net-mark';
-  if (dot) {
+  const entry = logoFor(id);
+  if (dot && !entry) {
     const dotEl = document.createElement('span');
     dotEl.className = 'net-dot';
     const key = familyKey(family);
@@ -46,7 +49,6 @@ export function networkMark({ id, name, family }, { dot = true } = {}) {
     watchTheme();
     mark.appendChild(dotEl);
   }
-  const entry = logoFor(id);
   if (entry) {
     const img = document.createElement('img');
     img.className = entry.box === 'badge' ? 'net-logo net-logo--badge' : 'net-logo';

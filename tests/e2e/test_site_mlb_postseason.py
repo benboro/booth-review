@@ -91,6 +91,9 @@ def test_a_split_cell_shows_every_outlet(post: Page) -> None:
         {"alt": "TBS", "title": "TBS", "name": None},
     ]
     assert post.locator(f"{VIEW} .mlb-cell-head .pill").count() == 0
+    # A logo stands alone: no family dot beside it (brief §5).
+    cell = post.locator(f"{VIEW} button[data-cell='2025-wild_card-NL'] .mlb-cell-head")
+    assert cell.locator(".net-dot").count() == 0
 
 
 def test_outlet_without_a_logo_falls_back_to_dot_and_name(
@@ -107,6 +110,8 @@ def test_outlet_without_a_logo_falls_back_to_dot_and_name(
     assert _cell_marks(mlb_guarded_page, "2014-world_series-all") == [
         {"alt": None, "title": None, "name": "MLB Network"}
     ]
+    head = f"{VIEW} button[data-cell='2014-world_series-all'] .mlb-cell-head"
+    assert mlb_guarded_page.locator(f"{head} .net-dot").count() == 1
 
 
 def test_crew_not_listed_and_al_nl_split(post: Page) -> None:
