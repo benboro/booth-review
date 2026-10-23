@@ -4270,7 +4270,8 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 .crews-table th.crews-col-season {
-  width: 72px;
+  /* 96px, not the spec's 72: the 600-weight head plus its sort glyph needs 64px of content beside the 32px of padding. */
+  width: 96px;
 }
 
 .crews-table th.crews-col-rank {
@@ -4773,7 +4774,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   }
 
   .crews-table th.crews-col-season {
-    width: 72px;
+    width: 96px;
   }
 
   .crews-table th.crews-col-rank,
