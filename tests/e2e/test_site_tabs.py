@@ -30,7 +30,7 @@ def _state(page: Page) -> dict[str, Any]:
 
 
 def _hint(page: Page) -> str:
-    return page.locator("#tab-hint").inner_text()
+    return page.locator("#chart-subtitle").inner_text()
 
 
 def _box(page: Page, selector: str) -> dict[str, float]:
@@ -271,7 +271,9 @@ def test_tab_switching_never_shifts_the_chart_chrome(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(guarded_page, "?school=northfield,lakeview")
-    before = {s: _box(guarded_page, s) for s in ("#legend-chips", "#chart-controls", "#tab-hint")}
+    before = {
+        s: _box(guarded_page, s) for s in ("#legend-chips", "#chart-controls", "#chart-subtitle")
+    }
     for view in ("bars", "butterfly", "scatter"):
         guarded_page.locator(f"#tab-{view}").click()
         assert _state(guarded_page)["view"] == view

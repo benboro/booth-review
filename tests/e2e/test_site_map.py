@@ -128,7 +128,7 @@ def test_no_subject_draws_dots_only_with_tab_hint(guarded_page: Page, open_app: 
     assert traces["venue-dots"]["n"] > 0
     assert traces["venue-dots"]["cd"] == [d["key"] for d in _model(guarded_page)["venueDots"]]
     assert guarded_page.locator("#map-hint").count() == 0
-    assert guarded_page.locator("#tab-hint").text_content() == MAP_HINT
+    assert guarded_page.locator("#chart-subtitle").text_content() == MAP_HINT
 
 
 def test_person_paths_split_by_season_and_colored_by_destination(

@@ -517,7 +517,7 @@ def test_tab_change_drops_the_team_selection(app: Page) -> None:
     assert app.evaluate("window.__nflTestHooks.getTableIndexes()") == []
     assert app.locator("#nfl-clear-selection").is_hidden()
     _set(app, {"view": "special"})
-    assert app.inner_text("#nfl-tab-hint") == "Pick a team bar to see its seasons and games."
+    assert app.inner_text("#nfl-chart-subtitle") == "Pick a team bar to see its seasons and games."
     # A patch that changes the view and sets a selection keeps that selection.
     sel = {"kind": "test", "key": "t", "label": "Test", "games": [0, 1]}
     _set(app, {"view": "fox", "selection": sel})

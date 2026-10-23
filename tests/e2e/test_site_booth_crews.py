@@ -225,7 +225,7 @@ def test_person_selection_is_ignored(
     base = _model(guarded_page)
     picked = _model(guarded_page, {"people": ["kris-venn"]})
     assert picked == base
-    hint = guarded_page.locator("#crews-panel .crews-hint").text_content()
+    hint = guarded_page.locator("#chart-subtitle").text_content()
     assert hint is not None
     assert "Selected announcers do not change this table." in hint
 
