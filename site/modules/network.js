@@ -9,8 +9,24 @@
  */
 
 import { FAMILY_COLORS, familyKey } from './palette.js';
-import { currentTheme } from './theme.js';
+import { currentTheme, onThemeChange } from './theme.js';
 import { logoFor } from './logos.js';
+
+let themeWatch = null;
+
+/**
+ * Repaints every family dot on the page when data-theme changes, so dots in tables,
+ * chips and open panels follow the theme hook, not only the active chart (SHELL-02).
+ * Armed once, on the first dot built.
+ */
+function watchTheme() {
+  if (themeWatch) return;
+  themeWatch = onThemeChange((theme) => {
+    for (const dot of document.querySelectorAll('.net-dot[data-family]')) {
+      dot.style.background = FAMILY_COLORS[theme][dot.dataset.family];
+    }
+  });
+}
 
 /**
  * Builds one network mark (`span.net-mark`).
@@ -24,7 +40,10 @@ export function networkMark({ id, name, family }, { dot = true } = {}) {
   if (dot) {
     const dotEl = document.createElement('span');
     dotEl.className = 'net-dot';
-    dotEl.style.background = FAMILY_COLORS[currentTheme()][familyKey(family)];
+    const key = familyKey(family);
+    dotEl.dataset.family = key;
+    dotEl.style.background = FAMILY_COLORS[currentTheme()][key];
+    watchTheme();
     mark.appendChild(dotEl);
   }
   const entry = logoFor(id);

@@ -114,6 +114,38 @@ def test_network_without_a_logo_shows_dot_and_name(
     assert dot_color not in ("", "rgba(0, 0, 0, 0)")
 
 
+def test_table_family_dots_follow_a_theme_change(
+    guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
+) -> None:
+    """SHELL-02: flipping data-theme repaints the family dots already in the games table,
+    not only the active chart."""
+    _serve(guarded_page, _with_logo_ids(fixture_raw))
+    open_app(guarded_page, _QUERY)
+    guarded_page.wait_for_selector("#games-table tbody tr .net-dot[data-family]")
+    # Paint a probe dot with each theme's colour, so the comparison is computed-to-computed.
+    snapshot_js = """async () => {
+      const url = new URL('./modules/palette.js', location.href).href;
+      const { FAMILY_COLORS } = await import(url);
+      const theme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+      const probe = document.createElement('span');
+      document.body.appendChild(probe);
+      const out = [...document.querySelectorAll('#games-table .net-dot')].map((el) => {
+        probe.style.background = FAMILY_COLORS[theme][el.dataset.family];
+        return [getComputedStyle(el).backgroundColor, getComputedStyle(probe).backgroundColor];
+      });
+      probe.remove();
+      return out;
+    }"""
+    light = guarded_page.evaluate(snapshot_js)
+    assert light and all(got == want for got, want in light)
+    guarded_page.evaluate("document.documentElement.dataset.theme = 'dark'")
+    guarded_page.wait_for_timeout(50)  # MutationObserver callbacks run as a microtask
+    dark = guarded_page.evaluate(snapshot_js)
+    assert len(dark) == len(light)
+    assert all(got == want for got, want in dark)
+    assert any(d[0] != li[0] for d, li in zip(dark, light, strict=True)), "no dot changed"
+
+
 def test_badge_row_is_no_taller_than_a_fallback_only_row(
     guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
 ) -> None:
