@@ -694,3 +694,31 @@ def test_a_single_season_range_shows_the_toggle_off_and_disabled(
     expect(box).not_to_be_checked()
     expect(_season_head(guarded_page)).to_have_count(0)
     assert "perseason" not in guarded_page.url
+
+
+# -- 14-10: viewer figures in table columns carry a fixed one decimal -----------------------
+
+
+def test_table_formatter_always_has_one_decimal_and_the_shared_one_is_untouched(app: Page) -> None:
+    values = [523_412, 12_000, 2_000_000, 50_640_000, 999_960, 1_049_999, 950]
+    out = app.evaluate(
+        """async (vs) => {
+          const f = await import('./modules/format.js');
+          return [vs.map((v) => f.formatAudienceTable(v)), vs.map((v) => f.formatAudienceShort(v))];
+        }""",
+        values,
+    )
+    assert out[0] == ["523.4K", "12.0K", "2.0MM", "50.6MM", "1.0MM", "1.0MM", "950"]
+    assert out[1] == ["523.4K", "12K", "2MM", "50.6MM", "1MM", "1MM", "950"]
+
+
+def test_viewer_cells_and_game_list_figures_show_one_decimal(app: Page) -> None:
+    pattern = re.compile(r"^\d+\.\d(K|MM)$")
+    figures = app.locator("#crews-panel tbody td.num .crews-figure")
+    texts = figures.all_inner_texts()
+    viewer_texts = [t for t in texts if t.endswith(("K", "MM"))]
+    assert viewer_texts, "no viewer figures rendered"
+    assert all(pattern.match(t) for t in viewer_texts), viewer_texts
+    _rows(app).first.locator(".crews-chevron").click()
+    games = app.locator("#crews-panel .crews-game .crews-figure").all_inner_texts()
+    assert games and all(pattern.match(t) for t in games), games

@@ -326,6 +326,20 @@ export function formatAudienceShort(n) {
   return `${trim(n / 1e6)}MM`;
 }
 
+/**
+ * Audience figure for a TABLE column (Crews, 14-10): the same K and MM units as
+ * `formatAudienceShort`, but always one decimal so a column reads evenly ("2.0MM", "523.4K",
+ * "12.0K"). Charts, tooltips and prose keep the trimmed `formatAudienceShort`.
+ * @param {number} n
+ * @returns {string} e.g. "523.4K", "12.0K", "2.0MM", "50.6MM".
+ */
+export function formatAudienceTable(n) {
+  if (n < 1000) return String(Math.round(n));
+  const k = Math.round(n / 100) / 10;
+  if (k < 1000) return `${k.toFixed(1)}K`;
+  return `${(Math.round(n / 1e5) / 10).toFixed(1)}MM`;
+}
+
 /** Label for a game with no public rating (04.13). */
 export const NO_RATING_LABEL = 'No public rating';
 

@@ -9,7 +9,7 @@
  */
 
 import { NATURAL_DIR, modelBreakSeason, sortCrewRows } from './crew-groups.js';
-import { crewEntries, figureSourceOf, formatAudienceShort, formatMatchup } from './format.js';
+import { crewEntries, figureSourceOf, formatAudienceTable, formatMatchup } from './format.js';
 import { networkMark } from './network.js';
 import { safeHref } from './panel.js';
 import { attachScrollCue } from './scroll-cue.js';
@@ -177,7 +177,7 @@ function metricCell(m, kind, data) {
     }
     return td;
   }
-  const fig = kind === 'viewers' ? formatAudienceShort(m.mean) : m.mean.toFixed(1);
+  const fig = kind === 'viewers' ? formatAudienceTable(m.mean) : m.mean.toFixed(1);
   td.append(el('span', 'crews-figure', fig));
   if (kind === 'viewers') td.append(' ', el('span', 'caption', `(${m.n})`));
   if (m.flagged) {
@@ -264,7 +264,7 @@ function viewersCell(data, i) {
     td.append(el('span', 'caption', 'none rated'));
     return td;
   }
-  td.append(el('span', 'crews-figure', formatAudienceShort(data.t.viewers[i])));
+  td.append(el('span', 'crews-figure', formatAudienceTable(data.t.viewers[i])));
   // A second-source figure keeps the publisher link the Matched games table gives it (RT-10).
   if (figureSourceOf(data, i) !== 'rr') {
     const t = data.t;
