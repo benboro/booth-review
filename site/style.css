@@ -1990,7 +1990,7 @@ input[type="checkbox"] {
 }
 
 .axis-caption {
-  font: var(--font-body);
+  font: var(--font-caption);
   color: var(--muted);
   white-space: nowrap;
 }
@@ -2865,7 +2865,7 @@ html:has(#mlb-detail-panel[open]) {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
-    column-gap: var(--space-xs);
+    column-gap: 0;
   }
 
   #axis-toggle {
@@ -2882,8 +2882,11 @@ html:has(#mlb-detail-panel[open]) {
     width: 100%;
   }
 
+  /* 13-19: the module frame (border and 12px padding) took 26px from this row, so the
+     buttons trim their side padding to 1px and the caption sits flush (no column gap); the full labels
+     still fit at 360px in the wide font. */
   #y-toggle button {
-    padding: 0 4px;
+    padding: 0 1px;
   }
 
   #axis-toggle .axis-long {
@@ -4318,6 +4321,11 @@ tr.is-matched > :first-child {
 }
 
 @media (max-width: 480px) {
+  /* UI-SPEC spacing exceptions: 12px phone module inner padding. */
+  .module {
+    padding: 12px;
+  }
+
   .module-tools {
     width: 100%;
     margin-left: 0;
