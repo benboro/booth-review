@@ -872,6 +872,14 @@ body.app {
   white-space: nowrap;
 }
 
+/* Nothing changed: muted text and a quiet rule, still focusable (aria-disabled). */
+.clear-all[aria-disabled="true"],
+.nfl-filters-sheet .nfl-sheet-clear[aria-disabled="true"] {
+  color: var(--muted);
+  border-color: var(--rule-strong);
+  cursor: default;
+}
+
 .clear-all:focus-visible,
 .filter-trigger:focus-visible {
   outline: 2px solid var(--accent);

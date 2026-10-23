@@ -604,3 +604,37 @@ def test_team_alone_fills_the_table_like_cfb_school(
     assert "row-link" in (rows.first.get_attribute("class") or "")
     rows.first.locator("td").nth(1).click(position={"x": 2, "y": 2})
     nfl_guarded_page.wait_for_selector("#nfl-detail-panel[open]")
+
+
+def _clear_state(page: Page, selector: str) -> dict[str, str | None]:
+    result: dict[str, str | None] = page.evaluate(
+        "(s) => { const el = document.querySelector(s); const cs = getComputedStyle(el); "
+        "return { aria: el.getAttribute('aria-disabled'), border: cs.borderTopColor }; }",
+        selector,
+    )
+    return result
+
+
+def test_clear_all_filters_is_disabled_until_a_filter_changes(app: Page) -> None:
+    idle = _clear_state(app, "#nfl-clear-filters")
+    assert idle["aria"] == "true"
+    assert idle["border"] != "rgb(35, 32, 27)"  # not --ink
+    app.evaluate("window.__nflTestHooks.setState({ cats: ['agotw'] })")
+    live = _clear_state(app, "#nfl-clear-filters")
+    assert live["aria"] == "false"
+    assert live["border"] == "rgb(35, 32, 27)"
+    app.click("#nfl-clear-filters")
+    app.wait_for_function(
+        "document.getElementById('nfl-clear-filters').getAttribute('aria-disabled') === 'true'"
+    )
+
+
+def test_phone_clear_all_filters_is_disabled_until_a_filter_changes(mobile: Page) -> None:
+    sheet_clear = ".nfl-filters-sheet .nfl-sheet-clear"
+    idle = _clear_state(mobile, sheet_clear)
+    assert idle["aria"] == "true"
+    assert idle["border"] != "rgb(35, 32, 27)"
+    mobile.evaluate("window.__nflTestHooks.setState({ cats: ['agotw'] })")
+    live = _clear_state(mobile, sheet_clear)
+    assert live["aria"] == "false"
+    assert live["border"] == "rgb(35, 32, 27)"

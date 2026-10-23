@@ -666,7 +666,7 @@ function buildShell(ctx) {
   });
   layer.appendChild(sheet);
 
-  ui = { clear, filtersButton, filterChips, triggers, popovers, sheet, sheetBody: body };
+  ui = { clear, sheetClear, filtersButton, filterChips, triggers, popovers, sheet, sheetBody: body };
   for (const btn of [filtersButton, ...triggers.values()]) {
     btn.disabled = true;
   }
@@ -726,6 +726,8 @@ export function renderNflFilters(ctx) {
   const changed = changedControls(ctx.model, state);
   ui.filtersButton.textContent = changed.length ? `Filters · ${changed.length} changed` : 'Filters';
   ui.filtersButton.classList.toggle('is-changed', changed.length > 0);
+  // Clear all filters looks and reads as disabled while nothing is changed (the shared predicate).
+  for (const btn of [ui.clear, ui.sheetClear]) btn.setAttribute('aria-disabled', changed.length > 0 ? 'false' : 'true');
   ui.filterChips.replaceChildren(
     ...changed.map((key) => {
       const label = TRIGGERS.find((t) => t.key === key).label;

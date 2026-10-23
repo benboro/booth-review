@@ -1488,6 +1488,8 @@ function renderFiltersButton(data, state, view) {
   const n = changed.length;
   els.filtersButton.textContent = n > 0 ? `Filters · ${n} changed` : 'Filters';
   els.filtersButton.classList.toggle('is-changed', n > 0);
+  // Clear all filters looks and reads as disabled while nothing is changed (the shared predicate).
+  els.clearFilters.setAttribute('aria-disabled', n > 0 ? 'false' : 'true');
   const chips = changed.map((name) => {
     const { label } = triggerInfo(name, data, state, view);
     const li = document.createElement('li');

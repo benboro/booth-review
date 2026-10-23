@@ -540,8 +540,8 @@ def test_toolbar_order_and_clear_all_contrast(
     a bar item. D-25: its computed color against the selection row's own
     background (the page) clears WCAG AA's 4.5:1 minimum, and its color/border-top-color
     differ from a plain filter trigger's -- the `--ink` outline style, neither
-    accent nor the old red."""
-    open_app(guarded_page, "")
+    accent nor the old red. Opened with one filter changed: at the default it is disabled."""
+    open_app(guarded_page, "?role=pbp")
 
     ids = guarded_page.evaluate(
         "() => Array.from(document.querySelectorAll('#toolbar > *'))"
@@ -2282,3 +2282,45 @@ def test_clear_all_filters_sits_at_the_right_end_of_the_selection_row(
     state = guarded_page.evaluate("window.__testHooks.getState()")
     assert state["people"] == []
     assert state["school"] == []
+
+
+def _clear_state(page: Page, selector: str) -> dict[str, str | None]:
+    result: dict[str, str | None] = page.evaluate(
+        "(s) => { const el = document.querySelector(s); const cs = getComputedStyle(el); "
+        "return { aria: el.getAttribute('aria-disabled'), color: cs.color, "
+        "border: cs.borderTopColor }; }",
+        selector,
+    )
+    return result
+
+
+def test_clear_all_filters_is_disabled_until_a_filter_changes(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """At the default Clear all filters is aria-disabled and wears the muted look (no ink
+    border); with any control changed it is enabled with the ink border, and back again."""
+    open_app(guarded_page, "")
+    idle = _clear_state(guarded_page, "#clear-filters")
+    assert idle["aria"] == "true"
+    assert idle["border"] != "rgb(35, 32, 27)"  # not --ink
+    open_app(guarded_page, "?role=pbp")
+    live = _clear_state(guarded_page, "#clear-filters")
+    assert live["aria"] == "false"
+    assert live["border"] == "rgb(35, 32, 27)"
+    guarded_page.click("#clear-filters")
+    guarded_page.wait_for_function(
+        "document.getElementById('clear-filters').getAttribute('aria-disabled') === 'true'"
+    )
+
+
+def test_phone_clear_all_filters_is_disabled_until_a_filter_changes(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(mobile_page, "")
+    idle = _clear_state(mobile_page, "#clear-filters")
+    assert idle["aria"] == "true"
+    assert idle["border"] != "rgb(35, 32, 27)"
+    open_app(mobile_page, "?role=pbp")
+    live = _clear_state(mobile_page, "#clear-filters")
+    assert live["aria"] == "false"
+    assert live["border"] == "rgb(35, 32, 27)"

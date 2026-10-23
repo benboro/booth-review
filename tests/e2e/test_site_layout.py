@@ -390,8 +390,9 @@ def test_clear_all_filters_is_distinct_and_aa(
 ) -> None:
     """D-25b / C1: Clear all filters sits at the right end of the selection row, clears
     WCAG AA against the page background, and is distinct from a plain filter trigger
-    (1px --ink border and 600 weight against the trigger's --rule-strong border)."""
-    open_app(guarded_page, "")
+    (1px --ink border and 600 weight against the trigger's --rule-strong border) once a filter
+    is changed; at the default it is disabled."""
+    open_app(guarded_page, "?role=pbp")
 
     styles = guarded_page.evaluate(
         "() => { const pageBg = getComputedStyle(document.body).backgroundColor; "
