@@ -633,6 +633,8 @@ li[role="option"][aria-selected="true"] .option-check::after {
   flex-basis: 100%;
   flex-wrap: wrap;
   gap: 6px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 @media (max-width: 480px) {
@@ -644,6 +646,12 @@ li[role="option"][aria-selected="true"] .option-check::after {
   #nfl-clear-filters {
     display: none;
   }
+}
+
+/* A long label (a crew pick) must truncate inside the row, not widen the page. */
+.filter-chips > li {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .filter-chip {

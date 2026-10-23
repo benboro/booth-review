@@ -141,3 +141,14 @@ def test_map_prompt_hides_on_a_crew_pick(app: Page) -> None:
     expect(app.locator("#chart-subtitle")).not_to_have_text("")
     _pick(app)
     expect(app.locator("#chart-subtitle")).to_have_text("")
+
+
+def test_phone_filter_chip_never_widens_the_page(app: Page) -> None:
+    """The phone "Crew: A / B / C" accent chip truncates inside the row (Plan 10 critique)."""
+    app.set_viewport_size({"width": 390, "height": 800})
+    _pick(app)
+    widths = app.evaluate(
+        "() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]"
+    )
+    scroll_w, client_w = widths
+    assert scroll_w <= client_w
