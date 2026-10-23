@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -333,6 +334,68 @@ def test_scatter_only_captions_hide_on_bar_tabs(
     guarded_page.locator("#tab-scatter").click()
     assert _visible(guarded_page, "#excitement-caption")
     assert _visible(guarded_page, "#era-note")
+
+
+def test_scatter_captions_keep_their_text_and_methodology_links(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """RT-20/RT-21: the excitement caption and the Nielsen era note keep their text and
+    their methodology.html anchors."""
+    open_app(guarded_page, ONE_SCHOOL + "&axis=excitement")
+    caption = guarded_page.locator("#excitement-caption")
+    assert caption.inner_text() == (
+        "2025+ excitement uses CFBD's new win-probability model; see methodology."
+    )
+    assert (
+        caption.locator("a").get_attribute("href") == "methodology.html#the-2025-excitement-break"
+    )
+    era = guarded_page.locator("#era-note")
+    assert era.inner_text() == (
+        "Nielsen changed how it measures viewing in 2020, 2025, and 2026, "
+        "so compare seasons with care; see methodology."
+    )
+    assert era.locator("a").get_attribute("href") == "methodology.html#measurement-eras"
+
+
+def test_hint_copy_matches_the_chart_tabs_module(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """The hint strings asserted in this file are the ones chart-tabs.js ships."""
+    source = Path("site/modules/chart-tabs.js").read_text(encoding="utf-8")
+    for hint in (BARS_HINT, BUTTERFLY_HINT, H2H_HINT):
+        assert f"'{hint}'" in source, hint
+
+
+def test_selected_tab_has_a_2px_ink_underline(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """SHELL-03: the selected tab carries a 2px --ink bottom border, not the accent."""
+    open_app(guarded_page, ONE_SCHOOL)
+    for tab in ("#tab-scatter", "#tab-bars"):
+        guarded_page.locator(tab).click()
+        style = guarded_page.eval_on_selector(
+            tab,
+            "el => { const s = getComputedStyle(el);"
+            " return [s.borderBottomWidth, s.borderBottomStyle, s.borderBottomColor]; }",
+        )
+        assert style == ["2px", "solid", "rgb(35, 32, 27)"], tab
+    other = guarded_page.eval_on_selector(
+        "#tab-scatter", "el => getComputedStyle(el).borderBottomColor"
+    )
+    assert other != "rgb(35, 32, 27)"
+
+
+def test_tab_changes_never_alter_the_filter_bar(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """SHELL-03 / C6: no filter is shown, hidden or rewritten by a tab change; the filter
+    bar serialises identically before and after each tab."""
+    open_app(guarded_page, ONE_SCHOOL)
+    before = guarded_page.evaluate("document.getElementById('toolbar').outerHTML")
+    for tab in ("#tab-bars", "#tab-map", "#tab-scatter"):
+        guarded_page.locator(tab).click()
+        guarded_page.wait_for_timeout(150)
+        assert guarded_page.evaluate("document.getElementById('toolbar').outerHTML") == before, tab
 
 
 def test_resizing_on_the_bars_tab_raises_no_errors(

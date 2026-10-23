@@ -771,8 +771,8 @@ def test_reset_axes_button_after_switching_to_date_restores_full_range(
     _settle(guarded_page)
     guarded_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [20, 60]})
     _settle(guarded_page)
-    guarded_page.locator("#chart").hover()
-    guarded_page.locator('#chart .modebar-btn[data-attr="zoom"][data-val="reset"]').click()
+    expect(guarded_page.locator("#reset-zoom")).to_have_attribute("aria-disabled", "false")
+    guarded_page.locator("#reset-zoom").click()
     _settle(guarded_page)
     assert guarded_page.evaluate(_XRANGE_JS) == pytest.approx(
         _home(guarded_page, [0, 330]), abs=1e-6
