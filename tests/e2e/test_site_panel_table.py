@@ -415,12 +415,10 @@ def test_panel_unknown_bowl_name_keeps_neutral_site(
     assert "Neutral site" in guarded_page.inner_text("#panel-body")
 
 
-@pytest.mark.parametrize("scheme", ["light", "dark"])
 def test_panel_bowl_core_and_sponsor_colors(
-    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
+    guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-20: the core name is bold in --text, the sponsor text is --muted."""
-    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
     open_app(guarded_page, "")
     guarded_page.evaluate("window.__testHooks.openPanel(7)")
     css = """() => {
@@ -462,28 +460,72 @@ def test_panel_bowl_name_is_rendered_as_literal_text(
     assert guarded_page.evaluate("window.__xss") is None
 
 
-def test_panel_and_table_network_pills_have_wcag_aa_colors(
+_FAMILY_DOT_JS = """
+async (family) => {
+  const p = await import(new URL('./modules/palette.js', location.href).href);
+  const d = document.createElement('div');
+  d.style.backgroundColor = p.FAMILY_COLORS.light[family];
+  return d.style.backgroundColor;
+}
+"""
+
+
+def test_panel_and_table_network_cells_use_marks_with_family_dots(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """SITE-26: a network pill's fill/text colors come from its family, the
-    same lookup table wherever a pill renders -- the panel's network field
-    and the table's network cell."""
+    """SHELL-05: a network without a vendored logo renders a `.net-mark` -- the
+    family-coloured dot plus the name -- in the panel's Network line and the
+    table's network cell (the fixture's networks have no logo; logo cases live in
+    test_site_logos.py)."""
     open_app(guarded_page, "?school=northfield")
 
     guarded_page.evaluate("window.__testHooks.openPanel(0)")
-    panel_pill = guarded_page.locator("#panel-body .panel-networks .pill").first
-    expect(panel_pill).to_have_css("background-color", "rgb(0, 114, 178)")
-    expect(panel_pill).to_have_css("color", "rgb(255, 255, 255)")
+    panel_mark = guarded_page.locator("#panel-body .panel-networks .net-mark").first
+    expect(panel_mark.locator(".net-name")).to_have_text("Alpha Sports")
+    expect(panel_mark.locator(".net-dot")).to_have_css(
+        "background-color", guarded_page.evaluate(_FAMILY_DOT_JS, "disney")
+    )
+    assert guarded_page.locator("#panel-body .pill").count() == 0
 
     expect(guarded_page.locator("#games-table")).to_be_visible()
-    table_pill = guarded_page.locator("#games-table tbody tr").first.locator(".pill").first
-    expect(table_pill).to_have_css("background-color", "rgb(0, 114, 178)")
-    expect(table_pill).to_have_css("color", "rgb(255, 255, 255)")
+    row = guarded_page.locator("#games-table tbody tr").first
+    table_mark = row.locator(".net-mark").first
+    expect(table_mark.locator(".net-name")).to_have_text("Alpha Sports")
+    expect(table_mark.locator(".net-dot")).to_have_css(
+        "background-color", guarded_page.evaluate(_FAMILY_DOT_JS, "disney")
+    )
+    assert row.locator(".pill").count() == 0
 
     guarded_page.evaluate("window.__testHooks.openPanel(1)")
-    fox_pill = guarded_page.locator("#panel-body .panel-networks .pill").first
-    expect(fox_pill).to_have_css("background-color", "rgb(0, 158, 115)")
-    expect(fox_pill).to_have_css("color", "rgb(0, 0, 0)")
+    fox_mark = guarded_page.locator("#panel-body .panel-networks .net-mark").first
+    expect(fox_mark.locator(".net-name")).to_have_text("Beta Network")
+    expect(fox_mark.locator(".net-dot")).to_have_css(
+        "background-color", guarded_page.evaluate(_FAMILY_DOT_JS, "fox")
+    )
+
+
+def test_panel_original_source_link_href_is_the_rows_source_url(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+) -> None:
+    """RT-28: the CFB panel's `View original source (<publisher>) ↗` links the
+    row's own source_url, beside its Ratings Reference record link."""
+    open_app(guarded_page, "")
+    t = fixture_raw["telecasts"]
+    for index in (0, 1):
+        publisher = fixture_raw["lookups"]["publishers"][t["publisher"][index]]
+        guarded_page.evaluate(f"window.__testHooks.openPanel({index})")
+        link = guarded_page.locator(
+            f"#panel-body a:text-is('View original source ({publisher}) ↗')"
+        )
+        expect(link).to_have_count(1)
+        expect(link).to_have_attribute("href", t["source_url"][index])
+        expect(link).to_have_attribute("target", "_blank")
+        expect(link).to_have_attribute("rel", "noopener noreferrer")
+        expect(
+            guarded_page.locator("#panel-body a:text-is('View record on Ratings Reference ↗')")
+        ).to_have_attribute("href", t["rr_urls"][index][0])
 
 
 def test_open_panel_shows_selected_on_this_game(

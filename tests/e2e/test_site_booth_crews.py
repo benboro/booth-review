@@ -304,8 +304,19 @@ def test_credits_and_no_innerhtml(
     link = panel.get_by_role("link", name="Data provided by CollegeFootballData.com")
     assert link.get_attribute("href") == "https://collegefootballdata.com"
     text = panel.inner_text()
-    assert "Viewership figures: Ratings Reference" in text
-    assert "data/reference/cfb_booth_ranks.csv" in text
+    captions = [
+        re.sub(r"\s+", " ", c).strip() for c in panel.locator("p.caption").all_inner_texts()
+    ]
+    # RT-10 (b) and (c): the full sentences, not fragments.
+    assert (
+        "Viewership figures: Ratings Reference and the second sources credited in each "
+        "game's detail panel."
+    ) in captions
+    assert (
+        "Booth order from network press releases, cited per season in "
+        "data/reference/cfb_booth_ranks.csv."
+    ) in captions
+    assert "Data provided by CollegeFootballData.com" in captions
     assert "Rated shows how many games have a viewership figure." in text
     src = guarded_page.evaluate("async () => (await fetch('modules/crews.js')).text()")
     assert "innerHTML" not in src

@@ -147,3 +147,91 @@ def test_backup_crew_unsafe_url_degrades_to_plain_text(
     assert "Crew source: ESPN Press Room" in links
     assert "Crew source: ESPN Press Room ↗" not in links
     expect(body.locator("a:has-text('View 506 Sports listing')")).to_have_count(0)
+
+
+# -- RT-08 / RT-09: The TV Ratings Guide, Awful Announcing and ESPN Press Room figures ----------
+# The contract fixture carries no TVRG, AA or ESPN Press Room figure row, so the telecast-3 row
+# (an SMW row with no Ratings Reference records) is re-served with another figure source, its
+# publisher name and a same-publisher source URL. The fixture file's contract shape is unchanged.
+
+_NOT_VIA_RR = "not listed on Ratings Reference."
+_SECOND_SOURCES = [
+    (
+        "tvrg",
+        "The TV Ratings Guide",
+        "https://tvratingsguide.com/2021/10/example-ratings-post/",
+        f"Figure read from The TV Ratings Guide's ratings post; {_NOT_VIA_RR}",
+    ),
+    (
+        "aa",
+        "Awful Announcing",
+        "https://awfulannouncing.com/2021/example-ratings-post.html",
+        f"Figure read from Awful Announcing's ratings post; {_NOT_VIA_RR}",
+    ),
+    (
+        "espnpr",
+        "ESPN Press Room",
+        "https://espnpressroom.com/us/press-releases/2021/10/example-release/",
+        f"Figure read from an ESPN Press Room release; {_NOT_VIA_RR}",
+    ),
+]
+
+
+def _serve_second_source(
+    page: Page, fixture_raw: dict[str, Any], source: str, publisher: str, url: str
+) -> None:
+    raw = copy.deepcopy(fixture_raw)
+    raw["lookups"]["publishers"][raw["telecasts"]["publisher"][SMW_INDEX]] = publisher
+    raw["telecasts"]["figure_source"][SMW_INDEX] = source
+    raw["telecasts"]["source_url"][SMW_INDEX] = url
+    assert raw["telecasts"]["rr_urls"][SMW_INDEX] == []
+    page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+
+
+@pytest.mark.parametrize(("source", "publisher", "url", "line"), _SECOND_SOURCES)
+def test_second_source_panel_line_and_publisher_link(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+    source: str,
+    publisher: str,
+    url: str,
+    line: str,
+) -> None:
+    """RT-08 exact panel line and RT-09 panel link for each non-SMW second source."""
+    _serve_second_source(guarded_page, fixture_raw, source, publisher, url)
+    open_app(guarded_page, "")
+    guarded_page.evaluate(f"window.__testHooks.openPanel({SMW_INDEX})")
+    body = guarded_page.locator("#panel-body")
+    assert line in body.locator("p").all_inner_texts()
+    link = body.locator(f"a:text-is('View original source ({publisher}) ↗')")
+    expect(link).to_have_count(1)
+    expect(link).to_have_attribute("href", url)
+    expect(link).to_have_attribute("target", "_blank")
+    expect(link).to_have_attribute("rel", "noopener noreferrer")
+    expect(body.locator("a:has-text('View record')")).to_have_count(0)
+
+
+@pytest.mark.parametrize(("source", "publisher", "url", "line"), _SECOND_SOURCES)
+def test_second_source_table_cell_is_publisher_link_only(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+    source: str,
+    publisher: str,
+    url: str,
+    line: str,
+) -> None:
+    """RT-09 table cell: the publisher name linked to the figure's page, no Ratings Reference."""
+    _serve_second_source(guarded_page, fixture_raw, source, publisher, url)
+    open_app(guarded_page, "?school=stonebridge")
+    cell = _smw_row(guarded_page).locator("td").last
+    links = cell.locator("a")
+    expect(links).to_have_count(1)
+    expect(links.first).to_have_text(publisher)
+    expect(links.first).to_have_attribute("href", url)
+    expect(links.first).to_have_attribute("target", "_blank")
+    expect(links.first).to_have_attribute("rel", "noopener noreferrer")
+    text = cell.inner_text()
+    assert "·" not in text
+    assert "Ratings Reference" not in text
