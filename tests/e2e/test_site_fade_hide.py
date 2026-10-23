@@ -61,6 +61,15 @@ def test_switch_sits_after_the_chips_outside_the_chip_list(
     last_chip = _box(guarded_page, "#legend-chips li:last-child button")
     switch = _box(guarded_page, "#dots-toggle")
     assert switch["x"] >= last_chip["x"] + last_chip["width"]
+    # C5: the switch is the last visible item at the right end of the legend row; only the
+    # concealed (visibility: hidden) Network colors slot, kept for layout stability,
+    # follows it.
+    row = _box(guarded_page, "#legend-row")
+    colors = _box(guarded_page, "#colors-toggle")
+    assert _visibility(guarded_page, "#colors-toggle") == "hidden"
+    assert abs((colors["x"] + colors["width"]) - (row["x"] + row["width"])) <= 1
+    assert colors["x"] >= switch["x"] + switch["width"]
+    assert abs(switch["y"] - last_chip["y"]) < last_chip["height"]
 
 
 def test_switch_hides_and_restores_filtered_out_dots(

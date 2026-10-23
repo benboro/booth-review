@@ -17,7 +17,6 @@ from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
 
-_THEMES = ["light", "dark"]
 _CELL = 40
 _COLS = 10
 _ROWS = 5
@@ -30,7 +29,7 @@ async (metas) => {
     if (metas.includes(String(t.meta))) out[String(t.meta)] = JSON.parse(JSON.stringify(t.marker));
   }
   const p = await import('./modules/palette.js');
-  const theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  const theme = (document.documentElement.dataset.theme === 'dark') ? 'dark' : 'light';
   return { markers: out, bg: p.SURFACE[theme] };
 }
 """
@@ -103,16 +102,13 @@ def _data_url(page: Page, width: int, height: int) -> str:
     return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
 
 
-@pytest.mark.parametrize("theme", _THEMES)
 @pytest.mark.parametrize("state", ["filled", "hollow"])
 def test_lead_star_has_no_pixels_outside_the_glyph(
     guarded_page: Page,
     serve_booths: Callable[[Page], None],
     open_app: Callable[[Page, str], None],
-    theme: str,
     state: str,
 ) -> None:
-    guarded_page.emulate_media(color_scheme=theme)  # type: ignore[arg-type]
     serve_booths(guarded_page)
     open_app(guarded_page, "")
     guarded_page.wait_for_timeout(150)

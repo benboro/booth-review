@@ -181,7 +181,11 @@ def real_open_app(real_site_url: str) -> Callable[[Page, str], None]:
 
     def _open(page: Page, query: str = "") -> None:
         page.goto(f"{real_site_url}/index.html{query}")
-        page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
+        # 90 s: the test right after the all-people highlight sweep (a minute of CPU on the
+        # real vault) otherwise misses the default 30 s ready wait on a busy machine.
+        page.wait_for_function(
+            "window.__testHooks && window.__testHooks.ready === true", timeout=90_000
+        )
 
     return _open
 
@@ -220,7 +224,8 @@ def test_real_dot_count_and_origin(
     makes no off-origin request (checked by `real_guarded_page`'s teardown)."""
     real_open_app(real_guarded_page, "")
     traces: list[dict[str, Any]] = real_guarded_page.evaluate(_TRACES_JS)
-    family_traces = [t for t in traces if str(t["meta"]).startswith("family:")]
+    # Lead-booth games are drawn as stars on `lead:<family>` traces instead of family dots.
+    family_traces = [t for t in traces if str(t["meta"]).startswith(("family:", "lead:"))]
     total_dots = len(real_raw["telecasts"]["season"])
     # A family trace with no dots of its own carries one null legend
     # placeholder (CR-03); a real dot always has a numeric x (the n/a strip
@@ -1056,7 +1061,8 @@ _DATE_FACTS_JS = """
   let plotted = 0;
   let outside = 0;
   for (const t of gd.data) {
-    if (!String(t.meta).startsWith('family:')) continue;
+    // Lead-booth games are stars on `lead:<family>` traces instead of family dots.
+    if (!String(t.meta).startsWith('family:') && !String(t.meta).startsWith('lead:')) continue;
     for (const x of t.x) {
       if (x === null || x === undefined) continue;
       plotted += 1;
@@ -1180,7 +1186,7 @@ def test_real_phone_shows_all_season_labels(
 
 
 @pytest.mark.parametrize("chart_font", ["default", "dejavu"])
-@pytest.mark.parametrize("width", [641, 700, 800, 900, 1024])
+@pytest.mark.parametrize("width", [481, 700, 800, 900, 1024])
 def test_real_desktop_season_labels_never_overlap(
     real_guarded_page: Page,
     real_open_app: Callable[[Page, str], None],
@@ -1262,7 +1268,7 @@ def test_real_unrated_games_summary_band_and_causes(
     marker_count = sum(
         1
         for t in traces
-        if str(t["meta"]).startswith("unrated-active:")
+        if str(t["meta"]).startswith(("unrated-active:", "unrated-lead:"))
         for x in t["x"]
         if x is not None
     )
@@ -1294,7 +1300,7 @@ async () => {
   const gd = document.getElementById('chart');
   const fl = gd._fullLayout;
   const p = await import('./modules/palette.js');
-  const theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  const theme = (document.documentElement.dataset.theme === 'dark') ? 'dark' : 'light';
   const traces = gd.data
     .filter((t) => (t.yaxis ?? 'y') === 'y2')
     .map((t) => ({
@@ -1315,20 +1321,19 @@ async () => {
 
 # Calibrated (04.13-17) against the real band: the open-symbol band differs from its SVG
 # reference by far more; filled rings stay under this.
-_REAL_BAND_MAX_DIFF = 2000
+# 13-24: re-measured on the Phase 13 chart frame (2,077 differing pixels at 1280px with the
+# #F4F0E8 surface); the open-symbol failure this guards is an order of magnitude larger.
+_REAL_BAND_MAX_DIFF = 2500
 
 
-@pytest.mark.parametrize("theme", ["light", "dark"])
 @pytest.mark.parametrize("size", [(1280, 900), (390, 844)])
 def test_real_band_rings_are_clean(
     real_guarded_page: Page,
     real_open_app: Callable[[Page, str], None],
-    theme: str,
     size: tuple[int, int],
 ) -> None:
     """notes-2 #1: no open symbol on the real chart, and the real band's own traces drawn through
     GL match their SVG rendering within the calibrated pixel count -- integers only."""
-    real_guarded_page.emulate_media(color_scheme=theme)  # type: ignore[arg-type]
     real_guarded_page.set_viewport_size({"width": size[0], "height": size[1]})
     real_open_app(real_guarded_page, "")
     real_guarded_page.evaluate(
@@ -1347,7 +1352,7 @@ def test_real_band_rings_are_clean(
 _REAL_Y_TRACES_JS = """
 async () => {
   const p = await import('./modules/palette.js');
-  const theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  const theme = (document.documentElement.dataset.theme === 'dark') ? 'dark' : 'light';
   const gd = document.getElementById('chart');
   let band = 0;
   let ringed = 0;
@@ -1356,6 +1361,9 @@ async () => {
     if (meta.startsWith('unrated-') || meta.startsWith('highlight-unrated')) {
       for (const v of Array.from(t.x ?? [])) if (v !== null && v !== undefined) band += 1;
     }
+    // Lead-star casings and the unrated highlight hole are drawn in the surface colour on
+    // purpose; they are not ringed dots.
+    if (meta.includes('lead-halo') || meta.endsWith('-hole')) continue;
     if (t.marker && t.marker.color === p.SURFACE[theme]) ringed += 1;
   }
   const yr = gd._fullLayout.yaxis.range;
@@ -1685,7 +1693,7 @@ def test_real_points_and_margin_axes(
 
 # ---------------------------------------------------------------- 04.18 Map (SITE-70..75)
 
-_MAP_TRACE_COUNT = 26
+_MAP_TRACE_COUNT = 13
 
 _MAP_PICK_JS = """
 async () => {
@@ -1937,8 +1945,8 @@ def test_real_map_constant_traces_and_note(
     real_guarded_page: Page,
     real_open_app: Callable[[Page, str], None],
 ) -> None:
-    """04.18 D-06/D-16: 26 traces whatever the subject or Hide, and #map-note matches the
-    count of visible games without a venue location."""
+    """04.18 D-06/D-16: 13 traces (the Phase 11 splat map) whatever the subject or Hide, and
+    #map-note matches the count of visible games without a venue location."""
     real_open_app(real_guarded_page, "")
     person_id = real_guarded_page.evaluate(_MAP_PICK_JS)
     _map_open(real_guarded_page, real_open_app)

@@ -487,8 +487,12 @@ def test_phone_no_horizontal_scroll_and_labels_above(
           const bars = Array.from(document.querySelectorAll(
             '#bars-chart .trace.bars .point path'))
             .map(p => p.getBoundingClientRect()).filter(r => r.width > 0 && r.height > 0);
+          // Row labels only: the end-marker counts deliberately sit on the bar ends.
+          const named = document.getElementById('bars-chart').layout.annotations;
           const labels = Array.from(document.querySelectorAll(
-            '#bars-chart g.annotation-text-g')).map(a => a.getBoundingClientRect());
+            '#bars-chart g.annotation')).filter(
+              a => !named[Number(a.getAttribute('data-index'))].name)
+            .map(a => a.querySelector('g.annotation-text-g').getBoundingClientRect());
           let n = 0;
           for (const l of labels) for (const b of bars) {
             const ix = Math.min(l.right, b.right) - Math.max(l.left, b.left);

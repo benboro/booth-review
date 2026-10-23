@@ -52,3 +52,14 @@ def test_flag_on_cfb_page_still_boots_clean(
     assert page.evaluate("window.__testHooks.ready") is True
     assert page.evaluate("window.location.search") == ""
     assert errors == []
+
+
+def test_document_title_follows_the_active_sport(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], open_flagon_cfb: Callable[..., None]
+) -> None:
+    """The tab title for each sport is the registry.js title (SHELL-02)."""
+    page = nfl_guarded_page
+    open_flagon_cfb(page)
+    assert page.title() == "The Broadcast Ledger · college football broadcast crews and viewership"
+    open_nfl_app(page, "?sport=nfl")
+    assert page.title() == "The Broadcast Ledger · NFL broadcast crews and special games"

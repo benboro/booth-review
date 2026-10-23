@@ -50,7 +50,7 @@ _TRACES_JS = """
 _THIN_JS = """
 async () => {
   const p = await import('./modules/palette.js');
-  const theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  const theme = (document.documentElement.dataset.theme === 'dark') ? 'dark' : 'light';
   const out = {};
   for (const [f, c] of Object.entries(p.FAMILY_COLORS[theme])) {
     out[f] = p.contrastRatio(c, p.SURFACE[theme]) < 3 ? 2 : 1.5;
@@ -62,7 +62,7 @@ async () => {
 _PALETTE_JS = """
 async () => {
   const p = await import('./modules/palette.js');
-  const theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  const theme = (document.documentElement.dataset.theme === 'dark') ? 'dark' : 'light';
   return { surface: p.SURFACE[theme], accent: p.ACCENT[theme], outline: p.DOT_OUTLINE };
 }
 """
@@ -216,7 +216,7 @@ def _family_colors(page: Page) -> dict[str, str]:
     colors: dict[str, str] = page.evaluate(
         """async () => {
           const p = await import('./modules/palette.js');
-          const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          const dark = (document.documentElement.dataset.theme === 'dark');
           const theme = dark ? 'dark' : 'light';
           return p.FAMILY_COLORS[theme];
         }"""
@@ -550,16 +550,14 @@ def test_compare_shared_booth_is_a_star_and_others_get_shapes(
 _SPECKLE_QUERY = "?people=kris-venn,sam-delgado,dale-harlow,casey-lund&mode=compare"
 
 
-@pytest.mark.parametrize("color_scheme", ["light", "dark"])
 def test_filled_compare_shapes_in_the_band_have_no_edge_speckles(
-    guarded_page: Page, open_app: Callable[[Page, str], None], color_scheme: str
+    guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-31 guard on the band's filled compare shapes: no accent speckle beyond the halo.
 
     Measures with the `_speckle_count` helper of test_site_chart.py (imported, not edited).
     """
     guarded_page.set_viewport_size({"width": 1280, "height": 900})
-    guarded_page.emulate_media(color_scheme=color_scheme)
     open_app(guarded_page, _SPECKLE_QUERY)
     guarded_page.locator("#chart").scroll_into_view_if_needed()
     points = guarded_page.evaluate(
@@ -592,7 +590,7 @@ def test_filled_compare_shapes_in_the_band_have_no_edge_speckles(
             guarded_page,
             point["px"],
             point["py"],
-            color_scheme,
+            "light",
             _halo_ring_inner_radius(point["size"]),
             others,
         )
@@ -605,9 +603,8 @@ def test_filled_compare_shapes_in_the_band_have_no_edge_speckles(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("theme", ["light", "dark"])
 def test_every_family_ring_color_clears_three_to_one_on_surface(
-    guarded_page: Page, open_app: Callable[[Page, str], None], theme: str
+    guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(guarded_page, "")
     got = guarded_page.evaluate(
@@ -619,13 +616,12 @@ def test_every_family_ring_color_clears_three_to_one_on_surface(
           }
           return out;
         }""",
-        theme,
+        "light",
     )
     # A family under 3:1 gets a 2px ring (see chart.js); never fail on the palette itself.
     assert got
     assert all(math.isfinite(v) and v > 1 for v in got.values()), got
-    if theme == "light":
-        assert got["other"] >= 2.5
+    assert got["other"] >= 2.5
 
 
 # ---------------------------------------------------------------------------

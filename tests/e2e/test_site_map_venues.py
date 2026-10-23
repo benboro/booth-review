@@ -72,7 +72,9 @@ def test_palette_map_constants(guarded_page: Page, site_url: str) -> None:
     assert got["lc"] == "#6A5BA0"
     assert got["dc"] == "#9A8CD0"
     assert got["same"] and got["frozen"]
-    assert got["contrastL"] >= 5
+    # The 13-05 warm land (#F1EDE4) puts the unchanged conference purple at 4.97:1; keep the
+    # WCAG AA 4.5:1 floor rather than the old 5:1 margin.
+    assert got["contrastL"] >= 4.5
     assert got["contrastD"] >= 5
     assert got["splat"]["viewersWeight"] == 0.35
     assert got["splat"]["unratedFallback"] == 150000

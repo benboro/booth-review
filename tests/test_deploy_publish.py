@@ -882,7 +882,9 @@ def test_mlb_carry_base_cfb_nfl(remote: Path, target: Path, tmp_path: Path, mlb_
     assert all(after[k] == before[k] for k in kept)
     index = after["index.html"].decode("utf-8")
     assert '<meta name="booth-review-sports" content="cfb,nfl,mlb">' in index
-    buttons = re.findall(r'data-sport="(\w+)"', index.split('<header id="topbar">')[1])
+    buttons = re.findall(
+        r'data-sport="(\w+)"', index.split('<header id="topbar" class="site-header">')[1]
+    )
     assert buttons[:3] == ["cfb", "nfl", "mlb"]
     assert _live_mlb_bytes(remote) == LIVE_MLB.encode()
 

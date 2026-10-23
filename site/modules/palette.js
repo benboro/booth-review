@@ -70,12 +70,12 @@ export const FAMILY_CHANNEL_LEAD = Object.freeze({
  * clears it with black. Verified against the real sRGB relative-luminance
  * formula for every family/theme fill in FAMILY_COLORS (UI-SPEC Color):
  * disney #0072B2 -> white 5.19:1 (both themes); fox #009E73 -> black
- * 6.14:1 (both); cbs light #BD8300 -> black 6.41:1, dark #E69F00 -> black
+ * 6.14:1 (both); cbs light #B77F00 -> black 6.05:1, dark #E69F00 -> black
  * 9.32:1; nbc light #C972A2 -> black 6.41:1, dark #CC79A7 -> black 6.86:1;
  * cw light #1D96DB -> black 6.44:1, dark #56B4E9 -> black 9.10:1; wbd
  * #D55E00 -> black 5.43:1 (both); conference light #000000 -> white
- * 21.0:1, dark #696969 -> white 5.49:1; other light #8F8F8F -> black
- * 6.49:1, dark #999999 -> black 7.37:1.
+ * 21.0:1, dark #696969 -> white 5.49:1; other light #8B8B8B -> black
+ * 6.16:1, dark #999999 -> black 7.37:1.
  * @type {Record<string, string>}
  */
 export const PILL_TEXT_COLOR = {
@@ -99,12 +99,12 @@ export const FAMILY_COLORS = {
   light: {
     disney: '#0072B2',
     fox: '#009E73',
-    cbs: '#BD8300',
+    cbs: '#B77F00',
     nbc: '#C972A2',
     cw: '#1D96DB',
     wbd: '#D55E00',
     conference: '#000000',
-    other: '#8F8F8F',
+    other: '#8B8B8B',
   },
   dark: {
     disney: '#0072B2',
@@ -119,16 +119,19 @@ export const FAMILY_COLORS = {
 };
 
 /** UI chrome accent token per theme (search focus ring, active states, highlight outline). */
-export const ACCENT = { light: '#111827', dark: '#E5E7EB' };
+export const ACCENT = { light: '#23201B', dark: '#E5E7EB' };
+
+/** The --ink text token per theme: neutral marks and unmatched bar fills (D-04). */
+export const INK = { light: '#23201B', dark: '#E5E7EB' };
 
 /** Outline on enlarged (filter-passing) dots; same in light and dark. */
 export const DOT_OUTLINE = '#000000';
 
 /** Result-vs-spread zero line: a step darker than DIVIDER gridlines, lighter than MUTED text (D-02). */
-export const ZERO_LINE = { light: '#9CA3AF', dark: '#6B7280' };
+export const ZERO_LINE = { light: '#CFC6B6', dark: '#6B7280' };
 
 /** UI chrome divider/border token per theme. */
-export const DIVIDER = { light: '#E2E4E9', dark: '#2A2E35' };
+export const DIVIDER = { light: '#E4DDD1', dark: '#2A2E35' };
 
 /**
  * Faint gold/brown tint behind each season's bowl and playoff span on the Date axis
@@ -143,19 +146,19 @@ export const POSTSEASON_BAND = { light: 'rgba(166, 120, 40, 0.07)', dark: 'rgba(
 export const POSTSEASON_LABEL = { light: '#6E4A10', dark: '#E8BE6E' };
 
 /** UI chrome page background token per theme. */
-export const PAGE_BG = { light: '#FFFFFF', dark: '#14161A' };
+export const PAGE_BG = { light: '#FBF9F5', dark: '#14161A' };
 
 /** UI chrome secondary-surface token per theme (rail, top bar, panel, table header). */
-export const SURFACE = { light: '#F4F5F7', dark: '#1E2126' };
+export const SURFACE = { light: '#F4F0E8', dark: '#1E2126' };
 
 /** The --muted text token per theme (axis ticks and zero lines; not a bar fill). */
-export const MUTED = { light: '#4B5563', dark: '#9CA3AF' };
+export const MUTED = { light: '#6A6358', dark: '#9CA3AF' };
 
 /**
  * Map land fill per theme (04.18 D-08, UI-SPEC "Color"): barely off the page background so
  * the states read as a faint base. DEFAULTED pending the user's close-out sign-off.
  */
-export const MAP_LAND = { light: '#F1F2F5', dark: '#1B1E23' };
+export const MAP_LAND = { light: '#F1EDE4', dark: '#1B1E23' };
 
 /**
  * Map state outline per theme (04.18 D-08, UI-SPEC "Color"): muted, one step darker than
@@ -245,11 +248,10 @@ export const MAP_VENUE_DOT = Object.freeze({
 export const MAP_LINE_WIDTH = Object.freeze({ outline: 0.6, leg: 1.25, marker: 1.5, subjectOutline: 1 });
 
 /**
- * Mirrors the `--special` CSS token (the Announcers toolbar button's violet, D-34); the
- * fill for announcer, team, and conference bars (04.4 D-24). A rendered test keeps the
- * two equal.
+ * The matched-state accent (D-04), mirroring the `--accent` CSS token. Unmatched marks read
+ * INK; this colour is for a mark only while a pick matches it.
  */
-export const SPECIAL = { light: '#7C3AED', dark: '#A78BFA' };
+export const SPECIAL = { light: '#1B4F5C', dark: '#A78BFA' };
 
 /**
  * Mixes two `#RRGGBB` colors per channel: `round(w*a + (1-w)*b)`, uppercase.

@@ -20,9 +20,10 @@
  */
 
 import { prepareData } from './modules/data.js';
+import { currentTheme, onThemeChange } from './modules/theme.js';
 import { defaultState, computeView, toggleFamilyNetworks, familyOnlyPatch, axisPatch, yPatch } from './modules/select.js';
 import { encodeState, decodeState } from './modules/url-state.js';
-import { buildFigure, renderChart, bindChartEvents, TOOLTIP_MODE } from './modules/chart.js';
+import { buildFigure, renderChart, bindChartEvents, scatterAtHome, resetScatterZoom, TOOLTIP_MODE } from './modules/chart.js';
 import { initTopbar, renderTopbar, renderMapShapeLegend } from './modules/topbar.js';
 import { initFilters, renderFilters } from './modules/filters.js';
 import { initLegend, renderLegend } from './modules/legend.js';
@@ -33,7 +34,7 @@ import { chartContext } from './modules/bars.js';
 import { initBarsPanel, renderBarsPanel, lastBarsModel, resetBarsTap } from './modules/bars-panel.js';
 import { buildMapModel } from './modules/map-model.js';
 import { buildCrewsModel, renderCrewsPanel } from './modules/crews.js';
-import { initMapPanel, renderMapPanel, resetMapTap, mapRenderCount, mapSplatCount } from './modules/map-panel.js';
+import { initMapPanel, renderMapPanel, resetMapTap, mapRenderCount, mapSplatCount, onMapViewChange, mapAtHome, resetMapZoom } from './modules/map-panel.js';
 import { initBandInfo, positionBandInfo, closeBandNote, setBandInfoMode } from './modules/band-info.js';
 import { showTooltip, hideTooltip } from './modules/tooltip.js';
 import { selectedPersonIndexes } from './modules/format.js';
@@ -44,6 +45,8 @@ import {
   ringSpecFromPoint,
   hoverRingDiameter,
 } from './modules/hover-ring.js';
+import { PHONE_QUERY } from './modules/breakpoints.js';
+import { waitForFonts, onLateFont } from './modules/chart-frame.js';
 
 const versionMeta = document.querySelector('meta[name="site-data-version"]');
 const version = versionMeta ? versionMeta.content : '';
@@ -70,8 +73,7 @@ const barsOnlyEls = ['bars-title', 'bars-footer', 'bars-captions', 'bars-data'].
   document.getElementById(id),
 );
 
-const darkMedia = window.matchMedia('(prefers-color-scheme: dark)');
-const mobileMedia = window.matchMedia('(max-width: 640px)');
+const mobileMedia = window.matchMedia(PHONE_QUERY);
 /** True on a touch device with no real hover capability (D-22): these
  * devices keep tap-to-open-panel and never show the hover tooltip. */
 const hoverNoneMedia = window.matchMedia('(hover: none)');
@@ -207,7 +209,7 @@ function tableRenderer({ data, state, view }) {
 /** The env object `buildFigure` needs, refreshed on every render. */
 function currentEnv() {
   return {
-    theme: darkMedia.matches ? 'dark' : 'light',
+    theme: currentTheme(),
     mobile: mobileMedia.matches,
     revision,
     tooltipMode,
@@ -355,6 +357,7 @@ function render() {
   if (leadKeyEl) leadKeyEl.hidden = state.view !== 'scatter';
   if (state.view === 'map') renderMapShapeLegend(shapeLegendEl, lastMapModel);
   else if (state.view !== 'scatter' && shapeLegendEl) shapeLegendEl.hidden = true;
+  syncResetZoom();
 }
 
 /**
@@ -380,8 +383,29 @@ function renderBarsShell(applies) {
   if (chartBox) chartBox.classList.add('is-concealed');
 }
 
+/**
+ * Reset zoom (13-12): the page-level button replaces the Plotly modebar. It is `aria-disabled`
+ * (grey, `--disabled`) while the active chart shows its home range and `--ink` once zoomed.
+ */
+function syncResetZoom() {
+  const button = document.getElementById('reset-zoom');
+  if (!button) return;
+  const atHome = state?.view === 'map' ? mapAtHome() : scatterAtHome(chartEl);
+  button.setAttribute('aria-disabled', String(atHome));
+}
+
+/** Click on Reset zoom: a no-op at home range, otherwise resets the active chart. */
+function resetActiveZoom() {
+  const button = document.getElementById('reset-zoom');
+  if (!button || button.getAttribute('aria-disabled') === 'true') return;
+  if (state.view === 'map') resetMapZoom();
+  else if (state.view === 'scatter') resetScatterZoom(chartEl);
+}
+
 /** Binds the scatter's Plotly events; runs once, after the first scatter render. */
 function bindScatterEvents() {
+  chartEl.on('plotly_afterplot', syncResetZoom);
+  chartEl.on('plotly_relayout', syncResetZoom);
   // WR-03: Plotly.react is async, so place the band button once the layout is
   // drawn (first render, width changes, axis switches). Writes no Plotly layout.
   chartEl.on('plotly_afterplot', () => {
@@ -493,6 +517,9 @@ async function startCfb(search = location.search) {
     initChartTabs({ data, getState: () => state, setState });
     renderers.push(renderChartTabs);
 
+    document.getElementById('reset-zoom')?.addEventListener('click', resetActiveZoom);
+    onMapViewChange(syncResetZoom);
+
     initMapPanel({ setState, getState: () => state, getMatchedCount: () => lastView.matched.length });
 
     initBarsPanel({ data, getState: () => state, setState, rerender: render });
@@ -533,7 +560,7 @@ async function startCfb(search = location.search) {
       });
     }
 
-    darkMedia.addEventListener('change', () => {
+    onThemeChange(() => {
       if (cfbActive()) render();
     });
     mobileMedia.addEventListener('change', () => {
@@ -541,7 +568,14 @@ async function startCfb(search = location.search) {
     });
 
     // The graph div only gains its `.on()` event-emitter API once Plotly has
-    // rendered into it at least once, so the first render must come first.
+    // rendered into it at least once, so the first render must come first. The first draw
+    // waits (at most 1500ms) for the faces so tick labels and margins do not shift after font
+    // swap; a face that arrives later re-lays the chart out once (13-12, SHELL-06).
+    if (!(await waitForFonts())) {
+      onLateFont(() => {
+        if (cfbActive()) render();
+      });
+    }
     render();
 
     window.__testHooks = {

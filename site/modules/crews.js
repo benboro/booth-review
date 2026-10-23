@@ -10,6 +10,7 @@
 import { FAMILY_ORDER } from './palette.js';
 import { BOOTH_FAMILY_NAMES, stripNetworkNote } from './format.js';
 import { makeRolePill, nameWithRoles } from './pill.js';
+import { attachScrollCue } from './scroll-cue.js';
 
 /**
  * Rows with fewer games than this are faded and tagged "low n" (D-15). Off (0) by user choice
@@ -19,8 +20,13 @@ export const CREWS_LOW_N = 0;
 
 const TIER_KEYS = ['a', 'b', 'conf', 'other'];
 
-const HINT =
+/** Shown in the Crews module's subtitle (13-11); Phase 14 replaces the behaviour it describes. */
+export const CREWS_HINT =
   'Booths by network family and season, for the games your filters show. Selected announcers do not change this table.';
+
+/** Disposers for the scroll cues on the tables the last render built. */
+const detachCues = [];
+
 const RATED_NOTE = 'Rated shows how many games have a viewership figure. It is context, not a ranking.';
 const NO_MATCH = {
   title: 'No booths match these filters',
@@ -146,12 +152,14 @@ function numCell(text) {
 }
 
 function buildTable(group) {
-  const wrap = el('div', 'nfl-booth-table-wrap crews-table-wrap');
+  const wrap = el('div', 'nfl-booth-table-wrap crews-table-wrap table-scroll');
   const table = el('table', 'games-table nfl-booth-table crews-table');
   table.append(el('caption', 'visually-hidden', `Booths for ${group.heading}`));
   const tr = el('tr');
   ['Booth', 'Games', 'Median excitement', 'Median spread (points)', 'Ranked vs. ranked', 'Rated'].forEach((h, idx) => {
-    const th = el('th', idx === 0 ? 'booth-col' : 'num', h);
+    // Games and Rated hold short figures, so their set widths are narrower (style.css).
+    const cls = idx === 0 ? 'booth-col' : idx === 1 || idx === 5 ? 'num crews-narrow' : 'num';
+    const th = el('th', cls, h);
     th.scope = 'col';
     tr.append(th);
   });
@@ -190,6 +198,7 @@ function buildTable(group) {
   }
   table.append(thead, tbody);
   wrap.append(table);
+  detachCues.push(attachScrollCue(wrap, null));
   return wrap;
 }
 
@@ -212,8 +221,9 @@ function creditLine(text, href) {
  * @param {ReturnType<typeof buildCrewsModel>} model
  */
 export function renderCrewsPanel(container, model) {
+  // Every render rebuilds the tables, so release the old ones' scroll-cue observers first.
+  detachCues.splice(0).forEach((detach) => detach());
   container.replaceChildren();
-  container.append(el('p', 'caption crews-hint', HINT));
   if (model.state !== 'rows') {
     const copy = model.state === 'no-order' ? NO_ORDER : NO_MATCH;
     const note = el('div', 'season-empty-note crews-empty');

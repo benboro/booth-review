@@ -288,12 +288,12 @@ def test_colors_off_and_bogus_urls(guarded_page: Page, open_app: Any) -> None:
     assert _pressed(guarded_page) == ["on"]
 
 
-def test_map_conference_chip_uses_map_violet(guarded_page: Page, open_app: Any) -> None:
+def test_map_conference_chip_dot_uses_map_violet(guarded_page: Page, open_app: Any) -> None:
     _open_map(guarded_page, open_app)
     got = guarded_page.evaluate(
         """async () => {
           const P = await import('./modules/palette.js');
-          const chip = document.querySelector('#legend-chips button[data-family=conference]');
+          const chip = document.querySelector('#legend-chips button[data-family=conference] .legend-dot');
           const probe = document.createElement('span');
           probe.style.color = P.MAP_FAMILY_COLORS.light.conference;
           document.body.appendChild(probe);
@@ -451,36 +451,6 @@ _DECODE = """async ([name, which]) => {
 def _near(a: list[int], hex_color: str, tol: int) -> bool:
     want = [int(hex_color[i : i + 2], 16) for i in (1, 3, 5)]
     return all(abs(a[i] - want[i]) <= tol for i in range(3))
-
-
-def test_dark_theme_redraws_with_dark_land(guarded_page: Page, open_app: Any) -> None:
-    _open_splat(guarded_page, open_app)
-    n = _splats(guarded_page)
-    guarded_page.emulate_media(color_scheme="dark")
-    _wait_splat(guarded_page, n)
-    land_dark = guarded_page.evaluate(
-        "async () => (await import('./modules/palette.js')).MAP_LAND.dark"
-    )
-    # Find a land pixel far from every venue: scan the mask for one.
-    px = guarded_page.evaluate(
-        """async (land) => {
-          const gd = document.getElementById('map-chart');
-          const bmp = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = gd.layout.images[0].source; });
-          const c = document.createElement('canvas'); c.width = bmp.naturalWidth; c.height = bmp.naturalHeight;
-          const ctx = c.getContext('2d'); ctx.drawImage(bmp, 0, 0);
-          const want = [1, 3, 5].map((i) => parseInt(land.slice(i, i + 2), 16));
-          const d = ctx.getImageData(0, 0, c.width, c.height).data;
-          let best = null;
-          for (let i = 0; i < d.length; i += 4) {
-            if (d[i + 3] === 255 && [0, 1, 2].every((k) => Math.abs(d[i + k] - want[k]) <= 3)) {
-              return true;
-            }
-          }
-          return false;
-        }""",
-        land_dark,
-    )
-    assert px is True
 
 
 def test_raster_pixel_at_venue_leans_to_family_hue(guarded_page: Page, open_app: Any) -> None:

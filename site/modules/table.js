@@ -23,7 +23,9 @@ import {
   figureSourceOf,
 } from './format.js';
 import { safeHref } from './panel.js';
-import { currentTheme, makePill, makeRolePill, nameWithRoles } from './pill.js';
+import { networkMark } from './network.js';
+import { attachScrollCue } from './scroll-cue.js';
+import { makeRolePill, nameWithRoles } from './pill.js';
 import { personOnGame } from './select.js';
 import { venueFilterInfo } from './map-model.js';
 
@@ -31,6 +33,12 @@ const tableEl = document.getElementById('games-table');
 const emptyEl = document.getElementById('table-empty');
 const venueChipsEl = document.getElementById('venue-chips');
 const venueNoMatchEl = document.getElementById('venue-nomatch');
+// The static table gets a sideways scroller of its own (phone scroll cue, 13-14).
+const scrollEl = document.createElement('div');
+scrollEl.className = 'table-scroll';
+tableEl.before(scrollEl);
+scrollEl.append(tableEl);
+attachScrollCue(scrollEl, () => scrollEl.closest('.module')?.querySelector(':scope > .module-head') ?? null);
 const tbody = tableEl.querySelector('tbody');
 const dateSortButton = tableEl.querySelector('th button[data-sort="date"]');
 const viewersSortButton = tableEl.querySelector('th button[data-sort="viewers"]');
@@ -153,17 +161,18 @@ function buildRow(data, state, onDetails, i) {
   });
 
   const dateTd = document.createElement('td');
-  dateTd.className = 'num';
+  dateTd.className = 'date';
   dateTd.textContent = formatDate(t.date[i]);
   tr.appendChild(dateTd);
 
   const matchupTd = document.createElement('td');
+  matchupTd.className = 'matchup';
   matchupTd.textContent = formatMatchup(data, i, { withScore: true });
   tr.appendChild(matchupTd);
 
   const networkTd = document.createElement('td');
   const net = data.lookups.networks[t.network[i]];
-  networkTd.appendChild(makePill(net.name, net.family, currentTheme()));
+  networkTd.appendChild(networkMark({ id: net.id, name: net.name, family: net.family }));
   tr.appendChild(networkTd);
 
   const crewTd = document.createElement('td');
@@ -173,13 +182,21 @@ function buildRow(data, state, onDetails, i) {
   const viewersTd = document.createElement('td');
   if (data.rated[i]) {
     viewersTd.className = 'num';
-    let viewersText = formatViewers(t.viewers[i]);
+    viewersTd.textContent = formatViewers(t.viewers[i]);
+    // The measurement note sits on its own small line, so the figure keeps the column's
+    // right edge and the note does not widen the column with a " · " suffix (brief §5).
     if (t.measurement_type[i] === 'nielsen_adobe') {
-      viewersText += ` · ${measurementLabel('nielsen_adobe')}`;
+      const note = document.createElement('span');
+      note.className = 'num-note';
+      // The short form keeps the column near the figures' width; the full label is the
+      // note's title and the panel's badge.
+      note.textContent = 'Nielsen + Adobe';
+      note.title = measurementLabel('nielsen_adobe');
+      viewersTd.append(note);
     }
-    viewersTd.textContent = viewersText;
   } else {
-    viewersTd.className = 'no-rating';
+    // A placeholder in a numeric column takes the numbers' alignment (brief §5).
+    viewersTd.className = 'num no-rating';
     viewersTd.textContent = NO_RATING_LABEL;
   }
   tr.appendChild(viewersTd);

@@ -1,5 +1,5 @@
 /**
- * Chart tabs: the Scatter | Bars | Butterfly | Map tablist, its hint row, and the
+ * Chart tabs: the Scatter | Bars | Butterfly | Map tablist, its hint (the chart module's subtitle), and the
  * grouping / Both-PBP-Analyst controls (SITE-33, D-10, D-12, D-13, D-14,
  * D-17, D-25, D-30; 04.6 D-21). One grouping control (`state.by`) shows only
  * the options that apply to the current subjects, and the role control is
@@ -19,6 +19,7 @@
 
 import { byPatch, chartContext } from './bars.js';
 import { MAP_HINT } from './map-model.js';
+import { CREWS_HINT } from './crews.js';
 
 export const TAB_HINTS = {
   bars: 'Pick a school, network, announcer, or game',
@@ -38,9 +39,10 @@ export const STALE_COPY = {
 
 const VIEWS = ['scatter', 'bars', 'butterfly', 'map', 'crews'];
 
-/** The hint the tab row rests on: the Map's prompt until an announcer or school is picked (04.18 D-02). */
+/** The hint the module subtitle rests on: the Map's prompt until an announcer or school is picked (04.18 D-02); the Crews note on Crews. */
 function restingHint(state) {
   if (state.view === 'map' && state.people.length === 0 && state.school.length === 0) return MAP_HINT;
+  if (state.view === 'crews') return CREWS_HINT;
   return '';
 }
 
@@ -85,9 +87,13 @@ function allTabs() {
   return Array.from(tabsEl().querySelectorAll('button[role="tab"]'));
 }
 
+/** The tab hint lives in the chart module's subtitle slot (C6); the title carries the full text. */
 function setHint(text) {
-  const hint = document.getElementById('tab-hint');
-  if (hint) hint.textContent = text;
+  const hint = document.getElementById('chart-subtitle');
+  if (!hint) return;
+  hint.textContent = text;
+  if (text) hint.title = text;
+  else hint.removeAttribute('title');
 }
 
 let currentState = null;
@@ -212,11 +218,14 @@ export function renderChartTabs({ data, state }) {
     } else {
       tab.setAttribute('aria-disabled', 'true');
       tab.setAttribute('title', tabHint(view, state));
-      tab.setAttribute('aria-describedby', 'tab-hint');
+      tab.setAttribute('aria-describedby', 'chart-subtitle');
     }
     if (selected) {
       const panel = document.getElementById('chart-panel');
       if (panel) panel.setAttribute('aria-labelledby', tab.id);
+      // The module title is the active tab's label (recorded planner choice, 13-11).
+      const title = document.getElementById('chart-title');
+      if (title) title.textContent = tab.textContent;
     }
   }
   currentState = state;
@@ -227,6 +236,10 @@ export function renderChartTabs({ data, state }) {
   const barControls = document.getElementById('bar-controls');
   if (scatterControls) scatterControls.classList.toggle('is-concealed', !scatter);
   if (barControls) barControls.classList.toggle('is-concealed', scatter || state.view === 'map' || state.view === 'crews');
+  // Reset zoom is wired by 13-12; it is shown on the zoomable Scatter and Map only, and
+  // concealed (not removed) elsewhere so the header never reflows.
+  const resetZoom = document.getElementById('reset-zoom');
+  if (resetZoom) resetZoom.classList.toggle('is-concealed', !(scatter || state.view === 'map'));
 
   for (const button of document.querySelectorAll('#bar-role-toggle button[data-role]')) {
     button.setAttribute('aria-pressed', String((button.dataset.role || null) === state.role));

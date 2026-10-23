@@ -83,3 +83,11 @@ def test_nfl_round_trip_loads_module_once(
         page.wait_for_function("document.body.dataset.sport === 'cfb'")
     assert _count(urls, "sports/nfl/index.js") == 1
     assert _count(urls, "mlb-data.json") == 0
+
+
+def test_document_title_follows_the_active_sport(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """The tab title for each sport is the registry.js title (SHELL-02)."""
+    open_mlb_app(mlb_guarded_page, "?sport=mlb")
+    assert mlb_guarded_page.title() == "The Broadcast Ledger · MLB national telecasts"

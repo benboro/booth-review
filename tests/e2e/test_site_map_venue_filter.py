@@ -83,10 +83,13 @@ def test_clear_all_clears_venue_but_keeps_colors_off(guarded_page: Page, open_ap
     key = _first_key(guarded_page, open_app)
     open_app(guarded_page, f"?venue={key}&colors=off")
     guarded_page.wait_for_function("() => document.querySelector('#venue-chips .chip')")
+    # A venue alone has no toolbar trigger, but Clear all resets it, so Clear all is enabled.
+    assert guarded_page.get_attribute("#clear-filters", "aria-disabled") == "false"
     guarded_page.evaluate("() => document.getElementById('clear-filters').click()")
     guarded_page.wait_for_function("() => !location.search.includes('venue=')")
     assert guarded_page.locator("#venue-chips .chip").count() == 0
     assert "colors=off" in guarded_page.evaluate("() => location.search")
+    assert guarded_page.get_attribute("#clear-filters", "aria-disabled") == "true"
 
 
 def test_venue_intersects_with_school(guarded_page: Page, open_app: OpenApp) -> None:

@@ -33,6 +33,7 @@ import { makeCaretIcon, makeGameTypeIcon } from './icons.js';
 import { FAMILY_LABELS } from './palette.js';
 import { familyIsSole, familyOnlyPatch, offeredFamilyIds, sameSet } from './select.js';
 import { NEW_YEARS_SIX, SLOT_SHORT_LABELS, ROLE_LABELS, gameRowTitle } from './format.js';
+import { PHONE_QUERY } from './breakpoints.js';
 
 const ROLE_HELPER_TEXT = 'Limits matches to main-broadcast play-by-play or analyst roles.';
 
@@ -949,7 +950,7 @@ function placeSections(isMobile) {
       els.sheetBody.appendChild(document.getElementById(sectionId));
     }
   } else {
-    els.toolbar.insertBefore(els.clearFilters, els.toolbar.firstChild);
+    els.selectionRow.appendChild(els.clearFilters);
     for (const [sectionId, popoverId] of SECTION_POPOVERS) {
       document.getElementById(popoverId).appendChild(document.getElementById(sectionId));
     }
@@ -960,6 +961,8 @@ function placeSections(isMobile) {
 export function initFilters({ data, getState, setState }) {
   els = {
     toolbar: document.getElementById('toolbar'),
+    selectionRow: document.getElementById('selection-row'),
+    filterChips: document.getElementById('filter-chips'),
     seasonFrom: document.getElementById('season-from'),
     seasonTo: document.getElementById('season-to'),
     seasonCounts: document.getElementById('season-counts'),
@@ -988,6 +991,8 @@ export function initFilters({ data, getState, setState }) {
       TRIGGER_NAMES.map((name) => [name, document.getElementById(`trigger-${name}`)]),
     ),
   };
+
+  for (const name of TRIGGER_NAMES) restingLabels.set(name, els.triggers[name].textContent.trim());
 
   buildSeasonSelects();
   buildNetworkChecklist(data);
@@ -1077,8 +1082,11 @@ export function initFilters({ data, getState, setState }) {
 
   els.gameSearch.addEventListener('input', () => {
     filterGameRows(data, els.gameSearch.value);
-    // Typing alone can make the Game Reset live (04.10 IN-03); no render runs here.
-    if (lastView) renderGroupResets(data, getState(), lastView);
+    // Typing alone can make the Game Reset and Clear all live (04.10 IN-03); no render runs here.
+    if (lastView) {
+      renderGroupResets(data, getState(), lastView);
+      renderFiltersButton(data, getState(), lastView);
+    }
   });
   els.gameOptions.addEventListener('click', (ev) => {
     const head = ev.target.closest('.game-section-head');
@@ -1093,6 +1101,9 @@ export function initFilters({ data, getState, setState }) {
   bindGameKeyboard(setState);
 
   els.clearFilters.addEventListener('click', () => {
+    // Announced as disabled while nothing is changed (renderFiltersButton): a no-op then,
+    // like the per-group Reset below.
+    if (els.clearFilters.getAttribute('aria-disabled') === 'true') return;
     // D-27 (overrides the earlier "people are not cleared" proposal): Clear all
     // filters also removes every selected announcer, compare mode, and
     // called-together (the `announcers` reset). "Clear selection" in the chip
@@ -1148,7 +1159,7 @@ export function initFilters({ data, getState, setState }) {
     syncGameTooltips();
   });
 
-  const mobileMedia = window.matchMedia('(max-width: 640px)');
+  const mobileMedia = window.matchMedia(PHONE_QUERY);
   placeSections(mobileMedia.matches);
   mobileMedia.addEventListener('change', (ev) => placeSections(ev.matches));
 }
@@ -1432,43 +1443,97 @@ function triggerInfo(name, data, state, view) {
   return { label: name, active: false };
 }
 
-/** Renders every toolbar trigger's label and `data-active` state (D-02). */
+/** Resting label per trigger name, captured from index.html before the first render replaces any of them. */
+const restingLabels = new Map();
+
+/** The trigger's changed value text ("" at default): the part of the summary after the resting label. */
+function triggerValue(name, label, active) {
+  if (!active) return '';
+  const resting = restingLabels.get(name) ?? '';
+  return label.startsWith(resting) ? label.slice(resting.length) : label;
+}
+
+/**
+ * The control keys that differ from a clean load, in toolbar order (SHELL-03).
+ * One predicate for the desktop accent, the phone "Filters · N changed" label and
+ * the phone chips. It reads the same per-control facts `triggerInfo` shows, not
+ * `activeFilterCount`, which also counts each selected person (Pitfall 10).
+ */
+export function changedControls(data, state, view) {
+  return TRIGGER_NAMES.filter((name) => triggerInfo(name, data, state, view).active);
+}
+
+/**
+ * Whether Clear all filters has anything to reset: a changed toolbar control, a venue picked
+ * on the map (GROUP_RESETS.venue has no toolbar trigger, so `changedControls` never lists it),
+ * or any state a group Reset is live for without its trigger showing it (renderGroupResets):
+ * compare or called-together with no one selected, a stored Networks pick, search text.
+ */
+export function clearAllActive(changed, state, searchText = '') {
+  return (
+    changed.length > 0 ||
+    state.venue != null ||
+    state.compare ||
+    state.together ||
+    state.networks != null ||
+    searchText !== ''
+  );
+}
+
+/** Renders every toolbar trigger's label, value and `data-active` / `.is-changed` state (D-02). */
 function renderTriggers(data, state, view) {
+  const changed = new Set(changedControls(data, state, view));
   for (const name of TRIGGER_NAMES) {
     const btn = els.triggers[name];
     const { label, active } = triggerInfo(name, data, state, view);
-    btn.textContent = label;
+    const resting = restingLabels.get(name) ?? label;
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'filter-label';
+    labelSpan.textContent = resting;
+    const valueSpan = document.createElement('span');
+    valueSpan.className = 'filter-value';
+    valueSpan.textContent = triggerValue(name, label, active);
+    const text = document.createElement('span');
+    text.className = 'filter-text';
+    text.append(labelSpan, valueSpan);
+    btn.replaceChildren(text);
     btn.dataset.active = active ? 'true' : 'false';
-    // The full label is always available; long ones truncate in their grid cell (04.9 D-21).
+    btn.classList.toggle('is-changed', changed.has(name));
+    // The full summary is always available; long values truncate in their grid cell (C3).
     btn.setAttribute('title', label);
     btn.setAttribute('aria-label', label);
   }
 }
 
-/** Counts the active filters, for the mobile Filters(N) button (extends SITE-18's rail-era count).
- * D-27: also counts every selected announcer, since the phone Announcers
- * picker lives inside this same Filters sheet and "Clear all filters"
- * clears people too. Networks counts exactly when its trigger shows a count
- * (D-36), so the badge and the Networks button never disagree (review WR-02). */
-function activeFilterCount(data, state, view) {
-  let n = 0;
-  if (state.seasons != null) n += 1;
-  if (triggerInfo('networks', data, state, view).active) n += 1;
-  if (state.slots != null) n += 1;
-  if (state.role != null) n += 1;
-  if (state.conferences.length > 0) n += 1;
-  if (state.school.length > 0) n += 1;
-  if (state.postseason !== 'all') n += 1;
-  if (state.booth.length > 0) n += 1;
-  if (triggerInfo('game', data, state, view).active) n += 1;
-  n += state.people.length;
-  return n;
-}
-
-/** Renders the `#filters-button` label (SITE-18, D-03). */
+/** Renders the phone `#filters-button` label and the changed-control chips (SHELL-03 Phone). */
 function renderFiltersButton(data, state, view) {
-  const n = activeFilterCount(data, state, view);
-  els.filtersButton.textContent = n > 0 ? `Filters (${n})` : 'Filters';
+  const changed = changedControls(data, state, view);
+  const n = changed.length;
+  els.filtersButton.textContent = n > 0 ? `Filters · ${n} changed` : 'Filters';
+  els.filtersButton.classList.toggle('is-changed', n > 0);
+  // Clear all filters looks and reads as disabled while nothing it would reset is changed: a
+  // changed toolbar control, the map's venue filter (its chip sits in the table heading row),
+  // or state only a group Reset shows, such as compare with no one selected or search text.
+  const live = clearAllActive(changed, state, els.gameSearch.value);
+  els.clearFilters.setAttribute('aria-disabled', live ? 'false' : 'true');
+  const chips = changed.map((name) => {
+    const { label } = triggerInfo(name, data, state, view);
+    const li = document.createElement('li');
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'filter-chip';
+    chip.setAttribute('popovertarget', 'filters-sheet');
+    chip.setAttribute('aria-haspopup', 'dialog');
+    const resting = restingLabels.get(name) ?? label;
+    const strong = document.createElement('b');
+    strong.textContent = resting;
+    chip.append(strong, document.createTextNode(triggerValue(name, label, true)));
+    chip.setAttribute('aria-label', label);
+    li.append(chip);
+    return li;
+  });
+  els.filterChips.replaceChildren(...chips);
+  els.filterChips.hidden = chips.length === 0;
 }
 
 /** Dims each group's Reset button (`aria-disabled`) while that group is at its default (A4). */

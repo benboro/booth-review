@@ -140,7 +140,7 @@ def test_band_holds_exactly_the_null_excitement_games(
     open_app(guarded_page, "?y=excitement")
     surface = guarded_page.evaluate(
         "async () => { const p = await import('./modules/palette.js');"
-        " const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;"
+        " const dark = (document.documentElement.dataset.theme === 'dark');"
         " return p.SURFACE[dark ? 'dark' : 'light']; }"
     )
     traces = _traces(guarded_page)
@@ -178,7 +178,7 @@ def test_compare_shapes_are_filled_and_default_y_restores_rings(
     open_app(guarded_page, f"?{query}")
     surface = guarded_page.evaluate(
         "async () => { const p = await import('./modules/palette.js');"
-        " const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;"
+        " const dark = (document.documentElement.dataset.theme === 'dark');"
         " return p.SURFACE[dark ? 'dark' : 'light']; }"
     )
     assert any(t["color"] == surface for t in _traces(guarded_page)), "04.13 rings return"

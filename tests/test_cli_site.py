@@ -65,7 +65,10 @@ def _site_source_files(*, include_nfl: bool) -> list[Path]:
         rel = path.relative_to(SITE_SRC)
         if any(part.startswith(".") for part in rel.parts):
             continue
-        if path.suffix not in {".html", ".js", ".css"}:
+        folder_only = {("fonts", ".woff2"), ("fonts", ".txt"), ("logos", ".svg")}
+        if path.suffix not in {".html", ".js", ".css"} and (
+            len(rel.parts) < 2 or (rel.parts[0], path.suffix) not in folder_only
+        ):
             continue
         if not include_nfl and rel.parts[:2] == ("sports", "nfl"):
             continue
@@ -174,16 +177,29 @@ def test_fixture_build_file_suffixes_and_one_json_file(site_env: Path) -> None:
     out = site_env / "out"
     assert main(["site", "--fixture", "--out", str(out)]) == 0
 
-    json_files = []
+    by_suffix: dict[str, set[str]] = {}
     for path in out.rglob("*"):
         if not path.is_file():
             continue
         if path.name == ".booth-review-site":
             continue
-        assert path.suffix in {".html", ".js", ".css", ".json"}, path
-        if path.suffix == ".json":
-            json_files.append(path)
-    assert len(json_files) == 1
+        by_suffix.setdefault(path.suffix, set()).add(path.relative_to(out).as_posix())
+
+    assert set(by_suffix) <= {".html", ".js", ".css", ".json", ".svg", ".woff2", ".txt"}
+    assert by_suffix[".woff2"] == {
+        "fonts/crimson-text-latin-600-normal.woff2",
+        "fonts/roboto-latin-400-normal.woff2",
+        "fonts/roboto-latin-600-normal.woff2",
+        "fonts/roboto-condensed-latin-400-normal.woff2",
+    }
+    assert by_suffix[".txt"] == {
+        "fonts/OFL-crimson-text.txt",
+        "fonts/OFL-roboto.txt",
+        "fonts/OFL-roboto-condensed.txt",
+    }
+    source_svgs = {path.relative_to(SITE_SRC).as_posix() for path in SITE_SRC.rglob("*.svg")}
+    assert by_suffix.get(".svg", set()) == source_svgs
+    assert len(by_suffix[".json"]) == 1
 
 
 def test_key_check_passed_when_key_set(
@@ -251,7 +267,7 @@ def test_bundle_digest_mismatch_exits_3_and_names_digest(
 ) -> None:
     tainted_src = site_env / "site_src_bad_bundle"
     shutil.copytree(SITE_SRC, tainted_src)
-    bundle_path = tainted_src / "vendor" / "plotly-4.1.1.min.js"
+    bundle_path = tainted_src / "vendor" / "plotly-partial-4.1.1.min.js"
     corrupted = bytearray(bundle_path.read_bytes())
     corrupted[0] ^= 0xFF
     bundle_path.write_bytes(bytes(corrupted))
@@ -501,3 +517,37 @@ def test_mlb_without_vault_file_names_the_command_to_run(
     assert code != 0
     assert "processed/mlb-data.json not found" in err
     assert "booth-review mlb site-data" in err
+
+
+def test_folder_scoped_suffixes_ship_only_from_their_folder(tmp_path: Path) -> None:
+    """WR-07: .woff2/.txt ship only from fonts/ and .svg only from logos/; the same
+    suffixes anywhere else under site/ (a stray note or sketch) are never copied."""
+    from booth_review.build.site_assembly import _copy_site_source
+
+    src = tmp_path / "site"
+    files = [
+        "index.html",
+        "modules/a.js",
+        "fonts/f.woff2",
+        "fonts/OFL-f.txt",
+        "logos/espn.svg",
+        "logos/manifest.csv",
+        "notes.txt",
+        "modules/notes.txt",
+        "sketch.svg",
+        "modules/sketch.svg",
+        "fonts/stray.svg",
+        "logos/stray.txt",
+        "f.woff2",
+    ]
+    for rel in files:
+        (src / rel).parent.mkdir(parents=True, exist_ok=True)
+        (src / rel).write_text("x")
+    copied = _copy_site_source(src, tmp_path / "out")
+    assert sorted(copied) == [
+        "fonts/OFL-f.txt",
+        "fonts/f.woff2",
+        "index.html",
+        "logos/espn.svg",
+        "modules/a.js",
+    ]

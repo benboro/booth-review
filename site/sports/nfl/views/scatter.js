@@ -22,25 +22,19 @@ import { gameRow } from '../data.js';
 import { categoryColor } from '../palette.js';
 import { CAUSE_COPY, slotLabel, flagLabels, viewersText, kickoffText, dateShortText } from '../game-format.js';
 import { ACCENT, MUTED, PAGE_BG, DIVIDER, ZERO_LINE } from '../../../modules/palette.js';
+import { frameConfig, frameLayout } from '../../../modules/chart-frame.js';
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import { showHoverRing, hideHoverRing, ringSpecFromPoint, hoverRingDiameter } from '../../../modules/hover-ring.js';
 import { initBandInfo, positionBandInfo, closeBandNote } from '../../../modules/band-info.js';
 import { placeEraLabels, setEraCaption } from '../era-labels.js';
-import { bandLayout, MARGIN, TICK_FONT_PX, DOT_OPACITY } from '../../../modules/chart.js';
+import { bandLayout, marginFor, TICK_FONT_PX, DOT_OPACITY } from '../../../modules/chart.js';
 import { createOnlyDetector } from '../../../modules/legend.js';
 import { buildDateAxis, seasonRange, shownBlocks, gapDividers } from '../../../modules/date-axis.js';
 import { MONTHS, escapeHover } from '../../../modules/format.js';
+import { mountViewTools } from '../tools.js';
 import { DATA_TABLE_CLASS, findRowButton, rebuildKeepingFocus, rovingRows } from '../data-table.js';
 
-const CONFIG = {
-  responsive: true,
-  displayModeBar: false,
-  displaylogo: false,
-  scrollZoom: false,
-  showLink: false,
-  showSendToCloud: false,
-  showEditInChartStudio: false,
-};
+const CONFIG = frameConfig({ zoomable: true });
 
 const Y_TITLES = { viewers: 'Viewers', excitement: 'Excitement' };
 const X_TITLE_MARGIN = 'Final margin (points)';
@@ -204,7 +198,7 @@ function pickGame(i, fromTable = false) {
   ctx.openGame(i, opener ?? refs.gd);
 }
 
-function hoverLines(model, i) {
+function hoverLines(model, i, state) {
   const row = gameRow(model, i);
   const lines = [{ text: `${row.away} at ${row.home}`, kind: 'title' }];
   const kick = kickoffText(row);
@@ -213,11 +207,18 @@ function hoverLines(model, i) {
     kind: 'body',
   });
   lines.push({ text: [slotLabel(row.slot), ...flagLabels(row)].join(' · '), kind: 'body' });
-  if (row.network) lines.push({ text: row.network, kind: 'body' });
+  if (row.network) {
+    lines.push({ kind: 'network', network: { id: row.networkId, name: row.network, family: row.networkFamily } });
+  }
   const pbp = row.crew.find((m) => m.role === 'pbp');
   const analyst = row.crew.find((m) => m.role === 'analyst');
-  const crew = [pbp, analyst].filter(Boolean).map((m) => m.name).join(' / ');
-  if (crew) lines.push({ text: crew, kind: 'body' });
+  const picked = new Set((state?.people ?? []).map((id) => model.personIndex.get(id)));
+  const entries = [pbp, analyst].filter(Boolean).map((m) => ({
+    name: m.name,
+    role: m.role,
+    selected: picked.has(m.person),
+  }));
+  if (entries.length > 0) lines.push({ kind: 'crew', entries });
   if (row.viewers != null) {
     lines.push({
       text: `Viewers: ${viewersText(row)}${row.scope === 'window' ? ' · window-level' : ''}`,
@@ -233,7 +234,6 @@ function hoverLines(model, i) {
       : 'Excitement: not available',
     kind: 'body',
   });
-  lines.push({ text: 'Click for details.', kind: 'hint' });
   return lines;
 }
 
@@ -282,6 +282,7 @@ function pointClientPosition(gd, ev) {
 function bindEvents(gd) {
   if (refs.bound) return;
   refs.bound = true;
+  gd.on('plotly_relayout', syncResetZoom);
   gd.on('plotly_click', (ev) => {
     const it = itemFor(ev);
     if (it && it.pass) pickGame(it.i);
@@ -293,7 +294,7 @@ function bindEvents(gd) {
     const e = ev.event || {};
     const pointerX = e.clientX ?? 0;
     const pointerY = e.clientY ?? 0;
-    showTextTooltip(hoverLines(current.model, it.i), {
+    showTextTooltip(hoverLines(current.model, it.i, current.state), {
       theme: theme(current.env),
       borderColor: ACCENT[theme(current.env)],
       clientX: pointerX,
@@ -391,6 +392,36 @@ function buildControls() {
   const scatterControls = el('div', 'scatter-controls');
   scatterControls.append(axisGroup('X axis', refs.xGroup), axisGroup('Y axis', refs.yGroup));
   refs.controls.appendChild(scatterControls);
+  // Page-style Reset zoom (13-13): aria-disabled at the home range, same as the CFB scatter.
+  refs.resetZoom = el('button', 'reset-zoom', 'Reset zoom');
+  refs.resetZoom.type = 'button';
+  refs.resetZoom.setAttribute('aria-disabled', 'true');
+  refs.resetZoom.addEventListener('click', resetToHome);
+  refs.controls.appendChild(refs.resetZoom);
+}
+
+/** The axis ranges Plotly drew last, as plain arrays (null before the first draw). */
+function liveRanges(gd) {
+  const full = gd && gd._fullLayout;
+  if (!full || !full.xaxis || !full.yaxis) return null;
+  return { x: [...full.xaxis.range], y: [...full.yaxis.range] };
+}
+
+const sameRange = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+/** Reset zoom is enabled only while the plot has left its home range. */
+function syncResetZoom() {
+  const now = liveRanges(refs.gd);
+  const atHome = !refs.home || !now || (sameRange(now.x, refs.home.x) && sameRange(now.y, refs.home.y));
+  refs.resetZoom.setAttribute('aria-disabled', String(atHome));
+}
+
+function resetToHome() {
+  if (refs.resetZoom.getAttribute('aria-disabled') === 'true' || !refs.home) return;
+  window.Plotly.relayout(refs.gd, {
+    'xaxis.range': [...refs.home.x],
+    'yaxis.range': [...refs.home.y],
+  });
 }
 
 const ALL_CATS = EXCLUSIVE_CATEGORIES.map((c) => c.key);
@@ -627,7 +658,7 @@ function dateXAxis(model, state, env, th, plotPx) {
   for (const b of use) {
     annotations.push({
       xref: 'x', yref: 'paper', x: (b.start + b.end) / 2, y: 0, yanchor: 'top', yshift: -36,
-      showarrow: false, font: { size: env.mobile ? 10 : 12, color: MUTED[th] },
+      showarrow: false, font: { size: 12, color: MUTED[th] },
       text: wide ? String(b.season) : `'${String(b.season).slice(-2)}`,
     });
   }
@@ -647,7 +678,7 @@ function dateXAxis(model, state, env, th, plotPx) {
   });
   const places = placeEraLabels(
     merged.map((band) => ({ text: model.eras[band.era].label, x0: band.x0 })),
-    range, plotPx, env.mobile ? 10 : 12,
+    range, plotPx, 12,
   );
   merged.forEach((band, k) => {
     if (k % 2 === 0) {
@@ -662,13 +693,13 @@ function dateXAxis(model, state, env, th, plotPx) {
       xref: 'x', yref: 'paper', x: pos.x, y: 1, xanchor: pos.xanchor, yanchor: 'top',
       xshift: pos.xshift, yshift: -2, showarrow: false, align: pos.xanchor,
       text: escapeHover(pos.text),
-      font: { size: env.mobile ? 10 : 12, color: MUTED[th] },
+      font: { size: 12, color: MUTED[th] },
     });
   });
   return {
     xaxis: {
       range, tickmode: 'array', tickvals, ticktext, ticks: 'outside', ticklen: 4,
-      tickcolor: ZERO_LINE[th], tickangle: 0, tickfont: { size: env.mobile ? 10 : 12, color: MUTED[th] },
+      tickcolor: ZERO_LINE[th], tickangle: 0, tickfont: { size: 12, color: MUTED[th] },
       showgrid: false, zeroline: false, fixedrange: true, anchor: 'y2',
     },
     shapes,
@@ -697,7 +728,7 @@ function marginXAxis(model, th, env) {
     }],
     annotations: [{
       xref: 'x', yref: 'paper', x: NA_X, y: 1, xanchor: 'center', yanchor: 'top', yshift: -2,
-      showarrow: false, text: 'N/A', font: { size: env.mobile ? 10 : 12, color: MUTED[th] },
+      showarrow: false, text: 'N/A', font: { size: 12, color: MUTED[th] },
     }],
   };
 }
@@ -705,7 +736,7 @@ function marginXAxis(model, th, env) {
 function buildFigure(model, state, env, th, items) {
   const bg = PAGE_BG[th];
   const height = env.mobile ? 440 : 520;
-  const margin = MARGIN;
+  const margin = marginFor(env.mobile);
   const fontPx = env.mobile ? TICK_FONT_PX.mobile : TICK_FONT_PX.desktop;
   const plotH = height - margin.t - margin.b;
   const bandGeo = bandLayout(plotH);
@@ -741,10 +772,6 @@ function buildFigure(model, state, env, th, items) {
   const traces = [build(main, (it) => it.y, 'y'), build(band, (it) => bandY(it.i), 'y2')];
 
   const layout = {
-    paper_bgcolor: bg,
-    plot_bgcolor: bg,
-    font: { family: getComputedStyle(document.body).fontFamily, size: fontPx, color: ACCENT[th] },
-    showlegend: false,
     hovermode: 'closest',
     clickmode: 'event',
     dragmode: false,
@@ -776,7 +803,7 @@ function buildFigure(model, state, env, th, items) {
       zeroline: false,
     },
   };
-  return { traces, layout, yAxis, eraLabels: xPart.eraLabels || [] };
+  return { traces, layout: frameLayout(layout, { theme: th }), yAxis, eraLabels: xPart.eraLabels || [] };
 }
 
 // ---- contract ----
@@ -837,7 +864,8 @@ export function mount(container, ctx) {
   });
   dataTable.append(thead, refs.dataBody);
   dataWrap.appendChild(dataTable);
-  container.append(refs.legend, refs.controls, refs.chart, refs.captions, dataWrap);
+  container.append(refs.legend, refs.chart, refs.captions, dataWrap);
+  mountViewTools(ctx, 'scatter', [refs.controls], container);
 }
 
 export function render(ctx) {
@@ -891,7 +919,13 @@ export function render(ctx) {
   setEraCaption(refs.captions, fig.eraLabels, env.mobile);
   const done = window.Plotly.react(refs.gd, fig.traces, fig.layout, CONFIG);
   bindEvents(refs.gd);
-  if (done && typeof done.then === 'function') done.then(placeBandInfo);
+  if (done && typeof done.then === 'function') {
+    done.then(() => {
+      placeBandInfo();
+      refs.home = liveRanges(refs.gd);
+      syncResetZoom();
+    });
+  }
 }
 
 export function resize() {

@@ -13,23 +13,17 @@ import { placeEraLabels, setEraCaption } from '../era-labels.js';
 import { viewershipSeries, pointHasBooth } from '../state.js';
 import { viewCategoryStyle } from '../palette.js';
 import { ACCENT, MUTED, PAGE_BG, DIVIDER, ZERO_LINE } from '../../../modules/palette.js';
+import { frameConfig, frameLayout, referenceLine } from '../../../modules/chart-frame.js';
 import { DOT_OPACITY, MARGIN, TICK_FONT_PX } from '../../../modules/chart.js';
 import { createOnlyDetector } from '../../../modules/legend.js';
 import { initBandInfo, closeBandNote } from '../../../modules/band-info.js';
 import { currentTheme } from '../../../modules/pill.js';
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import { escapeHover, formatViewers, MINUS } from '../../../modules/format.js';
+import { mountViewTools } from '../tools.js';
 import { DATA_TABLE_CLASS, rebuildKeepingFocus } from '../data-table.js';
 
-const CONFIG = {
-  responsive: true,
-  displayModeBar: false,
-  displaylogo: false,
-  scrollZoom: false,
-  showLink: false,
-  showSendToCloud: false,
-  showEditInChartStudio: false,
-};
+const CONFIG = frameConfig({ zoomable: false });
 
 const TITLES = {
   mean: 'Mean viewers',
@@ -473,7 +467,7 @@ function buildFigure(model, state, env, th, lines, seasonPoints) {
     });
   });
   if (resid) {
-    shapes.push({ type: 'line', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 0, y1: 0, line: { color: ZERO_LINE[th], width: 1.5 } });
+    shapes.push(referenceLine({ xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 0, y1: 0 }, th));
   }
 
   let lo = 0;
@@ -499,10 +493,7 @@ function buildFigure(model, state, env, th, lines, seasonPoints) {
 
   const bg = PAGE_BG[th];
   const layout = {
-    paper_bgcolor: bg,
-    plot_bgcolor: bg,
-    font: { family: getComputedStyle(document.body).fontFamily, size: 14, color: ACCENT[th] },
-    showlegend: false,
+    font: { size: 14, color: ACCENT[th] },
     hovermode: 'closest',
     clickmode: 'event',
     dragmode: false,
@@ -521,7 +512,7 @@ function buildFigure(model, state, env, th, lines, seasonPoints) {
       fixedrange: true,
     },
     yaxis: {
-      title: { text: TITLES[resid ? 'resid' : 'mean'], standoff: 8 },
+      title: { text: TITLES[resid ? 'resid' : 'mean'], standoff: 8, font: { size: 14 } },
       range,
       tickmode: 'array',
       tickvals,
@@ -532,7 +523,7 @@ function buildFigure(model, state, env, th, lines, seasonPoints) {
       fixedrange: true,
     },
   };
-  return { traces, layout, bands, eraLabels: bands.map((b) => model.eras[b.era].label) };
+  return { traces, layout: frameLayout(layout, { theme: th }), bands, eraLabels: bands.map((b) => model.eras[b.era].label) };
 }
 
 // ---- contract ----
@@ -565,7 +556,8 @@ export function mount(container, ctx) {
   refs.dataBody = el('tbody');
   dataTable.append(thead, refs.dataBody);
   dataWrap.appendChild(dataTable);
-  container.append(controls, legendRow, refs.chart, refs.captions, dataWrap);
+  container.append(legendRow, refs.chart, refs.captions, dataWrap);
+  mountViewTools(ctx, 'viewership', [controls], container);
 }
 
 export function render(ctx) {

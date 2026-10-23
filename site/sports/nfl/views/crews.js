@@ -16,21 +16,16 @@
 import { crewsNetworks, crewsSeasons, crewsRows, crewsCoverage, CREW_METRICS } from '../state.js';
 import { crewStyle } from '../palette.js';
 import { ACCENT, MUTED, PAGE_BG, DIVIDER, ZERO_LINE } from '../../../modules/palette.js';
+import { frameConfig, frameLayout, referenceLine } from '../../../modules/chart-frame.js';
 import { MARGIN, TICK_FONT_PX, DOT_OPACITY } from '../../../modules/chart.js';
 import { makeRolePill, nameWithRoles, currentTheme } from '../../../modules/pill.js';
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import { escapeHover, MINUS, formatViewers } from '../../../modules/format.js';
+import { mountViewTools } from '../tools.js';
+import { attachScrollCue } from '../../../modules/scroll-cue.js';
 import { DATA_TABLE_CLASS, rebuildKeepingFocus } from '../data-table.js';
 
-const CONFIG = {
-  responsive: true,
-  displayModeBar: false,
-  displaylogo: false,
-  scrollZoom: false,
-  showLink: false,
-  showSendToCloud: false,
-  showEditInChartStudio: false,
-};
+const CONFIG = frameConfig({ zoomable: false });
 
 const DASH = '—';
 const SEGMENT_MAX = 6; // more networks than this use the popover picker
@@ -413,7 +408,7 @@ function renderBoothTable(items, group, state, season, anyPublished) {
   heads.push('Avg viewers', 'Avg margin', 'Excitement');
   refs.tableHead.replaceChildren(
     ...heads.map((h, k) => {
-      const th = el('th', k === 0 ? 'booth-col' : null, h);
+      const th = el('th', k === 0 ? 'booth-col' : 'num', h);
       th.scope = 'col';
       if (h === 'Avg viewers') {
         const mark = el('span', 'footnote-mark', '*');
@@ -441,7 +436,7 @@ function renderBoothTable(items, group, state, season, anyPublished) {
       btn.setAttribute('aria-pressed', String(sel === it.key));
       btn.append(el('span', 'booth-rank', it.rankLabel));
       // The names sit in one `.booth-names` group: inline on desktop, stacked (pbp, analyst,
-      // then the low-n tag) in the narrow phone column; see the 640px rules in style.css.
+      // then the low-n tag) in the narrow phone column; see the 480px rules in style.css.
       const names = el('span', 'booth-names');
       names.append(nameWithRoles(el('span', 'booth-name', personName(current.model, r.pbp_person)), makeRolePill('pbp')));
       if (r.analyst_person != null) {
@@ -651,20 +646,17 @@ function buildFigure(items, metric, adjusted, env, th, sel, picked) {
 
   const tick = env.mobile ? TICK_FONT_PX.mobile : TICK_FONT_PX.desktop;
   const titleText = adjusted ? f.adjTitle : f.rawTitle;
-  const font = { family: getComputedStyle(document.body).fontFamily, size: tick, color: ACCENT[th] };
+  const font = { size: tick, color: ACCENT[th] };
   const pitch = env.mobile ? 48 : 40;
   const layout = {
-    paper_bgcolor: bg,
-    plot_bgcolor: bg,
     font,
-    showlegend: false,
     hovermode: 'closest',
     clickmode: 'event',
     dragmode: false,
     height: items.length * pitch + MARGIN.t + MARGIN.b + 20,
     margin: { ...MARGIN, l: env.mobile ? 56 : MARGIN.l },
     shapes: adjusted
-      ? [{ type: 'line', xref: 'x', yref: 'paper', x0: 0, x1: 0, y0: 0, y1: 1, line: { color: ZERO_LINE[th], width: 1.5 } }]
+      ? [referenceLine({ xref: 'x', yref: 'paper', x0: 0, x1: 0, y0: 0, y1: 1 }, th)]
       : [],
     xaxis: {
       title: { text: escapeHover(titleText), standoff: 4, font: { size: tick } },
@@ -688,7 +680,7 @@ function buildFigure(items, metric, adjusted, env, th, sel, picked) {
       fixedrange: true,
     },
   };
-  return { traces: [underlay, main], layout };
+  return { traces: [underlay, main], layout: frameLayout(layout, { theme: th }) };
 }
 
 function renderDataTable(items, metric, adjusted) {
@@ -721,7 +713,7 @@ export function mount(container, ctx) {
   refs.coverage = el('p', 'caption nfl-coverage');
   refs.coverage.setAttribute('role', 'status');
 
-  refs.tableWrap = el('div', 'nfl-booth-table-wrap');
+  refs.tableWrap = el('div', 'nfl-booth-table-wrap table-scroll');
   const table = el('table', 'games-table nfl-booth-table');
   refs.tableCaption = el('caption', 'visually-hidden');
   refs.tableHead = el('tr');
@@ -731,6 +723,7 @@ export function mount(container, ctx) {
   table.append(refs.tableCaption, thead, refs.tableBody);
   refs.viewersNote = el('p', 'caption nfl-viewers-footnote', `* ${VIEWERS_SCOPE_NOTE}`);
   refs.tableWrap.append(table, refs.viewersNote);
+  attachScrollCue(refs.tableWrap, null);
   refs.publishedNote = el('p', 'caption nfl-published-note', 'Booth order from a published lineup.');
   refs.publishedNote.hidden = true;
 
@@ -766,11 +759,12 @@ export function mount(container, ctx) {
     refs.tableWrap,
     refs.publishedNote,
     refs.note,
-    chartControls,
     refs.chart,
     refs.captions,
     dataWrap,
   );
+  // The mode control (measure, raw or adjusted) lives in the module header tools.
+  mountViewTools(ctx, 'crews', [chartControls], container);
 }
 
 function nearest(list, season) {

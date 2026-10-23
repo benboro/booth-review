@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import pytest
+from conftest import element_height, measure_gap
 from playwright.sync_api import Page, Route
 
 pytestmark = pytest.mark.e2e
@@ -119,9 +120,8 @@ def _bar_height(page: Page) -> float:
 def test_mobile_switch_size_and_topbar_height(
     nfl_mobile_page: Page,
     open_flagon_cfb: Callable[..., None],
-    browser: object,
-    site_url: str,
 ) -> None:
+    """Phone: switch buttons are touch targets and share the title's row (no wrap)."""
     page = nfl_mobile_page
     open_flagon_cfb(page)
     for sport in ("cfb", "nfl"):
@@ -129,36 +129,41 @@ def test_mobile_switch_size_and_topbar_height(
         assert box is not None
         assert box["height"] >= 44
         assert box["width"] >= 44
-    on_height = _bar_height(page)
-    ctx = browser.new_context(  # type: ignore[attr-defined]
-        viewport={"width": 390, "height": 844}, has_touch=True, is_mobile=True
-    )
-    try:
-        off = ctx.new_page()
-        off.goto(f"{site_url}/index.html")
-        off.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
-        assert abs(_bar_height(off) - on_height) <= 1
-    finally:
-        ctx.close()
+    title = page.locator("#topbar .site-title").bounding_box()
+    switch = page.locator("#sport-switch").bounding_box()
+    header = element_height(page, "#topbar")
+    assert title is not None and switch is not None
+    # One row: the switch starts beside the title, not below it.
+    assert switch["y"] < title["y"] + title["height"]
+    # 16px padding twice around the 44px target: well under two rows.
+    assert header <= 80
 
 
-_RECT = "document.querySelector('%s').getBoundingClientRect().%s"
+_ROWS = """(sel) => new Set(
+  [...document.querySelectorAll(sel)]
+    .filter((e) => e.getBoundingClientRect().width > 0)
+    .map((e) => Math.round(e.getBoundingClientRect().top))
+).size"""
 
 
 def _assert_layout_stable(page: Page, open_cfb: Callable[..., None]) -> None:
-    """Top bar, toolbar height and chart top do not move when the sport changes (SITE-20)."""
+    """The header and both gap tokens hold when the sport changes; the filter bar's row
+    count is each sport's own (D-11 dropped the equal-height spacer rule)."""
     open_cfb(page)
     bar = _bar_height(page)
-    cfb_toolbar = page.evaluate(_RECT % ("#toolbar", "height"))
-    cfb_chart_top = page.evaluate(_RECT % ("#chart-area", "top"))
+    cfb_rows = page.evaluate(_ROWS, "#toolbar > button")
+    assert measure_gap(page, "#toolbar", "#selection-row") == 8
+    assert measure_gap(page, "#chart-tabs", "#chart-module") == 16
     _click(page, "nfl")
     page.wait_for_function("window.__nflTestHooks && window.__nflTestHooks.ready === true")
     assert abs(_bar_height(page) - bar) <= 1
-    assert abs(page.evaluate(_RECT % ("#nfl-toolbar", "height")) - cfb_toolbar) <= 1
-    bar_bottom = page.evaluate(_RECT % ("#nfl-selection-bar", "bottom"))
-    assert abs(page.evaluate(_RECT % ("#nfl-chart-area", "top")) - bar_bottom) <= 1
-    assert abs(page.evaluate(_RECT % ("#nfl-chart-area", "top")) - cfb_chart_top) <= 1
-    assert page.evaluate(_RECT % ("#chart-area", "height")) == 0
+    assert measure_gap(page, "#nfl-toolbar", "#nfl-selection-row") == 8
+    assert measure_gap(page, "#nfl-chart-tabs", "#nfl-chart-area .nfl-chart-module") == 16
+    nfl_rows = page.evaluate(_ROWS, "#nfl-toolbar > button")
+    assert element_height(page, "#nfl-toolbar") > 0
+    assert page.evaluate("getComputedStyle(document.getElementById('toolbar')).display") == "none"
+    # Each sport owns its row count; neither is forced to the other's height.
+    assert cfb_rows >= 1 and nfl_rows >= 1
 
 
 def test_switching_keeps_topbar_toolbar_and_chart_top(
@@ -239,17 +244,14 @@ def _open_nfl_from_cfb(
 def test_cfb_listeners_never_rewrite_the_nfl_url(
     nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None]
 ) -> None:
-    """JS-CR-01: CFB's media and resize listeners stay quiet while NFL is shown.
+    """JS-CR-01: CFB's resize listeners stay quiet while NFL is shown.
 
     CFB is left on Butterfly, whose resize handler re-renders at any width.
     """
     page = nfl_guarded_page
     cfb_search, nfl_search = _open_nfl_from_cfb(page, open_flagon_cfb, "?view=butterfly")
     nfl_state = page.evaluate("window.__nflTestHooks.getState()")
-    page.emulate_media(color_scheme="dark")
-    _settle(page)
-    assert page.evaluate("location.search") == nfl_search
-    page.set_viewport_size({"width": 600, "height": 800})  # across 640px
+    page.set_viewport_size({"width": 400, "height": 800})  # across 480px
     _settle(page)
     assert page.evaluate("location.search") == nfl_search
     page.set_viewport_size({"width": 1100, "height": 800})  # back across, then a plain resize
@@ -262,26 +264,6 @@ def test_cfb_listeners_never_rewrite_the_nfl_url(
     _click(page, "cfb")
     page.wait_for_function("location.search === " + repr(cfb_search))
     assert page.evaluate("window.__testHooks.getState().view") == "butterfly"
-
-
-def test_cfb_scatter_stays_quiet_under_nfl_on_a_theme_change(
-    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None]
-) -> None:
-    """JS-CR-01 with CFB left on its scatter: an OS light/dark flip under NFL keeps
-    the NFL URL and state, and CFB comes back as it was left."""
-    page = nfl_guarded_page
-    cfb_search, nfl_search = _open_nfl_from_cfb(page, open_flagon_cfb, "")
-    nfl_state = page.evaluate("window.__nflTestHooks.getState()")
-    page.emulate_media(color_scheme="dark")
-    _settle(page)
-    assert page.evaluate("location.search") == nfl_search
-    page.emulate_media(color_scheme="light")
-    _settle(page)
-    assert page.evaluate("location.search") == nfl_search
-    assert page.evaluate("window.__nflTestHooks.getState()") == nfl_state
-    _click(page, "cfb")
-    page.wait_for_function("location.search === " + repr(cfb_search))
-    assert page.locator("#chart").is_visible()
 
 
 def test_cfb_url_params_never_leak_into_nfl(
@@ -396,3 +378,26 @@ def test_the_failure_note_leaves_with_nfl_and_cfb_keeps_its_url(
     assert page.locator("#sport-load-error").count() == 0
     assert page.locator("#chart-area .error-banner:not([hidden])").count() == 0
     assert _pressed(page, "cfb") == "true"
+
+
+def test_switch_marks_the_current_sport_with_an_ink_underline(
+    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None]
+) -> None:
+    """Underline tabs: the pressed sport is weight 600 with a 2px bottom border, not the other."""
+    page = nfl_guarded_page
+    open_flagon_cfb(page)
+    probe = """(s) => {
+      const b = document.querySelector('#sport-switch button[data-sport="' + s + '"]');
+      const c = getComputedStyle(b);
+      return [c.fontWeight, c.borderBottomWidth, c.borderBottomStyle];
+    }"""
+    cfb = page.evaluate(probe, "cfb")
+    nfl = page.evaluate(probe, "nfl")
+    assert cfb[0] == "600"
+    assert cfb[1] == "2px" and cfb[2] == "solid"
+    assert nfl[0] != "600"
+    _click(page, "nfl")
+    page.wait_for_function("window.__nflTestHooks && window.__nflTestHooks.ready === true")
+    assert page.evaluate(probe, "nfl")[0] == "600"
+    assert page.evaluate(probe, "cfb")[0] != "600"
+    assert _pressed(page, "nfl") == "true"

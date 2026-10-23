@@ -225,7 +225,7 @@ def test_person_selection_is_ignored(
     base = _model(guarded_page)
     picked = _model(guarded_page, {"people": ["kris-venn"]})
     assert picked == base
-    hint = guarded_page.locator("#crews-panel .crews-hint").text_content()
+    hint = guarded_page.locator("#chart-subtitle").text_content()
     assert hint is not None
     assert "Selected announcers do not change this table." in hint
 
@@ -304,8 +304,19 @@ def test_credits_and_no_innerhtml(
     link = panel.get_by_role("link", name="Data provided by CollegeFootballData.com")
     assert link.get_attribute("href") == "https://collegefootballdata.com"
     text = panel.inner_text()
-    assert "Viewership figures: Ratings Reference" in text
-    assert "data/reference/cfb_booth_ranks.csv" in text
+    captions = [
+        re.sub(r"\s+", " ", c).strip() for c in panel.locator("p.caption").all_inner_texts()
+    ]
+    # RT-10 (b) and (c): the full sentences, not fragments.
+    assert (
+        "Viewership figures: Ratings Reference and the second sources credited in each "
+        "game's detail panel."
+    ) in captions
+    assert (
+        "Booth order from network press releases, cited per season in "
+        "data/reference/cfb_booth_ranks.csv."
+    ) in captions
+    assert "Data provided by CollegeFootballData.com" in captions
     assert "Rated shows how many games have a viewership figure." in text
     src = guarded_page.evaluate("async () => (await fetch('modules/crews.js')).text()")
     assert "innerHTML" not in src
@@ -367,3 +378,21 @@ def test_legend_chips_are_hidden_on_crews_and_networks_filter_still_applies(
     assert len(no_fox["groups"]) == 3
     guarded_page.locator("#tab-scatter").click()
     assert guarded_page.locator("#legend-row").is_visible()
+
+
+def test_booth_column_is_pinned_and_filled_on_phones_only(
+    guarded_page: Page, serve_booths: Callable[[Page], None], open_app: Callable[[Page, str], None]
+) -> None:
+    """UI-SPEC phone contract: the sticky identity column and its fill belong at <=480px."""
+    js = """() => {
+      const th = document.querySelector('#crews-panel tbody th.booth-col');
+      const cs = getComputedStyle(th);
+      return { position: cs.position, bg: cs.backgroundColor }; }"""
+    _open(guarded_page, serve_booths, open_app)
+    desktop = guarded_page.evaluate(js)
+    assert desktop["position"] != "sticky"
+    assert desktop["bg"] == "rgba(0, 0, 0, 0)"
+    guarded_page.set_viewport_size({"width": 390, "height": 844})
+    phone = guarded_page.evaluate(js)
+    assert phone["position"] == "sticky"
+    assert phone["bg"] != "rgba(0, 0, 0, 0)"

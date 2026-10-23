@@ -1,6 +1,6 @@
 /**
  * Custom HTML chip legend (D-04, D-16, SITE-20, SITE-26): a horizontal row
- * of clickable family-colored pills above the chart, replacing Plotly's
+ * of clickable outlined chips (family dot plus label) above the chart, replacing Plotly's
  * built-in legend now that `chart.js` sets `showlegend: false` on every
  * trace. Clicking (or Enter/Space on) a chip toggles that family in the
  * Networks filter through the same `toggleFamilyNetworks` helper the
@@ -19,13 +19,7 @@
  */
 
 import { familyToggledOff, familyIsSole } from './select.js';
-import {
-  FAMILY_COLORS,
-  FAMILY_LABELS,
-  MAP_FAMILY_COLORS,
-  PILL_TEXT_COLOR,
-  readableTextOn,
-} from './palette.js';
+import { FAMILY_COLORS, FAMILY_LABELS, MAP_FAMILY_COLORS } from './palette.js';
 import { currentTheme } from './pill.js';
 
 /** D-07: two single clicks (or taps) on one pill within this many ms, by input time,
@@ -149,9 +143,18 @@ export function renderLegend({ data, state, view }) {
     const li = document.createElement('li');
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'legend-chip pill';
+    button.className = 'legend-chip';
     button.dataset.family = family;
-    button.textContent = FAMILY_LABELS[family];
+    // Outlined chip (13-12): an 8px family-colour dot plus the family label; the chip itself
+    // is never filled. No logos: a chip stands for several channels.
+    const dot = document.createElement('span');
+    dot.className = 'legend-dot';
+    dot.setAttribute('aria-hidden', 'true');
+    dot.style.backgroundColor = palette[theme][family];
+    const label = document.createElement('span');
+    label.className = 'legend-label';
+    label.textContent = FAMILY_LABELS[family];
+    button.append(dot, label);
     const pressed = !familyToggledOff(data, state, family);
     button.setAttribute('aria-pressed', String(pressed));
     const hint = familyIsSole(data, view, family, state.networks)
@@ -163,27 +166,7 @@ export function renderLegend({ data, state, view }) {
     const offered = !counts
       || (data.networksByFamily.get(family) ?? []).reduce((sum, idx) => sum + (counts[idx] ?? 0), 0) > 0;
     button.dataset.offered = String(offered);
-    if (!offered) {
-      // Greyed by CSS (`[data-offered="false"]`): no inline fill or text color
-      // so the stylesheet applies; the border keeps the family color.
-      button.style.backgroundColor = '';
-      button.style.color = '';
-      button.style.borderColor = palette[theme][family];
-    } else if (pressed) {
-      button.style.backgroundColor = palette[theme][family];
-      button.style.color =
-        state.view === 'map' && family === 'conference'
-          ? (readableTextOn(palette[theme][family]) ?? PILL_TEXT_COLOR[family])
-          : PILL_TEXT_COLOR[family];
-      button.style.borderColor = '';
-    } else {
-      // Toggled off: clear the inline fill so CSS's own
-      // `.legend-chip[aria-pressed="false"]` rule (transparent background,
-      // `--text` color) applies; only the border keeps the family color.
-      button.style.backgroundColor = '';
-      button.style.color = '';
-      button.style.borderColor = palette[theme][family];
-    }
+    // Offered, pressed and dashed states are drawn by CSS from data-offered and aria-pressed.
     li.appendChild(button);
     return li;
   });

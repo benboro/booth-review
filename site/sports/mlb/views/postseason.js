@@ -12,8 +12,10 @@
  * Everything is built with createElement and textContent only.
  */
 import { boothLabelOf, cellKey, personName } from '../data.js';
+import { networkMark } from '../../../modules/network.js';
 import { externalLink } from '../../../modules/panel-parts.js';
-import { makePill, makeRolePill, nameWithRoles, currentTheme } from '../../../modules/pill.js';
+import { makeRolePill, nameWithRoles } from '../../../modules/pill.js';
+import { attachScrollCue } from '../../../modules/scroll-cue.js';
 
 export const PENDING_TEXT = 'pending Retrosheet 2026';
 export const NO_CREW_TEXT = 'crew not listed';
@@ -33,7 +35,10 @@ function el(tag, className, text) {
   return node;
 }
 
-const refs = { ctx: null, head: null, body: null, captions: null, table: null };
+/** Booth lines the phone Booths cell shows before a "+N more" last line (13-14 line budget). */
+export const PHONE_BOOTH_LINES = 3;
+
+const refs = { ctx: null, head: null, body: null, captions: null, table: null, phoneBody: null };
 let current = null;
 
 function coveragePct(num, den) {
@@ -57,7 +62,7 @@ function buildGrid(model) {
     }
     for (const idx of r.networks) {
       const net = model.networks[idx];
-      if (net && !b.outlets.some((o) => o.name === net.name)) b.outlets.push({ name: net.name, family: net.family });
+      if (net && !b.outlets.some((o) => o.name === net.name)) b.outlets.push({ id: net.id ?? null, name: net.name, family: net.family });
     }
     if (r.outlet_source_url && !b.outletSourceUrl) b.outletSourceUrl = r.outlet_source_url;
     for (const pair of r.booths) {
@@ -92,7 +97,7 @@ function excitementLine(model, b) {
   return 'no excitement figure';
 }
 
-function blockButton(model, b, label, picked) {
+function blockButton(model, b, label, picked, maxLines = Infinity) {
   const btn = el('button', 'mlb-cell-btn');
   btn.type = 'button';
   btn.dataset.cell = b.key;
@@ -101,18 +106,22 @@ function blockButton(model, b, label, picked) {
   btn.setAttribute('aria-label', `${where}, ${b.games} ${b.games === 1 ? 'game' : 'games'}`);
   const head = el('span', 'mlb-cell-head');
   if (label) head.append(el('span', 'mlb-cell-league', label));
-  for (const o of b.outlets) head.append(makePill(o.name, o.family, currentTheme()));
+  for (const o of b.outlets) head.append(networkMark(o));
   btn.append(head);
 
   const booths = el('span', 'mlb-cell-booths');
   if (b.booths.length) {
-    for (const [pbp, analyst] of b.booths) {
+    const shown = b.booths.slice(0, maxLines);
+    for (const [pbp, analyst] of shown) {
       const line = el('span', 'mlb-cell-booth');
       line.append(nameWithRoles(el('span', 'booth-name', personName(model, pbp)), makeRolePill('pbp')));
       if (analyst != null) {
         line.append(el('span', 'booth-sep', ' / '), nameWithRoles(el('span', 'booth-name', personName(model, analyst)), makeRolePill('analyst')));
       }
       booths.append(line);
+    }
+    if (b.booths.length > shown.length) {
+      booths.append(el('span', 'mlb-booth-more', `+${b.booths.length - shown.length} more`));
     }
   } else {
     booths.append(el('span', 'mlb-no-crew', NO_CREW_TEXT));
@@ -145,6 +154,52 @@ function roundsPresent(model) {
   return ROUND_ORDER.filter((r) => r !== 'tiebreak' || have.has('tiebreak'));
 }
 
+/**
+ * A season's coverage line (`data-low` under the coverage bar) and its per-season Wikipedia
+ * outlets credit (RT-13), built fresh for each grid so the phone twin carries both too.
+ */
+function seasonNotes(s, blocks, bar) {
+  const pct = coveragePct(s.coverage_num, s.coverage_den);
+  // Counts come from the builder's season table: every postseason game of the season.
+  const cov = el(
+    'span',
+    'mlb-season-coverage',
+    pct == null ? '' : `Crews listed for ${s.coverage_num} of ${s.coverage_den} postseason games (${pct}%)`,
+  );
+  if (s.coverage_den > 0 && s.coverage_num / s.coverage_den < bar) cov.dataset.low = 'true';
+  const wikiUrl = [...blocks.values()].find((b) => b.season === s.season && b.outletSourceUrl)?.outletSourceUrl;
+  const credit = wikiUrl ? externalLink(wikiUrl, `Outlets: Wikipedia ${s.season} postseason (CC BY-SA 4.0) ↗`) : null;
+  if (credit) credit.className = 'mlb-season-credit';
+  return credit ? [cov, credit] : [cov];
+}
+
+function phoneRows(model, state, seasons, rounds, blocks) {
+  const out = [];
+  for (const s of seasons) {
+    for (const r of rounds) {
+      const here = [...blocks.values()].filter((b) => b.season === s.season && b.round === r);
+      here.sort((x, y) => String(x.league).localeCompare(String(y.league)));
+      for (const b of here) {
+        const tr = el('tr');
+        tr.dataset.season = String(s.season);
+        const th = el('th', 'mlb-merged-col');
+        th.scope = 'row';
+        th.append(el('span', 'mlb-merged-line', `${s.season} ${SHORT_ROUNDS[r]}`));
+        th.append(el('span', 'mlb-merged-line mlb-merged-league', b.league ?? ''));
+        const td = el('td', 'mlb-booths-col');
+        const btn = blockButton(model, b, null, state.cell === b.key, PHONE_BOOTH_LINES);
+        // The desktop grid owns data-cell; the phone twin must not double-match it.
+        btn.dataset.phoneCell = b.key;
+        delete btn.dataset.cell;
+        td.append(btn);
+        tr.append(th, td);
+        out.push(tr);
+      }
+    }
+  }
+  return out;
+}
+
 export function mount(container, ctx) {
   refs.ctx = ctx;
   const wrap = el('div', 'mlb-grid-wrap');
@@ -156,9 +211,30 @@ export function mount(container, ctx) {
   refs.body = el('tbody');
   table.append(thead, refs.body);
   wrap.appendChild(table);
+  // Phone twin (480px and under, CSS swaps the two): one row per season, round and league
+  // block with a merged pinned first column and a Booths column.
+  const phone = el('table', 'games-table mlb-phone-grid');
+  phone.appendChild(el('caption', 'visually-hidden', 'Postseason booths by season, round and league'));
+  const phoneHead = el('tr');
+  for (const [text, cls] of [['Season and round', 'mlb-merged-col'], ['Booths', 'mlb-booths-col']]) {
+    const th = el('th', cls, text);
+    th.scope = 'col';
+    phoneHead.appendChild(th);
+  }
+  const phoneThead = el('thead');
+  phoneThead.appendChild(phoneHead);
+  refs.phoneBody = el('tbody');
+  phone.append(phoneThead, refs.phoneBody);
+  wrap.appendChild(phone);
+  wrap.classList.add('table-scroll');
+  attachScrollCue(wrap, null);
   refs.table = table;
+  // The phone twin's 96px pinned column has no room for each season's coverage line and
+  // Wikipedia credit, and a row inside the scroller would sit under its fades: they follow
+  // the table as a per-season list (CSS shows it at 480px and under only).
+  refs.phoneNotes = el('ul', 'mlb-phone-season-notes');
   refs.captions = el('div', 'nfl-captions');
-  container.append(wrap, refs.captions);
+  container.append(wrap, refs.phoneNotes, refs.captions);
 }
 
 export function render(ctx) {
@@ -181,22 +257,7 @@ export function render(ctx) {
     const th = el('th', 'mlb-season-col');
     th.scope = 'row';
     th.append(el('span', 'mlb-season', String(s.season)));
-    const pct = coveragePct(s.coverage_num, s.coverage_den);
-    // Counts come from the builder's season table: every postseason game of the season.
-    const cov = el(
-      'span',
-      'mlb-season-coverage',
-      pct == null ? '' : `Crews listed for ${s.coverage_num} of ${s.coverage_den} postseason games (${pct}%)`,
-    );
-    const low = s.coverage_den > 0 && s.coverage_num / s.coverage_den < bar;
-    if (low) cov.dataset.low = 'true';
-    th.append(cov);
-    const wikiUrl = [...blocks.values()].find((b) => b.season === s.season && b.outletSourceUrl)?.outletSourceUrl;
-    const credit = wikiUrl ? externalLink(wikiUrl, `Outlets: Wikipedia ${s.season} postseason (CC BY-SA 4.0) ↗`) : null;
-    if (credit) {
-      credit.className = 'mlb-season-credit';
-      th.append(credit);
-    }
+    th.append(...seasonNotes(s, blocks, bar));
     tr.appendChild(th);
     for (const r of rounds) {
       const td = el('td', 'mlb-cell');
@@ -226,6 +287,15 @@ export function render(ctx) {
     rows.push(tr);
   }
   refs.body.replaceChildren(...rows);
+  refs.phoneBody.replaceChildren(...phoneRows(model, state, seasons, rounds, blocks));
+  refs.phoneNotes.replaceChildren(
+    ...seasons.map((s) => {
+      const li = el('li');
+      li.dataset.season = String(s.season);
+      li.append(el('span', 'mlb-season', String(s.season)), ...seasonNotes(s, blocks, bar));
+      return li;
+    }),
+  );
 
   refs.captions.replaceChildren(
     el('p', 'caption', 'Excitement is the mean per game from win probability, a tendency, not proof.'),

@@ -19,7 +19,6 @@ pytestmark = pytest.mark.e2e
 OpenApp = Callable[[Page, str], None]
 
 SLACK = 4.0
-THEMES = ["light", "dark"]
 QUERIES = [
     "?school=northfield&view=bars",
     "?school=northfield&view=bars&by=network",
@@ -111,7 +110,16 @@ def _hover(page: Page, p: dict[str, float]) -> None:
     page.mouse.move(2, 2)
     x, y = _center(p)
     page.mouse.move(x, y, steps=4)
-    page.wait_for_selector("#bars-hover-outline:not([hidden])")
+    # Wait for the outline to land on this piece's row, not a stale outline from the cursor's path.
+    page.wait_for_function(
+        """([t, b]) => {
+          const el = document.getElementById('bars-hover-outline');
+          if (!el || el.hidden) return false;
+          const r = el.getBoundingClientRect();
+          return r.top <= b && r.bottom >= t && r.height < (b - t) + 12;
+        }""",
+        arg=[p["t"], p["b"]],
+    )
 
 
 def _picks(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -124,13 +132,11 @@ def _picks(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return seen
 
 
-@pytest.mark.parametrize("theme", THEMES)
 @pytest.mark.parametrize("query", QUERIES)
 def test_hover_outlines_the_whole_segment(
-    guarded_page: Page, open_app: OpenApp, query: str, theme: str
+    guarded_page: Page, open_app: OpenApp, query: str
 ) -> None:
     page = guarded_page
-    page.emulate_media(color_scheme=theme)  # type: ignore[arg-type]
     open_app(page, query)
     groups = _groups(page)
     assert groups
@@ -170,12 +176,8 @@ def test_any_piece_of_a_segment_gives_the_same_outline(
             assert box[k] == pytest.approx(first[k], abs=1.0)
 
 
-@pytest.mark.parametrize("theme", THEMES)
-def test_outline_uses_the_scatter_ring_tokens(
-    guarded_page: Page, open_app: OpenApp, theme: str
-) -> None:
+def test_outline_uses_the_scatter_ring_tokens(guarded_page: Page, open_app: OpenApp) -> None:
     page = guarded_page
-    page.emulate_media(color_scheme=theme)  # type: ignore[arg-type]
     open_app(page, QUERIES[0])
     _hover(page, _groups(page)[0]["pieces"][0])
     got = page.evaluate(

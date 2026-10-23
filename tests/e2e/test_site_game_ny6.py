@@ -182,20 +182,17 @@ def test_keyboard_skips_band_and_label(
     assert inert == 0
 
 
-@pytest.mark.parametrize("scheme", ["light", "dark"])
 def test_label_contrast(
     guarded_page: Page,
     open_app: Callable[..., None],
     serve_ny6: Callable[..., None],
-    scheme: str,
 ) -> None:
     """The label holds AA (4.5:1) on the band tint itself, not the plain popover
-    background (UI-SPEC: light 5.81 on #F8F4EB, dark 9.54 on #26241A)."""
-    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
+    background (the 8% playoff tint over the 13-05 light surface, about #F4EEE1)."""
     _open_with(guarded_page, serve_ny6, open_app, BOTH)
     fg = _rgb_of(guarded_page, ".game-ny6-label", "color")
     tint: list[int] = guarded_page.evaluate(_BAND_TINT_JS, BAND)
-    expected = {"light": (0xF8, 0xF4, 0xEB), "dark": (0x26, 0x24, 0x1A)}[scheme]
+    expected = (0xF4, 0xEE, 0xE1)
     assert all(abs(got - want) <= 2 for got, want in zip(tint, expected, strict=True)), tint
     assert _ratio(fg, (float(tint[0]), float(tint[1]), float(tint[2]))) >= 4.5
 

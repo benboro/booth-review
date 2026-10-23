@@ -7,7 +7,9 @@
  * the CFB panel's `safeHref`. Nothing here reads or shows a point spread.
  */
 
-import { nameWithRoles, makeRolePill, makePill, currentTheme } from '../../modules/pill.js';
+import { nameWithRoles, makeRolePill } from '../../modules/pill.js';
+import { networkMark } from '../../modules/network.js';
+import { attachScrollCue } from '../../modules/scroll-cue.js';
 import { safeHref } from '../../modules/panel.js';
 import { crewSourceText, dateShortText, flagLabels, kickoffText, scoreText, viewersText } from './game-format.js';
 
@@ -84,7 +86,7 @@ function buildRow(row, onOpen) {
     onOpen?.(row.i, tr.querySelector('.nfl-matchup-btn'));
   });
 
-  const dateTd = el('td', 'num', dateShortText(row));
+  const dateTd = el('td', 'date', dateShortText(row));
   const ko = kickoffText(row);
   if (ko) {
     dateTd.appendChild(el('br'));
@@ -92,7 +94,7 @@ function buildRow(row, onOpen) {
   }
   tr.appendChild(dateTd);
 
-  const matchupTd = el('td');
+  const matchupTd = el('td', 'matchup');
   const button = el('button', 'nfl-matchup-btn', `${row.away} at ${row.home}`);
   button.type = 'button';
   button.setAttribute('aria-label', `Details for ${row.away} at ${row.home}`);
@@ -109,7 +111,7 @@ function buildRow(row, onOpen) {
   // CFB parity (D-18): the network is a family-colored pill, as in CFB's table.
   const networkTd = el('td');
   if (row.network == null) networkTd.textContent = NOT_RECORDED;
-  else networkTd.appendChild(makePill(row.network, row.networkFamily, currentTheme()));
+  else networkTd.appendChild(networkMark({ id: row.networkId, name: row.network, family: row.networkFamily }));
   tr.appendChild(networkTd);
 
   const crewTd = el('td');
@@ -126,7 +128,7 @@ function buildRow(row, onOpen) {
       vTd.appendChild(el('span', 'nfl-muted', 'window-level'));
     }
   } else {
-    vTd.className = 'no-rating';
+    vTd.className = 'num no-rating';
     vTd.textContent = 'No rating';
   }
   tr.appendChild(vTd);
@@ -157,16 +159,18 @@ export function createGamesTable(host, { onOpen } = {}) {
   const thead = el('thead');
   const headRow = el('tr');
   const sortButtons = {};
-  for (const [label, key] of [
+  // Viewers holds numbers, so its head aligns right like its cells; Date is a text date
+  // ("Sun, Aug 31"), left-aligned and never wrapped (brief §5).
+  for (const [label, key, numeric] of [
     ['Date', 'date'],
     ['Matchup', null],
     ['Score', null],
     ['Network', null],
     ['Crew', null],
-    ['Viewers', 'viewers'],
+    ['Viewers', 'viewers', true],
     ['Source', null],
   ]) {
-    const th = el('th');
+    const th = el('th', numeric ? 'num' : null);
     th.scope = 'col';
     if (key) {
       const b = el('button');
@@ -184,7 +188,12 @@ export function createGamesTable(host, { onOpen } = {}) {
   thead.appendChild(headRow);
   const tbody = el('tbody');
   table.append(thead, tbody);
-  section.append(heading, summary, empty, table);
+  const head = el('div', 'module-head');
+  head.append(heading);
+  const scroll = el('div', 'table-scroll');
+  scroll.append(table);
+  section.append(head, summary, empty, scroll);
+  attachScrollCue(scroll, head);
   host.appendChild(section);
 
   let sort = { key: 'date', dir: 'desc' };

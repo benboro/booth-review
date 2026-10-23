@@ -42,6 +42,25 @@ def _visible_by(page: Page) -> list[str]:
     return list(page.evaluate(_VISIBLE_BY_JS))
 
 
+def test_group_by_lives_in_module_tools_and_pressed_fills_ink(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """13-UI-SPEC "Module header tools": the group-by and role groups sit in #chart-tools,
+    and the pressed button fills --ink (rgb(35, 32, 27)) with --bg text."""
+    open_app(guarded_page, BAR_VIEW)
+    assert guarded_page.locator("#chart-tools #group-by-toggle").count() == 1
+    assert guarded_page.locator("#chart-tools #bar-role-toggle").count() == 1
+    for selector in (
+        '#group-by-toggle button[aria-pressed="true"]',
+        '#bar-role-toggle button[aria-pressed="true"]',
+    ):
+        styles = guarded_page.eval_on_selector(
+            selector,
+            "el => [getComputedStyle(el).backgroundColor, getComputedStyle(el).color]",
+        )
+        assert styles == ["rgb(35, 32, 27)", "rgb(251, 249, 245)"], selector
+
+
 def _pressed_by(page: Page) -> list[str]:
     return list(page.evaluate(_PRESSED_BY_JS))
 

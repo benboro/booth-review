@@ -1,13 +1,18 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
-<meta name="description" content="An interactive scatter of college football games and their public viewer counts by network, announcer, and matchup quality.">
+<meta name="description" content="The Broadcast Ledger: An interactive scatter of college football games and their public viewer counts by network, announcer, and matchup quality.">
 <meta name="site-data-version" content="__SITE_DATA_VERSION__">
 <!-- booth-review:sports-meta -->
-<title>booth-review · college football broadcast crews and viewership</title>
+<title>The Broadcast Ledger · college football broadcast crews and viewership</title>
+<link rel="preload" as="script" href="toolbar-fit.js">
+<link rel="preload" as="font" type="font/woff2" href="fonts/roboto-latin-400-normal.woff2" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="fonts/roboto-latin-600-normal.woff2" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="fonts/crimson-text-latin-600-normal.woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
 </head>
 <body class="app">
@@ -15,13 +20,15 @@
   <p>The chart needs JavaScript. The methodology and coverage pages work without it: <a href="methodology.html">Methodology</a>, <a href="coverage.html">Coverage</a>.</p>
 </noscript>
 
-<header id="topbar">
-  <a href="index.html" class="site-title">booth-review</a><!-- booth-review:sport-switch -->
+<header id="topbar" class="site-header">
+  <a href="index.html" class="site-title">The Broadcast Ledger</a><!-- booth-review:sport-switch -->
+  <nav class="header-links" aria-label="Pages"><a href="methodology.html">Methodology</a><a href="coverage.html">Coverage</a></nav>
+  <span id="theme-slot"></span>
 </header>
 
 <nav id="toolbar" aria-label="Filters">
-  <button type="button" id="clear-filters">Clear all filters</button>
   <button type="button" id="filters-button" class="mobile-only" popovertarget="filters-sheet" aria-haspopup="dialog" aria-expanded="false">Filters</button>
+  <ul id="filter-chips" class="filter-chips mobile-only" aria-label="Changed filters" hidden></ul>
   <button type="button" class="filter-trigger desktop-only" id="trigger-announcers" popovertarget="pop-announcers" aria-haspopup="dialog" aria-expanded="false">Announcers</button>
   <button type="button" class="filter-trigger desktop-only" id="trigger-seasons" popovertarget="pop-seasons" aria-haspopup="dialog" aria-expanded="false">Seasons</button>
   <button type="button" class="filter-trigger desktop-only" id="trigger-networks" popovertarget="pop-networks" aria-haspopup="dialog" aria-expanded="false">Networks</button>
@@ -36,7 +43,7 @@
 <script src="toolbar-fit.js"></script>
 
 <section id="selection-bar" aria-label="Selected announcers and match summary">
-  <div id="selection-row" class="selection-row" hidden>
+  <div id="selection-row" class="selection-row">
     <ul id="chips" aria-label="Selected people"></ul>
 
     <div class="toggle-group">
@@ -46,13 +53,14 @@
       <span id="together-help" class="visually-hidden">Show only games where everyone selected shared the booth.</span>
       <button type="button" id="clear-selection" aria-label="Clear selection" title="Clear selection"><span class="lbl-long">Clear selection</span><span class="lbl-short">Clear</span></button>
     </div>
-  </div>
 
-  <p id="compare-note" hidden>Compare mode holds up to 4 people.</p>
+    <button type="button" id="clear-filters" class="clear-all">Clear all filters</button>
+  </div>
 
   <div id="summary" aria-live="polite">
     <span id="summary-count" class="summary-count"></span>
     <span id="summary-detail"></span>
+    <span id="compare-note" hidden>Compare mode holds up to 4 people.</span>
   </div>
 </section>
 
@@ -204,7 +212,7 @@
   </div>
   <div class="sheet-body"></div>
   <div class="sheet-footer">
-    <button type="button" id="filters-show-results">Show results</button>
+    <button type="button" id="filters-show-results">Show games</button>
   </div>
 </div>
 
@@ -216,26 +224,12 @@
     <button type="button" role="tab" class="chart-tab" id="tab-map" data-view="map" aria-controls="chart-panel" aria-selected="false" tabindex="-1">Map</button>
     <button type="button" role="tab" class="chart-tab" id="tab-crews" data-view="crews" aria-controls="chart-panel" aria-selected="false" tabindex="-1">Crews</button>
   </div>
-  <p id="tab-hint" class="tab-hint" role="status"></p>
 
-  <div id="legend-row" class="legend-row">
-    <ul id="legend-chips" class="legend-chips" aria-label="Network families: select to show or hide"></ul>
-    <div id="dots-toggle" class="dots-toggle">
-      <span class="dots-caption" aria-hidden="true">Filtered-out dots</span>
-      <div class="segmented" role="group" aria-label="Filtered-out dots" title="Filters fade the games they exclude unless Hide is on." aria-description="Filters fade the games they exclude unless Hide is on.">
-        <button type="button" data-dots="fade" aria-pressed="true">Fade</button>
-        <button type="button" data-dots="hide" aria-pressed="false">Hide</button>
-      </div>
-    </div>
-    <div id="colors-toggle" class="dots-toggle colors-toggle is-concealed">
-      <span class="dots-caption" aria-hidden="true">Network colors</span>
-      <div class="segmented" role="group" aria-label="Network colors on the map" title="Paints each area in the color of the network with the most games nearby. Fainter color means fewer games or a split between networks." aria-description="Paints each area in the color of the network with the most games nearby. Fainter color means fewer games or a split between networks.">
-        <button type="button" data-colors="on" aria-pressed="true">On</button>
-        <button type="button" data-colors="off" aria-pressed="false">Off</button>
-      </div>
-    </div>
-  </div>
-
+  <section id="chart-module" class="module">
+  <div class="module-head">
+    <h2 id="chart-title" class="module-title"></h2>
+    <p id="chart-subtitle" class="module-subtitle" role="status"></p>
+    <div id="chart-tools" class="module-tools">
   <div id="chart-controls" class="chart-controls">
     <div id="scatter-controls" class="scatter-controls">
       <div class="axis-group">
@@ -273,6 +267,27 @@
       </div>
     </div>
   </div>
+      <button type="button" id="reset-zoom" class="reset-zoom" aria-disabled="true">Reset zoom</button>
+    </div>
+  </div>
+
+  <div id="legend-row" class="legend-row">
+    <ul id="legend-chips" class="legend-chips" aria-label="Network families: select to show or hide"></ul>
+    <div id="dots-toggle" class="dots-toggle">
+      <span class="dots-caption" aria-hidden="true">Filtered-out dots</span>
+      <div class="segmented" role="group" aria-label="Filtered-out dots" title="Filters fade the games they exclude unless Hide is on." aria-description="Filters fade the games they exclude unless Hide is on.">
+        <button type="button" data-dots="fade" aria-pressed="true">Fade</button>
+        <button type="button" data-dots="hide" aria-pressed="false">Hide</button>
+      </div>
+    </div>
+    <div id="colors-toggle" class="dots-toggle colors-toggle is-concealed">
+      <span class="dots-caption" aria-hidden="true">Network colors</span>
+      <div class="segmented" role="group" aria-label="Network colors on the map" title="Paints each area in the color of the network with the most games nearby. Fainter color means fewer games or a split between networks." aria-description="Paints each area in the color of the network with the most games nearby. Fainter color means fewer games or a split between networks.">
+        <button type="button" data-colors="on" aria-pressed="true">On</button>
+        <button type="button" data-colors="off" aria-pressed="false">Off</button>
+      </div>
+    </div>
+  </div>
 
   <div id="chart-panel" role="tabpanel" aria-labelledby="tab-scatter">
     <div id="chart" tabindex="-1"><div id="season-empty-note" class="season-empty-note" role="status" hidden><p class="season-empty-title"></p><p class="season-empty-hint">Widen the season range or reset Seasons.</p></div><button type="button" id="band-info" class="band-info" aria-label="Why do some games have no public rating?" aria-expanded="false" aria-controls="band-note" hidden><span class="band-info-text">No public rating</span><span class="band-info-glyph" aria-hidden="true">i</span></button><div id="band-note" class="band-note" hidden><div id="band-note-viewers"><p class="band-note-title">No public rating</p><p>We found no published viewer count for these games. The reason is shown for each game. The most common ones:</p><ul><li>The network is rarely rated, such as ESPN+, CBS Sports Network, or SEC Network.</li><li>The figure is not posted yet. This is for the newest games of the current season.</li><li>No figure found in our sources for some 2021–24 games.</li><li>No figure was published.</li></ul><p><a href="methodology.html#games-with-no-public-rating">How we count games</a></p></div><div id="band-note-excitement" hidden><p class="band-note-title">No excitement value</p><p>CFBD publishes no excitement index for these games, so they have no height on this chart. They are drawn here instead of being left out. Their viewer figures are unchanged.</p><p><a href="methodology.html#the-y-axis-viewers-excitement-points-or-margin">How the Y axis works</a></p></div><div id="band-note-score" hidden><p class="band-note-title">No final score</p><p>These games have no final score yet, so they have no height on this chart. They are drawn here instead of being left out. Their viewer figures are unchanged.</p><p><a href="methodology.html#the-y-axis-viewers-excitement-points-or-margin">How the Y axis works</a></p></div></div></div>
@@ -302,15 +317,16 @@
   <p id="excitement-caption" class="caption" hidden>2025+ excitement uses CFBD's new win-probability model; see <a href="methodology.html#the-2025-excitement-break">methodology</a>.</p>
 
   <p id="era-note" class="caption">Nielsen changed how it measures viewing in 2020, 2025, and 2026, so compare seasons with care; see <a href="methodology.html#measurement-eras">methodology</a>.</p>
+  </section>
 
   <div id="load-error" class="error-banner" role="alert" hidden>
-    <p>Couldn't load the site data.</p>
-    <p>Check your connection and reload the page. If this keeps happening, the data file may have moved — try the site's homepage.</p>
+    <p>The data did not load. Reload the page; if it still fails, try again later.</p>
   </div>
 </main>
 
 <section id="matched-games">
-  <div class="matched-heading-row"><h2 id="matched-games-title" tabindex="-1">Matched games</h2><ul id="venue-chips" class="chips venue-chips" aria-label="Venue filter"></ul></div>
+  <div id="matched-module" class="module">
+  <div class="matched-heading-row module-head"><h2 id="matched-games-title" tabindex="-1">Matched games</h2><ul id="venue-chips" class="chips venue-chips" aria-label="Venue filter"></ul></div>
   <p id="venue-status" class="visually-hidden" role="status" aria-live="polite"></p>
 
   <div id="table-empty" class="empty-state">
@@ -328,12 +344,13 @@
         <th scope="col">Matchup</th>
         <th scope="col">Network</th>
         <th scope="col">Crew</th>
-        <th scope="col"><button type="button" data-sort="viewers" aria-sort="none">Viewers <span class="sort-glyph"></span></button></th>
+        <th scope="col" class="num"><button type="button" data-sort="viewers" aria-sort="none">Viewers <span class="sort-glyph"></span></button></th>
         <th scope="col">Source</th>
       </tr>
     </thead>
     <tbody></tbody>
   </table>
+  </div>
 </section>
 
 <dialog id="detail-panel" aria-labelledby="panel-title">
@@ -346,7 +363,7 @@
 
 <footer id="site-footer" class="site-footer"><!-- booth-review:footer --></footer>
 
-<script src="vendor/plotly-4.1.1.min.js" integrity="sha256-O24V1F27f8pb0glCkelh3cVHLNiHAJ5gCaVtq2aNch8=" crossorigin="anonymous"></script>
+<script src="vendor/plotly-partial-4.1.1.min.js" integrity="sha256-vfgIx6Ma01EPTwMGyycg+Zm4OG3i6XzWQAcg90Ab0E0=" crossorigin="anonymous"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>

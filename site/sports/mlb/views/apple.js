@@ -11,6 +11,7 @@
  */
 import { boothLabelOf, personName } from '../data.js';
 import { makeRolePill, nameWithRoles } from '../../../modules/pill.js';
+import { attachScrollCue } from '../../../modules/scroll-cue.js';
 
 const DASH = '—';
 const MINUS = '−';
@@ -231,12 +232,12 @@ export function mount(container, ctx) {
   refs.coverage = el('p', 'caption nfl-coverage');
   refs.coverage.setAttribute('role', 'status');
 
-  const wrap = el('div', 'nfl-booth-table-wrap');
+  const wrap = el('div', 'nfl-booth-table-wrap table-scroll');
   const table = el('table', 'games-table nfl-booth-table mlb-apple-table');
   table.appendChild(el('caption', 'visually-hidden', 'Apple booths, 2026'));
   const head = el('tr');
   for (const h of ['Booth', 'Games', 'Crew listed', 'Stakes', 'Excitement', '2025 win % of both clubs']) {
-    const th = el('th', h === 'Booth' ? 'booth-col' : null, h);
+    const th = el('th', h === 'Booth' ? 'booth-col' : 'num', h);
     th.scope = 'col';
     head.appendChild(th);
   }
@@ -245,6 +246,7 @@ export function mount(container, ctx) {
   refs.tableBody = el('tbody');
   table.append(thead, refs.tableBody);
   wrap.appendChild(table);
+  attachScrollCue(wrap, null);
 
   refs.lead = el('div', 'mlb-lead-lines');
   refs.lead.setAttribute('role', 'status');

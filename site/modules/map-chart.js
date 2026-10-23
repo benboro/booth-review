@@ -10,6 +10,7 @@
 
 import { escapeHover } from './format.js';
 import { MAP_HEIGHT, MAP_WIDTH } from './map-model.js';
+import { frameLayout, frameConfig, haloText } from './chart-frame.js';
 import {
   ACCENT,
   DOT_OUTLINE,
@@ -26,7 +27,7 @@ import {
   PAGE_BG,
 } from './palette.js';
 
-const MARKER_FONT = { desktop: 12, mobile: 10 };
+const MARKER_FONT = { desktop: 12, mobile: 12 };
 const MOBILE_HOVER_DISTANCE = 22;
 
 /** The 13 trace names in draw order (Phase 11). */
@@ -195,6 +196,7 @@ function markersTrace(markers, theme, mobile) {
     textfont: {
       size: mobile ? MARKER_FONT.mobile : MARKER_FONT.desktop,
       color: MAP_MARKER_LABEL[theme],
+      ...haloText(theme),
     },
     marker: {
       symbol: 'circle-open',
@@ -242,13 +244,6 @@ export function splatImageSpec(url) {
 }
 
 /**
- * Desktop top margin in px that holds the Plotly modebar above the plot, so the modebar never
- * covers the top-right edge markers (Dublin, London) and swallows their hover and click.
- * Phones show no modebar, so they keep no margin.
- */
-export const MODEBAR_BAND = 26;
-
-/**
  * Builds the whole Map figure.
  * @param {object} model - buildMapModel output (venueDots, venueFaded, legs, markers used).
  * @param {ReadonlyArray<{id: string, rings: number[][]}>} geometry - US_STATES.
@@ -265,38 +260,32 @@ export function buildMapFigure(model, geometry, env) {
     venueSelectedTrace(model, theme, mobile),
     markersTrace(model.markers, theme, mobile),
   ];
-  const layout = {
+  const layout = frameLayout({
     xaxis: {
       visible: false,
+      showgrid: false,
       range: [0, MAP_WIDTH],
       constrain: 'domain',
       fixedrange: mobile,
     },
     yaxis: {
       visible: false,
+      showgrid: false,
       range: [MAP_HEIGHT, 0],
       scaleanchor: 'x',
       scaleratio: 1,
       constrain: 'domain',
       fixedrange: mobile,
     },
-    margin: { l: 0, r: 0, t: mobile ? 0 : MODEBAR_BAND, b: 0 },
-    paper_bgcolor: PAGE_BG[theme],
-    plot_bgcolor: PAGE_BG[theme],
-    showlegend: false,
+    // No modebar any more (Reset zoom is a page-level button), so no band is held above the plot.
+    margin: { l: 0, r: 0, t: 0, b: 0 },
     hovermode: 'closest',
     dragmode: mobile ? false : 'zoom',
     uirevision: 'map',
     images: env.images ?? [],
-  };
+  }, env);
   if (mobile) layout.hoverdistance = MOBILE_HOVER_DISTANCE;
-  const config = {
-    responsive: true,
-    scrollZoom: false,
-    displayModeBar: !mobile,
-    displaylogo: false,
-    modeBarButtonsToRemove: ['lasso2d', 'select2d'],
-  };
+  const config = frameConfig({ zoomable: true });
   return { traces, layout, config };
 }
 

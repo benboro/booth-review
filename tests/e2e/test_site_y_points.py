@@ -167,7 +167,7 @@ def test_band_holds_exactly_the_games_without_a_score(
     nr = len(raw["telecasts"]["season"])
     surface = page.evaluate(
         "async () => { const p = await import('./modules/palette.js');"
-        " const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;"
+        " const dark = (document.documentElement.dataset.theme === 'dark');"
         " return p.SURFACE[dark ? 'dark' : 'light']; }"
     )
     jitter = page.evaluate("Array.from(window.__testHooks.data.bandJitter)")

@@ -771,8 +771,8 @@ def test_reset_axes_button_after_switching_to_date_restores_full_range(
     _settle(guarded_page)
     guarded_page.evaluate(_RELAYOUT_JS, {"xaxis.range": [20, 60]})
     _settle(guarded_page)
-    guarded_page.locator("#chart").hover()
-    guarded_page.locator('#chart .modebar-btn[data-attr="zoom"][data-val="reset"]').click()
+    expect(guarded_page.locator("#reset-zoom")).to_have_attribute("aria-disabled", "false")
+    guarded_page.locator("#reset-zoom").click()
     _settle(guarded_page)
     assert guarded_page.evaluate(_XRANGE_JS) == pytest.approx(
         _home(guarded_page, [0, 330]), abs=1e-6
@@ -1010,7 +1010,7 @@ def _thirteen_season_raw(raw: dict) -> dict:  # type: ignore[type-arg]
 
 
 @pytest.mark.parametrize("chart_font", ["default", "dejavu"])
-@pytest.mark.parametrize("width", [641, 700, 800, 900, 1024])
+@pytest.mark.parametrize("width", [481, 700, 800, 900, 1024])
 def test_desktop_13_season_labels_never_overlap_in_dom(
     guarded_page: Page,
     open_app: Callable[[Page, str], None],
@@ -1034,3 +1034,20 @@ def test_desktop_13_season_labels_never_overlap_in_dom(
     assert out["zeroWidth"] == 0
     assert out["outside"] == 0
     assert out["minGap"] >= 2, out
+
+
+def test_date_axis_ticks_use_the_frame_font_and_no_modebar(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """SHELL-06: on the Date axis the ticks are Roboto Condensed 12px and no modebar draws."""
+    open_app(guarded_page, "?axis=date")
+    _settle(guarded_page)
+    assert guarded_page.locator("#chart .modebar").count() == 0
+    ticks = guarded_page.evaluate(
+        "() => [...document.querySelectorAll('#chart .ytick text')]"
+        ".map(t => { const s = getComputedStyle(t); return [s.fontFamily, s.fontSize]; })"
+    )
+    assert ticks, "the date-axis scatter drew no y tick labels"
+    for family, size in ticks:
+        assert "Roboto Condensed" in family
+        assert size == "12px"

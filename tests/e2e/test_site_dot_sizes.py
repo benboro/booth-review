@@ -164,7 +164,7 @@ def test_highlight_keeps_accent_border(
         "() => document.getElementById('chart').data"
         ".find(t => t.meta === 'highlight').marker.line.color"
     )
-    assert accent in ("#111827", "#E5E7EB")
+    assert accent == "#23201B"
 
 
 # SITE-50 (04.12 D-05..D-07): on the Date axis a seasons-only filter must not enlarge

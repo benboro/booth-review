@@ -15,6 +15,7 @@ from playwright.sync_api import Page
 pytestmark = pytest.mark.e2e
 
 VIEW = "#nfl-view-crews"
+TOOLS = "#nfl-chart-tools [data-tools-for='crews']"  # view tools sit in the module header (13-13)
 GD = f"{VIEW} .nfl-chart > div"
 HEADS = ["Booth", "Games", "Avg viewers*", "Avg margin", "Excitement"]
 
@@ -350,7 +351,7 @@ def test_measure_switch_and_axis_titles(
     page.get_by_role("button", name="Avg viewers").click()
     page.wait_for_function("window.__nflTestHooks.getViewModel('crews').chart.metric === 'viewers'")
     assert title() == "Avg viewers"
-    assert "is-concealed" in page.locator(f"{VIEW} [aria-label='Raw or adjusted']").get_attribute(
+    assert "is-concealed" in page.locator(f"{TOOLS} [aria-label='Raw or adjusted']").get_attribute(
         "class"
     )
 
@@ -510,3 +511,51 @@ def test_phone_booth_table_shows_games_and_unclipped_low_n(
     names = page.locator(f"{VIEW} .nfl-booth-table .booth-names").first.bounding_box()
     assert names is not None
     assert page.locator(f"{VIEW} .nfl-booth-table .booth-names .name-with-roles").count() >= 2
+
+
+_CELL_JS = """(sel) => { const el = document.querySelector(sel); const cs = getComputedStyle(el);
+  return { position: cs.position, bg: cs.backgroundColor }; }"""
+
+
+def test_desktop_booth_column_has_no_pin_or_fill(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    """UI-SPEC phone contract: the sticky identity column and its fill exist at <=480px only."""
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    _vm(page)
+    for sel in (f"{VIEW} tbody th.booth-col", f"{VIEW} thead th.booth-col"):
+        got = page.evaluate(_CELL_JS, sel)
+        assert got["position"] != "sticky", sel
+        assert got["bg"] == "rgba(0, 0, 0, 0)", sel
+
+
+def test_phone_booth_column_is_pinned_with_a_fill(
+    nfl_mobile_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_mobile_page
+    _open(page, open_nfl_app)
+    _vm(page)
+    got = page.evaluate(_CELL_JS, f"{VIEW} tbody th.booth-col")
+    assert got["position"] == "sticky"
+    assert got["bg"] != "rgba(0, 0, 0, 0)"
+
+
+def test_low_n_is_a_styled_tag(nfl_guarded_page: Page, open_nfl_app: Callable[..., None]) -> None:
+    """low n is a dashed pill like the role tags, not bare trailing text."""
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    _vm(page)
+    got = page.evaluate(
+        """() => {
+          const cs = getComputedStyle(document.querySelector('.nfl-booth-table .low-n-tag'));
+          const rp = getComputedStyle(document.querySelector('.nfl-booth-table .role-pill'));
+          return {
+            style: cs.borderTopStyle, width: cs.borderTopWidth, radius: cs.borderTopLeftRadius,
+            height: cs.height, pillHeight: rp.height, pillRadius: rp.borderTopLeftRadius };
+        }"""
+    )
+    assert got["style"] == "dashed"
+    assert got["width"] == "1px"
+    assert got["radius"] == got["pillRadius"]
+    assert got["height"] == got["pillHeight"]

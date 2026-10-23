@@ -66,7 +66,10 @@ def test_game_row_nulls_crew_and_era(run: Callable[[str], Any], nfl_fixture_raw:
     assert got["b"]["cause"] == g["cause"][no_view]
     assert got["c"]["era"] is not None and got["c"]["cause"] is None
     people = nfl_fixture_raw["lookups"]["people"]
-    expect = [{"name": people[c["person"]]["name"], "role": c["role"]} for c in g["crew"][0]]
+    expect = [
+        {"name": people[c["person"]]["name"], "role": c["role"], "person": c["person"]}
+        for c in g["crew"][0]
+    ]
     assert run("return D.gameRow(m, 0).crew") == expect
     for k in range(len(g["season"])):
         for key, col in (("homePoints", "home_points"), ("excitement", "excitement")):
@@ -222,63 +225,59 @@ def _luminance_js() -> str:
     """
 
 
-@pytest.mark.parametrize("scheme", ["light", "dark"])
 def test_segment_colors_reach_3_to_1(
-    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None], scheme: str
+    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None]
 ) -> None:
-    nfl_guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
     open_flagon_cfb(nfl_guarded_page)
     got = nfl_guarded_page.evaluate(
         "async () => {"
         + PRELUDE
         + _luminance_js()
-        + f"""
+        + """
         const cs = getComputedStyle(document.documentElement);
         const bg = cs.getPropertyValue('--bg').trim().toUpperCase();
         const surface = cs.getPropertyValue('--surface').trim().toUpperCase();
         const out = [];
         const entries = [...Object.entries(P.NFL_CATEGORY_COLORS), ['other', P.NFL_OTHER_COLOR]];
-        for (const [k, e] of entries) {{
-          const hex = e['{scheme}'];
+        for (const [k, e] of entries) {
+          const hex = e.light;
           out.push([k, ratio(hex, bg), ratio(hex, surface)]);
-        }}
-        return {{ bg, surface, out }};
-        }}"""
+        }
+        return { bg, surface, out };
+        }"""
     )
     assert got["bg"].startswith("#") and got["surface"].startswith("#")
     assert len(got["out"]) == 9
     for key, on_bg, on_surface in got["out"]:
-        assert on_bg >= 3.0, (scheme, key, on_bg)
-        assert on_surface >= 3.0, (scheme, key, on_surface)
+        assert on_bg >= 3.0, ("light", key, on_bg)
+        assert on_surface >= 3.0, ("light", key, on_surface)
 
 
-@pytest.mark.parametrize("scheme", ["light", "dark"])
 def test_view_category_colors_reach_3_to_1(
-    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None], scheme: str
+    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None]
 ) -> None:
     """Every Viewership line color, including the per-line shades of shared hues."""
-    nfl_guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
     open_flagon_cfb(nfl_guarded_page)
     got = nfl_guarded_page.evaluate(
         "async () => {"
         + PRELUDE
         + _luminance_js()
-        + f"""
+        + """
         const cs = getComputedStyle(document.documentElement);
         const bg = cs.getPropertyValue('--bg').trim().toUpperCase();
         const surface = cs.getPropertyValue('--surface').trim().toUpperCase();
         const out = [];
-        for (const id of Object.keys(P.VIEW_CATEGORY_STYLE)) {{
-          const hex = P.viewCategoryStyle(id, '{scheme}').color;
+        for (const id of Object.keys(P.VIEW_CATEGORY_STYLE)) {
+          const hex = P.viewCategoryStyle(id, 'light').color;
           out.push([id, ratio(hex, bg), ratio(hex, surface)]);
-        }}
-        return {{ out }};
-        }}"""
+        }
+        return { out };
+        }"""
     )
     assert len(got["out"]) == 12
     for key, on_bg, on_surface in got["out"]:
-        assert on_bg >= 3.0, (scheme, key, on_bg)
-        assert on_surface >= 3.0, (scheme, key, on_surface)
+        assert on_bg >= 3.0, ("light", key, on_bg)
+        assert on_surface >= 3.0, ("light", key, on_surface)
 
 
 def test_flag_labels_and_source_text(run: Callable[[str], Any]) -> None:

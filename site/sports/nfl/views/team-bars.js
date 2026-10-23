@@ -14,7 +14,15 @@ import { createOnlyDetector } from '../../../modules/legend.js';
 import { initBandInfo } from '../../../modules/band-info.js';
 import { MARGIN, TICK_FONT_PX } from '../../../modules/chart.js';
 import { categoryColor } from '../palette.js';
-import { ACCENT, MUTED, PAGE_BG, DIVIDER } from '../../../modules/palette.js';
+import { ACCENT, INK, MUTED, PAGE_BG, DIVIDER, SPECIAL, mixHex } from '../../../modules/palette.js';
+import { FRAME_FONT, frameConfig, frameLayout } from '../../../modules/chart-frame.js';
+import {
+  endMarkerAnnotations,
+  endMarkerShapes,
+  markerWidth,
+  textWidth,
+  valueColumn,
+} from '../../../modules/bar-chart.js';
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import { escapeHover } from '../../../modules/format.js';
 import { DATA_TABLE_CLASS, rebuildKeepingFocus } from '../data-table.js';
@@ -26,15 +34,11 @@ const SLOT_ORDER = [
   'TNF', 'SNF', 'MNF', 'Thanksgiving', 'Christmas', 'Black Friday', 'Saturday',
   'International', 'Friday', 'Sunday early', 'Sunday late', 'Other',
 ];
-const CONFIG = {
-  responsive: true,
-  displayModeBar: false,
-  displaylogo: false,
-  scrollZoom: false,
-  showLink: false,
-  showSendToCloud: false,
-  showEditInChartStudio: false,
-};
+const CONFIG = frameConfig();
+const HERO_INK_WEIGHT = 0.8;
+const VALUE_COL_PX = 12;
+// Gap Plotly leaves between a y tick label and the plot when automargin sizes the left edge.
+const LABEL_PAD_PX = 4;
 
 /** Round tick step (1, 2, 5, 10, 20, 25, 50, ...) giving 4-8 ticks over max. */
 export function niceStep(max) {
@@ -339,7 +343,7 @@ function renderBreakdown(model, state, env, rows) {
   const table = el('table', 'games-table');
   const head = el('tr');
   for (const h of ['Season', 'Special games', ...SEGMENTS.map((x) => x.label), 'Flexed']) {
-    const th = cell('th', h);
+    const th = cell('th', h, h === 'Season' ? null : 'num');
     th.scope = 'col';
     head.appendChild(th);
   }
@@ -355,8 +359,8 @@ function renderBreakdown(model, state, env, rows) {
       season,
       cell('td', String(r.total), 'num'),
       ...SEGMENTS.map((seg) => {
-        if (seg.key === 'agotw') return cell('td', agotwCell(r.agotwRate.count, r.agotwRate.denom));
-        if (seg.key === 'cbs_national') return cell('td', agotwCell(r.cbsRate.count, r.cbsRate.denom));
+        if (seg.key === 'agotw') return cell('td', agotwCell(r.agotwRate.count, r.agotwRate.denom), 'num');
+        if (seg.key === 'cbs_national') return cell('td', agotwCell(r.cbsRate.count, r.cbsRate.denom), 'num');
         return cell('td', String(r.counts[seg.key]), 'num');
       }),
       cell('td', String(r.flexed), 'num'),
@@ -444,12 +448,20 @@ function buildFigure(rows, state, env, th) {
   const pitch = env.mobile ? 44 : 32;
   const thickness = env.mobile ? 28 : 20;
   const fontPx = env.mobile ? TICK_FONT_PX.mobile : TICK_FONT_PX.desktop;
-  const font = { family: getComputedStyle(document.body).fontFamily, size: fontPx, color: ACCENT[th] };
+  // End markers: the visible total per row, in the hero colour (--ink at 80%, accent on the picked team).
+  const totals = rows.map((r) =>
+    SEGMENTS.reduce((a, seg) => a + (hidden.has(seg.key) ? 0 : r.bar.counts[seg.key]), 0));
+  const heroInk = mixHex(INK[th], bg, HERO_INK_WEIGHT);
+  const fills = rows.map((r) => (r.id === selected ? SPECIAL[th] : heroInk));
+  const markerRows = totals.map((total) => ({ total }));
+  const columnPx = Math.ceil(textWidth(String(Math.max(max, 1)), { size: 14 })) + VALUE_COL_PX;
+  const markerHalf = Math.ceil(markerWidth(String(Math.max(max, 1))) / 2) + 2;
+  // The y axis automargins to the team names, so the plot is narrower than the 8px left
+  // margin says by the widest label (plus Plotly's tick pad); size the marker headroom to that.
+  const labelPx = Math.ceil(Math.max(0, ...rows.map((r) => textWidth(r.label, { size: fontPx, family: FRAME_FONT }))));
+  const plotPx = Math.max(1, (refs.chart.clientWidth || env.width || 600) - 8 - labelPx - LABEL_PAD_PX - columnPx - 16);
+  const top = Math.max(1, max) * Math.max(1.05, plotPx / Math.max(1, plotPx - markerHalf));
   const layout = {
-    paper_bgcolor: bg,
-    plot_bgcolor: bg,
-    font,
-    showlegend: false,
     barmode: 'stack',
     bargap: 1 - thickness / pitch,
     hovermode: 'closest',
@@ -458,18 +470,17 @@ function buildFigure(rows, state, env, th) {
     height: rows.length * pitch + 70,
     // NFL-only: horizontal bars need no top margin and a tiny left one, because
     // automargin sizes the left edge to the team names.
-    margin: { l: 8, r: MARGIN.r, t: 8, b: MARGIN.b },
+    margin: { l: 8, r: 16 + columnPx, t: 8, b: MARGIN.b },
     xaxis: {
       title: { text: 'Special games', standoff: 4 },
-      range: [0, Math.max(1, max) * 1.05],
+      range: [0, top],
       tickmode: 'linear',
       tick0: 0,
       dtick: niceStep(max),
       tickformat: ',d',
       gridcolor: DIVIDER[th],
       tickfont: { color: MUTED[th], size: fontPx },
-      zeroline: true,
-      zerolinecolor: MUTED[th],
+      zeroline: false,
       fixedrange: true,
     },
     yaxis: {
@@ -479,7 +490,7 @@ function buildFigure(rows, state, env, th) {
       tickmode: 'array',
       tickvals: ids,
       ticktext: rows.map((r) => escapeHover(r.label)),
-      tickfont: { size: fontPx },
+      tickfont: { size: fontPx, color: INK[th] },
       autorange: 'reversed',
       automargin: true,
       showgrid: false,
@@ -487,7 +498,11 @@ function buildFigure(rows, state, env, th) {
       fixedrange: true,
     },
   };
-  return { traces, layout };
+  layout.shapes = endMarkerShapes(markerRows, (r) => r.total, fills, th, 'x');
+  layout.annotations = endMarkerAnnotations(markerRows, (r) => r.total, fills, th, 'x').concat(
+    valueColumn(markerRows, (r) => r.total, layout.margin.r, th),
+  );
+  return { traces, layout: frameLayout(layout, { theme: th }) };
 }
 
 export function mount(container, ctx) {

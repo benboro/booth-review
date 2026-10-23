@@ -144,8 +144,12 @@ def test_long_matchup_label_truncates_without_overlap(
         assert _box(guarded_page, "#trigger-school")["width"] == pytest.approx(
             _box(guarded_page, "#trigger-role")["width"], abs=1
         )
-        assert trigger.evaluate("e => e.scrollWidth > e.clientWidth")
-        assert trigger.evaluate("e => getComputedStyle(e).textOverflow") == "ellipsis"
+        # The ellipsis lives on the inner `.filter-text` span (C3); the full label
+        # stays in the title and aria-label.
+        text = trigger.locator(".filter-text")
+        assert text.evaluate("e => e.scrollWidth > e.clientWidth")
+        assert text.evaluate("e => getComputedStyle(e).textOverflow") == "ellipsis"
+        assert (trigger.get_attribute("title") or "").endswith("Mississippi State Bulldogs Extra")
         toolbar = _box(guarded_page, "#toolbar")
         table = _box(guarded_page, "#games-table:visible, #table-empty:visible")
         assert toolbar["y"] + toolbar["height"] <= table["y"] + 1

@@ -416,6 +416,33 @@ def test_click_selects_team_and_fills_games_and_breakdown(
     assert app.evaluate("window.__nflTestHooks.getTableIndexes()") == []
 
 
+def test_end_markers_are_ink_until_a_team_is_picked_then_accent(app: Page) -> None:
+    """UI-SPEC ranked bars: end markers (--ink at 80%) with a value column; the picked
+    team's marker takes the accent."""
+    layout = f"document.querySelector('{GD}').layout"
+    fills = app.evaluate(f"{layout}.shapes.map(s => s.fillcolor)")
+    assert fills
+    hero = app.evaluate(
+        """async () => { const P = await import('./modules/palette.js');
+          return {ink: P.mixHex(P.INK.light, P.PAGE_BG.light, 0.8), accent: P.SPECIAL.light,
+                  bg: P.PAGE_BG.light}; }"""
+    )
+    assert set(fills) == {hero["ink"]}
+    ring = app.evaluate(f"{layout}.shapes.map(s => [s.line.color, s.line.width])")
+    assert all(r == [hero["bg"], 2] for r in ring)
+    annos = app.evaluate(f"{layout}.annotations")
+    totals = [a for a in annos if a.get("name") == "total"]
+    values = [a for a in annos if a.get("name") == "value"]
+    assert len(totals) == len(fills) == len(values)
+    assert all(a["font"]["weight"] == 600 for a in totals)
+    assert all((v["xref"], v["xanchor"]) == ("paper", "right") for v in values)
+    _emit(app, "plotly_click", 0)
+    app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
+    picked = app.evaluate(f"{layout}.shapes.map(s => s.fillcolor)")
+    assert picked[0] == hero["accent"] == "#1B4F5C"
+    assert set(picked[1:]) == {hero["ink"]}
+
+
 def test_breakdown_rows_match_fixture(app: Page, nfl_fixture_raw: dict[str, Any]) -> None:
     sp = _special_rows(nfl_fixture_raw, 2024, 2026)
     # F-owls (index 3): Thursday night one week, AGOTW another, in 2026 (special 2).
@@ -517,7 +544,7 @@ def test_tab_change_drops_the_team_selection(app: Page) -> None:
     assert app.evaluate("window.__nflTestHooks.getTableIndexes()") == []
     assert app.locator("#nfl-clear-selection").is_hidden()
     _set(app, {"view": "special"})
-    assert app.inner_text("#nfl-tab-hint") == "Pick a team bar to see its seasons and games."
+    assert app.inner_text("#nfl-chart-subtitle") == "Pick a team bar to see its seasons and games."
     # A patch that changes the view and sets a selection keeps that selection.
     sel = {"kind": "test", "key": "t", "label": "Test", "games": [0, 1]}
     _set(app, {"view": "fox", "selection": sel})
@@ -557,3 +584,23 @@ def test_chart_container_hugs_the_plot_for_six_teams(
     )
     assert got["rows"] == 6
     assert got["gap"] <= 4
+
+
+@pytest.mark.parametrize("width", (360, 390, 1440))
+def test_end_markers_stay_inside_the_plot(mobile: Page, width: int) -> None:
+    """WR-08: the marker headroom accounts for the automargined team-name column, so the
+    longest bar's end marker is not clipped at the plot's right edge."""
+    mobile.set_viewport_size({"width": width, "height": 844})
+    mobile.wait_for_timeout(300)
+    _vm(mobile)
+    over = mobile.evaluate(
+        f"""() => {{
+          const gd = document.querySelector('{GD}');
+          const xa = gd._fullLayout.xaxis;
+          return (gd.layout.shapes || [])
+            .filter((s) => s.name === 'end-marker')
+            .map((s) => xa.l2p(s.xanchor) + s.x1 - xa._length);
+        }}"""
+    )
+    assert over, "no end markers drawn"
+    assert max(over) <= 0.5, over

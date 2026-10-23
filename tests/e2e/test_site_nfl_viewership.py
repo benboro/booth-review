@@ -15,6 +15,7 @@ from playwright.sync_api import Page
 pytestmark = pytest.mark.e2e
 
 VIEW = "#nfl-view-viewership"
+TOOLS = "#nfl-chart-tools [data-tools-for='viewership']"  # tools sit in the module header
 GD = f"{VIEW} .nfl-chart > div"
 CHIPS = f"{VIEW} .legend-chips button[data-category]"
 
@@ -151,7 +152,11 @@ def test_window_level_lines_dashed_and_labeled(
     assert "window-level" not in (
         page.locator(f"{CHIPS}[data-category=snf]").get_attribute("title") or ""
     )
-    assert "Dashed lines are window-level" in page.locator(f"{VIEW} .nfl-captions").inner_text()
+    # RT-25: the full sentence, not only its prefix.
+    assert (
+        "Dashed lines are window-level: one figure covers every game in that Sunday window."
+        in page.locator(f"{VIEW} .nfl-captions").inner_text()
+    )
 
 
 def test_era_note_links_methodology(
@@ -171,7 +176,7 @@ def test_residual_mode_whiskers_caption_and_gap(
     _open(page, open_nfl_app)
     _vm(page)
     assert "Residuals compare" not in page.locator(f"{VIEW} .nfl-captions").inner_text()
-    page.locator(f"{VIEW} .segmented button", has_text="Residual given game quality").click()
+    page.locator(f"{TOOLS} .segmented button", has_text="Residual given game quality").click()
     page.wait_for_function("window.__nflTestHooks.getViewModel('viewership').viewY === 'resid'")
     vm = _vm(page)
     assert (
@@ -202,7 +207,7 @@ def test_residual_whiskers_use_line_color_thin_and_dodged(
     page = nfl_guarded_page
     _open(page, open_nfl_app)
     _vm(page)
-    page.locator(f"{VIEW} .segmented button", has_text="Residual given game quality").click()
+    page.locator(f"{TOOLS} .segmented button", has_text="Residual given game quality").click()
     page.wait_for_function("window.__nflTestHooks.getViewModel('viewership').viewY === 'resid'")
     got = page.evaluate(
         """(sel) => document.querySelector(sel).data.map((t) => ({
@@ -303,12 +308,10 @@ def test_controls_are_not_stretched_full_width(
     _open(page, open_nfl_app)
     _vm(page)
     widths = page.eval_on_selector_all(
-        f"{VIEW} .nfl-viewership-controls .segmented, {VIEW} .nfl-viewership-controls .axis-group",
+        f"{TOOLS} .segmented, {TOOLS} .axis-group",
         "els => els.map(e => e.getBoundingClientRect().width)",
     )
-    container = page.eval_on_selector(
-        f"{VIEW} .nfl-viewership-controls", "e => e.getBoundingClientRect().width"
-    )
+    container = page.eval_on_selector(f"{VIEW} .nfl-chart", "e => e.getBoundingClientRect().width")
     assert widths and all(w < container * 0.6 for w in widths)
 
 
@@ -449,6 +452,6 @@ def test_no_console_errors(nfl_guarded_page: Page, open_nfl_app: Callable[..., N
     page.on("pageerror", lambda e: errors.append(str(e)))
     _open(page, open_nfl_app)
     _vm(page)
-    page.locator(f"{VIEW} .segmented button", has_text="Residual").click()
+    page.locator(f"{TOOLS} .segmented button", has_text="Residual").click()
     _vm(page)
     assert errors == []

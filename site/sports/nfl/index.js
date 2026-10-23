@@ -10,6 +10,7 @@
  * Everything is built with createElement/textContent; no innerHTML.
  */
 import { prepareNfl, gameRow } from './data.js';
+import { currentTheme, onThemeChange } from '../../modules/theme.js';
 import { canonicalNflState, tableGames, gamePasses } from './state.js';
 import { encodeNflState, decodeNflState } from './url-state.js';
 import { createGamesTable } from './table.js';
@@ -20,6 +21,9 @@ import * as teamBars from './views/team-bars.js';
 import * as crews from './views/crews.js';
 import * as viewership from './views/viewership.js';
 import * as scatter from './views/scatter.js';
+import { PHONE_QUERY } from '../../modules/breakpoints.js';
+import { waitForFonts, onLateFont } from '../../modules/chart-frame.js';
+import { showToolsFor } from './tools.js';
 
 const VIEW_MODULES = { special: teamBars, crews, viewership, scatter };
 const VIEW_IDS = Object.keys(VIEW_MODULES);
@@ -66,6 +70,7 @@ let footerOriginals = null; // { freshness: Node[], credit: Node[] }
 let footerRefs = null; // { freshness, credit }
 const mqls = [];
 let mqHandler = null;
+let stopThemeWatch = null;
 
 const hooks = {
   ready: false,
@@ -98,20 +103,33 @@ function buildRegions(footerEl) {
   clearBtn.hidden = true;
   const summary = el('p', 'nfl-summary');
   summary.id = 'nfl-summary';
-  const headline = el('h2', 'nfl-headline');
+  // The headline is the chart module's title (13-11); it keeps its id.
+  const headline = el('h2', 'nfl-headline module-title');
   headline.id = 'nfl-headline';
-  selection.append(chips, clearBtn, summary, headline);
+  // Always-rendered 32px row: chips, Clear selection, then Clear all filters at
+  // the right end (filters.js places it; C1).
+  const selectionRow = el('div', 'selection-row nfl-selection-row');
+  selectionRow.id = 'nfl-selection-row';
+  selectionRow.append(chips, clearBtn);
+  selection.append(selectionRow, summary);
 
   const chartArea = el('section', 'nfl-region');
   chartArea.id = 'nfl-chart-area';
   chartArea.setAttribute('aria-label', 'Chart');
   const tabHost = el('div', 'nfl-tabs-host');
-  const hint = el('p', 'tab-hint');
-  hint.id = 'nfl-tab-hint';
+  // Module frame (SHELL-06): title (the headline), subtitle (the tab hint, C6) and tools.
+  const chartModule = el('div', 'module nfl-chart-module');
+  const moduleHead = el('div', 'module-head');
+  const hint = el('p', 'module-subtitle');
+  hint.id = 'nfl-chart-subtitle';
   hint.setAttribute('role', 'status');
+  const tools = el('div', 'module-tools');
+  tools.id = 'nfl-chart-tools';
+  moduleHead.append(headline, hint, tools);
   const viewHost = el('div', 'nfl-views');
   const status = el('div', 'nfl-status');
-  chartArea.append(tabHost, hint, viewHost, status);
+  chartModule.append(moduleHead, viewHost, status);
+  chartArea.append(tabHost, chartModule);
 
   const matched = el('section', 'nfl-region');
   matched.id = 'nfl-matched-games';
@@ -120,7 +138,7 @@ function buildRegions(footerEl) {
   filterLayer.id = 'nfl-filter-layer';
 
   footerEl.before(toolbar, filterLayer, selection, chartArea, matched);
-  return { toolbar, filterLayer, selection, chips, clearBtn, summary, chartArea, tabHost, hint, viewHost, status, matched, headline };
+  return { toolbar, filterLayer, selection, selectionRow, chips, clearBtn, summary, chartArea, tabHost, hint, tools, viewHost, status, matched, headline };
 }
 
 function showStatus(kind) {
@@ -204,8 +222,8 @@ function restoreFooter() {
 
 function env() {
   return {
-    dark: window.matchMedia('(prefers-color-scheme: dark)').matches,
-    mobile: window.matchMedia('(max-width: 640px)').matches,
+    dark: currentTheme() === 'dark',
+    mobile: window.matchMedia(PHONE_QUERY).matches,
     hoverNone: window.matchMedia('(hover: none)').matches,
   };
 }
@@ -229,6 +247,8 @@ function renderSelectionBar() {
   const { chips, clearBtn, summary } = regions;
   const chip = (name, onRemove) => {
     const li = el('li', 'chip');
+    li.title = name;
+    li.setAttribute('aria-label', name);
     const label = el('span', 'chip-label', name);
     const rm = el('button', 'chip-remove', '×');
     rm.type = 'button';
@@ -245,7 +265,26 @@ function renderSelectionBar() {
   );
   clearBtn.hidden = !state.selection;
   const n = lastRows.length;
-  summary.textContent = n ? `${n} ${n === 1 ? 'game matches' : 'games match'}` : '';
+  // Same sources tableGames fills the table from; a source that matches nothing still reads
+  // "0 games match" rather than falling back to the at-rest line.
+  const tableActive = !!state.selection || state.booths.length > 0 || state.people.length > 0
+    || state.teams.length > 0;
+  if (tableActive) {
+    summary.textContent = `${n} ${n === 1 ? 'game matches' : 'games match'}`;
+  } else {
+    // No selection: the same "N rated of M games" line CFB shows, over the games the filters pass.
+    const total = model.cols.season.length;
+    let all = 0;
+    let rated = 0;
+    for (let i = 0; i < total; i += 1) {
+      if (!gamePasses(model, state, i)) continue;
+      all += 1;
+      if (model.cols.viewers[i] != null) rated += 1;
+    }
+    summary.textContent = all
+      ? `${rated.toLocaleString('en-US')} rated of ${all.toLocaleString('en-US')} ${all === 1 ? 'game' : 'games'}`
+      : '';
+  }
 }
 
 /** '{N} games · {first}–{last}' for the active Seasons range and filters. */
@@ -276,6 +315,7 @@ function renderTabHint() {
 
 function showActiveView({ resize }) {
   for (const id of VIEW_IDS) views[id].section.hidden = id !== state.view;
+  showToolsFor(regions.tools, state.view);
   tabs.setActive(state.view);
   if (resize) views[state.view].mod.resize();
 }
@@ -323,6 +363,10 @@ const ctx = {
   methodologyHref: (anchor) => (anchor ? `${METHODOLOGY}#${anchor}` : METHODOLOGY),
   setTabHint: (text) => {
     if (regions) regions.hint.textContent = text || '';
+  },
+  /** The chart module header's tools slot (view tools move in here in 13-13). */
+  get chartTools() {
+    return regions ? regions.tools : null;
   },
 };
 
@@ -380,7 +424,13 @@ function ensureShell(footerEl) {
     onSelect: (id) => setState({ view: id }),
   });
   regions.clearBtn.addEventListener('click', () => setState({ selection: null }));
-  initNflFilters({ toolbar: regions.toolbar, chipsHost: regions.chips, sheetHost: regions.filterLayer, ctx });
+  initNflFilters({
+    toolbar: regions.toolbar,
+    chipsHost: regions.chips,
+    sheetHost: regions.filterLayer,
+    clearHost: regions.selectionRow,
+    ctx,
+  });
   table.render([], { emptyKind: 'nothing' });
 }
 
@@ -389,16 +439,19 @@ function attachMedia() {
   mqHandler = () => {
     if (mounted && model && views) views[state.view].mod.render(ctx);
   };
-  for (const q of ['(prefers-color-scheme: dark)', '(max-width: 640px)', '(hover: none)']) {
+  for (const q of [PHONE_QUERY, '(hover: none)']) {
     const mql = window.matchMedia(q);
     mql.addEventListener('change', mqHandler);
     mqls.push(mql);
   }
+  stopThemeWatch = onThemeChange(mqHandler);
 }
 
 function detachMedia() {
   for (const mql of mqls) mql.removeEventListener('change', mqHandler);
   mqls.length = 0;
+  if (stopThemeWatch) stopThemeWatch();
+  stopThemeWatch = null;
 }
 
 /**
@@ -411,7 +464,9 @@ export async function mount({ footerEl, search = '' } = {}) {
   ensureShell(footerEl);
   swapFooter(footerEl);
   attachMedia();
-  await ensureLoaded(search);
+  // The first draw waits (at most 1500ms, alongside the data) for the faces, as CFB's does, so
+  // tick labels and margins do not shift after font swap (13-UI-SPEC "Wait for fonts").
+  const [, fontsLoaded] = await Promise.all([ensureLoaded(search), waitForFonts()]);
   if (loadFailed || !model) {
     hooks.failed = true;
     hooks.ready = true;
@@ -422,6 +477,12 @@ export async function mount({ footerEl, search = '' } = {}) {
     swapFooter(footerEl);
     syncUrl();
     renderAll({ resize: true });
+    // A face that arrives later re-lays the charts out once.
+    if (!fontsLoaded) {
+      onLateFont(() => {
+        if (mounted) renderAll({ resize: true });
+      });
+    }
   }
   hooks.ready = true;
 }

@@ -20,6 +20,30 @@ _CREDIT_LINE = (
     "Data provided by CollegeFootballData.com"
 )
 
+_TRADEMARK_LINE = (
+    "Network logos are trademarks of their owners, shown only to identify each network. "
+    "Their use does not imply endorsement, and they are not covered by this site's MIT license."
+)
+
+_TYPE_LINE = (
+    "Type: Crimson Text (copyright 2010 The Crimson Text Project Authors), "
+    "Roboto (copyright 2011 The Roboto Project Authors) and "
+    "Roboto Condensed (copyright 2011 Google Inc.), "
+    "used under the SIL Open Font License 1.1."
+)
+
+_OFL_HREFS = (
+    "fonts/OFL-crimson-text.txt",
+    "fonts/OFL-roboto.txt",
+    "fonts/OFL-roboto-condensed.txt",
+)
+
+_TITLES = {
+    "index.html": "The Broadcast Ledger · college football broadcast crews and viewership",
+    "methodology.html": "Methodology · The Broadcast Ledger",
+    "coverage.html": "Coverage · The Broadcast Ledger",
+}
+
 _CREDIT_LINKS = (
     ("RatingsReference.com", "https://ratingsreference.com"),
     ("CC BY 4.0", "https://creativecommons.org/licenses/by/4.0/"),
@@ -47,7 +71,45 @@ def test_footer_credits_freshness_and_nav(
         assert link.get_attribute("href") == href
 
     for nav_label in ("Chart", "Methodology", "Coverage"):
-        assert guarded_page.locator(f"nav a:text-is('{nav_label}')").count() == 1
+        assert guarded_page.locator(f"footer nav a:text-is('{nav_label}')").count() == 1
+
+    # RT-23 and RT-24 exact lines, in the footer order nav, freshness, credit, trademark, type.
+    assert guarded_page.locator("footer p.trademark-line").inner_text().strip() == _TRADEMARK_LINE
+    assert re.sub(r"\s+", " ", guarded_page.locator("footer p.type-line").inner_text()) == (
+        _TYPE_LINE
+    )
+    child_classes = guarded_page.evaluate(
+        "[...document.querySelector('footer').children].map("
+        "(el) => el.tagName === 'NAV' ? 'nav' : el.className)"
+    )
+    assert child_classes == ["nav", "freshness", "credit-line", "trademark-line", "type-line"]
+
+
+@pytest.mark.parametrize("page_name", _PAGES)
+def test_header_title_links_and_page_title(
+    guarded_page: Page, site_url: str, page_name: str
+) -> None:
+    """The header carries the site title and the Methodology/Coverage links."""
+    guarded_page.goto(f"{site_url}/{page_name}")
+    assert guarded_page.title() == _TITLES[page_name]
+    assert guarded_page.locator("header .site-title").inner_text() == "The Broadcast Ledger"
+    for label in ("Methodology", "Coverage"):
+        assert guarded_page.locator(f"header a:text-is('{label}')").count() == 1
+
+
+@pytest.mark.parametrize("page_name", _PAGES)
+def test_ofl_licence_links_resolve_to_plain_text(
+    guarded_page: Page, site_url: str, page_name: str
+) -> None:
+    guarded_page.goto(f"{site_url}/{page_name}")
+    hrefs = guarded_page.locator("footer p.type-line a").evaluate_all(
+        "els => els.map((a) => a.getAttribute('href'))"
+    )
+    assert tuple(hrefs) == _OFL_HREFS
+    for href in hrefs:
+        response = guarded_page.request.get(f"{site_url}/{href}")
+        assert response.status == 200
+        assert response.headers["content-type"].startswith("text/plain")
 
 
 def test_methodology_page_has_expected_heading_anchors(guarded_page: Page, site_url: str) -> None:

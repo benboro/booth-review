@@ -135,7 +135,7 @@ export function createDetailPanel(host, { methodologyHref: _methodologyHref } = 
     const network = row.network == null
       ? el('p', null, 'Network not recorded.')
       : networksParagraph({
-          primary: { name: row.network, family: row.networkFamily },
+          primary: { id: row.networkId, name: row.network, family: row.networkFamily },
           others: [],
           theme: currentTheme(),
         });

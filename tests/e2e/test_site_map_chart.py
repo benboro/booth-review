@@ -250,7 +250,7 @@ def test_venue_dots_faded_selected_and_markers(guarded_page: Page, site_url: str
     assert mk["fontColor"] == mk["muted"]
     assert mk["custom"] == ["g:x", None]
     assert mk["hover"] == "none"
-    assert got["mobileFont"] == 10
+    assert got["mobileFont"] == 12  # the frame floors chart text at 12px, phone included
     assert mk["text"][0] == "&lt;b&gt;x&lt;/b&gt;"
     assert "<b>" not in "".join(mk["text"])
     assert got["selMk"]["lw"] == [2]
@@ -306,20 +306,19 @@ def test_layout_and_config(guarded_page: Page, site_url: str) -> None:
         assert f["ui"] == "map"
         assert f["legend"] is False
         assert f["cfg"]["scrollZoom"] is False
-        assert f["cfg"]["modeBarButtonsToRemove"] == ["lasso2d", "select2d"]
+        assert "modeBarButtonsToRemove" not in f["cfg"]  # no modebar to prune (SHELL-06)
+        assert f["cfg"]["displayModeBar"] is False
         assert f["cfg"]["responsive"] is True
         assert f["cfg"]["displaylogo"] is False
     assert d["drag"] == "zoom"
     assert d["xfix"] is False
     assert d["yfix"] is False
-    assert d["cfg"]["displayModeBar"] is True
     assert d["paper"] == got["bg"]
     assert d["plot"] == got["bg"]
     assert m["drag"] is False
     assert m["xfix"] is True
     assert m["yfix"] is True
     assert m["hd"] == 22
-    assert m["cfg"]["displayModeBar"] is False
     assert m["paper"] == got["mbg"]
 
 

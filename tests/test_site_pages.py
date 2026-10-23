@@ -80,6 +80,18 @@ def test_footer_html_has_credit_line_once_and_nav_and_credit_links() -> None:
     ):
         assert f'href="{href}"' in footer
 
+    assert plain.count("Network logos are trademarks of their owners, shown only to identify") == 1
+    assert plain.count("they are not covered by this site's MIT license.") == 1
+    assert plain.count("used under the SIL Open Font License 1.1.") == 1
+    assert footer.count('class="trademark-line"') == 1
+    assert footer.count('class="type-line"') == 1
+    for href in (
+        "fonts/OFL-crimson-text.txt",
+        "fonts/OFL-roboto.txt",
+        "fonts/OFL-roboto-condensed.txt",
+    ):
+        assert f'href="{href}"' in footer
+
 
 def test_render_methodology_includes_known_gaps_demoted_and_no_marker() -> None:
     result = render_methodology(REPO_ROOT / "docs", _fixture_site())
@@ -360,7 +372,9 @@ def test_render_methodology_resolves_md_links_against_docs(
 # colors); no NFL text changed.
 # Re-pinned at 11 review fixes: one sentence on announcer picks rescaling the map's dots
 # and coloring; no NFL text changed.
-_METHODOLOGY_FLAG_OFF_SHA256 = "75358f81127ec87b18730c999158e110bef03b5216b7c8b6818b24231574be56"
+# Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
+# new header with theme slot, site name.
+_METHODOLOGY_FLAG_OFF_SHA256 = "2d0e07bd422e517c8a4e6bdf9d002a9b097ee31e90beb6f529bd1490ef40abb1"
 
 _NFL_ANCHORS = (
     "nfl-special-games",

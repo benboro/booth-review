@@ -7,7 +7,9 @@
  * links in the table (the panel carries the credits).
  */
 
-import { nameWithRoles, makeRolePill, makePill, currentTheme } from '../../modules/pill.js';
+import { nameWithRoles, makeRolePill } from '../../modules/pill.js';
+import { networkMark } from '../../modules/network.js';
+import { attachScrollCue } from '../../modules/scroll-cue.js';
 import { dateShortText } from './format.js';
 import { CAUSE_COPY, crewSourceTag, viewersText } from './data.js';
 
@@ -81,9 +83,9 @@ function buildRow(row, onOpen) {
     onOpen?.(row.i, tr.querySelector('.nfl-matchup-btn'));
   });
 
-  tr.appendChild(el('td', 'num', dateShortText(row)));
+  tr.appendChild(el('td', 'date', dateShortText(row)));
 
-  const matchupTd = el('td');
+  const matchupTd = el('td', 'matchup');
   const button = el('button', 'nfl-matchup-btn', `${row.away} at ${row.home}`);
   button.type = 'button';
   button.dataset.game = String(row.i);
@@ -101,7 +103,7 @@ function buildRow(row, onOpen) {
     outletTd.className = 'no-rating';
     outletTd.textContent = 'Not recorded';
   } else {
-    outletTd.appendChild(makePill(row.network, row.networkFamily, currentTheme()));
+    outletTd.appendChild(networkMark({ id: row.networkId, name: row.network, family: row.networkFamily }));
   }
   tr.appendChild(outletTd);
 
@@ -121,7 +123,7 @@ function buildRow(row, onOpen) {
       vTd.append(document.createTextNode(' '), tag);
     }
   } else {
-    vTd.className = 'no-rating';
+    vTd.className = 'num no-rating';
     vTd.textContent = CAUSE_COPY[row.cause] ?? CAUSE_COPY.none;
   }
   tr.appendChild(vTd);
@@ -152,15 +154,17 @@ export function createGamesTable(host, { onOpen } = {}) {
   const thead = el('thead');
   const headRow = el('tr');
   const sortButtons = {};
-  for (const [label, key] of [
+  // Viewers holds numbers, so its head aligns right like its cells; Date is a text date
+  // ("Sun, Aug 31"), left-aligned and never wrapped (brief §5).
+  for (const [label, key, numeric] of [
     ['Date', 'date'],
     ['Matchup', null],
     ['Round', null],
     ['Outlet', null],
     ['Crew', null],
-    ['Viewers', 'viewers'],
+    ['Viewers', 'viewers', true],
   ]) {
-    const th = el('th');
+    const th = el('th', numeric ? 'num' : null);
     th.scope = 'col';
     if (key) {
       const b = el('button');
@@ -178,7 +182,12 @@ export function createGamesTable(host, { onOpen } = {}) {
   thead.appendChild(headRow);
   const tbody = el('tbody');
   table.append(thead, tbody);
-  section.append(heading, summary, empty, table);
+  const head = el('div', 'module-head');
+  head.append(heading);
+  const scroll = el('div', 'table-scroll');
+  scroll.append(table);
+  section.append(head, summary, empty, scroll);
+  attachScrollCue(scroll, head);
   host.appendChild(section);
 
   let sort = { key: 'date', dir: 'desc' };

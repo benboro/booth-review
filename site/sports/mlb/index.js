@@ -10,6 +10,7 @@
  * Everything is built with createElement and textContent only.
  */
 import { prepareMlb, gameRow, boothLabelOf } from './data.js';
+import { currentTheme, onThemeChange } from '../../modules/theme.js';
 import { canonicalMlbState, tableGames, selectionLabel } from './state.js';
 import { encodeMlbState, decodeMlbState } from './url-state.js';
 import { createGamesTable } from './table.js';
@@ -17,6 +18,7 @@ import { createDetailPanel, RETROSHEET_NOTICE, RETROSHEET_CONTACT } from './pane
 import { createMlbTabs } from './tabs.js';
 import * as appleView from './views/apple.js';
 import * as postseasonView from './views/postseason.js';
+import { PHONE_QUERY } from '../../modules/breakpoints.js';
 
 // View id -> module (mount, render, resize, testModel); the tab bar renders from this map.
 const VIEW_MODULES = { apple: appleView, postseason: postseasonView };
@@ -61,6 +63,7 @@ let footerOriginals = null; // { freshness: Node[], credit: Node[] }
 let footerRefs = null; // { freshness, credit }
 const mqls = [];
 let mqHandler = null;
+let stopThemeWatch = null;
 
 const hooks = {
   ready: false,
@@ -87,34 +90,46 @@ function buildRegions(footerEl) {
   const selection = el('section', 'nfl-region');
   selection.id = 'mlb-selection-bar';
   selection.setAttribute('aria-label', 'Selection');
+  // MLB has no filter bar: this labelled 32px area takes its place (SHELL-03).
+  const area = el('div', 'mlb-selection-area');
+  area.id = 'mlb-selection-area';
+  const note = el('p', 'mlb-selection-note', 'Filters: none. MLB is selection-driven; pick a row below.');
   const chips = el('ul', 'nfl-chips');
   chips.id = 'mlb-chips';
   const clearBtn = el('button', 'toggle', 'Clear selection');
   clearBtn.type = 'button';
   clearBtn.id = 'mlb-clear-selection';
   clearBtn.hidden = true;
+  area.append(note, chips, clearBtn);
   const summary = el('p', 'nfl-summary');
   summary.id = 'mlb-summary';
-  const headline = el('h2', 'nfl-headline');
-  headline.id = 'mlb-headline';
-  selection.append(chips, clearBtn, summary, headline);
+  selection.append(area, summary);
 
   const chartArea = el('section', 'nfl-region');
   chartArea.id = 'mlb-chart-area';
   chartArea.setAttribute('aria-label', 'Chart');
   const tabHost = el('div', 'nfl-tabs-host');
-  const hint = el('p', 'tab-hint');
-  hint.id = 'mlb-tab-hint';
+  // Module frame (SHELL-06): title (the headline), subtitle (the tab hint, C6) and tools.
+  const chartModule = el('div', 'module nfl-chart-module');
+  const moduleHead = el('div', 'module-head');
+  const headline = el('h2', 'nfl-headline module-title');
+  headline.id = 'mlb-chart-title';
+  const hint = el('p', 'module-subtitle');
+  hint.id = 'mlb-chart-subtitle';
   hint.setAttribute('role', 'status');
+  const tools = el('div', 'module-tools');
+  tools.id = 'mlb-chart-tools';
+  moduleHead.append(headline, hint, tools);
   const viewHost = el('div', 'nfl-views');
   const status = el('div', 'nfl-status');
-  chartArea.append(tabHost, hint, viewHost, status);
+  chartModule.append(moduleHead, viewHost, status);
+  chartArea.append(tabHost, chartModule);
 
   const matched = el('section', 'nfl-region');
   matched.id = 'mlb-matched-games';
 
   footerEl.before(toolbar, selection, chartArea, matched);
-  return { toolbar, selection, chips, clearBtn, summary, chartArea, tabHost, hint, viewHost, status, matched, headline };
+  return { toolbar, selection, chips, clearBtn, summary, chartArea, tabHost, hint, tools, viewHost, status, matched, headline };
 }
 
 function showStatus(kind) {
@@ -193,8 +208,8 @@ function restoreFooter() {
 
 function env() {
   return {
-    dark: window.matchMedia('(prefers-color-scheme: dark)').matches,
-    mobile: window.matchMedia('(max-width: 640px)').matches,
+    dark: currentTheme() === 'dark',
+    mobile: window.matchMedia(PHONE_QUERY).matches,
     hoverNone: window.matchMedia('(hover: none)').matches,
   };
 }
@@ -209,6 +224,8 @@ function renderSelectionBar() {
   const label = selectionLabel(model, state);
   if (label) {
     const li = el('li', 'chip');
+    li.title = label;
+    li.setAttribute('aria-label', label);
     const rm = el('button', 'chip-remove', '×');
     rm.type = 'button';
     rm.setAttribute('aria-label', `Remove ${label}`);
@@ -220,7 +237,15 @@ function renderSelectionBar() {
   }
   clearBtn.hidden = !label;
   const n = lastRows.length;
-  summary.textContent = n ? `${n} ${n === 1 ? 'game matches' : 'games match'}` : '';
+  if (label) {
+    summary.textContent = `${n} ${n === 1 ? 'game matches' : 'games match'}`;
+  } else {
+    // No selection: the CFB-style "N rated of M games" line over every MLB game.
+    const rated = model.cols.viewers.reduce((k, v) => k + (v != null ? 1 : 0), 0);
+    summary.textContent = model.n
+      ? `${rated.toLocaleString('en-US')} rated of ${model.n.toLocaleString('en-US')} ${model.n === 1 ? 'game' : 'games'}`
+      : '';
+  }
   const seasons = model.cols.season;
   const lo = model.n ? Math.min(...seasons) : null;
   const hi = model.n ? Math.max(...seasons) : null;
@@ -388,16 +413,19 @@ function attachMedia() {
   mqHandler = () => {
     if (mounted && model && views && views[state.view]) views[state.view].mod.render(ctx);
   };
-  for (const q of ['(prefers-color-scheme: dark)', '(max-width: 640px)', '(hover: none)']) {
+  for (const q of [PHONE_QUERY, '(hover: none)']) {
     const mql = window.matchMedia(q);
     mql.addEventListener('change', mqHandler);
     mqls.push(mql);
   }
+  stopThemeWatch = onThemeChange(mqHandler);
 }
 
 function detachMedia() {
   for (const mql of mqls) mql.removeEventListener('change', mqHandler);
   mqls.length = 0;
+  if (stopThemeWatch) stopThemeWatch();
+  stopThemeWatch = null;
 }
 
 /**

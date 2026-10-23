@@ -13,6 +13,7 @@ from playwright.sync_api import Page
 pytestmark = pytest.mark.e2e
 
 TRIGGERS = ["Announcers", "Seasons", "Category", "Team"]
+BAR = [*TRIGGERS, "Booths"]  # the fixed filter set (D-10): Booths on every view
 CFB_ONLY = ["Networks", "Role", "Conference", "Bowls/Playoffs", "Kickoff", "School", "Game"]
 
 
@@ -42,13 +43,50 @@ def test_trigger_order_and_labels(app: Page) -> None:
         "#nfl-toolbar > button",
         "els => els.filter(e => e.offsetParent !== null).map(e => e.textContent.trim())",
     )
-    assert labels == ["Clear all filters", *TRIGGERS]
+    # Booths is last in the bar and Clear all filters has moved to the selection row (C1).
+    assert labels == BAR
+    assert app.locator("#nfl-toolbar #nfl-clear-filters").count() == 0
+    # D-11: no spacer cells pad the bar out any more.
+    assert app.locator(".nfl-toolbar-spacer").count() == 0
     text = app.inner_text("#nfl-toolbar")
     for label in CFB_ONLY:
         assert label not in text
     for key in ("announcers", "seasons", "category", "team"):
         assert app.get_attribute(f"#nfl-trigger-{key}", "aria-haspopup") == "dialog"
         assert app.get_attribute(f"#nfl-trigger-{key}", "aria-expanded") == "false"
+
+
+def test_clear_all_filters_is_the_right_end_of_the_selection_row(app: Page) -> None:
+    """C1: Clear all filters is the last item of the always-rendered NFL
+    selection row, flush with its right edge."""
+    assert app.locator("#nfl-selection-row > #nfl-clear-filters").count() == 1
+    last = app.evaluate("document.querySelector('#nfl-selection-row').lastElementChild.id")
+    assert last == "nfl-clear-filters"
+    box = app.locator("#nfl-clear-filters").bounding_box()
+    row = app.locator("#nfl-selection-row").bounding_box()
+    assert box is not None and row is not None
+    assert abs((box["x"] + box["width"]) - (row["x"] + row["width"])) <= 1
+
+
+def test_changed_trigger_styling_follows_the_clean_load_predicate(app: Page) -> None:
+    """SHELL-03 on the NFL bar: a control that differs from a clean load gets
+    the accent border, --accent-soft fill and a 600 label; reverting it clears
+    the state; the full summary is in title and aria-label."""
+    assert app.locator("#nfl-toolbar .is-changed").count() == 0
+    app.evaluate("window.__nflTestHooks.setState({ teams: ['f-gulls'] })")
+    trigger = app.locator("#nfl-trigger-team")
+    assert "is-changed" in (trigger.get_attribute("class") or "")
+    style = trigger.evaluate(
+        "el => { const s = getComputedStyle(el);"
+        " return [s.borderTopColor, s.backgroundColor,"
+        " getComputedStyle(el.querySelector('.filter-label')).fontWeight]; }"
+    )
+    assert style == ["rgb(27, 79, 92)", "rgb(227, 237, 239)", "600"]
+    title = trigger.get_attribute("title") or ""
+    assert title.startswith("Team") and title == trigger.get_attribute("aria-label")
+    app.evaluate("window.__nflTestHooks.setState({ teams: [] })")
+    assert app.locator("#nfl-toolbar .is-changed").count() == 0
+    assert app.locator("#nfl-trigger-team .filter-value").inner_text() == ""
 
 
 def test_announcers_search_pick_chip_and_remove(app: Page, nfl_site_dist: Path) -> None:
@@ -151,17 +189,17 @@ def test_clear_all_filters_resets_url(app: Page) -> None:
 
 
 def test_keyboard_reaches_each_trigger_and_enter_opens(app: Page) -> None:
-    app.focus("#nfl-clear-filters")
-    for key in ("announcers", "seasons", "category", "team"):
+    app.focus("#nfl-trigger-announcers")
+    for key in ("seasons", "category", "team", "booths"):
         app.keyboard.press("Tab")
         assert app.evaluate("document.activeElement.id") == f"nfl-trigger-{key}"
     app.keyboard.press("Enter")
-    app.wait_for_selector("#nfl-pop-team:popover-open")
+    app.wait_for_selector("#nfl-pop-booths:popover-open")
     # aria-expanded follows the popover's toggle event, which fires after it opens.
-    app.wait_for_selector('#nfl-trigger-team[aria-expanded="true"]')
+    app.wait_for_selector('#nfl-trigger-booths[aria-expanded="true"]')
     app.keyboard.press("Escape")
-    app.wait_for_selector("#nfl-pop-team:not(:popover-open)", state="attached")
-    app.wait_for_selector('#nfl-trigger-team[aria-expanded="false"]')
+    app.wait_for_selector("#nfl-pop-booths:not(:popover-open)", state="attached")
+    app.wait_for_selector('#nfl-trigger-booths[aria-expanded="false"]')
 
 
 def test_popover_markup_is_text_only(app: Page) -> None:
@@ -187,26 +225,45 @@ def test_mobile_only_filters_button_visible(mobile: Page) -> None:
         "#nfl-toolbar > button",
         "els => els.filter(e => e.offsetParent !== null).map(e => e.id)",
     )
-    assert visible == ["nfl-clear-filters", "nfl-filters-button"]
+    assert visible == ["nfl-filters-button"]
     assert mobile.inner_text("#nfl-filters-button") == "Filters"
+    assert mobile.locator(".nfl-toolbar-spacer").count() == 0
 
 
 def test_mobile_badge_counts_active_filters(mobile: Page) -> None:
     mobile.evaluate("window.__nflTestHooks.setState({ teams: ['f-gulls'], cats: ['agotw'] })")
-    assert mobile.inner_text("#nfl-filters-button") == "Filters (2)"
-    mobile.click("#nfl-clear-filters")
+    assert mobile.inner_text("#nfl-filters-button") == "Filters · 2 changed"
+    chips = mobile.locator("#nfl-filter-chips li button")
+    assert chips.count() == 2
+    assert [t.split()[0] for t in chips.all_inner_texts()] == ["Category", "Team"]
+    chip_style = chips.first.evaluate(
+        "el => { const s = getComputedStyle(el); return [s.borderTopColor, s.backgroundColor]; }"
+    )
+    assert chip_style == ["rgb(27, 79, 92)", "rgb(227, 237, 239)"]
+    assert (
+        mobile.evaluate("getComputedStyle(document.querySelector('#nfl-filters-button')).color")
+        == "rgb(27, 79, 92)"
+    )
+    mobile.click("#nfl-filters-button")
+    mobile.wait_for_selector("#nfl-filters-sheet:popover-open")
+    mobile.click("#nfl-filters-sheet .nfl-sheet-clear")
     assert mobile.inner_text("#nfl-filters-button") == "Filters"
+    assert mobile.locator("#nfl-filter-chips li").count() == 0
 
 
 def test_mobile_sheet_sections_url_and_close(mobile: Page) -> None:
     mobile.click("#nfl-filters-button")
     mobile.wait_for_selector("#nfl-filters-sheet:popover-open")
-    assert mobile.get_attribute("#nfl-filters-button", "aria-expanded") == "true"
+    # The popover's `toggle` event, which sets aria-expanded, fires after :popover-open holds.
+    mobile.wait_for_function(
+        "document.getElementById('nfl-filters-button').getAttribute('aria-expanded') === 'true'"
+    )
     headings = mobile.locator("#nfl-filters-sheet .sheet-body h3:visible").all_inner_texts()
-    assert headings == TRIGGERS
+    assert headings == BAR  # Booths is a sheet row on every view (D-10)
     mobile.select_option("#nfl-season-to-sheet", "2025")
     assert _search(mobile) == "?sport=nfl&seasons=2024-2025"
-    assert mobile.inner_text("#nfl-filters-button") == "Filters (1)"
+    assert mobile.inner_text("#nfl-filters-button") == "Filters · 1 changed"
+    assert mobile.inner_text("#nfl-filters-show-results") == "Show games"
     mobile.click("#nfl-filters-sheet .nfl-sheet-clear")
     assert _search(mobile) == "?sport=nfl"
     mobile.click("#nfl-filters-show-results")
@@ -298,20 +355,50 @@ def _booth_games(raw: dict, key: str) -> list[int]:  # type: ignore[type-arg]
     ]
 
 
-def test_booths_trigger_only_on_crews_and_viewership(
+def test_booths_trigger_is_visible_and_enabled_on_every_view(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
 ) -> None:
+    """D-10: Booths is part of the fixed NFL filter set, on all four views."""
     page = nfl_guarded_page
     open_nfl_app(page, "?sport=nfl")
-    for view, visible in (
-        ("special", False),
-        ("scatter", False),
-        ("crews", True),
-        ("viewership", True),
-    ):
+    for view in ("special", "scatter", "crews", "viewership"):
         page.evaluate("v => window.__nflTestHooks.setState({ view: v })", view)
         page.wait_for_function("v => window.__nflTestHooks.getState().view === v", arg=view)
-        assert page.locator("#nfl-trigger-booths").is_visible() is visible, view
+        trigger = page.locator("#nfl-trigger-booths")
+        assert trigger.is_visible(), view
+        assert trigger.is_enabled(), view
+        assert trigger.get_attribute("aria-disabled") in (None, "false"), view
+        assert page.locator(".nfl-toolbar-spacer").count() == 0, view
+
+
+def test_booth_pick_effect_per_view_is_unchanged_for_now(
+    nfl_guarded_page: Page,
+    open_nfl_app: Callable[..., None],
+    nfl_fixture_raw: dict,  # type: ignore[type-arg]
+) -> None:
+    """D-10 interim: a booth pick narrows the matched games on Crews and
+    Viewership as before, and does not yet change the Special games or Scatter
+    chart models (it is kept in state and the URL on all four views)."""
+    page = nfl_guarded_page
+    _booths_app(page, open_nfl_app, "crews")
+    key = page.evaluate("window.__nflTestHooks.getBoothCatalog()[0].key")
+    expected = sorted(_booth_games(nfl_fixture_raw, key))
+    assert expected
+    for view in ("crews", "viewership"):
+        page.evaluate("v => window.__nflTestHooks.setState({ view: v, booths: [] })", view)
+        page.evaluate("k => window.__nflTestHooks.setState({ booths: [k] })", key)
+        page.wait_for_function("window.__nflTestHooks.getState().booths.length === 1")
+        assert sorted(page.evaluate("window.__nflTestHooks.getTableIndexes()")) == expected, view
+    for view in ("special", "scatter"):
+        page.evaluate("v => window.__nflTestHooks.setState({ view: v, booths: [] })", view)
+        page.wait_for_function("v => window.__nflTestHooks.getState().view === v", arg=view)
+        before = page.evaluate("v => JSON.stringify(window.__nflTestHooks.getViewModel(v))", view)
+        page.evaluate("k => window.__nflTestHooks.setState({ booths: [k] })", key)
+        page.wait_for_function("window.__nflTestHooks.getState().booths.length === 1")
+        after = page.evaluate("v => JSON.stringify(window.__nflTestHooks.getViewModel(v))", view)
+        assert before not in ("null", "undefined"), view
+        assert before == after, view
+        assert "booths=" in _search(page), view
 
 
 def test_booths_grouped_by_network_on_crews_and_category_on_viewership(
@@ -520,3 +607,47 @@ def test_team_alone_fills_the_table_like_cfb_school(
     assert "row-link" in (rows.first.get_attribute("class") or "")
     rows.first.locator("td").nth(1).click(position={"x": 2, "y": 2})
     nfl_guarded_page.wait_for_selector("#nfl-detail-panel[open]")
+
+
+def _clear_state(page: Page, selector: str) -> dict[str, str | None]:
+    result: dict[str, str | None] = page.evaluate(
+        "(s) => { const el = document.querySelector(s); const cs = getComputedStyle(el); "
+        "return { aria: el.getAttribute('aria-disabled'), border: cs.borderTopColor }; }",
+        selector,
+    )
+    return result
+
+
+def test_clear_all_filters_is_disabled_until_a_filter_changes(app: Page) -> None:
+    idle = _clear_state(app, "#nfl-clear-filters")
+    assert idle["aria"] == "true"
+    assert idle["border"] != "rgb(35, 32, 27)"  # not --ink
+    app.evaluate("window.__nflTestHooks.setState({ cats: ['agotw'] })")
+    live = _clear_state(app, "#nfl-clear-filters")
+    assert live["aria"] == "false"
+    assert live["border"] == "rgb(35, 32, 27)"
+    app.click("#nfl-clear-filters")
+    app.wait_for_function(
+        "document.getElementById('nfl-clear-filters').getAttribute('aria-disabled') === 'true'"
+    )
+
+
+def test_disabled_clear_all_filters_is_a_no_op(app: Page) -> None:
+    """While aria-disabled, Clear all filters does not touch the state or re-render."""
+    assert _clear_state(app, "#nfl-clear-filters")["aria"] == "true"
+    before = app.evaluate("window.__nflTestHooks.renderCount")
+    # Playwright refuses to click an aria-disabled button; a script click still fires.
+    app.evaluate("document.getElementById('nfl-clear-filters').click()")
+    app.wait_for_timeout(100)
+    assert app.evaluate("window.__nflTestHooks.renderCount") == before
+
+
+def test_phone_clear_all_filters_is_disabled_until_a_filter_changes(mobile: Page) -> None:
+    sheet_clear = ".nfl-filters-sheet .nfl-sheet-clear"
+    idle = _clear_state(mobile, sheet_clear)
+    assert idle["aria"] == "true"
+    assert idle["border"] != "rgb(35, 32, 27)"
+    mobile.evaluate("window.__nflTestHooks.setState({ cats: ['agotw'] })")
+    live = _clear_state(mobile, sheet_clear)
+    assert live["aria"] == "false"
+    assert live["border"] == "rgb(35, 32, 27)"

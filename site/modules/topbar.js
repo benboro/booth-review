@@ -6,8 +6,8 @@
  *
  * D-21: the search combobox lives in the toolbar's Announcers popover
  * (`#pop-announcers`/`#filter-announcers`); the chips, toggles, and summary
- * live in `#selection-bar`'s `#selection-row` (hidden while no one is
- * selected) below the toolbar.
+ * live in `#selection-bar`'s `#selection-row` (always rendered; with no one
+ * selected it holds only Clear all filters) below the toolbar.
  *
  * D-28: `#person-results` is an Excel AutoFilter-style multi-select list --
  * every person is always rendered (one `<li role="option">` per person,
@@ -225,6 +225,7 @@ export function initTopbar({ data, getState, setState }) {
     results: document.getElementById('person-results'),
     selectionRow: document.getElementById('selection-row'),
     chips: document.getElementById('chips'),
+    toggleGroup: document.querySelector('#selection-row .toggle-group'),
     compareToggle: document.getElementById('compare-toggle'),
     compareHelp: document.getElementById('compare-help'),
     togetherToggle: document.getElementById('together-toggle'),
@@ -306,6 +307,9 @@ function renderChips(data, state) {
 
     const li = document.createElement('li');
     li.className = 'chip';
+    // The chip truncates (64-160px); the title and label carry the full name.
+    li.title = person.name;
+    li.setAttribute('aria-label', person.name);
 
     // D-30: this slot is always present (never conditional on
     // `state.compare`) so toggling Compare only changes its text, never
@@ -480,7 +484,10 @@ function renderPersonFacets(state, view) {
 
 /** Pure DOM update from the current state/view, called every render cycle. */
 export function renderTopbar({ data, state, view }) {
-  els.selectionRow.hidden = state.people.length === 0;
+  // The row always renders (it holds Clear all filters); only its person parts hide.
+  const noPeople = state.people.length === 0;
+  els.chips.hidden = noPeople;
+  els.toggleGroup.hidden = noPeople;
   renderChips(data, state);
   renderToggles(state);
   els.clearSelection.hidden = state.people.length === 0;

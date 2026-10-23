@@ -333,3 +333,36 @@ def test_click_between_pills_clears_the_pending_first_click(
     _synthetic_double(page, family, [2])
     assert _networks(page) is None
     assert _pill(page, family).get_attribute("aria-pressed") == "true"
+
+
+def test_chips_are_outlined_28px_with_a_family_dot_and_toggle_the_dot_opacity(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    """C5: a chip is an outlined 28px control (1px border, no family fill) with an 8px
+    family dot and its FAMILY_LABELS text; toggling a family off mutes the text and drops
+    the dot to the faded-mark 32% opacity, and select-to-toggle still works."""
+    open_app(guarded_page, "")
+    labels = guarded_page.locator("#legend-chips .legend-label").all_inner_texts()
+    assert labels == ["ABC/ESPN", "FOX/FS1/BTN", "Pac-12 Net/MW Net", "Other"]
+    for family in ("disney", "fox", "conference", "other"):
+        chip = _pill(guarded_page, family)
+        look = chip.evaluate(
+            "el => { const s = getComputedStyle(el); const d = el.querySelector('.legend-dot');"
+            " const ds = getComputedStyle(d); const r = d.getBoundingClientRect();"
+            " return {h: el.getBoundingClientRect().height, border: s.borderTopWidth,"
+            " bg: s.backgroundColor, dotBg: ds.backgroundColor, dotW: r.width, dotH: r.height,"
+            " dotOpacity: ds.opacity}; }"
+        )
+        assert look["h"] == 28, family
+        assert look["border"] == "1px", family
+        assert look["bg"] == "rgb(251, 249, 245)", family  # --bg, never the family fill
+        assert (look["dotW"], look["dotH"]) == (8, 8), family
+        assert look["dotBg"] != look["bg"], family
+        assert look["dotOpacity"] == "1", family
+    chip = _pill(guarded_page, "fox")
+    chip.click()
+    guarded_page.wait_for_function(
+        "document.querySelector(\"#legend-chips button[data-family='fox']\")"
+        ".getAttribute('aria-pressed') === 'false'"
+    )
+    assert chip.locator(".legend-dot").evaluate("el => getComputedStyle(el).opacity") == "0.32"

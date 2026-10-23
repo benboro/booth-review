@@ -527,22 +527,34 @@ _PILL_CONTRAST = {
     "disney": ("rgb(0, 114, 178)", "rgb(255, 255, 255)"),
     "fox": ("rgb(0, 158, 115)", "rgb(0, 0, 0)"),
     "conference": ("rgb(0, 0, 0)", "rgb(255, 255, 255)"),
-    "other": ("rgb(143, 143, 143)", "rgb(0, 0, 0)"),
+    "other": ("rgb(139, 139, 139)", "rgb(0, 0, 0)"),
 }
 
 
-def test_legend_chip_pill_fill_and_text_meet_wcag_aa_contrast(
+def test_legend_chips_are_outlined_with_a_family_dot(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """SITE-26: each pressed chip's computed background/text colors match
-    the family's Okabe-Ito fill and its verified WCAG-AA pill text color."""
+    """C5 / 13-12: a shown chip is an outlined 28px chip on the page background with
+    --ink text and an 8px dot in the family colour; there is no filled family pill."""
     open_app(guarded_page, "")
-    for family, (bg, color) in _PILL_CONTRAST.items():
+    bg = _token_rgb(guarded_page, "--bg")
+    ink = _token_rgb(guarded_page, "--ink")
+    for family, (fill, _text) in _PILL_CONTRAST.items():
         chip = guarded_page.locator(f'#legend-chips button[data-family="{family}"]')
-        styles = chip.evaluate(
-            "el => { const s = getComputedStyle(el); return [s.backgroundColor, s.color]; }"
+        sel = f'#legend-chips button[data-family="{family}"]'
+        assert _rgb_of(guarded_page, sel, "backgroundColor") == bg, family
+        assert _rgb_of(guarded_page, sel, "color") == ink, family
+        border = chip.evaluate(
+            "el => { const s = getComputedStyle(el); return [s.borderTopWidth, s.borderTopStyle]; }"
         )
-        assert styles == [bg, color], family
+        assert border == ["1px", "solid"], family
+        assert float(chip.bounding_box()["height"]) == 28, family  # type: ignore[index]
+        dot = chip.locator(".legend-dot").evaluate(
+            "el => { const s = getComputedStyle(el); const r = el.getBoundingClientRect();"
+            " return [s.backgroundColor, r.width, r.height]; }"
+        )
+        assert dot[0] == fill, family
+        assert dot[1:] == [8, 8], family
 
 
 def test_set_state_people_highlights_and_fades_family_traces(
@@ -646,7 +658,7 @@ def test_hover_text_stays_minimal_and_drops_methodology_notes(
     """SITE-25 (product notes 2026-09-27): the tooltip carries only the
     matchup+score, date+kickoff (+ Bowl / CFP round for postseason games,
     never a time-slot label), networks, crew, viewers, the active
-    axis value, and a closing "Click for details →" hint -- the
+    axis value (no closing "Click for details" hint, D-09) -- the
     measurement/scoring-source label, conferences, game type, and
     flags/combined-feed notes are dropped from the tooltip (they still show
     in the detail panel: see test_site_panel_table.py's
@@ -662,7 +674,8 @@ def test_hover_text_stays_minimal_and_drops_methodology_notes(
     assert "Lakeview 20 at Northfield 27" in dot0
     assert "Sat, Sep 7, 2019" in dot0
     assert "Noon" not in dot0
-    assert dot0.endswith("Click for details →")
+    assert "Click for details" not in dot0
+    assert dot0.split("<br>")[-1].startswith("Spread:")
     assert "Measurement" not in dot0
     assert "Source" not in dot0
     assert "Selected:" not in dot0
@@ -682,7 +695,7 @@ def test_hover_text_stays_minimal_and_drops_methodology_notes(
     assert "Afternoon" not in dot7
     assert "Prime time" not in dot7
     assert (
-        '<span style="color:#8F8F8F">Other Network</span>'
+        '<span style="color:#8B8B8B">Other Network</span>'
         '/<span style="color:#0072B2">Alpha Sports</span>'
         '/<span style="color:#009E73">Beta Network</span>'
     ) in dot7
@@ -747,7 +760,7 @@ def test_hover_text_crew_lines_use_name_then_role(
     assert lines.index("Dale Harlow (PBP)") < lines.index("Dale Harlow Jr. (Analyst)")
 
 
-def test_hover_text_shows_the_active_axis_value_and_closing_hint(
+def test_hover_text_shows_the_active_axis_value_without_a_click_hint(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """SITE-25: the tooltip's sixth line is the active axis's own value,
@@ -757,7 +770,7 @@ def test_hover_text_shows_the_active_axis_value_and_closing_hint(
     dot11 = _hover_text(_traces(guarded_page), 11)
     assert "Spread: Stonebridge \u22121.5" in dot11
     assert "Excitement:" not in dot11
-    assert dot11.endswith("Click for details →")
+    assert "Click for details" not in dot11
 
     guarded_page.click('#axis-toggle button[data-axis="excitement"]')
     guarded_page.wait_for_function("location.search === '?axis=excitement'")
@@ -773,7 +786,7 @@ def test_missing_site_data_shows_load_error(guarded_page: Page, site_url: str) -
     guarded_page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
 
     assert guarded_page.is_visible("#load-error")
-    assert "Couldn't load the site data." in guarded_page.inner_text("#load-error")
+    assert "The data did not load." in guarded_page.inner_text("#load-error")
 
 
 def test_plotly_failing_to_load_shows_load_error(guarded_page: Page, site_url: str) -> None:
@@ -826,6 +839,33 @@ def test_mobile_layout_disables_drag_zoom_and_moves_legend_below(
     assert legend_box is not None
     assert chart_box is not None
     assert legend_box["y"] >= chart_box["y"] + chart_box["height"]
+
+
+def test_phone_left_margin_is_narrow_and_the_y_axis_text_still_fits(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """SITE-48: at <=480px the shared left margin is 44px (70 on desktop) and the y ticks
+    and title stay inside the chart div, clear of the plot edge."""
+    open_app(mobile_page, "")
+    assert _layout(mobile_page)["margin"]["l"] == 44
+    boxes = mobile_page.evaluate(
+        "() => { const c = document.getElementById('chart').getBoundingClientRect();"
+        " const p = document.querySelector('#chart .nsewdrag').getBoundingClientRect();"
+        " const t = [...document.querySelectorAll('.yaxislayer-above .ytick text, .g-ytitle text')]"
+        "  .map(e => e.getBoundingClientRect());"
+        " return {chartLeft: c.left, plotLeft: p.left, texts: t.map(r => [r.left, r.right])}; }"
+    )
+    assert boxes["texts"]
+    for left, right in boxes["texts"]:
+        assert left >= boxes["chartLeft"] - 0.5
+        assert right <= boxes["plotLeft"] + 0.5
+
+
+def test_desktop_left_margin_is_unchanged(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(guarded_page, "")
+    assert _layout(guarded_page)["margin"]["l"] == 70
 
 
 def test_mobile_page_has_no_horizontal_scroll(
@@ -1045,9 +1085,9 @@ def test_html_tooltip_content_is_minimal_with_network_pills(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-22/SITE-25/SITE-26: the tooltip holds the matchup, a "Position:
-    Name" crew line, and the closing hint, with no conference/game-type/
-    methodology text; each network in `.tooltip-networks` renders as a real
-    `pill.js` pill with the family's verified WCAG-AA fill/text colors."""
+    Name" crew line, and no closing hint (D-09), with no conference/game-type/
+    methodology text; each network in `.tooltip-networks` renders as a
+    `.net-mark` and the border carries the primary family colour."""
     open_app(guarded_page, "")
 
     _hover_dot(guarded_page, 0)
@@ -1056,29 +1096,31 @@ def test_html_tooltip_content_is_minimal_with_network_pills(
     assert "Lakeview 20 at Northfield 27" in text
     assert "Dale Harlow" in text
     assert "Play-by-play:" not in text
-    assert "Click for details →" in text
+    assert "Click for details" not in text
     assert "Conference" not in text
     assert "Bowl" not in text
     assert "Nielsen" not in text
 
     networks_text = guarded_page.inner_text("#chart-tooltip .tooltip-networks")
     assert networks_text == "Alpha Sports"
-
-    disney_bg, disney_color = _PILL_CONTRAST["disney"]
-    pill0 = guarded_page.locator("#chart-tooltip .tooltip-networks .pill").first
-    assert pill0.evaluate(
-        "el => { const s = getComputedStyle(el); return [s.backgroundColor, s.color]; }"
-    ) == [disney_bg, disney_color]
+    # SHELL-05: a network renders as a net-mark (no pill, no family dot in the
+    # tooltip); the border carries the primary family colour.
+    assert guarded_page.locator("#chart-tooltip .pill").count() == 0
+    assert guarded_page.locator("#chart-tooltip .tooltip-networks .net-mark").count() == 1
+    assert guarded_page.locator("#chart-tooltip .tooltip-networks .net-dot").count() == 0
+    border = guarded_page.eval_on_selector(
+        "#chart-tooltip", "el => getComputedStyle(el).borderTopColor"
+    )
+    assert border == _BORDER_COLOR["light"]["disney"]
 
     _hover_dot(guarded_page, 1)
     guarded_page.wait_for_function(
         "document.querySelector('#chart-tooltip .tooltip-title')?.textContent.includes('Foxhollow')"
     )
-    fox_bg, fox_color = _PILL_CONTRAST["fox"]
-    pill1 = guarded_page.locator("#chart-tooltip .tooltip-networks .pill").first
-    assert pill1.evaluate(
-        "el => { const s = getComputedStyle(el); return [s.backgroundColor, s.color]; }"
-    ) == [fox_bg, fox_color]
+    border = guarded_page.eval_on_selector(
+        "#chart-tooltip", "el => getComputedStyle(el).borderTopColor"
+    )
+    assert border == _BORDER_COLOR["light"]["fox"]
 
 
 def test_html_tooltip_names_every_named_game(
@@ -1153,15 +1195,13 @@ def _ratio(a: tuple[float, float, float], b: tuple[float, float, float]) -> floa
     return hi / lo
 
 
-@pytest.mark.parametrize("scheme", ["light", "dark"])
 def test_game_type_icons_have_own_colors_meeting_non_text_contrast(
-    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
+    guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """WCAG 1.4.11: the trophy (playoff), bowl and rivalry icons carry their own
     colors, distinct from each other and from the text color, and each
     reaches 3:1 against both the tooltip and the detail-panel background in
     both themes."""
-    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
     open_app(guarded_page, "")
     icon_colors: dict[str, tuple[float, float, float]] = {}
 
@@ -1171,14 +1211,14 @@ def test_game_type_icons_have_own_colors_meeting_non_text_contrast(
         icon = f'#chart-tooltip svg.game-type-icon[data-kind="{kind}"]'
         fg = _rgb_of(guarded_page, icon, "color")
         bg = _rgb_of(guarded_page, "#chart-tooltip", "backgroundColor")
-        assert _ratio(fg, bg) >= 3, (scheme, kind, "tooltip")
+        assert _ratio(fg, bg) >= 3, ("light", kind, "tooltip")
         icon_colors[kind] = fg
 
         guarded_page.evaluate(f"window.__testHooks.openPanel({index})")
         panel_icon = f'#panel-body .panel-game-type svg.game-type-icon[data-kind="{kind}"]'
         assert _rgb_of(guarded_page, panel_icon, "color") == fg
         panel_bg = _rgb_of(guarded_page, "#detail-panel", "backgroundColor")
-        assert _ratio(fg, panel_bg) >= 3, (scheme, kind, "panel")
+        assert _ratio(fg, panel_bg) >= 3, ("light", kind, "panel")
         # The modal makes the page inert, so close it before the next hover.
         guarded_page.click("#panel-close")
 
@@ -1639,8 +1679,9 @@ def test_tooltip_mode_trace_config(
 # literals, kept in sync by `test_compare_highlight_trace_config` and
 # `test_compare_shapes_have_no_edge_speckles` both exercising the real
 # built page (never a hand-rendered swatch).
-_ACCENT = {"light": "#111827", "dark": "#E5E7EB"}
-_PAGE_BG = {"light": "#FFFFFF", "dark": "#14161A"}
+# The site is light-only until Phase 17, so only the light values are kept.
+_ACCENT = {"light": "#23201B"}
+_PAGE_BG = {"light": "#FBF9F5"}
 
 # The fixture compare selection that assigns every COMPARE_SYMBOLS shape
 # plus the shared-game star (04.1-CONTEXT.md interfaces, confirmed against
@@ -1796,9 +1837,8 @@ def _boxes_overlap(a: dict[str, Any], b: dict[str, Any], pad: float = 4) -> bool
     return abs(a["px"] - b["px"]) < half_a + half_b and abs(a["py"] - b["py"]) < half_a + half_b
 
 
-@pytest.mark.parametrize("color_scheme", ["light", "dark"])
 def test_compare_shapes_have_no_edge_speckles(
-    guarded_page: Page, open_app: Callable[[Page, str], None], color_scheme: str
+    guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-31: in compare mode, every non-circle highlight marker (square,
     diamond, triangle-up, star) renders with no accent-colored speckle
@@ -1819,7 +1859,6 @@ def test_compare_shapes_have_no_edge_speckles(
     halo's own expected solid ring must never be mistaken for a speckle.
     """
     guarded_page.set_viewport_size({"width": 1280, "height": 800})
-    guarded_page.emulate_media(color_scheme=color_scheme)
     open_app(guarded_page, _COMPARE_ALL_SHAPES_QUERY)
     guarded_page.locator("#chart").scroll_into_view_if_needed()
     points = guarded_page.evaluate(_HIGHLIGHT_POINTS_JS)
@@ -1841,7 +1880,7 @@ def test_compare_shapes_have_no_edge_speckles(
             guarded_page,
             point["px"],
             point["py"],
-            color_scheme,
+            "light",
             _halo_ring_inner_radius(point["size"]),
             others,
         )
@@ -1903,9 +1942,8 @@ def _border_pixel_count(
     return int(count)
 
 
-@pytest.mark.parametrize("color_scheme", ["light", "dark"])
 def test_compare_shapes_have_accent_halo_border(
-    guarded_page: Page, open_app: Callable[[Page, str], None], color_scheme: str
+    guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-33: in compare mode, every non-circle highlight marker (square,
     diamond, triangle-up, star) shows a solid ACCENT-colored halo border --
@@ -1915,7 +1953,6 @@ def test_compare_shapes_have_accent_halo_border(
     (D-33) so it never reintroduces the D-31 SDF-glyph speckle fringe a
     `marker.line` border on these symbols caused."""
     guarded_page.set_viewport_size({"width": 1280, "height": 800})
-    guarded_page.emulate_media(color_scheme=color_scheme)
     open_app(guarded_page, _COMPARE_ALL_SHAPES_QUERY)
     # This is a pixel-fidelity check on the glyph edges; the stable scrollbar
     # gutter (SITE-28) shifts the chart by a half pixel, which this
@@ -1942,7 +1979,7 @@ def test_compare_shapes_have_accent_halo_border(
                 guarded_page,
                 point["px"],
                 point["py"],
-                color_scheme,
+                "light",
                 point["size"] / 2,
                 (point["size"] + 3) / 2,
                 others,
@@ -2010,7 +2047,6 @@ def test_compare_halo_trace_config(
     0, `opacity` 1, and is inert to hover/click (`hoverinfo: 'skip'`,
     `hovertemplate: null`). The highlight trace itself is unchanged: still
     `line.width` 0 on every non-circle point and >= 12px."""
-    guarded_page.emulate_media(color_scheme="light")
     open_app(guarded_page, _COMPARE_ALL_SHAPES_QUERY)
     result = guarded_page.evaluate(
         "() => { const gd = document.getElementById('chart'); "
@@ -2109,17 +2145,12 @@ def test_no_halo_trace_with_no_selection(
 
 # `FAMILY_COLORS[theme]` for the three families exercised below (palette.js
 # literal hex, as `rgb(...)` -- disney/fox are shared between themes; only
-# `other` differs light `#8F8F8F` vs dark `#999999`).
+# `other` differs light `#8B8B8B` vs dark `#999999`).
 _BORDER_COLOR = {
     "light": {
         "disney": "rgb(0, 114, 178)",
         "fox": "rgb(0, 158, 115)",
-        "other": "rgb(143, 143, 143)",
-    },
-    "dark": {
-        "disney": "rgb(0, 114, 178)",
-        "fox": "rgb(0, 158, 115)",
-        "other": "rgb(153, 153, 153)",
+        "other": "rgb(139, 139, 139)",
     },
 }
 
@@ -2137,7 +2168,7 @@ def test_html_tooltip_pills_are_space_separated(
     networks_text = guarded_page.inner_text("#chart-tooltip .tooltip-networks")
     assert "/" not in networks_text
 
-    pills = guarded_page.locator("#chart-tooltip .tooltip-networks .pill")
+    pills = guarded_page.locator("#chart-tooltip .tooltip-networks .net-mark")
     expect(pills).to_have_count(2)
     box0 = pills.nth(0).bounding_box()
     box1 = pills.nth(1).bounding_box()
@@ -2147,13 +2178,11 @@ def test_html_tooltip_pills_are_space_separated(
     assert 4 <= gap <= 12, gap
 
 
-@pytest.mark.parametrize("color_scheme", ["light", "dark"])
 def test_html_tooltip_border_is_primary_family_color(
-    guarded_page: Page, open_app: Callable[[Page, str], None], color_scheme: str
+    guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-29: the tooltip's ~2px border is the primary network's own family
     color, in both themes and whether or not a person is selected."""
-    guarded_page.emulate_media(color_scheme=color_scheme)
     open_app(guarded_page, "")
 
     _hover_dot(guarded_page, 0)
@@ -2162,26 +2191,26 @@ def test_html_tooltip_border_is_primary_family_color(
         "el => { const s = getComputedStyle(el); return [s.borderTopWidth, s.borderTopColor]; }",
     )
     assert styles[0] == "2px"
-    assert styles[1] == _BORDER_COLOR[color_scheme]["disney"]
+    assert styles[1] == _BORDER_COLOR["light"]["disney"]
 
     _hover_dot(guarded_page, 1)
     styles = guarded_page.eval_on_selector(
         "#chart-tooltip", "el => getComputedStyle(el).borderTopColor"
     )
-    assert styles == _BORDER_COLOR[color_scheme]["fox"]
+    assert styles == _BORDER_COLOR["light"]["fox"]
 
     _hover_dot(guarded_page, 7)
     styles = guarded_page.eval_on_selector(
         "#chart-tooltip", "el => getComputedStyle(el).borderTopColor"
     )
-    assert styles == _BORDER_COLOR[color_scheme]["other"]
+    assert styles == _BORDER_COLOR["light"]["other"]
 
     open_app(guarded_page, "?people=dale-harlow")
     _hover_dot(guarded_page, 0)
     styles = guarded_page.eval_on_selector(
         "#chart-tooltip", "el => getComputedStyle(el).borderTopColor"
     )
-    assert styles == _BORDER_COLOR[color_scheme]["disney"]
+    assert styles == _BORDER_COLOR["light"]["disney"]
 
 
 def test_plotly_tooltip_border_is_primary_family_color(
@@ -2222,12 +2251,10 @@ def _token_rgb(page: Page, name: str) -> tuple[float, float, float]:
     return (float(match[1]), float(match[2]), float(match[3]))
 
 
-@pytest.mark.parametrize("scheme", ["light", "dark"])
 def test_dashed_legend_chip_text_follows_its_toggle(
-    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
+    guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-37: a dashed chip reads --text when on and --muted-weak when off."""
-    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
+    """D-37: a dashed chip reads --ink when on and --disabled when off."""
     open_app(guarded_page, "?people=dale-harlow")
     sel = '#legend-chips button[data-family="fox"]'
     chip = guarded_page.locator(sel)
@@ -2235,16 +2262,15 @@ def test_dashed_legend_chip_text_follows_its_toggle(
     expect(chip).to_have_attribute("aria-pressed", "true")
     bg = _token_rgb(guarded_page, "--bg")
     on = _rgb_of(guarded_page, sel, "color")
-    assert on == _token_rgb(guarded_page, "--text")
+    assert on == _token_rgb(guarded_page, "--ink")
     assert _ratio(on, bg) >= 4.5
     chip.click()
     expect(chip).to_have_attribute("aria-pressed", "false")
     off = _rgb_of(guarded_page, sel, "color")
-    assert off == _token_rgb(guarded_page, "--muted-weak")
-    assert _ratio(off, bg) >= 4.5
+    assert off == _token_rgb(guarded_page, "--disabled")
     disney = '#legend-chips button[data-family="disney"]'
-    disney_color: str = guarded_page.locator(disney).evaluate("el => getComputedStyle(el).color")
-    assert disney_color == _PILL_CONTRAST["disney"][1]
+    disney_color = _rgb_of(guarded_page, disney, "color")
+    assert disney_color == _token_rgb(guarded_page, "--ink")
 
 
 # --- Hover ring (notes-6) ---------------------------------------------------
@@ -2283,13 +2309,11 @@ _RING = "#chart-hover-ring"
 _RING_VISIBLE = "#chart-hover-ring:not([hidden])"
 
 
-@pytest.mark.parametrize("color_scheme", ["light", "dark"])
 def test_hover_ring_marks_the_hovered_dot(
-    guarded_page: Page, open_app: Callable[[Page, str], None], color_scheme: str
+    guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """notes-6: hovering an active dot draws an accent ring centered on it, in both
     themes, and it clears when the pointer leaves."""
-    guarded_page.emulate_media(color_scheme=color_scheme)  # type: ignore[arg-type]
     open_app(guarded_page, "")
     point = _hover_dot(guarded_page, 0)
     guarded_page.wait_for_selector(_RING_VISIBLE, timeout=3000)
@@ -2300,7 +2324,8 @@ def test_hover_ring_marks_the_hovered_dot(
         _RING,
         "el => { const s = getComputedStyle(el); return [s.borderTopColor, s.pointerEvents]; }",
     )
-    assert style[0] == _rgb(_ACCENT[color_scheme])
+    accent = _token_rgb(guarded_page, "--accent")
+    assert style[0] == "rgb({:.0f}, {:.0f}, {:.0f})".format(*accent)
     assert style[1] == "none"
     guarded_page.mouse.move(5, 5)
     guarded_page.wait_for_selector(f"{_RING}[hidden]", state="attached")
@@ -2435,13 +2460,11 @@ def test_hover_ring_never_shows_on_inert_or_faded_dots(
     guarded_page.wait_for_selector(_RING_VISIBLE, timeout=3000)
 
 
-@pytest.mark.parametrize("color_scheme", ["light", "dark"])
 def test_hover_ring_on_compare_shapes_clears_the_halo(
-    guarded_page: Page, open_app: Callable[[Page, str], None], color_scheme: str
+    guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-31/D-33: a hovered compare shape gets a ring that clears its halo's
     corners, and the highlight trace gains no marker.line (no speckles)."""
-    guarded_page.emulate_media(color_scheme=color_scheme)  # type: ignore[arg-type]
     open_app(guarded_page, _COMPARE_ALL_SHAPES_QUERY)
     points: list[dict[str, Any]] = guarded_page.evaluate(_HIGHLIGHT_POINTS_JS)
     target = next(
@@ -2652,3 +2675,62 @@ def test_faded_traces_draw_under_every_active_trace(
     inert = [i for i, m in enumerate(metas) if m.startswith("inert:")]
     family = [i for i, m in enumerate(metas) if m.startswith("family:")]
     assert max(inert) < min(family)
+
+
+# ---------- SHELL-06: the shared chart frame on the CFB scatter ----------
+
+_RELAYOUT_X = "(r) => window.Plotly.relayout(document.getElementById('chart'), {'xaxis.range': r})"
+
+
+def test_scatter_frame_has_no_modebar_and_condensed_ticks_and_rule_gridlines(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """SHELL-06: no Plotly modebar; tick text is Roboto Condensed at 12px; the gridlines
+    are the --rule token."""
+    open_app(guarded_page, "")
+    assert guarded_page.evaluate("document.querySelector('.modebar')") is None
+    ticks = guarded_page.evaluate(
+        "() => [...document.querySelectorAll('#chart .xtick text, #chart .ytick text')]"
+        ".map(t => { const s = getComputedStyle(t); return [s.fontFamily, s.fontSize]; })"
+    )
+    assert ticks, "the scatter drew no tick labels"
+    for family, size in ticks:
+        assert "Roboto Condensed" in family
+        assert size == "12px"
+    grid = guarded_page.evaluate(
+        "() => [...document.querySelectorAll('#chart .ygrid')].map(g => getComputedStyle(g).stroke)"
+    )
+    assert grid, "the scatter drew no y gridlines"
+    rule = _token_rgb(guarded_page, "--rule")
+    for stroke in grid:
+        assert stroke == "rgb({:.0f}, {:.0f}, {:.0f})".format(*rule)
+
+
+def test_reset_zoom_is_disabled_at_home_enabled_after_zoom_and_double_click_resets(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """SHELL-06: Reset zoom is aria-disabled at the home range, enabled once the axis is
+    zoomed, and both the button and a double-click on the plot restore the home range."""
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    open_app(guarded_page, "")
+    button = guarded_page.locator("#reset-zoom")
+    expect(button).to_have_attribute("aria-disabled", "true")
+    home = guarded_page.evaluate("document.getElementById('chart')._fullLayout.xaxis.range")
+
+    guarded_page.evaluate(_RELAYOUT_X, [home[0] + 1, home[1] - 1])
+    expect(button).to_have_attribute("aria-disabled", "false")
+    button.click()
+    expect(button).to_have_attribute("aria-disabled", "true")
+    assert guarded_page.evaluate(
+        "document.getElementById('chart')._fullLayout.xaxis.range"
+    ) == pytest.approx(home, abs=1e-6)
+
+    guarded_page.evaluate(_RELAYOUT_X, [home[0] + 1, home[1] - 1])
+    expect(button).to_have_attribute("aria-disabled", "false")
+    box = guarded_page.locator("#chart .nsewdrag").first.bounding_box()
+    assert box is not None
+    guarded_page.mouse.dblclick(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    expect(button).to_have_attribute("aria-disabled", "true")
+    assert guarded_page.evaluate(
+        "document.getElementById('chart')._fullLayout.xaxis.range"
+    ) == pytest.approx(home, abs=1e-6)

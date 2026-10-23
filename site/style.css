@@ -1,67 +1,97 @@
-/* booth-review — hand-written CSS. No remote imports, embedded fonts, or external resource references. */
+/* booth-review — hand-written CSS. No remote imports; fonts are self-hosted same-origin woff2 files under fonts/. */
 
+@font-face {
+  font-family: "Crimson Text";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("fonts/crimson-text-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Roboto";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/roboto-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Roboto";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("fonts/roboto-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Roboto Condensed";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/roboto-condensed-latin-400-normal.woff2") format("woff2");
+}
+
+/* Phone breakpoint: 480px and under; desktop 481px and up (mirrors site/modules/breakpoints.js). */
 :root {
+  color-scheme: light;
   --space-xs: 4px;
   --space-sm: 8px;
   --space-md: 16px;
   --space-lg: 24px;
+  /* The two vertical-rhythm gaps (SHELL-04). No other rule may set either: filter bar
+     bottom to selection row top, and tab row bottom to the first module top. */
+  --gap-filters-band: 8px;
+  --gap-bar-content: 16px;
   --space-xl: 32px;
   --space-2xl: 48px;
   --space-3xl: 64px;
 
-  --font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-  --font-body: 16px/1.5 var(--font-family);
-  --font-label: 14px/1.4 var(--font-family);
-  --font-heading: 20px/1.2 var(--font-family);
-  --font-display: 28px/1.2 var(--font-family);
+  --serif: "Crimson Text", Georgia, serif;
+  --sans: "Roboto", Arial, sans-serif;
+  --plot: "Roboto Condensed", Arial, sans-serif;
+  --font-caption: 12px/1.4 var(--sans);
+  --font-body: 14px/1.5 var(--sans);
+  --font-heading: 600 20px/1.2 var(--serif);
+  --font-display: 600 24px/1.1 var(--serif);
   --weight-regular: 400;
   --weight-semibold: 600;
 
-  --bg: #FFFFFF;
-  --surface: #F4F5F7;
-  --border: #E2E4E9;
-  --accent: #111827;
-  --text: #111827;
-  --muted: #4B5563;
-  /* Greyed (count 0) options and legend chips. Only for --bg surfaces, never --surface. */
-  --muted-weak: #6B7280;
+  --bg: #FBF9F5;
+  --surface: #F4F0E8;
+  --ink: #23201B;
+  --muted: #6A6358;
+  --rule: #E4DDD1;
+  --rule-strong: #CFC6B6;
+  --accent: #1B4F5C;
+  --accent-soft: #E3EDEF;
+  --accent-soft-hover: #D3E3E7;
+  --disabled: #9C9486;
   --error: #B3261E;
-  /* D-25: "Clear all filters" own accent color -- the same verified pair as
-     --error today, kept as its own token so the two can diverge later
-     without also changing the error banner's color. */
-  --reset: #B3261E;
   /* Game-type icon colors (notes-4 A1/A2a follow-up): trophy = gold, bowl =
-     bronze/copper. Each reaches 3:1 non-text contrast (WCAG 1.4.11) against
-     --surface, the tooltip and detail-panel background: light 3.67 / 5.03,
-     dark 9.90 / 5.13. */
+     bronze/copper, rivalry = rose crimson. Each reaches 3:1 non-text
+     contrast (WCAG 1.4.11) against --bg and --surface. */
   --game-playoff: #A37800;
   --game-bowl: #A8501C;
-  --game-rivalry: #B42318;
+  --game-rivalry: #8F2D3A;
   --game-playoff-text: #7A5A00;
-  /* D-34: violet special-filter hue for the Announcers button (not an
-     Okabe-Ito family color). 5.70/5.22 on --bg/--surface; filled 5.70. */
-  --special: #7C3AED;
-  --on-special: #FFFFFF;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14161A;
-    --surface: #1E2126;
-    --border: #2A2E35;
-    --accent: #E5E7EB;
-    --text: #E5E7EB;
-    --muted: #9CA3AF;
-    --muted-weak: #7B8492;
-    --error: #F2B8B5;
-    --reset: #F2B8B5;
-    --game-playoff: #F5C518;
-    --game-bowl: #CD7F32;
-    --game-rivalry: #F97066;
-    --game-playoff-text: #F5C518;
-    --special: #A78BFA;
-    --on-special: #111827;
-  }
+/* Placeholder dark values; untested until Phase 17. The data-theme attribute is the only theme hook. */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #14161A;
+  --surface: #1E2126;
+  --ink: #E5E7EB;
+  --muted: #9CA3AF;
+  --rule: #2A2E35;
+  --rule-strong: #3A3F47;
+  --accent: #E5E7EB;
+  --accent-soft: #1E2126;
+  --accent-soft-hover: #2A2E35;
+  --disabled: #7B8492;
+  --error: #F2B8B5;
+  --game-playoff: #F5C518;
+  --game-bowl: #CD7F32;
+  --game-rivalry: #F97066;
+  --game-playoff-text: #F5C518;
 }
 
 * {
@@ -72,13 +102,13 @@ html, body {
   margin: 0;
   padding: 0;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   font: var(--font-body);
   font-weight: var(--weight-regular);
 }
 
 a {
-  color: var(--accent);
+  color: var(--ink);
   text-decoration: underline;
 }
 
@@ -117,19 +147,46 @@ h1, h2, h3 {
 /* D-21: the top bar now holds only the site title -- the person search
    moved into the toolbar's Announcers popover, and the chips/toggles/
    summary moved into #selection-bar below the toolbar (see that section). */
+.site-header,
 #topbar {
   display: flex;
-  align-items: center;
-  min-height: 56px;
-  padding: 0 var(--space-lg);
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  align-items: baseline;
+  min-height: 64px;
+  padding: var(--space-md) var(--space-lg);
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
 }
 
 .site-title {
-  font: var(--font-heading);
-  font-weight: var(--weight-semibold);
+  font: var(--font-display);
+  color: var(--ink);
   text-decoration: none;
+}
+
+.header-links {
+  display: flex;
+  gap: var(--space-md);
+  margin-left: auto;
+}
+
+.header-links a {
+  font: var(--font-body);
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.header-links a:hover,
+.header-links a:focus-visible {
+  text-decoration: underline;
+}
+
+/* Phase 17 mounts the theme toggle here; empty until then. */
+#theme-slot {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  margin-left: var(--space-md);
 }
 
 /* D-28: a flex column so #person-results (flex: 1 1 auto) can grow to fill
@@ -145,10 +202,10 @@ h1, h2, h3 {
 .search-field input {
   font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 4px;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   width: 100%;
 }
 
@@ -169,7 +226,7 @@ h1, h2, h3 {
   min-height: 0;
   overflow-y: auto;
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 4px;
 }
 
@@ -177,10 +234,10 @@ h1, h2, h3 {
 #school-search {
   font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 4px;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   width: 100%;
 }
 
@@ -199,7 +256,7 @@ h1, h2, h3 {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  font: var(--font-label);
+  font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
   cursor: pointer;
 }
@@ -239,63 +296,14 @@ li[role="option"][aria-selected="true"] .option-check::after {
 
 /* ---------- Selection bar (D-21) ---------- */
 
-/* The chips, Compare/Called together/Clear selection row, and the summary
-   line all live here now, below the toolbar -- filling the empty band the
-   user flagged between the filters and the plot (D-25). `min-width: 0` lets
-   its flex children shrink instead of forcing the whole page wider. */
+/* The selection band: a 32px row (chips, toggles, Clear all filters), 8px, then
+   a 24px summary box -- exactly 64px at 481px and up with zero to four picks.
+   The old viewport-tiered min-height reserve is gone (C2); the band is fixed by
+   its parts. `min-width: 0` lets its flex children shrink instead of forcing
+   the page wider. */
 #selection-bar {
-  padding: var(--space-sm) var(--space-lg);
+  padding: 0 var(--space-lg);
   min-width: 0;
-  /* D-01/D-04: the reserve covers zero or one person and depends on viewport
-     width only (never on content), so the legend row and chart do not move
-     when a person is added or cleared. Three width tiers, each the measured
-     natural one-person band height (min-height 0, fixture person with the
-     longest name, default / DejaVu / wide fonts) rounded up with ~5-6px of
-     headroom for font metrics that differ across machines.
-     641-751px: the box wraps its buttons under the chip, so the band is
-     natural 120.2 / 121.2 / 121.2px; reserve 127px. */
-  min-height: 127px;
-}
-
-/* 752-1103px: the box fits on one row (39.6px) and the summary line sits
-   under it: natural 84.6 / 85.6 / 85.6px; reserve 91px (empty gap about
-   63px). The row stops wrapping at 745px in the wide font, so 752 is the
-   next multiple of 8. */
-@media (min-width: 752px) {
-  #selection-bar {
-    min-height: 91px;
-  }
-}
-
-/* D-02 (revised): from 1104px up the summary sits beside the box, to its
-   right with an 8px gap, on one row: natural 55.6px in all three fonts;
-   reserve 61px (empty gap about 26px). 1104px is the breakpoint B: the
-   smallest multiple of 8 at which the widest one-person box (680px in the
-   wide font), the 8px gap, the full count (220px) and 120px of detail fit
-   inside the bar's content box (1088px gave only 108px of detail). */
-@media (min-width: 1104px) {
-  #selection-bar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    column-gap: var(--space-sm);
-    min-height: 61px;
-  }
-
-  .selection-row {
-    flex: none;
-    max-width: 100%;
-  }
-
-  #summary {
-    flex: 1 1 16rem;
-    min-width: 0;
-    margin-top: 0;
-  }
-
-  #compare-note {
-    flex-basis: 100%;
-  }
 }
 
 .selection-row {
@@ -303,12 +311,9 @@ li[role="option"][aria-selected="true"] .option-check::after {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm);
-  /* D-13: the selection controls sit in a violet box (8% tint keeps violet
-     text >= 4.5:1). */
-  border: 1px solid var(--special);
-  border-radius: 8px;
-  padding: var(--space-xs);
-  background: color-mix(in srgb, var(--special) 8%, var(--bg));
+  /* D-03: no box; chips and toggles sit on the page. Always rendered, 32px:
+     with no pick it holds only Clear all filters at the right end (C1). */
+  min-height: 32px;
 }
 
 #chips {
@@ -323,13 +328,13 @@ li[role="option"][aria-selected="true"] .option-check::after {
 }
 
 .chip {
-  font: var(--font-label);
+  font: var(--font-body);
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
   padding: 2px var(--space-sm);
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 999px;
   max-width: 100%;
 }
@@ -348,8 +353,8 @@ li[role="option"][aria-selected="true"] .option-check::after {
   border: none;
   background: none;
   cursor: pointer;
-  color: var(--text);
-  font: var(--font-label);
+  color: var(--ink);
+  font: var(--font-body);
 }
 
 .toggle-group {
@@ -363,13 +368,87 @@ li[role="option"][aria-selected="true"] .option-check::after {
   display: none;
 }
 
+/* 481px and up: the selection row never wraps (C2). Chips truncate (64-160px,
+   full name in title and aria-label); below 1104px the toggles use their short
+   labels; Clear all filters stays at the right end. */
+@media (min-width: 481px) {
+  .selection-row {
+    flex-wrap: nowrap;
+    height: 32px;
+    min-height: 0;
+    box-sizing: border-box;
+  }
+
+  #chips,
+  #nfl-chips,
+  #mlb-chips {
+    flex-wrap: nowrap;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  #chips > .chip,
+  #nfl-chips > .chip,
+  #mlb-chips > .chip {
+    box-sizing: border-box;
+    height: 28px;
+    min-width: 64px;
+    max-width: 160px;
+    flex: 0 1 auto;
+    padding: 0 var(--space-sm);
+    border-radius: 14px;
+    background: var(--bg);
+  }
+
+  .selection-row .toggle-group {
+    flex-wrap: nowrap;
+    flex: none;
+  }
+
+  .selection-row .toggle,
+  .selection-row #clear-selection,
+  .mlb-selection-area .toggle {
+    box-sizing: border-box;
+    height: 28px;
+    padding: 0 12px;
+    white-space: nowrap;
+  }
+
+  .selection-row .clear-all {
+    margin-left: auto;
+    flex: none;
+    white-space: nowrap;
+  }
+}
+
+@media (min-width: 481px) {
+  .lbl-long {
+    display: none;
+  }
+
+  .lbl-short {
+    display: inline;
+  }
+}
+
+@media (min-width: 1104px) {
+  .lbl-long {
+    display: inline;
+  }
+
+  .lbl-short {
+    display: none;
+  }
+}
+
 .toggle {
-  font: var(--font-label);
+  font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 4px;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   cursor: pointer;
 }
 
@@ -412,15 +491,15 @@ li[role="option"][aria-selected="true"] .option-check::after {
 
 /* D-30: Clear selection is its own kind of control -- a dashed secondary
    treatment, never the toggle's filled/outlined look and never Clear all
-   filters' `--reset` red, so the two "clear" actions read as distinct.
+   filters' `--ink` red, so the two "clear" actions read as distinct.
    Dashed `--muted` on `--bg` clears 3:1 in both themes (about 7.5:1 light,
    7.3:1 dark). The explicit `background`/`color` (D-25a) keeps dark mode
    from ever falling back to the UA's own white button face. */
 #clear-selection {
-  font: var(--font-label);
+  font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   border: 1px dashed var(--muted);
   border-radius: 4px;
   cursor: pointer;
@@ -444,15 +523,17 @@ li[role="option"][aria-selected="true"] .option-check::after {
   color: var(--muted);
 }
 
+/* Inside the summary box (D-03): transient text, never an extra row. */
 #compare-note {
-  font: var(--font-label);
+  flex: none;
+  font: var(--font-body);
   color: var(--muted);
-  margin: var(--space-xs) 0 0 0;
+  white-space: nowrap;
 }
 
 .helper,
 .caption {
-  font: var(--font-label);
+  font: var(--font-body);
   color: var(--muted);
   margin: var(--space-xs) 0 0 0;
 }
@@ -471,19 +552,15 @@ li[role="option"][aria-selected="true"] .option-check::after {
 #summary {
   display: flex;
   flex-wrap: nowrap;
-  align-items: baseline;
+  align-items: center;
   column-gap: var(--space-sm);
   text-align: left;
-  margin-top: var(--space-xs);
-  /* A flex container forms its own formatting context (no CSS2.1 "strut"),
-     so with no selection both #summary-count and #summary-detail are empty
-     text and the whole box collapses to 0 height -- appearing "hidden" to
-     a real visitor and to Playwright's own visibility check alike (Rule 1,
-     found while writing test_site_layout.py's
-     test_selection_row_hidden_with_no_people). A block #summary (its
-     pre-flex shape) never had this problem, since an empty inline "strut"
-     still reserves one line of height. */
-  min-height: 1.5em;
+  /* The 24px fixed box, 8px below the selection row. A flex container with
+     only empty text collapses, so the height is explicit. */
+  box-sizing: border-box;
+  height: 24px;
+  margin-top: var(--space-sm);
+  overflow: hidden;
 }
 
 /* The detail stays one line and ends in an ellipsis when it does not fit
@@ -499,15 +576,66 @@ li[role="option"][aria-selected="true"] .option-check::after {
 }
 
 /* `#filters-button`'s visibility comes from `.mobile-only` below; this rule
-   is only its shape. */
+   is only its shape. Accent once anything differs from a clean load. */
 #filters-button {
-  font: var(--font-label);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  font: var(--font-body);
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   cursor: pointer;
+}
+
+#filters-button.is-changed,
+#nfl-filters-button.is-changed {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: var(--weight-semibold);
+}
+
+/* One accent chip per changed control (phone only; the list is hidden at
+   desktop widths by `.mobile-only` and while nothing differs). */
+.filter-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+@media (max-width: 480px) {
+  .filter-chips:not([hidden]) {
+    display: flex;
+  }
+
+  /* The NFL sheet carries its own Clear all filters, as the CFB one does. */
+  #nfl-clear-filters {
+    display: none;
+  }
+}
+
+.filter-chip {
+  font: var(--font-body);
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--accent);
+  border-radius: 20px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
+.filter-chip b {
+  font-weight: var(--weight-semibold);
 }
 
 .desktop-only {
@@ -517,7 +645,7 @@ li[role="option"][aria-selected="true"] .option-check::after {
   display: none;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 480px) {
   .desktop-only {
     display: none;
   }
@@ -565,7 +693,7 @@ body.app {
   /* D-25: side gutters (>=16px) plus a small top pad -- the selection bar
      above already supplies its own vertical space, so this no longer needs
      the old `--space-xl` top pad to avoid crowding the toolbar. */
-  padding: var(--space-sm) var(--space-lg) 0;
+  padding: var(--space-md) var(--space-lg) 0;
   /* Regression (2026-09-27): `#chart-area` must stay in normal flow, never
      a floating/pinned position -- making it sticky alongside the old left
      filter column (11ac9b5) pinned it over the "Matched games" table once
@@ -590,92 +718,147 @@ body.app {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm);
+  margin-bottom: var(--gap-filters-band);
   min-height: 48px;
   padding: var(--space-sm) var(--space-md);
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--rule);
   /* Never sticky or fixed -- scrolls with the page like any other block
      (D-02). */
 }
 
+/* SHELL-03 control anatomy: 32px, 12px side padding, 1px rule, 3px radius. The
+   label (14px 400) and the value (muted, hidden at default) sit on one line
+   and truncate with an ellipsis; the 6px caret is a pair of borders. */
 .filter-trigger {
-  font: var(--font-label);
-  padding: 6px var(--space-sm);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  font: var(--font-body);
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
   background: var(--bg);
   /* Regression: form controls don't inherit `color` from an ancestor like
      `body` -- the UA stylesheet sets an explicit color for `<button>`
-     itself, which wins over inheritance. Without this, the button rendered
-     in the browser's default button-text color instead of the theme's
-     `--text` token, failing WCAG AA 4.5:1 in dark mode against `--bg`. */
-  color: var(--text);
+     itself, which wins over inheritance. */
+  color: var(--ink);
   cursor: pointer;
-  /* Labels truncate in their grid cell; the full label is the button's title
-     and aria-label (04.9 D-21). */
   max-width: 320px;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.filter-trigger::after {
-  content: " ▾";
+/* Label and value are inline spans in one block, so the whole summary reads as
+   one line of text and ellipsises at the cell's edge. `pre` keeps the
+   separator a value starts with (": ", " · ", " "). */
+.filter-trigger .filter-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+  text-align: left;
 }
 
-.filter-trigger[data-active="true"],
+.filter-trigger .filter-value {
+  color: var(--muted);
+}
+
+.filter-trigger::after {
+  content: "";
+  flex: none;
+  box-sizing: border-box;
+  width: 6px;
+  height: 6px;
+  margin: -2px 2px 0 8px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.filter-trigger:hover {
+  background: var(--surface);
+}
+
+/* A control that differs from a clean load (changedControls in filters.js):
+   border, label and caret in the accent, soft fill, label 600, value 400. */
+@media (max-width: 480px) {
+  /* `.filter-trigger` sets a display above, so the phone rule must outrank it. */
+  .filter-trigger.desktop-only {
+    display: none;
+  }
+}
+
+.filter-trigger.is-changed {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.filter-trigger.is-changed:hover {
+  background: var(--accent-soft-hover);
+}
+
+.filter-trigger.is-changed .filter-label {
+  font-weight: var(--weight-semibold);
+}
+
+.filter-trigger.is-changed .filter-value {
+  font-weight: 400;
+  color: var(--accent);
+}
+
 .filter-trigger[aria-expanded="true"] {
   border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
 }
 
-/* D-25b: "Clear all filters" gets a style distinct from the plain filter
-   triggers above -- an outlined accent, never the same look as the filter
-   buttons -- while it also clears the selected announcers (D-27). An
-   outlined `--reset` treatment rather than a filled one, so it doesn't read
-   as more prominent than the primary filter controls. Contrast against the
-   toolbar's `--surface` background (#F4F5F7 light / #1E2126 dark):
-   `--reset` on light is ~6.0:1, on dark ~9.5:1 -- both clear WCAG AA's
-   4.5:1 minimum. */
-#clear-filters {
-  font: var(--font-label);
+/* Clear all filters: the right end of the always-rendered 32px selection row
+   (C1), never in the filter bar. Not accent, not red: `--ink` outline. */
+.clear-all {
+  font: var(--font-body);
   font-weight: var(--weight-semibold);
-  padding: 6px var(--space-sm);
-  border: 1px solid var(--reset);
-  border-radius: 6px;
+  box-sizing: border-box;
+  height: 32px;
+  margin-left: auto;
+  padding: 0 12px;
+  border: 1px solid var(--ink);
+  border-radius: 3px;
   background: transparent;
-  color: var(--reset);
+  color: var(--ink);
   cursor: pointer;
+  white-space: nowrap;
 }
 
-/* D-21: above 640px the toolbar is a grid of equal cells, so its row count
+/* D-21: above 480px the filter bar is a grid of equal cells, so its row count
    depends only on the viewport width and the visitor's font, never on a
-   filter label. toolbar-fit.js sets `--toolbar-cell-min` to the widest
-   resting label ("Bowls/Playoffs ▾", "Clear all filters", ...) measured in
-   the font the page renders in, so no resting label truncates on a wide
-   font. 116px stays the floor (one row of ten at 1280px on narrow fonts);
-   `min(100%, ...)` keeps a pathological font from overflowing the toolbar. */
-@media (min-width: 641px) {
+   control's value. toolbar-fit.js writes `--toolbar-cell-min` (the widest
+   resting label in the rendered font, caret included) and `--toolbar-cols`
+   (balanced rows). Before it runs, auto-fill with a 116px floor stands in.
+   `min(100%, ...)` keeps a pathological font from overflowing the bar. */
+@media (min-width: 481px) {
   #toolbar {
     display: grid;
     grid-template-columns: repeat(
-      auto-fill,
+      var(--toolbar-cols, auto-fill),
       minmax(min(100%, max(116px, var(--toolbar-cell-min, 116px))), 1fr)
     );
     gap: var(--space-sm);
     align-items: center;
   }
 
-  .filter-trigger,
-  #clear-filters {
+  .filter-trigger {
     width: 100%;
     min-width: 0;
     max-width: none;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    padding-left: var(--space-xs);
-    padding-right: var(--space-xs);
+  }
+
+  /* On a slow load the page can paint while toolbar-fit.js still downloads; the controls
+     stay invisible until its first fit, so they appear in their final cells instead of
+     jumping from the stand-in grid. */
+  #toolbar:not([data-fitted]) > .filter-trigger {
+    visibility: hidden;
   }
 }
 
@@ -696,28 +879,18 @@ body.app {
   white-space: nowrap;
 }
 
-#clear-filters:focus-visible,
+/* Nothing changed: muted text and a quiet rule, still focusable (aria-disabled). */
+.clear-all[aria-disabled="true"],
+.nfl-filters-sheet .nfl-sheet-clear[aria-disabled="true"] {
+  color: var(--muted);
+  border-color: var(--rule-strong);
+  cursor: default;
+}
+
+.clear-all:focus-visible,
 .filter-trigger:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-
-/* D-34: the Announcers button is the special filter -- violet outline and
-   text at rest, filled when people are selected. Distinct from the red
-   --reset "Clear all filters". */
-#trigger-announcers {
-  border-color: var(--special);
-  color: var(--special);
-}
-
-#trigger-announcers[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--special) 12%, var(--bg));
-}
-
-#trigger-announcers[data-active="true"] {
-  background: var(--special);
-  border-color: var(--special);
-  color: var(--on-special);
 }
 
 /* ---------- Filter popovers ---------- */
@@ -739,10 +912,9 @@ body.app {
   overflow-y: auto;
   padding: var(--space-md);
   background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border);
+  color: var(--ink);
+  border: 1px solid var(--rule-strong);
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
 /* A4: every filter section's header row -- the title with a per-group Reset at
@@ -766,13 +938,13 @@ body.app {
    aria-disabled (not disabled) keeps it focusable. The 2px outline + 2px
    offset fit inside the popover's 16px padding, so no ancestor clips it. */
 .group-reset {
-  font: var(--font-label);
+  font: var(--font-body);
   background: transparent;
   border: none;
   padding: 2px var(--space-xs);
   margin: 0;
   cursor: pointer;
-  color: var(--reset);
+  color: var(--ink);
 }
 
 .group-reset[aria-disabled="true"] {
@@ -841,7 +1013,7 @@ body.app {
 
 .filter-popover label,
 .sheet-body label {
-  font: var(--font-label);
+  font: var(--font-body);
   display: flex;
   align-items: center;
   gap: var(--space-xs);
@@ -877,7 +1049,7 @@ body.app {
   display: flex;
   flex-direction: column;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   padding: 0;
   border: none;
 }
@@ -893,7 +1065,7 @@ body.app {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--rule);
 }
 
 .sheet-body {
@@ -905,7 +1077,7 @@ body.app {
 .sheet-body section {
   padding-bottom: var(--space-lg);
   margin-bottom: var(--space-lg);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--rule);
 }
 
 /* D-28: inside the phone Filters sheet, cap the announcer list's own height
@@ -915,13 +1087,13 @@ body.app {
 }
 
 .sheet-footer {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--rule);
 }
 
 .sheet-footer #filters-show-results {
   display: block;
   width: 100%;
-  font: var(--font-label);
+  font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
   border: none;
   border-radius: 6px;
@@ -960,7 +1132,7 @@ input[type="checkbox"] {
   background: var(--bg);
   margin: calc(-1 * var(--space-md)) calc(-1 * var(--space-md)) 0;
   padding: var(--space-md) var(--space-md) var(--space-sm);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--rule);
 }
 
 .sheet-body .game-sticky {
@@ -990,7 +1162,7 @@ input[type="checkbox"] {
   margin: 0;
   background: none;
   border: none;
-  font: var(--font-label);
+  font: var(--font-body);
   font-weight: var(--weight-semibold);
   color: var(--muted);
   text-align: left;
@@ -1029,7 +1201,7 @@ input[type="checkbox"] {
 
 @media (hover: hover) {
   .family-caret:hover {
-    color: var(--text);
+    color: var(--ink);
   }
 }
 
@@ -1149,15 +1321,13 @@ input[type="checkbox"] {
   margin-bottom: var(--space-xs);
 }
 
-@media (prefers-color-scheme: dark) {
-  .game-ny6 {
-    background: #26241A;
-    background: color-mix(in srgb, var(--game-playoff) 8%, transparent);
-  }
+[data-theme="dark"] .game-ny6 {
+  background: #26241A;
+  background: color-mix(in srgb, var(--game-playoff) 8%, transparent);
 }
 
 .game-ny6-label {
-  font: var(--font-label);
+  font: var(--font-body);
   font-weight: 400;
   font-style: italic;
   line-height: 1.4;
@@ -1219,7 +1389,7 @@ input[type="checkbox"] {
 /* Greyed (count 0): color only, so the checkbox keeps its accent and stays clickable. */
 .is-zero,
 .is-zero .option-count {
-  color: var(--muted-weak);
+  color: var(--disabled);
 }
 
 /* ---------- Bowls/Playoffs radio list (D-35) ---------- */
@@ -1238,8 +1408,8 @@ input[type="checkbox"] {
   padding: 4px 0;
   border: none;
   background: none;
-  font: var(--font-label);
-  color: var(--text);
+  font: var(--font-body);
+  color: var(--ink);
   text-align: left;
   cursor: pointer;
 }
@@ -1293,7 +1463,7 @@ input[type="checkbox"] {
 }
 
 .only-btn:hover {
-  color: var(--text);
+  color: var(--ink);
 }
 
 .only-btn:focus-visible {
@@ -1307,11 +1477,11 @@ input[type="checkbox"] {
 }
 
 /* Touch: always shown, quiet, 44px target at the row's right edge. Popovers and the phone
-   sheet sit on --bg, so --muted-weak (at least 3:1 there) is the right grey. */
+   sheet sit on --bg, where --disabled is only 2.86:1, so the quiet grey is --muted. */
 @media (hover: none) {
   .only-btn {
     opacity: 1;
-    color: var(--muted-weak);
+    color: var(--muted);
     min-width: 44px;
     min-height: 44px;
   }
@@ -1368,7 +1538,7 @@ input[type="checkbox"] {
   min-width: 0;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 480px) {
   .filter-trigger {
     max-width: 100%;
   }
@@ -1382,17 +1552,16 @@ input[type="checkbox"] {
 }
 
 /* Legend chip for a family with no matching games (plan 04.2-09). #chart-area
-   sits on --bg, so --muted-weak is the right grey. */
+   sits on --bg, so --disabled is the right grey. */
 .legend-chip[data-offered="false"] {
   background: transparent;
   border-style: dashed;
-  border-width: 2px;
 }
 
 #person-results .option-count,
 #person-results li.is-zero,
 #person-results li.is-zero .option-name {
-  color: var(--muted-weak);
+  color: var(--disabled);
 }
 
 #filter-seasons,
@@ -1427,7 +1596,7 @@ input[type="checkbox"] {
   box-sizing: border-box;
   padding: 0;
   margin: 0;
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 .network-list {
@@ -1456,7 +1625,7 @@ input[type="checkbox"] {
 }
 
 #season-counts-details summary {
-  font: var(--font-label);
+  font: var(--font-body);
   color: var(--muted);
   cursor: pointer;
   margin-top: var(--space-sm);
@@ -1466,7 +1635,7 @@ input[type="checkbox"] {
   list-style: none;
   margin: var(--space-sm) 0 0 0;
   padding: 0;
-  font: var(--font-label);
+  font: var(--font-body);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1490,11 +1659,10 @@ input[type="checkbox"] {
   max-width: 320px;
   padding: var(--space-sm) var(--space-md);
   background: var(--surface);
-  color: var(--text);
-  border: 2px solid var(--border);
+  color: var(--ink);
+  border: 2px solid var(--rule-strong);
   border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 /* notes-6: the hovered-dot ring is a DOM overlay, not a Plotly trace or
@@ -1640,7 +1808,7 @@ input[type="checkbox"] {
 .tooltip-booth,
 .panel-booth {
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 .tooltip-booth {
@@ -1654,7 +1822,7 @@ input[type="checkbox"] {
 /* ---------- Chart area ---------- */
 
 /* `#chart-area`'s own children stack top-to-bottom in flex-column flow (not
-   grid) so the ≤640px media query below can reorder the legend row below
+   grid) so the ≤480px media query below can reorder the legend row below
    the chart via `order`, without touching the rest of the page's grid. */
 #chart-area {
   display: flex;
@@ -1707,7 +1875,7 @@ input[type="checkbox"] {
 }
 
 .dots-caption {
-  font: var(--font-label);
+  font: var(--font-body);
   color: var(--muted);
 }
 
@@ -1719,7 +1887,7 @@ input[type="checkbox"] {
    network pills -- pill.js's `makePill`). */
 .pill {
   display: inline-block;
-  font: var(--font-label);
+  font: var(--font-body);
   padding: 2px var(--space-sm);
   border-radius: 999px;
   white-space: nowrap;
@@ -1727,28 +1895,40 @@ input[type="checkbox"] {
 }
 
 .legend-chip {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 28px;
+  padding: 0 var(--space-md);
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--rule-strong);
+  border-radius: 14px;
   cursor: pointer;
-  font: inherit;
+  font: var(--font-body);
+  white-space: nowrap;
   /* D-07: double-tap zoom off; pan and pinch kept. */
   touch-action: manipulation;
   user-select: none;
 }
 
-/* Toggled off (D-16): legend.js clears the inline fill so this rule's
-   transparent background/--text color shows through; only the chip's own
-   inline `border-color` (the family color) is kept. */
+/* Outlined chips (13-12): shown = --ink text and a full-strength family dot; hidden (the
+   family is toggled off) = --muted text and a dot at 32%, the faded-dot opacity. */
 .legend-chip[aria-pressed="false"] {
-  background: transparent;
-  color: var(--text);
+  color: var(--muted);
+}
+
+.legend-chip[aria-pressed="false"] .legend-dot {
+  opacity: 0.32;
 }
 
 /* D-37: a dashed (not offered) chip reads lighter when on, grey when off. */
 .legend-chip[data-offered="false"][aria-pressed="true"] {
-  color: var(--text);
+  color: var(--ink);
 }
 
 .legend-chip[data-offered="false"][aria-pressed="false"] {
-  color: var(--muted-weak);
+  color: var(--disabled);
 }
 
 .legend-chip:focus-visible {
@@ -1759,12 +1939,15 @@ input[type="checkbox"] {
 .chart-tabs {
   display: flex;
   gap: 4px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--rule-strong);
   min-height: 40px;
+  box-sizing: border-box;
+  /* The only rule that sets the tab-row-to-module gap (SHELL-04). */
+  margin-bottom: var(--gap-bar-content);
 }
 
 .chart-tab {
-  font: var(--font-label);
+  font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
   background: transparent;
   border: none;
@@ -1774,12 +1957,13 @@ input[type="checkbox"] {
 }
 
 .chart-tab[aria-selected="true"] {
-  color: var(--text);
-  border-bottom-color: var(--accent);
+  color: var(--ink);
+  font-weight: var(--weight-semibold);
+  border-bottom-color: var(--ink);
 }
 
 .chart-tab[aria-disabled="true"] {
-  color: var(--muted-weak);
+  color: var(--disabled);
   cursor: not-allowed;
   border-bottom-color: transparent;
 }
@@ -1789,23 +1973,12 @@ input[type="checkbox"] {
   outline-offset: 2px;
 }
 
-.tab-hint {
-  min-height: 24px;
-  margin: 0;
-  /* One line always: a wrapped Map prompt would push the chart panel down (04.18 D-09). */
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font: var(--font-label);
-  color: var(--muted);
-}
-
 /* D-14/D-17: both control sets share one grid cell so the slot never shifts. */
 .chart-controls {
   display: grid;
-  /* D-22: the row's bottom spacing lives here, not on each control, so no
-     control's margin box shifts its text off the shared baseline. */
-  margin-bottom: var(--space-md);
+  /* The controls live in the module header tools now; their spacing is the
+     header's own (D-22: no control's margin box shifts the shared baseline). */
+  margin-bottom: 0;
 }
 
 .chart-controls .segmented {
@@ -1832,7 +2005,7 @@ input[type="checkbox"] {
 }
 
 .axis-caption {
-  font: var(--font-label);
+  font: var(--font-caption);
   color: var(--muted);
   white-space: nowrap;
 }
@@ -1873,7 +2046,7 @@ input[type="checkbox"] {
 }
 
 .by-sizer > span {
-  font: var(--font-label);
+  font: var(--font-body);
   padding: 0 12px;
   white-space: nowrap;
 }
@@ -1937,7 +2110,7 @@ input[type="checkbox"] {
 }
 
 .bars-captions p {
-  font: var(--font-label);
+  font: var(--font-body);
   color: var(--muted);
   margin: 0 0 4px;
 }
@@ -1945,7 +2118,7 @@ input[type="checkbox"] {
 .counts-list {
   list-style: none;
   padding: 0;
-  font: var(--font-label);
+  font: var(--font-body);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1958,7 +2131,7 @@ input[type="checkbox"] {
   border: none;
   padding: 0;
   font: inherit;
-  color: var(--text);
+  color: var(--ink);
   cursor: pointer;
   text-align: left;
 }
@@ -1981,20 +2154,21 @@ input[type="checkbox"] {
   border-radius: 2px;
   margin-right: var(--space-xs);
   vertical-align: middle;
-  outline: 1px solid var(--border);
+  outline: 1px solid var(--rule-strong);
 }
 
 .counts-list ol.counts-channels {
   padding-left: var(--space-md);
 }
 
-/* Role pills (D-14..D-16); colors come from tokens so they follow the theme. */
+/* Role tags (D-02): PBP filled ink, Analyst ink outline, Sideline dashed muted. */
 .role-pill {
   display: inline-block;
-  font: 600 12px/1 var(--font-family);
-  padding: 2px 6px;
-  border-radius: 999px;
-  border: 1px solid var(--special);
+  font: 400 12px/18px var(--sans);
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 10px;
+  border: 1px solid var(--ink);
   white-space: nowrap;
   vertical-align: baseline;
   margin-left: 4px;
@@ -2009,19 +2183,26 @@ input[type="checkbox"] {
 }
 
 .role-pill[data-role="pbp"] {
-  background: var(--special);
-  color: var(--on-special);
+  background: var(--ink);
+  color: var(--bg);
 }
 
 .role-pill[data-role="analyst"] {
   background: transparent;
-  color: var(--special);
+  color: var(--ink);
 }
 
+.role-pill[data-role="sideline"],
 .role-pill[data-role="unknown"] {
   background: transparent;
-  border-color: var(--muted);
+  border: 1px dashed var(--muted);
   color: var(--muted);
+}
+
+.crew-box.is-matched {
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  background: var(--accent-soft);
 }
 
 .segmented .role-pill,
@@ -2037,11 +2218,12 @@ input[type="checkbox"] {
 }
 
 /* Crew box (D-09, D-11, D-12). */
+/* D-01: neutral box; accent use (3) is extended to the matched crew box. */
 .crew-box {
-  border: 1px solid var(--special);
-  border-radius: 8px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
   padding: var(--space-sm);
-  background: color-mix(in srgb, var(--special) 8%, var(--surface));
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
@@ -2069,26 +2251,25 @@ input[type="checkbox"] {
 
 .segmented {
   display: inline-flex;
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 4px;
   overflow: hidden;
   margin-bottom: var(--space-md);
 }
 
 .segmented button {
-  font: var(--font-label);
-  padding: var(--space-sm) var(--space-md);
+  font: var(--font-body);
+  min-height: 28px;
+  padding: 0 var(--space-md);
   border: none;
-  /* D-22: pressed and unpressed buttons are the same height. */
-  border-bottom: 2px solid transparent;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   cursor: pointer;
 }
 
 .segmented button[aria-pressed="true"] {
-  border-bottom-color: var(--accent);
-  color: var(--accent);
+  background: var(--ink);
+  color: var(--bg);
 }
 
 #chart {
@@ -2109,7 +2290,7 @@ input[type="checkbox"] {
   padding: var(--space-md);
   pointer-events: none;
   z-index: 2;
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 /* 04.7 D-06: a boxed note stays legible over faded dots. */
@@ -2121,7 +2302,7 @@ input[type="checkbox"] {
   width: max-content;
   max-width: calc(100% - var(--space-xl));
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 4px;
   padding: var(--space-sm) var(--space-md);
 }
@@ -2131,7 +2312,7 @@ input[type="checkbox"] {
 }
 
 .season-empty-title {
-  color: var(--text);
+  color: var(--ink);
   margin: 0;
 }
 
@@ -2147,13 +2328,13 @@ input[type="checkbox"] {
   gap: var(--space-md);
   padding: 0;
   margin: var(--space-sm) 0;
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 .lead-key {
   margin: var(--space-sm) 0;
-  font: var(--font-label);
-  color: var(--text);
+  font: var(--font-body);
+  color: var(--ink);
 }
 
 /* Space stays reserved when the key is off so nothing shifts. */
@@ -2200,7 +2381,7 @@ input[type="checkbox"] {
   /* SITE-20: `.games-table` has no `table-layout: fixed`, so its natural width
      (the Source cell's two links, long crew names, wider fonts) can pass the
      container's width. That happened on phones and, with wider fonts, just
-     above the 640px breakpoint too. The table scrolls inside this box at every
+     above the 480px breakpoint too. The table scrolls inside this box at every
      width so the page itself never scrolls sideways; whole-row clicks (D-06)
      still work inside a scrolled container. */
   overflow-x: auto;
@@ -2224,31 +2405,88 @@ input[type="checkbox"] {
 .games-table {
   width: 100%;
   border-collapse: collapse;
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 .games-table th,
 .games-table td {
-  padding: var(--space-xs) var(--space-sm);
-  border-bottom: 1px solid var(--border);
+  padding: var(--space-sm) var(--space-md);
+  line-height: 1.4;
+  border-bottom: 1px solid var(--rule);
   text-align: left;
 }
 
 .games-table th {
-  background: var(--surface);
+  background: transparent;
+  font-weight: var(--weight-semibold);
+  border-bottom-color: var(--rule-strong);
 }
 
-.games-table tbody tr:nth-child(even) {
-  background: var(--surface);
+/* A row header closes its row with the same hairline as the cells beside it. */
+.games-table tbody th {
+  border-bottom-color: var(--rule);
 }
 
+/* Professional table alignment (brief §5), shared by every data table built on
+   `.games-table`: numbers sit right in tabular figures, a head aligns like its data, a text
+   placeholder in a numeric column (`num no-rating`) takes the numbers' alignment, and a
+   numeric column is only as wide as its content (width 1% shrinks it in an auto-layout
+   table; the fixed-layout Crews table sets its own widths). Numbers and dates never wrap. */
 .games-table td.num,
+.games-table th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  width: 1%;
+}
+
 .games-table th button {
   font-variant-numeric: tabular-nums;
 }
 
+/* Heads sit on the bottom line, so a one-line head shares the baseline of a wrapped one. */
+.games-table thead th {
+  vertical-align: bottom;
+}
+
+/* A source link breaks between links, never inside a publisher's name. */
+.games-table td a {
+  white-space: nowrap;
+}
+
+/* A qualifier under a figure (the Nielsen + Adobe measurement): its own small muted line. */
+.games-table td.num .num-note {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* On desktop the matchup stays on one line, so the table gives it the spare width the crew
+   column would otherwise hold; on a phone the table scrolls and the matchup may wrap. */
+@media (min-width: 481px) {
+  .games-table td.matchup {
+    white-space: nowrap;
+  }
+}
+
+/* A text date ("Sun, Aug 31, 2014") varies in width, so it reads as text: left-aligned
+   with its head, tabular figures, and never wrapped. */
+.games-table td.date {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Over a right-aligned column the sort glyph sits left of the label, so the label keeps the
+   numbers' right edge and does not move when the glyph appears. */
+.games-table th.num button {
+  flex-direction: row-reverse;
+}
+
 .games-table td {
   word-break: break-word;
+  /* No lone score or word on a wrapped line ("Vanderbilt / 3"). */
+  text-wrap: pretty;
 }
 
 .games-table th button {
@@ -2264,7 +2502,7 @@ input[type="checkbox"] {
 }
 
 .sort-glyph {
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 /* D-06: the whole row is the click/Enter target that opens the detail
@@ -2284,9 +2522,9 @@ input[type="checkbox"] {
 
 .badge {
   display: inline-block;
-  font: var(--font-label);
+  font: var(--font-body);
   padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 999px;
 }
 
@@ -2311,10 +2549,10 @@ html:has(#mlb-detail-panel[open]) {
 #nfl-detail-panel,
 #mlb-detail-panel {
   padding: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 8px;
   background: var(--surface);
-  color: var(--text);
+  color: var(--ink);
   width: min(560px, calc(100vw - 32px));
   max-width: none;
   max-height: 85vh;
@@ -2384,8 +2622,8 @@ html:has(#mlb-detail-panel[open]) {
   }
 }
 
-/* Phones (<=640px): the same dialog as a bottom sheet. */
-@media (max-width: 640px) {
+/* Phones (<=480px): the same dialog as a bottom sheet. */
+@media (max-width: 480px) {
   #detail-panel,
   #nfl-detail-panel,
   #mlb-detail-panel {
@@ -2412,12 +2650,12 @@ html:has(#mlb-detail-panel[open]) {
 }
 
 .panel-bowl .bowl-core {
-  color: var(--text);
+  color: var(--ink);
   font-weight: 600;
 }
 
 .panel-rivalry .rivalry-name {
-  color: var(--text);
+  color: var(--ink);
   font-weight: 600;
 }
 
@@ -2470,14 +2708,22 @@ html:has(#mlb-detail-panel[open]) {
 /* ---------- Footer ---------- */
 
 .site-footer {
-  background: var(--surface);
-  border-top: 1px solid var(--border);
+  background: var(--bg);
+  border-top: 1px solid var(--rule);
+  margin-top: var(--space-2xl);
   padding: var(--space-lg);
-  font: var(--font-label);
+  font: var(--font-caption);
+  color: var(--muted);
 }
 
 .site-footer a {
-  color: var(--accent);
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.trademark-line,
+.type-line {
+  margin: var(--space-xs) 0;
 }
 
 /* ---------- Methodology / coverage pages ---------- */
@@ -2505,26 +2751,72 @@ html:has(#mlb-detail-panel[open]) {
 
 .page table th,
 .page table td {
-  border: 1px solid var(--border);
-  padding: var(--space-xs) var(--space-sm);
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  padding: var(--space-sm) var(--space-md);
+  font: var(--font-body);
+  line-height: 1.4;
+  text-align: left;
+}
+
+.page table th {
+  font-weight: var(--weight-semibold);
+  border-bottom-color: var(--rule-strong);
+}
+
+/* Coverage tables: every column after the first holds counts, so cells and heads sit right
+   (brief §5); the first column (network or season) stays left. */
+.page .coverage-table td,
+.page .coverage-table thead th:not(:first-child),
+.page .coverage-quality-table td:not(:first-child),
+.page .coverage-quality-table thead th:not(:first-child) {
+  text-align: right;
+}
+
+.page .coverage-table td,
+.page .coverage-quality-table td {
+  white-space: nowrap;
+}
+
+/* A row header closes its row with the cells' hairline, and a network name stays on one line. */
+.page table tbody th {
+  border-bottom-color: var(--rule);
+  white-space: nowrap;
 }
 
 .table-scroll {
   overflow-x: auto;
+  position: relative;
 }
 
-/* ---------- Phones (≤640px) ---------- */
+/* Scroll-cue plumbing (13-14): 1px sentinels the IntersectionObserver watches, and the
+   header label. Neither shows on desktop. */
+.scroll-sentinel {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+  visibility: hidden;
+}
 
-@media (max-width: 640px) {
-  /* Phones keep no reserve (user, 2026-10-13): the one-person reserve left a
-     ~128px blank band under the summary with nobody selected. The trade-off:
-     the chart moves down when the first person is added and back up on
-     Clear. Picks from the full-screen Filters sheet hide the move; a tap on a
-     person bar in Bars does not. */
-  #selection-bar {
-    min-height: 0;
-  }
+.scroll-sentinel-start {
+  left: 0;
+}
 
+.swipe-cue {
+  display: none;
+}
+
+/* The phone twin of the MLB Postseason grid, and its season notes, never show above 480px. */
+.mlb-phone-grid,
+.mlb-phone-season-notes {
+  display: none;
+}
+
+/* ---------- Phones (≤480px) ---------- */
+
+@media (max-width: 480px) {
   .selection-row {
     flex-direction: column;
     align-items: stretch;
@@ -2590,7 +2882,7 @@ html:has(#mlb-detail-panel[open]) {
   }
 
   /* The phone bottom-sheet `#detail-panel` rules live in the "Detail modal"
-     section's own `(max-width: 640px)` block above. */
+     section's own `(max-width: 480px)` block above. */
 
   button,
   .toggle,
@@ -2621,7 +2913,7 @@ html:has(#mlb-detail-panel[open]) {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 480px) {
   #game-search {
     height: 44px;
   }
@@ -2662,12 +2954,14 @@ html:has(#mlb-detail-panel[open]) {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
-    column-gap: var(--space-xs);
+    column-gap: 0;
   }
 
+  /* Content-sized columns (13-24): equal 1fr columns left "Excitement" 5px short in the wide
+     font at 360px; auto columns size to the labels and still fill the row. */
   #axis-toggle {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, auto);
     width: 100%;
   }
 
@@ -2679,8 +2973,11 @@ html:has(#mlb-detail-panel[open]) {
     width: 100%;
   }
 
+  /* 13-19: the module frame (border and 12px padding) took 26px from this row, so the
+     buttons trim their side padding to 1px and the caption sits flush (no column gap); the full labels
+     still fit at 360px in the wide font. */
   #y-toggle button {
-    padding: 0 4px;
+    padding: 0 1px;
   }
 
   #axis-toggle .axis-long {
@@ -2764,8 +3061,13 @@ html:has(#mlb-detail-panel[open]) {
   border: 0;
   white-space: nowrap;
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
+  /* Chart text: 12px Roboto Condensed with a halo in the page background (13-12). */
+  font-family: var(--plot);
+  font-size: 12px;
   font-weight: var(--weight-regular);
+  paint-order: stroke;
+  text-shadow: -1px -1px 0 var(--bg), 1px -1px 0 var(--bg), -1px 1px 0 var(--bg), 1px 1px 0 var(--bg);
   cursor: pointer;
 }
 
@@ -2787,7 +3089,7 @@ html:has(#mlb-detail-panel[open]) {
   height: 20px;
   border: 1px solid var(--muted);
   border-radius: 50%;
-  font: var(--font-label);
+  font: var(--font-body);
   font-weight: var(--weight-semibold);
   line-height: 1;
 }
@@ -2799,9 +3101,9 @@ html:has(#mlb-detail-panel[open]) {
   max-width: 280px;
   padding: var(--space-md);
   background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text);
-  font: var(--font-label);
+  border: 1px solid var(--rule-strong);
+  color: var(--ink);
+  font: var(--font-body);
   line-height: 1.5;
 }
 
@@ -2823,7 +3125,7 @@ html:has(#mlb-detail-panel[open]) {
 }
 
 .band-note a {
-  color: var(--text);
+  color: var(--ink);
   text-decoration: underline;
 }
 
@@ -2860,7 +3162,7 @@ td.no-rating {
 .map-overlay {
   position: absolute;
   margin: 0;
-  font: var(--font-label);
+  font: var(--font-body);
   line-height: 1.4;
   color: var(--muted);
   pointer-events: none;
@@ -2881,7 +3183,7 @@ td.no-rating {
 .map-key-heading {
   margin: 0 0 var(--space-xs);
   font-weight: 600;
-  color: var(--text);
+  color: var(--ink);
 }
 
 .map-key-block + .map-key-block {
@@ -2963,38 +3265,40 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm);
+  margin-bottom: var(--gap-filters-band);
   min-height: 48px;
   padding: var(--space-sm) var(--space-md);
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--rule);
 }
 
 .nfl-filter-layer {
   display: contents;
 }
 
-.nfl-toolbar-spacer {
-  display: none;
-}
-
-#nfl-clear-filters {
-  font: var(--font-label);
-  font-weight: var(--weight-semibold);
-  padding: 6px var(--space-sm);
-  border: 1px solid var(--reset);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--reset);
-  cursor: pointer;
+/* Same equal-cell grid as #toolbar (set after the flex base above, which it
+   must outrank); `.filter-trigger` sizing is shared. */
+@media (min-width: 481px) {
+  #nfl-toolbar {
+    display: grid;
+    grid-template-columns: repeat(
+      var(--toolbar-cols, auto-fill),
+      minmax(min(100%, max(116px, var(--toolbar-cell-min, 116px))), 1fr)
+    );
+    gap: var(--space-sm);
+    align-items: center;
+  }
 }
 
 #nfl-filters-button {
-  font: var(--font-label);
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  font: var(--font-body);
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   cursor: pointer;
 }
 
@@ -3003,64 +3307,11 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   cursor: default;
 }
 
-#nfl-clear-filters:focus-visible,
 #nfl-filters-button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-#nfl-trigger-announcers {
-  border-color: var(--special);
-  color: var(--special);
-}
-
-#nfl-trigger-announcers[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--special) 12%, var(--bg));
-}
-
-#nfl-trigger-announcers[data-active="true"] {
-  background: var(--special);
-  border-color: var(--special);
-  color: var(--on-special);
-}
-
-/* Same grid as #toolbar. The hidden spacer cells bring the NFL row count up to
-   the CFB toolbar's twelve cells, so a switch never moves the chart (SITE-20). */
-@media (min-width: 641px) {
-  #nfl-toolbar {
-    display: grid;
-    grid-template-columns: repeat(
-      auto-fill,
-      minmax(min(100%, max(116px, var(--toolbar-cell-min, 116px))), 1fr)
-    );
-    gap: var(--space-sm);
-    align-items: center;
-  }
-
-  #nfl-toolbar .filter-trigger,
-  #nfl-clear-filters {
-    width: 100%;
-    min-width: 0;
-    max-width: none;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    padding-left: var(--space-xs);
-    padding-right: var(--space-xs);
-  }
-
-  .nfl-toolbar-spacer {
-    display: block;
-    visibility: hidden;
-    font: var(--font-label);
-    padding: 6px var(--space-xs);
-    border: 1px solid transparent;
-  }
-
-  .nfl-toolbar-spacer::before {
-    content: "\00a0";
-  }
-}
 
 .nfl-filter-popover section {
   display: flex;
@@ -3073,10 +3324,10 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .nfl-team-search {
   font: var(--font-body);
   padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 4px;
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
 }
 
 .nfl-team-search {
@@ -3090,7 +3341,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   max-height: 240px;
   overflow-y: auto;
   background: var(--bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 4px;
 }
 
@@ -3152,7 +3403,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .nfl-booth-list .group-name {
   flex: 1 1 auto;
   min-width: 0;
-  font: var(--font-label);
+  font: var(--font-body);
   font-weight: var(--weight-semibold);
 }
 
@@ -3176,7 +3427,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 .nfl-cat-group legend {
-  font: var(--font-label);
+  font: var(--font-body);
   font-weight: var(--weight-semibold);
   padding: 0;
   margin-bottom: var(--space-xs);
@@ -3188,7 +3439,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   margin-top: var(--space-sm);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 480px) {
   .nfl-filters-sheet input,
   .nfl-filters-sheet select,
   .nfl-filters-sheet .group-reset,
@@ -3217,7 +3468,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .nfl-filters-sheet #nfl-filters-show-results {
   display: block;
   width: 100%;
-  font: var(--font-label);
+  font: var(--font-body);
   padding: var(--space-sm) var(--space-md);
   border: none;
   border-radius: 6px;
@@ -3227,66 +3478,71 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 .nfl-filters-sheet .nfl-sheet-clear {
-  font: var(--font-label);
+  font: var(--font-body);
   padding: var(--space-xs) var(--space-md);
-  border: 1px solid var(--reset);
+  border: 1px solid var(--ink);
   border-radius: 6px;
   background: transparent;
-  color: var(--reset);
+  color: var(--ink);
   cursor: pointer;
 }
 
 #nfl-selection-bar,
 #mlb-selection-bar {
-  padding: var(--space-sm) var(--space-lg);
+  padding: 0 var(--space-lg);
   min-width: 0;
-  min-height: 127px;
 }
 
-@media (min-width: 752px) {
-  #nfl-selection-bar,
-  #mlb-selection-bar {
-    min-height: 91px;
-  }
-}
-
-@media (min-width: 1104px) {
-  #nfl-selection-bar,
-  #mlb-selection-bar {
-    min-height: 61px;
-  }
-}
-
-@media (max-width: 640px) {
-  #nfl-selection-bar,
-  #mlb-selection-bar {
-    min-height: 0;
-  }
-
-  /* With no reserve, the empty chip list and summary's margins would make the
-     empty NFL band 12px taller than CFB's and move the chart on a sport
-     switch (SITE-20). */
-  .nfl-chips:empty,
-  .nfl-summary:empty {
-    display: none;
-  }
-}
-
-/* 999.5-19: the NFL headline sits in the reserved band like CFB's summary count. */
-#nfl-headline,
-#mlb-headline {
-  margin: var(--space-xs) 0 0;
+/* The NFL and MLB summary is the same 24px fixed box as CFB's, 8px below the row, and
+   its count reads in the same serif as CFB's `.summary-count`. */
+.nfl-summary {
+  box-sizing: border-box;
+  height: 24px;
+  margin: var(--space-sm) 0 0;
   font: var(--font-heading);
   font-weight: var(--weight-semibold);
+  color: var(--ink);
+  line-height: 24px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* The NFL and MLB headline is the module title now (module-head). */
+#nfl-headline,
+#mlb-chart-title {
+  margin: 0;
+}
+
+/* MLB has no filter bar: its labelled selection area takes the bar's place,
+   32px high, in the same position (SHELL-03). */
+#mlb-toolbar {
+  display: none;
+}
+
+.mlb-selection-area {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  height: 32px;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.mlb-selection-note {
+  margin: 0;
+  font: var(--font-body);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
 #nfl-chips,
 #mlb-chips {
   list-style: none;
-  margin: 0 0 var(--space-xs) 0;
+  margin: 0;
   padding: 0;
   display: flex;
   flex-wrap: wrap;
@@ -3295,7 +3551,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 #nfl-chart-area,
 #mlb-chart-area {
-  padding: var(--space-sm) var(--space-lg) 0;
+  padding: var(--space-md) var(--space-lg) 0;
   position: static;
   display: flex;
   flex-direction: column;
@@ -3333,7 +3589,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 .nfl-captions {
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
   margin-top: var(--space-sm);
 }
 
@@ -3401,15 +3657,30 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 /* ---------- Sport switch (CFB | NFL, D-05) ---------- */
 
 #sport-switch {
+  display: inline-flex;
+  gap: var(--space-xs);
   margin: 0 0 0 var(--space-md);
+  border: none;
+  border-radius: 0;
+  overflow: visible;
 }
 
 #sport-switch button {
-  min-height: 40px;
-  padding: 0 var(--space-md);
+  min-height: 0;
+  padding: var(--space-sm) var(--space-md);
+  background: transparent;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
 }
 
-@media (max-width: 640px) {
+#sport-switch button[aria-pressed="true"] {
+  background: transparent;
+  color: var(--ink);
+  font-weight: var(--weight-semibold);
+  border-bottom-color: var(--ink);
+}
+
+@media (max-width: 480px) {
   #topbar:has(#sport-switch) {
     flex-wrap: wrap;
     justify-content: space-between;
@@ -3450,17 +3721,6 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   overflow-x: auto;
 }
 
-.nfl-booth-table .booth-col {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  background: var(--bg);
-}
-
-.nfl-booth-table th.booth-col {
-  background: var(--surface);
-}
-
 .booth-row-btn {
   border: none;
   background: transparent;
@@ -3476,7 +3736,26 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   outline-offset: 2px;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 480px) {
+  /* Identity column pinned (UI-SPEC phone contract): sticky left with its own opaque fill.
+     Desktop has no column fill. */
+  .nfl-booth-table .booth-col,
+  .crews-table tbody th.booth-col {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--bg);
+  }
+
+  .nfl-booth-table th.booth-col,
+  .crews-table thead th.booth-col {
+    background: var(--surface);
+  }
+
+  .crews-table tbody tr:hover th.booth-col {
+    background: var(--surface);
+  }
+
   .booth-row-btn {
     min-height: 44px;
   }
@@ -3514,13 +3793,6 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
     padding-right: var(--space-xs);
   }
 
-  .nfl-booth-table-wrap {
-    background:
-      linear-gradient(to right, var(--bg), var(--bg)) left center / 20px 100% no-repeat local,
-      linear-gradient(to left, var(--bg), var(--bg)) right center / 20px 100% no-repeat local,
-      linear-gradient(to right, rgba(0, 0, 0, 0.22), transparent) left center / 10px 100% no-repeat scroll,
-      linear-gradient(to left, rgba(0, 0, 0, 0.22), transparent) right center / 10px 100% no-repeat scroll;
-  }
 }
 
 /* NFL control rows: fixed-width groups side by side, never stretched to the row (the shared
@@ -3541,13 +3813,22 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 .nfl-booth-table tr[data-low-n="true"] {
-  color: var(--muted-weak);
+  color: var(--disabled);
 }
 
+/* Low-n tag: a dashed muted pill, the same shape as the role tags (D-02). */
 .low-n-tag {
+  display: inline-block;
   margin-left: var(--space-xs);
+  height: 20px;
+  padding: 0 8px;
+  border: 1px dashed var(--muted);
+  border-radius: 10px;
+  background: transparent;
   color: var(--muted);
-  font-size: 14px;
+  font: 400 12px/18px var(--sans);
+  white-space: nowrap;
+  vertical-align: baseline;
 }
 
 .nfl-booth-table tr[data-picked="true"] .booth-col,
@@ -3565,7 +3846,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .nfl-coverage,
 .nfl-published-note {
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 /* NFL-only: the legend info button and its note sit in the legend row's flex
@@ -3598,7 +3879,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .crew-source-note {
   margin: var(--space-xs) 0 0 0;
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 /* NFL-only: Avg viewers scope footnote mark and rated-game count in the Crews table. */
@@ -3610,7 +3891,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .rated-n {
   display: block;
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
   font-weight: normal;
 }
 
@@ -3623,7 +3904,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 .mlb-credit {
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 #mlb-detail-panel .mlb-lineup-note {
@@ -3640,8 +3921,8 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .mlb-lineup h4 {
   margin: 0 0 var(--space-xs) 0;
   padding-bottom: var(--space-xs);
-  border-bottom: 1px solid var(--border);
-  font: var(--font-label);
+  border-bottom: 1px solid var(--rule);
+  font: var(--font-body);
   font-weight: var(--weight-semibold);
 }
 
@@ -3657,7 +3938,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   column-gap: var(--space-xs);
   align-items: baseline;
   padding: 2px 0;
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 .mlb-lineup-list .mlb-slot {
@@ -3674,7 +3955,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .mlb-lineup-list .mlb-sp {
   margin-top: var(--space-xs);
   padding-top: var(--space-xs);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--rule);
 }
 
 @media (max-width: 420px) {
@@ -3687,14 +3968,15 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
    itself reuses the NFL booth-table rules above. */
 .mlb-apple-table td.mlb-pending {
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .mlb-apple-table .rated-n {
   display: block;
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 .mlb-lead-lines {
@@ -3749,14 +4031,14 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .mlb-season-coverage {
   display: block;
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
   font-weight: 400;
 }
 
 .mlb-season-credit {
   display: block;
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
   font-weight: 400;
 }
 
@@ -3777,7 +4059,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 .mlb-empty-mark,
 .mlb-cell-empty {
-  color: var(--muted-weak);
+  color: var(--disabled);
 }
 
 .mlb-cell-btn {
@@ -3836,17 +4118,17 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 .mlb-no-crew {
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
 }
 
 .mlb-cell-stats {
   margin-top: var(--space-xs);
   color: var(--muted);
-  font: var(--font-label);
+  font: var(--font-body);
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 480px) {
   .mlb-grid thead {
     position: absolute;
     width: 1px;
@@ -3865,7 +4147,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
   .mlb-grid tr {
     padding: var(--space-sm) 0;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--rule);
   }
 
   .mlb-grid {
@@ -3892,7 +4174,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   .mlb-cell-label {
     display: block;
     color: var(--muted);
-    font: var(--font-label);
+    font: var(--font-body);
     font-weight: var(--weight-semibold);
   }
 
@@ -3935,28 +4217,16 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   min-width: 620px;
 }
 
-.crews-table th.booth-col {
-  width: 38%;
-}
-
-/* Row headers take the row's own background, so a row reads as one band. */
-.crews-table tbody th.booth-col {
-  background: var(--bg);
-}
-
-.crews-table tbody tr:nth-child(even) th.booth-col {
-  background: var(--surface);
-}
-
-.crews-table th.num,
-.crews-table td.num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
+/* Fixed layout keeps the columns of every season-and-family table in line, so the numeric
+   columns get set widths sized to their content (heads may wrap to two lines) and the Booth
+   column takes the rest (brief §5). */
 .crews-table th.num {
+  width: 8.5rem;
   white-space: normal;
+}
+
+.crews-table th.num.crews-narrow {
+  width: 5rem;
 }
 
 .crews-table .crews-pbp {
@@ -3966,7 +4236,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .crews-chip {
   margin-left: var(--space-xs);
   padding: 0 var(--space-xs);
-  border: 1px solid var(--border);
+  border: 1px solid var(--rule-strong);
   border-radius: 3px;
   color: var(--muted);
   font-size: 14px;
@@ -4002,7 +4272,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   font-weight: 600;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 480px) {
   .crews-table .booth-col {
     min-width: 150px;
   }
@@ -4012,6 +4282,366 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   }
 
   .crews-table th.num {
-    min-width: 64px;
+    width: 5.5rem;
+  }
+
+  .crews-table th.num.crews-narrow {
+    width: 4rem;
+  }
+}
+
+/* ---------- Phase 13 shared components (modules, marks, chips) ---------- */
+
+.module {
+  border: 1px solid var(--rule-strong);
+  background: var(--bg);
+  padding: var(--space-md);
+  margin: 0 0 var(--space-lg);
+}
+
+.module-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-height: 32px;
+  gap: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.module-title {
+  font: var(--font-heading);
+  margin: 0;
+}
+
+.module-subtitle {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  font: var(--font-body);
+  color: var(--muted);
+  /* One line always: a wrapped hint would push the chart down (04.18 D-09). The
+     full text is the element's title. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.module-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-left: auto;
+}
+
+.reset-zoom {
+  min-height: 28px;
+  padding: 0 var(--space-md);
+  font: var(--font-body);
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.reset-zoom[aria-disabled="true"] {
+  color: var(--disabled);
+  cursor: default;
+}
+
+/* Legend chip family dot. */
+.legend-chip .legend-dot {
+  flex: none;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: var(--space-sm);
+}
+
+/* Network marks: a logo (or the dot-and-name fallback) beside the name. */
+.net-marks {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.net-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.net-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.net-logo {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* A 20px badge inside a 19.6px table line box must not grow the row. */
+.net-logo--badge {
+  height: 20px;
+  margin-block: -2px;
+}
+
+.net-name {
+  font: var(--font-body);
+}
+
+table tbody tr:hover {
+  background: var(--surface);
+}
+
+/* Matched table row (accent use 3): soft fill and a 2px ink marker. */
+tr.is-matched {
+  background: var(--accent-soft);
+}
+
+tr.is-matched > :first-child {
+  box-shadow: inset 2px 0 0 var(--ink);
+}
+
+
+/* CFB chart module: a flex column so the phone `order` rules (legend row and
+   captions below the chart) keep working now that they sit inside the module. */
+#chart-module {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+#chart-module > .module-head .module-title:empty {
+  display: none;
+}
+
+@media (max-width: 480px) {
+  /* UI-SPEC spacing exceptions: 12px phone module inner padding. */
+  .module {
+    padding: 12px;
+  }
+
+  .module-tools {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .module-subtitle {
+    flex-basis: 100%;
+    /* The subtitle owns a full row here, so an empty one (Scatter) must keep the
+       row a one-line hint (Map) fills, or the chart panel jumps a line on tab change. */
+    min-height: 21px;
+  }
+
+  #chart-tools > #chart-controls {
+    width: 100%;
+  }
+}
+
+/* ---------- Phone tables (13-14; 13-UI-SPEC "Phone" items 1-3) ---------- */
+
+@media (max-width: 480px) {
+  /* Header: Methodology and Coverage are in the footer nav, so the title, sport switch
+     and theme slot share the row. */
+  .header-links {
+    display: none;
+  }
+
+  .site-header,
+  #topbar {
+    padding-inline: var(--space-md);
+  }
+
+  /* 13-14: at 390px "The Broadcast Ledger" at the 24px display size (214px) plus the
+     sport switch (141px at 8px button padding) and the theme slot cannot share one
+     row in 358px, and dropping "The" alone still left it 11px over. The title drops to
+     20px on phone (177px, "The" kept) and the switch buttons lose half their side
+     padding; the 360px-and-under grid switch below keeps its own row. */
+  .site-title {
+    font-size: 20px;
+    white-space: nowrap;
+  }
+
+  #sport-switch button {
+    padding-inline: var(--space-sm);
+  }
+
+  #theme-slot {
+    margin-left: var(--space-sm);
+  }
+
+  /* Scroll cue label: a fixed-height slot in the module header, so showing or hiding it
+     never moves the table below. */
+  .swipe-cue {
+    display: none;
+    flex: 0 0 100%;
+    box-sizing: border-box;
+    height: 16px;
+    margin: 0;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--muted);
+    text-align: right;
+  }
+
+  .swipe-cue.is-slot {
+    display: block;
+  }
+
+  .swipe-cue.is-idle {
+    visibility: hidden;
+  }
+
+  .module-head:has(> .swipe-cue.is-slot) {
+    row-gap: 0;
+  }
+
+  .nfl-games > .module-head {
+    min-height: 0;
+    margin-bottom: 0;
+  }
+
+  /* 24px fades at the scroller edges, only while content remains in that direction
+     (a mask over the module's own --bg, so the fade needs no overlay element). */
+  .table-scroll.has-more-right {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  }
+
+  .table-scroll.has-more-left {
+    -webkit-mask-image: linear-gradient(to right, #000 var(--pin-w, 0px), transparent var(--pin-w, 0px), #000 calc(var(--pin-w, 0px) + 24px));
+    mask-image: linear-gradient(to right, #000 var(--pin-w, 0px), transparent var(--pin-w, 0px), #000 calc(var(--pin-w, 0px) + 24px));
+  }
+
+  .table-scroll.has-more-left.has-more-right {
+    -webkit-mask-image:
+      linear-gradient(to right, #000 var(--pin-w, 0px), transparent var(--pin-w, 0px), #000 calc(var(--pin-w, 0px) + 24px)),
+      linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    mask-image:
+      linear-gradient(to right, #000 var(--pin-w, 0px), transparent var(--pin-w, 0px), #000 calc(var(--pin-w, 0px) + 24px)),
+      linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
+  }
+
+  /* Identity column pinned: sticky left, a 1px strong divider, its own opaque fill. */
+  .table-scroll .games-table th,
+  .table-scroll .games-table td {
+    padding: 8px 12px;
+  }
+
+  /* The 8px cell padding alone would leave a whole-row click target under 44px. */
+  .table-scroll .games-table tr.row-link > td {
+    height: 44px;
+  }
+
+  .table-scroll .games-table tr > :first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background-color: var(--bg);
+    border-right: 1px solid var(--rule-strong);
+  }
+
+  .table-scroll .games-table thead tr > :first-child {
+    background-color: var(--surface);
+  }
+
+  .table-scroll .games-table tbody tr:hover > :first-child {
+    background-color: var(--surface);
+  }
+
+  .table-scroll .games-table tr.is-matched > :first-child {
+    background-image: linear-gradient(var(--accent-soft), var(--accent-soft));
+  }
+
+  /* The CFB and NFL/MLB matched tables outgrow 360px; they scroll inside the module. */
+  .table-scroll .games-table {
+    width: max-content;
+    min-width: 100%;
+  }
+
+  /* MLB Postseason booths: the stacked-by-season grid gives way to the phone twin, one
+     row per season, round and league with a merged 96px pinned column. */
+  .mlb-grid {
+    display: none;
+  }
+
+  .mlb-phone-grid {
+    display: table;
+    table-layout: auto;
+  }
+
+  .mlb-phone-grid th.mlb-merged-col,
+  .mlb-phone-grid td.mlb-booths-col {
+    vertical-align: top;
+    text-align: left;
+  }
+
+  .mlb-phone-grid th.mlb-merged-col {
+    box-sizing: border-box;
+    width: 96px;
+    min-width: 96px;
+    max-width: 96px;
+    padding-inline: 8px;
+  }
+
+  .mlb-merged-line {
+    display: block;
+    min-height: 1.4em;
+    font-weight: var(--weight-semibold);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+
+  .mlb-merged-league {
+    color: var(--muted);
+    font-weight: 400;
+  }
+
+  /* Each season's coverage line and Wikipedia credit (RT-13), listed under the twin. */
+  .mlb-phone-season-notes {
+    display: block;
+    margin: 12px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .mlb-phone-season-notes li + li {
+    margin-top: 8px;
+  }
+
+  .mlb-phone-grid td.mlb-booths-col {
+    min-width: 200px;
+    white-space: normal;
+  }
+
+  .mlb-phone-grid .mlb-cell-btn {
+    min-width: 200px;
+  }
+
+  .mlb-booth-more {
+    display: block;
+    color: var(--muted);
+    font: var(--font-body);
+  }
+}
+
+.mlb-booth-more {
+  display: block;
+}
+
+@media (min-width: 361px) and (max-width: 480px) {
+  #topbar:has(#sport-switch) {
+    flex-wrap: nowrap;
+    align-items: center;
   }
 }

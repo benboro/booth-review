@@ -21,6 +21,7 @@ from test_site_chart import _RING_VISIBLE, _assert_ring_on
 pytestmark = pytest.mark.e2e
 
 VIEW = "#nfl-view-scatter"
+TOOLS = "#nfl-chart-tools [data-tools-for='scatter']"  # view tools sit in the module header (13-13)
 GD = f"{VIEW} .nfl-chart > div"
 CAUSES = ("pending", "regional", "none")
 
@@ -358,12 +359,12 @@ def test_controls_use_cfb_markup_and_wording(
     page = nfl_guarded_page
     _open(page, open_nfl_app)
     _vm(page)
-    groups = page.locator(f"{VIEW} .chart-controls .axis-group")
+    groups = page.locator(f"{TOOLS} .chart-controls .axis-group")
     assert groups.locator(".axis-caption").all_inner_texts() == ["X axis", "Y axis"]
     assert groups.locator(".segmented").evaluate_all(
         "els => els.map(e => e.getAttribute('aria-label'))"
     ) == ["X-axis measure", "Y-axis measure"]
-    exc = page.locator(f"{VIEW} button[data-y=excitement]")
+    exc = page.locator(f"{TOOLS} button[data-y=excitement]")
     assert exc.get_attribute("aria-label") == "Excitement"
     assert exc.get_attribute("title") == "Excitement"
     assert exc.locator(".axis-long").inner_text() == "Excitement"
@@ -373,7 +374,7 @@ def test_controls_use_cfb_markup_and_wording(
     assert dots.get_attribute("aria-label") == "Filtered-out dots"
     assert dots.locator("button[data-dots]").all_inner_texts() == ["Fade", "Hide"]
     # D-17: the GEI-style qualifier is in the caption only, never a button, axis title or header.
-    for sel in (f"{VIEW} button", f"{VIEW} th"):
+    for sel in (f"{VIEW} button", f"{TOOLS} button", f"{VIEW} th"):
         assert not any("GEI-style" in t for t in page.locator(sel).all_text_contents())
     assert "GEI-style" in page.locator(f"{VIEW} p.caption").nth(1).inner_text()
     _set(page, {"scatterY": "excitement"})
@@ -393,7 +394,7 @@ def test_no_spread_text_anywhere(nfl_guarded_page: Page, open_nfl_app: Callable[
     _open(nfl_guarded_page, open_nfl_app)
     _vm(nfl_guarded_page)
     assert "spread" not in nfl_guarded_page.locator(VIEW).inner_text().lower()
-    nfl_guarded_page.locator(f"{VIEW} [aria-label='X-axis measure']").locator(
+    nfl_guarded_page.locator(f"{TOOLS} [aria-label='X-axis measure']").locator(
         "button[data-axis=margin]"
     ).click()
     nfl_guarded_page.wait_for_function(
@@ -437,14 +438,45 @@ def test_hover_lines_rated_window_and_unrated_regional(
         == f"{names[g['away_name'][rated]]['name']} at {names[g['home_name'][rated]]['name']}"
     )
     assert lines[1].endswith(f" ET · Week {g['week'][rated]}")
-    assert lines[3] == networks[g["network"][rated]]["name"]
+    net_name = networks[g["network"][rated]]["name"]
+    # D-09: the network line is a mark (logo img with alt/title = name, or dot plus name).
+    net = nfl_guarded_page.evaluate(
+        """() => {
+          const row = document.querySelector('#chart-tooltip .tooltip-networks');
+          const img = row.querySelector('img');
+          return {
+            alt: img ? img.getAttribute('alt') : null,
+            title: img ? img.getAttribute('title') : null,
+            name: row.querySelector('.net-name')?.textContent ?? null,
+            text: row.textContent,
+          };
+        }"""
+    )
+    if net["alt"] is not None:
+        assert net["alt"] == net_name and net["title"] == net_name and net["text"] == ""
+    else:
+        assert net["name"] == net_name
     pbp = next(m for m in g["crew"][rated] if m["role"] == "pbp")
     analyst = next(m for m in g["crew"][rated] if m["role"] == "analyst")
-    assert lines[4] == f"{people[pbp['person']]['name']} / {people[analyst['person']]['name']}"
-    assert lines[5] == f"Viewers: {g['viewers'][rated] / 1e6:.1f}M · window-level"
+    # D-01 crew box: neutral unless a picked announcer is in it.
+    box = nfl_guarded_page.evaluate(
+        """() => {
+          const b = document.querySelector('#chart-tooltip .crew-box');
+          return {
+            matched: b.classList.contains('is-matched'),
+            names: [...b.querySelectorAll('.crew-name')].map((n) => n.textContent),
+          };
+        }"""
+    )
+    assert box == {
+        "matched": False,
+        "names": [people[pbp["person"]]["name"], people[analyst["person"]]["name"]],
+    }
+    assert f"Viewers: {g['viewers'][rated] / 1e6:.1f}M · window-level" in lines
     exc = g["excitement"][rated]
-    assert lines[6] == f"Excitement: {exc:.1f} (GEI-style, not CFBD's index)"
-    assert lines[-1] == "Click for details."
+    assert f"Excitement: {exc:.1f} (GEI-style, not CFBD's index)" in lines
+    assert lines[-1].startswith("Excitement:")
+    assert not any("Click for details" in ln for ln in lines)
     assert not nfl_guarded_page.locator("#chart-hover-ring").is_hidden()
     _emit(nfl_guarded_page, "plotly_unhover", rated)
     assert nfl_guarded_page.locator("#chart-hover-ring").is_hidden()
@@ -552,6 +584,32 @@ def test_caption_text_and_links_exact(
         "nfl-window-level-viewership",
         "nfl-gei-style-excitement",
     ]
+
+
+def test_reset_zoom_is_disabled_at_home_and_enabled_after_a_zoom(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    """SHELL-06: the NFL scatter's page-level Reset zoom is aria-disabled at the home range,
+    enabled once the plot is zoomed, and restores the home range."""
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    _vm(page)
+    button = page.locator(
+        "#nfl-chart-tools button.reset-zoom, #nfl-view-scatter button.reset-zoom"
+    ).first
+    assert button.get_attribute("aria-disabled") == "true"
+    home = page.evaluate(f"document.querySelector('{GD}')._fullLayout.xaxis.range")
+    page.evaluate(
+        """([sel, lo, hi]) => window.Plotly.relayout(document.querySelector(sel), {'xaxis.range': [lo, hi]})""",
+        [GD, home[0] + 1, home[1] - 1],
+    )
+    handle = button.element_handle()
+    page.wait_for_function("b => b.getAttribute('aria-disabled') === 'false'", arg=handle)
+    button.click()
+    page.wait_for_function("b => b.getAttribute('aria-disabled') === 'true'", arg=handle)
+    assert page.evaluate(
+        f"document.querySelector('{GD}')._fullLayout.xaxis.range"
+    ) == pytest.approx(home, abs=1e-6)
 
 
 def test_mobile_tap_opens_panel(nfl_mobile_page: Page, open_nfl_app: Callable[..., None]) -> None:

@@ -410,18 +410,61 @@ def _assert_guard_clean(off_origin: list[str], csp_errors: list[str]) -> None:
 # to catch any font-dependent sizing that happens to fit DejaVu. `narrow` tightens
 # DejaVu below the toolbar's 116px cell floor, a stand-in for a narrow system font
 # that is present on every runner.
+_DEJAVU_ROOT = (
+    ':root { --sans: "DejaVu Sans", sans-serif !important;'
+    ' --serif: "DejaVu Sans", sans-serif !important;'
+    ' --plot: "DejaVu Sans", sans-serif !important; }'
+)
 FONT_CSS: dict[str, str] = {
     "default": "",
-    "dejavu": ':root { --font-family: "DejaVu Sans", sans-serif !important; }',
-    "wide": (
-        ':root { --font-family: "DejaVu Sans", sans-serif !important; }'
-        " body, button, input { letter-spacing: 0.4px; }"
-    ),
-    "narrow": (
-        ':root { --font-family: "DejaVu Sans", sans-serif !important; }'
-        " body, button, input { letter-spacing: -1px; }"
-    ),
+    "dejavu": _DEJAVU_ROOT,
+    "wide": (_DEJAVU_ROOT + " body, button, input { letter-spacing: 0.4px; }"),
+    "narrow": (_DEJAVU_ROOT + " body, button, input { letter-spacing: -1px; }"),
 }
+
+
+def measure_gap(page: Page, upper_selector: str, lower_selector: str) -> float:
+    """Vertical gap in px: the lower element's top minus the upper element's bottom."""
+    return float(
+        page.evaluate(
+            """([upper, lower]) => {
+              const a = document.querySelector(upper).getBoundingClientRect();
+              const b = document.querySelector(lower).getBoundingClientRect();
+              return b.top - a.bottom;
+            }""",
+            [upper_selector, lower_selector],
+        )
+    )
+
+
+def element_height(page: Page, selector: str) -> float:
+    """Rendered height in px of the first element matching `selector`."""
+    return float(
+        page.evaluate(
+            "(sel) => document.querySelector(sel).getBoundingClientRect().height",
+            selector,
+        )
+    )
+
+
+def logo_images(page: Page, scope_selector: str) -> list[dict[str, Any]]:
+    """Every `<img>` under `scope_selector` with its src, alt, title, rendered
+    size and natural width, for logo size and attribution checks."""
+    result: list[dict[str, Any]] = page.evaluate(
+        """(scope) => [...document.querySelectorAll(scope + ' img')].map((img) => {
+          const r = img.getBoundingClientRect();
+          return {
+            src: img.getAttribute('src'),
+            alt: img.getAttribute('alt'),
+            title: img.getAttribute('title'),
+            width: r.width,
+            height: r.height,
+            naturalWidth: img.naturalWidth,
+          };
+        })""",
+        scope_selector,
+    )
+    return result
 
 
 @pytest.fixture

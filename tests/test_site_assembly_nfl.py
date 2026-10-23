@@ -56,8 +56,22 @@ NFL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "contract" / "nfl-data.fixture.
 # Index re-pinned at Phase 11 Plan 10: only the Matched games heading row, venue status and
 # no-match line (4 added lines, 1 removed).
 _SITE_DATA_SHA256 = "8ceec31a10326e809f9a9397da7734be8b1092156ef094093742c7d4e117ac02"
-_COVERAGE_SHA256 = "f3cf1022cdd2bacc514a00971310411288b395acd621ea3f880d12731ed0a4e9"
-_INDEX_PRE_PHASE_SHA256 = "3960852df9d8999c9d6a998cd5c1d3fabe8930da3e853375eaf620d9773a36e4"
+# Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
+# new header with theme slot, site name.
+_COVERAGE_SHA256 = "1c2076a54c682ad0355657a0e1a3d938d35c7451c3c7d52bf5342a8753f7c39c"
+# Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
+# new header with theme slot, site name.
+# Re-pinned at Phase 13 Plan 05: Plotly partial bundle src and SRI.
+# Re-pinned at Phase 13 Plan 06: font preloads and load-error copy.
+# Re-pinned at Phase 13 Plan 10: Clear all filters moved into the always-rendered
+# selection row; Show games label.
+# Re-pinned at Phase 13 Plan 11: module headers, tab hint moved into the module subtitle,
+# compare note in the summary, Reset zoom slot.
+# Re-pinned after the Phase 13 checkpoint: the Viewers head carries class="num" so it aligns
+# right like its cells (1 changed line).
+# Re-pinned after the Phase 13 panel review: #theme-slot drops aria-hidden (1 changed line).
+# Re-pinned for the toolbar-fit.js preload in <head> (1 added line).
+_INDEX_PRE_PHASE_SHA256 = "f824b5be88745c211d1994e100b722cedaf2d3e7ae19b4d67fe2260aacef172a"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'
@@ -108,7 +122,7 @@ def test_flag_on_build(tmp_path: Path) -> None:
     result = _build(out, nfl=True, nfl_payload=load_nfl_site_payload(NFL_FIXTURE))
     index = (out / "index.html").read_text(encoding="utf-8")
     assert '<meta name="booth-review-sports" content="cfb,nfl">' in index
-    topbar = index.split('<header id="topbar">')[1].split("</header>")[0]
+    topbar = index.split('<header id="topbar" class="site-header">')[1].split("</header>")[0]
     assert 'id="sport-switch"' in topbar
     cfb = topbar.index('data-sport="cfb" aria-pressed="true"')
     assert cfb < topbar.index('data-sport="nfl" aria-pressed="false"')

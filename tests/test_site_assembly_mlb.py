@@ -119,7 +119,7 @@ def test_mlb_on_build(tmp_path: Path, src: Path, docs: Path) -> None:
     result = _build(out, src, docs, **_nfl(), **_mlb())
     index = (out / "index.html").read_text("utf-8")
     assert '<meta name="booth-review-sports" content="cfb,nfl,mlb">' in index
-    topbar = index.split('<header id="topbar">')[1].split("</header>")[0]
+    topbar = index.split('<header id="topbar" class="site-header">')[1].split("</header>")[0]
     assert topbar.index('data-sport="cfb"') < topbar.index('data-sport="nfl"')
     assert topbar.index('data-sport="nfl"') < topbar.index('data-sport="mlb"')
     assert (out / "mlb-data.json").read_bytes() == body

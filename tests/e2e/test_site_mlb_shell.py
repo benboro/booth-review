@@ -44,27 +44,89 @@ def test_mlb_button_and_single_mount(
     assert _count(urls, "mlb-data.json") == 1
 
 
+_TRADEMARK_LINE = (
+    "Network logos are trademarks of their owners, shown only to identify each network. "
+    "Their use does not imply endorsement, and they are not covered by this site's MIT license."
+)
+
+_TYPE_LINE = (
+    "Type: Crimson Text (copyright 2010 The Crimson Text Project Authors), "
+    "Roboto (copyright 2011 The Roboto Project Authors) and "
+    "Roboto Condensed (copyright 2011 Google Inc.), "
+    "used under the SIL Open Font License 1.1."
+)
+
+_RT05_TEXT = (
+    "The information used here was obtained free of charge from and is copyrighted by "
+    "Retrosheet. Interested parties may contact Retrosheet at www.retrosheet.org · "
+    "Viewership: RatingsReference.com (CC BY 4.0), modified: filtered and joined with crew and "
+    "game data · Postseason outlets and some crews: Wikipedia (CC BY-SA 4.0) · "
+    "Crews and networks: 506 Sports · Some 2026 crews: relayed from a fan schedule blog, "
+    "each linked in the game panel with the press page it cites"
+)
+
+_RT05_LINKS = [
+    ("www.retrosheet.org", "https://www.retrosheet.org"),
+    ("RatingsReference.com", "https://ratingsreference.com"),
+    ("CC BY 4.0", "https://creativecommons.org/licenses/by/4.0/"),
+    ("Wikipedia", "https://www.wikipedia.org"),
+    ("CC BY-SA 4.0", "https://creativecommons.org/licenses/by-sa/4.0/"),
+    ("506 Sports", "https://506sports.com"),
+]
+
+
+def _norm(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _static_lines(page: Page) -> tuple[str, str, list[str]]:
+    """RT-23 and RT-24 text and RT-24 link targets as the footer shows them now."""
+    trademark = _norm(page.locator("#site-footer p.trademark-line").inner_text())
+    type_line = _norm(page.locator("#site-footer p.type-line").inner_text())
+    hrefs = page.locator("#site-footer p.type-line a").evaluate_all(
+        "els => els.map(e => e.getAttribute('href'))"
+    )
+    return trademark, type_line, hrefs
+
+
 def test_footer_credits_and_restore(
     mlb_guarded_page: Page, open_mlb_cfb: Callable[..., None]
 ) -> None:
     page = mlb_guarded_page
     open_mlb_cfb(page)
     before = page.evaluate("document.getElementById('site-footer').outerHTML")
+    lines_before = _static_lines(page)
+    assert lines_before[0] == _TRADEMARK_LINE
+    assert lines_before[1] == _TYPE_LINE
     page.click('#sport-switch button[data-sport="mlb"]')
     _wait_mlb(page)
-    text = page.inner_text("#site-footer")
-    assert RETROSHEET in text
-    assert "Interested parties may contact Retrosheet at www.retrosheet.org" in text
-    assert "RatingsReference.com" in text
-    assert "Wikipedia (CC BY-SA 4.0)" in text
-    assert "506 Sports" in text
-    assert "relayed from a fan schedule blog" in text
-    assert "CollegeFootballData" not in text
-    rels = page.eval_on_selector_all("#site-footer .credit-line a", "els => els.map(e => e.rel)")
-    assert rels and all(rel == "noopener noreferrer" for rel in rels)
+    credit = page.locator("#site-footer .credit-line")
+    assert _norm(credit.inner_text()) == _RT05_TEXT
+    assert RETROSHEET in _norm(credit.inner_text())
+    anchors = credit.locator("a")
+    assert anchors.evaluate_all("els => els.map(e => [e.textContent, e.getAttribute('href')])") == [
+        list(pair) for pair in _RT05_LINKS
+    ]
+    assert anchors.evaluate_all("els => els.map(e => e.rel)") == ["noopener noreferrer"] * 6
+    assert "CollegeFootballData" not in page.inner_text("#site-footer")
+    # RT-23 and RT-24 stay present and untouched while MLB is shown.
+    assert _static_lines(page) == lines_before
     page.click('#sport-switch button[data-sport="cfb"]')
     page.wait_for_function("document.body.dataset.sport === 'cfb'")
     assert page.evaluate("document.getElementById('site-footer').outerHTML") == before
+    assert _static_lines(page) == lines_before
+
+
+def test_selection_area_copy_and_module_subtitle(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    page = mlb_guarded_page
+    open_mlb_app(page)
+    assert (
+        _norm(page.locator(".mlb-selection-note").inner_text())
+        == "Filters: none. MLB is selection-driven; pick a row below."
+    )
+    assert page.locator("#mlb-chart-subtitle").count() == 1
 
 
 def test_state_survives_sport_switch(
