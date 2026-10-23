@@ -748,7 +748,6 @@ def test_violet_text_contrast(guarded_page: Page, site_url: str, theme: str) -> 
 def test_rendered_accent_matches_css_token(
     guarded_page: Page, open_app: Callable[[Page, str], None], theme: str
 ) -> None:
-    guarded_page.emulate_media(color_scheme=theme)  # type: ignore[arg-type]
     out = _render(
         guarded_page,
         open_app,
@@ -2016,7 +2015,6 @@ def test_rendered_stacked_segment_gaps(
 ) -> None:
     import base64
 
-    guarded_page.emulate_media(color_scheme=theme)  # type: ignore[arg-type]
     raw = request.getfixturevalue("multichannel") if multi else None
     env = {"theme": theme, "mobile": width < 600, "revision": 1, "width": width}
     out = _render(guarded_page, open_app, partial, fn, env, raw=raw)

@@ -373,10 +373,9 @@ def test_light_theme_uses_light_land_and_map_family_colors(
 ) -> None:
     """D-08: the outline is drawn in MAP_LAND light, legs in MAP_FAMILY_COLORS light.
 
-    The site is light-only until Phase 17 (13-01 moved dark to data-theme), so an OS dark
-    scheme must not change the map either.
+    The site is light-only until Phase 17 (13-01 moved dark to data-theme); the OS-dark
+    case is covered by test_site_theme_light.py.
     """
-    guarded_page.emulate_media(color_scheme="dark")
     _open_map(guarded_page, open_app, "?view=map&people=pat-rowan")
     palette: dict[str, Any] = guarded_page.evaluate(
         """async () => { const P = await import('./modules/palette.js');
