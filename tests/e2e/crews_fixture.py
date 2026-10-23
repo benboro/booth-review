@@ -105,7 +105,7 @@ CASE_ERA = {
 # One unrated one-game crew with no figures; it sorts last under any default sort (fewest
 # games, no viewers, no excitement, last by name), so it falls past the 25-row cut (D-13).
 CASE_PAST_CUT = {"pbp": "zz-cut-pbp", "analyst": "zz-cut-ana", "games": 1}
-N_FILLER_CREWS = 26  # filler pairs, 2 games each (the first 8 also have an unrated game)
+N_FILLER_CREWS = 40  # filler pairs, 2 games each (the first 8 also have an unrated game)
 
 _Role = tuple[str, str]  # (person slug, role)
 

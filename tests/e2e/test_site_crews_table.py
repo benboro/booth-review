@@ -270,3 +270,276 @@ def test_blank_cells_read_see_per_season_or_none_rated(app: Page) -> None:
     cut = _row(app, _name(CASE_PAST_CUT["pbp"]))
     expect(cut.locator("td.num").nth(2)).to_have_text("none rated")
     expect(cut.locator("td.num").nth(1)).to_have_text("")
+
+
+# -- V14-6: view more -------------------------------------------------------------------------
+
+_KEY_JS = """
+async (slugs) => {
+  const G = await import('./modules/crew-groups.js');
+  for (const [key, crew] of G.crewIndex(window.__testHooks.data).crews) {
+    const same = crew.people.length === slugs.length;
+    if (same && slugs.every((s) => crew.people.includes(s))) return key;
+  }
+  return null;
+}
+"""
+
+
+def _key(page: Page, slugs: list[str]) -> str:
+    key = page.evaluate(_KEY_JS, slugs)
+    assert key, slugs
+    return str(key)
+
+
+def _set(page: Page, patch: dict[str, Any]) -> None:
+    page.evaluate("(patch) => window.__testHooks.setState(patch)", patch)
+
+
+def test_opens_with_25_rows_and_view_more_adds_25(app: Page) -> None:
+    total = _model(app)["totalRows"]
+    assert total > 50
+    expect(_rows(app)).to_have_count(25)
+    more = app.locator("#crews-panel .crews-more")
+    expect(more).to_have_text(f"View 25 more ({total - 25} left)")
+    expect(app.locator("#crews-panel .crews-count")).to_have_text(f"Showing 25 of {total} rows.")
+    more.click()
+    expect(_rows(app)).to_have_count(50)
+    expect(app.locator("#crews-panel .crews-count")).to_have_text(f"Showing 50 of {total} rows.")
+    expect(_rows(app).nth(25)).to_be_focused()
+    last = total - 50
+    if last > 25:
+        expect(more).to_have_text(f"View 25 more ({last} left)")
+    _show_all(app)
+    expect(_rows(app)).to_have_count(total)
+    expect(more).to_have_count(0)
+
+
+def test_last_page_button_names_the_remainder(app: Page) -> None:
+    total = _model(app)["totalRows"]
+    while total - _rows(app).count() > 25:
+        app.locator("#crews-panel .crews-more").click()
+    left = total - _rows(app).count()
+    expect(app.locator("#crews-panel .crews-more")).to_have_text(f"View {left} more ({left} left)")
+
+
+@pytest.mark.parametrize("change", ["sort", "mode", "perseason", "filter"])
+def test_shown_count_resets_to_25(app: Page, change: str) -> None:
+    app.locator("#crews-panel .crews-more").click()
+    expect(_rows(app)).to_have_count(50)
+    if change == "sort":
+        app.locator("#crews-panel button[data-sort-key=crew]").click()
+    elif change == "mode":
+        app.locator("#crews-panel button[data-cmode=pbp]").click()
+    elif change == "perseason":
+        app.locator("#crews-panel input.crews-perseason").check()
+    else:
+        _set(app, {"networks": ["net-a", "net-b", "net-c", "net-f", "net-g"]})
+    expect(_rows(app)).to_have_count(25)
+
+
+def test_a_pick_past_the_cut_off_is_revealed(app: Page) -> None:
+    total = _model(app)["totalRows"]
+    key = _key(app, [CASE_PAST_CUT["pbp"], CASE_PAST_CUT["analyst"]])
+    _set(app, {"crew": key})
+    row = _rows(app).last
+    expect(row).to_have_attribute("data-crew-key", key)
+    expect(row).to_have_attribute("aria-pressed", "true")
+    # The pick sorts last, so the table grows to hold it and the button is gone.
+    expect(_rows(app)).to_have_count(total)
+    expect(app.locator("#crews-panel .crews-more")).to_have_count(0)
+    _set(app, {"crew": None})
+    expect(_rows(app)).to_have_count(25)
+
+
+# -- V14-7: filters, picks and the status seat ------------------------------------------------
+
+
+def test_filters_recount_the_rows(app: Page) -> None:
+    _set(app, {"booth": ["a"]})
+    # Tier A holds one cited booth with a fill-in: 4 games, 1 row.
+    expect(_rows(app)).to_have_count(1)
+    expect(_rows(app).locator("td.num").first).to_have_text("4")
+    assert _state(app)["booth"] == ["a"]
+    _set(app, {"booth": [], "seasons": [2022, 2022]})
+    # Only the two Nielsen-era crew games fall in 2022.
+    expect(_rows(app)).to_have_count(1)
+    expect(_rows(app).locator("td.num").first).to_have_text("2")
+    _set(app, {"seasons": None, "networks": ["net-a"]})
+    model = _model(app)
+    _show_all(app)
+    expect(_rows(app)).to_have_count(model["totalRows"])
+    assert model["totalRows"] < _model_total_unfiltered(app)
+
+
+def _model_total_unfiltered(page: Page) -> int:
+    n: int = page.evaluate(
+        """async () => {
+          const G = await import('./modules/crew-groups.js');
+          const S = await import('./modules/select.js');
+          const h = window.__testHooks;
+          const view = S.computeView(h.data, S.defaultState(h.data));
+          return G.buildCrewRows(h.data, view, {}).totalRows;
+        }"""
+    )
+    return n
+
+
+def test_person_pick_highlights_rows_and_drops_none(app: Page) -> None:
+    total = _model(app)["totalRows"]
+    _set(app, {"people": [CASE_TRIO["pbp"]]})
+    assert _model(app)["totalRows"] == total
+    _show_all(app)
+    expect(_rows(app)).to_have_count(total)
+    highlighted = app.locator("#crews-panel tr.is-highlighted")
+    expect(highlighted).to_have_count(1)
+    expect(highlighted).to_contain_text(_name(CASE_TRIO["pbp"]))
+    expect(app.locator("#crews-panel tr.is-picked")).to_have_count(0)
+    # Compare with two people highlights both rows; Called together needs both on one row.
+    _set(app, {"people": [CASE_TRIO["pbp"], "fill-pbp"], "compare": True})
+    expect(app.locator("#crews-panel tr.is-highlighted")).to_have_count(2)
+    _set(app, {"compare": False, "together": True})
+    expect(app.locator("#crews-panel tr.is-highlighted")).to_have_count(0)
+    expect(_rows(app)).to_have_count(total)
+
+
+def test_crew_row_click_sets_crew_and_clears_people(app: Page) -> None:
+    trio_names = [_name(s) for s in (CASE_TRIO["pbp"], *CASE_TRIO["analysts"])]
+    _set(app, {"people": ["fill-pbp"]})
+    _show_all(app)
+    row = _row(app, _name(CASE_TRIO["pbp"]))
+    row.click()
+    state = _state(app)
+    assert state["crew"] == _key(app, [CASE_TRIO["pbp"], *CASE_TRIO["analysts"]])
+    assert state["people"] == []
+    status = app.locator("#pick-status")
+    expect(status).to_have_text(f"Crew pick set to {_join(trio_names)}. Announcers pick cleared.")
+    expect(row).to_have_attribute("aria-pressed", "true")
+    expect(row).to_have_class(re.compile(r"is-picked"))
+    row.click()
+    assert _state(app)["crew"] is None
+    expect(status).to_have_text("Crew pick cleared.")
+    expect(row).to_have_attribute("aria-pressed", "false")
+
+
+def test_person_row_click_sets_announcers_and_clears_crew(app: Page) -> None:
+    key = _key(app, [CASE_TRIO["pbp"], *CASE_TRIO["analysts"]])
+    _set(app, {"crew": key})
+    app.locator("#crews-panel button[data-cmode=pbp]").click()
+    assert _state(app)["crew"] == key
+    _show_all(app)
+    row = _row(app, _name(CASE_TRIO["pbp"]))
+    row.click()
+    state = _state(app)
+    assert state["people"] == [CASE_TRIO["pbp"]]
+    assert state["crew"] is None
+    expect(app.locator("#pick-status")).to_have_text(
+        f"Announcers pick set to {_name(CASE_TRIO['pbp'])}. Crew pick cleared."
+    )
+    expect(row).to_have_class(re.compile(r"is-picked"))
+    row.click()
+    assert _state(app)["people"] == []
+
+
+def test_crew_pick_never_filters_or_touches_booth(app: Page) -> None:
+    _set(app, {"booth": []})
+    total = _model(app)["totalRows"]
+    _show_all(app)
+    _row(app, _name(CASE_TRIO["pbp"])).click()
+    assert _state(app)["booth"] == []
+    assert _model(app)["totalRows"] == total
+    expect(_rows(app)).to_have_count(total)
+
+
+def test_chevron_click_sets_no_pick(app: Page) -> None:
+    _rows(app).first.locator("button.crews-chevron").click()
+    state = _state(app)
+    assert state["crew"] is None
+    assert state["people"] == []
+    expect(_rows(app).first).to_have_attribute("aria-pressed", "false")
+
+
+def test_per_season_marks_every_row_of_the_picked_crew(app: Page) -> None:
+    app.locator("#crews-panel input.crews-perseason").check()
+    _show_all(app)
+    full = _row(app, "Full Pbp")
+    expect(full).to_have_count(3)  # seasons 2023, 2024 and 2025
+    full.first.click()
+    expect(
+        _row(app, "Full Pbp").locator("xpath=self::tr[contains(@class,'is-picked')]")
+    ).to_have_count(3)
+    expect(app.locator("#crews-panel tr.is-picked")).to_have_count(3)
+
+
+# -- Notes, credits and the empty state ----------------------------------------------------------
+
+_CREDITS = [
+    "Data provided by CollegeFootballData.com",
+    "Viewership figures: Ratings Reference and the second sources credited in each game's "
+    "detail panel.",
+    "Booth order from network press releases, cited per season in "
+    "data/reference/cfb_booth_ranks.csv.",
+]
+
+
+def _captions(page: Page) -> list[str]:
+    return [
+        re.sub(r"\s+", " ", c).strip()
+        for c in page.locator("#crews-panel p.caption").all_inner_texts()
+    ]
+
+
+def test_notes_and_credits_in_order(app: Page) -> None:
+    total = _model(app)["totalRows"]
+    assert _captions(app) == [
+        f"Showing 25 of {total} rows.",
+        "1 telecasts list no crew and are not in this table.",
+        "Avg viewers (rated games) mostly reflects which games a crew was assigned.",
+        "Crews with a member of unknown role are kept and marked.",
+        *_CREDITS,
+    ]
+    link = app.locator("#crews-panel").get_by_role("link", name=_CREDITS[0])
+    expect(link).to_have_attribute("href", "https://collegefootballdata.com")
+
+
+@pytest.mark.parametrize(
+    "mode,left_out",
+    [
+        ("pbp", "4 telecasts with no resolved play-by-play voice are not in this mode."),
+        ("analyst", "3 telecasts with no resolved analyst are not in this mode."),
+    ],
+)
+def test_person_mode_notes(app: Page, mode: str, left_out: str) -> None:
+    app.locator(f"#crews-panel button[data-cmode={mode}]").click()
+    caps = _captions(app)
+    assert left_out in caps
+    assert "Crews with a member of unknown role are kept and marked." not in caps
+    assert caps[-3:] == _CREDITS
+    assert any(c.startswith("Avg viewers (rated games) mostly") for c in caps)
+
+
+def test_left_out_note_is_hidden_at_zero(app: Page) -> None:
+    _set(app, {"booth": ["a"]})
+    assert not any("telecasts" in c for c in _captions(app))
+
+
+def test_empty_filters_show_the_empty_state_with_tools(app: Page) -> None:
+    _set(app, {"booth": ["other"]})
+    panel = app.locator("#crews-panel")
+    expect(panel.locator(".season-empty-title")).to_have_text("No games match these filters")
+    expect(panel.locator(".season-empty-hint")).to_have_text(
+        "Clear all filters, or widen the Seasons range."
+    )
+    expect(panel.locator("table")).to_have_count(0)
+    expect(panel.locator(".crews-mode")).to_be_visible()
+    expect(panel.locator("input.crews-perseason")).to_be_visible()
+    assert _captions(app)[-3:] == _CREDITS
+
+
+def test_excitement_caption_follows_the_seasons_range(app: Page) -> None:
+    caption = app.locator("#excitement-caption")
+    expect(caption).to_be_visible()
+    _set(app, {"seasons": [2022, 2024]})
+    expect(caption).to_be_hidden()
+    _set(app, {"seasons": [2024, 2025]})
+    expect(caption).to_be_visible()

@@ -1,18 +1,13 @@
-"""Phase 10 Crews tab (plan 10-09, D-13..D-15), proven on the synthetic booth overlay.
+"""Crews tab shell (Phase 10 plan 10-09, rewritten in Phase 14 plan 14-07): tab, URL, legend,
+credits (RT-10), the excitement caption (RT-20) and the pick-does-not-filter rule.
 
-Merged indices: rated 0..11, then unrated 12..19. Booth games and their fixture values
-(excitement, |home spread|, both teams ranked, rated):
-
-    booth 4 (ESPN/ABC 2026, A):   idx 8   5.5   6.5  no   rated
-    booth 6 (FOX 2026, B):        idx 9   6.1   0.5  no   rated
-    booth 3 (ESPN/ABC 2025, Other): idx 4 8.4   1.0  yes  rated
-    booth 5 (FOX 2025, A):        idx 5   9.6  14.0  no   rated
-    booth 2 (ESPN/ABC 2021, A):   idx 14  4.2   6.0  no   unrated
-    booth 0 (ESPN/ABC 2021, B):   idx 13  5.5   3.5  no   unrated
-    booth 1 (ESPN/ABC 2021, conference lead): idx 15  7.1  2.5  no  unrated
-
-Every booth has one game, so each median is that game's value. Groups run seasons
-descending then FAMILY_ORDER; rows run tier A, B, conference lead, Other.
+Runs on the synthetic crews dataset (tests/e2e/crews_fixture.py); no vault content. The table
+itself is covered in test_site_crews_table.py. Hand-computed expectations, from the CASE_*
+constants: the dataset spans 2022-2025 with the excitement model break in 2025, so the
+caption shows for the default range and for 2024-2025 and not for 2022-2024; the trio crew
+(`trio-pbp`, `trio-a1`, `trio-a2`) is the only crew holding `trio-pbp`, so a pick of that
+person highlights exactly one row and drops none; and a Tier A booth filter keeps the one
+cited booth (4 games, 1 row).
 """
 
 from __future__ import annotations
@@ -22,239 +17,108 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from playwright.sync_api import Page
+from crews_fixture import CASE_TRIO
+from playwright.sync_api import Page, expect
 
 pytestmark = pytest.mark.e2e
 
-_MODEL_JS = """
-async ([partial, opts]) => {
-  const D = await import('./modules/data.js');
-  const S = await import('./modules/select.js');
-  const C = await import('./modules/crews.js');
-  const raw = await (await fetch('site-data.json')).json();
-  const data = D.prepareData(raw);
-  const state = Object.assign(S.defaultState(data), partial);
-  const view = S.computeView(data, state);
-  const model = C.buildCrewsModel(data, view, opts || undefined);
-  return {
-    state: model.state,
-    lowN: model.lowN,
-    groups: model.groups.map((g) => ({
-      heading: g.heading,
-      rows: g.rows.map((r) => ({
-        booth: r.booth, tier: r.tier, chip: r.chip, pbp: r.pbp, analyst: r.analyst,
-        games: r.games, exc: r.medianExcitement, spread: r.medianSpread,
-        ranked: r.rankedShare, rated: r.ratedShare, lowN: r.lowN,
-      })),
-    })),
-  };
-}
-"""
-
-_ORDER_UNDER_RATED_FLIP_JS = """
-async () => {
-  const D = await import('./modules/data.js');
-  const S = await import('./modules/select.js');
-  const C = await import('./modules/crews.js');
-  const raw = await (await fetch('site-data.json')).json();
-  const data = D.prepareData(raw);
-  const view = S.computeView(data, S.defaultState(data));
-  const order = (m) => m.groups.map((g) => [g.heading, g.rows.map((r) => r.booth)]);
-  const before = order(C.buildCrewsModel(data, view));
-  for (let i = 0; i < data.rated.length; i += 1) data.rated[i] = 1 - data.rated[i];
-  const after = order(C.buildCrewsModel(data, view));
-  return { before, after };
-}
-"""
-
-HEADINGS = [
-    "ESPN/ABC, 2026",
-    "FOX, 2026",
-    "ESPN/ABC, 2025",
-    "FOX, 2025",
-    "ESPN/ABC, 2021",
+# RT-10, closing the Phase 12 gap: the three credit lines as full sentences.
+CREDITS = [
+    "Data provided by CollegeFootballData.com",
+    "Viewership figures: Ratings Reference and the second sources credited in each game's "
+    "detail panel.",
+    "Booth order from network press releases, cited per season in "
+    "data/reference/cfb_booth_ranks.csv.",
 ]
+CONFOUND = "Avg viewers (rated games) mostly reflects which games a crew was assigned."
 
 
-def _open(
-    page: Page,
-    serve_booths: Callable[[Page], None],
-    open_app: Callable[[Page, str], None],
-    query: str = "?view=crews",
-) -> None:
-    serve_booths(page)
-    open_app(page, query)
-
-
-def _model(page: Page, partial: dict[str, Any] | None = None, opts: Any = None) -> dict[str, Any]:
-    open_app_done = page.evaluate("() => window.__testHooks.ready")
-    assert open_app_done
-    return page.evaluate(_MODEL_JS, [partial or {}, opts])  # type: ignore[no-any-return]
-
-
-def test_model_groups_rows_and_hand_computed_values(
-    guarded_page: Page, serve_booths: Callable[[Page], None], open_app: Callable[[Page, str], None]
-) -> None:
-    _open(guarded_page, serve_booths, open_app)
-    model = _model(guarded_page)
-    assert model["state"] == "rows"
-    assert [g["heading"] for g in model["groups"]] == HEADINGS
-    rows = {r["booth"]: r for g in model["groups"] for r in g["rows"]}
-    assert len(rows) == 7
-    expected = {
-        4: ("a", 5.5, 6.5, 0, 1),
-        6: ("b", 6.1, 0.5, 0, 1),
-        3: ("other", 8.4, 1.0, 1, 1),
-        5: ("a", 9.6, 14.0, 0, 1),
-        2: ("a", 4.2, 6.0, 0, 0),
-        0: ("b", 5.5, 3.5, 0, 0),
-        1: ("conf", 7.1, 2.5, 0, 0),
-    }
-    for booth, (tier, exc, spread, ranked, rated) in expected.items():
-        row = rows[booth]
-        assert row["tier"] == tier
-        assert row["games"] == 1
-        assert row["exc"] == pytest.approx(exc)
-        assert row["spread"] == pytest.approx(spread)
-        assert row["ranked"] == ranked
-        assert row["rated"] == rated
-    # 2021 group: A, then B, then the conference lead
-    assert [r["booth"] for r in model["groups"][4]["rows"]] == [2, 0, 1]
-    assert rows[1]["chip"] == "Lead Conference Network"
-    assert rows[2]["chip"] == "Lead"
-    assert rows[0]["chip"] == "No. 2"
-    assert rows[3]["chip"] == ""
-    assert rows[4]["pbp"] == "Dale Harlow"
-    assert rows[4]["analyst"] == "Dale Harlow Jr."
-
-
-def test_low_n_default_and_off(
-    guarded_page: Page, serve_booths: Callable[[Page], None], open_app: Callable[[Page, str], None]
-) -> None:
-    _open(guarded_page, serve_booths, open_app)
-    # The user set CREWS_LOW_N = 0 (2026-10-18): mid-season most booths sit under 8 games.
-    default = _model(guarded_page)
-    assert default["lowN"] == 0
-    assert not any(r["lowN"] for g in default["groups"] for r in g["rows"])
-    on = _model(guarded_page, opts={"lowN": 8})
-    assert all(r["lowN"] for g in on["groups"] for r in g["rows"])
-
-    assert guarded_page.locator("#crews-panel .low-n-tag").count() == 0
-    assert guarded_page.locator("#crews-panel tr[data-low-n]").count() == 0
-    assert guarded_page.locator("#crews-panel .crews-legend").count() == 0
-    # A nonzero cutoff still fades, tags and explains every row under it
-    guarded_page.evaluate(
-        """async () => {
-          const D = await import('./modules/data.js');
-          const S = await import('./modules/select.js');
-          const C = await import('./modules/crews.js');
-          const raw = await (await fetch('site-data.json')).json();
-          const data = D.prepareData(raw);
-          const view = S.computeView(data, S.defaultState(data));
-          const host = document.createElement('div');
-          host.id = 'crews-on';
-          document.body.append(host);
-          C.renderCrewsPanel(host, C.buildCrewsModel(data, view, { lowN: 8 }));
-        }"""
-    )
-    assert guarded_page.locator("#crews-on .low-n-tag").count() == 7
-    assert guarded_page.locator("#crews-on tr[data-low-n='true']").count() == 7
-    legend = guarded_page.locator("#crews-on .crews-legend")
-    assert legend.text_content() == "low n: fewer than 8 games, so medians move easily."
-    # Off (0) removes the tags and the legend in the DOM too
-    guarded_page.evaluate(
-        """async () => {
-          const D = await import('./modules/data.js');
-          const S = await import('./modules/select.js');
-          const C = await import('./modules/crews.js');
-          const raw = await (await fetch('site-data.json')).json();
-          const data = D.prepareData(raw);
-          const view = S.computeView(data, S.defaultState(data));
-          const host = document.createElement('div');
-          host.id = 'crews-off';
-          document.body.append(host);
-          C.renderCrewsPanel(host, C.buildCrewsModel(data, view, { lowN: 0 }));
-        }"""
-    )
-    assert guarded_page.locator("#crews-off .low-n-tag").count() == 0
-    assert guarded_page.locator("#crews-off .crews-legend").count() == 0
-    assert guarded_page.locator("#crews-off tr[data-low-n]").count() == 0
-
-
-def test_columns_and_no_viewers(
-    guarded_page: Page, serve_booths: Callable[[Page], None], open_app: Callable[[Page, str], None]
-) -> None:
-    _open(guarded_page, serve_booths, open_app)
-    heads = guarded_page.locator("#crews-panel table").first.locator("th[scope=col]")
-    assert heads.all_inner_texts() == [
-        "Booth",
-        "Games",
-        "Median excitement",
-        "Median spread (points)",
-        "Ranked vs. ranked",
-        "Rated",
-    ]
-    assert guarded_page.locator("#crews-panel h3").all_inner_texts() == HEADINGS
-    text = guarded_page.locator("#crews-panel").inner_text().lower()
-    assert not re.search(r"\bviewers\b", text)
-    assert guarded_page.locator("#crews-panel button, #crews-panel a[download]").count() == 0
-    first = guarded_page.locator("#crews-panel tbody tr").first.locator("td").all_inner_texts()
-    assert first == ["1", "5.5", "6.5", "0%", "100%"]
-
-
-def test_booth_filter_and_networks_filter(
-    guarded_page: Page, serve_booths: Callable[[Page], None], open_app: Callable[[Page, str], None]
-) -> None:
-    _open(guarded_page, serve_booths, open_app)
-    only_a = _model(guarded_page, {"booth": ["a"]})
-    assert [g["heading"] for g in only_a["groups"]] == [
-        "ESPN/ABC, 2026",
-        "FOX, 2025",
-        "ESPN/ABC, 2021",
-    ]
-    assert [r["booth"] for g in only_a["groups"] for r in g["rows"]] == [4, 5, 2]
-    no_fox = _model(guarded_page, {"networks": ["net-a", "net-c", "net-d", "net-e"]})
-    assert not any("FOX" in g["heading"] for g in no_fox["groups"])
-    assert len(no_fox["groups"]) == 3
-
-
-def test_person_selection_is_ignored(
-    guarded_page: Page, serve_booths: Callable[[Page], None], open_app: Callable[[Page, str], None]
-) -> None:
-    _open(guarded_page, serve_booths, open_app)
-    base = _model(guarded_page)
-    picked = _model(guarded_page, {"people": ["kris-venn"]})
-    assert picked == base
-    hint = guarded_page.locator("#chart-subtitle").text_content()
-    assert hint is not None
-    assert "Selected announcers do not change this table." in hint
-
-
-def test_empty_states(
+@pytest.fixture
+def crews(
     guarded_page: Page,
-    serve_booths: Callable[[Page], None],
+    serve_crews: Callable[[Page], None],
     open_app: Callable[[Page, str], None],
-) -> None:
-    # net-d carries no booth game, so this filter leaves no crew rows
-    _open(guarded_page, serve_booths, open_app, "?view=crews&networks=net-d")
-    assert _model(guarded_page, {"networks": ["net-d"]})["state"] == "no-match"
-    title = guarded_page.locator("#crews-panel .season-empty-title")
-    assert title.text_content() == "No booths match these filters"
-    assert guarded_page.locator("#crews-panel table").count() == 0
-
-
-def test_no_booth_order_state(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
+) -> Page:
+    serve_crews(guarded_page)
     open_app(guarded_page, "?view=crews")
-    assert guarded_page.locator("#crews-panel .season-empty-title").text_content() == (
-        "No booth order yet"
+    return guarded_page
+
+
+def _set(page: Page, patch: dict[str, Any]) -> None:
+    page.evaluate("(patch) => window.__testHooks.setState(patch)", patch)
+
+
+def _captions(page: Page) -> list[str]:
+    return [
+        re.sub(r"\s+", " ", c).strip()
+        for c in page.locator("#crews-panel p.caption").all_inner_texts()
+    ]
+
+
+def _rows(page: Page) -> Any:
+    return page.locator("#crews-panel tbody tr.crews-row")
+
+
+def test_credits_are_the_three_rt10_sentences_verbatim(crews: Page) -> None:
+    panel = crews.locator("#crews-panel")
+    link = panel.get_by_role("link", name=CREDITS[0])
+    expect(link).to_have_attribute("href", "https://collegefootballdata.com")
+    captions = _captions(crews)
+    for line in CREDITS:
+        assert line in captions
+    assert captions[-3:] == CREDITS
+    assert CONFOUND in captions
+    assert "Crews with a member of unknown role are kept and marked." in captions
+    # Gone with the family-season table.
+    assert "Rated shows how many games have a viewership figure." not in " ".join(captions)
+
+
+def test_credits_stay_with_the_empty_state(crews: Page) -> None:
+    _set(crews, {"booth": ["other"]})
+    assert _captions(crews)[-3:] == CREDITS
+
+
+def test_crews_source_never_uses_markup_apis(crews: Page) -> None:
+    src = crews.evaluate("async () => (await fetch('modules/crews.js')).text()")
+    for banned in ("innerHTML", "insertAdjacentHTML", "outerHTML"):
+        assert banned not in src
+    for gone in ("CREWS_HINT", "buildCrewsModel", "RATED_NOTE"):
+        assert gone not in src
+
+
+def test_person_selection_highlights_rows_and_the_old_hint_is_gone(crews: Page) -> None:
+    """A person pick used to be ignored (hint: "Selected announcers do not change this table.").
+    Now it highlights the rows holding the person and drops none."""
+    expect(crews.locator("#chart-subtitle")).not_to_contain_text("Selected announcers")
+    total = crews.evaluate(
+        """async () => {
+          const G = await import('./modules/crew-groups.js');
+          const h = window.__testHooks;
+          return G.buildCrewRows(h.data, h.getView(), {}).totalRows;
+        }"""
     )
-    assert guarded_page.locator("#crews-panel table").count() == 0
+    _set(crews, {"people": [CASE_TRIO["pbp"]]})
+    while crews.locator("#crews-panel .crews-more").count():
+        crews.locator("#crews-panel .crews-more").click()
+    expect(_rows(crews)).to_have_count(total)
+    highlighted = crews.locator("#crews-panel tr.is-highlighted")
+    expect(highlighted).to_have_count(1)
+    expect(highlighted).to_contain_text("Trio Pbp")
+
+
+def test_subtitle_is_the_seasons_range(crews: Page) -> None:
+    expect(crews.locator("#chart-subtitle")).to_have_text("Seasons 2022\u20132025")
+    _set(crews, {"seasons": [2024, 2024]})
+    expect(crews.locator("#chart-subtitle")).to_have_text("Season 2024")
 
 
 def test_url_tab_click_keyboard_and_controls(
-    guarded_page: Page, serve_booths: Callable[[Page], None], open_app: Callable[[Page, str], None]
+    guarded_page: Page,
+    serve_crews: Callable[[Page], None],
+    open_app: Callable[[Page, str], None],
 ) -> None:
-    _open(guarded_page, serve_booths, open_app, "")
+    serve_crews(guarded_page)
+    open_app(guarded_page, "")
     guarded_page.locator("#tab-crews").click()
     assert "view=crews" in guarded_page.url
     assert guarded_page.locator("#tab-crews").get_attribute("aria-selected") == "true"
@@ -276,123 +140,57 @@ def test_url_tab_click_keyboard_and_controls(
     guarded_page.keyboard.press("Enter")
     assert guarded_page.locator("#tab-crews").get_attribute("aria-selected") == "true"
     # ?view=crews loads selected
-    _open(guarded_page, serve_booths, open_app)
+    open_app(guarded_page, "?view=crews")
     assert guarded_page.locator("#tab-crews").get_attribute("aria-selected") == "true"
     assert guarded_page.locator("#crews-panel").is_visible()
 
 
 def test_unknown_view_falls_back_to_scatter(
-    guarded_page: Page, serve_booths: Callable[[Page], None], open_app: Callable[[Page, str], None]
+    guarded_page: Page,
+    serve_crews: Callable[[Page], None],
+    open_app: Callable[[Page, str], None],
 ) -> None:
-    _open(guarded_page, serve_booths, open_app, "?view=crewz")
+    serve_crews(guarded_page)
+    open_app(guarded_page, "?view=crewz")
     assert guarded_page.locator("#tab-scatter").get_attribute("aria-selected") == "true"
 
 
-def test_order_never_depends_on_rated(
-    guarded_page: Page, serve_booths: Callable[[Page], None], open_app: Callable[[Page, str], None]
-) -> None:
-    _open(guarded_page, serve_booths, open_app)
-    out = guarded_page.evaluate(_ORDER_UNDER_RATED_FLIP_JS)
-    assert out["before"] == out["after"]
-
-
-def test_credits_and_no_innerhtml(
-    guarded_page: Page, serve_booths: Callable[[Page], None], open_app: Callable[[Page, str], None]
-) -> None:
-    _open(guarded_page, serve_booths, open_app)
-    panel = guarded_page.locator("#crews-panel")
-    link = panel.get_by_role("link", name="Data provided by CollegeFootballData.com")
-    assert link.get_attribute("href") == "https://collegefootballdata.com"
-    text = panel.inner_text()
-    captions = [
-        re.sub(r"\s+", " ", c).strip() for c in panel.locator("p.caption").all_inner_texts()
-    ]
-    # RT-10 (b) and (c): the full sentences, not fragments.
-    assert (
-        "Viewership figures: Ratings Reference and the second sources credited in each "
-        "game's detail panel."
-    ) in captions
-    assert (
-        "Booth order from network press releases, cited per season in "
-        "data/reference/cfb_booth_ranks.csv."
-    ) in captions
-    assert "Data provided by CollegeFootballData.com" in captions
-    assert "Rated shows how many games have a viewership figure." in text
-    src = guarded_page.evaluate("async () => (await fetch('modules/crews.js')).text()")
-    assert "innerHTML" not in src
-
-
-def test_phone_scrolls_inside_wrapper(
-    guarded_page: Page, serve_booths: Callable[[Page], None], open_app: Callable[[Page, str], None]
-) -> None:
-    guarded_page.set_viewport_size({"width": 390, "height": 844})
-    _open(guarded_page, serve_booths, open_app)
-    out = guarded_page.evaluate(
-        """() => {
-          const wrap = document.querySelector('#crews-panel .crews-table-wrap');
-          return {
-            wrapScroll: wrap.scrollWidth, wrapClient: wrap.clientWidth,
-            page: document.documentElement.scrollWidth,
-            numWrap: [...document.querySelectorAll('#crews-panel td.num')]
-              .filter((td) => {
-                const r = document.createRange();
-                r.selectNodeContents(td);
-                return r.getClientRects().length > 1;
-              }).length,
-          };
-        }"""
-    )
-    assert out["wrapScroll"] > out["wrapClient"]
-    assert out["page"] <= 390
-    assert out["numWrap"] == 0
-
-
-def test_new_model_caption_shows_only_when_a_group_is_2025_or_later(
-    guarded_page: Page, serve_booths: Callable[[Page], None], open_app: Callable[[Page, str], None]
-) -> None:
-    _open(guarded_page, serve_booths, open_app)
-    caption = guarded_page.locator("#excitement-caption")
-    assert caption.is_visible()
+def test_excitement_caption_shows_when_the_range_reaches_the_break_season(crews: Page) -> None:
+    caption = crews.locator("#excitement-caption")
+    expect(caption).to_be_visible()
     assert "2025+ excitement uses CFBD's new win-probability model" in (
         caption.text_content() or ""
     )
-    # Only the 2021 group left: no 2025+ excitement on the table, so no note.
-    guarded_page.evaluate("() => window.__testHooks.setState({ seasons: [2021, 2021] })")
-    assert [g.text_content() for g in guarded_page.locator("#crews-panel h3").all()] == [
-        "ESPN/ABC, 2021"
-    ]
-    assert not caption.is_visible()
-    guarded_page.evaluate("() => window.__testHooks.setState({ seasons: [2021, 2026] })")
-    assert caption.is_visible()
+    _set(crews, {"seasons": [2022, 2024]})
+    expect(caption).to_be_hidden()
+    _set(crews, {"seasons": [2022, 2025]})
+    expect(caption).to_be_visible()
 
 
 def test_legend_chips_are_hidden_on_crews_and_networks_filter_still_applies(
-    guarded_page: Page, serve_booths: Callable[[Page], None], open_app: Callable[[Page, str], None]
+    guarded_page: Page,
+    serve_crews: Callable[[Page], None],
+    open_app: Callable[[Page, str], None],
 ) -> None:
-    _open(guarded_page, serve_booths, open_app, "")
+    serve_crews(guarded_page)
+    open_app(guarded_page, "")
     assert guarded_page.locator("#legend-row").is_visible()
     guarded_page.locator("#tab-crews").click()
     assert not guarded_page.locator("#legend-row").is_visible()
     assert guarded_page.locator("#legend-chips").is_hidden()
-    no_fox = _model(guarded_page, {"networks": ["net-a", "net-c", "net-d", "net-e"]})
-    assert len(no_fox["groups"]) == 3
+    before = guarded_page.locator("#crews-panel .crews-count").inner_text()
+    _set(guarded_page, {"networks": ["net-a"]})
+    assert guarded_page.locator("#crews-panel .crews-count").inner_text() != before
     guarded_page.locator("#tab-scatter").click()
     assert guarded_page.locator("#legend-row").is_visible()
 
 
-def test_booth_column_is_pinned_and_filled_on_phones_only(
-    guarded_page: Page, serve_booths: Callable[[Page], None], open_app: Callable[[Page, str], None]
-) -> None:
-    """UI-SPEC phone contract: the sticky identity column and its fill belong at <=480px."""
-    js = """() => {
-      const th = document.querySelector('#crews-panel tbody th.booth-col');
-      const cs = getComputedStyle(th);
-      return { position: cs.position, bg: cs.backgroundColor }; }"""
-    _open(guarded_page, serve_booths, open_app)
-    desktop = guarded_page.evaluate(js)
-    assert desktop["position"] != "sticky"
-    assert desktop["bg"] == "rgba(0, 0, 0, 0)"
-    guarded_page.set_viewport_size({"width": 390, "height": 844})
-    phone = guarded_page.evaluate(js)
-    assert phone["position"] == "sticky"
-    assert phone["bg"] != "rgba(0, 0, 0, 0)"
+def test_booth_filter_recounts_and_a_crew_pick_leaves_it_alone(crews: Page) -> None:
+    _set(crews, {"booth": ["a"]})
+    expect(_rows(crews)).to_have_count(1)
+    expect(_rows(crews).locator("td.num").first).to_have_text("4")
+    _rows(crews).first.click()
+    state = crews.evaluate("() => window.__testHooks.getState()")
+    assert state["booth"] == ["a"]
+    assert state["crew"] is not None
+    expect(_rows(crews)).to_have_count(1)
