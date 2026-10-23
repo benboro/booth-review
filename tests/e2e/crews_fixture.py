@@ -105,6 +105,15 @@ CASE_ERA = {
 # One unrated one-game crew with no figures; it sorts last under any default sort (fewest
 # games, no viewers, no excitement, last by name), so it falls past the 25-row cut (D-13).
 CASE_PAST_CUT = {"pbp": "zz-cut-pbp", "analyst": "zz-cut-ana", "games": 1}
+# 14-08: a crew with 20 games (two pages of 10) and its pbp's other pairing, 3 games with a
+# second analyst, so a person row has a two-partner "Worked with" list ordered by count.
+CASE_BIG = {
+    "pbp": "big-pbp",
+    "analyst": "big-ana",
+    "other_analyst": "big-ana2",
+    "games": 20,
+    "other_games": 3,
+}
 N_FILLER_CREWS = 40  # filler pairs, 2 games each (the first 8 also have an unrated game)
 
 _Role = tuple[str, str]  # (person slug, role)
@@ -207,6 +216,20 @@ def _games() -> list[_Game]:
     # Two Nielsen eras (2022, 2023).
     for season in (2022, 2022, 2023, 2023):
         g.append(_Game(season, NET_A, _pair("era-pbp", "era-ana"), excitement=7.0))
+    # 14-08: the 20-game crew and the pbp's 3-game second pairing.
+    for i in range(CASE_BIG["games"]):
+        g.append(
+            _Game(
+                2023 + i % 3,
+                NET_A,
+                _pair("big-pbp", "big-ana"),
+                viewers=1_000_000 + i * 20_000,
+                excitement=5.0 + i * 0.1,
+                rated=i % 7 != 6,
+            )
+        )
+    for i in range(CASE_BIG["other_games"]):
+        g.append(_Game(2024, NET_B, _pair("big-pbp", "big-ana2"), viewers=500_000 + i * 10_000))
     # Filler crews so Crew mode has well over 25 rows.
     for i in range(N_FILLER_CREWS):
         pbp, ana = f"filler-{i:02d}-pbp", f"filler-{i:02d}-ana"

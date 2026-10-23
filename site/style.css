@@ -4388,7 +4388,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   background-image: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.025) 0 1px, transparent 1px 6px);
 }
 
-/* Chevron: a CSS-border caret in a 28px square (44px on a phone). Expansion arrives in 14-08. */
+/* Chevron: a CSS-border caret in a 28px square (44px on a phone); it turns down while the row is open. */
 .crews-table td.crews-chevron-cell,
 .crews-table th.crews-chevron-cell {
   padding: 0;
@@ -4418,6 +4418,15 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   border-right: 2px solid var(--muted);
   border-bottom: 2px solid var(--muted);
   transform: rotate(-45deg);
+}
+
+.crews-chevron:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.crews-row[aria-expanded="true"] .crews-chevron::before {
+  transform: rotate(45deg);
 }
 
 .crews-row {
@@ -4512,6 +4521,206 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   font-weight: 600;
 }
 
+/* Expanded row (D-14, D-15): a full-width sub-row on the surface fill between two hairlines. */
+.crews-table > tbody > tr.crews-expanded > td {
+  padding: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  white-space: normal;
+}
+
+.crews-expanded-inner {
+  box-sizing: border-box;
+  padding: var(--space-md);
+  width: 100%;
+}
+
+.crews-worked-label {
+  margin: 0 0 var(--space-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.crews-worked {
+  margin: 0 0 var(--space-md);
+  color: var(--ink);
+}
+
+.crews-worked-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The game list: the same typeset table as Matched games, on the sub-row's fill. */
+.crews-games {
+  table-layout: auto;
+  width: 100%;
+  background: transparent;
+}
+
+.crews-games td,
+.crews-games th {
+  vertical-align: top;
+}
+
+/* The Viewers head stays on one line (the shared Crews head rule lets numeric heads wrap). */
+.crews-table .crews-games th.num {
+  white-space: nowrap;
+}
+
+.crews-games tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.crews-games td.crews-game-crew {
+  color: var(--muted);
+}
+
+.crews-games td.crews-game-matchup {
+  white-space: normal;
+}
+
+.crews-games td .caption {
+  display: block;
+  margin: 0;
+}
+
+.crews-games .crews-source {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.crews-game {
+  cursor: pointer;
+}
+
+.crews-game:hover {
+  background: var(--bg);
+}
+
+.crews-game:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.crews-games-more {
+  margin-top: var(--space-md);
+}
+
+@media (max-width: 480px) {
+  /* The sub-row keeps the scroller's visible width and sticks to its left edge. */
+  .crews-expanded-inner {
+    position: sticky;
+    left: 0;
+    width: var(--crews-scroll-w, 100%);
+  }
+
+  .crews-games-more {
+    width: 100%;
+  }
+
+  /* The sub-row's cell is not a pinned column: it keeps the surface fill and scrolls with the table. */
+  .table-scroll .crews-table > tbody > tr.crews-expanded > td:first-child {
+    position: static;
+    border-right: none;
+    background-color: var(--surface);
+  }
+
+  /* Game items stack: matchup on line 1; date, logo and viewers on line 2; crew on line 3. */
+  .table-scroll .games-table.crews-games {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .crews-games thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .crews-games tbody {
+    display: block;
+  }
+
+  .table-scroll .crews-games tbody tr.crews-game {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    grid-template-areas:
+      "matchup matchup matchup"
+      "date network viewers"
+      "crew crew crew";
+    column-gap: var(--space-sm);
+    align-items: center;
+    min-height: 44px;
+    padding: var(--space-sm) 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .table-scroll .crews-games tbody tr.crews-game:last-child {
+    border-bottom: none;
+  }
+
+  .table-scroll .games-table.crews-games tr > :first-child {
+    position: static;
+    border-right: none;
+    background-color: transparent;
+  }
+
+  .table-scroll .games-table.crews-games td {
+    display: block;
+    height: auto;
+    padding: 0;
+    border: none;
+    text-align: left;
+    width: auto;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--muted);
+  }
+
+  .table-scroll .games-table.crews-games td.crews-game-matchup {
+    grid-area: matchup;
+    font-size: 14px;
+    color: var(--ink);
+  }
+
+  .table-scroll .games-table.crews-games td.crews-game-date {
+    grid-area: date;
+  }
+
+  .table-scroll .games-table.crews-games td.crews-game-network {
+    grid-area: network;
+  }
+
+  .table-scroll .games-table.crews-games td.crews-game-crew {
+    grid-area: crew;
+  }
+
+  .table-scroll .games-table.crews-games td.crews-game-viewers {
+    grid-area: viewers;
+  }
+
+  .crews-games td.crews-game-network::before,
+  .crews-games td.crews-game-viewers::before {
+    content: "\00b7";
+    margin-right: var(--space-sm);
+  }
+
+  .crews-games td .caption {
+    display: inline;
+    white-space: nowrap;
+  }
+
+  .crews-games td.crews-game-network {
+    display: flex;
+    align-items: center;
+  }
+}
+
 @media (max-width: 480px) {
   /* Two reserved rows (mode switch, Per season) so nothing shifts between modes. */
   .crews-tools {
@@ -4588,11 +4797,13 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   }
 
   /* The Crew or Person column is pinned beside the chevron; the chevron keeps no divider. */
-  .table-scroll .crews-table tr > :first-child {
+  .table-scroll .crews-table > tbody > tr > :first-child,
+  .table-scroll .crews-table > thead > tr > :first-child {
     border-right: none;
   }
 
-  .table-scroll .crews-table tr > :nth-child(2) {
+  .table-scroll .crews-table > tbody > tr > :nth-child(2),
+  .table-scroll .crews-table > thead > tr > :nth-child(2) {
     position: sticky;
     left: 44px;
     z-index: 1;
