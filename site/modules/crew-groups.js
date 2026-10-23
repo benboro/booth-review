@@ -267,3 +267,319 @@ export function crewIndex(data) {
   indexCache.set(data, result);
   return result;
 }
+
+// ---------------------------------------------------------------------------------------
+// Row model (Phase 14, plan 14-03): Crew, PBP and Analyst rows, pooled or per season.
+// Pure and DOM-free; the Crews table (14-07) only renders what these return.
+// ---------------------------------------------------------------------------------------
+
+/**
+ * Fewest figures a metric needs before its cell stops carrying the `n < 8` flag (D-11).
+ * Mirrors the NFL table's 12-D-20 choice and reverses the 2026-10-18 `CREWS_LOW_N = 0`
+ * decision for the old family-season table, which this table replaces.
+ */
+export const CREWS_LOW_N_MIN = 8;
+
+/**
+ * Fallback for the first season of the CFBD excitement model break (A4) when no game in
+ * the data carries a `model_break` flag. The real boundary is derived from the data.
+ */
+const MODEL_BREAK_SEASON_FALLBACK = 2025;
+
+const breakCache = new WeakMap();
+
+/** First season whose rated games carry a `model_break` flag, else the fallback (A4). */
+function modelBreakSeason(data) {
+  if (breakCache.has(data)) return breakCache.get(data);
+  const kinds = data.lookups.flags.map((f) => f.kind);
+  let min = null;
+  for (let i = 0; i < data.n; i += 1) {
+    if (!data.rated[i]) continue;
+    for (const f of data.t.flags[i] ?? []) {
+      if (kinds[f] === 'model_break' && (min === null || data.t.season[i] < min)) {
+        min = data.t.season[i];
+      }
+    }
+  }
+  const season = min ?? MODEL_BREAK_SEASON_FALLBACK;
+  breakCache.set(data, season);
+  return season;
+}
+
+const cmpStr = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
+function joinNames(names) {
+  if (names.length <= 1) return names.join('');
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/** Display name for a person slug. */
+function nameOf(data, slug) {
+  const idx = data.personIndexById.get(slug);
+  return idx === undefined ? slug : data.lookups.people[idx].name;
+}
+
+/** Rank run text (D-04): `Lead 2019–24, No. 2 2025`; per season rows print one token. */
+function rankRunOf(bySeason, perSeason) {
+  const seasons = Array.from(bySeason.keys()).sort((a, b) => a - b);
+  if (!seasons.length) return '';
+  const label = (r) => (r === 1 ? 'Lead' : `No. ${r}`);
+  if (perSeason) return label(bySeason.get(seasons[0]));
+  const runs = [];
+  for (const s of seasons) {
+    const last = runs[runs.length - 1];
+    const l = label(bySeason.get(s));
+    if (last && last.label === l && last.end === s - 1) last.end = s;
+    else runs.push({ label: l, start: s, end: s });
+  }
+  const span = (r) => {
+    if (r.start === r.end) return `${r.start}`;
+    const sameCentury = Math.floor(r.start / 100) === Math.floor(r.end / 100);
+    return `${r.start}–${sameCentury ? String(r.end % 100).padStart(2, '0') : r.end}`;
+  };
+  return runs.map((r) => `${r.label} ${span(r)}`).join(', ');
+}
+
+function metric(mean, n, blank) {
+  const shown = blank ? null : mean;
+  return { mean: shown, n, flagged: !blank && n > 0 && n < CREWS_LOW_N_MIN, blank: blank ?? null };
+}
+
+/** exc / viewers metric objects for a row's games. */
+function metricsOf(data, games) {
+  const { t } = data;
+  const boundary = modelBreakSeason(data);
+  const kinds = data.lookups.flags.map((f) => f.kind);
+  let excSum = 0;
+  let excN = 0;
+  let before = false;
+  let after = false;
+  let vSum = 0;
+  let vN = 0;
+  const eras = new Set();
+  for (const i of games) {
+    const e = t.excitement[i];
+    if (e != null) {
+      excSum += e;
+      excN += 1;
+      if (t.season[i] < boundary) before = true;
+      else after = true;
+    }
+    if (data.rated[i] && t.viewers[i] != null) {
+      vSum += t.viewers[i];
+      vN += 1;
+      for (const f of t.flags[i] ?? []) if (kinds[f] === 'era') eras.add(f);
+    }
+  }
+  const excBlank = excN === 0 ? 'none' : before && after ? 'break' : null;
+  const vBlank = vN === 0 ? 'none' : eras.size > 1 ? 'era' : null;
+  return {
+    exc: metric(excN ? excSum / excN : null, excN, excBlank),
+    viewers: metric(vN ? vSum / vN : null, vN, vBlank),
+  };
+}
+
+/** Primary network (most games, ties to the lower id) and the full list. */
+function networkOf(data, games) {
+  const counts = new Map();
+  for (const i of games) {
+    const id = data.lookups.networks[data.t.network[i]].id;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  const all = Array.from(counts.keys()).sort((a, b) => counts.get(b) - counts.get(a) || cmpStr(a, b));
+  const primaryId = all[0] ?? null;
+  const net = data.lookups.networks.find((n) => n.id === primaryId);
+  return { primaryId, name: net ? net.name : '', count: all.length, all };
+}
+
+/** Newest first by date, then by index. */
+function newestFirst(data, games) {
+  return games.slice().sort((a, b) => {
+    const da = data.t.date[a];
+    const db = data.t.date[b];
+    return da < db ? 1 : da > db ? -1 : b - a;
+  });
+}
+
+/** Main-feed slugs of one role on game `i`, in crew order. */
+function mainSlugs(data, i, role) {
+  const out = [];
+  for (const e of data.t.crew[i]) {
+    if (e.feed === 'main' && e.role === role) out.push(data.lookups.people[e.person].id);
+  }
+  return out;
+}
+
+const defaultTie = (a, b) => b.gamesCount - a.gamesCount || cmpStr(a.names, b.names);
+
+/**
+ * Build the Crews rows from the games that pass the master filters.
+ * @param {object} data - a `prepareData` result.
+ * @param {{passesFilters: Uint8Array}} view - a `computeView` result.
+ * @param {{mode?: 'crew'|'pbp'|'analyst', perSeason?: boolean}} [opts]
+ * @returns {{mode: string, perSeason: boolean, rows: Array<object>, leftOut: number,
+ *   totalRows: number}}
+ */
+export function buildCrewRows(data, view, { mode = 'crew', perSeason = false } = {}) {
+  const { t } = data;
+  const index = crewIndex(data);
+  const buckets = new Map();
+  let leftOut = 0;
+  const add = (rowKey, meta, i) => {
+    let b = buckets.get(rowKey);
+    if (!b) {
+      b = { rowKey, meta, games: [] };
+      buckets.set(rowKey, b);
+    }
+    b.games.push(i);
+  };
+  const suffix = (i) => (perSeason ? `|${t.season[i]}` : '');
+
+  for (let i = 0; i < data.n; i += 1) {
+    if (!view.passesFilters[i]) continue;
+    const pg = index.perGame[i];
+    if (mode === 'crew') {
+      if (pg.noCrew) {
+        leftOut += 1;
+        continue;
+      }
+      add(pg.key + suffix(i), { crewKey: pg.key }, i);
+    } else if (mode === 'pbp') {
+      if (pg.pbp === null) {
+        leftOut += 1;
+        continue;
+      }
+      add(`pbp:${pg.pbp}${suffix(i)}`, { slug: pg.pbp }, i);
+    } else {
+      const analysts = mainSlugs(data, i, 'analyst');
+      if (!analysts.length) {
+        leftOut += 1;
+        continue;
+      }
+      for (const slug of new Set(analysts)) add(`analyst:${slug}${suffix(i)}`, { slug }, i);
+    }
+  }
+
+  const rows = [];
+  for (const b of buckets.values()) {
+    const games = newestFirst(data, b.games);
+    const season = perSeason ? t.season[games[0]] : null;
+    const base = {
+      rowKey: b.rowKey,
+      season,
+      games,
+      gamesCount: games.length,
+      network: networkOf(data, games),
+      ...metricsOf(data, games),
+    };
+    if (mode === 'crew') {
+      const crew = index.crews.get(b.meta.crewKey);
+      const unknownCount = new Map();
+      if (crew.noPbp) {
+        for (const i of games) {
+          for (const s of index.perGame[i].unknownPeople) {
+            unknownCount.set(s, (unknownCount.get(s) ?? 0) + 1);
+          }
+        }
+      }
+      const people = crew.people.map((slug) => {
+        const k = unknownCount.get(slug) ?? 0;
+        const unknownTag = k === 0 ? null : k === games.length ? 'all' : { k, n: games.length };
+        return { slug, name: nameOf(data, slug), unknownTag };
+      });
+      const rankBySeason = new Map();
+      for (const i of games) {
+        const r = index.perGame[i].rank;
+        if (r == null) continue;
+        const s = t.season[i];
+        rankBySeason.set(s, Math.min(rankBySeason.get(s) ?? r, r));
+      }
+      const ranks = Array.from(rankBySeason.values());
+      rows.push({
+        ...base,
+        crewKey: b.meta.crewKey,
+        groupId: crew.groupId,
+        family: BOOTH_FAMILIES.has(crew.groupId) ? crew.groupId : null,
+        people,
+        names: joinNames(people.map((p) => p.name)),
+        rankRun: rankRunOf(rankBySeason, perSeason),
+        rankKey: ranks.length ? Math.min(...ranks) : null,
+        fillInGames: new Set(games.filter((i) => index.perGame[i].fillIn)),
+      });
+    } else {
+      const partnerCount = new Map();
+      for (const i of games) {
+        const others = mode === 'pbp' ? mainSlugs(data, i, 'analyst') : [index.perGame[i].pbp];
+        for (const s of new Set(others)) {
+          if (s != null && s !== b.meta.slug) partnerCount.set(s, (partnerCount.get(s) ?? 0) + 1);
+        }
+      }
+      const partners = Array.from(partnerCount, ([slug, n]) => ({
+        slug,
+        name: nameOf(data, slug),
+        games: n,
+      })).sort((a, c) => c.games - a.games || cmpStr(a.name, c.name));
+      const name = nameOf(data, b.meta.slug);
+      rows.push({
+        ...base,
+        personSlug: b.meta.slug,
+        crewKey: null,
+        groupId: null,
+        family: null,
+        people: [{ slug: b.meta.slug, name, unknownTag: null }],
+        names: name,
+        partners,
+        partnersShown: partners.slice(0, 3),
+        partnersMore: Math.max(0, partners.length - 3),
+        rankRun: '',
+        rankKey: null,
+        fillInGames: new Set(),
+      });
+    }
+  }
+  rows.sort(defaultTie);
+  return { mode, perSeason, rows, leftOut, totalRows: rows.length };
+}
+
+/**
+ * Sort rows without touching the input. Metric keys bucket full-n values, then flagged
+ * values, then blanks (D-12), and only reverse inside the first two buckets; `rank` puts
+ * unranked rows last in both directions. Ties fall back to games desc, then name asc.
+ * @param {Array<object>} rows
+ * @param {{key: string, dir?: 'asc'|'desc'}|null} sort - null is the default sort.
+ */
+export function sortCrewRows(rows, sort) {
+  if (!sort) return rows.slice().sort(defaultTie);
+  const dir = (sort.dir ?? NATURAL_DIR[sort.key]) === 'desc' ? -1 : 1;
+  const bucket = (m) => (m.mean == null ? 2 : m.flagged ? 1 : 0);
+  const cmp = (a, b) => {
+    switch (sort.key) {
+      case 'crew':
+        return dir * cmpStr(a.names, b.names);
+      case 'season': {
+        if (a.season == null || b.season == null) return (a.season == null) - (b.season == null);
+        return dir * (a.season - b.season);
+      }
+      case 'network':
+        return dir * cmpStr(a.network.name, b.network.name);
+      case 'games':
+        return dir * (a.gamesCount - b.gamesCount);
+      case 'rank': {
+        if (a.rankKey == null || b.rankKey == null) return (a.rankKey == null) - (b.rankKey == null);
+        return dir * (a.rankKey - b.rankKey);
+      }
+      case 'exc':
+      case 'viewers': {
+        const ma = a[sort.key];
+        const mb = b[sort.key];
+        const ba = bucket(ma);
+        const bb = bucket(mb);
+        if (ba !== bb) return ba - bb;
+        return ba === 2 ? 0 : dir * (ma.mean - mb.mean);
+      }
+      default:
+        return 0;
+    }
+  };
+  return rows.slice().sort((a, b) => cmp(a, b) || defaultTie(a, b));
+}
