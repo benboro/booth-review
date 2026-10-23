@@ -175,4 +175,5 @@ def test_crew_chip_label_has_no_left_indent_from_an_empty_icon_slot(app: Page) -
         }"""
     )
     assert m["glyphs"] == 0
-    assert abs(m["inset"] - m["own"]) <= 0.5, f"label is {m['inset'] - m['own']}px past the chip padding"
+    extra = m["inset"] - m["own"]
+    assert abs(extra) <= 0.5, f"label is {extra}px past the chip padding"

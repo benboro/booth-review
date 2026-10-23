@@ -249,4 +249,5 @@ def test_sort_glyph_follows_the_label_on_number_heads(app: Page, width: int) -> 
     for h in heads:
         assert 0 <= h["gap"] <= 8, f"{h['text']}: the sort glyph is {h['gap']}px from its label"
         assert h["dy"] <= 8, f"{h['text']}: the sort glyph is off the label's last line"
-        assert abs(h["labelRight"] - h["numRight"]) <= 1, f"{h['text']}: label lost the numbers' edge"
+        edge = h["labelRight"] - h["numRight"]
+        assert abs(edge) <= 1, f"{h['text']}: label is {edge}px off the numbers' edge"
