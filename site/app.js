@@ -33,7 +33,8 @@ import { initChartTabs, renderChartTabs, staleCopy } from './modules/chart-tabs.
 import { chartContext } from './modules/bars.js';
 import { initBarsPanel, renderBarsPanel, lastBarsModel, resetBarsTap } from './modules/bars-panel.js';
 import { buildMapModel } from './modules/map-model.js';
-import { buildCrewsModel, renderCrewsPanel } from './modules/crews.js';
+import { renderCrewsPanel } from './modules/crews.js';
+import { buildCrewRows, modelBreakSeason } from './modules/crew-groups.js';
 import { initMapPanel, renderMapPanel, resetMapTap, mapRenderCount, mapSplatCount, onMapViewChange, mapAtHome, resetMapZoom } from './modules/map-panel.js';
 import { initBandInfo, positionBandInfo, closeBandNote, setBandInfoMode } from './modules/band-info.js';
 import { showTooltip, hideTooltip } from './modules/tooltip.js';
@@ -278,9 +279,18 @@ function render() {
     hideBandInfo();
     if (crewsPanelEl) {
       crewsPanelEl.hidden = false;
-      const crewsModel = buildCrewsModel(data, view);
-      renderCrewsPanel(crewsPanelEl, crewsModel);
-      crewsHasNewModelSeason = crewsModel.groups.some((g) => g.season >= 2025);
+      const crewsModel = buildCrewRows(data, view, { mode: state.cmode, perSeason: state.perseason });
+      renderCrewsPanel(crewsPanelEl, crewsModel, {
+        data,
+        state,
+        view,
+        setState,
+        openGame: openDetailPanel,
+      });
+      // Crews shows excitement averages, so the model-break note applies when the Seasons range
+      // reaches the break season (RT-20).
+      const rangeHi = state.seasons ? state.seasons[1] : data.seasons[data.seasons.length - 1];
+      crewsHasNewModelSeason = rangeHi >= modelBreakSeason(data);
     }
     lastPanel = 'crews';
   } else if (state.view === 'map') {

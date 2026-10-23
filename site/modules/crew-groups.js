@@ -289,7 +289,7 @@ const MODEL_BREAK_SEASON_FALLBACK = 2025;
 const breakCache = new WeakMap();
 
 /** First season whose rated games carry a `model_break` flag, else the fallback (A4). */
-function modelBreakSeason(data) {
+export function modelBreakSeason(data) {
   if (breakCache.has(data)) return breakCache.get(data);
   const kinds = data.lookups.flags.map((f) => f.kind);
   let min = null;
