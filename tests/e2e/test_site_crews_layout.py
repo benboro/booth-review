@@ -235,6 +235,7 @@ _GLYPH_JS = """
   const cs = getComputedStyle(th);
   const numRight = th.getBoundingClientRect().right - parseFloat(cs.paddingRight);
   return { text: label.textContent, lines: lines.length, gap: glyph.left - last.right,
+           overflow: glyph.right - th.getBoundingClientRect().right,
            labelRight: last.right, numRight,
            dy: Math.abs((glyph.top + glyph.bottom) / 2 - (last.top + last.bottom) / 2) };
 })
@@ -249,5 +250,8 @@ def test_sort_glyph_follows_the_label_on_number_heads(app: Page, width: int) -> 
     for h in heads:
         assert 0 <= h["gap"] <= 8, f"{h['text']}: the sort glyph is {h['gap']}px from its label"
         assert h["dy"] <= 8, f"{h['text']}: the sort glyph is off the label's last line"
+        assert h["overflow"] <= 0.5, (
+            f"{h['text']}: the glyph spills past its cell (sideways scroll)"
+        )
         edge = h["labelRight"] - h["numRight"]
         assert abs(edge) <= 1, f"{h['text']}: label is {edge}px off the numbers' edge"

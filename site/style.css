@@ -4323,7 +4323,8 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 /* Over a right-aligned number column the sort glyph follows the label's last word, so it never
    floats left of a wrapped label. Its box takes no inline width (the negative margin cancels
-   it), so the label keeps the numbers' right edge and the glyph hangs in the cell padding. */
+   it), so the label keeps the numbers' right edge and the glyph hangs inside the cell's 12px
+   padding (so the last column never adds sideways scroll). */
 .crews-table th.num button {
   display: block;
   overflow: visible;
@@ -4335,9 +4336,9 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 .crews-table th.num .sort-glyph {
-  width: 12px;
+  width: 8px;
   margin-left: var(--space-xs);
-  margin-right: calc(-12px - var(--space-xs));
+  margin-right: calc(-8px - var(--space-xs));
 }
 
 .crews-table td.crews-name,
