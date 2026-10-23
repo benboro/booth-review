@@ -83,7 +83,7 @@ function buildRow(row, onOpen) {
     onOpen?.(row.i, tr.querySelector('.nfl-matchup-btn'));
   });
 
-  tr.appendChild(el('td', 'num', dateShortText(row)));
+  tr.appendChild(el('td', 'date', dateShortText(row)));
 
   const matchupTd = el('td');
   const button = el('button', 'nfl-matchup-btn', `${row.away} at ${row.home}`);
@@ -123,7 +123,7 @@ function buildRow(row, onOpen) {
       vTd.append(document.createTextNode(' '), tag);
     }
   } else {
-    vTd.className = 'no-rating';
+    vTd.className = 'num no-rating';
     vTd.textContent = CAUSE_COPY[row.cause] ?? CAUSE_COPY.none;
   }
   tr.appendChild(vTd);
@@ -154,15 +154,17 @@ export function createGamesTable(host, { onOpen } = {}) {
   const thead = el('thead');
   const headRow = el('tr');
   const sortButtons = {};
-  for (const [label, key] of [
+  // Viewers holds numbers, so its head aligns right like its cells; Date is a text date
+  // ("Sun, Aug 31"), left-aligned and never wrapped (brief §5).
+  for (const [label, key, numeric] of [
     ['Date', 'date'],
     ['Matchup', null],
     ['Round', null],
     ['Outlet', null],
     ['Crew', null],
-    ['Viewers', 'viewers'],
+    ['Viewers', 'viewers', true],
   ]) {
-    const th = el('th');
+    const th = el('th', numeric ? 'num' : null);
     th.scope = 'col';
     if (key) {
       const b = el('button');

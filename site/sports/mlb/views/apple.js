@@ -237,7 +237,7 @@ export function mount(container, ctx) {
   table.appendChild(el('caption', 'visually-hidden', 'Apple booths, 2026'));
   const head = el('tr');
   for (const h of ['Booth', 'Games', 'Crew listed', 'Stakes', 'Excitement', '2025 win % of both clubs']) {
-    const th = el('th', h === 'Booth' ? 'booth-col' : null, h);
+    const th = el('th', h === 'Booth' ? 'booth-col' : 'num', h);
     th.scope = 'col';
     head.appendChild(th);
   }

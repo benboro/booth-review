@@ -153,7 +153,9 @@ function buildTable(group) {
   table.append(el('caption', 'visually-hidden', `Booths for ${group.heading}`));
   const tr = el('tr');
   ['Booth', 'Games', 'Median excitement', 'Median spread (points)', 'Ranked vs. ranked', 'Rated'].forEach((h, idx) => {
-    const th = el('th', idx === 0 ? 'booth-col' : 'num', h);
+    // Games and Rated hold short figures, so their set widths are narrower (style.css).
+    const cls = idx === 0 ? 'booth-col' : idx === 1 || idx === 5 ? 'num crews-narrow' : 'num';
+    const th = el('th', cls, h);
     th.scope = 'col';
     tr.append(th);
   });

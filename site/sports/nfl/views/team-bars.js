@@ -343,7 +343,7 @@ function renderBreakdown(model, state, env, rows) {
   const table = el('table', 'games-table');
   const head = el('tr');
   for (const h of ['Season', 'Special games', ...SEGMENTS.map((x) => x.label), 'Flexed']) {
-    const th = cell('th', h);
+    const th = cell('th', h, h === 'Season' ? null : 'num');
     th.scope = 'col';
     head.appendChild(th);
   }
@@ -359,8 +359,8 @@ function renderBreakdown(model, state, env, rows) {
       season,
       cell('td', String(r.total), 'num'),
       ...SEGMENTS.map((seg) => {
-        if (seg.key === 'agotw') return cell('td', agotwCell(r.agotwRate.count, r.agotwRate.denom));
-        if (seg.key === 'cbs_national') return cell('td', agotwCell(r.cbsRate.count, r.cbsRate.denom));
+        if (seg.key === 'agotw') return cell('td', agotwCell(r.agotwRate.count, r.agotwRate.denom), 'num');
+        if (seg.key === 'cbs_national') return cell('td', agotwCell(r.cbsRate.count, r.cbsRate.denom), 'num');
         return cell('td', String(r.counts[seg.key]), 'num');
       }),
       cell('td', String(r.flexed), 'num'),

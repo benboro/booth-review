@@ -408,7 +408,7 @@ function renderBoothTable(items, group, state, season, anyPublished) {
   heads.push('Avg viewers', 'Avg margin', 'Excitement');
   refs.tableHead.replaceChildren(
     ...heads.map((h, k) => {
-      const th = el('th', k === 0 ? 'booth-col' : null, h);
+      const th = el('th', k === 0 ? 'booth-col' : 'num', h);
       th.scope = 'col';
       if (h === 'Avg viewers') {
         const mark = el('span', 'footnote-mark', '*');

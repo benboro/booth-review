@@ -1141,9 +1141,12 @@ def test_unrated_rows_listed_inline_with_no_rating_cells(
         viewers = row.locator("td").nth(4)
         source = row.locator("td").nth(5)
         assert viewers.inner_text() == "No public rating"
-        assert viewers.get_attribute("class") == "no-rating"
+        # A placeholder in a numeric column takes the numbers' alignment (brief §5).
+        assert viewers.get_attribute("class") == "num no-rating"
+        assert viewers.evaluate("e => getComputedStyle(e).textAlign") == "right"
         assert source.inner_text() == "No figure to cite"
         assert source.get_attribute("class") == "no-rating"
+        assert source.evaluate("e => getComputedStyle(e).textAlign") == "left"
         assert source.locator("a").count() == 0
     unrated[0].click()
     expect(guarded_page.locator("#detail-panel")).to_be_visible()

@@ -161,7 +161,7 @@ function buildRow(data, state, onDetails, i) {
   });
 
   const dateTd = document.createElement('td');
-  dateTd.className = 'num';
+  dateTd.className = 'date';
   dateTd.textContent = formatDate(t.date[i]);
   tr.appendChild(dateTd);
 
@@ -181,13 +181,18 @@ function buildRow(data, state, onDetails, i) {
   const viewersTd = document.createElement('td');
   if (data.rated[i]) {
     viewersTd.className = 'num';
-    let viewersText = formatViewers(t.viewers[i]);
+    viewersTd.textContent = formatViewers(t.viewers[i]);
+    // The measurement note sits on its own small line, so the figure keeps the column's
+    // right edge and the note does not widen the column with a " · " suffix (brief §5).
     if (t.measurement_type[i] === 'nielsen_adobe') {
-      viewersText += ` · ${measurementLabel('nielsen_adobe')}`;
+      const note = document.createElement('span');
+      note.className = 'num-note';
+      note.textContent = measurementLabel('nielsen_adobe');
+      viewersTd.append(note);
     }
-    viewersTd.textContent = viewersText;
   } else {
-    viewersTd.className = 'no-rating';
+    // A placeholder in a numeric column takes the numbers' alignment (brief §5).
+    viewersTd.className = 'num no-rating';
     viewersTd.textContent = NO_RATING_LABEL;
   }
   tr.appendChild(viewersTd);

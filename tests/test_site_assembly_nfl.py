@@ -67,7 +67,9 @@ _COVERAGE_SHA256 = "1c2076a54c682ad0355657a0e1a3d938d35c7451c3c7d52bf5342a8753f7
 # selection row; Show games label.
 # Re-pinned at Phase 13 Plan 11: module headers, tab hint moved into the module subtitle,
 # compare note in the summary, Reset zoom slot.
-_INDEX_PRE_PHASE_SHA256 = "1e9300ae41a1d2ed36c1ba68790823a79fd13748d045f9cabc5398bb273d80ff"
+# Re-pinned after the Phase 13 checkpoint: the Viewers head carries class="num" so it aligns
+# right like its cells (1 changed line).
+_INDEX_PRE_PHASE_SHA256 = "7cb2870b0e66a517369b01202eae152a529658a538b650621ff3ebc18fa36e53"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'

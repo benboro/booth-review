@@ -2420,18 +2420,58 @@ input[type="checkbox"] {
   border-bottom-color: var(--rule);
 }
 
+/* Professional table alignment (brief §5), shared by every data table built on
+   `.games-table`: numbers sit right in tabular figures, a head aligns like its data, a text
+   placeholder in a numeric column (`num no-rating`) takes the numbers' alignment, and a
+   numeric column is only as wide as its content (width 1% shrinks it in an auto-layout
+   table; the fixed-layout Crews table sets its own widths). Numbers and dates never wrap. */
 .games-table td.num,
 .games-table th.num {
   text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  width: 1%;
 }
 
-.games-table td.num,
 .games-table th button {
   font-variant-numeric: tabular-nums;
 }
 
+/* Heads sit on the bottom line, so a one-line head shares the baseline of a wrapped one. */
+.games-table thead th {
+  vertical-align: bottom;
+}
+
+/* A source link breaks between links, never inside a publisher's name. */
+.games-table td a {
+  white-space: nowrap;
+}
+
+/* A qualifier under a figure (the Nielsen + Adobe measurement): its own small muted line. */
+.games-table td.num .num-note {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* A text date ("Sun, Aug 31, 2014") varies in width, so it reads as text: left-aligned
+   with its head, tabular figures, and never wrapped. */
+.games-table td.date {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Over a right-aligned column the sort glyph sits left of the label, so the label keeps the
+   numbers' right edge and does not move when the glyph appears. */
+.games-table th.num button {
+  flex-direction: row-reverse;
+}
+
 .games-table td {
   word-break: break-word;
+  /* No lone score or word on a wrapped line ("Vanderbilt / 3"). */
+  text-wrap: pretty;
 }
 
 .games-table th button {
@@ -2707,6 +2747,26 @@ html:has(#mlb-detail-panel[open]) {
 .page table th {
   font-weight: var(--weight-semibold);
   border-bottom-color: var(--rule-strong);
+}
+
+/* Coverage tables: every column after the first holds counts, so cells and heads sit right
+   (brief §5); the first column (network or season) stays left. */
+.page .coverage-table td,
+.page .coverage-table thead th:not(:first-child),
+.page .coverage-quality-table td:not(:first-child),
+.page .coverage-quality-table thead th:not(:first-child) {
+  text-align: right;
+}
+
+.page .coverage-table td,
+.page .coverage-quality-table td {
+  white-space: nowrap;
+}
+
+/* A row header closes its row with the cells' hairline, and a network name stays on one line. */
+.page table tbody th {
+  border-bottom-color: var(--rule);
+  white-space: nowrap;
 }
 
 .table-scroll {
@@ -3417,13 +3477,15 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   min-width: 0;
 }
 
-/* The NFL and MLB summary is the same 24px fixed box as CFB's, 8px below the row. */
+/* The NFL and MLB summary is the same 24px fixed box as CFB's, 8px below the row, and
+   its count reads in the same serif as CFB's `.summary-count`. */
 .nfl-summary {
   box-sizing: border-box;
   height: 24px;
   margin: var(--space-sm) 0 0;
-  font: var(--font-body);
-  color: var(--muted);
+  font: var(--font-heading);
+  font-weight: var(--weight-semibold);
+  color: var(--ink);
   line-height: 24px;
   white-space: nowrap;
   overflow: hidden;
@@ -3891,6 +3953,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .mlb-apple-table td.mlb-pending {
   color: var(--muted);
   font: var(--font-body);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -4138,19 +4201,16 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   min-width: 620px;
 }
 
-.crews-table th.booth-col {
-  width: 38%;
-}
-
-.crews-table th.num,
-.crews-table td.num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
+/* Fixed layout keeps the columns of every season-and-family table in line, so the numeric
+   columns get set widths sized to their content (heads may wrap to two lines) and the Booth
+   column takes the rest (brief §5). */
 .crews-table th.num {
+  width: 8.5rem;
   white-space: normal;
+}
+
+.crews-table th.num.crews-narrow {
+  width: 5rem;
 }
 
 .crews-table .crews-pbp {
@@ -4206,7 +4266,11 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   }
 
   .crews-table th.num {
-    min-width: 64px;
+    width: 5.5rem;
+  }
+
+  .crews-table th.num.crews-narrow {
+    width: 4rem;
   }
 }
 
