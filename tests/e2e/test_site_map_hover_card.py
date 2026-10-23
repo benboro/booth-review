@@ -272,6 +272,9 @@ def _pixel(page: Page, x: float, y: float) -> tuple[float, float]:
 
 
 def _hover(page: Page, x: float, y: float) -> None:
+    # The framed module sits below the fold at 900px; bring the map on screen first.
+    page.evaluate("() => document.getElementById('map-chart').scrollIntoView({block: 'center'})")
+    page.evaluate("() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")
     px, py = _pixel(page, x, y)
     page.mouse.move(px - 60, py - 60)
     page.mouse.move(px, py, steps=5)

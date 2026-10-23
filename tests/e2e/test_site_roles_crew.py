@@ -12,8 +12,6 @@ from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
 
-_SCHEMES = ("light", "dark")
-
 _RESOLVE_JS = """
 (el) => {
   const read = (css) => {
@@ -132,11 +130,7 @@ def test_make_role_pill_text_name_and_safety(
         assert row["color"] == ""
 
 
-@pytest.mark.parametrize("scheme", _SCHEMES)
-def test_role_pill_contrast(
-    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
-) -> None:
-    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
+def test_role_pill_contrast(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
     open_app(guarded_page, "")
     guarded_page.evaluate(_PILLS_JS)
     bg = _parse_rgb(_token(guarded_page, "--bg"))
@@ -153,14 +147,10 @@ def test_role_pill_contrast(
             backs = {"own": _rgb(own)}
         for name, back in backs.items():
             ratio = _contrast_ratio(fg, back)
-            assert ratio >= 4.5, f"{role} on {name} in {scheme}: {ratio:.2f}"
+            assert ratio >= 4.5, f"{role} on {name} (light only): {ratio:.2f}"
 
 
-@pytest.mark.parametrize("scheme", _SCHEMES)
-def test_crew_box_style(
-    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
-) -> None:
-    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
+def test_crew_box_style(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
     open_app(guarded_page, "")
     guarded_page.evaluate(_PILLS_JS)
     style = guarded_page.locator("#test-crew-box").evaluate(
@@ -170,9 +160,65 @@ def test_crew_box_style(
     )
     assert style["w"] == "1px"
     assert style["s"] == "solid"
-    assert style["col"] == _token(guarded_page, "--special")
-    assert style["r"] == "8px"
+    assert style["col"] == _token(guarded_page, "--rule-strong")
+    assert style["r"] == "0px"
     assert style["p"] == "8px"
+    assert guarded_page.evaluate("document.documentElement.dataset.theme || 'light'") == "light"
+
+
+_TAG_JS = """
+(el) => { const c = getComputedStyle(el); return {
+  bg: c.backgroundColor, color: c.color, bw: c.borderTopWidth, bs: c.borderTopStyle,
+  bc: c.borderTopColor, label: el.getAttribute('aria-label') }; }
+"""
+
+
+def test_role_tag_styles_follow_d02(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-02: PBP filled ink, Analyst outlined ink, Sideline dashed muted; names unchanged."""
+    open_app(guarded_page, "")
+    guarded_page.evaluate(_PILLS_JS)
+    tags = {
+        role: guarded_page.locator(f"#test-crew-box .role-pill[data-role={role}]").evaluate(_TAG_JS)
+        for role in ("pbp", "analyst", "unknown")
+    }
+    pbp, analyst, side = tags["pbp"], tags["analyst"], tags["unknown"]
+    assert pbp["bg"] == "rgb(35, 32, 27)"
+    assert pbp["color"] == "rgb(251, 249, 245)"
+    assert pbp["label"] == "PBP, play-by-play"
+    assert (analyst["bw"], analyst["bs"], analyst["bc"]) == ("1px", "solid", "rgb(35, 32, 27)")
+    assert analyst["bg"] == "rgba(0, 0, 0, 0)"
+    assert analyst["label"] == "Analyst"
+    assert (side["bs"], side["bw"]) == ("dashed", "1px")
+    assert side["bc"] == _token(guarded_page, "--muted")
+    assert side["color"] == _token(guarded_page, "--muted")
+    assert side["label"] == "Sideline"
+
+
+def test_matched_crew_box_is_teal_in_tooltip_and_panel(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-01: the crew box turns teal only when a picked announcer is in the crew."""
+    open_app(guarded_page, "?people=dale-harlow")
+    guarded_page.evaluate(_SHOW_TOOLTIP_JS, [0, ["dale-harlow"]])
+    tip_box = guarded_page.locator("#chart-tooltip .crew-box")
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    panel_box = guarded_page.locator("#panel-body .crew-box")
+    for box in (tip_box, panel_box):
+        assert "is-matched" in (box.get_attribute("class") or "")
+        style = box.evaluate(
+            "(el) => { const c = getComputedStyle(el); return { b: c.borderTopColor, "
+            "bg: c.backgroundColor, r: c.borderTopLeftRadius }; }"
+        )
+        assert style == {"b": "rgb(27, 79, 92)", "bg": "rgb(227, 237, 239)", "r": "3px"}
+        weights = box.locator(".crew-name").evaluate_all(
+            "els => els.map(e => getComputedStyle(e).fontWeight)"
+        )
+        assert weights == ["600", "400"]
+    # A pick who is not in this game's crew leaves the box neutral.
+    guarded_page.evaluate(_SHOW_TOOLTIP_JS, [0, ["kris-venn"]])
+    assert "is-matched" not in (tip_box.get_attribute("class") or "")
 
 
 def test_role_control_pills(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
@@ -210,22 +256,17 @@ def test_role_filter_popover_pills(
     assert guarded_page.get_by_role("checkbox", name="Analyst").count() == 1
 
 
-@pytest.mark.parametrize("scheme", _SCHEMES)
-def test_selection_row_box(
-    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
-) -> None:
-    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
+def test_selection_row_box(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
     open_app(guarded_page, "?people=dale-harlow")
     row = guarded_page.locator("#selection-row")
     style = row.evaluate(
         "(el) => { const c = getComputedStyle(el); return { w: c.borderTopWidth, "
         "col: c.borderTopColor, r: c.borderTopLeftRadius, p: c.paddingTop }; }"
     )
-    assert style["w"] == "1px"
-    assert style["col"] == _token(guarded_page, "--special")
-    assert style["r"] == "8px"
-    # 04.15 D-01: the compact band tightens the box padding to --space-xs.
-    assert style["p"] == "4px"
+    # D-03: the selection row is no longer a box; chips and toggles sit on the page.
+    assert style["w"] == "0px"
+    assert style["r"] == "0px"
+    assert style["p"] == "0px"
     assert row.locator("#summary").count() == 0
     assert row.locator("#compare-note").count() == 0
 
@@ -240,11 +281,9 @@ async ([i, selectedIds]) => {
 """
 
 
-@pytest.mark.parametrize("scheme", _SCHEMES)
 def test_tooltip_crew_box_and_pills(
-    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
+    guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
     open_app(guarded_page, "")
     guarded_page.evaluate(_SHOW_TOOLTIP_JS, [0, []])
     box = guarded_page.locator("#chart-tooltip .crew-box")
@@ -256,15 +295,15 @@ def test_tooltip_crew_box_and_pills(
     assert lines.nth(1).locator(".crew-name").text_content() == "Dale Harlow Jr."
     assert lines.nth(1).locator(".role-pill").get_attribute("data-role") == "analyst"
     assert "Play-by-play:" not in guarded_page.inner_text("#chart-tooltip")
+    box_class = box.get_attribute("class")
+    assert box_class == "crew-box"
     border = box.evaluate("(el) => getComputedStyle(el).borderTopColor")
-    assert border == _token(guarded_page, "--special")
+    assert border == _token(guarded_page, "--rule-strong")
 
 
-@pytest.mark.parametrize("scheme", _SCHEMES)
 def test_tooltip_selected_name_is_bold(
-    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
+    guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
     open_app(guarded_page, "?people=dale-harlow")
     guarded_page.evaluate(_SHOW_TOOLTIP_JS, [0, ["dale-harlow"]])
     weights = guarded_page.locator("#chart-tooltip .crew-name").evaluate_all(
@@ -273,11 +312,9 @@ def test_tooltip_selected_name_is_bold(
     assert weights == ["600", "400"]
 
 
-@pytest.mark.parametrize("scheme", _SCHEMES)
 def test_crew_not_recorded_has_no_box(
-    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
+    guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
     open_app(guarded_page, "")
     guarded_page.evaluate(
         """async () => {
@@ -296,11 +333,9 @@ def test_crew_not_recorded_has_no_box(
     assert missing.evaluate("(el) => getComputedStyle(el).color") == _token(guarded_page, "--muted")
 
 
-@pytest.mark.parametrize("scheme", _SCHEMES)
 def test_modal_crew_box_wraps_all_feeds(
-    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
+    guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
     open_app(guarded_page, "")
     # Telecast 7 has an alt-cast analyst; telecast 8 has an unknown-role person.
     guarded_page.evaluate("window.__testHooks.openPanel(7)")
@@ -316,7 +351,8 @@ def test_modal_crew_box_wraps_all_feeds(
         "(el) => [...el.children].map(c => c.className)"
     ) == ["crew-name", "role-pill"]
     border = boxes.evaluate("(el) => getComputedStyle(el).borderTopColor")
-    assert border == _token(guarded_page, "--special")
+    assert border == _token(guarded_page, "--rule-strong")
+    assert "is-matched" not in (boxes.get_attribute("class") or "")
     guarded_page.evaluate("window.__testHooks.openPanel(8)")
     pill = guarded_page.locator("#panel-body .crew-box li .role-pill[data-role=unknown]")
     assert pill.count() == 1
