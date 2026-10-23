@@ -91,6 +91,8 @@ def test_theme_slot_is_an_empty_32px_box_at_the_header_right(
     assert slot.count() == 1
     assert slot.evaluate("el => el.children.length") == 0
     assert slot.inner_text().strip() == ""
+    # The Phase 17 toggle mounts here, so the slot must not hide its children from assistive tech.
+    assert slot.get_attribute("aria-hidden") is None
     box = slot.bounding_box()
     assert box is not None
     assert round(box["width"]) == 32
