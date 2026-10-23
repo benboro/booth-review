@@ -254,7 +254,10 @@ def test_mobile_badge_counts_active_filters(mobile: Page) -> None:
 def test_mobile_sheet_sections_url_and_close(mobile: Page) -> None:
     mobile.click("#nfl-filters-button")
     mobile.wait_for_selector("#nfl-filters-sheet:popover-open")
-    assert mobile.get_attribute("#nfl-filters-button", "aria-expanded") == "true"
+    # The popover's `toggle` event, which sets aria-expanded, fires after :popover-open holds.
+    mobile.wait_for_function(
+        "document.getElementById('nfl-filters-button').getAttribute('aria-expanded') === 'true'"
+    )
     headings = mobile.locator("#nfl-filters-sheet .sheet-body h3:visible").all_inner_texts()
     assert headings == BAR  # Booths is a sheet row on every view (D-10)
     mobile.select_option("#nfl-season-to-sheet", "2025")
