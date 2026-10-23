@@ -2455,6 +2455,14 @@ input[type="checkbox"] {
   line-height: 1.4;
 }
 
+/* On desktop the matchup stays on one line, so the table gives it the spare width the crew
+   column would otherwise hold; on a phone the table scrolls and the matchup may wrap. */
+@media (min-width: 481px) {
+  .games-table td.matchup {
+    white-space: nowrap;
+  }
+}
+
 /* A text date ("Sun, Aug 31, 2014") varies in width, so it reads as text: left-aligned
    with its head, tabular figures, and never wrapped. */
 .games-table td.date {

@@ -94,7 +94,7 @@ function buildRow(row, onOpen) {
   }
   tr.appendChild(dateTd);
 
-  const matchupTd = el('td');
+  const matchupTd = el('td', 'matchup');
   const button = el('button', 'nfl-matchup-btn', `${row.away} at ${row.home}`);
   button.type = 'button';
   button.setAttribute('aria-label', `Details for ${row.away} at ${row.home}`);

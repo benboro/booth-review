@@ -85,7 +85,7 @@ function buildRow(row, onOpen) {
 
   tr.appendChild(el('td', 'date', dateShortText(row)));
 
-  const matchupTd = el('td');
+  const matchupTd = el('td', 'matchup');
   const button = el('button', 'nfl-matchup-btn', `${row.away} at ${row.home}`);
   button.type = 'button';
   button.dataset.game = String(row.i);

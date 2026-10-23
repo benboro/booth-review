@@ -166,6 +166,7 @@ function buildRow(data, state, onDetails, i) {
   tr.appendChild(dateTd);
 
   const matchupTd = document.createElement('td');
+  matchupTd.className = 'matchup';
   matchupTd.textContent = formatMatchup(data, i, { withScore: true });
   tr.appendChild(matchupTd);
 
@@ -187,7 +188,10 @@ function buildRow(data, state, onDetails, i) {
     if (t.measurement_type[i] === 'nielsen_adobe') {
       const note = document.createElement('span');
       note.className = 'num-note';
-      note.textContent = measurementLabel('nielsen_adobe');
+      // The short form keeps the column near the figures' width; the full label is the
+      // note's title and the panel's badge.
+      note.textContent = 'Nielsen + Adobe';
+      note.title = measurementLabel('nielsen_adobe');
       viewersTd.append(note);
     }
   } else {

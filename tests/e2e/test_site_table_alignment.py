@@ -240,3 +240,51 @@ def test_mlb_count_line_matches_the_cfb_count(
     got = mlb_guarded_page.evaluate(_FONT_JS, "#mlb-summary")
     assert "Crimson Text" in got["cfb"][0]
     assert got["line"] == got["cfb"]
+
+
+_MATCHUP_LINES_JS = """(scope) => [...document.querySelectorAll(scope + ' td.matchup')]
+  .map((td) => {
+  const target = td.querySelector('button') ?? td;
+  const r = document.createRange();
+  r.selectNodeContents(target);
+  return [target.textContent, new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size];
+})"""
+
+
+def _assert_one_line_matchups(page: Page, scope: str) -> None:
+    lines = page.evaluate(_MATCHUP_LINES_JS, scope)
+    assert lines, f"no matchup cells under {scope}"
+    assert all(n == 1 for _, n in lines), lines
+
+
+def test_cfb_matchup_stays_on_one_line_at_1440(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """The matchup takes the spare width on desktop instead of wrapping beside an empty
+    Crew column; on a phone it may still wrap."""
+    guarded_page.set_viewport_size(DESKTOP)
+    open_app(guarded_page, "?school=northfield")
+    guarded_page.wait_for_selector("#games-table tbody tr")
+    _assert_one_line_matchups(guarded_page, "#games-table")
+
+
+def test_nfl_matchup_stays_on_one_line_at_1440(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    page.set_viewport_size(DESKTOP)
+    open_nfl_app(page, "?sport=nfl&view=crews")
+    page.locator("#nfl-view-crews .booth-row-btn").first.click()
+    page.wait_for_selector(".nfl-games table.games-table tbody tr")
+    _assert_one_line_matchups(page, ".nfl-games")
+
+
+def test_mlb_matchup_stays_on_one_line_at_1440(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    page = mlb_guarded_page
+    page.set_viewport_size(DESKTOP)
+    open_mlb_app(page, "?sport=mlb&view=apple")
+    page.locator(".mlb-apple-table .booth-row-btn").first.click()
+    page.wait_for_selector(".nfl-games table.games-table tbody tr")
+    _assert_one_line_matchups(page, ".nfl-games")
