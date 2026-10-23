@@ -65,7 +65,10 @@ def _site_source_files(*, include_nfl: bool) -> list[Path]:
         rel = path.relative_to(SITE_SRC)
         if any(part.startswith(".") for part in rel.parts):
             continue
-        if path.suffix not in {".html", ".js", ".css", ".svg", ".woff2", ".txt"}:
+        folder_only = {("fonts", ".woff2"), ("fonts", ".txt"), ("logos", ".svg")}
+        if path.suffix not in {".html", ".js", ".css"} and (
+            len(rel.parts) < 2 or (rel.parts[0], path.suffix) not in folder_only
+        ):
             continue
         if not include_nfl and rel.parts[:2] == ("sports", "nfl"):
             continue
@@ -514,3 +517,37 @@ def test_mlb_without_vault_file_names_the_command_to_run(
     assert code != 0
     assert "processed/mlb-data.json not found" in err
     assert "booth-review mlb site-data" in err
+
+
+def test_folder_scoped_suffixes_ship_only_from_their_folder(tmp_path: Path) -> None:
+    """WR-07: .woff2/.txt ship only from fonts/ and .svg only from logos/; the same
+    suffixes anywhere else under site/ (a stray note or sketch) are never copied."""
+    from booth_review.build.site_assembly import _copy_site_source
+
+    src = tmp_path / "site"
+    files = [
+        "index.html",
+        "modules/a.js",
+        "fonts/f.woff2",
+        "fonts/OFL-f.txt",
+        "logos/espn.svg",
+        "logos/manifest.csv",
+        "notes.txt",
+        "modules/notes.txt",
+        "sketch.svg",
+        "modules/sketch.svg",
+        "fonts/stray.svg",
+        "logos/stray.txt",
+        "f.woff2",
+    ]
+    for rel in files:
+        (src / rel).parent.mkdir(parents=True, exist_ok=True)
+        (src / rel).write_text("x")
+    copied = _copy_site_source(src, tmp_path / "out")
+    assert sorted(copied) == [
+        "fonts/OFL-f.txt",
+        "fonts/f.woff2",
+        "index.html",
+        "logos/espn.svg",
+        "modules/a.js",
+    ]

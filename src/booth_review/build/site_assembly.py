@@ -41,9 +41,13 @@ PLOTLY_BUNDLE = "vendor/plotly-partial-4.1.1.min.js"
 PLOTLY_SHA256 = "bdf808c7a31ad3510f4f0306cb2720f999b8386de2e97cd6400720f7401bd04d"
 MAP_GEOMETRY = "vendor/us-states-albers.js"
 MAP_GEOMETRY_SHA256 = "ff1e0a82d121f389782ef3ff466fc2910a08b7594af9e92598ac4032a9e2d3dc"
-# Pages, scripts and styles, plus the vendored fonts (.woff2), their OFL texts (.txt)
-# and network logos (.svg). .csv and .md stay out, so logos/manifest.csv and READMEs never ship.
-COPY_SUFFIXES = frozenset({".html", ".js", ".css", ".svg", ".woff2", ".txt"})
+# Pages, scripts and styles ship from anywhere under site/. .csv and .md stay out, so
+# logos/manifest.csv and READMEs never ship.
+COPY_SUFFIXES = frozenset({".html", ".js", ".css"})
+# Suffixes allowed only in one top-level folder: the vendored fonts (.woff2) and their OFL
+# texts (.txt) under fonts/, and the linted network logos (.svg) under logos/. A stray note
+# or sketch elsewhere under site/ is never published.
+FOLDER_COPY_SUFFIXES = frozenset({("fonts", ".woff2"), ("fonts", ".txt"), ("logos", ".svg")})
 BUILD_MARKER = ".booth-review-site"
 VERSION_TOKEN = "__SITE_DATA_VERSION__"
 FOOTER_TOKEN = "<!-- booth-review:footer -->"
@@ -612,12 +616,20 @@ def _is_disabled_sport_module(relative: Path, sports: frozenset[str]) -> bool:
     )
 
 
+def _copy_allowed(relative: Path) -> bool:
+    """True when `relative` (a path under site/) has a published suffix for its folder."""
+    if relative.suffix in COPY_SUFFIXES:
+        return True
+    return len(relative.parts) > 1 and (relative.parts[0], relative.suffix) in FOLDER_COPY_SUFFIXES
+
+
 def _copy_site_source(
     site_src: Path, out_dir: Path, *, sports: frozenset[str] | None = None
 ) -> list[str]:
     """Copy every non-dotfile under `site_src` whose suffix is in
-    COPY_SUFFIXES into `out_dir`, preserving relative paths (COPY_SUFFIXES
-    also blocks any CSV/data dump from ever reaching dist/site, T-04-14).
+    COPY_SUFFIXES (or, in its top-level folder, FOLDER_COPY_SUFFIXES) into
+    `out_dir`, preserving relative paths (the allowlists also block any CSV/data
+    dump from ever reaching dist/site, T-04-14).
     """
     copied: list[str] = []
     for path in sorted(site_src.rglob("*")):
@@ -626,7 +638,7 @@ def _copy_site_source(
         relative = path.relative_to(site_src)
         if any(part.startswith(".") for part in relative.parts):
             continue
-        if path.suffix not in COPY_SUFFIXES:
+        if not _copy_allowed(relative):
             continue
         if sports is not None and _is_disabled_sport_module(relative, sports):
             continue
