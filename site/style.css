@@ -4364,6 +4364,15 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   max-width: calc(100% - 28px);
 }
 
+/* A wide logo shrinks inside its mark instead of overflowing it and covering the +N count
+   (14-10: ESPN2 read "5" for "+5"); the badge's fixed 20px height keeps its ratio via contain. */
+.crews-network .net-logo {
+  min-width: 0;
+  max-width: 100%;
+  object-fit: contain;
+  object-position: left center;
+}
+
 .crews-network .net-name {
   min-width: 0;
   overflow: hidden;

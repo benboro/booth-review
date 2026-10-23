@@ -173,3 +173,52 @@ def test_logo_images_carry_alt_title_and_size(app: Page, width: int) -> None:
         assert a["h"], a
     assert len(logo_images(app, "#crews-panel")) == len(attrs)
     assert app.locator("#crews-panel tbody tr.crews-row").count() > 0
+
+
+# -- 14-10: the +N count stays clear of wide network logos ------------------------------------
+
+_PLUS_N_JS = """
+async ([id, name, family]) => {
+  const { networkMark } = await import('./modules/network.js');
+  const td = document.querySelector('#crews-panel tbody tr.crews-row td.crews-network');
+  td.className = 'crews-network has-more';
+  td.replaceChildren(networkMark({ id, name, family }));
+  const more = document.createElement('span');
+  more.className = 'crews-more-nets caption';
+  more.textContent = '+5';
+  td.append(more);
+  const cs = getComputedStyle(td);
+  const content = td.getBoundingClientRect().right - parseFloat(cs.paddingRight);
+  const mark = td.querySelector('.net-mark').getBoundingClientRect();
+  const img = td.querySelector('img');
+  const visual = img ? img.getBoundingClientRect() : mark;
+  const m = more.getBoundingClientRect();
+  return { imgRight: visual.right, markRight: mark.right, moreLeft: m.left, moreRight: m.right,
+           contentRight: content, text: more.textContent, imgW: visual.width, imgH: visual.height,
+           ratio: img ? img.naturalWidth / (img.naturalHeight || 1) : 0 };
+}
+"""
+
+# The wide logos plus a text network that is cut with an ellipsis (Pac-12 has no vendored mark).
+_WIDE_NETWORKS = [
+    ("espn2", "ESPN2", "espn"),
+    ("espn-plus", "ESPN+", "espn"),
+    ("sec-network", "SEC Network", "espn"),
+    ("cbs-sports-network", "CBS Sports Network", "cbs"),
+    ("acc-network", "ACC Network", "espn"),
+    ("espnews", "ESPNEWS", "espn"),
+    ("pac-12-network", "Pac-12 Network", "other"),
+]
+
+
+@pytest.mark.parametrize("width", [1440, 390])
+@pytest.mark.parametrize(("net_id", "name", "family"), _WIDE_NETWORKS)
+def test_plus_n_count_never_overlaps_a_wide_logo(
+    app: Page, width: int, net_id: str, name: str, family: str
+) -> None:
+    _at(app, width)
+    m = app.evaluate(_PLUS_N_JS, [net_id, name, family])
+    assert m["text"] == "+5"
+    assert m["imgRight"] <= m["moreLeft"] + 0.5, f"{name}: the logo covers the +N count"
+    assert m["moreRight"] <= m["contentRight"] + 0.5, f"{name}: the +N count is clipped"
+    assert m["markRight"] <= m["moreLeft"] + 0.5
