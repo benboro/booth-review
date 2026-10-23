@@ -90,7 +90,7 @@ def _js_entries() -> dict[str, tuple[str, int, int, str]]:
 
     Handles inline object entries and ids that share a named const object.
     """
-    text = LOGOS_JS.read_text()
+    text = LOGOS_JS.read_text(encoding="utf-8")
     obj = (
         r"\{\s*file:\s*'logos/([^']+)'\s*,\s*width:\s*(\d+)\s*,"
         r"\s*height:\s*(\d+)\s*,\s*box:\s*'(wordmark|badge)'\s*\}"
@@ -186,10 +186,10 @@ def test_logos_js_matches_files_and_sizes() -> None:
 
 
 def test_logos_js_uses_map_and_builder_avoids_bracket_lookup() -> None:
-    js = LOGOS_JS.read_text()
+    js = LOGOS_JS.read_text(encoding="utf-8")
     assert "new Map(" in js
     assert "LOGOS.has(" in js
-    builder = NETWORK_JS.read_text()
+    builder = NETWORK_JS.read_text(encoding="utf-8")
     assert "LOGOS[" not in builder
     assert re.search(r"logoFor\(", builder)
     for banned in ("innerHTML", "insertAdjacentHTML", "outerHTML"):
