@@ -113,6 +113,12 @@ function truncate(text, max) {
 
 let measureCtx = null;
 const measureCache = new Map();
+// A width measured before a web font (font-display: swap) finished loading is the fallback
+// face's width under the same key; drop every cached width once fonts land. Registered at
+// module load, so it runs before chart-frame's onLateFont re-render reads the cache.
+if (typeof document !== 'undefined' && document.fonts?.addEventListener) {
+  document.fonts.addEventListener('loadingdone', () => measureCache.clear());
+}
 
 /**
  * Rendered width in px of `text` in the page's font, by canvas `measureText`
