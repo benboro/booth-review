@@ -346,8 +346,9 @@ function renderChips(data, state) {
 
 /**
  * The Crews pick chip (D-07): "Crew: A / B" in the accent, after the person chips. Same shape as a
- * person chip (empty fixed-width glyph slot, so nothing shifts); names via textContent, the
- * full text via title/aria-label properties.
+ * person chip but with no glyph slot (a person chip needs it for the compare swatch; a crew pick
+ * never shows one, and the empty slot indented the label); names via textContent, the full text
+ * via title/aria-label properties.
  */
 function buildCrewChip(names) {
   const li = document.createElement('li');
@@ -355,11 +356,6 @@ function buildCrewChip(names) {
   li.dataset.crew = '1';
   li.title = `Crew pick: ${names.join(' and ')}. Remove`;
   li.setAttribute('aria-label', li.title);
-
-  const glyph = document.createElement('span');
-  glyph.className = 'chip-glyph';
-  glyph.setAttribute('aria-hidden', 'true');
-  li.appendChild(glyph);
 
   const label = document.createElement('span');
   label.className = 'chip-crew-label';

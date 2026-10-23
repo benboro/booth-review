@@ -160,3 +160,19 @@ def test_phone_filter_chip_names_the_crew_once(app: Page) -> None:
     chip = app.locator("#filter-chips .filter-chip")
     expect(chip).to_have_count(1)
     assert chip.inner_text().strip() == f"Crew: {' / '.join(names)}"
+
+
+def test_crew_chip_label_has_no_left_indent_from_an_empty_icon_slot(app: Page) -> None:
+    _pick(app)
+    m = app.evaluate(
+        """() => {
+          const chip = document.querySelector('#chips > .chip-crew');
+          const cs = getComputedStyle(chip);
+          const label = chip.querySelector('.chip-crew-label').getBoundingClientRect();
+          return { inset: label.left - chip.getBoundingClientRect().left,
+                   own: parseFloat(cs.borderLeftWidth) + parseFloat(cs.paddingLeft),
+                   glyphs: chip.querySelectorAll('.chip-glyph').length };
+        }"""
+    )
+    assert m["glyphs"] == 0
+    assert abs(m["inset"] - m["own"]) <= 0.5, f"label is {m['inset'] - m['own']}px past the chip padding"
