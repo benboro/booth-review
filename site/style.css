@@ -3738,10 +3738,19 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   color: var(--disabled);
 }
 
+/* Low-n tag: a dashed muted pill, the same shape as the role tags (D-02). */
 .low-n-tag {
+  display: inline-block;
   margin-left: var(--space-xs);
+  height: 20px;
+  padding: 0 8px;
+  border: 1px dashed var(--muted);
+  border-radius: 10px;
+  background: transparent;
   color: var(--muted);
-  font-size: 14px;
+  font: 400 12px/18px var(--sans);
+  white-space: nowrap;
+  vertical-align: baseline;
 }
 
 .nfl-booth-table tr[data-picked="true"] .booth-col,
