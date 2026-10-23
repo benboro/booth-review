@@ -220,7 +220,7 @@ def test_panel_cfb_layout(run: Callable[[str], Any]) -> None:
       host.appendChild(opener);
       opener.focus();
       p.open(mk({
-        flexed: true, originalSlot: 'SNF', originalNetwork: 'NBC', slot: 'MNF', network: 'ESPN',
+        flexed: true, originalSlot: 'SNF', originalNetwork: 'NBC', slot: 'MNF', network: 'ESPN', networkId: 'espn',
         networkFamily: 'disney', changeUrl: 'https://example.com/wiki/change',
         crewSource: 'published_lineup', crewSourceUrl: 'https://example.com/lineup',
       }), opener);
@@ -231,7 +231,13 @@ def test_panel_cfb_layout(run: Callable[[str], Any]) -> None:
         closeLabel: d.querySelector('.panel-close').getAttribute('aria-label'),
         headings: [...d.querySelectorAll('h3')].map((h) => h.textContent),
         paras: [...d.querySelectorAll('.panel-body > p')].map((x) => x.textContent),
-        pillFamily: d.querySelector('.panel-networks .pill')?.dataset.family,
+        mark: (() => {
+          const m = d.querySelector('.panel-networks .net-mark');
+          const img = m.querySelector('img');
+          return { alt: img?.alt, title: img?.title, text: m.textContent, pills: d.querySelectorAll('.panel-networks .pill').length };
+        })(),
+        hrefs: [...d.querySelectorAll('.panel-links a')].map((a) => a.getAttribute('href')),
+        wiki: [...d.querySelectorAll('.panel-body > p a')].map((a) => [a.textContent, a.getAttribute('href')]),
         crewBox: d.querySelectorAll('.crew-box .panel-crew li').length,
         rolePills: d.querySelectorAll('.crew-box .role-pill').length,
         boxText: d.querySelector('.crew-box').textContent,
@@ -252,8 +258,17 @@ def test_panel_cfb_layout(run: Callable[[str], Any]) -> None:
     assert got["headings"] == ["Crew", "Links"]
     paras = got["paras"]
     assert paras[0] == "Sunday, Sep 7, 2025 · 1:00 PM ET"
-    assert paras[1].startswith("Network: ESPN")
-    assert got["pillFamily"] == "disney"
+    assert paras[1] == "Network: "  # the logo carries the name as alt/title
+    # SHELL-05: the espn id shows its logo (alt/title = name, no text), no pill.
+    assert got["mark"] == {"alt": "ESPN", "title": "ESPN", "text": "", "pills": 0}
+    # RT-11: the Wikipedia link's href is the row's changeUrl.
+    assert got["wiki"] == [["Wikipedia (CC BY-SA 4.0)", "https://example.com/wiki/change"]]
+    # RT-28: record and original-source hrefs, not only the link text.
+    assert got["hrefs"] == [
+        "https://example.com/rr/1",
+        "https://example.com/src/1",
+        "https://example.com/lineup",
+    ]
     assert got["crewBox"] == 3 and got["rolePills"] >= 2
     assert "From published lineup." in got["boxText"]
     assert "Viewers: 12.3M · Window-level figure (all Sunday afternoon games)." in paras
@@ -275,6 +290,26 @@ def test_panel_cfb_layout(run: Callable[[str], Any]) -> None:
     assert "spread" not in got["text"] and "excitementindex" not in got["text"]
     assert got["closed"] is False
     assert got["focusBack"] is True
+
+
+def test_table_network_cell_uses_marks(run: Callable[[str], Any]) -> None:
+    got = run("""
+      const t = T.createGamesTable(host, { onOpen: () => {} });
+      t.render([
+        mk({ i: 0, date: '2025-09-07', networkId: 'fox' }),
+        mk({ i: 1, date: '2025-09-14', network: 'Invented Net', networkId: 'invented-net' }),
+      ]);
+      return [...host.querySelectorAll('tbody tr')].map((tr) => {
+        const m = tr.children[3].querySelector('.net-mark');
+        const img = m.querySelector('img');
+        return { alt: img?.alt ?? null, title: img?.title ?? null, name: m.querySelector('.net-name')?.textContent ?? null, pills: tr.children[3].querySelectorAll('.pill').length };
+      });
+    """)
+    # Newest first: the id with no logo falls back to dot plus name, the fox id shows its logo.
+    assert got == [
+        {"alt": None, "title": None, "name": "Invented Net", "pills": 0},
+        {"alt": "Fox", "title": "Fox", "name": None, "pills": 0},
+    ]
 
 
 def test_panel_unrated_and_unsafe_links(run: Callable[[str], Any]) -> None:
@@ -300,6 +335,8 @@ def test_panel_unrated_and_unsafe_links(run: Callable[[str], Any]) -> None:
     assert not any(x.startswith("Measured under") for x in paras)
     facts = next(x for x in paras if x.startswith("Slot:"))
     assert "Solo slot." in facts and "Excitement: not available." in facts
+    # RT-11 plain sentence when changeUrl is unsafe/absent.
+    assert "Source: Wikipedia (CC BY-SA 4.0)." in facts
     assert got["links"] == []
     assert got["anchors"] == 0
 

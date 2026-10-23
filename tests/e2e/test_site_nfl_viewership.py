@@ -152,7 +152,11 @@ def test_window_level_lines_dashed_and_labeled(
     assert "window-level" not in (
         page.locator(f"{CHIPS}[data-category=snf]").get_attribute("title") or ""
     )
-    assert "Dashed lines are window-level" in page.locator(f"{VIEW} .nfl-captions").inner_text()
+    # RT-25: the full sentence, not only its prefix.
+    assert (
+        "Dashed lines are window-level: one figure covers every game in that Sunday window."
+        in page.locator(f"{VIEW} .nfl-captions").inner_text()
+    )
 
 
 def test_era_note_links_methodology(
