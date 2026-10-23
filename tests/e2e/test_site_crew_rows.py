@@ -196,3 +196,137 @@ def test_rank_runs_and_network(rows_page: Callable[..., dict[str, Any]]) -> None
     assert cite["rankRun"] == "No. 2 2024"
     two = _find(pooled, CASE_TWO_FAMILIES["pbp"])
     assert all(r["network"]["count"] == 1 for r in two)
+
+
+# -- Person modes ----------------------------------------------------------------------------
+
+
+def test_pbp_mode_partners(rows_page: Callable[..., dict[str, Any]]) -> None:
+    out = rows_page(mode="pbp")
+    row = _one(out["rows"], CASE_TRIO["pbp"])
+    # one row per person across families
+    assert len(_find(out["rows"], CASE_TWO_FAMILIES["pbp"])) == 1
+    assert _one(out["rows"], CASE_TWO_FAMILIES["pbp"])["gamesCount"] == CASE_TWO_FAMILIES["games"]
+    partners = {p["slug"]: p["games"] for p in row["partners"]}
+    assert partners == {CASE_TRIO["analysts"][0]: 5, CASE_TRIO["analysts"][1]: 4}
+    assert [p["games"] for p in row["partners"]] == sorted(partners.values(), reverse=True)
+    assert row["partnersMore"] == 0 and len(row["partnersShown"]) == 2
+    # leftOut: no resolved PBP (all-unknown telecast, mixed no-PBP pair, no crew)
+    assert out["leftOut"] == CASE_NO_PBP["games"] + CASE_MIXED_UNKNOWN["games"] + 1
+
+
+def test_pbp_partners_top_three_and_fill_in(rows_page: Callable[..., dict[str, Any]]) -> None:
+    out = rows_page(mode="pbp")
+    fill = _one(out["rows"], "fill-pbp")
+    assert {p["slug"]: p["games"] for p in fill["partners"]} == {"fill-ana": 3, "fill-sub": 1}
+    assert all(r["partnersMore"] == max(0, len(r["partners"]) - 3) for r in out["rows"])
+    assert all(len(r["partnersShown"]) <= 3 for r in out["rows"])
+
+
+def test_analyst_mode(rows_page: Callable[..., dict[str, Any]]) -> None:
+    out = rows_page(mode="analyst")
+    a1 = _one(out["rows"], CASE_TRIO["analysts"][0])
+    assert a1["gamesCount"] == CASE_TRIO["games"]
+    assert [p["slug"] for p in a1["partners"]] == [CASE_TRIO["pbp"]]
+    # the trio game counts for both analysts
+    assert _one(out["rows"], CASE_TRIO["analysts"][1])["gamesCount"] == CASE_TRIO["games"] - 1
+    # the unknown-role sideline person never sits an analyst seat
+    assert not _find(out["rows"], CASE_SIDELINE["sideline"])
+    assert not _find(out["rows"], CASE_NO_PBP["people"][0])
+    # mixed pair: X sat an analyst seat once, with no PBP: a row with no partner
+    x = _one(out["rows"], CASE_MIXED_UNKNOWN["x"])
+    assert x["gamesCount"] == 1 and x["partners"] == []
+    # leftOut: passing games without a main-feed analyst
+    assert out["leftOut"] == CASE_NO_PBP["games"] + 1 + 1
+
+
+def test_person_rows_have_no_rank_run(rows_page: Callable[..., dict[str, Any]]) -> None:
+    for mode in ("pbp", "analyst"):
+        for per_season in (False, True):
+            rows = rows_page(mode=mode, per_season=per_season)["rows"]
+            assert rows and all(r["rankRun"] == "" and r["rankKey"] is None for r in rows)
+    per = rows_page(mode="pbp", per_season=True)["rows"]
+    assert len(_find(per, CASE_FULL_N["pbp"])) == 3
+
+
+# -- Sort ------------------------------------------------------------------------------------
+
+
+def _buckets(rows: list[dict[str, Any]], key: str) -> list[int]:
+    return [2 if r[key]["mean"] is None else int(r[key]["flagged"]) for r in rows]
+
+
+@pytest.mark.parametrize("key", ["exc", "viewers"])
+@pytest.mark.parametrize("direction", ["asc", "desc"])
+def test_metric_sort_buckets(
+    rows_page: Callable[..., dict[str, Any]], key: str, direction: str
+) -> None:
+    rows = rows_page(sort={"key": key, "dir": direction})["rows"]
+    buckets = _buckets(rows, key)
+    assert buckets == sorted(buckets)
+    assert {1, 2} <= set(buckets)  # flagged and blank rows exist (full-n: see the next test)
+    for b in (0, 1):
+        means = [r[key]["mean"] for r, x in zip(rows, buckets, strict=True) if x == b]
+        assert means == sorted(means, reverse=direction == "desc")
+
+
+def test_default_sort_and_tail(rows_page: Callable[..., dict[str, Any]]) -> None:
+    rows = rows_page(sort=None)["rows"]
+    keyed = [(-r["gamesCount"], r["names"]) for r in rows]
+    assert keyed == sorted(keyed)
+    # CASE_PAST_CUT lands past the 25-row cut (D-13)
+    pos = next(i for i, r in enumerate(rows) if "zz-cut-pbp" in [p["slug"] for p in r["people"]])
+    assert pos >= 25
+
+
+@pytest.mark.parametrize("direction", ["asc", "desc"])
+def test_rank_sort_blanks_last(rows_page: Callable[..., dict[str, Any]], direction: str) -> None:
+    rows = rows_page(sort={"key": "rank", "dir": direction})["rows"]
+    keys = [r["rankKey"] for r in rows]
+    ranked = [k for k in keys if k is not None]
+    assert keys == ranked + [None] * (len(keys) - len(ranked))
+    assert ranked == sorted(ranked, reverse=direction == "desc")
+    assert len(ranked) == 2 and len(keys) > 25
+    if direction == "asc":
+        assert rows[0]["rankRun"].startswith("Lead") and rows[1]["rankRun"].startswith("No. 2")
+
+
+def test_text_sorts_and_input_untouched(rows_page: Callable[..., dict[str, Any]]) -> None:
+    by_crew = rows_page(sort={"key": "crew", "dir": "asc"})["rows"]
+    names = [r["names"] for r in by_crew]
+    assert names == sorted(names)
+    by_games = rows_page(sort={"key": "games", "dir": "asc"})["rows"]
+    counts = [r["gamesCount"] for r in by_games]
+    assert counts == sorted(counts)
+    # no dir: the natural direction (games descending)
+    natural = [r["gamesCount"] for r in rows_page(sort={"key": "games"})["rows"]]
+    assert natural == sorted(natural, reverse=True)
+
+
+_SYNTH_SORT_JS = """
+async ({key, dir}) => {
+  const G = await import('./modules/crew-groups.js');
+  const m = (mean, n, flagged, blank = null) => ({ mean, n, flagged, blank });
+  const mk = (names, v) => ({ names, gamesCount: 5, [key]: v, network: { name: '' } });
+  const rows = [
+    mk('blank-a', m(null, 0, false, 'none')),
+    mk('flag-hi', m(9, 2, true)),
+    mk('full-lo', m(2, 9, false)),
+    mk('flag-lo', m(1, 1, true)),
+    mk('full-hi', m(8, 12, false)),
+    mk('blank-b', m(null, 9, false, 'break')),
+  ];
+  return G.sortCrewRows(rows, {key, dir}).map((r) => r.names);
+}
+"""
+
+
+@pytest.mark.parametrize("key", ["exc", "viewers"])
+def test_metric_sort_full_n_then_flagged_then_blank(
+    rows_page: Callable[..., dict[str, Any]], guarded_page: Page, key: str
+) -> None:
+    rows_page()  # the app is open
+    desc = guarded_page.evaluate(_SYNTH_SORT_JS, {"key": key, "dir": "desc"})
+    asc = guarded_page.evaluate(_SYNTH_SORT_JS, {"key": key, "dir": "asc"})
+    assert desc == ["full-hi", "full-lo", "flag-hi", "flag-lo", "blank-a", "blank-b"]
+    assert asc == ["full-lo", "full-hi", "flag-lo", "flag-hi", "blank-a", "blank-b"]
