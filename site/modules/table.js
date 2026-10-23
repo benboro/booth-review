@@ -15,6 +15,7 @@
 
 import {
   crewEntries,
+  crewPickNames,
   formatDate,
   formatMatchup,
   formatViewers,
@@ -262,6 +263,22 @@ function renderVenueChip({ data, view, state }) {
   venueChipsEl.replaceChildren(li);
 }
 
+/** D-06: the Matched games subtitle names the picked crew; hidden otherwise. textContent only. */
+function renderMatchedSubtitle(data, view, state) {
+  const el = document.getElementById('matched-subtitle');
+  if (!el) return;
+  const names = view.hasCrewSelection ? crewPickNames(data, state) : [];
+  if (names.length === 0) {
+    el.hidden = true;
+    el.textContent = '';
+    el.removeAttribute('title');
+    return;
+  }
+  el.textContent = `Crew: ${names.join(' / ')}, newest first`;
+  el.title = el.textContent;
+  el.hidden = false;
+}
+
 /**
  * Renders the matched-games table (or its empty state) from the current
  * data/state/view (D-12, SITE-13, SITE-22).
@@ -269,6 +286,7 @@ function renderVenueChip({ data, view, state }) {
  */
 export function renderTable({ data, view, state, sort, onSort, onDetails }) {
   currentOnSort = onSort;
+  renderMatchedSubtitle(data, view, state);
   bindHeaderListeners();
   renderSortHeaders(sort);
 

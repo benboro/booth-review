@@ -8,6 +8,8 @@
  * already in ET and must never shift by the viewer's local timezone.
  */
 
+import { crewIndex } from './crew-groups.js';
+
 /** Short weekday names, Sunday-first, indexed by `Date#getUTCDay()`. */
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -430,11 +432,35 @@ export function crewEntries(data, i, { mainOnly = false, selected = new Set() } 
  */
 export function selectedPersonIndexes(data, state) {
   const result = new Set();
+  // A crew pick (D-06) marks its people as matched; D-08 keeps it exclusive with a people pick.
+  if (state.crew != null && (state.people ?? []).length === 0) {
+    for (const slug of crewIndex(data).crews.get(state.crew)?.people ?? []) {
+      const idx = data.personIndexById.get(slug);
+      if (idx !== undefined) result.add(idx);
+    }
+    return result;
+  }
   for (const id of state.people ?? []) {
     const idx = data.personIndexById.get(id);
     if (idx !== undefined) result.add(idx);
   }
   return result;
+}
+
+/**
+ * Display names of the picked crew's people (play-by-play first), or [] without a crew pick.
+ * @param {object} data - a `prepareData` result.
+ * @param {{crew?: string|null}} state
+ * @returns {string[]}
+ */
+export function crewPickNames(data, state) {
+  if (state.crew == null) return [];
+  const crew = crewIndex(data).crews.get(state.crew);
+  if (!crew) return [];
+  return crew.people
+    .map((slug) => data.personIndexById.get(slug))
+    .filter((idx) => idx !== undefined)
+    .map((idx) => data.lookups.people[idx].name);
 }
 
 /** Typographic minus used in all spread copy. */

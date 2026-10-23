@@ -41,7 +41,7 @@ const VIEWS = ['scatter', 'bars', 'butterfly', 'map', 'crews'];
 
 /** The hint the module subtitle rests on: the Map's prompt until an announcer or school is picked (04.18 D-02); the Crews note on Crews. */
 function restingHint(state) {
-  if (state.view === 'map' && state.people.length === 0 && state.school.length === 0) return MAP_HINT;
+  if (state.view === 'map' && state.people.length === 0 && state.school.length === 0 && state.crew == null) return MAP_HINT;
   if (state.view === 'crews') return CREWS_HINT;
   return '';
 }

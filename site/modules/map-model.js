@@ -268,7 +268,7 @@ export function buildMapModel(data, view, state) {
   // the picked people's games among those passing, exactly computeView's `highlighted`
   // (role and called-together included), so it rescales with the pick. Venues that
   // host only other games stay on the map as background dots from the full cohort.
-  const personPick = hasSubject && subjects[0].kind === 'person';
+  const personPick = (hasSubject && subjects[0].kind === 'person') || view.hasCrewSelection === true;
   const fullVenueModel = buildVenueModel(data, passing, placements);
   const venueModel = personPick
     ? buildVenueModel(
