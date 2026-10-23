@@ -237,7 +237,15 @@ function renderSelectionBar() {
   }
   clearBtn.hidden = !label;
   const n = lastRows.length;
-  summary.textContent = n ? `${n} ${n === 1 ? 'game matches' : 'games match'}` : '';
+  if (n) {
+    summary.textContent = `${n} ${n === 1 ? 'game matches' : 'games match'}`;
+  } else {
+    // No selection: the CFB-style "N rated of M games" line over every MLB game.
+    const rated = model.cols.viewers.reduce((k, v) => k + (v != null ? 1 : 0), 0);
+    summary.textContent = model.n
+      ? `${rated.toLocaleString('en-US')} rated of ${model.n.toLocaleString('en-US')} ${model.n === 1 ? 'game' : 'games'}`
+      : '';
+  }
   const seasons = model.cols.season;
   const lo = model.n ? Math.min(...seasons) : null;
   const hi = model.n ? Math.max(...seasons) : null;

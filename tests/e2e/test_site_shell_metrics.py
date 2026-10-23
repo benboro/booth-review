@@ -638,3 +638,20 @@ def test_font_swap_causes_no_layout_shift_in_header_filter_bar_or_tab_row(
     fonts = page.evaluate("[...document.fonts].filter((f) => f.status === 'loaded').length")
     assert fonts >= 1, "no web font loaded during the throttled load"
     assert chrome == 0, shifts
+
+
+@pytest.mark.parametrize("sport_key", [s.key for s in SPORTS])
+def test_summary_line_is_filled_at_rest_in_every_sport(
+    both_guarded_page: Page, both_site_url: str, sport_key: str
+) -> None:
+    """With nothing selected every sport's summary line reads "N rated of M games", so no
+    sport leaves an empty gap above its tabs (CFB's own line is the model)."""
+    page = both_guarded_page
+    sport = SPORT_BY_KEY[sport_key]
+    page.set_viewport_size({"width": 1440, "height": 900})
+    _open(page, both_site_url, sport)
+    page.wait_for_function(
+        "(s) => /^[\\d,]+ rated of [\\d,]+ games?/.test("
+        "document.querySelector(s).textContent.trim())",
+        arg=sport.summary,
+    )

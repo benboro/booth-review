@@ -264,7 +264,22 @@ function renderSelectionBar() {
   );
   clearBtn.hidden = !state.selection;
   const n = lastRows.length;
-  summary.textContent = n ? `${n} ${n === 1 ? 'game matches' : 'games match'}` : '';
+  if (n) {
+    summary.textContent = `${n} ${n === 1 ? 'game matches' : 'games match'}`;
+  } else {
+    // No selection: the same "N rated of M games" line CFB shows, over the games the filters pass.
+    const total = model.cols.season.length;
+    let all = 0;
+    let rated = 0;
+    for (let i = 0; i < total; i += 1) {
+      if (!gamePasses(model, state, i)) continue;
+      all += 1;
+      if (model.cols.viewers[i] != null) rated += 1;
+    }
+    summary.textContent = all
+      ? `${rated.toLocaleString('en-US')} rated of ${all.toLocaleString('en-US')} ${all === 1 ? 'game' : 'games'}`
+      : '';
+  }
 }
 
 /** '{N} games · {first}–{last}' for the active Seasons range and filters. */
