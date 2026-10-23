@@ -7,14 +7,17 @@ from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
 
-_RETROSHEET = "obtained free of charge from and is copyrighted by Retrosheet"
+_RETROSHEET = (
+    "The information used here was obtained free of charge from and is copyrighted by "
+    "Retrosheet. Interested parties may contact Retrosheet at www.retrosheet.org."
+)
 
 
 def test_methodology_shows_the_mlb_block_when_mlb_is_on(
     mlb_guarded_page: Page, mlb_site_url: str
 ) -> None:
     mlb_guarded_page.goto(f"{mlb_site_url}/methodology.html")
-    text = mlb_guarded_page.inner_text("body")
+    text = " ".join(mlb_guarded_page.inner_text("body").split())
     assert "MLB: Stakes" in text
     assert "pending Retrosheet 2026" in text
     assert _RETROSHEET in text
