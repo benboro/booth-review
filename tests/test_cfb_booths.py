@@ -2,119 +2,15 @@
 
 from __future__ import annotations
 
-import polars as pl
 import pytest
+from cfb_booth_support import URL, by_id, crew, run, tel
 
-from booth_review.build.booth_ranks import CfbBoothRank, load_cfb_booth_ranks
+from booth_review.build.booth_ranks import load_cfb_booth_ranks
 from booth_review.build.booths import (
     BOOTH_TIERS_SCHEMA,
     UNTIERED_COLUMNS,
-    assign_cfb_booths,
 )
 from booth_review.errors import ReferenceTableError
-from booth_review.resolve.networks import NetworkRow, NetworkTable
-
-URL = "https://example.com/lineup"
-
-
-def _net(nid: str, family: str) -> NetworkRow:
-    return NetworkRow(nid, nid, nid, family, "cable", "main", None, None, None)
-
-
-NETWORKS = NetworkTable(
-    [
-        _net("d-one", "disney"),
-        _net("d-two", "disney"),
-        _net("d-conf", "disney"),
-        _net("f-one", "fox"),
-        _net("c-one", "conference"),
-    ]
-)
-
-
-def rank(
-    r: int | None, pbp: str, analyst: str, *, scope: str | None = None, family: str = "disney"
-) -> CfbBoothRank:
-    return CfbBoothRank(family, 2024, r, pbp, analyst, scope, URL)
-
-
-RANKS = {
-    ("disney", 2024): (
-        rank(1, "p1", "a1"),
-        rank(2, "p2", "a2"),
-        rank(3, "p3", "a3"),
-        rank(None, "p4", "a4", scope="d-conf"),
-    )
-}
-
-
-def tel(tid: str, net: str = "d-one", season: int = 2024, feed: str = "main") -> dict[str, object]:
-    return {
-        "telecast_id": tid,
-        "game_id": 1,
-        "season": season,
-        "network_id": net,
-        "feed_type": feed,
-    }
-
-
-def crew(
-    tid: str,
-    pbp: str | None,
-    analyst: str | None = None,
-    *,
-    feed: str = "main",
-    pos: int = 1,
-    role: str = "pbp",
-) -> list[dict[str, object]]:
-    rows = []
-    if pbp:
-        rows.append(
-            {
-                "telecast_id": tid,
-                "person_id": pbp,
-                "role": role,
-                "feed_type": feed,
-                "crew_position": pos,
-            }
-        )
-    if analyst:
-        rows.append(
-            {
-                "telecast_id": tid,
-                "person_id": analyst,
-                "role": "analyst",
-                "feed_type": feed,
-                "crew_position": pos + 1,
-            }
-        )
-    return rows
-
-
-def frames(
-    items: list[tuple[dict[str, object], list[dict[str, object]]]],
-) -> tuple[pl.DataFrame, pl.DataFrame, pl.DataFrame]:
-    tels = pl.DataFrame([t for t, _ in items])
-    tp_schema = {
-        "telecast_id": pl.Utf8,
-        "person_id": pl.Utf8,
-        "role": pl.Utf8,
-        "feed_type": pl.Utf8,
-        "crew_position": pl.Int64,
-    }
-    tp = pl.DataFrame([r for _, rows in items for r in rows], schema=tp_schema)
-    ids = sorted({str(r["person_id"]) for _, rows in items for r in rows})
-    people = pl.DataFrame({"person_id": ids, "canonical_name": [f"Name {i}" for i in ids]})
-    return tels, tp, people
-
-
-def run(items, ranks=RANKS):
-    tels, tp, people = frames(items)
-    return assign_cfb_booths(tels, tp, people, NETWORKS, ranks)
-
-
-def by_id(result) -> dict[str, dict]:
-    return {r["telecast_id"]: r for r in result.booth_tiers.iter_rows(named=True)}
 
 
 def test_tiers_by_rank_and_scope() -> None:
