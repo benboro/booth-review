@@ -23,7 +23,12 @@
  * a rivalry, or a CFP round; allowlisted against `data.gameIndexBySlug`; omitted when
  * no game is picked; 04.9 D-20). `venue` (one venue or abroad-group slug, allowlisted against
  * `data.venueIndexesByKey`; omitted when none; Phase 11 D-05) and `colors` (`off`; omitted at the
- * On default; Phase 11 D-09). `booth` (`a`,`b`,`other`, canonical order; omitted when no
+ * On default; Phase 11 D-09). The Crews params (Phase 14 D-06..D-10), view-agnostic like `by` so a
+ * stale `?view=scatter&crew=...` survives a setState round trip: `crew` (a pooled crew key, allowlisted
+ * by `CREW_KEY_RE` and by existence in `crewIndex(data).crews`; dropped when `people` is present, A7),
+ * `cmode` (`pbp`/`analyst`; Crew is the omitted default), `perseason` (`1`; ignored on a one-season
+ * range) and `csort` (`<key>` or `<key>.asc|desc`; omitted at the Games-descending default; `rank`
+ * only in Crew mode, `season` only with Per season on, A8). `booth` (`a`,`b`,`other`, canonical order; omitted when no
  * tier is picked; Phase 10 D-12). The old `bars` and
  * `group` params are ignored (04.6 D-27). There is no `team` param on encode -- `school` replaces
  * it (D-11, Pitfall 4). The legacy `team` param is still *decoded*: a valid
@@ -33,10 +38,14 @@
  */
 
 import { MAX_COMPARE, defaultState } from './select.js';
+import { CREW_KEY_RE, NATURAL_DIR, crewIndex } from './crew-groups.js';
 
 /** Canonical time-slot order used both for encoding and decoding the `slot` param. */
 // Y measures a link may name; Viewers is the default and is never encoded (04.17 D-19).
 const Y_VALUES = ['excitement', 'points', 'margin'];
+// Crews table sort keys a link may name (Phase 14); the default is Games called descending.
+const CSORT_RE = /^(crew|season|rank|network|games|exc|viewers)(\.(asc|desc))?$/;
+const CSORT_DEFAULT = 'games';
 // Booth tiers in canonical order (Phase 10 D-12).
 const BOOTH_ORDER = ['a', 'b', 'other'];
 const SLOT_ORDER = ['noon', 'afternoon', 'prime', 'late'];
@@ -119,6 +128,15 @@ export function encodeState(state, data) {
   if (state.by) params.push(['by', state.by]);
   if (state.dots === 'hide') params.push(['dots', 'hide']);
   if (state.colors === 'off') params.push(['colors', 'off']);
+  if (state.crew != null) params.push(['crew', state.crew]);
+  if (state.cmode === 'pbp' || state.cmode === 'analyst') params.push(['cmode', state.cmode]);
+  if (state.perseason === true) params.push(['perseason', '1']);
+  if (state.csort != null && CSORT_RE.test(state.csort.key)) {
+    const { key, dir } = state.csort;
+    const natural = NATURAL_DIR[key];
+    const isDefault = key === CSORT_DEFAULT && dir === NATURAL_DIR[CSORT_DEFAULT];
+    if (!isDefault) params.push(['csort', dir === natural ? key : `${key}.${dir}`]);
+  }
 
   if (params.length === 0) return '';
   return `?${params.map(([key, value]) => `${key}=${value}`).join('&')}`;
@@ -339,6 +357,34 @@ export function decodeState(search, data) {
   // Fade is the default; only the literal 'hide' selects Hide (04.7 D-10).
   state.dots = scalarParam(params, 'dots') === 'hide' ? 'hide' : 'fade';
   state.colors = scalarParam(params, 'colors') === 'off' ? 'off' : 'on';
+
+  // Crews params (Phase 14). The crew index is built only when `crew` is present, so a crew-free
+  // URL does no grouping work. A pick of people wins over a crew in the same link (A7, D-08).
+  const rawCrew = scalarParam(params, 'crew');
+  state.crew =
+    rawCrew != null &&
+    state.people.length === 0 &&
+    CREW_KEY_RE.test(rawCrew) &&
+    crewIndex(data).crews.has(rawCrew)
+      ? rawCrew
+      : null;
+  const rawCmode = scalarParam(params, 'cmode');
+  state.cmode = rawCmode === 'pbp' || rawCmode === 'analyst' ? rawCmode : 'crew';
+  // Per season needs two or more seasons in the range; a narrowed one-season range ignores it (D-10).
+  const lo = state.seasons ? state.seasons[0] : data.seasonMin;
+  const hi = state.seasons ? state.seasons[1] : data.seasonMax;
+  const seasonsInRange = data.seasons.filter((season) => season >= lo && season <= hi).length;
+  state.perseason = scalarParam(params, 'perseason') === '1' && seasonsInRange >= 2;
+  const csortMatch = CSORT_RE.exec(scalarParam(params, 'csort') ?? '');
+  state.csort = null;
+  if (csortMatch) {
+    const key = csortMatch[1];
+    const dir = csortMatch[3] ?? NATURAL_DIR[key];
+    const modeOk = key !== 'rank' || state.cmode === 'crew';
+    const seasonOk = key !== 'season' || state.perseason;
+    const isDefault = key === CSORT_DEFAULT && dir === NATURAL_DIR[CSORT_DEFAULT];
+    if (modeOk && seasonOk && !isDefault && NATURAL_DIR[key] !== undefined) state.csort = { key, dir };
+  }
 
   return state;
 }

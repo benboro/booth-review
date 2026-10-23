@@ -14,6 +14,7 @@
 import { COMPARE_SYMBOLS, SHARED_SYMBOL } from './palette.js';
 import { gameTitlePhrase } from './format.js';
 import { BOOTH_TIER_CODE } from './data.js';
+import { crewIndex } from './crew-groups.js';
 
 /** Maximum number of people that can be selected in compare mode (D-07). */
 export const MAX_COMPARE = 4;
@@ -58,6 +59,13 @@ export function defaultState(_data) {
     // Phase 11 D-09: the Network colors switch on the Map ('on' | 'off').
     colors: 'on',
     h2h: false,
+    // Phase 14 D-06..D-10 (14-UI-SPEC "URL state"): the Crews pick (a pooled crew key, never a
+    // season), the Crews table's mode ('crew' | 'pbp' | 'analyst'), its Per season toggle and sort
+    // ({key, dir}; null = the default Games descending).
+    crew: null,
+    cmode: 'crew',
+    perseason: false,
+    csort: null,
   };
 }
 
@@ -253,6 +261,8 @@ export function computeFacets(data, state) {
   const { n, t } = data;
   const personIndexes = state.people.map((id) => data.personIndexById.get(id));
   const hasPeople = personIndexes.length > 0;
+  // A crew pick narrows like an Announcers pick (D-06); the index is read only when picked.
+  const crewKeys = state.crew != null ? crewIndex(data).keys : null;
 
   const seasons = new Map(data.seasons.map((s) => [s, 0]));
   const networks = new Int32Array(data.lookups.networks.length);
@@ -277,6 +287,7 @@ export function computeFacets(data, state) {
     if (failsGame(data, state, i)) mask |= BIT_GAME;
     if (failsBooth(data, state, i)) mask |= BIT_BOOTH;
     if (hasPeople && !personMatches(data, state, personIndexes, i, state.role)) mask |= BIT_PERSON;
+    if (crewKeys && crewKeys[i] !== state.crew) mask |= BIT_PERSON;
 
     if (mask === 0) total += 1;
     if ((mask & ~BIT_SEASON) === 0) seasons.set(t.season[i], (seasons.get(t.season[i]) ?? 0) + 1);
@@ -462,7 +473,12 @@ export function computeView(data, state) {
   const seasonCounts = data.seasons.map((season) => [season, facets.seasons.get(season)]);
 
   const personIndexes = state.people.map((id) => data.personIndexById.get(id));
-  const hasPersonSelection = state.people.length > 0;
+  const hasPeople = state.people.length > 0;
+  // Phase 14 D-06: a crew pick is an Announcers-equivalent pick (no role check, A12). The grouping
+  // index is built only when a crew is picked, so the other views do no grouping work.
+  const hasCrew = state.crew != null;
+  const crewKeys = hasCrew ? crewIndex(data).keys : null;
+  const hasPersonSelection = hasPeople || hasCrew;
   const hasGameSelection =
     state.game != null && data.gameIndexBySlug.has(state.game);
   const hasSelection = hasPersonSelection || hasGameSelection || state.school.length > 0;
@@ -474,8 +490,10 @@ export function computeView(data, state) {
   for (let i = 0; i < n; i += 1) {
     // D-14: a person-matched dot that fails a fade filter is filtered out,
     // not highlighted -- the filter always wins.
-    if (
-      hasPersonSelection &&
+    if (hasCrew) {
+      if (passesFilters[i] && crewKeys[i] === state.crew) highlighted.push(i);
+    } else if (
+      hasPeople &&
       passesFilters[i] &&
       personMatches(data, state, personIndexes, i, state.role)
     ) {
@@ -598,6 +616,7 @@ export function computeView(data, state) {
     visibleCount,
     passingCount,
     hasPersonSelection,
+    hasCrewSelection: hasCrew,
     hasGameSelection,
     hasSelection,
     filterActive,
@@ -697,4 +716,44 @@ export function axisPatch(axis, state) {
  */
 export function yPatch(y, state) {
   return y === 'excitement' && state.axis === 'excitement' ? { y, axis: 'spread' } : { y };
+}
+
+/** "A", "A and B", "A, B and C". */
+function joinNamesAnd(names) {
+  if (names.length <= 1) return names.join('');
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/**
+ * The live-region sentence for a pick change (D-08, 14-UI-SPEC "Live region"), or '' when no
+ * pick-related state changed. `prev` and `next` are canonical states.
+ * @param {object} prev
+ * @param {object} next
+ * @param {object} data - a `prepareData` result.
+ * @returns {string}
+ */
+export function describePickChange(prev, next, data) {
+  const nameOf = (id) => {
+    const idx = data.personIndexById.get(id);
+    return idx === undefined ? id : data.lookups.people[idx].name;
+  };
+  const sameList = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+  const crewChanged = prev.crew !== next.crew;
+  const peopleChanged = !sameList(prev.people, next.people);
+  if (next.crew != null && crewChanged) {
+    const slugs = crewIndex(data).crews.get(next.crew)?.people ?? [];
+    let text = `Crew pick set to ${joinNamesAnd(slugs.map(nameOf))}.`;
+    if (prev.people.length > 0) text += ' Announcers pick cleared.';
+    if (prev.compare) text += ' Compare cleared.';
+    if (prev.together) text += ' Called together cleared.';
+    return text;
+  }
+  if (next.people.length > 0 && peopleChanged) {
+    let text = `Announcers pick set to ${joinNamesAnd(next.people.map(nameOf))}.`;
+    if (prev.crew != null) text += ' Crew pick cleared.';
+    return text;
+  }
+  if (prev.crew != null && next.crew == null) return 'Crew pick cleared.';
+  if (prev.people.length > 0 && next.people.length === 0) return 'Announcers pick cleared.';
+  return '';
 }
