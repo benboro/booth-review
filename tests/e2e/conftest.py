@@ -39,6 +39,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import pytest
+from crews_fixture import build_crews_raw
 from playwright.sync_api import Browser, ConsoleMessage, Error, Page, Playwright, Route, expect
 
 from booth_review.cli import main
@@ -199,6 +200,21 @@ def serve_booths(fixture_raw: dict[str, Any]) -> Callable[[Page], None]:
         raw["telecasts"]["booth"] = overlay["telecasts_booth"]
         raw["telecasts_unrated"]["booth"] = overlay["unrated_booth"]
         page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+
+    return _serve
+
+
+@pytest.fixture
+def serve_crews(fixture_raw: dict[str, Any]) -> Callable[[Page], None]:
+    """Returns `serve(page)`: makes `page` load the synthetic crews dataset
+    (tests/e2e/crews_fixture.py `build_crews_raw`: 30+ crews and every Crews table case).
+    Synthetic data only. Call it before opening the app; a later route wins over the
+    origin guard's catch-all, as for `serve_booths`.
+    """
+    raw = build_crews_raw(fixture_raw)
+
+    def _serve(page: Page) -> None:
+        page.route("**/site-data.json*", lambda route: route.fulfill(json=copy.deepcopy(raw)))
 
     return _serve
 
