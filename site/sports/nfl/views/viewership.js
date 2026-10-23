@@ -512,7 +512,7 @@ function buildFigure(model, state, env, th, lines, seasonPoints) {
       fixedrange: true,
     },
     yaxis: {
-      title: { text: TITLES[resid ? 'resid' : 'mean'], standoff: 8 },
+      title: { text: TITLES[resid ? 'resid' : 'mean'], standoff: 8, font: { size: 14 } },
       range,
       tickmode: 'array',
       tickvals,
