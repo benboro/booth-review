@@ -70,12 +70,12 @@ export const FAMILY_CHANNEL_LEAD = Object.freeze({
  * clears it with black. Verified against the real sRGB relative-luminance
  * formula for every family/theme fill in FAMILY_COLORS (UI-SPEC Color):
  * disney #0072B2 -> white 5.19:1 (both themes); fox #009E73 -> black
- * 6.14:1 (both); cbs light #BD8300 -> black 6.41:1, dark #E69F00 -> black
+ * 6.14:1 (both); cbs light #B77F00 -> black 6.05:1, dark #E69F00 -> black
  * 9.32:1; nbc light #C972A2 -> black 6.41:1, dark #CC79A7 -> black 6.86:1;
  * cw light #1D96DB -> black 6.44:1, dark #56B4E9 -> black 9.10:1; wbd
  * #D55E00 -> black 5.43:1 (both); conference light #000000 -> white
- * 21.0:1, dark #696969 -> white 5.49:1; other light #8F8F8F -> black
- * 6.49:1, dark #999999 -> black 7.37:1.
+ * 21.0:1, dark #696969 -> white 5.49:1; other light #8B8B8B -> black
+ * 6.16:1, dark #999999 -> black 7.37:1.
  * @type {Record<string, string>}
  */
 export const PILL_TEXT_COLOR = {
@@ -99,12 +99,12 @@ export const FAMILY_COLORS = {
   light: {
     disney: '#0072B2',
     fox: '#009E73',
-    cbs: '#BD8300',
+    cbs: '#B77F00',
     nbc: '#C972A2',
     cw: '#1D96DB',
     wbd: '#D55E00',
     conference: '#000000',
-    other: '#8F8F8F',
+    other: '#8B8B8B',
   },
   dark: {
     disney: '#0072B2',

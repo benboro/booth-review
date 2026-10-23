@@ -215,23 +215,11 @@ def _contrast(app_page: Page, a: str, b: str) -> float:
     )
 
 
-# 13-05 moved the light page and surface backgrounds to #FBF9F5 and #F4F0E8; on the blended band
-# the cbs (#BD8300) and other (#8F8F8F) dot colours fall to 2.89/2.85 on the plot and
-# 2.69/2.65 on the surface, under the 3.0 and 2.7 floors set for the old backgrounds. Fixing it
-# means changing the Okabe-Ito family palette (also pinned by test_site_bar_figures.py and
-# test_site_chart.py), a palette decision the UI-SPEC does not make. Ledger row 13-24.
-_BAND_DOT_XFAIL = pytest.mark.xfail(
-    reason="family dot colours below the old 3.0/2.7 floors on the new light backgrounds; "
-    "palette decision pending (13-E2E-LEDGER, 13-24)",
-    strict=False,
-)
-
-
 @pytest.mark.parametrize(
     ("theme", "surface", "floor"),
     [
-        pytest.param("light", "plot", 3.0, marks=_BAND_DOT_XFAIL),
-        pytest.param("light", "surface", 2.7, marks=_BAND_DOT_XFAIL),
+        ("light", "plot", 3.0),
+        ("light", "surface", 2.7),
     ],
 )
 def test_dots_keep_contrast_on_blended_band(

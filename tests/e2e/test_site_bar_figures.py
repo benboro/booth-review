@@ -912,7 +912,7 @@ def test_stacked_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
 
 
 _MAIN_FAMILY_LIGHT = [
-    "#009E73", "#0072B2", "#8F8F8F", "#0072B2", "#009E73",
+    "#009E73", "#0072B2", "#8B8B8B", "#0072B2", "#009E73",
     "#0072B2", "#0072B2", "#0072B2", "#0072B2", "#0072B2", "#009E73",
 ]  # fmt: skip
 
@@ -940,10 +940,10 @@ def test_butterfly_announcer_bars_use_main_family_color(guarded_page: Page, site
     casey = by_label["Robin Teague"]  # main family "other" (grey)
     jamie = by_label["Jamie Oaks"]
     for trace in (left, right):
-        assert trace["marker"]["color"][casey] == "#8F8F8F"
+        assert trace["marker"]["color"][casey] == "#8B8B8B"
         assert trace["marker"]["color"][jamie] == "#0072B2"
     for trace in (left_unrated, right_unrated):
-        assert trace["marker"]["line"]["color"][casey] == "#8F8F8F"
+        assert trace["marker"]["line"]["color"][casey] == "#8B8B8B"
         assert trace["marker"]["line"]["color"][jamie] == "#0072B2"
 
 

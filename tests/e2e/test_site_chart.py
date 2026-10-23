@@ -527,7 +527,7 @@ _PILL_CONTRAST = {
     "disney": ("rgb(0, 114, 178)", "rgb(255, 255, 255)"),
     "fox": ("rgb(0, 158, 115)", "rgb(0, 0, 0)"),
     "conference": ("rgb(0, 0, 0)", "rgb(255, 255, 255)"),
-    "other": ("rgb(143, 143, 143)", "rgb(0, 0, 0)"),
+    "other": ("rgb(139, 139, 139)", "rgb(0, 0, 0)"),
 }
 
 
@@ -695,7 +695,7 @@ def test_hover_text_stays_minimal_and_drops_methodology_notes(
     assert "Afternoon" not in dot7
     assert "Prime time" not in dot7
     assert (
-        '<span style="color:#8F8F8F">Other Network</span>'
+        '<span style="color:#8B8B8B">Other Network</span>'
         '/<span style="color:#0072B2">Alpha Sports</span>'
         '/<span style="color:#009E73">Beta Network</span>'
     ) in dot7
@@ -2118,12 +2118,12 @@ def test_no_halo_trace_with_no_selection(
 
 # `FAMILY_COLORS[theme]` for the three families exercised below (palette.js
 # literal hex, as `rgb(...)` -- disney/fox are shared between themes; only
-# `other` differs light `#8F8F8F` vs dark `#999999`).
+# `other` differs light `#8B8B8B` vs dark `#999999`).
 _BORDER_COLOR = {
     "light": {
         "disney": "rgb(0, 114, 178)",
         "fox": "rgb(0, 158, 115)",
-        "other": "rgb(143, 143, 143)",
+        "other": "rgb(139, 139, 139)",
     },
 }
 
