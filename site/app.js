@@ -21,7 +21,7 @@
 
 import { prepareData } from './modules/data.js';
 import { currentTheme, onThemeChange } from './modules/theme.js';
-import { defaultState, computeView, toggleFamilyNetworks, familyOnlyPatch, axisPatch, yPatch } from './modules/select.js';
+import { defaultState, computeView, toggleFamilyNetworks, familyOnlyPatch, axisPatch, yPatch, describePickChange } from './modules/select.js';
 import { encodeState, decodeState } from './modules/url-state.js';
 import { buildFigure, renderChart, bindChartEvents, scatterAtHome, resetScatterZoom, TOOLTIP_MODE } from './modules/chart.js';
 import { initTopbar, renderTopbar, renderMapShapeLegend } from './modules/topbar.js';
@@ -449,8 +449,28 @@ function bindScatterEvents() {
  * @param {object} patch
  */
 function setState(patch) {
-  const next = { ...state, ...patch };
+  const prev = state;
+  const exclusive = { ...patch };
+  // D-08, in one place: a crew pick and an Announcers pick never coexist. Setting a crew clears
+  // Announcers, Compare and Called together; setting people (or Compare/Called together) clears the crew.
+  if (patch.crew != null) {
+    exclusive.people = [];
+    exclusive.compare = false;
+    exclusive.together = false;
+  } else if (
+    (Array.isArray(patch.people) && patch.people.length > 0) ||
+    patch.compare === true ||
+    patch.together === true
+  ) {
+    exclusive.crew = null;
+  }
+  const next = { ...state, ...exclusive };
   state = decodeState(encodeState(next, data), data);
+  const message = prev ? describePickChange(prev, state, data) : '';
+  if (message) {
+    const seat = document.getElementById('pick-status');
+    if (seat) seat.textContent = message;
+  }
   render();
 }
 
@@ -601,6 +621,7 @@ async function startCfb(search = location.search) {
         enlargeDots: lastView.enlargeDots,
         drawnFaded: lastView.drawnFaded,
         hasPersonSelection: lastView.hasPersonSelection,
+        hasCrewSelection: lastView.hasCrewSelection,
         hasGameSelection: lastView.hasGameSelection,
         highlighted: lastView.highlighted,
         matched: lastView.matched,
