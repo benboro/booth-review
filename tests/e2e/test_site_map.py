@@ -101,6 +101,12 @@ def _venue_pixel(page: Page, x: float, y: float) -> tuple[float, float]:
     return px, py
 
 
+def _reveal_map(page: Page) -> None:
+    """Scroll the chart into the viewport: the framed module sits below the fold at 900px."""
+    page.evaluate("() => document.getElementById('map-chart').scrollIntoView({block: 'center'})")
+    page.evaluate("() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")
+
+
 def _dot_point(page: Page) -> tuple[float, float]:
     """Plot coordinates of the largest venue dot (the model orders dots by score)."""
     dot = _model(page)["venueDots"][0]
@@ -204,7 +210,7 @@ def test_no_location_note_follows_the_filters(guarded_page: Page, open_app: Open
 def test_desktop_real_mouse_hover_on_each_edge_marker_fires_plotly_hover(
     guarded_page: Page, open_app: OpenApp, label: str
 ) -> None:
-    """Regression: the modebar sat over Dublin (top right) and swallowed its hover."""
+    """Regression: nothing may sit over an edge marker (Dublin top right) and swallow its hover."""
     guarded_page.set_viewport_size({"width": 1280, "height": 900})
     _open_map(guarded_page, open_app, "?view=map")
     guarded_page.evaluate(
@@ -213,22 +219,28 @@ def test_desktop_real_mouse_hover_on_each_edge_marker_fires_plotly_hover(
             (e) => window.__hovered.push(String(e.points[0].customdata))); }"""
     )
     marker = next(m for m in _model(guarded_page)["markers"] if m["label"] == label)
+    _reveal_map(guarded_page)
     px, py = _venue_pixel(guarded_page, marker["x"], marker["y"])
     guarded_page.mouse.move(px - 60, py)
     guarded_page.mouse.move(px, py)  # one jump: only the marker's own pixel is hit-tested
     guarded_page.wait_for_function(f"() => window.__hovered.includes('{label.lower()}')")
 
 
-def test_desktop_modebar_does_not_overlap_the_edge_markers(
+def test_desktop_has_no_modebar_so_nothing_covers_the_edge_markers(
     guarded_page: Page, open_app: OpenApp
 ) -> None:
+    """SHELL-06: the modebar is gone; Reset zoom is the page-level button outside the plot."""
     guarded_page.set_viewport_size({"width": 1280, "height": 900})
     _open_map(guarded_page, open_app, "?view=map")
-    dublin = next(m for m in _model(guarded_page)["markers"] if m["label"] == "Dublin")
-    _, py = _venue_pixel(guarded_page, dublin["x"], dublin["y"])
-    bar = guarded_page.locator("#map-chart .modebar").bounding_box()
-    assert bar is not None
-    assert py - 12 > bar["y"] + bar["height"]
+    assert guarded_page.locator("#map-chart .modebar").count() == 0
+    assert guarded_page.locator("#reset-zoom").is_visible()
+    chart = guarded_page.locator("#map-chart").bounding_box()
+    button = guarded_page.locator("#reset-zoom").bounding_box()
+    assert chart is not None and button is not None
+    assert (
+        button["y"] + button["height"] <= chart["y"] + 1
+        or button["y"] >= chart["y"] + chart["height"]
+    )
 
 
 @pytest.mark.parametrize("label", ["Dublin", "Nassau"])
@@ -251,6 +263,7 @@ def test_desktop_hover_shows_venue_tooltip(guarded_page: Page, open_app: OpenApp
     guarded_page.set_viewport_size({"width": 1280, "height": 900})
     _open_map(guarded_page, open_app, "?view=map&people=pat-rowan")
     nassau = next(m for m in _model(guarded_page)["markers"] if m["label"] == "Nassau")
+    _reveal_map(guarded_page)
     px, py = _venue_pixel(guarded_page, nassau["x"], nassau["y"])
     guarded_page.mouse.move(px - 80, py - 80)
     guarded_page.mouse.move(px, py, steps=5)
@@ -355,24 +368,28 @@ def test_map_url_survives_setstate_and_reload(guarded_page: Page, open_app: Open
     assert state["people"] == ["pat-rowan"]
 
 
-def test_dark_theme_uses_dark_land_and_map_family_colors(
+def test_light_theme_uses_light_land_and_map_family_colors(
     guarded_page: Page, open_app: OpenApp
 ) -> None:
-    """D-08: dark scheme draws the outline in MAP_LAND dark, legs in MAP_FAMILY_COLORS dark."""
+    """D-08: the outline is drawn in MAP_LAND light, legs in MAP_FAMILY_COLORS light.
+
+    The site is light-only until Phase 17 (13-01 moved dark to data-theme), so an OS dark
+    scheme must not change the map either.
+    """
     guarded_page.emulate_media(color_scheme="dark")
     _open_map(guarded_page, open_app, "?view=map&people=pat-rowan")
     palette: dict[str, Any] = guarded_page.evaluate(
         """async () => { const P = await import('./modules/palette.js');
-          return {land: P.MAP_LAND.dark, disney: P.MAP_FAMILY_COLORS.dark.disney,
-                  fox: P.MAP_FAMILY_COLORS.dark.fox}; }"""
+          return {land: P.MAP_LAND.light, disney: P.MAP_FAMILY_COLORS.light.disney,
+                  fox: P.MAP_FAMILY_COLORS.light.fox}; }"""
     )
     traces = _traces(guarded_page)
-    assert palette["land"] == "#1B1E23"
+    assert palette["land"] == "#F1EDE4"
     assert traces["outline"]["fill"] == palette["land"]
     assert traces["legs:disney"]["color"] == palette["disney"]
     assert traces["legs:fox"]["color"] == palette["fox"]
-    dark_colors = [d["dotColor"]["dark"] for d in _model(guarded_page)["venueDots"]]
-    assert traces["venue-dots"]["mcolor"] == dark_colors
+    light_colors = [d["dotColor"]["light"] for d in _model(guarded_page)["venueDots"]]
+    assert traces["venue-dots"]["mcolor"] == light_colors
 
 
 def test_every_game_hidden_shows_the_empty_note(guarded_page: Page, open_app: OpenApp) -> None:
@@ -457,14 +474,16 @@ def test_plotly_rejection_shows_error_note_without_unhandled_rejection(
 
 
 def test_desktop_drag_zoom_and_double_click_reset(guarded_page: Page, open_app: OpenApp) -> None:
-    """D-07: desktop keeps drag-zoom and a modebar; a double-click restores the full extent."""
+    """D-07: drag-zoom with page-level Reset zoom; a double-click restores the extent."""
     guarded_page.set_viewport_size({"width": 1280, "height": 900})
     _open_map(guarded_page, open_app, "?view=map&people=pat-rowan")
     layout: dict[str, Any] = guarded_page.evaluate(
         "() => ({drag: document.getElementById('map-chart').layout.dragmode})"
     )
     assert layout["drag"] == "zoom"
-    assert guarded_page.locator("#map-chart .modebar").is_visible()
+    assert guarded_page.locator("#map-chart .modebar").count() == 0
+    reset = guarded_page.locator("#reset-zoom")
+    assert reset.get_attribute("aria-disabled") == "true"
     x0, y0 = _venue_pixel(guarded_page, 300, 200)
     x1, y1 = _venue_pixel(guarded_page, 600, 400)
     guarded_page.mouse.move(x0, y0)
@@ -476,6 +495,7 @@ def test_desktop_drag_zoom_and_double_click_reset(guarded_page: Page, open_app: 
         "() => document.getElementById('map-chart')._fullLayout.xaxis.range"
     )
     assert zoomed[1] - zoomed[0] < 600
+    assert reset.get_attribute("aria-disabled") == "false"
     cx, cy = _venue_pixel(guarded_page, (zoomed[0] + zoomed[1]) / 2, 300)
     guarded_page.mouse.dblclick(cx, cy)
     guarded_page.wait_for_timeout(400)
@@ -484,6 +504,7 @@ def test_desktop_drag_zoom_and_double_click_reset(guarded_page: Page, open_app: 
     )
     assert abs(rng[0]) <= 0.5
     assert abs(rng[1] - 975) <= 0.5
+    assert reset.get_attribute("aria-disabled") == "true"
 
 
 def _phone(page: Page, open_app: OpenApp, query: str) -> None:
@@ -499,7 +520,7 @@ def test_phone_map_is_fixed_and_has_no_overflow(mobile_page: Page, open_app: Ope
           return {drag: l.dragmode, x: l.xaxis.fixedrange, y: l.yaxis.fixedrange}; }"""
     )
     assert fixed == {"drag": False, "x": True, "y": True}
-    assert not mobile_page.locator("#map-chart .modebar").is_visible()
+    assert mobile_page.locator("#map-chart .modebar").count() == 0
     width: int = mobile_page.evaluate("() => document.documentElement.scrollWidth")
     assert width <= 360
 

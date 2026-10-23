@@ -1034,3 +1034,20 @@ def test_desktop_13_season_labels_never_overlap_in_dom(
     assert out["zeroWidth"] == 0
     assert out["outside"] == 0
     assert out["minGap"] >= 2, out
+
+
+def test_date_axis_ticks_use_the_frame_font_and_no_modebar(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """SHELL-06: on the Date axis the ticks are Roboto Condensed 12px and no modebar draws."""
+    open_app(guarded_page, "?axis=date")
+    _settle(guarded_page)
+    assert guarded_page.locator("#chart .modebar").count() == 0
+    ticks = guarded_page.evaluate(
+        "() => [...document.querySelectorAll('#chart .ytick text')]"
+        ".map(t => { const s = getComputedStyle(t); return [s.fontFamily, s.fontSize]; })"
+    )
+    assert ticks, "the date-axis scatter drew no y tick labels"
+    for family, size in ticks:
+        assert "Roboto Condensed" in family
+        assert size == "12px"

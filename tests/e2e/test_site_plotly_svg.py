@@ -6,6 +6,7 @@ the loaded app page and drives it with the real mouse.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -193,3 +194,47 @@ def test_double_click_resets_zoom(guarded_page: Page, site_url: str) -> None:
     lo, hi = rng[0], rng[1]
     assert abs(lo - 0) < 0.5
     assert abs(hi - 975) < 0.5
+
+
+def test_page_loads_the_partial_bundle_with_its_integrity_hash(
+    guarded_page: Page, site_url: str
+) -> None:
+    """T-13-39: the browser loads vendor/plotly-partial-4.1.1.min.js under an SRI hash."""
+    _load(guarded_page, site_url)
+    script = guarded_page.evaluate(
+        """() => { const s = [...document.scripts].find(
+            (e) => (e.getAttribute('src') || '').includes('plotly'));
+          return {src: s.getAttribute('src'), integrity: s.integrity,
+                  cross: s.crossOrigin, plotly: typeof window.Plotly}; }"""
+    )
+    assert script["src"] == "vendor/plotly-partial-4.1.1.min.js"
+    assert script["integrity"].startswith("sha256-")
+    assert script["cross"] == "anonymous"
+    assert script["plotly"] == "object"
+    assert guarded_page.evaluate("() => document.querySelector('.modebar')") is None
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "",
+        "?view=map&people=pat-rowan",
+        "?school=northfield&view=bars",
+        "?school=northfield,lakeview&view=butterfly",
+    ],
+)
+def test_every_drawn_trace_is_scatter_scattergl_or_bar(
+    guarded_page: Page, open_app: Callable[[Page, str], None], query: str
+) -> None:
+    """The partial bundle registers only these trace types, so the charts draw nothing else."""
+    open_app(guarded_page, query)
+    guarded_page.wait_for_function(
+        "() => [...document.querySelectorAll('.js-plotly-plot')]"
+        ".some((g) => g.data && g.data.length)"
+    )
+    types = guarded_page.evaluate(
+        "() => [...document.querySelectorAll('.js-plotly-plot')]"
+        ".flatMap((g) => (g.data || []).map((t) => t.type || 'scatter'))"
+    )
+    assert types
+    assert set(types) <= {"scatter", "scattergl", "bar"}
