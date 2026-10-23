@@ -374,7 +374,8 @@ def test_render_methodology_resolves_md_links_against_docs(
 # and coloring; no NFL text changed.
 # Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
 # new header with theme slot, site name.
-_METHODOLOGY_FLAG_OFF_SHA256 = "2d0e07bd422e517c8a4e6bdf9d002a9b097ee31e90beb6f529bd1490ef40abb1"
+# Re-pinned at Phase 14 Plan 09: new Crews section.
+_METHODOLOGY_FLAG_OFF_SHA256 = "f081132ccecb4da3b702284eeef91dc126f42651b986ff8c679abe18c8ec2d80"
 
 _NFL_ANCHORS = (
     "nfl-special-games",

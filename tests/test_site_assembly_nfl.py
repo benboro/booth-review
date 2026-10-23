@@ -71,7 +71,8 @@ _COVERAGE_SHA256 = "1c2076a54c682ad0355657a0e1a3d938d35c7451c3c7d52bf5342a8753f7
 # right like its cells (1 changed line).
 # Re-pinned after the Phase 13 panel review: #theme-slot drops aria-hidden (1 changed line).
 # Re-pinned for the toolbar-fit.js preload in <head> (1 added line).
-_INDEX_PRE_PHASE_SHA256 = "f824b5be88745c211d1994e100b722cedaf2d3e7ae19b4d67fe2260aacef172a"
+# Re-pinned at Phase 14 Plan 09: #pick-status and #matched-subtitle seats (crew pick).
+_INDEX_PRE_PHASE_SHA256 = "62aa8eec4c47a669dd608a95ce1a53561dae817ff54975bfb80ca0e381d1709d"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'
