@@ -1298,6 +1298,35 @@ def test_announcers_reset_is_active_for_compare_mode_without_people(
     assert reset.get_attribute("aria-disabled") == "true"
 
 
+def test_clear_all_is_live_for_compare_mode_without_people(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Removing the last announcer chip leaves Compare on with no toolbar change; Clear all
+    must still be live (as the Announcers Reset is) and turn Compare off."""
+    open_app(guarded_page, "?mode=compare")
+    clear = guarded_page.locator("#clear-filters")
+    assert clear.get_attribute("aria-disabled") == "false"
+    clear.click()
+    guarded_page.wait_for_function("location.search === ''")
+    assert clear.get_attribute("aria-disabled") == "true"
+
+
+def test_clear_all_is_live_for_game_search_text_alone(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Search text with no game picked is live for the Game Reset, so Clear all is live too."""
+    open_app(guarded_page, "")
+    clear = guarded_page.locator("#clear-filters")
+    assert clear.get_attribute("aria-disabled") == "true"
+    _open_filter(guarded_page, "game")
+    guarded_page.locator("#game-search").fill("harbor")
+    assert clear.get_attribute("aria-disabled") == "false"
+    # Escape would empty a search box by itself, so close the popover by clicking Clear all.
+    clear.click()
+    assert clear.get_attribute("aria-disabled") == "true"
+    assert guarded_page.input_value("#game-search") == ""
+
+
 _RESET_ARIA_LABELS = {
     "announcers": "Reset Announcers",
     "seasons": "Reset Seasons",

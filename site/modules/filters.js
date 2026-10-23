@@ -1082,8 +1082,11 @@ export function initFilters({ data, getState, setState }) {
 
   els.gameSearch.addEventListener('input', () => {
     filterGameRows(data, els.gameSearch.value);
-    // Typing alone can make the Game Reset live (04.10 IN-03); no render runs here.
-    if (lastView) renderGroupResets(data, getState(), lastView);
+    // Typing alone can make the Game Reset and Clear all live (04.10 IN-03); no render runs here.
+    if (lastView) {
+      renderGroupResets(data, getState(), lastView);
+      renderFiltersButton(data, getState(), lastView);
+    }
   });
   els.gameOptions.addEventListener('click', (ev) => {
     const head = ev.target.closest('.game-section-head');
@@ -1461,12 +1464,20 @@ export function changedControls(data, state, view) {
 }
 
 /**
- * Whether Clear all filters has anything to reset: a changed toolbar control, or a venue
- * picked on the map (GROUP_RESETS.venue has no toolbar trigger, so `changedControls` never
- * lists it).
+ * Whether Clear all filters has anything to reset: a changed toolbar control, a venue picked
+ * on the map (GROUP_RESETS.venue has no toolbar trigger, so `changedControls` never lists it),
+ * or any state a group Reset is live for without its trigger showing it (renderGroupResets):
+ * compare or called-together with no one selected, a stored Networks pick, search text.
  */
-export function clearAllActive(changed, state) {
-  return changed.length > 0 || state.venue != null;
+export function clearAllActive(changed, state, searchText = '') {
+  return (
+    changed.length > 0 ||
+    state.venue != null ||
+    state.compare ||
+    state.together ||
+    state.networks != null ||
+    searchText !== ''
+  );
 }
 
 /** Renders every toolbar trigger's label, value and `data-active` / `.is-changed` state (D-02). */
@@ -1501,9 +1512,10 @@ function renderFiltersButton(data, state, view) {
   els.filtersButton.textContent = n > 0 ? `Filters · ${n} changed` : 'Filters';
   els.filtersButton.classList.toggle('is-changed', n > 0);
   // Clear all filters looks and reads as disabled while nothing it would reset is changed: a
-  // changed toolbar control, or the map's venue filter, which Clear all also resets but which
-  // has no toolbar trigger (its chip sits in the table heading row).
-  els.clearFilters.setAttribute('aria-disabled', clearAllActive(changed, state) ? 'false' : 'true');
+  // changed toolbar control, the map's venue filter (its chip sits in the table heading row),
+  // or state only a group Reset shows, such as compare with no one selected or search text.
+  const live = clearAllActive(changed, state, els.gameSearch.value);
+  els.clearFilters.setAttribute('aria-disabled', live ? 'false' : 'true');
   const chips = changed.map((name) => {
     const { label } = triggerInfo(name, data, state, view);
     const li = document.createElement('li');
