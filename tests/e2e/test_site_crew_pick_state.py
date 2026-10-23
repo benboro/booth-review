@@ -132,8 +132,14 @@ def test_csort(app: Page) -> None:
     asc = _url(app, "?csort=viewers.asc")
     assert asc["decoded"]["csort"] == {"key": "viewers", "dir": "asc"}
     assert asc["encoded"] == "?csort=viewers.asc"
-    assert _url(app, "?csort=games")["encoded"] == ""
-    assert _url(app, "?csort=games.asc")["encoded"] == "?csort=games.asc"
+    # The default sort encodes to nothing in each mode: Season newest first when Per season
+    # applies, Games called descending when pooled.
+    assert _url(app, "?csort=season.desc")["decoded"]["csort"] is None
+    assert _url(app, "?csort=season.desc")["encoded"] == ""
+    assert _url(app, "?csort=games")["encoded"] == "?csort=games"
+    assert _url(app, "?csort=games&perseason=0")["encoded"] == "?perseason=0"
+    assert _url(app, "?csort=games.asc&perseason=0")["encoded"] == "?perseason=0&csort=games.asc"
+    assert _url(app, "?csort=season.desc&perseason=0")["decoded"]["csort"] is None
     assert _url(app, "?csort=rank&cmode=pbp")["decoded"]["csort"] is None
     assert _url(app, "?csort=rank")["decoded"]["csort"] == {"key": "rank", "dir": "asc"}
     assert _url(app, "?csort=season")["decoded"]["csort"] == {"key": "season", "dir": "asc"}

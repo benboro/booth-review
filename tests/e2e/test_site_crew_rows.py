@@ -57,7 +57,17 @@ async ({partial, opts, sort}) => {
   }));
   const passes = [];
   for (let i = 0; i < data.n; i += 1) if (view.passesFilters[i]) passes.push(i);
+  const kinds = data.lookups.flags.map((f) => f.kind);
+  const eraFlags = {};
+  for (let i = 0; i < data.n; i += 1) {
+    if (!data.rated[i]) continue;
+    for (const f of data.t.flags[i] ?? []) {
+      if (kinds[f] !== 'era') continue;
+      (eraFlags[data.t.season[i]] ??= new Set()).add(f);
+    }
+  }
   return {
+    eraFlagsBySeason: Object.fromEntries(Object.entries(eraFlags).map(([k, v]) => [k, v.size])),
     rows,
     leftOut: out.leftOut,
     totalRows: out.totalRows,
@@ -187,6 +197,32 @@ def test_break_and_era_blanks(rows_page: Callable[..., dict[str, Any]]) -> None:
     era_rows = _find(per, CASE_ERA["pbp"])
     assert len(era_rows) == 2
     assert all(r["viewers"]["blank"] is None for r in era_rows)
+
+
+def test_a_season_is_one_nielsen_band(rows_page: Callable[..., dict[str, Any]]) -> None:
+    """A 2025 Week 1 game dated before 2025-09-01 carries a different era flag from the rest of
+    its season, yet the Per season row keeps its viewers figure; a pooled row that crosses a band
+    change (2022 -> 2023) still blanks."""
+    assert rows_page()["eraFlagsBySeason"]["2025"] == 2  # the season's games carry two era flags
+    per = _find(rows_page(per_season=True)["rows"], CASE_BREAK["pbp"])
+    row_2025 = next(r for r in per if r["season"] == 2025)
+    assert row_2025["gamesCount"] == 2
+    assert row_2025["viewers"]["blank"] is None
+    assert row_2025["viewers"]["mean"] is not None and row_2025["viewers"]["n"] == 2
+    pooled = _one(rows_page()["rows"], CASE_ERA["pbp"])
+    assert pooled["viewers"]["blank"] == "era"
+
+
+def test_per_season_default_order_is_season_newest_then_games(
+    rows_page: Callable[..., dict[str, Any]],
+) -> None:
+    rows = rows_page(per_season=True, sort=None)["rows"]
+    keys = [(-r["season"], -r["gamesCount"], r["names"]) for r in rows]
+    assert keys == sorted(keys)
+    assert rows[0]["season"] == max(r["season"] for r in rows)
+    pooled = rows_page(sort=None)["rows"]
+    pooled_keys = [(-r["gamesCount"], r["names"]) for r in pooled]
+    assert pooled_keys == sorted(pooled_keys)
 
 
 def test_seasons_narrowing_drops_empty_rows(rows_page: Callable[..., dict[str, Any]]) -> None:

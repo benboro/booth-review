@@ -8,7 +8,7 @@
  * (crew, or Announcers from a person row) highlights rows without ever dropping one.
  */
 
-import { NATURAL_DIR, modelBreakSeason, sortCrewRows } from './crew-groups.js';
+import { NATURAL_DIR, defaultSort, modelBreakSeason, sortCrewRows } from './crew-groups.js';
 import { crewEntries, figureSourceOf, formatAudienceTable, formatMatchup } from './format.js';
 import { networkMark } from './network.js';
 import { safeHref } from './panel.js';
@@ -95,31 +95,34 @@ function columnsFor(mode, perSeason) {
   return cols;
 }
 
-/** The sort the table currently shows: null state means Games called, descending. */
-function activeSort(state) {
-  return state.csort ?? { key: 'games', dir: NATURAL_DIR.games };
+/** The sort the table currently shows: null state means the mode's default (see `defaultSort`). */
+function activeSort(state, perSeason) {
+  return state.csort ?? defaultSort(perSeason);
 }
 
 /** Next csort for a click on `key`: natural, reversed, then back to the default (null). */
-function nextSort(state, key) {
+function nextSort(state, key, perSeason) {
   const natural = NATURAL_DIR[key];
   const reversed = natural === 'asc' ? 'desc' : 'asc';
-  const current = activeSort(state);
-  const isDefault = state.csort == null;
-  if (isDefault && key !== 'games') return { key, dir: natural };
-  if (current.key !== key) return { key, dir: natural };
-  if (current.dir === natural) return { key, dir: reversed };
-  return null;
+  const current = activeSort(state, perSeason);
+  const flip = (dir) => (dir === 'asc' ? 'desc' : 'asc');
+  let next;
+  if (current.key !== key) next = { key, dir: natural };
+  else if (state.csort == null) next = { key, dir: flip(current.dir) };
+  else if (current.dir === natural) next = { key, dir: reversed };
+  else return null;
+  const def = defaultSort(perSeason);
+  return next.key === def.key && next.dir === def.dir ? null : next;
 }
 
-function sortGlyph(state, key) {
-  const current = activeSort(state);
+function sortGlyph(state, key, perSeason) {
+  const current = activeSort(state, perSeason);
   if (current.key !== key) return '↕';
   return current.dir === 'desc' ? '↓' : '↑';
 }
 
-function ariaSort(state, key) {
-  const current = activeSort(state);
+function ariaSort(state, key, perSeason) {
+  const current = activeSort(state, perSeason);
   if (current.key !== key) return 'none';
   return current.dir === 'desc' ? 'descending' : 'ascending';
 }
@@ -552,12 +555,12 @@ function buildTable(rows, ctx, cols) {
   for (const [key, label, numeric] of cols) {
     const th = el('th', `crews-col-${key}${numeric ? ' num' : ''}`);
     th.scope = 'col';
-    th.setAttribute('aria-sort', ariaSort(state, key));
+    th.setAttribute('aria-sort', ariaSort(state, key, model.perSeason));
     const b = el('button');
     b.type = 'button';
     b.dataset.sortKey = key;
-    b.append(el('span', 'crews-sort-label', label), el('span', 'sort-glyph', sortGlyph(state, key)));
-    b.addEventListener('click', () => setState({ csort: nextSort(state, key) }));
+    b.append(el('span', 'crews-sort-label', label), el('span', 'sort-glyph', sortGlyph(state, key, model.perSeason)));
+    b.addEventListener('click', () => setState({ csort: nextSort(state, key, model.perSeason) }));
     th.append(b);
     headRow.append(th);
   }
@@ -618,7 +621,7 @@ export function renderCrewsPanel(container, model, ctx) {
     const reveal = revealIndex(sorted, model.mode, state);
     const count = Math.min(sorted.length, Math.max(shown, reveal + 1));
     container.append(buildTable(sorted.slice(0, count), full, cols));
-    const sortNow = activeSort(state);
+    const sortNow = activeSort(state, model.perSeason);
     const sortKey = `${model.mode}|${sortNow.key}|${sortNow.dir}`;
     if (lastSortKey !== null && sortKey !== lastSortKey) {
       const label = cols.find((c) => c[0] === sortNow.key)?.[1] ?? sortNow.key;

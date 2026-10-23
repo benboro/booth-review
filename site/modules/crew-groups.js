@@ -46,6 +46,11 @@ export const NATURAL_DIR = Object.freeze({
   viewers: 'desc',
 });
 
+/** The sort a Crews table opens on: Season newest first when rows are per season, else Games called descending. */
+export function defaultSort(perSeason) {
+  return perSeason ? { key: 'season', dir: 'desc' } : { key: 'games', dir: 'desc' };
+}
+
 /**
  * Most common slug; ties go to the lower slug. null when empty.
  * @param {string[]} slugs
@@ -306,6 +311,48 @@ export function modelBreakSeason(data) {
   return season;
 }
 
+const bandCache = new WeakMap();
+
+/**
+ * Nielsen measurement band of each season, read from the shipped `era` flags (no dates
+ * hard-coded). A season counts as one band, as the NFL views do ("bands align to whole
+ * seasons"): the era carried by most of the season's rated games, ties to the era that
+ * starts later. A Week 0-1 game dated before a switch (2025-09-01) never splits a season.
+ * @returns {Map<number, number>} season -> era flag index
+ */
+export function seasonBands(data) {
+  const hit = bandCache.get(data);
+  if (hit) return hit;
+  const { t } = data;
+  const kinds = data.lookups.flags.map((f) => f.kind);
+  const count = new Map(); // season -> Map(flag -> n)
+  const first = new Map(); // flag -> earliest date
+  for (let i = 0; i < data.n; i += 1) {
+    if (!data.rated[i]) continue;
+    for (const f of t.flags[i] ?? []) {
+      if (kinds[f] !== 'era') continue;
+      const s = t.season[i];
+      if (!count.has(s)) count.set(s, new Map());
+      count.get(s).set(f, (count.get(s).get(f) ?? 0) + 1);
+      if (!first.has(f) || t.date[i] < first.get(f)) first.set(f, t.date[i]);
+    }
+  }
+  const out = new Map();
+  for (const [s, flags] of count) {
+    let best = null;
+    for (const [f, n] of flags) {
+      if (best === null) best = f;
+      else {
+        const bn = flags.get(best);
+        if (n > bn || (n === bn && first.get(f) > first.get(best))) best = f;
+      }
+    }
+    out.set(s, best);
+  }
+  bandCache.set(data, out);
+  return out;
+}
+
 const cmpStr = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 function joinNames(names) {
@@ -349,7 +396,7 @@ function metric(mean, n, blank) {
 function metricsOf(data, games) {
   const { t } = data;
   const boundary = modelBreakSeason(data);
-  const kinds = data.lookups.flags.map((f) => f.kind);
+  const bands = seasonBands(data);
   let excSum = 0;
   let excN = 0;
   let before = false;
@@ -368,7 +415,8 @@ function metricsOf(data, games) {
     if (data.rated[i] && t.viewers[i] != null) {
       vSum += t.viewers[i];
       vN += 1;
-      for (const f of t.flags[i] ?? []) if (kinds[f] === 'era') eras.add(f);
+      const band = bands.get(t.season[i]);
+      if (band !== undefined) eras.add(band);
     }
   }
   const excBlank = excN === 0 ? 'none' : before && after ? 'break' : null;
@@ -411,6 +459,10 @@ function mainSlugs(data, i, role) {
 }
 
 const defaultTie = (a, b) => b.gamesCount - a.gamesCount || cmpStr(a.names, b.names);
+
+/** Per season rows open newest season first, then Games called descending; pooled rows by Games called. */
+const seasonDefault = (a, b) => b.season - a.season || defaultTie(a, b);
+const defaultOf = (rows) => (rows.length && rows[0].season != null ? seasonDefault : defaultTie);
 
 /**
  * Build the Crews rows from the games that pass the master filters.
@@ -537,7 +589,7 @@ export function buildCrewRows(data, view, { mode = 'crew', perSeason = false } =
       });
     }
   }
-  rows.sort(defaultTie);
+  rows.sort(perSeason ? seasonDefault : defaultTie);
   return { mode, perSeason, rows, leftOut, totalRows: rows.length };
 }
 
@@ -549,7 +601,7 @@ export function buildCrewRows(data, view, { mode = 'crew', perSeason = false } =
  * @param {{key: string, dir?: 'asc'|'desc'}|null} sort - null is the default sort.
  */
 export function sortCrewRows(rows, sort) {
-  if (!sort) return rows.slice().sort(defaultTie);
+  if (!sort) return rows.slice().sort(defaultOf(rows));
   const dir = (sort.dir ?? NATURAL_DIR[sort.key]) === 'desc' ? -1 : 1;
   const bucket = (m) => (m.mean == null ? 2 : m.flagged ? 1 : 0);
   const cmp = (a, b) => {

@@ -93,8 +93,18 @@ CASE_MIXED_UNKNOWN = {
 CASE_FULL_N = {"pbp": "full-pbp", "analyst": "full-ana", "rated": 9, "excitement_values": 9}
 # A crew with 3 rated games (1-7) plus 1 unrated game.
 CASE_LOW_N = {"pbp": "low-pbp", "analyst": "low-ana", "rated": 3, "unrated": 1}
-# A crew with games in 2024 (2 rated) and 2025 (2 rated, model-break flag).
-CASE_BREAK = {"pbp": "brk-pbp", "analyst": "brk-ana", "seasons": [2024, 2025], "games": 4}
+# A crew with games in 2024 (2 rated) and 2025 (2 rated, model-break flag). One 2025 game is
+# Week 1, dated 2025-08-30 and carrying the older era flag (era-ooh-2020) where every other 2025
+# game carries era-nielsen-2023: the games differ in era flag inside one season. A season is one
+# measurement band, so its Per season row still shows a viewers figure (the pooled crew crosses
+# no band change, so it shows one too).
+CASE_BREAK = {
+    "pbp": "brk-pbp",
+    "analyst": "brk-ana",
+    "seasons": [2024, 2025],
+    "games": 4,
+    "week1_date": "2025-08-30",
+}
 # A crew whose rated games span two Nielsen eras: 2022 (era-ooh-2020), 2023 (era-nielsen-2023).
 CASE_ERA = {
     "pbp": "era-pbp",
@@ -130,6 +140,7 @@ class _Game:
         viewers: int = 1_000_000,
         excitement: float | None = 6.0,
         booth: str | None = None,
+        week1: bool = False,
     ) -> None:
         self.season = season
         self.network = network
@@ -138,6 +149,7 @@ class _Game:
         self.viewers = viewers
         self.excitement = excitement
         self.booth = booth
+        self.week1 = week1
 
 
 def _pair(pbp: str, ana: str) -> list[_Role]:
@@ -212,7 +224,15 @@ def _games() -> list[_Game]:
     g.append(_Game(2024, NET_B, _pair("low-pbp", "low-ana"), rated=False, excitement=None))
     # Games on both sides of 2025.
     for season in (2024, 2024, 2025, 2025):
-        g.append(_Game(season, NET_B, _pair("brk-pbp", "brk-ana"), excitement=6.5))
+        g.append(
+            _Game(
+                season,
+                NET_B,
+                _pair("brk-pbp", "brk-ana"),
+                excitement=6.5,
+                week1=season == 2025 and not any(x.week1 for x in g),
+            )
+        )
     # Two Nielsen eras (2022, 2023).
     for season in (2022, 2022, 2023, 2023):
         g.append(_Game(season, NET_A, _pair("era-pbp", "era-ana"), excitement=7.0))
@@ -326,6 +346,8 @@ def build_crews_raw(fixture_raw: dict[str, Any]) -> dict[str, Any]:
         base = rated_t if gm.rated else unrated_t
         row = copy.deepcopy(base)
         day = date(gm.season, 8, 25) + timedelta(days=n % 120)
+        if gm.week1:
+            day = date.fromisoformat(str(CASE_BREAK["week1_date"]))
         away = n % n_teams
         home = (n * 3 + 1) % n_teams
         if home == away:
@@ -358,7 +380,7 @@ def build_crews_raw(fixture_raw: dict[str, Any]) -> dict[str, Any]:
             booth=booth_index[gm.booth] if gm.booth else None,
         )
         if gm.rated:
-            flags = [FLAG_ERA_A if gm.season <= 2022 else FLAG_ERA_B]
+            flags = [FLAG_ERA_A if gm.season <= 2022 or gm.week1 else FLAG_ERA_B]
             if gm.season >= 2025:
                 flags.append(FLAG_MODEL_BREAK)
             row.update(

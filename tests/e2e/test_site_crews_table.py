@@ -264,6 +264,8 @@ def test_blank_cells_read_see_per_season_or_none_rated(app: Page) -> None:
     era = _row(app, "Era Pbp").locator("td.num").nth(2)
     expect(era).to_contain_text("see Per season")
     expect(era).to_have_attribute("title", "Games span more than one Nielsen measurement era")
+    # The 2024 + 2025 crew mixes era flags only inside 2025, so pooled it still has a figure.
+    expect(_row(app, "Brk Pbp").locator("td.num").nth(2).locator(".caption")).to_have_text("(4)")
     brk = _row(app, "Brk Pbp").locator("td.num").nth(1)
     expect(brk).to_contain_text("see Per season")
     expect(brk).to_have_attribute("title", re.compile(r"both sides of the 2025 excitement model"))
@@ -694,6 +696,61 @@ def test_a_single_season_range_shows_the_toggle_off_and_disabled(
     expect(box).not_to_be_checked()
     expect(_season_head(guarded_page)).to_have_count(0)
     assert "perseason" not in guarded_page.url
+
+
+def test_a_per_season_row_with_mixed_era_flags_keeps_its_viewers_figure(
+    guarded_page: Page,
+    serve_crews: Callable[[Page], None],
+    open_app: Callable[[Page, str], None],
+) -> None:
+    serve_crews(guarded_page)
+    open_app(guarded_page, "?view=crews")
+    _show_all(guarded_page)
+    rows = _row(guarded_page, "Brk Pbp").filter(has_text="2025")
+    expect(rows).to_have_count(1)
+    viewers = rows.locator("td.num").nth(2)
+    expect(viewers.locator(".crews-figure")).to_have_count(1)
+    expect(viewers.locator(".caption")).to_have_text("(2)")
+    expect(viewers).not_to_contain_text("see Per season")
+
+
+def test_per_season_opens_season_newest_first_then_games_called(
+    guarded_page: Page,
+    serve_crews: Callable[[Page], None],
+    open_app: Callable[[Page, str], None],
+) -> None:
+    serve_crews(guarded_page)
+    open_app(guarded_page, "?view=crews")
+    assert _sort_label(guarded_page, "season") == "descending"
+    assert _sort_label(guarded_page, "games") == "none"
+    _show_all(guarded_page)
+    cells = guarded_page.locator("#crews-panel tbody td.crews-season")
+    seasons = [int(t) for t in cells.all_inner_texts()]
+    assert seasons == sorted(seasons, reverse=True)
+    first = seasons[0]
+    games = [
+        int(row.locator("td.num").first.inner_text())
+        for row in guarded_page.locator("#crews-panel tbody tr.crews-row").all()
+        if row.locator("td.crews-season").inner_text() == str(first)
+    ]
+    assert games == sorted(games, reverse=True)
+    assert _state(guarded_page)["csort"] is None
+    assert "csort" not in guarded_page.url
+    # Season: default (desc) -> asc -> back to the default; Games called leaves it and returns.
+    season_btn = "#crews-panel button[data-sort-key=season]"
+    guarded_page.locator(season_btn).click()
+    assert _sort_label(guarded_page, "season") == "ascending"
+    guarded_page.locator(season_btn).click()
+    assert _sort_label(guarded_page, "season") == "descending"
+    assert _state(guarded_page)["csort"] is None
+    games_btn = "#crews-panel button[data-sort-key=games]"
+    guarded_page.locator(games_btn).click()
+    assert _sort_label(guarded_page, "games") == "descending"
+    assert "csort=games" in guarded_page.url
+    guarded_page.locator(games_btn).click()
+    guarded_page.locator(games_btn).click()
+    assert _sort_label(guarded_page, "season") == "descending"
+    assert "csort" not in guarded_page.url
 
 
 # -- 14-10: viewer figures in table columns carry a fixed one decimal -----------------------

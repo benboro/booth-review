@@ -38,14 +38,14 @@
  */
 
 import { MAX_COMPARE, defaultState } from './select.js';
-import { CREW_KEY_RE, NATURAL_DIR, crewIndex } from './crew-groups.js';
+import { CREW_KEY_RE, NATURAL_DIR, crewIndex, defaultSort } from './crew-groups.js';
 
 /** Canonical time-slot order used both for encoding and decoding the `slot` param. */
 // Y measures a link may name; Viewers is the default and is never encoded (04.17 D-19).
 const Y_VALUES = ['excitement', 'points', 'margin'];
-// Crews table sort keys a link may name (Phase 14); the default is Games called descending.
+// Crews table sort keys a link may name (Phase 14). The default depends on the mode: Season newest
+// first (then Games called) when rows are per season, else Games called descending; it encodes to nothing.
 const CSORT_RE = /^(crew|season|rank|network|games|exc|viewers)(\.(asc|desc))?$/;
-const CSORT_DEFAULT = 'games';
 // Booth tiers in canonical order (Phase 10 D-12).
 const BOOTH_ORDER = ['a', 'b', 'other'];
 const SLOT_ORDER = ['noon', 'afternoon', 'prime', 'late'];
@@ -56,6 +56,13 @@ function isAllPrimaryNetworks(networkIds, allPrimaryIds) {
     networkIds.length === allPrimaryIds.length &&
     allPrimaryIds.every((id) => networkIds.includes(id))
   );
+}
+
+/** Per season applies when the preference is on and the Seasons range holds two or more seasons. */
+function perSeasonApplies(state, data) {
+  const lo = state.seasons ? state.seasons[0] : data.seasonMin;
+  const hi = state.seasons ? state.seasons[1] : data.seasonMax;
+  return state.perseason !== false && data.seasons.filter((s) => s >= lo && s <= hi).length >= 2;
 }
 
 /**
@@ -134,7 +141,8 @@ export function encodeState(state, data) {
   if (state.csort != null && CSORT_RE.test(state.csort.key)) {
     const { key, dir } = state.csort;
     const natural = NATURAL_DIR[key];
-    const isDefault = key === CSORT_DEFAULT && dir === NATURAL_DIR[CSORT_DEFAULT];
+    const def = defaultSort(perSeasonApplies(state, data));
+    const isDefault = key === def.key && dir === def.dir;
     if (!isDefault) params.push(['csort', dir === natural ? key : `${key}.${dir}`]);
   }
 
@@ -385,7 +393,8 @@ export function decodeState(search, data) {
     const dir = csortMatch[3] ?? NATURAL_DIR[key];
     const modeOk = key !== 'rank' || state.cmode === 'crew';
     const seasonOk = key !== 'season' || (state.perseason && seasonsInRange >= 2);
-    const isDefault = key === CSORT_DEFAULT && dir === NATURAL_DIR[CSORT_DEFAULT];
+    const def = defaultSort(state.perseason && seasonsInRange >= 2);
+    const isDefault = key === def.key && dir === def.dir;
     if (modeOk && seasonOk && !isDefault && NATURAL_DIR[key] !== undefined) state.csort = { key, dir };
   }
 
