@@ -124,22 +124,16 @@ def test_phone_announcers_list_has_no_horizontal_scroll(
     assert sizes[0] <= sizes[1]
 
 
-# 04.15 D-02: the width at which the summary moves beside the person box. It is the
-# `@media (min-width: ...)` that carries the 61px reserve in site/style.css.
-BESIDE_MIN_WIDTH = 1104
-# The 91px tier starts here (the box stops wrapping its buttons); below it the box wraps
-# and the reserve is 127px.
-ONE_ROW_MIN_WIDTH = 752
-TIER_WIDTHS = [1280, BESIDE_MIN_WIDTH, BESIDE_MIN_WIDTH - 8, 800, ONE_ROW_MIN_WIDTH, 481]
+# 13-UI-SPEC C2: the selection band is a fixed 64px (32px row, 8px, 24px summary line)
+# at every width and font. Below 1104px the toggles use their short labels.
+BAND_PX = 64
+LONG_LABEL_MIN_WIDTH = 1104
+TIER_WIDTHS = [1280, LONG_LABEL_MIN_WIDTH, LONG_LABEL_MIN_WIDTH - 1, 800, 481]
 FONTS = ["default", "dejavu", "wide"]
 
-# The fixture person with the longest name (the widest one-person box).
+# The fixture person with the longest name (the widest one-person chip).
 LONGEST_NAME_QUERY = "?people=dale-harlow-jr"
-
-_NATURAL_JS = """() => { const bar = document.getElementById('selection-bar');
-  const old = bar.style.minHeight; bar.style.minHeight = '0px';
-  const natural = bar.getBoundingClientRect().height; bar.style.minHeight = old;
-  return [natural, parseFloat(getComputedStyle(bar).minHeight)]; }"""
+FOUR_PICKS = "?people=dale-harlow,kris-venn,sam-delgado,pat-rowan&mode=compare"
 
 
 @pytest.mark.parametrize("font_setting", FONTS, indirect=True)
@@ -147,38 +141,90 @@ _NATURAL_JS = """() => { const bar = document.getElementById('selection-bar');
 def test_selection_band_height_is_fixed(
     guarded_page: Page, open_app: Callable[[Page, str], None], width: int
 ) -> None:
+    """0, 1 and 4 picks all give a 64px band with a 32px row, and the legend row
+    (the next block down) never moves."""
     guarded_page.set_viewport_size({"width": width, "height": 800})
     open_app(guarded_page, "")
     y0 = _y(guarded_page, "#legend-chips")
-    h0 = _height(guarded_page, "#selection-bar")
-    open_app(guarded_page, "?people=dale-harlow")
-    assert abs(_y(guarded_page, "#legend-chips") - y0) <= 0.5
-    assert abs(_height(guarded_page, "#selection-bar") - h0) <= 0.5
+    assert _height(guarded_page, "#selection-bar") == BAND_PX
+    assert _height(guarded_page, "#selection-row") == 32
+    for query in ("?people=dale-harlow", LONGEST_NAME_QUERY, FOUR_PICKS):
+        open_app(guarded_page, query)
+        assert abs(_y(guarded_page, "#legend-chips") - y0) <= 0.5, query
+        assert _height(guarded_page, "#selection-bar") == BAND_PX, query
+        assert _height(guarded_page, "#selection-row") == 32, query
     guarded_page.click("#clear-selection")
     assert abs(_y(guarded_page, "#legend-chips") - y0) <= 0.5
 
 
-@pytest.mark.parametrize("font_setting", FONTS, indirect=True)
-@pytest.mark.parametrize("width", TIER_WIDTHS)
-def test_selection_band_reserve_has_small_headroom(
-    guarded_page: Page, open_app: Callable[[Page, str], None], width: int, font_setting: str
+def test_selection_row_has_no_box(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """The reserve is the natural one-person height plus a little: too small shifts the chart,
-    too large leaves the gap this phase set out to shrink."""
+    """D-03: chips and toggles sit directly on the page, no violet box around the row."""
+    guarded_page.set_viewport_size({"width": 1280, "height": 800})
+    open_app(guarded_page, "?people=dale-harlow")
+    style = guarded_page.eval_on_selector(
+        "#selection-row",
+        "el => { const s = getComputedStyle(el); return [s.borderTopWidth, s.borderTopStyle,"
+        " s.backgroundColor, s.paddingTop]; }",
+    )
+    assert style[0] == "0px"
+    assert style[2] == "rgba(0, 0, 0, 0)"
+
+
+@pytest.mark.parametrize("width", [1280, 481])
+def test_chips_truncate_between_64_and_160px_with_the_full_name(
+    guarded_page: Page, open_app: Callable[[Page, str], None], width: int
+) -> None:
     guarded_page.set_viewport_size({"width": width, "height": 800})
-    open_app(guarded_page, LONGEST_NAME_QUERY)
-    natural, reserve = guarded_page.evaluate(_NATURAL_JS)
-    print(f"MEASURED {font_setting} {width}px natural={natural:.1f} reserve={reserve:.1f}")
-    assert 2 <= reserve - natural <= 8
+    open_app(guarded_page, FOUR_PICKS)
+    chips = guarded_page.locator("#chips .chip")
+    assert chips.count() == 4
+    for i in range(chips.count()):
+        chip = chips.nth(i)
+        box = chip.bounding_box()
+        assert box is not None
+        assert 64 - 0.5 <= box["width"] <= 160 + 0.5
+        assert box["height"] == 28
+        name = chip.get_attribute("title")
+        assert name
+        assert name in (chip.get_attribute("aria-label") or "")
+    row = guarded_page.locator("#selection-row").bounding_box()
+    assert row is not None
+    assert row["height"] == 32
 
 
-def test_phone_selection_band_has_no_reserve(
-    mobile_page: Page, open_app: Callable[[Page, str], None]
+@pytest.mark.parametrize(
+    ("width", "long_labels"),
+    [(LONG_LABEL_MIN_WIDTH, True), (LONG_LABEL_MIN_WIDTH - 1, False), (800, False)],
+)
+def test_toggles_switch_to_short_labels_below_1104px(
+    guarded_page: Page, open_app: Callable[[Page, str], None], width: int, long_labels: bool
 ) -> None:
-    """Phones drop the one-person reserve (user, 2026-10-13): the band hugs its content."""
-    open_app(mobile_page, "")
-    _, reserve = mobile_page.evaluate(_NATURAL_JS)
-    assert reserve == 0
+    guarded_page.set_viewport_size({"width": width, "height": 800})
+    open_app(guarded_page, "?people=dale-harlow")
+    expected = (
+        ["Compare people", "Called together", "Clear selection"]
+        if long_labels
+        else ["Compare", "Together", "Clear"]
+    )
+    for selector, label in zip(
+        ["#compare-toggle", "#together-toggle", "#clear-selection"], expected, strict=True
+    ):
+        assert guarded_page.locator(selector).inner_text().strip().lstrip("\u2713\u00d7 ") == label
+    # The full name is always the accessible name.
+    assert guarded_page.get_attribute("#compare-toggle", "aria-label") == "Compare people"
+
+
+def test_compare_note_sits_inside_the_summary_box_without_a_new_row(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """D-03: the transient "up to 4" note lives inside #summary and never grows the band."""
+    guarded_page.set_viewport_size({"width": 1280, "height": 800})
+    open_app(guarded_page, FOUR_PICKS)
+    assert guarded_page.locator("#summary #compare-note").count() == 1
+    assert _height(guarded_page, "#selection-bar") == BAND_PX
+    assert _height(guarded_page, "#summary") == 24
 
 
 def _gap_under_summary(page: Page) -> float:
@@ -212,8 +258,8 @@ def test_phone_summary_gap_is_reclaimed(
 
 
 @pytest.mark.parametrize("font_setting", FONTS, indirect=True)
-@pytest.mark.parametrize("width", [1280, BESIDE_MIN_WIDTH])
-def test_beside_layout_puts_summary_right_of_the_box(
+@pytest.mark.parametrize("width", [1280, LONG_LABEL_MIN_WIDTH])
+def test_summary_sits_under_the_row_with_polite_live_region(
     guarded_page: Page, open_app: Callable[[Page, str], None], width: int
 ) -> None:
     guarded_page.set_viewport_size({"width": width, "height": 800})
@@ -222,8 +268,7 @@ def test_beside_layout_puts_summary_right_of_the_box(
     summary = guarded_page.locator("#summary").bounding_box()
     assert row is not None
     assert summary is not None
-    assert summary["x"] >= row["x"] + row["width"] + 7
-    assert abs((summary["y"] + summary["height"] / 2) - (row["y"] + row["height"] / 2)) <= 4
+    assert summary["y"] >= row["y"] + row["height"] - 0.5
     assert guarded_page.get_attribute("#summary", "aria-live") == "polite"
     detail = guarded_page.locator("#summary-detail")
     assert detail.get_attribute("title") == detail.inner_text()
@@ -233,7 +278,7 @@ def test_beside_layout_puts_summary_right_of_the_box(
 def test_below_the_breakpoint_the_summary_sits_under_the_box(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    guarded_page.set_viewport_size({"width": BESIDE_MIN_WIDTH - 8, "height": 800})
+    guarded_page.set_viewport_size({"width": LONG_LABEL_MIN_WIDTH - 8, "height": 800})
     open_app(guarded_page, LONGEST_NAME_QUERY)
     row = guarded_page.locator("#selection-row").bounding_box()
     summary = guarded_page.locator("#summary").bounding_box()
@@ -363,36 +408,27 @@ def test_summary_title_is_smaller(
     assert size == "20px"
 
 
-@pytest.mark.parametrize("scheme", ["light", "dark"])
-def test_announcers_trigger_is_the_special_filter(
-    guarded_page: Page, open_app: Callable[[Page, str], None], scheme: str
+def test_announcers_trigger_is_a_plain_filter_that_takes_the_accent_when_changed(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
+    """D-04 / C7: Announcers has no colour of its own. At rest it matches the other
+    triggers; with a pick it uses the accent like any changed filter (accent use 1)."""
     guarded_page.set_viewport_size({"width": 1280, "height": 800})
-    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
     open_app(guarded_page, "")
-    special = _token(guarded_page, "--special")
-    on_special = _token(guarded_page, "--on-special")
-    reset = _token(guarded_page, "--reset")
-    border = _token(guarded_page, "--border")
+    accent = _token(guarded_page, "--accent")
+    accent_soft = _token(guarded_page, "--accent-soft")
     style_js = (
         "el => { const s = getComputedStyle(el);"
         "return [s.borderTopColor, s.color, s.backgroundColor]; }"
     )
-
     rest: list[str] = guarded_page.eval_on_selector("#trigger-announcers", style_js)
-    assert rest[0] == special
-    assert rest[1] == special
-    assert rest[1] != reset
+    seasons: list[str] = guarded_page.eval_on_selector("#trigger-seasons", style_js)
+    assert rest == seasons
     bg = guarded_page.evaluate("getComputedStyle(document.body).backgroundColor")
     assert _contrast_ratio(_parse_rgb(rest[1]), _parse_rgb(bg)) >= 4.5
-    seasons: str = guarded_page.eval_on_selector(
-        "#trigger-seasons", "el => getComputedStyle(el).borderTopColor"
-    )
-    assert seasons == border
 
     open_app(guarded_page, "?people=dale-harlow")
     active: list[str] = guarded_page.eval_on_selector("#trigger-announcers", style_js)
-    assert active[2] == special
-    assert active[1] == on_special
-    assert active[1] != reset
+    assert active[0] == accent
+    assert active[2] == accent_soft
     assert _contrast_ratio(_parse_rgb(active[1]), _parse_rgb(active[2])) >= 4.5
