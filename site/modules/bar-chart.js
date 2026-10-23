@@ -703,6 +703,7 @@ export function spineGapPx(longestPx) {
  */
 export function buildButterflyFigure(model, rows, env) {
   const { theme, mobile } = env;
+  const matched = env.matched === true;
   const stacked = model.mode === 'stacked';
   const gap = mobile ? SEGMENT_GAP.phone : SEGMENT_GAP.desktop;
   const labelMax = mobile ? LABEL_MAX : SPINE_LABEL_MAX;
@@ -722,14 +723,14 @@ export function buildButterflyFigure(model, rows, env) {
       const axes = side === 0
         ? { piece: 'x', overlay: 'x3', text: 'x5' }
         : { piece: 'x2', overlay: 'x4', text: 'x6' };
-      const parts = family ? familyParts(theme) : plainParts(theme);
+      const parts = family ? familyParts(theme) : plainParts(theme, matched);
       traces = traces.concat(
-        stackedTraces(wrapped, (r) => r.__side.segments, parts, side, theme, axes, gap),
+        stackedTraces(wrapped, (r) => r.__side.segments, parts, side, theme, axes, gap, matched),
       );
     } else {
       const axis = side === 0 ? 'x' : 'x2';
       traces = traces.concat(
-        simpleTraces(wrapped, (r) => r.__side.total, (r) => r.__side.rated, side, theme, axis),
+        simpleTraces(wrapped, (r) => r.__side.total, (r) => r.__side.rated, side, theme, axis, matched),
       );
     }
   }

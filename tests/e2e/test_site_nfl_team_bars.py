@@ -416,6 +416,33 @@ def test_click_selects_team_and_fills_games_and_breakdown(
     assert app.evaluate("window.__nflTestHooks.getTableIndexes()") == []
 
 
+def test_end_markers_are_ink_until_a_team_is_picked_then_accent(app: Page) -> None:
+    """UI-SPEC ranked bars: end markers (--ink at 80%) with a value column; the picked
+    team's marker takes the accent."""
+    layout = f"document.querySelector('{GD}').layout"
+    fills = app.evaluate(f"{layout}.shapes.map(s => s.fillcolor)")
+    assert fills
+    hero = app.evaluate(
+        """async () => { const P = await import('./modules/palette.js');
+          return {ink: P.mixHex(P.INK.light, P.PAGE_BG.light, 0.8), accent: P.SPECIAL.light,
+                  bg: P.PAGE_BG.light}; }"""
+    )
+    assert set(fills) == {hero["ink"]}
+    ring = app.evaluate(f"{layout}.shapes.map(s => [s.line.color, s.line.width])")
+    assert all(r == [hero["bg"], 2] for r in ring)
+    annos = app.evaluate(f"{layout}.annotations")
+    totals = [a for a in annos if a.get("name") == "total"]
+    values = [a for a in annos if a.get("name") == "value"]
+    assert len(totals) == len(fills) == len(values)
+    assert all(a["font"]["weight"] == 600 for a in totals)
+    assert all((v["xref"], v["xanchor"]) == ("paper", "right") for v in values)
+    _emit(app, "plotly_click", 0)
+    app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
+    picked = app.evaluate(f"{layout}.shapes.map(s => s.fillcolor)")
+    assert picked[0] == hero["accent"] == "#1B4F5C"
+    assert set(picked[1:]) == {hero["ink"]}
+
+
 def test_breakdown_rows_match_fixture(app: Page, nfl_fixture_raw: dict[str, Any]) -> None:
     sp = _special_rows(nfl_fixture_raw, 2024, 2026)
     # F-owls (index 3): Thursday night one week, AGOTW another, in 2026 (special 2).
