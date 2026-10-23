@@ -423,6 +423,50 @@ FONT_CSS: dict[str, str] = {
 }
 
 
+def measure_gap(page: Page, upper_selector: str, lower_selector: str) -> float:
+    """Vertical gap in px: the lower element's top minus the upper element's bottom."""
+    return float(
+        page.evaluate(
+            """([upper, lower]) => {
+              const a = document.querySelector(upper).getBoundingClientRect();
+              const b = document.querySelector(lower).getBoundingClientRect();
+              return b.top - a.bottom;
+            }""",
+            [upper_selector, lower_selector],
+        )
+    )
+
+
+def element_height(page: Page, selector: str) -> float:
+    """Rendered height in px of the first element matching `selector`."""
+    return float(
+        page.evaluate(
+            "(sel) => document.querySelector(sel).getBoundingClientRect().height",
+            selector,
+        )
+    )
+
+
+def logo_images(page: Page, scope_selector: str) -> list[dict[str, Any]]:
+    """Every `<img>` under `scope_selector` with its src, alt, title, rendered
+    size and natural width, for logo size and attribution checks."""
+    result: list[dict[str, Any]] = page.evaluate(
+        """(scope) => [...document.querySelectorAll(scope + ' img')].map((img) => {
+          const r = img.getBoundingClientRect();
+          return {
+            src: img.getAttribute('src'),
+            alt: img.getAttribute('alt'),
+            title: img.getAttribute('title'),
+            width: r.width,
+            height: r.height,
+            naturalWidth: img.naturalWidth,
+          };
+        })""",
+        scope_selector,
+    )
+    return result
+
+
 @pytest.fixture
 def font_setting(request: pytest.FixtureRequest) -> str:
     """The font stack the page renders in. Geometry tests parametrize this
