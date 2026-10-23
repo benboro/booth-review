@@ -321,7 +321,7 @@ def test_phone_sheet_section_badge_and_touch_targets(
     mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(mobile_page, "?game=lakeshore")
-    assert mobile_page.locator("#filters-button").inner_text() == "Filters (1)"
+    assert mobile_page.locator("#filters-button").inner_text() == "Filters · 1 changed"
     mobile_page.click("#filters-button")
     sibling = mobile_page.evaluate(
         "() => document.getElementById('filter-game').previousElementSibling.id"

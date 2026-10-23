@@ -18,8 +18,9 @@ pytestmark = pytest.mark.e2e
 
 # Row pitches (y distance between consecutive rows' top edges) measured at
 # 1280x800 on the CSS before plan 04.2-12; the D-29 fix must not change them.
-KICKOFF_PITCH = 35.59
-CONFERENCE_PITCH = 35.59
+# Re-measured in Phase 13 (14px type scale, 20/12px tokens): rows are 37px apart.
+KICKOFF_PITCH = 37.0
+CONFERENCE_PITCH = 37.0
 
 _LONG_NAME = "The Extraordinarily Long Synthetic Conference Network"
 

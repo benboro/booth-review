@@ -515,28 +515,32 @@ def test_clear_all_filters_also_clears_people(
     assert state["school"] == []
     assert state["compare"] is False
     assert state["together"] is False
-    expect(guarded_page.locator("#selection-row")).to_be_hidden()
+    # The selection row is always rendered now (C1); it keeps Clear all filters
+    # and drops the chips.
+    expect(guarded_page.locator("#selection-row")).to_be_visible()
+    expect(guarded_page.locator("#chips li")).to_have_count(0)
+    assert guarded_page.locator("#toolbar .is-changed").count() == 0
 
 
 def test_phone_filters_button_count_includes_selected_people(
     mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-27: the phone `Filters(N)` badge counts selected announcers too,
-    since the Announcers picker lives inside the same Filters sheet."""
+    """D-27: the phone "Filters · N changed" label counts a selected announcer
+    as a changed control, since the Announcers picker lives inside the same
+    Filters sheet."""
     open_app(mobile_page, "?people=dale-harlow")
-    expect(mobile_page.locator("#filters-button")).to_have_text("Filters (1)")
+    expect(mobile_page.locator("#filters-button")).to_have_text("Filters · 1 changed")
 
 
 def test_toolbar_order_and_clear_all_contrast(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-02/SITE-27: "Clear all filters" is the first visible toolbar item,
-    followed by the Announcers trigger and the other filter triggers in
-    order (D-21). D-25: its computed color against the *toolbar's own*
-    background (its own background is transparent) clears WCAG AA's 4.5:1
-    minimum, and its color/border-top-color differ from a plain filter
-    trigger's -- a style distinct from the filter buttons, not the Phase 4
-    low-contrast secondary tone."""
+    """D-02/SITE-27 (C1): the filter bar holds the ten triggers in order
+    (D-21) and "Clear all filters" is the right end of the selection row, not
+    a bar item. D-25: its computed color against the selection row's own
+    background (the page) clears WCAG AA's 4.5:1 minimum, and its color/border-top-color
+    differ from a plain filter trigger's -- the `--ink` outline style, neither
+    accent nor the old red."""
     open_app(guarded_page, "")
 
     ids = guarded_page.evaluate(
@@ -544,7 +548,6 @@ def test_toolbar_order_and_clear_all_contrast(
         ".filter((el) => getComputedStyle(el).display !== 'none').map((el) => el.id)"
     )
     assert ids == [
-        "clear-filters",
         "trigger-announcers",
         "trigger-seasons",
         "trigger-networks",
@@ -557,40 +560,49 @@ def test_toolbar_order_and_clear_all_contrast(
         "trigger-booth",
     ]
 
+    # Clear all filters sits inside the selection row, after the chips and toggles.
+    assert guarded_page.locator("#selection-row > #clear-filters").count() == 1
+    assert guarded_page.locator("#toolbar #clear-filters").count() == 0
+
     styles = guarded_page.evaluate(
-        "() => { const toolbarBg = getComputedStyle(document.getElementById('toolbar'))"
+        "() => { const toolbarBg = getComputedStyle(document.body)"
         ".backgroundColor; "
         "const clear = getComputedStyle(document.getElementById('clear-filters')); "
         "const trig = getComputedStyle(document.getElementById('trigger-seasons')); "
         "return { toolbarBg, clearColor: clear.color, clearBorderTop: clear.borderTopColor, "
+        "clearWeight: clear.fontWeight, "
         "trigColor: trig.color, trigBorderTop: trig.borderTopColor }; }"
     )
     fg = _parse_rgb(styles["clearColor"])
     bg = _parse_rgb(styles["toolbarBg"])
     assert _contrast_ratio(fg, bg) >= 4.5
-    assert styles["clearColor"] != styles["trigColor"]
+    # Same ink text as a trigger, told apart by its ink border and 600 weight.
+    assert styles["clearBorderTop"] == "rgb(35, 32, 27)"
     assert styles["clearBorderTop"] != styles["trigBorderTop"]
+    assert styles["clearWeight"] == "600"
 
 
-def test_chrome_buttons_use_the_theme_text_color_in_dark_mode(
+def test_chrome_buttons_use_the_theme_text_color(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """Buttons don't inherit `color`, so without an explicit rule the toolbar/
-    sheet/panel controls fall back to the UA's button text color, unreadable
-    against the dark theme's background. "Clear all filters" no longer
-    belongs in this list (D-25 gives it its own distinct `--reset` color);
-    Clear selection (D-25a) takes its place, checked with a person selected
-    so it's visible."""
-    guarded_page.emulate_media(color_scheme="dark")
+    panel controls fall back to the UA's button text color. Clear selection
+    (D-25a) is checked with a person selected so it's visible. The phone
+    Filters button turns to the accent once a control differs from a clean
+    load (the selected person), which is the one intended exception."""
     open_app(guarded_page, "")
     _add_person_by_query(guarded_page, "Dale Harlow")
     colors = guarded_page.evaluate(
         "() => { const body = getComputedStyle(document.body).color; "
-        "return ['#filters-button', '#panel-close', '#trigger-seasons', '#clear-selection']"
+        "return ['#panel-close', '#trigger-seasons', '#clear-selection']"
         ".map(sel => [sel, getComputedStyle(document.querySelector(sel)).color, body]); }"
     )
     for selector, color, body_color in colors:
         assert color == body_color, selector
+    assert (
+        guarded_page.evaluate("getComputedStyle(document.querySelector('#filters-button')).color")
+        == "rgb(27, 79, 92)"
+    )
 
 
 @pytest.mark.parametrize(
@@ -1019,7 +1031,8 @@ def test_mobile_filters_sheet(mobile_page: Page, open_app: Callable[[Page, str],
 
     mobile_page.check("input[name='slot'][value='prime']")
     mobile_page.wait_for_function("location.search.includes('slot=prime')")
-    expect(filters_button).to_have_text("Filters (1)")
+    expect(filters_button).to_have_text("Filters · 1 changed")
+    expect(mobile_page.locator("#filters-show-results")).to_have_text("Show games")
 
     mobile_page.click("#filters-show-results")
     mobile_page.wait_for_function(
@@ -1043,7 +1056,10 @@ def test_mobile_filters_button_badge_reflects_school_filter(
     mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(mobile_page, "?school=northfield")
-    expect(mobile_page.locator("#filters-button")).to_have_text("Filters (1)")
+    expect(mobile_page.locator("#filters-button")).to_have_text("Filters · 1 changed")
+    chips = mobile_page.locator("#filter-chips li")
+    expect(chips).to_have_count(1)
+    assert "School" in chips.first.inner_text()
 
 
 _POPOVER_TRIGGERS = (
@@ -1343,16 +1359,13 @@ def test_group_reset_and_clear_all_stay_consistent(
     assert states == ["true"] * 10
 
 
-@pytest.mark.parametrize("scheme", ["light", "dark"])
 def test_group_reset_text_meets_aa_contrast_enabled_and_disabled(
     guarded_page: Page,
     open_app: Callable[[Page, str], None],
-    scheme: str,
 ) -> None:
     """A4: the Reset text (enabled --reset, dimmed --muted) clears WCAG AA
-    4.5:1 against the popover background in both themes -- dimming is by
+    4.5:1 against the popover background (light only since Phase 13) -- dimming is by
     color, never opacity."""
-    guarded_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
     open_app(guarded_page, "?role=pbp")
     colors = guarded_page.evaluate(
         "() => ({"
@@ -2153,11 +2166,9 @@ def test_only_button_reveal_on_desktop(
     assert opacity() == "1"
 
 
-@pytest.mark.parametrize("scheme", ["light", "dark"])
 def test_only_button_touch_contrast_and_target(
-    mobile_page: Page, open_app: Callable[[Page, str], None], scheme: str
+    mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    mobile_page.emulate_media(color_scheme=scheme)  # type: ignore[arg-type]
     open_app(mobile_page, "")
     assert mobile_page.evaluate("matchMedia('(hover: none)').matches")
     mobile_page.click("#filters-button")
@@ -2168,12 +2179,12 @@ def test_only_button_touch_contrast_and_target(
     btn.scroll_into_view_if_needed()
     assert btn.evaluate("el => getComputedStyle(el).opacity") == "1"
     color = btn.evaluate("el => getComputedStyle(el).color")
-    muted_weak = mobile_page.evaluate(
+    muted = mobile_page.evaluate(
         "(() => { const s = document.createElement('span');"
-        "s.style.color = 'var(--muted-weak)'; document.body.append(s);"
+        "s.style.color = 'var(--muted)'; document.body.append(s);"
         "const c = getComputedStyle(s).color; s.remove(); return c; })()"
     )
-    assert color == muted_weak
+    assert color == muted
     bg = mobile_page.evaluate("getComputedStyle(document.body).backgroundColor")
     assert _contrast_ratio(_parse_rgb(color), _parse_rgb(bg)) >= 3.0
     box = btn.bounding_box()
@@ -2181,3 +2192,93 @@ def test_only_button_touch_contrast_and_target(
     assert box is not None and row is not None
     assert box["width"] >= 44 and box["height"] >= 44
     assert abs((box["x"] + box["width"]) - (row["x"] + row["width"])) <= 1
+
+
+def test_phone_filters_button_and_chips_follow_changed_controls(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """SHELL-03 phone: a clean load reads "Filters" with no chips and no accent;
+    two changed controls read "Filters · 2 changed" in the accent, with one
+    accent chip per changed control, in toolbar order."""
+    open_app(mobile_page, "")
+    button = mobile_page.locator("#filters-button")
+    expect(button).to_have_text("Filters")
+    assert "is-changed" not in (button.get_attribute("class") or "")
+    expect(mobile_page.locator("#filter-chips")).to_be_hidden()
+
+    open_app(mobile_page, "?school=northfield&seasons=2019-2025")
+    expect(button).to_have_text("Filters · 2 changed")
+    styles = button.evaluate(
+        "el => { const s = getComputedStyle(el);"
+        " return [s.borderTopColor, s.backgroundColor, s.color]; }"
+    )
+    assert styles == ["rgb(27, 79, 92)", "rgb(227, 237, 239)", "rgb(27, 79, 92)"]
+    chips = mobile_page.locator("#filter-chips li button")
+    expect(chips).to_have_count(2)
+    texts = chips.all_inner_texts()
+    assert texts[0].startswith("Seasons")
+    assert texts[1].startswith("School")
+    chip_colors = chips.first.evaluate(
+        "el => { const s = getComputedStyle(el); return [s.borderTopColor, s.backgroundColor]; }"
+    )
+    assert chip_colors == ["rgb(27, 79, 92)", "rgb(227, 237, 239)"]
+
+
+def test_changed_predicate_matches_a_clean_load(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """SHELL-03: "changed" means differs from a clean load. Changing a control
+    and reverting it leaves nothing changed; the changed trigger carries the
+    accent border, --accent-soft fill and a 600 label, with the full summary in
+    title and aria-label and the value on its own span."""
+    open_app(guarded_page, "")
+    assert guarded_page.locator("#toolbar .is-changed").count() == 0
+    clean = guarded_page.evaluate("window.__testHooks.getState()")
+
+    _open_filter(guarded_page, "school")
+    guarded_page.check("#school-list input[value='northfield']")
+    guarded_page.wait_for_function("location.search.includes('school=northfield')")
+    trigger = guarded_page.locator("#trigger-school")
+    assert "is-changed" in (trigger.get_attribute("class") or "")
+    style = trigger.evaluate(
+        "el => { const s = getComputedStyle(el);"
+        " return [s.borderTopColor, s.backgroundColor,"
+        " getComputedStyle(el.querySelector('.filter-label')).fontWeight,"
+        " getComputedStyle(el.querySelector('.filter-value')).fontWeight]; }"
+    )
+    assert style == ["rgb(27, 79, 92)", "rgb(227, 237, 239)", "600", "400"]
+    assert trigger.locator(".filter-label").inner_text() == "School"
+    assert trigger.locator(".filter-value").inner_text() == ": Northfield"
+    assert trigger.get_attribute("title") == "School: Northfield"
+    assert trigger.get_attribute("aria-label") == "School: Northfield"
+
+    guarded_page.keyboard.press("Escape")
+    _open_filter(guarded_page, "school")
+    guarded_page.uncheck("#school-list input[value='northfield']")
+    guarded_page.wait_for_function("!location.search.includes('school=')")
+    guarded_page.keyboard.press("Escape")
+    assert guarded_page.locator("#toolbar .is-changed").count() == 0
+    assert guarded_page.locator("#trigger-school .filter-value").inner_text() == ""
+    assert guarded_page.evaluate("window.__testHooks.getState()") == clean
+
+
+def test_clear_all_filters_sits_at_the_right_end_of_the_selection_row(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """C1: Clear all filters is the last item in the always-rendered selection
+    row, flush with its right edge, and resets every control to its clean-load
+    value (changed state included)."""
+    open_app(guarded_page, "?school=northfield&seasons=2019-2025&people=dale-harlow")
+    assert guarded_page.locator("#toolbar .is-changed").count() >= 3
+    box = guarded_page.locator("#clear-filters").bounding_box()
+    row = guarded_page.locator("#selection-row").bounding_box()
+    assert box is not None and row is not None
+    assert abs((box["x"] + box["width"]) - (row["x"] + row["width"])) <= 1
+    last = guarded_page.evaluate("document.querySelector('#selection-row').lastElementChild.id")
+    assert last == "clear-filters"
+    guarded_page.click("#clear-filters")
+    guarded_page.wait_for_function("location.search === ''")
+    assert guarded_page.locator("#toolbar .is-changed").count() == 0
+    state = guarded_page.evaluate("window.__testHooks.getState()")
+    assert state["people"] == []
+    assert state["school"] == []
