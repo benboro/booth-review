@@ -584,3 +584,23 @@ def test_chart_container_hugs_the_plot_for_six_teams(
     )
     assert got["rows"] == 6
     assert got["gap"] <= 4
+
+
+@pytest.mark.parametrize("width", (360, 390, 1440))
+def test_end_markers_stay_inside_the_plot(mobile: Page, width: int) -> None:
+    """WR-08: the marker headroom accounts for the automargined team-name column, so the
+    longest bar's end marker is not clipped at the plot's right edge."""
+    mobile.set_viewport_size({"width": width, "height": 844})
+    mobile.wait_for_timeout(300)
+    _vm(mobile)
+    over = mobile.evaluate(
+        f"""() => {{
+          const gd = document.querySelector('{GD}');
+          const xa = gd._fullLayout.xaxis;
+          return (gd.layout.shapes || [])
+            .filter((s) => s.name === 'end-marker')
+            .map((s) => xa.l2p(s.xanchor) + s.x1 - xa._length);
+        }}"""
+    )
+    assert over, "no end markers drawn"
+    assert max(over) <= 0.5, over

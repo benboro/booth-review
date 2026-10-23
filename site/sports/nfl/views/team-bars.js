@@ -15,7 +15,7 @@ import { initBandInfo } from '../../../modules/band-info.js';
 import { MARGIN, TICK_FONT_PX } from '../../../modules/chart.js';
 import { categoryColor } from '../palette.js';
 import { ACCENT, INK, MUTED, PAGE_BG, DIVIDER, SPECIAL, mixHex } from '../../../modules/palette.js';
-import { frameConfig, frameLayout } from '../../../modules/chart-frame.js';
+import { FRAME_FONT, frameConfig, frameLayout } from '../../../modules/chart-frame.js';
 import {
   endMarkerAnnotations,
   endMarkerShapes,
@@ -37,6 +37,8 @@ const SLOT_ORDER = [
 const CONFIG = frameConfig();
 const HERO_INK_WEIGHT = 0.8;
 const VALUE_COL_PX = 12;
+// Gap Plotly leaves between a y tick label and the plot when automargin sizes the left edge.
+const LABEL_PAD_PX = 4;
 
 /** Round tick step (1, 2, 5, 10, 20, 25, 50, ...) giving 4-8 ticks over max. */
 export function niceStep(max) {
@@ -454,7 +456,10 @@ function buildFigure(rows, state, env, th) {
   const markerRows = totals.map((total) => ({ total }));
   const columnPx = Math.ceil(textWidth(String(Math.max(max, 1)), { size: 14 })) + VALUE_COL_PX;
   const markerHalf = Math.ceil(markerWidth(String(Math.max(max, 1))) / 2) + 2;
-  const plotPx = Math.max(1, (refs.chart.clientWidth || env.width || 600) - 8 - columnPx - 16);
+  // The y axis automargins to the team names, so the plot is narrower than the 8px left
+  // margin says by the widest label (plus Plotly's tick pad); size the marker headroom to that.
+  const labelPx = Math.ceil(Math.max(0, ...rows.map((r) => textWidth(r.label, { size: fontPx, family: FRAME_FONT }))));
+  const plotPx = Math.max(1, (refs.chart.clientWidth || env.width || 600) - 8 - labelPx - LABEL_PAD_PX - columnPx - 16);
   const top = Math.max(1, max) * Math.max(1.05, plotPx / Math.max(1, plotPx - markerHalf));
   const layout = {
     barmode: 'stack',
