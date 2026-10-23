@@ -4325,6 +4325,9 @@ tr.is-matched > :first-child {
 
   .module-subtitle {
     flex-basis: 100%;
+    /* The subtitle owns a full row here, so an empty one (Scatter) must keep the
+       row a one-line hint (Map) fills, or the chart panel jumps a line on tab change. */
+    min-height: 21px;
   }
 
   #chart-tools > #chart-controls {
