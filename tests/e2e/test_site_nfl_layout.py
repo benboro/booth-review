@@ -102,6 +102,27 @@ def test_reason_bar_reserves_its_height(
     assert not _is_displayed(pg, "#nfl-reason-viewership")
 
 
+CLIP_WIDTHS = [1440, 1104, 1024, 768, 640, 600, 500, 481, 480, 390]
+
+
+@pytest.mark.parametrize("width", CLIP_WIDTHS)
+def test_reason_bar_never_clips(pg: Page, open_nfl_app: Callable[..., None], width: int) -> None:
+    """15-13 F5: the bar reserves 56px (96px on phones) but grows when the copy wraps further."""
+    want = 96 if width <= 480 else 56
+    cases = [
+        ("#nfl-reason-crews", f"&view=crews&adj=1&team={TEAM}"),
+        ("#nfl-reason-viewership", "&view=viewership&ay=resid&cat=snf"),
+    ]
+    for selector, query in cases:
+        _open(pg, open_nfl_app, query, width)
+        box = pg.eval_on_selector(
+            selector,
+            "e => ({ h: e.getBoundingClientRect().height, s: e.scrollHeight, c: e.clientHeight })",
+        )
+        assert box["s"] <= box["c"], (selector, width, box)
+        assert box["h"] >= want, (selector, width, box)
+
+
 @pytest.mark.parametrize("width", WIDTHS)
 def test_viewership_subtitle_row_height(
     pg: Page, open_nfl_app: Callable[..., None], width: int

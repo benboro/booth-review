@@ -5373,17 +5373,16 @@ tr.is-matched > :first-child {
   }
 }
 
-/* NFL Raw reason bar (15-04, D-06): reserved 56px, 96px on phones, spaceless when hidden. */
+/* NFL Raw reason bar (15-04, D-06): reserves 56px (96px on phones) and grows rather than clips; spaceless when hidden. */
 .nfl-reason-bar {
   background: var(--surface);
   border: 1px solid var(--rule);
-  padding: 8px 16px;
+  padding: 6px 16px;
   font-size: 14px;
   line-height: 1.4;
   color: var(--ink);
   box-sizing: border-box;
-  height: 56px;
-  overflow: hidden;
+  min-height: 56px;
 }
 
 .nfl-reason-bar[hidden] {
@@ -5452,7 +5451,7 @@ tr.is-matched > :first-child {
 
 @media (max-width: 480px) {
   .nfl-reason-bar {
-    height: 96px;
+    min-height: 96px;
   }
 
   .nfl-window-key {
