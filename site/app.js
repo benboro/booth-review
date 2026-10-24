@@ -168,6 +168,9 @@ let openPanelIndex = null;
 /** The matched-games table's own sort state (kept out of the URL, D-11/SITE-13). */
 let sort = { key: 'date', dir: 'asc' };
 
+/** The crew pick the table last saw, so a new crew pick resets the sort once (D-06). */
+let sortCrew = null;
+
 /** Opens the detail panel on telecast `i` and remembers it's open, for `render`'s own refresh (D-10). */
 function openDetailPanel(i) {
   clearHover();
@@ -189,6 +192,13 @@ initPanel({
 
 /** Pushed into `renderers`: renders the matched-games table and wires its sort headers and Details buttons. */
 function tableRenderer({ data, state, view }) {
+  // D-06: a new crew pick lists the crew's games newest first; a later header click still
+  // re-sorts, and the subtitle follows whatever sort is active.
+  const crew = view.hasCrewSelection ? state.crew : null;
+  if (crew !== sortCrew) {
+    if (crew != null) sort = { key: 'date', dir: 'desc' };
+    sortCrew = crew;
+  }
   renderTable({
     data,
     view,

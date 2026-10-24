@@ -217,8 +217,31 @@ def test_matched_games_lists_the_crews_games_with_a_subtitle(app: Page) -> None:
     assert app.locator("#matched-games tbody tr").count() == CASE_TRIO["games"]
     dates = app.locator("#matched-games tbody tr td:first-child").all_inner_texts()
     assert len(dates) == CASE_TRIO["games"]
+    assert dates == _matched_dates(app, descending=True)
+    # A header click re-sorts, and the subtitle follows the active sort.
+    app.locator('#matched-games th button[data-sort="date"]').click()
+    assert sub.text_content() == f"Crew: {' / '.join(names)}, oldest first"
+    dates = app.locator("#matched-games tbody tr td:first-child").all_inner_texts()
+    assert dates == _matched_dates(app, descending=False)
     _set(app, {"crew": None})
     assert sub.is_hidden()
+    # Picking the crew again opens newest first once more.
+    _set(app, {"crew": key})
+    assert sub.text_content() == f"Crew: {' / '.join(names)}, newest first"
+
+
+def _matched_dates(page: Page, *, descending: bool) -> list[str]:
+    dates: list[str] = page.evaluate(
+        """async (desc) => {
+          const F = await import('./modules/format.js');
+          const d = window.__testHooks.data;
+          const iso = window.__testHooks.getView().matched.map((i) => d.t.date[i]).sort();
+          if (desc) iso.reverse();
+          return iso.map((x) => F.formatDate(x));
+        }""",
+        descending,
+    )
+    return dates
 
 
 def test_selected_person_indexes_returns_the_crews_people(app: Page) -> None:

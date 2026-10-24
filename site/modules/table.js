@@ -263,8 +263,17 @@ function renderVenueChip({ data, view, state }) {
   venueChipsEl.replaceChildren(li);
 }
 
-/** D-06: the Matched games subtitle names the picked crew; hidden otherwise. textContent only. */
-function renderMatchedSubtitle(data, view, state) {
+/** How the subtitle reads the table's active sort. */
+function sortPhrase(sort) {
+  if (sort.key === 'viewers') return sort.dir === 'desc' ? 'most viewers first' : 'fewest viewers first';
+  return sort.dir === 'desc' ? 'newest first' : 'oldest first';
+}
+
+/**
+ * D-06: the Matched games subtitle names the picked crew and the active sort ("newest
+ * first" when the pick lands); hidden otherwise. textContent only.
+ */
+function renderMatchedSubtitle(data, view, state, sort) {
   const el = document.getElementById('matched-subtitle');
   if (!el) return;
   const names = view.hasCrewSelection ? crewPickNames(data, state) : [];
@@ -274,7 +283,7 @@ function renderMatchedSubtitle(data, view, state) {
     el.removeAttribute('title');
     return;
   }
-  el.textContent = `Crew: ${names.join(' / ')}, newest first`;
+  el.textContent = `Crew: ${names.join(' / ')}, ${sortPhrase(sort)}`;
   el.title = el.textContent;
   el.hidden = false;
 }
@@ -286,7 +295,7 @@ function renderMatchedSubtitle(data, view, state) {
  */
 export function renderTable({ data, view, state, sort, onSort, onDetails }) {
   currentOnSort = onSort;
-  renderMatchedSubtitle(data, view, state);
+  renderMatchedSubtitle(data, view, state, sort);
   bindHeaderListeners();
   renderSortHeaders(sort);
 
