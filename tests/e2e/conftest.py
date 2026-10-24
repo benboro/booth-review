@@ -40,6 +40,7 @@ from urllib.parse import urlsplit
 
 import pytest
 from crews_fixture import build_crews_raw
+from nfl_crews_fixture import build_nfl_crews_raw
 from playwright.sync_api import Browser, ConsoleMessage, Error, Page, Playwright, Route, expect
 
 from booth_review.cli import main
@@ -215,6 +216,22 @@ def serve_crews(fixture_raw: dict[str, Any]) -> Callable[[Page], None]:
 
     def _serve(page: Page) -> None:
         page.route("**/site-data.json*", lambda route: route.fulfill(json=copy.deepcopy(raw)))
+
+    return _serve
+
+
+@pytest.fixture
+def serve_nfl_crews(nfl_fixture_raw: dict[str, Any]) -> Callable[[Page], None]:
+    """Returns `serve(page)`: makes `page` load the synthetic NFL Crews dataset
+    (tests/e2e/nfl_crews_fixture.py `build_nfl_crews_raw`: the built nfl-data.json plus
+    more than 25 pooled pairs and every NFL Crews case). Synthetic data only. Call it
+    before opening the app; a later route wins over the origin guard's catch-all, as for
+    `serve_crews`.
+    """
+    raw = build_nfl_crews_raw(nfl_fixture_raw)
+
+    def _serve(page: Page) -> None:
+        page.route("**/nfl-data.json*", lambda route: route.fulfill(json=copy.deepcopy(raw)))
 
     return _serve
 
