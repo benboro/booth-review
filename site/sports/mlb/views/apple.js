@@ -16,6 +16,7 @@ import { boothLabelOf, gameRow as mlbGameRow, CAUSE_COPY } from '../data.js';
 import { announce, createTableState, el, renderCrewsTable } from '../../../modules/crews-table.js';
 import { formatAudienceTable } from '../../../modules/format.js';
 import { networkMark } from '../../../modules/network.js';
+import { hideTooltip, showTextTooltip } from '../../../modules/tooltip.js';
 
 const DASH = '—';
 const MINUS = '−';
@@ -130,6 +131,65 @@ function positionCell(row) {
   return td;
 }
 
+const countText = (a) => `${a.name} (${a.n})`;
+
+/** The `+N` control: a tooltip on hover or focus (desktop), a popover on tap (phone). It never picks the row. */
+function moreNames(rest) {
+  const btn = el('button', 'more-names', `+${rest.length}`);
+  btn.type = 'button';
+  const noun = rest.length === 1 ? 'analyst' : 'analysts';
+  btn.setAttribute('aria-label', `${rest.length} more ${noun}: ${rest.map(countText).join(', ')}`);
+  const hoverCapable = () => !window.matchMedia('(hover: none)').matches;
+  const showTip = (x, y) => {
+    const border = getComputedStyle(document.documentElement).getPropertyValue('--rule-strong').trim();
+    showTextTooltip(rest.map((a) => ({ kind: 'body', text: countText(a) })), {
+      borderColor: border, clientX: x, clientY: y,
+    });
+  };
+  btn.addEventListener('mouseenter', (ev) => {
+    if (hoverCapable()) showTip(ev.clientX, ev.clientY);
+  });
+  btn.addEventListener('focus', () => {
+    if (!hoverCapable()) return;
+    const r = btn.getBoundingClientRect();
+    showTip(r.left, r.bottom);
+  });
+  btn.addEventListener('mouseleave', hideTooltip);
+  btn.addEventListener('blur', hideTooltip);
+
+  let pop = null;
+  const close = (refocus) => {
+    if (!pop) return;
+    pop.remove();
+    pop = null;
+    document.removeEventListener('pointerdown', onOutside, true);
+    document.removeEventListener('keydown', onKey, true);
+    if (refocus) btn.focus();
+  };
+  function onOutside(ev) {
+    if (pop && !pop.contains(ev.target) && ev.target !== btn) close(false);
+  }
+  function onKey(ev) {
+    if (ev.key === 'Escape') close(true);
+  }
+  btn.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    if (hoverCapable()) return;
+    if (pop) {
+      close(false);
+      return;
+    }
+    pop = el('div', 'more-names-pop');
+    pop.setAttribute('role', 'dialog');
+    pop.setAttribute('aria-label', 'More analysts');
+    for (const a of rest) pop.append(el('p', null, countText(a)));
+    btn.after(pop);
+    document.addEventListener('pointerdown', onOutside, true);
+    document.addEventListener('keydown', onKey, true);
+  });
+  return btn;
+}
+
 function nameCell(row) {
   const td = el('td', 'crews-name');
   td.append(el('span', 'crews-person-name', row.pbpName));
@@ -141,7 +201,23 @@ function nameCell(row) {
       td.append(el('span', 'crews-person-name', a.name));
     });
   }
+  const rest = row.analysts.slice(2);
+  if (rest.length > 0) td.append(moreNames(rest));
   return td;
+}
+
+/** The expanded row's head: every analyst with the games worked (the full list `+N` abbreviates). */
+function subHead(row) {
+  const p = el('p', 'mlb-analysts');
+  p.append(el('strong', null, 'Analysts'));
+  if (row.analysts.length === 0) {
+    p.append(' ', el('span', 'mlb-analyst-n', 'none listed'));
+    return [p];
+  }
+  row.analysts.forEach((a, k) => {
+    p.append(k === 0 ? ' ' : ', ', a.name, ' ', el('span', 'mlb-analyst-n', `(${a.n})`));
+  });
+  return [p];
 }
 
 function networkCell(row) {
@@ -179,6 +255,13 @@ function gameRow(ctx, model, row, i) {
   const crewTd = el('td', 'crews-game-crew');
   const analysts = g.crew.filter((m) => m.role === 'analyst').map((m) => m.name);
   crewTd.append(analysts.join(', '));
+  const here = (model.cols.crew[i] || []).filter((m) => m.role === 'analyst').map((m) => m.person);
+  const regular = row.analysts[0];
+  if (here.length > 0 && regular && !here.includes(regular.person)) {
+    const tag = el('span', 'crews-tag is-dashed', 'fill-in');
+    tag.title = 'The regular analyst was absent';
+    crewTd.append(tag);
+  }
   const viewers = el('td', 'num crews-game-viewers');
   if (g.viewers != null) viewers.append(el('span', 'crews-figure', formatAudienceTable(g.viewers)));
   else viewers.append(el('span', 'caption', CAUSE_COPY[g.cause] ?? 'no Ratings Reference figure'));
@@ -188,8 +271,24 @@ function gameRow(ctx, model, row, i) {
     crewTd,
     viewers,
   );
-  tr.addEventListener('click', () => ctx.openGame?.(i, tr));
+  tr.addEventListener('click', () => ctx.openGame?.(i, gameOpener(i)));
   return tr;
+}
+
+/**
+ * Focus target for the game panel: the table is rebuilt when the panel opens, so the row that
+ * opened it is detached by the time the panel closes. This stands in for "the same game's row".
+ */
+function gameOpener(i) {
+  const find = () => refs.tableHost.querySelector(`tr.crews-game[data-game="${i}"]`);
+  return {
+    get isConnected() {
+      return find() != null;
+    },
+    focus(opts) {
+      find()?.focus(opts);
+    },
+  };
 }
 
 function renderTable(ctx, model, state) {
@@ -215,6 +314,7 @@ function renderTable(ctx, model, state) {
     isPicked: picked,
     crewKeyOf: (r) => r.rowKey,
     buildCells: (r) => buildCells(model, r),
+    subHead,
     gameRow: (r, i) => gameRow(ctx, model, r, i),
     onPick: (r) => {
       if (picked(r)) {
@@ -230,7 +330,7 @@ function renderTable(ctx, model, state) {
       csort = next;
       render(ctx);
     },
-    openGame: (i) => ctx.openGame(i),
+    openGame: (i) => ctx.openGame(i, gameOpener(i)),
     rerender: () => render(ctx),
   });
   return rows;

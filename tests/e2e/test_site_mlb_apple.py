@@ -317,3 +317,134 @@ def test_some_booths_pending_withholds_the_lead_lines_as_pending(
     )
     assert lead and all("pending Retrosheet 2026" in t for t in lead)
     assert not any("too few games" in t for t in lead)
+
+
+# ---- 16-06 Task 3: the '+N' analysts control and the expanded row ----
+
+TRICKY = "<b>&amp;"
+
+
+def _analyst_heavy(route: Route) -> None:
+    """Booth 0 plays games 0, 1, 5, 6: Ben x3, Dee x2, Fay x1 and a fill-in named TRICKY x1."""
+    resp = route.fetch()
+    data = json.loads(resp.text())
+    data["lookups"]["people"][7]["name"] = TRICKY
+    g = data["games"]
+    pbp = {"person": 0, "role": "pbp"}
+
+    def an(p: int) -> dict[str, int | str]:
+        return {"person": p, "role": "analyst"}
+
+    g["crew"][0] = [pbp, an(1), an(3), an(5)]
+    g["crew"][1] = [pbp, an(1), an(3)]
+    g["crew"][5] = [pbp, an(1)]
+    g["crew"][6] = [pbp, an(7)]
+    b = data["apple_booths"]
+    b["game_list"][0] = [0, 1, 5, 6]
+    b["games"][0] = 4
+    route.fulfill(response=resp, body=json.dumps(data))
+
+
+@pytest.fixture
+def heavy(mlb_guarded_page: Page, open_mlb_app: Callable[..., None]) -> Page:
+    mlb_guarded_page.route("**/mlb-data.json", _analyst_heavy)
+    open_mlb_app(mlb_guarded_page)
+    return mlb_guarded_page
+
+
+@pytest.fixture
+def heavy_phone(mlb_mobile_page: Page, open_mlb_app: Callable[..., None]) -> Page:
+    mlb_mobile_page.route("**/mlb-data.json", _analyst_heavy)
+    open_mlb_app(mlb_mobile_page)
+    return mlb_mobile_page
+
+
+def test_more_names_shows_two_analysts_and_a_count(heavy: Page) -> None:
+    cell = heavy.locator(ROW).nth(0).locator("td.crews-name")
+    names = cell.locator(".crews-person-name").all_inner_texts()
+    assert names == ["Ada Quill", "Ben Marlow", "Dee Hart"]
+    more = cell.locator("button.more-names")
+    assert more.inner_text() == "+2"
+    label = more.get_attribute("aria-label") or ""
+    assert label.startswith("2 more analysts: ")
+    assert f"Fay Lorn (1), {TRICKY} (1)" in label or f"{TRICKY} (1), Fay Lorn (1)" in label
+    # Booth 1 has one analyst: no button.
+    assert heavy.locator(ROW).nth(1).locator("button.more-names").count() == 0
+
+
+def test_more_names_tooltip_on_hover_and_focus_and_never_picks(heavy: Page) -> None:
+    more = heavy.locator(ROW).nth(0).locator("button.more-names")
+    more.hover()
+    tip = heavy.locator("#chart-tooltip")
+    assert tip.is_visible()
+    text = tip.inner_text()
+    assert "Fay Lorn (1)" in text
+    assert f"{TRICKY} (1)" in text
+    assert tip.locator("b").count() == 0
+    border = tip.evaluate("e => getComputedStyle(e).borderTopColor")
+    assert border == "rgb(207, 198, 182)"  # --rule-strong
+    heavy.mouse.move(5, 5)
+    assert tip.is_hidden()
+    more.focus()
+    assert tip.is_visible()
+    more.blur()
+    assert tip.is_hidden()
+    more.click()
+    assert heavy.evaluate(f"{HOOKS}.getState().booth") in (None, "")
+    assert heavy.locator("#mlb-view-apple tr.is-picked").count() == 0
+
+
+def test_more_names_popover_on_phone_toggles_and_closes(heavy_phone: Page) -> None:
+    page = heavy_phone
+    more = page.locator(ROW).nth(0).locator("button.more-names")
+    pop = page.locator("#mlb-view-apple .more-names-pop")
+    more.tap()
+    assert pop.is_visible()
+    assert "Fay Lorn (1)" in pop.inner_text()
+    assert pop.locator("b").count() == 0
+    assert page.locator("#mlb-view-apple tr.is-picked").count() == 0
+    more.tap()
+    assert pop.count() == 0
+    more.tap()
+    page.keyboard.press("Escape")
+    assert pop.count() == 0
+    more.tap()
+    page.locator("#mlb-view-apple .nfl-coverage").tap()
+    assert pop.count() == 0
+
+
+def test_expanded_row_lists_analysts_games_and_fill_in(heavy: Page) -> None:
+    row = heavy.locator(ROW).nth(0)
+    row.locator(".crews-chevron").click()
+    sub = heavy.locator("#mlb-view-apple tr.crews-expanded")
+    line = sub.locator("p.mlb-analysts").inner_text()
+    assert line.startswith("Analysts")
+    assert "Ben Marlow (3)" in line
+    assert "Dee Hart (2)" in line
+    assert "Fay Lorn (1)" in line
+    assert f"{TRICKY} (1)" in line
+    assert sub.locator("b").count() == 0
+    heads = sub.locator("table.crews-games thead th").all_inner_texts()
+    assert heads == ["Date", "Matchup", "Crew", "Viewers"]
+    games = sub.locator("tr.crews-game")
+    assert games.count() == 4
+    dates = games.locator("td.crews-game-date").all_inner_texts()
+    assert dates == sorted(dates, reverse=True)
+    tags = sub.locator(".crews-tag.is-dashed")
+    assert tags.count() == 1
+    assert tags.first.inner_text() == "fill-in"
+    assert tags.first.get_attribute("title") == "The regular analyst was absent"
+    # The fill-in game's crew cell names the tricky analyst as literal text.
+    assert TRICKY in sub.locator("tr.crews-game:has(.crews-tag.is-dashed)").inner_text()
+
+
+def test_game_row_opens_the_panel_and_focus_returns(heavy: Page) -> None:
+    heavy.locator(ROW).nth(0).locator(".crews-chevron").click()
+    game = heavy.locator("#mlb-view-apple tr.crews-game").first
+    game.focus()
+    heavy.keyboard.press("Enter")
+    heavy.wait_for_selector("#mlb-detail-panel[open]")
+    heavy.keyboard.press("Escape")
+    heavy.wait_for_function(
+        "document.activeElement && document.activeElement.classList.contains('crews-game')"
+    )

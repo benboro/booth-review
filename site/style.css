@@ -4986,7 +4986,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   outline-offset: 2px;
 }
 
-.crews-names-wrap {
+.crews-table.is-mlb td.crews-name {
   position: relative;
 }
 
