@@ -331,6 +331,9 @@ def test_legacy_cseason_and_net_links(
         assert gone not in search
     state, search = _legacy(page, open_nfl_app, f"&fseason={y}")
     assert state["seasons"] == [y, y] and "fseason" not in search
+    # 15-13 F11: a literal cseason* key is just an unknown key and must not suppress cseason.
+    state, search = _legacy(page, open_nfl_app, f"&cseason*=1&cseason={y}")
+    assert state["seasons"] == [y, y]
     state, search = _legacy(page, open_nfl_app, f"&seasons={lo}-{hi}&cseason={y}")
     assert state["seasons"] == [lo, hi] and "cseason" not in search
     assert _seasons_control(page) == (str(lo), str(hi))

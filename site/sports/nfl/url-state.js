@@ -100,10 +100,7 @@ export function decodeNflState(search, model) {
       case 'cseason':
       case 'fseason':
         // The first of cseason and fseason seen wins (fseason is the old name).
-        if (!seen.has('cseason*') && /^\d{4}$/.test(raw)) {
-          legacySeason = Number(raw);
-          seen.add('cseason*');
-        }
+        if (legacySeason == null && /^\d{4}$/.test(raw)) legacySeason = Number(raw);
         break;
       case 'perseason': state.perseason = raw !== '0'; break;
       case 'csort': {
