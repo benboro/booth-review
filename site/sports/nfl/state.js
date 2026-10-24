@@ -9,6 +9,13 @@
 export const NFL_VIEWS = Object.freeze(['special', 'crews', 'viewership', 'scatter']);
 export const CREW_METRICS = Object.freeze(['margin', 'excitement', 'viewers']);
 
+/** Crews table sort keys and their natural directions (booth like CFB crew, margin like exc). */
+export const NFL_CSORT_KEYS = Object.freeze(['booth', 'season', 'rank', 'network', 'games', 'margin', 'exc', 'viewers']);
+export const NFL_NATURAL_DIR = Object.freeze({
+  booth: 'asc', season: 'asc', rank: 'asc', network: 'asc',
+  games: 'desc', margin: 'desc', exc: 'desc', viewers: 'desc',
+});
+
 /** Category filter options in UI order (labels exact per UI-SPEC). */
 export const CATEGORY_OPTIONS = Object.freeze([
   { key: 'tnf', label: 'Thursday night', group: 'Solo slots', slot: 'TNF' },
@@ -94,6 +101,8 @@ export function defaultNflState(model) {
     network: defaultNetwork(model),
     cseason: crewsDefaultSeason(model),
     booths: [],
+    perseason: true,
+    csort: null,
     adjusted: false,
     metric: 'margin',
     viewY: 'mean',
@@ -134,6 +143,10 @@ export function canonicalNflState(state, model) {
   const catSet = new Set(Array.isArray(s.cats) ? s.cats : []);
   const cs = Number(s.cseason);
   const catIds = new Set(model.viewCategories.map((c) => c.id));
+  const cso = s.csort;
+  const csort = cso && typeof cso === 'object'
+    && NFL_CSORT_KEYS.includes(cso.key) && (cso.dir === 'asc' || cso.dir === 'desc')
+    ? { key: cso.key, dir: cso.dir } : null;
   const asList = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
   return {
     view: pick(s.view, NFL_VIEWS, d.view),
@@ -145,6 +158,8 @@ export function canonicalNflState(state, model) {
     network: model.networkGroups.some((g) => g.id === s.network) ? s.network : d.network,
     cseason: model.crewSeasons.includes(cs) ? cs : d.cseason,
     booths: [...new Set(asList(s.booths).filter((k) => model.boothIndex.has(k)))],
+    perseason: s.perseason !== false,
+    csort,
     adjusted: s.adjusted === true,
     metric: pick(s.metric, CREW_METRICS, 'margin'),
     viewY: s.viewY === 'resid' ? 'resid' : 'mean',
