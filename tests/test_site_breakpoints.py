@@ -12,6 +12,7 @@ ALLOWED_MAX_WIDTHS: dict[str, str] = {
     "360": _NARROW,
     "374": _NARROW,
     "420": _NARROW,
+    "1279": "desktop-narrow switch of the MLB postseason LCS round head (16-UI-SPEC)",
 }
 
 
@@ -23,12 +24,15 @@ def _site_files() -> list[Path]:
     ]
 
 
+_OLD_BREAKPOINT = re.compile(r"(?:max|min)-width:\s*64[01](?:px)?\b")
+
+
 def test_no_640_or_641_breakpoints_remain() -> None:
+    # Only width queries count: a 640px size (e.g. a scroll box's max-height) is not a breakpoint.
     bad = [
-        f"{p.relative_to(SITE)}: {needle}"
+        f"{p.relative_to(SITE)}: {m.group(0)}"
         for p in _site_files()
-        for needle in ("640px", "641px", "max-width: 640", "min-width: 641")
-        if needle in p.read_text(encoding="utf-8")
+        for m in _OLD_BREAKPOINT.finditer(p.read_text(encoding="utf-8"))
     ]
     assert not bad, bad
 
