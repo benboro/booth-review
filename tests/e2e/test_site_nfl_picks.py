@@ -256,11 +256,11 @@ def test_viewership_mode_reasons(run: Callable[[str], Any]) -> None:
         """
     )
     category = (
-        "Showing Raw: Category picks do not line up with the viewership categories, so "
+        "Showing Viewers: Category picks do not line up with the viewership categories, so "
         "residuals are off. Clear the Category pick to see Residual again."
     )
     subset = (
-        "Showing Raw: this filter cuts inside each category\u2019s season. "
+        "Showing Viewers: this filter cuts inside each category\u2019s season. "
         "Clear it to see Residual again."
     )
     assert got["mean"] == {"stored": "mean", "effective": "mean", "forced": False, "reason": None}

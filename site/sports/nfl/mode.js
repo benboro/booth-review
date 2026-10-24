@@ -9,9 +9,9 @@ export const REASONS = Object.freeze({
   crewsSubset:
     'Showing Raw: this filter cuts inside each booth’s season. Clear it to see Adjusted again.',
   viewershipCategory:
-    'Showing Raw: Category picks do not line up with the viewership categories, so residuals are off. Clear the Category pick to see Residual again.',
+    'Showing Viewers: Category picks do not line up with the viewership categories, so residuals are off. Clear the Category pick to see Residual again.',
   viewershipSubset:
-    'Showing Raw: this filter cuts inside each category’s season. Clear it to see Residual again.',
+    'Showing Viewers: this filter cuts inside each category’s season. Clear it to see Residual again.',
 });
 
 const has = (list) => Array.isArray(list) && list.length > 0;

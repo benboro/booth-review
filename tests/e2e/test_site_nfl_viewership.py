@@ -24,11 +24,11 @@ BAR = "#nfl-reason-viewership"
 WINDOW_NOTE = "Dashed lines are window-level: one figure covers every game in that Sunday window."
 WINDOW_SUBTITLE = f"{WINDOW_NOTE} Regional games have no published figure; see methodology."
 REASON_SUBSET = (
-    "Showing Raw: this filter cuts inside each category\u2019s season. "
+    "Showing Viewers: this filter cuts inside each category\u2019s season. "
     "Clear it to see Residual again."
 )
 REASON_CATEGORY = (
-    "Showing Raw: Category picks do not line up with the viewership categories, so residuals "
+    "Showing Viewers: Category picks do not line up with the viewership categories, so residuals "
     "are off. Clear the Category pick to see Residual again."
 )
 
