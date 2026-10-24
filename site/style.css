@@ -3827,7 +3827,6 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 /* NFL control rows: fixed-width groups side by side, never stretched to the row (the shared
    `.chart-controls` is a one-cell grid built for CFB's single controls block). */
 .nfl-crews-controls,
-.nfl-crews-chart-controls,
 .nfl-viewership-controls {
   display: flex;
   flex-wrap: wrap;
@@ -3863,13 +3862,6 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .nfl-booth-table tr[data-picked="true"] .booth-col,
 .booth-row-btn[aria-pressed="true"] {
   border-inline-start: 3px solid var(--accent);
-}
-
-.season-stepper .season-value {
-  display: flex;
-  align-items: center;
-  padding: 0 var(--space-sm);
-  font-variant-numeric: tabular-nums;
 }
 
 .nfl-coverage,
@@ -4875,6 +4867,98 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   .crews-more {
     width: 100%;
     min-height: 44px;
+  }
+}
+
+/* ---------- NFL Crews (Phase 15-09): the shared Crews table with NFL columns ---------- */
+
+/* Raw and Adjusted: fixed-width buttons, so the label never shifts the group. */
+.nfl-crews-values button {
+  width: 80px;
+  padding: 0;
+}
+
+/* Booth takes the rest (320px minimum); the other columns keep the UI-SPEC widths. */
+.crews-table.is-nfl {
+  min-width: 1208px;
+}
+
+.crews-table.is-nfl.has-season {
+  min-width: 1304px;
+}
+
+.crews-table th.crews-col-margin {
+  width: 120px;
+}
+
+.nfl-crews-table > .caption {
+  margin: var(--space-sm) 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.nfl-crews-table > .crews-count {
+  margin-top: var(--space-md);
+}
+
+.crews-table tbody tr.crews-row.is-hover:not(.is-picked) {
+  background: var(--surface);
+}
+
+/* The measure row sits 16px under the Showing note and 8px above the chart. */
+.nfl-crews-chart-block {
+  margin-top: var(--space-md);
+}
+
+.nfl-crews-measure {
+  display: inline-flex;
+  min-height: 28px;
+  margin-bottom: var(--space-sm);
+}
+
+.nfl-crews-measure button {
+  min-height: 28px;
+}
+
+.nfl-crews-chart-caption {
+  margin: var(--space-sm) 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.nfl-crews-notes {
+  margin-top: var(--space-sm);
+}
+
+.nfl-crews-notes .caption {
+  margin: var(--space-sm) 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+@media (max-width: 480px) {
+  /* Phone widths: chevron 44, Booth 148, Rank 96, Network 96, Games 80, Avg margin 88,
+     Avg excitement 100, Avg viewers 120, and 96 more for Season. */
+  .table-scroll .games-table.crews-table.is-nfl {
+    width: 772px;
+    min-width: 772px;
+  }
+
+  .table-scroll .games-table.crews-table.is-nfl.has-season {
+    width: 868px;
+    min-width: 868px;
+  }
+
+  .crews-table th.crews-col-booth {
+    width: 148px;
+  }
+
+  .crews-table th.crews-col-margin {
+    width: 88px;
+  }
+
+  .nfl-crews-values button {
+    width: 72px;
   }
 }
 
