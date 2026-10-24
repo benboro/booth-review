@@ -174,7 +174,8 @@ export function buildNflCrewRows(model, state) {
     }
     rows.push({
       rowKey: g.rowKey,
-      boothKey: boothKeyOf(model, first),
+      // A lineup-only booth (no games) is not in the booth catalog, so it has no pickable key.
+      boothKey: model.boothIndex.has(boothKeyOf(model, first)) ? boothKeyOf(model, first) : null,
       groupId: group.id,
       network: { id: group.id, name: group.name },
       pbp: pbp && { id: pbp.id, name: pbp.name },

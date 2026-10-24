@@ -12,7 +12,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from nfl_crews_fixture import CASE_FILL_IN, CASE_MIXED_SEAT, CASE_TWO_ANALYSTS
+from nfl_crews_fixture import CASE_FILL_IN, CASE_MIXED_SEAT, CASE_TWO_ANALYSTS, CASE_ZERO_GAME
 from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
@@ -144,6 +144,21 @@ def test_row_click_sets_booths_and_announces(crews: Callable[[str], Page]) -> No
     page.wait_for_function(f"{HOOKS}.getState().booths.length === 0")
     assert _status(page) == "Booths pick cleared."
     assert page.get_attribute("#nfl-trigger-booths", "data-active") != "true"
+
+
+def test_lineup_only_row_click_leaves_picks_alone(crews: Callable[[str], Page]) -> None:
+    """15-13 F4: a booth with no games is not in the catalog, so its row click is a no-op."""
+    page = crews("&perseason=0")
+    _filter_bar_person(page, CASE_ZERO_GAME["pbp"], "Synth Pbp Zero")
+    before = _state(page)
+    assert before["people"] == [CASE_ZERO_GAME["pbp"]] and before["booths"] == []
+    status = _status(page)
+    key = f"fox:{CASE_ZERO_GAME['pbp']}.{CASE_ZERO_GAME['analyst']}"
+    _row(page, key).locator("td.crews-name").click()
+    after = _state(page)
+    assert after["people"] == before["people"] and after["booths"] == []
+    assert _status(page) == status
+    assert "booths=" not in page.url and "people=" + str(CASE_ZERO_GAME["pbp"]) in page.url
 
 
 def test_announcer_in_filter_bar_clears_a_row_made_pick(crews: Callable[[str], Page]) -> None:

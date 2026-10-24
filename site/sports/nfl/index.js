@@ -385,7 +385,7 @@ function setState(patch) {
 
 /** D-05: a Crews booth-row pick replaces Booths with that catalog key; the same key clears it. */
 function pickBoothRow(key, label) {
-  if (!model) return;
+  if (!model || !model.boothIndex.has(key)) return;
   const prev = state;
   if (prev.booths.length === 1 && prev.booths[0] === key) {
     setState({ booths: [] });
