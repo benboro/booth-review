@@ -143,15 +143,22 @@ function isPickedRow(row, mode, state) {
 
 /**
  * Whether `row` holds a picked person without being the pick itself (accent rule 2, U-06),
- * and at least one of its games is a matched game (computeView's `highlighted`, which
- * applies Role and Called together), so Role keeps its person-matching meaning (CFB-05).
+ * and at least one of its games is a matched game on which a picked person the row itself
+ * holds matches Role (P14-FU-1). `computeView`'s `highlighted` alone is not enough: another
+ * picked person may supply the match, which must not light a row whose own person did not.
+ * Called together still needs every picked person on the row.
  */
-function isHighlightedRow(row, mode, state, highlightedSet) {
+function isHighlightedRow(row, mode, state, highlightedSet, view, data) {
   if (!state.people.length) return false;
   const slugs = mode === 'crew' ? row.people.map((p) => p.slug) : [row.personSlug];
   const held = state.people.filter((id) => slugs.includes(id));
   const holds = state.together ? held.length === state.people.length : held.length > 0;
-  return holds && row.games.some((i) => highlightedSet.has(i));
+  if (!holds) return false;
+  return row.games.some((i) => {
+    if (!highlightedSet.has(i)) return false;
+    const onGame = view.peopleOnGame?.get(i) ?? [];
+    return onGame.some((idx) => held.includes(data.lookups.people[idx].id));
+  });
 }
 
 /** Sets the pick to this row, or clears it when this row is the pick. */
@@ -295,7 +302,7 @@ export function renderCrewsPanel(container, model, ctx) {
       return note;
     },
     isPicked: (row) => isPickedRow(row, mode, state),
-    isHighlighted: (row) => isHighlightedRow(row, mode, state, full.highlightedSet),
+    isHighlighted: (row) => isHighlightedRow(row, mode, state, full.highlightedSet, view, data),
     crewKeyOf: (row) => (mode === 'crew' ? row.crewKey : row.personSlug),
     buildCells: (row) => {
       const cells = [nameCell(row, mode)];
