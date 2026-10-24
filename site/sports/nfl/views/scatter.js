@@ -7,7 +7,7 @@
  * band) and games with no final score sit in an N/A strip at the left of the
  * margin axis. A missing value is never plotted at 0. Dots are colored by
  * exclusive category, fade (or hide) under the Seasons, Team and Category
- * filters and highlight under Announcers.
+ * filters and fade the games an Announcers or Booths pick does not match.
  *
  * Date X reuses the CFB `buildDateAxis` for the block geometry: it keys blocks
  * by the season column and measures days from each season's first game, so a
@@ -17,11 +17,12 @@
  * label rows are built here. Game strings only reach the DOM through
  * textContent/createElement; customdata holds game indexes only.
  */
-import { gamePasses, personHighlight, EXCLUSIVE_CATEGORIES } from '../state.js';
+import { EXCLUSIVE_CATEGORIES } from '../state.js';
+import { computePicks } from '../picks.js';
 import { gameRow } from '../data.js';
 import { categoryColor } from '../palette.js';
 import { CAUSE_COPY, slotLabel, flagLabels, viewersText, kickoffText, dateShortText } from '../game-format.js';
-import { ACCENT, MUTED, PAGE_BG, DIVIDER, ZERO_LINE } from '../../../modules/palette.js';
+import { ACCENT, DOT_OUTLINE, MUTED, PAGE_BG, DIVIDER, ZERO_LINE } from '../../../modules/palette.js';
 import { frameConfig, frameLayout } from '../../../modules/chart-frame.js';
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import { showHoverRing, hideHoverRing, ringSpecFromPoint, hoverRingDiameter } from '../../../modules/hover-ring.js';
@@ -42,9 +43,8 @@ const VIEWER_TICKS = [
   [5e5, '500K'], [1e6, '1M'], [2e6, '2M'], [5e6, '5M'], [1e7, '10M'], [2e7, '20M'],
 ];
 const BAND_FILL = { light: 'rgba(75, 85, 99, 0.06)', dark: 'rgba(156, 163, 175, 0.10)' };
-// Marker sizes match the CFB scatter's base (6) and highlighted (10) dots.
+// Marker size matches the CFB scatter's base dot (6); a pick fades, it never enlarges (UI-SPEC).
 const BASE_SIZE = 6;
-const HIGHLIGHT_SIZE = 10;
 const NA_X = -2.5; // the N/A strip's center on the margin axis
 const NA_EDGE = -1; // the strip's right divider
 
@@ -137,17 +137,19 @@ function buildItems(model, state) {
   const c = model.cols;
   const geo = state.scatterX === 'date' ? dateGeometry(model) : null;
   const items = [];
-  const counts = { plotted: 0, band: 0, faded: 0, hidden: 0, highlighted: 0, naStrip: 0 };
+  const counts = { plotted: 0, band: 0, faded: 0, hidden: 0, matched: 0, naStrip: 0 };
   const bandCauses = { pending: 0, regional: 0, none: 0 };
   const yKey = state.scatterY;
+  const picks = computePicks(model, state);
   for (let i = 0; i < model.n; i++) {
     const cat = EXCLUSIVE_CATEGORIES[model.category[i]];
     if (hiddenCats.has(cat.key)) {
       counts.hidden += 1;
       continue;
     }
-    const pass = gamePasses(model, state, i);
-    if (!pass && state.dots === 'hide') {
+    const pass = picks.passes[i] === 1;
+    const matched = pass && (!picks.hasPick || picks.matched[i] === 1);
+    if (!matched && state.dots === 'hide') {
       counts.hidden += 1;
       continue;
     }
@@ -160,8 +162,7 @@ function buildItems(model, state) {
       na = true;
     } else x = Math.abs(c.final_margin[i]);
     const band = y == null;
-    const highlight = pass && personHighlight(model, state, i);
-    items.push({ i, x, y: band ? null : y, band, na, pass, highlight, cat });
+    items.push({ i, x, y: band ? null : y, band, na, pass, matched, cat });
     if (band) {
       counts.band += 1;
       if (c.viewers[i] == null) {
@@ -170,8 +171,8 @@ function buildItems(model, state) {
       }
     } else counts.plotted += 1;
     if (na) counts.naStrip += 1;
-    if (!pass) counts.faded += 1;
-    if (highlight) counts.highlighted += 1;
+    if (!matched) counts.faded += 1;
+    else counts.matched += 1;
   }
   return { items, counts, bandCauses };
 }
@@ -285,11 +286,11 @@ function bindEvents(gd) {
   gd.on('plotly_relayout', syncResetZoom);
   gd.on('plotly_click', (ev) => {
     const it = itemFor(ev);
-    if (it && it.pass) pickGame(it.i);
+    if (it && it.matched) pickGame(it.i);
   });
   gd.on('plotly_hover', (ev) => {
     const it = itemFor(ev);
-    if (!it || !it.pass) return;
+    if (!it || !it.matched) return;
     if (current.env.mobile || current.env.hoverNone) return;
     const e = ev.event || {};
     const pointerX = e.clientX ?? 0;
@@ -550,7 +551,7 @@ function renderDataTable(items, model) {
       // A keyboard path to the detail panel, as a click on a dot gives (JS-WR-04).
       // Faded dots are not clickable, so their rows get no button either.
       const action = el('td');
-      if (it.pass) {
+      if (it.matched) {
         const btn = el('button', null, 'Details');
         btn.type = 'button';
         btn.dataset.key = String(it.i);
@@ -733,7 +734,13 @@ function marginXAxis(model, th, env) {
   };
 }
 
+function dotOpacity(it) {
+  if (it.matched) return DOT_OPACITY.active;
+  return it.pass ? DOT_OPACITY.activeUnderPerson : DOT_OPACITY.inertUnderPerson;
+}
+
 function buildFigure(model, state, env, th, items) {
+  const picks = computePicks(model, state);
   const bg = PAGE_BG[th];
   const height = env.mobile ? 440 : 520;
   const margin = marginFor(env.mobile);
@@ -758,12 +765,15 @@ function buildFigure(model, state, env, th, items) {
       // Other games share the grey of Other solo slot (#8C8C8C / #999999), so they draw
       // hollow and never read as that segment (UI-SPEC Color).
       symbol: subset.map((it) => (it.cat.key === 'none' ? 'circle-open' : 'circle')),
-      size: subset.map((it) => (it.highlight ? HIGHLIGHT_SIZE : BASE_SIZE)),
+      size: subset.map(() => BASE_SIZE),
       color: subset.map((it) => categoryColor(it.cat.key, th)),
-      opacity: subset.map((it) => (it.pass ? 1 : DOT_OPACITY.inertUnderPerson)),
+      // The CFB ladder: matched full, passing-but-unmatched under a pick half, non-passing faintest.
+      opacity: subset.map(dotOpacity),
       line: {
-        width: subset.map((it) => (it.highlight ? 1.5 : it.cat.key === 'none' ? 1.5 : 0)),
-        color: subset.map((it) => (it.highlight ? ACCENT[th] : categoryColor(it.cat.key, th))),
+        // A matched dot under a pick gets the CFB highlight outline; hollow Other games keep their own ring.
+        width: subset.map((it) => (it.cat.key === 'none' ? 1.5 : picks.hasPick && it.matched ? 1 : 0)),
+        color: subset.map((it) => (it.cat.key === 'none' ? categoryColor(it.cat.key, th)
+          : picks.hasPick && it.matched ? DOT_OUTLINE : categoryColor(it.cat.key, th))),
       },
     },
   });
@@ -823,8 +833,8 @@ export function mount(container, ctx) {
   refs.note.setAttribute('role', 'status');
   refs.note.hidden = true;
   refs.note.append(
-    el('p', 'season-empty-title', 'No NFL games match.'),
-    el('p', 'season-empty-hint', 'Widen the season range or reset the filters.'),
+    el('p', 'season-empty-title', 'No games match these filters'),
+    el('p', 'season-empty-hint', 'Clear all filters, or widen the Seasons range.'),
   );
   refs.bandButton = el('button', 'band-info');
   refs.bandButton.type = 'button';
@@ -901,7 +911,7 @@ export function render(ctx) {
   current = { items, byGame, counts, bandCauses, env, model, state, axisTitles: null };
   renderDataTable(items, model);
 
-  if (!items.length) {
+  if (!items.length || counts.matched === 0) {
     refs.drawn = false;
     setEmpty(true);
     return;
@@ -942,7 +952,7 @@ export function testModel() {
   if (!current || !refs.drawn) {
     return {
       view: 'scatter', drawn: false, x, y,
-      counts: { plotted: 0, band: 0, faded: 0, hidden: 0, highlighted: 0 },
+      counts: { plotted: 0, band: 0, faded: 0, hidden: 0, matched: 0 },
       bandCauses: { pending: 0, regional: 0, none: 0 },
       axisTitles: null, dateAxis: 'reused', items: [],
     };
@@ -961,7 +971,7 @@ export function testModel() {
     bandLabel: refs.bandText.textContent,
     hiddenCategories: [...hiddenCats],
     items: items.map((it) => ({
-      i: it.i, band: it.band, na: it.na, faded: !it.pass, highlighted: it.highlight, category: it.cat.key,
+      i: it.i, band: it.band, na: it.na, faded: !it.matched, matched: it.matched, opacity: dotOpacity(it), category: it.cat.key,
     })),
   };
 }

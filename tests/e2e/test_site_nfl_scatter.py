@@ -257,22 +257,99 @@ def test_team_filter_fades_and_hide_removes(
     assert vm["counts"]["plotted"] + vm["counts"]["band"] == matching
 
 
-def test_announcer_highlight_count(
+_CFB_OPACITY_JS = "import('./modules/chart.js').then(c => c.DOT_OPACITY)"
+_BOOTH_GAMES_JS = """async (key) => {
+  const D = await import('./sports/nfl/data.js');
+  const S = await import('./sports/nfl/state.js');
+  const raw = await (await fetch('nfl-data.json')).json();
+  return S.boothGames(D.prepareNfl(raw), [key]);
+}"""
+
+
+def test_announcer_and_booth_picks_fade_like_cfb(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
 ) -> None:
-    _open(nfl_guarded_page, open_nfl_app)
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    g = _g(nfl_fixture_raw)
+    pid = nfl_fixture_raw["lookups"]["people"][0]["id"]
+    n = len(g["season"])
+    called = {i for i in range(n) if any(m["person"] == 0 for m in g["crew"][i])}
+    assert called and len(called) < n
+    opacity = page.evaluate(_CFB_OPACITY_JS)
+    _set(page, {"people": [pid]})
+    page.wait_for_function("window.__nflTestHooks.getViewModel('scatter').counts.matched > 0")
+    vm = _vm(page)
+    assert vm["counts"]["matched"] == len(called)
+    assert vm["counts"]["faded"] == n - len(called)
+    for it in vm["items"]:
+        if it["i"] in called:
+            assert it["matched"] and it["opacity"] == opacity["active"]
+        else:
+            assert not it["matched"] and it["opacity"] == opacity["activeUnderPerson"]
+    # No dot grows because of a pick.
+    sizes = page.evaluate(f"Array.from(document.querySelector('{GD}').data, t => t.marker.size)")
+    assert {z for arr in sizes for z in arr} == {6}
+    # Booths alone, then both: the intersection.
+    key = page.evaluate("window.__nflTestHooks.getBoothCatalog()[0].key")
+    booth = set(page.evaluate(_BOOTH_GAMES_JS, key))
+    assert booth
+    _set(page, {"people": [], "booths": [key]})
+    page.wait_for_function(
+        f"window.__nflTestHooks.getViewModel('scatter').counts.matched === {len(booth)}"
+    )
+    _set(page, {"people": [pid], "booths": [key]})
+    both = called & booth
+    page.wait_for_function(
+        f"window.__nflTestHooks.getViewModel('scatter').counts.matched === {len(both)}"
+    )
+    vm = _vm(page)
+    assert {it["i"] for it in vm["items"] if it["matched"]} == both
+
+
+def test_hide_removes_unmatched_under_a_pick(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
+) -> None:
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    g = _g(nfl_fixture_raw)
+    pid = nfl_fixture_raw["lookups"]["people"][0]["id"]
+    called = {i for i in range(len(g["season"])) if any(m["person"] == 0 for m in g["crew"][i])}
+    _set(page, {"people": [pid], "dots": "hide"})
+    page.wait_for_function(
+        f"window.__nflTestHooks.getViewModel('scatter').items.length === {len(called)}"
+    )
+    vm = _vm(page)
+    assert {it["i"] for it in vm["items"]} == called
+    assert vm["counts"]["faded"] == 0
+
+
+def test_empty_state_copy(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
+) -> None:
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    _vm(page)
     g = _g(nfl_fixture_raw)
     people = nfl_fixture_raw["lookups"]["people"]
-    pid = people[0]["id"]  # person index 0
-    want = sum(1 for crew in g["crew"] if any(m["person"] == 0 for m in crew))
-    assert want > 0
-    _set(nfl_guarded_page, {"people": [pid]})
-    nfl_guarded_page.wait_for_function(
-        "window.__nflTestHooks.getViewModel('scatter').counts.highlighted > 0"
+    # A season in which some person called nothing: picking them matches no game.
+    season, who = next(
+        (se, k)
+        for se in sorted(set(g["season"]))
+        for k in range(len(people))
+        if not any(
+            g["season"][i] == se and any(m["person"] == k for m in g["crew"][i])
+            for i in range(len(g["season"]))
+        )
     )
-    vm = _vm(nfl_guarded_page)
-    assert vm["counts"]["highlighted"] == want
-    assert vm["counts"]["faded"] == 0
+    _set(page, {"dots": "hide", "seasons": [season, season], "people": [people[who]["id"]]})
+    note = page.locator(f"{VIEW} .season-empty-note")
+    note.wait_for(state="visible")
+    assert note.locator(".season-empty-title").inner_text() == "No games match these filters"
+    assert (
+        note.locator(".season-empty-hint").inner_text()
+        == "Clear all filters, or widen the Seasons range."
+    )
 
 
 def test_legend_chip_hides_a_category(
