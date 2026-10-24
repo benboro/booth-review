@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from cfb_booth_support import URL, by_id, crew, run, tel
+from cfb_booth_support import URL, by_id, crew, run, run_scenario, scenarios, tel
 
 from booth_review.build.booth_ranks import load_cfb_booth_ranks
 from booth_review.build.booths import (
@@ -14,14 +14,7 @@ from booth_review.errors import ReferenceTableError
 
 
 def test_tiers_by_rank_and_scope() -> None:
-    items = [
-        (tel("t1"), crew("t1", "p1", "a1")),
-        (tel("t2", "d-two"), crew("t2", "p2", "a2")),
-        (tel("t3"), crew("t3", "p3", "a3")),
-        (tel("t4", "d-one"), crew("t4", "p4", "a4")),
-        (tel("t5"), crew("t5", "p5", "a5")),
-    ]
-    got = by_id(run(items))
+    got = by_id(run_scenario("tiers_by_rank_and_scope"))
     assert (got["t1"]["tier"], got["t1"]["rank"]) == ("a", 1)
     assert (got["t2"]["tier"], got["t2"]["rank"]) == ("b", 2)
     assert (got["t3"]["tier"], got["t3"]["rank"]) == ("other", 3)
@@ -35,7 +28,7 @@ def test_tiers_by_rank_and_scope() -> None:
 
 
 def test_schema_and_counts() -> None:
-    result = run([(tel("t1"), crew("t1", "p1", "a1")), (tel("t4"), crew("t4", "p4", "a4"))])
+    result = run_scenario("schema_and_counts")
     assert dict(result.booth_tiers.schema) == BOOTH_TIERS_SCHEMA
     assert result.counts["tiered_telecasts"] == 2
     assert result.counts["a"] == 1
@@ -44,7 +37,7 @@ def test_schema_and_counts() -> None:
 
 
 def test_fill_in_keeps_tier() -> None:
-    got = by_id(run([(tel("t1"), crew("t1", "p1", "x"))]))
+    got = by_id(run_scenario("fill_in_keeps_tier"))
     assert got["t1"]["tier"] == "a"
     assert got["t1"]["is_fill_in"] is True
     assert got["t1"]["analyst_person_id"] == "a1"
@@ -52,69 +45,61 @@ def test_fill_in_keeps_tier() -> None:
 
 
 def test_regular_analyst_is_not_fill_in() -> None:
-    got = by_id(run([(tel("t1"), crew("t1", "p1", "a1"))]))
+    got = by_id(run_scenario("regular_analyst_not_fill_in"))
     assert got["t1"]["is_fill_in"] is False
 
 
 def test_regular_analyst_with_other_pbp_is_other_booth() -> None:
-    got = by_id(run([(tel("t1"), crew("t1", "z", "a1"))]))
+    got = by_id(run_scenario("regular_analyst_other_pbp"))
     assert got["t1"]["tier"] == "other"
     assert got["t1"]["pbp_person_id"] == "z"
 
 
 def test_uncited_family_season_is_untiered() -> None:
-    result = run([(tel("t1", "f-one"), crew("t1", "p1", "a1"))])
+    result = run_scenario("uncited_family_season")
     assert result.booth_tiers.is_empty()
     assert result.counts["untiered_family_seasons"] == 1
 
 
 def test_other_family_never_tiered_or_reviewed() -> None:
-    result = run([(tel("t1", "c-one"), crew("t1", "p1", "a1"))])
+    result = run_scenario("other_family")
     assert result.booth_tiers.is_empty()
     assert result.untiered_rows == []
 
 
 def test_unmapped_network_untiered() -> None:
-    result = run([(tel("t1", "nope"), crew("t1", "p1", "a1"))])
+    result = run_scenario("unmapped_network")
     assert result.booth_tiers.is_empty()
 
 
 def test_no_pbp_role_untiered_and_counted() -> None:
-    result = run([(tel("t1"), crew("t1", "p1", None, role="sideline"))])
+    result = run_scenario("no_pbp_role")
     assert result.booth_tiers.is_empty()
     assert result.counts["no_pbp"] == 1
 
 
 def test_multi_pbp_lowest_position_wins() -> None:
-    rows = crew("t1", "p2", None, pos=2) + crew("t1", "p1", None, pos=1)
-    result = run([(tel("t1"), rows)])
+    result = run_scenario("multi_pbp_lowest_position")
     assert by_id(result)["t1"]["pbp_person_id"] == "p1"
     assert result.counts["multi_pbp"] == 1
 
 
 def test_alt_feed_crew_never_chooses_pbp() -> None:
-    rows = crew("t1", "p1", None, feed="alt") + crew("t1", "p2", None)
-    assert by_id(run([(tel("t1"), rows)]))["t1"]["pbp_person_id"] == "p2"
+    assert by_id(run_scenario("alt_feed_crew_never_chooses"))["t1"]["pbp_person_id"] == "p2"
 
 
 def test_alt_feed_telecast_not_tiered() -> None:
-    result = run([(tel("t1", feed="alt"), crew("t1", "p1", "a1", feed="alt"))])
+    result = run_scenario("alt_feed_telecast")
     assert result.booth_tiers.is_empty()
 
 
 def test_january_bowl_uses_telecast_season() -> None:
-    got = by_id(run([(tel("t1", season=2024), crew("t1", "p1", "a1"))]))
+    got = by_id(run_scenario("january_bowl_season"))
     assert got["t1"]["season"] == 2024
 
 
 def test_untiered_review_rows_sorted() -> None:
-    items = [
-        (tel("t1"), crew("t1", "q1", "b1")),
-        (tel("t2"), crew("t2", "q2", "b2")),
-        (tel("t3"), crew("t3", "q2", "b2")),
-        (tel("t4", "f-one"), crew("t4", "r1", "c1")),
-    ]
-    result = run(items, ranks={})
+    result = run_scenario("untiered_review_rows")
     rows = result.untiered_rows
     assert [(r["family"], r["pbp_person_id"], r["games"]) for r in rows] == [
         ("disney", "q2", 2),
@@ -128,44 +113,46 @@ def test_untiered_review_rows_sorted() -> None:
 
 
 def test_tiered_family_season_has_no_review_rows() -> None:
-    result = run([(tel("t1"), crew("t1", "p1", "a1"))])
+    result = run_scenario("regular_analyst_not_fill_in")
     assert result.untiered_rows == []
 
 
 def test_empty_inputs_keep_schema() -> None:
-    result = run([(tel("t1", "c-one"), crew("t1", "p1", "a1"))])
+    result = run_scenario("other_family")
     assert dict(result.booth_tiers.schema) == BOOTH_TIERS_SCHEMA
 
 
 def test_three_person_crew_with_regular_analyst_is_not_fill_in() -> None:
     # The regular analyst sits in the second analyst seat; the lowest-position analyst differs.
-    rows = [
-        *crew("t1", "p1", "x"),
-        {
-            "telecast_id": "t1",
-            "person_id": "a1",
-            "role": "analyst",
-            "feed_type": "main",
-            "crew_position": 3,
-        },
-    ]
-    got = by_id(run([(tel("t1"), rows)]))
+    got = by_id(run_scenario("three_person_with_regular"))
     assert got["t1"]["is_fill_in"] is False
     assert got["t1"]["game_analyst_person_id"] == "x"
 
 
 def test_three_person_crew_without_regular_analyst_is_fill_in() -> None:
-    rows = [
-        *crew("t1", "p1", "x"),
-        {
-            "telecast_id": "t1",
-            "person_id": "y",
-            "role": "analyst",
-            "feed_type": "main",
-            "crew_position": 3,
-        },
-    ]
-    assert by_id(run([(tel("t1"), rows)]))["t1"]["is_fill_in"] is True
+    assert by_id(run_scenario("three_person_without_regular"))["t1"]["is_fill_in"] is True
+
+
+def test_cited_regular_on_no_crew_makes_every_analyst_game_a_fill_in() -> None:
+    got = by_id(run_scenario("CITED_ANALYST_ON_NO_CREW"))
+    assert {t: got[t]["analyst_person_id"] for t in got} == {"n1": "a2", "n2": "a2", "n3": "a2"}
+    assert [got[t]["is_fill_in"] for t in ("n1", "n2", "n3")] == [True, True, False]
+    assert {got[t]["tier"] for t in got} == {"b"}
+
+
+def test_cited_not_modal_keeps_cited_regular_and_untiered_network_uses_its_modal() -> None:
+    result = run_scenario("CITED_NOT_MODAL_UNTIERED_SECOND_NETWORK")
+    got = by_id(result)
+    assert {got[t]["analyst_person_id"] for t in ("g1", "g2", "g3")} == {"a1"}
+    assert [got[t]["is_fill_in"] for t in ("g1", "g2", "g3")] == [False, True, True]
+    assert set(got) == {"g1", "g2", "g3"}
+    assert [(r["family"], r["pbp_person_id"]) for r in result.untiered_rows] == [("fox", "p1")]
+
+
+@pytest.mark.parametrize("name", list(scenarios()))
+def test_every_shared_scenario_keeps_the_schema(name: str) -> None:
+    """Each shared case (also fed to the client parity test) runs and keeps the schema."""
+    assert dict(run_scenario(name).booth_tiers.schema) == BOOTH_TIERS_SCHEMA
 
 
 _LOADER_PEOPLE = """person_id,canonical_name,variants,usual_role,role_override

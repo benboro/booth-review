@@ -175,7 +175,10 @@ export function groupTelecasts(input) {
     let regular = grp.modal;
     const booth = p.booth != null ? booths[p.booth] : null;
     if (booth) {
-      if (booth.analyst != null) regular = people[booth.analyst];
+      // A null booth analyst is a cited regular who is on no shipped crew row, so on none
+      // of this game's seats: the client cannot name them, and (as in booths.py) any game
+      // with an analyst is a fill-in. The lineup then falls back to the group's modal one.
+      regular = booth.analyst != null ? people[booth.analyst] : null;
       base.rank = booth.rank;
       base.tier = booth.tier;
     }
