@@ -602,8 +602,9 @@ def test_team_alone_fills_the_table_like_cfb_school(
     open_nfl_app(nfl_guarded_page, "?sport=nfl&view=scatter&team=f-lanterns")
     rows = nfl_guarded_page.locator("#nfl-matched-games tbody tr")
     assert rows.count() > 0
-    # CFB parity: the network is a family-colored pill and the row is a click target.
-    assert rows.first.locator("td .pill").count() >= 1
+    # CFB parity: the network is a mark and the row is a click target. (Re-pinned at Phase 15
+    # Plan 12 r6: this used to match the category pills, which are now plain text.)
+    assert rows.first.locator("td .net-mark").count() >= 1
     assert "row-link" in (rows.first.get_attribute("class") or "")
     rows.first.locator("td").nth(1).click(position={"x": 2, "y": 2})
     nfl_guarded_page.wait_for_selector("#nfl-detail-panel[open]")

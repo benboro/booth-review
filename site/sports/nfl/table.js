@@ -23,10 +23,6 @@ function el(tag, className, text) {
   return node;
 }
 
-function textPill(text) {
-  return el('span', 'pill nfl-pill', text);
-}
-
 /** Row order: active key and direction, unrated always last, ties by date then index. */
 function compareRows(sort, a, b) {
   let cmp = 0;
@@ -94,10 +90,8 @@ function buildRow(row, onOpen) {
   button.setAttribute('aria-label', `Details for ${row.away} at ${row.home}`);
   button.addEventListener('click', () => onOpen?.(row.i, button));
   matchupTd.appendChild(button);
-  const pills = el('div', 'nfl-pills');
-  pills.appendChild(textPill(row.slot));
-  for (const label of flagLabels(row)) pills.appendChild(textPill(label));
-  matchupTd.appendChild(pills);
+  // The category line is secondary text under the matchup, like the time under the date.
+  matchupTd.appendChild(el('span', 'games-sub', [row.slot, ...flagLabels(row)].join(' · ')));
   tr.appendChild(matchupTd);
 
   // NFL-only column: the table shows the final score; CFB shows it only in the panel.

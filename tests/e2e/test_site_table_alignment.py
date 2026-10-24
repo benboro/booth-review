@@ -418,6 +418,28 @@ def _assert_second_lines_share_a_top(page: Page, scope: str, *, expect_pair: boo
         assert seen_pair, rows
 
 
+def test_nfl_matched_games_second_lines_share_a_top(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    """The time under the Date and the category under the Matchup share a top at 1440."""
+    page = nfl_guarded_page
+    page.set_viewport_size(DESKTOP)
+    open_nfl_app(page, "?sport=nfl&view=crews")
+    page.locator("#nfl-view-crews tr.crews-row td.crews-name").first.click()
+    page.wait_for_selector(".nfl-games table.games-table tbody tr")
+    _assert_second_lines_share_a_top(page, ".nfl-games", expect_pair=True)
+
+
+def test_nfl_matched_games_second_lines_share_a_top_on_a_phone(
+    nfl_mobile_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_mobile_page
+    open_nfl_app(page, "?sport=nfl&view=crews")
+    page.locator("#nfl-view-crews tr.crews-row td.crews-name").first.click()
+    page.wait_for_selector(".nfl-games table.games-table tbody tr")
+    _assert_second_lines_share_a_top(page, ".nfl-games", expect_pair=True)
+
+
 def test_cfb_matched_games_second_lines_share_a_top(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
@@ -434,6 +456,43 @@ def test_cfb_matched_games_second_lines_share_a_top_on_a_phone(
     open_app(mobile_page, "?school=northfield")
     mobile_page.wait_for_selector("#games-table tbody tr")
     _assert_second_lines_share_a_top(mobile_page, "#matched-games", expect_pair=False)
+
+
+def test_nfl_category_line_is_muted_secondary_text(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    """The category line matches the time line (colour, size), starts flush with the matchup
+    text, holds no pill, and joins several categories with " · "."""
+    page = nfl_guarded_page
+    page.set_viewport_size(DESKTOP)
+    open_nfl_app(page, "?sport=nfl&view=crews")
+    page.locator("#nfl-view-crews tr.crews-row td.crews-name").first.click()
+    page.wait_for_selector(".nfl-games table.games-table tbody tr")
+    got = page.evaluate(
+        """() => [...document.querySelectorAll('.nfl-games tbody tr')].map((tr) => {
+          const cat = tr.querySelector('td.matchup .games-sub');
+          const time = tr.querySelector('td.date .games-sub');
+          const btn = tr.querySelector('td.matchup button');
+          const left = (el) => {
+            const r = document.createRange(); r.selectNodeContents(el);
+            return r.getClientRects()[0].left;
+          };
+          const cs = (el) => getComputedStyle(el);
+          return { text: cat.textContent, pills: tr.querySelectorAll('td.matchup .pill').length,
+                   color: cs(cat).color, size: cs(cat).fontSize,
+                   timeColor: time ? cs(time).color : null,
+                   timeSize: time ? cs(time).fontSize : null,
+                   flush: Math.abs(left(cat) - left(btn)) };
+        })"""
+    )
+    assert got
+    for row in got:
+        assert row["pills"] == 0, row
+        assert row["flush"] <= 0.5, row
+        assert row["size"] in ("12px", "14px"), row
+        if row["timeColor"]:
+            assert (row["color"], row["size"]) == (row["timeColor"], row["timeSize"]), row
+    assert any(" · " in r["text"] for r in got) or all(" · " not in r["text"] for r in got)
 
 
 # Fix 15-12 r6: a crew's " · " never dangles. The list is forced narrow to wrap it, then
