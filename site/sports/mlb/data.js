@@ -12,15 +12,18 @@ const REQUIRED_BLOCKS = [
 ];
 const REQUIRED_LOOKUPS = ['clubs', 'team_names', 'networks', 'people', 'players', 'rounds', 'leagues', 'eras'];
 
-/** Display text per contract round name; a regular-season game has none. */
+/** Display text per contract round name (title case; one map for every surface). */
 export const ROUND_LABELS = Object.freeze({
-  regular: '',
-  wild_card: 'Wild card',
-  division: 'Division series',
-  lcs: 'League championship',
+  regular: 'Reg. Season',
+  wild_card: 'Wild Card',
+  division: 'Division Series',
+  lcs: 'League Championship Series',
   world_series: 'World Series',
-  tiebreak: 'Tiebreak',
+  tiebreak: 'Tiebreaker',
 });
+
+/** Short round text for tight places (LCS instead of the full series name). */
+export const ROUND_SHORT = Object.freeze({ ...ROUND_LABELS, lcs: 'LCS' });
 
 /** Why a game has no figure, as table and panel copy (D-22). */
 export const CAUSE_COPY = Object.freeze({
@@ -91,11 +94,23 @@ export function prepareMlb(raw) {
     const key = cellKey(r.season, r.round, leagueId);
     let c = cells.get(key);
     if (!c) {
-      c = { key, season: r.season, round: r.round, league: leagueId, games: [] };
+      c = { key, season: r.season, round: r.round, league: leagueId, kind: 'round', games: [] };
       cells.set(key, c);
     }
     for (const g of r.game_list) if (!c.games.includes(g)) c.games.push(g);
   }
+  // One synthetic cell per postseason season: the union of its round cells' games.
+  const seasonCells = new Map();
+  for (const c of cells.values()) {
+    const key = `season-${c.season}`;
+    let sc = seasonCells.get(key);
+    if (!sc) {
+      sc = { key, season: c.season, round: null, league: null, kind: 'season', games: [] };
+      seasonCells.set(key, sc);
+    }
+    for (const g of c.games) if (!sc.games.includes(g)) sc.games.push(g);
+  }
+  for (const [key, sc] of seasonCells) cells.set(key, sc);
 
   // Stable ids for deep links: a booth is its play-by-play person's id, a game is its
   // date, clubs and game number. Positions shift when the data is rebuilt; these do not.
@@ -166,9 +181,10 @@ export function boothLabelOf(model, pbp, analyst) {
   return b == null ? a : `${a} / ${b}`;
 }
 
-/** Cell heading: '2019 League championship, NL'. */
+/** Cell heading: '2019 League Championship Series, NL' or '2014 postseason'. */
 export function cellLabel(cell) {
-  const round = ROUND_LABELS[cell.round] || 'Regular season';
+  if (cell.kind === 'season') return `${cell.season} postseason`;
+  const round = ROUND_LABELS[cell.round] ?? String(cell.round);
   return cell.league ? `${cell.season} ${round}, ${cell.league}` : `${cell.season} ${round}`;
 }
 
@@ -231,6 +247,7 @@ export function gameRow(model, i) {
     homeShort: home.short,
     round: c.round[i],
     roundLabel: ROUND_LABELS[c.round[i]] ?? '',
+    roundShort: ROUND_SHORT[c.round[i]] ?? '',
     seriesLeague: leagueIdx == null ? null : model.leagues[leagueIdx].id,
     seriesGame: c.series_game[i] ?? null,
     network: net ? net.name : null,

@@ -64,7 +64,7 @@ def test_postseason_cell_selection_and_empty_crew(mlb: Page) -> None:
     assert mlb.evaluate(f"{HOOKS}.getTableIndexes()") == [6]
     text = mlb.inner_text("#mlb-matched-games tbody")
     assert "crew not listed" in text
-    assert "Wild card" in text
+    assert "Wild Card" in text
     assert "AL, game 1" in text
     mlb.evaluate(f"{HOOKS}.setState({{ cell: '2019-division-AL' }})")
     text = mlb.inner_text("#mlb-matched-games tbody")

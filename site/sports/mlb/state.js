@@ -9,9 +9,11 @@
 import { boothLabelOf, cellLabel } from './data.js';
 
 export const MLB_VIEWS = Object.freeze(['apple', 'postseason']);
+export const MLB_STYPES = Object.freeze(['post', 'reg']);
+export const MLB_SROUNDS = Object.freeze(['wild_card', 'division', 'lcs', 'world_series', 'tiebreak']);
 
 export function defaultMlbState() {
-  return { view: 'apple', booth: null, cell: null, game: null, selection: null };
+  return { view: 'apple', booth: null, cell: null, game: null, selection: null, stype: null, sround: null };
 }
 
 /** Clamp and allowlist a state so every later reader can trust it. Never throws. */
@@ -23,12 +25,16 @@ export function canonicalMlbState(state, model) {
   const cell = typeof s.cell === 'string' && model.cells.has(s.cell) ? s.cell : null;
   const gameNum = Number(s.game);
   const game = s.game != null && Number.isInteger(gameNum) && gameNum >= 0 && gameNum < model.n ? gameNum : null;
+  const stype = MLB_STYPES.includes(s.stype) ? s.stype : null;
+  const sround = stype === 'post' && MLB_SROUNDS.includes(s.sround) ? s.sround : null;
   return {
     view: MLB_VIEWS.includes(s.view) ? s.view : d.view,
     booth,
     cell: booth == null ? cell : null,
     game,
     selection: s.selection && typeof s.selection === 'object' && Array.isArray(s.selection.games) ? s.selection : null,
+    stype,
+    sround,
   };
 }
 

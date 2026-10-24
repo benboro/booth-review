@@ -18,6 +18,8 @@ export function encodeMlbState(state, model) {
     parts.push('booth=' + encodeURIComponent(boothId));
   }
   if (s.cell != null) parts.push('cell=' + encodeURIComponent(s.cell));
+  if (s.stype != null) parts.push('stype=' + s.stype);
+  if (s.sround != null) parts.push('sround=' + s.sround);
   const gameId = s.game == null ? null : model.gameIds[s.game];
   if (gameId != null && model.gameIndexById.get(gameId) === s.game) {
     parts.push('game=' + encodeURIComponent(gameId));
@@ -56,6 +58,8 @@ export function decodeMlbState(search, model) {
         break;
       }
       case 'cell': state.cell = safeDecode(raw); break;
+      case 'stype': state.stype = safeDecode(raw); break;
+      case 'sround': state.sround = safeDecode(raw); break;
       case 'game': {
         const at = model.gameIndexById.get(safeDecode(raw));
         state.game = at == null ? null : at;
