@@ -183,7 +183,7 @@ def test_nfl_crews_and_matched_games_heads_align_like_their_columns(
     open_nfl_app(page, "?sport=nfl&view=crews")
     page.wait_for_selector("#nfl-view-crews table.games-table tbody tr")
     _assert_aligned(_columns(page, "#nfl-view-crews"))
-    page.locator("#nfl-view-crews .booth-row-btn").first.click()
+    page.locator("#nfl-view-crews tr.crews-row td.crews-name").first.click()
     page.wait_for_selector(".nfl-games table.games-table tbody tr")
     _assert_aligned(_columns(page, ".nfl-games"))
 
@@ -274,7 +274,7 @@ def test_nfl_matchup_stays_on_one_line_at_1440(
     page = nfl_guarded_page
     page.set_viewport_size(DESKTOP)
     open_nfl_app(page, "?sport=nfl&view=crews")
-    page.locator("#nfl-view-crews .booth-row-btn").first.click()
+    page.locator("#nfl-view-crews tr.crews-row td.crews-name").first.click()
     page.wait_for_selector(".nfl-games table.games-table tbody tr")
     _assert_one_line_matchups(page, ".nfl-games")
 
