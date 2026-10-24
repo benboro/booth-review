@@ -612,6 +612,56 @@ def test_table_games_and_filter_count(run: Callable[[str], Any]) -> None:
     assert (got["c0"], got["c4"]) == (0, 4)
 
 
+def test_table_games_intersects_people_and_booths(run: Callable[[str], Any]) -> None:
+    got = run(
+        """
+        const d = S.defaultNflState(m);
+        const key = m.boothCatalog[0].key;
+        const bg = S.boothGames(m, [key]);
+        const pg = (id) => m.personGames.get(m.personIndex.get(id)) || [];
+        // a person who called one of the booth's games, and one who called none of them
+        const inBooth = m.people.find((p) => pg(p.id).some((g) => bg.includes(g)));
+        const outBooth = m.people.find((p) => pg(p.id).length && !pg(p.id).some((g) => bg.includes(g)));
+        const both = S.tableGames(m, { ...d, people: [inBooth.id], booths: [key] });
+        const expect = bg.filter((g) => pg(inBooth.id).includes(g));
+        const none = outBooth ? S.tableGames(m, { ...d, people: [outBooth.id], booths: [key] }) : [];
+        const season = m.cols.season[bg[0]];
+        const narrowed = S.tableGames(m, { ...d, people: [inBooth.id], booths: [key], seasons: [season, season] });
+        const dates = both.map((i) => m.cols.date[i]);
+        return { both: both.slice().sort((a, b) => a - b), expect, none, hasOut: !!outBooth,
+          narrowedOk: narrowed.every((i) => m.cols.season[i] === season && expect.includes(i)),
+          sorted: dates.every((x, k) => k === 0 || dates[k - 1] >= x) };
+        """
+    )
+    assert got["expect"] and got["both"] == got["expect"]
+    assert got["sorted"] is True and got["narrowedOk"] is True
+    if got["hasOut"]:
+        assert got["none"] == []
+
+
+def test_special_recount_matches_special_rows(run: Callable[[str], Any]) -> None:
+    bad = run(
+        """
+        const d = S.defaultNflState(m);
+        const passes = new Uint8Array(m.n).fill(1);
+        const keys = ['solo_thursday', 'solo_sunday', 'solo_monday', 'solo_holiday',
+          'solo_other', 'agotw', 'cbs_national', 'international_other'];
+        const got = S.specialMatchedCounts(m, d, passes);
+        const bad = [];
+        m.franchises.forEach((f, fi) => {
+          const rec = got.get(fi) || {};
+          for (const k of keys) {
+            const want = m.special.filter((r) => r.franchise === fi
+              && r.season >= d.seasons[0] && r.season <= d.seasons[1]).reduce((n, r) => n + r[k], 0);
+            if ((rec[k] || 0) !== want) bad.push([f.id, k, rec[k] || 0, want]);
+          }
+        });
+        return bad;
+        """
+    )
+    assert bad == []
+
+
 # ------------------------------------------------------------- url-state.js
 
 

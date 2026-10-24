@@ -6,6 +6,8 @@
  * encoded in the URL.
  */
 
+import { computePicks } from './picks.js';
+
 export const NFL_VIEWS = Object.freeze(['special', 'crews', 'viewership', 'scatter']);
 export const CREW_METRICS = Object.freeze(['margin', 'excitement', 'viewers']);
 
@@ -419,19 +421,44 @@ function newestFirst(model, list) {
 export function tableGames(model, state) {
   let base = null;
   if (state.selection && Array.isArray(state.selection.games)) base = state.selection.games;
-  else if (state.booths.length) base = boothGames(model, state.booths);
-  else if (state.people.length) {
-    const set = new Set();
-    for (const id of state.people) {
-      for (const g of model.personGames.get(model.personIndex.get(id)) || []) set.add(g);
+  else {
+    const picks = computePicks(model, state);
+    if (picks.hasPick) {
+      // U-05: Announcers and Booths intersect; computePicks already applies Seasons, Team and Category.
+      base = [];
+      for (let i = 0; i < model.n; i++) if (picks.matched[i]) base.push(i);
+    } else if (state.teams.length) {
+      // CFB parity (D-18, D-19): a Team alone fills the table with that team's games, as School does on CFB.
+      base = model.cols.date.map((_, i) => i);
     }
-    base = [...set];
-  } else if (state.teams.length) {
-    // CFB parity (D-18, D-19): a Team alone fills the table with that team's games, as School does on CFB.
-    base = model.cols.date.map((_, i) => i);
   }
   if (!base) return [];
   return newestFirst(model, base.filter((i) => gamePasses(model, state, i)));
+}
+
+/**
+ * Per-franchise, per-segment counts of the games in `matched` (a 0/1 mask over games) inside the
+ * Seasons range. A game counts for both franchises under its exclusive category (D-24, the same
+ * precedence as special[]); the 'none' category belongs to no segment. With matched = passes and
+ * no Team/Category filter this equals the shipped special[] counts.
+ */
+export function specialMatchedCounts(model, state, matched) {
+  const [lo, hi] = state.seasons;
+  const c = model.cols;
+  const out = new Map();
+  const bump = (f, key) => {
+    let rec = out.get(f);
+    if (!rec) { rec = emptyCounts(); out.set(f, rec); }
+    rec[key]++;
+  };
+  for (let i = 0; i < model.n; i++) {
+    if (!matched[i] || c.season[i] < lo || c.season[i] > hi) continue;
+    const cat = EXCLUSIVE_CATEGORIES[model.category[i]];
+    if (!cat || cat.key === 'none') continue;
+    bump(c.home[i], cat.key);
+    bump(c.away[i], cat.key);
+  }
+  return out;
 }
 
 /** Count of non-default Seasons, Team, Category and Announcers filters (0-4). */
