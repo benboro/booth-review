@@ -610,7 +610,7 @@ def test_raw_hover_strings_and_axis_titles(
     assert any(" rated game" in line for line in _tooltip(page))
 
 
-def test_chart_plots_first_25_rows_at_fixed_height(
+def test_chart_plots_first_25_rows_and_shrinks_to_fewer(
     nfl_guarded_page: Page,
     open_nfl_app: Callable[..., None],
     serve_nfl_crews: Callable[[Page], None],
@@ -632,12 +632,22 @@ def test_chart_plots_first_25_rows_at_fixed_height(
         f"!(document.querySelector('{GD}')._ev && document.querySelector('{GD}')._ev._events"
         f" && document.querySelector('{GD}')._ev._events.plotly_click)"
     )
-    # Three rows plot at the same height.
+    # Fewer rows shrink the figure (user override of the UI-SPEC Q2 reserve, 2026-10-24):
+    # 24px per row, and the chart container follows it.
     catalog = str(CASE_TWO_ANALYSTS["catalog_key"])
     _set(page, {"booths": [catalog]})
     page.wait_for_function("window.__nflTestHooks.getViewModel('crews').rows.length === 2")
     assert len(_vm(page)["chart"]["points"]) == 2
-    assert page.evaluate(f"document.querySelector('{GD}').layout.height") == height
+    small = page.evaluate(f"document.querySelector('{GD}').layout.height")
+    assert height - small == (25 - 2) * 24
+    box = page.evaluate(
+        f"""() => {{
+          const gd = document.querySelector('{GD}');
+          return [gd.getBoundingClientRect().height,
+                  gd.parentElement.getBoundingClientRect().height];
+        }}"""
+    )
+    assert abs(box[0] - small) <= 1 and box[1] - box[0] <= 4
 
 
 _YTICKS_JS = """(sel) => {

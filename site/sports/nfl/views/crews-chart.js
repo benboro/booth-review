@@ -1,7 +1,9 @@
 /**
  * NFL Crews booth chart (15-09): one measure, one row per booth, for the first 25 rows of the
- * Crews table in the table's order. The plot height is fixed (25 rows x 24px plus the frame's
- * axis band), so nothing below it shifts while the table grows or the row count changes.
+ * Crews table in the table's order. The figure is rows x 24px plus the frame's margins and
+ * axis band, so the chart (and the module around it) shrinks to the rows actually plotted.
+ * USER OVERRIDE of the UI-SPEC Q2 reserve (2026-10-24): the 25-row height is no longer held
+ * when fewer rows are plotted; content below the chart may move when the row count changes.
  * Marks have no click action (UI-SPEC): the table is where a booth is picked.
  *
  * Names enter Plotly strings only through escapeHover. The spread's value is never shown;
@@ -256,11 +258,10 @@ function buildFigure(items, metric, adjusted, env, th, widthPx = 0) {
     hovermode: 'closest',
     clickmode: 'none',
     dragmode: false,
-    // Fixed: 25 rows x 24px, plus the frame's margins and the axis-title band.
-    height: CHART_ROWS * ROW_PX + MARGIN.t + MARGIN.b + 20,
-    // Fewer rows shrink the plot and push the extra height below the axis, so the axis sits
-    // right under the last row and the module's height still does not change.
-    margin: { ...MARGIN, l: Math.max(MARGIN.l, left), b: MARGIN.b + (CHART_ROWS - rows) * ROW_PX },
+    // Fits the plotted rows (user override of the UI-SPEC Q2 25-row reserve, 2026-10-24):
+    // rows x 24px, plus the frame's margins and the axis-title band.
+    height: rows * ROW_PX + MARGIN.t + MARGIN.b + 20,
+    margin: { ...MARGIN, l: Math.max(MARGIN.l, left) },
     shapes: useAdj
       ? [referenceLine({ xref: 'x', yref: 'paper', x0: 0, x1: 0, y0: 0, y1: 1 }, th)]
       : [],
@@ -288,7 +289,7 @@ function buildFigure(items, metric, adjusted, env, th, widthPx = 0) {
 }
 
 /**
- * Draws the chart into `refs.gd` and sizes `refs.chart` to the fixed figure height.
+ * Draws the chart into `refs.gd` and sizes `refs.chart` to the figure height (it follows the plotted rows).
  * @param {{gd: HTMLElement, chart: HTMLElement}} refs
  * @param {object[]} items - from chartModel
  * @param {{metric: string, adjusted: boolean, env: object, th: string,
