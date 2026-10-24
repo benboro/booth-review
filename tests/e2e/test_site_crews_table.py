@@ -405,6 +405,20 @@ def test_person_pick_highlights_rows_and_drops_none(app: Page) -> None:
     expect(_rows(app)).to_have_count(total)
 
 
+def test_person_pick_highlight_respects_role(app: Page) -> None:
+    """CFB-05: Role keeps its person-matching meaning, so a row is highlighted only when one
+    of its games is a matched game: the trio's pbp never called a game as an analyst."""
+    _set(app, {"people": [CASE_TRIO["pbp"]], "role": "analyst"})
+    _show_all(app)
+    assert app.evaluate("() => window.__testHooks.getView().matched.length") == 0
+    expect(app.locator("#crews-panel tr.is-highlighted")).to_have_count(0)
+    _set(app, {"role": "pbp"})
+    _show_all(app)
+    highlighted = app.locator("#crews-panel tr.is-highlighted")
+    expect(highlighted).to_have_count(1)
+    expect(highlighted).to_contain_text(_name(CASE_TRIO["pbp"]))
+
+
 def test_crew_row_click_sets_crew_and_clears_people(app: Page) -> None:
     trio_names = [_name(s) for s in (CASE_TRIO["pbp"], *CASE_TRIO["analysts"])]
     _set(app, {"people": ["fill-pbp"]})
@@ -536,6 +550,17 @@ def test_empty_filters_show_the_empty_state_with_tools(app: Page) -> None:
     expect(panel.locator(".crews-mode")).to_be_visible()
     expect(panel.locator("input.crews-perseason")).to_be_visible()
     assert _captions(app)[-3:] == _CREDITS
+
+
+def test_empty_person_mode_still_names_the_left_out_telecasts(app: Page) -> None:
+    """The two net-d telecasts have no play-by-play voice: PBP mode has no rows, and the
+    empty state still says both were left out."""
+    _set(app, {"networks": ["net-d"], "cmode": "pbp"})
+    panel = app.locator("#crews-panel")
+    expect(panel.locator(".season-empty-title")).to_have_text("No games match these filters")
+    expect(panel.locator(".crews-left-out")).to_have_text(
+        "2 telecasts with no resolved play-by-play voice are not in this mode."
+    )
 
 
 def test_excitement_caption_follows_the_seasons_range(app: Page) -> None:

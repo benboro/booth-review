@@ -198,12 +198,17 @@ function isPickedRow(row, mode, state) {
   return state.people.length === 1 && state.people[0] === row.personSlug;
 }
 
-/** Whether `row` holds a picked person without being the pick itself (accent rule 2, U-06). */
-function isHighlightedRow(row, mode, state) {
+/**
+ * Whether `row` holds a picked person without being the pick itself (accent rule 2, U-06),
+ * and at least one of its games is a matched game (computeView's `highlighted`, which
+ * applies Role and Called together), so Role keeps its person-matching meaning (CFB-05).
+ */
+function isHighlightedRow(row, mode, state, highlightedSet) {
   if (!state.people.length) return false;
   const slugs = mode === 'crew' ? row.people.map((p) => p.slug) : [row.personSlug];
   const held = state.people.filter((id) => slugs.includes(id));
-  return state.together ? held.length === state.people.length : held.length > 0;
+  const holds = state.together ? held.length === state.people.length : held.length > 0;
+  return holds && row.games.some((i) => highlightedSet.has(i));
 }
 
 function buildRow(row, mode, ctx, firstRow) {
@@ -218,7 +223,7 @@ function buildRow(row, mode, ctx, firstRow) {
   tr.setAttribute('aria-expanded', String(open));
   tr.setAttribute('aria-label', row.names);
   if (picked) tr.classList.add('is-picked');
-  else if (isHighlightedRow(row, mode, state)) tr.classList.add('is-highlighted');
+  else if (isHighlightedRow(row, mode, state, ctx.highlightedSet)) tr.classList.add('is-highlighted');
 
   const chevronCell = el('td', 'crews-chevron-cell');
   const chevron = el('button', 'crews-chevron');
@@ -593,7 +598,7 @@ function buildTable(rows, ctx, cols) {
  */
 export function renderCrewsPanel(container, model, ctx) {
   const { state, view } = ctx;
-  const full = { ...ctx, model };
+  const full = { ...ctx, model, highlightedSet: new Set(view.highlighted ?? []) };
   const signature = `${model.mode}|${model.perSeason}|${JSON.stringify(state.csort)}|${passingHash(view)}`;
   if (signature !== lastSignature) {
     shown = PAGE;
@@ -644,8 +649,9 @@ export function renderCrewsPanel(container, model, ctx) {
       container.append(more);
     }
     container.append(el('p', 'caption crews-count', `Showing ${count} of ${sorted.length} rows.`));
-    if (model.leftOut > 0) container.append(el('p', 'caption crews-left-out', LEFT_OUT[model.mode](model.leftOut)));
   }
+  // Shown with or without rows: an empty person mode still says which telecasts it left out.
+  if (model.leftOut > 0) container.append(el('p', 'caption crews-left-out', LEFT_OUT[model.mode](model.leftOut)));
   container.append(el('p', 'caption crews-confound', CONFOUND));
   if (model.mode === 'crew') container.append(el('p', 'caption crews-unknown-note', UNKNOWN_NOTE));
   const credits = el('div', 'crews-credits');
