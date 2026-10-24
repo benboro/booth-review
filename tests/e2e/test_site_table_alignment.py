@@ -370,6 +370,8 @@ def test_cfb_matched_games_first_lines_share_a_top_on_a_phone(
 # Fix 15-12 r6: line N of every cell in a row shares a top (the time under the Date, the
 # category under the Matchup). Lines are read from each cell's text outside pills, grouped by
 # top; a new line starts when the top moves 6px or more.
+CREW_ROW_GAP = 4  # the crew list row-gap, one 4px step
+
 _LINE_TOPS_JS = """
 (scope) => [...document.querySelectorAll(scope + ' table.games-table')]
   .filter((t) => t.offsetParent !== null && t.tBodies[0] && t.tBodies[0].rows.length)
@@ -395,9 +397,8 @@ _LINE_TOPS_JS = """
     return {
       date: date ? lines(date) : [],
       matchup: matchup ? lines(matchup) : [],
-      all: cells
-        .filter((c) => c.matches('.date, .matchup') || c.querySelector('.crew-list'))
-        .map(lines),
+      cells: cells.filter((c) => c.matches('.date, .matchup')).map(lines),
+      crews: cells.filter((c) => c.querySelector('.crew-list')).map(lines),
     };
   }))
 """
@@ -408,9 +409,18 @@ def _assert_second_lines_share_a_top(page: Page, scope: str, *, expect_pair: boo
     assert rows, f"no rows under {scope}"
     seen_pair = False
     for row in rows:
-        seconds = [c[1] for c in row["all"] if len(c) > 1]
+        # Date, Matchup (and the NFL time / category lines) keep the 1.5px tolerance. A
+        # wrapped crew's second line is the exception: the crew list has a 4px row-gap
+        # between wrapped lines, so it may sit lower than the time / category second line
+        # by exactly that gap (within 1.5px). It is never higher.
+        seconds = [c[1] for c in row["cells"] if len(c) > 1]
         if len(seconds) > 1:
             assert max(seconds) - min(seconds) <= 1.5, row
+        crew = [c[1] for c in row["crews"] if len(c) > 1]
+        if crew and seconds:
+            ref = min(seconds)
+            for top in crew:
+                assert -1.5 <= top - ref <= CREW_ROW_GAP + 1.5, row
         if len(row["date"]) > 1 and len(row["matchup"]) > 1:
             seen_pair = True
             assert abs(row["date"][1] - row["matchup"][1]) <= 1.5, row
@@ -523,6 +533,38 @@ _SEPARATORS_JS = """
 }
 """
 
+# The pills of a wrapped crew's line 1 end at least 2px above the pills of line 2, and a pill
+# fits its own line (its height is logged by the measuring test below).
+_PILL_GAP_JS = """
+(args) => {
+  const [scope, width] = args;
+  const out = [];
+  for (const list of document.querySelectorAll(scope + ' .crew-list')) {
+    list.style.width = width;
+    const rects = [...list.querySelectorAll('.pill, .role-pill')].map((p) => {
+      const r = p.getBoundingClientRect();
+      return {top: r.top, bottom: r.bottom, h: r.height};
+    });
+    const lineTops = [...new Set(rects.map((r) => Math.round(r.top / 4)))].sort((a, b) => a - b);
+    if (lineTops.length < 2) continue;
+    const first = rects.filter((r) => Math.round(r.top / 4) === lineTops[0]);
+    const second = rects.filter((r) => Math.round(r.top / 4) === lineTops[1]);
+    out.push({
+      gap: Math.min(...second.map((r) => r.top)) - Math.max(...first.map((r) => r.bottom)),
+      h: Math.max(...rects.map((r) => r.h)),
+    });
+  }
+  return out;
+}
+"""
+
+
+def _assert_wrapped_pills_do_not_touch(page: Page, scope: str) -> None:
+    gaps = page.evaluate(_PILL_GAP_JS, [scope, "150px"])
+    assert gaps, f"no crew with pills wrapped under {scope}"
+    for g in gaps:
+        assert g["gap"] >= 2, g  # the line-1 pill bottom is clear of the line-2 pill top
+
 
 def _assert_no_dangling_separator(page: Page, scope: str, *, expect_wrap: bool) -> None:
     seps = page.evaluate(_SEPARATORS_JS, [scope, "150px" if expect_wrap else None])
@@ -548,6 +590,7 @@ def test_nfl_crew_separator_does_not_dangle_when_wrapped(
     page.locator("#nfl-view-crews tr.crews-row td.crews-name").first.click()
     page.wait_for_selector(".nfl-games table.games-table tbody tr")
     _assert_no_dangling_separator(page, ".nfl-games", expect_wrap=True)
+    _assert_wrapped_pills_do_not_touch(page, ".nfl-games")
 
 
 def test_nfl_crew_separator_shows_between_people_on_one_line(
@@ -569,6 +612,7 @@ def test_cfb_crew_separator_does_not_dangle_when_wrapped(
     open_app(mobile_page, "?school=northfield")
     mobile_page.wait_for_selector("#games-table tbody tr")
     _assert_no_dangling_separator(mobile_page, "#games-table", expect_wrap=True)
+    _assert_wrapped_pills_do_not_touch(mobile_page, "#games-table")
 
 
 def test_cfb_crew_separator_shows_between_people_on_one_line(

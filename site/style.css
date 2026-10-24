@@ -3682,6 +3682,8 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
+  /* A wrapped line's pills would otherwise touch the pills of the line above. */
+  row-gap: var(--space-xs);
   margin-left: calc(-1 * var(--space-md));
 }
 
