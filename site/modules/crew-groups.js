@@ -369,11 +369,14 @@ function nameOf(data, slug) {
   return idx === undefined ? slug : data.lookups.people[idx].name;
 }
 
-/** Rank run text (D-04): `Lead 2019–24, No. 2 2025`; per season rows print one token. */
-function rankRunOf(bySeason, perSeason) {
+/**
+ * Rank run text (D-04): `Lead 2019–24, No. 2 2025`; per season rows print one token.
+ * `labelOf` maps a rank number to its text, so a sport can name its ranks its own way.
+ */
+export function rankRunOf(bySeason, perSeason, labelOf = (r) => (r === 1 ? 'Lead' : `No. ${r}`)) {
   const seasons = Array.from(bySeason.keys()).sort((a, b) => a - b);
   if (!seasons.length) return '';
-  const label = (r) => (r === 1 ? 'Lead' : `No. ${r}`);
+  const label = labelOf;
   if (perSeason) return label(bySeason.get(seasons[0]));
   const runs = [];
   for (const s of seasons) {
@@ -600,16 +603,19 @@ export function buildCrewRows(data, view, { mode = 'crew', perSeason = false } =
  * Sort rows without touching the input. Metric keys bucket full-n values, then flagged
  * values, then blanks (D-12), and only reverse inside the first two buckets; `rank` puts
  * unranked rows last in both directions. Ties fall back to games desc, then name asc.
+ * `booth` sorts like `crew` (by names) and `margin` like `exc`/`viewers` (NFL keys).
  * @param {Array<object>} rows
  * @param {{key: string, dir?: 'asc'|'desc'}|null} sort - null is the default sort.
+ * @param {Readonly<Record<string, 'asc'|'desc'>>} [naturalDir] - the sport's natural directions.
  */
-export function sortCrewRows(rows, sort) {
+export function sortCrewRows(rows, sort, naturalDir = NATURAL_DIR) {
   if (!sort) return rows.slice().sort(defaultOf(rows));
-  const dir = (sort.dir ?? NATURAL_DIR[sort.key]) === 'desc' ? -1 : 1;
+  const dir = (sort.dir ?? naturalDir[sort.key]) === 'desc' ? -1 : 1;
   const bucket = (m) => (m.mean == null ? 2 : m.flagged ? 1 : 0);
   const cmp = (a, b) => {
     switch (sort.key) {
       case 'crew':
+      case 'booth':
         return dir * cmpStr(a.names, b.names);
       case 'season': {
         if (a.season == null || b.season == null) return (a.season == null) - (b.season == null);
@@ -624,6 +630,7 @@ export function sortCrewRows(rows, sort) {
         return dir * (a.rankKey - b.rankKey);
       }
       case 'exc':
+      case 'margin':
       case 'viewers': {
         const ma = a[sort.key];
         const mb = b[sort.key];
