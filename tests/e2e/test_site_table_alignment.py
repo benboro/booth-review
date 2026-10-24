@@ -365,3 +365,88 @@ def test_cfb_matched_games_first_lines_share_a_top_on_a_phone(
     open_app(mobile_page, "?school=northfield")
     mobile_page.wait_for_selector("#games-table tbody tr")
     _assert_first_lines_share_a_top(mobile_page, "#matched-games")
+
+
+# Fix 15-12 r6: a crew's " · " never dangles. The list is forced narrow to wrap it, then
+# each separator is checked against the list's clip edge.
+_SEPARATORS_JS = """
+(args) => {
+  const [scope, width] = args;
+  const out = [];
+  for (const list of document.querySelectorAll(scope + ' .crew-list')) {
+    if (width) list.style.width = width;
+    const box = list.getBoundingClientRect();
+    const items = [...list.querySelectorAll('.crew-item')];
+    const tops = items.map((it) => Math.round(it.getBoundingClientRect().top));
+    items.forEach((it, k) => {
+      const sep = it.querySelector('.crew-sep');
+      if (!sep) return;
+      const s = sep.getBoundingClientRect();
+      out.push({
+        startsLine: tops[k] !== tops[k - 1],
+        visible: s.left >= box.left - 0.5 && s.right <= box.right + 0.5,
+        clipped: s.right <= box.left + 0.5,
+        wrapped: new Set(tops).size > 1,
+        label: list.textContent,
+      });
+    });
+  }
+  return out;
+}
+"""
+
+
+def _assert_no_dangling_separator(page: Page, scope: str, *, expect_wrap: bool) -> None:
+    seps = page.evaluate(_SEPARATORS_JS, [scope, "150px" if expect_wrap else None])
+    assert seps, f"no crew separators under {scope}"
+    for sep in seps:
+        if sep["startsLine"]:
+            assert not sep["visible"], sep  # a line-start separator sits in the clipped gutter
+        else:
+            assert sep["visible"], sep  # a mid-line separator shows between its people
+    if expect_wrap:
+        assert any(s["startsLine"] for s in seps), seps
+    else:
+        # A crew that fits on one line keeps every separator; a long one may wrap naturally.
+        fits = [s for s in seps if not s["wrapped"]]
+        assert fits and all(s["visible"] for s in fits), seps
+
+
+def test_nfl_crew_separator_does_not_dangle_when_wrapped(
+    nfl_mobile_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_mobile_page
+    open_nfl_app(page, "?sport=nfl&view=crews")
+    page.locator("#nfl-view-crews tr.crews-row td.crews-name").first.click()
+    page.wait_for_selector(".nfl-games table.games-table tbody tr")
+    _assert_no_dangling_separator(page, ".nfl-games", expect_wrap=True)
+
+
+def test_nfl_crew_separator_shows_between_people_on_one_line(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    page.set_viewport_size(DESKTOP)
+    open_nfl_app(page, "?sport=nfl&view=crews")
+    page.locator("#nfl-view-crews tr.crews-row td.crews-name").first.click()
+    page.wait_for_selector(".nfl-games table.games-table tbody tr")
+    _assert_no_dangling_separator(page, ".nfl-games", expect_wrap=False)
+    text = page.locator(".nfl-games .crew-list").first.text_content() or ""
+    assert " · " in text
+
+
+def test_cfb_crew_separator_does_not_dangle_when_wrapped(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(mobile_page, "?school=northfield")
+    mobile_page.wait_for_selector("#games-table tbody tr")
+    _assert_no_dangling_separator(mobile_page, "#games-table", expect_wrap=True)
+
+
+def test_cfb_crew_separator_shows_between_people_on_one_line(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    guarded_page.set_viewport_size(DESKTOP)
+    open_app(guarded_page, "?school=northfield")
+    guarded_page.wait_for_selector("#games-table tbody tr")
+    _assert_no_dangling_separator(guarded_page, "#games-table", expect_wrap=False)

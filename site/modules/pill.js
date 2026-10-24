@@ -66,6 +66,44 @@ export function nameWithRoles(...nodes) {
   return span;
 }
 
+/**
+ * A crew cell's people as one wrapping list (15-12 r6). Each person after the first carries
+ * its own " · " separator, drawn in the gap before it; the list clips that gap (style.css
+ * `.crew-list`), so a person who starts a line shows no separator and one who follows
+ * another on the same line does -- on every resize, with no measuring. The separator stays
+ * real text (aria-hidden) so a plain-text copy still reads "A PBP · B Analyst".
+ * @param {Node[]} people - one node per person (a `nameWithRoles` span or plain text)
+ * @param {Node[]} [notes] - trailing notes (a provenance tag) that take no separator
+ * @returns {HTMLSpanElement}
+ */
+export function crewList(people, notes = []) {
+  const outer = document.createElement('span');
+  outer.className = 'crew-list';
+  const inner = document.createElement('span');
+  inner.className = 'crew-list-inner';
+  people.forEach((node, idx) => {
+    const item = document.createElement('span');
+    item.className = 'crew-item';
+    if (idx > 0) {
+      const sep = document.createElement('span');
+      sep.className = 'crew-sep';
+      sep.setAttribute('aria-hidden', 'true');
+      sep.textContent = ' · ';
+      item.append(sep);
+    }
+    item.append(node);
+    inner.append(item);
+  });
+  for (const node of notes) {
+    const item = document.createElement('span');
+    item.className = 'crew-item crew-note';
+    item.append(node);
+    inner.append(item);
+  }
+  outer.append(inner);
+  return outer;
+}
+
 // Re-exported so the existing importers keep working; the theme module owns it.
 export { currentTheme } from './theme.js';
 

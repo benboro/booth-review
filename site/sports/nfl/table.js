@@ -7,7 +7,7 @@
  * the CFB panel's `safeHref`. Nothing here reads or shows a point spread.
  */
 
-import { nameWithRoles, makeRolePill } from '../../modules/pill.js';
+import { crewList, nameWithRoles, makeRolePill } from '../../modules/pill.js';
 import { networkMark } from '../../modules/network.js';
 import { attachScrollCue } from '../../modules/scroll-cue.js';
 import { safeHref } from '../../modules/panel.js';
@@ -51,14 +51,9 @@ function crewCell(td, row) {
     td.textContent = NOT_RECORDED;
     return;
   }
-  const nodes = [];
-  for (const c of ordered) {
-    if (nodes.length > 0) nodes.push(document.createTextNode(' · '));
-    nodes.push(nameWithRoles(el('span', 'crew-name', c.name), makeRolePill(c.role)));
-  }
+  const people = ordered.map((c) => nameWithRoles(el('span', 'crew-name', c.name), makeRolePill(c.role)));
   const source = crewSourceText(row);
-  if (source) nodes.push(document.createTextNode(' '), el('span', 'nfl-muted', source));
-  td.replaceChildren(...nodes);
+  td.replaceChildren(crewList(people, source ? [el('span', 'nfl-muted', source)] : []));
 }
 
 function sourceCell(row) {

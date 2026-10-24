@@ -7,7 +7,7 @@
  * links in the table (the panel carries the credits).
  */
 
-import { nameWithRoles, makeRolePill } from '../../modules/pill.js';
+import { crewList, nameWithRoles, makeRolePill } from '../../modules/pill.js';
 import { networkMark } from '../../modules/network.js';
 import { attachScrollCue } from '../../modules/scroll-cue.js';
 import { dateShortText } from './format.js';
@@ -51,17 +51,17 @@ function crewCell(td, row) {
     .sort((x, y) => (ROLE_ORDER[x.c.role] ?? 2) - (ROLE_ORDER[y.c.role] ?? 2) || x.idx - y.idx)
     .map(({ c }) => c);
   const nodes = [];
+  const notes = [];
   for (const c of ordered) {
-    if (nodes.length > 0) nodes.push(document.createTextNode(' · '));
     nodes.push(nameWithRoles(el('span', 'crew-name', c.name), makeRolePill(c.role)));
   }
   const tag = crewSourceTag(row.crewSource);
   if (tag) {
     const t = el('span', 'nfl-muted mlb-source-tag', tag);
     t.dataset.source = row.crewSource;
-    nodes.push(document.createTextNode(' '), t);
+    notes.push(t);
   }
-  td.replaceChildren(...nodes);
+  td.replaceChildren(crewList(nodes, notes));
 }
 
 function roundCell(td, row) {

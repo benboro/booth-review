@@ -26,7 +26,7 @@ import {
 import { safeHref } from './panel.js';
 import { networkMark } from './network.js';
 import { attachScrollCue } from './scroll-cue.js';
-import { makeRolePill, nameWithRoles } from './pill.js';
+import { crewList, makeRolePill, nameWithRoles } from './pill.js';
 import { personOnGame } from './select.js';
 import { venueFilterInfo } from './map-model.js';
 
@@ -61,12 +61,10 @@ function bindHeaderListeners() {
   viewersSortButton.addEventListener('click', () => currentOnSort?.('viewers'));
 }
 
-/** Fills the crew cell: main-feed "Name [pill]" entries joined by " · " (pbp, analyst, other), plus any selected alt-cast person appended as text (D-08, D-17, CR-04). */
+/** Fills the crew cell: main-feed "Name [pill]" entries in a wrapping list with " · " between people (pbp, analyst, other), plus any selected alt-cast person appended as text (D-08, D-17, CR-04). */
 function buildCrewCell(td, data, state, i) {
   const nodes = [];
-  const sep = () => document.createTextNode(' · ');
   for (const entry of crewEntries(data, i, { mainOnly: true })) {
-    if (nodes.length > 0) nodes.push(sep());
     const name = document.createElement('span');
     name.className = 'crew-name';
     name.textContent = entry.name;
@@ -75,12 +73,11 @@ function buildCrewCell(td, data, state, i) {
   for (const personId of state.people) {
     const personIndex = data.personIndexById.get(personId);
     if (personOnGame(data, i, personIndex, state.role) === 'alt') {
-      if (nodes.length > 0) nodes.push(sep());
       nodes.push(document.createTextNode(`${data.lookups.people[personIndex].name} (alt-cast)`));
     }
   }
   if (nodes.length === 0) td.textContent = 'Crew not recorded';
-  else td.replaceChildren(...nodes);
+  else td.replaceChildren(crewList(nodes));
 }
 
 /** Source cell: the publisher link (or "Original source not recorded"), then Ratings Reference link(s). */
