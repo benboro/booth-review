@@ -26,8 +26,6 @@ export function encodeNflState(state, model) {
   if (s.teams.length) parts.push('team=' + s.teams.map(encodeURIComponent).join(','));
   if (s.people.length) parts.push('people=' + s.people.map(encodeURIComponent).join(','));
   if (s.cats.length) parts.push('cat=' + s.cats.map(encodeURIComponent).join(','));
-  if (s.network !== d.network && s.network != null) parts.push('net=' + encodeURIComponent(s.network));
-  if (s.cseason !== d.cseason && s.cseason != null) parts.push('cseason=' + s.cseason);
   if (s.booths.length) parts.push('booths=' + s.booths.map(encodeURIComponent).join(','));
   if (s.perseason === false) parts.push('perseason=0');
   if (s.csort) {
@@ -94,17 +92,12 @@ export function decodeNflState(search, model) {
       case 'team': state.teams = list(raw); break;
       case 'people': state.people = list(raw); break;
       case 'cat': state.cats = list(raw).filter((k) => CATEGORY_OPTIONS.some((o) => o.key === k)); break;
-      case 'net': {
-        const v = safeDecode(raw);
-        if (v !== null) state.network = v;
-        break;
-      }
+      case 'net': break; // legacy one-network param: read and ignored
       case 'booths': state.booths = list(raw); break;
       case 'cseason':
       case 'fseason':
         // The first of cseason and fseason seen wins (fseason is the old name).
         if (!seen.has('cseason*') && /^\d{4}$/.test(raw)) {
-          state.cseason = Number(raw);
           legacySeason = Number(raw);
           seen.add('cseason*');
         }

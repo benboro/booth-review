@@ -82,15 +82,6 @@ const SPECIAL_SLOT_COLUMNS = Object.freeze([
   ['sunday_late', 'Sunday late'], ['other', 'Other'],
 ]);
 
-function defaultNetwork(model) {
-  const ids = model.networkGroups.map((g) => g.id);
-  return ids.includes('fox') ? 'fox' : ids[0] ?? null;
-}
-
-function crewsDefaultSeason(model) {
-  return model.freshness.crews_default_season ?? model.crewSeasons[0] ?? null;
-}
-
 /** @returns {object} the default NFL state for this model */
 export function defaultNflState(model) {
   return {
@@ -100,8 +91,6 @@ export function defaultNflState(model) {
     people: [],
     cats: [],
     dots: 'fade',
-    network: defaultNetwork(model),
-    cseason: crewsDefaultSeason(model),
     booths: [],
     perseason: true,
     csort: null,
@@ -143,7 +132,6 @@ export function canonicalNflState(state, model) {
   lo = Math.min(Math.max(Math.trunc(lo), d.seasons[0]), d.seasons[1]);
   hi = Math.min(Math.max(Math.trunc(hi), d.seasons[0]), d.seasons[1]);
   const catSet = new Set(Array.isArray(s.cats) ? s.cats : []);
-  const cs = Number(s.cseason);
   const catIds = new Set(model.viewCategories.map((c) => c.id));
   const cso = s.csort;
   const csort = cso && typeof cso === 'object'
@@ -157,8 +145,6 @@ export function canonicalNflState(state, model) {
     people: cleanIds(s.people, new Map(model.people.map((p) => [p.id, 1]))),
     cats: CAT_KEYS.filter((k) => catSet.has(k)),
     dots: s.dots === 'hide' ? 'hide' : 'fade',
-    network: model.networkGroups.some((g) => g.id === s.network) ? s.network : d.network,
-    cseason: model.crewSeasons.includes(cs) ? cs : d.cseason,
     booths: [...new Set(asList(s.booths).filter((k) => model.boothIndex.has(k)))],
     perseason: s.perseason !== false,
     csort,
@@ -201,13 +187,6 @@ export function gamePasses(model, state, i) {
   }
   if (state.cats.length && !state.cats.some((k) => catMatches(model, k, i))) return false;
   return true;
-}
-
-/** True when any selected person called game i. */
-export function personHighlight(model, state, i) {
-  if (!state.people.length) return false;
-  const idx = new Set(state.people.map((id) => model.personIndex.get(id)));
-  return (model.cols.crew[i] || []).some((m) => idx.has(m.person));
 }
 
 function emptyCounts() {
@@ -317,53 +296,6 @@ export function rateText(count, denom) {
   return `${count} of ${denom} weeks (${Math.round((count / denom) * 100)}%)`;
 }
 
-function groupIndexOf(model, id) {
-  return model.networkGroups.findIndex((g) => g.id === id);
-}
-
-/** Network groups with a game in the season range, in lookup order. */
-export function crewsNetworks(model, state) {
-  const [lo, hi] = state.seasons;
-  const c = model.cols;
-  const has = new Set();
-  for (let i = 0; i < model.n; i++) {
-    if (c.season[i] < lo || c.season[i] > hi || c.network[i] == null) continue;
-    const g = model.groupOfNetwork.get(c.network[i]);
-    if (g !== undefined) has.add(g);
-  }
-  return model.networkGroups
-    .map((g, index) => ({ id: g.id, index, name: g.name, flagship: g.flagship }))
-    .filter((g) => has.has(g.index));
-}
-
-/** Seasons (newest first) with booth rows for a network group index. */
-export function crewsSeasons(model, groupIndex) {
-  return model.crewSeasonsByGroup.get(groupIndex) ?? [];
-}
-
-/** Booth rows for the picked network and season, by rank. */
-export function crewsRows(model, state) {
-  const gi = groupIndexOf(model, state.network);
-  return model.booths
-    .filter((r) => r.network_group === gi && r.season === state.cseason)
-    .sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
-}
-
-/** {total, withCrew, fromLineup} over the picked network's games in the season. */
-export function crewsCoverage(model, state) {
-  const gi = groupIndexOf(model, state.network);
-  const c = model.cols;
-  const out = { total: 0, withCrew: 0, fromLineup: 0 };
-  for (let i = 0; i < model.n; i++) {
-    if (c.season[i] !== state.cseason || c.network[i] == null) continue;
-    if (model.groupOfNetwork.get(c.network[i]) !== gi) continue;
-    out.total++;
-    if ((c.crew[i] || []).length) out.withCrew++;
-    if (c.crew_source[i] === 'published_lineup') out.fromLineup++;
-  }
-  return out;
-}
-
 /** One series per view category with its points in the season range. */
 export function viewershipSeries(model, state) {
   const [lo, hi] = state.seasons;
@@ -400,13 +332,6 @@ export function boothGames(model, keys) {
     }
   }
   return [...set].sort((a, b) => a - b);
-}
-
-/** True when any game in the list was called by one of the picked booths. */
-export function pointHasBooth(model, gameList, keys) {
-  if (!keys || !keys.length) return false;
-  const set = new Set(boothGames(model, keys));
-  return (gameList || []).some((g) => set.has(g));
 }
 
 function newestFirst(model, list) {
