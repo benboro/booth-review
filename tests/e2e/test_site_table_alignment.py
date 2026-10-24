@@ -288,3 +288,80 @@ def test_mlb_matchup_stays_on_one_line_at_1440(
     page.locator(".mlb-apple-table .booth-row-btn").first.click()
     page.wait_for_selector(".nfl-games table.games-table tbody tr")
     _assert_one_line_matchups(page, ".nfl-games")
+
+
+# Fix 15-12 r5: a one-line Date cell used to sit lower than the Matchup cell's first line,
+# because a table cell centres vertically by default. The top of each cell's first text
+# line is read from a Range over its first non-empty text node.
+_FIRST_LINE_TOPS_JS = """
+(scope) => [...document.querySelectorAll(scope + ' table.games-table')]
+  .filter((t) => t.offsetParent !== null && t.tBodies[0] && t.tBodies[0].rows.length)
+  .flatMap((t) => [...t.tBodies[0].rows].map((tr) => {
+    const top = (td) => {
+      const w = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
+      for (let n = w.nextNode(); n; n = w.nextNode()) {
+        if (!n.textContent.trim()) continue;
+        const r = document.createRange();
+        r.selectNodeContents(n);
+        const rect = r.getClientRects()[0];
+        if (rect) return rect.top;
+      }
+      return null;
+    };
+    const cells = [...tr.cells];
+    const date = cells.find((c) => c.classList.contains('date'));
+    const matchup = cells.find((c) => c.classList.contains('matchup'));
+    return {
+      date: date ? top(date) : null,
+      matchup: matchup ? top(matchup) : null,
+      all: cells.map(top).filter((v) => v !== null),
+    };
+  }))
+"""
+
+
+def _assert_first_lines_share_a_top(page: Page, scope: str) -> None:
+    rows = page.evaluate(_FIRST_LINE_TOPS_JS, scope)
+    assert rows, f"no rows under {scope}"
+    for row in rows:
+        assert row["date"] is not None and row["matchup"] is not None, row
+        assert abs(row["date"] - row["matchup"]) <= 1.5, row
+        assert max(row["all"]) - min(row["all"]) <= 4, row
+
+
+def test_nfl_matched_games_first_lines_share_a_top(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    page.set_viewport_size(DESKTOP)
+    open_nfl_app(page, "?sport=nfl&view=crews")
+    page.locator("#nfl-view-crews tr.crews-row td.crews-name").first.click()
+    page.wait_for_selector(".nfl-games table.games-table tbody tr")
+    _assert_first_lines_share_a_top(page, ".nfl-games")
+
+
+def test_nfl_matched_games_first_lines_share_a_top_on_a_phone(
+    nfl_mobile_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_mobile_page
+    open_nfl_app(page, "?sport=nfl&view=crews")
+    page.locator("#nfl-view-crews tr.crews-row td.crews-name").first.click()
+    page.wait_for_selector(".nfl-games table.games-table tbody tr")
+    _assert_first_lines_share_a_top(page, ".nfl-games")
+
+
+def test_cfb_matched_games_first_lines_share_a_top(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    guarded_page.set_viewport_size(DESKTOP)
+    open_app(guarded_page, "?school=northfield")
+    guarded_page.wait_for_selector("#games-table tbody tr")
+    _assert_first_lines_share_a_top(guarded_page, "#matched-games")
+
+
+def test_cfb_matched_games_first_lines_share_a_top_on_a_phone(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(mobile_page, "?school=northfield")
+    mobile_page.wait_for_selector("#games-table tbody tr")
+    _assert_first_lines_share_a_top(mobile_page, "#matched-games")

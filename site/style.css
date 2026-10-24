@@ -2519,6 +2519,9 @@ input[type="checkbox"] {
 }
 
 .games-table td {
+  /* Cells share a top, so a one-line Date sits level with the first line of a Matchup that
+     carries pills or a wrapped name (a table cell centres vertically by default). */
+  vertical-align: top;
   word-break: break-word;
   /* No lone score or word on a wrapped line ("Vanderbilt / 3"). */
   text-wrap: pretty;
@@ -3675,6 +3678,10 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   font: inherit;
   text-align: left;
   cursor: pointer;
+  /* The whole row is the 44px touch target; the touch minimum on `button` would centre the
+     text 12px below the Date's first line. */
+  min-height: 0;
+  min-width: 0;
 }
 
 /* A real button (keyboard and screen-reader opener) that reads as plain matchup text like
