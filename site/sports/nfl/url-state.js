@@ -2,7 +2,12 @@
  * NFL URL state (D-05, D-06). DOM-free. Encodes `sport=nfl` first plus only
  * non-default params; decoding allowlists every value and never throws.
  */
-import { canonicalNflState, defaultNflState, CATEGORY_OPTIONS, CREW_METRICS } from './state.js';
+import {
+  canonicalNflState, defaultNflState, CATEGORY_OPTIONS, CREW_METRICS, NFL_NATURAL_DIR,
+} from './state.js';
+import { defaultSort } from '../../modules/crew-groups.js';
+
+const CSORT_RE = /^(booth|season|rank|network|games|margin|exc|viewers)(\.(asc|desc))?$/;
 
 const VIEW_PARAM = ['crews', 'viewership', 'scatter'];
 const VIEW_ALIASES = Object.freeze({ fox: 'crews', agotw: 'viewership' });
@@ -24,6 +29,13 @@ export function encodeNflState(state, model) {
   if (s.network !== d.network && s.network != null) parts.push('net=' + encodeURIComponent(s.network));
   if (s.cseason !== d.cseason && s.cseason != null) parts.push('cseason=' + s.cseason);
   if (s.booths.length) parts.push('booths=' + s.booths.map(encodeURIComponent).join(','));
+  if (s.perseason === false) parts.push('perseason=0');
+  if (s.csort) {
+    const def = defaultSort(s.perseason !== false);
+    if (s.csort.key !== def.key || s.csort.dir !== def.dir) {
+      parts.push('csort=' + (s.csort.dir === NFL_NATURAL_DIR[s.csort.key] ? s.csort.key : `${s.csort.key}.${s.csort.dir}`));
+    }
+  }
   if (s.adjusted) parts.push('adj=1');
   if (s.metric !== 'margin') parts.push('m=' + s.metric);
   if (s.viewY === 'resid') parts.push('ay=resid');
@@ -58,6 +70,8 @@ export function decodeNflState(search, model) {
   const state = defaultNflState(model);
   const q = typeof search === 'string' ? search.replace(/^\?/, '') : '';
   const seen = new Set();
+  let legacySeason = null;
+  let csort = null;
   for (const pair of q.split('&')) {
     const eq = pair.indexOf('=');
     if (eq < 0) continue;
@@ -91,9 +105,16 @@ export function decodeNflState(search, model) {
         // The first of cseason and fseason seen wins (fseason is the old name).
         if (!seen.has('cseason*') && /^\d{4}$/.test(raw)) {
           state.cseason = Number(raw);
+          legacySeason = Number(raw);
           seen.add('cseason*');
         }
         break;
+      case 'perseason': state.perseason = raw !== '0'; break;
+      case 'csort': {
+        const m = CSORT_RE.exec(raw);
+        if (m) csort = { key: m[1], dir: m[3] || NFL_NATURAL_DIR[m[1]] };
+        break;
+      }
       case 'adj': state.adjusted = raw === '1'; break;
       case 'm': if (CREW_METRICS.includes(raw)) state.metric = raw; break;
       case 'ay': if (raw === 'resid') state.viewY = 'resid'; break;
@@ -103,5 +124,17 @@ export function decodeNflState(search, model) {
       default: break;
     }
   }
-  return canonicalNflState(state, model);
+  if (legacySeason != null && !seen.has('seasons')
+    && legacySeason >= model.seasons[0] && legacySeason <= model.seasons[1]) {
+    state.seasons = [legacySeason, legacySeason];
+  }
+  const out = canonicalNflState(state, model);
+  if (csort) {
+    const def = defaultSort(out.perseason);
+    const seasonOk = out.perseason && out.seasons[1] > out.seasons[0];
+    if ((csort.key !== 'season' || seasonOk) && !(csort.key === def.key && csort.dir === def.dir)) {
+      out.csort = csort;
+    }
+  }
+  return out;
 }

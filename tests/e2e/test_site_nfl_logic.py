@@ -341,6 +341,35 @@ def test_default_state(run: Callable[[str], Any], nfl_fixture_raw: dict) -> None
     assert s["view"] == "special" and s["teams"] == [] and s["selection"] is None
 
 
+def test_perseason_and_csort_state(run: Callable[[str], Any]) -> None:
+    got = run(
+        """
+        const d = S.defaultNflState(m);
+        const c = (x) => S.canonicalNflState(x, m);
+        return { d, off: c({ perseason: false }).perseason, odd: c({ perseason: 0 }).perseason,
+          keep: c({ csort: { key: 'margin', dir: 'desc' } }).csort,
+          bad: [{ key: 'crew', dir: 'asc' }, { key: 'games', dir: 'up' }, 'games', null, 7]
+            .map((x) => c({ csort: x }).csort),
+          keys: S.NFL_CSORT_KEYS, nat: S.NFL_NATURAL_DIR };
+        """
+    )
+    assert got["d"]["perseason"] is True and got["d"]["csort"] is None
+    assert got["off"] is False and got["odd"] is True
+    assert got["keep"] == {"key": "margin", "dir": "desc"}
+    assert got["bad"] == [None] * 5
+    assert got["keys"] == [
+        "booth",
+        "season",
+        "rank",
+        "network",
+        "games",
+        "margin",
+        "exc",
+        "viewers",
+    ]
+    assert set(got["nat"]) == set(got["keys"])
+
+
 def test_game_passes_and_person_highlight(run: Callable[[str], Any], nfl_fixture_raw: dict) -> None:
     g = nfl_fixture_raw["games"]
     fr = nfl_fixture_raw["lookups"]["franchises"]
@@ -624,6 +653,75 @@ def test_round_trip(run: Callable[[str], Any]) -> None:
     assert ok is True
 
 
+def test_perseason_csort_round_trip(run: Callable[[str], Any]) -> None:
+    got = run(
+        """
+        const d = S.defaultNflState(m);
+        const e = (x) => U.encodeNflState({ ...d, ...x }, m);
+        const wide = [m.seasons[0], m.seasons[1]];
+        const rt = (x) => U.decodeNflState(e(x), m);
+        return { off: e({ perseason: false }),
+          games: e({ csort: { key: 'games', dir: 'desc' } }),
+          seasonDesc: e({ csort: { key: 'season', dir: 'desc' } }),
+          marginAsc: e({ csort: { key: 'margin', dir: 'asc' } }),
+          offGames: e({ perseason: false, csort: { key: 'games', dir: 'desc' } }),
+          oneSeason: e({ seasons: [2025, 2025], csort: { key: 'games', dir: 'desc' } }),
+          back: rt({ csort: { key: 'margin', dir: 'asc' } }).csort,
+          backOff: rt({ perseason: false }).perseason,
+          wide };
+        """
+    )
+    assert got["off"] == "?sport=nfl&perseason=0"
+    assert got["games"] == "?sport=nfl&csort=games"
+    assert got["seasonDesc"] == "?sport=nfl"
+    assert got["marginAsc"] == "?sport=nfl&csort=margin.asc"
+    assert got["offGames"] == "?sport=nfl&perseason=0"
+    assert got["oneSeason"] == "?sport=nfl&seasons=2025-2025&csort=games"
+    assert got["back"] == {"key": "margin", "dir": "asc"}
+    assert got["backOff"] is False
+
+
+def test_csort_default_follows_the_stored_preference(run: Callable[[str], Any]) -> None:
+    got = run(
+        """
+        const [lo, hi] = m.seasons;
+        const dec = (q) => U.decodeNflState(q, m).csort;
+        return { seasonWide: dec('?csort=season.asc'),
+          seasonOne: dec(`?seasons=${hi}-${hi}&csort=season.asc`),
+          seasonOff: dec('?perseason=0&csort=season.asc'),
+          gamesOff: dec('?perseason=0&csort=games'), gamesOn: dec('?csort=games'),
+          bogus: [dec('?csort=crew'), dec('?csort=games.up'), dec('?csort=%'), dec('?csort=')],
+          perBad: U.decodeNflState('?perseason=yes', m).perseason };
+        """
+    )
+    assert got["seasonWide"] == {"key": "season", "dir": "asc"}
+    assert got["seasonOne"] is None and got["seasonOff"] is None
+    assert got["gamesOff"] is None
+    assert got["gamesOn"] == {"key": "games", "dir": "desc"}
+    assert got["bogus"] == [None] * 4
+    assert got["perBad"] is True
+
+
+def test_legacy_cseason_maps_to_seasons_in_any_order(run: Callable[[str], Any]) -> None:
+    got = run(
+        """
+        const [lo, hi] = m.seasons;
+        const y = hi;
+        const dec = (q) => U.decodeNflState(q, m).seasons;
+        return { lo, hi, y,
+          c: dec(`?sport=nfl&cseason=${y}`), f: dec(`?sport=nfl&fseason=${y}`),
+          a: dec(`?sport=nfl&cseason=${y}&seasons=${lo}-${hi}`),
+          b: dec(`?sport=nfl&seasons=${lo}-${hi}&cseason=${y}`),
+          out: dec('?sport=nfl&cseason=1850') };
+        """
+    )
+    one = [got["y"], got["y"]]
+    full = [got["lo"], got["hi"]]
+    assert got["c"] == one and got["f"] == one
+    assert got["a"] == full and got["b"] == full
+    assert got["out"] == full
+
+
 def test_decode_aliases(run: Callable[[str], Any]) -> None:
     got = run(
         """
@@ -646,7 +744,8 @@ def test_decode_never_throws(run: Callable[[str], Any]) -> None:
         const d = S.defaultNflState(m);
         const q = ['%', '?sport=nfl&seasons=abc', '?team=nope,%E0%A4%A', '?cat=bogus,tnf',
           '?cseason=1850', '?view=bogus', '?seasons=2030-2001', '?sport=cfb&team=%', '&&==', '',
-          '?net=%E0%A4%A', '?net=nope', '?booths=zz%3Azz,%', '?fseason=1850'];
+          '?net=%E0%A4%A', '?net=nope', '?booths=zz%3Azz,%', '?fseason=1850',
+          '?csort=%E0%A4%A', '?csort=a.b.c', '?perseason=%', '?csort=games&csort=%'];
         const out = q.map(x => U.decodeNflState(x, m));
         return { out, d, ids: m.franchises.map(f => f.id) };
         """
@@ -656,5 +755,7 @@ def test_decode_never_throws(run: Callable[[str], Any]) -> None:
     assert out[2]["teams"] == [] and out[3]["cats"] == ["tnf"]
     assert out[4]["cseason"] == d["cseason"] and out[5]["view"] == "special"
     assert out[6]["seasons"] == d["seasons"] and out[7] == d
-    for k in (10, 11, 12, 13):
+    for k in (10, 11, 12, 13, 14, 15):
         assert out[k] == d
+    assert out[16]["perseason"] is True and out[16]["csort"] is None
+    assert out[17]["csort"] == {"key": "games", "dir": "desc"}
