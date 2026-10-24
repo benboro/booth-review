@@ -379,7 +379,9 @@ def test_render_methodology_resolves_md_links_against_docs(
 # Re-pinned at Phase 14 Plan 10 (checkpoint): one Crews sentence on whole-season Nielsen bands.
 # Re-pinned at Phase 14 Plan 11: Crews panel fixes (shipped-modal and null-cited-analyst
 # fill-in rule, unknown-role marks on no-PBP rows); no NFL text changed.
-_METHODOLOGY_FLAG_OFF_SHA256 = "15a14fb44be4f05c4141527b853cb4dbed5be9cb7c0663d61a74e89919d82384"
+# Re-pinned at Phase 15 Plan 05: CFB Crews regular-analyst exception (P14-FU-3);
+# NFL text changes are inside the nfl fences.
+_METHODOLOGY_FLAG_OFF_SHA256 = "b78919a2ae89ca846586e63166040e363f66398a7008bc81dc2f4000d2290dd8"
 
 _NFL_ANCHORS = (
     "nfl-special-games",
@@ -408,6 +410,24 @@ def test_methodology_flag_off_digest_is_pinned() -> None:
 
     rendered = render_methodology(_DOCS, _fixture_site())
     assert hashlib.sha256(rendered.encode("utf-8")).hexdigest() == _METHODOLOGY_FLAG_OFF_SHA256
+
+
+def test_methodology_states_the_backend_modal_exception() -> None:
+    rendered = " ".join(render_methodology(_DOCS, _fixture_site()).split())
+    assert "as an <code>other</code> booth" in rendered
+    assert "for a voice with no shipped booth assignment" in rendered
+
+
+def test_methodology_nfl_crews_pool_exactly() -> None:
+    rendered = " ".join(render_methodology(_DOCS, _fixture_site(), nfl=True).split())
+    assert "never pooled across seasons, because" not in rendered
+    assert "Pooling is exact" in rendered
+
+
+def test_known_gaps_regional_gap_links_the_window_section() -> None:
+    rendered = " ".join(render_methodology(_DOCS, _fixture_site(), nfl=True).split())
+    assert "regional Sunday-afternoon games have no published figure" in rendered
+    assert re.search(r'href="[^"]*#nfl-window-level-viewership"', rendered)
 
 
 def _temp_docs(
