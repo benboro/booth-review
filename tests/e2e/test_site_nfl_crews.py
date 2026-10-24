@@ -292,7 +292,7 @@ def test_csort_season_encode_and_decode_agree_nfl(
     open_nfl_app: Callable[..., None],
     serve_nfl_crews: Callable[[Page], None],
 ) -> None:
-    """15-13 F10: csort=season is in the URL only while a Season column exists, and reloads whole."""
+    """15-13 F10: csort=season is in the URL only with a Season column."""
     serve_nfl_crews(nfl_guarded_page)
     page = nfl_guarded_page
     _open(page, open_nfl_app)
