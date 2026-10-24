@@ -18,6 +18,13 @@ from playwright.sync_api import Locator, Page, expect
 
 pytestmark = pytest.mark.e2e
 
+# The Crew-mode note states A2(a) (14-11 panel fix F6).
+_UNKNOWN_NOTE = (
+    "A person of unknown role on a telecast with a play-by-play voice is not shown. "
+    "Telecasts with no play-by-play voice are grouped by their exact people, and unknown "
+    "roles are marked."
+)
+
 _MODEL_JS = """
 async ([mode, perSeason]) => {
   const G = await import('./modules/crew-groups.js');
@@ -511,7 +518,7 @@ def test_notes_and_credits_in_order(app: Page) -> None:
         f"Showing 25 of {total} rows.",
         "1 telecasts list no crew and are not in this table.",
         "Avg viewers (rated games) mostly reflects which games a crew was assigned.",
-        "Crews with a member of unknown role are kept and marked.",
+        _UNKNOWN_NOTE,
         *_CREDITS,
     ]
     link = app.locator("#crews-panel").get_by_role("link", name=_CREDITS[0])
@@ -529,7 +536,7 @@ def test_person_mode_notes(app: Page, mode: str, left_out: str) -> None:
     app.locator(f"#crews-panel button[data-cmode={mode}]").click()
     caps = _captions(app)
     assert left_out in caps
-    assert "Crews with a member of unknown role are kept and marked." not in caps
+    assert _UNKNOWN_NOTE not in caps
     assert caps[-3:] == _CREDITS
     assert any(c.startswith("Avg viewers (rated games) mostly") for c in caps)
 

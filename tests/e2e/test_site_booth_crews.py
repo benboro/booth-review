@@ -22,6 +22,13 @@ from playwright.sync_api import Page, expect
 
 pytestmark = pytest.mark.e2e
 
+# The Crew-mode note states A2(a) (14-11 panel fix F6).
+_UNKNOWN_NOTE = (
+    "A person of unknown role on a telecast with a play-by-play voice is not shown. "
+    "Telecasts with no play-by-play voice are grouped by their exact people, and unknown "
+    "roles are marked."
+)
+
 # RT-10, closing the Phase 12 gap: the three credit lines as full sentences.
 CREDITS = [
     "Data provided by CollegeFootballData.com",
@@ -68,7 +75,7 @@ def test_credits_are_the_three_rt10_sentences_verbatim(crews: Page) -> None:
         assert line in captions
     assert captions[-3:] == CREDITS
     assert CONFOUND in captions
-    assert "Crews with a member of unknown role are kept and marked." in captions
+    assert _UNKNOWN_NOTE in captions
     # Gone with the family-season table.
     assert "Rated shows how many games have a viewership figure." not in " ".join(captions)
 

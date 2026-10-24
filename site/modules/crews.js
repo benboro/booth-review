@@ -42,7 +42,9 @@ let lastSortKey = null;
 const MODE_LABELS = { crew: 'Crew', pbp: 'PBP', analyst: 'Analyst' };
 
 const CONFOUND = 'Avg viewers (rated games) mostly reflects which games a crew was assigned.';
-const UNKNOWN_NOTE = 'Crews with a member of unknown role are kept and marked.';
+// A2(a): unknown-role people drop from a row with a play-by-play voice; no-PBP rows mark them.
+const UNKNOWN_NOTE =
+  'A person of unknown role on a telecast with a play-by-play voice is not shown. Telecasts with no play-by-play voice are grouped by their exact people, and unknown roles are marked.';
 const LEFT_OUT = {
   crew: (n) => `${n} telecasts list no crew and are not in this table.`,
   pbp: (n) => `${n} telecasts with no resolved play-by-play voice are not in this mode.`,
