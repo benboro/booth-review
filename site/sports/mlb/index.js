@@ -406,8 +406,11 @@ function ensureShell(footerEl) {
     // Escape, the close button and the backdrop all end here: the game leaves the state and URL.
     onClose: () => {
       if (state && state.game != null) {
+        const wasOnlyGame = state.booth == null && state.cell == null && state.selection == null;
         state = canonicalMlbState({ ...state, game: null }, model);
         if (mounted) syncUrl();
+        // The Scatter fades to an open game when nothing else is picked (D-07): undo that on close.
+        if (wasOnlyGame && state.view === 'scatter' && views && views.scatter) views.scatter.mod.render(ctx);
       }
     },
   });

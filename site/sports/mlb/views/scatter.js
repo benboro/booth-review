@@ -10,16 +10,23 @@
  * game indexes only, hover is off, and every label here is a fixed string set with
  * textContent.
  */
-import { FAMILY_COLORS, MUTED, PAGE_BG, DIVIDER } from '../../../modules/palette.js';
+import { FAMILY_COLORS, MUTED, PAGE_BG, DIVIDER, INK } from '../../../modules/palette.js';
+import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
+import {
+  showHoverRing, hideHoverRing, ringSpecFromPoint, hoverRingDiameter,
+} from '../../../modules/hover-ring.js';
+import { createOnlyDetector } from '../../../modules/legend.js';
+import { formatAudienceShort } from '../../../modules/format.js';
 import { frameConfig, frameLayout, referenceLine } from '../../../modules/chart-frame.js';
 import { bandLayout, marginFor } from '../../../modules/chart.js';
 import { initBandInfo, positionBandInfo, closeBandNote } from '../../../modules/band-info.js';
 import { mountViewTools } from '../tools.js';
-import { ROUND_SHORT } from '../data.js';
+import { ROUND_SHORT, gameRow } from '../data.js';
+import { dateShortText } from '../format.js';
 import { MLB_SROUNDS } from '../state.js';
 import { RETROSHEET_NOTICE, RETROSHEET_CONTACT } from '../panel.js';
 import {
-  buildScatterItems, colorSlotOf, statusText, stripJitter, MLB_FAMILY_ORDER,
+  buildScatterItems, colorSlotOf, statusText, stripJitter, MLB_FAMILY_ORDER, MLB_FAMILY_LABELS,
 } from '../scatter-items.js';
 
 const CONFIG = frameConfig({ zoomable: true });
@@ -42,6 +49,12 @@ const CAPTION_NETWORKS = "Networks: 506 Sports and Wikipedia (CC BY-SA 4.0); eac
 // The real MLB eras break at the same years as CFB's (2020, 2025, 2026), so the CFB era
 // note (RT-21) is used as written (checked against the local build, 16-07).
 const CAPTION_ERAS = 'Nielsen changed how it measures viewing in 2020, 2025, and 2026, so compare seasons with care; see ';
+
+const FADED_OPACITY = 0.32; // unmatched dots under a selection (D-07)
+const OUTLINE_PX = 1.5; // matched dots under a selection get an ink outline
+const TAP_DEBOUNCE_MS = 500; // one physical tap can reach Plotly twice
+const TAP_HINT = 'Tap again to open this game';
+const hiddenFamilies = new Set(); // families toggled off by their legend chips
 
 const STYPE_OPTIONS = [
   { key: 'all', label: 'All games' },
@@ -67,7 +80,14 @@ const refs = {
   bound: false,
   home: null,
   lastWidth: 0,
+  legend: null,
+  chips: null,
+  resetZoom: null,
 };
+
+let pendingTap = null; // touch: the game whose tooltip the first tap showed
+let lastTapAt = -Infinity;
+let lastClick = { i: null, at: -Infinity };
 
 let current = null; // what the last render drew
 
@@ -158,8 +178,10 @@ function buildFigure(items, env, th) {
       y: strip ? stripJitter(it.i) : it.x,
     };
   };
-  const build = (family, subset, yaxis) => {
+  const build = (family, rawSubset, yaxis) => {
     const color = familyColor(family, th);
+    // Matched dots draw last so they sit on top of the faded ones.
+    const subset = [...rawSubset.filter((it) => !it.matched), ...rawSubset.filter((it) => it.matched)];
     const pts = subset.map(coords);
     return {
       type: 'scatter',
@@ -176,9 +198,10 @@ function buildFigure(items, env, th) {
         size: subset.map(() => BASE_SIZE),
         // Window-scope figures cover a whole broadcast window: open dots, page-colour fill.
         color: subset.map((it) => (it.window ? bg : color)),
+        opacity: subset.map((it) => (it.faded ? FADED_OPACITY : 1)),
         line: {
-          width: subset.map((it) => (it.window ? 1.5 : 0)),
-          color: subset.map(() => color),
+          width: subset.map((it) => (it.matched || it.window ? OUTLINE_PX : 0)),
+          color: subset.map((it) => (it.matched ? INK[th] : color)),
         },
       },
     };
@@ -391,10 +414,218 @@ function buildCaptions(ctx) {
   return lines;
 }
 
+function itemFor(ev) {
+  const pt = ev.points && ev.points[0] ? ev.points[0] : null;
+  const k = pt ? pt.customdata : null;
+  if (!current || !Number.isInteger(k)) return null;
+  return current.byGame.get(k) || null;
+}
+
+/**
+ * The dot's client-pixel position, for the hover ring (copied from the NFL scatter). The
+ * point math reaches into undocumented Plotly internals, so it falls back to the event's
+ * own coordinates if a vendored version drops any of them.
+ */
+function pointClientPosition(gd, ev) {
+  const point = ev.points && ev.points[0];
+  let clientX;
+  let clientY;
+  try {
+    if (point && point.x != null && point.y != null && gd._fullLayout) {
+      const layout = gd._fullLayout;
+      const rect = gd.getBoundingClientRect();
+      const xa = point.xaxis ?? layout.xaxis;
+      const ya = point.yaxis ?? layout.yaxis;
+      clientX = rect.left + xa._offset + xa.l2p(xa.d2l(point.x));
+      clientY = rect.top + ya._offset + ya.l2p(ya.d2l(point.y));
+    }
+  } catch {
+    clientX = undefined;
+    clientY = undefined;
+  }
+  if (clientX == null || clientY == null) {
+    clientX = ev.event?.clientX;
+    clientY = ev.event?.clientY;
+  }
+  return { clientX, clientY };
+}
+
+function excitementText(row) {
+  if (row.excitement != null) return `Excitement ${row.excitement.toFixed(1)}`;
+  return row.lineupStatus === 'pending' || row.season >= 2026
+    ? 'Excitement pending Retrosheet 2026'
+    : 'Excitement not available';
+}
+
+/** Tooltip lines (D-05): logo, matchup and date, then the viewers and excitement line. */
+function hoverLines(model, i, hint) {
+  const row = gameRow(model, i);
+  const lines = [];
+  if (row.network) {
+    lines.push({ kind: 'network', network: { id: row.networkId, name: row.network, family: row.networkFamily } });
+  }
+  lines.push({ text: `${row.away} at ${row.home} · ${dateShortText(row)}`, kind: 'title' });
+  let viewers = 'No public rating';
+  if (row.viewers != null) {
+    viewers = `${formatAudienceShort(row.viewers)} viewers${row.scope === 'window' ? ', whole window' : ''}`;
+  }
+  lines.push({ text: `${viewers} · ${excitementText(row)}`, kind: 'body' });
+  if (hint) lines.push({ text: hint, kind: 'hint' });
+  return lines;
+}
+
+function showTip(ev, it, hint) {
+  const th = theme(current.env);
+  const at = pointClientPosition(refs.gd, ev);
+  const e = ev.event || {};
+  showTextTooltip(hoverLines(current.model, it.i, hint), {
+    theme: th,
+    borderColor: familyColor(it.family, th),
+    clientX: hint ? at.clientX ?? e.clientX ?? 0 : e.clientX ?? at.clientX ?? 0,
+    clientY: hint ? at.clientY ?? e.clientY ?? 0 : e.clientY ?? at.clientY ?? 0,
+  });
+  if (Number.isFinite(at.clientX) && Number.isFinite(at.clientY)) {
+    const spec = ringSpecFromPoint(ev.points[0]);
+    showHoverRing({
+      i: it.i, clientX: at.clientX, clientY: at.clientY, diameter: hoverRingDiameter(spec.size, spec.symbol),
+    });
+  }
+}
+
+function clearHover() {
+  pendingTap = null;
+  hideTooltip();
+  hideHoverRing();
+}
+
+function openFrom(it) {
+  clearHover();
+  // The chart never sets a selection (Pitfall 9); it only opens the panel.
+  refs.ctx.openGame(it.i, refs.gd);
+}
+
+function onClick(ev) {
+  const it = itemFor(ev);
+  if (!it) return;
+  const now = performance.now();
+  if (current.env.hoverNone || current.env.mobile) {
+    // One tap reaches Plotly twice (touch, then the compatibility click): ignore the echo.
+    if (now - lastTapAt < TAP_DEBOUNCE_MS) return;
+    lastTapAt = now;
+    if (pendingTap !== it.i) {
+      pendingTap = it.i;
+      showTip(ev, it, TAP_HINT);
+      return;
+    }
+    openFrom(it);
+    return;
+  }
+  if (lastClick.i === it.i && now - lastClick.at < TAP_DEBOUNCE_MS) return;
+  lastClick = { i: it.i, at: now };
+  openFrom(it);
+}
+
+/** Reset zoom is enabled only while the viewers axis has left its home range. */
+function syncResetZoom() {
+  const now = liveRanges(refs.gd);
+  const home = refs.home;
+  const atHome = !home || !now || (now.y[0] === home.y[0] && now.y[1] === home.y[1]);
+  refs.resetZoom.setAttribute('aria-disabled', String(atHome));
+}
+
+function resetToHome() {
+  if (refs.resetZoom.getAttribute('aria-disabled') === 'true' || !refs.home) return;
+  window.Plotly.relayout(refs.gd, { 'yaxis.range': [...refs.home.y] });
+}
+
 function bindEvents(gd) {
   if (refs.bound) return;
   refs.bound = true;
   gd.on('plotly_afterplot', () => placeStripInfo());
+  gd.on('plotly_relayout', () => {
+    syncResetZoom();
+    hideHoverRing();
+  });
+  gd.on('plotly_click', onClick);
+  gd.on('plotly_hover', (ev) => {
+    const it = itemFor(ev);
+    if (!it || current.env.mobile || current.env.hoverNone) return;
+    showTip(ev, it, null);
+  });
+  gd.on('plotly_unhover', () => {
+    if (current && (current.env.mobile || current.env.hoverNone)) return;
+    hideTooltip();
+    hideHoverRing();
+  });
+}
+
+// ---- legend chips (D-05; no Fade | Hide toggle on MLB, U-10) ----
+
+function textOn(hex) {
+  const lin = (v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const n = parseInt(hex.slice(1), 16);
+  const lum = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+  return 1.05 / (lum + 0.05) >= (lum + 0.05) / 0.05 ? '#FFFFFF' : '#111111';
+}
+
+/** One delegated chip listener; chips are rebuilt each render. */
+function bindLegend() {
+  const present = () => (current ? current.families : []);
+  const detector = createOnlyDetector({
+    onToggle: (key) => {
+      if (hiddenFamilies.has(key)) hiddenFamilies.delete(key);
+      else hiddenFamilies.add(key);
+      refs.ctx.setState({});
+    },
+    onOnly: (key, before) => {
+      const prior = new Set(before || []);
+      const all = present();
+      const wasOnly = all.every((k) => (k === key ? !prior.has(k) : prior.has(k)));
+      hiddenFamilies.clear();
+      if (!wasOnly) for (const k of all) if (k !== key) hiddenFamilies.add(k);
+      refs.ctx.setState({});
+    },
+    snapshot: () => [...hiddenFamilies],
+  });
+  refs.chips.addEventListener('click', (ev) => {
+    const button = ev.target.closest('button[data-family]');
+    if (!button) {
+      detector.reset();
+      return;
+    }
+    detector.click(ev, button.dataset.family);
+  });
+}
+
+function renderLegend(families, th) {
+  const shown = families.filter((f) => !hiddenFamilies.has(f));
+  const items = families.map((family) => {
+    const label = MLB_FAMILY_LABELS[family];
+    const color = familyColor(family, th);
+    const b = el('button', 'legend-chip pill', label);
+    b.type = 'button';
+    b.dataset.family = family;
+    const on = !hiddenFamilies.has(family);
+    b.setAttribute('aria-pressed', String(on));
+    const hint = shown.length === 1 && shown[0] === family
+      ? 'Double-click to show all'
+      : `Double-click to show only ${label}`;
+    b.title = hint;
+    b.setAttribute('aria-description', hint);
+    if (on) {
+      b.style.backgroundColor = color;
+      b.style.color = textOn(color);
+    } else {
+      b.style.borderColor = color;
+    }
+    const li = document.createElement('li');
+    li.appendChild(b);
+    return li;
+  });
+  refs.chips.replaceChildren(...items);
 }
 
 // ---- contract ----
@@ -405,6 +636,7 @@ export function mount(container, ctx) {
   refs.controls = el('div', 'chart-controls mlb-scatter-controls');
   refs.chart = el('div', 'nfl-chart mlb-scatter-plot');
   refs.gd = el('div');
+  refs.gd.tabIndex = -1; // the panel's Escape returns focus here
   refs.note = el('div', 'season-empty-note');
   refs.note.setAttribute('role', 'status');
   refs.note.hidden = true;
@@ -425,7 +657,20 @@ export function mount(container, ctx) {
   refs.status = el('p', 'mlb-scatter-status');
   refs.status.setAttribute('role', 'status');
   buildControls(ctx);
-  container.append(refs.chart, refs.status, ...buildCaptions(ctx));
+  refs.resetZoom = el('button', 'reset-zoom', 'Reset zoom');
+  refs.resetZoom.type = 'button';
+  refs.resetZoom.setAttribute('aria-disabled', 'true');
+  refs.resetZoom.addEventListener('click', resetToHome);
+  refs.controls.appendChild(refs.resetZoom);
+  refs.legend = el('div', 'legend-row');
+  refs.chips = el('ul', 'legend-chips');
+  refs.chips.setAttribute('aria-label', 'Network families: select to show or hide');
+  refs.legend.appendChild(refs.chips);
+  bindLegend();
+  document.addEventListener('pointerdown', (ev) => {
+    if (pendingTap != null && !ev.target.closest('.mlb-scatter-plot')) clearHover();
+  });
+  container.append(refs.legend, refs.chart, refs.status, ...buildCaptions(ctx));
   mountViewTools(ctx, 'scatter', [refs.controls], container);
   // The strip is a fixed 72px, so a width change re-lays the figure out.
   if (typeof ResizeObserver !== 'undefined') {
@@ -444,15 +689,19 @@ export function render(ctx) {
   const state = ctx.getState();
   const env = ctx.env();
   const th = theme(env);
+  clearHover();
 
-  const built = buildScatterItems(model, state, { hiddenFamilies: new Set() });
+  const built = buildScatterItems(model, state, { hiddenFamilies });
   const { items, counts, families } = built;
-  current = { items, counts, families, env, model, state };
+  current = { items, counts, families, env, model, state, byGame: new Map(items.map((it) => [it.i, it])) };
+  renderLegend(families, th);
   refs.status.textContent = statusText(counts);
   syncControls(state);
 
   if (!items.length) {
     refs.drawn = false;
+    refs.home = null;
+    refs.resetZoom.setAttribute('aria-disabled', 'true');
     setEmpty(true);
     return;
   }
@@ -471,6 +720,7 @@ export function render(ctx) {
     done.then(() => {
       placeStripInfo();
       refs.home = liveRanges(refs.gd);
+      syncResetZoom();
     });
   }
 }

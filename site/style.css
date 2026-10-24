@@ -5673,6 +5673,18 @@ tr.is-matched > :first-child {
 }
 
 /* Scatter header tools: the Round group dims, never reflows, outside Postseason. */
+.mlb-scatter-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+.mlb-scatter-controls .reset-zoom {
+  flex: none;
+}
+
 .mlb-scatter-controls .scatter-controls {
   flex-wrap: wrap;
 }

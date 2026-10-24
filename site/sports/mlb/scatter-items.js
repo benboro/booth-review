@@ -59,8 +59,11 @@ export function stripJitter(i) {
 export function buildScatterItems(model, state, { hiddenFamilies } = {}) {
   const c = model.cols;
   const hiddenSet = hiddenFamilies || new Set();
-  const selecting = state.booth != null || state.cell != null || state.selection != null;
-  const matchedSet = selecting ? new Set(tableGames(model, state)) : null;
+  const picked = state.booth != null || state.cell != null || state.selection != null;
+  // An open game counts as a selection for the fade only when nothing else is picked (D-07).
+  const gameOnly = !picked && Number.isInteger(state.game);
+  const selecting = picked || gameOnly;
+  const matchedSet = !selecting ? null : gameOnly ? new Set([state.game]) : new Set(tableGames(model, state));
   const items = [];
   const present = new Set();
   const counts = { total: 0, plotted: 0, noRating: 0, noExcitement: 0, neither: 0, matched: 0, faded: 0 };
