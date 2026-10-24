@@ -287,6 +287,34 @@ def test_metric_sorts_bucket_both_directions(
         page.wait_for_function("window.__nflTestHooks.getViewModel('crews').sort.key === 'games'")
 
 
+def test_csort_season_encode_and_decode_agree_nfl(
+    nfl_guarded_page: Page,
+    open_nfl_app: Callable[..., None],
+    serve_nfl_crews: Callable[[Page], None],
+) -> None:
+    """15-13 F10: csort=season is in the URL only while a Season column exists, and reloads whole."""
+    serve_nfl_crews(nfl_guarded_page)
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    _vm(page)
+    page.locator(f"{VIEW} button[data-sort-key='season']").click()
+    page.wait_for_function("window.__nflTestHooks.getState().csort?.key === 'season'")
+    with_season = page.url
+    assert "csort=season" in with_season
+    open_nfl_app(page, "?" + page.url.split("?", 1)[1])
+    _vm(page)
+    assert _state(page)["csort"]["key"] == "season"
+    assert page.url == with_season
+    page.locator(f"{TOOLS} input.crews-perseason").uncheck()
+    page.wait_for_function("window.__nflTestHooks.getViewModel('crews').perSeason === false")
+    assert "csort" not in page.url
+    pooled = page.url
+    open_nfl_app(page, "?" + page.url.split("?", 1)[1])
+    _vm(page)
+    assert _state(page)["csort"] is None
+    assert page.url == pooled
+
+
 def test_csort_games_survives_widening_nfl(
     nfl_guarded_page: Page,
     open_nfl_app: Callable[..., None],

@@ -28,7 +28,10 @@ export function encodeNflState(state, model) {
   if (s.cats.length) parts.push('cat=' + s.cats.map(encodeURIComponent).join(','));
   if (s.booths.length) parts.push('booths=' + s.booths.map(encodeURIComponent).join(','));
   if (s.perseason === false) parts.push('perseason=0');
-  if (s.csort) {
+  // decode keeps csort=season only when the table has a Season column (Per season on and a
+  // multi-season range), so encode drops it under the same rule: URL and reload then agree.
+  const seasonColumn = s.perseason !== false && s.seasons[1] > s.seasons[0];
+  if (s.csort && (s.csort.key !== 'season' || seasonColumn)) {
     const def = defaultSort(s.perseason !== false);
     if (s.csort.key !== def.key || s.csort.dir !== def.dir) {
       parts.push('csort=' + (s.csort.dir === NFL_NATURAL_DIR[s.csort.key] ? s.csort.key : `${s.csort.key}.${s.csort.dir}`));
