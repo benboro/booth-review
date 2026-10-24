@@ -438,6 +438,8 @@ The MLB view covers the Apple TV Friday game and the postseason booths on nation
 
 **Apple lead booth.** The lead is the play-by-play voice that Wikipedia's current national broadcaster list ranks first for Apple. Apple booths are the play-by-play voice plus the analysts listed with them in a season.
 
+**Scatter.** The Scatter plots one dot per game, viewers against excitement. Games with no public rating sit in a strip along the bottom and games with no excitement figure in a strip on the left, so no game is left out.
+
 ## MLB: Stakes
 
 Stakes is a leverage proxy, not a simulation. For each game it takes each club's record through the previous day and its games behind the division leader and the last wild-card spot, and asks how much one game can move those races: the games-behind change is treated as having a standard deviation of the square root of one eighth per square-root game left, and ties on a cutoff are shifted by half a game. Wild-card spots are two per league through 2021 and three from 2022. Stakes are not scored in the first 20 games of a season, and 2020 is left out of the baseline because the short season distorts it.
@@ -448,7 +450,7 @@ Excitement uses a win-expectancy table our own method builds from Retrosheet pla
 
 ## MLB: The adjustment, low n and what is pending
 
-Booths are compared after adjusting for the matchup. Stakes are compared with the average for games in the same calendar month; excitement with the average for games in the same stakes band (band edges at the 50th, 80th and 95th percentiles of a 2017-2025 baseline with 2020 excluded). A band with fewer than 200 games is pooled with its neighbor. The difference between the lead booth and the others is a Welch difference with its standard error. A booth with fewer than 10 games is marked low n and no difference is claimed from it.
+Booths are compared after adjusting for the matchup. Stakes are compared with the average for games in the same calendar month; excitement with the average for games in the same stakes band (band edges at the 50th, 80th and 95th percentiles of a 2017-2025 baseline with 2020 excluded). A band with fewer than 200 games is pooled with its neighbor. The difference between the lead booth and the others is a Welch difference with its standard error. A booth with fewer than 10 games is marked low n and no difference is claimed from it. In the Apple crews table, a Stakes or Excitement figure resting on fewer than that many games is marked n < 10 in its own cell; the row is not faded.
 
 **Pending Retrosheet 2026.** Retrosheet publishes the 2026 season late in 2026. Until then 2026 games have no play-by-play, so 2026 stakes, excitement and lineups read "pending Retrosheet 2026". Rebuilding after the release fills them in. We did not use the league's own statistics service as a stopgap.
 
