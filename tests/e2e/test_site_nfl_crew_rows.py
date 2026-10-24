@@ -438,9 +438,47 @@ def test_sort_buckets_both_directions(run: Callable[[str], Any]) -> None:
     assert out["asc"] and out["desc"]
     assert out["buckets"] == [0, 1, 2]
     assert out["g"] == sorted(out["g"], reverse=True)
-    seasons = [s for s, _ in out["s"]]
+    played = [(s, g) for s, g in out["s"] if g > 0]  # lineup-only rows sink (own test)
+    seasons = [s for s, _ in played]
     assert seasons == sorted(seasons, reverse=True)
     for season in set(seasons):
-        gs = [g for s, g in out["s"] if s == season]
+        gs = [g for s, g in played if s == season]
         assert gs == sorted(gs, reverse=True)
     assert out["poolSeason"] == sorted(out["poolSeason"], reverse=True)
+
+
+def test_zero_game_rows_sink_in_every_sort(run: Callable[[str], Any]) -> None:
+    """Lineup-only rows (0 games) follow every row with games, whatever the sort or direction."""
+    out = run(
+        """
+        const keys = ['crew', 'booth', 'network', 'games', 'rank', 'margin', 'exc', 'viewers'];
+        const res = [];
+        for (const perSeason of [true, false]) {
+          const rows = R.buildNflCrewRows(m, { ...base, perseason: perSeason }).rows;
+          const dirs = ['asc', 'desc'];
+          const sorts = [null, ...keys.flatMap((key) => dirs.map((dir) => ({ key, dir })))];
+          if (perSeason) sorts.push({ key: 'season', dir: 'asc' }, { key: 'season', dir: 'desc' });
+          for (const mode of ['raw', 'adjusted']) {
+            for (const s of sorts) {
+              const out = R.sortNflCrewRows(rows, s, perSeason, mode);
+              const g = out.map((r) => r.gamesCount);
+              const first0 = g.indexOf(0);
+              res.push({ perSeason, mode, sort: s && `${s.key}:${s.dir}`, n: g.length,
+                         total: rows.length, first0,
+                         tail: first0 < 0 || g.slice(first0).every((v) => v === 0),
+                         zeroKeys: out.filter((r) => r.gamesCount === 0).map((r) => r.rowKey) });
+            }
+          }
+        }
+        return res;
+        """
+    )
+    assert len(out) > 40
+    for case in out:
+        assert case["n"] == case["total"]
+        assert case["first0"] > 0, case  # present, and never leading
+        assert case["tail"], case
+        assert case["zeroKeys"], case
+    # Relative order among the lineup-only rows follows the unsorted order for a stable sort
+    # of equal (blank) figures: the same set in every sort.
+    assert len({tuple(sorted(c["zeroKeys"])) for c in out if c["perSeason"]}) == 1

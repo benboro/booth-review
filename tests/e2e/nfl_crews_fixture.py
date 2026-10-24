@@ -87,6 +87,8 @@ CASE_FILL_IN = {
     "fill_in_games": 1,
 }
 # A row with analyst_person null (a play-by-play voice alone).
+#: Lineup-only booths (no games): one for the 2026 lineup, sunk below every row with games.
+CASE_ZERO_GAME = {"pbp": "synth-pbp-zero", "analyst": "synth-an-zero", "season": 2026}
 CASE_NULL_ANALYST = {"pbp": "synth-pbp-solo", "season": 2025, "games": 3}
 # A person who is the PBP of one row and the analyst on another row's games.
 CASE_MIXED_SEAT = {
@@ -193,6 +195,9 @@ class _Builder:
             game_list.append(
                 self._game(season, _GROUP_NETWORK[group], this_crew, scope=scope, era=era)
             )
+        if n_games == 0:
+            self._zero_row(season, group, pbp_i, an_i, rank)
+            return
         n_adj = n_games if n_adj is None else n_adj
         margin = [round(self.rng.gauss(0.5, 3.0), 3) for _ in range(n_adj)]
         exc = [round(self.rng.gauss(-0.2, 0.8), 3) for _ in range(n_adj)]
@@ -237,6 +242,38 @@ class _Builder:
             "adj_excitement_resid": r3(e_mean),
             "adj_excitement_se": r3(e_se),
             "low_n": n_adj < LOW_N,
+        }
+        for col in self.booths:
+            self.booths[col].append(values[col])
+
+    def _zero_row(self, season: int, group: int, pbp_i: int, an_i: int | None, rank: int) -> None:
+        """A lineup-only booth row: no games, no figures (the real 2026 lineup rows)."""
+        values: dict[str, Any] = {
+            "season": season,
+            "network_group": group,
+            "pbp_person": pbp_i,
+            "analyst_person": an_i,
+            "rank": rank,
+            "rank_source": "inferred",
+            "games": 0,
+            "game_list": [],
+            "is_lead": False,
+            "flagship_games": 0,
+            "lineup_games": 0,
+            "fill_in_games": 0,
+            "raw_n_margin": 0,
+            "raw_mean_abs_margin": None,
+            "raw_n_excitement": 0,
+            "raw_mean_excitement": None,
+            "raw_n_viewers": 0,
+            "raw_mean_viewers": None,
+            "adj_n_margin": 0,
+            "adj_margin_resid": None,
+            "adj_margin_se": None,
+            "adj_n_excitement": 0,
+            "adj_excitement_resid": None,
+            "adj_excitement_se": None,
+            "low_n": True,
         }
         for col in self.booths:
             self.booths[col].append(values[col])
@@ -324,6 +361,7 @@ def build_nfl_crews_raw(base: dict[str, Any]) -> dict[str, Any]:
         CASE_FILL_IN["games"],
         fill_in=CASE_FILL_IN["fill_in"],
     )
+    b.row(CASE_ZERO_GAME["season"], GROUP_FOX, CASE_ZERO_GAME["pbp"], CASE_ZERO_GAME["analyst"], 0)  # type: ignore[arg-type]
     b.row(CASE_NULL_ANALYST["season"], GROUP_CBS, CASE_NULL_ANALYST["pbp"], None, 3)
     seat = CASE_MIXED_SEAT["person"]
     b.row(2025, GROUP_FOX, seat, CASE_MIXED_SEAT["pbp_row"]["analyst"], 4)  # type: ignore[index]
@@ -337,7 +375,6 @@ def build_nfl_crews_raw(base: dict[str, Any]) -> dict[str, Any]:
     pairs = {
         (cols["network_group"][i], cols["pbp_person"][i], cols["analyst_person"][i])
         for i in range(len(cols["season"]))
-        if cols["games"][i] > 0
     }
     EXPECT_SEASON_ROWS = sum(1 for g in cols["games"] if g > 0)
     EXPECT_POOLED_ROWS = len(pairs)

@@ -208,8 +208,15 @@ export function buildNflCrewRows(model, state) {
 /**
  * Sort Crews rows with the shared buckets (D-03). In Adjusted mode the Margin and
  * Excitement sorts read the residual cells. A Season sort on pooled rows is the default.
+ * Rows with 0 games (the lineup-only rows) go after every row that has games, in every sort
+ * and both directions, keeping the order the sort gave them among themselves.
  */
 export function sortNflCrewRows(rows, csort, perSeason, mode = 'raw') {
+  const sorted = sortRows(rows, csort, perSeason, mode);
+  return [...sorted.filter((r) => r.gamesCount > 0), ...sorted.filter((r) => r.gamesCount === 0)];
+}
+
+function sortRows(rows, csort, perSeason, mode) {
   let sort = csort ?? defaultSort(perSeason);
   if (!perSeason && sort.key === 'season') sort = defaultSort(false);
   if (mode === 'adjusted' && (sort.key === 'margin' || sort.key === 'exc')) {

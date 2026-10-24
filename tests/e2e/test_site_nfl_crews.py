@@ -144,8 +144,11 @@ def test_default_opens_per_season_newest_first(
     assert vm["perSeason"] is True
     assert vm["sort"] == {"key": "season", "dir": "desc"}
     assert vm["columns"][:2] == ["Booth", "Season"]
-    seasons = [int(r["season"]) for r in vm["rows"]]
+    played = [r for r in vm["rows"] if r["gamesCount"]]
+    seasons = [int(r["season"]) for r in played]
     assert seasons == sorted(seasons, reverse=True)
+    # Zero-game (lineup-only) rows sink below every row with games, never leading.
+    assert vm["rows"][: len(played)] == played and len(played) < len(vm["rows"])
     assert vm["totalRows"] >= fx.EXPECT_SEASON_ROWS
     assert vm["shown"] == 25
     cells = page.eval_on_selector_all(ROW, "els => els.map(e => e.children[2].textContent)")
