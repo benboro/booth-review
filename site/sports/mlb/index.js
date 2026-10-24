@@ -11,7 +11,7 @@
  */
 import { prepareMlb, gameRow, boothLabelOf } from './data.js';
 import { currentTheme, onThemeChange } from '../../modules/theme.js';
-import { canonicalMlbState, tableGames, selectionLabel } from './state.js';
+import { canonicalMlbState, carryOnViewChange, tableGames, selectionLabel } from './state.js';
 import { encodeMlbState, decodeMlbState } from './url-state.js';
 import { createGamesTable } from './table.js';
 import { createDetailPanel, RETROSHEET_NOTICE, RETROSHEET_CONTACT } from './panel.js';
@@ -26,7 +26,7 @@ const VIEW_IDS = Object.keys(VIEW_MODULES);
 
 const HINTS = {
   apple: 'Pick a booth to list its games.',
-  postseason: 'Pick a postseason cell to list its games.',
+  postseason: 'Pick a postseason cell or a season to list its games.',
 };
 
 function el(tag, className, text) {
@@ -144,8 +144,7 @@ function showStatus(kind) {
     const banner = el('div', 'error-banner');
     banner.setAttribute('role', 'alert');
     banner.append(
-      el('p', 'error-title', "Couldn't load the MLB data."),
-      el('p', null, 'Check your connection and reload the page. You can still use the CFB view.'),
+      el('p', 'error-title', 'The data did not load. Reload the page; if it still fails, try again later.'),
     );
     status.appendChild(banner);
   }
@@ -307,10 +306,10 @@ function setState(patch) {
   if (p.cell != null && !('booth' in p)) p.booth = null;
   if (('booth' in p || 'cell' in p) && !('selection' in p)) p.selection = null;
   state = canonicalMlbState({ ...state, ...p }, model);
-  // A selection belongs to the view that made it, so a tab change drops it
+  // A tab change keeps or drops the pick per transition (carryOnViewChange)
   // unless the same patch sets a new one.
   if (state.view !== prevView && !('booth' in p || 'cell' in p || 'selection' in p)) {
-    state = canonicalMlbState({ ...state, booth: null, cell: null, selection: null }, model);
+    state = canonicalMlbState(carryOnViewChange(prevView, state.view, state), model);
   }
   syncUrl();
   renderAll({ resize: state.view !== prevView });

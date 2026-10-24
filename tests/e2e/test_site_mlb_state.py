@@ -139,3 +139,57 @@ def test_scatter_codec(run: Callable[[str], Any]) -> None:
     assert got["junk1"] is None
     assert got["junk2"] is None
     assert got["def"] == "?sport=mlb"
+
+
+def test_carry_rule(run: Callable[[str], Any]) -> None:
+    got = run(
+        """
+        const s = { view: 'x', booth: '1', cell: 'c', game: 2, selection: { games: [1], label: 'L' } };
+        const f = (a, b) => { const o = S.carryOnViewChange(a, b, s);
+          return [o.booth, o.cell, o.selection ? 'sel' : null]; };
+        return {
+          same: S.carryOnViewChange('apple', 'apple', s) === s,
+          appleScatter: f('apple', 'scatter'),
+          postScatter: f('postseason', 'scatter'),
+          scatterApple: f('scatter', 'apple'),
+          scatterPost: f('scatter', 'postseason'),
+          applePost: f('apple', 'postseason'),
+          postApple: f('postseason', 'apple'),
+        };
+        """
+    )
+    assert got["same"] is True
+    assert got["appleScatter"] == ["1", "c", "sel"]
+    assert got["postScatter"] == ["1", "c", "sel"]
+    assert got["scatterApple"] == ["1", None, None]
+    assert got["scatterPost"] == [None, "c", None]
+    assert got["applePost"] == [None, None, None]
+    assert got["postApple"] == [None, None, None]
+
+
+def test_tab_change_drops_selection_in_the_app(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    open_mlb_app(mlb_guarded_page)
+    hooks = "window.__mlbTestHooks"
+    mlb_guarded_page.evaluate(f"{hooks}.setState({{ booth: '0' }})")
+    mlb_guarded_page.evaluate(f"{hooks}.setState({{ view: 'postseason' }})")
+    assert mlb_guarded_page.evaluate(f"{hooks}.getTableIndexes()") == []
+
+
+def test_postseason_hint(mlb_guarded_page: Page, open_mlb_app: Callable[..., None]) -> None:
+    open_mlb_app(mlb_guarded_page, "?sport=mlb&view=postseason")
+    assert (
+        mlb_guarded_page.inner_text("#mlb-chart-subtitle")
+        == "Pick a postseason cell or a season to list its games."
+    )
+
+
+def test_load_error_uses_the_shared_copy(mlb_guarded_page: Page, mlb_site_url: str) -> None:
+    mlb_guarded_page.route("**/mlb-data.json", lambda route: route.fulfill(status=500, body=""))
+    mlb_guarded_page.goto(f"{mlb_site_url}/index.html?sport=mlb")
+    banner = mlb_guarded_page.locator(".nfl-status .error-banner[role=alert]")
+    banner.wait_for()
+    assert banner.inner_text().strip() == (
+        "The data did not load. Reload the page; if it still fails, try again later."
+    )

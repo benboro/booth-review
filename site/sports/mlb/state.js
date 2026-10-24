@@ -66,3 +66,16 @@ export function selectionLabel(model, state) {
   if (state.cell != null) return cellLabel(model.cells.get(state.cell));
   return '';
 }
+
+/**
+ * What survives a tab change (D-07): booth and cell are kept or dropped per
+ * transition; a selection made by a view never outlives its view, except into
+ * the Scatter, which reads whatever is picked. Pure; view ids are plain strings.
+ */
+export function carryOnViewChange(prev, next, s) {
+  if (prev === next) return s;
+  if (next === 'scatter') return s;
+  if (prev === 'scatter' && next === 'apple') return { ...s, cell: null, selection: null };
+  if (prev === 'scatter' && next === 'postseason') return { ...s, booth: null, selection: null };
+  return { ...s, booth: null, cell: null, selection: null };
+}
