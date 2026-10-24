@@ -7,7 +7,7 @@
  */
 
 import { TOP_N } from './bars.js';
-import { gameTitlePhrase } from './format.js';
+import { crewPickNames, gameTitlePhrase } from './format.js';
 import { ROLE_PILL_TEXT } from './pill.js';
 
 /** Shown when the filters leave no rows (UI-SPEC empty state). */
@@ -93,6 +93,10 @@ export function subjectPhrase(data, state, { omit = null } = {}) {
   if (omit !== 'people' && state.people.length > 0) {
     const names = state.people.map((id) => personName(data, id));
     groups.push({ names, joiner: state.together ? ' and ' : ' or ' });
+  }
+  if (omit !== 'people' && state.crew != null && state.people.length === 0) {
+    const names = crewPickNames(data, state);
+    if (names.length > 0) groups.push({ names: [`Crew: ${names.join(' / ')}`], joiner: ' or ' });
   }
   if (omit !== 'schools' && !isMatchup(state) && state.school.length > 0) {
     groups.push({ names: state.school.map((slug) => teamName(data, slug)), joiner: ' or ' });

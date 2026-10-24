@@ -319,6 +319,7 @@ export function renderBarsPanel({ data, state, view, env }) {
     state.school.join(','),
     String(state.h2h === true),
     state.people.join(','),
+    String(state.crew),
     JSON.stringify(state.networks),
   ].join('|');
   if (key !== expandKey) {
@@ -347,7 +348,7 @@ export function renderBarsPanel({ data, state, view, env }) {
   chart.classList.remove('is-concealed');
   setHidden(['bars-footer', 'bars-captions', 'bars-data'], false);
 
-  lastMatched = state.people.length > 0;
+  lastMatched = state.people.length > 0 || state.crew != null;
   const figEnv = { ...env, width: chart.clientWidth || env.width, matched: lastMatched };
   const figure =
     model.kind === 'butterfly' ? buildButterflyFigure(model, shown, figEnv) : buildBarFigure(model, shown, figEnv);

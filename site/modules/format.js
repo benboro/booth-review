@@ -8,6 +8,8 @@
  * already in ET and must never shift by the viewer's local timezone.
  */
 
+import { crewIndex } from './crew-groups.js';
+
 /** Short weekday names, Sunday-first, indexed by `Date#getUTCDay()`. */
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -324,6 +326,22 @@ export function formatAudienceShort(n) {
   return `${trim(n / 1e6)}MM`;
 }
 
+/**
+ * Audience figure for a TABLE column (Crews, 14-10): the same K and MM units as
+ * `formatAudienceShort`, but always one decimal so a column reads evenly ("2.0MM", "523.4K",
+ * "12.0K"). Charts, tooltips and prose keep the trimmed `formatAudienceShort`.
+ * @param {number} n
+ * @returns {string} e.g. "523.4K", "12.0K", "2.0MM", "50.6MM".
+ */
+export function formatAudienceTable(n) {
+  // Round first, then pick the unit, so 999.6 reads "1.0K", never "1000".
+  const whole = Math.round(n);
+  if (whole < 1000) return String(whole);
+  const k = Math.round(n / 100) / 10;
+  if (k < 1000) return `${k.toFixed(1)}K`;
+  return `${(Math.round(n / 1e5) / 10).toFixed(1)}MM`;
+}
+
 /** Label for a game with no public rating (04.13). */
 export const NO_RATING_LABEL = 'No public rating';
 
@@ -430,11 +448,35 @@ export function crewEntries(data, i, { mainOnly = false, selected = new Set() } 
  */
 export function selectedPersonIndexes(data, state) {
   const result = new Set();
+  // A crew pick (D-06) marks its people as matched; D-08 keeps it exclusive with a people pick.
+  if (state.crew != null && (state.people ?? []).length === 0) {
+    for (const slug of crewIndex(data).crews.get(state.crew)?.people ?? []) {
+      const idx = data.personIndexById.get(slug);
+      if (idx !== undefined) result.add(idx);
+    }
+    return result;
+  }
   for (const id of state.people ?? []) {
     const idx = data.personIndexById.get(id);
     if (idx !== undefined) result.add(idx);
   }
   return result;
+}
+
+/**
+ * Display names of the picked crew's people (play-by-play first), or [] without a crew pick.
+ * @param {object} data - a `prepareData` result.
+ * @param {{crew?: string|null}} state
+ * @returns {string[]}
+ */
+export function crewPickNames(data, state) {
+  if (state.crew == null) return [];
+  const crew = crewIndex(data).crews.get(state.crew);
+  if (!crew) return [];
+  return crew.people
+    .map((slug) => data.personIndexById.get(slug))
+    .filter((idx) => idx !== undefined)
+    .map((idx) => data.lookups.people[idx].name);
 }
 
 /** Typographic minus used in all spread copy. */

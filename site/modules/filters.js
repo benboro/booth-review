@@ -32,7 +32,7 @@ import { gameKeyMatches, gameSearchKey, normalizeName } from './data.js';
 import { makeCaretIcon, makeGameTypeIcon } from './icons.js';
 import { FAMILY_LABELS } from './palette.js';
 import { familyIsSole, familyOnlyPatch, offeredFamilyIds, sameSet } from './select.js';
-import { NEW_YEARS_SIX, SLOT_SHORT_LABELS, ROLE_LABELS, gameRowTitle } from './format.js';
+import { NEW_YEARS_SIX, SLOT_SHORT_LABELS, ROLE_LABELS, crewPickNames, gameRowTitle } from './format.js';
 import { PHONE_QUERY } from './breakpoints.js';
 
 const ROLE_HELPER_TEXT = 'Limits matches to main-broadcast play-by-play or analyst roles.';
@@ -71,6 +71,8 @@ const GROUP_RESETS = {
   game: { game: null },
   booth: { booth: [] },
   venue: { venue: null },
+  // Phase 14 D-07: Clear all filters also drops a Crews pick (it has no toolbar trigger).
+  crew: { crew: null },
 };
 
 /** Booth tier values in canonical order, and their trigger labels (D-12). */
@@ -1381,6 +1383,10 @@ function renderGame(data, state, view) {
 /** A toolbar trigger's label and active state, from `state` (D-02 copywriting).
  * D-36: the Networks count is the checked rows among the rows shown in the list. */
 function triggerInfo(name, data, state, view) {
+  if (name === 'crew') {
+    // Not a toolbar trigger: only `changedControls` asks, so the phone count and chips list it.
+    return { label: `Crew: ${crewPickNames(data, state).join(' / ')}`, active: state.crew != null };
+  }
   if (name === 'announcers') {
     if (state.people.length === 0) return { label: 'Announcers', active: false };
     return { label: `Announcers · ${state.people.length}`, active: true };
@@ -1460,7 +1466,10 @@ function triggerValue(name, label, active) {
  * `activeFilterCount`, which also counts each selected person (Pitfall 10).
  */
 export function changedControls(data, state, view) {
-  return TRIGGER_NAMES.filter((name) => triggerInfo(name, data, state, view).active);
+  const changed = TRIGGER_NAMES.filter((name) => triggerInfo(name, data, state, view).active);
+  // D-07: a Crews pick counts once, after the toolbar controls; it never touches Booth.
+  if (state.crew != null) changed.push('crew');
+  return changed;
 }
 
 /**
@@ -1524,10 +1533,12 @@ function renderFiltersButton(data, state, view) {
     chip.className = 'filter-chip';
     chip.setAttribute('popovertarget', 'filters-sheet');
     chip.setAttribute('aria-haspopup', 'dialog');
-    const resting = restingLabels.get(name) ?? label;
+    // The crew pick has no toolbar trigger, so no resting label: bold its "Crew:" prefix.
+    const resting = name === 'crew' ? 'Crew:' : (restingLabels.get(name) ?? label);
     const strong = document.createElement('b');
     strong.textContent = resting;
-    chip.append(strong, document.createTextNode(triggerValue(name, label, true)));
+    const value = name === 'crew' ? label.slice(resting.length) : triggerValue(name, label, true);
+    chip.append(strong, document.createTextNode(value));
     chip.setAttribute('aria-label', label);
     li.append(chip);
     return li;

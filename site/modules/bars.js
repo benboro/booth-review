@@ -81,7 +81,8 @@ export function chartContext(data, state) {
   // no Butterfly trigger. Unknown slugs never reach state (url-state allowlist), but check anyway.
   const gamePicked = state.game != null && data.gameIndexBySlug.has(state.game);
   const announcersApply = state.school.length > 0 || gamePicked;
-  const teamsApply = state.networks !== null || state.people.length > 0;
+  // A crew pick counts like a person pick (D-06): it narrows the games, so Bars show by team.
+  const teamsApply = state.networks !== null || state.people.length > 0 || state.crew != null;
   const { pref, mode } = byParts(state.by);
   const preferTeams = pref === 'teams';
   // Head-to-head makes the two schools one matchup subject: the Bars group by

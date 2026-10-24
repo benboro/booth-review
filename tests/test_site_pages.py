@@ -374,7 +374,12 @@ def test_render_methodology_resolves_md_links_against_docs(
 # and coloring; no NFL text changed.
 # Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
 # new header with theme slot, site name.
-_METHODOLOGY_FLAG_OFF_SHA256 = "2d0e07bd422e517c8a4e6bdf9d002a9b097ee31e90beb6f529bd1490ef40abb1"
+# Re-pinned at Phase 14 Plan 09: new Crews section.
+# Re-pinned at Phase 14 Plan 10: Crews opens on Per season (one methodology sentence).
+# Re-pinned at Phase 14 Plan 10 (checkpoint): one Crews sentence on whole-season Nielsen bands.
+# Re-pinned at Phase 14 Plan 11: Crews panel fixes (shipped-modal and null-cited-analyst
+# fill-in rule, unknown-role marks on no-PBP rows); no NFL text changed.
+_METHODOLOGY_FLAG_OFF_SHA256 = "15a14fb44be4f05c4141527b853cb4dbed5be9cb7c0663d61a74e89919d82384"
 
 _NFL_ANCHORS = (
     "nfl-special-games",

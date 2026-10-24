@@ -21,7 +21,7 @@
 
 import { prepareData } from './modules/data.js';
 import { currentTheme, onThemeChange } from './modules/theme.js';
-import { defaultState, computeView, toggleFamilyNetworks, familyOnlyPatch, axisPatch, yPatch } from './modules/select.js';
+import { defaultState, computeView, toggleFamilyNetworks, familyOnlyPatch, axisPatch, yPatch, describePickChange } from './modules/select.js';
 import { encodeState, decodeState } from './modules/url-state.js';
 import { buildFigure, renderChart, bindChartEvents, scatterAtHome, resetScatterZoom, TOOLTIP_MODE } from './modules/chart.js';
 import { initTopbar, renderTopbar, renderMapShapeLegend } from './modules/topbar.js';
@@ -33,7 +33,8 @@ import { initChartTabs, renderChartTabs, staleCopy } from './modules/chart-tabs.
 import { chartContext } from './modules/bars.js';
 import { initBarsPanel, renderBarsPanel, lastBarsModel, resetBarsTap } from './modules/bars-panel.js';
 import { buildMapModel } from './modules/map-model.js';
-import { buildCrewsModel, renderCrewsPanel } from './modules/crews.js';
+import { renderCrewsPanel, perSeasonApplies } from './modules/crews.js';
+import { buildCrewRows, modelBreakSeason } from './modules/crew-groups.js';
 import { initMapPanel, renderMapPanel, resetMapTap, mapRenderCount, mapSplatCount, onMapViewChange, mapAtHome, resetMapZoom } from './modules/map-panel.js';
 import { initBandInfo, positionBandInfo, closeBandNote, setBandInfoMode } from './modules/band-info.js';
 import { showTooltip, hideTooltip } from './modules/tooltip.js';
@@ -167,6 +168,9 @@ let openPanelIndex = null;
 /** The matched-games table's own sort state (kept out of the URL, D-11/SITE-13). */
 let sort = { key: 'date', dir: 'asc' };
 
+/** The crew pick the table last saw, so a new crew pick resets the sort once (D-06). */
+let sortCrew = null;
+
 /** Opens the detail panel on telecast `i` and remembers it's open, for `render`'s own refresh (D-10). */
 function openDetailPanel(i) {
   clearHover();
@@ -188,6 +192,13 @@ initPanel({
 
 /** Pushed into `renderers`: renders the matched-games table and wires its sort headers and Details buttons. */
 function tableRenderer({ data, state, view }) {
+  // D-06: a new crew pick lists the crew's games newest first; a later header click still
+  // re-sorts, and the subtitle follows whatever sort is active.
+  const crew = view.hasCrewSelection ? state.crew : null;
+  if (crew !== sortCrew) {
+    if (crew != null) sort = { key: 'date', dir: 'desc' };
+    sortCrew = crew;
+  }
   renderTable({
     data,
     view,
@@ -278,9 +289,18 @@ function render() {
     hideBandInfo();
     if (crewsPanelEl) {
       crewsPanelEl.hidden = false;
-      const crewsModel = buildCrewsModel(data, view);
-      renderCrewsPanel(crewsPanelEl, crewsModel);
-      crewsHasNewModelSeason = crewsModel.groups.some((g) => g.season >= 2025);
+      const crewsModel = buildCrewRows(data, view, { mode: state.cmode, perSeason: perSeasonApplies(data, state) });
+      renderCrewsPanel(crewsPanelEl, crewsModel, {
+        data,
+        state,
+        view,
+        setState,
+        openGame: openDetailPanel,
+      });
+      // Crews shows excitement averages, so the model-break note applies when the Seasons range
+      // reaches the break season (RT-20).
+      const rangeHi = state.seasons ? state.seasons[1] : data.seasons[data.seasons.length - 1];
+      crewsHasNewModelSeason = rangeHi >= modelBreakSeason(data);
     }
     lastPanel = 'crews';
   } else if (state.view === 'map') {
@@ -449,8 +469,28 @@ function bindScatterEvents() {
  * @param {object} patch
  */
 function setState(patch) {
-  const next = { ...state, ...patch };
+  const prev = state;
+  const exclusive = { ...patch };
+  // D-08, in one place: a crew pick and an Announcers pick never coexist. Setting a crew clears
+  // Announcers, Compare and Called together; setting people (or Compare/Called together) clears the crew.
+  if (patch.crew != null) {
+    exclusive.people = [];
+    exclusive.compare = false;
+    exclusive.together = false;
+  } else if (
+    (Array.isArray(patch.people) && patch.people.length > 0) ||
+    patch.compare === true ||
+    patch.together === true
+  ) {
+    exclusive.crew = null;
+  }
+  const next = { ...state, ...exclusive };
   state = decodeState(encodeState(next, data), data);
+  const message = prev ? describePickChange(prev, state, data) : '';
+  if (message) {
+    const seat = document.getElementById('pick-status');
+    if (seat) seat.textContent = message;
+  }
   render();
 }
 
@@ -601,6 +641,7 @@ async function startCfb(search = location.search) {
         enlargeDots: lastView.enlargeDots,
         drawnFaded: lastView.drawnFaded,
         hasPersonSelection: lastView.hasPersonSelection,
+        hasCrewSelection: lastView.hasCrewSelection,
         hasGameSelection: lastView.hasGameSelection,
         highlighted: lastView.highlighted,
         matched: lastView.matched,

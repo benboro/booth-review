@@ -1985,3 +1985,132 @@ def test_real_map_constant_traces_and_note(
     all_notes = all(note_ok)
     assert all_constant
     assert all_notes
+
+
+# -- Phase 14 plan 03: Crews row model checks (counts only) ------------------------------------
+
+_CREW_FAMILY_JS = """
+async () => {
+  const G = await import('./modules/crew-groups.js');
+  const data = window.__testHooks.data;
+  const idx = G.crewIndex(data);
+  let tiered = 0;
+  let mismatched = 0;
+  for (let i = 0; i < data.n; i += 1) {
+    const b = data.boothOf[i];
+    if (b < 0) continue;
+    tiered += 1;
+    if (idx.perGame[i].groupId !== data.lookups.booths[b].family) mismatched += 1;
+  }
+  return { tiered, mismatched };
+}
+"""
+
+_CREW_BREAK_JS = """
+() => {
+  const data = window.__testHooks.data;
+  const kinds = data.lookups.flags.map((f) => f.kind);
+  const has = (i) => (data.t.flags[i] ?? []).some((f) => kinds[f] === 'model_break');
+  let boundary = null;
+  for (let i = 0; i < data.n; i += 1) {
+    if (data.rated[i] && has(i) && (boundary === null || data.t.season[i] < boundary)) {
+      boundary = data.t.season[i];
+    }
+  }
+  let missing = 0;
+  let early = 0;
+  let ratedFrom = 0;
+  for (let i = 0; i < data.n; i += 1) {
+    if (!data.rated[i] || boundary === null) continue;
+    if (data.t.season[i] >= boundary) {
+      ratedFrom += 1;
+      if (!has(i)) missing += 1;
+    } else if (has(i)) early += 1;
+  }
+  return { found: boundary !== null, missing, early, ratedFrom };
+}
+"""
+
+_CREW_ROWS_JS = """
+async () => {
+  const D = window.__testHooks.data;
+  const S = await import('./modules/select.js');
+  const G = await import('./modules/crew-groups.js');
+  const view = S.computeView(D, S.defaultState(D));
+  const out = G.buildCrewRows(D, view, { mode: 'crew', perSeason: false });
+  const idx = G.crewIndex(D);
+  const distinct = new Set();
+  for (let i = 0; i < D.n; i += 1) {
+    if (view.passesFilters[i] && idx.keys[i] !== null) distinct.add(idx.keys[i]);
+  }
+  let noPbpRows = 0;
+  let tagWrong = 0;
+  let allUnknownRows = 0;
+  let allUnknownUntagged = 0;
+  for (const row of out.rows) {
+    if (!idx.crews.get(row.crewKey).noPbp) continue;
+    noPbpRows += 1;
+    const n = row.games.length;
+    let everyone = true;
+    for (const p of row.people) {
+      const k = row.games.filter((i) => idx.perGame[i].unknownPeople.includes(p.slug)).length;
+      if ((k === n) !== (p.unknownTag === 'all')) tagWrong += 1;
+      if (k !== n) everyone = false;
+    }
+    if (everyone) {
+      allUnknownRows += 1;
+      if (row.people.some((p) => p.unknownTag !== 'all')) allUnknownUntagged += 1;
+    }
+  }
+  return {
+    rows: out.totalRows,
+    distinct: distinct.size,
+    noPbpRows,
+    tagWrong,
+    allUnknownRows,
+    allUnknownUntagged,
+  };
+}
+"""
+
+
+def test_real_crew_group_family_matches_booth_family(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """A5: for every tiered game the client group id equals lookups.booths[booth].family."""
+    real_open_app(real_guarded_page, "?view=crews")
+    res: dict[str, int] = real_guarded_page.evaluate(_CREW_FAMILY_JS)
+    tiered = res["tiered"]
+    mismatched = res["mismatched"]
+    assert tiered > 0
+    assert mismatched == 0
+
+
+def test_real_crew_model_break_flag_matches_derived_season(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """A4: every rated game from the derived model-break season on carries the flag, none before."""
+    real_open_app(real_guarded_page, "?view=crews")
+    res: dict[str, Any] = real_guarded_page.evaluate(_CREW_BREAK_JS)
+    found = res["found"]
+    missing = res["missing"]
+    early = res["early"]
+    assert found
+    assert missing == 0
+    assert early == 0
+
+
+def test_real_crew_rows_match_distinct_keys_and_tag_unknowns(
+    real_guarded_page: Page, real_open_app: Callable[[Page, str], None]
+) -> None:
+    """V14-3: one Crew-mode row per distinct crew key; unknown tags follow the games."""
+    real_open_app(real_guarded_page, "?view=crews")
+    res: dict[str, int] = real_guarded_page.evaluate(_CREW_ROWS_JS)
+    rows = res["rows"]
+    distinct = res["distinct"]
+    tag_wrong = res["tagWrong"]
+    untagged = res["allUnknownUntagged"]
+    assert rows == distinct
+    assert distinct > 0
+    assert tag_wrong == 0
+    assert untagged == 0

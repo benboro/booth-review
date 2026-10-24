@@ -254,6 +254,41 @@ rather than matched as literal strings, so that, for example, a parent and
 child who share the same name are kept as two separate, distinct people
 rather than merged into one.
 
+## Crews
+
+The Crews table groups college football telecasts by booth. A crew is a
+play-by-play voice and that season's regular analyst within one network family
+(ESPN/ABC, FOX, CBS or NBC), or within one network for any other network. A
+pair that changes family is two rows. Where a network's lineup names a booth
+order, the regular analyst is the one the lineup cites; otherwise it is the
+analyst who worked the most games with that voice, counted over the games this
+site shows (one telecast per game), so a game's second telecast never tips it. A
+game where the regular analyst was absent stays in the crew and is marked
+fill-in; if the cited analyst called none of the games shown, every game with an
+analyst is marked fill-in and the row names the voice's most common analysts. A
+usual three-person booth names all three people.
+
+Rows split by season by default when the Seasons range covers two or more
+seasons, and a Per season switch pools them across the range instead. On a
+telecast with a resolved play-by-play voice, only the play-by-play and analyst
+seats name the crew, so a person of unknown role on that telecast (often a
+sideline reporter) is not shown in its row. Telecasts where no one has a
+resolved play-by-play role are grouped by their exact people, and people whose
+role is unknown are marked unknown role. When a person's role is known in some of their
+games, the mark reads "unknown role in k of n games".
+
+The play-by-play and analyst views group by one person instead of the pair.
+They leave out telecasts with no person in that role, and say how many.
+
+An average from fewer than 8 games is flagged n < 8. A pooled row whose games
+fall on both sides of [the 2025 excitement break](#the-2025-excitement-break),
+or across more than one [measurement era](#measurement-eras), shows "see Per
+season" instead of an average. The Crews table treats a whole season as one
+measurement band, so a Per season row never blanks for a mid-season switch; bands
+change at the 2020, 2025 and 2026 seasons. Average viewers mostly reflects which games a
+crew was assigned, not how well it called them; see
+[assignments, not quality](#assignments-not-quality).
+
 ## The map
 
 The map shows where games were played and who traveled to call them. Each

@@ -19,7 +19,6 @@
 
 import { byPatch, chartContext } from './bars.js';
 import { MAP_HINT } from './map-model.js';
-import { CREWS_HINT } from './crews.js';
 
 export const TAB_HINTS = {
   bars: 'Pick a school, network, announcer, or game',
@@ -39,10 +38,19 @@ export const STALE_COPY = {
 
 const VIEWS = ['scatter', 'bars', 'butterfly', 'map', 'crews'];
 
-/** The hint the module subtitle rests on: the Map's prompt until an announcer or school is picked (04.18 D-02); the Crews note on Crews. */
+/** The Crews subtitle (14-UI-SPEC): the master Seasons range, "Seasons 2014–2026" or "Season 2026". */
+function crewsSubtitle(state) {
+  const years = currentData?.seasons ?? [];
+  const lo = state.seasons ? state.seasons[0] : years[0];
+  const hi = state.seasons ? state.seasons[1] : years[years.length - 1];
+  if (lo == null || hi == null) return '';
+  return lo === hi ? `Season ${lo}` : `Seasons ${lo}–${hi}`;
+}
+
+/** The hint the module subtitle rests on: the Map's prompt until a subject (announcer, school or crew) is picked (04.18 D-02); the season range on Crews. */
 function restingHint(state) {
-  if (state.view === 'map' && state.people.length === 0 && state.school.length === 0) return MAP_HINT;
-  if (state.view === 'crews') return CREWS_HINT;
+  if (state.view === 'map' && state.people.length === 0 && state.school.length === 0 && state.crew == null) return MAP_HINT;
+  if (state.view === 'crews') return crewsSubtitle(state);
   return '';
 }
 
@@ -97,6 +105,7 @@ function setHint(text) {
 }
 
 let currentState = null;
+let currentData = null;
 
 function showHintFor(tab) {
   if (tab && tab.getAttribute('aria-disabled') === 'true') {
@@ -229,6 +238,7 @@ export function renderChartTabs({ data, state }) {
     }
   }
   currentState = state;
+  currentData = data;
   setHint(restingHint(state));
 
   const scatter = state.view === 'scatter';
