@@ -529,6 +529,45 @@ def test_click_selects_team_and_fills_games_and_breakdown(
     assert app.evaluate("window.__nflTestHooks.getTableIndexes()") == []
 
 
+def test_bar_click_under_a_pick_lists_only_matched_games(
+    app: Page, nfl_fixture_raw: dict[str, Any]
+) -> None:
+    raw = nfl_fixture_raw
+    g = raw["games"]
+    _vm(app)
+    _set(app, {"people": ["p12"]})
+    app.wait_for_function("window.__nflTestHooks.getViewModel('special').overlay?.length > 0")
+    matched = set(app.evaluate("window.__nflTestHooks.getTableIndexes()"))
+    p12 = next(i for i, p in enumerate(raw["lookups"]["people"]) if p["id"] == "p12")
+    assert any(m["person"] == p12 for i in matched for m in g["crew"][i])
+    lo, hi = app.evaluate("window.__nflTestHooks.getState().seasons")
+    ids = [f["id"] for f in raw["lookups"]["franchises"]]
+    cut = 0
+    for k, row in enumerate(_vm(app)["rows"]):
+        f = ids.index(row["franchise"])
+        team = {
+            i
+            for i in range(len(g["season"]))
+            if f in (g["home"][i], g["away"][i])
+            and lo <= g["season"][i] <= hi
+            and (
+                g["standalone"][i] or g["agotw"][i] or g["cbs_national"][i] or g["international"][i]
+            )
+        }
+        _emit(app, "plotly_click", k)
+        app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
+        app.wait_for_timeout(100)  # a render re-sync may rewrite the selection
+        assert sorted(app.evaluate("window.__nflTestHooks.getTableIndexes()")) == sorted(
+            team & matched
+        )
+        cut += len(team - matched)
+        app.wait_for_timeout(600)  # past the touch double-fire guard
+        _emit(app, "plotly_click", k)
+        app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected === null")
+        app.wait_for_timeout(600)
+    assert cut > 0
+
+
 def test_end_markers_are_ink_until_a_team_is_picked_then_accent(app: Page) -> None:
     """UI-SPEC ranked bars: end markers (--ink at 80%) with a value column; the picked
     team's marker takes the accent."""
