@@ -373,6 +373,28 @@ def test_double_click_shows_only_then_restores(
     assert sorted(_shown(page)) == sorted(ids)
 
 
+def test_double_click_only_under_a_pick_hides_nothing_once_the_pick_clears(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
+) -> None:
+    page = nfl_guarded_page
+    _open(page, open_nfl_app, "&people=p01")
+    _vm(page)
+    under_pick = _shown(page)
+    assert under_pick
+    assert len(under_pick) < len(_present_ids(nfl_fixture_raw))
+    _double(page, under_pick[0])
+    page.wait_for_function(
+        "window.__nflTestHooks.getViewModel('viewership').categories.length === 1"
+    )
+    # "Only" hides just the other categories this pick plots, so clearing it leaves none hidden.
+    _set(page, {"people": []})
+    page.wait_for_function("window.__nflTestHooks.getState().people.length === 0")
+    hidden = _state(page)["hiddenCategories"]
+    assert set(hidden) <= set(under_pick) - {under_pick[0]}
+    assert sorted(_shown(page)) == sorted(set(_present_ids(nfl_fixture_raw)) - set(hidden))
+    assert len(_shown(page)) >= len(_present_ids(nfl_fixture_raw)) - len(under_pick) + 1
+
+
 def test_keyboard_enter_never_triggers_only(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
 ) -> None:

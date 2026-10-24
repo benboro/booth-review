@@ -181,7 +181,7 @@ function recountedSeries(model, state) {
 
 function onlyPatch(key, before) {
   const { ctx } = refs;
-  const present = presentIds(viewershipSeries(ctx.model, ctx.getState()));
+  const present = presentIds(recountedSeries(ctx.model, ctx.getState()));
   const shown = shownFrom(present, before || []);
   if (shown.length === 1 && shown[0] === key) return { hiddenCategories: [] };
   return { hiddenCategories: present.filter((id) => id !== key) };
