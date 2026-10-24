@@ -160,7 +160,8 @@ function drawGames(holder, row, tc, count) {
       ts.expanded.set(row.rowKey, count + step);
       drawGames(holder, row, tc, count + step);
       holder.querySelectorAll('tr.crews-game')[count]?.focus();
-      announce(holder.closest('#crews-panel') ?? holder, `${step} more games shown, ${left - step} left.`);
+      // CFB announces on its panel; any other sport on the nearest ancestor that owns the status seat.
+      announce(holder.closest('#crews-panel') ?? holder.closest(':has(> .crews-status)') ?? holder, `${step} more games shown, ${left - step} left.`);
     });
     holder.append(more);
   }

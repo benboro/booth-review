@@ -386,6 +386,24 @@ def test_adjusted_cells_print_signed_residual_with_se(
 # ------------------------------------------------------------------ game lists
 
 
+def test_game_list_view_more_announces_on_the_status_seat(
+    nfl_guarded_page: Page,
+    open_nfl_app: Callable[..., None],
+    serve_nfl_crews: Callable[[Page], None],
+) -> None:
+    """15-13 N1: the game-list View more writes to the NFL table's polite status seat."""
+    serve_nfl_crews(nfl_guarded_page)
+    page = nfl_guarded_page
+    _open(page, open_nfl_app, "&perseason=0")
+    _vm(page)
+    two = f"fox:{CASE_TWO_ANALYSTS['pbp']}.synth-an-two-a"  # 18 games
+    _row(page, two).locator(".crews-chevron").click()
+    sub = page.locator(f"{VIEW} tr.crews-expanded[data-sub-for='{two}']")
+    seat = page.locator(f"{VIEW} .crews-status")
+    sub.locator(".crews-games-more").click()
+    assert seat.text_content() == "8 more games shown, 0 left."
+
+
 def test_game_list_ten_newest_first_with_tags(
     nfl_guarded_page: Page,
     open_nfl_app: Callable[..., None],
