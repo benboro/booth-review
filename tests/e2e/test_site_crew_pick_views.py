@@ -124,6 +124,84 @@ def test_map_crew_pick_rebuilds_the_venue_model_from_the_crews_games(app: Page) 
     assert any(d["tier"] == "other" for d in dots) == (len(dots) > placed)
 
 
+def test_map_crew_pick_is_a_subject_with_tier_and_legs(app: Page) -> None:
+    """D-06: a crew pick is the Map's one subject, like an Announcers pick: its venues take
+    the subject tier and its season path draws legs."""
+    _set(app, {"view": "map"})
+    app.wait_for_function("() => window.__testHooks.mapRenders >= 1")
+    key = _key(app)
+    before = app.evaluate("() => window.__testHooks.mapRenders")
+    _set(app, {"crew": key})
+    app.wait_for_function("(n) => window.__testHooks.mapRenders > n", arg=before)
+    model = app.evaluate("() => window.__testHooks.getMapModel()")
+    assert model["hasSubject"] is True
+    assert [s["kind"] for s in model["subjects"]] == ["crew"]
+    assert model["subjects"][0]["label"] == " / ".join(_crew_names(app, key))
+    matched = set(_view(app)["matched"])
+    subject_dots = [d for d in model["venueDots"] if d["tier"] == "subject"]
+    assert subject_dots
+    places = app.evaluate(
+        "(m) => [...new Set(m.map((i) => window.__testHooks.data.t.place[i]))]", sorted(matched)
+    )
+    assert {d["venue"] for d in subject_dots} <= set(places)
+    assert len(model["legs"]) > 0
+    assert all(leg["from"] in matched and leg["to"] in matched for leg in model["legs"])
+
+
+_CREW_SCHOOL_JS = """
+async ([key]) => {
+  const S = await import('./modules/select.js');
+  const M = await import('./modules/map-model.js');
+  const data = window.__testHooks.data;
+  const base = { ...window.__testHooks.getState(), crew: key, people: [] };
+  const crewOnly = S.computeView(data, base);
+  const first = crewOnly.highlighted[0];
+  const slug = data.teamSlugs[data.t.home_team[first]];
+  const state = { ...base, school: [slug] };
+  const view = S.computeView(data, state);
+  const model = M.buildMapModel(data, view, state);
+  const cardGames = [];
+  for (const d of model.venueDots) {
+    const card = M.venueCard(data, model, d.key);
+    if (!card) continue;
+    for (const line of card.subjectLines) cardGames.push(line.text);
+  }
+  const subjectVenueGames = model.subjectVenueGames.flatMap((m) => [...m.values()].flat());
+  const schoolGames = [];
+  const team = data.teamSlugs.indexOf(slug);
+  for (let i = 0; i < data.n; i += 1) {
+    if (view.passesFilters[i] && (data.t.home_team[i] === team || data.t.away_team[i] === team)) {
+      schoolGames.push(i);
+    }
+  }
+  return {
+    crewGames: crewOnly.highlighted,
+    matched: view.highlighted,
+    schoolGames,
+    kinds: model.subjects.map((s) => s.kind),
+    legs: model.legs.map((l) => [l.from, l.to]),
+    subjectVenueGames,
+    cardLines: cardGames.length,
+  };
+}
+"""
+
+
+def test_map_crew_with_school_keeps_paths_and_tooltips_inside_the_crews_games(app: Page) -> None:
+    """D-06 with School set: the crew stays the one subject (as an Announcers pick does), so
+    every path leg and every tooltip game is one of the crew's games, never another crew's."""
+    out = app.evaluate(_CREW_SCHOOL_JS, [_key(app)])
+    crew = set(out["crewGames"])
+    assert out["kinds"] == ["crew"]
+    # The school plays games the crew did not call, so the check is not vacuous.
+    assert set(out["schoolGames"]) - crew
+    assert set(out["matched"]) <= crew
+    assert out["subjectVenueGames"]
+    assert set(out["subjectVenueGames"]) <= crew
+    assert all(a in crew and b in crew for a, b in out["legs"])
+    assert out["cardLines"] > 0
+
+
 # -- Matched games -------------------------------------------------------------------------
 
 
