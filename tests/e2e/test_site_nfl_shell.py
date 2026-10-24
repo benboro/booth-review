@@ -309,10 +309,43 @@ def test_headline_shows_count_and_season_range(
     page.wait_for_function(
         "t => document.querySelector('#nfl-headline').textContent === t", arg=want
     )
-    # The headline is visible on every NFL view.
-    for view in ("special", "crews", "viewership", "scatter"):
+    # The headline is visible on every NFL view; Crews and Viewership title the module by tab label.
+    page.evaluate("() => window.__nflTestHooks.setState({ seasons: null })")
+    for view, title in (
+        ("special", None),
+        ("crews", "Crews"),
+        ("viewership", "Viewership"),
+        ("scatter", None),
+    ):
         page.evaluate("v => window.__nflTestHooks.setState({ view: v })", view)
         assert page.locator("#nfl-headline").is_visible()
+        text = page.locator("#nfl-headline").text_content() or ""
+        if title is None:
+            assert " games · " in text or " game · " in text
+        else:
+            assert text == title
+
+
+def test_crews_subtitle_is_the_seasons_range(
+    nfl_guarded_page: Page,
+    open_nfl_app: Callable[..., None],
+    nfl_fixture_raw: dict[str, Any],
+) -> None:
+    page = nfl_guarded_page
+    open_nfl_app(page, "?sport=nfl&view=crews")
+    seasons = nfl_fixture_raw["games"]["season"]
+    lo, hi = min(seasons), max(seasons)
+    sub = page.locator("#nfl-chart-subtitle")
+    page.wait_for_function(
+        "t => document.querySelector('#nfl-chart-subtitle').textContent === t",
+        arg=f"Seasons {lo}–{hi}",
+    )
+    page.evaluate("y => window.__nflTestHooks.setState({ seasons: [y, y] })", hi)
+    page.wait_for_function(
+        "t => document.querySelector('#nfl-chart-subtitle').textContent === t",
+        arg=f"Season {hi}",
+    )
+    assert sub.count() == 1
 
 
 # ------------------------------------------------- views load without errors
