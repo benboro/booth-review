@@ -3689,6 +3689,16 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   text-align: center;
 }
 
+/* A secondary line under a Matched games cell: the kickoff time under the date, the slot and
+   flag categories under the matchup. Both are a block of the cell's own 14px / 1.4 line box, so
+   line 2 of every cell in a row shares a top; no indent, no pill. */
+.games-sub {
+  display: block;
+  color: var(--muted);
+  margin: 0;
+  padding: 0;
+}
+
 .nfl-pill {
   display: inline-block;
 }
@@ -3712,6 +3722,8 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
      text 12px below the Date's first line. */
   min-height: 0;
   min-width: 0;
+  /* Its own block, so the category line below starts at the button's left edge. */
+  display: block;
 }
 
 /* A real button (keyboard and screen-reader opener) that reads as plain matchup text like

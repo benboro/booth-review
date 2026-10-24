@@ -84,8 +84,7 @@ function buildRow(row, onOpen) {
   const dateTd = el('td', 'date', dateShortText(row));
   const ko = kickoffText(row);
   if (ko) {
-    dateTd.appendChild(el('br'));
-    dateTd.appendChild(el('span', 'nfl-muted', ko));
+    dateTd.appendChild(el('span', 'games-sub', ko));
   }
   tr.appendChild(dateTd);
 

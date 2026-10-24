@@ -367,6 +367,75 @@ def test_cfb_matched_games_first_lines_share_a_top_on_a_phone(
     _assert_first_lines_share_a_top(mobile_page, "#matched-games")
 
 
+# Fix 15-12 r6: line N of every cell in a row shares a top (the time under the Date, the
+# category under the Matchup). Lines are read from each cell's text outside pills, grouped by
+# top; a new line starts when the top moves 6px or more.
+_LINE_TOPS_JS = """
+(scope) => [...document.querySelectorAll(scope + ' table.games-table')]
+  .filter((t) => t.offsetParent !== null && t.tBodies[0] && t.tBodies[0].rows.length)
+  .flatMap((t) => [...t.tBodies[0].rows].map((tr) => {
+    const lines = (td) => {
+      const tops = [];
+      const w = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
+      for (let n = w.nextNode(); n; n = w.nextNode()) {
+        const skip = n.parentElement.closest('.pill, .role-pill, .crew-sep');
+        if (!n.textContent.trim() || skip) continue;
+        const r = document.createRange();
+        r.selectNodeContents(n);
+        for (const q of r.getClientRects()) tops.push(q.top);
+      }
+      tops.sort((a, b) => a - b);
+      const out = [];
+      for (const v of tops) if (!out.length || v - out[out.length - 1] >= 6) out.push(v);
+      return out;
+    };
+    const cells = [...tr.cells];
+    const date = cells.find((c) => c.classList.contains('date'));
+    const matchup = cells.find((c) => c.classList.contains('matchup'));
+    return {
+      date: date ? lines(date) : [],
+      matchup: matchup ? lines(matchup) : [],
+      all: cells
+        .filter((c) => c.matches('.date, .matchup') || c.querySelector('.crew-list'))
+        .map(lines),
+    };
+  }))
+"""
+
+
+def _assert_second_lines_share_a_top(page: Page, scope: str, *, expect_pair: bool) -> None:
+    rows = page.evaluate(_LINE_TOPS_JS, scope)
+    assert rows, f"no rows under {scope}"
+    seen_pair = False
+    for row in rows:
+        seconds = [c[1] for c in row["all"] if len(c) > 1]
+        if len(seconds) > 1:
+            assert max(seconds) - min(seconds) <= 1.5, row
+        if len(row["date"]) > 1 and len(row["matchup"]) > 1:
+            seen_pair = True
+            assert abs(row["date"][1] - row["matchup"][1]) <= 1.5, row
+    if expect_pair:
+        assert seen_pair, rows
+
+
+def test_cfb_matched_games_second_lines_share_a_top(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """CFB rows have no time or category line; any cell that wraps still shares line 2."""
+    guarded_page.set_viewport_size(DESKTOP)
+    open_app(guarded_page, "?school=northfield")
+    guarded_page.wait_for_selector("#games-table tbody tr")
+    _assert_second_lines_share_a_top(guarded_page, "#matched-games", expect_pair=False)
+
+
+def test_cfb_matched_games_second_lines_share_a_top_on_a_phone(
+    mobile_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    open_app(mobile_page, "?school=northfield")
+    mobile_page.wait_for_selector("#games-table tbody tr")
+    _assert_second_lines_share_a_top(mobile_page, "#matched-games", expect_pair=False)
+
+
 # Fix 15-12 r6: a crew's " · " never dangles. The list is forced narrow to wrap it, then
 # each separator is checked against the list's clip edge.
 _SEPARATORS_JS = """
