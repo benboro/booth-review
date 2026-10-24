@@ -640,6 +640,97 @@ def test_chart_plots_first_25_rows_at_fixed_height(
     assert page.evaluate(f"document.querySelector('{GD}').layout.height") == height
 
 
+_YTICKS_JS = """(sel) => {
+  const gd = document.querySelector(sel);
+  const left = gd.getBoundingClientRect().left;
+  return {
+    text: gd.layout.yaxis.ticktext,
+    clipped: [...gd.querySelectorAll('.yaxislayer-above .ytick text')]
+      .filter((t) => t.getBoundingClientRect().left < left - 0.5).length,
+    ticks: gd.querySelectorAll('.yaxislayer-above .ytick text').length,
+  };
+}"""
+
+
+def test_desktop_chart_labels_show_the_full_name_and_season(
+    nfl_guarded_page: Page,
+    open_nfl_app: Callable[..., None],
+    serve_nfl_crews: Callable[[Page], None],
+) -> None:
+    """User fix 2026-10-24: no 30-character clip; the margin is sized from the text."""
+    serve_nfl_crews(nfl_guarded_page)
+    page = nfl_guarded_page
+    page.set_viewport_size({"width": 1440, "height": 900})
+    _open(page, open_nfl_app)
+    vm = _vm(page)
+    got = page.evaluate(_YTICKS_JS, GD)
+    want = [f"{r['names']}, {r['season']}" for r in vm["rows"][:25]]
+    assert got["text"] == want
+    assert any(len(s) > 30 for s in want)  # the old 30-character clip would have cut these
+    assert not any("\u2026" in s for s in got["text"])
+    assert got["ticks"] == len(want) and got["clipped"] == 0
+    _set(page, {"perseason": False})
+    page.wait_for_function("window.__nflTestHooks.getViewModel('crews').perSeason === false")
+    vm = _vm(page)
+    got = page.evaluate(_YTICKS_JS, GD)
+    assert got["text"] == [r["names"] for r in vm["rows"][:25]]
+    assert got["clipped"] == 0
+
+
+def test_phone_chart_labels_are_last_names_with_the_season(
+    nfl_mobile_page: Page,
+    open_nfl_app: Callable[..., None],
+    serve_nfl_crews: Callable[[Page], None],
+) -> None:
+    """Phone labels read "Last / Last, YYYY"; pooled rows drop the season; a booth with no
+    analyst shows the play-by-play last name alone."""
+    serve_nfl_crews(nfl_mobile_page)
+    page = nfl_mobile_page
+    _open(page, open_nfl_app)
+    vm = _vm(page)
+    got = page.evaluate(_YTICKS_JS, GD)
+    assert got["clipped"] == 0 and got["ticks"] == len(got["text"])
+    assert all(re.fullmatch(r"\S+ / \S+, \d{4}|\S+, \d{4}", s) for s in got["text"]), got["text"]
+    seasons = [r["season"] for r in vm["rows"][:25]]
+    assert [s.rsplit(", ", 1)[1] for s in got["text"]] == [str(s) for s in seasons]
+    _set(page, {"perseason": False})
+    page.wait_for_function("window.__nflTestHooks.getViewModel('crews').perSeason === false")
+    pooled = page.evaluate(_YTICKS_JS, GD)
+    assert pooled["clipped"] == 0
+    assert all(re.fullmatch(r"\S+( / \S+)?", s) for s in pooled["text"]), pooled["text"]
+
+
+def test_compact_label_last_names(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    got = page.evaluate(
+        """async () => {
+          const C = await import('./sports/nfl/views/crews-chart.js');
+          const p = (name) => ({ name });
+          return [
+            C.compactLabel({ pbp: p('Jim Nantz'), analyst: p('Tony Romo'), season: 2025 }),
+            C.compactLabel({ pbp: p('Jim Nantz'), analyst: p('Tony Romo'), season: null }),
+            C.compactLabel({ pbp: p('Jim Nantz'), analyst: null, season: 2024 }),
+            C.compactLabel({ pbp: p('Joe Buck'), analyst: p('Greg Olsen Jr.'), season: 2024 }),
+            C.compactLabel({ pbp: null, analyst: p('Tony Romo'), season: null }),
+            C.compactLabel({ pbp: p('Cher'), analyst: p('Tony Romo'), season: 2023 }),
+            C.compactLabel({ pbp: null, analyst: null, names: '', season: null }),
+          ];
+        }"""
+    )
+    assert got == [
+        "Nantz / Romo, 2025",
+        "Nantz / Romo",
+        "Nantz, 2024",
+        "Buck / Olsen, 2024",
+        "Romo",
+        "Cher / Romo, 2023",
+        "",
+    ]
+
+
 def test_hovering_a_chart_mark_lights_its_table_row(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
 ) -> None:
