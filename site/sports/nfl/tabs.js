@@ -4,7 +4,7 @@
  */
 import { NFL_VIEWS } from './state.js';
 
-const LABELS = Object.freeze({
+export const TAB_LABELS = Object.freeze({
   special: 'Special games',
   crews: 'Crews',
   viewership: 'Viewership',
@@ -32,7 +32,7 @@ export function createNflTabs(host, { onSelect }) {
     b.setAttribute('aria-controls', `nfl-view-${id}`);
     b.setAttribute('aria-selected', 'false');
     b.tabIndex = -1;
-    b.textContent = LABELS[id];
+    b.textContent = TAB_LABELS[id];
     list.appendChild(b);
     return b;
   });
