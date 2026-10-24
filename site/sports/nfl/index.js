@@ -15,7 +15,7 @@ import { canonicalNflState, tableGames, gamePasses } from './state.js';
 import { encodeNflState, decodeNflState } from './url-state.js';
 import { createGamesTable } from './table.js';
 import { createDetailPanel } from './panel.js';
-import { createNflTabs } from './tabs.js';
+import { createNflTabs, TAB_LABELS } from './tabs.js';
 import { initNflFilters, renderNflFilters, closeNflFilters } from './filters.js';
 import * as teamBars from './views/team-bars.js';
 import * as crews from './views/crews.js';
@@ -30,8 +30,6 @@ const VIEW_IDS = Object.keys(VIEW_MODULES);
 
 const HINTS = {
   special: 'Pick a team bar to see its seasons and games.',
-  crews: 'Pick a booth to list its games.',
-  viewership: 'Pick a season point to list its games.',
   scatter: '',
 };
 
@@ -64,6 +62,9 @@ let views = null; // id -> { section, mod }
 let loadPromise = null;
 let loadFailed = false;
 let mounted = false;
+// Whether the current Booths pick came from a Crews row (memory only; a reload counts it as
+// filter-bar made, UI-SPEC Q8).
+let boothFromRow = false;
 let renderCount = 0;
 let lastRows = [];
 let footerOriginals = null; // { freshness: Node[], credit: Node[] }
@@ -81,6 +82,7 @@ const hooks = {
   getTableIndexes: () => lastRows.map((r) => r.i),
   openGame: (i) => openGame(i, undefined),
   closePanel: () => panel && panel.close(),
+  pickBoothRow: (key, label) => pickBoothRow(key, label),
   getBoothCatalog: () => (model ? model.boothCatalog.map((e) => ({ key: e.key, label: e.label })) : []),
   getViewModel: (id) => (views && views[id] ? views[id].mod.testModel() : null),
 };
@@ -294,6 +296,10 @@ function renderHeadline() {
   for (let i = 0; i < n; i += 1) if (gamePasses(model, state, i)) count += 1;
   const [lo, hi] = state.seasons;
   const span = lo === hi ? String(lo) : `${lo}–${hi}`;
+  if (state.view === 'crews' || state.view === 'viewership') {
+    regions.headline.textContent = TAB_LABELS[state.view];
+    return;
+  }
   regions.headline.textContent = `${count.toLocaleString('en-US')} ${count === 1 ? 'game' : 'games'} · ${span}`;
 }
 
@@ -310,6 +316,13 @@ function renderTable() {
 }
 
 function renderTabHint() {
+  // Viewership writes its own subtitle through ctx.setSubtitle.
+  if (state.view === 'viewership') return;
+  if (state.view === 'crews') {
+    const [lo, hi] = state.seasons;
+    regions.hint.textContent = lo === hi ? `Season ${lo}` : `Seasons ${lo}–${hi}`;
+    return;
+  }
   regions.hint.textContent = state.selection ? '' : HINTS[state.view] ?? '';
 }
 
@@ -317,6 +330,8 @@ function showActiveView({ resize }) {
   for (const id of VIEW_IDS) views[id].section.hidden = id !== state.view;
   showToolsFor(regions.tools, state.view);
   tabs.setActive(state.view);
+  const chartModule = regions.chartArea.querySelector('.nfl-chart-module');
+  if (chartModule) chartModule.dataset.view = state.view;
   if (resize) views[state.view].mod.resize();
 }
 
@@ -333,9 +348,31 @@ function renderAll({ resize = false } = {}) {
   hooks.renderCount = renderCount;
 }
 
+function joinNamesAnd(names) {
+  if (names.length <= 1) return names.join('');
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+function announce(text) {
+  const seat = document.getElementById('pick-status');
+  if (seat) seat.textContent = text;
+}
+
 function setState(patch) {
   if (!model) return;
   const prevView = state.view;
+  let message = '';
+  if (patch) {
+    const hasBooths = 'booths' in patch;
+    if (Array.isArray(patch.people) && patch.people.length > 0 && boothFromRow && !hasBooths) {
+      // D-04: an Announcers pick clears a Booths pick that a row made.
+      patch = { ...patch, booths: [] };
+      boothFromRow = false;
+      message = `Announcers pick set to ${joinNamesAnd(patch.people.map(personName))}. Booths pick cleared.`;
+    } else if (hasBooths) {
+      boothFromRow = false;
+    }
+  }
   state = canonicalNflState({ ...state, ...(patch || {}) }, model);
   // A selection (team bar, booth, AGOTW season, scatter picks) belongs to the
   // view that made it and only that view keeps it current, so a tab change
@@ -343,6 +380,23 @@ function setState(patch) {
   if (state.view !== prevView && !(patch && 'selection' in patch)) state.selection = null;
   syncUrl();
   renderAll({ resize: state.view !== prevView });
+  if (message) announce(message);
+}
+
+/** D-05: a Crews booth-row pick replaces Booths with that catalog key; the same key clears it. */
+function pickBoothRow(key, label) {
+  if (!model || !model.boothIndex.has(key)) return;
+  const prev = state;
+  if (prev.booths.length === 1 && prev.booths[0] === key) {
+    setState({ booths: [] });
+    announce('Booths pick cleared.');
+    return;
+  }
+  setState({ booths: [key], people: [] });
+  boothFromRow = state.booths.length === 1 && state.booths[0] === key;
+  let text = `Booths pick set to ${label || boothLabel(key)}.`;
+  if (prev.people.length > 0) text += ' Announcers pick cleared.';
+  announce(text);
 }
 
 function openGame(i, opener) {
@@ -361,6 +415,11 @@ const ctx = {
   clearSelection: () => setState({ selection: null }),
   openGame: (i, opener) => openGame(i, opener),
   methodologyHref: (anchor) => (anchor ? `${METHODOLOGY}#${anchor}` : METHODOLOGY),
+  pickBoothRow: (key, label) => pickBoothRow(key, label),
+  /** Viewership writes its own subtitle row from nodes it built (never HTML strings). */
+  setSubtitle: (nodes) => {
+    if (regions) regions.hint.replaceChildren(...nodes);
+  },
   setTabHint: (text) => {
     if (regions) regions.hint.textContent = text || '';
   },

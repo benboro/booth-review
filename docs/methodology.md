@@ -260,9 +260,13 @@ The Crews table groups college football telecasts by booth. A crew is a
 play-by-play voice and that season's regular analyst within one network family
 (ESPN/ABC, FOX, CBS or NBC), or within one network for any other network. A
 pair that changes family is two rows. Where a network's lineup names a booth
-order, the regular analyst is the one the lineup cites; otherwise it is the
-analyst who worked the most games with that voice, counted over the games this
-site shows (one telecast per game), so a game's second telecast never tips it. A
+order, the regular analyst is the one the lineup cites; otherwise, for a voice with no
+shipped booth assignment, it is the analyst who worked the most games with that
+voice, counted over the games this site shows (one telecast per game), so a
+game's second telecast never tips it. The exception is an uncited voice in a
+family-season that also has cited booths: the build counts that voice's most
+frequent analyst over every main telecast and ships the booth as an `other`
+booth, and the table reads that analyst as is. A
 game where the regular analyst was absent stays in the crew and is marked
 fill-in; if the cited analyst called none of the games shown, every game with an
 analyst is marked fill-in and the row names the voice's most common analysts. A
@@ -362,19 +366,23 @@ A network has a doubleheader on a Sunday when it carries a game at the late nati
 
 ## NFL: Crews and the lead booth
 
-A booth is a play-by-play voice within one season and one network, together with that booth's most frequent analyst. Fill-in analysts stay with their booth, and each row shows its fill-in game count. Networks are grouped by family: ESPN, ABC, ESPN2, ESPN+ and ESPN Deportes count as ESPN/ABC, Peacock counts with NBC, NFL Network stands alone, and Netflix, YouTube and similar one-offs stand on their own. Games with no network are left out. Every regular-season game a booth called for that network counts.
+A row is one play-by-play voice and that voice's regular analyst within one network group. A pair that moves groups is two rows. Games where the regular analyst was absent stay with the row and are marked fill-in in its game list. Networks are grouped by family: ESPN, ABC, ESPN2, ESPN+ and ESPN Deportes count as ESPN/ABC, Peacock counts with NBC, NFL Network stands alone, and Netflix, YouTube and similar one-offs stand on their own. Games with no network are left out. Every regular-season game a booth called for that network counts.
 
 Each network's lead booth is its flagship booth. For Fox it is the booth with the most Fox AGOTW calls. For CBS it is the booth with the most CBS late national calls. For NBC it is the Sunday night booth, for ESPN/ABC the Monday night booth, and for Amazon the Thursday night booth. For other networks it is the booth with the most games. The other booths follow by games called.
 
 Three sources set the order, strongest first. Where a cited published lineup ranks a network's booths for a season, that order sets Lead, #2 and #3. Otherwise a cited lead-booth override applies. Otherwise the inference above applies. The build reports where a published lead differs from the inferred one.
 
-The view shows one season at a time and is never pooled across seasons, because the standard errors do not combine simply. Its season list covers seasons with games and seasons with a published lineup. The rows describe which games each booth was assigned and how those games turned out, not how well anyone called them.
+The table follows the Seasons filter and opens on Per season, one row per pair and season, when the range holds two or more seasons. Per season off pools each pair across the range. Pooling is exact: counts add, means are weighted by their counts, and the standard errors combine from each season's count, mean and standard error, so a pooled figure equals the one computed from all the games at once. A season with no residual leaves the pool with its games. A pooled Avg viewers figure is left blank when its seasons fall in more than one Nielsen measurement era.
+
+**Raw switch.** Adjusted stays under Seasons, a Booths pick and an Announcers pick of a booth's play-by-play voice. A Team or Category pick, or an Announcers pick of an analyst, fill-in or other crew member, cuts inside a booth's season, so the table shows Raw, recomputed from the picked games, and says why above the table.
+
+The rows describe which games each booth was assigned and how those games turned out, not how well anyone called them.
 
 ## NFL: Published lineups
 
 506 lists a crew for nearly all Fox and CBS games, but often gives national games (Sunday, Monday and Thursday night, and streaming) a network and no crew. For those games, the first booth on a network's cited lineup release for that season is assigned to that network's flagship-window games that have no 506 crew. These games say "from published lineup" in the table and panel, which link the release. A crew 506 names always wins.
 
-This is the second documented exception to the 506-only crew rule, alongside the college-football crew overrides in `crew_overrides.csv`. The rows are typed by hand from the release and confirmed by the user; no network site is collected by script. The Crews view states how many of a network's games have a listed crew.
+This is the second documented exception to the 506-only crew rule, alongside the college-football crew overrides in `crew_overrides.csv`. The rows are typed by hand from the release and confirmed by the user; no network site is collected by script.
 
 ## NFL: The spread adjustment
 
@@ -382,7 +390,7 @@ The Adjusted setting compares each booth's average outcome with what the league-
 
 ## NFL: Low n
 
-A booth, or a category point in the viewership view, with fewer than 8 games for an adjusted outcome or a residual is marked low n. It is drawn faded or hollow and carries a "low n" label. No ranking is implied by the order of rows, and a faded row is not a verdict.
+A booth, or a category point in the viewership view, with fewer than 8 games for an adjusted outcome or a residual is marked low n. In the Crews table the cell carries an `n < 8` tag; in the charts the mark is hollow. No ranking is implied by the order of rows, and a faded row is not a verdict.
 
 ## NFL: GEI-style excitement
 
@@ -396,9 +404,13 @@ The chart draws one line per category, with season on the x axis and mean viewer
 
 The residual setting fits viewers on game quality within each category and Nielsen era. A point shows how a season compared with other seasons of the same category and era, not how categories compare with each other. Categories with too few games for a fit show no residual. Points with fewer than 8 games are marked low n. A missing figure stays missing and is never shown as 0.
 
+Seasons trims the points drawn, one point per category and season in both settings. Residual is never pooled across seasons. A Category, Team, Announcers or Booths pick switches the view to Viewers, recomputed from the picked games' figures, with a short reason above the chart.
+
 ## NFL: Window-level viewership
 
 Ratings Reference reports some Sunday-afternoon figures for the whole regional window rather than for one game, so those figures are labeled window-level. See [Viewership by category](#nfl-viewership-by-category) for how they are drawn.
+
+Fox AGOTW and CBS late national figures cover every game in that Sunday window and are dashed in the chart. Ratings Reference compiles national windows, so regional Sunday-afternoon games outside those windows have no published figure of their own and read "No public rating". The Viewership note links to this section.
 
 ## NFL: Games with no public rating
 

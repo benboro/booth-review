@@ -102,7 +102,8 @@ def test_table_cells(run: Callable[[str], Any]) -> None:
         link: rows[1].querySelector('td:last-child a')?.getAttribute('rel'),
         badLink: rows[0].querySelector('td:last-child a') !== null,
         tagged: rows[1].children[4].textContent.includes('from published lineup'),
-        pillTexts: [...rows[0].querySelectorAll('.nfl-pill')].map((p) => p.textContent),
+        categoryText: rows[0].querySelector('td.matchup .games-sub').textContent,
+        pills: rows[0].querySelectorAll('td.matchup .pill').length,
         text: host.textContent.toLowerCase(),
       };
     """)
@@ -124,7 +125,9 @@ def test_table_cells(run: Callable[[str], Any]) -> None:
     assert second[5] == "No rating"
     assert second[6] == "No record"
     assert got["badLink"] is False
-    assert got["pillTexts"] == ["SNF", "Fox AGOTW"]
+    # Re-styled at Phase 15 Plan 12 r6: the category line is muted text joined by " · ", not pills.
+    assert got["categoryText"] == "SNF · Fox AGOTW"
+    assert got["pills"] == 0
     assert "spread" not in got["text"]
 
 

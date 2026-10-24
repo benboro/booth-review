@@ -160,6 +160,35 @@ def test_csort_games_survives_a_one_season_range(app: Page) -> None:
     assert wide["decoded"]["csort"] == {"key": "games", "dir": "desc"}
 
 
+def test_games_called_header_click_survives_widening_the_range(app: Page) -> None:
+    """P14-FU-2: a Games called click under a one-season range stores csort=games (Per season
+    stays stored on), and widening the range keeps it and the Games-called-descending order."""
+    seasons = app.evaluate("window.__testHooks.data.seasons")
+    assert len(seasons) >= 2
+    app.evaluate(
+        "([lo, hi]) => window.__testHooks.setState({view: 'crews', seasons: [lo, hi]})",
+        [seasons[-1], seasons[-1]],
+    )
+    app.locator('button[data-sort-key="viewers"]').click()
+    app.locator('button[data-sort-key="games"]').click()
+    assert app.evaluate("window.__testHooks.getState().csort") == {"key": "games", "dir": "desc"}
+    assert "csort=games" in app.url
+    app.evaluate(
+        "([lo, hi]) => window.__testHooks.setState({seasons: [lo, hi]})", [seasons[0], seasons[-1]]
+    )
+    assert "csort=games" in app.url
+    counts = app.evaluate(
+        """() => {
+          const at = [...document.querySelectorAll('.crews-table thead th')]
+            .findIndex((th) => th.classList.contains('crews-col-games'));
+          return [...document.querySelectorAll('.crews-table tbody tr.crews-row')]
+            .map((tr) => Number(tr.children[at].textContent));
+        }"""
+    )
+    assert len(counts) >= 2
+    assert counts == sorted(counts, reverse=True)
+
+
 def test_crews_params_survive_view_change(app: Page) -> None:
     key = _key(app)
     app.evaluate(

@@ -371,14 +371,14 @@ def test_booths_trigger_is_visible_and_enabled_on_every_view(
         assert page.locator(".nfl-toolbar-spacer").count() == 0, view
 
 
-def test_booth_pick_effect_per_view_is_unchanged_for_now(
+def test_booth_pick_narrows_tables_and_changes_special_and_scatter(
     nfl_guarded_page: Page,
     open_nfl_app: Callable[..., None],
     nfl_fixture_raw: dict,  # type: ignore[type-arg]
 ) -> None:
-    """D-10 interim: a booth pick narrows the matched games on Crews and
-    Viewership as before, and does not yet change the Special games or Scatter
-    chart models (it is kept in state and the URL on all four views)."""
+    """A booth pick narrows the matched games on Crews and Viewership, changes the Special
+    games (matched overlay) and Scatter (fade) view models, and stays in state and the URL on
+    all four views (D-04/D-05 picks intersect everywhere)."""
     page = nfl_guarded_page
     _booths_app(page, open_nfl_app, "crews")
     key = page.evaluate("window.__nflTestHooks.getBoothCatalog()[0].key")
@@ -397,7 +397,7 @@ def test_booth_pick_effect_per_view_is_unchanged_for_now(
         page.wait_for_function("window.__nflTestHooks.getState().booths.length === 1")
         after = page.evaluate("v => JSON.stringify(window.__nflTestHooks.getViewModel(v))", view)
         assert before not in ("null", "undefined"), view
-        assert before == after, view
+        assert before != after, view
         assert "booths=" in _search(page), view
 
 
@@ -602,8 +602,9 @@ def test_team_alone_fills_the_table_like_cfb_school(
     open_nfl_app(nfl_guarded_page, "?sport=nfl&view=scatter&team=f-lanterns")
     rows = nfl_guarded_page.locator("#nfl-matched-games tbody tr")
     assert rows.count() > 0
-    # CFB parity: the network is a family-colored pill and the row is a click target.
-    assert rows.first.locator("td .pill").count() >= 1
+    # CFB parity: the network is a mark and the row is a click target. (Re-pinned at Phase 15
+    # Plan 12 r6: this used to match the category pills, which are now plain text.)
+    assert rows.first.locator("td .net-mark").count() >= 1
     assert "row-link" in (rows.first.get_attribute("class") or "")
     rows.first.locator("td").nth(1).click(position={"x": 2, "y": 2})
     nfl_guarded_page.wait_for_selector("#nfl-detail-panel[open]")

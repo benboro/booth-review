@@ -1,4 +1,4 @@
-"""Phase 8 plan 09: the NFL Viewership tab (category lines, legend, residuals, booth highlight).
+"""Phase 8 plan 09: the NFL Viewership tab (category lines, legend, residuals, pick recompute).
 
 Synthetic nfl-data fixture only; no vault rows. Expected values are recomputed
 from the fixture's `viewership` block so the view is checked against the source.
@@ -18,6 +18,19 @@ VIEW = "#nfl-view-viewership"
 TOOLS = "#nfl-chart-tools [data-tools-for='viewership']"  # tools sit in the module header
 GD = f"{VIEW} .nfl-chart > div"
 CHIPS = f"{VIEW} .legend-chips button[data-category]"
+SUBTITLE = "#nfl-chart-subtitle"
+KEY = f"{VIEW} .nfl-window-key"
+BAR = "#nfl-reason-viewership"
+WINDOW_NOTE = "Dashed lines are window-level: one figure covers every game in that Sunday window."
+WINDOW_SUBTITLE = f"{WINDOW_NOTE} Regional games have no published figure; see methodology."
+REASON_SUBSET = (
+    "Showing Viewers: this filter cuts inside each category\u2019s season. "
+    "Clear it to see Residual again."
+)
+REASON_CATEGORY = (
+    "Showing Viewers: Category picks do not line up with the viewership categories, so residuals "
+    "are off. Clear the Category pick to see Residual again."
+)
 
 _CLICKS = """
 ([cat, details]) => {
@@ -152,11 +165,13 @@ def test_window_level_lines_dashed_and_labeled(
     assert "window-level" not in (
         page.locator(f"{CHIPS}[data-category=snf]").get_attribute("title") or ""
     )
-    # RT-25: the full sentence, not only its prefix.
-    assert (
-        "Dashed lines are window-level: one figure covers every game in that Sunday window."
-        in page.locator(f"{VIEW} .nfl-captions").inner_text()
+    # RT-25 (Phase 12 gap 11): the full sentence, word for word, at the subtitle.
+    sub = page.locator(SUBTITLE)
+    assert (sub.inner_text() or "").strip() == WINDOW_SUBTITLE
+    assert (sub.locator("a").get_attribute("href") or "").endswith(
+        "methodology.html#nfl-window-level-viewership"
     )
+    assert "Dashed lines are window-level" not in page.locator(f"{VIEW} .nfl-captions").inner_text()
 
 
 def test_era_note_links_methodology(
@@ -176,7 +191,7 @@ def test_residual_mode_whiskers_caption_and_gap(
     _open(page, open_nfl_app)
     _vm(page)
     assert "Residuals compare" not in page.locator(f"{VIEW} .nfl-captions").inner_text()
-    page.locator(f"{TOOLS} .segmented button", has_text="Residual given game quality").click()
+    page.locator(f"{TOOLS} .segmented button", has_text="Residual").click()
     page.wait_for_function("window.__nflTestHooks.getViewModel('viewership').viewY === 'resid'")
     vm = _vm(page)
     assert (
@@ -207,7 +222,7 @@ def test_residual_whiskers_use_line_color_thin_and_dodged(
     page = nfl_guarded_page
     _open(page, open_nfl_app)
     _vm(page)
-    page.locator(f"{TOOLS} .segmented button", has_text="Residual given game quality").click()
+    page.locator(f"{TOOLS} .segmented button", has_text="Residual").click()
     page.wait_for_function("window.__nflTestHooks.getViewModel('viewership').viewY === 'resid'")
     got = page.evaluate(
         """(sel) => document.querySelector(sel).data.map((t) => ({
@@ -358,6 +373,28 @@ def test_double_click_shows_only_then_restores(
     assert sorted(_shown(page)) == sorted(ids)
 
 
+def test_double_click_only_under_a_pick_hides_nothing_once_the_pick_clears(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
+) -> None:
+    page = nfl_guarded_page
+    _open(page, open_nfl_app, "&people=p01")
+    _vm(page)
+    under_pick = _shown(page)
+    assert under_pick
+    assert len(under_pick) < len(_present_ids(nfl_fixture_raw))
+    _double(page, under_pick[0])
+    page.wait_for_function(
+        "window.__nflTestHooks.getViewModel('viewership').categories.length === 1"
+    )
+    # "Only" hides just the other categories this pick plots, so clearing it leaves none hidden.
+    _set(page, {"people": []})
+    page.wait_for_function("window.__nflTestHooks.getState().people.length === 0")
+    hidden = _state(page)["hiddenCategories"]
+    assert set(hidden) <= set(under_pick) - {under_pick[0]}
+    assert sorted(_shown(page)) == sorted(set(_present_ids(nfl_fixture_raw)) - set(hidden))
+    assert len(_shown(page)) >= len(_present_ids(nfl_fixture_raw)) - len(under_pick) + 1
+
+
 def test_keyboard_enter_never_triggers_only(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
 ) -> None:
@@ -423,26 +460,193 @@ def test_info_note_opens_and_closes_on_escape(
     assert note.is_hidden()
 
 
-def test_booth_highlight_keeps_values(
+def _matched_mean(
+    raw: dict[str, Any], k: int, keep: Callable[[int], bool]
+) -> tuple[float | None, int]:
+    vals = [
+        raw["games"]["viewers"][g]
+        for g in raw["viewership"]["game_list"][k]
+        if keep(g) and raw["games"]["viewers"][g] is not None
+    ]
+    return (sum(vals) / len(vals) if vals else None, len(vals))
+
+
+def test_measure_button_reads_residual(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
 ) -> None:
     page = nfl_guarded_page
     _open(page, open_nfl_app)
-    before = _vm(page)
-    assert all(not p["highlighted"] for c in before["categories"] for p in c["points"])
+    _vm(page)
+    labels = page.locator(f"{TOOLS} .segmented button").all_inner_texts()
+    assert labels == ["Viewers", "Residual"]
+
+
+def test_window_key_shows_with_the_note_and_reserves_space(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    _vm(page)
+    assert page.locator(KEY).get_attribute("aria-label") == "Line styles"
+    assert page.locator(f"{KEY} li").all_inner_texts() == ["one game", "whole Sunday window"]
+    assert page.locator(f"{KEY} .swatch[aria-hidden='true']").count() == 2
+    assert "is-reserved" not in (page.locator(KEY).get_attribute("class") or "")
+    first = page.locator(CHIPS).first
+    before = first.bounding_box()
+    _set(page, {"hiddenCategories": ["agotw", "cbs_national"]})
+    page.wait_for_function("!window.__nflTestHooks.getViewModel('viewership').windowKey.shown")
+    assert "is-reserved" in (page.locator(KEY).get_attribute("class") or "")
+    assert page.locator(KEY).get_attribute("aria-hidden") == "true"
+    assert first.bounding_box() == before
+    text = page.locator(SUBTITLE).inner_text().strip()
+    assert text.startswith("Seasons ") and "window-level" not in text
+
+
+def _subtitle_height(page: Page) -> float:
+    return page.eval_on_selector(SUBTITLE, "e => e.getBoundingClientRect().height")  # type: ignore[no-any-return]
+
+
+def test_subtitle_row_reserves_its_height(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    page.set_viewport_size({"width": 1440, "height": 900})
+    _open(page, open_nfl_app)
+    _vm(page)
+    with_note = _subtitle_height(page)
+    _set(page, {"hiddenCategories": ["agotw", "cbs_national"]})
+    page.wait_for_function("!window.__nflTestHooks.getViewModel('viewership').windowKey.shown")
+    assert with_note == _subtitle_height(page) == 20
+
+
+def test_subtitle_row_reserves_its_height_on_mobile(
+    nfl_mobile_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_mobile_page
+    _open(page, open_nfl_app)
+    _vm(page)
+    with_note = _subtitle_height(page)
+    _set(page, {"hiddenCategories": ["agotw", "cbs_national"]})
+    page.wait_for_function("!window.__nflTestHooks.getViewModel('viewership').windowKey.shown")
+    assert with_note == _subtitle_height(page) == 80
+
+
+def test_team_pick_forces_viewers_with_reason(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    _open(page, open_nfl_app, "&ay=resid&team=f-lanterns")
+    vm = _vm(page)
+    assert vm["viewY"] == "mean" and vm["mode"]["stored"] == "resid"
+    assert page.locator(BAR).inner_text().strip() == REASON_SUBSET
+    assert page.locator(BAR).get_attribute("role") == "status"
+    resid = page.locator(f"{TOOLS} .segmented button", has_text="Residual")
+    assert resid.get_attribute("aria-disabled") == "true"
+    assert resid.get_attribute("aria-describedby") == "nfl-reason-viewership"
+    resid.click(force=True)
+    assert _state(page)["viewY"] == "resid"
+    assert "ay=resid" in page.evaluate("location.search")
+    _set(page, {"teams": []})
+    page.wait_for_function("window.__nflTestHooks.getViewModel('viewership').viewY === 'resid'")
+    assert page.locator(BAR).is_hidden()
+    assert resid.get_attribute("aria-disabled") is None
+
+
+def test_category_pick_uses_the_category_reason(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    _open(page, open_nfl_app, "&ay=resid&cat=snf")
+    vm = _vm(page)
+    assert vm["viewY"] == "mean"
+    assert page.locator(BAR).inner_text().strip() == REASON_CATEGORY
+
+
+def test_team_pick_recomputes_points_from_matched_games(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
+) -> None:
+    page = nfl_guarded_page
+    raw = nfl_fixture_raw
+    _open(page, open_nfl_app, "&team=f-lanterns")
+    vm = _vm(page)
+    fi = next(i for i, f in enumerate(raw["lookups"]["franchises"]) if f["id"] == "f-lanterns")
+    g = raw["games"]
+    cats = _cats(raw)
+    seen = 0
+    for ci, cat in enumerate(cats):
+        want = {}
+        for k in _points(raw, ci):
+            mean, n = _matched_mean(raw, k, lambda i: fi in (g["home"][i], g["away"][i]))
+            if n:
+                want[raw["viewership"]["season"][k]] = (mean, n)
+        got = next((c for c in vm["categories"] if c["id"] == cat["id"]), None)
+        pts = got["points"] if got else []
+        assert {p["season"] for p in pts} == set(want)
+        for p in pts:
+            assert p["y"] == pytest.approx(want[p["season"]][0])
+            assert p["n"] == want[p["season"]][1]
+            seen += 1
+    assert seen > 0
+
+
+def test_booth_pick_recomputes_points_from_matched_games(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
+) -> None:
+    page = nfl_guarded_page
+    raw = nfl_fixture_raw
+    _open(page, open_nfl_app)
+    _vm(page)
     key = page.evaluate("window.__nflTestHooks.getBoothCatalog()[0].key")
     _set(page, {"booths": [key]})
-    page.wait_for_function(
-        "window.__nflTestHooks.getViewModel('viewership').categories"
-        ".some(c => c.points.some(p => p.highlighted))"
-    )
-    after = _vm(page)
-    for b, a in zip(before["categories"], after["categories"], strict=True):
-        assert [p["y"] for p in b["points"]] == [p["y"] for p in a["points"]]
-        assert [p["season"] for p in b["points"]] == [p["season"] for p in a["points"]]
-    assert any(p["highlighted"] for c in after["categories"] for p in c["points"])
-    tr = _trace(page, "Fox AGOTW")
-    assert set(tr["opacity"]) <= {1, 0.15}
+    page.wait_for_function("window.__nflTestHooks.getState().booths.length === 1")
+    matched = set(page.evaluate("window.__nflTestHooks.getTableIndexes()"))
+    assert matched
+    vm = _vm(page)
+    seen = 0
+    for ci, cat in enumerate(_cats(raw)):
+        want = {}
+        for k in _points(raw, ci):
+            mean, n = _matched_mean(raw, k, lambda i: i in matched)
+            if n:
+                want[raw["viewership"]["season"][k]] = (mean, n)
+        got = next((c for c in vm["categories"] if c["id"] == cat["id"]), None)
+        pts = got["points"] if got else []
+        assert {p["season"] for p in pts} == set(want)
+        for p in pts:
+            assert p["y"] == pytest.approx(want[p["season"]][0])
+            assert p["n"] == want[p["season"]][1]
+            seen += 1
+    assert seen > 0
+    assert all(p["n"] > 0 for c in vm["categories"] for p in c["points"])
+
+
+def test_seasons_trim_points_and_residual_is_not_pooled(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
+) -> None:
+    page = nfl_guarded_page
+    raw = nfl_fixture_raw
+    _open(page, open_nfl_app, "&ay=resid&seasons=2025-2025")
+    vm = _vm(page)
+    assert vm["viewY"] == "resid"
+    v = raw["viewership"]
+    for c in vm["categories"]:
+        assert [p["season"] for p in c["points"]] == [2025]
+        ci = next(i for i, x in enumerate(_cats(raw)) if x["id"] == c["id"])
+        (k,) = [k for k in _points(raw, ci) if v["season"][k] == 2025]
+        assert c["points"][0]["y"] == v["viewership_resid"][k]
+    assert vm["categories"]
+    assert page.locator(SUBTITLE).inner_text().strip().startswith(WINDOW_NOTE)
+
+
+def test_empty_state_uses_the_standard_copy(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    _open(page, open_nfl_app, "&team=f-gulls&cat=intl")
+    note = page.locator(f"{VIEW} .season-empty-note")
+    note.wait_for(state="visible")
+    assert "No games match these filters" in note.inner_text()
+    assert "Clear all filters, or widen the Seasons range." in note.inner_text()
 
 
 def test_no_console_errors(nfl_guarded_page: Page, open_nfl_app: Callable[..., None]) -> None:
@@ -455,3 +659,81 @@ def test_no_console_errors(nfl_guarded_page: Page, open_nfl_app: Callable[..., N
     page.locator(f"{TOOLS} .segmented button", has_text="Residual").click()
     _vm(page)
     assert errors == []
+
+
+# ------------------------------------------------------------------ pick-scoped click (F2, F1)
+
+
+def _click_every_point_matches_n(page: Page, raw: dict[str, Any]) -> int:
+    """Click each plotted point; its table length, probe `games` and n must agree.
+
+    Returns how many points had a full game list longer than n (the pick cut games out).
+    """
+    vm = _vm(page)
+    ids = [c["id"] for c in _cats(raw)]
+    v = raw["viewership"]
+    full = {
+        (ids[v["category"][k]], v["season"][k]): len(v["game_list"][k])
+        for k in range(len(v["season"]))
+    }
+    k = 0
+    cut = 0
+    for c in vm["categories"]:
+        for p in c["points"]:
+            _emit(page, "plotly_click", k)
+            page.wait_for_function("window.__nflTestHooks.getState().selection !== null")
+            assert len(page.evaluate("window.__nflTestHooks.getTableIndexes()")) == p["n"]
+            assert p["games"] == p["n"]
+            if full[(c["id"], p["season"])] > p["n"]:
+                cut += 1
+            page.wait_for_timeout(600)  # past the touch double-fire guard
+            k += 1
+    return cut
+
+
+def test_point_click_under_an_announcer_pick_lists_only_matched_games(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
+) -> None:
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    _vm(page)
+    _set(page, {"people": ["p01"]})
+    assert _click_every_point_matches_n(page, nfl_fixture_raw) > 0
+
+
+def test_point_click_under_a_booth_pick_lists_only_matched_games(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
+) -> None:
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    _vm(page)
+    # Booth 16 of the fixture: p12 calling play-by-play on the fourth network group.
+    group = nfl_fixture_raw["lookups"]["network_groups"][3]["id"]
+    _set(page, {"booths": [f"{group}:p12"]})
+    assert _click_every_point_matches_n(page, nfl_fixture_raw) > 0
+
+
+def test_selection_follows_a_pick_change(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    vm = _vm(page)
+    key = page.evaluate("window.__nflTestHooks.getBoothCatalog()[0].key")
+    _set(page, {"booths": [key]})
+    page.wait_for_function("window.__nflTestHooks.getState().booths.length === 1")
+    matched = set(page.evaluate("window.__nflTestHooks.getTableIndexes()"))
+    _set(page, {"booths": []})
+    page.wait_for_function("window.__nflTestHooks.getState().booths.length === 0")
+    # Click a point with no pick, then pick the booth: the table narrows to the matched games.
+    _emit(page, "plotly_click", 0)
+    page.wait_for_function("window.__nflTestHooks.getState().selection !== null")
+    before = page.evaluate("window.__nflTestHooks.getTableIndexes()")
+    assert len(before) == vm["categories"][0]["points"][0]["n"]
+    _set(page, {"booths": [key]})
+    page.wait_for_function("window.__nflTestHooks.getState().booths.length === 1")
+    after = page.evaluate("window.__nflTestHooks.getTableIndexes()")
+    assert sorted(after) == sorted(set(before) & matched)
+    _set(page, {"booths": []})
+    page.wait_for_function("window.__nflTestHooks.getState().booths.length === 0")
+    assert sorted(page.evaluate("window.__nflTestHooks.getTableIndexes()")) == sorted(before)

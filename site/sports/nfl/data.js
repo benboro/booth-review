@@ -110,16 +110,6 @@ export function prepareNfl(raw) {
   networkGroups.forEach((g, gi) => {
     for (const m of g.members || []) groupOfNetwork.set(m, gi);
   });
-  const crewSeasons = [...new Set(booths.map((r) => r.season))].sort((a, b) => b - a);
-  const crewSeasonsByGroup = new Map();
-  for (const r of booths) {
-    if (!crewSeasonsByGroup.has(r.network_group)) crewSeasonsByGroup.set(r.network_group, new Set());
-    crewSeasonsByGroup.get(r.network_group).add(r.season);
-  }
-  for (const [g, set] of crewSeasonsByGroup) {
-    crewSeasonsByGroup.set(g, [...set].sort((a, b) => b - a));
-  }
-
   // Booth catalog: one entry per (group, pbp person) with games, analyst from the latest season.
   const boothIndex = new Map();
   const latest = new Map();
@@ -175,8 +165,6 @@ export function prepareNfl(raw) {
     groupOfNetwork,
     viewCategories,
     booths,
-    crewSeasons,
-    crewSeasonsByGroup,
     viewership,
     boothCatalog,
     boothIndex,

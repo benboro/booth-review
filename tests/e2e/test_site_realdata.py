@@ -2114,3 +2114,90 @@ def test_real_crew_rows_match_distinct_keys_and_tag_unknowns(
     assert distinct > 0
     assert tag_wrong == 0
     assert untagged == 0
+
+
+# -- NFL Crews pooling counts (Phase 15-06) -------------------------------------------------
+
+_NFL_CREW_COUNTS_JS = """
+async () => {
+  const D = await import('./sports/nfl/data.js');
+  const S = await import('./sports/nfl/state.js');
+  const R = await import('./sports/nfl/crew-rows.js');
+  const raw = await (await fetch('nfl-data.json')).json();
+  const m = D.prepareNfl(raw);
+  const st = { ...S.defaultNflState(m), seasons: [m.seasons[0], m.seasons[1]] };
+  const pooled = R.buildNflCrewRows(m, { ...st, perseason: false }).rows;
+  const season = R.buildNflCrewRows(m, { ...st, perseason: true }).rows;
+  const byPair = new Map();
+  for (const r of pooled) {
+    const k = `${r.pbp ? r.pbp.id : ''}|${r.analyst ? r.analyst.id : ''}`;
+    byPair.set(k, (byPair.get(k) || 0) + 1);
+  }
+  let movedRows = 0;
+  for (const c of byPair.values()) if (c > 1) movedRows += c;
+  return [pooled.length, season.length, movedRows];
+}
+"""
+
+
+@pytest.fixture(scope="module")
+def real_nfl_data_path() -> Path:
+    """The vault's built nfl-data.json; skips when absent."""
+    path = DataPaths.from_env().processed / "nfl-data.json"
+    if not path.is_file():
+        pytest.skip("nfl-data.json not found (real vault data unavailable)")
+    return path
+
+
+@pytest.fixture(scope="module")
+def real_nfl_site_dist(tmp_path_factory: pytest.TempPathFactory, real_nfl_data_path: Path) -> Path:
+    """Builds dist/site with the NFL flag on from the real vault data."""
+    del real_nfl_data_path  # only used to gate/skip before this fixture runs
+    out = tmp_path_factory.mktemp("real-nfl-site") / "site"
+    returncode = main(["site", "--nfl", "--out", str(out)])
+    assert returncode == 0, f"booth-review site --nfl exited {returncode}"
+    return out
+
+
+@pytest.fixture(scope="module")
+def real_nfl_raw(real_nfl_site_dist: Path) -> dict[str, Any]:
+    """The real built nfl-data.json, parsed -- read only for counts (never printed)."""
+    return json.loads((real_nfl_site_dist / "nfl-data.json").read_text(encoding="utf-8"))  # type: ignore[no-any-return]
+
+
+@pytest.fixture(scope="module")
+def real_nfl_site_url(real_nfl_site_dist: Path) -> Iterator[str]:
+    yield from _serve_directory(real_nfl_site_dist)
+
+
+def test_real_nfl_crews_pool_counts(
+    page: Page, real_nfl_site_url: str, real_nfl_raw: dict[str, Any]
+) -> None:
+    """NFL-03: pooled rows equal distinct (group, pbp, analyst) triples, Per season rows
+    equal shipped booth rows, and a pair that moved groups is several pooled rows."""
+    off_origin, csp_errors = _install_guard(page, real_nfl_site_url)
+    page.goto(f"{real_nfl_site_url}/index.html")
+    page.wait_for_function(
+        "window.__testHooks && window.__testHooks.ready === true", timeout=90_000
+    )
+    counts: list[int] = page.evaluate(_NFL_CREW_COUNTS_JS)
+    page_pooled, page_season, page_moved_rows = counts
+
+    b = real_nfl_raw["booths"]
+    n_rows = len(b["season"])
+    triples = {
+        (b["network_group"][i], b["pbp_person"][i], b["analyst_person"][i]) for i in range(n_rows)
+    }
+    pairs: dict[tuple[Any, Any], set[Any]] = {}
+    for group, pbp, analyst in triples:
+        pairs.setdefault((pbp, analyst), set()).add(group)
+    shipped_rows = n_rows
+    pooled_pairs = len(triples)
+    moved_pairs = sum(1 for groups in pairs.values() if len(groups) > 1)
+    moved_rows = sum(len(groups) for groups in pairs.values() if len(groups) > 1)
+
+    assert page_pooled == pooled_pairs
+    assert page_season == shipped_rows
+    assert page_moved_rows == moved_rows
+    print(f"nfl crews counts: pooled={page_pooled} season={page_season} moved_pairs={moved_pairs}")
+    _assert_guard_clean(off_origin, csp_errors)

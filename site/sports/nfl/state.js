@@ -6,8 +6,17 @@
  * encoded in the URL.
  */
 
+import { computePicks } from './picks.js';
+
 export const NFL_VIEWS = Object.freeze(['special', 'crews', 'viewership', 'scatter']);
 export const CREW_METRICS = Object.freeze(['margin', 'excitement', 'viewers']);
+
+/** Crews table sort keys and their natural directions (booth like CFB crew, margin like exc). */
+export const NFL_CSORT_KEYS = Object.freeze(['booth', 'season', 'rank', 'network', 'games', 'margin', 'exc', 'viewers']);
+export const NFL_NATURAL_DIR = Object.freeze({
+  booth: 'asc', season: 'asc', rank: 'asc', network: 'asc',
+  games: 'desc', margin: 'desc', exc: 'desc', viewers: 'desc',
+});
 
 /** Category filter options in UI order (labels exact per UI-SPEC). */
 export const CATEGORY_OPTIONS = Object.freeze([
@@ -73,15 +82,6 @@ const SPECIAL_SLOT_COLUMNS = Object.freeze([
   ['sunday_late', 'Sunday late'], ['other', 'Other'],
 ]);
 
-function defaultNetwork(model) {
-  const ids = model.networkGroups.map((g) => g.id);
-  return ids.includes('fox') ? 'fox' : ids[0] ?? null;
-}
-
-function crewsDefaultSeason(model) {
-  return model.freshness.crews_default_season ?? model.crewSeasons[0] ?? null;
-}
-
 /** @returns {object} the default NFL state for this model */
 export function defaultNflState(model) {
   return {
@@ -91,9 +91,9 @@ export function defaultNflState(model) {
     people: [],
     cats: [],
     dots: 'fade',
-    network: defaultNetwork(model),
-    cseason: crewsDefaultSeason(model),
     booths: [],
+    perseason: true,
+    csort: null,
     adjusted: false,
     metric: 'margin',
     viewY: 'mean',
@@ -132,8 +132,11 @@ export function canonicalNflState(state, model) {
   lo = Math.min(Math.max(Math.trunc(lo), d.seasons[0]), d.seasons[1]);
   hi = Math.min(Math.max(Math.trunc(hi), d.seasons[0]), d.seasons[1]);
   const catSet = new Set(Array.isArray(s.cats) ? s.cats : []);
-  const cs = Number(s.cseason);
   const catIds = new Set(model.viewCategories.map((c) => c.id));
+  const cso = s.csort;
+  const csort = cso && typeof cso === 'object'
+    && NFL_CSORT_KEYS.includes(cso.key) && (cso.dir === 'asc' || cso.dir === 'desc')
+    ? { key: cso.key, dir: cso.dir } : null;
   const asList = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
   return {
     view: pick(s.view, NFL_VIEWS, d.view),
@@ -142,9 +145,9 @@ export function canonicalNflState(state, model) {
     people: cleanIds(s.people, new Map(model.people.map((p) => [p.id, 1]))),
     cats: CAT_KEYS.filter((k) => catSet.has(k)),
     dots: s.dots === 'hide' ? 'hide' : 'fade',
-    network: model.networkGroups.some((g) => g.id === s.network) ? s.network : d.network,
-    cseason: model.crewSeasons.includes(cs) ? cs : d.cseason,
     booths: [...new Set(asList(s.booths).filter((k) => model.boothIndex.has(k)))],
+    perseason: s.perseason !== false,
+    csort,
     adjusted: s.adjusted === true,
     metric: pick(s.metric, CREW_METRICS, 'margin'),
     viewY: s.viewY === 'resid' ? 'resid' : 'mean',
@@ -184,13 +187,6 @@ export function gamePasses(model, state, i) {
   }
   if (state.cats.length && !state.cats.some((k) => catMatches(model, k, i))) return false;
   return true;
-}
-
-/** True when any selected person called game i. */
-export function personHighlight(model, state, i) {
-  if (!state.people.length) return false;
-  const idx = new Set(state.people.map((id) => model.personIndex.get(id)));
-  return (model.cols.crew[i] || []).some((m) => idx.has(m.person));
 }
 
 function emptyCounts() {
@@ -300,53 +296,6 @@ export function rateText(count, denom) {
   return `${count} of ${denom} weeks (${Math.round((count / denom) * 100)}%)`;
 }
 
-function groupIndexOf(model, id) {
-  return model.networkGroups.findIndex((g) => g.id === id);
-}
-
-/** Network groups with a game in the season range, in lookup order. */
-export function crewsNetworks(model, state) {
-  const [lo, hi] = state.seasons;
-  const c = model.cols;
-  const has = new Set();
-  for (let i = 0; i < model.n; i++) {
-    if (c.season[i] < lo || c.season[i] > hi || c.network[i] == null) continue;
-    const g = model.groupOfNetwork.get(c.network[i]);
-    if (g !== undefined) has.add(g);
-  }
-  return model.networkGroups
-    .map((g, index) => ({ id: g.id, index, name: g.name, flagship: g.flagship }))
-    .filter((g) => has.has(g.index));
-}
-
-/** Seasons (newest first) with booth rows for a network group index. */
-export function crewsSeasons(model, groupIndex) {
-  return model.crewSeasonsByGroup.get(groupIndex) ?? [];
-}
-
-/** Booth rows for the picked network and season, by rank. */
-export function crewsRows(model, state) {
-  const gi = groupIndexOf(model, state.network);
-  return model.booths
-    .filter((r) => r.network_group === gi && r.season === state.cseason)
-    .sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
-}
-
-/** {total, withCrew, fromLineup} over the picked network's games in the season. */
-export function crewsCoverage(model, state) {
-  const gi = groupIndexOf(model, state.network);
-  const c = model.cols;
-  const out = { total: 0, withCrew: 0, fromLineup: 0 };
-  for (let i = 0; i < model.n; i++) {
-    if (c.season[i] !== state.cseason || c.network[i] == null) continue;
-    if (model.groupOfNetwork.get(c.network[i]) !== gi) continue;
-    out.total++;
-    if ((c.crew[i] || []).length) out.withCrew++;
-    if (c.crew_source[i] === 'published_lineup') out.fromLineup++;
-  }
-  return out;
-}
-
 /** One series per view category with its points in the season range. */
 export function viewershipSeries(model, state) {
   const [lo, hi] = state.seasons;
@@ -385,13 +334,6 @@ export function boothGames(model, keys) {
   return [...set].sort((a, b) => a - b);
 }
 
-/** True when any game in the list was called by one of the picked booths. */
-export function pointHasBooth(model, gameList, keys) {
-  if (!keys || !keys.length) return false;
-  const set = new Set(boothGames(model, keys));
-  return (gameList || []).some((g) => set.has(g));
-}
-
 function newestFirst(model, list) {
   const c = model.cols;
   return [...list].sort((a, b) => {
@@ -403,20 +345,49 @@ function newestFirst(model, list) {
 /** Game indexes for the Matched games table. */
 export function tableGames(model, state) {
   let base = null;
-  if (state.selection && Array.isArray(state.selection.games)) base = state.selection.games;
-  else if (state.booths.length) base = boothGames(model, state.booths);
-  else if (state.people.length) {
-    const set = new Set();
-    for (const id of state.people) {
-      for (const g of model.personGames.get(model.personIndex.get(id)) || []) set.add(g);
+  const picks = computePicks(model, state);
+  if (state.selection && Array.isArray(state.selection.games)) {
+    // Under a pick a chart click may carry games the pick excludes (a Special games bar, a point's
+    // full list) and a selection can go stale when the pick changes, so intersect with the matched
+    // mask. A scatter hand-pick that a later pick change leaves unmatched drops out of the table.
+    base = picks.hasPick ? state.selection.games.filter((i) => picks.matched[i]) : state.selection.games;
+  } else {
+    if (picks.hasPick) {
+      // U-05: Announcers and Booths intersect; computePicks already applies Seasons, Team and Category.
+      base = [];
+      for (let i = 0; i < model.n; i++) if (picks.matched[i]) base.push(i);
+    } else if (state.teams.length) {
+      // CFB parity (D-18, D-19): a Team alone fills the table with that team's games, as School does on CFB.
+      base = model.cols.date.map((_, i) => i);
     }
-    base = [...set];
-  } else if (state.teams.length) {
-    // CFB parity (D-18, D-19): a Team alone fills the table with that team's games, as School does on CFB.
-    base = model.cols.date.map((_, i) => i);
   }
   if (!base) return [];
   return newestFirst(model, base.filter((i) => gamePasses(model, state, i)));
+}
+
+/**
+ * Per-franchise, per-segment counts of the games in `matched` (a 0/1 mask over games) inside the
+ * Seasons range. A game counts for both franchises under its exclusive category (D-24, the same
+ * precedence as special[]); the 'none' category belongs to no segment. With matched = passes and
+ * no Team/Category filter this equals the shipped special[] counts.
+ */
+export function specialMatchedCounts(model, state, matched) {
+  const [lo, hi] = state.seasons;
+  const c = model.cols;
+  const out = new Map();
+  const bump = (f, key) => {
+    let rec = out.get(f);
+    if (!rec) { rec = emptyCounts(); out.set(f, rec); }
+    rec[key]++;
+  };
+  for (let i = 0; i < model.n; i++) {
+    if (!matched[i] || c.season[i] < lo || c.season[i] > hi) continue;
+    const cat = EXCLUSIVE_CATEGORIES[model.category[i]];
+    if (!cat || cat.key === 'none') continue;
+    bump(c.home[i], cat.key);
+    bump(c.away[i], cat.key);
+  }
+  return out;
 }
 
 /** Count of non-default Seasons, Team, Category and Announcers filters (0-4). */

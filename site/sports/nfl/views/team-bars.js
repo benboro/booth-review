@@ -9,10 +9,11 @@
  * createElement/textContent; names enter Plotly strings only through
  * escapeHover, and customdata carries row indexes, never names.
  */
-import { teamBars, teamSeasonRows, rateText, EXCLUSIVE_CATEGORIES } from '../state.js';
+import { teamBars, teamSeasonRows, rateText, specialMatchedCounts, EXCLUSIVE_CATEGORIES } from '../state.js';
+import { computePicks } from '../picks.js';
 import { createOnlyDetector } from '../../../modules/legend.js';
 import { initBandInfo } from '../../../modules/band-info.js';
-import { MARGIN, TICK_FONT_PX } from '../../../modules/chart.js';
+import { MARGIN, TICK_FONT_PX, DOT_OPACITY } from '../../../modules/chart.js';
 import { categoryColor } from '../palette.js';
 import { ACCENT, INK, MUTED, PAGE_BG, DIVIDER, SPECIAL, mixHex } from '../../../modules/palette.js';
 import { FRAME_FONT, frameConfig, frameLayout } from '../../../modules/chart-frame.js';
@@ -30,6 +31,8 @@ import { DATA_TABLE_CLASS, rebuildKeepingFocus } from '../data-table.js';
 const SEGMENTS = EXCLUSIVE_CATEGORIES.filter((c) => c.key !== 'none');
 const TOP_N = 15;
 const FADE = 0.4;
+const EMPTY_TITLE = 'No games match these filters';
+const EMPTY_HINT = 'Clear all filters, or widen the Seasons range.';
 const SLOT_ORDER = [
   'TNF', 'SNF', 'MNF', 'Thanksgiving', 'Christmas', 'Black Friday', 'Saturday',
   'International', 'Friday', 'Sunday early', 'Sunday late', 'Other',
@@ -123,9 +126,11 @@ function slotText(slots) {
 function hoverLines(state, label, bar) {
   const [lo, hi] = state.seasons;
   const title = lo === hi ? `${label}, ${lo}` : `${label}, ${lo}–${hi}`;
+  // Under an Announcers or Booths pick the second line is the matched share (UI-SPEC Q7).
+  const matchedTotal = bar.matched ? SEGMENTS.reduce((a, seg) => a + bar.matched[seg.key], 0) : 0;
   const lines = [
     { text: title, kind: 'title' },
-    { text: `${bar.total} special games`, kind: 'body' },
+    { text: bar.matched ? `${matchedTotal} of ${bar.total} games` : `${bar.total} special games`, kind: 'body' },
   ];
   for (const seg of SEGMENTS) {
     const n = bar.counts[seg.key];
@@ -422,24 +427,43 @@ function buildFigure(rows, state, env, th) {
   const selected = selectedKey(state);
   const bg = PAGE_BG[th];
   const ids = rows.map((r) => r.id);
-  const traces = SEGMENTS.map((seg) => ({
+  const picked = rows.some((r) => r.bar.matched);
+  // Under a pick every segment gets an explicit start so the matched overlay lines up exactly.
+  const starts = new Map(SEGMENTS.map((seg) => [seg.key, []]));
+  for (const r of rows) {
+    let at = 0;
+    for (const seg of SEGMENTS) {
+      starts.get(seg.key).push(at);
+      if (!hidden.has(seg.key)) at += r.bar.counts[seg.key];
+    }
+  }
+  const rowFade = (r, seg) => (r.faded || r.bar.segmentFaded[seg.key] || (selected && r.id !== selected) ? FADE : 1);
+  const trace = (seg, full) => ({
     type: 'bar',
     orientation: 'h',
     name: seg.label,
+    ...(full ? {} : { meta: `matched:${seg.key}`, showlegend: false }),
     visible: hidden.has(seg.key) ? false : true,
-    x: rows.map((r) => r.bar.counts[seg.key]),
+    // A segment with no matched games draws no overlay (null, not a zero-length outlined bar).
+    x: rows.map((r) => (full ? r.bar.counts[seg.key] : r.bar.matched[seg.key] || null)),
+    ...(picked ? { base: starts.get(seg.key) } : {}),
     y: ids,
     customdata: rows.map((_, k) => k),
     hoverinfo: 'none',
     marker: {
       color: categoryColor(seg.key, th),
-      opacity: rows.map((r) => (r.faded || r.bar.segmentFaded[seg.key] || (selected && r.id !== selected) ? FADE : 1)),
+      opacity: rows.map((r) => {
+        const f = rowFade(r, seg);
+        return picked && full ? Math.min(f, DOT_OPACITY.inert) : f;
+      }),
       line: {
         color: rows.map((r) => (r.id === selected ? ACCENT[th] : bg)),
         width: rows.map((r) => (r.id === selected ? 1.5 : 1)),
       },
     },
-  }));
+  });
+  const traces = SEGMENTS.map((seg) => trace(seg, true));
+  if (picked) for (const seg of SEGMENTS) traces.push(trace(seg, false));
   let max = 0;
   for (const r of rows) {
     const sum = SEGMENTS.reduce((a, seg) => a + (hidden.has(seg.key) ? 0 : r.bar.counts[seg.key]), 0);
@@ -462,7 +486,7 @@ function buildFigure(rows, state, env, th) {
   const plotPx = Math.max(1, (refs.chart.clientWidth || env.width || 600) - 8 - labelPx - LABEL_PAD_PX - columnPx - 16);
   const top = Math.max(1, max) * Math.max(1.05, plotPx / Math.max(1, plotPx - markerHalf));
   const layout = {
-    barmode: 'stack',
+    barmode: picked ? 'overlay' : 'stack',
     bargap: 1 - thickness / pitch,
     hovermode: 'closest',
     clickmode: 'event',
@@ -565,6 +589,16 @@ export function render(ctx) {
 
   renderLegend(state, th);
   const bars = teamBars(model, state);
+  const picks = computePicks(model, state);
+  let pickedGames = 0;
+  if (picks.hasPick) {
+    const counts = specialMatchedCounts(model, state, picks.matched);
+    for (const bar of bars) {
+      bar.matched = {};
+      for (const seg of SEGMENTS) bar.matched[seg.key] = counts.get(bar.franchise)?.[seg.key] ?? 0;
+      pickedGames += SEGMENTS.reduce((a, seg) => a + bar.matched[seg.key], 0);
+    }
+  }
   const hasGames = bars.some((b) => b.total > 0);
   const rowsAll = bars.map((bar) => ({
     bar,
@@ -580,9 +614,9 @@ export function render(ctx) {
 
   let anyShown = false;
   if (!model.n || !model.special.some((r) => r.season >= state.seasons[0] && r.season <= state.seasons[1])) {
-    setNote('No NFL games in these seasons.', 'Widen the season range or reset Seasons.');
-  } else if (!hasGames) {
-    setNote('No teams match these filters.', 'Clear a Team or Category filter.');
+    setNote(EMPTY_TITLE, EMPTY_HINT);
+  } else if (!hasGames || (picks.hasPick && pickedGames === 0)) {
+    setNote(EMPTY_TITLE, EMPTY_HINT);
   } else {
     anyShown = true;
     setNote(null);
@@ -625,8 +659,13 @@ export function testModel() {
       counts: { ...r.bar.counts },
       total: r.bar.total,
       faded: r.faded,
+      matched: r.bar.matched ? { ...r.bar.matched } : null,
       segmentFaded: { ...r.bar.segmentFaded },
     })),
+    overlay: drawn.rows.flatMap((r) => (r.bar.matched
+      ? SEGMENTS.filter((seg) => r.bar.matched[seg.key] > 0)
+        .map((seg) => ({ id: r.id, segment: seg.key, matched: r.bar.matched[seg.key], total: r.bar.counts[seg.key] }))
+      : [])),
     hiddenSegments: [...s.hiddenSegments],
     selected: selectedKey(s),
     totalTeams: teamBars(drawn.model, s).length,

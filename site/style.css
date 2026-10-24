@@ -2519,6 +2519,9 @@ input[type="checkbox"] {
 }
 
 .games-table td {
+  /* Cells share a top, so a one-line Date sits level with the first line of a Matchup that
+     carries pills or a wrapped name (a table cell centres vertically by default). */
+  vertical-align: top;
   word-break: break-word;
   /* No lone score or word on a wrapped line ("Vanderbilt / 3"). */
   text-wrap: pretty;
@@ -3656,15 +3659,46 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   color: var(--muted);
 }
 
-.nfl-pill {
-  display: inline-block;
+/* A secondary line under a Matched games cell: the kickoff time under the date, the slot and
+   flag categories under the matchup. Both are a block of the cell's own 14px / 1.4 line box, so
+   line 2 of every cell in a row shares a top; no indent, no pill. */
+.games-sub {
+  display: block;
+  color: var(--muted);
+  margin: 0;
+  padding: 0;
 }
 
-.nfl-pills {
+/* A crew cell's people wrap as whole units (name + role pills). Each person after the first
+   carries its " · " in a gutter to its left; the list is shifted left by that gutter and
+   clips sideways, so a person who starts a line has its separator clipped away and a person
+   who follows another on the same line keeps it. Pure CSS, so it holds on every resize. */
+.crew-list {
+  display: block;
+  overflow-x: clip;
+}
+
+.crew-list-inner {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-xs);
-  margin-top: var(--space-xs);
+  align-items: baseline;
+  /* A wrapped line's pills would otherwise touch the pills of the line above. */
+  row-gap: var(--space-xs);
+  margin-left: calc(-1 * var(--space-md));
+}
+
+.crew-item {
+  position: relative;
+  padding-left: var(--space-md);
+  white-space: nowrap;
+}
+
+.crew-sep {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--space-md);
+  text-align: center;
 }
 
 .nfl-matchup-btn {
@@ -3675,6 +3709,12 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   font: inherit;
   text-align: left;
   cursor: pointer;
+  /* The whole row is the 44px touch target; the touch minimum on `button` would centre the
+     text 12px below the Date's first line. */
+  min-height: 0;
+  min-width: 0;
+  /* Its own block, so the category line below starts at the button's left edge. */
+  display: block;
 }
 
 /* A real button (keyboard and screen-reader opener) that reads as plain matchup text like
@@ -3827,12 +3867,17 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 /* NFL control rows: fixed-width groups side by side, never stretched to the row (the shared
    `.chart-controls` is a one-cell grid built for CFB's single controls block). */
 .nfl-crews-controls,
-.nfl-crews-chart-controls,
 .nfl-viewership-controls {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-xs) var(--space-md);
+}
+
+/* The phone `.axis-group` grid has no column gap (CFB's caption sits inside its row); the NFL
+   Measure caption keeps the 4px key-gap token so it does not touch the Viewers button. */
+.nfl-viewership-controls .axis-group {
+  column-gap: var(--space-xs);
 }
 
 .booth-rank {
@@ -3863,13 +3908,6 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .nfl-booth-table tr[data-picked="true"] .booth-col,
 .booth-row-btn[aria-pressed="true"] {
   border-inline-start: 3px solid var(--accent);
-}
-
-.season-stepper .season-value {
-  display: flex;
-  align-items: center;
-  padding: 0 var(--space-sm);
-  font-variant-numeric: tabular-nums;
 }
 
 .nfl-coverage,
@@ -4288,6 +4326,15 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 .crews-table th.crews-col-network {
   width: 128px;
+}
+
+/* NFL groups without a logo print a name ("NFL Network"); 144px keeps it whole beside its dot. */
+.nfl-crews-table .crews-table {
+  min-width: 1104px;
+}
+
+.nfl-crews-table .crews-table th.crews-col-network {
+  width: 144px;
 }
 
 .crews-table th.crews-col-games {
@@ -4878,6 +4925,98 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   }
 }
 
+/* ---------- NFL Crews (Phase 15-09): the shared Crews table with NFL columns ---------- */
+
+/* Raw and Adjusted: fixed-width buttons, so the label never shifts the group. */
+.nfl-crews-values button {
+  width: 80px;
+  padding: 0;
+}
+
+/* Booth takes the rest (320px minimum); the other columns keep the UI-SPEC widths. */
+.crews-table.is-nfl {
+  min-width: 1208px;
+}
+
+.crews-table.is-nfl.has-season {
+  min-width: 1304px;
+}
+
+.crews-table th.crews-col-margin {
+  width: 120px;
+}
+
+.nfl-crews-table > .caption {
+  margin: var(--space-sm) 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.nfl-crews-table > .crews-count {
+  margin-top: var(--space-md);
+}
+
+.crews-table tbody tr.crews-row.is-hover:not(.is-picked) {
+  background: var(--surface);
+}
+
+/* The measure row sits 16px under the Showing note and 8px above the chart. */
+.nfl-crews-chart-block {
+  margin-top: var(--space-md);
+}
+
+.nfl-crews-measure {
+  display: inline-flex;
+  min-height: 28px;
+  margin-bottom: var(--space-sm);
+}
+
+.nfl-crews-measure button {
+  min-height: 28px;
+}
+
+.nfl-crews-chart-caption {
+  margin: var(--space-sm) 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.nfl-crews-notes {
+  margin-top: var(--space-sm);
+}
+
+.nfl-crews-notes .caption {
+  margin: var(--space-sm) 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+@media (max-width: 480px) {
+  /* Phone widths: chevron 44, Booth 148, Rank 96, Network 96, Games 80, Avg margin 88,
+     Avg excitement 100, Avg viewers 120, and 96 more for Season. */
+  .table-scroll .games-table.crews-table.is-nfl {
+    width: 772px;
+    min-width: 772px;
+  }
+
+  .table-scroll .games-table.crews-table.is-nfl.has-season {
+    width: 868px;
+    min-width: 868px;
+  }
+
+  .crews-table th.crews-col-booth {
+    width: 148px;
+  }
+
+  .crews-table th.crews-col-margin {
+    width: 88px;
+  }
+
+  .nfl-crews-values button {
+    width: 72px;
+  }
+}
+
 /* ---------- Phase 13 shared components (modules, marks, chips) ---------- */
 
 .module {
@@ -5231,5 +5370,96 @@ tr.is-matched > :first-child {
   #topbar:has(#sport-switch) {
     flex-wrap: nowrap;
     align-items: center;
+  }
+}
+
+/* NFL Raw reason bar (15-04, D-06): reserves 56px (96px on phones) and grows rather than clips; spaceless when hidden. */
+.nfl-reason-bar {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  padding: 6px 16px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ink);
+  box-sizing: border-box;
+  min-height: 56px;
+}
+
+.nfl-reason-bar[hidden] {
+  display: none;
+}
+
+/* NFL Viewership window key (15-04): solid and dashed line swatches. */
+.nfl-window-key {
+  list-style: none;
+  margin: 0 0 0 auto;
+  padding: 0;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.nfl-window-key li {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.nfl-window-key .swatch {
+  width: 24px;
+  height: 2px;
+  background: var(--ink);
+}
+
+.nfl-window-key .swatch.is-dashed {
+  background: repeating-linear-gradient(90deg, var(--ink) 0 4px, transparent 4px 8px);
+}
+
+/* Space kept so the chips do not move when the key is not shown. */
+.nfl-window-key.is-reserved {
+  visibility: hidden;
+}
+
+/* Viewership subtitle row: its own full row after the title and tools. */
+.nfl-chart-module[data-view="viewership"] .module-head {
+  flex-wrap: wrap;
+}
+
+.nfl-chart-module[data-view="viewership"] #nfl-chart-subtitle {
+  flex-basis: 100%;
+  order: 3;
+  min-height: 20px;
+  line-height: 20px;
+  margin: 0;
+  white-space: normal;
+}
+
+.nfl-chart-module[data-view="viewership"] #nfl-chart-subtitle a {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+/* The window sentence wraps to two lines below about 1000px, so the row reserves two lines
+   there; it then holds the same height with and without the sentence. */
+@media (width < 1000px) {
+  .nfl-chart-module[data-view="viewership"] #nfl-chart-subtitle {
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 480px) {
+  .nfl-reason-bar {
+    min-height: 96px;
+  }
+
+  .nfl-window-key {
+    flex-basis: 100%;
+    margin: 8px 0 0;
+  }
+
+  .nfl-chart-module[data-view="viewership"] #nfl-chart-subtitle {
+    min-height: 80px;
   }
 }

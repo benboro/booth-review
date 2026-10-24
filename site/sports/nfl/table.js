@@ -7,7 +7,7 @@
  * the CFB panel's `safeHref`. Nothing here reads or shows a point spread.
  */
 
-import { nameWithRoles, makeRolePill } from '../../modules/pill.js';
+import { crewList, nameWithRoles, makeRolePill } from '../../modules/pill.js';
 import { networkMark } from '../../modules/network.js';
 import { attachScrollCue } from '../../modules/scroll-cue.js';
 import { safeHref } from '../../modules/panel.js';
@@ -21,10 +21,6 @@ function el(tag, className, text) {
   if (className) node.className = className;
   if (text != null) node.textContent = text;
   return node;
-}
-
-function textPill(text) {
-  return el('span', 'pill nfl-pill', text);
 }
 
 /** Row order: active key and direction, unrated always last, ties by date then index. */
@@ -51,14 +47,9 @@ function crewCell(td, row) {
     td.textContent = NOT_RECORDED;
     return;
   }
-  const nodes = [];
-  for (const c of ordered) {
-    if (nodes.length > 0) nodes.push(document.createTextNode(' · '));
-    nodes.push(nameWithRoles(el('span', 'crew-name', c.name), makeRolePill(c.role)));
-  }
+  const people = ordered.map((c) => nameWithRoles(el('span', 'crew-name', c.name), makeRolePill(c.role)));
   const source = crewSourceText(row);
-  if (source) nodes.push(document.createTextNode(' '), el('span', 'nfl-muted', source));
-  td.replaceChildren(...nodes);
+  td.replaceChildren(crewList(people, source ? [el('span', 'nfl-muted', source)] : []));
 }
 
 function sourceCell(row) {
@@ -89,8 +80,7 @@ function buildRow(row, onOpen) {
   const dateTd = el('td', 'date', dateShortText(row));
   const ko = kickoffText(row);
   if (ko) {
-    dateTd.appendChild(el('br'));
-    dateTd.appendChild(el('span', 'nfl-muted', ko));
+    dateTd.appendChild(el('span', 'games-sub', ko));
   }
   tr.appendChild(dateTd);
 
@@ -100,10 +90,8 @@ function buildRow(row, onOpen) {
   button.setAttribute('aria-label', `Details for ${row.away} at ${row.home}`);
   button.addEventListener('click', () => onOpen?.(row.i, button));
   matchupTd.appendChild(button);
-  const pills = el('div', 'nfl-pills');
-  pills.appendChild(textPill(row.slot));
-  for (const label of flagLabels(row)) pills.appendChild(textPill(label));
-  matchupTd.appendChild(pills);
+  // The category line is secondary text under the matchup, like the time under the date.
+  matchupTd.appendChild(el('span', 'games-sub', [row.slot, ...flagLabels(row)].join(' · ')));
   tr.appendChild(matchupTd);
 
   // NFL-only column: the table shows the final score; CFB shows it only in the panel.

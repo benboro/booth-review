@@ -817,3 +817,46 @@ def test_viewer_cells_and_game_list_figures_show_one_decimal(app: Page) -> None:
     _rows(app).first.locator(".crews-chevron").click()
     games = app.locator("#crews-panel .crews-game .crews-figure").all_inner_texts()
     assert games and all(pattern.match(t) for t in games), games
+
+
+# -- P14-FU-1: a row highlights only through its own person ---------------------------------
+
+
+@pytest.fixture
+def harlow(guarded_page: Page, open_app: Callable[[Page, str], None]) -> Page:
+    """The base site fixture, which holds Dale Harlow (PBP) and Dale Harlow Jr. (analyst)."""
+    open_app(
+        guarded_page, "?view=crews&cmode=analyst&perseason=0&people=dale-harlow,dale-harlow-jr"
+    )
+    return guarded_page
+
+
+def _highlighted_names(page: Page) -> list[str]:
+    page.locator("#crews-panel tr.crews-row").first.wait_for()
+    names: list[str] = page.evaluate(
+        "() => [...document.querySelectorAll('#crews-panel tr.crews-row.is-highlighted')]"
+        ".map((tr) => tr.getAttribute('aria-label'))"
+    )
+    return names
+
+
+def test_two_people_with_role_highlight_only_rows_whose_person_matches(harlow: Page) -> None:
+    """Dale Harlow only ever calls play-by-play, so with Role = PBP his matched games must not
+    light the Analyst row of Dale Harlow Jr., who is merely the other picked person."""
+    _set(harlow, {"role": "pbp"})
+    assert "Dale Harlow Jr." not in _highlighted_names(harlow)
+    _set(harlow, {"role": "analyst"})
+    assert "Dale Harlow Jr." in _highlighted_names(harlow)
+    assert "Dale Harlow" not in _highlighted_names(harlow)
+
+
+def test_pbp_mode_highlights_the_pbp_person_for_role_pbp(harlow: Page) -> None:
+    _set(harlow, {"cmode": "pbp", "role": "pbp"})
+    names = _highlighted_names(harlow)
+    assert "Dale Harlow" in names
+    assert "Dale Harlow Jr." not in names
+
+
+def test_called_together_still_needs_every_picked_person_on_the_row(harlow: Page) -> None:
+    _set(harlow, {"role": None, "together": True})
+    assert _highlighted_names(harlow) == []

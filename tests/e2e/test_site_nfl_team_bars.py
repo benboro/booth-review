@@ -309,6 +309,119 @@ def test_team_filter_fades_and_announcers_do_not(
     assert not any(any(r["segmentFaded"].values()) for r in vm["rows"])
 
 
+_EXPECTED_MATCHED_JS = """async (pid) => {
+  const D = await import('./sports/nfl/data.js');
+  const S = await import('./sports/nfl/state.js');
+  const raw = await (await fetch('nfl-data.json')).json();
+  const m = D.prepareNfl(raw);
+  const k = m.personIndex.get(pid);
+  const keys = S.EXCLUSIVE_CATEGORIES.map((c) => c.key);
+  const out = {};
+  for (let i = 0; i < m.n; i++) {
+    if (!(m.cols.crew[i] || []).some((c) => c.person === k)) continue;
+    const key = keys[m.category[i]];
+    if (key === 'none') continue;
+    for (const f of [m.cols.home[i], m.cols.away[i]]) {
+      const id = m.franchises[f].id;
+      out[id] = out[id] || {};
+      out[id][key] = (out[id][key] || 0) + 1;
+    }
+  }
+  return out;
+}"""
+
+
+def _pick_person(app: Page, raw: dict[str, Any]) -> tuple[str, dict[str, dict[str, int]]]:
+    pid = raw["lookups"]["people"][0]["id"]
+    expected = app.evaluate(_EXPECTED_MATCHED_JS, pid)
+    assert expected
+    _set(app, {"people": [pid]})
+    app.wait_for_function("window.__nflTestHooks.getViewModel('special').overlay?.length > 0")
+    return pid, expected
+
+
+def test_pick_overlays_matched_length_from_the_segment_start(
+    app: Page, nfl_fixture_raw: dict[str, Any]
+) -> None:
+    _vm(app)
+    _, expected = _pick_person(app, nfl_fixture_raw)
+    vm = _vm(app)
+    got: dict[str, dict[str, int]] = {}
+    for o in vm["overlay"]:
+        got.setdefault(o["id"], {})[o["segment"]] = o["matched"]
+        assert 0 < o["matched"] <= o["total"]
+    # Per franchise and segment, the overlay is the recount of the picked person's games.
+    in_range = {r["franchise"] for r in vm["rows"]}
+    assert got == {k: v for k, v in expected.items() if k in in_range}
+    data = app.evaluate(
+        f"""(() => {{ const gd = document.querySelector('{GD}');
+          return {{ barmode: gd.layout.barmode, traces: gd.data.map(t => ({{ meta: t.meta ?? null,
+          name: t.name, base: t.base, x: t.x, op: t.marker.opacity }})) }}; }})()"""
+    )
+    assert data["barmode"] == "overlay"
+    full, over = data["traces"][:8], data["traces"][8:]
+    assert [t["meta"] for t in over] == [f"matched:{k}" for k in SEGMENT_KEYS]
+    for f, o in zip(full, over, strict=True):
+        assert f["base"] == o["base"] and f["name"] == o["name"]
+        assert set(f["op"]) == {0.3}  # DOT_OPACITY.inert
+        assert set(o["op"]) == {1}
+        # A segment with no matched games draws no overlay bar.
+        assert all(v is None or v > 0 for v in o["x"])
+    # Each segment starts where the one before it ends.
+    for row_i in range(len(vm["rows"])):
+        at = 0
+        for seg_i, key in enumerate(SEGMENT_KEYS):
+            assert full[seg_i]["base"][row_i] == at
+            at += vm["rows"][row_i]["counts"][key]
+
+
+def test_tooltip_reads_n_of_m_games(app: Page, nfl_fixture_raw: dict[str, Any]) -> None:
+    _vm(app)
+    _pick_person(app, nfl_fixture_raw)
+    vm = _vm(app)
+    k = next(i for i, r in enumerate(vm["rows"]) if r["matched"] and sum(r["matched"].values()))
+    row = vm["rows"][k]
+    _emit(app, "plotly_hover", k)
+    lines = _tooltip(app)
+    assert lines[1] == f"{sum(row['matched'].values())} of {row['total']} games"
+
+
+def test_no_pick_figure_is_unchanged(app: Page) -> None:
+    vm = _vm(app)
+    assert vm["overlay"] == []
+    got = app.evaluate(
+        f"""(() => {{ const gd = document.querySelector('{GD}');
+          return [gd.layout.barmode, gd.data.length, gd.data.some(t => 'base' in t && t.base != null)]; }})()"""
+    )
+    assert got == ["stack", 8, False]
+    _emit(app, "plotly_hover", 0)
+    assert _tooltip(app)[1].endswith(" special games")
+
+
+def test_empty_state_copy(app: Page, nfl_fixture_raw: dict[str, Any]) -> None:
+    _vm(app)
+    g = nfl_fixture_raw["games"]
+    people = nfl_fixture_raw["lookups"]["people"]
+    # A season in which some person called nothing: picking them matches no special game.
+    season, who = next(
+        (se, k)
+        for se in sorted(set(g["season"]))
+        for k in range(len(people))
+        if not any(
+            g["season"][i] == se and any(m["person"] == k for m in g["crew"][i])
+            for i in range(len(g["season"]))
+        )
+    )
+    _set(app, {"seasons": [season, season], "people": [people[who]["id"]]})
+    note = app.locator("#nfl-view-special .season-empty-note")
+    note.wait_for(state="visible")
+    assert note.locator(".season-empty-title").inner_text() == "No games match these filters"
+    assert (
+        note.locator(".season-empty-hint").inner_text()
+        == "Clear all filters, or widen the Seasons range."
+    )
+
+
 def test_category_filter_fades_segments(app: Page) -> None:
     _vm(app)
     _set(app, {"cats": ["agotw"]})
@@ -414,6 +527,45 @@ def test_click_selects_team_and_fills_games_and_breakdown(
     app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected === null")
     assert app.locator("#nfl-view-special .nfl-breakdown").is_hidden()
     assert app.evaluate("window.__nflTestHooks.getTableIndexes()") == []
+
+
+def test_bar_click_under_a_pick_lists_only_matched_games(
+    app: Page, nfl_fixture_raw: dict[str, Any]
+) -> None:
+    raw = nfl_fixture_raw
+    g = raw["games"]
+    _vm(app)
+    _set(app, {"people": ["p12"]})
+    app.wait_for_function("window.__nflTestHooks.getViewModel('special').overlay?.length > 0")
+    matched = set(app.evaluate("window.__nflTestHooks.getTableIndexes()"))
+    p12 = next(i for i, p in enumerate(raw["lookups"]["people"]) if p["id"] == "p12")
+    assert any(m["person"] == p12 for i in matched for m in g["crew"][i])
+    lo, hi = app.evaluate("window.__nflTestHooks.getState().seasons")
+    ids = [f["id"] for f in raw["lookups"]["franchises"]]
+    cut = 0
+    for k, row in enumerate(_vm(app)["rows"]):
+        f = ids.index(row["franchise"])
+        team = {
+            i
+            for i in range(len(g["season"]))
+            if f in (g["home"][i], g["away"][i])
+            and lo <= g["season"][i] <= hi
+            and (
+                g["standalone"][i] or g["agotw"][i] or g["cbs_national"][i] or g["international"][i]
+            )
+        }
+        _emit(app, "plotly_click", k)
+        app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
+        app.wait_for_timeout(100)  # a render re-sync may rewrite the selection
+        assert sorted(app.evaluate("window.__nflTestHooks.getTableIndexes()")) == sorted(
+            team & matched
+        )
+        cut += len(team - matched)
+        app.wait_for_timeout(600)  # past the touch double-fire guard
+        _emit(app, "plotly_click", k)
+        app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected === null")
+        app.wait_for_timeout(600)
+    assert cut > 0
 
 
 def test_end_markers_are_ink_until_a_team_is_picked_then_accent(app: Page) -> None:
