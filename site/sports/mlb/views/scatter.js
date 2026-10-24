@@ -13,8 +13,11 @@
 import { FAMILY_COLORS, MUTED, PAGE_BG, DIVIDER } from '../../../modules/palette.js';
 import { frameConfig, frameLayout, referenceLine } from '../../../modules/chart-frame.js';
 import { bandLayout, marginFor } from '../../../modules/chart.js';
-import { positionBandInfo } from '../../../modules/band-info.js';
+import { initBandInfo, positionBandInfo, closeBandNote } from '../../../modules/band-info.js';
 import { mountViewTools } from '../tools.js';
+import { ROUND_SHORT } from '../data.js';
+import { MLB_SROUNDS } from '../state.js';
+import { RETROSHEET_NOTICE, RETROSHEET_CONTACT } from '../panel.js';
 import {
   buildScatterItems, colorSlotOf, statusText, stripJitter, MLB_FAMILY_ORDER,
 } from '../scatter-items.js';
@@ -29,6 +32,22 @@ const STRIP_PX = 72; // the left strip's width
 const STRIP_GAP_PX = 8; // between the strip's divider and excitement 0
 const EDGE_PAD_PX = 8; // right padding so a dot at the maximum is not clipped
 const PLOT_HEIGHT = { desktop: 480, phone: 360 };
+
+// Fixed copy (RT-29..RT-34); no data string is ever written into it.
+const ROUND_DISABLED_TITLE = 'Round applies to postseason games';
+const NOTE_BOTTOM = 'No viewership figure for these games: Ratings Reference has none, the figure is not posted yet, or it is window-level only.';
+const NOTE_LEFT = "Retrosheet's 2026 files are released late in 2026, and some older games have no play-by-play.";
+const CAPTION_VIEWERS = "Viewership figures: Ratings Reference; each game's detail panel links its record and the figure's original source. Open dots are window-level: one figure covers the whole broadcast window, not this game alone.";
+const CAPTION_NETWORKS = "Networks: 506 Sports and Wikipedia (CC BY-SA 4.0); each game's detail panel links its source.";
+// The real MLB eras break at the same years as CFB's (2020, 2025, 2026), so the CFB era
+// note (RT-21) is used as written (checked against the local build, 16-07).
+const CAPTION_ERAS = 'Nielsen changed how it measures viewing in 2020, 2025, and 2026, so compare seasons with care; see ';
+
+const STYPE_OPTIONS = [
+  { key: 'all', label: 'All games' },
+  { key: 'post', label: 'Postseason' },
+  { key: 'reg', label: 'Reg. Season' },
+];
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -234,13 +253,15 @@ function setEmpty(show) {
   refs.note.hidden = !show;
   refs.gd.hidden = show;
   if (show) {
-    refs.bottomInfo.button.hidden = true;
-    refs.leftInfo.button.hidden = true;
+    for (const info of [refs.bottomInfo, refs.leftInfo]) {
+      info.button.hidden = true;
+      closeBandNote(info);
+    }
   }
 }
 
 /** A strip label that doubles as a 44px info button (the CFB band pattern). */
-function stripInfo(className, label, ariaLabel) {
+function stripInfo(className, label, ariaLabel, noteText) {
   const button = el('button', `band-info ${className}`);
   button.type = 'button';
   button.hidden = true;
@@ -249,7 +270,13 @@ function stripInfo(className, label, ariaLabel) {
   const glyph = el('span', 'band-info-glyph', 'i');
   glyph.setAttribute('aria-hidden', 'true');
   button.append(el('span', 'band-info-text', label), glyph);
-  return { button };
+  const note = el('div', `band-note ${className.replace('info', 'note')}`);
+  note.hidden = true;
+  note.id = `${className}-note`;
+  note.appendChild(el('p', null, noteText));
+  button.setAttribute('aria-controls', note.id);
+  initBandInfo({ button, note });
+  return { button, note };
 }
 
 /** Bottom label in the gap row above the bottom strip; left label at the top of the left strip. */
@@ -258,12 +285,110 @@ function placeStripInfo() {
   const gd = refs.gd;
   const full = gd._fullLayout;
   if (!full || !full._size || !full.xaxis) return;
-  if (!refs.bottomInfo.button.hidden) positionBandInfo(gd, refs.bottomInfo.button, null);
+  if (!refs.bottomInfo.button.hidden) positionBandInfo(gd, refs.bottomInfo.button, refs.bottomInfo.note);
   const left = refs.leftInfo.button;
   if (!left.hidden) {
-    left.style.left = `${Math.round(full._size.l + 2)}px`;
-    left.style.top = `${Math.round(full._size.t + 2)}px`;
+    const x = Math.round(full._size.l + 2);
+    const y = Math.round(full._size.t + 2);
+    left.style.left = `${x}px`;
+    left.style.top = `${y}px`;
+    const note = refs.leftInfo.note;
+    const noteW = note.offsetWidth || 280;
+    note.style.left = `${Math.round(Math.min(x, Math.max(0, gd.clientWidth - noteW - 4)))}px`;
+    note.style.top = `${y + left.offsetHeight}px`;
   }
+}
+
+// ---- controls and captions ----
+
+function segmented(label, options, onPick) {
+  const group = el('div', 'segmented');
+  group.setAttribute('role', 'group');
+  group.setAttribute('aria-label', label);
+  for (const o of options) {
+    const b = el('button', null, o.label);
+    b.type = 'button';
+    b.dataset.value = o.key;
+    b.addEventListener('click', () => onPick(o.key, b));
+    group.appendChild(b);
+  }
+  return group;
+}
+
+function axisGroup(caption, group) {
+  const wrap = el('div', 'axis-group');
+  const cap = el('span', 'axis-caption', caption);
+  cap.setAttribute('aria-hidden', 'true');
+  wrap.append(cap, group);
+  return wrap;
+}
+
+function presentRounds(model) {
+  const seen = new Set(model.cols.round);
+  return MLB_SROUNDS.filter((r) => seen.has(r));
+}
+
+function buildControls(ctx) {
+  refs.stypeGroup = segmented('Season type', STYPE_OPTIONS, (k) => {
+    ctx.setState(k === 'all' ? { stype: null, sround: null } : { stype: k });
+  });
+  const rounds = [{ key: 'all', label: 'All rounds' }, ...presentRounds(ctx.model).map((r) => ({ key: r, label: ROUND_SHORT[r] }))];
+  refs.roundGroup = segmented('Round', rounds, (k, b) => {
+    if (b.getAttribute('aria-disabled') === 'true') return;
+    ctx.setState({ sround: k === 'all' ? null : k });
+  });
+  const wrap = el('div', 'scatter-controls');
+  wrap.append(axisGroup('Season type', refs.stypeGroup), axisGroup('Round', refs.roundGroup));
+  refs.controls.appendChild(wrap);
+}
+
+function press(group, value) {
+  for (const b of group.querySelectorAll('button')) {
+    b.setAttribute('aria-pressed', String(b.dataset.value === value));
+  }
+}
+
+/** Pressed state, and the Round group's disabled look (no reflow: the buttons stay). */
+function syncControls(state) {
+  press(refs.stypeGroup, state.stype ?? 'all');
+  const post = state.stype === 'post';
+  press(refs.roundGroup, post ? state.sround ?? 'all' : 'all');
+  for (const b of refs.roundGroup.querySelectorAll('button')) {
+    if (post) {
+      b.removeAttribute('aria-disabled');
+      b.removeAttribute('title');
+    } else {
+      b.setAttribute('aria-disabled', 'true');
+      b.title = ROUND_DISABLED_TITLE;
+    }
+  }
+}
+
+function link(text, href) {
+  const a = el('a', null, text);
+  a.href = href;
+  a.rel = 'noopener noreferrer';
+  return a;
+}
+
+/** Captions 1-3 always (Retrosheet, Ratings Reference, networks); caption 4 with more than one era. */
+function buildCaptions(ctx) {
+  const retro = el('p', 'caption');
+  retro.append(
+    document.createTextNode(`${RETROSHEET_NOTICE} ${RETROSHEET_CONTACT}`),
+    link('www.retrosheet.org', 'https://www.retrosheet.org'),
+  );
+  const lines = [retro, el('p', 'caption', CAPTION_VIEWERS), el('p', 'caption', CAPTION_NETWORKS)];
+  if (ctx.model.lookups.eras.length > 1) {
+    const eras = el('p', 'caption');
+    eras.append(
+      document.createTextNode(CAPTION_ERAS),
+      link('methodology', ctx.methodologyHref('measurement-eras')),
+      document.createTextNode('.'),
+    );
+    lines.push(eras);
+  }
+  return lines;
 }
 
 function bindEvents(gd) {
@@ -287,12 +412,20 @@ export function mount(container, ctx) {
     el('p', 'season-empty-title', 'No games in this view'),
     el('p', 'season-empty-hint', 'Choose All games or another round.'),
   );
-  refs.bottomInfo = stripInfo('mlb-bottom-info', 'No public rating', 'Why do some games have no public rating?');
-  refs.leftInfo = stripInfo('mlb-left-info', 'No excitement', 'Why do some games have no excitement figure?');
-  refs.chart.append(refs.gd, refs.note, refs.bottomInfo.button, refs.leftInfo.button);
+  refs.bottomInfo = stripInfo(
+    'mlb-bottom-info', 'No public rating', 'Why do some games have no public rating?', NOTE_BOTTOM,
+  );
+  refs.leftInfo = stripInfo(
+    'mlb-left-info', 'No excitement', 'Why do some games have no excitement figure?', NOTE_LEFT,
+  );
+  refs.chart.append(
+    refs.gd, refs.note,
+    refs.bottomInfo.button, refs.bottomInfo.note, refs.leftInfo.button, refs.leftInfo.note,
+  );
   refs.status = el('p', 'mlb-scatter-status');
   refs.status.setAttribute('role', 'status');
-  container.append(refs.chart, refs.status);
+  buildControls(ctx);
+  container.append(refs.chart, refs.status, ...buildCaptions(ctx));
   mountViewTools(ctx, 'scatter', [refs.controls], container);
   // The strip is a fixed 72px, so a width change re-lays the figure out.
   if (typeof ResizeObserver !== 'undefined') {
@@ -316,6 +449,7 @@ export function render(ctx) {
   const { items, counts, families } = built;
   current = { items, counts, families, env, model, state };
   refs.status.textContent = statusText(counts);
+  syncControls(state);
 
   if (!items.length) {
     refs.drawn = false;
@@ -328,7 +462,9 @@ export function render(ctx) {
   refs.drawn = true;
   refs.lastWidth = refs.chart.clientWidth;
   refs.bottomInfo.button.hidden = counts.noRating + counts.neither === 0;
+  if (refs.bottomInfo.button.hidden) closeBandNote(refs.bottomInfo);
   refs.leftInfo.button.hidden = counts.noExcitement + counts.neither === 0;
+  if (refs.leftInfo.button.hidden) closeBandNote(refs.leftInfo);
   const done = window.Plotly.react(refs.gd, fig.traces, fig.layout, CONFIG);
   bindEvents(refs.gd);
   if (done && typeof done.then === 'function') {

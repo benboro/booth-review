@@ -355,3 +355,224 @@ def test_phone_scatter_is_not_zoomable(
     assert layout["dragmode"] is False
     assert layout["xaxis"]["fixedrange"] is True and layout["yaxis"]["fixedrange"] is True
 
+
+# -- Task 2: the Season type / Round control, captions and strip texts --------------------
+
+SEASON_GROUP = f"{TOOLS} [role=group][aria-label='Season type']"
+ROUND_GROUP = f"{TOOLS} [role=group][aria-label='Round']"
+ROUND_TITLE = "Round applies to postseason games"
+
+RT29 = (
+    "The information used here was obtained free of charge from and is copyrighted by "
+    "Retrosheet. Interested parties may contact Retrosheet at www.retrosheet.org"
+)
+RT30 = (
+    "Viewership figures: Ratings Reference; each game's detail panel links its record and the "
+    "figure's original source. Open dots are window-level: one figure covers the whole "
+    "broadcast window, not this game alone."
+)
+RT31 = (
+    "Networks: 506 Sports and Wikipedia (CC BY-SA 4.0); each game's detail panel links its source."
+)
+# Caption 4: the real MLB eras break at the same years as CFB's (2020, 2025, 2026), so the
+# CFB era note (RT-21) is used verbatim.
+RT32 = (
+    "Nielsen changed how it measures viewing in 2020, 2025, and 2026, "
+    "so compare seasons with care; see methodology."
+)
+RT33 = (
+    "No viewership figure for these games: Ratings Reference has none, the figure is not "
+    "posted yet, or it is window-level only."
+)
+RT34 = (
+    "Retrosheet's 2026 files are released late in 2026, and some older games have no play-by-play."
+)
+
+
+def _norm(text: str) -> str:
+    return " ".join(text.split())
+
+
+def _texts(page: Page, group: str) -> list[str]:
+    return page.eval_on_selector_all(f"{group} button", "els => els.map(e => e.textContent)")
+
+
+def _round_disabled(page: Page) -> list[str | None]:
+    return page.eval_on_selector_all(
+        f"{ROUND_GROUP} button", "els => els.map(e => e.getAttribute('aria-disabled'))"
+    )
+
+
+def _head_height(page: Page) -> float:
+    return page.locator("#mlb-chart-area .module-head").bounding_box()["height"]  # type: ignore[index]
+
+
+def _pick_counts(page: Page) -> dict[str, int]:
+    counts = _vm(page)["counts"]
+    return {k: counts[k] for k in ("total", "plotted", "noRating", "noExcitement", "neither")}
+
+
+def test_control_groups_labels_and_disabled_round(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    page = mlb_guarded_page
+    _open(page, open_mlb_app)
+    assert page.locator(TOOLS).is_visible()
+    assert _texts(page, SEASON_GROUP) == ["All games", "Postseason", "Reg. Season"]
+    assert _texts(page, ROUND_GROUP) == [
+        "All rounds",
+        "Wild Card",
+        "Division Series",
+        "LCS",
+        "World Series",
+    ]
+    assert set(_round_disabled(page)) == {"true"}
+    titles = page.eval_on_selector_all(f"{ROUND_GROUP} button", "els => els.map(e => e.title)")
+    assert set(titles) == {ROUND_TITLE}
+
+
+def test_control_round_trip_counts_and_leaves_selection_alone(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    page = mlb_guarded_page
+    _open(page, open_mlb_app, "&booth=p2")
+    before = {
+        "booth": page.evaluate(f"{HOOKS}.getState().booth"),
+        "rows": page.evaluate(f"{HOOKS}.getTableIndexes()"),
+        "summary": page.inner_text("#mlb-summary"),
+        "head": _head_height(page),
+    }
+    assert before["booth"] == "1"
+    assert _pick_counts(page) == SCATTER_CASE["all"]
+
+    def same() -> None:
+        assert page.evaluate(f"{HOOKS}.getState().booth") == before["booth"]
+        assert page.evaluate(f"{HOOKS}.getTableIndexes()") == before["rows"]
+        assert page.inner_text("#mlb-summary") == before["summary"]
+        assert _head_height(page) == before["head"]
+
+    page.click(f"{SEASON_GROUP} button:has-text('Postseason')")
+    page.wait_for_function(
+        f"{HOOKS}.getViewModel('scatter').counts.total === {SCATTER_CASE['post']['total']}"
+    )
+    assert "stype=post" in page.url and "sround" not in page.url
+    assert _pick_counts(page) == SCATTER_CASE["post"]
+    assert set(_round_disabled(page)) == {None}
+    same()
+
+    page.click(f"{ROUND_GROUP} button:has-text('LCS')")
+    page.wait_for_function(
+        f"{HOOKS}.getViewModel('scatter').counts.total === {SCATTER_CASE['post+lcs']['total']}"
+    )
+    assert "sround=lcs" in page.url
+    assert _pick_counts(page) == SCATTER_CASE["post+lcs"]
+    assert page.locator(f"{ROUND_GROUP} button[aria-pressed='true']").inner_text() == "LCS"
+    same()
+
+    page.click(f"{SEASON_GROUP} button:has-text('Reg. Season')")
+    page.wait_for_function(
+        f"{HOOKS}.getViewModel('scatter').counts.total === {SCATTER_CASE['reg']['total']}"
+    )
+    assert "stype=reg" in page.url and "sround" not in page.url
+    assert _pick_counts(page) == SCATTER_CASE["reg"]
+    assert set(_round_disabled(page)) == {"true"}
+    same()
+
+    page.click(f"{SEASON_GROUP} button:has-text('All games')")
+    page.wait_for_function(
+        f"{HOOKS}.getViewModel('scatter').counts.total === {SCATTER_CASE['all']['total']}"
+    )
+    assert "stype" not in page.url
+    same()
+
+
+def test_disabled_round_buttons_do_nothing_and_urls_are_allowlisted(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    page = mlb_guarded_page
+    _open(page, open_mlb_app)
+    page.click(
+        f"{ROUND_GROUP} button:has-text('LCS')", force=True
+    )  # aria-disabled still takes clicks
+    assert page.evaluate(f"{HOOKS}.getState().sround") is None
+    assert "sround" not in page.url
+    for query, want in (
+        ("&stype=junk", (None, None)),
+        ("&sround=lcs", (None, None)),
+        ("&stype=reg&sround=lcs", ("reg", None)),
+        ("&stype=post&sround=zzz", ("post", None)),
+        ("&stype=post&sround=lcs", ("post", "lcs")),
+    ):
+        open_mlb_app(page, "?sport=mlb&view=scatter" + query)
+        state = page.evaluate(f"{HOOKS}.getState()")
+        assert (state["stype"], state["sround"]) == want, query
+
+
+def test_empty_result_keeps_the_module_height(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    page = mlb_guarded_page
+    page.set_viewport_size({"width": 1440, "height": 900})
+    _open(page, open_mlb_app)
+    height = page.locator(f"{VIEW} .mlb-scatter-plot").bounding_box()["height"]  # type: ignore[index]
+    page.evaluate(f"{HOOKS}.setState({{ stype: 'post', sround: 'tiebreak' }})")
+    note = page.locator(f"{VIEW} .season-empty-note")
+    assert note.is_visible()
+    assert _norm(note.inner_text()) == "No games in this view Choose All games or another round."
+    assert page.locator(f"{VIEW} .mlb-scatter-plot").bounding_box()["height"] == height  # type: ignore[index]
+    assert page.locator(f"{VIEW} .mlb-scatter-status").inner_text() == ""
+
+
+def test_captions_are_verbatim_with_their_links(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    page = mlb_guarded_page
+    _open(page, open_mlb_app)
+    caps = page.locator(f"{VIEW} p.caption")
+    assert [_norm(t) for t in caps.all_inner_texts()] == [RT29, RT30, RT31, RT32]
+    first = caps.nth(0).locator("a")
+    assert first.count() == 1
+    assert first.inner_text() == "www.retrosheet.org"
+    assert first.get_attribute("href") == "https://www.retrosheet.org"
+    assert first.get_attribute("rel") == "noopener noreferrer"
+    era = caps.nth(3).locator("a")
+    assert era.inner_text() == "methodology"
+    assert era.get_attribute("href") == "methodology.html#measurement-eras"
+    assert "CollegeFootballData" not in page.inner_text("#mlb-chart-area")
+    assert "CollegeFootballData" not in page.inner_text("#site-footer")
+
+
+def test_era_caption_needs_more_than_one_era(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    page = mlb_guarded_page
+    open_mlb_app(page, "?sport=mlb&view=scatter")
+    page.wait_for_function(f"{HOOKS}.getViewModel('scatter').drawn === true")
+    assert [_norm(t) for t in page.locator(f"{VIEW} p.caption").all_inner_texts()] == [
+        RT29,
+        RT30,
+        RT31,
+    ]
+
+
+def test_strip_info_buttons_open_the_fixed_texts(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    page = mlb_guarded_page
+    page.set_viewport_size({"width": 1440, "height": 900})
+    _open(page, open_mlb_app)
+    bottom = page.locator(f"{VIEW} .mlb-bottom-info")
+    left = page.locator(f"{VIEW} .mlb-left-info")
+    bottom_note = page.locator(f"{VIEW} .mlb-bottom-note")
+    left_note = page.locator(f"{VIEW} .mlb-left-note")
+    assert bottom_note.is_hidden() and left_note.is_hidden()
+    bottom.click()
+    assert bottom_note.is_visible()
+    assert _norm(bottom_note.inner_text()) == RT33
+    page.keyboard.press("Escape")
+    assert bottom_note.is_hidden()
+    left.click()
+    assert left_note.is_visible()
+    assert _norm(left_note.inner_text()) == RT34
+    for text in ("No public rating", "No excitement"):
+        assert page.locator(f"{VIEW} .band-info-text:text-is('{text}')").count() == 1

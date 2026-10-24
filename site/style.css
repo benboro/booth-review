@@ -5671,3 +5671,43 @@ tr.is-matched > :first-child {
     min-height: 40px;
   }
 }
+
+/* Scatter header tools: the Round group dims, never reflows, outside Postseason. */
+.mlb-scatter-controls .scatter-controls {
+  flex-wrap: wrap;
+}
+
+.mlb-scatter-controls .segmented button[aria-disabled="true"] {
+  background: var(--bg);
+  color: var(--disabled);
+  cursor: default;
+}
+
+/* With the Scatter's two control groups in the header, the hint drops to its own row (as the
+   NFL viewership module does) so it is not cut off at 1440px. */
+#mlb-chart-area .module-head:has([data-tools-for="scatter"]:not([hidden])) {
+  flex-wrap: wrap;
+}
+
+#mlb-chart-area .module-head:has([data-tools-for="scatter"]:not([hidden])) .module-subtitle {
+  flex-basis: 100%;
+  order: 3;
+}
+
+@media (max-width: 480px) {
+  .mlb-scatter-controls .axis-group {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-xs);
+  }
+
+  .mlb-scatter-controls .segmented {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .mlb-scatter-controls .segmented button {
+    flex: 1 1 auto;
+    white-space: nowrap;
+    padding: 0 var(--space-sm);
+  }
+}
