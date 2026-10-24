@@ -628,8 +628,7 @@ def test_encode_default_and_order(run: Callable[[str], Any]) -> None:
     assert got["def"] == "?sport=nfl"
     key = got["key"].replace(":", "%3A")
     assert got["full"] == (
-        f"?sport=nfl&view=crews&seasons=2024-2025&team={got['id']}"
-        f"&booths={key}&adj=1&m=viewers"
+        f"?sport=nfl&view=crews&seasons=2024-2025&team={got['id']}&booths={key}&adj=1&m=viewers"
     )
     assert got["vw"] == "?sport=nfl&view=viewership&ay=resid"
 
