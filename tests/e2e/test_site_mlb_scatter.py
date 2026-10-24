@@ -136,9 +136,9 @@ def test_tab_bar_subtitle_and_deep_link(
     )
     assert "view=scatter" in page.url
     # The tools show only on the Scatter tab.
-    assert page.locator(TOOLS).is_visible()
+    assert page.eval_on_selector(TOOLS, "e => e.hidden") is False
     page.click("#mlb-tab-apple")
-    assert page.locator(TOOLS).is_hidden()
+    assert page.eval_on_selector(TOOLS, "e => e.hidden") is True
 
 
 def test_counts_equal_the_case_and_every_game_is_drawn_once(
@@ -205,8 +205,14 @@ def test_placements_strips_and_divider(
             assert p["x"] == _G["wp_excitement"][p["i"]]
     assert seen == {"plot", "bottom", "left", "corner"}
     # Strip labels are the info buttons; their texts are fixed copy.
-    assert page.locator(f"{VIEW} .band-info.mlb-bottom-info .band-info-text").inner_text() == "No public rating"
-    assert page.locator(f"{VIEW} .band-info.mlb-left-info .band-info-text").inner_text() == "No excitement"
+    assert (
+        page.locator(f"{VIEW} .band-info.mlb-bottom-info .band-info-text").inner_text()
+        == "No public rating"
+    )
+    assert (
+        page.locator(f"{VIEW} .band-info.mlb-left-info .band-info-text").inner_text()
+        == "No excitement"
+    )
     # The left strip is 72px wide (the divider sits 72px from the axis start).
     px = page.evaluate(
         """([sel, edge]) => {
@@ -246,7 +252,10 @@ def test_status_line_equals_counts(
     assert status.inner_text() == _status(SCATTER_CASE["all"])
     counts = SCATTER_CASE["all"]
     # plotted + the strip groups add up to the games in the control.
-    assert counts["plotted"] + counts["noRating"] + counts["noExcitement"] + counts["neither"] == counts["total"]
+    assert (
+        counts["plotted"] + counts["noRating"] + counts["noExcitement"] + counts["neither"]
+        == counts["total"]
+    )
 
 
 def test_plot_height_desktop_and_phone(
@@ -278,3 +287,71 @@ def test_one_trace_group_per_family_present(
         axes = [t["yaxis"] for t in plot["data"] if t["meta"] == fam]
         assert len(axes) == len(set(axes)) and set(axes) <= {"y", "y2"}
     assert {t["type"] for t in plot["data"]} == {"scatter"}
+
+
+def test_desktop_drag_zoom_is_vertical_and_both_strips_survive(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """Zoom spike (RESEARCH A3): a drag zooms the viewers axis only; the strips stay put."""
+    page = mlb_guarded_page
+    page.set_viewport_size({"width": 1440, "height": 900})
+    _open(page, open_mlb_app)
+    page.wait_for_timeout(300)
+    info = page.evaluate(
+        """sel => {
+          const gd = document.querySelector(sel);
+          const r = gd.getBoundingClientRect();
+          const f = gd._fullLayout;
+          return { l: r.left, t: r.top, size: f._size, xr: [...f.xaxis.range], yr: [...f.yaxis.range], drag: f.dragmode };
+        }""",
+        GD,
+    )
+    assert info["drag"] == "zoom"
+    s = info["size"]
+    x0 = info["l"] + s["l"] + s["w"] * 0.35
+    x1 = info["l"] + s["l"] + s["w"] * 0.7
+    y0 = info["t"] + s["t"] + s["h"] * 0.16
+    y1 = info["t"] + s["t"] + s["h"] * 0.6
+    page.mouse.move(x0, y0)
+    page.mouse.down()
+    page.mouse.move((x0 + x1) / 2, (y0 + y1) / 2, steps=5)
+    page.mouse.move(x1, y1, steps=5)
+    page.mouse.up()
+    page.wait_for_timeout(500)
+    after = page.evaluate(
+        """sel => {
+          const gd = document.querySelector(sel);
+          const f = gd._fullLayout;
+          const left = gd.data.flatMap(t => t.customdata.map((c, k) => ({ x: t.x[k], ya: t.yaxis }))).filter(p => p.x < 0 && p.ya === 'y');
+          return {
+            xr: [...f.xaxis.range], yr: [...f.yaxis.range],
+            leftPx: left.map(p => f.xaxis.l2p(p.x)), len: f.xaxis._length,
+            bottom: !document.querySelector('.mlb-bottom-info').hidden,
+            leftBtn: !document.querySelector('.mlb-left-info').hidden,
+          };
+        }""",
+        GD,
+    )
+    assert after["yr"] != info["yr"]
+    assert after["yr"][1] - after["yr"][0] < info["yr"][1] - info["yr"][0]
+    assert after["xr"] == info["xr"]
+    assert after["leftPx"] and all(0 <= px <= 72 for px in after["leftPx"])
+    assert after["bottom"] and after["leftBtn"]
+    page.mouse.dblclick(x0, y0)
+    page.wait_for_timeout(500)
+    back = page.evaluate(
+        "sel => { const f = document.querySelector(sel)._fullLayout; return { xr: [...f.xaxis.range], yr: [...f.yaxis.range] }; }",
+        GD,
+    )
+    assert back == {"xr": info["xr"], "yr": info["yr"]}
+
+
+def test_phone_scatter_is_not_zoomable(
+    mlb_mobile_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    page = mlb_mobile_page
+    _open(page, open_mlb_app)
+    layout = _plot(page)["layout"]
+    assert layout["dragmode"] is False
+    assert layout["xaxis"]["fixedrange"] is True and layout["yaxis"]["fixedrange"] is True
+

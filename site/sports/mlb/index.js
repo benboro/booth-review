@@ -18,15 +18,18 @@ import { createDetailPanel, RETROSHEET_NOTICE, RETROSHEET_CONTACT } from './pane
 import { createMlbTabs } from './tabs.js';
 import * as appleView from './views/apple.js';
 import * as postseasonView from './views/postseason.js';
+import * as scatterView from './views/scatter.js';
+import { showToolsFor } from './tools.js';
 import { PHONE_QUERY } from '../../modules/breakpoints.js';
 
 // View id -> module (mount, render, resize, testModel); the tab bar renders from this map.
-const VIEW_MODULES = { apple: appleView, postseason: postseasonView };
+const VIEW_MODULES = { apple: appleView, postseason: postseasonView, scatter: scatterView };
 const VIEW_IDS = Object.keys(VIEW_MODULES);
 
 const HINTS = {
   apple: 'Pick a booth to list its games.',
   postseason: 'Pick a postseason cell or a season to list its games.',
+  scatter: 'One dot per game. Pick a booth, cell or season on its tab to highlight its games here.',
 };
 
 function el(tag, className, text) {
@@ -269,6 +272,7 @@ function renderTabHint() {
 function showActiveView({ resize }) {
   for (const id of VIEW_IDS) views[id].section.hidden = id !== state.view;
   tabs.setActive(state.view);
+  showToolsFor(regions.tools, state.view);
   if (resize && views[state.view]) views[state.view].mod.resize();
 }
 
@@ -333,6 +337,10 @@ const ctx = {
   get model() {
     return model;
   },
+  get chartTools() {
+    return regions ? regions.tools : null;
+  },
+  methodologyHref: (anchor) => (anchor ? `methodology.html#${anchor}` : 'methodology.html'),
   getState: () => state,
   setState: (patch) => setState(patch),
   env,

@@ -7,6 +7,7 @@
 const LABELS = Object.freeze({
   apple: 'Apple crews',
   postseason: 'Postseason booths',
+  scatter: 'Scatter',
 });
 
 /**

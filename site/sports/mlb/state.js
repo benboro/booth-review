@@ -8,7 +8,7 @@
  */
 import { boothLabelOf, cellLabel } from './data.js';
 
-export const MLB_VIEWS = Object.freeze(['apple', 'postseason']);
+export const MLB_VIEWS = Object.freeze(['apple', 'postseason', 'scatter']);
 export const MLB_STYPES = Object.freeze(['post', 'reg']);
 export const MLB_SROUNDS = Object.freeze(['wild_card', 'division', 'lcs', 'world_series', 'tiebreak']);
 
