@@ -5233,3 +5233,86 @@ tr.is-matched > :first-child {
     align-items: center;
   }
 }
+
+/* NFL Raw reason bar (15-04, D-06): reserved 56px, 96px on phones, spaceless when hidden. */
+.nfl-reason-bar {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  padding: 8px 16px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ink);
+  box-sizing: border-box;
+  height: 56px;
+  overflow: hidden;
+}
+
+.nfl-reason-bar[hidden] {
+  display: none;
+}
+
+/* NFL Viewership window key (15-04): solid and dashed line swatches. */
+.nfl-window-key {
+  list-style: none;
+  margin: 0 0 0 auto;
+  padding: 0;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.nfl-window-key li {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.nfl-window-key .swatch {
+  width: 24px;
+  height: 2px;
+  background: var(--ink);
+}
+
+.nfl-window-key .swatch.is-dashed {
+  background: repeating-linear-gradient(90deg, var(--ink) 0 4px, transparent 4px 8px);
+}
+
+/* Space kept so the chips do not move when the key is not shown. */
+.nfl-window-key.is-reserved {
+  visibility: hidden;
+}
+
+/* Viewership subtitle row: its own full row after the title and tools. */
+.nfl-chart-module[data-view="viewership"] .module-head {
+  flex-wrap: wrap;
+}
+
+.nfl-chart-module[data-view="viewership"] #nfl-chart-subtitle {
+  flex-basis: 100%;
+  order: 3;
+  min-height: 20px;
+  margin: 0;
+  white-space: normal;
+}
+
+.nfl-chart-module[data-view="viewership"] #nfl-chart-subtitle a {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+@media (max-width: 480px) {
+  .nfl-reason-bar {
+    height: 96px;
+  }
+
+  .nfl-window-key {
+    flex-basis: 100%;
+    margin: 8px 0 0;
+  }
+
+  .nfl-chart-module[data-view="viewership"] #nfl-chart-subtitle {
+    min-height: 80px;
+  }
+}
