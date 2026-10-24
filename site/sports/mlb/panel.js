@@ -33,7 +33,7 @@ function roundLine(row) {
   if (!row.roundLabel) return '';
   const bits = [row.roundLabel];
   if (row.seriesLeague) bits.push(row.seriesLeague);
-  if (row.seriesGame != null) bits.push(`game ${row.seriesGame}`);
+  if (row.seriesGame != null) bits.push(`Game ${row.seriesGame}`);
   return bits.length > 1 ? `${bits[0]} · ${bits.slice(1).join(', ')}` : bits[0];
 }
 
@@ -142,7 +142,7 @@ function lineupList(side) {
 }
 
 function lineupsSection(row) {
-  const nodes = [el('h3', null, 'Lineups')];
+  const nodes = [el('h3', null, 'Starting Lineups')];
   if (row.lineupStatus === 'pending') {
     nodes.push(el('p', 'mlb-lineup-note', 'Lineups: pending Retrosheet 2026'));
     return nodes;
