@@ -42,21 +42,53 @@ def test_booth_selection_lists_its_games(mlb: Page) -> None:
     headers = mlb.eval_on_selector_all(
         "#mlb-matched-games thead th", "els => els.map(e => e.textContent.replace(/[▲▼]/g, ''))"
     )
-    assert headers == ["Date", "Matchup", "Round", "Outlet", "Crew", "Viewers"]
+    assert headers == ["Date", "Matchup", "Round", "Network", "Crew", "Viewers"]
     rows = mlb.locator("#mlb-matched-games tbody tr")
     assert rows.count() == 2
     text = mlb.inner_text("#mlb-matched-games tbody")
     assert "Apr 10, 2026" in text
-    assert "1.8M" in text
+    assert "1,800,000" in text
     assert "not posted yet" in text
-    tags = mlb.eval_on_selector_all(
-        "#mlb-matched-games .mlb-source-tag", "els => els.map(e => e.textContent)"
-    )
-    assert sorted(tags) == ["506", "relay"]
+    assert mlb.locator("#mlb-matched-games td .mlb-source-tag[data-source]").count() == 0
     assert "Ada Quill" in text
     assert mlb.locator("#mlb-clear-selection").is_visible()
     mlb.click("#mlb-clear-selection")
     assert mlb.evaluate(f"{HOOKS}.getTableIndexes()") == []
+
+
+def _subtitle(page: Page) -> str:
+    return page.inner_text("#mlb-matched-subtitle")
+
+
+def test_subtitle_follows_sort_and_resets_on_new_selection(mlb: Page) -> None:
+    assert mlb.locator("#mlb-matched-subtitle").is_hidden()
+    mlb.evaluate(f"{HOOKS}.setState({{ booth: '0' }})")
+    label = mlb.evaluate(f"{HOOKS}.getState().booth") and _subtitle(mlb).rsplit(", ", 1)[0]
+    assert _subtitle(mlb).endswith(", newest first")
+    viewers = "#mlb-matched-games th button[data-sort='viewers']"
+    date = "#mlb-matched-games th button[data-sort='date']"
+    mlb.click(viewers)
+    assert _subtitle(mlb) == f"{label}, most viewers first"
+    mlb.click(viewers)
+    assert _subtitle(mlb) == f"{label}, fewest viewers first"
+    mlb.click(date)
+    assert _subtitle(mlb).endswith(", oldest first")
+    mlb.click(viewers)
+    mlb.evaluate(f"{HOOKS}.setState({{ booth: '1' }})")
+    assert _subtitle(mlb).endswith(", newest first")
+    mlb.evaluate(f"{HOOKS}.setState({{ booth: null }})")
+    assert mlb.locator("#mlb-matched-subtitle").is_hidden()
+
+
+def test_regular_season_round_cell_and_empty_copy(mlb: Page) -> None:
+    assert "Pick a booth, a postseason cell or a season to list its games." in mlb.inner_text(
+        "#mlb-matched-games"
+    )
+    mlb.evaluate(f"{HOOKS}.setState({{ booth: '0' }})")
+    cells = mlb.eval_on_selector_all(
+        "#mlb-matched-games tbody tr td:nth-child(3)", "els => els.map(e => e.textContent)"
+    )
+    assert cells and all(c == "Reg. Season" for c in cells)
 
 
 def test_postseason_cell_selection_and_empty_crew(mlb: Page) -> None:
@@ -65,11 +97,12 @@ def test_postseason_cell_selection_and_empty_crew(mlb: Page) -> None:
     text = mlb.inner_text("#mlb-matched-games tbody")
     assert "crew not listed" in text
     assert "Wild Card" in text
-    assert "AL, game 1" in text
+    assert "AL, Game 1" in text
     mlb.evaluate(f"{HOOKS}.setState({{ cell: '2019-division-AL' }})")
     text = mlb.inner_text("#mlb-matched-games tbody")
     assert "per-network figures only" in text
-    assert "Wikipedia" in text
+    assert "Wikipedia" not in text
+    assert "Division Series" in text
 
 
 def test_lineups_nine_batters_and_starter_per_side(mlb: Page) -> None:
@@ -81,6 +114,7 @@ def test_lineups_nine_batters_and_starter_per_side(mlb: Page) -> None:
         slots = col.locator("li .mlb-slot").all_inner_texts()
         assert slots == ["1", "2", "3", "4", "5", "6", "7", "8", "9", "SP"]
     text = _panel(mlb)
+    assert mlb.locator("#mlb-detail-panel h3", has_text="Starting Lineups").count() == 1
     assert "Invented Player 00" in text
     assert "Harbor City Gulls" in text
     assert "obtained free of charge from and is copyrighted by Retrosheet" in text
@@ -241,12 +275,20 @@ def test_phone_panel_fits_without_sideways_scroll(
     assert page.locator("#mlb-detail-panel .mlb-lineup").count() == 2
 
 
+def test_panel_round_line(mlb: Page) -> None:
+    _open(mlb, 6)
+    assert "Wild Card · AL, Game 1" in _panel(mlb)
+    _open(mlb, 0)
+    assert "Reg. Season" in _panel(mlb)
+
+
 def test_506_crew_credit_link_text_and_href(mlb: Page) -> None:
     """RT-14: a 506-sourced crew reads 'Crew from 506 Sports ↗' and links to the week page."""
     _open(mlb, 1)
     link = mlb.locator('#mlb-detail-panel a:has-text("506 Sports ↗")')
     assert link.count() == 1
     assert link.inner_text() == "506 Sports ↗"
+    assert link.get_attribute("rel") == "noopener noreferrer"
     assert link.get_attribute("href") == "https://example.org/506/mlb-week"
     assert "Crew from 506 Sports ↗" in _panel(mlb)
 

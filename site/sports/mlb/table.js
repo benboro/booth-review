@@ -11,7 +11,8 @@ import { crewList, nameWithRoles, makeRolePill } from '../../modules/pill.js';
 import { networkMark } from '../../modules/network.js';
 import { attachScrollCue } from '../../modules/scroll-cue.js';
 import { dateShortText } from './format.js';
-import { CAUSE_COPY, crewSourceTag, viewersText } from './data.js';
+import { formatViewers } from '../../modules/format.js';
+import { CAUSE_COPY } from './data.js';
 
 const ROLE_ORDER = { pbp: 0, analyst: 1 };
 
@@ -55,21 +56,16 @@ function crewCell(td, row) {
   for (const c of ordered) {
     nodes.push(nameWithRoles(el('span', 'crew-name', c.name), makeRolePill(c.role)));
   }
-  const tag = crewSourceTag(row.crewSource);
-  if (tag) {
-    const t = el('span', 'nfl-muted mlb-source-tag', tag);
-    t.dataset.source = row.crewSource;
-    notes.push(t);
-  }
   td.replaceChildren(crewList(nodes, notes));
 }
 
 function roundCell(td, row) {
   if (!row.roundLabel) return;
-  td.textContent = row.roundLabel;
+  td.textContent = row.roundShort;
+  td.title = row.roundLabel;
   const bits = [];
   if (row.seriesLeague) bits.push(row.seriesLeague);
-  if (row.seriesGame != null) bits.push(`game ${row.seriesGame}`);
+  if (row.seriesGame != null) bits.push(`Game ${row.seriesGame}`);
   if (bits.length) {
     td.appendChild(el('br'));
     td.appendChild(el('span', 'nfl-muted', bits.join(', ')));
@@ -112,10 +108,9 @@ function buildRow(row, onOpen) {
   tr.appendChild(crewTd);
 
   const vTd = el('td');
-  const vText = viewersText(row.viewers);
-  if (vText) {
+  if (row.viewers != null) {
     vTd.className = 'num';
-    vTd.textContent = vText;
+    vTd.textContent = formatViewers(row.viewers);
     if (row.scope === 'window') {
       const tag = el('span', 'nfl-muted mlb-source-tag', 'window');
       tag.dataset.scope = 'window';
@@ -128,6 +123,12 @@ function buildRow(row, onOpen) {
   }
   tr.appendChild(vTd);
   return tr;
+}
+
+/** How the subtitle reads the active sort (same wording as the CFB table). */
+function sortPhrase(sort) {
+  if (sort.key === 'viewers') return sort.dir === 'desc' ? 'most viewers first' : 'fewest viewers first';
+  return sort.dir === 'desc' ? 'newest first' : 'oldest first';
 }
 
 function summaryText(rows) {
@@ -147,6 +148,9 @@ function summaryText(rows) {
 export function createGamesTable(host, { onOpen } = {}) {
   const section = el('section', 'nfl-games');
   const heading = el('h2', null, 'Matched games');
+  const subtitle = el('p', 'module-subtitle');
+  subtitle.id = 'mlb-matched-subtitle';
+  subtitle.hidden = true;
   const summary = el('p', 'nfl-games-summary');
   const empty = el('div', 'empty-state');
   empty.hidden = true;
@@ -160,7 +164,7 @@ export function createGamesTable(host, { onOpen } = {}) {
     ['Date', 'date'],
     ['Matchup', null],
     ['Round', null],
-    ['Outlet', null],
+    ['Network', null],
     ['Crew', null],
     ['Viewers', 'viewers', true],
   ]) {
@@ -186,12 +190,14 @@ export function createGamesTable(host, { onOpen } = {}) {
   head.append(heading);
   const scroll = el('div', 'table-scroll');
   scroll.append(table);
-  section.append(head, summary, empty, scroll);
+  section.append(head, subtitle, summary, empty, scroll);
   attachScrollCue(scroll, head);
   host.appendChild(section);
 
   let sort = { key: 'date', dir: 'desc' };
   let current = [];
+  let selectionLabelNow = '';
+  let lastKey = null;
 
   function syncHeaders() {
     for (const [key, b] of Object.entries(sortButtons)) {
@@ -203,26 +209,43 @@ export function createGamesTable(host, { onOpen } = {}) {
     }
   }
 
+  function syncSubtitle() {
+    if (!selectionLabelNow || current.length === 0) {
+      subtitle.hidden = true;
+      subtitle.textContent = '';
+      subtitle.removeAttribute('title');
+      return;
+    }
+    subtitle.textContent = `${selectionLabelNow}, ${sortPhrase(sort)}`;
+    subtitle.title = subtitle.textContent;
+    subtitle.hidden = false;
+  }
+
   function paint() {
     syncHeaders();
+    syncSubtitle();
     const sorted = [...current].sort((a, b) => compareRows(sort, a, b));
     tbody.replaceChildren(...sorted.map((r) => buildRow(r, onOpen)));
   }
 
   for (const [key, b] of Object.entries(sortButtons)) {
     b.addEventListener('click', () => {
-      sort = sort.key === key ? { key, dir: sort.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' };
+      sort = sort.key === key ? { key, dir: sort.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'date' ? 'asc' : 'desc' };
       paint();
     });
   }
 
   return {
-    render(rows, { emptyKind = 'nothing', selectionLabel = '' } = {}) {
+    render(rows, { emptyKind = 'nothing', selectionLabel = '', selectionKey = null } = {}) {
       current = rows;
+      selectionLabelNow = selectionLabel;
+      if (selectionKey !== lastKey) sort = { key: 'date', dir: 'desc' };
+      lastKey = selectionKey;
       if (rows.length === 0) {
         table.hidden = true;
         empty.hidden = false;
         summary.textContent = '';
+        syncSubtitle();
         if (emptyKind === 'filtered') {
           empty.replaceChildren(
             el('h3', null, 'No matching games'),
@@ -231,7 +254,7 @@ export function createGamesTable(host, { onOpen } = {}) {
         } else {
           empty.replaceChildren(
             el('h3', null, 'Nothing selected'),
-            el('p', null, 'Pick a booth or a postseason cell from the chart to list its games.'),
+            el('p', null, 'Pick a booth, a postseason cell or a season to list its games.'),
           );
         }
         tbody.replaceChildren();

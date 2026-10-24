@@ -255,7 +255,11 @@ function renderSelectionBar() {
 function renderTable() {
   lastRows = tableGames(model, state).map((i) => gameRow(model, i));
   const label = selectionLabel(model, state);
-  table.render(lastRows, { emptyKind: label ? 'filtered' : 'nothing', selectionLabel: label });
+  table.render(lastRows, {
+    emptyKind: label ? 'filtered' : 'nothing',
+    selectionLabel: label,
+    selectionKey: JSON.stringify([state.booth, state.cell, state.selection ? state.selection.label : null]),
+  });
 }
 
 function renderTabHint() {

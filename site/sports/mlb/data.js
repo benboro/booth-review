@@ -36,13 +36,6 @@ export const CAUSE_COPY = Object.freeze({
   window_level: 'window-level figure',
 });
 
-const SOURCE_TAGS = Object.freeze({
-  override: 'confirmed',
-  506: '506',
-  relay: 'relay',
-  wikipedia: 'Wikipedia',
-});
-
 /** Columnar block -> array of row objects keyed by column name. */
 function rowsOf(block) {
   const keys = Object.keys(block);
@@ -191,11 +184,6 @@ export function cellLabel(cell) {
 /** '12.0M' or null when unrated. */
 export function viewersText(viewers) {
   return viewers == null ? null : `${(viewers / 1e6).toFixed(1)}M`;
-}
-
-/** Source tag for the table's Crew column, or null. */
-export function crewSourceTag(source) {
-  return source == null ? null : SOURCE_TAGS[source] ?? null;
 }
 
 function lineupSide(model, row) {
