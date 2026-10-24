@@ -149,6 +149,17 @@ def test_csort(app: Page) -> None:
     assert _url(app, "?csort=bogus")["decoded"]["csort"] is None
 
 
+def test_csort_games_survives_a_one_season_range(app: Page) -> None:
+    """The default follows the stored Per season preference, so `csort=games` (not the
+    per-season default) is kept while the range is one season and is back when it widens."""
+    seasons = app.evaluate("window.__testHooks.data.seasons")
+    one = _url(app, f"?csort=games&seasons={seasons[-1]}-{seasons[-1]}")
+    assert one["decoded"]["csort"] == {"key": "games", "dir": "desc"}
+    assert "csort=games" in one["encoded"]
+    wide = _url(app, one["encoded"].replace(f"seasons={seasons[-1]}-", f"seasons={seasons[0]}-"))
+    assert wide["decoded"]["csort"] == {"key": "games", "dir": "desc"}
+
+
 def test_crews_params_survive_view_change(app: Page) -> None:
     key = _key(app)
     app.evaluate(

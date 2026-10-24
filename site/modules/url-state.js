@@ -27,7 +27,7 @@
  * stale `?view=scatter&crew=...` survives a setState round trip: `crew` (a pooled crew key, allowlisted
  * by `CREW_KEY_RE` and by existence in `crewIndex(data).crews`; dropped when `people` is present, A7),
  * `cmode` (`pbp`/`analyst`; Crew is the omitted default), `perseason` (`0` = pooled; Per season is the omitted default since Phase 14 Plan 10, and a
- * one-season range applies it as pooled without storing that) and `csort` (`<key>` or `<key>.asc|desc`; omitted at the Games-descending default; `rank`
+ * one-season range applies it as pooled without storing that) and `csort` (`<key>` or `<key>.asc|desc`; omitted at the default of the stored Per season preference, Season newest first or Games descending, so a chosen sort survives a one-season range; `rank`
  * only in Crew mode, `season` only with Per season on, A8). `booth` (`a`,`b`,`other`, canonical order; omitted when no
  * tier is picked; Phase 10 D-12). The old `bars` and
  * `group` params are ignored (04.6 D-27). There is no `team` param on encode -- `school` replaces
@@ -56,13 +56,6 @@ function isAllPrimaryNetworks(networkIds, allPrimaryIds) {
     networkIds.length === allPrimaryIds.length &&
     allPrimaryIds.every((id) => networkIds.includes(id))
   );
-}
-
-/** Per season applies when the preference is on and the Seasons range holds two or more seasons. */
-function perSeasonApplies(state, data) {
-  const lo = state.seasons ? state.seasons[0] : data.seasonMin;
-  const hi = state.seasons ? state.seasons[1] : data.seasonMax;
-  return state.perseason !== false && data.seasons.filter((s) => s >= lo && s <= hi).length >= 2;
 }
 
 /**
@@ -141,7 +134,9 @@ export function encodeState(state, data) {
   if (state.csort != null && CSORT_RE.test(state.csort.key)) {
     const { key, dir } = state.csort;
     const natural = NATURAL_DIR[key];
-    const def = defaultSort(perSeasonApplies(state, data));
+    // The default follows the stored Per season preference, not the range, so a chosen
+    // `csort=games` survives a one-season range and is still there when it widens.
+    const def = defaultSort(state.perseason !== false);
     const isDefault = key === def.key && dir === def.dir;
     if (!isDefault) params.push(['csort', dir === natural ? key : `${key}.${dir}`]);
   }
@@ -393,7 +388,7 @@ export function decodeState(search, data) {
     const dir = csortMatch[3] ?? NATURAL_DIR[key];
     const modeOk = key !== 'rank' || state.cmode === 'crew';
     const seasonOk = key !== 'season' || (state.perseason && seasonsInRange >= 2);
-    const def = defaultSort(state.perseason && seasonsInRange >= 2);
+    const def = defaultSort(state.perseason);
     const isDefault = key === def.key && dir === def.dir;
     if (modeOk && seasonOk && !isDefault && NATURAL_DIR[key] !== undefined) state.csort = { key, dir };
   }
