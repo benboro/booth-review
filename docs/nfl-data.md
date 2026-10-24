@@ -44,8 +44,8 @@ Columnar like the CFB file: each block is an object of equal-length lists, and i
 
 `season`, `in_progress` (true while the season is under way), `through_week`
 (last week with results), `viewership_through_week`, `crews_default_season` (the latest
-season before the in-progress one; the Crews view opens there). The two weeks and
-the default season are `null` when unknown.
+season before the in-progress one). The two weeks and
+the default season are `null` when unknown. `crews_default_season` stays in the contract, but the site no longer reads it since Phase 15 (Crews follows the master Seasons range).
 
 ### constants
 
@@ -132,8 +132,8 @@ doubleheader weeks minus ambiguous weeks and shows "n/a" at zero, never 0.
 
 ### booths
 
-Booth rows, one per season, network group and booth, never pooled across seasons
-because the standard errors do not pool. Win-probability volatility stays in the vault
+Booth rows, one per season, network group and booth, which the site pools exactly across
+the Seasons range from their counts, means and standard errors (see methodology). Win-probability volatility stays in the vault
 table and is not shipped.
 
 - `season`, `network_group` (`lookups.network_groups` index).

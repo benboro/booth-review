@@ -227,12 +227,14 @@ a value for the shown metric. No NFL contract, golden or fixture changes.
 | Crews x Announcers (booth's play-by-play voice) | row filter: `booths[].pbp_person` |
 | Crews x Announcers (analyst, fill-in or other crew member) | Raw, from the absolute value of `games[].final_margin`, `excitement`, `viewers` via `booths[].game_list` |
 | Crews x Team, Crews x Category | Raw, as above |
-| Viewership x Seasons | row filter: `viewership[].games`, `mean_viewers`, `era`, raw pooled only within one measurement era; Residual shows `viewership_resid`, `viewership_se` per category-season, not pooled |
+| Viewership x Seasons | row filter on `viewership[]` rows: Seasons trims the points drawn, one point per category-season in both settings (`mean_viewers`, `games`; Residual `viewership_resid`, `viewership_se`); nothing is pooled across seasons |
 | Viewership x Category, Team, Announcers or Booths | Raw, from `games[].viewers` via `viewership[].game_list` |
 | Special games x Seasons | row filter: `special[]` whole rows |
 | Special games x Category | fades segments within `special[]` rows; no row is dropped |
 | Special games x Team, Announcers | `games[].home`, `away`, `crew`, `slot`, `standalone`, `agotw`, `cbs_national`, `international`, `flexed` (no spread value used) |
 | Scatter, Matched games table x any pick | `games[]` fields, by pass |
+
+Phase 15 (2026-10-23): the approved 15-UI-SPEC trims Viewership points to the Seasons range instead of pooling Viewers within one era; the 12-DECISIONS reading of pooled Viewers is not built.
 
 506's owners were asked about reuse and have not replied. The CFB, NFL and later
 MLB views show 506 crews and networks with credit, and they come off the site if

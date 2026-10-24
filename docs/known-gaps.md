@@ -252,7 +252,11 @@ Games with no public viewer figure are shown, not dropped: they sit in a "No pub
 
 ## NFL crews outside Fox and CBS
 
-506 Sports lists crews for regional Fox and CBS games but rarely for national NBC, ESPN/ABC, Amazon and NFL Network games. The Crews view says "Crew listed for N of M games" for each network. Cited published lineups fill only the flagship-window games of seasons with a cited release, so other national games stay without a crew. See [NFL: Published lineups](methodology.md#nfl-published-lineups).
+506 Sports lists crews for regional Fox and CBS games but rarely for national NBC, ESPN/ABC, Amazon and NFL Network games. Games with no listed crew do not appear in the Crews table. Cited published lineups fill only the flagship-window games of seasons with a cited release, so other national games stay without a crew. See [NFL: Published lineups](methodology.md#nfl-published-lineups).
+
+## NFL: regional Sunday-afternoon games have no published figure
+
+Ratings Reference compiles national windows, so regional Sunday-afternoon games (outside Fox AGOTW and CBS late national) have no figure of their own. They read "No public rating" and stay out of every viewers average, while the window-level figures cover every game in their window. See [NFL: Window-level viewership](methodology.md#nfl-window-level-viewership).
 
 <!-- nfl:end -->
 
