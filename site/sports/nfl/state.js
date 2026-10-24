@@ -345,9 +345,13 @@ function newestFirst(model, list) {
 /** Game indexes for the Matched games table. */
 export function tableGames(model, state) {
   let base = null;
-  if (state.selection && Array.isArray(state.selection.games)) base = state.selection.games;
-  else {
-    const picks = computePicks(model, state);
+  const picks = computePicks(model, state);
+  if (state.selection && Array.isArray(state.selection.games)) {
+    // Under a pick a chart click may carry games the pick excludes (a Special games bar, a point's
+    // full list) and a selection can go stale when the pick changes, so intersect with the matched
+    // mask. A scatter hand-pick that a later pick change leaves unmatched drops out of the table.
+    base = picks.hasPick ? state.selection.games.filter((i) => picks.matched[i]) : state.selection.games;
+  } else {
     if (picks.hasPick) {
       // U-05: Announcers and Booths intersect; computePicks already applies Seasons, Team and Category.
       base = [];

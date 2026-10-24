@@ -637,3 +637,81 @@ def test_no_console_errors(nfl_guarded_page: Page, open_nfl_app: Callable[..., N
     page.locator(f"{TOOLS} .segmented button", has_text="Residual").click()
     _vm(page)
     assert errors == []
+
+
+# ------------------------------------------------------------------ pick-scoped click (F2, F1)
+
+
+def _click_every_point_matches_n(page: Page, raw: dict[str, Any]) -> int:
+    """Click each plotted point; its table length, probe `games` and n must agree.
+
+    Returns how many points had a full game list longer than n (the pick cut games out).
+    """
+    vm = _vm(page)
+    ids = [c["id"] for c in _cats(raw)]
+    v = raw["viewership"]
+    full = {
+        (ids[v["category"][k]], v["season"][k]): len(v["game_list"][k])
+        for k in range(len(v["season"]))
+    }
+    k = 0
+    cut = 0
+    for c in vm["categories"]:
+        for p in c["points"]:
+            _emit(page, "plotly_click", k)
+            page.wait_for_function("window.__nflTestHooks.getState().selection !== null")
+            assert len(page.evaluate("window.__nflTestHooks.getTableIndexes()")) == p["n"]
+            assert p["games"] == p["n"]
+            if full[(c["id"], p["season"])] > p["n"]:
+                cut += 1
+            page.wait_for_timeout(600)  # past the touch double-fire guard
+            k += 1
+    return cut
+
+
+def test_point_click_under_an_announcer_pick_lists_only_matched_games(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
+) -> None:
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    _vm(page)
+    _set(page, {"people": ["p01"]})
+    assert _click_every_point_matches_n(page, nfl_fixture_raw) > 0
+
+
+def test_point_click_under_a_booth_pick_lists_only_matched_games(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
+) -> None:
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    _vm(page)
+    # Booth 16 of the fixture: p12 calling play-by-play on the fourth network group.
+    group = nfl_fixture_raw["lookups"]["network_groups"][3]["id"]
+    _set(page, {"booths": [f"{group}:p12"]})
+    assert _click_every_point_matches_n(page, nfl_fixture_raw) > 0
+
+
+def test_selection_follows_a_pick_change(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    vm = _vm(page)
+    key = page.evaluate("window.__nflTestHooks.getBoothCatalog()[0].key")
+    _set(page, {"booths": [key]})
+    page.wait_for_function("window.__nflTestHooks.getState().booths.length === 1")
+    matched = set(page.evaluate("window.__nflTestHooks.getTableIndexes()"))
+    _set(page, {"booths": []})
+    page.wait_for_function("window.__nflTestHooks.getState().booths.length === 0")
+    # Click a point with no pick, then pick the booth: the table narrows to the matched games.
+    _emit(page, "plotly_click", 0)
+    page.wait_for_function("window.__nflTestHooks.getState().selection !== null")
+    before = page.evaluate("window.__nflTestHooks.getTableIndexes()")
+    assert len(before) == vm["categories"][0]["points"][0]["n"]
+    _set(page, {"booths": [key]})
+    page.wait_for_function("window.__nflTestHooks.getState().booths.length === 1")
+    after = page.evaluate("window.__nflTestHooks.getTableIndexes()")
+    assert sorted(after) == sorted(set(before) & matched)
+    _set(page, {"booths": []})
+    page.wait_for_function("window.__nflTestHooks.getState().booths.length === 0")
+    assert sorted(page.evaluate("window.__nflTestHooks.getTableIndexes()")) == sorted(before)

@@ -151,6 +151,34 @@ function shownFrom(present, hidden) {
   return present.filter((id) => !h.has(id));
 }
 
+/** The series the chart and legend draw: under a pick, Category or Team each point is recounted to its matched games. */
+function recountedSeries(model, state) {
+  const picks = computePicks(model, state);
+  const subset = picks.hasPick || state.cats.length > 0 || state.teams.length > 0;
+  const series = viewershipSeries(model, state);
+  if (subset) {
+    const viewers = model.cols.viewers;
+    for (const s of series) {
+      s.points = s.points
+        .map((p) => {
+          let sum = 0;
+          let count = 0;
+          const gameList = [];
+          for (const g of p.gameList || []) {
+            if (picks.matched[g] !== 1 || viewers[g] == null) continue;
+            sum += viewers[g];
+            count++;
+            gameList.push(g);
+          }
+          // gameList follows the recount so hover crews, the Crew column, the click and the probe agree with n.
+          return { ...p, gameList, mean: count ? sum / count : null, games: count, lowN: count < LOW_N };
+        })
+        .filter((p) => p.games > 0);
+    }
+  }
+  return series;
+}
+
 function onlyPatch(key, before) {
   const { ctx } = refs;
   const present = presentIds(viewershipSeries(ctx.model, ctx.getState()));
@@ -606,26 +634,7 @@ export function render(ctx) {
   linkDisabled(refs.residButton, refs.reasonBar, mode.forced);
   setReason(refs.reasonBar, mode.reason);
 
-  const picks = computePicks(model, state);
-  const subset = picks.hasPick || state.cats.length > 0 || state.teams.length > 0;
-  const series = viewershipSeries(model, state);
-  if (subset) {
-    const viewers = model.cols.viewers;
-    for (const s of series) {
-      s.points = s.points
-        .map((p) => {
-          let sum = 0;
-          let count = 0;
-          for (const g of p.gameList || []) {
-            if (picks.matched[g] !== 1 || viewers[g] == null) continue;
-            sum += viewers[g];
-            count++;
-          }
-          return { ...p, mean: count ? sum / count : null, games: count, lowN: count < LOW_N };
-        })
-        .filter((p) => p.games > 0);
-    }
-  }
+  const series = recountedSeries(model, state);
   renderLegend(series, state, th);
 
   const resid = eff === 'resid';
