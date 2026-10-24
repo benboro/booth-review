@@ -825,7 +825,9 @@ def test_viewer_cells_and_game_list_figures_show_one_decimal(app: Page) -> None:
 @pytest.fixture
 def harlow(guarded_page: Page, open_app: Callable[[Page, str], None]) -> Page:
     """The base site fixture, which holds Dale Harlow (PBP) and Dale Harlow Jr. (analyst)."""
-    open_app(guarded_page, "?view=crews&cmode=analyst&perseason=0&people=dale-harlow,dale-harlow-jr")
+    open_app(
+        guarded_page, "?view=crews&cmode=analyst&perseason=0&people=dale-harlow,dale-harlow-jr"
+    )
     return guarded_page
 
 
