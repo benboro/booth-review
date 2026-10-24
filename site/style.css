@@ -5389,7 +5389,7 @@ tr.is-matched > :first-child {
 
 /* The window sentence wraps to two lines below about 1000px, so the row reserves two lines
    there; it then holds the same height with and without the sentence. */
-@media (max-width: 999px) {
+@media (width < 1000px) {
   .nfl-chart-module[data-view="viewership"] #nfl-chart-subtitle {
     min-height: 40px;
   }
