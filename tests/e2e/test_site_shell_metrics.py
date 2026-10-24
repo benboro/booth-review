@@ -71,7 +71,7 @@ MLB = Sport(
     "mlb",
     "?sport=mlb",
     "__mlbTestHooks",
-    tuple(f"#mlb-tab-{v}" for v in ("apple", "postseason")),
+    tuple(f"#mlb-tab-{v}" for v in ("apple", "postseason", "scatter")),
     "#mlb-chart-tabs",
     "#mlb-chart-area .nfl-chart-module",
     "#mlb-selection-area",

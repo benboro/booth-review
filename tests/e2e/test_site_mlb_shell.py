@@ -222,7 +222,7 @@ def test_tab_bar_lists_exactly_the_registered_views(
     tabs = mlb_guarded_page.eval_on_selector_all(
         "#mlb-chart-tabs [role=tab]", "els => els.map(e => e.textContent)"
     )
-    assert tabs == ["Apple crews", "Postseason booths"]
+    assert tabs == ["Apple crews", "Postseason booths", "Scatter"]
     assert mlb_guarded_page.locator("#mlb-chart-tabs").is_visible()
     assert mlb_guarded_page.locator("#mlb-tab-apple[aria-selected='true']").count() == 1
     mlb_guarded_page.click("#mlb-tab-postseason")
@@ -242,3 +242,8 @@ def test_view_deep_links(mlb_guarded_page: Page, open_mlb_app: Callable[..., Non
     assert page.locator("#mlb-tab-apple[aria-selected='true']").count() == 1
     assert page.locator("#mlb-view-apple table.mlb-apple-table").is_visible()
     assert page.locator("#mlb-view-postseason").is_hidden()
+    open_mlb_app(page, "?sport=mlb&view=scatter")
+    assert page.locator("#mlb-tab-scatter[aria-selected='true']").count() == 1
+    assert page.locator("#mlb-view-scatter").is_visible()
+    assert page.locator("#mlb-view-apple").is_hidden()
+    assert page.evaluate("window.__mlbTestHooks.getState().view") == "scatter"
