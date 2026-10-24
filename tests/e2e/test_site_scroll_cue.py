@@ -11,7 +11,7 @@ from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
 
-WRAP = "document.querySelector('.nfl-booth-table-wrap.table-scroll')"
+WRAP = "document.querySelector('#mlb-chart-area .crews-table-wrap.table-scroll')"
 
 
 def test_scroll_extent_shrinks_when_the_table_narrows(
@@ -22,12 +22,15 @@ def test_scroll_extent_shrinks_when_the_table_narrows(
     page.wait_for_function(f"() => {WRAP}.classList.contains('has-more-right')")
     # Hide every column past the second: the table now fits, so the fade and extent must go.
     page.evaluate(
-        f"""() => {WRAP}.querySelectorAll('tr').forEach((tr) =>
-          [...tr.children].slice(2).forEach((c) => {{ c.style.display = 'none'; }}))"""
+        f"""() => {{
+          {WRAP}.querySelectorAll('tr').forEach((tr) =>
+            [...tr.children].slice(2).forEach((c) => {{ c.style.display = 'none'; }}));
+          {WRAP}.querySelector('table').style.cssText = 'width:auto;min-width:0';
+        }}"""
     )
     page.wait_for_function(
         f"""() => {{ const w = {WRAP};
-          return w.scrollWidth === w.querySelector('table').offsetWidth
+          return w.scrollWidth <= w.clientWidth
             && !w.classList.contains('has-more-right'); }}"""
     )
 
