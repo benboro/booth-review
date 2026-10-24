@@ -39,6 +39,7 @@ def _densify(route: Route) -> None:
     b = data["apple_booths"]
     b["quality_status"] = ["ready", "ready", "pending"]
     b["game_list"] = [list(range(9)), [0, 1, 2, 9, 10, 11, 12, 13, 14], [4]]
+    b["games"] = [9, 9, 1]
     b["raw_stakes"] = [1.1, 0.9, None]
     b["raw_stakes_n"] = [3, 8, 0]
     b["adj_stakes"] = [0.2, -0.1, None]
