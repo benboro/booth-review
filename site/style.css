@@ -72,6 +72,13 @@
   --game-bowl: #A8501C;
   --game-rivalry: #8F2D3A;
   --game-playoff-text: #7A5A00;
+  /* MLB Apple crews rank pills (16-UI-SPEC): text on fill at 4.5:1, border at 3:1 on --bg and --accent-soft. */
+  --pill-gold-fill: #F2DFA0;
+  --pill-gold-ink: #5C4300;
+  --pill-gold-edge: #8A6A12;
+  --pill-silver-fill: #D9DBDF;
+  --pill-silver-ink: #3B3F46;
+  --pill-silver-edge: #80858D;
 }
 
 /* Placeholder dark values; untested until Phase 17. The data-theme attribute is the only theme hook. */
@@ -3790,80 +3797,6 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   margin: 0;
 }
 
-/* NFL Crews booth table; no CFB twin. The wrap scrolls sideways on phones with
-   the Booth column pinned. */
-.nfl-booth-table-wrap {
-  overflow-x: auto;
-}
-
-.booth-row-btn {
-  border: none;
-  background: transparent;
-  padding: 0;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.booth-row-btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-@media (max-width: 480px) {
-  /* Identity column pinned (UI-SPEC phone contract): sticky left with its own opaque fill.
-     Desktop has no column fill. */
-  .nfl-booth-table .booth-col {
-    position: sticky;
-    left: 0;
-    z-index: 1;
-    background: var(--bg);
-  }
-
-  .nfl-booth-table th.booth-col {
-    background: var(--surface);
-  }
-
-  .booth-row-btn {
-    min-height: 44px;
-  }
-
-  /* Phone Crews table: the booth cell stacks pbp, analyst and the low-n tag on their own
-     lines so the narrow Booth column leaves Games and the flagship column on screen. The
-     rest scrolls sideways, with an edge shadow as the cue. CFB's table has no twin. */
-  .booth-row-btn {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-xs);
-  }
-
-  .booth-rank {
-    min-width: 0;
-  }
-
-  .booth-names {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .booth-sep {
-    display: none;
-  }
-
-  .low-n-tag {
-    margin-left: 0;
-  }
-
-  .nfl-booth-table th,
-  .nfl-booth-table td {
-    padding-left: var(--space-xs);
-    padding-right: var(--space-xs);
-  }
-
-}
-
 /* NFL control rows: fixed-width groups side by side, never stretched to the row (the shared
    `.chart-controls` is a one-cell grid built for CFB's single controls block). */
 .nfl-crews-controls,
@@ -3878,36 +3811,6 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
    Measure caption keeps the 4px key-gap token so it does not touch the Viewers button. */
 .nfl-viewership-controls .axis-group {
   column-gap: var(--space-xs);
-}
-
-.booth-rank {
-  display: inline-block;
-  min-width: 4ch;
-  font-weight: 600;
-}
-
-.nfl-booth-table tr[data-low-n="true"] {
-  color: var(--disabled);
-}
-
-/* Low-n tag: a dashed muted pill, the same shape as the role tags (D-02). */
-.low-n-tag {
-  display: inline-block;
-  margin-left: var(--space-xs);
-  height: 20px;
-  padding: 0 8px;
-  border: 1px dashed var(--muted);
-  border-radius: 10px;
-  background: transparent;
-  color: var(--muted);
-  font: 400 12px/18px var(--sans);
-  white-space: nowrap;
-  vertical-align: baseline;
-}
-
-.nfl-booth-table tr[data-picked="true"] .booth-col,
-.booth-row-btn[aria-pressed="true"] {
-  border-inline-start: 3px solid var(--accent);
 }
 
 .nfl-coverage,
@@ -4997,6 +4900,167 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   .crews-more {
     width: 100%;
     min-height: 44px;
+  }
+}
+
+/* ---------- MLB Apple crews (Phase 16-06): the shared Crews table with MLB columns ---------- */
+
+.crews-table.is-mlb {
+  min-width: 1280px;
+}
+
+.crews-table.is-mlb th.crews-col-position {
+  width: 128px;
+}
+
+.crews-table.is-mlb th.crews-col-booth {
+  min-width: 320px;
+}
+
+.crews-table.is-mlb th.crews-col-network {
+  width: 128px;
+}
+
+.crews-table.is-mlb th.crews-col-games {
+  width: 88px;
+}
+
+.crews-table.is-mlb th.crews-col-listed {
+  width: 128px;
+}
+
+.crews-table.is-mlb th.crews-col-stakes,
+.crews-table.is-mlb th.crews-col-excitement {
+  width: 144px;
+}
+
+.crews-table.is-mlb th.crews-col-prior {
+  width: 160px;
+}
+
+.rank-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--rule-strong);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.rank-pill[data-rank="lead"] {
+  background: var(--pill-gold-fill);
+  color: var(--pill-gold-ink);
+  border-color: var(--pill-gold-edge);
+}
+
+.rank-pill[data-rank="2"] {
+  background: var(--pill-silver-fill);
+  color: var(--pill-silver-ink);
+  border-color: var(--pill-silver-edge);
+}
+
+.crews-with {
+  color: var(--muted);
+}
+
+.more-names {
+  display: inline-block;
+  min-height: 24px;
+  margin-left: var(--space-xs);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 24px;
+  text-decoration: underline dotted;
+  cursor: pointer;
+  vertical-align: baseline;
+}
+
+.more-names:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.crews-names-wrap {
+  position: relative;
+}
+
+.more-names-pop {
+  position: absolute;
+  z-index: 3;
+  left: 0;
+  top: 100%;
+  min-width: 160px;
+  padding: var(--space-sm);
+  border: 1px solid var(--rule-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.more-names-pop p {
+  margin: 0;
+}
+
+.mlb-analysts {
+  margin: 0 0 var(--space-sm);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.mlb-analysts .mlb-analyst-n {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.crews-table .crews-game-date {
+  white-space: nowrap;
+}
+
+.crews-table .crews-game-crew {
+  color: var(--muted);
+}
+
+@media (max-width: 480px) {
+  .table-scroll .games-table.crews-table.is-mlb {
+    width: 928px;
+    min-width: 928px;
+  }
+
+  .crews-table.is-mlb th.crews-col-position {
+    width: 88px;
+  }
+
+  .crews-table.is-mlb th.crews-col-booth {
+    width: 148px;
+    min-width: 148px;
+  }
+
+  .crews-table.is-mlb th.crews-col-network {
+    width: 96px;
+  }
+
+  .crews-table.is-mlb th.crews-col-games {
+    width: 80px;
+  }
+
+  .crews-table.is-mlb th.crews-col-listed {
+    width: 104px;
+  }
+
+  .crews-table.is-mlb th.crews-col-stakes,
+  .crews-table.is-mlb th.crews-col-excitement {
+    width: 128px;
+  }
+
+  .crews-table.is-mlb th.crews-col-prior {
+    width: 112px;
   }
 }
 

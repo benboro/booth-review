@@ -142,3 +142,18 @@ def test_text_colours_contrast(fg: str, bg: str) -> None:
     tokens = _root_tokens()
     ratio = _ratio(tokens[fg], tokens[bg])
     assert ratio >= 4.5, f"{fg} on {bg}: {ratio:.2f}:1"
+
+
+@pytest.mark.parametrize("tone", ["gold", "silver"])
+def test_rank_pill_text_contrast(tone: str) -> None:
+    tokens = _root_tokens()
+    ratio = _ratio(tokens[f"--pill-{tone}-ink"], tokens[f"--pill-{tone}-fill"])
+    assert ratio >= 4.5, f"pill {tone} text: {ratio:.2f}:1"
+
+
+@pytest.mark.parametrize("tone", ["gold", "silver"])
+@pytest.mark.parametrize("bg", ["--bg", "--accent-soft"])
+def test_rank_pill_edge_contrast(tone: str, bg: str) -> None:
+    tokens = _root_tokens()
+    ratio = _ratio(tokens[f"--pill-{tone}-edge"], tokens[bg])
+    assert ratio >= 3.0, f"pill {tone} edge on {bg}: {ratio:.2f}:1"
