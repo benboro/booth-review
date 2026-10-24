@@ -792,6 +792,12 @@ def test_table_formatter_always_has_one_decimal_and_the_shared_one_is_untouched(
     )
     assert out[0] == ["523.4K", "12.0K", "2.0MM", "50.6MM", "1.0MM", "1.0MM", "950"]
     assert out[1] == ["523.4K", "12K", "2MM", "50.6MM", "1MM", "1MM", "950"]
+    # Rounding comes before the unit, so a figure just under 1,000 reads 1.0K.
+    edge = app.evaluate(
+        "async () => { const f = await import('./modules/format.js');"
+        " return [999.6, 999.4, 999.5].map((v) => f.formatAudienceTable(v)); }"
+    )
+    assert edge == ["1.0K", "999", "1.0K"]
 
 
 def test_viewer_cells_and_game_list_figures_show_one_decimal(app: Page) -> None:

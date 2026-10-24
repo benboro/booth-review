@@ -334,7 +334,9 @@ export function formatAudienceShort(n) {
  * @returns {string} e.g. "523.4K", "12.0K", "2.0MM", "50.6MM".
  */
 export function formatAudienceTable(n) {
-  if (n < 1000) return String(Math.round(n));
+  // Round first, then pick the unit, so 999.6 reads "1.0K", never "1000".
+  const whole = Math.round(n);
+  if (whole < 1000) return String(whole);
   const k = Math.round(n / 100) / 10;
   if (k < 1000) return `${k.toFixed(1)}K`;
   return `${(Math.round(n / 1e5) / 10).toFixed(1)}MM`;
