@@ -3,14 +3,18 @@
  *
  * x = season, y = mean viewers, or (Residual) viewers versus what the matchup
  * quality predicts with +/-1.96 SE whiskers. Window-level categories (Fox AGOTW,
- * CBS late national) draw dashed. Booths picked in the toolbar highlight their
- * points; the lines are never recomputed in the browser (D-11). Controls, legend,
+ * CBS late national) draw dashed. Team, Announcers, Booths and Category picks recompute
+ * each point's raw mean from the matched games; Residual is never computed in the
+ * browser and is forced to Viewers under a pick (R3). Controls, legend,
  * captions and info note reuse the CFB classes and the shared legend detector
  * (D-18). Names enter Plotly strings only through escapeHover; every other
  * string goes through createElement/textContent.
  */
 import { placeEraLabels, setEraCaption } from '../era-labels.js';
-import { viewershipSeries, pointHasBooth } from '../state.js';
+import { viewershipSeries } from '../state.js';
+import { computePicks } from '../picks.js';
+import { viewershipMode } from '../mode.js';
+import { createReasonBar, setReason, linkDisabled } from '../reason-bar.js';
 import { viewCategoryStyle } from '../palette.js';
 import { ACCENT, MUTED, PAGE_BG, DIVIDER, ZERO_LINE } from '../../../modules/palette.js';
 import { frameConfig, frameLayout, referenceLine } from '../../../modules/chart-frame.js';
@@ -37,7 +41,8 @@ const BAND_FILL = {
 
 const LINE_WIDTH = 2.5;
 const BASE_SIZE = 8;
-const PICKED_SIZE = 10;
+const LOW_N = 8;
+const WINDOW_NOTE = 'Dashed lines are window-level: one figure covers every game in that Sunday window.';
 const MAX_CREWS = 3;
 
 const NOTES = [
@@ -60,6 +65,9 @@ const DODGE_STEP = 0.06;
 const refs = {
   ctx: null,
   measure: null,
+  residButton: null,
+  reasonBar: null,
+  windowKey: null,
   legend: null,
   bandButton: null,
   bandNote: null,
@@ -178,19 +186,19 @@ function pick(item) {
   });
 }
 
-function valueText(state, v) {
+function valueText(eff, v) {
   if (v == null) return 'not available';
-  return state.viewY === 'resid' ? millions(v, true) : millions(v, false);
+  return millions(v, eff === 'resid');
 }
 
 function hoverLines(item) {
-  const { state, model } = current;
+  const { model } = current;
   const p = item.p;
-  const resid = state.viewY === 'resid';
+  const resid = current.eff === 'resid';
   const lines = [
     { text: `${item.label}${item.windowLevel ? ' · window-level' : ''}`, kind: 'title' },
     { text: `${p.season} · ${model.eras[p.era].label}`, kind: 'body' },
-    { text: `${resid ? 'Residual' : 'Viewers'}: ${valueText(state, item.y)}`, kind: 'body' },
+    { text: `${resid ? 'Residual' : 'Viewers'}: ${valueText(current.eff, item.y)}`, kind: 'body' },
   ];
   if (resid && item.y != null && item.err == null) {
     lines.push({ text: '±1.96 standard errors: not available', kind: 'body' });
@@ -242,12 +250,16 @@ function buildControls() {
   refs.measure.setAttribute('aria-label', 'Measure');
   for (const o of [
     { key: 'mean', label: 'Viewers' },
-    { key: 'resid', label: 'Residual given game quality' },
+    { key: 'resid', label: 'Residual' },
   ]) {
     const b = el('button', null, o.label);
     b.type = 'button';
     b.dataset.value = o.key;
-    b.addEventListener('click', () => ctx.setState({ viewY: o.key }));
+    if (o.key === 'resid') refs.residButton = b;
+    b.addEventListener('click', () => {
+      if (b.getAttribute('aria-disabled') === 'true') return;
+      ctx.setState({ viewY: o.key });
+    });
     refs.measure.appendChild(b);
   }
   measureGroup.appendChild(refs.measure);
@@ -315,7 +327,16 @@ function buildLegendRow() {
   refs.bandButton = btn;
   refs.bandNote = note;
   initBandInfo({ button: btn, note });
-  row.append(refs.legend, wrap);
+  refs.windowKey = el('ul', 'nfl-window-key');
+  refs.windowKey.setAttribute('aria-label', 'Line styles');
+  for (const [dashed, text] of [[false, 'one game'], [true, 'whole Sunday window']]) {
+    const li = el('li');
+    const sw = el('span', dashed ? 'swatch is-dashed' : 'swatch');
+    sw.setAttribute('aria-hidden', 'true');
+    li.append(sw, document.createTextNode(text));
+    refs.windowKey.appendChild(li);
+  }
+  row.append(refs.legend, refs.windowKey, wrap);
   return row;
 }
 
@@ -326,12 +347,24 @@ function link(text, href) {
   return a;
 }
 
-function renderCaptions(state, anyWindow) {
-  const kids = [];
+function renderSubtitle(anyWindow, state) {
+  const { ctx } = refs;
   if (anyWindow) {
-    kids.push(el('p', 'caption', 'Dashed lines are window-level: one figure covers every game in that Sunday window.'));
+    const a = link('methodology', ctx.methodologyHref('nfl-window-level-viewership'));
+    ctx.setSubtitle([
+      document.createTextNode(`${WINDOW_NOTE} Regional games have no published figure; see `),
+      a,
+      document.createTextNode('.'),
+    ]);
+  } else {
+    const [lo, hi] = state.seasons;
+    ctx.setSubtitle([document.createTextNode(lo === hi ? `Season ${lo}` : `Seasons ${lo}–${hi}`)]);
   }
-  if (state.viewY === 'resid') {
+}
+
+function renderCaptions(effective) {
+  const kids = [];
+  if (effective === 'resid') {
     kids.push(el('p', 'caption', 'Residuals compare seasons within one category, not categories with each other.'));
   }
   const era = el('p', 'caption');
@@ -346,7 +379,7 @@ function renderCaptions(state, anyWindow) {
   refs.captions.replaceChildren(...kids);
 }
 
-function renderDataTable(items, state) {
+function renderDataTable(items, eff) {
   const { dataBody } = refs;
   rebuildKeepingFocus(dataBody, () => {
     dataBody.replaceChildren();
@@ -362,7 +395,7 @@ function renderDataTable(items, state) {
       th.appendChild(btn);
       tr.append(
         th,
-        el('td', null, it.y == null ? 'n/a' : valueText(state, it.y)),
+        el('td', null, it.y == null ? 'n/a' : valueText(eff, it.y)),
         el('td', null, `${it.p.games} games`),
         el('td', null, crewLabels(current.model, it.p.gameList).join('; ')),
       );
@@ -384,9 +417,8 @@ function setNote(title, hint) {
 // ---- figure ----
 
 function buildFigure(model, state, env, th, lines, seasonPoints) {
-  const resid = state.viewY === 'resid';
-  const size = env.mobile ? PICKED_SIZE : BASE_SIZE;
-  const picking = state.booths.length > 0;
+  const resid = current.eff === 'resid';
+  const size = env.mobile ? 10 : BASE_SIZE;
   const traces = lines.map((ln) => {
     const trace = {
       type: 'scatter',
@@ -400,15 +432,12 @@ function buildFigure(model, state, env, th, lines, seasonPoints) {
       line: { color: ln.color, width: LINE_WIDTH, ...(ln.windowLevel ? { dash: 'dash' } : {}) },
       marker: {
         symbol: ln.items.map((it) => (it.p.lowN ? `${ln.symbol}-open` : ln.symbol)),
-        size: ln.items.map((it) => (it.highlighted ? PICKED_SIZE + (env.mobile ? 2 : 0) : size)),
+        size,
         color: ln.color,
-        opacity: ln.items.map((it) => {
-          if (picking) return it.highlighted ? 1 : DOT_OPACITY.inertUnderPerson;
-          return it.p.lowN ? DOT_OPACITY.activeUnderPerson : 1;
-        }),
+        opacity: ln.items.map((it) => (it.p.lowN ? DOT_OPACITY.activeUnderPerson : 1)),
         line: {
-          color: ln.items.map((it) => (it.highlighted ? ACCENT[th] : ln.color)),
-          width: ln.items.map((it) => (it.highlighted ? 2 : it.p.lowN ? 2 : 0)),
+          color: ln.color,
+          width: ln.items.map((it) => (it.p.lowN ? 2 : 0)),
         },
       },
     };
@@ -556,7 +585,8 @@ export function mount(container, ctx) {
   refs.dataBody = el('tbody');
   dataTable.append(thead, refs.dataBody);
   dataWrap.appendChild(dataTable);
-  container.append(legendRow, refs.chart, refs.captions, dataWrap);
+  refs.reasonBar = createReasonBar('nfl-reason-viewership');
+  container.append(refs.reasonBar, legendRow, refs.chart, refs.captions, dataWrap);
   mountViewTools(ctx, 'viewership', [controls], container);
 }
 
@@ -568,14 +598,37 @@ export function render(ctx) {
   hideTooltip();
   closeBandNote({ button: refs.bandButton, note: refs.bandNote });
 
+  const mode = viewershipMode(state);
+  const eff = mode.effective;
   for (const b of refs.measure.querySelectorAll('button')) {
-    b.setAttribute('aria-pressed', String(b.dataset.value === state.viewY));
+    b.setAttribute('aria-pressed', String(b.dataset.value === eff));
   }
+  linkDisabled(refs.residButton, refs.reasonBar, mode.forced);
+  setReason(refs.reasonBar, mode.reason);
 
+  const picks = computePicks(model, state);
+  const subset = picks.hasPick || state.cats.length > 0 || state.teams.length > 0;
   const series = viewershipSeries(model, state);
+  if (subset) {
+    const viewers = model.cols.viewers;
+    for (const s of series) {
+      s.points = s.points
+        .map((p) => {
+          let sum = 0;
+          let count = 0;
+          for (const g of p.gameList || []) {
+            if (picks.matched[g] !== 1 || viewers[g] == null) continue;
+            sum += viewers[g];
+            count++;
+          }
+          return { ...p, mean: count ? sum / count : null, games: count, lowN: count < LOW_N };
+        })
+        .filter((p) => p.games > 0);
+    }
+  }
   renderLegend(series, state, th);
 
-  const resid = state.viewY === 'resid';
+  const resid = eff === 'resid';
   const present = series.filter((s) => s.points.length);
   const hidden = new Set(state.hiddenCategories);
   const shown = present.filter((s) => !hidden.has(s.id));
@@ -601,20 +654,25 @@ export function render(ctx) {
         key: `${s.id}:${p.season}`,
         y: y == null ? null : y,
         err: resid && y != null && p.se != null ? 1.96 * p.se : null,
-        highlighted: pointHasBooth(model, p.gameList, state.booths),
       };
       items.push(it);
       ln.items.push(it);
     }
     return ln;
   });
-  current = { items, lines, env, theme: th, state, model, bands: [] };
-  renderDataTable(items, state);
-  renderCaptions(state, lines.some((l) => l.windowLevel));
+  current = { items, lines, env, theme: th, state, model, bands: [], eff, mode, anyWindow: false };
+  renderDataTable(items, eff);
+  const anyWindow = lines.some((l) => l.windowLevel);
+  current.anyWindow = anyWindow;
+  renderSubtitle(anyWindow, state);
+  refs.windowKey.classList.toggle('is-reserved', !anyWindow);
+  if (anyWindow) refs.windowKey.removeAttribute('aria-hidden');
+  else refs.windowKey.setAttribute('aria-hidden', 'true');
+  renderCaptions(eff);
 
   if (!present.length) {
     refs.drawn = false;
-    setNote('No viewership figures for this selection.', 'Widen the season range or reset Seasons.');
+    setNote('No games match these filters', 'Clear all filters, or widen the Seasons range.');
     return;
   }
   if (!shown.length) {
@@ -641,13 +699,20 @@ export function resize() {
 
 export function testModel() {
   const s = refs.ctx ? refs.ctx.getState() : null;
-  const viewY = s ? s.viewY : 'mean';
+  const viewY = current ? current.eff : s ? s.viewY : 'mean';
   if (!current) return { view: 'viewership', drawn: false, viewY, categories: [] };
   const { items, lines, model, bands } = current;
   return {
     view: 'viewership',
     drawn: refs.drawn,
     viewY,
+    mode: { stored: current.mode.stored, effective: current.mode.effective, reason: current.mode.reason },
+    subtitle: document.getElementById('nfl-chart-subtitle')?.textContent ?? '',
+    subtitleHref: document.querySelector('#nfl-chart-subtitle a')?.getAttribute('href') ?? null,
+    windowKey: {
+      shown: !refs.windowKey.classList.contains('is-reserved'),
+      labels: [...refs.windowKey.querySelectorAll('li')].map((li) => li.textContent),
+    },
     axisTitle: TITLES[viewY],
     bands: bands.map((b) => ({ era: model.eras[b.era].label, from: b.from, to: b.to })),
     categories: lines.map((ln) => ({
@@ -660,7 +725,7 @@ export function testModel() {
         y: it.y,
         err: it.err,
         lowN: it.p.lowN,
-        highlighted: it.highlighted,
+        n: it.p.games,
         games: it.p.gameList.length,
       })),
     })),

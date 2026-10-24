@@ -5293,6 +5293,7 @@ tr.is-matched > :first-child {
   flex-basis: 100%;
   order: 3;
   min-height: 20px;
+  line-height: 20px;
   margin: 0;
   white-space: normal;
 }
