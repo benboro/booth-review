@@ -174,6 +174,45 @@ function hoverLines(item) {
   return lines;
 }
 
+function cssToken(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+/** Styles the y-labels: the hovered row's label in --ink at 600, the rest as Plotly drew them. */
+function styleLabels(gd, k) {
+  const ink = cssToken('--ink');
+  gd.querySelectorAll('.yaxislayer-above .ytick text').forEach((t, i) => {
+    if (t.dataset.origFill === undefined) t.dataset.origFill = t.style.fill || '';
+    if (i === k) {
+      t.style.fill = ink;
+      t.style.fontWeight = '600';
+    } else {
+      t.style.fill = t.dataset.origFill;
+      t.style.fontWeight = '';
+    }
+  });
+}
+
+/**
+ * Lights chart row `k` (or clears with null): a --surface band across the plot width, drawn
+ * under the marks, and the row's label in --ink at 600. Hover never touches the Booths pick.
+ */
+function highlightRow(gd, k) {
+  if (!live || live.hoverK === k) return;
+  live.hoverK = k;
+  const shapes = [...live.baseShapes];
+  if (k != null) {
+    shapes.unshift({
+      type: 'rect', xref: 'paper', x0: 0, x1: 1, yref: 'y', y0: k - 0.5, y1: k + 0.5,
+      fillcolor: cssToken('--surface'), line: { width: 0 }, layer: 'below', name: 'row-band',
+    });
+  }
+  const done = window.Plotly.relayout(gd, { shapes });
+  Promise.resolve(done).then(() => {
+    if (live && live.hoverK === k) styleLabels(gd, k);
+  });
+}
+
 function bindHover(gd) {
   if (bound.has(gd)) return;
   bound.add(gd);
@@ -181,6 +220,7 @@ function bindHover(gd) {
     const k = ev.points && ev.points[0] ? ev.points[0].customdata : null;
     if (!live || !Number.isInteger(k) || !live.items[k]) return;
     live.onHoverRow?.(live.items[k].rowKey);
+    highlightRow(gd, k);
     if (live.env.mobile || live.env.hoverNone) return;
     const e = ev.event || {};
     showTextTooltip(hoverLines(live.items[k]), {
@@ -193,6 +233,7 @@ function bindHover(gd) {
   gd.on('plotly_unhover', () => {
     hideTooltip();
     live?.onHoverRow?.(null);
+    highlightRow(gd, null);
   });
 }
 
@@ -296,8 +337,8 @@ function buildFigure(items, metric, adjusted, env, th, widthPx = 0) {
  *   onHoverRow?: (rowKey: string|null) => void}} opts
  */
 export function drawCrewsChart(refs, items, { metric, adjusted, env, th, onHoverRow }) {
-  live = { items, metric, adjusted, env, onHoverRow };
   const fig = buildFigure(items, metric, adjusted, env, th, refs.chart.clientWidth);
+  live = { items, metric, adjusted, env, onHoverRow, hoverK: null, baseShapes: fig.layout.shapes ?? [] };
   refs.chart.style.minHeight = `${fig.layout.height}px`;
   window.Plotly.react(refs.gd, fig.traces, fig.layout, CONFIG);
   bindHover(refs.gd);

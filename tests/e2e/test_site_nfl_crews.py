@@ -755,6 +755,77 @@ def test_hovering_a_chart_mark_lights_its_table_row(
     assert page.locator(f"{ROW}.is-hover").count() == 0
 
 
+_HOVER_STATE_JS = """([sel, k]) => {
+  const gd = document.querySelector(sel);
+  const size = gd._fullLayout._size;
+  const probe = document.createElement('i');
+  const rgb = (v) => { probe.style.color = `var(${v})`; document.body.append(probe);
+    const c = getComputedStyle(probe).color; probe.remove(); return c; };
+  const band = [...gd.querySelectorAll('.layer-below .shapelayer path')]
+    .map((p) => p.getBoundingClientRect())
+    .filter((r) => r.width > 0 && r.height > 0);
+  const ticks = [...gd.querySelectorAll('.yaxislayer-above .ytick text')];
+  return {
+    shapes: (gd.layout.shapes || []).filter((s) => s.name === 'row-band').length,
+    bandWidths: band.map((r) => Math.round(r.width)),
+    plotWidth: Math.round(size.w),
+    weights: ticks.map((t) => getComputedStyle(t).fontWeight),
+    fill: ticks[k] ? getComputedStyle(ticks[k]).fill : null,
+    ink: rgb('--ink'),
+  };
+}"""
+
+
+def test_hovering_a_chart_mark_lights_its_chart_row_and_table_row(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    """Hover bands the mark's row across the plot (--surface), bolds its label in --ink, and
+    lights the table row with the table's own hover style; none of it picks a booth."""
+    page = nfl_guarded_page
+    _open(page, open_nfl_app, "&perseason=0")
+    vm = _vm(page)
+    k = next(i for i, p in enumerate(vm["chart"]["points"]) if p["x"] is not None)
+    key = vm["chart"]["points"][k]["rowKey"]
+    state_before, url_before = _state(page), page.url
+    _emit(page, "plotly_hover", k)
+    page.wait_for_function(
+        "(sel) => (document.querySelector(sel).layout.shapes || [])"
+        ".some((s) => s.name === 'row-band')",
+        arg=GD,
+    )
+    page.wait_for_function(
+        "([sel, k]) => [...document.querySelectorAll(sel + ' .yaxislayer-above .ytick text')]"
+        "[k].style.fontWeight === '600'",
+        arg=[GD, k],
+    )
+    got = page.evaluate(_HOVER_STATE_JS, [GD, k])
+    assert got["shapes"] == 1
+    assert got["bandWidths"] and abs(max(got["bandWidths"]) - got["plotWidth"]) <= 2, got
+    assert [w for i, w in enumerate(got["weights"]) if w in ("600", "bold")] == [got["weights"][k]]
+    assert got["weights"][k] in ("600", "bold") and got["fill"] == got["ink"], got
+    row = page.locator(f"{ROW}[data-row-key='{key}']")
+    assert "is-hover" in (row.get_attribute("class") or "")
+    surface = page.evaluate(
+        """() => { const i = document.createElement('i'); i.style.color = 'var(--surface)';
+          document.body.append(i); const c = getComputedStyle(i).color; i.remove(); return c; }"""
+    )
+    assert row.evaluate("e => getComputedStyle(e).backgroundColor") == surface
+    assert _state(page)["booths"] == state_before["booths"] and page.url == url_before
+    _emit(page, "plotly_unhover", k)
+    page.wait_for_function(
+        "(sel) => !(document.querySelector(sel).layout.shapes || [])"
+        ".some((s) => s.name === 'row-band')",
+        arg=GD,
+    )
+    page.wait_for_function(
+        "(sel) => [...document.querySelectorAll(sel + ' .yaxislayer-above .ytick text')]"
+        ".every((t) => t.style.fontWeight === '')",
+        arg=GD,
+    )
+    assert page.locator(f"{ROW}.is-hover").count() == 0
+    assert _state(page)["booths"] == state_before["booths"] and page.url == url_before
+
+
 def test_chart_container_hugs_the_plot(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
 ) -> None:
