@@ -83,14 +83,22 @@ def test_detaching_a_rebuilt_table_releases_its_observers(
     assert grown == {"io": 1, "ro": 1, "mq": 1}
 
 
-def test_phone_pin_width_comes_from_the_visible_twin(
+def test_phone_postseason_twin_is_not_in_a_scroller(
     mlb_mobile_page: Page, open_mlb_app: Callable[..., None]
 ) -> None:
-    """MLB Postseason holds a hidden desktop grid and its phone twin in one scroller: the left
-    fade starts after the twin's 96px pinned column, not at the hidden grid's 0px."""
+    """16-05 (N1): the desktop grid owns the scroll box and cue; the phone twin sits in a plain
+    wrapper so the page scrolls and its header sticks to the viewport."""
     page = mlb_mobile_page
     open_mlb_app(page, "?sport=mlb&view=postseason")
-    page.wait_for_function(
-        "() => getComputedStyle(document.querySelector('#mlb-view-postseason .mlb-grid-wrap'))"
-        ".getPropertyValue('--pin-w').trim() === '96px'"
+    view = "#mlb-view-postseason"
+    assert page.locator(f"{view} .mlb-grid-wrap").is_hidden()
+    assert (
+        page.locator(f"{view} .mlb-phone-grid")
+        .locator("xpath=ancestor::*[contains(@class,'table-scroll')]")
+        .count()
+        == 0
+    )
+    assert (
+        page.locator(f"{view} .mlb-phone-wrap").evaluate("e => getComputedStyle(e).overflowY")
+        == "visible"
     )

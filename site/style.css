@@ -4075,11 +4075,53 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 /* MLB postseason grid: seasons down, rounds across. Whitespace and hairlines group the cells;
    on phones every season becomes a stacked block with the round named above each cell. */
 .mlb-grid-wrap {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: min(640px, calc(100vh - 280px));
+  min-height: 320px;
+  overscroll-behavior: contain;
+}
+
+.mlb-grid-wrap:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .mlb-grid {
   table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* Frozen header row and Season column inside the scroll box (N1). */
+.mlb-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg);
+  border-bottom: none;
+  box-shadow: inset 0 -1px 0 var(--rule-strong);
+}
+
+.mlb-grid thead th.mlb-season-col {
+  z-index: 3;
+}
+
+.mlb-round-short {
+  display: none;
+}
+
+@media (max-width: 1279px) {
+  .mlb-round-short {
+    display: inline;
+  }
+
+  .mlb-round-long {
+    display: none;
+  }
+}
+
+.mlb-phone-wrap {
+  overflow: visible;
 }
 
 .mlb-grid th.mlb-season-col {
@@ -4087,6 +4129,35 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   min-width: 11em;
   vertical-align: top;
   text-align: left;
+  position: sticky;
+  left: 0;
+  background: var(--bg);
+}
+
+.mlb-grid th.mlb-season-col[data-picked="true"] {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--ink);
+}
+
+.mlb-season-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mlb-season-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.mlb-season-btn[aria-pressed="true"] .mlb-season {
+  font-weight: 600;
 }
 
 .mlb-season {
@@ -4135,7 +4206,6 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   margin: 0 0 var(--space-sm) 0;
   padding: var(--space-xs) var(--space-sm);
   border: none;
-  border-inline-start: 3px solid transparent;
   background: transparent;
   color: inherit;
   font: inherit;
@@ -4152,8 +4222,13 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 .mlb-cell-btn[aria-pressed="true"] {
-  border-inline-start-color: var(--accent);
-  background: var(--surface);
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--ink);
+}
+
+.mlb-cell-btn[aria-pressed="true"] .mlb-cell-league,
+.mlb-cell-btn[aria-pressed="true"] .booth-name {
+  font-weight: 600;
 }
 
 .mlb-cell-btn:focus-visible {
@@ -5298,6 +5373,10 @@ tr.is-matched > :first-child {
 
   /* MLB Postseason booths: the stacked-by-season grid gives way to the phone twin, one
      row per season, round and league with a merged 96px pinned column. */
+  .mlb-grid-wrap {
+    display: none;
+  }
+
   .mlb-grid {
     display: none;
   }
@@ -5305,6 +5384,30 @@ tr.is-matched > :first-child {
   .mlb-phone-grid {
     display: table;
     table-layout: auto;
+    width: 100%;
+  }
+
+  /* The page scrolls here, so the twin's header sticks to the viewport (no inner scroller). */
+  .mlb-phone-grid thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--bg);
+    padding: 8px 12px;
+    box-shadow: inset 0 -1px 0 var(--rule-strong);
+  }
+
+  .mlb-phone-grid td {
+    padding: 8px 12px;
+  }
+
+  .mlb-phone-grid tbody tr > th.mlb-merged-col {
+    background: var(--bg);
+  }
+
+  .mlb-season-btn {
+    display: inline;
+    min-height: 44px;
   }
 
   .mlb-phone-grid th.mlb-merged-col,
@@ -5319,6 +5422,10 @@ tr.is-matched > :first-child {
     min-width: 96px;
     max-width: 96px;
     padding-inline: 8px;
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--bg);
   }
 
   .mlb-merged-line {

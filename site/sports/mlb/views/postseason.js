@@ -11,7 +11,8 @@
  * table. On phones the grid collapses to one stacked block per season (CSS only).
  * Everything is built with createElement and textContent only.
  */
-import { boothLabelOf, cellKey, personName } from '../data.js';
+import { ROUND_LABELS, ROUND_SHORT, boothLabelOf, cellKey, cellLabel, personName } from '../data.js';
+import { tableGames } from '../state.js';
 import { networkMark } from '../../../modules/network.js';
 import { externalLink } from '../../../modules/panel-parts.js';
 import { makeRolePill, nameWithRoles } from '../../../modules/pill.js';
@@ -20,13 +21,6 @@ import { attachScrollCue } from '../../../modules/scroll-cue.js';
 export const PENDING_TEXT = 'pending Retrosheet 2026';
 export const NO_CREW_TEXT = 'crew not listed';
 const ROUND_ORDER = ['wild_card', 'division', 'lcs', 'world_series', 'tiebreak'];
-const SHORT_ROUNDS = Object.freeze({
-  wild_card: 'Wild Card',
-  division: 'Division',
-  lcs: 'LCS',
-  world_series: 'World Series',
-  tiebreak: 'Tiebreak',
-});
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -38,8 +32,155 @@ function el(tag, className, text) {
 /** Booth lines the phone Booths cell shows before a "+N more" last line (13-14 line budget). */
 export const PHONE_BOOTH_LINES = 3;
 
-const refs = { ctx: null, head: null, body: null, captions: null, table: null, phoneBody: null };
+const refs = {
+  ctx: null, head: null, body: null, captions: null, table: null, phoneBody: null,
+  status: null, wrap: null, phoneNotes: null,
+};
 let current = null;
+/** Data key of the grid button that holds the roving tab stop (survives re-renders). */
+let activeKey = null;
+/** Data keys of the grid, row by row, for keyboard navigation (rebuilt on every render). */
+let gridButtons = [];
+
+const GRID_PAGE = 5;
+const BTN_SEL = '.mlb-season-btn, .mlb-cell-btn[data-cell]';
+
+function btnKey(btn) {
+  return btn.dataset.seasonCell ?? btn.dataset.cell;
+}
+
+/** Select the key, or clear it when it is already picked; announce either in the live region. */
+function toggleCell(key) {
+  const { ctx } = refs;
+  if (!current?.model.cells.has(key)) return;
+  const label = cellLabel(current.model.cells.get(key));
+  if (ctx.getState().cell === key) {
+    ctx.clearSelection();
+    announce('Selection cleared.');
+    return;
+  }
+  ctx.setState({ cell: key });
+  const n = tableGames(current.model, ctx.getState()).length;
+  announce(`Selected ${label}, ${n} ${n === 1 ? 'game' : 'games'}.`);
+}
+
+function announce(text) {
+  if (refs.status) refs.status.textContent = text;
+}
+
+/** Nearest non-empty column to `col` in a row (left wins a tie), or -1. */
+function nearestColumn(row, col) {
+  for (let d = 0; d < row.length; d += 1) {
+    if (row[col - d]?.length) return col - d;
+    if (row[col + d]?.length) return col + d;
+  }
+  return -1;
+}
+
+/**
+ * Keyboard move over the Postseason grid. `grid` is rows of columns of sub-block ids (column 0
+ * the Season button, an empty array for an empty cell); `pos` is `{ row, col, sub }`. Returns
+ * the next position, or `pos` itself when the key does not move.
+ */
+export function nextGridTarget(grid, pos, key) {
+  const { row, col, sub } = pos;
+  const cols = grid[row] ?? [];
+  const sideways = (step) => {
+    for (let c = col + step; c >= 0 && c < cols.length; c += step) {
+      if (cols[c].length) return { row, col: c, sub: sub < cols[c].length ? sub : 0 };
+    }
+    return pos;
+  };
+  const vertical = (target, subPick) => {
+    if (target < 0 || target >= grid.length || target === row) return pos;
+    const c = nearestColumn(grid[target], col);
+    if (c < 0) return pos;
+    const len = grid[target][c].length;
+    return { row: target, col: c, sub: subPick === 'last' ? len - 1 : 0 };
+  };
+  switch (key) {
+    case 'ArrowRight': return sideways(1);
+    case 'ArrowLeft': return sideways(-1);
+    case 'ArrowDown':
+      return sub + 1 < cols[col].length ? { row, col, sub: sub + 1 } : vertical(row + 1, 'first');
+    case 'ArrowUp':
+      return sub > 0 ? { row, col, sub: sub - 1 } : vertical(row - 1, 'last');
+    case 'Home': {
+      const c = cols.findIndex((x) => x.length);
+      return c < 0 ? pos : { row, col: c, sub: 0 };
+    }
+    case 'End': {
+      let c = cols.length - 1;
+      while (c >= 0 && !cols[c].length) c -= 1;
+      return c < 0 ? pos : { row, col: c, sub: 0 };
+    }
+    case 'PageDown': return vertical(Math.min(row + GRID_PAGE, grid.length - 1), 'first');
+    case 'PageUp': return vertical(Math.max(row - GRID_PAGE, 0), 'first');
+    default: return pos;
+  }
+}
+
+function gridIds() {
+  return gridButtons.map((cols) => cols.map((subs) => subs.map(btnKey)));
+}
+
+function locate(btn) {
+  for (let row = 0; row < gridButtons.length; row += 1) {
+    for (let col = 0; col < gridButtons[row].length; col += 1) {
+      const sub = gridButtons[row][col].indexOf(btn);
+      if (sub >= 0) return { row, col, sub };
+    }
+  }
+  return null;
+}
+
+function indexGrid() {
+  gridButtons = [...refs.body.rows].map((tr) => [...tr.cells].map((cell) => [...cell.querySelectorAll(BTN_SEL)]));
+  const all = gridButtons.flat(2);
+  const want = all.find((b) => btnKey(b) === activeKey)
+    ?? all.find((b) => b.getAttribute('aria-pressed') === 'true')
+    ?? all[0];
+  for (const b of all) b.tabIndex = b === want ? 0 : -1;
+}
+
+function setActive(btn) {
+  activeKey = btnKey(btn);
+  for (const b of gridButtons.flat(2)) b.tabIndex = b === btn ? 0 : -1;
+}
+
+function onGridKeydown(ev) {
+  const btn = ev.target.closest?.(BTN_SEL);
+  if (!btn || !refs.table.contains(btn)) return;
+  if (ev.key === 'Enter' || ev.key === ' ') {
+    ev.preventDefault();
+    if (!ev.repeat) btn.click();
+    return;
+  }
+  if (ev.key === 'Escape') {
+    ev.preventDefault();
+    if (refs.ctx.getState().cell != null) {
+      refs.ctx.clearSelection();
+      announce('Selection cleared.');
+    }
+    return;
+  }
+  const pos = locate(btn);
+  if (!pos) return;
+  const next = nextGridTarget(gridIds(), pos, ev.key);
+  if (!['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Home', 'End', 'PageDown', 'PageUp'].includes(ev.key)) return;
+  ev.preventDefault();
+  const target = gridButtons[next.row]?.[next.col]?.[next.sub];
+  if (!target || target === btn) return;
+  setActive(target);
+  target.focus();
+  target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+/** Space activates a button on keyup: swallow it so the keydown handler is the only trigger. */
+function onGridKeyup(ev) {
+  if (ev.key === ' ' && ev.target.closest?.(BTN_SEL)) ev.preventDefault();
+}
+
 
 function coveragePct(num, den) {
   return den > 0 ? Math.round((100 * num) / den) : null;
@@ -102,7 +243,7 @@ function blockButton(model, b, label, picked, maxLines = Infinity) {
   btn.type = 'button';
   btn.dataset.cell = b.key;
   btn.setAttribute('aria-pressed', String(picked));
-  const where = b.league ? `${b.season} ${SHORT_ROUNDS[b.round]} ${b.league}` : `${b.season} ${SHORT_ROUNDS[b.round]}`;
+  const where = b.league ? `${b.season} ${ROUND_LABELS[b.round]} ${b.league}` : `${b.season} ${ROUND_LABELS[b.round]}`;
   btn.setAttribute('aria-label', `${where}, ${b.games} ${b.games === 1 ? 'game' : 'games'}`);
   const head = el('span', 'mlb-cell-head');
   if (label) head.append(el('span', 'mlb-cell-league', label));
@@ -141,11 +282,7 @@ function blockButton(model, b, label, picked, maxLines = Infinity) {
   }
   btn.append(stats);
 
-  btn.addEventListener('click', () => {
-    const state = refs.ctx.getState();
-    if (state.cell === b.key) refs.ctx.clearSelection();
-    else refs.ctx.setState({ cell: b.key });
-  });
+  btn.addEventListener('click', () => toggleCell(b.key));
   return btn;
 }
 
@@ -173,6 +310,17 @@ function seasonNotes(s, blocks, bar) {
   return credit ? [cov, credit] : [cov];
 }
 
+/** A Season button (desktop grid or phone notes): the year, plus any coverage line inside it. */
+function seasonButton(key, season, picked, dataName, inside) {
+  const btn = el('button', 'mlb-season-btn');
+  btn.type = 'button';
+  btn.dataset[dataName] = key;
+  btn.setAttribute('aria-pressed', String(picked));
+  btn.append(el('span', 'mlb-season', String(season)), ...inside);
+  if (dataName === 'phoneSeasonCell') btn.addEventListener('click', () => toggleCell(key));
+  return btn;
+}
+
 function phoneRows(model, state, seasons, rounds, blocks) {
   const out = [];
   for (const s of seasons) {
@@ -184,7 +332,7 @@ function phoneRows(model, state, seasons, rounds, blocks) {
         tr.dataset.season = String(s.season);
         const th = el('th', 'mlb-merged-col');
         th.scope = 'row';
-        th.append(el('span', 'mlb-merged-line', `${s.season} ${SHORT_ROUNDS[r]}`));
+        th.append(el('span', 'mlb-merged-line', `${s.season} ${ROUND_SHORT[r]}`));
         th.append(el('span', 'mlb-merged-line mlb-merged-league', b.league ?? ''));
         const td = el('td', 'mlb-booths-col');
         const btn = blockButton(model, b, null, state.cell === b.key, PHONE_BOOTH_LINES);
@@ -203,7 +351,10 @@ function phoneRows(model, state, seasons, rounds, blocks) {
 export function mount(container, ctx) {
   refs.ctx = ctx;
   const wrap = el('div', 'mlb-grid-wrap');
+  wrap.tabIndex = 0;
+  wrap.setAttribute('aria-label', 'Postseason booths grid');
   const table = el('table', 'games-table mlb-grid');
+  table.setAttribute('role', 'grid');
   table.appendChild(el('caption', 'visually-hidden', 'Postseason booths by season and round'));
   refs.head = el('tr');
   const thead = el('thead');
@@ -225,16 +376,33 @@ export function mount(container, ctx) {
   phoneThead.appendChild(phoneHead);
   refs.phoneBody = el('tbody');
   phone.append(phoneThead, refs.phoneBody);
-  wrap.appendChild(phone);
+  const phoneWrap = el('div', 'mlb-phone-wrap');
+  phoneWrap.appendChild(phone);
   wrap.classList.add('table-scroll');
   attachScrollCue(wrap, null);
   refs.table = table;
+  refs.wrap = wrap;
+  // One delegated listener: a Season cell selects its whole season, but a click on the
+  // Wikipedia credit link only follows the link (RT-13).
+  refs.body.addEventListener('click', (ev) => {
+    if (ev.target.closest('a')) return;
+    const th = ev.target.closest('th.mlb-season-col');
+    if (th) toggleCell(`season-${th.parentElement.dataset.season}`);
+  });
+  table.addEventListener('keydown', onGridKeydown);
+  table.addEventListener('keyup', onGridKeyup);
+  table.addEventListener('focusin', (ev) => {
+    const btn = ev.target.closest?.(BTN_SEL);
+    if (btn) setActive(btn);
+  });
+  refs.status = el('p', 'visually-hidden mlb-grid-status');
+  refs.status.setAttribute('role', 'status');
   // The phone twin's 96px pinned column has no room for each season's coverage line and
   // Wikipedia credit, and a row inside the scroller would sit under its fades: they follow
   // the table as a per-season list (CSS shows it at 480px and under only).
   refs.phoneNotes = el('ul', 'mlb-phone-season-notes');
   refs.captions = el('div', 'nfl-captions');
-  container.append(wrap, refs.phoneNotes, refs.captions);
+  container.append(wrap, refs.status, phoneWrap, refs.phoneNotes, refs.captions);
 }
 
 export function render(ctx) {
@@ -244,11 +412,20 @@ export function render(ctx) {
   const blocks = buildGrid(model);
   const bar = model.constants.coverage_bar;
 
-  const heads = [el('th', 'mlb-season-col', 'Season'), ...rounds.map((r) => el('th', null, SHORT_ROUNDS[r]))];
+  const roundHead = (r) => {
+    const th = el('th');
+    th.append(el('span', 'mlb-round-long', ROUND_LABELS[r]));
+    if (ROUND_SHORT[r] !== ROUND_LABELS[r]) {
+      th.append(el('span', 'mlb-round-short', ROUND_SHORT[r]));
+      th.title = ROUND_LABELS[r];
+    }
+    return th;
+  };
+  const heads = [el('th', 'mlb-season-col', 'Season'), ...rounds.map(roundHead)];
   heads.forEach((th) => { th.scope = 'col'; });
   refs.head.replaceChildren(...heads);
 
-  const seasons = [...model.postseasonSeasons].sort((a, b) => a.season - b.season);
+  const seasons = [...model.postseasonSeasons].sort((a, b) => b.season - a.season);
   const rows = [];
   const summary = [];
   for (const s of seasons) {
@@ -256,8 +433,11 @@ export function render(ctx) {
     tr.dataset.season = String(s.season);
     const th = el('th', 'mlb-season-col');
     th.scope = 'row';
-    th.append(el('span', 'mlb-season', String(s.season)));
-    th.append(...seasonNotes(s, blocks, bar));
+    const [cov, ...credit] = seasonNotes(s, blocks, bar);
+    const seasonKey = `season-${s.season}`;
+    const sBtn = seasonButton(seasonKey, s.season, state.cell === seasonKey, 'seasonCell', [cov]);
+    th.append(sBtn, ...credit);
+    if (state.cell === seasonKey) th.dataset.picked = 'true';
     tr.appendChild(th);
     for (const r of rounds) {
       const td = el('td', 'mlb-cell');
@@ -265,9 +445,9 @@ export function render(ctx) {
       const here = [...blocks.values()].filter((b) => b.season === s.season && b.round === r);
       if (!here.length) {
         td.classList.add('mlb-cell-empty');
-        td.append(el('span', 'mlb-cell-label', SHORT_ROUNDS[r]), el('span', 'mlb-empty-mark', '—'));
+        td.append(el('span', 'mlb-cell-label', ROUND_LABELS[r]), el('span', 'mlb-empty-mark', '—'));
       } else {
-        td.append(el('span', 'mlb-cell-label', SHORT_ROUNDS[r]));
+        td.append(el('span', 'mlb-cell-label', ROUND_LABELS[r]));
         here.sort((x, y) => String(x.league).localeCompare(String(y.league)));
         const split = here.length > 1 || here[0].league != null;
         for (const b of here) {
@@ -286,13 +466,17 @@ export function render(ctx) {
     }
     rows.push(tr);
   }
+  const focusKey = refs.table.contains(document.activeElement) ? btnKey(document.activeElement.closest(BTN_SEL) ?? document.activeElement) : null;
+  if (focusKey) activeKey = focusKey;
   refs.body.replaceChildren(...rows);
   refs.phoneBody.replaceChildren(...phoneRows(model, state, seasons, rounds, blocks));
   refs.phoneNotes.replaceChildren(
     ...seasons.map((s) => {
       const li = el('li');
       li.dataset.season = String(s.season);
-      li.append(el('span', 'mlb-season', String(s.season)), ...seasonNotes(s, blocks, bar));
+      const seasonKey = `season-${s.season}`;
+      const [cov, ...credit] = seasonNotes(s, blocks, bar);
+      li.append(seasonButton(seasonKey, s.season, state.cell === seasonKey, 'phoneSeasonCell', []), cov, ...credit);
       return li;
     }),
   );
@@ -301,6 +485,10 @@ export function render(ctx) {
     el('p', 'caption', 'Excitement is the mean per game from win probability, a tendency, not proof.'),
     el('p', 'caption', `Season percentages count every postseason game of the season, including games with no outlet listed; a cell counts only the games it shows. Seasons with crews listed for fewer than ${Math.round(bar * 100)}% of those games are marked; their booths are partial.`),
   );
+  indexGrid();
+  if (focusKey) {
+    refs.body.querySelector(`[data-season-cell="${CSS.escape(focusKey)}"], [data-cell="${CSS.escape(focusKey)}"]`)?.focus();
+  }
   current = { model, state, summary, seasons: seasons.map((s) => s.season), rounds };
 }
 
