@@ -336,9 +336,7 @@ def _pick_person(app: Page, raw: dict[str, Any]) -> tuple[str, dict[str, dict[st
     expected = app.evaluate(_EXPECTED_MATCHED_JS, pid)
     assert expected
     _set(app, {"people": [pid]})
-    app.wait_for_function(
-        "window.__nflTestHooks.getViewModel('special').overlay?.length > 0"
-    )
+    app.wait_for_function("window.__nflTestHooks.getViewModel('special').overlay?.length > 0")
     return pid, expected
 
 

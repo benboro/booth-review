@@ -1,3 +1,4 @@
+# ruff: noqa: E501  (embedded JS lines)
 """999.5-07: the DOM-free NFL core (data.js, palette.js, state.js, url-state.js).
 
 In-page tests on the synthetic nfl-data fixture only; no vault rows.
