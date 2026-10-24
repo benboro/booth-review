@@ -222,6 +222,7 @@ function buildFigure(items, metric, adjusted, env, th) {
   const tick = env.mobile ? TICK_FONT_PX.mobile : TICK_FONT_PX.desktop;
   const titleText = useAdj ? f.adjTitle : f.rawTitle;
   const chars = env.mobile ? TICK_CHARS.mobile : TICK_CHARS.desktop;
+  const rows = Math.max(1, Math.min(CHART_ROWS, items.length));
   const layout = {
     font: { size: tick, color: ACCENT[th] },
     hovermode: 'closest',
@@ -229,7 +230,9 @@ function buildFigure(items, metric, adjusted, env, th) {
     dragmode: false,
     // Fixed: 25 rows x 24px, plus the frame's margins and the axis-title band.
     height: CHART_ROWS * ROW_PX + MARGIN.t + MARGIN.b + 20,
-    margin: { ...MARGIN, l: env.mobile ? 100 : 210 },
+    // Fewer rows shrink the plot and push the extra height below the axis, so the axis sits
+    // right under the last row and the module's height still does not change.
+    margin: { ...MARGIN, l: env.mobile ? 100 : 210, b: MARGIN.b + (CHART_ROWS - rows) * ROW_PX },
     shapes: useAdj
       ? [referenceLine({ xref: 'x', yref: 'paper', x0: 0, x1: 0, y0: 0, y1: 1 }, th)]
       : [],
@@ -242,8 +245,8 @@ function buildFigure(items, metric, adjusted, env, th) {
       fixedrange: true,
     },
     yaxis: {
-      // Rows keep their 24px slot whatever the count: the axis always spans 25 slots.
-      range: [CHART_ROWS - 0.5, -0.5],
+      // Rows keep their 24px slot whatever the count.
+      range: [rows - 0.5, -0.5],
       tickmode: 'array',
       tickvals: ys,
       ticktext: items.map((it) => escapeHover(clip(it.label, chars))),
