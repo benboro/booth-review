@@ -371,14 +371,14 @@ def test_booths_trigger_is_visible_and_enabled_on_every_view(
         assert page.locator(".nfl-toolbar-spacer").count() == 0, view
 
 
-def test_booth_pick_effect_per_view_is_unchanged_for_now(
+def test_booth_pick_narrows_tables_and_changes_special_and_scatter(
     nfl_guarded_page: Page,
     open_nfl_app: Callable[..., None],
     nfl_fixture_raw: dict,  # type: ignore[type-arg]
 ) -> None:
-    """D-10 interim: a booth pick narrows the matched games on Crews and
-    Viewership as before, and does not yet change the Special games or Scatter
-    chart models (it is kept in state and the URL on all four views)."""
+    """A booth pick narrows the matched games on Crews and Viewership, changes the Special
+    games (matched overlay) and Scatter (fade) view models, and stays in state and the URL on
+    all four views (D-04/D-05 picks intersect everywhere)."""
     page = nfl_guarded_page
     _booths_app(page, open_nfl_app, "crews")
     key = page.evaluate("window.__nflTestHooks.getBoothCatalog()[0].key")
@@ -397,7 +397,7 @@ def test_booth_pick_effect_per_view_is_unchanged_for_now(
         page.wait_for_function("window.__nflTestHooks.getState().booths.length === 1")
         after = page.evaluate("v => JSON.stringify(window.__nflTestHooks.getViewModel(v))", view)
         assert before not in ("null", "undefined"), view
-        assert before == after, view
+        assert before != after, view
         assert "booths=" in _search(page), view
 
 
