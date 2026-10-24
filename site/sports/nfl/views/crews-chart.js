@@ -91,10 +91,10 @@ export function lastName(name) {
  * The phone's row label: "Last / Last, YYYY" (pooled rows drop the season; a booth with no
  * analyst shows the play-by-play last name alone), so two seasons of one voice stay apart.
  */
-export function compactLabel(row) {
+export function compactLabel(row, withSeason = true) {
   const names = [row.pbp, row.analyst].map((p) => lastName(p && p.name)).filter(Boolean);
   const base = names.length ? names.join(' / ') : row.names;
-  return row.season != null ? `${base}, ${row.season}` : base;
+  return withSeason && row.season != null ? `${base}, ${row.season}` : base;
 }
 
 /**
@@ -115,6 +115,9 @@ export function chartModel(rows, { metric, adjusted }) {
       rowKey: r.rowKey,
       label: r.season != null ? `${r.names}, ${r.season}` : r.names,
       compactLabel: compactLabel(r),
+      nameOnly: r.names,
+      compactNameOnly: compactLabel(r, false),
+      season: r.season ?? null,
       seasonText: seasonText(r),
       games: r.gamesCount,
       n: cell.n,
@@ -123,6 +126,13 @@ export function chartModel(rows, { metric, adjusted }) {
       hollow: !!cell.flagged,
     };
   });
+}
+
+/** The one season every plotted row shares (per-season rows only), else null. */
+export function sharedSeason(items) {
+  if (!items.length || items.some((it) => it.season == null)) return null;
+  const first = items[0].season;
+  return items.every((it) => it.season === first) ? first : null;
 }
 
 // What the last draw drew (also what the hover handlers read).
@@ -282,10 +292,17 @@ function buildFigure(items, metric, adjusted, env, th, widthPx = 0) {
   const range = [lo === 0 && !useAdj ? 0 : lo - pad, hi + pad];
 
   const tick = env.mobile ? TICK_FONT_PX.mobile : TICK_FONT_PX.desktop;
-  const titleText = useAdj ? f.adjTitle : f.rawTitle;
+  // When every plotted row is one season's row of the same year, the labels drop it and the
+  // axis title carries it once; mixed seasons keep a season on each label, pooled rows have none.
+  const shared = sharedSeason(items);
+  const baseTitle = useAdj ? f.adjTitle : f.rawTitle;
+  const titleText = shared != null ? `${baseTitle} \u00B7 ${shared}` : baseTitle;
   // Full names on desktop, "Last / Last, YYYY" on a phone; the margin is sized from the
   // measured text so no label is ever cut.
-  const labels = items.map((it) => (env.mobile ? it.compactLabel : it.label));
+  const labels = items.map((it) => {
+    if (shared != null) return env.mobile ? it.compactNameOnly : it.nameOnly;
+    return env.mobile ? it.compactLabel : it.label;
+  });
   const labelPx = labels.reduce(
     (m, s) => Math.max(m, textWidth(s, { size: tick, family: FRAME_FONT })), 0,
   );

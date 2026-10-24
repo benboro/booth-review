@@ -826,6 +826,52 @@ def test_hovering_a_chart_mark_lights_its_chart_row_and_table_row(
     assert _state(page)["booths"] == state_before["booths"] and page.url == url_before
 
 
+_DRAW_JS = """async ([mobile, seasons]) => {
+  const C = await import('./sports/nfl/views/crews-chart.js');
+  const host = document.createElement('div');
+  host.style.width = '900px';
+  document.body.append(host);
+  const gd = document.createElement('div');
+  host.append(gd);
+  const p = (name) => ({ name });
+  const rows = seasons.map((season, i) => ({
+    rowKey: `r${i}`, names: `Pbp${i} Name and Ana${i} Last`, season,
+    pbp: p(`Pbp${i} Name`), analyst: p(`Ana${i} Last`), gamesCount: 3,
+    margin: { mean: 3 + i, n: 3, flagged: false },
+    adjusted: { margin: { resid: 1, se: 1, n: 3, flagged: false } },
+  }));
+  const items = C.chartModel(rows, { metric: 'margin', adjusted: false });
+  C.drawCrewsChart({ gd, chart: host }, items,
+    { metric: 'margin', adjusted: false, env: { mobile, hoverNone: false }, th: 'light' });
+  await new Promise((r) => setTimeout(r, 300));
+  const out = { text: gd.layout.yaxis.ticktext, title: gd.layout.xaxis.title.text };
+  host.remove();
+  return out;
+}"""
+
+
+@pytest.mark.parametrize("mobile", [False, True])
+def test_chart_labels_drop_a_shared_season_into_the_axis_title(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], mobile: bool
+) -> None:
+    """Every plotted row from one season: names only on the labels, the season once in the
+    axis title. Mixed seasons keep a season on each label and the title unchanged."""
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    shared = page.evaluate(_DRAW_JS, [mobile, [2025, 2025, 2025]])
+    if mobile:
+        assert shared["text"] == ["Name / Last"] * 3
+    else:
+        assert shared["text"] == [f"Pbp{i} Name and Ana{i} Last" for i in range(3)]
+    assert shared["title"].endswith("\u00b7 2025"), shared
+    mixed = page.evaluate(_DRAW_JS, [mobile, [2025, 2024, 2025]])
+    assert all(t.endswith(("2024", "2025")) and ", " in t for t in mixed["text"]), mixed
+    assert "\u00b7" not in mixed["title"], mixed
+    pooled = page.evaluate(_DRAW_JS, [mobile, [None, None]])
+    assert not any(t.endswith(("2024", "2025")) for t in pooled["text"]), pooled
+    assert "\u00b7" not in pooled["title"], pooled
+
+
 def test_chart_container_hugs_the_plot(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
 ) -> None:
