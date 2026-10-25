@@ -46,6 +46,14 @@ def test_user_orderings_are_pinned(guarded_page: Page, open_app: Callable[..., N
         "paramount-plus",
     ]
     assert _sorted(guarded_page, ["trutv", "tnt", "tbs"]) == ["tbs", "tnt", "trutv"]
+    # G3: the crosswalk ids are listed, so MLB Network (mlbn) is not pushed behind streaming.
+    assert _sorted(guarded_page, ["netflix", "mlbn", "apple"]) == ["apple", "mlbn", "netflix"]
+    assert _sorted(guarded_page, ["peacock_local", "peacock", "nbc"]) == [
+        "nbc",
+        "peacock",
+        "peacock_local",
+    ]
+    assert _sorted(guarded_page, ["espn_unltd", "espn", "abc"]) == ["abc", "espn", "espn_unltd"]
     # An unlisted network keeps its place after the listed ones; the sort is stable.
     assert _sorted(guarded_page, ["zz-local", "fs1", "aa-local", "fox"]) == [
         "fox",
