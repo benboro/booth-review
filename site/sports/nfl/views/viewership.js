@@ -19,7 +19,7 @@ import { viewCategoryStyle } from '../palette.js';
 import { ACCENT, MUTED, PAGE_BG, DIVIDER, ZERO_LINE } from '../../../modules/palette.js';
 import { frameConfig, frameLayout, referenceLine } from '../../../modules/chart-frame.js';
 import { DOT_OPACITY, MARGIN, TICK_FONT_PX } from '../../../modules/chart.js';
-import { createOnlyDetector } from '../../../modules/legend.js';
+import { createOnlyDetector, makeLegendChip } from '../../../modules/legend.js';
 import { initBandInfo, closeBandNote } from '../../../modules/band-info.js';
 import { currentTheme } from '../../../modules/pill.js';
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
@@ -84,16 +84,6 @@ const refs = {
 
 let current = null; // what the last render drew
 let lastPick = { key: null, at: 0 };
-
-function textOn(hex) {
-  const lin = (v) => {
-    const s = v / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  };
-  const n = parseInt(hex.slice(1), 16);
-  const lum = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
-  return 1.05 / (lum + 0.05) >= (lum + 0.05) / 0.05 ? '#FFFFFF' : '#111111';
-}
 
 function tickLabel(v, signed) {
   const a = Math.abs(v);
@@ -302,20 +292,11 @@ function renderLegend(series, state, th) {
     const st = viewCategoryStyle(s.id, th);
     const on = shown.includes(s.id);
     const li = el('li');
-    const b = el('button', 'legend-chip pill', s.label);
-    b.type = 'button';
-    b.dataset.category = s.id;
-    b.setAttribute('aria-pressed', String(on));
     const sole = shown.length === 1 && shown[0] === s.id;
     let hint = sole ? 'Double-click to show all' : `Double-click to show only ${s.label}`;
     if (s.windowLevel) hint += ' (window-level)';
-    b.title = hint;
-    b.setAttribute('aria-description', hint);
-    b.style.borderColor = st.color;
-    if (on) {
-      b.style.backgroundColor = st.color;
-      b.style.color = textOn(st.color);
-    }
+    // The shared outlined chip with a colour dot (U6), as on CFB and MLB.
+    const b = makeLegendChip({ label: s.label, color: st.color, pressed: on, hint, data: { category: s.id } });
     li.appendChild(b);
     return li;
   });

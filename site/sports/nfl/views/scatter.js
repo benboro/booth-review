@@ -29,7 +29,7 @@ import { showHoverRing, hideHoverRing, ringSpecFromPoint, hoverRingDiameter } fr
 import { initBandInfo, positionBandInfo, closeBandNote } from '../../../modules/band-info.js';
 import { placeEraLabels, setEraCaption } from '../era-labels.js';
 import { bandLayout, marginFor, TICK_FONT_PX, DOT_OPACITY } from '../../../modules/chart.js';
-import { createOnlyDetector } from '../../../modules/legend.js';
+import { createOnlyDetector, makeLegendChip } from '../../../modules/legend.js';
 import { buildDateAxis, seasonRange, shownBlocks, gapDividers } from '../../../modules/date-axis.js';
 import { MONTHS, escapeHover } from '../../../modules/format.js';
 import { mountViewTools } from '../tools.js';
@@ -91,16 +91,6 @@ let lastToggle = { key: null, at: 0 };
 
 function theme(env) {
   return env.dark ? 'dark' : 'light';
-}
-
-function textOn(hex) {
-  const lin = (v) => {
-    const s = v / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  };
-  const n = parseInt(hex.slice(1), 16);
-  const lum = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
-  return 1.05 / (lum + 0.05) >= (lum + 0.05) / 0.05 ? '#FFFFFF' : '#111111';
 }
 
 function dateGeometry(model) {
@@ -459,26 +449,17 @@ function renderLegend(th, state) {
   const { chips } = refs;
   const shown = ALL_CATS.filter((k) => !hiddenCats.has(k));
   const items = EXCLUSIVE_CATEGORIES.map((cat) => {
-    const color = categoryColor(cat.key, th);
-    const b = el('button', 'legend-chip pill', cat.label);
-    b.type = 'button';
-    b.dataset.category = cat.key;
-    const on = !hiddenCats.has(cat.key);
-    b.setAttribute('aria-pressed', String(on));
     const hint = shown.length === 1 && shown[0] === cat.key
       ? 'Double-click to show all'
       : `Double-click to show only ${cat.label}`;
-    b.title = hint;
-    b.setAttribute('aria-description', hint);
-    if (on) {
-      b.style.backgroundColor = color;
-      b.style.color = textOn(color);
-      b.style.borderColor = '';
-    } else {
-      b.style.backgroundColor = '';
-      b.style.color = '';
-      b.style.borderColor = color;
-    }
+    // The shared outlined chip with a colour dot (U6), as on CFB and MLB.
+    const b = makeLegendChip({
+      label: cat.label,
+      color: categoryColor(cat.key, th),
+      pressed: !hiddenCats.has(cat.key),
+      hint,
+      data: { category: cat.key },
+    });
     const li = document.createElement('li');
     li.appendChild(b);
     return li;

@@ -124,6 +124,36 @@ export function initLegend({
 }
 
 /**
+ * One legend chip, the shared look for every chart legend (CFB, NFL and MLB; 13-12, U6): an
+ * outlined chip with an 8px colour dot beside the label. The chip itself is never filled, so
+ * its text is always --ink (or --muted when off) on --bg, whatever the series colour. CSS draws
+ * the on/off state from `aria-pressed` (the off dot fades to 32%).
+ * @param {{label: string, color: string, pressed: boolean, hint?: string, data?: Object<string, string>}} opts
+ *   `data` becomes the button's data-* attributes (e.g. `{ family: 'fox' }`).
+ * @returns {HTMLButtonElement}
+ */
+export function makeLegendChip({ label, color, pressed, hint, data = {} }) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'legend-chip';
+  for (const [k, v] of Object.entries(data)) button.dataset[k] = v;
+  const dot = document.createElement('span');
+  dot.className = 'legend-dot';
+  dot.setAttribute('aria-hidden', 'true');
+  dot.style.backgroundColor = color;
+  const text = document.createElement('span');
+  text.className = 'legend-label';
+  text.textContent = label;
+  button.append(dot, text);
+  button.setAttribute('aria-pressed', String(pressed));
+  if (hint) {
+    button.title = hint;
+    button.setAttribute('aria-description', hint);
+  }
+  return button;
+}
+
+/**
  * Rebuilds `#legend-chips`'s children from `data.families`, syncing each
  * chip's `aria-pressed` and fill/border styling to whether the Networks
  * filter currently excludes every one of that family's networks (D-16).
@@ -141,27 +171,17 @@ export function renderLegend({ data, state, view }) {
   const palette = state.view === 'map' ? MAP_FAMILY_COLORS : FAMILY_COLORS;
   const items = data.families.map((family) => {
     const li = document.createElement('li');
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'legend-chip';
-    button.dataset.family = family;
-    // Outlined chip (13-12): an 8px family-colour dot plus the family label; the chip itself
-    // is never filled. No logos: a chip stands for several channels.
-    const dot = document.createElement('span');
-    dot.className = 'legend-dot';
-    dot.setAttribute('aria-hidden', 'true');
-    dot.style.backgroundColor = palette[theme][family];
-    const label = document.createElement('span');
-    label.className = 'legend-label';
-    label.textContent = FAMILY_LABELS[family];
-    button.append(dot, label);
-    const pressed = !familyToggledOff(data, state, family);
-    button.setAttribute('aria-pressed', String(pressed));
+    // Outlined chip (13-12): no logos, since a chip stands for several channels.
     const hint = familyIsSole(data, view, family, state.networks)
       ? 'Double-click to show all networks'
       : `Double-click to show only ${FAMILY_LABELS[family]}`;
-    button.title = hint;
-    button.setAttribute('aria-description', hint);
+    const button = makeLegendChip({
+      label: FAMILY_LABELS[family],
+      color: palette[theme][family],
+      pressed: !familyToggledOff(data, state, family),
+      hint,
+      data: { family },
+    });
     const counts = view?.facets?.networks;
     const offered = !counts
       || (data.networksByFamily.get(family) ?? []).reduce((sum, idx) => sum + (counts[idx] ?? 0), 0) > 0;

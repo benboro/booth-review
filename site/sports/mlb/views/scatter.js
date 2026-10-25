@@ -15,7 +15,7 @@ import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import {
   showHoverRing, hideHoverRing, ringSpecFromPoint, hoverRingDiameter,
 } from '../../../modules/hover-ring.js';
-import { createOnlyDetector } from '../../../modules/legend.js';
+import { createOnlyDetector, makeLegendChip } from '../../../modules/legend.js';
 import { formatAudienceShort } from '../../../modules/format.js';
 import { frameConfig, frameLayout, referenceLine } from '../../../modules/chart-frame.js';
 import { bandLayout, marginFor } from '../../../modules/chart.js';
@@ -565,16 +565,6 @@ function bindEvents(gd) {
 
 // ---- legend chips (D-05; no Fade | Hide toggle on MLB, U-10) ----
 
-function textOn(hex) {
-  const lin = (v) => {
-    const c = v / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  };
-  const n = parseInt(hex.slice(1), 16);
-  const lum = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
-  return 1.05 / (lum + 0.05) >= (lum + 0.05) / 0.05 ? '#FFFFFF' : '#111111';
-}
-
 /** One delegated chip listener; chips are rebuilt each render. */
 function bindLegend() {
   const present = () => (current ? current.families : []);
@@ -608,23 +598,17 @@ function renderLegend(families, th) {
   const shown = families.filter((f) => !hiddenFamilies.has(f));
   const items = families.map((family) => {
     const label = MLB_FAMILY_LABELS[family];
-    const color = familyColor(family, th);
-    const b = el('button', 'legend-chip pill', label);
-    b.type = 'button';
-    b.dataset.family = family;
-    const on = !hiddenFamilies.has(family);
-    b.setAttribute('aria-pressed', String(on));
     const hint = shown.length === 1 && shown[0] === family
       ? 'Double-click to show all'
       : `Double-click to show only ${label}`;
-    b.title = hint;
-    b.setAttribute('aria-description', hint);
-    if (on) {
-      b.style.backgroundColor = color;
-      b.style.color = textOn(color);
-    } else {
-      b.style.borderColor = color;
-    }
+    // The shared outlined chip with a colour dot (U6), as on CFB and NFL.
+    const b = makeLegendChip({
+      label,
+      color: familyColor(family, th),
+      pressed: !hiddenFamilies.has(family),
+      hint,
+      data: { family },
+    });
     const li = document.createElement('li');
     li.appendChild(b);
     return li;
