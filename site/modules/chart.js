@@ -106,6 +106,10 @@ const ENLARGED_DOT_PX = 10;
 const LEAD_STAR_SIZE = 14;
 /** Phase 10 (10-11 review): the surface-colored casing star drawn directly beneath each rated lead star. */
 const LEAD_CASING_SIZE = 18;
+/** Phase 17: how much larger the DOT_OUTLINE rim star is than the lead star, sized so the rim
+ * matches an enlarged dot's outline weight along the star's edges; 18px total, the largest
+ * marker gutter.js allows for. */
+const LEAD_RIM_GROWTH = 4;
 const FALLBACK_PLOT_HEIGHT = 420;
 
 /**
@@ -523,9 +527,9 @@ export function buildFigure(data, view, state, env) {
           }
         : ringMarker(activeOpacity),
     });
-    // Phase 10 D-09/D-10: lead-booth stars. No marker.line on an SDF glyph (it speckles, notes-2
-    // #1); a hollow star is a family-colored star under a slightly smaller SURFACE star. Always
-    // pushed, possibly empty, so the trace count never changes.
+    // Phase 10 D-09/D-10: lead-booth stars. No marker.line on a filled SDF glyph (it speckles,
+    // notes-2 #1); the hollow star is an open star. Always pushed, possibly empty, so the trace
+    // count never changes.
     const leadBase = (meta, bucket, yaxis) => ({
       type: 'scattergl',
       mode: 'markers',
@@ -544,7 +548,7 @@ export function buildFigure(data, view, state, env) {
     // same-colored dots it overlaps. Plain filled surface star: no marker.line, no open symbol.
     // Phase 17: with dots enlarged the casing becomes a thin DOT_OUTLINE rim instead, so stars
     // carry the same outline as the enlarged dots (dark in light, light in dark).
-    const rimMarker = { symbol: 'star', color: DOT_OUTLINE[theme], size: LEAD_STAR_SIZE + 2, opacity: activeOpacity, line: { width: 0 } };
+    const rimMarker = { symbol: 'star', color: DOT_OUTLINE[theme], size: LEAD_STAR_SIZE + LEAD_RIM_GROWTH, opacity: activeOpacity, line: { width: 0 } };
     const casingMarker = view.enlargeDots
       ? rimMarker
       : { symbol: 'star', color: SURFACE[theme], size: LEAD_CASING_SIZE, opacity: 1, line: { width: 0 } };
@@ -581,21 +585,13 @@ export function buildFigure(data, view, state, env) {
       marker: { symbol: 'star', color, size: LEAD_STAR_SIZE, opacity: activeOpacity, line: { width: 0 } },
     });
     leadTraces.push({
-      type: 'scattergl',
-      mode: 'markers',
-      meta: `unrated-lead-halo:${family}`,
-      showlegend: false,
-      yaxis: 'y2',
-      x: uLead.x,
-      y: uLead.y,
-      hoverinfo: 'skip',
-      hovertemplate: null,
-      marker: { symbol: 'star', color, size: LEAD_STAR_SIZE + (thin === 2 ? 4 : 3), opacity: activeOpacity, line: { width: 0 } },
-    });
-    leadTraces.push({
       ...leadBase(`unrated-lead:${family}`, uLead, 'y2'),
-      // Hollow only in Viewers mode; elsewhere the band is filled (D-14), so no surface fill.
-      marker: { symbol: 'star', color: yMode === 'viewers' ? SURFACE[theme] : color, size: LEAD_STAR_SIZE, opacity: activeOpacity, line: { width: 0 } },
+      // Phase 17 (user sign-off): a truly empty star, so the band's rings show through it, at
+      // the rings' own line width. `star-open` draws cleanly in this Plotly build (the speckle
+      // test guards it). uLead only fills in Viewers mode; elsewhere the band is filled (D-14).
+      marker: yMode === 'viewers'
+        ? { symbol: 'star-open', color, size: LEAD_STAR_SIZE, opacity: activeOpacity, line: { width: thin, color } }
+        : { symbol: 'star', color, size: LEAD_STAR_SIZE, opacity: activeOpacity, line: { width: 0 } },
     });
   }
 

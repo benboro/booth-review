@@ -113,17 +113,18 @@ def test_lead_star_has_no_pixels_outside_the_glyph(
     open_app(guarded_page, "")
     guarded_page.wait_for_timeout(150)
     # The filled state is the cased star as drawn: surface casing star beneath the lead star.
-    metas = (
-        ["lead-halo:disney", "lead:disney"]
-        if state == "filled"
-        else ["unrated-lead-halo:disney", "unrated-lead:disney"]
-    )
+    # The filled state is the cased star as drawn: surface casing star beneath the lead star.
+    # The hollow (no-rating) star is a 14px open star with a line since Phase 17 (user sign-off).
+    metas = ["lead-halo:disney", "lead:disney"] if state == "filled" else ["unrated-lead:disney"]
     info: dict[str, Any] = guarded_page.evaluate(_MARKERS_JS, metas)
     layers = [info["markers"][m] for m in metas]
     for marker in layers:
-        assert marker["symbol"] == "star"
-        assert marker["line"]["width"] == 0
-    largest = max(float(m["size"]) for m in layers)
+        if state == "filled":
+            assert marker["symbol"] == "star"
+            assert marker["line"]["width"] == 0
+        else:
+            assert marker["symbol"] == "star-open"
+    largest = max(float(m["size"]) + float(m["line"]["width"]) for m in layers)
     # A star's top tip reaches about 0.65 of its size from the centre (11px at 17px), past the
     # size / 2 of a square marker, so the glyph box is 0.65 * size plus a 1px antialias margin.
     half = largest * 0.65 + 1

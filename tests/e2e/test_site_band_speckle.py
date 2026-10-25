@@ -4,7 +4,9 @@ Plotly's scattergl draws an open symbol (`circle-open`, `star-open`, ...) from a
 atlas, which breaks into pixelated squares at small sizes (notes2-band-speckle.png). Two guards:
 
 - structural: no `scattergl` trace in any chart state carries an open symbol, so the glyph path
-  that speckles is never taken;
+  that speckles is never taken. The one exception (Phase 17, user sign-off) is the 14px
+  `star-open` on `unrated-lead:` traces: at that size the glyph draws cleanly, which
+  test_site_booth_speckle proves pixel by pixel;
 - pixel: the band's real marker configs (read from `gd.data`, never hand-copied) are drawn at
   real-data density through `scattergl` and again through SVG `scatter` (analytic reference);
   the two renderings must agree to within a few pixels.
@@ -49,6 +51,9 @@ OPEN_SYMBOLS_JS = """
   for (const t of document.getElementById('chart').data) {
     if (t.type !== 'scattergl') continue;
     const sym = t.marker && t.marker.symbol;
+    if (String(t.meta).startsWith('unrated-lead:') && sym === 'star-open' && t.marker.size >= 14) {
+      continue;
+    }
     const list = Array.isArray(sym) || ArrayBuffer.isView(sym) ? Array.from(sym) : [sym];
     if (list.some(isOpen)) bad.push('open');
   }

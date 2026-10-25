@@ -66,6 +66,13 @@ def _open(
     return page.evaluate(_TRACES_JS)
 
 
+def _surface(page: Page) -> str:
+    return page.evaluate(
+        "async () => { const p = await import('./modules/palette.js');"
+        " return p.SURFACE[document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light']; }"
+    )
+
+
 def _by_prefix(traces: list[dict], prefix: str) -> list[dict]:
     return [t for t in traces if t["meta"].startswith(prefix)]
 
@@ -92,26 +99,31 @@ def test_default_view_draws_a_games_as_stars(
     assert _points(traces, "family:") & (LEAD_RATED | LEAD_UNRATED) == set()
     assert _points(traces, "unrated-active:") & LEAD_UNRATED == set()
     for t in traces:
-        if t["meta"].startswith(("lead:", "unrated-lead")):
+        if t["meta"].startswith("unrated-lead:"):
+            # Phase 17: the no-rating star is empty, drawn as an open star with a line.
+            assert t["symbol"] == "star-open", t["meta"]
+            assert t["lineWidth"] > 0, t["meta"]
+        elif t["meta"].startswith(("lead:", "unrated-lead")):
             assert t["symbol"] == "star", t["meta"]
             assert t["lineWidth"] == 0, t["meta"]
-        assert "star-open" not in json.dumps(t["symbol"])
+        else:
+            assert "star-open" not in json.dumps(t["symbol"])
 
 
-def test_hollow_star_is_a_surface_star_over_a_family_halo(
+def test_hollow_star_is_an_empty_open_star(
     guarded_page: Page, serve_booths: Callable, open_app: Callable
 ) -> None:
+    # Phase 17 (user sign-off): the no-rating star has an empty fill, so the band shows through.
     traces = _open(guarded_page, serve_booths, open_app)
     by_meta = {t["meta"]: t for t in traces}
-    halo = by_meta["unrated-lead-halo:disney"]
     hollow = by_meta["unrated-lead:disney"]
     filled = by_meta["lead:disney"]
-    assert halo["n"] == hollow["n"] == 1
-    assert halo["size"] > hollow["size"] == filled["size"]
-    assert halo["color"] == filled["color"] != hollow["color"]
-    assert halo["customdata"] == []  # the halo never takes hover or click
-    order = [t["meta"] for t in traces]
-    assert order.index("unrated-lead-halo:disney") < order.index("unrated-lead:disney")
+    assert hollow["n"] == 1
+    assert hollow["symbol"] == "star-open"
+    assert hollow["size"] == filled["size"]
+    assert hollow["color"] == filled["color"]
+    assert hollow["lineWidth"] > 0
+    assert not any(t["meta"].startswith("unrated-lead-halo:") for t in traces)
 
 
 def test_stars_on_every_channel_of_the_family(
@@ -286,7 +298,7 @@ def test_rated_lead_star_has_a_surface_casing_drawn_beneath_it(
     traces = _open(guarded_page, serve_booths, open_app)
     by_meta = {t["meta"]: t for t in traces}
     order = [t["meta"] for t in traces]
-    surface = by_meta["unrated-lead:disney"]["color"]
+    surface = _surface(guarded_page)
     for family, game in (("disney", 8), ("fox", 5)):
         casing, star = by_meta[f"lead-halo:{family}"], by_meta[f"lead:{family}"]
         assert star["customdata"] == [game]
@@ -306,7 +318,7 @@ def test_one_announcer_highlight_keeps_the_unrated_lead_star_hollow(
     guarded_page: Page, serve_booths: Callable, open_app: Callable
 ) -> None:
     default = {t["meta"]: t for t in _open(guarded_page, serve_booths, open_app)}
-    surface = default["unrated-lead:disney"]["color"]
+    surface = _surface(guarded_page)
     traces = _open(guarded_page, serve_booths, open_app, "?people=casey-lund")
     order = [t["meta"] for t in traces]
     unrated = next(t for t in traces if t["meta"] == "highlight-unrated")
@@ -341,4 +353,4 @@ def test_enlarged_dots_give_lead_stars_the_dot_outline(
     assert star["customdata"] == [5]
     assert casing["n"] == 1
     assert str(casing["color"]).upper() == rim
-    assert (casing["size"], star["size"]) == (16, 14)
+    assert (casing["size"], star["size"]) == (18, 14)
