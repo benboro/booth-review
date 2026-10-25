@@ -462,7 +462,7 @@ Viewership is matched to games from Ratings Reference records, which are kept wi
 
 ## MLB: Postseason crews 2014-2026
 
-Crews for the 2025 and 2026 postseason come from 506 Sports round pages first. 506 has no MLB round pages before 2025, so 2014-2024 crews come from Wikipedia's lists of broadcasters for the Wild Card, Championship Series and World Series, which do not cover the Division Series. The round-to-network map for those seasons is read from each season's Wikipedia postseason article and settled by hand. Each season row says what share of its games has a crew listed.
+Crews for the 2025 and 2026 postseason come from 506 Sports round pages first. 506 has no MLB round pages before 2025, so 2014-2024 crews come from Wikipedia's lists of broadcasters for the Wild Card, League Championship Series and World Series, which do not cover the Division Series. The round-to-network map for those seasons is read from each season's Wikipedia postseason article and settled by hand. Each season row says what share of its games has a crew listed.
 
 <!-- mlb:end -->
 
