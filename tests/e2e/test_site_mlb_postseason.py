@@ -408,3 +408,32 @@ def test_desktop_has_separate_columns_and_no_phone_twin(post: Page) -> None:
         "League Championship Series",
         "World Series",
     ]
+
+
+def test_season_with_no_cells_selects_and_shows_the_empty_state(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """F15: a season in the season table with no round cells is still a working Season button."""
+    page = mlb_guarded_page
+
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        s = data["postseason_seasons"]
+        s["season"].append(2027)
+        s["coverage_num"].append(0)
+        s["coverage_den"].append(0)
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    page.route("**/mlb-data.json", handler)
+    open_mlb_app(page, "?sport=mlb&view=postseason")
+    btn = page.locator(f"{VIEW} .mlb-grid button[data-season-cell='season-2027']")
+    btn.click()
+    assert page.evaluate(f"{HOOKS}.getState().cell") == "season-2027"
+    assert btn.get_attribute("aria-pressed") == "true"
+    assert page.evaluate(f"{HOOKS}.getTableIndexes()") == []
+    assert page.inner_text(f"{VIEW} .mlb-grid-status") == "Selected 2027 postseason, 0 games."
+    matched = page.inner_text("#mlb-matched-games")
+    assert "No matching games" in matched
+    assert "No games are listed for 2027 postseason." in matched
+    assert "cell=season-2027" in page.url

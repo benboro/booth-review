@@ -103,6 +103,14 @@ export function prepareMlb(raw) {
     }
     for (const g of c.games) if (!sc.games.includes(g)) sc.games.push(g);
   }
+  // Every season the grid lists gets a Season cell, even one with no round cells yet (for
+  // example before its outlets are known): picking it shows the empty state, never nothing.
+  for (const s of rowsOf(raw.postseason_seasons)) {
+    const key = `season-${s.season}`;
+    if (!seasonCells.has(key)) {
+      seasonCells.set(key, { key, season: s.season, round: null, league: null, kind: 'season', games: [] });
+    }
+  }
   for (const [key, sc] of seasonCells) cells.set(key, sc);
 
   // Stable ids for deep links: a booth is its play-by-play person's id, a game is its
