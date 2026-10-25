@@ -17,13 +17,19 @@ let themeWatch = null;
 /**
  * Repaints every family dot on the page when data-theme changes, so dots in tables,
  * chips and open panels follow the theme hook, not only the active chart (SHELL-02).
- * Armed once, on the first dot built.
+ * Armed once, on the first dot or logo built.
  */
 function watchTheme() {
   if (themeWatch) return;
   themeWatch = onThemeChange((theme) => {
     for (const dot of document.querySelectorAll('.net-dot[data-family]')) {
       dot.style.background = FAMILY_COLORS[theme][dot.dataset.family];
+    }
+    // Logo <img> cannot see page CSS, so a theme flip swaps to the generated dark file (D-09).
+    // The id is a map key set from logoFor(); the Map lookup keeps data rows out of it (T-13-08).
+    for (const img of document.querySelectorAll('img.net-logo[data-logo]')) {
+      const logo = logoFor(img.dataset.logo);
+      if (logo) img.src = theme === 'dark' ? logo.darkFile : logo.file;
     }
   });
 }
@@ -118,7 +124,9 @@ export function networkMark({ id, name, family }, { dot = true } = {}) {
   if (entry) {
     const img = document.createElement('img');
     img.className = entry.box === 'badge' ? 'net-logo net-logo--badge' : 'net-logo';
-    img.src = entry.file;
+    img.dataset.logo = String(id);
+    img.src = currentTheme() === 'dark' ? entry.darkFile : entry.file;
+    watchTheme();
     img.alt = name;
     img.title = name;
     img.setAttribute('width', String(entry.width));

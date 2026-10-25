@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 import pytest
-from test_site_logos import _logo_files, lint_svg
+from test_site_logos import _logo_files, _manifest_rows, lint_svg
 
 from booth_review.build import logos_dark
 from booth_review.build.logos_dark import (
@@ -16,6 +18,7 @@ from booth_review.build.logos_dark import (
     contrast,
     dark_variant,
 )
+from booth_review.build.site_assembly import assemble_site
 from booth_review.errors import SiteBuildError
 
 NS = "http://www.w3.org/2000/svg"
@@ -130,3 +133,34 @@ def test_every_source_variant(path) -> None:  # type: ignore[no-untyped-def]
             continue
         low = min(contrast(paint, bg) for bg in DARK_BACKGROUNDS)
         assert low >= 3.0, f"{path.name}: {paint} only {low:.2f}:1"
+
+
+def test_manifest_dark_sha256() -> None:
+    rows = _manifest_rows()
+    assert rows
+    for row in rows:
+        path = next(p for p in _logo_files() if p.name == row["file"])
+        expected = hashlib.sha256(
+            dark_variant(path.read_bytes(), flip_pair=path.name in FLIP_PAIR_FILES)
+        ).hexdigest()
+        assert row["dark_sha256"] == expected, row["file"]
+
+
+def test_build_writes_a_dark_variant_for_every_logo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)  # never read a real .env
+    monkeypatch.delenv("CFBD_API_KEY", raising=False)
+    root = Path(__file__).resolve().parents[1]
+    out = tmp_path / "site"
+    result = assemble_site(
+        source=root / "tests" / "fixtures" / "contract" / "site-data.fixture.json",
+        out_dir=out,
+        site_src=root / "site",
+        docs=root / "docs",
+    )
+    for logo in _logo_files():
+        built = out / "logos" / "dark" / logo.name
+        expected = dark_variant(logo.read_bytes(), flip_pair=logo.name in FLIP_PAIR_FILES)
+        assert built.read_bytes() == expected
+        assert f"logos/dark/{logo.name}" in result.files

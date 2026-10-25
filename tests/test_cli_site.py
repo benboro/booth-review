@@ -198,7 +198,10 @@ def test_fixture_build_file_suffixes_and_one_json_file(site_env: Path) -> None:
         "fonts/OFL-roboto-condensed.txt",
     }
     source_svgs = {path.relative_to(SITE_SRC).as_posix() for path in SITE_SRC.rglob("*.svg")}
-    assert by_suffix.get(".svg", set()) == source_svgs
+    dark_svgs = {
+        f"logos/dark/{Path(name).name}" for name in source_svgs if name.startswith("logos/")
+    }
+    assert by_suffix.get(".svg", set()) == source_svgs | dark_svgs
     assert len(by_suffix[".json"]) == 1
 
 

@@ -27,7 +27,7 @@ from typing import Any, cast
 
 from pydantic import BaseModel, ValidationError
 
-from booth_review.build import pages
+from booth_review.build import logos_dark, pages
 from booth_review.build.site_data import _contract_error_summary
 from booth_review.config import load_cfbd_key
 from booth_review.contract.mlb_models import MlbSiteData, validate_mlb_site_data
@@ -666,6 +666,15 @@ def _assemble_into(
     bodies = dict(sport_bodies or {})
     ids = _ordered_sports(bodies)
     copied = _copy_site_source(site_src, stage, sports=frozenset(ids))
+    for logo in sorted((site_src / "logos").glob("*.svg")):
+        dark_rel = Path("logos") / "dark" / logo.name
+        atomic_write_bytes(
+            stage / dark_rel,
+            logos_dark.dark_variant(
+                logo.read_bytes(), flip_pair=logo.name in logos_dark.FLIP_PAIR_FILES
+            ),
+        )
+        copied.append(dark_rel.as_posix())
     atomic_write_bytes(stage / "site-data.json", body)
     for sid in ids[1:]:
         data_file = sport_spec(sid).data_file

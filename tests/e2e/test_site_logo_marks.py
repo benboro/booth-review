@@ -311,3 +311,63 @@ def test_footer_carries_the_logo_trademark_line(guarded_page: Page, open_app: Op
         "Network logos are trademarks of their owners, shown only to identify each network. "
         "Their use does not imply endorsement, and they are not covered by this site's MIT license."
     )
+
+
+_LOGO_STATE_JS = """() => [...document.querySelectorAll('img.net-logo')].map((img) => ({
+  src: new URL(img.getAttribute('src'), location.href).pathname,
+  width: img.getAttribute('width'), height: img.getAttribute('height'),
+  alt: img.alt, title: img.title,
+  filter: getComputedStyle(img).filter,
+  chrome: [img, img.parentElement, img.closest('td')].filter(Boolean).map(
+    (el) => getComputedStyle(el).backgroundColor),
+}))"""
+
+
+def test_logos_swap_to_dark_files_on_a_live_theme_flip(
+    guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
+) -> None:
+    """D-09: flipping data-theme swaps every img.net-logo between logos/<name>.svg and
+    logos/dark/<name>.svg, with size, alt and title untouched, and no filter or plate."""
+    _serve(guarded_page, _with_logo_ids(fixture_raw))
+    open_app(guarded_page, _QUERY)
+    guarded_page.wait_for_selector("#games-table tbody img.net-logo")
+    light = guarded_page.evaluate(_LOGO_STATE_JS)
+    assert light
+    assert all(re.fullmatch(r"/logos/[a-z0-9-]+\.svg", s["src"]) for s in light)
+    guarded_page.evaluate("document.documentElement.dataset.theme = 'dark'")
+    guarded_page.wait_for_function(
+        "[...document.querySelectorAll('img.net-logo')].every(i => i.src.includes('/logos/dark/'))"
+    )
+    dark = guarded_page.evaluate(_LOGO_STATE_JS)
+    assert len(dark) == len(light)
+    for before, after in zip(light, dark, strict=True):
+        assert after["src"] == before["src"].replace("/logos/", "/logos/dark/")
+        for key in ("width", "height", "alt", "title"):
+            assert after[key] == before[key]
+        assert after["filter"] == "none"
+        assert all(c in {"rgba(0, 0, 0, 0)", "transparent"} for c in after["chrome"][:2])
+    assert guarded_page.evaluate(
+        "[...document.querySelectorAll('img.net-logo')].every(i => i.naturalWidth > 0)"
+    )
+    guarded_page.evaluate("document.documentElement.dataset.theme = 'light'")
+    guarded_page.wait_for_function(
+        "[...document.querySelectorAll('img.net-logo')].every(i => !i.src.includes('/dark/'))"
+    )
+    assert guarded_page.evaluate(_LOGO_STATE_JS) == light
+
+
+def test_first_mark_logo_still_arms_the_theme_watcher(
+    guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
+) -> None:
+    """RESEARCH Pitfall 5: with every network a logo (no family dot built), the swap still runs."""
+    raw = _with_logo_ids(fixture_raw)
+    raw["lookups"]["networks"][2]["id"] = "fox"
+    raw["lookups"]["networks"][3]["id"] = "nbc"
+    _serve(guarded_page, raw)
+    open_app(guarded_page, _QUERY)
+    guarded_page.wait_for_selector("#games-table tbody img.net-logo")
+    assert guarded_page.locator("#games-table .net-dot").count() == 0
+    guarded_page.evaluate("document.documentElement.dataset.theme = 'dark'")
+    guarded_page.wait_for_function(
+        "[...document.querySelectorAll('img.net-logo')].every(i => i.src.includes('/logos/dark/'))"
+    )

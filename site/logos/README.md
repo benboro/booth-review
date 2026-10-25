@@ -14,4 +14,9 @@ covered by this repository's MIT license.
   the unused SVG 1.1 `DOCTYPE` line from the CBS file so it passes the lint. Line
   endings are normalised to LF.
 - Logos are rendered only through `<img>`, so no script inside a file can run.
+- Dark-theme variants are generated at build time by
+  `src/booth_review/build/logos_dark.py` into `logos/dark/<name>.svg` (same viewBox,
+  width and height; light marks recoloured, nothing else changed). The sources here are
+  never edited, the manifest's `dark_sha256` column records each generated file's hash,
+  and the trademark notice is unchanged.
 - The manifest and this notice are not copied into the built site.
