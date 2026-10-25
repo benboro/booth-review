@@ -58,7 +58,9 @@ NFL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "contract" / "nfl-data.fixture.
 _SITE_DATA_SHA256 = "8ceec31a10326e809f9a9397da7734be8b1092156ef094093742c7d4e117ac02"
 # Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
 # new header with theme slot, site name.
-_COVERAGE_SHA256 = "1c2076a54c682ad0355657a0e1a3d938d35c7451c3c7d52bf5342a8753f7c39c"
+# Re-pinned at Phase 17 Plan 06: inline hash-pinned theme-init.js script, sha256 CSP and
+# #theme-slot toggle in the header.
+_COVERAGE_SHA256 = "f3746cece5a8d5ad854b07f69c0b333ffcba8513f1901c6e5ad3345ac37a9c8b"
 # Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
 # new header with theme slot, site name.
 # Re-pinned at Phase 13 Plan 05: Plotly partial bundle src and SRI.
@@ -72,7 +74,8 @@ _COVERAGE_SHA256 = "1c2076a54c682ad0355657a0e1a3d938d35c7451c3c7d52bf5342a8753f7
 # Re-pinned after the Phase 13 panel review: #theme-slot drops aria-hidden (1 changed line).
 # Re-pinned for the toolbar-fit.js preload in <head> (1 added line).
 # Re-pinned at Phase 14 Plan 09: #pick-status and #matched-subtitle seats (crew pick).
-_INDEX_PRE_PHASE_SHA256 = "62aa8eec4c47a669dd608a95ce1a53561dae817ff54975bfb80ca0e381d1709d"
+# Re-pinned at Phase 17 Plan 06: theme-init.js head script and #theme-toggle button markup.
+_INDEX_PRE_PHASE_SHA256 = "465a846196c1f2bbbadb7a0ef3044157d1263aac5f32035efa4d210ffc9a821b"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'

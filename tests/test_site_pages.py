@@ -383,7 +383,9 @@ def test_render_methodology_resolves_md_links_against_docs(
 # fill-in rule, unknown-role marks on no-PBP rows); no NFL text changed.
 # Re-pinned at Phase 15 Plan 05: CFB Crews regular-analyst exception (P14-FU-3);
 # NFL text changes are inside the nfl fences.
-_METHODOLOGY_FLAG_OFF_SHA256 = "b78919a2ae89ca846586e63166040e363f66398a7008bc81dc2f4000d2290dd8"
+# Re-pinned at Phase 17 Plan 06: inline hash-pinned theme-init.js script, sha256 CSP and
+# #theme-slot toggle in the header.
+_METHODOLOGY_FLAG_OFF_SHA256 = "b3b78d6c49b48d497e2fc50c5a39ea9c2c694afe18603433e2ea33b20d874431"
 
 _NFL_ANCHORS = (
     "nfl-special-games",
