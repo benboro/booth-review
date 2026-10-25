@@ -67,6 +67,8 @@ export function buildScatterItems(model, state, { hiddenFamilies } = {}) {
   const items = [];
   const present = new Set();
   const counts = { total: 0, plotted: 0, noRating: 0, noExcitement: 0, neither: 0, matched: 0, faded: 0 };
+  // Games whose family chip is off: still in the counts (they follow the control), not drawn.
+  let hidden = 0;
   for (let i = 0; i < model.n; i += 1) {
     if (!passesControl(model, i, state)) continue;
     const x = c.viewers[i] == null ? null : c.viewers[i];
@@ -92,6 +94,7 @@ export function buildScatterItems(model, state, { hiddenFamilies } = {}) {
     if (matched) counts.matched += 1;
     if (faded) counts.faded += 1;
     counts.total += 1;
+    if (hiddenSet.has(family)) hidden += 1;
     items.push({
       i, x, y, family, place,
       window: x != null && c.scope[i] === 'window',
@@ -99,11 +102,15 @@ export function buildScatterItems(model, state, { hiddenFamilies } = {}) {
       hidden: hiddenSet.has(family),
     });
   }
-  return { items, counts, families: MLB_FAMILY_ORDER.filter((f) => present.has(f)) };
+  return { items, counts, hidden, families: MLB_FAMILY_ORDER.filter((f) => present.has(f)) };
 }
 
-/** Status line under the chart (D-08): what is plotted and what sits in a strip. */
-export function statusText(counts) {
+/**
+ * Status line under the chart (D-08): what is plotted and what sits in a strip. The counts follow
+ * the Season type / Round control; `hidden` games (legend chips off) are named so the line still
+ * adds up to what is drawn.
+ */
+export function statusText(counts, hidden = 0) {
   if (!counts || !counts.total) return '';
   const rest = [];
   if (counts.noRating) rest.push(`${counts.noRating} with no rating`);
@@ -113,5 +120,6 @@ export function statusText(counts) {
     ? `${counts.plotted} ${counts.plotted === 1 ? 'game' : 'games'} plotted.`
     : '';
   const tail = rest.length ? `${rest.join(', ')}.` : '';
-  return [plotted, tail].filter(Boolean).join(' ');
+  const off = hidden > 0 ? `${hidden} hidden by the legend.` : '';
+  return [plotted, tail, off].filter(Boolean).join(' ');
 }

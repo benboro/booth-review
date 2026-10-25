@@ -173,6 +173,12 @@ def test_chips_show_present_families_toggle_and_isolate(
     assert (
         page.locator(f"{LEGEND} button[data-family='fox']").get_attribute("aria-pressed") == "false"
     )
+    # F4: the counts keep the hidden family, and the status line says how many it hides.
+    drawn = sum(1 for t in _plot(page)["data"] for _ in t["customdata"])
+    hidden = before["total"] - drawn
+    status = page.inner_text("#mlb-view-scatter p.mlb-scatter-status")
+    assert hidden > 0
+    assert status.endswith(f" {hidden} hidden by the legend.")
     page.click(f"{LEGEND} button[data-family='fox']")
     page.wait_for_function(
         "document.querySelector('#mlb-view-scatter .js-plotly-plot').data.some(t => t.meta === 'fox')"

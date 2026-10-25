@@ -695,10 +695,10 @@ export function render(ctx) {
   clearHover();
 
   const built = buildScatterItems(model, state, { hiddenFamilies });
-  const { items, counts, families } = built;
+  const { items, counts, hidden, families } = built;
   current = { items, counts, families, env, model, state, byGame: new Map(items.map((it) => [it.i, it])) };
   renderLegend(families, th);
-  refs.status.textContent = statusText(counts);
+  refs.status.textContent = statusText(counts, hidden);
   syncControls(state);
 
   // The home range changes only with the Season type / Round control, phone vs desktop or the

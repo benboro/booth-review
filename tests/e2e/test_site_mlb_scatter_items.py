@@ -222,6 +222,8 @@ def test_status_text(run: Callable[[str], Any]) -> None:
           M.statusText(c({ total: 3, plotted: 2, neither: 1 })),
           M.statusText(c({ total: 3, noRating: 2, neither: 1 })),
           M.statusText(c({ total: 0 })),
+          M.statusText(c({ total: 9, plotted: 5, noRating: 2, noExcitement: 1, neither: 1 }), 3),
+          M.statusText(c({ total: 1, plotted: 1 }), 0),
         ];
         """
     )
@@ -230,6 +232,12 @@ def test_status_text(run: Callable[[str], Any]) -> None:
     assert out[2] == "2 games plotted. 1 with neither."
     assert out[3] == "2 with no rating, 1 with neither."
     assert out[4] == ""
+    # F4: games behind an off legend chip stay in the counts and are named as hidden.
+    assert out[5] == (
+        "5 games plotted. 2 with no rating, 1 with no excitement, 1 with neither. "
+        "3 hidden by the legend."
+    )
+    assert out[6] == "1 game plotted."
 
 
 def test_strip_jitter_is_deterministic(run: Callable[[str], Any]) -> None:
