@@ -448,3 +448,21 @@ def test_game_row_opens_the_panel_and_focus_returns(heavy: Page) -> None:
     heavy.wait_for_function(
         "document.activeElement && document.activeElement.classList.contains('crews-game')"
     )
+
+
+def test_booth_picked_game_row_escape_returns_focus_to_the_row(heavy: Page) -> None:
+    """F2: the picked booth's games are also in Matched games; focus still returns to the row."""
+    heavy.locator(ROW).nth(0).locator("td.crews-name").click()
+    assert heavy.evaluate(f"{HOOKS}.getState().booth") == "0"
+    heavy.locator(ROW).nth(0).locator(".crews-chevron").click()
+    game = heavy.locator("#mlb-view-apple tr.crews-game").first
+    i = game.get_attribute("data-game")
+    assert heavy.locator(f"#mlb-matched-games .nfl-matchup-btn[data-game='{i}']").count() == 1
+    game.focus()
+    heavy.keyboard.press("Enter")
+    heavy.wait_for_selector("#mlb-detail-panel[open]")
+    heavy.keyboard.press("Escape")
+    heavy.wait_for_function(
+        "document.activeElement && document.activeElement.classList.contains('crews-game')"
+    )
+    assert heavy.evaluate("document.activeElement.dataset.game") == i

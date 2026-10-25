@@ -283,11 +283,13 @@ function syncPanel() {
     return;
   }
   if (panel.currentGame() === state.game) return;
-  // The table re-rendered before this point, so an opener button from the old render is detached:
-  // focus returns to the same game's new button instead.
-  const opener = pendingOpener
-    ? regions.matched.querySelector(`.nfl-matchup-btn[data-game="${state.game}"]`) ?? pendingOpener
-    : undefined;
+  // The table re-rendered before this point, so a Matched games button from the old render is
+  // detached: focus returns to the same game's new button instead. A connected opener (the
+  // Scatter chart) or a proxy (an Apple expanded row) is kept as passed.
+  let opener = pendingOpener ?? undefined;
+  if (opener instanceof Element && !opener.isConnected) {
+    opener = regions.matched.querySelector(`.nfl-matchup-btn[data-game="${state.game}"]`) ?? opener;
+  }
   panel.open(gameRow(model, state.game), opener);
   pendingOpener = null;
 }

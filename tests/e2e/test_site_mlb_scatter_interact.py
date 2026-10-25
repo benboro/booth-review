@@ -237,6 +237,24 @@ def test_click_opens_the_panel_and_escape_returns_focus(
     assert page.evaluate("document.activeElement.closest('#mlb-view-scatter') !== null")
 
 
+def test_booth_picked_dot_escape_returns_focus_to_the_chart(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """F2: with a booth picked the game is also in Matched games; focus still returns to the chart."""
+    page = mlb_guarded_page
+    page.set_viewport_size({"width": 1440, "height": 900})
+    _open(page, open_mlb_app, "&booth=p2")
+    page.wait_for_timeout(300)
+    game = page.evaluate(f"{HOOKS}.getTableIndexes()")[0]
+    pt = _dot(page, game)
+    page.mouse.click(pt["x"], pt["y"])
+    page.wait_for_function(f"{HOOKS}.getState().game === {game}")
+    assert page.locator(f"#mlb-matched-games .nfl-matchup-btn[data-game='{game}']").count() == 1
+    page.keyboard.press("Escape")
+    page.wait_for_function(f"{HOOKS}.getState().game === null")
+    assert page.evaluate("document.activeElement.closest('#mlb-view-scatter') !== null")
+
+
 def test_touch_first_tap_tooltip_second_tap_opens(
     mlb_mobile_page: Page, open_mlb_app: Callable[..., None]
 ) -> None:
