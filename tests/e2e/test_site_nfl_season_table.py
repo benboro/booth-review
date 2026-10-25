@@ -1,0 +1,248 @@
+# ruff: noqa: E501  (embedded JS lines and tooltip copy)
+"""17.1-02: the NFL team "season by season" table (grouped heads, group rules, header tooltips).
+
+Synthetic nfl-data fixture only; no vault rows.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+
+import pytest
+from dark_checks import set_theme
+from playwright.sync_api import Page
+
+pytestmark = pytest.mark.e2e
+
+GD = "#nfl-view-special .nfl-chart > div"
+TABLE = "#nfl-view-special .nfl-breakdown table"
+HEADS = [
+    "Season",
+    "Solo slots",
+    "Sunday windows",
+    "Special games",
+    "Flexed",
+    "Thursday night",
+    "Sunday night",
+    "Monday night",
+    "Holiday",
+    "Other solo slot",
+    "Fox AGOTW",
+    "CBS late national",
+    "International",
+]
+TIPS = {
+    "Special games": "Solo slots plus Sunday-window games: Thu + Sun + Mon + Holiday + Other solo + AGOTW + CBS + Intl.",
+    "Other solo slot": "A game alone in its window that is not a Thursday, Sunday or Monday night game or a holiday, such as a Saturday, a Friday or a lone Sunday-afternoon game.",
+    "Fox AGOTW": "Fox's America's Game of the Week, its top Sunday-afternoon game.",
+    "CBS late national": "CBS's late Sunday-afternoon national game.",
+}
+RULED = ["Thursday night", "Fox AGOTW", "Special games", "Flexed"]
+
+
+def _select_team(page: Page) -> None:
+    page.wait_for_function("window.__nflTestHooks.getViewModel('special').drawn === true")
+    page.evaluate(
+        """(sel) => {
+          document.querySelector(sel).emit('plotly_click',
+            { points: [{ customdata: 0 }], event: { clientX: 300, clientY: 200 } });
+        }""",
+        GD,
+    )
+    page.wait_for_selector(TABLE)
+
+
+@pytest.fixture
+def app(nfl_guarded_page: Page, open_nfl_app: Callable[..., None]) -> Page:
+    nfl_guarded_page.set_viewport_size({"width": 1440, "height": 900})
+    open_nfl_app(nfl_guarded_page)
+    _select_team(nfl_guarded_page)
+    return nfl_guarded_page
+
+
+@pytest.fixture
+def mobile(nfl_mobile_page: Page, open_nfl_app: Callable[..., None]) -> Page:
+    open_nfl_app(nfl_mobile_page)
+    _select_team(nfl_mobile_page)
+    return nfl_mobile_page
+
+
+def _tip_text(page: Page) -> str | None:
+    hidden = page.evaluate("document.getElementById('chart-tooltip')?.hidden ?? true")
+    if hidden:
+        return None
+    return page.evaluate("document.getElementById('chart-tooltip').textContent")  # type: ignore[no-any-return]
+
+
+def test_structure_and_totals(app: Page) -> None:
+    rows = app.locator(f"{TABLE} thead tr")
+    assert rows.count() == 2
+    assert rows.nth(0).locator("th").all_inner_texts() == [
+        "Season",
+        "Solo slots",
+        "Sunday windows",
+        "Special games",
+        "Flexed",
+    ]
+    assert rows.nth(1).locator("th").all_inner_texts() == HEADS[5:]
+    spans = app.eval_on_selector_all(
+        f"{TABLE} thead tr:first-child th", "els => els.map(e => [e.colSpan, e.rowSpan])"
+    )
+    assert spans == [[1, 2], [5, 1], [3, 1], [1, 2], [1, 2]]
+    for tr in app.locator(f"{TABLE} tbody tr").all():
+        cells = [int(c) for c in tr.locator("td").all_inner_texts()]
+        assert len(cells) == 10
+        assert sum(cells[:8]) == cells[8]
+        assert tr.locator("td").nth(5).inner_text().isdigit()
+        assert tr.locator("td").nth(6).inner_text().isdigit()
+    table_text = app.inner_text(TABLE)
+    for bad in ("n/a", "weeks", "%", " of "):
+        assert bad not in table_text
+    text = app.inner_text("#nfl-view-special .nfl-breakdown")
+    assert (
+        "Special games is the sum of the eight columns before it. "
+        "Flexed games are counted separately."
+    ) in text
+    assert app.locator("#nfl-view-special .nfl-breakdown a").count() == 0
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_vertical_rules_and_weights(app: Page, theme: str) -> None:
+    set_theme(app, theme)
+    muted = app.evaluate(
+        "getComputedStyle(document.documentElement).getPropertyValue('--muted').trim()"
+    )
+    got = app.evaluate(
+        """(sel) => {
+          const probe = document.createElement('i');
+          probe.style.color = getComputedStyle(document.documentElement).getPropertyValue('--muted');
+          document.body.appendChild(probe);
+          const muted = getComputedStyle(probe).color;
+          probe.remove();
+          const out = [];
+          for (const c of document.querySelectorAll(sel + ' th, ' + sel + ' td')) {
+            const s = getComputedStyle(c);
+            out.push({
+              text: c.textContent, cls: c.className, left: s.borderLeftWidth, right: s.borderRightWidth,
+              color: s.borderLeftColor, muted, weight: s.fontWeight, bg: s.backgroundColor,
+              align: s.textAlign, nums: s.fontVariantNumeric, bottom: s.borderBottomWidth,
+            });
+          }
+          return out;
+        }""",
+        TABLE,
+    )
+    assert muted
+    for c in got:
+        assert c["right"] == "0px", c
+        if "nfl-vrule" in c["cls"]:
+            assert c["left"] == "1px" and c["color"] == c["muted"], c
+        else:
+            assert c["left"] == "0px", c
+        if "nfl-spanner" in c["cls"]:
+            assert c["bottom"] == "0px" and c["align"] == "center", c
+        if "nfl-total" in c["cls"]:
+            assert c["weight"] == "600" and c["bg"] == "rgba(0, 0, 0, 0)", c
+        if " num" in f" {c['cls']}":
+            assert c["align"] == "right" and "tabular-nums" in c["nums"], c
+    ruled_heads = {c["text"] for c in got if "nfl-vrule" in c["cls"] and c["text"] in HEADS}
+    assert ruled_heads == {*RULED, "Solo slots", "Sunday windows"}
+    # Each spanner's trimmed rule is narrower than its cell.
+    widths = app.eval_on_selector_all(
+        f"{TABLE} th.nfl-spanner",
+        """els => els.map(e => [e.querySelector('.nfl-spanner-label').getBoundingClientRect().width,
+          e.getBoundingClientRect().width,
+          getComputedStyle(e.querySelector('.nfl-spanner-label')).borderBottomWidth])""",
+    )
+    for inner, outer, border in widths:
+        assert inner < outer and border == "1px"
+
+
+def test_only_four_heads_are_tooltip_buttons(app: Page) -> None:
+    buttons = app.locator(f"{TABLE} button.nfl-tip")
+    assert buttons.all_inner_texts() == list(TIPS)
+    assert app.locator(f"{TABLE} button").count() == 4
+    for label, text in TIPS.items():
+        b = app.locator(f"{TABLE} button.nfl-tip", has_text=label)
+        assert b.get_attribute("type") == "button"
+        assert b.get_attribute("aria-description") == text
+        assert b.get_attribute("title") is None
+        style = b.evaluate(
+            "e => { const s = getComputedStyle(e); return [s.textDecorationLine, s.textDecorationStyle]; }"
+        )
+        assert style == ["underline", "dotted"]
+
+
+def test_tooltip_hover_focus_blur_escape(app: Page) -> None:
+    for label, text in TIPS.items():
+        b = app.locator(f"{TABLE} button.nfl-tip", has_text=label)
+        b.hover()
+        app.wait_for_function("!document.getElementById('chart-tooltip').hidden")
+        assert _tip_text(app) == text
+        app.mouse.move(5, 5)
+        app.wait_for_function("document.getElementById('chart-tooltip').hidden")
+        b.focus()
+        app.wait_for_function("!document.getElementById('chart-tooltip').hidden")
+        assert _tip_text(app) == text
+        app.keyboard.press("Escape")
+        app.wait_for_function("document.getElementById('chart-tooltip').hidden")
+        b.focus()
+        b.blur()
+        app.wait_for_function("document.getElementById('chart-tooltip').hidden")
+
+
+def test_tooltip_stays_in_viewport_at_right_edge(app: Page) -> None:
+    app.locator(f"{TABLE} button.nfl-tip", has_text="Special games").hover()
+    app.wait_for_function("!document.getElementById('chart-tooltip').hidden")
+    box = app.evaluate(
+        "(() => { const r = document.getElementById('chart-tooltip').getBoundingClientRect();"
+        " return [r.left, r.right, innerWidth]; })()"
+    )
+    assert box[0] >= 0 and box[1] <= box[2]
+
+
+def test_phone_tap_toggle_outside_and_replace(mobile: Page) -> None:
+    assert mobile.evaluate("innerWidth") == 390  # the page did not widen to fit the table
+    assert mobile.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    one = mobile.locator(f"{TABLE} button.nfl-tip", has_text="Special games")
+    two = mobile.locator(f"{TABLE} button.nfl-tip", has_text="Fox AGOTW")
+    one.evaluate("e => e.scrollIntoView({ block: 'center' })")
+    one.tap()
+    mobile.wait_for_function("!document.getElementById('chart-tooltip').hidden")
+    assert _tip_text(mobile) == TIPS["Special games"]
+    one.tap()
+    mobile.wait_for_function("document.getElementById('chart-tooltip').hidden")
+    one.tap()
+    mobile.wait_for_function("!document.getElementById('chart-tooltip').hidden")
+    two.tap()
+    mobile.wait_for_function(
+        "t => document.getElementById('chart-tooltip').textContent === t", arg=TIPS["Fox AGOTW"]
+    )
+    mobile.locator("#nfl-view-special .nfl-breakdown h3").evaluate(
+        "e => e.scrollIntoView({ block: 'center' })"
+    )
+    mobile.locator("#nfl-view-special .nfl-breakdown h3").tap()
+    mobile.wait_for_function("document.getElementById('chart-tooltip').hidden")
+
+
+def test_touch_tip_keeps_head_height(mobile: Page) -> None:
+    size = mobile.eval_on_selector(
+        f"{TABLE} button.nfl-tip", "e => [e.offsetHeight, e.offsetWidth]"
+    )
+    assert size[0] < 44
+
+
+def test_rerender_while_open_hides_tooltip(mobile: Page) -> None:
+    b = mobile.locator(f"{TABLE} button.nfl-tip", has_text="Special games")
+    b.evaluate("e => e.scrollIntoView({ block: 'center' })")
+    b.tap()
+    mobile.wait_for_function("!document.getElementById('chart-tooltip').hidden")
+    mobile.evaluate("window.__nflTestHooks.setState({ seasons: [2025, 2026] })")
+    mobile.wait_for_function("document.getElementById('chart-tooltip').hidden")
+    mobile.mouse.click(5, 5)
+    assert mobile.evaluate("document.getElementById('chart-tooltip').hidden")
+
+
+def test_international_label_in_table_head(app: Page) -> None:
+    assert "International" in app.locator(f"{TABLE} thead th").all_inner_texts()
+    assert "International, shared" not in app.inner_text("#nfl-view-special")

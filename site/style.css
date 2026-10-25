@@ -3052,6 +3052,12 @@ html:has(#mlb-detail-panel[open]) {
     min-height: 44px;
     min-width: 44px;
   }
+
+  /* Header tooltip labels are not 44px controls (Phase 17.1 UI-SPEC B4). */
+  .games-table th .nfl-tip {
+    min-height: 0;
+    min-width: 0;
+  }
 }
 
 @media (max-width: 480px) {
@@ -3779,6 +3785,46 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .nfl-show-all {
   align-self: flex-start;
   margin-top: var(--space-sm);
+}
+
+/* The season-by-season table's group rules: the one table with vertical rules (D-11). */
+.games-table .nfl-vrule {
+  border-left: 1px solid var(--muted);
+}
+
+.games-table th.nfl-spanner {
+  text-align: center;
+  border-bottom: 0;
+}
+
+.nfl-spanner-label {
+  display: block;
+  border-bottom: 1px solid var(--rule-strong);
+  padding-bottom: var(--space-xs);
+}
+
+.games-table td.nfl-total {
+  font-weight: var(--weight-semibold);
+}
+
+/* Header with a tooltip: dotted underline, no icon. Beats `.games-table th button`. */
+.games-table th .nfl-tip {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: help;
+  display: inline;
+  text-align: inherit;
+  text-decoration: underline dotted 1px;
+  text-decoration-color: var(--muted);
+  text-underline-offset: 4px;
+}
+
+.games-table th .nfl-tip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .nfl-muted {

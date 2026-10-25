@@ -365,7 +365,7 @@ def test_legend_chip_hides_a_category(
         "Other solo slot",
         "Fox AGOTW",
         "CBS late national",
-        "International, shared window",
+        "International",
         "Other games",
     ]
     before = _vm(nfl_guarded_page)

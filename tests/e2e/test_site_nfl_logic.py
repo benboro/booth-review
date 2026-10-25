@@ -439,14 +439,10 @@ def test_team_bars_range_rates_and_fading(run: Callable[[str], Any], nfl_fixture
         assert st_faded is True and ag_faded is False
 
 
-def test_rate_text_and_season_rows(run: Callable[[str], Any]) -> None:
+def test_season_rows(run: Callable[[str], Any]) -> None:
     got = run(
-        """return { a: S.rateText(4, 8), b: S.rateText(1, 3), c: S.rateText(0, 0),
-          rows: S.teamSeasonRows(m, S.defaultNflState(m), 0).map(r => r.season) }"""
+        """return { rows: S.teamSeasonRows(m, S.defaultNflState(m), 0).map(r => r.season) }"""
     )
-    assert got["a"] == "4 of 8 weeks (50%)"
-    assert got["b"] == "1 of 3 weeks (33%)"
-    assert got["c"] == "n/a"
     assert got["rows"] == sorted(got["rows"], reverse=True) and len(got["rows"]) >= 1
 
 
