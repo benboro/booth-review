@@ -51,7 +51,7 @@ NFL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "contract" / "nfl-data.fixture.
 # Index re-pinned at Phase 10 Plan 11: plans 10-06..10-09 added only markup (Booth trigger and
 # popover, Crews tab and panel, Lead booth key; 21 added lines, none removed), then re-pinned
 # once more for the 10-11 review: the Booth helper now ends "faded or hidden." (one reworded line).
-# Index re-pinned at Phase 11 Plan 09: only added markup (Network colors toggle, later removed, and the
+# Index re-pinned at Phase 11 Plan 09: only added markup (Network colors toggle, later removed;
 # map key overlay; 8 added lines, none removed).
 # Index re-pinned at Phase 11 Plan 10: only the Matched games heading row, venue status and
 # no-match line (4 added lines, 1 removed).

@@ -10,10 +10,7 @@ from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
 
-CREDIT = (
-    "Viewers add up published figures from Ratings Reference and other outlets; "
-    "the games table (click the dot) credits each game's source."
-)
+CREDIT_FRAGMENT = "add up published figures"
 
 _FMT_JS = """
 async (values) => {
@@ -57,9 +54,9 @@ async ([card, opts]) => {
     rows: [...el.querySelectorAll('tbody tr')].map((r) =>
       [...r.children].map((c) => c.textContent)),
     swatches: [...el.querySelectorAll('.tooltip-swatch')].map((s) => s.style.backgroundColor),
-    footnotes: [...el.querySelectorAll('.tooltip-footnote:not(.tooltip-credit)')]
+    footnotes: [...el.querySelectorAll('.tooltip-footnote')]
       .map((n) => n.textContent),
-    credits: [...el.querySelectorAll('.tooltip-credit')].map((n) => n.textContent),
+    text: el.textContent,
     lastText: el.lastElementChild.textContent,
     lastClass: el.lastElementChild.className,
     hasPie: el.querySelector('.tooltip-venue-body svg') !== null,
@@ -82,7 +79,6 @@ def _card(**over: Any) -> dict[str, Any]:
             {"family": "cbs", "label": "CBS", "games": 1, "viewers": None},
         ],
         "hasMissingViewers": True,
-        "hasViewers": True,
         "subjectLines": [{"text": "Best game: A vs B", "kind": "body"}],
     }
     card.update(over)
@@ -172,15 +168,17 @@ def test_card_other_row_uses_neutral_swatch(
     assert r["swatches"][1] == "rgb(179, 170, 156)"
 
 
-def test_credit_note_follows_has_viewers(
+def test_card_has_no_credit_sentence(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
+    """Phase 17.1 D-07a: per-game credits live in the games table, not the hover card."""
     open_app(guarded_page, "")
     with_viewers = _show(guarded_page, _card())
-    assert with_viewers["credits"] == [CREDIT]
+    assert CREDIT_FRAGMENT not in with_viewers["text"]
+    assert with_viewers["footnotes"] == ["- no viewer figure listed"]
     rows = [{"family": "fox", "label": "FOX", "games": 3, "viewers": None}]
-    without = _show(guarded_page, _card(rows=rows, hasViewers=False))
-    assert without["credits"] == []
+    without = _show(guarded_page, _card(rows=rows))
+    assert CREDIT_FRAGMENT not in without["text"]
     assert without["rows"] == [["FOX", "3", "-"]]
 
 
@@ -347,7 +345,7 @@ def test_hovering_an_edge_marker_shows_its_card(guarded_page: Page, open_app: Op
     assert tip["pie"] is True
 
 
-def test_unrated_and_rated_venues_show_dash_and_credit_note(
+def test_unrated_and_rated_venues_show_dash_and_no_credit_sentence(
     guarded_page: Page, open_app: OpenApp, serve_map_venues: Callable[[Page], None]
 ) -> None:
     serve_map_venues(guarded_page)
@@ -360,7 +358,21 @@ def test_unrated_and_rated_venues_show_dash_and_credit_note(
         if tip:
             texts.append(tip["text"])
     assert any("- no viewer figure listed" in t for t in texts)
-    assert any(CREDIT in t for t in texts)
+    assert not any(CREDIT_FRAGMENT in t for t in texts)
+
+
+def test_click_lists_games_with_source_credits(guarded_page: Page, open_app: OpenApp) -> None:
+    """D-07a: attribution stays reachable from the map; a dot click fills the games table."""
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    _open_map(guarded_page, open_app)
+    dot = _model(guarded_page)["venueDots"][0]
+    _hover(guarded_page, dot["x"], dot["y"])
+    px, py = _pixel(guarded_page, dot["x"], dot["y"])
+    guarded_page.mouse.click(px, py)
+    guarded_page.wait_for_function(f"() => location.search.includes('venue={dot['key']}')")
+    rows = guarded_page.locator("#matched-games tbody tr")
+    assert rows.count() > 0
+    assert guarded_page.locator("#matched-games tbody tr a[href^='http']").count() > 0
 
 
 def test_phone_first_tap_shows_card_second_tap_filters(

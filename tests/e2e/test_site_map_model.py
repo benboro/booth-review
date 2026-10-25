@@ -619,7 +619,6 @@ def test_venue_card_rows_and_viewers(guarded_page: Page, site_url: str) -> None:
     assert got["none"] is None
     unrated = got["unrated"]
     assert all(r["viewers"] is None for r in unrated["rows"])
-    assert unrated["hasViewers"] is False
     assert unrated["hasMissingViewers"] is True
     folded = got["folded"]
     assert len(folded["rows"]) <= 7

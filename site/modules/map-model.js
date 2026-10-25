@@ -562,7 +562,6 @@ export function venueCard(data, model, key) {
     hasMissingViewers: rows.some((r) => r.viewers == null),
     // A row's Viewers figure adds up its rated games only when some of its games are unrated.
     hasPartialViewers: rows.some((r) => r.partial),
-    hasViewers: rows.some((r) => r.viewers != null),
     subjectLines: subjectLinesFor(data, model, indexes),
   };
 }

@@ -320,10 +320,6 @@ export function hideTooltip() {
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-/** Credit note for aggregate viewer sums (CLAUDE.md Website rule): the games table credits each source. */
-export const VENUE_CREDIT_NOTE =
-  "Viewers add up published figures from Ratings Reference and other outlets; the games table (click the dot) credits each game's source.";
-
 /**
  * The 48px venue pie (Phase 11 D-02): slices clockwise from 12 o'clock in the given order,
  * 1px page-background separators, a plain circle for a single family. Built with
@@ -373,7 +369,7 @@ export function venuePieSvg(slices, theme) {
 /**
  * Shows the venue hover card (Phase 11 D-02, D-01a) from a plain card object.
  * @param {{title: string, leader: string, slices: object[], rows: object[],
- *   hasMissingViewers: boolean, hasPartialViewers?: boolean, hasViewers: boolean,
+ *   hasMissingViewers: boolean, hasPartialViewers?: boolean,
  *   subjectLines: {text: string, kind: string}[]}} card
  * @param {{theme: "light"|"dark", clientX: number, clientY: number, hint: string}} opts
  */
@@ -421,9 +417,6 @@ export function showVenueTooltip(card, { theme, clientX, clientY, hint }) {
   }
   if (card.hasPartialViewers) {
     children.push(text('p', 'tooltip-footnote', '* Viewers cover rated games only'));
-  }
-  if (card.hasViewers) {
-    children.push(text('p', 'tooltip-footnote tooltip-credit', VENUE_CREDIT_NOTE));
   }
   for (const line of card.subjectLines) {
     children.push(text('div', line.kind === 'hint' ? 'tooltip-hint' : '', line.text));
