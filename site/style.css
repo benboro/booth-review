@@ -3594,6 +3594,30 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   gap: var(--space-xs);
 }
 
+/* Phone: a long booth chip shrinks and truncates its name instead of pushing Clear selection
+   past the right edge (the 481px-and-up rules above do this for wider screens). */
+@media (max-width: 480px) {
+  #mlb-chips {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  #mlb-chips > .chip {
+    min-width: 0;
+  }
+
+  /* With a pick the chip says what is selected, so the "Filters: none" note steps aside and
+     the chip gets the row instead of truncating to two letters. */
+  .mlb-selection-area:has(#mlb-chips > .chip) .mlb-selection-note {
+    display: none;
+  }
+
+  .mlb-selection-area .toggle {
+    flex: none;
+    white-space: nowrap;
+  }
+}
+
 #nfl-chart-area,
 #mlb-chart-area {
   padding: var(--space-md) var(--space-lg) 0;
