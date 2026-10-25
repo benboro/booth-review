@@ -81,7 +81,7 @@ def test_palette_map_constants(guarded_page: Page, site_url: str) -> None:
     assert got["splat"]["viewersWeight"] == 0.35
     assert got["splat"]["unratedFallback"] == 150000
     assert got["dot"]["maxDiameter"] == 20
-    assert got["dot"]["phoneMaxDiameter"] == 14
+    assert got["dot"]["phoneMaxDiameter"] == 10
     assert got["dot"]["hitDiameter"] == 12
     assert not {"radiusMax", "radiusBase", "phoneMax"} & set(got["dot"])
     # Phase 17 lifted the dark neutral to #8B8377 (3.97:1 on the new land, 17-UI-SPEC).
@@ -230,15 +230,15 @@ def test_dot_size_formula(guarded_page: Page, site_url: str) -> None:
         };
         """,
     )
-    assert got["top"] == {"desktop": 20, "phone": 14}
+    assert got["top"] == {"desktop": 20, "phone": 10}
     assert abs(got["one"]["desktop"] - 20 / 73**0.5) < 1e-9
-    assert abs(got["one"]["phone"] - 14 / 73**0.5) < 1e-9
-    assert got["over"] == {"desktop": 20, "phone": 14}
+    assert abs(got["one"]["phone"] - 10 / 73**0.5) < 1e-9
+    assert got["over"] == {"desktop": 20, "phone": 10}
     assert got["zero"] == {"desktop": 0, "phone": 0}
     for size in got["badRef"]:
         assert size == {
             "desktop": 20 if size["desktop"] else 0,
-            "phone": 14 if size["phone"] else 0,
+            "phone": 10 if size["phone"] else 0,
         }
     for a, b in got["areas"]:
         assert abs(a) < 1e-9 and abs(b) < 1e-9
@@ -266,10 +266,10 @@ def test_size_rescales_with_filters(guarded_page: Page, site_url: str) -> None:
         };
         """,
     )
-    assert got["top"] == {"desktop": 20, "phone": 14}
+    assert got["top"] == {"desktop": 20, "phone": 10}
     assert got["small"] == got["expected"]
     # Narrowing to the small venue makes it the busiest, so it grows to max.
-    assert got["onlySmall"] == {"desktop": 20, "phone": 14}
+    assert got["onlySmall"] == {"desktop": 20, "phone": 10}
     assert got["ref"] == [16, 4, 3, 0]
     assert got["fewSizes"][0][2] == 20
     for _key, games, desktop in got["fewSizes"]:

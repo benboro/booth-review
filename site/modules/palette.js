@@ -262,7 +262,7 @@ export const MAP_SPLAT = Object.freeze({
  */
 export const MAP_VENUE_DOT = Object.freeze({
   maxDiameter: 20,
-  phoneMaxDiameter: 14,
+  phoneMaxDiameter: 10,
   hitDiameter: 12,
   opacity: 1,
   ringWidth: 1,
