@@ -118,6 +118,20 @@ def test_flag_off_build(tmp_path: Path) -> None:
     assert result.nfl_games is None
 
 
+def test_theme_init_ships_and_sport_csp_unchanged(tmp_path: Path) -> None:
+    out = tmp_path / "out"
+    result = _build(out)
+    assert "theme-init.js" in result.files
+
+    def csp(text: str) -> str:
+        line = next(ln for ln in text.splitlines() if "Content-Security-Policy" in ln)
+        return line.strip()
+
+    built = (out / "index.html").read_text(encoding="utf-8")
+    source = (SITE_SRC / "index.html").read_text(encoding="utf-8")
+    assert csp(built) == csp(source)
+
+
 def test_flag_on_build(tmp_path: Path) -> None:
     out = tmp_path / "out"
     result = _build(out, nfl=True, nfl_payload=load_nfl_site_payload(NFL_FIXTURE))

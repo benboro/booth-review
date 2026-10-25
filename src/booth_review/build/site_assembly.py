@@ -704,7 +704,9 @@ def _assemble_into(
     index_text = index_text.replace(FOOTER_TOKEN, pages.footer_html(site.freshness))
     atomic_write_bytes(index_path, index_text.encode("utf-8"))
 
-    page_files = pages.write_pages(stage, site, docs, nfl="nfl" in ids, mlb="mlb" in ids)
+    page_files = pages.write_pages(
+        stage, site, docs, nfl="nfl" in ids, mlb="mlb" in ids, site_src=site_src
+    )
     atomic_write_bytes(stage / BUILD_MARKER, b"")
     return copied, page_files, version
 

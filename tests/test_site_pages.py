@@ -20,6 +20,8 @@ import pytest
 from booth_review.build.pages import (
     CREDIT_LINE_TEXT,
     NAV,
+    THEME_TOGGLE_HTML,
+    csp_for,
     footer_html,
     freshness_stamps,
     render_coverage,
@@ -104,8 +106,8 @@ def test_render_methodology_includes_known_gaps_demoted_and_no_marker() -> None:
     assert 'href="known-gaps.md"' not in result
     assert "<h3" in result
     assert "<table" in result
-    assert "<script" not in result
-    assert "script-src 'none'" in result
+    assert result.count("<script") == 1
+    assert "script-src 'sha256-" in result
     assert 'href="style.css"' in result
 
 
@@ -204,8 +206,8 @@ def test_render_coverage_table_structure() -> None:
     assert "Total" in result
     for season in sorted({row.season for row in site.coverage}):
         assert f'<th scope="col">{season}</th>' in result
-    assert "<script" not in result
-    assert "script-src 'none'" in result
+    assert result.count("<script") == 1
+    assert "script-src 'sha256-" in result
     assert 'href="style.css"' in result
 
 
@@ -535,3 +537,63 @@ def test_methodology_nfl_never_ranks_crews() -> None:
     joined = " ".join(blocks + gap_blocks).lower()
     for phrase in ("best booth", "worst", "better crew"):
         assert phrase not in joined
+
+
+_THEME_JS = (REPO_ROOT / "site" / "theme-init.js").read_text(encoding="utf-8")
+
+
+def _static_pages() -> dict[str, str]:
+    site = _fixture_site()
+    return {
+        "methodology": render_methodology(REPO_ROOT / "docs", site),
+        "coverage": render_coverage(site),
+    }
+
+
+@pytest.mark.parametrize("page", ["methodology", "coverage"])
+def test_static_page_csp_hash_matches_inline_script(page: str) -> None:
+    import base64
+    import hashlib
+
+    result = _static_pages()[page]
+    assert result.count("<script") == 1
+    opening = result[result.index("<script") : result.index(">", result.index("<script")) + 1]
+    assert "src=" not in opening
+    inline = result.split("<script>", 1)[1].split("</script>", 1)[0]
+    assert inline == _THEME_JS
+    digest = base64.b64encode(hashlib.sha256(inline.encode("utf-8")).digest()).decode("ascii")
+    csp = re.search(r'Content-Security-Policy" content="([^"]*)"', result)
+    assert csp is not None
+    assert f"script-src 'sha256-{digest}'" in csp.group(1)
+    script_src = next(d for d in csp.group(1).split("; ") if d.startswith("script-src"))
+    for banned in ("'self'", "'unsafe-inline'", "'unsafe-eval'"):
+        assert banned not in script_src
+    assert "style-src 'self'" in csp.group(1)
+    assert csp.group(1) == csp_for(_THEME_JS)
+
+
+@pytest.mark.parametrize("page", ["methodology", "coverage"])
+def test_static_script_sits_before_stylesheet(page: str) -> None:
+    result = _static_pages()[page]
+    script = result.index("<script>")
+    assert script > result.index('<meta name="color-scheme"')
+    assert script > result.index("Content-Security-Policy")
+    assert result[result.index("</script>") + len("</script>\n") :].startswith(
+        '<link rel="stylesheet"'
+    )
+
+
+@pytest.mark.parametrize("page", ["methodology", "coverage"])
+def test_static_toggle_markup_matches_index(page: str) -> None:
+    index = (REPO_ROOT / "site" / "index.html").read_text(encoding="utf-8")
+    block = re.search(r'<span id="theme-slot">.*?</span>', index, re.S)
+    assert block is not None
+    assert block.group(0) == THEME_TOGGLE_HTML
+    result = _static_pages()[page]
+    assert result.count(THEME_TOGGLE_HTML) == 1
+    assert "</nav>" + THEME_TOGGLE_HTML in result
+
+
+def test_page_html_missing_script_file_raises(tmp_path: Path) -> None:
+    with pytest.raises(SiteBuildError):
+        write_pages(tmp_path, _fixture_site(), REPO_ROOT / "docs", site_src=tmp_path)
