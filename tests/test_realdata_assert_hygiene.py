@@ -41,3 +41,21 @@ def test_hygiene_check_rejects_an_inline_len() -> None:
     ok = ast.parse("assert n_expected == n_people").body[0]
     assert isinstance(ok, ast.Assert)
     assert _plain(ok.test)
+
+
+def test_every_guard_install_is_asserted() -> None:
+    """F12: a function that installs the off-origin guard must also assert it is clean; a
+    discarded `_install_guard` result would let an off-origin request pass unnoticed."""
+    tree = ast.parse(_REALDATA_TEST.read_text(encoding="utf-8"))
+    unasserted = []
+    for fn in ast.walk(tree):
+        if not isinstance(fn, ast.FunctionDef):
+            continue
+        called = {
+            node.func.id
+            for node in ast.walk(fn)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+        if "_install_guard" in called and "_assert_guard_clean" not in called:
+            unasserted.append(fn.name)
+    assert unasserted == [], f"guards installed but never asserted in {unasserted}"

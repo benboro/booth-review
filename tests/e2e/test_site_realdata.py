@@ -2280,8 +2280,17 @@ def real_mlb_site_url(real_mlb_site_dist: Path) -> Iterator[str]:
     yield from _serve_directory(real_mlb_site_dist)
 
 
+@pytest.fixture
+def real_mlb_guarded_page(page: Page, real_mlb_site_url: str) -> Iterator[Page]:
+    """`page`, guarded against off-origin requests/CSP violations, against the real MLB build;
+    the teardown asserts the guard stayed clean, as `real_guarded_page` does for CFB."""
+    off_origin, csp_errors = _install_guard(page, real_mlb_site_url)
+    yield page
+    _assert_guard_clean(off_origin, csp_errors)
+
+
 def _open_real_mlb(page: Page, url: str, query: str) -> None:
-    _install_guard(page, url)
+    """Open the MLB app on `page`, which must come from `real_mlb_guarded_page`."""
     page.goto(f"{url}/index.html?sport=mlb{query}")
     page.wait_for_function(
         "window.__mlbTestHooks && window.__mlbTestHooks.ready === true", timeout=90_000
@@ -2289,7 +2298,8 @@ def _open_real_mlb(page: Page, url: str, query: str) -> None:
 
 
 @pytest.fixture
-def real_mlb_counts(page: Page, real_mlb_site_url: str) -> dict[str, int]:
+def real_mlb_counts(real_mlb_guarded_page: Page, real_mlb_site_url: str) -> dict[str, int]:
+    page = real_mlb_guarded_page
     _open_real_mlb(page, real_mlb_site_url, "&view=scatter")
     counts: dict[str, int] = page.evaluate(_MLB_COUNTS_JS)
     return counts
@@ -2354,8 +2364,9 @@ def test_real_mlb_excitement_n_matches_the_shipped_mean(real_mlb_raw: dict[str, 
     assert apple_matching == apple_checked
 
 
-def test_real_mlb_era_note_branch(page: Page, real_mlb_site_url: str) -> None:
+def test_real_mlb_era_note_branch(real_mlb_guarded_page: Page, real_mlb_site_url: str) -> None:
     """Caption 4 (era note) shows exactly when the data has more than one era."""
+    page = real_mlb_guarded_page
     _open_real_mlb(page, real_mlb_site_url, "&view=scatter")
     page.wait_for_function("window.__mlbTestHooks.getViewModel('scatter')?.drawn === true")
     era_count: int = page.evaluate(
@@ -2380,7 +2391,10 @@ def test_real_mlb_round_values_all_have_labels(real_mlb_counts: dict[str, int]) 
     assert unlabelled == 0
 
 
-def test_real_mlb_apple_and_postseason_counts(page: Page, real_mlb_site_url: str) -> None:
+def test_real_mlb_apple_and_postseason_counts(
+    real_mlb_guarded_page: Page, real_mlb_site_url: str
+) -> None:
+    page = real_mlb_guarded_page
     _open_real_mlb(page, real_mlb_site_url, "&view=apple")
     model_booths: int = page.evaluate(
         "async () => (await (await fetch('mlb-data.json')).json()).apple_booths.rank_label.length"
