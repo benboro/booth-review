@@ -389,6 +389,21 @@ function seasonButton(key, season, picked, dataName, inside) {
   return btn;
 }
 
+/** The focused phone control (season note or round cell) as its container, attribute and key. */
+function phoneFocusKey() {
+  const a = document.activeElement;
+  if (!a || !a.closest) return null;
+  const season = a.closest('[data-phone-season-cell]');
+  if (season && refs.phoneNotes.contains(season)) {
+    return { box: refs.phoneNotes, attr: 'data-phone-season-cell', key: season.dataset.phoneSeasonCell };
+  }
+  const cell = a.closest('[data-phone-cell]');
+  if (cell && refs.phoneBody.contains(cell)) {
+    return { box: refs.phoneBody, attr: 'data-phone-cell', key: cell.dataset.phoneCell };
+  }
+  return null;
+}
+
 function phoneRows(model, state, seasons, rounds, blocks) {
   const out = [];
   for (const s of seasons) {
@@ -539,6 +554,8 @@ export function render(ctx) {
   }
   const focusKey = refs.table.contains(document.activeElement) ? btnKey(document.activeElement.closest(BTN_SEL) ?? document.activeElement) : null;
   if (focusKey) activeKey = focusKey;
+  // The phone twin's buttons are rebuilt too; keep a focused one focused (G4).
+  const phoneFocus = phoneFocusKey();
   refs.body.replaceChildren(...rows);
   refs.phoneBody.replaceChildren(...phoneRows(model, state, seasons, rounds, blocks));
   refs.phoneNotes.replaceChildren(
@@ -559,6 +576,10 @@ export function render(ctx) {
   indexGrid();
   if (focusKey) {
     refs.body.querySelector(`[data-season-cell="${CSS.escape(focusKey)}"], [data-cell="${CSS.escape(focusKey)}"]`)?.focus();
+  }
+  if (phoneFocus) {
+    const { box, attr, key } = phoneFocus;
+    box.querySelector(`[${attr}="${CSS.escape(key)}"]`)?.focus();
   }
   current = { model, state, summary, seasons: seasons.map((s) => s.season), rounds };
 }

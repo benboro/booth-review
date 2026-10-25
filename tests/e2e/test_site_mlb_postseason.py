@@ -614,3 +614,35 @@ def test_short_series_names_come_as_a_pair_everywhere(
         "els => els.map(e => e.textContent.replace(/^\\d{4} /, ''))",
     )
     _assert_series_forms_agree(merged, "phone twin")
+
+
+@pytest.mark.parametrize(
+    ("selector", "key"),
+    [
+        ("button[data-phone-season-cell='season-2019']", "season-2019"),
+        ("button[data-phone-cell='2014-world_series-all']", "2014-world_series-all"),
+    ],
+)
+def test_phone_controls_keep_focus_after_enter(
+    mlb_mobile_page: Page,
+    open_mlb_app: Callable[..., None],
+    selector: str,
+    key: str,
+) -> None:
+    """G4: at 390px, Enter on a phone season or round-cell button keeps keyboard focus on the
+    same control after the grid re-renders, so a second Enter toggles the pick off."""
+    page = mlb_mobile_page
+    open_mlb_app(page, "?sport=mlb&view=postseason")
+    btn = page.locator(f"{VIEW} {selector}")
+    btn.focus()
+    page.keyboard.press("Enter")
+    assert page.evaluate(f"{HOOKS}.getState().cell") == key
+    focused = page.evaluate(
+        "() => { const a = document.activeElement;"
+        " return a ? (a.dataset.phoneSeasonCell ?? a.dataset.phoneCell ?? a.tagName) : null; }"
+    )
+    assert focused == key
+    assert page.locator(f"{VIEW} {selector}").get_attribute("aria-pressed") == "true"
+    page.keyboard.press("Enter")
+    assert page.evaluate(f"{HOOKS}.getState().cell") is None
+    assert page.locator(f"{VIEW} {selector}").get_attribute("aria-pressed") == "false"
