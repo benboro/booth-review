@@ -170,6 +170,8 @@ model, and build phases; read the relevant section before starting a phase.
 
 # Website
 
+- Site-specific design decisions (fonts, layout, filter accents, marks) live in
+  `docs/design.md`; read it before any visual change.
 - The website serves only pre-built data files. All data is pulled ahead of time,
   server-side; viewing the page never sends a request to CFBD or any other data
   source, and the CFBD key never appears in site code or build output.
