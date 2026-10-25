@@ -222,8 +222,12 @@ h1, h2, h3 {
   position: relative;
 }
 
+/* Hidden until theme-init.js runs, but keeping its box: a slow first paint with an empty
+   slot would move the baseline-aligned header when the button appears. !important beats
+   the global [hidden] rule. */
 .theme-toggle[hidden] {
-  display: none;
+  display: inline-flex !important;
+  visibility: hidden;
 }
 
 .theme-toggle:hover,
