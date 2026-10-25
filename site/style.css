@@ -2002,10 +2002,6 @@ input[type="checkbox"] {
   margin-inline-start: auto;
 }
 
-.colors-toggle {
-  margin-inline-start: var(--space-md);
-}
-
 .dots-caption {
   font: var(--font-body);
   color: var(--muted);
@@ -3003,16 +2999,13 @@ html:has(#mlb-detail-panel[open]) {
     order: 1;
   }
 
-  .dots-toggle,
-  .colors-toggle {
+  .dots-toggle {
     margin-inline-start: 0;
     flex-basis: 100%;
   }
 
   .dots-toggle .segmented,
-  .dots-toggle .segmented button,
-  .colors-toggle .segmented,
-  .colors-toggle .segmented button {
+  .dots-toggle .segmented button {
     flex: 1;
   }
 
@@ -3333,10 +3326,6 @@ td.no-rating {
   color: var(--ink);
 }
 
-.map-key-block + .map-key-block {
-  margin-top: var(--space-sm);
-}
-
 .map-key-sizes {
   position: relative;
 }
@@ -3345,29 +3334,6 @@ td.no-rating {
   position: absolute;
   white-space: nowrap;
   line-height: 20px;
-}
-
-.map-key-strength {
-  display: grid;
-  grid-template-columns: repeat(3, 16px) auto;
-  align-items: center;
-  column-gap: var(--space-xs);
-}
-
-.map-key-strength .map-key-heading,
-.map-key-strength .map-key-end:first-of-type {
-  grid-column: 1 / -1;
-}
-
-.map-key-strength .map-key-end:last-child {
-  grid-column: 4;
-  margin-inline-start: var(--space-xs);
-}
-
-.map-key-swatch {
-  display: inline-block;
-  width: 16px;
-  height: 8px;
 }
 
 /* ---------- NFL side (999.5-10) ----------

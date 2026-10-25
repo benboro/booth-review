@@ -82,11 +82,11 @@ def test_default_state_encodes_empty(app: Page) -> None:
     assert (s["crew"], s["cmode"], s["perseason"], s["csort"]) == (None, "crew", True, None)
 
 
-def test_crew_round_trip_after_colors(app: Page) -> None:
+def test_crew_survives_an_old_colors_param(app: Page) -> None:
     key = _key(app)
     out = _url(app, f"?colors=off&crew={key}")
     assert out["decoded"]["crew"] == key
-    assert out["encoded"] == f"?colors=off&crew={key}"
+    assert out["encoded"] == f"?crew={key}"
     assert _url(app, f"?crew={key}")["encoded"] == f"?crew={key}"
 
 

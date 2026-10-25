@@ -314,7 +314,7 @@ function render() {
         renderMapPanel({
       data,
       model: lastMapModel,
-      env: { ...currentEnv(), splat: state.colors !== 'off' },
+      env: { ...currentEnv(), splat: true },
       resize: lastPanel !== 'map',
     });
     lastPanel = 'map';
@@ -547,8 +547,6 @@ async function startCfb(search = location.search) {
       getNetworks: () => structuredClone(state.networks),
       switchEl: document.getElementById('dots-toggle'),
       onDots: (dots) => setState({ dots }),
-      colorsEl: document.getElementById('colors-toggle'),
-      onColors: (colors) => setState({ colors }),
     });
     renderers.push(renderLegend);
 
