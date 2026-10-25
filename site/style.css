@@ -81,24 +81,30 @@
   --pill-silver-edge: #80858D;
 }
 
-/* Placeholder dark values; untested until Phase 17. The data-theme attribute is the only theme hook. */
+/* Phase 17 dark tokens. The data-theme attribute is the only theme hook. */
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #14161A;
-  --surface: #1E2126;
-  --ink: #E5E7EB;
-  --muted: #9CA3AF;
-  --rule: #2A2E35;
-  --rule-strong: #3A3F47;
-  --accent: #E5E7EB;
-  --accent-soft: #1E2126;
-  --accent-soft-hover: #2A2E35;
-  --disabled: #7B8492;
-  --error: #F2B8B5;
-  --game-playoff: #F5C518;
-  --game-bowl: #CD7F32;
-  --game-rivalry: #F97066;
-  --game-playoff-text: #F5C518;
+  --bg: #1D1B18;
+  --surface: #26231F;
+  --ink: #ECE7DF;
+  --muted: #A59E94;
+  --rule: #3A3632;
+  --rule-strong: #4A453E;
+  --accent: #68BACB;
+  --accent-soft: #223A40;
+  --accent-soft-hover: #274046;
+  --disabled: #7D766B;
+  --error: #F0877F;
+  --game-playoff: #D9A420;
+  --game-bowl: #D9824A;
+  --game-rivalry: #E0707F;
+  --game-playoff-text: #E3B845;
+  --pill-gold-fill: #3F3413;
+  --pill-gold-ink: #F2DFA0;
+  --pill-gold-edge: #B8921F;
+  --pill-silver-fill: #37393E;
+  --pill-silver-ink: #D9DBDF;
+  --pill-silver-edge: #8E939B;
 }
 
 * {
@@ -187,13 +193,59 @@ h1, h2, h3 {
   text-decoration: underline;
 }
 
-/* Phase 17 mounts the theme toggle here; empty until then. */
+/* Theme toggle (Phase 17): icon-only button; theme-init.js reveals it and sets its label. */
 #theme-slot {
   display: inline-block;
   width: 32px;
   height: 32px;
   flex: none;
   margin-left: var(--space-md);
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  position: relative;
+}
+
+.theme-toggle[hidden] {
+  display: none;
+}
+
+.theme-toggle:hover,
+.theme-toggle:active {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.theme-icon {
+  display: block;
+}
+
+.theme-icon-sun {
+  display: none;
+}
+
+[data-theme="dark"] .theme-icon-moon {
+  display: none;
+}
+
+[data-theme="dark"] .theme-icon-sun {
+  display: block;
 }
 
 /* D-28: a flex column so #person-results (flex: 1 1 auto) can grow to fill
@@ -1364,7 +1416,7 @@ input[type="checkbox"] {
 }
 
 [data-theme="dark"] .game-ny6 {
-  background: #26241A;
+  background: #2A2518;
   background: color-mix(in srgb, var(--game-playoff) 8%, transparent);
 }
 
@@ -2627,6 +2679,12 @@ html:has(#mlb-detail-panel[open]) {
 #nfl-detail-panel::backdrop,
 #mlb-detail-panel::backdrop {
   background: rgb(0 0 0 / 0.5);
+}
+
+[data-theme="dark"] #detail-panel::backdrop,
+[data-theme="dark"] #nfl-detail-panel::backdrop,
+[data-theme="dark"] #mlb-detail-panel::backdrop {
+  background: rgb(0 0 0 / 0.65);
 }
 
 #chart:focus:not(:focus-visible) {
@@ -4536,6 +4594,10 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   background-image: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.025) 0 1px, transparent 1px 6px);
 }
 
+[data-theme="dark"] .crews-table td.is-low-n {
+  background-image: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 6px);
+}
+
 /* Chevron: a CSS-border caret in a 28px square (44px on a phone); it turns down while the row is open. */
 .crews-table td.crews-chevron-cell,
 .crews-table th.crews-chevron-cell {
@@ -5426,6 +5488,12 @@ tr.is-matched > :first-child {
 
   #theme-slot {
     margin-left: var(--space-sm);
+  }
+
+  .theme-toggle::after {
+    content: "";
+    position: absolute;
+    inset: -6px;
   }
 
   /* Scroll cue label: a fixed-height slot in the module header, so showing or hiding it
