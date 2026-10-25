@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 from playwright.sync_api import Page, Route
@@ -18,6 +19,31 @@ pytestmark = pytest.mark.e2e
 
 HOOKS = "window.__mlbTestHooks"
 VIEW = "#mlb-view-postseason"
+
+
+def _set_cell_crews(data: dict[str, Any], k: int, crews: list[list[list[Any]]]) -> None:
+    """Give postseason row `k` one game per crew (its own games first, then borrowed ones),
+    each crew a list of [person, role]; the builder's 2-person pairs follow the crews."""
+    games = list(data["postseason"]["game_list"][k])
+    games += [g for g in range(len(data["games"]["crew"])) if g not in games]
+    games = games[: len(crews)]
+    data["postseason"]["game_list"][k] = games
+    for g, crew in zip(games, crews, strict=True):
+        data["games"]["crew"][g] = [{"person": m, "role": r} for m, r in crew]
+    data["postseason"]["booths"][k] = [
+        [
+            next((m for m, r in crew if r == "pbp"), None),
+            next((m for m, r in crew if r == "analyst"), None),
+        ]
+        for crew in crews
+    ]
+
+
+def _crews(pairs: list[list[int | None]]) -> list[list[list[Any]]]:
+    return [
+        [[m, r] for m, r in zip(pair, ("pbp", "analyst"), strict=True) if m is not None]
+        for pair in pairs
+    ]
 
 
 @pytest.fixture
@@ -260,7 +286,7 @@ def test_phone_booths_cell_caps_lines_with_plus_n_more(
         p = data["postseason"]
         k = next(i for i, s in enumerate(p["season"]) if s == 2019 and p["round"][i] == "division")
         # Five crews with no person in common, so five booth lines (U3 groups shared people).
-        p["booths"][k] = [[8, 7], [6, None], [2, 3], [0, 1], [4, 5]]
+        _set_cell_crews(data, k, _crews([[8, 7], [6, None], [2, 3], [0, 1], [4, 5]]))
         route.fulfill(response=resp, body=json.dumps(data))
 
     mlb_mobile_page.route("**/mlb-data.json", handler)
@@ -493,7 +519,10 @@ def test_stacked_role_pills_keep_a_vertical_gap(post: Page) -> None:
 _GROUP_JS = """
 async (pairs) => {
   const P = await import('./sports/mlb/views/postseason.js');
-  return P.groupBooths(pairs).map((g) => ({
+  const crews = pairs.map((pair) => pair.length && typeof pair[0] === 'object' && pair[0] !== null
+    ? pair.map(([person, role]) => ({ person, role }))
+    : [{ person: pair[0], role: 'pbp' }, { person: pair[1], role: 'analyst' }]);
+  return P.groupBooths(crews).map((g) => ({
     pbps: g.pbps.map((e) => [e.person, e.roles]),
     analysts: g.analysts.map((e) => [e.person, e.roles]),
   }));
@@ -521,6 +550,48 @@ def test_group_booths_lists_each_person_once(post: Page) -> None:
         {"pbps": [[4, ["pbp"]]], "analysts": []},
     ]
     assert group([]) == []
+    # U9: a full crew of three (play-by-play and two analysts) lists all three, once each.
+    assert group([[[1, "pbp"], [2, "analyst"], [3, "analyst"]], [[1, "pbp"], [2, "analyst"]]]) == [
+        {"pbps": [[1, ["pbp"]]], "analysts": [[2, ["analyst"]], [3, ["analyst"]]]},
+    ]
+
+
+def test_cell_shows_a_second_analyst_from_the_game_crews(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """U9: the builder's pairs hold one analyst per booth; the cell reads every game's full
+    crew, so a three-person booth (play-by-play and two analysts) shows each person once."""
+
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        p = data["postseason"]
+        k = next(i for i, s in enumerate(p["season"]) if s == 2019 and p["round"][i] == "division")
+        _set_cell_crews(
+            data, k, [[[0, "pbp"], [1, "analyst"], [2, "analyst"]], [[0, "pbp"], [1, "analyst"]]]
+        )
+        assert p["booths"][k] == [[0, 1], [0, 1]]  # the pairs alone never carry person 2
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    page = mlb_guarded_page
+    page.route("**/mlb-data.json", handler)
+    open_mlb_app(page, "?sport=mlb&view=postseason")
+    sel = f"{VIEW} .mlb-grid button[data-cell='2019-division-AL']"
+    people = page.evaluate(
+        """(sel) => [...document.querySelectorAll(sel + ' .mlb-cell-booth')].map((line) =>
+          [...line.querySelectorAll('.name-with-roles')].map((n) => [
+            n.querySelector('.booth-name').textContent,
+            [...n.querySelectorAll('.role-pill')].map((r) => r.dataset.role),
+          ]))""",
+        sel,
+    )
+    want = page.evaluate(
+        "async () => (await (await fetch('mlb-data.json')).json()).lookups.people"
+        ".slice(0, 3).map((p) => p.name)"
+    )
+    assert len(people) == 1
+    assert [name for name, _ in people[0]] == want
+    assert [roles for _, roles in people[0]] == [["pbp"], ["analyst"], ["analyst"]]
 
 
 def test_cell_groups_crews_that_share_an_analyst(
@@ -533,7 +604,7 @@ def test_cell_groups_crews_that_share_an_analyst(
         data = json.loads(resp.text())
         p = data["postseason"]
         k = next(i for i, s in enumerate(p["season"]) if s == 2019 and p["round"][i] == "division")
-        p["booths"][k] = [[0, 7], [2, 7], [4, 7], [5, 6]]
+        _set_cell_crews(data, k, _crews([[0, 7], [2, 7], [4, 7], [5, 6]]))
         route.fulfill(response=resp, body=json.dumps(data))
 
     page = mlb_guarded_page

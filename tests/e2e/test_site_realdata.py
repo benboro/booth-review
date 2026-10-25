@@ -2412,3 +2412,66 @@ def test_real_mlb_apple_and_postseason_counts(
     season_count = len(seasons)
     assert season_count > 0
     assert descending
+
+
+# U9: per cell, the people a Postseason cell shows against the union of its games' full crews
+# (by person index, since two people may share a name). Returns ints only, never names.
+_MLB_POST_PEOPLE_JS = """
+async () => {
+  const raw = await (await fetch('mlb-data.json')).json();
+  const { cellKey } = await import('./sports/mlb/data.js');
+  const post = raw.postseason;
+  const leagues = raw.lookups.leagues;
+  const people = raw.lookups.people;
+  const expected = new Map();
+  post.season.forEach((season, k) => {
+    const lg = post.league[k] == null ? null : leagues[post.league[k]].id;
+    const key = cellKey(season, post.round[k], lg);
+    if (!expected.has(key)) expected.set(key, new Set());
+    for (const g of post.game_list[k]) {
+      for (const m of raw.games.crew[g] || []) expected.get(key).add(people[m.person].name);
+    }
+  });
+  let cells = 0, mismatched = 0, missing = 0, extra = 0, repeated = 0, unmatched = 0;
+  for (const btn of document.querySelectorAll('#mlb-view-postseason .mlb-grid button[data-cell]')) {
+    cells += 1;
+    const want = expected.get(btn.dataset.cell);
+    if (!want) { unmatched += 1; continue; }
+    const shown = [...btn.querySelectorAll('.mlb-cell-booth .booth-name')]
+      .map((n) => n.textContent);
+    const got = new Set(shown);
+    repeated += shown.length - got.size;
+    const miss = [...want].filter((n) => !got.has(n)).length;
+    const more = [...got].filter((n) => !want.has(n)).length;
+    missing += miss;
+    extra += more;
+    if (miss || more) mismatched += 1;
+  }
+  return { cells, expected: expected.size, mismatched, missing, extra, repeated, unmatched };
+}
+"""
+
+
+def test_real_mlb_postseason_cells_show_every_crew_member(
+    real_mlb_guarded_page: Page, real_mlb_site_url: str
+) -> None:
+    """U9: every Postseason cell shows exactly the union of its games' full crews (a second
+    analyst included), each person once. Counts only."""
+    page = real_mlb_guarded_page
+    _open_real_mlb(page, real_mlb_site_url, "&view=postseason")
+    page.wait_for_selector("#mlb-view-postseason .mlb-grid tbody tr[data-season]")
+    counts: dict[str, int] = page.evaluate(_MLB_POST_PEOPLE_JS)
+    cells = counts["cells"]
+    expected_cells = counts["expected"]
+    mismatched = counts["mismatched"]
+    missing = counts["missing"]
+    extra = counts["extra"]
+    repeated = counts["repeated"]
+    unmatched = counts["unmatched"]
+    assert cells > 0
+    assert cells == expected_cells
+    assert unmatched == 0
+    assert mismatched == 0
+    assert missing == 0
+    assert extra == 0
+    assert repeated == 0

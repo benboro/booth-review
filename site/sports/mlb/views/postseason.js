@@ -198,7 +198,7 @@ function buildGrid(model) {
     if (!b) {
       b = {
         key, season: r.season, round: r.round, league: leagueId,
-        outlets: [], outletSourceUrl: null, booths: [], games: 0, crewListed: 0,
+        outlets: [], outletSourceUrl: null, booths: [], gameList: [], games: 0, crewListed: 0,
         exciteSum: 0, exciteN: 0, viewerSum: 0, viewerN: 0,
       };
       blocks.set(key, b);
@@ -211,6 +211,7 @@ function buildGrid(model) {
     for (const pair of r.booths) {
       if (!b.booths.some((p) => p[0] === pair[0] && p[1] === pair[1])) b.booths.push(pair);
     }
+    for (const g of r.game_list) if (!b.gameList.includes(g)) b.gameList.push(g);
     b.games += r.games;
     b.crewListed += r.crew_listed;
     if (r.mean_excitement != null && r.excitement_n > 0) {
@@ -257,11 +258,15 @@ function excitementLine(model, b) {
  * relation. A group lists its play-by-play people, then its analysts who are not already
  * listed, each in first-seen order; a person seen in both roles is listed once, with both
  * pills. Only the display groups; the crews and every game's own crew are untouched.
- * @param {Array<[number, number|null]>} pairs [pbp, analyst] person indexes
+ *
+ * `order` (optional) ranks people per role: listed people keep that order inside a group,
+ * unlisted ones follow in first-seen order (U9 keeps the builder's booth order this way).
+ * @param {Array<Array<{person: number|null, role: string}>>} crews each game's full crew
+ * @param {{pbp: Map<number, number>, analyst: Map<number, number>}|null} [order]
  * @returns {Array<{pbps: Array<{person: number, roles: string[]}>, analysts: Array<{person: number, roles: string[]}>}>}
  */
-export function groupBooths(pairs) {
-  const parent = pairs.map((_, k) => k);
+export function groupBooths(crews, order = null) {
+  const parent = crews.map((_, k) => k);
   const find = (k) => {
     while (parent[k] !== k) {
       parent[k] = parent[parent[k]];
@@ -270,8 +275,8 @@ export function groupBooths(pairs) {
     return k;
   };
   const firstCrew = new Map();
-  pairs.forEach((pair, k) => {
-    for (const person of pair) {
+  crews.forEach((crew, k) => {
+    for (const { person } of crew) {
       if (person == null) continue;
       if (!firstCrew.has(person)) firstCrew.set(person, k);
       else {
@@ -282,27 +287,62 @@ export function groupBooths(pairs) {
     }
   });
   const byRoot = new Map();
-  pairs.forEach((pair, k) => {
+  crews.forEach((crew, k) => {
     const root = find(k);
     if (!byRoot.has(root)) byRoot.set(root, []);
-    byRoot.get(root).push(pair);
+    byRoot.get(root).push(crew);
   });
+  const rankBy = (role) => {
+    const ranks = order?.[role];
+    return (list) => (ranks
+      ? list.map((e, k) => [ranks.get(e.person) ?? Infinity, k, e])
+        .sort((x, y) => x[0] - y[0] || x[1] - y[1]).map((x) => x[2])
+      : list);
+  };
   // Roots are each group's first crew, so Map order is first-seen order.
-  return [...byRoot.values()].map((crews) => {
+  return [...byRoot.values()].map((group) => {
     const roles = new Map();
     const add = (person, role) => {
       if (person == null) return;
       if (!roles.has(person)) roles.set(person, []);
       if (!roles.get(person).includes(role)) roles.get(person).push(role);
     };
-    for (const [pbp] of crews) add(pbp, 'pbp');
-    for (const [, analyst] of crews) add(analyst, 'analyst');
+    for (const crew of group) for (const m of crew) if (m.role === 'pbp') add(m.person, 'pbp');
+    for (const crew of group) for (const m of crew) if (m.role !== 'pbp') add(m.person, 'analyst');
     const entries = [...roles].map(([person, r]) => ({ person, roles: r }));
     return {
-      pbps: entries.filter((e) => e.roles.includes('pbp')),
-      analysts: entries.filter((e) => !e.roles.includes('pbp')),
+      pbps: rankBy('pbp')(entries.filter((e) => e.roles.includes('pbp'))),
+      analysts: rankBy('analyst')(entries.filter((e) => !e.roles.includes('pbp'))),
     };
   });
+}
+
+/**
+ * A cell's booth lines from the full crew of every game it lists (U9). The builder's
+ * `booths` pairs carry one analyst per booth, so a second analyst never reached the cell;
+ * the games' own crews are complete. The pairs still set the order: crews sort by the first
+ * pair they hold (crews matching none follow, in game order) and people keep their pair
+ * order, so a cell reads as before with the missing people added.
+ */
+export function cellBooths(model, b) {
+  const crews = b.gameList.map((i) => model.cols.crew[i] || []).filter((c) => c.length);
+  const order = { pbp: new Map(), analyst: new Map() };
+  const anyRank = new Map();
+  b.booths.forEach(([pbp, analyst], k) => {
+    if (pbp != null && !order.pbp.has(pbp)) order.pbp.set(pbp, k);
+    if (analyst != null && !order.analyst.has(analyst)) order.analyst.set(analyst, k);
+    for (const person of [pbp, analyst]) if (person != null && !anyRank.has(person)) anyRank.set(person, k);
+  });
+  const crewRank = (crew) => {
+    const people = new Set(crew.map((m) => m.person));
+    const k = b.booths.findIndex(([pbp, analyst]) =>
+      (pbp == null || people.has(pbp)) && (analyst == null || people.has(analyst)));
+    if (k >= 0) return k;
+    return Math.min(Infinity, ...crew.map((m) => anyRank.get(m.person) ?? Infinity));
+  };
+  const ranked = crews.map((crew, k) => [crewRank(crew), k, crew])
+    .sort((x, y) => x[0] - y[0] || x[1] - y[1]).map((x) => x[2]);
+  return groupBooths(ranked, order);
 }
 
 /** One booth line: its play-by-play people, then ' / ' and its analysts. */
@@ -334,7 +374,7 @@ function blockButton(model, b, label, picked, maxLines = Infinity) {
   btn.append(head);
 
   const booths = el('span', 'mlb-cell-booths');
-  const groups = groupBooths(b.booths);
+  const groups = cellBooths(model, b);
   if (groups.length) {
     const shown = groups.slice(0, maxLines);
     for (const g of shown) booths.append(boothLine(model, g));
@@ -344,7 +384,7 @@ function blockButton(model, b, label, picked, maxLines = Infinity) {
   } else {
     booths.append(el('span', 'mlb-no-crew', NO_CREW_TEXT));
   }
-  if (b.booths.length && b.crewListed < b.games) {
+  if (groups.length && b.crewListed < b.games) {
     booths.append(el('span', 'mlb-no-crew', `${NO_CREW_TEXT} for ${b.games - b.crewListed} of ${b.games}`));
   }
   btn.append(booths);
@@ -550,7 +590,7 @@ export function render(ctx) {
             key: b.key, season: b.season, round: b.round, league: b.league, games: b.games,
             outlets: b.outlets.map((o) => o.name), outletSourceUrl: b.outletSourceUrl,
             booths: b.booths.map(([p, a]) => boothLabelOf(model, p, a)),
-            boothLines: groupBooths(b.booths).length,
+            boothLines: cellBooths(model, b).length,
             crewListed: b.crewListed, excitementN: b.exciteN,
             excitement: b.exciteN ? b.exciteSum / b.exciteN : null,
             viewersN: b.viewerN, pending: cellPending(model, b),
