@@ -34,6 +34,7 @@ const CONFIG = frameConfig({ zoomable: true });
 
 const VIEWER_TICKS = [
   [5e5, '500K'], [1e6, '1M'], [2e6, '2M'], [5e6, '5M'], [1e7, '10M'], [2e7, '20M'],
+  [5e7, '50M'], // shown only when the data runs above 20M (World Series Game 7s)
 ];
 const BASE_SIZE = 6;
 const STRIP_PX = 72; // the left strip's width
@@ -103,7 +104,7 @@ function familyColor(family, th) {
 
 // ---- axes ----
 
-/** Viewers axis from the rated items: log range padded 10% (UI-SPEC Axes), ticks that fall inside it. */
+/** Viewers axis from the rated items: log range padded 10% (UI-SPEC Axes), up to 50M when data passes 20M; ticks inside it. */
 function yAxisFor(items) {
   let lo = Infinity;
   let hi = -Infinity;
@@ -115,7 +116,8 @@ function yAxisFor(items) {
   const all = { tickvals: VIEWER_TICKS.map((t) => t[0]), ticktext: VIEWER_TICKS.map((t) => t[1]) };
   if (!(hi > 0)) return { range: [Math.log10(5e5), Math.log10(2e7)], ...all };
   const rLo = lo / 1.1;
-  const rHi = hi * 1.1;
+  // Above 20M the top extends to the 50M tick so the upper decade carries a label (G10).
+  const rHi = hi > 2e7 ? Math.max(hi * 1.1, 5e7) : hi * 1.1;
   const ticks = VIEWER_TICKS.filter(([v]) => v >= rLo && v <= rHi);
   if (ticks.length >= 2) {
     return {
