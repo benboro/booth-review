@@ -118,7 +118,12 @@ function viewershipSection(row) {
 
 function excitementLine(row, constants) {
   if (row.excitement != null) {
-    const method = constants && constants.excitement_method ? ` (${constants.excitement_method})` : '';
+    // 'WE-table (Retrosheet)' already carries brackets: flatten them so the line reads
+    // 'Excitement: 5.7 (WE-table, Retrosheet)', not '(WE-table (Retrosheet))'.
+    const label = constants && constants.excitement_method
+      ? String(constants.excitement_method).replace(/\s*\(([^()]*)\)\s*$/, ', $1')
+      : '';
+    const method = label ? ` (${label})` : '';
     return `Excitement: ${row.excitement.toFixed(1)}${method}`;
   }
   return row.lineupStatus === 'pending' || row.season >= 2026
