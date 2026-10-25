@@ -159,12 +159,33 @@ function moreNames(rest) {
   btn.addEventListener('blur', hideTooltip);
 
   let pop = null;
+  // The popover is fixed to the viewport and lives outside the table's scroller, so the last
+  // row's list is never clipped by it: below the button when it fits, else above.
+  const place = () => {
+    if (!pop) return;
+    // The table re-rendered under it: its button is gone, so the popover goes too.
+    if (!btn.isConnected) {
+      close(false);
+      return;
+    }
+    const r = btn.getBoundingClientRect();
+    const w = pop.offsetWidth;
+    const h = pop.offsetHeight;
+    const gap = 4;
+    const left = Math.max(gap, Math.min(r.left, window.innerWidth - w - gap));
+    const below = r.bottom + gap;
+    const top = below + h <= window.innerHeight - gap ? below : Math.max(gap, r.top - h - gap);
+    pop.style.left = `${Math.round(left)}px`;
+    pop.style.top = `${Math.round(top)}px`;
+  };
   const close = (refocus) => {
     if (!pop) return;
     pop.remove();
     pop = null;
     document.removeEventListener('pointerdown', onOutside, true);
     document.removeEventListener('keydown', onKey, true);
+    window.removeEventListener('scroll', place, true);
+    window.removeEventListener('resize', place);
     if (refocus) btn.focus();
   };
   function onOutside(ev) {
@@ -184,9 +205,12 @@ function moreNames(rest) {
     pop.setAttribute('role', 'dialog');
     pop.setAttribute('aria-label', 'More analysts');
     for (const a of rest) pop.append(el('p', null, countText(a)));
-    btn.after(pop);
+    (btn.closest('.nfl-view') ?? document.body).append(pop);
+    place();
     document.addEventListener('pointerdown', onOutside, true);
     document.addEventListener('keydown', onKey, true);
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
   });
   return btn;
 }

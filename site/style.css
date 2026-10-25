@@ -5026,10 +5026,11 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 .more-names-pop {
-  position: absolute;
-  z-index: 3;
+  /* Placed from the button's rect in apple.js, outside the table scroller (never clipped). */
+  position: fixed;
+  z-index: 30;
   left: 0;
-  top: 100%;
+  top: 0;
   min-width: 160px;
   padding: var(--space-sm);
   border: 1px solid var(--rule-strong);

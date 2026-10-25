@@ -530,3 +530,52 @@ def test_fill_in_compares_against_the_listed_analyst(
     )
     assert tagged == [0, 1, 5]
     assert sub.locator("tr.crews-game[data-game='6'] .crews-tag.is-dashed").count() == 0
+
+
+def test_more_names_popover_on_the_last_row_is_not_clipped(
+    mlb_mobile_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """F17: the phone popover on the last Apple row sits in the viewport, clear of the scroller."""
+    page = mlb_mobile_page
+
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        g = data["games"]
+        # Booth 2 (the last row) plays game 4 with three analysts, so its cell shows '+1'.
+        g["crew"][4] = [
+            {"person": 4, "role": "pbp"},
+            {"person": 5, "role": "analyst"},
+            {"person": 1, "role": "analyst"},
+            {"person": 3, "role": "analyst"},
+        ]
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    page.route("**/mlb-data.json", handler)
+    open_mlb_app(page)
+    more = page.locator(ROW).last.locator("button.more-names")
+    assert more.inner_text() == "+1"
+    more.scroll_into_view_if_needed()
+    more.tap()
+    pop = page.locator("#mlb-view-apple .more-names-pop")
+    assert pop.count() == 1
+    box = pop.evaluate(
+        """(p) => {
+          const r = p.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          const wrap = document.querySelector('#mlb-view-apple .table-scroll');
+          const w = wrap.getBoundingClientRect();
+          return {
+            top: r.top, bottom: r.bottom, left: r.left, right: r.right,
+            vw: innerWidth, vh: innerHeight, hit: !!hit && p.contains(hit),
+            insideWrap: wrap.contains(p), wrapBottom: w.bottom,
+          };
+        }"""
+    )
+    assert box["top"] >= 0 and box["left"] >= 0
+    assert box["bottom"] <= box["vh"] and box["right"] <= box["vw"]
+    assert box["hit"], box  # nothing (no scroller edge) covers it
+    assert not box["insideWrap"] or box["bottom"] <= box["wrapBottom"]
+    assert pop.inner_text() == "Fay Lorn (1)"  # ties order by name: Ben, Dee, then Fay
+    page.keyboard.press("Escape")
+    assert pop.count() == 0
