@@ -516,7 +516,7 @@ def test_venue_dot_subject_and_shared_shapes(guarded_page: Page, site_url: str) 
     assert got["tog"]["1"] == ["subject", "star"]
 
 
-def test_venue_dots_rescale_and_faded_per_venue(guarded_page: Page, site_url: str) -> None:
+def test_venue_dots_fixed_scale_and_faded_per_venue(guarded_page: Page, site_url: str) -> None:
     got = _model(
         guarded_page,
         site_url,
@@ -535,6 +535,9 @@ def test_venue_dots_rescale_and_faded_per_venue(guarded_page: Page, site_url: st
           hideFaded: hide.venueFaded.length,
           nbcVenues: one.venueDots.map((d) => d.venue).sort(),
           top: one.venueDots[0].size.desktop,
+          topGames: one.venueModel.venues[0].games,
+          ref: one.venueModel.refGames,
+          full: M.buildMapModel(data, mkView(), mkState()).venueModel.refGames,
         };
         """,
     )
@@ -542,7 +545,9 @@ def test_venue_dots_rescale_and_faded_per_venue(guarded_page: Page, site_url: st
     assert got["faded"] == [[1, "beta-bowl-los-angeles"]]
     assert got["hideFaded"] == 0
     assert got["nbcVenues"] == [0, 1, 5]
-    assert got["top"] == 16
+    assert got["ref"] == got["full"]  # the filter never changes the reference
+    assert got["topGames"] <= got["ref"]
+    assert abs(got["top"] - 28 * (got["topGames"] / got["ref"]) ** 0.5) < 1e-9
 
 
 def test_marker_keys_and_selected_flags(guarded_page: Page, site_url: str) -> None:
@@ -670,7 +675,9 @@ def test_hook_exposes_venue_fields(guarded_page: Page, site_url: str) -> None:
         assert got == {"dots": True, "faded": True, "keyed": True}
 
 
-def test_announcer_pick_rescales_the_venue_model(guarded_page: Page, site_url: str) -> None:
+def test_announcer_pick_builds_the_venue_model_on_the_fixed_scale(
+    guarded_page: Page, site_url: str
+) -> None:
     """D-03: picking an announcer builds dots, splat, key and card from the picked people's
     games; venues with only other games stay as background dots; the venue filter never
     reaches this cohort."""
@@ -693,7 +700,8 @@ def test_announcer_pick_rescales_the_venue_model(guarded_page: Page, site_url: s
           allGames: byVenue(none), patGames: byVenue(m), selGames: byVenue(sel),
           allDots: none.venueDots.map((d) => d.venue).sort(),
           patDots: m.venueDots.map((d) => [d.venue, d.tier]).sort((a, b) => a[0] - b[0]),
-          bgSize: dot(m, 5).size, bgScore: dot(m, 5).score, patMax: m.venueModel.maxScore,
+          bgSize: dot(m, 5).size, bgGames: none.venueModel.venues.find((v) => v.index === 5).games,
+          ref: none.venueModel.refGames, bgScore: dot(m, 5).score, patMax: m.venueModel.maxScore,
           alphaCard: cardGames(m, alpha),
           alphaCardAll: cardGames(none, alpha),
           bgCard: M.venueCard(data, m, 'delta-dome-columbus') !== null,
@@ -709,7 +717,8 @@ def test_announcer_pick_rescales_the_venue_model(guarded_page: Page, site_url: s
     assert [d[0] for d in got["patDots"]] == [int(v) for v in got["allDots"]]
     assert tiers[5] == "other"
     assert tiers[0] == "subject"
-    assert got["bgSize"]["desktop"] <= 16
+    # Background dots sit on the fixed full-data scale, never a picked-cohort scale.
+    assert abs(got["bgSize"]["desktop"] - 28 * (got["bgGames"] / got["ref"]) ** 0.5) < 1e-9
     assert got["alphaCard"] == 2
     assert got["alphaCardAll"] == 4
     assert got["bgCard"] is True

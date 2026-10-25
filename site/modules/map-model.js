@@ -22,7 +22,7 @@ import {
 } from './palette.js';
 import { MAX_COMPARE } from './select.js';
 import { crewPickNames } from './format.js';
-import { buildVenueModel, venueDotSize } from './map-venues.js';
+import { buildVenueModel } from './map-venues.js';
 import {
   ALBERS_SCALE,
   ALBERS_TRANSLATE,
@@ -283,8 +283,9 @@ export function buildMapModel(data, view, state) {
   // venue flag (D-05; the venue filter never reaches `passing`, so no dot collapses).
   // D-03: with announcers (or a crew, Phase 14 D-06) picked, the venue model (dots,
   // splat, key, card) is built from the picked games among those passing, exactly
-  // computeView's `highlighted` (role and called-together included), so it rescales
-  // with the pick. Venues that host only other games stay on the map as background dots
+  // computeView's `highlighted` (role and called-together included), so the picked games
+  // decide which venues are cohort dots and their counts. Dot sizes use the fixed full-data
+  // scale (Phase 17.1 D-04). Venues that host only other games stay on the map as background dots
   // from the full cohort.
   const personPick = hasSubject && (subjects[0].kind === 'person' || subjects[0].kind === 'crew');
   const fullVenueModel = buildVenueModel(data, passing, placements);
@@ -341,8 +342,8 @@ export function buildMapModel(data, view, state) {
     };
   });
   if (personPick) {
-    // Background venues first, so the picked people's dots draw on top. Their size uses the
-    // picked cohort's scale (capped like any dot), so the two kinds stay comparable.
+    // Background venues first, so the picked people's dots draw on top. Their size is on the
+    // same fixed full-data scale as every dot.
     const inCohort = new Set(venueModel.venues.map((v) => v.index));
     const background = fullVenueModel.venues
       .filter((v) => !inCohort.has(v.index))
@@ -355,7 +356,7 @@ export function buildMapModel(data, view, state) {
         symbol: 'circle',
         leader: v.leader,
         score: v.score,
-        size: venueDotSize(v.score, venueModel.maxScore),
+        size: v.size,
         dotColor: v.dotColor,
         selected: selectedSet.has(v.index),
       }));
