@@ -412,7 +412,10 @@ function ensureShell(footerEl) {
         state = canonicalMlbState({ ...state, game: null }, model);
         if (mounted) syncUrl();
         // The Scatter fades to an open game when nothing else is picked (D-07): undo that on close.
-        if (wasOnlyGame && state.view === 'scatter' && views && views.scatter) views.scatter.mod.render(ctx);
+        // unmount() closes the panel too; a hidden MLB view is not redrawn (it renders on remount).
+        if (mounted && wasOnlyGame && state.view === 'scatter' && views && views.scatter) {
+          views.scatter.mod.render(ctx);
+        }
       }
     },
   });
