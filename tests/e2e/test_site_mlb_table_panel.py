@@ -1,7 +1,7 @@
 # ruff: noqa: E501
 """09-17: the MLB games table and detail panel on the synthetic MLB fixture.
 
-Fixture games used here: 0 (2026 relay crew, lineup pending), 1 (2026 506 crew, rated 1.8M,
+Fixture games used here: 0 (2026 relay crew, lineup pending), 1 (2026 506 crew, rated 1.8MM,
 lineup pending), 6 (2014 wild card, no crew, full lineups), 7 (2014 World Series, Wikipedia
 crew, lineup missing), 8 (2019 division, per_network, lineup missing).
 """
@@ -194,7 +194,7 @@ def test_relay_crew_links_post_and_press_page(mlb: Page) -> None:
 def test_rated_game_shows_record_and_publisher_links(mlb: Page) -> None:
     _open(mlb, 1)
     text = _panel(mlb)
-    assert "Viewers: 1.8M" in text
+    assert "Viewers: 1.8MM" in text
     assert "Measured under Invented era." in text
     rr = mlb.locator('#mlb-detail-panel a[href="https://example.org/rr/telecast-1"]')
     src = mlb.locator('#mlb-detail-panel a[href="https://example.org/source/figure-1"]')
@@ -208,7 +208,7 @@ def test_rated_game_shows_record_and_publisher_links(mlb: Page) -> None:
 def test_window_level_figure_is_labelled_not_a_game_audience(mlb: Page) -> None:
     _open(mlb, 10)
     text = _panel(mlb)
-    assert "Viewers: 5.5M (whole broadcast window, not this game alone)" in text
+    assert "Viewers: 5.5MM (whole broadcast window, not this game alone)" in text
     # A per-game figure carries no such note.
     _open(mlb, 7)
     assert "whole broadcast window" not in _panel(mlb)
@@ -222,7 +222,7 @@ def test_window_level_figure_is_labelled_not_a_game_audience(mlb: Page) -> None:
 def test_window_figures_sort_after_game_figures(mlb: Page) -> None:
     mlb.evaluate(f"{HOOKS}.setState({{ view: 'postseason', selection: null }})")
     mlb.evaluate(f"{HOOKS}.setState({{ cell: null }})")
-    # 2014 World Series (12.0M game figure) and 2019 LCS (5.5M window) need one table.
+    # 2014 World Series (12.0MM game figure) and 2019 LCS (5.5MM window) need one table.
     mlb.evaluate(f"{HOOKS}.setState({{ selection: {{ games: [7, 10], label: 'test pair' }} }})")
     mlb.click("#mlb-matched-games th button[data-sort='viewers']")
     rows = mlb.eval_on_selector_all(
@@ -397,14 +397,14 @@ def test_game_figure_reads_as_that_games_viewers_not_its_label(
     open_mlb_app(page)
     _open(page, 1)
     text = _panel(page)
-    assert "Viewers: 1.8M" in text
+    assert "Viewers: 1.8MM" in text
     assert "per-game" not in text.lower()
     # A window figure keeps the RT-27 qualifier; a composite says it adds telecasts together.
     _open(page, 10)
-    assert "Viewers: 5.5M (whole broadcast window, not this game alone)" in _panel(page)
+    assert "Viewers: 5.5MM (whole broadcast window, not this game alone)" in _panel(page)
     assert "window-level:" not in _panel(page)
     _open(page, 7)
-    assert "Viewers: 12.0M (several telecasts combined)" in _panel(page)
+    assert "Viewers: 12.0MM (several telecasts combined)" in _panel(page)
 
 
 def test_panel_says_retrosheet_not_loaded_without_retrosheet(
@@ -444,6 +444,6 @@ def test_a_composite_window_figure_keeps_both_qualifiers(
     open_mlb_app(page)
     _open(page, 10)
     assert (
-        "Viewers: 5.5M (whole broadcast window, not this game alone; several telecasts combined)"
+        "Viewers: 5.5MM (whole broadcast window, not this game alone; several telecasts combined)"
         in _panel(page)
     )

@@ -16,7 +16,7 @@ import {
   showHoverRing, hideHoverRing, ringSpecFromPoint, hoverRingDiameter,
 } from '../../../modules/hover-ring.js';
 import { createOnlyDetector, makeLegendChip } from '../../../modules/legend.js';
-import { formatAudienceShort } from '../../../modules/format.js';
+import { formatAudienceShort, viewerTickLabel } from '../../../modules/format.js';
 import { frameConfig, frameLayout, referenceLine } from '../../../modules/chart-frame.js';
 import { bandLayout, marginFor } from '../../../modules/chart.js';
 import { initBandInfo, positionBandInfo, closeBandNote } from '../../../modules/band-info.js';
@@ -32,9 +32,7 @@ import {
 
 const CONFIG = frameConfig({ zoomable: true });
 
-const VIEWER_TICKS = [
-  [5e5, '500K'], [1e6, '1M'], [2e6, '2M'], [5e6, '5M'], [1e7, '10M'], [2e7, '20M'],
-];
+const VIEWER_TICKS = [5e5, 1e6, 2e6, 5e6, 1e7, 2e7].map((v) => [v, viewerTickLabel(v)]);
 const BASE_SIZE = 6;
 const STRIP_PX = 72; // the left strip's width
 const STRIP_GAP_PX = 8; // between the strip's divider and excitement 0
