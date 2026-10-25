@@ -3940,7 +3940,9 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   color: var(--muted);
   font: var(--font-body);
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  /* "pending Retrosheet 2026" is wider than the 144px Stakes and Excitement columns; on one
+     line it ran into the next column. It wraps, right-aligned, like the Crew listed cell. */
+  white-space: normal;
 }
 
 .mlb-apple-table .rated-n {
