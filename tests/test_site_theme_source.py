@@ -67,6 +67,14 @@ def test_theme_init_shape() -> None:
             assert "try {" in line, line
 
 
+def test_theme_init_reapplies_the_theme_on_a_bfcache_restore() -> None:
+    # Review 6a: a page restored from the back/forward cache keeps its old data-theme, so a
+    # toggle on another page would not show; pageshow with persisted re-reads the stored theme.
+    text = (SITE / "theme-init.js").read_text(encoding="utf-8")
+    assert "window.addEventListener('pageshow', function (e) {" in text
+    assert "if (e.persisted) apply(stored());" in text
+
+
 def test_theme_init_is_the_only_writer() -> None:
     offenders = [
         str(p.relative_to(SITE))

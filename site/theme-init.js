@@ -15,6 +15,9 @@
   document.addEventListener('DOMContentLoaded', function () {
     apply(r.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
   });
+  window.addEventListener('pageshow', function (e) {
+    if (e.persisted) apply(stored());
+  });
   document.addEventListener('click', function (e) {
     var b = e.target.closest && e.target.closest('#theme-toggle');
     if (!b) return;

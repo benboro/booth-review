@@ -385,7 +385,9 @@ def test_render_methodology_resolves_md_links_against_docs(
 # NFL text changes are inside the nfl fences.
 # Re-pinned at Phase 17 Plan 06: inline hash-pinned theme-init.js script, sha256 CSP and
 # #theme-slot toggle in the header.
-_METHODOLOGY_FLAG_OFF_SHA256 = "b3b78d6c49b48d497e2fc50c5a39ea9c2c694afe18603433e2ea33b20d874431"
+# Re-pinned at Phase 17 review: theme-init.js re-applies the stored theme on a back/forward
+# cache restore (pageshow), which changes the inlined script and its CSP hash.
+_METHODOLOGY_FLAG_OFF_SHA256 = "39b25489be10aba6ab272b60b3f6a1f99ea3e7636124c1354f5989aa036f2abc"
 
 _NFL_ANCHORS = (
     "nfl-special-games",

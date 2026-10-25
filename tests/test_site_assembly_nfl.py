@@ -60,7 +60,9 @@ _SITE_DATA_SHA256 = "8ceec31a10326e809f9a9397da7734be8b1092156ef094093742c7d4e11
 # new header with theme slot, site name.
 # Re-pinned at Phase 17 Plan 06: inline hash-pinned theme-init.js script, sha256 CSP and
 # #theme-slot toggle in the header.
-_COVERAGE_SHA256 = "f3746cece5a8d5ad854b07f69c0b333ffcba8513f1901c6e5ad3345ac37a9c8b"
+# Re-pinned at Phase 17 review: theme-init.js re-applies the stored theme on a back/forward
+# cache restore (pageshow), which changes the inlined script and its CSP hash.
+_COVERAGE_SHA256 = "f486fd2361993d9323d36870d0d7e23f1150efeef31c2e829cd53b7d6070411c"
 # Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
 # new header with theme slot, site name.
 # Re-pinned at Phase 13 Plan 05: Plotly partial bundle src and SRI.
