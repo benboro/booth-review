@@ -93,16 +93,28 @@ function crewSection(row) {
   return nodes;
 }
 
+/**
+ * The panel's figure line. The panel shows one game, so its figure is that game's audience:
+ * the line always reads `Viewers: <value>`, never the data's `viewership_label` ('per-game' and
+ * the rest describe the record, not the reader's question). A window-scope figure keeps the
+ * RT-27 qualifier, and a composite figure says it adds several telecasts together.
+ */
+export function viewersLine(row) {
+  const v = viewersText(row.viewers);
+  if (v == null) return `Viewers: not available (${CAUSE_COPY[row.cause] ?? CAUSE_COPY.none})`;
+  let note = '';
+  if (row.scope === 'window' || row.viewersLabel === 'window-level') {
+    note = ' (whole broadcast window, not this game alone)';
+  } else if (row.viewersLabel === 'composite') {
+    note = ' (several telecasts combined)';
+  }
+  return `Viewers: ${v}${note}`;
+}
+
 function viewershipSection(row) {
   const nodes = [el('h3', null, 'Viewership')];
-  const v = viewersText(row.viewers);
-  if (v == null) {
-    nodes.push(el('p', null, `Viewers: not available (${CAUSE_COPY[row.cause] ?? CAUSE_COPY.none})`));
-  } else {
-    const windowNote = row.scope === 'window' ? ' (whole broadcast window, not this game alone)' : '';
-    nodes.push(el('p', null, `${row.viewersLabel || 'Viewers'}: ${v}${windowNote}`));
-    if (row.era != null) nodes.push(el('p', null, `Measured under ${row.era}.`));
-  }
+  nodes.push(el('p', null, viewersLine(row)));
+  if (row.viewers != null && row.era != null) nodes.push(el('p', null, `Measured under ${row.era}.`));
   const links = [{ href: row.rrUrl, text: 'View record on Ratings Reference ↗' }];
   if (row.viewers != null) {
     links.push({

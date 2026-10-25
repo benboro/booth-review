@@ -370,3 +370,33 @@ def test_excitement_pending_follows_retrosheet_freshness(
     # A pending lineup stays pending.
     _open(page, 1)
     assert "Excitement: pending Retrosheet 2026" in _panel(page)
+
+
+def _relabel(route: Route) -> None:
+    """Give the fixture's rated games the builder's real label values."""
+    resp = route.fetch()
+    raw = json.loads(resp.text())
+    labels = raw["games"]["viewership_label"]
+    labels[1] = "per-game"
+    labels[7] = "composite"
+    labels[10] = "window-level"
+    route.fulfill(response=resp, body=json.dumps(raw))
+
+
+def test_game_figure_reads_as_that_games_viewers_not_its_label(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """U1: a game's own figure reads `Viewers: <value>`, never the data label 'per-game'."""
+    page = mlb_guarded_page
+    page.route("**/mlb-data.json", _relabel)
+    open_mlb_app(page)
+    _open(page, 1)
+    text = _panel(page)
+    assert "Viewers: 1.8M" in text
+    assert "per-game" not in text.lower()
+    # A window figure keeps the RT-27 qualifier; a composite says it adds telecasts together.
+    _open(page, 10)
+    assert "Viewers: 5.5M (whole broadcast window, not this game alone)" in _panel(page)
+    assert "window-level:" not in _panel(page)
+    _open(page, 7)
+    assert "Viewers: 12.0M (several telecasts combined)" in _panel(page)
