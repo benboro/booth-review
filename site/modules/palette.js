@@ -192,6 +192,24 @@ export const MAP_OPACITY = Object.freeze({
 });
 
 /**
+ * Dark map opacity (Phase 17 review F13): at the light 0.55 leg and 0.85 subject tiers the dark
+ * family colours composited over MAP_LAND.dark fall to 1.85:1 (Disney leg). Dark draws selected
+ * legs and subject dots at 0.95, which holds every dark map family, and every venue mix toward
+ * MAP_DOT_NEUTRAL, at 3.08:1 or more on the land. The base, other and faded tiers stay faint
+ * context on purpose.
+ */
+export const MAP_OPACITY_DARK = Object.freeze({ ...MAP_OPACITY, leg: 0.95, subject: 0.95 });
+
+/**
+ * Map mark opacity tiers for a theme.
+ * @param {'light'|'dark'} theme
+ * @returns {Readonly<Record<string, number>>}
+ */
+export function mapOpacity(theme) {
+  return theme === 'dark' ? MAP_OPACITY_DARK : MAP_OPACITY;
+}
+
+/**
  * Map mark sizes in px (04.18 D-05/D-10, UI-SPEC "Mark tiers"); `subject` is per compare
  * shape, sized so each shape reads equally large. DEFAULTED pending close-out sign-off.
  */
