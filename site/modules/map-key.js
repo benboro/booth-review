@@ -39,7 +39,7 @@ function stepAtMost(value) {
 }
 
 /**
- * Key model, sized from the fixed full-data reference so it never changes while filtering.
+ * Key model, sized from the busiest venue of the filtered set, so it rescales with the filters.
  * @param {{refGames: number}} venueModel
  * @param {{phone?: boolean}} [opts]
  * @returns {{visible: boolean, sizes: {games: number, label: string, diameter: number}[],

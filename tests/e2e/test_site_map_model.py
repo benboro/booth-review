@@ -516,7 +516,9 @@ def test_venue_dot_subject_and_shared_shapes(guarded_page: Page, site_url: str) 
     assert got["tog"]["1"] == ["subject", "star"]
 
 
-def test_venue_dots_fixed_scale_and_faded_per_venue(guarded_page: Page, site_url: str) -> None:
+def test_venue_dots_rescale_to_the_filter_and_fade_per_venue(
+    guarded_page: Page, site_url: str
+) -> None:
     got = _model(
         guarded_page,
         site_url,
@@ -545,9 +547,9 @@ def test_venue_dots_fixed_scale_and_faded_per_venue(guarded_page: Page, site_url
     assert got["faded"] == [[1, "beta-bowl-los-angeles"]]
     assert got["hideFaded"] == 0
     assert got["nbcVenues"] == [0, 1, 5]
-    assert got["ref"] == got["full"]  # the filter never changes the reference
-    assert got["topGames"] <= got["ref"]
-    assert abs(got["top"] - 28 * (got["topGames"] / got["ref"]) ** 0.5) < 1e-9
+    assert got["topGames"] == got["ref"]  # the filtered busiest venue is the reference
+    assert got["ref"] < got["full"]  # narrowing the filter lowers it
+    assert got["top"] == 20  # and that venue draws at max
 
 
 def test_marker_keys_and_selected_flags(guarded_page: Page, site_url: str) -> None:
@@ -674,7 +676,7 @@ def test_hook_exposes_venue_fields(guarded_page: Page, site_url: str) -> None:
         assert got == {"dots": True, "faded": True, "keyed": True}
 
 
-def test_announcer_pick_builds_the_venue_model_on_the_fixed_scale(
+def test_announcer_pick_builds_the_venue_model_on_the_cohort_scale(
     guarded_page: Page, site_url: str
 ) -> None:
     """D-03: picking an announcer builds dots, splat, key and card from the picked people's
@@ -700,7 +702,7 @@ def test_announcer_pick_builds_the_venue_model_on_the_fixed_scale(
           allDots: none.venueDots.map((d) => d.venue).sort(),
           patDots: m.venueDots.map((d) => [d.venue, d.tier]).sort((a, b) => a[0] - b[0]),
           bgSize: dot(m, 5).size, bgGames: none.venueModel.venues.find((v) => v.index === 5).games,
-          ref: none.venueModel.refGames, bgScore: dot(m, 5).score, patMax: m.venueModel.maxScore,
+          patRef: m.venueModel.refGames, bgScore: dot(m, 5).score, patMax: m.venueModel.maxScore,
           alphaCard: cardGames(m, alpha),
           alphaCardAll: cardGames(none, alpha),
           bgCard: M.venueCard(data, m, 'delta-dome-columbus') !== null,
@@ -716,8 +718,10 @@ def test_announcer_pick_builds_the_venue_model_on_the_fixed_scale(
     assert [d[0] for d in got["patDots"]] == [int(v) for v in got["allDots"]]
     assert tiers[5] == "other"
     assert tiers[0] == "subject"
-    # Background dots sit on the fixed full-data scale, never a picked-cohort scale.
-    assert abs(got["bgSize"]["desktop"] - 28 * (got["bgGames"] / got["ref"]) ** 0.5) < 1e-9
+    # Background dots share the picked cohort's scale (D-20), clamped to the max.
+    expected = 20 * (min(got["bgGames"], got["patRef"]) / got["patRef"]) ** 0.5
+    assert got["patRef"] == 2
+    assert abs(got["bgSize"]["desktop"] - expected) < 1e-9
     assert got["alphaCard"] == 2
     assert got["alphaCardAll"] == 4
     assert got["bgCard"] is True

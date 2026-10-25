@@ -69,11 +69,35 @@ def test_diameters_and_visibility(guarded_page: Page, site_url: str) -> None:
         """,
     )
     assert got["dd"] == got["dExp"] and got["pd"] == got["pExp"]
-    assert got["dd"][0] <= 28 and got["pd"][0] <= 20
+    assert got["dd"][0] <= 20 and got["pd"][0] <= 14
     assert got["dd"] == sorted(got["dd"], reverse=True)
     assert got["dd"][0] >= 1.5 * got["dd"][1]
-    assert abs(got["dd"][-1] - 28 * (5 / 73) ** 0.5) < 1e-9  # no minimum size
+    assert abs(got["dd"][-1] - 20 * (5 / 73) ** 0.5) < 1e-9  # no minimum size
     assert got["bad"] == [False] * 4
+
+
+def test_key_rescales_with_the_filtered_reference(guarded_page: Page, site_url: str) -> None:
+    got = _run(
+        guarded_page,
+        site_url,
+        """
+        const at = (n) => K.buildMapKey(model(n), { phone: false });
+        const labels = (n) => at(n).sizes.map((s) => s.label);
+        return {
+          full: labels(73), narrow: labels(12), two: labels(2), one: labels(1),
+          oneDiameter: at(1).sizes[0].diameter,
+          empty: K.buildMapKey({ venues: [], refGames: 0 }).sizes,
+          exact: at(10).sizes.map((s) => s.diameter),
+        };
+        """,
+    )
+    assert got["full"] == ["50 games", "20 games", "5 games"]
+    assert got["narrow"] == ["10 games", "5 games", "1 game"]
+    assert got["two"] == ["2 games", "1 game"]
+    assert got["one"] == ["1 game"]
+    assert got["oneDiameter"] == 20
+    assert got["empty"] == []
+    assert got["exact"][0] == 20  # a step equal to the reference draws at max
 
 
 def test_render_dom(guarded_page: Page, site_url: str) -> None:

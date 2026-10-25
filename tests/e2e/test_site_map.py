@@ -182,6 +182,23 @@ def test_network_filter_skips_instead_of_cutting(guarded_page: Page, open_app: O
     assert round(leg["last"]["y"]) == 405
 
 
+def test_key_and_dots_rescale_when_a_filter_narrows(guarded_page: Page, open_app: OpenApp) -> None:
+    """D-20: the filtered busiest venue draws at max and the key follows the filtered set."""
+
+    def state() -> tuple[list[int], float]:
+        top = max(d["size"]["desktop"] for d in _model(guarded_page)["venueDots"])
+        labels = guarded_page.locator("#map-key .map-key-label").all_inner_texts()
+        return [int(t.split()[0]) for t in labels], top
+
+    _open_map(guarded_page, open_app, "?view=map")
+    full_games, full_top = state()
+    _set(guarded_page, {"seasons": [2019, 2019]})
+    games, top = state()
+    assert full_top == top == 20
+    assert games[0] < full_games[0]
+    assert games == [1]  # one game left: nRef 1 gives just "1 game"
+
+
 def test_fade_keeps_excluded_venues_hide_removes_them_legs_unchanged(
     guarded_page: Page, open_app: OpenApp
 ) -> None:

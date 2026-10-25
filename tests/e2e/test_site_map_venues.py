@@ -80,8 +80,8 @@ def test_palette_map_constants(guarded_page: Page, site_url: str) -> None:
     assert got["contrastD"] >= 4.5
     assert got["splat"]["viewersWeight"] == 0.35
     assert got["splat"]["unratedFallback"] == 150000
-    assert got["dot"]["maxDiameter"] == 28
-    assert got["dot"]["phoneMaxDiameter"] == 20
+    assert got["dot"]["maxDiameter"] == 20
+    assert got["dot"]["phoneMaxDiameter"] == 14
     assert got["dot"]["hitDiameter"] == 12
     assert not {"radiusMax", "radiusBase", "phoneMax"} & set(got["dot"])
     # Phase 17 lifted the dark neutral to #8B8377 (3.97:1 on the new land, 17-UI-SPEC).
@@ -230,45 +230,22 @@ def test_dot_size_formula(guarded_page: Page, site_url: str) -> None:
         };
         """,
     )
-    assert got["top"] == {"desktop": 28, "phone": 20}
-    assert abs(got["one"]["desktop"] - 28 / 73**0.5) < 1e-9
-    assert abs(got["one"]["phone"] - 20 / 73**0.5) < 1e-9
-    assert got["over"] == {"desktop": 28, "phone": 20}
+    assert got["top"] == {"desktop": 20, "phone": 14}
+    assert abs(got["one"]["desktop"] - 20 / 73**0.5) < 1e-9
+    assert abs(got["one"]["phone"] - 14 / 73**0.5) < 1e-9
+    assert got["over"] == {"desktop": 20, "phone": 14}
     assert got["zero"] == {"desktop": 0, "phone": 0}
     for size in got["badRef"]:
         assert size == {
-            "desktop": 28 if size["desktop"] else 0,
-            "phone": 20 if size["phone"] else 0,
+            "desktop": 20 if size["desktop"] else 0,
+            "phone": 14 if size["phone"] else 0,
         }
     for a, b in got["areas"]:
         assert abs(a) < 1e-9 and abs(b) < 1e-9
     assert abs(got["ratio"] - 5**0.5) < 1e-9
 
 
-def test_reference_games_and_cache(guarded_page: Page, site_url: str) -> None:
-    got = _model(
-        guarded_page,
-        site_url,
-        """
-        const venues = [{ name: 'Big' }, { name: 'Small' }, { name: 'Away', abroad: true }, { name: 'Void' }];
-        const games = [...rep(5, 'fox', 1e6), ...Array.from({ length: 2 }, () => [1, 'fox', 1e6]),
-                       ...Array.from({ length: 9 }, () => [2, 'fox', 1e6]),
-                       ...Array.from({ length: 8 }, () => [3, 'nonesuch', 1e6]),
-                       ...Array.from({ length: 7 }, () => [null, 'fox', 1e6])];
-        const data = {
-          t: { place: games.map((g) => g[0]), viewers: games.map((g) => g[2]) },
-          familyOf: games.map((g) => g[1]),
-        };
-        const placements = venues.map((v, i) => (i === 3 ? null : { x: i, y: i, abroad: !!v.abroad }));
-        const first = M.referenceGames(data, placements);
-        data.t.place = [];
-        return { first, second: M.referenceGames(data, placements) };
-        """,
-    )
-    assert got == {"first": 5, "second": 5}
-
-
-def test_size_does_not_rescale_with_filters(guarded_page: Page, site_url: str) -> None:
+def test_size_rescales_with_filters(guarded_page: Page, site_url: str) -> None:
     got = _model(
         guarded_page,
         site_url,
@@ -279,19 +256,25 @@ def test_size_does_not_rescale_with_filters(guarded_page: Page, site_url: str) -
         const m = build(games, vs);
         const only = build(games, vs, { passing: games.map((_, i) => i).filter((i) => games[i][0] === 1) });
         const few = build(games, vs, { passing: [0, 1, 2, 16] });
+        const none = build(games, vs, { passing: [] });
         return {
           top: m.venues[0].size, small: m.venues[1].size,
-          filteredSmall: only.venues[0].size, ref: [m.refGames, only.refGames, few.refGames],
+          onlySmall: only.venues[0].size, ref: [m.refGames, only.refGames, few.refGames, none.refGames],
           fewSizes: few.venues.map((v) => [v.key, v.games, v.size.desktop]),
           expected: M.venueDotSize(4, 16),
+          hasRef: 'referenceGames' in M,
         };
         """,
     )
-    assert got["top"] == {"desktop": 28, "phone": 20}
-    assert got["small"] == got["filteredSmall"] == got["expected"]
-    assert got["ref"] == [16, 16, 16]
+    assert got["top"] == {"desktop": 20, "phone": 14}
+    assert got["small"] == got["expected"]
+    # Narrowing to the small venue makes it the busiest, so it grows to max.
+    assert got["onlySmall"] == {"desktop": 20, "phone": 14}
+    assert got["ref"] == [16, 4, 3, 0]
+    assert got["fewSizes"][0][2] == 20
     for _key, games, desktop in got["fewSizes"]:
-        assert abs(desktop - 28 * (games / 16) ** 0.5) < 1e-9
+        assert abs(desktop - 20 * (games / 3) ** 0.5) < 1e-9
+    assert got["hasRef"] is False
 
 
 def test_venues_draw_largest_games_first(guarded_page: Page, site_url: str) -> None:

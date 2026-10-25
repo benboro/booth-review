@@ -256,13 +256,13 @@ export const MAP_SPLAT = Object.freeze({
 });
 
 /**
- * Venue dot sizes (px) and ring widths (Phase 11 D-12, Phase 17.1 D-02/D-16). Diameters are
+ * Venue dot sizes (px) and ring widths (Phase 11 D-12, Phase 17.1 D-02/D-16/D-20). Diameters are
  * in px and dot area is exactly proportional to games. `hitDiameter` is the smallest
  * hover and click target.
  */
 export const MAP_VENUE_DOT = Object.freeze({
-  maxDiameter: 28,
-  phoneMaxDiameter: 20,
+  maxDiameter: 20,
+  phoneMaxDiameter: 14,
   hitDiameter: 12,
   opacity: 1,
   ringWidth: 1,

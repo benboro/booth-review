@@ -8,8 +8,8 @@
 //
 // Rules: inside a venue the family with the most games leads and viewers only break exact
 // ties (D-06a). Across venues one score, games^(1 - w) x max(viewersMM, 0.01)^w, sets splat
-// strength. Dot size is games only (Phase 17.1 D-01): area exactly proportional to games, on
-// a fixed scale from the busiest venue overall (D-04). Unrated games count at the floor
+// strength. Dot size is games only (Phase 17.1 D-01): area exactly proportional to games, relative
+// to the busiest venue in the filtered set (D-20). Unrated games count at the floor
 // viewers (p10 of the rated passing set) in the score only, never in the shown viewers (D-07).
 
 import {
@@ -75,37 +75,9 @@ export function venueLeader(counts, weighted, viewers = counts.map(() => 0)) {
   return { leaderIndex: ai, leaderGames: a, runnerUpGames: b };
 }
 
-const KNOWN_FAMILIES = new Set(FAMILY_ORDER);
-const refCache = new WeakMap();
-
-/**
- * Games at the busiest drawn venue over the whole data set, filters ignored (D-04). Skips
- * the same games buildVenueModel skips: unplaced, abroad and unknown-family. Cached per data.
- * @param {{t: {place: (number|null)[]}, familyOf: string[]}} data
- * @param {{abroad?: boolean}[]} placements
- * @returns {number} At least 1.
- */
-export function referenceGames(data, placements) {
-  const hit = refCache.get(data);
-  if (hit !== undefined) return hit;
-  const counts = new Map();
-  const place = data.t.place;
-  let best = 1;
-  for (let g = 0; g < place.length; g += 1) {
-    const idx = place[g];
-    if (idx == null || !placements[idx] || placements[idx].abroad) continue;
-    if (!KNOWN_FAMILIES.has(data.familyOf[g])) continue;
-    const n = (counts.get(idx) ?? 0) + 1;
-    counts.set(idx, n);
-    if (n > best) best = n;
-  }
-  refCache.set(data, best);
-  return best;
-}
-
 /**
  * Dot diameters in px for desktop and phone: games only, area exactly proportional to
- * games, on a fixed scale where refGames (the busiest venue overall) draws the maximum.
+ * games, where refGames (the busiest venue in the filtered set) draws the maximum (D-20).
  * @param {number} games
  * @param {number} refGames
  * @returns {{desktop: number, phone: number}}
@@ -233,7 +205,8 @@ export function buildVenueModel(data, passing, placements) {
   for (const v of venues) if (v.score > maxScore) maxScore = v.score;
   const positive = venues.map((v) => v.score).filter((s) => s > 0).sort((p, q) => p - q);
   const medianScore = median(positive, 1);
-  const refGames = referenceGames(data, placements);
+  let refGames = 0;
+  for (const v of venues) if (v.games > refGames) refGames = v.games;
   for (const v of venues) v.size = venueDotSize(v.games, refGames);
   venues.sort((p, q) => q.games - p.games || p.index - q.index);
 
