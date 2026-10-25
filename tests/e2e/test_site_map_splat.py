@@ -502,8 +502,6 @@ def test_raster_failure_falls_back_to_land_fill(guarded_page: Page, open_app: An
         > 0
     )
     assert guarded_page.locator("#map-empty-note").is_hidden()
-    # While broken the key drops its Color strength block although the switch stays On.
-    assert "Color strength" not in guarded_page.locator("#map-key").inner_text()
     assert _pressed(guarded_page) == ["on"]
     _set_state(guarded_page, {"seasons": [2021, 2021]})
     guarded_page.evaluate(_WAIT_FRAMES)
@@ -516,7 +514,6 @@ def test_raster_failure_falls_back_to_land_fill(guarded_page: Page, open_app: An
     _wait_splat(guarded_page, 0)
     assert len(guarded_page.evaluate(_IMAGES)) == 1
     assert guarded_page.evaluate(_OUTLINE_FILL) == "none"
-    assert "Color strength" in guarded_page.locator("#map-key").inner_text()
     assert len([m for m in messages if "map colors" in m]) == 1
 
 
@@ -763,7 +760,6 @@ def test_key_desktop_over_water_clear_of_inset(guarded_page: Page, open_app: Any
     got = guarded_page.evaluate(_KEY_BOXES)
     assert got["visible"]
     assert "Dot size" in got["text"]
-    assert "Color strength" in got["text"]
     labels = guarded_page.locator("#map-key .map-key-label").all_inner_texts()
     assert 1 <= len(labels) <= 3
     assert all(t.endswith(("game", "games")) for t in labels)
@@ -771,13 +767,6 @@ def test_key_desktop_over_water_clear_of_inset(guarded_page: Page, open_app: Any
     assert not _hits(got["key"], got["hawaii"])
     if got["note"]:
         assert not _hits(got["key"], got["note"])
-
-
-def test_key_omits_strength_when_colors_off(guarded_page: Page, open_app: Any) -> None:
-    _open_map(guarded_page, open_app, "?view=map&colors=off")
-    text = guarded_page.locator("#map-key").inner_text()
-    assert "Dot size" in text
-    assert "Color strength" not in text
 
 
 def test_key_phone_sits_in_panel_corner(mobile_page: Page, open_app: Any) -> None:

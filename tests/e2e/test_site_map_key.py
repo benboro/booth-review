@@ -12,11 +12,7 @@ from playwright.sync_api import Page
 pytestmark = pytest.mark.e2e
 
 _MODEL = """
-const model = (nMax, median = 4e6) => ({
-  venues: [{ score: 1 }],
-  maxScore: nMax * (median / 1e6) ** 0.35,
-  medianRatedViewers: median,
-});
+const model = (refGames) => ({ venues: [{ games: 1 }], refGames });
 """
 
 
@@ -33,19 +29,25 @@ def test_labels_are_easy_counts(guarded_page: Page, site_url: str) -> None:
         guarded_page,
         site_url,
         """
-        const at = (n) => K.buildMapKey(model(n), { phone: false, colorsOn: true });
+        const at = (n) => K.buildMapKey(model(n), { phone: false });
+        const labels = (n) => at(n).sizes.map((s) => s.label);
         return {
-          twenty: at(20).sizes.map((s) => s.label),
-          one: at(1).sizes.map((s) => s.label),
+          l73: labels(73), l60: labels(60), l99: labels(99), l150: labels(150),
+          l3: labels(3), l1: labels(1),
           steps: Array.from(K.KEY_GAME_STEPS),
-          desc: at(20).description,
+          desc: at(73).description,
+          keys: Object.keys(at(73)).sort(),
         };
         """,
     )
-    assert got["twenty"] == ["20 games", "5 games", "1 game"]
-    assert got["one"] == ["1 game"]
-    assert got["steps"] == [1, 2, 5, 10, 20, 50]
-    assert got["desc"] == "Dot size blends the number of games with their audience."
+    three = ["50 games", "20 games", "5 games"]
+    assert got["l73"] == got["l60"] == got["l99"] == three
+    assert got["l150"] == ["100 games", "50 games", "10 games"]
+    assert got["l3"] == ["2 games", "1 game"]
+    assert got["l1"] == ["1 game"]
+    assert got["steps"] == [1, 2, 5, 10, 20, 50, 100, 200]
+    assert got["desc"] == "Dot size is the number of games at the venue."
+    assert got["keys"] == ["description", "sizes", "visible"]
 
 
 def test_diameters_and_visibility(guarded_page: Page, site_url: str) -> None:
@@ -53,22 +55,25 @@ def test_diameters_and_visibility(guarded_page: Page, site_url: str) -> None:
         guarded_page,
         site_url,
         """
-        const d = K.buildMapKey(model(20), { phone: false, colorsOn: true });
-        const p = K.buildMapKey(model(20), { phone: true, colorsOn: true });
-        const empty = K.buildMapKey({ venues: [], maxScore: 0, medianRatedViewers: 1e6 },
-                                    { phone: false, colorsOn: true });
-        const zero = K.buildMapKey({ venues: [{}], maxScore: 0, medianRatedViewers: 1e6 },
-                                   { phone: false, colorsOn: true });
+        const V = await import('./modules/map-venues.js');
+        const d = K.buildMapKey(model(73), { phone: false });
+        const p = K.buildMapKey(model(73), { phone: true });
+        const bad = [undefined, {}, { refGames: 0 }, { refGames: NaN }].map((m) => K.buildMapKey(m).visible);
         return {
           dd: d.sizes.map((s) => s.diameter), pd: p.sizes.map((s) => s.diameter),
-          empty: empty.visible, zero: zero.visible,
+          games: d.sizes.map((s) => s.games),
+          dExp: d.sizes.map((s) => V.venueDotSize(s.games, 73).desktop),
+          pExp: p.sizes.map((s) => V.venueDotSize(s.games, 73).phone),
+          bad,
         };
         """,
     )
-    assert got["dd"][0] <= 16 and got["pd"][0] <= 12
+    assert got["dd"] == got["dExp"] and got["pd"] == got["pExp"]
+    assert got["dd"][0] <= 28 and got["pd"][0] <= 20
     assert got["dd"] == sorted(got["dd"], reverse=True)
-    assert got["dd"][0] > got["dd"][-1]
-    assert got["empty"] is False and got["zero"] is False
+    assert got["dd"][0] >= 1.5 * got["dd"][1]
+    assert abs(got["dd"][-1] - 28 * (5 / 73) ** 0.5) < 1e-9  # no minimum size
+    assert got["bad"] == [False] * 4
 
 
 def test_render_dom(guarded_page: Page, site_url: str) -> None:
@@ -77,39 +82,31 @@ def test_render_dom(guarded_page: Page, site_url: str) -> None:
         site_url,
         """
         const root = document.createElement('div');
-        const on = K.buildMapKey(model(20), { phone: false, colorsOn: true });
-        K.renderMapKey(root, on, { theme: 'light' });
+        K.renderMapKey(root, K.buildMapKey(model(73), { phone: false }), { theme: 'light' });
         const q = (s) => root.querySelectorAll(s).length;
         const res = {
           headings: Array.from(root.querySelectorAll('.map-key-heading')).map((n) => n.textContent),
           circles: q('svg[aria-hidden="true"] circle'),
           lines: q('svg polyline'),
           labels: q('.map-key-label'),
-          swatches: Array.from(root.querySelectorAll('.map-key-swatch')).map((n) => n.style.opacity),
-          ends: Array.from(root.querySelectorAll('.map-key-end')).map((n) => n.textContent),
+          legacy: q('.map-key-strength, .map-key-swatch, .map-key-end'),
           aria: root.getAttribute('aria-description'),
           hidden: root.hidden,
         };
-        const off = K.buildMapKey(model(20), { phone: false, colorsOn: false });
-        K.renderMapKey(root, off, { theme: 'dark' });
-        res.offStrength = q('.map-key-strength');
-        res.offHeadings = Array.from(root.querySelectorAll('.map-key-heading')).map((n) => n.textContent);
-        K.renderMapKey(root, K.buildMapKey({ venues: [], maxScore: 0, medianRatedViewers: 1 }, {}), { theme: 'light' });
+        K.renderMapKey(root, K.buildMapKey({ venues: [], refGames: 0 }, {}), { theme: 'light' });
         res.emptyHidden = root.hidden;
         return res;
         """,
     )
-    assert got["headings"] == ["Dot size", "Color strength"]
+    assert got["headings"] == ["Dot size"]
     assert got["circles"] == 3 and got["lines"] == 3 and got["labels"] == 3
-    assert got["swatches"] == ["0.15", "0.5", "0.88"]
-    assert got["ends"] == ["Few games or split networks", "Many games, one network"]
-    assert got["aria"] == "Dot size blends the number of games with their audience."
+    assert got["legacy"] == 0
+    assert got["aria"] == "Dot size is the number of games at the venue."
     assert got["hidden"] is False
-    assert got["offStrength"] == 0 and got["offHeadings"] == ["Dot size"]
     assert got["emptyHidden"] is True
 
 
-@pytest.mark.parametrize("n_max", [1, 2, 5, 20])
+@pytest.mark.parametrize("n_max", [1, 2, 5, 20, 73])
 @pytest.mark.parametrize("phone", [False, True])
 def test_size_labels_never_overlap(
     guarded_page: Page, site_url: str, n_max: int, phone: bool
@@ -123,15 +120,13 @@ def test_size_labels_never_overlap(
         root.className = 'map-key';
         root.style.cssText = 'position:fixed;left:20px;top:20px';
         document.body.appendChild(root);
-        K.renderMapKey(root, K.buildMapKey(model({n_max}), {{ phone: {str(phone).lower()}, colorsOn: true }}),
+        K.renderMapKey(root, K.buildMapKey(model({n_max}), {{ phone: {str(phone).lower()} }}),
                        {{ theme: 'light' }});
         const box = (r) => ({{ left: r.left, right: r.right, top: r.top, bottom: r.bottom }});
         const labels = Array.from(root.querySelectorAll('.map-key-label')).map((n) => box(n.getBoundingClientRect()));
         const svg = root.querySelector('.map-key-sizes svg').getBoundingClientRect();
         const sizes = root.querySelector('.map-key-sizes').getBoundingClientRect();
-        const heading = root.querySelector('.map-key-strength .map-key-heading').getBoundingClientRect();
-        const res = {{ labels, svg: box(svg), sizes: box(sizes), heading: box(heading),
-                      leaders: root.querySelectorAll('svg polyline').length,
+        const res = {{ labels, svg: box(svg), sizes: box(sizes), leaders: root.querySelectorAll('svg polyline').length,
                       circles: root.querySelectorAll('svg circle').length }};
         root.remove();
         return res;
@@ -144,5 +139,4 @@ def test_size_labels_never_overlap(
             assert not (a["top"] < b["bottom"] and a["bottom"] > b["top"]), (a, b)
         assert a["left"] >= got["svg"]["right"] - 1  # clear of every circle and leader
         assert a["top"] >= got["sizes"]["top"] - 0.5 and a["bottom"] <= got["sizes"]["bottom"] + 0.5
-    assert got["sizes"]["bottom"] <= got["heading"]["top"]  # the next block starts below
     assert got["leaders"] == (0 if got["circles"] == 1 else got["circles"])

@@ -153,12 +153,11 @@ async function clearSplat(gd) {
   });
 }
 
-/** Draws the key; the Color strength block hides while the raster is broken. */
+/** Draws the size-only key. */
 function drawKey({ model, env }) {
   const keyEl = el('map-key');
   if (!keyEl) return;
-  const colorsOn = Boolean(env.splat) && !splatBroken;
-  renderMapKey(keyEl, buildMapKey(model.venueModel, { phone: env.mobile, colorsOn }), {
+  renderMapKey(keyEl, buildMapKey(model.venueModel, { phone: env.mobile }), {
     theme: env.theme,
   });
   if (model.emptyAll) keyEl.hidden = true;
