@@ -804,7 +804,7 @@ export function mount(container, ctx) {
   refs.legend = el('div', 'legend-row');
   refs.chips = el('ul', 'legend-chips');
   refs.chips.setAttribute('aria-label', 'Game categories: select to show or hide');
-  refs.controls = el('div', 'chart-controls');
+  refs.controls = el('div', 'chart-controls nfl-scatter-controls');
   buildControls();
   refs.legend.append(refs.chips, refs.dotsToggle);
   bindLegend();

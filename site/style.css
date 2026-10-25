@@ -3831,6 +3831,21 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   gap: var(--space-xs) var(--space-md);
 }
 
+/* U8: the NFL Scatter's axis groups and Reset zoom, laid out as the MLB Scatter's are. In the
+   one-cell `.chart-controls` grid Reset zoom stretched to the groups' width and touched them;
+   here it keeps its content width and the --space-sm gap, wrapping right-aligned on a phone. */
+.nfl-scatter-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+.nfl-scatter-controls .reset-zoom {
+  flex: none;
+}
+
 /* The phone `.axis-group` grid has no column gap (CFB's caption sits inside its row); the NFL
    Measure caption keeps the 4px key-gap token so it does not touch the Viewers button. */
 .nfl-viewership-controls .axis-group {
