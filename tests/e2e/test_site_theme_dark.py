@@ -265,3 +265,22 @@ def test_without_javascript_coverage_is_light_and_toggle_hidden(
         assert page.locator("html").get_attribute("data-theme") == "light"
     finally:
         context.close()
+
+
+def test_dark_theme_prints_with_the_light_tokens(guarded_page: Page, site_url: str) -> None:
+    # Review 6e: a dark-theme page prints light: the light ink on white-ish paper, light scheme.
+    page = guarded_page
+    page.context.add_init_script("localStorage.setItem('bl-theme', 'dark');")
+    page.goto(f"{site_url}/methodology.html")
+    assert _state(page)["theme"] == "dark"
+    assert page.evaluate("getComputedStyle(document.body).color") == "rgb(236, 231, 223)"
+    page.emulate_media(media="print")
+    got = page.evaluate(
+        """() => ({
+          ink: getComputedStyle(document.body).color,
+          bg: getComputedStyle(document.body).backgroundColor,
+          scheme: getComputedStyle(document.documentElement).colorScheme,
+          theme: document.documentElement.dataset.theme,
+        })"""
+    )
+    assert got == {"ink": "rgb(35, 32, 27)", "bg": _LIGHT_BG, "scheme": "light", "theme": "dark"}

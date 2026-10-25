@@ -107,6 +107,35 @@
   --pill-silver-edge: #8E939B;
 }
 
+/* A dark-theme page prints light (review 6e): paper is white, so the print restates the light
+   colour tokens above for every token the dark block redefines. */
+@media print {
+  [data-theme="dark"] {
+    color-scheme: light;
+    --bg: #FBF9F5;
+    --surface: #F4F0E8;
+    --ink: #23201B;
+    --muted: #6A6358;
+    --rule: #E4DDD1;
+    --rule-strong: #CFC6B6;
+    --accent: #1B4F5C;
+    --accent-soft: #E3EDEF;
+    --accent-soft-hover: #D3E3E7;
+    --disabled: #9C9486;
+    --error: #B3261E;
+    --game-playoff: #A37800;
+    --game-bowl: #A8501C;
+    --game-rivalry: #8F2D3A;
+    --game-playoff-text: #7A5A00;
+    --pill-gold-fill: #F2DFA0;
+    --pill-gold-ink: #5C4300;
+    --pill-gold-edge: #8A6A12;
+    --pill-silver-fill: #D9DBDF;
+    --pill-silver-ink: #3B3F46;
+    --pill-silver-edge: #80858D;
+  }
+}
+
 * {
   box-sizing: border-box;
 }
