@@ -46,9 +46,10 @@ records only where the site settles or applies them.
   It stays empty when highlighted or when a filter outlines it: the highlight and the dot
   outline are larger open stars around it, never a filled halo or a background-coloured fill.
 - CFB map dots are sized by games at the venue only: area is exactly proportional to
-  games, with no minimum floor, on a fixed scale set by the busiest venue overall, so a
-  filter or announcer pick never resizes a dot. The busiest venue is 28px across on
-  desktop and 20px on a phone, and dots are drawn largest first. A dot under 12px gets an
+  games, with no minimum floor, and relative to the busiest venue in the filtered set, so
+  narrowing a filter or picking an announcer rescales the dots. That venue is 20px across
+  on desktop and 14px on a phone, and dots are drawn largest first. A dot under 12px gets an
   invisible 12px hit target so it stays hoverable. The key is three nested outline
-  circles on the same size function, showing size only, and venue colours are always on
+  circles on the same size function and the same busiest-venue reference, so its values
+  change with the filters, showing size only, and venue colours are always on
   (Phase 17.1).
