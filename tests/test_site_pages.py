@@ -387,7 +387,9 @@ def test_render_methodology_resolves_md_links_against_docs(
 # #theme-slot toggle in the header.
 # Re-pinned at Phase 17 review: theme-init.js re-applies the stored theme on a back/forward
 # cache restore (pageshow), which changes the inlined script and its CSP hash.
-_METHODOLOGY_FLAG_OFF_SHA256 = "39b25489be10aba6ab272b60b3f6a1f99ea3e7636124c1354f5989aa036f2abc"
+# Re-pinned at Phase 17.1 Plan 04: CFB map dot-size prose (games only, fixed scale)
+# and Network colors switch line removed.
+_METHODOLOGY_FLAG_OFF_SHA256 = "6637777697f40615216fce4cd53f2393234d5b5a4c86ed9b0c8d46a93c03b5b5"
 
 _NFL_ANCHORS = (
     "nfl-special-games",
