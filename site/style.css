@@ -5638,6 +5638,14 @@ tr.is-matched > :first-child {
     background-color: var(--surface);
   }
 
+  /* A grouped head's second row starts under the rowspanned identity cell, so its first
+     cell is a data header, not the pinned column (NFL season table, Phase 17.1). */
+  .table-scroll .games-table thead tr:nth-child(2) > :first-child {
+    position: static;
+    border-right: 0;
+    background-color: transparent;
+  }
+
   .table-scroll .games-table tbody tr:hover > :first-child {
     background-color: var(--surface);
   }

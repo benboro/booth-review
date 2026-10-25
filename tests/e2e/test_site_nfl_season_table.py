@@ -246,3 +246,15 @@ def test_rerender_while_open_hides_tooltip(mobile: Page) -> None:
 def test_international_label_in_table_head(app: Page) -> None:
     assert "International" in app.locator(f"{TABLE} thead th").all_inner_texts()
     assert "International, shared" not in app.inner_text("#nfl-view-special")
+
+
+def test_phone_second_head_row_is_not_pinned(mobile: Page) -> None:
+    """Only the rowspanned Season cell is pinned; the second head row's first cell is a data header."""
+    positions = mobile.evaluate(
+        """(sel) => {
+          const rows = document.querySelectorAll(sel + ' thead tr');
+          return [...rows].map((r) => getComputedStyle(r.firstElementChild).position);
+        }""",
+        TABLE,
+    )
+    assert positions == ["sticky", "static"]
