@@ -132,3 +132,32 @@ def test_static_pages_hold_one_toggle(opened: Callable[[str], Page], which: str)
              .map((r) => r.right)"""
     )
     assert box["x"] + box["width"] >= max(rights) - 0.5
+
+
+@pytest.mark.parametrize("which", ("methodology", "coverage"))
+def test_static_page_toggle_stays_top_right_on_a_phone(
+    opened: Callable[[str], Page], which: str
+) -> None:
+    # Review F3: at 480px and below the header links are hidden; the static pages' header has
+    # no #topbar, so the slot must push itself to the right edge.
+    page = opened(which)
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.wait_for_timeout(50)
+    got: dict[str, float] = page.evaluate(
+        """() => {
+          const header = document.querySelector('.site-header');
+          const h = header.getBoundingClientRect();
+          const s = document.getElementById('theme-slot').getBoundingClientRect();
+          const title = document.querySelector('.site-title').getBoundingClientRect();
+          return {
+            contentRight: h.right - parseFloat(getComputedStyle(header).paddingRight),
+            slotRight: s.right,
+            slotTop: s.top,
+            titleTop: title.top,
+            titleBottom: title.bottom,
+          };
+        }"""
+    )
+    assert abs(got["slotRight"] - got["contentRight"]) <= 1, got
+    # Still on the title's row.
+    assert got["titleTop"] - 16 <= got["slotTop"] <= got["titleBottom"], got

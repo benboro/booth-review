@@ -5507,8 +5507,10 @@ tr.is-matched > :first-child {
     min-height: 0;
   }
 
-  /* With no sport switch to push it, the slot takes the free space itself. */
-  #topbar:not(:has(#sport-switch)) #theme-slot {
+  /* With no sport switch to push it, the slot takes the free space itself; so does the
+     static pages' header (methodology, coverage), which has no #topbar. */
+  #topbar:not(:has(#sport-switch)) #theme-slot,
+  .site-header #theme-slot {
     margin-left: auto;
   }
 
