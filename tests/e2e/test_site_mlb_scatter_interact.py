@@ -395,3 +395,24 @@ def test_tooltip_text_is_escaped(mlb_guarded_page: Page, open_mlb_app: Callable[
     _hover(page, 1)
     assert ESCAPE_NAME in _tooltip(page)[1]
     assert page.locator("#chart-tooltip b").count() == 0
+
+
+def test_legend_chip_keyboard_toggle_keeps_focus(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """F20: Space on a chip re-renders the legend; focus moves to the same family's new chip."""
+    page = mlb_guarded_page
+    _open(page, open_mlb_app)
+    chip = f"{LEGEND} button[data-family='fox']"
+    page.focus(chip)
+    page.keyboard.press("Space")
+    page.wait_for_function(
+        "sel => document.querySelector(sel).getAttribute('aria-pressed') === 'false'", arg=chip
+    )
+    page.wait_for_timeout(600)  # past the double-click window
+    assert page.evaluate("document.activeElement.dataset.family") == "fox"
+    page.keyboard.press("Space")
+    page.wait_for_function(
+        "sel => document.querySelector(sel).getAttribute('aria-pressed') === 'true'", arg=chip
+    )
+    assert page.evaluate("document.activeElement.dataset.family") == "fox"

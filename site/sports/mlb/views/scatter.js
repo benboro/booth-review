@@ -628,7 +628,11 @@ function renderLegend(families, th) {
     li.appendChild(b);
     return li;
   });
+  // A chip toggle re-renders the legend: keep keyboard focus on the same family's new chip.
+  const active = document.activeElement;
+  const focused = active && refs.chips.contains(active) ? active.dataset.family : null;
   refs.chips.replaceChildren(...items);
+  if (focused) refs.chips.querySelector(`button[data-family="${CSS.escape(focused)}"]`)?.focus();
 }
 
 // ---- contract ----
