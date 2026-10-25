@@ -2440,7 +2440,13 @@ async () => {
     const shown = [...btn.querySelectorAll('.mlb-cell-booth .booth-name')]
       .map((n) => n.textContent);
     const got = new Set(shown);
-    repeated += shown.length - got.size;
+    // U10 groups people per series, so one person may head a line in two series of a cell;
+    // within a series each person is listed once.
+    for (const ser of btn.querySelectorAll('.mlb-series')) {
+      const names = [...ser.querySelectorAll('.mlb-cell-booth .booth-name')]
+        .map((n) => n.textContent);
+      repeated += names.length - new Set(names).size;
+    }
     const miss = [...want].filter((n) => !got.has(n)).length;
     const more = [...got].filter((n) => !want.has(n)).length;
     missing += miss;
@@ -2456,7 +2462,7 @@ def test_real_mlb_postseason_cells_show_every_crew_member(
     real_mlb_guarded_page: Page, real_mlb_site_url: str
 ) -> None:
     """U9: every Postseason cell shows exactly the union of its games' full crews (a second
-    analyst included), each person once. Counts only."""
+    analyst included), each person once per series (U10). Counts only."""
     page = real_mlb_guarded_page
     _open_real_mlb(page, real_mlb_site_url, "&view=postseason")
     page.wait_for_selector("#mlb-view-postseason .mlb-grid tbody tr[data-season]")
@@ -2475,3 +2481,67 @@ def test_real_mlb_postseason_cells_show_every_crew_member(
     assert missing == 0
     assert extra == 0
     assert repeated == 0
+
+
+# U10: per cell, the matchup heads shown against the distinct series in its games (season,
+# round and league are the cell's; a series is the unordered pair of clubs). Ints only.
+_MLB_POST_SERIES_JS = """
+async () => {
+  const raw = await (await fetch('mlb-data.json')).json();
+  const { cellKey } = await import('./sports/mlb/data.js');
+  const post = raw.postseason;
+  const g = raw.games;
+  const expected = new Map();
+  let nullClubs = 0;
+  post.season.forEach((season, k) => {
+    const lg = post.league[k] == null ? null : raw.lookups.leagues[post.league[k]].id;
+    const key = cellKey(season, post.round[k], lg);
+    if (!expected.has(key)) expected.set(key, new Set());
+    for (const i of post.game_list[k]) {
+      if (g.home[i] == null || g.away[i] == null) nullClubs += 1;
+      expected.get(key).add([g.home[i], g.away[i]].map(String).sort().join('~'));
+    }
+  });
+  let cells = 0, mismatched = 0, unmatched = 0, twoOrMore = 0, rules = 0, wantRules = 0;
+  for (const btn of document.querySelectorAll('#mlb-view-postseason .mlb-grid button[data-cell]')) {
+    cells += 1;
+    const want = expected.get(btn.dataset.cell);
+    if (!want) { unmatched += 1; continue; }
+    const heads = btn.querySelectorAll('.mlb-series .mlb-series-head').length;
+    if (heads !== want.size) mismatched += 1;
+    if (want.size > 1) twoOrMore += 1;
+    wantRules += Math.max(want.size - 1, 0);
+    for (const s of btn.querySelectorAll('.mlb-series')) {
+      if (getComputedStyle(s).borderTopWidth === '1px') rules += 1;
+    }
+  }
+  return { cells, expected: expected.size, mismatched, unmatched, twoOrMore, rules, wantRules,
+           nullClubs };
+}
+"""
+
+
+def test_real_mlb_postseason_cells_head_every_series(
+    real_mlb_guarded_page: Page, real_mlb_site_url: str
+) -> None:
+    """U10: every Postseason cell shows one matchup head per distinct series in its games,
+    with one hairline between consecutive series. Counts only."""
+    page = real_mlb_guarded_page
+    _open_real_mlb(page, real_mlb_site_url, "&view=postseason")
+    page.wait_for_selector("#mlb-view-postseason .mlb-grid tbody tr[data-season]")
+    counts: dict[str, int] = page.evaluate(_MLB_POST_SERIES_JS)
+    cells = counts["cells"]
+    expected_cells = counts["expected"]
+    mismatched = counts["mismatched"]
+    unmatched = counts["unmatched"]
+    two_or_more = counts["twoOrMore"]
+    rules = counts["rules"]
+    want_rules = counts["wantRules"]
+    null_clubs = counts["nullClubs"]
+    print(f"mlb postseason series: cells={cells} two_or_more={two_or_more} rules={rules}")
+    assert cells > 0
+    assert cells == expected_cells
+    assert unmatched == 0
+    assert mismatched == 0
+    assert null_clubs == 0
+    assert rules == want_rules

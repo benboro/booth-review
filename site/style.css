@@ -4233,6 +4233,30 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   font: var(--font-body);
 }
 
+/* One block per series in a cell (U10): a small matchup head, then that series' booth lines,
+   with a hairline between two series of the same cell. */
+.mlb-series,
+.mlb-series-head {
+  display: block;
+}
+
+.mlb-series-head {
+  margin-bottom: 2px;
+  color: var(--muted);
+  font: 600 12px/1.4 var(--sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.mlb-series + .mlb-series {
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--rule);
+}
+
+.mlb-cell-btn .mlb-series > .mlb-cell-booth:last-child {
+  margin-bottom: 0;
+}
+
 .mlb-cell-stats {
   margin-top: var(--space-xs);
   color: var(--muted);
@@ -5513,9 +5537,11 @@ tr.is-matched > :first-child {
     display: none;
   }
 
+  /* Fixed layout: the 96px merged column and the Booths column share the module's width
+     exactly, so a long booth line wraps instead of widening the table past its wrap (U10). */
   .mlb-phone-grid {
     display: table;
-    table-layout: auto;
+    table-layout: fixed;
     width: 100%;
   }
 
@@ -5592,12 +5618,18 @@ tr.is-matched > :first-child {
   }
 
   .mlb-phone-grid td.mlb-booths-col {
-    min-width: 200px;
     white-space: normal;
   }
 
   .mlb-phone-grid .mlb-cell-btn {
-    min-width: 200px;
+    min-width: 0;
+  }
+
+  /* A person stays whole on a line when it fits; only a name longer than the column wraps. */
+  .mlb-phone-grid .mlb-cell-booth .name-with-roles {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .mlb-booth-more {

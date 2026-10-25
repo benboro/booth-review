@@ -762,3 +762,138 @@ def test_grid_says_retrosheet_not_loaded_without_retrosheet(
     assert "pending Retrosheet" not in page.inner_text(VIEW)
     cells = {c["key"]: c for c in page.evaluate(f"{HOOKS}.getViewModel('postseason').cells")}
     assert cells["2026-lcs-AL"]["pending"] is True
+
+
+def _two_series(data: dict[str, Any]) -> None:
+    """2019 Division Series AL holds two series: game 8 moves to another pair of clubs (and
+    plays first), game 9 keeps its pair and borrows regular-season game 0 (same pair). The
+    analyst (person 7) works both series, so a cell-wide grouping would merge them."""
+    g = data["games"]
+    g["home"][8], g["away"][8] = 2, 4
+    p = data["postseason"]
+    k = next(i for i, s in enumerate(p["season"]) if s == 2019 and p["round"][i] == "division")
+    p["game_list"][k] = [9, 0, 8]
+    crews = {
+        8: [[6, "pbp"], [7, "analyst"]],
+        9: [[8, "pbp"], [7, "analyst"]],
+        0: [[0, "pbp"], [7, "analyst"]],
+    }
+    for game, crew in crews.items():
+        g["crew"][game] = [{"person": m, "role": r} for m, r in crew]
+    p["booths"][k] = [[8, 7], [0, 7], [6, 7]]
+    p["games"][k] = 3
+
+
+_SERIES_JS = """
+(sel) => [...document.querySelectorAll(sel + ' .mlb-series')].map((s) => ({
+  head: s.querySelector('.mlb-series-head').textContent,
+  rule: getComputedStyle(s).borderTopWidth,
+  lines: [...s.querySelectorAll('.mlb-cell-booth')].map((line) =>
+    [...line.querySelectorAll('.booth-name')].map((n) => n.textContent)),
+}))
+"""
+
+
+def test_a_cell_with_two_series_gets_two_heads_in_date_order(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """U10: each series in a cell gets a matchup head (first game's home club first), series
+    in first-game date order, one hairline between them, and booth grouping per series."""
+
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        _two_series(data)
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    page = mlb_guarded_page
+    page.route("**/mlb-data.json", handler)
+    open_mlb_app(page, "?sport=mlb&view=postseason")
+    names = page.evaluate(
+        "async () => (await (await fetch('mlb-data.json')).json())"
+        ".lookups.people.map((p) => p.name)"
+    )
+    sel = f"{VIEW} .mlb-grid button[data-cell='2019-division-AL']"
+    series = page.evaluate(_SERIES_JS, sel)
+    assert [s["head"] for s in series] == ["FOXES vs HERONS", "LANTERNS vs GULLS"]
+    assert [s["rule"] for s in series] == ["0px", "1px"]
+    # The shared analyst appears once per series: grouping never crosses a series line.
+    assert series[0]["lines"] == [[names[6], names[7]]]
+    assert series[1]["lines"] == [[names[8], names[0], names[7]]]
+    head_style = page.eval_on_selector(
+        f"{sel} .mlb-series-head",
+        "e => [getComputedStyle(e).fontSize, getComputedStyle(e).fontWeight]",
+    )
+    assert head_style == ["12px", "600"]
+    btn = page.locator(sel)
+    label = btn.get_attribute("aria-label") or ""
+    assert label.startswith("2019 Division Series AL, 3 games")
+    assert "FOXES vs HERONS, LANTERNS vs GULLS" in label
+    cells = {c["key"]: c for c in page.evaluate(f"{HOOKS}.getViewModel('postseason').cells")}
+    assert cells["2019-division-AL"]["series"] == [
+        {"label": "FOXES vs HERONS", "games": 1},
+        {"label": "LANTERNS vs GULLS", "games": 2},
+    ]
+    btn.click()
+    assert page.evaluate(f"{HOOKS}.getState().cell") == "2019-division-AL"
+    assert btn.get_attribute("aria-pressed") == "true"
+
+
+def test_phone_twin_shows_the_same_series_heads_and_hairline(
+    mlb_mobile_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        _two_series(data)
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    page = mlb_mobile_page
+    page.route("**/mlb-data.json", handler)
+    open_mlb_app(page, "?sport=mlb&view=postseason")
+    series = page.evaluate(_SERIES_JS, f"{VIEW} button[data-phone-cell='2019-division-AL']")
+    assert [s["head"] for s in series] == ["FOXES vs HERONS", "LANTERNS vs GULLS"]
+    assert [s["rule"] for s in series] == ["0px", "1px"]
+
+
+def test_a_single_series_cell_has_one_head_and_no_hairline(post: Page) -> None:
+    series = post.evaluate(
+        _SERIES_JS, f"{VIEW} .mlb-grid button[data-cell='2014-world_series-all']"
+    )
+    assert [s["head"] for s in series] == ["GULLS vs FOXES"]
+    assert series[0]["rule"] == "0px"
+
+
+def test_phone_postseason_has_no_horizontal_overflow_at_390(
+    mlb_mobile_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """U10: the phone twin fits its wrap at 390px (it was wider by its fixed column minimums),
+    and no booth name, series head or cell button runs past its Booths cell, even a long name."""
+
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        data["lookups"]["people"][6]["name"] = "Invented Considerably-Longer Announcername"
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    page = mlb_mobile_page
+    page.route("**/mlb-data.json", handler)
+    open_mlb_app(page, "?sport=mlb&view=postseason")
+    out = page.evaluate(
+        """() => {
+          const t = document.querySelector('#mlb-view-postseason .mlb-phone-grid');
+          const w = t.closest('.mlb-phone-wrap');
+          let over = 0;
+          for (const n of t.querySelectorAll('.name-with-roles, .mlb-series-head, .mlb-cell-btn')) {
+            const td = n.closest('td').getBoundingClientRect();
+            if (n.getBoundingClientRect().right > td.right + 0.5) over += 1;
+          }
+          return { table: t.getBoundingClientRect().width, wrap: w.getBoundingClientRect().width,
+                   wrapScroll: w.scrollWidth, wrapClient: w.clientWidth, over,
+                   doc: document.documentElement.scrollWidth, win: window.innerWidth };
+        }"""
+    )
+    assert out["table"] <= out["wrap"] + 0.5, out
+    assert out["wrapScroll"] <= out["wrapClient"], out
+    assert out["over"] == 0, out
+    assert out["doc"] <= out["win"], out

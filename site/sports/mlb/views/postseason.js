@@ -7,6 +7,9 @@
  * A season with an incomplete
  * crew record carries its coverage percentage, and a cell with no listed crew says so.
  *
+ * Inside a cell each series (one pair of clubs) gets a matchup head, oldest series first,
+ * with a hairline between series (U10); booth lines group people within a series only.
+ *
  * Each cell (or league sub-block) is a button that selects its games into the games
  * table. On phones the grid collapses to one stacked block per season (CSS only).
  * Everything is built with createElement and textContent only.
@@ -317,15 +320,46 @@ export function groupBooths(crews, order = null) {
   });
 }
 
+/** Upper-case club code from its lookup id, or an em dash when the club is unknown. */
+function clubCode(model, idx) {
+  const id = idx == null ? null : model.clubs[idx]?.id;
+  return id ? String(id).toUpperCase() : '—';
+}
+
+/**
+ * A cell's series (U10): its games split by the unordered pair of clubs (season, round and
+ * league are the cell's own), each in date order, the series ordered by their first game.
+ * The head names the first game's home club first, e.g. `NYY vs BOS`.
+ * @returns {Array<{key: string, label: string, games: number[]}>}
+ */
+export function cellSeries(model, b) {
+  const { date, home, away, game_number: gameNo } = model.cols;
+  const byGame = (x, y) => (date[x] < date[y] ? -1 : date[x] > date[y] ? 1 : (gameNo[x] ?? 0) - (gameNo[y] ?? 0));
+  const series = new Map();
+  for (const g of b.gameList) {
+    const key = [home[g], away[g]].map((c) => (c == null ? 'null' : String(c))).sort().join('~');
+    if (!series.has(key)) series.set(key, { key, games: [] });
+    series.get(key).games.push(g);
+  }
+  const list = [...series.values()];
+  for (const ser of list) {
+    ser.games.sort(byGame);
+    const first = ser.games[0];
+    ser.label = `${clubCode(model, home[first])} vs ${clubCode(model, away[first])}`;
+  }
+  return list.sort((x, y) => byGame(x.games[0], y.games[0]) || (x.key < y.key ? -1 : x.key > y.key ? 1 : 0));
+}
+
 /**
  * A cell's booth lines from the full crew of every game it lists (U9). The builder's
  * `booths` pairs carry one analyst per booth, so a second analyst never reached the cell;
  * the games' own crews are complete. The pairs still set the order: crews sort by the first
  * pair they hold (crews matching none follow, in game order) and people keep their pair
- * order, so a cell reads as before with the missing people added.
+ * order, so a cell reads as before with the missing people added. `games` limits it to one
+ * series (U10), so people are grouped within that series only.
  */
-export function cellBooths(model, b) {
-  const crews = b.gameList.map((i) => model.cols.crew[i] || []).filter((c) => c.length);
+export function cellBooths(model, b, games = b.gameList) {
+  const crews = games.map((i) => model.cols.crew[i] || []).filter((c) => c.length);
   const order = { pbp: new Map(), analyst: new Map() };
   const anyRank = new Map();
   b.booths.forEach(([pbp, analyst], k) => {
@@ -367,26 +401,41 @@ function blockButton(model, b, label, picked, maxLines = Infinity) {
   btn.dataset.cell = b.key;
   btn.setAttribute('aria-pressed', String(picked));
   const where = b.league ? `${b.season} ${ROUND_LABELS[b.round]} ${b.league}` : `${b.season} ${ROUND_LABELS[b.round]}`;
-  btn.setAttribute('aria-label', `${where}, ${b.games} ${b.games === 1 ? 'game' : 'games'}`);
+  const series = cellSeries(model, b);
+  const named = series.length ? `, ${series.map((x) => x.label).join(', ')}` : '';
+  btn.setAttribute('aria-label', `${where}, ${b.games} ${b.games === 1 ? 'game' : 'games'}${named}`);
   const head = el('span', 'mlb-cell-head');
   if (label) head.append(el('span', 'mlb-cell-league', label));
   for (const o of b.outlets) head.append(networkMark(o));
   btn.append(head);
 
+  // One block per series: its matchup head, then its booth lines (U10). The phone line budget
+  // counts booth lines across the whole cell; a series past it folds into "+N more".
   const booths = el('span', 'mlb-cell-booths');
-  const groups = cellBooths(model, b);
-  if (groups.length) {
-    const shown = groups.slice(0, maxLines);
-    for (const g of shown) booths.append(boothLine(model, g));
-    if (groups.length > shown.length) {
-      booths.append(el('span', 'mlb-booth-more', `+${groups.length - shown.length} more`));
+  let budget = maxLines;
+  let hidden = 0;
+  for (const ser of series) {
+    const groups = cellBooths(model, b, ser.games);
+    if (groups.length && budget <= 0) {
+      hidden += groups.length;
+      continue;
     }
-  } else {
-    booths.append(el('span', 'mlb-no-crew', NO_CREW_TEXT));
+    const box = el('span', 'mlb-series');
+    box.dataset.series = ser.key;
+    box.append(el('span', 'mlb-series-head', ser.label));
+    const shown = groups.slice(0, Math.max(budget, 0));
+    for (const g of shown) box.append(boothLine(model, g));
+    hidden += groups.length - shown.length;
+    budget -= shown.length;
+    const listed = ser.games.filter((g) => (model.cols.crew[g] || []).length).length;
+    if (!groups.length) box.append(el('span', 'mlb-no-crew', NO_CREW_TEXT));
+    else if (listed < ser.games.length) {
+      box.append(el('span', 'mlb-no-crew', `${NO_CREW_TEXT} for ${ser.games.length - listed} of ${ser.games.length}`));
+    }
+    booths.append(box);
   }
-  if (groups.length && b.crewListed < b.games) {
-    booths.append(el('span', 'mlb-no-crew', `${NO_CREW_TEXT} for ${b.games - b.crewListed} of ${b.games}`));
-  }
+  if (!series.length) booths.append(el('span', 'mlb-no-crew', NO_CREW_TEXT));
+  if (hidden) booths.append(el('span', 'mlb-booth-more', `+${hidden} more`));
   btn.append(booths);
 
   const stats = el('span', 'mlb-cell-stats');
@@ -590,7 +639,8 @@ export function render(ctx) {
             key: b.key, season: b.season, round: b.round, league: b.league, games: b.games,
             outlets: b.outlets.map((o) => o.name), outletSourceUrl: b.outletSourceUrl,
             booths: b.booths.map(([p, a]) => boothLabelOf(model, p, a)),
-            boothLines: cellBooths(model, b).length,
+            boothLines: cellSeries(model, b).reduce((n, x) => n + cellBooths(model, b, x.games).length, 0),
+            series: cellSeries(model, b).map((x) => ({ label: x.label, games: x.games.length })),
             crewListed: b.crewListed, excitementN: b.exciteN,
             excitement: b.exciteN ? b.exciteSum / b.exciteN : null,
             viewersN: b.viewerN, pending: cellPending(model, b),
