@@ -437,3 +437,51 @@ def test_season_with_no_cells_selects_and_shows_the_empty_state(
     assert "No matching games" in matched
     assert "No games are listed for 2027 postseason." in matched
     assert "cell=season-2027" in page.url
+
+
+# U2: stacked role pills (a wrapped booth line, the panel crew, a wrapped Matched games crew)
+# never touch. Pills are grouped into lines by their top; the gap is the next line's top
+# minus the line above's bottom.
+_STACKED_PILL_GAPS_JS = """
+([scope, width]) => {
+  const out = [];
+  for (const box of document.querySelectorAll(scope)) {
+    if (width) box.style.width = width;
+    const rects = [...box.querySelectorAll('.role-pill')]
+      .map((p) => p.getBoundingClientRect())
+      .filter((r) => r.height > 0)
+      .sort((a, b) => a.top - b.top);
+    const lines = [];
+    for (const r of rects) {
+      const line = lines[lines.length - 1];
+      if (line && r.top < line.top + 6) line.bottom = Math.max(line.bottom, r.bottom);
+      else lines.push({ top: r.top, bottom: r.bottom });
+    }
+    for (let k = 1; k < lines.length; k += 1) out.push(lines[k].top - lines[k - 1].bottom);
+  }
+  return out;
+}
+"""
+
+
+def _stacked_pill_gaps(page: Page, scope: str, width: str | None = None) -> list[float]:
+    return page.evaluate(_STACKED_PILL_GAPS_JS, [scope, width])
+
+
+def test_stacked_role_pills_keep_a_vertical_gap(post: Page) -> None:
+    # A narrow booth line wraps its PBP and Analyst onto separate lines.
+    gaps = _stacked_pill_gaps(post, f"{VIEW} .mlb-grid .mlb-cell-booths", "110px")
+    assert gaps, "no wrapped booth line in the grid"
+    assert min(gaps) > 0, gaps
+    # The panel crew stacks one person per line.
+    post.evaluate(f"{HOOKS}.openGame(1)")
+    post.wait_for_selector("#mlb-detail-panel[open]")
+    gaps = _stacked_pill_gaps(post, "#mlb-detail-panel .crew-box")
+    assert gaps, "no stacked crew in the panel"
+    assert min(gaps) > 0, gaps
+    post.evaluate(f"{HOOKS}.closePanel()")
+    # A wrapped Matched games crew cell.
+    post.evaluate(f"{HOOKS}.setState({{ cell: 'season-2026' }})")
+    gaps = _stacked_pill_gaps(post, "#mlb-matched-games .crew-list", "110px")
+    assert gaps, "no wrapped crew in Matched games"
+    assert min(gaps) > 0, gaps

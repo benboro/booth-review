@@ -4192,8 +4192,19 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   font-weight: var(--weight-semibold);
 }
 
-.mlb-cell-booth {
-  margin-bottom: 2px;
+/* A booth line wraps as whole people (name + role pill) with the crew list's 4px row gap
+   (c6224c3), so a wrapped line's pills never touch the pills of the line above. */
+.mlb-cell-btn .mlb-cell-booth {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  row-gap: var(--space-xs);
+  margin-bottom: var(--space-xs);
+}
+
+/* As a flex item the " / " would lose its spaces. */
+.mlb-cell-booth .booth-sep {
+  white-space: pre;
 }
 
 .mlb-no-crew {
