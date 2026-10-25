@@ -12,6 +12,8 @@ project. Output lives in `dist/site/` until Phase 5 deploys it.
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import html
 import posixpath
 import re
@@ -39,10 +41,39 @@ NAV: tuple[tuple[str, str], ...] = (
     ("Coverage", "coverage.html"),
 )
 
-_CSP = (
-    "default-src 'self'; script-src 'none'; style-src 'self'; img-src 'self'; "
-    "object-src 'none'; base-uri 'none'; form-action 'none'"
+
+def csp_for(script_text: str) -> str:
+    """The static pages' CSP: exactly one inline script, allowed by its SHA-256
+    hash (never 'self', which would admit every script on the origin).
+    """
+    digest = base64.b64encode(hashlib.sha256(script_text.encode("utf-8")).digest()).decode("ascii")
+    return (
+        f"default-src 'self'; script-src 'sha256-{digest}'; style-src 'self'; "
+        "img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    )
+
+
+# Must equal the #theme-slot block in site/index.html byte for byte (a unit test checks).
+THEME_TOGGLE_HTML = (
+    '<span id="theme-slot"><button type="button" id="theme-toggle" class="theme-toggle" hidden aria-label="Switch to dark theme" title="Switch to dark theme">\n'  # noqa: E501
+    '    <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7z"/></svg>\n'  # noqa: E501
+    '    <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>\n'  # noqa: E501
+    "  </button></span>"
 )
+
+
+def read_theme_script(site_src: Path) -> str:
+    """The exact text of `theme-init.js` under `site_src`."""
+    path = site_src / "theme-init.js"
+    if not path.is_file():
+        raise SiteBuildError(f"{path} not found")
+    return path.read_text(encoding="utf-8")
+
+
+def default_theme_script() -> str:
+    """The repo's own `site/theme-init.js`."""
+    return read_theme_script(Path(__file__).resolve().parents[3] / "site")
+
 
 _INCLUDE_MARKER = "<!-- include: known-gaps.md -->"
 _ATX_HEADING_RE = re.compile(r"^(#{1,6})(\s.*)$")
@@ -109,11 +140,16 @@ def footer_html(freshness: Freshness) -> str:
     )
 
 
-def page_html(title: str, body_html: str, freshness: Freshness) -> str:
-    """Wrap `body_html` in a full HTML5 document: CSP meta (script-src
-    'none' -- these pages never carry a `<script>`), the site stylesheet,
-    a header link back to the chart, and the shared footer.
+def page_html(
+    title: str, body_html: str, freshness: Freshness, *, theme_script: str | None = None
+) -> str:
+    """Wrap `body_html` in a full HTML5 document: CSP meta (script-src is
+    the SHA-256 of the one inline theme script, which is interpolated
+    unescaped and unaltered), the site stylesheet, a header link back to
+    the chart, the theme toggle slot, and the shared footer.
     """
+    if theme_script is None:
+        theme_script = default_theme_script()
     footer = footer_html(freshness)
     return (
         "<!DOCTYPE html>\n"
@@ -122,15 +158,16 @@ def page_html(title: str, body_html: str, freshness: Freshness) -> str:
         '<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
         '<meta name="color-scheme" content="light">\n'
-        f'<meta http-equiv="Content-Security-Policy" content="{_CSP}">\n'
+        f'<meta http-equiv="Content-Security-Policy" content="{csp_for(theme_script)}">\n'
         f"<title>{html.escape(title)}</title>\n"
+        f"<script>{theme_script}</script>\n"
         '<link rel="stylesheet" href="style.css">\n'
         "</head>\n"
         "<body>\n"
         '<header class="site-header"><a href="index.html" class="site-title">'
         'The Broadcast Ledger</a><nav class="header-links" aria-label="Pages">'
         '<a href="methodology.html">Methodology</a><a href="coverage.html">Coverage</a>'
-        "</nav></header>\n"
+        f"</nav>{THEME_TOGGLE_HTML}</header>\n"
         f'<main class="page">{body_html}</main>\n'
         f'<footer class="site-footer">{footer}</footer>\n'
         "</body>\n"
@@ -244,7 +281,12 @@ def _apply_all_sport_blocks(text: str, *, nfl: bool, mlb: bool) -> str:
 
 
 def render_methodology(
-    docs_dir: Path, site: SiteData, *, nfl: bool = False, mlb: bool = False
+    docs_dir: Path,
+    site: SiteData,
+    *,
+    nfl: bool = False,
+    mlb: bool = False,
+    theme_script: str | None = None,
 ) -> str:
     """Render `docs/methodology.md` to HTML, with `docs/known-gaps.md`
     spliced in at its include marker (D-13). Raises SiteBuildError --
@@ -270,14 +312,16 @@ def render_methodology(
     combined = methodology_text.replace(_INCLUDE_MARKER, _known_gaps_body(known_gaps_text))
     renderer = markdown.Markdown(extensions=["tables", "toc"])
     body_html = _rewrite_relative_md_links(renderer.convert(combined))
-    return page_html("Methodology · The Broadcast Ledger", body_html, site.freshness)
+    return page_html(
+        "Methodology · The Broadcast Ledger", body_html, site.freshness, theme_script=theme_script
+    )
 
 
 def _pct(value: float | None) -> str:
     return f"{value * 100:.1f}%" if value is not None else _EN_DASH
 
 
-def render_coverage(site: SiteData) -> str:
+def render_coverage(site: SiteData, *, theme_script: str | None = None) -> str:
     """Render `coverage.html`: a season x network completeness table, then
     a season-level match/data-quality table, both from `site.coverage`
     (D-13/SITE-16). Every network name is html-escaped.
@@ -371,18 +415,33 @@ def render_coverage(site: SiteData) -> str:
         "<h2>Match and data quality by season</h2>"
         f"{quality_table}"
     )
-    return page_html("Coverage · The Broadcast Ledger", body, site.freshness)
+    return page_html(
+        "Coverage · The Broadcast Ledger", body, site.freshness, theme_script=theme_script
+    )
 
 
 def write_pages(
-    out_dir: Path, site: SiteData, docs_dir: Path, *, nfl: bool = False, mlb: bool = False
+    out_dir: Path,
+    site: SiteData,
+    docs_dir: Path,
+    *,
+    nfl: bool = False,
+    mlb: bool = False,
+    site_src: Path | None = None,
 ) -> list[str]:
     """Render and atomically write `methodology.html` and `coverage.html`
-    under `out_dir`. Returns their out_dir-relative paths.
+    under `out_dir`. Returns their out_dir-relative paths. `site_src`, when
+    given, supplies `theme-init.js` for the inline theme script.
     """
+    theme_script = read_theme_script(site_src) if site_src is not None else None
     atomic_write_bytes(
         out_dir / "methodology.html",
-        render_methodology(docs_dir, site, nfl=nfl, mlb=mlb).encode("utf-8"),
+        render_methodology(docs_dir, site, nfl=nfl, mlb=mlb, theme_script=theme_script).encode(
+            "utf-8"
+        ),
     )
-    atomic_write_bytes(out_dir / "coverage.html", render_coverage(site).encode("utf-8"))
+    atomic_write_bytes(
+        out_dir / "coverage.html",
+        render_coverage(site, theme_script=theme_script).encode("utf-8"),
+    )
     return ["methodology.html", "coverage.html"]

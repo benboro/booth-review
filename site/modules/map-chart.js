@@ -20,6 +20,7 @@ import {
   MAP_LINE_WIDTH,
   MAP_MARKER_LABEL,
   MAP_OPACITY,
+  mapOpacity,
   MAP_OUTLINE,
   MAP_SIZE,
   MAP_VENUE_DOT,
@@ -93,7 +94,7 @@ function legsTrace(family, legs, theme) {
     y,
     connectgaps: false,
     line: { color: MAP_FAMILY_COLORS[theme][family], width: MAP_LINE_WIDTH.leg },
-    opacity: MAP_OPACITY.leg,
+    opacity: mapOpacity(theme).leg,
     hoverinfo: 'skip',
     hovertemplate: null,
     showlegend: false,
@@ -141,7 +142,7 @@ function venueDotsTrace(dots, theme, mobile) {
       color: dots.map((d) => d.dotColor[theme]),
       opacity: dots.map((d) =>
         d.tier === 'subject'
-          ? MAP_OPACITY.subject
+          ? mapOpacity(theme).subject
           : d.tier === 'other'
             ? MAP_OPACITY.other
             : MAP_VENUE_DOT.opacity,
@@ -150,7 +151,7 @@ function venueDotsTrace(dots, theme, mobile) {
         width: dots.map((d) =>
           d.tier === 'subject' ? MAP_LINE_WIDTH.subjectOutline : MAP_VENUE_DOT.ringWidth,
         ),
-        color: dots.map((d) => (d.tier === 'subject' ? DOT_OUTLINE : PAGE_BG[theme])),
+        color: dots.map((d) => (d.tier === 'subject' ? DOT_OUTLINE[theme] : PAGE_BG[theme])),
       },
     },
     hoverinfo: 'none',

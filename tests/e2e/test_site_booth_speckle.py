@@ -26,7 +26,15 @@ async (metas) => {
   const gd = document.getElementById('chart');
   const out = {};
   for (const t of gd.data) {
-    if (metas.includes(String(t.meta))) out[String(t.meta)] = JSON.parse(JSON.stringify(t.marker));
+    if (!metas.includes(String(t.meta))) continue;
+    const m = JSON.parse(JSON.stringify(t.marker));
+    // A per-point marker (the highlight traces) is reduced to the lead game's own point.
+    const at = Math.max(0, Array.from(t.customdata || []).indexOf(14));
+    const keys = [[m, 'symbol'], [m, 'size'], [m, 'color'], [m.line, 'width'], [m.line, 'color']];
+    for (const [obj, key] of keys) {
+      if (obj && Array.isArray(obj[key])) obj[key] = obj[key][at];
+    }
+    out[String(t.meta)] = m;
   }
   const p = await import('./modules/palette.js');
   const theme = (document.documentElement.dataset.theme === 'dark') ? 'dark' : 'light';
@@ -102,28 +110,46 @@ def _data_url(page: Page, width: int, height: int) -> str:
     return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
 
 
-@pytest.mark.parametrize("state", ["filled", "hollow"])
+# state -> (query, marker metas drawn bottom to top). "hollow-outlined" is the no-rating star with
+# the dot outline a filter adds (review F2); "hollow-highlighted" is it under a one-announcer
+# highlight, its ACCENT open outline beneath the family open star (review F1).
+_STATES = {
+    "filled": ("", ["lead-halo:disney", "lead:disney"]),
+    "hollow": ("", ["unrated-lead:disney"]),
+    "hollow-outlined": (
+        "?networks=net-a&dots=fade",
+        ["unrated-lead-rim:disney", "unrated-lead:disney"],
+    ),
+    "hollow-highlighted": (
+        "?people=casey-lund",
+        ["highlight-halo-unrated-open", "highlight-unrated"],
+    ),
+}
+
+
+@pytest.mark.parametrize("state", list(_STATES))
 def test_lead_star_has_no_pixels_outside_the_glyph(
     guarded_page: Page,
     serve_booths: Callable[[Page], None],
     open_app: Callable[[Page, str], None],
     state: str,
 ) -> None:
+    query, metas = _STATES[state]
     serve_booths(guarded_page)
-    open_app(guarded_page, "")
+    open_app(guarded_page, query)
     guarded_page.wait_for_timeout(150)
     # The filled state is the cased star as drawn: surface casing star beneath the lead star.
-    metas = (
-        ["lead-halo:disney", "lead:disney"]
-        if state == "filled"
-        else ["unrated-lead-halo:disney", "unrated-lead:disney"]
-    )
+    # The hollow (no-rating) star is a 14px open star with a line since Phase 17 (user sign-off).
     info: dict[str, Any] = guarded_page.evaluate(_MARKERS_JS, metas)
     layers = [info["markers"][m] for m in metas]
     for marker in layers:
-        assert marker["symbol"] == "star"
-        assert marker["line"]["width"] == 0
-    largest = max(float(m["size"]) for m in layers)
+        if state == "filled":
+            assert marker["symbol"] == "star"
+            assert marker["line"]["width"] == 0
+        else:
+            assert marker["symbol"] == "star-open"
+            assert float(marker["size"]) >= 14
+    largest = max(float(m["size"]) + float(m["line"]["width"]) for m in layers)
     # A star's top tip reaches about 0.65 of its size from the centre (11px at 17px), past the
     # size / 2 of a square marker, so the glyph box is 0.65 * size plus a 1px antialias margin.
     half = largest * 0.65 + 1

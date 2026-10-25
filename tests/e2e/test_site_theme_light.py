@@ -1,6 +1,6 @@
-"""SHELL-01 / SHELL-02: the site is light-only whatever the OS prefers, and the
-reserved `#theme-slot` is an empty 32x32 box at the right end of every sport
-page's header (none on the static pages)."""
+"""SHELL-01 / SHELL-02: the site opens light whatever the OS prefers (dark is reached only
+through the toggle), and `#theme-slot` holds the one 32x32 theme toggle at the right end of
+the header on every page, sport pages and the static methodology and coverage pages alike."""
 
 from __future__ import annotations
 
@@ -83,16 +83,21 @@ def test_os_dark_still_renders_light(opened: Callable[[str], Page], which: str) 
 
 
 @pytest.mark.parametrize("which", _SPORT_PAGES)
-def test_theme_slot_is_an_empty_32px_box_at_the_header_right(
+def test_theme_slot_holds_one_toggle_at_the_header_right(
     opened: Callable[[str], Page], which: str
 ) -> None:
     page = opened(which)
     slot = page.locator("#theme-slot")
     assert slot.count() == 1
-    assert slot.evaluate("el => el.children.length") == 0
-    assert slot.inner_text().strip() == ""
-    # The Phase 17 toggle mounts here, so the slot must not hide its children from assistive tech.
+    assert slot.locator("#theme-toggle").count() == 1
+    assert page.locator("#theme-toggle").count() == 1
+    assert slot.locator("#theme-toggle").is_visible()
+    # The toggle must stay visible to assistive tech.
     assert slot.get_attribute("aria-hidden") is None
+    toggle = slot.locator("#theme-toggle").bounding_box()
+    assert toggle is not None
+    assert round(toggle["width"]) == 32
+    assert round(toggle["height"]) == 32
     box = slot.bounding_box()
     assert box is not None
     assert round(box["width"]) == 32
@@ -107,5 +112,79 @@ def test_theme_slot_is_an_empty_32px_box_at_the_header_right(
 
 
 @pytest.mark.parametrize("which", ("methodology", "coverage"))
-def test_static_pages_have_no_theme_slot(opened: Callable[[str], Page], which: str) -> None:
-    assert opened(which).locator("#theme-slot").count() == 0
+def test_static_pages_hold_one_toggle(opened: Callable[[str], Page], which: str) -> None:
+    page = opened(which)
+    slot = page.locator("#theme-slot")
+    assert slot.count() == 1
+    assert page.locator("#theme-toggle").count() == 1
+    assert slot.locator("#theme-toggle").count() == 1
+    assert slot.locator("#theme-toggle").is_visible()
+    toggle = slot.locator("#theme-toggle").bounding_box()
+    assert toggle is not None
+    assert round(toggle["width"]) == 32
+    assert round(toggle["height"]) == 32
+    box = slot.bounding_box()
+    assert box is not None
+    rights: list[float] = page.evaluate(
+        """() => [...document.querySelector('.site-header').children]
+             .map((el) => el.getBoundingClientRect())
+             .filter((r) => r.width > 0)
+             .map((r) => r.right)"""
+    )
+    assert box["x"] + box["width"] >= max(rights) - 0.5
+
+
+@pytest.mark.parametrize("which", ("methodology", "coverage"))
+def test_static_page_toggle_stays_top_right_on_a_phone(
+    opened: Callable[[str], Page], which: str
+) -> None:
+    # Review F3: at 480px and below the header links are hidden; the static pages' header has
+    # no #topbar, so the slot must push itself to the right edge.
+    page = opened(which)
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.wait_for_timeout(50)
+    got: dict[str, float] = page.evaluate(
+        """() => {
+          const header = document.querySelector('.site-header');
+          const h = header.getBoundingClientRect();
+          const s = document.getElementById('theme-slot').getBoundingClientRect();
+          const title = document.querySelector('.site-title').getBoundingClientRect();
+          return {
+            contentRight: h.right - parseFloat(getComputedStyle(header).paddingRight),
+            slotRight: s.right,
+            slotTop: s.top,
+            titleTop: title.top,
+            titleBottom: title.bottom,
+          };
+        }"""
+    )
+    assert abs(got["slotRight"] - got["contentRight"]) <= 1, got
+    # Still on the title's row.
+    assert got["titleTop"] - 16 <= got["slotTop"] <= got["titleBottom"], got
+
+
+@pytest.mark.parametrize("theme", ("light", "dark"))
+@pytest.mark.parametrize("width", (1440, 1024))
+@pytest.mark.parametrize("which", ("cfb", "methodology"))
+def test_toggle_is_centred_on_the_methodology_link(
+    opened: Callable[[str], Page], which: str, width: int, theme: str
+) -> None:
+    # Review 6d: the toggle sits optically centred on the header links (docs/design.md).
+    page = opened(which)
+    page.set_viewport_size({"width": width, "height": 900})
+    if theme == "dark":
+        page.locator("#theme-toggle").click()
+        page.wait_for_function("document.documentElement.dataset.theme === 'dark'")
+    page.wait_for_timeout(50)
+    centres: dict[str, float] = page.evaluate(
+        """() => {
+          const mid = (el) => {
+            const r = el.getBoundingClientRect();
+            return r.top + r.height / 2;
+          };
+          const link = [...document.querySelectorAll('.header-links a')]
+            .find((a) => a.textContent.trim() === 'Methodology');
+          return { toggle: mid(document.getElementById('theme-toggle')), link: mid(link) };
+        }"""
+    )
+    assert abs(centres["toggle"] - centres["link"]) <= 1, centres

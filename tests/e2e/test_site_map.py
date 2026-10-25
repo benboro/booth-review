@@ -373,8 +373,8 @@ def test_light_theme_uses_light_land_and_map_family_colors(
 ) -> None:
     """D-08: the outline is drawn in MAP_LAND light, legs in MAP_FAMILY_COLORS light.
 
-    The site is light-only until Phase 17 (13-01 moved dark to data-theme); the OS-dark
-    case is covered by test_site_theme_light.py.
+    This test covers light; the dark map (land, outline, dots, splat, live labels) is
+    covered in test_site_dark_cfb.py, and the OS-dark case by test_site_theme_light.py.
     """
     _open_map(guarded_page, open_app, "?view=map&people=pat-rowan")
     palette: dict[str, Any] = guarded_page.evaluate(

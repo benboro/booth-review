@@ -36,7 +36,7 @@ const TITLES = {
 
 const BAND_FILL = {
   light: 'rgba(75, 85, 99, 0.06)',
-  dark: 'rgba(156, 163, 175, 0.10)',
+  dark: 'rgba(236, 231, 223, 0.06)',
 };
 
 const LINE_WIDTH = 2.5;

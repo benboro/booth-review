@@ -832,7 +832,7 @@ def test_facet_announcers_scroll_survives_unrelated_renders(
 def test_header_structure_and_selection_row(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """Header: title link, page links, empty theme slot. Selection row: always rendered,
+    """Header: title link, page links, theme slot. Selection row: always rendered,
     Clear all filters at its right end; summary is a fixed 24px box."""
     page = guarded_page
     open_app(page, "")
@@ -841,6 +841,7 @@ def test_header_structure_and_selection_row(
     expect(header.locator("a.site-title")).to_have_text("The Broadcast Ledger")
     assert header.locator("a.site-title").get_attribute("href") == "index.html"
     expect(header.locator(".header-links a")).to_have_text(["Methodology", "Coverage"])
+    # The slot holds an icon-only toggle: no visible text.
     assert page.locator("#theme-slot").inner_text() == ""
     # Always rendered, with no people picked.
     row = page.locator("#selection-row")

@@ -1609,8 +1609,9 @@ def test_tooltip_mode_trace_config(
                 "unrated-inert:",
                 "highlight-halo",
                 "unrated-lead-halo:",
+                "unrated-lead-filled-halo:",
                 "lead-halo:",
-                "highlight-unrated-hole",
+                "unrated-lead-rim:",
             )
         ):
             assert t["hoverinfo"] == "skip"
@@ -1636,8 +1637,9 @@ def test_tooltip_mode_trace_config(
                 "unrated-inert:",
                 "highlight-halo",
                 "unrated-lead-halo:",
+                "unrated-lead-filled-halo:",
                 "lead-halo:",
-                "highlight-unrated-hole",
+                "unrated-lead-rim:",
             )
         ):
             assert t["hoverinfo"] == "skip"
@@ -1667,7 +1669,7 @@ def test_tooltip_mode_trace_config(
         ):
             assert t["hoverinfo"] == "skip"
             assert not t["hovertemplate"]
-        elif meta.startswith(("highlight-halo", "highlight-unrated-hole")):
+        elif meta.startswith(("highlight-halo", "unrated-lead-rim:")):
             assert t["hoverinfo"] == "skip"  # halos are never hoverable
         else:
             assert meta in ("highlight", "highlight-unrated")

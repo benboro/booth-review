@@ -75,11 +75,14 @@ def test_palette_map_constants(guarded_page: Page, site_url: str) -> None:
     # The 13-05 warm land (#F1EDE4) puts the unchanged conference purple at 4.97:1; keep the
     # WCAG AA 4.5:1 floor rather than the old 5:1 margin.
     assert got["contrastL"] >= 4.5
-    assert got["contrastD"] >= 5
+    # Phase 17's warm dark land (#2A2722, 17-UI-SPEC) puts the kept dark violet at 4.98:1;
+    # same 4.5:1 floor as light.
+    assert got["contrastD"] >= 4.5
     assert got["splat"]["viewersWeight"] == 0.35
     assert got["splat"]["unratedFallback"] == 150000
     assert got["dot"]["radiusMax"] == 8
-    assert got["neutral"] == {"light": "#B3AA9C", "dark": "#7A7266"}
+    # Phase 17 lifted the dark neutral to #8B8377 (3.97:1 on the new land, 17-UI-SPEC).
+    assert got["neutral"] == {"light": "#B3AA9C", "dark": "#8B8377"}
 
 
 # ---------------------------------------------------------------- venue model

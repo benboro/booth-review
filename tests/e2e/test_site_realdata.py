@@ -1362,9 +1362,8 @@ async () => {
     if (meta.startsWith('unrated-') || meta.startsWith('highlight-unrated')) {
       for (const v of Array.from(t.x ?? [])) if (v !== null && v !== undefined) band += 1;
     }
-    // Lead-star casings and the unrated highlight hole are drawn in the surface colour on
-    // purpose; they are not ringed dots.
-    if (meta.includes('lead-halo') || meta.endsWith('-hole')) continue;
+    // Lead-star casings are drawn in the surface colour on purpose; they are not ringed dots.
+    if (meta.includes('lead-halo')) continue;
     if (t.marker && t.marker.color === p.SURFACE[theme]) ringed += 1;
   }
   const yr = gd._fullLayout.yaxis.range;

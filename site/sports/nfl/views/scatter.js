@@ -40,7 +40,7 @@ const CONFIG = frameConfig({ zoomable: true });
 const Y_TITLES = { viewers: 'Viewers', excitement: 'Excitement' };
 const X_TITLE_MARGIN = 'Final margin (points)';
 const VIEWER_TICKS = [5e5, 1e6, 2e6, 5e6, 1e7, 2e7].map((v) => [v, viewerTickLabel(v)]);
-const BAND_FILL = { light: 'rgba(75, 85, 99, 0.06)', dark: 'rgba(156, 163, 175, 0.10)' };
+const BAND_FILL = { light: 'rgba(75, 85, 99, 0.06)', dark: 'rgba(236, 231, 223, 0.06)' };
 // Marker size matches the CFB scatter's base dot (6); a pick fades, it never enlarges (UI-SPEC).
 const BASE_SIZE = 6;
 const NA_X = -2.5; // the N/A strip's center on the margin axis
@@ -752,7 +752,7 @@ function buildFigure(model, state, env, th, items) {
         // A matched dot under a pick gets the CFB highlight outline; hollow Other games keep their own ring.
         width: subset.map((it) => (it.cat.key === 'none' ? 1.5 : picks.hasPick && it.matched ? 1 : 0)),
         color: subset.map((it) => (it.cat.key === 'none' ? categoryColor(it.cat.key, th)
-          : picks.hasPick && it.matched ? DOT_OUTLINE : categoryColor(it.cat.key, th))),
+          : picks.hasPick && it.matched ? DOT_OUTLINE[th] : categoryColor(it.cat.key, th))),
       },
     },
   });

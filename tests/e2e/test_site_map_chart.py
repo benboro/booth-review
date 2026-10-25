@@ -157,6 +157,46 @@ def test_legs_traces(guarded_page: Page, site_url: str) -> None:
     assert got["foxX"] == 0
 
 
+def test_dark_legs_and_subject_dots_clear_3_to_1_on_the_land(
+    guarded_page: Page, site_url: str
+) -> None:
+    # Review F13: a dark leg or subject dot is checked as drawn, its colour composited over the
+    # dark land at the opacity the figure uses, not as the opaque colour. Light keeps 0.55/0.85.
+    got = _run(
+        guarded_page,
+        site_url,
+        """
+        const dark = build(rich, 'dark');
+        const light = build(rich, 'light');
+        const dots = byName(dark, 'venue-dots');
+        const sub = dots.marker.opacity.filter((o, k) => rich.venueDots[k].tier === 'subject');
+        const ratios = {};
+        for (const [fam, color] of Object.entries(P.MAP_FAMILY_COLORS.dark)) {
+          const land = P.MAP_LAND.dark;
+          const leg = P.mixHex(color, land, byName(dark, 'legs:nbc').opacity);
+          const dot = P.mixHex(color, land, sub[0]);
+          const neutralMix = P.mixHex(P.mixOklab(P.MAP_DOT_NEUTRAL.dark, color, 0.5), land, sub[0]);
+          ratios[fam] = [leg, dot, neutralMix].map((c) => P.contrastRatio(c, land));
+        }
+        return {
+          ratios,
+          lightLeg: byName(light, 'legs:nbc').opacity,
+          lightSub: byName(light, 'venue-dots').marker.opacity
+            .filter((o, k) => rich.venueDots[k].tier === 'subject'),
+          darkOther: dots.marker.opacity
+            .filter((o, k) => rich.venueDots[k].tier === 'other'),
+          subN: sub.length,
+        };
+        """,
+    )
+    assert got["subN"] > 0
+    for fam, ratios in got["ratios"].items():
+        assert min(ratios) >= 3.0, (fam, ratios)
+    assert got["lightLeg"] == 0.55
+    assert set(got["lightSub"]) == {0.85}
+    assert set(got["darkOther"]) <= {0.45}  # context tiers stay faint
+
+
 def test_conference_leg_uses_the_map_violet(guarded_page: Page, site_url: str) -> None:
     got = _run(
         guarded_page,
@@ -191,7 +231,7 @@ def test_venue_dots_faded_selected_and_markers(guarded_page: Page, site_url: str
             x: dots.x, y: dots.y, custom: dots.customdata, symbol: dots.marker.symbol,
             size: dots.marker.size, color: dots.marker.color, opacity: dots.marker.opacity,
             lw: dots.marker.line.width, lc: dots.marker.line.color, hover: dots.hoverinfo,
-            ht: dots.hovertemplate, bg: P.PAGE_BG.light, outline: P.DOT_OUTLINE,
+            ht: dots.hovertemplate, bg: P.PAGE_BG.light, outline: P.DOT_OUTLINE.light,
           },
           phoneSize: phone.marker.size, phoneColor: phone.marker.color,
           faded: {

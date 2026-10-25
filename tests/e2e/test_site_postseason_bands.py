@@ -234,6 +234,19 @@ def test_dots_keep_contrast_on_blended_band(
         assert ratio >= floor - 0.01, (theme, surface, family, ratio)
 
 
+@pytest.mark.parametrize("backdrop", ["surface", "pageBg"])
+def test_every_dark_family_clears_3_to_1_on_the_dark_band(app_page: Page, backdrop: str) -> None:
+    # Phase 17 review F4: the band is drawn over the SURFACE "No public rating" strip on purpose,
+    # so a dark family mark sits on the band-over-SURFACE composite there and on the
+    # band-over-PAGE_BG composite in the plot. Both must hold every dark family at 3:1.
+    pal = app_page.evaluate(_PALETTE_JS)
+    blended = _blend(pal["band"]["dark"], pal[backdrop]["dark"])
+    assert blended != pal[backdrop]["dark"]  # the band still tints the backdrop
+    for family, color in pal["fam"]["dark"].items():
+        ratio = _contrast(app_page, color, blended)
+        assert ratio >= 3.0, (backdrop, family, blended, ratio)
+
+
 @pytest.mark.parametrize(("theme", "floor"), [("light", 4.5)])
 def test_label_text_has_contrast_on_blended_band(app_page: Page, theme: str, floor: float) -> None:
     pal = app_page.evaluate(_PALETTE_JS)

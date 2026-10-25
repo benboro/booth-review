@@ -10,7 +10,7 @@
  * rings are filled SURFACE circles with a family-colored line (never an open
  * symbol, whose SDF glyph speckles, notes-2 #1), and with a size filter active
  * passing unrated games draw like rated dots (notes-2 #5, amends D-03);
- * two highlight overlays -- `highlight-halo-unrated`/`highlight-unrated`
+ * two highlight overlays -- `highlight-halo-unrated`/`highlight-halo-unrated-open`/`highlight-unrated`
  * (styled like the rated highlight) then the rated halo and `highlight`, always last --
  * plus a highlight overlay drawn last, the D-03 n/a strip, log-axis ticks,
  * the UI-SPEC's minimal hover content, and the phone/desktop layout.
@@ -106,6 +106,10 @@ const ENLARGED_DOT_PX = 10;
 const LEAD_STAR_SIZE = 14;
 /** Phase 10 (10-11 review): the surface-colored casing star drawn directly beneath each rated lead star. */
 const LEAD_CASING_SIZE = 18;
+/** Phase 17: how much larger the DOT_OUTLINE rim star is than the lead star, sized so the rim
+ * matches an enlarged dot's outline weight along the star's edges; 18px total, the largest
+ * marker gutter.js allows for. */
+const LEAD_RIM_GROWTH = 4;
 const FALLBACK_PLOT_HEIGHT = 420;
 
 /**
@@ -456,15 +460,15 @@ export function buildFigure(data, view, state, env) {
       hoverlabel: { bordercolor: FAMILY_COLORS[theme][family] },
       marker: {
         color: FAMILY_COLORS[theme][family],
-        // 04.16 D-01/D-05: passing dots take the announcer-selected size (10px, 1px black
-        // outline, theme-independent) only when view.enlargeDots, i.e. a faded dot is
+        // 04.16 D-01/D-05: passing dots take the announcer-selected size (10px, 1px
+        // outline in the DOT_OUTLINE theme colour) only when view.enlargeDots, i.e. a faded dot is
         // drawn, capped at 1-3 families when Networks is the only filter (04.16 D-16); otherwise 6px and borderless.
         // Inert dots always stay 6. Under a person this trace holds the passing-not-theirs
         // dots, at activeUnderPerson opacity and the same size switch (D-09).
         // 04.12 D-05 / 04.16 D-03: a seasons-only filter on Date never counts.
         size: view.enlargeDots ? ENLARGED_DOT_PX : 6,
         opacity: view.hasPersonSelection ? DOT_OPACITY.activeUnderPerson : DOT_OPACITY.active,
-        line: { width: view.enlargeDots ? 1 : 0, color: DOT_OUTLINE },
+        line: { width: view.enlargeDots ? 1 : 0, color: DOT_OUTLINE[theme] },
       },
     });
     // D-03 (amended by notes-2 #1/#5): a ring is a filled SURFACE circle with a family-colored
@@ -519,13 +523,13 @@ export function buildFigure(data, view, state, env) {
             color,
             size: ENLARGED_DOT_PX,
             opacity: activeOpacity,
-            line: { width: 1, color: DOT_OUTLINE },
+            line: { width: 1, color: DOT_OUTLINE[theme] },
           }
         : ringMarker(activeOpacity),
     });
-    // Phase 10 D-09/D-10: lead-booth stars. No marker.line on an SDF glyph (it speckles, notes-2
-    // #1); a hollow star is a family-colored star under a slightly smaller SURFACE star. Always
-    // pushed, possibly empty, so the trace count never changes.
+    // Phase 10 D-09/D-10: lead-booth stars. No marker.line on a filled SDF glyph (it speckles,
+    // notes-2 #1); the hollow star is an open star. Always pushed, possibly empty, so the trace
+    // count never changes.
     const leadBase = (meta, bucket, yaxis) => ({
       type: 'scattergl',
       mode: 'markers',
@@ -542,6 +546,12 @@ export function buildFigure(data, view, state, env) {
     });
     // A page-background casing star under each rated lead star keeps it readable among the
     // same-colored dots it overlaps. Plain filled surface star: no marker.line, no open symbol.
+    // Phase 17: with dots enlarged the casing becomes a thin DOT_OUTLINE rim instead, so stars
+    // carry the same outline as the enlarged dots (dark in light, light in dark).
+    const rimMarker = { symbol: 'star', color: DOT_OUTLINE[theme], size: LEAD_STAR_SIZE + LEAD_RIM_GROWTH, opacity: activeOpacity, line: { width: 0 } };
+    const casingMarker = view.enlargeDots
+      ? rimMarker
+      : { symbol: 'star', color: SURFACE[theme], size: LEAD_CASING_SIZE, opacity: 1, line: { width: 0 } };
     leadCasingTraces.push({
       type: 'scattergl',
       mode: 'markers',
@@ -551,7 +561,42 @@ export function buildFigure(data, view, state, env) {
       y: lead.y,
       hoverinfo: 'skip',
       hovertemplate: null,
-      marker: { symbol: 'star', color: SURFACE[theme], size: LEAD_CASING_SIZE, opacity: 1, line: { width: 0 } },
+      marker: casingMarker,
+    });
+    // The filled band star (non-Viewers modes) gets the rim too, only while dots are enlarged.
+    leadCasingTraces.push({
+      type: 'scattergl',
+      mode: 'markers',
+      meta: `unrated-lead-filled-halo:${family}`,
+      showlegend: false,
+      yaxis: 'y2',
+      x: view.enlargeDots ? uLeadFilled.x : [],
+      y: view.enlargeDots ? uLeadFilled.y : [],
+      hoverinfo: 'skip',
+      hovertemplate: null,
+      marker: rimMarker,
+    });
+    // Review F2: the empty no-rating star (Viewers mode) gets the same outline while dots are
+    // enlarged, as a larger DOT_OUTLINE open star around it at the dots' 1px weight, so the
+    // star stays empty inside two concentric outlines. Always pushed, possibly empty.
+    const hollowRim = view.enlargeDots && yMode === 'viewers';
+    leadCasingTraces.push({
+      type: 'scattergl',
+      mode: 'markers',
+      meta: `unrated-lead-rim:${family}`,
+      showlegend: false,
+      yaxis: 'y2',
+      x: hollowRim ? uLead.x : [],
+      y: hollowRim ? uLead.y : [],
+      hoverinfo: 'skip',
+      hovertemplate: null,
+      marker: {
+        symbol: 'star-open',
+        color: DOT_OUTLINE[theme],
+        size: LEAD_STAR_SIZE + LEAD_RIM_GROWTH,
+        opacity: activeOpacity,
+        line: { width: 1, color: DOT_OUTLINE[theme] },
+      },
     });
     leadTraces.push({
       ...leadBase(`lead:${family}`, lead, null),
@@ -562,21 +607,13 @@ export function buildFigure(data, view, state, env) {
       marker: { symbol: 'star', color, size: LEAD_STAR_SIZE, opacity: activeOpacity, line: { width: 0 } },
     });
     leadTraces.push({
-      type: 'scattergl',
-      mode: 'markers',
-      meta: `unrated-lead-halo:${family}`,
-      showlegend: false,
-      yaxis: 'y2',
-      x: uLead.x,
-      y: uLead.y,
-      hoverinfo: 'skip',
-      hovertemplate: null,
-      marker: { symbol: 'star', color, size: LEAD_STAR_SIZE + (thin === 2 ? 4 : 3), opacity: activeOpacity, line: { width: 0 } },
-    });
-    leadTraces.push({
       ...leadBase(`unrated-lead:${family}`, uLead, 'y2'),
-      // Hollow only in Viewers mode; elsewhere the band is filled (D-14), so no surface fill.
-      marker: { symbol: 'star', color: yMode === 'viewers' ? SURFACE[theme] : color, size: LEAD_STAR_SIZE, opacity: activeOpacity, line: { width: 0 } },
+      // Phase 17 (user sign-off): a truly empty star, so the band's rings show through it, at
+      // the rings' own line width. `star-open` draws cleanly in this Plotly build (the speckle
+      // test guards it). uLead only fills in Viewers mode; elsewhere the band is filled (D-14).
+      marker: yMode === 'viewers'
+        ? { symbol: 'star-open', color, size: LEAD_STAR_SIZE, opacity: activeOpacity, line: { width: thin, color } }
+        : { symbol: 'star', color, size: LEAD_STAR_SIZE, opacity: activeOpacity, line: { width: 0 } },
     });
   }
 
@@ -610,11 +647,13 @@ export function buildFigure(data, view, state, env) {
   const uhaloY = [];
   const uhaloSymbol = [];
   const uhaloSize = [];
-  // 10-11 review: a highlighted unrated lead (A) game in Viewers mode keeps its hollow star -- the
-  // family-colored star above gets a smaller SURFACE star on top, as the unrated-lead traces do.
-  const uholeX = [];
-  const uholeY = [];
-  const uholeSize = [];
+  // A highlighted unrated lead (A) game in Viewers mode keeps its empty star (review F1): an
+  // open family star in `highlight-unrated`, and the ACCENT highlight as a larger open star
+  // beneath it instead of a filled halo. Nothing is filled, so the band shows through.
+  const uopenX = [];
+  const uopenY = [];
+  const uopenSize = [];
+  const uopenSymbol = []; // per point, so an empty trace names no open symbol at all
   // D-31/D-33: a scattergl non-circle symbol (square/diamond/triangle-up/
   // star) is drawn from an SDF glyph atlas (regl-scatter2d), and a
   // `marker.line` border on one of those glyphs antialiases into a
@@ -636,18 +675,23 @@ export function buildFigure(data, view, state, env) {
     if (inBand(i)) {
       // notes-2 #5: the band's highlighted games draw exactly like rated highlights (filled
       // compare shapes; circles take the ACCENT line, other shapes the filled ACCENT halo).
+      const familyColor = FAMILY_COLORS[theme][data.familyOf[i]];
+      const hollow = symbol === 'star' && yMode === 'viewers' && !view.personShapes && data.boothTier[i] === 1;
       ux.push(x);
       uy.push(bandY(i));
       ucustomdata.push(i);
       if (usePlotlyText) utext.push(hoverText(data, i, hoverOpts));
-      ucolor.push(FAMILY_COLORS[theme][data.familyOf[i]]);
-      usymbol.push(symbol);
+      ucolor.push(familyColor);
+      usymbol.push(hollow ? 'star-open' : symbol);
       usize.push(size);
-      ulineWidth.push(symbol === 'circle' ? 1.5 : 0);
-      if (symbol === 'star' && yMode === 'viewers' && !view.personShapes && data.boothTier[i] === 1) {
-        uholeX.push(x);
-        uholeY.push(bandY(i));
-        uholeSize.push(size - 3);
+      // An open symbol draws its line in the marker colour, at the band rings' width.
+      ulineWidth.push(symbol === 'circle' ? 1.5 : hollow ? (contrastRatio(familyColor, SURFACE[theme]) < 3 ? 2 : 1.5) : 0);
+      if (hollow) {
+        uopenX.push(x);
+        uopenY.push(bandY(i));
+        uopenSize.push(size + 4);
+        uopenSymbol.push('star-open');
+        continue;
       }
       if (symbol !== 'circle') {
         uhaloX.push(x);
@@ -694,6 +738,24 @@ export function buildFigure(data, view, state, env) {
   traces.push({
     type: 'scattergl',
     mode: 'markers',
+    meta: 'highlight-halo-unrated-open',
+    showlegend: false,
+    yaxis: 'y2',
+    x: uopenX,
+    y: uopenY,
+    hoverinfo: 'skip',
+    hovertemplate: null,
+    marker: {
+      symbol: uopenSymbol,
+      size: uopenSize,
+      color: ACCENT[theme],
+      opacity: 1,
+      line: { width: 1.5, color: ACCENT[theme] },
+    },
+  });
+  traces.push({
+    type: 'scattergl',
+    mode: 'markers',
     meta: 'highlight-unrated',
     showlegend: false,
     yaxis: 'y2',
@@ -711,18 +773,6 @@ export function buildFigure(data, view, state, env) {
       opacity: 1,
       line: { width: ulineWidth, color: ACCENT[theme] },
     },
-  });
-  traces.push({
-    type: 'scattergl',
-    mode: 'markers',
-    meta: 'highlight-unrated-hole',
-    showlegend: false,
-    yaxis: 'y2',
-    x: uholeX,
-    y: uholeY,
-    hoverinfo: 'skip',
-    hovertemplate: null,
-    marker: { symbol: 'star', size: uholeSize, color: SURFACE[theme], opacity: 1, line: { width: 0 } },
   });
   if (haloX.length > 0) {
     traces.push({

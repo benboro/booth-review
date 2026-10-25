@@ -65,28 +65,34 @@ export const FAMILY_CHANNEL_LEAD = Object.freeze({
 });
 
 /**
- * WCAG-AA text color per family, same in both themes (D-04, SITE-26): only
- * `disney` and `conference` clear 4.5:1 with white; every other family
- * clears it with black. Verified against the real sRGB relative-luminance
- * formula for every family/theme fill in FAMILY_COLORS (UI-SPEC Color):
- * disney #0072B2 -> white 5.19:1 (both themes); fox #009E73 -> black
- * 6.14:1 (both); cbs light #B77F00 -> black 6.05:1, dark #E69F00 -> black
- * 9.32:1; nbc light #C972A2 -> black 6.41:1, dark #CC79A7 -> black 6.86:1;
- * cw light #1D96DB -> black 6.44:1, dark #56B4E9 -> black 9.10:1; wbd
- * #D55E00 -> black 5.43:1 (both); conference light #000000 -> white
- * 21.0:1, dark #696969 -> white 5.49:1; other light #8B8B8B -> black
- * 6.16:1, dark #999999 -> black 7.37:1.
- * @type {Record<string, string>}
+ * WCAG-AA text color per family and theme (D-04, D-08, SITE-26). Light: only `disney` and
+ * `conference` clear 4.5:1 with white; every other family clears it with black (disney
+ * #0072B2 -> white 5.19:1; conference #000000 -> white 21.0:1). Dark: the brighter disney
+ * #0A7BC0 takes white (4.56:1) and every other family takes black, including conference
+ * #E4DFD6 (15.82:1).
+ * @type {{light: Record<string, string>, dark: Record<string, string>}}
  */
 export const PILL_TEXT_COLOR = {
-  disney: '#FFFFFF',
-  fox: '#000000',
-  cbs: '#000000',
-  nbc: '#000000',
-  cw: '#000000',
-  wbd: '#000000',
-  conference: '#FFFFFF',
-  other: '#000000',
+  light: {
+    disney: '#FFFFFF',
+    fox: '#000000',
+    cbs: '#000000',
+    nbc: '#000000',
+    cw: '#000000',
+    wbd: '#000000',
+    conference: '#FFFFFF',
+    other: '#000000',
+  },
+  dark: {
+    disney: '#FFFFFF',
+    fox: '#000000',
+    cbs: '#000000',
+    nbc: '#000000',
+    cw: '#000000',
+    wbd: '#000000',
+    conference: '#000000',
+    other: '#000000',
+  },
 };
 
 /**
@@ -107,64 +113,67 @@ export const FAMILY_COLORS = {
     other: '#8B8B8B',
   },
   dark: {
-    disney: '#0072B2',
+    disney: '#0A7BC0',
     fox: '#009E73',
     cbs: '#E69F00',
     nbc: '#CC79A7',
     cw: '#56B4E9',
     wbd: '#D55E00',
-    conference: '#696969',
-    other: '#999999',
+    conference: '#E4DFD6',
+    other: '#9C958A',
   },
 };
 
 /** UI chrome accent token per theme (search focus ring, active states, highlight outline). */
-export const ACCENT = { light: '#23201B', dark: '#E5E7EB' };
+export const ACCENT = { light: '#23201B', dark: '#ECE7DF' };
 
 /** The --ink text token per theme: neutral marks and unmatched bar fills (D-04). */
-export const INK = { light: '#23201B', dark: '#E5E7EB' };
+export const INK = { light: '#23201B', dark: '#ECE7DF' };
 
-/** Outline on enlarged (filter-passing) dots; same in light and dark. */
-export const DOT_OUTLINE = '#000000';
+/** Outline on enlarged (filter-passing) dots: black on light, ink on dark so it stays visible (D-08). */
+export const DOT_OUTLINE = { light: '#000000', dark: '#ECE7DF' };
 
 /** Result-vs-spread zero line: a step darker than DIVIDER gridlines, lighter than MUTED text (D-02). */
-export const ZERO_LINE = { light: '#CFC6B6', dark: '#6B7280' };
+export const ZERO_LINE = { light: '#CFC6B6', dark: '#5A554D' };
 
 /** UI chrome divider/border token per theme. */
-export const DIVIDER = { light: '#E4DDD1', dark: '#2A2E35' };
+export const DIVIDER = { light: '#E4DDD1', dark: '#3A3632' };
 
 /**
  * Faint gold/brown tint behind each season's bowl and playoff span on the Date axis
- * (04.17 D-07). Light alpha must stay at or below 0.10 for CBS/Other contrast.
+ * (04.17 D-07). Light alpha must stay at or below 0.10 for CBS/Other contrast. Dark alpha
+ * 0.07 (Phase 17 review F4, was 0.12) keeps every dark family at 3:1 or more on the band
+ * over SURFACE (the "No public rating" strip, #322C21, Disney 3.04:1) and over PAGE_BG
+ * (#2A241B, Disney 3.37:1).
  */
-export const POSTSEASON_BAND = { light: 'rgba(166, 120, 40, 0.07)', dark: 'rgba(212, 160, 60, 0.12)' };
+export const POSTSEASON_BAND = { light: 'rgba(166, 120, 40, 0.07)', dark: 'rgba(212, 160, 60, 0.07)' };
 
 /**
  * "Bowls & CFP" label text: a darker tint of the band hue on light, a lighter one on dark
- * (04.17 D-08, amended). 7.3:1 on the blended light plot, 8.5:1 on the blended dark plot.
+ * (04.17 D-08, amended). 7.3:1 on the blended light plot, 8.8:1 on the blended dark plot.
  */
 export const POSTSEASON_LABEL = { light: '#6E4A10', dark: '#E8BE6E' };
 
 /** UI chrome page background token per theme. */
-export const PAGE_BG = { light: '#FBF9F5', dark: '#14161A' };
+export const PAGE_BG = { light: '#FBF9F5', dark: '#1D1B18' };
 
 /** UI chrome secondary-surface token per theme (rail, top bar, panel, table header). */
-export const SURFACE = { light: '#F4F0E8', dark: '#1E2126' };
+export const SURFACE = { light: '#F4F0E8', dark: '#26231F' };
 
 /** The --muted text token per theme (axis ticks and zero lines; not a bar fill). */
-export const MUTED = { light: '#6A6358', dark: '#9CA3AF' };
+export const MUTED = { light: '#6A6358', dark: '#A59E94' };
 
 /**
  * Map land fill per theme (04.18 D-08, UI-SPEC "Color"): barely off the page background so
  * the states read as a faint base. DEFAULTED pending the user's close-out sign-off.
  */
-export const MAP_LAND = { light: '#F1EDE4', dark: '#1B1E23' };
+export const MAP_LAND = { light: '#F1EDE4', dark: '#2A2722' };
 
 /**
  * Map state outline per theme (04.18 D-08, UI-SPEC "Color"): muted, one step darker than
  * the land on light and lighter on dark. DEFAULTED pending the user's close-out sign-off.
  */
-export const MAP_OUTLINE = { light: '#C4C9D1', dark: '#3D424B' };
+export const MAP_OUTLINE = { light: '#C4C9D1', dark: '#4A453E' };
 
 /** Edge-marker label text (04.18 D-15): the muted token, aliased so the Map can tune it alone. */
 export const MAP_MARKER_LABEL = MUTED;
@@ -181,6 +190,24 @@ export const MAP_OPACITY = Object.freeze({
   leg: 0.55,
   marker: 0.6,
 });
+
+/**
+ * Dark map opacity (Phase 17 review F13): at the light 0.55 leg and 0.85 subject tiers the dark
+ * family colours composited over MAP_LAND.dark fall to 1.85:1 (Disney leg). Dark draws selected
+ * legs and subject dots at 0.95, which holds every dark map family, and every venue mix toward
+ * MAP_DOT_NEUTRAL, at 3.08:1 or more on the land. The base, other and faded tiers stay faint
+ * context on purpose.
+ */
+export const MAP_OPACITY_DARK = Object.freeze({ ...MAP_OPACITY, leg: 0.95, subject: 0.95 });
+
+/**
+ * Map mark opacity tiers for a theme.
+ * @param {'light'|'dark'} theme
+ * @returns {Readonly<Record<string, number>>}
+ */
+export function mapOpacity(theme) {
+  return theme === 'dark' ? MAP_OPACITY_DARK : MAP_OPACITY;
+}
 
 /**
  * Map mark sizes in px (04.18 D-05/D-10, UI-SPEC "Mark tiers"); `subject` is per compare
@@ -205,7 +232,7 @@ export const MAP_FAMILY_COLORS = {
 };
 
 /** Warm neutral a venue dot fades toward as its games split evenly (Phase 11 D-01a). */
-export const MAP_DOT_NEUTRAL = { light: '#B3AA9C', dark: '#7A7266' };
+export const MAP_DOT_NEUTRAL = { light: '#B3AA9C', dark: '#8B8377' };
 
 /** Splat and venue-score tuning (Phase 11 D-06a/D-07/D-12). */
 export const MAP_SPLAT = Object.freeze({
@@ -251,7 +278,7 @@ export const MAP_LINE_WIDTH = Object.freeze({ outline: 0.6, leg: 1.25, marker: 1
  * The matched-state accent (D-04), mirroring the `--accent` CSS token. Unmatched marks read
  * INK; this colour is for a mark only while a pick matches it.
  */
-export const SPECIAL = { light: '#1B4F5C', dark: '#A78BFA' };
+export const SPECIAL = { light: '#1B4F5C', dark: '#68BACB' };
 
 /**
  * Mixes two `#RRGGBB` colors per channel: `round(w*a + (1-w)*b)`, uppercase.
@@ -340,14 +367,29 @@ const SHADE_LADDER = [
   ['#000000', 0.5],
 ];
 
+/** Dark only: a channel shade must clear this contrast on the dark page (D-08). */
+const DARK_SHADE_MIN = 3.1;
+
+/**
+ * Dark only (Phase 17 review F6): the 3.1 floor drops the darker ladder steps, leaving 5-6
+ * shades, so a 7th channel repeated an earlier shade. After the ladder, dark scans finer mixes
+ * toward white then black, base weight 0.2 to 0.975 in 1/40 steps (lightest first; never paler
+ * than the ladder's own 0.2 step, so the hue stays), accepting a candidate at a DARK_EXTRA_GAP
+ * contrast with every accepted shade. Every family then has at least its light shade count.
+ */
+const DARK_EXTRA_GAP = 1.1;
+const DARK_EXTRA_LADDER = Array.from({ length: 32 }, (_, k) => (k + 8) / 40)
+  .flatMap((w) => [['#FFFFFF', w], ['#000000', w]]);
+
 /**
  * Channel shades of a family color (D-23): the stacked Announcers chart draws
  * one bar per network family and sub-shades each announcer segment by channel.
  * Shade 0 is the family color itself, so a one-channel family looks unchanged.
  * Further shades walk a fixed lighter/darker ladder of mixes with white or
  * black (`mixHex(base, toward, w)`, w the base weight); a candidate is skipped unless it has at least 1.15:1 contrast with
- * every shade already accepted (this drops the darker steps of a black base).
- * If the ladder runs out, the accepted list repeats cyclically.
+ * every shade already accepted (and, in dark, DARK_SHADE_MIN on the page) (this drops the darker steps of a black base).
+ * Dark then continues with DARK_EXTRA_LADDER at the DARK_EXTRA_GAP gap. If the ladder runs out,
+ * the accepted list repeats cyclically.
  * @param {string} family - a `familyKey` value.
  * @param {'light'|'dark'} theme
  * @param {number} n - how many shades.
@@ -360,7 +402,16 @@ export function channelShades(family, theme, n) {
   for (const [toward, w] of SHADE_LADDER) {
     if (accepted.length >= n) break;
     const candidate = mixHex(base, toward, w);
+    if (theme === 'dark' && contrastRatio(candidate, PAGE_BG.dark) < DARK_SHADE_MIN) continue;
     if (accepted.every((a) => contrastRatio(a, candidate) >= 1.15)) accepted.push(candidate);
+  }
+  if (theme === 'dark') {
+    for (const [toward, w] of DARK_EXTRA_LADDER) {
+      if (accepted.length >= n) break;
+      const candidate = mixHex(base, toward, w);
+      if (contrastRatio(candidate, PAGE_BG.dark) < DARK_SHADE_MIN) continue;
+      if (accepted.every((a) => contrastRatio(a, candidate) >= DARK_EXTRA_GAP)) accepted.push(candidate);
+    }
   }
   const out = [];
   for (let i = 0; i < n; i += 1) out.push(accepted[i % accepted.length]);

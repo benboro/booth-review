@@ -4,7 +4,11 @@ Plotly's scattergl draws an open symbol (`circle-open`, `star-open`, ...) from a
 atlas, which breaks into pixelated squares at small sizes (notes2-band-speckle.png). Two guards:
 
 - structural: no `scattergl` trace in any chart state carries an open symbol, so the glyph path
-  that speckles is never taken;
+  that speckles is never taken. The one exception (Phase 17, user sign-off) is a `star-open` of
+  14px or more for the empty no-rating star: on `unrated-lead:`, its filter outline
+  `unrated-lead-rim:`, and its highlight (`highlight-unrated` points and the ACCENT
+  `highlight-halo-unrated-open`). At that size the glyph draws cleanly, which
+  test_site_booth_speckle proves pixel by pixel;
 - pixel: the band's real marker configs (read from `gd.data`, never hand-copied) are drawn at
   real-data density through `scattergl` and again through SVG `scatter` (analytic reference);
   the two renderings must agree to within a few pixels.
@@ -49,8 +53,16 @@ OPEN_SYMBOLS_JS = """
   for (const t of document.getElementById('chart').data) {
     if (t.type !== 'scattergl') continue;
     const sym = t.marker && t.marker.symbol;
+    const meta = String(t.meta);
+    // The empty no-rating star and its outlines (Phase 17): `star-open` at 14px or more only.
+    const starOk = meta.startsWith('unrated-lead:') || meta.startsWith('unrated-lead-rim:')
+      || meta === 'highlight-halo-unrated-open' || meta === 'highlight-unrated';
     const list = Array.isArray(sym) || ArrayBuffer.isView(sym) ? Array.from(sym) : [sym];
-    if (list.some(isOpen)) bad.push('open');
+    const size = t.marker && t.marker.size;
+    const sizeAt = (k) => (Array.isArray(size) || ArrayBuffer.isView(size) ? size[k] : size);
+    if (list.some((s, k) => isOpen(s) && !(starOk && s === 'star-open' && sizeAt(k) >= 14))) {
+      bad.push('open');
+    }
   }
   return bad.length;
 }
@@ -195,6 +207,20 @@ def test_no_scattergl_trace_uses_an_open_symbol(
     _open(guarded_page, open_app, query, 1280)
     open_traces: int = guarded_page.evaluate(OPEN_SYMBOLS_JS)
     assert open_traces == 0, f"{open_traces} scattergl trace(s) carry an open symbol at {query!r}"
+
+
+@pytest.mark.parametrize("query", ["", "?networks=net-a&dots=fade", "?people=casey-lund"])
+def test_booth_stars_use_only_the_allowed_open_star(
+    guarded_page: Page,
+    serve_booths: Callable[[Page], None],
+    open_app: Callable[[Page, str], None],
+    query: str,
+) -> None:
+    """The no-rating lead star, its filter outline and its highlight are the only open symbols."""
+    serve_booths(guarded_page)
+    _open(guarded_page, open_app, query, 1280)
+    open_traces: int = guarded_page.evaluate(OPEN_SYMBOLS_JS)
+    assert open_traces == 0, f"{open_traces} scattergl trace(s) carry a disallowed open symbol"
 
 
 # Calibrated (04.13-17): the speckled open-symbol band differs from its SVG reference by

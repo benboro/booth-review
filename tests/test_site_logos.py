@@ -85,23 +85,24 @@ def _view_box(path: Path) -> tuple[float, float]:
     return float(box[2]), float(box[3])
 
 
-def _js_entries() -> dict[str, tuple[str, int, int, str]]:
-    """Map each network id in logos.js to (file, width, height, box).
+def _js_entries() -> dict[str, tuple[str, int, int, str, str]]:
+    """Map each network id in logos.js to (file, width, height, box, dark_file).
 
     Handles inline object entries and ids that share a named const object.
     """
     text = LOGOS_JS.read_text(encoding="utf-8")
     obj = (
         r"\{\s*file:\s*'logos/([^']+)'\s*,\s*width:\s*(\d+)\s*,"
-        r"\s*height:\s*(\d+)\s*,\s*box:\s*'(wordmark|badge)'\s*\}"
+        r"\s*height:\s*(\d+)\s*,\s*box:\s*'(wordmark|badge)'\s*,"
+        r"\s*darkFile:\s*'logos/dark/([^']+)'\s*\}"
     )
     consts = {
-        m.group(1): (m.group(2), int(m.group(3)), int(m.group(4)), m.group(5))
+        m.group(1): (m.group(2), int(m.group(3)), int(m.group(4)), m.group(5), m.group(6))
         for m in re.finditer(r"const (\w+) = " + obj, text)
     }
-    entries: dict[str, tuple[str, int, int, str]] = {}
+    entries: dict[str, tuple[str, int, int, str, str]] = {}
     for m in re.finditer(r"\[\s*'([^']+)'\s*,\s*" + obj + r"\s*\]", text):
-        entries[m.group(1)] = (m.group(2), int(m.group(3)), int(m.group(4)), m.group(5))
+        entries[m.group(1)] = (m.group(2), int(m.group(3)), int(m.group(4)), m.group(5), m.group(6))
     for m in re.finditer(r"\[\s*'([^']+)'\s*,\s*(\w+)\s*\]", text):
         entries[m.group(1)] = consts[m.group(2)]
     return entries
@@ -177,8 +178,9 @@ def test_logos_js_matches_files_and_sizes() -> None:
     assert set(entries) == expected_ids
     for row in rows:
         for net_id in row["network_ids"].split(";"):
-            file, width, height, box = entries[net_id]
+            file, width, height, box, dark_file = entries[net_id]
             assert file == row["file"]
+            assert dark_file == file
             assert box == row["render_box"]
             assert height == (14 if box == "wordmark" else 20)
             vb_w, vb_h = _view_box(LOGO_DIR / file)
