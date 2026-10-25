@@ -38,3 +38,5 @@ records only where the site settles or applies them.
 - When a filter is active, lead stars take the same outline as the enlarged dots, at the
   same weight: dark in light mode, light in dark mode.
 - A game with no rating is an empty, open star, so the band shows through it (Phase 17).
+  It stays empty when highlighted or when a filter outlines it: the highlight and the dot
+  outline are larger open stars around it, never a filled halo or a background-coloured fill.
