@@ -139,7 +139,7 @@ function excitementLine(row, constants) {
     return `Excitement: ${row.excitement.toFixed(1)}${method}`;
   }
   return row.retrosheetPending
-    ? `Excitement: pending Retrosheet ${row.season}`
+    ? `Excitement: ${row.retrosheetPendingText ?? `pending Retrosheet ${row.season}`}`
     : 'Excitement: not available';
 }
 

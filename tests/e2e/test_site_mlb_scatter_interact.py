@@ -505,3 +505,24 @@ def test_control_highlights_and_fades_without_removing_or_rescaling(
     pt = _dot(page, faded)
     page.mouse.click(pt["x"], pt["y"])
     page.wait_for_function(f"{HOOKS}.getState().game === {faded}")
+
+
+def test_tooltip_says_retrosheet_not_loaded_without_retrosheet(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """G11: with no Retrosheet loaded, a game with no excitement says so, not 'pending <year>'."""
+    page = mlb_guarded_page
+    page.set_viewport_size({"width": 1440, "height": 900})
+
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = densify_scatter(json.loads(resp.text()))
+        data["freshness"]["retrosheet_through_season"] = None
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    page.route("**/mlb-data.json", handler)
+    open_mlb_app(page, "?sport=mlb&view=scatter")
+    page.wait_for_function(f"{HOOKS}.getViewModel('scatter').drawn === true")
+    page.wait_for_timeout(300)
+    _hover(page, 4)
+    assert _tooltip(page)[2] == "1.1MM viewers · Excitement: Retrosheet not loaded"

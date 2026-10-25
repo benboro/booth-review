@@ -405,3 +405,23 @@ def test_game_figure_reads_as_that_games_viewers_not_its_label(
     assert "window-level:" not in _panel(page)
     _open(page, 7)
     assert "Viewers: 12.0M (several telecasts combined)" in _panel(page)
+
+
+def test_panel_says_retrosheet_not_loaded_without_retrosheet(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """G11: with no Retrosheet loaded the panel names that, not 'pending Retrosheet <year>'."""
+    page = mlb_guarded_page
+
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        data["freshness"]["retrosheet_through_season"] = None
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    page.route("**/mlb-data.json", handler)
+    open_mlb_app(page)
+    _open(page, 1)
+    text = _panel(page)
+    assert "Excitement: Retrosheet not loaded" in text
+    assert "Excitement: pending Retrosheet" not in text

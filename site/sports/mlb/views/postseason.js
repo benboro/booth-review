@@ -11,14 +11,15 @@
  * table. On phones the grid collapses to one stacked block per season (CSS only).
  * Everything is built with createElement and textContent only.
  */
-import { ROUND_LABELS, ROUND_SHORT, boothLabelOf, cellKey, cellLabel, personName } from '../data.js';
+import {
+  ROUND_LABELS, ROUND_SHORT, boothLabelOf, cellKey, cellLabel, personName, retrosheetPendingText,
+} from '../data.js';
 import { tableGames } from '../state.js';
 import { networkMark, sortNetworks } from '../../../modules/network.js';
 import { externalLink } from '../../../modules/panel-parts.js';
 import { makeRolePill, nameWithRoles } from '../../../modules/pill.js';
 import { attachScrollCue } from '../../../modules/scroll-cue.js';
 
-export const PENDING_TEXT = 'pending Retrosheet 2026';
 export const NO_CREW_TEXT = 'crew not listed';
 const ROUND_ORDER = ['wild_card', 'division', 'lcs', 'world_series', 'tiebreak'];
 
@@ -230,14 +231,22 @@ function viewersText(mean) {
   return `${(mean / 1e6).toFixed(1)}M`;
 }
 
+/**
+ * Whether a cell's excitement is still to come: none yet, and its season is past Retrosheet's
+ * coverage or no Retrosheet is loaded. An older cell without a figure simply lacks play-by-play,
+ * whatever the Apple booths' quality status says.
+ */
+function cellPending(model, b) {
+  const through = model.freshness.retrosheet_through_season ?? null;
+  return b.exciteN === 0 && (through == null || b.season > through);
+}
+
 function excitementLine(model, b) {
   if (b.exciteN > 0) {
     return `Excitement ${(b.exciteSum / b.exciteN).toFixed(2)} (${b.exciteN} ${b.exciteN === 1 ? 'game' : 'games'})`;
   }
-  // Pending only for seasons Retrosheet has not reached; an older cell without a figure
-  // simply lacks play-by-play, whatever the Apple booths' quality status says.
-  const through = model.freshness.retrosheet_through_season;
-  if (through == null || b.season > through) return PENDING_TEXT;
+  // The year is the cell's own season (G6); no Retrosheet at all reads as the footer does (G11).
+  if (cellPending(model, b)) return retrosheetPendingText(model, b.season);
   return 'no excitement figure';
 }
 
@@ -544,7 +553,7 @@ export function render(ctx) {
             boothLines: groupBooths(b.booths).length,
             crewListed: b.crewListed, excitementN: b.exciteN,
             excitement: b.exciteN ? b.exciteSum / b.exciteN : null,
-            viewersN: b.viewerN, pending: b.exciteN === 0 && excitementLine(model, b) === PENDING_TEXT,
+            viewersN: b.viewerN, pending: cellPending(model, b),
           });
         }
       }

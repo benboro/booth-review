@@ -646,3 +646,48 @@ def test_phone_controls_keep_focus_after_enter(
     page.keyboard.press("Enter")
     assert page.evaluate(f"{HOOKS}.getState().cell") is None
     assert page.locator(f"{VIEW} {selector}").get_attribute("aria-pressed") == "false"
+
+
+def _through(page: Page, open_mlb_app: Callable[..., None], through: int | None) -> None:
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        data["freshness"]["retrosheet_through_season"] = through
+        p = data["postseason"]
+        for k, season in enumerate(p["season"]):
+            if season > 2014:
+                p["mean_excitement"][k] = None
+                p["excitement_n"][k] = 0
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    page.route("**/mlb-data.json", handler)
+    open_mlb_app(page, "?sport=mlb&view=postseason")
+
+
+def test_pending_text_names_the_cells_own_season(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """G6: a cell past Retrosheet's coverage reads 'pending Retrosheet <its season>', and the
+    summary marks it pending by rule, not by matching one fixed string."""
+    page = mlb_guarded_page
+    _through(page, open_mlb_app, 2014)
+    for key, season in (("2019-division-AL", 2019), ("2025-world_series-all", 2025)):
+        text = page.locator(f"{VIEW} button[data-cell='{key}']").inner_text()
+        assert f"pending Retrosheet {season}" in text, key
+    cells = {c["key"]: c for c in page.evaluate(f"{HOOKS}.getViewModel('postseason').cells")}
+    assert cells["2019-division-AL"]["pending"] is True
+    assert cells["2025-world_series-all"]["pending"] is True
+    assert cells["2014-world_series-all"]["pending"] is False
+
+
+def test_grid_says_retrosheet_not_loaded_without_retrosheet(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """G11: with no Retrosheet loaded a cell with no excitement reads 'Retrosheet not loaded'."""
+    page = mlb_guarded_page
+    _through(page, open_mlb_app, None)
+    text = page.locator(f"{VIEW} button[data-cell='2026-lcs-AL']").inner_text()
+    assert "Retrosheet not loaded" in text
+    assert "pending Retrosheet" not in page.inner_text(VIEW)
+    cells = {c["key"]: c for c in page.evaluate(f"{HOOKS}.getViewModel('postseason').cells")}
+    assert cells["2026-lcs-AL"]["pending"] is True

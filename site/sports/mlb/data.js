@@ -201,6 +201,20 @@ export function retrosheetPending(model, season, lineupStatus) {
   return lineupStatus === 'pending' || through == null || season > through;
 }
 
+/**
+ * The words for a figure Retrosheet has not supplied yet (G6, G11): 'pending Retrosheet <season>'
+ * once Retrosheet is loaded, or 'Retrosheet not loaded' (the footer's wording) when no Retrosheet
+ * season is loaded at all, so no game claims a year is about to arrive.
+ */
+export function retrosheetPendingText(model, season) {
+  return retrosheetLoaded(model) ? `pending Retrosheet ${season}` : 'Retrosheet not loaded';
+}
+
+/** Whether any Retrosheet season is loaded (freshness names a through-season). */
+export function retrosheetLoaded(model) {
+  return (model.freshness ? model.freshness.retrosheet_through_season ?? null : null) != null;
+}
+
 /** '12.0M' or null when unrated. */
 export function viewersText(viewers) {
   return viewers == null ? null : `${(viewers / 1e6).toFixed(1)}M`;
@@ -279,6 +293,8 @@ export function gameRow(model, i) {
     sourceUrl: c.source_url[i] ?? null,
     lineupStatus: row.lineup_status,
     retrosheetPending: retrosheetPending(model, season, row.lineup_status),
+    retrosheetLoaded: retrosheetLoaded(model),
+    retrosheetPendingText: retrosheetPendingText(model, season),
     lineups: lineupSide(model, row),
   };
 }
