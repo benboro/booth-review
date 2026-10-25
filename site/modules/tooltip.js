@@ -32,7 +32,7 @@ import {
   stripNetworkNote,
 } from './format.js';
 import { makeGameTypeIcon } from './icons.js';
-import { networkMark, networkMarks } from './network.js';
+import { networkMark, networkMarks, sortNetworks } from './network.js';
 import { crewBox } from './panel-parts.js';
 import { makeRolePill, nameWithRoles, roleKey, ROLE_PILL_TEXT } from './pill.js';
 import {
@@ -88,9 +88,10 @@ export function tooltipModel(data, i, { axis, y = 'viewers', selected = new Set(
   const gameType = namedGameInfo(data, i);
 
   const primaryNetwork = data.lookups.networks[t.network[i]];
-  const otherOutlets = t.outlets[i]
+  // The other outlets read in network precedence (U7); the primary stays first.
+  const otherOutlets = sortNetworks(t.outlets[i]
     .filter((idx) => idx !== t.network[i])
-    .map((idx) => data.lookups.networks[idx]);
+    .map((idx) => data.lookups.networks[idx]));
   const networks = [primaryNetwork, ...otherOutlets].map((net) => ({
     id: net.id,
     name: stripNetworkNote(net.name),

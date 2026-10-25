@@ -90,7 +90,7 @@ def _cell_marks(page: Page, cell: str) -> list[dict[str, str | None]]:
 
 
 def test_a_split_cell_shows_every_outlet(post: Page) -> None:
-    """SHELL-05: each outlet is a logo by id with alt/title = name, in the lookup order."""
+    """SHELL-05: each outlet is a logo by id with alt/title = name, in network precedence (U7)."""
     marks = _cell_marks(post, "2025-wild_card-NL")
     assert marks == [
         {"alt": "ESPN", "title": "ESPN", "name": None},

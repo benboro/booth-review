@@ -13,7 +13,7 @@
  */
 import { ROUND_LABELS, ROUND_SHORT, boothLabelOf, cellKey, cellLabel, personName } from '../data.js';
 import { tableGames } from '../state.js';
-import { networkMark } from '../../../modules/network.js';
+import { networkMark, sortNetworks } from '../../../modules/network.js';
 import { externalLink } from '../../../modules/panel-parts.js';
 import { makeRolePill, nameWithRoles } from '../../../modules/pill.js';
 import { attachScrollCue } from '../../../modules/scroll-cue.js';
@@ -221,6 +221,8 @@ function buildGrid(model) {
       b.viewerN += r.viewers_n;
     }
   }
+  // Several outlets read in network precedence: FOX before FS1, ABC before ESPN (U7).
+  for (const b of blocks.values()) b.outlets = sortNetworks(b.outlets);
   return blocks;
 }
 

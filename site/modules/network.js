@@ -29,6 +29,52 @@ function watchTheme() {
 }
 
 /**
+ * Network precedence (U7): the order networks take whenever several are shown together (an MLB
+ * Postseason cell's outlets, a CFB panel's "Also on" list and tooltip row after the primary).
+ * Within each family the broadcast network comes first, then cable from the most prominent
+ * down, then streaming:
+ *   FOX > FS1 > FS2 > Big Ten Network > Fox regional nets;
+ *   ABC > ESPN > ESPN2 > ESPNEWS > ESPNU > the conference nets > ESPN3 / ESPN+ / Disney+;
+ *   NBC > USA Network > NBCSN > NBC regional > Peacock;
+ *   CBS > CBS Sports Network > Paramount+;
+ *   TBS > TNT > truTV > Max;
+ *   then The CW, Apple TV, MLB Network, NFL Network and Prime Video.
+ * The family blocks are in the same order as the chart families. A network not listed keeps its
+ * given order after every listed one (the sort is stable). The user's pinned orderings: FOX
+ * before FS1, ABC before ESPN before ESPN2 / ESPNEWS / ESPNU, NBC before Peacock.
+ */
+export const NETWORK_PRECEDENCE = Object.freeze([
+  'fox', 'fs1', 'fs2', 'big-ten-network', 'fsn-regional', 'sun-sports', 'sportsouth',
+  'abc', 'espn', 'espn2', 'espnews', 'espnu', 'sec-network', 'acc-network', 'longhorn-network',
+  'sec-network-plus', 'acc-network-extra', 'espn3', 'espn-plus', 'espn_plus', 'espn-unlimited',
+  'disney-plus', 'espn-gameplan', 'espn-regional-insert',
+  'nbc', 'usa-network', 'nbcsn', 'nbc-sports-bay-area', 'peacock',
+  'cbs', 'cbs-sports-network', 'paramount-plus', 'cbs-sports-facebook',
+  'tbs', 'tnt', 'trutv', 'max',
+  'cw', 'apple', 'mlb-network', 'nfl-network', 'prime',
+]);
+
+const PRECEDENCE_RANK = new Map(NETWORK_PRECEDENCE.map((id, k) => [id, k]));
+
+/**
+ * A copy of `list` in network precedence (see NETWORK_PRECEDENCE); unlisted ids keep their
+ * order after the listed ones.
+ * @template {{id?: string}} T
+ * @param {T[]} list
+ * @returns {T[]}
+ */
+export function sortNetworks(list) {
+  const rank = (net) => {
+    const key = net && net.id != null ? String(net.id) : '';
+    return PRECEDENCE_RANK.has(key) ? PRECEDENCE_RANK.get(key) : Infinity;
+  };
+  return list
+    .map((net, k) => ({ net, k, r: rank(net) }))
+    .sort((a, b) => (a.r === b.r ? a.k - b.k : a.r < b.r ? -1 : 1))
+    .map((x) => x.net);
+}
+
+/**
  * Builds one network mark (`span.net-mark`).
  * @param {{id: string, name: string, family: string}} network
  * @param {{dot?: boolean}} [opts] - dot: draw the family dot before a fallback name
