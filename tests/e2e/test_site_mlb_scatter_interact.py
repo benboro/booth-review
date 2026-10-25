@@ -311,6 +311,64 @@ def test_reset_zoom_disabled_at_home_enabled_after_zoom(
     assert yr == info["yr"]
 
 
+def test_zoom_survives_unrelated_rerenders_and_control_change_resets(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """F3: a dot click, panel close, chip toggle or same-width re-render keeps the viewers zoom."""
+    page = mlb_guarded_page
+    page.set_viewport_size({"width": 1440, "height": 900})
+    _open(page, open_mlb_app)
+    page.wait_for_timeout(400)
+    btn = '#mlb-chart-tools [data-tools-for="scatter"] .reset-zoom'
+    yr = "sel => [...document.querySelector(sel)._fullLayout.yaxis.range]"
+    home = page.evaluate(yr, GD)
+    zoom = [home[0] + (home[1] - home[0]) * 0.2, home[1] - (home[1] - home[0]) * 0.3]
+    page.evaluate(
+        "([sel, r]) => window.Plotly.relayout(document.querySelector(sel), {'yaxis.range': r})",
+        [GD, zoom],
+    )
+    page.wait_for_function(
+        "sel => document.querySelector(sel).getAttribute('aria-disabled') === 'false'", arg=btn
+    )
+
+    def kept(step: str) -> None:
+        page.wait_for_timeout(300)
+        assert page.evaluate(yr, GD) == pytest.approx(zoom), step
+        assert page.get_attribute(btn, "aria-disabled") == "false", step
+
+    # A dot in the bottom strip (no rating) stays on screen whatever the viewers zoom.
+    game = next(
+        i
+        for i in range(len(_G["viewers"]))
+        if _G["viewers"][i] is None and _G["wp_excitement"][i] is not None
+    )
+    pt = _dot(page, game)
+    page.mouse.click(pt["x"], pt["y"])
+    page.wait_for_function(f"{HOOKS}.getState().game === {game}")
+    kept("dot click")
+    page.keyboard.press("Escape")
+    page.wait_for_function(f"{HOOKS}.getState().game === null")
+    kept("panel close")
+    page.locator(f"{LEGEND} button[data-family]").first.click()
+    page.wait_for_timeout(600)  # past the double-click window
+    kept("chip toggle")
+    page.evaluate(f"{HOOKS}.setState({{}})")
+    kept("same-width re-render")
+    page.click(btn)
+    page.wait_for_function(
+        "sel => document.querySelector(sel).getAttribute('aria-disabled') === 'true'", arg=btn
+    )
+    assert page.evaluate(yr, GD) == home
+    # A Season type change is allowed to reset to its own home.
+    page.evaluate(
+        "([sel, r]) => window.Plotly.relayout(document.querySelector(sel), {'yaxis.range': r})",
+        [GD, zoom],
+    )
+    page.evaluate(f"{HOOKS}.setState({{ stype: 'reg' }})")
+    page.wait_for_timeout(300)
+    assert page.get_attribute(btn, "aria-disabled") == "true"
+
+
 def test_tooltip_text_is_escaped(mlb_guarded_page: Page, open_mlb_app: Callable[..., None]) -> None:
     page = mlb_guarded_page
     page.set_viewport_size({"width": 1440, "height": 900})

@@ -79,6 +79,7 @@ const refs = {
   drawn: false,
   bound: false,
   home: null,
+  homeKey: null,
   lastWidth: 0,
   legend: null,
   chips: null,
@@ -700,15 +701,24 @@ export function render(ctx) {
   refs.status.textContent = statusText(counts);
   syncControls(state);
 
+  // The home range changes only with the Season type / Round control, phone vs desktop or the
+  // theme. Any other re-render (a dot click, the panel closing, a legend chip, a width change)
+  // keeps a viewers-axis zoom, and the kept zoom never becomes the new home.
+  const homeKey = JSON.stringify([state.stype ?? null, state.sround ?? null, !!env.mobile, th]);
+  const live = refs.drawn && refs.home && refs.homeKey === homeKey ? liveRanges(refs.gd) : null;
+  const zoomed = !!live && (live.y[0] !== refs.home.y[0] || live.y[1] !== refs.home.y[1]);
+
   if (!items.length) {
     refs.drawn = false;
     refs.home = null;
+    refs.homeKey = null;
     refs.resetZoom.setAttribute('aria-disabled', 'true');
     setEmpty(true);
     return;
   }
   setEmpty(false);
   const fig = buildFigure(items, env, th);
+  if (zoomed) fig.layout.yaxis.range = [...live.y];
   current.fig = fig;
   refs.drawn = true;
   refs.lastWidth = refs.chart.clientWidth;
@@ -721,7 +731,8 @@ export function render(ctx) {
   if (done && typeof done.then === 'function') {
     done.then(() => {
       placeStripInfo();
-      refs.home = liveRanges(refs.gd);
+      if (!zoomed) refs.home = liveRanges(refs.gd);
+      refs.homeKey = homeKey;
       syncResetZoom();
     });
   }
