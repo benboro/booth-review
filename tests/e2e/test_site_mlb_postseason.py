@@ -72,13 +72,15 @@ def test_grid_rows_and_columns(post: Page) -> None:
 
 def test_coverage_per_season_and_low_tone(post: Page) -> None:
     cov = post.eval_on_selector_all(
-        f"{VIEW} .mlb-grid .mlb-season-coverage", "els => els.map(e => e.textContent)"
+        f"{VIEW} .mlb-grid tbody tr",
+        "els => els.map(e => e.querySelector('.mlb-season-coverage')?.textContent ?? null)",
     )
     # Counts come from the builder's season table; 2019 has one postseason game that
-    # sits in no cell, so its denominator is larger than its cells'.
+    # sits in no cell, so its denominator is larger than its cells'. 2025 has every crew
+    # listed, so it has no coverage line (U11).
     assert cov == [
         "Crews listed for 1 of 2 postseason games (50%)",
-        "Crews listed for 2 of 2 postseason games (100%)",
+        None,
         "Crews listed for 3 of 4 postseason games (75%)",
         "Crews listed for 1 of 2 postseason games (50%)",
     ]
@@ -163,46 +165,26 @@ def test_crew_not_listed_and_al_nl_split(post: Page) -> None:
     )
 
 
-def test_wikipedia_crew_excitement_and_viewers(post: Page) -> None:
+def test_wikipedia_crew_and_no_cell_notes(post: Page) -> None:
+    """U11: a cell shows its outlet and booths only; no games, excitement or viewers notes."""
     ws = post.locator(f"{VIEW} button[data-cell='2014-world_series-all']").inner_text()
     assert "Gus Penn" in ws
     assert "Hana Voss" in ws
     assert _cell_marks(post, "2014-world_series-all") == [
         {"alt": "Fox", "title": "Fox", "name": None}
     ]
-    assert "Excitement 2.40 (1 game)" in ws
-    assert "Avg 12.0M viewers, 1 of 1 games rated" in ws
-    two = post.locator(f"{VIEW} button[data-cell='2019-division-AL']").inner_text()
-    assert "2 games" in two
-    assert "Excitement 1.25 (2 games)" in two
-    assert "viewers" not in two
+    grid = post.inner_text(f"{VIEW} .mlb-grid")
+    for gone in ("Excitement", "viewers", "games rated", "Avg ", "1 game", "2 games"):
+        assert gone not in grid, gone
+    assert post.locator(f"{VIEW} .mlb-cell-stats").count() == 0
 
 
-def test_2026_excitement_pending_and_no_stakes(post: Page) -> None:
+def test_no_pending_or_excitement_line_and_no_stakes(post: Page) -> None:
+    """U11: a 2026 cell no longer reads 'pending Retrosheet 2026' (the panel still does)."""
     cell = post.locator(f"{VIEW} button[data-cell='2026-lcs-AL']").inner_text()
-    assert "pending Retrosheet 2026" in cell
+    assert "pending Retrosheet" not in cell
+    assert "excitement" not in post.inner_text(f"{VIEW} .mlb-grid").lower()
     assert "stakes" not in post.inner_text(VIEW).lower()
-
-
-def test_a_historic_cell_without_excitement_is_not_called_pending(
-    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
-) -> None:
-    def handler(route: Route) -> None:
-        resp = route.fetch()
-        data = json.loads(resp.text())
-        p = data["postseason"]
-        k = next(i for i, s in enumerate(p["season"]) if s == 2019 and p["round"][i] == "division")
-        p["mean_excitement"][k] = None
-        p["excitement_n"][k] = 0
-        route.fulfill(response=resp, body=json.dumps(data))
-
-    mlb_guarded_page.route("**/mlb-data.json", handler)
-    open_mlb_app(mlb_guarded_page, "?sport=mlb&view=postseason")
-    old = mlb_guarded_page.locator(f"{VIEW} button[data-cell='2019-division-AL']").inner_text()
-    assert "no excitement figure" in old and "pending" not in old
-    # Quality is still pending (Apple booths), and 2026 is past Retrosheet's coverage.
-    new = mlb_guarded_page.locator(f"{VIEW} button[data-cell='2026-lcs-AL']").inner_text()
-    assert "pending Retrosheet 2026" in new
 
 
 def test_cell_click_lists_games_and_deep_link(
@@ -269,9 +251,11 @@ def test_phone_lists_each_season_credit_and_coverage(
         "https://example.org/wiki/2019_Invented_Series",
         "https://example.org/wiki/2014_Invented_Series",
     ]
+    # 2025 has every crew listed, so it has no coverage line (U11); the others keep theirs.
     cov = twin.locator(".mlb-season-coverage")
-    assert cov.count() == 4
-    assert all(cov.nth(i).is_visible() for i in range(4))
+    assert cov.count() == 3
+    assert all(cov.nth(i).is_visible() for i in range(3))
+    assert twin.locator("li[data-season='2025'] .mlb-season-coverage").count() == 0
     assert twin.locator(".mlb-season-coverage[data-low='true']").count() == 3
 
 
@@ -735,33 +719,72 @@ def _through(page: Page, open_mlb_app: Callable[..., None], through: int | None)
     open_mlb_app(page, "?sport=mlb&view=postseason")
 
 
-def test_pending_text_names_the_cells_own_season(
-    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+@pytest.mark.parametrize("through", [2014, None])
+def test_grid_has_no_retrosheet_note_at_any_coverage(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None], through: int | None
 ) -> None:
-    """G6: a cell past Retrosheet's coverage reads 'pending Retrosheet <its season>', and the
-    summary marks it pending by rule, not by matching one fixed string."""
+    """U11 (replaces G6 and G11 here): the cells carry no excitement line, so neither
+    'pending Retrosheet <season>' nor 'Retrosheet not loaded' appears in the grid, and the
+    view model no longer reports excitement or pending per cell."""
     page = mlb_guarded_page
-    _through(page, open_mlb_app, 2014)
-    for key, season in (("2019-division-AL", 2019), ("2025-world_series-all", 2025)):
-        text = page.locator(f"{VIEW} button[data-cell='{key}']").inner_text()
-        assert f"pending Retrosheet {season}" in text, key
-    cells = {c["key"]: c for c in page.evaluate(f"{HOOKS}.getViewModel('postseason').cells")}
-    assert cells["2019-division-AL"]["pending"] is True
-    assert cells["2025-world_series-all"]["pending"] is True
-    assert cells["2014-world_series-all"]["pending"] is False
+    _through(page, open_mlb_app, through)
+    grid = page.inner_text(f"{VIEW} .mlb-grid")
+    assert "pending Retrosheet" not in grid
+    assert "Retrosheet not loaded" not in grid
+    assert "no excitement figure" not in grid
+    cells = page.evaluate(f"{HOOKS}.getViewModel('postseason').cells")
+    assert cells
+    assert not any({"pending", "excitement", "excitementN", "viewersN"} & set(c) for c in cells)
 
 
-def test_grid_says_retrosheet_not_loaded_without_retrosheet(
-    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+def test_full_coverage_season_hides_its_line_and_keeps_its_credit(
+    mlb_guarded_page: Page, mlb_mobile_page: Page, open_mlb_app: Callable[..., None]
 ) -> None:
-    """G11: with no Retrosheet loaded a cell with no excitement reads 'Retrosheet not loaded'."""
-    page = mlb_guarded_page
-    _through(page, open_mlb_app, None)
-    text = page.locator(f"{VIEW} button[data-cell='2026-lcs-AL']").inner_text()
-    assert "Retrosheet not loaded" in text
-    assert "pending Retrosheet" not in page.inner_text(VIEW)
-    cells = {c["key"]: c for c in page.evaluate(f"{HOOKS}.getViewModel('postseason').cells")}
-    assert cells["2026-lcs-AL"]["pending"] is True
+    """U11: a season with every crew listed (N == M) has no coverage line on desktop or
+    phone, but keeps its Wikipedia credit; a season with N < M keeps its line."""
+
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        s = data["postseason_seasons"]
+        k = s["season"].index(2019)
+        s["coverage_num"][k] = s["coverage_den"][k]  # 2019: full coverage, Wikipedia credit
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    for page in (mlb_guarded_page, mlb_mobile_page):
+        page.route("**/mlb-data.json", handler)
+        open_mlb_app(page, "?sport=mlb&view=postseason")
+    desk = mlb_guarded_page
+    row = desk.locator(f"{VIEW} .mlb-grid tr[data-season='2019']")
+    assert row.locator(".mlb-season-coverage").count() == 0
+    assert "Crews listed" not in row.locator("th").inner_text()
+    credit = row.locator(".mlb-season-credit")
+    assert credit.is_visible()
+    assert credit.get_attribute("href") == "https://example.org/wiki/2019_Invented_Series"
+    partial = desk.locator(f"{VIEW} .mlb-grid tr[data-season='2014'] .mlb-season-coverage")
+    assert partial.inner_text() == "Crews listed for 1 of 2 postseason games (50%)"
+    assert partial.get_attribute("data-low") == "true"
+    assert desk.locator(f"{VIEW} .mlb-grid tr[data-season='2014'] .mlb-season-credit").count() == 1
+    notes = mlb_mobile_page.locator(f"{VIEW} .mlb-phone-season-notes")
+    assert notes.locator("li[data-season='2019'] .mlb-season-coverage").count() == 0
+    assert notes.locator("li[data-season='2019'] .mlb-season-credit").is_visible()
+    assert notes.locator("li[data-season='2014'] .mlb-season-coverage").inner_text() == (
+        "Crews listed for 1 of 2 postseason games (50%)"
+    )
+
+
+def test_grid_caption_describes_only_what_the_grid_shows(post: Page) -> None:
+    """U11: the excitement caption is gone, and the coverage caption no longer says a cell
+    counts its games; it names the coverage line as shown only for a season missing a crew."""
+    captions = post.eval_on_selector_all(
+        f"{VIEW} .nfl-captions p.caption", "els => els.map(e => e.textContent)"
+    )
+    assert captions == [
+        "A season missing any crew shows the share of its postseason games with a crew "
+        "listed, counting every game of the season, including games with no outlet listed. "
+        "Seasons with crews listed for fewer than 80% of those games are marked; their "
+        "booths are partial."
+    ]
 
 
 def _two_series(data: dict[str, Any]) -> None:

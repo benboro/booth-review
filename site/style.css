@@ -4190,7 +4190,6 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 .mlb-cell-btn > span,
-.mlb-cell-stats > span,
 .mlb-cell-booth {
   display: block;
 }
@@ -4255,13 +4254,6 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 .mlb-cell-btn .mlb-series > .mlb-cell-booth:last-child {
   margin-bottom: 0;
-}
-
-.mlb-cell-stats {
-  margin-top: var(--space-xs);
-  color: var(--muted);
-  font: var(--font-body);
-  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 480px) {

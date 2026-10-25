@@ -2,10 +2,9 @@
  * MLB Postseason booths view (SPORT-07): a season-by-round grid, 2014 onward.
  *
  * Rows are seasons, columns the rounds that appear in the data. Each cell shows the
- * outlet, the booth names (Division and Championship Series split into AL and NL),
- * games, mean excitement per game and, where Ratings Reference has one, viewers.
- * A season with an incomplete
- * crew record carries its coverage percentage, and a cell with no listed crew says so.
+ * outlet and the booth names (Division and Championship Series split into AL and NL); it
+ * carries no games, excitement or viewers notes (U11). A season with an incomplete crew
+ * record carries its coverage percentage, and a cell with no listed crew says so.
  *
  * Inside a cell each series (one pair of clubs) gets a matchup head, oldest series first,
  * with a hairline between series (U10); booth lines group people within a series only.
@@ -15,7 +14,7 @@
  * Everything is built with createElement and textContent only.
  */
 import {
-  ROUND_LABELS, ROUND_SHORT, boothLabelOf, cellKey, cellLabel, personName, retrosheetPendingText,
+  ROUND_LABELS, ROUND_SHORT, boothLabelOf, cellKey, cellLabel, personName,
 } from '../data.js';
 import { tableGames } from '../state.js';
 import { networkMark, sortNetworks } from '../../../modules/network.js';
@@ -202,7 +201,6 @@ function buildGrid(model) {
       b = {
         key, season: r.season, round: r.round, league: leagueId,
         outlets: [], outletSourceUrl: null, booths: [], gameList: [], games: 0, crewListed: 0,
-        exciteSum: 0, exciteN: 0, viewerSum: 0, viewerN: 0,
       };
       blocks.set(key, b);
     }
@@ -217,41 +215,10 @@ function buildGrid(model) {
     for (const g of r.game_list) if (!b.gameList.includes(g)) b.gameList.push(g);
     b.games += r.games;
     b.crewListed += r.crew_listed;
-    if (r.mean_excitement != null && r.excitement_n > 0) {
-      b.exciteSum += r.mean_excitement * r.excitement_n;
-      b.exciteN += r.excitement_n;
-    }
-    if (r.viewers_mean != null && r.viewers_n > 0) {
-      b.viewerSum += r.viewers_mean * r.viewers_n;
-      b.viewerN += r.viewers_n;
-    }
   }
   // Several outlets read in network precedence: FOX before FS1, ABC before ESPN (U7).
   for (const b of blocks.values()) b.outlets = sortNetworks(b.outlets);
   return blocks;
-}
-
-function viewersText(mean) {
-  return `${(mean / 1e6).toFixed(1)}M`;
-}
-
-/**
- * Whether a cell's excitement is still to come: none yet, and its season is past Retrosheet's
- * coverage or no Retrosheet is loaded. An older cell without a figure simply lacks play-by-play,
- * whatever the Apple booths' quality status says.
- */
-function cellPending(model, b) {
-  const through = model.freshness.retrosheet_through_season ?? null;
-  return b.exciteN === 0 && (through == null || b.season > through);
-}
-
-function excitementLine(model, b) {
-  if (b.exciteN > 0) {
-    return `Excitement ${(b.exciteSum / b.exciteN).toFixed(2)} (${b.exciteN} ${b.exciteN === 1 ? 'game' : 'games'})`;
-  }
-  // The year is the cell's own season (G6); no Retrosheet at all reads as the footer does (G11).
-  if (cellPending(model, b)) return retrosheetPendingText(model, b.season);
-  return 'no excitement figure';
 }
 
 /**
@@ -438,16 +405,6 @@ function blockButton(model, b, label, picked, maxLines = Infinity) {
   if (hidden) booths.append(el('span', 'mlb-booth-more', `+${hidden} more`));
   btn.append(booths);
 
-  const stats = el('span', 'mlb-cell-stats');
-  stats.append(el('span', null, `${b.games} ${b.games === 1 ? 'game' : 'games'}`));
-  const ex = el('span', b.exciteN > 0 ? null : 'mlb-pending', excitementLine(model, b));
-  if (b.exciteN === 0) ex.dataset.pending = 'true';
-  stats.append(ex);
-  if (b.viewerN > 0) {
-    stats.append(el('span', null, `Avg ${viewersText(b.viewerSum / b.viewerN)} viewers, ${b.viewerN} of ${b.games} games rated`));
-  }
-  btn.append(stats);
-
   btn.addEventListener('click', () => toggleCell(b.key));
   return btn;
 }
@@ -459,21 +416,26 @@ function roundsPresent(model) {
 
 /**
  * A season's coverage line (`data-low` under the coverage bar) and its per-season Wikipedia
- * outlets credit (RT-13), built fresh for each grid so the phone twin carries both too.
+ * outlets credit (RT-13), built fresh for each grid so the phone twin carries both too. A
+ * season with every game's crew listed has no coverage line (U11); the credit always stays.
+ * @returns {{cov: HTMLElement|null, credit: HTMLElement|null}}
  */
 function seasonNotes(s, blocks, bar) {
   const pct = coveragePct(s.coverage_num, s.coverage_den);
   // Counts come from the builder's season table: every postseason game of the season.
-  const cov = el(
-    'span',
-    'mlb-season-coverage',
-    pct == null ? '' : `Crews listed for ${s.coverage_num} of ${s.coverage_den} postseason games (${pct}%)`,
-  );
-  if (s.coverage_den > 0 && s.coverage_num / s.coverage_den < bar) cov.dataset.low = 'true';
+  let cov = null;
+  if (pct != null && s.coverage_num < s.coverage_den) {
+    cov = el(
+      'span',
+      'mlb-season-coverage',
+      `Crews listed for ${s.coverage_num} of ${s.coverage_den} postseason games (${pct}%)`,
+    );
+    if (s.coverage_num / s.coverage_den < bar) cov.dataset.low = 'true';
+  }
   const wikiUrl = [...blocks.values()].find((b) => b.season === s.season && b.outletSourceUrl)?.outletSourceUrl;
   const credit = wikiUrl ? externalLink(wikiUrl, `Outlets: Wikipedia ${s.season} postseason (CC BY-SA 4.0) ↗`) : null;
   if (credit) credit.className = 'mlb-season-credit';
-  return credit ? [cov, credit] : [cov];
+  return { cov, credit };
 }
 
 /** A Season button (desktop grid or phone notes): the year, plus any coverage line inside it. */
@@ -616,10 +578,10 @@ export function render(ctx) {
     tr.dataset.season = String(s.season);
     const th = el('th', 'mlb-season-col');
     th.scope = 'row';
-    const [cov, ...credit] = seasonNotes(s, blocks, bar);
+    const { cov, credit } = seasonNotes(s, blocks, bar);
     const seasonKey = `season-${s.season}`;
-    const sBtn = seasonButton(seasonKey, s.season, state.cell === seasonKey, 'seasonCell', [cov]);
-    th.append(sBtn, ...credit);
+    const sBtn = seasonButton(seasonKey, s.season, state.cell === seasonKey, 'seasonCell', cov ? [cov] : []);
+    th.append(sBtn, ...(credit ? [credit] : []));
     if (state.cell === seasonKey) th.dataset.picked = 'true';
     tr.appendChild(th);
     for (const r of rounds) {
@@ -641,9 +603,7 @@ export function render(ctx) {
             booths: b.booths.map(([p, a]) => boothLabelOf(model, p, a)),
             boothLines: cellSeries(model, b).reduce((n, x) => n + cellBooths(model, b, x.games).length, 0),
             series: cellSeries(model, b).map((x) => ({ label: x.label, games: x.games.length })),
-            crewListed: b.crewListed, excitementN: b.exciteN,
-            excitement: b.exciteN ? b.exciteSum / b.exciteN : null,
-            viewersN: b.viewerN, pending: cellPending(model, b),
+            crewListed: b.crewListed,
           });
         }
       }
@@ -662,15 +622,19 @@ export function render(ctx) {
       const li = el('li');
       li.dataset.season = String(s.season);
       const seasonKey = `season-${s.season}`;
-      const [cov, ...credit] = seasonNotes(s, blocks, bar);
-      li.append(seasonButton(seasonKey, s.season, state.cell === seasonKey, 'phoneSeasonCell', []), cov, ...credit);
+      const { cov, credit } = seasonNotes(s, blocks, bar);
+      li.append(seasonButton(seasonKey, s.season, state.cell === seasonKey, 'phoneSeasonCell', []));
+      if (cov) li.append(cov);
+      if (credit) li.append(credit);
       return li;
     }),
   );
 
+  // U11: the cells carry no excitement or game counts, so the excitement caption and "a cell
+  // counts only the games it shows" are gone; the coverage line shows only for a season missing
+  // a crew.
   refs.captions.replaceChildren(
-    el('p', 'caption', 'Excitement is the mean per game from win probability, a tendency, not proof.'),
-    el('p', 'caption', `Season percentages count every postseason game of the season, including games with no outlet listed; a cell counts only the games it shows. Seasons with crews listed for fewer than ${Math.round(bar * 100)}% of those games are marked; their booths are partial.`),
+    el('p', 'caption', `A season missing any crew shows the share of its postseason games with a crew listed, counting every game of the season, including games with no outlet listed. Seasons with crews listed for fewer than ${Math.round(bar * 100)}% of those games are marked; their booths are partial.`),
   );
   indexGrid();
   if (focusKey) {
