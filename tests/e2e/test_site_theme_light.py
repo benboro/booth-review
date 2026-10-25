@@ -1,6 +1,6 @@
-"""SHELL-01 / SHELL-02: the site is light-only whatever the OS prefers, and the
-`#theme-slot` holds the one 32x32 theme toggle at the right end of every sport
-page's header (none on the static pages)."""
+"""SHELL-01 / SHELL-02: the site opens light whatever the OS prefers (dark is reached only
+through the toggle), and `#theme-slot` holds the one 32x32 theme toggle at the right end of
+the header on every page, sport pages and the static methodology and coverage pages alike."""
 
 from __future__ import annotations
 
