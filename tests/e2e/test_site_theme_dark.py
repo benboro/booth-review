@@ -1,13 +1,14 @@
 """DARK-01 (sport pages): the header toggle switches to the dark tokens, the choice
 persists with no light frame, a blocked or invalid store reads light, and the
-toggle is keyboard reachable and phone sized. The static pages are covered in 17-02."""
+toggle is keyboard reachable and phone sized. The static pages carry the same toggle
+behind a hash-pinned inline script."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
 import pytest
-from playwright.sync_api import Page
+from playwright.sync_api import Browser, Page
 
 pytestmark = pytest.mark.e2e
 
@@ -198,3 +199,69 @@ def test_phone_toggle_is_top_right_with_44px_hit_area(
     header_after = page.locator("#topbar").bounding_box()
     assert header_after is not None
     assert header_after["height"] == header_before["height"]
+
+
+_STATIC_PAGES = ("methodology", "coverage")
+
+
+@pytest.mark.parametrize("which", _STATIC_PAGES)
+def test_static_page_toggle_switches_theme_without_csp_errors(
+    guarded_page: Page, site_url: str, which: str
+) -> None:
+    page = guarded_page
+    errors: list[str] = []
+    page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+    page.goto(f"{site_url}/{which}.html")
+    assert _state(page)["theme"] == "light"
+    page.locator("#theme-toggle").click()
+    assert _state(page) == {
+        "theme": "dark",
+        "bg": _DARK_BG,
+        "scheme": "dark",
+        "label": "Switch to light theme",
+        "title": "Switch to light theme",
+    }
+    assert errors == []
+    # The guard fixture also fails teardown on any CSP console error.
+
+
+def test_dark_follows_the_user_from_the_sport_page_to_both_static_pages(
+    opened: Callable[..., Page],
+) -> None:
+    page = opened("cfb", init=_RECORD_JS)
+    page.locator("#theme-toggle").click()
+    assert _state(page)["theme"] == "dark"
+    page.locator(".header-links a[href='methodology.html']").click()
+    page.wait_for_url("**/methodology.html")
+    assert page.evaluate("window.__themeLog[0]") == "dark"
+    assert _state(page)["theme"] == "dark"
+    page.locator(".header-links a[href='coverage.html']").click()
+    page.wait_for_url("**/coverage.html")
+    assert page.evaluate("window.__themeLog[0]") == "dark"
+    assert _state(page)["theme"] == "dark"
+
+
+def test_stored_dark_renders_coverage_dark_at_domcontentloaded(
+    guarded_page: Page, site_url: str
+) -> None:
+    guarded_page.context.add_init_script(_RECORD_JS)
+    guarded_page.context.add_init_script("localStorage.setItem('bl-theme', 'dark');")
+    guarded_page.goto(f"{site_url}/coverage.html")
+    assert guarded_page.evaluate("window.__themeLog[0]") == "dark"
+    # No later script blocks DCL on a static page, so the stylesheet may land after it:
+    # check the attribute that drives the tokens, then the painted ground once loaded.
+    assert _state(guarded_page)["theme"] == "dark"
+    assert _state(guarded_page)["bg"] == _DARK_BG
+
+
+def test_without_javascript_coverage_is_light_and_toggle_hidden(
+    browser: Browser, site_url: str
+) -> None:
+    context = browser.new_context(java_script_enabled=False)
+    try:
+        page = context.new_page()
+        page.goto(f"{site_url}/coverage.html")
+        assert page.locator("#theme-toggle").is_visible() is False
+        assert page.locator("html").get_attribute("data-theme") == "light"
+    finally:
+        context.close()

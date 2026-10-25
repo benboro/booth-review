@@ -112,5 +112,23 @@ def test_theme_slot_holds_one_toggle_at_the_header_right(
 
 
 @pytest.mark.parametrize("which", ("methodology", "coverage"))
-def test_static_pages_have_no_theme_slot(opened: Callable[[str], Page], which: str) -> None:
-    assert opened(which).locator("#theme-slot").count() == 0
+def test_static_pages_hold_one_toggle(opened: Callable[[str], Page], which: str) -> None:
+    page = opened(which)
+    slot = page.locator("#theme-slot")
+    assert slot.count() == 1
+    assert page.locator("#theme-toggle").count() == 1
+    assert slot.locator("#theme-toggle").count() == 1
+    assert slot.locator("#theme-toggle").is_visible()
+    toggle = slot.locator("#theme-toggle").bounding_box()
+    assert toggle is not None
+    assert round(toggle["width"]) == 32
+    assert round(toggle["height"]) == 32
+    box = slot.bounding_box()
+    assert box is not None
+    rights: list[float] = page.evaluate(
+        """() => [...document.querySelector('.site-header').children]
+             .map((el) => el.getBoundingClientRect())
+             .filter((r) => r.width > 0)
+             .map((r) => r.right)"""
+    )
+    assert box["x"] + box["width"] >= max(rights) - 0.5
