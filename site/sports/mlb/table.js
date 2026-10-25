@@ -111,12 +111,7 @@ function buildRow(row, onOpen) {
   if (row.viewers != null) {
     vTd.className = 'num';
     vTd.textContent = formatViewers(row.viewers);
-    if (row.scope === 'window') {
-      const tag = el('span', 'nfl-muted mlb-source-tag', 'window');
-      tag.dataset.scope = 'window';
-      tag.title = 'Audience of the whole broadcast window, not this game alone';
-      vTd.append(document.createTextNode(' '), tag);
-    }
+    if (row.scope === 'window') vTd.append(document.createTextNode(' '), windowTag());
   } else {
     vTd.className = 'num no-rating';
     vTd.textContent = CAUSE_COPY[row.cause] ?? CAUSE_COPY.none;
@@ -145,6 +140,14 @@ function summaryText(rows) {
  * @param {HTMLElement} host
  * @param {{onOpen?: (i: number, button: HTMLElement) => void}} opts
  */
+/** The `window` tag for an audience that covers the whole broadcast window (also used by the Apple rows). */
+export function windowTag() {
+  const tag = el('span', 'nfl-muted mlb-source-tag', 'window');
+  tag.dataset.scope = 'window';
+  tag.title = 'Audience of the whole broadcast window, not this game alone';
+  return tag;
+}
+
 export function createGamesTable(host, { onOpen } = {}) {
   const section = el('section', 'nfl-games');
   const heading = el('h2', null, 'Matched games');

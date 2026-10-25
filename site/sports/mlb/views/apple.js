@@ -13,6 +13,7 @@
  */
 import { APPLE_SORT_SPEC, buildAppleRows, sortAppleRows } from '../apple-rows.js';
 import { boothLabelOf, gameRow as mlbGameRow, CAUSE_COPY } from '../data.js';
+import { windowTag } from '../table.js';
 import { announce, createTableState, el, renderCrewsTable } from '../../../modules/crews-table.js';
 import { formatAudienceTable } from '../../../modules/format.js';
 import { networkMark } from '../../../modules/network.js';
@@ -263,8 +264,11 @@ function gameRow(ctx, model, row, i) {
     crewTd.append(tag);
   }
   const viewers = el('td', 'num crews-game-viewers');
-  if (g.viewers != null) viewers.append(el('span', 'crews-figure', formatAudienceTable(g.viewers)));
-  else viewers.append(el('span', 'caption', CAUSE_COPY[g.cause] ?? 'no Ratings Reference figure'));
+  if (g.viewers != null) {
+    viewers.append(el('span', 'crews-figure', formatAudienceTable(g.viewers)));
+    // A window-level figure covers the whole broadcast window: tag it as Matched games does.
+    if (g.scope === 'window') viewers.append(' ', windowTag());
+  } else viewers.append(el('span', 'caption', CAUSE_COPY[g.cause] ?? 'no Ratings Reference figure'));
   tr.append(
     el('td', 'date crews-game-date', g.date),
     el('td', 'matchup crews-game-matchup', matchup),

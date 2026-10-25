@@ -466,3 +466,29 @@ def test_booth_picked_game_row_escape_returns_focus_to_the_row(heavy: Page) -> N
         "document.activeElement && document.activeElement.classList.contains('crews-game')"
     )
     assert heavy.evaluate("document.activeElement.dataset.game") == i
+
+
+def test_expanded_game_row_tags_a_window_audience(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """F6: a window-level figure in an expanded game row carries the Matched games `window` tag."""
+    page = mlb_guarded_page
+
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        data["games"]["scope"][1] = "window"  # booth 0's rated game
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    page.route("**/mlb-data.json", handler)
+    open_mlb_app(page)
+    page.locator(ROW).nth(0).locator(".crews-chevron").click()
+    cell = page.locator("#mlb-view-apple tr.crews-game[data-game='1'] td.crews-game-viewers")
+    tag = cell.locator(".mlb-source-tag[data-scope='window']")
+    assert tag.count() == 1
+    assert tag.inner_text() == "window"
+    assert tag.get_attribute("title") == (
+        "Audience of the whole broadcast window, not this game alone"
+    )
+    other = page.locator("#mlb-view-apple tr.crews-game[data-game='0'] td.crews-game-viewers")
+    assert other.locator(".mlb-source-tag").count() == 0
