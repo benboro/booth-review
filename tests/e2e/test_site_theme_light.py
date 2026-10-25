@@ -161,3 +161,27 @@ def test_static_page_toggle_stays_top_right_on_a_phone(
     assert abs(got["slotRight"] - got["contentRight"]) <= 1, got
     # Still on the title's row.
     assert got["titleTop"] - 16 <= got["slotTop"] <= got["titleBottom"], got
+
+
+@pytest.mark.parametrize("theme", ("light", "dark"))
+@pytest.mark.parametrize("width", (1440, 1024))
+@pytest.mark.parametrize("which", ("cfb", "methodology"))
+def test_toggle_is_centred_on_the_methodology_link(
+    opened: Callable[[str], Page], which: str, width: int, theme: str
+) -> None:
+    # Review 6d: the toggle sits optically centred on the header links (docs/design.md).
+    page = opened(which)
+    page.set_viewport_size({"width": width, "height": 900})
+    if theme == "dark":
+        page.locator("#theme-toggle").click()
+        page.wait_for_function("document.documentElement.dataset.theme === 'dark'")
+    page.wait_for_timeout(50)
+    centres: dict[str, float] = page.evaluate(
+        """() => {
+          const mid = (el) => { const r = el.getBoundingClientRect(); return r.top + r.height / 2; };
+          const link = [...document.querySelectorAll('.header-links a')]
+            .find((a) => a.textContent.trim() === 'Methodology');
+          return { toggle: mid(document.getElementById('theme-toggle')), link: mid(link) };
+        }"""
+    )
+    assert abs(centres["toggle"] - centres["link"]) <= 1, centres
