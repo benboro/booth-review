@@ -5613,13 +5613,20 @@ tr.is-matched > :first-child {
     white-space: normal;
   }
 
+  /* 4px side padding (8px on desktop) keeps the longest real booth person (name, pill and
+     comma) on one line in the 220px Booths column at 390px. */
   .mlb-phone-grid .mlb-cell-btn {
+    min-width: 0;
+    padding-inline: var(--space-xs);
+  }
+
+  /* A person stays whole (name, pill and comma together); only a name longer than the whole
+     column wraps, inside the name itself. */
+  .mlb-phone-grid .mlb-cell-booth .name-with-roles {
     min-width: 0;
   }
 
-  /* A person stays whole on a line when it fits; only a name longer than the column wraps. */
-  .mlb-phone-grid .mlb-cell-booth .name-with-roles {
-    min-width: 0;
+  .mlb-phone-grid .mlb-cell-booth .booth-name {
     white-space: normal;
     overflow-wrap: anywhere;
   }

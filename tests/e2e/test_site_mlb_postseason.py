@@ -911,12 +911,20 @@ def test_phone_postseason_has_no_horizontal_overflow_at_390(
             const td = n.closest('td').getBoundingClientRect();
             if (n.getBoundingClientRect().right > td.right + 0.5) over += 1;
           }
+          // A comma rides on its person's line, never alone on the next one.
+          let orphan = 0;
+          for (const c of t.querySelectorAll('.booth-comma')) {
+            const prev = c.previousElementSibling;
+            const below = c.getBoundingClientRect().top > prev?.getBoundingClientRect().bottom;
+            if (below) orphan += 1;
+          }
           return { table: t.getBoundingClientRect().width, wrap: w.getBoundingClientRect().width,
-                   wrapScroll: w.scrollWidth, wrapClient: w.clientWidth, over,
+                   wrapScroll: w.scrollWidth, wrapClient: w.clientWidth, over, orphan,
                    doc: document.documentElement.scrollWidth, win: window.innerWidth };
         }"""
     )
     assert out["table"] <= out["wrap"] + 0.5, out
     assert out["wrapScroll"] <= out["wrapClient"], out
     assert out["over"] == 0, out
+    assert out["orphan"] == 0, out
     assert out["doc"] <= out["win"], out
