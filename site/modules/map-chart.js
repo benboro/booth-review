@@ -30,6 +30,8 @@ import {
 
 const MARKER_FONT = { desktop: 12, mobile: 12 };
 const MOBILE_HOVER_DISTANCE = 22;
+/** Blank pixels kept between two stacked edge-marker labels. */
+const MARKER_GAP_PX = 6;
 
 /** The 14 trace names in draw order (Phase 11; `venue-hits` added at Phase 17.1 D-16). */
 export const MAP_TRACE_NAMES = Object.freeze([
@@ -209,7 +211,43 @@ function venueSelectedTrace(model, theme, mobile) {
   };
 }
 
-function markersTrace(markers, theme, mobile) {
+/**
+ * D-21: edge anchors sit a fixed number of map units apart, but the label font and ring are
+ * pixels, so on a phone (the map drawn at about 0.4 px per unit) neighbouring entries such as
+ * Dublin and London overlapped. Spreads same-side markers vertically until each is at least one
+ * label height apart in pixels, keeping the cluster centred on where it was.
+ * @param {{x: number, y: number, side: string}[]} markers
+ * @param {number} pxPerUnit - rendered pixels per map unit (<= 0 or NaN leaves markers alone).
+ * @param {number} fontPx
+ */
+export function spreadMarkers(markers, pxPerUnit, fontPx) {
+  const out = markers.map((m) => ({ ...m }));
+  if (!(pxPerUnit > 0)) return out;
+  const gap = (fontPx + MARKER_GAP_PX) / pxPerUnit;
+  const half = (fontPx / 2 + 2) / pxPerUnit;
+  for (const side of ['left', 'right']) {
+    const col = out.filter((m) => m.side === side).sort((p, q) => p.y - q.y);
+    // Clusters: runs of markers closer than the gap.
+    let start = 0;
+    for (let i = 1; i <= col.length; i += 1) {
+      if (i < col.length && col[i].y - col[i - 1].y < gap && Math.abs(col[i].x - col[i - 1].x) < 200) continue;
+      const run = col.slice(start, i);
+      start = i;
+      if (run.length < 2) continue;
+      const mid = run.reduce((s, m) => s + m.y, 0) / run.length;
+      let top = mid - ((run.length - 1) * gap) / 2;
+      top = Math.min(Math.max(top, half), MAP_HEIGHT - half - (run.length - 1) * gap);
+      run.forEach((m, k) => {
+        m.y = top + k * gap;
+      });
+    }
+  }
+  return out;
+}
+
+function markersTrace(rawMarkers, theme, mobile, pxPerUnit) {
+  const fontPx = mobile ? MARKER_FONT.mobile : MARKER_FONT.desktop;
+  const markers = spreadMarkers(rawMarkers, pxPerUnit, fontPx);
   const colors = markers.map((m) =>
     m.selected ? ACCENT[theme] : MAP_FAMILY_COLORS[theme][m.family],
   );
@@ -272,6 +310,12 @@ export function splatImageSpec(url) {
   };
 }
 
+/** Rendered pixels per map unit for a plot of {w, h} CSS pixels (constrain: 'domain'). */
+function pxPerUnit(plot) {
+  if (!plot || !(plot.w > 0) || !(plot.h > 0)) return 0;
+  return Math.min(plot.w / MAP_WIDTH, plot.h / MAP_HEIGHT);
+}
+
 /**
  * Builds the whole Map figure.
  * @param {object} model - buildMapModel output (venueDots, venueFaded, legs, markers used).
@@ -288,7 +332,7 @@ export function buildMapFigure(model, geometry, env) {
     venueDotsTrace(model.venueDots, theme, mobile),
     venueHitsTrace(model.venueDots, mobile),
     venueSelectedTrace(model, theme, mobile),
-    markersTrace(model.markers, theme, mobile),
+    markersTrace(model.markers, theme, mobile, pxPerUnit(env.plot)),
   ];
   const layout = frameLayout({
     xaxis: {

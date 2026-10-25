@@ -557,6 +557,8 @@ export async function renderMapPanel(args) {
       model.venueModel.venues.length > 0;
     const figure = buildMapFigure(model, geometry, {
       ...env,
+      // D-21: the plot size in pixels, so edge markers can be spaced by label height.
+      plot: { w: gd.clientWidth, h: gd.clientHeight },
       // The land stays filled until the raster that replaces it is in the layout.
       splat: wantSplat && currentImageSpec !== null,
       images: wantSplat && currentImageSpec ? [currentImageSpec] : [],
