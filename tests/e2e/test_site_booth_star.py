@@ -324,3 +324,21 @@ def test_one_announcer_highlight_keeps_the_unrated_lead_star_hollow(
     assert hole["customdata"] == []
     assert halo["n"] >= 1  # the accent highlight halo is still drawn
     assert order.index("highlight-unrated-hole") == order.index("highlight-unrated") + 1
+
+
+@pytest.mark.parametrize(("theme", "rim"), [("light", "#000000"), ("dark", "#ECE7DF")])
+def test_enlarged_dots_give_lead_stars_the_dot_outline(
+    guarded_page: Page, serve_booths: Callable, open_app: Callable, theme: str, rim: str
+) -> None:
+    # Phase 17 (user sign-off): a filter that enlarges and outlines the dots gives the stars
+    # the same outline, dark in light and light in dark.
+    if theme == "dark":
+        guarded_page.add_init_script("localStorage.setItem('bl-theme', 'dark')")
+    traces = _open(guarded_page, serve_booths, open_app, "?networks=net-b&dots=fade")
+    by_meta = {t["meta"]: t for t in traces}
+    assert by_meta["family:fox"]["lineWidth"] == 1  # the dots are enlarged and outlined
+    casing, star = by_meta["lead-halo:fox"], by_meta["lead:fox"]
+    assert star["customdata"] == [5]
+    assert casing["n"] == 1
+    assert str(casing["color"]).upper() == rim
+    assert (casing["size"], star["size"]) == (16, 14)

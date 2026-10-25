@@ -542,6 +542,12 @@ export function buildFigure(data, view, state, env) {
     });
     // A page-background casing star under each rated lead star keeps it readable among the
     // same-colored dots it overlaps. Plain filled surface star: no marker.line, no open symbol.
+    // Phase 17: with dots enlarged the casing becomes a thin DOT_OUTLINE rim instead, so stars
+    // carry the same outline as the enlarged dots (dark in light, light in dark).
+    const rimMarker = { symbol: 'star', color: DOT_OUTLINE[theme], size: LEAD_STAR_SIZE + 2, opacity: activeOpacity, line: { width: 0 } };
+    const casingMarker = view.enlargeDots
+      ? rimMarker
+      : { symbol: 'star', color: SURFACE[theme], size: LEAD_CASING_SIZE, opacity: 1, line: { width: 0 } };
     leadCasingTraces.push({
       type: 'scattergl',
       mode: 'markers',
@@ -551,7 +557,20 @@ export function buildFigure(data, view, state, env) {
       y: lead.y,
       hoverinfo: 'skip',
       hovertemplate: null,
-      marker: { symbol: 'star', color: SURFACE[theme], size: LEAD_CASING_SIZE, opacity: 1, line: { width: 0 } },
+      marker: casingMarker,
+    });
+    // The filled band star (non-Viewers modes) gets the rim too, only while dots are enlarged.
+    leadCasingTraces.push({
+      type: 'scattergl',
+      mode: 'markers',
+      meta: `unrated-lead-filled-halo:${family}`,
+      showlegend: false,
+      yaxis: 'y2',
+      x: view.enlargeDots ? uLeadFilled.x : [],
+      y: view.enlargeDots ? uLeadFilled.y : [],
+      hoverinfo: 'skip',
+      hovertemplate: null,
+      marker: rimMarker,
     });
     leadTraces.push({
       ...leadBase(`lead:${family}`, lead, null),

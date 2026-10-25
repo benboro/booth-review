@@ -1609,6 +1609,7 @@ def test_tooltip_mode_trace_config(
                 "unrated-inert:",
                 "highlight-halo",
                 "unrated-lead-halo:",
+                "unrated-lead-filled-halo:",
                 "lead-halo:",
                 "highlight-unrated-hole",
             )
@@ -1636,6 +1637,7 @@ def test_tooltip_mode_trace_config(
                 "unrated-inert:",
                 "highlight-halo",
                 "unrated-lead-halo:",
+                "unrated-lead-filled-halo:",
                 "lead-halo:",
                 "highlight-unrated-hole",
             )
