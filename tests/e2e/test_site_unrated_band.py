@@ -63,7 +63,7 @@ _PALETTE_JS = """
 async () => {
   const p = await import('./modules/palette.js');
   const theme = (document.documentElement.dataset.theme === 'dark') ? 'dark' : 'light';
-  return { surface: p.SURFACE[theme], accent: p.ACCENT[theme], outline: p.DOT_OUTLINE };
+  return { surface: p.SURFACE[theme], accent: p.ACCENT[theme], outline: p.DOT_OUTLINE[theme] };
 }
 """
 

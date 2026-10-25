@@ -169,6 +169,9 @@ function widest(labels, opts) {
   return labels.reduce((m, l) => Math.max(m, textWidth(l, opts)), 0);
 }
 
+/** Base weight of tone B's mix toward the page: dark needs 0.85 to clear 3:1 (D-08). */
+const TONE_B_WEIGHT = { light: 0.55, dark: 0.85 };
+
 /**
  * Tone A / Tone B fills for a row (D-16): a network row uses its family
  * color, an announcer row its main family color (D-31), every other row the
@@ -183,7 +186,7 @@ export function barTones(row, theme, matched = false) {
   // Hero bars (no family): --ink at 80% with no pick, --accent once a pick matches (accent use 4).
   const hero = matched ? SPECIAL[theme] : mixHex(INK[theme], PAGE_BG[theme], HERO_INK_WEIGHT);
   const base = family != null ? FAMILY_COLORS[theme][familyKey(family)] : hero;
-  return { a: base, b: mixHex(base, PAGE_BG[theme], 0.55) };
+  return { a: base, b: mixHex(base, PAGE_BG[theme], TONE_B_WEIGHT[theme]) };
 }
 
 /**

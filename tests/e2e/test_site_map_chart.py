@@ -191,7 +191,7 @@ def test_venue_dots_faded_selected_and_markers(guarded_page: Page, site_url: str
             x: dots.x, y: dots.y, custom: dots.customdata, symbol: dots.marker.symbol,
             size: dots.marker.size, color: dots.marker.color, opacity: dots.marker.opacity,
             lw: dots.marker.line.width, lc: dots.marker.line.color, hover: dots.hoverinfo,
-            ht: dots.hovertemplate, bg: P.PAGE_BG.light, outline: P.DOT_OUTLINE,
+            ht: dots.hovertemplate, bg: P.PAGE_BG.light, outline: P.DOT_OUTLINE.light,
           },
           phoneSize: phone.marker.size, phoneColor: phone.marker.color,
           faded: {

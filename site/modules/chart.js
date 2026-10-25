@@ -456,15 +456,15 @@ export function buildFigure(data, view, state, env) {
       hoverlabel: { bordercolor: FAMILY_COLORS[theme][family] },
       marker: {
         color: FAMILY_COLORS[theme][family],
-        // 04.16 D-01/D-05: passing dots take the announcer-selected size (10px, 1px black
-        // outline, theme-independent) only when view.enlargeDots, i.e. a faded dot is
+        // 04.16 D-01/D-05: passing dots take the announcer-selected size (10px, 1px
+        // outline in the DOT_OUTLINE theme colour) only when view.enlargeDots, i.e. a faded dot is
         // drawn, capped at 1-3 families when Networks is the only filter (04.16 D-16); otherwise 6px and borderless.
         // Inert dots always stay 6. Under a person this trace holds the passing-not-theirs
         // dots, at activeUnderPerson opacity and the same size switch (D-09).
         // 04.12 D-05 / 04.16 D-03: a seasons-only filter on Date never counts.
         size: view.enlargeDots ? ENLARGED_DOT_PX : 6,
         opacity: view.hasPersonSelection ? DOT_OPACITY.activeUnderPerson : DOT_OPACITY.active,
-        line: { width: view.enlargeDots ? 1 : 0, color: DOT_OUTLINE },
+        line: { width: view.enlargeDots ? 1 : 0, color: DOT_OUTLINE[theme] },
       },
     });
     // D-03 (amended by notes-2 #1/#5): a ring is a filled SURFACE circle with a family-colored
@@ -519,7 +519,7 @@ export function buildFigure(data, view, state, env) {
             color,
             size: ENLARGED_DOT_PX,
             opacity: activeOpacity,
-            line: { width: 1, color: DOT_OUTLINE },
+            line: { width: 1, color: DOT_OUTLINE[theme] },
           }
         : ringMarker(activeOpacity),
     });

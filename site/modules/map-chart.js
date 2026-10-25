@@ -150,7 +150,7 @@ function venueDotsTrace(dots, theme, mobile) {
         width: dots.map((d) =>
           d.tier === 'subject' ? MAP_LINE_WIDTH.subjectOutline : MAP_VENUE_DOT.ringWidth,
         ),
-        color: dots.map((d) => (d.tier === 'subject' ? DOT_OUTLINE : PAGE_BG[theme])),
+        color: dots.map((d) => (d.tier === 'subject' ? DOT_OUTLINE[theme] : PAGE_BG[theme])),
       },
     },
     hoverinfo: 'none',

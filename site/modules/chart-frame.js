@@ -15,7 +15,7 @@
  * `window.Plotly`, so `frameLayout` / `frameConfig` stay importable from node.
  */
 
-import { DIVIDER, MUTED, PAGE_BG, SURFACE, ZERO_LINE } from './palette.js';
+import { DIVIDER, INK, MUTED, PAGE_BG, SURFACE, ZERO_LINE } from './palette.js';
 
 /** The `--plot` stack from style.css. */
 export const FRAME_FONT = 'Roboto Condensed, Arial, sans-serif';
@@ -91,7 +91,7 @@ export function frameLayout(overrides, env) {
     plot_bgcolor: PAGE_BG[theme],
     showlegend: false,
     hoverlabel: {
-      font: { family: FRAME_FONT, size: FRAME_MIN_FONT_PX },
+      font: { family: FRAME_FONT, size: FRAME_MIN_FONT_PX, color: INK[theme] },
       bgcolor: SURFACE[theme],
       bordercolor: DIVIDER[theme],
     },

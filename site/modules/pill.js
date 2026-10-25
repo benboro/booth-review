@@ -122,7 +122,7 @@ export function makePill(text, family, theme) {
   span.className = 'pill';
   span.dataset.family = key;
   span.style.backgroundColor = FAMILY_COLORS[theme][key];
-  span.style.color = PILL_TEXT_COLOR[key];
+  span.style.color = PILL_TEXT_COLOR[theme][key];
   span.textContent = text;
   return span;
 }
