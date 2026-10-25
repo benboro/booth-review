@@ -182,3 +182,121 @@ def test_bars_counts_swatches_repaint(guarded_page: Page, open_app: OpenApp) -> 
     assert paints, "the counts list shows no family pill or dot"
     for family, bg in paints:
         assert bg == rgb(palette["family"][family]), (family, bg)
+
+
+# -- The splat map in dark (D-10) -------------------------------------------------------
+
+_MAP_TRACES = """() => document.getElementById('map-chart').data.map(
+  (t) => ({name: t.name, linecolor: t.line && t.line.color, fill: t.fillcolor,
+           mcolor: t.marker ? t.marker.color : null,
+           textcolor: t.textfont ? t.textfont.color : null, n: (t.x || []).length}))"""
+_MAP_IMAGES = (
+    "() => (document.getElementById('map-chart').layout.images || []).map((i) => i.source)"
+)
+MAP_LAND = "#2A2722"
+MAP_OUTLINE = "#4A453E"
+MAP_NEUTRAL = "#8B8377"
+
+
+def _open_dark_map(page: Page, open_app: OpenApp, query: str) -> None:
+    page.add_init_script("localStorage.setItem('bl-theme', 'dark')")
+    open_app(page, query)
+    page.wait_for_function("() => window.__testHooks.mapRenders >= 1")
+    page.wait_for_function("() => window.__testHooks.mapSplatRenders >= 1")
+    page.wait_for_timeout(300)
+
+
+@pytest.mark.parametrize("live_flip", [True, False])
+def test_map_dark_base_dots_and_splat(
+    guarded_page: Page, open_app: OpenApp, live_flip: bool
+) -> None:
+    query = "?view=map&people=pat-rowan"
+    if live_flip:
+        open_app(guarded_page, query)
+        guarded_page.wait_for_function("() => window.__testHooks.mapSplatRenders >= 1")
+        light_image = guarded_page.evaluate(_MAP_IMAGES)
+    else:
+        light_image = None
+    if live_flip:
+        _flip_map_dark(guarded_page)
+    else:
+        _open_dark_map(guarded_page, open_app, query)
+    palette = _palette(guarded_page)
+    traces = {t["name"]: t for t in guarded_page.evaluate(_MAP_TRACES)}
+    # The splat paints the land as an image, so the outline carries the land fill only as the
+    # fallback; either way it must be the dark land value, never the light one.
+    assert traces["outline"]["linecolor"] == MAP_OUTLINE, traces["outline"]
+    assert traces["outline"]["fill"] in (MAP_LAND, None, "rgba(0,0,0,0)"), traces["outline"]
+    for family in ("disney", "fox"):
+        leg = traces.get(f"legs:{family}")
+        if leg and leg["n"]:
+            assert leg["linecolor"] == palette["mapFamily"][family], leg
+    dots = traces["venue-dots"]
+    assert dots["n"] > 0
+    model = guarded_page.evaluate("() => window.__testHooks.getMapModel()")
+    assert dots["mcolor"] == [d["dotColor"]["dark"] for d in model["venueDots"]], dots["mcolor"]
+    neutral = guarded_page.evaluate(
+        "import(new URL('./modules/palette.js', location.href).href)"
+        ".then(p => p.MAP_DOT_NEUTRAL.dark)"
+    )
+    assert neutral == MAP_NEUTRAL
+    bg = guarded_page.evaluate(
+        "getComputedStyle(document.getElementById('map-chart')).backgroundColor"
+    )
+    assert chart_layout(guarded_page, "#map-chart")["paper"] == PAGE_BG, bg
+    images = guarded_page.evaluate(_MAP_IMAGES)
+    assert len(images) == 1 and images[0].startswith("blob:")
+    if light_image is not None:
+        assert images[0] != light_image[0], "the splat was not regenerated for dark"
+    assert white_box_offenders(guarded_page) == []
+
+
+def _flip_map_dark(page: Page) -> None:
+    renders = page.evaluate("() => window.__testHooks.mapSplatRenders")
+    set_theme(page, "dark")
+    page.wait_for_function(
+        "(n) => window.__testHooks.mapSplatRenders > n", arg=renders, timeout=15000
+    )
+    page.wait_for_timeout(300)
+
+
+def test_map_labels_are_live_selectable_svg_text_in_dark(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    open_app(guarded_page, "?view=map&people=pat-rowan")
+    guarded_page.wait_for_function("() => window.__testHooks.mapSplatRenders >= 1")
+    _flip_map_dark(guarded_page)
+    result = guarded_page.evaluate(
+        """() => {
+          const nodes = [...document.querySelectorAll('#map-chart text')]
+            .filter((n) => (n.textContent || '').trim().length > 0 && n.closest('.main-svg'));
+          if (!nodes.length) return null;
+          const node = nodes.find((n) => n.closest('.textpoint')) || nodes[0];
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+          // Plotly's own `.user-select-none` makes Selection.toString() empty on every chart
+          // (light too); the Range text proves the label is live text, not raster pixels.
+          return { selected: range.toString(), ranges: sel.rangeCount,
+                   tag: node.tagName.toLowerCase(), fill: getComputedStyle(node).fill };
+        }"""
+    )
+    assert result is not None, "no SVG text node on the dark map"
+    assert result["tag"] == "text" and result["selected"].strip(), result
+    assert result["ranges"] == 1, result
+    assert result["fill"] == rgb(MUTED), result
+    marker_text = guarded_page.evaluate(
+        "(document.getElementById('map-chart').data.find((t) => t.name === 'markers') || {})"
+        ".textfont?.color ?? null"
+    )
+    assert marker_text in (None, MUTED), marker_text
+
+
+def test_map_land_fill_is_dark_when_colors_are_off(guarded_page: Page, open_app: OpenApp) -> None:
+    guarded_page.add_init_script("localStorage.setItem('bl-theme', 'dark')")
+    open_app(guarded_page, "?view=map&colors=off")
+    guarded_page.wait_for_function("() => window.__testHooks.mapRenders >= 1")
+    outline = next(t for t in guarded_page.evaluate(_MAP_TRACES) if t["name"] == "outline")
+    assert outline["fill"] == MAP_LAND and outline["linecolor"] == MAP_OUTLINE, outline
