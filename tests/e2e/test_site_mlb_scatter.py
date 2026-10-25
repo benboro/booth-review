@@ -407,9 +407,16 @@ def _head_height(page: Page) -> float:
     return page.locator("#mlb-chart-area .module-head").bounding_box()["height"]  # type: ignore[index]
 
 
+_PLACES = ("total", "plotted", "noRating", "noExcitement", "neither")
+
+
 def _pick_counts(page: Page) -> dict[str, int]:
     counts = _vm(page)["counts"]
-    return {k: counts[k] for k in ("total", "plotted", "noRating", "noExcitement", "neither")}
+    return {k: counts[k] for k in _PLACES}
+
+
+def _case_places(name: str) -> dict[str, int | None]:
+    return {k: SCATTER_CASE[name][k] for k in _PLACES}
 
 
 def test_control_groups_labels_and_disabled_round(
@@ -443,7 +450,8 @@ def test_control_round_trip_counts_and_leaves_selection_alone(
         "head": _head_height(page),
     }
     assert before["booth"] == "1"
-    assert _pick_counts(page) == SCATTER_CASE["all"]
+    # The control fades, never narrows (U5): the placement counts stay those of every game.
+    assert _pick_counts(page) == _case_places("all")
 
     def same() -> None:
         assert page.evaluate(f"{HOOKS}.getState().booth") == before["booth"]
@@ -452,20 +460,16 @@ def test_control_round_trip_counts_and_leaves_selection_alone(
         assert _head_height(page) == before["head"]
 
     page.click(f"{SEASON_GROUP} button:has-text('Postseason')")
-    page.wait_for_function(
-        f"{HOOKS}.getViewModel('scatter').counts.total === {SCATTER_CASE['post']['total']}"
-    )
+    page.wait_for_function(f"{HOOKS}.getState().stype === 'post'")
     assert "stype=post" in page.url and "sround" not in page.url
-    assert _pick_counts(page) == SCATTER_CASE["post"]
+    assert _pick_counts(page) == _case_places("post")
     assert set(_round_disabled(page)) == {None}
     same()
 
     page.click(f"{ROUND_GROUP} button:has-text('Championship Series')")
-    page.wait_for_function(
-        f"{HOOKS}.getViewModel('scatter').counts.total === {SCATTER_CASE['post+lcs']['total']}"
-    )
+    page.wait_for_function(f"{HOOKS}.getState().sround === 'lcs'")
     assert "sround=lcs" in page.url
-    assert _pick_counts(page) == SCATTER_CASE["post+lcs"]
+    assert _pick_counts(page) == _case_places("post+lcs")
     assert (
         page.locator(f"{ROUND_GROUP} button[aria-pressed='true']").inner_text()
         == "Championship Series"
@@ -473,18 +477,14 @@ def test_control_round_trip_counts_and_leaves_selection_alone(
     same()
 
     page.click(f"{SEASON_GROUP} button:has-text('Reg. Season')")
-    page.wait_for_function(
-        f"{HOOKS}.getViewModel('scatter').counts.total === {SCATTER_CASE['reg']['total']}"
-    )
+    page.wait_for_function(f"{HOOKS}.getState().stype === 'reg'")
     assert "stype=reg" in page.url and "sround" not in page.url
-    assert _pick_counts(page) == SCATTER_CASE["reg"]
+    assert _pick_counts(page) == _case_places("reg")
     assert set(_round_disabled(page)) == {"true"}
     same()
 
     page.click(f"{SEASON_GROUP} button:has-text('All games')")
-    page.wait_for_function(
-        f"{HOOKS}.getViewModel('scatter').counts.total === {SCATTER_CASE['all']['total']}"
-    )
+    page.wait_for_function(f"{HOOKS}.getState().stype === null")
     assert "stype" not in page.url
     same()
 
@@ -511,19 +511,21 @@ def test_disabled_round_buttons_do_nothing_and_urls_are_allowlisted(
         assert (state["stype"], state["sround"]) == want, query
 
 
-def test_empty_result_keeps_the_module_height(
+def test_a_round_with_no_games_fades_every_dot_and_keeps_the_module_height(
     mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
 ) -> None:
+    """U5: a control with no games no longer empties the chart; every dot stays, faded."""
     page = mlb_guarded_page
     page.set_viewport_size({"width": 1440, "height": 900})
     _open(page, open_mlb_app)
     height = page.locator(f"{VIEW} .mlb-scatter-plot").bounding_box()["height"]  # type: ignore[index]
     page.evaluate(f"{HOOKS}.setState({{ stype: 'post', sround: 'tiebreak' }})")
-    note = page.locator(f"{VIEW} .season-empty-note")
-    assert note.is_visible()
-    assert _norm(note.inner_text()) == "No games in this view Choose All games or another round."
+    page.wait_for_function(f"{HOOKS}.getViewModel('scatter').counts.highlighted === 0")
+    assert page.locator(f"{VIEW} .season-empty-note").is_hidden()
     assert page.locator(f"{VIEW} .mlb-scatter-plot").bounding_box()["height"] == height  # type: ignore[index]
-    assert page.locator(f"{VIEW} .mlb-scatter-status").inner_text() == ""
+    assert len(_points(_plot(page))) == len(_G["viewers"])
+    status = page.locator(f"{VIEW} .mlb-scatter-status").inner_text()
+    assert status == _status(SCATTER_CASE["all"]) + " 0 highlighted."
 
 
 def test_captions_are_verbatim_with_their_links(

@@ -1,7 +1,7 @@
 /**
  * MLB view 3: Scatter (D-04..D-10). MLB-only: the NFL scatter helpers it needs are copied, not imported.
  *
- * One svg `scatter` dot per game that passes the Season type / Round control. X is
+ * One svg `scatter` dot per game; the Season type / Round control fades the games outside it. X is
  * Retrosheet excitement (linear), Y is viewers (log). A game with no public rating sits
  * in the bottom strip, a game with a rating but no excitement in the 72px left strip,
  * and a game with neither in the corner where the strips meet, so no game is dropped and
@@ -27,6 +27,7 @@ import { MLB_SROUNDS } from '../state.js';
 import { RETROSHEET_NOTICE, RETROSHEET_CONTACT } from '../panel.js';
 import {
   buildScatterItems, colorSlotOf, statusText, stripJitter, MLB_FAMILY_ORDER, MLB_FAMILY_LABELS,
+  SEASON_TYPE_HIGHLIGHTS,
 } from '../scatter-items.js';
 
 const CONFIG = frameConfig({ zoomable: true });
@@ -183,8 +184,9 @@ function buildFigure(items, env, th) {
   };
   const build = (family, rawSubset, yaxis) => {
     const color = familyColor(family, th);
-    // Matched dots draw last so they sit on top of the faded ones.
-    const subset = [...rawSubset.filter((it) => !it.matched), ...rawSubset.filter((it) => it.matched)];
+    // Faded dots draw first, matched dots last, so highlighted games sit on top.
+    const rank = (it) => (it.faded ? 0 : it.matched ? 2 : 1);
+    const subset = [0, 1, 2].flatMap((r) => rawSubset.filter((it) => rank(it) === r));
     const pts = subset.map(coords);
     return {
       type: 'scatter',
@@ -704,10 +706,11 @@ export function render(ctx) {
   refs.status.textContent = statusText(counts, hidden);
   syncControls(state);
 
-  // The home range changes only with the Season type / Round control, phone vs desktop or the
-  // theme. Any other re-render (a dot click, the panel closing, a legend chip, a width change)
-  // keeps a viewers-axis zoom, and the kept zoom never becomes the new home.
-  const homeKey = JSON.stringify([state.stype ?? null, state.sround ?? null, !!env.mobile, th]);
+  // The axes come from every game (the control only fades, U5), so the home range changes only
+  // with phone vs desktop or the theme. Any other re-render (a control change, a dot click, the
+  // panel closing, a legend chip, a width change) keeps a viewers-axis zoom, and the kept zoom
+  // never becomes the new home. If Season type narrows again, it moves the home range too.
+  const homeKey = JSON.stringify([SEASON_TYPE_HIGHLIGHTS ? null : state.stype ?? null, !!env.mobile, th]);
   const live = refs.drawn && refs.home && refs.homeKey === homeKey ? liveRanges(refs.gd) : null;
   const zoomed = !!live && (live.y[0] !== refs.home.y[0] || live.y[1] !== refs.home.y[1]);
 

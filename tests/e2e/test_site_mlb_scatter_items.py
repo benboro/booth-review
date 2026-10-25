@@ -105,10 +105,13 @@ def test_every_game_appears_exactly_once(run: Callable[[str], Any], name: str) -
         f"const s = st({_ctl(name)});"
         "const r = M.buildScatterItems(model, s, { hiddenFamilies: new Set() });"
         "const idx = r.items.map((it) => it.i).sort((a, b) => a - b);"
+        "const lit = r.items.filter((it) => !it.faded).map((it) => it.i).sort((a, b) => a - b);"
         "const expect = [...Array(model.n).keys()].filter((i) => M.passesControl(model, i, s));"
-        "return { idx, expect, places: r.items.map((it) => it.place) };"
+        "return { idx, lit, expect, places: r.items.map((it) => it.place) };"
     )
-    assert out["idx"] == out["expect"]
+    # U5: the control never removes a game; it fades the games outside it.
+    assert out["idx"] == list(range(15))
+    assert out["lit"] == out["expect"]
     assert len(set(out["idx"])) == len(out["idx"])
     assert len(out["places"]) == SCATTER_CASE[name]["total"]
 
@@ -195,21 +198,40 @@ def test_view_selection_marks_its_games(run: Callable[[str], Any]) -> None:
     assert out == [0, 7]
 
 
-def test_control_never_changes_matched(run: Callable[[str], Any]) -> None:
+def test_full_strength_needs_both_the_control_and_the_pick(run: Callable[[str], Any]) -> None:
+    """U5: with a pick and a control, a dot is full strength (and outlined) only if it is in both."""
     out = run(
         """
-        const base = { selection: { games: [0, 7, 10, 13], label: 'x' } };
-        const all = M.buildScatterItems(model, st(base), {});
-        const byI = new Map(all.items.map((it) => [it.i, it.matched]));
+        const pick = [0, 7, 10, 13];
+        const base = { selection: { games: pick, label: 'x' } };
         const res = [];
-        for (const c of [{stype:'post'}, {stype:'post', sround:'lcs'}, {stype:'reg'}]) {
-          const r = M.buildScatterItems(model, st({ ...base, ...c }), {});
-          res.push(r.items.every((it) => it.matched === byI.get(it.i)));
+        for (const c of [{}, {stype:'post'}, {stype:'post', sround:'lcs'}, {stype:'reg'}]) {
+          const s = st({ ...base, ...c });
+          const r = M.buildScatterItems(model, s, {});
+          const ok = r.items.every((it) => {
+            const both = pick.includes(it.i) && M.passesControl(model, it.i, s);
+            return it.matched === both && it.faded === !both;
+          });
+          res.push([ok, r.counts.total, r.counts.highlighted, S.tableGames(model, s).length]);
         }
         return res;
         """
     )
-    assert out == [True, True, True]
+    assert [ok for ok, *_ in out] == [True, True, True, True]
+    assert [total for _, total, _, _ in out] == [15, 15, 15, 15]
+    assert [lit for _, _, lit, _ in out] == [4, 3, 2, 1]
+    # The control never narrows Matched games.
+    assert [rows for *_, rows in out] == [4, 4, 4, 4]
+
+
+def test_control_alone_fades_without_outlines(run: Callable[[str], Any]) -> None:
+    out = run(
+        "const r = M.buildScatterItems(model, st({ stype: 'post', sround: 'lcs' }), {});"
+        "return { lit: r.items.filter((it) => !it.faded).map((it) => it.i),"
+        " matched: r.counts.matched, highlighted: r.counts.highlighted, total: r.counts.total,"
+        " none: M.buildScatterItems(model, st({}), {}).counts.highlighted };"
+    )
+    assert out == {"lit": [10, 13], "matched": 0, "highlighted": 2, "total": 15, "none": None}
 
 
 def test_status_text(run: Callable[[str], Any]) -> None:
@@ -224,6 +246,9 @@ def test_status_text(run: Callable[[str], Any]) -> None:
           M.statusText(c({ total: 0 })),
           M.statusText(c({ total: 9, plotted: 5, noRating: 2, noExcitement: 1, neither: 1 }), 3),
           M.statusText(c({ total: 1, plotted: 1 }), 0),
+          M.statusText(c({ total: 9, plotted: 5, noRating: 2, noExcitement: 1, neither: 1, highlighted: 4 }), 3),
+          M.statusText(c({ total: 1, plotted: 1, highlighted: 0 })),
+          M.statusText(c({ total: 1, plotted: 1, highlighted: null })),
         ];
         """
     )
@@ -238,6 +263,13 @@ def test_status_text(run: Callable[[str], Any]) -> None:
         "3 hidden by the legend."
     )
     assert out[6] == "1 game plotted."
+    # U5: every game is still counted; the highlighted count comes before the hidden clause.
+    assert out[7] == (
+        "5 games plotted. 2 with no rating, 1 with no excitement, 1 with neither. "
+        "4 highlighted. 3 hidden by the legend."
+    )
+    assert out[8] == "1 game plotted. 0 highlighted."
+    assert out[9] == "1 game plotted."
 
 
 def test_strip_jitter_is_deterministic(run: Callable[[str], Any]) -> None:

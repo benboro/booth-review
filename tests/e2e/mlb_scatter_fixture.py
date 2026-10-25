@@ -3,7 +3,8 @@
 Deep-copies the parsed synthetic ``mlb-data.json`` and rewrites game columns with invented
 values so every Scatter placement occurs at least twice. The contract fixture is never
 edited. ``SCATTER_CASE`` holds the expected counts per control setting, computed from the
-data the helper writes.
+data the helper writes; the control highlights rather than narrows (U5), so only its
+``highlighted`` count changes with the setting.
 """
 
 from __future__ import annotations
@@ -68,35 +69,47 @@ def densify_scatter(data: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _case(data: dict[str, Any]) -> dict[str, dict[str, int]]:
+def control_rows(data: dict[str, Any], name: str) -> list[int]:
+    """Games the control `name` highlights (every game for 'all')."""
     g = data["games"]
+    stype, sround = CONTROLS[name]
     post_rounds = {"wild_card", "division", "lcs", "world_series", "tiebreak"}
-    case: dict[str, dict[str, int]] = {}
-    for name, (stype, sround) in CONTROLS.items():
-        rows = []
-        for i, rnd in enumerate(g["round"]):
-            if stype == "reg" and rnd != "regular":
-                continue
-            if stype == "post" and (rnd not in post_rounds or (sround and rnd != sround)):
-                continue
-            rows.append(i)
-        counts = {"total": len(rows), "plotted": 0, "noRating": 0, "noExcitement": 0, "neither": 0}
-        for i in rows:
-            has_v = g["viewers"][i] is not None
-            has_e = g["wp_excitement"][i] is not None
-            if has_v and has_e:
-                counts["plotted"] += 1
-            elif has_e:
-                counts["noRating"] += 1
-            elif has_v:
-                counts["noExcitement"] += 1
-            else:
-                counts["neither"] += 1
-        case[name] = counts
+    rows = []
+    for i, rnd in enumerate(g["round"]):
+        if stype == "reg" and rnd != "regular":
+            continue
+        if stype == "post" and (rnd not in post_rounds or (sround and rnd != sround)):
+            continue
+        rows.append(i)
+    return rows
+
+
+def _case(data: dict[str, Any]) -> dict[str, dict[str, int | None]]:
+    """Counts per control. The control fades rather than narrows (U5): the placement counts
+    always cover every game, and `highlighted` is the number of games the control keeps at full
+    strength (None with no control and no pick)."""
+    g = data["games"]
+    every = {"total": 0, "plotted": 0, "noRating": 0, "noExcitement": 0, "neither": 0}
+    for i in range(len(g["round"])):
+        has_v = g["viewers"][i] is not None
+        has_e = g["wp_excitement"][i] is not None
+        every["total"] += 1
+        if has_v and has_e:
+            every["plotted"] += 1
+        elif has_e:
+            every["noRating"] += 1
+        elif has_v:
+            every["noExcitement"] += 1
+        else:
+            every["neither"] += 1
+    case: dict[str, dict[str, int | None]] = {}
+    for name, (stype, _sround) in CONTROLS.items():
+        lit = len(control_rows(data, name)) if stype is not None else None
+        case[name] = {**every, "highlighted": lit}
     return case
 
 
-def _build_case() -> dict[str, dict[str, int]]:
+def _build_case() -> dict[str, dict[str, int | None]]:
     import json
     from pathlib import Path
 
@@ -108,4 +121,4 @@ def _build_case() -> dict[str, dict[str, int]]:
     return _case(densify_scatter(base))
 
 
-SCATTER_CASE: dict[str, dict[str, int]] = _build_case()
+SCATTER_CASE: dict[str, dict[str, int | None]] = _build_case()

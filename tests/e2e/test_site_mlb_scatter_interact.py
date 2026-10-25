@@ -12,9 +12,20 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from mlb_scatter_fixture import ESCAPE_NAME, densify_scatter
+from mlb_scatter_fixture import CONTROLS, ESCAPE_NAME, SCATTER_CASE, densify_scatter
 from playwright.sync_api import Page, Route
-from test_site_mlb_scatter import _G, GD, HOOKS, _open, _plot, _points, _vm
+from test_site_mlb_scatter import (
+    _G,
+    GD,
+    HOOKS,
+    VIEW,
+    _in_control,
+    _open,
+    _plot,
+    _points,
+    _status,
+    _vm,
+)
 
 pytestmark = pytest.mark.e2e
 
@@ -317,10 +328,14 @@ def test_reset_zoom_disabled_at_home_enabled_after_zoom(
     assert yr == info["yr"]
 
 
-def test_zoom_survives_unrelated_rerenders_and_control_change_resets(
+def test_zoom_survives_rerenders_and_control_changes(
     mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
 ) -> None:
-    """F3: a dot click, panel close, chip toggle or same-width re-render keeps the viewers zoom."""
+    """F3: a dot click, panel close, chip toggle or same-width re-render keeps the viewers zoom.
+
+    U5: the Season type / Round control only fades dots and the axes come from every game, so
+    the home range no longer depends on it: a control change keeps the zoom too, and Reset zoom
+    still returns to the one home range."""
     page = mlb_guarded_page
     page.set_viewport_size({"width": 1440, "height": 900})
     _open(page, open_mlb_app)
@@ -365,14 +380,23 @@ def test_zoom_survives_unrelated_rerenders_and_control_change_resets(
         "sel => document.querySelector(sel).getAttribute('aria-disabled') === 'true'", arg=btn
     )
     assert page.evaluate(yr, GD) == home
-    # A Season type change is allowed to reset to its own home.
+    # A control change keeps the zoom, and Reset zoom still goes to the same home range.
     page.evaluate(
         "([sel, r]) => window.Plotly.relayout(document.querySelector(sel), {'yaxis.range': r})",
         [GD, zoom],
     )
+    page.wait_for_function(
+        "sel => document.querySelector(sel).getAttribute('aria-disabled') === 'false'", arg=btn
+    )
     page.evaluate(f"{HOOKS}.setState({{ stype: 'reg' }})")
-    page.wait_for_timeout(300)
-    assert page.get_attribute(btn, "aria-disabled") == "true"
+    kept("season type")
+    page.evaluate(f"{HOOKS}.setState({{ stype: 'post', sround: 'lcs' }})")
+    kept("round")
+    page.click(btn)
+    page.wait_for_function(
+        "sel => document.querySelector(sel).getAttribute('aria-disabled') === 'true'", arg=btn
+    )
+    assert page.evaluate(yr, GD) == home
 
 
 def test_tooltip_text_is_escaped(mlb_guarded_page: Page, open_mlb_app: Callable[..., None]) -> None:
@@ -438,3 +462,46 @@ def test_tooltip_pending_follows_retrosheet_freshness(
     page.wait_for_timeout(300)
     _hover(page, 4)
     assert _tooltip(page)[2] == "1.1MM viewers · Excitement not available"
+
+
+@pytest.mark.parametrize("name", ["post", "post+lcs", "reg"])
+def test_control_highlights_and_fades_without_removing_or_rescaling(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None], name: str
+) -> None:
+    """U5: every game stays plotted; games outside the control fade; axes and chips hold."""
+    page = mlb_guarded_page
+    page.set_viewport_size({"width": 1440, "height": 900})
+    _open(page, open_mlb_app)
+    page.wait_for_timeout(300)
+    layout = lambda: page.evaluate(  # noqa: E731
+        "sel => { const l = document.querySelector(sel)._fullLayout;"
+        " return [l.xaxis.range, l.yaxis.range]; }",
+        GD,
+    )
+    before = layout()
+    chips = page.eval_on_selector_all(f"{LEGEND} button", "els => els.map(e => e.dataset.family)")
+    stype, sround = CONTROLS[name]
+    page.evaluate(f"{HOOKS}.setState({json.dumps({'stype': stype, 'sround': sround})})")
+    want = SCATTER_CASE[name]["highlighted"]
+    page.wait_for_function(f"{HOOKS}.getViewModel('scatter').counts.highlighted === {want}")
+    page.wait_for_timeout(300)
+    pts = _points(_plot(page))
+    assert sorted(p["i"] for p in pts) == list(range(len(_G["viewers"])))
+    lit = {i for i in range(len(_G["round"])) if _in_control(i, name)}
+    assert len(lit) == want
+    op = _opacity(_plot(page))
+    for p in pts:
+        assert op[p["i"]] == (1 if p["i"] in lit else FADED), p["i"]
+        assert p["line_c"].upper() != INK_LIGHT  # no pick, so no ink outline
+    assert layout() == before
+    assert (
+        page.eval_on_selector_all(f"{LEGEND} button", "els => els.map(e => e.dataset.family)")
+        == chips
+    )
+    status = page.locator(f"{VIEW} .mlb-scatter-status").inner_text()
+    assert status == _status(SCATTER_CASE["all"]) + f" {want} highlighted."
+    # A faded dot still opens its game.
+    faded = next(p["i"] for p in pts if p["i"] not in lit)
+    pt = _dot(page, faded)
+    page.mouse.click(pt["x"], pt["y"])
+    page.wait_for_function(f"{HOOKS}.getState().game === {faded}")
