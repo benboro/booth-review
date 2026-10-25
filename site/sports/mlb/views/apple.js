@@ -334,7 +334,9 @@ function renderTable(ctx, model, state) {
     perSeason: false,
     sortSpec: APPLE_SORT_SPEC,
     rows,
-    signature: JSON.stringify([csort, adjusted, state.booth]),
+    // The pick is not part of it (as in CFB Crews): picking keeps open rows and paging, and
+    // renderCrewsTable still reveals the picked row's page (G5).
+    signature: JSON.stringify([csort, adjusted]),
     columns: COLUMNS,
     label: 'Apple booths',
     modeKey: adjusted ? 'adjusted' : 'raw',

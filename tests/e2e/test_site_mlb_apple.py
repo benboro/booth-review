@@ -296,6 +296,19 @@ def test_row_keys_pick_and_expand(mlb: Page) -> None:
     assert "booth=p0" in mlb.url or "booth=" in mlb.url
 
 
+
+def test_picking_or_clearing_a_booth_keeps_the_row_expanded(mlb: Page) -> None:
+    """G5: as in the CFB Crews table, a pick or Clear selection keeps open rows and paging."""
+    mlb.locator(ROW).first.focus()
+    mlb.keyboard.press("ArrowRight")
+    assert mlb.locator(ROW).first.get_attribute("aria-expanded") == "true"
+    mlb.keyboard.press("Enter")
+    assert "booth=" in mlb.url
+    assert mlb.locator(ROW).first.get_attribute("aria-expanded") == "true"
+    mlb.click("#mlb-clear-selection")
+    assert "booth=" not in mlb.url
+    assert mlb.locator(ROW).first.get_attribute("aria-expanded") == "true"
+
 def test_some_booths_pending_withholds_the_lead_lines_as_pending(
     mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
 ) -> None:
