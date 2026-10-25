@@ -252,7 +252,7 @@ def test_view_deep_links(mlb_guarded_page: Page, open_mlb_app: Callable[..., Non
 def test_sport_switch_with_an_open_game_does_not_redraw_the_hidden_scatter(
     mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
 ) -> None:
-    """F14: unmount closes the panel; its onClose must not re-render the Scatter once MLB is gone."""
+    """F14: unmount closes the panel; onClose must not re-render the Scatter once MLB is gone."""
     page = mlb_guarded_page
     open_mlb_app(page, "?sport=mlb&view=scatter")
     page.wait_for_function("window.__mlbTestHooks.getViewModel('scatter').drawn === true")
