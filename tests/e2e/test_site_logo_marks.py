@@ -250,6 +250,59 @@ def test_panel_network_and_also_on_lines_use_marks(
     assert line.locator(".net-mark .net-name").text_content() == "Conference Network"
 
 
+@pytest.mark.parametrize(
+    ("ids", "outlets", "want"),
+    [
+        # An ESPN game also streamed on ESPN+, listed streaming-first in the data.
+        ({0: "espn", 4: "espn-plus"}, [4, 0], ["espn", "espn-plus"]),
+        # NBC simulcast on Peacock, and CBS on Paramount+ (no Paramount+ logo: its name shows).
+        ({0: "nbc", 4: "peacock"}, [4, 0], ["nbc", "peacock"]),
+        ({0: "cbs", 4: "paramount-plus"}, [4, 0], ["cbs", "paramount-plus"]),
+        # Several outlets after the primary follow NETWORK_PRECEDENCE: ABC, ESPN2, then ESPN+.
+        (
+            {0: "espn", 1: "espn2", 2: "abc", 4: "espn-plus"},
+            [4, 1, 0, 2],
+            ["espn", "abc", "espn2", "espn-plus"],
+        ),
+    ],
+)
+def test_tooltip_shows_every_outlet_in_network_precedence(
+    guarded_page: Page,
+    open_app: OpenApp,
+    fixture_raw: dict[str, Any],
+    ids: dict[int, str],
+    outlets: list[int],
+    want: list[str],
+) -> None:
+    """User report 2026-10-24: a game on ESPN and ESPN+ must show both logos. The tooltip
+    shows the primary network first, then every other outlet in NETWORK_PRECEDENCE, the
+    same order as the panel's "Also on" list; a network with a vendored logo shows it."""
+    raw = copy.deepcopy(fixture_raw)
+    for index, logo_id in ids.items():
+        raw["lookups"]["networks"][index]["id"] = logo_id
+    raw["telecasts"]["network"][0] = 0
+    raw["telecasts"]["outlets"][0] = outlets
+    _serve(guarded_page, raw)
+    open_app(guarded_page, "")
+    guarded_page.evaluate(_SHOW_TOOLTIP_JS, 0)
+    row = "#chart-tooltip .tooltip-networks .net-mark"
+    shown = guarded_page.evaluate(
+        """(sel) => [...document.querySelectorAll(sel)].map((m) => {
+          const img = m.querySelector('img');
+          return img ? img.getAttribute('src') : 'name:' + m.textContent;
+        })""",
+        row,
+    )
+    logos = guarded_page.evaluate(
+        "async () => (await import(new URL('./modules/logos.js', location.href).href))"
+        ".logoFor('paramount-plus')"
+    )
+    assert logos is None  # no vendored Paramount+ mark: it falls back to its name
+    names = {n["id"]: n["name"] for n in raw["lookups"]["networks"]}
+    expected = [f"logos/{i}.svg" if i != "paramount-plus" else f"name:{names[i]}" for i in want]
+    assert shown == expected
+
+
 def test_footer_carries_the_logo_trademark_line(guarded_page: Page, open_app: OpenApp) -> None:
     """RT-23: the trademark line shown wherever logos render."""
     open_app(guarded_page, "")
