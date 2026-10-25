@@ -3984,6 +3984,9 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   max-height: min(640px, calc(100vh - 280px));
   min-height: 320px;
   overscroll-behavior: contain;
+  /* The table's closing rule: without it the box cut a row mid-line with no visible edge,
+     which read as clipped text rather than a scroll box. */
+  border-bottom: 1px solid var(--rule-strong);
 }
 
 .mlb-grid-wrap:focus-visible {
