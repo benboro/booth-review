@@ -103,7 +103,7 @@ function familyColor(family, th) {
 
 // ---- axes ----
 
-/** Viewers axis from the rated items: log range padded 25%, ticks that fall inside it. */
+/** Viewers axis from the rated items: log range padded 10% (UI-SPEC Axes), ticks that fall inside it. */
 function yAxisFor(items) {
   let lo = Infinity;
   let hi = -Infinity;
@@ -114,8 +114,8 @@ function yAxisFor(items) {
   }
   const all = { tickvals: VIEWER_TICKS.map((t) => t[0]), ticktext: VIEWER_TICKS.map((t) => t[1]) };
   if (!(hi > 0)) return { range: [Math.log10(5e5), Math.log10(2e7)], ...all };
-  const rLo = lo / 1.25;
-  const rHi = hi * 1.25;
+  const rLo = lo / 1.1;
+  const rHi = hi * 1.1;
   const ticks = VIEWER_TICKS.filter(([v]) => v >= rLo && v <= rHi);
   if (ticks.length >= 2) {
     return {

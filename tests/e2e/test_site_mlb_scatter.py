@@ -174,6 +174,11 @@ def test_axes_titles_ticks_and_ranges(
     assert lo < 0  # the left strip sits at negative x
     assert nice <= hi < nice + 0.5
     assert layout["xaxis"]["tickvals"][0] == 0
+    # G9: the viewers range is the rated span padded 10% each way (UI-SPEC Axes table).
+    rated = [v for v in _G["viewers"] if v is not None]
+    ylo, yhi = layout["yaxis"]["range"]
+    assert ylo == pytest.approx(math.log10(min(rated) / 1.1))
+    assert yhi == pytest.approx(math.log10(max(rated) * 1.1))
 
 
 def test_placements_strips_and_divider(
