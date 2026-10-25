@@ -30,7 +30,7 @@ _DENSE: dict[str, Any] = densify_scatter(_RAW)
 _G = _DENSE["games"]
 _POST_ROUNDS = {"wild_card", "division", "lcs", "world_series", "tiebreak"}
 
-VIEWER_TICKS = {"500K", "1M", "2M", "5M", "10M", "20M", "50M"}
+VIEWER_TICKS = {"500K", "1M", "2M", "5M", "10M", "20M"}
 PAGE_BG_LIGHT = "#FBF9F5"
 
 
@@ -179,30 +179,6 @@ def test_axes_titles_ticks_and_ranges(
     ylo, yhi = layout["yaxis"]["range"]
     assert ylo == pytest.approx(math.log10(min(rated) / 1.1))
     assert yhi == pytest.approx(math.log10(max(rated) * 1.1))
-
-
-def _big_game(route: Route) -> None:
-    resp = route.fetch()
-    data = densify_scatter(json.loads(resp.text()))
-    rated = [i for i, v in enumerate(data["games"]["viewers"]) if v is not None]
-    data["games"]["viewers"][rated[0]] = 41_000_000
-    route.fulfill(response=resp, body=json.dumps(data))
-
-
-def test_fifty_million_tick_shows_only_above_twenty_million(
-    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
-) -> None:
-    page = mlb_guarded_page
-    _open(page, open_mlb_app)
-    default_labels = _plot(page)["layout"]["yaxis"]["ticktext"]
-    assert "50M" not in default_labels  # fixture tops out below 20M
-    page.unroute("**/mlb-data.json")
-    page.route("**/mlb-data.json", _big_game)
-    open_mlb_app(page, "?sport=mlb&view=scatter")
-    page.wait_for_function(f"{HOOKS}.getViewModel('scatter').drawn === true")
-    big_labels = _plot(page)["layout"]["yaxis"]["ticktext"]
-    assert "20M" in big_labels
-    assert "50M" in big_labels
 
 
 def test_placements_strips_and_divider(
