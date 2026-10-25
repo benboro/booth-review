@@ -112,7 +112,8 @@ export function nextGridTarget(grid, pos, key) {
     case 'End': {
       let c = cols.length - 1;
       while (c >= 0 && !cols[c].length) c -= 1;
-      return c < 0 ? pos : { row, col: c, sub: 0 };
+      // The row's last button: the final column's last sub-block (NL after AL).
+      return c < 0 ? pos : { row, col: c, sub: cols[c].length - 1 };
     }
     case 'PageDown': return vertical(Math.min(row + GRID_PAGE, grid.length - 1), 'first');
     case 'PageUp': return vertical(Math.max(row - GRID_PAGE, 0), 'first');

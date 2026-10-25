@@ -73,6 +73,14 @@ def test_next_grid_target_across_a_row(post: Page) -> None:
         "col": 2,
         "sub": 0,
     }
+    # F22: End lands on the row's last button, the final column's last sub-block (UI-SPEC:257).
+    assert _next(
+        post, [[["season-2018"], ["AL", "NL"]]], {"row": 0, "col": 0, "sub": 0}, "End"
+    ) == {
+        "row": 0,
+        "col": 1,
+        "sub": 1,
+    }
 
 
 def test_next_grid_target_down_and_up(post: Page) -> None:
