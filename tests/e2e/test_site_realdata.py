@@ -28,6 +28,7 @@ import gzip
 import json
 import os
 from collections.abc import Callable, Iterator
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -2201,3 +2202,199 @@ def test_real_nfl_crews_pool_counts(
     assert page_moved_rows == moved_rows
     print(f"nfl crews counts: pooled={page_pooled} season={page_season} moved_pairs={moved_pairs}")
     _assert_guard_clean(off_origin, csp_errors)
+
+
+# -- MLB views on real data (Phase 16-09) ---------------------------------------------------
+
+_MLB_COUNTS_JS = """
+async () => {
+  const D = await import('./sports/mlb/data.js');
+  const S = await import('./sports/mlb/state.js');
+  const A = await import('./sports/mlb/apple-rows.js');
+  const I = await import('./sports/mlb/scatter-items.js');
+  const raw = await (await fetch('mlb-data.json')).json();
+  const m = D.prepareMlb(raw);
+  const st = S.defaultMlbState();
+  const res = I.buildScatterItems(m, st);
+  const c = res.counts;
+  const roundValues = new Set(m.cols.round.filter((r) => r != null));
+  for (const p of m.postseason) roundValues.add(p.round);
+  let unlabelled = 0;
+  for (const r of roundValues) {
+    if (!Object.prototype.hasOwnProperty.call(D.ROUND_LABELS, r)) unlabelled += 1;
+  }
+  let unmapped = 0;
+  for (const net of m.networks) if (!I.MLB_FAMILY_ORDER.includes(net.family)) unmapped += 1;
+  const apple = A.buildAppleRows(m, { adjusted: false });
+  return {
+    n: m.n,
+    items: res.items.length,
+    plotted: c.plotted,
+    noRating: c.noRating,
+    noExcitement: c.noExcitement,
+    neither: c.neither,
+    unlabelled,
+    unmapped,
+    eras: m.eras.length,
+    appleModel: m.appleBooths.length,
+    appleRows: apple.length,
+  };
+}
+"""
+
+_MLB_APPLE_TABLE_JS = "() => document.querySelectorAll('#mlb-view-apple tr.crews-row').length"
+
+_MLB_POST_SEASONS_JS = """
+() => Array.from(document.querySelectorAll('#mlb-view-postseason .mlb-grid tbody tr[data-season]'))
+  .map((tr) => Number(tr.dataset.season))
+"""
+
+
+@pytest.fixture(scope="module")
+def real_mlb_data_path() -> Path:
+    """The vault's built mlb-data.json; skips when absent."""
+    path = DataPaths.from_env().processed / "mlb-data.json"
+    if not path.is_file():
+        pytest.skip("mlb-data.json not found (real vault data unavailable)")
+    return path
+
+
+@pytest.fixture(scope="module")
+def real_mlb_site_dist(tmp_path_factory: pytest.TempPathFactory, real_mlb_data_path: Path) -> Path:
+    """Builds dist/site with the MLB flag on from the real vault data."""
+    del real_mlb_data_path  # only used to gate/skip before this fixture runs
+    out = tmp_path_factory.mktemp("real-mlb-site") / "site"
+    returncode = main(["site", "--mlb", "--out", str(out)])
+    assert returncode == 0, f"booth-review site --mlb exited {returncode}"
+    return out
+
+
+@pytest.fixture(scope="module")
+def real_mlb_raw(real_mlb_site_dist: Path) -> dict[str, Any]:
+    """The real built mlb-data.json, parsed -- read only for counts (never printed)."""
+    return json.loads((real_mlb_site_dist / "mlb-data.json").read_text(encoding="utf-8"))  # type: ignore[no-any-return]
+
+
+@pytest.fixture(scope="module")
+def real_mlb_site_url(real_mlb_site_dist: Path) -> Iterator[str]:
+    yield from _serve_directory(real_mlb_site_dist)
+
+
+def _open_real_mlb(page: Page, url: str, query: str) -> None:
+    _install_guard(page, url)
+    page.goto(f"{url}/index.html?sport=mlb{query}")
+    page.wait_for_function(
+        "window.__mlbTestHooks && window.__mlbTestHooks.ready === true", timeout=90_000
+    )
+
+
+@pytest.fixture
+def real_mlb_counts(page: Page, real_mlb_site_url: str) -> dict[str, int]:
+    _open_real_mlb(page, real_mlb_site_url, "&view=scatter")
+    counts: dict[str, int] = page.evaluate(_MLB_COUNTS_JS)
+    return counts
+
+
+def test_real_mlb_scatter_places_every_game_once(real_mlb_counts: dict[str, int]) -> None:
+    """D-05: default control, one item per game and the four placements add up to n."""
+    n = real_mlb_counts["n"]
+    items = real_mlb_counts["items"]
+    placed = (
+        real_mlb_counts["plotted"]
+        + real_mlb_counts["noRating"]
+        + real_mlb_counts["noExcitement"]
+        + real_mlb_counts["neither"]
+    )
+    assert n > 0
+    assert items == n
+    assert placed == n
+
+
+def test_real_mlb_network_families_are_all_mapped(real_mlb_counts: dict[str, int]) -> None:
+    unmapped = real_mlb_counts["unmapped"]
+    assert unmapped == 0
+
+
+# Per-game wp_excitement ships rounded to 3 decimals while the cell means come from the
+# unrounded values, so a mean differs from the shipped game figures' mean by at most 0.0005.
+_WP_TOL = 5e-4 + 1e-9
+
+
+def test_real_mlb_excitement_n_matches_the_shipped_mean(real_mlb_raw: dict[str, Any]) -> None:
+    """A1 parity: each Postseason cell's excitement_n and mean_excitement equal the count and
+    mean of its games' non-null wp_excitement; Apple booths are checked too when rated."""
+    wp = real_mlb_raw["games"]["wp_excitement"]
+    post = real_mlb_raw["postseason"]
+    checked = 0
+    n_matching = 0
+    mean_matching = 0
+    for k, game_list in enumerate(post["game_list"]):
+        vals = [wp[g] for g in game_list if wp[g] is not None]
+        checked += 1
+        if len(vals) == post["excitement_n"][k]:
+            n_matching += 1
+        shipped = post["mean_excitement"][k]
+        if (not vals and shipped is None) or (
+            vals and shipped is not None and abs(sum(vals) / len(vals) - shipped) <= _WP_TOL
+        ):
+            mean_matching += 1
+    booths = real_mlb_raw["apple_booths"]
+    apple_checked = 0
+    apple_matching = 0
+    for k, shipped in enumerate(booths["raw_excitement"]):
+        if shipped is None:
+            continue
+        vals = [wp[g] for g in booths["game_list"][k] if wp[g] is not None]
+        apple_checked += 1
+        if vals and abs(sum(vals) / len(vals) - shipped) <= _WP_TOL:
+            apple_matching += 1
+    assert checked > 0
+    assert n_matching == checked
+    assert mean_matching == checked
+    assert apple_matching == apple_checked
+
+
+def test_real_mlb_era_note_branch(page: Page, real_mlb_site_url: str) -> None:
+    """Caption 4 (era note) shows exactly when the data has more than one era."""
+    _open_real_mlb(page, real_mlb_site_url, "&view=scatter")
+    page.wait_for_function("window.__mlbTestHooks.getViewModel('scatter')?.drawn === true")
+    era_count: int = page.evaluate(
+        "async () => (await (await fetch('mlb-data.json')).json()).lookups.eras.length"
+    )
+    captions: int = page.evaluate(
+        "() => document.querySelectorAll('#mlb-view-scatter p.caption').length"
+    )
+    era_link: int = page.evaluate(
+        "() => document.querySelectorAll("
+        "\"#mlb-view-scatter p.caption a[href$='#measurement-eras']\").length"
+    )
+    expected_captions = 4 if era_count > 1 else 3
+    expected_link = 1 if era_count > 1 else 0
+    assert era_count > 0
+    assert captions == expected_captions
+    assert era_link == expected_link
+
+
+def test_real_mlb_round_values_all_have_labels(real_mlb_counts: dict[str, int]) -> None:
+    unlabelled = real_mlb_counts["unlabelled"]
+    assert unlabelled == 0
+
+
+def test_real_mlb_apple_and_postseason_counts(page: Page, real_mlb_site_url: str) -> None:
+    _open_real_mlb(page, real_mlb_site_url, "&view=apple")
+    model_booths: int = page.evaluate(
+        "async () => (await (await fetch('mlb-data.json')).json()).apple_booths.rank_label.length"
+    )
+    table_rows: int = page.evaluate(_MLB_APPLE_TABLE_JS)
+    assert model_booths > 0
+    assert table_rows == model_booths
+    page.goto(f"{real_mlb_site_url}/index.html?sport=mlb&view=postseason")
+    page.wait_for_function(
+        "window.__mlbTestHooks && window.__mlbTestHooks.ready === true", timeout=90_000
+    )
+    page.wait_for_selector("#mlb-view-postseason .mlb-grid tbody tr[data-season]")
+    seasons: list[int] = page.evaluate(_MLB_POST_SEASONS_JS)
+    descending = all(a > b for a, b in pairwise(seasons))
+    season_count = len(seasons)
+    assert season_count > 0
+    assert descending
