@@ -94,12 +94,12 @@ def white_box_offenders(page: Page) -> list[str]:
     return result
 
 
-def chart_layout(page: Page, chart_id: str = "chart") -> dict[str, Any]:
-    """The colour- and range-bearing parts of a Plotly chart's current layout."""
+def chart_layout(page: Page, selector: str = "#chart") -> dict[str, Any]:
+    """The colour- and range-bearing parts of the Plotly chart at `selector`."""
     result: dict[str, Any] = page.evaluate(
         """
-        (id) => {
-          const gd = document.getElementById(id);
+        (sel) => {
+          const gd = document.querySelector(sel);
           const l = gd.layout;
           const fl = gd._fullLayout;
           return {
@@ -116,6 +116,6 @@ def chart_layout(page: Page, chart_id: str = "chart") -> dict[str, Any]:
           };
         }
         """,
-        chart_id,
+        selector,
     )
     return result

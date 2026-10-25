@@ -38,8 +38,8 @@ def _palette(page: Page) -> dict[str, dict[str, str]]:
     return result
 
 
-def _assert_dark_frame(page: Page, chart_id: str = "chart") -> None:
-    lay = chart_layout(page, chart_id)
+def _assert_dark_frame(page: Page, selector: str = "#chart") -> None:
+    lay = chart_layout(page, selector)
     assert lay["paper"] == PAGE_BG and lay["plot"] == PAGE_BG, lay
     assert lay["font"] == MUTED, lay
     assert lay["gridY"] == GRID, lay
@@ -109,7 +109,7 @@ def test_bars_and_butterfly_dark_tone_a_and_no_white_boxes(
     for query in ("?school=northfield&view=bars", "?school=northfield,lakeview&view=butterfly"):
         open_app(guarded_page, query)
         click_toggle(guarded_page)
-        _assert_dark_frame(guarded_page, "bars-chart")
+        _assert_dark_frame(guarded_page, "#bars-chart")
         colors = guarded_page.evaluate(
             "Array.from(document.querySelectorAll('#bars-chart .trace.bars .point path'))"
             ".map(p => getComputedStyle(p).fill)"
