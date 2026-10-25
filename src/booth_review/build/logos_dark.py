@@ -17,7 +17,10 @@ Rules, applied to every paint (UI-SPEC "Dark logo variants"):
    lifted paint, else it takes the dark ground.
 
 Only colour tokens are rewritten, by regex, so every other byte is unchanged;
-an unrecognised colour syntax raises `SiteBuildError`. Stdlib only.
+an unrecognised colour syntax raises `SiteBuildError`, and so does `currentColor`
+(an `<img>` resolves it to black) or any fill/stroke/stop-color paint the strict
+regexes do not parse (for example `fill = "#000"`), which a loose scan counts.
+Stdlib only.
 """
 
 from __future__ import annotations
@@ -42,7 +45,7 @@ KEEP_CONTRAST = 3.0
 LIFT_CONTRAST = 3.1
 LIFT_STEP = 0.005
 
-_KEEP_WORDS = frozenset({"none", "currentcolor", "inherit", "transparent"})
+_KEEP_WORDS = frozenset({"none", "inherit", "transparent"})
 _NAMED = {"black": "#000000", "white": "#FFFFFF"}
 
 # fill="..." attributes and `fill: ...` declarations (style attributes, <style>).
@@ -50,6 +53,8 @@ _ATTR = re.compile(r"""(?<=\s)(fill|stroke|stop-color)=(["'])(.*?)\2""", re.S)
 _DECL = re.compile(r"(?<![\w-])(fill|stroke|stop-color)(\s*:\s*)([^;\"'}<]+)")
 _ROOT = re.compile(r"<svg\b[^>]*>", re.S)
 _HEX = re.compile(r"#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+# Every paint property name followed by `=` or `:`, however spaced (not fill-rule and kin).
+_LOOSE = re.compile(r"(?<![\w-])(fill|stroke|stop-color)(?![\w-])\s*[=:]")
 
 
 def _hex_to_rgb(hex_color: str) -> tuple[float, float, float]:
@@ -126,6 +131,8 @@ def _normalise(token: str) -> str | None:
     """Return `#RRGGBB` (upper) for a colour token, None to leave it alone."""
     value = token.strip()
     low = value.lower()
+    if low == "currentcolor":
+        raise SiteBuildError("logo dark variant: currentColor paints black in an <img>")
     if low in _KEEP_WORDS or low.startswith("url("):
         return None
     if low in _NAMED:
@@ -140,8 +147,16 @@ def _normalise(token: str) -> str | None:
 
 
 def _paints(text: str) -> list[str]:
-    found = [_normalise(m.group(3)) for m in _ATTR.finditer(text)]
-    found += [_normalise(m.group(3)) for m in _DECL.finditer(text)]
+    attrs = list(_ATTR.finditer(text))
+    decls = list(_DECL.finditer(text))
+    loose = len(_LOOSE.findall(text))
+    if loose != len(attrs) + len(decls):
+        raise SiteBuildError(
+            f"logo dark variant: {loose} paint properties but only "
+            f"{len(attrs) + len(decls)} parse as fill/stroke/stop-color tokens"
+        )
+    found = [_normalise(m.group(3)) for m in attrs]
+    found += [_normalise(m.group(3)) for m in decls]
     return [p for p in found if p is not None]
 
 

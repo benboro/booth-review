@@ -164,3 +164,44 @@ def test_build_writes_a_dark_variant_for_every_logo(
         expected = dark_variant(logo.read_bytes(), flip_pair=logo.name in FLIP_PAIR_FILES)
         assert built.read_bytes() == expected
         assert f"logos/dark/{logo.name}" in result.files
+
+
+@pytest.mark.parametrize(
+    "path_attrs",
+    [
+        'fill = "#000"',
+        'fill ="#000"',
+        "fill= '#000'",
+        'stroke = "#111212"',
+        'stop-color = "#000"',
+    ],
+)
+def test_spaced_paint_attribute_fails(path_attrs: str) -> None:
+    # Review 6f: the strict regexes miss a spaced `=`, so the paint would ship unrecoloured;
+    # a loose scan's count must match theirs, in the generator and in the lint below alike.
+    src = f'<svg xmlns="{NS}" viewBox="0 0 1 1"><path {path_attrs} d="M0 0"/></svg>'
+    with pytest.raises(SiteBuildError, match="paint properties"):
+        dark_variant(src.encode())
+    with pytest.raises(SiteBuildError, match="paint properties"):
+        logos_dark._paints(src)
+
+
+@pytest.mark.parametrize(
+    "src",
+    [
+        f'<svg xmlns="{NS}" viewBox="0 0 1 1"><path fill="currentColor" d="M0 0"/></svg>',
+        f'<svg xmlns="{NS}" viewBox="0 0 1 1"><path style="stroke:currentcolor" d="M0 0"/></svg>',
+    ],
+)
+def test_current_color_fails(src: str) -> None:
+    with pytest.raises(SiteBuildError, match="currentColor"):
+        dark_variant(src.encode())
+
+
+def test_paint_lookalikes_do_not_trip_the_loose_scan() -> None:
+    src = (
+        f'<svg xmlns="{NS}" viewBox="0 0 1 1" fill="none"><path fill-rule="evenodd"'
+        f' stroke-width="2" fill-opacity=".5" fill="#CC0000" style="stroke-linejoin:round"'
+        f' d="M0 0"/></svg>'
+    )
+    assert logos_dark._paints(src) == ["#CC0000"]
