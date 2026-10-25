@@ -1,7 +1,9 @@
 /**
  * Theme hook (SHELL-01, SHELL-02): the `data-theme` attribute on <html> is
  * the single source of truth for light/dark. Phase 13 writes it statically
- * ("light"); Phase 17 adds the toggle. No script reads the OS colour scheme.
+ * ("light"); the toggle lives in `theme-init.js`, the only writer of
+ * `data-theme`. This module stays the only reader. No script reads the OS
+ * colour scheme.
  *
  * Anything other than the literal "dark" reads as "light", and the value
  * never flows into markup (T-13-05).
