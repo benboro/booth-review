@@ -5490,6 +5490,18 @@ tr.is-matched > :first-child {
     margin-left: var(--space-sm);
   }
 
+  /* The phone-wide button rule would grow the toggle to 44px; the visual stays 32px and
+     the ::after below carries the 44px hit area. */
+  .theme-toggle {
+    min-width: 0;
+    min-height: 0;
+  }
+
+  /* With no sport switch to push it, the slot takes the free space itself. */
+  #topbar:not(:has(#sport-switch)) #theme-slot {
+    margin-left: auto;
+  }
+
   .theme-toggle::after {
     content: "";
     position: absolute;

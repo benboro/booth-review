@@ -1,5 +1,5 @@
 """SHELL-01 / SHELL-02: the site is light-only whatever the OS prefers, and the
-reserved `#theme-slot` is an empty 32x32 box at the right end of every sport
+`#theme-slot` holds the one 32x32 theme toggle at the right end of every sport
 page's header (none on the static pages)."""
 
 from __future__ import annotations
@@ -83,16 +83,21 @@ def test_os_dark_still_renders_light(opened: Callable[[str], Page], which: str) 
 
 
 @pytest.mark.parametrize("which", _SPORT_PAGES)
-def test_theme_slot_is_an_empty_32px_box_at_the_header_right(
+def test_theme_slot_holds_one_toggle_at_the_header_right(
     opened: Callable[[str], Page], which: str
 ) -> None:
     page = opened(which)
     slot = page.locator("#theme-slot")
     assert slot.count() == 1
-    assert slot.evaluate("el => el.children.length") == 0
-    assert slot.inner_text().strip() == ""
-    # The Phase 17 toggle mounts here, so the slot must not hide its children from assistive tech.
+    assert slot.locator("#theme-toggle").count() == 1
+    assert page.locator("#theme-toggle").count() == 1
+    assert slot.locator("#theme-toggle").is_visible()
+    # The toggle must stay visible to assistive tech.
     assert slot.get_attribute("aria-hidden") is None
+    toggle = slot.locator("#theme-toggle").bounding_box()
+    assert toggle is not None
+    assert round(toggle["width"]) == 32
+    assert round(toggle["height"]) == 32
     box = slot.bounding_box()
     assert box is not None
     assert round(box["width"]) == 32
