@@ -5527,6 +5527,12 @@ tr.is-matched > :first-child {
     background: var(--bg);
   }
 
+  /* The header's merged cell matches the rule above too; without this its z-index fell to 1 and
+     the body's pinned season cells scrolled over it, hiding "Season and round". */
+  .mlb-phone-grid thead th.mlb-merged-col {
+    z-index: 3;
+  }
+
   .mlb-merged-line {
     display: block;
     min-height: 1.4em;
