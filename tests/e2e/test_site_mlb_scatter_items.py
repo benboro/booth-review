@@ -118,13 +118,23 @@ def test_every_game_appears_exactly_once(run: Callable[[str], Any], name: str) -
 
 @pytest.mark.parametrize("name", list(CONTROLS))
 def test_counts_match_scatter_case(run: Callable[[str], Any], name: str) -> None:
-    out = run(
-        f"const r = M.buildScatterItems(model, st({_ctl(name)}), {{ hiddenFamilies: new Set(['fox']) }});"
-        "return r.counts;"
+    out, off = run(
+        f"const s = st({_ctl(name)});"
+        "const r = M.buildScatterItems(model, s, {});"
+        "const h = M.buildScatterItems(model, s, { hiddenFamilies: new Set(['fox']) });"
+        "const litFox = h.items.filter((it) => it.hidden && !it.faded).length;"
+        "return [r.counts, { ...h.counts, litFox }];"
     )
     for key, val in SCATTER_CASE[name].items():
         assert out[key] == val, (name, key)
     assert out["plotted"] + out["noRating"] + out["noExcitement"] + out["neither"] == out["total"]
+    # A chip off keeps every game in the counts; only the full-strength count drops (G1).
+    for key, val in SCATTER_CASE[name].items():
+        if key == "highlighted":
+            expect = None if val is None else val - off["litFox"]
+            assert off[key] == expect, (name, key)
+        else:
+            assert off[key] == val, (name, key)
 
 
 def test_missing_values_are_null_never_zero(run: Callable[[str], Any]) -> None:
@@ -279,3 +289,30 @@ def test_strip_jitter_is_deterministic(run: Callable[[str], Any]) -> None:
     for got, want in out:
         assert got == want
         assert 0 < got < 1
+
+
+def test_highlighted_skips_games_the_legend_hides(run: Callable[[str], Any]) -> None:
+    """G1: "N highlighted" counts only games drawn at full strength, so a game whose legend chip
+    is off is not counted; `matched` stays a population count and still includes it."""
+    out = run(
+        """
+        const out = [];
+        for (const pickState of [{ selection: { games: [0, 7, 10, 13], label: 'x' }, stype: 'post' }, { booth: '0', stype: 'reg' }]) {
+        const s = st(pickState);
+        const all = M.buildScatterItems(model, s, {});
+        const lit = all.items.filter((it) => !it.faded);
+        const fam = lit[0].family;
+        const r = M.buildScatterItems(model, s, { hiddenFamilies: new Set([fam]) });
+        const drawnFull = r.items.filter((it) => !it.hidden && !it.faded).length;
+        out.push({ before: all.counts.highlighted, after: r.counts.highlighted, drawnFull,
+                 hiddenLit: lit.filter((it) => it.family === fam).length,
+                 matchedBefore: all.counts.matched, matchedAfter: r.counts.matched });
+        }
+        return out;
+        """
+    )
+    for case in out:  # a selection pick, then a booth pick, each with Season type set
+        assert case["hiddenLit"] >= 1
+        assert case["after"] == case["drawnFull"]
+        assert case["after"] == case["before"] - case["hiddenLit"]
+        assert case["matchedAfter"] == case["matchedBefore"]

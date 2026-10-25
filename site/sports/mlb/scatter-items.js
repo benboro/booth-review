@@ -113,16 +113,19 @@ export function buildScatterItems(model, state, { hiddenFamilies } = {}) {
     const inPick = !selecting || matchedSet.has(i);
     const matched = selecting && inPick && inControl;
     const faded = highlighting && !(inPick && inControl);
+    const isHidden = hiddenSet.has(family);
+    // `matched` is a population count (every game in both the pick and the control);
+    // `highlighted` counts only what is drawn at full strength, so legend-hidden games are out (G1).
     if (matched) counts.matched += 1;
     if (faded) counts.faded += 1;
-    else if (highlighting) counts.highlighted += 1;
+    else if (highlighting && !isHidden) counts.highlighted += 1;
     counts.total += 1;
-    if (hiddenSet.has(family)) hidden += 1;
+    if (isHidden) hidden += 1;
     items.push({
       i, x, y, family, place,
       window: x != null && c.scope[i] === 'window',
       matched, faded,
-      hidden: hiddenSet.has(family),
+      hidden: isHidden,
     });
   }
   return { items, counts, hidden, families: MLB_FAMILY_ORDER.filter((f) => present.has(f)) };
