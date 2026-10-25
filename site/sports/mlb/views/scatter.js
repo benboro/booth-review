@@ -150,9 +150,11 @@ function xGeometry(items, plotW) {
   };
 }
 
-/** Deterministic x inside the left strip (12..60px of its 72px) for a game with no excitement. */
-function stripX(geo, i) {
-  const j = (stripJitter(i) - 0.12) / 0.76;
+/** Deterministic x inside the left strip (12..60px of its 72px) for a game with no excitement.
+ * A corner game (neither figure) also takes its y from `stripJitter(i)`, so its x uses a second,
+ * independent sequence; reusing `stripJitter(i)` for both drew the corner as one diagonal line. */
+function stripX(geo, i, corner = false) {
+  const j = corner ? (i * 0.7548776662) % 1 : (stripJitter(i) - 0.12) / 0.76;
   return geo.lo + geo.scale * (12 + j * 48);
 }
 
@@ -174,7 +176,7 @@ function buildFigure(items, env, th) {
     const left = it.place === 'left' || it.place === 'corner';
     const strip = it.place === 'bottom' || it.place === 'corner';
     return {
-      x: left ? stripX(geo, it.i) : it.y,
+      x: left ? stripX(geo, it.i, it.place === 'corner') : it.y,
       y: strip ? stripJitter(it.i) : it.x,
     };
   };
