@@ -194,12 +194,17 @@ h1, h2, h3 {
 }
 
 /* Theme toggle (Phase 17): icon-only button; theme-init.js reveals it and sets its label. */
+/* #topbar aligns on the text baseline, which leaves the 32px slot 4px above the centre line
+   of the header links beside it (measured at 1440: links 36px, icon 32px). The offset moves
+   only the icon; the phone rule resets it, since the links leave the header there. */
 #theme-slot {
   display: inline-block;
   width: 32px;
   height: 32px;
   flex: none;
   margin-left: var(--space-md);
+  position: relative;
+  top: 4px;
 }
 
 .theme-toggle {
@@ -5488,6 +5493,7 @@ tr.is-matched > :first-child {
 
   #theme-slot {
     margin-left: var(--space-sm);
+    top: 0;
   }
 
   /* The phone-wide button rule would grow the toggle to 44px; the visual stays 32px and
