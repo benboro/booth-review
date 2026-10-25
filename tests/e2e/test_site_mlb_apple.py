@@ -492,3 +492,41 @@ def test_expanded_game_row_tags_a_window_audience(
     )
     other = page.locator("#mlb-view-apple tr.crews-game[data-game='0'] td.crews-game-viewers")
     assert other.locator(".mlb-source-tag").count() == 0
+
+
+def test_fill_in_compares_against_the_listed_analyst(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """F7: the booth lists TRICKY (1 game) though Ben works 3; Ben's games are the fill-ins."""
+    page = mlb_guarded_page
+
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        data["lookups"]["people"][7]["name"] = TRICKY
+        g = data["games"]
+        pbp = {"person": 0, "role": "pbp"}
+        g["crew"][0] = [pbp, {"person": 1, "role": "analyst"}, {"person": 3, "role": "analyst"}]
+        g["crew"][1] = [pbp, {"person": 1, "role": "analyst"}]
+        g["crew"][5] = [pbp, {"person": 1, "role": "analyst"}]
+        g["crew"][6] = [pbp, {"person": 7, "role": "analyst"}]
+        b = data["apple_booths"]
+        b["game_list"][0] = [0, 1, 5, 6]
+        b["games"][0] = 4
+        b["analyst"][0] = 7  # the listed analyst is not the most-worked one
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    page.route("**/mlb-data.json", handler)
+    open_mlb_app(page)
+    # The row keeps its order by games worked (UI-SPEC: analysts by total appearances).
+    names = page.locator(ROW).nth(0).locator("td.crews-name .crews-person-name").all_inner_texts()
+    assert names[:2] == ["Ada Quill", "Ben Marlow"]
+    page.locator(ROW).nth(0).locator(".crews-chevron").click()
+    sub = page.locator("#mlb-view-apple tr.crews-expanded")
+    tagged = sorted(
+        sub.locator("tr.crews-game:has(.crews-tag.is-dashed)").evaluate_all(
+            "els => els.map(e => Number(e.dataset.game))"
+        )
+    )
+    assert tagged == [0, 1, 5]
+    assert sub.locator("tr.crews-game[data-game='6'] .crews-tag.is-dashed").count() == 0

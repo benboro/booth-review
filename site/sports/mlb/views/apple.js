@@ -257,8 +257,11 @@ function gameRow(ctx, model, row, i) {
   const analysts = g.crew.filter((m) => m.role === 'analyst').map((m) => m.name);
   crewTd.append(analysts.join(', '));
   const here = (model.cols.crew[i] || []).filter((m) => m.role === 'analyst').map((m) => m.person);
-  const regular = row.analysts[0];
-  if (here.length > 0 && regular && !here.includes(regular.person)) {
+  // The regular analyst is the booth's listed one (the chip and selection label use it), not the
+  // analyst with the most games; the tally leader is only the fallback when none is listed.
+  const listed = model.appleBooths[Number(row.rowKey)]?.analyst;
+  const regular = listed ?? row.analysts[0]?.person ?? null;
+  if (here.length > 0 && regular != null && !here.includes(regular)) {
     const tag = el('span', 'crews-tag is-dashed', 'fill-in');
     tag.title = 'The regular analyst was absent';
     crewTd.append(tag);
