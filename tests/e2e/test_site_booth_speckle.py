@@ -30,7 +30,8 @@ async (metas) => {
     const m = JSON.parse(JSON.stringify(t.marker));
     // A per-point marker (the highlight traces) is reduced to the lead game's own point.
     const at = Math.max(0, Array.from(t.customdata || []).indexOf(14));
-    for (const [obj, key] of [[m, 'symbol'], [m, 'size'], [m, 'color'], [m.line, 'width'], [m.line, 'color']]) {
+    const keys = [[m, 'symbol'], [m, 'size'], [m, 'color'], [m.line, 'width'], [m.line, 'color']];
+    for (const [obj, key] of keys) {
       if (obj && Array.isArray(obj[key])) obj[key] = obj[key][at];
     }
     out[String(t.meta)] = m;
@@ -115,8 +116,14 @@ def _data_url(page: Page, width: int, height: int) -> str:
 _STATES = {
     "filled": ("", ["lead-halo:disney", "lead:disney"]),
     "hollow": ("", ["unrated-lead:disney"]),
-    "hollow-outlined": ("?networks=net-a&dots=fade", ["unrated-lead-rim:disney", "unrated-lead:disney"]),
-    "hollow-highlighted": ("?people=casey-lund", ["highlight-halo-unrated-open", "highlight-unrated"]),
+    "hollow-outlined": (
+        "?networks=net-a&dots=fade",
+        ["unrated-lead-rim:disney", "unrated-lead:disney"],
+    ),
+    "hollow-highlighted": (
+        "?people=casey-lund",
+        ["highlight-halo-unrated-open", "highlight-unrated"],
+    ),
 }
 
 

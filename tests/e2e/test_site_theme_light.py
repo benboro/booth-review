@@ -178,7 +178,10 @@ def test_toggle_is_centred_on_the_methodology_link(
     page.wait_for_timeout(50)
     centres: dict[str, float] = page.evaluate(
         """() => {
-          const mid = (el) => { const r = el.getBoundingClientRect(); return r.top + r.height / 2; };
+          const mid = (el) => {
+            const r = el.getBoundingClientRect();
+            return r.top + r.height / 2;
+          };
           const link = [...document.querySelectorAll('.header-links a')]
             .find((a) => a.textContent.trim() === 'Methodology');
           return { toggle: mid(document.getElementById('theme-toggle')), link: mid(link) };
