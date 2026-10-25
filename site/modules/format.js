@@ -303,13 +303,15 @@ export function measurementLabel(type) {
 }
 
 /**
- * Formats a viewer count with thousands separators.
- * @param {number} n
- * @returns {string} e.g. "3,200,000".
+ * Formats one game's viewer count for the tooltip, panel and tables: unit shorthand at
+ * one decimal ("33.4MM", "523.4K"), never the full comma number (user choice 2026-10-24,
+ * overriding Phase 14 D-13 and Phase 16 N2). Sorting reads the raw numbers, never this.
+ * @param {number|null} n
+ * @returns {string} e.g. "3.2MM", or the no-rating label for null.
  */
 export function formatViewers(n) {
   if (n == null) return NO_RATING_LABEL;
-  return n.toLocaleString('en-US');
+  return formatAudienceTable(n);
 }
 
 /**

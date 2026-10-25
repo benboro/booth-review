@@ -47,7 +47,7 @@ def test_booth_selection_lists_its_games(mlb: Page) -> None:
     assert rows.count() == 2
     text = mlb.inner_text("#mlb-matched-games tbody")
     assert "Apr 10, 2026" in text
-    assert "1,800,000" in text
+    assert "1.8MM" in text
     assert "not posted yet" in text
     assert mlb.locator("#mlb-matched-games td .mlb-source-tag[data-source]").count() == 0
     assert "Ada Quill" in text

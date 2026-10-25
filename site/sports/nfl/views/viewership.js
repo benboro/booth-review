@@ -23,7 +23,7 @@ import { createOnlyDetector, makeLegendChip } from '../../../modules/legend.js';
 import { initBandInfo, closeBandNote } from '../../../modules/band-info.js';
 import { currentTheme } from '../../../modules/pill.js';
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
-import { escapeHover, formatMillions, formatViewers, MILLIONS, MINUS } from '../../../modules/format.js';
+import { escapeHover, formatMillions, MILLIONS, MINUS } from '../../../modules/format.js';
 import { mountViewTools } from '../tools.js';
 import { DATA_TABLE_CLASS, rebuildKeepingFocus } from '../data-table.js';
 

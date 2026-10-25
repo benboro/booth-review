@@ -689,16 +689,16 @@ def test_table_sorts_by_date_then_viewers(
 
     guarded_page.click('button[data-sort="viewers"]')
     rows = _row_texts(guarded_page)
-    assert "970,000" in rows[0]
-    assert "850,000" in rows[1]
+    assert "970.0K" in rows[0]
+    assert "850.0K" in rows[1]
     assert "No public rating" in rows[2]
     assert _aria_sort(guarded_page, "viewers") == "descending"
     assert _aria_sort(guarded_page, "date") == "none"
 
     guarded_page.click('button[data-sort="viewers"]')
     rows = _row_texts(guarded_page)
-    assert "850,000" in rows[0]
-    assert "970,000" in rows[1]
+    assert "850.0K" in rows[0]
+    assert "970.0K" in rows[1]
     assert "No public rating" in rows[2]  # unrated stay last in both directions
     assert _aria_sort(guarded_page, "viewers") == "ascending"
 
