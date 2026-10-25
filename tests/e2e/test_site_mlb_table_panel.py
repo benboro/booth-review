@@ -333,3 +333,40 @@ def test_panel_outlet_without_a_logo_falls_back_to_dot_and_name(
         "pills": "0",
     }
     assert mlb_guarded_page.locator("#mlb-detail-panel .panel-networks .net-dot").count() == 1
+
+
+def _retrosheet_through(page: Page, open_mlb_app: Callable[..., None], through: int) -> None:
+    """Open the app with Retrosheet loaded through `through`; game 0 lacks play-by-play, game 13
+    moves to the next season, game 1 keeps its pending lineup."""
+
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        data["freshness"]["retrosheet_through_season"] = through
+        g = data["games"]
+        g["lineup_status"][0] = "missing"
+        g["lineup_status"][13] = "missing"
+        g["season"][13] = through + 1
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    page.route("**/mlb-data.json", handler)
+    open_mlb_app(page)
+
+
+def test_excitement_pending_follows_retrosheet_freshness(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """F21: 'pending' comes from freshness, not a fixed 2026, and its year from the game."""
+    page = mlb_guarded_page
+    _retrosheet_through(page, open_mlb_app, 2026)
+    # A 2026 game Retrosheet has reached but with no play-by-play: not pending.
+    _open(page, 0)
+    assert "Excitement: not available" in _panel(page)
+    page.evaluate(f"{HOOKS}.closePanel()")
+    # A season Retrosheet has not reached reads pending with that season's year.
+    _open(page, 13)
+    assert "Excitement: pending Retrosheet 2027" in _panel(page)
+    page.evaluate(f"{HOOKS}.closePanel()")
+    # A pending lineup stays pending.
+    _open(page, 1)
+    assert "Excitement: pending Retrosheet 2026" in _panel(page)

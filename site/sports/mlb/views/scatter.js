@@ -455,9 +455,8 @@ function pointClientPosition(gd, ev) {
 
 function excitementText(row) {
   if (row.excitement != null) return `Excitement ${row.excitement.toFixed(1)}`;
-  return row.lineupStatus === 'pending' || row.season >= 2026
-    ? 'Excitement pending Retrosheet 2026'
-    : 'Excitement not available';
+  // Pending follows Retrosheet's freshness, as the Postseason grid does; the year is the game's.
+  return row.retrosheetPending ? `Excitement pending Retrosheet ${row.season}` : 'Excitement not available';
 }
 
 /** Tooltip lines (D-05): logo, matchup and date, then the viewers and excitement line. */

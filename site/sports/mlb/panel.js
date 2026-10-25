@@ -126,8 +126,8 @@ function excitementLine(row, constants) {
     const method = label ? ` (${label})` : '';
     return `Excitement: ${row.excitement.toFixed(1)}${method}`;
   }
-  return row.lineupStatus === 'pending' || row.season >= 2026
-    ? 'Excitement: pending Retrosheet 2026'
+  return row.retrosheetPending
+    ? `Excitement: pending Retrosheet ${row.season}`
     : 'Excitement: not available';
 }
 
@@ -149,7 +149,7 @@ function lineupList(side) {
 function lineupsSection(row) {
   const nodes = [el('h3', null, 'Starting Lineups')];
   if (row.lineupStatus === 'pending') {
-    nodes.push(el('p', 'mlb-lineup-note', 'Lineups: pending Retrosheet 2026'));
+    nodes.push(el('p', 'mlb-lineup-note', `Lineups: pending Retrosheet ${row.season}`));
     return nodes;
   }
   if (row.lineupStatus !== 'present') {

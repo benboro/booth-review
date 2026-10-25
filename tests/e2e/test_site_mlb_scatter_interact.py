@@ -416,3 +416,25 @@ def test_legend_chip_keyboard_toggle_keeps_focus(
         "sel => document.querySelector(sel).getAttribute('aria-pressed') === 'true'", arg=chip
     )
     assert page.evaluate("document.activeElement.dataset.family") == "fox"
+
+
+def test_tooltip_pending_follows_retrosheet_freshness(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """F21: once Retrosheet reaches 2026, a 2026 game with no play-by-play is not 'pending'."""
+    page = mlb_guarded_page
+    page.set_viewport_size({"width": 1440, "height": 900})
+
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = densify_scatter(json.loads(resp.text()))
+        data["freshness"]["retrosheet_through_season"] = 2026
+        data["games"]["lineup_status"][4] = "missing"
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    page.route("**/mlb-data.json", handler)
+    open_mlb_app(page, "?sport=mlb&view=scatter")
+    page.wait_for_function(f"{HOOKS}.getViewModel('scatter').drawn === true")
+    page.wait_for_timeout(300)
+    _hover(page, 4)
+    assert _tooltip(page)[2] == "1.1MM viewers · Excitement not available"

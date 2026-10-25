@@ -189,6 +189,15 @@ export function cellLabel(cell) {
   return cell.league ? `${cell.season} ${round}, ${cell.league}` : `${cell.season} ${round}`;
 }
 
+/**
+ * Whether a game's Retrosheet figures are still to come (the Postseason grid's rule): its lineup
+ * is pending, Retrosheet is not loaded, or its season is later than the last one loaded.
+ */
+export function retrosheetPending(model, season, lineupStatus) {
+  const through = model.freshness ? model.freshness.retrosheet_through_season ?? null : null;
+  return lineupStatus === 'pending' || through == null || season > through;
+}
+
 /** '12.0M' or null when unrated. */
 export function viewersText(viewers) {
   return viewers == null ? null : `${(viewers / 1e6).toFixed(1)}M`;
@@ -266,6 +275,7 @@ export function gameRow(model, i) {
     rrUrl: c.rr_url[i] ?? null,
     sourceUrl: c.source_url[i] ?? null,
     lineupStatus: row.lineup_status,
+    retrosheetPending: retrosheetPending(model, season, row.lineup_status),
     lineups: lineupSide(model, row),
   };
 }
