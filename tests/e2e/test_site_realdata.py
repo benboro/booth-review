@@ -1693,7 +1693,7 @@ def test_real_points_and_margin_axes(
 
 # ---------------------------------------------------------------- 04.18 Map (SITE-70..75)
 
-_MAP_TRACE_COUNT = 13
+_MAP_TRACE_COUNT = 14
 
 _MAP_PICK_JS = """
 async () => {

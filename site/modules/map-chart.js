@@ -31,12 +31,13 @@ import {
 const MARKER_FONT = { desktop: 12, mobile: 12 };
 const MOBILE_HOVER_DISTANCE = 22;
 
-/** The 13 trace names in draw order (Phase 11). */
+/** The 14 trace names in draw order (Phase 11; `venue-hits` added at Phase 17.1 D-16). */
 export const MAP_TRACE_NAMES = Object.freeze([
   'outline',
   ...FAMILY_ORDER.map((f) => `legs:${f}`),
   'venue-faded',
   'venue-dots',
+  'venue-hits',
   'venue-selected',
   'markers',
 ]);
@@ -154,6 +155,33 @@ function venueDotsTrace(dots, theme, mobile) {
         color: dots.map((d) => (d.tier === 'subject' ? DOT_OUTLINE[theme] : PAGE_BG[theme])),
       },
     },
+    // The invisible venue-hits trace carries hover and click, so these draw only.
+    hoverinfo: 'skip',
+    hovertemplate: null,
+    showlegend: false,
+  };
+}
+
+/**
+ * The minimum hit target (Phase 17.1 D-16): a fully transparent twin of the venue dots, same
+ * points in the same order, each at least `MAP_VENUE_DOT.hitDiameter` wide so a small dot is
+ * still easy to hover, click and tap. It draws nothing; events are keyed by customdata.
+ */
+function venueHitsTrace(dots, mobile) {
+  return {
+    type: 'scatter',
+    mode: 'markers',
+    name: 'venue-hits',
+    x: dots.map((d) => d.x),
+    y: dots.map((d) => d.y),
+    customdata: dots.map((d) => d.key),
+    marker: {
+      symbol: 'circle',
+      size: dots.map((d) => Math.max(venueDotSize(d, mobile), MAP_VENUE_DOT.hitDiameter)),
+      color: 'rgba(0,0,0,0)',
+      opacity: 1,
+      line: { width: 0 },
+    },
     hoverinfo: 'none',
     hovertemplate: null,
     showlegend: false,
@@ -258,6 +286,7 @@ export function buildMapFigure(model, geometry, env) {
     ...FAMILY_ORDER.map((f) => legsTrace(f, model.legs, theme)),
     venueFadedTrace(model.venueFaded, theme),
     venueDotsTrace(model.venueDots, theme, mobile),
+    venueHitsTrace(model.venueDots, mobile),
     venueSelectedTrace(model, theme, mobile),
     markersTrace(model.markers, theme, mobile),
   ];
@@ -304,7 +333,7 @@ function venueOf(ev) {
   const p = ev.points && ev.points[0];
   if (!p || p.customdata == null) return null;
   const name = p.data && p.data.name;
-  if (name !== 'venue-dots' && name !== 'markers') return null;
+  if (name !== 'venue-hits' && name !== 'markers') return null;
   return { key: p.customdata };
 }
 

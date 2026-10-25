@@ -336,7 +336,7 @@ def test_seasons_change_swaps_image_and_revokes_previous(guarded_page: Page, ope
     assert len(second) == 1
     assert second[0] != first
     assert guarded_page.evaluate(_FETCH_OK, first) is False
-    assert guarded_page.evaluate(_TRACE_COUNT) == 13
+    assert guarded_page.evaluate(_TRACE_COUNT) == 14
 
 
 def test_rapid_changes_coalesce_and_never_blank(guarded_page: Page, open_app: Any) -> None:
@@ -453,7 +453,7 @@ def test_raster_failure_falls_back_to_land_fill(guarded_page: Page, open_app: An
         "() => document.getElementById('map-chart').data[0].fill === 'toself'"
     )
     guarded_page.evaluate(_WAIT_FRAMES)
-    assert guarded_page.evaluate(_TRACE_COUNT) == 13
+    assert guarded_page.evaluate(_TRACE_COUNT) == 14
     assert (
         guarded_page.evaluate(
             "() => document.getElementById('map-chart').data.find((t) => t.name === 'venue-dots').x.length"

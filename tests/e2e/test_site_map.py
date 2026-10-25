@@ -24,7 +24,7 @@ _FAMILIES = ["disney", "fox", "cbs", "nbc", "cw", "wbd", "conference", "other"]
 _TRACE_NAMES = (
     ["outline"]
     + [f"legs:{f}" for f in _FAMILIES]
-    + ["venue-faded", "venue-dots", "venue-selected", "markers"]
+    + ["venue-faded", "venue-dots", "venue-hits", "venue-selected", "markers"]
 )
 # Fixture network ids by family (lookups.networks): net-a disney, net-b fox, net-c
 # conference, net-d other, net-e disney (Stream Plus, the Nassau game's network).
@@ -113,16 +113,16 @@ def _dot_point(page: Page) -> tuple[float, float]:
     return dot["x"], dot["y"]
 
 
-def test_map_view_shows_panel_hides_others_with_13_traces(
+def test_map_view_shows_panel_hides_others_with_14_traces(
     guarded_page: Page, open_app: OpenApp
 ) -> None:
-    """D-06: `?view=map` shows #map-panel, hides #chart and #bars-panel; 13 traces."""
+    """D-06: `?view=map` shows #map-panel, hides #chart and #bars-panel; 14 traces."""
     _open_map(guarded_page, open_app, "?view=map")
     assert _visible(guarded_page, "#map-panel")
     assert not _visible(guarded_page, "#chart")
     assert not _visible(guarded_page, "#bars-panel")
     assert list(_traces(guarded_page)) == _TRACE_NAMES
-    assert len(_TRACE_NAMES) == 13
+    assert len(_TRACE_NAMES) == 14
 
 
 def test_no_subject_draws_dots_only_with_tab_hint(guarded_page: Page, open_app: OpenApp) -> None:
@@ -338,7 +338,7 @@ def test_more_than_four_schools_shows_the_shapes_caption(
 
 
 def test_trace_names_are_constant_across_states(guarded_page: Page, open_app: OpenApp) -> None:
-    """D-06: the 13 trace names never change with subject, filters or Hide."""
+    """D-06: the 14 trace names never change with subject, filters or Hide."""
     _open_map(guarded_page, open_app, "?view=map")
     seen = [list(_traces(guarded_page))]
     for patch in (
@@ -413,7 +413,7 @@ def test_no_passing_game_is_a_plain_empty_map_in_fade_and_hide(
     assert _visible(guarded_page, "#map-empty-note")
     assert not _visible(guarded_page, "#map-key")
     traces = _traces(guarded_page)
-    for name in ("venue-faded", "venue-dots", "venue-selected", "markers"):
+    for name in ("venue-faded", "venue-dots", "venue-hits", "venue-selected", "markers"):
         assert traces[name]["n"] == 0, name
     model = _model(guarded_page)
     assert (model["venueFaded"], model["markers"], model["drawnCount"]) == ([], [], 0)
