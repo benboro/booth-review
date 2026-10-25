@@ -4047,7 +4047,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
     display: inline;
   }
 
-  .mlb-round-long {
+  .has-short > .mlb-round-long {
     display: none;
   }
 }

@@ -418,6 +418,8 @@ export function render(ctx) {
     if (ROUND_SHORT[r] !== ROUND_LABELS[r]) {
       th.append(el('span', 'mlb-round-short', ROUND_SHORT[r]));
       th.title = ROUND_LABELS[r];
+      // Only a head with a short form swaps below 1280px; the others keep their full name.
+      th.classList.add('has-short');
     }
     return th;
   };

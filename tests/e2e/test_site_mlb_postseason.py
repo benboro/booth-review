@@ -330,6 +330,15 @@ def test_lcs_head_is_short_below_1280_with_a_title(post: Page) -> None:
     assert head.get_attribute("title") == "League Championship Series"
 
 
+def test_every_round_head_keeps_a_label_below_1280(post: Page) -> None:
+    post.set_viewport_size({"width": 1100, "height": 800})
+    heads = post.eval_on_selector_all(
+        f"{VIEW} .mlb-grid thead th", "els => els.map(e => e.innerText.trim())"
+    )
+    # Only LCS switches to its short form; every other round keeps its full name.
+    assert heads == ["Season", "Wild Card", "Division Series", "LCS", "World Series"]
+
+
 def test_season_cell_selects_the_whole_season(post: Page) -> None:
     btn = post.locator(f"{VIEW} .mlb-grid button[data-season-cell='season-2019']")
     btn.click()
