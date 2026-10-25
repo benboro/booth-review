@@ -260,9 +260,10 @@ def _flip_map_dark(page: Page) -> None:
     page.wait_for_timeout(300)
 
 
-def test_map_labels_are_live_selectable_svg_text_in_dark(
-    guarded_page: Page, open_app: OpenApp
-) -> None:
+def test_map_labels_are_live_svg_text_in_dark(guarded_page: Page, open_app: OpenApp) -> None:
+    # The labels are live SVG text, never raster pixels in the splat image. They are not
+    # user-selectable, in light or dark: Plotly sets `user-select: none` on its charts, and dark
+    # matches light here. The Range text below proves the text is live, not that it selects.
     open_app(guarded_page, "?view=map&people=pat-rowan")
     guarded_page.wait_for_function("() => window.__testHooks.mapSplatRenders >= 1")
     _flip_map_dark(guarded_page)
@@ -274,18 +275,12 @@ def test_map_labels_are_live_selectable_svg_text_in_dark(
           const node = nodes.find((n) => n.closest('.textpoint')) || nodes[0];
           const range = document.createRange();
           range.selectNodeContents(node);
-          const sel = window.getSelection();
-          sel.removeAllRanges();
-          sel.addRange(range);
-          // Plotly's own `.user-select-none` makes Selection.toString() empty on every chart
-          // (light too); the Range text proves the label is live text, not raster pixels.
-          return { selected: range.toString(), ranges: sel.rangeCount,
-                   tag: node.tagName.toLowerCase(), fill: getComputedStyle(node).fill };
+          return { text: range.toString(), tag: node.tagName.toLowerCase(),
+                   fill: getComputedStyle(node).fill };
         }"""
     )
     assert result is not None, "no SVG text node on the dark map"
-    assert result["tag"] == "text" and result["selected"].strip(), result
-    assert result["ranges"] == 1, result
+    assert result["tag"] == "text" and result["text"].strip(), result
     assert result["fill"] == rgb(MUTED), result
     marker_text = guarded_page.evaluate(
         "(document.getElementById('map-chart').data.find((t) => t.name === 'markers') || {})"
