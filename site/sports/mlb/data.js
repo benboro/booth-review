@@ -6,6 +6,8 @@
  * never 0.
  */
 
+import { formatMillions } from '../../modules/format.js';
+
 const REQUIRED_BLOCKS = [
   'games', 'lineups', 'lookups', 'apple_booths', 'apple_summary',
   'postseason', 'postseason_seasons', 'freshness', 'constants',
@@ -215,9 +217,9 @@ export function retrosheetLoaded(model) {
   return (model.freshness ? model.freshness.retrosheet_through_season ?? null : null) != null;
 }
 
-/** '12.0M' or null when unrated. */
+/** '12.0MM' or null when unrated. */
 export function viewersText(viewers) {
-  return viewers == null ? null : `${(viewers / 1e6).toFixed(1)}M`;
+  return viewers == null ? null : formatMillions(viewers);
 }
 
 function lineupSide(model, row) {

@@ -23,7 +23,7 @@ import { createOnlyDetector, makeLegendChip } from '../../../modules/legend.js';
 import { initBandInfo, closeBandNote } from '../../../modules/band-info.js';
 import { currentTheme } from '../../../modules/pill.js';
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
-import { escapeHover, formatViewers, MINUS } from '../../../modules/format.js';
+import { escapeHover, formatMillions, MILLIONS, MINUS } from '../../../modules/format.js';
 import { mountViewTools } from '../tools.js';
 import { DATA_TABLE_CLASS, rebuildKeepingFocus } from '../data-table.js';
 
@@ -90,7 +90,7 @@ function tickLabel(v, signed) {
   let s;
   if (a === 0) s = '0';
   else if (a < 1e6) s = `${+(a / 1e3).toFixed(1)}K`;
-  else s = `${+(a / 1e6).toFixed(2)}M`;
+  else s = `${+(a / 1e6).toFixed(2)}${MILLIONS}`;
   if (v < 0) return MINUS + s;
   return signed && v > 0 ? '+' + s : s;
 }
@@ -105,7 +105,7 @@ function niceStep(range, target) {
 function millions(v, signed) {
   const r = Math.round(v);
   if (r === 0) return '0';
-  const body = `${(Math.abs(r) / 1e6).toFixed(1)}M`;
+  const body = formatMillions(Math.abs(r));
   if (r < 0) return MINUS + body;
   return signed ? `+${body}` : body;
 }

@@ -302,25 +302,27 @@ def test_axis_toggle_shows_excitement_caption_and_persists_on_reload(
 def test_y_axis_ticks_use_short_labels_not_raw_exponents(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """SITE-01: log-viewers ticks read like '1M', never a raw exponent."""
+    """SITE-01: log-viewers ticks read like '1MM', never a raw exponent."""
     open_app(guarded_page, "")
     # SVG <text> nodes have no `innerText`; use `textContent` via
     # `all_text_contents` instead of `all_inner_texts`.
     texts = guarded_page.locator(".ytick text").all_text_contents()
-    assert any("1M" in text for text in texts)
+    assert any(re.fullmatch(r"1\d*MM", text) for text in texts)
     assert not any(re.search(r"e[+-]?\d", text) for text in texts)
 
 
 def test_y_axis_ticks_show_thousands_as_k_below_one_million(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """Below 1M, ticks read "500K"/"200K" -- never "0.5M"/"0.2M" -- and stay
-    "1M"/"2M"/... at/above 1M."""
+    """Below 1MM, ticks read "500K"/"200K" -- never "0.5MM"/"0.2MM" -- and stay
+    "1MM"/"2MM"/... at/above 1MM (the site-wide millions unit, 2026-10-24)."""
     open_app(guarded_page, "")
     texts = guarded_page.locator(".ytick text").all_text_contents()
     assert any("500K" in text for text in texts)
-    assert any("1M" in text for text in texts)
+    assert any(re.fullmatch(r"1\d*MM", text) for text in texts)
     assert not any(re.search(r"0\.\dM", text) for text in texts)
+    # Millions read "MM" only: no tick ends in a bare "M".
+    assert not any(re.search(r"\dM$", text) for text in texts)
 
 
 def test_axis_titles_render_for_both_axes(

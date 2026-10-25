@@ -31,7 +31,7 @@ import { placeEraLabels, setEraCaption } from '../era-labels.js';
 import { bandLayout, marginFor, TICK_FONT_PX, DOT_OPACITY } from '../../../modules/chart.js';
 import { createOnlyDetector, makeLegendChip } from '../../../modules/legend.js';
 import { buildDateAxis, seasonRange, shownBlocks, gapDividers } from '../../../modules/date-axis.js';
-import { MONTHS, escapeHover } from '../../../modules/format.js';
+import { MONTHS, escapeHover, viewerTickLabel } from '../../../modules/format.js';
 import { mountViewTools } from '../tools.js';
 import { DATA_TABLE_CLASS, findRowButton, rebuildKeepingFocus, rovingRows } from '../data-table.js';
 
@@ -39,9 +39,7 @@ const CONFIG = frameConfig({ zoomable: true });
 
 const Y_TITLES = { viewers: 'Viewers', excitement: 'Excitement' };
 const X_TITLE_MARGIN = 'Final margin (points)';
-const VIEWER_TICKS = [
-  [5e5, '500K'], [1e6, '1M'], [2e6, '2M'], [5e6, '5M'], [1e7, '10M'], [2e7, '20M'],
-];
+const VIEWER_TICKS = [5e5, 1e6, 2e6, 5e6, 1e7, 2e7].map((v) => [v, viewerTickLabel(v)]);
 const BAND_FILL = { light: 'rgba(75, 85, 99, 0.06)', dark: 'rgba(156, 163, 175, 0.10)' };
 // Marker size matches the CFB scatter's base dot (6); a pick fades, it never enlarges (UI-SPEC).
 const BASE_SIZE = 6;
