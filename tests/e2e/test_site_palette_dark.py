@@ -177,7 +177,7 @@ _DARK_SCALARS = {
     "DIVIDER": "#3A3632",
     "ZERO_LINE": "#5A554D",
     "SPECIAL": "#68BACB",
-    "POSTSEASON_BAND": "rgba(212, 160, 60, 0.12)",
+    "POSTSEASON_BAND": "rgba(212, 160, 60, 0.07)",
     "POSTSEASON_LABEL": "#E8BE6E",
     "MAP_LAND": _LAND,
     "MAP_OUTLINE": "#4A453E",

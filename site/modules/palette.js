@@ -141,13 +141,16 @@ export const DIVIDER = { light: '#E4DDD1', dark: '#3A3632' };
 
 /**
  * Faint gold/brown tint behind each season's bowl and playoff span on the Date axis
- * (04.17 D-07). Light alpha must stay at or below 0.10 for CBS/Other contrast.
+ * (04.17 D-07). Light alpha must stay at or below 0.10 for CBS/Other contrast. Dark alpha
+ * 0.07 (Phase 17 review F4, was 0.12) keeps every dark family at 3:1 or more on the band
+ * over SURFACE (the "No public rating" strip, #322C21, Disney 3.04:1) and over PAGE_BG
+ * (#2A241B, Disney 3.37:1).
  */
-export const POSTSEASON_BAND = { light: 'rgba(166, 120, 40, 0.07)', dark: 'rgba(212, 160, 60, 0.12)' };
+export const POSTSEASON_BAND = { light: 'rgba(166, 120, 40, 0.07)', dark: 'rgba(212, 160, 60, 0.07)' };
 
 /**
  * "Bowls & CFP" label text: a darker tint of the band hue on light, a lighter one on dark
- * (04.17 D-08, amended). 7.3:1 on the blended light plot, 8.5:1 on the blended dark plot.
+ * (04.17 D-08, amended). 7.3:1 on the blended light plot, 8.8:1 on the blended dark plot.
  */
 export const POSTSEASON_LABEL = { light: '#6E4A10', dark: '#E8BE6E' };
 
