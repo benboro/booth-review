@@ -4056,6 +4056,12 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   cursor: pointer;
 }
 
+/* `.games-table th button` (sort heads) is more specific than `.mlb-season-btn` and made the
+   season button an inline-flex row, so the year sat mid-line inside the coverage text. */
+.mlb-grid th .mlb-season-btn {
+  display: block;
+}
+
 .mlb-season-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
