@@ -4,7 +4,7 @@
  * field here is, or is derived from, a point spread.
  */
 
-import { MONTHS, formatKickoff } from '../../modules/format.js';
+import { MONTHS, formatKickoff, formatMillions } from '../../modules/format.js';
 
 const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -53,10 +53,10 @@ export function crewSourceText(row) {
   return row.crewSource === 'published_lineup' ? 'from published lineup' : null;
 }
 
-/** '12.3M' or null when unrated. */
+/** '12.3MM' or null when unrated. */
 export function viewersText(row) {
   if (row.viewers == null) return null;
-  return `${(row.viewers / 1e6).toFixed(1)}M`;
+  return formatMillions(row.viewers);
 }
 
 /** '1:00 PM ET' or null. */

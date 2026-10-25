@@ -192,7 +192,7 @@ def test_plots_every_game_with_unrated_band(
         f"Array.from(document.querySelectorAll('{GD} .ytick text')).map(t => t.textContent)"
     )
     assert ticks
-    assert set(ticks) <= {"500K", "1M", "2M", "5M", "10M", "20M"}
+    assert set(ticks) <= {"500K", "1MM", "2MM", "5MM", "10MM", "20MM"}
     assert nfl_guarded_page.locator(f"{GD} svg").count() >= 1
     assert nfl_guarded_page.locator(f"{GD} canvas").count() == 0  # svg scatter, never scattergl
 
@@ -549,7 +549,7 @@ def test_hover_lines_rated_window_and_unrated_regional(
         "matched": False,
         "names": [people[pbp["person"]]["name"], people[analyst["person"]]["name"]],
     }
-    assert f"Viewers: {g['viewers'][rated] / 1e6:.1f}M · window-level" in lines
+    assert f"Viewers: {g['viewers'][rated] / 1e6:.1f}MM · window-level" in lines
     exc = g["excitement"][rated]
     assert f"Excitement: {exc:.1f} (GEI-style, not CFBD's index)" in lines
     assert lines[-1].startswith("Excitement:")

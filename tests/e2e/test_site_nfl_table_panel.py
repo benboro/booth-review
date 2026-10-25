@@ -73,7 +73,7 @@ def test_format_helpers(run: Callable[[str], Any]) -> None:
     assert got["snf"] == "Sunday Night Football (SNF)"
     assert got["other"] == "Thanksgiving"
     assert got["flags"] == ["Solo slot", "Fox AGOTW", "Flexed"]
-    assert got["v"] == "12.3M"
+    assert got["v"] == "12.3MM"
     assert got["nv"] is None
     assert got["ko"] == "1:00 PM ET"
     assert got["long"] == "Sunday, Sep 7, 2025"
@@ -118,7 +118,7 @@ def test_table_cells(run: Callable[[str], Any]) -> None:
     assert first[2] == "Lanterns 27, Gulls 24"
     assert first[3] == "Fox"
     assert got["crewOrder"] == ["Pat Pbp", "Ann Analyst", "Sam Sideline"]
-    assert "12.3M" in first[5] and "window-level" in first[5]
+    assert "12.3MM" in first[5] and "window-level" in first[5]
     assert first[6] == "Record ↗"
     assert got["link"] == "noopener noreferrer"
     assert second[3] == "Not recorded" and second[4] == "Not recorded"
@@ -274,7 +274,7 @@ def test_panel_cfb_layout(run: Callable[[str], Any]) -> None:
     ]
     assert got["crewBox"] == 3 and got["rolePills"] >= 2
     assert "From published lineup." in got["boxText"]
-    assert "Viewers: 12.3M · Window-level figure (all Sunday afternoon games)." in paras
+    assert "Viewers: 12.3MM · Window-level figure (all Sunday afternoon games)." in paras
     assert "Measured under Nielsen panel plus out-of-home." in paras
     facts = next(x for x in paras if x.startswith("Slot:"))
     assert "Slot: Monday Night Football (MNF). Shares its window." in facts
