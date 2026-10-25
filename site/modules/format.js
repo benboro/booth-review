@@ -313,6 +313,35 @@ export function formatViewers(n) {
 }
 
 /**
+ * The one unit for a viewer figure in millions, site-wide (CFB, NFL and MLB): "MM", the
+ * user's choice on 2026-10-24. Thousands stay "K". Every viewer figure in millions goes
+ * through `MILLIONS` or a helper below, never a hand-written suffix.
+ */
+export const MILLIONS = 'MM';
+
+/**
+ * A viewer figure in millions at a fixed number of decimals, for chart hovers, panels and
+ * table cells that always show millions.
+ * @param {number} n - viewers (not millions).
+ * @param {number} [digits]
+ * @returns {string} e.g. "12.3MM", "0.5MM".
+ */
+export function formatMillions(n, digits = 1) {
+  return `${(n / 1e6).toFixed(digits)}${MILLIONS}`;
+}
+
+/**
+ * Labels one viewers-axis tick value: whole thousands ("K") below 1,000,000 and millions
+ * ("MM") at and above, so hundreds of thousands read "500K", never "0.5MM".
+ * @param {number} value
+ * @returns {string} e.g. "500K", "1MM", "20MM", "2.5MM".
+ */
+export function viewerTickLabel(value) {
+  if (value < 1000000) return `${value / 1000}K`;
+  return `${value / 1000000}${MILLIONS}`;
+}
+
+/**
  * Short audience total for the map hover card (Phase 11 UI-SPEC Typography): K under a
  * million, MM from there, at most one decimal with no trailing zero.
  * @param {number} n
@@ -323,7 +352,7 @@ export function formatAudienceShort(n) {
   if (n < 1000) return String(Math.round(n));
   const k = Math.round((n / 1e3) * 10) / 10;
   if (k < 1000) return `${trim(k)}K`;
-  return `${trim(n / 1e6)}MM`;
+  return `${trim(n / 1e6)}${MILLIONS}`;
 }
 
 /**
@@ -339,7 +368,7 @@ export function formatAudienceTable(n) {
   if (whole < 1000) return String(whole);
   const k = Math.round(n / 100) / 10;
   if (k < 1000) return `${k.toFixed(1)}K`;
-  return `${(Math.round(n / 1e5) / 10).toFixed(1)}MM`;
+  return `${(Math.round(n / 1e5) / 10).toFixed(1)}${MILLIONS}`;
 }
 
 /** Label for a game with no public rating (04.13). */
@@ -551,15 +580,6 @@ function logTickCandidates() {
   return candidates;
 }
 
-/** Labels a single log-axis tick value, "K" below 1,000,000 and "M" at/above
- * (e.g. "500K", "200K", "100K", then "1M", "2M", ...) -- values in the
- * hundreds-of-thousands read clearer as whole thousands than as a fraction
- * of a million. */
-function logTickLabel(value) {
-  if (value < 1000000) return `${value / 1000}K`;
-  return `${value / 1000000}M`;
-}
-
 /**
  * Builds log-axis tick values and labels for the viewers y-axis, filtered
  * to a padded window around the data's own min/max so the axis never shows
@@ -572,7 +592,7 @@ export function logTicks(minViewers, maxViewers) {
   const lo = minViewers / 1.5;
   const hi = maxViewers * 1.5;
   const tickvals = logTickCandidates().filter((v) => v >= lo && v <= hi);
-  const ticktext = tickvals.map(logTickLabel);
+  const ticktext = tickvals.map(viewerTickLabel);
   return { tickvals, ticktext };
 }
 

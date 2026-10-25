@@ -1444,3 +1444,32 @@ def test_scatter_draws_rated_dots_and_band_rings(guarded_page: Page, site_url: s
     """The figure holds every rated dot plus one band ring per unrated game."""
     _load(guarded_page, site_url)
     assert guarded_page.evaluate(_FIGURE_JS) == FIXTURE_GAMES
+
+
+def test_viewer_millions_read_mm_everywhere(guarded_page: Page, site_url: str) -> None:
+    """User-requested unit change 2026-10-24: every viewer figure in millions reads "MM"
+    (CFB, NFL and MLB); thousands stay "K". NFL and MLB route through these same helpers;
+    their panel, table and tick text is pinned in their own e2e files."""
+    _load(guarded_page, site_url)
+    r = guarded_page.evaluate(
+        """
+        async () => {
+          const F = await import('./modules/format.js');
+          return {
+            unit: F.MILLIONS,
+            millions: [12345678, 500000].map((v) => F.formatMillions(v))
+              .concat([F.formatMillions(2e6, 2)]),
+            ticks: [5e5, 1e6, 2.5e6, 2e7].map((v) => F.viewerTickLabel(v)),
+            log: F.logTicks(400000, 6000000).ticktext,
+            short: [F.formatAudienceShort(900000), F.formatAudienceShort(50600000)],
+            table: [F.formatAudienceTable(523400), F.formatAudienceTable(2e6)],
+          };
+        }
+        """
+    )
+    assert r["unit"] == "MM"
+    assert r["millions"] == ["12.3MM", "0.5MM", "2.00MM"]
+    assert r["ticks"] == ["500K", "1MM", "2.5MM", "20MM"]
+    assert r["log"] == ["500K", "1MM", "2MM", "5MM"]
+    assert r["short"] == ["900K", "50.6MM"]
+    assert r["table"] == ["523.4K", "2.0MM"]
