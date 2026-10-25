@@ -353,13 +353,25 @@ const SHADE_LADDER = [
 const DARK_SHADE_MIN = 3.1;
 
 /**
+ * Dark only (Phase 17 review F6): the 3.1 floor drops the darker ladder steps, leaving 5-6
+ * shades, so a 7th channel repeated an earlier shade. After the ladder, dark scans finer mixes
+ * toward white then black, base weight 0.2 to 0.975 in 1/40 steps (lightest first; never paler
+ * than the ladder's own 0.2 step, so the hue stays), accepting a candidate at a DARK_EXTRA_GAP
+ * contrast with every accepted shade. Every family then has at least its light shade count.
+ */
+const DARK_EXTRA_GAP = 1.1;
+const DARK_EXTRA_LADDER = Array.from({ length: 32 }, (_, k) => (k + 8) / 40)
+  .flatMap((w) => [['#FFFFFF', w], ['#000000', w]]);
+
+/**
  * Channel shades of a family color (D-23): the stacked Announcers chart draws
  * one bar per network family and sub-shades each announcer segment by channel.
  * Shade 0 is the family color itself, so a one-channel family looks unchanged.
  * Further shades walk a fixed lighter/darker ladder of mixes with white or
  * black (`mixHex(base, toward, w)`, w the base weight); a candidate is skipped unless it has at least 1.15:1 contrast with
  * every shade already accepted (and, in dark, DARK_SHADE_MIN on the page) (this drops the darker steps of a black base).
- * If the ladder runs out, the accepted list repeats cyclically.
+ * Dark then continues with DARK_EXTRA_LADDER at the DARK_EXTRA_GAP gap. If the ladder runs out,
+ * the accepted list repeats cyclically.
  * @param {string} family - a `familyKey` value.
  * @param {'light'|'dark'} theme
  * @param {number} n - how many shades.
@@ -374,6 +386,14 @@ export function channelShades(family, theme, n) {
     const candidate = mixHex(base, toward, w);
     if (theme === 'dark' && contrastRatio(candidate, PAGE_BG.dark) < DARK_SHADE_MIN) continue;
     if (accepted.every((a) => contrastRatio(a, candidate) >= 1.15)) accepted.push(candidate);
+  }
+  if (theme === 'dark') {
+    for (const [toward, w] of DARK_EXTRA_LADDER) {
+      if (accepted.length >= n) break;
+      const candidate = mixHex(base, toward, w);
+      if (contrastRatio(candidate, PAGE_BG.dark) < DARK_SHADE_MIN) continue;
+      if (accepted.every((a) => contrastRatio(a, candidate) >= DARK_EXTRA_GAP)) accepted.push(candidate);
+    }
   }
   const out = [];
   for (let i = 0; i < n; i += 1) out.push(accepted[i % accepted.length]);

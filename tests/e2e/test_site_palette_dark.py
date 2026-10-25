@@ -264,12 +264,43 @@ def test_dark_map(app: Page) -> None:
 def test_dark_channel_shades(app: Page) -> None:
     for fam in _FAMILIES:
         shades = _ev(app, "palette.js", "return M.channelShades(arg, 'dark', 8);", fam)
-        assert len(set(shades)) >= 5, fam
+        # Phase 17 review F6: a 7th and 8th channel get their own shades, never a repeat.
+        assert len(set(shades)) == 8, (fam, shades)
         for i, s in enumerate(shades):
             assert _ratio(app, s, _PAGE) >= 3.1, (fam, s)
             for t in shades[i + 1 :]:
-                if s != t:
-                    assert _ratio(app, s, t) >= 1.15, (fam, s, t)
+                # The ladder's first shades keep the 1.15 gap; the finer dark extension 1.10.
+                assert _ratio(app, s, t) >= 1.1, (fam, s, t)
+
+
+def test_dark_shade_count_matches_light(app: Page) -> None:
+    # Phase 17 review F6: dark reaches at least the light distinct-shade count for every family,
+    # each shade at 3.1:1 or more on the dark page and 1.10 or more against every other shade.
+    counts = _ev(
+        app,
+        "palette.js",
+        """
+        const out = {};
+        for (const f of arg) {
+          out[f] = {
+            light: new Set(M.channelShades(f, 'light', 40)).size,
+            dark: [...new Set(M.channelShades(f, 'dark', 40))],
+          };
+        }
+        return out;
+        """,
+        _FAMILIES,
+    )
+    for fam, c in counts.items():
+        dark = c["dark"]
+        assert len(dark) >= c["light"], (fam, len(dark), c["light"])
+        for i, s in enumerate(dark):
+            assert _ratio(app, s, _PAGE) >= 3.1, (fam, s)
+            for t in dark[i + 1 :]:
+                assert _ratio(app, s, t) >= 1.1, (fam, s, t)
+    assert _ev(app, "palette.js", "return M.channelShades('disney', 'dark', 8)[0];") != _ev(
+        app, "palette.js", "return M.channelShades('disney', 'dark', 8)[6];"
+    )
 
 
 def test_bar_tones_dark(app: Page) -> None:
