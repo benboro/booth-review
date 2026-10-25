@@ -47,7 +47,8 @@ function stepAtMost(value) {
  */
 export function buildMapKey(venueModel, opts) {
   const { phone = false } = opts || {};
-  const out = { visible: false, sizes: [], description: DESCRIPTION };
+  // Desktop nests the circles with leaders (D-05); a phone gets an inline row (D-22).
+  const out = { visible: false, layout: phone ? 'inline' : 'nested', sizes: [], description: DESCRIPTION };
   const ref = venueModel && venueModel.refGames;
   if (!(ref > 0)) return out;
   const top = stepAtMost(ref);
@@ -95,7 +96,27 @@ export function renderMapKey(root, key, env) {
   root.setAttribute('aria-description', key.description);
   if (!key.visible) return;
 
-  if (key.sizes.length) {
+  if (key.sizes.length && key.layout === 'inline') {
+    // D-22: a phone key is one row, largest first: circle, its count, next circle, ...; the
+    // unit closes the last label ("50  20  5 games"). No leaders, no nesting.
+    const block = el('div', 'map-key-block');
+    block.appendChild(el('p', 'map-key-heading', 'Dot size'));
+    const row = el('div', 'map-key-row');
+    const last = key.sizes.length - 1;
+    key.sizes.forEach((s, i) => {
+      const d = Math.max(Math.ceil(s.diameter), 1);
+      const item = el('span', 'map-key-item');
+      const svg = svgEl('svg', { width: d, height: d, 'aria-hidden': 'true', focusable: 'false' });
+      svg.appendChild(
+        svgEl('circle', { cx: d / 2, cy: d / 2, r: Math.max(s.diameter / 2 - 0.5, 0.5), fill: 'none', stroke: muted, 'stroke-width': 1 }),
+      );
+      item.appendChild(svg);
+      item.appendChild(el('span', 'map-key-label', i === last ? s.label : String(s.games)));
+      row.appendChild(item);
+    });
+    block.appendChild(row);
+    root.appendChild(block);
+  } else if (key.sizes.length) {
     const block = el('div', 'map-key-block');
     block.appendChild(el('p', 'map-key-heading', 'Dot size'));
     // Labels stack at one line each: a label sits level with its circle's top when it can,

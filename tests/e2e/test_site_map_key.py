@@ -47,7 +47,7 @@ def test_labels_are_easy_counts(guarded_page: Page, site_url: str) -> None:
     assert got["l1"] == ["1 game"]
     assert got["steps"] == [1, 2, 5, 10, 20, 50, 100, 200]
     assert got["desc"] == "Dot size is the number of games at the venue."
-    assert got["keys"] == ["description", "sizes", "visible"]
+    assert got["keys"] == ["description", "layout", "sizes", "visible"]
 
 
 def test_diameters_and_visibility(guarded_page: Page, site_url: str) -> None:
@@ -131,10 +131,7 @@ def test_render_dom(guarded_page: Page, site_url: str) -> None:
 
 
 @pytest.mark.parametrize("n_max", [1, 2, 5, 20, 73])
-@pytest.mark.parametrize("phone", [False, True])
-def test_size_labels_never_overlap(
-    guarded_page: Page, site_url: str, n_max: int, phone: bool
-) -> None:
+def test_size_labels_never_overlap(guarded_page: Page, site_url: str, n_max: int) -> None:
     """Each size step renders one legible label: no label boxes meet, and the circles clear them."""
     got = _run(
         guarded_page,
@@ -144,7 +141,7 @@ def test_size_labels_never_overlap(
         root.className = 'map-key';
         root.style.cssText = 'position:fixed;left:20px;top:20px';
         document.body.appendChild(root);
-        K.renderMapKey(root, K.buildMapKey(model({n_max}), {{ phone: {str(phone).lower()} }}),
+        K.renderMapKey(root, K.buildMapKey(model({n_max}), {{ phone: false }}),
                        {{ theme: 'light' }});
         const box = (r) => ({{ left: r.left, right: r.right, top: r.top, bottom: r.bottom }});
         const labels = Array.from(root.querySelectorAll('.map-key-label')).map((n) => box(n.getBoundingClientRect()));
@@ -164,3 +161,89 @@ def test_size_labels_never_overlap(
         assert a["left"] >= got["svg"]["right"] - 1  # clear of every circle and leader
         assert a["top"] >= got["sizes"]["top"] - 0.5 and a["bottom"] <= got["sizes"]["bottom"] + 0.5
     assert got["leaders"] == (0 if got["circles"] == 1 else got["circles"])
+
+
+_INLINE = """() => {
+  const root = document.getElementById('map-key');
+  const box = (r) => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom });
+  return {
+    text: root.textContent,
+    nested: root.querySelectorAll('.map-key-sizes, svg polyline').length,
+    refGames: window.__testHooks.getMapModel().refGames,
+    items: Array.from(root.querySelectorAll('.map-key-item')).map((it) => ({
+      circle: box(it.querySelector('svg circle').getBoundingClientRect()),
+      d: it.querySelector('svg').getBoundingClientRect().width,
+      label: box(it.querySelector('.map-key-label').getBoundingClientRect()),
+      text: it.querySelector('.map-key-label').textContent,
+    })),
+  };
+}"""
+
+
+def _check_inline(got: dict[str, Any], expected: list[tuple[int, float]]) -> None:
+    items = got["items"]
+    assert got["nested"] == 0  # no nesting, no leaders
+    assert [int(i["text"].split()[0]) for i in items] == [g for g, _ in expected]
+    assert items[-1]["text"].endswith(("game", "games"))
+    for item, (_, diameter) in zip(items, expected, strict=True):
+        assert abs(item["d"] - max(round(diameter + 0.49), 1)) <= 1  # svg is ceil(diameter)
+        c, lab = item["circle"], item["label"]
+        assert 0 <= lab["left"] - c["right"] <= 8, (c, lab)
+        assert c["top"] < lab["bottom"] and c["bottom"] > lab["top"], (c, lab)
+    lefts = [i["circle"]["left"] for i in items]
+    assert lefts == sorted(lefts)  # largest first, left to right
+    diameters = [i["d"] for i in items]
+    assert diameters == sorted(diameters, reverse=True)
+
+
+def _expected(page: Page, ref: int, games: list[int]) -> list[tuple[int, float]]:
+    sizes = page.evaluate(
+        """async ([games, ref]) => { const V = await import('./modules/map-venues.js');
+          return games.map((g) => V.venueDotSize(g, ref).phone); }""",
+        [games, ref],
+    )
+    return list(zip(games, sizes, strict=True))
+
+
+def test_phone_key_is_an_inline_row(mobile_page: Page, open_app: Any) -> None:
+    open_app(mobile_page, "?view=map")
+    mobile_page.wait_for_function("() => window.__testHooks.mapRenders >= 1")
+    got = mobile_page.evaluate(_INLINE)
+    assert got["text"].startswith("Dot size")
+    games = [int(i["text"].split()[0]) for i in got["items"]]
+    assert len(games) >= 2
+    _check_inline(got, _expected(mobile_page, got["refGames"], games))
+
+
+def test_phone_key_rescales_under_a_narrow_filter(mobile_page: Page, open_app: Any) -> None:
+    open_app(mobile_page, "?view=map")
+    mobile_page.wait_for_function("() => window.__testHooks.mapRenders >= 1")
+    before = mobile_page.evaluate(_INLINE)
+    n = mobile_page.evaluate("() => window.__testHooks.mapRenders")
+    mobile_page.evaluate("() => window.__testHooks.setState({ seasons: [2019, 2019] })")
+    mobile_page.wait_for_function("(n) => window.__testHooks.mapRenders > n", arg=n)
+    got = mobile_page.evaluate(_INLINE)
+    assert got["refGames"] < before["refGames"]
+    games = [int(i["text"].split()[0]) for i in got["items"]]
+    _check_inline(got, _expected(mobile_page, got["refGames"], games))
+    assert got["items"][0]["d"] == 10  # the busiest filtered venue draws at the phone max
+
+
+def test_desktop_key_stays_nested(guarded_page: Page, open_app: Any) -> None:
+    guarded_page.set_viewport_size({"width": 1440, "height": 900})
+    open_app(guarded_page, "?view=map")
+    guarded_page.wait_for_function("() => window.__testHooks.mapRenders >= 1")
+    got = guarded_page.evaluate(
+        """() => {
+          const root = document.getElementById('map-key');
+          const cs = Array.from(root.querySelectorAll('.map-key-sizes svg circle'))
+            .map((c) => c.getBoundingClientRect());
+          return { items: root.querySelectorAll('.map-key-item').length,
+                   leaders: root.querySelectorAll('svg polyline').length,
+                   bottoms: cs.map((r) => Math.round(r.bottom * 10) / 10),
+                   centers: cs.map((r) => Math.round((r.left + r.right) / 2 * 10) / 10) };
+        }"""
+    )
+    assert got["items"] == 0
+    assert got["leaders"] == len(got["bottoms"]) >= 2
+    assert len(set(got["bottoms"])) == 1 and len(set(got["centers"])) == 1

@@ -3330,6 +3330,26 @@ td.no-rating {
   position: relative;
 }
 
+.map-key-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm, 8px);
+}
+
+.map-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.map-key-item svg {
+  flex: none;
+}
+
+.map-key-item .map-key-label {
+  position: static;
+}
+
 .map-key-label {
   position: absolute;
   white-space: nowrap;
