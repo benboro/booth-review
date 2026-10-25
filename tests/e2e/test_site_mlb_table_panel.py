@@ -425,3 +425,25 @@ def test_panel_says_retrosheet_not_loaded_without_retrosheet(
     text = _panel(page)
     assert "Excitement: Retrosheet not loaded" in text
     assert "Excitement: pending Retrosheet" not in text
+
+
+def test_a_composite_window_figure_keeps_both_qualifiers(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """G12: a figure that is both window-level and composite says both, not the window note alone."""
+    page = mlb_guarded_page
+
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        raw = json.loads(resp.text())
+        assert raw["games"]["scope"][10] == "window"
+        raw["games"]["viewership_label"][10] = "composite"
+        route.fulfill(response=resp, body=json.dumps(raw))
+
+    page.route("**/mlb-data.json", handler)
+    open_mlb_app(page)
+    _open(page, 10)
+    assert (
+        "Viewers: 5.5M (whole broadcast window, not this game alone; several telecasts combined)"
+        in _panel(page)
+    )

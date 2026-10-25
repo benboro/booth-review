@@ -97,18 +97,20 @@ function crewSection(row) {
  * The panel's figure line. The panel shows one game, so its figure is that game's audience:
  * the line always reads `Viewers: <value>`, never the data's `viewership_label` ('per-game' and
  * the rest describe the record, not the reader's question). A window-scope figure keeps the
- * RT-27 qualifier, and a composite figure says it adds several telecasts together.
+ * RT-27 qualifier, and a composite figure says it adds several telecasts together; a figure
+ * that is both carries both.
  */
 export function viewersLine(row) {
   const v = viewersText(row.viewers);
   if (v == null) return `Viewers: not available (${CAUSE_COPY[row.cause] ?? CAUSE_COPY.none})`;
-  let note = '';
+  // A figure can be both (G12): the builder labels a combined claim 'composite' and still
+  // scopes it to the window, so each qualifier is added on its own.
+  const notes = [];
   if (row.scope === 'window' || row.viewersLabel === 'window-level') {
-    note = ' (whole broadcast window, not this game alone)';
-  } else if (row.viewersLabel === 'composite') {
-    note = ' (several telecasts combined)';
+    notes.push('whole broadcast window, not this game alone');
   }
-  return `Viewers: ${v}${note}`;
+  if (row.viewersLabel === 'composite') notes.push('several telecasts combined');
+  return `Viewers: ${v}${notes.length ? ` (${notes.join('; ')})` : ''}`;
 }
 
 function viewershipSection(row) {
