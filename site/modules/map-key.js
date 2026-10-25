@@ -46,9 +46,9 @@ function stepAtMost(value) {
  *   description: string}}
  */
 export function buildMapKey(venueModel, opts) {
-  const { phone = false } = opts || {};
-  // Desktop nests the circles with leaders (D-05); a phone gets an inline row (D-22).
-  const out = { visible: false, layout: phone ? 'inline' : 'nested', sizes: [], description: DESCRIPTION };
+  const { phone = false, layout = 'inline' } = opts || {};
+  // Trial: every width gets the inline row (D-22); layout: 'nested' still draws the leader key (D-05).
+  const out = { visible: false, layout, sizes: [], description: DESCRIPTION };
   const ref = venueModel && venueModel.refGames;
   if (!(ref > 0)) return out;
   const top = stepAtMost(ref);

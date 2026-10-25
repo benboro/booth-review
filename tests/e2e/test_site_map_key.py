@@ -106,7 +106,7 @@ def test_render_dom(guarded_page: Page, site_url: str) -> None:
         site_url,
         """
         const root = document.createElement('div');
-        K.renderMapKey(root, K.buildMapKey(model(73), { phone: false }), { theme: 'light' });
+        K.renderMapKey(root, K.buildMapKey(model(73), { phone: false, layout: 'nested' }), { theme: 'light' });
         const q = (s) => root.querySelectorAll(s).length;
         const res = {
           headings: Array.from(root.querySelectorAll('.map-key-heading')).map((n) => n.textContent),
@@ -141,7 +141,7 @@ def test_size_labels_never_overlap(guarded_page: Page, site_url: str, n_max: int
         root.className = 'map-key';
         root.style.cssText = 'position:fixed;left:20px;top:20px';
         document.body.appendChild(root);
-        K.renderMapKey(root, K.buildMapKey(model({n_max}), {{ phone: false }}),
+        K.renderMapKey(root, K.buildMapKey(model({n_max}), {{ phone: false, layout: 'nested' }}),
                        {{ theme: 'light' }});
         const box = (r) => ({{ left: r.left, right: r.right, top: r.top, bottom: r.bottom }});
         const labels = Array.from(root.querySelectorAll('.map-key-label')).map((n) => box(n.getBoundingClientRect()));
@@ -229,21 +229,17 @@ def test_phone_key_rescales_under_a_narrow_filter(mobile_page: Page, open_app: A
     assert got["items"][0]["d"] == 10  # the busiest filtered venue draws at the phone max
 
 
-def test_desktop_key_stays_nested(guarded_page: Page, open_app: Any) -> None:
+def test_desktop_key_is_an_inline_row(guarded_page: Page, open_app: Any) -> None:
     guarded_page.set_viewport_size({"width": 1440, "height": 900})
     open_app(guarded_page, "?view=map")
     guarded_page.wait_for_function("() => window.__testHooks.mapRenders >= 1")
-    got = guarded_page.evaluate(
-        """() => {
-          const root = document.getElementById('map-key');
-          const cs = Array.from(root.querySelectorAll('.map-key-sizes svg circle'))
-            .map((c) => c.getBoundingClientRect());
-          return { items: root.querySelectorAll('.map-key-item').length,
-                   leaders: root.querySelectorAll('svg polyline').length,
-                   bottoms: cs.map((r) => Math.round(r.bottom * 10) / 10),
-                   centers: cs.map((r) => Math.round((r.left + r.right) / 2 * 10) / 10) };
-        }"""
+    got = guarded_page.evaluate(_INLINE)
+    assert got["text"].startswith("Dot size")
+    games = [int(i["text"].split()[0]) for i in got["items"]]
+    assert len(games) >= 2
+    sizes = guarded_page.evaluate(
+        """async ([games, ref]) => { const V = await import('./modules/map-venues.js');
+          return games.map((g) => V.venueDotSize(g, ref).desktop); }""",
+        [games, got["refGames"]],
     )
-    assert got["items"] == 0
-    assert got["leaders"] == len(got["bottoms"]) >= 2
-    assert len(set(got["bottoms"])) == 1 and len(set(got["centers"])) == 1
+    _check_inline(got, list(zip(games, sizes, strict=True)))

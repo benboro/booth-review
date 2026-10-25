@@ -700,7 +700,8 @@ def test_key_desktop_over_water_clear_of_inset(guarded_page: Page, open_app: Any
     assert "Dot size" in got["text"]
     labels = guarded_page.locator("#map-key .map-key-label").all_inner_texts()
     assert 1 <= len(labels) <= 3
-    assert all(t.endswith(("game", "games")) for t in labels)
+    assert labels[-1].endswith(("game", "games"))  # the unit rides on the last label only
+    assert all(t.split()[0].isdigit() for t in labels)
     assert got["land"] == 0
     assert not _hits(got["key"], got["hawaii"])
     if got["note"]:
