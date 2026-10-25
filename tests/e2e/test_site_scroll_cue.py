@@ -11,7 +11,7 @@ from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
 
-WRAP = "document.querySelector('.nfl-booth-table-wrap.table-scroll')"
+WRAP = "document.querySelector('#mlb-chart-area .crews-table-wrap.table-scroll')"
 
 
 def test_scroll_extent_shrinks_when_the_table_narrows(
@@ -22,12 +22,15 @@ def test_scroll_extent_shrinks_when_the_table_narrows(
     page.wait_for_function(f"() => {WRAP}.classList.contains('has-more-right')")
     # Hide every column past the second: the table now fits, so the fade and extent must go.
     page.evaluate(
-        f"""() => {WRAP}.querySelectorAll('tr').forEach((tr) =>
-          [...tr.children].slice(2).forEach((c) => {{ c.style.display = 'none'; }}))"""
+        f"""() => {{
+          {WRAP}.querySelectorAll('tr').forEach((tr) =>
+            [...tr.children].slice(2).forEach((c) => {{ c.style.display = 'none'; }}));
+          {WRAP}.querySelector('table').style.cssText = 'width:auto;min-width:0';
+        }}"""
     )
     page.wait_for_function(
         f"""() => {{ const w = {WRAP};
-          return w.scrollWidth === w.querySelector('table').offsetWidth
+          return w.scrollWidth <= w.clientWidth
             && !w.classList.contains('has-more-right'); }}"""
     )
 
@@ -83,14 +86,22 @@ def test_detaching_a_rebuilt_table_releases_its_observers(
     assert grown == {"io": 1, "ro": 1, "mq": 1}
 
 
-def test_phone_pin_width_comes_from_the_visible_twin(
+def test_phone_postseason_twin_is_not_in_a_scroller(
     mlb_mobile_page: Page, open_mlb_app: Callable[..., None]
 ) -> None:
-    """MLB Postseason holds a hidden desktop grid and its phone twin in one scroller: the left
-    fade starts after the twin's 96px pinned column, not at the hidden grid's 0px."""
+    """16-05 (N1): the desktop grid owns the scroll box and cue; the phone twin sits in a plain
+    wrapper so the page scrolls and its header sticks to the viewport."""
     page = mlb_mobile_page
     open_mlb_app(page, "?sport=mlb&view=postseason")
-    page.wait_for_function(
-        "() => getComputedStyle(document.querySelector('#mlb-view-postseason .mlb-grid-wrap'))"
-        ".getPropertyValue('--pin-w').trim() === '96px'"
+    view = "#mlb-view-postseason"
+    assert page.locator(f"{view} .mlb-grid-wrap").is_hidden()
+    assert (
+        page.locator(f"{view} .mlb-phone-grid")
+        .locator("xpath=ancestor::*[contains(@class,'table-scroll')]")
+        .count()
+        == 0
+    )
+    assert (
+        page.locator(f"{view} .mlb-phone-wrap").evaluate("e => getComputedStyle(e).overflowY")
+        == "visible"
     )

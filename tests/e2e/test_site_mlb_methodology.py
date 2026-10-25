@@ -39,3 +39,26 @@ def test_methodology_has_no_mlb_text_when_mlb_is_off(guarded_page: Page, site_ur
     assert "MLB: Stakes" not in text
     assert "Retrosheet" not in text
     assert "Division Series" not in text
+
+
+def test_methodology_explains_cell_flags_and_scatter_strips(
+    mlb_guarded_page: Page, mlb_site_url: str
+) -> None:
+    mlb_guarded_page.goto(f"{mlb_site_url}/methodology.html")
+    text = " ".join(mlb_guarded_page.inner_text("body").split())
+    assert (
+        "In the Apple crews table, a Stakes or Excitement figure resting on fewer than that "
+        "many games is marked n < 10 in its own cell; the row is not faded." in text
+    )
+    assert (
+        "The Scatter plots one dot per game, viewers against excitement. Games with no public "
+        "rating sit in a strip along the bottom and games with no excitement figure in a strip "
+        "on the left, so no game is left out." in text
+    )
+
+
+def test_methodology_flag_off_has_no_scatter_strip_text(guarded_page: Page, site_url: str) -> None:
+    guarded_page.goto(f"{site_url}/methodology.html")
+    text = " ".join(guarded_page.inner_text("body").split())
+    assert "so no game is left out" not in text
+    assert "the row is not faded" not in text

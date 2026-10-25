@@ -29,6 +29,72 @@ function watchTheme() {
 }
 
 /**
+ * Network precedence (U7): the order networks take whenever several are shown together (an MLB
+ * Postseason cell's outlets, a CFB panel's "Also on" list and tooltip row after the primary).
+ * Within each family the broadcast network comes first, then cable from the most prominent
+ * down, then streaming:
+ *   FOX > FS1 > FS2 > Big Ten Network > Fox regional nets;
+ *   ABC > ESPN > ESPN2 > ESPNEWS > ESPNU > ESPN Deportes > the conference nets > ESPN3 / ESPN+ /
+ *     ESPN Unlimited / Disney+;
+ *   NBC > USA Network > NBCSN > CNBC > NBC regional > Peacock;
+ *   CBS > CBS Sports Network > Paramount+;
+ *   TBS > TNT > truTV > Max;
+ *   then The CW and Apple TV, the conference family (Pac-12, Mountain West, CUSA Digital), the
+ *   regional sports networks, and the other family: local broadcast affiliates, then cable (MLB
+ *   Network, NFL Network and the rest), then streaming (Prime Video, Netflix, YouTube, Yahoo and
+ *   the school and digital services), then pay-per-view and unclassified.
+ * The family blocks are not ordered against each other by tier (that question is open, G2). It
+ * holds every network_id in data/reference/*networks.csv (tests/test_site_network_precedence.py
+ * checks it); both the CFB ids (espn-plus, espn-unlimited, nfl-network) and the MLB / NFL ids
+ * (espn_plus, espn_unltd, mlbn, nfln) are listed. A network not listed keeps its given order
+ * after every listed one (the sort is stable). The user's pinned orderings: FOX before FS1, ABC
+ * before ESPN before ESPN2 / ESPNEWS / ESPNU, NBC before Peacock.
+ */
+export const NETWORK_PRECEDENCE = Object.freeze([
+  'fox', 'fs1', 'fs2', 'big-ten-network', 'fsn-regional', 'sun-sports', 'sportsouth',
+  'abc', 'espn', 'espn2', 'espnews', 'espnu', 'espn_deportes', 'sec-network', 'acc-network',
+  'longhorn-network', 'sec-network-plus', 'acc-network-extra', 'espn3', 'espn-plus', 'espn_plus',
+  'espn-unlimited', 'espn_unltd', 'disney-plus', 'espn-gameplan', 'espn-regional-insert',
+  'nbc', 'usa-network', 'nbcsn', 'cnbc', 'nbc-sports-bay-area', 'peacock', 'peacock_local',
+  'cbs', 'cbs-sports-network', 'paramount-plus', 'cbs-sports-facebook',
+  'tbs', 'tnt', 'trutv', 'max',
+  'cw', 'apple',
+  'pac-12-network', 'mountain-west-network', 'conference-usa-digital',
+  'nesn', 'sny', 'bally-sports-regional', 'spectrum-sports-regional', 'altitude-sports',
+  'root-att-sportsnet-mountain', 'root-att-sportsnet-pittsburgh', 'csn-houston',
+  'comcast-sportsnet-nm', 'time-warner-cable-sports', 'nevada-sports-net', 'silver-state-sports',
+  'swx-spokane', 'buckeye-cable-sports',
+  'local-broadcast-affiliate', 'unimas',
+  'mlbn', 'mlbn_alt', 'nfl-network', 'nfln', 'bein-sports', 'byutv', 'eleven-sports',
+  'acc-network-legacy', 'american-sports-network', 'fcs-regional-network', 'jayhawk-network',
+  'k-state-hd', 'team-1-sports',
+  'prime', 'netflix', 'youtube', 'yahoo', 'stadium', 'flosports', 'barstool-sports',
+  'campus-insiders', 'cyclones-tv', 'soonersports-tv', 'uconn-huskies-tv', 'uconn-plus',
+  'wvusports-com',
+  'directv-college-sports', 'hawaii-ppv', 'oklahoma-ppv', 'other-unclassified',
+]);
+
+const PRECEDENCE_RANK = new Map(NETWORK_PRECEDENCE.map((id, k) => [id, k]));
+
+/**
+ * A copy of `list` in network precedence (see NETWORK_PRECEDENCE); unlisted ids keep their
+ * order after the listed ones.
+ * @template {{id?: string}} T
+ * @param {T[]} list
+ * @returns {T[]}
+ */
+export function sortNetworks(list) {
+  const rank = (net) => {
+    const key = net && net.id != null ? String(net.id) : '';
+    return PRECEDENCE_RANK.has(key) ? PRECEDENCE_RANK.get(key) : Infinity;
+  };
+  return list
+    .map((net, k) => ({ net, k, r: rank(net) }))
+    .sort((a, b) => (a.r === b.r ? a.k - b.k : a.r < b.r ? -1 : 1))
+    .map((x) => x.net);
+}
+
+/**
  * Builds one network mark (`span.net-mark`).
  * @param {{id: string, name: string, family: string}} network
  * @param {{dot?: boolean}} [opts] - dot: draw the family dot before a fallback name

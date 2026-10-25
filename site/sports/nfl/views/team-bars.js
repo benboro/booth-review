@@ -11,7 +11,7 @@
  */
 import { teamBars, teamSeasonRows, rateText, specialMatchedCounts, EXCLUSIVE_CATEGORIES } from '../state.js';
 import { computePicks } from '../picks.js';
-import { createOnlyDetector } from '../../../modules/legend.js';
+import { createOnlyDetector, makeLegendChip } from '../../../modules/legend.js';
 import { initBandInfo } from '../../../modules/band-info.js';
 import { MARGIN, TICK_FONT_PX, DOT_OPACITY } from '../../../modules/chart.js';
 import { categoryColor } from '../palette.js';
@@ -79,17 +79,6 @@ let drawn = null; // { rows, env, theme, state, model }
 
 function theme(env) {
   return env.dark ? 'dark' : 'light';
-}
-
-/** Black or white, whichever reads better on `hex`. */
-function textOn(hex) {
-  const lin = (v) => {
-    const s = v / 255;
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  };
-  const n = parseInt(hex.slice(1), 16);
-  const lum = 0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
-  return (1.05) / (lum + 0.05) >= (lum + 0.05) / 0.05 ? '#FFFFFF' : '#111111';
 }
 
 /** The franchise's display name: its latest, or that season's when one is picked. */
@@ -253,26 +242,17 @@ function renderLegend(state, th) {
   const hidden = new Set(state.hiddenSegments);
   const shown = ALL_KEYS.filter((k) => !hidden.has(k));
   const items = SEGMENTS.map((seg) => {
-    const color = categoryColor(seg.key, th);
-    const b = el('button', 'legend-chip pill', seg.label);
-    b.type = 'button';
-    b.dataset.segment = seg.key;
-    const on = !hidden.has(seg.key);
-    b.setAttribute('aria-pressed', String(on));
     const hint = shown.length === 1 && shown[0] === seg.key
       ? 'Double-click to show all'
       : `Double-click to show only ${seg.label}`;
-    b.title = hint;
-    b.setAttribute('aria-description', hint);
-    if (on) {
-      b.style.backgroundColor = color;
-      b.style.color = textOn(color);
-      b.style.borderColor = '';
-    } else {
-      b.style.backgroundColor = '';
-      b.style.color = '';
-      b.style.borderColor = color;
-    }
+    // The shared outlined chip with a colour dot (U6), as on CFB and MLB.
+    const b = makeLegendChip({
+      label: seg.label,
+      color: categoryColor(seg.key, th),
+      pressed: !hidden.has(seg.key),
+      hint,
+      data: { segment: seg.key },
+    });
     const li = document.createElement('li');
     li.appendChild(b);
     return li;

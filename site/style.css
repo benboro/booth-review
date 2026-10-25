@@ -72,6 +72,13 @@
   --game-bowl: #A8501C;
   --game-rivalry: #8F2D3A;
   --game-playoff-text: #7A5A00;
+  /* MLB Apple crews rank pills (16-UI-SPEC): text on fill at 4.5:1, border at 3:1 on --bg and --accent-soft. */
+  --pill-gold-fill: #F2DFA0;
+  --pill-gold-ink: #5C4300;
+  --pill-gold-edge: #8A6A12;
+  --pill-silver-fill: #D9DBDF;
+  --pill-silver-ink: #3B3F46;
+  --pill-silver-edge: #80858D;
 }
 
 /* Placeholder dark values; untested until Phase 17. The data-theme attribute is the only theme hook. */
@@ -3587,6 +3594,30 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   gap: var(--space-xs);
 }
 
+/* Phone: a long booth chip shrinks and truncates its name instead of pushing Clear selection
+   past the right edge (the 481px-and-up rules above do this for wider screens). */
+@media (max-width: 480px) {
+  #mlb-chips {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  #mlb-chips > .chip {
+    min-width: 0;
+  }
+
+  /* With a pick the chip says what is selected, so the "Filters: none" note steps aside and
+     the chip gets the row instead of truncating to two letters. */
+  .mlb-selection-area:has(#mlb-chips > .chip) .mlb-selection-note {
+    display: none;
+  }
+
+  .mlb-selection-area .toggle {
+    flex: none;
+    white-space: nowrap;
+  }
+}
+
 #nfl-chart-area,
 #mlb-chart-area {
   padding: var(--space-md) var(--space-lg) 0;
@@ -3790,80 +3821,6 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   margin: 0;
 }
 
-/* NFL Crews booth table; no CFB twin. The wrap scrolls sideways on phones with
-   the Booth column pinned. */
-.nfl-booth-table-wrap {
-  overflow-x: auto;
-}
-
-.booth-row-btn {
-  border: none;
-  background: transparent;
-  padding: 0;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.booth-row-btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-@media (max-width: 480px) {
-  /* Identity column pinned (UI-SPEC phone contract): sticky left with its own opaque fill.
-     Desktop has no column fill. */
-  .nfl-booth-table .booth-col {
-    position: sticky;
-    left: 0;
-    z-index: 1;
-    background: var(--bg);
-  }
-
-  .nfl-booth-table th.booth-col {
-    background: var(--surface);
-  }
-
-  .booth-row-btn {
-    min-height: 44px;
-  }
-
-  /* Phone Crews table: the booth cell stacks pbp, analyst and the low-n tag on their own
-     lines so the narrow Booth column leaves Games and the flagship column on screen. The
-     rest scrolls sideways, with an edge shadow as the cue. CFB's table has no twin. */
-  .booth-row-btn {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-xs);
-  }
-
-  .booth-rank {
-    min-width: 0;
-  }
-
-  .booth-names {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .booth-sep {
-    display: none;
-  }
-
-  .low-n-tag {
-    margin-left: 0;
-  }
-
-  .nfl-booth-table th,
-  .nfl-booth-table td {
-    padding-left: var(--space-xs);
-    padding-right: var(--space-xs);
-  }
-
-}
-
 /* NFL control rows: fixed-width groups side by side, never stretched to the row (the shared
    `.chart-controls` is a one-cell grid built for CFB's single controls block). */
 .nfl-crews-controls,
@@ -3874,40 +3831,25 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   gap: var(--space-xs) var(--space-md);
 }
 
+/* U8: the NFL Scatter's axis groups and Reset zoom, laid out as the MLB Scatter's are. In the
+   one-cell `.chart-controls` grid Reset zoom stretched to the groups' width and touched them;
+   here it keeps its content width and the --space-sm gap, wrapping right-aligned on a phone. */
+.nfl-scatter-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+.nfl-scatter-controls .reset-zoom {
+  flex: none;
+}
+
 /* The phone `.axis-group` grid has no column gap (CFB's caption sits inside its row); the NFL
    Measure caption keeps the 4px key-gap token so it does not touch the Viewers button. */
 .nfl-viewership-controls .axis-group {
   column-gap: var(--space-xs);
-}
-
-.booth-rank {
-  display: inline-block;
-  min-width: 4ch;
-  font-weight: 600;
-}
-
-.nfl-booth-table tr[data-low-n="true"] {
-  color: var(--disabled);
-}
-
-/* Low-n tag: a dashed muted pill, the same shape as the role tags (D-02). */
-.low-n-tag {
-  display: inline-block;
-  margin-left: var(--space-xs);
-  height: 20px;
-  padding: 0 8px;
-  border: 1px dashed var(--muted);
-  border-radius: 10px;
-  background: transparent;
-  color: var(--muted);
-  font: 400 12px/18px var(--sans);
-  white-space: nowrap;
-  vertical-align: baseline;
-}
-
-.nfl-booth-table tr[data-picked="true"] .booth-col,
-.booth-row-btn[aria-pressed="true"] {
-  border-inline-start: 3px solid var(--accent);
 }
 
 .nfl-coverage,
@@ -4037,7 +3979,9 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   color: var(--muted);
   font: var(--font-body);
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  /* "pending Retrosheet 2026" is wider than the 144px Stakes and Excitement columns; on one
+     line it ran into the next column. It wraps, right-aligned, like the Crew listed cell. */
+  white-space: normal;
 }
 
 .mlb-apple-table .rated-n {
@@ -4075,11 +4019,56 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 /* MLB postseason grid: seasons down, rounds across. Whitespace and hairlines group the cells;
    on phones every season becomes a stacked block with the round named above each cell. */
 .mlb-grid-wrap {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: min(640px, calc(100vh - 280px));
+  min-height: 320px;
+  overscroll-behavior: contain;
+  /* The table's closing rule: without it the box cut a row mid-line with no visible edge,
+     which read as clipped text rather than a scroll box. */
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.mlb-grid-wrap:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .mlb-grid {
   table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* Frozen header row and Season column inside the scroll box (N1). */
+.mlb-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg);
+  border-bottom: none;
+  box-shadow: inset 0 -1px 0 var(--rule-strong);
+}
+
+.mlb-grid thead th.mlb-season-col {
+  z-index: 3;
+}
+
+.mlb-round-short {
+  display: none;
+}
+
+@media (max-width: 1279px) {
+  .mlb-round-short {
+    display: inline;
+  }
+
+  .has-short > .mlb-round-long {
+    display: none;
+  }
+}
+
+.mlb-phone-wrap {
+  overflow: visible;
 }
 
 .mlb-grid th.mlb-season-col {
@@ -4087,6 +4076,41 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   min-width: 11em;
   vertical-align: top;
   text-align: left;
+  position: sticky;
+  left: 0;
+  background: var(--bg);
+}
+
+.mlb-grid th.mlb-season-col[data-picked="true"] {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--ink);
+}
+
+.mlb-season-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* `.games-table th button` (sort heads) is more specific than `.mlb-season-btn` and made the
+   season button an inline-flex row, so the year sat mid-line inside the coverage text. */
+.mlb-grid th .mlb-season-btn {
+  display: block;
+}
+
+.mlb-season-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.mlb-season-btn[aria-pressed="true"] .mlb-season {
+  font-weight: 600;
 }
 
 .mlb-season {
@@ -4135,7 +4159,6 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   margin: 0 0 var(--space-sm) 0;
   padding: var(--space-xs) var(--space-sm);
   border: none;
-  border-inline-start: 3px solid transparent;
   background: transparent;
   color: inherit;
   font: inherit;
@@ -4152,8 +4175,13 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 .mlb-cell-btn[aria-pressed="true"] {
-  border-inline-start-color: var(--accent);
-  background: var(--surface);
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--ink);
+}
+
+.mlb-cell-btn[aria-pressed="true"] .mlb-cell-league,
+.mlb-cell-btn[aria-pressed="true"] .booth-name {
+  font-weight: 600;
 }
 
 .mlb-cell-btn:focus-visible {
@@ -4162,7 +4190,6 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 .mlb-cell-btn > span,
-.mlb-cell-stats > span,
 .mlb-cell-booth {
   display: block;
 }
@@ -4179,8 +4206,25 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   font-weight: var(--weight-semibold);
 }
 
-.mlb-cell-booth {
-  margin-bottom: 2px;
+/* A booth line wraps as whole people (name + role pill) with the crew list's 4px row gap
+   (c6224c3), so a wrapped line's pills never touch the pills of the line above. */
+.mlb-cell-btn .mlb-cell-booth {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  row-gap: var(--space-xs);
+  margin-bottom: var(--space-xs);
+}
+
+/* As a flex item the " / " would lose its spaces. */
+.mlb-cell-booth .booth-sep {
+  white-space: pre;
+}
+
+/* A grouped booth lists several people per role (U3): the comma rides on the person before
+   it, so a wrapped line never starts with one, and keeps a word space after it. */
+.mlb-cell-booth .booth-comma {
+  margin-right: 0.3em;
 }
 
 .mlb-no-crew {
@@ -4188,11 +4232,28 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   font: var(--font-body);
 }
 
-.mlb-cell-stats {
-  margin-top: var(--space-xs);
+/* One block per series in a cell (U10): a small matchup head, then that series' booth lines,
+   with a hairline between two series of the same cell. */
+.mlb-series,
+.mlb-series-head {
+  display: block;
+}
+
+.mlb-series-head {
+  margin-bottom: 2px;
   color: var(--muted);
-  font: var(--font-body);
+  font: 600 12px/1.4 var(--sans);
   font-variant-numeric: tabular-nums;
+}
+
+.mlb-series + .mlb-series {
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--rule);
+}
+
+.mlb-cell-btn .mlb-series > .mlb-cell-booth:last-child {
+  margin-bottom: 0;
 }
 
 @media (max-width: 480px) {
@@ -4925,6 +4986,168 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   }
 }
 
+/* ---------- MLB Apple crews (Phase 16-06): the shared Crews table with MLB columns ---------- */
+
+.crews-table.is-mlb {
+  min-width: 1280px;
+}
+
+.crews-table.is-mlb th.crews-col-position {
+  width: 128px;
+}
+
+.crews-table.is-mlb th.crews-col-booth {
+  min-width: 320px;
+}
+
+.crews-table.is-mlb th.crews-col-network {
+  width: 128px;
+}
+
+.crews-table.is-mlb th.crews-col-games {
+  width: 88px;
+}
+
+.crews-table.is-mlb th.crews-col-listed {
+  width: 128px;
+}
+
+.crews-table.is-mlb th.crews-col-stakes,
+.crews-table.is-mlb th.crews-col-excitement {
+  width: 144px;
+}
+
+.crews-table.is-mlb th.crews-col-prior {
+  width: 160px;
+}
+
+.rank-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--rule-strong);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.rank-pill[data-rank="lead"] {
+  background: var(--pill-gold-fill);
+  color: var(--pill-gold-ink);
+  border-color: var(--pill-gold-edge);
+}
+
+.rank-pill[data-rank="2"] {
+  background: var(--pill-silver-fill);
+  color: var(--pill-silver-ink);
+  border-color: var(--pill-silver-edge);
+}
+
+.crews-with {
+  color: var(--muted);
+}
+
+.more-names {
+  display: inline-block;
+  min-height: 24px;
+  margin-left: var(--space-xs);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 24px;
+  text-decoration: underline dotted;
+  cursor: pointer;
+  vertical-align: baseline;
+}
+
+.more-names:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.crews-table.is-mlb td.crews-name {
+  position: relative;
+}
+
+.more-names-pop {
+  /* Placed from the button's rect in apple.js, outside the table scroller (never clipped). */
+  position: fixed;
+  z-index: 30;
+  left: 0;
+  top: 0;
+  min-width: 160px;
+  padding: var(--space-sm);
+  border: 1px solid var(--rule-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.more-names-pop p {
+  margin: 0;
+}
+
+.mlb-analysts {
+  margin: 0 0 var(--space-sm);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.mlb-analysts .mlb-analyst-n {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.crews-table .crews-game-date {
+  white-space: nowrap;
+}
+
+.crews-table .crews-game-crew {
+  color: var(--muted);
+}
+
+@media (max-width: 480px) {
+  .table-scroll .games-table.crews-table.is-mlb {
+    width: 928px;
+    min-width: 928px;
+  }
+
+  .crews-table.is-mlb th.crews-col-position {
+    width: 88px;
+  }
+
+  .crews-table.is-mlb th.crews-col-booth {
+    width: 148px;
+    min-width: 148px;
+  }
+
+  .crews-table.is-mlb th.crews-col-network {
+    width: 96px;
+  }
+
+  .crews-table.is-mlb th.crews-col-games {
+    width: 80px;
+  }
+
+  .crews-table.is-mlb th.crews-col-listed {
+    width: 104px;
+  }
+
+  .crews-table.is-mlb th.crews-col-stakes,
+  .crews-table.is-mlb th.crews-col-excitement {
+    width: 128px;
+  }
+
+  .crews-table.is-mlb th.crews-col-prior {
+    width: 112px;
+  }
+}
+
 /* ---------- NFL Crews (Phase 15-09): the shared Crews table with NFL columns ---------- */
 
 /* Raw and Adjusted: fixed-width buttons, so the label never shifts the group. */
@@ -5298,13 +5521,43 @@ tr.is-matched > :first-child {
 
   /* MLB Postseason booths: the stacked-by-season grid gives way to the phone twin, one
      row per season, round and league with a merged 96px pinned column. */
+  .mlb-grid-wrap {
+    display: none;
+  }
+
   .mlb-grid {
     display: none;
   }
 
+  /* Fixed layout: the 96px merged column and the Booths column share the module's width
+     exactly, so a long booth line wraps instead of widening the table past its wrap (U10). */
   .mlb-phone-grid {
     display: table;
-    table-layout: auto;
+    table-layout: fixed;
+    width: 100%;
+  }
+
+  /* The page scrolls here, so the twin's header sticks to the viewport (no inner scroller). */
+  .mlb-phone-grid thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--bg);
+    padding: 8px 12px;
+    box-shadow: inset 0 -1px 0 var(--rule-strong);
+  }
+
+  .mlb-phone-grid td {
+    padding: 8px 12px;
+  }
+
+  .mlb-phone-grid tbody tr > th.mlb-merged-col {
+    background: var(--bg);
+  }
+
+  .mlb-season-btn {
+    display: inline;
+    min-height: 44px;
   }
 
   .mlb-phone-grid th.mlb-merged-col,
@@ -5319,6 +5572,16 @@ tr.is-matched > :first-child {
     min-width: 96px;
     max-width: 96px;
     padding-inline: 8px;
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--bg);
+  }
+
+  /* The header's merged cell matches the rule above too; without this its z-index fell to 1 and
+     the body's pinned season cells scrolled over it, hiding "Season and round". */
+  .mlb-phone-grid thead th.mlb-merged-col {
+    z-index: 3;
   }
 
   .mlb-merged-line {
@@ -5347,12 +5610,25 @@ tr.is-matched > :first-child {
   }
 
   .mlb-phone-grid td.mlb-booths-col {
-    min-width: 200px;
     white-space: normal;
   }
 
+  /* 4px side padding (8px on desktop) keeps the longest real booth person (name, pill and
+     comma) on one line in the 220px Booths column at 390px. */
   .mlb-phone-grid .mlb-cell-btn {
-    min-width: 200px;
+    min-width: 0;
+    padding-inline: var(--space-xs);
+  }
+
+  /* A person stays whole (name, pill and comma together); only a name longer than the whole
+     column wraps, inside the name itself. */
+  .mlb-phone-grid .mlb-cell-booth .name-with-roles {
+    min-width: 0;
+  }
+
+  .mlb-phone-grid .mlb-cell-booth .booth-name {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .mlb-booth-more {
@@ -5461,5 +5737,94 @@ tr.is-matched > :first-child {
 
   .nfl-chart-module[data-view="viewership"] #nfl-chart-subtitle {
     min-height: 80px;
+  }
+}
+
+/* MLB Scatter (16-07): the plot height is reserved (480px, 360px on a phone) so a control
+   change never shifts the page; the status line reserves its lines for the same reason. */
+.mlb-scatter-plot {
+  height: 480px;
+  min-height: 0;
+}
+
+.mlb-scatter-status {
+  margin: var(--space-xs) 0 0;
+  min-height: 20px;
+  font: var(--font-caption);
+  color: var(--muted);
+}
+
+/* The left strip is 72px wide, so its label wraps inside it. */
+.band-info.mlb-left-info {
+  box-sizing: border-box;
+  width: 72px;
+  min-height: 44px;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0 var(--space-xs);
+  white-space: normal;
+  line-height: 1.2;
+  text-align: center;
+}
+
+@media (max-width: 480px) {
+  .mlb-scatter-plot {
+    height: 360px;
+  }
+
+  .mlb-scatter-status {
+    min-height: 40px;
+  }
+}
+
+/* Scatter header tools: the Round group dims, never reflows, outside Postseason. */
+.mlb-scatter-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+.mlb-scatter-controls .reset-zoom {
+  flex: none;
+}
+
+.mlb-scatter-controls .scatter-controls {
+  flex-wrap: wrap;
+}
+
+.mlb-scatter-controls .segmented button[aria-disabled="true"] {
+  background: var(--bg);
+  color: var(--disabled);
+  cursor: default;
+}
+
+/* With the Scatter's two control groups in the header, the hint drops to its own row (as the
+   NFL viewership module does) so it is not cut off at 1440px. */
+#mlb-chart-area .module-head:has([data-tools-for="scatter"]:not([hidden])) {
+  flex-wrap: wrap;
+}
+
+#mlb-chart-area .module-head:has([data-tools-for="scatter"]:not([hidden])) .module-subtitle {
+  flex-basis: 100%;
+  order: 3;
+}
+
+@media (max-width: 480px) {
+  .mlb-scatter-controls .axis-group {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--space-xs);
+  }
+
+  .mlb-scatter-controls .segmented {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .mlb-scatter-controls .segmented button {
+    flex: 1 1 auto;
+    white-space: nowrap;
+    padding: 0 var(--space-sm);
   }
 }

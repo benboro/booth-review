@@ -1,7 +1,7 @@
 """09-19: the MLB Apple crews view on the synthetic MLB fixture.
 
 Fixture booths: 0 Ada Quill / Ben Marlow (Lead, 2 games, 1 from the relay), 1 Cy Fable /
-Dee Hart (#2, 2 games, 1 relay), 2 Eli Stroud / Fay Lorn (#3, 1 game, low n). Every
+Dee Hart (#2, 2 games, 1 relay), 2 Eli Stroud / Fay Lorn (#3, 1 game). Every
 booth is quality-pending in the fixture; tests that need ready data rewrite the response.
 """
 
@@ -49,35 +49,72 @@ def _ready_open(
     open_mlb_app(page)
 
 
+ROW = "#mlb-view-apple tr.crews-row"
+
+
 def test_rows_rank_labels_and_names(mlb: Page) -> None:
-    rows = mlb.locator("#mlb-view-apple tbody tr")
+    rows = mlb.locator(ROW)
     assert rows.count() == 3
-    ranks = mlb.eval_on_selector_all(
-        "#mlb-view-apple .booth-rank", "els => els.map(e => e.textContent)"
+    pills = mlb.eval_on_selector_all(
+        f"{ROW} td.crews-col-position, {ROW} td:nth-child(2)", "els => els.map(e => e.textContent)"
     )
-    assert ranks == ["Lead", "#2", "#3"]
+    assert pills == ["Lead", "#2", "#3"]
     first = rows.nth(0).inner_text()
     assert "Ada Quill" in first
     assert "Ben Marlow" in first
-    assert rows.nth(0).locator(".role-pill").count() == 2
+    assert "with" in first
+    assert mlb.locator("#mlb-view-apple .crews-table.is-mlb .role-pill").count() == 0
     heads = mlb.eval_on_selector_all(
-        "#mlb-view-apple thead th", "els => els.map(e => e.textContent)"
+        "#mlb-view-apple thead th button .crews-sort-label", "els => els.map(e => e.textContent)"
     )
     assert heads == [
+        "Booth position",
         "Booth",
+        "Network",
         "Games",
         "Crew listed",
         "Stakes",
         "Excitement",
         "2025 win % of both clubs",
     ]
+    sorts = mlb.eval_on_selector_all(
+        "#mlb-view-apple thead th[aria-sort]", "els => els.map(e => e.getAttribute('aria-sort'))"
+    )
+    assert sorts == ["ascending"] + ["none"] * 7
     assert mlb.locator("#mlb-tab-apple[aria-selected='true']").count() == 1
+
+
+def test_rank_pills_are_gold_and_silver(mlb: Page) -> None:
+    css = mlb.evaluate(
+        """() => {
+          const root = getComputedStyle(document.documentElement);
+          const pill = (r) =>
+            document.querySelector(`#mlb-view-apple .rank-pill[data-rank="${r}"]`);
+          return {
+            lead: pill('lead')?.textContent, two: pill('2')?.textContent,
+            leadBg: getComputedStyle(pill('lead')).backgroundColor,
+            twoBg: getComputedStyle(pill('2')).backgroundColor,
+            gold: root.getPropertyValue('--pill-gold-fill').trim(),
+            silver: root.getPropertyValue('--pill-silver-fill').trim(),
+            pills: document.querySelectorAll('#mlb-view-apple .rank-pill').length,
+          };
+        }"""
+    )
+    assert css["lead"] == "Lead"
+    assert css["two"] == "#2"
+    assert css["pills"] == 2  # #3 is plain text
+    assert css["leadBg"] == "rgb(242, 223, 160)"
+    assert css["twoBg"] == "rgb(217, 219, 223)"
+
+
+def test_network_column_shows_the_apple_logo(mlb: Page) -> None:
+    assert mlb.locator(f'{ROW} td.crews-network img[alt="Apple TV"]').count() == 3
 
 
 def test_coverage_line_comes_from_data(mlb: Page) -> None:
     text = mlb.inner_text("#mlb-view-apple .nfl-coverage")
     assert text == "Crew listed for 5 of 6 Apple games. 2 from the relay."
-    assert "1 from relay" in mlb.locator("#mlb-view-apple tbody tr").nth(0).inner_text()
+    assert "1 from relay" in mlb.locator(ROW).nth(0).inner_text()
 
 
 def test_pending_cells_and_lead_lines(mlb: Page) -> None:
@@ -91,11 +128,61 @@ def test_pending_cells_and_lead_lines(mlb: Page) -> None:
     assert "late in 2026" in mlb.inner_text("#mlb-view-apple .mlb-pending-note")
 
 
-def test_low_n_booth_is_faded_and_tagged(mlb: Page) -> None:
-    low = mlb.locator("#mlb-view-apple tbody tr[data-low-n='true']")
-    assert low.count() == 3  # 2, 2 and 1 games are all under the threshold of 8
-    assert low.nth(2).locator(".low-n-tag").inner_text() == "low n"
-    assert mlb.evaluate(f"{HOOKS}.getViewModel('apple').rows.every(r => r.lowN)")
+def test_low_n_is_flagged_per_cell_and_rows_stay_full(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    page = mlb_guarded_page
+
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        b = data["apple_booths"]
+        b["quality_status"] = ["ready", "ready", "pending"]
+        b["raw_stakes"] = [1.1, 0.9, None]
+        b["raw_stakes_n"] = [3, 8, 0]
+        b["raw_excitement"] = [1.5, 1.2, None]
+        g = data["games"]
+        g["wp_excitement"] = [1.0] * len(g["date"])
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    page.route("**/mlb-data.json", handler)
+    open_mlb_app(page)
+    assert page.locator("#mlb-view-apple tr[data-low-n]").count() == 0
+    for tr in page.locator(ROW).all():
+        assert tr.evaluate("e => getComputedStyle(e).opacity") == "1"
+    cells = page.locator(ROW).nth(0).locator("td")
+    stakes = cells.nth(6)
+    assert "is-low-n" in (stakes.get_attribute("class") or "")
+    assert stakes.locator(".crews-tag").inner_text() == "n < 8"
+    assert (
+        stakes.locator(".crews-tag").get_attribute("title") == "Fewer than 8 games have this figure"
+    )
+    # Excitement n is 2 games (the booth's two), also under 8.
+    assert cells.nth(7).locator(".crews-tag").inner_text() == "n < 8"
+    # Booth 1: stakes n is exactly 8, not flagged.
+    assert page.locator(ROW).nth(1).locator("td").nth(6).locator(".crews-tag").count() == 0
+    # Booth 2 is pending: text, no tag.
+    pend = page.locator(ROW).nth(2).locator("td.mlb-pending")
+    assert pend.count() == 2
+    assert set(pend.all_inner_texts()) == {"pending Retrosheet 2026"}
+    assert page.locator(ROW).nth(2).locator(".crews-tag").count() == 0
+    caps = page.inner_text("#mlb-view-apple .nfl-captions")
+    assert "Cells marked n < 8 rest on fewer than 8 games." in caps
+    assert "Faded rows" not in caps
+
+
+def test_notes_follow_the_table_in_order(mlb: Page) -> None:
+    order = mlb.evaluate(
+        """() => {
+          const v = document.querySelector('#mlb-view-apple');
+          const at = (sel) => v.querySelector(sel);
+          const pos = (n) => [...v.querySelectorAll('*')].indexOf(n);
+          return [at('.crews-table-wrap'), at('.nfl-coverage'), at('.mlb-lead-lines'),
+            at('.mlb-rr-note'), at('.nfl-captions')].map(pos);
+        }"""
+    )
+    assert order == sorted(order)
+    assert min(order) >= 0
 
 
 def test_rr_note_uses_summary_counts(
@@ -119,22 +206,16 @@ def test_ready_values_raw_then_adjusted(
 ) -> None:
     page = mlb_guarded_page
     _ready_open(page, open_mlb_app)
-    cells = page.locator("#mlb-view-apple tbody tr").nth(0).locator("td")
-    assert cells.nth(0).inner_text() == "2"
-    assert cells.nth(2).inner_text() == "1.10"
-    assert cells.nth(3).inner_text() == "1.50"
-    assert cells.nth(4).inner_text() == "55.3%"
+    # Cells: chevron, position, booth, network, games, listed, stakes, excitement, prior.
+    cells = page.locator(ROW).nth(0).locator("td")
+    assert cells.nth(4).inner_text() == "2"
+    assert cells.nth(6).inner_text().split()[0] == "1.10"
+    assert cells.nth(7).inner_text().split()[0] == "1.50"
+    assert cells.nth(8).inner_text() == "55.3%"
     page.click("#mlb-view-apple .segmented button[data-value='adjusted']")
-    cells = page.locator("#mlb-view-apple tbody tr").nth(0).locator("td")
-    assert cells.nth(2).inner_text().replace("\n", " ") == "+0.20 ±0.10"
-    assert (
-        page.locator("#mlb-view-apple tbody tr")
-        .nth(1)
-        .locator("td")
-        .nth(2)
-        .inner_text()
-        .startswith("\u22120.10")
-    )
+    cells = page.locator(ROW).nth(0).locator("td")
+    assert cells.nth(6).inner_text().replace("\n", " ").startswith("+0.20 ±0.10")
+    assert page.locator(ROW).nth(1).locator("td").nth(6).inner_text().startswith("\u22120.10")
     assert "tendency, not proof" in page.inner_text("#mlb-view-apple .nfl-captions")
     assert "pending" not in page.inner_text("#mlb-view-apple tbody").lower()
 
@@ -163,13 +244,69 @@ def test_difference_line_and_spanning_zero(
 
 
 def test_row_click_lists_booth_games_and_toggles(mlb: Page) -> None:
-    mlb.click("#mlb-view-apple .booth-row-btn >> nth=1")
+    mlb.click(f"{ROW} td.crews-name >> nth=1")
     assert mlb.evaluate(f"{HOOKS}.getTableIndexes()") == [3, 2]
-    assert mlb.locator("#mlb-view-apple .booth-row-btn[aria-pressed='true']").count() == 1
+    assert mlb.locator("#mlb-view-apple tr.is-picked").count() == 1
+    assert mlb.locator(ROW).nth(1).get_attribute("aria-pressed") == "true"
     assert "booth=p2" in mlb.url
-    mlb.click("#mlb-view-apple .booth-row-btn >> nth=1")
+    # Exactly one inset inline-start marker, 2px, in the picked row.
+    marks = mlb.evaluate(
+        """() => [...document.querySelectorAll('#mlb-view-apple tr.is-picked > *')]
+          .map((c) => getComputedStyle(c).boxShadow).filter((b) => b !== 'none')"""
+    )
+    assert len(marks) == 1
+    assert "inset" in marks[0]
+    assert "2px" in marks[0]
+    mlb.click(f"{ROW} td.crews-name >> nth=1")
     assert mlb.evaluate(f"{HOOKS}.getTableIndexes()") == []
     assert "booth=" not in mlb.url
+
+
+def test_every_head_sorts_and_third_click_returns_to_position(mlb: Page) -> None:
+    head = "#mlb-view-apple thead th.crews-col-games button"
+    names = lambda: mlb.eval_on_selector_all(  # noqa: E731
+        f"{ROW} td.crews-col-position, {ROW} td:nth-child(2)", "els => els.map(e => e.textContent)"
+    )
+    mlb.click(head)
+    assert (
+        mlb.get_attribute("#mlb-view-apple thead th.crews-col-games", "aria-sort") == "descending"
+    )
+    mlb.click(head)
+    assert mlb.get_attribute("#mlb-view-apple thead th.crews-col-games", "aria-sort") == "ascending"
+    assert names()[0] == "#3"  # 1 game first
+    mlb.click(head)
+    assert (
+        mlb.get_attribute("#mlb-view-apple thead th.crews-col-position", "aria-sort") == "ascending"
+    )
+    assert names() == ["Lead", "#2", "#3"]
+
+
+def test_row_keys_pick_and_expand(mlb: Page) -> None:
+    mlb.locator(ROW).first.focus()
+    mlb.keyboard.press("ArrowDown")
+    assert mlb.evaluate("document.activeElement.dataset.rowKey") == "1"
+    mlb.keyboard.press("End")
+    assert mlb.evaluate("document.activeElement.dataset.rowKey") == "2"
+    mlb.keyboard.press("Home")
+    mlb.keyboard.press("ArrowRight")
+    assert mlb.locator(ROW).first.get_attribute("aria-expanded") == "true"
+    mlb.keyboard.press("Escape")
+    assert mlb.locator(ROW).first.get_attribute("aria-expanded") == "false"
+    mlb.keyboard.press("Enter")
+    assert "booth=p0" in mlb.url or "booth=" in mlb.url
+
+
+def test_picking_or_clearing_a_booth_keeps_the_row_expanded(mlb: Page) -> None:
+    """G5: as in the CFB Crews table, a pick or Clear selection keeps open rows and paging."""
+    mlb.locator(ROW).first.focus()
+    mlb.keyboard.press("ArrowRight")
+    assert mlb.locator(ROW).first.get_attribute("aria-expanded") == "true"
+    mlb.keyboard.press("Enter")
+    assert "booth=" in mlb.url
+    assert mlb.locator(ROW).first.get_attribute("aria-expanded") == "true"
+    mlb.click("#mlb-clear-selection")
+    assert "booth=" not in mlb.url
+    assert mlb.locator(ROW).first.get_attribute("aria-expanded") == "true"
 
 
 def test_some_booths_pending_withholds_the_lead_lines_as_pending(
@@ -193,3 +330,265 @@ def test_some_booths_pending_withholds_the_lead_lines_as_pending(
     )
     assert lead and all("pending Retrosheet 2026" in t for t in lead)
     assert not any("too few games" in t for t in lead)
+
+
+# ---- 16-06 Task 3: the '+N' analysts control and the expanded row ----
+
+TRICKY = "<b>&amp;"
+
+
+def _analyst_heavy(route: Route) -> None:
+    """Booth 0 plays games 0, 1, 5, 6: Ben x3, Dee x2, Fay x1 and a fill-in named TRICKY x1."""
+    resp = route.fetch()
+    data = json.loads(resp.text())
+    data["lookups"]["people"][7]["name"] = TRICKY
+    g = data["games"]
+    pbp = {"person": 0, "role": "pbp"}
+
+    def an(p: int) -> dict[str, int | str]:
+        return {"person": p, "role": "analyst"}
+
+    g["crew"][0] = [pbp, an(1), an(3), an(5)]
+    g["crew"][1] = [pbp, an(1), an(3)]
+    g["crew"][5] = [pbp, an(1)]
+    g["crew"][6] = [pbp, an(7)]
+    b = data["apple_booths"]
+    b["game_list"][0] = [0, 1, 5, 6]
+    b["games"][0] = 4
+    route.fulfill(response=resp, body=json.dumps(data))
+
+
+@pytest.fixture
+def heavy(mlb_guarded_page: Page, open_mlb_app: Callable[..., None]) -> Page:
+    mlb_guarded_page.route("**/mlb-data.json", _analyst_heavy)
+    open_mlb_app(mlb_guarded_page)
+    return mlb_guarded_page
+
+
+@pytest.fixture
+def heavy_phone(mlb_mobile_page: Page, open_mlb_app: Callable[..., None]) -> Page:
+    mlb_mobile_page.route("**/mlb-data.json", _analyst_heavy)
+    open_mlb_app(mlb_mobile_page)
+    return mlb_mobile_page
+
+
+def test_more_names_shows_two_analysts_and_a_count(heavy: Page) -> None:
+    cell = heavy.locator(ROW).nth(0).locator("td.crews-name")
+    names = cell.locator(".crews-person-name").all_inner_texts()
+    assert names == ["Ada Quill", "Ben Marlow", "Dee Hart"]
+    more = cell.locator("button.more-names")
+    assert more.inner_text() == "+2"
+    label = more.get_attribute("aria-label") or ""
+    assert label.startswith("2 more analysts: ")
+    assert f"Fay Lorn (1), {TRICKY} (1)" in label or f"{TRICKY} (1), Fay Lorn (1)" in label
+    # Booth 1 has one analyst: no button.
+    assert heavy.locator(ROW).nth(1).locator("button.more-names").count() == 0
+
+
+def test_more_names_tooltip_on_hover_and_focus_and_never_picks(heavy: Page) -> None:
+    more = heavy.locator(ROW).nth(0).locator("button.more-names")
+    more.hover()
+    tip = heavy.locator("#chart-tooltip")
+    assert tip.is_visible()
+    text = tip.inner_text()
+    assert "Fay Lorn (1)" in text
+    assert f"{TRICKY} (1)" in text
+    assert tip.locator("b").count() == 0
+    border = tip.evaluate("e => getComputedStyle(e).borderTopColor")
+    assert border == "rgb(207, 198, 182)"  # --rule-strong
+    heavy.mouse.move(5, 5)
+    assert tip.is_hidden()
+    more.focus()
+    assert tip.is_visible()
+    more.blur()
+    assert tip.is_hidden()
+    more.click()
+    assert heavy.evaluate(f"{HOOKS}.getState().booth") in (None, "")
+    assert heavy.locator("#mlb-view-apple tr.is-picked").count() == 0
+
+
+def test_more_names_popover_on_phone_toggles_and_closes(heavy_phone: Page) -> None:
+    page = heavy_phone
+    more = page.locator(ROW).nth(0).locator("button.more-names")
+    pop = page.locator("#mlb-view-apple .more-names-pop")
+    more.tap()
+    assert pop.is_visible()
+    assert "Fay Lorn (1)" in pop.inner_text()
+    assert pop.locator("b").count() == 0
+    assert page.locator("#mlb-view-apple tr.is-picked").count() == 0
+    more.tap()
+    assert pop.count() == 0
+    more.tap()
+    page.keyboard.press("Escape")
+    assert pop.count() == 0
+    more.tap()
+    page.locator("#mlb-view-apple .nfl-coverage").tap()
+    assert pop.count() == 0
+
+
+def test_expanded_row_lists_analysts_games_and_fill_in(heavy: Page) -> None:
+    row = heavy.locator(ROW).nth(0)
+    row.locator(".crews-chevron").click()
+    sub = heavy.locator("#mlb-view-apple tr.crews-expanded")
+    line = sub.locator("p.mlb-analysts").inner_text()
+    assert line.startswith("Analysts")
+    assert "Ben Marlow (3)" in line
+    assert "Dee Hart (2)" in line
+    assert "Fay Lorn (1)" in line
+    assert f"{TRICKY} (1)" in line
+    assert sub.locator("b").count() == 0
+    heads = sub.locator("table.crews-games thead th").all_inner_texts()
+    assert heads == ["Date", "Matchup", "Crew", "Viewers"]
+    games = sub.locator("tr.crews-game")
+    assert games.count() == 4
+    dates = games.locator("td.crews-game-date").all_inner_texts()
+    assert dates == sorted(dates, reverse=True)
+    tags = sub.locator(".crews-tag.is-dashed")
+    assert tags.count() == 1
+    assert tags.first.inner_text() == "fill-in"
+    assert tags.first.get_attribute("title") == "The regular analyst was absent"
+    # The fill-in game's crew cell names the tricky analyst as literal text.
+    assert TRICKY in sub.locator("tr.crews-game:has(.crews-tag.is-dashed)").inner_text()
+
+
+def test_game_row_opens_the_panel_and_focus_returns(heavy: Page) -> None:
+    heavy.locator(ROW).nth(0).locator(".crews-chevron").click()
+    game = heavy.locator("#mlb-view-apple tr.crews-game").first
+    game.focus()
+    heavy.keyboard.press("Enter")
+    heavy.wait_for_selector("#mlb-detail-panel[open]")
+    heavy.keyboard.press("Escape")
+    heavy.wait_for_function(
+        "document.activeElement && document.activeElement.classList.contains('crews-game')"
+    )
+
+
+def test_booth_picked_game_row_escape_returns_focus_to_the_row(heavy: Page) -> None:
+    """F2: the picked booth's games are also in Matched games; focus still returns to the row."""
+    heavy.locator(ROW).nth(0).locator("td.crews-name").click()
+    assert heavy.evaluate(f"{HOOKS}.getState().booth") == "0"
+    heavy.locator(ROW).nth(0).locator(".crews-chevron").click()
+    game = heavy.locator("#mlb-view-apple tr.crews-game").first
+    i = game.get_attribute("data-game")
+    assert heavy.locator(f"#mlb-matched-games .nfl-matchup-btn[data-game='{i}']").count() == 1
+    game.focus()
+    heavy.keyboard.press("Enter")
+    heavy.wait_for_selector("#mlb-detail-panel[open]")
+    heavy.keyboard.press("Escape")
+    heavy.wait_for_function(
+        "document.activeElement && document.activeElement.classList.contains('crews-game')"
+    )
+    assert heavy.evaluate("document.activeElement.dataset.game") == i
+
+
+def test_expanded_game_row_tags_a_window_audience(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """F6: a window-level figure in an expanded game row carries the Matched games `window` tag."""
+    page = mlb_guarded_page
+
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        data["games"]["scope"][1] = "window"  # booth 0's rated game
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    page.route("**/mlb-data.json", handler)
+    open_mlb_app(page)
+    page.locator(ROW).nth(0).locator(".crews-chevron").click()
+    cell = page.locator("#mlb-view-apple tr.crews-game[data-game='1'] td.crews-game-viewers")
+    tag = cell.locator(".mlb-source-tag[data-scope='window']")
+    assert tag.count() == 1
+    assert tag.inner_text() == "window"
+    assert tag.get_attribute("title") == (
+        "Audience of the whole broadcast window, not this game alone"
+    )
+    other = page.locator("#mlb-view-apple tr.crews-game[data-game='0'] td.crews-game-viewers")
+    assert other.locator(".mlb-source-tag").count() == 0
+
+
+def test_fill_in_compares_against_the_listed_analyst(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """F7: the booth lists TRICKY (1 game) though Ben works 3; Ben's games are the fill-ins."""
+    page = mlb_guarded_page
+
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        data["lookups"]["people"][7]["name"] = TRICKY
+        g = data["games"]
+        pbp = {"person": 0, "role": "pbp"}
+        g["crew"][0] = [pbp, {"person": 1, "role": "analyst"}, {"person": 3, "role": "analyst"}]
+        g["crew"][1] = [pbp, {"person": 1, "role": "analyst"}]
+        g["crew"][5] = [pbp, {"person": 1, "role": "analyst"}]
+        g["crew"][6] = [pbp, {"person": 7, "role": "analyst"}]
+        b = data["apple_booths"]
+        b["game_list"][0] = [0, 1, 5, 6]
+        b["games"][0] = 4
+        b["analyst"][0] = 7  # the listed analyst is not the most-worked one
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    page.route("**/mlb-data.json", handler)
+    open_mlb_app(page)
+    # The row keeps its order by games worked (UI-SPEC: analysts by total appearances).
+    names = page.locator(ROW).nth(0).locator("td.crews-name .crews-person-name").all_inner_texts()
+    assert names[:2] == ["Ada Quill", "Ben Marlow"]
+    page.locator(ROW).nth(0).locator(".crews-chevron").click()
+    sub = page.locator("#mlb-view-apple tr.crews-expanded")
+    tagged = sorted(
+        sub.locator("tr.crews-game:has(.crews-tag.is-dashed)").evaluate_all(
+            "els => els.map(e => Number(e.dataset.game))"
+        )
+    )
+    assert tagged == [0, 1, 5]
+    assert sub.locator("tr.crews-game[data-game='6'] .crews-tag.is-dashed").count() == 0
+
+
+def test_more_names_popover_on_the_last_row_is_not_clipped(
+    mlb_mobile_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """F17: the phone popover on the last Apple row sits in the viewport, clear of the scroller."""
+    page = mlb_mobile_page
+
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        g = data["games"]
+        # Booth 2 (the last row) plays game 4 with three analysts, so its cell shows '+1'.
+        g["crew"][4] = [
+            {"person": 4, "role": "pbp"},
+            {"person": 5, "role": "analyst"},
+            {"person": 1, "role": "analyst"},
+            {"person": 3, "role": "analyst"},
+        ]
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    page.route("**/mlb-data.json", handler)
+    open_mlb_app(page)
+    more = page.locator(ROW).last.locator("button.more-names")
+    assert more.inner_text() == "+1"
+    more.scroll_into_view_if_needed()
+    more.tap()
+    pop = page.locator("#mlb-view-apple .more-names-pop")
+    assert pop.count() == 1
+    box = pop.evaluate(
+        """(p) => {
+          const r = p.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          const wrap = document.querySelector('#mlb-view-apple .table-scroll');
+          const w = wrap.getBoundingClientRect();
+          return {
+            top: r.top, bottom: r.bottom, left: r.left, right: r.right,
+            vw: innerWidth, vh: innerHeight, hit: !!hit && p.contains(hit),
+            insideWrap: wrap.contains(p), wrapBottom: w.bottom,
+          };
+        }"""
+    )
+    assert box["top"] >= 0 and box["left"] >= 0
+    assert box["bottom"] <= box["vh"] and box["right"] <= box["vw"]
+    assert box["hit"], box  # nothing (no scroller edge) covers it
+    assert not box["insideWrap"] or box["bottom"] <= box["wrapBottom"]
+    assert pop.inner_text() == "Fay Lorn (1)"  # ties order by name: Ben, Dee, then Fay
+    page.keyboard.press("Escape")
+    assert pop.count() == 0

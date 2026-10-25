@@ -11,22 +11,25 @@
  */
 import { prepareMlb, gameRow, boothLabelOf } from './data.js';
 import { currentTheme, onThemeChange } from '../../modules/theme.js';
-import { canonicalMlbState, tableGames, selectionLabel } from './state.js';
+import { canonicalMlbState, carryOnViewChange, tableGames, selectionLabel } from './state.js';
 import { encodeMlbState, decodeMlbState } from './url-state.js';
 import { createGamesTable } from './table.js';
 import { createDetailPanel, RETROSHEET_NOTICE, RETROSHEET_CONTACT } from './panel.js';
 import { createMlbTabs } from './tabs.js';
 import * as appleView from './views/apple.js';
 import * as postseasonView from './views/postseason.js';
+import * as scatterView from './views/scatter.js';
+import { showToolsFor } from './tools.js';
 import { PHONE_QUERY } from '../../modules/breakpoints.js';
 
 // View id -> module (mount, render, resize, testModel); the tab bar renders from this map.
-const VIEW_MODULES = { apple: appleView, postseason: postseasonView };
+const VIEW_MODULES = { apple: appleView, postseason: postseasonView, scatter: scatterView };
 const VIEW_IDS = Object.keys(VIEW_MODULES);
 
 const HINTS = {
   apple: 'Pick a booth to list its games.',
-  postseason: 'Pick a postseason cell to list its games.',
+  postseason: 'Pick a postseason cell or a season to list its games.',
+  scatter: 'One dot per game. Pick a booth, cell or season on its tab to highlight its games here.',
 };
 
 function el(tag, className, text) {
@@ -144,8 +147,7 @@ function showStatus(kind) {
     const banner = el('div', 'error-banner');
     banner.setAttribute('role', 'alert');
     banner.append(
-      el('p', 'error-title', "Couldn't load the MLB data."),
-      el('p', null, 'Check your connection and reload the page. You can still use the CFB view.'),
+      el('p', 'error-title', 'The data did not load. Reload the page; if it still fails, try again later.'),
     );
     status.appendChild(banner);
   }
@@ -256,7 +258,11 @@ function renderSelectionBar() {
 function renderTable() {
   lastRows = tableGames(model, state).map((i) => gameRow(model, i));
   const label = selectionLabel(model, state);
-  table.render(lastRows, { emptyKind: label ? 'filtered' : 'nothing', selectionLabel: label });
+  table.render(lastRows, {
+    emptyKind: label ? 'filtered' : 'nothing',
+    selectionLabel: label,
+    selectionKey: JSON.stringify([state.booth, state.cell, state.selection ? state.selection.label : null]),
+  });
 }
 
 function renderTabHint() {
@@ -266,6 +272,7 @@ function renderTabHint() {
 function showActiveView({ resize }) {
   for (const id of VIEW_IDS) views[id].section.hidden = id !== state.view;
   tabs.setActive(state.view);
+  showToolsFor(regions.tools, state.view);
   if (resize && views[state.view]) views[state.view].mod.resize();
 }
 
@@ -276,11 +283,13 @@ function syncPanel() {
     return;
   }
   if (panel.currentGame() === state.game) return;
-  // The table re-rendered before this point, so an opener button from the old render is detached:
-  // focus returns to the same game's new button instead.
-  const opener = pendingOpener
-    ? regions.matched.querySelector(`.nfl-matchup-btn[data-game="${state.game}"]`) ?? pendingOpener
-    : undefined;
+  // The table re-rendered before this point, so a Matched games button from the old render is
+  // detached: focus returns to the same game's new button instead. A connected opener (the
+  // Scatter chart) or a proxy (an Apple expanded row) is kept as passed.
+  let opener = pendingOpener ?? undefined;
+  if (opener instanceof Element && !opener.isConnected) {
+    opener = regions.matched.querySelector(`.nfl-matchup-btn[data-game="${state.game}"]`) ?? opener;
+  }
   panel.open(gameRow(model, state.game), opener);
   pendingOpener = null;
 }
@@ -307,10 +316,10 @@ function setState(patch) {
   if (p.cell != null && !('booth' in p)) p.booth = null;
   if (('booth' in p || 'cell' in p) && !('selection' in p)) p.selection = null;
   state = canonicalMlbState({ ...state, ...p }, model);
-  // A selection belongs to the view that made it, so a tab change drops it
+  // A tab change keeps or drops the pick per transition (carryOnViewChange)
   // unless the same patch sets a new one.
   if (state.view !== prevView && !('booth' in p || 'cell' in p || 'selection' in p)) {
-    state = canonicalMlbState({ ...state, booth: null, cell: null, selection: null }, model);
+    state = canonicalMlbState(carryOnViewChange(prevView, state.view, state), model);
   }
   syncUrl();
   renderAll({ resize: state.view !== prevView });
@@ -330,6 +339,10 @@ const ctx = {
   get model() {
     return model;
   },
+  get chartTools() {
+    return regions ? regions.tools : null;
+  },
+  methodologyHref: (anchor) => (anchor ? `methodology.html#${anchor}` : 'methodology.html'),
   getState: () => state,
   setState: (patch) => setState(patch),
   env,
@@ -395,8 +408,14 @@ function ensureShell(footerEl) {
     // Escape, the close button and the backdrop all end here: the game leaves the state and URL.
     onClose: () => {
       if (state && state.game != null) {
+        const wasOnlyGame = state.booth == null && state.cell == null && state.selection == null;
         state = canonicalMlbState({ ...state, game: null }, model);
         if (mounted) syncUrl();
+        // The Scatter fades to an open game when nothing else is picked (D-07): undo that on close.
+        // unmount() closes the panel too; a hidden MLB view is not redrawn (it renders on remount).
+        if (mounted && wasOnlyGame && state.view === 'scatter' && views && views.scatter) {
+          views.scatter.mod.render(ctx);
+        }
       }
     },
   });

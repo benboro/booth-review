@@ -356,7 +356,7 @@ def test_legend_chip_hides_a_category(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
 ) -> None:
     _open(nfl_guarded_page, open_nfl_app)
-    chips = nfl_guarded_page.locator(f"{VIEW} ul.legend-chips > li > button.legend-chip.pill")
+    chips = nfl_guarded_page.locator(f"{VIEW} ul.legend-chips > li > button.legend-chip")
     assert chips.all_inner_texts() == [
         "Thursday night",
         "Sunday night",

@@ -37,6 +37,7 @@ import {
 import { makeGameTypeIcon } from './icons.js';
 import { currentTheme } from './pill.js';
 import { crewBox, externalLink, linksList, networksParagraph } from './panel-parts.js';
+import { sortNetworks } from './network.js';
 
 /** The element focus returns to when the dialog closes, or null. */
 let opener = null;
@@ -69,7 +70,8 @@ function buildNetworksParagraph(data, i, theme) {
   const others = t.outlets[i].filter((idx) => idx !== t.network[i]);
   return networksParagraph({
     primary: data.lookups.networks[t.network[i]],
-    others: others.map((idx) => data.lookups.networks[idx]),
+    // The other outlets read in network precedence (U7); the primary stays first.
+    others: sortNetworks(others.map((idx) => data.lookups.networks[idx])),
     theme,
   });
 }

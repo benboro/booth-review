@@ -222,7 +222,7 @@ def test_tab_bar_lists_exactly_the_registered_views(
     tabs = mlb_guarded_page.eval_on_selector_all(
         "#mlb-chart-tabs [role=tab]", "els => els.map(e => e.textContent)"
     )
-    assert tabs == ["Apple crews", "Postseason booths"]
+    assert tabs == ["Apple crews", "Postseason booths", "Scatter"]
     assert mlb_guarded_page.locator("#mlb-chart-tabs").is_visible()
     assert mlb_guarded_page.locator("#mlb-tab-apple[aria-selected='true']").count() == 1
     mlb_guarded_page.click("#mlb-tab-postseason")
@@ -242,3 +242,36 @@ def test_view_deep_links(mlb_guarded_page: Page, open_mlb_app: Callable[..., Non
     assert page.locator("#mlb-tab-apple[aria-selected='true']").count() == 1
     assert page.locator("#mlb-view-apple table.mlb-apple-table").is_visible()
     assert page.locator("#mlb-view-postseason").is_hidden()
+    open_mlb_app(page, "?sport=mlb&view=scatter")
+    assert page.locator("#mlb-tab-scatter[aria-selected='true']").count() == 1
+    assert page.locator("#mlb-view-scatter").is_visible()
+    assert page.locator("#mlb-view-apple").is_hidden()
+    assert page.evaluate("window.__mlbTestHooks.getState().view") == "scatter"
+
+
+def test_sport_switch_with_an_open_game_does_not_redraw_the_hidden_scatter(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """F14: unmount closes the panel; onClose must not re-render the Scatter once MLB is gone."""
+    page = mlb_guarded_page
+    open_mlb_app(page, "?sport=mlb&view=scatter")
+    page.wait_for_function("window.__mlbTestHooks.getViewModel('scatter').drawn === true")
+    page.evaluate("window.__mlbTestHooks.openGame(1)")
+    page.wait_for_function("document.getElementById('mlb-detail-panel').open")
+    page.evaluate(
+        """() => {
+          window.__mlbReacts = 0;
+          const gd = document.querySelector('#mlb-view-scatter .js-plotly-plot');
+          const react = window.Plotly.react;
+          window.Plotly.react = function (el, ...rest) {
+            if (el === gd) window.__mlbReacts += 1;
+            return react.call(this, el, ...rest);
+          };
+        }"""
+    )
+    # The modal panel covers the switch, so the sport change is driven programmatically.
+    page.evaluate("document.querySelector('#sport-switch button[data-sport=\"cfb\"]').click()")
+    page.wait_for_function("document.body.dataset.sport === 'cfb'")
+    page.wait_for_timeout(200)
+    assert page.evaluate("document.getElementById('mlb-detail-panel').open") is False
+    assert page.evaluate("window.__mlbReacts") == 0

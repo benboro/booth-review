@@ -12,15 +12,21 @@ const REQUIRED_BLOCKS = [
 ];
 const REQUIRED_LOOKUPS = ['clubs', 'team_names', 'networks', 'people', 'players', 'rounds', 'leagues', 'eras'];
 
-/** Display text per contract round name; a regular-season game has none. */
+/** Display text per contract round name (title case; one map for every surface). */
 export const ROUND_LABELS = Object.freeze({
-  regular: '',
-  wild_card: 'Wild card',
-  division: 'Division series',
-  lcs: 'League championship',
+  regular: 'Reg. Season',
+  wild_card: 'Wild Card',
+  division: 'Division Series',
+  lcs: 'Championship Series',
   world_series: 'World Series',
-  tiebreak: 'Tiebreak',
+  tiebreak: 'Tiebreaker',
 });
+
+/**
+ * Short round text for tight places. The two league series shorten together (LDS and LCS),
+ * so a place that abbreviates one abbreviates both; the other rounds keep their full names.
+ */
+export const ROUND_SHORT = Object.freeze({ ...ROUND_LABELS, division: 'LDS', lcs: 'LCS' });
 
 /** Why a game has no figure, as table and panel copy (D-22). */
 export const CAUSE_COPY = Object.freeze({
@@ -31,13 +37,6 @@ export const CAUSE_COPY = Object.freeze({
   ambiguous_doubleheader: 'doubleheader: figure not tied to one game',
   conflict: 'conflicting records',
   window_level: 'window-level figure',
-});
-
-const SOURCE_TAGS = Object.freeze({
-  override: 'confirmed',
-  506: '506',
-  relay: 'relay',
-  wikipedia: 'Wikipedia',
 });
 
 /** Columnar block -> array of row objects keyed by column name. */
@@ -91,11 +90,31 @@ export function prepareMlb(raw) {
     const key = cellKey(r.season, r.round, leagueId);
     let c = cells.get(key);
     if (!c) {
-      c = { key, season: r.season, round: r.round, league: leagueId, games: [] };
+      c = { key, season: r.season, round: r.round, league: leagueId, kind: 'round', games: [] };
       cells.set(key, c);
     }
     for (const g of r.game_list) if (!c.games.includes(g)) c.games.push(g);
   }
+  // One synthetic cell per postseason season: the union of its round cells' games.
+  const seasonCells = new Map();
+  for (const c of cells.values()) {
+    const key = `season-${c.season}`;
+    let sc = seasonCells.get(key);
+    if (!sc) {
+      sc = { key, season: c.season, round: null, league: null, kind: 'season', games: [] };
+      seasonCells.set(key, sc);
+    }
+    for (const g of c.games) if (!sc.games.includes(g)) sc.games.push(g);
+  }
+  // Every season the grid lists gets a Season cell, even one with no round cells yet (for
+  // example before its outlets are known): picking it shows the empty state, never nothing.
+  for (const s of rowsOf(raw.postseason_seasons)) {
+    const key = `season-${s.season}`;
+    if (!seasonCells.has(key)) {
+      seasonCells.set(key, { key, season: s.season, round: null, league: null, kind: 'season', games: [] });
+    }
+  }
+  for (const [key, sc] of seasonCells) cells.set(key, sc);
 
   // Stable ids for deep links: a booth is its play-by-play person's id, a game is its
   // date, clubs and game number. Positions shift when the data is rebuilt; these do not.
@@ -166,20 +185,39 @@ export function boothLabelOf(model, pbp, analyst) {
   return b == null ? a : `${a} / ${b}`;
 }
 
-/** Cell heading: '2019 League championship, NL'. */
+/** Cell heading: '2019 Championship Series, NL' or '2014 postseason'. */
 export function cellLabel(cell) {
-  const round = ROUND_LABELS[cell.round] || 'Regular season';
+  if (cell.kind === 'season') return `${cell.season} postseason`;
+  const round = ROUND_LABELS[cell.round] ?? String(cell.round);
   return cell.league ? `${cell.season} ${round}, ${cell.league}` : `${cell.season} ${round}`;
+}
+
+/**
+ * Whether a game's Retrosheet figures are still to come (the Postseason grid's rule): its lineup
+ * is pending, Retrosheet is not loaded, or its season is later than the last one loaded.
+ */
+export function retrosheetPending(model, season, lineupStatus) {
+  const through = model.freshness ? model.freshness.retrosheet_through_season ?? null : null;
+  return lineupStatus === 'pending' || through == null || season > through;
+}
+
+/**
+ * The words for a figure Retrosheet has not supplied yet (G6, G11): 'pending Retrosheet <season>'
+ * once Retrosheet is loaded, or 'Retrosheet not loaded' (the footer's wording) when no Retrosheet
+ * season is loaded at all, so no game claims a year is about to arrive.
+ */
+export function retrosheetPendingText(model, season) {
+  return retrosheetLoaded(model) ? `pending Retrosheet ${season}` : 'Retrosheet not loaded';
+}
+
+/** Whether any Retrosheet season is loaded (freshness names a through-season). */
+export function retrosheetLoaded(model) {
+  return (model.freshness ? model.freshness.retrosheet_through_season ?? null : null) != null;
 }
 
 /** '12.0M' or null when unrated. */
 export function viewersText(viewers) {
   return viewers == null ? null : `${(viewers / 1e6).toFixed(1)}M`;
-}
-
-/** Source tag for the table's Crew column, or null. */
-export function crewSourceTag(source) {
-  return source == null ? null : SOURCE_TAGS[source] ?? null;
 }
 
 function lineupSide(model, row) {
@@ -231,6 +269,7 @@ export function gameRow(model, i) {
     homeShort: home.short,
     round: c.round[i],
     roundLabel: ROUND_LABELS[c.round[i]] ?? '',
+    roundShort: ROUND_SHORT[c.round[i]] ?? '',
     seriesLeague: leagueIdx == null ? null : model.leagues[leagueIdx].id,
     seriesGame: c.series_game[i] ?? null,
     network: net ? net.name : null,
@@ -253,6 +292,9 @@ export function gameRow(model, i) {
     rrUrl: c.rr_url[i] ?? null,
     sourceUrl: c.source_url[i] ?? null,
     lineupStatus: row.lineup_status,
+    retrosheetPending: retrosheetPending(model, season, row.lineup_status),
+    retrosheetLoaded: retrosheetLoaded(model),
+    retrosheetPendingText: retrosheetPendingText(model, season),
     lineups: lineupSide(model, row),
   };
 }

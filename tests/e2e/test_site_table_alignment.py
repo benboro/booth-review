@@ -196,7 +196,7 @@ def test_mlb_apple_and_matched_games_heads_align_like_their_columns(
     open_mlb_app(page, "?sport=mlb&view=apple")
     page.wait_for_selector(".mlb-apple-table tbody tr")
     _assert_aligned(_columns(page, "#mlb-chart-area"))
-    page.locator(".mlb-apple-table .booth-row-btn").first.click()
+    page.locator(".crews-table.is-mlb tr.crews-row td.crews-name").first.click()
     page.wait_for_selector(".nfl-games table.games-table tbody tr")
     _assert_aligned(_columns(page, ".nfl-games"))
 
@@ -285,7 +285,7 @@ def test_mlb_matchup_stays_on_one_line_at_1440(
     page = mlb_guarded_page
     page.set_viewport_size(DESKTOP)
     open_mlb_app(page, "?sport=mlb&view=apple")
-    page.locator(".mlb-apple-table .booth-row-btn").first.click()
+    page.locator(".crews-table.is-mlb tr.crews-row td.crews-name").first.click()
     page.wait_for_selector(".nfl-games table.games-table tbody tr")
     _assert_one_line_matchups(page, ".nfl-games")
 

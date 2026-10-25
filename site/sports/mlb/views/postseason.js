@@ -2,31 +2,28 @@
  * MLB Postseason booths view (SPORT-07): a season-by-round grid, 2014 onward.
  *
  * Rows are seasons, columns the rounds that appear in the data. Each cell shows the
- * outlet, the booth names (Division and League Championship split into AL and NL),
- * games, mean excitement per game and, where Ratings Reference has one, viewers.
- * A season with an incomplete
- * crew record carries its coverage percentage, and a cell with no listed crew says so.
+ * outlet and the booth names (Division and Championship Series split into AL and NL); it
+ * carries no games, excitement or viewers notes (U11). A season with an incomplete crew
+ * record carries its coverage percentage, and a cell with no listed crew says so.
+ *
+ * Inside a cell each series (one pair of clubs) gets a matchup head, oldest series first,
+ * with a hairline between series (U10); booth lines group people within a series only.
  *
  * Each cell (or league sub-block) is a button that selects its games into the games
  * table. On phones the grid collapses to one stacked block per season (CSS only).
  * Everything is built with createElement and textContent only.
  */
-import { boothLabelOf, cellKey, personName } from '../data.js';
-import { networkMark } from '../../../modules/network.js';
+import {
+  ROUND_LABELS, ROUND_SHORT, boothLabelOf, cellKey, cellLabel, personName,
+} from '../data.js';
+import { tableGames } from '../state.js';
+import { networkMark, sortNetworks } from '../../../modules/network.js';
 import { externalLink } from '../../../modules/panel-parts.js';
 import { makeRolePill, nameWithRoles } from '../../../modules/pill.js';
 import { attachScrollCue } from '../../../modules/scroll-cue.js';
 
-export const PENDING_TEXT = 'pending Retrosheet 2026';
 export const NO_CREW_TEXT = 'crew not listed';
 const ROUND_ORDER = ['wild_card', 'division', 'lcs', 'world_series', 'tiebreak'];
-const SHORT_ROUNDS = Object.freeze({
-  wild_card: 'Wild Card',
-  division: 'Division',
-  lcs: 'LCS',
-  world_series: 'World Series',
-  tiebreak: 'Tiebreak',
-});
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -38,8 +35,156 @@ function el(tag, className, text) {
 /** Booth lines the phone Booths cell shows before a "+N more" last line (13-14 line budget). */
 export const PHONE_BOOTH_LINES = 3;
 
-const refs = { ctx: null, head: null, body: null, captions: null, table: null, phoneBody: null };
+const refs = {
+  ctx: null, head: null, body: null, captions: null, table: null, phoneBody: null,
+  status: null, wrap: null, phoneNotes: null,
+};
 let current = null;
+/** Data key of the grid button that holds the roving tab stop (survives re-renders). */
+let activeKey = null;
+/** Data keys of the grid, row by row, for keyboard navigation (rebuilt on every render). */
+let gridButtons = [];
+
+const GRID_PAGE = 5;
+const BTN_SEL = '.mlb-season-btn, .mlb-cell-btn[data-cell]';
+
+function btnKey(btn) {
+  return btn.dataset.seasonCell ?? btn.dataset.cell;
+}
+
+/** Select the key, or clear it when it is already picked; announce either in the live region. */
+function toggleCell(key) {
+  const { ctx } = refs;
+  if (!current?.model.cells.has(key)) return;
+  const label = cellLabel(current.model.cells.get(key));
+  if (ctx.getState().cell === key) {
+    ctx.clearSelection();
+    announce('Selection cleared.');
+    return;
+  }
+  ctx.setState({ cell: key });
+  const n = tableGames(current.model, ctx.getState()).length;
+  announce(`Selected ${label}, ${n} ${n === 1 ? 'game' : 'games'}.`);
+}
+
+function announce(text) {
+  if (refs.status) refs.status.textContent = text;
+}
+
+/** Nearest non-empty column to `col` in a row (left wins a tie), or -1. */
+function nearestColumn(row, col) {
+  for (let d = 0; d < row.length; d += 1) {
+    if (row[col - d]?.length) return col - d;
+    if (row[col + d]?.length) return col + d;
+  }
+  return -1;
+}
+
+/**
+ * Keyboard move over the Postseason grid. `grid` is rows of columns of sub-block ids (column 0
+ * the Season button, an empty array for an empty cell); `pos` is `{ row, col, sub }`. Returns
+ * the next position, or `pos` itself when the key does not move.
+ */
+export function nextGridTarget(grid, pos, key) {
+  const { row, col, sub } = pos;
+  const cols = grid[row] ?? [];
+  const sideways = (step) => {
+    for (let c = col + step; c >= 0 && c < cols.length; c += step) {
+      if (cols[c].length) return { row, col: c, sub: sub < cols[c].length ? sub : 0 };
+    }
+    return pos;
+  };
+  const vertical = (target, subPick) => {
+    if (target < 0 || target >= grid.length || target === row) return pos;
+    const c = nearestColumn(grid[target], col);
+    if (c < 0) return pos;
+    const len = grid[target][c].length;
+    return { row: target, col: c, sub: subPick === 'last' ? len - 1 : 0 };
+  };
+  switch (key) {
+    case 'ArrowRight': return sideways(1);
+    case 'ArrowLeft': return sideways(-1);
+    case 'ArrowDown':
+      return sub + 1 < cols[col].length ? { row, col, sub: sub + 1 } : vertical(row + 1, 'first');
+    case 'ArrowUp':
+      return sub > 0 ? { row, col, sub: sub - 1 } : vertical(row - 1, 'last');
+    case 'Home': {
+      const c = cols.findIndex((x) => x.length);
+      return c < 0 ? pos : { row, col: c, sub: 0 };
+    }
+    case 'End': {
+      let c = cols.length - 1;
+      while (c >= 0 && !cols[c].length) c -= 1;
+      // The row's last button: the final column's last sub-block (NL after AL).
+      return c < 0 ? pos : { row, col: c, sub: cols[c].length - 1 };
+    }
+    case 'PageDown': return vertical(Math.min(row + GRID_PAGE, grid.length - 1), 'first');
+    case 'PageUp': return vertical(Math.max(row - GRID_PAGE, 0), 'first');
+    default: return pos;
+  }
+}
+
+function gridIds() {
+  return gridButtons.map((cols) => cols.map((subs) => subs.map(btnKey)));
+}
+
+function locate(btn) {
+  for (let row = 0; row < gridButtons.length; row += 1) {
+    for (let col = 0; col < gridButtons[row].length; col += 1) {
+      const sub = gridButtons[row][col].indexOf(btn);
+      if (sub >= 0) return { row, col, sub };
+    }
+  }
+  return null;
+}
+
+function indexGrid() {
+  gridButtons = [...refs.body.rows].map((tr) => [...tr.cells].map((cell) => [...cell.querySelectorAll(BTN_SEL)]));
+  const all = gridButtons.flat(2);
+  const want = all.find((b) => btnKey(b) === activeKey)
+    ?? all.find((b) => b.getAttribute('aria-pressed') === 'true')
+    ?? all[0];
+  for (const b of all) b.tabIndex = b === want ? 0 : -1;
+}
+
+function setActive(btn) {
+  activeKey = btnKey(btn);
+  for (const b of gridButtons.flat(2)) b.tabIndex = b === btn ? 0 : -1;
+}
+
+function onGridKeydown(ev) {
+  const btn = ev.target.closest?.(BTN_SEL);
+  if (!btn || !refs.table.contains(btn)) return;
+  if (ev.key === 'Enter' || ev.key === ' ') {
+    ev.preventDefault();
+    if (!ev.repeat) btn.click();
+    return;
+  }
+  if (ev.key === 'Escape') {
+    ev.preventDefault();
+    if (refs.ctx.getState().cell != null) {
+      refs.ctx.clearSelection();
+      announce('Selection cleared.');
+    }
+    return;
+  }
+  const pos = locate(btn);
+  if (!pos) return;
+  const next = nextGridTarget(gridIds(), pos, ev.key);
+  if (!['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Home', 'End', 'PageDown', 'PageUp'].includes(ev.key)) return;
+  ev.preventDefault();
+  const target = gridButtons[next.row]?.[next.col]?.[next.sub];
+  if (!target || target === btn) return;
+  setActive(target);
+  target.focus();
+  target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+/** Space activates a button on keyup: swallow it so the keydown handler is the only trigger. */
+function onGridKeyup(ev) {
+  if (ev.key === ' ' && ev.target.closest?.(BTN_SEL)) ev.preventDefault();
+}
+
 
 function coveragePct(num, den) {
   return den > 0 ? Math.round((100 * num) / den) : null;
@@ -55,8 +200,7 @@ function buildGrid(model) {
     if (!b) {
       b = {
         key, season: r.season, round: r.round, league: leagueId,
-        outlets: [], outletSourceUrl: null, booths: [], games: 0, crewListed: 0,
-        exciteSum: 0, exciteN: 0, viewerSum: 0, viewerN: 0,
+        outlets: [], outletSourceUrl: null, booths: [], gameList: [], games: 0, crewListed: 0,
       };
       blocks.set(key, b);
     }
@@ -68,33 +212,154 @@ function buildGrid(model) {
     for (const pair of r.booths) {
       if (!b.booths.some((p) => p[0] === pair[0] && p[1] === pair[1])) b.booths.push(pair);
     }
+    for (const g of r.game_list) if (!b.gameList.includes(g)) b.gameList.push(g);
     b.games += r.games;
     b.crewListed += r.crew_listed;
-    if (r.mean_excitement != null && r.excitement_n > 0) {
-      b.exciteSum += r.mean_excitement * r.excitement_n;
-      b.exciteN += r.excitement_n;
-    }
-    if (r.viewers_mean != null && r.viewers_n > 0) {
-      b.viewerSum += r.viewers_mean * r.viewers_n;
-      b.viewerN += r.viewers_n;
-    }
   }
+  // Several outlets read in network precedence: FOX before FS1, ABC before ESPN (U7).
+  for (const b of blocks.values()) b.outlets = sortNetworks(b.outlets);
   return blocks;
 }
 
-function viewersText(mean) {
-  return `${(mean / 1e6).toFixed(1)}M`;
+/**
+ * Group a cell's crews so each person is listed once (U3). Two crews join a group when they
+ * share any person (an analyst who called the series beside a fill-in play-by-play, or a
+ * play-by-play who worked with two analysts); groups are the connected components of that
+ * relation. A group lists its play-by-play people, then its analysts who are not already
+ * listed, each in first-seen order; a person seen in both roles is listed once, with both
+ * pills. Only the display groups; the crews and every game's own crew are untouched.
+ *
+ * `order` (optional) ranks people per role: listed people keep that order inside a group,
+ * unlisted ones follow in first-seen order (U9 keeps the builder's booth order this way).
+ * @param {Array<Array<{person: number|null, role: string}>>} crews each game's full crew
+ * @param {{pbp: Map<number, number>, analyst: Map<number, number>}|null} [order]
+ * @returns {Array<{pbps: Array<{person: number, roles: string[]}>, analysts: Array<{person: number, roles: string[]}>}>}
+ */
+export function groupBooths(crews, order = null) {
+  const parent = crews.map((_, k) => k);
+  const find = (k) => {
+    while (parent[k] !== k) {
+      parent[k] = parent[parent[k]];
+      k = parent[k];
+    }
+    return k;
+  };
+  const firstCrew = new Map();
+  crews.forEach((crew, k) => {
+    for (const { person } of crew) {
+      if (person == null) continue;
+      if (!firstCrew.has(person)) firstCrew.set(person, k);
+      else {
+        const a = find(firstCrew.get(person));
+        const b = find(k);
+        if (a !== b) parent[Math.max(a, b)] = Math.min(a, b);
+      }
+    }
+  });
+  const byRoot = new Map();
+  crews.forEach((crew, k) => {
+    const root = find(k);
+    if (!byRoot.has(root)) byRoot.set(root, []);
+    byRoot.get(root).push(crew);
+  });
+  const rankBy = (role) => {
+    const ranks = order?.[role];
+    return (list) => (ranks
+      ? list.map((e, k) => [ranks.get(e.person) ?? Infinity, k, e])
+        .sort((x, y) => x[0] - y[0] || x[1] - y[1]).map((x) => x[2])
+      : list);
+  };
+  // Roots are each group's first crew, so Map order is first-seen order.
+  return [...byRoot.values()].map((group) => {
+    const roles = new Map();
+    const add = (person, role) => {
+      if (person == null) return;
+      if (!roles.has(person)) roles.set(person, []);
+      if (!roles.get(person).includes(role)) roles.get(person).push(role);
+    };
+    for (const crew of group) for (const m of crew) if (m.role === 'pbp') add(m.person, 'pbp');
+    for (const crew of group) for (const m of crew) if (m.role !== 'pbp') add(m.person, 'analyst');
+    const entries = [...roles].map(([person, r]) => ({ person, roles: r }));
+    return {
+      pbps: rankBy('pbp')(entries.filter((e) => e.roles.includes('pbp'))),
+      analysts: rankBy('analyst')(entries.filter((e) => !e.roles.includes('pbp'))),
+    };
+  });
 }
 
-function excitementLine(model, b) {
-  if (b.exciteN > 0) {
-    return `Excitement ${(b.exciteSum / b.exciteN).toFixed(2)} (${b.exciteN} ${b.exciteN === 1 ? 'game' : 'games'})`;
+/** Upper-case club code from its lookup id, or an em dash when the club is unknown. */
+function clubCode(model, idx) {
+  const id = idx == null ? null : model.clubs[idx]?.id;
+  return id ? String(id).toUpperCase() : '—';
+}
+
+/**
+ * A cell's series (U10): its games split by the unordered pair of clubs (season, round and
+ * league are the cell's own), each in date order, the series ordered by their first game.
+ * The head names the first game's home club first, e.g. `NYY vs BOS`.
+ * @returns {Array<{key: string, label: string, games: number[]}>}
+ */
+export function cellSeries(model, b) {
+  const { date, home, away, game_number: gameNo } = model.cols;
+  const byGame = (x, y) => (date[x] < date[y] ? -1 : date[x] > date[y] ? 1 : (gameNo[x] ?? 0) - (gameNo[y] ?? 0));
+  const series = new Map();
+  for (const g of b.gameList) {
+    const key = [home[g], away[g]].map((c) => (c == null ? 'null' : String(c))).sort().join('~');
+    if (!series.has(key)) series.set(key, { key, games: [] });
+    series.get(key).games.push(g);
   }
-  // Pending only for seasons Retrosheet has not reached; an older cell without a figure
-  // simply lacks play-by-play, whatever the Apple booths' quality status says.
-  const through = model.freshness.retrosheet_through_season;
-  if (through == null || b.season > through) return PENDING_TEXT;
-  return 'no excitement figure';
+  const list = [...series.values()];
+  for (const ser of list) {
+    ser.games.sort(byGame);
+    const first = ser.games[0];
+    ser.label = `${clubCode(model, home[first])} vs ${clubCode(model, away[first])}`;
+  }
+  return list.sort((x, y) => byGame(x.games[0], y.games[0]) || (x.key < y.key ? -1 : x.key > y.key ? 1 : 0));
+}
+
+/**
+ * A cell's booth lines from the full crew of every game it lists (U9). The builder's
+ * `booths` pairs carry one analyst per booth, so a second analyst never reached the cell;
+ * the games' own crews are complete. The pairs still set the order: crews sort by the first
+ * pair they hold (crews matching none follow, in game order) and people keep their pair
+ * order, so a cell reads as before with the missing people added. `games` limits it to one
+ * series (U10), so people are grouped within that series only.
+ */
+export function cellBooths(model, b, games = b.gameList) {
+  const crews = games.map((i) => model.cols.crew[i] || []).filter((c) => c.length);
+  const order = { pbp: new Map(), analyst: new Map() };
+  const anyRank = new Map();
+  b.booths.forEach(([pbp, analyst], k) => {
+    if (pbp != null && !order.pbp.has(pbp)) order.pbp.set(pbp, k);
+    if (analyst != null && !order.analyst.has(analyst)) order.analyst.set(analyst, k);
+    for (const person of [pbp, analyst]) if (person != null && !anyRank.has(person)) anyRank.set(person, k);
+  });
+  const crewRank = (crew) => {
+    const people = new Set(crew.map((m) => m.person));
+    const k = b.booths.findIndex(([pbp, analyst]) =>
+      (pbp == null || people.has(pbp)) && (analyst == null || people.has(analyst)));
+    if (k >= 0) return k;
+    return Math.min(Infinity, ...crew.map((m) => anyRank.get(m.person) ?? Infinity));
+  };
+  const ranked = crews.map((crew, k) => [crewRank(crew), k, crew])
+    .sort((x, y) => x[0] - y[0] || x[1] - y[1]).map((x) => x[2]);
+  return groupBooths(ranked, order);
+}
+
+/** One booth line: its play-by-play people, then ' / ' and its analysts. */
+function boothLine(model, group) {
+  const line = el('span', 'mlb-cell-booth');
+  const person = (e, last) => {
+    const node = nameWithRoles(el('span', 'booth-name', personName(model, e.person)), ...e.roles.map((r) => makeRolePill(r)));
+    if (!last) node.append(el('span', 'booth-comma', ','));
+    return node;
+  };
+  group.pbps.forEach((e, k) => line.append(person(e, k === group.pbps.length - 1)));
+  if (group.analysts.length) {
+    if (group.pbps.length) line.append(el('span', 'booth-sep', ' / '));
+    group.analysts.forEach((e, k) => line.append(person(e, k === group.analysts.length - 1)));
+  }
+  return line;
 }
 
 function blockButton(model, b, label, picked, maxLines = Infinity) {
@@ -102,50 +367,45 @@ function blockButton(model, b, label, picked, maxLines = Infinity) {
   btn.type = 'button';
   btn.dataset.cell = b.key;
   btn.setAttribute('aria-pressed', String(picked));
-  const where = b.league ? `${b.season} ${SHORT_ROUNDS[b.round]} ${b.league}` : `${b.season} ${SHORT_ROUNDS[b.round]}`;
-  btn.setAttribute('aria-label', `${where}, ${b.games} ${b.games === 1 ? 'game' : 'games'}`);
+  const where = b.league ? `${b.season} ${ROUND_LABELS[b.round]} ${b.league}` : `${b.season} ${ROUND_LABELS[b.round]}`;
+  const series = cellSeries(model, b);
+  const named = series.length ? `, ${series.map((x) => x.label).join(', ')}` : '';
+  btn.setAttribute('aria-label', `${where}, ${b.games} ${b.games === 1 ? 'game' : 'games'}${named}`);
   const head = el('span', 'mlb-cell-head');
   if (label) head.append(el('span', 'mlb-cell-league', label));
   for (const o of b.outlets) head.append(networkMark(o));
   btn.append(head);
 
+  // One block per series: its matchup head, then its booth lines (U10). The phone line budget
+  // counts booth lines across the whole cell; a series past it folds into "+N more".
   const booths = el('span', 'mlb-cell-booths');
-  if (b.booths.length) {
-    const shown = b.booths.slice(0, maxLines);
-    for (const [pbp, analyst] of shown) {
-      const line = el('span', 'mlb-cell-booth');
-      line.append(nameWithRoles(el('span', 'booth-name', personName(model, pbp)), makeRolePill('pbp')));
-      if (analyst != null) {
-        line.append(el('span', 'booth-sep', ' / '), nameWithRoles(el('span', 'booth-name', personName(model, analyst)), makeRolePill('analyst')));
-      }
-      booths.append(line);
+  let budget = maxLines;
+  let hidden = 0;
+  for (const ser of series) {
+    const groups = cellBooths(model, b, ser.games);
+    if (groups.length && budget <= 0) {
+      hidden += groups.length;
+      continue;
     }
-    if (b.booths.length > shown.length) {
-      booths.append(el('span', 'mlb-booth-more', `+${b.booths.length - shown.length} more`));
+    const box = el('span', 'mlb-series');
+    box.dataset.series = ser.key;
+    box.append(el('span', 'mlb-series-head', ser.label));
+    const shown = groups.slice(0, Math.max(budget, 0));
+    for (const g of shown) box.append(boothLine(model, g));
+    hidden += groups.length - shown.length;
+    budget -= shown.length;
+    const listed = ser.games.filter((g) => (model.cols.crew[g] || []).length).length;
+    if (!groups.length) box.append(el('span', 'mlb-no-crew', NO_CREW_TEXT));
+    else if (listed < ser.games.length) {
+      box.append(el('span', 'mlb-no-crew', `${NO_CREW_TEXT} for ${ser.games.length - listed} of ${ser.games.length}`));
     }
-  } else {
-    booths.append(el('span', 'mlb-no-crew', NO_CREW_TEXT));
+    booths.append(box);
   }
-  if (b.booths.length && b.crewListed < b.games) {
-    booths.append(el('span', 'mlb-no-crew', `${NO_CREW_TEXT} for ${b.games - b.crewListed} of ${b.games}`));
-  }
+  if (!series.length) booths.append(el('span', 'mlb-no-crew', NO_CREW_TEXT));
+  if (hidden) booths.append(el('span', 'mlb-booth-more', `+${hidden} more`));
   btn.append(booths);
 
-  const stats = el('span', 'mlb-cell-stats');
-  stats.append(el('span', null, `${b.games} ${b.games === 1 ? 'game' : 'games'}`));
-  const ex = el('span', b.exciteN > 0 ? null : 'mlb-pending', excitementLine(model, b));
-  if (b.exciteN === 0) ex.dataset.pending = 'true';
-  stats.append(ex);
-  if (b.viewerN > 0) {
-    stats.append(el('span', null, `Avg ${viewersText(b.viewerSum / b.viewerN)} viewers, ${b.viewerN} of ${b.games} games rated`));
-  }
-  btn.append(stats);
-
-  btn.addEventListener('click', () => {
-    const state = refs.ctx.getState();
-    if (state.cell === b.key) refs.ctx.clearSelection();
-    else refs.ctx.setState({ cell: b.key });
-  });
+  btn.addEventListener('click', () => toggleCell(b.key));
   return btn;
 }
 
@@ -156,21 +416,52 @@ function roundsPresent(model) {
 
 /**
  * A season's coverage line (`data-low` under the coverage bar) and its per-season Wikipedia
- * outlets credit (RT-13), built fresh for each grid so the phone twin carries both too.
+ * outlets credit (RT-13), built fresh for each grid so the phone twin carries both too. A
+ * season with every game's crew listed has no coverage line (U11); the credit always stays.
+ * @returns {{cov: HTMLElement|null, credit: HTMLElement|null}}
  */
 function seasonNotes(s, blocks, bar) {
   const pct = coveragePct(s.coverage_num, s.coverage_den);
   // Counts come from the builder's season table: every postseason game of the season.
-  const cov = el(
-    'span',
-    'mlb-season-coverage',
-    pct == null ? '' : `Crews listed for ${s.coverage_num} of ${s.coverage_den} postseason games (${pct}%)`,
-  );
-  if (s.coverage_den > 0 && s.coverage_num / s.coverage_den < bar) cov.dataset.low = 'true';
+  let cov = null;
+  if (pct != null && s.coverage_num < s.coverage_den) {
+    cov = el(
+      'span',
+      'mlb-season-coverage',
+      `Crews listed for ${s.coverage_num} of ${s.coverage_den} postseason games (${pct}%)`,
+    );
+    if (s.coverage_num / s.coverage_den < bar) cov.dataset.low = 'true';
+  }
   const wikiUrl = [...blocks.values()].find((b) => b.season === s.season && b.outletSourceUrl)?.outletSourceUrl;
   const credit = wikiUrl ? externalLink(wikiUrl, `Outlets: Wikipedia ${s.season} postseason (CC BY-SA 4.0) ↗`) : null;
   if (credit) credit.className = 'mlb-season-credit';
-  return credit ? [cov, credit] : [cov];
+  return { cov, credit };
+}
+
+/** A Season button (desktop grid or phone notes): the year, plus any coverage line inside it. */
+function seasonButton(key, season, picked, dataName, inside) {
+  const btn = el('button', 'mlb-season-btn');
+  btn.type = 'button';
+  btn.dataset[dataName] = key;
+  btn.setAttribute('aria-pressed', String(picked));
+  btn.append(el('span', 'mlb-season', String(season)), ...inside);
+  if (dataName === 'phoneSeasonCell') btn.addEventListener('click', () => toggleCell(key));
+  return btn;
+}
+
+/** The focused phone control (season note or round cell) as its container, attribute and key. */
+function phoneFocusKey() {
+  const a = document.activeElement;
+  if (!a || !a.closest) return null;
+  const season = a.closest('[data-phone-season-cell]');
+  if (season && refs.phoneNotes.contains(season)) {
+    return { box: refs.phoneNotes, attr: 'data-phone-season-cell', key: season.dataset.phoneSeasonCell };
+  }
+  const cell = a.closest('[data-phone-cell]');
+  if (cell && refs.phoneBody.contains(cell)) {
+    return { box: refs.phoneBody, attr: 'data-phone-cell', key: cell.dataset.phoneCell };
+  }
+  return null;
 }
 
 function phoneRows(model, state, seasons, rounds, blocks) {
@@ -184,7 +475,7 @@ function phoneRows(model, state, seasons, rounds, blocks) {
         tr.dataset.season = String(s.season);
         const th = el('th', 'mlb-merged-col');
         th.scope = 'row';
-        th.append(el('span', 'mlb-merged-line', `${s.season} ${SHORT_ROUNDS[r]}`));
+        th.append(el('span', 'mlb-merged-line', `${s.season} ${ROUND_SHORT[r]}`));
         th.append(el('span', 'mlb-merged-line mlb-merged-league', b.league ?? ''));
         const td = el('td', 'mlb-booths-col');
         const btn = blockButton(model, b, null, state.cell === b.key, PHONE_BOOTH_LINES);
@@ -203,7 +494,10 @@ function phoneRows(model, state, seasons, rounds, blocks) {
 export function mount(container, ctx) {
   refs.ctx = ctx;
   const wrap = el('div', 'mlb-grid-wrap');
+  wrap.tabIndex = 0;
+  wrap.setAttribute('aria-label', 'Postseason booths grid');
   const table = el('table', 'games-table mlb-grid');
+  table.setAttribute('role', 'grid');
   table.appendChild(el('caption', 'visually-hidden', 'Postseason booths by season and round'));
   refs.head = el('tr');
   const thead = el('thead');
@@ -225,16 +519,33 @@ export function mount(container, ctx) {
   phoneThead.appendChild(phoneHead);
   refs.phoneBody = el('tbody');
   phone.append(phoneThead, refs.phoneBody);
-  wrap.appendChild(phone);
+  const phoneWrap = el('div', 'mlb-phone-wrap');
+  phoneWrap.appendChild(phone);
   wrap.classList.add('table-scroll');
   attachScrollCue(wrap, null);
   refs.table = table;
+  refs.wrap = wrap;
+  // One delegated listener: a Season cell selects its whole season, but a click on the
+  // Wikipedia credit link only follows the link (RT-13).
+  refs.body.addEventListener('click', (ev) => {
+    if (ev.target.closest('a')) return;
+    const th = ev.target.closest('th.mlb-season-col');
+    if (th) toggleCell(`season-${th.parentElement.dataset.season}`);
+  });
+  table.addEventListener('keydown', onGridKeydown);
+  table.addEventListener('keyup', onGridKeyup);
+  table.addEventListener('focusin', (ev) => {
+    const btn = ev.target.closest?.(BTN_SEL);
+    if (btn) setActive(btn);
+  });
+  refs.status = el('p', 'visually-hidden mlb-grid-status');
+  refs.status.setAttribute('role', 'status');
   // The phone twin's 96px pinned column has no room for each season's coverage line and
   // Wikipedia credit, and a row inside the scroller would sit under its fades: they follow
   // the table as a per-season list (CSS shows it at 480px and under only).
   refs.phoneNotes = el('ul', 'mlb-phone-season-notes');
   refs.captions = el('div', 'nfl-captions');
-  container.append(wrap, refs.phoneNotes, refs.captions);
+  container.append(wrap, refs.status, phoneWrap, refs.phoneNotes, refs.captions);
 }
 
 export function render(ctx) {
@@ -244,11 +555,22 @@ export function render(ctx) {
   const blocks = buildGrid(model);
   const bar = model.constants.coverage_bar;
 
-  const heads = [el('th', 'mlb-season-col', 'Season'), ...rounds.map((r) => el('th', null, SHORT_ROUNDS[r]))];
+  const roundHead = (r) => {
+    const th = el('th');
+    th.append(el('span', 'mlb-round-long', ROUND_LABELS[r]));
+    if (ROUND_SHORT[r] !== ROUND_LABELS[r]) {
+      th.append(el('span', 'mlb-round-short', ROUND_SHORT[r]));
+      th.title = ROUND_LABELS[r];
+      // Only a head with a short form swaps below 1280px; the others keep their full name.
+      th.classList.add('has-short');
+    }
+    return th;
+  };
+  const heads = [el('th', 'mlb-season-col', 'Season'), ...rounds.map(roundHead)];
   heads.forEach((th) => { th.scope = 'col'; });
   refs.head.replaceChildren(...heads);
 
-  const seasons = [...model.postseasonSeasons].sort((a, b) => a.season - b.season);
+  const seasons = [...model.postseasonSeasons].sort((a, b) => b.season - a.season);
   const rows = [];
   const summary = [];
   for (const s of seasons) {
@@ -256,8 +578,11 @@ export function render(ctx) {
     tr.dataset.season = String(s.season);
     const th = el('th', 'mlb-season-col');
     th.scope = 'row';
-    th.append(el('span', 'mlb-season', String(s.season)));
-    th.append(...seasonNotes(s, blocks, bar));
+    const { cov, credit } = seasonNotes(s, blocks, bar);
+    const seasonKey = `season-${s.season}`;
+    const sBtn = seasonButton(seasonKey, s.season, state.cell === seasonKey, 'seasonCell', cov ? [cov] : []);
+    th.append(sBtn, ...(credit ? [credit] : []));
+    if (state.cell === seasonKey) th.dataset.picked = 'true';
     tr.appendChild(th);
     for (const r of rounds) {
       const td = el('td', 'mlb-cell');
@@ -265,9 +590,9 @@ export function render(ctx) {
       const here = [...blocks.values()].filter((b) => b.season === s.season && b.round === r);
       if (!here.length) {
         td.classList.add('mlb-cell-empty');
-        td.append(el('span', 'mlb-cell-label', SHORT_ROUNDS[r]), el('span', 'mlb-empty-mark', '—'));
+        td.append(el('span', 'mlb-cell-label', ROUND_LABELS[r]), el('span', 'mlb-empty-mark', '—'));
       } else {
-        td.append(el('span', 'mlb-cell-label', SHORT_ROUNDS[r]));
+        td.append(el('span', 'mlb-cell-label', ROUND_LABELS[r]));
         here.sort((x, y) => String(x.league).localeCompare(String(y.league)));
         const split = here.length > 1 || here[0].league != null;
         for (const b of here) {
@@ -276,9 +601,9 @@ export function render(ctx) {
             key: b.key, season: b.season, round: b.round, league: b.league, games: b.games,
             outlets: b.outlets.map((o) => o.name), outletSourceUrl: b.outletSourceUrl,
             booths: b.booths.map(([p, a]) => boothLabelOf(model, p, a)),
-            crewListed: b.crewListed, excitementN: b.exciteN,
-            excitement: b.exciteN ? b.exciteSum / b.exciteN : null,
-            viewersN: b.viewerN, pending: b.exciteN === 0 && excitementLine(model, b) === PENDING_TEXT,
+            boothLines: cellSeries(model, b).reduce((n, x) => n + cellBooths(model, b, x.games).length, 0),
+            series: cellSeries(model, b).map((x) => ({ label: x.label, games: x.games.length })),
+            crewListed: b.crewListed,
           });
         }
       }
@@ -286,21 +611,39 @@ export function render(ctx) {
     }
     rows.push(tr);
   }
+  const focusKey = refs.table.contains(document.activeElement) ? btnKey(document.activeElement.closest(BTN_SEL) ?? document.activeElement) : null;
+  if (focusKey) activeKey = focusKey;
+  // The phone twin's buttons are rebuilt too; keep a focused one focused (G4).
+  const phoneFocus = phoneFocusKey();
   refs.body.replaceChildren(...rows);
   refs.phoneBody.replaceChildren(...phoneRows(model, state, seasons, rounds, blocks));
   refs.phoneNotes.replaceChildren(
     ...seasons.map((s) => {
       const li = el('li');
       li.dataset.season = String(s.season);
-      li.append(el('span', 'mlb-season', String(s.season)), ...seasonNotes(s, blocks, bar));
+      const seasonKey = `season-${s.season}`;
+      const { cov, credit } = seasonNotes(s, blocks, bar);
+      li.append(seasonButton(seasonKey, s.season, state.cell === seasonKey, 'phoneSeasonCell', []));
+      if (cov) li.append(cov);
+      if (credit) li.append(credit);
       return li;
     }),
   );
 
+  // U11: the cells carry no excitement or game counts, so the excitement caption and "a cell
+  // counts only the games it shows" are gone; the coverage line shows only for a season missing
+  // a crew.
   refs.captions.replaceChildren(
-    el('p', 'caption', 'Excitement is the mean per game from win probability, a tendency, not proof.'),
-    el('p', 'caption', `Season percentages count every postseason game of the season, including games with no outlet listed; a cell counts only the games it shows. Seasons with crews listed for fewer than ${Math.round(bar * 100)}% of those games are marked; their booths are partial.`),
+    el('p', 'caption', `A season missing any crew shows the share of its postseason games with a crew listed, counting every game of the season, including games with no outlet listed. Seasons with crews listed for fewer than ${Math.round(bar * 100)}% of those games are marked; their booths are partial.`),
   );
+  indexGrid();
+  if (focusKey) {
+    refs.body.querySelector(`[data-season-cell="${CSS.escape(focusKey)}"], [data-cell="${CSS.escape(focusKey)}"]`)?.focus();
+  }
+  if (phoneFocus) {
+    const { box, attr, key } = phoneFocus;
+    box.querySelector(`[${attr}="${CSS.escape(key)}"]`)?.focus();
+  }
   current = { model, state, summary, seasons: seasons.map((s) => s.season), rounds };
 }
 

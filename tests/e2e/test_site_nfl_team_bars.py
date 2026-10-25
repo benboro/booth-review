@@ -203,7 +203,7 @@ def test_traces_legend_and_counts(app: Page, nfl_fixture_raw: dict[str, Any]) ->
     )
     assert marker_lines == [1] * 8
     chips = app.eval_on_selector_all(
-        f"{LEGEND} li > button.legend-chip.pill",
+        f"{LEGEND} li > button.legend-chip",
         "els => els.map(e => [e.textContent, e.getAttribute('aria-pressed')])",
     )
     assert chips == [[label, "true"] for label in SEGMENT_LABELS]

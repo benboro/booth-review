@@ -28,12 +28,12 @@ function titleText(row) {
   return `${row.away} at ${row.home}`;
 }
 
-/** 'League championship · AL, game 2' or '' for the regular season. */
+/** 'Championship Series · AL, Game 2' or '' for the regular season. */
 function roundLine(row) {
   if (!row.roundLabel) return '';
   const bits = [row.roundLabel];
   if (row.seriesLeague) bits.push(row.seriesLeague);
-  if (row.seriesGame != null) bits.push(`game ${row.seriesGame}`);
+  if (row.seriesGame != null) bits.push(`Game ${row.seriesGame}`);
   return bits.length > 1 ? `${bits[0]} · ${bits.slice(1).join(', ')}` : bits[0];
 }
 
@@ -93,16 +93,30 @@ function crewSection(row) {
   return nodes;
 }
 
+/**
+ * The panel's figure line. The panel shows one game, so its figure is that game's audience:
+ * the line always reads `Viewers: <value>`, never the data's `viewership_label` ('per-game' and
+ * the rest describe the record, not the reader's question). A window-scope figure keeps the
+ * RT-27 qualifier, and a composite figure says it adds several telecasts together; a figure
+ * that is both carries both.
+ */
+export function viewersLine(row) {
+  const v = viewersText(row.viewers);
+  if (v == null) return `Viewers: not available (${CAUSE_COPY[row.cause] ?? CAUSE_COPY.none})`;
+  // A figure can be both (G12): the builder labels a combined claim 'composite' and still
+  // scopes it to the window, so each qualifier is added on its own.
+  const notes = [];
+  if (row.scope === 'window' || row.viewersLabel === 'window-level') {
+    notes.push('whole broadcast window, not this game alone');
+  }
+  if (row.viewersLabel === 'composite') notes.push('several telecasts combined');
+  return `Viewers: ${v}${notes.length ? ` (${notes.join('; ')})` : ''}`;
+}
+
 function viewershipSection(row) {
   const nodes = [el('h3', null, 'Viewership')];
-  const v = viewersText(row.viewers);
-  if (v == null) {
-    nodes.push(el('p', null, `Viewers: not available (${CAUSE_COPY[row.cause] ?? CAUSE_COPY.none})`));
-  } else {
-    const windowNote = row.scope === 'window' ? ' (whole broadcast window, not this game alone)' : '';
-    nodes.push(el('p', null, `${row.viewersLabel || 'Viewers'}: ${v}${windowNote}`));
-    if (row.era != null) nodes.push(el('p', null, `Measured under ${row.era}.`));
-  }
+  nodes.push(el('p', null, viewersLine(row)));
+  if (row.viewers != null && row.era != null) nodes.push(el('p', null, `Measured under ${row.era}.`));
   const links = [{ href: row.rrUrl, text: 'View record on Ratings Reference ↗' }];
   if (row.viewers != null) {
     links.push({
@@ -118,11 +132,16 @@ function viewershipSection(row) {
 
 function excitementLine(row, constants) {
   if (row.excitement != null) {
-    const method = constants && constants.excitement_method ? ` (${constants.excitement_method})` : '';
+    // 'WE-table (Retrosheet)' already carries brackets: flatten them so the line reads
+    // 'Excitement: 5.7 (WE-table, Retrosheet)', not '(WE-table (Retrosheet))'.
+    const label = constants && constants.excitement_method
+      ? String(constants.excitement_method).replace(/\s*\(([^()]*)\)\s*$/, ', $1')
+      : '';
+    const method = label ? ` (${label})` : '';
     return `Excitement: ${row.excitement.toFixed(1)}${method}`;
   }
-  return row.lineupStatus === 'pending' || row.season >= 2026
-    ? 'Excitement: pending Retrosheet 2026'
+  return row.retrosheetPending
+    ? `Excitement: ${row.retrosheetPendingText ?? `pending Retrosheet ${row.season}`}`
     : 'Excitement: not available';
 }
 
@@ -142,9 +161,9 @@ function lineupList(side) {
 }
 
 function lineupsSection(row) {
-  const nodes = [el('h3', null, 'Lineups')];
+  const nodes = [el('h3', null, 'Starting Lineups')];
   if (row.lineupStatus === 'pending') {
-    nodes.push(el('p', 'mlb-lineup-note', 'Lineups: pending Retrosheet 2026'));
+    nodes.push(el('p', 'mlb-lineup-note', `Lineups: pending Retrosheet ${row.season}`));
     return nodes;
   }
   if (row.lineupStatus !== 'present') {
