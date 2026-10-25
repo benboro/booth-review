@@ -4207,6 +4207,12 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   white-space: pre;
 }
 
+/* A grouped booth lists several people per role (U3): the comma rides on the person before
+   it, so a wrapped line never starts with one, and keeps a word space after it. */
+.mlb-cell-booth .booth-comma {
+  margin-right: 0.3em;
+}
+
 .mlb-no-crew {
   color: var(--muted);
   font: var(--font-body);

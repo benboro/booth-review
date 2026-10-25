@@ -259,7 +259,8 @@ def test_phone_booths_cell_caps_lines_with_plus_n_more(
         data = json.loads(resp.text())
         p = data["postseason"]
         k = next(i for i, s in enumerate(p["season"]) if s == 2019 and p["round"][i] == "division")
-        p["booths"][k] = [[8, 7], [6, 7], [2, 3], [0, 1], [4, 5]]
+        # Five crews with no person in common, so five booth lines (U3 groups shared people).
+        p["booths"][k] = [[8, 7], [6, None], [2, 3], [0, 1], [4, 5]]
         route.fulfill(response=resp, body=json.dumps(data))
 
     mlb_mobile_page.route("**/mlb-data.json", handler)
@@ -485,3 +486,90 @@ def test_stacked_role_pills_keep_a_vertical_gap(post: Page) -> None:
     gaps = _stacked_pill_gaps(post, "#mlb-matched-games .crew-list", "110px")
     assert gaps, "no wrapped crew in Matched games"
     assert min(gaps) > 0, gaps
+
+
+_GROUP_JS = """
+async (pairs) => {
+  const P = await import('./sports/mlb/views/postseason.js');
+  return P.groupBooths(pairs).map((g) => ({
+    pbps: g.pbps.map((e) => [e.person, e.roles]),
+    analysts: g.analysts.map((e) => [e.person, e.roles]),
+  }));
+}
+"""
+
+
+def test_group_booths_lists_each_person_once(post: Page) -> None:
+    """U3: crews that share any person form one booth line; each person appears once."""
+    group = lambda pairs: post.evaluate(_GROUP_JS, pairs)  # noqa: E731
+    # Three play-by-play voices beside one analyst (a fill-in in the same series) make one
+    # line; a crew with nobody in common stays its own line.
+    assert group([[10, 20], [11, 20], [12, 20], [13, 21]]) == [
+        {"pbps": [[10, ["pbp"]], [11, ["pbp"]], [12, ["pbp"]]], "analysts": [[20, ["analyst"]]]},
+        {"pbps": [[13, ["pbp"]]], "analysts": [[21, ["analyst"]]]},
+    ]
+    # Shared people chain: A/X, B/X, B/Y join through X then B, in first-seen order.
+    assert group([[1, 9], [5, 6], [2, 9], [2, 8]]) == [
+        {"pbps": [[1, ["pbp"]], [2, ["pbp"]]], "analysts": [[9, ["analyst"]], [8, ["analyst"]]]},
+        {"pbps": [[5, ["pbp"]]], "analysts": [[6, ["analyst"]]]},
+    ]
+    # A person in both roles is listed once, with both pills; a crew with no analyst groups too.
+    assert group([[1, 2], [2, 3], [4, None], [4, None]]) == [
+        {"pbps": [[1, ["pbp"]], [2, ["pbp", "analyst"]]], "analysts": [[3, ["analyst"]]]},
+        {"pbps": [[4, ["pbp"]]], "analysts": []},
+    ]
+    assert group([]) == []
+
+
+def test_cell_groups_crews_that_share_an_analyst(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """U3: the rendered cell lists the shared analyst once; the games keep their own crews."""
+
+    def handler(route: Route) -> None:
+        resp = route.fetch()
+        data = json.loads(resp.text())
+        p = data["postseason"]
+        k = next(i for i, s in enumerate(p["season"]) if s == 2019 and p["round"][i] == "division")
+        p["booths"][k] = [[0, 7], [2, 7], [4, 7], [5, 6]]
+        route.fulfill(response=resp, body=json.dumps(data))
+
+    page = mlb_guarded_page
+    page.route("**/mlb-data.json", handler)
+    open_mlb_app(page, "?sport=mlb&view=postseason")
+    cell = page.locator(f"{VIEW} .mlb-grid button[data-cell='2019-division-AL']")
+    lines = cell.locator(".mlb-cell-booth")
+    assert lines.count() == 2
+    people = page.evaluate(
+        """(sel) => [...document.querySelectorAll(sel + ' .mlb-cell-booth')].map((line) =>
+          [...line.querySelectorAll('.name-with-roles')].map((n) => [
+            n.querySelector('.booth-name').textContent,
+            [...n.querySelectorAll('.role-pill')].map((r) => r.dataset.role),
+          ]))""",
+        f"{VIEW} .mlb-grid button[data-cell='2019-division-AL']",
+    )
+    names = [name for line in people for name, _ in line]
+    assert len(names) == len(set(names)) == 6
+    assert [roles for _, roles in people[0]] == [["pbp"], ["pbp"], ["pbp"], ["analyst"]]
+    assert [roles for _, roles in people[1]] == [["pbp"], ["analyst"]]
+    assert lines.first.inner_text().count(" / ") == 1
+    # Each game's panel still shows that game's own crew from the data, not the grouped line.
+    page.evaluate(f"{HOOKS}.setState({{ cell: '2019-division-AL' }})")
+    games = page.evaluate(f"{HOOKS}.getTableIndexes()")
+    assert games
+    want = page.evaluate(
+        """async (games) => {
+          const raw = await (await fetch('mlb-data.json')).json();
+          const name = (m) => raw.lookups.people[m.person].name;
+          return games.map((g) => (raw.games.crew[g] || []).map(name));
+        }""",
+        games,
+    )
+    for g, names in zip(games, want, strict=True):
+        page.evaluate(f"{HOOKS}.openGame({g})")
+        page.wait_for_selector("#mlb-detail-panel[open]")
+        shown = page.eval_on_selector_all(
+            "#mlb-detail-panel .crew-box .crew-name", "els => els.map((e) => e.textContent)"
+        )
+        assert shown == names, g
+        page.evaluate(f"{HOOKS}.closePanel()")

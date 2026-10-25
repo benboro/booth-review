@@ -239,6 +239,77 @@ function excitementLine(model, b) {
   return 'no excitement figure';
 }
 
+/**
+ * Group a cell's crews so each person is listed once (U3). Two crews join a group when they
+ * share any person (an analyst who called the series beside a fill-in play-by-play, or a
+ * play-by-play who worked with two analysts); groups are the connected components of that
+ * relation. A group lists its play-by-play people, then its analysts who are not already
+ * listed, each in first-seen order; a person seen in both roles is listed once, with both
+ * pills. Only the display groups; the crews and every game's own crew are untouched.
+ * @param {Array<[number, number|null]>} pairs [pbp, analyst] person indexes
+ * @returns {Array<{pbps: Array<{person: number, roles: string[]}>, analysts: Array<{person: number, roles: string[]}>}>}
+ */
+export function groupBooths(pairs) {
+  const parent = pairs.map((_, k) => k);
+  const find = (k) => {
+    while (parent[k] !== k) {
+      parent[k] = parent[parent[k]];
+      k = parent[k];
+    }
+    return k;
+  };
+  const firstCrew = new Map();
+  pairs.forEach((pair, k) => {
+    for (const person of pair) {
+      if (person == null) continue;
+      if (!firstCrew.has(person)) firstCrew.set(person, k);
+      else {
+        const a = find(firstCrew.get(person));
+        const b = find(k);
+        if (a !== b) parent[Math.max(a, b)] = Math.min(a, b);
+      }
+    }
+  });
+  const byRoot = new Map();
+  pairs.forEach((pair, k) => {
+    const root = find(k);
+    if (!byRoot.has(root)) byRoot.set(root, []);
+    byRoot.get(root).push(pair);
+  });
+  // Roots are each group's first crew, so Map order is first-seen order.
+  return [...byRoot.values()].map((crews) => {
+    const roles = new Map();
+    const add = (person, role) => {
+      if (person == null) return;
+      if (!roles.has(person)) roles.set(person, []);
+      if (!roles.get(person).includes(role)) roles.get(person).push(role);
+    };
+    for (const [pbp] of crews) add(pbp, 'pbp');
+    for (const [, analyst] of crews) add(analyst, 'analyst');
+    const entries = [...roles].map(([person, r]) => ({ person, roles: r }));
+    return {
+      pbps: entries.filter((e) => e.roles.includes('pbp')),
+      analysts: entries.filter((e) => !e.roles.includes('pbp')),
+    };
+  });
+}
+
+/** One booth line: its play-by-play people, then ' / ' and its analysts. */
+function boothLine(model, group) {
+  const line = el('span', 'mlb-cell-booth');
+  const person = (e, last) => {
+    const node = nameWithRoles(el('span', 'booth-name', personName(model, e.person)), ...e.roles.map((r) => makeRolePill(r)));
+    if (!last) node.append(el('span', 'booth-comma', ','));
+    return node;
+  };
+  group.pbps.forEach((e, k) => line.append(person(e, k === group.pbps.length - 1)));
+  if (group.analysts.length) {
+    if (group.pbps.length) line.append(el('span', 'booth-sep', ' / '));
+    group.analysts.forEach((e, k) => line.append(person(e, k === group.analysts.length - 1)));
+  }
+  return line;
+}
+
 function blockButton(model, b, label, picked, maxLines = Infinity) {
   const btn = el('button', 'mlb-cell-btn');
   btn.type = 'button';
@@ -252,18 +323,12 @@ function blockButton(model, b, label, picked, maxLines = Infinity) {
   btn.append(head);
 
   const booths = el('span', 'mlb-cell-booths');
-  if (b.booths.length) {
-    const shown = b.booths.slice(0, maxLines);
-    for (const [pbp, analyst] of shown) {
-      const line = el('span', 'mlb-cell-booth');
-      line.append(nameWithRoles(el('span', 'booth-name', personName(model, pbp)), makeRolePill('pbp')));
-      if (analyst != null) {
-        line.append(el('span', 'booth-sep', ' / '), nameWithRoles(el('span', 'booth-name', personName(model, analyst)), makeRolePill('analyst')));
-      }
-      booths.append(line);
-    }
-    if (b.booths.length > shown.length) {
-      booths.append(el('span', 'mlb-booth-more', `+${b.booths.length - shown.length} more`));
+  const groups = groupBooths(b.booths);
+  if (groups.length) {
+    const shown = groups.slice(0, maxLines);
+    for (const g of shown) booths.append(boothLine(model, g));
+    if (groups.length > shown.length) {
+      booths.append(el('span', 'mlb-booth-more', `+${groups.length - shown.length} more`));
     }
   } else {
     booths.append(el('span', 'mlb-no-crew', NO_CREW_TEXT));
@@ -459,6 +524,7 @@ export function render(ctx) {
             key: b.key, season: b.season, round: b.round, league: b.league, games: b.games,
             outlets: b.outlets.map((o) => o.name), outletSourceUrl: b.outletSourceUrl,
             booths: b.booths.map(([p, a]) => boothLabelOf(model, p, a)),
+            boothLines: groupBooths(b.booths).length,
             crewListed: b.crewListed, excitementN: b.exciteN,
             excitement: b.exciteN ? b.exciteSum / b.exciteN : null,
             viewersN: b.viewerN, pending: b.exciteN === 0 && excitementLine(model, b) === PENDING_TEXT,
