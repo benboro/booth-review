@@ -26,7 +26,7 @@ LONG = {
     "regular": "Reg. Season",
     "wild_card": "Wild Card",
     "division": "Division Series",
-    "lcs": "League Championship Series",
+    "lcs": "Championship Series",
     "world_series": "World Series",
     "tiebreak": "Tiebreaker",
 }
@@ -45,7 +45,8 @@ def run(mlb_guarded_page: Page, open_mlb_app: Callable[..., None]) -> Callable[[
 def test_round_maps(run: Callable[[str], Any]) -> None:
     got = run("return { long: D.ROUND_LABELS, short: D.ROUND_SHORT };")
     assert got["long"] == LONG
-    assert got["short"] == {**LONG, "lcs": "LCS"}
+    # The two league series shorten together, or not at all (U4).
+    assert got["short"] == {**LONG, "division": "LDS", "lcs": "LCS"}
 
 
 def test_cell_labels(run: Callable[[str], Any]) -> None:
@@ -59,7 +60,7 @@ def test_cell_labels(run: Callable[[str], Any]) -> None:
         """
     )
     assert got == {
-        "lcs": "2019 League Championship Series, NL",
+        "lcs": "2019 Championship Series, NL",
         "reg": "2019 Reg. Season",
         "season": "2014 postseason",
     }
@@ -100,7 +101,7 @@ def test_game_row_labels(run: Callable[[str], Any]) -> None:
     assert got["regular"] == ["Reg. Season", "Reg. Season"]
     for rnd, (long, short) in got.items():
         assert long == LONG[rnd]
-        assert short == ("LCS" if rnd == "lcs" else LONG[rnd])
+        assert short == {"division": "LDS", "lcs": "LCS"}.get(rnd, LONG[rnd])
 
 
 def test_season_cell_round_trips(run: Callable[[str], Any]) -> None:

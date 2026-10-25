@@ -12,7 +12,7 @@ ALLOWED_MAX_WIDTHS: dict[str, str] = {
     "360": _NARROW,
     "374": _NARROW,
     "420": _NARROW,
-    "1279": "desktop-narrow switch of the MLB postseason LCS round head (16-UI-SPEC)",
+    "1279": "desktop-narrow switch of the MLB postseason LDS and LCS round heads (16-UI-SPEC)",
 }
 
 

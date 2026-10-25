@@ -28,7 +28,7 @@ function titleText(row) {
   return `${row.away} at ${row.home}`;
 }
 
-/** 'League championship · AL, game 2' or '' for the regular season. */
+/** 'Championship Series · AL, Game 2' or '' for the regular season. */
 function roundLine(row) {
   if (!row.roundLabel) return '';
   const bits = [row.roundLabel];

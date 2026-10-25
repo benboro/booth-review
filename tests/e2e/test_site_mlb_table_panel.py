@@ -102,7 +102,12 @@ def test_postseason_cell_selection_and_empty_crew(mlb: Page) -> None:
     text = mlb.inner_text("#mlb-matched-games tbody")
     assert "per-network figures only" in text
     assert "Wikipedia" not in text
-    assert "Division Series" in text
+    # The narrow Round column shortens the league series as a pair (U4), full name in the title.
+    assert "LDS" in text
+    titles = mlb.eval_on_selector_all(
+        "#mlb-matched-games tbody td:nth-child(3)", "els => els.map(e => e.title)"
+    )
+    assert "Division Series" in titles
 
 
 def test_lineups_nine_batters_and_starter_per_side(mlb: Page) -> None:

@@ -21,7 +21,7 @@ import { frameConfig, frameLayout, referenceLine } from '../../../modules/chart-
 import { bandLayout, marginFor } from '../../../modules/chart.js';
 import { initBandInfo, positionBandInfo, closeBandNote } from '../../../modules/band-info.js';
 import { mountViewTools } from '../tools.js';
-import { ROUND_SHORT, gameRow } from '../data.js';
+import { ROUND_LABELS, gameRow } from '../data.js';
 import { dateShortText } from '../format.js';
 import { MLB_SROUNDS } from '../state.js';
 import { RETROSHEET_NOTICE, RETROSHEET_CONTACT } from '../panel.js';
@@ -358,7 +358,7 @@ function buildControls(ctx) {
   refs.stypeGroup = segmented('Season type', STYPE_OPTIONS, (k) => {
     ctx.setState(k === 'all' ? { stype: null, sround: null } : { stype: k });
   });
-  const rounds = [{ key: 'all', label: 'All rounds' }, ...presentRounds(ctx.model).map((r) => ({ key: r, label: ROUND_SHORT[r] }))];
+  const rounds = [{ key: 'all', label: 'All rounds' }, ...presentRounds(ctx.model).map((r) => ({ key: r, label: ROUND_LABELS[r] }))];
   refs.roundGroup = segmented('Round', rounds, (k, b) => {
     if (b.getAttribute('aria-disabled') === 'true') return;
     ctx.setState({ sround: k === 'all' ? null : k });

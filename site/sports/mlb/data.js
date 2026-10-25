@@ -17,13 +17,16 @@ export const ROUND_LABELS = Object.freeze({
   regular: 'Reg. Season',
   wild_card: 'Wild Card',
   division: 'Division Series',
-  lcs: 'League Championship Series',
+  lcs: 'Championship Series',
   world_series: 'World Series',
   tiebreak: 'Tiebreaker',
 });
 
-/** Short round text for tight places (LCS instead of the full series name). */
-export const ROUND_SHORT = Object.freeze({ ...ROUND_LABELS, lcs: 'LCS' });
+/**
+ * Short round text for tight places. The two league series shorten together (LDS and LCS),
+ * so a place that abbreviates one abbreviates both; the other rounds keep their full names.
+ */
+export const ROUND_SHORT = Object.freeze({ ...ROUND_LABELS, division: 'LDS', lcs: 'LCS' });
 
 /** Why a game has no figure, as table and panel copy (D-22). */
 export const CAUSE_COPY = Object.freeze({
@@ -182,7 +185,7 @@ export function boothLabelOf(model, pbp, analyst) {
   return b == null ? a : `${a} / ${b}`;
 }
 
-/** Cell heading: '2019 League Championship Series, NL' or '2014 postseason'. */
+/** Cell heading: '2019 Championship Series, NL' or '2014 postseason'. */
 export function cellLabel(cell) {
   if (cell.kind === 'season') return `${cell.season} postseason`;
   const round = ROUND_LABELS[cell.round] ?? String(cell.round);

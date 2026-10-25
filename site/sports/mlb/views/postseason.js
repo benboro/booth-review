@@ -2,7 +2,7 @@
  * MLB Postseason booths view (SPORT-07): a season-by-round grid, 2014 onward.
  *
  * Rows are seasons, columns the rounds that appear in the data. Each cell shows the
- * outlet, the booth names (Division and League Championship split into AL and NL),
+ * outlet, the booth names (Division and Championship Series split into AL and NL),
  * games, mean excitement per game and, where Ratings Reference has one, viewers.
  * A season with an incomplete
  * crew record carries its coverage percentage, and a cell with no listed crew says so.

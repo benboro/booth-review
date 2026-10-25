@@ -2,7 +2,7 @@
 
 Synthetic grid, newest first: 2026 (division NL, LCS AL), 2025 (wild card NL, World Series),
 2019 (division AL, LCS NL), 2014 (wild card AL, World Series). Columns are Season, Wild Card,
-Division Series, League Championship Series, World Series.
+Division Series, Championship Series, World Series.
 """
 
 from __future__ import annotations

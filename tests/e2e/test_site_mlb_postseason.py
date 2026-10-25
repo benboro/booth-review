@@ -38,7 +38,7 @@ def test_grid_rows_and_columns(post: Page) -> None:
         "Season",
         "Wild Card",
         "Division Series",
-        "League Championship Series",
+        "Championship Series",
         "World Series",
     ]
     assert post.locator(f"{VIEW} .mlb-grid th[scope='row']").count() == 4
@@ -218,7 +218,7 @@ def test_phone_twin_has_a_merged_pinned_column_and_booths(
     assert first.evaluate("e => e.getBoundingClientRect().width") == 96
     assert first.evaluate("e => getComputedStyle(e).position") == "sticky"
     lines = first.locator(".mlb-merged-line").all_inner_texts()
-    assert lines[0].endswith(("Wild Card", "LCS", "Division Series", "World Series"))
+    assert lines[0].endswith(("Wild Card", "LCS", "LDS", "World Series"))
     old = twin.locator("tbody tr[data-season='2014'] th.mlb-merged-col").first
     assert old.locator(".mlb-merged-line").all_inner_texts() == ["2014 Wild Card", "AL"]
     assert twin.locator("td.mlb-booths-col").first.evaluate("e => e.offsetWidth") >= 200
@@ -324,11 +324,13 @@ def test_desktop_grid_is_a_scroll_box_with_a_frozen_header(post: Page) -> None:
     assert wrap.get_attribute("tabindex") == "0"
 
 
-def test_lcs_head_is_short_below_1280_with_a_title(post: Page) -> None:
+def test_series_heads_are_short_below_1280_with_a_title(post: Page) -> None:
     post.set_viewport_size({"width": 1100, "height": 800})
-    head = post.locator(f"{VIEW} .mlb-grid thead th[title]")
-    assert head.inner_text() == "LCS"
-    assert head.get_attribute("title") == "League Championship Series"
+    heads = post.eval_on_selector_all(
+        f"{VIEW} .mlb-grid thead th[title]", "els => els.map(e => [e.innerText.trim(), e.title])"
+    )
+    # Both league series shorten together (U4): never "Division Series" beside "LCS".
+    assert heads == [["LDS", "Division Series"], ["LCS", "Championship Series"]]
 
 
 def test_every_round_head_keeps_a_label_below_1280(post: Page) -> None:
@@ -336,8 +338,8 @@ def test_every_round_head_keeps_a_label_below_1280(post: Page) -> None:
     heads = post.eval_on_selector_all(
         f"{VIEW} .mlb-grid thead th", "els => els.map(e => e.innerText.trim())"
     )
-    # Only LCS switches to its short form; every other round keeps its full name.
-    assert heads == ["Season", "Wild Card", "Division Series", "LCS", "World Series"]
+    # The two league series switch to LDS and LCS; every other round keeps its full name.
+    assert heads == ["Season", "Wild Card", "LDS", "LCS", "World Series"]
 
 
 def test_season_cell_selects_the_whole_season(post: Page) -> None:
@@ -406,7 +408,7 @@ def test_desktop_has_separate_columns_and_no_phone_twin(post: Page) -> None:
         "Season",
         "Wild Card",
         "Division Series",
-        "League Championship Series",
+        "Championship Series",
         "World Series",
     ]
 
@@ -573,3 +575,42 @@ def test_cell_groups_crews_that_share_an_analyst(
         )
         assert shown == names, g
         page.evaluate(f"{HOOKS}.closePanel()")
+
+
+_SERIES_LONG = {"Division Series", "Championship Series"}
+_SERIES_SHORT = {"LDS", "LCS"}
+
+
+def _assert_series_forms_agree(texts: list[str], where: str) -> None:
+    """Both league series in one form: never 'Division Series' beside 'LCS' (U4)."""
+    found = {t for t in texts if t in _SERIES_LONG | _SERIES_SHORT}
+    assert found, f"no series round on {where}"
+    assert found <= _SERIES_SHORT or found <= _SERIES_LONG, (where, found)
+    assert "CS" not in texts and not any("League Championship" in t for t in texts), where
+
+
+def test_short_series_names_come_as_a_pair_everywhere(
+    post: Page, mlb_mobile_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    # Desktop grid heads at full width and below 1280px.
+    heads = lambda: post.eval_on_selector_all(  # noqa: E731
+        f"{VIEW} .mlb-grid thead th", "els => els.map(e => e.innerText.trim())"
+    )
+    _assert_series_forms_agree(heads(), "grid heads at 1440")
+    post.set_viewport_size({"width": 1100, "height": 800})
+    _assert_series_forms_agree(heads(), "grid heads below 1280")
+    # Matched games Round column (short: its column is narrow).
+    for cell in ("season-2019", "season-2026"):
+        post.evaluate(f"{HOOKS}.setState({{ cell: '{cell}' }})")
+        rounds = post.eval_on_selector_all(
+            "#mlb-matched-games tbody td:nth-child(3)",
+            "els => els.map(e => e.firstChild ? e.firstChild.textContent : '')",
+        )
+        _assert_series_forms_agree(rounds, f"Matched games {cell}")
+    # Phone twin merged column.
+    open_mlb_app(mlb_mobile_page, "?sport=mlb&view=postseason")
+    merged = mlb_mobile_page.eval_on_selector_all(
+        f"{VIEW} .mlb-phone-grid tbody th .mlb-merged-line:first-child",
+        "els => els.map(e => e.textContent.replace(/^\\d{4} /, ''))",
+    )
+    _assert_series_forms_agree(merged, "phone twin")

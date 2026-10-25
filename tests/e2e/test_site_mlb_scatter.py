@@ -423,7 +423,7 @@ def test_control_groups_labels_and_disabled_round(
         "All rounds",
         "Wild Card",
         "Division Series",
-        "LCS",
+        "Championship Series",
         "World Series",
     ]
     assert set(_round_disabled(page)) == {"true"}
@@ -460,13 +460,16 @@ def test_control_round_trip_counts_and_leaves_selection_alone(
     assert set(_round_disabled(page)) == {None}
     same()
 
-    page.click(f"{ROUND_GROUP} button:has-text('LCS')")
+    page.click(f"{ROUND_GROUP} button:has-text('Championship Series')")
     page.wait_for_function(
         f"{HOOKS}.getViewModel('scatter').counts.total === {SCATTER_CASE['post+lcs']['total']}"
     )
     assert "sround=lcs" in page.url
     assert _pick_counts(page) == SCATTER_CASE["post+lcs"]
-    assert page.locator(f"{ROUND_GROUP} button[aria-pressed='true']").inner_text() == "LCS"
+    assert (
+        page.locator(f"{ROUND_GROUP} button[aria-pressed='true']").inner_text()
+        == "Championship Series"
+    )
     same()
 
     page.click(f"{SEASON_GROUP} button:has-text('Reg. Season')")
@@ -492,7 +495,7 @@ def test_disabled_round_buttons_do_nothing_and_urls_are_allowlisted(
     page = mlb_guarded_page
     _open(page, open_mlb_app)
     page.click(
-        f"{ROUND_GROUP} button:has-text('LCS')", force=True
+        f"{ROUND_GROUP} button:has-text('Championship Series')", force=True
     )  # aria-disabled still takes clicks
     assert page.evaluate(f"{HOOKS}.getState().sround") is None
     assert "sround" not in page.url
