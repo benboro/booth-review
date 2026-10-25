@@ -99,8 +99,9 @@ def test_default_view_draws_a_games_as_stars(
     assert _points(traces, "family:") & (LEAD_RATED | LEAD_UNRATED) == set()
     assert _points(traces, "unrated-active:") & LEAD_UNRATED == set()
     for t in traces:
-        if t["meta"].startswith("unrated-lead:"):
-            # Phase 17: the no-rating star is empty, drawn as an open star with a line.
+        if t["meta"].startswith(("unrated-lead:", "unrated-lead-rim:")):
+            # Phase 17: the no-rating star is empty, drawn as an open star with a line; its
+            # filter outline (empty here) is a larger open star.
             assert t["symbol"] == "star-open", t["meta"]
             assert t["lineWidth"] > 0, t["meta"]
         elif t["meta"].startswith(("lead:", "unrated-lead")):
@@ -317,25 +318,32 @@ def test_rated_lead_star_has_a_surface_casing_drawn_beneath_it(
 def test_one_announcer_highlight_keeps_the_unrated_lead_star_hollow(
     guarded_page: Page, serve_booths: Callable, open_app: Callable
 ) -> None:
+    # Review F1: a highlighted no-rating star stays empty. It is an open family star with a line,
+    # and the ACCENT highlight is a larger open star beneath it; nothing in either is filled.
     default = {t["meta"]: t for t in _open(guarded_page, serve_booths, open_app)}
-    surface = _surface(guarded_page)
+    accent = guarded_page.evaluate(
+        "async () => { const p = await import('./modules/palette.js');"
+        " return p.ACCENT[document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light']; }"
+    )
     traces = _open(guarded_page, serve_booths, open_app, "?people=casey-lund")
     order = [t["meta"] for t in traces]
+    assert "highlight-unrated-hole" not in order
     unrated = next(t for t in traces if t["meta"] == "highlight-unrated")
-    hole = next(t for t in traces if t["meta"] == "highlight-unrated-hole")
+    ring = next(t for t in traces if t["meta"] == "highlight-halo-unrated-open")
     halo = next(t for t in traces if t["meta"] == "highlight-halo-unrated")
     at = unrated["customdata"].index(14)
-    assert unrated["symbol"][at] == "star"
-    # Fill, not just symbol: the star is family colored, with a smaller surface star on top.
-    assert unrated["color"][at] == default["lead:disney"]["color"] != surface
-    assert hole["n"] == 1
-    assert hole["color"] == surface
-    assert hole["symbol"] == "star"
-    assert hole["lineWidth"] == 0
-    assert hole["size"][0] < unrated["size"][at]
-    assert hole["customdata"] == []
-    assert halo["n"] >= 1  # the accent highlight halo is still drawn
-    assert order.index("highlight-unrated-hole") == order.index("highlight-unrated") + 1
+    assert unrated["symbol"][at] == "star-open"
+    assert unrated["lineWidth"][at] > 0
+    assert unrated["color"][at] == default["lead:disney"]["color"]
+    assert ring["n"] == 1
+    assert ring["symbol"] == ["star-open"]
+    assert ring["color"] == accent
+    assert ring["lineWidth"] > 0
+    assert ring["size"][0] > unrated["size"][at]
+    assert ring["customdata"] == []
+    # The filled ACCENT halo no longer sits under the hollow star.
+    assert halo["n"] == 0
+    assert order.index("highlight-halo-unrated-open") == order.index("highlight-unrated") - 1
 
 
 @pytest.mark.parametrize(("theme", "rim"), [("light", "#000000"), ("dark", "#ECE7DF")])
@@ -354,3 +362,29 @@ def test_enlarged_dots_give_lead_stars_the_dot_outline(
     assert casing["n"] == 1
     assert str(casing["color"]).upper() == rim
     assert (casing["size"], star["size"]) == (18, 14)
+
+
+@pytest.mark.parametrize(("theme", "rim"), [("light", "#000000"), ("dark", "#ECE7DF")])
+def test_enlarged_dots_give_the_no_rating_star_the_dot_outline(
+    guarded_page: Page, serve_booths: Callable, open_app: Callable, theme: str, rim: str
+) -> None:
+    # Review F2: the empty no-rating star takes the dot outline too, as a larger open star in the
+    # DOT_OUTLINE colour around the family open star, so both outlines stay empty inside.
+    if theme == "dark":
+        guarded_page.add_init_script("localStorage.setItem('bl-theme', 'dark')")
+    traces = _open(guarded_page, serve_booths, open_app, "?networks=net-a&dots=fade")
+    by_meta = {t["meta"]: t for t in traces}
+    order = [t["meta"] for t in traces]
+    star, outline = by_meta["unrated-lead:disney"], by_meta["unrated-lead-rim:disney"]
+    assert star["customdata"] == [14]
+    assert star["symbol"] == "star-open"
+    assert outline["n"] == 1
+    assert outline["customdata"] == []
+    assert outline["symbol"] == "star-open"
+    assert str(outline["color"]).upper() == rim
+    assert outline["lineWidth"] == 1  # the enlarged dots' outline weight
+    assert outline["size"] > star["size"]
+    assert order.index("unrated-lead-rim:disney") < order.index("unrated-lead:disney")
+    # Without a filter the rim is empty, but its trace is still there.
+    plain = {t["meta"]: t for t in _open(guarded_page, serve_booths, open_app)}
+    assert plain["unrated-lead-rim:disney"]["n"] == 0

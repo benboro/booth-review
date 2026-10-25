@@ -68,7 +68,7 @@ def _passes(page: Page) -> list[int]:
 def _visible_dots(page: Page) -> int:
     result: int = page.evaluate(
         "() => document.getElementById('chart').data.reduce("
-        "(n, t) => n + (/^(unrated-)?lead-(filled-)?halo:/.test(String(t.meta))"
+        "(n, t) => n + (/^(unrated-)?lead-((filled-)?halo|rim):/.test(String(t.meta))"
         " ? 0 : t.x.length), 0)"
     )
     return result
@@ -128,7 +128,7 @@ def test_hide_mode_draws_only_the_picked_tier(
     guarded_page.wait_for_function("document.getElementById('chart').data.length > 0")
     guarded_page.wait_for_function(
         "document.getElementById('chart').data.reduce("
-        "(n, t) => n + (/^(unrated-)?lead-(filled-)?halo:/.test(String(t.meta))"
+        "(n, t) => n + (/^(unrated-)?lead-((filled-)?halo|rim):/.test(String(t.meta))"
         " ? 0 : t.x.length), 0) === 3"
     )
     assert _visible_dots(guarded_page) == 3
