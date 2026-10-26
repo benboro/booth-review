@@ -752,6 +752,13 @@
           },
           "title": "Time Slot",
           "type": "array"
+        },
+        "week": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Week",
+          "type": "array"
         }
       },
       "required": [
@@ -768,7 +775,8 @@
         "outlets",
         "home_conference",
         "away_conference",
-        "place"
+        "place",
+        "week"
       ],
       "title": "ScheduledColumns",
       "type": "object"
@@ -1223,6 +1231,20 @@
           },
           "title": "Viewers",
           "type": "array"
+        },
+        "week": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Week",
+          "type": "array"
         }
       },
       "required": [
@@ -1260,7 +1282,8 @@
         "bowl",
         "rivalry",
         "place",
-        "booth"
+        "booth",
+        "week"
       ],
       "title": "TelecastColumns",
       "type": "object"
@@ -1619,6 +1642,20 @@
           },
           "title": "Time Slot",
           "type": "array"
+        },
+        "week": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Week",
+          "type": "array"
         }
       },
       "required": [
@@ -1649,6 +1686,7 @@
         "rivalry",
         "place",
         "booth",
+        "week",
         "cause"
       ],
       "title": "UnratedColumns",

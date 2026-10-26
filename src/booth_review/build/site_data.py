@@ -420,6 +420,14 @@ def build_site_data(
     ]
     shipped_ids = {row["telecast_id"] for row in shipped_rows}
     rated_ids = {row["telecast_id"] for row in rated_rows}
+    week_label_set = {str(week["label"]) for week in schedule.weeks}
+
+    def _week_label(row: dict[str, Any]) -> str | None:
+        """The game's own lookups.weeks label (18-13 F1), from its CFBD week, else None."""
+        if row["season"] != schedule.season:
+            return None
+        label = schedule.labels.get(int(row["game_id"]))
+        return label if label in week_label_set else None
 
     crew_by_telecast: dict[str, list[dict[str, object]]] = {}
     for crow in tables.telecast_people.iter_rows(named=True):
@@ -658,6 +666,7 @@ def build_site_data(
         "rivalry",
         "place",
         "booth",
+        "week",
     )
     rated_only_names = (
         "viewers",
@@ -733,6 +742,7 @@ def build_site_data(
         target["place"].append(venue_index.get(int(venue_id)) if venue_id is not None else None)
         booth_key = booth_key_by_telecast.get(str(row["telecast_id"]))
         target["booth"].append(booth_index[booth_key] if booth_key is not None else None)
+        target["week"].append(_week_label(row))
 
     for row in rated_rows:
         _append_game_fields(columns, row)
@@ -797,6 +807,7 @@ def build_site_data(
         scheduled_columns["place"].append(
             venue_index.get(int(venue_id)) if venue_id is not None else None
         )
+        scheduled_columns["week"].append(_week_label(row))
 
     # -- coverage: publisher_counts per (season, network), and per-season totals ------------
     publisher_counts_by_key: dict[tuple[int, str], dict[str, int]] = {}

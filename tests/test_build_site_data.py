@@ -2390,9 +2390,19 @@ def _scheduled_site(
     networks: dict[int, tuple[str | None, list[str]]],
     build_reference: Path,
     row_overrides: dict[int, dict[str, object]] | None = None,
+    *,
+    generated_at: datetime = _GENERATED_AT,
+    extra_telecasts: list[dict[str, object]] | None = None,
 ) -> dict[str, Any]:
     rows = [_sched_row(g, **(row_overrides or {}).get(g.id, {})) for g in cfbd_games]
     frame = pl.concat([base.games, _games_frame(rows)], how="vertical_relaxed")
+    if extra_telecasts:
+        base = dataclasses.replace(
+            base,
+            telecasts=pl.concat(
+                [base.telecasts, _telecasts_frame(extra_telecasts)], how="vertical_relaxed"
+            ),
+        )
     schedule = ScheduleInputs(
         season=2026,
         games=tuple(cfbd_games),
@@ -2412,7 +2422,7 @@ def _scheduled_site(
     tables = dataclasses.replace(base, games=frame, schedule=schedule)
     counts: dict[str, int] = {}
     site = build_site_data(
-        tables, build_coverage(tables), build_reference, _GENERATED_AT, counts=counts
+        tables, build_coverage(tables), build_reference, generated_at, counts=counts
     )
     payload = site.model_dump(mode="json")
     payload["_counts"] = counts
@@ -2493,6 +2503,43 @@ def test_scheduled_excludes_games_already_shipped(
     names = [payload["lookups"]["teams"][i]["name"] for i in block["home_team"]]
     assert shipped_game["home_team"] not in names
     assert len(names) == 4
+
+
+def test_week_label_follows_cfbd_week_not_the_calendar(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    # 18-13 F1: a Labor Day Monday game is CFBD week 1 but falls in week 2's Monday-to-Sunday
+    # span. Every block ships the game's own label so the tab shows it under week 1.
+    games = [
+        _cfbd_game(101, 1, _et_utc(9, 5, 12)),
+        _cfbd_game(102, 1, _et_utc(9, 7, 20)),
+        _cfbd_game(103, 2, _et_utc(9, 12, 12)),
+    ]
+    played = _unrated_row(
+        telecast_id="101-net-a",
+        game_id=101,
+        season=2026,
+        date_et=date(2026, 9, 5),
+        kickoff_et="2026-09-05T12:00:00-04:00",
+    )
+    payload = _scheduled_site(
+        small_tables,
+        games,
+        {102: ("net-a", ["net-a"])},
+        build_reference,
+        generated_at=_et_utc(9, 7, 9),
+        extra_telecasts=[played],
+    )
+    assert payload["freshness"]["weekend"]["label"] == "1"
+    week_one = next(w for w in payload["lookups"]["weeks"] if w["label"] == "1")
+    assert week_one["end"] == "2026-09-06"
+    scheduled = payload["telecasts_scheduled"]
+    assert scheduled["date"] == ["2026-09-07"]
+    assert scheduled["week"] == ["1"]
+    unrated = payload["telecasts_unrated"]
+    weeks = dict(zip(unrated["season"], unrated["week"], strict=True))
+    assert weeks[2026] == "1"
+    assert set(payload["telecasts"]["week"]) == {None}
 
 
 def test_scheduled_empty_without_schedule_inputs(

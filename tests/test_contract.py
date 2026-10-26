@@ -795,9 +795,9 @@ def test_unrated_fields_are_display_only() -> None:
 
 
 def test_site_data_fields_unchanged() -> None:
-    assert len(SITE_DATA_FIELDS) == 35
+    assert len(SITE_DATA_FIELDS) == 36
     assert SITE_DATA_FIELDS[:3] == ("season", "date", "kickoff")
-    assert SITE_DATA_FIELDS[-1] == "booth"
+    assert SITE_DATA_FIELDS[-1] == "week"
     assert not set(UnratedColumns.model_fields) & {"cause"} & set(SITE_DATA_FIELDS)
 
 
@@ -853,6 +853,7 @@ def _with_unrated_row(data: dict[str, Any]) -> dict[str, Any]:
         "rivalry": None,
         "place": None,
         "booth": None,
+        "week": None,
         "cause": "none",
     }
     data["telecasts_unrated"] = {k: [v] for k, v in row.items()}
@@ -1249,4 +1250,22 @@ def test_scheduled_extra_key_rejected() -> None:
     data = _load_fixture()
     data["telecasts_scheduled"]["crew"] = [[] for _ in data["telecasts_scheduled"]["season"]]
     with pytest.raises(ValidationError, match=r"telecasts_scheduled\.crew"):
+        validate_site_data(data)
+
+
+@pytest.mark.parametrize("block", ["telecasts", "telecasts_unrated", "telecasts_scheduled"])
+def test_week_label_must_be_a_known_week(block: str) -> None:
+    # 18-13 F1: each block's week column is the game's own lookups.weeks label.
+    data = _load_fixture()
+    data[block]["week"][-1] = "99"
+    with pytest.raises(ValidationError, match=rf"{block}\.week\[\d+\]"):
+        validate_site_data(data)
+
+
+def test_week_label_null_only_outside_the_scheduled_block() -> None:
+    data = _load_fixture()
+    data["telecasts"]["week"][-1] = None
+    validate_site_data(data)
+    data["telecasts_scheduled"]["week"][0] = None
+    with pytest.raises(ValidationError, match=r"telecasts_scheduled\.week"):
         validate_site_data(data)

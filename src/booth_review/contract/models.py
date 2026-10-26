@@ -334,6 +334,9 @@ class TelecastColumns(BaseModel):
     place: list[int | None]
     # Index into lookups.booths; null when the game has no booth tier (Phase 10)
     booth: list[int | None]
+    # Phase 18 (18-13 F1): the game's own week label in lookups.weeks, from its CFBD week;
+    # null outside the schedule's season and for postseason games
+    week: list[str | None]
 
 
 class UnratedColumns(BaseModel):
@@ -379,6 +382,9 @@ class UnratedColumns(BaseModel):
     place: list[int | None]
     # Index into lookups.booths; null when the game has no booth tier (Phase 10)
     booth: list[int | None]
+    # Phase 18 (18-13 F1): the game's own week label in lookups.weeks, from its CFBD week;
+    # null outside the schedule's season and for postseason games
+    week: list[str | None]
     # 04.13 D-10: why the game has no figure. An enum only; the wording lives in
     # site/modules/format.js, never in the data.
     cause: list[Literal["rarely_rated", "pending", "rr_dip", "none"]]
@@ -411,6 +417,9 @@ class ScheduledColumns(BaseModel):
     home_conference: list[int | None]
     away_conference: list[int | None]
     place: list[int | None]
+    # The game's own week label in lookups.weeks (18-13 F1): a Labor Day Monday game keeps
+    # its CFBD week even though its date falls in the next week's Monday-to-Sunday span.
+    week: list[str]
 
 
 class CoverageRow(BaseModel):
@@ -623,9 +632,18 @@ class SiteData(BaseModel):
                 raise ValueError(f"lookups.weeks[{k}]: start is after end")
         if len({w.label for w in weeks}) != len(weeks):
             raise ValueError("lookups.weeks: duplicate week label")
+        week_labels = {w.label for w in weeks}
         weekend = self.freshness.weekend
-        if weekend is not None and weekend.label not in {w.label for w in weeks}:
+        if weekend is not None and weekend.label not in week_labels:
             raise ValueError("freshness.weekend.label: not a label in lookups.weeks")
+        for block_name, cols in (
+            ("telecasts", tc),
+            ("telecasts_unrated", uc),
+            ("telecasts_scheduled", sc),
+        ):
+            for i, label in enumerate(cols.week):
+                if label is not None and label not in week_labels:
+                    raise ValueError(f"{block_name}.week[{i}]: not a label in lookups.weeks")
 
         # WR-01: no block ships a game or telecast id, so a game is its
         # (date, away_team, home_team); count only, never a value (T-03-04).

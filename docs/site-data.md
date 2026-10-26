@@ -72,7 +72,7 @@ meaning as the `telecasts` field of the same name: `season`, `date`, `kickoff`,
 `time_slot`, `away_team`, `home_team`, `neutral`, `away_points`, `home_points`,
 `away_rank`, `home_rank`, `network`, `outlets`, `s506_url`, `crew_source_url`,
 `crew_source_label`, `excitement`, `home_spread`, `crew`, `game_type`, `playoff_round`,
-`home_conference`, `away_conference`, `bowl`, `rivalry`, `place`, `booth`. The rated-only fields
+`home_conference`, `away_conference`, `bowl`, `rivalry`, `place`, `booth`, `week`. The rated-only fields
 `viewers`, `measurement_type`, `publisher`, `source_url`, `rr_urls`, `flags`, and
 `combined_feeds` are absent, and so is any game or telecast id (SITE-19, CFBD terms).
 The block rejects any column it does not declare.
@@ -93,7 +93,7 @@ the client, never in the data:
 Phase 18's This weekend tab. One list per display field, index-aligned like the other
 blocks: `season`, `date`, `kickoff`, `time_slot`, `away_team`, `home_team`, `neutral`,
 `away_rank`, `home_rank`, `network`, `outlets`, `home_conference`, `away_conference`,
-`place`. Each has the meaning of the same-named `telecasts` field, with these differences:
+`place`, `week`. Each has the meaning of the same-named `telecasts` field, with these differences:
 
 - A row is an unplayed FBS-involving regular-season game of the current season, in weeks
   up to and including the current weekend, that has no shipped telecast row (a game in
@@ -114,6 +114,7 @@ blocks: `season`, `date`, `kickoff`, `time_slot`, `away_team`, `home_team`, `neu
   client puts the game in the Time TBA strip. The network comes from the CFBD media rows
   whose `mediaType` is `tv` or `web` only, never radio or mobile.
 - `kickoff` and `time_slot` are null together: a game with no time yet.
+- `week` is never null here: every row is a numbered regular-season week's game.
 - No crew, booth, cause, points, spread or excitement ships, since the game has none by
   definition, and no game or telecast id or completed flag does either (CFBD display
   fields only). The block rejects any column it does not declare.
@@ -169,6 +170,7 @@ describes when the value is `null` instead of coerced to a placeholder like
 | `rivalry` | int \| null, index into `lookups.rivalries` | non-null only on a regular-season game that is the first meeting of a curated rivalry's two teams in that season, not counting conference championship games; a conference championship game (marked by CFBD from 2022 on, so null even when it comes before the rivalry game or is the only meeting) or a postseason meeting is null, and for earlier seasons a later rematch is null; resolved at build time from `data/reference/rivalries.csv`. The build reads CFBD's private game notes only as a yes/no test for a title game; no notes text ships | SITE-45 |
 | `place` | int \| null, index into `lookups.venues` | the game's own CFBD venue, so a neutral-site game sits at the venue's location, never the home team's city; null when the game has no venue id, its venue is missing from CFBD's venue list, or the venue has no coordinates (never guessed, never the home stadium; 04.18 D-16) | SITE-71 |
 | `booth` | int \| null, index into `lookups.booths` | the game's CFB booth tier for its network family and season (Phase 10); null when the game has no booth tier. Present in both blocks, so an unrated lead game keeps its tier | BOOTH-04 |
+| `week` | string \| null, a `lookups.weeks` label | the game's own week from its CFBD week, the label the This weekend tab files it under; null outside the schedule's season and for postseason games. A Labor Day Monday game keeps its week (`"1"`) even though its date falls in the next week's Monday-to-Sunday span, so the tab never relies on the date span alone (18-13). Present in all three blocks; the contract rejects a label that is not in `lookups.weeks` | Phase 18 |
 
 ### `time_slot` boundaries
 
@@ -307,7 +309,7 @@ Unrated rows carry the same display-only CFBD fields as rated rows (`excitement`
   `2.3.0 -> 2.4.0` added `telecasts.figure_source` and allowed empty `rr_urls` for second-source figures (SRC-06, 04.19); minor bump;
   `2.4.0 -> 2.5.0` added coverage `matched_crew_backup` (SRC-09, 04.19); minor bump;
   `2.5.0 -> 2.6.0`: `lookups.booths` and `telecasts[_unrated].booth` (Phase 10 CFB booth tiers; additive);
-  `2.6.0 -> 2.7.0`: the `telecasts_scheduled` block, `lookups.weeks` and `freshness.weekend` (Phase 18 This weekend tab; additive).
+  `2.6.0 -> 2.7.0`: the `telecasts_scheduled` block, `lookups.weeks`, `freshness.weekend` and the per-game `week` label in all three blocks (Phase 18 This weekend tab; additive).
 - **Removing a field, renaming a field, or changing a field's type**
   (including narrowing an enum) bumps the **major** version (`1.0.0` →
   `2.0.0`).

@@ -1080,6 +1080,20 @@
       null,
       null,
       null
+    ],
+    "week": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "1",
+      "3",
+      "4",
+      "5"
     ]
   },
   "telecasts_unrated": {
@@ -1439,6 +1453,16 @@
       null,
       null,
       null
+    ],
+    "week": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "5"
     ]
   },
   "telecasts_scheduled": {
@@ -1597,6 +1621,17 @@
       null,
       null,
       null
+    ],
+    "week": [
+      "5",
+      "5",
+      "5",
+      "5",
+      "5",
+      "5",
+      "5",
+      "5",
+      "5"
     ]
   },
   "coverage": [

@@ -31,6 +31,10 @@ lookups.weeks ([]) and freshness.weekend (null); no figure or crew changed.
 (site-data.json now carries the season's weeks lookup, the weekend stamp and the unplayed,
 unshipped games of weeks up to the current one; no figure or crew changed.)
 
+Phase 18 Plan 13 (F1): the three site-data blocks gain the per-game week label column;
+site-data.json with that column dropped hashes to the Plan 06 digest (765b88ada315...), so no
+figure or crew changed.
+
 Phase 10 Plan 04: the build adds interim/review_cfb_booths_untiered.csv (header-only here:
 the synthetic networks carry no big-four family) and cfb_booths_* summary counts;
 site-data.json is unchanged from Plan 03 (no cfb_booth_ranks.csv in the synthetic
@@ -161,7 +165,7 @@ _GOLDEN: dict[str, str] = {
         "07ff159d34d5e0cfdd3b77f84c3ecaec0cd14c437fa015fe89333709317831c3"
     ),
     "processed/site-data.json": (
-        "765b88ada315efc99f43baaecb528c71a806994f6cf2fac5452f4fa1a7eea5ea"
+        "6fb5786c21b0c2b29f7ade32f04ce51add0030c223fe201a95f22b11c7a51730"
     ),
     "processed/telecast_flags.parquet": (
         "2e2f334909dc09ab5ff590cadd3d4cb2158678a2d980948cd454219ab82927e2"

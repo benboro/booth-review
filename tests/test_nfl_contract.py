@@ -39,7 +39,8 @@ REPO = Path(__file__).resolve().parent.parent
 # Re-pinned at Phase 10 Plan 03: contract 2.6.0 adds lookups.booths and the booth column.
 # Re-pinned at Phase 18 Plan 01: CFB contract 2.7.0 adds telecasts_scheduled, lookups.weeks,
 # freshness.weekend.
-CFB_SCHEMA_SHA256 = "8a05b9dc9af411fe03ea75adacce5e8195c36012fe0490cacb7433a0645cbd0e"
+# Re-pinned at Phase 18 Plan 13 (F1): the three CFB blocks gain the week label column.
+CFB_SCHEMA_SHA256 = "b586edc90d6dab32c1faa26899c03e05692b9271025aaf8dd4b5347546582d78"
 
 INVENTED_STRINGS = ("Northfield Lanterns", "Harbor City", "Ada Quill", "example.com")
 

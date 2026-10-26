@@ -127,6 +127,29 @@ def test_cfb_weekend_games_cover_all_three_blocks_once(lead_page: Page) -> None:
     assert out["weekOf"] == ["5", None]
 
 
+def test_games_file_under_their_own_week_label_not_the_date_span(
+    guarded_page: Page,
+    fixture_raw: dict[str, Any],
+    open_app: Callable[[Page, str], None],
+) -> None:
+    # 18-13 F1: a Monday game after its week's Saturday slate (Labor Day) keeps its CFBD week
+    # even though its date sits in the next week's span (or in no span at all).
+    raw = copy.deepcopy(fixture_raw)
+    raw["telecasts_scheduled"]["date"][0] = "2026-10-05"  # Monday after week 5, in no span
+    raw["telecasts"]["date"][10] = "2026-09-28"  # in week 5's span, but a week-4 game
+    guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+    open_app(guarded_page, "")
+    out = guarded_page.evaluate(
+        _js(
+            """const keys = (label) => W.cfbWeekendGames(data, label).map((g) => g.key);
+            return { five: keys('5'), four: keys('4') };"""
+        )
+    )
+    assert "cfb:scheduled:0" in out["five"]
+    assert "cfb:t:10" not in out["five"]
+    assert "cfb:t:10" in out["four"]
+
+
 def test_pick_parity_with_the_existing_predicates(lead_page: Page) -> None:
     out = lead_page.evaluate(
         _js(

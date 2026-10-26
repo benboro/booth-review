@@ -148,9 +148,11 @@ function weekendGame(data, obj, block, i, week, weekend) {
 
 /**
  * Every game of one week as `WeekendGame` objects, once each: main-feed rated and unrated
- * telecasts whose date falls in the week (block `'t'`, index into `data.t`), then the
- * scheduled rows (block `'scheduled'`, index into the scheduled block). Scheduled rows have no
- * crew. Empty for an unknown week label.
+ * telecasts of the week (block `'t'`, index into `data.t`), then the scheduled rows (block
+ * `'scheduled'`, index into the scheduled block). A row belongs to the week its shipped `week`
+ * label names, so a Labor Day Monday game stays in its CFBD week (18-13 F1); a row with a null
+ * label (another season, a postseason game, a file without the column) falls back to the
+ * week's Monday-to-Sunday dates. Scheduled rows have no crew. Empty for an unknown week label.
  * @param {object} data - a `prepareData` result.
  * @param {string} label - a `lookups.weeks` label.
  * @returns {object[]}
@@ -160,13 +162,18 @@ export function cfbWeekendGames(data, label) {
   if (!week) return [];
   const weekend = data.weekend ?? null;
   const out = [];
-  const inWeek = (d) => d != null && week.start <= d && d <= week.end;
+  const inWeek = (t, i) => {
+    const own = t.week?.[i];
+    if (own != null) return own === week.label;
+    const d = t.date[i];
+    return d != null && week.start <= d && d <= week.end;
+  };
   for (let i = 0; i < data.n; i += 1) {
-    if (inWeek(data.t.date[i])) out.push(weekendGame(data, data, 't', i, week, weekend));
+    if (inWeek(data.t, i)) out.push(weekendGame(data, data, 't', i, week, weekend));
   }
   const facade = scheduledFacade(data);
   for (let j = 0; j < facade.n; j += 1) {
-    if (inWeek(facade.t.date[j])) out.push(weekendGame(data, facade, 'scheduled', j, week, weekend));
+    if (inWeek(facade.t, j)) out.push(weekendGame(data, facade, 'scheduled', j, week, weekend));
   }
   return out;
 }
