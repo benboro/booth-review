@@ -3152,6 +3152,28 @@ html:has(#mlb-detail-panel[open]) {
   }
 }
 
+/* Six tabs (This weekend added in Phase 18) stay on one row below 700px by scrolling sideways,
+   so a narrow-but-not-phone window never scrolls the page; no tab label is clipped or wrapped.
+   The scrollbar is hidden, the selected tab is brought into view by chart-tabs.js, and the
+   keyboard still reaches every tab. */
+@media (max-width: 700px) {
+  .chart-tabs {
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .chart-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chart-tab {
+    flex: none;
+    white-space: nowrap;
+  }
+}
+
 @media (max-width: 480px) {
   #game-search {
     height: 44px;
@@ -3165,18 +3187,6 @@ html:has(#mlb-detail-panel[open]) {
   .chart-tabs {
     min-height: 44px;
     gap: 0;
-  }
-
-  /* Six tabs (This weekend added in Phase 18) stay on one row at 340px by scrolling sideways;
-     no tab label is clipped or wrapped. The scrollbar is hidden, the selected tab is brought
-     into view by chart-tabs.js, and the keyboard still reaches every tab. */
-  .chart-tabs {
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .chart-tabs::-webkit-scrollbar {
-    display: none;
   }
 
   .chart-tab {

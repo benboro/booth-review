@@ -26,6 +26,8 @@ records only where the site settles or applies them.
   collapsible Time TBA strip, the CFB ESPN+ and regional table, and a source line that
   credits only the sources the sport uses. Below 480px the grid becomes a list grouped by
   kickoff (Phase 18).
+- Below 700px the six view tabs stay on one row and scroll sideways inside their bar, so a
+  narrow window never scrolls the page (Phase 18).
 
 ## Filters
 
