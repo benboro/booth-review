@@ -96,7 +96,10 @@ export function renderMapKey(root, key, env) {
   // last label ("50  20  5 games"). No leaders, no nesting.
   const block = el('div', 'map-key-block');
   block.appendChild(el('p', 'map-key-heading', 'Dot size'));
+  // The row's bare counts read poorly aloud, so assistive tech gets each step with its unit.
+  block.appendChild(el('span', 'visually-hidden', key.sizes.map((s) => s.label).join(', ')));
   const row = el('div', 'map-key-row');
+  row.setAttribute('aria-hidden', 'true');
   const last = key.sizes.length - 1;
   key.sizes.forEach((s, i) => {
     const d = Math.max(Math.ceil(s.diameter), 1);

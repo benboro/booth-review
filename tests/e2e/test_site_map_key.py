@@ -121,6 +121,8 @@ def test_render_dom(guarded_page: Page, site_url: str) -> None:
           widths: Array.from(root.querySelectorAll('.map-key-item svg')).map((s) => Number(s.getAttribute('width'))),
           legacy: q('.map-key-sizes, .map-key-strength, .map-key-swatch, .map-key-end'),
           aria: root.getAttribute('aria-description'),
+          spoken: Array.from(root.querySelectorAll('.visually-hidden')).map((n) => n.textContent),
+          rowHidden: root.querySelector('.map-key-row').getAttribute('aria-hidden'),
           hidden: root.hidden,
         };
         K.renderMapKey(root, K.buildMapKey({ venues: [], refGames: 0 }, {}), { theme: 'light' });
@@ -139,6 +141,9 @@ def test_render_dom(guarded_page: Page, site_url: str) -> None:
     assert got["widths"][0] == math.ceil(20 * (50 / 73) ** 0.5)
     assert got["legacy"] == 0
     assert got["aria"] == "Dot size is the number of games at the venue."
+    # IN-05: screen readers get every step with its unit; the bare-number row is hidden from them.
+    assert got["spoken"] == ["50 games, 20 games, 5 games"]
+    assert got["rowHidden"] == "true"
     assert got["hidden"] is False
     assert got["emptyHidden"] is True
     assert got["emptyChildren"] == 0
