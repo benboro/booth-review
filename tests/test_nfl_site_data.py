@@ -1157,3 +1157,152 @@ def test_a_playoff_inclusive_special_table_is_refused_by_position() -> None:
         )
     assert str(err.value).startswith("special[")
     assert "].games: does not match the regular-season games" in str(err.value)
+
+
+# ------------------------------------------------------- upcoming block (Phase 18)
+
+
+def _up(**over: Any) -> dict[str, Any]:
+    from booth_review.nfl.upcoming import UPCOMING_COLUMNS
+
+    row: dict[str, Any] = dict.fromkeys(UPCOMING_COLUMNS)
+    row.update(
+        season=2024,
+        week=2,
+        game_id="u0",
+        game_date=date(2024, 9, 15),
+        kickoff_utc=datetime(2024, 9, 15, 17, 0, tzinfo=UTC),
+        home_franchise_id="gamma",
+        away_franchise_id="delta",
+        home_display_name="Gamma Town",
+        away_display_name="Delta Town",
+        slot_name="Sunday early",
+        is_international=False,
+        is_neutral=False,
+        network_id="cbs",
+        network_basis="506",
+        sideline_person_ids=[],
+    )
+    row.update(over)
+    return row
+
+
+def _with_upcoming(rows: list[dict[str, Any]], weekend: dict[str, Any] | None = None) -> Any:
+    from booth_review.nfl.upcoming import UPCOMING_SCHEMA, WEEKEND_SCHEMA
+
+    base = _scenario()
+    upcoming = pl.DataFrame(rows, schema=UPCOMING_SCHEMA, orient="row")
+    stamp = pl.DataFrame([weekend] if weekend else [], schema=WEEKEND_SCHEMA, orient="row")
+    return build_nfl_site_data(
+        NflSiteInputs(
+            base.games,
+            base.special,
+            base.task1,
+            base.people,
+            base.franchises,
+            base.eras,
+            upcoming,
+            stamp,
+        )
+    )
+
+
+def test_upcoming_block_ships_tba_states_crews_and_basis() -> None:
+    site = _with_upcoming(
+        [
+            _up(
+                game_id="u-tbd",
+                game_date=None,
+                kickoff_utc=None,
+                slot_name=None,
+                network_id=None,
+                network_basis=None,
+                home_franchise_id="alpha",
+                away_franchise_id="beta",
+                home_display_name="Alpha Town",
+                away_display_name="Beta Town",
+            ),
+            _up(
+                game_id="u-slot",
+                slot_name="SNF",
+                network_id="nbc",
+                network_basis="slot",
+                kickoff_utc=datetime(2024, 9, 16, 0, 20, tzinfo=UTC),
+                game_date=date(2024, 9, 15),
+            ),
+            _up(
+                game_id="u-crew",
+                pbp_person_id="p-lead",
+                analyst_person_id="a-one",
+                sideline_person_ids=["side"],
+                crew_source="506",
+                booth_rank=1,
+                crew_source_url="https://506sports.com/nfl.php?yr=2024&wk=2",
+                home_franchise_id="beta",
+                away_franchise_id="gamma",
+                home_display_name="Beta Town",
+                away_display_name="Gamma Town",
+            ),
+        ]
+    )
+    u = site.upcoming
+    assert len(u.season) == 3
+    # dated rows first, the date-less game last
+    assert u.date[-1] is None and u.kickoff[-1] is None and u.slot[-1] is None
+    assert u.network[-1] is None and u.network_basis[-1] is None
+    basis = {b for b in u.network_basis if b}
+    assert basis == {"506", "slot"}
+    crew_row = next(i for i in range(3) if u.crew[i])
+    assert [e.role for e in u.crew[crew_row]] == ["pbp", "analyst", "unknown"]
+    assert u.crew_source[crew_row] == "506" and u.booth_rank[crew_row] == 1
+    assert u.crew_source_url[crew_row] is not None
+
+
+def test_upcoming_missing_tables_give_an_empty_block(tmp_path: Path) -> None:
+    paths = DataPaths(tmp_path / "vault")
+    paths.processed.mkdir(parents=True)
+    inputs = _scenario()
+    inputs.games.write_parquet(paths.processed / "nfl_games.parquet")
+    inputs.special.write_parquet(paths.processed / "nfl_special_games_by_team_season.parquet")
+    inputs.task1.write_parquet(paths.processed / "nfl_task1_crews.parquet")
+    loaded = load_nfl_site_inputs(paths, REFERENCE)
+    assert loaded.upcoming.height == 0 and loaded.weekend.height == 0
+    from dataclasses import replace
+
+    loaded = replace(loaded, people=inputs.people, franchises=inputs.franchises, eras=inputs.eras)
+    site = build_nfl_site_data(loaded)
+    assert site.upcoming.season == []
+    assert site.freshness.weekend is None
+
+
+def test_weekend_freshness_comes_from_the_weekend_table() -> None:
+    site = _with_upcoming(
+        [_up()],
+        {
+            "season": 2024,
+            "week": 2,
+            "schedule_updated_at": "2024-09-10T21:30:00Z",
+            "crews_506_saved_at": None,
+        },
+    )
+    weekend = site.freshness.weekend
+    assert weekend is not None
+    assert (weekend.week, weekend.schedule_updated_at, weekend.crews_506_saved_at) == (
+        2,
+        "2024-09-10T21:30:00Z",
+        None,
+    )
+
+
+def test_upcoming_payload_is_deterministic_and_input_order_free() -> None:
+    a = _up(
+        game_id="a",
+        home_franchise_id="alpha",
+        away_franchise_id="beta",
+        home_display_name="Alpha Town",
+        away_display_name="Beta Town",
+    )
+    b = _up(game_id="b")
+    assert nfl_site_payload_bytes(_with_upcoming([a, b])) == nfl_site_payload_bytes(
+        _with_upcoming([b, a])
+    )

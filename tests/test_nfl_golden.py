@@ -75,6 +75,14 @@ _NFL_GOLDEN: dict[str, str] = {
     "processed/nfl_games.parquet": (
         "8f49003959842fe8f30c4ff6427bd4c0c61815be6cbe53be6707ac90c23ea082"
     ),
+    # Added at Phase 18 Plan 07: the synthetic 2014 season is fully played, so both new
+    # tables are empty (the digest of an empty NDJSON); no existing output changed.
+    "processed/nfl_upcoming.parquet": (
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ),
+    "processed/nfl_weekend.parquet": (
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ),
     "processed/nfl_special_games_by_team_season.parquet": (
         "577c3de4ab28895167863b7c5d9aeb656dcbf26196eccf687efacb1009b4781c"
     ),

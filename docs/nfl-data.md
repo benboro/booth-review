@@ -127,6 +127,28 @@ played-game view iterates them. Columns: `season`, `week`, `date`, `kickoff`, `h
   crew is "Crew TBA".
 - `booth_rank` is the published rank from `data/reference/nfl_booth_ranks.csv` for the
   game's network and season, and is `null` when the crew is empty.
+- Selection (built by `nfl/upcoming.py` into `processed/nfl_upcoming.parquet`): the latest
+  season's unplayed regular-season games (not past kickoff + 4 h) in weeks up to and
+  including the current week. The current week is the last fully played week plus one,
+  capped at the last week, so it flips once Monday Night Football ends. Games whose date
+  or time is still TBD/TBA/NA are kept; rows with no week cannot be placed and are counted
+  (`upcoming_unplaced`), never dropped silently.
+- `network_basis` rule: a saved 506 page wins (`"506"`). Otherwise only a plain Thursday,
+  Sunday or Monday night game takes its network from `data/reference/nfl_slot_networks.csv`
+  (`"slot"`, columns `season,slot,network_id,source_url`; the three 2026 rows are hand-entered
+  facts from the Wikipedia 2026 NFL season article, each carrying that `source_url`). Slot
+  exclusions: international games and neutral games at an unknown site, Thanksgiving,
+  Black Friday, Christmas, Wednesday and Saturday games, the Week 1 Thursday opener, Week
+  18, any game in the season's Wikipedia scheduling-changes list, and any game without a
+  kickoff time. Every other game has a `null` network (Network TBA). A season missing from
+  the table gives no slot networks and counts `upcoming_slot_table_missing`. The credit
+  rule: Wikipedia (CC BY-SA 4.0) is credited with the article link wherever a `"slot"`
+  network shows. All slot-rule lines live in `_slot_network`; deleting the rule is a
+  one-file change.
+- Rollover: the NFL file switches weeks on the first deploy after the week's last kickoff
+  + 4 h (the Wednesday 20:00 build, or a manual `nfl build`). A vault built before this
+  phase has no `nfl_upcoming.parquet`; the site builder then ships an empty block and a
+  `null` `freshness.weekend`. The weekend stamp is also `null` when no game is upcoming.
 - A game in `games` never appears here: the contract rejects a repeated
   (season, week, home, away), count only. No points, viewers, excitement or cause ship.
 

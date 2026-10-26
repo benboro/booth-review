@@ -38,6 +38,7 @@ from booth_review.nfl.inputs import load_nfl_inputs
 from booth_review.nfl.reference import load_nfl_franchises
 from booth_review.nfl.tables import special_games_table, write_nfl_tables, write_review_files
 from booth_review.nfl.task1 import TASK1_TABLE, build_task1
+from booth_review.nfl.upcoming import assemble_upcoming, weekend_frame
 from booth_review.vault import VaultRepo, batch_message
 
 ExtraTables = Callable[[NflGameTable, NflReference], Mapping[str, pl.DataFrame]]
@@ -104,12 +105,21 @@ def run_nfl_build(
             special = special_games_table(table, load_nfl_franchises(reference_directory))
             extra: Mapping[str, pl.DataFrame]
             task1_reviews: Mapping[str, list[dict[str, object]]] = {}
+            upcoming, upcoming_counts = assemble_upcoming(
+                inputs, ref, now=played_cut, reference_directory=reference_directory
+            )
+            weekend, _ = weekend_frame(paths, inputs, upcoming, now=played_cut)
+            counts.update(upcoming_counts)
+            upcoming_tables: dict[str, pl.DataFrame] = {
+                "nfl_upcoming": upcoming,
+                "nfl_weekend": weekend,
+            }
             if extra_tables is not None:
                 # Test hook: replaces the Task 1 table.
-                extra = extra_tables(table, ref)
+                extra = {**upcoming_tables, **extra_tables(table, ref)}
             else:
                 task1, task1_reviews, task1_counts = build_task1(table, ref)
-                extra = {TASK1_TABLE: task1}
+                extra = {TASK1_TABLE: task1, **upcoming_tables}
                 counts.update(task1_counts)
             written = write_nfl_tables(paths, table, special, extra)
             written += write_review_files(paths, task1_reviews)

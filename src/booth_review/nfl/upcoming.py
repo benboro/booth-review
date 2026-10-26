@@ -20,11 +20,13 @@ from pathlib import Path
 
 import polars as pl
 
+from booth_review.build.pipeline import _stamp
+from booth_review.config import DataPaths
 from booth_review.errors import ReferenceTableError
 from booth_review.nfl.changes import match_schedule_changes
 from booth_review.nfl.games import PLAYED_AFTER, NflReference
 from booth_review.nfl.inputs import NflInputs
-from booth_review.nfl.layout import nfl_506_url
+from booth_review.nfl.layout import NFLVERSE_SCHEDULES_PATH, nfl_506_path, nfl_506_url
 from booth_review.nfl.listings import ListingMatch, match_506_listings
 from booth_review.nfl.network_groups import network_group_of
 from booth_review.nfl.people import resolve_crew
@@ -32,6 +34,7 @@ from booth_review.nfl.reference import NFL_NETWORK_IDS
 from booth_review.nfl.rules import SlotName, slot_name
 from booth_review.nfl.schedule import UpcomingNflGame
 from booth_review.reference import read_reference_csv_numbered
+from booth_review.transport.cache import Manifest
 
 SLOT_NETWORKS_FILE = "nfl_slot_networks.csv"
 SLOT_NETWORK_COLUMNS = ("season", "slot", "network_id", "source_url")
@@ -63,6 +66,15 @@ UPCOMING_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
     "booth_rank": pl.Int64,
 }
 UPCOMING_COLUMNS = tuple(UPCOMING_SCHEMA)
+
+WEEKEND_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
+    "season": pl.Int64,
+    "week": pl.Int64,
+    "schedule_updated_at": pl.String,
+    "crews_506_saved_at": pl.String,
+}
+WEEKEND_COLUMNS = tuple(WEEKEND_SCHEMA)
+_TIME_FMT = "%Y-%m-%dT%H:%M:%SZ"
 
 UPCOMING_COUNT_KEYS = (
     "upcoming_games",
@@ -248,3 +260,33 @@ def assemble_upcoming(
         ["week", "game_date", "kickoff_utc", "network_id", "home_franchise_id"], nulls_last=True
     )
     return frame, counts
+
+
+def weekend_frame(
+    paths: DataPaths, inputs: NflInputs, upcoming: pl.DataFrame, *, now: datetime
+) -> tuple[pl.DataFrame, int | None]:
+    """One row: the current week and when its two inputs last changed (times only).
+
+    `schedule_updated_at` is the newest manifest change to the nflverse games.csv;
+    `crews_506_saved_at` is the saved_at (else fetched_at) of the current week's NFL
+    506 page entry, None when no page is saved. Empty when no game is upcoming (a finished
+    or historical season), so such a build ships no weekend stamp.
+    """
+    week = current_nfl_week(inputs.upcoming, now)
+    if week is None or upcoming.height == 0:
+        return pl.DataFrame(schema=WEEKEND_SCHEMA), None
+    season = max(g.season for g in inputs.upcoming)
+    schedule = _stamp(paths, lambda path: path == NFLVERSE_SCHEDULES_PATH)
+    schedule_text = schedule.strftime(_TIME_FMT) if schedule.year > 1970 else None
+    page = nfl_506_path(season, week)
+    saved: str | None = None
+    for entry in Manifest(paths.manifest).entries():
+        if entry.get("path") == page:
+            saved = entry.get("saved_at") or entry.get("fetched_at") or saved
+    row = {
+        "season": season,
+        "week": week,
+        "schedule_updated_at": schedule_text,
+        "crews_506_saved_at": saved,
+    }
+    return pl.DataFrame([row], schema=WEEKEND_SCHEMA, orient="row"), week

@@ -290,3 +290,122 @@ def test_missing_slot_file_is_empty(tmp_path: Path) -> None:
 
 def test_inputs_dataclass_defaults() -> None:
     assert NflInputs.__dataclass_fields__["upcoming"].default == ()
+
+
+# -- weekend stamps -----------------------------------------------------------------
+
+
+def _entry(path: str, fetched_at: str, sha: str, saved_at: str | None = None):
+    from booth_review.transport.cache import ManifestEntry
+
+    return ManifestEntry(
+        url=f"https://example.com/{path}",
+        source="nfl_nflverse",
+        season=2026,
+        kind="x",
+        fetched_at=fetched_at,
+        status=200,
+        etag=None,
+        last_modified=None,
+        sha256=sha,
+        path=path,
+        bytes=1,
+        final_url="",
+        saved_at=saved_at,
+    )
+
+
+def test_weekend_frame_stamps_schedule_change_and_506_save(tmp_path: Path) -> None:
+    from booth_review.config import DataPaths
+    from booth_review.nfl.layout import NFLVERSE_SCHEDULES_PATH, nfl_506_path
+    from booth_review.nfl.upcoming import weekend_frame
+    from booth_review.transport.cache import Manifest
+
+    paths = DataPaths(tmp_path / "vault")
+    manifest = Manifest(paths.manifest)
+    manifest.append(_entry(NFLVERSE_SCHEDULES_PATH, "2026-10-01T10:00:00Z", "a"))
+    manifest.append(_entry(NFLVERSE_SCHEDULES_PATH, "2026-10-02T10:00:00Z", "a"))  # unchanged
+    manifest.append(_entry(NFLVERSE_SCHEDULES_PATH, "2026-10-09T21:30:00Z", "b"))
+    manifest.append(
+        _entry(nfl_506_path(2026, 8), "2026-10-12T00:00:00Z", "c", "2026-10-06T02:14:00Z")
+    )
+    rows = [_row("a", 1, 2, "2026-10-25", "13:00", "Sunday")]
+    ups, _ = parse_upcoming(schedule_csv(rows), seasons=[2026])
+    inputs = replace(make_inputs(rows), upcoming=tuple(ups))
+    frame, upcoming_week = weekend_frame(paths, inputs, frame_of(ups), now=EARLY)
+    assert upcoming_week == 8
+    row = frame.row(0, named=True)
+    assert row["week"] == 8
+    assert row["schedule_updated_at"] == "2026-10-09T21:30:00Z"
+    assert row["crews_506_saved_at"] == "2026-10-06T02:14:00Z"
+
+
+def frame_of(ups):
+    import polars as pl
+
+    from booth_review.nfl.upcoming import UPCOMING_SCHEMA
+
+    return pl.DataFrame({k: [None] * len(ups) for k in UPCOMING_SCHEMA}, schema=UPCOMING_SCHEMA)
+
+
+def test_weekend_frame_without_page_or_manifest_has_null_stamps(tmp_path: Path) -> None:
+    from booth_review.config import DataPaths
+    from booth_review.nfl.upcoming import weekend_frame
+
+    rows = [_row("a", 1, 2, "2026-10-25", "13:00", "Sunday")]
+    ups, _ = parse_upcoming(schedule_csv(rows), seasons=[2026])
+    inputs = replace(make_inputs(rows), upcoming=tuple(ups))
+    frame, _ = weekend_frame(DataPaths(tmp_path / "vault"), inputs, frame_of(ups), now=EARLY)
+    row = frame.row(0, named=True)
+    assert row["schedule_updated_at"] is None and row["crews_506_saved_at"] is None
+
+
+def test_weekend_frame_is_empty_without_upcoming_games(tmp_path: Path) -> None:
+    from booth_review.config import DataPaths
+    from booth_review.nfl.upcoming import weekend_frame
+
+    rows = [_row("a", 1, 2, "2026-10-25", "13:00", "Sunday")]
+    ups, _ = parse_upcoming(schedule_csv(rows), seasons=[2026])
+    inputs = replace(make_inputs(rows), upcoming=tuple(ups))
+    frame, week = weekend_frame(DataPaths(tmp_path / "vault"), inputs, frame_of([]), now=EARLY)
+    assert frame.height == 0 and week is None
+
+
+# -- pipeline -----------------------------------------------------------------------
+
+
+def test_build_writes_upcoming_tables_and_ships_the_block(
+    git_vault, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+    import shutil
+
+    import polars as pl
+    from test_nfl_pipeline import REFERENCE, _seed
+
+    import booth_review.nfl.pipeline as nfl_pipeline
+
+    ref = tmp_path / "nfl_ref"
+    shutil.copytree(REFERENCE, ref)
+    _seed(git_vault, rr=["NFL Network"])
+    outcome = nfl_pipeline.run_nfl_build(
+        git_vault,
+        ref,
+        seasons=[2014],
+        include_playoffs=False,
+        check_acceptance=False,
+        commit=False,
+        site_data=True,
+        now=datetime(2014, 9, 5, 12, tzinfo=UTC),
+    )
+    assert outcome.counts["upcoming_games"] == 2
+    assert outcome.counts["upcoming_slot_table_missing"] == 1
+    assert "processed/nfl_upcoming.parquet" in outcome.written
+    assert "processed/nfl_weekend.parquet" in outcome.written
+    upcoming = pl.read_parquet(git_vault.processed / "nfl_upcoming.parquet")
+    assert upcoming.height == 2
+    weekend = pl.read_parquet(git_vault.processed / "nfl_weekend.parquet")
+    assert weekend["week"].to_list() == [1]
+    site = json.loads((git_vault.processed / "nfl-data.json").read_text())
+    assert len(site["upcoming"]["season"]) == 2
+    assert site["freshness"]["weekend"]["week"] == 1
