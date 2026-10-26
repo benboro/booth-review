@@ -70,7 +70,7 @@ def test_diameters_and_visibility(guarded_page: Page, site_url: str) -> None:
         """,
     )
     assert got["dd"] == got["dExp"] and got["pd"] == got["pExp"]
-    assert got["dd"][0] <= 20 and got["pd"][0] <= 14
+    assert got["dd"][0] <= 20 and got["pd"][0] <= 10
     assert got["dd"] == sorted(got["dd"], reverse=True)
     assert got["dd"][0] >= 1.5 * got["dd"][1]
     assert abs(got["dd"][-1] - 20 * (5 / 73) ** 0.5) < 1e-9  # no minimum size
