@@ -57,7 +57,7 @@ NFL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "contract" / "nfl-data.fixture.
 # no-match line (4 added lines, 1 removed).
 # Re-pinned at Phase 18 Plan 01: CFB contract 2.7.0 adds telecasts_scheduled, lookups.weeks,
 # freshness.weekend.
-_SITE_DATA_SHA256 = "efc8a9dbb7772d7dd46e389be12eb57a18182beb0ea3b4d3007386f881be165a"
+_SITE_DATA_SHA256 = "28874f48781254e8b816b2d9d3183f4166c538fd9edae84df06cfa43ee667c22"
 # Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
 # new header with theme slot, site name.
 # Re-pinned at Phase 17 Plan 06: inline hash-pinned theme-init.js script, sha256 CSP and
@@ -82,7 +82,7 @@ _COVERAGE_SHA256 = "f486fd2361993d9323d36870d0d7e23f1150efeef31c2e829cd53b7d6070
 # Re-pinned at Phase 17.1 Plan 03: Network colors switch markup removed from #legend-row.
 # Re-pinned at Phase 18 Plan 01: CFB contract 2.7.0 moves the index only through its site-data
 # cache-bust hash.
-_INDEX_PRE_PHASE_SHA256 = "244396fb1f039a50e6bee8a03f97e14e0f54685f2f141f8f5ac71c5928d82666"
+_INDEX_PRE_PHASE_SHA256 = "c67edf1d72900e64e8d9cd2a9393124d5aafc252d018761c22d10dbc52eb5249"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'

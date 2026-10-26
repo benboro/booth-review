@@ -825,8 +825,6 @@ def _with_unrated_row(data: dict[str, Any]) -> dict[str, Any]:
     data["schema_version"] = "2.7.0"
     # The replaced unrated block was the only user of the last two venues.
     del data["lookups"]["venues"][7:]
-    # ... and of the fixture's one booth (Phase 18 gave the 2026 pending row a tier-a booth).
-    data["lookups"]["booths"] = []
     row: dict[str, Any] = {
         "season": 2019,
         "date": "2019-10-12",

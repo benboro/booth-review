@@ -66,11 +66,6 @@
         "id": "net-e",
         "name": "Stream Plus",
         "family": "disney"
-      },
-      {
-        "id": "espn-plus",
-        "name": "ESPN Plus",
-        "family": "disney"
       }
     ],
     "people": [
@@ -353,17 +348,7 @@
         "lon": -77.3554
       }
     ],
-    "booths": [
-      {
-        "family": "disney",
-        "season": 2026,
-        "pbp": 4,
-        "analyst": 5,
-        "rank": 1,
-        "tier": "a",
-        "lead_network": null
-      }
-    ],
+    "booths": [],
     "weeks": [
       {
         "label": "0",
@@ -1453,7 +1438,7 @@
       null,
       null,
       null,
-      0
+      null
     ]
   },
   "telecasts_scheduled": {
@@ -1565,7 +1550,7 @@
       3,
       0,
       4,
-      5
+      4
     ],
     "outlets": [
       [],
