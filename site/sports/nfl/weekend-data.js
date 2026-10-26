@@ -20,12 +20,15 @@ function kickoffMinutes(iso) {
 
 /**
  * The panel row (the shape `gameRow` returns) for upcoming row `j`: no score, figure or
- * excitement, plus `networkBasis` ('506' or 'slot') and `unplayed: true`.
+ * excitement, plus `networkBasis` ('506' or 'slot'), `upcoming: true` and `unplayed`. The host
+ * passes `unplayed: false` once the kickoff has passed in ET (the cell's own rule), and the row
+ * then reads as a played game whose figure is not posted yet (18-13 F3, WR-01).
  * @param {object} model - a `prepareNfl` result.
  * @param {number} j - index into the upcoming block.
+ * @param {{unplayed?: boolean}} [opts]
  * @returns {object}
  */
-export function upcomingRow(model, j) {
+export function upcomingRow(model, j, { unplayed = true } = {}) {
   const u = model.upcomingRaw;
   const net = u.network[j] == null ? null : model.networks[u.network[j]];
   const slot = u.slot[j] == null ? null : model.slots[u.slot[j]];
@@ -33,7 +36,8 @@ export function upcomingRow(model, j) {
   const home = model.teamNames[u.home_name[j]];
   return {
     i: j,
-    unplayed: true,
+    upcoming: true,
+    unplayed,
     season: u.season[j],
     week: u.week[j],
     date: u.date[j],
@@ -67,7 +71,7 @@ export function upcomingRow(model, j) {
     })),
     viewers: null,
     scope: null,
-    cause: null,
+    cause: unplayed ? null : 'pending',
     era: null,
     excitement: null,
     rrUrl: null,

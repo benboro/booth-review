@@ -10,7 +10,9 @@
  */
 import { renderWeekend } from '../../../modules/weekend-view.js';
 import { renderWeekendList } from '../../../modules/weekend-list.js';
-import { dayLabel, dayTabs, dayToken, defaultDay } from '../../../modules/weekend.js';
+import {
+  dayLabel, dayTabs, dayToken, defaultDay, etParts, etWallMinutes, isUnplayedGame,
+} from '../../../modules/weekend.js';
 import { PHONE_QUERY } from '../../../modules/breakpoints.js';
 import { nflWeekendGames, nflWeekendPasses } from '../weekend-data.js';
 import { weekendCurrentWeek, weekendWeeks } from '../state.js';
@@ -101,8 +103,15 @@ export function render(ctx) {
       if (to != null) ctx.setState({ week: to, day: r.day ? dayToken(r.day) : null });
     },
     onOpen: (game, opener) => {
-      if (game.block === 'upcoming') ctx.openUpcoming(game.index, opener);
-      else ctx.openGame(game.index, opener);
+      if (game.block !== 'upcoming') {
+        ctx.openGame(game.index, opener);
+        return;
+      }
+      // The kickoff rule that turns the cell to "Crew not listed" also ends "Not played yet."
+      // (18-13 F3, WR-01): an upcoming row stays one until the next build after the game.
+      const now = etParts(opts.now ?? new Date());
+      const unplayed = isUnplayedGame(game, etWallMinutes(now.date, now.minutes));
+      ctx.openUpcoming(game.index, opener, { unplayed });
     },
   };
   if (fixedNow) opts.now = new Date(fixedNow);

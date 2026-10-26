@@ -67,7 +67,8 @@ function unplayedFacts(row) {
 }
 
 function factsParagraph(row) {
-  if (row.unplayed) return unplayedFacts(row);
+  // An upcoming row has no score or excitement, kicked off or not.
+  if (row.upcoming) return unplayedFacts(row);
   const p = el('p', 'panel-facts');
   const bits = [`Slot: ${slotLabel(row.slot)}.`, row.standalone ? 'Solo slot.' : 'Shares its window.'];
   for (const f of flagLabels(row)) if (f !== 'Solo slot' && f !== 'Flexed') bits.push(`${f}.`);
@@ -90,7 +91,7 @@ function factsParagraph(row) {
 }
 
 function linkItems(row) {
-  if (row.unplayed) {
+  if (row.upcoming) {
     return row.crewSource === '506'
       ? [{ href: row.crewSourceUrl, text: 'Crew from 506 Sports ↗', fallback: 'Crew from 506 Sports' }]
       : [];
@@ -161,7 +162,7 @@ export function createDetailPanel(host, { methodologyHref: _methodologyHref } = 
           theme: currentTheme(),
         });
     const children = [dateP, network];
-    if (row.unplayed && row.network != null && row.networkBasis === 'slot') {
+    if (row.upcoming && row.network != null && row.networkBasis === 'slot') {
       children.push(el('p', 'panel-network-basis',
         `Network follows the slot's rights until a 506 Sports page is saved.`));
     }
