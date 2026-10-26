@@ -95,3 +95,34 @@ def test_overseas_entries_do_not_overlap(
         for j in range(4):
             if i != j:
                 assert not _hit(rings[i], labels[j]), ("ring/label", i, j, rings[i], labels[j])
+
+
+def _assert_apart(boxes: dict[str, Any]) -> None:
+    rings, labels = boxes["rings"], boxes["labels"]
+    assert len(rings) == len(labels) == 4
+    for i in range(4):
+        for j in range(i + 1, 4):
+            assert not _hit(rings[i], rings[j]), ("ring", i, j, rings)
+            assert not _hit(labels[i], labels[j]), ("label", labels[i], labels[j])
+        for j in range(4):
+            if i != j:
+                assert not _hit(rings[i], labels[j]), ("ring/label", i, j, rings[i], labels[j])
+
+
+@pytest.mark.parametrize("narrow", [390, 500])
+def test_overseas_entries_stay_apart_after_a_resize(
+    guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any], narrow: int
+) -> None:
+    """WR-03: the spacing is in rendered pixels, so narrowing the window re-spaces the entries.
+    500px stays above the phone breakpoint, so only the resize handler can redraw the map."""
+    guarded_page.set_viewport_size({"width": 1440, "height": 900})
+    _serve_extra_venues(guarded_page, fixture_raw)
+    open_app(guarded_page, "?view=map")
+    guarded_page.wait_for_function("() => window.__testHooks.mapRenders >= 1")
+    guarded_page.wait_for_timeout(300)
+    _assert_apart(guarded_page.evaluate(_BOXES))
+    before = guarded_page.evaluate("() => window.__testHooks.mapRenders")
+    guarded_page.set_viewport_size({"width": narrow, "height": 900})
+    guarded_page.wait_for_function("(n) => window.__testHooks.mapRenders > n", arg=before)
+    guarded_page.wait_for_timeout(500)
+    _assert_apart(guarded_page.evaluate(_BOXES))
