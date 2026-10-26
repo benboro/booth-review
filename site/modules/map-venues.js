@@ -78,13 +78,14 @@ export function venueLeader(counts, weighted, viewers = counts.map(() => 0)) {
 /**
  * Dot diameters in px for desktop and phone: games only, area exactly proportional to
  * games, where refGames (the busiest venue in the filtered set) draws the maximum (D-20).
+ * Games are not clamped to refGames: each caller passes its own set's busiest venue (D-24).
  * @param {number} games
  * @param {number} refGames
  * @returns {{desktop: number, phone: number}}
  */
 export function venueDotSize(games, refGames) {
   const ref = refGames > 0 ? refGames : 1;
-  const n = Math.min(Math.max(Number(games) || 0, 0), ref);
+  const n = Math.max(Number(games) || 0, 0);
   const r = Math.sqrt(n / ref);
   return {
     desktop: MAP_VENUE_DOT.maxDiameter * r,

@@ -233,7 +233,9 @@ def test_dot_size_formula(guarded_page: Page, site_url: str) -> None:
     assert got["top"] == {"desktop": 20, "phone": 10}
     assert abs(got["one"]["desktop"] - 20 / 73**0.5) < 1e-9
     assert abs(got["one"]["phone"] - 10 / 73**0.5) < 1e-9
-    assert got["over"] == {"desktop": 20, "phone": 10}
+    # No clamp (D-24): a count above the reference keeps area proportional to games.
+    assert abs(got["over"]["desktop"] - 20 * (200 / 73) ** 0.5) < 1e-9
+    assert abs(got["over"]["phone"] - 10 * (200 / 73) ** 0.5) < 1e-9
     assert got["zero"] == {"desktop": 0, "phone": 0}
     for size in got["badRef"]:
         assert size == {

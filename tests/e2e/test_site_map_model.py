@@ -702,7 +702,8 @@ def test_announcer_pick_builds_the_venue_model_on_the_cohort_scale(
           allDots: none.venueDots.map((d) => d.venue).sort(),
           patDots: m.venueDots.map((d) => [d.venue, d.tier]).sort((a, b) => a[0] - b[0]),
           bgSize: dot(m, 5).size, bgGames: none.venueModel.venues.find((v) => v.index === 5).games,
-          patRef: m.venueModel.refGames, bgScore: dot(m, 5).score, patMax: m.venueModel.maxScore,
+          patRef: m.venueModel.refGames, fullRef: none.venueModel.refGames,
+          noneSize: dot(none, 5).size, bgScore: dot(m, 5).score, patMax: m.venueModel.maxScore,
           alphaCard: cardGames(m, alpha),
           alphaCardAll: cardGames(none, alpha),
           bgCard: M.venueCard(data, m, 'delta-dome-columbus') !== null,
@@ -718,10 +719,13 @@ def test_announcer_pick_builds_the_venue_model_on_the_cohort_scale(
     assert [d[0] for d in got["patDots"]] == [int(v) for v in got["allDots"]]
     assert tiers[5] == "other"
     assert tiers[0] == "subject"
-    # Background dots share the picked cohort's scale (D-20), clamped to the max.
-    expected = 20 * (min(got["bgGames"], got["patRef"]) / got["patRef"]) ** 0.5
+    # Background dots keep their size from the map without the pick (D-24), not the cohort's.
+    expected = 20 * (got["bgGames"] / got["fullRef"]) ** 0.5
     assert got["patRef"] == 2
+    assert got["fullRef"] == 4
     assert abs(got["bgSize"]["desktop"] - expected) < 1e-9
+    assert got["bgSize"] == got["noneSize"]
+    assert got["bgSize"]["desktop"] <= 20
     assert got["alphaCard"] == 2
     assert got["alphaCardAll"] == 4
     assert got["bgCard"] is True
