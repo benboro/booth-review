@@ -32,6 +32,13 @@ The 04.5 backup-crew rules, with the collector swapped for hand-save import
   crew_source_url_problem and host_matches("espnpr"). `crew_backup` marks the
   telecast so the 506 freshness stamp can leave it out (D-14).
 
+Phase 18 (18-13 F7): in the current season the pass also fills an unplotted
+telecast (an upcoming game 506 listed without a crew), and gives a booth to a
+game with no telecast row yet when its CFBD network (the This weekend
+schedule's) is the booth's. Those `scheduled_crews` ship only in
+telecasts_scheduled; a later 506 listing turns the game into a telecast and the
+precedence above takes over.
+
 D-15: `backfill_gap_rows` lists the ESPN-family main-crew gaps left after the
 overrides and this pass, for 2014-2025, by CFBD week with ESPN's week label,
 so the user can look up and hand-save the weekly releases that cover them.
@@ -128,6 +135,7 @@ _COUNT_KEYS: tuple[str, ...] = (
     "no_names",
     "bad_url",
     "filled",
+    "scheduled_filled",
     "kept_override",
     "kept_506",
     "agreements",
@@ -171,6 +179,14 @@ class LoadedBooths:
 
 
 @dataclass(frozen=True)
+class ScheduledCrew:
+    """One scheduled game's backup booth: (person_id, role) in booth order and its page."""
+
+    entries: tuple[tuple[str, Role], ...]
+    source_url: str
+
+
+@dataclass(frozen=True)
 class CrewBackupResult:
     telecasts: pl.DataFrame
     telecast_people: pl.DataFrame
@@ -182,6 +198,8 @@ class CrewBackupResult:
     counts: dict[str, int]
     unmatched_rows: list[UnmatchedRow] = field(default_factory=list)
     unresolved_rows: list[UnresolvedTeamRow] = field(default_factory=list)
+    # CFBD game id -> backup booth, for current-season games with no telecast (18-13 F7).
+    scheduled_crews: dict[int, ScheduledCrew] = field(default_factory=dict)
 
     @property
     def filled_ids(self) -> frozenset[str]:
@@ -364,11 +382,16 @@ def apply_crew_backup(
     networks: NetworkTable,
     registry: PeopleRegistry,
     season_counts: Mapping[int, Mapping[str, int]],
+    current_season: int | None = None,
+    scheduled_networks: Mapping[int, str | None] | None = None,
 ) -> CrewBackupResult:
     """Fill ESPN-family telecasts 506 and the overrides left crew-less with a
     saved ESPN Press Room booth (see module docstring). Run after
     apply_crew_overrides. `registry` is people.csv (roles); `people` is the
     people table the 506 pass built (it holds 506's provisional persons).
+    `current_season` lets unplotted telecasts of that season be filled, and
+    `scheduled_networks` (CFBD game id -> the schedule's network) names the
+    games with no telecast that may take a booth (18-13 F7).
     Inputs are not mutated; failures are count-only.
     """
     counts: dict[str, int] = dict.fromkeys(_COUNT_KEYS, 0)
@@ -395,6 +418,7 @@ def apply_crew_backup(
     unmatched_rows: list[UnmatchedRow] = []
     unresolved: dict[str, list[int]] = {}
     targets: dict[str, list[SavedBooth]] = {}
+    scheduled_targets: dict[int, list[SavedBooth]] = {}
     for saved in booths:
         booth = saved.booth
         counts["booths"] += 1
@@ -431,14 +455,28 @@ def apply_crew_backup(
             continue
         game_mains = mains_by_game.get(game.id, [])
         if not game_mains:
-            counts["no_telecast"] += 1
+            if (
+                scheduled_networks is None
+                or game.season != current_season
+                or game.id not in scheduled_networks
+            ):
+                counts["no_telecast"] += 1
+                continue
+            if scheduled_networks[game.id] != chart.network_id:
+                counts["network_mismatch"] += 1
+                unmatched_rows.append(_unmatched(booth, "", "network_mismatch"))
+                continue
+            if _family(chart.network_id, networks) != ESPN_FAMILY:
+                counts["not_espn_family"] += 1
+                continue
+            scheduled_targets.setdefault(game.id, []).append(saved)
             continue
         target = next((tid for tid, nid in game_mains if nid == chart.network_id), None)
         if target is None:
             counts["network_mismatch"] += 1
             unmatched_rows.append(_unmatched(booth, "", "network_mismatch"))
             continue
-        if not info[target]["plotted"]:
+        if not info[target]["plotted"] and info[target]["season"] != current_season:
             counts["not_plotted"] += 1
             continue
         if _family(info[target]["network_id"], networks) != ESPN_FAMILY:
@@ -494,12 +532,28 @@ def apply_crew_backup(
         counts["sideline_dropped"] += int(dropped)
         fills[telecast_id] = (names, winner)
 
+    scheduled_fills: dict[int, tuple[tuple[str, ...], SavedBooth]] = {}
+    for game_id in sorted(scheduled_targets):
+        winner, conflict = _settle(scheduled_targets[game_id])
+        counts["page_conflicts"] += int(conflict)
+        names, dropped = _booth_names(winner.booth.tv_names, registry)
+        if not names:
+            counts["no_names"] += 1
+            continue
+        url = winner.booth.source_url
+        if crew_source_url_problem(url) is not None or not host_matches(_SOURCE, url):
+            counts["bad_url"] += 1
+            continue
+        counts["sideline_dropped"] += int(dropped)
+        scheduled_fills[game_id] = (names, winner)
+
     # Unknown names in the filled booths become provisional persons (Phase 3
     # D-01/D-02), the same fold-grouped flow 506 names take.
     name_counts: Counter[str] = Counter()
     name_seasons: dict[str, tuple[int, int]] = {}
-    for telecast_id, (names, _) in fills.items():
-        season = int(info[telecast_id]["season"])
+    filled_names = [(int(info[tid]["season"]), names) for tid, (names, _) in fills.items()]
+    filled_names += [(w.booth.season, names) for names, w in scheduled_fills.values()]
+    for season, names in filled_names:
         for name in names:
             if working.lookup(name) is None:
                 name_counts[name] += 1
@@ -510,8 +564,7 @@ def apply_crew_backup(
         working = register_names(working, dict(name_counts))
     new_ids = sorted(set(working.persons) - ids_before)
 
-    new_rows: list[dict[str, object]] = []
-    for telecast_id, (names, _winner) in sorted(fills.items()):
+    def _booth_people(names: Sequence[str]) -> list[tuple[str, Role]]:
         person_ids: list[str] = []
         kept_names: list[str] = []
         for name in names:
@@ -520,9 +573,11 @@ def apply_crew_backup(
                 continue
             person_ids.append(person_id)
             kept_names.append(name)
-        for position, (person_id, role) in enumerate(
-            zip(person_ids, _roles(kept_names, registry), strict=True)
-        ):
+        return list(zip(person_ids, _roles(kept_names, registry), strict=True))
+
+    new_rows: list[dict[str, object]] = []
+    for telecast_id, (names, _winner) in sorted(fills.items()):
+        for position, (person_id, role) in enumerate(_booth_people(names)):
             new_rows.append(
                 {
                     "telecast_id": telecast_id,
@@ -542,6 +597,13 @@ def apply_crew_backup(
             bucket["records_with_crew"] = bucket.get("records_with_crew", 0) + len(
                 tel["rr_telecast_ids"] or []
             )
+
+    scheduled_crews: dict[int, ScheduledCrew] = {}
+    for game_id, (names, winner) in sorted(scheduled_fills.items()):
+        entries = tuple(_booth_people(names))
+        if entries:
+            scheduled_crews[game_id] = ScheduledCrew(entries, winner.booth.source_url)
+    counts["scheduled_filled"] = len(scheduled_crews)
 
     filled = sorted(fills)
     counts["filled"] = len(filled)
@@ -628,6 +690,7 @@ def apply_crew_backup(
         counts=counts,
         unmatched_rows=unmatched_rows,
         unresolved_rows=unresolved_rows,
+        scheduled_crews=scheduled_crews,
     )
 
 

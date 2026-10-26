@@ -2075,7 +2075,10 @@ def _build(args: argparse.Namespace) -> int:
         f"rows skipped {outcome.counts.get('crew_backup_rows_skipped', 0)}, "
         f"radio dropped {outcome.counts.get('crew_backup_radio_dropped', 0)}, "
         f"pages without booths {outcome.counts.get('crew_backup_pages_without_booths', 0)}"
-        + _nonzero(("rejected pages", outcome.counts.get("crew_backup_rejected_pages", 0)))
+        + _nonzero(
+            ("rejected pages", outcome.counts.get("crew_backup_rejected_pages", 0)),
+            ("upcoming games filled", outcome.counts.get("crew_backup_scheduled_filled", 0)),
+        )
     )
     for gate in outcome.second_source_gates:
         extras = _nonzero(

@@ -208,6 +208,8 @@ def _build_counts(tables: BuildTables, result: RegressionResult) -> dict[str, in
         "crew_gaps_unpatched": totals.get("crew_gaps_unpatched", 0),
         # 04.19 D-13/D-15: the ESPN Press Room backup pass; counts only.
         "crew_backup_filled": totals.get("crew_backup_filled", 0),
+        # 18-13 F7: upcoming games with no telecast that took a Press Room booth.
+        "crew_backup_scheduled_filled": totals.get("crew_backup_scheduled_filled", 0),
         "crew_backup_disagreements": totals.get("crew_backup_disagreements", 0),
         "crew_backup_network_mismatch": totals.get("crew_backup_network_mismatch", 0),
         "crew_backup_sideline_dropped": totals.get("crew_backup_sideline_dropped", 0),

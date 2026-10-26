@@ -42,9 +42,10 @@ const facadeCache = new WeakMap();
 
 /**
  * A `prepareData`-shaped object over the scheduled block, so `passesFadeFilters`, `personOnGame`
- * and `renderPanel` read it with the same column names. Scheduled games have no crew, booth,
- * score, figure or excitement; a null network points at a synthetic Network TBA entry. Cached
- * per prepared data object.
+ * and `renderPanel` read it with the same column names. Scheduled games have no booth, score,
+ * figure or excitement; their only crew is an ESPN Press Room booth with its page credit
+ * (18-13 F7), else none. A null network points at a synthetic Network TBA entry. Cached per
+ * prepared data object.
  * @param {object} data - a `prepareData` result.
  * @returns {object}
  */
@@ -71,8 +72,8 @@ export function scheduledFacade(data) {
     combined_feeds: nulls(),
     figure_source: nulls(),
     publisher: nulls(),
-    crew_source_url: nulls(),
-    crew_source_label: nulls(),
+    crew_source_url: raw.crew_source_url ?? nulls(),
+    crew_source_label: raw.crew_source_label ?? nulls(),
     s506_url: nulls(),
     playoff_round: nulls(),
     bowl: nulls(),
@@ -80,7 +81,7 @@ export function scheduledFacade(data) {
     cause: nulls(),
     booth: nulls(),
     game_type: new Array(n).fill('regular'),
-    crew: Array.from({ length: n }, () => []),
+    crew: raw.crew ?? Array.from({ length: n }, () => []),
     flags: Array.from({ length: n }, () => []),
     rr_urls: Array.from({ length: n }, () => []),
   };
@@ -152,7 +153,8 @@ function weekendGame(data, obj, block, i, week, weekend) {
  * `'scheduled'`, index into the scheduled block). A row belongs to the week its shipped `week`
  * label names, so a Labor Day Monday game stays in its CFBD week (18-13 F1); a row with a null
  * label (another season, a postseason game, a file without the column) falls back to the
- * week's Monday-to-Sunday dates. Scheduled rows have no crew. Empty for an unknown week label.
+ * week's Monday-to-Sunday dates. A scheduled row's only crew is an ESPN Press Room booth.
+ * Empty for an unknown week label.
  * @param {object} data - a `prepareData` result.
  * @param {string} label - a `lookups.weeks` label.
  * @returns {object[]}

@@ -394,10 +394,11 @@ class ScheduledColumns(BaseModel):
     """One list per display field; index k across every list is one unplayed
     regular-season FBS game with no shipped telecast row (Phase 18).
 
-    No crew, booth, cause, points, spread or excitement by definition, and no
-    game or telecast id. A null network means Network TBA; kickoff and
-    time_slot are null together for a game with no time yet. CFBD display
-    fields only. See docs/site-data.md.
+    No booth, cause, points, spread or excitement by definition, and no game
+    or telecast id. The only crew is an ESPN Press Room backup booth (18-13
+    F7), main feed, with its page credit. A null network means Network TBA;
+    kickoff and time_slot are null together for a game with no time yet. CFBD
+    display fields only. See docs/site-data.md.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
@@ -414,6 +415,11 @@ class ScheduledColumns(BaseModel):
     # Index into lookups.networks; null = Network TBA (D-13/D-14).
     network: list[int | None]
     outlets: list[list[int]]
+    # 18-13 F7: an ESPN Press Room booth for a game 506 has not listed; empty, or main-feed
+    # entries with the page's URL and label set (both null for an empty crew).
+    crew: list[list[CrewEntry]]
+    crew_source_url: list[str | None]
+    crew_source_label: list[str | None]
     home_conference: list[int | None]
     away_conference: list[int | None]
     place: list[int | None]
@@ -625,6 +631,29 @@ class SiteData(BaseModel):
                 raise ValueError(
                     f"telecasts_scheduled.time_slot[{i}]: must be null exactly when kickoff is null"
                 )
+            for j, crew_entry in enumerate(sc.crew[i]):
+                if not 0 <= crew_entry.person < len(self.lookups.people):
+                    raise ValueError(
+                        f"telecasts_scheduled.crew[{i}][{j}].person: person index out of range"
+                    )
+                if crew_entry.feed != "main":
+                    raise ValueError(f"telecasts_scheduled.crew[{i}][{j}].feed: must be main")
+            sched_url = sc.crew_source_url[i]
+            sched_label = sc.crew_source_label[i]
+            if (sched_url is None) != (sched_label is None) or (sched_url is None) != (
+                not sc.crew[i]
+            ):
+                raise ValueError(
+                    f"telecasts_scheduled.crew_source_url[{i}]: a crew and its source URL and "
+                    "label are set together"
+                )
+            if sched_url is not None and sched_label is not None:
+                problem = crew_source_url_problem(sched_url)
+                if problem is not None:
+                    raise ValueError(f"telecasts_scheduled.crew_source_url[{i}]: {problem}")
+                label_problem = crew_source_label_problem(sched_label)
+                if label_problem is not None:
+                    raise ValueError(f"telecasts_scheduled.crew_source_label[{i}]: {label_problem}")
 
         weeks = self.lookups.weeks
         for k, week in enumerate(weeks):

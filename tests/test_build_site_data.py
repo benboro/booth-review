@@ -21,6 +21,7 @@ from booth_review.build import site_data as site_data_module
 from booth_review.build.booths import BOOTH_TIERS_SCHEMA
 from booth_review.build.bowls import BowlEntry
 from booth_review.build.coverage import build_coverage
+from booth_review.build.crew_backup import ScheduledCrew
 from booth_review.build.games import GAMES_SCHEMA
 from booth_review.build.people_links import PEOPLE_SCHEMA, TELECAST_PEOPLE_SCHEMA
 from booth_review.build.site_data import build_site_data, time_slot, write_site_data
@@ -2393,6 +2394,7 @@ def _scheduled_site(
     *,
     generated_at: datetime = _GENERATED_AT,
     extra_telecasts: list[dict[str, object]] | None = None,
+    crews: dict[int, ScheduledCrew] | None = None,
 ) -> dict[str, Any]:
     rows = [_sched_row(g, **(row_overrides or {}).get(g.id, {})) for g in cfbd_games]
     frame = pl.concat([base.games, _games_frame(rows)], how="vertical_relaxed")
@@ -2410,6 +2412,7 @@ def _scheduled_site(
         labels=week_labels(cfbd_games, 2026),
         networks=networks,
         network_unmapped=1,
+        crews=crews or {},
         stamps={
             "5": {
                 "schedule_updated_at": "2026-09-26T10:00:00Z",
@@ -2540,6 +2543,33 @@ def test_week_label_follows_cfbd_week_not_the_calendar(
     weeks = dict(zip(unrated["season"], unrated["week"], strict=True))
     assert weeks[2026] == "1"
     assert set(payload["telecasts"]["week"]) == {None}
+
+
+def test_scheduled_game_ships_its_press_room_booth(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    # 18-13 F7: a Monday commentators page booth reaches a game 506 has not listed yet.
+    url = "https://espnpressroom.com/us/press-releases/2026/09/synthetic-commentators/"
+    crew = ScheduledCrew((("mike-golic-jr", "pbp"), ("dale-harlow", "analyst")), url)
+    payload = _scheduled_site(
+        small_tables,
+        _weeks_four_to_six(),
+        {102: ("net-a", ["net-a"])},
+        build_reference,
+        crews={102: crew},
+    )
+    block = payload["telecasts_scheduled"]
+    names = [payload["lookups"]["teams"][i]["name"] for i in block["home_team"]]
+    k = names.index("Sched Home 102")
+    people = payload["lookups"]["people"]
+    assert [(people[e["person"]]["id"], e["role"], e["feed"]) for e in block["crew"][k]] == [
+        ("mike-golic-jr", "pbp", "main"),
+        ("dale-harlow", "analyst", "main"),
+    ]
+    assert block["crew_source_url"][k] == url
+    assert block["crew_source_label"][k] == "ESPN Press Room"
+    others = [i for i in range(len(names)) if i != k]
+    assert all(block["crew"][i] == [] and block["crew_source_url"][i] is None for i in others)
 
 
 def test_scheduled_empty_without_schedule_inputs(

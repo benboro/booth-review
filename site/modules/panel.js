@@ -465,8 +465,8 @@ export function openPanel(i, ctx) {
 
 /**
  * Opens the same modal on scheduled game `j` (Phase 18, D-22): the panel renders over the
- * scheduled facade, so it shows teams, kickoff (or Time TBA), network (or Network TBA) and
- * "Not played yet." with no crew, score, figure or excitement.
+ * scheduled facade, so it shows teams, kickoff (or Time TBA), network (or Network TBA), its
+ * ESPN Press Room crew or "Crew TBA", and "Not played yet." with no score, figure or excitement.
  * @param {number} j - index into the scheduled block.
  * @param {{data: object, state: object, view?: object}} ctx - `data` is the prepared data.
  */

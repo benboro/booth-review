@@ -66,7 +66,13 @@ A booth fills a telecast only when:
 - it matches the game by season, both teams through
   `data/reference/team_crosswalk.csv`, and the date within a day;
 - its network is the telecast's own network, in the ESPN family;
-- the telecast has no hand-confirmed override and no 506 crew.
+- the telecast has no hand-confirmed override and no 506 crew;
+- the telecast has a viewer figure on the chart, except in the current season, where an
+  upcoming game 506 listed without a crew is filled too.
+
+In the current season a booth also reaches a game 506 has not listed yet (no telecast),
+when its network is the game's CFBD network: the This weekend tab shows that crew with
+its page credit until 506 lists the game.
 
 The order is a hand-confirmed override, then 506 Sports, then ESPN Press Room,
 and the whole booth comes from one source. A later 506 crew replaces a backup

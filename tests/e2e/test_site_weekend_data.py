@@ -262,6 +262,49 @@ def test_scheduled_panel_titles_times_and_not_played(lead_page: Page) -> None:
     assert "Viewers" in out["played"] or "No public rating" in out["played"]
 
 
+def test_scheduled_press_room_booth_shows_as_a_known_crew(
+    guarded_page: Page,
+    fixture_raw: dict[str, Any],
+    open_app: Callable[[Page, str], None],
+) -> None:
+    # 18-13 F7: an ESPN Press Room booth on a game 506 has not listed yet fills its cell and
+    # its panel, with the page's credit.
+    raw = copy.deepcopy(fixture_raw)
+    url = "https://espnpressroom.com/us/press-releases/2026/09/synthetic-commentators/"
+    sched = raw["telecasts_scheduled"]
+    sched["crew"][0] = [
+        {"person": 4, "role": "pbp", "feed": "main"},
+        {"person": 5, "role": "analyst", "feed": "main"},
+    ]
+    sched["crew_source_url"][0] = url
+    sched["crew_source_label"][0] = "ESPN Press Room"
+    guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+    open_app(guarded_page, "")
+    out = guarded_page.evaluate(
+        _js(
+            """const P = await import('./modules/panel.js');
+            const games = W.cfbWeekendGames(data, '5').filter((g) => g.block === 'scheduled');
+            const g0 = games.find((g) => g.index === 0);
+            const g1 = games.find((g) => g.index === 1);
+            P.openScheduledPanel(0, { data, state: S.defaultState(data) });
+            const body = document.getElementById('panel-body');
+            const link = [...body.querySelectorAll('a')].map((a) => [a.textContent, a.href]);
+            const text = body.textContent;
+            document.getElementById('detail-panel').close();
+            return {
+              known: [g0.crewKnown, g0.pbp, g0.analyst], other: g1.crewKnown,
+              people: [data.lookups.people[4].name, data.lookups.people[5].name],
+              text, link,
+            };"""
+        )
+    )
+    assert out["known"] == [True, *out["people"]]
+    assert out["other"] is False
+    assert out["people"][0] in out["text"] and out["people"][1] in out["text"]
+    assert "Crew TBA" not in out["text"]
+    assert any("ESPN Press Room" in label and href == url for label, href in out["link"])
+
+
 def test_a6_probe_unplayed_pending_row_in_other_tabs(lead_page: Page) -> None:
     """RESEARCH A6: records how the unplayed pending unrated game (merged 19) is counted by the
     other tabs. An observation only: the numbers are printed for the SUMMARY, not fixed."""

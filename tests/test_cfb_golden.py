@@ -35,6 +35,10 @@ Phase 18 Plan 13 (F1): the three site-data blocks gain the per-game week label c
 site-data.json with that column dropped hashes to the Plan 06 digest (765b88ada315...), so no
 figure or crew changed.
 
+Phase 18 Plan 13 (F7): telecasts_scheduled gains crew, crew_source_url and crew_source_label
+(all empty or null in the synthetic vault, a backfill season); with them dropped site-data.json
+hashes to the F1 digest (6fb5786c21b0...), so no figure or crew changed.
+
 Phase 10 Plan 04: the build adds interim/review_cfb_booths_untiered.csv (header-only here:
 the synthetic networks carry no big-four family) and cfb_booths_* summary counts;
 site-data.json is unchanged from Plan 03 (no cfb_booth_ranks.csv in the synthetic
@@ -165,7 +169,7 @@ _GOLDEN: dict[str, str] = {
         "07ff159d34d5e0cfdd3b77f84c3ecaec0cd14c437fa015fe89333709317831c3"
     ),
     "processed/site-data.json": (
-        "6fb5786c21b0c2b29f7ade32f04ce51add0030c223fe201a95f22b11c7a51730"
+        "cce9771409a80899f0aa10221be449ead4b6feffe00dbad59a73684b6f96d3ed"
     ),
     "processed/telecast_flags.parquet": (
         "2e2f334909dc09ab5ff590cadd3d4cb2158678a2d980948cd454219ab82927e2"

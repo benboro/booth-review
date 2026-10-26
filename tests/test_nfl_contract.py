@@ -40,7 +40,8 @@ REPO = Path(__file__).resolve().parent.parent
 # Re-pinned at Phase 18 Plan 01: CFB contract 2.7.0 adds telecasts_scheduled, lookups.weeks,
 # freshness.weekend.
 # Re-pinned at Phase 18 Plan 13 (F1): the three CFB blocks gain the week label column.
-CFB_SCHEMA_SHA256 = "b586edc90d6dab32c1faa26899c03e05692b9271025aaf8dd4b5347546582d78"
+# Re-pinned at Phase 18 Plan 13 (F7): telecasts_scheduled gains the ESPN Press Room crew columns.
+CFB_SCHEMA_SHA256 = "6ab4104a74e8348da38f0d532b646c45725287da802ee135cef3d31d2160b7db"
 
 INVENTED_STRINGS = ("Northfield Lanterns", "Harbor City", "Ada Quill", "example.com")
 

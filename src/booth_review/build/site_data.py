@@ -29,6 +29,7 @@ import polars as pl
 from pydantic import ValidationError
 
 from booth_review.build.bowls import load_bowls
+from booth_review.build.crew_backup import CREW_BACKUP_LABEL
 from booth_review.build.named_games import (
     build_franchises,
     check_game_slugs,
@@ -527,9 +528,13 @@ def build_site_data(
             is_fbs = row[f"{side}_classification"] == "fbs"
             conference_is_fbs[conf] = conference_is_fbs.get(conf, False) or is_fbs
 
+    scheduled_crews = schedule.crews
     for row in scheduled_rows:
         team_names.add(str(row["home_team"]))
         team_names.add(str(row["away_team"]))
+        sched_crew = scheduled_crews.get(int(row["game_id"]))
+        if sched_crew is not None:
+            person_ids.update(person_id for person_id, _ in sched_crew.entries)
         if row["network_id"] is not None:
             network_ids.add(row["network_id"])
         network_ids.update(row["outlets"])
@@ -798,6 +803,19 @@ def build_site_data(
             network_index[row["network_id"]] if row["network_id"] is not None else None
         )
         scheduled_columns["outlets"].append([network_index[o] for o in row["outlets"]])
+        sched_crew = scheduled_crews.get(int(row["game_id"]))
+        scheduled_columns["crew"].append(
+            [
+                {"person": person_index[person_id], "role": role, "feed": "main"}
+                for person_id, role in (sched_crew.entries if sched_crew is not None else ())
+            ]
+        )
+        scheduled_columns["crew_source_url"].append(
+            sched_crew.source_url if sched_crew is not None else None
+        )
+        scheduled_columns["crew_source_label"].append(
+            CREW_BACKUP_LABEL if sched_crew is not None else None
+        )
         for side in ("home", "away"):
             conf = row[f"{side}_conference"]
             scheduled_columns[f"{side}_conference"].append(

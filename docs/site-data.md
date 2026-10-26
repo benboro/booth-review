@@ -92,8 +92,8 @@ the client, never in the data:
 
 Phase 18's This weekend tab. One list per display field, index-aligned like the other
 blocks: `season`, `date`, `kickoff`, `time_slot`, `away_team`, `home_team`, `neutral`,
-`away_rank`, `home_rank`, `network`, `outlets`, `home_conference`, `away_conference`,
-`place`, `week`. Each has the meaning of the same-named `telecasts` field, with these differences:
+`away_rank`, `home_rank`, `network`, `outlets`, `crew`, `crew_source_url`,
+`crew_source_label`, `home_conference`, `away_conference`, `place`, `week`. Each has the meaning of the same-named `telecasts` field, with these differences:
 
 - A row is an unplayed FBS-involving regular-season game of the current season, in weeks
   up to and including the current weekend, that has no shipped telecast row (a game in
@@ -115,7 +115,15 @@ blocks: `season`, `date`, `kickoff`, `time_slot`, `away_team`, `home_team`, `neu
   whose `mediaType` is `tv` or `web` only, never radio or mobile.
 - `kickoff` and `time_slot` are null together: a game with no time yet.
 - `week` is never null here: every row is a numbered regular-season week's game.
-- No crew, booth, cause, points, spread or excitement ships, since the game has none by
+- `crew` is empty unless the user has imported an ESPN Press Room page whose booth names
+  this game on the game's own CFBD network, in the ESPN family (18-13 F7). Then it lists
+  that booth (main feed; the first name is play-by-play), and `crew_source_url` (the
+  page's canonical URL) and `crew_source_label` (`ESPN Press Room`) are set; both are
+  null for an empty crew, and the contract rejects one without the others. Once 506 lists
+  the game it moves to `telecasts_unrated`, where a 506 crew outranks the backup booth.
+  In the current season the same booth also fills an unplotted telecast 506 listed with no
+  crew, so the precedence (override > 506 > ESPN Press Room) holds for upcoming games.
+- No booth, cause, points, spread or excitement ships, since the game has none by
   definition, and no game or telecast id or completed flag does either (CFBD display
   fields only). The block rejects any column it does not declare.
 

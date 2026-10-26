@@ -588,7 +588,7 @@
     },
     "ScheduledColumns": {
       "additionalProperties": false,
-      "description": "One list per display field; index k across every list is one unplayed\nregular-season FBS game with no shipped telecast row (Phase 18).\n\nNo crew, booth, cause, points, spread or excitement by definition, and no\ngame or telecast id. A null network means Network TBA; kickoff and\ntime_slot are null together for a game with no time yet. CFBD display\nfields only. See docs/site-data.md.",
+      "description": "One list per display field; index k across every list is one unplayed\nregular-season FBS game with no shipped telecast row (Phase 18).\n\nNo booth, cause, points, spread or excitement by definition, and no game\nor telecast id. The only crew is an ESPN Press Room backup booth (18-13\nF7), main feed, with its page credit. A null network means Network TBA;\nkickoff and time_slot are null together for a game with no time yet. CFBD\ndisplay fields only. See docs/site-data.md.",
       "properties": {
         "away_conference": {
           "items": {
@@ -623,6 +623,44 @@
             "type": "integer"
           },
           "title": "Away Team",
+          "type": "array"
+        },
+        "crew": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/CrewEntry"
+            },
+            "type": "array"
+          },
+          "title": "Crew",
+          "type": "array"
+        },
+        "crew_source_label": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Crew Source Label",
+          "type": "array"
+        },
+        "crew_source_url": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Crew Source Url",
           "type": "array"
         },
         "date": {
@@ -773,6 +811,9 @@
         "home_rank",
         "network",
         "outlets",
+        "crew",
+        "crew_source_url",
+        "crew_source_label",
         "home_conference",
         "away_conference",
         "place",

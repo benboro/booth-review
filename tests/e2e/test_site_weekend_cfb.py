@@ -74,10 +74,15 @@ def _weekend_raw(fixture_raw: dict[str, Any], *, extra_tba: int = 0) -> dict[str
             "home_rank": None,
             "network": network,
             "outlets": [],
+            "crew": [],
+            "crew_source_url": None,
+            "crew_source_label": None,
             "home_conference": 0,
             "away_conference": 3,
             "place": None,
+            "week": "5",
         }
+        assert row.keys() == sched.keys()
         for key, value in row.items():
             sched[key].append(value)
 

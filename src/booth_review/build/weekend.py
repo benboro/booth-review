@@ -17,6 +17,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
+from booth_review.build.crew_backup import ScheduledCrew
 from booth_review.config import DataPaths
 from booth_review.job.gaps506 import GAME_LENGTH, _entry_time, week_windows
 from booth_review.job.gaps_espnpr import espn_week_label, week_spans
@@ -47,6 +48,8 @@ class ScheduleInputs:
     networks: dict[int, tuple[str | None, list[str]]] = field(default_factory=dict)
     network_unmapped: int = 0
     stamps: dict[str, WeekendStamps] = field(default_factory=dict)
+    # CFBD game id -> ESPN Press Room booth for a game with no telecast (18-13 F7).
+    crews: dict[int, ScheduledCrew] = field(default_factory=dict)
 
 
 def _fbs_regular(games: Iterable[CfbdGame], season: int) -> list[CfbdGame]:

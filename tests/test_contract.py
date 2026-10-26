@@ -1248,8 +1248,45 @@ def test_weekend_label_must_be_a_known_week() -> None:
 
 def test_scheduled_extra_key_rejected() -> None:
     data = _load_fixture()
-    data["telecasts_scheduled"]["crew"] = [[] for _ in data["telecasts_scheduled"]["season"]]
-    with pytest.raises(ValidationError, match=r"telecasts_scheduled\.crew"):
+    data["telecasts_scheduled"]["booth"] = [None for _ in data["telecasts_scheduled"]["season"]]
+    with pytest.raises(ValidationError, match=r"telecasts_scheduled\.booth"):
+        validate_site_data(data)
+
+
+_PR_URL = "https://espnpressroom.com/us/press-releases/2026/09/synthetic-commentators/"
+
+
+def _sched_crew(data: dict[str, Any], crew: list[dict[str, Any]], url: Any, label: Any) -> None:
+    data["telecasts_scheduled"]["crew"][0] = crew
+    data["telecasts_scheduled"]["crew_source_url"][0] = url
+    data["telecasts_scheduled"]["crew_source_label"][0] = label
+
+
+def test_scheduled_crew_with_its_press_room_credit_validates() -> None:
+    # 18-13 F7: a scheduled game may carry an ESPN Press Room booth and its page credit.
+    data = _load_fixture()
+    crew = [{"person": 0, "role": "pbp", "feed": "main"}]
+    _sched_crew(data, crew, _PR_URL, "ESPN Press Room")
+    validate_site_data(data)
+
+
+@pytest.mark.parametrize(
+    ("crew", "url", "label", "message"),
+    [
+        ([{"person": 99, "role": "pbp", "feed": "main"}], _PR_URL, "ESPN Press Room", "person"),
+        ([{"person": 0, "role": "pbp", "feed": "alt"}], _PR_URL, "ESPN Press Room", "feed"),
+        ([{"person": 0, "role": "pbp", "feed": "main"}], None, None, "crew_source_url"),
+        ([], _PR_URL, "ESPN Press Room", "crew_source_url"),
+        ([{"person": 0, "role": "pbp", "feed": "main"}], _PR_URL, None, "crew_source_url"),
+        ([{"person": 0, "role": "pbp", "feed": "main"}], "javascript:x", "ESPN Press Room", "url"),
+    ],
+)
+def test_scheduled_crew_needs_its_credit_and_known_people(
+    crew: list[dict[str, Any]], url: Any, label: Any, message: str
+) -> None:
+    data = _load_fixture()
+    _sched_crew(data, crew, url, label)
+    with pytest.raises(ValidationError, match=rf"telecasts_scheduled\.\S*{message}"):
         validate_site_data(data)
 
 

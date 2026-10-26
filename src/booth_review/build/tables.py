@@ -37,6 +37,7 @@ from booth_review.build.combined import (
     orphan_decision_count,
 )
 from booth_review.build.crew_backup import (
+    BACKFILL_SEASONS,
     ESPNPR_BACKFILL_GAP_COLUMNS,
     ESPNPR_BACKFILL_GAPS,
     REVIEW_CREW_BACKUP_DISAGREEMENT_COLUMNS,
@@ -431,6 +432,9 @@ def assemble_tables(
 
     # 04.19 D-13: ESPN Press Room booths fill the ESPN-family telecasts that
     # 506 and the overrides left crew-less (override > 506 > backup).
+    # 18-13 F7: in the schedule's season the backup also reaches upcoming games, both the
+    # unplotted telecasts 506 listed without a crew and the games with no telecast yet.
+    schedule = _schedule_inputs(paths, sources, networks)
     booth_pages = load_espnpr_booths(paths, seasons)
     backup = apply_crew_backup(
         telecasts,
@@ -443,7 +447,13 @@ def assemble_tables(
         networks=networks,
         registry=registry,
         season_counts=override_result.season_counts,
+        # A backfill season is never "current", even when a build loads only past seasons.
+        current_season=(
+            schedule.season if schedule.games and schedule.season not in BACKFILL_SEASONS else None
+        ),
+        scheduled_networks={gid: net for gid, (net, _) in schedule.networks.items()},
     )
+    schedule = replace(schedule, crews=backup.scheduled_crews)
     telecasts = backup.telecasts
     telecast_people = backup.telecast_people
     people = backup.people
@@ -583,7 +593,7 @@ def assemble_tables(
         booth_tiers=booth_assignment.booth_tiers,
         second_source_gates=second.gates,
         second_source_accept_warnings=_accept_warnings(accept_lines, second, seasons),
-        schedule=_schedule_inputs(paths, sources, networks),
+        schedule=schedule,
     )
 
 
