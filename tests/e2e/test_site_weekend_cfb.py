@@ -612,3 +612,17 @@ def test_matched_games_section_is_hidden_on_this_weekend(wk: Callable[..., Page]
     assert page.locator("#matched-games").is_visible()
     page.locator("#tab-weekend").click()
     assert page.locator("#matched-games").is_hidden()
+
+
+def test_phone_has_no_dead_gap_above_the_day_tabs(wk_phone: Callable[..., Page]) -> None:
+    # 18-UI-REVIEW item 10: the concealed chart tools kept a 28px row plus margins between the
+    # subtitle and the day tabs on the phone.
+    page = wk_phone()
+    assert page.locator("#chart-tools").is_hidden()
+    subtitle = page.locator("#chart-subtitle").bounding_box()
+    tabs = page.locator(".wk-days").bounding_box()
+    assert subtitle is not None and tabs is not None
+    gap = tabs["y"] - (subtitle["y"] + subtitle["height"])
+    assert gap <= 16, gap
+    page.locator("#tab-scatter").click()
+    assert page.locator("#chart-tools").is_visible()

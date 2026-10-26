@@ -5640,6 +5640,12 @@ tr.is-matched > :first-child {
   #chart-tools > #chart-controls {
     width: 100%;
   }
+
+  /* This weekend has no axis toggles or zoom; the empty tools row would hold a 28px reserved
+     line plus margins between the subtitle and the day tabs (18-UI-REVIEW item 10). */
+  #chart-module[data-view="weekend"] #chart-tools {
+    display: none;
+  }
 }
 
 /* ---------- Phone tables (13-14; 13-UI-SPEC "Phone" items 1-3) ---------- */
