@@ -2143,6 +2143,18 @@ input[type="checkbox"] {
   box-sizing: border-box;
   /* The only rule that sets the tab-row-to-module gap (SHELL-04). */
   margin-bottom: var(--gap-bar-content);
+  /* Six tabs (This weekend added in Phase 18) stay on one row by scrolling sideways inside the
+     bar when the window is narrow, so the page never scrolls; no tab label is clipped or
+     wrapped. The scrollbar is hidden, the selected tab is brought into view by chart-tabs.js,
+     and the keyboard still reaches every tab. */
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.chart-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .chart-tab {
@@ -2197,7 +2209,8 @@ input[type="checkbox"] {
 
 .chart-tab:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  /* Inside the box: the scrolling tab bar would clip an outer ring. */
+  outline-offset: -2px;
 }
 
 /* D-14/D-17: both control sets share one grid cell so the slot never shifts. */
@@ -3149,28 +3162,6 @@ html:has(#mlb-detail-panel[open]) {
   .games-table th .nfl-tip {
     min-height: 0;
     min-width: 0;
-  }
-}
-
-/* Six tabs (This weekend added in Phase 18) stay on one row below 700px by scrolling sideways,
-   so a narrow-but-not-phone window never scrolls the page; no tab label is clipped or wrapped.
-   The scrollbar is hidden, the selected tab is brought into view by chart-tabs.js, and the
-   keyboard still reaches every tab. */
-@media (max-width: 700px) {
-  .chart-tabs {
-    max-width: 100%;
-    min-width: 0;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .chart-tabs::-webkit-scrollbar {
-    display: none;
-  }
-
-  .chart-tab {
-    flex: none;
-    white-space: nowrap;
   }
 }
 
