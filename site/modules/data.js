@@ -488,6 +488,11 @@ export function prepareData(raw) {
     venueGroupKeys,
     venueIndexesByKey,
     dotGames,
+    // Phase 18: the This weekend tab's blocks. They never join `t`, so every other tab keeps its
+    // counts; `weekend-data.js` reads them. A file from before contract 2.7.0 reads as empty.
+    scheduledRaw: raw.telecasts_scheduled ?? null,
+    weeks: lookups.weeks ?? [],
+    weekend: raw.freshness?.weekend ?? null,
   };
 }
 
