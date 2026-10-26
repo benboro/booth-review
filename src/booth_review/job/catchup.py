@@ -89,9 +89,11 @@ class JobState:
     """Set by an update-mode run whose build wrote processed/ unblocked; read by
     the D-14 staleness check."""
     last_schedule_at: datetime | None = None
-    """Set by every schedule-only or rebuild-only run (D-17). Those runs never move
-    `last_success_at` or `last_attempt_at`, so the Sunday/Wednesday slot logic is
-    unchanged; this field only stops a backup cron repeating a schedule-only run."""
+    """Set by a schedule-only run that pulled and built cleanly (D-17, 18-13 F11); a
+    failed pull or a rebuild never moves it, so the next backup slot still pulls.
+    Those runs never move `last_success_at` or `last_attempt_at`, so the
+    Sunday/Wednesday slot logic is unchanged; this field only stops a backup cron
+    repeating a clean schedule-only run."""
 
 
 _EMPTY_STATE = JobState(
