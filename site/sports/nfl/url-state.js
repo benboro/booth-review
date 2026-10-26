@@ -6,11 +6,11 @@ import {
   canonicalNflState, defaultNflState, CATEGORY_OPTIONS, CREW_METRICS, NFL_NATURAL_DIR,
 } from './state.js';
 import { defaultSort } from '../../modules/crew-groups.js';
+import { DAY_TOKENS } from '../../modules/weekend.js';
 
 const CSORT_RE = /^(booth|season|rank|network|games|margin|exc|viewers)(\.(asc|desc))?$/;
 
 const VIEW_PARAM = ['crews', 'viewership', 'scatter', 'weekend'];
-const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const VIEW_ALIASES = Object.freeze({ fox: 'crews', agotw: 'viewership' });
 
 /**
@@ -93,7 +93,7 @@ export function decodeNflState(search, model) {
         break;
       }
       case 'week': if (/^\d{1,2}$/.test(raw)) state.week = Number(raw); break;
-      case 'day': if (DAY_RE.test(raw)) state.day = raw; break;
+      case 'day': if (DAY_TOKENS.includes(raw)) state.day = raw; break;
       case 'seasons': {
         const m = /^(\d{4})-(\d{4})$/.exec(raw);
         if (m) state.seasons = [Number(m[1]), Number(m[2])];

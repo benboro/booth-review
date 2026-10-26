@@ -7,7 +7,7 @@
  */
 
 import { computePicks } from './picks.js';
-import { defaultDay } from '../../modules/weekend.js';
+import { dayToken, defaultDay } from '../../modules/weekend.js';
 
 export const NFL_VIEWS = Object.freeze(['special', 'crews', 'viewership', 'scatter', 'weekend']);
 export const CREW_METRICS = Object.freeze(['margin', 'excitement', 'viewers']);
@@ -167,13 +167,17 @@ export function weekendDays(model, week) {
   return [...set].sort();
 }
 
-/** Allowlist a week and day pair: defaults (the current week, the Sunday) collapse to null. */
+/**
+ * Allowlist a week and day pair: defaults (the current week, the Sunday) collapse to null. The
+ * day is a weekday token (`thu`), kept only when the week has a game that day (18-13 F23).
+ */
 function cleanWeekend(model, week, day) {
   const weeks = weekendWeeks(model);
   const current = weekendCurrentWeek(model);
   const w = Number.isInteger(week) && weeks.includes(week) && week !== current ? week : null;
   const days = weekendDays(model, w ?? current);
-  const d = typeof day === 'string' && days.includes(day) && day !== defaultDay(days, 'nfl') ? day : null;
+  const iso = typeof day === 'string' ? days.find((dd) => dayToken(dd) === day) : undefined;
+  const d = iso != null && iso !== defaultDay(days, 'nfl') ? day : null;
   return { week: w, day: d };
 }
 

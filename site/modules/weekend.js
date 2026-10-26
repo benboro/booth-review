@@ -130,6 +130,14 @@ function weekdayOf(isoDate) {
   return (dayNumber(isoDate) + 4) % 7; // 1970-01-01 was a Thursday
 }
 
+/** The `day` URL tokens both sports use, by weekday number (Sunday first). */
+export const DAY_TOKENS = Object.freeze(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']);
+
+/** The weekday token of an ET ISO date. */
+export function dayToken(isoDate) {
+  return DAY_TOKENS[weekdayOf(isoDate)];
+}
+
 /**
  * AP-style day tab label, `Sat. Oct. 31`.
  * @param {string} isoDate

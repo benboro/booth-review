@@ -4,6 +4,7 @@ phone list, dark theme and the credits. Synthetic fixture only (week 5, Sunday 2
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable
 from typing import Any
 
@@ -204,19 +205,46 @@ def test_week_and_day_round_trip_and_invalid_dropped(
     page.reload()
     page.wait_for_function("window.__nflTestHooks && window.__nflTestHooks.ready === true")
     assert page.locator(".wk-week").inner_text() == "Week 4"
-    # Week 1 has a Thursday and a Sunday; the Sunday default is omitted, Thursday is kept.
-    page.goto(page.url.split("?")[0] + "?sport=nfl&view=weekend&week=1&day=2026-09-10")
+    # Week 1 has a Thursday and a Sunday; the Sunday default is omitted, Thursday is kept as the
+    # weekday token both sports use (18-UI-SPEC; 18-13 F23).
+    page.goto(page.url.split("?")[0] + "?sport=nfl&view=weekend&week=1&day=thu")
     page.wait_for_function("window.__nflTestHooks && window.__nflTestHooks.ready === true")
     assert "week=1" in page.url
-    assert "day=2026-09-10" in page.url
+    assert "day=thu" in page.url
+    assert page.locator(".wk-day[aria-selected=true]").inner_text().startswith("Thu.")
     page.click(".wk-day >> nth=1")
     assert "day=" not in page.url
-    for bad in ("week=99", "week=abc", "week=6", "day=nope", "day=2026-12-25"):
+    for bad in ("week=99", "week=abc", "week=6", "day=nope", "day=2026-09-10", "day=mon"):
         page.goto(page.url.split("?")[0] + f"?sport=nfl&view=weekend&{bad}")
         page.wait_for_function("window.__nflTestHooks && window.__nflTestHooks.ready === true")
         key = bad.split("=")[0]
         assert f"{key}=" not in page.url
         assert page.locator(".wk-week").inner_text() == "Week 5"
+
+
+def test_week_step_keeps_the_weekday_when_the_next_week_has_it(
+    nfl_guarded_page: Page, open_nfl_app: OpenNfl, nfl_fixture_raw: dict[str, Any]
+) -> None:
+    # 18-13 F22: stepping weeks keeps the selected weekday when the destination week has it.
+    raw = copy.deepcopy(nfl_fixture_raw)
+    games = raw["games"]
+    k = next(
+        i
+        for i, (s, w) in enumerate(zip(games["season"], games["week"], strict=True))
+        if s == 2026 and w == 2
+    )
+    games["date"][k] = "2026-09-17"  # a week-2 Thursday game
+    page = nfl_guarded_page
+    page.route("**/nfl-data.json*", lambda route: route.fulfill(json=raw))
+    _open(page, open_nfl_app, "&week=1&day=thu")
+    assert "day=thu" in page.url
+    page.click(".wk-step--next")
+    assert "week=2" in page.url
+    assert "day=thu" in page.url
+    assert page.locator(".wk-day[aria-selected=true]").inner_text().startswith("Thu. Sept. 17")
+    page.click(".wk-step--next")
+    assert "week=3" in page.url
+    assert "day=" not in page.url
 
 
 def test_next_week_step_is_disabled_on_the_latest_week(

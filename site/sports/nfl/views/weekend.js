@@ -10,7 +10,7 @@
  */
 import { renderWeekend } from '../../../modules/weekend-view.js';
 import { renderWeekendList } from '../../../modules/weekend-list.js';
-import { dayLabel, dayTabs, defaultDay } from '../../../modules/weekend.js';
+import { dayLabel, dayTabs, dayToken, defaultDay } from '../../../modules/weekend.js';
 import { PHONE_QUERY } from '../../../modules/breakpoints.js';
 import { nflWeekendGames, nflWeekendPasses } from '../weekend-data.js';
 import { weekendCurrentWeek, weekendWeeks } from '../state.js';
@@ -35,7 +35,9 @@ function resolve(model, state) {
   const week = state.week ?? currentWeek;
   const games = week == null ? [] : nflWeekendGames(model, week);
   const days = dayTabs(games);
-  const day = state.day != null && days.includes(state.day) ? state.day : defaultDay(days, 'nfl');
+  // state.day is a weekday token; the week's own date for it, else the default day.
+  const day = days.find((d) => state.day != null && dayToken(d) === state.day)
+    ?? defaultDay(days, 'nfl');
   return { weeks, currentWeek, week, games, days, day };
 }
 
@@ -89,11 +91,12 @@ export function render(ctx) {
   const fixedNow = window.__nflWeekendNow ?? (window.__nflTestHooks && window.__nflTestHooks.weekendNow);
   const opts = {
     passes: (g) => (hasPick(state) ? nflWeekendPasses(model, state, g) : null),
-    onDay: (day) => ctx.setState({ day }),
+    onDay: (day) => ctx.setState({ day: dayToken(day) }),
+    // The weekday carries over; canonicalNflState drops it when the new week has no such day.
     onWeek: (delta) => {
       const at = r.weeks.indexOf(r.week);
       const to = r.weeks[at + delta];
-      if (to != null) ctx.setState({ week: to, day: null });
+      if (to != null) ctx.setState({ week: to, day: r.day ? dayToken(r.day) : null });
     },
     onOpen: (game, opener) => {
       if (game.block === 'upcoming') ctx.openUpcoming(game.index, opener);

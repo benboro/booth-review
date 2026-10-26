@@ -9,16 +9,9 @@
  */
 
 import { cfbWeekendGames } from './weekend-data.js';
-import { dayTabs, defaultDay } from './weekend.js';
+import { DAY_TOKENS, dayTabs, dayToken, defaultDay } from './weekend.js';
 
-export const DAY_TOKENS = Object.freeze(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']);
-
-/** The weekday token of an ET ISO date. */
-export function dayToken(isoDate) {
-  const [y, m, d] = isoDate.split('-').map(Number);
-  const dayNumber = Math.floor(Date.UTC(y, m - 1, d) / 86400000);
-  return DAY_TOKENS[(dayNumber + 4) % 7]; // 1970-01-01 was a Thursday
-}
+export { DAY_TOKENS, dayToken };
 
 /** The label the stepper and subtitle show: `Week 9` for a numeric label, else the label. */
 export function weekDisplay(week) {
