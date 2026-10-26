@@ -589,3 +589,15 @@ def test_phone_dark_has_no_light_boxes(wk_phone: Callable[..., Page]) -> None:
     bg = page.evaluate("getComputedStyle(document.body).backgroundColor")
     nums = [int(x) for x in bg.removeprefix("rgb(").removesuffix(")").split(",")[:3]]
     assert max(nums) < 120
+
+
+# ---- v2.1 polish (18-UI-REVIEW items 4, 7, 8, 10; 18-REVIEW IN-02) ----
+
+
+def test_legend_chip_row_is_hidden_on_this_weekend(wk: Callable[..., Page]) -> None:
+    # 18-UI-REVIEW item 4: the chips are not in the Phase 18 contract and acted as a second,
+    # undeclared Networks control; the Networks filter in the bar already fades rows here.
+    page = wk()
+    assert page.locator("#legend-row").is_hidden()
+    page.locator("#tab-scatter").click()
+    assert page.locator("#legend-row").is_visible()

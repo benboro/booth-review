@@ -472,8 +472,9 @@ function render() {
         ? !crewsHasNewModelSeason
         : (state.axis !== 'excitement' && state.y !== 'excitement') || state.view !== 'scatter';
   }
-  // The network-color chips mean nothing on the Crews table; the Networks filter still applies.
-  if (legendRowEl) legendRowEl.hidden = state.view === 'crews';
+  // The network-color chips mean nothing on the Crews table, and on This weekend they would be a
+  // second, undeclared Networks control (18-UI-REVIEW item 4); the Networks filter still applies.
+  if (legendRowEl) legendRowEl.hidden = state.view === 'crews' || state.view === 'weekend';
   // Its axis and bar toggles are concealed on Crews; drop the reserved row so the hint sits close.
   if (chartControlsEl) chartControlsEl.hidden = state.view === 'crews' || state.view === 'weekend';
   if (eraNoteEl) eraNoteEl.hidden = state.view !== 'scatter';
