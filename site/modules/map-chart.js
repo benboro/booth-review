@@ -1,8 +1,8 @@
 // Map figure (04.18 D-04/D-05/D-07..D-10/D-13/D-15): paints the map model with Plotly.
 //
-// Constant-trace figure: outline, legs x 8 families, venue-faded, venue-dots, venue-selected,
-// markers, always in that order and drawn bottom to top, so Plotly.react diffs cleanly whatever the
-// selection; unused slots carry empty arrays. buildMapFigure is pure (model + geometry +
+// Constant-trace figure (14 traces): outline, legs x 8 families, venue-faded, venue-dots,
+// venue-hits, venue-selected, markers, always in that order and drawn bottom to top, so
+// Plotly.react diffs cleanly whatever the selection; unused slots carry empty arrays. buildMapFigure is pure (model + geometry +
 // env in, {traces, layout, config} out). window.Plotly is touched only inside renderMap
 // and bindMapEvents. Data strings reach Plotly text only through escapeHover; hover labels
 // are off (the page paints its own tooltip from the venue index), so no hovertemplate
