@@ -387,9 +387,11 @@ def test_render_methodology_resolves_md_links_against_docs(
 # #theme-slot toggle in the header.
 # Re-pinned at Phase 17 review: theme-init.js re-applies the stored theme on a back/forward
 # cache restore (pageshow), which changes the inlined script and its CSP hash.
-# Re-pinned at Phase 17.1 Plan 04: CFB map dot-size prose (games only, fixed scale)
-# and Network colors switch line removed.
-_METHODOLOGY_FLAG_OFF_SHA256 = "6637777697f40615216fce4cd53f2393234d5b5a4c86ed9b0c8d46a93c03b5b5"
+# Re-pinned at Phase 17.1 Plan 04: CFB map dot-size prose (games only) and Network colors
+# switch line removed.
+# Re-pinned at Phase 17.1 review: dot-size prose follows D-20, D-23 and D-24 (scale set by the
+# busiest venue shown, rescaling with filters and picks; paler dots sized without the pick).
+_METHODOLOGY_FLAG_OFF_SHA256 = "acea43bb8e649bd295726f907367b26a9132bd52b668c8278ce37abc4b52de83"
 
 _NFL_ANCHORS = (
     "nfl-special-games",

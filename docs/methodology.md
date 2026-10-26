@@ -304,12 +304,14 @@ The viewer totals on the hover card add up published figures from Ratings Refere
 
 There is one dot per venue, counting only the games that pass the filters. Its
 color fades toward a neutral when the venue's games split between networks, and
-its size is the number of games at the venue, on a fixed scale set by the busiest
-venue overall, so filters and announcer picks never resize the dots. With
-announcers picked, the dots, their colors, and the map's coloring count
-only the games those announcers called (together, when called together is on),
-with sizes on that same fixed scale; venues where they called no game stay on the
-map as paler dots.
+its size is the number of games at the venue: dot area is proportional to games,
+with no minimum size, and the busiest venue among the games shown draws at full
+size, so narrowing a filter rescales the dots and the size key. With announcers
+picked, the dots, their colors, and the map's coloring count only the games
+those announcers called (together, when called together is on), and the busiest
+venue among those games draws at full size, whatever the dot's shape; the size
+key follows it. Venues where they called no game stay on the map as paler dots,
+sized as they would be with no announcer picked.
 
 Where each dot sits comes from one list of venues from CollegeFootballData.com.
 Each game uses its own venue, so a neutral-site or bowl game sits where it was
