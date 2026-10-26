@@ -601,3 +601,14 @@ def test_legend_chip_row_is_hidden_on_this_weekend(wk: Callable[..., Page]) -> N
     assert page.locator("#legend-row").is_hidden()
     page.locator("#tab-scatter").click()
     assert page.locator("#legend-row").is_visible()
+
+
+def test_matched_games_section_is_hidden_on_this_weekend(wk: Callable[..., Page]) -> None:
+    # 18-UI-REVIEW item 7 / 18-REVIEW IN-03: the table lists played games from the greyed
+    # Seasons range and its empty state asks for a Game pick, which this tab greys out.
+    page = wk()
+    assert page.locator("#matched-games").is_hidden()
+    page.locator("#tab-scatter").click()
+    assert page.locator("#matched-games").is_visible()
+    page.locator("#tab-weekend").click()
+    assert page.locator("#matched-games").is_hidden()

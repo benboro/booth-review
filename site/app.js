@@ -79,6 +79,7 @@ const barsPanelEl = document.getElementById('bars-panel');
 const mapPanelEl = document.getElementById('map-panel');
 const crewsPanelEl = document.getElementById('crews-panel');
 const weekendPanelEl = document.getElementById('weekend-panel');
+const matchedGamesEl = document.getElementById('matched-games');
 const mapChartEl = document.getElementById('map-chart');
 const barsNoteEl = document.getElementById('bars-note');
 const eraNoteEl = document.getElementById('era-note');
@@ -478,6 +479,10 @@ function render() {
   // Its axis and bar toggles are concealed on Crews; drop the reserved row so the hint sits close.
   if (chartControlsEl) chartControlsEl.hidden = state.view === 'crews' || state.view === 'weekend';
   if (eraNoteEl) eraNoteEl.hidden = state.view !== 'scatter';
+  // The matched-games table lists played games from the greyed Seasons range, and its empty state
+  // asks for a Game pick this tab greys out; This weekend has its own cells and panel, so the
+  // section hides here as it does on the NFL page (18-UI-REVIEW item 7, 18-REVIEW IN-03).
+  if (matchedGamesEl) matchedGamesEl.hidden = state.view === 'weekend';
 
   history.replaceState(null, '', location.pathname + encodeState(state, data));
 
