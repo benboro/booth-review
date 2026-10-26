@@ -163,7 +163,7 @@ def test_load_error_banner(cfb: Page) -> None:
     banner = cfb.locator("#nfl-chart-area .error-banner[role=alert]")
     assert "Couldn't load the NFL data." in banner.inner_text()
     assert "You can still use the CFB view." in banner.inner_text()
-    assert cfb.locator("#nfl-chart-tabs button[aria-disabled=true]").count() == 4
+    assert cfb.locator("#nfl-chart-tabs button[aria-disabled=true]").count() == 5
     assert "Nothing selected" in cfb.inner_text("#nfl-matched-games")
 
 
@@ -239,10 +239,11 @@ def test_tab_order_labels_and_default(cfb: Page) -> None:
         "Crews",
         "Viewership",
         "Scatter",
+        "This weekend",
     ]
     assert cfb.locator("#nfl-tab-special").get_attribute("aria-selected") == "true"
     assert cfb.url.endswith("?sport=nfl")
-    for view in ("special", "crews", "viewership", "scatter"):
+    for view in ("special", "crews", "viewership", "scatter", "weekend"):
         assert (
             cfb.locator(f"#nfl-view-{view}").get_attribute("aria-labelledby") == f"nfl-tab-{view}"
         )
@@ -261,7 +262,7 @@ def test_tab_keyboard(cfb: Page) -> None:
     assert cfb.locator("#nfl-view-crews").is_visible()
     assert not cfb.locator("#nfl-view-special").is_visible()
     cfb.keyboard.press("End")
-    assert cfb.evaluate("document.activeElement.id") == "nfl-tab-scatter"
+    assert cfb.evaluate("document.activeElement.id") == "nfl-tab-weekend"
     cfb.keyboard.press("Home")
     assert cfb.evaluate("document.activeElement.id") == "nfl-tab-special"
 

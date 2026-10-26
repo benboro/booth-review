@@ -21,6 +21,14 @@ records only where the site settles or applies them.
 - Light mode is the default. Dark mode is reached by the theme toggle at the top right
   of the header, optically centred on the header links (Phase 17).
 - The CFB, NFL and MLB pages share one visual system.
+- This weekend is the sixth CFB tab and the fifth NFL tab (NFL behind its site flag): a
+  control row (week stepper, day tabs), a one-line freshness stamp, the timeline grid, a
+  collapsible Time TBA strip, the CFB ESPN+ and regional table, and a source line that
+  credits only the sources the sport uses. Below 480px the grid becomes a list grouped by
+  kickoff (Phase 18).
+- The six view tabs stay on one row and scroll sideways inside their bar when the window is
+  narrow, so the page never scrolls; the tab focus ring sits inside the tab so the bar does
+  not clip it (Phase 18).
 
 ## Filters
 
@@ -69,3 +77,20 @@ records only where the site settles or applies them.
   `venueDotSize` (desktop and phone) with the same busiest-venue reference as the dots, so
   its values change with the filters. The key shows size only; venue colours are always on
   (Phase 17.1).
+
+- The This weekend timeline is plain DOM, not a chart: rows follow network precedence in
+  a 96px label column, the time scale runs 80-120 px/hour (80, not the spec's 88,
+  so a 15-hour day fits at 1440), cells are 44px tall on a 48px
+  row pitch, and a game's block is 3h30 long for CFB and 3h15 for NFL (Phase 18).
+- Cell states: a known crew is a solid network-family fill, deepened toward black until
+  white text on it reaches 7:1 (the mid-tone fills read poorly with black text; user
+  sign-off 2026-10-26); Crew TBA and not-listed
+  cells use a 0.18 family tint with a 4px family edge, and never `--muted` text on a
+  tint (Phase 18).
+- Under a pick, non-matching cells fade to 0.3 and matching cells get an inset 2px `--ink`
+  ring with a `--bg` keyline. This is a user-approved deviation from the accent ring in
+  the Phase 18 context (D-21), because the ring has to read over every family fill in both
+  themes (Phase 18).
+- The Now line (1px, `--accent`, labelled "Now") is the one use of the accent in this
+  view that is not a focus or changed-filter state; lead stars follow the stars rule above
+  (Phase 18).

@@ -169,3 +169,86 @@ def parse_schedules_counted(
     if unscheduled:
         logger.warning("nfl schedules: %d row(s) not scheduled yet were skipped", unscheduled)
     return games, unscheduled
+
+
+@dataclass(frozen=True)
+class UpcomingNflGame:
+    """A regular-season row with a week, scheduled or not (Phase 18).
+
+    `gameday` and `kickoff_et` are None while the date or kickoff time is still
+    TBD/TBA/NA. Unlike `NflGame` it never carries a score.
+    """
+
+    game_id: str
+    season: int
+    game_type: str
+    week: int
+    gameday: date | None
+    kickoff_et: datetime | None
+    away_team: str
+    home_team: str
+    location: str
+    stadium_id: str
+
+
+def parse_upcoming(
+    content: bytes, *, seasons: Sequence[int] | None = None
+) -> tuple[list[UpcomingNflGame], int]:
+    """Every regular-season row that has a week, plus the count with no week yet.
+
+    Rows with an unset date or kickoff time are kept (date or time None); a row with
+    no week cannot be placed and is counted, never dropped silently. A value that is
+    set but malformed raises ParseError, naming the column, never the cell value.
+    """
+    try:
+        frame = pl.read_csv(io.BytesIO(content), infer_schema_length=0)
+    except Exception as exc:  # polars raises several types for malformed CSV
+        raise ParseError("nfl schedules: unreadable CSV") from exc
+    for column in SCHEDULE_REQUIRED_COLUMNS:
+        if column not in frame.columns:
+            raise ParseError(f"nfl schedules: missing column {column}")
+    wanted = None if seasons is None else set(seasons)
+    games: list[UpcomingNflGame] = []
+    unplaced = 0
+    for index, row in enumerate(frame.iter_rows(named=True), start=2):
+        raw_season = _text(row["season"])
+        where = f"season {raw_season} row {index}"
+        try:
+            season = int(raw_season)
+        except ValueError as exc:
+            raise ParseError(f"nfl schedules row {index}: season is not a number") from exc
+        if (wanted is not None and season not in wanted) or _text(row["game_type"]) != "REG":
+            continue
+        if _text(row["week"]).upper() in _UNSET:
+            unplaced += 1
+            continue
+        week = _opt_int(row["week"], "week", where)
+        if week is None:
+            unplaced += 1
+            continue
+        gameday: date | None = None
+        kickoff: datetime | None = None
+        try:
+            if _text(row["gameday"]).upper() not in _UNSET:
+                gameday = date.fromisoformat(_text(row["gameday"]))
+                if _text(row["gametime"]).upper() not in _UNSET:
+                    kickoff = datetime.fromisoformat(
+                        f"{gameday.isoformat()}T{_text(row['gametime'])}"
+                    ).replace(tzinfo=ET)
+        except ValueError as exc:
+            raise ParseError(f"nfl schedules {where}: unparseable date or time") from exc
+        games.append(
+            UpcomingNflGame(
+                game_id=_text(row["game_id"]),
+                season=season,
+                game_type="REG",
+                week=week,
+                gameday=gameday,
+                kickoff_et=kickoff,
+                away_team=_text(row["away_team"]),
+                home_team=_text(row["home_team"]),
+                location=_text(row["location"]),
+                stadium_id=_text(row["stadium_id"]),
+            )
+        )
+    return games, unplaced

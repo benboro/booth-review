@@ -173,6 +173,10 @@ export function prepareNfl(raw) {
     franchiseIndex,
     personIndex,
     category,
+    // Phase 18: the This weekend tab's unplayed games. They never join `cols`, so every other NFL
+    // view keeps its counts; `weekend-data.js` reads them. A file from before 2.1.0 reads as null.
+    upcomingRaw: raw.upcoming ?? null,
+    weekend: raw.freshness?.weekend ?? null,
   };
 }
 

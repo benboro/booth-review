@@ -10,6 +10,7 @@
  * Everything is built with createElement/textContent; no innerHTML.
  */
 import { prepareNfl, gameRow } from './data.js';
+import { upcomingRow } from './weekend-data.js';
 import { currentTheme, onThemeChange } from '../../modules/theme.js';
 import { canonicalNflState, tableGames, gamePasses } from './state.js';
 import { encodeNflState, decodeNflState } from './url-state.js';
@@ -21,11 +22,12 @@ import * as teamBars from './views/team-bars.js';
 import * as crews from './views/crews.js';
 import * as viewership from './views/viewership.js';
 import * as scatter from './views/scatter.js';
+import * as weekend from './views/weekend.js';
 import { PHONE_QUERY } from '../../modules/breakpoints.js';
 import { waitForFonts, onLateFont } from '../../modules/chart-frame.js';
 import { showToolsFor } from './tools.js';
 
-const VIEW_MODULES = { special: teamBars, crews, viewership, scatter };
+const VIEW_MODULES = { special: teamBars, crews, viewership, scatter, weekend };
 const VIEW_IDS = Object.keys(VIEW_MODULES);
 
 const HINTS = {
@@ -266,6 +268,10 @@ function renderSelectionBar() {
       chip(boothLabel(key), () => setState({ booths: state.booths.filter((k) => k !== key) }))),
   );
   clearBtn.hidden = !state.selection;
+  if (state.view === 'weekend') {
+    summary.textContent = '';
+    return;
+  }
   const n = lastRows.length;
   // Same sources tableGames fills the table from; a source that matches nothing still reads
   // "0 games match" rather than falling back to the at-rest line.
@@ -296,7 +302,7 @@ function renderHeadline() {
   for (let i = 0; i < n; i += 1) if (gamePasses(model, state, i)) count += 1;
   const [lo, hi] = state.seasons;
   const span = lo === hi ? String(lo) : `${lo}–${hi}`;
-  if (state.view === 'crews' || state.view === 'viewership') {
+  if (state.view === 'crews' || state.view === 'viewership' || state.view === 'weekend') {
     regions.headline.textContent = TAB_LABELS[state.view];
     return;
   }
@@ -316,8 +322,8 @@ function renderTable() {
 }
 
 function renderTabHint() {
-  // Viewership writes its own subtitle through ctx.setSubtitle.
-  if (state.view === 'viewership') return;
+  // Viewership and This weekend write their own subtitle through ctx.setSubtitle.
+  if (state.view === 'viewership' || state.view === 'weekend') return;
   if (state.view === 'crews') {
     const [lo, hi] = state.seasons;
     regions.hint.textContent = lo === hi ? `Season ${lo}` : `Seasons ${lo}–${hi}`;
@@ -327,7 +333,12 @@ function renderTabHint() {
 }
 
 function showActiveView({ resize }) {
-  for (const id of VIEW_IDS) views[id].section.hidden = id !== state.view;
+  for (const id of VIEW_IDS) {
+    views[id].section.hidden = id !== state.view;
+    if (id !== state.view && views[id].mod.deactivate) views[id].mod.deactivate();
+  }
+  // The matched games table lists played games; This weekend has its own cells and panel.
+  regions.matched.hidden = state.view === 'weekend';
   showToolsFor(regions.tools, state.view);
   tabs.setActive(state.view);
   const chartModule = regions.chartArea.querySelector('.nfl-chart-module');
@@ -373,6 +384,9 @@ function setState(patch) {
       boothFromRow = false;
     }
   }
+  // Leaving This weekend forgets its week and day, so the tab reopens on the current weekend
+  // (18-UI-SPEC; 18-13 F16).
+  if (patch && 'view' in patch && patch.view !== 'weekend') patch = { ...patch, week: null, day: null };
   state = canonicalNflState({ ...state, ...(patch || {}) }, model);
   // A selection (team bar, booth, AGOTW season, scatter picks) belongs to the
   // view that made it and only that view keeps it current, so a tab change
@@ -404,6 +418,12 @@ function openGame(i, opener) {
   panel.open(gameRow(model, i), opener);
 }
 
+function openUpcoming(j, opener) {
+  const u = model && model.upcomingRaw;
+  if (!u || !panel || !Number.isInteger(j) || j < 0 || j >= u.season.length) return;
+  panel.open(upcomingRow(model, j), opener);
+}
+
 const ctx = {
   get model() {
     return model;
@@ -414,6 +434,7 @@ const ctx = {
   selectGames: (sel) => setState({ selection: sel }),
   clearSelection: () => setState({ selection: null }),
   openGame: (i, opener) => openGame(i, opener),
+  openUpcoming: (j, opener) => openUpcoming(j, opener),
   methodologyHref: (anchor) => (anchor ? `${METHODOLOGY}#${anchor}` : METHODOLOGY),
   pickBoothRow: (key, label) => pickBoothRow(key, label),
   /** Viewership writes its own subtitle row from nodes it built (never HTML strings). */

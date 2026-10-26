@@ -310,3 +310,61 @@ def test_build_warns_about_a_network_accept_that_places_no_figure(
     assert main(["build", "--no-commit"]) == 0
     err = capsys.readouterr().err
     assert "warning: second_source_network_accepts.csv line 2: no held row needs it" in err
+
+
+_SCHED_SLUG = "synthetic-week-2-college-football-on-espn"
+_SCHED_URL = f"https://espnpressroom.com/press-release/{_SCHED_SLUG}/"
+
+
+def test_press_room_booth_reaches_an_upcoming_game_with_no_telecast(
+    git_vault: DataPaths, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 18-13 F7: in the current season a commentators page booth fills a game 506 has not
+    # listed (no telecast row), so it ships in telecasts_scheduled with the page's credit.
+    # 2025 stands in for the current season here.
+    from test_build_pipeline_determinism import _entry, _write_manifest
+
+    import booth_review.build.tables as tables_module
+
+    monkeypatch.setattr(tables_module, "BACKFILL_SEASONS", range(2014, 2025))
+    _seed_build_raw(git_vault)
+    reference = _reference(tmp_path, monkeypatch)
+    media_path = git_vault.raw / "cfbd" / "media" / "2025.json"
+    media = json.loads(media_path.read_text(encoding="utf-8"))
+    media.append(
+        {
+            **media[0],
+            "id": 500010,
+            "week": 2,
+            "startTime": "2025-09-06T16:00:00.000Z",
+            "homeTeam": "Silverlake",
+            "awayTeam": "Cedarhollow",
+            "outlet": "ECN",
+        }
+    )
+    media_path.write_text(json.dumps(media), encoding="utf-8")
+    _write_manifest(git_vault, [_entry("cfbd/games/2025.json", "a", "2026-10-01T10:00:00Z")])
+    rel = f"espnpr/2025/releases/{_SCHED_SLUG}.html"
+    page = git_vault.raw / rel
+    page.parent.mkdir(parents=True, exist_ok=True)
+    row = (
+        "<tr><td><strong>Sat, Sep 6</strong></td><td>Noon</td>"
+        "<td><strong>Cedarhollow at Silverlake<br></strong>Avery Lane, Morgan Pike</td>"
+        "<td>ECN</td></tr>"
+    )
+    page.write_text(_release(row).replace(_URL, _SCHED_URL), encoding="utf-8")
+
+    outcome = _build(git_vault, reference)
+
+    assert outcome.counts["crew_backup_scheduled_filled"] == 1
+    site = _site(git_vault)
+    block = site["telecasts_scheduled"]
+    teams = [t["name"] for t in site["lookups"]["teams"]]
+    k = next(i for i, h in enumerate(block["home_team"]) if teams[h] == "Silverlake")
+    people = site["lookups"]["people"]
+    assert [people[e["person"]]["name"] for e in block["crew"][k]] == [
+        "Avery Lane",
+        "Morgan Pike",
+    ]
+    assert block["crew_source_url"][k] == _SCHED_URL
+    assert block["crew_source_label"][k] == "ESPN Press Room"

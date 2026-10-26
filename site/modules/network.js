@@ -60,7 +60,7 @@ export const NETWORK_PRECEDENCE = Object.freeze([
   'fox', 'fs1', 'fs2', 'big-ten-network', 'fsn-regional', 'sun-sports', 'sportsouth',
   'abc', 'espn', 'espn2', 'espnews', 'espnu', 'espn_deportes', 'sec-network', 'acc-network',
   'longhorn-network', 'sec-network-plus', 'acc-network-extra', 'espn3', 'espn-plus', 'espn_plus',
-  'espn-unlimited', 'espn_unltd', 'disney-plus', 'espn-gameplan', 'espn-regional-insert',
+  'espn-unlimited', 'espn_unltd', 'disney-plus', 'espn-gameplan', 'espn-radio', 'espn-mobile',
   'nbc', 'usa-network', 'nbcsn', 'cnbc', 'nbc-sports-bay-area', 'peacock', 'peacock_local',
   'cbs', 'cbs-sports-network', 'paramount-plus', 'cbs-sports-facebook',
   'tbs', 'tnt', 'trutv', 'max',

@@ -36,8 +36,10 @@ import {
 } from './format.js';
 import { makeGameTypeIcon } from './icons.js';
 import { currentTheme } from './pill.js';
-import { crewBox, externalLink, linksList, networksParagraph } from './panel-parts.js';
+import { crewBox, externalLink, linksList, liveOpener, networksParagraph } from './panel-parts.js';
 import { sortNetworks } from './network.js';
+import { personOnGame } from './select.js';
+import { scheduledFacade } from './weekend-data.js';
 
 /** The element focus returns to when the dialog closes, or null. */
 let opener = null;
@@ -56,9 +58,10 @@ export { safeHref } from './panel-parts.js';
  * "Afternoon", "Noon") is gated on `showsTimeSlot` (D-19): only a
  * regular-season Saturday game shows it, so a Saturday bowl/CFP game never
  * gets a misleading scheduling-pattern label. */
-function dateLine(data, i) {
+function dateLine(data, i, unplayed = false) {
   const t = data.t;
-  const parts = [formatDate(t.date[i]), formatKickoff(t.kickoff[i]) ?? 'Kickoff time not recorded'];
+  const noTime = unplayed ? 'Time TBA' : 'Kickoff time not recorded';
+  const parts = [formatDate(t.date[i]), formatKickoff(t.kickoff[i]) ?? noTime];
   if (showsTimeSlot(data, i)) parts.push(SLOT_LABELS[t.time_slot[i]]);
   return parts.join(' · ');
 }
@@ -286,18 +289,20 @@ function buildRivalryLine(name) {
  * D-39: an empty crew reads "Crew not recorded" (the missing crews themselves are
  * a data-join issue, out of scope: see the championship-crews todo); the
  * Nielsen+Adobe label shows once (the badge) and combined feeds show as one line.
+ * An `unplayed` game (D-22, Phase 18) shows "Not played yet." in place of the viewers, figure,
+ * spread and excitement lines, and "Crew TBA" for an empty crew; nothing else changes.
  * @param {HTMLElement} bodyEl
  * @param {HTMLElement} titleEl
- * @param {{data: object, i: number, state: object, view: object}} ctx
+ * @param {{data: object, i: number, state: object, view: object, unplayed?: boolean}} ctx
  */
-export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
+export function renderPanel(bodyEl, titleEl, { data, i, state, view, unplayed = false }) {
   const t = data.t;
   titleEl.textContent = formatMatchup(data, i, { withScore: true });
 
   const children = [];
 
   const dateP = document.createElement('p');
-  dateP.textContent = dateLine(data, i);
+  dateP.textContent = dateLine(data, i, unplayed);
   children.push(dateP);
 
   const gameType = gameTypeInfo(data, i);
@@ -343,7 +348,7 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
   if (t.crew[i].length === 0) {
     const emptyP = document.createElement('p');
     emptyP.className = 'panel-crew-empty crew-missing';
-    emptyP.textContent = 'Crew not recorded';
+    emptyP.textContent = unplayed ? 'Crew TBA' : 'Crew not recorded';
     children.push(crewHeading, emptyP);
   } else {
     children.push(crewHeading, buildCrewList(data, i, selectedPersonIndexes(data, state)));
@@ -363,45 +368,54 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view }) {
     children.push(selectedP);
   }
 
-  children.push(buildViewersParagraph(data, i));
+  if (unplayed) {
+    const unplayedP = document.createElement('p');
+    unplayedP.className = 'panel-unplayed';
+    unplayedP.textContent = 'Not played yet.';
+    children.push(unplayedP);
+  } else {
+    children.push(buildViewersParagraph(data, i));
 
-  if (data.rated[i] && t.publisher[i] != null) {
-    const publishedP = document.createElement('p');
-    publishedP.textContent = `Figure first published by ${data.lookups.publishers[t.publisher[i]]}`;
-    children.push(publishedP);
-  }
+    if (data.rated[i] && t.publisher[i] != null) {
+      const publishedP = document.createElement('p');
+      publishedP.textContent = `Figure first published by ${data.lookups.publishers[t.publisher[i]]}`;
+      children.push(publishedP);
+    }
 
-  const notViaRr = data.rated[i] ? figureNotViaRrText(data, i) : null;
-  if (notViaRr) {
-    const notViaRrP = document.createElement('p');
-    notViaRrP.textContent = notViaRr;
-    children.push(notViaRrP);
-  }
+    const notViaRr = data.rated[i] ? figureNotViaRrText(data, i) : null;
+    if (notViaRr) {
+      const notViaRrP = document.createElement('p');
+      notViaRrP.textContent = notViaRr;
+      children.push(notViaRrP);
+    }
 
-  const spreadText = axisValueText(data, i, 'spread');
-  const excitementText = axisValueText(data, i, 'excitement');
-  const axisP = document.createElement('p');
-  axisP.textContent = state.axis === 'excitement'
-    ? `${excitementText} · ${spreadText}`
-    : `${spreadText} · ${excitementText}`;
-  children.push(axisP);
+    const spreadText = axisValueText(data, i, 'spread');
+    const excitementText = axisValueText(data, i, 'excitement');
+    const axisP = document.createElement('p');
+    axisP.textContent = state.axis === 'excitement'
+      ? `${excitementText} · ${spreadText}`
+      : `${spreadText} · ${excitementText}`;
+    children.push(axisP);
 
-  const flagsList = buildFlagsList(data, i);
-  if (flagsList) children.push(flagsList);
+    const flagsList = buildFlagsList(data, i);
+    if (flagsList) children.push(flagsList);
 
-  if (data.rated[i] && t.combined_feeds[i] != null) {
-    const combinedP = document.createElement('p');
-    const combinedText = `Combined across ${t.combined_feeds[i]} feeds`;
-    const combinedFlag = flagOfKind(data, i, 'combined');
-    const combinedLink = combinedFlag && externalLink(combinedFlag.source_url, combinedText);
-    if (combinedLink) combinedP.appendChild(combinedLink);
-    else combinedP.textContent = combinedText;
-    children.push(combinedP);
+    if (data.rated[i] && t.combined_feeds[i] != null) {
+      const combinedP = document.createElement('p');
+      const combinedText = `Combined across ${t.combined_feeds[i]} feeds`;
+      const combinedFlag = flagOfKind(data, i, 'combined');
+      const combinedLink = combinedFlag && externalLink(combinedFlag.source_url, combinedText);
+      if (combinedLink) combinedP.appendChild(combinedLink);
+      else combinedP.textContent = combinedText;
+      children.push(combinedP);
+    }
   }
 
   const linksHeading = document.createElement('h3');
   linksHeading.textContent = 'Links';
-  children.push(linksHeading, buildLinksList(data, i));
+  const linksEl = buildLinksList(data, i);
+  // An unplayed game with no crew source has no link to show; skip the empty section.
+  if (!unplayed || linksEl.children.length > 0) children.push(linksHeading, linksEl);
 
   bodyEl.replaceChildren(...children);
 }
@@ -433,7 +447,7 @@ export function initPanel({ onClosed }) {
     if (dialog.open || handledSession === openSession) return;
     handledSession = openSession;
     onClosed();
-    const target = opener && opener.isConnected ? opener : document.getElementById('chart');
+    const target = liveOpener(opener) ?? document.getElementById('chart');
     opener = null;
     if (target) target.focus({ preventScroll: true });
   });
@@ -444,13 +458,48 @@ export function initPanel({ onClosed }) {
  * open (D-10). Closes any open popover first; the opener is the focused
  * element, or `#chart` when focus sat on the body (a dot click).
  * @param {number} i
- * @param {{data: object, state: object, view: object}} ctx
+ * @param {{data: object, state: object, view: object, unplayed?: boolean}} ctx
  */
 export function openPanel(i, ctx) {
+  showPanel({ data: ctx.data, i, state: ctx.state, view: ctx.view, unplayed: ctx.unplayed === true });
+}
+
+/**
+ * Opens the same modal on scheduled game `j` (Phase 18, D-22): the panel renders over the
+ * scheduled facade, so it shows teams, kickoff (or Time TBA), network (or Network TBA), its
+ * ESPN Press Room crew or "Crew TBA", and "Not played yet." with no score, figure or excitement.
+ * @param {number} j - index into the scheduled block.
+ * @param {{data: object, state: object, unplayed?: boolean}} ctx - `data` is the prepared data;
+ *   `unplayed` (default true) is false once the game has kicked off (18-13 F3).
+ */
+export function openScheduledPanel(j, ctx) {
+  const facade = scheduledFacade(ctx.data);
+  showPanel({
+    data: facade,
+    i: j,
+    state: ctx.state,
+    view: scheduledView(facade, j, ctx.state),
+    unplayed: ctx.unplayed ?? true,
+  });
+}
+
+/**
+ * The panel view of scheduled game `j`: the picked people on its own crew. The played-game
+ * view is keyed by `data.t` index, so it never applies to a scheduled row (18-13 F5).
+ */
+function scheduledView(facade, j, state) {
+  const onGame = (state.people ?? [])
+    .map((id) => facade.personIndexById.get(id))
+    .filter((p) => p != null && personOnGame(facade, j, p, state.role) != null);
+  return { peopleOnGame: onGame.length > 0 ? new Map([[j, onGame]]) : new Map() };
+}
+
+/** Renders `args` into the dialog and opens it (or swaps its contents when already open). */
+function showPanel(args) {
   const dialog = document.getElementById('detail-panel');
   const titleEl = document.getElementById('panel-title');
   const bodyEl = document.getElementById('panel-body');
-  renderPanel(bodyEl, titleEl, { data: ctx.data, i, state: ctx.state, view: ctx.view });
+  renderPanel(bodyEl, titleEl, args);
   if (dialog.open) return;
   for (const el of document.querySelectorAll(':popover-open')) el.hidePopover();
   const active = document.activeElement;

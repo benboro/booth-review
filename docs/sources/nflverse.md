@@ -47,6 +47,9 @@ One row per game:
 - `stadium`, `stadium_id`, `roof`, `surface`
 - rest days, starting quarterbacks, coaches, and the referee
 
+The Friday and Saturday schedule-only job runs re-fetch `games.csv` with its
+ETag, so a flexed kickoff reaches the site before the weekend.
+
 The schedules carry **no network or broadcaster field**. The network comes
 from 506 Sports (hand-saved week pages) and, for national games, from Ratings
 Reference.

@@ -946,6 +946,24 @@ body.app {
   border-color: var(--accent);
 }
 
+/* A control the current view does not use (NFL This weekend: Seasons, Category): muted, still
+   focusable, and it does not open (filters.js). */
+.filter-trigger[aria-disabled="true"] {
+  color: var(--muted);
+  border-color: var(--rule);
+  background: transparent;
+  cursor: default;
+}
+
+.nfl-unused-note {
+  margin: 0 0 8px;
+  color: var(--muted);
+}
+
+.nfl-filter-section.is-unused > :not(.nfl-unused-note) {
+  opacity: 0.45;
+}
+
 /* Clear all filters: the right end of the always-rendered 32px selection row
    (C1), never in the filter bar. Not accent, not red: `--ink` outline. */
 .clear-all {
@@ -2125,6 +2143,18 @@ input[type="checkbox"] {
   box-sizing: border-box;
   /* The only rule that sets the tab-row-to-module gap (SHELL-04). */
   margin-bottom: var(--gap-bar-content);
+  /* Six tabs (This weekend added in Phase 18) stay on one row by scrolling sideways inside the
+     bar when the window is narrow, so the page never scrolls; no tab label is clipped or
+     wrapped. The scrollbar is hidden, the selected tab is brought into view by chart-tabs.js,
+     and the keyboard still reaches every tab. */
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.chart-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .chart-tab {
@@ -2149,9 +2179,38 @@ input[type="checkbox"] {
   border-bottom-color: transparent;
 }
 
+/* This weekend (Phase 18, D-20): controls the view does not use stay visible but grey. */
+.filter-trigger[aria-disabled="true"],
+.filter-trigger[aria-disabled="true"].is-changed {
+  color: var(--disabled);
+  border-color: var(--rule);
+  background: transparent;
+  cursor: not-allowed;
+}
+
+.filter-trigger[aria-disabled="true"] .filter-label,
+.filter-trigger[aria-disabled="true"] .filter-value {
+  color: var(--disabled);
+}
+
+.dots-toggle.is-unused {
+  color: var(--disabled);
+}
+
+.dots-toggle.is-unused .dots-caption,
+.dots-toggle.is-unused .segmented button {
+  color: var(--disabled);
+  cursor: not-allowed;
+}
+
+.unused-hint {
+  color: var(--muted);
+}
+
 .chart-tab:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  /* Inside the box: the scrolling tab bar would clip an outer ring. */
+  outline-offset: -2px;
 }
 
 /* D-14/D-17: both control sets share one grid cell so the slot never shifts. */
@@ -3121,8 +3180,9 @@ html:has(#mlb-detail-panel[open]) {
     gap: 0;
   }
 
-  /* Five tabs (Crews added in Phase 10) must share one row at 340px. */
   .chart-tab {
+    flex: none;
+    white-space: nowrap;
     padding-left: var(--space-sm);
     padding-right: var(--space-sm);
   }
@@ -6041,5 +6101,583 @@ tr.is-matched > :first-child {
     flex: 1 1 auto;
     white-space: nowrap;
     padding: 0 var(--space-sm);
+  }
+}
+
+/* ---------- This weekend (Phase 18): timeline grid ---------- */
+
+.wk-root {
+  --wk-cell-h: 44px;
+  --wk-head-w: 96px;
+  min-width: 0;
+}
+
+.wk-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  min-height: var(--space-xl);
+  margin-bottom: var(--space-sm);
+}
+
+.wk-days {
+  display: flex;
+  gap: var(--space-xs);
+  min-width: 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--rule-strong);
+  flex: 1 1 auto;
+}
+
+.wk-days .chart-tab {
+  height: var(--space-xl);
+  padding: 0 var(--space-md);
+  box-sizing: border-box;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.wk-count {
+  color: var(--muted);
+  font-weight: var(--weight-regular);
+}
+
+.wk-stepper {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+
+.wk-step {
+  width: var(--space-xl);
+  height: var(--space-xl);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.wk-step--prev .game-caret {
+  transform: rotate(90deg);
+}
+
+.wk-step--next .game-caret {
+  transform: rotate(-90deg);
+}
+
+.wk-step[aria-disabled="true"] {
+  color: var(--disabled);
+  cursor: not-allowed;
+}
+
+@media (hover: hover) {
+  .wk-step:not([aria-disabled="true"]):hover {
+    background: var(--surface);
+  }
+}
+
+.wk-week {
+  width: 72px;
+  text-align: center;
+  font: var(--font-body);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.wk-scroll {
+  overflow-x: auto;
+  position: relative;
+  margin-top: var(--space-sm);
+}
+
+.wk-grid {
+  position: relative;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.wk-axis {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  height: var(--space-xl);
+  box-sizing: border-box;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.wk-corner {
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  flex: none;
+  width: var(--wk-head-w);
+  box-sizing: border-box;
+  padding: 0 var(--space-sm);
+  display: flex;
+  align-items: center;
+  background: var(--bg);
+  border-right: 1px solid var(--rule-strong);
+  font: var(--font-caption);
+  color: var(--muted);
+}
+
+.wk-ticks {
+  position: relative;
+  flex: none;
+}
+
+.wk-tick {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding-left: var(--space-xs);
+  font: var(--font-caption);
+  font-family: var(--plot);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.wk-body {
+  position: relative;
+}
+
+.wk-row {
+  display: flex;
+}
+
+.wk-row + .wk-row {
+  border-top: 1px solid var(--rule);
+}
+
+.wk-rowhead {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  flex: none;
+  width: var(--wk-head-w);
+  box-sizing: border-box;
+  padding: 0 var(--space-sm);
+  background: var(--bg);
+  border-right: 1px solid var(--rule-strong);
+  display: flex;
+  align-items: flex-start;
+}
+
+/* The mark sits on the first sub-row: a 44px box at the top of the column. */
+.wk-rowhead .net-mark,
+.wk-rowhead .wk-rowname {
+  min-height: var(--wk-cell-h);
+  max-width: 100%;
+}
+
+.wk-rowname,
+.wk-rowhead .net-name {
+  font: var(--font-caption);
+  font-weight: var(--weight-semibold);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.wk-rowname {
+  display: flex;
+  align-items: center;
+}
+
+.wk-lane {
+  position: relative;
+  flex: none;
+  background-image: linear-gradient(to right, var(--rule) 1px, transparent 1px);
+  background-size: var(--wk-pxh) 100%;
+}
+
+.wk-cell {
+  position: absolute;
+  height: var(--wk-cell-h);
+  box-sizing: border-box;
+  margin: 0;
+  padding: var(--space-xs) var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  border: none;
+  border-radius: 0;
+  text-align: left;
+  font: var(--font-caption);
+  line-height: 18px;
+  cursor: pointer;
+  transition: opacity 120ms;
+}
+
+.wk-cell--tint {
+  background-image: linear-gradient(to right, var(--wk-edge) 4px, transparent 4px);
+  padding-left: var(--space-sm);
+}
+
+.wk-cell--neutral {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--rule-strong);
+}
+
+.wk-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  min-width: 0;
+  height: 18px;
+  white-space: nowrap;
+}
+
+.wk-time {
+  flex: none;
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.wk-match {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--plot);
+  font-weight: var(--weight-regular);
+}
+
+.wk-tail {
+  flex: none;
+  margin-left: auto;
+  font-weight: var(--weight-regular);
+}
+
+.wk-star {
+  flex: none;
+}
+
+.wk-booth {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wk-cell.is-faded,
+.wk-rowhead.is-faded {
+  transition: opacity 120ms;
+}
+
+@media (hover: hover) {
+  .wk-cell:hover {
+    box-shadow: inset 0 0 0 1px var(--ink);
+  }
+}
+
+/* The match ring (UI-SPEC decision 5): ink outline with a background keyline inside it. */
+.wk-cell.is-match {
+  z-index: 2;
+  box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 3px var(--bg);
+}
+
+.wk-cell:focus-visible {
+  z-index: 3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wk-cell,
+  .wk-cell.is-faded,
+  .wk-rowhead.is-faded {
+    transition: none;
+  }
+}
+
+/* The now line: the one non-focus use of the accent (D-23). */
+.wk-now {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  z-index: 6;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.wk-now-label {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  transform: translateX(-100%);
+  font: var(--font-caption);
+  font-weight: var(--weight-semibold);
+  color: var(--accent);
+  pointer-events: none;
+}
+
+/* Stamp, Time TBA strip, ESPN+ and regional table, source line, empty and error states. */
+.wk-stamp,
+.wk-source {
+  margin: 0;
+  font: var(--font-caption);
+  color: var(--muted);
+}
+
+.wk-stamp--picks {
+  color: var(--ink);
+}
+
+.wk-source {
+  margin-top: var(--space-md);
+}
+
+.wk-source a {
+  color: inherit;
+}
+
+.wk-tba,
+.wk-compact {
+  margin-top: var(--space-lg);
+}
+
+.wk-tba {
+  border-top: 1px solid var(--rule-strong);
+}
+
+.wk-tba-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-height: var(--space-xl);
+  padding: var(--space-xs) 0;
+  background: transparent;
+  border: none;
+  font: var(--font-body);
+  font-weight: var(--weight-semibold);
+  text-align: left;
+  cursor: pointer;
+}
+
+.wk-tba-head[aria-expanded="false"] .game-caret {
+  transform: rotate(-90deg);
+}
+
+.wk-tba-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-xs);
+  padding-top: var(--space-sm);
+}
+
+.wk-tba-body .wk-cell {
+  position: relative;
+  width: auto;
+}
+
+.wk-compact-title {
+  margin: 0 0 var(--space-sm) 0;
+}
+
+.wk-compact-table {
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+}
+
+.wk-compact-table th,
+.wk-compact-table td {
+  padding: var(--space-xs) var(--space-md) var(--space-xs) 0;
+  height: var(--space-xl);
+  box-sizing: border-box;
+  vertical-align: middle;
+  border-bottom-color: var(--rule);
+}
+
+.wk-compact-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.wk-compact-table th {
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.wk-compact-table .wk-c-time {
+  width: 72px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.wk-crow {
+  cursor: pointer;
+  transition: opacity 120ms;
+}
+
+.wk-crow.is-match > td:first-child {
+  box-shadow: inset 2px 0 0 var(--ink);
+  padding-left: var(--space-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wk-crow {
+    transition: none;
+  }
+}
+
+.wk-empty {
+  padding: var(--space-lg) 0;
+}
+
+.wk-empty-title {
+  margin: 0;
+  font: var(--font-body);
+  font-weight: var(--weight-semibold);
+}
+
+.wk-empty-body {
+  margin: var(--space-xs) 0 0 0;
+  font: var(--font-body);
+  color: var(--muted);
+}
+
+.wk-error {
+  margin: var(--space-md) 0 0 0;
+  font: var(--font-body);
+  color: var(--error);
+}
+
+/* This weekend phone list (D-08): grouped by kickoff, one item per game. */
+.wk-group-title {
+  margin: var(--space-md) 0 var(--space-sm) 0;
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--rule-strong);
+  font: var(--font-body);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.wk-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-height: 56px;
+  box-sizing: border-box;
+  margin: 0 0 var(--space-xs) 0;
+  padding: var(--space-sm) var(--space-md) var(--space-sm) var(--space-sm);
+  background: transparent;
+  border: none;
+  border-left: 4px solid var(--rule-strong);
+  border-radius: 0;
+  text-align: left;
+  cursor: pointer;
+  transition: opacity 120ms;
+}
+
+.wk-item-mark {
+  flex: none;
+  width: 56px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.wk-item-mark .net-mark {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.wk-item-mark .net-logo {
+  max-width: 100%;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.wk-item-mark .net-name,
+.wk-item-nonet {
+  font: var(--font-caption);
+  font-weight: var(--weight-semibold);
+  overflow: hidden;
+}
+
+.wk-item-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.wk-item-l1 {
+  font: var(--font-body);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.wk-item-l2 {
+  display: flex;
+  gap: var(--space-xs);
+  min-width: 0;
+  font: var(--font-caption);
+}
+
+.wk-item.is-match {
+  box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 3px var(--bg);
+}
+
+.wk-root--list .wk-tba-body {
+  display: block;
+}
+
+.wk-root--list .wk-tba,
+.wk-root--list .wk-compact {
+  margin-top: 0;
+  border-top: none;
+}
+
+.wk-root--list .wk-tba-head {
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--rule-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wk-item {
+    transition: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .wk-controls {
+    flex-wrap: wrap;
+    gap: 0;
+  }
+
+  .wk-days {
+    flex: 1 1 100%;
+    margin-bottom: var(--space-xs);
+  }
+
+  .wk-stepper {
+    margin-left: auto;
+  }
+
+  .wk-step {
+    width: 44px;
+    height: 44px;
+  }
+
+  .wk-compact-table td,
+  .wk-compact-table th {
+    height: var(--space-2xl);
   }
 }

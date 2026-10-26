@@ -143,6 +143,9 @@ def test_url_tab_click_keyboard_and_controls(
     assert not guarded_page.locator("#crews-panel").is_visible()
     guarded_page.locator("#tab-scatter").focus()
     guarded_page.keyboard.press("End")
+    # This weekend (Phase 18) is the last tab; Crews is the one before it.
+    assert guarded_page.evaluate("() => document.activeElement.id") == "tab-weekend"
+    guarded_page.keyboard.press("ArrowLeft")
     assert guarded_page.evaluate("() => document.activeElement.id") == "tab-crews"
     guarded_page.keyboard.press("Enter")
     assert guarded_page.locator("#tab-crews").get_attribute("aria-selected") == "true"

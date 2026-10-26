@@ -55,7 +55,11 @@ NFL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "contract" / "nfl-data.fixture.
 # map key overlay; 8 added lines, none removed).
 # Index re-pinned at Phase 11 Plan 10: only the Matched games heading row, venue status and
 # no-match line (4 added lines, 1 removed).
-_SITE_DATA_SHA256 = "8ceec31a10326e809f9a9397da7734be8b1092156ef094093742c7d4e117ac02"
+# Re-pinned at Phase 18 Plan 01: CFB contract 2.7.0 adds telecasts_scheduled, lookups.weeks,
+# freshness.weekend.
+# Re-pinned at Phase 18 Plan 13 (F1): the fixture gains the per-game week label column.
+# Re-pinned at Phase 18 Plan 13 (F7): telecasts_scheduled gains empty crew columns.
+_SITE_DATA_SHA256 = "cec8bf26b5e0f5b1aaa165cfe335d80582e308af4ceea75a3657ab4aad479b51"
 # Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
 # new header with theme slot, site name.
 # Re-pinned at Phase 17 Plan 06: inline hash-pinned theme-init.js script, sha256 CSP and
@@ -78,7 +82,14 @@ _COVERAGE_SHA256 = "f486fd2361993d9323d36870d0d7e23f1150efeef31c2e829cd53b7d6070
 # Re-pinned at Phase 14 Plan 09: #pick-status and #matched-subtitle seats (crew pick).
 # Re-pinned at Phase 17 Plan 06: theme-init.js head script and #theme-toggle button markup.
 # Re-pinned at Phase 17.1 Plan 03: Network colors switch markup removed from #legend-row.
-_INDEX_PRE_PHASE_SHA256 = "53f6f2ea30f7cce000878ff51ff90537a706708c60a85040fe0d917a8a2b7dbc"
+# Re-pinned at Phase 18 Plan 01: CFB contract 2.7.0 moves the index only through its site-data
+# cache-bust hash.
+# Re-pinned at Phase 18 Plan 10: This weekend tab button and #weekend-panel section (2 added lines).
+# Re-pinned 2026-10-26 (18-13 F2): the two #table-empty paragraphs merged into one, requested and
+# approved by the user at plan 12 sign-off ("Fix both items").
+# Re-pinned at Phase 18 Plan 13 (F1): the week label column moves the index only through its
+# site-data cache-bust hash. Re-pinned again for F7's scheduled crew columns, the same way.
+_INDEX_PRE_PHASE_SHA256 = "691e9407679b73d24bf6eae9117df8a7e7010d42f7809d8ab252678b8e1fd735"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'

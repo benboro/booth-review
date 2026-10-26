@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -33,6 +33,7 @@ from booth_review.contract.nfl_models import (
     NflBoothColumns,
     NflGameColumns,
     NflSiteData,
+    NflUpcomingColumns,
     NflViewershipColumns,
 )
 from booth_review.errors import SiteBuildError
@@ -44,6 +45,7 @@ from booth_review.nfl.network_groups import NETWORK_FAMILY, NETWORK_GROUPS
 from booth_review.nfl.reference import NflFranchises, load_nfl_franchises
 from booth_review.nfl.tables import NFL_SPECIAL_COLUMNS
 from booth_review.nfl.task1 import NFL_TASK1_COLUMNS, view_category_expr
+from booth_review.nfl.upcoming import UPCOMING_COLUMNS, WEEKEND_COLUMNS
 from booth_review.people.registry import PeopleRegistry, load_people
 from booth_review.transport.cache import atomic_write_bytes
 
@@ -127,6 +129,9 @@ class NflSiteInputs:
     people: PeopleRegistry
     franchises: NflFranchises
     eras: Sequence[MeasurementEra]
+    # Phase 18: absent in a vault built before it (empty frames: no upcoming, no stamp).
+    upcoming: pl.DataFrame = field(default_factory=pl.DataFrame)
+    weekend: pl.DataFrame = field(default_factory=pl.DataFrame)
 
 
 # ----------------------------------------------------------------------------
@@ -146,6 +151,13 @@ def _read_table(paths: DataPaths, name: str, columns: Sequence[str]) -> pl.DataF
     return frame
 
 
+def _read_optional(paths: DataPaths, name: str, columns: Sequence[str]) -> pl.DataFrame:
+    """Like `_read_table`, but a table the vault lacks (built before Phase 18) is empty."""
+    if not (paths.vault / f"processed/{name}.parquet").is_file():
+        return pl.DataFrame()
+    return _read_table(paths, name, columns)
+
+
 def load_nfl_site_inputs(paths: DataPaths, reference_directory: Path) -> NflSiteInputs:
     """Read the three vault tables plus the public people, franchise and era tables."""
     return NflSiteInputs(
@@ -155,6 +167,8 @@ def load_nfl_site_inputs(paths: DataPaths, reference_directory: Path) -> NflSite
         people=load_people(reference_directory),
         franchises=load_nfl_franchises(reference_directory),
         eras=load_eras(reference_directory),
+        upcoming=_read_optional(paths, "nfl_upcoming", UPCOMING_COLUMNS),
+        weekend=_read_optional(paths, "nfl_weekend", WEEKEND_COLUMNS),
     )
 
 
@@ -395,6 +409,73 @@ def _iso(value: date | None) -> str | None:
 
 
 # ----------------------------------------------------------------------------
+# Upcoming (Phase 18)
+# ----------------------------------------------------------------------------
+
+
+def _append_upcoming(
+    cols: dict[str, list[Any]],
+    row: dict[str, Any],
+    i: int,
+    inputs: NflSiteInputs,
+    lookups: dict[str, _Index],
+) -> None:
+    season = int(row["season"])
+    slot = row["slot_name"]
+    if slot is not None and slot not in NFL_SLOTS:
+        raise SiteBuildError(f"upcoming.slot[{i}]: not a known slot name")
+    cols["season"].append(season)
+    cols["week"].append(int(row["week"]))
+    cols["date"].append(None if row["game_date"] is None else row["game_date"].isoformat())
+    cols["kickoff"].append(_et_kickoff(row["kickoff_utc"]))
+    for side in ("home", "away"):
+        fid = row[f"{side}_franchise_id"]
+        cols[side].append(lookups["franchises"].add(fid, _franchise_entry(inputs, fid)))
+        name, short = _season_name(inputs.franchises, fid, season, row[f"{side}_display_name"])
+        cols[f"{side}_name"].append(
+            lookups["team_names"].add((name, short), {"name": name, "short": short})
+        )
+    cols["slot"].append(None if slot is None else NFL_SLOTS.index(slot))
+    cols["international"].append(bool(row["is_international"]))
+    cols["neutral"].append(bool(row["is_neutral"]))
+    cols["network"].append(
+        _network_index(lookups["networks"], row["network_id"], f"upcoming.network[{i}]")
+    )
+    cols["network_basis"].append(row["network_basis"])
+    crew: list[dict[str, Any]] = []
+    for role, pid in (
+        ("pbp", row["pbp_person_id"]),
+        ("analyst", row["analyst_person_id"]),
+        *(("unknown", s) for s in (row["sideline_person_ids"] or [])),
+    ):
+        if pid is not None:
+            idx = _person_index(lookups["people"], inputs.people, pid, f"upcoming.crew[{i}]")
+            crew.append({"person": idx, "role": role})
+    cols["crew"].append(crew)
+    cols["crew_source"].append(row["crew_source"] if crew else None)
+    cols["crew_source_url"].append(row["crew_source_url"] if crew else None)
+    cols["booth_rank"].append(row["booth_rank"] if crew else None)
+
+
+def _franchise_entry(inputs: NflSiteInputs, franchise_id: str) -> dict[str, str]:
+    return {"id": franchise_id, "name": _latest_display_name(inputs.franchises, franchise_id)}
+
+
+def _upcoming_block(inputs: NflSiteInputs, lookups: dict[str, _Index]) -> dict[str, list[Any]]:
+    """Every nfl_upcoming row, ordered by week, date, kickoff (nulls last), network, home."""
+    cols: dict[str, list[Any]] = {name: [] for name in NflUpcomingColumns.model_fields}
+    if inputs.upcoming.height == 0:
+        return cols
+    rows = inputs.upcoming.sort(
+        ["week", "game_date", "kickoff_utc", "network_id", "home_franchise_id", "game_id"],
+        nulls_last=True,
+    )
+    for i, row in enumerate(rows.iter_rows(named=True)):
+        _append_upcoming(cols, row, i, inputs, lookups)
+    return cols
+
+
+# ----------------------------------------------------------------------------
 # Freshness and constants
 # ----------------------------------------------------------------------------
 
@@ -403,7 +484,18 @@ def _opt_int(value: object) -> int | None:
     return None if value is None else int(value)  # type: ignore[call-overload]
 
 
-def _freshness(games: pl.DataFrame, task1: pl.DataFrame) -> dict[str, Any]:
+def _weekend_freshness(weekend: pl.DataFrame) -> dict[str, Any] | None:
+    if weekend.height == 0:
+        return None
+    row = weekend.row(0, named=True)
+    return {
+        "week": int(row["week"]),
+        "schedule_updated_at": row["schedule_updated_at"],
+        "crews_506_saved_at": row["crews_506_saved_at"],
+    }
+
+
+def _freshness(games: pl.DataFrame, task1: pl.DataFrame, weekend: pl.DataFrame) -> dict[str, Any]:
     season = int(games["season"].max())  # type: ignore[arg-type]
     current = games.filter(pl.col("season") == season)
     in_progress = bool(current["home_points"].is_null().any())
@@ -425,6 +517,7 @@ def _freshness(games: pl.DataFrame, task1: pl.DataFrame) -> dict[str, Any]:
         "through_week": _opt_int(through),
         "viewership_through_week": _opt_int(rated),
         "crews_default_season": booth_seasons[-1] if booth_seasons else None,
+        "weekend": _weekend_freshness(weekend),
     }
 
 
@@ -643,7 +736,7 @@ def build_nfl_site_data(inputs: NflSiteInputs) -> NflSiteData:
     games = _sorted_regular(inputs.games)
     if games.height == 0:
         raise SiteBuildError("games: no regular-season games to ship")
-    freshness = _freshness(games, inputs.task1)
+    freshness = _freshness(games, inputs.task1, inputs.weekend)
     constants = _constants(inputs.task1)
     # The CFB rule (shipped.no_rating_cause): "pending" covers a game in the
     # current season (the freshness season, the latest in the tables) at or
@@ -656,6 +749,7 @@ def build_nfl_site_data(inputs: NflSiteInputs) -> NflSiteData:
     game_cols, lookups = _games_block(
         games, inputs, current_season, freshness["viewership_through_week"]
     )
+    upcoming_cols = _upcoming_block(inputs, lookups)
     game_index = {gid: k for k, gid in enumerate(games["game_id"].to_list())}
     special = _special_block(inputs.special, games, lookups["franchises"])
     season_weeks = _season_weeks_block(inputs.special)
@@ -681,6 +775,7 @@ def build_nfl_site_data(inputs: NflSiteInputs) -> NflSiteData:
             "slots": list(NFL_SLOTS),
         },
         "games": game_cols,
+        "upcoming": upcoming_cols,
         "special": special,
         "season_weeks": season_weeks,
         "booths": booths,

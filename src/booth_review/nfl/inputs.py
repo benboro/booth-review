@@ -20,7 +20,7 @@ from booth_review.nfl.layout import (
     nflverse_pbp_path,
     wikipedia_path,
 )
-from booth_review.nfl.schedule import NflGame, parse_schedules
+from booth_review.nfl.schedule import NflGame, UpcomingNflGame, parse_schedules, parse_upcoming
 from booth_review.sources.ratingsref.parser import RRRecord, parse_record
 from booth_review.sources.sports506.nfl_parser import NflListing506, parse_nfl_week_page
 from booth_review.sources.wikipedia.parser import ChangesResult, parse_scheduling_changes
@@ -37,6 +37,10 @@ class NflInputs:
     rr_parse_failures: int = 0
     change_parse_failures: int = 0
     seasons: tuple[int, ...] = field(default_factory=tuple)
+    #: Every regular-season row with a week, scheduled or not (Phase 18).
+    upcoming: tuple[UpcomingNflGame, ...] = ()
+    #: Regular-season rows with no week yet: counted, never placed.
+    upcoming_unplaced: int = 0
 
 
 def _week_of(file_name: str) -> int | None:
@@ -52,7 +56,9 @@ def load_nfl_inputs(paths: DataPaths, seasons: Sequence[int]) -> NflInputs:
     schedule_path = raw / NFLVERSE_SCHEDULES_PATH
     if not schedule_path.is_file():
         raise VaultStateError("nfl schedules missing: run booth-review collect nflverse first")
-    games = parse_schedules(schedule_path.read_bytes(), seasons=seasons)
+    schedule_bytes = schedule_path.read_bytes()
+    games = parse_schedules(schedule_bytes, seasons=seasons)
+    upcoming, upcoming_unplaced = parse_upcoming(schedule_bytes, seasons=seasons)
 
     listings: dict[tuple[int, int], tuple[NflListing506, ...]] = {}
     listing_failures = 0
@@ -105,4 +111,6 @@ def load_nfl_inputs(paths: DataPaths, seasons: Sequence[int]) -> NflInputs:
         rr_parse_failures=rr_failures,
         change_parse_failures=change_failures,
         seasons=tuple(sorted(set(seasons))),
+        upcoming=tuple(upcoming),
+        upcoming_unplaced=upcoming_unplaced,
     )

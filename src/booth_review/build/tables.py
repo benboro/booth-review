@@ -37,6 +37,7 @@ from booth_review.build.combined import (
     orphan_decision_count,
 )
 from booth_review.build.crew_backup import (
+    BACKFILL_SEASONS,
     ESPNPR_BACKFILL_GAP_COLUMNS,
     ESPNPR_BACKFILL_GAPS,
     REVIEW_CREW_BACKUP_DISAGREEMENT_COLUMNS,
@@ -79,7 +80,7 @@ from booth_review.build.shipped import (
     rarity_verdict,
     shipped_expr,
 )
-from booth_review.build.sources import load_all_sources, load_cfbd_venues
+from booth_review.build.sources import SeasonSources, load_all_sources, load_cfbd_venues
 from booth_review.build.telecasts import build_telecasts
 from booth_review.build.venues import (
     empty_venues_frame,
@@ -94,6 +95,7 @@ from booth_review.build.viewership import (
     apply_headlines,
     build_viewership,
 )
+from booth_review.build.weekend import ScheduleInputs, build_schedule_inputs
 from booth_review.config import DataPaths
 from booth_review.flags.era import load_eras
 from booth_review.flags.events import load_event_flags
@@ -107,6 +109,7 @@ from booth_review.resolve.diagnose import (
 )
 from booth_review.resolve.games import GameIndex
 from booth_review.resolve.networks import (
+    NetworkTable,
     check_primary_overrides,
     load_network_rarity,
     load_networks,
@@ -167,6 +170,8 @@ class BuildTables:
     second_source_accept_warnings: tuple[tuple[int, str], ...] = ()
     # Phase 10 booth tier per tiered CFB telecast; private, never written to processed/.
     booth_tiers: pl.DataFrame = field(default_factory=empty_booth_tiers_frame)
+    # Phase 18: the current season's schedule inputs for telecasts_scheduled and the weekend stamp.
+    schedule: ScheduleInputs = field(default_factory=ScheduleInputs)
 
 
 def _combined_review_row(
@@ -315,6 +320,22 @@ def _accept_warnings(
     return tuple(sorted(warnings))
 
 
+def _schedule_inputs(
+    paths: DataPaths,
+    sources: Sequence[SeasonSources],
+    networks: NetworkTable,
+    primary_overrides: Mapping[int, str],
+) -> ScheduleInputs:
+    """The newest loaded season's games, media and manifest stamps (Phase 18)."""
+    with_games = [s for s in sources if s.games]
+    if not with_games:
+        return ScheduleInputs()
+    newest = max(with_games, key=lambda s: s.season)
+    return build_schedule_inputs(
+        paths, newest.season, newest.games, newest.media, networks, primary_overrides
+    )
+
+
 def assemble_tables(
     paths: DataPaths, reference_directory: Path, seasons: Sequence[int] | None = None
 ) -> BuildTables:
@@ -416,6 +437,9 @@ def assemble_tables(
 
     # 04.19 D-13: ESPN Press Room booths fill the ESPN-family telecasts that
     # 506 and the overrides left crew-less (override > 506 > backup).
+    # 18-13 F7: in the schedule's season the backup also reaches upcoming games, both the
+    # unplotted telecasts 506 listed without a crew and the games with no telecast yet.
+    schedule = _schedule_inputs(paths, sources, networks, primary_overrides)
     booth_pages = load_espnpr_booths(paths, seasons)
     backup = apply_crew_backup(
         telecasts,
@@ -428,7 +452,13 @@ def assemble_tables(
         networks=networks,
         registry=registry,
         season_counts=override_result.season_counts,
+        # A backfill season is never "current", even when a build loads only past seasons.
+        current_season=(
+            schedule.season if schedule.games and schedule.season not in BACKFILL_SEASONS else None
+        ),
+        scheduled_networks={gid: net for gid, (net, _) in schedule.networks.items()},
     )
+    schedule = replace(schedule, crews=backup.scheduled_crews)
     telecasts = backup.telecasts
     telecast_people = backup.telecast_people
     people = backup.people
@@ -568,6 +598,7 @@ def assemble_tables(
         booth_tiers=booth_assignment.booth_tiers,
         second_source_gates=second.gates,
         second_source_accept_warnings=_accept_warnings(accept_lines, second, seasons),
+        schedule=schedule,
     )
 
 

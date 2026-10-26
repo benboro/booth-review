@@ -19,6 +19,8 @@
 
 import { byPatch, chartContext } from './bars.js';
 import { MAP_HINT } from './map-model.js';
+import { dayLabel } from './weekend.js';
+import { selectedDay, selectedWeek, weekDays, weekDisplay } from './weekend-state.js';
 
 export const TAB_HINTS = {
   bars: 'Pick a school, network, announcer, or game',
@@ -36,7 +38,7 @@ export const STALE_COPY = {
   },
 };
 
-const VIEWS = ['scatter', 'bars', 'butterfly', 'map', 'crews'];
+const VIEWS = ['scatter', 'bars', 'butterfly', 'map', 'crews', 'weekend'];
 
 /** The Crews subtitle (14-UI-SPEC): the master Seasons range, "Seasons 2014–2026" or "Season 2026". */
 function crewsSubtitle(state) {
@@ -47,10 +49,19 @@ function crewsSubtitle(state) {
   return lo === hi ? `Season ${lo}` : `Seasons ${lo}–${hi}`;
 }
 
+/** The This weekend subtitle (18-UI-SPEC): `Week 9 · Sat. Oct. 31 · All times ET`. */
+function weekendSubtitle(state) {
+  const week = currentData ? selectedWeek(currentData, state) : null;
+  if (!week) return '';
+  const day = selectedDay(weekDays(currentData, week).days, state.day);
+  return [weekDisplay(week), day ? dayLabel(day) : null, 'All times ET'].filter(Boolean).join(' · ');
+}
+
 /** The hint the module subtitle rests on: the Map's prompt until a subject (announcer, school or crew) is picked (04.18 D-02); the season range on Crews. */
 function restingHint(state) {
   if (state.view === 'map' && state.people.length === 0 && state.school.length === 0 && state.crew == null) return MAP_HINT;
   if (state.view === 'crews') return crewsSubtitle(state);
+  if (state.view === 'weekend') return weekendSubtitle(state);
   return '';
 }
 
@@ -92,7 +103,7 @@ function tabsEl() {
 }
 
 function allTabs() {
-  return Array.from(tabsEl().querySelectorAll('button[role="tab"]'));
+  return Array.from(tabsEl().querySelectorAll('button[role="tab"]')).filter((tab) => !tab.hidden);
 }
 
 /** The tab hint lives in the chart module's subtitle slot (C6); the title carries the full text. */
@@ -207,7 +218,7 @@ export function renderChartTabs({ data, state }) {
   const tabs = tabsEl();
   if (!tabs) return;
   const ctx = chartContext(data, state);
-  const enabled = { scatter: true, bars: ctx.barsEnabled, butterfly: ctx.butterflyEnabled, map: true, crews: true };
+  const enabled = { scatter: true, bars: ctx.barsEnabled, butterfly: ctx.butterflyEnabled, map: true, crews: true, weekend: (data.weeks ?? []).length > 0 };
   const focused = document.activeElement;
   // Roving tabindex (WR-04): one Tab stop. The focused tab keeps it while focus
   // is inside the tablist (a focused disabled tab included); otherwise the
@@ -217,6 +228,8 @@ export function renderChartTabs({ data, state }) {
   for (const tab of allTabs()) {
     const view = tab.dataset.view;
     if (!VIEWS.includes(view)) continue;
+    // No weeks in the build, no This weekend tab (the tab never shows empty).
+    if (view === 'weekend') tab.hidden = !enabled.weekend;
     const selected = view === state.view;
     tab.setAttribute('aria-selected', String(selected));
     tab.setAttribute('tabindex', (focusInside ? tab === focused : selected) ? '0' : '-1');
@@ -232,6 +245,14 @@ export function renderChartTabs({ data, state }) {
     if (selected) {
       const panel = document.getElementById('chart-panel');
       if (panel) panel.setAttribute('aria-labelledby', tab.id);
+      // On a phone the tab row scrolls sideways; keep the selected tab fully in view.
+      if (tabs.scrollWidth > tabs.clientWidth) {
+        const left = tab.offsetLeft - tabs.offsetLeft;
+        if (left < tabs.scrollLeft) tabs.scrollLeft = left;
+        else if (left + tab.offsetWidth > tabs.scrollLeft + tabs.clientWidth) {
+          tabs.scrollLeft = left + tab.offsetWidth - tabs.clientWidth;
+        }
+      }
       // The module title is the active tab's label (recorded planner choice, 13-11).
       const title = document.getElementById('chart-title');
       if (title) title.textContent = tab.textContent;
@@ -245,7 +266,7 @@ export function renderChartTabs({ data, state }) {
   const scatterControls = document.getElementById('scatter-controls');
   const barControls = document.getElementById('bar-controls');
   if (scatterControls) scatterControls.classList.toggle('is-concealed', !scatter);
-  if (barControls) barControls.classList.toggle('is-concealed', scatter || state.view === 'map' || state.view === 'crews');
+  if (barControls) barControls.classList.toggle('is-concealed', scatter || state.view === 'map' || state.view === 'crews' || state.view === 'weekend');
   // Reset zoom is wired by 13-12; it is shown on the zoomable Scatter and Map only, and
   // concealed (not removed) elsewhere so the header never reflows.
   const resetZoom = document.getElementById('reset-zoom');

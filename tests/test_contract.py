@@ -795,9 +795,9 @@ def test_unrated_fields_are_display_only() -> None:
 
 
 def test_site_data_fields_unchanged() -> None:
-    assert len(SITE_DATA_FIELDS) == 35
+    assert len(SITE_DATA_FIELDS) == 36
     assert SITE_DATA_FIELDS[:3] == ("season", "date", "kickoff")
-    assert SITE_DATA_FIELDS[-1] == "booth"
+    assert SITE_DATA_FIELDS[-1] == "week"
     assert not set(UnratedColumns.model_fields) & {"cause"} & set(SITE_DATA_FIELDS)
 
 
@@ -822,7 +822,7 @@ def test_unrated_block_has_no_cfbd_only_fields() -> None:
 def _with_unrated_row(data: dict[str, Any]) -> dict[str, Any]:
     """The fixture plus a one-row unrated block (a regular 2019 net-b game,
     crewless, cause none); every unrated variant mutates this row."""
-    data["schema_version"] = "2.6.0"
+    data["schema_version"] = "2.7.0"
     # The replaced unrated block was the only user of the last two venues.
     del data["lookups"]["venues"][7:]
     row: dict[str, Any] = {
@@ -853,6 +853,7 @@ def _with_unrated_row(data: dict[str, Any]) -> dict[str, Any]:
         "rivalry": None,
         "place": None,
         "booth": None,
+        "week": None,
         "cause": "none",
     }
     data["telecasts_unrated"] = {k: [v] for k, v in row.items()}
@@ -1183,3 +1184,125 @@ def test_second_a_booth_in_one_family_season_rejected() -> None:
     with pytest.raises(ValidationError) as excinfo:
         validate_site_data(data)
     assert "second a booth in one family season" in str(excinfo.value)
+
+
+# --- Phase 18 Plan 01: telecasts_scheduled, lookups.weeks, freshness.weekend (2.7.0) ---
+
+
+def _sched(data: dict[str, Any], **changes: Any) -> dict[str, Any]:
+    for column, value in changes.items():
+        data["telecasts_scheduled"][column][0] = value
+    return data
+
+
+def test_scheduled_block_fixture_has_every_weekend_state() -> None:
+    site_data = validate_site_data(_load_fixture())
+    sc = site_data.telecasts_scheduled
+    assert len(sc.season) == 9
+    assert None in sc.network  # Network TBA
+    assert None in sc.kickoff  # Time TBA
+    assert any(sc.neutral)
+    assert any(r is not None for r in sc.home_rank)
+    assert site_data.freshness.weekend is not None
+    assert site_data.freshness.weekend.label == "5"
+
+
+def test_scheduled_game_repeated_in_unrated_is_rejected_count_only() -> None:
+    data = _load_fixture()
+    unrated = data["telecasts_unrated"]
+    sched = data["telecasts_scheduled"]
+    for column in ("date", "away_team", "home_team"):
+        sched[column][0] = unrated[column][7]
+    with pytest.raises(ValidationError) as info:
+        validate_site_data(data)
+    message = str(info.value)
+    assert "telecasts/telecasts_unrated/telecasts_scheduled: 1 game(s)" in message
+    assert unrated["date"][7] not in message
+
+
+def test_scheduled_kickoff_null_with_time_slot_set_rejected() -> None:
+    with pytest.raises(ValidationError, match=r"telecasts_scheduled\.time_slot\[0\]"):
+        validate_site_data(_sched(_load_fixture(), kickoff=None))
+
+
+def test_scheduled_network_null_validates_and_out_of_range_fails() -> None:
+    validate_site_data(_sched(_load_fixture(), network=None))
+    with pytest.raises(ValidationError, match=r"telecasts_scheduled\.network\[0\]"):
+        validate_site_data(_sched(_load_fixture(), network=99))
+
+
+def test_week_start_after_end_rejected() -> None:
+    data = _load_fixture()
+    week = data["lookups"]["weeks"][0]
+    week["start"], week["end"] = week["end"], week["start"]
+    with pytest.raises(ValidationError, match=r"lookups\.weeks\[0\]"):
+        validate_site_data(data)
+
+
+def test_weekend_label_must_be_a_known_week() -> None:
+    data = _load_fixture()
+    data["freshness"]["weekend"]["label"] = "99"
+    with pytest.raises(ValidationError, match=r"freshness\.weekend\.label"):
+        validate_site_data(data)
+
+
+def test_scheduled_extra_key_rejected() -> None:
+    data = _load_fixture()
+    data["telecasts_scheduled"]["booth"] = [None for _ in data["telecasts_scheduled"]["season"]]
+    with pytest.raises(ValidationError, match=r"telecasts_scheduled\.booth"):
+        validate_site_data(data)
+
+
+_PR_URL = "https://espnpressroom.com/us/press-releases/2026/09/synthetic-commentators/"
+
+
+def _sched_crew(data: dict[str, Any], crew: list[dict[str, Any]], url: Any, label: Any) -> None:
+    data["telecasts_scheduled"]["crew"][0] = crew
+    data["telecasts_scheduled"]["crew_source_url"][0] = url
+    data["telecasts_scheduled"]["crew_source_label"][0] = label
+
+
+def test_scheduled_crew_with_its_press_room_credit_validates() -> None:
+    # 18-13 F7: a scheduled game may carry an ESPN Press Room booth and its page credit.
+    data = _load_fixture()
+    crew = [{"person": 0, "role": "pbp", "feed": "main"}]
+    _sched_crew(data, crew, _PR_URL, "ESPN Press Room")
+    validate_site_data(data)
+
+
+@pytest.mark.parametrize(
+    ("crew", "url", "label", "message"),
+    [
+        ([{"person": 99, "role": "pbp", "feed": "main"}], _PR_URL, "ESPN Press Room", "person"),
+        ([{"person": 0, "role": "pbp", "feed": "alt"}], _PR_URL, "ESPN Press Room", "feed"),
+        ([{"person": 0, "role": "pbp", "feed": "main"}], None, None, "crew_source_url"),
+        ([], _PR_URL, "ESPN Press Room", "crew_source_url"),
+        ([{"person": 0, "role": "pbp", "feed": "main"}], _PR_URL, None, "crew_source_url"),
+        ([{"person": 0, "role": "pbp", "feed": "main"}], "javascript:x", "ESPN Press Room", "url"),
+    ],
+)
+def test_scheduled_crew_needs_its_credit_and_known_people(
+    crew: list[dict[str, Any]], url: Any, label: Any, message: str
+) -> None:
+    data = _load_fixture()
+    _sched_crew(data, crew, url, label)
+    with pytest.raises(ValidationError, match=rf"telecasts_scheduled\.\S*{message}"):
+        validate_site_data(data)
+
+
+@pytest.mark.parametrize("block", ["telecasts", "telecasts_unrated", "telecasts_scheduled"])
+def test_week_label_must_be_a_known_week(block: str) -> None:
+    # 18-13 F1: each block's week column is the game's own lookups.weeks label.
+    data = _load_fixture()
+    data[block]["week"][-1] = "99"
+    with pytest.raises(ValidationError, match=rf"{block}\.week\[\d+\]"):
+        validate_site_data(data)
+
+
+def test_week_label_null_only_outside_the_scheduled_block() -> None:
+    data = _load_fixture()
+    data["telecasts"]["week"][-1] = None
+    validate_site_data(data)
+    data["telecasts_scheduled"]["week"][0] = None
+    with pytest.raises(ValidationError, match=r"telecasts_scheduled\.week"):
+        validate_site_data(data)

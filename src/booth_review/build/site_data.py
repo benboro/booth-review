@@ -29,6 +29,7 @@ import polars as pl
 from pydantic import ValidationError
 
 from booth_review.build.bowls import load_bowls
+from booth_review.build.crew_backup import CREW_BACKUP_LABEL
 from booth_review.build.named_games import (
     build_franchises,
     check_game_slugs,
@@ -43,9 +44,11 @@ from booth_review.build.shipped import (
     select_plotted_shipped,
     select_unrated_shipped,
 )
+from booth_review.build.weekend import current_label
 from booth_review.config import DataPaths
 from booth_review.contract.models import (
     SCHEMA_VERSION,
+    ScheduledColumns,
     SiteData,
     validate_site_data,
 )
@@ -136,7 +139,51 @@ def _through_week(
     return None
 
 
-def _build_freshness(tables: BuildTables) -> dict[str, object]:
+def _scheduled_game_rows(
+    tables: BuildTables,
+    label: str | None,
+    shipped_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """The games.parquet rows that ship in telecasts_scheduled (Phase 18, D-14/D-23).
+
+    FBS-involving regular-season games of the schedule's season whose week label is
+    numbered and no later than the current weekend's, and that no shipped telecast
+    row (rated or unrated) already covers. Sorted for byte stability: date, kickoff
+    (null last), home team, away team.
+    """
+    schedule = tables.schedule
+    if label is None or not schedule.labels:
+        return []
+    last = int(label)
+    shipped_ids = {int(r["game_id"]) for r in shipped_rows}
+    shipped_keys = {(r["date_et"], r["away_team"], r["home_team"]) for r in shipped_rows}
+    rows: list[dict[str, Any]] = []
+    for game in tables.games.iter_rows(named=True):
+        if game["season"] != schedule.season or game["season_type"] != "regular":
+            continue
+        game_label = schedule.labels.get(int(game["game_id"]))
+        if game_label is None or not game_label.isdigit() or int(game_label) > last:
+            continue
+        if int(game["game_id"]) in shipped_ids:
+            continue
+        if (game["date_et"], game["away_team"], game["home_team"]) in shipped_keys:
+            continue
+        network, outlets = schedule.networks.get(int(game["game_id"]), (None, []))
+        rows.append({**game, "network_id": network, "outlets": outlets})
+    rows.sort(
+        key=lambda r: (
+            r["date_et"],
+            r["kickoff_et"] is None,
+            r["kickoff_et"] or "",
+            r["home_team"],
+            r["away_team"],
+            r["game_id"],
+        )
+    )
+    return rows
+
+
+def _build_freshness(tables: BuildTables, label: str | None = None) -> dict[str, object]:
     games = tables.games
     telecasts = tables.telecasts
     seasons = games["season"].to_list() if games.height else telecasts["season"].to_list()
@@ -171,6 +218,11 @@ def _build_freshness(tables: BuildTables) -> dict[str, object]:
         "season": season,
         "crews_through_week": _through_week(crew_ids, game_by_telecast),
         "viewership_through_week": _through_week(viewership_ids, game_by_telecast),
+        "weekend": (
+            {"label": label, "number": int(label), **tables.schedule.stamps.get(label, {})}
+            if label is not None
+            else None
+        ),
     }
 
 
@@ -210,7 +262,14 @@ def build_site_data(
     sort_keys = ["date_et", "kickoff_et", "telecast_id"]
     plotted, plotted_duplicates_dropped = select_plotted_shipped(tables.telecasts, sort_keys)
     unrated_frame, duplicates_dropped = select_unrated_shipped(tables.telecasts, sort_keys)
-    freshness = _build_freshness(tables)
+    schedule = tables.schedule
+    # generated_at is the input stamp in the job (pipeline.run_build), so the weekend rolls
+    # over on the first build whose inputs postdate the last game: the Sunday 10:00 full run's
+    # /games refresh (D-18). No wall clock is read here.
+    weekend_label = (
+        current_label(schedule.games, schedule.season, generated_at) if schedule.games else None
+    )
+    freshness = _build_freshness(tables, weekend_label)
     games_slim = tables.games.select(
         "game_id",
         "season_type",
@@ -237,6 +296,7 @@ def build_site_data(
         unrated_frame.join(games_slim, on="game_id", how="left").iter_rows(named=True)
     )
     shipped_rows = rated_rows + unrated_rows
+    scheduled_rows = _scheduled_game_rows(tables, weekend_label, shipped_rows)
     unusable = sum(1 for row in rated_rows if not is_usable_value(row["headline_value"]))
     if unusable:
         # Backstop for the plotted rule (CR-02): fail with a clean,
@@ -341,7 +401,11 @@ def build_site_data(
         if vrow["lat"] is not None and vrow["lon"] is not None
     }
     used_venue_ids = sorted(
-        {int(r["venue_id"]) for r in shipped_rows if r["venue_id"] in venue_rows}
+        {
+            int(r["venue_id"])
+            for r in (*shipped_rows, *scheduled_rows)
+            if r["venue_id"] in venue_rows
+        }
     )
     venue_index = {venue_id: i for i, venue_id in enumerate(used_venue_ids)}
     venues_lookup = [
@@ -357,6 +421,14 @@ def build_site_data(
     ]
     shipped_ids = {row["telecast_id"] for row in shipped_rows}
     rated_ids = {row["telecast_id"] for row in rated_rows}
+    week_label_set = {str(week["label"]) for week in schedule.weeks}
+
+    def _week_label(row: dict[str, Any]) -> str | None:
+        """The game's own lookups.weeks label (18-13 F1), from its CFBD week, else None."""
+        if row["season"] != schedule.season:
+            return None
+        label = schedule.labels.get(int(row["game_id"]))
+        return label if label in week_label_set else None
 
     crew_by_telecast: dict[str, list[dict[str, object]]] = {}
     for crow in tables.telecast_people.iter_rows(named=True):
@@ -449,6 +521,23 @@ def build_site_data(
             person_ids.add(str(booth_row["pbp_person_id"]))
             if booth_row["lead_network_id"] is not None:
                 network_ids.add(str(booth_row["lead_network_id"]))
+        for side in ("home", "away"):
+            conf = row[f"{side}_conference"]
+            if conf is None:
+                continue
+            is_fbs = row[f"{side}_classification"] == "fbs"
+            conference_is_fbs[conf] = conference_is_fbs.get(conf, False) or is_fbs
+
+    scheduled_crews = schedule.crews
+    for row in scheduled_rows:
+        team_names.add(str(row["home_team"]))
+        team_names.add(str(row["away_team"]))
+        sched_crew = scheduled_crews.get(int(row["game_id"]))
+        if sched_crew is not None:
+            person_ids.update(person_id for person_id, _ in sched_crew.entries)
+        if row["network_id"] is not None:
+            network_ids.add(row["network_id"])
+        network_ids.update(row["outlets"])
         for side in ("home", "away"):
             conf = row[f"{side}_conference"]
             if conf is None:
@@ -582,6 +671,7 @@ def build_site_data(
         "rivalry",
         "place",
         "booth",
+        "week",
     )
     rated_only_names = (
         "viewers",
@@ -657,6 +747,7 @@ def build_site_data(
         target["place"].append(venue_index.get(int(venue_id)) if venue_id is not None else None)
         booth_key = booth_key_by_telecast.get(str(row["telecast_id"]))
         target["booth"].append(booth_index[booth_key] if booth_key is not None else None)
+        target["week"].append(_week_label(row))
 
     for row in rated_rows:
         _append_game_fields(columns, row)
@@ -693,6 +784,48 @@ def build_site_data(
                 rated_not_plotted=bool(row["rated"]),
             )
         )
+
+    scheduled_columns: dict[str, list[object]] = {
+        name: [] for name in ScheduledColumns.model_fields
+    }
+    for row in scheduled_rows:
+        kickoff_value = row["kickoff_et"]
+        scheduled_columns["season"].append(int(row["season"]))
+        scheduled_columns["date"].append(row["date_et"].isoformat())
+        scheduled_columns["kickoff"].append(kickoff_value)
+        scheduled_columns["time_slot"].append(time_slot(kickoff_value))
+        scheduled_columns["away_team"].append(team_index[str(row["away_team"])])
+        scheduled_columns["home_team"].append(team_index[str(row["home_team"])])
+        scheduled_columns["neutral"].append(bool(row["neutral_site"]))
+        scheduled_columns["away_rank"].append(row["away_rank"])
+        scheduled_columns["home_rank"].append(row["home_rank"])
+        scheduled_columns["network"].append(
+            network_index[row["network_id"]] if row["network_id"] is not None else None
+        )
+        scheduled_columns["outlets"].append([network_index[o] for o in row["outlets"]])
+        sched_crew = scheduled_crews.get(int(row["game_id"]))
+        scheduled_columns["crew"].append(
+            [
+                {"person": person_index[person_id], "role": role, "feed": "main"}
+                for person_id, role in (sched_crew.entries if sched_crew is not None else ())
+            ]
+        )
+        scheduled_columns["crew_source_url"].append(
+            sched_crew.source_url if sched_crew is not None else None
+        )
+        scheduled_columns["crew_source_label"].append(
+            CREW_BACKUP_LABEL if sched_crew is not None else None
+        )
+        for side in ("home", "away"):
+            conf = row[f"{side}_conference"]
+            scheduled_columns[f"{side}_conference"].append(
+                conference_index[conf] if conf is not None else None
+            )
+        venue_id = row["venue_id"]
+        scheduled_columns["place"].append(
+            venue_index.get(int(venue_id)) if venue_id is not None else None
+        )
+        scheduled_columns["week"].append(_week_label(row))
 
     # -- coverage: publisher_counts per (season, network), and per-season totals ------------
     publisher_counts_by_key: dict[tuple[int, str], dict[str, int]] = {}
@@ -766,9 +899,11 @@ def build_site_data(
             "rivalries": rivalries_lookup,
             "venues": venues_lookup,
             "booths": booths_lookup,
+            "weeks": [dict(week) for week in schedule.weeks],
         },
         "telecasts": columns,
         "telecasts_unrated": unrated_columns,
+        "telecasts_scheduled": scheduled_columns,
         "coverage": coverage_rows,
     }
     if counts is not None:
@@ -778,6 +913,8 @@ def build_site_data(
             1 for v in (*columns["rivalry"], *unrated_columns["rivalry"]) if v is not None
         )
         counts["unrated_shipped"] = len(unrated_rows)
+        counts["scheduled_games"] = len(scheduled_rows)
+        counts["scheduled_network_unmapped"] = schedule.network_unmapped
         counts["unrated_left_out"] = tables.telecasts.filter(left_out_unrated_expr()).height
         counts["unrated_duplicates_dropped"] = duplicates_dropped
         counts["plotted_duplicates_dropped"] = plotted_duplicates_dropped

@@ -1,7 +1,7 @@
 # NFL site data contract
 
-`nfl-data.json` is the NFL site file (schema `2.0.0`). It is separate from
-`site-data.json` (see `docs/site-data.md`, schema `2.6.0`, which this contract never
+`nfl-data.json` is the NFL site file (schema `2.1.0`). It is separate from
+`site-data.json` (see `docs/site-data.md`, schema `2.7.0`, which this contract never
 touches) and the page loads it only when NFL is chosen, directly or through
 `?sport=nfl`, so a college-football page load is unchanged.
 
@@ -46,6 +46,11 @@ Columnar like the CFB file: each block is an object of equal-length lists, and i
 (last week with results), `viewership_through_week`, `crews_default_season` (the latest
 season before the in-progress one). The two weeks and
 the default season are `null` when unknown. `crews_default_season` stays in the contract, but the site no longer reads it since Phase 15 (Crews follows the master Seasons range).
+
+`weekend` (Phase 18) is `null` or `{ week, schedule_updated_at, crews_506_saved_at }`: the
+week the This weekend tab opens on and when the nflverse schedule and the last 506 import
+landed. The timestamps are ISO UTC strings (`YYYY-MM-DDTHH:MM:SSZ`) or `null`; the client
+formats them in ET, and the file carries no wall clock of its own.
 
 ### constants
 
@@ -100,6 +105,55 @@ cancelled one included, is never `pending`.
 
 `original_slot`, `original_network` and `change_url` are extracted from Wikipedia
 articles and are CC BY-SA 4.0 (D-23); the detail panel links the article.
+
+### upcoming
+
+Phase 18's This weekend tab. Unplayed games of the weekend, kept apart from `games` so no
+played-game view iterates them. Columns: `season`, `week`, `date`, `kickoff`, `home`,
+`away`, `home_name`, `away_name` (the same lookup indexes as `games`), `slot` (index into
+`lookups.slots`), `international`, `neutral` (nflverse location `Neutral`), `network`,
+`network_basis`, `crew`, `crew_source`, `crew_source_url`, `booth_rank`.
+
+- The This weekend tab writes "vs" for an `international` game on both blocks, since
+  `games` ships no `neutral` column; `neutral` is not used for it (18-13).
+- `date`, `kickoff` and `network` may be `null` for a game the schedule has not settled
+  (Time TBA, Network TBA). `date` is `null` only when `kickoff` is `null`, and `slot` is
+  `null` whenever `kickoff` is.
+- `network_basis` is `null` exactly when `network` is `null`. `"506"` means a hand-saved
+  506 page named the network; `"slot"` means the hand-curated slot-rights table filled it
+  (plain Thursday Prime, Sunday Night on NBC, Monday Night on ESPN) and a 506 page
+  overrides it. The slot-table facts come from Wikipedia (CC BY-SA 4.0), credited with
+  the article link.
+- `crew` and `crew_source` come from hand-saved 506 imports only (`crew_source` is
+  `"506"` or `null`; a published lineup is never used for an upcoming game). An empty
+  crew is "Crew TBA".
+- `booth_rank` is the published rank from `data/reference/nfl_booth_ranks.csv` for the
+  game's network and season, and is `null` when the crew is empty.
+- Selection (built by `nfl/upcoming.py` into `processed/nfl_upcoming.parquet`): the latest
+  season's unplayed regular-season games (not past kickoff + 4 h) in weeks up to and
+  including the current week. The current week is the last fully played week plus one,
+  capped at the last week, so it flips once Monday Night Football ends. Games whose date
+  or time is still TBD/TBA/NA are kept; rows with no week cannot be placed and are counted
+  (`upcoming_unplaced`), never dropped silently.
+- `network_basis` rule: a saved 506 page wins (`"506"`). Otherwise only a plain Thursday,
+  Sunday or Monday night game takes its network from `data/reference/nfl_slot_networks.csv`
+  (`"slot"`, columns `season,slot,network_id,source_url`; the three 2026 rows are hand-entered
+  facts from the Wikipedia 2026 NFL season article, each carrying that `source_url`). Slot
+  exclusions: international games and neutral games at an unknown site, Thanksgiving,
+  Black Friday, Christmas, Wednesday and Saturday games, the Week 1 Thursday opener, Week
+  18, any game in the season's Wikipedia scheduling-changes list, any game without a
+  kickoff time, a Monday kickoff before 7 pm ET, and every game of a slot the week holds
+  more than one game in (a Monday doubleheader split across ESPN and ABC). Every other game has a `null` network (Network TBA). A season missing from
+  the table gives no slot networks and counts `upcoming_slot_table_missing`. The credit
+  rule: Wikipedia (CC BY-SA 4.0) is credited with the article link wherever a `"slot"`
+  network shows. All slot-rule lines live in `_slot_network`; deleting the rule is a
+  one-file change.
+- Rollover: the NFL file switches weeks on the first deploy after the week's last kickoff
+  + 4 h (the Wednesday 20:00 build, or a manual `nfl build`). A vault built before this
+  phase has no `nfl_upcoming.parquet`; the site builder then ships an empty block and a
+  `null` `freshness.weekend`. The weekend stamp is also `null` when no game is upcoming.
+- A game in `games` never appears here: the contract rejects a repeated
+  (season, week, home, away), count only. No points, viewers, excitement or cause ship.
 
 ### special
 
@@ -177,9 +231,11 @@ never 0. Figures for the window-level categories are labeled as such by the clie
 
 ## Versioning
 
-NFL data is on its own `2.0.0` line, with the same rules as the CFB contract: a patch
+NFL data is on its own `2.x.0` line, with the same rules as the CFB contract: a patch
 for wording or documentation, a minor for an added optional field, a major for a
 removed or retyped field. Changing the CFB contract's version is out of scope here.
 
 - 2.0.0 (Phase 8): fox_booths and agotw_viewership replaced by booths and viewership;
   families, network groups, view categories, solo segments and crew source added.
+- 2.1.0 (Phase 18): the `upcoming` block and `freshness.weekend` for the This weekend tab
+  (additive).

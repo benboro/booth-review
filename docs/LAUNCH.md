@@ -75,6 +75,7 @@ that the site is live, and no private repo name may appear.
 ## Observations
 
 - Time zone: at the first Sunday main slot after the 2026-11-01 fall-back, confirm the `schedule.timezone` setting keeps the run at 10:00 ET (it must not shift an hour).
+- Schedule-only slots: Friday 18:00 and Saturday 08:00 ET runs re-pull only the CFBD schedule and the nflverse schedule, then rebuild and deploy; a manual dispatch with mode rebuild publishes newly imported crews at once (Phase 18).
 - Cron delays: scheduled runs can start late. Read "by Sunday night" as the Sunday main slot or its backups, and "by Wednesday" as the Wednesday slot or the Thursday-morning backups.
 
 ## Operating notes

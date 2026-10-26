@@ -366,3 +366,15 @@ def test_parse_info_reads_documented_fields() -> None:
     assert snapshot.monthly_limit == 1000
     assert snapshot.used_calls == 257
     assert snapshot.reset_at == "2026-10-01T00:00:00Z"
+
+
+def test_limit_run_calls_only_lowers_the_cap(tmp_path: Path) -> None:
+    # 18-13 F6: a schedule-only run lowers the job's cap, and never raises a lower one.
+    budget = CfbdBudget(tmp_path / "ledger.jsonl", max_calls=8)
+    budget.limit_run_calls(3)
+    assert budget.run_cap == 3
+    budget.limit_run_calls(5)
+    assert budget.run_cap == 3
+    uncapped = CfbdBudget(tmp_path / "other.jsonl")
+    uncapped.limit_run_calls(3)
+    assert uncapped.run_cap == 3

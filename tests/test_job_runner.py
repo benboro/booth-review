@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -23,7 +24,11 @@ from booth_review.config import CFBD_FLOOR_DEFAULT
 from booth_review.errors import VaultCommitError, VaultStateError
 from booth_review.job.catchup import JobState, load_state, save_state
 from booth_review.job.gaps506 import find_506_gaps
-from booth_review.job.runner import JOB_CFBD_MAX_CALLS, ScheduledJob
+from booth_review.job.runner import (
+    JOB_CFBD_MAX_CALLS,
+    JOB_CFBD_SCHEDULE_MAX_CALLS,
+    ScheduledJob,
+)
 from booth_review.runtime import Runtime
 from booth_review.sources.ratingsref.collector import SITEMAP_URL
 from booth_review.transport.budget import CfbdBudget
@@ -1483,6 +1488,7 @@ def test_update_run_appends_one_count_only_report_line_in_the_state_commit(
         "run_at",
         "trigger",
         "update",
+        "mode",
         "deploy_ready",
         "cfbd_remaining_start",
         "cfbd_remaining_end",
@@ -1975,3 +1981,175 @@ def test_espnpr_step_error_is_one_count_only_item_and_the_run_continues(
     saved_state = load_state(paths.job_state)
     assert saved_state.last_attempt_at == _ESPNPR_NOW
     assert saved_state.last_status == "failed"
+
+
+# -- schedule-only and rebuild-only modes (Phase 18 D-14/D-15/D-17) -------------------------
+
+
+_FRI_NOW = datetime(2026, 10, 30, 22, 5, tzinfo=UTC)  # Fri 18:05 EDT
+_WED_RUN = datetime(2026, 10, 29, 0, 5, tzinfo=UTC)  # Wed 20:05 EDT
+
+
+def _seed_wednesday_run(paths) -> JobState:
+    state = JobState(
+        season=2026,
+        last_success_at=_WED_RUN,
+        last_attempt_at=_WED_RUN,
+        last_status="ok",
+        last_window_start=_WED_RUN,
+    )
+    save_state(paths.job_state, state)
+    return state
+
+
+def test_scheduled_job_schedule_mode_pulls_only_games_and_media(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    before = _seed_wednesday_run(paths)
+
+    handle = mock_transport_factory(_cfbd_ok_responses(2026))
+    runtime = _runtime(paths, handle, now=lambda: _FRI_NOW, fake_clock=fake_clock, max_calls=3)
+    result = ScheduledJob(
+        runtime, token="test-token", now=lambda: _FRI_NOW, trigger="schedule"
+    ).run()
+
+    assert result.exit_code != 5
+    urls = [r.url for r in handle.requests]
+    data = [
+        u
+        for u in urls
+        if u.startswith("https://api.collegefootballdata.com") and not u.endswith("robots.txt")
+    ]
+    assert sorted(u.split("?")[0] for u in data) == [
+        "https://api.collegefootballdata.com/games",
+        "https://api.collegefootballdata.com/games/media",
+    ]
+    for banned in ("506sports.com", "ratingsreference.com", "espn", "wikipedia", "retrosheet"):
+        assert all(banned not in u for u in urls)
+
+    after = load_state(paths.job_state)
+    assert after.last_schedule_at == _FRI_NOW
+    assert after.last_success_at == before.last_success_at
+    assert after.last_attempt_at == before.last_attempt_at
+    assert after.last_status == before.last_status
+
+
+def test_auto_resolved_schedule_mode_lowers_the_cfbd_cap(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    # 18-13 F6: the workflow passes --mode auto on cron, so the 3-call cap is chosen after the
+    # mode resolves, not from the flag.
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    _seed_wednesday_run(paths)
+    handle = mock_transport_factory(_cfbd_ok_responses(2026))
+    runtime = _runtime(
+        paths, handle, now=lambda: _FRI_NOW, fake_clock=fake_clock, max_calls=JOB_CFBD_MAX_CALLS
+    )
+    ScheduledJob(
+        runtime,
+        token="test-token",
+        now=lambda: _FRI_NOW,
+        trigger="schedule",
+        schedule_max_calls=JOB_CFBD_SCHEDULE_MAX_CALLS,
+    ).run()
+    assert runtime.budget is not None
+    assert runtime.budget.run_cap == JOB_CFBD_SCHEDULE_MAX_CALLS
+
+
+def test_cli_job_run_rejects_a_mode_on_a_scheduled_trigger(capsys) -> None:
+    # 18-13 F15: a scheduled run picks its own mode from the clock; a --mode would be ignored.
+    for mode in ("full", "schedule", "rebuild"):
+        assert main(["job", "run", "--trigger", "schedule", "--mode", mode, "--dry-run"]) == 2
+        assert "--mode" in capsys.readouterr().err
+
+
+def test_failed_schedule_pull_leaves_last_schedule_at_so_a_backup_slot_retries(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    # 18-13 F11: a schedule-only run whose CFBD pull failed must not mark the slot done, or the
+    # 20:00/22:00 backups no-op.
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    before = _seed_wednesday_run(paths)
+    responses = _cfbd_ok_responses(2026)
+    responses["https://api.collegefootballdata.com/games?seasonType=both&year=2026"] = (
+        502,
+        b"bad gateway",
+        {},
+    )
+    handle = mock_transport_factory(responses)
+    runtime = _runtime(paths, handle, now=lambda: _FRI_NOW, fake_clock=fake_clock, max_calls=3)
+    ScheduledJob(runtime, token="test-token", now=lambda: _FRI_NOW, trigger="schedule").run()
+    assert load_state(paths.job_state).last_schedule_at == before.last_schedule_at
+
+    later = datetime(2026, 10, 31, 0, 5, tzinfo=UTC)  # Fri 20:05 EDT backup
+    retry = mock_transport_factory(_cfbd_ok_responses(2026))
+    runtime = _runtime(paths, retry, now=lambda: later, fake_clock=fake_clock, max_calls=3)
+    result = ScheduledJob(runtime, token="test-token", now=lambda: later, trigger="schedule").run()
+    assert result.exit_code != 5
+    assert any("/games" in r.url for r in retry.requests)
+    assert load_state(paths.job_state).last_schedule_at == later
+
+
+def test_scheduled_job_schedule_mode_backup_slot_is_nothing_due(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    state = _seed_wednesday_run(paths)
+    save_state(paths.job_state, replace(state, last_schedule_at=_FRI_NOW))
+
+    handle = mock_transport_factory({})
+    later = datetime(2026, 10, 31, 0, 5, tzinfo=UTC)  # Fri 20:05 EDT backup
+    runtime = _runtime(paths, handle, now=lambda: later, fake_clock=fake_clock)
+    result = ScheduledJob(runtime, token="test-token", now=lambda: later, trigger="schedule").run()
+
+    assert result.exit_code == 5
+    assert handle.requests == []
+
+
+def test_update_rebuild_mode_collects_nothing_and_deploys(
+    update_vault, mock_transport_factory, fake_clock, tmp_path
+) -> None:
+    paths = update_vault
+    before = load_state(paths.job_state)
+    handle = mock_transport_factory({})
+    later = UPDATE_NOW.replace(hour=18)
+    job = _update_job(paths, handle, fake_clock, tmp_path, now=later, mode="rebuild")
+    result = job.run()
+
+    assert handle.requests == []
+    assert result.deploy_ready is True
+    assert (tmp_path / "site-out" / "index.html").is_file()
+    after = load_state(paths.job_state)
+    # 18-13 F11: a rebuild pulls no schedule, so it never stands in for a schedule slot.
+    assert after.last_schedule_at == before.last_schedule_at
+    assert after.last_build_at == later
+    assert after.last_success_at == before.last_success_at
+    assert after.last_attempt_at == before.last_attempt_at
+
+
+def test_update_schedule_mode_requests_only_games_and_media_then_deploys(
+    update_vault, mock_transport_factory, fake_clock, tmp_path
+) -> None:
+    paths = update_vault
+    before = load_state(paths.job_state)
+    handle = mock_transport_factory(_update_cfbd_responses())
+    later = UPDATE_NOW.replace(hour=18)
+    job = _update_job(paths, handle, fake_clock, tmp_path, now=later, mode="schedule")
+    result = job.run()
+
+    paths_requested = {
+        u.split("?")[0].removeprefix("https://api.collegefootballdata.com")
+        for u in (r.url for r in handle.requests)
+        if "collegefootballdata" in u and not u.endswith("robots.txt")
+    }
+    assert paths_requested == {"/games", "/games/media"}
+    assert all("ratingsreference" not in r.url for r in handle.requests)
+    assert result.deploy_ready is True
+    after = load_state(paths.job_state)
+    assert after.last_schedule_at == later
+    assert after.last_success_at == before.last_success_at

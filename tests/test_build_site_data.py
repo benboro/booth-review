@@ -12,6 +12,7 @@ import shutil
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import polars as pl
 import pytest
@@ -20,6 +21,7 @@ from booth_review.build import site_data as site_data_module
 from booth_review.build.booths import BOOTH_TIERS_SCHEMA
 from booth_review.build.bowls import BowlEntry
 from booth_review.build.coverage import build_coverage
+from booth_review.build.crew_backup import ScheduledCrew
 from booth_review.build.games import GAMES_SCHEMA
 from booth_review.build.people_links import PEOPLE_SCHEMA, TELECAST_PEOPLE_SCHEMA
 from booth_review.build.site_data import build_site_data, time_slot, write_site_data
@@ -27,8 +29,10 @@ from booth_review.build.tables import BuildDiagnostics, BuildTables
 from booth_review.build.telecasts import LISTING_LINKS_SCHEMA, TELECASTS_SCHEMA
 from booth_review.build.venues import VENUES_SCHEMA
 from booth_review.build.viewership import TELECAST_FLAGS_SCHEMA, VIEWERSHIP_SCHEMA
+from booth_review.build.weekend import ScheduleInputs, week_labels, week_refs
 from booth_review.config import DataPaths
 from booth_review.contract.models import SITE_DATA_FIELDS, validate_site_data
+from booth_review.sources.cfbd.parser import CfbdGame
 
 _GENERATED_AT = datetime(2026, 9, 27, 12, 0, 0, tzinfo=UTC)
 
@@ -1630,7 +1634,7 @@ def test_backup_crew_ships_espn_press_room_credit_and_main_crew(build_reference:
     )
     payload = _site(tables, build_reference)
 
-    assert payload["schema_version"] == "2.6.0"
+    assert payload["schema_version"] == "2.7.0"
     columns = payload["telecasts"]
     assert columns["crew_source_label"] == [None, "ESPN Press Room"]
     assert columns["crew_source_url"] == [None, release]
@@ -1825,6 +1829,8 @@ def test_title_game_before_rivalry_game_is_untagged_and_counted(
     payload = site.model_dump(mode="json")
     assert payload["telecasts"]["rivalry"] == [None, 0]
     assert counts == {
+        "scheduled_games": 0,
+        "scheduled_network_unmapped": 0,
         "bowls_no_franchise": 0,
         "rivalry_games_tagged": 1,
         "rivalry_telecasts_tagged": 1,
@@ -2323,3 +2329,265 @@ def test_disagreeing_booth_rows_raise_a_count_only_error(
     rows = [_booth_row("2-net-b"), _booth_row("6-net-b", rank=1, tier="a")]
     with pytest.raises(VaultStateError, match=r"booth_tiers: 1 telecast"):
         _site(_booth_tables(small_tables, rows), _booth_reference(tmp_path, build_reference))
+
+
+# -- telecasts_scheduled (Phase 18 Plan 06) ----------------------------------------------------
+
+
+def _cfbd_game(game_id: int, week: int, start: datetime, **overrides: object) -> CfbdGame:
+    defaults: dict[str, object] = {
+        "id": game_id,
+        "season": 2026,
+        "week": week,
+        "season_type": "regular",
+        "start_date": start,
+        "start_time_tbd": False,
+        "completed": False,
+        "neutral_site": False,
+        "conference_game": True,
+        "venue": None,
+        "home_id": game_id,
+        "home_team": f"Sched Home {game_id}",
+        "home_classification": "fbs",
+        "home_conference": "Fixture Conference",
+        "home_points": None,
+        "away_id": game_id + 500,
+        "away_team": f"Sched Away {game_id}",
+        "away_classification": "fbs",
+        "away_conference": "Fixture Conference",
+        "away_points": None,
+        "excitement_index": None,
+        "notes": None,
+    }
+    defaults.update(overrides)
+    return CfbdGame(**defaults)  # type: ignore[arg-type]
+
+
+def _sched_row(game: CfbdGame, **overrides: object) -> dict[str, object]:
+    eastern = game.start_date.astimezone(ZoneInfo("America/New_York"))
+    fields: dict[str, object] = {
+        "game_id": game.id,
+        "season": 2026,
+        "week": game.week,
+        "date_et": eastern.date(),
+        "kickoff_et": None if game.start_time_tbd else eastern.isoformat(),
+        "home_team": game.home_team,
+        "away_team": game.away_team,
+        "home_points": None,
+        "away_points": None,
+        "home_rank": None,
+        "away_rank": None,
+        "excitement": None,
+        "closing_spread": None,
+        "pregame_x": None,
+    }
+    fields.update(overrides)
+    return _game_row(**fields)
+
+
+def _scheduled_site(
+    base: BuildTables,
+    cfbd_games: list[CfbdGame],
+    networks: dict[int, tuple[str | None, list[str]]],
+    build_reference: Path,
+    row_overrides: dict[int, dict[str, object]] | None = None,
+    *,
+    generated_at: datetime = _GENERATED_AT,
+    extra_telecasts: list[dict[str, object]] | None = None,
+    crews: dict[int, ScheduledCrew] | None = None,
+) -> dict[str, Any]:
+    rows = [_sched_row(g, **(row_overrides or {}).get(g.id, {})) for g in cfbd_games]
+    frame = pl.concat([base.games, _games_frame(rows)], how="vertical_relaxed")
+    if extra_telecasts:
+        base = dataclasses.replace(
+            base,
+            telecasts=pl.concat(
+                [base.telecasts, _telecasts_frame(extra_telecasts)], how="vertical_relaxed"
+            ),
+        )
+    schedule = ScheduleInputs(
+        season=2026,
+        games=tuple(cfbd_games),
+        weeks=tuple(week_refs(cfbd_games, 2026)),
+        labels=week_labels(cfbd_games, 2026),
+        networks=networks,
+        network_unmapped=1,
+        crews=crews or {},
+        stamps={
+            "5": {
+                "schedule_updated_at": "2026-09-26T10:00:00Z",
+                "crews_506_saved_at": None,
+                "crews_espnpr_saved_at": None,
+                "espnpr_week": None,
+            }
+        },
+    )
+    tables = dataclasses.replace(base, games=frame, schedule=schedule)
+    counts: dict[str, int] = {}
+    site = build_site_data(
+        tables, build_coverage(tables), build_reference, generated_at, counts=counts
+    )
+    payload = site.model_dump(mode="json")
+    payload["_counts"] = counts
+    return payload
+
+
+def _et_utc(month: int, day: int, hour: int) -> datetime:
+    return datetime(2026, month, day, hour, tzinfo=ZoneInfo("America/New_York")).astimezone(UTC)
+
+
+def _weeks_four_to_six() -> list[CfbdGame]:
+    return [
+        _cfbd_game(101, 4, _et_utc(9, 26, 12)),
+        _cfbd_game(102, 5, _et_utc(10, 3, 12)),
+        _cfbd_game(103, 5, _et_utc(10, 3, 19), start_time_tbd=True),
+        _cfbd_game(104, 5, _et_utc(10, 3, 20)),
+        _cfbd_game(105, 6, _et_utc(10, 10, 12)),
+    ]
+
+
+def test_scheduled_ships_current_and_past_weeks_not_later_ones(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    payload = _scheduled_site(
+        small_tables,
+        _weeks_four_to_six(),
+        {102: ("net-a", ["net-a"]), 101: ("net-b", ["net-b"])},
+        build_reference,
+    )
+    block = payload["telecasts_scheduled"]
+    teams = [payload["lookups"]["teams"][i]["name"] for i in block["home_team"]]
+    assert teams == ["Sched Home 101", "Sched Home 102", "Sched Home 104", "Sched Home 103"]
+    assert payload["freshness"]["weekend"]["label"] == "5"
+    assert payload["freshness"]["weekend"]["number"] == 5
+    assert payload["freshness"]["weekend"]["schedule_updated_at"] == "2026-09-26T10:00:00Z"
+    assert [w["label"] for w in payload["lookups"]["weeks"]] == ["4", "5", "6"]
+    assert payload["_counts"]["scheduled_games"] == 4
+    assert payload["_counts"]["scheduled_network_unmapped"] == 1
+
+
+def test_scheduled_tbd_kickoff_and_radio_only_network_are_null(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    payload = _scheduled_site(
+        small_tables, _weeks_four_to_six(), {102: ("net-a", ["net-a"])}, build_reference
+    )
+    block = payload["telecasts_scheduled"]
+    names = [payload["lookups"]["teams"][i]["name"] for i in block["home_team"]]
+    tbd = names.index("Sched Home 103")
+    assert block["kickoff"][tbd] is None
+    assert block["time_slot"][tbd] is None
+    assert block["kickoff"][names.index("Sched Home 102")] is not None
+    # Nulls sort last within the day.
+    assert names.index("Sched Home 103") > names.index("Sched Home 104")
+    assert block["network"][names.index("Sched Home 104")] is None
+    net_a = block["network"][names.index("Sched Home 102")]
+    assert payload["lookups"]["networks"][net_a]["id"] == "net-a"
+
+
+def test_scheduled_excludes_games_already_shipped(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    games = _weeks_four_to_six()
+    shipped = small_tables.telecasts.row(0, named=True)
+    shipped_game = small_tables.games.filter(pl.col("game_id") == shipped["game_id"]).row(
+        0, named=True
+    )
+    clash = _cfbd_game(
+        999,
+        4,
+        _et_utc(9, 26, 15),
+        home_team=shipped_game["home_team"],
+        away_team=shipped_game["away_team"],
+    )
+    same_day = {999: {"date_et": shipped_game["date_et"]}}
+    payload = _scheduled_site(small_tables, [*games, clash], {}, build_reference, same_day)
+    block = payload["telecasts_scheduled"]
+    names = [payload["lookups"]["teams"][i]["name"] for i in block["home_team"]]
+    assert shipped_game["home_team"] not in names
+    assert len(names) == 4
+
+
+def test_week_label_follows_cfbd_week_not_the_calendar(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    # 18-13 F1: a Labor Day Monday game is CFBD week 1 but falls in week 2's Monday-to-Sunday
+    # span. Every block ships the game's own label so the tab shows it under week 1.
+    games = [
+        _cfbd_game(101, 1, _et_utc(9, 5, 12)),
+        _cfbd_game(102, 1, _et_utc(9, 7, 20)),
+        _cfbd_game(103, 2, _et_utc(9, 12, 12)),
+    ]
+    played = _unrated_row(
+        telecast_id="101-net-a",
+        game_id=101,
+        season=2026,
+        date_et=date(2026, 9, 5),
+        kickoff_et="2026-09-05T12:00:00-04:00",
+    )
+    payload = _scheduled_site(
+        small_tables,
+        games,
+        {102: ("net-a", ["net-a"])},
+        build_reference,
+        generated_at=_et_utc(9, 7, 9),
+        extra_telecasts=[played],
+    )
+    assert payload["freshness"]["weekend"]["label"] == "1"
+    week_one = next(w for w in payload["lookups"]["weeks"] if w["label"] == "1")
+    assert week_one["end"] == "2026-09-06"
+    scheduled = payload["telecasts_scheduled"]
+    assert scheduled["date"] == ["2026-09-07"]
+    assert scheduled["week"] == ["1"]
+    unrated = payload["telecasts_unrated"]
+    weeks = dict(zip(unrated["season"], unrated["week"], strict=True))
+    assert weeks[2026] == "1"
+    assert set(payload["telecasts"]["week"]) == {None}
+
+
+def test_scheduled_game_ships_its_press_room_booth(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    # 18-13 F7: a Monday commentators page booth reaches a game 506 has not listed yet.
+    url = "https://espnpressroom.com/us/press-releases/2026/09/synthetic-commentators/"
+    crew = ScheduledCrew((("mike-golic-jr", "pbp"), ("dale-harlow", "analyst")), url)
+    payload = _scheduled_site(
+        small_tables,
+        _weeks_four_to_six(),
+        {102: ("net-a", ["net-a"])},
+        build_reference,
+        crews={102: crew},
+    )
+    block = payload["telecasts_scheduled"]
+    names = [payload["lookups"]["teams"][i]["name"] for i in block["home_team"]]
+    k = names.index("Sched Home 102")
+    people = payload["lookups"]["people"]
+    assert [(people[e["person"]]["id"], e["role"], e["feed"]) for e in block["crew"][k]] == [
+        ("mike-golic-jr", "pbp", "main"),
+        ("dale-harlow", "analyst", "main"),
+    ]
+    assert block["crew_source_url"][k] == url
+    assert block["crew_source_label"][k] == "ESPN Press Room"
+    others = [i for i in range(len(names)) if i != k]
+    assert all(block["crew"][i] == [] and block["crew_source_url"][i] is None for i in others)
+
+
+def test_scheduled_empty_without_schedule_inputs(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    payload = _site(small_tables, build_reference)
+    assert payload["telecasts_scheduled"]["date"] == []
+    assert payload["freshness"]["weekend"] is None
+    assert payload["lookups"]["weeks"] == []
+
+
+def test_scheduled_build_is_byte_identical(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    first = _scheduled_site(
+        small_tables, _weeks_four_to_six(), {102: ("net-a", ["net-a"])}, build_reference
+    )
+    second = _scheduled_site(
+        small_tables, _weeks_four_to_six(), {102: ("net-a", ["net-a"])}, build_reference
+    )
+    assert json.dumps(first, sort_keys=True) == json.dumps(second, sort_keys=True)

@@ -31,7 +31,14 @@ EASTERN = ZoneInfo("America/New_York")
 # Wednesday 20:00 (D-11).
 SCHEDULE: tuple[tuple[int, int], ...] = ((6, 10), (2, 20))
 
+# Schedule-only slots (Phase 18 D-17): Friday 18:00 and Saturday 08:00 ET, after
+# typical Thursday/Friday imports and before the first Saturday noon kickoff.
+# They re-pull only the schedule sources and rebuild; they are never "main"
+# slots, so `scheduled_slots`, `missed_slots` and `is_due` ignore them.
+SCHEDULE_ONLY: tuple[tuple[int, int], ...] = ((4, 18), (5, 8))
+
 Trigger = Literal["schedule", "manual"]
+RunMode = Literal["full", "schedule", "rebuild"]
 
 _STATUSES = frozenset({"ok", "attention", "failed"})
 _TIME_FMT = "%Y-%m-%dT%H:%M:%SZ"
@@ -81,6 +88,10 @@ class JobState:
     last_build_at: datetime | None = None
     """Set by an update-mode run whose build wrote processed/ unblocked; read by
     the D-14 staleness check."""
+    last_schedule_at: datetime | None = None
+    """Set by every schedule-only or rebuild-only run (D-17). Those runs never move
+    `last_success_at` or `last_attempt_at`, so the Sunday/Wednesday slot logic is
+    unchanged; this field only stops a backup cron repeating a schedule-only run."""
 
 
 _EMPTY_STATE = JobState(
@@ -127,6 +138,7 @@ def load_state(path: Path) -> JobState:
         last_window_start=_parse_dt(data, "last_window_start", path=path),
         retry_pending=retry_pending,
         last_build_at=_parse_dt(data, "last_build_at", path=path),
+        last_schedule_at=_parse_dt(data, "last_schedule_at", path=path),
     )
 
 
@@ -141,17 +153,12 @@ def save_state(path: Path, state: JobState) -> None:
         "last_window_start": _format_dt(state.last_window_start),
         "retry_pending": state.retry_pending,
         "last_build_at": _format_dt(state.last_build_at),
+        "last_schedule_at": _format_dt(state.last_schedule_at),
     }
     atomic_write_json(path, payload)
 
 
-def scheduled_slots(start: datetime, end: datetime) -> list[datetime]:
-    """Return every scheduled UTC slot in (start, end], sorted ascending.
-
-    Both bounds must be timezone-aware. Slots are built in America/New_York
-    local time (D-11) and converted to UTC, so this stays correct across the
-    fall DST change without any UTC-offset arithmetic.
-    """
+def _slots_in(table: tuple[tuple[int, int], ...], start: datetime, end: datetime) -> list[datetime]:
     _require_aware(start, "start")
     _require_aware(end, "end")
     if end <= start:
@@ -166,7 +173,7 @@ def scheduled_slots(start: datetime, end: datetime) -> list[datetime]:
     slots: list[datetime] = []
     while day <= last_day:
         weekday = day.weekday()
-        for slot_weekday, slot_hour in SCHEDULE:
+        for slot_weekday, slot_hour in table:
             if weekday != slot_weekday:
                 continue
             local = datetime(day.year, day.month, day.day, slot_hour, 0, tzinfo=EASTERN)
@@ -177,6 +184,21 @@ def scheduled_slots(start: datetime, end: datetime) -> list[datetime]:
 
     slots.sort()
     return slots
+
+
+def scheduled_slots(start: datetime, end: datetime) -> list[datetime]:
+    """Return every scheduled UTC slot in (start, end], sorted ascending.
+
+    Both bounds must be timezone-aware. Slots are built in America/New_York
+    local time (D-11) and converted to UTC, so this stays correct across the
+    fall DST change without any UTC-offset arithmetic.
+    """
+    return _slots_in(SCHEDULE, start, end)
+
+
+def schedule_only_slots(start: datetime, end: datetime) -> list[datetime]:
+    """Return every Friday/Saturday schedule-only UTC slot in (start, end]."""
+    return _slots_in(SCHEDULE_ONLY, start, end)
 
 
 def missed_slots(since: datetime | None, now: datetime, trigger: Trigger) -> int:
@@ -278,6 +300,37 @@ def is_due(state: JobState, now: datetime, trigger: Trigger) -> bool:
     if since is None:
         return True
     return len(scheduled_slots(since, now)) >= 1
+
+
+def resolve_mode(
+    state: JobState,
+    now: datetime,
+    trigger: Trigger,
+    requested: RunMode | None,
+) -> RunMode | None:
+    """The mode a run should take, or None for a backup-slot no-op (D-17).
+
+    A manual run takes `requested` (default "full"). A scheduled run is "full"
+    when a main slot (Sunday/Wednesday) is due (`is_due`), "schedule" when only a
+    Friday/Saturday schedule-only slot passed since the later of
+    `last_schedule_at` and the last attempt, else None. Schedule and rebuild
+    runs never move `last_success_at` or `last_attempt_at`.
+    """
+    _require_aware(now, "now")
+    if trigger == "manual":
+        return requested or "full"
+    if is_due(state, now, trigger):
+        return "full"
+    candidates = [
+        value
+        for value in (state.last_schedule_at, state.last_attempt_at, state.last_success_at)
+        if value is not None
+    ]
+    if not candidates:
+        return None
+    if schedule_only_slots(max(candidates), now):
+        return "schedule"
+    return None
 
 
 def collectable_season(today: date) -> int | None:

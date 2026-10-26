@@ -215,6 +215,8 @@ def _run(
     people: pl.DataFrame | None = None,
     overrides: dict[tuple[str, int, str], GameOverride] | None = None,
     season_counts: dict[int, dict[str, int]] | None = None,
+    current_season: int | None = None,
+    scheduled_networks: dict[int, str | None] | None = None,
 ) -> CrewBackupResult:
     return apply_crew_backup(
         pl.DataFrame(tels, schema=TELECASTS_SCHEMA),
@@ -227,6 +229,8 @@ def _run(
         networks=_networks(),
         registry=_registry(),
         season_counts=season_counts if season_counts is not None else _COUNTS,
+        current_season=current_season,
+        scheduled_networks=scheduled_networks,
     )
 
 
@@ -384,6 +388,61 @@ def test_unplotted_telecast_is_never_filled() -> None:
     result = _run([_tel(100, plotted=False)], [_booth(("Avery Lane", "Morgan Pike"))])
     assert result.statuses == {}
     assert result.counts["not_plotted"] == 1
+
+
+def test_unplotted_current_season_telecast_is_filled() -> None:
+    # 18-13 F7: an upcoming game 506 listed without a crew is unplotted; in the current season
+    # the Monday commentators page fills it (override > 506 > ESPN Press Room still holds).
+    result = _run(
+        [_tel(100, plotted=False, rated=False)],
+        [_booth(("Avery Lane", "Morgan Pike"))],
+        current_season=SEASON,
+    )
+    assert result.statuses == {"100-espn": "filled"}
+    assert result.counts["not_plotted"] == 0
+    assert result.telecast_people.height == 2
+
+
+def test_scheduled_game_without_a_telecast_takes_the_booth() -> None:
+    # 18-13 F7: a game with no telecast row yet (no 506 listing) ships in telecasts_scheduled;
+    # its ESPN-family booth comes back per game id with the page credit.
+    result = _run(
+        [],
+        [_booth(("Avery Lane", "Morgan Pike", "Newcomer Voice"))],
+        current_season=SEASON,
+        scheduled_networks={100: "espn"},
+    )
+    crew = result.scheduled_crews[100]
+    assert crew.entries == (("avery-lane", "pbp"), ("morgan-pike", "analyst"))
+    assert crew.source_url == URL
+    assert result.counts["scheduled_filled"] == 1
+    assert result.counts["no_telecast"] == 0
+    assert result.telecast_people.height == 0
+    assert result.statuses == {}
+
+
+def test_scheduled_booth_is_skipped_off_its_network_or_out_of_season() -> None:
+    booth = [_booth(("Avery Lane", "Morgan Pike"))]
+    other = _run([], booth, current_season=SEASON, scheduled_networks={100: "abc"})
+    assert other.scheduled_crews == {}
+    assert other.counts["network_mismatch"] == 1
+    tba = _run([], booth, current_season=SEASON, scheduled_networks={100: None})
+    assert tba.scheduled_crews == {}
+    past = _run([], booth, current_season=SEASON + 1, scheduled_networks={100: "espn"})
+    assert past.scheduled_crews == {}
+    assert past.counts["no_telecast"] == 1
+
+
+def test_scheduled_unknown_name_becomes_a_provisional_person() -> None:
+    result = _run(
+        [],
+        [_booth(("Avery Lane", "Brand Newname"))],
+        current_season=SEASON,
+        scheduled_networks={100: "espn"},
+    )
+    new_id = result.scheduled_crews[100].entries[1][0]
+    assert new_id in set(result.people["person_id"].to_list())
+    assert [r["provisional_id"] for r in result.new_name_rows] == [new_id]
 
 
 def test_alt_feed_telecast_is_never_a_target() -> None:

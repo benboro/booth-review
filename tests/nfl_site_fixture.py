@@ -23,6 +23,7 @@ from booth_review.contract.nfl_models import (
     NFL_VIEW_CATEGORIES,
     NflBoothColumns,
     NflGameColumns,
+    NflUpcomingColumns,
     NflViewershipColumns,
     validate_nfl_site_data,
 )
@@ -595,6 +596,55 @@ def _games_block(specs: list[dict[str, Any]], person_roles: dict[int, str]) -> d
     return cols
 
 
+def _upcoming_block(person_roles: dict[int, str]) -> dict[str, list[Any]]:
+    """Week 5 of 2026 as the This weekend tab sees it (Phase 18): four CBS 1:00 games (two
+    with crews of booth rank 1 and 2), two FOX 4:25 games, one slot-table SNF game, one
+    game with no kickoff yet, one with no network yet and one neutral-site game."""
+    # (day|None, hhmm|None, home, away, slot, network|None, basis, crew, rank, neutral)
+    rows: list[tuple[Any, ...]] = [
+        ("2026-10-11", "13:00", 0, 1, "Sunday early", CBS, "506", _CREW_CBS, 1, False),
+        ("2026-10-11", "13:00", 2, 3, "Sunday early", CBS, "506", _CREW_CBS2, 2, False),
+        ("2026-10-11", "13:00", 4, 5, "Sunday early", CBS, "506", None, None, False),
+        ("2026-10-11", "13:00", 3, 0, "Sunday early", CBS, "506", None, None, False),
+        ("2026-10-11", "16:25", 5, 2, "Sunday late", FOX, "506", None, None, False),
+        ("2026-10-11", "16:25", 1, 4, "Sunday late", FOX, "506", None, None, False),
+        ("2026-10-11", "20:20", 3, 5, "SNF", NBC, "slot", None, None, False),
+        ("2026-10-11", None, 1, 5, None, CBS, "506", None, None, False),
+        ("2026-10-11", "13:00", 2, 0, "Sunday early", None, None, None, None, False),
+        ("2026-10-11", "09:30", 4, 3, "International", NFLN, "506", None, None, True),
+    ]
+    cols: dict[str, list[Any]] = {name: [] for name in NflUpcomingColumns.model_fields}
+    for day, hhmm, home, away, slot, network, basis, crew, rank, neutral in rows:
+        kickoff = None
+        if hhmm is not None:
+            hour, minute = (int(x) for x in hhmm.split(":"))
+            y, m, d = (int(x) for x in day.split("-"))
+            kickoff = datetime(y, m, d, hour, minute, tzinfo=_ET).isoformat()
+        entries = [] if crew is None else [{"person": p, "role": person_roles[p]} for p in crew]
+        values: dict[str, Any] = {
+            "season": 2026,
+            "week": 5,
+            "date": day,
+            "kickoff": kickoff,
+            "home": home,
+            "away": away,
+            "home_name": _team_name_index(home, 2026),
+            "away_name": _team_name_index(away, 2026),
+            "slot": None if slot is None else SLOT[slot],
+            "international": slot == "International",
+            "neutral": neutral,
+            "network": network,
+            "network_basis": basis,
+            "crew": entries,
+            "crew_source": "506" if entries else None,
+            "crew_source_url": LINEUP_URL if entries else None,
+            "booth_rank": rank,
+        }
+        for name in cols:
+            cols[name].append(values[name])
+    return cols
+
+
 def _special_block(
     specs: list[dict[str, Any]], weeks: dict[int, dict[str, int]]
 ) -> dict[str, list[Any]]:
@@ -872,13 +922,18 @@ def build_fixture() -> dict[str, Any]:
     }
     games = _games_block(specs, person_roles)
     payload: dict[str, Any] = {
-        "schema_version": "2.0.0",
+        "schema_version": "2.1.0",
         "freshness": {
             "season": 2026,
             "in_progress": True,
             "through_week": 3,
             "viewership_through_week": 2,
             "crews_default_season": 2025,
+            "weekend": {
+                "week": 5,
+                "schedule_updated_at": "2026-10-09T21:30:00Z",
+                "crews_506_saved_at": "2026-10-06T02:14:00Z",
+            },
         },
         "constants": {
             "viewership_scope": "window",
@@ -905,6 +960,7 @@ def build_fixture() -> dict[str, Any]:
             "slots": list(NFL_SLOTS),
         },
         "games": games,
+        "upcoming": _upcoming_block(person_roles),
         "special": _special_block(specs, weeks),
         "season_weeks": {
             "season": list(weeks),

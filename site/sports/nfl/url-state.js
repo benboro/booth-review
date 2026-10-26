@@ -6,10 +6,11 @@ import {
   canonicalNflState, defaultNflState, CATEGORY_OPTIONS, CREW_METRICS, NFL_NATURAL_DIR,
 } from './state.js';
 import { defaultSort } from '../../modules/crew-groups.js';
+import { DAY_TOKENS } from '../../modules/weekend.js';
 
 const CSORT_RE = /^(booth|season|rank|network|games|margin|exc|viewers)(\.(asc|desc))?$/;
 
-const VIEW_PARAM = ['crews', 'viewership', 'scatter'];
+const VIEW_PARAM = ['crews', 'viewership', 'scatter', 'weekend'];
 const VIEW_ALIASES = Object.freeze({ fox: 'crews', agotw: 'viewership' });
 
 /**
@@ -20,6 +21,10 @@ export function encodeNflState(state, model) {
   const d = defaultNflState(model);
   const parts = ['sport=nfl'];
   if (VIEW_PARAM.includes(s.view)) parts.push('view=' + s.view);
+  if (s.view === 'weekend') {
+    if (s.week != null) parts.push('week=' + s.week);
+    if (s.day != null) parts.push('day=' + s.day);
+  }
   if (s.seasons[0] !== d.seasons[0] || s.seasons[1] !== d.seasons[1]) {
     parts.push(`seasons=${s.seasons[0]}-${s.seasons[1]}`);
   }
@@ -87,6 +92,8 @@ export function decodeNflState(search, model) {
         else if (Object.prototype.hasOwnProperty.call(VIEW_ALIASES, v)) state.view = VIEW_ALIASES[v];
         break;
       }
+      case 'week': if (/^\d{1,2}$/.test(raw)) state.week = Number(raw); break;
+      case 'day': if (DAY_TOKENS.includes(raw)) state.day = raw; break;
       case 'seasons': {
         const m = /^(\d{4})-(\d{4})$/.exec(raw);
         if (m) state.seasons = [Number(m[1]), Number(m[2])];

@@ -181,7 +181,7 @@ def test_smw_figures_flip_an_unrated_telecast_and_reach_every_consumer(
     # Contract 2.4.0: the full build validates and ships the SMW figure with its source label.
     _build(git_vault, reference)
     site = json.loads((git_vault.vault / "processed" / "site-data.json").read_text())
-    assert site["schema_version"] == "2.6.0"
+    assert site["schema_version"] == "2.7.0"
     columns = site["telecasts"]
     assert Counter(columns["figure_source"]) == {"rr": rated_before.height, "smw": 1}
     i = columns["figure_source"].index("smw")

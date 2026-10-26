@@ -179,3 +179,19 @@ def test_nfl_layout_paths_and_sources() -> None:
     assert wikipedia_url(2025) == "https://en.wikipedia.org/wiki/2025_NFL_season"
     assert NFLVERSE_SCHEDULES_PATH == "nfl/nflverse/schedules/games.csv"
     assert DataPaths(vault=Path("v")).nfl_raw == Path("v") / "raw" / "nfl"
+
+
+def test_pipeline_build_ships_weeks_and_weekend_stamp_deterministically(
+    git_vault: DataPaths, tmp_path: Path
+) -> None:
+    reference = _vault_with_sentinel_note(git_vault, tmp_path, _KNOWN_BOWLS)
+    _write_manifest(git_vault, [_entry("cfbd/games/2025.json", "a", "2026-10-01T10:00:00Z")])
+    target = git_vault.vault / "processed" / "site-data.json"
+    run_build(git_vault, reference, commit=False, accept_baseline=True)
+    payload = json.loads(target.read_bytes())
+    weekend = payload["freshness"]["weekend"]
+    assert weekend is not None
+    assert weekend["label"] == payload["lookups"]["weeks"][-1]["label"]
+    assert weekend["schedule_updated_at"] == "2026-10-01T10:00:00Z"
+    scheduled = payload["telecasts_scheduled"]
+    assert len({len(column) for column in scheduled.values()}) == 1

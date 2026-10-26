@@ -27,7 +27,7 @@ import { buildFigure, renderChart, bindChartEvents, scatterAtHome, resetScatterZ
 import { initTopbar, renderTopbar, renderMapShapeLegend } from './modules/topbar.js';
 import { initFilters, renderFilters } from './modules/filters.js';
 import { initLegend, renderLegend } from './modules/legend.js';
-import { renderPanel, openPanel, closePanel, initPanel } from './modules/panel.js';
+import { renderPanel, openPanel, openScheduledPanel, closePanel, initPanel } from './modules/panel.js';
 import { renderTable } from './modules/table.js';
 import { initChartTabs, renderChartTabs, staleCopy } from './modules/chart-tabs.js';
 import { chartContext } from './modules/bars.js';
@@ -47,6 +47,19 @@ import {
   hoverRingDiameter,
 } from './modules/hover-ring.js';
 import { PHONE_QUERY } from './modules/breakpoints.js';
+import { etParts, etWallMinutes } from './modules/weekend.js';
+import { renderWeekend } from './modules/weekend-view.js';
+import { renderWeekendList } from './modules/weekend-list.js';
+import { cfbWeekendPasses, isUnplayedGame } from './modules/weekend-data.js';
+import {
+  currentWeek,
+  dayToken,
+  reachableWeeks,
+  selectedDay,
+  selectedWeek,
+  weekDays,
+  weekDisplay,
+} from './modules/weekend-state.js';
 import { waitForFonts, onLateFont } from './modules/chart-frame.js';
 
 const versionMeta = document.querySelector('meta[name="site-data-version"]');
@@ -65,6 +78,7 @@ const panelTitleEl = document.getElementById('panel-title');
 const barsPanelEl = document.getElementById('bars-panel');
 const mapPanelEl = document.getElementById('map-panel');
 const crewsPanelEl = document.getElementById('crews-panel');
+const weekendPanelEl = document.getElementById('weekend-panel');
 const mapChartEl = document.getElementById('map-chart');
 const barsNoteEl = document.getElementById('bars-note');
 const eraNoteEl = document.getElementById('era-note');
@@ -159,13 +173,15 @@ let revision = 0;
 
 /** Whether the scatter's Plotly event handlers are bound (needs one rendered scatter first). */
 let scatterBound = false;
-/** Which panel the last render showed: 'scatter' | 'bars' | 'map' | 'crews'. */
+/** Which panel the last render showed: 'scatter' | 'bars' | 'map' | 'crews' | 'weekend'. */
 let lastPanel = null;
 /** The Map model of the last Map render, or null before one ran. */
 let lastMapModel = null;
 
 /** Telecast index the detail panel currently shows, or null when it's closed. */
 let openPanelIndex = null;
+/** Whether that panel is the "Not played yet." one (a pending row opened from This weekend). */
+let openPanelUnplayed = false;
 
 /** The matched-games table's own sort state (kept out of the URL, D-11/SITE-13). */
 let sort = { key: 'date', dir: 'asc' };
@@ -174,10 +190,11 @@ let sort = { key: 'date', dir: 'asc' };
 let sortCrew = null;
 
 /** Opens the detail panel on telecast `i` and remembers it's open, for `render`'s own refresh (D-10). */
-function openDetailPanel(i) {
+function openDetailPanel(i, { unplayed = false } = {}) {
   clearHover();
   openPanelIndex = i;
-  openPanel(i, { data, state, view: lastView });
+  openPanelUnplayed = unplayed;
+  openPanel(i, { data, state, view: lastView, unplayed });
 }
 
 /** Closes the detail panel and forgets it's open. */
@@ -189,6 +206,7 @@ function hideDetailPanel() {
 initPanel({
   onClosed: () => {
     openPanelIndex = null;
+    openPanelUnplayed = false;
   },
 });
 
@@ -259,6 +277,85 @@ function cfbActive() {
   return activeSport === 'cfb';
 }
 
+/** The mounted This weekend view, so leaving the tab (or CFB) stops its clock timer. */
+let weekendInstance = null;
+
+function destroyWeekend() {
+  weekendInstance?.destroy();
+  weekendInstance = null;
+}
+
+/**
+ * Whether the master filters hold a pick that applies on This weekend (D-20): an Announcers,
+ * Networks, Conference, School or Booth pick, or a crew pick. Role, Compare and Called together
+ * only refine an Announcers pick, so they are not picks by themselves.
+ */
+function weekendPickActive(st) {
+  return (
+    st.people.length > 0 ||
+    st.crew != null ||
+    st.networks != null ||
+    st.conferences.length > 0 ||
+    st.school.length > 0 ||
+    st.booth.length > 0
+  );
+}
+
+/** Mounts the This weekend view for the state's week and day; returns the summary-line counts. */
+function renderWeekendPanel() {
+  const week = selectedWeek(data, state);
+  const current = currentWeek(data);
+  const reach = reachableWeeks(data);
+  const { games, days } = weekDays(data, week);
+  const day = selectedDay(days, state.day);
+  const pickActive = weekendPickActive(state);
+  const passes = (game) => (pickActive ? cfbWeekendPasses(data, state, game) : null);
+  const networksPicked = (id) => (state.networks == null ? null : state.networks.includes(id));
+  const model = {
+    sport: 'cfb',
+    weekLabel: weekDisplay(week),
+    weekNumber: week.number,
+    weeks: reach.map((w) => ({ label: weekDisplay(w), number: w.number })),
+    isLatestWeek: week.number === current.number,
+    games,
+    day,
+    past: data.weekend != null && week.number < data.weekend.number,
+    missing: false,
+    freshness: data.weekend,
+    links: {},
+  };
+  const opts = {
+    // A function, not a Date: the view re-reads the clock every 60 s while it is mounted.
+    now: () => new Date(),
+    passes,
+    networksPicked,
+    onDay(iso) {
+      setState({ day: dayToken(iso) });
+    },
+    onWeek(delta) {
+      const at = reach.findIndex((w) => w.number === week.number);
+      const target = reach[at + delta];
+      if (!target) return;
+      setState({ week: target.number === current.number ? null : target.number });
+    },
+    onOpen(game) {
+      const now = etParts(opts.now());
+      const unplayed = isUnplayedGame(game, etWallMinutes(now.date, now.minutes));
+      if (game.block === 'scheduled') {
+        clearHover();
+        openScheduledPanel(game.index, { data, state, unplayed });
+      } else {
+        openDetailPanel(game.index, { unplayed });
+      }
+    },
+  };
+  // A second mount on the same host replaces the first and keeps focus on the same control.
+  weekendInstance = (mobileMedia.matches ? renderWeekendList : renderWeekend)(weekendPanelEl, model, opts);
+  const inDay = games.filter((g) => g.date === day || g.date == null);
+  const matching = pickActive ? inDay.filter((g) => passes(g) === true).length : inDay.length;
+  return { matching, total: inDay.length };
+}
+
 /** Recomputes the view, re-renders the chart, syncs the axis UI and the URL, and runs every registered renderer. */
 function render() {
   if (!cfbActive()) return;
@@ -268,6 +365,11 @@ function render() {
   lastView = view;
 
   const ctx = chartContext(data, state);
+  if (state.view !== 'weekend') {
+    destroyWeekend();
+    if (weekendPanelEl) weekendPanelEl.hidden = true;
+  }
+  let weekendCounts = null;
   if (state.view === 'scatter') {
     chartEl.hidden = false;
     if (barsPanelEl) barsPanelEl.hidden = true;
@@ -284,6 +386,17 @@ function render() {
       scatterBound = true;
     }
     lastPanel = 'scatter';
+  } else if (state.view === 'weekend') {
+    chartEl.hidden = true;
+    if (barsPanelEl) barsPanelEl.hidden = true;
+    if (mapPanelEl) mapPanelEl.hidden = true;
+    if (crewsPanelEl) crewsPanelEl.hidden = true;
+    hideBandInfo();
+    if (weekendPanelEl) {
+      weekendPanelEl.hidden = false;
+      weekendCounts = renderWeekendPanel();
+    }
+    lastPanel = 'weekend';
   } else if (state.view === 'crews') {
     chartEl.hidden = true;
     if (barsPanelEl) barsPanelEl.hidden = true;
@@ -353,14 +466,16 @@ function render() {
   if (excitementCaptionEl) {
     // Crews shows excitement medians, so the 2025+ model note applies when any shown group is 2025+.
     excitementCaptionEl.hidden =
-      state.view === 'crews'
+      state.view === 'weekend'
+        ? true
+        : state.view === 'crews'
         ? !crewsHasNewModelSeason
         : (state.axis !== 'excitement' && state.y !== 'excitement') || state.view !== 'scatter';
   }
   // The network-color chips mean nothing on the Crews table; the Networks filter still applies.
   if (legendRowEl) legendRowEl.hidden = state.view === 'crews';
   // Its axis and bar toggles are concealed on Crews; drop the reserved row so the hint sits close.
-  if (chartControlsEl) chartControlsEl.hidden = state.view === 'crews';
+  if (chartControlsEl) chartControlsEl.hidden = state.view === 'crews' || state.view === 'weekend';
   if (eraNoteEl) eraNoteEl.hidden = state.view !== 'scatter';
 
   history.replaceState(null, '', location.pathname + encodeState(state, data));
@@ -370,11 +485,17 @@ function render() {
   // triggers this render, without re-running openPanel's own focus/reveal
   // side effects.
   if (openPanelIndex !== null) {
-    renderPanel(panelBodyEl, panelTitleEl, { data, i: openPanelIndex, state, view });
+    renderPanel(panelBodyEl, panelTitleEl, { data, i: openPanelIndex, state, view, unplayed: openPanelUnplayed });
   }
 
   for (const renderer of renderers) {
     renderer({ data, state, view, setState });
+  }
+  if (weekendCounts) {
+    // The selection summary counts the selected day's games (grid, strip and compact table).
+    document.getElementById('summary-count').textContent = `${weekendCounts.matching} of ${weekendCounts.total} games match`;
+    document.getElementById('summary-detail').textContent = '';
+    document.getElementById('summary-detail').removeAttribute('title');
   }
   const leadKeyEl = document.getElementById('lead-key');
   if (leadKeyEl) leadKeyEl.hidden = state.view !== 'scatter';
@@ -549,7 +670,9 @@ async function startCfb(search = location.search) {
       onOnly: (family, before) => setState(familyOnlyPatch(data, lastView, family, before)),
       getNetworks: () => structuredClone(state.networks),
       switchEl: document.getElementById('dots-toggle'),
-      onDots: (dots) => setState({ dots }),
+      onDots: (dots) => {
+        if (state.view !== 'weekend') setState({ dots });
+      },
     });
     renderers.push(renderLegend);
 
@@ -814,6 +937,7 @@ async function showSport(id) {
   for (const pop of document.querySelectorAll(':popover-open')) pop.hidePopover();
   if (openPanelIndex !== null) hideDetailPanel();
   window.scrollTo(0, 0);
+  if (id !== 'cfb') destroyWeekend();
 
   if (id !== 'cfb') {
     const entry = sportMeta(id);

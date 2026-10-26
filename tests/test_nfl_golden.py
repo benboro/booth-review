@@ -69,9 +69,19 @@ _NFL_GOLDEN: dict[str, str] = {
     "interim/review_nfl_teams.csv": (
         "cab416b259342944414082b5af4814918d16e2661fbebb0f779b8de57193b680"
     ),
-    "processed/nfl-data.json": ("561817c5d2d39801723e972317f228903cdde377c0691331de2fec24c814e992"),
+    # Re-pinned at Phase 18 Plan 01: NFL contract 2.1.0 adds an empty upcoming block and a
+    # null freshness.weekend; no game, crew or figure changed.
+    "processed/nfl-data.json": ("64fb3a6156e5170605486f39265c3b17368f8107a8b9a735b9ead71abcb48102"),
     "processed/nfl_games.parquet": (
         "8f49003959842fe8f30c4ff6427bd4c0c61815be6cbe53be6707ac90c23ea082"
+    ),
+    # Added at Phase 18 Plan 07: the synthetic 2014 season is fully played, so both new
+    # tables are empty (the digest of an empty NDJSON); no existing output changed.
+    "processed/nfl_upcoming.parquet": (
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ),
+    "processed/nfl_weekend.parquet": (
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     ),
     "processed/nfl_special_games_by_team_season.parquet": (
         "577c3de4ab28895167863b7c5d9aeb656dcbf26196eccf687efacb1009b4781c"

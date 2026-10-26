@@ -441,6 +441,17 @@
             }
           ],
           "title": "Viewership Through Week"
+        },
+        "weekend": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NflWeekendFreshness"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -1348,6 +1359,216 @@
       "title": "NflTeamNameRef",
       "type": "object"
     },
+    "NflUpcomingColumns": {
+      "additionalProperties": false,
+      "description": "One list per display field; index i across every list is one unplayed game of the\nweekend (Phase 18), kept apart from `games` so no played-game view iterates it.\n\nNo points, viewers, excitement or cause by definition. `date`, `kickoff` and `network`\nare null for a game the schedule has not settled yet (Time TBA / Network TBA).\n`network_basis` says where a non-null network came from: \"506\" for a saved 506 page,\n\"slot\" for the hand-curated slot-rights table (TNF, SNF, MNF).",
+      "properties": {
+        "away": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Away",
+          "type": "array"
+        },
+        "away_name": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Away Name",
+          "type": "array"
+        },
+        "booth_rank": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Booth Rank",
+          "type": "array"
+        },
+        "crew": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/NflCrewEntry"
+            },
+            "type": "array"
+          },
+          "title": "Crew",
+          "type": "array"
+        },
+        "crew_source": {
+          "items": {
+            "anyOf": [
+              {
+                "const": "506",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Crew Source",
+          "type": "array"
+        },
+        "crew_source_url": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Crew Source Url",
+          "type": "array"
+        },
+        "date": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Date",
+          "type": "array"
+        },
+        "home": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Home",
+          "type": "array"
+        },
+        "home_name": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Home Name",
+          "type": "array"
+        },
+        "international": {
+          "items": {
+            "type": "boolean"
+          },
+          "title": "International",
+          "type": "array"
+        },
+        "kickoff": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Kickoff",
+          "type": "array"
+        },
+        "network": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Network",
+          "type": "array"
+        },
+        "network_basis": {
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "506",
+                  "slot"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Network Basis",
+          "type": "array"
+        },
+        "neutral": {
+          "items": {
+            "type": "boolean"
+          },
+          "title": "Neutral",
+          "type": "array"
+        },
+        "season": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Season",
+          "type": "array"
+        },
+        "slot": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Slot",
+          "type": "array"
+        },
+        "week": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Week",
+          "type": "array"
+        }
+      },
+      "required": [
+        "season",
+        "week",
+        "date",
+        "kickoff",
+        "home",
+        "away",
+        "home_name",
+        "away_name",
+        "slot",
+        "international",
+        "neutral",
+        "network",
+        "network_basis",
+        "crew",
+        "crew_source",
+        "crew_source_url",
+        "booth_rank"
+      ],
+      "title": "NflUpcomingColumns",
+      "type": "object"
+    },
     "NflViewCategoryRef": {
       "additionalProperties": false,
       "properties": {
@@ -1477,9 +1698,48 @@
       ],
       "title": "NflViewershipColumns",
       "type": "object"
+    },
+    "NflWeekendFreshness": {
+      "additionalProperties": false,
+      "description": "The week the This weekend tab opens on and when each source last landed (Phase 18).\n\nTimestamps are ISO UTC strings (\"%Y-%m-%dT%H:%M:%SZ\"); the client formats them in ET.",
+      "properties": {
+        "crews_506_saved_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Crews 506 Saved At"
+        },
+        "schedule_updated_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Schedule Updated At"
+        },
+        "week": {
+          "title": "Week",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "week"
+      ],
+      "title": "NflWeekendFreshness",
+      "type": "object"
     }
   },
-  "$id": "booth-review/nfl-data/2.0.0",
+  "$id": "booth-review/nfl-data/2.1.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -1499,7 +1759,7 @@
       "$ref": "#/$defs/NflLookups"
     },
     "schema_version": {
-      "const": "2.0.0",
+      "const": "2.1.0",
       "title": "Schema Version",
       "type": "string"
     },
@@ -1508,6 +1768,9 @@
     },
     "special": {
       "$ref": "#/$defs/NflSpecialColumns"
+    },
+    "upcoming": {
+      "$ref": "#/$defs/NflUpcomingColumns"
     },
     "viewership": {
       "$ref": "#/$defs/NflViewershipColumns"
@@ -1519,6 +1782,7 @@
     "constants",
     "lookups",
     "games",
+    "upcoming",
     "special",
     "season_weeks",
     "booths",
