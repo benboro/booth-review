@@ -46,7 +46,10 @@ function resolve(model, state) {
 function buildModel(ctx, r) {
   const { model } = ctx;
   const season = model.upcomingRaw?.season?.[0] ?? model.freshness?.season ?? model.seasons[1];
-  // Wikipedia is credited only when a slot-basis network shows on the shown day (RT-03).
+  // Wikipedia is credited only when a slot-basis network shows on the shown day (RT-03). The
+  // article is rebuilt from the season; tests/test_nfl_slot_credit.py pins this pattern to every
+  // source_url in data/reference/nfl_slot_networks.csv, since the contract ships no slot URL
+  // (18-REVIEW IN-04).
   const slotShown = r.games.some((g) => g.networkBasis === 'slot' && (g.date === r.day || g.date == null));
   const links = slotShown ? { wikipedia: `https://en.wikipedia.org/wiki/${season}_NFL_season` } : {};
   return {
