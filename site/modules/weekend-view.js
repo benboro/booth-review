@@ -116,7 +116,7 @@ function crewSentence(game, state, line) {
   return state === 'tba' ? 'Crew to be announced.' : 'Crew not listed.';
 }
 
-function accessibleName(game, state, line) {
+export function accessibleName(game, state, line) {
   const time = game.kickoffMin == null ? 'Time to be announced' : clock12(game.kickoffMin);
   const match = matchupText(game).replace(' @ ', ' at ');
   const net = game.networkName ?? 'Network to be announced';

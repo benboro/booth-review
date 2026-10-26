@@ -607,3 +607,133 @@ def test_empty_week_and_missing_schedule(wk_page: Page) -> None:
         "This build has no schedule for Week 9. Reload the page or step back to Week 8."
     )
     assert _style(wk_page, "#wk-host .wk-error", "color") == "rgb(179, 38, 30)"
+
+
+# -- Task 3: phone list at 390px -----------------------------------------------------------
+
+
+@pytest.fixture
+def phone_page(guarded_page: Page, open_app: Callable[[Page, str], None]) -> Page:
+    guarded_page.set_viewport_size({"width": 390, "height": 844})
+    open_app(guarded_page, "")
+    return guarded_page
+
+
+def _mount_phone(page: Page, games: list[dict[str, Any]], **kw: Any) -> None:
+    _mount(page, games, width=390, kind="list", **kw)
+
+
+def _phone_games() -> list[dict[str, Any]]:
+    return [
+        _known(key="f2", boothRank=2, home="F2", kickoffMin=720),
+        _known(key="f1", boothRank=1, home="F1", kickoffMin=720, lead=True),
+        _known(
+            key="a1", networkId="abc", networkName="ABC", family="disney", home="A1", kickoffMin=720
+        ),
+        _game(key="late", home="Late", kickoffMin=930, boothRank=1),
+    ]
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_phone_groups_order_and_item_shape(phone_page: Page, theme: str) -> None:
+    _mount_phone(phone_page, _phone_games(), theme=theme)
+    titles = phone_page.locator("#wk-host .wk-group-title").all_inner_texts()
+    assert titles == ["12:00 pm", "3:30 pm"]
+    order = (
+        phone_page.locator("#wk-host .wk-group")
+        .first.locator(".wk-item")
+        .evaluate_all("i => i.map(x => x.dataset.wkId)")
+    )
+    assert order == ["g:f1", "g:f2", "g:a1"]  # FOX before ABC; rank 1 before rank 2
+    pal = _palette(phone_page, theme, "fox")
+    first = _cell("f1").replace("[data-wk-id", ".wk-item[data-wk-id")
+    box = phone_page.locator(first).bounding_box()
+    assert box is not None and box["height"] >= 56
+    assert _style(phone_page, first, "borderLeftWidth") == "4px"
+    assert _style(phone_page, first, "borderLeftColor") == pal["solid"]
+    mark = phone_page.locator(f"{first} .wk-item-mark").bounding_box()
+    assert mark is not None and mark["width"] == 56
+    assert phone_page.locator(f"{first} .wk-item-l1").inner_text() == "Away @ Home".replace(
+        "Home", "F1"
+    )
+    assert (
+        phone_page.locator(f"{first} .wk-item-l2 .wk-booth").inner_text() == "Fowler · Herbstreit"
+    )
+    assert phone_page.locator(f"{first} .wk-star").count() == 1
+    assert _style(phone_page, first, "backgroundColor") == "rgba(0, 0, 0, 0)"
+    tba = phone_page.locator('#wk-host .wk-item[data-wk-id="g:late"] .wk-booth')
+    assert tba.inner_text() == "Crew TBA"
+    assert tba.evaluate("e => getComputedStyle(e).fontWeight") == "400"
+
+
+def test_phone_has_no_axis_or_now_line(phone_page: Page) -> None:
+    _mount_phone(phone_page, _phone_games(), now="2026-10-31T13:00:00-04:00")
+    for sel in (".wk-axis", ".wk-now", ".wk-grid", ".wk-corner"):
+        assert phone_page.locator(f"#wk-host {sel}").count() == 0
+
+
+def test_phone_tba_and_espn_plus_groups_last(phone_page: Page) -> None:
+    games = [*_phone_games(), _plus(key="p1", home="Plus"), *_tba_games(7)]
+    _mount_phone(phone_page, games)
+    classes = phone_page.locator("#wk-host .wk-group").evaluate_all("g => g.map(x => x.className)")
+    assert [
+        ("tba" if "wk-tba" in c else "compact" if "wk-compact" in c else "time") for c in classes
+    ] == [
+        "time",
+        "time",
+        "tba",
+        "compact",
+    ]
+    head = phone_page.locator("#wk-host .wk-tba-head")
+    assert head.inner_text() == "Time or network to be announced (7)"
+    assert head.get_attribute("aria-expanded") == "false"
+    head.click()
+    assert phone_page.locator("#wk-host .wk-tba-head").get_attribute("aria-expanded") == "true"
+    assert phone_page.locator("#wk-host .wk-tba-body > .wk-item").count() == 7
+    assert phone_page.locator("#wk-host .wk-compact .wk-group-title").inner_text() == (
+        "ESPN+ and regional"
+    )
+    assert phone_page.locator("#wk-host .wk-compact .wk-item").count() == 1
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_phone_picks_fade_and_ring(phone_page: Page, theme: str) -> None:
+    _mount_phone(phone_page, _phone_games(), theme=theme, pass_keys=["f1"])
+    sel = lambda k: f'#wk-host .wk-item[data-wk-id="g:{k}"]'  # noqa: E731
+    assert _style(phone_page, sel("f2"), "opacity") == "0.3"
+    assert _style(phone_page, sel("f1"), "opacity") == "1"
+    ink = "rgb(35, 32, 27)" if theme == "light" else "rgb(236, 231, 223)"
+    assert ink in _style(phone_page, sel("f1"), "boxShadow")
+    phone_page.locator(sel("f2")).click()
+    assert phone_page.evaluate("window.__wk.opened") == ["f2"]
+
+
+def test_phone_stepper_on_its_own_line_with_44px_taps(phone_page: Page) -> None:
+    _mount_phone(phone_page, _phone_games())
+    tabs = phone_page.locator("#wk-host .wk-days").bounding_box()
+    step = phone_page.locator("#wk-host .wk-stepper").bounding_box()
+    nxt = phone_page.locator("#wk-host .wk-step--next").bounding_box()
+    assert tabs is not None and step is not None and nxt is not None
+    assert step["y"] >= tabs["y"] + tabs["height"]
+    assert nxt["width"] >= 44 and nxt["height"] >= 44
+    assert step["x"] + step["width"] <= 390
+
+
+def test_phone_nfl_cbs_window_rank_one_first(phone_page: Page) -> None:
+    games = [
+        _known(
+            key=f"c{k}",
+            sport="nfl",
+            networkId="cbs",
+            networkName="CBS",
+            family="cbs",
+            kickoffMin=780,
+            boothRank=r,
+            home=f"H{k}",
+        )
+        for k, r in enumerate([3, 1, 2])
+    ]
+    _mount_phone(phone_page, games, model={"sport": "nfl"})
+    order = phone_page.locator("#wk-host .wk-item").evaluate_all("i => i.map(x => x.dataset.wkId)")
+    assert order == ["g:c1", "g:c2", "g:c0"]
+    assert phone_page.locator("#wk-host .wk-group-title").inner_text() == "1:00 pm"
