@@ -112,7 +112,9 @@ blocks: `season`, `date`, `kickoff`, `time_slot`, `away_team`, `home_team`, `neu
   week's grid appears with no user action.
 - `network` is an index into `lookups.networks` or null. Null means Network TBA, and the
   client puts the game in the Time TBA strip. The network comes from the CFBD media rows
-  whose `mediaType` is `tv` or `web` only, never radio or mobile.
+  whose `mediaType` is `tv` or `web` only, never radio or mobile; a
+  `data/reference/primary_network_overrides.csv` row for the game wins, as it does for
+  telecasts.
 - `kickoff` and `time_slot` are null together: a game with no time yet.
 - `week` is never null here: every row is a numbered regular-season week's game.
 - `crew` is empty unless the user has imported an ESPN Press Room page whose booth names
