@@ -32,6 +32,9 @@ const TICK_MS = 60000;
 const ESPN_PRESS_ROOM = 'https://www.espnpressroom.com/';
 const ROW_HEAD_WIDTH = 96;
 const SUB_ROW_PITCH = 48;
+// The "Now" label's width in the caption face, and its gap from the line.
+const NOW_LABEL_WIDTH = 24;
+const NOW_LABEL_GAP = 4;
 
 /** Small element helper: tag, class, text. */
 export function el(tag, cls, text) {
@@ -464,6 +467,14 @@ function buildRow(row, ctx, lanes) {
     cell.style.width = `${c.width}px`;
     cell.dataset.left = String(c.left);
     applyPick(cell, c.game, ctx, faded);
+    if (cell.classList.contains('is-faded')) {
+      // An opaque underlay, so the faded cell blends with the page and not the hour hairlines.
+      const under = el('div', 'wk-underlay');
+      under.style.left = cell.style.left;
+      under.style.top = cell.style.top;
+      under.style.width = cell.style.width;
+      lane.append(under);
+    }
     lane.append(cell);
     (bySub[c.subRow] ??= []).push(cell);
   }
@@ -524,8 +535,19 @@ function buildNowLine(ctx, body, axisEl) {
   line.style.left = `${x}px`;
   body.append(line);
   const label = el('span', 'wk-now-label', 'Now');
-  label.style.left = `${x - 4}px`;
+  // Too close to the axis start, the label flips right of the line, clear of the corner.
+  const room = NOW_LABEL_WIDTH + 2 * NOW_LABEL_GAP;
+  const flip = x - room < ROW_HEAD_WIDTH + NOW_LABEL_GAP;
+  if (flip) label.classList.add('is-right');
+  label.style.left = `${flip ? x + 1 : x - NOW_LABEL_GAP}px`;
   axisEl.append(label);
+  // A tick label the Now label would cover hides; its hairline still marks the hour.
+  const from = (flip ? x + 1 + NOW_LABEL_GAP : x - room) - ROW_HEAD_WIDTH;
+  const to = from + NOW_LABEL_WIDTH + NOW_LABEL_GAP;
+  for (const tick of axisEl.querySelectorAll('.wk-tick')) {
+    const left = Number.parseFloat(tick.style.left);
+    if (left < to && from < left + TICK_LABEL_ROOM) tick.classList.add('is-covered');
+  }
 }
 
 /** The timeline: sticky axis and network column, one row per network. */

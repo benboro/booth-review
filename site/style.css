@@ -6319,6 +6319,14 @@ tr.is-matched > :first-child {
   transition: opacity 120ms;
 }
 
+/* Under a faded cell: the page background, so the hairlines stay behind the block. */
+.wk-underlay {
+  position: absolute;
+  height: var(--wk-cell-h);
+  background: var(--bg);
+  pointer-events: none;
+}
+
 .wk-cell--tint {
   background-image: linear-gradient(to right, var(--wk-edge) 4px, transparent 4px);
   padding-left: var(--space-sm);
@@ -6422,6 +6430,14 @@ tr.is-matched > :first-child {
   font-weight: var(--weight-semibold);
   color: var(--accent);
   pointer-events: none;
+}
+
+.wk-now-label.is-right {
+  transform: translateX(4px);
+}
+
+.wk-tick.is-covered {
+  visibility: hidden;
 }
 
 /* Stamp, Time TBA strip, ESPN+ and regional table, source line, empty and error states. */
@@ -6605,7 +6621,11 @@ tr.is-matched > :first-child {
 .wk-item-nonet {
   font: var(--font-caption);
   font-weight: var(--weight-semibold);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .wk-item-text {

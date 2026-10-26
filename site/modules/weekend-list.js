@@ -34,8 +34,9 @@ function item(game, ctx, { showTime = false } = {}) {
 
   const mark = el('span', 'wk-item-mark');
   if (game.networkId != null) {
+    // No family dot: the 4px edge already carries the family, and the name needs all 56px.
     mark.append(networkMark({ id: game.networkId, name: game.networkName ?? game.networkId,
-      family: game.family }));
+      family: game.family }, { dot: false }));
   } else {
     mark.append(el('span', 'wk-item-nonet', 'Network TBA'));
   }

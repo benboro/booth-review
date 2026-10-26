@@ -8,10 +8,12 @@ beyond a served page and never touch vault data.
 
 from __future__ import annotations
 
+import io
 from collections.abc import Callable
 from typing import Any
 
 import pytest
+from PIL import Image
 from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
@@ -263,6 +265,47 @@ def test_picks_fade_and_ring_without_shifting_layout(wk_page: Page) -> None:
     assert _style(wk_page, _cell("a"), "boxShadow") == "none"
 
 
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_faded_cell_hides_the_hour_hairlines(wk_page: Page, theme: str) -> None:
+    # UI review fix 3: a faded cell is the cell at 0.3 strength over the page background, opaque,
+    # so the lane's hour hairlines stay behind it instead of slicing it.
+    games = [_known(key="a", boothRank=1), _known(key="b", home="B")]
+    _mount(wk_page, games, theme=theme, pass_keys=["a"])
+    assert _style(wk_page, _cell("b"), "opacity") == "0.3"
+    wk_page.evaluate(
+        "(s) => document.querySelector(s).scrollIntoView({block: 'center'})", _cell("b")
+    )
+    geo = wk_page.evaluate(
+        """(sel) => {
+          const lane = document.querySelector('#wk-host .wk-lane').getBoundingClientRect();
+          const cell = document.querySelector(sel).getBoundingClientRect();
+          const pxh = parseFloat(getComputedStyle(document.querySelector('#wk-host .wk-grid'))
+            .getPropertyValue('--wk-pxh'));
+          return { line: lane.left + pxh, top: cell.top, bottom: cell.bottom };
+        }""",
+        _cell("b"),
+    )
+    # The bottom padding row: no text, and the 1 pm hairline crosses the cell there.
+    y = int(geo["bottom"]) - 2
+    x = int(geo["line"])
+    shot = wk_page.screenshot(clip={"x": x - 2, "y": y, "width": 8, "height": 1})
+    with Image.open(io.BytesIO(shot)) as img:
+        row = [img.convert("RGB").getpixel((i, 0)) for i in range(8)]
+    assert len(set(row)) == 1, row
+    want = wk_page.evaluate(
+        """async ([theme, family]) => {
+          const P = await import('./modules/palette.js');
+          const W = await import('./modules/weekend.js');
+          const hex = P.mixHex(W.cellColors(family, theme, 'known').bg, P.PAGE_BG[theme],
+            W.WEEKEND_FADED_OPACITY);
+          const n = parseInt(hex.slice(1), 16);
+          return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+        }""",
+        [theme, "fox"],
+    )
+    assert all(abs(a - b) <= 3 for a, b in zip(row[0], want, strict=True)), (row[0], want)
+
+
 def test_ring_is_light_in_dark_theme(wk_page: Page) -> None:
     _mount(wk_page, [_known(key="a"), _known(key="b", home="B")], theme="dark", pass_keys=["a"])
     ring = _style(wk_page, _cell("a"), "boxShadow")
@@ -378,6 +421,50 @@ def test_now_line_only_on_todays_et_day(wk_page: Page) -> None:
     # Outside the axis range on the same day: no line.
     _mount(wk_page, games, now="2026-10-31T06:00:00-04:00")
     assert wk_page.locator("#wk-host .wk-now").count() == 0
+
+
+def _intersects(a: dict[str, float], b: dict[str, float]) -> bool:
+    return (
+        a["x"] < b["x"] + b["width"]
+        and b["x"] < a["x"] + a["width"]
+        and a["y"] < b["y"] + b["height"]
+        and b["y"] < a["y"] + a["height"]
+    )
+
+
+def test_now_label_flips_right_of_the_line_near_the_axis_start(wk_page: Page) -> None:
+    # UI review fix 1: in the axis's first hour the label sits right of the line, clear of the
+    # sticky "All times ET" corner; later in the day it stays on the line's left.
+    games = [_known(key="a"), _known(key="b", kickoffMin=1170, home="Late")]
+    wk_page.clock.install(time="2026-10-31T12:05:00-04:00")
+    _mount(wk_page, games, live_clock=True)
+    corner = wk_page.locator("#wk-host .wk-corner").bounding_box()
+    label = wk_page.locator("#wk-host .wk-now-label").bounding_box()
+    line = wk_page.locator("#wk-host .wk-now").bounding_box()
+    assert corner is not None and label is not None and line is not None
+    assert not _intersects(label, corner)
+    assert label["x"] >= line["x"] + line["width"]
+    assert not any(_intersects(label, t) for t in _shown_ticks(wk_page))
+    wk_page.evaluate("window.__wk.inst.destroy()")
+    for time in ("15:00", "15:20"):
+        wk_page.clock.set_system_time(f"2026-10-31T{time}:00-04:00")
+        _mount(wk_page, games, live_clock=True)
+        label = wk_page.locator("#wk-host .wk-now-label").bounding_box()
+        line = wk_page.locator("#wk-host .wk-now").bounding_box()
+        assert label is not None and line is not None
+        assert label["x"] + label["width"] <= line["x"]
+        # A tick label the Now label would cover hides; its hairline still shows.
+        assert not any(_intersects(label, t) for t in _shown_ticks(wk_page))
+        wk_page.evaluate("window.__wk.inst.destroy()")
+
+
+def _shown_ticks(page: Page) -> list[dict[str, float]]:
+    return page.locator("#wk-host .wk-tick").evaluate_all(  # type: ignore[no-any-return]
+        """ts => ts.filter((t) => getComputedStyle(t).visibility !== 'hidden').map((t) => {
+          const r = t.getBoundingClientRect();
+          return { x: r.x, y: r.y, width: r.width, height: r.height };
+        })"""
+    )
 
 
 _ROOT = "document.querySelector('#wk-host .wk-root')"
@@ -792,3 +879,34 @@ def test_phone_nfl_cbs_window_rank_one_first(phone_page: Page) -> None:
     order = phone_page.locator("#wk-host .wk-item").evaluate_all("i => i.map(x => x.dataset.wkId)")
     assert order == ["g:c1", "g:c2", "g:c0"]
     assert phone_page.locator("#wk-host .wk-group-title").inner_text() == "1:00 pm"
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_phone_network_name_without_logo_shows_whole(phone_page: Page, theme: str) -> None:
+    # UI review fix 2: a network with no logo wraps its name in the 56px mark column instead of
+    # clipping it ("NFL Networl").
+    games = [
+        _known(
+            key="n",
+            sport="nfl",
+            networkId="nfl-network",
+            networkName="NFL Network",
+            family="nfl-network",
+            kickoffMin=570,
+        ),
+        _known(key="f", kickoffMin=570, home="F"),
+    ]
+    _mount_phone(phone_page, games, theme=theme, model={"sport": "nfl"})
+    name = phone_page.locator('#wk-host .wk-item[data-wk-id="g:n"] .wk-item-mark .net-name')
+    assert name.inner_text() == "NFL Network"
+    fit = name.evaluate(
+        "e => ({sw: e.scrollWidth, cw: e.clientWidth, sh: e.scrollHeight, ch: e.clientHeight,"
+        " right: e.getBoundingClientRect().right,"
+        " col: e.closest('.wk-item-mark').getBoundingClientRect().right})"
+    )
+    assert fit["sw"] <= fit["cw"]
+    assert fit["sh"] <= fit["ch"]
+    assert fit["right"] <= fit["col"]
+    assert phone_page.evaluate(
+        "document.documentElement.scrollWidth <= document.documentElement.clientWidth"
+    )
