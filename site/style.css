@@ -6613,7 +6613,11 @@ tr.is-matched > :first-child {
 .wk-item-nonet {
   font: var(--font-caption);
   font-weight: var(--weight-semibold);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .wk-item-text {

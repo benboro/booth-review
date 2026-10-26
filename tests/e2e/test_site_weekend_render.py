@@ -837,3 +837,34 @@ def test_phone_nfl_cbs_window_rank_one_first(phone_page: Page) -> None:
     order = phone_page.locator("#wk-host .wk-item").evaluate_all("i => i.map(x => x.dataset.wkId)")
     assert order == ["g:c1", "g:c2", "g:c0"]
     assert phone_page.locator("#wk-host .wk-group-title").inner_text() == "1:00 pm"
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_phone_network_name_without_logo_shows_whole(phone_page: Page, theme: str) -> None:
+    # UI review fix 2: a network with no logo wraps its name in the 56px mark column instead of
+    # clipping it ("NFL Networl").
+    games = [
+        _known(
+            key="n",
+            sport="nfl",
+            networkId="nfl-network",
+            networkName="NFL Network",
+            family="nfl-network",
+            kickoffMin=570,
+        ),
+        _known(key="f", kickoffMin=570, home="F"),
+    ]
+    _mount_phone(phone_page, games, theme=theme, model={"sport": "nfl"})
+    name = phone_page.locator('#wk-host .wk-item[data-wk-id="g:n"] .wk-item-mark .net-name')
+    assert name.inner_text() == "NFL Network"
+    fit = name.evaluate(
+        "e => ({sw: e.scrollWidth, cw: e.clientWidth, sh: e.scrollHeight, ch: e.clientHeight,"
+        " right: e.getBoundingClientRect().right,"
+        " col: e.closest('.wk-item-mark').getBoundingClientRect().right})"
+    )
+    assert fit["sw"] <= fit["cw"]
+    assert fit["sh"] <= fit["ch"]
+    assert fit["right"] <= fit["col"]
+    assert phone_page.evaluate(
+        "document.documentElement.scrollWidth <= document.documentElement.clientWidth"
+    )
