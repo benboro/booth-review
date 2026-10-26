@@ -81,7 +81,18 @@ records only where the site settles or applies them.
 - The This weekend timeline is plain DOM, not a chart: rows follow network precedence in
   a 96px label column, the time scale runs 80-120 px/hour (80, not the spec's 88,
   so a 15-hour day fits at 1440), cells are 44px tall on a 48px
-  row pitch, and a game's block is 3h30 long for CFB and 3h15 for NFL (Phase 18).
+  row pitch, and a game's block is 3h30 long for CFB and 3h15 for NFL (Phase 18). A day
+  narrower than the module (the 120 cap, or floor rounding) stretches its lane to the
+  module edge and runs the hour ticks on to the lane's end or midnight, so the rules never
+  stop mid-module; a longer day keeps its scroll width (v2.1 polish, 18-UI-REVIEW 9, 11).
+- A day tab's count box keeps a min-width of one ch per character of the day's full count,
+  so the count a pick adds never widens the tab or moves the next one. The legend chip row
+  and the Matched games section hide under This weekend, as on Crews and the NFL page, and
+  on the phone the empty chart-tools row goes too (v2.1 polish, 18-UI-REVIEW 4, 5, 7, 10).
+- A panel opened from a This weekend cell writes its kickoff as the view does (`Sat. Oct.
+  31, 12:00 pm ET`, AP style) and credits the crew as `Crew from 506 Sports ↗` in both
+  sports; the same game opened from the Matched games table keeps the site's long date
+  form (18-UI-REVIEW 8).
 - Cell states: a known crew is a solid network-family fill, deepened toward black until
   white text on it reaches 7:1 (the mid-tone fills read poorly with black text; user
   sign-off 2026-10-26); Crew TBA and not-listed
