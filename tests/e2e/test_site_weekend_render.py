@@ -546,6 +546,8 @@ def test_stamp_line_variants(wk_page: Page) -> None:
     assert wk_page.locator("#wk-host .wk-stamp").inner_text() == (
         "Crews: 506 Sports and ESPN Press Room, as saved."
     )
+    _mount(wk_page, games, model={"freshness": fresh, "past": True, "sport": "nfl"})
+    assert wk_page.locator("#wk-host .wk-stamp").inner_text() == "Crews: 506 Sports, as saved."
     _mount(wk_page, games, model={"freshness": None})
     assert wk_page.locator("#wk-host .wk-stamp").inner_text().startswith("Crews for this week")
 
@@ -578,7 +580,7 @@ def test_source_line_nfl_has_no_cfbd_credit(wk_page: Page) -> None:
     games = [_known(key="a", sport="nfl", networkId="cbs", networkName="CBS", family="cbs")]
     _mount(wk_page, games, model={"sport": "nfl"})
     text = wk_page.locator("#wk-host .wk-source").inner_text()
-    assert text == "Schedule: nflverse · Crews: 506 Sports and ESPN Press Room"
+    assert text == "Schedule: nflverse · Crews: 506 Sports"
     assert "CollegeFootballData" not in text and "Wikipedia" not in text
     _mount(
         wk_page,

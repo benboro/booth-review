@@ -266,7 +266,10 @@ export function buildStampLine(ctx) {
     return p;
   }
   if (model.past) {
-    p.textContent = 'Crews: 506 Sports and ESPN Press Room, as saved.';
+    // ESPN Press Room is a college-football crew backup only; the NFL has no such source.
+    p.textContent = model.sport === 'nfl'
+      ? 'Crews: 506 Sports, as saved.'
+      : 'Crews: 506 Sports and ESPN Press Room, as saved.';
     return p;
   }
   const f = model.freshness ?? {};
@@ -394,8 +397,7 @@ export function buildSourceLine(ctx) {
   const text = (t) => document.createTextNode(t);
   if (model.sport === 'nfl') {
     p.append(text('Schedule: '), sourceLink('nflverse', 'https://www.nflverse.com/'),
-      text(' · Crews: '), sourceLink('506 Sports', 'https://506sports.com'), text(' and '),
-      sourceLink('ESPN Press Room', press));
+      text(' · Crews: '), sourceLink('506 Sports', 'https://506sports.com'));
     if (links.wikipedia) {
       p.append(text(' · Networks: '), sourceLink('Wikipedia', links.wikipedia),
         text(' (CC BY-SA 4.0)'));
