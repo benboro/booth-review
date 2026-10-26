@@ -7,7 +7,9 @@ a review row (pointer and reason only, no source text).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from typing import Protocol
 
 from booth_review.nfl.inputs import NflInputs
 from booth_review.nfl.schedule import NflGame
@@ -15,6 +17,21 @@ from booth_review.nfl.teams import NflNetworkResolver, NflTeamResolver
 from booth_review.sources.sports506.nfl_parser import NflListing506
 
 GameKey = tuple[int, int, frozenset[str]]
+
+
+class GameLike(Protocol):
+    """The fields a listing needs to find its game (NflGame, UpcomingNflGame)."""
+
+    @property
+    def game_id(self) -> str: ...
+    @property
+    def season(self) -> int: ...
+    @property
+    def week(self) -> int: ...
+    @property
+    def away_team(self) -> str: ...
+    @property
+    def home_team(self) -> str: ...
 
 
 @dataclass(frozen=True)
@@ -38,16 +55,22 @@ class ListingReview:
     reason: str
 
 
-def index_games(inputs: NflInputs, teams: NflTeamResolver) -> dict[GameKey, list[NflGame]]:
+def index_games_of[G: GameLike](
+    games: Sequence[G], teams: NflTeamResolver
+) -> dict[GameKey, list[G]]:
     """Games keyed by (season, week, unordered franchise pair); unresolvable games are skipped."""
-    index: dict[GameKey, list[NflGame]] = {}
-    for game in inputs.games:
+    index: dict[GameKey, list[G]] = {}
+    for game in games:
         away = teams.resolve("nflverse", game.away_team, game.season).franchise_id
         home = teams.resolve("nflverse", game.home_team, game.season).franchise_id
         if away is None or home is None:
             continue
         index.setdefault((game.season, game.week, frozenset((away, home))), []).append(game)
     return index
+
+
+def index_games(inputs: NflInputs, teams: NflTeamResolver) -> dict[GameKey, list[NflGame]]:
+    return index_games_of(inputs.games, teams)
 
 
 def _merge(first: ListingMatch, second: ListingMatch) -> ListingMatch:
@@ -75,9 +98,12 @@ def _merge(first: ListingMatch, second: ListingMatch) -> ListingMatch:
 
 
 def match_506_listings(
-    inputs: NflInputs, teams: NflTeamResolver, networks: NflNetworkResolver
+    inputs: NflInputs,
+    teams: NflTeamResolver,
+    networks: NflNetworkResolver,
+    games: Sequence[GameLike] | None = None,
 ) -> tuple[dict[str, ListingMatch], list[ListingReview]]:
-    index = index_games(inputs, teams)
+    index = index_games_of(inputs.games if games is None else games, teams)
     reviews: list[ListingReview] = []
     by_game: dict[str, list[ListingMatch]] = {}
 
