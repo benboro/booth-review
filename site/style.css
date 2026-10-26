@@ -6424,6 +6424,14 @@ tr.is-matched > :first-child {
   pointer-events: none;
 }
 
+.wk-now-label.is-right {
+  transform: translateX(4px);
+}
+
+.wk-tick.is-covered {
+  visibility: hidden;
+}
+
 /* Stamp, Time TBA strip, ESPN+ and regional table, source line, empty and error states. */
 .wk-stamp,
 .wk-source {

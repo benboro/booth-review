@@ -380,6 +380,51 @@ def test_now_line_only_on_todays_et_day(wk_page: Page) -> None:
     assert wk_page.locator("#wk-host .wk-now").count() == 0
 
 
+
+def _intersects(a: dict[str, float], b: dict[str, float]) -> bool:
+    return (
+        a["x"] < b["x"] + b["width"]
+        and b["x"] < a["x"] + a["width"]
+        and a["y"] < b["y"] + b["height"]
+        and b["y"] < a["y"] + a["height"]
+    )
+
+
+def test_now_label_flips_right_of_the_line_near_the_axis_start(wk_page: Page) -> None:
+    # UI review fix 1: in the axis's first hour the label sits right of the line, clear of the
+    # sticky "All times ET" corner; later in the day it stays on the line's left.
+    games = [_known(key="a"), _known(key="b", kickoffMin=1170, home="Late")]
+    wk_page.clock.install(time="2026-10-31T12:05:00-04:00")
+    _mount(wk_page, games, live_clock=True)
+    corner = wk_page.locator("#wk-host .wk-corner").bounding_box()
+    label = wk_page.locator("#wk-host .wk-now-label").bounding_box()
+    line = wk_page.locator("#wk-host .wk-now").bounding_box()
+    assert corner is not None and label is not None and line is not None
+    assert not _intersects(label, corner)
+    assert label["x"] >= line["x"] + line["width"]
+    assert not any(_intersects(label, t) for t in _shown_ticks(wk_page))
+    wk_page.evaluate("window.__wk.inst.destroy()")
+    for time in ("15:00", "15:20"):
+        wk_page.clock.set_system_time(f"2026-10-31T{time}:00-04:00")
+        _mount(wk_page, games, live_clock=True)
+        label = wk_page.locator("#wk-host .wk-now-label").bounding_box()
+        line = wk_page.locator("#wk-host .wk-now").bounding_box()
+        assert label is not None and line is not None
+        assert label["x"] + label["width"] <= line["x"]
+        # A tick label the Now label would cover hides; its hairline still shows.
+        assert not any(_intersects(label, t) for t in _shown_ticks(wk_page))
+        wk_page.evaluate("window.__wk.inst.destroy()")
+
+
+def _shown_ticks(page: Page) -> list[dict[str, float]]:
+    return page.locator("#wk-host .wk-tick").evaluate_all(  # type: ignore[no-any-return]
+        """ts => ts.filter((t) => getComputedStyle(t).visibility !== 'hidden').map((t) => {
+          const r = t.getBoundingClientRect();
+          return { x: r.x, y: r.y, width: r.width, height: r.height };
+        })"""
+    )
+
+
 _ROOT = "document.querySelector('#wk-host .wk-root')"
 
 
