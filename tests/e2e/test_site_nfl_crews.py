@@ -14,7 +14,7 @@ from typing import Any
 
 import nfl_crews_fixture as fx
 import pytest
-from nfl_crews_fixture import CASE_FILL_IN, CASE_TWO_ANALYSTS, CASE_WINDOW
+from nfl_crews_fixture import CASE_FILL_IN, CASE_TWO_ANALYSTS, CASE_WINDOW, build_nfl_crews_raw
 from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
@@ -1003,3 +1003,26 @@ def test_no_console_errors(page: Page, nfl_site_url: str) -> None:
     page.get_by_role("button", name="Adjusted").click()
     page.locator(f"{VIEW} button[data-sort-key='games']").click()
     assert errors == []
+
+
+def test_low_n_tag_and_flag_read_the_shipped_threshold(
+    nfl_guarded_page: Page,
+    open_nfl_app: Callable[..., None],
+    nfl_fixture_raw: dict[str, Any],
+) -> None:
+    # v2.1 (Phase 15 review F6): a changed constants.low_n_threshold moves the tags.
+    raw = build_nfl_crews_raw(nfl_fixture_raw)
+    raw["constants"]["low_n_threshold"] = 3
+    page = nfl_guarded_page
+    page.route("**/nfl-data.json*", lambda route: route.fulfill(json=raw))
+    _open(page, open_nfl_app, "&perseason=0")
+    vm = _vm(page)
+    tags = page.locator(f"{ROW} td.is-low-n .crews-tag")
+    assert tags.count() >= 1
+    assert set(tags.all_inner_texts()) == {"n < 3"}
+    assert tags.first.get_attribute("title") == "Fewer than 3 games have this figure"
+    for r in vm["rows"]:
+        for key in ("margin", "exc", "viewers"):
+            cell = r[key]
+            if cell["n"] and cell["mean"] is not None:
+                assert cell["flagged"] == (cell["n"] < 3), (r["rowKey"], key, cell)
