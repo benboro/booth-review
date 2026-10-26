@@ -47,7 +47,7 @@ INVENTED_STRINGS = ("Northfield Lanterns", "Harbor City", "Ada Quill", "example.
 def _minimal_payload() -> Payload:
     """A tiny valid payload: two games (one rated, one unrated), one row per block."""
     return {
-        "schema_version": "2.0.0",
+        "schema_version": "2.1.0",
         "freshness": {
             "season": 2026,
             "in_progress": True,
@@ -125,6 +125,7 @@ def _minimal_payload() -> Payload:
             "source_url": ["https://example.com/src/1", None],
             "cause": [None, "pending"],
         },
+        "upcoming": {name: [] for name in nfl_models.NflUpcomingColumns.model_fields},
         "special": {
             "franchise": [0],
             "season": [2025],
@@ -613,8 +614,8 @@ def test_schema_file_matches_models() -> None:
 
 
 def test_schema_version_pinned() -> None:
-    assert NFL_SCHEMA_VERSION == "2.0.0"
-    assert render_schema()["$id"] == "booth-review/nfl-data/2.0.0"
+    assert NFL_SCHEMA_VERSION == "2.1.0"
+    assert render_schema()["$id"] == "booth-review/nfl-data/2.1.0"
 
 
 def test_cfb_contract_unchanged() -> None:
@@ -785,3 +786,69 @@ def test_serializers_never_emit_nan() -> None:
     broken = site.model_copy(update={"booths": booths})
     with pytest.raises(ValueError):
         nfl_site_payload_bytes(broken)
+
+
+# --- Phase 18 Plan 01: upcoming block and freshness.weekend (contract 2.1.0) ---
+
+
+def _fixture() -> Payload:
+    data: Payload = json.loads(FIXTURE_PATH.read_text())
+    return data
+
+
+def _set_upcoming(column: str, i: int, value: object) -> Payload:
+    data = _fixture()
+    data["upcoming"][column][i] = value
+    return data
+
+
+def test_fixture_upcoming_covers_every_weekend_state() -> None:
+    site = validate_nfl_site_data(_fixture())
+    u = site.upcoming
+    assert len(u.season) == 10
+    assert site.freshness.weekend is not None
+    assert site.freshness.weekend.week == 5
+    assert sorted(r for r in u.booth_rank if r is not None) == [1, 2]
+    assert "slot" in u.network_basis
+    assert None in u.kickoff and None in u.network and any(u.neutral)
+
+
+def test_upcoming_network_basis_null_exactly_when_network_null() -> None:
+    with pytest.raises(ValidationError, match=r"upcoming\.network_basis\[0\]"):
+        validate_nfl_site_data(_set_upcoming("network_basis", 0, None))
+    with pytest.raises(ValidationError, match=r"upcoming\.network_basis\[8\]"):
+        validate_nfl_site_data(_set_upcoming("network_basis", 8, "slot"))
+    with pytest.raises(ValidationError, match=r"upcoming\.network_basis\.0"):
+        validate_nfl_site_data(_set_upcoming("network_basis", 0, "wikipedia"))
+
+
+def test_upcoming_kickoff_null_forces_slot_null_and_date_rule() -> None:
+    with pytest.raises(ValidationError, match=r"upcoming\.slot\[7\]"):
+        validate_nfl_site_data(_set_upcoming("slot", 7, 9))
+    with pytest.raises(ValidationError, match=r"upcoming\.date\[0\]"):
+        validate_nfl_site_data(_set_upcoming("date", 0, None))
+    validate_nfl_site_data(_set_upcoming("date", 7, None))
+
+
+def test_upcoming_booth_rank_needs_a_crew() -> None:
+    with pytest.raises(ValidationError, match=r"upcoming\.booth_rank\[2\]"):
+        validate_nfl_site_data(_set_upcoming("booth_rank", 2, 1))
+
+
+def test_upcoming_game_already_in_games_is_rejected_count_only() -> None:
+    data = _fixture()
+    g = data["games"]
+    for column in ("season", "week", "home", "away"):
+        data["upcoming"][column][0] = g[column][0]
+    with pytest.raises(ValidationError) as info:
+        validate_nfl_site_data(data)
+    assert "games/upcoming: 1 game(s) appear more than once" in str(info.value)
+
+
+def test_upcoming_rejects_a_published_lineup_source_and_extra_keys() -> None:
+    with pytest.raises(ValidationError, match=r"upcoming\.crew_source\.0"):
+        validate_nfl_site_data(_set_upcoming("crew_source", 0, "published_lineup"))
+    data = _fixture()
+    data["upcoming"]["viewers"] = [None] * len(data["upcoming"]["season"])
+    with pytest.raises(ValidationError, match=r"upcoming\.viewers"):
+        validate_nfl_site_data(data)

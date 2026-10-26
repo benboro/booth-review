@@ -33,6 +33,7 @@ from booth_review.contract.nfl_models import (
     NflBoothColumns,
     NflGameColumns,
     NflSiteData,
+    NflUpcomingColumns,
     NflViewershipColumns,
 )
 from booth_review.errors import SiteBuildError
@@ -425,6 +426,8 @@ def _freshness(games: pl.DataFrame, task1: pl.DataFrame) -> dict[str, Any]:
         "through_week": _opt_int(through),
         "viewership_through_week": _opt_int(rated),
         "crews_default_season": booth_seasons[-1] if booth_seasons else None,
+        # Phase 18: Plan 07 fills the weekend stamp and the upcoming block.
+        "weekend": None,
     }
 
 
@@ -681,6 +684,7 @@ def build_nfl_site_data(inputs: NflSiteInputs) -> NflSiteData:
             "slots": list(NFL_SLOTS),
         },
         "games": game_cols,
+        "upcoming": {name: [] for name in NflUpcomingColumns.model_fields},
         "special": special,
         "season_weeks": season_weeks,
         "booths": booths,

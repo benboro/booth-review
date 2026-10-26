@@ -16,12 +16,13 @@ give identical bytes. See docs/nfl-data.md for the field-by-field contract.
 from __future__ import annotations
 
 import math
+from collections import Counter
 from collections.abc import Sequence
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-NFL_SCHEMA_VERSION = "2.0.0"
+NFL_SCHEMA_VERSION = "2.1.0"
 
 NflSlotLabel = Literal[
     "Christmas",
@@ -76,6 +77,19 @@ NFL_VIEW_CATEGORIES: tuple[tuple[str, str, bool], ...] = (
 )
 
 
+class NflWeekendFreshness(BaseModel):
+    """The week the This weekend tab opens on and when each source last landed (Phase 18).
+
+    Timestamps are ISO UTC strings ("%Y-%m-%dT%H:%M:%SZ"); the client formats them in ET.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    week: int
+    schedule_updated_at: str | None = None
+    crews_506_saved_at: str | None = None
+
+
 class NflFreshness(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
@@ -84,6 +98,7 @@ class NflFreshness(BaseModel):
     through_week: int | None
     viewership_through_week: int | None
     crews_default_season: int | None
+    weekend: NflWeekendFreshness | None = None
 
 
 class NflConstants(BaseModel):
@@ -211,6 +226,42 @@ class NflGameColumns(BaseModel):
     rr_url: list[str | None]
     source_url: list[str | None]
     cause: list[Literal["pending", "regional", "none"] | None]
+
+
+class NflUpcomingColumns(BaseModel):
+    """One list per display field; index i across every list is one unplayed game of the
+    weekend (Phase 18), kept apart from `games` so no played-game view iterates it.
+
+    No points, viewers, excitement or cause by definition. `date`, `kickoff` and `network`
+    are null for a game the schedule has not settled yet (Time TBA / Network TBA).
+    `network_basis` says where a non-null network came from: "506" for a saved 506 page,
+    "slot" for the hand-curated slot-rights table (TNF, SNF, MNF).
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    season: list[int]
+    week: list[int]
+    date: list[str | None]
+    kickoff: list[str | None]
+    home: list[int]
+    away: list[int]
+    home_name: list[int]
+    away_name: list[int]
+    # Index into lookups.slots; null when kickoff is null.
+    slot: list[int | None]
+    international: list[bool]
+    # nflverse location "Neutral"
+    neutral: list[bool]
+    network: list[int | None]
+    network_basis: list[Literal["506", "slot"] | None]
+    crew: list[list[NflCrewEntry]]
+    # Hand-save imports only; never a published lineup for an upcoming game (D-15).
+    crew_source: list[Literal["506"] | None]
+    crew_source_url: list[str | None]
+    # Published booth rank (nfl_booth_ranks.csv) for the game's network and season; null
+    # when the crew is empty.
+    booth_rank: list[int | None]
 
 
 class NflSpecialColumns(BaseModel):
@@ -380,11 +431,12 @@ def _check_game_list(block: str, i: int, game_list: Sequence[int], num_games: in
 class NflSiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["2.0.0"]
+    schema_version: Literal["2.1.0"]
     freshness: NflFreshness
     constants: NflConstants
     lookups: NflLookups
     games: NflGameColumns
+    upcoming: NflUpcomingColumns
     special: NflSpecialColumns
     season_weeks: NflSeasonWeekColumns
     booths: NflBoothColumns
@@ -399,12 +451,13 @@ class NflSiteData(BaseModel):
         """
         if tuple(self.lookups.slots) != NFL_SLOTS:
             raise ValueError("lookups.slots: must equal the NFL slot names in order")
-        for block in ("games", "special", "booths", "viewership"):
+        for block in ("games", "upcoming", "special", "booths", "viewership"):
             _check_finite(block, getattr(self, block))
         self._check_lookups()
         referenced_people: set[int] = set()
         referenced_networks: set[int] = set()
         n_games = self._check_games(referenced_people, referenced_networks)
+        self._check_upcoming(referenced_people, referenced_networks)
         self._check_special()
         self._check_season_weeks()
         self._check_booths(n_games, referenced_people)
@@ -468,6 +521,48 @@ class NflSiteData(BaseModel):
             self._check_points(i)
             self._check_rating(i)
         return n
+
+    def _check_upcoming(self, referenced_people: set[int], referenced_networks: set[int]) -> None:
+        u = self.upcoming
+        lk = self.lookups
+        n = _check_lengths("upcoming", u, "season")
+        for i in range(n):
+            _check_index("upcoming", "home", i, u.home[i], len(lk.franchises))
+            _check_index("upcoming", "away", i, u.away[i], len(lk.franchises))
+            _check_index("upcoming", "home_name", i, u.home_name[i], len(lk.team_names))
+            _check_index("upcoming", "away_name", i, u.away_name[i], len(lk.team_names))
+            _check_index("upcoming", "slot", i, u.slot[i], len(lk.slots))
+            _check_index("upcoming", "network", i, u.network[i], len(lk.networks))
+            network = u.network[i]
+            if network is not None:
+                referenced_networks.add(network)
+            if (network is None) != (u.network_basis[i] is None):
+                raise ValueError(
+                    f"upcoming.network_basis[{i}]: must be null exactly when network is null"
+                )
+            if u.kickoff[i] is None and u.slot[i] is not None:
+                raise ValueError(f"upcoming.slot[{i}]: must be null when kickoff is null")
+            if u.date[i] is None and u.kickoff[i] is not None:
+                raise ValueError(f"upcoming.date[{i}]: may be null only when kickoff is null")
+            crew = u.crew[i]
+            for j, entry in enumerate(crew):
+                if not 0 <= entry.person < len(lk.people):
+                    raise ValueError(f"upcoming.crew[{i}][{j}].person: index out of range")
+                referenced_people.add(entry.person)
+            if (u.crew_source[i] is None) == bool(crew):
+                raise ValueError(
+                    f"upcoming.crew_source[{i}]: must be set exactly when the game has a crew"
+                )
+            if not crew and (u.booth_rank[i] is not None or u.crew_source_url[i] is not None):
+                raise ValueError(
+                    f"upcoming.booth_rank[{i}]: booth_rank and crew_source_url need a crew"
+                )
+        g = self.games
+        played = {(g.season[i], g.week[i], g.home[i], g.away[i]) for i in range(len(g.season))}
+        keys = Counter((u.season[i], u.week[i], u.home[i], u.away[i]) for i in range(n))
+        repeated = sum(1 for key, c in keys.items() if c > 1 or key in played)
+        if repeated:
+            raise ValueError(f"games/upcoming: {repeated} game(s) appear more than once")
 
     def _check_crew_source(self, i: int) -> None:
         g = self.games
