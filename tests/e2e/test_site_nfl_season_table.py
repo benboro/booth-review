@@ -33,7 +33,7 @@ HEADS = [
 ]
 TIPS = {
     "Special games": "Solo slots plus Sunday-window games: Thu + Sun + Mon + Holiday + Other solo + AGOTW + CBS + Intl.",
-    "Other solo slot": "A game alone in its window that is not a Thursday, Sunday or Monday night game or a holiday, such as a Saturday, a Friday or a lone Sunday-afternoon game.",
+    "Other solo slot": "A game alone in its window that is not a Thursday, Sunday or Monday night game or a holiday, such as a Saturday, Friday or lone Sunday-afternoon game, or a solo international game.",
     "Fox AGOTW": "Fox's America's Game of the Week, its top Sunday-afternoon game.",
     "CBS late national": "CBS's late Sunday-afternoon national game.",
 }

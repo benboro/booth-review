@@ -301,7 +301,7 @@ function cell(tag, text, className) {
 const RULE_KEYS = new Set(['solo_thursday', 'agotw']);
 const SPECIAL_TIP = 'Solo slots plus Sunday-window games: Thu + Sun + Mon + Holiday + Other solo + AGOTW + CBS + Intl.';
 const SEGMENT_TIPS = Object.freeze({
-  solo_other: 'A game alone in its window that is not a Thursday, Sunday or Monday night game or a holiday, such as a Saturday, a Friday or a lone Sunday-afternoon game.',
+  solo_other: 'A game alone in its window that is not a Thursday, Sunday or Monday night game or a holiday, such as a Saturday, Friday or lone Sunday-afternoon game, or a solo international game.',
   agotw: "Fox's America's Game of the Week, its top Sunday-afternoon game.",
   cbs_national: "CBS's late Sunday-afternoon national game.",
 });
