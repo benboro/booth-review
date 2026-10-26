@@ -1540,3 +1540,53 @@ def test_nfl_build_no_commit_passes_commit_false(
     _install_fakes(monkeypatch, _NflFakes(calls=[], build_kwargs=kwargs))
     _nfl_update_run(update_vault, tmp_path, mock_transport_factory, fake_clock, commit=False)
     assert [c["commit"] for c in kwargs] == [False]
+
+
+# -- 18-13 F11 residual (accepted at the v2.0 close) ---------------------------------------------
+
+
+def test_failed_nflverse_pull_in_schedule_mode_raises_attention_but_still_marks_the_slot(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
+) -> None:
+    """A schedule-only run saves the CFB state before the NFL block (CR-02), so a failed
+    nflverse pull after a clean CFBD pull still moves `last_schedule_at`. The run raises the
+    nflverse attention item and exits 4, and Sunday's full run pulls the schedule again. This
+    pins that residual (18-13 FIXLOG "Residual"; left by decision in v2.1, WKND-13)."""
+    _clean_cfb(monkeypatch)
+    fakes = _NflFakes(calls=[])
+    _install_fakes(monkeypatch, fakes)
+    root = tmp_path / "run"
+    paths = _clone_vault(update_vault, root)
+    _bootstrap_nfl(paths, season=2025, frozen_through=2024)
+    fakes.fail = ("schedules", "fetch")
+    before = load_state(paths.job_state)
+    friday = UPDATE_NOW.replace(hour=18)
+    handle = mock_transport_factory(_update_cfbd_responses())
+    runtime = _runtime(paths, handle, now=lambda: friday, fake_clock=fake_clock)
+    result = ScheduledJob(
+        runtime,
+        token="test-token",
+        now=lambda: friday,
+        trigger="manual",
+        update=True,
+        site_out=root / "site-out",
+        mode="schedule",
+    ).run()
+
+    # Schedule mode ran only the nflverse schedule step (then the build) on the NFL side.
+    assert fakes.calls == ["schedules", "build"]
+    assert _expected_item("schedules", "fetch") in result.items
+    assert result.exit_code == 4
+    # The CFBD pull was the schedule-only pair, and it was clean.
+    cfbd = {
+        u.split("?")[0].removeprefix("https://api.collegefootballdata.com")
+        for u in (r.url for r in handle.requests)
+        if "collegefootballdata" in u and not u.endswith("robots.txt")
+    }
+    assert cfbd == {"/games", "/games/media"}
+    after = load_state(paths.job_state)
+    # The residual: the slot still counts as done, because the state was saved before the NFL
+    # block ran. The Sunday full run re-pulls; a backup slot the same evening does not.
+    assert before.last_schedule_at is None
+    assert after.last_schedule_at == friday
+    assert after.last_success_at == before.last_success_at
