@@ -56,7 +56,13 @@ from booth_review.errors import (
     UnknownHostError,
 )
 from booth_review.job.attention import build_attention_body
-from booth_review.job.runner import EXIT_NOTHING_DUE, JOB_CFBD_MAX_CALLS, JobRunResult, ScheduledJob
+from booth_review.job.runner import (
+    EXIT_NOTHING_DUE,
+    JOB_CFBD_MAX_CALLS,
+    JOB_CFBD_SCHEDULE_MAX_CALLS,
+    JobRunResult,
+    ScheduledJob,
+)
 from booth_review.mlb.collect_cli import (
     MLB_RR_WINDOWS_MISSING,
     add_mlb_collect_parsers,
@@ -452,7 +458,20 @@ def build_parser() -> argparse.ArgumentParser:
         default=NFL_REFRESH_CAP_DEFAULT,
         help="Ratings Reference NFL re-fetch cap per run, separate from --rr-cap (999.4 D-09)",
     )
-    job_run.add_argument("--max-cfbd-calls", type=int, default=JOB_CFBD_MAX_CALLS)
+    job_run.add_argument(
+        "--max-cfbd-calls",
+        type=int,
+        default=None,
+        help=f"CFBD call cap (default {JOB_CFBD_MAX_CALLS}, "
+        f"{JOB_CFBD_SCHEDULE_MAX_CALLS} with --mode schedule)",
+    )
+    job_run.add_argument(
+        "--mode",
+        choices=["auto", "full", "schedule", "rebuild"],
+        default="auto",
+        help="auto picks full or schedule-only from the clock; schedule re-pulls only "
+        "CFBD games/media and the nflverse schedule; rebuild collects nothing (D-17)",
+    )
     job_run.add_argument("--attention-out", type=Path, default=None)
     job_run.add_argument("--dry-run", action="store_true")
     job_run.add_argument("--no-commit", action="store_true")
@@ -1837,8 +1856,11 @@ def _job_run(args: argparse.Namespace) -> int:
     if args.update and args.site_out is None:
         print("error: --update requires --site-out", file=sys.stderr)
         return 2
+    max_calls = args.max_cfbd_calls
+    if max_calls is None:
+        max_calls = JOB_CFBD_SCHEDULE_MAX_CALLS if args.mode == "schedule" else JOB_CFBD_MAX_CALLS
     runtime = build_runtime(
-        with_budget=True, floor=CFBD_FLOOR_DEFAULT, max_calls=args.max_cfbd_calls, tag="job"
+        with_budget=True, floor=CFBD_FLOOR_DEFAULT, max_calls=max_calls, tag="job"
     )
     try:
         token = None if args.dry_run else load_cfbd_key()
@@ -1856,6 +1878,7 @@ def _job_run(args: argparse.Namespace) -> int:
             nfl_rr_cap=args.nfl_rr_cap,
             github_token=github_token,
             nfl_site=nfl_site_enabled(os.environ),
+            mode=None if args.mode == "auto" else args.mode,
             # CR-02: the CFB-only outcome is written before the NFL block, so a
             # killed run (the workflow's step timeout) still leaves it to deploy.
             on_cfb_result=lambda cfb: _write_job_outputs(args, cfb),

@@ -67,7 +67,7 @@ from __future__ import annotations
 import contextlib
 import json
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TypeVar
@@ -136,11 +136,12 @@ from booth_review.job.catchup import (
     EASTERN,
     CatchupWindow,
     JobState,
+    RunMode,
     Trigger,
     catchup_window,
     collectable_season,
-    is_due,
     load_state,
+    resolve_mode,
     save_state,
 )
 from booth_review.job.gaps506 import find_506_gaps
@@ -175,6 +176,11 @@ from booth_review.vault import batch_message
 # outside CfbdCollector.plan's own allow-listed endpoint names.
 JOB_CFBD_REFRESH: tuple[str, ...] = ("games", "media", "lines", "wp_pregame", "rankings")
 JOB_CFBD_ONCE: tuple[str, ...] = ("teams_fbs",)
+
+# Schedule-only runs (Phase 18 D-14/D-15): just the whole-season games and media
+# lists, 2 counted requests, plus a possible /info on a month's first run.
+JOB_CFBD_SCHEDULE: tuple[str, ...] = ("games", "media")
+JOB_CFBD_SCHEDULE_MAX_CALLS = 3
 
 # A default run-cap for the job's CFBD calls: 5 refresh endpoints + 1 once
 # endpoint (uncached worst case) + 1 /info on a month's first run (when the
@@ -338,6 +344,7 @@ class ScheduledJob:
         github_token: str | None = None,
         on_cfb_result: Callable[[JobRunResult], None] | None = None,
         nfl_site: bool = False,
+        mode: RunMode | None = None,
     ) -> None:
         """`github_token` (optional GITHUB_TOKEN) goes only to the nflverse
         play-by-play listing on api.github.com; it is never logged or stored.
@@ -352,7 +359,12 @@ class ScheduledJob:
         build. The NFL switch ships only with a valid file (WR-01): with no
         valid carry-over the site is built CFB-only, and the NFL block turns
         the switch on in the same run once it has a valid fresh file (iter-2
-        WR-02). NFL site problems are items that join the final outcome only."""
+        WR-02). NFL site problems are items that join the final outcome only.
+
+        `mode` (D-17): None derives it from the trigger and clock
+        (`resolve_mode`); "schedule" re-pulls only CFBD games/media and the
+        nflverse schedule, "rebuild" collects nothing; both then build and
+        deploy and never move `last_success_at` or `last_attempt_at`."""
         if update and site_out is None:
             raise ValueError("update mode requires site_out")
         self._update = update
@@ -371,6 +383,7 @@ class ScheduledJob:
         self._commit_enabled = commit
         self._on_cfb_result = on_cfb_result
         self._nfl_site = nfl_site
+        self._mode = mode
         self._nfl_carry_items: list[AttentionItem] = []
 
     # -- public entry point ------------------------------------------------
@@ -388,7 +401,8 @@ class ScheduledJob:
         window_season = season if season is not None else rr_current_season
         window = catchup_window(state, now, window_season, self._trigger)
 
-        if not is_due(state, now, self._trigger):
+        mode = resolve_mode(state, now, self._trigger, self._mode)
+        if mode is None:
             if self._update:
                 stale_items: list[AttentionItem] = []
                 self._staleness_step(stale_items, state.last_build_at, now, season)
@@ -403,6 +417,9 @@ class ScheduledJob:
             return JobRunResult(
                 exit_code=EXIT_NOTHING_DUE, items=[], counts={"skipped": 1}, window=window
             )
+
+        if mode != "full":
+            return self._run_light(mode, state, now, season, window, window_season)
 
         items: list[AttentionItem] = []
         counts: dict[str, int] = {}
@@ -467,30 +484,10 @@ class ScheduledJob:
             any_failed = any_failed or not freeze_ok
 
             if self._update and not self._dry_run:
-                outcome = self._guarded(
-                    items,
-                    lambda name: step_failed("build", name),
-                    lambda: self._run_build_step(items, counts),
-                    passthrough=(VaultCommitError,),
+                build_failed, new_last_build_at, deploy_ready, key_leak = self._build_and_site(
+                    items, counts, now
                 )
-                # WR-06: a crashed build or site step, or a key leak, is a
-                # failed run (state, failed_attempts, catch-up window); a
-                # guard-blocked build (D-09) stays attention only.
-                if outcome is None:
-                    any_failed = True
-                elif not outcome.blocked:
-                    new_last_build_at = now
-                    site_result = self._guarded(
-                        items,
-                        lambda name: step_failed("site", name),
-                        lambda: self._run_site_step(items),
-                        passthrough=(VaultCommitError,),
-                    )
-                    if site_result is None:
-                        any_failed = True
-                    else:
-                        deploy_ready, key_leak = site_result
-                        any_failed = any_failed or key_leak
+                any_failed = any_failed or build_failed
 
             if self._update:
                 self._staleness_step(items, new_last_build_at or state.last_build_at, now, season)
@@ -533,6 +530,7 @@ class ScheduledJob:
                 "run_at": now.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "trigger": self._trigger,
                 "update": self._update,
+                "mode": "full",
                 "deploy_ready": deploy_ready,
                 "cfbd_remaining_start": remaining_start,
                 "cfbd_remaining_end": remaining_end,
@@ -571,6 +569,171 @@ class ScheduledJob:
         nfl_counts: dict[str, int] = {}
         items.extend(self._nfl_carry_items)
         self._run_nfl_phase(now, window_season, items, nfl_counts)
+        counts.update(nfl_counts)
+        if self._update and not self._dry_run and self._nfl_site:
+            self._guarded_ok(
+                items,
+                lambda name: step_failed("nfl_site", name),
+                lambda: self._note_switch_off(items),
+                passthrough=(),
+            )
+
+        return JobRunResult(
+            exit_code=_exit_code(key_leak, items),
+            items=items,
+            counts=counts,
+            window=window,
+            deploy_ready=deploy_ready,
+        )
+
+    def _build_and_site(
+        self, items: list[AttentionItem], counts: dict[str, int], now: datetime
+    ) -> tuple[bool, datetime | None, bool, bool]:
+        """The build then site steps. Returns (failed, last_build_at,
+        deploy_ready, key_leak); the VaultCommitError of a build push passes
+        through."""
+        any_failed = False
+        new_last_build_at: datetime | None = None
+        deploy_ready = False
+        key_leak = False
+        outcome = self._guarded(
+            items,
+            lambda name: step_failed("build", name),
+            lambda: self._run_build_step(items, counts),
+            passthrough=(VaultCommitError,),
+        )
+        # WR-06: a crashed build or site step, or a key leak, is a
+        # failed run (state, failed_attempts, catch-up window); a
+        # guard-blocked build (D-09) stays attention only.
+        if outcome is None:
+            any_failed = True
+        elif not outcome.blocked:
+            new_last_build_at = now
+            site_result = self._guarded(
+                items,
+                lambda name: step_failed("site", name),
+                lambda: self._run_site_step(items),
+                passthrough=(VaultCommitError,),
+            )
+            if site_result is None:
+                any_failed = True
+            else:
+                deploy_ready, key_leak = site_result
+                any_failed = any_failed or key_leak
+        return any_failed, new_last_build_at, deploy_ready, key_leak
+
+    def _run_light(
+        self,
+        mode: RunMode,
+        state: JobState,
+        now: datetime,
+        season: int | None,
+        window: CatchupWindow,
+        window_season: int,
+    ) -> JobRunResult:
+        """A schedule-only or rebuild-only run (D-14/D-15/D-17).
+
+        "schedule" re-pulls CFBD games and media (when in season), then the
+        NFL block runs only the nflverse schedule; "rebuild" collects nothing.
+        Both then build and deploy under the same gates as a full run. Neither
+        calls Ratings Reference, 506, ESPN Press Room, Wikipedia, the gap or
+        freeze steps. The saved state moves only `last_schedule_at` and
+        `last_build_at`, so the Sunday/Wednesday slot logic is untouched."""
+        items: list[AttentionItem] = []
+        counts: dict[str, int] = {}
+        any_failed = False
+        deploy_ready = False
+        key_leak = False
+        new_last_build_at: datetime | None = None
+        remaining_start = self._remaining(now)
+        print(f"mode: {mode}")
+        print(f"cfbd remaining at start: {_remaining_text(remaining_start)}")
+
+        try:
+            if mode == "schedule" and season is not None:
+                cfbd_season = season
+                cfbd_result = self._guarded(
+                    items,
+                    cfbd_step_failed,
+                    lambda: self._run_cfbd_step(
+                        cfbd_season, items, endpoints=JOB_CFBD_SCHEDULE, include_once=False
+                    ),
+                    passthrough=_COMMIT_PASSTHROUGH,
+                )
+                if cfbd_result is None:
+                    any_failed = True
+                else:
+                    cfbd_failed, _transient, cfbd_counts = cfbd_result
+                    any_failed = any_failed or cfbd_failed
+                    counts.update({f"cfbd_{key}": value for key, value in cfbd_counts.items()})
+
+            if self._update and not self._dry_run:
+                build_failed, new_last_build_at, deploy_ready, key_leak = self._build_and_site(
+                    items, counts, now
+                )
+                any_failed = any_failed or build_failed
+
+            if self._update:
+                self._staleness_step(items, new_last_build_at or state.last_build_at, now, season)
+
+            remaining_end: int | None = None
+            budget = self._runtime.budget
+            if budget is not None:
+                remaining_end = self._guarded(
+                    items,
+                    lambda name: step_failed("budget", name),
+                    lambda: budget.last_known_remaining(now.strftime("%Y-%m")),
+                )
+                if remaining_end is not None:
+                    items.append(cfbd_remaining(remaining_end, CFBD_FLOOR_DEFAULT))
+            print(f"cfbd remaining at end: {_remaining_text(remaining_end)}")
+        except VaultCommitError:
+            return JobRunResult(exit_code=3, items=items, counts=counts, window=window)
+
+        deploy_ready = deploy_ready and not key_leak
+        if not self._dry_run:
+            new_state = replace(
+                state,
+                last_schedule_at=now,
+                last_build_at=new_last_build_at or state.last_build_at,
+            )
+            report = {
+                "run_at": now.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "trigger": self._trigger,
+                "update": self._update,
+                "mode": mode,
+                "deploy_ready": deploy_ready,
+                "cfbd_remaining_start": remaining_start,
+                "cfbd_remaining_end": remaining_end,
+                "attention": sum(1 for item in items if item.severity == "attention"),
+                "counts": dict(counts),
+            }
+            try:
+                self._save_state(new_state, window, window_season, items, report)
+            except VaultCommitError:
+                items.append(push_failed("state"))
+                return JobRunResult(
+                    exit_code=3, items=items, counts=counts, window=window, deploy_ready=False
+                )
+            except VaultStateError:
+                raise
+            except Exception as exc:
+                items.append(step_failed("state", error_type_name(exc)))
+
+        self._report_cfb_result(
+            JobRunResult(
+                exit_code=_exit_code(key_leak, items),
+                items=list(items),
+                counts=dict(counts),
+                window=window,
+                deploy_ready=deploy_ready,
+            ),
+            items,
+        )
+
+        nfl_counts: dict[str, int] = {}
+        items.extend(self._nfl_carry_items)
+        self._run_nfl_phase(now, window_season, items, nfl_counts, mode)
         counts.update(nfl_counts)
         if self._update and not self._dry_run and self._nfl_site:
             self._guarded_ok(
@@ -806,7 +969,12 @@ class ScheduledJob:
     # -- CFBD step -----------------------------------------------------------
 
     def _run_cfbd_step(
-        self, season: int, items: list[AttentionItem]
+        self,
+        season: int,
+        items: list[AttentionItem],
+        *,
+        endpoints: tuple[str, ...] = JOB_CFBD_REFRESH,
+        include_once: bool = True,
     ) -> tuple[bool, bool, dict[str, int]]:
         """Returns (failed, transient, counts); `transient` marks a failure
         the next backup slot should retry (`_is_transient_cfbd_error`)."""
@@ -822,10 +990,9 @@ class ScheduledJob:
                 # A new month has no ledger line yet; /info records one so the
                 # data calls below aren't refused with BudgetUnknownError.
                 collector.ensure_budget_known()
-            summaries.append(
-                collector.run(season, JOB_CFBD_REFRESH, dry_run=self._dry_run, refresh=True)
-            )
-            summaries.append(collector.run(season, JOB_CFBD_ONCE, dry_run=self._dry_run))
+            summaries.append(collector.run(season, endpoints, dry_run=self._dry_run, refresh=True))
+            if include_once:
+                summaries.append(collector.run(season, JOB_CFBD_ONCE, dry_run=self._dry_run))
         except VaultCommitError:
             raise
         except Exception as exc:
@@ -990,13 +1157,14 @@ class ScheduledJob:
         window_season: int,
         items: list[AttentionItem],
         nfl_counts: dict[str, int],
+        mode: RunMode = "full",
     ) -> None:
         """The NFL block, then its own report line. Any exception becomes an
         attention item; a skipped block (CFB-only vault, off-season) writes nothing."""
         first = len(items)
         label = window_season
         try:
-            ran = self._run_nfl_block(now, items, nfl_counts)
+            ran = self._run_nfl_block(now, items, nfl_counts, mode)
         except Exception as exc:
             items.append(step_failed("nfl", error_type_name(exc)))
         else:
@@ -1039,11 +1207,17 @@ class ScheduledJob:
         )
 
     def _run_nfl_block(
-        self, now: datetime, items: list[AttentionItem], counts: dict[str, int]
+        self,
+        now: datetime,
+        items: list[AttentionItem],
+        counts: dict[str, int],
+        mode: RunMode = "full",
     ) -> int | None:
         """Every NFL step, each guarded with no passthrough. Skipped (None)
         until the vault is NFL-bootstrapped and outside the NFL collectable
-        season; otherwise returns the NFL season it ran for."""
+        season; otherwise returns the NFL season it ran for. A "schedule" run
+        does only the nflverse schedule, a "rebuild" run only the build and
+        site (D-17)."""
         paths = self._runtime.paths
         if not (paths.raw / NFLVERSE_SCHEDULES_PATH).is_file():
             return None
@@ -1055,60 +1229,62 @@ class ScheduledJob:
             if result is not None:
                 counts.update({f"nfl_{prefix}{key}": value for key, value in result.items()})
 
-        _merge(
-            "schedules_",
-            self._guarded(
-                items,
-                lambda name: step_failed("nflverse", name),
-                lambda: self._nfl_schedules_step(nfl_season, items),
-                passthrough=(),
-            ),
-        )
-        _merge(
-            "pbp_",
-            self._guarded(
-                items,
-                lambda name: step_failed("nflverse", name),
-                lambda: self._nfl_pbp_step(nfl_season, now, items),
-                passthrough=(),
-            ),
-        )
-        _merge(
-            "rr_",
-            self._guarded(
-                items,
-                lambda name: step_failed("nfl_rr", name),
-                lambda: self._nfl_rr_step(nfl_season, items),
-                passthrough=(),
-            ),
-        )
-        _merge(
-            "wikipedia_",
-            self._guarded(
-                items,
-                lambda name: step_failed("nfl_wikipedia", name),
-                lambda: self._nfl_wikipedia_step(nfl_season, items),
-                passthrough=(),
-            ),
-        )
-        _merge(
-            "",
-            self._guarded(
-                items,
-                lambda name: step_failed("nfl_gaps", name),
-                lambda: self._nfl_gaps_step(nfl_season, now, items),
-                passthrough=(),
-            ),
-        )
-        _merge(
-            "",
-            self._guarded(
-                items,
-                lambda name: step_failed("nfl_freeze", name),
-                lambda: self._nfl_checks_step(nfl_season, now, items),
-                passthrough=(),
-            ),
-        )
+        if mode != "rebuild":
+            _merge(
+                "schedules_",
+                self._guarded(
+                    items,
+                    lambda name: step_failed("nflverse", name),
+                    lambda: self._nfl_schedules_step(nfl_season, items),
+                    passthrough=(),
+                ),
+            )
+        if mode == "full":
+            _merge(
+                "pbp_",
+                self._guarded(
+                    items,
+                    lambda name: step_failed("nflverse", name),
+                    lambda: self._nfl_pbp_step(nfl_season, now, items),
+                    passthrough=(),
+                ),
+            )
+            _merge(
+                "rr_",
+                self._guarded(
+                    items,
+                    lambda name: step_failed("nfl_rr", name),
+                    lambda: self._nfl_rr_step(nfl_season, items),
+                    passthrough=(),
+                ),
+            )
+            _merge(
+                "wikipedia_",
+                self._guarded(
+                    items,
+                    lambda name: step_failed("nfl_wikipedia", name),
+                    lambda: self._nfl_wikipedia_step(nfl_season, items),
+                    passthrough=(),
+                ),
+            )
+            _merge(
+                "",
+                self._guarded(
+                    items,
+                    lambda name: step_failed("nfl_gaps", name),
+                    lambda: self._nfl_gaps_step(nfl_season, now, items),
+                    passthrough=(),
+                ),
+            )
+            _merge(
+                "",
+                self._guarded(
+                    items,
+                    lambda name: step_failed("nfl_freeze", name),
+                    lambda: self._nfl_checks_step(nfl_season, now, items),
+                    passthrough=(),
+                ),
+            )
         if self._update and not self._dry_run:
             _merge(
                 "build_",
