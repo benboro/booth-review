@@ -40,6 +40,14 @@ records only where the site settles or applies them.
 
 ## Chart marks
 
+- The NFL Special games bars have no value column at the right: the end markers carry
+  each total (notes 15). The bars rank by their bright part: the categories the chips
+  show and the Category filter keeps in focus, or the matched games under a pick.
+- The NFL Special games hover lists one row per shown category with games, keyed by
+  the legend chip's colour dot, the count right-aligned in tabular semibold figures.
+  International (any window) and Flexed cut across the categories, so they show only
+  while every chip is on.
+
 - When a filter is active, lead stars take the same outline as the enlarged dots, at the
   same weight: dark in light mode, light in dark mode.
 - A game with no rating is an empty, open star, so the band shows through it (Phase 17).
