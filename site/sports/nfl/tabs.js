@@ -9,6 +9,7 @@ export const TAB_LABELS = Object.freeze({
   crews: 'Crews',
   viewership: 'Viewership',
   scatter: 'Scatter',
+  weekend: 'This weekend',
 });
 
 /**

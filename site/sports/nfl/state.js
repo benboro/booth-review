@@ -7,8 +7,9 @@
  */
 
 import { computePicks } from './picks.js';
+import { defaultDay } from '../../modules/weekend.js';
 
-export const NFL_VIEWS = Object.freeze(['special', 'crews', 'viewership', 'scatter']);
+export const NFL_VIEWS = Object.freeze(['special', 'crews', 'viewership', 'scatter', 'weekend']);
 export const CREW_METRICS = Object.freeze(['margin', 'excitement', 'viewers']);
 
 /** Crews table sort keys and their natural directions (booth like CFB crew, margin like exc). */
@@ -103,6 +104,8 @@ export function defaultNflState(model) {
     showAllTeams: false,
     hiddenSegments: [],
     hiddenCategories: [],
+    week: null,
+    day: null,
   };
 }
 
@@ -115,6 +118,63 @@ function cleanIds(list, lookup) {
 
 function pick(value, allowed, fallback) {
   return allowed.includes(value) ? value : fallback;
+}
+
+/** The season the This weekend tab shows: the upcoming block's, else the freshness season. */
+function weekendSeason(model) {
+  return model.upcomingRaw?.season?.[0] ?? model.freshness?.season ?? model.seasons[1];
+}
+
+/** The current weekend week: the freshness stamp's, else the latest played week of the season. */
+export function weekendCurrentWeek(model) {
+  if (model.weekend?.week != null) return model.weekend.week;
+  const season = weekendSeason(model);
+  let latest = null;
+  for (let i = 0; i < model.n; i += 1) {
+    if (model.cols.season[i] === season && (latest == null || model.cols.week[i] > latest)) {
+      latest = model.cols.week[i];
+    }
+  }
+  return latest;
+}
+
+/** Weeks the stepper reaches: those of the weekend season with games, up to the current week. */
+export function weekendWeeks(model) {
+  const current = weekendCurrentWeek(model);
+  if (current == null) return [];
+  const season = weekendSeason(model);
+  const set = new Set();
+  const c = model.cols;
+  for (let i = 0; i < model.n; i += 1) if (c.season[i] === season) set.add(c.week[i]);
+  const u = model.upcomingRaw;
+  for (let j = 0; u && j < u.season.length; j += 1) if (u.season[j] === season) set.add(u.week[j]);
+  set.add(current);
+  return [...set].filter((w) => Number.isInteger(w) && w <= current).sort((a, b) => a - b);
+}
+
+/** The ET dates (YYYY-MM-DD, sorted) that have a game in one weekend week. */
+export function weekendDays(model, week) {
+  const season = weekendSeason(model);
+  const set = new Set();
+  const c = model.cols;
+  for (let i = 0; i < model.n; i += 1) {
+    if (c.season[i] === season && c.week[i] === week && c.date[i]) set.add(c.date[i]);
+  }
+  const u = model.upcomingRaw;
+  for (let j = 0; u && j < u.season.length; j += 1) {
+    if (u.season[j] === season && u.week[j] === week && u.date[j]) set.add(u.date[j]);
+  }
+  return [...set].sort();
+}
+
+/** Allowlist a week and day pair: defaults (the current week, the Sunday) collapse to null. */
+function cleanWeekend(model, week, day) {
+  const weeks = weekendWeeks(model);
+  const current = weekendCurrentWeek(model);
+  const w = Number.isInteger(week) && weeks.includes(week) && week !== current ? week : null;
+  const days = weekendDays(model, w ?? current);
+  const d = typeof day === 'string' && days.includes(day) && day !== defaultDay(days, 'nfl') ? day : null;
+  return { week: w, day: d };
 }
 
 /**
@@ -137,6 +197,7 @@ export function canonicalNflState(state, model) {
   const csort = cso && typeof cso === 'object'
     && NFL_CSORT_KEYS.includes(cso.key) && (cso.dir === 'asc' || cso.dir === 'desc')
     ? { key: cso.key, dir: cso.dir } : null;
+  const wk = cleanWeekend(model, Number(s.week), s.day);
   const asList = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
   return {
     view: pick(s.view, NFL_VIEWS, d.view),
@@ -157,6 +218,8 @@ export function canonicalNflState(state, model) {
     showAllTeams: s.showAllTeams === true,
     hiddenSegments: [...new Set(asList(s.hiddenSegments).filter((k) => EXCLUSIVE_CATEGORIES.some((c) => c.key === k)))],
     hiddenCategories: [...new Set(asList(s.hiddenCategories).filter((k) => catIds.has(k)))],
+    week: wk.week,
+    day: wk.day,
   };
 }
 

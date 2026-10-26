@@ -26,6 +26,9 @@ const TRIGGERS = [
   { key: 'booths', label: 'Booths' },
 ];
 
+const UNUSED_ON_WEEKEND = ['seasons', 'category'];
+const NOT_USED = 'Not used on This weekend';
+
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -623,6 +626,11 @@ function buildShell(ctx) {
     pop.setAttribute('role', 'dialog');
     pop.setAttribute('aria-label', t.label);
     pop.addEventListener('beforetoggle', (e) => {
+      // A control This weekend does not use stays shut (D-21).
+      if (e.newState === 'open' && btn.getAttribute('aria-disabled') === 'true') {
+        e.preventDefault();
+        return;
+      }
       if (e.newState === 'open') {
         placePopover(pop, btn);
         requestAnimationFrame(() => placePopover(pop, btn));
@@ -726,6 +734,30 @@ export function renderNflFilters(ctx) {
     // The full summary is always available; long values truncate in their cell (C3).
     btn.setAttribute('title', `${label}${value}`);
     btn.setAttribute('aria-label', `${label}${value}`);
+  }
+  // This weekend uses only Team, Announcers and Booths: Seasons and Category are greyed (D-21).
+  const weekendView = state.view === 'weekend';
+  for (const key of UNUSED_ON_WEEKEND) {
+    const btn = ui.triggers.get(key);
+    btn.setAttribute('aria-disabled', weekendView ? 'true' : 'false');
+    if (weekendView) {
+      btn.title = NOT_USED;
+      btn.setAttribute('aria-description', NOT_USED);
+      if (btn.matches(':popover-open')) btn.popoverTargetElement?.hidePopover();
+    } else {
+      btn.removeAttribute('aria-description');
+    }
+    for (const root of document.querySelectorAll(`#nfl-filter-${key}-pop, #nfl-filter-${key}-sheet`)) {
+      root.classList.toggle('is-unused', weekendView);
+      root.setAttribute('aria-disabled', weekendView ? 'true' : 'false');
+      let note = root.querySelector('.nfl-unused-note');
+      if (weekendView && !note) {
+        note = el('p', 'helper nfl-unused-note', NOT_USED);
+        root.prepend(note);
+      }
+      if (note) note.hidden = !weekendView;
+      for (const child of root.children) if (child !== note) child.inert = weekendView;
+    }
   }
   const changed = changedControls(ctx.model, state);
   ui.filtersButton.textContent = changed.length ? `Filters · ${changed.length} changed` : 'Filters';

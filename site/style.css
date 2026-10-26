@@ -946,6 +946,24 @@ body.app {
   border-color: var(--accent);
 }
 
+/* A control the current view does not use (NFL This weekend: Seasons, Category): muted, still
+   focusable, and it does not open (filters.js). */
+.filter-trigger[aria-disabled="true"] {
+  color: var(--muted);
+  border-color: var(--rule);
+  background: transparent;
+  cursor: default;
+}
+
+.nfl-unused-note {
+  margin: 0 0 8px;
+  color: var(--muted);
+}
+
+.nfl-filter-section.is-unused > :not(.nfl-unused-note) {
+  opacity: 0.45;
+}
+
 /* Clear all filters: the right end of the always-rendered 32px selection row
    (C1), never in the filter bar. Not accent, not red: `--ink` outline. */
 .clear-all {
