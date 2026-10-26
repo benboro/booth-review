@@ -141,8 +141,9 @@ played-game view iterates them. Columns: `season`, `week`, `date`, `kickoff`, `h
   facts from the Wikipedia 2026 NFL season article, each carrying that `source_url`). Slot
   exclusions: international games and neutral games at an unknown site, Thanksgiving,
   Black Friday, Christmas, Wednesday and Saturday games, the Week 1 Thursday opener, Week
-  18, any game in the season's Wikipedia scheduling-changes list, and any game without a
-  kickoff time. Every other game has a `null` network (Network TBA). A season missing from
+  18, any game in the season's Wikipedia scheduling-changes list, any game without a
+  kickoff time, a Monday kickoff before 7 pm ET, and every game of a slot the week holds
+  more than one game in (a Monday doubleheader split across ESPN and ABC). Every other game has a `null` network (Network TBA). A season missing from
   the table gives no slot networks and counts `upcoming_slot_table_missing`. The credit
   rule: Wikipedia (CC BY-SA 4.0) is credited with the article link wherever a `"slot"`
   network shows. All slot-rule lines live in `_slot_network`; deleting the rule is a

@@ -14,8 +14,9 @@ line lives in `_slot_network`, so dropping the rule is a one-file change.
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, time
 from pathlib import Path
 
 import polars as pl
@@ -42,6 +43,8 @@ SLOT_NAMES = frozenset({"TNF", "SNF", "MNF"})
 
 #: The last regular-season week: never given a slot network (flex scheduling).
 _LAST_WEEK = 18
+# A Monday kickoff before this is no MNF window (rules.slot_name calls any Monday MNF).
+_MNF_FROM = time(19, 0)
 
 UPCOMING_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
     "season": pl.Int64,
@@ -130,19 +133,28 @@ def current_nfl_week(games: Sequence[UpcomingNflGame], now: datetime) -> int | N
     return min(last_played + 1, weeks[-1])
 
 
+def _slot_key(game: UpcomingNflGame) -> tuple[int, int, SlotName] | None:
+    if game.kickoff_et is None:
+        return None
+    return (game.season, game.week, slot_name(game.kickoff_et, outside_us=False))
+
+
 def _slot_network(
     game: UpcomingNflGame,
     *,
     international: bool,
     changed: bool,
     slots: Mapping[tuple[int, str], str],
+    slot_games: Mapping[tuple[int, int, SlotName], int],
 ) -> str | None:
     """The slot-rights network of a plain TNF, SNF or MNF game, else None.
 
     Excluded: international and unknown-site neutral games, Thanksgiving, Black Friday,
     Christmas, Wednesday and Saturday games (slot_name is not TNF/SNF/MNF), the Week 1
     Thursday opener, Week 18, a game in the season's Wikipedia scheduling-changes list,
-    and any game without a kickoff time.
+    and any game without a kickoff time. The table names one network per slot, so a slot
+    the week holds more than one game in (a Monday doubleheader split across ESPN and
+    ABC) and a Monday kickoff before night are left to 506 too (18-13 F14).
     """
     kickoff = game.kickoff_et
     if kickoff is None or international or changed or game.week >= _LAST_WEEK:
@@ -151,6 +163,10 @@ def _slot_network(
         return None
     slot: SlotName = slot_name(kickoff, outside_us=False)
     if slot not in SLOT_NAMES:
+        return None
+    if slot == "MNF" and kickoff.timetz().replace(tzinfo=None) < _MNF_FROM:
+        return None
+    if slot_games.get((game.season, game.week, slot), 0) > 1:
         return None
     return slots.get((game.season, slot))
 
@@ -179,6 +195,11 @@ def assemble_upcoming(
         and (g.kickoff_et is None or g.kickoff_et + PLAYED_AFTER > now)
     ]
     slots = load_slot_networks(reference_directory)
+    # Every game of the season with a kickoff, played or not, so a doubleheader's played early
+    # game still counts against its slot.
+    slot_games = Counter(
+        key for g in inputs.upcoming if g.season == season and (key := _slot_key(g)) is not None
+    )
     if pending and not any(s == season for s, _ in slots):
         counts["upcoming_slot_table_missing"] = 1
     listings, _ = match_506_listings(inputs, ref.teams, ref.networks, games=pending)
@@ -207,6 +228,7 @@ def assemble_upcoming(
                 international=uncertain,
                 changed=game.game_id in changes,
                 slots=slots,
+                slot_games=slot_games,
             )
             if slot_network is not None:
                 network_id, basis = slot_network, "slot"

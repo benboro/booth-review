@@ -195,6 +195,23 @@ def test_slot_rule_exclusions(tmp_path, label, day, time, weekday, week, extra) 
     assert counts["upcoming_slot_basis"] == 0
 
 
+def test_monday_doubleheader_and_monday_daytime_get_no_slot_network(tmp_path: Path) -> None:
+    # 18-13 F14: the slot table names one MNF network; with two Monday games in a week (an
+    # ESPN/ABC split) it cannot say which is which, and a daytime Monday game is no MNF.
+    double = [
+        _row("mnf-early", 1, 2, "2026-10-26", "19:15", "Monday"),
+        _row("mnf-late", 3, 4, "2026-10-26", "20:15", "Monday"),
+    ]
+    frame, counts = _build(tmp_path, double)
+    assert {r["game_id"]: r["network_id"] for r in frame.iter_rows(named=True)} == {
+        "mnf-early": None,
+        "mnf-late": None,
+    }
+    assert counts["upcoming_slot_basis"] == 0
+    noon, _ = _build(tmp_path, [_row("labor-day", 1, 2, "2026-10-26", "12:00", "Monday")])
+    assert noon.row(0, named=True)["network_id"] is None
+
+
 def test_scheduling_change_excludes_slot(tmp_path: Path) -> None:
     change = ScheduleChange(2026, 8, "Team 01", "Team 02", None, None, None, None, None, "h")
     rows = [_row("a", 1, 2, "2026-10-25", "20:20", "Sunday")]
