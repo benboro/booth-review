@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from booth_review.build.weekend import (
+    build_schedule_inputs,
     current_label,
     schedule_networks,
     week_labels,
@@ -189,6 +190,19 @@ def test_schedule_networks_unmapped_outlet_is_null_and_counted() -> None:
     result, unmapped = schedule_networks([_media(4, "tv", "Mystery Net")], 2026, _TABLE)
     assert result[4] == (None, [])
     assert unmapped == 1
+
+
+def test_schedule_unmapped_count_covers_fbs_regular_games_only(vault_paths: DataPaths) -> None:
+    # 18-13 F10: the count describes scheduled games, so a non-FBS game's unmapped outlet is
+    # never counted.
+    games = [
+        _game(1, 8, _et(10, 24, 12)),
+        _game(2, 8, _et(10, 24, 13), home_classification="fcs", away_classification="fcs"),
+    ]
+    media = [_media(1, "tv", "Mystery Net"), _media(2, "tv", "Other Mystery Net")]
+    inputs = build_schedule_inputs(vault_paths, 2026, games, media, _TABLE)
+    assert inputs.networks[1] == (None, [])
+    assert inputs.network_unmapped == 1
 
 
 def test_schedule_networks_outlets_list_every_mapped_tv_and_web_id() -> None:
