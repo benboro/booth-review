@@ -204,7 +204,8 @@ export function nflWeekendGames(model, week) {
       home: model.teamNames[u.home_name[j]].name,
       awayRank: null,
       homeRank: null,
-      neutral: Boolean(u.neutral[j]),
+      // One rule for both blocks: played games ship only `international` (18-13 F19).
+      neutral: Boolean(u.international?.[j]),
       pbp,
       analyst,
       boothRank: rank,

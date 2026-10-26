@@ -530,3 +530,20 @@ def test_nfl_upcoming_games_pass_before_the_season_opener(nfl_run: Callable[[str
           plain: W.nflWeekendPasses(m2, S.defaultNflState(m2), g) };"""
     )
     assert got == {"found": True, "passes": True, "plain": True}
+
+
+def test_nfl_neutral_follows_one_rule_for_played_and_upcoming(
+    nfl_run: Callable[[str], Any],
+) -> None:
+    # 18-13 F19: played games ship only `international`, so "vs" follows it on both blocks; a
+    # domestic neutral-site upcoming game reads "@" exactly like the same kind of played game.
+    got = nfl_run(
+        """const raw2 = structuredClone(raw);
+        const u = raw2.upcoming;
+        u.neutral = u.neutral.map(() => true);
+        u.international = u.international.map((_, j) => j === 9);
+        const m2 = D.prepareNfl(raw2);
+        const games = W.nflWeekendGames(m2, u.week[0]).filter((g) => g.block === 'upcoming');
+        return games.filter((g) => g.neutral).map((g) => g.index);"""
+    )
+    assert got == [9]

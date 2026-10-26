@@ -114,6 +114,8 @@ played-game view iterates them. Columns: `season`, `week`, `date`, `kickoff`, `h
 `lookups.slots`), `international`, `neutral` (nflverse location `Neutral`), `network`,
 `network_basis`, `crew`, `crew_source`, `crew_source_url`, `booth_rank`.
 
+- The This weekend tab writes "vs" for an `international` game on both blocks, since
+  `games` ships no `neutral` column; `neutral` is not used for it (18-13).
 - `date`, `kickoff` and `network` may be `null` for a game the schedule has not settled
   (Time TBA, Network TBA). `date` is `null` only when `kickoff` is `null`, and `slot` is
   `null` whenever `kickoff` is.
