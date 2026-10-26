@@ -614,6 +614,34 @@ def test_matched_games_section_is_hidden_on_this_weekend(wk: Callable[..., Page]
     assert page.locator("#matched-games").is_hidden()
 
 
+def test_espn_press_room_crew_on_a_scheduled_row_carries_its_booth_tier(
+    wk: Callable[..., Page],
+) -> None:
+    # 18-REVIEW IN-02: a scheduled game whose ESPN Press Room booth is the network's A booth
+    # shows the lead star and is kept by a Booth A pick instead of fading.
+    def tweak(raw: dict[str, Any]) -> None:
+        sched = raw["telecasts_scheduled"]
+        sched["network"][0] = 0  # espn, the disney family of the tier-a booth
+        sched["crew"][0] = [
+            {"person": 4, "role": "pbp", "feed": "main"},
+            {"person": 5, "role": "analyst", "feed": "main"},
+        ]
+        sched["crew_source_url"][0] = "https://espnpressroom.com/us/press-releases/2026/x/"
+        sched["crew_source_label"][0] = "ESPN Press Room"
+
+    page = wk(tweak=tweak)
+    cell = page.locator('[data-wk-id="g:cfb:scheduled:0"]')
+    assert cell.locator(".wk-star").count() == 1
+    assert "Rowan" in cell.locator(".wk-line2").inner_text()
+    page.evaluate("window.__testHooks.setState({ booth: ['a'] })")
+    assert cell.evaluate("e => getComputedStyle(e).opacity") == "1"
+    assert page.locator(FOX_NOON).count() == 1
+    assert page.locator(RANKED).evaluate("e => getComputedStyle(e).opacity") == "0.3"
+    # A crew that matches no cited booth still has no tier.
+    page.evaluate("window.__testHooks.setState({ booth: [] })")
+    assert page.locator(RANKED).locator(".wk-star").count() == 0
+
+
 def test_phone_has_no_dead_gap_above_the_day_tabs(wk_phone: Callable[..., Page]) -> None:
     # 18-UI-REVIEW item 10: the concealed chart tools kept a 28px row plus margins between the
     # subtitle and the day tabs on the phone.
