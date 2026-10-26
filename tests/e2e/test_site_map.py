@@ -632,15 +632,37 @@ def test_phone_second_tap_filters_the_table(mobile_page: Page, open_app: OpenApp
     assert "venue=" not in mobile_page.evaluate("() => location.search")
 
 
-def test_phone_plot_is_centered_in_a_520px_panel(mobile_page: Page, open_app: OpenApp) -> None:
-    """D-09: the plot's top and bottom gaps match and the map panel is 520px tall."""
+def test_phone_plot_fills_its_panel_with_the_key_below(
+    mobile_page: Page, open_app: OpenApp
+) -> None:
+    """v2.1 (todo 2026-10-25-phone-map-blank-bands): on a phone the map box takes the map's own
+    aspect ratio, so no blank band sits above the map or between the map and its key, and the
+    key sits in flow right under the map instead of at the bottom of a 520px panel."""
     _phone(mobile_page, open_app, "?view=map&people=pat-rowan")
     box: dict[str, float] = mobile_page.evaluate(
         """() => { const gd = document.getElementById('map-chart');
           const fl = gd._fullLayout; const r = gd.getBoundingClientRect();
+          const key = document.getElementById('map-key').getBoundingClientRect();
+          const panel = document.getElementById('map-panel').getBoundingClientRect();
           return {above: fl.yaxis._offset,
                   below: r.height - fl.yaxis._offset - fl.yaxis._length,
-                  panel: document.getElementById('map-panel').getBoundingClientRect().height}; }"""
+                  width: r.width, height: r.height, bottom: r.bottom,
+                  keyTop: key.top, keyBottom: key.bottom, panelBottom: panel.bottom}; }"""
     )
-    assert abs(box["above"] - box["below"]) <= 2
-    assert box["panel"] == 520
+    assert box["above"] <= 2 and box["below"] <= 2, box
+    assert abs(box["height"] - box["width"] * 610 / 975) <= 2, box
+    assert 0 <= box["keyTop"] - box["bottom"] <= 16, box
+    assert box["panelBottom"] - box["keyBottom"] <= 16, box
+    # The tools row (concealed scatter controls plus a Reset zoom the fixed phone map never
+    # uses) is gone too, so the map follows the subtitle closely.
+    assert mobile_page.locator("#chart-tools").is_hidden()
+    gap = mobile_page.evaluate(
+        """() => document.getElementById('map-chart').getBoundingClientRect().top
+             - document.getElementById('chart-subtitle').getBoundingClientRect().bottom"""
+    )
+    assert gap <= 32, gap
+
+
+def test_desktop_map_panel_keeps_its_520px_height(guarded_page: Page, open_app: OpenApp) -> None:
+    _open_map(guarded_page, open_app, "?view=map")
+    assert guarded_page.locator("#map-chart").bounding_box()["height"] == 520

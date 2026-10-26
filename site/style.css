@@ -3460,6 +3460,31 @@ td.no-rating {
   line-height: 20px;
 }
 
+/* v2.1 (todo 2026-10-25-phone-map-blank-bands): on a phone the map box takes the map's own
+   975:610 aspect ratio instead of the desktop's 520px, so no blank band sits above the map, and
+   the key leaves the plot's corner to sit in flow right under it. Desktop is unchanged. */
+@media (max-width: 480px) {
+  #map-panel {
+    min-height: 0;
+  }
+
+  #map-chart {
+    height: auto;
+    aspect-ratio: 975 / 610;
+  }
+
+  #map-panel .map-key {
+    position: static;
+    margin: var(--space-sm) 0 0;
+  }
+
+  /* The phone map is fixed (no zoom), so its tools row held only concealed scatter controls
+     and a dead Reset zoom: a 140px band above the map. Dropped here as on This weekend. */
+  #chart-module[data-view="map"] #chart-tools {
+    display: none;
+  }
+}
+
 /* ---------- NFL side (999.5-10) ----------
    The NFL regions share the CFB grid areas. Only one set shows at a time,
    keyed to body[data-sport]; the CFB regions stay in the DOM. */

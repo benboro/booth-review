@@ -708,15 +708,22 @@ def test_key_desktop_over_water_clear_of_inset(guarded_page: Page, open_app: Any
         assert not _hits(got["key"], got["note"])
 
 
-def test_key_phone_sits_in_panel_corner(mobile_page: Page, open_app: Any) -> None:
+def test_key_phone_sits_under_the_map(mobile_page: Page, open_app: Any) -> None:
+    # v2.1 (todo 2026-10-25-phone-map-blank-bands): the phone key is in flow right under the
+    # chart's box, not pinned in the corner of a 520px panel.
     _open_splat(mobile_page, open_app)
     mobile_page.evaluate(_WAIT_FRAMES)
     got = mobile_page.evaluate(_KEY_BOXES)
     key = got["key"]
+    chart = mobile_page.evaluate(
+        """() => { const p = document.getElementById('map-panel').getBoundingClientRect();
+          const r = document.getElementById('map-chart').getBoundingClientRect();
+          return { bottom: r.bottom - p.top, left: r.left - p.left }; }"""
+    )
     assert key["left"] >= 0 and key["right"] <= got["panelW"]
     assert key["bottom"] <= got["panelH"] and key["top"] >= 0
-    assert abs(key["left"] - 8) <= 1
-    assert abs(got["panelH"] - key["bottom"] - 8) <= 1
+    assert 0 <= key["top"] - chart["bottom"] <= 16, (key, chart)
+    assert abs(key["left"] - chart["left"]) <= 1
     if got["note"]:
         assert not _hits(key, got["note"])
     mobile_page.screenshot(path=str(_SHOTS / "map-key-390.png"))

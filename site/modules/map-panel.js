@@ -375,12 +375,17 @@ function positionOverlays() {
   if (!full || !full.xaxis || !full.yaxis) return;
   const right = full.xaxis._offset + full.xaxis._length;
   const bottom = full.yaxis._offset + full.yaxis._length;
+  const panel = el('map-panel');
   const note = el('map-note');
   if (note) {
+    // On a phone the key sits in flow under the chart (v2.1), so the panel runs past the
+    // chart's box; the note still anchors to the chart's own bottom-right corner.
+    const extraBelow = panel
+      ? Math.max(0, panel.clientHeight - gd.offsetTop - gd.clientHeight)
+      : 0;
     note.style.right = `${Math.max(0, gd.clientWidth - right) + OVERLAY_INSET}px`;
-    note.style.bottom = `${Math.max(0, gd.clientHeight - bottom) + OVERLAY_INSET}px`;
+    note.style.bottom = `${Math.max(0, gd.clientHeight - bottom) + OVERLAY_INSET + extraBelow}px`;
   }
-  const panel = el('map-panel');
   const key = el('map-key');
   if (!panel || !key) return;
   placeKey(gd, full, panel);
