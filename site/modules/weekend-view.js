@@ -458,7 +458,7 @@ function buildRow(row, ctx, lanes) {
   }
   const lane = el('div', 'wk-lane');
   lane.style.height = `${row.height}px`;
-  lane.style.width = `${Math.round(((ctx.dayModel.axis.end - ctx.dayModel.axis.start) * ctx.dayModel.pxh) / 60)}px`;
+  lane.style.width = `${ctx.dayModel.laneWidth}px`;
   const bySub = [];
   for (const c of row.cells) {
     const cell = buildCell(c.game, ctx, { tail: row.id === 'streaming' ? c.game.networkName : null });
@@ -552,8 +552,7 @@ function buildNowLine(ctx, body, axisEl) {
 
 /** The timeline: sticky axis and network column, one row per network. */
 export function buildGrid(ctx, api) {
-  const { axis, pxh, rows } = ctx.dayModel;
-  const laneWidth = Math.round(((axis.end - axis.start) * pxh) / 60);
+  const { pxh, rows, laneWidth } = ctx.dayModel;
   const scroller = el('div', 'wk-scroll');
   const grid = el('div', 'wk-grid');
   grid.setAttribute('role', 'group');

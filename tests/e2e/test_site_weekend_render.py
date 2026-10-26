@@ -910,3 +910,30 @@ def test_phone_network_name_without_logo_shows_whole(phone_page: Page, theme: st
     assert phone_page.evaluate(
         "document.documentElement.scrollWidth <= document.documentElement.clientWidth"
     )
+
+
+# ---- v2.1 polish (18-UI-REVIEW items 5, 9, 11) ----
+
+
+def _widths(page: Page, selector: str) -> list[float]:
+    return page.evaluate(  # type: ignore[no-any-return]
+        "(s) => [...document.querySelectorAll(s)].map((e) => e.getBoundingClientRect().width)",
+        selector,
+    )
+
+
+def test_short_day_lane_fills_the_host_width(wk_page: Page) -> None:
+    # 18-UI-REVIEW items 9 and 11: a day the cap or the floor leaves narrower than the module
+    # stretches its lane to the module's edge, so the rules end where the sections below do.
+    _mount(wk_page, [_game(kickoffMin=840)], width=1340, host_width=1340)
+    assert _widths(wk_page, "#wk-host .wk-lane") == [1340 - 96]
+    assert _widths(wk_page, "#wk-host .wk-grid") == [1340]
+    assert _widths(wk_page, "#wk-host .wk-ticks") == [1340 - 96]
+    # A 15-hour day at 1440: the 89 px/hour floor rounding left 9px uncovered.
+    _mount(wk_page, [_game(key="a", kickoffMin=540), _game(key="b", kickoffMin=1230)],
+           width=1440, host_width=1440)
+    assert _widths(wk_page, "#wk-host .wk-lane") == [1440 - 96]
+    # A long day still scrolls: the lane keeps its 80 px/hour width past the host.
+    _mount(wk_page, [_game(key="a", kickoffMin=540), _game(key="b", kickoffMin=1230)],
+           width=900, host_width=900)
+    assert _widths(wk_page, "#wk-host .wk-lane") == [15 * 80]

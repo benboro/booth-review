@@ -73,6 +73,8 @@ const KNOWN_TEXT_CONTRAST = 7;
 const STREAMING_ROW = 'streaming';
 const SUB_ROW_PITCH = 48;
 const CELL_HEIGHT = 44;
+/** The sticky network column (UI-SPEC "Row header column: 96px wide"). */
+const ROW_HEAD_WIDTH = 96;
 /** The Time TBA strip starts collapsed at this many games or more (D-13). */
 const STRIP_COLLAPSE_AT = 7;
 
@@ -210,7 +212,7 @@ export function axisRange(kickoffs, blockMinutes) {
  * @returns {number}
  */
 export function pxPerHour(width, hours) {
-  return Math.min(120, Math.max(80, Math.floor((width - 96) / hours)));
+  return Math.min(120, Math.max(80, Math.floor((width - ROW_HEAD_WIDTH) / hours)));
 }
 
 function tickLabel(min) {
@@ -275,6 +277,7 @@ function precedenceIndex(ids) {
  * @returns {{
  *   axis: {start: number, end: number, ticks: {min: number, label: string}[]}|null,
  *   pxh: number,
+ *   laneWidth: number,
  *   rows: {id: string, label: string, subRows: number, height: number,
  *          cells: {game: WeekendGame, subRow: number, left: number, width: number}[]}[],
  *   tba: WeekendGame[],
@@ -299,6 +302,12 @@ export function buildDayModel(games, { sport, day, width }) {
   const kickoffs = [...byRow.values()].flat().map((g) => g.kickoffMin);
   const range = axisRange(kickoffs, block);
   const pxh = range ? pxPerHour(width, (range.end - range.start) / 60) : 80;
+  // The lane is the axis span at pxh, or the room beside the row header when that is wider: a
+  // short day (the 120 cap) or floor rounding must not leave the rules ending mid-module
+  // (18-UI-REVIEW items 9 and 11). A long day keeps its scroll width.
+  const laneWidth = range
+    ? Math.max(Math.round(((range.end - range.start) * pxh) / 60), width - ROW_HEAD_WIDTH)
+    : 0;
   let axis = null;
   if (range) {
     const ticks = [];
@@ -335,7 +344,7 @@ export function buildDayModel(games, { sport, day, width }) {
       || cmpNum(idRank(a), idRank(b)) || a.home.localeCompare(b.home),
   );
   compact.sort((a, b) => cmpNum(a.kickoffMin, b.kickoffMin) || cmpNum(idRank(a), idRank(b)));
-  return { axis, pxh, rows, tba, compact };
+  return { axis, pxh, laneWidth, rows, tba, compact };
 }
 
 // ---- Cell state, text, colour ----
