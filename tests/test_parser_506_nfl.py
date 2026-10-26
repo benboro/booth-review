@@ -13,6 +13,7 @@ import pytest
 from booth_review.errors import ParseError
 from booth_review.sources.sports506.nfl_parser import (
     NflListing506,
+    names_nfl_week_page,
     nfl_smoke_check,
     parse_nfl_week_page,
 )
@@ -35,6 +36,10 @@ def _l2016() -> list[NflListing506]:
 
 def _l2025() -> list[NflListing506]:
     return _load("nfl_2025_wk10_synthetic.html", 2025, 10)
+
+
+def _l2026() -> list[NflListing506]:
+    return _load("nfl_2026_wk04_synthetic.html", 2026, 4)
 
 
 def test_2014_table_layout_networks_and_windows() -> None:
@@ -123,7 +128,7 @@ def test_2025_national_lines_network_crew_and_intl() -> None:
 
 
 def test_source_row_index_monotonic_and_stable() -> None:
-    for loader in (_l2014, _l2016, _l2025):
+    for loader in (_l2014, _l2016, _l2025, _l2026):
         first = loader()
         indexes = [x.source_row_index for x in first]
         assert indexes == sorted(set(indexes))
@@ -309,3 +314,165 @@ def test_unclosed_national_item_never_takes_the_next_header_as_crew() -> None:
         ("ESPN/ABC", ()),
         ("CBS", ("Pat Example", "Sam Sample")),
     ]
+
+
+_NFL_HEAD = (
+    '<link rel="canonical" href="https://506sports.com/nfl.php?yr=2026&wk=6">'
+    "<title>506 Sports - NFL Maps: Week 6, 2026</title>"
+)
+
+
+def _page(body: str, head: str = _NFL_HEAD) -> bytes:
+    return (
+        f'<!DOCTYPE html><html><head><meta charset="utf-8">{head}</head>'
+        f"<body><article>{body}</article></body></html>"
+    ).encode()
+
+
+def _card(matchup: str, time: str, network: str, crew: str) -> str:
+    return (
+        f'<div id="cgame"><div id="cmatchup">{matchup}</div><div id="ctime">{time}</div>'
+        f'<div id="cntwk">{network}</div><div id="canncrs">{crew}</div></div>'
+    )
+
+
+def _game(matchup: str, crew: str) -> str:
+    return f'<div id="game"><div id="matchup">{matchup}</div><div id="anncrs">{crew}</div></div>'
+
+
+def test_2026_cards_are_national_lines_with_network_time_and_crew() -> None:
+    national = [x for x in _l2026() if x.is_national_line]
+    assert [x.network_raw for x in national] == ["Prime Video", "NFLN", "NBC", "ESPN/ABC"]
+    assert {x.window for x in national} == {"national"}
+    assert [x.national_time_et_raw for x in national] == [
+        "8:00 ET",
+        "9:30 AM ET",
+        "8:00 ET",
+        "8:00 ET",
+    ]
+    assert national[0].away_raw == "Coral Bay Pelicans"
+    assert national[0].home_raw == "Timber Mill Jacks"
+    assert national[0].neutral_site is False
+
+
+def test_2026_card_crew_drops_affiliate_line() -> None:
+    national = [x for x in _l2026() if x.is_national_line]
+    assert national[0].crew_names == ("Pat Example", "Sam Sample")
+    assert national[1].crew_names == ("Lee Placeholder", "Kim Invented", "Jo Imaginary")
+    names = " ".join(n for x in _l2026() for n in x.crew_names)
+    assert "also" not in names
+    assert "WXXX" not in names
+
+
+def test_2026_card_intl_city_never_leaks_into_team() -> None:
+    intl = [x for x in _l2026() if x.is_national_line][1]
+    assert intl.intl_city == "Testville"
+    assert intl.neutral_site is True
+    assert intl.away_raw == "Dune Rock Camels"
+    assert intl.home_raw == "Frost Hollow Elk"
+
+
+def test_2026_regional_games_keep_window_headers() -> None:
+    regional = [x for x in _l2026() if not x.is_national_line]
+    assert [(x.network_raw, x.window) for x in regional] == [("CBS", "early")] * 2 + [
+        ("FOX", "late")
+    ] * 4
+    assert regional[0].crew_names == ("Morgan Dummy", "Casey Faux")
+
+
+def test_2026_card_page_passes_smoke_check() -> None:
+    html = (FIXTURES / "nfl_2026_wk04_synthetic.html").read_bytes()
+    result = nfl_smoke_check(html, season=2026, week=4)
+    assert result.passed, result.reason
+    assert (result.games, result.regional, result.regional_with_crew) == (10, 6, 6)
+
+
+def test_mixed_page_reads_cards_li_lines_and_regional_rows_in_order() -> None:
+    body = (
+        '<b><font size="5">NATIONAL BROADCASTS</font></b><br/>'
+        "<li><b>Thursday Night:</b> Glen Rock Lynx @ Fort Lantern Kings (NBC)</li>"
+        + _card("Red Cliff Stags @ Bay Point Marlins", "Sun 8:00 ET", "NBC", "Ann Fiction, Bo Stub")
+        + '<p><b><font size="5">FOX SINGLE</font></b></p>'
+        + _game("Iron Ridge Bears @ Clearwater Pilots", "Cy Madeup, Di Notreal")
+        + _card("Salt Flat Badgers @ Ember Hill Drakes", "Mon 8:15 ET", "ESPN", "Ed Faux, Flo Mock")
+        + _game("Sunset Pass Vipers @ Granite Peak Bisons", "Gus Sample, Hal Example")
+    )
+    listings = parse_nfl_week_page(_page(body), season=2026, week=6)
+    assert [(x.home_raw, x.is_national_line, x.network_raw, x.window) for x in listings] == [
+        ("Fort Lantern Kings", True, "NBC", "national"),
+        ("Bay Point Marlins", True, "NBC", "national"),
+        ("Clearwater Pilots", False, "FOX", "single"),
+        ("Ember Hill Drakes", True, "ESPN", "national"),
+        # A card never changes the window header the regional rows sit under.
+        ("Granite Peak Bisons", False, "FOX", "single"),
+    ]
+    assert [x.source_row_index for x in listings] == [0, 1, 2, 3, 4]
+
+
+def test_card_without_readable_matchup_is_skipped() -> None:
+    body = _card("Crews to be announced", "Sun 1:00 ET", "CBS", "") + _game(
+        "Iron Ridge Bears @ Clearwater Pilots", "Cy Madeup, Di Notreal"
+    )
+    listings = parse_nfl_week_page(_page(body), season=2026, week=6)
+    assert [x.home_raw for x in listings] == ["Clearwater Pilots"]
+
+
+def test_card_with_tba_time_and_no_crew() -> None:
+    body = _card("Red Cliff Stags @ Bay Point Marlins", "Sun TBA", "NBC", "")
+    (listing,) = parse_nfl_week_page(_page(body), season=2026, week=6)
+    assert listing.national_time_et_raw is None
+    assert listing.crew_names == ()
+
+
+@pytest.mark.parametrize(
+    ("head", "expected"),
+    [
+        (_NFL_HEAD, True),
+        ("<title>506 Sports - NFL Maps: Week 6, 2026</title>", True),
+        ('<link rel="canonical" href="https://506sports.com/ncaaf.php?yr=2026&wk=6">', False),
+        (
+            '<link rel="canonical" href="https://506sports.com/ncaaf.php?yr=2026&wk=6">'
+            "<title>506 Sports - NFL Maps: Week 6, 2026</title>",
+            False,
+        ),
+        ('<link rel="canonical" href="https://506sports.com/mlb.php?yr=2026&wk=6">', False),
+        ("<title>506 Sports - College Football: Week 6, 2026</title>", False),
+        ("", None),
+        ("<title> </title>", None),
+    ],
+)
+def test_names_nfl_week_page(head: str, expected: bool | None) -> None:
+    assert names_nfl_week_page(_page("", head).decode()) is expected
+
+
+def test_nfl_cards_accepted_but_cfb_canonical_rejected_whatever_the_markup() -> None:
+    body = _card(
+        "Red Cliff Stags @ Bay Point Marlins", "Sun 8:00 ET", "NBC", "Ann Fiction, Bo Stub"
+    )
+    assert len(parse_nfl_week_page(_page(body), season=2026, week=6)) == 1
+    cfb_head = '<link rel="canonical" href="https://506sports.com/ncaaf.php?yr=2026&wk=6">'
+    regional = '<p><b><font size="5">FOX SINGLE</font></b></p>' + _game(
+        "Iron Ridge Bears @ Clearwater Pilots", "Cy Madeup, Di Notreal"
+    )
+    for page_body in (body, regional):
+        with pytest.raises(ParseError, match="not an nfl week page"):
+            parse_nfl_week_page(_page(page_body, cfb_head), season=2026, week=6)
+
+
+def test_page_naming_nothing_falls_back_to_markup() -> None:
+    card = _card(
+        "Red Cliff Stags @ Bay Point Marlins", "Sun 8:00 ET", "NBC", "Ann Fiction, Bo Stub"
+    )
+    with pytest.raises(ParseError, match="not an nfl week page"):
+        parse_nfl_week_page(_page(card, ""), season=2026, week=6)
+    regional = '<p><b><font size="5">FOX SINGLE</font></b></p>' + _game(
+        "Iron Ridge Bears @ Clearwater Pilots", "Cy Madeup, Di Notreal"
+    )
+    assert len(parse_nfl_week_page(_page(regional, ""), season=2026, week=6)) == 1
+
+
+def test_card_crew_split_across_lines_keeps_each_name() -> None:
+    crew = "Ann Fiction, Bo Stub<br/>Cy Madeup<br/><font>also WXXX Harbor City</font>"
+    body = _card("Red Cliff Stags @ Bay Point Marlins", "Sun 8:00 ET", "NBC", crew)
+    (listing,) = parse_nfl_week_page(_page(body), season=2026, week=6)
+    assert listing.crew_names == ("Ann Fiction", "Bo Stub", "Cy Madeup")

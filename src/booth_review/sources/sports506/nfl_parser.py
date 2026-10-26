@@ -10,10 +10,20 @@ on regional lines (they come from nflverse). The pages use three layouts:
   "NATIONAL BROADCASTS" block of ``<li>`` lines.
 - 2018 onward: one ``<div id="game">`` per game (``div#matchup`` and
   ``div#anncrs``), ``div#nogame`` placeholders, and the same national block.
+- 2026 played weeks: the national block's ``<li>`` lines become
+  ``<div id="cgame">`` cards (``div#cmatchup``, ``div#ctime``, ``div#cntwk``,
+  ``div#canncrs``, the CFB card shape); regional games stay ``div#game``.
+  A card names its own network and time, so every card is a national line,
+  wherever it sits on the page.
 
 Each window is introduced by a bold header ("CBS EARLY", "FOX SINGLE", ...).
-All three layouts are read by one document-order walk that tracks the current
-header, so the layouts need no separate code paths.
+All layouts are read by one document-order walk that tracks the current
+header, so the layouts need no separate code paths; a page mixing cards with
+``<li>`` national lines or regional rows yields each in page order.
+
+A page is told apart from a CFB or MLB page by its own canonical link and
+<title> (``NFL_CANONICAL_RE`` / ``NFL_TITLE_RE``, which the importer shares),
+not by its markup: 2026 NFL pages use the same card divs CFB pages do.
 
 Only structural cleanup is applied to names: whitespace collapse, dropping
 Alaska/Hawaii region brackets and parenthesized notes, and splitting a crew on
@@ -35,6 +45,16 @@ from booth_review.sources.sports506.parser import (
     collapse_whitespace,
     decode_html,
     split_matchup,
+)
+
+# A saved week page names itself in its canonical link and its <title>. The
+# importer identifies NFL pages with these same patterns (one source of truth).
+NFL_CANONICAL_RE = re.compile(
+    r"<link[^>]*rel=[\"']canonical[\"'][^>]*href=[\"'][^\"']*nfl\.php\?yr=(\d{4})(?:&amp;|&)wk=(\d{1,2})[\"']",
+    re.IGNORECASE,
+)
+NFL_TITLE_RE = re.compile(
+    r"<title>[^<]*NFL Maps:\s*Week\s+(\d{1,2}),\s*(\d{4})[^<]*</title>", re.IGNORECASE
 )
 
 SMOKE_MIN_GAMES = 8
@@ -70,7 +90,22 @@ _WINDOW_WORDS: dict[str, Window] = {
     "SINGLE": "single",
 }
 
-_GAME_DIV_IDS = frozenset({"game", "nogame", "matchup", "anncrs", "updates", "map", "akhi"})
+_GAME_DIV_IDS = frozenset(
+    {
+        "game",
+        "nogame",
+        "matchup",
+        "anncrs",
+        "updates",
+        "map",
+        "akhi",
+        "cgame",
+        "cmatchup",
+        "ctime",
+        "cntwk",
+        "canncrs",
+    }
+)
 _INTL_RE = re.compile(r"\(\s*in\s+([^)]+?)\s*\)", re.IGNORECASE)
 # National lines italicize the host city in three shapes: "(in London)", a bare
 # "in London" and "(London)". Each is rewritten to "(in London)" so the city is
@@ -94,6 +129,12 @@ _TIME_RE = re.compile(
     re.IGNORECASE,
 )
 _LEAD_PUNCT_RE = re.compile(r"^[\s\-\u2013\u2014:]+")
+_ANY_CANONICAL_RE = re.compile(r"<link[^>]*rel=[\"']canonical[\"']", re.IGNORECASE)
+_ANY_TITLE_RE = re.compile(r"<title>[^<]*\S[^<]*</title>", re.IGNORECASE)
+# A card's time cell leads with a weekday ("Thu 8:00 ET", "Sun 9:30 AM ET").
+_CARD_DAY_RE = re.compile(r"^(?:Mon|Tue|Tues|Wed|Thu|Thur|Thurs|Fri|Sat|Sun)[a-z]*\.?\s+", re.I)
+_SLASH_RE = re.compile(r"\s*/\s*")
+_AFFILIATE_LINE_RE = re.compile(r"^also\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -334,6 +375,68 @@ def _national_listings(li: Tag) -> list[_NationalFields]:
     return found
 
 
+def names_nfl_week_page(text: str) -> bool | None:
+    """Whether a page names itself an NFL week page, by its own canonical link and title.
+
+    True for an ``nfl.php`` canonical link (or, with no canonical link, an
+    "NFL Maps: Week N, YYYY" title); False when the page names itself as
+    anything else (a CFB ``ncaaf.php`` or MLB page); None when it carries
+    neither a canonical link nor a title.
+    """
+    if _ANY_CANONICAL_RE.search(text):
+        return NFL_CANONICAL_RE.search(text) is not None
+    if _ANY_TITLE_RE.search(text):
+        return NFL_TITLE_RE.search(text) is not None
+    return None
+
+
+def _card_listing(card: Tag) -> _NationalFields | None:
+    """Fields of one 2026 ``div#cgame`` card, or None without a readable matchup.
+
+    The crew cell holds the booth, then a ``<br>`` and a ``<font>`` "also ..."
+    line naming simulcast affiliates; affiliate lines are not crew and are
+    dropped, as the ``<li>`` layout's parser never kept them either.
+    """
+    matchup_div = card.find("div", id="cmatchup")
+    if not isinstance(matchup_div, Tag):
+        return None
+    matchup = copy.copy(matchup_div)
+    for italic in matchup.find_all("i"):
+        place = _ITALIC_PLACE_RE.match(collapse_whitespace(italic.get_text()))
+        if place is not None:
+            city = place.group("a") or place.group("b") or place.group("c")
+            italic.replace_with(f" (in {city}) ")
+    cleaned = _clean_matchup(_text_with_breaks(matchup).replace("\n", " "))
+    if cleaned is None:
+        return None
+    away, home, neutral, city = cleaned
+
+    network = ""
+    network_div = card.find("div", id="cntwk")
+    if isinstance(network_div, Tag):
+        # "ESPN / ABC" is spelled "ESPN/ABC" on <li> lines; keep one spelling.
+        text = collapse_whitespace(_text_with_breaks(network_div).replace("\n", " "))
+        network = _SLASH_RE.sub("/", text)
+
+    time_raw: str | None = None
+    time_div = card.find("div", id="ctime")
+    if isinstance(time_div, Tag):
+        text = _CARD_DAY_RE.sub("", collapse_whitespace(time_div.get_text()))
+        time_raw = text if _is_time(text) else None
+
+    crew: tuple[str, ...] = ()
+    crew_div = card.find("div", id="canncrs")
+    if isinstance(crew_div, Tag):
+        clone = copy.copy(crew_div)
+        for font in clone.find_all("font"):
+            font.decompose()
+        lines = [collapse_whitespace(line) for line in _text_with_breaks(clone).split("\n")]
+        kept = [line for line in lines if line and not _AFFILIATE_LINE_RE.match(line)]
+        # A name per line stays one name each; commas inside a line split as usual.
+        crew = _split_crew(", ".join(kept))
+    return _NationalFields(away, home, neutral, network, crew, city, time_raw)
+
+
 def _regional_from_row(row: Tag) -> tuple[str, tuple[str, ...]] | None:
     """(matchup_text, crew) for a table row holding a bold matchup.
 
@@ -356,14 +459,21 @@ def _regional_from_row(row: Tag) -> tuple[str, tuple[str, ...]] | None:
 def parse_nfl_week_page(html: bytes, *, season: int, week: int) -> list[NflListing506]:
     """Parse one hand-saved 506 NFL week page into ordered listings.
 
-    Raises ParseError (naming only season and week) for an empty body, a CFB
-    page, or a page with no recognizable game lines.
+    Raises ParseError (naming only season and week) for an empty body, a page
+    that names itself as something other than an NFL week page (a CFB page,
+    say), or a page with no recognizable game lines. A page naming nothing
+    falls back to markup: CFB card or listing-table rows mark it as CFB.
     """
     if not html:
         raise _error(season, week, "empty response body")
 
-    soup = BeautifulSoup(decode_html(html), features="lxml")
-    if soup.find("div", id="cgame") is not None or soup.select_one("table.listingtable"):
+    text = decode_html(html)
+    soup = BeautifulSoup(text, features="lxml")
+    identity = names_nfl_week_page(text)
+    if identity is False or (
+        identity is None
+        and (soup.find("div", id="cgame") is not None or soup.select_one("table.listingtable"))
+    ):
         raise _error(season, week, "page is not an nfl week page")
 
     root = soup.find("article") or soup.body or soup
@@ -429,6 +539,21 @@ def parse_nfl_week_page(html: bytes, *, season: int, week: int) -> list[NflListi
                 city=city,
                 net=network,
                 win=window,
+            )
+        elif element.name == "div" and element.get("id") == "cgame":
+            card = _card_listing(element)
+            if card is None:
+                continue
+            add(
+                away=card.away,
+                home=card.home,
+                neutral=card.neutral,
+                crew=card.crew,
+                is_national=True,
+                city=card.city,
+                net=card.network,
+                win="national",
+                time_raw=card.time_raw,
             )
         elif element.name == "div":
             if element.get("id") != "game":

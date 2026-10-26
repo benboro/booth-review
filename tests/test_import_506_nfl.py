@@ -165,3 +165,17 @@ def test_nfl_default_folder_and_never_reads_root(
     assert result.root_pages == 0
     _save(tmp_path / "data/incoming/506/nfl", "n.html", _PAGE_2025)
     assert importer.run(2025).imported == ["10"]
+
+
+def test_imports_2026_card_layout_page(vault_paths, mock_transport_factory, tmp_path) -> None:
+    page = (NFL_FIXTURES / "nfl_2026_wk04_synthetic.html").read_bytes()
+    importer, handle = _importer(vault_paths, mock_transport_factory)
+    folder = tmp_path / "nfl"
+    _save(folder, "506 Sports - NFL Maps_ Week 4, 2026.html", page, 1_790_000_000.0)
+
+    assert identify_page(folder / "x.html", page, NFL_PROFILE) == (2026, "4")
+    result = importer.run(2026, incoming_dir=folder)
+
+    assert result.imported == ["4"]
+    assert handle.requests == []
+    assert (vault_paths.raw / "nfl/sports506/2026/wk-04.html").read_bytes() == page
