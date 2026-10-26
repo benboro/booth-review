@@ -259,9 +259,9 @@ def test_venue_dots_faded_selected_and_markers(guarded_page: Page, site_url: str
     assert d["custom"] == ["v3", "v4", "v5", "v6"]
     assert d["x"] == [400, 410, 420, 430]
     assert d["symbol"] == ["circle", "circle", "diamond", "star"]
-    # Subject dots are raised to their shape size (diamond 10, star 12); others keep the model size.
-    assert d["size"] == [14, 8, 10, 16]
-    assert got["phoneSize"] == [10, 6, 10, 12]
+    # D-23: every tier and shape draws at its model size; a picked dot has no minimum.
+    assert d["size"] == [14, 8, 4, 16]
+    assert got["phoneSize"] == [10, 6, 4, 12]
     assert d["color"] == ["#103000", "#104000", "#105000", "#106000"]
     assert got["phoneColor"] == ["#203000", "#204000", "#205000", "#206000"]
     assert d["opacity"] == [1, 0.45, 0.85, 0.85]
@@ -276,7 +276,7 @@ def test_venue_dots_faded_selected_and_markers(guarded_page: Page, site_url: str
     s = got["sel"]
     assert (s["x"], s["y"]) == ([420], [320])
     assert s["symbol"] == "circle-open"
-    assert s["size"] == [10 + 2 * (2 + 2)]
+    assert s["size"] == [4 + 2 * (2 + 2)]
     assert (s["lw"], s["lc"], s["hover"]) == (2, s["accent"], "skip")
     assert got["noneSel"] == 0
     mk = got["mk"]

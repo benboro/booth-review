@@ -210,15 +210,14 @@ export function mapOpacity(theme) {
 }
 
 /**
- * Map mark sizes in px (04.18 D-05/D-10, UI-SPEC "Mark tiers"); `subject` is per compare
- * shape, sized so each shape reads equally large. DEFAULTED pending close-out sign-off.
+ * Map mark sizes in px (04.18 D-05/D-10, UI-SPEC "Mark tiers"). Venue dots of every shape take
+ * their size from venueDotSize (Phase 17.1 D-23), so no per-shape size lives here.
  */
 export const MAP_SIZE = Object.freeze({
   base: 7,
   other: 7,
   faded: 7,
   marker: 9,
-  subject: Object.freeze({ circle: 8, square: 8, diamond: 10, 'triangle-up': 9, star: 12 }),
 });
 
 /**

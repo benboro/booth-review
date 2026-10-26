@@ -6,6 +6,7 @@ vault content.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from typing import Any
 
@@ -340,6 +341,51 @@ def test_shared_booth_star_and_legend_item(guarded_page: Page, open_app: OpenApp
     assert stars > 0
     labels = guarded_page.locator("#shape-legend li").all_text_contents()
     assert any("Shared booth" in label for label in labels)
+
+
+@pytest.mark.parametrize("width,height,max_px", [(390, 844, 10), (1440, 900, 20)])
+def test_picked_dots_draw_at_their_true_size(
+    guarded_page: Page, open_app: OpenApp, width: int, height: int, max_px: int
+) -> None:
+    """D-23: under a pick, every drawn dot (circle, square, star) is its size-function size,
+    with no minimum and none above the maximum; the hit target stays at least 12px."""
+    guarded_page.set_viewport_size({"width": width, "height": height})
+    # Kris and Pat give a circle, a square and shared-booth stars on cohort venues of 2 and 3 games.
+    _open_map(guarded_page, open_app, "?view=map&people=pat-rowan,kris-venn")
+    got: dict[str, Any] = guarded_page.evaluate(
+        """() => {
+          const gd = document.getElementById('map-chart');
+          const by = (n) => gd.data.find((t) => t.name === n);
+          const m = window.__testHooks.getMapModel();
+          const phone = window.matchMedia('(max-width: 480px)').matches;
+          return {
+            phone,
+            drawn: by('venue-dots').marker.size,
+            hits: by('venue-hits').marker.size,
+            symbols: by('venue-dots').marker.symbol,
+            model: m.venueDots.map((d) => (phone ? d.size.phone : d.size.desktop)),
+            tiers: m.venueDots.map((d) => d.tier),
+            key: Array.from(document.querySelectorAll('#map-key .map-key-item')).map((it) => [
+              Number(it.querySelector('.map-key-label').textContent.split(' ')[0]),
+              Number(it.querySelector('svg').getAttribute('width')),
+            ]),
+            ref: m.refGames,
+          };
+        }"""
+    )
+    assert got["phone"] is (width < 480)
+    assert {"circle", "square", "star"} <= set(got["symbols"])
+    # No shape minimum lifts a picked dot (the old phone star was 12px, over the 10px max).
+    assert got["drawn"] == got["model"]
+    assert max(got["drawn"]) <= max_px + 1e-9
+    subject = [s for s, t in zip(got["drawn"], got["tiers"], strict=True) if t == "subject"]
+    assert subject and max(subject) == max_px  # the busiest picked venue draws at the max
+    assert min(subject) < max_px
+    # The key's circles use the same size function and the picked cohort's reference.
+    assert got["key"]
+    for games, svg_width in got["key"]:
+        assert svg_width == math.ceil(max_px * (games / got["ref"]) ** 0.5)
+    assert got["hits"] == [max(s, 12) for s in got["drawn"]]
 
 
 def test_more_than_four_schools_shows_the_shapes_caption(

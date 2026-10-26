@@ -124,11 +124,13 @@ function venueFadedTrace(faded, theme) {
   };
 }
 
-/** Drawn diameter of one venue dot: the model size, raised to the subject shape size. */
+/**
+ * Drawn diameter of one venue dot: the model size, for every tier and shape (Phase 17.1 D-23).
+ * A picked dot has no minimum; it stands out by its outline and the fading of the rest, and
+ * the venue-hits trace keeps it easy to hit.
+ */
 function venueDotSize(dot, mobile) {
-  const base = mobile ? dot.size.phone : dot.size.desktop;
-  if (dot.tier !== 'subject') return base;
-  return Math.max(base, MAP_SIZE.subject[dot.symbol] ?? MAP_SIZE.subject.circle);
+  return mobile ? dot.size.phone : dot.size.desktop;
 }
 
 function venueDotsTrace(dots, theme, mobile) {

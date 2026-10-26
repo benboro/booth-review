@@ -49,6 +49,9 @@ records only where the site settles or applies them.
   games, with no minimum floor, and relative to the busiest venue in the filtered set, so
   narrowing a filter or picking an announcer rescales the dots. That venue is 20px across
   on desktop and 10px on a phone, and dots are drawn largest first. A dot under 12px gets an
-  invisible 12px hit target so it stays hoverable. The key is one inline row at every width (circle, count, circle, count, circle, "N games", largest first, no leaders, no nesting). Circle sizes come from `venueDotSize` (desktop and phone) with the same busiest-venue reference as the dots, so its values
+  invisible 12px hit target so it stays hoverable. Under an announcer or crew pick, picked
+  dots of every shape (circle, square, diamond, star) keep this size with no minimum, so none
+  exceeds the maximum; they stand out only by their outline and the fading of the other
+  dots. The key is one inline row at every width (circle, count, circle, count, circle, "N games", largest first, no leaders, no nesting). Circle sizes come from `venueDotSize` (desktop and phone) with the same busiest-venue reference as the dots, so its values
   change with the filters, showing size only, and venue colours are always on
   (Phase 17.1).
