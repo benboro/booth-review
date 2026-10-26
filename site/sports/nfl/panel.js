@@ -12,6 +12,7 @@ import {
   externalLink, crewBox, linksList, liveOpener, networksParagraph,
 } from '../../modules/panel-parts.js';
 import { currentTheme } from '../../modules/pill.js';
+import { apKickoff } from '../../modules/weekend.js';
 import {
   causeCopy,
   dateLongText,
@@ -152,7 +153,10 @@ export function createDetailPanel(host, { methodologyHref: _methodologyHref } = 
   function renderRow(row) {
     title.textContent = titleText(row);
     const noTime = row.unplayed ? 'Time TBA' : 'Kickoff time not recorded';
-    const dateP = el('p', null, `${dateLongText(row)} · ${kickoffText(row) ?? noTime}`);
+    // A panel opened from This weekend writes the kickoff as that view does (18-UI-REVIEW item 8).
+    const dateP = el('p', null, row.weekend
+      ? apKickoff(row.date, row.kickoff, noTime)
+      : `${dateLongText(row)} · ${kickoffText(row) ?? noTime}`);
     const noNetwork = row.unplayed ? 'Network TBA' : 'Network not recorded.';
     const network = row.network == null
       ? el('p', null, noNetwork)

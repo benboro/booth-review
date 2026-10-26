@@ -95,7 +95,11 @@ from booth_review.build.viewership import (
     apply_headlines,
     build_viewership,
 )
-from booth_review.build.weekend import ScheduleInputs, build_schedule_inputs
+from booth_review.build.weekend import (
+    ScheduleInputs,
+    build_schedule_inputs,
+    restrict_espnpr_stamps,
+)
 from booth_review.config import DataPaths
 from booth_review.flags.era import load_eras
 from booth_review.flags.events import load_event_flags
@@ -458,7 +462,27 @@ def assemble_tables(
         ),
         scheduled_networks={gid: net for gid, (net, _) in schedule.networks.items()},
     )
-    schedule = replace(schedule, crews=backup.scheduled_crews)
+    # The weekend stamp credits ESPN Press Room only for weeks where one of its crews landed
+    # on a shown game: a backup-filled telecast or a scheduled row (18-REVIEW IN-01).
+    filled_games = {
+        int(gid)
+        for tid, gid in zip(
+            backup.telecasts["telecast_id"].to_list(),
+            backup.telecasts["game_id"].to_list(),
+            strict=True,
+        )
+        if tid in backup.filled_ids and gid is not None
+    }
+    backup_labels = {
+        schedule.labels[gid]
+        for gid in filled_games | set(backup.scheduled_crews)
+        if gid in schedule.labels
+    }
+    schedule = replace(
+        schedule,
+        crews=backup.scheduled_crews,
+        stamps=restrict_espnpr_stamps(schedule.stamps, backup_labels),
+    )
     telecasts = backup.telecasts
     telecast_people = backup.telecast_people
     people = backup.people

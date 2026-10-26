@@ -223,6 +223,25 @@ def weekend_stamps(
     return stamps
 
 
+def restrict_espnpr_stamps(
+    stamps: Mapping[str, WeekendStamps], labels_with_backup: Collection[str]
+) -> dict[str, WeekendStamps]:
+    """The stamps with the ESPN Press Room segment kept only for `labels_with_backup`.
+
+    A saved commentators page alone must not credit ESPN Press Room in the stamp
+    (18-UI-SPEC: "ESPN PR segment only when an ESPN PR page contributed"); the
+    builder passes the week labels where one of its crews filled a shown game
+    (18-REVIEW IN-01). The input is not changed.
+    """
+    out: dict[str, WeekendStamps] = {}
+    for label, stamp in stamps.items():
+        if label in labels_with_backup:
+            out[label] = dict(stamp)
+        else:
+            out[label] = {**stamp, "crews_espnpr_saved_at": None, "espnpr_week": None}
+    return out
+
+
 def build_schedule_inputs(
     paths: DataPaths,
     season: int,

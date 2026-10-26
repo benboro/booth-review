@@ -5640,6 +5640,12 @@ tr.is-matched > :first-child {
   #chart-tools > #chart-controls {
     width: 100%;
   }
+
+  /* This weekend has no axis toggles or zoom; the empty tools row would hold a 28px reserved
+     line plus margins between the subtitle and the day tabs (18-UI-REVIEW item 10). */
+  #chart-module[data-view="weekend"] #chart-tools {
+    display: none;
+  }
 }
 
 /* ---------- Phone tables (13-14; 13-UI-SPEC "Phone" items 1-3) ---------- */
@@ -6138,7 +6144,11 @@ tr.is-matched > :first-child {
   font-variant-numeric: tabular-nums;
 }
 
+/* The count box keeps a min-width the view sets from the day's full count, so a pick never
+   moves the tabs (18-UI-REVIEW item 5); inline-block, so the tab's text never breaks. */
 .wk-count {
+  display: inline-block;
+  white-space: pre;
   color: var(--muted);
   font-weight: var(--weight-regular);
 }

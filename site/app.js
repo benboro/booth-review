@@ -79,6 +79,8 @@ const barsPanelEl = document.getElementById('bars-panel');
 const mapPanelEl = document.getElementById('map-panel');
 const crewsPanelEl = document.getElementById('crews-panel');
 const weekendPanelEl = document.getElementById('weekend-panel');
+const matchedGamesEl = document.getElementById('matched-games');
+const chartModuleEl = document.getElementById('chart-module');
 const mapChartEl = document.getElementById('map-chart');
 const barsNoteEl = document.getElementById('bars-note');
 const eraNoteEl = document.getElementById('era-note');
@@ -182,6 +184,8 @@ let lastMapModel = null;
 let openPanelIndex = null;
 /** Whether that panel is the "Not played yet." one (a pending row opened from This weekend). */
 let openPanelUnplayed = false;
+/** Whether that panel was opened from This weekend (AP kickoff line, one crew credit). */
+let openPanelWeekend = false;
 
 /** The matched-games table's own sort state (kept out of the URL, D-11/SITE-13). */
 let sort = { key: 'date', dir: 'asc' };
@@ -190,11 +194,12 @@ let sort = { key: 'date', dir: 'asc' };
 let sortCrew = null;
 
 /** Opens the detail panel on telecast `i` and remembers it's open, for `render`'s own refresh (D-10). */
-function openDetailPanel(i, { unplayed = false } = {}) {
+function openDetailPanel(i, { unplayed = false, weekend = false } = {}) {
   clearHover();
   openPanelIndex = i;
   openPanelUnplayed = unplayed;
-  openPanel(i, { data, state, view: lastView, unplayed });
+  openPanelWeekend = weekend;
+  openPanel(i, { data, state, view: lastView, unplayed, weekend });
 }
 
 /** Closes the detail panel and forgets it's open. */
@@ -207,6 +212,7 @@ initPanel({
   onClosed: () => {
     openPanelIndex = null;
     openPanelUnplayed = false;
+    openPanelWeekend = false;
   },
 });
 
@@ -345,7 +351,7 @@ function renderWeekendPanel() {
         clearHover();
         openScheduledPanel(game.index, { data, state, unplayed });
       } else {
-        openDetailPanel(game.index, { unplayed });
+        openDetailPanel(game.index, { unplayed, weekend: true });
       }
     },
   };
@@ -472,11 +478,19 @@ function render() {
         ? !crewsHasNewModelSeason
         : (state.axis !== 'excitement' && state.y !== 'excitement') || state.view !== 'scatter';
   }
-  // The network-color chips mean nothing on the Crews table; the Networks filter still applies.
-  if (legendRowEl) legendRowEl.hidden = state.view === 'crews';
+  // The network-color chips mean nothing on the Crews table, and on This weekend they would be a
+  // second, undeclared Networks control (18-UI-REVIEW item 4); the Networks filter still applies.
+  if (legendRowEl) legendRowEl.hidden = state.view === 'crews' || state.view === 'weekend';
   // Its axis and bar toggles are concealed on Crews; drop the reserved row so the hint sits close.
   if (chartControlsEl) chartControlsEl.hidden = state.view === 'crews' || state.view === 'weekend';
+  // The module records its view so the phone stylesheet can drop the tools row entirely under
+  // This weekend, where it held only a concealed Reset zoom (18-UI-REVIEW item 10).
+  if (chartModuleEl) chartModuleEl.dataset.view = state.view;
   if (eraNoteEl) eraNoteEl.hidden = state.view !== 'scatter';
+  // The matched-games table lists played games from the greyed Seasons range, and its empty state
+  // asks for a Game pick this tab greys out; This weekend has its own cells and panel, so the
+  // section hides here as it does on the NFL page (18-UI-REVIEW item 7, 18-REVIEW IN-03).
+  if (matchedGamesEl) matchedGamesEl.hidden = state.view === 'weekend';
 
   history.replaceState(null, '', location.pathname + encodeState(state, data));
 
@@ -485,7 +499,9 @@ function render() {
   // triggers this render, without re-running openPanel's own focus/reveal
   // side effects.
   if (openPanelIndex !== null) {
-    renderPanel(panelBodyEl, panelTitleEl, { data, i: openPanelIndex, state, view, unplayed: openPanelUnplayed });
+    renderPanel(panelBodyEl, panelTitleEl, {
+      data, i: openPanelIndex, state, view, unplayed: openPanelUnplayed, weekend: openPanelWeekend,
+    });
   }
 
   for (const renderer of renderers) {
@@ -493,7 +509,9 @@ function render() {
   }
   if (weekendCounts) {
     // The selection summary counts the selected day's games (grid, strip and compact table).
-    document.getElementById('summary-count').textContent = `${weekendCounts.matching} of ${weekendCounts.total} games match`;
+    const { matching, total } = weekendCounts;
+    document.getElementById('summary-count').textContent =
+      `${matching} of ${total} ${total === 1 ? 'game matches' : 'games match'}`;
     document.getElementById('summary-detail').textContent = '';
     document.getElementById('summary-detail').removeAttribute('title');
   }

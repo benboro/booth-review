@@ -11,10 +11,11 @@
  * DOM-free: no document, no markup. Nothing here reads the clock.
  */
 
+import { BOOTH_TIER_CODE } from './data.js';
 import { familyKey } from './palette.js';
 import { defaultState, passesFadeFilters, personOnGame } from './select.js';
 import { crewIndex } from './crew-groups.js';
-import { weekendPickState } from './weekend.js';
+import { kickoffMinutes, weekendPickState } from './weekend.js';
 
 // Shared with the NFL host, so it lives with the clock rules in weekend.js.
 export { isUnplayedGame } from './weekend.js';
@@ -34,21 +35,39 @@ export function weekOfDate(weeks, isoDate) {
   return hit ? hit.label : null;
 }
 
-/** Minutes after ET midnight read from an ET ISO datetime, or null (no time yet). */
-function kickoffMinutes(iso) {
-  if (iso == null) return null;
-  const m = /T(\d{2}):(\d{2})/.exec(iso);
-  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+const facadeCache = new WeakMap();
+
+/** The main-feed person index in `role` of a shipped crew list, or null. */
+function mainPerson(crew, role) {
+  const hit = (crew ?? []).find((e) => e.feed === 'main' && e.role === role);
+  return hit ? hit.person : null;
 }
 
-const facadeCache = new WeakMap();
+/**
+ * The index in `lookups.booths` of the cited booth a scheduled row's ESPN Press Room crew is
+ * (same family and season, same play-by-play and analyst), or null. The builder tiers only
+ * shipped telecasts; a scheduled game with the network's A booth still earns its star and a
+ * Booth pick this way (18-REVIEW IN-02).
+ */
+function scheduledBoothIndex(booths, networks, raw, j) {
+  const netIdx = raw.network?.[j];
+  const family = netIdx != null ? (networks[netIdx]?.family ?? null) : null;
+  if (family == null) return null;
+  const pbp = mainPerson(raw.crew?.[j], 'pbp');
+  const analyst = mainPerson(raw.crew?.[j], 'analyst');
+  if (pbp == null || analyst == null) return null;
+  const season = raw.season[j];
+  const b = booths.findIndex((bo) => bo.family === family && bo.season === season
+    && bo.pbp === pbp && bo.analyst === analyst);
+  return b >= 0 ? b : null;
+}
 
 /**
  * A `prepareData`-shaped object over the scheduled block, so `passesFadeFilters`, `personOnGame`
- * and `renderPanel` read it with the same column names. Scheduled games have no booth, score,
- * figure or excitement; their only crew is an ESPN Press Room booth with its page credit
- * (18-13 F7), else none. A null network points at a synthetic Network TBA entry. Cached per
- * prepared data object.
+ * and `renderPanel` read it with the same column names. Scheduled games have no score, figure or
+ * excitement; their only crew is an ESPN Press Room booth with its page credit (18-13 F7), else
+ * none, and that crew takes the tier of the cited booth it matches (IN-02). A null network
+ * points at a synthetic Network TBA entry. Cached per prepared data object.
  * @param {object} data - a `prepareData` result.
  * @returns {object}
  */
@@ -60,6 +79,18 @@ export function scheduledFacade(data) {
   const tbaIdx = data.lookups.networks.length;
   const lookups = { ...data.lookups, networks: [...data.lookups.networks, TBA_NETWORK] };
   const nulls = () => new Array(n).fill(null);
+  const booths = lookups.booths ?? [];
+  const booth = Array.from({ length: n }, (_, j) => scheduledBoothIndex(booths, data.lookups.networks, raw, j));
+  const boothOf = new Int32Array(n).fill(-1);
+  const boothTier = new Uint8Array(n);
+  const boothIsConfLead = new Uint8Array(n);
+  for (let j = 0; j < n; j += 1) {
+    const b = booth[j];
+    if (b == null) continue;
+    boothOf[j] = b;
+    boothTier[j] = BOOTH_TIER_CODE[booths[b].tier] ?? 0;
+    boothIsConfLead[j] = booths[b].lead_network != null ? 1 : 0;
+  }
   const t = {
     ...raw,
     network: (raw.network ?? nulls()).map((v) => v ?? tbaIdx),
@@ -84,7 +115,7 @@ export function scheduledFacade(data) {
     // A scheduled game is a current-season game with no figure yet, so a panel opened after
     // kickoff reads "viewership not posted yet" (18-13 F3).
     cause: new Array(n).fill('pending'),
-    booth: nulls(),
+    booth,
     game_type: new Array(n).fill('regular'),
     crew: raw.crew ?? Array.from({ length: n }, () => []),
     flags: Array.from({ length: n }, () => []),
@@ -98,9 +129,9 @@ export function scheduledFacade(data) {
     t,
     lookups,
     booths: lookups.booths,
-    boothOf: new Int32Array(n).fill(-1),
-    boothTier: new Uint8Array(n),
-    boothIsConfLead: new Uint8Array(n),
+    boothOf,
+    boothTier,
+    boothIsConfLead,
     teamSlugs: data.teamSlugs,
     teamIndexBySlug: data.teamIndexBySlug,
     personIndexById: data.personIndexById,

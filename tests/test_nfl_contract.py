@@ -41,7 +41,7 @@ REPO = Path(__file__).resolve().parent.parent
 # freshness.weekend.
 # Re-pinned at Phase 18 Plan 13 (F1): the three CFB blocks gain the week label column.
 # Re-pinned at Phase 18 Plan 13 (F7): telecasts_scheduled gains the ESPN Press Room crew columns.
-CFB_SCHEMA_SHA256 = "6ab4104a74e8348da38f0d532b646c45725287da802ee135cef3d31d2160b7db"
+CFB_SCHEMA_SHA256 = "3e3b4d0720f20bf3a98cfcd95e684a3ff6e3ca2c14c11828f931d30481e8009f"
 
 INVENTED_STRINGS = ("Northfield Lanterns", "Harbor City", "Ada Quill", "example.com")
 

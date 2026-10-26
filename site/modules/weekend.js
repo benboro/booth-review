@@ -73,6 +73,10 @@ const KNOWN_TEXT_CONTRAST = 7;
 const STREAMING_ROW = 'streaming';
 const SUB_ROW_PITCH = 48;
 const CELL_HEIGHT = 44;
+/** The sticky network column (UI-SPEC "Row header column: 96px wide"). */
+const ROW_HEAD_WIDTH = 96;
+/** Minutes after ET midnight at the next midnight: the last tick a stretched lane can show. */
+const MIDNIGHT = 24 * 60;
 /** The Time TBA strip starts collapsed at this many games or more (D-13). */
 const STRIP_COLLAPSE_AT = 7;
 
@@ -148,6 +152,33 @@ export function dayLabel(isoDate) {
   return `${WEEKDAYS[weekdayOf(isoDate)]} ${MONTHS[m - 1]} ${d}`;
 }
 
+/** `12:30 pm`. */
+export function clock12(min) {
+  const h = Math.floor(min / 60) % 24;
+  const m = min % 60;
+  return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
+}
+
+/** Minutes after ET midnight read from an ET ISO datetime, or null (no time yet). */
+export function kickoffMinutes(iso) {
+  if (iso == null) return null;
+  const m = /T(\d{2}):(\d{2})/.exec(iso);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
+/**
+ * The kickoff line of a panel opened from This weekend, written as the view writes times
+ * (18-UI-SPEC, 18-UI-REVIEW item 8): `Sat. Oct. 31, 12:00 pm ET`, or `Sat. Oct. 31, Time TBA`.
+ * @param {string} isoDate - ET date `YYYY-MM-DD`.
+ * @param {string|null} kickoffIso - ET ISO datetime, or null.
+ * @param {string} [noTime] - the text when there is no time.
+ * @returns {string}
+ */
+export function apKickoff(isoDate, kickoffIso, noTime = 'Time TBA') {
+  const min = kickoffMinutes(kickoffIso);
+  return `${dayLabel(isoDate)}, ${min == null ? noTime : `${clock12(min)} ET`}`;
+}
+
 // ---- Classification, days, axis ----
 
 /**
@@ -210,7 +241,7 @@ export function axisRange(kickoffs, blockMinutes) {
  * @returns {number}
  */
 export function pxPerHour(width, hours) {
-  return Math.min(120, Math.max(80, Math.floor((width - 96) / hours)));
+  return Math.min(120, Math.max(80, Math.floor((width - ROW_HEAD_WIDTH) / hours)));
 }
 
 function tickLabel(min) {
@@ -275,6 +306,7 @@ function precedenceIndex(ids) {
  * @returns {{
  *   axis: {start: number, end: number, ticks: {min: number, label: string}[]}|null,
  *   pxh: number,
+ *   laneWidth: number,
  *   rows: {id: string, label: string, subRows: number, height: number,
  *          cells: {game: WeekendGame, subRow: number, left: number, width: number}[]}[],
  *   tba: WeekendGame[],
@@ -299,10 +331,23 @@ export function buildDayModel(games, { sport, day, width }) {
   const kickoffs = [...byRow.values()].flat().map((g) => g.kickoffMin);
   const range = axisRange(kickoffs, block);
   const pxh = range ? pxPerHour(width, (range.end - range.start) / 60) : 80;
+  // The lane is the axis span at pxh, or the room beside the row header when that is wider: a
+  // short day (the 120 cap) or floor rounding must not leave the rules ending mid-module
+  // (18-UI-REVIEW items 9 and 11). A long day keeps its scroll width.
+  const laneWidth = range
+    ? Math.max(Math.round(((range.end - range.start) * pxh) / 60), width - ROW_HEAD_WIDTH)
+    : 0;
   let axis = null;
   if (range) {
+    // Hour ticks run to the axis end, and on across a stretched lane up to midnight, so the
+    // axis never stops mid-module (18-UI-REVIEW item 9).
+    const lastTick = Math.min(
+      MIDNIGHT, range.start + Math.floor((laneWidth * 60) / pxh / 60) * 60,
+    );
     const ticks = [];
-    for (let m = range.start; m <= range.end; m += 60) ticks.push({ min: m, label: tickLabel(m) });
+    for (let m = range.start; m <= Math.max(range.end, lastTick); m += 60) {
+      ticks.push({ min: m, label: tickLabel(m) });
+    }
     axis = { ...range, ticks };
   }
 
@@ -335,7 +380,7 @@ export function buildDayModel(games, { sport, day, width }) {
       || cmpNum(idRank(a), idRank(b)) || a.home.localeCompare(b.home),
   );
   compact.sort((a, b) => cmpNum(a.kickoffMin, b.kickoffMin) || cmpNum(idRank(a), idRank(b)));
-  return { axis, pxh, rows, tba, compact };
+  return { axis, pxh, laneWidth, rows, tba, compact };
 }
 
 // ---- Cell state, text, colour ----

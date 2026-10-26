@@ -391,8 +391,10 @@ class UnratedColumns(BaseModel):
 
 
 class ScheduledColumns(BaseModel):
-    """One list per display field; index k across every list is one unplayed
-    regular-season FBS game with no shipped telecast row (Phase 18).
+    """One list per display field; index k across every list is one regular-season
+    FBS game, of a week up to the current weekend, that no shipped telecast row
+    covers (Phase 18). Past weeks ship their played games too, so This weekend can
+    step back; see docs/site-data.md.
 
     No booth, cause, points, spread or excitement by definition, and no game
     or telecast id. The only crew is an ESPN Press Room backup booth (18-13

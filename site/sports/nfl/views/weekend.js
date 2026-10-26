@@ -46,7 +46,10 @@ function resolve(model, state) {
 function buildModel(ctx, r) {
   const { model } = ctx;
   const season = model.upcomingRaw?.season?.[0] ?? model.freshness?.season ?? model.seasons[1];
-  // Wikipedia is credited only when a slot-basis network shows on the shown day (RT-03).
+  // Wikipedia is credited only when a slot-basis network shows on the shown day (RT-03). The
+  // article is rebuilt from the season; tests/test_nfl_slot_credit.py pins this pattern to every
+  // source_url in data/reference/nfl_slot_networks.csv, since the contract ships no slot URL
+  // (18-REVIEW IN-04).
   const slotShown = r.games.some((g) => g.networkBasis === 'slot' && (g.date === r.day || g.date == null));
   const links = slotShown ? { wikipedia: `https://en.wikipedia.org/wiki/${season}_NFL_season` } : {};
   return {
@@ -104,24 +107,36 @@ export function render(ctx) {
     },
     onOpen: (game, opener) => {
       if (game.block !== 'upcoming') {
-        ctx.openGame(game.index, opener);
+        ctx.openGame(game.index, opener, { weekend: true });
         return;
       }
       // The kickoff rule that turns the cell to "Crew not listed" also ends "Not played yet."
       // (18-13 F3, WR-01): an upcoming row stays one until the next build after the game.
       const now = etParts(opts.now ?? new Date());
       const unplayed = isUnplayedGame(game, etWallMinutes(now.date, now.minutes));
-      ctx.openUpcoming(game.index, opener, { unplayed });
+      ctx.openUpcoming(game.index, opener, { unplayed, weekend: true });
     },
   };
   if (fixedNow) opts.now = new Date(fixedNow);
   const phone = window.matchMedia(PHONE_QUERY).matches;
   refs.instance = (phone ? renderWeekendList : renderWeekend)(refs.host, wk, opts);
-  current = { week: r.week, day: r.day, days: r.days, games: r.games.length, slotCredit: Boolean(wk.links.wikipedia) };
+  // The selection bar's summary counts the shown day's games, as the CFB host does
+  // (18-UI-REVIEW item 6): every game dated that day or undated (so in every strip).
+  const inDay = r.games.filter((g) => g.date === r.day || g.date == null);
+  const matching = hasPick(state) ? inDay.filter((g) => opts.passes(g) === true).length : inDay.length;
+  current = {
+    week: r.week, day: r.day, days: r.days, games: r.games.length,
+    slotCredit: Boolean(wk.links.wikipedia), counts: { matching, total: inDay.length },
+  };
 }
 
 export function resize() {}
 
 export function testModel() {
   return { view: 'weekend', ...(current ?? { week: null, day: null, days: [], games: 0, slotCredit: false }) };
+}
+
+/** The shown day's `{ matching, total }` for the host's summary line, or null before a render. */
+export function summaryCounts() {
+  return current ? current.counts : null;
 }

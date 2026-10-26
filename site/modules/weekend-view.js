@@ -16,7 +16,7 @@
  */
 
 import {
-  WEEKEND_FADED_OPACITY, boothLine, buildDayModel, cellColors, cellState,
+  WEEKEND_FADED_OPACITY, boothLine, buildDayModel, cellColors, cellState, clock12,
   collidingSurnames, dayLabel, dayTabs, defaultDay, etParts, etWallMinutes, matchupText,
   stripCollapsedByDefault,
 } from './weekend.js';
@@ -53,11 +53,7 @@ export function clockText(min) {
   return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')}`;
 }
 
-/** `12:30 pm`. */
-export function clock12(min) {
-  const h = Math.floor(min / 60) % 24;
-  return `${clockText(min)} ${h < 12 ? 'am' : 'pm'}`;
-}
+export { clock12 };
 
 /** An ISO UTC stamp as ET text: `Thu. Oct. 29, 9:14 pm ET` (or the date alone). */
 export function etStamp(iso, { withTime = true } = {}) {
@@ -93,6 +89,10 @@ export function makeContext(model, opts, state) {
     inDay, dayModel, anyPick, collide, open,
     countFor(d) {
       return model.games.filter((g) => (g.date === d || g.date == null) && passes(g) === true).length;
+    },
+    /** Every game the day tab can count (dated that day, or undated and so in every strip). */
+    totalFor(d) {
+      return model.games.filter((g) => g.date === d || g.date == null).length;
     },
     /** Whole-row fade from a Networks pick: every game in the row fails it. */
     rowFaded(games) {
@@ -218,7 +218,12 @@ export function buildControls(ctx, api) {
     tab.setAttribute('aria-selected', String(selected));
     tab.tabIndex = selected ? 0 : -1;
     tab.append(document.createTextNode(dayLabel(d)));
-    if (ctx.anyPick) tab.append(el('span', 'wk-count', ` (${ctx.countFor(d)})`));
+    // The count box is always at least as wide as the day's full count (one ch per character,
+    // tabular digits), so a pick's count never widens the tab or shifts the next one
+    // (18-UI-REVIEW item 5). The leading space lives inside the box.
+    const count = el('span', 'wk-count', ctx.anyPick ? ` (${ctx.countFor(d)})` : '');
+    count.style.minWidth = `${` (${ctx.totalFor(d)})`.length}ch`;
+    tab.append(count);
     tab.addEventListener('click', () => api.setDay(d));
     buttons.push(tab);
     tabs.append(tab);
@@ -458,7 +463,7 @@ function buildRow(row, ctx, lanes) {
   }
   const lane = el('div', 'wk-lane');
   lane.style.height = `${row.height}px`;
-  lane.style.width = `${Math.round(((ctx.dayModel.axis.end - ctx.dayModel.axis.start) * ctx.dayModel.pxh) / 60)}px`;
+  lane.style.width = `${ctx.dayModel.laneWidth}px`;
   const bySub = [];
   for (const c of row.cells) {
     const cell = buildCell(c.game, ctx, { tail: row.id === 'streaming' ? c.game.networkName : null });
@@ -552,8 +557,7 @@ function buildNowLine(ctx, body, axisEl) {
 
 /** The timeline: sticky axis and network column, one row per network. */
 export function buildGrid(ctx, api) {
-  const { axis, pxh, rows } = ctx.dayModel;
-  const laneWidth = Math.round(((axis.end - axis.start) * pxh) / 60);
+  const { pxh, rows, laneWidth } = ctx.dayModel;
   const scroller = el('div', 'wk-scroll');
   const grid = el('div', 'wk-grid');
   grid.setAttribute('role', 'group');

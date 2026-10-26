@@ -589,3 +589,113 @@ def test_phone_dark_has_no_light_boxes(wk_phone: Callable[..., Page]) -> None:
     bg = page.evaluate("getComputedStyle(document.body).backgroundColor")
     nums = [int(x) for x in bg.removeprefix("rgb(").removesuffix(")").split(",")[:3]]
     assert max(nums) < 120
+
+
+# ---- v2.1 polish (18-UI-REVIEW items 4, 7, 8, 10; 18-REVIEW IN-02) ----
+
+
+def test_legend_chip_row_is_hidden_on_this_weekend(wk: Callable[..., Page]) -> None:
+    # 18-UI-REVIEW item 4: the chips are not in the Phase 18 contract and acted as a second,
+    # undeclared Networks control; the Networks filter in the bar already fades rows here.
+    page = wk()
+    assert page.locator("#legend-row").is_hidden()
+    page.locator("#tab-scatter").click()
+    assert page.locator("#legend-row").is_visible()
+
+
+def test_matched_games_section_is_hidden_on_this_weekend(wk: Callable[..., Page]) -> None:
+    # 18-UI-REVIEW item 7 / 18-REVIEW IN-03: the table lists played games from the greyed
+    # Seasons range and its empty state asks for a Game pick, which this tab greys out.
+    page = wk()
+    assert page.locator("#matched-games").is_hidden()
+    page.locator("#tab-scatter").click()
+    assert page.locator("#matched-games").is_visible()
+    page.locator("#tab-weekend").click()
+    assert page.locator("#matched-games").is_hidden()
+
+
+_AP_KICKOFF = __import__("re").compile(
+    r"^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\. "
+    r"(Jan\.|Feb\.|March|April|May|June|July|Aug\.|Sept\.|Oct\.|Nov\.|Dec\.)"
+    r" \d{1,2}, (\d{1,2}:\d{2} (am|pm) ET|Time TBA)$"
+)
+
+
+def _open_dialog(page: Page, selector: str) -> Any:
+    cell = page.locator(selector)
+    cell.focus()
+    cell.press("Enter")
+    dialog = page.locator("dialog[open]")
+    expect(dialog).to_be_visible()
+    return dialog
+
+
+def test_weekend_panel_uses_ap_kickoff_and_the_one_crew_credit(wk: Callable[..., Page]) -> None:
+    # 18-UI-REVIEW item 8 / 18-UI-SPEC: a panel opened from a cell writes the kickoff as the
+    # view does (`Sat. Oct. 3, 7:30 pm ET`) and credits the crew as NFL does.
+    page = wk()
+    dialog = _open_dialog(page, LEAD)
+    date_line = dialog.locator("#panel-body p").first.inner_text()
+    assert date_line == "Sat. Oct. 3, 7:30 pm ET", date_line
+    text = dialog.inner_text()
+    assert "Crew from 506 Sports ↗" in text
+    assert "View 506 Sports listing" not in text
+    page.keyboard.press("Escape")
+    dialog = _open_dialog(page, FOX_NOON)
+    assert _AP_KICKOFF.match(dialog.locator("#panel-body p").first.inner_text())
+    page.keyboard.press("Escape")
+    dialog = _open_dialog(page, TBD_KICKOFF)
+    assert dialog.locator("#panel-body p").first.inner_text() == "Sat. Oct. 3, Time TBA"
+    page.keyboard.press("Escape")
+    # The same played game opened from the Matched games table keeps the site's long form.
+    page.locator("#tab-scatter").click()
+    page.evaluate(
+        "(id) => window.__testHooks.setState({ people: [id] })",
+        page.evaluate("window.__testHooks.data.lookups.people[4].id"),
+    )
+    page.locator("#matched-games tr.row-link").first.click()
+    expect(page.locator("dialog[open]")).to_be_visible()
+    long_form = page.locator("dialog[open] #panel-body p").first.inner_text()
+    assert not _AP_KICKOFF.match(long_form), long_form
+
+
+def test_espn_press_room_crew_on_a_scheduled_row_carries_its_booth_tier(
+    wk: Callable[..., Page],
+) -> None:
+    # 18-REVIEW IN-02: a scheduled game whose ESPN Press Room booth is the network's A booth
+    # shows the lead star and is kept by a Booth A pick instead of fading.
+    def tweak(raw: dict[str, Any]) -> None:
+        sched = raw["telecasts_scheduled"]
+        sched["network"][0] = 0  # espn, the disney family of the tier-a booth
+        sched["crew"][0] = [
+            {"person": 4, "role": "pbp", "feed": "main"},
+            {"person": 5, "role": "analyst", "feed": "main"},
+        ]
+        sched["crew_source_url"][0] = "https://espnpressroom.com/us/press-releases/2026/x/"
+        sched["crew_source_label"][0] = "ESPN Press Room"
+
+    page = wk(tweak=tweak)
+    cell = page.locator('[data-wk-id="g:cfb:scheduled:0"]')
+    assert cell.locator(".wk-star").count() == 1
+    assert "Rowan" in cell.locator(".wk-line2").inner_text()
+    page.evaluate("window.__testHooks.setState({ booth: ['a'] })")
+    assert cell.evaluate("e => getComputedStyle(e).opacity") == "1"
+    assert page.locator(FOX_NOON).count() == 1
+    assert page.locator(RANKED).evaluate("e => getComputedStyle(e).opacity") == "0.3"
+    # A crew that matches no cited booth still has no tier.
+    page.evaluate("window.__testHooks.setState({ booth: [] })")
+    assert page.locator(RANKED).locator(".wk-star").count() == 0
+
+
+def test_phone_has_no_dead_gap_above_the_day_tabs(wk_phone: Callable[..., Page]) -> None:
+    # 18-UI-REVIEW item 10: the concealed chart tools kept a 28px row plus margins between the
+    # subtitle and the day tabs on the phone.
+    page = wk_phone()
+    assert page.locator("#chart-tools").is_hidden()
+    subtitle = page.locator("#chart-subtitle").bounding_box()
+    tabs = page.locator(".wk-days").bounding_box()
+    assert subtitle is not None and tabs is not None
+    gap = tabs["y"] - (subtitle["y"] + subtitle["height"])
+    assert gap <= 16, gap
+    page.locator("#tab-scatter").click()
+    assert page.locator("#chart-tools").is_visible()

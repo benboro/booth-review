@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 from booth_review.build.weekend import (
     build_schedule_inputs,
     current_label,
+    restrict_espnpr_stamps,
     schedule_networks,
     week_labels,
     week_refs,
@@ -282,3 +283,19 @@ def test_weekend_stamps_read_manifest_lines(vault_paths: DataPaths) -> None:
 def test_weekend_stamps_empty_manifest_is_all_none(vault_paths: DataPaths) -> None:
     stamps = weekend_stamps(vault_paths, 2026, ["8"])
     assert set(stamps["8"].values()) == {None}
+
+
+def test_espnpr_stamp_only_for_weeks_where_a_backup_crew_landed(vault_paths: DataPaths) -> None:
+    # 18-REVIEW IN-01: a saved commentators page alone must not put ESPN Press Room in the stamp;
+    # the segment names the source only when one of its crews fills a shown game that week.
+    _append(vault_paths, "espnpr/2026/commentators/wk-8.html", "2026-10-21T09:00:00Z", "e")
+    _append(vault_paths, "espnpr/2026/commentators/wk-9.html", "2026-10-28T09:00:00Z", "f")
+    stamps = weekend_stamps(vault_paths, 2026, ["8", "9"])
+    kept = restrict_espnpr_stamps(stamps, {"9"})
+    assert kept["8"]["crews_espnpr_saved_at"] is None
+    assert kept["8"]["espnpr_week"] is None
+    assert kept["9"]["crews_espnpr_saved_at"] == "2026-10-28T09:00:00Z"
+    assert kept["9"]["espnpr_week"] == "9"
+    # The other stamps and the input are untouched.
+    assert kept["9"]["schedule_updated_at"] is None
+    assert stamps["8"]["crews_espnpr_saved_at"] == "2026-10-21T09:00:00Z"
