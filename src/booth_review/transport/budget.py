@@ -112,6 +112,15 @@ class CfbdBudget(FetchGuard):
         self._now = now
         self.run_calls = 0
 
+    @property
+    def run_cap(self) -> int | None:
+        """This run's CFBD call cap (None = no per-run cap)."""
+        return self._max_calls
+
+    def limit_run_calls(self, max_calls: int) -> None:
+        """Lower this run's call cap to `max_calls`; never raises an existing lower cap."""
+        self._max_calls = max_calls if self._max_calls is None else min(self._max_calls, max_calls)
+
     # -- FetchGuard protocol --------------------------------------------
 
     def before_fetch(self, req: FetchRequest) -> None:

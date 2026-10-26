@@ -345,6 +345,7 @@ class ScheduledJob:
         on_cfb_result: Callable[[JobRunResult], None] | None = None,
         nfl_site: bool = False,
         mode: RunMode | None = None,
+        schedule_max_calls: int | None = None,
     ) -> None:
         """`github_token` (optional GITHUB_TOKEN) goes only to the nflverse
         play-by-play listing on api.github.com; it is never logged or stored.
@@ -364,7 +365,10 @@ class ScheduledJob:
         `mode` (D-17): None derives it from the trigger and clock
         (`resolve_mode`); "schedule" re-pulls only CFBD games/media and the
         nflverse schedule, "rebuild" collects nothing; both then build and
-        deploy and never move `last_success_at` or `last_attempt_at`."""
+        deploy and never move `last_success_at` or `last_attempt_at`.
+
+        `schedule_max_calls` lowers the CFBD run cap once the run resolves to
+        "schedule" mode, however the mode was chosen (18-13 F6)."""
         if update and site_out is None:
             raise ValueError("update mode requires site_out")
         self._update = update
@@ -384,6 +388,7 @@ class ScheduledJob:
         self._on_cfb_result = on_cfb_result
         self._nfl_site = nfl_site
         self._mode = mode
+        self._schedule_max_calls = schedule_max_calls
         self._nfl_carry_items: list[AttentionItem] = []
 
     # -- public entry point ------------------------------------------------
@@ -418,6 +423,9 @@ class ScheduledJob:
                 exit_code=EXIT_NOTHING_DUE, items=[], counts={"skipped": 1}, window=window
             )
 
+        budget = self._runtime.budget
+        if mode == "schedule" and self._schedule_max_calls is not None and budget is not None:
+            budget.limit_run_calls(self._schedule_max_calls)
         if mode != "full":
             return self._run_light(mode, state, now, season, window, window_season)
 

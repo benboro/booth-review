@@ -463,7 +463,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help=f"CFBD call cap (default {JOB_CFBD_MAX_CALLS}, "
-        f"{JOB_CFBD_SCHEDULE_MAX_CALLS} with --mode schedule)",
+        f"{JOB_CFBD_SCHEDULE_MAX_CALLS} on a schedule-only run)",
     )
     job_run.add_argument(
         "--mode",
@@ -1856,9 +1856,18 @@ def _job_run(args: argparse.Namespace) -> int:
     if args.update and args.site_out is None:
         print("error: --update requires --site-out", file=sys.stderr)
         return 2
+    if args.trigger == "schedule" and args.mode != "auto":
+        # 18-13 F15: a scheduled run takes its mode from the clock (D-17).
+        print(
+            "error: --mode needs --trigger manual; a scheduled run picks its own", file=sys.stderr
+        )
+        return 2
+    # 18-13 F6: the schedule-only cap applies once the run resolves to schedule mode (cron passes
+    # --mode auto), unless --max-cfbd-calls names a cap.
     max_calls = args.max_cfbd_calls
+    schedule_max_calls = None if max_calls is not None else JOB_CFBD_SCHEDULE_MAX_CALLS
     if max_calls is None:
-        max_calls = JOB_CFBD_SCHEDULE_MAX_CALLS if args.mode == "schedule" else JOB_CFBD_MAX_CALLS
+        max_calls = JOB_CFBD_MAX_CALLS
     runtime = build_runtime(
         with_budget=True, floor=CFBD_FLOOR_DEFAULT, max_calls=max_calls, tag="job"
     )
@@ -1879,6 +1888,7 @@ def _job_run(args: argparse.Namespace) -> int:
             github_token=github_token,
             nfl_site=nfl_site_enabled(os.environ),
             mode=None if args.mode == "auto" else args.mode,
+            schedule_max_calls=schedule_max_calls,
             # CR-02: the CFB-only outcome is written before the NFL block, so a
             # killed run (the workflow's step timeout) still leaves it to deploy.
             on_cfb_result=lambda cfb: _write_job_outputs(args, cfb),

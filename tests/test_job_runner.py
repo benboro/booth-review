@@ -24,7 +24,11 @@ from booth_review.config import CFBD_FLOOR_DEFAULT
 from booth_review.errors import VaultCommitError, VaultStateError
 from booth_review.job.catchup import JobState, load_state, save_state
 from booth_review.job.gaps506 import find_506_gaps
-from booth_review.job.runner import JOB_CFBD_MAX_CALLS, ScheduledJob
+from booth_review.job.runner import (
+    JOB_CFBD_MAX_CALLS,
+    JOB_CFBD_SCHEDULE_MAX_CALLS,
+    ScheduledJob,
+)
 from booth_review.runtime import Runtime
 from booth_review.sources.ratingsref.collector import SITEMAP_URL
 from booth_review.transport.budget import CfbdBudget
@@ -2030,6 +2034,36 @@ def test_scheduled_job_schedule_mode_pulls_only_games_and_media(
     assert after.last_success_at == before.last_success_at
     assert after.last_attempt_at == before.last_attempt_at
     assert after.last_status == before.last_status
+
+
+def test_auto_resolved_schedule_mode_lowers_the_cfbd_cap(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    # 18-13 F6: the workflow passes --mode auto on cron, so the 3-call cap is chosen after the
+    # mode resolves, not from the flag.
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    _seed_wednesday_run(paths)
+    handle = mock_transport_factory(_cfbd_ok_responses(2026))
+    runtime = _runtime(
+        paths, handle, now=lambda: _FRI_NOW, fake_clock=fake_clock, max_calls=JOB_CFBD_MAX_CALLS
+    )
+    ScheduledJob(
+        runtime,
+        token="test-token",
+        now=lambda: _FRI_NOW,
+        trigger="schedule",
+        schedule_max_calls=JOB_CFBD_SCHEDULE_MAX_CALLS,
+    ).run()
+    assert runtime.budget is not None
+    assert runtime.budget.run_cap == JOB_CFBD_SCHEDULE_MAX_CALLS
+
+
+def test_cli_job_run_rejects_a_mode_on_a_scheduled_trigger(capsys) -> None:
+    # 18-13 F15: a scheduled run picks its own mode from the clock; a --mode would be ignored.
+    for mode in ("full", "schedule", "rebuild"):
+        assert main(["job", "run", "--trigger", "schedule", "--mode", mode, "--dry-run"]) == 2
+        assert "--mode" in capsys.readouterr().err
 
 
 def test_scheduled_job_schedule_mode_backup_slot_is_nothing_due(
