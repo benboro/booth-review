@@ -229,7 +229,7 @@ def test_axis_range(weekend_page: Page) -> None:
         "return [W.axisRange([720, 1350], 210), W.axisRange([750], 210), W.axisRange([], 210)];",
     )
     assert out[0] == {"start": 720, "end": 1560}
-    assert out[1] == {"start": 720, "end": 1020}  # 12:30 + 3:30 = 16:00
+    assert out[1] == {"start": 720, "end": 960}  # 12:30 + 3:30 = 16:00
     assert out[2] is None
 
 
