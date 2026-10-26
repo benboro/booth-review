@@ -277,6 +277,23 @@ def test_finished_season_shows_the_past_week_stamp(
     assert page.locator(".wk-cell .wk-booth", has_text="Crew TBA").count() == 0
 
 
+def test_upcoming_only_announcer_stays_out_of_the_shared_picker(
+    nfl_guarded_page: Page, open_nfl_app: OpenNfl, nfl_fixture_raw: dict[str, Any]
+) -> None:
+    # 18-13 F9: the Announcers list every NFL tab shares offers people on a played game only;
+    # a person known only from an upcoming crew would zero every other tab.
+    raw = copy.deepcopy(nfl_fixture_raw)
+    people = raw["lookups"]["people"]
+    idx = len(people)
+    people.append({"id": "p-upcoming-only", "name": "Uma Upcoming"})
+    raw["upcoming"]["crew"][0][0]["person"] = idx
+    page = nfl_guarded_page
+    page.route("**/nfl-data.json*", lambda route: route.fulfill(json=raw))
+    open_nfl_app(page, "?sport=nfl")
+    assert page.locator('li[data-person="p-upcoming-only"]').count() == 0
+    assert page.locator("li[data-person]").count() > 0
+
+
 def test_next_week_step_is_disabled_on_the_latest_week(
     nfl_guarded_page: Page, open_nfl_app: OpenNfl
 ) -> None:

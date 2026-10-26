@@ -356,19 +356,28 @@ export function prepareData(raw) {
     keys: [normalizeName(p.name), ...p.variants.map(normalizeName)],
   }));
 
-  const teamKeys = lookups.teams.map((team, index) => ({
-    index,
-    slug: teamSlugs[index],
-    name: team.name,
-    keys: [normalizeName(team.name)],
-  }));
+  // The School and Conference lists every tab shares offer only teams and conferences of a
+  // played or listed game: one known only from a scheduled This weekend row would zero every
+  // other tab (18-13 F9). URL values still resolve through teamSlugs and the full lookups.
+  const listedTeams = new Set([...t.home_team, ...t.away_team]);
+  const listedConferences = new Set(
+    [...t.home_conference, ...t.away_conference].filter((c) => c != null),
+  );
+  const teamKeys = lookups.teams
+    .map((team, index) => ({
+      index,
+      slug: teamSlugs[index],
+      name: team.name,
+      keys: [normalizeName(team.name)],
+    }))
+    .filter((team) => listedTeams.has(team.index));
 
   // FBS conference names, alphabetical (D-10): the Conference filter's list
   // scope. FCS conferences (is_fbs false) are left out entirely -- School
   // reuses teamSlugs/teamIndexBySlug/teamKeys unchanged (D-11), so nothing
   // else needs a name->index map here.
   const fbsConferences = lookups.conferences
-    .filter((c) => c.is_fbs)
+    .filter((c, index) => c.is_fbs && listedConferences.has(index))
     .map((c) => c.name)
     .sort((a, b) => a.localeCompare(b));
 

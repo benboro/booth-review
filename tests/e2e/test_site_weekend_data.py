@@ -344,6 +344,54 @@ def test_scheduled_panel_never_borrows_a_played_games_selection(
     assert out["firstName"] not in out["one"]
 
 
+def test_upcoming_only_people_teams_and_conferences_stay_out_of_the_pickers(
+    guarded_page: Page,
+    fixture_raw: dict[str, Any],
+    open_app: Callable[[Page, str], None],
+) -> None:
+    # 18-13 F9: the pickers every tab shares list only what a played or listed game has; a
+    # person, school or conference known only from a scheduled game would zero those tabs.
+    raw = copy.deepcopy(fixture_raw)
+    lk = raw["lookups"]
+    person = len(lk["people"])
+    lk["people"].append(
+        {"id": "zed-schedonly", "name": "Zed Schedonly", "variants": [], "usual_role": "pbp"}
+    )
+    team = len(lk["teams"])
+    lk["teams"].append({"name": "Schedonly State"})
+    conf = len(lk["conferences"])
+    lk["conferences"].append({"name": "Schedonly Conference", "is_fbs": True})
+    sched = raw["telecasts_scheduled"]
+    sched["crew"][0] = [{"person": person, "role": "pbp", "feed": "main"}]
+    sched["crew_source_url"][0] = (
+        "https://espnpressroom.com/us/press-releases/2026/09/synthetic-commentators/"
+    )
+    sched["crew_source_label"][0] = "ESPN Press Room"
+    sched["home_team"][1] = team
+    sched["home_conference"][1] = conf
+    guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+    open_app(guarded_page, "")
+    out = guarded_page.evaluate(
+        """() => ({
+          person: !!document.querySelector('[data-person-id="zed-schedonly"]'),
+          known: !!document.querySelector('[data-person-id="dale-harlow"]'),
+          school: [...document.querySelectorAll('input[name=school]')]
+            .some((c) => c.value === 'schedonly-state'),
+          conf: [...document.querySelectorAll('input[name=conference]')]
+            .some((c) => c.value === 'Schedonly Conference'),
+          anyConf: document.querySelectorAll('input[name=conference]').length,
+        })"""
+    )
+    assert out == {
+        "person": False,
+        "known": True,
+        "school": False,
+        "conf": False,
+        "anyConf": out["anyConf"],
+    }
+    assert out["anyConf"] > 0
+
+
 def test_a6_probe_unplayed_pending_row_in_other_tabs(lead_page: Page) -> None:
     """RESEARCH A6: records how the unplayed pending unrated game (merged 19) is counted by the
     other tabs. An observation only: the numbers are printed for the SUMMARY, not fixed."""

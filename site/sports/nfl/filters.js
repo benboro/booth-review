@@ -90,7 +90,6 @@ function announcersSection(ctx, sfx) {
   const empty = el('p', 'helper', 'No announcers match.');
   empty.hidden = true;
 
-  const people = [...model.people].sort((a, b) => a.name.localeCompare(b.name));
   // CFB parity (D-18): each row carries the person's usual role pill and game count, as CFB's list does.
   const roleTally = new Map();
   for (const crew of model.cols.crew) {
@@ -100,6 +99,19 @@ function announcersSection(ctx, sfx) {
       roleTally.set(m.person, t);
     }
   }
+  // Every NFL tab shares this list, so a person known only from an upcoming This weekend crew is
+  // left out: picking them would zero every other tab (18-13 F9).
+  const upcomingOnly = new Set();
+  for (const crew of model.upcomingRaw?.crew ?? []) {
+    for (const m of crew || []) {
+      if (!roleTally.has(m.person) && !(model.personGames.get(m.person) || []).length) {
+        upcomingOnly.add(m.person);
+      }
+    }
+  }
+  const people = model.people
+    .filter((p) => !upcomingOnly.has(model.personIndex.get(p.id)))
+    .sort((a, b) => a.name.localeCompare(b.name));
   const usualRole = (idx) => {
     const t = roleTally.get(idx);
     if (!t) return 'unknown';
