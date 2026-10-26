@@ -321,14 +321,19 @@ def _accept_warnings(
 
 
 def _schedule_inputs(
-    paths: DataPaths, sources: Sequence[SeasonSources], networks: NetworkTable
+    paths: DataPaths,
+    sources: Sequence[SeasonSources],
+    networks: NetworkTable,
+    primary_overrides: Mapping[int, str],
 ) -> ScheduleInputs:
     """The newest loaded season's games, media and manifest stamps (Phase 18)."""
     with_games = [s for s in sources if s.games]
     if not with_games:
         return ScheduleInputs()
     newest = max(with_games, key=lambda s: s.season)
-    return build_schedule_inputs(paths, newest.season, newest.games, newest.media, networks)
+    return build_schedule_inputs(
+        paths, newest.season, newest.games, newest.media, networks, primary_overrides
+    )
 
 
 def assemble_tables(
@@ -434,7 +439,7 @@ def assemble_tables(
     # 506 and the overrides left crew-less (override > 506 > backup).
     # 18-13 F7: in the schedule's season the backup also reaches upcoming games, both the
     # unplotted telecasts 506 listed without a crew and the games with no telecast yet.
-    schedule = _schedule_inputs(paths, sources, networks)
+    schedule = _schedule_inputs(paths, sources, networks, primary_overrides)
     booth_pages = load_espnpr_booths(paths, seasons)
     backup = apply_crew_backup(
         telecasts,

@@ -13,7 +13,7 @@ never read: it lags the real result by hours (RESEARCH Pitfall 2).
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterable, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
@@ -108,13 +108,16 @@ def schedule_networks(
     season: int,
     table: NetworkTable,
     counted: Collection[int] | None = None,
+    primary_overrides: Mapping[int, str] | None = None,
 ) -> tuple[dict[int, tuple[str | None, list[str]]], int]:
     """Resolve each game's network from its tv (then web) CFBD media rows.
 
     Radio and mobile rows are ignored. An outlet the crosswalk does not map
     leaves the network null; a game whose tv/web outlets all failed to map is
     counted in the second return value, among the `counted` game ids when
-    given (the schedule's FBS regular-season games, 18-13 F10).
+    given (the schedule's FBS regular-season games, 18-13 F10). A
+    primary_network_overrides.csv row replaces the network by CFBD game id, as
+    the telecast build does (18-13 F20).
     """
     tv: dict[int, list[str]] = {}
     web: dict[int, list[str]] = {}
@@ -126,9 +129,11 @@ def schedule_networks(
         bucket = tv if media.media_type == "tv" else web
         bucket.setdefault(media.id, []).append(media.outlet)
 
+    overrides = primary_overrides or {}
+    override_only = {g for g in overrides if counted is None or g in counted}
     result: dict[int, tuple[str | None, list[str]]] = {}
     unmapped = 0
-    for game_id in sorted(set(tv) | set(web)):
+    for game_id in sorted(set(tv) | set(web) | override_only):
         outlet_ids: dict[str, None] = {}
         network: str | None = None
         any_unmapped = False
@@ -141,6 +146,9 @@ def schedule_networks(
                 outlet_ids.setdefault(outlet_id, None)
             if network is None:
                 network = picked.network_id
+        if game_id in overrides:
+            network = overrides[game_id]
+            outlet_ids.setdefault(network, None)
         if network is None and any_unmapped and (counted is None or game_id in counted):
             unmapped += 1
         result[game_id] = (network, list(outlet_ids))
@@ -221,12 +229,15 @@ def build_schedule_inputs(
     games: Sequence[CfbdGame],
     media_rows: Iterable[CfbdMedia],
     table: NetworkTable,
+    primary_overrides: Mapping[int, str] | None = None,
 ) -> ScheduleInputs:
     """Gather the current season's ScheduleInputs from already-loaded sources."""
     season_games = tuple(g for g in games if g.season == season)
     refs = week_refs(season_games, season)
     game_labels = week_labels(season_games, season)
-    networks, unmapped = schedule_networks(media_rows, season, table, counted=game_labels)
+    networks, unmapped = schedule_networks(
+        media_rows, season, table, counted=game_labels, primary_overrides=primary_overrides
+    )
     labels = [str(ref["label"]) for ref in refs]
     return ScheduleInputs(
         season=season,

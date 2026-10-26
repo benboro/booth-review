@@ -205,6 +205,19 @@ def test_schedule_unmapped_count_covers_fbs_regular_games_only(vault_paths: Data
     assert inputs.network_unmapped == 1
 
 
+def test_schedule_networks_honour_a_primary_network_override() -> None:
+    # 18-13 F20: the telecast build applies primary_network_overrides.csv by CFBD game id, so
+    # the weekend grid does too; an override also names a network for a game with no media.
+    rows = [_media(6, "tv", "ESPN"), _media(6, "tv", "FOX"), _media(7, "tv", "Mystery Net")]
+    result, unmapped = schedule_networks(
+        rows, 2026, _TABLE, primary_overrides={6: "fox", 7: "fox", 8: "peacock"}
+    )
+    assert result[6][0] == "fox"
+    assert result[7][0] == "fox"
+    assert result[8] == ("peacock", ["peacock"])
+    assert unmapped == 0
+
+
 def test_schedule_networks_outlets_list_every_mapped_tv_and_web_id() -> None:
     rows = [_media(5, "tv", "ESPN"), _media(5, "web", "Peacock")]
     result, _ = schedule_networks(rows, 2026, _TABLE)
