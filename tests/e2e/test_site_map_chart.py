@@ -88,10 +88,10 @@ def test_trace_names_constant_across_models_themes_and_envs(
     expected = (
         ["outline"]
         + [f"legs:{f}" for f in _FAMILIES]
-        + ["venue-faded", "venue-dots", "venue-selected", "markers"]
+        + ["venue-faded", "venue-dots", "venue-hits", "venue-selected", "markers"]
     )
     assert got["names"] == expected
-    assert len(expected) == 13
+    assert len(expected) == 14
     for run in got["runs"]:
         assert run == expected
 
@@ -259,15 +259,15 @@ def test_venue_dots_faded_selected_and_markers(guarded_page: Page, site_url: str
     assert d["custom"] == ["v3", "v4", "v5", "v6"]
     assert d["x"] == [400, 410, 420, 430]
     assert d["symbol"] == ["circle", "circle", "diamond", "star"]
-    # Subject dots are raised to their shape size (diamond 10, star 12); others keep the model size.
-    assert d["size"] == [14, 8, 10, 16]
-    assert got["phoneSize"] == [10, 6, 10, 12]
+    # D-23: every tier and shape draws at its model size; a picked dot has no minimum.
+    assert d["size"] == [14, 8, 4, 16]
+    assert got["phoneSize"] == [10, 6, 4, 12]
     assert d["color"] == ["#103000", "#104000", "#105000", "#106000"]
     assert got["phoneColor"] == ["#203000", "#204000", "#205000", "#206000"]
     assert d["opacity"] == [1, 0.45, 0.85, 0.85]
     assert d["lw"] == [1, 1, 1, 1]
     assert d["lc"] == [d["bg"], d["bg"], d["outline"], d["outline"]]
-    assert d["hover"] == "none"
+    assert d["hover"] == "skip"
     assert d["ht"] is None
     f = got["faded"]
     assert (f["size"], f["opacity"], f["hover"], f["n"]) == (6, 0.15, "skip", 1)
@@ -276,7 +276,7 @@ def test_venue_dots_faded_selected_and_markers(guarded_page: Page, site_url: str
     s = got["sel"]
     assert (s["x"], s["y"]) == ([420], [320])
     assert s["symbol"] == "circle-open"
-    assert s["size"] == [10 + 2 * (2 + 2)]
+    assert s["size"] == [4 + 2 * (2 + 2)]
     assert (s["lw"], s["lc"], s["hover"]) == (2, s["accent"], "skip")
     assert got["noneSel"] == 0
     mk = got["mk"]
@@ -505,7 +505,7 @@ def test_render_centers_at_desktop_and_phone_widths(guarded_page: Page, site_url
     page = guarded_page
     _mount(page, site_url, 1280, 520)
     box = page.evaluate(_PLOT_BOX)
-    assert box["n"] == 13
+    assert box["n"] == 14
     left = box["l"]
     right = box["pw"] - box["l"] - box["w"]
     assert abs(left - right) <= 2
@@ -560,7 +560,7 @@ def test_react_keeps_traces_and_double_click_resets(guarded_page: Page, site_url
           return gd.data.length;
         }"""
     )
-    assert got == 13
+    assert got == 14
     ax, ay = _px(page, 487, 305)
     page.evaluate(
         "() => window.Plotly.relayout(document.getElementById('map-test'),"
@@ -571,3 +571,44 @@ def test_react_keeps_traces_and_double_click_resets(guarded_page: Page, site_url
     rng = page.evaluate("document.getElementById('map-test')._fullLayout.xaxis.range")
     assert abs(rng[0]) <= 0.5
     assert abs(rng[1] - 975) <= 0.5
+
+
+def test_venue_hits_trace_is_an_invisible_twin_with_a_12px_minimum(
+    guarded_page: Page, site_url: str
+) -> None:
+    """Phase 17.1 D-16: every dot under 12px gets a transparent 12px hit target."""
+    got = _run(
+        guarded_page,
+        site_url,
+        """
+        const out = {};
+        for (const mobile of [false, true]) {
+          for (const theme of ['light', 'dark']) {
+            const fig = build(rich, theme, mobile);
+            const dots = byName(fig, 'venue-dots');
+            const hits = byName(fig, 'venue-hits');
+            out[`${theme}-${mobile}`] = {
+              order: fig.traces.map((t) => t.name),
+              x: hits.x, y: hits.y, sameX: hits.x.every((v, k) => v === dots.x[k]),
+              sameY: hits.y.every((v, k) => v === dots.y[k]),
+              custom: hits.customdata, dotCustom: dots.customdata,
+              sizes: hits.marker.size, dotSizes: dots.marker.size, min: P.MAP_VENUE_DOT.hitDiameter,
+              color: hits.marker.color, opacity: hits.marker.opacity,
+              lw: hits.marker.line.width, hover: hits.hoverinfo, legend: hits.showlegend,
+              dotHover: dots.hoverinfo,
+            };
+          }
+        }
+        return out;
+        """,
+    )
+    for run in got.values():
+        assert run["order"].index("venue-hits") == run["order"].index("venue-dots") + 1
+        assert run["order"].index("venue-selected") == run["order"].index("venue-hits") + 1
+        assert run["custom"] == run["dotCustom"] == ["v3", "v4", "v5", "v6"]
+        assert run["sameX"] and run["sameY"]
+        assert run["sizes"] == [max(s, run["min"]) for s in run["dotSizes"]]
+        assert run["min"] == 12
+        assert run["color"] == "rgba(0,0,0,0)"
+        assert (run["opacity"], run["lw"], run["hover"], run["legend"]) == (1, 0, "none", False)
+        assert run["dotHover"] == "skip"

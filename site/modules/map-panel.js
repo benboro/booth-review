@@ -153,12 +153,11 @@ async function clearSplat(gd) {
   });
 }
 
-/** Draws the key; the Color strength block hides while the raster is broken. */
+/** Draws the size-only key. */
 function drawKey({ model, env }) {
   const keyEl = el('map-key');
   if (!keyEl) return;
-  const colorsOn = Boolean(env.splat) && !splatBroken;
-  renderMapKey(keyEl, buildMapKey(model.venueModel, { phone: env.mobile, colorsOn }), {
+  renderMapKey(keyEl, buildMapKey(model.venueModel, { phone: env.mobile }), {
     theme: env.theme,
   });
   if (model.emptyAll) keyEl.hidden = true;
@@ -558,6 +557,8 @@ export async function renderMapPanel(args) {
       model.venueModel.venues.length > 0;
     const figure = buildMapFigure(model, geometry, {
       ...env,
+      // D-21: the plot size in pixels, so edge markers can be spaced by label height.
+      plot: { w: gd.clientWidth, h: gd.clientHeight },
       // The land stays filled until the raster that replaces it is in the layout.
       splat: wantSplat && currentImageSpec !== null,
       images: wantSplat && currentImageSpec ? [currentImageSpec] : [],

@@ -32,6 +32,11 @@ records only where the site settles or applies them.
 
 - A network logo stands alone in its cell. The network-family dot is shown only when
   there is no logo (Phase 13).
+- The NFL team "season by season" table is the one table with vertical rules: a 1px
+  `--muted` rule on the left of Thursday night, Fox AGOTW, Special games and Flexed, with
+  trimmed spanner rules over "Solo slots" and "Sunday windows" (Silver Bulletin is the
+  reference). Every other table keeps booktabs rules (Phase 17.1).
+- A header with a tooltip gets a dotted underline in `--muted` and no icon (Phase 17.1).
 
 ## Chart marks
 
@@ -40,3 +45,19 @@ records only where the site settles or applies them.
 - A game with no rating is an empty, open star, so the band shows through it (Phase 17).
   It stays empty when highlighted or when a filter outlines it: the highlight and the dot
   outline are larger open stars around it, never a filled halo or a background-coloured fill.
+- CFB map dots are sized by games at the venue only: area is exactly proportional to
+  games, with no minimum floor, and relative to the busiest venue in the filtered set, so
+  narrowing a filter or picking an announcer rescales the dots. That venue is 20px across
+  on desktop and 10px on a phone, and dots are drawn largest first. A dot under 12px gets an
+  invisible 12px hit target so it stays hoverable (Phase 17.1).
+- Under an announcer or crew pick, picked dots of every shape (circle, square, diamond,
+  star) keep this size with no minimum, so none exceeds the maximum; they stand out only by
+  their outline and the fading of the other dots. Only the picked dots and the key use the
+  busiest picked venue as the reference. The other venues' dots keep their size from the
+  map without the pick, where its busiest venue is at the maximum, and are drawn faded; they
+  are never capped at the picked scale (Phase 17.1).
+- The map key is one inline row at every width: circle, count, circle, count, circle,
+  "N games", largest first, with no leaders and no nesting. Its circle sizes come from
+  `venueDotSize` (desktop and phone) with the same busiest-venue reference as the dots, so
+  its values change with the filters. The key shows size only; venue colours are always on
+  (Phase 17.1).

@@ -6,6 +6,7 @@ vault content.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from typing import Any
 
@@ -24,7 +25,7 @@ _FAMILIES = ["disney", "fox", "cbs", "nbc", "cw", "wbd", "conference", "other"]
 _TRACE_NAMES = (
     ["outline"]
     + [f"legs:{f}" for f in _FAMILIES]
-    + ["venue-faded", "venue-dots", "venue-selected", "markers"]
+    + ["venue-faded", "venue-dots", "venue-hits", "venue-selected", "markers"]
 )
 # Fixture network ids by family (lookups.networks): net-a disney, net-b fox, net-c
 # conference, net-d other, net-e disney (Stream Plus, the Nassau game's network).
@@ -113,16 +114,16 @@ def _dot_point(page: Page) -> tuple[float, float]:
     return dot["x"], dot["y"]
 
 
-def test_map_view_shows_panel_hides_others_with_13_traces(
+def test_map_view_shows_panel_hides_others_with_14_traces(
     guarded_page: Page, open_app: OpenApp
 ) -> None:
-    """D-06: `?view=map` shows #map-panel, hides #chart and #bars-panel; 13 traces."""
+    """D-06: `?view=map` shows #map-panel, hides #chart and #bars-panel; 14 traces."""
     _open_map(guarded_page, open_app, "?view=map")
     assert _visible(guarded_page, "#map-panel")
     assert not _visible(guarded_page, "#chart")
     assert not _visible(guarded_page, "#bars-panel")
     assert list(_traces(guarded_page)) == _TRACE_NAMES
-    assert len(_TRACE_NAMES) == 13
+    assert len(_TRACE_NAMES) == 14
 
 
 def test_no_subject_draws_dots_only_with_tab_hint(guarded_page: Page, open_app: OpenApp) -> None:
@@ -180,6 +181,23 @@ def test_network_filter_skips_instead_of_cutting(guarded_page: Page, open_app: O
     assert leg["first"]["x"] < 340
     assert round(leg["last"]["x"]) == 715
     assert round(leg["last"]["y"]) == 405
+
+
+def test_key_and_dots_rescale_when_a_filter_narrows(guarded_page: Page, open_app: OpenApp) -> None:
+    """D-20: the filtered busiest venue draws at max and the key follows the filtered set."""
+
+    def state() -> tuple[list[int], float]:
+        top = max(d["size"]["desktop"] for d in _model(guarded_page)["venueDots"])
+        labels = guarded_page.locator("#map-key .map-key-label").all_inner_texts()
+        return [int(t.split()[0]) for t in labels], top
+
+    _open_map(guarded_page, open_app, "?view=map")
+    full_games, full_top = state()
+    _set(guarded_page, {"seasons": [2019, 2019]})
+    games, top = state()
+    assert full_top == top == 20
+    assert games[0] < full_games[0]
+    assert games == [1]  # one game left: nRef 1 gives just "1 game"
 
 
 def test_fade_keeps_excluded_venues_hide_removes_them_legs_unchanged(
@@ -325,6 +343,51 @@ def test_shared_booth_star_and_legend_item(guarded_page: Page, open_app: OpenApp
     assert any("Shared booth" in label for label in labels)
 
 
+@pytest.mark.parametrize("width,height,max_px", [(390, 844, 10), (1440, 900, 20)])
+def test_picked_dots_draw_at_their_true_size(
+    guarded_page: Page, open_app: OpenApp, width: int, height: int, max_px: int
+) -> None:
+    """D-23: under a pick, every drawn dot (circle, square, star) is its size-function size,
+    with no minimum and none above the maximum; the hit target stays at least 12px."""
+    guarded_page.set_viewport_size({"width": width, "height": height})
+    # Kris and Pat give a circle, a square and shared-booth stars on cohort venues of 2 and 3 games.
+    _open_map(guarded_page, open_app, "?view=map&people=pat-rowan,kris-venn")
+    got: dict[str, Any] = guarded_page.evaluate(
+        """() => {
+          const gd = document.getElementById('map-chart');
+          const by = (n) => gd.data.find((t) => t.name === n);
+          const m = window.__testHooks.getMapModel();
+          const phone = window.matchMedia('(max-width: 480px)').matches;
+          return {
+            phone,
+            drawn: by('venue-dots').marker.size,
+            hits: by('venue-hits').marker.size,
+            symbols: by('venue-dots').marker.symbol,
+            model: m.venueDots.map((d) => (phone ? d.size.phone : d.size.desktop)),
+            tiers: m.venueDots.map((d) => d.tier),
+            key: Array.from(document.querySelectorAll('#map-key .map-key-item')).map((it) => [
+              Number(it.querySelector('.map-key-label').textContent.split(' ')[0]),
+              Number(it.querySelector('svg').getAttribute('width')),
+            ]),
+            ref: m.refGames,
+          };
+        }"""
+    )
+    assert got["phone"] is (width < 480)
+    assert {"circle", "square", "star"} <= set(got["symbols"])
+    # No shape minimum lifts a picked dot (the old phone star was 12px, over the 10px max).
+    assert got["drawn"] == got["model"]
+    assert max(got["drawn"]) <= max_px + 1e-9
+    subject = [s for s, t in zip(got["drawn"], got["tiers"], strict=True) if t == "subject"]
+    assert subject and max(subject) == max_px  # the busiest picked venue draws at the max
+    assert min(subject) < max_px
+    # The key's circles use the same size function and the picked cohort's reference.
+    assert got["key"]
+    for games, svg_width in got["key"]:
+        assert svg_width == math.ceil(max_px * (games / got["ref"]) ** 0.5)
+    assert got["hits"] == [max(s, 12) for s in got["drawn"]]
+
+
 def test_more_than_four_schools_shows_the_shapes_caption(
     guarded_page: Page, open_app: OpenApp
 ) -> None:
@@ -338,7 +401,7 @@ def test_more_than_four_schools_shows_the_shapes_caption(
 
 
 def test_trace_names_are_constant_across_states(guarded_page: Page, open_app: OpenApp) -> None:
-    """D-06: the 13 trace names never change with subject, filters or Hide."""
+    """D-06: the 14 trace names never change with subject, filters or Hide."""
     _open_map(guarded_page, open_app, "?view=map")
     seen = [list(_traces(guarded_page))]
     for patch in (
@@ -413,7 +476,7 @@ def test_no_passing_game_is_a_plain_empty_map_in_fade_and_hide(
     assert _visible(guarded_page, "#map-empty-note")
     assert not _visible(guarded_page, "#map-key")
     traces = _traces(guarded_page)
-    for name in ("venue-faded", "venue-dots", "venue-selected", "markers"):
+    for name in ("venue-faded", "venue-dots", "venue-hits", "venue-selected", "markers"):
         assert traces[name]["n"] == 0, name
     model = _model(guarded_page)
     assert (model["venueFaded"], model["markers"], model["drawnCount"]) == ([], [], 0)

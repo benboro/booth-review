@@ -350,8 +350,8 @@ def test_five_chart_tabs_fit_at_340px(
     assert fit["scrollWidth"] <= 340
 
 
-_COLORS_RECT_JS = """() => {
-  const el = document.getElementById('colors-toggle');
+_DOTS_RECT_JS = """() => {
+  const el = document.getElementById('dots-toggle');
   const r = el.getBoundingClientRect();
   const lr = document.getElementById('legend-row').getBoundingClientRect();
   return {x: r.x, y: r.y - lr.y, w: r.width, h: r.height, vis: getComputedStyle(el).visibility,
@@ -361,20 +361,30 @@ _COLORS_RECT_JS = """() => {
 
 @pytest.mark.parametrize("font_setting", ["default", "dejavu", "wide"], indirect=True)
 @pytest.mark.parametrize("width", [1280, 360])
-def test_colors_toggle_conceals_without_layout_shift(
+def test_dots_toggle_conceals_without_layout_shift(
     guarded_page: Page, open_app: Callable[[Page, str], None], width: int
 ) -> None:
-    """Phase 11 D-09: the Network colors switch is concealed (not hidden) off the Map, so
+    """Phase 11 D-09: the Fade/Hide switch is concealed (not hidden) off the scatter, so
     the legend row and the switch's own box never move between tabs."""
     guarded_page.set_viewport_size({"width": width, "height": 900})
     open_app(guarded_page)
-    off_map = guarded_page.evaluate(_COLORS_RECT_JS)
-    assert off_map["vis"] == "hidden"
+    off_map = guarded_page.evaluate(_DOTS_RECT_JS)
+    assert off_map["vis"] == "visible"
     before: int = guarded_page.evaluate("() => window.__testHooks.mapRenders")
     _set(guarded_page, {"view": "map"})
     guarded_page.wait_for_function("(n) => window.__testHooks.mapRenders > n", arg=before)
     guarded_page.evaluate(_WAIT_TWO_FRAMES)
-    on_map = guarded_page.evaluate(_COLORS_RECT_JS)
-    assert on_map["vis"] == "visible"
+    on_map = guarded_page.evaluate(_DOTS_RECT_JS)
+    assert on_map["vis"] == "hidden"
     for key in ("x", "y", "w", "h", "legendH"):
         assert on_map[key] == off_map[key], key
+
+
+@pytest.mark.parametrize("view", ["scatter", "bars", "butterfly", "map", "crews"])
+def test_no_network_colors_switch_on_any_tab(
+    guarded_page: Page, open_app: Callable[[Page, str], None], view: str
+) -> None:
+    """Phase 17.1 D-07: colours are always on, so no tab carries a Network colors control."""
+    open_app(guarded_page, f"?view={view}")
+    assert guarded_page.locator("#colors-toggle").count() == 0
+    assert "Network colors" not in guarded_page.evaluate("() => document.body.innerText")

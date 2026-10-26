@@ -34,7 +34,7 @@ SEGMENT_LABELS = [
     "Other solo slot",
     "Fox AGOTW",
     "CBS late national",
-    "International, shared window",
+    "International",
 ]
 NOTE_LINES = [
     "Solo slot = no other NFL game kicks off within 3 hours.",
@@ -45,7 +45,7 @@ NOTE_LINES = [
     "Other solo slot: any other game with no NFL game within 3 hours, such as Saturday or an international morning game.",
     "Fox AGOTW: Fox's top game on a Sunday afternoon doubleheader.",
     "CBS late national: CBS's national game in the late Sunday window.",
-    "International, shared window: a game played abroad that shares its window with other games.",
+    "International: a game played abroad that shares its window with other games.",
 ]
 LEGEND = "#nfl-view-special .legend-chips"
 SLOT_ORDER = [
@@ -116,25 +116,8 @@ def _agg(raw: dict[str, Any], lo: int, hi: int) -> dict[int, dict[str, Any]]:
     return out
 
 
-def _denoms(raw: dict[str, Any], lo: int, hi: int) -> tuple[int, int]:
-    w = raw["season_weeks"]
-    fox = cbs = 0
-    for k, s in enumerate(w["season"]):
-        if lo <= s <= hi:
-            fox += w["fox_doubleheader_weeks"][k] - w["fox_ambiguous_weeks"][k]
-            cbs += w["cbs_doubleheader_weeks"][k] - w["cbs_ambiguous_weeks"][k]
-    return fox, cbs
-
-
-def _rate(count: int, denom: int) -> str:
-    if denom <= 0:
-        return "n/a"
-    return f"{count} of {denom} weeks ({int(count / denom * 100 + 0.5)}%)"
-
-
 def _hover(raw: dict[str, Any], f: int, lo: int, hi: int) -> list[str]:
     a = _agg(raw, lo, hi)[f]
-    fox, cbs = _denoms(raw, lo, hi)
     name = raw["lookups"]["franchises"][f]["name"]
     slots = ", ".join(f"{lbl} {a['slots'][col]}" for col, lbl in SLOT_ORDER if a["slots"][col] > 0)
     total = sum(a[k] for k in SEGMENT_KEYS)
@@ -146,9 +129,7 @@ def _hover(raw: dict[str, Any], f: int, lo: int, hi: int) -> list[str]:
     if slots:
         out.append(f"Solo slots: {slots}")
     out += [
-        f"International, all windows: {a['international']}",
-        f"Fox AGOTW weeks: {_rate(a['agotw'], fox)}",
-        f"CBS late national weeks: {_rate(a['cbs_national'], cbs)}",
+        f"International, any window: {a['international']}",
         f"Flexed: {a['flexed']}",
         "Click to see seasons and games.",
     ]
@@ -229,7 +210,7 @@ def test_sorted_by_total_then_name(app: Page, nfl_fixture_raw: dict[str, Any]) -
     assert [r["franchise"] for r in vm["rows"]] == _expected_order(nfl_fixture_raw, 2024, 2026)
 
 
-def test_hover_lines_exact_and_na_for_2026(app: Page, nfl_fixture_raw: dict[str, Any]) -> None:
+def test_hover_lines_exact_and_plain_for_2026(app: Page, nfl_fixture_raw: dict[str, Any]) -> None:
     vm = _vm(app)
     ids = [f["id"] for f in nfl_fixture_raw["lookups"]["franchises"]]
     k = 0
@@ -245,10 +226,9 @@ def test_hover_lines_exact_and_na_for_2026(app: Page, nfl_fixture_raw: dict[str,
     _emit(app, "plotly_hover", 0)
     lines = _tooltip(app)
     assert lines == _hover(nfl_fixture_raw, f, 2026, 2026)
-    fox_line = next(x for x in lines if x.startswith("Fox AGOTW weeks"))
-    cbs_line = next(x for x in lines if x.startswith("CBS late national weeks"))
-    assert fox_line.endswith("n/a") and cbs_line.endswith("n/a")
-    assert "0 of" not in fox_line and "(0%)" not in "".join(lines)
+    assert not any(x.startswith(("Fox AGOTW weeks", "CBS late national weeks")) for x in lines)
+    joined = "\n".join(lines)
+    assert "n/a" not in joined and "weeks" not in joined and "%" not in joined
 
 
 def test_legend_chip_hides_segment(app: Page) -> None:
@@ -510,11 +490,11 @@ def test_click_selects_team_and_fills_games_and_breakdown(
         "#nfl-view-special .nfl-breakdown tbody tr", "els => els.map(e => e.dataset.season)"
     )
     assert seasons == ["2026", "2025", "2024"]
-    link = app.get_attribute("#nfl-view-special .nfl-breakdown a", "href")
-    assert link == "methodology.html#nfl-doubleheader-weeks-and-rates"
-    assert "Rates count doubleheader weeks only." in app.inner_text(
-        "#nfl-view-special .nfl-breakdown"
-    )
+    assert app.locator("#nfl-view-special .nfl-breakdown a").count() == 0
+    assert (
+        "Special games is the sum of the eight columns before it. "
+        "Flexed games are counted separately."
+    ) in app.inner_text("#nfl-view-special .nfl-breakdown")
 
     # Selected bar outlined, others at 40%.
     opac = app.evaluate(f"document.querySelector('{GD}').data[0].marker.opacity")
@@ -615,20 +595,21 @@ def test_breakdown_rows_match_fixture(app: Page, nfl_fixture_raw: dict[str, Any]
         "#nfl-view-special .nfl-breakdown tbody tr[data-season='2026'] > *",
         "els => els.map(e => e.textContent)",
     )
-    assert cells[:2] == ["2026", str(row["special"] + row["international_other"])]
-    assert cells[2:7] == [str(row[k]) for k in SEGMENT_KEYS[:5]]
-    assert cells[7] == f"{row['agotw']} · n/a"
-    assert cells[8] == f"{row['cbs_national']} · n/a"
-    # An earlier season carries a real rate.
+    assert cells[0] == "2026"
+    assert cells[1:6] == [str(row[k]) for k in SEGMENT_KEYS[:5]]
+    assert cells[6] == str(row["agotw"])
+    assert cells[7] == str(row["cbs_national"])
+    assert cells[8] == str(row["international_other"])
+    assert cells[9] == str(row["special"] + row["international_other"])
+    assert sum(int(c) for c in cells[1:9]) == int(cells[9])
     older = next(r for r in sp if r["season"] == 2025 and r["franchise"] == row["franchise"])
-    fox, cbs = _denoms(nfl_fixture_raw, 2025, 2025)
     cells = app.eval_on_selector_all(
         "#nfl-view-special .nfl-breakdown tbody tr[data-season='2025'] > *",
         "els => els.map(e => e.textContent)",
     )
-    assert cells[7] == _rate(older["agotw"], fox)
-    assert cells[8] == _rate(older["cbs_national"], cbs)
-    assert cells[1] == str(older["special"] + older["international_other"])
+    assert cells[6] == str(older["agotw"])
+    assert cells[7] == str(older["cbs_national"])
+    assert cells[9] == str(older["special"] + older["international_other"])
 
 
 def test_hidden_table_one_row_per_bar(app: Page) -> None:

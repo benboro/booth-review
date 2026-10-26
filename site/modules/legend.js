@@ -82,8 +82,7 @@ export function createOnlyDetector({ onToggle, onOnly, snapshot }) {
  * @param {{listEl: HTMLElement, onToggle: (family: string) => void,
  *   onOnly: (family: string, before: string[]|null) => void,
  *   getNetworks: () => string[]|null,
- *   switchEl?: HTMLElement|null, onDots?: (value: string) => void,
- *   colorsEl?: HTMLElement|null, onColors?: (value: string) => void}} args
+ *   switchEl?: HTMLElement|null, onDots?: (value: string) => void}} args
  */
 export function initLegend({
   listEl,
@@ -92,8 +91,6 @@ export function initLegend({
   getNetworks,
   switchEl,
   onDots,
-  colorsEl,
-  onColors,
 }) {
   const detector = createOnlyDetector({ onToggle, onOnly, snapshot: getNetworks });
   if (switchEl) {
@@ -102,14 +99,6 @@ export function initLegend({
       if (!button) return;
       const value = button.dataset.dots;
       if (value === 'fade' || value === 'hide') onDots(value);
-    });
-  }
-  if (colorsEl) {
-    colorsEl.addEventListener('click', (ev) => {
-      const button = ev.target.closest('button[data-colors]');
-      if (!button) return;
-      const value = button.dataset.colors;
-      if (value === 'on' || value === 'off') onColors(value);
     });
   }
   listEl.addEventListener('click', (ev) => {
@@ -198,13 +187,5 @@ export function renderLegend({ data, state, view }) {
       button.setAttribute('aria-pressed', String(button.dataset.dots === mode));
     }
     toggleEl.classList.toggle('is-concealed', state.view !== 'scatter');
-  }
-  const colorsEl = document.getElementById('colors-toggle');
-  if (colorsEl) {
-    const mode = state.colors === 'off' ? 'off' : 'on';
-    for (const button of colorsEl.querySelectorAll('button[data-colors]')) {
-      button.setAttribute('aria-pressed', String(button.dataset.colors === mode));
-    }
-    colorsEl.classList.toggle('is-concealed', state.view !== 'map');
   }
 }

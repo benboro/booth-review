@@ -22,8 +22,7 @@
  * the Fade default; 04.7 D-10, D-14). `game` (one named-game slug: a bowl franchise,
  * a rivalry, or a CFP round; allowlisted against `data.gameIndexBySlug`; omitted when
  * no game is picked; 04.9 D-20). `venue` (one venue or abroad-group slug, allowlisted against
- * `data.venueIndexesByKey`; omitted when none; Phase 11 D-05) and `colors` (`off`; omitted at the
- * On default; Phase 11 D-09). The Crews params (Phase 14 D-06..D-10), view-agnostic like `by` so a
+ * `data.venueIndexesByKey`; omitted when none; Phase 11 D-05) (an old `colors` param is ignored; colours are always on, Phase 17.1 D-07). The Crews params (Phase 14 D-06..D-10), view-agnostic like `by` so a
  * stale `?view=scatter&crew=...` survives a setState round trip: `crew` (a pooled crew key, allowlisted
  * by `CREW_KEY_RE` and by existence in `crewIndex(data).crews`; dropped when `people` is present, A7),
  * `cmode` (`pbp`/`analyst`; Crew is the omitted default), `perseason` (`0` = pooled; Per season is the omitted default since Phase 14 Plan 10, and a
@@ -127,7 +126,6 @@ export function encodeState(state, data) {
   if (state.view === 'bars' || state.view === 'butterfly' || state.view === 'map' || state.view === 'crews') params.push(['view', state.view]);
   if (state.by) params.push(['by', state.by]);
   if (state.dots === 'hide') params.push(['dots', 'hide']);
-  if (state.colors === 'off') params.push(['colors', 'off']);
   if (state.crew != null) params.push(['crew', state.crew]);
   if (state.cmode === 'pbp' || state.cmode === 'analyst') params.push(['cmode', state.cmode]);
   if (state.perseason === false) params.push(['perseason', '0']);
@@ -359,7 +357,6 @@ export function decodeState(search, data) {
   state.by = ['network', 'team', 'conference'].includes(rawBy) ? rawBy : null;
   // Fade is the default; only the literal 'hide' selects Hide (04.7 D-10).
   state.dots = scalarParam(params, 'dots') === 'hide' ? 'hide' : 'fade';
-  state.colors = scalarParam(params, 'colors') === 'off' ? 'off' : 'on';
 
   // Crews params (Phase 14). The crew index is built only when `crew` is present, so a crew-free
   // URL does no grouping work. A pick of people wins over a crew in the same link (A7, D-08).

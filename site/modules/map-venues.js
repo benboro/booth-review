@@ -7,9 +7,10 @@
 // style cheap later (D-11).
 //
 // Rules: inside a venue the family with the most games leads and viewers only break exact
-// ties (D-06a). Across venues one score, games^(1 - w) x max(viewersMM, 0.01)^w, sets dot
-// size and splat strength. Unrated games count at the floor viewers (p10 of the rated
-// passing set) in that score only, never in the shown viewers (D-07).
+// ties (D-06a). Across venues one score, games^(1 - w) x max(viewersMM, 0.01)^w, sets splat
+// strength. Dot size is games only (Phase 17.1 D-01): area exactly proportional to games, relative
+// to the busiest venue in the filtered set (D-20). Unrated games count at the floor
+// viewers (p10 of the rated passing set) in the score only, never in the shown viewers (D-07).
 
 import {
   FAMILY_ORDER,
@@ -75,18 +76,20 @@ export function venueLeader(counts, weighted, viewers = counts.map(() => 0)) {
 }
 
 /**
- * Dot diameters in px for desktop and phone; sizes are relative to the top score so
- * narrowing the filters rescales them (D-03).
- * @param {number} score
- * @param {number} maxScore
+ * Dot diameters in px for desktop and phone: games only, area exactly proportional to
+ * games, where refGames (the busiest venue in the filtered set) draws the maximum (D-20).
+ * Games are not clamped to refGames: each caller passes its own set's busiest venue (D-24).
+ * @param {number} games
+ * @param {number} refGames
  * @returns {{desktop: number, phone: number}}
  */
-export function venueDotSize(score, maxScore) {
-  const s = Math.sqrt(maxScore > 0 ? score / maxScore : 0);
-  const d = MAP_VENUE_DOT;
+export function venueDotSize(games, refGames) {
+  const ref = refGames > 0 ? refGames : 1;
+  const n = Math.max(Number(games) || 0, 0);
+  const r = Math.sqrt(n / ref);
   return {
-    desktop: 2 * Math.min(d.radiusMax, d.radiusBase + d.radiusSpan * s),
-    phone: Math.min(d.phoneMax, d.phoneBase + d.phoneSpan * s),
+    desktop: MAP_VENUE_DOT.maxDiameter * r,
+    phone: MAP_VENUE_DOT.phoneMaxDiameter * r,
   };
 }
 
@@ -203,8 +206,10 @@ export function buildVenueModel(data, passing, placements) {
   for (const v of venues) if (v.score > maxScore) maxScore = v.score;
   const positive = venues.map((v) => v.score).filter((s) => s > 0).sort((p, q) => p - q);
   const medianScore = median(positive, 1);
-  for (const v of venues) v.size = venueDotSize(v.score, maxScore);
-  venues.sort((p, q) => q.score - p.score || p.index - q.index);
+  let refGames = 0;
+  for (const v of venues) if (v.games > refGames) refGames = v.games;
+  for (const v of venues) v.size = venueDotSize(v.games, refGames);
+  venues.sort((p, q) => q.games - p.games || p.index - q.index);
 
   const groups = [];
   for (const grp of groupMap.values()) {
@@ -220,5 +225,5 @@ export function buildVenueModel(data, passing, placements) {
   for (const v of venues) byKey.set(v.key, v);
   for (const grp of groups) byKey.set(grp.key, grp);
 
-  return { venues, byKey, groups, floorViewers, medianRatedViewers, medianScore, maxScore };
+  return { venues, byKey, groups, floorViewers, medianRatedViewers, medianScore, maxScore, refGames };
 }

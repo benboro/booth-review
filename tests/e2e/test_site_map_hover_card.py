@@ -10,10 +10,7 @@ from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
 
-CREDIT = (
-    "Viewers add up published figures from Ratings Reference and other outlets; "
-    "the games table (click the dot) credits each game's source."
-)
+CREDIT_FRAGMENT = "add up published figures"
 
 _FMT_JS = """
 async (values) => {
@@ -57,9 +54,9 @@ async ([card, opts]) => {
     rows: [...el.querySelectorAll('tbody tr')].map((r) =>
       [...r.children].map((c) => c.textContent)),
     swatches: [...el.querySelectorAll('.tooltip-swatch')].map((s) => s.style.backgroundColor),
-    footnotes: [...el.querySelectorAll('.tooltip-footnote:not(.tooltip-credit)')]
+    footnotes: [...el.querySelectorAll('.tooltip-footnote')]
       .map((n) => n.textContent),
-    credits: [...el.querySelectorAll('.tooltip-credit')].map((n) => n.textContent),
+    text: el.textContent,
     lastText: el.lastElementChild.textContent,
     lastClass: el.lastElementChild.className,
     hasPie: el.querySelector('.tooltip-venue-body svg') !== null,
@@ -82,7 +79,6 @@ def _card(**over: Any) -> dict[str, Any]:
             {"family": "cbs", "label": "CBS", "games": 1, "viewers": None},
         ],
         "hasMissingViewers": True,
-        "hasViewers": True,
         "subjectLines": [{"text": "Best game: A vs B", "kind": "body"}],
     }
     card.update(over)
@@ -172,15 +168,17 @@ def test_card_other_row_uses_neutral_swatch(
     assert r["swatches"][1] == "rgb(179, 170, 156)"
 
 
-def test_credit_note_follows_has_viewers(
+def test_card_has_no_credit_sentence(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
+    """Phase 17.1 D-07a: per-game credits live in the games table, not the hover card."""
     open_app(guarded_page, "")
     with_viewers = _show(guarded_page, _card())
-    assert with_viewers["credits"] == [CREDIT]
+    assert CREDIT_FRAGMENT not in with_viewers["text"]
+    assert with_viewers["footnotes"] == ["- no viewer figure listed"]
     rows = [{"family": "fox", "label": "FOX", "games": 3, "viewers": None}]
-    without = _show(guarded_page, _card(rows=rows, hasViewers=False))
-    assert without["credits"] == []
+    without = _show(guarded_page, _card(rows=rows))
+    assert CREDIT_FRAGMENT not in without["text"]
     assert without["rows"] == [["FOX", "3", "-"]]
 
 
@@ -347,7 +345,7 @@ def test_hovering_an_edge_marker_shows_its_card(guarded_page: Page, open_app: Op
     assert tip["pie"] is True
 
 
-def test_unrated_and_rated_venues_show_dash_and_credit_note(
+def test_unrated_and_rated_venues_show_dash_and_no_credit_sentence(
     guarded_page: Page, open_app: OpenApp, serve_map_venues: Callable[[Page], None]
 ) -> None:
     serve_map_venues(guarded_page)
@@ -360,7 +358,21 @@ def test_unrated_and_rated_venues_show_dash_and_credit_note(
         if tip:
             texts.append(tip["text"])
     assert any("- no viewer figure listed" in t for t in texts)
-    assert any(CREDIT in t for t in texts)
+    assert not any(CREDIT_FRAGMENT in t for t in texts)
+
+
+def test_click_lists_games_with_source_credits(guarded_page: Page, open_app: OpenApp) -> None:
+    """D-07a: attribution stays reachable from the map; a dot click fills the games table."""
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    _open_map(guarded_page, open_app)
+    dot = _model(guarded_page)["venueDots"][0]
+    _hover(guarded_page, dot["x"], dot["y"])
+    px, py = _pixel(guarded_page, dot["x"], dot["y"])
+    guarded_page.mouse.click(px, py)
+    guarded_page.wait_for_function(f"() => location.search.includes('venue={dot['key']}')")
+    rows = guarded_page.locator("#matched-games tbody tr")
+    assert rows.count() > 0
+    assert guarded_page.locator("#matched-games tbody tr a[href^='http']").count() > 0
 
 
 def test_phone_first_tap_shows_card_second_tap_filters(
@@ -421,3 +433,128 @@ def test_phone_background_tap_clears_the_card_and_rearms_the_first_tap(
     assert tip["hint"] == "Tap again to list these games"
     mobile_page.wait_for_timeout(450)
     assert "venue=" not in mobile_page.evaluate("() => location.search")
+
+
+# -- Phase 17.1 D-16: an invisible 12px hit target under every small dot ----------------------
+
+_SHRINK_JS = """async ([key, size, mobile, near, offsetPx]) => {
+  // Re-draws the live map with one real venue shrunk to `size` px (a 1-game dot); when `near`
+  // names another venue, that dot's centre is moved under the large one so the circles overlap.
+  const C = await import('./modules/map-chart.js');
+  const G = await import('./vendor/us-states-albers.js');
+  const gd = document.getElementById('map-chart');
+  const model = structuredClone(window.__testHooks.getMapModel());
+  const small = model.venueDots.find((d) => d.key === key);
+  small.size = {desktop: size, phone: size};
+  if (near) {
+    const big = model.venueDots.find((d) => d.key === near);
+    const unit = gd._fullLayout.xaxis.l2p(1) - gd._fullLayout.xaxis.l2p(0);
+    small.x = big.x + offsetPx / unit;
+    small.y = big.y;
+  }
+  const env = {theme: 'light', mobile, splat: false};
+  await C.renderMap(gd, C.buildMapFigure(model, G.US_STATES, env));
+  return {x: small.x, y: small.y};
+}"""
+
+
+def _shrink(
+    page: Page, key: str, *, mobile: bool = False, near: str | None = None, offset: float = 0
+) -> dict[str, float]:
+    result: dict[str, float] = page.evaluate(_SHRINK_JS, [key, 3.3, mobile, near, offset])
+    page.evaluate("() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")
+    return result
+
+
+def _hover_title(page: Page, x: float, y: float) -> str | None:
+    _hover(page, x, y)
+    tip = _tooltip(page)
+    return tip["title"] if tip else None
+
+
+def test_small_dot_hover_target_reaches_5px_from_its_centre(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    _open_map(guarded_page, open_app)
+    dot = _model(guarded_page)["venueDots"][-1]
+    expected = _hover_title(guarded_page, dot["x"], dot["y"])
+    assert expected
+    guarded_page.mouse.move(5, 5, steps=3)
+    _shrink(guarded_page, dot["key"])
+    px, py = _pixel(guarded_page, dot["x"], dot["y"])
+    guarded_page.mouse.move(px + 5 - 60, py - 60)
+    guarded_page.mouse.move(px + 5, py, steps=5)
+    guarded_page.wait_for_timeout(250)
+    tip = _tooltip(guarded_page)
+    assert tip is not None and tip["title"] == expected
+    # Far outside the 12px target nothing opens.
+    guarded_page.mouse.move(px + 40, py + 40, steps=4)
+    guarded_page.wait_for_timeout(250)
+    assert _tooltip(guarded_page) is None
+
+
+def test_small_dot_click_5px_from_its_centre_lists_its_games(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    _open_map(guarded_page, open_app)
+    dot = _model(guarded_page)["venueDots"][-1]
+    _shrink(guarded_page, dot["key"])
+    guarded_page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
+    px, py = _pixel(guarded_page, dot["x"], dot["y"])
+    guarded_page.mouse.move(px - 40, py)
+    guarded_page.mouse.move(px + 5, py, steps=4)
+    guarded_page.mouse.click(px + 5, py)
+    guarded_page.wait_for_function(f"() => location.search.includes('venue={dot['key']}')")
+
+
+def test_small_dot_on_top_of_a_large_neighbour_wins_at_its_own_centre(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    guarded_page.set_viewport_size({"width": 1280, "height": 900})
+    _open_map(guarded_page, open_app)
+    dots = _model(guarded_page)["venueDots"]
+    big, small = dots[0], dots[-1]
+    big_title = _hover_title(guarded_page, big["x"], big["y"])
+    small_title = _hover_title(guarded_page, small["x"], small["y"])
+    assert big_title and small_title and big_title != small_title
+    guarded_page.mouse.move(5, 5, steps=3)
+    # The 3.3px dot sits 10px from the 28px dot's centre, drawn inside it.
+    spot = _shrink(guarded_page, small["key"], near=big["key"], offset=10)
+    assert _hover_title(guarded_page, spot["x"], spot["y"]) == small_title
+    assert _hover_title(guarded_page, big["x"], big["y"]) == big_title
+
+
+def test_phone_tap_5px_off_a_small_dot_opens_its_card(mobile_page: Page, open_app: OpenApp) -> None:
+    mobile_page.set_viewport_size({"width": 390, "height": 800})
+    _open_map(mobile_page, open_app)
+    dot = _model(mobile_page)["venueDots"][-1]
+    _shrink(mobile_page, dot["key"], mobile=True)
+    mobile_page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
+    px, py = _pixel(mobile_page, dot["x"], dot["y"])
+    mobile_page.touchscreen.tap(px + 5, py)
+    mobile_page.wait_for_function(
+        "() => { const e = document.getElementById('chart-tooltip'); return e && !e.hidden; }"
+    )
+    tip = _tooltip(mobile_page)
+    assert tip is not None and tip["kind"] == "venue"
+
+
+def test_hit_trace_draws_nothing_visible(guarded_page: Page, open_app: OpenApp) -> None:
+    _open_map(guarded_page, open_app)
+    got = guarded_page.evaluate(
+        """() => {
+          const gd = document.getElementById('map-chart');
+          const n = gd.data.find((t) => t.name === 'venue-hits').x.length;
+          const fills = [...gd.querySelectorAll('.scatterlayer g.trace')]
+            .map((g) => [...g.querySelectorAll('path.point')]
+              .map((p) => {
+                const st = getComputedStyle(p);
+                return st.fillOpacity === '0' || st.fill === 'none' ? 'clear' : st.fill;
+              }));
+          return {n, twins: fills.filter((f) => f.length === n)};
+        }"""
+    )
+    transparent = [f for f in got["twins"] if all(c == "clear" for c in f)]
+    assert transparent, got

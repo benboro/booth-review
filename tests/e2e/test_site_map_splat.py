@@ -252,40 +252,16 @@ def _open_map(page: Page, open_app: Any, query: str = "?view=map") -> None:
     page.wait_for_function("() => window.__testHooks.mapRenders >= 1")
 
 
-def _pressed(page: Page) -> list[str]:
-    result: list[str] = page.evaluate(
-        "() => [...document.querySelectorAll('#colors-toggle button')]"
-        ".filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset.colors)"
-    )
-    return result
-
-
-def test_colors_switch_visible_only_on_map_and_round_trips_url(
-    guarded_page: Page, open_app: Any
-) -> None:
-    open_app(guarded_page)
-    assert (
-        guarded_page.evaluate(
-            "() => getComputedStyle(document.getElementById('colors-toggle')).visibility"
-        )
-        == "hidden"
-    )
-    _open_map(guarded_page, open_app)
-    assert guarded_page.locator("#colors-toggle").is_visible()
-    assert _pressed(guarded_page) == ["on"]
-    guarded_page.click("#colors-toggle button[data-colors=off]")
-    guarded_page.wait_for_function("() => location.search.includes('colors=off')")
-    assert _pressed(guarded_page) == ["off"]
-    guarded_page.click("#colors-toggle button[data-colors=on]")
-    guarded_page.wait_for_function("() => !location.search.includes('colors')")
-    assert _pressed(guarded_page) == ["on"]
-
-
-def test_colors_off_and_bogus_urls(guarded_page: Page, open_app: Any) -> None:
+def test_old_colors_param_is_ignored(guarded_page: Page, open_app: Any) -> None:
+    """An old ?colors=off link draws the colours, logs nothing and never re-encodes the param."""
     _open_map(guarded_page, open_app, "?view=map&colors=off")
-    assert _pressed(guarded_page) == ["off"]
-    _open_map(guarded_page, open_app, "?view=map&colors=bogus")
-    assert _pressed(guarded_page) == ["on"]
+    _wait_splat(guarded_page, 0)
+    assert len(guarded_page.evaluate(_IMAGES)) == 1
+    assert guarded_page.evaluate(_OUTLINE_FILL) == "none"
+    assert guarded_page.locator("#colors-toggle").count() == 0
+    _set_state(guarded_page, {"seasons": [2021, 2021]})
+    guarded_page.evaluate(_WAIT_FRAMES)
+    assert "colors" not in guarded_page.evaluate("() => location.search")
 
 
 def test_map_conference_chip_dot_uses_map_violet(guarded_page: Page, open_app: Any) -> None:
@@ -340,23 +316,6 @@ def test_default_map_has_one_blob_image_and_no_outline_fill(
     assert guarded_page.evaluate(_OUTLINE_FILL) == "none"
 
 
-def test_colors_off_has_no_image_and_on_restores_it(guarded_page: Page, open_app: Any) -> None:
-    _open_map(guarded_page, open_app, "?view=map&colors=off")
-    assert guarded_page.evaluate(_IMAGES) == []
-    assert guarded_page.evaluate(_OUTLINE_FILL) == "toself"
-    guarded_page.click("#colors-toggle button[data-colors=on]")
-    _wait_splat(guarded_page, 0)
-    assert len(guarded_page.evaluate(_IMAGES)) == 1
-    assert guarded_page.evaluate(_OUTLINE_FILL) == "none"
-    revoked_source = guarded_page.evaluate(_IMAGES)[0]
-    guarded_page.click("#colors-toggle button[data-colors=off]")
-    guarded_page.wait_for_function(
-        "() => (document.getElementById('map-chart').layout.images || []).length === 0"
-    )
-    assert guarded_page.evaluate(_OUTLINE_FILL) == "toself"
-    assert guarded_page.evaluate(_FETCH_OK, revoked_source) is False
-
-
 # connect-src is 'self', so a blob is probed through an image element (img-src allows blob:).
 _FETCH_OK = """(u) => new Promise((resolve) => {
   const img = new Image();
@@ -377,7 +336,7 @@ def test_seasons_change_swaps_image_and_revokes_previous(guarded_page: Page, ope
     assert len(second) == 1
     assert second[0] != first
     assert guarded_page.evaluate(_FETCH_OK, first) is False
-    assert guarded_page.evaluate(_TRACE_COUNT) == 13
+    assert guarded_page.evaluate(_TRACE_COUNT) == 14
 
 
 def test_rapid_changes_coalesce_and_never_blank(guarded_page: Page, open_app: Any) -> None:
@@ -494,7 +453,7 @@ def test_raster_failure_falls_back_to_land_fill(guarded_page: Page, open_app: An
         "() => document.getElementById('map-chart').data[0].fill === 'toself'"
     )
     guarded_page.evaluate(_WAIT_FRAMES)
-    assert guarded_page.evaluate(_TRACE_COUNT) == 13
+    assert guarded_page.evaluate(_TRACE_COUNT) == 14
     assert (
         guarded_page.evaluate(
             "() => document.getElementById('map-chart').data.find((t) => t.name === 'venue-dots').x.length"
@@ -502,9 +461,6 @@ def test_raster_failure_falls_back_to_land_fill(guarded_page: Page, open_app: An
         > 0
     )
     assert guarded_page.locator("#map-empty-note").is_hidden()
-    # While broken the key drops its Color strength block although the switch stays On.
-    assert "Color strength" not in guarded_page.locator("#map-key").inner_text()
-    assert _pressed(guarded_page) == ["on"]
     _set_state(guarded_page, {"seasons": [2021, 2021]})
     guarded_page.evaluate(_WAIT_FRAMES)
     _settle(guarded_page)
@@ -516,7 +472,6 @@ def test_raster_failure_falls_back_to_land_fill(guarded_page: Page, open_app: An
     _wait_splat(guarded_page, 0)
     assert len(guarded_page.evaluate(_IMAGES)) == 1
     assert guarded_page.evaluate(_OUTLINE_FILL) == "none"
-    assert "Color strength" in guarded_page.locator("#map-key").inner_text()
     assert len([m for m in messages if "map colors" in m]) == 1
 
 
@@ -586,26 +541,6 @@ def test_stale_paint_suspended_in_relayout_does_not_revoke_the_newer_image(
     assert guarded_page.evaluate(_FETCH_OK, images[0]) is True
     assert guarded_page.evaluate(_OUTLINE_FILL) == "none"
     assert _splats(guarded_page) == n + 1
-
-
-@pytest.mark.parametrize("mode", ["resolve", "apply"])
-def test_colors_off_during_a_relayout_leaves_land_fill_and_no_image(
-    guarded_page: Page, open_app: Any, mode: str
-) -> None:
-    """Colors go Off while paint A is suspended in its relayout: the map ends with the land
-    fill and no image, never fill 'none' over an empty image list (a white map)."""
-    _open_splat(guarded_page, open_app)
-    _hold_next(guarded_page, mode)
-    _set_state(guarded_page, {"seasons": [2021, 2021]})
-    guarded_page.wait_for_function("() => window.__gate.held === 1")
-    guarded_page.click("#colors-toggle button[data-colors=off]")
-    _settle(guarded_page)
-    _release_and_settle(guarded_page)
-    guarded_page.wait_for_function(
-        "() => (document.getElementById('map-chart').layout.images || []).length === 0"
-    )
-    assert guarded_page.evaluate(_OUTLINE_FILL) == "toself"
-    assert guarded_page.evaluate(_IMAGES) == []
 
 
 # -- Review fix WR-01: a superseded render must not cancel the current render's raster ---------
@@ -763,21 +698,14 @@ def test_key_desktop_over_water_clear_of_inset(guarded_page: Page, open_app: Any
     got = guarded_page.evaluate(_KEY_BOXES)
     assert got["visible"]
     assert "Dot size" in got["text"]
-    assert "Color strength" in got["text"]
     labels = guarded_page.locator("#map-key .map-key-label").all_inner_texts()
     assert 1 <= len(labels) <= 3
-    assert all(t.endswith(("game", "games")) for t in labels)
+    assert labels[-1].endswith(("game", "games"))  # the unit rides on the last label only
+    assert all(t.split()[0].isdigit() for t in labels)
     assert got["land"] == 0
     assert not _hits(got["key"], got["hawaii"])
     if got["note"]:
         assert not _hits(got["key"], got["note"])
-
-
-def test_key_omits_strength_when_colors_off(guarded_page: Page, open_app: Any) -> None:
-    _open_map(guarded_page, open_app, "?view=map&colors=off")
-    text = guarded_page.locator("#map-key").inner_text()
-    assert "Dot size" in text
-    assert "Color strength" not in text
 
 
 def test_key_phone_sits_in_panel_corner(mobile_page: Page, open_app: Any) -> None:

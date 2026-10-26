@@ -56,8 +56,6 @@ export function defaultState(_data) {
     view: 'scatter',
     by: null,
     dots: 'fade',
-    // Phase 11 D-09: the Network colors switch on the Map ('on' | 'off').
-    colors: 'on',
     h2h: false,
     // Phase 14 D-06..D-10 (14-UI-SPEC "URL state"): the Crews pick (a pooled crew key, never a
     // season), the Crews table's mode ('crew' | 'pbp' | 'analyst'), its Per season toggle (on by default since 14-10; false = pooled) and sort

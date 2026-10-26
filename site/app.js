@@ -153,6 +153,8 @@ let lastView = null;
 /** The chart width the scatter was last rendered at, and how many width-only re-renders ran (04.12 D-01). */
 let lastScatterWidth = null;
 let scatterResizeRenders = 0;
+/** The map width the Map was last drawn at (Phase 17.1 D-21: edge-marker spacing is in pixels). */
+let lastMapWidth = null;
 let revision = 0;
 
 /** Whether the scatter's Plotly event handlers are bound (needs one rendered scatter first). */
@@ -311,10 +313,11 @@ function render() {
     hideBandInfo();
     resetMapTap();
     lastMapModel = buildMapModel(data, view, state);
+    lastMapWidth = mapChartEl ? mapChartEl.clientWidth : null;
         renderMapPanel({
       data,
       model: lastMapModel,
-      env: { ...currentEnv(), splat: state.colors !== 'off' },
+      env: { ...currentEnv(), splat: true },
       resize: lastPanel !== 'map',
     });
     lastPanel = 'map';
@@ -547,8 +550,6 @@ async function startCfb(search = location.search) {
       getNetworks: () => structuredClone(state.networks),
       switchEl: document.getElementById('dots-toggle'),
       onDots: (dots) => setState({ dots }),
-      colorsEl: document.getElementById('colors-toggle'),
-      onColors: (colors) => setState({ colors }),
     });
     renderers.push(renderLegend);
 
@@ -578,6 +579,12 @@ async function startCfb(search = location.search) {
           scatterResizeRenders += 1;
           renderChart(chartEl, buildFigure(data, lastView, state, currentEnv()));
           showBandInfo();
+        }
+        // D-21: edge markers are spaced by label height in rendered pixels, so a width change
+        // (a narrowed window, a rotated tablet) rebuilds the map figure from the same model.
+        if (state.view === 'map' && lastMapModel && mapChartEl && mapChartEl.clientWidth !== lastMapWidth) {
+          lastMapWidth = mapChartEl.clientWidth;
+          renderMapPanel({ data, model: lastMapModel, env: { ...currentEnv(), splat: true }, resize: false });
         }
       }, 150);
     });
@@ -677,6 +684,7 @@ async function startCfb(search = location.search) {
           subjects: m.subjects.map(({ kind, key, label, symbol }) => ({ kind, key, label, symbol })),
           shapesCapped: m.shapesCapped,
           hasShared: m.hasShared,
+          refGames: m.venueModel.refGames,
           venueDots: structuredClone(m.venueDots),
           venueFaded: structuredClone(m.venueFaded),
           legs: m.legs.map((leg) => ({

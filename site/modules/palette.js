@@ -210,15 +210,14 @@ export function mapOpacity(theme) {
 }
 
 /**
- * Map mark sizes in px (04.18 D-05/D-10, UI-SPEC "Mark tiers"); `subject` is per compare
- * shape, sized so each shape reads equally large. DEFAULTED pending close-out sign-off.
+ * Map mark sizes in px (04.18 D-05/D-10, UI-SPEC "Mark tiers"). Venue dots of every shape take
+ * their size from venueDotSize (Phase 17.1 D-23), so no per-shape size lives here.
  */
 export const MAP_SIZE = Object.freeze({
   base: 7,
   other: 7,
   faded: 7,
   marker: 9,
-  subject: Object.freeze({ circle: 8, square: 8, diamond: 10, 'triangle-up': 9, star: 12 }),
 });
 
 /**
@@ -255,14 +254,15 @@ export const MAP_SPLAT = Object.freeze({
   dotMarginExp: 0.7,
 });
 
-/** Venue dot sizes (radius and phone diameter, px) and ring widths (Phase 11 D-03/D-12). */
+/**
+ * Venue dot sizes (px) and ring widths (Phase 11 D-12, Phase 17.1 D-02/D-16/D-20). Diameters are
+ * in px and dot area is exactly proportional to games. `hitDiameter` is the smallest
+ * hover and click target.
+ */
 export const MAP_VENUE_DOT = Object.freeze({
-  radiusBase: 2,
-  radiusSpan: 6,
-  radiusMax: 8,
-  phoneBase: 4,
-  phoneSpan: 8,
-  phoneMax: 12,
+  maxDiameter: 20,
+  phoneMaxDiameter: 10,
+  hitDiameter: 12,
   opacity: 1,
   ringWidth: 1,
   hoverRingWidth: 2,

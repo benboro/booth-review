@@ -79,7 +79,7 @@ def test_removing_chip_clears_venue_without_scrolling(
     assert guarded_page.evaluate("() => window.scrollY") == before
 
 
-def test_clear_all_clears_venue_but_keeps_colors_off(guarded_page: Page, open_app: OpenApp) -> None:
+def test_old_colors_param_is_dropped_with_the_venue(guarded_page: Page, open_app: OpenApp) -> None:
     key = _first_key(guarded_page, open_app)
     open_app(guarded_page, f"?venue={key}&colors=off")
     guarded_page.wait_for_function("() => document.querySelector('#venue-chips .chip')")
@@ -88,7 +88,7 @@ def test_clear_all_clears_venue_but_keeps_colors_off(guarded_page: Page, open_ap
     guarded_page.evaluate("() => document.getElementById('clear-filters').click()")
     guarded_page.wait_for_function("() => !location.search.includes('venue=')")
     assert guarded_page.locator("#venue-chips .chip").count() == 0
-    assert "colors=off" in guarded_page.evaluate("() => location.search")
+    assert "colors" not in guarded_page.evaluate("() => location.search")
     assert guarded_page.get_attribute("#clear-filters", "aria-disabled") == "true"
 
 

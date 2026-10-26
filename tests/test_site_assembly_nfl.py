@@ -51,7 +51,7 @@ NFL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "contract" / "nfl-data.fixture.
 # Index re-pinned at Phase 10 Plan 11: plans 10-06..10-09 added only markup (Booth trigger and
 # popover, Crews tab and panel, Lead booth key; 21 added lines, none removed), then re-pinned
 # once more for the 10-11 review: the Booth helper now ends "faded or hidden." (one reworded line).
-# Index re-pinned at Phase 11 Plan 09: only added markup (Network colors toggle and the
+# Index re-pinned at Phase 11 Plan 09: only added markup (Network colors toggle, later removed;
 # map key overlay; 8 added lines, none removed).
 # Index re-pinned at Phase 11 Plan 10: only the Matched games heading row, venue status and
 # no-match line (4 added lines, 1 removed).
@@ -77,7 +77,8 @@ _COVERAGE_SHA256 = "f486fd2361993d9323d36870d0d7e23f1150efeef31c2e829cd53b7d6070
 # Re-pinned for the toolbar-fit.js preload in <head> (1 added line).
 # Re-pinned at Phase 14 Plan 09: #pick-status and #matched-subtitle seats (crew pick).
 # Re-pinned at Phase 17 Plan 06: theme-init.js head script and #theme-toggle button markup.
-_INDEX_PRE_PHASE_SHA256 = "465a846196c1f2bbbadb7a0ef3044157d1263aac5f32035efa4d210ffc9a821b"
+# Re-pinned at Phase 17.1 Plan 03: Network colors switch markup removed from #legend-row.
+_INDEX_PRE_PHASE_SHA256 = "53f6f2ea30f7cce000878ff51ff90537a706708c60a85040fe0d917a8a2b7dbc"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'

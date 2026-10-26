@@ -2,14 +2,14 @@
  * NFL view 1: Special games by team (D-12, D-13, D-24).
  *
  * A stacked horizontal Plotly bar per franchise over the selected seasons, eight
- * exclusive segments (Thursday night ... International, shared window), each game
+ * exclusive segments (Thursday night ... International), each game
  * counted once. The legend is CFB's chip row with double-click "only this one"
  * (D-15) and an info note with one definition per segment (D-13). Hover text, the
  * season breakdown and the hidden data table are all built with
  * createElement/textContent; names enter Plotly strings only through
  * escapeHover, and customdata carries row indexes, never names.
  */
-import { teamBars, teamSeasonRows, rateText, specialMatchedCounts, EXCLUSIVE_CATEGORIES } from '../state.js';
+import { teamBars, teamSeasonRows, specialMatchedCounts, EXCLUSIVE_CATEGORIES } from '../state.js';
 import { computePicks } from '../picks.js';
 import { createOnlyDetector, makeLegendChip } from '../../../modules/legend.js';
 import { initBandInfo } from '../../../modules/band-info.js';
@@ -24,7 +24,7 @@ import {
   textWidth,
   valueColumn,
 } from '../../../modules/bar-chart.js';
-import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
+import { ensureTooltipEl, showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import { escapeHover } from '../../../modules/format.js';
 import { DATA_TABLE_CLASS, rebuildKeepingFocus } from '../data-table.js';
 
@@ -127,9 +127,7 @@ function hoverLines(state, label, bar) {
   }
   if (bar.slots.length) lines.push({ text: `Solo slots: ${slotText(bar.slots)}`, kind: 'body' });
   lines.push(
-    { text: `International, all windows: ${bar.international}`, kind: 'body' },
-    { text: `Fox AGOTW weeks: ${rateText(bar.agotwRate.count, bar.agotwRate.denom)}`, kind: 'body' },
-    { text: `CBS late national weeks: ${rateText(bar.cbsRate.count, bar.cbsRate.denom)}`, kind: 'body' },
+    { text: `International, any window: ${bar.international}`, kind: 'body' },
     { text: `Flexed: ${bar.flexed}`, kind: 'body' },
   );
   return lines;
@@ -198,7 +196,7 @@ const SEGMENT_NOTES = Object.freeze([
   'Other solo slot: any other game with no NFL game within 3 hours, such as Saturday or an international morning game.',
   "Fox AGOTW: Fox's top game on a Sunday afternoon doubleheader.",
   "CBS late national: CBS's national game in the late Sunday window.",
-  'International, shared window: a game played abroad that shares its window with other games.',
+  'International: a game played abroad that shares its window with other games.',
 ]);
 
 const ALL_KEYS = SEGMENTS.map((s) => s.key);
@@ -300,12 +298,168 @@ function cell(tag, text, className) {
   return el(tag, className || null, text);
 }
 
-function agotwCell(count, denom) {
-  return denom > 0 ? rateText(count, denom) : `${count} · n/a`;
+const RULE_KEYS = new Set(['solo_thursday', 'agotw']);
+const SPECIAL_TIP = 'Solo slots plus Sunday-window games: Thu + Sun + Mon + Holiday + Other solo + AGOTW + CBS + Intl.';
+const SEGMENT_TIPS = Object.freeze({
+  solo_other: 'A game alone in its window that is not a Thursday, Sunday or Monday night game or a holiday, such as a Saturday, Friday or lone Sunday-afternoon game, or a solo international game.',
+  agotw: "Fox's America's Game of the Week, its top Sunday-afternoon game.",
+  cbs_national: "CBS's late Sunday-afternoon national game.",
+});
+
+/** How long a header tip waits after the pointer leaves, so the pointer can reach the tip. */
+const TIP_LEAVE_MS = 200;
+
+// The one open header tooltip: { button, off } where off removes its listeners. Touch mode
+// (`openTip`, a tap toggle) and hover mode (`hoverTip`, hover and focus) never mix on one page.
+let openTip = null;
+let hoverTip = null;
+let tipWatch = null;
+
+function closeTip() {
+  if (!openTip) return;
+  const { button, off } = openTip;
+  openTip = null;
+  off();
+  button.setAttribute('aria-expanded', 'false');
+  hideTooltip();
+}
+
+function closeHoverTip() {
+  if (!hoverTip) return;
+  const { off } = hoverTip;
+  hoverTip = null;
+  off();
+  // Another view may have taken the shared tooltip over meanwhile; only a header tip is hidden.
+  if ('hoverable' in ensureTooltipEl().dataset) hideTooltip();
+}
+
+/**
+ * The shared tooltip is also hidden by other code (a window resize or scroll, another view's
+ * hover). Once it is hidden, whichever header tip was open counts as closed, so its listeners
+ * go, `aria-expanded` is reset, and the next tap on the same header opens it again.
+ */
+function watchTooltip() {
+  if (tipWatch) return;
+  const tip = ensureTooltipEl();
+  tipWatch = new MutationObserver(() => {
+    if (!tip.hidden) return;
+    closeTip();
+    closeHoverTip();
+  });
+  tipWatch.observe(tip, { attributes: true, attributeFilter: ['hidden'] });
+}
+
+/** Hover and focus mode (WCAG 1.4.13): Escape closes it from anywhere, and the pointer can rest on it. */
+function openHoverTip(button, show) {
+  const tip = ensureTooltipEl();
+  if (hoverTip && hoverTip.button === button && !tip.hidden) {
+    hoverTip.cancel();
+    return;
+  }
+  closeHoverTip();
+  let timer = null;
+  const cancel = () => {
+    clearTimeout(timer);
+    timer = null;
+  };
+  // Leaving closes after a short wait, unless the header still has keyboard focus.
+  const later = () => {
+    cancel();
+    timer = setTimeout(() => {
+      if (document.activeElement !== button) closeHoverTip();
+    }, TIP_LEAVE_MS);
+  };
+  const onKey = (ev) => {
+    if (ev.key === 'Escape') closeHoverTip();
+  };
+  const onTipLeave = (ev) => {
+    if (!button.contains(ev.relatedTarget)) later();
+  };
+  document.addEventListener('keydown', onKey, true);
+  tip.addEventListener('mouseenter', cancel);
+  tip.addEventListener('mouseleave', onTipLeave);
+  hoverTip = {
+    button,
+    cancel,
+    later,
+    off: () => {
+      cancel();
+      document.removeEventListener('keydown', onKey, true);
+      tip.removeEventListener('mouseenter', cancel);
+      tip.removeEventListener('mouseleave', onTipLeave);
+    },
+  };
+  show(true);
+}
+
+/** Fills a head th with a dotted-underline button that shows `text` in the site tooltip. */
+function tipHead(th, label, text, env) {
+  const button = el('button', 'nfl-tip', label);
+  button.type = 'button';
+  button.setAttribute('aria-description', text);
+  watchTooltip();
+  const show = (hoverable = false) => {
+    const rect = button.getBoundingClientRect();
+    const e = drawn ? drawn.env : env;
+    showTextTooltip([{ kind: 'body', text }], {
+      theme: theme(e),
+      borderColor: DIVIDER[theme(e)],
+      clientX: rect.left,
+      clientY: rect.bottom,
+      hoverable,
+    });
+  };
+  if (!env.hoverNone) {
+    const mine = () => hoverTip && hoverTip.button === button;
+    button.addEventListener('mouseenter', () => openHoverTip(button, show));
+    button.addEventListener('focus', () => openHoverTip(button, show));
+    button.addEventListener('mouseleave', (ev) => {
+      const tip = ensureTooltipEl();
+      if (mine() && !tip.contains(ev.relatedTarget)) hoverTip.later();
+    });
+    button.addEventListener('blur', () => {
+      // A blur while the pointer still rests on the header or its tip keeps the tip.
+      if (mine() && !button.matches(':hover') && !ensureTooltipEl().matches(':hover')) {
+        closeHoverTip();
+      }
+    });
+  } else {
+    button.setAttribute('aria-expanded', 'false');
+    button.addEventListener('click', () => {
+      if (openTip && openTip.button === button && !ensureTooltipEl().hidden) {
+        closeTip();
+        return;
+      }
+      closeTip();
+      const onDown = (ev) => {
+        if (ev.target !== button && !button.contains(ev.target)) closeTip();
+      };
+      const onKey = (ev) => {
+        if (ev.key === 'Escape') closeTip();
+      };
+      const onScroll = () => closeTip();
+      document.addEventListener('pointerdown', onDown, true);
+      document.addEventListener('keydown', onKey, true);
+      window.addEventListener('scroll', onScroll, true);
+      openTip = {
+        button,
+        off: () => {
+          document.removeEventListener('pointerdown', onDown, true);
+          document.removeEventListener('keydown', onKey, true);
+          window.removeEventListener('scroll', onScroll, true);
+        },
+      };
+      button.setAttribute('aria-expanded', 'true');
+      show();
+    });
+  }
+  th.appendChild(button);
 }
 
 function renderBreakdown(model, state, env, rows) {
-  const { ctx, breakdown } = refs;
+  const { breakdown } = refs;
+  closeTip();
+  closeHoverTip();
   breakdown.replaceChildren();
   const key = selectedKey(state);
   if (key == null || !model.franchiseIndex.has(key)) {
@@ -326,14 +480,35 @@ function renderBreakdown(model, state, env, rows) {
   }
 
   const table = el('table', 'games-table');
-  const head = el('tr');
-  for (const h of ['Season', 'Special games', ...SEGMENTS.map((x) => x.label), 'Flexed']) {
-    const th = cell('th', h, h === 'Season' ? null : 'num');
+  const VR = ' nfl-vrule';
+  const spanner = (label, span) => {
+    const th = el('th', 'nfl-spanner' + VR);
+    th.colSpan = span;
+    th.scope = 'colgroup';
+    th.appendChild(el('span', 'nfl-spanner-label', label));
+    return th;
+  };
+  const tall = (label, cls) => {
+    const th = cell('th', label, cls);
+    th.rowSpan = 2;
     th.scope = 'col';
-    head.appendChild(th);
+    return th;
+  };
+  const row1 = el('tr');
+  const seasonHead = tall('Season', null);
+  const specialHead = tall(null, 'num' + VR);
+  tipHead(specialHead, 'Special games', SPECIAL_TIP, env);
+  row1.append(seasonHead, spanner('Solo slots', 5), spanner('Sunday windows', 3), specialHead, tall('Flexed', 'num' + VR));
+  const row2 = el('tr');
+  for (const seg of SEGMENTS) {
+    const th = el('th', 'num' + (RULE_KEYS.has(seg.key) ? VR : ''));
+    th.scope = 'col';
+    if (SEGMENT_TIPS[seg.key]) tipHead(th, seg.label, SEGMENT_TIPS[seg.key], env);
+    else th.textContent = seg.label;
+    row2.appendChild(th);
   }
   const thead = el('thead');
-  thead.appendChild(head);
+  thead.append(row1, row2);
   const tbody = el('tbody');
   for (const r of teamSeasonRows(model, state, fIdx)) {
     const tr = el('tr');
@@ -342,28 +517,29 @@ function renderBreakdown(model, state, env, rows) {
     season.scope = 'row';
     tr.append(
       season,
-      cell('td', String(r.total), 'num'),
-      ...SEGMENTS.map((seg) => {
-        if (seg.key === 'agotw') return cell('td', agotwCell(r.agotwRate.count, r.agotwRate.denom), 'num');
-        if (seg.key === 'cbs_national') return cell('td', agotwCell(r.cbsRate.count, r.cbsRate.denom), 'num');
-        return cell('td', String(r.counts[seg.key]), 'num');
-      }),
-      cell('td', String(r.flexed), 'num'),
+      ...SEGMENTS.map((seg) => cell('td', String(r.counts[seg.key]), 'num' + (RULE_KEYS.has(seg.key) ? VR : ''))),
+      cell('td', String(r.total), 'num nfl-vrule nfl-total'),
+      cell('td', String(r.flexed), 'num nfl-vrule'),
     );
     tbody.appendChild(tr);
   }
-  table.append(thead, tbody);
-  breakdown.appendChild(table);
+  // Column groups matching the spanners, so scope="colgroup" ties each spanner to its columns.
+  const groups = [1, 5, 3, 1, 1].map((span) => {
+    const g = el('colgroup');
+    g.span = span;
+    return g;
+  });
+  table.append(...groups, thead, tbody);
+  // Eleven columns do not fit a phone; the table scrolls inside its own wrapper.
+  const scroll = el('div', 'table-scroll');
+  scroll.appendChild(table);
+  breakdown.appendChild(scroll);
 
-  const caption = el('p', 'nfl-muted');
-  caption.append(
-    document.createTextNode('Rates count doubleheader weeks only. Weeks that cannot be classified are left out; see '),
-  );
-  const a = el('a', null, 'methodology');
-  a.href = ctx.methodologyHref('nfl-doubleheader-weeks-and-rates');
-  a.rel = 'noopener noreferrer';
-  caption.append(a, document.createTextNode('.'));
-  breakdown.appendChild(caption);
+  breakdown.appendChild(el(
+    'p',
+    'nfl-muted',
+    'Special games is the sum of the eight columns before it. Flexed games are counted separately.',
+  ));
 }
 
 function renderDataTable(rows) {

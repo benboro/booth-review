@@ -50,7 +50,7 @@ export const EXCLUSIVE_CATEGORIES = Object.freeze([
   { key: 'solo_other', code: 4, label: 'Other solo slot' },
   { key: 'agotw', code: 5, label: 'Fox AGOTW' },
   { key: 'cbs_national', code: 6, label: 'CBS late national' },
-  { key: 'international_other', code: 7, label: 'International, shared window' },
+  { key: 'international_other', code: 7, label: 'International' },
   { key: 'none', code: 8, label: 'Other games' },
 ].map((o) => Object.freeze(o)));
 
@@ -209,17 +209,6 @@ function newAcc() {
   return { counts: emptyCounts(), international: 0, flexed: 0, games: 0, slotCounts };
 }
 
-function denominators(model, lo, hi) {
-  let fox = 0;
-  let cbs = 0;
-  for (const [season, w] of model.seasonWeeks) {
-    if (season < lo || season > hi) continue;
-    fox += w.fox_doubleheader_weeks - w.fox_ambiguous_weeks;
-    cbs += w.cbs_doubleheader_weeks - w.cbs_ambiguous_weeks;
-  }
-  return { fox, cbs };
-}
-
 function segmentFading(state) {
   const keep = new Set();
   let any = false;
@@ -234,7 +223,7 @@ function segmentFading(state) {
   return out;
 }
 
-function finish(model, acc, fIdx, denom, faded, segFaded) {
+function finish(model, acc, fIdx, faded, segFaded) {
   const slots = SPECIAL_SLOT_COLUMNS
     .filter(([col]) => acc.slotCounts[col] > 0)
     .map(([col, label]) => ({ key: col, label, count: acc.slotCounts[col] }));
@@ -248,8 +237,6 @@ function finish(model, acc, fIdx, denom, faded, segFaded) {
     flexed: acc.flexed,
     games: acc.games,
     slots,
-    agotwRate: { count: c.agotw, denom: denom.fox },
-    cbsRate: { count: c.cbs_national, denom: denom.cbs },
     teamFaded: faded,
     segmentFaded: segFaded,
   };
@@ -263,11 +250,10 @@ export function teamBars(model, state) {
     if (r.season < lo || r.season > hi) continue;
     addRow(accs[r.franchise], r);
   }
-  const denom = denominators(model, lo, hi);
   const segFaded = segmentFading(state);
   const out = accs.map((acc, f) =>
     finish(
-      model, acc, f, denom,
+      model, acc, f,
       state.teams.length > 0 && !state.teams.includes(model.franchises[f].id),
       segFaded,
     ));
@@ -285,15 +271,8 @@ export function teamSeasonRows(model, state, franchiseIdx) {
   return rows.map((r) => {
     const acc = newAcc();
     addRow(acc, r);
-    const d = denominators(model, r.season, r.season);
-    return { season: r.season, ...finish(model, acc, franchiseIdx, d, false, segFaded) };
+    return { season: r.season, ...finish(model, acc, franchiseIdx, false, segFaded) };
   });
-}
-
-/** '4 of 8 weeks (50%)' or 'n/a' when no denominator. */
-export function rateText(count, denom) {
-  if (!(denom > 0)) return 'n/a';
-  return `${count} of ${denom} weeks (${Math.round((count / denom) * 100)}%)`;
 }
 
 /** One series per view category with its points in the season range. */

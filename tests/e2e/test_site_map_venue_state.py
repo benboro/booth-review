@@ -190,13 +190,13 @@ def test_abroad_group_key_never_collides_with_a_venue_or_another_group(
 _VENUE = "ironpeak-field-boulder"  # fixture venue 2: rated telecasts 1 (2019) and 8 (2026)
 
 
-def test_default_state_has_venue_and_colors(guarded_page: Page, site_url: str) -> None:
+def test_default_state_has_venue_and_no_colors(guarded_page: Page, site_url: str) -> None:
     got = _eval(
         guarded_page,
         site_url,
-        "const s = S.defaultState(data); return { venue: s.venue, colors: s.colors };",
+        "const s = S.defaultState(data); return { venue: s.venue, hasColors: 'colors' in s };",
     )
-    assert got == {"venue": None, "colors": "on"}
+    assert got == {"venue": None, "hasColors": False}
 
 
 def test_venue_alone_fills_table_with_its_filtered_games(guarded_page: Page, site_url: str) -> None:
@@ -325,23 +325,13 @@ def test_venue_url_round_trip_and_drops(guarded_page: Page, site_url: str) -> No
     assert got["group"] == "dublin"
 
 
-def test_colors_url_round_trip(guarded_page: Page, site_url: str) -> None:
+def test_old_colors_param_is_ignored(guarded_page: Page, site_url: str) -> None:
     got = _eval(
         guarded_page,
         site_url,
         """
-        const on = S.defaultState(data);
-        const off = { ...on, colors: 'off' };
-        return {
-          off: U.encodeState(off, data),
-          on: U.encodeState(on, data),
-          offBack: U.decodeState('?colors=off', data).colors,
-          maybe: U.decodeState('?colors=maybe', data).colors,
-          none: U.decodeState('', data).colors,
-        };
+        const state = U.decodeState('?colors=off', data);
+        return { has: 'colors' in state, encoded: U.encodeState(state, data) };
         """,
     )
-    assert "colors=off" in got["off"]
-    assert "colors" not in got["on"]
-    assert got["offBack"] == "off"
-    assert got["maybe"] == "on" and got["none"] == "on"
+    assert got == {"has": False, "encoded": ""}

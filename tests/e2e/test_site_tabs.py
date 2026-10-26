@@ -896,4 +896,4 @@ def test_map_renders_figure(guarded_page: Page, open_app: Callable[[Page, str], 
     open_app(guarded_page, "?view=map&people=pat-rowan")
     guarded_page.wait_for_function("() => window.__testHooks.mapRenders >= 1")
     traces = guarded_page.evaluate("() => document.getElementById('map-chart').data.length")
-    assert traces == 13
+    assert traces == 14

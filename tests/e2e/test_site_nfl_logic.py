@@ -396,16 +396,10 @@ def test_game_passes_and_person_highlight(run: Callable[[str], Any], nfl_fixture
     assert got["both"] == [i for i in expect_team if i in expect_any]
 
 
-def test_team_bars_range_rates_and_fading(run: Callable[[str], Any], nfl_fixture_raw: dict) -> None:
+def test_team_bars_range_and_fading(run: Callable[[str], Any], nfl_fixture_raw: dict) -> None:
     sp = nfl_fixture_raw["special"]
-    sw = nfl_fixture_raw["season_weeks"]
     fr = nfl_fixture_raw["lookups"]["franchises"]
     rng = (2024, 2025)
-    denom_fox = sum(
-        sw["fox_doubleheader_weeks"][k] - sw["fox_ambiguous_weeks"][k]
-        for k in range(len(sw["season"]))
-        if rng[0] <= sw["season"][k] <= rng[1]
-    )
     totals: dict[int, int] = {}
     agotw: dict[int, int] = {}
     for k in range(len(sp["season"])):
@@ -433,20 +427,17 @@ def test_team_bars_range_rates_and_fading(run: Callable[[str], Any], nfl_fixture
     assert order == sorted(order)
     for b in bars:
         assert b["total"] == totals.get(b["franchise"], 0)
-        assert b["agotwRate"] == {"count": agotw.get(b["franchise"], 0), "denom": denom_fox}
+        assert b["counts"]["agotw"] == agotw.get(b["franchise"], 0)
+        assert "agotwRate" not in b and "cbsRate" not in b
     for f, team_faded, st_faded, ag_faded in got["faded"]:
         assert team_faded is (f != 0)
         assert st_faded is True and ag_faded is False
 
 
-def test_rate_text_and_season_rows(run: Callable[[str], Any]) -> None:
+def test_season_rows(run: Callable[[str], Any]) -> None:
     got = run(
-        """return { a: S.rateText(4, 8), b: S.rateText(1, 3), c: S.rateText(0, 0),
-          rows: S.teamSeasonRows(m, S.defaultNflState(m), 0).map(r => r.season) }"""
+        """return { rows: S.teamSeasonRows(m, S.defaultNflState(m), 0).map(r => r.season) }"""
     )
-    assert got["a"] == "4 of 8 weeks (50%)"
-    assert got["b"] == "1 of 3 weeks (33%)"
-    assert got["c"] == "n/a"
     assert got["rows"] == sorted(got["rows"], reverse=True) and len(got["rows"]) >= 1
 
 

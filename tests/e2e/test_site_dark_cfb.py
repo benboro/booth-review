@@ -289,9 +289,21 @@ def test_map_labels_are_live_svg_text_in_dark(guarded_page: Page, open_app: Open
     assert marker_text in (None, MUTED), marker_text
 
 
-def test_map_land_fill_is_dark_when_colors_are_off(guarded_page: Page, open_app: OpenApp) -> None:
+def test_map_land_fill_is_dark_when_the_raster_fails(guarded_page: Page, open_app: OpenApp) -> None:
+    """Colours are always on, so the plain land fill shows only on the raster-failure fallback."""
     guarded_page.add_init_script("localStorage.setItem('bl-theme', 'dark')")
-    open_app(guarded_page, "?view=map&colors=off")
+    guarded_page.add_init_script(
+        """
+        if (typeof OffscreenCanvas !== 'undefined') {
+          OffscreenCanvas.prototype.convertToBlob = () => Promise.reject(new Error('boom'));
+        }
+        HTMLCanvasElement.prototype.toBlob = function (cb) { cb(null); };
+        """
+    )
+    open_app(guarded_page, "?view=map")
     guarded_page.wait_for_function("() => window.__testHooks.mapRenders >= 1")
+    guarded_page.wait_for_function(
+        "() => document.getElementById('map-chart').data[0].fill === 'toself'"
+    )
     outline = next(t for t in guarded_page.evaluate(_MAP_TRACES) if t["name"] == "outline")
     assert outline["fill"] == MAP_LAND and outline["linecolor"] == MAP_OUTLINE, outline

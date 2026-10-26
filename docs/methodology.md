@@ -304,10 +304,14 @@ The viewer totals on the hover card add up published figures from Ratings Refere
 
 There is one dot per venue, counting only the games that pass the filters. Its
 color fades toward a neutral when the venue's games split between networks, and
-its size blends how many games it hosted with how many people watched. With
-announcers picked, the dots, their sizes and colors, and the map's coloring count
-only the games those announcers called (together, when called together is on);
-venues where they called no game stay on the map as paler dots.
+its size is the number of games at the venue: dot area is proportional to games,
+with no minimum size, and the busiest venue among the games shown draws at full
+size, so narrowing a filter rescales the dots and the size key. With announcers
+picked, the dots, their colors, and the map's coloring count only the games
+those announcers called (together, when called together is on), and the busiest
+venue among those games draws at full size, whatever the dot's shape; the size
+key follows it. Venues where they called no game stay on the map as paler dots,
+sized as they would be with no announcer picked.
 
 Where each dot sits comes from one list of venues from CollegeFootballData.com.
 Each game uses its own venue, so a neutral-site or bowl game sits where it was
@@ -331,8 +335,6 @@ and counted in a note.
 
 Each venue pulls color from the networks that aired its games, and the network with the most games leads. How far and how strongly a venue pulls blends how many games it hosted with how many people watched, with games counting a little more than viewers. Areas with few games, or where networks split the games, look faint. Games with no published viewer figure count as a low-rated game here; the figure is not shown anywhere.
 
-The Network colors switch above the map turns the coloring off.
-
 <!-- nfl:start -->
 
 ## NFL: Special games
@@ -341,7 +343,7 @@ The NFL view counts how often each franchise plays in a special game. These are 
 
 **Solo slot.** A game is in a solo slot when no other NFL game kicks off within three hours of it, judged by kickoff times alone. A gap of exactly three hours fails. Slot names (Thursday night, Sunday night, Monday night, Thanksgiving, Christmas, Black Friday, Saturday, International) are labels only and never decide whether a game is in a solo slot. A Monday doubleheader keeps its Monday night label but neither game is in a solo slot.
 
-**Fox AGOTW.** On a Fox doubleheader Sunday, the game Fox shows at the late national kickoff is America's Game of the Week. When several Fox games share that kickoff, a text source (a Ratings Reference late-window record or 506 page text) must name the national game. Otherwise the week is ambiguous and is left out of the Fox AGOTW counts and rates.
+**Fox AGOTW.** On a Fox doubleheader Sunday, the game Fox shows at the late national kickoff is America's Game of the Week. When several Fox games share that kickoff, a text source (a Ratings Reference late-window record or 506 page text) must name the national game. Otherwise the week is ambiguous and is left out of the Fox AGOTW counts.
 
 **CBS late national.** The same rule applied to CBS on a CBS doubleheader Sunday.
 
@@ -356,13 +358,13 @@ The NFL view counts how often each franchise plays in a special game. These are 
 5. Other solo slot (Saturday, international mornings and any other solo-slot game)
 6. Fox AGOTW
 7. CBS late national
-8. International, shared window (a game played abroad that shares its window)
+8. International (a game played abroad that shares its window)
 
 A solo international game counts under its solo segment. The detail panel lists every flag a game carries, including the total international count.
 
 ## NFL: Doubleheader weeks and rates
 
-A network has a doubleheader on a Sunday when it carries a game at the late national kickoff and at least one early game that day. The Fox AGOTW rate is a team's Fox AGOTW games divided by the Fox doubleheader weeks that are not ambiguous; the CBS late national rate works the same way for CBS. When the range covers several seasons, the rate is the summed count divided by the summed denominator, never an average of season rates. When the denominator is zero the rate shows as n/a, never 0.
+A network has a doubleheader on a Sunday when it carries a game at the late national kickoff and at least one early game that day. The Fox AGOTW rate is a team's Fox AGOTW games divided by the Fox doubleheader weeks that are not ambiguous; the CBS late national rate works the same way for CBS. When the range covers several seasons, the rate is the summed count divided by the summed denominator, never an average of season rates. The team views show the plain Fox AGOTW and CBS late national counts (ambiguous weeks are left out of those counts) rather than the rates; when the denominator is zero the rate is undefined, never 0.
 
 ## NFL: Crews and the lead booth
 

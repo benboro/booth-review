@@ -1,8 +1,8 @@
 // Map figure (04.18 D-04/D-05/D-07..D-10/D-13/D-15): paints the map model with Plotly.
 //
-// Constant-trace figure: outline, legs x 8 families, venue-faded, venue-dots, venue-selected,
-// markers, always in that order and drawn bottom to top, so Plotly.react diffs cleanly whatever the
-// selection; unused slots carry empty arrays. buildMapFigure is pure (model + geometry +
+// Constant-trace figure (14 traces): outline, legs x 8 families, venue-faded, venue-dots,
+// venue-hits, venue-selected, markers, always in that order and drawn bottom to top, so
+// Plotly.react diffs cleanly whatever the selection; unused slots carry empty arrays. buildMapFigure is pure (model + geometry +
 // env in, {traces, layout, config} out). window.Plotly is touched only inside renderMap
 // and bindMapEvents. Data strings reach Plotly text only through escapeHover; hover labels
 // are off (the page paints its own tooltip from the venue index), so no hovertemplate
@@ -30,13 +30,16 @@ import {
 
 const MARKER_FONT = { desktop: 12, mobile: 12 };
 const MOBILE_HOVER_DISTANCE = 22;
+/** Blank pixels kept between two stacked edge-marker labels. */
+const MARKER_GAP_PX = 6;
 
-/** The 13 trace names in draw order (Phase 11). */
+/** The 14 trace names in draw order (Phase 11; `venue-hits` added at Phase 17.1 D-16). */
 export const MAP_TRACE_NAMES = Object.freeze([
   'outline',
   ...FAMILY_ORDER.map((f) => `legs:${f}`),
   'venue-faded',
   'venue-dots',
+  'venue-hits',
   'venue-selected',
   'markers',
 ]);
@@ -121,11 +124,13 @@ function venueFadedTrace(faded, theme) {
   };
 }
 
-/** Drawn diameter of one venue dot: the model size, raised to the subject shape size. */
+/**
+ * Drawn diameter of one venue dot: the model size, for every tier and shape (Phase 17.1 D-23).
+ * A picked dot has no minimum; it stands out by its outline and the fading of the rest, and
+ * the venue-hits trace keeps it easy to hit.
+ */
 function venueDotSize(dot, mobile) {
-  const base = mobile ? dot.size.phone : dot.size.desktop;
-  if (dot.tier !== 'subject') return base;
-  return Math.max(base, MAP_SIZE.subject[dot.symbol] ?? MAP_SIZE.subject.circle);
+  return mobile ? dot.size.phone : dot.size.desktop;
 }
 
 function venueDotsTrace(dots, theme, mobile) {
@@ -154,6 +159,33 @@ function venueDotsTrace(dots, theme, mobile) {
         color: dots.map((d) => (d.tier === 'subject' ? DOT_OUTLINE[theme] : PAGE_BG[theme])),
       },
     },
+    // The invisible venue-hits trace carries hover and click, so these draw only.
+    hoverinfo: 'skip',
+    hovertemplate: null,
+    showlegend: false,
+  };
+}
+
+/**
+ * The minimum hit target (Phase 17.1 D-16): a fully transparent twin of the venue dots, same
+ * points in the same order, each at least `MAP_VENUE_DOT.hitDiameter` wide so a small dot is
+ * still easy to hover, click and tap. It draws nothing; events are keyed by customdata.
+ */
+function venueHitsTrace(dots, mobile) {
+  return {
+    type: 'scatter',
+    mode: 'markers',
+    name: 'venue-hits',
+    x: dots.map((d) => d.x),
+    y: dots.map((d) => d.y),
+    customdata: dots.map((d) => d.key),
+    marker: {
+      symbol: 'circle',
+      size: dots.map((d) => Math.max(venueDotSize(d, mobile), MAP_VENUE_DOT.hitDiameter)),
+      color: 'rgba(0,0,0,0)',
+      opacity: 1,
+      line: { width: 0 },
+    },
     hoverinfo: 'none',
     hovertemplate: null,
     showlegend: false,
@@ -181,7 +213,43 @@ function venueSelectedTrace(model, theme, mobile) {
   };
 }
 
-function markersTrace(markers, theme, mobile) {
+/**
+ * D-21: edge anchors sit a fixed number of map units apart, but the label font and ring are
+ * pixels, so on a phone (the map drawn at about 0.4 px per unit) neighbouring entries such as
+ * Dublin and London overlapped. Spreads same-side markers vertically until each is at least one
+ * label height apart in pixels, keeping the cluster centred on where it was.
+ * @param {{x: number, y: number, side: string}[]} markers
+ * @param {number} pxPerUnit - rendered pixels per map unit (<= 0 or NaN leaves markers alone).
+ * @param {number} fontPx
+ */
+export function spreadMarkers(markers, pxPerUnit, fontPx) {
+  const out = markers.map((m) => ({ ...m }));
+  if (!(pxPerUnit > 0)) return out;
+  const gap = (fontPx + MARKER_GAP_PX) / pxPerUnit;
+  const half = (fontPx / 2 + 2) / pxPerUnit;
+  for (const side of ['left', 'right']) {
+    const col = out.filter((m) => m.side === side).sort((p, q) => p.y - q.y);
+    // Clusters: runs of markers closer than the gap.
+    let start = 0;
+    for (let i = 1; i <= col.length; i += 1) {
+      if (i < col.length && col[i].y - col[i - 1].y < gap && Math.abs(col[i].x - col[i - 1].x) < 200) continue;
+      const run = col.slice(start, i);
+      start = i;
+      if (run.length < 2) continue;
+      const mid = run.reduce((s, m) => s + m.y, 0) / run.length;
+      let top = mid - ((run.length - 1) * gap) / 2;
+      top = Math.min(Math.max(top, half), MAP_HEIGHT - half - (run.length - 1) * gap);
+      run.forEach((m, k) => {
+        m.y = top + k * gap;
+      });
+    }
+  }
+  return out;
+}
+
+function markersTrace(rawMarkers, theme, mobile, pxPerUnit) {
+  const fontPx = mobile ? MARKER_FONT.mobile : MARKER_FONT.desktop;
+  const markers = spreadMarkers(rawMarkers, pxPerUnit, fontPx);
   const colors = markers.map((m) =>
     m.selected ? ACCENT[theme] : MAP_FAMILY_COLORS[theme][m.family],
   );
@@ -244,6 +312,12 @@ export function splatImageSpec(url) {
   };
 }
 
+/** Rendered pixels per map unit for a plot of {w, h} CSS pixels (constrain: 'domain'). */
+function pxPerUnit(plot) {
+  if (!plot || !(plot.w > 0) || !(plot.h > 0)) return 0;
+  return Math.min(plot.w / MAP_WIDTH, plot.h / MAP_HEIGHT);
+}
+
 /**
  * Builds the whole Map figure.
  * @param {object} model - buildMapModel output (venueDots, venueFaded, legs, markers used).
@@ -258,8 +332,9 @@ export function buildMapFigure(model, geometry, env) {
     ...FAMILY_ORDER.map((f) => legsTrace(f, model.legs, theme)),
     venueFadedTrace(model.venueFaded, theme),
     venueDotsTrace(model.venueDots, theme, mobile),
+    venueHitsTrace(model.venueDots, mobile),
     venueSelectedTrace(model, theme, mobile),
-    markersTrace(model.markers, theme, mobile),
+    markersTrace(model.markers, theme, mobile, pxPerUnit(env.plot)),
   ];
   const layout = frameLayout({
     xaxis: {
@@ -304,7 +379,7 @@ function venueOf(ev) {
   const p = ev.points && ev.points[0];
   if (!p || p.customdata == null) return null;
   const name = p.data && p.data.name;
-  if (name !== 'venue-dots' && name !== 'markers') return null;
+  if (name !== 'venue-hits' && name !== 'markers') return null;
   return { key: p.customdata };
 }
 

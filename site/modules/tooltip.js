@@ -250,9 +250,10 @@ function placeTooltip(el, clientX, clientY) {
 /**
  * Shows plain text lines in the shared tooltip (Bars/Butterfly, D-16).
  * @param {({text: string, kind: 'title'|'body'|'hint', swatch?: string, roles?: string[]}|{kind: 'network', network: {id?: string, name: string, family: string}}|{kind: 'crew', entries: {name: string, role: string, selected?: boolean}[]})[]} lines
- * @param {{theme: string, borderColor: string, clientX: number, clientY: number}} opts
+ * @param {{theme: string, borderColor: string, clientX: number, clientY: number, hoverable?: boolean}} opts
+ *   `hoverable` lets the pointer rest on the tip (WCAG 1.4.13); every other show clears it.
  */
-export function showTextTooltip(lines, { borderColor, clientX, clientY }) {
+export function showTextTooltip(lines, { borderColor, clientX, clientY, hoverable = false }) {
   const el = ensureTooltipEl();
   const children = lines.map(({ text, kind, swatch, roles, network, entries }) => {
     // Rich kinds (NFL scatter hover): a network logo mark and a D-01 crew box.
@@ -288,6 +289,8 @@ export function showTextTooltip(lines, { borderColor, clientX, clientY }) {
   el.style.borderColor = borderColor;
   delete el.dataset.family;
   delete el.dataset.kind;
+  if (hoverable) el.dataset.hoverable = '';
+  else delete el.dataset.hoverable;
   el.hidden = false;
   placeTooltip(el, clientX, clientY);
 }
@@ -308,6 +311,7 @@ export function showTooltip(data, i, { axis, y, theme, clientX, clientY, selecte
   const el = ensureTooltipEl();
   renderTooltipContent(el, tooltipModel(data, i, { axis, y, selected }), theme);
   delete el.dataset.kind;
+  delete el.dataset.hoverable;
   el.hidden = false;
 
   placeTooltip(el, clientX, clientY);
@@ -319,10 +323,6 @@ export function hideTooltip() {
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-
-/** Credit note for aggregate viewer sums (CLAUDE.md Website rule): the games table credits each source. */
-export const VENUE_CREDIT_NOTE =
-  "Viewers add up published figures from Ratings Reference and other outlets; the games table (click the dot) credits each game's source.";
 
 /**
  * The 48px venue pie (Phase 11 D-02): slices clockwise from 12 o'clock in the given order,
@@ -373,7 +373,7 @@ export function venuePieSvg(slices, theme) {
 /**
  * Shows the venue hover card (Phase 11 D-02, D-01a) from a plain card object.
  * @param {{title: string, leader: string, slices: object[], rows: object[],
- *   hasMissingViewers: boolean, hasPartialViewers?: boolean, hasViewers: boolean,
+ *   hasMissingViewers: boolean, hasPartialViewers?: boolean,
  *   subjectLines: {text: string, kind: string}[]}} card
  * @param {{theme: "light"|"dark", clientX: number, clientY: number, hint: string}} opts
  */
@@ -422,9 +422,6 @@ export function showVenueTooltip(card, { theme, clientX, clientY, hint }) {
   if (card.hasPartialViewers) {
     children.push(text('p', 'tooltip-footnote', '* Viewers cover rated games only'));
   }
-  if (card.hasViewers) {
-    children.push(text('p', 'tooltip-footnote tooltip-credit', VENUE_CREDIT_NOTE));
-  }
   for (const line of card.subjectLines) {
     children.push(text('div', line.kind === 'hint' ? 'tooltip-hint' : '', line.text));
   }
@@ -433,6 +430,7 @@ export function showVenueTooltip(card, { theme, clientX, clientY, hint }) {
   el.replaceChildren(...children);
   el.style.borderColor = MAP_FAMILY_COLORS[theme][card.leader];
   delete el.dataset.family;
+  delete el.dataset.hoverable;
   el.dataset.kind = 'venue';
   el.hidden = false;
   placeTooltip(el, clientX, clientY);
