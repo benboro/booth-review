@@ -3,7 +3,9 @@
 Verified calendar facts used below: 2026-10-04, 2026-10-11, 2026-11-01 are
 Sundays; 2026-10-07, 2026-10-14, 2026-10-28, 2026-11-04 are Wednesdays.
 America/New_York is UTC-4 (EDT) through 2026-11-01 02:00 local, then UTC-5
-(EST).
+(EST). 2026-10-30 and 2026-11-06 are Fridays, 2026-10-31 and 2026-11-07 are
+Saturdays: Fri 18:00 EDT is 22:00Z, Sat 08:00 EDT is 12:00Z, Fri 18:00 EST is
+23:00Z, Sat 08:00 EST is 13:00Z.
 """
 
 from __future__ import annotations
@@ -23,7 +25,9 @@ from booth_review.job.catchup import (
     is_due,
     load_state,
     missed_slots,
+    resolve_mode,
     save_state,
+    schedule_only_slots,
     scheduled_slots,
 )
 
@@ -461,3 +465,80 @@ def test_schedule_trigger_excludes_its_own_slot() -> None:
     now = datetime(2026, 10, 7, 20, 5, tzinfo=EASTERN)
     window = catchup_window(_state(sunday, sunday), now, 2026, "schedule")
     assert window.missed_slots == 0
+
+
+# -- schedule-only slots and resolve_mode (Phase 18 D-17) --------------------
+
+
+def test_schedule_only_slots_fri_sat_edt() -> None:
+    start = datetime(2026, 10, 30, 0, 0, tzinfo=EASTERN)
+    end = datetime(2026, 10, 31, 23, 59, tzinfo=EASTERN)
+    assert schedule_only_slots(start, end) == [
+        datetime(2026, 10, 30, 22, 0, tzinfo=UTC),
+        datetime(2026, 10, 31, 12, 0, tzinfo=UTC),
+    ]
+
+
+def test_schedule_only_slots_across_dst_fallback() -> None:
+    start = datetime(2026, 11, 6, 0, 0, tzinfo=EASTERN)
+    end = datetime(2026, 11, 7, 23, 59, tzinfo=EASTERN)
+    assert schedule_only_slots(start, end) == [
+        datetime(2026, 11, 6, 23, 0, tzinfo=UTC),
+        datetime(2026, 11, 7, 13, 0, tzinfo=UTC),
+    ]
+
+
+def test_schedule_only_slots_never_count_as_main_slots() -> None:
+    start = datetime(2026, 10, 30, 0, 0, tzinfo=EASTERN)
+    end = datetime(2026, 10, 31, 23, 59, tzinfo=EASTERN)
+    assert scheduled_slots(start, end) == []
+    assert missed_slots(start, end, "manual") == 0
+
+
+def _sunday_run() -> JobState:
+    # Last full run: Wed 2026-10-28 20:00 EDT (the Sunday/Wednesday main slots).
+    return _state_with_last_success(datetime(2026, 10, 29, 0, 5, tzinfo=UTC))
+
+
+def test_resolve_mode_friday_slot_is_schedule_only() -> None:
+    now = datetime(2026, 10, 30, 22, 5, tzinfo=UTC)
+    assert resolve_mode(_sunday_run(), now, "schedule", None) == "schedule"
+
+
+def test_resolve_mode_main_slot_wins_over_schedule_only() -> None:
+    now = datetime(2026, 11, 1, 15, 5, tzinfo=UTC)
+    assert resolve_mode(_sunday_run(), now, "schedule", None) == "full"
+
+
+def test_resolve_mode_backup_after_schedule_run_is_noop() -> None:
+    state = replace(_sunday_run(), last_schedule_at=datetime(2026, 10, 31, 12, 1, tzinfo=UTC))
+    now = datetime(2026, 10, 31, 13, 0, tzinfo=UTC)
+    assert resolve_mode(state, now, "schedule", None) is None
+
+
+def test_resolve_mode_saturday_follows_friday_run() -> None:
+    state = replace(_sunday_run(), last_schedule_at=datetime(2026, 10, 30, 22, 1, tzinfo=UTC))
+    now = datetime(2026, 10, 31, 12, 5, tzinfo=UTC)
+    assert resolve_mode(state, now, "schedule", None) == "schedule"
+
+
+def test_resolve_mode_no_slot_since_is_noop() -> None:
+    now = datetime(2026, 10, 29, 12, 0, tzinfo=UTC)
+    assert resolve_mode(_sunday_run(), now, "schedule", None) is None
+
+
+def test_resolve_mode_manual() -> None:
+    now = datetime(2026, 10, 29, 12, 0, tzinfo=UTC)
+    assert resolve_mode(_sunday_run(), now, "manual", "rebuild") == "rebuild"
+    assert resolve_mode(_sunday_run(), now, "manual", None) == "full"
+    assert resolve_mode(_sunday_run(), now, "manual", "schedule") == "schedule"
+
+
+def test_last_schedule_at_round_trips_and_defaults(tmp_path: Path) -> None:
+    path = tmp_path / "job_state.json"
+    save_state(path, _sunday_run())
+    assert load_state(path).last_schedule_at is None
+    stamp = datetime(2026, 10, 30, 22, 1, tzinfo=UTC)
+    save_state(path, replace(_sunday_run(), last_schedule_at=stamp))
+    assert load_state(path).last_schedule_at == stamp
+    assert '"version": 1' in path.read_text(encoding="utf-8")
