@@ -1908,6 +1908,54 @@ input[type="checkbox"] {
   margin: var(--space-xs) 0 0;
 }
 
+/* NFL Special games hover (notes 15): one row per shown category, keyed by the same colour
+   dot as its legend chip, with the count right-aligned in tabular figures. */
+.chart-tooltip .tooltip-counts {
+  width: 100%;
+  margin: var(--space-xs) 0;
+  border-collapse: collapse;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.chart-tooltip .tooltip-counts td {
+  padding: 1px 0;
+  vertical-align: top;
+}
+
+.chart-tooltip .tooltip-counts td:first-child {
+  /* hanging indent: a wrapped label or sub-line stays clear of the dot */
+  padding-left: 16px;
+  text-indent: -16px;
+}
+
+.chart-tooltip .tooltip-counts td.num {
+  padding-left: var(--space-md);
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-semibold);
+}
+
+.tooltip-counts-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  vertical-align: 0.05em;
+}
+
+.chart-tooltip .tooltip-counts-sub {
+  display: block;
+  text-indent: 0;
+  color: var(--muted);
+}
+
+.chart-tooltip .tooltip-aside {
+  color: var(--muted);
+}
+
 /* Bowl / playoff icon (notes-4 A1/A2a): inline SVG in `currentColor` from
    icons.js, shared by the tooltip and the detail panel. Each kind takes its
    own color from the tokens above. */
@@ -3787,6 +3835,16 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 .games-table td.nfl-total {
   font-weight: var(--weight-semibold);
+}
+
+/* Notes 15: a pending count's footnote star hangs past the digits, so the column still aligns. */
+.games-table td.nfl-pending {
+  position: relative;
+}
+
+.games-table td.nfl-pending .nfl-pending-mark {
+  position: absolute;
+  color: var(--muted);
 }
 
 /* Header with a tooltip: dotted underline, no icon. Beats `.games-table th button`. */

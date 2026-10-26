@@ -441,6 +441,76 @@ def test_season_rows(run: Callable[[str], Any]) -> None:
     assert got["rows"] == sorted(got["rows"], reverse=True) and len(got["rows"]) >= 1
 
 
+def test_rank_team_bars_by_active_count(run: Callable[[str], Any]) -> None:
+    """Notes 15: bars rank by their shown, in-focus (and, under a pick, matched) count; ties go
+    to the larger shown total, then the franchise name, then its id."""
+    got = run(
+        """
+        const d = S.defaultNflState(m);
+        const bars = S.teamBars(m, d);
+        const fake = (name, franchise, counts, extra = {}) => ({ name, franchise,
+          counts: { ...Object.fromEntries(Object.keys(bars[0].counts).map(k => [k, 0])), ...counts },
+          segmentFaded: Object.fromEntries(Object.keys(bars[0].counts).map(k => [k, false])), ...extra });
+        const a = fake(m.franchises[1].name, 1, { solo_sunday: 2, agotw: 5 });
+        const b = fake(m.franchises[2].name, 2, { solo_sunday: 3, agotw: 1 });
+        const c = fake(m.franchises[0].name, 0, { solo_sunday: 3, agotw: 0 });
+        const names = (list) => list.map(x => x.franchise);
+        const hideAgotw = S.rankTeamBars(m, [a, b, c], ['agotw']);
+        const all = S.rankTeamBars(m, [a, b, c], []);
+        const faded = { ...b, segmentFaded: { ...b.segmentFaded, agotw: true } };
+        const fadedA = { ...a, segmentFaded: { ...a.segmentFaded, agotw: true } };
+        const fadedC = { ...c, segmentFaded: { ...c.segmentFaded, agotw: true } };
+        const cat = S.rankTeamBars(m, [fadedA, faded, fadedC], []);
+        const picked = S.rankTeamBars(m, [
+          { ...a, matched: { ...a.counts, agotw: 0, solo_sunday: 1 } },
+          { ...b, matched: { ...b.counts, agotw: 0, solo_sunday: 0 } },
+          { ...c, matched: { ...c.counts, solo_sunday: 2 } },
+        ], []);
+        const live = S.rankTeamBars(m, bars, ['agotw', 'cbs_national']);
+        return { hideAgotw: names(hideAgotw), all: names(all), cat: names(cat), picked: names(picked),
+          liveOk: live.every((x, k) => k === 0 || S.activeCount(live[k - 1], ['agotw', 'cbs_national'])
+            >= S.activeCount(x, ['agotw', 'cbs_national'])),
+          names: m.franchises.slice(0, 3).map(f => f.name) };
+        """
+    )
+    # Hiding AGOTW: b and c tie at 3 shown and 3 active, so the franchise name decides.
+    assert got["hideAgotw"] == [*sorted([2, 0], key=lambda f: got["names"][f]), 1]
+    assert got["all"] == [1, 2, 0]  # 7, then 4 beats 3
+    # AGOTW faded by the Category filter: Sunday night decides, b's larger shown total wins the tie.
+    assert got["cat"] == [2, 0, 1]
+    assert got["picked"] == [0, 1, 2]
+    assert got["liveOk"] is True
+
+
+def test_pending_network_seasons(run: Callable[[str], Any], nfl_fixture_raw: dict) -> None:
+    """Notes 15: a season with a Sunday-afternoon game and no network is pending."""
+    got = run(
+        """
+        const d = S.defaultNflState(m);
+        const none = S.pendingNetworkSeasons(m, d);
+        const sunday = new Set(['Sunday early', 'Sunday late']);
+        const idx = [];
+        for (let i = 0; i < m.n; i++) {
+          if (m.cols.season[i] === 2026 && sunday.has(m.slots[m.cols.slot[i]])) idx.push(i);
+        }
+        const nets = idx.map(i => m.cols.network[i]);
+        for (const i of idx) m.cols.network[i] = null;
+        // A null-network night game never counts.
+        const night = [];
+        for (let i = 0; i < m.n; i++) if (m.cols.season[i] === 2025 && !sunday.has(m.slots[m.cols.slot[i]])) night.push(i);
+        m.cols.network[night[0]] = null;
+        const all = S.pendingNetworkSeasons(m, d);
+        const old = S.pendingNetworkSeasons(m, { ...d, seasons: [2024, 2025] });
+        idx.forEach((i, k) => { m.cols.network[i] = nets[k]; });
+        return { none, all, old, n: idx.length, night: night.length };
+        """
+    )
+    assert got["none"] == {"seasons": [], "games": 0}
+    assert got["n"] > 0 and got["night"] > 0
+    assert got["all"] == {"seasons": [2026], "games": got["n"]}
+    assert got["old"] == {"seasons": [], "games": 0}
+
+
 def test_segment_counts_and_fading_map(run: Callable[[str], Any]) -> None:
     got = run(
         """

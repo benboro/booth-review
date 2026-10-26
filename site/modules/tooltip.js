@@ -248,14 +248,48 @@ function placeTooltip(el, clientX, clientY) {
 }
 
 /**
+ * A keyed count table (NFL Special games hover, notes 15): one row per category with its
+ * colour dot, label and a right-aligned count, and an optional muted sub-line under the label.
+ * @param {{color: string, label: string, value: string, sub?: string|null}[]} rows
+ * @returns {HTMLTableElement}
+ */
+function countsTable(rows) {
+  const table = document.createElement('table');
+  table.className = 'tooltip-counts';
+  const tbody = document.createElement('tbody');
+  for (const row of rows) {
+    const tr = document.createElement('tr');
+    const label = document.createElement('td');
+    const chip = document.createElement('span');
+    chip.className = 'tooltip-counts-dot';
+    chip.setAttribute('aria-hidden', 'true');
+    chip.style.backgroundColor = row.color;
+    label.append(chip, document.createTextNode(row.label));
+    if (row.sub) {
+      const sub = document.createElement('span');
+      sub.className = 'tooltip-counts-sub';
+      sub.textContent = row.sub;
+      label.appendChild(sub);
+    }
+    const value = document.createElement('td');
+    value.className = 'num';
+    value.textContent = row.value;
+    tr.append(label, value);
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  return table;
+}
+
+/**
  * Shows plain text lines in the shared tooltip (Bars/Butterfly, D-16).
- * @param {({text: string, kind: 'title'|'body'|'hint', swatch?: string, roles?: string[]}|{kind: 'network', network: {id?: string, name: string, family: string}}|{kind: 'crew', entries: {name: string, role: string, selected?: boolean}[]})[]} lines
+ * @param {({text: string, kind: 'title'|'body'|'hint'|'aside'|'footnote', swatch?: string, roles?: string[]}|{kind: 'network', network: {id?: string, name: string, family: string}}|{kind: 'crew', entries: {name: string, role: string, selected?: boolean}[]}|{kind: 'counts', rows: {color: string, label: string, value: string, sub?: string|null}[]})[]} lines
  * @param {{theme: string, borderColor: string, clientX: number, clientY: number, hoverable?: boolean}} opts
  *   `hoverable` lets the pointer rest on the tip (WCAG 1.4.13); every other show clears it.
  */
 export function showTextTooltip(lines, { borderColor, clientX, clientY, hoverable = false }) {
   const el = ensureTooltipEl();
-  const children = lines.map(({ text, kind, swatch, roles, network, entries }) => {
+  const children = lines.map(({ text, kind, swatch, roles, network, entries, rows }) => {
     // Rich kinds (NFL scatter hover): a network logo mark and a D-01 crew box.
     if (kind === 'network') {
       const row = document.createElement('div');
@@ -264,9 +298,12 @@ export function showTextTooltip(lines, { borderColor, clientX, clientY, hoverabl
       return row;
     }
     if (kind === 'crew') return crewBox(entries);
+    if (kind === 'counts') return countsTable(rows);
     const node = document.createElement(kind === 'title' ? 'strong' : 'div');
     if (kind === 'title') node.className = 'tooltip-title';
     if (kind === 'hint') node.className = 'tooltip-hint';
+    if (kind === 'aside') node.className = 'tooltip-aside';
+    if (kind === 'footnote') node.className = 'tooltip-footnote';
     if (swatch) {
       const chip = document.createElement('span');
       chip.className = 'tooltip-swatch';
