@@ -54,6 +54,10 @@ export function defaultState(_data) {
     axis: 'spread',
     y: 'viewers',
     view: 'scatter',
+    // Phase 18 This weekend: the stepper's week number and the day token (null = the current
+    // weekend and the sport's default day).
+    week: null,
+    day: null,
     by: null,
     dots: 'fade',
     h2h: false,

@@ -16,7 +16,7 @@
  * `school` (comma-separated team slugs, ordered by team index), `postseason`
  * (`exclude`/`only`; omitted at the default `all`), `seasons`, `networks`,
  * `slot`, `axis` (`excitement`/`date`; Spread is the default and is omitted), `y`
- * (`excitement`/`points`/`margin`; Viewers is the default and is omitted; y wins over `axis=excitement`, 04.15 D-12), `view` (`bars`/`butterfly`/`map`/`crews`), `by` (`network`/`team`/`conference`);
+ * (`excitement`/`points`/`margin`; Viewers is the default and is omitted; y wins over `axis=excitement`, 04.15 D-12), `view` (`bars`/`butterfly`/`map`/`crews`/`weekend`), `week` and `day` (This weekend, Phase 18), `by` (`network`/`team`/`conference`);
  * each of the last two is omitted at its default (D-13). `h2h` (`1`, only with
  * exactly two schools; omitted at Either team) and `dots` (`hide`; omitted at
  * the Fade default; 04.7 D-10, D-14). `game` (one named-game slug: a bowl franchise,
@@ -38,6 +38,7 @@
 
 import { MAX_COMPARE, defaultState } from './select.js';
 import { CREW_KEY_RE, NATURAL_DIR, crewIndex, defaultSort } from './crew-groups.js';
+import { DAY_TOKENS, decodeDay, decodeWeek } from './weekend-state.js';
 
 /** Canonical time-slot order used both for encoding and decoding the `slot` param. */
 // Y measures a link may name; Viewers is the default and is never encoded (04.17 D-19).
@@ -123,7 +124,11 @@ export function encodeState(state, data) {
 
   if (state.axis === 'excitement' || state.axis === 'date') params.push(['axis', state.axis]);
   if (Y_VALUES.includes(state.y)) params.push(['y', state.y]);
-  if (state.view === 'bars' || state.view === 'butterfly' || state.view === 'map' || state.view === 'crews') params.push(['view', state.view]);
+  if (state.view === 'bars' || state.view === 'butterfly' || state.view === 'map' || state.view === 'crews' || state.view === 'weekend') params.push(['view', state.view]);
+  // This weekend (Phase 18): the stepper's week number and the day token, each omitted at its
+  // default (the current weekend, the sport's default day) and validated again on decode.
+  if (Number.isInteger(state.week)) params.push(['week', String(state.week)]);
+  if (DAY_TOKENS.includes(state.day)) params.push(['day', state.day]);
   if (state.by) params.push(['by', state.by]);
   if (state.dots === 'hide') params.push(['dots', 'hide']);
   if (state.crew != null) params.push(['crew', state.crew]);
@@ -353,6 +358,12 @@ export function decodeState(search, data) {
   // (D-12): a stale `?view=bars` must survive a setState round trip.
   const rawView = scalarParam(params, 'view');
   state.view = rawView === 'bars' || rawView === 'butterfly' || rawView === 'map' || rawView === 'crews' ? rawView : 'scatter';
+  // The This weekend tab exists only when the build ships weeks (no weeks, no tab).
+  if (rawView === 'weekend' && (data.weeks ?? []).length > 0) state.view = 'weekend';
+  // This weekend (Phase 18, D-07, D-23): week and day are allowlisted against the shipped weeks
+  // and that week's games; anything else, and a value equal to the default, drops (T-18-31).
+  state.week = decodeWeek(scalarParam(params, 'week'), data);
+  state.day = decodeDay(scalarParam(params, 'day'), data, state.week);
   const rawBy = scalarParam(params, 'by');
   state.by = ['network', 'team', 'conference'].includes(rawBy) ? rawBy : null;
   // Fade is the default; only the literal 'hide' selects Hide (04.7 D-10).

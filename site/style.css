@@ -2167,6 +2167,34 @@ input[type="checkbox"] {
   border-bottom-color: transparent;
 }
 
+/* This weekend (Phase 18, D-20): controls the view does not use stay visible but grey. */
+.filter-trigger[aria-disabled="true"],
+.filter-trigger[aria-disabled="true"].is-changed {
+  color: var(--disabled);
+  border-color: var(--rule);
+  background: transparent;
+  cursor: not-allowed;
+}
+
+.filter-trigger[aria-disabled="true"] .filter-label,
+.filter-trigger[aria-disabled="true"] .filter-value {
+  color: var(--disabled);
+}
+
+.dots-toggle.is-unused {
+  color: var(--disabled);
+}
+
+.dots-toggle.is-unused .dots-caption,
+.dots-toggle.is-unused .segmented button {
+  color: var(--disabled);
+  cursor: not-allowed;
+}
+
+.unused-hint {
+  color: var(--muted);
+}
+
 .chart-tab:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -3139,8 +3167,21 @@ html:has(#mlb-detail-panel[open]) {
     gap: 0;
   }
 
-  /* Five tabs (Crews added in Phase 10) must share one row at 340px. */
+  /* Six tabs (This weekend added in Phase 18) stay on one row at 340px by scrolling sideways;
+     no tab label is clipped or wrapped. The scrollbar is hidden, the selected tab is brought
+     into view by chart-tabs.js, and the keyboard still reaches every tab. */
+  .chart-tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .chart-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
   .chart-tab {
+    flex: none;
+    white-space: nowrap;
     padding-left: var(--space-sm);
     padding-right: var(--space-sm);
   }

@@ -1570,6 +1570,70 @@ function renderGroupResets(data, state, view) {
   }
 }
 
+/** Filter controls with no meaning on This weekend (D-20): trigger, sheet section, hint. */
+const WEEKEND_UNUSED = [
+  { trigger: 'seasons', section: 'filter-seasons', hint: 'This weekend shows one week; use the week stepper.' },
+  { trigger: 'kickoff', section: 'filter-slots', hint: 'Not used on This weekend' },
+  { trigger: 'postseason', section: 'filter-postseason', hint: 'Not used on This weekend' },
+  { trigger: 'game', section: 'filter-game', hint: 'Not used on This weekend' },
+];
+
+/**
+ * Greys the controls This weekend does not use (D-20, D-21): `aria-disabled` plus the hint as
+ * title and description, the popover link removed so the control cannot open, and the same on
+ * the phone sheet's sections and the Fade | Hide switch. Restored when another tab is shown.
+ */
+function renderWeekendUnused(state) {
+  const on = state.view === 'weekend';
+  for (const { trigger, section, hint } of WEEKEND_UNUSED) {
+    const btn = els.triggers[trigger];
+    if (btn) {
+      if (on) {
+        if (btn.hasAttribute('popovertarget')) {
+          btn.dataset.popovertarget = btn.getAttribute('popovertarget');
+          btn.removeAttribute('popovertarget');
+        }
+        btn.setAttribute('aria-disabled', 'true');
+        btn.setAttribute('title', hint);
+        btn.setAttribute('aria-description', hint);
+      } else {
+        if (btn.dataset.popovertarget) btn.setAttribute('popovertarget', btn.dataset.popovertarget);
+        delete btn.dataset.popovertarget;
+        btn.removeAttribute('aria-disabled');
+        btn.removeAttribute('aria-description');
+      }
+    }
+    const sec = document.getElementById(section);
+    if (sec) {
+      sec.toggleAttribute('inert', on);
+      sec.classList.toggle('is-unused', on);
+      let note = sec.querySelector(':scope > .unused-hint');
+      if (on && !note) {
+        note = document.createElement('p');
+        note.className = 'helper unused-hint';
+        sec.prepend(note);
+      }
+      if (note) {
+        note.hidden = !on;
+        note.textContent = hint;
+      }
+    }
+  }
+  const dots = document.getElementById('dots-toggle');
+  if (dots) {
+    const group = dots.querySelector('.segmented');
+    dots.classList.toggle('is-unused', on);
+    for (const button of dots.querySelectorAll('button[data-dots]')) {
+      if (on) button.setAttribute('aria-disabled', 'true');
+      else button.removeAttribute('aria-disabled');
+    }
+    if (group) {
+      if (on) group.setAttribute('title', 'Not used on This weekend');
+      else group.setAttribute('title', 'Filters fade the games they exclude unless Hide is on.');
+    }
+  }
+}
+
 /** Pure DOM update from the current data/state/view, called every render cycle. */
 export function renderFilters({ data, state, view }) {
   lastView = view;
@@ -1586,6 +1650,7 @@ export function renderFilters({ data, state, view }) {
   renderTriggers(data, state, view);
   renderGroupResets(data, state, view);
   renderFiltersButton(data, state, view);
+  renderWeekendUnused(state);
   // Last, once every trigger label (and so the toolbar's wrap) and the School
   // popover's own content are final: an open popover stays under its trigger.
   repositionOpenPopovers();

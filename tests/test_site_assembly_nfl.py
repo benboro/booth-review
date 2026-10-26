@@ -82,7 +82,8 @@ _COVERAGE_SHA256 = "f486fd2361993d9323d36870d0d7e23f1150efeef31c2e829cd53b7d6070
 # Re-pinned at Phase 17.1 Plan 03: Network colors switch markup removed from #legend-row.
 # Re-pinned at Phase 18 Plan 01: CFB contract 2.7.0 moves the index only through its site-data
 # cache-bust hash.
-_INDEX_PRE_PHASE_SHA256 = "c67edf1d72900e64e8d9cd2a9393124d5aafc252d018761c22d10dbc52eb5249"
+# Re-pinned at Phase 18 Plan 10: This weekend tab button and #weekend-panel section (2 added lines).
+_INDEX_PRE_PHASE_SHA256 = "02931774d3310c2524bcf5369a49be2b5d8803a88eb83dbf307d4d6909103230"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'
