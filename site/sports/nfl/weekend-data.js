@@ -155,7 +155,9 @@ function netFields(model, networkIdx) {
 export function nflWeekendGames(model, week) {
   const season = model.upcomingRaw?.season?.[0] ?? model.freshness?.season ?? model.seasons[1];
   const currentWeek = model.weekend?.week ?? null;
-  const past = currentWeek != null && week < currentWeek;
+  // No weekend stamp (the season is over, or the build has no schedule): only played weeks
+  // show, so every week is past (18-13 F17).
+  const past = model.weekend == null || (currentWeek != null && week < currentWeek);
   const c = model.cols;
   const out = [];
   const ranks = playedBoothRanks(model);

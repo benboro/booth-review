@@ -55,7 +55,9 @@ function buildModel(ctx, r) {
     isLatestWeek: r.week === r.currentWeek,
     games: r.games,
     day: r.day,
-    past: r.currentWeek != null && r.week != null && r.week < r.currentWeek,
+    // Without a weekend stamp the tab shows the latest played week: a past week (18-13 F17).
+    past: r.week != null
+      && (model.weekend == null || (r.currentWeek != null && r.week < r.currentWeek)),
     missing: false,
     freshness: model.weekend ?? {},
     links,
