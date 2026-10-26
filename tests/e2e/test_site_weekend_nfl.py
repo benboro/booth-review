@@ -167,6 +167,30 @@ def test_cell_opens_panel_not_played_yet(nfl_guarded_page: Page, open_nfl_app: O
     assert "Not played yet." in dialog.inner_text()
 
 
+def test_escape_returns_focus_after_the_grid_rebuilds_under_the_panel(
+    nfl_guarded_page: Page, open_nfl_app: OpenNfl
+) -> None:
+    # 18-13 F21: a rebuild while the panel is open replaces the opener cell.
+    page = nfl_guarded_page
+    page.set_viewport_size({"width": 1440, "height": 900})
+    _open(page, open_nfl_app)
+    cell = page.locator(".wk-row[data-row=cbs] .wk-cell").first
+    wk_id = cell.get_attribute("data-wk-id")
+    cell.focus()
+    cell.press("Enter")
+    page.locator("dialog[open]").first.wait_for()
+    page.evaluate(
+        "(id) => { window.__oldCell = [...document.querySelectorAll('[data-wk-id]')]"
+        ".find((n) => n.dataset.wkId === id); }",
+        wk_id,
+    )
+    page.set_viewport_size({"width": 1300, "height": 900})
+    page.wait_for_function("!window.__oldCell.isConnected")
+    page.keyboard.press("Escape")
+    # The close event that restores focus is queued after the dialog closes.
+    page.wait_for_function("(id) => document.activeElement?.dataset?.wkId === id", arg=wk_id)
+
+
 def test_week_and_day_round_trip_and_invalid_dropped(
     nfl_guarded_page: Page, open_nfl_app: OpenNfl
 ) -> None:

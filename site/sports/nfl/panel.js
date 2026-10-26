@@ -8,7 +8,9 @@
  * `externalLink` -> `safeHref` and gets target=_blank, rel="noopener noreferrer".
  */
 
-import { externalLink, crewBox, linksList, networksParagraph } from '../../modules/panel-parts.js';
+import {
+  externalLink, crewBox, linksList, liveOpener, networksParagraph,
+} from '../../modules/panel-parts.js';
 import { currentTheme } from '../../modules/pill.js';
 import {
   causeCopy,
@@ -141,9 +143,9 @@ export function createDetailPanel(host, { methodologyHref: _methodologyHref } = 
     pointerDownOnBackdrop = false;
   });
   dialog.addEventListener('close', () => {
-    const target = opener;
+    const target = liveOpener(opener);
     opener = null;
-    if (target && target.isConnected) target.focus({ preventScroll: true });
+    if (target) target.focus({ preventScroll: true });
   });
 
   function renderRow(row) {

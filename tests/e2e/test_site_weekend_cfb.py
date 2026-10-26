@@ -313,6 +313,25 @@ def test_scheduled_cell_opens_the_panel_and_escape_returns_focus(wk: Callable[..
     assert page.evaluate("document.activeElement.dataset.wkId") == "g:cfb:scheduled:0"
 
 
+def test_escape_returns_focus_after_the_grid_rebuilds_under_the_panel(
+    wk: Callable[..., Page],
+) -> None:
+    # 18-13 F21: the minute clock (and a resize) rebuild every cell while a panel is open; the
+    # panel must still return focus to that game's new cell.
+    page = wk()
+    cell = page.locator(FOX_NOON)
+    cell.focus()
+    cell.press("Enter")
+    expect(page.locator("dialog[open]")).to_be_visible()
+    page.evaluate("window.__oldCell = document.querySelector('[data-wk-id=\"g:cfb:scheduled:0\"]')")
+    page.set_viewport_size({"width": 1300, "height": 900})
+    page.wait_for_function("!window.__oldCell.isConnected")
+    page.keyboard.press("Escape")
+    expect(page.locator("dialog[open]")).to_have_count(0)
+    # The close event that restores focus is queued after the dialog closes.
+    page.wait_for_function("document.activeElement?.dataset?.wkId === 'g:cfb:scheduled:0'")
+
+
 def test_shipped_unplayed_cell_opens_with_its_crew_credit(wk: Callable[..., Page]) -> None:
     page = wk()
     cell = page.locator(LEAD)

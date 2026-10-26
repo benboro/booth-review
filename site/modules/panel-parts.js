@@ -105,3 +105,18 @@ export function linksList(items) {
   }
   return ul;
 }
+
+/**
+ * The element a closing panel returns focus to: `el` while it is in the page, else the cell
+ * that replaced it under the same `data-wk-id` (the This weekend grid rebuilds every minute,
+ * 18-13 F21), else null.
+ * @param {Element|null} el
+ * @returns {Element|null}
+ */
+export function liveOpener(el) {
+  if (!el) return null;
+  if (el.isConnected) return el;
+  const id = el.dataset?.wkId;
+  if (!id) return null;
+  return [...document.querySelectorAll('[data-wk-id]')].find((n) => n.dataset.wkId === id) ?? null;
+}

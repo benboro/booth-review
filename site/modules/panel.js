@@ -36,7 +36,7 @@ import {
 } from './format.js';
 import { makeGameTypeIcon } from './icons.js';
 import { currentTheme } from './pill.js';
-import { crewBox, externalLink, linksList, networksParagraph } from './panel-parts.js';
+import { crewBox, externalLink, linksList, liveOpener, networksParagraph } from './panel-parts.js';
 import { sortNetworks } from './network.js';
 import { personOnGame } from './select.js';
 import { scheduledFacade } from './weekend-data.js';
@@ -447,7 +447,7 @@ export function initPanel({ onClosed }) {
     if (dialog.open || handledSession === openSession) return;
     handledSession = openSession;
     onClosed();
-    const target = opener && opener.isConnected ? opener : document.getElementById('chart');
+    const target = liveOpener(opener) ?? document.getElementById('chart');
     opener = null;
     if (target) target.focus({ preventScroll: true });
   });
