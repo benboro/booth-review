@@ -521,3 +521,34 @@ def test_network_diagnostic_strips_feed_markers_from_rr_outlets(vault_paths: Dat
 
     rr_outlets = {outlet for source, outlet in usage if source == "ratingsref"}
     assert rr_outlets == {"Net A"}
+
+
+# -- real crosswalk: ESPNM / ESPNN / ESPNRM (Phase 18 Plan 04) ---------------------------------
+
+REAL_REFERENCE = Path(__file__).parent.parent / "data" / "reference"
+
+
+@pytest.mark.parametrize(
+    ("variant", "network_id", "display", "tier"),
+    [
+        ("ESPNRM", "espn-radio", "ESPN Radio", "other"),
+        ("ESPNM", "espn-mobile", "ESPN Mobile", "other"),
+        ("ESPNN", "espnews", "ESPNEWS", "cable"),
+    ],
+)
+def test_real_crosswalk_maps_espn_radio_mobile_and_espnn(
+    variant: str, network_id: str, display: str, tier: str
+) -> None:
+    table = load_networks(REAL_REFERENCE)
+    row = table.lookup(variant, 2014)
+    assert row is not None
+    assert row.network_id == network_id
+    assert table.networks()[network_id][0] == display
+    assert table.networks()[network_id][2] == tier
+    assert "espn-regional-insert" not in table.networks()
+
+
+def test_real_crosswalk_radio_never_outranks_a_tv_outlet() -> None:
+    table = load_networks(REAL_REFERENCE)
+    assert primary_network(["ESPNRM, ESPN"], 2014, table).network_id == "espn"
+    assert primary_network(["ESPNM, ESPN2"], 2014, table).network_id == "espn2"
