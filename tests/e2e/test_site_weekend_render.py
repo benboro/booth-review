@@ -922,6 +922,28 @@ def _widths(page: Page, selector: str) -> list[float]:
     )
 
 
+def test_day_tabs_keep_their_width_under_a_pick(wk_page: Page) -> None:
+    # 18-UI-REVIEW item 5: the count a pick adds must not widen the tab and shift the next one.
+    games = [
+        _game(key="f", date=FRI, kickoffMin=1200),
+        _game(key="s1"),
+        _game(key="s2", kickoffMin=930),
+    ]
+    _mount(wk_page, games)
+    rest = _widths(wk_page, "#wk-host .wk-day")
+    assert len(rest) == 2
+
+    def live() -> list[str]:
+        return [s.strip() for s in wk_page.locator("#wk-host .wk-day .wk-count").all_inner_texts()]
+
+    assert live() == ["", ""]
+    _mount(wk_page, games, pass_keys=["s1"])
+    picked = _widths(wk_page, "#wk-host .wk-day")
+    assert picked == rest, (rest, picked)
+    assert live() == ["(0)", "(1)"]
+    assert wk_page.locator("#wk-host .wk-day").nth(1).inner_text().endswith("(1)")
+
+
 def test_short_day_lane_fills_the_host_width(wk_page: Page) -> None:
     # 18-UI-REVIEW items 9 and 11: a day the cap or the floor leaves narrower than the module
     # stretches its lane to the module's edge, so the rules end where the sections below do.
@@ -930,12 +952,11 @@ def test_short_day_lane_fills_the_host_width(wk_page: Page) -> None:
     assert _widths(wk_page, "#wk-host .wk-grid") == [1340]
     assert _widths(wk_page, "#wk-host .wk-ticks") == [1340 - 96]
     # A 15-hour day at 1440: the 89 px/hour floor rounding left 9px uncovered.
-    _mount(wk_page, [_game(key="a", kickoffMin=540), _game(key="b", kickoffMin=1230)],
-           width=1440, host_width=1440)
+    long_day = [_game(key="a", kickoffMin=540), _game(key="b", kickoffMin=1230)]
+    _mount(wk_page, long_day, width=1440, host_width=1440)
     assert _widths(wk_page, "#wk-host .wk-lane") == [1440 - 96]
     # A long day still scrolls: the lane keeps its 80 px/hour width past the host.
-    _mount(wk_page, [_game(key="a", kickoffMin=540), _game(key="b", kickoffMin=1230)],
-           width=900, host_width=900)
+    _mount(wk_page, long_day, width=900, host_width=900)
     assert _widths(wk_page, "#wk-host .wk-lane") == [15 * 80]
 
 

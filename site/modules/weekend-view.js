@@ -94,6 +94,10 @@ export function makeContext(model, opts, state) {
     countFor(d) {
       return model.games.filter((g) => (g.date === d || g.date == null) && passes(g) === true).length;
     },
+    /** Every game the day tab can count (dated that day, or undated and so in every strip). */
+    totalFor(d) {
+      return model.games.filter((g) => g.date === d || g.date == null).length;
+    },
     /** Whole-row fade from a Networks pick: every game in the row fails it. */
     rowFaded(games) {
       return games.length > 0 && games.every((g) => networksPicked(g.networkId) === false);
@@ -218,7 +222,12 @@ export function buildControls(ctx, api) {
     tab.setAttribute('aria-selected', String(selected));
     tab.tabIndex = selected ? 0 : -1;
     tab.append(document.createTextNode(dayLabel(d)));
-    if (ctx.anyPick) tab.append(el('span', 'wk-count', ` (${ctx.countFor(d)})`));
+    // The count box is always at least as wide as the day's full count (one ch per character,
+    // tabular digits), so a pick's count never widens the tab or shifts the next one
+    // (18-UI-REVIEW item 5). The leading space lives inside the box.
+    const count = el('span', 'wk-count', ctx.anyPick ? ` (${ctx.countFor(d)})` : '');
+    count.style.minWidth = `${` (${ctx.totalFor(d)})`.length}ch`;
+    tab.append(count);
     tab.addEventListener('click', () => api.setDay(d));
     buttons.push(tab);
     tabs.append(tab);

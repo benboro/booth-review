@@ -6138,7 +6138,11 @@ tr.is-matched > :first-child {
   font-variant-numeric: tabular-nums;
 }
 
+/* The count box keeps a min-width the view sets from the day's full count, so a pick never
+   moves the tabs (18-UI-REVIEW item 5); inline-block, so the tab's text never breaks. */
 .wk-count {
+  display: inline-block;
+  white-space: pre;
   color: var(--muted);
   font-weight: var(--weight-regular);
 }
