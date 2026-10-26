@@ -329,11 +329,11 @@ def test_spread_axis_na_strip(guarded_page: Page, open_app: Callable[[Page, str]
         assert by_idx[i][1] > 0
     assert by_idx["1"][0] == 7.0
     assert by_idx["8"][0] == -6.5
-    # 3 rated n/a games (2, 3, 10) + 2 unrated games with no spread (12, 19)
-    assert got["sentinelCount"] == 5
+    # 3 rated n/a games (2, 3, 10) + 1 unrated game with no spread (12); 19 is unplayed (v2.1)
+    assert got["sentinelCount"] == 4
     open_app(guarded_page, "?school=northfield")
     faded = guarded_page.evaluate(_XS_JS)
-    assert faded["sentinelCount"] == 5
+    assert faded["sentinelCount"] == 4
 
 
 _CAPTION_BOXES_JS = """() => {

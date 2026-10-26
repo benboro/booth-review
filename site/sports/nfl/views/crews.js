@@ -11,6 +11,7 @@
  * never shown; the word appears only in the Adjusted caption, hover lines and axis titles.
  */
 import { buildNflCrewRows, sortNflCrewRows, NFL_SORT_SPEC } from '../crew-rows.js';
+import { lowNThreshold } from '../mode.js';
 import { createReasonBar, setReason, linkDisabled } from '../reason-bar.js';
 import { mountViewTools } from '../tools.js';
 import { createTableState, el, renderCrewsTable, activeSort } from '../../../modules/crews-table.js';
@@ -54,6 +55,8 @@ const refs = {
 
 /** What the last render drew (also what testModel reads). */
 let current = null;
+/** The shipped low-n threshold of the model being rendered (set at the top of `render`). */
+let threshold = 8;
 
 // ---- tools ----
 
@@ -142,10 +145,10 @@ function networkCell(model, row) {
   return td;
 }
 
-function lowNTag(td) {
+function lowNTag(td, threshold) {
   td.classList.add('is-low-n');
-  const tag = el('span', 'crews-tag', 'n < 8');
-  tag.title = 'Fewer than 8 games have this figure';
+  const tag = el('span', 'crews-tag', `n < ${threshold}`);
+  tag.title = `Fewer than ${threshold} games have this figure`;
   td.append(' ', tag);
 }
 
@@ -168,7 +171,7 @@ function rawCell(m, kind) {
   const fig = kind === 'viewers' ? formatAudienceTable(m.mean) : m.mean.toFixed(1);
   td.append(el('span', 'crews-figure', fig));
   if (kind === 'viewers') td.append(' ', el('span', 'caption', `(${m.n})`));
-  if (m.flagged) lowNTag(td);
+  if (m.flagged) lowNTag(td, threshold);
   return td;
 }
 
@@ -187,7 +190,7 @@ function adjustedCell(c) {
   }
   td.append(el('span', 'crews-figure', signed(c.resid)));
   if (c.se != null) td.append(' ', el('span', 'caption', `± ${c.se.toFixed(1)}`));
-  if (c.flagged) lowNTag(td);
+  if (c.flagged) lowNTag(td, threshold);
   return td;
 }
 
@@ -325,6 +328,7 @@ function setHover(rowKey) {
 
 export function render(ctx) {
   const { model } = ctx;
+  threshold = lowNThreshold(model);
   const state = ctx.getState();
   const env = ctx.env();
   const th = theme();

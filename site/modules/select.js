@@ -110,6 +110,8 @@ function computeVisible(data, state) {
   const visible = new Uint8Array(n);
   const hide = state.dots === 'hide';
   for (let i = 0; i < n; i += 1) {
+    // An unplayed pending game is never drawn, not even faded (v2.1 user rule).
+    if (data.unplayed?.[i]) continue;
     if (hide && !passesFadeFilters(data, state, i)) continue;
     visible[i] = 1;
   }
@@ -212,7 +214,10 @@ function failsFadeable(data, state, i) {
  * @param {number} i - telecast index.
  * @returns {boolean}
  */
-export function passesFadeFilters(data, state, i) {
+export function passesFadeFilters(data, state, i, { unplayedOk = false } = {}) {
+  // An unplayed pending game passes nothing here (v2.1 user rule); This weekend, which does
+  // show such games, asks with `unplayedOk`.
+  if (!unplayedOk && data.unplayed?.[i]) return false;
   return !failsNetworks(data, state, i) && !failsFadeable(data, state, i);
 }
 
@@ -279,6 +284,7 @@ export function computeFacets(data, state) {
   let total = 0;
 
   for (let i = 0; i < n; i += 1) {
+    if (data.unplayed?.[i]) continue; // never counted (v2.1 user rule)
     let mask = 0;
     if (failsSeasons(data, state, i)) mask |= BIT_SEASON;
     if (failsNetworks(data, state, i)) mask |= BIT_NET;

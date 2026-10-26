@@ -557,7 +557,10 @@ def test_viewership_series(run: Callable[[str], Any], nfl_fixture_raw: dict) -> 
     first = min(k for k in range(len(v["season"])) if v["category"][k] == 0)
     p0 = got["p0"]
     assert p0["season"] == v["season"][first] and p0["mean"] == v["mean_viewers"][first]
-    assert p0["resid"] == v["viewership_resid"][first] and p0["lowN"] == v["low_n"][first]
+    # v2.1: low n means the game count under the shipped threshold, not the residual flag.
+    threshold = nfl_fixture_raw["constants"]["low_n_threshold"]
+    assert p0["resid"] == v["viewership_resid"][first]
+    assert p0["lowN"] == (v["games"][first] < threshold)
     assert p0["gameList"] == v["game_list"][first] and p0["games"] == v["games"][first]
     assert got["narrow"] == 1
 

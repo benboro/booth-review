@@ -13,7 +13,7 @@
 import { placeEraLabels, setEraCaption } from '../era-labels.js';
 import { viewershipSeries } from '../state.js';
 import { computePicks } from '../picks.js';
-import { viewershipMode } from '../mode.js';
+import { lowNThreshold, viewershipMode } from '../mode.js';
 import { createReasonBar, setReason, linkDisabled } from '../reason-bar.js';
 import { viewCategoryStyle } from '../palette.js';
 import { ACCENT, MUTED, PAGE_BG, DIVIDER, ZERO_LINE } from '../../../modules/palette.js';
@@ -41,7 +41,6 @@ const BAND_FILL = {
 
 const LINE_WIDTH = 2.5;
 const BASE_SIZE = 8;
-const LOW_N = 8;
 const WINDOW_NOTE = 'Dashed lines are window-level: one figure covers every game in that Sunday window.';
 const MAX_CREWS = 3;
 
@@ -143,6 +142,7 @@ function shownFrom(present, hidden) {
 
 /** The series the chart and legend draw: under a pick, Category or Team each point is recounted to its matched games. */
 function recountedSeries(model, state) {
+  const threshold = lowNThreshold(model);
   const picks = computePicks(model, state);
   const subset = picks.hasPick || state.cats.length > 0 || state.teams.length > 0;
   const series = viewershipSeries(model, state);
@@ -161,7 +161,7 @@ function recountedSeries(model, state) {
             gameList.push(g);
           }
           // gameList follows the recount so hover crews, the Crew column, the click and the probe agree with n.
-          return { ...p, gameList, mean: count ? sum / count : null, games: count, lowN: count < LOW_N };
+          return { ...p, gameList, mean: count ? sum / count : null, games: count, lowN: count < threshold };
         })
         .filter((p) => p.games > 0);
     }

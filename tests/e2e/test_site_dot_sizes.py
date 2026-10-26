@@ -254,7 +254,7 @@ def test_drawn_faded_counts_faded_dots(
     open_app(guarded_page, "?school=northfield&dots=hide")
     assert guarded_page.evaluate("() => window.__testHooks.getView().drawnFaded") == 0
     open_app(guarded_page, "?networks=net-b")
-    assert guarded_page.evaluate("() => window.__testHooks.getView().drawnFaded") == 15
+    assert guarded_page.evaluate("() => window.__testHooks.getView().drawnFaded") == 14
     open_app(guarded_page, "?networks=net-b&dots=hide")
     assert guarded_page.evaluate("() => window.__testHooks.getView().drawnFaded") == 0
     open_app(guarded_page, "")
@@ -318,10 +318,11 @@ def test_date_seasons_only_summary_still_reads_n_of_m(
     total = guarded_page.evaluate("() => window.__testHooks.data.n")
     assert summary["kind"] == "matches"
     # 04.13 D-07: the summary counts games (rated + unrated); `of` became `count`/`rated`
-    # 2025-2026 keeps 11 of the 20 fixture games, 8 of them rated (04.13 D-07: counts are games)
-    assert (summary["count"], summary["rated"]) == (11, 8)
+    # 2025-2026 keeps 10 of the 19 shown fixture games, 8 of them rated (04.13 D-07: counts
+    # are games); the data model still holds all 20, the unplayed one is never counted (v2.1).
+    assert (summary["count"], summary["rated"]) == (10, 8)
     assert total == 20
-    assert "8 rated of 11 games" in guarded_page.inner_text("#summary")
+    assert "8 rated of 10 games" in guarded_page.inner_text("#summary")
 
 
 @pytest.mark.parametrize("dots", ["", "&dots=hide"])

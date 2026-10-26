@@ -5,9 +5,9 @@
 // A pick that cuts inside a booth season (Team, Category, an Announcers pick that matches
 // another seat) recounts each row from its matched games and forces Raw.
 import { classifyAnnouncers, computePicks, boothKeyOf, crewsScopeRows } from './picks.js';
-import { crewsMode } from './mode.js';
+import { lowNThreshold, crewsMode } from './mode.js';
 import { NFL_NATURAL_DIR } from './state.js';
-import { CREWS_LOW_N_MIN, defaultSort, rankRunOf, sortCrewRows } from '../../modules/crew-groups.js';
+import { defaultSort, rankRunOf, sortCrewRows } from '../../modules/crew-groups.js';
 
 export const NFL_SORT_SPEC = Object.freeze({ naturalDir: NFL_NATURAL_DIR, defaultSort });
 
@@ -56,16 +56,17 @@ export function rawFromGames(model, games) {
   return out;
 }
 
-const flag = (n) => n > 0 && n < CREWS_LOW_N_MIN;
+/** Low n: a non-empty cell under the shipped threshold (`lowNThreshold`, v2.1). */
+const flag = (n, threshold) => n > 0 && n < threshold;
 
-function rawCell(p) {
+function rawCell(p, threshold) {
   const blank = p.n === 0 || p.mean == null ? 'none' : null;
-  return { mean: blank ? null : p.mean, n: p.n, flagged: !blank && flag(p.n), blank };
+  return { mean: blank ? null : p.mean, n: p.n, flagged: !blank && flag(p.n, threshold), blank };
 }
 
-function adjCell(parts) {
+function adjCell(parts, threshold) {
   const r = poolResidual(parts);
-  return { resid: r.mean, se: r.se, n: r.n, flagged: r.mean != null && flag(r.n) };
+  return { resid: r.mean, se: r.se, n: r.n, flagged: r.mean != null && flag(r.n, threshold) };
 }
 
 function modalEra(model, games) {
@@ -105,6 +106,7 @@ export function buildNflCrewRows(model, state) {
   }
   const m = crewsMode(state, { announcers });
   const adjustedMode = m.effective === 'adjusted' && !subset;
+  const threshold = lowNThreshold(model);
 
   const slug = (i) => (i == null ? 'null' : model.people[i].id);
   const groups = new Map();
@@ -139,13 +141,13 @@ export function buildNflCrewRows(model, state) {
     let viewers;
     if (subset) {
       const raw = rawFromGames(model, games);
-      margin = rawCell(raw.margin);
-      exc = rawCell(raw.exc);
-      viewers = rawCell(raw.viewers);
+      margin = rawCell(raw.margin, threshold);
+      exc = rawCell(raw.exc, threshold);
+      viewers = rawCell(raw.viewers, threshold);
     } else {
-      margin = rawCell(poolRaw(g.parts.map((p) => ({ n: p.raw_n_margin, mean: p.raw_mean_abs_margin }))));
-      exc = rawCell(poolRaw(g.parts.map((p) => ({ n: p.raw_n_excitement, mean: p.raw_mean_excitement }))));
-      viewers = rawCell(poolRaw(g.parts.map((p) => ({ n: p.raw_n_viewers, mean: p.raw_mean_viewers }))));
+      margin = rawCell(poolRaw(g.parts.map((p) => ({ n: p.raw_n_margin, mean: p.raw_mean_abs_margin }))), threshold);
+      exc = rawCell(poolRaw(g.parts.map((p) => ({ n: p.raw_n_excitement, mean: p.raw_mean_excitement }))), threshold);
+      viewers = rawCell(poolRaw(g.parts.map((p) => ({ n: p.raw_n_viewers, mean: p.raw_mean_viewers }))), threshold);
     }
     if (!perSeason && viewers.blank === null && bands.size > 1) {
       viewers = { mean: null, n: viewers.n, flagged: false, blank: 'era' };
@@ -154,8 +156,8 @@ export function buildNflCrewRows(model, state) {
     const adjusted = subset
       ? { margin: { resid: null, se: null, n: 0, flagged: false }, exc: { resid: null, se: null, n: 0, flagged: false } }
       : {
-        margin: adjCell(g.parts.map((p) => ({ n: p.adj_n_margin, m: p.adj_margin_resid, se: p.adj_margin_se }))),
-        exc: adjCell(g.parts.map((p) => ({ n: p.adj_n_excitement, m: p.adj_excitement_resid, se: p.adj_excitement_se }))),
+        margin: adjCell(g.parts.map((p) => ({ n: p.adj_n_margin, m: p.adj_margin_resid, se: p.adj_margin_se })), threshold),
+        exc: adjCell(g.parts.map((p) => ({ n: p.adj_n_excitement, m: p.adj_excitement_resid, se: p.adj_excitement_se })), threshold),
       };
 
     const bySeason = new Map();

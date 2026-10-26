@@ -476,7 +476,8 @@ def test_other_tabs_keep_their_counts(wk: Callable[..., Page]) -> None:
     page.locator("#tab-weekend").click()
     page.locator("#tab-scatter").click()
     assert page.evaluate("window.__testHooks.nGames") == 20
-    assert page.evaluate("window.__testHooks.getView().visibleCount") == 20
+    # The pending unplayed game (19) stays in the data but is never drawn (v2.1).
+    assert page.evaluate("window.__testHooks.getView().visibleCount") == 19
 
 
 def test_dark_theme_has_no_light_boxes(wk: Callable[..., Page]) -> None:

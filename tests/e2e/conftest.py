@@ -50,6 +50,11 @@ from booth_review.cli import main
 FIXTURE_RATED = 12
 FIXTURE_UNRATED = 8
 FIXTURE_GAMES = 20
+# One unrated game (merged index 19, 2026, cause pending, no score) is unplayed: the data
+# model carries it, but every view except This weekend leaves it out (v2.1 user rule).
+FIXTURE_UNPLAYED = 1
+FIXTURE_SHOWN = FIXTURE_GAMES - FIXTURE_UNPLAYED
+FIXTURE_BAND = FIXTURE_UNRATED - FIXTURE_UNPLAYED
 
 _PORT_RE = re.compile(r"port (\d+)")
 _SERVER_START_TIMEOUT = 15.0

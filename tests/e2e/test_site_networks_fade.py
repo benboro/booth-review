@@ -10,7 +10,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from conftest import FIXTURE_GAMES
+from conftest import FIXTURE_SHOWN
 from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
@@ -82,8 +82,8 @@ def _route_only(page: Page) -> None:
 
 
 ROUTES = [
-    pytest.param(_route_checkbox, 15, id="checkbox"),
-    pytest.param(_route_pill, 15, id="pill-click"),
+    pytest.param(_route_checkbox, 14, id="checkbox"),
+    pytest.param(_route_pill, 14, id="pill-click"),
     pytest.param(_route_double_click, 5, id="pill-double-click"),
     pytest.param(_route_only, 5, id="only-button"),
 ]
@@ -100,7 +100,7 @@ def test_each_networks_route_fades_in_fade_and_hides_in_hide(
     route(guarded_page)
 
     view = _view(guarded_page)
-    assert view["visibleCount"] == FIXTURE_GAMES
+    assert view["visibleCount"] == FIXTURE_SHOWN
     assert view["passingCount"] == passing
     active = _active_indices(guarded_page)
     passing_rated = set(view["passesFilters"])
@@ -119,7 +119,7 @@ def test_each_networks_route_fades_in_fade_and_hides_in_hide(
     guarded_page.click(FADE)
     guarded_page.wait_for_function(
         "window.__testHooks.getView().visibleCount === window.__testHooks.getView().n"
-        " || window.__testHooks.getView().visibleCount === " + str(FIXTURE_GAMES)
+        " || window.__testHooks.getView().visibleCount === " + str(FIXTURE_SHOWN)
     )
     assert _inert_total(guarded_page) == 12 - len(rated_passing)
 

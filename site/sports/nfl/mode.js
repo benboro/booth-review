@@ -48,3 +48,15 @@ export function viewershipMode(state) {
   }
   return { stored, effective: 'resid', forced: false, reason: null };
 }
+
+/**
+ * The shipped low-n threshold (`constants.low_n_threshold`), falling back to the CFB table's 8
+ * only when a file predates it (v2.1, Phase 15 review F6). Every NFL low-n tag, flag and hollow
+ * marker reads this, so a changed constant reaches the views.
+ * @param {object} model - a `prepareNfl` result.
+ * @returns {number}
+ */
+export function lowNThreshold(model) {
+  const n = model?.constants?.low_n_threshold;
+  return Number.isInteger(n) && n > 0 ? n : 8;
+}

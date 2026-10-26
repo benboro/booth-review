@@ -141,10 +141,11 @@ def test_no_subject_draws_dots_only_with_tab_hint(guarded_page: Page, open_app: 
 def test_person_paths_split_by_season_and_colored_by_destination(
     guarded_page: Page, open_app: OpenApp
 ) -> None:
-    """D-01/D-03/D-04/D-14: Pat Rowan's three legs, none across seasons, destination colors."""
+    """D-01/D-03/D-04/D-14: Pat Rowan's two legs (the 2026 game is unplayed, v2.1), none
+    across seasons, destination colors."""
     _open_map(guarded_page, open_app, "?view=map&people=pat-rowan")
     model = _model(guarded_page)
-    assert _legs(guarded_page) == [(2021, "disney"), (2021, "fox"), (2026, "disney")]
+    assert _legs(guarded_page) == [(2021, "disney"), (2021, "fox")]
     assert all(leg["pointCount"] >= 2 for leg in model["legs"])
     inset: dict[str, float] = guarded_page.evaluate(
         "async () => (await import('./modules/map-model.js')).HAWAII_INSET"

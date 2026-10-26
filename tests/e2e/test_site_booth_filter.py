@@ -97,7 +97,7 @@ def test_popover_lists_three_tiers_with_facet_counts(
         ("Other", "(2)"),
     ]
     assert guarded_page.locator("#booth-list input:checked").count() == 0
-    assert len(_passes(guarded_page)) == 20  # no pick filters nothing
+    assert len(_passes(guarded_page)) == 19  # no pick filters nothing (19 is unplayed)
 
 
 def test_lead_pick_fades_the_rest_and_labels_the_trigger(
@@ -113,7 +113,7 @@ def test_lead_pick_fades_the_rest_and_labels_the_trigger(
     trigger = guarded_page.locator("#trigger-booth")
     expect(trigger).to_have_text("Booth: Lead (A)")
     assert trigger.get_attribute("data-active") == "true"
-    assert _visible_dots(guarded_page) == 20
+    assert _visible_dots(guarded_page) == 19
     # Counts keep describing the other tiers while one is picked (own-excluded facets).
     expect(guarded_page.locator("#booth-list .check-item").nth(1)).to_contain_text("(2)")
 
