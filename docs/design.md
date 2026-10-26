@@ -49,11 +49,15 @@ records only where the site settles or applies them.
   games, with no minimum floor, and relative to the busiest venue in the filtered set, so
   narrowing a filter or picking an announcer rescales the dots. That venue is 20px across
   on desktop and 10px on a phone, and dots are drawn largest first. A dot under 12px gets an
-  invisible 12px hit target so it stays hoverable. Under an announcer or crew pick, picked
-  dots of every shape (circle, square, diamond, star) keep this size with no minimum, so none
-  exceeds the maximum; they stand out only by their outline and the fading of the other
-  dots. Only the picked dots and the key use the busiest picked venue as the reference. The
-  other venues' dots keep their size from the map without the pick, where its busiest venue
-  is at the maximum, and are drawn faded; they are never capped at the picked scale. The key is one inline row at every width (circle, count, circle, count, circle, "N games", largest first, no leaders, no nesting). Circle sizes come from `venueDotSize` (desktop and phone) with the same busiest-venue reference as the dots, so its values
-  change with the filters, showing size only, and venue colours are always on
+  invisible 12px hit target so it stays hoverable (Phase 17.1).
+- Under an announcer or crew pick, picked dots of every shape (circle, square, diamond,
+  star) keep this size with no minimum, so none exceeds the maximum; they stand out only by
+  their outline and the fading of the other dots. Only the picked dots and the key use the
+  busiest picked venue as the reference. The other venues' dots keep their size from the
+  map without the pick, where its busiest venue is at the maximum, and are drawn faded; they
+  are never capped at the picked scale (Phase 17.1).
+- The map key is one inline row at every width: circle, count, circle, count, circle,
+  "N games", largest first, with no leaders and no nesting. Its circle sizes come from
+  `venueDotSize` (desktop and phone) with the same busiest-venue reference as the dots, so
+  its values change with the filters. The key shows size only; venue colours are always on
   (Phase 17.1).
