@@ -104,14 +104,14 @@ export function render(ctx) {
     },
     onOpen: (game, opener) => {
       if (game.block !== 'upcoming') {
-        ctx.openGame(game.index, opener);
+        ctx.openGame(game.index, opener, { weekend: true });
         return;
       }
       // The kickoff rule that turns the cell to "Crew not listed" also ends "Not played yet."
       // (18-13 F3, WR-01): an upcoming row stays one until the next build after the game.
       const now = etParts(opts.now ?? new Date());
       const unplayed = isUnplayedGame(game, etWallMinutes(now.date, now.minutes));
-      ctx.openUpcoming(game.index, opener, { unplayed });
+      ctx.openUpcoming(game.index, opener, { unplayed, weekend: true });
     },
   };
   if (fixedNow) opts.now = new Date(fixedNow);

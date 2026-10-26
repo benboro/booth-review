@@ -15,7 +15,7 @@ import { BOOTH_TIER_CODE } from './data.js';
 import { familyKey } from './palette.js';
 import { defaultState, passesFadeFilters, personOnGame } from './select.js';
 import { crewIndex } from './crew-groups.js';
-import { weekendPickState } from './weekend.js';
+import { kickoffMinutes, weekendPickState } from './weekend.js';
 
 // Shared with the NFL host, so it lives with the clock rules in weekend.js.
 export { isUnplayedGame } from './weekend.js';
@@ -33,13 +33,6 @@ export function weekOfDate(weeks, isoDate) {
   if (isoDate == null) return null;
   const hit = (weeks ?? []).find((w) => w.start <= isoDate && isoDate <= w.end);
   return hit ? hit.label : null;
-}
-
-/** Minutes after ET midnight read from an ET ISO datetime, or null (no time yet). */
-function kickoffMinutes(iso) {
-  if (iso == null) return null;
-  const m = /T(\d{2}):(\d{2})/.exec(iso);
-  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
 }
 
 const facadeCache = new WeakMap();

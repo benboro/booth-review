@@ -40,6 +40,7 @@ import { crewBox, externalLink, linksList, liveOpener, networksParagraph } from 
 import { sortNetworks } from './network.js';
 import { personOnGame } from './select.js';
 import { scheduledFacade } from './weekend-data.js';
+import { apKickoff } from './weekend.js';
 
 /** The element focus returns to when the dialog closes, or null. */
 let opener = null;
@@ -58,9 +59,11 @@ export { safeHref } from './panel-parts.js';
  * "Afternoon", "Noon") is gated on `showsTimeSlot` (D-19): only a
  * regular-season Saturday game shows it, so a Saturday bowl/CFP game never
  * gets a misleading scheduling-pattern label. */
-function dateLine(data, i, unplayed = false) {
+function dateLine(data, i, unplayed = false, weekend = false) {
   const t = data.t;
   const noTime = unplayed ? 'Time TBA' : 'Kickoff time not recorded';
+  // A panel opened from This weekend writes the kickoff as that view does (18-UI-REVIEW item 8).
+  if (weekend) return apKickoff(t.date[i], t.kickoff[i], noTime);
   const parts = [formatDate(t.date[i]), formatKickoff(t.kickoff[i]) ?? noTime];
   if (showsTimeSlot(data, i)) parts.push(SLOT_LABELS[t.time_slot[i]]);
   return parts.join(' · ');
@@ -167,7 +170,7 @@ function buildFlagsList(data, i) {
 }
 
 /** Links section: every RR record, the original source (or its absence), then the crew's own source for a hand-confirmed crew (04.3 D-11) or else the 506 listing. */
-function buildLinksList(data, i) {
+function buildLinksList(data, i, weekend = false) {
   const t = data.t;
   const items = [];
 
@@ -199,7 +202,11 @@ function buildLinksList(data, i) {
       fallback: `Crew source: ${crewSourceLabel}`,
     });
   } else {
-    items.push({ href: t.s506_url[i], text: 'View 506 Sports listing ↗' });
+    // From This weekend the credit reads as the NFL panel's does (18-UI-SPEC, item 8).
+    items.push({
+      href: t.s506_url[i],
+      text: weekend ? 'Crew from 506 Sports ↗' : 'View 506 Sports listing ↗',
+    });
   }
 
   return linksList(items);
@@ -295,14 +302,14 @@ function buildRivalryLine(name) {
  * @param {HTMLElement} titleEl
  * @param {{data: object, i: number, state: object, view: object, unplayed?: boolean}} ctx
  */
-export function renderPanel(bodyEl, titleEl, { data, i, state, view, unplayed = false }) {
+export function renderPanel(bodyEl, titleEl, { data, i, state, view, unplayed = false, weekend = false }) {
   const t = data.t;
   titleEl.textContent = formatMatchup(data, i, { withScore: true });
 
   const children = [];
 
   const dateP = document.createElement('p');
-  dateP.textContent = dateLine(data, i, unplayed);
+  dateP.textContent = dateLine(data, i, unplayed, weekend);
   children.push(dateP);
 
   const gameType = gameTypeInfo(data, i);
@@ -413,7 +420,7 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view, unplayed = 
 
   const linksHeading = document.createElement('h3');
   linksHeading.textContent = 'Links';
-  const linksEl = buildLinksList(data, i);
+  const linksEl = buildLinksList(data, i, weekend);
   // An unplayed game with no crew source has no link to show; skip the empty section.
   if (!unplayed || linksEl.children.length > 0) children.push(linksHeading, linksEl);
 
@@ -458,10 +465,14 @@ export function initPanel({ onClosed }) {
  * open (D-10). Closes any open popover first; the opener is the focused
  * element, or `#chart` when focus sat on the body (a dot click).
  * @param {number} i
- * @param {{data: object, state: object, view: object, unplayed?: boolean}} ctx
+ * @param {{data: object, state: object, view: object, unplayed?: boolean, weekend?: boolean}} ctx -
+ *   `weekend` marks a panel opened from This weekend (AP kickoff line, `Crew from 506 Sports`).
  */
 export function openPanel(i, ctx) {
-  showPanel({ data: ctx.data, i, state: ctx.state, view: ctx.view, unplayed: ctx.unplayed === true });
+  showPanel({
+    data: ctx.data, i, state: ctx.state, view: ctx.view,
+    unplayed: ctx.unplayed === true, weekend: ctx.weekend === true,
+  });
 }
 
 /**
@@ -480,6 +491,7 @@ export function openScheduledPanel(j, ctx) {
     state: ctx.state,
     view: scheduledView(facade, j, ctx.state),
     unplayed: ctx.unplayed ?? true,
+    weekend: true,
   });
 }
 

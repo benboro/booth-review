@@ -152,6 +152,33 @@ export function dayLabel(isoDate) {
   return `${WEEKDAYS[weekdayOf(isoDate)]} ${MONTHS[m - 1]} ${d}`;
 }
 
+/** `12:30 pm`. */
+export function clock12(min) {
+  const h = Math.floor(min / 60) % 24;
+  const m = min % 60;
+  return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
+}
+
+/** Minutes after ET midnight read from an ET ISO datetime, or null (no time yet). */
+export function kickoffMinutes(iso) {
+  if (iso == null) return null;
+  const m = /T(\d{2}):(\d{2})/.exec(iso);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
+/**
+ * The kickoff line of a panel opened from This weekend, written as the view writes times
+ * (18-UI-SPEC, 18-UI-REVIEW item 8): `Sat. Oct. 31, 12:00 pm ET`, or `Sat. Oct. 31, Time TBA`.
+ * @param {string} isoDate - ET date `YYYY-MM-DD`.
+ * @param {string|null} kickoffIso - ET ISO datetime, or null.
+ * @param {string} [noTime] - the text when there is no time.
+ * @returns {string}
+ */
+export function apKickoff(isoDate, kickoffIso, noTime = 'Time TBA') {
+  const min = kickoffMinutes(kickoffIso);
+  return `${dayLabel(isoDate)}, ${min == null ? noTime : `${clock12(min)} ET`}`;
+}
+
 // ---- Classification, days, axis ----
 
 /**

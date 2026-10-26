@@ -404,3 +404,20 @@ def test_summary_counts_the_days_games_like_cfb(
     matched = page.locator(".wk-cell.is-match").count()
     assert 1 <= matched < cells
     assert page.locator("#nfl-summary").inner_text() == f"{matched} of {cells} games match"
+
+
+def test_weekend_panel_uses_the_ap_kickoff(nfl_guarded_page: Page, open_nfl_app: OpenNfl) -> None:
+    # 18-UI-REVIEW item 8: the panel opened from a cell writes the kickoff as the view does.
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    page.locator(".wk-row[data-row=cbs] .wk-cell").first.click()
+    dialog = page.locator("dialog[open]").first
+    dialog.wait_for()
+    assert dialog.locator("p").first.inner_text() == "Sun. Oct. 11, 1:00 pm ET"
+    page.keyboard.press("Escape")
+    # A Time TBA strip game has no clock.
+    strip = page.locator(".wk-tba-body .wk-cell")
+    if strip.count():
+        strip.first.click()
+        dialog.wait_for()
+        assert dialog.locator("p").first.inner_text().endswith(", Time TBA")

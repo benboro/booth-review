@@ -252,7 +252,9 @@ def test_scheduled_panel_titles_times_and_not_played(lead_page: Page) -> None:
         )
     )
     assert out["known"]["title"] == "Northfield at Foxhollow"
-    assert "12:00 PM ET" in out["known"]["body"]
+    # The scheduled panel is only ever opened from This weekend, so it writes the view's AP form.
+    assert "Sat. Oct. 3, 12:00 pm ET" in out["known"]["body"]
+    assert "12:00 PM ET" not in out["known"]["body"]
     assert "Not played yet." in out["known"]["body"]
     assert "Viewers" not in out["known"]["body"]
     assert "Excitement" not in out["known"]["body"]

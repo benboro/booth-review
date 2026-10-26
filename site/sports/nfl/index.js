@@ -420,15 +420,16 @@ function pickBoothRow(key, label) {
   announce(text);
 }
 
-function openGame(i, opener) {
+/** `weekend` marks a panel opened from This weekend: it writes the kickoff as that view does. */
+function openGame(i, opener, { weekend = false } = {}) {
   if (!model || !panel || !Number.isInteger(i) || i < 0 || i >= model.n) return;
-  panel.open(gameRow(model, i), opener);
+  panel.open({ ...gameRow(model, i), weekend }, opener);
 }
 
-function openUpcoming(j, opener, { unplayed = true } = {}) {
+function openUpcoming(j, opener, { unplayed = true, weekend = false } = {}) {
   const u = model && model.upcomingRaw;
   if (!u || !panel || !Number.isInteger(j) || j < 0 || j >= u.season.length) return;
-  panel.open(upcomingRow(model, j, { unplayed }), opener);
+  panel.open({ ...upcomingRow(model, j, { unplayed }), weekend }, opener);
 }
 
 const ctx = {
@@ -440,7 +441,7 @@ const ctx = {
   env,
   selectGames: (sel) => setState({ selection: sel }),
   clearSelection: () => setState({ selection: null }),
-  openGame: (i, opener) => openGame(i, opener),
+  openGame: (i, opener, opts) => openGame(i, opener, opts),
   openUpcoming: (j, opener, opts) => openUpcoming(j, opener, opts),
   methodologyHref: (anchor) => (anchor ? `${METHODOLOGY}#${anchor}` : METHODOLOGY),
   pickBoothRow: (key, label) => pickBoothRow(key, label),

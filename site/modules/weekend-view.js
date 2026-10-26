@@ -16,7 +16,7 @@
  */
 
 import {
-  WEEKEND_FADED_OPACITY, boothLine, buildDayModel, cellColors, cellState,
+  WEEKEND_FADED_OPACITY, boothLine, buildDayModel, cellColors, cellState, clock12,
   collidingSurnames, dayLabel, dayTabs, defaultDay, etParts, etWallMinutes, matchupText,
   stripCollapsedByDefault,
 } from './weekend.js';
@@ -53,11 +53,7 @@ export function clockText(min) {
   return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')}`;
 }
 
-/** `12:30 pm`. */
-export function clock12(min) {
-  const h = Math.floor(min / 60) % 24;
-  return `${clockText(min)} ${h < 12 ? 'am' : 'pm'}`;
-}
+export { clock12 };
 
 /** An ISO UTC stamp as ET text: `Thu. Oct. 29, 9:14 pm ET` (or the date alone). */
 export function etStamp(iso, { withTime = true } = {}) {
