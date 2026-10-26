@@ -116,24 +116,45 @@ def _agg(raw: dict[str, Any], lo: int, hi: int) -> dict[int, dict[str, Any]]:
     return out
 
 
-def _hover(raw: dict[str, Any], f: int, lo: int, hi: int) -> list[str]:
+# The solo slots each combined row lists under its label (notes 15), in slot order.
+SUB_SLOTS = {
+    "solo_holiday": ("thanksgiving", "christmas", "black_friday"),
+    "solo_other": ("saturday", "international", "friday", "sunday_early", "sunday_late", "other"),
+}
+
+
+def _hover(
+    raw: dict[str, Any],
+    f: int,
+    lo: int,
+    hi: int,
+    hidden: tuple[str, ...] = (),
+    footnote: str | None = None,
+) -> list[str]:
+    """The hover's lines as `_tooltip` reads them: one "Label: n (sub-slots)" line per shown
+    category with games; International and Flexed only while every category is shown."""
     a = _agg(raw, lo, hi)[f]
     name = raw["lookups"]["franchises"][f]["name"]
-    slots = ", ".join(f"{lbl} {a['slots'][col]}" for col, lbl in SLOT_ORDER if a["slots"][col] > 0)
-    total = sum(a[k] for k in SEGMENT_KEYS)
+    labels = dict(SLOT_ORDER)
+    shown = [
+        (k, lbl) for k, lbl in zip(SEGMENT_KEYS, SEGMENT_LABELS, strict=True) if k not in hidden
+    ]
     out = [
         f"{name}, {lo}" if lo == hi else f"{name}, {lo}–{hi}",
-        f"{total} special games",
+        f"{sum(a[k] for k, _ in shown)} special games",
     ]
-    out += [f"{lbl}: {a[k]}" for k, lbl in zip(SEGMENT_KEYS, SEGMENT_LABELS, strict=True) if a[k]]
-    if slots:
-        out.append(f"Solo slots: {slots}")
-    out += [
-        f"International, any window: {a['international']}",
-        f"Flexed: {a['flexed']}",
-        "Click to see seasons and games.",
-    ]
-    return out
+    for k, lbl in shown:
+        if not a[k]:
+            continue
+        sub = ", ".join(
+            f"{labels[c]} {a['slots'][c]}" for c in SUB_SLOTS.get(k, ()) if a["slots"][c]
+        )
+        out.append(f"{lbl}: {a[k]}" + (f" ({sub})" if sub else ""))
+    if not hidden:
+        out += [f"International, any window: {a['international']}", f"Flexed: {a['flexed']}"]
+    if footnote:
+        out.append(footnote)
+    return [*out, "Click to see seasons and games."]
 
 
 def _emit(page: Page, event: str, k: int) -> None:
@@ -146,26 +167,75 @@ def _emit(page: Page, event: str, k: int) -> None:
     )
 
 
+_TOOLTIP_JS = """() => Array.from(document.getElementById('chart-tooltip').children).flatMap((c) => {
+  if (c.tagName !== 'TABLE') return [c.textContent];
+  return Array.from(c.querySelectorAll('tr')).map((tr) => {
+    const [label, value] = tr.children;
+    const sub = label.querySelector('.tooltip-counts-sub');
+    const name = Array.from(label.childNodes).filter((n) => n.nodeType === 3).map((n) => n.textContent).join('');
+    return `${name}: ${value.textContent}` + (sub ? ` (${sub.textContent})` : '');
+  });
+})"""
+
+
 def _tooltip(page: Page) -> list[str]:
+    """The tooltip's lines, a count-table row read as "Label: n (sub-slots)"."""
     page.wait_for_function("!document.getElementById('chart-tooltip').hidden")
-    return page.evaluate(  # type: ignore[no-any-return]
-        "Array.from(document.getElementById('chart-tooltip').children).map(c => c.textContent)"
-    )
+    return page.evaluate(_TOOLTIP_JS)  # type: ignore[no-any-return]
 
 
 def _franchise_idx(raw: dict[str, Any], fid: str) -> int:
     return [f["id"] for f in raw["lookups"]["franchises"]].index(fid)
 
 
-def _expected_order(raw: dict[str, Any], lo: int, hi: int) -> list[str]:
+def _expected_order(
+    raw: dict[str, Any],
+    lo: int,
+    hi: int,
+    hidden: tuple[str, ...] = (),
+    focus: tuple[str, ...] = (),
+) -> list[str]:
+    """Notes 15: the active count (shown and in focus) descending, then the shown total, then
+    the franchise name and id."""
     agg = _agg(raw, lo, hi)
     fr = raw["lookups"]["franchises"]
+    shown = [k for k in SEGMENT_KEYS if k not in hidden]
+    active = [k for k in shown if not focus or k in focus]
     rows = []
     for idx, f in enumerate(fr):
         a = agg.get(idx)
-        total = sum(a[k] for k in SEGMENT_KEYS) if a else 0
-        rows.append((-total, f["name"], f["id"]))
-    return [r[2] for r in sorted(rows)]
+        rows.append(
+            (
+                -(sum(a[k] for k in active) if a else 0),
+                -(sum(a[k] for k in shown) if a else 0),
+                f["name"],
+                f["id"],
+            )
+        )
+    return [r[3] for r in sorted(rows)]
+
+
+def _pending_raw(raw: dict[str, Any]) -> dict[str, Any]:
+    """The fixture with every 2026 Sunday-afternoon network dropped, as before a 506 import."""
+    out = json.loads(json.dumps(raw))
+    g = out["games"]
+    slots = out["lookups"]["slots"]
+    for i in range(len(g["season"])):
+        if g["season"][i] == 2026 and slots[g["slot"][i]] in ("Sunday early", "Sunday late"):
+            g["network"][i] = None
+    return out
+
+
+def _pending_games(raw: dict[str, Any]) -> int:
+    g = raw["games"]
+    slots = raw["lookups"]["slots"]
+    return sum(
+        1
+        for i in range(len(g["season"]))
+        if g["season"][i] == 2026
+        and slots[g["slot"][i]] in ("Sunday early", "Sunday late")
+        and g["network"][i] is None
+    )
 
 
 # ------------------------------------------------------------------ chart
@@ -549,8 +619,8 @@ def test_bar_click_under_a_pick_lists_only_matched_games(
 
 
 def test_end_markers_are_ink_until_a_team_is_picked_then_accent(app: Page) -> None:
-    """UI-SPEC ranked bars: end markers (--ink at 80%) with a value column; the picked
-    team's marker takes the accent."""
+    """UI-SPEC ranked bars: end markers (--ink at 80%) and no value column (notes 15); the
+    picked team's marker takes the accent."""
     layout = f"document.querySelector('{GD}').layout"
     fills = app.evaluate(f"{layout}.shapes.map(s => s.fillcolor)")
     assert fills
@@ -564,10 +634,11 @@ def test_end_markers_are_ink_until_a_team_is_picked_then_accent(app: Page) -> No
     assert all(r == [hero["bg"], 2] for r in ring)
     annos = app.evaluate(f"{layout}.annotations")
     totals = [a for a in annos if a.get("name") == "total"]
-    values = [a for a in annos if a.get("name") == "value"]
-    assert len(totals) == len(fills) == len(values)
+    assert len(totals) == len(fills)
     assert all(a["font"]["weight"] == 600 for a in totals)
-    assert all((v["xref"], v["xanchor"]) == ("paper", "right") for v in values)
+    # Notes 15: no value column at the right; the end markers carry the totals.
+    assert not [a for a in annos if a.get("name") == "value"]
+    assert app.evaluate(f"{layout}.margin.r") == 16
     _emit(app, "plotly_click", 0)
     app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
     picked = app.evaluate(f"{layout}.shapes.map(s => s.fillcolor)")
@@ -737,3 +808,161 @@ def test_end_markers_stay_inside_the_plot(mobile: Page, width: int) -> None:
     )
     assert over, "no end markers drawn"
     assert max(over) <= 0.5, over
+
+
+# ------------------------------------------------------------- notes 15
+
+
+def test_chips_and_category_filter_resort(app: Page, nfl_fixture_raw: dict[str, Any]) -> None:
+    """Hiding categories or focusing one with the Category filter re-ranks the bars by what is
+    left bright; the order is deterministic (shown total, then name, then id break ties)."""
+    _vm(app)
+    hidden = ("solo_thursday", "solo_monday", "solo_holiday", "solo_other", "cbs_national")
+    _set(app, {"hiddenSegments": list(hidden)})
+    app.wait_for_function(
+        "window.__nflTestHooks.getViewModel('special').hiddenSegments.length === 5"
+    )
+    vm = _vm(app)
+    order = [r["franchise"] for r in vm["rows"]]
+    assert order == _expected_order(nfl_fixture_raw, 2024, 2026, hidden=hidden)
+    assert order != _expected_order(nfl_fixture_raw, 2024, 2026)
+    # The y axis follows the same order.
+    ids = app.evaluate(f"document.querySelector('{GD}').layout.yaxis.categoryarray")
+    assert ids == order
+    _set(app, {"hiddenSegments": [], "cats": ["agotw"]})
+    vm = _vm(app)
+    assert [r["franchise"] for r in vm["rows"]] == _expected_order(
+        nfl_fixture_raw, 2024, 2026, focus=("agotw",)
+    )
+    _set(app, {"cats": [], "seasons": [2025, 2025]})
+    vm = _vm(app)
+    assert [r["franchise"] for r in vm["rows"]] == _expected_order(nfl_fixture_raw, 2025, 2025)
+
+
+def test_tooltip_keys_and_filters_categories(app: Page, nfl_fixture_raw: dict[str, Any]) -> None:
+    """Each category row carries its legend chip's colour; with chips off the tooltip lists only
+    the shown categories, its total counts only them, and the cross-cutting lines drop out."""
+    ids = [f["id"] for f in nfl_fixture_raw["lookups"]["franchises"]]
+    _vm(app)
+    _emit(app, "plotly_hover", 0)
+    _tooltip(app)
+    dots = app.evaluate(
+        """() => Array.from(document.querySelectorAll('#chart-tooltip .tooltip-counts tr')).map((tr) =>
+          [tr.cells[0].textContent, tr.querySelector('.tooltip-counts-dot').style.backgroundColor])"""
+    )
+    chips = dict(
+        app.evaluate(
+            f"""() => Array.from(document.querySelectorAll('{LEGEND} button.legend-chip')).map((b) =>
+              [b.textContent, b.querySelector('.legend-dot').style.backgroundColor])"""
+        )
+    )
+    assert dots
+    for label, color in dots:
+        name = next(lbl for lbl in SEGMENT_LABELS if label.startswith(lbl))
+        assert color == chips[name]
+    _emit(app, "plotly_unhover", 0)
+
+    hidden = ("solo_thursday", "solo_monday", "solo_holiday", "solo_other", "cbs_national")
+    _set(app, {"hiddenSegments": list(hidden)})
+    app.wait_for_function(
+        "window.__nflTestHooks.getViewModel('special').hiddenSegments.length === 5"
+    )
+    vm = _vm(app)
+    for k in range(len(vm["rows"])):
+        f = ids.index(vm["rows"][k]["franchise"])
+        _emit(app, "plotly_hover", k)
+        lines = _tooltip(app)
+        assert lines == _hover(nfl_fixture_raw, f, 2024, 2026, hidden=hidden)
+        assert not any(x.startswith(("International, any window", "Flexed")) for x in lines)
+        _emit(app, "plotly_unhover", k)
+
+
+def test_complete_networks_show_no_pending_note(app: Page) -> None:
+    vm = _vm(app)
+    assert vm["pending"] == {"seasons": [], "games": 0}
+    assert app.locator("#nfl-view-special .nfl-pending-caption").is_hidden()
+    _emit(app, "plotly_hover", 0)
+    assert not any("pending" in x for x in _tooltip(app))
+
+
+def test_missing_sunday_networks_say_pending(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
+) -> None:
+    """Note 1 of notes 15: before a season's 506 pages are in, its Sunday-afternoon games have
+    no network, so Fox AGOTW and CBS late national cannot be found. The tab says they are
+    pending instead of showing a silent zero."""
+    page = nfl_guarded_page
+    pending = _pending_raw(nfl_fixture_raw)
+    page.route("**/nfl-data.json*", lambda route: route.fulfill(json=pending))
+    open_nfl_app(page)
+    n = _pending_games(pending)
+    assert n > 0
+    vm = _vm(page)
+    assert vm["pending"] == {"seasons": [2026], "games": n}
+    caption = page.locator("#nfl-view-special .nfl-pending-caption")
+    expected = (
+        "2026 Fox AGOTW and CBS late national counts are pending: "
+        f"{n} Sunday-afternoon games have no network listed yet, so they are not counted."
+    )
+    assert caption.inner_text() == expected
+    ids = [f["id"] for f in nfl_fixture_raw["lookups"]["franchises"]]
+    f = ids.index(vm["rows"][0]["franchise"])
+    _emit(page, "plotly_hover", 0)
+    note = "2026 Fox AGOTW and CBS late national are pending."
+    assert _tooltip(page) == _hover(nfl_fixture_raw, f, 2024, 2026, footnote=note)
+    assert page.locator("#chart-tooltip .tooltip-footnote").inner_text() == note
+    _emit(page, "plotly_unhover", 0)
+
+    # The tooltip names only the shown Sunday-window segment; the caption never changes.
+    _set(page, {"hiddenSegments": ["agotw"]})
+    page.wait_for_function(
+        "window.__nflTestHooks.getViewModel('special').hiddenSegments.length === 1"
+    )
+    _emit(page, "plotly_hover", 0)
+    assert _tooltip(page)[-2] == "2026 CBS late national is pending."
+    _emit(page, "plotly_unhover", 0)
+    assert caption.inner_text() == expected
+    _set(page, {"hiddenSegments": ["agotw", "cbs_national"]})
+    page.wait_for_function(
+        "window.__nflTestHooks.getViewModel('special').hiddenSegments.length === 2"
+    )
+    _emit(page, "plotly_hover", 0)
+    assert not any("pending" in x for x in _tooltip(page))
+    _emit(page, "plotly_unhover", 0)
+    _set(page, {"hiddenSegments": []})
+
+    # The season table stars the two pending cells and says why below it.
+    vm = _vm(page)
+    fid = vm["rows"][0]["franchise"]
+    _emit(page, "plotly_click", 0)
+    page.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
+    assert _vm(page)["selected"] == fid
+    cells = page.locator(
+        "#nfl-view-special .nfl-breakdown tbody tr[data-season='2026'] > *"
+    ).all_inner_texts()
+    assert [k for k, c in enumerate(cells) if c.endswith("*")] == [6, 7]
+    old = page.locator("#nfl-view-special .nfl-breakdown tbody tr[data-season='2025'] > *")
+    assert not any(c.endswith("*") for c in old.all_inner_texts())
+    assert page.locator("#nfl-view-special .nfl-pending-note").inner_text() == (
+        "* Pending: not every 2026 Sunday-afternoon game has a network listed yet, "
+        "so Fox AGOTW and CBS late national are not final."
+    )
+    # The star hangs past the digit, so the digits still line up down the column.
+    edges = page.evaluate(
+        """() => ['2026', '2025'].map((s) => {
+          const td = document.querySelector(
+            `#nfl-view-special .nfl-breakdown tr[data-season='${s}'] td:nth-child(7)`);
+          const r = document.createRange();
+          r.selectNodeContents(td.firstChild);
+          return r.getBoundingClientRect().right;
+        })"""
+    )
+    assert abs(edges[0] - edges[1]) < 0.5, edges
+
+    # A range without 2026 shows no note.
+    page.wait_for_timeout(600)  # past the touch double-fire guard
+    _emit(page, "plotly_click", 0)
+    page.wait_for_function("window.__nflTestHooks.getViewModel('special').selected === null")
+    _set(page, {"seasons": [2024, 2025]})
+    assert _vm(page)["pending"] == {"seasons": [], "games": 0}
+    assert caption.is_hidden()

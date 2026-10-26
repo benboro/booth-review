@@ -9,7 +9,16 @@
  * createElement/textContent; names enter Plotly strings only through
  * escapeHover, and customdata carries row indexes, never names.
  */
-import { teamBars, teamSeasonRows, specialMatchedCounts, EXCLUSIVE_CATEGORIES } from '../state.js';
+import {
+  teamBars,
+  teamSeasonRows,
+  specialMatchedCounts,
+  rankTeamBars,
+  shownTotal,
+  pendingNetworkSeasons,
+  SLOT_SEGMENT,
+  EXCLUSIVE_CATEGORIES,
+} from '../state.js';
 import { computePicks } from '../picks.js';
 import { createOnlyDetector, makeLegendChip } from '../../../modules/legend.js';
 import { initBandInfo } from '../../../modules/band-info.js';
@@ -22,7 +31,6 @@ import {
   endMarkerShapes,
   markerWidth,
   textWidth,
-  valueColumn,
 } from '../../../modules/bar-chart.js';
 import { ensureTooltipEl, showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import { escapeHover } from '../../../modules/format.js';
@@ -39,7 +47,6 @@ const SLOT_ORDER = [
 ];
 const CONFIG = frameConfig();
 const HERO_INK_WEIGHT = 0.8;
-const VALUE_COL_PX = 12;
 // Gap Plotly leaves between a y tick label and the plot when automargin sizes the left edge.
 const LABEL_PAD_PX = 4;
 
@@ -70,6 +77,7 @@ const refs = {
   showAll: null,
   breakdown: null,
   captions: null,
+  pending: null,
   dataBody: null,
   bound: false,
 };
@@ -106,31 +114,95 @@ function teamGames(model, state, fIdx) {
   );
 }
 
-function slotText(slots) {
-  const ordered = [...slots].sort((a, b) => SLOT_ORDER.indexOf(a.label) - SLOT_ORDER.indexOf(b.label));
-  return ordered.map((s) => `${s.label === 'Other' ? 'other' : s.label} ${s.count}`).join(', ');
+/** "2025", "2025 and 2026", "2024, 2025 and 2026". */
+function seasonList(seasons) {
+  const s = seasons.map(String);
+  return s.length < 2 ? s.join('') : `${s.slice(0, -1).join(', ')} and ${s[s.length - 1]}`;
 }
 
-/** The hover lines (UI-SPEC order) for a bar entry, without the click hint. */
-function hoverLines(state, label, bar) {
+/** Which of the two Sunday-window segments a pending season leaves unsettled, as shown. */
+function pendingNames(hidden) {
+  const names = [];
+  if (!hidden.has('agotw')) names.push('Fox AGOTW');
+  if (!hidden.has('cbs_national')) names.push('CBS late national');
+  return names.join(' and ');
+}
+
+/**
+ * The pending-networks note (notes 15), or null when no season in range is pending or both
+ * Sunday-window segments are hidden. `short` is the tooltip's one-liner.
+ */
+export function pendingText(pending, hiddenSegments, short = false) {
+  const names = pendingNames(new Set(hiddenSegments));
+  if (!pending.seasons.length || !names) return null;
+  const yrs = seasonList(pending.seasons);
+  if (short) return `${yrs} ${names} ${names.includes(' and ') ? 'are' : 'is'} pending.`;
+  const n = pending.games;
+  return `${yrs} ${names} counts are pending: ${n} Sunday-afternoon ${n === 1 ? 'game has' : 'games have'} no network listed yet, so ${n === 1 ? 'it is' : 'they are'} not counted.`;
+}
+
+/** Sub-slot text under a row that combines several slots (Holiday, Other solo slot). */
+function subSlots(bar, segKey) {
+  if (segKey !== 'solo_holiday' && segKey !== 'solo_other') return null;
+  const parts = [...bar.slots]
+    .filter((sl) => SLOT_SEGMENT[sl.key] === segKey)
+    .sort((a, b) => SLOT_ORDER.indexOf(a.label) - SLOT_ORDER.indexOf(b.label))
+    .map((sl) => `${sl.label === 'Other' ? 'other' : sl.label} ${sl.count}`);
+  return parts.length ? parts.join(', ') : null;
+}
+
+/**
+ * The hover content for a bar entry, without the click hint (notes 15): the title, the shown
+ * total, one colour-keyed row per shown category with games, then context lines.
+ * A chip-hidden category leaves the rows and the total. International (any window) and Flexed
+ * cut across the categories, so they show only while every category is shown.
+ */
+function hoverModel(state, label, bar, th, pending) {
   const [lo, hi] = state.seasons;
+  const hidden = new Set(state.hiddenSegments);
+  const shownSegs = SEGMENTS.filter((seg) => !hidden.has(seg.key));
   const title = lo === hi ? `${label}, ${lo}` : `${label}, ${lo}–${hi}`;
+  const total = shownTotal(bar, state.hiddenSegments);
   // Under an Announcers or Booths pick the second line is the matched share (UI-SPEC Q7).
-  const matchedTotal = bar.matched ? SEGMENTS.reduce((a, seg) => a + bar.matched[seg.key], 0) : 0;
+  const matchedTotal = bar.matched ? shownSegs.reduce((a, seg) => a + bar.matched[seg.key], 0) : 0;
+  const summary = bar.matched ? `${matchedTotal} of ${total} games` : `${total} special games`;
+  const rows = shownSegs
+    .filter((seg) => bar.counts[seg.key] > 0)
+    .map((seg) => ({
+      key: seg.key,
+      label: seg.label,
+      color: categoryColor(seg.key, th),
+      value: bar.matched ? `${bar.matched[seg.key]} of ${bar.counts[seg.key]}` : String(bar.counts[seg.key]),
+      // Sub-slot counts are all games, so they are left out beside a matched "n of m".
+      sub: bar.matched ? null : subSlots(bar, seg.key),
+    }));
+  const asides = hidden.size === 0
+    ? [`International, any window: ${bar.international}`, `Flexed: ${bar.flexed}`]
+    : [];
+  return { title, summary, rows, asides, footnote: pendingText(pending, state.hiddenSegments, true) };
+}
+
+/** The hover model as tooltip lines. */
+function tooltipLines(m) {
   const lines = [
-    { text: title, kind: 'title' },
-    { text: bar.matched ? `${matchedTotal} of ${bar.total} games` : `${bar.total} special games`, kind: 'body' },
+    { text: m.title, kind: 'title' },
+    { text: m.summary, kind: 'body' },
   ];
-  for (const seg of SEGMENTS) {
-    const n = bar.counts[seg.key];
-    if (n > 0) lines.push({ text: `${seg.label}: ${n}`, kind: 'body' });
-  }
-  if (bar.slots.length) lines.push({ text: `Solo slots: ${slotText(bar.slots)}`, kind: 'body' });
-  lines.push(
-    { text: `International, any window: ${bar.international}`, kind: 'body' },
-    { text: `Flexed: ${bar.flexed}`, kind: 'body' },
-  );
+  if (m.rows.length) lines.push({ kind: 'counts', rows: m.rows });
+  for (const text of m.asides) lines.push({ text, kind: 'aside' });
+  if (m.footnote) lines.push({ text: m.footnote, kind: 'footnote' });
   return lines;
+}
+
+/** The hover model as plain text lines (the phone breakdown and the tests). */
+export function hoverTextLines(m) {
+  return [
+    m.title,
+    m.summary,
+    ...m.rows.map((r) => `${r.label}: ${r.value}${r.sub ? ` (${r.sub})` : ''}`),
+    ...m.asides,
+    ...(m.footnote ? [m.footnote] : []),
+  ];
 }
 
 function selectedKey(state) {
@@ -172,7 +244,7 @@ function bindEvents(gd) {
     if (!drawn || !Number.isInteger(k) || !drawn.rows[k]) return;
     if (drawn.env.mobile || drawn.env.hoverNone) return;
     const row = drawn.rows[k];
-    const lines = hoverLines(drawn.state, row.label, row.bar);
+    const lines = tooltipLines(hoverModel(drawn.state, row.label, row.bar, drawn.theme, drawn.pending));
     lines.push({ text: 'Click to see seasons and games.', kind: 'hint' });
     const e = ev.event || {};
     showTextTooltip(lines, {
@@ -473,11 +545,28 @@ function renderBreakdown(model, state, env, rows) {
 
   const bar = (rows.find((r) => r.bar.franchise === fIdx) || {}).bar
     || teamBars(model, state).find((b) => b.franchise === fIdx);
+  const pending = pendingNetworkSeasons(model, state);
   if ((env.mobile || env.hoverNone) && bar) {
+    // The hover content on a phone, with the same colour dots as the tooltip.
+    const m = hoverModel(state, label, bar, theme(env), pending);
     const lines = el('div', 'nfl-breakdown-lines');
-    for (const l of hoverLines(state, label, bar).slice(1)) lines.appendChild(el('p', null, l.text));
+    const texts = hoverTextLines(m).slice(1);
+    texts.forEach((text, k) => {
+      const p = el('p');
+      const row = m.rows[k - 1];
+      if (row) {
+        const dot = el('span', 'tooltip-counts-dot');
+        dot.setAttribute('aria-hidden', 'true');
+        dot.style.backgroundColor = row.color;
+        p.appendChild(dot);
+      }
+      p.appendChild(document.createTextNode(text));
+      lines.appendChild(p);
+    });
     breakdown.appendChild(lines);
   }
+  const pendingSeasons = new Set(pending.seasons);
+  const PENDING_KEYS = new Set(['agotw', 'cbs_national']);
 
   const table = el('table', 'games-table');
   const VR = ' nfl-vrule';
@@ -517,7 +606,15 @@ function renderBreakdown(model, state, env, rows) {
     season.scope = 'row';
     tr.append(
       season,
-      ...SEGMENTS.map((seg) => cell('td', String(r.counts[seg.key]), 'num' + (RULE_KEYS.has(seg.key) ? VR : ''))),
+      ...SEGMENTS.map((seg) => {
+        const mark = pendingSeasons.has(r.season) && PENDING_KEYS.has(seg.key);
+        const td = cell('td', String(r.counts[seg.key]), 'num' + (RULE_KEYS.has(seg.key) ? VR : ''));
+        if (mark) {
+          td.classList.add('nfl-pending');
+          td.appendChild(el('span', 'nfl-pending-mark', '*'));
+        }
+        return td;
+      }),
       cell('td', String(r.total), 'num nfl-vrule nfl-total'),
       cell('td', String(r.flexed), 'num nfl-vrule'),
     );
@@ -540,6 +637,14 @@ function renderBreakdown(model, state, env, rows) {
     'nfl-muted',
     'Special games is the sum of the eight columns before it. Flexed games are counted separately.',
   ));
+  const shownPending = pending.seasons.filter((s) => tbody.querySelector(`tr[data-season="${s}"]`));
+  if (shownPending.length) {
+    breakdown.appendChild(el(
+      'p',
+      'nfl-muted nfl-pending-note',
+      `* Pending: not every ${seasonList(shownPending)} Sunday-afternoon game has a network listed yet, so Fox AGOTW and CBS late national are not final.`,
+    ));
+  }
 }
 
 function renderDataTable(rows) {
@@ -629,17 +734,15 @@ function buildFigure(rows, state, env, th) {
   const thickness = env.mobile ? 28 : 20;
   const fontPx = env.mobile ? TICK_FONT_PX.mobile : TICK_FONT_PX.desktop;
   // End markers: the visible total per row, in the hero colour (--ink at 80%, accent on the picked team).
-  const totals = rows.map((r) =>
-    SEGMENTS.reduce((a, seg) => a + (hidden.has(seg.key) ? 0 : r.bar.counts[seg.key]), 0));
+  const totals = rows.map((r) => shownTotal(r.bar, state.hiddenSegments));
   const heroInk = mixHex(INK[th], bg, HERO_INK_WEIGHT);
   const fills = rows.map((r) => (r.id === selected ? SPECIAL[th] : heroInk));
   const markerRows = totals.map((total) => ({ total }));
-  const columnPx = Math.ceil(textWidth(String(Math.max(max, 1)), { size: 14 })) + VALUE_COL_PX;
   const markerHalf = Math.ceil(markerWidth(String(Math.max(max, 1))) / 2) + 2;
   // The y axis automargins to the team names, so the plot is narrower than the 8px left
   // margin says by the widest label (plus Plotly's tick pad); size the marker headroom to that.
   const labelPx = Math.ceil(Math.max(0, ...rows.map((r) => textWidth(r.label, { size: fontPx, family: FRAME_FONT }))));
-  const plotPx = Math.max(1, (refs.chart.clientWidth || env.width || 600) - 8 - labelPx - LABEL_PAD_PX - columnPx - 16);
+  const plotPx = Math.max(1, (refs.chart.clientWidth || env.width || 600) - 8 - labelPx - LABEL_PAD_PX - 16);
   const top = Math.max(1, max) * Math.max(1.05, plotPx / Math.max(1, plotPx - markerHalf));
   const layout = {
     barmode: picked ? 'overlay' : 'stack',
@@ -650,7 +753,8 @@ function buildFigure(rows, state, env, th) {
     height: rows.length * pitch + 70,
     // NFL-only: horizontal bars need no top margin and a tiny left one, because
     // automargin sizes the left edge to the team names.
-    margin: { l: 8, r: 16 + columnPx, t: 8, b: MARGIN.b },
+    // No value column at the right (notes 15): the end markers carry each total.
+    margin: { l: 8, r: 16, t: 8, b: MARGIN.b },
     xaxis: {
       title: { text: 'Special games', standoff: 4 },
       range: [0, top],
@@ -679,9 +783,7 @@ function buildFigure(rows, state, env, th) {
     },
   };
   layout.shapes = endMarkerShapes(markerRows, (r) => r.total, fills, th, 'x');
-  layout.annotations = endMarkerAnnotations(markerRows, (r) => r.total, fills, th, 'x').concat(
-    valueColumn(markerRows, (r) => r.total, layout.margin.r, th),
-  );
+  layout.annotations = endMarkerAnnotations(markerRows, (r) => r.total, fills, th, 'x');
   return { traces, layout: frameLayout(layout, { theme: th }) };
 }
 
@@ -702,6 +804,9 @@ export function mount(container, ctx) {
   refs.noteHint = el('p', 'season-empty-hint');
   refs.note.append(refs.noteTitle, refs.noteHint);
   refs.chart.append(refs.gd, refs.note);
+  // Notes 15: a season whose Sunday-afternoon networks are missing says so under the chart.
+  refs.pending = el('p', 'nfl-captions nfl-pending-caption');
+  refs.pending.hidden = true;
   refs.showAll = el('button', 'toggle nfl-show-all');
   refs.showAll.type = 'button';
   refs.showAll.hidden = true;
@@ -722,7 +827,7 @@ export function mount(container, ctx) {
   thead.appendChild(hr);
   refs.dataBody = el('tbody');
   dataTable.append(thead, refs.dataBody);
-  container.append(legendRow, refs.chart, refs.showAll, refs.breakdown, refs.captions, dataWrap);
+  container.append(legendRow, refs.chart, refs.pending, refs.showAll, refs.breakdown, refs.captions, dataWrap);
 }
 
 export function render(ctx) {
@@ -756,14 +861,15 @@ export function render(ctx) {
     }
   }
   const hasGames = bars.some((b) => b.total > 0);
-  const rowsAll = bars.map((bar) => ({
+  const pending = pendingNetworkSeasons(model, state);
+  const rowsAll = rankTeamBars(model, bars, state.hiddenSegments).map((bar) => ({
     bar,
     id: model.franchises[bar.franchise].id,
     label: teamLabel(model, state, bar.franchise),
     faded: bar.teamFaded,
   }));
   const rows = state.showAllTeams ? rowsAll : rowsAll.slice(0, TOP_N);
-  drawn = { rows, env, theme: th, state, model };
+  drawn = { rows, env, theme: th, state, model, pending };
   renderShowAll(rowsAll.length, state);
   renderDataTable(rows);
   renderBreakdown(model, state, env, rowsAll);
@@ -778,6 +884,10 @@ export function render(ctx) {
     setNote(null);
   }
   refs.drawn = anyShown;
+  // The caption names both segments whatever the chips show, so a chip click never moves it.
+  const caption = anyShown ? pendingText(pending, []) : null;
+  refs.pending.hidden = caption == null;
+  refs.pending.textContent = caption ?? '';
   if (!anyShown) {
     refs.showAll.hidden = true;
     return;
@@ -825,5 +935,7 @@ export function testModel() {
     hiddenSegments: [...s.hiddenSegments],
     selected: selectedKey(s),
     totalTeams: teamBars(drawn.model, s).length,
+    pending: { ...drawn.pending },
+    hover: drawn.rows.map((r) => hoverTextLines(hoverModel(s, r.label, r.bar, drawn.theme, drawn.pending))),
   };
 }

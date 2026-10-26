@@ -275,6 +275,84 @@ export function teamSeasonRows(model, state, franchiseIdx) {
   });
 }
 
+/** The solo stack segment each `standalone_<slot>` column belongs to (docs/nfl-data.md). */
+export const SLOT_SEGMENT = Object.freeze({
+  tnf: 'solo_thursday',
+  snf: 'solo_sunday',
+  mnf: 'solo_monday',
+  thanksgiving: 'solo_holiday',
+  christmas: 'solo_holiday',
+  black_friday: 'solo_holiday',
+  saturday: 'solo_other',
+  international: 'solo_other',
+  friday: 'solo_other',
+  sunday_early: 'solo_other',
+  sunday_late: 'solo_other',
+  other: 'solo_other',
+});
+
+/**
+ * The count a team bar is ranked by: its segments that are shown (not hidden by a chip) and
+ * in focus (not faded by the Category filter); under an Announcers or Booths pick, only the
+ * matched games in them. That is the bright part of each bar.
+ */
+export function activeCount(bar, hiddenSegments) {
+  const hidden = new Set(hiddenSegments);
+  let n = 0;
+  for (const k of SEGMENT_KEYS) {
+    if (hidden.has(k) || bar.segmentFaded[k]) continue;
+    n += bar.matched ? bar.matched[k] ?? 0 : bar.counts[k];
+  }
+  return n;
+}
+
+/** The shown total: every segment a chip leaves visible, faded or not. */
+export function shownTotal(bar, hiddenSegments) {
+  const hidden = new Set(hiddenSegments);
+  return SEGMENT_KEYS.reduce((n, k) => n + (hidden.has(k) ? 0 : bar.counts[k]), 0);
+}
+
+/**
+ * Team bars ranked for the chart (notes 15): the active count, descending; ties go to the
+ * larger shown total, then the franchise name A to Z, then its id. Returns a new array.
+ */
+export function rankTeamBars(model, bars, hiddenSegments) {
+  const keyed = bars.map((bar) => ({
+    bar,
+    active: activeCount(bar, hiddenSegments),
+    shown: shownTotal(bar, hiddenSegments),
+    id: model.franchises[bar.franchise].id,
+  }));
+  keyed.sort((a, b) =>
+    b.active - a.active
+    || b.shown - a.shown
+    || (a.bar.name < b.bar.name ? -1 : a.bar.name > b.bar.name ? 1 : 0)
+    || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return keyed.map((k) => k.bar);
+}
+
+const SUNDAY_AFTERNOON = new Set(['Sunday early', 'Sunday late']);
+
+/**
+ * Seasons in the range whose Fox AGOTW and CBS late national counts are not final: they have
+ * Sunday-afternoon games with no network yet, so the CBS and FOX doubleheaders could not be
+ * found (notes 15). `games` counts those games over the range.
+ * @returns {{seasons: number[], games: number}}
+ */
+export function pendingNetworkSeasons(model, state) {
+  const [lo, hi] = state.seasons;
+  const c = model.cols;
+  const seasons = new Set();
+  let games = 0;
+  for (let i = 0; i < model.n; i++) {
+    if (c.season[i] < lo || c.season[i] > hi || c.network[i] != null) continue;
+    if (!SUNDAY_AFTERNOON.has(model.slots[c.slot[i]])) continue;
+    seasons.add(c.season[i]);
+    games += 1;
+  }
+  return { seasons: [...seasons].sort((a, b) => a - b), games };
+}
+
 /** One series per view category with its points in the season range. */
 export function viewershipSeries(model, state) {
   const [lo, hi] = state.seasons;
