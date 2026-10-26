@@ -126,9 +126,13 @@ export function encodeState(state, data) {
   if (Y_VALUES.includes(state.y)) params.push(['y', state.y]);
   if (state.view === 'bars' || state.view === 'butterfly' || state.view === 'map' || state.view === 'crews' || state.view === 'weekend') params.push(['view', state.view]);
   // This weekend (Phase 18): the stepper's week number and the day token, each omitted at its
-  // default (the current weekend, the sport's default day) and validated again on decode.
-  if (Number.isInteger(state.week)) params.push(['week', String(state.week)]);
-  if (DAY_TOKENS.includes(state.day)) params.push(['day', state.day]);
+  // default (the current weekend, the sport's default day) and validated again on decode. Only
+  // the weekend tab writes them, so another tab's link never carries them and reopening the tab
+  // lands on the current weekend (18-13 F16), as on the NFL page.
+  if (state.view === 'weekend') {
+    if (Number.isInteger(state.week)) params.push(['week', String(state.week)]);
+    if (DAY_TOKENS.includes(state.day)) params.push(['day', state.day]);
+  }
   if (state.by) params.push(['by', state.by]);
   if (state.dots === 'hide') params.push(['dots', 'hide']);
   if (state.crew != null) params.push(['crew', state.crew]);
@@ -362,8 +366,10 @@ export function decodeState(search, data) {
   if (rawView === 'weekend' && (data.weeks ?? []).length > 0) state.view = 'weekend';
   // This weekend (Phase 18, D-07, D-23): week and day are allowlisted against the shipped weeks
   // and that week's games; anything else, and a value equal to the default, drops (T-18-31).
-  state.week = decodeWeek(scalarParam(params, 'week'), data);
-  state.day = decodeDay(scalarParam(params, 'day'), data, state.week);
+  // Read on the weekend tab only, the same rule the encoder follows (18-13 F16).
+  const onWeekend = state.view === 'weekend';
+  state.week = onWeekend ? decodeWeek(scalarParam(params, 'week'), data) : null;
+  state.day = onWeekend ? decodeDay(scalarParam(params, 'day'), data, state.week) : null;
   const rawBy = scalarParam(params, 'by');
   state.by = ['network', 'team', 'conference'].includes(rawBy) ? rawBy : null;
   // Fade is the default; only the literal 'hide' selects Hide (04.7 D-10).

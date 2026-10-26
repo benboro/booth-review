@@ -422,6 +422,21 @@ def test_url_state_round_trips_and_drops_invalid_values(
     assert _url(page) == expected
 
 
+def test_week_and_day_belong_to_the_weekend_tab_only(wk: Callable[..., Page]) -> None:
+    # 18-13 F16: week and day never ride along on another tab's URL, and reopening the tab
+    # lands on the current weekend (18-UI-SPEC).
+    page = wk("?view=weekend&week=4")
+    assert "week=4" in _url(page)
+    page.click("#chart-tabs button[data-view=scatter]")
+    assert "week=" not in _url(page)
+    page.click("#chart-tabs button[data-view=weekend]")
+    assert page.locator(".wk-week").inner_text() == "Week 5"
+    assert "week=" not in _url(page)
+    page.goto(page.url.split("?")[0] + "?view=scatter&week=4&day=fri")
+    page.wait_for_function("window.__testHooks && window.__testHooks.getState")
+    assert "week=" not in _url(page) and "day=" not in _url(page)
+
+
 def test_arrow_keys_rove_across_cells(wk: Callable[..., Page]) -> None:
     page = wk()
     first = page.locator('[data-row="fox"] .wk-cell').first
