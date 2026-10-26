@@ -1844,6 +1844,23 @@ input[type="checkbox"] {
   pointer-events: auto;
 }
 
+/* A formula line in a header tip (the Special games sum) never wraps mid-expression (v2.1);
+   the tip widens for it on desktop and the line drops to the caption size on a phone. */
+.chart-tooltip .tooltip-formula {
+  display: block;
+  white-space: nowrap;
+}
+
+.chart-tooltip:has(.tooltip-formula) {
+  max-width: min(520px, calc(100vw - 16px));
+}
+
+@media (max-width: 480px) {
+  .chart-tooltip .tooltip-formula {
+    font: var(--font-caption);
+  }
+}
+
 .chart-tooltip .tooltip-title {
   display: block;
   font-weight: var(--weight-semibold);

@@ -396,7 +396,9 @@ def test_phone_special_games_tip_keeps_the_formula_on_one_line_in_the_viewport(
     mobile: Page,
 ) -> None:
     page = mobile
-    _tip_button(page, "Special games").click()
+    button = _tip_button(page, "Special games")
+    button.evaluate("e => e.scrollIntoView({ block: 'center' })")
+    button.tap()
     page.wait_for_function("!document.getElementById('chart-tooltip').hidden")
     got = page.evaluate(
         """() => { const t = document.getElementById('chart-tooltip').getBoundingClientRect();

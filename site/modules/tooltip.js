@@ -231,7 +231,7 @@ export function ensureTooltipEl() {
  * right of and below, flipping left/above near the right/bottom edge, always
  * clamped EDGE_MARGIN px inside the viewport.
  */
-function placeTooltip(el, clientX, clientY) {
+function placeTooltip(el, clientX, clientY, placement = 'beside') {
   const width = el.offsetWidth;
   const height = el.offsetHeight;
 
@@ -240,7 +240,15 @@ function placeTooltip(el, clientX, clientY) {
   left = Math.max(EDGE_MARGIN, Math.min(left, window.innerWidth - EDGE_MARGIN - width));
 
   let top = clientY + OFFSET;
-  if (top + height > window.innerHeight - EDGE_MARGIN) top = clientY - OFFSET - height;
+  if (placement === 'above') {
+    // A header tip opens above its header so it never covers the data cells under it
+    // (v2.1, todo 2026-10-25-nfl-special-games-tooltip-covers-data); below only when the
+    // viewport has no room above.
+    top = clientY - OFFSET - height;
+    if (top < EDGE_MARGIN) top = clientY + OFFSET;
+  } else if (top + height > window.innerHeight - EDGE_MARGIN) {
+    top = clientY - OFFSET - height;
+  }
   top = Math.max(EDGE_MARGIN, Math.min(top, window.innerHeight - EDGE_MARGIN - height));
 
   el.style.left = `${left}px`;
@@ -287,7 +295,10 @@ function countsTable(rows) {
  * @param {{theme: string, borderColor: string, clientX: number, clientY: number, hoverable?: boolean}} opts
  *   `hoverable` lets the pointer rest on the tip (WCAG 1.4.13); every other show clears it.
  */
-export function showTextTooltip(lines, { borderColor, clientX, clientY, hoverable = false }) {
+export function showTextTooltip(
+  lines,
+  { borderColor, clientX, clientY, hoverable = false, placement = 'beside' },
+) {
   const el = ensureTooltipEl();
   const children = lines.map(({ text, kind, swatch, roles, network, entries, rows }) => {
     // Rich kinds (NFL scatter hover): a network logo mark and a D-01 crew box.
@@ -304,6 +315,8 @@ export function showTextTooltip(lines, { borderColor, clientX, clientY, hoverabl
     if (kind === 'hint') node.className = 'tooltip-hint';
     if (kind === 'aside') node.className = 'tooltip-aside';
     if (kind === 'footnote') node.className = 'tooltip-footnote';
+    // A formula stays on one line (v2.1): the sum reads as one expression.
+    if (kind === 'formula') node.className = 'tooltip-formula';
     if (swatch) {
       const chip = document.createElement('span');
       chip.className = 'tooltip-swatch';
@@ -329,7 +342,7 @@ export function showTextTooltip(lines, { borderColor, clientX, clientY, hoverabl
   if (hoverable) el.dataset.hoverable = '';
   else delete el.dataset.hoverable;
   el.hidden = false;
-  placeTooltip(el, clientX, clientY);
+  placeTooltip(el, clientX, clientY, placement);
 }
 
 /**

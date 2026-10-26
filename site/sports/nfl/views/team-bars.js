@@ -372,7 +372,15 @@ function cell(tag, text, className) {
 }
 
 const RULE_KEYS = new Set(['solo_thursday', 'agotw']);
-const SPECIAL_TIP = 'Solo slots plus Sunday-window games: Thu + Sun + Mon + Holiday + Other solo + AGOTW + CBS + Intl.';
+const SPECIAL_TIP_LEAD = 'Solo slots plus Sunday-window games:';
+const SPECIAL_TIP_FORMULA = 'Thu + Sun + Mon + Holiday + Other solo + AGOTW + CBS + Intl.';
+const SPECIAL_TIP = `${SPECIAL_TIP_LEAD} ${SPECIAL_TIP_FORMULA}`;
+
+/** A header tip's lines: the Special games formula gets its own unbreakable line (v2.1). */
+function tipLines(text) {
+  if (text !== SPECIAL_TIP) return [{ kind: 'body', text }];
+  return [{ kind: 'body', text: `${SPECIAL_TIP_LEAD} ` }, { kind: 'formula', text: SPECIAL_TIP_FORMULA }];
+}
 const SEGMENT_TIPS = Object.freeze({
   solo_other: 'A game alone in its window that is not a Thursday, Sunday or Monday night game or a holiday, such as a Saturday, Friday or lone Sunday-afternoon game, or a solo international game.',
   agotw: "Fox's America's Game of the Week, its top Sunday-afternoon game.",
@@ -474,11 +482,13 @@ function tipHead(th, label, text, env) {
   const show = (hoverable = false) => {
     const rect = button.getBoundingClientRect();
     const e = drawn ? drawn.env : env;
-    showTextTooltip([{ kind: 'body', text }], {
+    // Above the header, so the tip never covers the data cells under it (v2.1).
+    showTextTooltip(tipLines(text), {
       theme: theme(e),
       borderColor: DIVIDER[theme(e)],
       clientX: rect.left,
-      clientY: rect.bottom,
+      clientY: rect.top,
+      placement: 'above',
       hoverable,
     });
   };
