@@ -38,6 +38,7 @@ import { makeGameTypeIcon } from './icons.js';
 import { currentTheme } from './pill.js';
 import { crewBox, externalLink, linksList, networksParagraph } from './panel-parts.js';
 import { sortNetworks } from './network.js';
+import { personOnGame } from './select.js';
 import { scheduledFacade } from './weekend-data.js';
 
 /** The element focus returns to when the dialog closes, or null. */
@@ -468,17 +469,29 @@ export function openPanel(i, ctx) {
  * scheduled facade, so it shows teams, kickoff (or Time TBA), network (or Network TBA), its
  * ESPN Press Room crew or "Crew TBA", and "Not played yet." with no score, figure or excitement.
  * @param {number} j - index into the scheduled block.
- * @param {{data: object, state: object, view?: object, unplayed?: boolean}} ctx - `data` is the
- *   prepared data; `unplayed` (default true) is false once the game has kicked off (18-13 F3).
+ * @param {{data: object, state: object, unplayed?: boolean}} ctx - `data` is the prepared data;
+ *   `unplayed` (default true) is false once the game has kicked off (18-13 F3).
  */
 export function openScheduledPanel(j, ctx) {
+  const facade = scheduledFacade(ctx.data);
   showPanel({
-    data: scheduledFacade(ctx.data),
+    data: facade,
     i: j,
     state: ctx.state,
-    view: ctx.view ?? { peopleOnGame: new Map() },
+    view: scheduledView(facade, j, ctx.state),
     unplayed: ctx.unplayed ?? true,
   });
+}
+
+/**
+ * The panel view of scheduled game `j`: the picked people on its own crew. The played-game
+ * view is keyed by `data.t` index, so it never applies to a scheduled row (18-13 F5).
+ */
+function scheduledView(facade, j, state) {
+  const onGame = (state.people ?? [])
+    .map((id) => facade.personIndexById.get(id))
+    .filter((p) => p != null && personOnGame(facade, j, p, state.role) != null);
+  return { peopleOnGame: onGame.length > 0 ? new Map([[j, onGame]]) : new Map() };
 }
 
 /** Renders `args` into the dialog and opens it (or swaps its contents when already open). */

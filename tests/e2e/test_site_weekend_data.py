@@ -305,6 +305,45 @@ def test_scheduled_press_room_booth_shows_as_a_known_crew(
     assert any("ESPN Press Room" in label and href == url for label, href in out["link"])
 
 
+def test_scheduled_panel_never_borrows_a_played_games_selection(
+    guarded_page: Page,
+    fixture_raw: dict[str, Any],
+    open_app: Callable[[Page, str], None],
+) -> None:
+    # 18-13 F5: the played-game view is keyed by data.t index, so passing it to a scheduled
+    # panel named people from an unrelated game. A scheduled panel matches its own crew only.
+    raw = copy.deepcopy(fixture_raw)
+    sched = raw["telecasts_scheduled"]
+    sched["crew"][1] = [{"person": 4, "role": "pbp", "feed": "main"}]
+    sched["crew_source_url"][1] = (
+        "https://espnpressroom.com/us/press-releases/2026/09/synthetic-commentators/"
+    )
+    sched["crew_source_label"][1] = "ESPN Press Room"
+    guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+    open_app(guarded_page, "")
+    out = guarded_page.evaluate(
+        _js(
+            """const P = await import('./modules/panel.js');
+            const first = data.t.crew[0].find((e) => e.feed === 'main').person;
+            const people = [data.lookups.people[first].id, data.lookups.people[4].id];
+            const state = { ...S.defaultState(data), people };
+            const view = S.computeView(data, state);
+            const read = (j) => {
+              P.openScheduledPanel(j, { data, state, view });
+              const text = document.getElementById('panel-body').textContent;
+              document.getElementById('detail-panel').close();
+              return text;
+            };
+            return { zero: read(0), one: read(1), firstName: data.lookups.people[first].name,
+              fourName: data.lookups.people[4].name, viewHasZero: view.peopleOnGame.has(0) };"""
+        )
+    )
+    assert out["viewHasZero"] is True
+    assert "Selected on this game" not in out["zero"]
+    assert f"Selected on this game: {out['fourName']}" in out["one"]
+    assert out["firstName"] not in out["one"]
+
+
 def test_a6_probe_unplayed_pending_row_in_other_tabs(lead_page: Page) -> None:
     """RESEARCH A6: records how the unplayed pending unrated game (merged 19) is counted by the
     other tabs. An observation only: the numbers are printed for the SUMMARY, not fixed."""

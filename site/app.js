@@ -343,7 +343,7 @@ function renderWeekendPanel() {
       const unplayed = isUnplayedGame(game, etWallMinutes(now.date, now.minutes));
       if (game.block === 'scheduled') {
         clearHover();
-        openScheduledPanel(game.index, { data, state, view: lastView, unplayed });
+        openScheduledPanel(game.index, { data, state, unplayed });
       } else {
         openDetailPanel(game.index, { unplayed });
       }
