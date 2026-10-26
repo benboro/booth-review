@@ -37,7 +37,9 @@ REPO = Path(__file__).resolve().parent.parent
 # Re-pinned at 04.19 Plan 08: contract 2.4.0 adds telecasts.figure_source.
 # Re-pinned at 04.19 Plan 41: contract 2.5.0 adds coverage matched_crew_backup.
 # Re-pinned at Phase 10 Plan 03: contract 2.6.0 adds lookups.booths and the booth column.
-CFB_SCHEMA_SHA256 = "1696ee973f3b168f6d23063a5e2fceb1afa84555b4977b84c672758dcf1c7795"
+# Re-pinned at Phase 18 Plan 01: CFB contract 2.7.0 adds telecasts_scheduled, lookups.weeks,
+# freshness.weekend.
+CFB_SCHEMA_SHA256 = "8a05b9dc9af411fe03ea75adacce5e8195c36012fe0490cacb7433a0645cbd0e"
 
 INVENTED_STRINGS = ("Northfield Lanterns", "Harbor City", "Ada Quill", "example.com")
 
@@ -616,7 +618,7 @@ def test_schema_version_pinned() -> None:
 
 
 def test_cfb_contract_unchanged() -> None:
-    assert cfb_models.SCHEMA_VERSION == "2.6.0"
+    assert cfb_models.SCHEMA_VERSION == "2.7.0"
     digest = hashlib.sha256((REPO / "docs" / "site-data.schema.json").read_bytes()).hexdigest()
     assert digest == CFB_SCHEMA_SHA256
 

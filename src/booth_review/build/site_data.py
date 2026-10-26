@@ -46,6 +46,7 @@ from booth_review.build.shipped import (
 from booth_review.config import DataPaths
 from booth_review.contract.models import (
     SCHEMA_VERSION,
+    ScheduledColumns,
     SiteData,
     validate_site_data,
 )
@@ -136,6 +137,12 @@ def _through_week(
     return None
 
 
+def _empty_scheduled_columns() -> dict[str, list[object]]:
+    """The telecasts_scheduled block with every list empty (Phase 18 Plan 01 stages the
+    contract; Plan 06 fills it)."""
+    return {name: [] for name in ScheduledColumns.model_fields}
+
+
 def _build_freshness(tables: BuildTables) -> dict[str, object]:
     games = tables.games
     telecasts = tables.telecasts
@@ -171,6 +178,7 @@ def _build_freshness(tables: BuildTables) -> dict[str, object]:
         "season": season,
         "crews_through_week": _through_week(crew_ids, game_by_telecast),
         "viewership_through_week": _through_week(viewership_ids, game_by_telecast),
+        "weekend": None,
     }
 
 
@@ -766,9 +774,12 @@ def build_site_data(
             "rivalries": rivalries_lookup,
             "venues": venues_lookup,
             "booths": booths_lookup,
+            # Phase 18: Plan 06 fills the weeks, the scheduled block and the weekend stamp.
+            "weeks": [],
         },
         "telecasts": columns,
         "telecasts_unrated": unrated_columns,
+        "telecasts_scheduled": _empty_scheduled_columns(),
         "coverage": coverage_rows,
     }
     if counts is not None:

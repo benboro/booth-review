@@ -1630,7 +1630,7 @@ def test_backup_crew_ships_espn_press_room_credit_and_main_crew(build_reference:
     )
     payload = _site(tables, build_reference)
 
-    assert payload["schema_version"] == "2.6.0"
+    assert payload["schema_version"] == "2.7.0"
     columns = payload["telecasts"]
     assert columns["crew_source_label"] == [None, "ESPN Press Room"]
     assert columns["crew_source_url"] == [None, release]

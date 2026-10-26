@@ -1,10 +1,18 @@
 {
-  "schema_version": "2.6.0",
+  "schema_version": "2.7.0",
   "generated_at": "2026-01-01T00:00:00Z",
   "freshness": {
     "season": 2026,
     "crews_through_week": "5",
-    "viewership_through_week": "4"
+    "viewership_through_week": "4",
+    "weekend": {
+      "label": "5",
+      "number": 5,
+      "schedule_updated_at": "2026-10-02T21:30:00Z",
+      "crews_506_saved_at": "2026-09-30T02:14:00Z",
+      "crews_espnpr_saved_at": "2026-09-28T14:05:00Z",
+      "espnpr_week": "5"
+    }
   },
   "lookups": {
     "teams": [
@@ -57,6 +65,11 @@
       {
         "id": "net-e",
         "name": "Stream Plus",
+        "family": "disney"
+      },
+      {
+        "id": "espn-plus",
+        "name": "ESPN Plus",
         "family": "disney"
       }
     ],
@@ -340,7 +353,55 @@
         "lon": -77.3554
       }
     ],
-    "booths": []
+    "booths": [
+      {
+        "family": "disney",
+        "season": 2026,
+        "pbp": 4,
+        "analyst": 5,
+        "rank": 1,
+        "tier": "a",
+        "lead_network": null
+      }
+    ],
+    "weeks": [
+      {
+        "label": "0",
+        "number": 0,
+        "start": "2026-08-24",
+        "end": "2026-08-30"
+      },
+      {
+        "label": "1",
+        "number": 1,
+        "start": "2026-08-31",
+        "end": "2026-09-06"
+      },
+      {
+        "label": "2",
+        "number": 2,
+        "start": "2026-09-07",
+        "end": "2026-09-13"
+      },
+      {
+        "label": "3",
+        "number": 3,
+        "start": "2026-09-14",
+        "end": "2026-09-20"
+      },
+      {
+        "label": "4",
+        "number": 4,
+        "start": "2026-09-21",
+        "end": "2026-09-27"
+      },
+      {
+        "label": "5",
+        "number": 5,
+        "start": "2026-09-28",
+        "end": "2026-10-04"
+      }
+    ]
   },
   "telecasts": {
     "season": [
@@ -1390,6 +1451,164 @@
       null,
       null,
       null,
+      null,
+      null,
+      0
+    ]
+  },
+  "telecasts_scheduled": {
+    "season": [
+      2026,
+      2026,
+      2026,
+      2026,
+      2026,
+      2026,
+      2026,
+      2026,
+      2026
+    ],
+    "date": [
+      "2026-10-03",
+      "2026-10-03",
+      "2026-10-03",
+      "2026-10-03",
+      "2026-10-03",
+      "2026-10-03",
+      "2026-10-03",
+      "2026-10-03",
+      "2026-10-03"
+    ],
+    "kickoff": [
+      "2026-10-03T12:00:00-04:00",
+      "2026-10-03T12:00:00-04:00",
+      "2026-10-03T12:00:00-04:00",
+      null,
+      "2026-10-03T15:30:00-04:00",
+      "2026-10-03T19:30:00-04:00",
+      "2026-10-03T15:30:00-04:00",
+      "2026-10-03T20:00:00-04:00",
+      "2026-10-03T20:00:00-04:00"
+    ],
+    "time_slot": [
+      "noon",
+      "noon",
+      "noon",
+      null,
+      "afternoon",
+      "prime",
+      "afternoon",
+      "prime",
+      "prime"
+    ],
+    "away_team": [
+      0,
+      1,
+      5,
+      3,
+      4,
+      6,
+      1,
+      7,
+      4
+    ],
+    "home_team": [
+      3,
+      4,
+      7,
+      5,
+      2,
+      0,
+      5,
+      3,
+      6
+    ],
+    "neutral": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ],
+    "away_rank": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      5,
+      null,
+      null
+    ],
+    "home_rank": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      12,
+      null,
+      null
+    ],
+    "network": [
+      1,
+      1,
+      1,
+      2,
+      null,
+      3,
+      0,
+      4,
+      5
+    ],
+    "outlets": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [
+        0
+      ],
+      []
+    ],
+    "home_conference": [
+      0,
+      3,
+      1,
+      5,
+      0,
+      null,
+      5,
+      0,
+      3
+    ],
+    "away_conference": [
+      5,
+      4,
+      2,
+      0,
+      3,
+      null,
+      0,
+      1,
+      3
+    ],
+    "place": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      3,
       null,
       null,
       null

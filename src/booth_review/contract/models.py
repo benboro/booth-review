@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from booth_review.sources.second_rows import SECOND_SOURCE_HOSTS, host_matches
 
-SCHEMA_VERSION = "2.6.0"
+SCHEMA_VERSION = "2.7.0"
 
 _S506_HOST = "506sports.com"
 
@@ -220,12 +220,43 @@ class CrewEntry(BaseModel):
     feed: Literal["main", "alt", "spanish"]
 
 
+class WeekRef(BaseModel):
+    """One CFB week of the current season: its label and its Monday-to-Sunday ET dates
+    (Phase 18)."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    label: str
+    number: int
+    # ISO dates (ET): the Monday that opens the week and the Sunday that closes it.
+    start: str
+    end: str
+
+
+class WeekendFreshness(BaseModel):
+    """The week the This weekend tab opens on and when each source last landed (Phase 18).
+
+    Timestamps are ISO UTC strings ("%Y-%m-%dT%H:%M:%SZ"); the client formats them in ET.
+    The file carries no wall clock of its own.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    label: str
+    number: int
+    schedule_updated_at: str | None = None
+    crews_506_saved_at: str | None = None
+    crews_espnpr_saved_at: str | None = None
+    espnpr_week: str | None = None
+
+
 class Freshness(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
     season: int
     crews_through_week: str | None = None
     viewership_through_week: str | None = None
+    weekend: WeekendFreshness | None = None
 
 
 class Lookups(BaseModel):
@@ -242,6 +273,7 @@ class Lookups(BaseModel):
     rivalries: list[RivalryRef]
     venues: list[VenueRef]
     booths: list[BoothRef]
+    weeks: list[WeekRef]
 
 
 class TelecastColumns(BaseModel):
@@ -352,6 +384,35 @@ class UnratedColumns(BaseModel):
     cause: list[Literal["rarely_rated", "pending", "rr_dip", "none"]]
 
 
+class ScheduledColumns(BaseModel):
+    """One list per display field; index k across every list is one unplayed
+    regular-season FBS game with no shipped telecast row (Phase 18).
+
+    No crew, booth, cause, points, spread or excitement by definition, and no
+    game or telecast id. A null network means Network TBA; kickoff and
+    time_slot are null together for a game with no time yet. CFBD display
+    fields only. See docs/site-data.md.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    season: list[int]
+    date: list[str]
+    kickoff: list[str | None]
+    time_slot: list[Literal["noon", "afternoon", "prime", "late"] | None]
+    away_team: list[int]
+    home_team: list[int]
+    neutral: list[bool]
+    away_rank: list[int | None]
+    home_rank: list[int | None]
+    # Index into lookups.networks; null = Network TBA (D-13/D-14).
+    network: list[int | None]
+    outlets: list[list[int]]
+    home_conference: list[int | None]
+    away_conference: list[int | None]
+    place: list[int | None]
+
+
 class CoverageRow(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
@@ -377,12 +438,13 @@ class CoverageRow(BaseModel):
 class SiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["2.6.0"]
+    schema_version: Literal["2.7.0"]
     generated_at: str
     freshness: Freshness
     lookups: Lookups
     telecasts: TelecastColumns
     telecasts_unrated: UnratedColumns
+    telecasts_scheduled: ScheduledColumns
     coverage: list[CoverageRow]
 
     @model_validator(mode="after")
@@ -513,17 +575,70 @@ class SiteData(BaseModel):
                     f"telecasts_unrated.network[{i}]: an unrated game needs a resolved network"
                 )
 
-        # WR-01: neither block ships a game or telecast id, so a game is its
+        sc = self.telecasts_scheduled
+        sn = len(sc.season)
+        for name in ScheduledColumns.model_fields:
+            value = getattr(sc, name)
+            if len(value) != sn:
+                raise ValueError(
+                    f"telecasts_scheduled.{name}: length {len(value)} does not match "
+                    f"telecasts_scheduled.season length {sn}"
+                )
+        num_conferences = len(self.lookups.conferences)
+        for i in range(sn):
+            if not 0 <= sc.away_team[i] < num_teams:
+                raise ValueError(f"telecasts_scheduled.away_team[{i}]: team index out of range")
+            if not 0 <= sc.home_team[i] < num_teams:
+                raise ValueError(f"telecasts_scheduled.home_team[{i}]: team index out of range")
+            sched_network = sc.network[i]
+            if sched_network is not None and not 0 <= sched_network < num_networks:
+                raise ValueError(f"telecasts_scheduled.network[{i}]: network index out of range")
+            for j, outlet in enumerate(sc.outlets[i]):
+                if not 0 <= outlet < num_networks:
+                    raise ValueError(
+                        f"telecasts_scheduled.outlets[{i}][{j}]: network index out of range"
+                    )
+            for conf_name, conf_col in (
+                ("home_conference", sc.home_conference),
+                ("away_conference", sc.away_conference),
+            ):
+                conf = conf_col[i]
+                if conf is not None and not 0 <= conf < num_conferences:
+                    raise ValueError(
+                        f"telecasts_scheduled.{conf_name}[{i}]: conference index out of range"
+                    )
+            sched_place = sc.place[i]
+            if sched_place is not None:
+                if not 0 <= sched_place < len(self.lookups.venues):
+                    raise ValueError(f"telecasts_scheduled.place[{i}]: venue index out of range")
+                referenced_venues.add(sched_place)
+            if (sc.kickoff[i] is None) != (sc.time_slot[i] is None):
+                raise ValueError(
+                    f"telecasts_scheduled.time_slot[{i}]: must be null exactly when kickoff is null"
+                )
+
+        weeks = self.lookups.weeks
+        for k, week in enumerate(weeks):
+            if week.start > week.end:
+                raise ValueError(f"lookups.weeks[{k}]: start is after end")
+        if len({w.label for w in weeks}) != len(weeks):
+            raise ValueError("lookups.weeks: duplicate week label")
+        weekend = self.freshness.weekend
+        if weekend is not None and weekend.label not in {w.label for w in weeks}:
+            raise ValueError("freshness.weekend.label: not a label in lookups.weeks")
+
+        # WR-01: no block ships a game or telecast id, so a game is its
         # (date, away_team, home_team); count only, never a value (T-03-04).
         game_keys = Counter(
             (cols.date[i], cols.away_team[i], cols.home_team[i])
-            for cols in (tc, uc)
+            for cols in (tc, uc, sc)
             for i in range(len(cols.season))
         )
         repeated = sum(1 for n in game_keys.values() if n > 1)
         if repeated:
             raise ValueError(
-                f"telecasts/telecasts_unrated: {repeated} game(s) appear more than once"
+                f"telecasts/telecasts_unrated/telecasts_scheduled: {repeated} game(s) "
+                "appear more than once"
             )
 
         for k in range(num_rivalries):

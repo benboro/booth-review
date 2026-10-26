@@ -18,7 +18,7 @@ immediately, in parallel with Phase 3's real joins.
 `site-data.json` is **one versioned columnar JSON file** (D-13), not an array
 of per-telecast objects:
 
-- `schema_version` — the contract version (currently `"2.6.0"`). See
+- `schema_version` — the contract version (currently `"2.7.0"`). See
   Versioning below.
 - `generated_at` — ISO UTC time of the newest change to a collected input (the
   newest manifest entry whose content differs from the previous one for the same
@@ -87,6 +87,25 @@ the client, never in the data:
   is null.
 - `rr_dip`: a 2021 to 2024 game on a network not flagged rarely rated.
 - `none`: anything else, including a game whose only figure is an alt-feed figure.
+
+### `telecasts_scheduled`
+
+Phase 18's This weekend tab. One list per display field, index-aligned like the other
+blocks: `season`, `date`, `kickoff`, `time_slot`, `away_team`, `home_team`, `neutral`,
+`away_rank`, `home_rank`, `network`, `outlets`, `home_conference`, `away_conference`,
+`place`. Each has the meaning of the same-named `telecasts` field, with these differences:
+
+- A row is an unplayed FBS-involving regular-season game of the current season, in weeks
+  up to and including the current weekend, that has no shipped telecast row (a game in
+  `telecasts` or `telecasts_unrated` never appears here; the contract rejects a game in
+  more than one block, count only).
+- `network` is an index into `lookups.networks` or null. Null means Network TBA, and the
+  client puts the game in the Time TBA strip. The network comes from the CFBD media rows
+  whose `mediaType` is `tv` or `web` only, never radio or mobile.
+- `kickoff` and `time_slot` are null together: a game with no time yet.
+- No crew, booth, cause, points, spread or excitement ships, since the game has none by
+  definition, and no game or telecast id or completed flag does either (CFBD display
+  fields only). The block rejects any column it does not declare.
 
 ## Field-by-field contract
 
@@ -186,12 +205,23 @@ Each `crew` entry is `{ person: int, role, feed }`:
   lists only the `is_fbs` entries plus "FBS Independents" (D-10), while the
   detail panel may still display any conference, FBS or not.
 
+- **`weeks`**: `{ label, number, start, end }` — the current season's weeks for the This
+  weekend stepper (Phase 18). `start` is the Monday and `end` the Sunday (ISO dates, ET);
+  labels are unique, and `start` is never after `end`. Empty when the build has no
+  schedule.
+
 ### `freshness`
 
-`{ season, crews_through_week, viewership_through_week }` — the two SITE-14
+`{ season, crews_through_week, viewership_through_week, weekend }` — the two SITE-14
 stamps ("crews through Week N" and "viewership through Week N") for the
 current in-season build. `crews_through_week` and `viewership_through_week`
 are null before either has a value.
+
+`weekend` (Phase 18) is null or `{ label, number, schedule_updated_at, crews_506_saved_at,
+crews_espnpr_saved_at, espnpr_week }`: the week the This weekend tab opens on (its `label`
+must be a label in `lookups.weeks`) and when each source last landed. The timestamps are
+ISO UTC strings (`YYYY-MM-DDTHH:MM:SSZ`) or null; the client formats them in ET, and the
+file carries no wall clock of its own.
 
 ### `coverage`
 
@@ -257,7 +287,8 @@ Unrated rows carry the same display-only CFBD fields as rated rows (`excitement`
   `2.2.0 -> 2.3.0` added `lookups.venues` and the per-game `place` index in both blocks (SITE-71, 04.18); minor bump, additive;
   `2.3.0 -> 2.4.0` added `telecasts.figure_source` and allowed empty `rr_urls` for second-source figures (SRC-06, 04.19); minor bump;
   `2.4.0 -> 2.5.0` added coverage `matched_crew_backup` (SRC-09, 04.19); minor bump;
-  `2.5.0 -> 2.6.0`: `lookups.booths` and `telecasts[_unrated].booth` (Phase 10 CFB booth tiers; additive).
+  `2.5.0 -> 2.6.0`: `lookups.booths` and `telecasts[_unrated].booth` (Phase 10 CFB booth tiers; additive);
+  `2.6.0 -> 2.7.0`: the `telecasts_scheduled` block, `lookups.weeks` and `freshness.weekend` (Phase 18 This weekend tab; additive).
 - **Removing a field, renaming a field, or changing a field's type**
   (including narrowing an enum) bumps the **major** version (`1.0.0` →
   `2.0.0`).
