@@ -247,6 +247,20 @@ def test_week_step_keeps_the_weekday_when_the_next_week_has_it(
     assert "day=" not in page.url
 
 
+def test_reopening_the_tab_lands_on_the_current_weekend(
+    nfl_guarded_page: Page, open_nfl_app: OpenNfl
+) -> None:
+    # 18-13 F16: another tab never keeps the weekend's week.
+    page = nfl_guarded_page
+    _open(page, open_nfl_app, "&week=4")
+    assert page.locator(".wk-week").inner_text() == "Week 4"
+    page.click("#nfl-chart-tabs [role=tab] >> nth=0")
+    assert "week=" not in page.url
+    page.click("#nfl-tab-weekend")
+    assert page.locator(".wk-week").inner_text() == "Week 5"
+    assert "week=" not in page.url
+
+
 def test_next_week_step_is_disabled_on_the_latest_week(
     nfl_guarded_page: Page, open_nfl_app: OpenNfl
 ) -> None:
