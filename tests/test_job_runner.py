@@ -2066,6 +2066,34 @@ def test_cli_job_run_rejects_a_mode_on_a_scheduled_trigger(capsys) -> None:
         assert "--mode" in capsys.readouterr().err
 
 
+def test_failed_schedule_pull_leaves_last_schedule_at_so_a_backup_slot_retries(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    # 18-13 F11: a schedule-only run whose CFBD pull failed must not mark the slot done, or the
+    # 20:00/22:00 backups no-op.
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    before = _seed_wednesday_run(paths)
+    responses = _cfbd_ok_responses(2026)
+    responses["https://api.collegefootballdata.com/games?seasonType=both&year=2026"] = (
+        502,
+        b"bad gateway",
+        {},
+    )
+    handle = mock_transport_factory(responses)
+    runtime = _runtime(paths, handle, now=lambda: _FRI_NOW, fake_clock=fake_clock, max_calls=3)
+    ScheduledJob(runtime, token="test-token", now=lambda: _FRI_NOW, trigger="schedule").run()
+    assert load_state(paths.job_state).last_schedule_at == before.last_schedule_at
+
+    later = datetime(2026, 10, 31, 0, 5, tzinfo=UTC)  # Fri 20:05 EDT backup
+    retry = mock_transport_factory(_cfbd_ok_responses(2026))
+    runtime = _runtime(paths, retry, now=lambda: later, fake_clock=fake_clock, max_calls=3)
+    result = ScheduledJob(runtime, token="test-token", now=lambda: later, trigger="schedule").run()
+    assert result.exit_code != 5
+    assert any("/games" in r.url for r in retry.requests)
+    assert load_state(paths.job_state).last_schedule_at == later
+
+
 def test_scheduled_job_schedule_mode_backup_slot_is_nothing_due(
     git_vault, mock_transport_factory, fake_clock
 ) -> None:
@@ -2097,7 +2125,8 @@ def test_update_rebuild_mode_collects_nothing_and_deploys(
     assert result.deploy_ready is True
     assert (tmp_path / "site-out" / "index.html").is_file()
     after = load_state(paths.job_state)
-    assert after.last_schedule_at == later
+    # 18-13 F11: a rebuild pulls no schedule, so it never stands in for a schedule slot.
+    assert after.last_schedule_at == before.last_schedule_at
     assert after.last_build_at == later
     assert after.last_success_at == before.last_success_at
     assert after.last_attempt_at == before.last_attempt_at

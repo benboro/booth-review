@@ -645,8 +645,9 @@ class ScheduledJob:
         NFL block runs only the nflverse schedule; "rebuild" collects nothing.
         Both then build and deploy under the same gates as a full run. Neither
         calls Ratings Reference, 506, ESPN Press Room, Wikipedia, the gap or
-        freeze steps. The saved state moves only `last_schedule_at` and
-        `last_build_at`, so the Sunday/Wednesday slot logic is untouched."""
+        freeze steps. The saved state moves only `last_schedule_at` (a clean
+        schedule run only) and `last_build_at`, so the Sunday/Wednesday slot
+        logic is untouched."""
         items: list[AttentionItem] = []
         counts: dict[str, int] = {}
         any_failed = False
@@ -700,9 +701,12 @@ class ScheduledJob:
 
         deploy_ready = deploy_ready and not key_leak
         if not self._dry_run:
+            # 18-13 F11: only a schedule run that pulled and built cleanly marks its slot done;
+            # a failed pull or a rebuild leaves it, so the next backup slot still pulls.
+            schedule_done = mode == "schedule" and not any_failed
             new_state = replace(
                 state,
-                last_schedule_at=now,
+                last_schedule_at=now if schedule_done else state.last_schedule_at,
                 last_build_at=new_last_build_at or state.last_build_at,
             )
             report = {
