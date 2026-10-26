@@ -523,7 +523,13 @@ function renderBreakdown(model, state, env, rows) {
     );
     tbody.appendChild(tr);
   }
-  table.append(thead, tbody);
+  // Column groups matching the spanners, so scope="colgroup" ties each spanner to its columns.
+  const groups = [1, 5, 3, 1, 1].map((span) => {
+    const g = el('colgroup');
+    g.span = span;
+    return g;
+  });
+  table.append(...groups, thead, tbody);
   // Eleven columns do not fit a phone; the table scrolls inside its own wrapper.
   const scroll = el('div', 'table-scroll');
   scroll.appendChild(table);

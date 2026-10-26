@@ -324,3 +324,13 @@ def test_phone_second_head_row_is_not_pinned(mobile: Page) -> None:
         TABLE,
     )
     assert positions == ["sticky", "static"]
+
+
+def test_colgroups_match_the_spanners(app: Page) -> None:
+    """IN-07: the scope="colgroup" spanners sit over real <colgroup>s (1 / 5 / 3 / 1 / 1)."""
+    spans = app.eval_on_selector_all(f"{TABLE} > colgroup", "els => els.map(e => e.span)")
+    assert spans == [1, 5, 3, 1, 1]
+    spanners = app.eval_on_selector_all(
+        f"{TABLE} th.nfl-spanner", "els => els.map(e => [e.scope, e.colSpan])"
+    )
+    assert spanners == [["colgroup", 5], ["colgroup", 3]]
