@@ -32,7 +32,11 @@ from booth_review.sources.sports506.mlb_parser import (
     mlb_smoke_check,
     parse_mlb_page,
 )
-from booth_review.sources.sports506.nfl_parser import nfl_smoke_check
+from booth_review.sources.sports506.nfl_parser import (
+    NFL_CANONICAL_RE,
+    NFL_TITLE_RE,
+    nfl_smoke_check,
+)
 from booth_review.sources.sports506.weeks import discover_season_weeks, smoke_check
 from booth_review.transport.cache import (
     FreezeGuard,
@@ -66,13 +70,6 @@ _TITLE_RE = re.compile(
 )
 _FILENAME_RE = re.compile(r"^(\d{4})-wk(\d{1,2}|B)\.html$")
 
-_NFL_CANONICAL_RE = re.compile(
-    r"<link[^>]*rel=[\"']canonical[\"'][^>]*href=[\"'][^\"']*nfl\.php\?yr=(\d{4})(?:&amp;|&)wk=(\d{1,2})[\"']",
-    re.IGNORECASE,
-)
-_NFL_TITLE_RE = re.compile(
-    r"<title>[^<]*NFL Maps:\s*Week\s+(\d{1,2}),\s*(\d{4})[^<]*</title>", re.IGNORECASE
-)
 _NFL_FILENAME_RE = re.compile(r"^(\d{4})-nfl-wk(\d{1,2})\.html$")
 
 # The MLB token is matched loosely (any short word) so an unexpected round label
@@ -189,8 +186,8 @@ CFB_PROFILE = PageProfile(
 NFL_PROFILE = PageProfile(
     league="nfl",
     source="nfl_sports506",
-    canonical_re=_NFL_CANONICAL_RE,
-    title_re=_NFL_TITLE_RE,
+    canonical_re=NFL_CANONICAL_RE,
+    title_re=NFL_TITLE_RE,
     filename_re=_NFL_FILENAME_RE,
     labels=_nfl_labels,
     request=_nfl_request,
