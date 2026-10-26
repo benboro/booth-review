@@ -79,7 +79,7 @@ from booth_review.build.shipped import (
     rarity_verdict,
     shipped_expr,
 )
-from booth_review.build.sources import load_all_sources, load_cfbd_venues
+from booth_review.build.sources import SeasonSources, load_all_sources, load_cfbd_venues
 from booth_review.build.telecasts import build_telecasts
 from booth_review.build.venues import (
     empty_venues_frame,
@@ -94,6 +94,7 @@ from booth_review.build.viewership import (
     apply_headlines,
     build_viewership,
 )
+from booth_review.build.weekend import ScheduleInputs, build_schedule_inputs
 from booth_review.config import DataPaths
 from booth_review.flags.era import load_eras
 from booth_review.flags.events import load_event_flags
@@ -107,6 +108,7 @@ from booth_review.resolve.diagnose import (
 )
 from booth_review.resolve.games import GameIndex
 from booth_review.resolve.networks import (
+    NetworkTable,
     check_primary_overrides,
     load_network_rarity,
     load_networks,
@@ -167,6 +169,8 @@ class BuildTables:
     second_source_accept_warnings: tuple[tuple[int, str], ...] = ()
     # Phase 10 booth tier per tiered CFB telecast; private, never written to processed/.
     booth_tiers: pl.DataFrame = field(default_factory=empty_booth_tiers_frame)
+    # Phase 18: the current season's schedule inputs for telecasts_scheduled and the weekend stamp.
+    schedule: ScheduleInputs = field(default_factory=ScheduleInputs)
 
 
 def _combined_review_row(
@@ -313,6 +317,17 @@ def _accept_warnings(
             continue
         warnings.append((line, "ignored" if key in second.accepts_ignored else "unused"))
     return tuple(sorted(warnings))
+
+
+def _schedule_inputs(
+    paths: DataPaths, sources: Sequence[SeasonSources], networks: NetworkTable
+) -> ScheduleInputs:
+    """The newest loaded season's games, media and manifest stamps (Phase 18)."""
+    with_games = [s for s in sources if s.games]
+    if not with_games:
+        return ScheduleInputs()
+    newest = max(with_games, key=lambda s: s.season)
+    return build_schedule_inputs(paths, newest.season, newest.games, newest.media, networks)
 
 
 def assemble_tables(
@@ -568,6 +583,7 @@ def assemble_tables(
         booth_tiers=booth_assignment.booth_tiers,
         second_source_gates=second.gates,
         second_source_accept_warnings=_accept_warnings(accept_lines, second, seasons),
+        schedule=_schedule_inputs(paths, sources, networks),
     )
 
 

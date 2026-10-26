@@ -99,6 +99,17 @@ blocks: `season`, `date`, `kickoff`, `time_slot`, `away_team`, `home_team`, `neu
   up to and including the current weekend, that has no shipped telecast row (a game in
   `telecasts` or `telecasts_unrated` never appears here; the contract rejects a game in
   more than one block, count only).
+- Selection as built (`build/weekend.py`, `build/site_data.py`): the current weekend is
+  the first numbered week whose last FBS-involving kickoff plus 4 hours is after the
+  build time (`generated_at`, the input stamp), never CFBD's `completed` flag; after the
+  last numbered week it stays on that week. Rows are the season's FBS-involving regular
+  games in weeks up to and including it, so past weeks keep their unlisted games ("Crew
+  not listed"). Postseason games and other seasons never ship here. Rows sort by date,
+  kickoff (nulls last), home team, away team.
+- Rollover: the weekend advances on the first build whose inputs postdate the last
+  game's kickoff plus 4 hours. In the job that is the first build after a games refresh
+  following that time (the Sunday 10:00 full run's `/games` refresh), so the next
+  week's grid appears with no user action.
 - `network` is an index into `lookups.networks` or null. Null means Network TBA, and the
   client puts the game in the Time TBA strip. The network comes from the CFBD media rows
   whose `mediaType` is `tv` or `web` only, never radio or mobile.
@@ -106,6 +117,14 @@ blocks: `season`, `date`, `kickoff`, `time_slot`, `away_team`, `home_team`, `neu
 - No crew, booth, cause, points, spread or excitement ships, since the game has none by
   definition, and no game or telecast id or completed flag does either (CFBD display
   fields only). The block rejects any column it does not declare.
+
+The This weekend view shows CFBD display fields (teams, kickoffs, ranks, conferences,
+neutral flag, TV network) in the interactive chart under CFBD's 2026-09-25 confirmation,
+credited "Data provided by CollegeFootballData.com"; no downloadable file carries them.
+Build counts gain `scheduled_games` and `scheduled_network_unmapped` (numbers only).
+`freshness.weekend` is built from manifest lines: "Schedule updated" is the newest
+change to the CFBD games or media cache, the 506 stamp is that week's page save time,
+and the ESPN Press Room stamp is that week's commentators page save time.
 
 ## Field-by-field contract
 

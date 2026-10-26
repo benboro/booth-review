@@ -27,6 +27,10 @@ and the version set back to 2.5.0 hashes to the 04.19 Plan 41 digest
 Phase 18 Plan 01: site-data.json schema 2.7.0 adds telecasts_scheduled (all lists empty),
 lookups.weeks ([]) and freshness.weekend (null); no figure or crew changed.
 
+# Re-pinned at Phase 18 Plan 06: telecasts_scheduled and weekend freshness.
+(site-data.json now carries the season's weeks lookup, the weekend stamp and the unplayed,
+unshipped games of weeks up to the current one; no figure or crew changed.)
+
 Phase 10 Plan 04: the build adds interim/review_cfb_booths_untiered.csv (header-only here:
 the synthetic networks carry no big-four family) and cfb_booths_* summary counts;
 site-data.json is unchanged from Plan 03 (no cfb_booth_ranks.csv in the synthetic
@@ -157,7 +161,7 @@ _GOLDEN: dict[str, str] = {
         "07ff159d34d5e0cfdd3b77f84c3ecaec0cd14c437fa015fe89333709317831c3"
     ),
     "processed/site-data.json": (
-        "e430e18c619e91aadd687dbb00403b120d7c53651e50aba8c6a93755fa5208d5"
+        "765b88ada315efc99f43baaecb528c71a806994f6cf2fac5452f4fa1a7eea5ea"
     ),
     "processed/telecast_flags.parquet": (
         "2e2f334909dc09ab5ff590cadd3d4cb2158678a2d980948cd454219ab82927e2"
