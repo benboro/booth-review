@@ -63,6 +63,7 @@ from booth_review.nfl.reference import (
     load_nfl_team_crosswalk,
     load_nfl_week_overrides,
 )
+from booth_review.nfl.upcoming import SLOT_NETWORK_COLUMNS, load_slot_networks
 from booth_review.people.registry import (
     PEOPLE_COLUMNS,
     PERSON_OVERRIDE_COLUMNS,
@@ -128,6 +129,7 @@ KNOWN_TABLES: dict[str, tuple[tuple[str, ...] | None, Loader | None]] = {
         load_nfl_lead_booth_overrides,
     ),
     "nfl_booth_ranks.csv": (NFL_BOOTH_RANK_COLUMNS, load_nfl_booth_ranks),
+    "nfl_slot_networks.csv": (SLOT_NETWORK_COLUMNS, load_slot_networks),
     "cfb_booth_ranks.csv": (CFB_BOOTH_RANK_COLUMNS, load_cfb_booth_ranks),
     "nfl_week_overrides.csv": (NFL_WEEK_OVERRIDE_COLUMNS, load_nfl_week_overrides),
     "mlb_clubs.csv": (MLB_CLUB_COLUMNS, load_mlb_clubs),
