@@ -247,6 +247,11 @@ function boothLabel(key) {
   return e ? e.label : key;
 }
 
+/** `3 of 12 games match`, singular on a one-game day. */
+function matchSummary(matching, total) {
+  return `${matching} of ${total} ${total === 1 ? 'game matches' : 'games match'}`;
+}
+
 function renderSelectionBar() {
   const { chips, clearBtn, summary } = regions;
   const chip = (name, onRemove) => {
@@ -269,7 +274,9 @@ function renderSelectionBar() {
   );
   clearBtn.hidden = !state.selection;
   if (state.view === 'weekend') {
-    summary.textContent = '';
+    // The weekend view counts the shown day's games (grid and strip), like the CFB summary.
+    const c = weekend.summaryCounts();
+    summary.textContent = c ? matchSummary(c.matching, c.total) : '';
     return;
   }
   const n = lastRows.length;

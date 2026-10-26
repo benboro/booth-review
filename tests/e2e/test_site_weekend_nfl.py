@@ -381,3 +381,26 @@ def test_keyboard_reaches_a_cell(nfl_guarded_page: Page, open_nfl_app: OpenNfl) 
     page.keyboard.press("ArrowDown")
     focused = page.evaluate("document.activeElement.querySelector('.wk-booth').textContent")
     assert focused == "Pryor · Reyes"
+
+
+# ---- v2.1 polish (18-UI-REVIEW items 6 and 8) ----
+
+
+def test_summary_counts_the_days_games_like_cfb(
+    nfl_guarded_page: Page, open_nfl_app: OpenNfl
+) -> None:
+    # 18-UI-REVIEW item 6: the NFL summary was blank on This weekend, leaving a 60px band and
+    # no "n of total games match" feedback under a pick.
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    cells = page.locator(".wk-cell").count()
+    assert cells > 1
+    assert page.locator("#nfl-summary").inner_text() == f"{cells} of {cells} games match"
+    team_id = page.evaluate(
+        "(async () => { const r = await fetch('nfl-data.json'); const j = await r.json();"
+        " return j.lookups.franchises.find((f) => f.name.includes('Granite Bay')).id; })()"
+    )
+    page.evaluate("(id) => window.__nflTestHooks.setState({ teams: [id] })", team_id)
+    matched = page.locator(".wk-cell.is-match").count()
+    assert 1 <= matched < cells
+    assert page.locator("#nfl-summary").inner_text() == f"{matched} of {cells} games match"

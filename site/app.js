@@ -503,7 +503,9 @@ function render() {
   }
   if (weekendCounts) {
     // The selection summary counts the selected day's games (grid, strip and compact table).
-    document.getElementById('summary-count').textContent = `${weekendCounts.matching} of ${weekendCounts.total} games match`;
+    const { matching, total } = weekendCounts;
+    document.getElementById('summary-count').textContent =
+      `${matching} of ${total} ${total === 1 ? 'game matches' : 'games match'}`;
     document.getElementById('summary-detail').textContent = '';
     document.getElementById('summary-detail').removeAttribute('title');
   }

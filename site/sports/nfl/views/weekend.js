@@ -117,11 +117,23 @@ export function render(ctx) {
   if (fixedNow) opts.now = new Date(fixedNow);
   const phone = window.matchMedia(PHONE_QUERY).matches;
   refs.instance = (phone ? renderWeekendList : renderWeekend)(refs.host, wk, opts);
-  current = { week: r.week, day: r.day, days: r.days, games: r.games.length, slotCredit: Boolean(wk.links.wikipedia) };
+  // The selection bar's summary counts the shown day's games, as the CFB host does
+  // (18-UI-REVIEW item 6): every game dated that day or undated (so in every strip).
+  const inDay = r.games.filter((g) => g.date === r.day || g.date == null);
+  const matching = hasPick(state) ? inDay.filter((g) => opts.passes(g) === true).length : inDay.length;
+  current = {
+    week: r.week, day: r.day, days: r.days, games: r.games.length,
+    slotCredit: Boolean(wk.links.wikipedia), counts: { matching, total: inDay.length },
+  };
 }
 
 export function resize() {}
 
 export function testModel() {
   return { view: 'weekend', ...(current ?? { week: null, day: null, days: [], games: 0, slotCredit: false }) };
+}
+
+/** The shown day's `{ matching, total }` for the host's summary line, or null before a render. */
+export function summaryCounts() {
+  return current ? current.counts : null;
 }
