@@ -13,7 +13,7 @@
 
 import { sortNetworks } from './network.js';
 import {
-  FAMILY_COLORS, INK, PAGE_BG, PILL_TEXT_COLOR, familyKey, mixHex,
+  FAMILY_COLORS, INK, PAGE_BG, contrastRatio, familyKey, mixHex,
 } from './palette.js';
 
 /**
@@ -68,6 +68,8 @@ export const WEEKEND_FADED_OPACITY = 0.3;
 
 /** Weight of the family colour in a Crew TBA / not-listed tint (D-05). */
 const TINT_WEIGHT = 0.18;
+/** White-on-fill contrast a known-crew cell is deepened to (user sign-off 2026-10-26). */
+const KNOWN_TEXT_CONTRAST = 7;
 const STREAMING_ROW = 'streaming';
 const SUB_ROW_PITCH = 48;
 const CELL_HEIGHT = 44;
@@ -193,13 +195,14 @@ export function axisRange(kickoffs, blockMinutes) {
 }
 
 /**
- * Pixels per hour: clamp(88, floor((width - 96) / hours), 120); 96 is the row header column.
+ * Pixels per hour: clamp(80, floor((width - 96) / hours), 120); 96 is the row header column.
+ * The 80 floor lets a 15-hour day fit at 1440 (user sign-off 2026-10-26; the spec had 88).
  * @param {number} width - container width in px.
  * @param {number} hours - hours the axis spans.
  * @returns {number}
  */
 export function pxPerHour(width, hours) {
-  return Math.min(120, Math.max(88, Math.floor((width - 96) / hours)));
+  return Math.min(120, Math.max(80, Math.floor((width - 96) / hours)));
 }
 
 function tickLabel(min) {
@@ -287,7 +290,7 @@ export function buildDayModel(games, { sport, day, width }) {
   }
   const kickoffs = [...byRow.values()].flat().map((g) => g.kickoffMin);
   const range = axisRange(kickoffs, block);
-  const pxh = range ? pxPerHour(width, (range.end - range.start) / 60) : 88;
+  const pxh = range ? pxPerHour(width, (range.end - range.start) / 60) : 80;
   let axis = null;
   if (range) {
     const ticks = [];
@@ -410,9 +413,24 @@ export function matchupText(game) {
 }
 
 /**
- * Cell colours (D-05). Known: solid family fill with the pill text colour, no edge. Crew TBA or
- * not listed: a tint of the family over the page background with `--ink` text and a solid
- * family left edge. An unknown family folds to `other`.
+ * The family colour mixed toward black, in 1% steps, until white text on it reaches
+ * `KNOWN_TEXT_CONTRAST`. Disney and light conference already pass and come back unchanged.
+ * @param {string} hex
+ * @returns {string}
+ */
+function deepenForWhite(hex) {
+  for (let w = 100; w >= 0; w -= 1) {
+    const out = mixHex(hex, '#000000', w / 100);
+    if (contrastRatio(out, '#FFFFFF') >= KNOWN_TEXT_CONTRAST) return out;
+  }
+  return '#000000';
+}
+
+/**
+ * Cell colours (D-05). Known: the family fill deepened for white text at 7:1, no edge (the
+ * mid-tone fills read poorly with black text; user sign-off 2026-10-26). Crew TBA or not
+ * listed: a tint of the family over the page background with `--ink` text and a solid family
+ * left edge. An unknown family folds to `other`.
  * @param {string} family
  * @param {'light'|'dark'} theme
  * @param {'known'|'tba'|'not-listed'} state
@@ -421,7 +439,7 @@ export function matchupText(game) {
 export function cellColors(family, theme, state) {
   const key = familyKey(family);
   const solid = FAMILY_COLORS[theme][key];
-  if (state === 'known') return { bg: solid, fg: PILL_TEXT_COLOR[theme][key], edge: null };
+  if (state === 'known') return { bg: deepenForWhite(solid), fg: '#FFFFFF', edge: null };
   return { bg: mixHex(solid, PAGE_BG[theme], TINT_WEIGHT), fg: INK[theme], edge: solid };
 }
 

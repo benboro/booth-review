@@ -79,9 +79,12 @@ records only where the site settles or applies them.
   (Phase 17.1).
 
 - The This weekend timeline is plain DOM, not a chart: rows follow network precedence in
-  a 96px label column, the time scale runs 88-120 px/hour, cells are 44px tall on a 48px
+  a 96px label column, the time scale runs 80-120 px/hour (80, not the spec's 88,
+  so a 15-hour day fits at 1440), cells are 44px tall on a 48px
   row pitch, and a game's block is 3h30 long for CFB and 3h15 for NFL (Phase 18).
-- Cell states: a known crew is a solid network-family fill; Crew TBA and not-listed
+- Cell states: a known crew is a solid network-family fill, deepened toward black until
+  white text on it reaches 7:1 (the mid-tone fills read poorly with black text; user
+  sign-off 2026-10-26); Crew TBA and not-listed
   cells use a 0.18 family tint with a 4px family edge, and never `--muted` text on a
   tint (Phase 18).
 - Under a pick, non-matching cells fade to 0.3 and matching cells get an inset 2px `--ink`

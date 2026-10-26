@@ -415,6 +415,9 @@ export function buildSourceLine(ctx) {
 
 // ---- The grid ----
 
+/** Lane width a tick label needs ("12 am" in the caption face plus its left pad). */
+const TICK_LABEL_ROOM = 44;
+
 function buildAxis(ctx, laneWidth) {
   const { axis, pxh } = ctx.dayModel;
   const bar = el('div', 'wk-axis');
@@ -422,9 +425,11 @@ function buildAxis(ctx, laneWidth) {
   const ticks = el('div', 'wk-ticks');
   ticks.style.width = `${laneWidth}px`;
   for (const t of axis.ticks) {
-    if (t.min >= axis.end) continue;
+    const left = Math.round(((t.min - axis.start) * pxh) / 60);
+    // A label too close to the lane's right edge would be clipped; its gridline still shows.
+    if (laneWidth - left < TICK_LABEL_ROOM) continue;
     const tick = el('span', 'wk-tick', t.label);
-    tick.style.left = `${Math.round(((t.min - axis.start) * pxh) / 60)}px`;
+    tick.style.left = `${left}px`;
     ticks.append(tick);
   }
   bar.append(ticks);

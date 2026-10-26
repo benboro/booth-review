@@ -219,17 +219,19 @@ def test_phone_list_orders_cbs_rows_by_booth_rank(nfl_mobile_page: Page, nfl_sit
 def test_dark_theme_renders(nfl_guarded_page: Page, open_nfl_app: OpenNfl) -> None:
     page = nfl_guarded_page
     _open(page, open_nfl_app)
-    light = page.locator(".wk-row[data-row=cbs] .wk-cell").first.evaluate(
-        "(n) => getComputedStyle(n).backgroundColor"
-    )
+    # Known-crew fills are deepened to the same 7:1 white-text fill in both themes, so the
+    # check is the page background instead (user sign-off 2026-10-26).
+    light = page.evaluate("getComputedStyle(document.body).backgroundColor")
     set_theme(page, "dark")
     assert page.evaluate("document.documentElement.dataset.theme") == "dark"
     assert page.locator(".wk-cell").count() == 10
-    dark = page.locator(".wk-row[data-row=cbs] .wk-cell").first.evaluate(
-        "(n) => getComputedStyle(n).backgroundColor"
+    cell = page.locator(".wk-row[data-row=cbs] .wk-cell").first
+    assert cell.evaluate("(n) => getComputedStyle(n).backgroundColor") not in (
+        "",
+        "rgba(0, 0, 0, 0)",
     )
-    assert dark not in ("", "rgba(0, 0, 0, 0)")
-    assert dark != light
+    assert cell.evaluate("(n) => getComputedStyle(n).color") == "rgb(255, 255, 255)"
+    assert page.evaluate("getComputedStyle(document.body).backgroundColor") != light
 
 
 def test_no_cfbd_text_on_the_nfl_page(nfl_guarded_page: Page, open_nfl_app: OpenNfl) -> None:

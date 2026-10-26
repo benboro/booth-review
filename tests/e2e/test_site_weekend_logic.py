@@ -236,9 +236,10 @@ def test_axis_range(weekend_page: Page) -> None:
 def test_px_per_hour_clamp(weekend_page: Page) -> None:
     out = _run(
         weekend_page,
-        "return [W.pxPerHour(1440, 16), W.pxPerHour(1440, 10), W.pxPerHour(1440, 13)];",
+        "return [W.pxPerHour(1440, 18), W.pxPerHour(1440, 10), W.pxPerHour(1440, 13), "
+        "W.pxPerHour(1440, 15)];",
     )
-    assert out == [88, 120, 103]
+    assert out == [80, 120, 103, 89]
 
 
 # -- day tabs ----------------------------------------------------------------------------
@@ -366,7 +367,8 @@ def test_cell_colors_are_accessible(weekend_page: Page) -> None:
             const known = W.cellColors(fam, theme, 'known');
             const tint = W.cellColors(fam, theme, 'tba');
             const lost = W.cellColors(fam, theme, 'not-listed');
-            const known_ok = P.contrastRatio(known.bg, known.fg) >= 4.5 && known.edge === null;
+            const known_ok = known.fg === '#FFFFFF'
+              && P.contrastRatio(known.bg, known.fg) >= 7 && known.edge === null;
             const tint_ok = P.contrastRatio(tint.bg, tint.fg) >= 4.5;
             const edge_ok = P.contrastRatio(tint.edge, P.PAGE_BG[theme]) >= 3;
             const same = tint.bg === lost.bg && tint.bg === P.mixHex(
@@ -375,7 +377,7 @@ def test_cell_colors_are_accessible(weekend_page: Page) -> None:
           }
         }
         const unknown = W.cellColors('martian', 'light', 'known').bg
-          === P.FAMILY_COLORS.light.other;
+          === W.cellColors('other', 'light', 'known').bg;
         return {n, fails, unknown, faded: W.WEEKEND_FADED_OPACITY,
                 families: Object.keys(P.FAMILY_COLORS.light).length};
         """,

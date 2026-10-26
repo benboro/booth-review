@@ -133,13 +133,14 @@ def _palette(page: Page, theme: str, family: str) -> dict[str, str]:
     return page.evaluate(  # type: ignore[no-any-return]
         """async ([theme, family]) => {
           const P = await import('./modules/palette.js');
+          const W = await import('./modules/weekend.js');
           const rgb = (hex) => {
             const n = parseInt(hex.slice(1), 16);
             return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
           };
           return {
             solid: rgb(P.FAMILY_COLORS[theme][family]),
-            text: rgb(P.PILL_TEXT_COLOR[theme][family]),
+            known: rgb(W.cellColors(family, theme, 'known').bg),
             tint: rgb(P.mixHex(P.FAMILY_COLORS[theme][family], P.PAGE_BG[theme], 0.18)),
             ink: rgb(P.INK[theme]),
           };
@@ -188,7 +189,7 @@ def test_axis_corner_ticks_and_cell_widths(wk_page: Page) -> None:
             ".getPropertyValue('--wk-pxh')"
         ).replace("px", "")
     )
-    assert 88 <= pxh <= 120
+    assert 80 <= pxh <= 120
     width = wk_page.evaluate(f"document.querySelector('{_cell('a')}').offsetWidth")
     assert width == round(210 * pxh / 60) - 2
     left_a = wk_page.evaluate(f"document.querySelector('{_cell('a')}').offsetLeft")
@@ -204,8 +205,10 @@ def test_cell_colors_known_and_tba(wk_page: Page, theme: str) -> None:
     ]
     _mount(wk_page, games, theme=theme)
     pal = _palette(wk_page, theme, "fox")
-    assert _style(wk_page, _cell("k"), "backgroundColor") == pal["solid"]
-    assert _style(wk_page, _cell("k"), "color") == pal["text"]
+    # Known fills are the family colour deepened for white text (user sign-off 2026-10-26).
+    assert _style(wk_page, _cell("k"), "backgroundColor") == pal["known"]
+    assert pal["known"] != pal["solid"]
+    assert _style(wk_page, _cell("k"), "color") == "rgb(255, 255, 255)"
     assert _style(wk_page, _cell("t"), "backgroundColor") == pal["tint"]
     assert _style(wk_page, _cell("t"), "color") == pal["ink"]
     assert pal["solid"] in _style(wk_page, _cell("t"), "backgroundImage")

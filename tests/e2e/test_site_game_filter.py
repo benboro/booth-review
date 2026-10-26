@@ -343,8 +343,11 @@ def test_empty_table_copy_names_games(
 ) -> None:
     open_app(guarded_page, "")
     text = guarded_page.inner_text("#table-empty")
-    assert "Select an announcer, a school, or a game to list matching games." in text
-    assert "Pick an announcer, a school, or a game from the filters above." in text
+    assert (
+        "Pick an announcer, a school, or a game from the filters above to list matching games."
+        in text
+    )
+    assert "Select an announcer" not in text
     assert "or a school from the School filter" not in text
 
 
