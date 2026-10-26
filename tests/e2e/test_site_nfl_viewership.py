@@ -6,6 +6,7 @@ from the fixture's `viewership` block so the view is checked against the source.
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable
 from typing import Any
 
@@ -242,10 +243,19 @@ def test_residual_whiskers_use_line_color_thin_and_dodged(
     assert len({t["x0"] for t in got}) == len(got)
 
 
+def _serve_threshold(page: Page, raw: dict[str, Any], threshold: int) -> None:
+    """Serves the fixture with `constants.low_n_threshold` replaced (synthetic data only)."""
+    data = copy.deepcopy(raw)
+    data["constants"]["low_n_threshold"] = threshold
+    page.route("**/nfl-data.json*", lambda route: route.fulfill(json=data))
+
+
 def test_low_n_hollow_and_hover_says_low_n(
-    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
 ) -> None:
     page = nfl_guarded_page
+    # No fixture category-season reaches 8 games, so a lower threshold gives both states.
+    _serve_threshold(page, nfl_fixture_raw, 4)
     _open(page, open_nfl_app)
     vm = _vm(page)
     agotw = next(c for c in vm["categories"] if c["id"] == "agotw")
@@ -737,3 +747,52 @@ def test_selection_follows_a_pick_change(
     _set(page, {"booths": []})
     page.wait_for_function("window.__nflTestHooks.getState().booths.length === 0")
     assert sorted(page.evaluate("window.__nflTestHooks.getTableIndexes()")) == sorted(before)
+
+
+# ---- v2.1: the low-n marker means the game count, read from the shipped threshold ----
+
+
+def test_low_n_follows_the_game_count_and_the_shipped_threshold(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
+) -> None:
+    page = nfl_guarded_page
+    _serve_threshold(page, nfl_fixture_raw, 4)
+    _open(page, open_nfl_app)
+    vm = _vm(page)
+    seen = {True: 0, False: 0}
+    for c in vm["categories"]:
+        for p in c["points"]:
+            assert p["lowN"] == (p["n"] < 4), (c["id"], p)
+            seen[p["lowN"]] += 1
+    assert seen[True] and seen[False]
+    agotw = next(c for c in vm["categories"] if c["id"] == "agotw")
+    tr = _trace(page, "Fox AGOTW")
+    for idx, p in enumerate(agotw["points"]):
+        assert tr["symbol"][idx].endswith("-open") == (p["n"] < 4)
+
+
+def test_no_fit_point_with_enough_games_is_solid(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
+) -> None:
+    # Category 0 in 2026 ships low_n=true with no residual (no fit) and 2 games; under the
+    # game-count rule and a threshold of 2 it is solid and the hover does not say low n.
+    v = nfl_fixture_raw["viewership"]
+    k = next(
+        i
+        for i in range(len(v["season"]))
+        if v["category"][i] == 0 and v["low_n"][i] and v["viewership_resid"][i] is None
+    )
+    assert v["games"][k] >= 2
+    page = nfl_guarded_page
+    _serve_threshold(page, nfl_fixture_raw, 2)
+    _open(page, open_nfl_app)
+    vm = _vm(page)
+    cat0 = next(c for c in vm["categories"] if c["id"] == _cats(nfl_fixture_raw)[0]["id"])
+    point = next(p for p in cat0["points"] if p["season"] == v["season"][k])
+    assert point["lowN"] is False and point["n"] == v["games"][k]
+    tr = _trace(page, cat0["label"])
+    idx = [p["season"] for p in cat0["points"]].index(point["season"])
+    assert not tr["symbol"][idx].endswith("-open")
+    _emit(page, "plotly_hover", k)
+    lines = _tooltip(page)
+    assert not any("low n:" in line for line in lines)

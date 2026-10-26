@@ -6,6 +6,7 @@
  * encoded in the URL.
  */
 
+import { lowNThreshold } from './mode.js';
 import { computePicks } from './picks.js';
 import { dayToken, defaultDay } from '../../modules/weekend.js';
 
@@ -423,6 +424,10 @@ export function pendingNetworkSeasons(model, state) {
 /** One series per view category with its points in the season range. */
 export function viewershipSeries(model, state) {
   const [lo, hi] = state.seasons;
+  // Low n means the game count in both the pick and no-pick paths (user rule, 2026-10-26;
+  // Phase 15 review F7): the shipped residual-based `low_n` flag is not read, so a no-fit
+  // point with enough games is solid.
+  const threshold = lowNThreshold(model);
   return model.viewCategories.map((vc, category) => ({
     category,
     id: vc.id,
@@ -437,7 +442,7 @@ export function viewershipSeries(model, state) {
         resid: r.viewership_resid,
         se: r.viewership_se,
         games: r.games,
-        lowN: !!r.low_n,
+        lowN: r.games < threshold,
         gameList: r.gameList,
       })),
   }));

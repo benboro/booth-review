@@ -217,6 +217,9 @@ table and is not shipped.
 One row per special-game category and season: `category` (`lookups.view_categories`
 index), `season`, `era` (Nielsen era index), `games` (at least 1, equal to the length of
 `game_list`), `mean_viewers`, `viewership_resid`, `viewership_se`, `low_n`, `game_list`.
+The site reads `constants.low_n_threshold` and marks a point low n when `games` is under
+it, with and without a pick; the shipped `low_n` flag (residual-based, also true when there
+is no fit) is kept for readers but not used by the views (v2.1, 2026-10-26).
 The residual is computed within category and era. A category with too few games ships
 `viewership_resid` and `viewership_se` as `null` and the client shows them as missing,
 never 0. Figures for the window-level categories are labeled as such by the client.
