@@ -83,7 +83,9 @@ _COVERAGE_SHA256 = "f486fd2361993d9323d36870d0d7e23f1150efeef31c2e829cd53b7d6070
 # Re-pinned at Phase 18 Plan 01: CFB contract 2.7.0 moves the index only through its site-data
 # cache-bust hash.
 # Re-pinned at Phase 18 Plan 10: This weekend tab button and #weekend-panel section (2 added lines).
-_INDEX_PRE_PHASE_SHA256 = "02931774d3310c2524bcf5369a49be2b5d8803a88eb83dbf307d4d6909103230"
+# Re-pinned 2026-10-26 (18-13 F2): the two #table-empty paragraphs merged into one, requested and
+# approved by the user at plan 12 sign-off ("Fix both items").
+_INDEX_PRE_PHASE_SHA256 = "d7d1011068d21a4744c022a3be3a3408a53a50d6c6f9aa27640ed7aa82b61150"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'
