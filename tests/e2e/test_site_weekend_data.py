@@ -262,3 +262,148 @@ def test_a6_probe_unplayed_pending_row_in_other_tabs(lead_page: Page) -> None:
     assert isinstance(out["crewGames"], int)
     assert out["noPoints"] is True
     assert out["cause"] == "pending"
+
+
+# ---------------------------------------------------------------- NFL
+
+_NFL_PRELUDE = """
+const D = await import('./sports/nfl/data.js');
+const S = await import('./sports/nfl/state.js');
+const W = await import('./sports/nfl/weekend-data.js');
+const PN = await import('./sports/nfl/panel.js');
+const raw = await (await fetch('nfl-data.json')).json();
+const m = D.prepareNfl(raw);
+"""
+
+
+@pytest.fixture
+def nfl_run(nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None]) -> Callable[[str], Any]:
+    open_flagon_cfb(nfl_guarded_page)
+
+    def _run(body: str) -> Any:
+        return nfl_guarded_page.evaluate("async () => {" + _NFL_PRELUDE + body + "}")
+
+    return _run
+
+
+def test_nfl_upcoming_never_joins_the_games_arrays(
+    nfl_run: Callable[[str], Any], nfl_fixture_raw: dict[str, Any]
+) -> None:
+    got = nfl_run(
+        """return { n: m.n, seasonLen: m.cols.season.length, networkLen: m.cols.network.length,
+          upcoming: m.upcomingRaw.season.length, week: m.weekend.week };"""
+    )
+    assert (
+        got["n"] == got["seasonLen"] == got["networkLen"] == len(nfl_fixture_raw["games"]["season"])
+    )
+    assert got["upcoming"] == 10
+    assert got["week"] == 5
+
+
+def test_nfl_weekend_games_blocks_ranks_and_flags(nfl_run: Callable[[str], Any]) -> None:
+    got = nfl_run(
+        """const games = W.nflWeekendGames(m, 5);
+        const played = W.nflWeekendGames(m, 4);
+        return {
+          count: games.length, unique: new Set(games.map((g) => g.key)).size,
+          blocks: [...new Set(games.map((g) => g.block))],
+          cbs1pm: games.filter((g) => g.networkId === 'cbs' && g.kickoffMin === 780)
+            .map((g) => [g.index, g.boothRank, g.lead]),
+          snf: games.filter((g) => g.index === 6).map((g) => [g.networkId, g.networkBasis]),
+          tbd: games.filter((g) => g.kickoffMin == null).map((g) => g.index),
+          noNet: games.filter((g) => g.networkId == null).map((g) => [g.index, g.family]),
+          intl: games.filter((g) => g.neutral).map((g) => g.index),
+          pastFlag: [games[0].past, played[0].past],
+          playedBlocks: [...new Set(played.map((g) => g.block))], playedCount: played.length,
+          none: W.nflWeekendGames(m, 99).length,
+        };"""
+    )
+    assert got["count"] == got["unique"] == 10
+    assert got["blocks"] == ["upcoming"]
+    assert got["cbs1pm"] == [[0, 1, True], [1, 2, False], [2, None, False], [3, None, False]]
+    assert got["snf"] == [["nbc", "slot"]]
+    assert got["tbd"] == [7]
+    assert got["noNet"] == [[8, "other"]]
+    assert got["intl"] == [9]
+    assert got["pastFlag"] == [False, True]
+    assert got["playedBlocks"] == ["t"]
+    assert got["playedCount"] == 2
+    assert got["none"] == 0
+
+
+def test_nfl_pick_parity_and_ignored_picks(nfl_run: Callable[[str], Any]) -> None:
+    got = nfl_run(
+        """const games = W.nflWeekendGames(m, 5);
+        const base = S.defaultNflState(m);
+        const ids = (partial) => games
+          .filter((g) => W.nflWeekendPasses(m, Object.assign({}, base, partial), g))
+          .map((g) => g.index);
+        const f0 = m.franchises[0].id;
+        const person = m.people[8].id;
+        return {
+          all: ids({}),
+          team: ids({ teams: [f0] }),
+          expectTeam: games.filter((g) => {
+            const u = m.upcomingRaw;
+            return u.home[g.index] === 0 || u.away[g.index] === 0;
+          }).map((g) => g.index),
+          people: ids({ people: [person] }),
+          booth: ids({ booths: ['cbs:' + m.people[8].id] }),
+          boothOther: ids({ booths: ['cbs:nobody'] }),
+          ignored: ids({ seasons: [2024, 2024], cats: ['tnf'] }),
+          ring: games.filter((g) => W.nflWeekendMatches(m, Object.assign({}, base,
+            { people: [person] }), g)).map((g) => g.index),
+          noRing: games.filter((g) => W.nflWeekendMatches(m, base, g)).length,
+        };"""
+    )
+    assert got["all"] == list(range(10))
+    assert got["team"] == got["expectTeam"] and got["team"]
+    assert got["people"] == [0]
+    assert got["booth"] == [0]
+    assert got["boothOther"] == []
+    assert got["ignored"] == list(range(10))
+    assert got["ring"] == [0]
+    assert got["noRing"] == 0
+
+
+def test_nfl_played_games_use_the_same_predicates(nfl_run: Callable[[str], Any]) -> None:
+    got = nfl_run(
+        """const games = W.nflWeekendGames(m, 4);
+        const base = S.defaultNflState(m);
+        const f = m.franchises[m.cols.home[games[0].index]].id;
+        const state = Object.assign({}, base, { teams: [f] });
+        return games.map((g) => [W.nflWeekendPasses(m, state, g), S.gamePasses(m,
+          Object.assign({}, state, { seasons: base.seasons, cats: [] }), g.index)]);"""
+    )
+    assert got and all(a == b for a, b in got)
+    assert got[0][0] is True
+
+
+def test_nfl_upcoming_panel_branches(nfl_run: Callable[[str], Any]) -> None:
+    got = nfl_run(
+        """const host = document.body;
+        const p = PN.createDetailPanel(host, {});
+        const read = (j) => {
+          p.open(W.upcomingRow(m, j), null);
+          const d = document.getElementById('nfl-detail-panel');
+          return {
+            title: document.getElementById('nfl-panel-title').textContent,
+            text: d.querySelector('.panel-body').textContent,
+            anchors: [...d.querySelectorAll('a')].map((a) => [a.textContent, a.href]),
+          };
+        };
+        const out = { crew: read(0), crewless: read(2), slot: read(6), noTime: read(7),
+          noNet: read(8) };
+        p.close();
+        return out;"""
+    )
+    crew = got["crew"]
+    assert crew["title"].count(" at ") == 1 and "Not played yet." in crew["text"]
+    assert "Final score" not in crew["text"] and "Viewers" not in crew["text"]
+    assert "1:00 PM ET" in crew["text"]
+    assert ["Crew from 506 Sports ↗", "https://example.com/lineup"] in crew["anchors"]
+    assert "Crew TBA." in got["crewless"]["text"]
+    assert "Network follows the slot" in got["slot"]["text"]
+    assert "Network follows the slot" not in crew["text"]
+    assert "Time TBA" in got["noTime"]["text"]
+    assert "Network TBA" in got["noNet"]["text"]

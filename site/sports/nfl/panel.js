@@ -37,7 +37,10 @@ function titleText(row) {
 
 function crewSection(row) {
   const heading = el('h3', null, 'Crew');
-  if (row.crew.length === 0) return [heading, el('p', 'panel-crew-empty crew-missing', 'Crew not listed.')];
+  if (row.crew.length === 0) {
+    const empty = row.unplayed ? 'Crew TBA.' : 'Crew not listed.';
+    return [heading, el('p', 'panel-crew-empty crew-missing', empty)];
+  }
   const box = crewBox(row.crew.map((c) => ({ name: c.name, role: c.role })));
   if (row.crewSource === 'published_lineup') {
     box.appendChild(el('p', 'crew-source-note', 'From published lineup.'));
@@ -46,6 +49,7 @@ function crewSection(row) {
 }
 
 function viewersNodes(row) {
+  if (row.unplayed) return [el('p', 'panel-unplayed', 'Not played yet.')];
   const v = viewersText(row);
   if (v == null) return [el('p', null, `Viewers: not available (${causeCopy(row).panel})`)];
   const nodes = [el('p', null, `Viewers: ${v}${row.scope === 'window' ? WINDOW_NOTE : ''}`)];
@@ -53,7 +57,15 @@ function viewersNodes(row) {
   return nodes;
 }
 
+function unplayedFacts(row) {
+  const bits = [];
+  if (row.slot != null) bits.push(`Slot: ${slotLabel(row.slot)}.`);
+  if (row.international) bits.push('International.');
+  return el('p', 'panel-facts', bits.join(' '));
+}
+
 function factsParagraph(row) {
+  if (row.unplayed) return unplayedFacts(row);
   const p = el('p', 'panel-facts');
   const bits = [`Slot: ${slotLabel(row.slot)}.`, row.standalone ? 'Solo slot.' : 'Shares its window.'];
   for (const f of flagLabels(row)) if (f !== 'Solo slot' && f !== 'Flexed') bits.push(`${f}.`);
@@ -76,6 +88,11 @@ function factsParagraph(row) {
 }
 
 function linkItems(row) {
+  if (row.unplayed) {
+    return row.crewSource === '506'
+      ? [{ href: row.crewSourceUrl, text: 'Crew from 506 Sports ↗', fallback: 'Crew from 506 Sports' }]
+      : [];
+  }
   const items = [{ href: row.rrUrl, text: 'View record on Ratings Reference ↗' }];
   items.push({
     href: row.sourceUrl,
@@ -131,15 +148,22 @@ export function createDetailPanel(host, { methodologyHref: _methodologyHref } = 
 
   function renderRow(row) {
     title.textContent = titleText(row);
-    const dateP = el('p', null, `${dateLongText(row)} · ${kickoffText(row) ?? 'Kickoff time not recorded'}`);
+    const noTime = row.unplayed ? 'Time TBA' : 'Kickoff time not recorded';
+    const dateP = el('p', null, `${dateLongText(row)} · ${kickoffText(row) ?? noTime}`);
+    const noNetwork = row.unplayed ? 'Network TBA' : 'Network not recorded.';
     const network = row.network == null
-      ? el('p', null, 'Network not recorded.')
+      ? el('p', null, noNetwork)
       : networksParagraph({
           primary: { id: row.networkId, name: row.network, family: row.networkFamily },
           others: [],
           theme: currentTheme(),
         });
-    const children = [dateP, network, ...crewSection(row), ...viewersNodes(row), factsParagraph(row)];
+    const children = [dateP, network];
+    if (row.unplayed && row.network != null && row.networkBasis === 'slot') {
+      children.push(el('p', 'panel-network-basis',
+        `Network follows the slot's rights until a 506 Sports page is saved.`));
+    }
+    children.push(...crewSection(row), ...viewersNodes(row), factsParagraph(row));
     // CFB parity: the Links heading appears only when there is something to link to.
     const links = linkItems(row).filter((it) => it.href || it.fallback);
     if (links.length) children.push(el('h3', null, 'Links'), linksList(links));
