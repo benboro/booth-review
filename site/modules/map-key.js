@@ -1,5 +1,5 @@
-// Map key (Phase 17.1 D-05, D-06): a size-only "Dot size" block of three nested outline
-// circles, each drawn by the same size function as the dots.
+// Map key (Phase 17.1 D-05, D-06, D-22): a size-only "Dot size" block, one inline row of
+// outline circles at every width, largest first, each drawn by the same size function as the dots.
 //
 // buildMapKey is pure (numbers in, numbers and fixed copy out). renderMapKey builds DOM with
 // createElement / createElementNS / textContent only, never HTML strings. Positioning and
@@ -12,9 +12,6 @@ export const KEY_GAME_STEPS = Object.freeze([1, 2, 5, 10, 20, 50, 100, 200]);
 
 const DESCRIPTION = 'Dot size is the number of games at the venue.';
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const LABEL_RESERVE = 96;
-const LEADER_GAP = 8;
-const LABEL_LINE = 20;
 
 /** Nearest key step in log distance; a tie goes to the smaller step. */
 function nearestStep(target) {
@@ -46,9 +43,8 @@ function stepAtMost(value) {
  *   description: string}}
  */
 export function buildMapKey(venueModel, opts) {
-  const { phone = false, layout = 'inline' } = opts || {};
-  // Trial: every width gets the inline row (D-22); layout: 'nested' still draws the leader key (D-05).
-  const out = { visible: false, layout, sizes: [], description: DESCRIPTION };
+  const { phone = false } = opts || {};
+  const out = { visible: false, sizes: [], description: DESCRIPTION };
   const ref = venueModel && venueModel.refGames;
   if (!(ref > 0)) return out;
   const top = stepAtMost(ref);
@@ -94,83 +90,25 @@ export function renderMapKey(root, key, env) {
   root.replaceChildren();
   root.hidden = !key.visible;
   root.setAttribute('aria-description', key.description);
-  if (!key.visible) return;
+  if (!key.visible || !key.sizes.length) return;
 
-  if (key.sizes.length && key.layout === 'inline') {
-    // D-22: a phone key is one row, largest first: circle, its count, next circle, ...; the
-    // unit closes the last label ("50  20  5 games"). No leaders, no nesting.
-    const block = el('div', 'map-key-block');
-    block.appendChild(el('p', 'map-key-heading', 'Dot size'));
-    const row = el('div', 'map-key-row');
-    const last = key.sizes.length - 1;
-    key.sizes.forEach((s, i) => {
-      const d = Math.max(Math.ceil(s.diameter), 1);
-      const item = el('span', 'map-key-item');
-      const svg = svgEl('svg', { width: d, height: d, 'aria-hidden': 'true', focusable: 'false' });
-      svg.appendChild(
-        svgEl('circle', { cx: d / 2, cy: d / 2, r: Math.max(s.diameter / 2 - 0.5, 0.5), fill: 'none', stroke: muted, 'stroke-width': 1 }),
-      );
-      item.appendChild(svg);
-      item.appendChild(el('span', 'map-key-label', i === last ? s.label : String(s.games)));
-      row.appendChild(item);
-    });
-    block.appendChild(row);
-    root.appendChild(block);
-  } else if (key.sizes.length) {
-    const block = el('div', 'map-key-block');
-    block.appendChild(el('p', 'map-key-heading', 'Dot size'));
-    // Labels stack at one line each: a label sits level with its circle's top when it can,
-    // and is pushed down when the circles are too close together for the text.
-    const circleW = Math.ceil(key.sizes[0].diameter);
-    const centers = [];
-    let prev = -Infinity;
-    for (const s of key.sizes) {
-      const want = circleW - s.diameter;
-      prev = Math.max(want, prev + LABEL_LINE, LABEL_LINE / 2);
-      centers.push(prev);
-    }
-    const height = Math.max(circleW, LABEL_LINE, Math.ceil(prev + LABEL_LINE / 2));
-    const box = el('div', 'map-key-sizes');
-    box.style.position = 'relative';
-    box.style.width = `${circleW + LEADER_GAP + LABEL_RESERVE}px`;
-    box.style.height = `${height}px`;
-    const svg = svgEl('svg', {
-      width: circleW + LEADER_GAP + 4,
-      height,
-      'aria-hidden': 'true',
-      focusable: 'false',
-    });
-    svg.style.position = 'absolute';
-    svg.style.left = '0px';
-    svg.style.top = '0px';
-    const cx = circleW / 2;
-    const single = key.sizes.length === 1;
-    key.sizes.forEach((s, i) => {
-      const d = s.diameter;
-      const top = height - d;
-      svg.appendChild(
-        svgEl('circle', { cx, cy: single ? height / 2 : height - d / 2, r: d / 2 - 0.5, fill: 'none', stroke: muted, 'stroke-width': 1 }),
-      );
-      // One circle needs no leader: its label is level with it.
-      if (!single) {
-        svg.appendChild(
-          svgEl('polyline', {
-            points: `${cx},${top} ${circleW / 2 + d / 2},${top} ${circleW + LEADER_GAP},${centers[i]}`,
-            fill: 'none',
-            stroke: muted,
-            'stroke-width': 1,
-            'stroke-dasharray': '1 2',
-          }),
-        );
-      }
-      const label = el('span', 'map-key-label', s.label);
-      label.style.position = 'absolute';
-      label.style.left = `${circleW + LEADER_GAP + 4}px`;
-      label.style.top = `${(single ? height / 2 : centers[i]) - LABEL_LINE / 2}px`;
-      box.appendChild(label);
-    });
-    box.insertBefore(svg, box.firstChild);
-    block.appendChild(box);
-    root.appendChild(block);
-  }
+  // D-22: one row, largest first: circle, its count, next circle, ...; the unit closes the
+  // last label ("50  20  5 games"). No leaders, no nesting.
+  const block = el('div', 'map-key-block');
+  block.appendChild(el('p', 'map-key-heading', 'Dot size'));
+  const row = el('div', 'map-key-row');
+  const last = key.sizes.length - 1;
+  key.sizes.forEach((s, i) => {
+    const d = Math.max(Math.ceil(s.diameter), 1);
+    const item = el('span', 'map-key-item');
+    const svg = svgEl('svg', { width: d, height: d, 'aria-hidden': 'true', focusable: 'false' });
+    svg.appendChild(
+      svgEl('circle', { cx: d / 2, cy: d / 2, r: Math.max(s.diameter / 2 - 0.5, 0.5), fill: 'none', stroke: muted, 'stroke-width': 1 }),
+    );
+    item.appendChild(svg);
+    item.appendChild(el('span', 'map-key-label', i === last ? s.label : String(s.games)));
+    row.appendChild(item);
+  });
+  block.appendChild(row);
+  root.appendChild(block);
 }

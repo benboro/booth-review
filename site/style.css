@@ -3326,10 +3326,6 @@ td.no-rating {
   color: var(--ink);
 }
 
-.map-key-sizes {
-  position: relative;
-}
-
 .map-key-row {
   display: flex;
   align-items: center;
@@ -3347,11 +3343,6 @@ td.no-rating {
 }
 
 .map-key-item .map-key-label {
-  position: static;
-}
-
-.map-key-label {
-  position: absolute;
   white-space: nowrap;
   line-height: 20px;
 }

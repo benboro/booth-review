@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import pytest
@@ -47,7 +48,7 @@ def test_labels_are_easy_counts(guarded_page: Page, site_url: str) -> None:
     assert got["l1"] == ["1 game"]
     assert got["steps"] == [1, 2, 5, 10, 20, 50, 100, 200]
     assert got["desc"] == "Dot size is the number of games at the venue."
-    assert got["keys"] == ["description", "layout", "sizes", "visible"]
+    assert got["keys"] == ["description", "sizes", "visible"]
 
 
 def test_diameters_and_visibility(guarded_page: Page, site_url: str) -> None:
@@ -101,66 +102,47 @@ def test_key_rescales_with_the_filtered_reference(guarded_page: Page, site_url: 
 
 
 def test_render_dom(guarded_page: Page, site_url: str) -> None:
+    """D-22: the key is one inline row: a heading, then one circle and one label per step,
+    largest first, the unit closing the last label; no leaders, and an empty key hides."""
     got = _run(
         guarded_page,
         site_url,
         """
         const root = document.createElement('div');
-        K.renderMapKey(root, K.buildMapKey(model(73), { phone: false, layout: 'nested' }), { theme: 'light' });
+        K.renderMapKey(root, K.buildMapKey(model(73), { phone: false }), { theme: 'light' });
         const q = (s) => root.querySelectorAll(s).length;
         const res = {
           headings: Array.from(root.querySelectorAll('.map-key-heading')).map((n) => n.textContent),
-          circles: q('svg[aria-hidden="true"] circle'),
+          rows: q('.map-key-row'),
+          items: q('.map-key-row > .map-key-item'),
+          circles: q('.map-key-item svg[aria-hidden="true"] circle'),
           lines: q('svg polyline'),
-          labels: q('.map-key-label'),
-          legacy: q('.map-key-strength, .map-key-swatch, .map-key-end'),
+          labels: Array.from(root.querySelectorAll('.map-key-item .map-key-label')).map((n) => n.textContent),
+          widths: Array.from(root.querySelectorAll('.map-key-item svg')).map((s) => Number(s.getAttribute('width'))),
+          legacy: q('.map-key-sizes, .map-key-strength, .map-key-swatch, .map-key-end'),
           aria: root.getAttribute('aria-description'),
           hidden: root.hidden,
         };
         K.renderMapKey(root, K.buildMapKey({ venues: [], refGames: 0 }, {}), { theme: 'light' });
         res.emptyHidden = root.hidden;
+        res.emptyChildren = root.childElementCount;
+        res.emptyAria = root.getAttribute('aria-description');
         return res;
         """,
     )
     assert got["headings"] == ["Dot size"]
-    assert got["circles"] == 3 and got["lines"] == 3 and got["labels"] == 3
+    assert got["rows"] == 1
+    assert got["items"] == got["circles"] == 3
+    assert got["lines"] == 0
+    assert got["labels"] == ["50", "20", "5 games"]
+    assert got["widths"] == sorted(got["widths"], reverse=True)
+    assert got["widths"][0] == math.ceil(20 * (50 / 73) ** 0.5)
     assert got["legacy"] == 0
     assert got["aria"] == "Dot size is the number of games at the venue."
     assert got["hidden"] is False
     assert got["emptyHidden"] is True
-
-
-@pytest.mark.parametrize("n_max", [1, 2, 5, 20, 73])
-def test_size_labels_never_overlap(guarded_page: Page, site_url: str, n_max: int) -> None:
-    """Each size step renders one legible label: no label boxes meet, and the circles clear them."""
-    got = _run(
-        guarded_page,
-        site_url,
-        f"""
-        const root = document.createElement('div');
-        root.className = 'map-key';
-        root.style.cssText = 'position:fixed;left:20px;top:20px';
-        document.body.appendChild(root);
-        K.renderMapKey(root, K.buildMapKey(model({n_max}), {{ phone: false, layout: 'nested' }}),
-                       {{ theme: 'light' }});
-        const box = (r) => ({{ left: r.left, right: r.right, top: r.top, bottom: r.bottom }});
-        const labels = Array.from(root.querySelectorAll('.map-key-label')).map((n) => box(n.getBoundingClientRect()));
-        const svg = root.querySelector('.map-key-sizes svg').getBoundingClientRect();
-        const sizes = root.querySelector('.map-key-sizes').getBoundingClientRect();
-        const res = {{ labels, svg: box(svg), sizes: box(sizes), leaders: root.querySelectorAll('svg polyline').length,
-                      circles: root.querySelectorAll('svg circle').length }};
-        root.remove();
-        return res;
-        """,
-    )
-    labels = got["labels"]
-    assert len(labels) == got["circles"] >= 1
-    for i, a in enumerate(labels):
-        for b in labels[i + 1 :]:
-            assert not (a["top"] < b["bottom"] and a["bottom"] > b["top"]), (a, b)
-        assert a["left"] >= got["svg"]["right"] - 1  # clear of every circle and leader
-        assert a["top"] >= got["sizes"]["top"] - 0.5 and a["bottom"] <= got["sizes"]["bottom"] + 0.5
-    assert got["leaders"] == (0 if got["circles"] == 1 else got["circles"])
+    assert got["emptyChildren"] == 0
+    assert got["emptyAria"] == got["aria"]
 
 
 _INLINE = """() => {
