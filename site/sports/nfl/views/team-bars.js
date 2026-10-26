@@ -24,7 +24,7 @@ import {
   textWidth,
   valueColumn,
 } from '../../../modules/bar-chart.js';
-import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
+import { ensureTooltipEl, showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import { escapeHover } from '../../../modules/format.js';
 import { DATA_TABLE_CLASS, rebuildKeepingFocus } from '../data-table.js';
 
@@ -306,15 +306,90 @@ const SEGMENT_TIPS = Object.freeze({
   cbs_national: "CBS's late Sunday-afternoon national game.",
 });
 
-// The one open header tooltip: { button, off } where off removes its document listeners.
+/** How long a header tip waits after the pointer leaves, so the pointer can reach the tip. */
+const TIP_LEAVE_MS = 200;
+
+// The one open header tooltip: { button, off } where off removes its listeners. Touch mode
+// (`openTip`, a tap toggle) and hover mode (`hoverTip`, hover and focus) never mix on one page.
 let openTip = null;
+let hoverTip = null;
+let tipWatch = null;
 
 function closeTip() {
   if (!openTip) return;
-  const { off } = openTip;
+  const { button, off } = openTip;
   openTip = null;
   off();
+  button.setAttribute('aria-expanded', 'false');
   hideTooltip();
+}
+
+function closeHoverTip() {
+  if (!hoverTip) return;
+  const { off } = hoverTip;
+  hoverTip = null;
+  off();
+  // Another view may have taken the shared tooltip over meanwhile; only a header tip is hidden.
+  if ('hoverable' in ensureTooltipEl().dataset) hideTooltip();
+}
+
+/**
+ * The shared tooltip is also hidden by other code (a window resize or scroll, another view's
+ * hover). Once it is hidden, whichever header tip was open counts as closed, so its listeners
+ * go, `aria-expanded` is reset, and the next tap on the same header opens it again.
+ */
+function watchTooltip() {
+  if (tipWatch) return;
+  const tip = ensureTooltipEl();
+  tipWatch = new MutationObserver(() => {
+    if (!tip.hidden) return;
+    closeTip();
+    closeHoverTip();
+  });
+  tipWatch.observe(tip, { attributes: true, attributeFilter: ['hidden'] });
+}
+
+/** Hover and focus mode (WCAG 1.4.13): Escape closes it from anywhere, and the pointer can rest on it. */
+function openHoverTip(button, show) {
+  const tip = ensureTooltipEl();
+  if (hoverTip && hoverTip.button === button && !tip.hidden) {
+    hoverTip.cancel();
+    return;
+  }
+  closeHoverTip();
+  let timer = null;
+  const cancel = () => {
+    clearTimeout(timer);
+    timer = null;
+  };
+  // Leaving closes after a short wait, unless the header still has keyboard focus.
+  const later = () => {
+    cancel();
+    timer = setTimeout(() => {
+      if (document.activeElement !== button) closeHoverTip();
+    }, TIP_LEAVE_MS);
+  };
+  const onKey = (ev) => {
+    if (ev.key === 'Escape') closeHoverTip();
+  };
+  const onTipLeave = (ev) => {
+    if (!button.contains(ev.relatedTarget)) later();
+  };
+  document.addEventListener('keydown', onKey, true);
+  tip.addEventListener('mouseenter', cancel);
+  tip.addEventListener('mouseleave', onTipLeave);
+  hoverTip = {
+    button,
+    cancel,
+    later,
+    off: () => {
+      cancel();
+      document.removeEventListener('keydown', onKey, true);
+      tip.removeEventListener('mouseenter', cancel);
+      tip.removeEventListener('mouseleave', onTipLeave);
+    },
+  };
+  show(true);
 }
 
 /** Fills a head th with a dotted-underline button that shows `text` in the site tooltip. */
@@ -322,7 +397,8 @@ function tipHead(th, label, text, env) {
   const button = el('button', 'nfl-tip', label);
   button.type = 'button';
   button.setAttribute('aria-description', text);
-  const show = () => {
+  watchTooltip();
+  const show = (hoverable = false) => {
     const rect = button.getBoundingClientRect();
     const e = drawn ? drawn.env : env;
     showTextTooltip([{ kind: 'body', text }], {
@@ -330,19 +406,27 @@ function tipHead(th, label, text, env) {
       borderColor: DIVIDER[theme(e)],
       clientX: rect.left,
       clientY: rect.bottom,
+      hoverable,
     });
   };
   if (!env.hoverNone) {
-    button.addEventListener('mouseenter', show);
-    button.addEventListener('focus', show);
-    button.addEventListener('mouseleave', () => hideTooltip());
-    button.addEventListener('blur', () => hideTooltip());
-    button.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Escape') hideTooltip();
+    const mine = () => hoverTip && hoverTip.button === button;
+    button.addEventListener('mouseenter', () => openHoverTip(button, show));
+    button.addEventListener('focus', () => openHoverTip(button, show));
+    button.addEventListener('mouseleave', (ev) => {
+      const tip = ensureTooltipEl();
+      if (mine() && !tip.contains(ev.relatedTarget)) hoverTip.later();
+    });
+    button.addEventListener('blur', () => {
+      // A blur while the pointer still rests on the header or its tip keeps the tip.
+      if (mine() && !button.matches(':hover') && !ensureTooltipEl().matches(':hover')) {
+        closeHoverTip();
+      }
     });
   } else {
+    button.setAttribute('aria-expanded', 'false');
     button.addEventListener('click', () => {
-      if (openTip && openTip.button === button) {
+      if (openTip && openTip.button === button && !ensureTooltipEl().hidden) {
         closeTip();
         return;
       }
@@ -365,6 +449,7 @@ function tipHead(th, label, text, env) {
           window.removeEventListener('scroll', onScroll, true);
         },
       };
+      button.setAttribute('aria-expanded', 'true');
       show();
     });
   }
@@ -374,6 +459,7 @@ function tipHead(th, label, text, env) {
 function renderBreakdown(model, state, env, rows) {
   const { breakdown } = refs;
   closeTip();
+  closeHoverTip();
   breakdown.replaceChildren();
   const key = selectedKey(state);
   if (key == null || !model.franchiseIndex.has(key)) {

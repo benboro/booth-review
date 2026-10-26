@@ -1821,6 +1821,11 @@ input[type="checkbox"] {
   box-shadow: 0 0 0 2px var(--bg);
 }
 
+/* A header tip (NFL season table) stays open while the pointer rests on it (WCAG 1.4.13). */
+.chart-tooltip[data-hoverable] {
+  pointer-events: auto;
+}
+
 .chart-tooltip .tooltip-title {
   display: block;
   font-weight: var(--weight-semibold);

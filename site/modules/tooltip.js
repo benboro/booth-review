@@ -250,9 +250,10 @@ function placeTooltip(el, clientX, clientY) {
 /**
  * Shows plain text lines in the shared tooltip (Bars/Butterfly, D-16).
  * @param {({text: string, kind: 'title'|'body'|'hint', swatch?: string, roles?: string[]}|{kind: 'network', network: {id?: string, name: string, family: string}}|{kind: 'crew', entries: {name: string, role: string, selected?: boolean}[]})[]} lines
- * @param {{theme: string, borderColor: string, clientX: number, clientY: number}} opts
+ * @param {{theme: string, borderColor: string, clientX: number, clientY: number, hoverable?: boolean}} opts
+ *   `hoverable` lets the pointer rest on the tip (WCAG 1.4.13); every other show clears it.
  */
-export function showTextTooltip(lines, { borderColor, clientX, clientY }) {
+export function showTextTooltip(lines, { borderColor, clientX, clientY, hoverable = false }) {
   const el = ensureTooltipEl();
   const children = lines.map(({ text, kind, swatch, roles, network, entries }) => {
     // Rich kinds (NFL scatter hover): a network logo mark and a D-01 crew box.
@@ -288,6 +289,8 @@ export function showTextTooltip(lines, { borderColor, clientX, clientY }) {
   el.style.borderColor = borderColor;
   delete el.dataset.family;
   delete el.dataset.kind;
+  if (hoverable) el.dataset.hoverable = '';
+  else delete el.dataset.hoverable;
   el.hidden = false;
   placeTooltip(el, clientX, clientY);
 }
@@ -308,6 +311,7 @@ export function showTooltip(data, i, { axis, y, theme, clientX, clientY, selecte
   const el = ensureTooltipEl();
   renderTooltipContent(el, tooltipModel(data, i, { axis, y, selected }), theme);
   delete el.dataset.kind;
+  delete el.dataset.hoverable;
   el.hidden = false;
 
   placeTooltip(el, clientX, clientY);
@@ -426,6 +430,7 @@ export function showVenueTooltip(card, { theme, clientX, clientY, hint }) {
   el.replaceChildren(...children);
   el.style.borderColor = MAP_FAMILY_COLORS[theme][card.leader];
   delete el.dataset.family;
+  delete el.dataset.hoverable;
   el.dataset.kind = 'venue';
   el.hidden = false;
   placeTooltip(el, clientX, clientY);

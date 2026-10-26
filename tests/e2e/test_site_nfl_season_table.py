@@ -191,6 +191,72 @@ def test_tooltip_hover_focus_blur_escape(app: Page) -> None:
         app.wait_for_function("document.getElementById('chart-tooltip').hidden")
 
 
+_HIDDEN = "document.getElementById('chart-tooltip').hidden"
+_SHOWN = "!document.getElementById('chart-tooltip').hidden"
+
+
+def test_escape_closes_a_hovered_tip_without_focus(app: Page) -> None:
+    """WR-04 (WCAG 1.4.13): a mouse-hovered tip closes on Escape with focus elsewhere."""
+    b = app.locator(f"{TABLE} button.nfl-tip", has_text="Fox AGOTW")
+    b.hover()
+    app.wait_for_function(_SHOWN)
+    assert app.evaluate("document.activeElement === document.body")
+    app.keyboard.press("Escape")
+    app.wait_for_function(_HIDDEN)
+
+
+def test_hovered_tip_stays_open_while_the_pointer_is_on_it(app: Page) -> None:
+    """WR-04 (WCAG 1.4.13): moving the pointer from the header onto its tip keeps it open."""
+    b = app.locator(f"{TABLE} button.nfl-tip", has_text="Special games")
+    b.hover()
+    app.wait_for_function(_SHOWN)
+    box = app.evaluate(
+        "(() => { const r = document.getElementById('chart-tooltip').getBoundingClientRect();"
+        " return [r.left + r.width / 2, r.top + r.height / 2]; })()"
+    )
+    app.mouse.move(box[0], box[1], steps=4)
+    app.wait_for_timeout(500)
+    assert _tip_text(app) == TIPS["Special games"]
+    app.mouse.move(5, 5)
+    app.wait_for_function(_HIDDEN)
+
+
+def test_focused_tip_outlives_the_pointer_leaving(app: Page) -> None:
+    """WR-04: a keyboard-focused header keeps its tip when the pointer passes over and away."""
+    b = app.locator(f"{TABLE} button.nfl-tip", has_text="CBS late national")
+    b.focus()
+    app.wait_for_function(_SHOWN)
+    b.hover()
+    app.mouse.move(5, 5)
+    app.wait_for_timeout(500)
+    assert _tip_text(app) == TIPS["CBS late national"]
+    b.blur()
+    app.wait_for_function(_HIDDEN)
+
+
+def test_touch_tip_tracks_aria_expanded_and_outside_hides(mobile: Page) -> None:
+    """WR-04: the touch toggle reports aria-expanded, and a tip hidden by other code (a
+    resize, say) counts as closed, so one tap on the same header reopens it."""
+    b = mobile.locator(f"{TABLE} button.nfl-tip", has_text="Special games")
+    b.evaluate("e => e.scrollIntoView({ block: 'center' })")
+    assert b.get_attribute("aria-expanded") == "false"
+    b.tap()
+    mobile.wait_for_function(_SHOWN)
+    assert b.get_attribute("aria-expanded") == "true"
+    mobile.evaluate("document.getElementById('chart-tooltip').hidden = true")
+    mobile.wait_for_function(
+        "(sel) => document.querySelector(sel).getAttribute('aria-expanded') === 'false'",
+        arg=f"{TABLE} button.nfl-tip",
+    )
+    b.tap()
+    mobile.wait_for_function(_SHOWN)
+    assert _tip_text(mobile) == TIPS["Special games"]
+    assert b.get_attribute("aria-expanded") == "true"
+    b.tap()
+    mobile.wait_for_function(_HIDDEN)
+    assert b.get_attribute("aria-expanded") == "false"
+
+
 def test_tooltip_stays_in_viewport_at_right_edge(app: Page) -> None:
     app.locator(f"{TABLE} button.nfl-tip", has_text="Special games").hover()
     app.wait_for_function("!document.getElementById('chart-tooltip').hidden")
