@@ -33,6 +33,7 @@ import {
   textWidth,
 } from '../../../modules/bar-chart.js';
 import { ensureTooltipEl, showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
+import { attachScrollCue } from '../../../modules/scroll-cue.js';
 import { escapeHover } from '../../../modules/format.js';
 import { DATA_TABLE_CLASS, rebuildKeepingFocus } from '../data-table.js';
 
@@ -546,10 +547,13 @@ function renderBreakdown(model, state, env, rows) {
   const bar = (rows.find((r) => r.bar.franchise === fIdx) || {}).bar
     || teamBars(model, state).find((b) => b.franchise === fIdx);
   const pending = pendingNetworkSeasons(model, state);
+  let lines = null;
   if ((env.mobile || env.hoverNone) && bar) {
-    // The hover content on a phone, with the same colour dots as the tooltip.
+    // The hover content on a phone, with the same colour dots as the tooltip. It is appended
+    // after the table (v2.1, todo 2026-10-25-nfl-phone-season-table-reach), so the table sits
+    // right under its heading instead of below ten stacked lines.
     const m = hoverModel(state, label, bar, theme(env), pending);
-    const lines = el('div', 'nfl-breakdown-lines');
+    lines = el('div', 'nfl-breakdown-lines');
     const texts = hoverTextLines(m).slice(1);
     texts.forEach((text, k) => {
       const p = el('p');
@@ -563,7 +567,6 @@ function renderBreakdown(model, state, env, rows) {
       p.appendChild(document.createTextNode(text));
       lines.appendChild(p);
     });
-    breakdown.appendChild(lines);
   }
   const pendingSeasons = new Set(pending.seasons);
   const PENDING_KEYS = new Set(['agotw', 'cbs_national']);
@@ -627,10 +630,14 @@ function renderBreakdown(model, state, env, rows) {
     return g;
   });
   table.append(...groups, thead, tbody);
-  // Eleven columns do not fit a phone; the table scrolls inside its own wrapper.
+  // Eleven columns do not fit a phone; the table scrolls inside its own wrapper, with the
+  // site's edge-fade scroll cue (v2.1). The breakdown lines follow the table.
   const scroll = el('div', 'table-scroll');
   scroll.appendChild(table);
   breakdown.appendChild(scroll);
+  refs.cueOff?.();
+  refs.cueOff = attachScrollCue(scroll, null);
+  if (lines) breakdown.appendChild(lines);
 
   breakdown.appendChild(el(
     'p',
