@@ -75,6 +75,9 @@ export function upcomingRow(model, j) {
   };
 }
 
+/** A Seasons range no game falls outside. */
+const ALL_SEASONS = Object.freeze([-Infinity, Infinity]);
+
 const upcomingFacades = new WeakMap();
 
 /** A `gamePasses`-shaped model over the upcoming columns (Team is the only filter that reads it). */
@@ -239,7 +242,9 @@ export function nflHasCrewPick(state) {
  * @returns {boolean}
  */
 export function nflWeekendPasses(model, state, game) {
-  const pick = weekendPickState(state, defaultNflState(model));
+  // Seasons is ignored outright: its default spans the played seasons only, so before an
+  // opener it would drop every upcoming game (18-13 F8).
+  const pick = { ...weekendPickState(state, defaultNflState(model)), seasons: ALL_SEASONS };
   const upcoming = game.block === 'upcoming';
   const i = game.index;
   if (!gamePasses(upcoming ? upcomingFacade(model) : model, pick, i)) return false;

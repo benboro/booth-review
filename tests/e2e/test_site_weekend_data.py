@@ -512,3 +512,21 @@ def test_nfl_upcoming_panel_branches(nfl_run: Callable[[str], Any]) -> None:
     assert "Network follows the slot" not in crew["text"]
     assert "Time TBA" in got["noTime"]["text"]
     assert "Network TBA" in got["noNet"]["text"]
+
+
+def test_nfl_upcoming_games_pass_before_the_season_opener(nfl_run: Callable[[str], Any]) -> None:
+    # 18-13 F8: before a season's opener every played game is from an earlier season, so the
+    # Seasons default range would exclude the upcoming rows; the weekend tab ignores Seasons.
+    got = nfl_run(
+        """const raw2 = structuredClone(raw);
+        const last = Math.max(...raw2.games.season);
+        raw2.upcoming.season = raw2.upcoming.season.map(() => last + 1);
+        const m2 = D.prepareNfl(raw2);
+        const games = W.nflWeekendGames(m2, raw2.upcoming.week[0]);
+        const g = games.find((x) => x.block === 'upcoming');
+        const home = m2.franchises[raw2.upcoming.home[g.index]].id;
+        const state = { ...S.defaultNflState(m2), teams: [home] };
+        return { found: g != null, passes: W.nflWeekendPasses(m2, state, g),
+          plain: W.nflWeekendPasses(m2, S.defaultNflState(m2), g) };"""
+    )
+    assert got == {"found": True, "passes": True, "plain": True}
