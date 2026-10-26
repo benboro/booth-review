@@ -8,10 +8,12 @@ beyond a served page and never touch vault data.
 
 from __future__ import annotations
 
+import io
 from collections.abc import Callable
 from typing import Any
 
 import pytest
+from PIL import Image
 from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
@@ -263,6 +265,47 @@ def test_picks_fade_and_ring_without_shifting_layout(wk_page: Page) -> None:
     assert _style(wk_page, _cell("a"), "boxShadow") == "none"
 
 
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_faded_cell_hides_the_hour_hairlines(wk_page: Page, theme: str) -> None:
+    # UI review fix 3: a faded cell is the cell at 0.3 strength over the page background, opaque,
+    # so the lane's hour hairlines stay behind it instead of slicing it.
+    games = [_known(key="a", boothRank=1), _known(key="b", home="B")]
+    _mount(wk_page, games, theme=theme, pass_keys=["a"])
+    assert _style(wk_page, _cell("b"), "opacity") == "0.3"
+    wk_page.evaluate(
+        "(s) => document.querySelector(s).scrollIntoView({block: 'center'})", _cell("b")
+    )
+    geo = wk_page.evaluate(
+        """(sel) => {
+          const lane = document.querySelector('#wk-host .wk-lane').getBoundingClientRect();
+          const cell = document.querySelector(sel).getBoundingClientRect();
+          const pxh = parseFloat(getComputedStyle(document.querySelector('#wk-host .wk-grid'))
+            .getPropertyValue('--wk-pxh'));
+          return { line: lane.left + pxh, top: cell.top, bottom: cell.bottom };
+        }""",
+        _cell("b"),
+    )
+    # The bottom padding row: no text, and the 1 pm hairline crosses the cell there.
+    y = int(geo["bottom"]) - 2
+    x = int(geo["line"])
+    shot = wk_page.screenshot(clip={"x": x - 2, "y": y, "width": 8, "height": 1})
+    with Image.open(io.BytesIO(shot)) as img:
+        row = [img.convert("RGB").getpixel((i, 0)) for i in range(8)]
+    assert len(set(row)) == 1, row
+    want = wk_page.evaluate(
+        """async ([theme, family]) => {
+          const P = await import('./modules/palette.js');
+          const W = await import('./modules/weekend.js');
+          const hex = P.mixHex(W.cellColors(family, theme, 'known').bg, P.PAGE_BG[theme],
+            W.WEEKEND_FADED_OPACITY);
+          const n = parseInt(hex.slice(1), 16);
+          return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+        }""",
+        [theme, "fox"],
+    )
+    assert all(abs(a - b) <= 3 for a, b in zip(row[0], want, strict=True)), (row[0], want)
+
+
 def test_ring_is_light_in_dark_theme(wk_page: Page) -> None:
     _mount(wk_page, [_known(key="a"), _known(key="b", home="B")], theme="dark", pass_keys=["a"])
     ring = _style(wk_page, _cell("a"), "boxShadow")
@@ -378,7 +421,6 @@ def test_now_line_only_on_todays_et_day(wk_page: Page) -> None:
     # Outside the axis range on the same day: no line.
     _mount(wk_page, games, now="2026-10-31T06:00:00-04:00")
     assert wk_page.locator("#wk-host .wk-now").count() == 0
-
 
 
 def _intersects(a: dict[str, float], b: dict[str, float]) -> bool:

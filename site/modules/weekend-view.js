@@ -467,6 +467,14 @@ function buildRow(row, ctx, lanes) {
     cell.style.width = `${c.width}px`;
     cell.dataset.left = String(c.left);
     applyPick(cell, c.game, ctx, faded);
+    if (cell.classList.contains('is-faded')) {
+      // An opaque underlay, so the faded cell blends with the page and not the hour hairlines.
+      const under = el('div', 'wk-underlay');
+      under.style.left = cell.style.left;
+      under.style.top = cell.style.top;
+      under.style.width = cell.style.width;
+      lane.append(under);
+    }
     lane.append(cell);
     (bySub[c.subRow] ??= []).push(cell);
   }
