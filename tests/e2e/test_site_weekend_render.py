@@ -36,7 +36,7 @@ _MOUNT = """async (arg) => {
   window.__wk = { opened: [], days: [], weeks: [] };
   const opts = {
     width: arg.width,
-    now: new Date(arg.now),
+    now: arg.liveClock ? () => new Date() : new Date(arg.now),
     passes: (g) => (picked ? picked.has(g.key) : null),
     networksPicked: (id) => (nets ? nets.has(id) : null),
     onDay: (d) => window.__wk.days.push(d),
@@ -107,6 +107,7 @@ def _mount(
     model: dict[str, Any] | None = None,
     kind: str = "grid",
     host_width: int | None = None,
+    live_clock: bool = False,
 ) -> None:
     page.evaluate(
         _MOUNT,
@@ -121,6 +122,7 @@ def _mount(
             "model": model,
             "kind": kind,
             "hostWidth": host_width,
+            "liveClock": live_clock,
         },
     )
 
@@ -376,6 +378,54 @@ def test_now_line_only_on_todays_et_day(wk_page: Page) -> None:
     # Outside the axis range on the same day: no line.
     _mount(wk_page, games, now="2026-10-31T06:00:00-04:00")
     assert wk_page.locator("#wk-host .wk-now").count() == 0
+
+
+_ROOT = "document.querySelector('#wk-host .wk-root')"
+
+
+def test_clock_tick_keeps_scroll_and_focus(wk_page: Page) -> None:
+    # WR-02: the minute rebuild on today keeps both sideways scrolls and the focused cell.
+    wk_page.clock.install(time="2026-10-31T13:00:00-04:00")
+    days = ["2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", FRI, SAT]
+    games = [_known(key=f"d{n}", date=d, home=f"H{n}") for n, d in enumerate(days)]
+    games.append(_known(key="late", kickoffMin=1380, home="Late"))
+    _mount(wk_page, games, width=800, host_width=420, live_clock=True)
+    before = wk_page.evaluate(
+        """() => {
+          const sc = document.querySelector('#wk-host .wk-scroll');
+          const tabs = document.querySelector('#wk-host .wk-days');
+          sc.scrollLeft = 200;
+          tabs.scrollLeft = 30;
+          document.querySelector('#wk-host [data-wk-id="g:late"]').focus({ preventScroll: true });
+          window.__oldRoot = """
+        + _ROOT
+        + """;
+          return { grid: sc.scrollLeft, tabs: tabs.scrollLeft };
+        }"""
+    )
+    assert before["grid"] > 0 and before["tabs"] > 0
+    wk_page.clock.run_for(60_000)
+    assert not wk_page.evaluate("window.__oldRoot.isConnected")
+    after = wk_page.evaluate(
+        """() => ({
+          grid: document.querySelector('#wk-host .wk-scroll').scrollLeft,
+          tabs: document.querySelector('#wk-host .wk-days').scrollLeft,
+          focus: document.activeElement?.dataset?.wkId ?? null,
+        })"""
+    )
+    assert after == {**before, "focus": "g:late"}
+
+
+def test_clock_tick_skips_rebuilds_that_change_nothing(wk_page: Page) -> None:
+    # WR-02: a past week, or a day other than today whose cells cannot move, is left alone.
+    wk_page.clock.install(time="2026-10-31T13:00:00-04:00")
+    games = [_game(key="a"), _game(key="f", date=FRI, kickoffMin=1200, home="F")]
+    for model, day in (({"past": True}, SAT), (None, FRI)):
+        _mount(wk_page, games, day=day, model=model, live_clock=True)
+        wk_page.evaluate(f"window.__oldRoot = {_ROOT}")
+        wk_page.clock.run_for(180_000)
+        assert wk_page.evaluate("window.__oldRoot.isConnected")
+        wk_page.evaluate("window.__wk.inst.destroy()")
 
 
 def test_theme_flip_recomputes_tints(wk_page: Page) -> None:

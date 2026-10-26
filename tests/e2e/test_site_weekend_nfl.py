@@ -19,8 +19,8 @@ NOW = "2026-10-11T09:00:00-04:00"
 OpenNfl = Callable[..., None]
 
 
-def _open(page: Page, open_nfl_app: OpenNfl, query: str = "") -> None:
-    page.add_init_script(f"window.__nflWeekendNow = '{NOW}'")
+def _open(page: Page, open_nfl_app: OpenNfl, query: str = "", now: str = NOW) -> None:
+    page.add_init_script(f"window.__nflWeekendNow = '{now}'")
     open_nfl_app(page, f"?sport=nfl&view=weekend{query}")
     page.wait_for_selector(".wk-root")
 
@@ -164,6 +164,36 @@ def test_cell_opens_panel_not_played_yet(nfl_guarded_page: Page, open_nfl_app: O
     _open(page, open_nfl_app)
     page.locator(".wk-row[data-row=cbs] .wk-cell").first.click()
     dialog = page.locator("dialog[open], [role=dialog]:visible").first
+    dialog.wait_for()
+    assert "Not played yet." in dialog.inner_text()
+
+
+def test_kicked_off_upcoming_game_panel_matches_its_cell(
+    nfl_guarded_page: Page, open_nfl_app: OpenNfl
+) -> None:
+    # WR-01: past the 1:00 kickoffs, an upcoming row reads as played, as its cell does.
+    page = nfl_guarded_page
+    _open(page, open_nfl_app, now="2026-10-11T14:00:00-04:00")
+    dialog = page.locator("dialog[open]").first
+    cbs = page.locator(".wk-row[data-row=cbs] .wk-cell")
+    bare = cbs.filter(has_text="Crew not listed").first
+    bare.click()
+    dialog.wait_for()
+    text = dialog.inner_text()
+    assert "Not played yet." not in text
+    assert "Crew not listed." in text
+    assert "Viewers: not available (not posted yet)" in text
+    assert "Final score" not in text
+    page.keyboard.press("Escape")
+    crewed = cbs.filter(has=page.locator(".wk-star")).first
+    crewed.click()
+    dialog.wait_for()
+    text = dialog.inner_text()
+    assert "Not played yet." not in text
+    assert "Crew from 506 Sports" in text
+    page.keyboard.press("Escape")
+    # The 4:25 window has not kicked off yet.
+    page.locator(".wk-row[data-row=fox] .wk-cell").first.click()
     dialog.wait_for()
     assert "Not played yet." in dialog.inner_text()
 

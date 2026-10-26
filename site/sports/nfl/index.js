@@ -418,10 +418,10 @@ function openGame(i, opener) {
   panel.open(gameRow(model, i), opener);
 }
 
-function openUpcoming(j, opener) {
+function openUpcoming(j, opener, { unplayed = true } = {}) {
   const u = model && model.upcomingRaw;
   if (!u || !panel || !Number.isInteger(j) || j < 0 || j >= u.season.length) return;
-  panel.open(upcomingRow(model, j), opener);
+  panel.open(upcomingRow(model, j, { unplayed }), opener);
 }
 
 const ctx = {
@@ -434,7 +434,7 @@ const ctx = {
   selectGames: (sel) => setState({ selection: sel }),
   clearSelection: () => setState({ selection: null }),
   openGame: (i, opener) => openGame(i, opener),
-  openUpcoming: (j, opener) => openUpcoming(j, opener),
+  openUpcoming: (j, opener, opts) => openUpcoming(j, opener, opts),
   methodologyHref: (anchor) => (anchor ? `${METHODOLOGY}#${anchor}` : METHODOLOGY),
   pickBoothRow: (key, label) => pickBoothRow(key, label),
   /** Viewership writes its own subtitle row from nodes it built (never HTML strings). */

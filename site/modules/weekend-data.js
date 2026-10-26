@@ -14,7 +14,10 @@
 import { familyKey } from './palette.js';
 import { defaultState, passesFadeFilters, personOnGame } from './select.js';
 import { crewIndex } from './crew-groups.js';
-import { etWallMinutes, weekendPickState } from './weekend.js';
+import { weekendPickState } from './weekend.js';
+
+// Shared with the NFL host, so it lives with the clock rules in weekend.js.
+export { isUnplayedGame } from './weekend.js';
 
 /** The synthetic network a null network points at in the facade (client-side only). */
 export const TBA_NETWORK = Object.freeze({ id: 'tba', name: 'Network TBA', family: 'other' });
@@ -233,19 +236,3 @@ export function cfbWeekendMatches(data, state, game) {
   return hasPersonPick(state) && cfbWeekendPasses(data, state, game);
 }
 
-/**
- * Whether a weekend game has not been played at `nowWall`: not in a past week, no score or
- * figure, and its kickoff (when known) still ahead in ET. The same kickoff rule flips its cell
- * from "Crew TBA" to "Crew not listed", so the panel's "Not played yet." (D-22) never outlives
- * the cell's (18-13 F3). The network's rating cause plays no part (18-13 F4).
- * @param {object} game - from `cfbWeekendGames`.
- * @param {number} nowWall - ET wall minutes (see `etWallMinutes`).
- * @returns {boolean}
- */
-export function isUnplayedGame(game, nowWall) {
-  if (game.past || game.scored) return false;
-  if (game.date != null && game.kickoffMin != null) {
-    return etWallMinutes(game.date, game.kickoffMin) > nowWall;
-  }
-  return true;
-}

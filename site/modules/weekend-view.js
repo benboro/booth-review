@@ -563,6 +563,19 @@ function buildDesktopBody(ctx, api) {
 const MOUNTED = new WeakMap();
 
 /**
+ * What the clock changes in a render: every game's cell state, and the Now line's minute while
+ * it shows on the grid. The minute timer rebuilds only when this changes (WR-02).
+ */
+function clockKey(ctx, kind) {
+  const { date, minutes } = ctx.nowParts;
+  const axis = ctx.dayModel.axis;
+  const nowLine = kind === 'grid' && axis && date === ctx.day
+    && minutes >= axis.start && minutes <= axis.end;
+  const states = ctx.model.games.map((g) => cellState(g, ctx.nowWall)).join();
+  return `${nowLine ? minutes : ''}|${states}`;
+}
+
+/**
  * Mounts one weekend view in `host`, replacing any earlier mount there and keeping focus on the
  * same control or cell across the rebuild. The theme, the clock and the width rebuild it.
  * @param {HTMLElement} host
@@ -582,6 +595,8 @@ export function mountWeekend(host, model, opts, buildBody, kind) {
   let disposers = [];
   let focusId = carriedFocus;
   let forceFocus = null;
+  let shownDay = null;
+  let shownClock = null;
 
   const api = {
     onDispose(fn) {
@@ -608,6 +623,9 @@ export function mountWeekend(host, model, opts, buildBody, kind) {
     for (const fn of disposers) fn();
     disposers = [];
     const ctx = makeContext(model, opts, state);
+    // A rebuild of the same day keeps the grid's and the day tabs' sideways scroll (WR-02).
+    const keepGrid = ctx.day === shownDay ? (host.querySelector('.wk-scroll')?.scrollLeft ?? 0) : 0;
+    const keepTabs = host.querySelector('.wk-days')?.scrollLeft ?? 0;
     const root = el('div', `wk-root wk-root--${kind}`);
     root.dataset.sport = model.sport;
     root.append(buildControls(ctx, api));
@@ -629,6 +647,12 @@ export function mountWeekend(host, model, opts, buildBody, kind) {
       for (const node of buildBody(ctx, api)) root.append(node);
     }
     host.replaceChildren(root);
+    const scroller = host.querySelector('.wk-scroll');
+    if (scroller && keepGrid) scroller.scrollLeft = keepGrid;
+    const tabs = host.querySelector('.wk-days');
+    if (tabs && keepTabs) tabs.scrollLeft = keepTabs;
+    shownDay = ctx.day;
+    shownClock = clockKey(ctx, kind);
     if (focusId) {
       const target = [...host.querySelectorAll('[data-wk-id]')].find((n) => n.dataset.wkId === focusId);
       target?.focus({ preventScroll: true });
@@ -651,8 +675,12 @@ export function mountWeekend(host, model, opts, buildBody, kind) {
   });
   resizeObserver.observe(host);
   const stopTheme = onThemeChange(() => render());
-  // A fixed Date is a test clock; otherwise the view re-reads the clock every minute.
-  const clockTimer = opts.now instanceof Date ? null : setInterval(render, TICK_MS);
+  // A fixed Date is a test clock, and nothing in a past week moves with the clock; otherwise
+  // the view re-reads the clock every minute and rebuilds only when a cell or the Now line moved.
+  const tick = () => {
+    if (clockKey(makeContext(model, opts, state), kind) !== shownClock) render();
+  };
+  const clockTimer = opts.now instanceof Date || model.past ? null : setInterval(tick, TICK_MS);
 
   const instance = {
     activeId,

@@ -357,6 +357,23 @@ export function cellState(game, nowWall) {
   return 'tba';
 }
 
+/**
+ * Whether a weekend game has not been played at `nowWall`: not in a past week, no score or
+ * figure, and its kickoff (when known) still ahead in ET. The same kickoff rule flips its cell
+ * from "Crew TBA" to "Crew not listed", so the panel's "Not played yet." (D-22) never outlives
+ * the cell's (18-13 F3). The network's rating cause plays no part (18-13 F4).
+ * @param {object} game - from `cfbWeekendGames` or `nflWeekendGames`.
+ * @param {number} nowWall - ET wall minutes (see `etWallMinutes`).
+ * @returns {boolean}
+ */
+export function isUnplayedGame(game, nowWall) {
+  if (game.past || game.scored) return false;
+  if (game.date != null && game.kickoffMin != null) {
+    return etWallMinutes(game.date, game.kickoffMin) > nowWall;
+  }
+  return true;
+}
+
 function surname(name) {
   const parts = name.trim().split(/\s+/);
   return parts[parts.length - 1];
