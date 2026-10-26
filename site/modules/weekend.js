@@ -75,6 +75,8 @@ const SUB_ROW_PITCH = 48;
 const CELL_HEIGHT = 44;
 /** The sticky network column (UI-SPEC "Row header column: 96px wide"). */
 const ROW_HEAD_WIDTH = 96;
+/** Minutes after ET midnight at the next midnight: the last tick a stretched lane can show. */
+const MIDNIGHT = 24 * 60;
 /** The Time TBA strip starts collapsed at this many games or more (D-13). */
 const STRIP_COLLAPSE_AT = 7;
 
@@ -310,8 +312,15 @@ export function buildDayModel(games, { sport, day, width }) {
     : 0;
   let axis = null;
   if (range) {
+    // Hour ticks run to the axis end, and on across a stretched lane up to midnight, so the
+    // axis never stops mid-module (18-UI-REVIEW item 9).
+    const lastTick = Math.min(
+      MIDNIGHT, range.start + Math.floor((laneWidth * 60) / pxh / 60) * 60,
+    );
     const ticks = [];
-    for (let m = range.start; m <= range.end; m += 60) ticks.push({ min: m, label: tickLabel(m) });
+    for (let m = range.start; m <= Math.max(range.end, lastTick); m += 60) {
+      ticks.push({ min: m, label: tickLabel(m) });
+    }
     axis = { ...range, ticks };
   }
 

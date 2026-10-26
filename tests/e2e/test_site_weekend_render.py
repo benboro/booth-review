@@ -937,3 +937,15 @@ def test_short_day_lane_fills_the_host_width(wk_page: Page) -> None:
     _mount(wk_page, [_game(key="a", kickoffMin=540), _game(key="b", kickoffMin=1230)],
            width=900, host_width=900)
     assert _widths(wk_page, "#wk-host .wk-lane") == [15 * 80]
+
+
+def test_ticks_continue_across_a_filled_lane_up_to_midnight(wk_page: Page) -> None:
+    # 18-UI-REVIEW item 9: when the cap binds, the hour ticks run on to the lane's end (or
+    # midnight), so the axis never stops mid-module.
+    _mount(wk_page, [_game(kickoffMin=840)], width=1340, host_width=1340)
+    labels = wk_page.locator("#wk-host .wk-tick").all_inner_texts()
+    assert labels[0] == "2 pm"
+    assert labels[-1] == "12 am"
+    assert len(labels) == 11
+    # The cell itself stays a 3.5-hour block at 120 px/hour.
+    assert _widths(wk_page, "#wk-host .wk-cell") == [420 - 2]
