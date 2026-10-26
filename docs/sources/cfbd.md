@@ -113,6 +113,13 @@ dropped) rather than assumed from the docs. Every CFBD call — data or
 `/info` — is refused outright once the remaining count would drop below a
 configured floor, so a bug can't run a key all the way to zero.
 
+The Friday 18:00 and Saturday 08:00 ET schedule-only job runs re-pull only the
+season's `/games` and `/games/media`: 2 counted requests per run (a 304 still
+counts), about 17-19 per month on top of the existing job estimate, with a cap
+of 3 calls per run (the extra one is a possible `/info` on a month's first
+run). They do not re-pull `/rankings`, so the next week's ranks stay empty on
+the site until the Wednesday run's poll; empty is better than stale.
+
 ## Terms (updated August 12, 2026)
 
 CFBD's terms allow using API data in a website, including derived outputs

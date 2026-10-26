@@ -53,6 +53,18 @@
 # tag still runs with this file, but a timed-out job step then leaves no
 # result file, so that run does not deploy.
 #
+# Phase 18 (D-14, D-15, D-17): Friday 18:00 and Saturday 08:00 ET are
+# schedule-only slots (job.catchup.SCHEDULE_ONLY) with backup crons. They
+# re-pull only the CFBD games and media lists and the nflverse schedule, then
+# rebuild and deploy under the same gates; they never fetch 506 or ESPN Press
+# Room and never move last_success_at, so the Sunday/Wednesday slots behave as
+# before. A manual dispatch takes a `mode` input: full (today's run), schedule,
+# or rebuild (no collection at all, to publish newly imported crews at once).
+# The Friday/Saturday slots and the mode input need a JOB_REF release that
+# includes Phase 18 before this template is re-installed in the vault repo (a
+# manual step after the merge; check STATE/ROADMAP/todos for a JOB_REF hold
+# first). An older tag rejects `--mode`.
+#
 # The NFL flag (vars.NFL_SITE_ENABLED, exactly true) needs a JOB_REF release
 # that includes 999.5 before the variable is set; an older tag ignores it.
 name: collect-2026
@@ -69,7 +81,24 @@ on:
       timezone: "America/New_York"
     - cron: "0 6-16/2 * * 4" # Thursday 06,08,10,12,14,16 (backup slots, D-12)
       timezone: "America/New_York"
-  workflow_dispatch: {} # manual trigger, used for the D-13 catch-up drill
+    - cron: "0 18 * * 5" # Friday 18:00 America/New_York (schedule-only main slot, Phase 18 D-17)
+      timezone: "America/New_York"
+    - cron: "0 20,22 * * 5" # Friday 20:00, 22:00 (schedule-only backup slots)
+      timezone: "America/New_York"
+    - cron: "0 8 * * 6" # Saturday 08:00 America/New_York (schedule-only main slot, Phase 18 D-17)
+      timezone: "America/New_York"
+    - cron: "0 9,10 * * 6" # Saturday 09:00, 10:00 (schedule-only backup slots, before noon kickoffs)
+      timezone: "America/New_York"
+  workflow_dispatch: # manual trigger, used for the D-13 catch-up drill
+    inputs:
+      mode:
+        description: "full runs everything; schedule re-pulls only the schedule; rebuild only rebuilds and deploys (publishes newly imported crews without collecting)"
+        type: choice
+        options:
+          - full
+          - schedule
+          - rebuild
+        default: full
 
 permissions:
   contents: write
@@ -145,6 +174,7 @@ jobs:
           CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
           BOOTH_REVIEW_VAULT: ${{ github.workspace }}/vault
           EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_MODE: ${{ inputs.mode }}
           # api.github.com only, for nflverse play-by-play listings; 999.4 D-21
           GITHUB_TOKEN: ${{ github.token }}
           # 999.5 D-18/D-20: NFL is on only when this variable is exactly true
@@ -156,7 +186,19 @@ jobs:
           if [ "$EVENT_NAME" = "schedule" ]; then
             trigger=schedule
           fi
-          uv run booth-review job run --trigger "$trigger" --update \
+          mode=auto
+          if [ "$EVENT_NAME" != "schedule" ]; then
+            mode="${DISPATCH_MODE:-full}"
+          fi
+          case "$mode" in
+            auto|full|schedule|rebuild) ;;
+            *)
+              echo "::error::unknown job mode" >&2
+              echo "code=2" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+          uv run booth-review job run --trigger "$trigger" --mode "$mode" --update \
             --site-out "$RUNNER_TEMP/site" \
             --result-out "$RUNNER_TEMP/result.txt" \
             --attention-out "$RUNNER_TEMP/attention.md"

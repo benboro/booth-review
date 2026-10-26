@@ -72,16 +72,17 @@ def test_version_matches_pyproject_and_lock() -> None:
 # -- collect.yml: schedule / triggers ----------------------------------------------------------
 
 
-def test_workflow_has_five_america_new_york_timezone_entries() -> None:
+def test_workflow_has_nine_america_new_york_timezone_entries() -> None:
     # 2 main slots (D-11) + 3 backup-slot groups (D-12: Sun afternoon/evening,
-    # Wed late, Thu daytime) -- every schedule entry uses the same timezone.
-    assert WORKFLOW_TEXT.count('timezone: "America/New_York"') == 5
+    # Wed late, Thu daytime) + the 4 Phase 18 schedule-only entries (Fri/Sat
+    # main and backup) -- every schedule entry uses the same timezone.
+    assert WORKFLOW_TEXT.count('timezone: "America/New_York"') == 9
 
 
-def test_workflow_schedule_has_exactly_five_entries_all_america_new_york() -> None:
+def test_workflow_schedule_has_exactly_nine_entries_all_america_new_york() -> None:
     workflow = yaml.safe_load(WORKFLOW_TEXT)
     entries = workflow[True]["schedule"]
-    assert len(entries) == 5
+    assert len(entries) == 9
     assert all(entry["timezone"] == "America/New_York" for entry in entries)
 
 
@@ -98,6 +99,29 @@ def test_workflow_has_backup_slot_cron_entries() -> None:
 
 def test_workflow_has_workflow_dispatch() -> None:
     assert "workflow_dispatch" in WORKFLOW_TEXT
+
+
+def test_workflow_has_friday_saturday_schedule_only_crons() -> None:
+    entries = yaml.safe_load(WORKFLOW_TEXT)[True]["schedule"]
+    by_cron = {entry["cron"]: entry for entry in entries}
+    for cron in ("0 18 * * 5", "0 20,22 * * 5", "0 8 * * 6", "0 9,10 * * 6"):
+        assert cron in by_cron
+        assert by_cron[cron]["timezone"] == "America/New_York"
+
+
+def test_workflow_dispatch_mode_input_is_a_three_way_choice() -> None:
+    dispatch = yaml.safe_load(WORKFLOW_TEXT)[True]["workflow_dispatch"]
+    mode = dispatch["inputs"]["mode"]
+    assert mode["type"] == "choice"
+    assert mode["options"] == ["full", "schedule", "rebuild"]
+    assert mode["default"] == "full"
+
+
+def test_workflow_passes_mode_through_env_never_inline() -> None:
+    assert "DISPATCH_MODE: ${{ inputs.mode }}" in WORKFLOW_TEXT
+    assert '--mode "$mode"' in WORKFLOW_TEXT
+    uses = [line for line in _non_comment_lines(WORKFLOW_TEXT) if "inputs.mode" in line]
+    assert uses == ["          DISPATCH_MODE: ${{ inputs.mode }}"]
 
 
 # -- collect.yml: permissions / concurrency ----------------------------------------------------
