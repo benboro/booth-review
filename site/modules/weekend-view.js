@@ -18,15 +18,18 @@
 import {
   WEEKEND_FADED_OPACITY, boothLine, buildDayModel, cellColors, cellState,
   collidingSurnames, dayLabel, dayTabs, defaultDay, etParts, etWallMinutes, matchupText,
+  stripCollapsedByDefault,
 } from './weekend.js';
 import { makeCaretIcon } from './icons.js';
 import { networkMark } from './network.js';
+import { safeHref } from './panel-parts.js';
 import { attachScrollCue } from './scroll-cue.js';
 import { currentTheme, onThemeChange } from './theme.js';
 
 const FALLBACK_WIDTH = 1440;
 const RESIZE_DEBOUNCE_MS = 120;
 const TICK_MS = 60000;
+const ESPN_PRESS_ROOM = 'https://www.espnpressroom.com/';
 const ROW_HEAD_WIDTH = 96;
 const SUB_ROW_PITCH = 48;
 
@@ -247,22 +250,165 @@ export function buildControls(ctx, api) {
   return row;
 }
 
-// ---- Section builders (filled in by the stamp/strip/table/source work) ----
+// ---- Stamp, Time TBA strip, ESPN+ table and source line ----
 
-export function buildStampLine() {
-  return document.createDocumentFragment();
+const EMPTY = () => document.createDocumentFragment();
+
+/** The freshness line above the grid, or the zero-match line under an active pick (D-16). */
+export function buildStampLine(ctx) {
+  const { model } = ctx;
+  const p = el('p', 'wk-stamp');
+  p.setAttribute('aria-live', 'off');
+  if (ctx.anyPick && ctx.inDay.length > 0 && !ctx.inDay.some((g) => ctx.passes(g) === true)) {
+    p.classList.add('wk-stamp--picks');
+    p.textContent = `No games match your picks on ${dayLabel(ctx.day)}. `
+      + 'Try another day or clear a filter.';
+    return p;
+  }
+  if (model.past) {
+    p.textContent = 'Crews: 506 Sports and ESPN Press Room, as saved.';
+    return p;
+  }
+  const f = model.freshness ?? {};
+  const schedule = f.schedule_updated_at ? `Schedule updated ${etStamp(f.schedule_updated_at)}` : null;
+  const segments = [];
+  if (f.crews_506_saved_at) segments.push(`506 Sports saved ${etStamp(f.crews_506_saved_at)}`);
+  if (f.crews_espnpr_saved_at) {
+    const week = f.espnpr_week != null ? ` week ${f.espnpr_week}` : '';
+    segments.push(`ESPN Press Room${week} saved ${etStamp(f.crews_espnpr_saved_at, { withTime: false })}`);
+  }
+  if (segments.length) {
+    p.textContent = `Crews: ${[...segments, ...(schedule ? [schedule] : [])].join(' · ')}`;
+  } else {
+    p.textContent = 'Crews for this week are not posted yet. Games show Crew TBA until they are.'
+      + `${schedule ? ` ${schedule}` : ''}`;
+  }
+  return p;
 }
 
-export function buildTbaStrip() {
-  return document.createDocumentFragment();
+/** One strip cell: the shared two-line cell with the network (or Network TBA) at the right. */
+function stripCell(game, ctx) {
+  const cell = buildCell(game, ctx, { tail: game.networkName ?? 'Network TBA' });
+  applyPick(cell, game, ctx, ctx.rowFaded([game]));
+  return cell;
 }
 
-export function buildCompactTable() {
-  return document.createDocumentFragment();
+/** The collapsible Time or network to be announced strip (D-13); nothing is dropped. */
+export function buildTbaStrip(ctx, api) {
+  const games = ctx.dayModel.tba;
+  if (!games.length) return EMPTY();
+  const open = ctx.state.stripOpen ?? !stripCollapsedByDefault(games.length);
+  const section = el('section', 'wk-tba');
+  const head = el('button', 'wk-tba-head');
+  head.type = 'button';
+  head.dataset.wkId = 'strip';
+  head.setAttribute('aria-expanded', String(open));
+  head.setAttribute('aria-controls', 'wk-tba-body');
+  head.append(makeCaretIcon(),
+    el('span', 'wk-tba-title', `Time or network to be announced (${games.length})`));
+  head.addEventListener('click', () => {
+    ctx.state.stripOpen = !open;
+    api.rerender();
+  });
+  const body = el('div', 'wk-tba-body');
+  body.id = 'wk-tba-body';
+  body.hidden = !open;
+  for (const g of games) body.append(stripCell(g, ctx));
+  section.append(head, body);
+  return section;
 }
 
-export function buildSourceLine() {
-  return document.createDocumentFragment();
+function activateOnKey(node, fn) {
+  node.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' || ev.key === ' ') {
+      ev.preventDefault();
+      fn();
+    }
+  });
+}
+
+/** The CFB ESPN+ and regional booktabs table (D-10); absent when empty and for the NFL. */
+export function buildCompactTable(ctx) {
+  const games = ctx.dayModel.compact;
+  if (ctx.model.sport !== 'cfb' || !games.length) return EMPTY();
+  const section = el('section', 'wk-compact');
+  section.append(el('h3', 'wk-compact-title', 'ESPN+ and regional'));
+  const table = el('table', 'games-table wk-compact-table');
+  const headRow = el('tr');
+  for (const label of ['Time', 'Game', 'Network', 'Booth']) {
+    const th = el('th', null, label);
+    th.scope = 'col';
+    headRow.append(th);
+  }
+  const thead = el('thead');
+  thead.append(headRow);
+  const tbody = el('tbody');
+  for (const g of games) {
+    const state = cellState(g, ctx.nowWall);
+    const line = boothLine(g, state, ctx.collide);
+    const tr = el('tr', 'wk-crow');
+    tr.setAttribute('role', 'button');
+    tr.tabIndex = 0;
+    tr.dataset.wkId = `g:${g.key}`;
+    tr.setAttribute('aria-label', accessibleName(g, state, line));
+    const net = el('td', 'wk-c-net');
+    if (g.networkId != null) {
+      net.append(networkMark({ id: g.networkId, name: g.networkName ?? g.networkId, family: g.family }));
+    }
+    const booth = el('td', 'wk-c-booth', line.text);
+    booth.style.fontWeight = String(line.weight);
+    tr.append(
+      el('td', 'wk-c-time', g.kickoffMin == null ? 'Time TBA' : clock12(g.kickoffMin)),
+      el('td', 'wk-c-game', matchupText(g)),
+      net,
+      booth,
+    );
+    applyPick(tr, g, ctx, ctx.rowFaded([g]));
+    if (tr.classList.contains('is-match')) booth.style.fontWeight = '600';
+    tr.addEventListener('click', () => ctx.open(g, tr));
+    activateOnKey(tr, () => ctx.open(g, tr));
+    tbody.append(tr);
+  }
+  table.append(thead, tbody);
+  section.append(table);
+  return section;
+}
+
+/** A link through safeHref; an unsafe or missing href leaves plain text. */
+function sourceLink(text, href) {
+  const safe = safeHref(href);
+  if (safe == null) return document.createTextNode(text);
+  const a = el('a', null, text);
+  a.href = safe;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  return a;
+}
+
+/** The credit line at the bottom: only the sources this sport actually uses (RT-01, RT-03). */
+export function buildSourceLine(ctx) {
+  const { model } = ctx;
+  const links = model.links ?? {};
+  const press = links.espnPressRoom ?? ESPN_PRESS_ROOM;
+  const p = el('p', 'wk-source');
+  const text = (t) => document.createTextNode(t);
+  if (model.sport === 'nfl') {
+    p.append(text('Schedule: '), sourceLink('nflverse', 'https://www.nflverse.com/'),
+      text(' · Crews: '), sourceLink('506 Sports', 'https://506sports.com'), text(' and '),
+      sourceLink('ESPN Press Room', press));
+    if (links.wikipedia) {
+      p.append(text(' · Networks: '), sourceLink('Wikipedia', links.wikipedia),
+        text(' (CC BY-SA 4.0)'));
+    }
+  } else {
+    const cfbd = 'https://collegefootballdata.com';
+    p.append(text('Schedule: '), sourceLink('CollegeFootballData.com', cfbd),
+      text(' · Crews: '), sourceLink('506 Sports', 'https://506sports.com'), text(' and '),
+      sourceLink('ESPN Press Room', press), text(' · Networks: '),
+      sourceLink('CollegeFootballData.com', cfbd), text(' and '),
+      sourceLink('506 Sports', 'https://506sports.com'));
+  }
+  return p;
 }
 
 // ---- The grid ----

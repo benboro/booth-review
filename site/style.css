@@ -6305,3 +6305,133 @@ tr.is-matched > :first-child {
   color: var(--accent);
   pointer-events: none;
 }
+
+/* Stamp, Time TBA strip, ESPN+ and regional table, source line, empty and error states. */
+.wk-stamp,
+.wk-source {
+  margin: 0;
+  font: var(--font-caption);
+  color: var(--muted);
+}
+
+.wk-stamp--picks {
+  color: var(--ink);
+}
+
+.wk-source {
+  margin-top: var(--space-md);
+}
+
+.wk-source a {
+  color: inherit;
+}
+
+.wk-tba,
+.wk-compact {
+  margin-top: var(--space-lg);
+}
+
+.wk-tba {
+  border-top: 1px solid var(--rule-strong);
+}
+
+.wk-tba-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-height: var(--space-xl);
+  padding: var(--space-xs) 0;
+  background: transparent;
+  border: none;
+  font: var(--font-body);
+  font-weight: var(--weight-semibold);
+  text-align: left;
+  cursor: pointer;
+}
+
+.wk-tba-head[aria-expanded="false"] .game-caret {
+  transform: rotate(-90deg);
+}
+
+.wk-tba-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-xs);
+  padding-top: var(--space-sm);
+}
+
+.wk-tba-body .wk-cell {
+  position: relative;
+  width: auto;
+}
+
+.wk-compact-title {
+  margin: 0 0 var(--space-sm) 0;
+}
+
+.wk-compact-table {
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+}
+
+.wk-compact-table th,
+.wk-compact-table td {
+  padding: var(--space-xs) var(--space-md) var(--space-xs) 0;
+  height: var(--space-xl);
+  box-sizing: border-box;
+  vertical-align: middle;
+  border-bottom-color: var(--rule);
+}
+
+.wk-compact-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.wk-compact-table th {
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.wk-compact-table .wk-c-time {
+  width: 72px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.wk-crow {
+  cursor: pointer;
+  transition: opacity 120ms;
+}
+
+.wk-crow.is-match > td:first-child {
+  box-shadow: inset 2px 0 0 var(--ink);
+  padding-left: var(--space-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wk-crow {
+    transition: none;
+  }
+}
+
+.wk-empty {
+  padding: var(--space-lg) 0;
+}
+
+.wk-empty-title {
+  margin: 0;
+  font: var(--font-body);
+  font-weight: var(--weight-semibold);
+}
+
+.wk-empty-body {
+  margin: var(--space-xs) 0 0 0;
+  font: var(--font-body);
+  color: var(--muted);
+}
+
+.wk-error {
+  margin: var(--space-md) 0 0 0;
+  font: var(--font-body);
+  color: var(--error);
+}

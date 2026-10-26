@@ -171,9 +171,7 @@ def test_fox_stack_rows_heights_and_two_lines(wk_page: Page) -> None:
         assert box is not None
         assert box["height"] == 44
         assert wk_page.locator(f"{_cell(key)} .wk-line").count() == 2
-    top = {
-        k: wk_page.evaluate(f"document.querySelector('{_cell(k)}').offsetTop") for k in "abc"
-    }
+    top = {k: wk_page.evaluate(f"document.querySelector('{_cell(k)}').offsetTop") for k in "abc"}
     assert top["b"] == 0
     assert top["a"] == 48
     assert top["c"] == 96
@@ -236,9 +234,7 @@ def test_cell_text_ranks_neutral_and_names(wk_page: Page) -> None:
     assert wk_page.locator(f"{_cell('a')} .wk-booth").inner_text() == "Fowler · Herbstreit"
     assert wk_page.locator(f"{_cell('p')} .wk-booth").inner_text() == "Fowler · Analyst TBA"
     label = wk_page.locator(_cell("a")).get_attribute("aria-label")
-    assert label == (
-        "12:00 pm, #20 Florida at #5 Georgia, FOX. Lead booth. Fowler and Herbstreit."
-    )
+    assert label == ("12:00 pm, #20 Florida at #5 Georgia, FOX. Lead booth. Fowler and Herbstreit.")
 
 
 def test_picks_fade_and_ring_without_shifting_layout(wk_page: Page) -> None:
@@ -404,3 +400,210 @@ def test_streaming_row_and_label(wk_page: Page) -> None:
         "Streaming"
     )
     assert wk_page.locator(f"{_cell('p')} .wk-tail").inner_text() == "Peacock"
+
+
+# -- Task 2: strip, ESPN+ table, stamp, source line, empty states --------------------------
+
+
+def _tba_games(n: int) -> list[dict[str, Any]]:
+    out = []
+    for k in range(n):
+        if k % 2 == 0:
+            out.append(_game(key=f"t{k}", kickoffMin=None, home=f"H{k}"))
+        else:
+            out.append(
+                _game(key=f"t{k}", networkId=None, networkName=None, family="other", home=f"H{k}")
+            )
+    return out
+
+
+def test_tba_strip_collapse_threshold_and_toggle(wk_page: Page) -> None:
+    _mount(wk_page, [_known(key="a"), *_tba_games(7)])
+    head = wk_page.locator("#wk-host .wk-tba-head")
+    assert head.inner_text() == "Time or network to be announced (7)"
+    assert head.get_attribute("aria-expanded") == "false"
+    assert wk_page.locator("#wk-host .wk-tba-body").is_hidden()
+    assert wk_page.locator("#wk-host .wk-tba-body > .wk-cell").count() == 7
+    head.click()
+    assert wk_page.locator("#wk-host .wk-tba-head").get_attribute("aria-expanded") == "true"
+    assert wk_page.locator("#wk-host .wk-tba-body").is_visible()
+    # Focus stays on the toggle across the rebuild.
+    assert wk_page.evaluate("document.activeElement.dataset.wkId") == "strip"
+    wk_page.locator("#wk-host .wk-tba-head").click()
+    assert wk_page.locator("#wk-host .wk-tba-head").get_attribute("aria-expanded") == "false"
+    _mount(wk_page, [_known(key="a"), *_tba_games(6)])
+    assert wk_page.locator("#wk-host .wk-tba-head").get_attribute("aria-expanded") == "true"
+    assert wk_page.locator("#wk-host .wk-tba-body > .wk-cell").count() == 6
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_tba_strip_cell_states(wk_page: Page, theme: str) -> None:
+    _mount(wk_page, [_known(key="a"), *_tba_games(2)], theme=theme)
+    pal = _palette(wk_page, theme, "fox")
+    net_known = _cell("t0")
+    net_unknown = _cell("t1")
+    assert wk_page.locator(f"{net_known} .wk-time").inner_text() == "Time TBA"
+    assert wk_page.locator(f"{net_known} .wk-tail").inner_text() == "FOX"
+    assert _style(wk_page, net_known, "backgroundColor") == pal["tint"]
+    assert wk_page.locator(f"{net_unknown} .wk-tail").inner_text() == "Network TBA"
+    surface = {"light": "rgb(244, 240, 232)", "dark": "rgb(38, 35, 31)"}[theme]
+    assert _style(wk_page, net_unknown, "backgroundColor") == surface
+    assert _style(wk_page, net_unknown, "boxShadow") != "none"
+    box = wk_page.locator(net_known).bounding_box()
+    assert box is not None and box["height"] == 44 and box["width"] >= 280
+    wk_page.locator(net_unknown).click()
+    assert wk_page.evaluate("window.__wk.opened") == ["t1"]
+
+
+def test_strip_cells_take_picks(wk_page: Page) -> None:
+    _mount(wk_page, [_known(key="a"), *_tba_games(2)], pass_keys=["t0"])
+    assert _style(wk_page, _cell("t1"), "opacity") == "0.3"
+    assert "inset" in _style(wk_page, _cell("t0"), "boxShadow")
+
+
+def _plus(**kw: Any) -> dict[str, Any]:
+    base = {"networkId": "espn-plus", "networkName": "ESPN+", "family": "disney"}
+    base.update(kw)
+    return _game(**base)
+
+
+def test_compact_table_rows_booths_and_keys(wk_page: Page) -> None:
+    games = [
+        _known(key="a"),
+        _plus(key="p1", home="Plus One", pbp="Ann Caller", analyst="Bob Color", crewKnown=True),
+        _plus(key="p2", home="Plus Two", kickoffMin=1140),
+    ]
+    _mount(wk_page, games)
+    assert wk_page.locator("#wk-host .wk-compact-title").inner_text() == "ESPN+ and regional"
+    assert _style(wk_page, "#wk-host .wk-compact-title", "fontFamily").startswith('"Crimson Text"')
+    heads = wk_page.locator("#wk-host .wk-compact-table th").all_inner_texts()
+    assert heads == ["Time", "Game", "Network", "Booth"]
+    rows = wk_page.locator("#wk-host .wk-compact-table tbody tr")
+    assert rows.count() == 2
+    assert rows.nth(0).locator(".wk-c-booth").inner_text() == "Caller · Color"
+    assert rows.nth(0).locator(".wk-c-time").inner_text() == "12:00 pm"
+    assert rows.nth(1).locator(".wk-c-booth").inner_text() == "Crew TBA"
+    assert rows.nth(0).get_attribute("role") == "button"
+    # ESPN+ games never draw in the grid.
+    assert wk_page.locator('#wk-host .wk-cell[data-wk-id="g:p1"]').count() == 0
+    rows.nth(1).focus()
+    wk_page.keyboard.press("Enter")
+    assert wk_page.evaluate("window.__wk.opened") == ["p2"]
+    wk_page.keyboard.press("Space")
+    assert wk_page.evaluate("window.__wk.opened") == ["p2", "p2"]
+
+
+def test_compact_table_picks_and_absent_cases(wk_page: Page) -> None:
+    games = [
+        _known(key="a"),
+        _plus(key="p1", home="One", pbp="Ann Caller", analyst="Bob Color", crewKnown=True),
+        _plus(key="p2", home="Two", kickoffMin=1140),
+    ]
+    _mount(wk_page, games, pass_keys=["p1"])
+    matched = wk_page.locator("#wk-host .wk-crow.is-match")
+    assert matched.count() == 1
+    assert "inset" in _style(wk_page, "#wk-host .wk-crow.is-match td", "boxShadow")
+    assert _style(wk_page, "#wk-host .wk-crow.is-match .wk-c-booth", "fontWeight") == "600"
+    assert _style(wk_page, "#wk-host .wk-crow:not(.is-match)", "opacity") == "0.3"
+    _mount(wk_page, [_known(key="a")])
+    assert wk_page.locator("#wk-host .wk-compact").count() == 0
+    assert wk_page.locator("#wk-host .wk-tba").count() == 0
+
+
+def test_crew_not_listed_after_kickoff(wk_page: Page) -> None:
+    games = [_game(key="a"), _plus(key="p")]
+    _mount(wk_page, games, now="2026-10-31T20:00:00-04:00")
+    assert wk_page.locator(f"{_cell('a')} .wk-booth").inner_text() == "Crew not listed"
+    assert wk_page.locator("#wk-host .wk-c-booth").inner_text() == "Crew not listed"
+
+
+def test_stamp_line_variants(wk_page: Page) -> None:
+    games = [_known(key="a")]
+    fresh = {
+        "crews_506_saved_at": "2026-10-30T01:14:00Z",
+        "crews_espnpr_saved_at": "2026-10-26T14:00:00Z",
+        "espnpr_week": 9,
+        "schedule_updated_at": "2026-10-30T22:00:00Z",
+    }
+    _mount(wk_page, games, model={"freshness": fresh})
+    assert wk_page.locator("#wk-host .wk-stamp").inner_text() == (
+        "Crews: 506 Sports saved Thu. Oct. 29, 9:14 pm ET · ESPN Press Room week 9 saved "
+        "Mon. Oct. 26 · Schedule updated Fri. Oct. 30, 6:00 pm ET"
+    )
+    assert wk_page.locator("#wk-host .wk-stamp").get_attribute("aria-live") == "off"
+    only_506 = {"crews_506_saved_at": fresh["crews_506_saved_at"]}
+    _mount(wk_page, games, model={"freshness": only_506})
+    assert wk_page.locator("#wk-host .wk-stamp").inner_text() == (
+        "Crews: 506 Sports saved Thu. Oct. 29, 9:14 pm ET"
+    )
+    sched = {"schedule_updated_at": fresh["schedule_updated_at"]}
+    _mount(wk_page, games, model={"freshness": sched})
+    assert wk_page.locator("#wk-host .wk-stamp").inner_text() == (
+        "Crews for this week are not posted yet. Games show Crew TBA until they are. "
+        "Schedule updated Fri. Oct. 30, 6:00 pm ET"
+    )
+    _mount(wk_page, games, model={"freshness": fresh, "past": True})
+    assert wk_page.locator("#wk-host .wk-stamp").inner_text() == (
+        "Crews: 506 Sports and ESPN Press Room, as saved."
+    )
+    _mount(wk_page, games, model={"freshness": None})
+    assert wk_page.locator("#wk-host .wk-stamp").inner_text().startswith("Crews for this week")
+
+
+def test_zero_matches_replaces_stamp(wk_page: Page) -> None:
+    _mount(wk_page, [_known(key="a"), _known(key="b", home="B")], pass_keys=["zzz"])
+    assert wk_page.locator("#wk-host .wk-stamp").inner_text() == (
+        "No games match your picks on Sat. Oct. 31. Try another day or clear a filter."
+    )
+    assert _style(wk_page, _cell("a"), "opacity") == "0.3"
+
+
+def test_source_line_cfb_credits_and_links(wk_page: Page) -> None:
+    _mount(wk_page, [_known(key="a")])
+    line = wk_page.locator("#wk-host .wk-source")
+    assert line.inner_text() == (
+        "Schedule: CollegeFootballData.com · Crews: 506 Sports and ESPN Press Room · "
+        "Networks: CollegeFootballData.com and 506 Sports"
+    )
+    anchors = wk_page.locator("#wk-host .wk-source a")
+    assert anchors.count() == 5
+    for i in range(5):
+        assert anchors.nth(i).get_attribute("rel") == "noopener noreferrer"
+    hrefs = anchors.evaluate_all("a => a.map(x => x.href)")
+    assert hrefs[0] == "https://collegefootballdata.com/"
+    assert hrefs[1] == "https://506sports.com/"
+
+
+def test_source_line_nfl_has_no_cfbd_credit(wk_page: Page) -> None:
+    games = [_known(key="a", sport="nfl", networkId="cbs", networkName="CBS", family="cbs")]
+    _mount(wk_page, games, model={"sport": "nfl"})
+    text = wk_page.locator("#wk-host .wk-source").inner_text()
+    assert text == "Schedule: nflverse · Crews: 506 Sports and ESPN Press Room"
+    assert "CollegeFootballData" not in text and "Wikipedia" not in text
+    _mount(
+        wk_page,
+        games,
+        model={"sport": "nfl", "links": {"wikipedia": "https://en.wikipedia.org/wiki/Foo"}},
+    )
+    text = wk_page.locator("#wk-host .wk-source").inner_text()
+    assert text.endswith("Networks: Wikipedia (CC BY-SA 4.0)")
+    href = wk_page.locator("#wk-host .wk-source a", has_text="Wikipedia").get_attribute("href")
+    assert href == "https://en.wikipedia.org/wiki/Foo"
+    # An unsafe href never becomes a link.
+    _mount(wk_page, games, model={"sport": "nfl", "links": {"wikipedia": "javascript:alert(1)"}})
+    assert wk_page.locator("#wk-host .wk-source a", has_text="Wikipedia").count() == 0
+
+
+def test_empty_week_and_missing_schedule(wk_page: Page) -> None:
+    _mount(wk_page, [], day=None)
+    assert wk_page.locator("#wk-host .wk-empty-title").inner_text() == "No games this weekend"
+    assert wk_page.locator("#wk-host .wk-empty-body").inner_text() == (
+        "The schedule has no games for Week 9 yet. Step back to a past week to see final crews."
+    )
+    assert wk_page.locator("#wk-host .wk-step--prev").count() == 1
+    _mount(wk_page, [], day=None, model={"missing": True})
+    err = wk_page.locator("#wk-host .wk-error")
+    assert err.inner_text() == (
+        "This build has no schedule for Week 9. Reload the page or step back to Week 8."
+    )
+    assert _style(wk_page, "#wk-host .wk-error", "color") == "rgb(179, 38, 30)"
