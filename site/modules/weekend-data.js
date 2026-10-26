@@ -14,7 +14,7 @@
 import { familyKey } from './palette.js';
 import { defaultState, passesFadeFilters, personOnGame } from './select.js';
 import { crewIndex } from './crew-groups.js';
-import { weekendPickState } from './weekend.js';
+import { etWallMinutes, weekendPickState } from './weekend.js';
 
 /** The synthetic network a null network points at in the facade (client-side only). */
 export const TBA_NETWORK = Object.freeze({ id: 'tba', name: 'Network TBA', family: 'other' });
@@ -78,7 +78,9 @@ export function scheduledFacade(data) {
     playoff_round: nulls(),
     bowl: nulls(),
     rivalry: nulls(),
-    cause: nulls(),
+    // A scheduled game is a current-season game with no figure yet, so a panel opened after
+    // kickoff reads "viewership not posted yet" (18-13 F3).
+    cause: new Array(n).fill('pending'),
     booth: nulls(),
     game_type: new Array(n).fill('regular'),
     crew: raw.crew ?? Array.from({ length: n }, () => []),
@@ -123,6 +125,7 @@ function weekendGame(data, obj, block, i, week, weekend) {
   const analyst = mainName(obj, i, 'analyst');
   const tier = obj.boothTier[i];
   const past = weekend != null && week.number < weekend.number;
+  const scored = Boolean(obj.rated[i]) || t.home_points[i] != null || t.away_points[i] != null;
   return {
     key: `cfb:${block}:${i}`,
     sport: 'cfb',
@@ -144,6 +147,7 @@ function weekendGame(data, obj, block, i, week, weekend) {
     lead: tier === 1,
     crewKnown: pbp != null || analyst != null,
     past,
+    scored,
   };
 }
 
@@ -230,14 +234,18 @@ export function cfbWeekendMatches(data, state, game) {
 }
 
 /**
- * Whether a played-block row has not been played: no score, no figure, still pending. The
- * panel shows "Not played yet." for it (D-22).
- * @param {object} data - a `prepareData` result.
- * @param {number} i - index into `data.t`.
+ * Whether a weekend game has not been played at `nowWall`: not in a past week, no score or
+ * figure, and its kickoff (when known) still ahead in ET. The same kickoff rule flips its cell
+ * from "Crew TBA" to "Crew not listed", so the panel's "Not played yet." (D-22) never outlives
+ * the cell's (18-13 F3). The network's rating cause plays no part (18-13 F4).
+ * @param {object} game - from `cfbWeekendGames`.
+ * @param {number} nowWall - ET wall minutes (see `etWallMinutes`).
  * @returns {boolean}
  */
-export function isUnplayedRow(data, i) {
-  const t = data.t;
-  return !data.rated[i] && t.home_points[i] == null && t.away_points[i] == null
-    && t.cause[i] === 'pending';
+export function isUnplayedGame(game, nowWall) {
+  if (game.past || game.scored) return false;
+  if (game.date != null && game.kickoffMin != null) {
+    return etWallMinutes(game.date, game.kickoffMin) > nowWall;
+  }
+  return true;
 }

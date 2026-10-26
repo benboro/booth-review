@@ -468,7 +468,8 @@ export function openPanel(i, ctx) {
  * scheduled facade, so it shows teams, kickoff (or Time TBA), network (or Network TBA), its
  * ESPN Press Room crew or "Crew TBA", and "Not played yet." with no score, figure or excitement.
  * @param {number} j - index into the scheduled block.
- * @param {{data: object, state: object, view?: object}} ctx - `data` is the prepared data.
+ * @param {{data: object, state: object, view?: object, unplayed?: boolean}} ctx - `data` is the
+ *   prepared data; `unplayed` (default true) is false once the game has kicked off (18-13 F3).
  */
 export function openScheduledPanel(j, ctx) {
   showPanel({
@@ -476,7 +477,7 @@ export function openScheduledPanel(j, ctx) {
     i: j,
     state: ctx.state,
     view: ctx.view ?? { peopleOnGame: new Map() },
-    unplayed: true,
+    unplayed: ctx.unplayed ?? true,
   });
 }
 

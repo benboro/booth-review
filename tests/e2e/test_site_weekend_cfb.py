@@ -97,8 +97,16 @@ def _weekend_raw(fixture_raw: dict[str, Any], *, extra_tba: int = 0) -> dict[str
 def serve_weekend(
     fixture_raw: dict[str, Any],
 ) -> Callable[..., None]:
-    def _serve(page: Page, *, now: str = MORNING, extra_tba: int = 0) -> None:
+    def _serve(
+        page: Page,
+        *,
+        now: str = MORNING,
+        extra_tba: int = 0,
+        tweak: Callable[[dict[str, Any]], None] | None = None,
+    ) -> None:
         raw = _weekend_raw(fixture_raw, extra_tba=extra_tba)
+        if tweak is not None:
+            tweak(raw)
         page.clock.set_fixed_time(now)
         page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
 
@@ -318,6 +326,43 @@ def test_shipped_unplayed_cell_opens_with_its_crew_credit(wk: Callable[..., Page
     assert "Sam Delgado" in text
     page.keyboard.press("Escape")
     assert page.evaluate("document.activeElement.dataset.wkId") == "g:cfb:t:19"
+
+
+def _panel_text(page: Page, selector: str) -> str:
+    cell = page.locator(selector)
+    cell.focus()
+    cell.press("Enter")
+    dialog = page.locator("dialog[open]")
+    expect(dialog).to_be_visible()
+    text = dialog.inner_text()
+    page.keyboard.press("Escape")
+    return text
+
+
+def test_panel_after_kickoff_matches_the_crew_not_listed_cell(wk: Callable[..., Page]) -> None:
+    # 18-13 F3: once a scheduled game kicks off its cell reads "Crew not listed", so its panel
+    # no longer says "Not played yet." or "Crew TBA".
+    page = wk(now=AFTERNOON)
+    text = _panel_text(page, FOX_NOON)
+    assert "Not played yet." not in text
+    assert "Crew TBA" not in text
+    assert "Crew not recorded" in text
+    assert "viewership not posted yet" in text
+    assert "null" not in text
+    # The 3:30 pm game is still ahead.
+    assert "Not played yet." in _panel_text(page, RANKED)
+
+
+def test_rarely_rated_upcoming_game_opens_as_not_played(wk: Callable[..., Page]) -> None:
+    # 18-13 F4: a 506-listed upcoming game on a rarely rated network has cause rarely_rated,
+    # not pending; it is still unplayed before kickoff.
+    def rarely(raw: dict[str, Any]) -> None:
+        raw["telecasts_unrated"]["cause"][7] = "rarely_rated"
+
+    page = wk(tweak=rarely)
+    text = _panel_text(page, LEAD)
+    assert "Not played yet." in text
+    assert "rarely rated" not in text
 
 
 def test_week_stepper_writes_week_and_stops_at_the_latest(wk: Callable[..., Page]) -> None:

@@ -47,9 +47,10 @@ import {
   hoverRingDiameter,
 } from './modules/hover-ring.js';
 import { PHONE_QUERY } from './modules/breakpoints.js';
+import { etParts, etWallMinutes } from './modules/weekend.js';
 import { renderWeekend } from './modules/weekend-view.js';
 import { renderWeekendList } from './modules/weekend-list.js';
-import { cfbWeekendPasses, isUnplayedRow } from './modules/weekend-data.js';
+import { cfbWeekendPasses, isUnplayedGame } from './modules/weekend-data.js';
 import {
   currentWeek,
   dayToken,
@@ -338,11 +339,13 @@ function renderWeekendPanel() {
       setState({ week: target.number === current.number ? null : target.number });
     },
     onOpen(game) {
+      const now = etParts(opts.now());
+      const unplayed = isUnplayedGame(game, etWallMinutes(now.date, now.minutes));
       if (game.block === 'scheduled') {
         clearHover();
-        openScheduledPanel(game.index, { data, state, view: lastView });
+        openScheduledPanel(game.index, { data, state, view: lastView, unplayed });
       } else {
-        openDetailPanel(game.index, { unplayed: isUnplayedRow(data, game.index) });
+        openDetailPanel(game.index, { unplayed });
       }
     },
   };
