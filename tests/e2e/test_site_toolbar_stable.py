@@ -326,7 +326,7 @@ def test_scatter_and_map_share_toolbar_and_chart_panel_geometry(
 def test_six_chart_tabs_fit_at_340px(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """04.18 D-09, Phase 18: the six tabs share one row at 340px (it scrolls sideways), no clipping."""
+    """04.18 D-09, Phase 18: six tabs share one row at 340px (it scrolls sideways), no clipping."""
     guarded_page.set_viewport_size({"width": 340, "height": 800})
     open_app(guarded_page, "?view=map")
     fit: dict[str, Any] = guarded_page.evaluate(
